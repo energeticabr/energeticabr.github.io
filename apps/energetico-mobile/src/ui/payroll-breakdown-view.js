@@ -3,7 +3,8 @@ import { payrollBreakdownPeriods, payrollCombinedTotal } from '../chat/payroll-b
 import { payrollDecimal, payrollKey } from '../chat/supplier-payroll.js';
 import { payrollTaxType } from '../chat/payroll-tax-competence.js';
 import { applyScreenNavigation } from './screen-navigation.js';
-import { createLoadingIndicator } from './loading-indicator.js';
+import { createLoadingIndicator, updateLoadingIndicator } from './loading-indicator.js';
+import { beginLoadingTask } from './loading-task.js';
 
 const money = value => Number(value).toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' });
 const dateText = date => date.split('-').reverse().join('/');
@@ -30,6 +31,7 @@ export function createPayrollBreakdownView({ data, root, documentRef = globalThi
   };
   let draft, progress, payrollContext, expandedDates, contextUnavailable = false, historyAttachments = {};
   const fileSelections = new Map(), fileMessages = new Map();
+  let loadingOperation = null;
   function reset() { draft = { supplier: null, month: currentMonth(), lines: [] }; progress = { operationId: globalThis.crypto?.randomUUID?.() || `${Date.now()}-${Math.random().toString(36).slice(2)}` }; result = null; payrollContext = null; contextUnavailable = false; expandedDates = null; fileSelections.clear(); fileMessages.clear(); step = 'supplier'; }
   reset();
   function savePending() {
@@ -72,10 +74,26 @@ export function createPayrollBreakdownView({ data, root, documentRef = globalThi
   async function work(action, message, mutation = false) {
     if (!opened || destroyed || busy) return false;
     if (step === 'schedule') expandedDates = new Set([...content.querySelectorAll('[data-breakdown-date][open]')].map(node => node.dataset.breakdownDate));
-    const attempt = epoch; busy = true; mutating = mutation; error.hidden = true; render(message);
+    const attempt = epoch;
+    const operation = { abort: new AbortController(), snapshot: { percent: 0 }, loader: null };
+    loadingOperation = operation;
+    const isCurrent = () => {
+      if (!opened || destroyed || epoch !== attempt || loadingOperation !== operation) return false;
+      try { assertSession(); return true; } catch { return false; }
+    };
+    const task = operation.task = beginLoadingTask(value => {
+      operation.snapshot = value;
+      if (operation.loader) updateLoadingIndicator(operation.loader, { progress: value.percent, progressLabel: value.progressLabel });
+    }, { signal: operation.abort.signal, isCurrent });
+    const options = { signal: operation.abort.signal, onProgress: task.report };
+    options.stage = (index, total) => ({ signal: operation.abort.signal, onProgress: event => {
+      if (typeof event?.percent === 'number' && Number.isFinite(event.percent))
+        task.report({ percent: (index + event.percent / 100) * 100 / total });
+    } });
+    busy = true; mutating = mutation; error.hidden = true; render(message);
     const active = () => { assertSession(); if (!opened || destroyed || attempt !== epoch) throw new Error('Esta operação foi encerrada.'); };
-    try { active(); await action(active); active(); busy = mutating = false; render(); return true; }
-    catch (cause) { if (opened && !destroyed && epoch === attempt) { busy = mutating = false; render(); showError(cause); } return false; }
+    try { active(); task.prepared(); await action(active, options); active(); task.acquired(); busy = mutating = false; render(); task.complete(); return true; }
+    catch (cause) { task.stop(); if (opened && !destroyed && epoch === attempt) { busy = mutating = false; render(); showError(cause); } return false; }
   }
   function identity() {
     const card = el('div', 'payroll-breakdown-identity'), table = el('table'), rows = el('tbody');
@@ -105,9 +123,9 @@ export function createPayrollBreakdownView({ data, root, documentRef = globalThi
     const month = el('input'); month.type = 'month'; month.value = draft.month; month.min = '1900-01'; month.dataset.breakdownMonth = '';
     month.addEventListener('input', () => { draft.month = month.value; });
     content.append(field('Mês e ano', month), el('p', '', 'Serão exibidas todas as sextas-feiras e o último dia do mês.'));
-    footer.append(button('Seguir', 'data-breakdown-next', () => work(async active => {
+    footer.append(button('Seguir', 'data-breakdown-next', () => work(async (active, options) => {
       initializeLines(); payrollContext = null; expandedDates = null; fileSelections.clear(); fileMessages.clear();
-      if (data.loadPayrollContext) { const loaded = await data.loadPayrollContext(draft.supplier, draft.month); active(); payrollContext = loaded; progress.sheetId = loaded.sheetId; }
+      if (data.loadPayrollContext) { const loaded = await data.loadPayrollContext(draft.supplier, draft.month, options); active(); payrollContext = loaded; progress.sheetId = loaded.sheetId; }
       step = 'schedule';
     }, 'Consultando pagamentos da folha…')));
   }
@@ -133,21 +151,21 @@ export function createPayrollBreakdownView({ data, root, documentRef = globalThi
         : manifest?.length ? `Selecione novamente os mesmos arquivos para retomar: ${manifest.map(file=>file.name).join(', ')}` : 'Nenhum anexo selecionado.');
     };
     input.addEventListener('change', () => { fileSelections.set(key,Array.from(input.files || [])); fileMessages.delete(key); update(); });
-    const submit = button('📎 Submeter anexos','', () => work(async active => {
+    const submit = button('📎 Submeter anexos','', () => work(async (active, options) => {
       const files = fileSelections.get(key) || [];
       if (!files.length) throw new Error('Selecione os arquivos desta linha.');
       if (!paymentId) {
         const line = draft.lines.find(line=>`new:${line.date}:${line.rubric}`===key);
         if (!line || !lineTotal(line)) throw new Error('Preencha quantidade e valor desta linha antes de submeter os anexos.');
         if (!data.prepareFiles) throw new Error('O envio de anexos não está disponível.');
-        await data.prepareFiles(files); active(); fileMessages.set(key,'Anexos prontos: serão enviados ao confirmar a criação da provisão.');
+        await data.prepareFiles(files, options); active(); fileMessages.set(key,'Anexos prontos: serão enviados ao confirmar a criação da provisão.');
       } else {
         if (!data.submitAttachments) throw new Error('O envio de anexos não está disponível.');
         const context = { supplier: draft.supplier, month: draft.month, sheetId: payrollContext.sheetId, paymentId };
         const journal = historyAttachments[paymentId] ??= { context };
         if (JSON.stringify(journal.context) !== JSON.stringify(context)) throw new Error('O contexto dos anexos mudou. Retome a folha original.');
         const uploaded = await data.submitAttachments({ supplier:draft.supplier, sheetId:payrollContext.sheetId, paymentId, files, progress:journal,
-          onProgress: () => { active(); savePending(); } }); active();
+          onProgress: event => { active(); if (!event?.stage) savePending(); options.onProgress(event); } }); active();
         const status = { complete:'Provisão, lançamento e pedido: anexos enviados e conferidos.',
           'pending-settlement':'Anexos na provisão; lançamento e pedido receberão os arquivos quando a baixa for efetuada.',
           'missing-provision':'Anexos no lançamento e pedido. Não há provisão vinculada a este pagamento; nenhuma foi criada.' };
@@ -242,10 +260,12 @@ export function createPayrollBreakdownView({ data, root, documentRef = globalThi
     content.append(list, totalsPanel(summary).element);
     if (progress.signature) content.append(el('p', '', 'O envio já foi iniciado. Retome para concluir as provisões pendentes.'));
     else footer.append(button('Voltar', 'data-breakdown-edit', navigateBack));
-    footer.append(button(progress.signature ? 'Retomar envio' : 'Confirmar e criar provisões', 'data-breakdown-submit', () => work(async active => {
-      result = await data.post(withFiles(), progress, () => { active(); savePending(); }); active();
+    footer.append(button(progress.signature ? 'Retomar envio' : 'Confirmar e criar provisões', 'data-breakdown-submit', () => work(async (active, options) => {
+      const postOptions = options.stage(0, data.loadPayrollContext ? 2 : 1);
+      result = await data.post(withFiles(), progress, event => { active(); if (!event?.stage) savePending(); postOptions.onProgress(event); }); active();
+      postOptions.onProgress({ percent: 100 });
       if (data.loadPayrollContext) {
-        try { const loaded = await data.loadPayrollContext(draft.supplier, draft.month); active(); payrollContext = loaded; }
+        try { const loaded = await data.loadPayrollContext(draft.supplier, draft.month, options.stage(1, 2)); active(); payrollContext = loaded; }
         catch { active(); payrollContext = null; contextUnavailable = true; }
       }
       progress = { operationId: globalThis.crypto?.randomUUID?.() || `${Date.now()}-${Math.random().toString(36).slice(2)}` };
@@ -254,7 +274,12 @@ export function createPayrollBreakdownView({ data, root, documentRef = globalThi
   }
   function render(message) {
     content.replaceChildren(); footer.replaceChildren(); body.scrollTop = 0; back.disabled = home.disabled = mutating; footer.hidden = busy;
-    if (busy) { content.append(createLoadingIndicator(doc, message || 'Carregando…')); return; }
+    if (busy) {
+      const snapshot = loadingOperation?.snapshot;
+      const loader = createLoadingIndicator(doc, message || 'Carregando…', { progress: snapshot?.percent, progressLabel: snapshot?.progressLabel });
+      if (loadingOperation) loadingOperation.loader = loader;
+      content.append(loader); return;
+    }
     if (step === 'supplier') supplierStep();
     if (step === 'month') monthStep();
     if (step === 'schedule') scheduleStep();
@@ -265,8 +290,8 @@ export function createPayrollBreakdownView({ data, root, documentRef = globalThi
       if (contextUnavailable) {
         const notice = el('p', 'payroll-breakdown-error', 'Não foi possível atualizar os pagamentos. O total geral está indisponível até uma nova consulta.');
         notice.setAttribute('role', 'status'); content.append(notice);
-        footer.append(button('Atualizar pagamentos', 'data-breakdown-refresh', () => work(async active => {
-          const loaded = await data.loadPayrollContext(draft.supplier, draft.month); active(); payrollContext = loaded; contextUnavailable = false;
+        footer.append(button('Atualizar pagamentos', 'data-breakdown-refresh', () => work(async (active, options) => {
+          const loaded = await data.loadPayrollContext(draft.supplier, draft.month, options); active(); payrollContext = loaded; contextUnavailable = false;
         }, 'Consultando pagamentos da folha…')));
       }
       footer.append(button('Concluir', 'data-breakdown-done', close));
@@ -275,11 +300,11 @@ export function createPayrollBreakdownView({ data, root, documentRef = globalThi
   }
   function navigateBack() {
     if (!opened || destroyed || mutating || progress.signature && step !== 'done') return;
-    if (busy) { epoch++; busy = false; }
+    if (busy) { epoch++; loadingOperation?.abort.abort(); busy = false; }
     if (step === 'supplier' || step === 'done') { close(); return; }
     step = { month: 'supplier', schedule: 'month', review: 'schedule' }[step]; error.hidden = true; render();
   }
-  function close() { if (!opened || destroyed || mutating) return false; savePending(); opened = false; epoch++; busy = false; page.hidden = true; previousFocus?.focus?.(); return true; }
+  function close() { if (!opened || destroyed || mutating) return false; savePending(); opened = false; epoch++; loadingOperation?.abort.abort(); busy = false; page.hidden = true; previousFocus?.focus?.(); return true; }
   back.addEventListener('click', navigateBack); home.addEventListener('click', () => { if (close()) onHome(); });
   page.addEventListener('keydown', event => { if (event.key === 'Escape') { event.preventDefault(); navigateBack(); } });
   return Object.freeze({ element: page,
@@ -287,13 +312,13 @@ export function createPayrollBreakdownView({ data, root, documentRef = globalThi
       if (destroyed) return false; assertSession(); if (opened) return true; if (step === 'done') reset();
       previousFocus = doc.activeElement; opened = true; page.hidden = false; epoch++;
       if (progress.signature || !draft.supplier && restorePending() || Object.keys(historyAttachments).length) {
-        return work(async active => {
+        return work(async (active, options) => {
           payrollContext = null;
-          if (data.loadPayrollContext) { const loaded = await data.loadPayrollContext(draft.supplier, draft.month); active(); payrollContext = loaded; }
+          if (data.loadPayrollContext) { const loaded = await data.loadPayrollContext(draft.supplier, draft.month, options); active(); payrollContext = loaded; }
         }, 'Consultando pagamentos da folha…');
       }
-      return work(async active => { const loaded = await data.loadSuppliers(); active(); suppliers = loaded; }, 'Carregando fornecedores ativos…');
+      return work(async (active, options) => { const loaded = await data.loadSuppliers(options); active(); suppliers = loaded; }, 'Carregando fornecedores ativos…');
     }, close,
-    destroy() { destroyed = true; opened = false; epoch++; page.remove(); },
+    destroy() { destroyed = true; opened = false; epoch++; loadingOperation?.abort.abort(); page.remove(); },
   });
 }

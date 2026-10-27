@@ -1,5 +1,6 @@
 import { loadingIndicatorMarkup } from "../ui/loading-indicator.js";
 import { escapeHtml } from "../ui/escape-html.js";
+import { beginLoadingTask } from "../ui/loading-task.js";
 
 const PREPARED_SHORTCUT_URL = "https://163-176-171-217.sslip.io/api/install-shortcut?v=4663F165";
 
@@ -46,7 +47,7 @@ export function renderInstallMarkup(state = {}) {
     <a class="primary-button setup-link" data-tool-action="install-shortcut" href="${PREPARED_SHORTCUT_URL}">Instalar compartilhamento ENERGÉTICO</a>
     <button class="danger-button" type="button" data-tool-action="revoke">Revogar credencial</button>
   </section>` : !state.ready ? `<section class="setup-section"><h3>Compartilhamento</h3><p>Entre com a Microsoft para consultar sua configuração.</p></section>`
-    : state.checking ? `<section class="setup-section"><h3>Compartilhamento</h3>${loadingIndicatorMarkup("Consultando sua credencial…", { compact: true })}</section>`
+    : state.checking ? `<section class="setup-section"><h3>Compartilhamento</h3>${loadingIndicatorMarkup("Consultando sua credencial…", { compact: true, progress: state.checkingProgress ?? 0, progressLabel: "Progresso por etapas concluídas" })}</section>`
     : state.credentialStatus === "active" && !state.reconfigure ? `<section class="setup-section">
     <h3>Credencial de compartilhamento ativa</h3>
     <p>Você já criou uma credencial. Se o Atalho já está configurado no iPhone, não é necessário configurá-lo novamente.</p>
@@ -88,11 +89,19 @@ export function createInstallView(root, {
     notice: "",
     credentialStatus: null,
     checking: false,
+    checkingProgress: 0,
     reconfigure: false,
   };
   let generation = 0;
   let destroyed = false;
   let lastMarkup;
+  let statusAbort = null, statusProgress = null;
+
+  function stopStatus() {
+    statusProgress?.stop();
+    statusAbort?.abort();
+    statusProgress = statusAbort = null;
+  }
 
   function render(next = {}) {
     state = { ...state, ...next };
@@ -102,16 +111,29 @@ export function createInstallView(root, {
   }
 
   async function refreshStatus() {
-    if (destroyed || !state.open || !state.standalone || !state.ready || state.busy || state.token) return;
+    if (destroyed || !state.open || !state.standalone || !state.ready || state.busy || state.checking || state.token) return;
+    stopStatus();
     const request = ++generation;
-    render({ checking: true, credentialStatus: null, reconfigure: false, error: "" });
+    const abort = new AbortController();
+    statusAbort = abort;
+    render({ checking: true, checkingProgress: 0, credentialStatus: null, reconfigure: false, error: "" });
+    const progress = beginLoadingTask(value => render({ checkingProgress: value.percent }), {
+      signal: abort.signal, isCurrent: () => request === generation && !destroyed && state.open && state.ready,
+    });
+    statusProgress = progress;
+    progress.prepared();
     try {
-      const result = await client.status();
+      const result = await client.status({ signal: abort.signal, onProgress: progress.report });
       if (request !== generation || destroyed) return;
       if (!["active", "inactive"].includes(result?.status)) throw new Error("A VM não devolveu uma confirmação válida.");
+      progress.acquired();
       render({ checking: false, credentialStatus: result.status });
+      progress.complete();
     } catch (error) {
       if (request === generation && !destroyed) render({ checking: false, error: error?.message || "Não foi possível consultar sua credencial." });
+    } finally {
+      progress.stop();
+      if (statusProgress === progress) statusProgress = statusAbort = null;
     }
   }
 
@@ -120,7 +142,9 @@ export function createInstallView(root, {
     if (!target) return;
     const action = target.dataset.toolAction;
     if (action === "close") {
-      return render({ open: false, reconfigure: false, error: "", notice: "" });
+      if (state.checking) generation += 1;
+      stopStatus();
+      return render({ open: false, checking: false, reconfigure: false, error: "", notice: "" });
     }
     if (action === "refresh-status") return refreshStatus();
     if (action === "reconfigure" && state.credentialStatus === "active" && !state.busy) return render({ reconfigure: true });
@@ -180,12 +204,13 @@ export function createInstallView(root, {
       if (destroyed) return;
       if (!ready) {
         generation += 1;
+        stopStatus();
         render({ ready: false, open: false, busy: false, checking: false, credentialStatus: null, reconfigure: false, token: "", uploadUrl: "", error: "", notice: "" });
       } else {
         render({ ready: true });
         if (state.open) void refreshStatus();
       }
     },
-    destroy() { destroyed = true; generation += 1; root.removeEventListener("click", click); root.innerHTML = ""; state.token = ""; },
+    destroy() { destroyed = true; generation += 1; stopStatus(); root.removeEventListener("click", click); root.innerHTML = ""; state.token = ""; },
   });
 }

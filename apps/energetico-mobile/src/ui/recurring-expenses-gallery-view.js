@@ -616,17 +616,23 @@ export function createRecurringExpensesGallery({
     attachmentCounts.reset();
     const requestSession = session;
     controller?.abort();
-    controller = new AbortController();
+    const loadController = controller = new AbortController();
     listLoading = true;
     setNotice("");
     listStatus.textContent = '';
     updateBusy();
+    const task = loadingScreen.beginTask({ signal: loadController.signal,
+      isCurrent: () => opened && !destroyed && root.isConnected && requestSession === session && controller === loadController });
+    task.prepared();
     try {
-      const snapshot = await data.loadSnapshot({ signal: controller.signal, refresh });
+      const snapshot = await data.loadSnapshot({ signal: loadController.signal, refresh, onProgress: task.report });
       if (!opened || destroyed || !root.isConnected || requestSession !== session) return;
-      rows = Array.isArray(snapshot?.rows) ? snapshot.rows : [];
+      if (!Array.isArray(snapshot?.rows)) throw new Error('A consulta não retornou uma lista de despesas recorrentes válida.');
+      task.acquired();
+      rows = snapshot.rows;
       populateFilters();
       applyFilters();
+      task.complete();
     } catch (error) {
       if (!opened || destroyed || !root.isConnected || requestSession !== session) return;
       setNotice(safeFailure(error, "Não foi possível carregar as despesas recorrentes"), true);
@@ -635,6 +641,7 @@ export function createRecurringExpensesGallery({
       pageLabel.textContent = "Página 0 de 0";
       return false;
     } finally {
+      task.stop();
       if (opened && !destroyed && root.isConnected && requestSession === session) {
         listLoading = false;
         updateBusy();

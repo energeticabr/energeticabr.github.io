@@ -26,6 +26,21 @@ function harness(options = {}) {
   return { dom, doc: documentRef, data, view, click, input, get posts() { return posts; }, get posted() { return posted; }, fail: () => { fail = true; }, recover: () => { fail = false; } };
 }
 
+test('breakdown posting reserves acquisition progress for its refresh and accepts the receipt last', async t => {
+  const h = harness(); t.after(() => { h.view.destroy(); h.dom.window.close(); });
+  const context = { sheetId: '19', paid: {}, paidTotal: 0, payments: [] }; let refresh, finish, calls = 0;
+  h.data.loadPayrollContext = (_supplier, _month, options) => ++calls === 1 ? Promise.resolve(context)
+    : new Promise(resolve => { refresh = options; finish = () => resolve(context); });
+  await h.view.open(); await h.click('[data-breakdown-supplier="7"]'); await h.click('[data-breakdown-next]');
+  h.input('[data-breakdown-value="2026-10-02:salary"]', '100'); await h.click('[data-breakdown-next]');
+  h.doc.querySelector('[data-breakdown-submit]').click(); await new Promise(resolve => setImmediate(resolve));
+  const loader = h.doc.querySelector('.app-loading'), percent = () => Number(loader.querySelector('[role=progressbar]').getAttribute('aria-valuenow'));
+  assert.equal(percent(), 50); assert.equal(h.doc.querySelector('[data-breakdown-done]'), null);
+  refresh.onProgress({ percent: 50 }); assert.equal(percent(), 58);
+  finish(); await new Promise(resolve => setImmediate(resolve));
+  assert.equal(percent(), 100); assert.ok(h.doc.querySelector('[data-breakdown-done]')); assert.equal(h.posts, 1);
+});
+
 test('taxes appear in monthly totals but are not offered as editable weekly obligations',async t=>{
   const h=harness();t.after(()=>{h.view.destroy();h.dom.window.close();});
   h.data.loadPayrollContext=async()=>({sheetId:'19',paid:{inss:120,fgts:80},paidTotal:200});

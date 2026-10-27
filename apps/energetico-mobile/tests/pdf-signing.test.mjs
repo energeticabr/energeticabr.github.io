@@ -11,6 +11,37 @@ const PNG_1X1 = Buffer.from(
   "base64",
 );
 
+test('measured signing progress exposes real reads embeddings flush and serialization', async () => {
+  const source = await PDFDocument.create(); source.addPage([300, 400]);
+  const progress = [];
+  const result = await signPdfAttachment({
+    documentBlob: new Blob([await source.save()]), signatureBlob: new Blob([PNG_1X1]),
+    point: { page: 1, x: 0.5, y: 0.2 },
+    onProgress: value => { progress.push(value); if (value.phase === 'signature') throw new Error('observer failed'); },
+  });
+  assert.ok(progress.some(value => value.phase === 'read' && value.percent > 0));
+  assert.ok(progress.some(value => value.phase === 'parsed'));
+  assert.ok(progress.some(value => value.phase === 'signature'));
+  assert.ok(progress.some(value => value.phase === 'flushed'));
+  assert.equal(progress.at(-1).phase, 'ready');
+  assert.equal(progress.at(-1).percent, 100);
+  assert.equal(progress.filter(value => value.percent === 100).length, 1);
+  assert.equal((await PDFDocument.load(await result.arrayBuffer())).getPageCount(), 1);
+});
+
+test('measured signing aborts after an awaited read without completion or parsing', async () => {
+  const source = await PDFDocument.create(); source.addPage([300, 400]);
+  const controller = new AbortController(), progress = [];
+  class InterruptedBlob extends Blob {
+    async arrayBuffer() { const bytes = await super.arrayBuffer(); controller.abort(); return bytes; }
+  }
+  await assert.rejects(signPdfAttachment({
+    documentBlob: new InterruptedBlob([await source.save()]), signatureBlob: new Blob([PNG_1X1]),
+    point: { page: 1, x: 0.5, y: 0.2 }, signal: controller.signal, onProgress: value => progress.push(value),
+  }), { name: 'AbortError' });
+  assert.equal(progress.some(value => value.phase === 'parsed' || value.percent === 100), false);
+});
+
 test("PDF com objetos de geração não zero usa tabela xref compatível com auditoria estrita", async () => {
   const source = await PDFDocument.create();
   source.addPage([300, 400]);

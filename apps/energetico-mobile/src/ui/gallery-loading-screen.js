@@ -1,4 +1,5 @@
 import { createLoadingIndicator } from './loading-indicator.js';
+import { beginLoadingTask } from './loading-task.js';
 
 // Default loading covers the gallery body; an optional viewport confines it to
 // a result region without masking the toolbar or rebuilding native controls.
@@ -7,9 +8,10 @@ export function createGalleryLoadingScreen({ root, header, label, viewport }) {
   const element = doc.createElement('div');
   element.className = `gallery-loading-screen${viewport ? ' gallery-loading-screen--scoped' : ''}`;
   element.hidden = true;
-  element.append(createLoadingIndicator(doc, label));
+  const indicator = createLoadingIndicator(doc, label);
+  element.append(indicator);
   root.append(element);
-  let loading = false, destroyed = false;
+  let loading = false, destroyed = false, task = null;
   const saved = new Map();
   const position = () => {
     if (!loading || destroyed) return;
@@ -46,6 +48,7 @@ export function createGalleryLoadingScreen({ root, header, label, viewport }) {
       }
       position();
     } else {
+      task?.stop();
       for (const [node, previous] of saved) {
         node.inert = previous.inert;
         if (previous.ariaHidden == null) node.removeAttribute('aria-hidden');
@@ -53,6 +56,12 @@ export function createGalleryLoadingScreen({ root, header, label, viewport }) {
       }
       saved.clear();
     }
+  }
+  function beginTask(options = {}) {
+    task?.stop();
+    task = beginLoadingTask(indicator, { ...options,
+      isCurrent: () => loading && !destroyed && (!options.isCurrent || options.isCurrent()) });
+    return task;
   }
   function destroy() {
     if (destroyed) return;
@@ -63,5 +72,5 @@ export function createGalleryLoadingScreen({ root, header, label, viewport }) {
     viewport?.removeEventListener('scroll', position);
     element.remove();
   }
-  return Object.freeze({ element, sync, destroy });
+  return Object.freeze({ element, sync, beginTask, destroy });
 }

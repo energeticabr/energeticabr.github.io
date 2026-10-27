@@ -1,4 +1,5 @@
 import { createLoadingIndicator } from './loading-indicator.js';
+import { beginLoadingTask } from './loading-task.js';
 import { postingCompletionMarkup } from './posting-completion.js';
 
 const key = value => String(value || '').replace(/_x([0-9a-f]{4})_/gi, (_, hex) => String.fromCodePoint(parseInt(hex, 16)))
@@ -16,6 +17,7 @@ export function createTaskCompletionDialog({ document: doc, host, data, today, o
   const active = current => !disposed && current === state;
   function close() {
     const previous = state; state = null;
+    previous?.abort.abort();
     clearTimeout(previous?.receiptTimer);
     previous?.finishReceipt?.();
     previous?.overlay.remove(); onBlocked(false);
@@ -73,7 +75,7 @@ export function createTaskCompletionDialog({ document: doc, host, data, today, o
     buttons.append(cancel);
     dialog.append(el('h2', 'gallery-record-dialog-title', `Concluir tarefa #${row.id}`), message, body);
     overlay.append(dialog); host.append(overlay);
-    const current = { overlay, dialog, trigger, error: message, busy: false, persisted: false };
+    const current = { overlay, dialog, trigger, error: message, busy: false, persisted: false, abort: new AbortController() };
     state = current; onBlocked(true); dialog.focus({ preventScroll: true });
     cancel.addEventListener('click', () => { if (active(current) && !current.busy) close(); });
     overlay.addEventListener('click', event => {
@@ -92,9 +94,12 @@ export function createTaskCompletionDialog({ document: doc, host, data, today, o
         else if (!event.shiftKey && (doc.activeElement === dialog || doc.activeElement === last || !dialog.contains(doc.activeElement))) { event.preventDefault(); first.focus(); }
       }
     });
-    body.append(createLoadingIndicator(doc, 'Carregando conclusão…'));
+    const loader = createLoadingIndicator(doc, 'Carregando conclusão…'); body.append(loader);
+    const task = beginLoadingTask(loader, { signal: current.abort.signal, isCurrent: () => active(current) });
+    task.prepared();
     try {
-      const context = await data.loadEditor(row.id, { refresh: true, includeAttachments: false });
+      const context = await data.loadEditor(row.id, { refresh: true, includeAttachments: false,
+        signal: current.abort.signal, onProgress: task.report });
       if (!active(current)) return;
       const dateColumn = editableColumn(context, ['DATA CONCLUSÃO', 'field_8'], ['date', 'datetime-local']);
       const completedColumn = editableColumn(context, ['CONCLUÍDO', 'field_12'], ['text', 'textarea', 'select']);
@@ -102,6 +107,7 @@ export function createTaskCompletionDialog({ document: doc, host, data, today, o
         || String(context.item?.id) !== String(row.id) || !dateColumn || !completedColumn) {
         throw new Error('Os metadados dos campos Data conclusão e Concluído não estão disponíveis para edição.');
       }
+      task.acquired();
       const form = el('form', 'tg-completion-form'); form.setAttribute('data-task-completion-form', '');
       const date = el('input', 'og-input'); date.type = 'date'; date.name = 'completionDate'; date.value = today(); date.required = true;
       const completed = el('input', 'og-input'); completed.type = 'text'; completed.name = 'completed'; completed.value = 'CONCLUÍDA'; completed.readOnly = true;
@@ -165,7 +171,8 @@ export function createTaskCompletionDialog({ document: doc, host, data, today, o
           }
         }
       });
-    } catch (failure) { if (active(current)) { body.replaceChildren(); dialog.append(buttons); error(current, failure); cancel.focus(); } }
+      task.complete();
+    } catch (failure) { task.stop(); if (active(current)) { body.replaceChildren(); dialog.append(buttons); error(current, failure); cancel.focus(); } }
   }
   return Object.freeze({ open, close, destroy() { disposed = true; close(); } });
 }

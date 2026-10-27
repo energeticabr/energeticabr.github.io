@@ -1,5 +1,4 @@
-import { createOrdersGalleryData, normalizeGalleryItem } from "./orders-gallery-data.js";
-import { loadProvisionDescriptionGroup } from './provision-description-detail-data.js';
+import { createOrdersGalleryData, normalizeGalleryItem, loadDescriptionGroupWithProgress } from "./orders-gallery-data.js";
 import { SHAREPOINT_SITES } from "../../../../portal/config.js";
 import { createGraphClient } from "../../../../portal/data/graph-client.js";
 import { createSharePointRepository } from "../../../../portal/data/sharepoint-repository.js";
@@ -8,6 +7,7 @@ import { createRegistrationGalleryFilterData } from "./registration-gallery-filt
 import { FINANCIAL_GALLERY_MODELS } from './financial-gallery-models.js';
 import { createFinancialMovementEditor } from './financial-movement-editor.js';
 import { createProvisionDescriptionEditor, loadProvisionDescriptionStatusOptions } from "../../../../portal/forms/provision-description-edit.js";
+import { createAcquisitionProgress } from './acquisition-progress.js';
 
 const AUDIT_FIELDS = ["ID", "Criado por", "Criado", "Modificado", "Modificado por"];
 const AUDIT_ALIASES = { Criado: ["Created"], Modificado: ["Modified"], "Criado por": ["Author"], "Modificado por": ["Editor"] };
@@ -243,14 +243,19 @@ function galleryRepository(options) {
     });
   }
   const columnCache = new Map();
+  const columnsFor = (site, list, options = {}) => {
+    if (!columnCache.has(list)) columnCache.set(list, typeof repository.getColumns === 'function'
+      ? Promise.resolve(repository.getColumns(site, list, options.signal ? { signal: options.signal } : {}))
+        .catch(error => { columnCache.delete(list); throw error; }) : Promise.resolve([]));
+    return columnCache.get(list);
+  };
   // A frozen repository cannot be the Proxy target when returning adapters
   // for its methods. Forward through an empty facade to preserve invariants.
   return new Proxy(Object.create(null), {
     get(_target, property) {
+      if (property === 'getSnapshotColumns') return columnsFor;
       if (property === "getItemsPage") return async (site, list, ...args) => {
-        if (!columnCache.has(list)) columnCache.set(list, typeof repository.getColumns === "function"
-          ? Promise.resolve(repository.getColumns(site, list, args[1]?.signal ? { signal: args[1].signal } : {})).catch(error => { columnCache.delete(list); throw error; }) : Promise.resolve([]));
-        const [page, columns] = await Promise.all([repository.getItemsPage(site, list, ...args), columnCache.get(list)]);
+        const [page, columns] = await Promise.all([repository.getItemsPage(site, list, ...args), columnsFor(site, list, args[1])]);
         if (page?.hasMore === true && (typeof page.nextLink !== "string" || !page.nextLink)) throw new Error("A paginação da galeria não retornou o próximo cursor.");
         if (!Array.isArray(page?.items)) return page;
         const items = (Array.isArray(page?.items) ? page.items : []).map(item => {
@@ -277,7 +282,7 @@ export function createRegistrationGalleryData({ kind, ...options } = {}) {
   const repository = model.nativeCard ? galleryRepository(options) : options.repository;
   const data = createOrdersGalleryData({
     ...options,
-    ...(model.nativeCard ? { repository, preserveSourceOrder: model.sourceSort == null } : {}),
+    ...(model.nativeCard ? { repository, snapshotColumns: true, preserveSourceOrder: model.sourceSort == null } : {}),
     listAliases: model.aliases,
     listName: model.listName,
     listMissingCode: `registration_${kind}_list_missing`,
@@ -296,7 +301,9 @@ export function createRegistrationGalleryData({ kind, ...options } = {}) {
       const editorRepository = new Proxy(Object.create(null), {
         get(_target, property) {
           if (property === "getColumns") return async (...args) => {
+            const progress = createAcquisitionProgress(args[2], ['columns', 'catalogs'], options.assertSession);
             const columns = await repository.getColumns(...args);
+            progress.step('columns');
             // The provision parent's Title is an idempotency token; display
             // labels must not grant fields outside its proven internal names.
             const allowed = (Array.isArray(columns) ? columns : []).filter(column => model.metadataEditorFields.some(field =>
@@ -304,29 +311,40 @@ export function createRegistrationGalleryData({ kind, ...options } = {}) {
                 .some(name => registrationFieldKey(name) === registrationFieldKey(field))));
             if (kind === 'investment' && allowed.some(column => registrationFieldKey(column.name) === 'instituicao')) {
               const institutions = await editorFilters.loadFilterOptions('INSTITUICAO', { refresh: true, signal: args[2]?.signal });
+              progress.step('catalogs');
               const choices = institutions.map(option => option.value);
               return allowed.map(column => registrationFieldKey(column.name) === 'instituicao'
                 ? { ...column, choice: { choices, allowTextEntry: false, allowMultipleValues: false } } : column);
             }
-            if (['institution', 'investment_type', 'profitability'].includes(kind)) return allowed.map(column => {
-              const field = registrationFieldKey(column.name);
-              const choices = field === 'status' ? ['ATIVO', 'INATIVO']
-                : kind === 'investment_type' && field === 'tipo' ? ['RENDA FIXA', 'RENDA VARIÁVEL'] : null;
-              return choices ? { ...column, choice: { choices, allowTextEntry: false, allowMultipleValues: false } } : column;
-            });
-            if (kind !== "provisionDescription") return allowed;
+            if (['institution', 'investment_type', 'profitability'].includes(kind)) {
+              progress.step('catalogs');
+              return allowed.map(column => {
+                const field = registrationFieldKey(column.name);
+                const choices = field === 'status' ? ['ATIVO', 'INATIVO']
+                  : kind === 'investment_type' && field === 'tipo' ? ['RENDA FIXA', 'RENDA VARIÁVEL'] : null;
+                return choices ? { ...column, choice: { choices, allowTextEntry: false, allowMultipleValues: false } } : column;
+              });
+            }
+            if (kind !== "provisionDescription") { progress.step('catalogs'); return allowed; }
             const catalogFields = ['filial', 'fornecedor', 'formapgto'];
             const editable = allowed.filter(column => !column.readOnly && !column.hidden);
             const fields = catalogFields.filter(field => editable.some(column => registrationFieldKey(column.name) === field));
-            const catalogs = await Promise.all(fields.map(async field => [field, await editorFilters.loadFilterOptions(field, {
-              refresh: true, signal: args[2]?.signal,
-            })]));
+            const hasStatus = editable.some(column => registrationFieldKey(column.name) === 'status');
+            const totalCatalogs = fields.length + Number(hasStatus);
+            let completedCatalogs = 0;
+            const catalogs = await Promise.all(fields.map(async field => {
+              const entries = await editorFilters.loadFilterOptions(field, { refresh: true, signal: args[2]?.signal });
+              progress.units('catalogs', ++completedCatalogs, totalCatalogs, 'catálogos');
+              return [field, entries];
+            }));
             const optionsByField = new Map(catalogs.map(([field, entries]) => [field, entries.map(entry => entry.value)]));
-            if (editable.some(column => registrationFieldKey(column.name) === 'status')) {
+            if (hasStatus) {
               optionsByField.set('status', await loadProvisionDescriptionStatusOptions({
                 repository, siteKey: options.siteKey || 'personal', signal: args[2]?.signal,
               }));
+              progress.units('catalogs', ++completedCatalogs, totalCatalogs, 'catálogos');
             }
+            progress.step('catalogs');
             return allowed.map(column => {
               const choices = optionsByField.get(registrationFieldKey(column.name));
               return choices ? { ...column, choice: {
@@ -355,7 +373,7 @@ export function createRegistrationGalleryData({ kind, ...options } = {}) {
   }
   return Object.freeze({ ...data,
     ...filters,
-    ...(descriptionEditor ? { loadDescriptionGroup: (id, loadOptions) => loadProvisionDescriptionGroup({
+    ...(descriptionEditor ? { loadDescriptionGroup: (id, loadOptions) => loadDescriptionGroupWithProgress({
       repository, siteKey: options.siteKey || 'personal', normalizeItem: normalizeGalleryItem,
       assertSession: options.assertSession || (() => {}),
     }, id, loadOptions) } : {}),

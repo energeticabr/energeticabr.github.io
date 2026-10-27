@@ -1,3 +1,5 @@
+import { createAcquisitionProgress } from './acquisition-progress.js';
+
 const sameSource = (a,b) => a?.id === b?.id && a.fileName === b.fileName && a.size === b.size
   && a.mimeType === b.mimeType && a.source === b.source && a.status === b.status;
 export const sameMealVoucherTray = (a,b) => Array.isArray(a) && Array.isArray(b) && a.length === b.length && a.every((item,index)=>sameSource(item,b[index]));
@@ -20,31 +22,43 @@ export function createMealVoucherTray({ store, assertSession, pickFiles, capture
     if (selected.some(item=>item.status === 'failed')) throw new Error('Há anexo com falha na bandeja. Tente enviá-lo novamente ou remova-o antes de confirmar.');
     if (selected.some(item=>item.status !== 'ready')) throw new Error('Aguarde o envio dos anexos da bandeja antes de confirmar.');
   }
-  async function read(selected, expected = []) {
+  async function read(selected, expected = [], options = {}) {
     assertSession(); verify(selected); const files = [];
-    for (const reference of selected) {
-      const blob = await load(reference.item); assertSession(); verify(selected);
+    const progress = createAcquisitionProgress(options, [...selected.map((_, index) => 'file:' + index), 'verified'], assertSession);
+    for (const [index, reference] of selected.entries()) {
+      progress.check();
+      const key = 'file:' + index;
+      const blob = await load(reference.item, { signal: options.signal, onProgress: value => {
+        if (Number.isFinite(value?.loaded) && Number.isFinite(value?.total) && value.total > 0) {
+          progress.units(key, value.loaded, value.total, 'bytes');
+        } else if (typeof value?.percent === 'number') progress.units(key, value.percent, 100, 'etapas');
+      } }); assertSession(); verify(selected);
       const normalize = value=>String(value || '').split(';',1)[0].trim().toLowerCase();
       const specific = value=>!['','application/octet-stream','binary/octet-stream'].includes(value);
       const downloaded = normalize(blob.type), declared = normalize(reference.mimeType);
       const old = expected.find(file=>file.name === reference.fileName && file.size === blob.size);
       files.push(new File([blob],reference.fileName,{type:specific(downloaded) ? downloaded : specific(declared) ? declared : '',
         lastModified:old?.lastModified ?? reference.item.file?.lastModified ?? 0}));
+      progress.step(key);
     }
-    verify(selected); return files;
+    verify(selected); progress.step('verified'); return files;
   }
-  async function consume(selected) {
+  async function consume(selected, options = {}) {
     assertSession(); const failures = [];
-    for (const reference of selected) {
+    const progress = createAcquisitionProgress(options, [...selected.map((_, index) => 'file:' + index), 'confirmed'], assertSession);
+    for (const [index, reference] of selected.entries()) {
+      progress.check();
+      const key = 'file:' + index;
       const current = snapshot().find(item=>item.id === reference.id);
       // New or replaced files belong to the next batch, even with the same name.
-      if (!current || !sameSource(current,reference)) continue;
-      if (reference.kind === 'pending') { store.discardFile(reference.fileId); continue; }
+      if (!current || !sameSource(current,reference)) { progress.step(key); continue; }
+      if (reference.kind === 'pending') { store.discardFile(reference.fileId); progress.step(key); continue; }
       store.removeAttachment(reference.fileId,{dismissFromSnapshots:true});
-      try { await deleteAttachment(reference.fileId); assertSession(); }
+      try { await deleteAttachment(reference.fileId, { progressSignal: options.signal }); assertSession(); progress.step(key); }
       catch (cause) { assertSession(); failures.push(reference.fileName); }
     }
     if (failures.length) throw new Error(`Os lançamentos e arquivos foram gravados. Não foi possível limpar a cópia temporária de: ${failures.join(', ')}. Não repita o lançamento.`);
+    progress.step('confirmed');
   }
   async function action(callback) {
     assertSession(); const result = await callback(); assertSession();

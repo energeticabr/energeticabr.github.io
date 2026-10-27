@@ -2430,11 +2430,11 @@ function rhidAttendanceReportMarkup({ open = false, date = "", messageId = "", b
   </section>`;
 }
 
-function rhidAttendanceReportLoadingMarkup(date = "") {
+function rhidAttendanceReportLoadingMarkup(date = "", progress) {
   return `<section class="chat-confirmation chat-rhid-report-page chat-rhid-report-loading" role="status" aria-live="polite">
     <h2>Relatório RHID</h2>
     <p>Data selecionada: <strong>${escapeHtml(isValidRhidReportDate(date) ? `${date.slice(8, 10)}/${date.slice(5, 7)}/${date.slice(0, 4)}` : date)}</strong></p>
-    ${loadingIndicatorMarkup("Consultando relatório RHID…")}
+    ${loadingIndicatorMarkup("Consultando relatório RHID…", { progress: progress?.percent, progressLabel: progress?.progressLabel })}
   </section>`;
 }
 
@@ -2762,8 +2762,11 @@ export function renderChatMarkup(state = {}, { showSettings = false, allowDemo =
   const pendingFiles = (Array.isArray(state.pendingFiles) ? state.pendingFiles : [])
     .filter(item => item?.status !== "failed");
   const attachments = Array.isArray(state.attachments) ? state.attachments : [];
-  const loadingProgress = state.activeText ? state.diaryAttachmentProgress : state.attachmentUploadProgress;
+  const loadingProgress = (rhidAttendanceReport?.busy ? rhidAttendanceReport.progress : null)
+    || (state.activeText ? state.diaryAttachmentProgress : state.attachmentUploadProgress) || state.operationProgress;
   const busy = Boolean(state.activeText || state.attachmentUploadProgress || state.resuming || state.recoveryBlocked || state.recoveryUncertain || state.responseTransitionPending)
+    || pendingFiles.some(item => item.status === "sending") || rhidAttendanceReport?.busy === true || state.pendingProvisionOpening === true;
+  const loading = Boolean(state.activeText || state.attachmentUploadProgress || state.resuming || state.responseTransitionPending || state.operationProgress)
     || pendingFiles.some(item => item.status === "sending") || rhidAttendanceReport?.busy === true || state.pendingProvisionOpening === true;
   const pendingAttachment = pendingFiles.length > 0;
   const firstName = String(state.account?.name || "Você").split(/\s+/)[0];
@@ -2790,11 +2793,12 @@ export function renderChatMarkup(state = {}, { showSettings = false, allowDemo =
       ${state.recoveryWarning ? `<p class="error-banner" role="alert">${escapeHtml(state.recoveryWarning)}</p>` : ""}
       ${rhidAttendanceReport?.open
         ? rhidAttendanceReport.busy
-          ? rhidAttendanceReportLoadingMarkup(rhidAttendanceReport.date)
+          ? rhidAttendanceReportLoadingMarkup(rhidAttendanceReport.date, rhidAttendanceReport.progress)
           : rhidAttendanceReportMarkup(rhidAttendanceReport)
         : transcriptMessages.length ? transcriptMessages.map((message, index) => renderMessage(message, state.account, busy, { finalSignedDocument: index === finalSignedIndex && isSignedDocumentMessage(message), draft: state.draft, databaseFilterMessage: databaseFilter?.message, activeFlow: state.activeFlow, attendanceSelectedIds, attendanceExpandedIds: message === latestPoll ? attendanceExpandedIds : [], attendanceIrregularityChecking: message === latestPoll && attendanceIrregularityChecking, currentPoll: message === latestPoll, attendanceHoursCurrent: message === latestAttendanceMessage, rhidRefresh, launchPayrollSelectedIds, launchPayrollCurrent: message === latestPoll })).join("") : state.recoveryPreview ? "" : `<article class="chat-message chat-message--assistant">${assistantAvatar()}<div class="chat-bubble"><strong>Energético</strong><p>Olá, ${escapeHtml(firstName)}. O que vamos fazer?</p></div></article>`}
     </div>
-    ${busy ? `<div class="chat-progress${rhidAttendanceReport?.busy ? " sr-only" : ""}">${loadingIndicatorMarkup(rhidAttendanceReport?.busy ? "Consultando relatório RHID…" : state.pendingProvisionOpening ? "Consultando provisões de pagamento…" : state.recoveryUncertain ? "Aguardando sincronização com a VM…" : state.responseTransitionPending ? "Atualizando a próxima pergunta…" : state.resuming ? "Retomando conversa…" : state.activeText ? "Processando sua resposta…" : state.recoveryBlocked ? "Aguardando conexão com a VM…" : "Enviando anexo…", { compact: true, progress: loadingProgress?.percent, progressLabel: loadingProgress ? (state.activeText ? 'Finalização dos anexos' : 'Envio do anexo') : 'Progresso do carregamento' })}</div>` : ""}
+    ${!loading && (state.recoveryBlocked || state.recoveryUncertain) ? `<p class="chat-hint" role="status">Aguardando sincronização com a VM. Toque em Retomar conversa para continuar.</p>` : ""}
+    ${loading ? `<div class="chat-progress${rhidAttendanceReport?.busy ? " sr-only" : ""}">${loadingIndicatorMarkup(loadingProgress?.label || (rhidAttendanceReport?.busy ? "Consultando relatório RHID…" : state.pendingProvisionOpening ? "Consultando provisões de pagamento…" : state.recoveryUncertain ? "Aguardando sincronização com a VM…" : state.responseTransitionPending ? "Atualizando a próxima pergunta…" : state.resuming ? "Retomando conversa…" : state.activeText ? "Processando sua resposta…" : state.recoveryBlocked ? "Aguardando conexão com a VM…" : "Enviando anexo…"), { compact: true, progress: loadingProgress?.percent, progressLabel: loadingProgress?.progressLabel || (loadingProgress ? (state.activeText ? 'Finalização dos anexos' : 'Envio do anexo') : 'Progresso do carregamento') })}</div>` : ""}
     ${!generatedSignatureChoice && (attachments.length || pendingFiles.length || state.activeFlow?.launches || state.activeFlow?.measurementLines || provisionLines) ? `<div class="chat-file-tray">${renderAttachments(attachments, busy, Boolean(state.activeFlow), state.activeFlow?.allowBulkAttachmentDelete === true, state.activeFlow?.id === "pending_document_attachment")}${pendingFiles.length ? `<ul class="pending-files" aria-label="Anexos pendentes">${pendingFiles.map(renderPendingFile).join("")}</ul>` : ""}${renderLaunches(state.activeFlow?.launches, busy)}${renderMeasurementLines(state.activeFlow?.measurementLines, busy)}${renderProvisionLines(provisionLines)}</div>` : ""}
     ${signaturePrompt ? signaturePadTriggerMarkup(busy) : ""}
     <form class="chat-composer" data-chat-form>
@@ -2903,6 +2907,7 @@ export function createChatView(root, { onOpenSettings, onDemoAccess, onSignOut, 
   let rhidAttendanceReportDate = "";
   let rhidAttendanceReportMessageId = "";
   let rhidAttendanceReportBusy = false;
+  let rhidAttendanceReportProgress = null;
   let rhidAttendanceReportDirectToday = false;
   let rhidAttendanceReportError = "";
   let rhidAttendanceMonthError = "";
@@ -4006,7 +4011,7 @@ export function createChatView(root, { onOpenSettings, onDemoAccess, onSignOut, 
       && lastState.account?.homeAccountId === state.account?.homeAccountId
        && (!state.recoveryReference || Boolean(lastState.draft) === Boolean(state.draft))
        && [
-         "messages", "attachments", "pendingFiles", "activeText", "activeFlow", "resuming", "diaryAttachmentProgress", "attachmentUploadProgress",
+         "messages", "attachments", "pendingFiles", "activeText", "activeFlow", "resuming", "diaryAttachmentProgress", "attachmentUploadProgress", "operationProgress",
          "responseTransitionPending", "error", "recoveryPreview", "recoveryReference",
          "recoveryReferenceCount", "recoveryWarning", "recoveryBlocked", "recoveryUncertain", "signaturePlacement",
          "pendingProvisions", "pendingProvisionOpening", "pendingConstructionDiaries", "pendingConstructionDiaryFillingId", "pendingConstructionDiaryError", "pendingNotes", "pendingNoteLaunchOrderId", "pendingProvisionReminderOpen",
@@ -4651,6 +4656,7 @@ export function createChatView(root, { onOpenSettings, onDemoAccess, onSignOut, 
       rhidAttendanceMonthPresentDates = [];
       rhidAttendanceMonthIrregularCounts = {};
       rhidAttendanceReportBusy = false;
+    rhidAttendanceReportProgress = null;
       rhidAttendanceReportError = "";
       rhidAttendanceMonthError = "";
       if (lastState) { const state = lastState; lastState = null; render(state); }
@@ -4715,6 +4721,7 @@ export function createChatView(root, { onOpenSettings, onDemoAccess, onSignOut, 
       }
       rhidAttendanceReportDate = selectedDate;
       rhidAttendanceReportBusy = true;
+    rhidAttendanceReportProgress = null;
       rhidAttendanceReportError = "";
       if (lastState) { const state = lastState; lastState = null; render(state); }
       emit({
@@ -5597,6 +5604,7 @@ export function createChatView(root, { onOpenSettings, onDemoAccess, onSignOut, 
         date: rhidAttendanceReportDate,
         messageId: rhidAttendanceReportMessageId,
         busy: rhidAttendanceReportBusy,
+        progress: rhidAttendanceReportProgress,
         error: rhidAttendanceReportError || rhidAttendanceMonthError,
         month: rhidAttendanceMonth,
         monthLoading: rhidAttendanceMonthLoading,
@@ -5690,9 +5698,10 @@ export function createChatView(root, { onOpenSettings, onDemoAccess, onSignOut, 
     return powerBiDashboard.open(options);
   }
 
-  function setRhidAttendanceReportStatus({ busy = false, error = "" } = {}) {
+  function setRhidAttendanceReportStatus({ busy = false, error = "", progress } = {}) {
     if (!rhidAttendanceReportOpen) return false;
     rhidAttendanceReportBusy = Boolean(busy);
+    rhidAttendanceReportProgress = busy ? progress ?? rhidAttendanceReportProgress : null;
     rhidAttendanceReportError = String(error || "");
     if (lastState) { const state = lastState; lastState = null; render(state); }
     return true;
@@ -5707,6 +5716,7 @@ export function createChatView(root, { onOpenSettings, onDemoAccess, onSignOut, 
     rhidAttendanceReportDate = date;
     rhidAttendanceReportMessageId = "";
     rhidAttendanceReportBusy = true;
+    rhidAttendanceReportProgress = null;
     rhidAttendanceReportError = "";
     rhidAttendanceMonthError = "";
     rhidAttendanceMonthLoading = false;
@@ -5752,6 +5762,7 @@ export function createChatView(root, { onOpenSettings, onDemoAccess, onSignOut, 
     rhidAttendanceReportDate = "";
     rhidAttendanceReportMessageId = "";
     rhidAttendanceReportBusy = false;
+    rhidAttendanceReportProgress = null;
     rhidAttendanceReportDirectToday = false;
     rhidAttendanceReportError = "";
     rhidAttendanceMonthError = "";
@@ -5876,6 +5887,7 @@ export function createChatView(root, { onOpenSettings, onDemoAccess, onSignOut, 
       rhidAttendanceReportOpen = false;
       rhidAttendanceReportDate = "";
       rhidAttendanceReportBusy = false;
+    rhidAttendanceReportProgress = null;
       rhidAttendanceReportError = "";
       rhidAttendanceMonthError = "";
       signaturePadOpen = false;

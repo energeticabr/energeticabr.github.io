@@ -9,6 +9,7 @@ import { createPayrollSheetAttachments } from './payroll-sheet-attachments.js';
 import { payrollProvisionId } from './payroll-provision-source.js';
 import { payrollTaxType } from './payroll-tax-competence.js';
 import { validateAttachment } from '../../../../portal/data/attachments.js';
+import { createAcquisitionProgress } from './acquisition-progress.js';
 
 function key(value) {
   return String(value || "").replace(/_x([0-9a-f]{4})_/gi, (_, hex) => String.fromCodePoint(parseInt(hex, 16)))
@@ -149,18 +150,30 @@ export function createGalleryRecordData({ repository, siteKey = "personal", list
     return frozenCopy({ ...item, id, eTag, fields: item.fields || {} });
   }
 
-  async function loadEditor(rawId, { signal, formVariantId, includeAttachments = true } = {}) {
+  async function loadEditor(rawId, { signal, onProgress, formVariantId, includeAttachments = true } = {}) {
     if (!entity) throw new Error("Não foi possível identificar o formulário seguro desta lista.");
     if (typeof repository.getColumns !== "function") throw new Error("Os metadados do formulário não estão disponíveis.");
+    const withAttachments = includeAttachments !== false && !isPayrollSheet && typeof repository.listAttachments === 'function';
+    const progress = createAcquisitionProgress({ signal, onProgress }, ['list', 'item', 'schema',
+      ...(isPayroll ? ['derived', 'payrollContext'] : []), ...(prepareEditColumns ? ['prepareColumns'] : []),
+      ...(withAttachments ? ['attachments'] : []), 'context'], assertSession);
     const id = idValue(rawId), list = frozenCopy(await resolveList(signal));
-    let [item, rawColumns] = await Promise.all([currentItem(list, id, signal), repository.getColumns(siteKey, list.id, signal ? { signal } : {})]);
+    progress.step('list');
+    let [item, rawColumns] = await Promise.all([
+      currentItem(list, id, signal).then(value => { progress.step('item'); return value; }),
+      Promise.resolve(repository.getColumns(siteKey, list.id, { ...(signal ? { signal } : {}), onProgress: progress.forward('schema') }))
+        .then(value => { progress.step('schema'); return value; }),
+    ]);
     const refreshDerivedValues = isPayroll ? async (draft = {}, options = {}) => {
       const derived = await readPayrollSource({ ...item.fields, ...draft }, options.signal);
       return Object.fromEntries(Object.entries(derived).map(([name, value]) => [
         rawColumns.find(c => payrollFieldKey(c.name) === name)?.name || name, value,
       ]));
     } : undefined;
-    if (isPayroll) item = frozenCopy({ ...item, fields: { ...item.fields, ...await refreshDerivedValues({}, { signal }) } });
+    if (isPayroll) {
+      item = frozenCopy({ ...item, fields: { ...item.fields, ...await refreshDerivedValues({}, { signal }) } });
+      progress.step('derived');
+    }
     const provisionLinked = isPayroll && Boolean(payrollProvisionId(item.fields));
     abort(signal);
     const mapped = typedColumns(Array.isArray(rawColumns) ? rawColumns : [], entity, metadataOnly);
@@ -175,11 +188,21 @@ export function createGalleryRecordData({ repository, siteKey = "personal", list
     const sheetSupplier=isPayroll?Object.entries(item.fields).find(([name])=>payrollFieldKey(name)==='FORNECEDOR')?.[1]:null;
     const launchColumn=isPayroll?rawColumns.find(c=>payrollFieldKey(c.name)==='IDLANCAMENTO'):null;
     const taxIdentityLocked=isPayroll&&payrollTaxType(Object.entries(item.fields).find(([name])=>payrollFieldKey(name)==='TIPOPGTO')?.[1]);
-    const taxCompetence=taxIdentityLocked&&sheetColumn ? await payrollSheets.assertSheet(item.fields[sheetColumn.name],sheetSupplier,{allowHistorical:true}) : '';
+    const needsTaxSheet = Boolean(taxIdentityLocked && sheetColumn);
+    const needsSheets = Boolean(sheetColumn && !provisionLinked && !taxIdentityLocked);
+    const needsLaunches = Boolean(launchColumn && !provisionLinked && !taxIdentityLocked);
+    const contextProgress = isPayroll ? createAcquisitionProgress({ signal, onProgress: progress.forward('payrollContext') },
+      [...(needsTaxSheet ? ['taxSheet'] : []), ...(needsSheets ? ['sheets'] : []), ...(needsLaunches ? ['launches'] : []), 'context'], assertSession) : null;
+    const taxCompetence=needsTaxSheet ? await payrollSheets.assertSheet(item.fields[sheetColumn.name],sheetSupplier,{allowHistorical:true}) : '';
+    if (needsTaxSheet) contextProgress.step('taxSheet');
     const [sheetOptions,launchOptions]=await Promise.all([
-      sheetColumn && !provisionLinked && !taxIdentityLocked ? payrollSheets.options(sheetSupplier,{signal}):[],
-      launchColumn && !provisionLinked && !taxIdentityLocked ? payrollLaunches.options({signal}):[],
+      Promise.resolve(needsSheets ? payrollSheets.options(sheetSupplier,{signal}):[])
+        .then(value => { if (needsSheets) contextProgress.step('sheets'); return value; }),
+      Promise.resolve(needsLaunches ? payrollLaunches.options({signal}):[])
+        .then(value => { if (needsLaunches) contextProgress.step('launches'); return value; }),
     ]);
+    contextProgress?.step('context');
+    if (isPayroll) progress.step('payrollContext');
     abort(signal);
     let formColumns = isPayrollSheet ? contract.formColumns.map(column =>
       (key(column.name) === 'STATUS' || key(column.label) === 'STATUS') && !column.allowMultipleValues
@@ -191,7 +214,10 @@ export function createGalleryRecordData({ repository, siteKey = "personal", list
               ? { [item.fields[column.name]]: item.fields[column.name].trim() || 'Sem status' } : {}) },
           powerApps: { closed: true, preserveCurrentValue: true } }
         : column) : contract.formColumns;
-    if (prepareEditColumns) formColumns = await prepareEditColumns({ columns:formColumns,rawColumns,item,signal });
+    if (prepareEditColumns) {
+      formColumns = await prepareEditColumns({ columns:formColumns,rawColumns,item,signal,onProgress:progress.forward('prepareColumns') });
+      progress.step('prepareColumns');
+    }
     abort(signal);
     const locked = new Set(readOnlyEditFields.map(key));
     const columns = frozenCopy((isPayroll ? payrollEditorColumns(formColumns,sheetOptions,launchOptions,{lockTaxIdentity:taxIdentityLocked}) : formColumns)
@@ -229,7 +255,7 @@ export function createGalleryRecordData({ repository, siteKey = "personal", list
     let attachments = Object.freeze({ enabled: false });
     // Field-only dialogs need fresh metadata and ETags, not the full editor's
     // attachment inventory. Keep attachment capabilities disabled when omitted.
-    if (includeAttachments !== false && !isPayrollSheet && typeof repository.listAttachments === 'function') {
+    if (withAttachments) {
       try {
         const existingFiles = frozenCopy(verifiedAttachments(await repository.listAttachments(siteKey, list.id, item.id)));
         abort(signal);
@@ -247,6 +273,7 @@ export function createGalleryRecordData({ repository, siteKey = "personal", list
         attachments = Object.freeze({ enabled: true, canView: false, canEdit: false, existingFiles: [],
           error: error?.message || 'Não foi possível consultar os anexos deste registro.' });
       }
+      progress.step('attachments', { outcome: attachments.canView ? 'available' : 'unavailable' });
     }
     const context = Object.freeze({ entity: frozenCopy({ ...entity, siteKey }), columns, item, contract, relationshipSearch, powerAppsOptionSearch,
       attachments,
@@ -255,6 +282,7 @@ export function createGalleryRecordData({ repository, siteKey = "personal", list
       ...(evaluateFieldLocks ? { evaluateFieldLocks } : {}) });
     contexts.set(context, { list, item, columns, contract, relationshipOptions, form43, statusColumn,sheetColumn,sheetSupplier,launchColumn,taxCompetence,sheetAttachments, attachments,
       savedFields: null, attemptedUploads: new Set(), uploadedNames: new Set(), attemptedDeletions: new Set(), deletedNames: new Set() });
+    progress.step('context');
     return context;
   }
 

@@ -1,5 +1,6 @@
 import { mealVoucherLines, mealVoucherTotal, mealVoucherKey, validateMealVoucherDraft } from '../chat/meal-voucher.js';
-import { createLoadingIndicator } from './loading-indicator.js';
+import { createLoadingIndicator, updateLoadingIndicator } from './loading-indicator.js';
+import { beginLoadingTask } from './loading-task.js';
 import { applyScreenNavigation } from './screen-navigation.js';
 import { bindSearchableFilterSelects } from './searchable-filter-selects.js';
 import { sameMealVoucherTray } from '../chat/meal-voucher-tray.js';
@@ -26,6 +27,7 @@ export function createMealVoucherView({ data, root, documentRef = globalThis.doc
   let reviewedTray = null, trayActionBusy = false;
   const storageKey = sessionKey ? `energetico:meal-voucher:pending:${sessionKey}` : '';
   let pendingSnapshot = null;
+  let loadingOperation = null;
   function savedFiles(files) { return files.map(file => ({ name: file.name, size: file.size, lastModified: file.lastModified })); }
   function clearPending() {
     if (storageKey && storage.getItem(storageKey) === pendingSnapshot) { storage.removeItem(storageKey); pendingSnapshot = null; }
@@ -69,14 +71,14 @@ export function createMealVoucherView({ data, root, documentRef = globalThis.doc
     expectedFiles = sameFiles ? [] : metadata;
     if (expectedFiles.length && step === 'summary') step = 'extras';
   }
-  async function refreshEditability() {
+  async function refreshEditability(active = assertSession, options = {}) {
     if (!progress.signature) return true;
     progress.editable = false;
     if (typeof data.canEditPending !== 'function') return false;
     let editable;
-    try { editable = await data.canEditPending(draft, progress) === true; }
-    catch (cause) { assertSession(); restoreOriginalDraft(); savePending(); throw cause; }
-    assertSession();
+    try { editable = await data.canEditPending(draft, progress, options) === true; }
+    catch (cause) { active(); restoreOriginalDraft(); savePending(); throw cause; }
+    active();
     if (editable) {
       progress.editable = true;
       for (const name of ['orderUpdated', 'lines', 'payroll', 'uploadedFiles']) delete progress[name];
@@ -139,22 +141,39 @@ export function createMealVoucherView({ data, root, documentRef = globalThis.doc
   async function work(action, message, mutation = false) {
     if (!opened || destroyed || busy) return false;
     const revision = epoch;
+    const operation = { abort: new AbortController(), snapshot: { percent: 0 }, loader: null };
+    loadingOperation = operation;
+    const isCurrent = () => {
+      if (!opened || destroyed || epoch !== revision || loadingOperation !== operation) return false;
+      try { assertSession(); return true; } catch { return false; }
+    };
+    const active = () => { assertSession(); if (!isCurrent()) throw new Error('Esta operação foi encerrada.'); };
+    const task = operation.task = beginLoadingTask(value => {
+      operation.snapshot = value;
+      if (operation.loader) updateLoadingIndicator(operation.loader, { progress: value.percent, progressLabel: value.progressLabel });
+    }, { signal: operation.abort.signal, isCurrent });
+    const options = { signal: operation.abort.signal, onProgress: task.report };
+    options.stage = (index, total) => ({ signal: operation.abort.signal, onProgress: event => {
+      if (typeof event?.percent === 'number' && Number.isFinite(event.percent))
+        task.report({ percent: (index + event.percent / 100) * 100 / total });
+    } });
     busy = true; mutating = mutation; error.hidden = true; render(message);
-    try { assertSession(); await action(); assertSession(); if (!opened || destroyed || epoch !== revision) return false; busy = false; mutating = false; render(); return true; }
+    try { active(); task.prepared(); await action(active, options); active(); task.acquired(); busy = false; mutating = false; render(); task.complete(); return true; }
     catch (cause) {
+      task.stop();
       if (opened && !destroyed && epoch === revision) {
         if (cause?.code === 'MEAL_DRAFT_CHANGED') {
           try {
             if (restorePending()) {
-              const editable = await refreshEditability();
-              if (editable) { step = 'details'; orders = await data.loadOrders(branch()); }
-              else assignments = await data.loadSheetAssignments(draft.referenceMonth, mealVoucherLines(draft.lines).map(line => line.supplier));
+              const editable = await refreshEditability(active, options); active();
+              if (editable) { step = 'details'; const loaded = await data.loadOrders(branch(), options); active(); orders = loaded; }
+              else { const loaded = await data.loadSheetAssignments(draft.referenceMonth, mealVoucherLines(draft.lines).map(line => line.supplier), options); active(); assignments = loaded; }
             } else {
               reset(); draft.lines = available.suppliers.map(supplier => ({ supplier, quantity:'5', unitValue:'' }));
             }
           } catch (recoveryError) { cause = recoveryError; }
         } else if (mutation && progress.signature) {
-          try { await refreshEditability(); } catch { progress.editable = false; }
+          try { await refreshEditability(active, options); } catch { if (isCurrent()) progress.editable = false; }
         }
         if (opened && !destroyed && epoch === revision) { busy = false; mutating = false; render(); showError(cause); }
       }
@@ -201,7 +220,7 @@ export function createMealVoucherView({ data, root, documentRef = globalThis.doc
     const total = el('p', 'meal-voucher-total'); total.dataset.mealTotal = ''; content.append(total); totals();
     footer.append(button('Seguir', 'data-meal-next', async () => {
       try { branch(); } catch (cause) { showError(cause); return; }
-      await work(async () => { orders = await data.loadOrders(branch()); step = 'order'; }, 'Carregando pedidos…');
+      await work(async (active, options) => { const loaded = await data.loadOrders(branch(), options); active(); orders = loaded; step = 'order'; }, 'Carregando pedidos…');
     }));
   }
   function renderOrder() {
@@ -239,7 +258,7 @@ export function createMealVoucherView({ data, root, documentRef = globalThis.doc
     footer.append(button('Seguir', 'data-meal-next', async () => {
       let verified;
       try { verified = validateMealVoucherDraft(draft); } catch (cause) { showError(cause); return; }
-      await work(async () => { assignments = await data.loadSheetAssignments(verified.referenceMonth, verified.lines.map(line => line.supplier)); step = 'extras'; }, 'Conferindo a IDFOLHA de cada fornecedor…');
+      await work(async (active, options) => { const loaded = await data.loadSheetAssignments(verified.referenceMonth, verified.lines.map(line => line.supplier), options); active(); assignments = loaded; step = 'extras'; }, 'Conferindo a IDFOLHA de cada fornecedor…');
     }));
   }
   function renderExtras() {
@@ -261,7 +280,7 @@ export function createMealVoucherView({ data, root, documentRef = globalThis.doc
         draft.files = files; validateMealVoucherDraft(draft); expectedFiles = []; reviewedTray = sources; step = 'summary';
       };
       if (!sources.length && !expected.length) { try { accept([]); render(); } catch (cause) { showError(cause); } return; }
-      return work(async()=>{const files = await trayAccess.read(sources,expected); assertSession();
+      return work(async(active, options)=>{const files = await trayAccess.read(sources,expected,options); active();
         if (!opened || destroyed || epoch !== readEpoch) return;
         accept(files);},'Conferindo arquivos da bandeja…');
     }));
@@ -326,20 +345,28 @@ export function createMealVoucherView({ data, root, documentRef = globalThis.doc
       content.append(el('p', 'meal-voucher-warning', `Já gravados nesta tentativa: ${saved.join(' · ')}. Retomar não duplicará estes registros.`));
     }
     footer.append(button('Voltar', 'data-meal-review-back', navigateBack));
-    footer.append(button(locked() ? 'Retomar envio' : 'Confirmar e lançar', 'data-meal-confirm', () => work(async () => {
+    footer.append(button(locked() ? 'Retomar envio' : 'Confirmar e lançar', 'data-meal-confirm', () => work(async (active, options) => {
       if (!sameMealVoucherTray(reviewedTray || [],trayAccess.snapshot())) { step = 'extras'; throw new Error('A bandeja mudou. Revise os anexos antes de confirmar.'); }
       savePending();
-      result = await data.post(verified, progress, savePending);
+      const postOptions = options.stage(0, 2), cleanupOptions = options.stage(1, 2);
+      const posted = await data.post(verified, progress, event => { active(); if (!event?.stage) savePending(); postOptions.onProgress(event); });
+      active(); result = posted;
+      postOptions.onProgress({ percent: 100 });
       clearPending(); step = 'done';
-      try { await trayAccess.consume?.(reviewedTray || []); }
-      catch (cause) { assertSession(); showError(cause); }
+      try { await trayAccess.consume?.(reviewedTray || [], cleanupOptions); active(); cleanupOptions.onProgress({ percent: 100 }); }
+      catch (cause) { active(); showError(cause); }
     }, 'Gravando pedido e lançamentos…', true)));
   }
   function render(message) {
     detailPickers?.destroy(); detailPickers = null;
     content.replaceChildren(); footer.replaceChildren(); footer.hidden = true; back.disabled = home.disabled = mutating;
     renderTray();
-    if (busy) { content.append(createLoadingIndicator(doc, message || 'Carregando vale-alimentação…')); return; }
+    if (busy) {
+      const snapshot = loadingOperation?.snapshot;
+      const loader = createLoadingIndicator(doc, message || 'Carregando vale-alimentação…', { progress: snapshot?.percent, progressLabel: snapshot?.progressLabel });
+      if (loadingOperation) loadingOperation.loader = loader;
+      content.append(loader); return;
+    }
     if (step === 'lines') renderLines();
     if (step === 'order') renderOrder();
     if (step === 'details') renderDetails();
@@ -372,29 +399,33 @@ export function createMealVoucherView({ data, root, documentRef = globalThis.doc
   function navigateBack() {
     if (!opened || destroyed || mutating) return;
     if (step === 'lines' || step === 'done') { close(); return; }
-    if (busy) { epoch++; busy = false; }
+    if (busy) { epoch++; loadingOperation?.abort.abort(); busy = false; }
     step = { order: 'lines', details: 'order', extras: 'details', summary: 'extras' }[step] || 'lines'; error.hidden = true; render();
   }
   back.addEventListener('click', navigateBack); home.addEventListener('click', () => { if (close()) onHome(); });
   page.addEventListener('keydown', event => { if (event.key === 'Escape') { event.preventDefault(); navigateBack(); } });
-  function close() { if (!opened || destroyed || mutating) return false; if (progress.signature && step !== 'done' && (!storageKey || storage.getItem(storageKey) === pendingSnapshot)) savePending(); opened = false; epoch++; busy = false; detailPickers?.close(); page.hidden = true; previousFocus?.focus?.(); return true; }
+  function close() { if (!opened || destroyed || mutating) return false; if (progress.signature && step !== 'done' && (!storageKey || storage.getItem(storageKey) === pendingSnapshot)) savePending(); opened = false; epoch++; loadingOperation?.abort.abort(); busy = false; detailPickers?.close(); page.hidden = true; previousFocus?.focus?.(); return true; }
   return Object.freeze({
-    async open() { if (destroyed) return false; assertSession(); if (opened) return true; if (step === 'done') reset(); previousFocus = doc.activeElement; opened = true; epoch++; page.hidden = false; const inMemory = Boolean(progress.signature); await work(async () => {
-      available = await data.loadOptions();
+    async open() { if (destroyed) return false; assertSession(); if (opened) return true; if (step === 'done') reset(); previousFocus = doc.activeElement; opened = true; epoch++; page.hidden = false; const inMemory = Boolean(progress.signature); await work(async (active, options) => {
+      const recovering = inMemory || Boolean(storageKey && storage.getItem(storageKey));
+      const catalogOptions = recovering ? options.stage(0, 3) : options;
+      const loaded = await data.loadOptions(catalogOptions); active(); available = loaded;
+      catalogOptions.onProgress({ percent: 100 });
       const changedElsewhere = storageKey && storage.getItem(storageKey) !== pendingSnapshot;
       const restored = (!inMemory || changedElsewhere) && restorePending();
       if (inMemory && changedElsewhere && !restored) reset();
       if ((!inMemory || changedElsewhere) && !restored) draft.lines = available.suppliers.map(supplier => ({ supplier, quantity: '5', unitValue: '' }));
       else {
-        const editable = await refreshEditability();
+        const inspectionOptions = options.stage(1, 3), nextOptions = options.stage(2, 3);
+        const editable = await refreshEditability(active, inspectionOptions); active(); inspectionOptions.onProgress({ percent: 100 });
         if (editable) {
           try { branch(); } catch { step = 'lines'; return; }
           if (restored) step = 'details';
-          orders = await data.loadOrders(branch());
-        } else assignments = await data.loadSheetAssignments(draft.referenceMonth, mealVoucherLines(draft.lines).map(line => line.supplier));
+          const loaded = await data.loadOrders(branch(), nextOptions); active(); orders = loaded;
+        } else { const loaded = await data.loadSheetAssignments(draft.referenceMonth, mealVoucherLines(draft.lines).map(line => line.supplier), nextOptions); active(); assignments = loaded; }
       }
     }, 'Carregando fornecedores…'); return true; },
     close,
-    destroy() { destroyed = true; opened = false; epoch++; unsubscribeTray?.(); detailPickers?.destroy(); detailPickers = null; page.remove(); },
+    destroy() { destroyed = true; opened = false; epoch++; loadingOperation?.abort.abort(); unsubscribeTray?.(); detailPickers?.destroy(); detailPickers = null; page.remove(); },
   });
 }

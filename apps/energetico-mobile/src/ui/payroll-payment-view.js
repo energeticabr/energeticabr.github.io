@@ -1,4 +1,5 @@
 import { createLoadingIndicator } from './loading-indicator.js';
+import { beginLoadingTask } from './loading-task.js';
 import { bindSearchableFilterSelects } from './searchable-filter-selects.js';
 import { payrollFieldKey } from '../chat/payroll-editor-policy.js';
 import { payrollTaxType, payrollCompetenceMonth, previousPayrollCompetence } from '../chat/payroll-tax-competence.js';
@@ -21,7 +22,7 @@ export function createPayrollPaymentComposer({document:doc,host,loadOptions,save
     const actions=el('div','dynamic-form-actions payroll-payment-actions'),submit=el('button','hr-gallery-button payroll-payment-submit','SUBMETER');
     submit.type='submit';submit.disabled=true;actions.append(cancel,submit);
     const body=el('div'),error=el('p','gallery-record-dialog-error');error.setAttribute('role','alert');error.hidden=true;
-    body.append(createLoadingIndicator(doc,'Carregando lançamentos e folhas…'));screen.append(header,error,body,actions);overlay.append(screen);host.append(overlay);
+    const loader=createLoadingIndicator(doc,'Carregando lançamentos e folhas…');body.append(loader);screen.append(header,error,body,actions);overlay.append(screen);host.append(overlay);
     const state={overlay,screen,trigger,abort:new AbortController(),busy:false,operationId:doc.defaultView.crypto.randomUUID(),saved:null};current=state;
     cancel.addEventListener('click',()=>close());overlay.addEventListener('click',event=>event.stopPropagation());
     overlay.addEventListener('keydown',event=>{
@@ -35,10 +36,13 @@ export function createPayrollPaymentComposer({document:doc,host,loadOptions,save
       }
     });
     screen.focus();
-    const active=()=>current===state;
+    const active=()=>current===state&&!state.abort.signal.aborted;
+    const task=beginLoadingTask(loader,{signal:state.abort.signal,isCurrent:active});task.prepared();
     const fail=err=>{if(active()){error.textContent=err?.message||'Não foi possível cadastrar o pagamento.';error.hidden=false;}};
     try {
-      const options=await loadOptions({signal:state.abort.signal});if(!active())return;
+      const options=await loadOptions({signal:state.abort.signal,onProgress:task.report});if(!active())return;
+      if(!Array.isArray(options?.launches)||!Array.isArray(options?.sheets)||!Array.isArray(options?.paymentTypes))throw new Error('As opções de pagamento não estão disponíveis.');
+      task.acquired();
       body.replaceChildren();
       const form=el('form','dynamic-form'),grid=el('div','dynamic-form-grid');
       form.id=`payroll-payment-${state.operationId}`;submit.setAttribute('form',form.id);
@@ -90,7 +94,8 @@ export function createPayrollPaymentComposer({document:doc,host,loadOptions,save
         finally {if(active()){state.busy=false;screen.setAttribute('aria-busy','false');controls.forEach((c,i)=>{c.disabled=disabled[i];});if(state.saved){launch.disabled=true;sheet.disabled=true;type.disabled=true;competence.disabled=true;}state.picker?.sync();}}
       });
       if(!options.launches.length)fail(new Error('Nenhum lançamento de fornecedor empreiteiro SIM e ATIVO foi encontrado.'));
-    } catch(err) {if(active()){body.replaceChildren();fail(err);const retry=el('button','hr-gallery-button','Tentar novamente');retry.type='button';body.append(retry);retry.addEventListener('click',()=>{close();void open(trigger);});}}
+      task.complete();
+    } catch(err) {task.stop();if(active()){body.replaceChildren();fail(err);const retry=el('button','hr-gallery-button','Tentar novamente');retry.type='button';body.append(retry);retry.addEventListener('click',()=>{close();void open(trigger);});}}
   }
   return Object.freeze({open,close:()=>close(true),isOpen:()=>Boolean(current)});
 }

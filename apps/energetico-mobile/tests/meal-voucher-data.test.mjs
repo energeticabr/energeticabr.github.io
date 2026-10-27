@@ -55,6 +55,40 @@ function fixture() {
   return { repo, columns, rows, writes, uploads, deliveries, seedAttachment, failSecond: () => { failSecond = true; }, recover: () => { failSecond = false; }, loseOrderResponse: () => { loseOrderResponse = true; }, appendOrderObs: () => { appendOrderObs = true; }, changeSheetDuringLaunch: () => { changeSheetDuringLaunch = true; }, changeOrderDuringLaunch: () => { changeOrderDuringLaunch = true; } };
 }
 const draft = suppliers => ({ date: '2026-10-15', dueDate: '2026-10-30', referenceMonth: '2026-10', stage: { id: '7', label: 'FUNDAÇÃO', branch: 'OBRA A' }, account: { id: '8', label: 'CAIXA' }, orderMode: 'new', obs: 'outubro', files: [], lines: suppliers.map((supplier, index) => ({ supplier, quantity: '1', unitValue: index ? '20' : '10' })) });
+test('meal options report completed sources while another catalog is still pending', async () => {
+  const f = fixture(), events = [], page = f.repo.getItemsPage; let release;
+  f.repo.getItemsPage = (...args) => args[1] === 'LANCAMENTOOBRA'
+    ? new Promise(resolve => { release = async () => resolve(await page(...args)); }) : page(...args);
+  const data = createMealVoucherData({ repository: f.repo });
+  const reading = data.loadOptions({ onProgress: event => events.push(event) });
+  await new Promise(resolve => setImmediate(resolve));
+  assert.ok(events.some(event => event.percent > 0 && event.percent < 100));
+  assert.ok(events.every(event => event.percent < 100)); release(); await reading;
+  assert.equal(events.at(-1).percent, 100); assert.equal(f.writes.length, 0);
+});
+
+test('meal post combines persistent journal callbacks with verified file target progress', async () => {
+  const f = fixture(), data = createMealVoucherData({ repository: f.repo }), { suppliers } = await data.loadOptions();
+  const selected = { ...draft(suppliers), files: [new File(['abc'], 'receipt.pdf', { type: 'application/pdf' })] };
+  const journal = { operationId: 'measured-meal' }, events = []; let persisted = 0;
+  await data.post(selected, journal, event => { if (!event) persisted++; else events.push({ ...event, delivered: f.deliveries.length }); });
+  assert.ok(persisted > 0); const files = events.filter(event => event.stage.startsWith('attachment:'));
+  assert.equal(files.length, 2); assert.deepEqual(files.map(event => event.delivered), [1, 2]);
+  assert.equal(events.at(-1).percent, 100); assert.ok(events.some(event => event.percent > 0 && event.percent < 100));
+  assert.equal(journal.percent, undefined); const writes = f.writes.length;
+  await createMealVoucherData({ repository: f.repo }).post(selected, journal);
+  assert.equal(f.writes.length, writes); assert.equal(f.deliveries.length, 2);
+});
+
+test('pending meal inspection emits scoped progress during its safety reads', async () => {
+  const f = fixture(), data = createMealVoucherData({ repository: f.repo }), { suppliers } = await data.loadOptions(), events = [];
+  const read = f.repo.getItemsPage; let release;
+  f.repo.getItemsPage = (...args) => args[1] === 'FOLHAPGTO' ? new Promise(resolve => { release = async () => resolve(await read(...args)); }) : read(...args);
+  const inspecting = data.canEditPending(draft(suppliers), { operationId: 'measured-inspect' }, { onProgress: event => events.push(event) });
+  await new Promise(resolve => setImmediate(resolve));
+  assert.ok(events.some(event => event.percent > 0 && event.percent < 100)); release();
+  assert.equal(await inspecting, true); assert.equal(events.at(-1).percent, 100); assert.equal(f.writes.length, 0);
+});
 async function waitForSubmission(doc) {
   for (let attempt=0; attempt<200; attempt++) {
     if (doc.querySelector('[data-meal-done]') || !doc.querySelector('[role="alert"]').hidden) return;

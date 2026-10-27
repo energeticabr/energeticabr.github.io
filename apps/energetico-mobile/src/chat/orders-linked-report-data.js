@@ -1,4 +1,5 @@
 import Decimal from 'decimal.js';
+import { createAcquisitionProgress } from './acquisition-progress.js';
 
 const ORDER_FIELDS = Object.freeze(['DATAPGTOEFETUADO', 'FILIAL', 'FORNECEDOR', 'FORMAPGTO', 'VALORTOTAL', 'OBS', 'NOTA FISCAL', 'OBS FISCAL', 'STATUS']);
 const ACTIVE_FIELDS = Object.freeze(['AGRUPAR', 'DATA', 'FILIAL', 'FORNECEDOR', 'CONTA', 'PRODUTO', 'DESCRIÇÃO', 'QUANTIDADE', 'VALOR UNITÁRIO', 'FRETE', 'APROVACAO']);
@@ -94,13 +95,18 @@ export function buildOrdersLinkedReport({ orderId, order, active, deleted }) {
 export function createOrdersLinkedReportData({ repository, siteKey = 'personal' } = {}) {
   const contracts = new Map();
 
-  async function contract(name, signal) {
+  async function contract(name, signal, progress) {
     abort(signal);
-    if (contracts.has(name)) return contracts.get(name);
+    if (contracts.has(name)) {
+      progress.step(`${name}:list`, { cached: true });
+      progress.step(`${name}:schema`, { cached: true });
+      return contracts.get(name);
+    }
     if (typeof repository?.getColumns !== 'function') throw new Error('Os metadados SharePoint do relatório de pedidos não estão disponíveis.');
     const list = await repository.resolveList(siteKey, [name], signal ? { signal } : {});
     abort(signal);
     if (list?.status !== 'resolved' || !list.id) throw new Error(`A lista ${name} não está disponível nesta conta SharePoint.`);
+    progress.step(`${name}:list`);
     const columns = await repository.getColumns(siteKey, list.id, signal ? { signal } : {});
     abort(signal);
     if (!Array.isArray(columns)) throw new Error(`Os metadados da lista ${name} não retornaram uma resposta válida.`);
@@ -116,6 +122,7 @@ export function createOrdersLinkedReportData({ repository, siteKey = 'personal' 
     }
     const result = { id: list.id, mapping };
     contracts.set(name, result);
+    progress.step(`${name}:schema`);
     return result;
   }
 
@@ -132,8 +139,8 @@ export function createOrdersLinkedReportData({ repository, siteKey = 'personal' 
     return Object.freeze({ id, fields: Object.freeze(fields) });
   }
 
-  async function readGroup(name, orderId, signal) {
-    const { id, mapping } = await contract(name, signal);
+  async function readGroup(name, orderId, signal, progress) {
+    const { id, mapping } = await contract(name, signal, progress);
     const query = `$select=id,createdBy&$expand=fields($select=${[...mapping.values()].join(',')})&$filter=fields/${mapping.get('AGRUPAR')} eq '${orderId}'&$top=${PAGE_SIZE}`;
     const rows = new Map();
     const visited = new Set();
@@ -148,7 +155,11 @@ export function createOrdersLinkedReportData({ repository, siteKey = 'personal' 
         const row = normalize(item, mapping);
         if (linkedReportText(row.fields.AGRUPAR) === orderId) rows.set(row.id, row);
       }
-      if (page.hasMore !== true) return [...rows.values()];
+      progress.report(`${name}:items`, { pages: pageNumber, records: rows.size, listName: name });
+      if (page.hasMore !== true) {
+        progress.step(`${name}:items`, { pages: pageNumber, records: rows.size, listName: name });
+        return [...rows.values()];
+      }
       if (typeof page.nextLink !== 'string' || !page.nextLink || visited.has(page.nextLink)) {
         throw new Error(`A paginação da lista ${name} está incompleta ou repetiu o cursor; o relatório não foi truncado.`);
       }
@@ -158,12 +169,17 @@ export function createOrdersLinkedReportData({ repository, siteKey = 'personal' 
     throw new Error(`A lista ${name} ultrapassou o limite seguro de páginas; o relatório não foi truncado.`);
   }
 
-  async function loadLinkedReport(rawId, { signal } = {}) {
+  async function loadLinkedReport(rawId, { signal, onProgress } = {}) {
     const orderId = String(rawId ?? '').trim();
     if (!/^\d{1,15}$/.test(orderId)) throw new RangeError('O ID do pedido não é válido.');
     abort(signal);
     if (typeof repository?.getItem !== 'function') throw new Error('A consulta pontual do pedido não está disponível.');
-    const { id, mapping } = await contract('NOTASPENDENTES', signal);
+    const progress = createAcquisitionProgress({ signal, onProgress }, [
+      'NOTASPENDENTES:list', 'NOTASPENDENTES:schema', 'order',
+      'LANCAMENTOS:list', 'LANCAMENTOS:schema', 'LANCAMENTOS:items',
+      'ARQUIVOLANCAMENTOS:list', 'ARQUIVOLANCAMENTOS:schema', 'ARQUIVOLANCAMENTOS:items', 'report',
+    ]);
+    const { id, mapping } = await contract('NOTASPENDENTES', signal, progress);
     let item;
     try {
       item = await repository.getItem(siteKey, id, orderId, `$expand=fields($select=${[...mapping.values()].join(',')})`, signal ? { signal } : {});
@@ -175,9 +191,12 @@ export function createOrdersLinkedReportData({ repository, siteKey = 'personal' 
     if (!item) throw new Error(`O pedido #${orderId} não foi encontrado no SharePoint.`);
     const order = normalize(item, mapping);
     if (order.id !== orderId) throw new Error('O SharePoint devolveu outro pedido para a consulta solicitada.');
-    const [active, deleted] = await Promise.all([readGroup('LANCAMENTOS', orderId, signal), readGroup('ARQUIVOLANCAMENTOS', orderId, signal)]);
+    progress.step('order');
+    const [active, deleted] = await Promise.all([readGroup('LANCAMENTOS', orderId, signal, progress), readGroup('ARQUIVOLANCAMENTOS', orderId, signal, progress)]);
     abort(signal);
-    return buildOrdersLinkedReport({ orderId, order, active, deleted });
+    const result = buildOrdersLinkedReport({ orderId, order, active, deleted });
+    progress.step('report');
+    return result;
   }
   return Object.freeze({ loadLinkedReport, invalidate: () => contracts.clear() });
 }

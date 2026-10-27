@@ -30,6 +30,8 @@ import { createReportSessionCache } from "./report-session-cache.js";
 import { observeReportMutations, observeReportMutationFactory } from "./report-mutations.js";
 import { subscribeDataMutations } from "../../../portal/data/data-mutations.js";
 import { decorateReportPrint, openFilteredReportPdf, preserveReportPdfReturn } from "./ui/report-print.js";
+import { beginLoadingTask } from "./ui/loading-task.js";
+import { createAcquisitionProgress } from "./chat/acquisition-progress.js";
 
 async function defaultSignPdfAttachment(input) {
   const module = await import("./web/pdf-signing.js");
@@ -1340,6 +1342,34 @@ export function createAppController({
   }
   let starting = false;
   let sessionRevision = 0;
+  let operationProgress = null;
+  let foregroundProgress = null;
+  let responseTransitionProgress = null;
+  function clearOperationProgress(record = foregroundProgress) {
+    record?.task?.stop();
+    record?.abort?.abort();
+    if (foregroundProgress === record) { foregroundProgress = null; operationProgress = null; }
+  }
+  function beginOperationProgress(label) {
+    clearOperationProgress();
+    const owner = account, revision = sessionRevision;
+    const record = { abort: new AbortController() };
+    foregroundProgress = record;
+    record.task = beginLoadingTask(value => {
+      operationProgress = label ? { ...value, label } : value;
+      if (!stopped) render();
+    }, { signal: record.abort.signal, isCurrent: () => !stopped && account === owner
+      && sessionRevision === revision && foregroundProgress === record });
+    record.task.prepared();
+    record.options = { progressSignal: record.abort.signal, onOperationProgress: record.task.report };
+    return record;
+  }
+  function completeOperationProgress(record, result) {
+    if (!record) return;
+    record.task.acquired();
+    if (result?.status === "processed" && !result.error
+      && !result.results?.some(item => /error|fail|paused|invalid|unavailable|reupload/i.test(String(item?.status || "")))) record.task.complete();
+  }
   let diaryAttachmentProgress = null;
   let diaryProgressAbort = null;
   function clearDiaryAttachmentProgress() {
@@ -2294,7 +2324,7 @@ export function createAppController({
     if (schedule !== undefined) void Promise.resolve(schedule).catch(() => {});
   }
 
-  async function refreshPendingProvisionSnapshot({ manual = false, isCurrent = () => true } = {}) {
+  async function refreshPendingProvisionSnapshot({ manual = false, isCurrent = () => true, progressOptions } = {}) {
     if (!account || stopped || typeof client.getPendingProvisionSnapshot !== "function") return false;
     if (pendingProvisionReminderOpen || pendingProvisionSnapshot) {
       const today = provisionDateKey();
@@ -2316,7 +2346,7 @@ export function createAppController({
     const suppressed = () => !manual && pendingProvisionReminderSuppressed();
     pendingProvisionRequest = Promise.resolve().then(async () => {
       try {
-        const original = await client.getPendingProvisionSnapshot();
+        const original = await client.getPendingProvisionSnapshot(progressOptions);
         if (!current() || suppressed()) return false;
         let rows = Array.isArray(original?.rows) ? original.rows : [];
         let upcomingUnavailable = false;
@@ -2400,11 +2430,14 @@ export function createAppController({
     const current = () => !stopped && account === targetAccount && sessionRevision === targetRevision;
     const openingCurrent = () => current() && pendingProvisionOpenRequest === request
       && latestAssistantPoll() === targetPoll;
+    const progress = beginOperationProgress("Consultando provisões de pagamento…");
     const work = Promise.resolve().then(async () => {
       if (pendingProvisionRequest) await pendingProvisionRequest;
       if (!openingCurrent() || flowBusy() || store.getState().activeFlow) return false;
       sessionError = "";
-      return refreshPendingProvisionSnapshot({ manual: true, isCurrent: openingCurrent });
+      const result = await refreshPendingProvisionSnapshot({ manual: true, isCurrent: openingCurrent, progressOptions: progress.options });
+      if (result && openingCurrent()) { progress.task.acquired(); progress.task.complete(); }
+      return result;
     });
     const request = withTimeout(work, 15_000,
       "A consulta das provisões demorou demais. Toque no mascote para tentar novamente.").catch(error => {
@@ -2419,6 +2452,7 @@ export function createAppController({
     render();
     try { return await request; }
     finally {
+      clearOperationProgress(progress);
       if (pendingProvisionOpenRequest === request) pendingProvisionOpenRequest = null;
       if (current()) render();
     }
@@ -2534,9 +2568,14 @@ export function createAppController({
     view.setRhidAttendanceReportStatus?.({ busy: true, error: "" });
     let request;
     request = Promise.resolve().then(async () => {
+      const progressAbort = new AbortController();
+      const progress = beginLoadingTask(value => view.setRhidAttendanceReportStatus?.({ busy: true, progress: value }),
+        { signal: progressAbort.signal, isCurrent: () => !stopped && account === reportAccount && sessionRevision === reportRevision
+          && rhidAttendanceReportNavigationRevision === navigationRevision && rhidAttendanceReportRequests.get(requestKey) === request });
+      progress.prepared();
       try {
         const report = await withTimeout(
-          client.getRhidAttendanceReport(day),
+          client.getRhidAttendanceReport(day, { onProgress: progress.report, progressSignal: progressAbort.signal }),
           rhidReportTimeoutMs,
           "A consulta RHID demorou demais. Tente novamente.",
         );
@@ -2556,6 +2595,7 @@ export function createAppController({
         const reportDay = isValidRhidReportDate(report.date) ? report.date : day;
         const reportDate = formatDatePickerValue(reportDay);
         const rows = Array.isArray(report.rows) ? report.rows.filter(row => row && typeof row === "object") : [];
+        progress.acquired();
         const table = { ...buildRhidAttendanceTable(rows), reportDate: reportDay };
         table.pendingValidationCount = Number.isSafeInteger(report.pendingValidationCount) && report.pendingValidationCount >= 0
           ? report.pendingValidationCount : 0;
@@ -2593,6 +2633,7 @@ export function createAppController({
           if (rhidAttendanceReportNavigationRevision !== navigationRevision) return false;
           await showMedia(pdf, `presencas-rhid-${day}.pdf`, { layout: 'report-pdf' });
         }
+        progress.complete();
         return true;
       } catch (error) {
         if (!stopped && account === reportAccount && sessionRevision === reportRevision) {
@@ -2618,6 +2659,7 @@ export function createAppController({
         }
         return false;
       } finally {
+        progress.stop(); progressAbort.abort();
         if (rhidAttendanceReportRequests.get(requestKey) === request) rhidAttendanceReportRequests.delete(requestKey);
       }
     });
@@ -4080,6 +4122,8 @@ export function createAppController({
   }
 
   function cancelResponseTransition() {
+    if (responseTransitionProgress) clearOperationProgress(responseTransitionProgress);
+    responseTransitionProgress = null;
     responseTransitionRevision += 1;
     if (responseTransitionTimer !== null) clearTimeout(responseTransitionTimer);
     responseTransitionTimer = null;
@@ -4109,17 +4153,25 @@ export function createAppController({
 
   function scheduleResponseTransition(nextMessages) {
     cancelResponseTransition();
+    // The response was acquired; only its next presentation remains.
+    const progress = responseTransitionProgress = beginOperationProgress();
+    progress.task.acquired();
     const revision = responseTransitionRevision;
     const transitionAccount = account;
     responseTransitionTimer = setTimeout(() => {
       responseTransitionTimer = null;
       if (stopped || account !== transitionAccount || revision !== responseTransitionRevision) {
+        clearOperationProgress(progress);
+        if (responseTransitionProgress === progress) responseTransitionProgress = null;
         responseTransitionWaiters.forEach(resolve => resolve(false));
         responseTransitionWaiters.clear();
         return;
       }
       attachmentRevision += 1;
       const replaced = store.replaceCurrentResponse(nextMessages);
+      if (replaced) progress.task.complete();
+      clearOperationProgress(progress);
+      if (responseTransitionProgress === progress) responseTransitionProgress = null;
       if (replaced) rememberCurrentAssistantPoll({}, nextMessages);
       hydrateMediaPreviews();
       responseTransitionWaiters.forEach(resolve => resolve(replaced));
@@ -4612,6 +4664,7 @@ export function createAppController({
       ...state,
       diaryAttachmentProgress,
       attachmentUploadProgress,
+      operationProgress,
       ...(renderMessages !== state.messages ? { messages: renderMessages } : {}),
       epiSelectedProductIds: epiSelectionIds,
       account,
@@ -4993,6 +5046,7 @@ export function createAppController({
     const currentConversation = () => account === conversationAccount && sessionRevision === conversationRevision && !stopped;
     const previousFlow = store.getState().activeFlow;
     const resumeDraftRevision = draftEditRevision;
+    const genericProgress = beginOperationProgress();
     sessionError = null;
     resuming = true;
     render();
@@ -5001,7 +5055,7 @@ export function createAppController({
       if (!currentConversation()) return false;
       attachmentRevision += 1;
       let paymentProvisionAutoReplyError = null;
-      const resumeRequest = client.sendText({ text: "", replyId: "input_continue" });
+      const resumeRequest = client.sendText({ text: "", replyId: "input_continue" }, genericProgress.options);
       const resumed = await (dismissUnavailableAttachments
         ? withTimeout(resumeRequest, 30_000, "A retomada demorou demais. Seu rascunho foi preservado; tente novamente.")
         : resumeRequest);
@@ -5016,7 +5070,7 @@ export function createAppController({
           result = preparePresenceResult(await client.sendText({
             replyId: blankPaymentFormOption.replyId,
             omitText: true,
-          }));
+          }, genericProgress?.options));
         } catch (error) {
           paymentProvisionAutoReplyError = error;
           result = paymentProvisionSyncNotice(result);
@@ -5033,7 +5087,7 @@ export function createAppController({
           text: pendingAutomaticExit.label,
           replyId: pendingAutomaticExit.replyId,
           ...(pendingAutomaticExit.homeTransferReceipt ? { homeTransferReceipt: pendingAutomaticExit.homeTransferReceipt } : {}),
-        }));
+        }, genericProgress?.options));
         if (!currentConversation()) return false;
         if (!isMenuResult(result)) throw new Error("A VM não confirmou o retorno ao menu principal. Tente novamente.");
         pendingAutomaticExit = null;
@@ -5130,11 +5184,13 @@ export function createAppController({
       if (attachmentReminderDetails()) scheduleAttachmentReminder();
       else cancelAttachmentReminder();
       scheduleCompletionMenu(result);
+      if (!paymentProvisionAutoReplyError) completeOperationProgress(genericProgress, result);
       return !paymentProvisionAutoReplyError;
     } catch (error) {
       if (currentConversation()) setSessionError(error, "Não foi possível retomar a conversa com a VM.");
       return false;
     } finally {
+      clearOperationProgress(genericProgress);
       resuming = false;
       if (!stopped) render();
     }
@@ -5910,7 +5966,7 @@ export function createAppController({
             pickFiles:()=>queueSelectedFiles(()=>native.pickDocuments(),{preserveFailedFiles:true}),
             capture:()=>capturePhotoOrScan({preserveFailedFiles:true}),
             open:openFile, remove:(id,kind)=>kind === 'pending' ? removeFile(id) : removeAttachment(id,{confirm:false}),
-            load:loadAttachment, deleteAttachment:id=>client.deleteAttachment(id),
+            load:loadAttachment, deleteAttachment:(id, options)=>client.deleteAttachment(id, options),
           });
           const panel = await mealVoucherFactory({ data, assertSession, attachmentTray, sessionKey: owner.homeAccountId, onHome: () => { assertSession(); return returnToMainMenu(); } });
           if (stopped || account !== owner || sessionRevision !== revision) { panel.destroy?.(); return false; }
@@ -6196,7 +6252,7 @@ export function createAppController({
               assertSession();
               const result = options && typeof hrPayrollGalleryData.loadFilteredPage === 'function'
                 ? await hrPayrollGalleryData.loadFilteredPage(selectedGallery, {page,pageSize,...options})
-                : await hrPayrollGalleryData.loadPage(selectedGallery, { page, pageSize, cursor });
+                : await hrPayrollGalleryData.loadPage(selectedGallery, { page, pageSize, cursor, ...options });
               assertSession();
               return result;
             },
@@ -6273,25 +6329,25 @@ export function createAppController({
               invalidateGalleryReportSources();
               assertSession();
             },
-            loadOrderSnapshot: async ({ id, signal } = {}) => {
+            loadOrderSnapshot: async ({ id, signal, onProgress } = {}) => {
               assertSession();
               const data = await getOrdersGalleryData(assertSession, LAUNCH_GALLERY_ID);
               if (id != null) {
                 if (typeof data.loadItem !== "function") throw new Error("A consulta pontual do pedido no SharePoint não está disponível.");
-                const item = await data.loadItem(id, { signal });
+                const item = await data.loadItem(id, { signal, onProgress });
                 assertSession();
                 return { listName: "NOTASPENDENTES", rows: item ? [item] : [] };
               }
               if (typeof data.loadSnapshot !== "function") throw new Error("A consulta de pedidos do SharePoint não está disponível.");
-              const snapshot = await data.loadSnapshot({ signal });
+              const snapshot = await data.loadSnapshot({ signal, onProgress });
               assertSession();
               return snapshot;
             },
-            loadLaunchGroup: async (groupId, { signal } = {}) => {
+            loadLaunchGroup: async (groupId, { signal, onProgress } = {}) => {
               assertSession();
               const data = await getOrdersGalleryData(assertSession, LAUNCH_GALLERY_ID);
               if (typeof data.loadLaunchGroup !== "function") throw new Error("A consulta filtrada de LANCAMENTOS não está disponível.");
-              const rows = await data.loadLaunchGroup(groupId, { signal });
+              const rows = await data.loadLaunchGroup(groupId, { signal, onProgress });
               assertSession();
               return rows;
             },
@@ -9311,6 +9367,7 @@ export function createAppController({
     const trackingDiary = isDiaryAttachmentFinalization(previousState.activeFlow,
       latestAssistantPoll(previousState.messages), submissionText, replyId);
     const progressAbort = trackingDiary ? new AbortController() : null;
+    const genericProgress = trackingDiary ? null : beginOperationProgress();
     if (trackingDiary) {
       clearDiaryAttachmentProgress();
       diaryProgressAbort = progressAbort;
@@ -9362,7 +9419,7 @@ export function createAppController({
           homeAttachmentIds: behavior.homeAttachmentIds, expectedContextId: behavior.expectedContextId,
         } : {}),
         ...(retryingAutomaticExit && pendingAutomaticExit?.homeTransferReceipt ? { homeTransferReceipt: pendingAutomaticExit.homeTransferReceipt } : {}),
-      }));
+      }, genericProgress?.options));
       remoteResponseReceived = true;
       if (stopped || account !== sendingAccount || sessionRevision !== sendingRevision) return false;
       if (trackingDiary && diaryAttachmentProgress?.percent === 100) {
@@ -9395,7 +9452,7 @@ export function createAppController({
           text: pendingAutomaticExit.label,
           replyId: pendingAutomaticExit.replyId,
           ...(pendingAutomaticExit.homeTransferReceipt ? { homeTransferReceipt: pendingAutomaticExit.homeTransferReceipt } : {}),
-        }));
+        }, genericProgress?.options));
         if (stopped || account !== sendingAccount || sessionRevision !== sendingRevision) return false;
       }
       result = recommendEffectivePaymentDate(previousPoll, submissionText, replyId, result);
@@ -9410,7 +9467,7 @@ export function createAppController({
           result = preparePresenceResult(await client.sendText({
             replyId: blankPaymentFormOption.replyId,
             omitText: true,
-          }));
+          }, genericProgress?.options));
           result = preserveDatabaseFilterRegistrationOptions([previousPoll], result);
         } catch (error) {
           paymentProvisionAutoReplyError = error;
@@ -9431,7 +9488,7 @@ export function createAppController({
           advancedResult = preparePresenceResult(await client.sendText({
             text: String(advanceOption.label || advanceOption.title || "SIM"),
             ...(advanceOption.reply || advanceOption.id ? { replyId: String(advanceOption.reply || advanceOption.id) } : {}),
-          }));
+          }, genericProgress?.options));
         } catch (error) {
           if (behavior.epiFinalizeStep === true && epiQuantityAnswer && epiFinalizeProgress) {
             epiAdvanceError = error;
@@ -9446,7 +9503,7 @@ export function createAppController({
           const returnedToMore = preparePresenceResult(await client.sendText({
             text: "↩️ RETORNAR À PERGUNTA ANTERIOR",
             replyId: NAVIGATION_BACK_ID,
-          }));
+          }, genericProgress?.options));
           const recoveredFinalizeOption = currentLineDecisionOption(
             returnedToMore.messages,
             returnedToMore.activeFlow || previousState.activeFlow,
@@ -9641,7 +9698,9 @@ export function createAppController({
         setSessionError(new Error("A VM não confirmou o retorno ao menu principal. Tente novamente."));
         return false;
       }
-      return confirmed && !epiAdvanceError && (behavior.requireMenuResult !== true || menuResult);
+      const succeeded = confirmed && !epiAdvanceError && (behavior.requireMenuResult !== true || menuResult);
+      if (succeeded) completeOperationProgress(genericProgress, result);
+      return succeeded;
     } catch (error) {
       // Preserve the hidden step so a failed automatic answer can be retried
       // against the same VM question instead of a stale visible poll.
@@ -9657,6 +9716,7 @@ export function createAppController({
       else setSessionError(error, "Não foi possível enviar a mensagem.");
       return false;
     } finally {
+      if (genericProgress) { clearOperationProgress(genericProgress); if (!stopped) render(); }
       if (trackingDiary && diaryProgressAbort === progressAbort) {
         clearDiaryAttachmentProgress();
         if (!stopped) render();
@@ -10235,6 +10295,7 @@ export function createAppController({
   }
 
   async function signOut() {
+    clearOperationProgress();
     clearAttachmentUploadProgress();
     attachmentActionBusy = false;
     attachmentCompressionReturnPoint = null;
@@ -10571,6 +10632,12 @@ export function createAppController({
       && signaturePlacementGeneration === signingGeneration
       && (placement.kind !== "report" || currentRhidPdf(placement.reportSession));
     attachmentSigningBusy = true;
+    const progress = beginOperationProgress("Assinando documento…");
+    const signingProgress = createAcquisitionProgress({ onProgress: progress.task.report, isCurrent: stillCurrent },
+      ['pdf', 'integrity', 'published']);
+    const completeProgress = () => {
+      signingProgress.step('published'); progress.task.acquired(); progress.task.complete();
+    };
     sessionError = null;
     if (signaturePlacementData) signaturePlacementData = { ...signaturePlacementData, status: "signing" };
     render();
@@ -10596,15 +10663,19 @@ export function createAppController({
         signedAt: evidence.signedAt,
         integrityId: evidence.id,
         verificationUrl: evidence.verificationUrl || "",
+        onProgress: signingProgress.forward('pdf'),
+        signal: progress.abort.signal,
       });
       if (!stillCurrent()) return false;
       if (!signedBlob || typeof signedBlob.arrayBuffer !== "function") {
         throw new Error("O PDF assinado não foi gerado corretamente.");
       }
+      signingProgress.step('pdf');
       const fileName = signedPdfFileName(placement.document.fileName);
       if (previousPlacementData) previousPlacementData.signedAttempt = { key: attemptKey, blob: signedBlob };
       const confirmation = await client.confirmSignatureEvidence({ recordId: evidence.id, documentBlob: signedBlob, fileName });
       if (!stillCurrent()) return false;
+      signingProgress.step('integrity');
       if (placement.kind === "report") {
         const target = placement.reportSession;
         target.blob = signedBlob;
@@ -10612,6 +10683,7 @@ export function createAppController({
         invalidateSignaturePlacement({ clearOverride: true });
         render();
         await previewRhidPdf(target);
+        completeProgress();
         return true;
       }
       if (placement.kind === "document" && !store.getState().activeFlow) {
@@ -10626,6 +10698,7 @@ export function createAppController({
         }], { activeFlow: null, resetConversation: false });
         invalidateSignaturePlacement({ clearOverride: true });
         render();
+        completeProgress();
         return true;
       }
       const FileCtor = globalThis.File;
@@ -10669,6 +10742,7 @@ export function createAppController({
       }
       invalidateSignaturePlacement({ clearOverride: true });
       render();
+      completeProgress();
       return true;
     } catch (error) {
       if (!stopped && account === signingAccount) {
@@ -10679,6 +10753,7 @@ export function createAppController({
       }
       return false;
     } finally {
+      clearOperationProgress(progress);
       attachmentSigningBusy = false;
       if (!stopped && account === signingAccount) render();
     }
@@ -10730,6 +10805,8 @@ export function createAppController({
       if (store.getState().pendingFiles.some(item => item.id === target.id)) {
         throw new Error('Aguarde a confirmação do envio deste anexo e abra-o novamente para acrescentar páginas.');
       }
+      const acquisition = createAcquisitionProgress({ signal, onProgress, isCurrent: current },
+        ['selected', 'synchronized', 'hashed', 'composed', 'replaced']);
       attachmentActionBusy = true;
       attachmentRevision += 1;
       sessionError = null;
@@ -10744,6 +10821,7 @@ export function createAppController({
             files = await (choice === 'scan' ? native.scanDocument() : native.capturePhoto());
           }
           if (!current() || !files?.length) return null;
+          acquisition.step('selected');
           // Only the open target's exact identity is writable. A homonym with
           // identical bytes is still a different attachment, not a replacement.
           await refreshAttachments({ silent: true, force: true });
@@ -10752,27 +10830,32 @@ export function createAppController({
           if (!resolved || resolved.readOnly || resolved.existing || !/^[a-f0-9]{64}$/.test(resolved.id)) {
             throw new Error('O anexo foi alterado ou é somente leitura. Atualize a bandeja e abra-o novamente.');
           }
+          acquisition.step('synchronized');
           const originalBytes = await blob.arrayBuffer();
           const hash = await globalThis.crypto.subtle.digest('SHA-256', originalBytes);
           if (!current()) return null;
+          acquisition.step('hashed');
           const { appendAttachmentPdf } = await import('./web/append-attachment-pdf.js');
           const pdf = await appendAttachmentPdf(blob, fileName, files, { signal,
-            onProgress: progress => { if (current()) onProgress?.({ percent: Math.min(45, Math.round(Number(progress?.percent ?? progress) * .45)) }); } });
+            onProgress: value => { if (current()) acquisition.units('composed', Number(value?.percent ?? value), 100, 'etapas'); } });
           if (!current()) return null;
           pendingAttempt = { targetId: resolved.id, file: pdf, requestId: globalThis.crypto.randomUUID(),
             expectedSha256: Array.from(new Uint8Array(hash), byte => byte.toString(16).padStart(2, '0')).join('') };
         }
         const attempt = pendingAttempt;
         if (!current()) return null;
+        // A retry reuses the already prepared, hashed PDF and its idempotency key.
+        for (const stage of ['selected', 'synchronized', 'hashed', 'composed']) acquisition.step(stage);
         const result = await client.replaceAttachment(attempt.targetId, attempt.file, {
           requestId: attempt.requestId, expectedSha256: attempt.expectedSha256, progressSignal: signal,
-          onProgress: progress => { if (current()) onProgress?.({ percent: Math.min(99, 45 + Math.round(progress.percent * .54)) }); },
+          onProgress: value => { if (current()) acquisition.units('replaced', value.percent, 100, 'etapas de envio'); },
         });
         if (!current()) return null;
         target = result.replacement;
         store.syncAttachments(result.attachments);
         pendingAttempt = null;
         hydrateMediaPreviews();
+        acquisition.step('replaced');
         return { blob: attempt.file, fileName: attempt.file.name };
       } finally {
         if (!stopped && account === owner && sessionRevision === revision) {
@@ -10854,21 +10937,24 @@ export function createAppController({
     cancelCompletionMenu();
     sessionError = null;
     const actionAccount = account;
+    const progress = beginOperationProgress("Eliminando anexos…");
     attachmentActionBusy = true;
     attachmentRevision += 1;
     render();
     try {
-      const result = await client.deleteAllAttachments();
+      const result = await client.deleteAllAttachments(progress.options);
       if (stopped || account !== actionAccount) return false;
       store.ingestRemoteMessages(result?.messages, { ...result, resetConversation: false, attachments: result?.attachments || [] });
       rememberCurrentAssistantPoll(result, result?.messages);
       if (Array.isArray(result?.attachments)) store.syncAttachments(result.attachments);
       hydrateMediaPreviews();
+      completeOperationProgress(progress, result);
       return true;
     } catch (error) {
       if (!stopped && account === actionAccount) setSessionError(error, "Não foi possível eliminar os anexos.");
       return false;
     } finally {
+      clearOperationProgress(progress);
       attachmentActionBusy = false;
       attachmentRevision += 1;
       if (!stopped) render();
@@ -10942,20 +11028,23 @@ export function createAppController({
     cancelAttachmentReminder();
     cancelCompletionMenu();
     sessionError = null;
+    const progress = beginOperationProgress("Compactando anexo…");
     attachmentActionBusy = true;
     attachmentRevision += 1;
     render();
     try {
       attachmentCompressionReturnPoint = captureAttachmentCompressionReturnPoint(returnPoint);
       currentAssistantPollSnapshot = null;
-      const result = attachCompressionPreview(await client.compressAttachment(item.id), item);
+      const result = attachCompressionPreview(await client.compressAttachment(item.id, progress.options), item);
       if (!currentCompression()) return false;
       ingestAttachmentCompressionResult(result);
+      completeOperationProgress(progress, result);
       return true;
     } catch (error) {
       if (currentCompression()) setSessionError(error, "Não foi possível comprimir o anexo.");
       return false;
     } finally {
+      clearOperationProgress(progress);
       if (currentCompression()) {
         attachmentActionBusy = false;
         attachmentRevision += 1;
@@ -10971,19 +11060,22 @@ export function createAppController({
     sessionError = null;
     const actionAccount = account, actionRevision = sessionRevision;
     const currentChoice = () => !stopped && account === actionAccount && sessionRevision === actionRevision;
+    const progress = beginOperationProgress("Confirmando versão do anexo…");
     attachmentActionBusy = true;
     attachmentRevision += 1;
     render();
     try {
       currentAssistantPollSnapshot = null;
-      const result = await client.chooseAttachmentCompression(choice);
+      const result = await client.chooseAttachmentCompression(choice, progress.options);
       if (!currentChoice()) return false;
       ingestAttachmentCompressionResult(result);
+      completeOperationProgress(progress, result);
       return true;
     } catch (error) {
       if (currentChoice()) setSessionError(error, "Não foi possível concluir a escolha do anexo.");
       return false;
     } finally {
+      clearOperationProgress(progress);
       if (currentChoice()) {
         attachmentActionBusy = false;
         attachmentRevision += 1;
@@ -11616,6 +11708,7 @@ export function createAppController({
   }
 
   function stop() {
+    clearOperationProgress();
     clearAttachmentUploadProgress();
     attachmentCompressionReturnPoint = null;
     clearDiaryAttachmentProgress();

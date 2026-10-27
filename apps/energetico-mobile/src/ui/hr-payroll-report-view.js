@@ -1,5 +1,6 @@
 import { addReportCloseControl } from "./report-close-control.js";
 import { createLoadingIndicator } from "./loading-indicator.js";
+import { beginLoadingTask } from './loading-task.js';
 function element(documentRef, tag, className, text) {
   const node = documentRef.createElement(tag);
   if (className) node.className = className;
@@ -250,20 +251,24 @@ export function createHrPayrollReport({ document: documentOption, root: mountRoo
     if (!opened || destroyed || !currentPayroll) return;
     const requestEpoch = ++epoch;
     controller?.abort();
-    controller = new AbortController();
+    const requestController = controller = new AbortController();
     overlay.setAttribute("aria-busy", "true");
-    status.replaceChildren(createLoadingIndicator(doc, "Carregando pagamentos da folha…"));
+    const loader = createLoadingIndicator(doc, "Carregando pagamentos da folha…"); status.replaceChildren(loader);
     totals.replaceChildren();
     breakdownCards.replaceChildren();
     payments.replaceChildren();
     paymentsSection.open = false;
     paymentsSection.hidden = true;
+    const task = beginLoadingTask(loader, { signal: requestController.signal,
+      isCurrent: () => opened && !destroyed && requestEpoch === epoch });
+    task.prepared();
     try {
-      const rows = await request(currentPayroll.id, { signal: controller.signal });
+      const rows = await request(currentPayroll.id, { signal: requestController.signal, onProgress: task.report });
       if (!opened || destroyed || requestEpoch !== epoch) return;
       if (!Array.isArray(rows)) throw new Error("A consulta retornou uma lista inválida.");
-      renderPayments(rows);
+      task.acquired(); renderPayments(rows); task.complete();
     } catch (error) {
+      task.stop();
       if (!opened || destroyed || requestEpoch !== epoch || error?.name === "AbortError") return;
       status.textContent = "Não foi possível carregar os pagamentos desta folha.";
       payments.replaceChildren();

@@ -29,6 +29,27 @@ function fixture(now = () => new Date('2026-10-05T12:00:00Z')) {
 const draft={launchId:'10',sheetId:'21',paymentType:'SALÁRIO'};
 const operation={operationId:'payment-test-1'};
 
+test('payment options report completed catalogs while another catalog remains pending', async () => {
+  const f = fixture(), events = [], page = f.repository.getItemsPage; let release;
+  f.repository.getItemsPage = (...args) => args[1] === 'IDFOLHA'
+    ? new Promise(resolve => { release = async () => resolve(await page(...args)); }) : page(...args);
+  const reading = f.data.loadOptions({ onProgress: event => events.push(event) });
+  await new Promise(resolve => setImmediate(resolve));
+  assert.ok(events.some(event => event.percent > 0 && event.percent < 100));
+  assert.ok(events.every(event => event.percent < 100));
+  release(); const result = await reading;
+  assert.ok(result.launches.length); assert.equal(events.at(-1).percent, 100); assert.equal(f.writes.length, 0);
+});
+
+test('payment option progress stops after abort during schema discovery', async () => {
+  const f = fixture(), events = [], abort = new AbortController(), columns = f.repository.getColumns; let release;
+  f.repository.getColumns = (...args) => args[1] === 'IDFOLHA'
+    ? new Promise(resolve => { release = async () => resolve(await columns(...args)); }) : columns(...args);
+  const reading = f.data.loadOptions({ signal: abort.signal, onProgress: event => events.push(event) });
+  await new Promise(resolve => setImmediate(resolve)); abort.abort(); const count = events.length; release();
+  await assert.rejects(reading, { name: 'AbortError' }); assert.equal(events.length, count); assert.equal(f.writes.length, 0);
+});
+
 function enableTaxes(f) {
   const get=f.repository.getColumns;
   f.repository.getColumns=async(...args)=>(await get(...args)).map(c=>c.name==='TIPOPGTO'?{...c,choice:{choices:['SALÁRIO','INSS','FGTS']}}:c);

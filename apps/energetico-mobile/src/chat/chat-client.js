@@ -3,6 +3,7 @@ import { audioTranscriptionText } from "./audio-transcription.js";
 import { startDiaryProgress } from "./diary-attachment-progress.js";
 import { uploadWithProgress } from "./upload-transport.js";
 import { readDownloadBlob } from "../../../../portal/data/download-progress.js";
+import { beginLoadingTask } from "../ui/loading-task.js";
 
 const TOKEN_SCOPES = Object.freeze(["User.Read"]);
 const EMPTY_EPI_REPLY_IDS = new Set([
@@ -223,11 +224,38 @@ export function createChatClient({
       : `${Date.now()}-${Math.random().toString(16).slice(2)}`
   );
 
-  async function sendText({ text = "", replyId, omitText = false, homeAttachmentIds, expectedContextId, homeTransferReceipt, onProgress, progressSignal } = {}) {
+  function operationMonitor(callback, signal, requestId) {
+    if (typeof callback !== "function") return null;
+    const task = beginLoadingTask(callback, { signal });
+    let polling;
+    return {
+      prepared() {
+        task.prepared();
+        polling = startDiaryProgress({ onProgress: task.report, signal,
+          read: pollSignal => getDiaryAttachmentProgress(requestId, { signal: pollSignal, action: "operation_progress" }) });
+      },
+      accept(result) {
+        task.acquired();
+        if (result.status === "processed" && !result.error
+          && !result.results?.some(item => /error|fail|paused|invalid|unavailable|reupload/i.test(String(item?.status || "")))) task.complete();
+      },
+      stop() { polling?.stop(); task.stop(); },
+    };
+  }
+
+  async function sendText({ text = "", replyId, omitText = false, homeAttachmentIds, expectedContextId, homeTransferReceipt,
+    onProgress, onOperationProgress: defaultOperationProgress, progressSignal: defaultProgressSignal } = {},
+  { onOperationProgress = defaultOperationProgress, progressSignal = defaultProgressSignal } = {}) {
+    const messageId = newMessageId();
+    const operation = operationMonitor(onOperationProgress, progressSignal, messageId);
+    let progress;
+    try {
     const token = await acquireToken(tokenProvider);
+    operation?.prepared();
     const blankEpiReply = EMPTY_EPI_REPLY_IDS.has(String(replyId || ""));
     const payload = {
-      messageId: newMessageId(),
+      messageId,
+      ...(operation ? { progressRequestId: messageId } : {}),
       ...(typeof onProgress === "function" ? { trackDiaryEvidence: true } : {}),
       ...(!(blankEpiReply || omitText) ? { text: String(text || "").trim() } : {}),
       ...(replyId ? { replyId: String(replyId) } : {}),
@@ -242,11 +270,10 @@ export function createChatClient({
           contextId: homeTransferReceipt.contextId, attachmentIds: [...homeTransferReceipt.attachmentIds] },
       } : {}),
     };
-    const progress = typeof onProgress === "function" ? startDiaryProgress({
+    progress = typeof onProgress === "function" ? startDiaryProgress({
       onProgress, signal: progressSignal,
       read: signal => getDiaryAttachmentProgress(payload.messageId, { signal }),
     }) : null;
-    try {
       const result = await request(chatUrl.href, {
       method: "POST",
       headers: {
@@ -261,16 +288,17 @@ export function createChatClient({
       if (result.status === "processed" && !result.error
           && !result.results?.some(item => /error|fail|paused|invalid|unavailable|reupload/i.test(String(item?.status || "")))
           && result.diaryEvidenceProgress?.requestId === payload.messageId) progress?.complete(result.diaryEvidenceProgress);
+      operation?.accept(result);
       return result;
-    } finally { progress?.stop(); }
+    } finally { progress?.stop(); operation?.stop(); }
   }
 
-  async function getDiaryAttachmentProgress(requestId, { signal } = {}) {
+  async function getDiaryAttachmentProgress(requestId, { signal, action = "diary_evidence_progress" } = {}) {
     const token = await cancellableToken(tokenProvider, signal);
     return request(chatUrl.href, {
       method: "POST",
       headers: { Accept: "application/json", Authorization: `Bearer ${token}`, "Content-Type": "application/json" },
-      body: JSON.stringify({ action: "diary_evidence_progress", requestId }),
+      body: JSON.stringify({ action, requestId }),
       cache: "no-store", credentials: "omit", signal,
     }, async response => {
       if (!response.ok) throw new Error("Progresso indisponível");
@@ -399,10 +427,14 @@ export function createChatClient({
     return result.attachments;
   }
 
-  async function launchGalleryRequest(operation, payload = {}, { signal } = {}) {
+  async function launchGalleryRequest(operation, payload = {}, { signal, onProgress } = {}) {
     const allowed = new Set(["snapshot", "detail", "schema", "update", "delete", "payment", "measurement", "attachment", "attachment_delete"]);
     if (!allowed.has(operation)) throw new Error("Operação de galeria inválida.");
+    const progressId = typeof onProgress === "function" ? newMessageId() : null;
+    const progress = operationMonitor(onProgress, signal, progressId);
+    try {
     const token = await acquireToken(tokenProvider);
+    progress?.prepared();
     const readOnly = ["snapshot", "detail", "schema", "attachment"].includes(operation);
     // The VM reads launch rows afresh on every snapshot and rejects unknown keys.
     // Refresh is a UI loader hint, not an additional server contract field.
@@ -411,11 +443,14 @@ export function createChatClient({
     const result = await request(chatUrl.href, {
       method: "POST",
       headers: { Accept: "application/json", Authorization: `Bearer ${token}`, "Content-Type": "application/json" },
-      body: JSON.stringify({ action: "launch_gallery", operation, payload: requestPayload }),
+      body: JSON.stringify({ action: "launch_gallery", operation, payload: requestPayload,
+        ...(progress ? { progressRequestId: progressId } : {}) }),
       cache: "no-store", credentials: "omit", ...(signal ? { signal } : {}),
     }, response => parsePortalResponse(response, "A galeria de lançamentos"), readOnly);
     if (!result.launchGallery || typeof result.launchGallery !== "object") throw new Error("A VM não devolveu os dados da galeria.");
+    progress?.accept(result);
     return result.launchGallery;
+    } finally { progress?.stop(); }
   }
 
   async function uploadLaunchGalleryFile(itemId, file, options = {}) {
@@ -445,46 +480,24 @@ export function createChatClient({
     return result.launchGallery;
   }
 
-  async function getPendingProvisionSnapshot() {
-    const token = await acquireToken(tokenProvider);
-    const result = await request(chatUrl.href, {
-      method: "POST",
-      headers: { Accept: "application/json", Authorization: `Bearer ${token}`, "Content-Type": "application/json" },
-      body: JSON.stringify({ action: "pending_provisions_snapshot", sourceKind: "provision-description" }),
-      cache: "no-store",
-      credentials: "omit",
-    }, response => parsePortalResponse(response, "A consulta de provisões pendentes", { allowRecovery: true }), true);
+  async function getPendingProvisionSnapshot(options = {}) {
+    const result = await portalAction("pending_provisions_snapshot", { sourceKind: "provision-description" }, "A consulta de provisões pendentes", options, { readOnly: true, allowRecovery: true });
     const snapshot = result?.pendingProvisions;
     if (!snapshot || !Array.isArray(snapshot.rows)) throw new Error("A VM não devolveu a lista de provisões pendentes.");
     return snapshot;
   }
 
-  async function getPendingNotesSnapshot() {
-    const token = await acquireToken(tokenProvider);
-    const result = await request(chatUrl.href, {
-      method: "POST",
-      headers: { Accept: "application/json", Authorization: `Bearer ${token}`, "Content-Type": "application/json" },
-      body: JSON.stringify({ action: "pending_notes_snapshot" }),
-      cache: "no-store",
-      credentials: "omit",
-    }, response => parsePortalResponse(response, "A consulta de notas pendentes", { allowRecovery: true }), true);
+  async function getPendingNotesSnapshot(options = {}) {
+    const result = await portalAction("pending_notes_snapshot", {}, "A consulta de notas pendentes", options, { readOnly: true, allowRecovery: true });
     const snapshot = result?.pendingNotes;
     if (!snapshot || !Array.isArray(snapshot.rows)) throw new Error("A VM não devolveu a lista de notas pendentes.");
     return snapshot;
   }
 
-  async function getRhidAttendanceReport(selectedDate, { includeRegistration = false } = {}) {
+  async function getRhidAttendanceReport(selectedDate, { includeRegistration = false, ...options } = {}) {
     const date = String(selectedDate || "").trim();
     if (!validIsoDate(date)) throw new Error("Selecione uma data válida para o relatório RHID.");
-    const token = await acquireToken(tokenProvider);
-    const result = await request(chatUrl.href, {
-      method: "POST",
-      headers: { Accept: "application/json", Authorization: `Bearer ${token}`, "Content-Type": "application/json" },
-      body: JSON.stringify({ action: "rhid_attendance_report", date,
-        ...(includeRegistration === true ? { includeRegistration: true } : {}) }),
-      cache: "no-store",
-      credentials: "omit",
-    }, response => parsePortalResponse(response, "O relatório de presenças RHID", { allowRecovery: true }), true);
+    const result = await portalAction("rhid_attendance_report", { date, ...(includeRegistration === true ? { includeRegistration: true } : {}) }, "O relatório de presenças RHID", options, { readOnly: true, allowRecovery: true });
     const report = result?.attendanceReport;
     if (!report || report.date !== date || !Array.isArray(report.rows)) {
       throw new Error("A VM não devolveu o relatório RHID da data escolhida.");
@@ -639,44 +652,46 @@ export function createChatClient({
     return result.provisionRefresh;
   }
 
-  async function deleteAttachment(attachmentId) {
+  async function deleteAttachment(attachmentId, options = {}) {
     const id = String(attachmentId || "").trim();
     if (!id) throw new Error("O anexo a excluir não foi identificado.");
+    return portalAction("attachment_delete", { attachmentId: id }, "A exclusão do anexo", options);
+  }
+
+  async function portalAction(action, payload, failurePrefix, options = {}, { readOnly = false, allowRecovery = false } = {}) {
+    const callback = options.onProgress || options.onOperationProgress;
+    const progressId = typeof callback === "function" ? newMessageId() : null;
+    const progress = operationMonitor(callback, options.progressSignal || options.signal, progressId);
+    try {
     const token = await acquireToken(tokenProvider);
-    return request(chatUrl.href, {
+    progress?.prepared();
+    const result = await request(chatUrl.href, {
       method: "POST",
       headers: { Accept: "application/json", Authorization: `Bearer ${token}`, "Content-Type": "application/json" },
-      body: JSON.stringify({ action: "attachment_delete", attachmentId: id }),
+      body: JSON.stringify({ action, ...payload, ...(progress ? { progressRequestId: progressId } : {}) }),
       cache: "no-store",
       credentials: "omit",
-    }, response => parsePortalResponse(response, "A exclusão do anexo"));
+      ...(readOnly && options.signal ? { signal: options.signal } : {}),
+    }, response => parsePortalResponse(response, failurePrefix, { allowRecovery }), readOnly);
+    progress?.accept(result);
+    return result;
+    } finally { progress?.stop(); }
   }
 
-  async function attachmentAction(action, payload, failurePrefix) {
-    const token = await acquireToken(tokenProvider);
-    return request(chatUrl.href, {
-      method: "POST",
-      headers: { Accept: "application/json", Authorization: `Bearer ${token}`, "Content-Type": "application/json" },
-      body: JSON.stringify({ action, ...payload }),
-      cache: "no-store",
-      credentials: "omit",
-    }, response => parsePortalResponse(response, failurePrefix));
+  async function deleteAllAttachments(options = {}) {
+    return portalAction("attachment_delete_all", {}, "A exclusão dos anexos", options);
   }
 
-  async function deleteAllAttachments() {
-    return attachmentAction("attachment_delete_all", {}, "A exclusão dos anexos");
-  }
-
-  async function compressAttachment(attachmentId) {
+  async function compressAttachment(attachmentId, options = {}) {
     const id = String(attachmentId || "").trim();
     if (!id) throw new Error("O anexo a compactar não foi identificado.");
-    return attachmentAction("attachment_compress", { attachmentId: id }, "A compactação do anexo");
+    return portalAction("attachment_compress", { attachmentId: id }, "A compactação do anexo", options);
   }
 
-  async function chooseAttachmentCompression(choice) {
+  async function chooseAttachmentCompression(choice, options = {}) {
     const value = String(choice || "").trim();
     if (!value) throw new Error("A versão do anexo não foi escolhida.");
-    return attachmentAction("attachment_compression_choice", { choice: value }, "A escolha da versão compactada");
+    return portalAction("attachment_compression_choice", { choice: value }, "A escolha da versão compactada", options);
   }
 
   async function getCompletionMenu(completionId) {

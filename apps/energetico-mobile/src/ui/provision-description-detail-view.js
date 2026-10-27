@@ -1,5 +1,6 @@
 import Decimal from 'decimal.js';
 import { createLoadingIndicator } from './loading-indicator.js';
+import { beginLoadingTask } from './loading-task.js';
 
 /** Read-only modal owned by the payment gallery; no editor or mutation actions. */
 export function createProvisionDescriptionDetail({ document: doc, host, background, loadGroup,
@@ -85,17 +86,22 @@ export function createProvisionDescriptionDetail({ document: doc, host, backgrou
     cancelLoad(state);
     const version = state.version, controller = state.controller = new AbortController();
     state.dialog.setAttribute('aria-busy', 'true');
-    state.body.replaceChildren(createLoadingIndicator(doc, 'Carregando provisões vinculadas…'));
+    const loader = createLoadingIndicator(doc, 'Carregando provisões vinculadas…'); state.body.replaceChildren(loader);
+    const task = beginLoadingTask(loader, { signal: controller.signal,
+      isCurrent: () => active(state) && state.version === version });
+    task.prepared();
     state.timer = setTimeout(() => {
       if (!active(state) || state.version !== version) return;
       cancelLoad(state); failure(state, 'A consulta demorou mais que o esperado. Verifique a conexão e tente novamente.');
     }, Math.max(1, Number(timeoutMs) || 30_000));
     try {
       if (typeof loadGroup !== 'function') throw new Error('Consulta indisponível.');
-      const result = await loadGroup(state.id, { signal: controller.signal });
+      const result = await loadGroup(state.id, { signal: controller.signal, onProgress: task.report });
       if (!active(state) || state.version !== version) return;
-      state.body.replaceChildren(groupContent(result, state.id)); state.dialog.setAttribute('aria-busy', 'false');
+      const content = groupContent(result, state.id); task.acquired();
+      state.body.replaceChildren(content); state.dialog.setAttribute('aria-busy', 'false'); task.complete();
     } catch (error) {
+      task.stop();
       if (!active(state) || state.version !== version) return;
       failure(state, error?.code === 'provision_description_not_found'
         ? 'O descritivo da provisão não está mais disponível. Feche e atualize a galeria.'

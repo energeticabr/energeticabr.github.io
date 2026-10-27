@@ -3,6 +3,7 @@ import { applyScreenNavigation } from "./screen-navigation.js";
 import { createGalleryCreationToolbar } from './gallery-create-shortcut.js';
 import { attachGalleryRefreshButton } from './gallery-refresh.js';
 import { createLoadingIndicator } from "./loading-indicator.js";
+import { beginLoadingTask } from './loading-task.js';
 import { createGalleryLoadingScreen } from './gallery-loading-screen.js';
 import { createGalleryRecordActions } from './gallery-record-actions.js';
 import { galleryDeletionFields } from './gallery-deletion-receipt.js';
@@ -482,11 +483,15 @@ export function createLaunchGallery({ document: documentRef = globalThis.documen
     listLoading = true;
     if (blocking) listStatus.textContent = '';
     updateBusy();
+    const task = (blocking ? loadingScreen : recalculatingScreen).beginTask({
+      isCurrent: () => active(epoch) && version === listVersion && (blocking || matchesCurrentFilters()) });
+    task.prepared();
     try {
-      const result = await request('snapshot', { ...data, filters: { ...data.filters }, ...(refresh ? { refresh: true } : {}) });
+      const result = await request('snapshot', { ...data, filters: { ...data.filters }, ...(refresh ? { refresh: true } : {}) }, { onProgress: task.report });
       if (!active(epoch) || version !== listVersion) return;
       if (!blocking && !matchesCurrentFilters()) { autoFilters.invalidate(); return; }
       if (!Array.isArray(result?.rows)) throw new Error('Resposta de lançamentos inválida');
+      task.acquired();
       page = result.page ?? data.page; pages = result.pages ?? 1;
       totals.replaceChildren(...TOTALS.map(([totalKey, title]) => {
         const pair = element('div', `lg-total lg-total-${totalKey}`);
@@ -507,6 +512,7 @@ export function createLaunchGallery({ document: documentRef = globalThis.documen
       void attachmentCounts.request(result.rows.filter(item => recordMedia(item)));
       listStatus.replaceChildren(element('p', 'lg-hint', result.rows.length ? `${result.count ?? result.rows.length} lançamento(s)` : 'Nenhum lançamento encontrado para estes filtros.'));
       pageLabel.textContent = `Página ${pages ? page : 0} de ${pages}`;
+      task.complete();
       return true;
     } catch (error) {
       if (!active(epoch) || version !== listVersion) return;
@@ -518,6 +524,7 @@ export function createLaunchGallery({ document: documentRef = globalThis.documen
         }, { locked: false }));
       return false;
     } finally {
+      task.stop();
       if (active(epoch) && version === listVersion) {
         // Keep stale results covered until the newest input has been applied.
         listLoading = autoFilters.hasPendingApplication() && !matchesCurrentFilters(); updateBusy();
@@ -677,20 +684,39 @@ export function createLaunchGallery({ document: documentRef = globalThis.documen
     });
     return pair;
   }
-  async function fetchLaunchRows(filters = {}, { signal, parallelPages = 1 } = {}) {
+  async function fetchLaunchRows(filters = {}, { signal, parallelPages = 1, onProgress } = {}) {
     const pageSize = 100;
     const concurrency = Math.max(1, Math.min(4, Math.trunc(Number(parallelPages) || 1)));
+    // Acquisition stages: discover pagination, read pages, normalize rows.
+    // Only a service-declared page total can subdivide the page-reading stage.
+    let totalPages = null;
+    const pageProgress = new Map();
+    const report = value => { try { onProgress?.(value); } catch { /* Progress is optional. */ } };
+    const reportPages = () => {
+      if (totalPages) report({ percent: (1 + Math.min(1, [...pageProgress.values()].reduce((sum, part) => sum + part, 0) / totalPages)) * 100 / 3 });
+    };
+    const reportPage = (pageNumber, value) => {
+      const percent = value?.percent;
+      if (typeof percent !== 'number' || !Number.isFinite(percent) || percent < 0 || percent > 100) return;
+      pageProgress.set(pageNumber, Math.max(pageProgress.get(pageNumber) || 0, percent / 100));
+      if (pageNumber === 1 && !totalPages) report({ percent: percent / 3 });
+      else reportPages();
+    };
     const loadPage = async targetPage => {
       if (targetPage > 100) throw new Error('A consulta ultrapassou o limite seguro de páginas.');
-      const result = await request('snapshot', { filters, sort: SORTS[0], page: targetPage, pageSize }, { signal });
+      const result = await request('snapshot', { filters, sort: SORTS[0], page: targetPage, pageSize }, {
+        signal, onProgress: value => reportPage(targetPage, value) });
       if (!Array.isArray(result?.rows)) throw new Error('Resposta de lançamentos inválida');
       const reportedPages = Number(result.pages);
       if (Number.isFinite(reportedPages) && reportedPages > 100) throw new Error('A consulta ultrapassou o limite seguro de páginas.');
+      reportPage(targetPage, { percent: 100 });
       return result;
     };
     const firstPage = await loadPage(1);
     const pageRows = [firstPage.rows];
     const firstPageCount = Number(firstPage.pages);
+    if (Number.isInteger(firstPageCount) && firstPageCount > 0) totalPages = firstPageCount;
+    report({ percent: 100 / 3 }); reportPages();
     const reportedCount = Number(firstPage.count);
     let pagesToLoad = Number.isFinite(firstPageCount) && firstPageCount > 0
       ? Math.trunc(firstPageCount)
@@ -710,12 +736,15 @@ export function createLaunchGallery({ document: documentRef = globalThis.documen
         const pageNumber = batch[index];
         pageRows[pageNumber - 1] = result.rows;
         const resultPageCount = Number(result.pages);
+        if (totalPages && Number.isInteger(resultPageCount) && resultPageCount > totalPages) totalPages = resultPageCount;
         if (Number.isFinite(resultPageCount) && resultPageCount > 0) pagesToLoad = Math.max(pagesToLoad, Math.trunc(resultPageCount));
         else if (result.rows.length >= pageSize) pagesToLoad = Math.max(pagesToLoad, pageNumber + 1);
       });
       if (pagesToLoad > 100) throw new Error('A consulta ultrapassou o limite seguro de páginas.');
+      reportPages();
     }
 
+    report({ percent: 200 / 3 });
     const rowsById = new Map();
     for (const rows of pageRows) {
       for (const item of rows ?? []) {
@@ -723,7 +752,9 @@ export function createLaunchGallery({ document: documentRef = globalThis.documen
         if (id) rowsById.set(id, item);
       }
     }
-    return [...rowsById.values()];
+    const rows = [...rowsById.values()];
+    report({ percent: 100 });
+    return rows;
   }
   function amountFor(item) {
     const fields = item?.fields;
@@ -853,10 +884,14 @@ export function createLaunchGallery({ document: documentRef = globalThis.documen
     const title = kind === 'supplier' ? `Lançamentos do fornecedor ${display(value)}` : `Pedido agrupado #${display(value)}`;
     const closeButton = button('Fechar', closeCluster, { locked: false });
     closeButton.classList.add('lg-detail-close');
-    clusterPanel.replaceChildren(element('div', 'lg-detail-header', ''), createLoadingIndicator(doc, "Carregando informações…"));
+    const indicator = createLoadingIndicator(doc, "Carregando informações…");
+    clusterPanel.replaceChildren(element('div', 'lg-detail-header', ''), indicator);
     const heading = element('h2', 'lg-section-title', title);
     clusterPanel.querySelector('.lg-detail-header').replaceChildren(heading, closeButton);
     focus(closeButton);
+    const task = beginLoadingTask(indicator, { signal,
+      isCurrent: () => active(epoch) && version === clusterVersion && !clusterPanel.hidden });
+    task.prepared();
     const timeout = Math.max(1, Number(clusterTimeoutMs) || 30_000);
     clusterTimer = setTimeout(() => {
       if (!active(epoch) || version !== clusterVersion || clusterPanel.hidden) return;
@@ -872,21 +907,34 @@ export function createLaunchGallery({ document: documentRef = globalThis.documen
     }, timeout);
     try {
       if (kind === 'supplier') {
-        const results = await fetchLaunchRows({ supplier: rawValue }, { signal });
+        const results = await fetchLaunchRows({ supplier: rawValue }, { signal, onProgress: task.report });
         if (!active(epoch) || version !== clusterVersion || clusterPanel.hidden) return;
+        task.acquired();
         const supplierRows = results.filter(item => clusterKey(field(item.fields, 'FORNECEDOR')) === clusterKey(rawValue));
         const listing = launchTable(supplierRows, 'supplier');
         const introduction = element('p', 'lg-cluster-intro', `Todos os lançamentos de ${display(value)} encontrados na galeria.`);
         const content = supplierRows.length ? [introduction, listing.table, listing.totals]
           : [introduction, element('p', 'lg-hint', 'Nenhum lançamento encontrado para este fornecedor.')];
         clusterPanel.replaceChildren(clusterPanel.querySelector('.lg-detail-header'), ...content);
+        task.complete();
       } else {
         if (!rawValue || !clusterKey(rawValue)) throw new Error('O valor de AGRUPAR não identifica um pedido válido.');
         if (typeof loadOrderSnapshot !== 'function') throw new Error('A consulta de pedidos do SharePoint não está disponível nesta sessão.');
         if (typeof loadLaunchGroup !== 'function') throw new Error('A consulta filtrada de LANCAMENTOS não está disponível nesta sessão.');
+        // Two independent source reads followed by the selected sparse-record batch.
+        const parts = [0, 0, 0];
+        const partProgress = index => value => {
+          const percent = value?.percent;
+          if (typeof percent !== 'number' || !Number.isFinite(percent) || percent < 0 || percent > 100) return;
+          parts[index] = Math.max(parts[index], percent / 100);
+          task.report({ percent: parts.reduce((sum, part) => sum + part, 0) * 100 / parts.length });
+        };
+        const orderProgress = partProgress(0), linksProgress = partProgress(1), hydrationProgress = partProgress(2);
         const [orders, launchRows] = await Promise.all([
-          loadOrderSnapshot({ id: rawValue, signal }),
-          loadLaunchGroup(rawValue, { signal }),
+          Promise.resolve(loadOrderSnapshot({ id: rawValue, signal, onProgress: orderProgress }))
+            .then(result => { orderProgress({ percent: 100 }); return result; }),
+          Promise.resolve(loadLaunchGroup(rawValue, { signal, onProgress: linksProgress }))
+            .then(result => { linksProgress({ percent: 100 }); return result; }),
         ]);
         if (!active(epoch) || version !== clusterVersion || clusterPanel.hidden) return;
         if (!Array.isArray(orders?.rows)) throw new Error('O SharePoint não devolveu os pedidos.');
@@ -901,11 +949,19 @@ export function createLaunchGallery({ document: documentRef = globalThis.documen
         let sparseCursor = 0;
         let loadMoreError = '';
         const current = () => active(epoch) && version === clusterVersion && !clusterPanel.hidden;
-        async function hydrateNext(batchSignal, isLive = current) {
+        async function hydrateNext(batchSignal, isLive = current, onProgress) {
           const fallback = sparse.slice(sparseCursor, sparseCursor + MAX_SPARSE_ORDER_DETAILS);
+          const progress = fallback.map(() => 0);
+          const reportItem = (index, value) => {
+            const percent = value?.percent;
+            if (!isLive() || typeof percent !== 'number' || !Number.isFinite(percent) || percent < 0 || percent > 100) return;
+            progress[index] = Math.max(progress[index], percent / 100);
+            onProgress?.({ percent: progress.reduce((sum, part) => sum + part, 0) * 100 / fallback.length });
+          };
+          if (!fallback.length && isLive()) onProgress?.({ percent: 100 });
           for (let offset = 0; offset < fallback.length; offset += 4) {
-            const batch = await Promise.allSettled(fallback.slice(offset, offset + 4).map(({ item }) =>
-              request('detail', { id: item.id }, { signal: batchSignal })));
+            const batch = await Promise.allSettled(fallback.slice(offset, offset + 4).map(({ item }, index) =>
+              request('detail', { id: item.id }, { signal: batchSignal, onProgress: value => reportItem(offset + index, value) })));
             if (!isLive()) return;
             batch.forEach((result, index) => {
               const expectedId = String(fallback[offset + index].item.id);
@@ -915,6 +971,7 @@ export function createLaunchGallery({ document: documentRef = globalThis.documen
                 failedIds.push(expectedId);
               } else {
                 linked[fallback[offset + index].index] = item;
+                reportItem(offset + index, { percent: 100 });
               }
             });
           }
@@ -976,9 +1033,11 @@ export function createLaunchGallery({ document: documentRef = globalThis.documen
           if (pendingIds.length) content.push(button('Carregar próximos lançamentos', () => { void loadMore(); }, { locked: false }));
           clusterPanel.replaceChildren(clusterPanel.querySelector('.lg-detail-header'), ...content);
         }
-        await hydrateNext(signal);
+        await hydrateNext(signal, current, hydrationProgress);
         if (!current()) return;
+        task.acquired();
         renderOrderPanel();
+        if (order && !failedIds.length && sparseCursor === sparse.length) task.complete();
       }
       focus(closeButton);
     } catch (error) {
@@ -988,6 +1047,7 @@ export function createLaunchGallery({ document: documentRef = globalThis.documen
       clusterPanel.replaceChildren(clusterPanel.querySelector('.lg-detail-header'), element('p', 'lg-error', failure(error, 'Não foi possível carregar o agrupamento')), retry);
       focus(retry);
     } finally {
+      task.stop();
       if (clusterAbortController === controller) {
         if (clusterTimer != null) clearTimeout(clusterTimer);
         clusterTimer = null;
@@ -1156,19 +1216,26 @@ export function createLaunchGallery({ document: documentRef = globalThis.documen
     selectedId = id;
     const version = ++detailVersion, epoch = session;
     detailLoading = true; panel.hidden = false;
-    panel.replaceChildren(createLoadingIndicator(doc, `Carregando edição de #${id}…`)); updateBusy();
+    const indicator = createLoadingIndicator(doc, `Carregando edição de #${id}…`);
+    panel.replaceChildren(indicator); updateBusy();
+    const task = beginLoadingTask(indicator, {
+      isCurrent: () => active(epoch) && version === detailVersion && !panel.hidden });
+    task.prepared();
     try {
-      const result = await request('detail', { id });
+      const result = await request('detail', { id }, { onProgress: task.report });
       if (!active(epoch) || version !== detailVersion) return;
       if (!result?.item?.fields) throw new Error('Resposta de edição inválida');
+      task.acquired();
       current = result; needsDetailRefresh = false; pendingAttachmentName = null;
       renderDetail(); reveal(panel); focus(editor?.form?.querySelector('.sfs-trigger, input:not([hidden]), textarea') ?? panel);
+      task.complete();
     } catch (error) {
       if (!active(epoch) || version !== detailVersion) return;
       current = null;
       panel.replaceChildren(element('p', 'lg-error', failure(error, `Erro ao abrir #${id}`)),
         button('Tentar novamente', () => loadDetail(id)), button('Fechar edição', dismissDetail));
     } finally {
+      task.stop();
       if (active(epoch) && version === detailVersion) { detailLoading = false; updateBusy(); }
     }
   }

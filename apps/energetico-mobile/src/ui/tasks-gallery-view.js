@@ -594,17 +594,21 @@ export function createTasksGallery({ document: documentRef = globalThis.document
     const current = session; controller?.abort(); const loadController = controller = new AbortController(); listLoading = true;
     showNotice(""); listStatus.textContent = ''; cards.replaceChildren(); updateBusy();
     void loadSuppliers();
+    const task = loadingScreen.beginTask({ signal: loadController.signal,
+      isCurrent: () => opened && !destroyed && root.isConnected && current === session && controller === loadController });
+    task.prepared();
     try {
-      const result = await data.loadSnapshot({ signal: loadController.signal, refresh });
+      const result = await data.loadSnapshot({ signal: loadController.signal, refresh, onProgress: task.report });
       if (!opened || destroyed || !root.isConnected || current !== session || controller !== loadController) return false;
       if (!Array.isArray(result?.rows)) throw new Error("A consulta não retornou uma lista de tarefas válida.");
+      task.acquired();
       rows = sortRows(result.rows.filter(row => /^\d{1,15}$/.test(String(row?.id || ""))));
-      filterOptions(); updateMetrics(); applyLocalFilters(); return true;
+      filterOptions(); updateMetrics(); applyLocalFilters(); task.complete(); return true;
     } catch (error) {
       if (!opened || destroyed || !root.isConnected || current !== session || controller !== loadController || error?.name === "AbortError") return false;
       listStatus.textContent = safeFailure(error, "Não foi possível carregar tarefas");
       const retry = el("button", "og-button og-button--primary", "Tentar novamente"); retry.type = "button"; retry.addEventListener("click", () => { void loadSnapshot(); }); cards.replaceChildren(retry); return false;
-    } finally { if (opened && !destroyed && root.isConnected && current === session && controller === loadController) { listLoading = false; updateBusy(); } }
+    } finally { task.stop(); if (opened && !destroyed && root.isConnected && current === session && controller === loadController) { listLoading = false; updateBusy(); } }
   }
 
   const autoFilters = bindAutoFilterForm(form, applyLocalFilters);

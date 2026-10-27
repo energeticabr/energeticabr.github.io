@@ -5,6 +5,7 @@ import { createSharePointAttachmentTransport, validateAttachment } from '../../.
 import { mealVoucherKey as key, validateMealVoucherDraft } from './meal-voucher.js';
 import { payrollDecimal } from './supplier-payroll.js';
 import { PAYROLL_RUBRICS } from './supplier-payroll.js';
+import { createPayrollProgress } from './supplier-payroll-data.js';
 import { MEAL_VOUCHER_CONTROL_COLUMN, mealVoucherControlColumn, ensureMealVoucherSchema } from './meal-voucher-schema.js';
 import { createMealVoucherAttachments } from './meal-voucher-attachments.js';
 import { payrollLaunchReferenceColumn, ensurePayrollLaunchSchema, confirmPayrollLaunchReference, compatiblePayrollLaunchLink,
@@ -71,18 +72,24 @@ export function createMealVoucherData({ repository, graph, tokenProvider, storag
     descriptors.delete('NOTASPENDENTES');
     descriptors.delete('LANCAMENTOS');
   }
-  async function describe(name) {
+  async function describe(name, { signal, onProgress } = {}) {
+    signal?.throwIfAborted();
     assertSession();
+    const loading = createPayrollProgress(onProgress, ['list', 'columns']);
     if (!descriptors.has(name)) {
-      const list = await repository.resolveList(siteKey, [name]);
+      const list = await repository.resolveList(siteKey, [name], { signal });
+      signal?.throwIfAborted();
       if (list?.status !== 'resolved' || !list.id) throw new Error(`A lista ${name} não está disponível.`);
-      const columns = [...await repository.getColumns(siteKey, list.id, name === 'NOTASPENDENTES' ? { includeHidden:true } : {})];
+      loading.done('list');
+      const columns = [...await repository.getColumns(siteKey, list.id, { ...(name === 'NOTASPENDENTES' ? { includeHidden:true } : {}), signal })];
+      signal?.throwIfAborted();
       assertSession();
       // Legacy inspection stays read-only even before the schema migration.
       if (name === 'NOTASPENDENTES' && !mealVoucherControlColumn(columns)) columns.push({ name:MEAL_VOUCHER_CONTROL_COLUMN,
         hidden:true, text:{allowMultipleLines:true}, virtual:true });
       descriptors.set(name, { id: list.id, name, columns });
-    }
+    } else loading.done('list');
+    loading.done('columns');
     return descriptors.get(name);
   }
   function column(descriptor, aliases, required = true) {
@@ -192,51 +199,67 @@ export function createMealVoucherData({ repository, graph, tokenProvider, storag
     }
     return revision;
   }
-  async function all(descriptor, filter = '') {
+  async function all(descriptor, filter = '', { signal, onProgress } = {}) {
+    const loading = createPayrollProgress(onProgress, ['pages']);
     const result = [], seen = new Set(); let cursor;
     for (let pageNumber = 1; pageNumber <= 100; pageNumber++) {
       assertSession();
-      const page = await repository.getItemsPage(siteKey, descriptor.id, `${readQuery(descriptor)}&$top=100${filter ? `&$filter=${filter}` : ''}`, { pageNumber, maxPages: 100, ...(cursor ? { cursor } : {}), headers: { Prefer: 'HonorNonIndexedQueriesWarningMayFailRandomly' } });
+      signal?.throwIfAborted();
+      const page = await repository.getItemsPage(siteKey, descriptor.id, `${readQuery(descriptor)}&$top=100${filter ? `&$filter=${filter}` : ''}`, { pageNumber, maxPages: 100, ...(cursor ? { cursor } : {}), signal, headers: { Prefer: 'HonorNonIndexedQueriesWarningMayFailRandomly' } });
       assertSession();
+      signal?.throwIfAborted();
       if (!Array.isArray(page?.items) || typeof page.hasMore !== 'boolean') throw new Error('A resposta do SharePoint está incompleta.');
       result.push(...page.items.map(row=>normalizedOrder(descriptor,row)));
-      if (!page.hasMore) return result;
+      const detail = { completedPages: pageNumber, completedItems: result.length };
+      if (!page.hasMore) { loading.done('pages', detail); return result; }
+      loading.report('pages', undefined, detail);
       if (!page.nextLink || seen.has(page.nextLink)) throw new Error('A paginação do SharePoint está incompleta.');
       seen.add(page.nextLink); cursor = page.nextLink;
     }
     throw new Error('A lista ultrapassou o limite seguro de páginas.');
   }
-  async function suppliers() {
-    const descriptor = await describe('FORNECEDORES');
-    return (await all(descriptor)).filter(row => key(value(descriptor, row, ['STATUS'])) === 'ATIVO' && key(value(descriptor, row, ['EMPREITEIRO'])) === 'SIM')
+  async function suppliers({ signal, onProgress } = {}) {
+    const loading = createPayrollProgress(onProgress, ['schema', 'items', 'normalized']);
+    const descriptor = await describe('FORNECEDORES', { signal, onProgress: loading.child('schema') });
+    const result = (await all(descriptor, '', { signal, onProgress: loading.child('items') })).filter(row => key(value(descriptor, row, ['STATUS'])) === 'ATIVO' && key(value(descriptor, row, ['EMPREITEIRO'])) === 'SIM')
       .map(row => ({ id: String(row.id), label: value(descriptor, row, ['CADASTRO', 'FORNECEDOR']), branch: value(descriptor, row, ['FILIAL']), profession: value(descriptor, row, ['PROFISSAO', 'PROFISSÃO'], false) }))
       .filter(row => numericId(row.id) && row.label).sort((a, b) => a.label.localeCompare(b.label, 'pt-BR'));
+    loading.done('normalized'); return result;
   }
-  async function options(name, label, extra = {}) {
-    const descriptor = await describe(name);
-    return (await all(descriptor)).map(row => ({ id: String(row.id), label: value(descriptor, row, [label]), ...Object.fromEntries(Object.entries(extra).map(([property, aliases]) => [property, value(descriptor, row, aliases)])) }))
+  async function options(name, label, extra = {}, { signal, onProgress } = {}) {
+    const loading = createPayrollProgress(onProgress, ['schema', 'items', 'normalized']);
+    const descriptor = await describe(name, { signal, onProgress: loading.child('schema') });
+    const result = (await all(descriptor, '', { signal, onProgress: loading.child('items') })).map(row => ({ id: String(row.id), label: value(descriptor, row, [label]), ...Object.fromEntries(Object.entries(extra).map(([property, aliases]) => [property, value(descriptor, row, aliases)])) }))
       .filter(row => numericId(row.id) && row.label);
+    loading.done('normalized'); return result;
   }
-  async function loadOptions() {
-    const [available, accounts, stages] = await Promise.all([suppliers(), options('CADASTROCONTA', 'CONTA'), options('LANCAMENTOOBRA', 'ETAPA', { branch: ['FILIAL'] })]);
+  async function loadOptions({ signal, onProgress } = {}) {
+    const loading = createPayrollProgress(onProgress, ['suppliers', 'accounts', 'stages']);
+    const [available, accounts, stages] = await Promise.all([suppliers({ signal, onProgress: loading.child('suppliers') }),
+      options('CADASTROCONTA', 'CONTA', {}, { signal, onProgress: loading.child('accounts') }),
+      options('LANCAMENTOOBRA', 'ETAPA', { branch: ['FILIAL'] }, { signal, onProgress: loading.child('stages') })]);
     return { suppliers: available, accounts, stages };
   }
-  async function loadOrders(branch) {
-    const descriptor = await describe('NOTASPENDENTES');
-    return (await all(descriptor)).filter(row => numericId(row.id) && key(value(descriptor, row, ['FILIAL'])) === key(branch) && pending(value(descriptor, row, ['STATUS'])))
+  async function loadOrders(branch, { signal, onProgress } = {}) {
+    const loading = createPayrollProgress(onProgress, ['schema', 'items', 'normalized']);
+    const descriptor = await describe('NOTASPENDENTES', { signal, onProgress: loading.child('schema') });
+    const result = (await all(descriptor, '', { signal, onProgress: loading.child('items') })).filter(row => numericId(row.id) && key(value(descriptor, row, ['FILIAL'])) === key(branch) && pending(value(descriptor, row, ['STATUS'])))
       .map(row => ({ id: String(row.id), label: `Pedido ${row.id} · ${value(descriptor, row, ['FORNECEDOR'])} · ${value(descriptor, row, ['VALORTOTAL'], false) || '0'}`, supplier: value(descriptor, row, ['FORNECEDOR']) }))
       .sort((a, b) => Number(b.id) - Number(a.id));
+    loading.done('normalized'); return result;
   }
-  async function loadSheetAssignments(referenceMonth, selectedSuppliers) {
+  async function loadSheetAssignments(referenceMonth, selectedSuppliers, { signal, onProgress } = {}) {
     if (!/^\d{4}-(0[1-9]|1[0-2])$/.test(String(referenceMonth || ''))) throw new Error('Informe um mês de referência válido.');
     if (new Set(selectedSuppliers.map(supplier => key(supplier.label))).size !== selectedSuppliers.length) throw new Error('Fornecedores homônimos não podem compartilhar a mesma IDFOLHA; confira os cadastros.');
-    const descriptor = await describe('IDFOLHA');
-    const rows = await all(descriptor), assignments = {};
+    const loading = createPayrollProgress(onProgress, ['schema', 'items', ...selectedSuppliers.map(supplier => `supplier:${supplier.id}`)]);
+    const descriptor = await describe('IDFOLHA', { signal, onProgress: loading.child('schema') });
+    const rows = await all(descriptor, '', { signal, onProgress: loading.child('items') }), assignments = {};
     for (const supplier of selectedSuppliers) {
       const matching = rows.filter(row => monthKey(value(descriptor, row, ['MESREFERENCIA', 'MES REFERENCIA'])) === referenceMonth
         && key(value(descriptor, row, ['FORNECEDOR'])) === key(supplier.label));
       if (matching.length !== 1 || !numericId(matching[0]?.id)) throw new Error(`O fornecedor ${supplier.label} precisa ter exatamente uma IDFOLHA em ${referenceMonth}.`);
       assignments[supplier.id] = { id: String(matching[0].id), supplier: supplier.label, referenceMonth };
+      loading.done(`supplier:${supplier.id}`);
     }
     return assignments;
   }
@@ -387,7 +410,9 @@ export function createMealVoucherData({ repository, graph, tokenProvider, storag
     }
     return supplierId;
   }
-  async function inspectPending(rawDraft, progress = {}) {
+  async function inspectPending(rawDraft, progress = {}, { signal, onProgress } = {}) {
+    signal?.throwIfAborted();
+    const loading = createPayrollProgress(onProgress, ['orderSchema', 'launchSchema', 'payrollSchema', 'orders', 'launches', 'payroll', 'verified']);
     assertSession();
     if (!/^[A-Za-z0-9-]{1,80}$/.test(String(progress.operationId || ''))) throw new Error('A operação não foi identificada.');
     const blocked = { editable:false };
@@ -397,10 +422,11 @@ export function createMealVoucherData({ repository, graph, tokenProvider, storag
       try { original = JSON.parse(progress.signature); } catch { throw new Error('Não foi possível conferir o lote anterior.'); }
       if (!original || !['new', 'existing'].includes(original.orderMode)) throw new Error('O lote anterior está incompleto.');
     }
-    const [orders, launches, payroll] = await Promise.all([describe('NOTASPENDENTES'), describe('LANCAMENTOS'), describe('FOLHAPGTO')]);
+    const [orders, launches, payroll] = await Promise.all([describe('NOTASPENDENTES', { signal, onProgress: loading.child('orderSchema') }),
+      describe('LANCAMENTOS', { signal, onProgress: loading.child('launchSchema') }), describe('FOLHAPGTO', { signal, onProgress: loading.child('payrollSchema') })]);
     const obs = column(orders, ['OBS']).name, controlName = control(orders), title = column(orders, ['Title'], false)?.name;
     const launchToken = column(launches, ['__PowerAppsId__']).name, payrollToken = column(payroll, ['Title']).name;
-    const records = await Promise.all([orders, launches, payroll].map(descriptor=>all(descriptor)));
+    const records = await Promise.all([orders, launches, payroll].map((descriptor, index) => all(descriptor, '', { signal, onProgress: loading.child(['orders', 'launches', 'payroll'][index]) })));
     if (records.some(rows => rows.some(row => !numericId(row?.id) || !row.fields || typeof row.fields !== 'object' || Array.isArray(row.fields))))
       throw new Error('Não foi possível confirmar todos os registros da tentativa anterior.');
     const prefix = `APP-vale-alimentacao-${progress.operationId}`.toUpperCase();
@@ -416,6 +442,7 @@ export function createMealVoucherData({ repository, graph, tokenProvider, storag
     if (!ownedOrders.length) return original.orderMode === 'new' && progress.orderId ? blocked : { editable:true };
     if (original.orderMode !== 'new' || progress.orderId && String(progress.orderId) !== String(ownedOrders[0].id)) return blocked;
     const row = await get(orders, ownedOrders[0].id);
+    signal?.throwIfAborted();
     if (!(row.eTag || row['@odata.etag']) || (row.eTag || row['@odata.etag']) === '*') return blocked;
     if (!pending(value(orders, row, ['STATUS']))) return blocked;
     const verified = validateMealVoucherDraft(original);
@@ -454,16 +481,20 @@ export function createMealVoucherData({ repository, graph, tokenProvider, storag
     if (!expected) return blocked;
     const attachments = await repository.listAttachments(siteKey, orders.id, row.id);
     assertSession();
+    signal?.throwIfAborted();
     if (!Array.isArray(attachments)) throw new Error('Não foi possível conferir os anexos do pedido.');
     if (attachments.length) return blocked;
+    loading.done('verified');
     return { editable:true, order:{ row, fields:{ ...expected.fields, [obs]:scalar(row.fields[obs]) }, expectedObs:expected.expectedObs } };
   }
-  async function canEditPending(rawDraft, progress = {}) {
-    return guardOperation(progress, async () => {
-      const result = await inspectPending(rawDraft, progress);
+  async function canEditPending(rawDraft, progress = {}, { signal, onProgress } = {}) {
+    const loading = createPayrollProgress(onProgress, ['inspection']);
+    const editable = await guardOperation(progress, async () => {
+      const result = await inspectPending(rawDraft, progress, { signal, onProgress: loading.child('inspection') });
       if (result.editable && result.order) progress.orderId = String(result.order.row.id);
       return result.editable;
     }, true);
+    signal?.throwIfAborted(); loading.done('inspection'); return editable;
   }
   async function postUnlocked(rawDraft, progress, onProgress) {
     if (posting) throw new Error('O lote já está sendo enviado.');
@@ -471,12 +502,17 @@ export function createMealVoucherData({ repository, graph, tokenProvider, storag
     posting = true;
     try {
       const draft = validateMealVoucherDraft(rawDraft);
+      const loading = createPayrollProgress(onProgress, ['reviewed', 'options', 'sheets', 'orderSchema', 'launchSchema', 'payrollSchema',
+        'filesPrepared', 'order', 'preflight', 'revision', 'sheetSchema', 'payrollRead',
+        ...(draft.orderMode === 'existing' ? ['orderTotal'] : []),
+        ...draft.lines.flatMap(line => [`launch:${line.supplier.id}`, `payroll:${line.supplier.id}`, `verified:${line.supplier.id}`]),
+        ...draft.files.flatMap(file => [`attachment:order:${file.name}`, `attachment:launch:${file.name}`])]);
       assertSession(); assertPayrollCreationStorage(storage);
       const hadOriginalDraft = Boolean(progress.signature);
       const signature = JSON.stringify({ ...draft, files: draft.files.map(file => ({ name: file.name, size: file.size, lastModified: file.lastModified })) });
       let edit;
       if (progress.signature && progress.signature !== signature) {
-        edit = await inspectPending(rawDraft, progress);
+        edit = await inspectPending(rawDraft, progress, { onProgress: loading.child('reviewed') });
         if (!edit.editable) throw new Error('O lote não pode ser alterado porque já existem registros gravados. Retome o envio com os dados originais.');
         if (edit.order && draft.orderMode !== 'new') throw new Error('O pedido desta tentativa já existe e será reutilizado. Não troque para outro pedido.');
         if (!edit.order) delete progress.orderId;
@@ -484,11 +520,12 @@ export function createMealVoucherData({ repository, graph, tokenProvider, storag
       }
       // An earlier PATCH may have failed before committing despite a saved new signature.
       if (!edit && progress.orderEdit) {
-        edit = await inspectPending(rawDraft, progress);
+        edit = await inspectPending(rawDraft, progress, { onProgress: loading.child('reviewed') });
         if (!edit.editable) throw new Error('O pedido em edição não pôde ser confirmado. Confira os registros antes de retomar.');
       }
       progress.editable = false;
-      const live = await loadOptions();
+      loading.done('reviewed');
+      const live = await loadOptions({ onProgress: loading.child('options') });
       for (const line of draft.lines) {
         const match = live.suppliers.find(row => row.id === line.supplier.id);
         if (!match || key(match.label) !== key(line.supplier.label) || key(match.branch) !== key(draft.branch) || key(match.profession) !== key(line.supplier.profession)) throw new Error('O cadastro de um fornecedor mudou; revise o lote.');
@@ -496,11 +533,13 @@ export function createMealVoucherData({ repository, graph, tokenProvider, storag
       if (!live.stages.some(row => row.id === draft.stage.id && key(row.branch) === key(draft.branch) && key(row.label) === key(draft.stage.label))) throw new Error('A etapa foi alterada no cadastro; revise o lote.');
       if (!live.accounts.some(row => row.id === draft.account.id && key(row.label) === key(draft.account.label))) throw new Error('A conta foi alterada no cadastro; revise o lote.');
       for (const file of draft.files) { const validation = validateAttachment(file); if (!validation.valid) throw new Error(validation.message); }
-      const sheets = await loadSheetAssignments(draft.referenceMonth, draft.lines.map(line => line.supplier));
-      const [orders, launches, payroll] = await Promise.all([describe('NOTASPENDENTES'), describe('LANCAMENTOS'), describe('FOLHAPGTO')]);
+      const sheets = await loadSheetAssignments(draft.referenceMonth, draft.lines.map(line => line.supplier), { onProgress: loading.child('sheets') });
+      const [orders, launches, payroll] = await Promise.all([describe('NOTASPENDENTES', { onProgress: loading.child('orderSchema') }),
+        describe('LANCAMENTOS', { onProgress: loading.child('launchSchema') }), describe('FOLHAPGTO', { onProgress: loading.child('payrollSchema') })]);
       if (!payrollLaunchReferenceColumn(launches.columns)) throw new Error('IDFOLHA de LANCAMENTOS não está disponível. Prepare a referência antes de enviar; nenhum registro financeiro foi criado.');
       if (column(orders,[MEAL_VOUCHER_CONTROL_COLUMN]).virtual) throw new Error('VALECONTROLE não está disponível. Prepare o controle técnico antes de enviar; nenhum registro financeiro foi criado.');
       const entries = await attachments.prepare(draft.files,progress.fileManifest);
+      loading.done('filesPrepared');
       const tokenCache = new Map();
       column(launches, ['__PowerAppsId__']);
       column(payroll, ['Title']);
@@ -551,9 +590,12 @@ export function createMealVoucherData({ repository, graph, tokenProvider, storag
         } else orderId = await ensureOrder(orders, fields, marker, tokenCache, edit?.order && { ...edit.order, progress, onProgress },
           payrollCreationKey(siteKey,orders.id,`order:${progress.operationId}`));
       }
+      loading.done('order');
       await preflightLines(launches, payroll, draft, sheets, orderId, progress.operationId, tokenCache);
       if (draft.orderMode === 'new') await confirmOriginatingOrderTotal(orders,launches,orderId,draft,progress.operationId,tokenCache);
+      loading.done('preflight');
       const revision = await confirmOrderRevision(orders, orderId, draft, progress.operationId);
+      loading.done('revision');
       if (entries.length) {
         const prefix = `APP-vale-alimentacao-${progress.operationId}-`;
         const hasPreviousLaunch = tokenCache.get(launches.id).some(row=>scalar(row.fields?.[column(launches,['__PowerAppsId__']).name]).startsWith(prefix));
@@ -567,7 +609,7 @@ export function createMealVoucherData({ repository, graph, tokenProvider, storag
       onProgress();
       progress.lines ??= {};
       progress.payroll ??= {};
-      const sheetDescriptor = await describe('IDFOLHA');
+      const sheetDescriptor = await describe('IDFOLHA', { onProgress: loading.child('sheetSchema') });
       const confirmSheet = async (line, sheet) => {
         const currentSheet = await get(sheetDescriptor, sheet.id);
         if (monthKey(value(sheetDescriptor, currentSheet, ['MESREFERENCIA', 'MES REFERENCIA'])) !== draft.referenceMonth
@@ -586,12 +628,14 @@ export function createMealVoucherData({ repository, graph, tokenProvider, storag
             fields:payrollFields(payroll,draft,line,sheet,saved.id)}));
         progress.lines[line.supplier.id] = launchId;
         onProgress();
+        loading.done(`launch:${line.supplier.id}`);
         await confirmSheet(line, sheet);
         // Confirm each association before the next financial row or any upload.
         const payrollId = await ensure(payroll, payrollFields(payroll, draft, line, sheet, launchId), 'Title',
           `APP-vale-alimentacao-${progress.operationId}-folha-${line.supplier.id}`, tokenCache);
         progress.payroll[line.supplier.id] = payrollId;
         onProgress();
+        loading.done(`payroll:${line.supplier.id}`);
         resultLines.push({ supplier: line.supplier.label, id: launchId, total: line.total, sheetId:sheet.id, payrollId });
       }
       if (draft.orderMode === 'existing') {
@@ -610,6 +654,7 @@ export function createMealVoucherData({ repository, graph, tokenProvider, storag
         }
         progress.orderUpdated = true;
         onProgress();
+        loading.done('orderTotal');
       }
       if (entries.length) {
         const launchId = progress.lines[progress.attachmentSupplierId];
@@ -617,11 +662,13 @@ export function createMealVoucherData({ repository, graph, tokenProvider, storag
         if (value(launches,destination,['AGRUPAR']) !== String(orderId)
           || scalar(destination.fields[column(launches,['__PowerAppsId__']).name]) !== `APP-vale-alimentacao-${progress.operationId}-${progress.attachmentSupplierId}`)
           throw new Error('O vínculo do último lançamento mudou. Confira os anexos antes de retomar.');
-        await attachments.submit([{listId:orders.id,id:orderId},{listId:launches.id,id:launchId}],entries,() => onProgress());
+        await attachments.submit([{listId:orders.id,id:orderId},{listId:launches.id,id:launchId}],entries,(target, manifest) => {
+          onProgress(); loading.done(`attachment:${target.listId === orders.id ? 'order' : 'launch'}:${manifest.name}`);
+        });
       }
       // Uploads can be slow. Success requires a fresh, read-only confirmation
       // of the selected sheets, financial origins and their associations.
-      const confirmedPayroll = await all(payroll);
+      const confirmedPayroll = await all(payroll, '', { onProgress: loading.child('payrollRead') });
       for (let index = 0; index < draft.lines.length; index++) {
         const line = draft.lines[index], resultLine = resultLines[index], sheet = sheets[line.supplier.id];
         await confirmSheet(line, sheet);
@@ -633,6 +680,7 @@ export function createMealVoucherData({ repository, graph, tokenProvider, storag
         const linked = compatiblePayrollLaunchLink({ columns:payroll.columns, rows:confirmedPayroll, fields });
         if (!linked || String(linked.id) !== resultLine.payrollId || !matchesFields(payroll,await get(payroll,linked.id),fields))
           throw new Error('O vínculo da folha não foi confirmado ao concluir o envio. Retome para conferir os registros pendentes.');
+        loading.done(`verified:${line.supplier.id}`);
       }
       return { orderId, lines: resultLines, total: draft.total };
     } finally { posting = false; }

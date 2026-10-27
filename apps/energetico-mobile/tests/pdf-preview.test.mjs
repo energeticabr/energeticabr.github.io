@@ -71,6 +71,74 @@ function setup(t, { renderPage, ...options } = {}) {
   return { viewer, container, documentRef, input: () => input, destroyed: () => destroyed, cleaned: () => cleaned };
 }
 
+test('measured PDF progress counts completed renders and completes only after presentation', async t => {
+  const progress = [];
+  let finishPage, progressContainer;
+  const { viewer, container } = setup(t, {
+    onProgress: value => progress.push({ ...value, busy: progressContainer?.querySelector('section')?.getAttribute('aria-busy') }),
+    renderPage: number => number === 2 ? { promise: new Promise(resolve => { finishPage = resolve; }), cancel() {} } : undefined,
+  });
+  progressContainer = container;
+  await tick();
+  assert.ok(progress.some(value => value.phase === 'parsed' && value.totalPages === 3));
+  assert.ok(progress.some(value => value.phase === 'render' && value.renderedPages === 1 && value.totalPages === 3));
+  assert.equal(progress.some(value => value.percent === 100), false);
+  finishPage();
+  await viewer.ready;
+  assert.equal(progress.at(-1).percent, 100);
+  assert.equal(progress.at(-1).busy, 'false');
+});
+
+test('measured PDF progress observes only the rendered window of a long PDF', async t => {
+  const progress = [], rendered = [];
+  const pdf = {
+    numPages: 30,
+    async getPage(number) {
+      return { getViewport: ({ scale }) => ({ width: 600 * scale, height: 900 * scale }),
+        render: () => { rendered.push(number); return { promise: Promise.resolve(), cancel() {} }; }, cleanup() {} };
+    },
+  };
+  const { viewer } = setup(t, { fit: 'page',
+    loadPdfJs: async () => ({ getDocument: () => ({ promise: Promise.resolve(pdf), destroy() {} }) }),
+    onProgress: value => progress.push(value),
+  });
+  await viewer.ready;
+  const frames = progress.filter(value => value.phase === 'render');
+  assert.ok(frames.length > 0);
+  assert.ok(rendered.length < 30);
+  assert.equal(frames.at(-1).renderedPages, rendered.length);
+  assert.equal(frames.at(-1).totalPages, rendered.length);
+  assert.equal(frames.at(-1).documentPages, 30);
+  assert.equal(progress.at(-1).percent, 100);
+});
+
+test('measured PDF progress ignores aborts and observer errors without corrupting media', async t => {
+  const controller = new AbortController(), progress = [];
+  let finishPage;
+  const { viewer } = setup(t, { signal: controller.signal,
+    onProgress: value => { progress.push(value); throw new Error('observer failed'); },
+    renderPage: () => ({ promise: new Promise(resolve => { finishPage = resolve; }), cancel() {} }),
+  });
+  await tick();
+  assert.equal(typeof finishPage, 'function');
+  assert.ok(progress.some(value => value.percent > 0));
+  controller.abort();
+  const count = progress.length;
+  finishPage(); await viewer.ready;
+  assert.equal(progress.length, count);
+  assert.equal(progress.some(value => value.percent === 100), false);
+});
+
+for (const phase of ['parsed', 'render']) test(`measured PDF progress cancellation at ${phase} stops without dereferencing a released document`, async t => {
+  const controller = new AbortController(), progress = [];
+  const { viewer, container } = setup(t, { signal: controller.signal,
+    onProgress: value => { progress.push(value); if (value.phase === phase) controller.abort(); },
+  });
+  await assert.doesNotReject(viewer.ready);
+  assert.equal(container.querySelector('section'), null);
+  assert.equal(progress.some(value => value.percent === 100), false);
+});
+
 test("PDF abre todas as páginas em uma coluna rolável", async t => {
   const { viewer, container, cleaned, input } = setup(t);
   await viewer.ready;
@@ -328,4 +396,20 @@ test("erro em uma página não fecha o PDF e sinaliza somente a página afetada"
   assert.equal(container.querySelectorAll("canvas").length, 2);
   assert.match(container.querySelector(".attachment-preview-pdf-page--error").textContent, /página 2/i);
   assert.match(viewer.getSummary(), /1 página não pôde ser exibida/);
+});
+for (const numPages of [3, 30]) test(`partial PDF rendering (${numPages} pages) never reports ready or 100%`, async t => {
+  const updates = [];
+  const pdf = { numPages, async getPage(number) {
+    return { getViewport: ({ scale }) => ({ width: 600 * scale, height: 900 * scale }), cleanup() {},
+      render: () => ({ promise: number === 2 ? Promise.reject(new Error('damaged page')) : Promise.resolve(), cancel() {} }) };
+  } };
+  const { viewer, container } = setup(t, { fit: 'page', navigation: 'scroll',
+    loadPdfJs: async () => ({ getDocument: () => ({ promise: Promise.resolve(pdf), destroy() {} }) }),
+    onProgress: value => updates.push(value) });
+  await viewer.ready;
+  assert.ok(container.querySelector('canvas'), 'usable pages remain available');
+  assert.ok(container.querySelector('.attachment-preview-pdf-page--error'));
+  assert.ok(updates.every(value => value.percent < 100));
+  assert.equal(updates.at(-1).phase, 'partial');
+  assert.equal(viewer.hasRenderingErrors(), true);
 });

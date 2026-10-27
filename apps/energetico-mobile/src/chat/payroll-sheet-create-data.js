@@ -1,4 +1,5 @@
 import { payrollFieldKey as fieldKey } from './payroll-editor-policy.js';
+import { createAcquisitionProgress } from './acquisition-progress.js';
 
 const scalar = value => String(value && typeof value === 'object'
   ? value.LookupValue ?? value.Value ?? value.value ?? '' : value ?? '').trim();
@@ -55,16 +56,20 @@ export function createPayrollSheetCreateData({ repository, siteKey = 'personal',
   async function guarded(request, signal) {
     check(signal); const result = await request(); check(signal); return result;
   }
-  async function describe(name, signal) {
+  async function describe(name, signal, onProgress) {
+    const progress = createAcquisitionProgress({ signal, onProgress }, ['list', 'columns'], assertSession);
     const options = signal ? { signal } : {};
     const list = await guarded(() => repository.resolveList(siteKey, [name], options), signal);
     if (list?.status !== 'resolved' || !list.id) throw new Error(`A lista ${name} não está disponível.`);
+    progress.step('list');
     const columns = await guarded(() => repository.getColumns(siteKey, list.id, options), signal);
     if (!Array.isArray(columns)) throw new Error(`Os metadados de ${name} não estão disponíveis.`);
+    progress.step('columns');
     return { id: list.id, columns };
   }
-  async function schema(signal) {
-    const [suppliers, sheets] = await Promise.all(['FORNECEDORES', 'IDFOLHA'].map(name => describe(name, signal)));
+  async function schema(signal, onProgress) {
+    const progress = createAcquisitionProgress({ signal, onProgress }, ['suppliers', 'sheets', 'validated'], assertSession);
+    const [suppliers, sheets] = await Promise.all(['FORNECEDORES', 'IDFOLHA'].map((name, index) => describe(name, signal, progress.forward(['suppliers', 'sheets'][index]))));
     check(signal);
     const label = column(suppliers.columns, ['CADASTRO', 'FORNECEDOR']);
     const supplier = column(sheets.columns, ['FORNECEDOR']);
@@ -76,9 +81,11 @@ export function createPayrollSheetCreateData({ repository, siteKey = 'personal',
       if (!status.text && !status.choice) throw new Error('O campo STATUS possui metadados incompatíveis com o cadastro.');
       fieldValue(status, 'ATIVO');
     }
+    progress.step('validated');
     return { suppliers, sheets, label, supplier, reference, status };
   }
-  async function all(descriptor, signal) {
+  async function all(descriptor, signal, onProgress) {
+    const progress = createAcquisitionProgress({ signal, onProgress }, ['pages'], assertSession);
     const rows = [], seen = new Set(); let cursor;
     for (let pageNumber = 1; pageNumber <= 100; pageNumber++) {
       const page = await guarded(() => repository.getItemsPage(siteKey, descriptor.id, '$expand=fields&$top=100', {
@@ -86,7 +93,9 @@ export function createPayrollSheetCreateData({ repository, siteKey = 'personal',
       }), signal);
       if (!Array.isArray(page?.items)) throw new Error('A consulta dos fornecedores e folhas não pôde ser concluída.');
       rows.push(...page.items);
-      if (!page.hasMore) return rows;
+      const details = { completedPages: pageNumber, completedItems: rows.length };
+      if (!page.hasMore) { progress.step('pages', details); return rows; }
+      progress.report('pages', details);
       if (!page.nextLink || seen.has(page.nextLink)) throw new Error('A paginação da consulta dos fornecedores e folhas não pôde ser concluída.');
       cursor = page.nextLink; seen.add(cursor);
     }
@@ -97,9 +106,10 @@ export function createPayrollSheetCreateData({ repository, siteKey = 'personal',
     if (canonicalId(result?.id) !== id || !result?.fields) throw new Error('O registro selecionado não foi confirmado pelo SharePoint.');
     return result;
   }
-  async function loadOptions({ signal } = {}) {
-    const { suppliers, label } = await schema(signal);
-    const rows = await all(suppliers, signal), ids = new Set();
+  async function loadOptions({ signal, onProgress } = {}) {
+    const progress = createAcquisitionProgress({ signal, onProgress }, ['schema', 'items', 'options'], assertSession);
+    const { suppliers, label } = await schema(signal, progress.forward('schema'));
+    const rows = await all(suppliers, signal, progress.forward('items')), ids = new Set();
     const options = rows.flatMap(row => {
       const id = canonicalId(row.id), name = scalar(row.fields?.[label.name]);
       if (ids.has(id)) throw new Error('A consulta retornou um ID de fornecedor duplicado.');
@@ -109,6 +119,7 @@ export function createPayrollSheetCreateData({ repository, siteKey = 'personal',
     const parts = new Intl.DateTimeFormat('en-CA', { timeZone: 'America/Sao_Paulo', year: 'numeric', month: '2-digit' }).formatToParts(now());
     const defaultMonth = `${parts.find(p => p.type === 'year').value}-${parts.find(p => p.type === 'month').value}`;
     check(signal);
+    progress.step('options', { completedItems: rows.length });
     return { suppliers: options, defaultMonth };
   }
   async function verify(description, item, name, month, signal, expected) {

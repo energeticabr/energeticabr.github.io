@@ -1,4 +1,5 @@
 import { createPinchZoom } from "./pinch-zoom.js";
+import { beginLoadingTask } from "../ui/loading-task.js";
 
 // Several canvases stay alive while the user scrolls. A lower per-page cap
 // avoids Safari/iOS dropping the whole preview when a PDF has many pages.
@@ -49,6 +50,7 @@ export function createPdfPreview({
   pageFilter = () => true,
   onPageChange = () => {},
   onError = () => {},
+  onProgress,
 } = {}) {
   const element = (tag, className, text) => {
     const node = documentRef.createElement(tag);
@@ -98,6 +100,28 @@ export function createPdfPreview({
   let fittedSize = '';
   let reportedPage = null;
   const viewportSize = () => `${viewport.clientWidth}:${viewport.clientHeight}`;
+  let progressDetail = { phase: 'prepared' };
+  const progress = beginLoadingTask(value => onProgress?.({ ...value, ...progressDetail }), {
+    signal, isCurrent: () => !destroyed,
+  });
+  const reportProgress = (completed, detail) => {
+    progressDetail = detail;
+    // Import, read, parse, page discovery, and the requested page renders.
+    progress.units(completed, 5);
+  };
+  function finishProgress(generation) {
+    if (destroyed || generation !== renderGeneration || busy || viewportSize() !== fittedSize || pendingPageIndex !== null) return;
+    if (!renderedCanvases.length) { progress.stop(); return; }
+    if (Number(root.dataset.failedPages || 0) > 0) {
+      progressDetail = { ...progressDetail, phase: 'partial', failedPages: Number(root.dataset.failedPages) };
+      progress.acquired();
+      progress.stop();
+      return;
+    }
+    progress.acquired();
+    progressDetail = { ...progressDetail, phase: 'ready' };
+    progress.complete();
+  }
 
   function visiblePageIndex() {
     const bounds = viewport.getBoundingClientRect();
@@ -290,6 +314,7 @@ export function createPdfPreview({
     while (!destroyed && generation === renderGeneration && pendingPageIndex !== null) {
       const target = pendingPageIndex; pendingPageIndex = null;
       const indices = windowIndices(target), wanted = new Set(indices.map(index => pageSlots[index].number));
+      let rendered = indices.filter(index => pageSlots[index].node.querySelector('canvas')).length;
       // Release backing stores BEFORE allocating another window. Removing a
       // canvas alone does not promptly free Safari's graphics memory.
       renderedCanvases = renderedCanvases.filter(canvas => {
@@ -305,6 +330,9 @@ export function createPdfPreview({
           const page = await pdf.getPage(slot.number);
           if (destroyed || generation !== renderGeneration) { page.cleanup(); return; }
           if (!(await renderPage(page, slot.number, generation, slot.node))) return;
+          reportProgress(4 + ++rendered / indices.length, {
+            phase: 'render', renderedPages: rendered, totalPages: indices.length, documentPages: pdf.numPages,
+          });
         } catch (error) {
           if (destroyed || generation !== renderGeneration || error?.name === 'RenderingCancelledException') return;
           const lastBounds = pageSlots.at(-1)?.node.getBoundingClientRect(), viewportBounds = viewport.getBoundingClientRect();
@@ -324,6 +352,7 @@ export function createPdfPreview({
     root.dataset.failedPages = String(failedPageNumbers.size);
     if (pinchZoom.getZoom() > 1) applyZoom(pinchZoom.getZoom());
     busy = false; root.setAttribute('aria-busy', 'false'); showCurrentPage();
+    finishProgress(generation);
   }
 
   async function preparePageSlots(generation) {
@@ -346,6 +375,9 @@ export function createPdfPreview({
       if (failed) { node.classList.add('attachment-preview-pdf-page--error'); node.append(element('p', 'attachment-preview-pdf-page-error', `Não foi possível mostrar a página ${number}.`)); }
       if (!continuous) node.hidden = number !== pageNumbers[pageIndex];
       surface.append(node); pageSlots.push({ node, number, width, height });
+      reportProgress(3 + pageSlots.length / pageNumbers.length, {
+        phase: 'page-sizes', preparedPages: pageSlots.length, totalPages: pageNumbers.length, documentPages: pdf.numPages,
+      });
     }
     slotsReady = true;
     if (pinchZoom.getZoom() > 1) applyZoom(pinchZoom.getZoom());
@@ -370,12 +402,17 @@ export function createPdfPreview({
       await queuePageWindow();
       return;
     }
+    reportProgress(4, { phase: 'pages', totalPages: pageNumbers.length, documentPages: pdf.numPages });
     let failedPages = 0;
+    let rendered = 0;
     for (let number = 1; number <= pdf.numPages; number += 1) {
       if (!pageFilter(number, pdf.numPages)) continue;
       try {
         const page = await pdf.getPage(number);
         if (!(await renderPage(page, number, generation))) return;
+        reportProgress(4 + ++rendered / pageNumbers.length, {
+          phase: 'render', renderedPages: rendered, totalPages: pageNumbers.length, documentPages: pdf.numPages,
+        });
       } catch (error) {
         if (destroyed || generation !== renderGeneration || error?.name === "RenderingCancelledException") return;
         failedPages += 1;
@@ -401,6 +438,7 @@ export function createPdfPreview({
     showCurrentPage();
     root.setAttribute("aria-busy", "false");
     refitPage();
+    finishProgress(generation);
   }
 
   function refitPage() {
@@ -420,6 +458,7 @@ export function createPdfPreview({
   function destroy() {
     if (destroyed) return;
     destroyed = true;
+    progress.stop();
     renderGeneration += 1;
     signal?.removeEventListener("abort", destroy);
     resizeObserver?.disconnect();
@@ -439,10 +478,13 @@ export function createPdfPreview({
   const ready = (async () => {
     if (destroyed) return;
     if (blob.size > MAX_PDF_BYTES) throw new Error("Este PDF é muito grande para a pré-visualização.");
+    progress.prepared();
     const pdfjs = await loadPdfJs();
     if (destroyed) return;
+    reportProgress(1, { phase: 'imported' });
     const data = new Uint8Array(await blob.arrayBuffer());
     if (destroyed) return;
+    reportProgress(2, { phase: 'read' });
     const assetBase = new URL("pdfjs/", new URL(import.meta.env?.BASE_URL || "./", documentRef.baseURI));
     loadingTask = pdfjs.getDocument({
       data,
@@ -457,6 +499,8 @@ export function createPdfPreview({
     });
     pdf = await loadingTask.promise;
     if (destroyed) { pdf = null; return; }
+    reportProgress(3, { phase: 'parsed', totalPages: pdf.numPages, documentPages: pdf.numPages });
+    if (destroyed) return;
     pageNumbers = Array.from({ length: pdf.numPages }, (_, i) => i + 1).filter(n => pageFilter(n, pdf.numPages));
     pageIndex = Math.max(0, pageNumbers.indexOf(initialPage));
     windowed = fit === 'page' && pageNumbers.length > WINDOWED_PAGE_THRESHOLD;
@@ -466,13 +510,14 @@ export function createPdfPreview({
     } catch (error) {
       if (!destroyed) throw error;
     }
-  })();
+  })().catch(error => { progress.stop(); throw error; });
 
   return Object.freeze({
     ready,
     destroy,
     getCurrentPage,
     hasRenderedPages: () => renderedCanvases.length > 0,
+    hasRenderingErrors: () => Number(root.dataset.failedPages || 0) > 0,
     getSummary: () => {
       if (!pdf) return "";
       const failed = Number(root.dataset.failedPages || 0);

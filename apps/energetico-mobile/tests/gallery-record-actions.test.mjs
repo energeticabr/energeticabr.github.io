@@ -37,6 +37,36 @@ async function setup(t, overrides = {}) {
 const click = (ctx, action) => ctx.buttons.querySelector(`[data-gallery-action="${action}"]`).click();
 const key = (ctx, target, name, options = {}) => target.dispatchEvent(new ctx.dom.window.KeyboardEvent("keydown", { key: name, bubbles: true, cancelable: true, ...options }));
 
+test('editor acquisition updates only its live mascot and completes after the form is mounted', async t => {
+  const pending = deferred(); let options;
+  const ctx = await setup(t, { loadEditor: (_id, input) => { options = input; return pending.promise; } });
+  click(ctx, 'edit');
+  const loader = ctx.get('.gallery-record-dialog-body > .app-loading');
+  const percent = () => loader.querySelector('[role=progressbar]').getAttribute('aria-valuenow');
+  assert.equal(percent(), '33');
+  assert.equal(typeof options.onProgress, 'function');
+  options.onProgress({ percent: 50 }); assert.equal(percent(), '50');
+  options.onProgress({ percent: 100 }); assert.equal(percent(), '66');
+  assert.equal(ctx.get('form'), null);
+  pending.resolve(context('42')); await settle(); await settle();
+  assert.ok(ctx.get('form'));
+  assert.equal(percent(), '100');
+});
+
+test('cancelled editor aborts its read and rejects subsequent progress callbacks', async t => {
+  const pending = deferred(); let options;
+  const ctx = await setup(t, { loadEditor: (_id, input) => { options = input; return pending.promise; } });
+  click(ctx, 'edit');
+  const loader = ctx.get('.app-loading'), badge = loader.querySelector('[role=progressbar]');
+  assert.equal(typeof options.onProgress, 'function');
+  options.onProgress({ percent: 50 });
+  ctx.get('[data-gallery-editor-cancel]').click();
+  assert.equal(options.signal.aborted, true);
+  options.onProgress({ percent: 100 }); pending.resolve(context('42')); await settle();
+  assert.equal(badge.getAttribute('aria-valuenow'), '50');
+  assert.equal(ctx.get('form'), null);
+});
+
 test('gallery backdrop cancels deletion without writes and never handles clicks inside or from nested popups', async t => {
   const ctx = await setup(t); click(ctx, 'delete');
   const overlay = ctx.get('.gallery-record-overlay'), dialog = ctx.get('[data-gallery-record-dialog]');
