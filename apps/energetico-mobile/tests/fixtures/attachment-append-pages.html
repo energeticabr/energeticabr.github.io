@@ -18,7 +18,7 @@ installAppZoomGuard();
 const browserPorts = createBrowserPorts();
 const store = createConversationStore(), view = createChatView(root), preview = createAttachmentPreview({ canEmbedPdf: () => false });
 const initialId = 'a'.repeat(64), blobs = new Map();
-let replacements = 0, replacementRequests = 0, pickerCalls = 0, cameraCalls = 0, networkWrites = 0, sentText = 0, sentFile = 0;
+let replacements = 0, replacementRequests = 0, pickerCalls = 0, cameraCalls = 0, galleryCalls = 0, networkWrites = 0, sentText = 0, sentFile = 0;
 let confirmReplacement;
 const confirmation = new Promise(resolve => { confirmReplacement = resolve; });
 const interactions = [];
@@ -60,6 +60,7 @@ const controller = createAppController({ store, view,
   diaryFieldVisitDataFactory:async () => ({load:async()=>[]}),
   pendingProvisionAttachmentsDataFactory:async () => ({loadUpcomingPayments:async()=>[],listAttachments:async()=>[]}),
   native: { importSharedItems:async()=>[], previewMedia:preview.open, closePreview:preview.close,
+    pickPhotos:async()=>{ galleryCalls++;return params.has('browser-picker') ? browserPorts.pickPhotos() : [image]; },
     pickDocuments:async()=>{ pickerCalls++; return params.has('browser-picker') ? browserPorts.pickDocuments() : [additional,image]; },
     capturePhoto:async()=>{ cameraCalls++;return params.has('browser-picker') ? browserPorts.capturePhoto() : [image]; }, scanDocument:async()=>{ cameraCalls++;return [scan]; } },
   client: { fetchMedia:async item=>blobs.get(item.id),
@@ -91,7 +92,7 @@ try {
   await openTray();
   if(params.has('manual')) {
     window.attachmentAppendFixture = {
-      snapshot: () => ({ replacements, replacementRequests, pickerCalls, cameraCalls, interactions, attachments: store.getState().attachments,
+      snapshot: () => ({ replacements, replacementRequests, pickerCalls, cameraCalls, galleryCalls, interactions, attachments: store.getState().attachments,
         pendingFiles: store.getState().pendingFiles.length,
         unchangedQuestion: JSON.stringify(store.getState().messages) === beforeMessages,
         unchangedDraft: store.getState().draft === 'Rascunho preservado', noReply: sentText === initialText,

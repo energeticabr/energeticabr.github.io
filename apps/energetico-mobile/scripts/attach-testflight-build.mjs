@@ -76,6 +76,17 @@ async function waitForComplete(client) {
   throw new Error('A build permaneceu em processamento dentro do limite automático; nenhuma associação foi feita.');
 }
 
+async function buildHasGroup(client, build, group) {
+  const response = await client.request('GET', `/v1/builds/${build.id}?include=betaGroups`);
+  const relationship = response.data?.relationships?.betaGroups;
+  if (response.data?.id !== build.id || !Array.isArray(relationship?.data)) {
+    throw new Error('A Apple não confirmou o relacionamento da build consultada.');
+  }
+  if (relationship.data.some(item => item.type === 'betaGroups' && item.id === group.id)) return true;
+  if (relationship.links?.next) throw new Error('A lista de grupos da build está incompleta; nenhuma associação foi confirmada.');
+  return false;
+}
+
 export async function attachLatestTestFlightBuild(client) {
   const build = await waitForComplete(client);
   const groups = await list(client, `/v1/betaGroups?filter[app]=${APP_ID}`);
@@ -84,8 +95,7 @@ export async function attachLatestTestFlightBuild(client) {
   if (attr(group).hasAccessToAllBuilds === true) {
     return { status: 'AUTO_INCLUDED', build: attr(build).version, buildId: build.id, group: attr(group).name };
   }
-  const attached = await list(client, `/v1/betaGroups/${group.id}/builds`);
-  if (attached.some(item => item.id === build.id)) {
+  if (await buildHasGroup(client, build, group)) {
     return { status: 'ALREADY_ATTACHED', build: attr(build).version, buildId: build.id, group: attr(group).name };
   }
   try {
@@ -97,8 +107,7 @@ export async function attachLatestTestFlightBuild(client) {
     // response exceed the client timeout. Verify the resulting relationship
     // before reporting a false failure or attempting a duplicate write.
     if (!/timeout|timed out|aborted/i.test(String(error?.message || error))) throw error;
-    const afterTimeout = await list(client, `/v1/betaGroups/${group.id}/builds`);
-    if (afterTimeout.some(item => item.id === build.id)) {
+    if (await buildHasGroup(client, build, group)) {
       return {
         status: 'ATTACHED_AFTER_TIMEOUT',
         build: attr(build).version,
@@ -107,6 +116,9 @@ export async function attachLatestTestFlightBuild(client) {
       };
     }
     throw error;
+  }
+  if (!(await buildHasGroup(client, build, group))) {
+    throw new Error('A associação da build ao grupo não foi confirmada pela Apple.');
   }
   return { status: 'ATTACHED', build: attr(build).version, buildId: build.id, group: attr(group).name };
 }

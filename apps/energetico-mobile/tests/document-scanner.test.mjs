@@ -60,12 +60,18 @@ function domSetup(t){
   t.after(()=>dom.window.close());return dom;
 }
 
-test('camera chooser offers scan/photo, cancellation resolves empty and returns focus', async t => {
+test('camera chooser offers gallery first, then photo/scan, cancellation resolves empty and returns focus', async t => {
   assert.equal(typeof ui.createCameraChooser,'function');
   const dom=domSetup(t),doc=dom.window.document;
   const chooser=ui.createCameraChooser(doc);t.after(()=>chooser.destroy());
   doc.querySelector('#camera').focus();
   let pending=chooser.choose();
+  const choices=[...doc.querySelectorAll('[data-camera-mode]')];
+  assert.deepEqual(choices.map(button=>button.dataset.cameraMode),['gallery','photo','scan','cancel']);
+  assert.equal(choices[0].textContent,'🖼️ ESCOLHER FOTO GALERIA');
+  assert.equal(doc.activeElement,choices[0]);
+  choices[0].click();assert.equal(await pending,'gallery');assert.equal(doc.activeElement.id,'camera');
+  pending=chooser.choose();
   assert.match(doc.querySelector('dialog').textContent,/Escanear/);
   doc.querySelector('[data-camera-mode="scan"]').click();
   assert.equal(await pending,'scan');assert.equal(doc.activeElement.id,'camera');

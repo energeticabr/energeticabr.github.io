@@ -140,9 +140,9 @@ test("associacao do TestFlight confirma o vínculo após timeout da Apple", asyn
       if (method === "GET" && path.startsWith("/v1/betaGroups?")) {
         return { data: [{ id: "group-1", attributes: { name: "ENERGETICO Validacao", isInternal: true } }] };
       }
-      if (method === "GET" && path === "/v1/betaGroups/group-1/builds") {
+      if (method === "GET" && path === "/v1/builds/build-301?include=betaGroups") {
         groupReads += 1;
-        return { data: groupReads > 1 ? [build] : [] };
+        return { data: { id: build.id, relationships: { betaGroups: { data: groupReads > 1 ? [{ type: 'betaGroups', id: 'group-1' }] : [] } } } };
       }
       if (method === "POST" && path.endsWith("/relationships/builds")) {
         throw new Error("The operation was aborted due to timeout");
@@ -156,4 +156,24 @@ test("associacao do TestFlight confirma o vínculo após timeout da Apple", asyn
   assert.equal(result.status, "ATTACHED_AFTER_TIMEOUT");
   assert.equal(result.build, "301");
   assert.equal(groupReads, 2);
+});
+
+for (const linked of [true,false]) test(`TestFlight checks the selected build relationship and ${linked?'keeps an existing association':'confirms a new association'}`,async()=>{
+  let attached=linked,posts=0,relationshipReads=0;
+  const build={id:'ready-build',attributes:{version:'302',processingState:'VALID',expired:false}};
+  const client={async request(method,path,payload){
+    if(method==='GET'&&path.startsWith('/v1/builds?'))return{data:[build]};
+    if(method==='GET'&&path.endsWith('/buildBetaDetail'))return{data:{attributes:{internalBuildState:'READY_FOR_BETA_TESTING'}}};
+    if(method==='GET'&&path.startsWith('/v1/betaGroups?'))return{data:[{id:'internal-group',attributes:{name:'ENERGETICO Validacao',isInternalGroup:true}}]};
+    if(method==='GET'&&path==='/v1/builds/ready-build?include=betaGroups'){
+      relationshipReads++;return{data:{id:build.id,relationships:{betaGroups:{data:attached?[{type:'betaGroups',id:'internal-group'}]:[]}}}};
+    }
+    if(method==='POST'&&path==='/v1/betaGroups/internal-group/relationships/builds'){
+      assert.deepEqual(payload,{data:[{type:'builds',id:build.id}]});posts++;attached=true;return{};
+    }
+    throw new Error(`Unexpected request: ${method} ${path}`);
+  }};
+  const result=await attachLatestTestFlightBuild(client);
+  assert.equal(result.status,linked?'ALREADY_ATTACHED':'ATTACHED');assert.equal(posts,linked?0:1);
+  assert.equal(relationshipReads,linked?1:2);
 });
