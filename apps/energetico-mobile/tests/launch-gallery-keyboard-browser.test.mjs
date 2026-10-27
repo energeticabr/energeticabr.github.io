@@ -42,10 +42,9 @@ test('native Tab retains the selected toolbar control during local recalculation
         await command('Input.dispatchKeyEvent', { type: 'keyDown', key: 'Tab', code: 'Tab', windowsVirtualKeyCode: 9 });
         await command('Input.dispatchKeyEvent', { type: 'keyUp', key: 'Tab', code: 'Tab', windowsVirtualKeyCode: 9 });
       }
-      assert.equal(await evaluate('Boolean(document.activeElement.closest(".lg-results"))'), true, 'native Tab reached an old result before the quiet period ends');
       await wait('!document.querySelector(".gallery-loading-screen--scoped").hidden');
-      assert.equal(await evaluate('document.activeElement === document.querySelector("[data-gallery-quick-search]")'), true,
-        'focus moves from a newly inert result to the available search');
+      assert.equal(await evaluate('Boolean(document.activeElement.closest(".lg-results"))'), false,
+        'native Tab skips old results while the live query is pending');
       await command('Input.dispatchKeyEvent', { type: 'keyDown', key: 'Tab', code: 'Tab', windowsVirtualKeyCode: 9 });
       await command('Input.dispatchKeyEvent', { type: 'keyUp', key: 'Tab', code: 'Tab', windowsVirtualKeyCode: 9 });
       assert.equal(await evaluate('document.querySelector(".lg-overlay").contains(document.activeElement)'), true, 'native Tab cannot escape to the underlying application');
@@ -70,7 +69,7 @@ test('native Tab retains the selected toolbar control during local recalculation
           open: combo.getAttribute('aria-expanded'), focused: document.activeElement === combo };
       })()`);
       const expected = { value: 'Mau', selection: [1, 2], open: 'true', focused: true };
-      assert.deepEqual(await edit(), expected, 'timer completion preserves a native supplier filter edit');
+      assert.deepEqual(await edit(), expected, 'live recalculation preserves a native supplier filter edit');
       await evaluate('document.dispatchEvent(new Event("qa-release-filter"))');
       await wait('document.querySelector(".gallery-loading-screen--scoped").hidden');
       assert.deepEqual(await edit(), expected, 'response option refresh also preserves the native filter edit');

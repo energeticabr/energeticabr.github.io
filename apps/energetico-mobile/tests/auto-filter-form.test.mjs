@@ -39,6 +39,7 @@ for (const strict of [false, true]) for (const external of [false, true]) test(`
   assert.equal(doc.querySelector('output').textContent, '', 'unfinished composition is not applied');
   input.value = 'São'; input.dispatchEvent(new dom.window.CompositionEvent('compositionend', { bubbles: true }));
   input.dispatchEvent(new dom.window.InputEvent('input', { bubbles: true }));
-  t.mock.timers.tick(strict ? 2999 : 179); assert.equal(doc.querySelector('output').textContent, '');
-  t.mock.timers.tick(1); assert.equal(doc.querySelector('output').textContent, 'São');
+  assert.equal(doc.querySelector('output').textContent, '');
+  if (strict) { t.mock.timers.tick(2999); assert.equal(doc.querySelector('output').textContent, ''); }
+  t.mock.timers.tick(strict ? 1 : 0); assert.equal(doc.querySelector('output').textContent, 'São');
 });

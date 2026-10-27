@@ -2,13 +2,13 @@ import { bindSearchableFilterSelects } from './searchable-filter-selects.js';
 
 const FILTER_CONTROL = 'input:not([type="button"]):not([type="submit"]):not([type="reset"]), select, textarea';
 
-export function bindAutoFilterForm(form, apply, { debounceMs = 180, externalControls = [], strictTextDebounce = false } = {}) {
+export function bindAutoFilterForm(form, apply, { debounceMs = 0, externalControls = [], strictTextDebounce = false } = {}) {
   if (!form?.addEventListener || typeof apply !== 'function') {
     throw new TypeError('A filter form and its apply callback are required.');
   }
 
   const view = form.ownerDocument?.defaultView || globalThis;
-  const delay = Number.isFinite(Number(debounceMs)) ? Math.max(0, Number(debounceMs)) : 180;
+  const delay = Number.isFinite(Number(debounceMs)) ? Math.max(0, Number(debounceMs)) : 0;
   let timer = null, pendingValues = null;
   const searchableSelects = bindSearchableFilterSelects(form);
   const external = new Set(externalControls.filter(control => !form.contains(control)));
@@ -70,6 +70,7 @@ export function bindAutoFilterForm(form, apply, { debounceMs = 180, externalCont
     if (event.isComposing) composing.add(event.target);
     if (composing.size) return;
     pendingValues = values();
+    // Yield to native typing, then apply without waiting for an idle period.
     timer = view.setTimeout(applyIfChanged, delay);
   }
 

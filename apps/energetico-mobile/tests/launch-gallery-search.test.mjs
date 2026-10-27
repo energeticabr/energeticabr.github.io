@@ -26,7 +26,7 @@ function setup(t) {
     search.value = value;
     search.dispatchEvent(new dom.window.InputEvent('input', { bubbles: true }));
   };
-  const tick = async (ms = 3000) => { t.mock.timers.tick(ms); await settle(); };
+  const tick = async (ms = 0) => { t.mock.timers.tick(ms); await settle(); };
   const rows = () => [...root.querySelectorAll('.lg-cards > [data-item-id]')].map(node => node.dataset.itemId);
   async function open() {
     const opening = gallery.open(); pending.at(-1).resolve(snapshot()); await opening;
@@ -93,20 +93,20 @@ test('focus, click and unchanged input do not reload launch data', async t => {
   assertInteractive(ctx); assert.deepEqual(ctx.rows(), ['17']);
 });
 
-test('typing debounces and suppresses an older response even before the newest query is sent', async t => {
+test('typing continuously searches and suppresses an older response before the newest input is applied', async t => {
   const ctx = setup(t); await ctx.open();
-  ctx.type('a'); await ctx.tick(2999); ctx.type('ab'); await ctx.tick(2999);
-  assert.equal(ctx.pending.length, 1);
-  assert.equal(ctx.root.querySelector('.gallery-loading-screen--scoped').hidden, true);
-  await ctx.tick(1); assert.equal(ctx.pending.length, 2);
-  ctx.type('abc'); ctx.pending[1].resolve(snapshot(18)); await settle();
+  ctx.type('a'); await ctx.tick();
+  assert.equal(ctx.pending[1].payload.filters.search, 'a');
+  ctx.type('ab'); await ctx.tick();
+  assert.equal(ctx.pending[2].payload.filters.search, 'ab');
+  ctx.type('abc'); ctx.pending[2].resolve(snapshot(18)); await settle();
   assert.deepEqual(ctx.rows(), ['17'], 'a response for ab cannot replace cards while abc is being typed');
   assertRecalculating(ctx);
   await ctx.tick();
-  assert.equal(ctx.pending[2].payload.filters.search, 'abc');
+  assert.equal(ctx.pending[3].payload.filters.search, 'abc');
   ctx.type('abcd'); await ctx.tick();
-  ctx.pending[3].resolve(snapshot(901)); await settle();
-  ctx.pending[2].resolve(snapshot(19)); await settle();
+  ctx.pending[4].resolve(snapshot(901)); await settle();
+  ctx.pending[3].resolve(snapshot(19)); ctx.pending[1].reject(new Error('obsolete')); await settle();
   assert.deepEqual(ctx.rows(), ['901']);
   assert.match(ctx.root.querySelector('.lg-totals').textContent, /901/);
   assert.equal(ctx.root.getAttribute('aria-busy'), 'false');
@@ -238,39 +238,45 @@ test('initial opening and explicit refresh retain the blocking loader', async t 
   assert.equal(ctx.root.querySelector('.gallery-loading-screen').hidden, true);
 });
 
-for (const event of ['change', 'search']) test(`native text ${event} does not bypass the three-second quiet period`, async t => {
+for (const event of ['change', 'search']) test(`native text ${event} deduplicates input and applies clearing without a pause`, async t => {
   const ctx = setup(t); await ctx.open();
-  ctx.search.focus(); ctx.type('Ma'); await ctx.tick(1800);
+  ctx.search.focus(); ctx.type('Ma');
   ctx.search.dispatchEvent(new ctx.dom.window.Event(event, { bubbles: true }));
-  await ctx.tick(1199);
-  assert.equal(ctx.pending.length, 1);
-  assertInteractive(ctx);
-  await ctx.tick(1);
+  await ctx.tick();
   assert.equal(ctx.pending.length, 2);
+  assert.equal(ctx.pending[1].payload.filters.search, 'Ma');
   assertRecalculating(ctx);
   ctx.pending[1].resolve(snapshot(901)); await settle();
+  ctx.search.value = '';
+  ctx.search.dispatchEvent(new ctx.dom.window.Event(event, { bubbles: true }));
+  ctx.search.dispatchEvent(new ctx.dom.window.InputEvent('input', { bubbles: true }));
+  await ctx.tick();
+  assert.equal(ctx.pending.length, 3);
+  assert.equal(ctx.pending[2].payload.filters.search, '');
+  ctx.pending[2].resolve(snapshot()); await settle();
+  assertInteractive(ctx);
 });
 
 test('typing another query while the local loader is active preserves the new caret and controls', async t => {
   const ctx = setup(t); await ctx.open();
   const toolbar = ctx.search.parentElement;
   ctx.search.focus(); ctx.type('Ma'); await ctx.tick();
-  ctx.type('Mauro'); ctx.search.setSelectionRange(1, 4); await ctx.tick(2999);
-  assert.equal(ctx.pending.length, 2);
+  ctx.type('Mauro'); ctx.search.setSelectionRange(1, 4); await ctx.tick();
+  assert.equal(ctx.pending.length, 3);
   ctx.pending[1].resolve(snapshot(18)); await settle();
   assert.deepEqual(ctx.rows(), ['17']); assertRecalculating(ctx);
   const filters = ctx.root.querySelector('.gallery-filter-button'); filters.click();
   assert.equal(ctx.root.querySelector('.lg-filters').open, true);
   assert.equal(ctx.search.parentElement, toolbar);
   assert.equal(ctx.root.querySelector('.lg-filter-form').closest('[inert]'), null);
-  await ctx.tick(1); ctx.pending[2].resolve(snapshot(901)); await settle();
+  ctx.pending[2].resolve(snapshot(901)); await settle();
   assertInteractive(ctx);
   assert.deepEqual([ctx.search.selectionStart, ctx.search.selectionEnd], [1, 4]);
 });
 
-for (const action of ['close', 'destroy']) test(`${action} cancels a search before its three-second timer expires`, async t => {
+for (const action of ['close', 'destroy']) test(`${action} cancels a search before the next event-loop turn`, async t => {
   const ctx = setup(t); await ctx.open();
-  ctx.type('Mauro'); await ctx.tick(2999); ctx.gallery[action](); await ctx.tick(5000);
+  ctx.type('Mauro'); ctx.gallery[action](); await ctx.tick(5000);
   assert.equal(ctx.pending.length, 1);
 });
 

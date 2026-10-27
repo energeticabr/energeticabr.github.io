@@ -369,7 +369,7 @@ export function createLaunchGallery({ document: documentRef = globalThis.documen
   filterForm.append(filterGrid,
     element('p', 'lg-hint', 'Período de empenho: as datas inicial e final são incluídas.'), filterActions);
   const autoFilters = bindAutoFilterForm(filterForm, applyFilters,
-    { externalControls: [search], debounceMs: 3000, strictTextDebounce: true });
+    { externalControls: [search] });
   const totals = element('dl', 'lg-totals');
   const notice = element('p', 'lg-notice'); notice.hidden = true;
   const listStatus = element('div', 'lg-list-status'); listStatus.setAttribute('aria-live', 'polite');
@@ -519,7 +519,7 @@ export function createLaunchGallery({ document: documentRef = globalThis.documen
       return false;
     } finally {
       if (active(epoch) && version === listVersion) {
-        // Keep stale results covered while a newer filter is still debouncing.
+        // Keep stale results covered until the newest input has been applied.
         listLoading = autoFilters.hasPendingApplication() && !matchesCurrentFilters(); updateBusy();
       }
     }
