@@ -17,14 +17,20 @@ if (['320', '390'].includes(width)) {
     FORNECEDOR: 'FORNECEDOR FICTÍCIO DA ETAPA DE ACABAMENTO', DESCRICAOPGTO: 'MATERIAL DE EXEMPLO',
     QTD: '3', VALORTOTAL: '10', FRETE: '5', STATUS: 'PAGAMENTO PREVISTO',
     'DATA PREVISTO PGTO': '2026-10-30', FILIAL: '004 - FILIAL FICTÍCIA', IMOVEL: 'TODOS', 'Tem anexos': false, ...fields } });
-  const rows = [child('350'), child('371', { QTD: '2', VALORTOTAL: '20', FRETE: '0', OBS: 'Observação fictícia' }),
+  const rows = params.has('accordion') ? ['ANA PAULA EXEMPLO DA SILVA', 'JOÃO RODRIGUES TESTE', 'MARIA FERNANDA EXEMPLO',
+    'LUCAS PEREIRA TESTE', 'RODRIGO SANTOS EXEMPLO', 'FORNECEDOR FICTÍCIO COM NOME EXTENSO PARA TESTAR O RESUMO', 'PAULA OLIVEIRA TESTE'].map((name, index) => child(String(350 + index), {
+      FORNECEDOR: name, DESCRICAOPGTO: 'VALE ALIMENTAÇÃO', QTD: '5', VALORTOTAL: '45', FRETE: '0',
+      'DATA PREVISTO PGTO': index < 3 ? '2026-10-28' : '2026-10-30',
+      STATUS: ['PAGAMENTO PREVISTO', 'PAGAMENTO PREVISTO', 'PENDENTE', 'SUSPENSO', 'PAGO', 'PAGAMENTO PREVISTO', 'PAGAMENTO PREVISTO'][index],
+      OBS: 'VALE ALIMENTAÇÃO — exemplo fictício',
+    })) : [child('350'), child('371', { QTD: '2', VALORTOTAL: '20', FRETE: '0', OBS: 'Observação fictícia' }),
     child('372', { QTD: '1', VALORTOTAL: '50', FRETE: '0', STATUS: 'PAGO' }), child('999', { DESCRITIVOPROVISAO: '99' })];
   const repository = {
     async resolveList(_site, aliases) { return { status: 'resolved', id: aliases.includes('DESCRITIVOPROVISAO') ? 'parents' : 'children' }; },
     async getColumns() { return [{ name: 'DESCRITIVOPROVISAO', text: {} }]; },
     async getItem(_site, _list, id) { return { id, fields: { ID: Number(id), FORNECEDOR: 'GRUPO FICTÍCIO', OBS: 'Exemplo local de provisões vinculadas', VALORTOTAL: '125' } }; },
     async getItemsPage(_site, _list, _query, { pageNumber }) { return { items: structuredClone(rows.slice((pageNumber - 1) * 2, pageNumber * 2)),
-      hasMore: pageNumber * 2 < rows.length, nextLink: pageNumber * 2 < rows.length ? 'page-2' : '' }; },
+      hasMore: pageNumber * 2 < rows.length, nextLink: pageNumber * 2 < rows.length ? `page-${pageNumber + 1}` : '' }; },
     updateItem() { throw new Error('Esta prévia é somente leitura.'); },
   };
   const data = createPaymentProgrammingGalleryData({ repository });
@@ -34,7 +40,7 @@ if (['320', '390'].includes(width)) {
   if (params.has('detail')) {
     document.querySelector('[data-action="description-provisions"]').click();
     const deadline = performance.now() + 5000;
-    while (!document.querySelector('[data-provision-id="372"]')) {
+    while (!document.querySelector(params.has('accordion') ? '[data-provision-id="356"]' : '[data-provision-id="372"]')) {
       if (performance.now() > deadline) throw new Error('O detalhamento fictício não apareceu.');
       await new Promise(requestAnimationFrame);
     }
