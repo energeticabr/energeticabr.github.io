@@ -258,9 +258,16 @@ export function createHrPayrollGallery({ document: documentOption,
     updateControls();
     const epoch = session;
     const filters = selectedFilters();
+    const current = () => {
+      if (!opened || destroyed || !root.isConnected || epoch !== session) return false;
+      if (JSON.stringify(filters) !== JSON.stringify(selectedFilters())) {
+        // Discarded results must not suppress a later return to this query.
+        autoFilters.invalidate();
+        return false;
+      }
+      return true;
+    };
     try {
-      const current = () => opened && !destroyed && root.isConnected && epoch === session
-        && JSON.stringify(filters) === JSON.stringify(selectedFilters());
       let result;
       try { result = await request(gallery, targetPage, 25, cursor, {filters,refresh}); }
       catch (error) {
@@ -288,7 +295,7 @@ export function createHrPayrollGallery({ document: documentOption,
       drawRows(result.rows);
       if(Number.isInteger(result.count)) status.textContent=`${result.count} registro(s) encontrado(s) · ${result.rows.length} nesta página.`;
     } catch(error) {
-      if (opened && !destroyed && root.isConnected && epoch === session) {
+      if (current()) {
         status.textContent = `Não foi possível carregar os registros. ${error?.message || 'Tente novamente.'}`;
         cards.replaceChildren();
         const retry = element("button", "hr-gallery-button hr-gallery-retry", "Tentar novamente");
@@ -344,6 +351,7 @@ export function createHrPayrollGallery({ document: documentOption,
       page = 1;
       hasMore = false;
       pageCursors.splice(0, pageCursors.length, null, null);
+      autoFilters.sync();
       await loadPage(1,null,false,true);
       return true;
     },

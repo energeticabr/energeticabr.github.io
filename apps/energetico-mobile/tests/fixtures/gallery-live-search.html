@@ -1,0 +1,49 @@
+<!doctype html>
+<html><head><meta name="viewport" content="width=device-width, initial-scale=1">
+<link rel="icon" href="data:,">
+<link rel="stylesheet" href="../../src/styles.css">
+<link rel="stylesheet" href="../../src/ui/launch-gallery.css">
+<link rel="stylesheet" href="../../src/ui/orders-gallery.css">
+<link rel="stylesheet" href="../../src/ui/tasks-gallery.css">
+<link rel="stylesheet" href="../../src/ui/registration-gallery.css">
+<link rel="stylesheet" href="../../src/ui/hr-payroll-gallery.css">
+</head><body><button id="background-control">Controle fora da galeria</button><script type="module">
+import { galleryCases, galleryOptions } from '../helpers/gallery-create-cases.mjs';
+import { loadingRow } from '../helpers/gallery-loading-cases.mjs';
+let gallery, root, entry, requests = [];
+const qa = window.qa = {
+  get queries() { return requests.map(item => item.text); },
+  get remote() { return entry.name === 'launch' || Boolean(entry.options?.gallery); },
+  async open(name) {
+    gallery?.destroy();
+    entry = galleryCases.find(item => item.name === name);
+    requests = [];
+    const rows = ['901', '902', '991'].map(id => loadingRow(entry, id));
+    let initial = true;
+    gallery = entry.factory(galleryOptions(entry, document, {
+      snapshot: { rows },
+      request: (...args) => {
+        const filters = args[4]?.filters || args[1]?.filters || {};
+        const text = filters.search || '';
+        const visible = text === '901' ? rows.slice(0, 1) : text === '90' ? rows.slice(0, 2) : rows;
+        const result = { rows: visible, count: visible.length, page: 1, pages: 1, totals: {},
+          gallery: entry.options?.gallery, hasMore: false, nextCursor: null, filterOptions: {} };
+        if (initial) { initial = false; return Promise.resolve(result); }
+        return new Promise(resolve => requests.push({ text, finish: () => resolve(result) }));
+      },
+    }));
+    await gallery.open();
+    root = document.querySelector(entry.root);
+    return true;
+  },
+  ids() {
+    if (entry.options?.gallery) return [...root.querySelectorAll('.hr-gallery-id')]
+      .map(node => node.textContent.replace(/^ID /, '')).sort();
+    return [...root.querySelectorAll('.lg-cards > [data-item-id], .og-cards > [data-item-id], [data-registration-row]')]
+      .map(node => node.dataset.itemId || node.dataset.registrationRow).sort();
+  },
+  finishLatest() { requests.at(-1)?.finish(); return true; },
+  finishFirst() { requests[0]?.finish(); return true; },
+};
+document.documentElement.dataset.ready = 'true';
+</script></body></html>
