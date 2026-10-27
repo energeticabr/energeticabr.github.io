@@ -18,6 +18,7 @@ test('ID grande à esquerda e cluster selecionável cabem no celular e desktop, 
       const {stdout}=await runBrowserLayout(browser,{width,height,url:`http://127.0.0.1:${server.httpServer.address().port}/tests/fixtures/description-gallery-linked-clusters.html${detail?'?detail=1':''}`});
       const dom=new JSDOM(stdout), layout=JSON.parse(dom.window.document.documentElement.dataset.layout);dom.window.close();
       assert.deepEqual(layout.overflow,[],`${width}px detail=${detail}`);
+      assert.equal(layout.pageOverflow,false,`${width}px detail=${detail}: page width`);
       assert.equal(layout.clusters.length,3);
       for(const cluster of layout.clusters) {
         assert.equal(cluster.text,cluster.id);
@@ -25,7 +26,12 @@ test('ID grande à esquerda e cluster selecionável cabem no celular e desktop, 
         assert.ok(cluster.touchHeight>=64&&cluster.fullWidth,JSON.stringify(cluster));
       }
       assert.equal(layout.count,detail?2:0);assert.equal(layout.wrongGroup,false);assert.equal(layout.dialogFits,true);
-      if(detail){assert.match(layout.total.replace(/\s/g,''),/R\$45,00/);assert.deepEqual(layout.colors,['rgb(255, 255, 255)','rgb(220, 238, 249)']);}
+      if(detail){
+        assert.match(layout.total.replace(/\s/g,''),/R\$45,00/);assert.deepEqual(layout.colors,['rgb(255, 255, 255)','rgb(220, 238, 249)']);
+        assert.deepEqual(layout.compactText.map(value=>value.text),['FORNECEDOR FICTÍCIO','Material de exemplo']);
+        assert.ok(layout.compactText.every(value=>value.title.includes(value.text)&&value.ellipsis&&value.overflowHidden&&value.nowrap),'collapsed text keeps its full accessible value');
+        assert.deepEqual(layout.statusLabel,{text:'Status',clipped:true,accessible:true});
+      }
     }
   } finally {await server.close();}
 });

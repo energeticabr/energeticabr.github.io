@@ -56,8 +56,25 @@ if (['320','390'].includes(width)) {
     }
   }
   const dialog=document.querySelector('[data-provision-description-detail]');
-  const overflow=[...document.querySelectorAll('.rg-overlay,.rg-overlay *')].filter(node=>!node.classList.contains('screen-nav-label')&&node.clientWidth&&node.scrollWidth>node.clientWidth+1).map(node=>node.className);
+  const summaryText = node => node.matches('.pg-description-line-supplier,.pg-description-line-product')
+    && node.closest('[data-action="toggle-provision-detail"][aria-expanded="false"]');
+  const intentionalClip = node => {
+    const style=getComputedStyle(node);
+    if(summaryText(node))return style.overflowX==='hidden'&&style.textOverflow==='ellipsis'&&style.whiteSpace==='nowrap'
+      && Boolean(node.title)&&node.title.includes(node.textContent);
+    return node.matches('.pg-description-line-field--status > dt')&&style.position==='absolute'
+      &&style.overflowX==='hidden'&&style.clipPath==='inset(50%)'&&style.whiteSpace==='nowrap';
+  };
+  const overflow=[...document.querySelectorAll('.rg-overlay,.rg-overlay *')].filter(node=>!node.classList.contains('screen-nav-label')
+    &&node.clientWidth&&node.scrollWidth>node.clientWidth+1&&!intentionalClip(node)).map(node=>node.className);
+  const compactText=[...document.querySelectorAll('.pg-description-line-supplier,.pg-description-line-product')].filter(summaryText)
+    .map(node=>{const style=getComputedStyle(node);return{text:node.textContent,title:node.title,ellipsis:style.textOverflow==='ellipsis',
+      overflowHidden:style.overflowX==='hidden',nowrap:style.whiteSpace==='nowrap'};});
+  const statusLabel=dialog?.querySelector('.pg-description-line:not([hidden]) .pg-description-line-field--status > dt');
   document.documentElement.dataset.layout=JSON.stringify({clusters,overflow,
+    pageOverflow:document.documentElement.scrollWidth>innerWidth+1,compactText,
+    statusLabel:statusLabel?{text:statusLabel.textContent,clipped:intentionalClip(statusLabel),
+      accessible:!statusLabel.closest('[aria-hidden="true"]')&&getComputedStyle(statusLabel).display!=='none'&&getComputedStyle(statusLabel).visibility!=='hidden'}:null,
     count:document.querySelectorAll('[data-provision-id]').length,
     wrongGroup:Boolean(document.querySelector('[data-provision-id="999"]')),
     total:document.querySelector('[data-description-total]')?.textContent||'',
