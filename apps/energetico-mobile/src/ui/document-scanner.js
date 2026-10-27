@@ -9,6 +9,7 @@ export function createCameraChooser(documentRef = globalThis.document) {
     dialog.className = 'document-scanner document-scanner--chooser';
     dialog.setAttribute('aria-label','Câmera');
     dialog.innerHTML = `<h2>📷 Câmera</h2><p>Como deseja adicionar a imagem?</p>
+      <button type="button" data-camera-mode="gallery">🖼️ ESCOLHER FOTO GALERIA</button>
       <button type="button" data-camera-mode="photo">📷 Tirar foto</button>
       <button type="button" data-camera-mode="scan">📄 Escanear</button>
       <p class="document-scanner-hint">Escaneie o papel e ajuste as bordas antes de anexar.</p>
@@ -25,7 +26,7 @@ export function createCameraChooser(documentRef = globalThis.document) {
       dialog.addEventListener('cancel',event=>{event.preventDefault();finish?.(null);});
       dialog.addEventListener('close',()=>finish?.(null));
       documentRef.body.append(dialog);dialog.showModal();
-      dialog.querySelector('[data-camera-mode="photo"]').focus();
+      dialog.querySelector('[data-camera-mode="gallery"]').focus();
     });
     return pending;
   }

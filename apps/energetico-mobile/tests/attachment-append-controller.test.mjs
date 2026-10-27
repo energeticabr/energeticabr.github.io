@@ -64,6 +64,20 @@ test('tray append composes and replaces only the open PDF while preserving quest
   assert.equal((await PDFDocument.load(await result.blob.arrayBuffer())).getPageCount(), 3);
 });
 
+test('camera gallery appends the selected existing photo as a PDF page to the open attachment',async t=>{
+  const h=await harness(t),preview=h.previews[0];
+  const {default:sharp}=await import('sharp');
+  const photo=new File([await sharp({create:{width:8,height:12,channels:3,background:'#c00'}}).png().toBuffer()],'galeria.png',{type:'image/png'});
+  h.view.chooseCaptureMode=async()=>'gallery';let selections=0;
+  h.native.pickPhotos=async()=>{selections++;return [photo];};
+  h.native.capturePhoto=h.native.scanDocument=async()=>{throw new Error('unexpected capture');};
+  const result=await preview.onAppendPages('camera',{blob:h.original,fileName:h.original.name,signal:new AbortController().signal});
+  assert.equal(selections,1);assert.equal(result.blob.type,'application/pdf');
+  assert.equal((await PDFDocument.load(await result.blob.arrayBuffer())).getPageCount(),2);
+  assert.equal(h.calls.length,1);assert.equal(h.calls[0].id,oldId);
+  assert.equal(h.store.getState().draft,'rascunho preservado');assert.equal(h.store.getState().pendingFiles.length,0);
+});
+
 test('cancelled selection, stale flow and close during picker never call replacement or queue loose files', async t => {
   for (const kind of ['cancel', 'flow', 'close']) {
     const h = await harness(t), preview = h.previews[0], abort = new AbortController();

@@ -118,13 +118,36 @@ for (const command of ['open-file', 'open-media']) test(`${command} opens the re
   assert.equal(documentRef.querySelector('.attachment-preview-text').textContent, 'conteúdo');
 });
 
-for (const mode of ['scan','photo',null]) test(`camera mode ${mode} uses only the chosen confirmed files`, async t => {
+for (const mode of ['gallery','scan','photo',null]) test(`camera mode ${mode} uses only the chosen confirmed files`, async t => {
   const h=makeHarness();t.after(()=>h.controller.stop());await h.controller.start();
   h.view.chooseCaptureMode=async()=>mode;
   h.native.scanDocument=async()=>[new File(['scan'],'scan.jpg',{type:'image/jpeg'})];
   h.native.capturePhoto=async()=>[new File(['photo'],'photo.jpg',{type:'image/jpeg'})];
+  h.native.pickPhotos=async()=>[new File(['gallery'],'gallery.jpg',{type:'image/jpeg'})];
   await h.view.emit('capture-photo');
   assert.deepEqual(h.chatCalls.filter(c=>c[0]==='file'),mode?[["file",`${mode}.jpg`]]:[]);
+});
+
+test('camera gallery cancellation preserves draft and confirmed attachments',async t=>{
+  const h=makeHarness();t.after(()=>h.controller.stop());await h.controller.start();
+  h.store.setDraft('atividade preservada');h.store.syncAttachments([{id:'receipt',fileName:'recibo.pdf',mimeType:'application/pdf',mediaUrl:'/receipt'}]);
+  h.view.chooseCaptureMode=async()=>'gallery';let selections=0;
+  h.native.pickPhotos=async()=>{selections++;return [];};
+  h.native.capturePhoto=async()=>{throw new Error('unexpected camera capture');};
+  await h.view.emit('capture-photo');
+  assert.equal(selections,1);assert.equal(h.store.getState().draft,'atividade preservada');
+  assert.equal(h.store.getState().attachments[0].id,'receipt');
+  assert.deepEqual(h.chatCalls.filter(c=>c[0]==='file'),[]);
+});
+
+test('old gallery picker cannot upload after the session ends',async t=>{
+  const h=makeHarness();t.after(()=>h.controller.stop());await h.controller.start();
+  h.view.chooseCaptureMode=async()=>'gallery';let finish;
+  h.native.pickPhotos=()=>new Promise(resolve=>finish=resolve);
+  const picking=h.view.emit('capture-photo');await new Promise(resolve=>setImmediate(resolve));
+  assert.equal(typeof finish,'function');await h.view.emit('sign-out');
+  finish([new File(['old'],'old.jpg',{type:'image/jpeg'})]);await picking;
+  assert.deepEqual(h.chatCalls.filter(c=>c[0]==='file'),[]);
 });
 
 // A regression to queueing every scanner image, or merging a later check, must fail at sendFile.
@@ -911,7 +934,8 @@ test('observação: clique no SIM da tela envia o texto atual e preserva os anex
   h.chatCalls.length = 0;
   root.querySelector(`[data-reply-id="${observationOptions[0].id}"]`).click();
   await new Promise(resolve => setImmediate(resolve));
-  assert.deepEqual(h.chatCalls, [['text', { text: 'Arame comprado com Marcos arcelor\nConferir na obra.' }]]);
+  // Optional thumbnail downloads are reads; verify every conversation mutation.
+  assert.deepEqual(h.chatCalls.filter(([kind])=>kind!=='media'), [['text', { text: 'Arame comprado com Marcos arcelor\nConferir na obra.' }]]);
   assert.equal(root.querySelector('[data-role="draft"]').value, '');
   assert.equal(h.store.getState().attachments[0].id, 'receipt');
 });

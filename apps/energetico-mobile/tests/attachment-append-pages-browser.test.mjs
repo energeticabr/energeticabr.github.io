@@ -29,6 +29,44 @@ test('tray + menu fits 320/390 px and desktop; files, photo-to-PDF and scan appe
   }finally{await server.close();}
 });
 
+test('camera gallery is first and opens an image picker without capture on phone and desktop', {timeout:120000},async t=>{
+  if(!browser)return t.skip('Chrome unavailable');
+  const server=await createServer({root,server:{host:'127.0.0.1',port:0,fs:{allow:[resolve(root,'../..')]}},logLevel:'silent'});
+  try{
+    await server.listen();
+    for(const width of [320,390,1365])await withAttachmentBrowser(browser,{width,height:844},async driver=>{
+      await driver.navigate(`http://127.0.0.1:${server.httpServer.address().port}/tests/fixtures/attachment-append-pages.html?manual=1&browser-picker=1`);
+      await driver.wait('window.attachmentAppendFixture');
+      await driver.tap('[data-preview-action="append-pages"]');await driver.tap('[data-preview-action="append-camera"]');
+      const chooser=await driver.evaluate(`(()=>{
+        const dialog=document.querySelector('.document-scanner--chooser'),buttons=[...dialog.querySelectorAll('[data-camera-mode]')],rect=dialog.getBoundingClientRect();
+        return{modes:buttons.map(button=>button.dataset.cameraMode),label:buttons[0].textContent,focused:document.activeElement===buttons[0],
+          fits:rect.left>=0&&rect.right<=innerWidth&&rect.top>=0&&rect.bottom<=innerHeight,
+          controls:buttons.every(button=>{const hit=button.getBoundingClientRect();return hit.width>=44&&hit.height>=44&&button.scrollWidth<=button.clientWidth;})};
+      })()`);
+      assert.deepEqual(chooser.modes,['gallery','photo','scan','cancel']);assert.equal(chooser.label,'🖼️ ESCOLHER FOTO GALERIA');
+      assert.equal(chooser.focused&&chooser.fits&&chooser.controls,true,JSON.stringify({width,chooser}));
+      // The target includes its border; compact system fonts can yield a
+      // 44px hit box with 42px clientHeight. Exercise that actual minimum.
+      const minimumTargets=await driver.evaluate(`(()=>{
+        const buttons=[...document.querySelectorAll('[data-camera-mode]')];
+        for(const button of buttons){button.style.font='14px Arial';button.style.height='44px';}
+        return buttons.map(button=>({height:button.getBoundingClientRect().height,clientHeight:button.clientHeight}));
+      })()`);
+      assert.ok(minimumTargets.every(target=>target.height===44&&target.clientHeight<44),JSON.stringify(minimumTargets));
+      await driver.tap('[data-camera-mode="gallery"]');
+      const picker=await driver.evaluate(`(()=>{const input=document.querySelector('input[type=file]');return{accept:input?.accept,capture:input?.hasAttribute('capture'),multiple:input?.multiple};})()`);
+      assert.deepEqual(picker,{accept:'image/*',capture:false,multiple:true});
+      assert.equal(driver.events.filter(event=>event.method==='Page.fileChooserOpened').length,1);
+      await driver.evaluate(`attachmentAppendFixture.selectFiles('photo')`);await driver.wait('attachmentAppendFixture.snapshot().replacements===1');
+      assert.equal(await driver.evaluate('attachmentAppendFixture.pageCount()'),3);
+      const snapshot=await driver.evaluate('attachmentAppendFixture.snapshot()');
+      assert.equal(snapshot.galleryCalls,1);assert.equal(snapshot.cameraCalls+snapshot.pickerCalls+snapshot.sentFile+snapshot.networkWrites,0);
+      assert.equal(snapshot.unchangedQuestion&&snapshot.unchangedDraft&&snapshot.noReply,true);
+    });
+  }finally{await server.close();}
+});
+
 test('real touch opens the file chooser and appends pages only after server confirmation', {timeout:60000}, async t => {
   if(!browser) return t.skip('Chrome unavailable');
   const server=await createServer({root,server:{host:'127.0.0.1',port:0,fs:{allow:[resolve(root,'../..')]}},logLevel:'silent'});

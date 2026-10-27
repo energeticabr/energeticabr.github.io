@@ -10117,7 +10117,8 @@ export function createAppController({
     try {
       return await queueSelectedFiles(async () => {
         const mode = typeof view.chooseCaptureMode === 'function' ? await view.chooseCaptureMode() : 'photo';
-        if (stopped || account !== captureAccount || sessionRevision !== captureRevision || !['photo','scan'].includes(mode)) return [];
+        if (stopped || account !== captureAccount || sessionRevision !== captureRevision || !['gallery','photo','scan'].includes(mode)) return [];
+        if (mode === 'gallery') return native.pickPhotos();
         return mode === 'scan' ? native.scanDocument() : native.capturePhoto();
       },options);
     } finally { cameraSelectionBusy = false; }
@@ -10817,8 +10818,9 @@ export function createAppController({
           if (mode === 'files') files = await native.pickDocuments();
           else {
             const choice = typeof view.chooseCaptureMode === 'function' ? await view.chooseCaptureMode() : 'photo';
-            if (!current() || !['photo', 'scan'].includes(choice)) return null;
-            files = await (choice === 'scan' ? native.scanDocument() : native.capturePhoto());
+            if (!current() || !['gallery', 'photo', 'scan'].includes(choice)) return null;
+            files = await (choice === 'gallery' ? native.pickPhotos()
+              : choice === 'scan' ? native.scanDocument() : native.capturePhoto());
           }
           if (!current() || !files?.length) return null;
           acquisition.step('selected');
