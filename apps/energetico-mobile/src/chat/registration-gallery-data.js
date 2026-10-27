@@ -18,6 +18,8 @@ export const REGISTRATION_GALLERY_MODELS = Object.freeze({
   dda: Object.freeze({
     title: "GALERIA DDA", listName: "DDAS SICOOB", aliases: ["DDAS SICOOB"],
     nativeCard: true, readOnly: true, readTransport: "rest", showAttachments: true, recordLabel: "DDA",
+    restReadFields: ["ID", "Title", "VENCIMENTO", "VALOR", "SITUACAO", "CNPJ_FORNECEDOR", "DOCUMENTO", "BANCO", "VALOR_PAGAMENTO", "NOSSO_NUMERO", "LINHA_DIGITAVEL", "CODIGO_BARRAS", "PAGADOR", "CNPJ_PAGADOR", "BLOQUEADO", "MENSAGEM", "ULTIMA_CONSULTA"],
+    restExpandSystemFields: false,
     searchPlaceholder: "Pesquisar fornecedor, documento ou ID",
     fields: ["FORNECEDOR", "VENCIMENTO", "VALOR", "SITUACAO", "CNPJ_FORNECEDOR", "DOCUMENTO", "BANCO", "VALOR_PAGAMENTO", "NOSSO_NUMERO", "LINHA_DIGITAVEL", "CODIGO_BARRAS", "PAGADOR", "CNPJ_PAGADOR", "BLOQUEADO", "MENSAGEM", "ULTIMA_CONSULTA", "ID"],
     filterFields: ["FORNECEDOR", "SITUACAO", "BANCO"], dateRangeField: "VENCIMENTO",
@@ -293,7 +295,9 @@ export function createRegistrationGalleryData({ kind, ...options } = {}) {
   if (model.readTransport) {
     const siteKey = options.siteKey || "personal";
     const sites = options.siteConfig || SHAREPOINT_SITES;
-    options = { ...options, siteConfig: { ...sites, [siteKey]: { ...sites[siteKey], readTransport: model.readTransport } } };
+    options = { ...options, siteConfig: { ...sites, [siteKey]: { ...sites[siteKey], readTransport: model.readTransport,
+      ...(model.restReadFields ? { restReadFields: model.restReadFields, restExpandSystemFields: model.restExpandSystemFields } : {}),
+    } } };
   }
   const repository = model.nativeCard ? galleryRepository(options) : options.repository;
   const data = createOrdersGalleryData({

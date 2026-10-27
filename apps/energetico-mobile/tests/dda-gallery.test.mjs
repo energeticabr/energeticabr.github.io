@@ -51,7 +51,15 @@ test('DDA uses authenticated SharePoint REST with read-only scope for private li
    calls.push(String(url));assert.equal(options.method,'GET');
    let value;
    if(String(url).includes('/fields?')) value=[{InternalName:'Title',Title:'Fornecedor',TypeAsString:'Text'},{InternalName:'VALOR',Title:'Valor nominal',TypeAsString:'Currency'}];
-   else if(String(url).includes('/items?')) value=[{Id:7,...sample.fields}];
+   else if(String(url).includes('/items?')) {
+    const query=new URL(String(url)).searchParams;
+    // Personal SharePoint lists reject the expanded system-field query with 502.
+    if(query.has('$expand')) return new Response('{"error":{"code":"BadGateway"}}',{status:502,headers:{'Content-Type':'application/json'}});
+    assert.ok(query.get('$select').split(',').includes('Title'));
+    assert.ok(query.get('$select').split(',').includes('VENCIMENTO'));
+    assert.equal(query.get('$select').includes('*'),false);
+    value=[{Id:7,...sample.fields}];
+   }
    else if(String(url).includes('/_api/web/lists?')) value=[{Id:'11111111-2222-3333-4444-555555555555',Title:'DDAS SICOOB',BaseTemplate:100,Hidden:false}];
    else throw new Error('Unexpected test request '+url);
    return new Response(JSON.stringify({value}),{status:200,headers:{'Content-Type':'application/json'}});
