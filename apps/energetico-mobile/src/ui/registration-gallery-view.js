@@ -88,6 +88,14 @@ function fieldValue(fields, name, model) {
   if ((raw == null || raw === "") && model.fieldDefaults?.[name]) raw = model.fieldDefaults[name];
   const value = valueText(raw);
   const type = model.fieldTypes?.[name];
+  if (type === "boolean") return raw === true || raw === 1 || value === "true" ? "Sim"
+    : raw === false || raw === 0 || value === "false" ? "Não" : value;
+  if (type === "datetime") {
+    const date = new Date(value);
+    return value && Number.isFinite(date.getTime()) ? new Intl.DateTimeFormat("pt-BR", {
+      dateStyle: "short", timeStyle: "short", timeZone: "America/Sao_Paulo",
+    }).format(date) : value;
+  }
   if (["number", "rounded-number", "currency", "percent", "days"].includes(type)) {
     const number = registrationNumber(value);
     if (number == null) return "";
@@ -172,6 +180,7 @@ export function createRegistrationGallery({ document: doc = globalThis.document,
   const createShortcut = createGalleryCreationToolbar({ document: doc, root, disclosure: filterDisclosure, onCreate, close: hide,
     label: `Adicionar registro — ${model.title}`, action: 'create-registration',
     isAvailable: () => !destroyed && !attachmentLoading });
+  if (model.readOnly) createShortcut.button.remove();
   const toolbar = el("div", "rg-toolbar");
   const filterFields = model.filterFields || ["STATUS"];
   if (model.filterFields) toolbar.classList.add("rg-toolbar--documents");

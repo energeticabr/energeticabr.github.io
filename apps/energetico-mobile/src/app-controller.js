@@ -454,6 +454,7 @@ const RECURRING_EXPENSES_GALLERY_ID = "action_recurring_expenses_gallery";
 const POWERBI_DASHBOARD_REPLY_ID = "action_powerbi_dashboard";
 const POWERBI_SCOPES = Object.freeze(["https://analysis.windows.net/powerbi/api/Report.Read.All"]);
 const REGISTRATION_GALLERY_KIND = Object.freeze({
+  action_dda_gallery: "dda",
   action_hr_gallery_presencas: "presenceDescriptions",
   action_hr_gallery_funcionarios: "contractorEmployment",
   action_financial_movement_gallery: 'financial_movement',
@@ -9216,8 +9217,8 @@ export function createAppController({
           assertSession();
           const panel = await registrationGalleryFactory({
             kind, data,
-            ...(kind === "contractorEmployment" ? {} : { onCreate: galleryCreationHandler(replyId, assertSession) }),
-            ...(["presenceDescriptions", "provisionDescription", "documents", "asset", "assetFunction", "assetProduct", "assetGroup", "workDiary", "quotes", "contracts", "contractLines", "measurements", "measurementLines", "stageDemonstratives", "constructionStages", "recurringTasks", "delegatedTasks"].includes(kind) ? {
+            ...(["contractorEmployment", "dda"].includes(kind) ? {} : { onCreate: galleryCreationHandler(replyId, assertSession) }),
+            ...(["dda", "presenceDescriptions", "provisionDescription", "documents", "asset", "assetFunction", "assetProduct", "assetGroup", "workDiary", "quotes", "contracts", "contractLines", "measurements", "measurementLines", "stageDemonstratives", "constructionStages", "recurringTasks", "delegatedTasks"].includes(kind) ? {
               openMediaCollection: items => {
                 assertSession();
                 const collection = (Array.isArray(items) ? items : []).map(item => ({

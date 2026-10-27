@@ -5032,9 +5032,10 @@ test("visita em obra aparece apenas no submenu Lançamentos, abaixo do anexo a p
   const supplyPairs = [...suppliesDoc.querySelectorAll(".chat-supplies-pair")];
   assert.deepEqual(supplyPairs.map(pair => [...pair.querySelectorAll("[data-reply-id]")].map(button => button.dataset.replyId)), [
     ["new_document", "action_orders_gallery", "action_launch_gallery"],
-    ["payment", "action_payment_programming_gallery", "action_provision_description_gallery", "action_recurring_expenses_gallery"],
+    ["payment", "action_payment_programming_gallery", "action_provision_description_gallery", "action_recurring_expenses_gallery", "action_dda_gallery"],
   ]);
-  assert.equal((suppliesMarkup.match(/data-gallery-button/g) || []).length, 5);
+  assert.equal((suppliesMarkup.match(/data-gallery-button/g) || []).length, 6);
+  assert.equal(supplyPairs[1].classList.contains("chat-supplies-pair--four-galleries"), true);
   assert.deepEqual([...suppliesDoc.querySelectorAll(".chat-supplies-extras__primary [data-reply-id]")].map(button => button.dataset.replyId), ["registrations"]);
   assert.doesNotMatch(suppliesMarkup, /<article class="chat-message chat-message--assistant chat-message--launch-menu"><span class="chat-avatar/);
   assert.doesNotMatch(suppliesMarkup, /📱 APPS/);
@@ -5129,7 +5130,7 @@ test("botões principais de Suprimentos ocupam a altura das galerias corresponde
   assert.deepEqual(pairs.map(pair => pair.querySelector(".chat-supplies-pair__primary [data-reply-id]")?.dataset.replyId), ["new_document", "payment"]);
   assert.deepEqual(pairs.map(pair => [...pair.querySelectorAll(".chat-gallery-actions button")].map(button => button.textContent)), [
     ["PEDIDOS", "LANÇAMENTOS"],
-    ["PGTOS PREVISTOS", "DESCRITIVO PROVISÃO", "DESPESAS RECORRENTES"],
+    ["PGTOS PREVISTOS", "DESCRITIVO PROVISÃO", "DESPESAS RECORRENTES", "GALERIA DDA"],
   ]);
   assert.match(styles, /\.chat-supplies-pair\s*\{[^}]*min-height:\s*calc\(2\s*\*\s*var\(--supplies-gallery-height\)\s*\+\s*var\(--supplies-gap\)\)/s);
   assert.match(styles, /\.chat-choice-columns--launch-menu \.chat-gallery-actions\s*\{[^}]*grid-template-rows:\s*repeat\(2,\s*minmax\(var\(--supplies-gallery-height\),\s*1fr\)\)/s);
@@ -5161,6 +5162,7 @@ test("Galeria Pgtos Previstos fica abaixo de Gal. Lançamentos e à direita da P
     ["action_payment_programming_gallery", "PGTOS PREVISTOS"],
     ["action_provision_description_gallery", "DESCRITIVO PROVISÃO"],
     ["action_recurring_expenses_gallery", "DESPESAS RECORRENTES"],
+    ["action_dda_gallery", "GALERIA DDA"],
   ]);
   assert.equal(pairs[1].querySelector('[data-reply-id="payment"]').dataset.label, "💳 PROVISÃO DE PAGAMENTO E DESPESAS RECORRENTES");
   assert.deepEqual([...dom.window.document.querySelectorAll(".chat-supplies-extras__primary [data-reply-id]")].map(button => button.dataset.replyId), ["registrations", "quote", "assets"]);
@@ -5246,7 +5248,7 @@ test("botões de todas as galerias têm cantos arredondados como os azuis e mant
   const galleryButtons = [...dom.window.document.querySelectorAll(".chat-gallery-actions .chat-choice-button--gallery")];
 
   assert.equal(expectedRadius, "14px");
-  assert.equal(galleryButtons.length, 10);
+  assert.equal(galleryButtons.length, 11);
   for (const button of galleryButtons) {
     assert.equal(dom.window.getComputedStyle(button).borderRadius, expectedRadius, button.textContent);
     assert.equal(dom.window.getComputedStyle(button).backgroundColor, "rgb(69, 76, 83)", button.textContent);
