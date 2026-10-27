@@ -618,7 +618,7 @@ function canonicalRestVersion(value) {
   });
 }
 
-function restItemsQuery(query, { fields } = {}) {
+function restItemsQuery(query, { fields, expandSystemFields = true } = {}) {
   const raw = typeof query === "string" ? query.replace(/^\?/, "") : new URLSearchParams(query || {}).toString();
   const source = new URLSearchParams(raw);
   const output = new URLSearchParams();
@@ -631,9 +631,9 @@ function restItemsQuery(query, { fields } = {}) {
     if (!["id", "createdBy", "lastModifiedBy"].includes(field)) selected.add(graphFieldName(field));
   }
   const select = selected.size ? ["ID", ...selected] : ["*"];
-  select.push("Author/Title", "Author/EMail", "Editor/Title", "Editor/EMail", "FieldValuesAsText");
+  if (expandSystemFields) select.push("Author/Title", "Author/EMail", "Editor/Title", "Editor/EMail", "FieldValuesAsText");
   output.set("$select", [...new Set(select)].join(","));
-  output.set("$expand", "Author,Editor,FieldValuesAsText");
+  if (expandSystemFields) output.set("$expand", "Author,Editor,FieldValuesAsText");
   const translateExpression = expression => String(expression || "")
     .replaceAll("fields/", "")
     .replace(/(^|[\s(])id(?=\s)/gi, "$1ID");
@@ -998,7 +998,7 @@ export function createSharePointRepository(graph, siteConfig, { attachmentTransp
     if (siteTransport(config, "read") === "rest") {
       if (!restTransport?.request) throw new Error("O transporte REST de leitura SharePoint nao foi configurado.");
       const collectionPath = restItemsCollectionPath(listId);
-      const parameters = restItemsQuery(query);
+      const parameters = restItemsQuery(query, { fields: config.restReadFields, expandSystemFields: config.restExpandSystemFields });
       const values = await getAllRestCollection(
         config,
         `${collectionPath}?${parameters}`,
@@ -1019,7 +1019,7 @@ export function createSharePointRepository(graph, siteConfig, { attachmentTransp
     if (siteTransport(config, "read") === "rest") {
       if (!restTransport?.request) throw new Error("O transporte REST de leitura SharePoint nao foi configurado.");
       const collectionPath = restItemsCollectionPath(listId);
-      const parameters = restItemsQuery(query);
+      const parameters = restItemsQuery(query, { fields: config.restReadFields, expandSystemFields: config.restExpandSystemFields });
       const cursor = validatedRestNextLink(options.cursor, config, collectionPath);
       const path = cursor || `${collectionPath}?${parameters}`;
       throwIfAborted(options.signal);
