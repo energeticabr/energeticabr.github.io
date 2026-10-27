@@ -25,6 +25,10 @@ if (['320', '390'].includes(width)) {
       OBS: 'VALE ALIMENTAÇÃO — exemplo fictício',
     })) : [child('350'), child('371', { QTD: '2', VALORTOTAL: '20', FRETE: '0', OBS: 'Observação fictícia' }),
     child('372', { QTD: '1', VALORTOTAL: '50', FRETE: '0', STATUS: 'PAGO' }), child('999', { DESCRITIVOPROVISAO: '99' })];
+  if (params.has('long')) {
+    rows[0].fields.OBS = 'Observação extensa de exemplo para manter o contexto do cartão selecionado. '.repeat(14);
+    for (let id = 357; id <= 361; id++) rows.push(child(String(id)));
+  }
   const repository = {
     async resolveList(_site, aliases) { return { status: 'resolved', id: aliases.includes('DESCRITIVOPROVISAO') ? 'parents' : 'children' }; },
     async getColumns() { return [{ name: 'DESCRITIVOPROVISAO', text: {} }]; },

@@ -78,3 +78,23 @@ test('cartões compactos respondem a toque e teclado, mantêm um painel e fecham
     });
   } finally { await server.close(); }
 });
+
+test('observação longa não esconde o próximo cartão atrás do cabeçalho ao abrir', { timeout: 45000 }, async t => {
+  const browser = [process.env.CHROME_BIN, '/usr/bin/google-chrome', '/usr/bin/chromium', 'C:/Program Files/Google/Chrome/Application/chrome.exe'].find(path => path && existsSync(path));
+  if (!browser) return t.skip('Chrome unavailable');
+  const root = resolve(fileURLToPath(new URL('..', import.meta.url)));
+  const server = await createServer({ root, server: { host: '127.0.0.1', port: 0, fs: { allow: [resolve(root, '../..')] } }, logLevel: 'silent' });
+  try {
+    await server.listen();
+    await withAttachmentBrowser(browser, { width: 320, height: 740 }, async driver => {
+      await driver.navigate(`http://127.0.0.1:${server.httpServer.address().port}/tests/fixtures/provision-description-detail.html?detail=1&accordion=1&long=1`);
+      await driver.wait('document.documentElement.dataset.layout');
+      const selector = '[data-provision-id="351"] [data-action="toggle-provision-detail"]';
+      await driver.evaluate(`document.querySelector('${selector}').scrollIntoView({block:'center'})`);
+      await driver.tap(selector);
+      const layout = await driver.evaluate(`(()=>{const dialog=document.querySelector('[data-provision-description-detail]'),button=document.querySelector('${selector}'),rect=button.getBoundingClientRect(),heading=dialog.querySelector('header').getBoundingClientRect(),bounds=dialog.getBoundingClientRect(),panel=document.getElementById(button.getAttribute('aria-controls'));return{top:rect.top,bottom:rect.bottom,headingBottom:heading.bottom,dialogBottom:bounds.bottom,expanded:button.getAttribute('aria-expanded'),hidden:panel.hidden};})()`);
+      assert.equal(layout.expanded, 'true'); assert.equal(layout.hidden, false);
+      assert.ok(layout.top >= layout.headingBottom && layout.bottom <= layout.dialogBottom, JSON.stringify(layout));
+    });
+  } finally { await server.close(); }
+});

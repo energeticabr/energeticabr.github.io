@@ -65,6 +65,15 @@ export function createProvisionDescriptionDetail({ document: doc, host, backgrou
         button.setAttribute('aria-expanded', String(open)); panel.hidden = !open;
         card.classList.toggle('is-expanded', open);
       });
+      const button = entries[selected].button, dialog = button.closest('.pg-description-detail');
+      if (!dialog?.clientHeight) return;
+      const bounds = dialog.getBoundingClientRect(), rect = button.getBoundingClientRect();
+      const heading = dialog.querySelector('.pg-description-detail-heading').getBoundingClientRect();
+      const top = Math.max(bounds.top, heading.bottom) + 8, bottom = bounds.bottom - 8;
+      // Collapsing a tall earlier panel can move this control above the sticky
+      // heading. Correct only this dialog's scroll, preserving the gallery below.
+      if (rect.top < top) dialog.scrollTop += rect.top - top;
+      else if (rect.bottom > bottom) dialog.scrollTop += rect.bottom - bottom;
     };
     result.provisions.forEach((row, index) => {
       if (!/^[1-9]\d{0,14}$/.test(String(row?.id)) || !row.fields) throw new Error('Provisão inválida.');
