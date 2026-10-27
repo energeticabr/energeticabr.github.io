@@ -42,10 +42,18 @@ test('camera gallery is first and opens an image picker without capture on phone
         const dialog=document.querySelector('.document-scanner--chooser'),buttons=[...dialog.querySelectorAll('[data-camera-mode]')],rect=dialog.getBoundingClientRect();
         return{modes:buttons.map(button=>button.dataset.cameraMode),label:buttons[0].textContent,focused:document.activeElement===buttons[0],
           fits:rect.left>=0&&rect.right<=innerWidth&&rect.top>=0&&rect.bottom<=innerHeight,
-          controls:buttons.every(button=>button.clientWidth>=44&&button.clientHeight>=44&&button.scrollWidth<=button.clientWidth)};
+          controls:buttons.every(button=>{const hit=button.getBoundingClientRect();return hit.width>=44&&hit.height>=44&&button.scrollWidth<=button.clientWidth;})};
       })()`);
       assert.deepEqual(chooser.modes,['gallery','photo','scan','cancel']);assert.equal(chooser.label,'🖼️ ESCOLHER FOTO GALERIA');
       assert.equal(chooser.focused&&chooser.fits&&chooser.controls,true,JSON.stringify({width,chooser}));
+      // The target includes its border; compact system fonts can yield a
+      // 44px hit box with 42px clientHeight. Exercise that actual minimum.
+      const minimumTargets=await driver.evaluate(`(()=>{
+        const buttons=[...document.querySelectorAll('[data-camera-mode]')];
+        for(const button of buttons){button.style.font='14px Arial';button.style.height='44px';}
+        return buttons.map(button=>({height:button.getBoundingClientRect().height,clientHeight:button.clientHeight}));
+      })()`);
+      assert.ok(minimumTargets.every(target=>target.height===44&&target.clientHeight<44),JSON.stringify(minimumTargets));
       await driver.tap('[data-camera-mode="gallery"]');
       const picker=await driver.evaluate(`(()=>{const input=document.querySelector('input[type=file]');return{accept:input?.accept,capture:input?.hasAttribute('capture'),multiple:input?.multiple};})()`);
       assert.deepEqual(picker,{accept:'image/*',capture:false,multiple:true});
