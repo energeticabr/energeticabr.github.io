@@ -83,7 +83,11 @@ async function buildHasGroup(client, build, group) {
     throw new Error('A Apple não confirmou o relacionamento da build consultada.');
   }
   if (relationship.data.some(item => item.type === 'betaGroups' && item.id === group.id)) return true;
-  if (relationship.links?.next) throw new Error('A lista de grupos da build está incompleta; nenhuma associação foi confirmada.');
+  const paging = relationship.meta?.paging || {};
+  const hasNextCursor = paging.nextCursor != null && String(paging.nextCursor).length > 0;
+  if (relationship.links?.next || hasNextCursor || Number(paging.total) > relationship.data.length) {
+    throw new Error('A lista de grupos da build está incompleta; nenhuma associação foi confirmada.');
+  }
   return false;
 }
 

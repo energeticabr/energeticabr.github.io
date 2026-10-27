@@ -177,3 +177,20 @@ for (const linked of [true,false]) test(`TestFlight checks the selected build re
   assert.equal(result.status,linked?'ALREADY_ATTACHED':'ATTACHED');assert.equal(posts,linked?0:1);
   assert.equal(relationshipReads,linked?1:2);
 });
+
+for(const paging of [{total:51},{nextCursor:'next-page'}])test(`TestFlight rejects a partial build group relationship before writing: ${JSON.stringify(paging)}`,async()=>{
+  let posts=0;
+  const build={id:'paged-build',attributes:{version:'303',processingState:'VALID',expired:false}};
+  const client={async request(method,path){
+    if(method==='POST'){posts++;return{};}
+    if(path.startsWith('/v1/builds?'))return{data:[build]};
+    if(path.endsWith('/buildBetaDetail'))return{data:{attributes:{internalBuildState:'READY_FOR_BETA_TESTING'}}};
+    if(path.startsWith('/v1/betaGroups?'))return{data:[{id:'target-group',attributes:{name:'ENERGETICO Validacao',isInternalGroup:true}}]};
+    if(path==='/v1/builds/paged-build?include=betaGroups')return{data:{id:build.id,relationships:{betaGroups:{
+      data:Array.from({length:50},(_,i)=>({type:'betaGroups',id:`other-${i}`})),meta:{paging}
+    }}}};
+    throw new Error('Unexpected request');
+  }};
+  await assert.rejects(attachLatestTestFlightBuild(client),/incompleta/);
+  assert.equal(posts,0);
+});
