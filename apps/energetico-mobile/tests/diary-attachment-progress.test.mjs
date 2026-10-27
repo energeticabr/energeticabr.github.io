@@ -118,9 +118,13 @@ for (const percent of [0, 37, 100]) test('loading badge safely displays ' + perc
   dom.window.close();
 });
 
-test('other loaders and invalid percentages remain indeterminate', () => {
-  for (const progress of [undefined, null, NaN, Infinity, '<img src=x>', -1, 101]) {
-    assert.doesNotMatch(loadingIndicatorMarkup('Carregando…', { progress }), /role="progressbar"/);
+test('unknown percentages keep the cluster visible without inventing a numeric value', () => {
+  for (const progress of [null, NaN, Infinity, '<img src=x>', -1, 101]) {
+    const dom = new JSDOM(loadingIndicatorMarkup('Carregando…', { progress }));
+    const badge = dom.window.document.querySelector('[role="progressbar"]');
+    assert.equal(badge?.textContent, '—%');
+    assert.equal(badge.hasAttribute('aria-valuenow'), false);
+    dom.window.close();
   }
 });
 
