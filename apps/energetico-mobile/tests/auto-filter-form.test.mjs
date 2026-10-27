@@ -3,6 +3,29 @@ import assert from 'node:assert/strict';
 import { JSDOM } from 'jsdom';
 import { bindAutoFilterForm } from '../src/ui/auto-filter-form.js';
 
+
+for (const external of [false, true]) test('automatic application preserves a picker opened after input (external=' + external + ')', t => {
+  const dom = new JSDOM('<form><select name="supplier"><option value="">Todos</option><option>Mauro</option></select></form><input name="search"><output></output>');
+  const doc = dom.window.document, form = doc.querySelector('form'), input = doc.querySelector('input');
+  if (!external) form.prepend(input);
+  t.mock.timers.enable({ apis: ['setTimeout'] });
+  dom.window.setTimeout = globalThis.setTimeout; dom.window.clearTimeout = globalThis.clearTimeout;
+  const binding = bindAutoFilterForm(form, () => { doc.querySelector('output').textContent = input.value; },
+    { externalControls: external ? [input] : [] });
+  t.after(() => { binding.destroy(); dom.window.close(); });
+  input.value = 'central'; input.dispatchEvent(new dom.window.InputEvent('input', { bubbles: true }));
+  const picker = doc.querySelector('select').nextElementSibling, combo = picker.querySelector('.sfs-search');
+  combo.click(); combo.value = 'Mau'; combo.dispatchEvent(new dom.window.InputEvent('input', { bubbles: true }));
+  combo.setSelectionRange(1, 2);
+  t.mock.timers.tick(0);
+  assert.equal(doc.querySelector('output').textContent, 'central');
+  assert.equal(combo.value, 'Mau');
+  assert.equal(doc.activeElement, combo);
+  assert.deepEqual([combo.selectionStart, combo.selectionEnd], [1, 2]);
+  assert.equal(combo.getAttribute('aria-expanded'), 'true');
+  assert.equal(picker.querySelector('.sfs-popup').hidden, false);
+});
+
 for (const event of ['change', 'search']) test(`strict text debounce waits for input silence even with native ${event}`, t => {
   const dom = new JSDOM('<form><input name="id"><select name="supplier"><option>A</option><option>B</option></select></form><input name="search" type="search"><output></output>');
   const doc = dom.window.document, form = doc.querySelector('form'), input = doc.querySelector('[name="search"]');

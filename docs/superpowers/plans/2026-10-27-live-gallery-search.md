@@ -4,7 +4,7 @@
 
 **Goal:** Pesquisar durante a digitação em todas as galerias, preservando a edição dos filtros.
 
-**Architecture:** O agendamento compartilhado passa a atraso zero no próximo ciclo de eventos. Lançamentos deixa de sobrescrever esse agendamento. As verificações de versão já existentes e os controles estáveis preservam a digitação e impedem resultados antigos.
+**Architecture:** O agendamento compartilhado passa a atraso zero no próximo ciclo de eventos, preservando seletores abertos. Lançamentos usa esse agendamento; RH invalida consultas descartadas e sincroniza a reabertura. Cadastros pesquisam pelo texto concluído enquanto o teclado compõe caracteres.
 
 **Tech Stack:** JavaScript ESM, Node test, JSDOM e Chrome via CDP, Vite/Capacitor.
 
@@ -31,6 +31,8 @@
 **Files**
 - Modify: apps/energetico-mobile/src/ui/auto-filter-form.js
 - Modify: apps/energetico-mobile/src/ui/launch-gallery-view.js
+- Modify: apps/energetico-mobile/src/ui/hr-payroll-gallery-view.js (apply the existing current-query guard to failures too)
+- Modify: apps/energetico-mobile/src/ui/registration-gallery-view.js (retain the committed search during IME composition)
 - Test: apps/energetico-mobile/tests/auto-filter-form.test.mjs
 - Test: apps/energetico-mobile/tests/launch-gallery-search.test.mjs
 - Create: apps/energetico-mobile/tests/gallery-live-search.test.mjs

@@ -49,8 +49,8 @@ export function bindAutoFilterForm(form, apply, { debounceMs = 0, externalContro
   }
 
   function applyIfChanged() {
-    if (strictTextDebounce) cancelTimer();
-    else cancelPending();
+    // A picker opened after input must remain editable when this task runs.
+    cancelTimer();
     if (composing.size) return;
     const nextValues = values();
     if (nextValues === lastAppliedValues) return;

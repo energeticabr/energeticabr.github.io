@@ -291,12 +291,12 @@ test('local loading relocates focus from controls that are about to become inert
 
 test('pending global search preserves an active supplier filter edit through loading and option refresh', async t => {
   const ctx = setup(t); await ctx.open();
-  ctx.type('central'); await ctx.tick(1000);
+  ctx.type('central');
   ctx.root.querySelector('.gallery-filter-button').click();
   const picker = ctx.root.querySelector('[name="supplier"]').nextElementSibling;
   const combo = picker.querySelector('.sfs-search'); combo.click();
   combo.value = 'Mau'; combo.dispatchEvent(new ctx.dom.window.Event('input', { bubbles: true }));
-  combo.setSelectionRange(1, 2); await ctx.tick(2000);
+  combo.setSelectionRange(1, 2); await ctx.tick();
   const preserved = () => {
     assert.equal(combo.value, 'Mau'); assert.equal(combo.getAttribute('aria-expanded'), 'true');
     assert.equal(picker.querySelector('.sfs-popup').hidden, false);

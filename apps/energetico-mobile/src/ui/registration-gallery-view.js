@@ -177,6 +177,7 @@ export function createRegistrationGallery({ document: doc = globalThis.document,
   if (model.filterFields) toolbar.classList.add("rg-toolbar--documents");
   const search = el("input", "rg-input");
   placeGalleryQuickSearch({ input: search, toolbar: createShortcut.toolbar });
+  let committedSearch = search.value, searchComposing = false;
   const filterControls = new Map();
   for (const field of filterFields) {
     const label = el("label", "rg-field", fieldLabel(field));
@@ -603,7 +604,7 @@ export function createRegistrationGallery({ document: doc = globalThis.document,
   }
 
   function filteredRows() {
-    const query = search.value.trim().normalize("NFD").replace(/[\u0300-\u036f]/g, "").toLowerCase();
+    const query = committedSearch.trim().normalize("NFD").replace(/[\u0300-\u036f]/g, "").toLowerCase();
     const filtered = rows.filter(row => {
       if (kind === 'provisionDescription' && filterControls.get('STATUS').value === model.defaultFilters.STATUS && provisionExecuted(row)) return false;
       for (const [field, control] of filterControls) {
@@ -833,7 +834,17 @@ export function createRegistrationGallery({ document: doc = globalThis.document,
     returnFocus = null;
   }
   close.addEventListener("click", hide);
-  search.addEventListener("input", () => { page = 1; attachmentNotice = ""; render(); });
+  function applySearch() {
+    if (searchComposing || committedSearch === search.value) return;
+    committedSearch = search.value;
+    page = 1; attachmentNotice = ""; render();
+  }
+  search.addEventListener("compositionstart", () => { searchComposing = true; });
+  search.addEventListener("input", event => {
+    if (event.isComposing) searchComposing = true;
+    applySearch();
+  });
+  search.addEventListener("compositionend", () => { searchComposing = false; applySearch(); });
   for (const [field, control] of filterControls) control.addEventListener("change", () => { page = 1; attachmentNotice = ""; void refreshDependentFilters(field); });
   for (const control of dateBounds.values()) control.addEventListener("change", () => { page = 1; attachmentNotice = ""; render(); });
   sortControl?.addEventListener("change", () => { page = 1; render(); });
@@ -854,7 +865,12 @@ export function createRegistrationGallery({ document: doc = globalThis.document,
     focusable[next].focus();
   });
   return {
-    async open() { if (destroyed) return; attachmentRequest += 1; attachmentLoading = false; returnFocus = doc.activeElement; root.hidden = false; root.focus(); await load(); },
+    async open() {
+      if (destroyed) return;
+      attachmentRequest += 1; attachmentLoading = false; returnFocus = doc.activeElement;
+      searchComposing = false; committedSearch = search.value;
+      root.hidden = false; root.focus(); await load();
+    },
     close: hide,
     destroy() { descriptionDetail?.destroy(); loadingScreen.destroy(); createShortcut.destroy(); refreshShortcut.destroy(); recordActions.destroy(); searchableFilters.destroy(); destroyed = true; request += 1; filterEpoch += 1; attachmentCountQueue = []; root.remove(); },
   };
