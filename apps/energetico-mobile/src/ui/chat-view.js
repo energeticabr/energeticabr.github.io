@@ -8,7 +8,7 @@ import { reportNavigationMarkup } from "./report-navigation.js";
 import { pendingReportPrintMarkup } from "./report-print.js";
 import { PAYROLL_LAUNCH_REPLY_ID, isSupplierPayrollMenu } from "../chat/supplier-payroll.js";
 import { MEAL_VOUCHER_REPLY_ID } from '../chat/meal-voucher.js';
-import { diaryFieldVisitOptionId } from '../chat/diary-field-visit-options.js';
+import { diaryFieldVisitOptionId, isInLocoDiaryOption, selectedDiaryTypeVisitId } from '../chat/diary-field-visit-options.js';
 import { PAYROLL_BREAKDOWN_REPLY_ID, isPayrollBreakdownMenu } from '../chat/payroll-breakdown.js';
 import { escapeHtml } from "./escape-html.js";
 import { normalizeProvisionSnapshotForFlow } from "../chat/provision-snapshot.js";
@@ -745,7 +745,7 @@ function draftTitle(option) {
     .replace(/^▶️\s*RETOMAR\s*•\s*/i, "");
 }
 
-function pollButton(option, busy, { deleteButton = false, deleteClass = "chat-draft-delete", galleryButton = false, launchMenuButton = false, suppliesButton = false, displayLabel = null, displayIcon = "", finishAttachments = false, diaryVisit = false } = {}) {
+function pollButton(option, busy, { deleteButton = false, deleteClass = "chat-draft-delete", galleryButton = false, launchMenuButton = false, suppliesButton = false, displayLabel = null, displayIcon = "", finishAttachments = false, diaryVisit = false, inLocoVisit = false } = {}) {
   const replyId = draftReplyId(option);
   const label = option.label || option.title || option.id;
   const disabled = busy || option?.disabled === true;
@@ -772,7 +772,11 @@ function pollButton(option, busy, { deleteButton = false, deleteClass = "chat-dr
   if (replyId === 'pending_payment_provisions_due' && !String(label).trimStart().startsWith('🔴')) {
     content = `🔴 ${content}`;
   }
-  if (diaryVisit && diaryFieldVisitOptionId(option)) {
+  if (inLocoVisit) {
+    const prefix = String(label).match(/^\s*\d+\s*-\s*/)?.[0] || '';
+    const text = String(label).slice(prefix.length).replace(/⭐\uFE0F?\s*/gu, '');
+    content = `${formatChatText(prefix)}<span class="chat-diary-in-loco-visit" role="img" aria-label="Visita em campo" title="Visita em campo nesta data e filial">⭐</span> ${formatChatText(text)}`;
+  } else if (diaryVisit && diaryFieldVisitOptionId(option)) {
     const date = String(label).match(/(\(\d{2}\/\d{2}\/\d{4}\))\s*$/);
     const icon = '<span class="chat-diary-field-visit" role="img" aria-label="Visita em campo" title="Visita em campo nesta data e filial">🏠</span>';
     content = date ? `${formatChatText(String(label).slice(0, date.index))}<span class="chat-diary-visit-date">${escapeHtml(date[1])}${icon}</span>` : `${content}${icon}`;
@@ -1639,6 +1643,8 @@ function renderPoll(message, busy, draft = "", databaseFilterMessage = null, act
     .map(([replyId, option]) => [replyId.slice("draft_delete:".length), option]));
   const seenDrafts = new Set();
   const initialAreaMenu = hasInitialAreaMenuHeading(message);
+  const selectedDiaryType = selectedDiaryTypeVisitId(message, activeFlow);
+  const hasDiaryTypeOptions = orderedChoiceOptions.some(isInLocoDiaryOption);
   const choices = orderedChoiceOptions.flatMap(option => {
     const replyId = draftReplyId(option);
     if (isDraftMenu && replyId.startsWith("draft_delete:")) return [];
@@ -1659,7 +1665,8 @@ function renderPoll(message, busy, draft = "", databaseFilterMessage = null, act
       return [`<div class="chat-document-option">${pollButton(deleteAction, busy, { deleteButton: true, deleteClass: "chat-document-option__delete" })}${pollButton(option, busy)}</div>`];
     }
     return [pollButton(option, busy, {
-      diaryVisit: currentPoll && activeFlow?.id === 'construction_diary_fill' && option.diaryFieldVisit === true,
+      diaryVisit: currentPoll && activeFlow?.id === 'construction_diary_fill' && !hasDiaryTypeOptions && option.diaryFieldVisit === true,
+      inLocoVisit: currentPoll && Boolean(selectedDiaryType) && option.diaryFieldVisit === true && isInLocoDiaryOption(option),
       finishAttachments: option === finishOption,
       launchMenuButton: isLaunchMenu && isLaunchFlowOption(option),
       displayLabel: option.worksiteVisitBranchLabel || (option?.recommendedDate === true

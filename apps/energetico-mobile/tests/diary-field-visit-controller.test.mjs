@@ -9,6 +9,13 @@ const poll = () => ({ type: 'poll', question: 'QUAL DIÁRIO DE OBRA PENDENTE DES
   { id: 'choice:diario_obra_pendente:218', label: '218 - 004 - EDIFÍCIO XAVANTE - (15/10/2026)' },
   { id: 'abandon_construction_diary', label: 'ABANDONAR DIÁRIO DE OBRAS' },
 ] });
+const typePoll = () => ({ type: 'poll', question: '👉 📍 QUAL É O TIPO DO DIÁRIO DE OBRA?\nCASO DESEJE FILTRAR, DIGITE UM TEXTO.', options: [
+  { id: 'choice:tipo_diario_obra:1', label: '1 - 🏗️ IN LOCO' },
+  { id: 'choice:tipo_diario_obra:2', label: '2 - 💻 REMOTO' },
+  { id: 'abandon_construction_diary', label: 'ABANDONAR DIÁRIO DE OBRAS' },
+] });
+const selectedFlow = (id = '219') => ({ id: 'construction_diary_fill', title: 'PREENCHER DIÁRIO DE OBRAS',
+  contextId: `diary-${id}`, rows: [{ label: 'ID', value: id }] });
 async function fixture(t, load, { factory } = {}) {
   const store = createConversationStore(), renders = [], handlers = new Map(); let writes = 0;
   const view = { render: state => renders.push(state), on: (type, fn) => { handlers.set(type, fn); return () => handlers.delete(type); }, destroy() {}, focusComposer() {} };
@@ -22,6 +29,7 @@ async function fixture(t, load, { factory } = {}) {
   t.after(() => controller.stop()); await controller.start();
   assert.equal(renders.at(-1).sessionStatus, 'authenticated', JSON.stringify(renders.at(-1).error));
   return { store, controller, renders, writes: () => writes, lastPoll: () => renders.at(-1).messages.at(-1),
+    openType: (id = '219', value = typePoll()) => store.ingestRemoteMessages([value], { activeFlow: selectedFlow(id) }),
     open: (value = poll()) => store.ingestRemoteMessages([value], { activeFlow: { id: 'construction_diary_fill', title: 'PREENCHER DIÁRIO DE OBRAS', contextId: 'diary-picker' } }) };
 }
 
@@ -40,6 +48,54 @@ test('consulta em segundo plano só na seleção de diários e decora sem altera
   assert.equal(f.store.getState().draft, '219');
   assert.equal(f.store.getState().messages.at(-1).options[0].diaryFieldVisit, undefined);
   assert.equal(f.writes(), before);
+});
+
+test('retomar a pergunta de tipo consulta o diário selecionado e marca só IN LOCO após confirmação', async t => {
+  let release, reads = 0;
+  const f = await fixture(t, async ({ diaryIds }) => {
+    reads++; assert.deepEqual(diaryIds, ['219']);
+    return new Promise(resolve => { release = resolve; });
+  });
+  const before = f.writes();
+  f.store.setDraft('texto preservado');
+  f.openType(); await tick();
+  assert.equal(reads, 1, 'retomada na tela de tipo deve consultar o diário selecionado');
+  assert.equal(f.lastPoll().options[0].diaryFieldVisit, false);
+  release(['219']); await tick();
+  assert.deepEqual(f.lastPoll().options.map(option => option.diaryFieldVisit), [true, false, false]);
+  assert.equal(f.lastPoll().options[0].label, '1 - 🏗️ IN LOCO');
+  assert.equal(f.store.getState().messages.at(-1).options[0].diaryFieldVisit, undefined);
+  assert.equal(f.store.getState().draft, 'texto preservado');
+  assert.equal(f.writes(), before);
+  f.store.setDraft('continuo digitando'); await tick();
+  assert.equal(reads, 1, 'digitar não repete a consulta');
+});
+
+test('trocar o ID do diário no mesmo poll aborta a consulta anterior e ignora seu resultado', async t => {
+  const requests = [];
+  const f = await fixture(t, input => new Promise(resolve => requests.push({ ...input, resolve })));
+  f.openType(); await tick();
+  assert.equal(requests.length, 1);
+  f.store.ingestRemoteMessages([], { activeFlow: selectedFlow('218') }); await tick();
+  assert.equal(requests.length, 2);
+  assert.equal(requests[0].signal.aborted, true);
+  assert.deepEqual(requests[1].diaryIds, ['218']);
+  requests[0].resolve(['219']); await tick();
+  assert.equal(f.lastPoll().options[0].diaryFieldVisit, false, 'resposta do diário antigo não marca o novo');
+  requests[1].resolve(['218']); await tick();
+  assert.deepEqual(f.lastPoll().options.map(option => option.diaryFieldVisit), [true, false, false]);
+});
+
+test('sem visita ou com falha de leitura, a pergunta de tipo permanece disponível e sem marcação antiga', async t => {
+  for (const fail of [false, true]) {
+    const f = await fixture(t, async () => { if (fail) throw new Error('Sem permissão'); return []; });
+    const value = typePoll(); value.options.forEach(option => { option.diaryFieldVisit = true; });
+    f.openType('219', value); await tick();
+    assert.deepEqual(f.lastPoll().options.map(option => option.diaryFieldVisit), [false, false, false]);
+    assert.equal(f.lastPoll().diaryFieldVisitsError, fail);
+    assert.equal(f.lastPoll().options.length, 3);
+    assert.equal(f.store.getState().activeText, null);
+  }
 });
 
 test('sair da pergunta cancela a consulta e ignora resposta tardia; voltar consulta de novo', async t => {
