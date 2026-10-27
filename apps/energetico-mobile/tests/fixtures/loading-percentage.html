@@ -1,0 +1,43 @@
+<!doctype html>
+<html lang="pt-BR"><head><meta name="viewport" content="width=device-width, initial-scale=1">
+<link rel="stylesheet" href="../../src/styles.css"></head><body><main id="app"></main>
+<script type="module">
+import { loadingIndicatorMarkup, createLoadingIndicator } from '../../src/ui/loading-indicator.js';
+import { renderChatMarkup } from '../../src/ui/chat-view.js';
+const host = document.querySelector('#app');
+const state = { sessionStatus: 'authenticated', account: { name: 'Demonstração' }, messages: [
+  { id: 'qa-question', role: 'assistant', type: 'poll', question: 'CONFIRMA A BAIXA DOS ITENS DO DESCRITIVO DE DEMONSTRAÇÃO?',
+    options: [{ id: 'qa-yes', label: '✅ SIM' }, { id: 'qa-edit', label: '✏️ EDITAR' }] }
+], pendingFiles: [] };
+const cases = [
+  ['response', () => host.innerHTML = renderChatMarkup({ ...state, activeText: { id: 'qa-response' } })],
+  ['transition', () => host.innerHTML = renderChatMarkup({ ...state, responseTransitionPending: true })],
+  ['resume', () => host.innerHTML = renderChatMarkup({ ...state, resuming: true })],
+  ['signin', () => host.innerHTML = renderChatMarkup({ sessionStatus: 'initializing' })],
+  ['markup', () => host.innerHTML = loadingIndicatorMarkup('Carregando informações…')],
+  ['compact markup', () => host.innerHTML = loadingIndicatorMarkup('Atualizando a próxima pergunta…', { compact: true })],
+  ['dom', () => host.append(createLoadingIndicator(document, 'Carregando formulário…'))],
+  ['compact dom', () => host.append(createLoadingIndicator(document, 'Carregando provisões…', { compact: true }))],
+];
+const frame = () => new Promise(resolve => requestAnimationFrame(() => requestAnimationFrame(resolve)));
+try {
+  const results = [], preview = new URLSearchParams(location.search).get('preview');
+  for (const [stage, render] of cases.filter(([name]) => !preview || name === preview)) {
+    host.replaceChildren(); render();
+    await Promise.all([...host.querySelectorAll('.app-loading__mascot')].map(image => image.decode()));
+    await frame();
+    for (const loader of host.querySelectorAll('.app-loading')) {
+      const badge = loader.querySelector('[role="progressbar"]'), spinner = loader.querySelector('.app-loading__spinner');
+      const rect = loader.getBoundingClientRect(), b = badge?.getBoundingClientRect(), s = spinner.getBoundingClientRect();
+      results.push({ stage, badgeCount: loader.querySelectorAll('[role="progressbar"]').length,
+        text: badge?.textContent, value: badge?.getAttribute('aria-valuenow'),
+        right: Boolean(b && b.left >= s.right),
+        aligned: Boolean(b && Math.abs(b.top + b.height / 2 - s.top - s.height / 2) <= 1),
+        visible: Boolean(b && b.width > 0 && b.height > 0 && getComputedStyle(badge).visibility === 'visible'),
+        fits: Boolean(b && b.left >= rect.left && b.right <= rect.right && rect.left >= 0 && rect.right <= innerWidth),
+        overflow: document.documentElement.scrollWidth > innerWidth + 1 });
+    }
+  }
+  document.documentElement.dataset.layout = JSON.stringify(results);
+} catch (error) { document.documentElement.dataset.layout = JSON.stringify({ error: error.stack }); }
+</script></body></html>
