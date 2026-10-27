@@ -53,6 +53,41 @@ async function open(ctx, id = '100') {
 }
 const close = ctx => ctx.dialog().querySelector('[data-action="close-description"]').click();
 
+test('resumos expansíveis abrem somente o primeiro e alternam sem consultar ou gravar novamente', async t => {
+  let reads = 0;
+  const ctx = await setup(t, { loadGroup: async id => {
+    reads++;
+    return group(id, [
+      row('350', id, { FORNECEDOR: 'EDGAR NELSON DA SILVA', OBS: 'Observação preservada', IDFOLHA: '81', 'DATA PGTO EFETUADO': '2026-10-29' }),
+      row('371', id, { FORNECEDOR: 'MAURICIO HONORATO DE SOUZA', QTD: '2', VALORTOTAL: '10', FRETE: '3', STATUS: 'PENDENTE' }),
+      row('372', id, { STATUS: 'SUSPENSO' }),
+    ]);
+  } });
+  await open(ctx);
+  const buttons = [...ctx.dialog().querySelectorAll('[data-action="toggle-provision-detail"]')];
+  assert.equal(buttons.length, 3, 'cada provisão oferece um controle expansível');
+  const panel = button => ctx.doc.getElementById(button.getAttribute('aria-controls'));
+  assert.deepEqual(buttons.map(button => button.getAttribute('aria-expanded')), ['true', 'false', 'false']);
+  assert.deepEqual(buttons.map(button => panel(button).hidden), [false, true, true]);
+  assert.match(buttons[0].textContent, /EDGAR NELSON DA SILVA/);
+  assert.match(buttons[1].textContent.replace(/\s/g, ''), /30\/10.*R\$23,00.*PENDENTE/s);
+  assert.match(panel(buttons[0]).textContent, /81/);
+  assert.match(panel(buttons[0]).textContent, /29\/10\/2026/);
+  assert.match(panel(buttons[0]).textContent, /Observação preservada/);
+  buttons[1].focus(); buttons[1].click();
+  assert.deepEqual(buttons.map(button => button.getAttribute('aria-expanded')), ['false', 'true', 'false']);
+  assert.deepEqual(buttons.map(button => panel(button).hidden), [true, false, true]);
+  assert.equal(ctx.doc.activeElement, buttons[1], 'alternar preserva o foco no controle acionado');
+  buttons[1].click();
+  assert.ok(buttons.every(button => panel(button).hidden), 'o item aberto pode ser recolhido');
+  buttons[2].click();
+  assert.equal(panel(buttons[2]).hidden, false);
+  assert.equal(reads, 1, 'expandir usa os dados já carregados');
+  assert.deepEqual(ctx.writes, []);
+  close(ctx); await open(ctx);
+  assert.deepEqual([...ctx.dialog().querySelectorAll('[data-action="toggle-provision-detail"]')].map(button => button.getAttribute('aria-expanded')), ['true', 'false', 'false']);
+});
+
 test('cluster real abre todas as provisões do vínculo apesar da pesquisa, página e status da galeria', async t => {
   const ctx = await setup(t);
   assert.equal(ctx.root.querySelectorAll('.pg-card').length, 10);
@@ -188,7 +223,13 @@ test('teclado fica no diálogo e Escape restaura foco e fundo sem fechar a galer
   ctx.doc.querySelector('#outside').focus();
   assert.equal(ctx.doc.activeElement, button);
   button.dispatchEvent(new ctx.dom.window.KeyboardEvent('keydown', { key: 'Tab', bubbles: true, cancelable: true }));
+  const toggles = [...dialog.querySelectorAll('[data-action="toggle-provision-detail"]')];
+  assert.ok(toggles.length > 1);
+  toggles.at(-1).focus();
+  toggles.at(-1).dispatchEvent(new ctx.dom.window.KeyboardEvent('keydown', { key: 'Tab', bubbles: true, cancelable: true }));
   assert.equal(ctx.doc.activeElement, button);
+  button.dispatchEvent(new ctx.dom.window.KeyboardEvent('keydown', { key: 'Tab', shiftKey: true, bubbles: true, cancelable: true }));
+  assert.equal(ctx.doc.activeElement, toggles.at(-1));
   dialog.dispatchEvent(new ctx.dom.window.KeyboardEvent('keydown', { key: 'Escape', bubbles: true, cancelable: true }));
   assert.equal(ctx.dialog(), null);
   assert.equal(ctx.root.hidden, false);

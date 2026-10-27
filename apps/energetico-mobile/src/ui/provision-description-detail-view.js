@@ -1,6 +1,8 @@
 import Decimal from 'decimal.js';
 import { createLoadingIndicator } from './loading-indicator.js';
 import { beginLoadingTask } from './loading-task.js';
+import { launchGalleryIcon } from './launch-gallery-icons.js';
+import { key } from './provision-payment-format.js';
 
 /** Read-only modal owned by the payment gallery; no editor or mutation actions. */
 export function createProvisionDescriptionDetail({ document: doc, host, background, loadGroup,
@@ -13,6 +15,13 @@ export function createProvisionDescriptionDetail({ document: doc, host, backgrou
   };
   const focusable = () => [...(current?.dialog.querySelectorAll('button:not([disabled])') || [])];
   const active = state => current === state && !destroyed && !host.hidden && host.isConnected;
+  function statusBadge(status) {
+    const value = key(status);
+    const tone = /^(PAGO|PAGA|QUITADO|PAGAMENTOEFETUADO)$/.test(value) ? 'paid'
+      : value.includes('SUSPENS') ? 'suspended' : value.includes('CANCEL') ? 'cancelled'
+        : value === 'PENDENTE' ? 'pending' : /PREVIST|AGENDAD/.test(value) ? 'planned' : 'neutral';
+    return el('span', `pg-description-status pg-description-status--${tone}`, status);
+  }
   function keepFocus(event) {
     if (current && !current.dialog.contains(event.target)) focusable()[0]?.focus({ preventScroll: true });
   }
@@ -48,28 +57,92 @@ export function createProvisionDescriptionDetail({ document: doc, host, backgrou
     total.dataset.descriptionTotal = ''; summary.append(total); content.append(summary);
     if (!count) content.append(el('p', 'pg-description-empty', 'Nenhuma provisão vinculada a este descritivo.'));
     const listing = el('div', 'pg-description-lines'); listing.setAttribute('aria-label', 'Provisões vinculadas');
+    const entries = [];
+    const toggle = selected => {
+      const expand = entries[selected].button.getAttribute('aria-expanded') !== 'true';
+      entries.forEach(({ card, button, panel }, index) => {
+        const open = expand && index === selected;
+        button.setAttribute('aria-expanded', String(open)); panel.hidden = !open;
+        card.classList.toggle('is-expanded', open);
+      });
+      const button = entries[selected].button, dialog = button.closest('.pg-description-detail');
+      if (!dialog?.clientHeight) return;
+      const bounds = dialog.getBoundingClientRect(), rect = button.getBoundingClientRect();
+      const heading = dialog.querySelector('.pg-description-detail-heading').getBoundingClientRect();
+      const top = Math.max(bounds.top, heading.bottom) + 8, bottom = bounds.bottom - 8;
+      // Collapsing a tall earlier panel can move this control above the sticky
+      // heading. Correct only this dialog's scroll, preserving the gallery below.
+      if (rect.top < top) dialog.scrollTop += rect.top - top;
+      else if (rect.bottom > bottom) dialog.scrollTop += rect.bottom - bottom;
+    };
     result.provisions.forEach((row, index) => {
       if (!/^[1-9]\d{0,14}$/.test(String(row?.id)) || !row.fields) throw new Error('Provisão inválida.');
       const card = el('article', 'pg-description-line'); card.dataset.provisionId = row.id;
-      card.append(el('h3', '', `Provisão #${row.id}`), el('strong', 'pg-description-line-supplier', format('FORNECEDOR', field(row.fields, ['FORNECEDOR']))));
-      const fields = el('dl', 'pg-description-line-fields');
-      const add = (label, value, { wide = false, money = false } = {}) => {
+      const supplier = format('FORNECEDOR', field(row.fields, ['FORNECEDOR']));
+      const product = format('Descrição', field(row.fields, ['DESCRICAOPGTO', 'DESCRIÇÃO PGTO', 'PRODUTO']));
+      const dateValue = field(row.fields, ['DATA PREVISTO PGTO', 'DATAPGTOPREVISTO']);
+      const date = format('Data prevista pgto', dateValue);
+      const amount = typeof totals[index] === 'number' && Number.isFinite(totals[index]) ? format('VALOR TOTAL', totals[index]) : 'Não informado';
+      const status = format('Status', field(row.fields, ['STATUS']));
+      const heading = el('h3', 'pg-description-line-heading');
+      const button = el('button', 'pg-description-line-toggle'); button.type = 'button'; button.dataset.action = 'toggle-provision-detail';
+      const panel = el('div', 'pg-description-line-panel'); panel.dataset.provisionPanel = '';
+      panel.id = `pg-description-${id}-${row.id}-${index}-panel`; button.id = `${panel.id}-toggle`;
+      button.setAttribute('aria-controls', panel.id); button.setAttribute('aria-expanded', String(index === 0));
+      button.setAttribute('aria-label', `Provisão #${row.id}: ${supplier}. ${product}. Data pgto: ${date}. Total: ${amount}. ${status}.`);
+      panel.setAttribute('role', 'region'); panel.setAttribute('aria-labelledby', button.id); panel.hidden = index !== 0;
+      card.classList.toggle('is-expanded', index === 0);
+      const names = String(supplier).match(/[\p{L}\p{N}]+/gu) || [];
+      const initials = names.length > 1 ? `${names[0][0]}${names.at(-1)[0]}` : (names[0] || '?').slice(0, 2);
+      const avatar = el('span', 'pg-description-line-avatar', initials.toLocaleUpperCase('pt-BR')); avatar.setAttribute('aria-hidden', 'true');
+      const identity = el('span', 'pg-description-line-identity');
+      const name = el('strong', 'pg-description-line-supplier', supplier); name.title = supplier;
+      const description = el('span', 'pg-description-line-product', product); description.title = `Descrição: ${product}`;
+      identity.append(name, description);
+      const finance = el('span', 'pg-description-line-finance');
+      const compactDate = el('span', 'pg-description-line-date'); compactDate.title = date;
+      compactDate.append(launchGalleryIcon(doc, 'calendar'), el('span', '', String(date).replace(/^(\d{2}\/\d{2})\/\d{4}$/, '$1')));
+      finance.append(compactDate, el('strong', 'pg-description-line-amount', amount));
+      const compactStatus = statusBadge(status); compactStatus.classList.add('pg-description-line-compact-status');
+      const badge = el('span', 'pg-description-line-id', `#${row.id}`);
+      const arrow = el('span', 'pg-description-line-chevron'); arrow.setAttribute('aria-hidden', 'true');
+      button.append(avatar, identity, finance, compactStatus, badge, arrow); heading.append(button);
+      const add = (fields, label, value, { wide = false, money = false, icon, badge = false } = {}) => {
         const pair = el('div', `pg-description-line-field${wide ? ' pg-description-line-field--wide' : ''}`);
-        pair.append(el('dt', '', label), el('dd', '', money ? format('VALOR TOTAL', value) : format(label, value))); fields.append(pair);
+        const term = el('dt'), definition = el('dd');
+        if (icon) term.append(launchGalleryIcon(doc, icon));
+        term.append(el('span', '', label));
+        const display = money ? format('VALOR TOTAL', value) : format(label, value);
+        if (badge) definition.append(statusBadge(display)); else definition.textContent = display;
+        pair.append(term, definition); fields.append(pair);
       };
-      add('Descrição', field(row.fields, ['DESCRICAOPGTO', 'DESCRIÇÃO PGTO', 'PRODUTO']), { wide: true });
-      add('Quantidade', field(row.fields, ['QTD', 'QUANTIDADE']));
-      add('Valor unitário', field(row.fields, ['VALOR TOTAL', 'VALORTOTAL']), { money: true });
-      add('Frete', field(row.fields, ['FRETE']) || 0, { money: true });
-      add('Total da provisão', typeof totals[index] === 'number' ? format('VALOR TOTAL', totals[index]) : 'Não informado');
-      add('Data prevista pgto', field(row.fields, ['DATA PREVISTO PGTO', 'DATAPGTOPREVISTO']));
-      add('Status', field(row.fields, ['STATUS']));
-      for (const [label, aliases] of [['Filial', ['FILIAL']], ['Imóvel', ['IMOVEL', 'IMÓVEL']], ['IDFOLHA', ['IDFOLHA']],
-        ['Data pgto efetuado', ['DATA PGTO EFETUADO', 'DATAPGTOEFETUADO']], ['OBS', ['OBS', 'OBSERVACAO', 'OBSERVAÇÃO']]]) {
+      const primary = el('dl', 'pg-description-line-fields pg-description-line-fields--primary');
+      add(primary, 'Data pgto', dateValue, { icon: 'calendar' });
+      add(primary, 'Valor total', amount, { icon: 'money' });
+      add(primary, 'Status', field(row.fields, ['STATUS']), { badge: true });
+      primary.children[1].classList.add('pg-description-line-field--total');
+      primary.children[2].classList.add('pg-description-line-field--status');
+      const quantities = el('dl', 'pg-description-line-fields pg-description-line-fields--quantities');
+      add(quantities, 'Qtd.', field(row.fields, ['QTD', 'QUANTIDADE']), { icon: 'quantity' });
+      add(quantities, 'Valor unitário', field(row.fields, ['VALOR TOTAL', 'VALORTOTAL']), { money: true, icon: 'money' });
+      add(quantities, 'Frete', field(row.fields, ['FRETE']) || 0, { money: true, icon: 'freight' });
+      const location = el('dl', 'pg-description-line-fields pg-description-line-fields--location');
+      add(location, 'Filial', field(row.fields, ['FILIAL']), { icon: 'branch' });
+      add(location, 'Imóvel', field(row.fields, ['IMOVEL', 'IMÓVEL']), { icon: 'property' });
+      const extra = el('dl', 'pg-description-line-fields pg-description-line-fields--location');
+      for (const [label, aliases] of [['IDFOLHA', ['IDFOLHA']], ['Data pgto efetuado', ['DATA PGTO EFETUADO', 'DATAPGTOEFETUADO']]]) {
         const value = field(row.fields, aliases);
-        if (value != null && String(value).trim()) add(label, value, { wide: label === 'OBS' });
+        if (value != null && String(value).trim()) add(extra, label, value);
       }
-      card.append(fields); listing.append(card);
+      panel.append(primary, quantities, location); if (extra.children.length) panel.append(extra);
+      const observation = field(row.fields, ['OBS', 'OBSERVACAO', 'OBSERVAÇÃO']);
+      if (observation != null && String(observation).trim()) {
+        const notes = el('dl', 'pg-description-line-fields pg-description-line-fields--notes');
+        add(notes, 'Obs', observation, { wide: true, icon: 'order' }); panel.append(notes);
+      }
+      entries.push({ card, button, panel });
+      button.addEventListener('click', () => toggle(index));
+      card.append(heading, panel); listing.append(card);
     });
     content.append(listing); return content;
   }
