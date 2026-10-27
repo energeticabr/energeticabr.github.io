@@ -1364,6 +1364,12 @@ export function createAppController({
     record.options = { progressSignal: record.abort.signal, onOperationProgress: record.task.report };
     return record;
   }
+  function completeOperationProgress(record, result) {
+    if (!record) return;
+    record.task.acquired();
+    if (result?.status === "processed" && !result.error
+      && !result.results?.some(item => /error|fail|paused|invalid|unavailable|reupload/i.test(String(item?.status || "")))) record.task.complete();
+  }
   let diaryAttachmentProgress = null;
   let diaryProgressAbort = null;
   function clearDiaryAttachmentProgress() {
@@ -5178,7 +5184,7 @@ export function createAppController({
       if (attachmentReminderDetails()) scheduleAttachmentReminder();
       else cancelAttachmentReminder();
       scheduleCompletionMenu(result);
-      if (!paymentProvisionAutoReplyError) { genericProgress.task.acquired(); genericProgress.task.complete(); }
+      if (!paymentProvisionAutoReplyError) completeOperationProgress(genericProgress, result);
       return !paymentProvisionAutoReplyError;
     } catch (error) {
       if (currentConversation()) setSessionError(error, "Não foi possível retomar a conversa com a VM.");
@@ -9693,7 +9699,7 @@ export function createAppController({
         return false;
       }
       const succeeded = confirmed && !epiAdvanceError && (behavior.requireMenuResult !== true || menuResult);
-      if (succeeded && genericProgress) { genericProgress.task.acquired(); genericProgress.task.complete(); }
+      if (succeeded) completeOperationProgress(genericProgress, result);
       return succeeded;
     } catch (error) {
       // Preserve the hidden step so a failed automatic answer can be retried
@@ -10942,7 +10948,7 @@ export function createAppController({
       rememberCurrentAssistantPoll(result, result?.messages);
       if (Array.isArray(result?.attachments)) store.syncAttachments(result.attachments);
       hydrateMediaPreviews();
-      progress.task.acquired(); progress.task.complete();
+      completeOperationProgress(progress, result);
       return true;
     } catch (error) {
       if (!stopped && account === actionAccount) setSessionError(error, "Não foi possível eliminar os anexos.");
@@ -11032,7 +11038,7 @@ export function createAppController({
       const result = attachCompressionPreview(await client.compressAttachment(item.id, progress.options), item);
       if (!currentCompression()) return false;
       ingestAttachmentCompressionResult(result);
-      progress.task.acquired(); progress.task.complete();
+      completeOperationProgress(progress, result);
       return true;
     } catch (error) {
       if (currentCompression()) setSessionError(error, "Não foi possível comprimir o anexo.");
@@ -11063,7 +11069,7 @@ export function createAppController({
       const result = await client.chooseAttachmentCompression(choice, progress.options);
       if (!currentChoice()) return false;
       ingestAttachmentCompressionResult(result);
-      progress.task.acquired(); progress.task.complete();
+      completeOperationProgress(progress, result);
       return true;
     } catch (error) {
       if (currentChoice()) setSessionError(error, "Não foi possível concluir a escolha do anexo.");

@@ -62,3 +62,22 @@ test('live chat view observes generic operation progress changes and keeps the b
   assert.equal(badge.textContent, '53%');
   assert.ok(badge.previousElementSibling.matches('.app-loading__spinner'));
 });
+
+for (const status of ['processed_with_recovery', 'processed']) test(`a confirmed response containing a business failure never paints 100: ${status}`, async t => {
+  const h = harness(t), starting = h.controller.start(); await flush();
+  h.requests[0].resolve({ status: 'processed', messages: [], attachments: [] }); await starting;
+  h.renders.length = 0;
+  const sending = h.controller.sendText('SIM'); await flush();
+  h.requests.at(-1).resolve({ status, messages: [{ type: 'text', text: 'Não foi possível gravar.' }],
+    results: [{ status: 'flow_paused_after_error' }], attachments: [] });
+  await sending;
+  assert.ok(h.renders.every(state => state.operationProgress?.percent !== 100));
+});
+
+test('a failed resume response cannot complete the visible task merely by being ingested', async t => {
+  const h = harness(t), starting = h.controller.start(); await flush();
+  h.requests[0].resolve({ status: 'processed_with_recovery', messages: [],
+    results: [{ status: 'flow_paused_after_error' }], attachments: [] });
+  await starting;
+  assert.ok(h.renders.every(state => state.operationProgress?.percent !== 100));
+});
