@@ -15,6 +15,17 @@ const AUDIT_ALIASES = { Criado: ["Created"], Modificado: ["Modified"], "Criado p
 // Lista e campos das galerias baseadas nas telas Power Apps.
 export const REGISTRATION_GALLERY_MODELS = Object.freeze({
   ...FINANCIAL_GALLERY_MODELS,
+  dda: Object.freeze({
+    title: "GALERIA DDA", listName: "DDAS SICOOB", aliases: ["DDAS SICOOB"],
+    nativeCard: true, readOnly: true, readTransport: "rest", showAttachments: true, recordLabel: "DDA",
+    searchPlaceholder: "Pesquisar fornecedor, documento ou ID",
+    fields: ["FORNECEDOR", "VENCIMENTO", "VALOR", "SITUACAO", "CNPJ_FORNECEDOR", "DOCUMENTO", "BANCO", "VALOR_PAGAMENTO", "NOSSO_NUMERO", "LINHA_DIGITAVEL", "CODIGO_BARRAS", "PAGADOR", "CNPJ_PAGADOR", "BLOQUEADO", "MENSAGEM", "ULTIMA_CONSULTA", "ID"],
+    filterFields: ["FORNECEDOR", "SITUACAO", "BANCO"], dateRangeField: "VENCIMENTO",
+    fieldAliases: { FORNECEDOR: ["Title", "Fornecedor"] },
+    fieldTypes: { VENCIMENTO: "date", VALOR: "currency", VALOR_PAGAMENTO: "currency", ULTIMA_CONSULTA: "datetime", BLOQUEADO: "boolean" },
+    fieldLabels: { FORNECEDOR: "Fornecedor", VENCIMENTO: "Vencimento", VALOR: "Valor nominal", SITUACAO: "Situação na última consulta", CNPJ_FORNECEDOR: "CPF/CNPJ fornecedor", DOCUMENTO: "Documento", BANCO: "Banco", VALOR_PAGAMENTO: "Valor para pagamento", NOSSO_NUMERO: "Nosso número", LINHA_DIGITAVEL: "Linha digitável", CODIGO_BARRAS: "Código de barras", PAGADOR: "Pagador", CNPJ_PAGADOR: "CPF/CNPJ pagador", BLOQUEADO: "Pagamento bloqueado", MENSAGEM: "Mensagem do banco", ULTIMA_CONSULTA: "Última consulta" },
+    sourceSort: {field:"VENCIMENTO",direction:"asc",type:"date"},
+  }),
   presenceDescriptions: Object.freeze({
     title: "GALERIA DE PRESENÇAS", screen: "G17- HISTÓRICODEMONSTRATIVOPRESENCA",
     listName: "DESCRITIVOPRESENCA", aliases: ["DESCRITIVOPRESENCA", "DESCRITIVO PRESENCA"],
@@ -279,6 +290,11 @@ function galleryRepository(options) {
 export function createRegistrationGalleryData({ kind, ...options } = {}) {
   const model = REGISTRATION_GALLERY_MODELS[kind];
   if (!model) throw new RangeError("Galeria de cadastro desconhecida.");
+  if (model.readTransport) {
+    const siteKey = options.siteKey || "personal";
+    const sites = options.siteConfig || SHAREPOINT_SITES;
+    options = { ...options, siteConfig: { ...sites, [siteKey]: { ...sites[siteKey], readTransport: model.readTransport } } };
+  }
   const repository = model.nativeCard ? galleryRepository(options) : options.repository;
   const data = createOrdersGalleryData({
     ...options,
@@ -288,6 +304,14 @@ export function createRegistrationGalleryData({ kind, ...options } = {}) {
     listMissingCode: `registration_${kind}_list_missing`,
   });
   if (!model.nativeCard) return data;
+  if (model.readOnly) return Object.freeze({
+    async loadSnapshot(loadOptions) {
+      const snapshot = await data.loadSnapshot(loadOptions);
+      return Object.freeze({ ...snapshot, rows: Object.freeze(sortRegistrationRows(snapshot.rows, model)) });
+    },
+    listAttachments: data.listAttachments,
+    downloadAttachment: data.downloadAttachment,
+  });
   const filters = createRegistrationGalleryFilterData({ repository, siteKey: options.siteKey || "personal", kind });
   // Lists without an extracted edit form use only the model's proven fields
   // with their real SharePoint metadata in the metadata editor.

@@ -274,8 +274,8 @@ test("menu deduplica o atalho pai, envia a ação correta e reserva três linhas
   const style = doc.createElement("style"); style.textContent = readFileSync(new URL("../src/styles.css", import.meta.url), "utf8").replace(/^@import[^;]+;/gm, ""); doc.head.append(style);
   const pairs = [...root.querySelectorAll(".chat-supplies-pair")];
   assert.equal(pairs[0].querySelectorAll("[data-gallery-button]").length, 2);
-  assert.equal(pairs[1].querySelectorAll("[data-gallery-button]").length, 3);
-  assert.equal(dom.window.getComputedStyle(pairs[1].querySelector(".chat-gallery-actions")).gridTemplateRows, "repeat(3, minmax(var(--supplies-gallery-height), 1fr))");
+  assert.equal(pairs[1].querySelectorAll("[data-gallery-button]").length, 4);
+  assert.equal(dom.window.getComputedStyle(pairs[1].querySelector(".chat-gallery-actions")).gridTemplateRows, "repeat(4, minmax(var(--supplies-gallery-height), 1fr))");
   assert.equal(root.querySelectorAll('[data-reply-id="action_provision_description_gallery"]').length, 1);
   const events = []; view.on("select-reply", event => events.push(event.replyId));
   root.querySelector('[data-reply-id="action_provision_description_gallery"]').click();

@@ -3094,6 +3094,35 @@ test("Galeria Despesas Recorrentes consulta SharePoint e abre localmente pelo me
   assert.equal(destroyed, 1);
 });
 
+test("Galeria DDA abre localmente, disponibiliza espelho e encerra ao sair", async t => {
+  let callbacks, opens = 0, destroyed = 0, preview;
+  const h = makeHarness({
+    registrationGalleryFactory: async options => { callbacks = options; return { async open() { opens++; }, destroy() { destroyed++; } }; },
+    registrationGalleryDataFactory: async ({ kind }) => { assert.equal(kind, "dda"); return {}; },
+  });
+  t.after(() => h.controller.stop());
+  h.native.previewMediaCollection = async items => { preview = items; };
+  await h.controller.start();
+  const before = h.chatCalls.length;
+  await h.view.emit("select-reply", { replyId: "action_dda_gallery", label: "GALERIA DDA" });
+  assert.equal(opens, 1); assert.equal(callbacks.kind, "dda");
+  assert.equal(h.chatCalls.length, before); assert.equal(callbacks.onCreate, undefined);
+  await callbacks.openMediaCollection([{fileName:"espelho.pdf",source:Promise.resolve(new Blob(["pdf"]))}]);
+  assert.equal(preview[0].fileName, "espelho.pdf");
+  await h.view.emit("sign-out"); assert.equal(destroyed, 1);
+});
+
+test("Galeria DDA retoma após autenticação Microsoft", async t => {
+  let opens = 0;
+  const h = makeHarness({
+    registrationGalleryFactory: async ({kind}) => { assert.equal(kind,"dda"); return {async open(){opens++;},destroy(){}}; },
+    registrationGalleryDataFactory: async () => ({}),
+  });
+  t.after(() => h.controller.stop());
+  h.auth.consumePendingAction = () => "action_dda_gallery";
+  await h.controller.start(); assert.equal(opens,1);
+});
+
 test("Galeria Despesas Recorrentes retoma após o consentimento Microsoft do SharePoint", async t => {
   let opens = 0;
   const h = makeHarness({
