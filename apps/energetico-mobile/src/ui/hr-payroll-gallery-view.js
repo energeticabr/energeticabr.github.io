@@ -267,25 +267,28 @@ export function createHrPayrollGallery({ document: documentOption,
       }
       return true;
     };
+    const task = quiet ? null : loadingScreen.beginTask({ isCurrent: current });
+    task?.prepared();
     try {
       let result;
-      try { result = await request(gallery, targetPage, 25, cursor, {filters,refresh}); }
+      try { result = await request(gallery, targetPage, 25, cursor, {filters,refresh,onProgress:task?.report}); }
       catch (error) {
         const invalidCursor = error?.status === 410 || error?.statusCode === 410
           || /cursor|skip.?token/i.test(`${error?.code || ''} ${error?.message || ''}`);
         if (!current() || !refresh || targetPage <= 1 || !invalidCursor) throw error;
         targetPage = 1; cursor = null;
-        result = await request(gallery, 1, 25, null, {filters,refresh});
+        result = await request(gallery, 1, 25, null, {filters,refresh,onProgress:task?.report});
       }
       if (!current()) return;
       if (refresh && targetPage > 1 && result?.page > 1 && Array.isArray(result.rows) && !result.rows.length) {
         targetPage = 1; cursor = null;
-        result = await request(gallery, 1, 25, null, {filters,refresh});
+        result = await request(gallery, 1, 25, null, {filters,refresh,onProgress:task?.report});
       }
       if (!current()) return;
       if (result?.gallery !== gallery || !Array.isArray(result.rows)) {
         throw new Error("Resposta da galeria inválida.");
       }
+      task?.acquired();
       page = result.page;
       if (refresh) pageCursors.splice(page + 1);
       pageCursors[page] = page === 1 ? null : cursor;
@@ -294,6 +297,7 @@ export function createHrPayrollGallery({ document: documentOption,
       if(!quiet || !filterForm.contains(doc.activeElement)) syncFilterOptions(result);
       drawRows(result.rows);
       if(Number.isInteger(result.count)) status.textContent=`${result.count} registro(s) encontrado(s) · ${result.rows.length} nesta página.`;
+      task?.complete();
     } catch(error) {
       if (current()) {
         status.textContent = `Não foi possível carregar os registros. ${error?.message || 'Tente novamente.'}`;
@@ -305,6 +309,7 @@ export function createHrPayrollGallery({ document: documentOption,
       }
       return false;
     } finally {
+      task?.stop();
       if (opened && !destroyed && root.isConnected && epoch === session) {
         busy = false;
         loadingScreen.sync(false);

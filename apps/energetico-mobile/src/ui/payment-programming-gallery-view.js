@@ -569,14 +569,19 @@ export function createPaymentProgrammingGallery({
     listLoading = true;
     setNotice("");
     updateBusy();
+    const task = loadingScreen.beginTask({ signal: loadController.signal,
+      isCurrent: () => opened && !destroyed && root.isConnected && current === session && controller === loadController });
+    task.prepared();
     try {
-      const result = await data.loadSnapshot({ signal: loadController.signal, refresh });
+      const result = await data.loadSnapshot({ signal: loadController.signal, refresh, onProgress: task.report });
       if (!opened || destroyed || !root.isConnected || current !== session || controller !== loadController) return false;
       if (!Array.isArray(result?.rows)) throw new Error("A consulta não retornou uma lista de pagamentos válida.");
+      task.acquired();
       rows = result.rows.filter(row => /^\d{1,15}$/.test(String(row?.id || "")));
       populateFilters();
       autoFilters.sync();
       applyFilters();
+      task.complete();
       return true;
     } catch (error) {
       if (!opened || destroyed || !root.isConnected || current !== session || controller !== loadController || error?.name === "AbortError") return false;
@@ -588,6 +593,7 @@ export function createPaymentProgrammingGallery({
       cards.replaceChildren(retry);
       return false;
     } finally {
+      task.stop();
       if (opened && !destroyed && root.isConnected && current === session && controller === loadController) { listLoading = false; updateBusy(); }
     }
   }

@@ -42,6 +42,62 @@ function setup(t, options = {}) {
   return { viewer, container, documentRef, point: () => point };
 }
 
+test('measured signature loader retains its progress across import read parse and completed pages', async t => {
+  let finishImport, finishRead, finishParse, finishPage;
+  const progress = [];
+  const { viewer, container } = setup(t, {
+    documentBlob: { size: 4, arrayBuffer: () => new Promise(resolve => { finishRead = resolve; }) },
+    loadPdfJs: () => new Promise(resolve => { finishImport = resolve; }),
+    onProgress: value => progress.push(value),
+  });
+  const loader = container.querySelector('.signature-placement-pdf-loading');
+  const percent = () => Number(loader.querySelector('[role="progressbar"]').getAttribute('aria-valuenow'));
+  assert.equal(percent(), 33);
+  finishImport({ getDocument: () => ({ promise: new Promise(resolve => { finishParse = resolve; }), destroy() {} }) });
+  await new Promise(resolve => setImmediate(resolve));
+  assert.ok(percent() > 33);
+  const imported = percent();
+  finishRead(new ArrayBuffer(4));
+  await new Promise(resolve => setImmediate(resolve));
+  assert.ok(percent() > imported);
+  finishParse({ numPages: 2, async getPage(number) {
+    return { getViewport: ({ scale }) => ({ width: 300 * scale, height: 400 * scale }), cleanup() {},
+      render: () => ({ promise: number === 2 ? new Promise(resolve => { finishPage = resolve; }) : Promise.resolve(), cancel() {} }) };
+  } });
+  await new Promise(resolve => setImmediate(resolve));
+  assert.equal(container.querySelector('.signature-placement-pdf-loading'), loader);
+  assert.ok(progress.some(value => value.phase === 'render' && value.renderedPages === 1 && value.totalPages === 2));
+  assert.equal(progress.some(value => value.percent === 100), false);
+  finishPage(); await viewer.ready;
+  assert.equal(progress.at(-1).percent, 100);
+  assert.equal(container.querySelector('.signature-placement-pdf').getAttribute('aria-busy'), 'false');
+});
+
+test('measured signature progress stops on close and tolerates a broken observer', async t => {
+  const progress = [];
+  let finishImport;
+  const { viewer } = setup(t, {
+    loadPdfJs: () => new Promise(resolve => { finishImport = resolve; }),
+    onProgress: value => { progress.push(value); throw new Error('observer failed'); },
+  });
+  assert.ok(progress.some(value => value.percent === 33));
+  viewer.destroy();
+  const count = progress.length;
+  finishImport({}); await viewer.ready;
+  assert.equal(progress.length, count);
+  assert.equal(progress.some(value => value.percent === 100), false);
+});
+
+for (const phase of ['parsed', 'render']) test(`measured signature cancellation at ${phase} cannot read a released document`, async t => {
+  const controller = new AbortController(), progress = [];
+  const { viewer, container } = setup(t, { signal: controller.signal,
+    onProgress: value => { progress.push(value); if (value.phase === phase) controller.abort(); },
+  });
+  await assert.doesNotReject(viewer.ready);
+  assert.equal(container.querySelector('section'), null);
+  assert.equal(progress.some(value => value.percent === 100), false);
+});
+
 test("renderiza as páginas do PDF e converte o toque em coordenadas proporcionais", async t => {
   const { viewer, container, point } = setup(t);
   assert.equal(container.querySelector(".signature-placement-pdf")?.getAttribute("aria-busy"), "true");

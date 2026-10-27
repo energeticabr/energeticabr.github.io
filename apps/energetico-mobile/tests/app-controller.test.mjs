@@ -110,7 +110,8 @@ for (const command of ['open-file', 'open-media']) test(`${command} opens the re
   assert.equal(openedAtRequest, true);
   assert.equal(typeof received?.onProgress, 'function');
   received.onProgress({ percent: 40, loaded: 4, total: 10 });
-  assert.equal(documentRef.querySelector('[role="progressbar"]').textContent, '40%');
+  // Request prepared plus 40% of acquisition; presentation is the third stage.
+  assert.equal(documentRef.querySelector('[role="progressbar"]').textContent, '46%');
   finish(new Blob(['conteúdo'], { type: 'text/plain' }));
   assert.equal(await opening, true);
   assert.equal(documentRef.querySelector('[role="progressbar"]').textContent, '100%');

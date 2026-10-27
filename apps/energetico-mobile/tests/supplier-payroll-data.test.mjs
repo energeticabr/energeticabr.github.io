@@ -10,6 +10,34 @@ const module={...production,createSupplierPayrollData(options){
   }
   return production.createSupplierPayrollData(options);
 }};
+test('option progress counts resolved schema and real pages without inventing a page total', async () => {
+  const f = fixture(), events = []; let release;
+  f.repository.getItemsPage = async (_site, list, _query, options) => options.cursor
+    ? new Promise(resolve => { release = () => resolve({ items: f.rows[list].slice(1), hasMore: false }); })
+    : { items: f.rows[list].slice(0, 1), hasMore: true, nextLink: 'page-two' };
+  const reading = f.data.loadSuppliers({ onProgress: event => events.push(event) });
+  await new Promise(resolve => setImmediate(resolve));
+  assert.ok(events.some(event => event.percent > 0 && event.percent < 100), 'schema completion must be visible during the remaining request');
+  assert.ok(events.some(event => event.completedPages === 1 && event.completedItems === 1));
+  assert.ok(events.every(event => event.percent < 100));
+  release(); const suppliers = await reading;
+  assert.equal(suppliers.length, 1); assert.equal(events.at(-1).percent, 100);
+  assert.equal(f.writes.length, 0);
+});
+
+test('payroll post reports confirmed launches, payroll links and receipts without storing UI progress', async () => {
+  const f = fixture(), events = [], journal = { operationId: 'measured-payroll' };
+  f.draft.lines[0].files = [new File(['abc'], 'receipt.pdf', { type: 'application/pdf' })];
+  await f.data.post(f.draft, journal, event => events.push({ ...event, launches: f.rows.LANCAMENTOS.length, payroll: f.rows.FOLHAPGTO.length, uploads: f.uploads.length }));
+  assert.ok(events.some(event => event.stage === 'launch:salary' && event.launches === 1));
+  assert.ok(events.some(event => event.stage === 'payroll:salary' && event.payroll === 1));
+  assert.ok(events.some(event => event.stage === 'attachment:salary:receipt.pdf' && event.uploads === 1));
+  assert.equal(events.at(-1).percent, 100); assert.ok(events.some(event => event.percent > 0 && event.percent < 100));
+  assert.equal(journal.percent, undefined); assert.equal(journal.completed, undefined);
+  const writes = f.writes.length; await f.data.post(f.draft, journal, () => { throw new Error('Detached UI'); });
+  assert.equal(f.writes.length, writes); assert.equal(f.uploads.length, 1);
+});
+
 const defs = {
   FORNECEDORES: ["CADASTRO", "STATUS", "EMPREITEIRO", "FILIAL", "PROFISSAO"],
   CADASTROPRODUTO: ["PRODUTO", "SATUS", "TIPO", "UNIDADE", "TIPODESPESA"],

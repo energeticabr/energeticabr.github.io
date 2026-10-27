@@ -1,5 +1,6 @@
 import { createPinchZoom } from "./pinch-zoom.js";
 import { createLoadingIndicator, updateLoadingIndicator } from "../ui/loading-indicator.js";
+import { beginLoadingTask } from "../ui/loading-task.js";
 
 let nextPreviewId = 0;
 
@@ -189,6 +190,8 @@ export function createAttachmentPreview({
     status.setAttribute("aria-busy", "true");
     updateAppendControls();
     const isCurrent = () => active === session && session.append === operation && !operation.abort.signal.aborted;
+    const progress = beginLoadingTask(loader, { signal: operation.abort.signal, isCurrent });
+    progress.prepared();
     const restoreStatus = () => {
       session.appendFeedback = false;
       status.replaceChildren(...session.statusContent);
@@ -201,9 +204,7 @@ export function createAttachmentPreview({
         onProgress: value => {
           if (!isCurrent()) return;
           const percent = typeof value === "number" ? value : value?.percent;
-          if (percent === null || (Number.isFinite(percent) && percent >= 0 && percent <= 100)) {
-            updateLoadingIndicator(loader, { progress: percent === null ? null : Math.min(99, Math.floor(percent)), progressLabel: "Acréscimo de páginas" });
-          }
+          progress.report({ percent });
         },
       });
       if (!isCurrent()) return;
@@ -215,6 +216,7 @@ export function createAttachmentPreview({
       if (!result.blob || typeof result.blob.slice !== "function" || typeof result.blob.arrayBuffer !== "function" || previewKind(result.blob, replacementName) !== "pdf") {
         throw new Error("O resultado precisa ser um PDF válido.");
       }
+      progress.acquired();
       const onClose = session.onClose;
       // Transfer dialog ownership; replacing its content is not a close.
       session.onClose = undefined;
@@ -230,6 +232,7 @@ export function createAttachmentPreview({
       }
       else status.textContent = `Não foi possível acrescentar páginas. ${error?.message || ""} Tente novamente no botão +.`;
     } finally {
+      progress.stop();
       if (active === session && session.append === operation) {
         session.append = null;
         status.removeAttribute("aria-busy");
@@ -360,6 +363,7 @@ export function createAttachmentPreview({
     active = null;
     previous.append?.abort.abort();
     previous.abort.abort();
+    previous.progressTask?.stop();
     previous.pdf?.destroy();
     previous.zoom?.destroy();
     previous.urls.forEach(url => urlApi.revokeObjectURL(url));
@@ -399,22 +403,32 @@ export function createAttachmentPreview({
 
   function explain(session, message) {
     if (active !== session) return;
+    session.progressTask?.stop();
     session.zoom?.destroy();
     session.zoom = null;
     content.replaceChildren(element("p", "attachment-preview-explanation", message));
     showPreviewStatus(session, "Use ENCAMINHAR para acessar o arquivo original.");
   }
 
-  function loading(session, label, progress = session.progress) {
-    if (active !== session || session.failed) return;
-    session.progress = progress;
-    updateLoadingIndicator(session.loader, { label, progress, progressLabel: 'Carregamento do anexo' });
+  function loading(session, label, progress) {
+    if (active !== session || session.failed || session.previewReady) return;
+    if (typeof progress === 'number' && Number.isFinite(progress)) session.progress = Math.max(session.progress, progress);
+    updateLoadingIndicator(session.loader, { label, progress: session.progress, progressLabel: 'Progresso por etapas concluídas' });
     showPreviewStatus(session, session.loader);
+  }
+
+  function presentationProgress(session, value) {
+    if (active !== session || session.abort.signal.aborted || session.failed || session.previewReady) return;
+    const percent = value?.percent;
+    if (typeof percent !== 'number' || !Number.isFinite(percent) || percent < 0 || percent > 100) return;
+    // The file is acquired; these are completed preparation/render stages.
+    loading(session, 'Preparando arquivo…', Math.min(99, Math.floor(66 + percent * 33 / 100)));
   }
 
   function ready(session, message) {
     if (active !== session || session.failed) return;
-    updateLoadingIndicator(session.loader, { progress: 100, progressLabel: 'Carregamento do anexo' });
+    session.progressTask.complete();
+    session.previewReady = true;
     const badge = session.loader.querySelector('[role="progressbar"]');
     showPreviewStatus(session, badge, ` ${message}`);
   }
@@ -431,7 +445,8 @@ export function createAttachmentPreview({
     frame.title = session.fileName;
     frame.addEventListener('load', () => ready(session, 'PDF aberto no leitor do navegador.'), { once: true });
     frame.addEventListener('error', () => { if (active === session) explain(session, 'Não foi possível abrir o PDF neste navegador.'); }, { once: true });
-    loading(session, 'Preparando PDF…', 99);
+    presentationProgress(session, { percent: 50 }); // Header accepted; await the browser's load event.
+    loading(session, 'Preparando PDF…');
     frame.src = href;
     content.replaceChildren(frame);
     return true;
@@ -449,6 +464,10 @@ export function createAttachmentPreview({
     const session = { abort: new AbortController(), urls: new Set(), blob: null, pdf: null, zoom: null, kind: null, fileName: String(fileName || "arquivo"), onClose, onSign, onStamp, onAppendPages, layout,
       progress: 0, failed: false, loader: createLoadingIndicator(documentRef, 'Carregando arquivo…', { progress: 0, progressLabel: 'Carregamento do anexo' }) };
     active = session;
+    session.progressTask = beginLoadingTask(value => {
+      session.progress = Math.max(session.progress, value.percent);
+      updateLoadingIndicator(session.loader, { progress: session.progress, progressLabel: value.progressLabel });
+    }, { signal: session.abort.signal, isCurrent: () => active === session && !session.failed });
     title.textContent = session.fileName;
     updateCollectionNavigation();
     showPreviewStatus(session, session.loader);
@@ -458,22 +477,25 @@ export function createAttachmentPreview({
       else { dialog.setAttribute("open", ""); dialog.setAttribute("aria-modal", "true"); }
     }
     closeButton.focus({ preventScroll: true });
+    session.progressTask.prepared();
     try {
       const source = typeof blobOrPromise === 'function' ? blobOrPromise({
         signal: session.abort.signal,
         onProgress: value => {
           if (active !== session || session.abort.signal.aborted || session.failed || session.downloadComplete) return;
-          if (value?.percent === null) loading(session, 'Carregando arquivo… Tamanho total não informado.', null);
-          else if (typeof value?.percent === 'number' && Number.isFinite(value.percent) && value.percent >= 0 && value.percent <= 100) {
-            loading(session, 'Carregando arquivo…', Math.min(99, Math.floor(value.percent)));
-          }
+          session.progressTask.report(value);
+          const loaded = Number.isFinite(value?.loaded) && value.loaded >= 0 ? value.loaded : null;
+          const total = Number.isFinite(value?.total) && value.total > 0 ? value.total : null;
+          const bytes = loaded === null ? '' : total === null ? ` ${loaded} bytes recebidos.` : ` ${loaded} de ${total} bytes.`;
+          loading(session, `Carregando arquivo…${bytes}${value?.percent === null ? ' Tamanho total não informado.' : ''}`);
         },
       }) : blobOrPromise;
       const blob = typeof source?.then === 'function' ? await source : source;
       if (active !== session) return;
       if (!blob || typeof blob.slice !== "function" || typeof blob.arrayBuffer !== "function") throw new Error("Arquivo inválido.");
       session.downloadComplete = true;
-      loading(session, 'Preparando arquivo…', 99);
+      session.progressTask.acquired();
+      loading(session, 'Preparando arquivo…');
       session.blob = blob;
       exportButton.disabled = typeof exportMedia !== "function";
       let kind = previewKind(blob, session.fileName);
@@ -625,6 +647,7 @@ export function createAttachmentPreview({
         if (active !== session) return;
         session.pdf = createPdfPreview({
           blob, container: content, documentRef, signal: session.abort.signal,
+          onProgress: value => presentationProgress(session, value),
           fit: layout === 'report-pdf' ? 'page' : 'width',
           navigation: 'scroll',
           initialPage,
@@ -644,7 +667,13 @@ export function createAttachmentPreview({
         await session.pdf.ready;
         if (active === session) {
           const summary = session.pdf.getSummary?.() || 'PDF pronto.';
-          if (session.pdf.hasRenderedPages?.() === false) showPreviewStatus(session, summary);
+          if (session.pdf.hasRenderingErrors?.() === true) {
+            session.progressTask.stop();
+            session.previewReady = true;
+            const badge = session.loader.querySelector('[role="progressbar"]');
+            showPreviewStatus(session, badge, ` Prévia parcial. ${summary}`);
+          }
+          else if (session.pdf.hasRenderedPages?.() === false) { session.progressTask.stop(); showPreviewStatus(session, summary); }
           else ready(session, summary);
           session.signatureReady = Number.isInteger(session.pdf.getCurrentPage?.());
           signButton.disabled = stampButton.disabled = !session.signatureReady;

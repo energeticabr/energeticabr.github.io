@@ -258,6 +258,7 @@ export function createRegistrationGallery({ document: doc = globalThis.document,
   let rows = [];
   let page = 1;
   let request = 0;
+  let loadController = null;
   let destroyed = false;
   let hasLoaded = false;
   let loadFailed = false;
@@ -766,6 +767,8 @@ export function createRegistrationGallery({ document: doc = globalThis.document,
   async function load({ refresh = hasLoaded } = {}) {
     descriptionDetail?.close();
     const current = ++request;
+    loadController?.abort();
+    const activeLoad = loadController = new AbortController();
     filterEpoch += 1;
     filterErrors.clear();
     attachmentCountEpoch += 1;
@@ -774,6 +777,9 @@ export function createRegistrationGallery({ document: doc = globalThis.document,
     loadFailed = false;
     root.setAttribute("aria-busy", "true");
     loadingScreen.sync(true);
+    const task = loadingScreen.beginTask({ signal: activeLoad.signal,
+      isCurrent: () => !destroyed && !root.hidden && root.isConnected && current === request });
+    task.prepared();
     createShortcut.sync();
     refreshShortcut.sync();
     feedback.textContent = '';
@@ -789,9 +795,11 @@ export function createRegistrationGallery({ document: doc = globalThis.document,
       }
     });
     try {
-      const snapshot = await data.loadSnapshot({ refresh });
+      const snapshot = await data.loadSnapshot({ refresh, signal: activeLoad.signal, onProgress: task.report });
       if (destroyed || root.hidden || !root.isConnected || current !== request) return;
-      rows = Array.isArray(snapshot?.rows) ? snapshot.rows : [];
+      if (!Array.isArray(snapshot?.rows)) throw new Error('A consulta não retornou uma lista de registros válida.');
+      task.acquired();
+      rows = snapshot.rows;
       populateFilters();
       if (destroyed || root.hidden || !root.isConnected || current !== request) return;
       const status = filterControls.get("STATUS");
@@ -805,6 +813,7 @@ export function createRegistrationGallery({ document: doc = globalThis.document,
       hasLoaded = true;
       page = 1;
       render();
+      task.complete();
     } catch (error) {
       if (destroyed || root.hidden || !root.isConnected || current !== request) return;
       loadFailed = true;
@@ -813,6 +822,7 @@ export function createRegistrationGallery({ document: doc = globalThis.document,
       render();
       return false;
     } finally {
+      task.stop();
       if (!destroyed && !root.hidden && root.isConnected && current === request) { loadingScreen.sync(false); root.setAttribute("aria-busy", "false"); createShortcut.sync(); refreshShortcut.sync(); }
     }
   }
@@ -820,6 +830,7 @@ export function createRegistrationGallery({ document: doc = globalThis.document,
   function hide() {
     if (root.hidden) return;
     descriptionDetail?.close();
+    loadController?.abort();
     loadingScreen.sync(false);
     recordActions.close();
     searchableFilters.close();
@@ -872,6 +883,6 @@ export function createRegistrationGallery({ document: doc = globalThis.document,
       root.hidden = false; root.focus(); await load();
     },
     close: hide,
-    destroy() { descriptionDetail?.destroy(); loadingScreen.destroy(); createShortcut.destroy(); refreshShortcut.destroy(); recordActions.destroy(); searchableFilters.destroy(); destroyed = true; request += 1; filterEpoch += 1; attachmentCountQueue = []; root.remove(); },
+    destroy() { loadController?.abort(); descriptionDetail?.destroy(); loadingScreen.destroy(); createShortcut.destroy(); refreshShortcut.destroy(); recordActions.destroy(); searchableFilters.destroy(); destroyed = true; request += 1; filterEpoch += 1; attachmentCountQueue = []; root.remove(); },
   };
 }

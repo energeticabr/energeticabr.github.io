@@ -10,6 +10,7 @@ import { createPayrollSourceReader } from './payroll-editor-policy.js';
 import { filterPayrollRows, payrollFilterOptions, validatePayrollFilters } from './payroll-gallery-filters.js';
 import { createRegistrationGalleryFilterData } from './registration-gallery-filter-data.js';
 import { loadProvisionDescriptionGroup, provisionDescriptionLinkColumn } from './provision-description-detail-data.js';
+import { createAcquisitionProgress, notifyAcquisitionProgress } from './acquisition-progress.js';
 
 const SITE_KEY = "personal";
 const LIST_ALIASES = Object.freeze(["NOTASPENDENTES"]);
@@ -250,10 +251,12 @@ export function createLaunchClusterData({
     return list;
   }
 
-  async function loadGroup(rawGroupId, { signal } = {}) {
+  async function loadGroup(rawGroupId, { signal, onProgress } = {}) {
     const groupId = String(rawGroupId ?? "").trim();
     if (!/^\d{1,15}$/.test(groupId)) throw new RangeError("O valor de AGRUPAR deve ser um ID numérico válido.");
+    const progress = createAcquisitionProgress({ signal, onProgress }, ['list', 'items', 'normalize']);
     const list = await resolveList(signal);
+    progress.step('list');
     const rowsById = new Map();
     const query = `$select=id&$expand=fields($select=${LAUNCH_GROUP_SELECT})&$filter=fields/AGRUPAR eq '${groupId}'&$top=${LAUNCH_GROUP_PAGE_SIZE}`;
     let cursor = "";
@@ -271,6 +274,7 @@ export function createLaunchClusterData({
           ...(signal ? { signal } : {}),
         },
       );
+      progress.check();
       for (const item of Array.isArray(page?.items) ? page.items : []) {
         const fields = item?.fields && typeof item.fields === "object" ? item.fields : {};
         if (String(scalar(fieldValue(fields, ["AGRUPAR"])) ?? "").trim() !== groupId) continue;
@@ -283,8 +287,11 @@ export function createLaunchClusterData({
           rowsById.set(id, Object.freeze({ ...item, id, fields: Object.freeze(namedFields) }));
         }
       }
+      progress.report('items', { pages: pageNumber, records: rowsById.size });
       if (!page?.hasMore || !page?.nextLink) {
+        progress.step('items', { pages: pageNumber, records: rowsById.size });
         const rows = [...rowsById.values()].sort((left, right) => Number(right.id) - Number(left.id));
+        progress.step('normalize');
         return Object.freeze(rows);
       }
       cursor = page.nextLink;
@@ -326,6 +333,38 @@ export function createRecurringExpensesGalleryData(options = {}) {
     listName: options.listName || "DESPESASRECORRENTES",
     listMissingCode: options.listMissingCode || "recurring_expenses_list_missing",
   });
+}
+
+// The complete-group reader is shared with the portal. Instrument only this
+// invocation's read facade, never the shared repository or mutation methods.
+export async function loadDescriptionGroupWithProgress(context, rawId, options = {}) {
+  const progress = createAcquisitionProgress(options, ['parentList', 'parent', 'childList', 'schema', 'items', 'confirmation', 'normalize'], context.assertSession);
+  let parentReads = 0, records = 0;
+  const repository = new Proxy(Object.create(null), {
+    get(_target, property) {
+      const method = context.repository[property];
+      if (typeof method !== 'function') return method;
+      if (!['resolveList', 'getItem', 'getColumns', 'getItemsPage'].includes(property)) return method.bind(context.repository);
+      return async (...args) => {
+        progress.check();
+        const value = await method.apply(context.repository, args);
+        progress.check();
+        if (property === 'resolveList') progress.step(args[1][0] === 'DESCRITIVOPROVISAO' ? 'parentList' : 'childList');
+        if (property === 'getItem') progress.step(++parentReads === 1 ? 'parent' : 'confirmation');
+        if (property === 'getColumns') progress.step('schema');
+        if (property === 'getItemsPage') {
+          records += Array.isArray(value?.items) ? value.items.length : 0;
+          const details = { pages: args[3]?.pageNumber, records };
+          progress.report('items', details);
+          if (value?.hasMore === false) progress.step('items', details);
+        }
+        return value;
+      };
+    },
+  });
+  const result = await loadProvisionDescriptionGroup({ ...context, repository }, rawId, options);
+  progress.step('normalize');
+  return result;
 }
 
 const HR_PAYROLL_GALLERIES = Object.freeze({
@@ -384,19 +423,24 @@ export function createHrPayrollGalleryData({
 
   const listRequests = new Map();
   const readPayrollSource = createPayrollSourceReader(repository, SITE_KEY);
-  async function currentPayrollRows(rows, signal, sourceCache) {
+  async function currentPayrollRows(rows, signal, sourceCache, progress, stage = 'hydrate') {
     const result = [];
+    let completed = 0;
     // Limit concurrent SharePoint requests for larger payroll reports.
     for (let start = 0; start < rows.length; start += 4) {
+      progress?.check();
       result.push(...await Promise.all(rows.slice(start, start + 4).map(async row => {
         let source = sourceCache?.get(row.id);
         if(!source) {
-          source=readPayrollSource(row,signal).catch(error=>{sourceCache?.delete(row.id);throw error;});
+          source=readPayrollSource(row,sourceCache ? undefined : signal).catch(error=>{sourceCache?.delete(row.id);throw error;});
           sourceCache?.set(row.id,source);
         }
-        return Object.freeze({...row,...await source});
+        const values = await (progress ? progress.wait(source) : source);
+        progress?.units(stage, ++completed, rows.length, 'registros');
+        return Object.freeze({...row,...values});
       })));
     }
+    progress?.step(stage, { records: rows.length });
     return Object.freeze(result);
   }
   async function resolveList(gallery) {
@@ -417,7 +461,7 @@ export function createHrPayrollGalleryData({
     return listRequests.get(gallery);
   }
 
-  async function loadPage(gallery, { page = 1, pageSize = 25, cursor = null, hydrateSource = true, includeSearchFields = false } = {}) {
+  async function loadPage(gallery, { page = 1, pageSize = 25, cursor = null, hydrateSource = true, includeSearchFields = false, signal, onProgress } = {}) {
     const config = HR_PAYROLL_GALLERIES[gallery];
     if (!config) throw new RangeError("Galeria de folha inválida.");
     if (!Number.isInteger(page) || page < 1 || page > HR_PAYROLL_PAGE_COUNT_MAX
@@ -425,7 +469,10 @@ export function createHrPayrollGalleryData({
       || (cursor !== null && (typeof cursor !== "string" || !cursor || cursor.length > 8192))) {
       throw new RangeError("Página ou cursor da galeria de folha inválido.");
     }
-    const list = await resolveList(gallery);
+    const hydrate = gallery === 'FOLHAPGTO' && hydrateSource;
+    const progress = createAcquisitionProgress({ signal, onProgress }, ['list', 'items', ...(hydrate ? ['hydrate'] : []), 'normalize'], assertSession);
+    const list = await progress.wait(resolveList(gallery));
+    progress.step('list');
     const selectedFields = config.fields.map(([, aliases]) => aliases[0]).join(",");
     // STATUS is optional on IDFOLHA. Read it when available without selecting a possibly missing column.
     const expandedFields = gallery === 'FOLHAPGTO' || gallery === 'IDFOLHA' && includeSearchFields ? 'fields' : `fields($select=${selectedFields})`;
@@ -433,8 +480,9 @@ export function createHrPayrollGalleryData({
       SITE_KEY,
       list.id,
       `$select=id&$expand=${expandedFields}&$top=${pageSize}`,
-      { pageNumber: page, maxPages: HR_PAYROLL_PAGE_COUNT_MAX, ...(cursor ? { cursor } : {}) },
+      { pageNumber: page, maxPages: HR_PAYROLL_PAGE_COUNT_MAX, ...(cursor ? { cursor } : {}), ...(signal ? { signal } : {}) },
     );
+    progress.step('items', { pages: 1, records: Array.isArray(result?.items) ? result.items.length : 0 });
     const rows = (Array.isArray(result?.items) ? result.items : []).map(item => {
       const fields = item?.fields && typeof item.fields === "object" ? item.fields : {};
       const row = { id: String(item?.id ?? hrPayrollFieldValue(fields, ["ID"]) ?? "") };
@@ -456,36 +504,46 @@ export function createHrPayrollGalleryData({
       ? result.nextLink
       : null;
     if(result?.hasMore === true && !nextCursor) throw new Error('A paginação da galeria não retornou o próximo cursor.');
-    return Object.freeze({
+    const response = Object.freeze({
       gallery,
       listName: config.listName,
       page,
       pageSize,
       fields: Object.freeze(config.fields.map(([key]) => key)),
-      rows: gallery === 'FOLHAPGTO' && hydrateSource ? await currentPayrollRows(rows) : Object.freeze(rows),
+      rows: hydrate ? await currentPayrollRows(rows, signal, undefined, progress) : Object.freeze(rows),
       hasMore: Boolean(nextCursor),
       nextCursor,
     });
+    progress.step('normalize');
+    return response;
   }
 
   const filterSnapshots = new Map();
-  async function loadFilteredPage(gallery, { page = 1, pageSize = 25, filters = {}, refresh = false } = {}) {
+  async function loadFilteredPage(gallery, { page = 1, pageSize = 25, filters = {}, refresh = false, signal, onProgress } = {}) {
     validatePayrollFilters(gallery, filters);
     if (!Number.isInteger(page) || page < 1 || page > 5000 || !Number.isInteger(pageSize) || pageSize < 1 || pageSize > HR_PAYROLL_PAGE_SIZE_MAX) {
       throw new RangeError('Página da galeria inválida.');
     }
-    assertSession();
+    const progress = createAcquisitionProgress({ signal, onProgress }, ['list', 'items',
+      ...(gallery === 'FOLHAPGTO' ? ['candidates'] : []), 'filter', ...(gallery === 'FOLHAPGTO' ? ['hydrate'] : []), 'result'], assertSession);
     let cached = filterSnapshots.get(gallery);
     if (refresh || !cached || (cached.completedAt != null && now().getTime() - cached.completedAt >= 15000)) {
-      cached = { completedAt: null, sources: new Map() };
+      cached = { completedAt: null, sources: new Map(), progress: new Map(), observers: new Set() };
       filterSnapshots.set(gallery, cached);
+      const publish = (stage, done, details = {}) => {
+        const value = { stage, done, details };
+        cached.progress.set(stage, value);
+        for (const observer of cached.observers) notifyAcquisitionProgress(observer, value);
+      };
       cached.promise = (async () => {
         const rows = [], seen = new Set(); let cursor = null;
         for (let number=1; number<=HR_PAYROLL_PAGE_COUNT_MAX; number++) {
           assertSession();
-          const result = await loadPage(gallery, {page:number,pageSize:HR_PAYROLL_PAGE_SIZE_MAX,cursor,hydrateSource:false,includeSearchFields:true});
+          const result = await loadPage(gallery, {page:number,pageSize:HR_PAYROLL_PAGE_SIZE_MAX,cursor,hydrateSource:false,includeSearchFields:true,
+            onProgress: value => { if (value.stage === 'list') publish('list', true); }});
           assertSession();
           rows.push(...result.rows);
+          publish('items', !result.hasMore, { pages: number, records: rows.length });
           if (!result.hasMore) { cached.completedAt=now().getTime(); return rows; }
           if (!result.nextCursor || seen.has(result.nextCursor)) throw new Error('A paginação dos filtros não retornou um cursor válido.');
           seen.add(result.nextCursor); cursor=result.nextCursor;
@@ -493,8 +551,17 @@ export function createHrPayrollGalleryData({
         throw new Error('A galeria excedeu o limite seguro de páginas; os filtros não foram truncados.');
       })().catch(error=>{if(filterSnapshots.get(gallery)===cached) filterSnapshots.delete(gallery); throw error;});
     }
-    const all = await cached.promise;
-    assertSession();
+    const observe = ({ stage, done, details }) => {
+      if (signal?.aborted) return;
+      if (done) progress.step(stage, details); else progress.report(stage, details);
+    };
+    cached.observers.add(observe);
+    let all;
+    try {
+      for (const value of cached.progress.values()) observe(value);
+      all = await progress.wait(cached.promise);
+      progress.check();
+    } finally { cached.observers.delete(observe); }
     // Numeric/currency terms can match current launch values even when copied values do not.
     // Prefilter only the remaining words/dates and specific nonfinancial fields before hydration.
     // This conservatively reads all candidates for numeric-only search (including ambiguous IDs),
@@ -507,19 +574,23 @@ export function createHrPayrollGalleryData({
       .map(([key,value])=>[key,key === 'search' && financialSearch ? nonFinancialTerms.join(' ') : value]));
     let candidates=filterPayrollRows(gallery,all,baseFilters);
     const financialFilters=Object.entries(filters).some(([key,value])=>value && (key.startsWith('VALORUNITARIO')||key.startsWith('QTD')));
-    if(gallery==='FOLHAPGTO' && (financialFilters || financialSearch)) candidates=await currentPayrollRows(candidates,undefined,cached.sources);
+    if(gallery==='FOLHAPGTO' && (financialFilters || financialSearch)) candidates=await currentPayrollRows(candidates,signal,cached.sources,progress,'candidates');
+    else if (gallery === 'FOLHAPGTO') progress.step('candidates', { records: candidates.length });
     const filtered=filterPayrollRows(gallery,candidates,filters);
+    progress.step('filter', { records: filtered.length });
     if (gallery === 'FOLHAPGTO') filtered.sort((a, b) => Number(b.id) - Number(a.id));
     const offset=(page-1)*pageSize;
     const hasMore=offset+pageSize<filtered.length;
     const pageRows=filtered.slice(offset,offset+pageSize);
-    const rows=gallery==='FOLHAPGTO' ? await currentPayrollRows(pageRows,undefined,cached.sources) : Object.freeze(pageRows);
-    assertSession();
-    return Object.freeze({gallery,page,pageSize,rows,
+    const rows=gallery==='FOLHAPGTO' ? await currentPayrollRows(pageRows,signal,cached.sources,progress) : Object.freeze(pageRows);
+    progress.check();
+    const response = Object.freeze({gallery,page,pageSize,rows,
       count:filtered.length,totalCount:all.length,filterOptions:payrollFilterOptions(gallery,all),hasMore,nextCursor:hasMore?String(page+1):null});
+    progress.step('result');
+    return response;
   }
 
-  async function loadPaymentsForPayrollId(rawId, { signal } = {}) {
+  async function loadPaymentsForPayrollId(rawId, { signal, onProgress } = {}) {
     const raw = String(rawId ?? "").trim();
     if (!/^\d{1,10}$/.test(raw) || !Number.isSafeInteger(Number(raw)) || Number(raw) < 1) {
       throw new RangeError("IDFOLHA inválido para consultar os pagamentos.");
@@ -527,7 +598,9 @@ export function createHrPayrollGalleryData({
     const payrollId = Number(raw);
     const gallery = "FOLHAPGTO";
     const config = HR_PAYROLL_GALLERIES[gallery];
-    const list = await resolveList(gallery);
+    const progress = createAcquisitionProgress({ signal, onProgress }, ['list', 'items', 'hydrate', 'result'], assertSession);
+    const list = await progress.wait(resolveList(gallery));
+    progress.step('list');
     const selectedFields = config.fields.map(([, aliases]) => aliases[0]).join(",");
     const baseQuery = `$select=id&$expand=fields&$top=${HR_PAYROLL_REPORT_PAGE_SIZE}`;
 
@@ -548,6 +621,7 @@ export function createHrPayrollGalleryData({
             ...(signal ? { signal } : {}),
           },
         );
+        progress.check();
         const items = Array.isArray(result?.items) ? result.items : [];
         for (const item of items) {
           const fields = item?.fields && typeof item.fields === "object" ? item.fields : {};
@@ -565,7 +639,11 @@ export function createHrPayrollGalleryData({
             rows.push(Object.freeze(row));
           }
         }
-        if (result?.hasMore !== true) return currentPayrollRows(rows, signal);
+        progress.report('items', { pages: pageNumber, records: rows.length });
+        if (result?.hasMore !== true) {
+          progress.step('items', { pages: pageNumber, records: rows.length });
+          return rows;
+        }
         if (typeof result.nextLink !== "string" || !result.nextLink) {
           throw new Error("A paginação dos pagamentos da folha não retornou o próximo cursor.");
         }
@@ -574,13 +652,17 @@ export function createHrPayrollGalleryData({
       throw new Error("A folha excedeu o limite seguro de páginas; o relatório não foi truncado.");
     }
 
+    let rows;
     try {
-      return await readPayments(`${baseQuery}&$filter=fields/IDFOLHA eq ${payrollId}`,
+      rows = await readPayments(`${baseQuery}&$filter=fields/IDFOLHA eq ${payrollId}`,
         { Prefer: LAUNCH_GROUP_PREFER });
     } catch (error) {
       if (error?.status !== 400 || signal?.aborted) throw error;
-      return readPayments(baseQuery);
+      rows = await readPayments(baseQuery);
     }
+    const result = await currentPayrollRows(rows, signal, undefined, progress);
+    progress.step('result');
+    return result;
   }
 
   const editors = new Map();
@@ -653,6 +735,7 @@ function createSharePointListData({
   listName = "NOTASPENDENTES",
   listMissingCode = "orders_list_missing",
   preserveSourceOrder = false,
+  snapshotColumns = false,
   retrySnapshotReads = false,
   filterKind,
   provisionPaymentSync = false,
@@ -732,21 +815,25 @@ function createSharePointListData({
     }
   }
 
-  async function normalizeDescriptionLinks(rows, listId, signal) {
+  async function normalizeDescriptionLinks(rows, listId, signal, onProgress) {
     if (!provisionPaymentSync || !rows.length || typeof repository.getColumns !== 'function') return rows;
+    const progress = createAcquisitionProgress({ signal, onProgress }, ['schema', 'links'], assertSession);
     assertSession();
     if (signal?.aborted) throw signal.reason || new DOMException('Consulta cancelada.', 'AbortError');
     const columns = await readSnapshot(() => repository.getColumns(siteKey, listId, signal ? { signal } : {}), signal);
     assertSession();
     if (signal?.aborted) throw signal.reason || new DOMException('Consulta cancelada.', 'AbortError');
     const linkName = provisionDescriptionLinkColumn(columns, { required: false });
-    if (!linkName) return rows;
-    return rows.map(row => Object.freeze({ ...row, fields: Object.freeze({ ...row.fields,
+    progress.step('schema');
+    const result = !linkName ? rows : rows.map(row => Object.freeze({ ...row, fields: Object.freeze({ ...row.fields,
       DESCRITIVOPROVISAO: row.fields[linkName] ?? '',
     }) }));
+    progress.step('links');
+    return result;
   }
 
-  async function loadSnapshot({ signal, refresh = false } = {}) {
+  async function loadSnapshot({ signal, onProgress, refresh = false } = {}) {
+    const progress = createAcquisitionProgress({ signal, onProgress }, ['list', ...(snapshotColumns ? ['schema'] : []), 'items', 'normalize'], assertSession);
     if (retrySnapshotReads) {
       if (signal?.aborted) throw signal.reason || new DOMException('Consulta cancelada.', 'AbortError');
       assertSession();
@@ -757,47 +844,66 @@ function createSharePointListData({
       }
     }
     const list = await readSnapshot(() => resolveList(signal), signal, true);
+    progress.step('list');
+    // Native registration cards need these same columns to map display names.
+    // Their repository shares this promise with the first page, avoiding a read.
+    const schema = snapshotColumns ? Promise.resolve(repository.getSnapshotColumns(siteKey, list.id, signal ? { signal } : {}))
+      .then(value => { progress.step('schema'); return value; }) : null;
     const rows = [];
     let cursor = "";
     for (let pageNumber = 1; pageNumber <= MAX_PAGES; pageNumber += 1) {
       if (signal?.aborted) throw signal.reason || new DOMException("A consulta foi cancelada.", "AbortError");
-      const page = await readSnapshot(() => repository.getItemsPage(
+      const [page] = await Promise.all([readSnapshot(() => repository.getItemsPage(
         siteKey,
         list.id,
         `$expand=fields&$top=${PAGE_SIZE}`,
         { pageNumber, maxPages: MAX_PAGES, ...(cursor ? { cursor } : {}), ...(signal ? { signal } : {}) },
-      ), signal);
+      ), signal), schema]);
+      progress.check();
       for (const item of Array.isArray(page?.items) ? page.items : []) {
         const row = normalizeItem(item);
         if (row) rows.push(row);
       }
+      progress.report('items', { pages: pageNumber, records: rows.length });
       if (!page?.hasMore || !page?.nextLink) {
+        progress.step('items', { pages: pageNumber, records: rows.length });
         if (!preserveSourceOrder) rows.sort((left, right) => Number(right.id) - Number(left.id));
         retryBlockedUntil = 0; retryBlockedError = undefined;
-        return Object.freeze({ listName, rows: Object.freeze(await normalizeDescriptionLinks(rows, list.id, signal)) });
+        const result = Object.freeze({ listName, rows: Object.freeze(await normalizeDescriptionLinks(rows, list.id, signal, progress.forward('normalize'))) });
+        progress.step('normalize');
+        return result;
       }
       cursor = page.nextLink;
     }
     throw new OrdersGalleryDataError("orders_page_limit", "A lista de pedidos ultrapassou o limite seguro de páginas.");
   }
 
-  async function loadItem(rawId, { signal } = {}) {
+  async function loadItem(rawId, { signal, onProgress } = {}) {
     const id = itemId(rawId);
+    const progress = createAcquisitionProgress({ signal, onProgress }, ['list', 'item', 'normalize'], assertSession);
     const list = await resolveList(signal);
+    progress.step('list');
     if (typeof repository.getItem !== "function") throw new Error("A consulta pontual de pedidos do SharePoint não está disponível.");
     if (signal?.aborted) throw signal.reason || new DOMException("A consulta foi cancelada.", "AbortError");
     let item;
     try {
       item = await repository.getItem(siteKey, list.id, id, "$expand=fields", signal ? { signal } : {});
     } catch (error) {
-      if (Number(error?.status) === 404 || String(error?.code || "").toLowerCase() === "itemnotfound") return null;
+      if (Number(error?.status) === 404 || String(error?.code || "").toLowerCase() === "itemnotfound") {
+        progress.step('item', { notFound: true });
+        progress.step('normalize', { notFound: true });
+        return null;
+      }
       throw error;
     }
     if (signal?.aborted) throw signal.reason || new DOMException("A consulta foi cancelada.", "AbortError");
-    if (item == null) return null;
+    progress.step('item', { notFound: item == null });
+    if (item == null) { progress.step('normalize', { notFound: true }); return null; }
     const row = normalizeItem(item);
     if (!row || row.id !== id) throw new OrdersGalleryDataError("orders_item_invalid", "O SharePoint não devolveu o pedido solicitado.");
-    return (await normalizeDescriptionLinks([row], list.id, signal))[0];
+    const result = (await normalizeDescriptionLinks([row], list.id, signal, progress.forward('normalize')))[0];
+    progress.step('normalize');
+    return result;
   }
 
   async function currentItemForMutation(rawId) {
@@ -831,25 +937,35 @@ function createSharePointListData({
   const saveEditor = async (context, fields, options) => (await editorData()).saveEditor(context, fields, options);
   const deleteItem = async (id, options) => (await editorData()).deleteItem(id, options);
 
-  async function listAttachments(rawId, { refresh = false } = {}) {
+  async function listAttachments(rawId, { refresh = false, signal, onProgress } = {}) {
     const id = itemId(rawId);
+    const progress = createAcquisitionProgress({ signal, onProgress }, ['list', 'attachments', 'normalize'], assertSession);
     if (refresh) attachmentCache.delete(id);
-    if (attachmentCache.has(id)) return attachmentCache.get(id);
-    const pending = (async () => {
-      const list = await resolveList();
-      if (typeof repository.listAttachments !== "function") throw new Error("A consulta de anexos SharePoint não está disponível.");
-      const values = await repository.listAttachments(siteKey, list.id, id);
-      return Object.freeze((Array.isArray(values) ? values : []).map(attachmentDescriptor).filter(Boolean));
-    })();
-    attachmentCache.set(id, pending);
-    try {
-      const result = await pending;
-      attachmentCache.set(id, result);
-      return result;
-    } catch (error) {
-      if (attachmentCache.get(id) === pending) attachmentCache.delete(id);
-      throw error;
+    let cached = attachmentCache.get(id);
+    if (Array.isArray(cached)) {
+      progress.step('list', { cached: true });
+      progress.step('attachments', { cached: true, records: cached.length });
+      progress.step('normalize');
+      return cached;
     }
+    if (!cached) {
+      // Cached reads are independent of any one observer's cancellation.
+      cached = { list: resolveList() };
+      attachmentCache.set(id, cached);
+      cached.promise = cached.list.then(async list => {
+        if (typeof repository.listAttachments !== 'function') throw new Error('A consulta de anexos SharePoint não está disponível.');
+        const values = await repository.listAttachments(siteKey, list.id, id);
+        const result = Object.freeze((Array.isArray(values) ? values : []).map(attachmentDescriptor).filter(Boolean));
+        if (attachmentCache.get(id) === cached) attachmentCache.set(id, result);
+        return result;
+      }).catch(error => { if (attachmentCache.get(id) === cached) attachmentCache.delete(id); throw error; });
+    }
+    const [, result] = await progress.wait(Promise.all([
+      cached.list.then(() => progress.step('list')),
+      cached.promise.then(value => { progress.step('attachments', { records: value.length }); return value; }),
+    ]));
+    progress.step('normalize');
+    return result;
   }
 
   async function downloadAttachment(rawId, rawName, options) {
@@ -860,7 +976,10 @@ function createSharePointListData({
     }
     const list = await resolveList();
     if (typeof repository.downloadAttachment !== "function") throw new Error("A abertura de anexos SharePoint não está disponível.");
-    const payload = await repository.downloadAttachment(siteKey, list.id, id, fileName, ...(options ? [options] : []));
+    const downloadOptions = options?.onProgress ? { ...options, onProgress: value => {
+      if (!options.signal?.aborted) notifyAcquisitionProgress(options.onProgress, value);
+    } } : options;
+    const payload = await repository.downloadAttachment(siteKey, list.id, id, fileName, ...(downloadOptions ? [downloadOptions] : []));
     const metadata = (await listAttachments(id)).find(entry => entry.fileName === fileName);
     return asBlob(payload, metadata?.mimeType || attachmentMimeType(fileName));
   }
@@ -907,12 +1026,15 @@ function createSharePointListData({
     return result;
   }
 
-  async function loadUpcomingPayments({ now = new Date(), signal, includeOverdue = false } = {}) {
+  async function loadUpcomingPayments({ now = new Date(), signal, onProgress, includeOverdue = false } = {}) {
     const today = provisionDateKey(now);
     if (!today) throw new RangeError("A data de referência dos vencimentos não é válida.");
+    const progress = createAcquisitionProgress({ signal, onProgress }, ['list', 'schema', 'items', 'normalize'], assertSession);
     const list = await resolveList(signal);
+    progress.step('list');
     if (typeof repository.getColumns !== "function") throw new Error("Os metadados do vencimento não estão disponíveis.");
     const columns = await repository.getColumns(siteKey, list.id, signal ? { signal } : {});
+    progress.step('schema');
     const dueColumns = [...new Set((Array.isArray(columns) ? columns : [])
       .filter(column => [column?.name, column?.displayName].some(name => ["DATAPREVISTOPGTO", "DATAPGTOPREVISTO"].includes(fieldKey(name))))
       .map(column => String(column.name || "")))];
@@ -941,6 +1063,7 @@ function createSharePointListData({
         pageNumber, maxPages: MAX_PAGES, headers: { Prefer: LAUNCH_GROUP_PREFER },
         ...(cursor ? { cursor } : {}), ...(signal ? { signal } : {}),
       });
+      progress.check();
       for (const item of Array.isArray(page?.items) ? page.items : []) {
         const row = normalizeItem(item);
         if (!row) continue;
@@ -966,7 +1089,13 @@ function createSharePointListData({
           branch: value(["FILIAL"]), property: value(["IMOVEL", "IMÓVEL"]),
         }));
       }
-      if (page?.hasMore !== true) return Object.freeze([...rows.values()].sort((a, b) => provisionDateKey(a.dueDate).localeCompare(provisionDateKey(b.dueDate)) || Number(a.id) - Number(b.id)));
+      progress.report('items', { pages: pageNumber, records: rows.size });
+      if (page?.hasMore !== true) {
+        progress.step('items', { pages: pageNumber, records: rows.size });
+        const result = Object.freeze([...rows.values()].sort((a, b) => provisionDateKey(a.dueDate).localeCompare(provisionDateKey(b.dueDate)) || Number(a.id) - Number(b.id)));
+        progress.step('normalize');
+        return result;
+      }
       if (!page.nextLink) throw new Error("A paginação dos vencimentos não retornou o próximo cursor.");
       cursor = page.nextLink;
     }
@@ -975,7 +1104,7 @@ function createSharePointListData({
 
   return Object.freeze({ loadSnapshot, loadItem, listAttachments, downloadAttachment, uploadAttachment, updateItem,
     loadEditor, saveEditor, deleteItem, updateDueDate, loadUpcomingPayments,
-    ...(provisionPaymentSync ? { loadDescriptionGroup: (id, options) => loadProvisionDescriptionGroup({
+    ...(provisionPaymentSync ? { loadDescriptionGroup: (id, options) => loadDescriptionGroupWithProgress({
       repository, siteKey, normalizeItem, assertSession,
     }, id, options) } : {}),
     ...(descriptionEditor ? { previewDeletion: async id => (await deletionService()).preview(id),

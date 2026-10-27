@@ -1,3 +1,5 @@
+import { createAcquisitionProgress } from '../chat/acquisition-progress.js';
+
 async function parseJson(response) {
   try {
     return await response.json();
@@ -11,9 +13,11 @@ export function createShortcutClient({ apiBaseUrl, tokenProvider, fetchImpl = gl
   const endpoint = new URL("/api/portal-shortcut-token", base).href;
   const expectedUploadUrl = new URL("/api/shortcut-upload", base).href;
 
-  async function request(action) {
+  async function request(action, options = {}) {
+    const progress = createAcquisitionProgress(options, ['authentication', 'response', 'validated']);
     const microsoftToken = await tokenProvider(["User.Read"]);
     if (!microsoftToken) throw new Error("Entre novamente com a Microsoft.");
+    progress.step('authentication');
     const response = await fetchImpl(endpoint, {
       method: "POST",
       mode: "cors",
@@ -24,11 +28,14 @@ export function createShortcutClient({ apiBaseUrl, tokenProvider, fetchImpl = gl
         "Content-Type": "application/json",
       },
       body: JSON.stringify({ action }),
+      ...(action === 'status' && options.signal ? { signal: options.signal } : {}),
     });
+    progress.step('response');
     const payload = await parseJson(response);
     if (!response.ok) throw new Error(String(payload?.error || "A VM recusou a configuração do Atalho."));
     if (action === "status") {
       if (!["active", "inactive"].includes(payload?.status)) throw new Error("A VM não devolveu uma confirmação válida.");
+      progress.step('validated');
       return Object.freeze({ status: payload.status });
     }
     if (action === "revoke") {
@@ -48,5 +55,5 @@ export function createShortcutClient({ apiBaseUrl, tokenProvider, fetchImpl = gl
     });
   }
 
-  return Object.freeze({ status: () => request("status"), issue: () => request("issue"), revoke: () => request("revoke") });
+  return Object.freeze({ status: options => request("status", options), issue: () => request("issue"), revoke: () => request("revoke") });
 }

@@ -4,6 +4,7 @@ import { applyScreenNavigation } from "./screen-navigation.js";
 import { attachGalleryRefreshButton } from './gallery-refresh.js';
 import { createGalleryCreationToolbar } from './gallery-create-shortcut.js';
 import { createLoadingIndicator } from "./loading-indicator.js";
+import { beginLoadingTask } from './loading-task.js';
 import { createGalleryLoadingScreen } from './gallery-loading-screen.js';
 import { createGalleryRecordActions } from './gallery-record-actions.js';
 import { galleryDeletionFields } from './gallery-deletion-receipt.js';
@@ -439,14 +440,19 @@ export function createOrdersGallery({
     listStatus.textContent = '';
     cards.replaceChildren();
     updateBusy();
+    const task = loadingScreen.beginTask({ signal: loadController.signal,
+      isCurrent: () => opened && !destroyed && root.isConnected && currentSession === session && controller === loadController });
+    task.prepared();
     try {
-      const result = await data.loadSnapshot({ signal: loadController.signal, refresh });
+      const result = await data.loadSnapshot({ signal: loadController.signal, refresh, onProgress: task.report });
       if (!opened || destroyed || !root.isConnected || currentSession !== session || controller !== loadController) return false;
       if (!Array.isArray(result?.rows)) throw new Error("A consulta não retornou uma lista de pedidos válida");
+      task.acquired();
       rows = sortRows(result.rows.filter(row => /^\d{1,15}$/.test(String(row?.id || ""))));
       filterOptions();
       updateMetrics();
       applyLocalFilters();
+      task.complete();
       return true;
     } catch (error) {
       if (!opened || destroyed || !root.isConnected || currentSession !== session || controller !== loadController || error?.name === "AbortError") return false;
@@ -458,6 +464,7 @@ export function createOrdersGallery({
       cards.replaceChildren(retryButton);
       return false;
     } finally {
+      task.stop();
       if (opened && !destroyed && root.isConnected && currentSession === session && controller === loadController) { listLoading = false; updateBusy(); }
     }
   }
@@ -497,15 +504,20 @@ export function createOrdersGallery({
     detail.setAttribute('aria-busy', 'true');
     const heading = detailHeading(row, currentDetailsSession);
     const status = el('div', 'olr-loading'); status.setAttribute('role', 'status');
-    status.append(createLoadingIndicator(doc, `Carregando pedido #${row.id} e lançamentos vinculados…`));
+    const indicator = createLoadingIndicator(doc, `Carregando pedido #${row.id} e lançamentos vinculados…`);
+    status.append(indicator);
     detail.replaceChildren(heading, status);
     detail.focus({ preventScroll: true });
+    const task = beginLoadingTask(indicator, { signal: request.signal, isCurrent: current });
+    task.prepared();
     try {
       if (typeof data.loadLinkedReport !== 'function') throw new Error('A consulta dos lançamentos vinculados não está disponível.');
-      const report = await data.loadLinkedReport(row.id, { signal: request.signal });
+      const report = await data.loadLinkedReport(row.id, { signal: request.signal, onProgress: task.report });
       if (!current()) return;
       if (String(report?.orderId) !== String(row.id)) throw new Error('A consulta não retornou o pedido selecionado.');
+      task.acquired();
       detail.replaceChildren(heading, renderOrdersLinkedReport(doc, report));
+      task.complete();
     } catch (error) {
       if (!current()) return;
       const failure = el('div', 'olr-failure'); failure.setAttribute('role', 'alert');
@@ -515,6 +527,7 @@ export function createOrdersGallery({
       failure.append(retry);
       detail.replaceChildren(heading, failure);
     } finally {
+      task.stop();
       if (current()) detail.setAttribute('aria-busy', 'false');
     }
   }

@@ -37,7 +37,7 @@ test('native gallery typing continues while current and obsolete searches finish
         if (await evaluate('qa.remote')) assert.equal(await evaluate('qa.queries.at(-1)'), '90', context + ' keeps searching while typing');
         if (name === 'launch') {
           assert.equal(await evaluate('!document.querySelector(".gallery-loading-screen--scoped").hidden'), true);
-          assert.match(await evaluate('document.querySelector(".gallery-loading-screen--scoped .app-loading__progress-row").textContent'), /0%/);
+          assert.match(await evaluate('document.querySelector(".gallery-loading-screen--scoped .app-loading__progress-row").textContent'), /33%/);
           assert.equal(await evaluate(`(() => {
             const loader = document.querySelector('.gallery-loading-screen--scoped').getBoundingClientRect();
             return loader.top >= document.querySelector('[data-gallery-quick-search]').getBoundingClientRect().bottom;

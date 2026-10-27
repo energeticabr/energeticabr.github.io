@@ -3,6 +3,7 @@ import { PAYROLL_RUBRICS, payrollDecimal, validPayrollDate } from './supplier-pa
 import Decimal from 'decimal.js';
 import { payrollTaxType, payrollCompetenceMonth } from './payroll-tax-competence.js';
 import { ensurePayrollTaxLink } from './payroll-tax-links.js';
+import { createAcquisitionProgress } from './acquisition-progress.js';
 
 const scalar = value => String(value && typeof value === 'object' ? value.LookupValue ?? value.Value ?? value.value ?? '' : value ?? '').trim();
 const id = value => { const result = String(value ?? ''); if (!/^[1-9]\d{0,14}$/.test(result) || !Number.isSafeInteger(Number(result))) throw new Error('Selecione um ID cadastrado.'); return result; };
@@ -21,14 +22,20 @@ function monthWindow(now) {
 export function createPayrollPaymentData({repository,siteKey='personal',now=()=>new Date(),assertSession=()=>{},storage}={}) {
   const descriptors = new Map(), operations = new Map();
   let saving = false;
-  async function describe(name) {
+  async function describe(name, {signal,onProgress} = {}) {
+    const progress=createAcquisitionProgress({signal,onProgress},['list','columns'],assertSession);
+    const options=signal?{signal}:{};
     assertSession();
     if (!descriptors.has(name)) {
-      const list = await repository.resolveList(siteKey,[name]);
+      const list = await repository.resolveList(siteKey,[name],options);
+      progress.check();
       if(list?.status!=='resolved'||!list.id) throw new Error(`A lista ${name} não está disponível.`);
-      const columns = await repository.getColumns(siteKey,list.id);
+      progress.step('list');
+      const columns = await repository.getColumns(siteKey,list.id,options);
+      progress.check();
       assertSession();descriptors.set(name,{...list,columns});
-    }
+    } else progress.step('list');
+    progress.step('columns');
     return descriptors.get(name);
   }
   function column(descriptor,aliases,required=true) {
@@ -42,15 +49,19 @@ export function createPayrollPaymentData({repository,siteKey='personal',now=()=>
     if(c.readOnly||c.calculated||c.lookup||c.personOrGroup) throw new Error(`O campo ${label} não permite esse cadastro.`);
     return c.dateTime&&label==='DATA' ? `${raw}T12:00:00Z` : c.text ? String(raw) : raw;
   }
-  async function all(descriptor,{signal,filter=''}={}) {
+  async function all(descriptor,{signal,onProgress,filter=''}={}) {
+    const progress=createAcquisitionProgress({signal,onProgress},['pages'],assertSession);
     const rows=[], seen=new Set();let cursor;
     for(let pageNumber=1;pageNumber<=100;pageNumber++) {
       assertSession();if(signal?.aborted) throw signal.reason || new DOMException('Consulta cancelada.','AbortError');
       const page=await repository.getItemsPage(siteKey,descriptor.id,`$expand=fields&$top=100${filter?`&$filter=${filter}`:''}`,{pageNumber,maxPages:100,headers:{Prefer:'HonorNonIndexedQueriesWarningMayFailRandomly'},...(cursor?{cursor}:{}),...(signal?{signal}:{})});
       assertSession();
+      progress.check();
       if(!Array.isArray(page?.items)||typeof page.hasMore!=='boolean')throw new Error('A consulta dos pagamentos não pôde ser confirmada.');
       rows.push(...page.items);
-      if(!page.hasMore) return rows;
+      const details={completedPages:pageNumber,completedItems:rows.length};
+      if(!page.hasMore) {progress.step('pages',details);return rows;}
+      progress.report('pages',details);
       if(!page.nextLink||seen.has(page.nextLink)) throw new Error('A consulta dos pagamentos não pôde ser concluída.');
       cursor=page.nextLink;seen.add(cursor);
     }
@@ -73,19 +84,21 @@ export function createPayrollPaymentData({repository,siteKey='personal',now=()=>
       unitValue,quantity,total,paidDate:validPayrollDate(paidDate)?paidDate:'',
       description:supplier.profession};
   }
-  async function loadOptions({signal}={}) {
-    const [suppliers,launches,sheets,payroll]=await Promise.all(['FORNECEDORES','LANCAMENTOS','IDFOLHA','FOLHAPGTO'].map(describe));
-    const [supplierRows,launchRows,sheetRows]=await Promise.all([suppliers,launches,sheets].map(d=>all(d,{signal})));
+  async function loadOptions({signal,onProgress}={}) {
+    const progress=createAcquisitionProgress({signal,onProgress},['supplierSchema','launchSchema','sheetSchema','payrollSchema','suppliers','launches','sheets','options'],assertSession);
+    const [suppliers,launches,sheets,payroll]=await Promise.all(['FORNECEDORES','LANCAMENTOS','IDFOLHA','FOLHAPGTO'].map((name,index)=>describe(name,{signal,onProgress:progress.forward(['supplierSchema','launchSchema','sheetSchema','payrollSchema'][index])})));
+    const [supplierRows,launchRows,sheetRows]=await Promise.all([suppliers,launches,sheets].map((d,index)=>all(d,{signal,onProgress:progress.forward(['suppliers','launches','sheets'][index])})));
     const eligible=supplierRows.filter(row=>activeSupplier(suppliers,row)).map(row=>({id:id(row.id),label:supplierName(suppliers,row),profession:value(suppliers,row,['PROFISSÃO'],false)}));
     const window=monthWindow(now());
     const allSheets=sheetRows.map(row=>({id:id(row.id),supplier:value(sheets,row,['FORNECEDOR']),label:value(sheets,row,['MESREFERENCIA','MES REFERENCIA'])}))
       .filter(row=>payrollCompetenceMonth(row.label)).sort((a,b)=>month(a.label).localeCompare(month(b.label))||Number(a.id)-Number(b.id));
-    return {
+    const result = {
       launches:launchRows.flatMap(row=>{const name=value(launches,row,['FORNECEDOR']),matches=eligible.filter(s=>key(s.label)===key(name));return matches.length===1?[launchRow(launches,row,matches[0])]:[];}).sort((a,b)=>Number(b.id)-Number(a.id)),
       sheets:sheetRows.flatMap(row=>{const reference=value(sheets,row,['MESREFERENCIA','MES REFERENCIA']),supplier=value(sheets,row,['FORNECEDOR']);return window.includes(month(reference))?[{id:id(row.id),supplier,label:reference}]:[];}).sort((a,b)=>month(a.label).localeCompare(month(b.label))||Number(a.id)-Number(b.id)),
       paymentTypes:types(payroll),
       allSheets,
     };
+    progress.step('options'); return result;
   }
   async function get(descriptor,rawId) {
     const item=await repository.getItem(siteKey,descriptor.id,id(rawId),'$expand=fields');assertSession();

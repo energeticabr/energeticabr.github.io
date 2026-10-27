@@ -78,6 +78,28 @@ function fixture(overrides = {}) {
   return { data, repository, columns, rows, calls, writes, hooks, setPageSize: value => { pageSize = value; } };
 }
 
+test('sheet options report schema and completed pages while the next page remains pending', async () => {
+  const f = fixture(), events = []; let release;
+  f.hooks.beforePage = (list, url) => list === 'suppliers' && url.searchParams.has('page')
+    ? new Promise(resolve => { release = resolve; }) : undefined;
+  const reading = f.data.loadOptions({ onProgress: event => events.push(event) });
+  await new Promise(resolve => setImmediate(resolve));
+  assert.ok(events.some(event => event.percent > 0 && event.percent < 100));
+  assert.ok(events.some(event => event.source?.completedPages === 1 && event.source?.completedItems === 1));
+  assert.ok(events.every(event => event.percent < 100));
+  release(); const result = await reading;
+  assert.equal(result.suppliers.length, 2); assert.equal(events.at(-1).percent, 100); assert.equal(f.writes.length, 0);
+});
+
+test('sheet option progress stops after abort and never finishes a cancelled read', async () => {
+  const f = fixture(), abort = new AbortController(), events = []; let release;
+  f.hooks.beforePage = () => new Promise(resolve => { release = resolve; });
+  const reading = f.data.loadOptions({ signal: abort.signal, onProgress: event => events.push(event) });
+  await new Promise(resolve => setImmediate(resolve)); abort.abort(); const count = events.length; release();
+  await assert.rejects(reading, { name: 'AbortError' }); assert.equal(events.length, count);
+  assert.ok(events.every(event => event.percent < 100)); assert.equal(f.writes.length, 0);
+});
+
 test('options read every supplier page, ignore computed Title auxiliaries, and never create', async () => {
   const f = fixture();
   const options = await f.data.loadOptions();

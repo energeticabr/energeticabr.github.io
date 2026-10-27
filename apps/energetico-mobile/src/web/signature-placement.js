@@ -142,6 +142,7 @@ export function createSignaturePlacement({
   loadStampBlob = loadBernardoStamp,
   onStamp = () => {},
   onStampError = () => {},
+  onProgress,
   signal,
 } = {}) {
   if (!container?.append || !documentRef?.createElement) throw new TypeError("Contêiner de posicionamento inválido.");
@@ -151,12 +152,9 @@ export function createSignaturePlacement({
   const viewport = element(documentRef, "div", "signature-placement-viewport");
   viewport.setAttribute("aria-label", "Páginas do PDF; toque ou arraste a assinatura");
   root.append(viewport);
-  const loadingMessage = () => {
-    const message = createLoadingIndicator(documentRef, "Carregando as páginas do documento…");
-    message.classList.add("signature-placement-pdf-loading");
-    return message;
-  };
-  viewport.append(loadingMessage());
+  const loader = createLoadingIndicator(documentRef, "Carregando as páginas do documento…");
+  loader.classList.add("signature-placement-pdf-loading");
+  viewport.append(loader);
   container.append(root);
 
   let destroyed = false;
@@ -213,6 +211,15 @@ export function createSignaturePlacement({
   let pinching = false;
   let pinchListenersAttached = false;
   const pages = new Map();
+  let progressDetail = { phase: "prepared" };
+  const progress = beginLoadingTask(value => {
+    updateLoadingIndicator(loader, { progress: value.percent, progressLabel: value.progressLabel });
+    try { onProgress?.({ ...value, ...progressDetail }); } catch { /* Presentation observers are optional. */ }
+  }, { signal, isCurrent: () => !destroyed });
+  const reportProgress = (completed, detail) => {
+    progressDetail = detail;
+    progress.units(completed, 4); // Import, read, parse, and the completed page renders.
+  };
 
   function removeMarker() {
     activeMarker?.remove?.();
@@ -960,18 +967,24 @@ export function createSignaturePlacement({
   async function renderAllPages() {
     const generation = ++renderGeneration;
     clearPages();
-    viewport.append(loadingMessage());
+    viewport.append(loader);
     if (!(pdf?.numPages > 0)) throw new Error("O PDF não contém páginas para exibir.");
     for (let page = 1; page <= pdf.numPages; page += 1) {
       if (destroyed || generation !== renderGeneration) return;
       await renderPage(page, generation);
+      if (destroyed || generation !== renderGeneration) return;
+      reportProgress(3 + page / pdf.numPages, { phase: "render", renderedPages: page, totalPages: pdf.numPages });
+      if (destroyed || generation !== renderGeneration) return;
     }
     if (!destroyed && generation === renderGeneration) {
       if (stampPoint && bernardoStampUrl) addStampMarker(pageNumber(stampPoint.page, pdf.numPages));
-      viewport.querySelector?.(".signature-placement-pdf-loading")?.remove?.();
       root.setAttribute("aria-busy", "false");
       root.dataset.renderedPages = String(pdf.numPages);
       root.dataset.pageNumber = String(selectedPage);
+      progress.acquired();
+      progressDetail = { phase: "ready", renderedPages: pdf.numPages, totalPages: pdf.numPages };
+      progress.complete();
+      loader.remove();
     }
   }
 
@@ -981,10 +994,13 @@ export function createSignaturePlacement({
     if (!signatureBlob || typeof signatureBlob.arrayBuffer !== "function") throw new Error("Assinatura indisponível para posicionamento.");
     if (Number(documentBlob.size) > MAX_PDF_BYTES) throw new Error("Este PDF é muito grande para a pré-visualização. Reduza o arquivo e tente novamente.");
     if (typeof urlApi?.createObjectURL === "function") signatureUrl = urlApi.createObjectURL(signatureBlob);
+    progress.prepared();
     const pdfjs = await loadPdfJs();
     if (destroyed) return;
+    reportProgress(1, { phase: "imported" });
     const data = new Uint8Array(await documentBlob.arrayBuffer());
     if (destroyed) return;
+    reportProgress(2, { phase: "read" });
     if (bernardoStampBlob && !bernardoStampUrl && typeof urlApi?.createObjectURL === "function") {
       bernardoStampUrl = urlApi.createObjectURL(bernardoStampBlob);
     }
@@ -1002,10 +1018,13 @@ export function createSignaturePlacement({
     });
     pdf = await loadingTask.promise;
     if (destroyed) return;
+    reportProgress(3, { phase: "parsed", totalPages: pdf.numPages });
+    if (destroyed) return;
     selectedPage = pageNumber(point?.page || 1, pdf.numPages);
     await renderAllPages();
   })();
   ready.catch(error => {
+    progress.stop();
     if (destroyed) return;
     root.setAttribute("aria-busy", "false");
     root.dataset.loadError = "true";
@@ -1020,6 +1039,7 @@ export function createSignaturePlacement({
   function destroy() {
     if (destroyed) return;
     destroyed = true;
+    progress.stop();
     if (dragging) finishDrag();
     if (stampDragging) finishStampDrag();
     if (pinchListenersAttached) finishPinch();
@@ -1059,4 +1079,5 @@ export function createSignaturePlacement({
     getSummary: () => pdf ? `${pdf.numPages === 1 ? "1 página" : `${pdf.numPages} páginas`} • ${documentBlob.size} bytes` : "",
   });
 }
-import { createLoadingIndicator } from "../ui/loading-indicator.js";
+import { createLoadingIndicator, updateLoadingIndicator } from "../ui/loading-indicator.js";
+import { beginLoadingTask } from "../ui/loading-task.js";

@@ -51,6 +51,22 @@ async function pageTexts(file) {
   });
 }
 
+test('measured append reports source reads page counts and saved output without trusting observers', async () => {
+  const original = await pdfFile([[100, 200, 'ONE'], [100, 200, 'TWO']]);
+  const addition = await pdfFile([[100, 200, 'THREE']]);
+  const progress = [];
+  const result = await appendAttachmentPdf(original, original.name, [addition], {
+    onProgress: (percent, detail) => { progress.push({ percent, ...detail }); if (detail?.phase === 'read') throw new Error('observer failed'); },
+  });
+  assert.ok(progress.some(value => value.phase === 'read' && value.completedSources === 0));
+  assert.ok(progress.some(value => value.phase === 'append' && value.appendedPages === 1 && value.totalPages === 2));
+  assert.ok(progress.some(value => value.phase === 'append' && value.completedSources === 1));
+  assert.equal(progress.at(-1).phase, 'ready');
+  assert.equal(progress.at(-1).completedSources, 2);
+  assert.equal(progress.at(-1).percent, 99, 'durable replacement is still owned by the caller');
+  assert.deepEqual(await pageTexts(result), ['ONE', 'TWO', 'THREE']);
+});
+
 function images(pdf, page = 0) {
   const resources = pdf.getPage(page).node.Resources().lookup(PDFName.of('XObject'), PDFDict);
   return resources.entries().map(([, ref]) => pdf.context.lookup(ref))
@@ -453,6 +469,6 @@ test('abort during asynchronous serialization never returns a composed file', as
   const original = await pdfFile([[100, 200, 'FIRST']]);
   await assert.rejects(appendAttachmentPdf(original, original.name, [original], {
     signal: controller.signal,
-    onProgress: value => { if (value === 95) queueMicrotask(() => controller.abort()); },
+    onProgress: (_value, detail) => { if (detail.phase === 'serialize') queueMicrotask(() => controller.abort()); },
   }), { name: 'AbortError' });
 });

@@ -30,6 +30,20 @@ async function extrasPanel(t,{files=[],post=async()=>({orderId:'5',lines:[],tota
   doc.querySelector('[data-meal-next]').click();await tick();return {dom,doc,tray,panel,type};
 }
 
+test('confirmed meal posting reserves progress until tray cleanup and the receipt are accepted', async t => {
+  const h = await extrasPanel(t, { post: async (_draft, _journal, onProgress) => {
+    onProgress({ stage: 'launch:1', percent: 50 });
+    onProgress({ stage: 'verified:1', percent: 100 }); return { orderId: '5', lines: [], total: 50 };
+  } });
+  let finish; h.tray.consume = () => new Promise(resolve => { finish = resolve; });
+  h.doc.querySelector('[data-meal-next]').click(); await tick();
+  h.doc.querySelector('[data-meal-confirm]').click(); await tick();
+  const loader = h.doc.querySelector('.app-loading'), progress = () => Number(loader.querySelector('[role=progressbar]').getAttribute('aria-valuenow'));
+  assert.equal(progress(), 50, 'cleanup is still pending after the server confirms the batch');
+  assert.equal(h.doc.querySelector('[data-meal-done]'), null);
+  finish(); await tick(); assert.equal(progress(), 100); assert.ok(h.doc.querySelector('[data-meal-done]'));
+});
+
 test('OBS não tem seletor próprio: a barra inclui os arquivos automaticamente e só os consome após confirmar',async t=>{
   const file=new File(['abc'],'comprovante.pdf',{type:'application/pdf',lastModified:0});let posted;
   const h=await extrasPanel(t,{files:[file],post:async value=>{posted=value;return {orderId:'5',lines:[],total:50};}});

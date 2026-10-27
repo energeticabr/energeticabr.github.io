@@ -1,4 +1,5 @@
 import { createLoadingIndicator } from "./loading-indicator.js";
+import { beginLoadingTask } from './loading-task.js';
 import { bindForm43FieldLocks } from './orders-form43-locks-view.js';
 import { bindSearchableFilterSelects } from './searchable-filter-selects.js';
 import { bindPayrollEditorSource } from './payroll-editor-source.js';
@@ -49,6 +50,7 @@ export function createGalleryRecordActions({ document, host, loadEditor, saveEdi
     previous?.sourceBinding?.cleanup?.();
     previous?.sheetAttachmentBinding?.cleanup?.();
     previous?.mutationAbort?.abort();
+    previous?.readAbort?.abort();
     previous?.variantPicker?.destroy();
     previous?.overlay.remove();
     syncRecordButtons();
@@ -240,6 +242,8 @@ export function createGalleryRecordActions({ document, host, loadEditor, saveEdi
     if (!active(state)) return;
     const loadEpoch = ++state.loadEpoch;
     const current = () => active(state) && state.loadEpoch === loadEpoch;
+    state.readAbort?.abort();
+    const readAbort = state.readAbort = new AbortController();
     state.controller?.cleanup?.();
     state.fieldLocks?.cleanup?.();
     state.sourceBinding?.cleanup?.();
@@ -249,14 +253,18 @@ export function createGalleryRecordActions({ document, host, loadEditor, saveEdi
     state.controller = null;
     state.error.hidden = true;
     const cancel = button("Cancelar", "data-gallery-editor-cancel", "", () => { if (active(state) && !state.busy) close(); });
-    state.body.replaceChildren(createLoadingIndicator(document, "Carregando formulário…"), cancel);
+    const indicator = createLoadingIndicator(document, "Carregando formulário…");
+    state.body.replaceChildren(indicator, cancel);
+    const task = beginLoadingTask(indicator, { signal: readAbort.signal, isCurrent: current });
+    task.prepared();
     try {
       if (typeof loadEditor !== "function") throw new Error("Os metadados deste formulário não estão disponíveis. Tente novamente.");
-      const context = await loadEditor(state.row.id, { refresh: true, ...options });
+      const context = await loadEditor(state.row.id, { refresh: true, ...options, signal: readAbort.signal, onProgress: task.report });
       if (!current()) return;
       if (context?.contract?.requiresVariantSelection) {
         const variants = context.contract.formVariants || [];
         if (!variants.length) throw new Error("Não há uma variante Power Apps comprovada disponível para este formulário.");
+        task.acquired();
         const label = element("label", "gallery-record-form-variant", "Selecione o formulário");
         const select = element("select");
         select.setAttribute("data-gallery-form-variant", "");
@@ -275,12 +283,14 @@ export function createGalleryRecordActions({ document, host, loadEditor, saveEdi
         state.body.replaceChildren(label, button("Cancelar", "data-gallery-editor-cancel", "", close));
         state.variantPicker = bindSearchableFilterSelects(state.body, {selectionOnly:true});
         state.body.querySelector('[role=combobox]').focus();
+        task.complete();
         return;
       }
       if (!context?.entity || !context?.item?.fields || !context?.contract?.hasForm || context.contract.readOnly === true
         || !Array.isArray(context.columns) || !context.columns.length) {
         throw new Error("Não foi possível localizar os metadados de edição deste registro. Tente novamente.");
       }
+      task.acquired();
       const { renderDynamicForm } = await import("../../../../portal/ui/dynamic-form.js");
       if (!current()) return;
       state.body.replaceChildren();
@@ -338,10 +348,13 @@ export function createGalleryRecordActions({ document, host, loadEditor, saveEdi
         onRecovered: () => { if (active(state)) state.error.hidden = true; },
       });
       (state.body.querySelector('input:not([disabled]), select:not([disabled]), textarea:not([disabled])') || focusable(state)[0] || state.dialog).focus();
+      task.complete();
     } catch (error) {
       if (!current()) return;
       showError(state, error);
       editorRetry(state, options);
+    } finally {
+      task.stop();
     }
   }
 

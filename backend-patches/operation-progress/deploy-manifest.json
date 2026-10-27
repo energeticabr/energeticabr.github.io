@@ -1,0 +1,40 @@
+{
+  "files": [
+    {
+      "destination": "/opt/energetica-whatsapp/channel_bridge.py",
+      "candidate": "channel_bridge.py",
+      "before_sha256": "5443e696694487f01ea768f1aab0d77a5d31eb525cb9547fe2084819228a4b61",
+      "after_sha256": "275f8c6ffe52812405ca1e478825ebe4713b46223e25f9b81d0dae3bd9f7e574"
+    },
+    {
+      "destination": "/opt/energetica-whatsapp/diary_progress.py",
+      "candidate": "diary_progress.py",
+      "before_sha256": "6b4d63e837b4063184bdc8ff4fe7de427c5f69077ec892583c2e9a4ea9535782",
+      "after_sha256": "2241628dcbbff716fcf3151be85fbff5970c7112a065c121ee773a32e5701e7a"
+    },
+    {
+      "destination": "/opt/energetica-whatsapp/operation_progress.py",
+      "candidate": "operation_progress.py",
+      "before_sha256": null,
+      "after_sha256": "7f844f0eb09b51557f609a2fc003f320c2c4c628af4f578eeac37c76340be863"
+    },
+    {
+      "destination": "/home/opc/energetica-build/channel_bridge.py",
+      "candidate": "channel_bridge.py",
+      "before_sha256": "5443e696694487f01ea768f1aab0d77a5d31eb525cb9547fe2084819228a4b61",
+      "after_sha256": "275f8c6ffe52812405ca1e478825ebe4713b46223e25f9b81d0dae3bd9f7e574"
+    },
+    {
+      "destination": "/home/opc/energetica-build/diary_progress.py",
+      "candidate": "diary_progress.py",
+      "before_sha256": "6b4d63e837b4063184bdc8ff4fe7de427c5f69077ec892583c2e9a4ea9535782",
+      "after_sha256": "2241628dcbbff716fcf3151be85fbff5970c7112a065c121ee773a32e5701e7a"
+    },
+    {
+      "destination": "/home/opc/energetica-build/operation_progress.py",
+      "candidate": "operation_progress.py",
+      "before_sha256": null,
+      "after_sha256": "7f844f0eb09b51557f609a2fc003f320c2c4c628af4f578eeac37c76340be863"
+    }
+  ]
+}

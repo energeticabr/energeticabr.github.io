@@ -343,14 +343,25 @@ export async function appendAttachmentPdf(originalBlob, originalName, additions,
     if (inputBytes > MAX_BYTES) throw new Error('O tamanho total dos arquivos excede o limite de 60 MB.');
   }
   if (entries.length > MAX_PAGES) throw new Error('O PDF final não pode exceder 200 páginas.');
-  const progress = value => { checkAbort(signal); onProgress?.(value); checkAbort(signal); };
-  progress(0);
+  // Each source completes its read, inspection/parse, and appended pages;
+  // creating the output and serializing it are two additional real units.
+  const totalUnits = entries.length * 3 + 2;
+  const progress = (completed, detail) => {
+    checkAbort(signal);
+    const percent = Math.min(99, Math.floor(completed * 100 / totalUnits));
+    try { onProgress?.(percent, { ...detail, percent, completed, total: totalUnits, totalSources: entries.length }); }
+    catch { /* An optional observer must not fail PDF composition. */ }
+    checkAbort(signal);
+  };
+  progress(0, { phase: 'prepared', completedSources: 0 });
   const output = await PDFDocument.create();
   checkAbort(signal);
+  progress(1, { phase: 'created', completedSources: 0 });
   for (const [index, entry] of entries.entries()) {
     checkAbort(signal);
     const bytes = new Uint8Array(await entry.blob.arrayBuffer());
     checkAbort(signal);
+    progress(2 + index * 3, { phase: 'read', completedSources: index });
     if (entry.kind === 'pdf') {
       let source, count;
       try {
@@ -364,6 +375,7 @@ export async function appendAttachmentPdf(originalBlob, originalName, additions,
       }
       if (!count) throw new Error('O PDF selecionado está vazio, sem páginas.');
       if (output.getPageCount() + count > MAX_PAGES) throw new Error('O PDF final não pode exceder 200 páginas.');
+      progress(3 + index * 3, { phase: 'parsed', completedSources: index, totalPages: count });
       await rejectDigitalSignatures(source, signal);
       checkAbort(signal);
       flattenExistingAppearances(source, signal);
@@ -374,12 +386,15 @@ export async function appendAttachmentPdf(originalBlob, originalName, additions,
       for (let page = 0; page < count; page++) {
         checkAbort(signal);
         output.addPage(copied[page]);
-        progress(Math.floor(5 + 85 * (index + (page + 1) / count) / entries.length));
+        progress(3 + index * 3 + (page + 1) / count, {
+          phase: 'append', completedSources: index + (page + 1 === count ? 1 : 0), appendedPages: page + 1, totalPages: count,
+        });
         if (page % 10 === 9) { await new Promise(resolve => setTimeout(resolve, 0)); checkAbort(signal); }
       }
     } else {
       if (output.getPageCount() >= MAX_PAGES) throw new Error('O PDF final não pode exceder 200 páginas.');
       const metadata = inspectImage(bytes, signal);
+      progress(3 + index * 3, { phase: 'inspected', completedSources: index, totalPages: 1 });
       let image;
       try {
         if (metadata.type === 'jpeg') image = await output.embedJpg(bytes);
@@ -399,14 +414,15 @@ export async function appendAttachmentPdf(originalBlob, originalName, additions,
         throw new Error(`Não foi possível converter a imagem em PDF. ${cause?.message || 'Imagem inválida ou não suportada.'}`, { cause });
       }
       addImagePage(output, image, metadata.type === 'jpeg' ? jpegOrientation(bytes) : 1);
-      progress(Math.floor(5 + 85 * (index + 1) / entries.length));
+      progress(4 + index * 3, { phase: 'append', completedSources: index + 1, appendedPages: 1, totalPages: 1 });
     }
   }
-  progress(95);
+  progress(totalUnits - 1, { phase: 'serialize', completedSources: entries.length });
   const bytes = await output.save({ updateFieldAppearances: false });
   checkAbort(signal);
   if (bytes.byteLength > MAX_BYTES) throw new Error('O PDF gerado excede o limite de 60 MB.');
-  progress(99);
   const name = String(originalName || originalBlob.name || 'anexo').split(/[\\/]/).at(-1).replace(/\.[^.]+$/, '') || 'anexo';
-  return new File([bytes], `${name}.pdf`, { type: 'application/pdf' });
+  const result = new File([bytes], `${name}.pdf`, { type: 'application/pdf' });
+  progress(totalUnits, { phase: 'ready', completedSources: entries.length });
+  return result;
 }

@@ -37,6 +37,37 @@ const draft = supplier => ({ supplier, month: '2026-10', lines: [
   { date: '2026-10-31', rubric: 'vacation', quantity: '1', unitValue: '' },
 ] });
 
+test('breakdown progress waits for confirmed IDs and leaves journal recovery intact', async () => {
+  const f = fixture(), supplier = (await f.data.loadSuppliers())[0], events = [], journal = { operationId: 'measured-breakdown' };
+  const get = f.repo.getItem; let release;
+  f.repo.getItem = (...args) => args[1] === 'DESCRITIVOPROVISAO' && args[2] === '1'
+    ? new Promise(resolve => { release = async () => resolve(await get(...args)); }) : get(...args);
+  const posting = f.data.post(draft(supplier), journal, event => { if (event) events.push(event); });
+  await new Promise(resolve => setImmediate(resolve));
+  assert.ok(journal.lines['2026-10-02:salary'].parent.id, 'ID is checkpointed before readback');
+  assert.ok(events.some(event => event.percent > 0 && event.percent < 100));
+  assert.equal(events.some(event => event.stage === 'parent:2026-10-02:salary'), false, 'checkpoint alone does not confirm acquisition');
+  release(); await posting;
+  assert.ok(events.some(event => event.stage === 'parent:2026-10-02:salary'));
+  assert.ok(events.some(event => event.stage === 'payroll:2026-10-02:salary'));
+  assert.equal(events.at(-1).percent, 100); assert.equal(journal.percent, undefined);
+  f.repo.getItem = get; const writes = f.writes.length;
+  await f.data.post(draft(supplier), journal); assert.equal(f.writes.length, writes);
+});
+
+test('attachment preparation reports each completed file read while the next file is pending', async () => {
+  const f = fixture(), events = []; let release;
+  const first = new File(['abc'], 'first.pdf', { type: 'application/pdf' });
+  const second = { name: 'second.pdf', size: 3, type: 'application/pdf',
+    arrayBuffer: () => new Promise(resolve => { release = () => resolve(new TextEncoder().encode('def').buffer); }) };
+  const reading = f.data.prepareFiles([first, second], { onProgress: event => events.push(event) });
+  await new Promise(resolve => setImmediate(resolve));
+  assert.ok(events.some(event => event.percent > 0 && event.percent < 100));
+  assert.ok(events.every(event => event.percent < 100));
+  release(); assert.equal((await reading).length, 2); assert.equal(events.at(-1).percent, 100);
+  assert.equal(f.writes.length, 0);
+});
+
 test('prepara Graph e anexos SharePoint antes de abrir o formulário', async () => {
   const f = fixture(), requests = [];
   const data = createPayrollBreakdownData({ repository: f.repo, tokenProvider: async scopes => { requests.push(scopes); return 'token'; } });

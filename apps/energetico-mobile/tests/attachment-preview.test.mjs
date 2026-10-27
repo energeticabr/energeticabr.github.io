@@ -244,18 +244,18 @@ test('busy append excludes duplicate choices, keeps Close available and caps pro
   const status = documentRef.querySelector('.attachment-preview-status');
   assert.equal(button.disabled, true);
   assert.equal(documentRef.querySelector('.attachment-preview-close').disabled, false);
-  assert.equal(status.querySelector('[role="progressbar"]').getAttribute('aria-valuenow'), '0');
+  assert.equal(status.querySelector('[role="progressbar"]').getAttribute('aria-valuenow'), '33');
   assert.ok(status.querySelector('.app-loading__spinner'));
   documentRef.querySelector('[data-preview-action="append-camera"]').dispatchEvent(new dom.window.MouseEvent('click', { bubbles: true }));
   button.dispatchEvent(new dom.window.MouseEvent('click', { bubbles: true }));
   assert.equal(calls, 1);
   context.onProgress({ percent: null });
-  assert.equal(status.querySelector('[role="progressbar"]').hasAttribute('aria-valuenow'), false);
+  assert.equal(status.querySelector('[role="progressbar"]').getAttribute('aria-valuenow'), '33');
   context.onProgress({ percent: 45 });
-  assert.equal(status.querySelector('[role="progressbar"]').textContent, '45%');
+  assert.equal(status.querySelector('[role="progressbar"]').textContent, '48%');
   context.onProgress({ percent: 100 });
   documentRef.querySelector('.attachment-preview-image').dispatchEvent(new dom.window.Event('load'));
-  assert.equal(status.querySelector('[role="progressbar"]').textContent, '99%');
+  assert.equal(status.querySelector('[role="progressbar"]').textContent, '66%');
   assert.equal(documentRef.querySelector('h2').textContent, 'foto.png');
   finish({ blob: new Blob(['%PDF-confirmed'], { type: 'application/pdf' }), fileName: 'confirmado.pdf' });
   await afterPreviewAction();
@@ -342,7 +342,7 @@ test('append menu supports arrow navigation and Escape without closing the previ
   assert.equal(documentRef.querySelector('dialog').open, true);
 });
 
-test('attachment loader shows real download percentage next to the spinner and waits for PDF rendering before 100%', async t => {
+test('measured attachment loader uses actual download bytes and waits for PDF rendering before 100%', async t => {
   let progress, finishDownload, finishPdf;
   const { preview, documentRef } = setup(t, { loadPdfPreview: async () => ({ createPdfPreview: () => ({
     ready: new Promise(resolve => { finishPdf = resolve; }), destroy() {},
@@ -352,14 +352,14 @@ test('attachment loader shows real download percentage next to the spinner and w
     return new Promise(resolve => { finishDownload = resolve; });
   }, 'large.pdf');
   const percent = () => documentRef.querySelector('.attachment-preview-status [role="progressbar"]');
-  assert.equal(percent()?.getAttribute('aria-valuenow'), '0');
+  assert.equal(percent()?.getAttribute('aria-valuenow'), '33');
   assert.ok(percent().parentElement.querySelector('.app-loading__spinner'));
   progress({ loaded: 4, total: 8, percent: 50 });
   assert.equal(percent().textContent, '50%');
   progress({ loaded: 8, total: 8, percent: 100 });
   finishDownload(new Blob(['%PDF'], { type: 'application/pdf' }));
   for (let i = 0; i < 3; i++) await new Promise(resolve => setImmediate(resolve));
-  assert.equal(percent().getAttribute('aria-valuenow'), '99');
+  assert.equal(percent().getAttribute('aria-valuenow'), '66');
   assert.equal(documentRef.querySelector('.attachment-preview-sign').disabled, true);
   finishPdf(); await pending;
   assert.equal(percent().getAttribute('aria-valuenow'), '100');
@@ -386,7 +386,7 @@ for (const kind of ['video', 'audio']) test(`${kind} waits for decoded data rath
   await preview.open(new Blob(['media'], { type: `${kind}/mp4` }), kind === 'audio' ? 'audio.m4a' : 'video.mp4');
   const media = documentRef.querySelector(kind);
   media.dispatchEvent(new dom.window.Event('loadedmetadata'));
-  assert.equal(documentRef.querySelector('[role="progressbar"]').textContent, '99%');
+  assert.equal(documentRef.querySelector('[role="progressbar"]').textContent, '66%');
   media.dispatchEvent(new dom.window.Event('loadeddata'));
   assert.equal(documentRef.querySelector('[role="progressbar"]').textContent, '100%');
 });
@@ -408,7 +408,7 @@ test('closing or replacing the attachment aborts its download and ignores its la
   const second = preview.open(new Promise(() => {}), 'new.txt');
   assert.equal(firstSignal?.aborted, true);
   firstProgress({ percent: 95, loaded: 95, total: 100 });
-  assert.equal(documentRef.querySelector('[role="progressbar"]').textContent, '0%');
+  assert.equal(documentRef.querySelector('[role="progressbar"]').textContent, '33%');
   finishFirst(new Blob(['old'], { type: 'text/plain' })); await first;
   assert.equal(documentRef.querySelector('h2').textContent, 'new.txt');
   preview.close();
@@ -445,20 +445,47 @@ test('attachments inside gallery editors use the app loader, retain collection n
   finish(new Blob(['late'], { type: 'text/plain' }));
 });
 
-test('unknown attachment size is explicitly indeterminate and download errors never reach 100%', async t => {
+test('measured unknown attachment size keeps completed stages and real bytes without inventing a total', async t => {
   const { preview, documentRef } = setup(t);
   let progress, fail;
   const pending = preview.open(({ onProgress }) => { progress = onProgress; return new Promise((_, reject) => { fail = reject; }); }, 'unavailable.pdf');
   progress({ percent: null, loaded: 200, total: null });
   const badge = documentRef.querySelector('[role="progressbar"]');
-  assert.equal(badge.hasAttribute('aria-valuenow'), false);
-  assert.equal(badge.textContent, '—%');
-  assert.match(badge.getAttribute('aria-valuetext'), /não informado/);
+  assert.equal(badge.getAttribute('aria-valuenow'), '33');
+  assert.equal(badge.textContent, '33%');
+  assert.match(badge.getAttribute('aria-label'), /etapas/i);
+  assert.match(documentRef.querySelector('.app-loading__text').textContent, /200/);
+  assert.match(documentRef.querySelector('.app-loading__text').textContent, /total não informado/i);
   fail(new Error('offline')); await pending;
   assert.equal(documentRef.querySelector('[role="progressbar"]'), null);
   assert.match(documentRef.querySelector('.attachment-preview-status').textContent, /não está disponível/);
   assert.doesNotThrow(() => progress({ percent: 100 }));
   assert.equal(documentRef.querySelector('[role="progressbar"]'), null);
+});
+
+test('measured attachment preparation accepts PDF parse and render callbacks but ignores stale completion', async t => {
+  let report, finish;
+  const { preview, documentRef } = setup(t, { loadPdfPreview: async () => ({ createPdfPreview: ({ onProgress }) => {
+    report = onProgress;
+    return { ready: new Promise(resolve => { finish = resolve; }), destroy() {} };
+  } }) });
+  const pending = preview.open(new Blob(['%PDF'], { type: 'application/pdf' }), 'pages.pdf');
+  await afterPreviewAction();
+  const badge = () => documentRef.querySelector('[role="progressbar"]');
+  assert.equal(badge().getAttribute('aria-valuenow'), '66');
+  assert.equal(typeof report, 'function');
+  report({ percent: 50, phase: 'parsed' });
+  assert.equal(badge().getAttribute('aria-valuenow'), '82');
+  report({ percent: 75, phase: 'render', renderedPages: 1, totalPages: 2 });
+  assert.equal(badge().getAttribute('aria-valuenow'), '90');
+  report({ percent: 100, phase: 'ready' });
+  assert.equal(badge().getAttribute('aria-valuenow'), '99');
+  finish(); await pending;
+  assert.equal(badge().getAttribute('aria-valuenow'), '100');
+  const next = preview.open(new Promise(() => {}), 'next.txt');
+  report({ percent: 100 });
+  assert.equal(badge().getAttribute('aria-valuenow'), '33');
+  preview.close(); void next;
 });
 for (const layout of ['report-pdf', 'flow-summary']) test(`${layout} has one emoji close and no duplicate return button, including loading and errors`, async t => {
   const { preview, documentRef, dom } = setup(t, { loadPdfPreview: async () => ({ createPdfPreview: () => ({ ready: Promise.resolve(), destroy() {} }) }) });
@@ -1030,7 +1057,7 @@ test("navegador desktop abre o PDF no leitor nativo quando o PDF.js falha", asyn
   assert.ok(frame, "o leitor nativo do navegador deve substituir a mensagem de erro");
   assert.equal(frame.title, "comprovante.pdf");
   assert.equal(frame.src, "blob:preview-1");
-  assert.equal(documentRef.querySelector('[role="progressbar"]').getAttribute('aria-valuenow'), '99');
+  assert.equal(documentRef.querySelector('[role="progressbar"]').getAttribute('aria-valuenow'), '82');
   frame.dispatchEvent(new documentRef.defaultView.Event('load'));
   assert.equal(documentRef.querySelector('[role="progressbar"]').getAttribute('aria-valuenow'), '100');
   assert.match(documentRef.querySelector(".attachment-preview-status").textContent, /leitor do navegador/i);
@@ -1067,4 +1094,31 @@ test("erro da rede fica na janela e resposta atrasada após fechar não altera o
   await ready;
   assert.equal(documentRef.querySelector("dialog").open, false);
   assert.equal(documentRef.querySelector("textarea").value, "rascunho preservado");
+});
+for (const numPages of [3, 30]) test(`outer PDF badge stays below 100 for a usable partial ${numPages}-page preview`, async t => {
+  let renderError;
+  const pdf = { numPages, async getPage(number) {
+    return { getViewport: ({ scale }) => ({ width: 600 * scale, height: 900 * scale }), cleanup() {},
+      render: () => ({ promise: number === 2 ? Promise.reject(new Error('damaged page')) : Promise.resolve(), cancel() {} }) };
+  } };
+  const { preview, documentRef, dom } = setup(t, {
+    loadPdfPreview: async () => ({ createPdfPreview: options => {
+      const viewer = createPdfPreview({ ...options,
+        loadPdfJs: async () => ({ getDocument: () => ({ promise: Promise.resolve(pdf), destroy() {} }) }) });
+      viewer.ready.catch(error => { renderError = error; });
+      return viewer;
+    } }),
+  });
+  dom.reconfigure({ url: 'https://example.test/energetico/' });
+  dom.window.HTMLCanvasElement.prototype.getContext = () => ({});
+  Object.defineProperties(dom.window.HTMLElement.prototype, {
+    clientWidth: { configurable: true, get() { return this.matches('.attachment-preview-pdf-viewport') ? 360 : 0; } },
+    clientHeight: { configurable: true, get() { return this.matches('.attachment-preview-pdf-viewport') ? 600 : 0; } },
+  });
+  await preview.open(new Blob(['%PDF'], { type: 'application/pdf' }), 'partial.pdf', { layout: 'report-pdf' });
+  const badge = documentRef.querySelector('[role=progressbar]');
+  assert.ok(badge, 'retain the measured partial badge beside the explanation: ' + documentRef.querySelector('.attachment-preview-status')?.textContent + ' / ' + documentRef.querySelector('.attachment-preview-explanation')?.textContent + ' / ' + renderError?.stack);
+  assert.ok(Number(badge.getAttribute('aria-valuenow')) < 100);
+  assert.ok(documentRef.querySelector('.attachment-preview-pdf-canvas'));
+  assert.match(documentRef.querySelector('.attachment-preview-status').textContent, /parcial|não pôde/i);
 });

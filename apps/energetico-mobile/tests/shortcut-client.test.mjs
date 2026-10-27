@@ -85,3 +85,16 @@ test("propaga erro seguro da VM e não aceita sucesso truncado", async () => {
   });
   await assert.rejects(truncated.issue(), /confirmação válida/);
 });
+test("credential status emits completed authentication and response stages while preserving secret filtering", async () => {
+  let finish;
+  const seen = [];
+  const client = createShortcutClient({ apiBaseUrl: "https://vm.example", tokenProvider: async () => "test-token",
+    fetchImpl: async () => new Promise(resolve => { finish = resolve; }) });
+  const pending = client.status({ onProgress: value => seen.push(value) });
+  await new Promise(setImmediate);
+  assert.ok(seen.some(value => value.percent > 0 && value.percent < 100));
+  finish(new Response(JSON.stringify({ status: "active", token: "secret-must-stay-filtered" })));
+  assert.deepEqual(await pending, { status: "active" });
+  assert.equal(seen.at(-1).percent, 100);
+  assert.ok(seen.every(value => !JSON.stringify(value).includes("secret-must-stay-filtered")));
+});

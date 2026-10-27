@@ -11,6 +11,24 @@ import { ensurePayrollTaxLink, assertPayrollTaxStorage } from './payroll-tax-lin
 import { payrollLaunchReferenceColumn, ensurePayrollLaunchSchema, confirmPayrollLaunchReference, compatiblePayrollLaunchLink,
   payrollLaunchLinkFilter, payrollCreationKey, payrollOriginKey, withPayrollWriteLock, ensurePayrollCreation, assertPayrollCreationStorage } from './payroll-launch-reference.js';
 const SITE = "personal";
+// Per-call finite work plans. Unknown page totals are reported as counts only.
+// Observers are optional UI: they must never change a financial operation's result.
+export function createPayrollProgress(onProgress, stages) {
+  const values = new Map(stages.map(stage => [stage, 0]));
+  function report(stage, percent, detail = {}) {
+    if (!values.has(stage)) return;
+    if (typeof percent === 'number' && Number.isFinite(percent) && percent >= 0 && percent <= 100)
+      values.set(stage, Math.max(values.get(stage), percent / 100));
+    const units = [...values.values()];
+    try { onProgress?.({ ...detail, stage, percent: units.reduce((sum, value) => sum + value, 0) * 100 / units.length,
+      completed: units.filter(value => value === 1).length, total: units.length }); } catch { /* Detached progress observer. */ }
+  }
+  return {
+    done: (stage, detail) => report(stage, 100, detail),
+    child: stage => event => report(stage, event?.percent, event),
+    report,
+  };
+}
 const scalar = (value) =>
   value && typeof value === "object"
     ? String(value.LookupValue ?? value.Value ?? value.value ?? "")
@@ -122,23 +140,31 @@ export function createSupplierPayrollData({
     await ensurePayrollLaunchSchema({ repository, graph, assertSession, siteKey:SITE });
     descriptions.delete('LANCAMENTOS');
   }
-  async function describe(name) {
+  async function describe(name, { signal, onProgress } = {}) {
+    signal?.throwIfAborted();
     assertSession();
-    if (descriptions.has(name)) return descriptions.get(name);
-    const list = await repository.resolveList(SITE, [name]);
+    const loading = createPayrollProgress(onProgress, ['list', 'columns']);
+    if (descriptions.has(name)) { loading.done('list'); loading.done('columns'); return descriptions.get(name); }
+    const list = await repository.resolveList(SITE, [name], { signal });
+    signal?.throwIfAborted();
     if (!list?.id) throw new Error(`A lista ${name} não foi encontrada.`);
-    const columns = await repository.getColumns(SITE, list.id);
+    loading.done('list');
+    const columns = await repository.getColumns(SITE, list.id, { signal });
+    signal?.throwIfAborted();
     assertSession();
     const descriptor = { name, id: list.id, columns };
     descriptions.set(name, descriptor);
+    loading.done('columns');
     return descriptor;
   }
-  async function all(descriptor, filter = "") {
+  async function all(descriptor, filter = "", { signal, onProgress } = {}) {
+    const loading = createPayrollProgress(onProgress, ['pages']);
     const items = [];
     let cursor;
     const seen = new Set();
     for (let page = 1; page <= 100; page++) {
       assertSession();
+      signal?.throwIfAborted();
       const response = await repository.getItemsPage(
         SITE,
         descriptor.id,
@@ -147,14 +173,18 @@ export function createSupplierPayrollData({
           pageNumber: page,
           maxPages: 100,
           cursor,
+          signal,
           headers: { Prefer: "HonorNonIndexedQueriesWarningMayFailRandomly" },
         },
       );
       assertSession();
+      signal?.throwIfAborted();
       if (!Array.isArray(response?.items) || typeof response.hasMore !== 'boolean')
         throw new Error('A consulta da folha não pôde ser confirmada.');
       items.push(...response.items);
-      if (!response.hasMore) return items;
+      const detail = { completedPages: page, completedItems: items.length };
+      if (!response.hasMore) { loading.done('pages', detail); return items; }
+      loading.report('pages', undefined, detail);
       if (!response.nextLink || seen.has(response.nextLink))
         throw new Error("A consulta da folha não pôde ser concluída.");
       seen.add(response.nextLink);
@@ -162,8 +192,9 @@ export function createSupplierPayrollData({
     }
     throw new Error("Há mais registros do que o limite da consulta da folha.");
   }
-  async function source(name) {
-    const descriptor = await describe(name);
+  async function source(name, { signal, onProgress } = {}) {
+    const loading = createPayrollProgress(onProgress, ['schema', 'items', 'options']);
+    const descriptor = await describe(name, { signal, onProgress: loading.child('schema') });
     const definitions = SOURCES[name];
     const resolved = Object.fromEntries(
       Object.entries(definitions).map(([k, aliases]) => [
@@ -175,7 +206,8 @@ export function createSupplierPayrollData({
         ),
       ]),
     );
-    return (await all(descriptor))
+    const rows = await all(descriptor, '', { signal, onProgress: loading.child('items') });
+    const result = rows
       .map((item) => ({
         id: String(item.id),
         ...Object.fromEntries(
@@ -186,13 +218,14 @@ export function createSupplierPayrollData({
         ),
       }))
       .filter((item) => /^[1-9]\d*$/.test(item.id) && item.label);
+    loading.done('options', { completedItems: rows.length }); return result;
   }
-  const loadSuppliers = async () =>
-    (await source("FORNECEDORES"))
+  const loadSuppliers = async (options) =>
+    (await source("FORNECEDORES", options))
       .filter((s) => key(s.status) === "ATIVO" && key(s.contractor) === "SIM")
       .sort((a, b) => a.label.localeCompare(b.label, "pt-BR"));
-  const loadProducts = async (supplier) =>
-    (await source("CADASTROPRODUTO"))
+  const loadProducts = async (supplier, options) =>
+    (await source("CADASTROPRODUTO", options))
       .filter((p) => key(p.status) === "ATIVO" && key(p.type) === "DESPESA")
       .map((p) => ({
         ...p,
@@ -205,24 +238,24 @@ export function createSupplierPayrollData({
           Number(b.recommended) - Number(a.recommended) ||
           a.label.localeCompare(b.label, "pt-BR"),
       );
-  const loadAccounts = async () => source("CADASTROCONTA");
-  const loadStages = async (supplier) =>
-    (await source("LANCAMENTOOBRA")).filter(
+  const loadAccounts = async (options) => source("CADASTROCONTA", options);
+  const loadStages = async (supplier, options) =>
+    (await source("LANCAMENTOOBRA", options)).filter(
       (s) => key(s.branch) === key(supplier.branch),
     );
-  const registeredSheets = async (supplier) =>
-    (await source("IDFOLHA")).filter(
+  const registeredSheets = async (supplier, options) =>
+    (await source("IDFOLHA", options)).filter(
       (s) => key(s.supplier) === key(supplier.label),
     );
-  async function loadSheets(supplier, {competence} = {}) {
+  async function loadSheets(supplier, {competence, ...options} = {}) {
     if (competence !== undefined) {
       const month = payrollCompetenceMonth(competence);
       if (!month) throw new Error('Informe uma competência válida.');
-      return (await registeredSheets(supplier)).filter(s => payrollCompetenceMonth(s.label) === month);
+      return (await registeredSheets(supplier, options)).filter(s => payrollCompetenceMonth(s.label) === month);
     }
     const current = currentMonth(now());
     const order = [current, shiftMonth(current, 1), shiftMonth(current, -1)];
-    return (await registeredSheets(supplier))
+    return (await registeredSheets(supplier, options))
       .filter((s) => order.includes(monthKey(s.label)))
       .map((s) => ({ ...s, recommended: monthKey(s.label) === current }))
       .sort(
@@ -331,12 +364,18 @@ export function createSupplierPayrollData({
       IDFOLHA: Number(sheet.id),
     };
   }
-  async function post(rawDraft, progress) {
+  async function post(rawDraft, progress, onProgress) {
     if (posting) throw new Error("A folha já está sendo postada.");
     operation(progress);
     posting = true;
     try {
       const draft = validatePayrollDraft(rawDraft);
+      const hasNormal = draft.lines.some(line => !payrollTaxType(line.payrollType));
+      const hasTax = draft.lines.some(line => payrollTaxType(line.payrollType));
+      const loading = createPayrollProgress(onProgress, ['supplier', 'products', 'accounts', 'stages',
+        ...(hasNormal ? ['sheets'] : []), ...(hasTax ? ['taxSheets'] : []), 'payrollSchema', 'launchSchema', 'validated', 'linked',
+        ...draft.lines.flatMap(line => [`launch:${line.rubric}`, `payroll:${line.rubric}`, `verified:${line.rubric}`,
+          ...line.files.map(file => `attachment:${line.rubric}:${file.name}`)])]);
       assertSession();assertPayrollCreationStorage(storage);
       const fingerprint = JSON.stringify({
         ...draft,
@@ -353,7 +392,7 @@ export function createSupplierPayrollData({
         throw new Error(
           "A folha não pode ser alterada depois de iniciar a postagem.",
         );
-      const suppliers = await loadSuppliers();
+      const suppliers = await loadSuppliers({ onProgress: loading.child('supplier') });
       const supplier = suppliers.find((s) => s.id === draft.supplier.id);
       if (
         !supplier ||
@@ -363,18 +402,16 @@ export function createSupplierPayrollData({
         throw new Error(
           "O fornecedor ou sua filial foi alterado; revise o cadastro.",
         );
-      const hasNormal = draft.lines.some(line => !payrollTaxType(line.payrollType));
-      const hasTax = draft.lines.some(line => payrollTaxType(line.payrollType));
       if (hasTax && !progress.fingerprint) assertPayrollTaxStorage(storage);
       const [products, accounts, stages, sheets, taxSheets] = await Promise.all([
-        loadProducts(supplier),
-        loadAccounts(),
-        loadStages(supplier),
+        loadProducts(supplier, { onProgress: loading.child('products') }),
+        loadAccounts({ onProgress: loading.child('accounts') }),
+        loadStages(supplier, { onProgress: loading.child('stages') }),
         // Once posting starts, keep its validated sheet across month rollover.
         !hasNormal ? [] : progress.fingerprint
-          ? registeredSheets(supplier)
-          : loadSheets(supplier),
-        hasTax ? loadSheets(supplier, {competence:draft.taxCompetence}) : [],
+          ? registeredSheets(supplier, { onProgress: loading.child('sheets') })
+          : loadSheets(supplier, { onProgress: loading.child('sheets') }),
+        hasTax ? loadSheets(supplier, {competence:draft.taxCompetence, onProgress: loading.child('taxSheets')}) : [],
       ]);
       const product = products.find((p) => p.id === draft.product.id),
         stage = stages.find((s) => s.id === draft.stage.id);
@@ -389,7 +426,7 @@ export function createSupplierPayrollData({
       if (hasTax && (taxSheets.length !== 1 || !taxSheet || payrollCompetenceMonth(taxSheet.label) !== payrollCompetenceMonth(draft.taxCompetence)))
         throw new Error('Selecione um IDFOLHA único desse fornecedor para a competência de INSS/FGTS.');
       const sheet = normalSheet || taxSheet;
-      const payrollDescriptor = await describe("FOLHAPGTO");
+      const payrollDescriptor = await describe("FOLHAPGTO", { onProgress: loading.child('payrollSchema') });
       writableColumn(payrollDescriptor, "Title");
       writableColumn(payrollDescriptor, "IDLANCAMENTO");
       for (const line of draft.lines)
@@ -397,7 +434,7 @@ export function createSupplierPayrollData({
           payrollDescriptor,
           payrollValues({ ...draft, supplier }, payrollTaxType(line.payrollType) ? taxSheet : sheet, line),
         );
-      const descriptor = await describe("LANCAMENTOS");
+      const descriptor = await describe("LANCAMENTOS", { onProgress: loading.child('launchSchema') });
       if (!payrollLaunchReferenceColumn(descriptor.columns)) throw new Error('IDFOLHA de LANCAMENTOS não está disponível; nenhum pagamento foi criado.');
       const values = draft.lines.map((line) => {
         const account = accounts.find((a) => a.id === line.account.id);
@@ -437,6 +474,7 @@ export function createSupplierPayrollData({
         );
       });
       column(descriptor.columns, ["__PowerAppsId__"]);
+      loading.done('validated');
       progress.fingerprint = fingerprint;
       progress.lines ??= {};
       const lines = [];
@@ -459,9 +497,11 @@ export function createSupplierPayrollData({
           },
         );
         saved.id = id;
+        loading.done(`launch:${line.rubric}`);
         const postedLine = { ...line, id };
         // A receipt failure must never leave a launch without its payroll link.
         await linkPayroll({ ...draft, supplier, product, stage, sheet, ...(hasTax ? {taxSheet} : {}), lines:[postedLine] }, sheet.id, progress);
+        loading.done(`payroll:${line.rubric}`);
         if (line.files.length) {
           const existing = await repository.listAttachments(
             SITE,
@@ -481,6 +521,7 @@ export function createSupplierPayrollData({
               if (!verified.some((a) => (a.name ?? a.fileName) === file.name))
                 throw new Error("O SharePoint não confirmou o comprovante.");
             }
+            loading.done(`attachment:${line.rubric}:${file.name}`);
           }
         }
         lines.push(postedLine);
@@ -490,9 +531,11 @@ export function createSupplierPayrollData({
           fields:{...values[index],[column(descriptor.columns,['__PowerAppsId__']).name]:`APP-folha-${progress.operationId}-${lines[index].rubric}`},
           readItem:id=>repository.getItem(SITE,descriptor.id,id,'$expand=fields'),
           updateItem:async()=>{throw new Error('A referência IDFOLHA mudou durante o envio; confira antes de concluir.');} });
+        loading.done(`verified:${lines[index].rubric}`);
       }
       const result = { ...draft, supplier, product, stage, sheet, ...(hasTax ? {taxSheet} : {}), lines };
       const linked = await linkPayroll(result, sheet.id, progress);
+      loading.done('linked');
       return { ...result, sheet: linked.sheet };
     } finally {
       posting = false;

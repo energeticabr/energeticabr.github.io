@@ -34,7 +34,8 @@ function loading(root) {
   assert.ok(screen.querySelector('.app-loading__spinner'));
   const spinner = screen.querySelector('.app-loading__spinner');
   assert.equal(spinner.nextElementSibling?.getAttribute('role'), 'progressbar');
-  assert.equal(spinner.nextElementSibling?.textContent, '0%');
+  assert.equal(spinner.nextElementSibling?.textContent, '33%');
+  assert.match(spinner.nextElementSibling?.getAttribute('aria-label'), /etapas concluídas/);
   const header = root.querySelector(':scope > header');
   assert.notEqual(header.inert, true);
   for (const content of [...root.children].filter(node => node !== header && node !== screen)) {

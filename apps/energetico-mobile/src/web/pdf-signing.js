@@ -218,11 +218,27 @@ export async function signPdfAttachment({
   signedAt = new Date(),
   integrityId = "",
   verificationUrl = "",
+  onProgress,
+  signal,
 } = {}) {
   if (!documentBlob || typeof documentBlob.arrayBuffer !== "function") throw new TypeError("PDF de origem inválido.");
   if (!signatureBlob || typeof signatureBlob.arrayBuffer !== "function") throw new TypeError("Imagem de assinatura inválida.");
 
-  const pdf = await PDFDocument.load(await documentBlob.arrayBuffer());
+  const total = 7 + (stampBlob ? 2 : 0);
+  let completed = 0;
+  const progress = (phase, advance = true) => {
+    const checkAbort = () => { if (signal?.aborted) throw new DOMException('Assinatura do PDF cancelada.', 'AbortError'); };
+    checkAbort();
+    if (advance) completed += 1;
+    try { onProgress?.({ percent: Math.floor(completed * 100 / total), completed, total, phase }); }
+    catch { /* An optional observer must not fail signing. */ }
+    checkAbort();
+  };
+  progress('prepared', false);
+  const data = await documentBlob.arrayBuffer();
+  progress('read');
+  const pdf = await PDFDocument.load(data);
+  progress('parsed');
   const pages = pdf.getPages();
   const pageNumber = Number(point?.page);
   if (!Number.isInteger(pageNumber) || pageNumber < 1 || pageNumber > pages.length) {
@@ -242,9 +258,11 @@ export async function signPdfAttachment({
     }
     const stampPage = pages[stampPageNumber - 1];
     const stamp = await embedSignature(pdf, stampBlob);
+    progress('stamp');
     await drawBernardoStampCard(pdf, stampPage, stamp, stampPoint, {
       signedAt,
     });
+    progress('stamp-drawn');
   }
 
   const scale = boundedScale(point?.scale, MIN_SCALE, MAX_SCALE);
@@ -271,6 +289,7 @@ export async function signPdfAttachment({
   const bottom = bounded(centerY - markerHeight / 2, 0, Math.max(0, pageHeight - markerHeight));
 
   const signature = await embedSignature(pdf, signatureBlob);
+  progress('signature');
   if (hasIntegrity) {
     await drawSignatureRecordCard(pdf, page, signature, {left, bottom, width:markerWidth, height:markerHeight,
       captionRatio:markerGeometry.captionRatio, signerName:printableText(signerName) || 'USUÁRIO',
@@ -411,9 +430,14 @@ export async function signPdfAttachment({
       color: paymentBorderColor, thickness: 1.2 });
   }
   }
+  progress('drawn');
   await pdf.flush();
+  progress('flushed');
   normalizeObjectGenerations(pdf.context);
+  progress('normalized');
   // Use a conventional xref table for compatibility with strict audit readers.
   const bytes = await pdf.save({ useObjectStreams: false });
-  return new Blob([bytes], { type: "application/pdf" });
+  const result = new Blob([bytes], { type: "application/pdf" });
+  progress('ready');
+  return result;
 }

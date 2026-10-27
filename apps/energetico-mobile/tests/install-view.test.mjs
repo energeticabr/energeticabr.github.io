@@ -1,9 +1,57 @@
 import test from "node:test";
 import assert from "node:assert/strict";
+import { JSDOM } from "jsdom";
 
 import * as installView from "../src/web/install-view.js";
 
 const { isStandaloneDisplay, renderInstallMarkup } = installView;
+
+test('measured credential progress persists through rerenders and ignores an older generation', async t => {
+  const dom = new JSDOM('<aside></aside>'), root = dom.window.document.querySelector('aside');
+  const requests = [];
+  const view = installView.createInstallView(root, { standalone: true, client: {
+    status: options => new Promise(resolve => requests.push({ ...options, resolve })),
+  } });
+  t.after(() => { view.destroy(); dom.window.close(); });
+  view.setReady(true);
+  const first = view.open();
+  const percent = () => root.querySelector('[role="progressbar"]')?.getAttribute('aria-valuenow');
+  assert.equal(percent(), '33');
+  assert.equal(typeof requests[0].onProgress, 'function');
+  requests[0].onProgress({ percent: 50 });
+  assert.equal(percent(), '50');
+  view.setReady(true);
+  assert.equal(requests.length, 1);
+  assert.equal(percent(), '50');
+  root.querySelector('button[data-tool-action="close"]').click();
+  assert.equal(requests[0].signal.aborted, true);
+  const second = view.open();
+  assert.equal(percent(), '33');
+  requests[0].onProgress({ percent: 100 });
+  requests[0].resolve({ status: 'active' }); await first;
+  assert.equal(percent(), '33');
+  requests[1].resolve({ status: 'inactive' }); await second;
+  assert.match(root.textContent, /Configurar compartilhamento/);
+  assert.equal(root.querySelector('[role="progressbar"]'), null);
+});
+
+test('measured credential status cancellation preserves an already submitted issue operation', async t => {
+  const dom = new JSDOM('<aside></aside>'), root = dom.window.document.querySelector('aside');
+  let finishIssue, issued = 0;
+  const view = installView.createInstallView(root, { standalone: true, client: {
+    status: async () => ({ status: 'inactive' }),
+    issue: () => { issued++; return new Promise(resolve => { finishIssue = resolve; }); },
+  } });
+  t.after(() => { view.destroy(); dom.window.close(); });
+  view.setReady(true); await view.open();
+  root.querySelector('[data-tool-action="issue"]').click();
+  root.querySelector('button[data-tool-action="close"]').click();
+  finishIssue({ token: 'test-credential', uploadUrl: '/upload' });
+  await new Promise(resolve => setImmediate(resolve));
+  await view.open();
+  assert.equal(root.querySelector('[data-role="shortcut-token"]')?.textContent, 'test-credential');
+  assert.equal(issued, 1);
+});
 
 test("detecta instalação tanto pelo padrão Web quanto pelo sinal do iOS", () => {
   assert.equal(isStandaloneDisplay({ matchMedia: () => ({ matches: true }), navigatorRef: {} }), true);

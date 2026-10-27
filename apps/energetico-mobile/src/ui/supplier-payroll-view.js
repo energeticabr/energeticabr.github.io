@@ -8,7 +8,8 @@ import {
   validatePayrollDraft,
   validatePayrollLines,
 } from "../chat/supplier-payroll.js";
-import { createLoadingIndicator } from "./loading-indicator.js";
+import { createLoadingIndicator, updateLoadingIndicator } from "./loading-indicator.js";
+import { beginLoadingTask } from './loading-task.js';
 import { openPayrollReceiptPicker } from "./payroll-receipt-picker.js";
 import { payrollTaxType, payrollCompetenceMonth, previousPayrollCompetence } from '../chat/payroll-tax-competence.js';
 const money = (value) =>
@@ -80,6 +81,7 @@ export function createSupplierPayrollView({
     previousFocus = null;
   let accountPickers = null;
   let receiptPicker = null;
+  let loadingOperation = null;
   let suppliers = [],
     products = [],
     accounts = [],
@@ -145,6 +147,16 @@ export function createSupplierPayrollView({
   ) {
     if (busy || destroyed || !opened) return false;
     const attempt = epoch;
+    const operation = { abort: new AbortController(), snapshot: { percent: 0 }, loader: null };
+    loadingOperation = operation;
+    const isCurrent = () => {
+      if (destroyed || !opened || attempt !== epoch || loadingOperation !== operation) return false;
+      try { assertSession(); return true; } catch { return false; }
+    };
+    const task = operation.task = beginLoadingTask(value => {
+      operation.snapshot = value;
+      if (operation.loader) updateLoadingIndicator(operation.loader, { progress: value.percent, progressLabel: value.progressLabel });
+    }, { signal: operation.abort.signal, isCurrent });
     const assertCurrent = () => {
       assertSession();
       if (destroyed || !opened || attempt !== epoch)
@@ -156,14 +168,18 @@ export function createSupplierPayrollView({
     render(loadingLabel);
     try {
       assertCurrent();
-      await action(assertCurrent);
+      task.prepared();
+      await action(assertCurrent, { signal: operation.abort.signal, onProgress: task.report });
       assertCurrent();
+      task.acquired();
       busy = false;
       mutating = false;
       render();
       focus();
+      task.complete();
       return true;
     } catch (cause) {
+      task.stop();
       if (!destroyed && opened && attempt === epoch) {
         busy = false;
         mutating = false;
@@ -452,8 +468,8 @@ export function createSupplierPayrollView({
         showError(new Error("Selecione uma data válida."));
         return;
       }
-      return work(async (assertCurrent) => {
-        const loaded = await data.loadSuppliers();
+      return work(async (assertCurrent, options) => {
+        const loaded = await data.loadSuppliers(options);
         assertCurrent();
         suppliers = loaded;
         step = "supplier";
@@ -466,8 +482,8 @@ export function createSupplierPayrollView({
         showError(cause);
         return;
       }
-      return work(async (assertCurrent) => {
-        const loaded = await data.loadStages(draft.supplier);
+      return work(async (assertCurrent, options) => {
+        const loaded = await data.loadStages(draft.supplier, options);
         assertCurrent();
         stages = loaded;
         step = "stage";
@@ -475,8 +491,8 @@ export function createSupplierPayrollView({
     }
     if (step === 'tax-competence') {
       if (!payrollCompetenceMonth(draft.taxCompetence)) { showError(new Error('Informe uma competência válida.')); return; }
-      return work(async assertCurrent => {
-        const loaded = await data.loadSheets(draft.supplier, {competence:draft.taxCompetence});
+      return work(async (assertCurrent, options) => {
+        const loaded = await data.loadSheets(draft.supplier, {...options, competence:draft.taxCompetence});
         assertCurrent(); taxSheets = loaded; draft.taxSheet = null; step = 'tax-sheet';
       });
     }
@@ -506,6 +522,7 @@ export function createSupplierPayrollView({
     }
     if (busy) {
       epoch++;
+      loadingOperation?.abort.abort();
       busy = false;
     }
     back();
@@ -520,9 +537,10 @@ export function createSupplierPayrollView({
     backButton.disabled = mutating;
     homeButton.disabled = mutating;
     if (busy) {
-      content.append(
-        createLoadingIndicator(doc, loadingLabel || "Carregando folha…"),
-      );
+      const snapshot = loadingOperation?.snapshot;
+      const loader = createLoadingIndicator(doc, loadingLabel || "Carregando folha…", { progress: snapshot?.percent, progressLabel: snapshot?.progressLabel });
+      if (loadingOperation) loadingOperation.loader = loader;
+      content.append(loader);
       return;
     }
     if (step === "date") {
@@ -540,8 +558,8 @@ export function createSupplierPayrollView({
     if (step === "supplier") {
       heading("DESEJA EFETUAR A FOLHA DE QUAL FORNECEDOR?");
       choiceList(suppliers, (option) =>
-        work(async (assertCurrent) => {
-          const loaded = await data.loadProducts(option);
+        work(async (assertCurrent, options) => {
+          const loaded = await data.loadProducts(option, options);
           assertCurrent();
           if (draft.supplier?.id !== option.id) {
             draft.lines = PAYROLL_RUBRICS.map((r) => ({
@@ -573,8 +591,8 @@ export function createSupplierPayrollView({
         ),
       );
       choiceList(products, (option) =>
-        work(async (assertCurrent) => {
-          const loaded = await data.loadAccounts();
+        work(async (assertCurrent, options) => {
+          const loaded = await data.loadAccounts(options);
           assertCurrent();
           draft.product = option;
           accounts = loaded;
@@ -587,9 +605,9 @@ export function createSupplierPayrollView({
       heading("Indique a etapa");
       identity();
       choiceList(stages, (option) =>
-        work(async (assertCurrent) => {
+        work(async (assertCurrent, options) => {
           const normal = hasNormal();
-          const loaded = normal ? await data.loadSheets(draft.supplier) : [];
+          const loaded = normal ? await data.loadSheets(draft.supplier, options) : [];
           assertCurrent();
           draft.stage = option;
           draft.sheet = null;
@@ -606,10 +624,11 @@ export function createSupplierPayrollView({
           "data-payroll-post",
           () =>
             work(
-              async (assertCurrent) => {
+              async (assertCurrent, options) => {
                 const posted = await data.post(
                   validatePayrollDraft(draft),
                   progress,
+                  options.onProgress,
                 );
                 assertCurrent();
                 result = posted;
@@ -682,6 +701,7 @@ export function createSupplierPayrollView({
   function close() {
     if (destroyed || !opened || mutating) return false;
     opened = false;
+    loadingOperation?.abort.abort();
     epoch++;
     busy = false;
     page.hidden = true;
@@ -738,6 +758,7 @@ export function createSupplierPayrollView({
     },
     close,
     destroy() {
+      loadingOperation?.abort.abort();
       receiptPicker?.close();
       accountPickers?.destroy(); accountPickers = null;
       destroyed = true;

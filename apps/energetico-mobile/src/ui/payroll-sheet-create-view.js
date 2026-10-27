@@ -1,4 +1,5 @@
 import { createLoadingIndicator } from './loading-indicator.js';
+import { beginLoadingTask } from './loading-task.js';
 import { bindSearchableFilterSelects } from './searchable-filter-selects.js';
 
 /** Standalone IDFOLHA composer using the native payroll form and shared dialog styles. */
@@ -41,13 +42,16 @@ export function createPayrollSheetCreateView({ document: doc = globalThis.docume
     if (!active(state) || state.loading) return;
     state.loading = true; state.error.hidden = true; state.submit.disabled = true;
     state.dialog.setAttribute('aria-busy', 'true');
-    state.body.replaceChildren(createLoadingIndicator(doc, 'Carregando fornecedores…'));
+    const loader = createLoadingIndicator(doc, 'Carregando fornecedores…'); state.body.replaceChildren(loader);
+    const task = beginLoadingTask(loader, { signal: state.abort.signal, isCurrent: () => active(state) });
+    task.prepared();
     try {
-      const options = await loadOptions({ signal: state.abort.signal });
+      const options = await loadOptions({ signal: state.abort.signal, onProgress: task.report });
       if (!active(state)) return;
       if (!Array.isArray(options?.suppliers) || !/^\d{4}-(?:0[1-9]|1[0-2])$/.test(options?.defaultMonth || '')) {
         throw new Error('As opções de cadastro da folha não estão disponíveis.');
       }
+      task.acquired();
       const form = element('form', 'dynamic-form'); form.noValidate = true;
       const grid = element('div', 'dynamic-form-grid');
       const supplierField = element('label', 'dynamic-field', 'Fornecedor');
@@ -100,7 +104,9 @@ export function createPayrollSheetCreateView({ document: doc = globalThis.docume
           }
         }
       });
+      task.complete();
     } catch (error) {
+      task.stop();
       if (!active(state)) return;
       state.body.replaceChildren(); fail(state, error);
       const retry = element('button', 'gallery-record-dialog-button', 'Tentar novamente');
