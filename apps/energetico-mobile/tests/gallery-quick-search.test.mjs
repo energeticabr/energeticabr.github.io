@@ -80,13 +80,13 @@ test('launch quick search resets pagination and sends text alongside selected fi
   supplier.value = 'Mauro';
   search.value = 'CENTRAL 08/10/2026';
   search.dispatchEvent(new dom.window.Event('input', { bubbles: true }));
-  t.mock.timers.tick(3000); await new Promise(resolve => setImmediate(resolve));
+  t.mock.timers.tick(0); await new Promise(resolve => setImmediate(resolve));
   assert.equal(calls.at(-1).payload.filters.search, 'CENTRAL 08/10/2026');
   assert.equal(calls.at(-1).payload.filters.supplier, 'Mauro');
   assert.equal(calls.at(-1).payload.page, 1);
   search.value = '';
   search.dispatchEvent(new dom.window.Event('input', { bubbles: true }));
-  t.mock.timers.tick(3000); await new Promise(resolve => setImmediate(resolve));
+  t.mock.timers.tick(0); await new Promise(resolve => setImmediate(resolve));
   assert.equal(calls.at(-1).payload.filters.search, '');
   assert.equal(calls.at(-1).payload.filters.supplier, 'Mauro');
 });

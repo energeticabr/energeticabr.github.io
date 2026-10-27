@@ -39,6 +39,10 @@
 - Create: apps/energetico-mobile/tests/gallery-live-search-browser.test.mjs
 - Create: apps/energetico-mobile/tests/fixtures/gallery-live-search.html
 - Modify: apps/energetico-mobile/tests/launch-gallery-keyboard-browser.test.mjs
+- Modify: apps/energetico-mobile/tests/diary-search-browser.test.mjs
+- Modify: apps/energetico-mobile/tests/fixtures/diary-search-performance.html
+- Modify: apps/energetico-mobile/tests/launch-gallery-view.test.mjs
+- Modify: apps/energetico-mobile/tests/gallery-quick-search.test.mjs
 - Modify existing timing fixtures only where the previous quiet-period contract is deliberately replaced.
 
 **Interfaces**

@@ -6,7 +6,7 @@ import { createServer } from 'vite';
 import { JSDOM } from 'jsdom';
 import { runBrowserLayout } from './helpers/browser-layout-runner.mjs';
 
-test('search masks only results after three seconds and photos retain small thumbnails', { timeout:120_000 }, async t => {
+test('live search masks only results immediately and photos retain small thumbnails', { timeout:120_000 }, async t => {
   const browser=[process.env.CHROME_BIN,'C:/Program Files/Google/Chrome/Application/chrome.exe','/usr/bin/google-chrome','/usr/bin/chromium'].find(path=>path&&existsSync(path));
   if(!browser)return t.skip('Chrome unavailable');
   const server=await createServer({root:fileURLToPath(new URL('..',import.meta.url)),logLevel:'silent',server:{host:'127.0.0.1',port:0}});
@@ -15,7 +15,7 @@ test('search masks only results after three seconds and photos retain small thum
     const {stdout}=await runBrowserLayout(browser,{width,height:900,mobile:width<700,
       url:`http://127.0.0.1:${server.httpServer.address().port}/tests/fixtures/diary-search-performance.html`});
     const dom=new JSDOM(stdout),layout=JSON.parse(dom.window.document.documentElement.dataset.layout);dom.window.close();
-    assert.equal(layout.beforeDelay.requests,1); assert.equal(layout.beforeDelay.loaderHidden,true);
+    assert.equal(layout.started.requests,2); assert.equal(layout.started.loaderHidden,false);
     assert.equal(layout.during.focused,true);assert.equal(layout.during.focusInNavigation,false);
     assert.equal(layout.during.loaderHidden,false);assert.equal(layout.during.interactive,true);
     assert.equal(layout.during.toolbarVisible,true); assert.equal(layout.during.scopeOnly,true);

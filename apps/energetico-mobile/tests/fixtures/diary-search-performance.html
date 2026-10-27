@@ -23,10 +23,9 @@ const sleep=ms=>new Promise(resolve=>setTimeout(resolve,ms));
 await gallery.open();
 const root=document.querySelector('.lg-overlay'),search=root.querySelector('[data-gallery-quick-search]');
 search.focus();search.value='Mauro';search.dispatchEvent(new Event('input',{bubbles:true}));search.setSelectionRange(2,4);
-await sleep(2500);
 const screen = root.querySelector('.gallery-loading-screen--scoped');
-const beforeDelay = { requests, loaderHidden: screen.hidden };
-await sleep(600);
+await sleep(0);
+const started = { requests, loaderHidden: screen.hidden };
 const screenRect = screen.getBoundingClientRect(), toolbar = root.querySelector('.gallery-create-toolbar');
 const toolbarRect = toolbar.getBoundingClientRect();
 const during={focused:document.activeElement===search,loaderHidden:screen.hidden,
@@ -38,7 +37,7 @@ const during={focused:document.activeElement===search,loaderHidden:screen.hidden
 search.value='Mauro central';search.dispatchEvent(new Event('input',{bubbles:true}));
 pending.shift().resolve(result([rows[1]]));await sleep(0);
 const staleIgnored=root.querySelectorAll('.lg-record').length===2;
-await sleep(3100);pending.shift().resolve(result([rows[0]]));await sleep(0);
+pending.shift().resolve(result([rows[0]]));await sleep(0);
 const source=document.createElement('canvas');source.width=2400;source.height=1600;
 const context=source.getContext('2d');context.fillStyle='#09566b';context.fillRect(0,0,2400,1600);
 const blob=await new Promise(resolve=>source.toBlob(resolve,'image/png'));
@@ -47,7 +46,7 @@ const small=await createImageBitmap(await(await fetch(preview)).blob());
 const dimensions=[small.width,small.height];small.close();
 document.querySelector('#thumbnail').src=preview;
 document.querySelector('#result').textContent='Busca sem interrupção · miniatura 520 × 347';
-const layout={beforeDelay,during,staleIgnored,finalIds:[...root.querySelectorAll('.lg-record')].map(item=>item.dataset.itemId),
+const layout={started,during,staleIgnored,finalIds:[...root.querySelectorAll('.lg-record')].map(item=>item.dataset.itemId),
   search:search.value,thumbnail:dimensions,overflow:root.scrollWidth>innerWidth+1,
   ready:screen.hidden && !search.closest('[inert]') && document.activeElement===search};
 document.documentElement.dataset.layout=JSON.stringify(layout);
