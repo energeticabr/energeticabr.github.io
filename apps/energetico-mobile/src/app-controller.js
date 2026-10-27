@@ -2,7 +2,7 @@ import { PAYROLL_LAUNCH_REPLY_ID, isSupplierPayrollMenu } from "./chat/supplier-
 import { MEAL_VOUCHER_REPLY_ID } from './chat/meal-voucher.js';
 import { createMealVoucherTray } from './chat/meal-voucher-tray.js';
 import { canDeleteRhidAdjustment } from './chat/rhid-adjustment-ownership.js';
-import { diaryFieldVisitOptionId } from './chat/diary-field-visit-options.js';
+import { diaryFieldVisitOptionId, isInLocoDiaryOption, selectedDiaryTypeVisitId } from './chat/diary-field-visit-options.js';
 import { PAYROLL_BREAKDOWN_REPLY_ID, isPayrollBreakdownMenu } from './chat/payroll-breakdown.js';
 import { createMediaThumbnail } from "./web/media-thumbnail.js";
 import { signatureInkHash, signatureInkImage } from "./web/signature-trace.js";
@@ -4549,15 +4549,18 @@ export function createAppController({
 
   function decorateDiaryFieldVisits(state, messages) {
     const poll = latestAssistantPoll(messages);
+    const selectedDiaryId = selectedDiaryTypeVisitId(poll, state.activeFlow);
     const diaryIds = isPendingConstructionDiaryPicker(poll, state.activeFlow)
-      ? [...new Set((poll?.options || []).map(diaryFieldVisitOptionId).filter(Boolean))] : [];
+      ? [...new Set((poll?.options || []).map(diaryFieldVisitOptionId).filter(Boolean))]
+      : selectedDiaryId ? [selectedDiaryId] : [];
     if (!account || stopped || sessionStatus !== 'authenticated' || !diaryIds.length) {
       clearDiaryFieldVisits(); return messages;
     }
-    if (diaryFieldVisitContext?.poll !== poll || diaryFieldVisitContext.account !== account
+    const selectionKey = JSON.stringify([state.activeFlow?.contextId, diaryIds]);
+    if (diaryFieldVisitContext?.poll !== poll || diaryFieldVisitContext.selectionKey !== selectionKey || diaryFieldVisitContext.account !== account
       || diaryFieldVisitContext.revision !== sessionRevision) {
       clearDiaryFieldVisits();
-      const context = { poll, account, revision: sessionRevision, abort: new AbortController(), visits: new Set(), loading: true, error: false };
+      const context = { poll, selectionKey, account, revision: sessionRevision, abort: new AbortController(), visits: new Set(), loading: true, error: false };
       diaryFieldVisitContext = context;
       const current = () => !stopped && diaryFieldVisitContext === context && account === context.account && sessionRevision === context.revision;
       const request = Promise.resolve().then(async () => {
@@ -4584,7 +4587,9 @@ export function createAppController({
     const context = diaryFieldVisitContext;
     const decorated = messages.slice();
     decorated[decorated.lastIndexOf(poll)] = { ...poll,
-      options: poll.options.map(option => ({ ...option, diaryFieldVisit: context.visits.has(diaryFieldVisitOptionId(option)) })),
+      options: (poll.options || []).map(option => ({ ...option, diaryFieldVisit: selectedDiaryId
+        ? context.visits.has(selectedDiaryId) && isInLocoDiaryOption(option)
+        : context.visits.has(diaryFieldVisitOptionId(option)) })),
       diaryFieldVisitsLoading: context.loading, diaryFieldVisitsError: context.error,
     };
     return decorated;

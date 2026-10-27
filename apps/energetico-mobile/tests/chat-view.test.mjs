@@ -152,6 +152,39 @@ test('casinha de visita fica ao lado da data do diário sem mudar o valor enviad
   icon.click(); assert.equal(selected[0].replyId, 'choice:diario_obra_pendente:219'); assert.equal(selected[0].label, label);
 });
 
+test('estrela de visita antecede o andaime apenas em IN LOCO e preserva a resposta original', t => {
+  const dom = new JSDOM('<main id="app"></main>'), root = dom.window.document.querySelector('#app');
+  const view = createChatView(root), selected = [];
+  t.after(() => { view.destroy(); dom.window.close(); });
+  view.on('select-reply', event => selected.push(event));
+  const options = [
+    { id: 'shown-one', reply: 'choice:tipo_diario_obra:1', label: '1 - 🏗️ IN LOCO', diaryFieldVisit: true },
+    { id: 'choice:tipo_diario_obra:2', label: '2 - 💻 REMOTO', diaryFieldVisit: true },
+    { id: 'abandon_construction_diary', label: 'ABANDONAR DIÁRIO DE OBRAS', diaryFieldVisit: true },
+  ];
+  const state = signedInState({ activeFlow: { id: 'construction_diary_fill', contextId: 'diary-219', rows: [{ label: 'ID', value: '219' }] },
+    messages: [{ id: 'diary-type', role: 'assistant', type: 'poll', question: '📍 QUAL É O TIPO DO DIÁRIO DE OBRA?', options }] });
+  view.render(state);
+  const buttons = [...root.querySelectorAll('.chat-choice-list [data-reply-id]')];
+  assert.deepEqual(buttons.map(button => button.textContent), ['1 - ⭐ 🏗️ IN LOCO', '2 - 💻 REMOTO', 'ABANDONAR DIÁRIO DE OBRAS']);
+  assert.equal(root.querySelectorAll('[aria-label="Visita em campo"]').length, 1);
+  assert.equal(buttons[0].dataset.label, '1 - 🏗️ IN LOCO');
+  buttons[0].querySelector('[aria-label="Visita em campo"]').click();
+  assert.equal(selected[0].replyId, 'choice:tipo_diario_obra:1');
+  assert.equal(selected[0].label, '1 - 🏗️ IN LOCO');
+  for (const activeFlow of [
+    { id: 'construction_diary_fill', contextId: 'diary-219', rows: [] },
+    { ...state.activeFlow, paused: true },
+    { ...state.activeFlow, rows: [{ label: 'ID', value: '219' }, { label: 'ID', value: '218' }] },
+    { ...state.activeFlow, id: 'another_flow' },
+  ]) {
+    view.render({ ...state, activeFlow });
+    assert.equal(root.querySelector('[aria-label="Visita em campo"]'), null);
+  }
+  view.render({ ...state, messages: [{ ...state.messages[0], options: options.map(option => ({ ...option, diaryFieldVisit: false })) }] });
+  assert.equal(root.querySelector('[aria-label="Visita em campo"]'), null);
+});
+
 test("mascotes comerciais ficam em uma faixa externa antes do cartão e preservam suas ações", t => {
   const dom = new JSDOM('<main id="app"></main>');
   const root = dom.window.document.querySelector('#app');
