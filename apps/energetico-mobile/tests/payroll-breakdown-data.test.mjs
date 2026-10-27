@@ -56,12 +56,14 @@ test('breakdown progress waits for confirmed IDs and leaves journal recovery int
 });
 
 test('attachment preparation reports each completed file read while the next file is pending', async () => {
-  const f = fixture(), events = []; let release;
+  const f = fixture(), events = []; let release, secondReadStarted;
+  const started = new Promise(resolve => { secondReadStarted = resolve; });
   const first = new File(['abc'], 'first.pdf', { type: 'application/pdf' });
   const second = { name: 'second.pdf', size: 3, type: 'application/pdf',
-    arrayBuffer: () => new Promise(resolve => { release = () => resolve(new TextEncoder().encode('def').buffer); }) };
+    arrayBuffer: () => new Promise(resolve => { release = () => resolve(new TextEncoder().encode('def').buffer); secondReadStarted(); }) };
   const reading = f.data.prepareFiles([first, second], { onProgress: event => events.push(event) });
-  await new Promise(resolve => setImmediate(resolve));
+  await Promise.race([started, reading]);
+  assert.equal(typeof release, 'function');
   assert.ok(events.some(event => event.percent > 0 && event.percent < 100));
   assert.ok(events.every(event => event.percent < 100));
   release(); assert.equal((await reading).length, 2); assert.equal(events.at(-1).percent, 100);

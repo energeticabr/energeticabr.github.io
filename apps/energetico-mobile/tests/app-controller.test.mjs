@@ -934,7 +934,8 @@ test('observação: clique no SIM da tela envia o texto atual e preserva os anex
   h.chatCalls.length = 0;
   root.querySelector(`[data-reply-id="${observationOptions[0].id}"]`).click();
   await new Promise(resolve => setImmediate(resolve));
-  assert.deepEqual(h.chatCalls, [['text', { text: 'Arame comprado com Marcos arcelor\nConferir na obra.' }]]);
+  // Optional thumbnail downloads are reads; verify every conversation mutation.
+  assert.deepEqual(h.chatCalls.filter(([kind])=>kind!=='media'), [['text', { text: 'Arame comprado com Marcos arcelor\nConferir na obra.' }]]);
   assert.equal(root.querySelector('[data-role="draft"]').value, '');
   assert.equal(h.store.getState().attachments[0].id, 'receipt');
 });
