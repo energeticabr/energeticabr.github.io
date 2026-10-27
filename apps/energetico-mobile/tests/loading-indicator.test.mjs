@@ -65,6 +65,7 @@ for (const [stage, state] of [['response', { activeText: { id: 'qa-response' } }
     const dom = new JSDOM(renderChatMarkup({ sessionStatus: 'authenticated', account: { name: 'QA' },
       messages: [], pendingFiles: [], ...state }));
     t.after(() => dom.window.close());
-    assertBadge(dom.window.document.querySelector('.chat-progress'), '0%', '0');
+    const badge = assertBadge(dom.window.document.querySelector('.chat-progress'), '0%', '0');
+    assert.equal(badge.getAttribute('aria-label'), 'Progresso do carregamento', 'generic steps describe their own loading rather than an attachment transfer');
   });
 }

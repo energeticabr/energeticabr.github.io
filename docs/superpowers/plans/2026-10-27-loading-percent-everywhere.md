@@ -27,7 +27,7 @@
 
 ### Task1: Default percentage in the shared loader and verify its consumers
 
-**Files:** modify apps/energetico-mobile/src/ui/loading-indicator.js; add tests/loading-indicator.test.mjs, tests/loading-percentage-browser.test.mjs and tests/fixtures/loading-percentage.html; update tests/diary-attachment-progress.test.mjs and tests/gallery-loading-screen.test.mjs. All test paths are under apps/energetico-mobile.
+**Files:** modify apps/energetico-mobile/src/ui/loading-indicator.js and the chat loader's accessibility context in src/ui/chat-view.js; add tests/loading-indicator.test.mjs, tests/loading-percentage-browser.test.mjs and tests/fixtures/loading-percentage.html; update tests/diary-attachment-progress.test.mjs and tests/gallery-loading-screen.test.mjs. All paths are under apps/energetico-mobile.
 
 **Interfaces:** preserve loadingIndicatorMarkup(label, options), createLoadingIndicator(documentRef, label, options), updateLoadingIndicator(root, options). All loading consumers inherit the default without per-screen patches.
 
