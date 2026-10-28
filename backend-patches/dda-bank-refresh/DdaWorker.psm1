@@ -15,6 +15,16 @@ function ConvertTo-DdaWorkerReceipt($Text, [int]$ExitCode, [datetime]$StartedUtc
             if($value[$key] -lt 0 -or $value[$key] -gt 1000000){return $failed}
             $result[$key]=$value[$key]
         }
+        if($value.ContainsKey('createdItemIds')){
+            $ids=$value.createdItemIds
+            if($ids -isnot [array] -or $ids.Count -ne $result.created -or $ids.Count -gt 10000){return $failed}
+            $seen=[Collections.Generic.HashSet[int]]::new()
+            foreach($id in $ids){
+                if(($id -isnot [long] -and $id -isnot [int]) -or $id -lt 1 -or $id -gt [int]::MaxValue){return $failed}
+                if(-not $seen.Add([int]$id)){return $failed}
+            }
+            $result.createdItemIds=@($ids)
+        }
         return $result
     } catch { return $failed }
 }

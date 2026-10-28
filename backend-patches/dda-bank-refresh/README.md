@@ -6,6 +6,8 @@ O Windows com o certificado consulta a fila por SSH de saída, utilizando a auto
 
 ## Estados e disponibilidade
 
+O coletor atualizado inclui `createdItemIds`: somente IDs inteiros de registros cuja criação e anexo foram confirmados pelo recibo SharePoint (`matchedItems=0`). O worker e a fila conferem tipos, unicidade e quantidade, sem transportar fornecedor, valor ou código bancário. A galeria usa esses IDs com seu snapshot autorizado para o pop-up. Recibos antigos sem IDs continuam aceitos, mas não permitem inferir quais itens foram criados. A atualização do coletor privado deve instalar `Get-DdaVerifiedCreationId` e a acumulação dos IDs junto desta versão do worker. Limites:10000IDs e128KiB no recibo CLI.
+
 Fila única com trava entre processos, identidade responsável, heartbeat de 180 segundos e limite de execução de 45 minutos. Cliques concorrentes da mesma pessoa acompanham a execução ativa. Outra identidade não lê esse pedido. Estados parcial, indisponível, expirado ou sem recibo não geram sucesso. O agente local mantém heartbeat durante a consulta e limita o subprocesso a 40 minutos.
 
 A tarefa Windows executa a cada minuto com sessão iniciada; pode levar até um minuto para receber um pedido. O computador deve permanecer ligado. A tarefa diária 07/12/17 continua existindo. O parâmetro opcional `WaitForLockSeconds` do coletor permite aguardar uma execução diária concorrente, sem considerá-la automaticamente uma consulta nova. Fechar a galeria encerra seu acompanhamento, sem cancelar a importação em andamento.

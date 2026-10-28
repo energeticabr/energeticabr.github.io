@@ -11,6 +11,7 @@ import Decimal from "decimal.js";
 import { renderWorkDiaryCardDetails } from './work-diary-card.js';
 import { renderAssetGalleryCard } from './asset-gallery-card.js';
 import { renderDdaCard, updateDdaDueTones, ddaTodayKey } from './dda-card.js';
+import { createDdaSyncReceipt } from './dda-sync-receipt.js';
 import { renderProvisionDescriptionCard, provisionDescriptionIcon } from './provision-description-card.js';
 import { createProvisionDescriptionDetail } from './provision-description-detail-view.js';
 import { field, displayValue, paymentTotal } from './provision-payment-format.js';
@@ -286,6 +287,8 @@ export function createRegistrationGallery({ document: doc = globalThis.document,
   const filterSources = new Map([...filterControls.keys()].map(field => [field, data.getFilterSource?.(field)]).filter(([, source]) => source));
   let pendingMutations = 0;
   let bankController = null;
+  const bankReceipt = kind === 'dda' ? createDdaSyncReceipt({ document: doc, host: root,
+    format: (row, name) => rowFieldValue(row, name) || '—', onClose: () => refreshShortcut.sync() }) : null;
   const bankNotice = kind === 'dda' ? el('p', 'rg-dda-sync-notice') : null;
   if (bankNotice) { bankNotice.hidden = true; bankNotice.setAttribute('role', 'status'); header.after(bankNotice); }
   async function manualRefresh() {
@@ -303,6 +306,7 @@ export function createRegistrationGallery({ document: doc = globalThis.document,
       const loaded = await load({ refresh: true, preserveRowsOnError: true });
       notice(loaded === false ? 'O Sicoob foi consultado, mas não foi possível recarregar a galeria. Tente sincronizar novamente.'
         : 'Sicoob e SharePoint atualizados.' + (Number.isInteger(result.created) ? ` ${result.created} novo(s) DDA(s).` : ''));
+      if (current()) bankReceipt.show(result, loaded === false ? [] : rows, refresh);
     } catch (error) {
       notice('Não foi possível concluir a atualização do Sicoob. Os dados exibidos são da última consulta disponível. '
         + (error?.name === 'AbortError' ? 'A conexão demorou demais. Tente novamente.' : String(error?.message || 'Tente novamente.')));
@@ -866,6 +870,7 @@ export function createRegistrationGallery({ document: doc = globalThis.document,
 
   function hide() {
     if (root.hidden) return;
+    bankReceipt?.close();
     bankController?.abort();
     if (bankNotice) bankNotice.hidden = true;
     stopDdaClock();
@@ -942,6 +947,6 @@ export function createRegistrationGallery({ document: doc = globalThis.document,
       root.hidden = false; root.focus(); startDdaClock(); await load();
     },
     close: hide,
-    destroy() { bankController?.abort(); stopDdaClock(); loadController?.abort(); descriptionDetail?.destroy(); loadingScreen.destroy(); createShortcut.destroy(); refreshShortcut.destroy(); recordActions.destroy(); searchableFilters.destroy(); destroyed = true; request += 1; filterEpoch += 1; attachmentCountQueue = []; root.remove(); },
+    destroy() { bankReceipt?.destroy(); bankController?.abort(); stopDdaClock(); loadController?.abort(); descriptionDetail?.destroy(); loadingScreen.destroy(); createShortcut.destroy(); refreshShortcut.destroy(); recordActions.destroy(); searchableFilters.destroy(); destroyed = true; request += 1; filterEpoch += 1; attachmentCountQueue = []; root.remove(); },
   };
 }

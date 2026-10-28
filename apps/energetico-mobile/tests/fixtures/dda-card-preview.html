@@ -2,6 +2,7 @@
 <html lang="pt-BR"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1">
 <title>Galeria DDA — dados fictícios</title>
 <link rel="stylesheet" href="../../src/styles.css"><link rel="stylesheet" href="../../src/ui/registration-gallery.css">
+<link rel="stylesheet" href="../../src/ui/gallery-record-actions.css">
 <style>body{margin:0;font-family:Arial,sans-serif}</style></head><body>
 <script type="module">
 import {createRegistrationGallery} from '../../src/ui/registration-gallery-view.js';
@@ -15,8 +16,9 @@ const rows=[2,0,1].map((offset,index)=>({id:String(index+1),fields:{
  NOSSO_NUMERO:'0000000000000000123456',CODIGO_BARRAS:'0'.repeat(44),LINHA_DIGITAVEL:'0'.repeat(47),
  PAGADOR:'EMPRESA FICTÍCIA LTDA',CNPJ_PAGADOR:'00000000000000',BLOQUEADO:false,ULTIMA_CONSULTA:new Date().toISOString(),Attachments:true
 }}));
+let synced=false;
 const gallery=createRegistrationGallery({document,kind:'dda',onHome:()=>{},
-refreshBank:async({onStatus})=>{onStatus('Consultando o Sicoob e atualizando o SharePoint. Dados fictícios de demonstração.');await new Promise(resolve=>setTimeout(resolve,1500));return {status:'succeeded',created:0};},
-data:{loadSnapshot:async()=>({rows}),listAttachments:async()=>[{fileName:'espelho-ficticio.pdf'}]},openMediaCollection:()=>{}});
+refreshBank:async({onStatus})=>{onStatus('Consultando o Sicoob e atualizando o SharePoint. Dados fictícios de demonstração.');await new Promise(resolve=>setTimeout(resolve,300));const result={status:'succeeded',created:synced?0:2,createdItemIds:synced?[]:[2,3]};synced=true;return result;},
+data:{loadSnapshot:async()=>({rows:synced?rows:rows.slice(0,1)}),listAttachments:async()=>[{fileName:'espelho-ficticio.pdf'}]},openMediaCollection:()=>{}});
 await gallery.open();
 </script></body></html>
