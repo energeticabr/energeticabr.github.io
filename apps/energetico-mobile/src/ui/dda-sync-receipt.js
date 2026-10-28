@@ -1,4 +1,5 @@
-/** Only confirmed creation IDs identify new records; a snapshot difference is not proof. */
+import { formatDdaElapsed } from '../chat/dda-bank-refresh.js';
+/** Every terminal outcome is acknowledged; only confirmed IDs identify new records. */
 export function createDdaSyncReceipt({ document: doc, host, format, onClose = () => {} }) {
   let current = null;
   const el = (tag, cls, text) => {
@@ -19,21 +20,29 @@ export function createDdaSyncReceipt({ document: doc, host, format, onClose = ()
     if (previous.trigger?.isConnected && !host.hidden) previous.trigger.focus({ preventScroll: true });
   }
   function show(result, rows, trigger) {
-    if (!Number.isSafeInteger(result?.created) || result.created <= 0 || host.hidden || !host.isConnected) return;
+    if (!['succeeded', 'failed', 'partial'].includes(result?.status) || host.hidden || !host.isConnected) return;
     close();
+    const hasNew = result.status !== 'failed' && Number.isSafeInteger(result.created) && result.created > 0;
+    const title = result.status === 'failed' ? 'Atualização não confirmada'
+      : result.status === 'partial' ? 'Consulta concluída; galeria desatualizada'
+      : hasNew ? 'Novos DDAs adicionados' : 'Sincronização concluída';
     const ids = result.createdItemIds;
     const validIds = Array.isArray(ids) && ids.length === result.created && ids.length <= 10000
       && ids.every(id => Number.isSafeInteger(id) && id > 0 && id <= 2147483647) && new Set(ids).size === ids.length;
     const overlay = el('div', 'gallery-record-overlay dda-sync-overlay');
     const dialog = el('section', 'gallery-record-dialog dda-sync-dialog');
-    dialog.dataset.ddaNewItems = '';
+    dialog.dataset.ddaSyncResult = result.status;
+    if (hasNew) dialog.dataset.ddaNewItems = '';
     dialog.setAttribute('role', 'dialog'); dialog.setAttribute('aria-modal', 'true');
-    dialog.setAttribute('aria-label', 'Novos DDAs adicionados');
-    dialog.append(el('h2', 'gallery-record-dialog-title', 'Novos DDAs adicionados'));
-    dialog.append(el('p', 'dda-sync-summary', `${result.created} ${result.created === 1 ? 'boleto criado' : 'boletos criados'} nesta sincronização.`));
+    dialog.setAttribute('aria-label', title);
+    dialog.append(el('h2', 'gallery-record-dialog-title', title));
+    const summary = result.message || (hasNew ? `${result.created} ${result.created === 1 ? 'boleto criado' : 'boletos criados'} nesta sincronização.`
+      : result.created === 0 ? 'Sicoob e SharePoint atualizados. Nenhum novo DDA foi encontrado.' : 'Sicoob e SharePoint atualizados.');
+    dialog.append(el('p', 'dda-sync-summary', summary));
+    if (Number.isFinite(result.elapsedMs)) dialog.append(el('p', 'dda-sync-summary', `Tempo de acompanhamento: ${formatDdaElapsed(result.elapsedMs)}.`));
     const list = el('ul', 'dda-sync-items');
     const byId = new Map(rows.map(row => [String(row.id), row]));
-    if (validIds) for (const id of ids) {
+    if (hasNew && validIds) for (const id of ids) {
       const row = byId.get(String(id));
       const item = el('li', 'dda-sync-item');
       item.append(el('span', 'rg-dda-id', `ID ${id}`));
@@ -47,8 +56,8 @@ export function createDdaSyncReceipt({ document: doc, host, format, onClose = ()
       } else item.append(el('p', '', 'Criação confirmada. Os detalhes deste item não estão disponíveis nesta leitura da galeria.'));
       list.append(item);
     }
-    else list.append(el('li', 'dda-sync-item', 'A sincronização confirmou a criação, mas não informou os IDs dos novos itens.'));
-    dialog.append(list);
+    else if (hasNew) list.append(el('li', 'dda-sync-item', 'A sincronização confirmou a criação, mas não informou os IDs dos novos itens.'));
+    if (hasNew) dialog.append(list);
     const button = el('button', 'gallery-record-dialog-button', 'Entendi'); button.type = 'button';
     button.addEventListener('click', close);
     const actions = el('div', 'gallery-record-dialog-buttons'); actions.append(button); dialog.append(actions);

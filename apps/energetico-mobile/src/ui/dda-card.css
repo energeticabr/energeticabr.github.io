@@ -89,6 +89,12 @@
  .rg-dda-body > .rg-dda-field:nth-child(even), .rg-dda-footer > .rg-dda-field:nth-child(even) { padding-left: 2px; border-left: 0; }
 }
 .rg-dda-sync-notice { margin: 8px 0; padding: 12px; border: 1px solid #94b4e0; border-radius: 8px; background: #e6f0ff; color: #102c50; font-size: .85rem; overflow-wrap: anywhere; }
+.rg-dda-sync-notice[data-state="succeeded"] { background: #eaf8ef; color: #205c41; border-color: #8cbca3; }
+.rg-dda-sync-notice[data-state="failed"] { background: #fff0f2; color: #a71932; border-color: #dca1ad; }
+.rg-dda-sync-notice[data-state="partial"] { background: #fff3e2; color: #815011; border-color: #dbbb87; }
+.dda-sync-dialog[data-dda-sync-result="succeeded"] { border-top: 6px solid #23744f; }
+.dda-sync-dialog[data-dda-sync-result="failed"] { border-top: 6px solid #b4223d; }
+.dda-sync-dialog[data-dda-sync-result="partial"] { border-top: 6px solid #b67624; }
 .gallery-record-overlay.dda-sync-overlay { z-index: 20; padding: 16px; }
 .gallery-record-dialog.dda-sync-dialog { width: min(100%, 560px); max-height: calc(100dvh - 32px); overflow: auto; box-sizing: border-box; }
 .dda-sync-summary { margin: 0 0 14px; color: #385266; }

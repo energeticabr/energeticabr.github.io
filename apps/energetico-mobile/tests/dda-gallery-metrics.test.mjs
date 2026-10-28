@@ -51,10 +51,12 @@ test('gallery metrics precede list, survive search, update after refresh and do 
   rows=[row(1,'2026-10-28',200)]; doc.querySelector('[data-action="registration-refresh"]').click();
   await new Promise(resolve=>setTimeout(resolve,30));
   assert.match(metrics.querySelector('[data-dda-metric="total"]').textContent,/200,00/);
+  doc.querySelector('[data-dda-sync-result] button').click();
   fail=true; doc.querySelector('[data-action="registration-refresh"]').click();
   await new Promise(resolve=>setTimeout(resolve,30));
   assert.match(metrics.querySelector('[data-dda-metric="total"]').textContent,/200,00/);
   assert.match(metrics.textContent,/Falha ao atualizar: valores da última base disponível/);
+  doc.querySelector('[data-dda-sync-result] button').click();
   doc.querySelector('[data-action="registration-close"]').click(); fail=true; await gallery.open();
   assert.doesNotMatch(metrics.querySelector('[data-dda-metric="total"]').textContent,/R\$/);
  } finally {gallery.destroy(); dom.window.close();}

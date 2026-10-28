@@ -17,8 +17,9 @@ const rows=[2,0,1].map((offset,index)=>({id:String(index+1),fields:{
  PAGADOR:'EMPRESA FICTÍCIA LTDA',CNPJ_PAGADOR:'00000000000000',BLOQUEADO:false,ULTIMA_CONSULTA:new Date().toISOString(),Attachments:true
 }}));
 let synced=false;
+const outcome=new URLSearchParams(location.search).get('outcome');
 const gallery=createRegistrationGallery({document,kind:'dda',onHome:()=>{},
-refreshBank:async({onStatus})=>{onStatus('Consultando o Sicoob e atualizando o SharePoint. Dados fictícios de demonstração.');await new Promise(resolve=>setTimeout(resolve,300));const result={status:'succeeded',created:synced?0:2,createdItemIds:synced?[]:[2,3]};synced=true;return result;},
+refreshBank:async({onStatus})=>{onStatus('Consultando o Sicoob. Tempo decorrido: 00:03. A consulta completa costuma levar de 10 a 15 minutos. Dados fictícios de demonstração.');await new Promise(resolve=>setTimeout(resolve,300));if(outcome==='failed')throw Error('Não foi possível confirmar o resultado da consulta. Tente novamente.');const noNew=synced||outcome==='empty';const result={status:'succeeded',created:noNew?0:2,createdItemIds:noNew?[]:[2,3],elapsedMs:670000};synced=true;return result;},
 data:{loadSnapshot:async()=>({rows:synced?rows:rows.slice(0,1)}),listAttachments:async()=>[{fileName:'espelho-ficticio.pdf'}]},openMediaCollection:()=>{}});
 await gallery.open();
 </script></body></html>

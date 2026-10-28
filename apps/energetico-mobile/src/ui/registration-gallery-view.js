@@ -298,7 +298,10 @@ export function createRegistrationGallery({ document: doc = globalThis.document,
     if (kind !== 'dda') return load({ refresh: true });
     const controller = bankController = new AbortController();
     const current = () => !controller.signal.aborted && bankController === controller && !destroyed && !root.hidden;
-    const notice = text => { if (current()) { bankNotice.hidden = false; bankNotice.textContent = text; } };
+    const notice = (text, state = 'running') => { if (current()) {
+      bankNotice.hidden = false; bankNotice.textContent = text; bankNotice.dataset.state = state;
+      bankNotice.setAttribute('role', state === 'failed' || state === 'partial' ? 'alert' : 'status');
+    } };
     notice('Solicitando atualização ao Sicoob…');
     try {
       if (typeof refreshBank !== 'function') throw new Error('A consulta bancária está indisponível nesta versão.');
@@ -307,12 +310,15 @@ export function createRegistrationGallery({ document: doc = globalThis.document,
       if (result?.status !== 'succeeded') throw new Error('A consulta bancária não foi confirmada.');
       notice('Consulta ao Sicoob concluída. Carregando a lista do SharePoint…');
       const loaded = await load({ refresh: true, preserveRowsOnError: true });
-      notice(loaded === false ? 'O Sicoob foi consultado, mas não foi possível recarregar a galeria. Tente sincronizar novamente.'
-        : 'Sicoob e SharePoint atualizados.' + (Number.isInteger(result.created) ? ` ${result.created} novo(s) DDA(s).` : ''));
-      if (current()) bankReceipt.show(result, loaded === false ? [] : rows, refresh);
+      const message = loaded === false ? 'O Sicoob foi consultado, mas não foi possível recarregar a galeria. Os cartões continuam mostrando a última leitura disponível. Tente sincronizar novamente.'
+        : 'Sicoob e SharePoint atualizados.' + (Number.isInteger(result.created) ? ` ${result.created} novo(s) DDA(s).` : '');
+      notice(message, loaded === false ? 'partial' : 'succeeded');
+      if (current()) bankReceipt.show(loaded === false ? { ...result, status: 'partial', message } : result, loaded === false ? [] : rows, refresh);
     } catch (error) {
-      notice('Não foi possível concluir a atualização do Sicoob. Os dados exibidos são da última consulta disponível. '
-        + (error?.name === 'AbortError' ? 'A conexão demorou demais. Tente novamente.' : String(error?.message || 'Tente novamente.')));
+      const message = 'Não foi possível concluir a atualização do Sicoob. Os dados exibidos são da última consulta disponível. '
+        + (error?.name === 'AbortError' ? 'A conexão demorou demais. Tente novamente.' : String(error?.message || 'Tente novamente.'));
+      notice(message, 'failed');
+      if (current()) bankReceipt.show({ status: 'failed', message }, [], refresh);
     } finally { if (bankController === controller) bankController = null; }
   }
   const refreshShortcut = attachGalleryRefreshButton({ document: doc, root, container: createShortcut.toolbar, header, button: refresh,

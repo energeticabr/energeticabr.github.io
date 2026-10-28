@@ -28,12 +28,14 @@ test('new DDA popup identifies only confirmed created IDs across filters and clo
  gallery.destroy();dom.window.close();
 });
 
-test('no new DDA means no popup; verified creation still identifies ID if gallery read fails',async()=>{
+test('no new DDA confirms success; verified creation still identifies ID if gallery read fails',async()=>{
  const dom=new JSDOM('<body></body>');const doc=dom.window.document;let created=0,loads=0;
  const gallery=createRegistrationGallery({document:doc,kind:'dda',data:{async loadSnapshot(){if(++loads>2)throw Error('offline');return {rows:[]};}},
  refreshBank:async()=>({status:'succeeded',created,createdItemIds:created?[50]:[]})});
  await gallery.open();const button=doc.querySelector('[data-action="registration-refresh"]');
  button.click();await tick();await tick();assert.equal(doc.querySelector('[data-dda-new-items]'),null);
+ assert.match(doc.querySelector('[data-dda-sync-result]').textContent,/Nenhum novo DDA/);
+ doc.querySelector('[data-dda-sync-result] button').click();
  created=1;button.click();await tick();await tick();assert.match(doc.querySelector('[data-dda-new-items]').textContent,/ID 50/);
  gallery.close();assert.equal(doc.querySelector('[data-dda-new-items]'),null);
  gallery.destroy();dom.window.close();
