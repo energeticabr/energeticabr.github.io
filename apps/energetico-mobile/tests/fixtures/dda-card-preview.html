@@ -15,6 +15,8 @@ const rows=[2,0,1].map((offset,index)=>({id:String(index+1),fields:{
  NOSSO_NUMERO:'0000000000000000123456',CODIGO_BARRAS:'0'.repeat(44),LINHA_DIGITAVEL:'0'.repeat(47),
  PAGADOR:'EMPRESA FICTÍCIA LTDA',CNPJ_PAGADOR:'00000000000000',BLOQUEADO:false,ULTIMA_CONSULTA:new Date().toISOString(),Attachments:true
 }}));
-const gallery=createRegistrationGallery({document,kind:'dda',onHome:()=>{},data:{loadSnapshot:async()=>({rows}),listAttachments:async()=>[{fileName:'espelho-ficticio.pdf'}]},openMediaCollection:()=>{}});
+const gallery=createRegistrationGallery({document,kind:'dda',onHome:()=>{},
+refreshBank:async({onStatus})=>{onStatus('Consultando o Sicoob e atualizando o SharePoint. Dados fictícios de demonstração.');await new Promise(resolve=>setTimeout(resolve,1500));return {status:'succeeded',created:0};},
+data:{loadSnapshot:async()=>({rows}),listAttachments:async()=>[{fileName:'espelho-ficticio.pdf'}]},openMediaCollection:()=>{}});
 await gallery.open();
 </script></body></html>

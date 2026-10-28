@@ -590,6 +590,23 @@ export function createChatClient({
     return deletion;
   }
 
+  async function ddaRequest(action, requestId, { signal } = {}) {
+    if (action === 'dda_refresh_status' && !/^[a-f0-9]{32}$/.test(String(requestId || ''))) throw new Error('Pedido DDA inválido.');
+    const token = await cancellableToken(tokenProvider, signal);
+    const result = await request(chatUrl.href, {
+      method: 'POST', signal,
+      headers: { Accept: 'application/json', Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' },
+      body: JSON.stringify({ action, ...(requestId ? { requestId } : {}) }),
+      cache: 'no-store', credentials: 'omit',
+    }, response => parsePortalResponse(response, 'A consulta DDA'), action === 'dda_refresh_status');
+    const receipt = result?.ddaRefresh;
+    if (!receipt || !['queued', 'running', 'succeeded', 'failed', 'unavailable', 'busy'].includes(receipt.status)
+      || (requestId && receipt.requestId !== requestId)) throw new Error('A VM não confirmou a consulta DDA.');
+    return receipt;
+  }
+  function refreshDda(options) { return ddaRequest('dda_refresh', null, options); }
+  function getDdaRefreshStatus(requestId, options) { return ddaRequest('dda_refresh_status', requestId, options); }
+
   async function refreshRhidAttendance() {
     const token = await acquireToken(tokenProvider);
     const result = await request(chatUrl.href, {
@@ -738,5 +755,5 @@ export function createChatClient({
     }, true);
   }
 
-  return Object.freeze({ sendText, sendFile, replaceAttachment, transcribeAudio, fetchMedia, getAttachments, launchGalleryRequest, uploadLaunchGalleryFile, getPendingProvisionSnapshot, getPendingNotesSnapshot, getRhidAttendanceReport, startRhidPendingValidation, startRhidDayValidation, getRhidAttendanceMonth, saveRhidAttendanceAdjustment, deleteRhidAttendanceAdjustment, refreshRhidAttendance, getRhidRefreshStatus, refreshRecurringProvisions, getRecurringProvisionRefreshStatus, deleteAttachment, deleteAllAttachments, compressAttachment, chooseAttachmentCompression, getCompletionMenu, prepareSignatureEvidence, confirmSignatureEvidence, verifySignatureEvidence, captureSignatureEvidence });
+  return Object.freeze({ sendText, sendFile, replaceAttachment, transcribeAudio, fetchMedia, getAttachments, launchGalleryRequest, uploadLaunchGalleryFile, getPendingProvisionSnapshot, getPendingNotesSnapshot, getRhidAttendanceReport, startRhidPendingValidation, startRhidDayValidation, getRhidAttendanceMonth, saveRhidAttendanceAdjustment, deleteRhidAttendanceAdjustment, refreshRhidAttendance, getRhidRefreshStatus, refreshRecurringProvisions, getRecurringProvisionRefreshStatus, refreshDda, getDdaRefreshStatus, deleteAttachment, deleteAllAttachments, compressAttachment, chooseAttachmentCompression, getCompletionMenu, prepareSignatureEvidence, confirmSignatureEvidence, verifySignatureEvidence, captureSignatureEvidence });
 }

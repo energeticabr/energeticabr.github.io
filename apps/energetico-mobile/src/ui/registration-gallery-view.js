@@ -141,7 +141,7 @@ function knownAttachmentCount(row) {
   return null;
 }
 
-export function createRegistrationGallery({ document: doc = globalThis.document, kind, data, onHome, onCreate, openMediaCollection, descriptionTimeoutMs = 30_000 } = {}) {
+export function createRegistrationGallery({ document: doc = globalThis.document, kind, data, onHome, onCreate, openMediaCollection, refreshBank, descriptionTimeoutMs = 30_000 } = {}) {
   const model = REGISTRATION_GALLERY_MODELS[kind];
   if (!model || !doc?.body || typeof data?.loadSnapshot !== "function") {
     throw new TypeError("Galeria de cadastro, documento e serviço de dados são obrigatórios.");
@@ -285,9 +285,33 @@ export function createRegistrationGallery({ document: doc = globalThis.document,
   const filterErrors = new Map();
   const filterSources = new Map([...filterControls.keys()].map(field => [field, data.getFilterSource?.(field)]).filter(([, source]) => source));
   let pendingMutations = 0;
+  let bankController = null;
+  const bankNotice = kind === 'dda' ? el('p', 'rg-dda-sync-notice') : null;
+  if (bankNotice) { bankNotice.hidden = true; bankNotice.setAttribute('role', 'status'); header.after(bankNotice); }
+  async function manualRefresh() {
+    if (kind !== 'dda') return load({ refresh: true });
+    const controller = bankController = new AbortController();
+    const current = () => !controller.signal.aborted && bankController === controller && !destroyed && !root.hidden;
+    const notice = text => { if (current()) { bankNotice.hidden = false; bankNotice.textContent = text; } };
+    notice('Solicitando atualização ao Sicoob…');
+    try {
+      if (typeof refreshBank !== 'function') throw new Error('A consulta bancária está indisponível nesta versão.');
+      const result = await refreshBank({ signal: controller.signal, onStatus: notice });
+      if (!current()) return;
+      if (result?.status !== 'succeeded') throw new Error('A consulta bancária não foi confirmada.');
+      notice('Consulta ao Sicoob concluída. Carregando a lista do SharePoint…');
+      const loaded = await load({ refresh: true, preserveRowsOnError: true });
+      notice(loaded === false ? 'O Sicoob foi consultado, mas não foi possível recarregar a galeria. Tente sincronizar novamente.'
+        : 'Sicoob e SharePoint atualizados.' + (Number.isInteger(result.created) ? ` ${result.created} novo(s) DDA(s).` : ''));
+    } catch (error) {
+      notice('Não foi possível concluir a atualização do Sicoob. Os dados exibidos são da última consulta disponível. '
+        + (error?.name === 'AbortError' ? 'A conexão demorou demais. Tente novamente.' : String(error?.message || 'Tente novamente.')));
+    } finally { if (bankController === controller) bankController = null; }
+  }
   const refreshShortcut = attachGalleryRefreshButton({ document: doc, root, container: createShortcut.toolbar, header, button: refresh,
-    onRefresh: () => load({ refresh: true }),
+    onRefresh: manualRefresh,
     isAvailable: () => !destroyed && !attachmentLoading && !pendingMutations });
+  if (kind === 'dda') { refresh.title = 'Consultar Sicoob e sincronizar SharePoint'; refresh.setAttribute('aria-label', refresh.title); }
   if (kind === 'provisionDescription' || kind === 'dda') {
     const searchWrap = el('div', 'rg-provision-search');
     search.before(searchWrap); searchWrap.append(provisionDescriptionIcon(doc, 'search'), search);
@@ -776,7 +800,8 @@ export function createRegistrationGallery({ document: doc = globalThis.document,
     }
   }
 
-  async function load({ refresh = hasLoaded } = {}) {
+  async function load({ refresh = hasLoaded, preserveRowsOnError = false } = {}) {
+    const previousRows = rows;
     descriptionDetail?.close();
     const current = ++request;
     loadController?.abort();
@@ -829,7 +854,7 @@ export function createRegistrationGallery({ document: doc = globalThis.document,
     } catch (error) {
       if (destroyed || root.hidden || !root.isConnected || current !== request) return;
       loadFailed = true;
-      rows = [];
+      rows = preserveRowsOnError ? previousRows : [];
       page = 1;
       render();
       return false;
@@ -841,6 +866,8 @@ export function createRegistrationGallery({ document: doc = globalThis.document,
 
   function hide() {
     if (root.hidden) return;
+    bankController?.abort();
+    if (bankNotice) bankNotice.hidden = true;
     stopDdaClock();
     descriptionDetail?.close();
     loadController?.abort();
@@ -915,6 +942,6 @@ export function createRegistrationGallery({ document: doc = globalThis.document,
       root.hidden = false; root.focus(); startDdaClock(); await load();
     },
     close: hide,
-    destroy() { stopDdaClock(); loadController?.abort(); descriptionDetail?.destroy(); loadingScreen.destroy(); createShortcut.destroy(); refreshShortcut.destroy(); recordActions.destroy(); searchableFilters.destroy(); destroyed = true; request += 1; filterEpoch += 1; attachmentCountQueue = []; root.remove(); },
+    destroy() { bankController?.abort(); stopDdaClock(); loadController?.abort(); descriptionDetail?.destroy(); loadingScreen.destroy(); createShortcut.destroy(); refreshShortcut.destroy(); recordActions.destroy(); searchableFilters.destroy(); destroyed = true; request += 1; filterEpoch += 1; attachmentCountQueue = []; root.remove(); },
   };
 }
