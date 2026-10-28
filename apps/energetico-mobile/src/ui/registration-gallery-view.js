@@ -12,6 +12,7 @@ import { renderWorkDiaryCardDetails } from './work-diary-card.js';
 import { renderAssetGalleryCard } from './asset-gallery-card.js';
 import { renderDdaCard, updateDdaDueTones, ddaTodayKey } from './dda-card.js';
 import { createDdaSyncReceipt } from './dda-sync-receipt.js';
+import { createDdaGalleryMetrics } from './dda-gallery-metrics.js';
 import { renderProvisionDescriptionCard, provisionDescriptionIcon } from './provision-description-card.js';
 import { createProvisionDescriptionDetail } from './provision-description-detail-view.js';
 import { field, displayValue, paymentTotal } from './provision-payment-format.js';
@@ -244,7 +245,8 @@ export function createRegistrationGallery({ document: doc = globalThis.document,
   const pageText = el("span", "", "Página 1");
   const next = el("button", "rg-button", "Próxima"); next.type = "button";
   pagination.append(previous, pageText, next);
-  root.append(header, createShortcut.toolbar, filterDisclosure, ...(sortBar ? [sortBar] : []), feedback, list, pagination);
+  const ddaMetrics = kind === 'dda' ? createDdaGalleryMetrics(doc) : null;
+  root.append(header, createShortcut.toolbar, filterDisclosure, ...(sortBar ? [sortBar] : []), ...(ddaMetrics ? [ddaMetrics.root] : []), feedback, list, pagination);
   doc.body.append(root);
   const descriptionDetail = kind === 'provisionDescription' ? createProvisionDescriptionDetail({
     document: doc, host: root, background: [header, createShortcut.toolbar, filterDisclosure, sortBar, feedback, list, pagination].filter(Boolean),
@@ -267,6 +269,7 @@ export function createRegistrationGallery({ document: doc = globalThis.document,
   });
 
   let rows = [];
+  let ddaSnapshot = null;
   let page = 1;
   let request = 0;
   let loadController = null;
@@ -677,6 +680,7 @@ export function createRegistrationGallery({ document: doc = globalThis.document,
 
   function render() {
     if (destroyed) return;
+    ddaMetrics?.update(ddaSnapshot, { stale: loadFailed });
     createShortcut.sync();
     refreshShortcut.sync();
     const filtered = filteredRows();
@@ -839,8 +843,10 @@ export function createRegistrationGallery({ document: doc = globalThis.document,
       const snapshot = await data.loadSnapshot({ refresh, signal: activeLoad.signal, onProgress: task.report });
       if (destroyed || root.hidden || !root.isConnected || current !== request) return;
       if (!Array.isArray(snapshot?.rows)) throw new Error('A consulta não retornou uma lista de registros válida.');
+      if (kind === 'dda' && (snapshot.hasMore === true || snapshot.complete === false)) throw new Error('A consulta DDA está incompleta.');
       task.acquired();
       rows = snapshot.rows;
+      ddaSnapshot = snapshot;
       populateFilters();
       if (destroyed || root.hidden || !root.isConnected || current !== request) return;
       const status = filterControls.get("STATUS");
@@ -859,6 +865,7 @@ export function createRegistrationGallery({ document: doc = globalThis.document,
       if (destroyed || root.hidden || !root.isConnected || current !== request) return;
       loadFailed = true;
       rows = preserveRowsOnError ? previousRows : [];
+      if (!preserveRowsOnError) ddaSnapshot = null;
       page = 1;
       render();
       return false;
@@ -894,7 +901,7 @@ export function createRegistrationGallery({ document: doc = globalThis.document,
   function refreshDdaDate() {
     if (destroyed || root.hidden || kind !== 'dda') return;
     const day = ddaTodayKey();
-    if (day !== ddaDay) { ddaDay = day; updateDdaDueTones(root); }
+    if (day !== ddaDay) { ddaDay = day; updateDdaDueTones(root); ddaMetrics?.update(ddaSnapshot, { stale: loadFailed }); }
   }
   function stopDdaClock() {
     if (ddaClock !== null) doc.defaultView?.clearInterval(ddaClock);

@@ -1,4 +1,18 @@
 /* DDA presentation stays isolated from editable registration galleries. */
+.rg-dda-metrics { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 10px; }
+.rg-dda-summary-tile { display: flex; flex-direction: column; gap: 7px; min-width: 0; padding: 14px; border: 1px solid #ccdfe9; border-left: 4px solid #32689f; border-radius: 10px; background: #eaf3fc; color: #193b61; }
+.rg-dda-summary-tile[data-dda-metric="total"] { background: #eaf6ef; border-color: #c7e2d0; border-left-color: #27734d; color: #215b3e; }
+.rg-dda-summary-tile[data-dda-metric="today"] { background: #fff0f2; border-color: #f0d0d6; border-left-color: #b32743; color: #99203b; }
+.rg-dda-summary-tile[data-dda-metric="week"] { background: #fff4e3; border-color: #ecd6b3; border-left-color: #b26717; color: #82480e; }
+.rg-dda-summary-tile__label { font-size: .8rem; line-height: 1.3; font-weight: 700; }
+.rg-dda-summary-tile__value { font-size: 1.15rem; line-height: 1.25; overflow-wrap: anywhere; }
+.rg-dda-summary-tile__detail { font-size: .68rem; line-height: 1.35; }
+.rg-dda-metrics__note { grid-column: 1 / -1; margin: 0; color: #536576; font-size: .7rem; line-height: 1.4; }
+@media (max-width: 700px) {
+  .rg-dda-metrics { grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 8px; }
+  .rg-dda-summary-tile { padding: 10px; gap: 6px; }
+  .rg-dda-summary-tile__value { font-size: 1rem; }
+}
 .rg-overlay[data-gallery-kind="dda"] { color: #182b49; gap: 12px; }
 .rg-overlay[data-gallery-kind="dda"] .rg-title { color: #142846; }
 .rg-overlay[data-gallery-kind="dda"] .gallery-filter-button { display: inline-flex; align-items: center; justify-content: center; gap: 6px; }
