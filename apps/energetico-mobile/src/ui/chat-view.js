@@ -4,6 +4,7 @@ import { canDeleteRhidAdjustment } from '../chat/rhid-adjustment-ownership.js';
 import { postingCompletion } from "../chat/posting-completion.js";
 import { postingCompletionMarkup } from "./posting-completion.js";
 import { provisionSettlementReviewMarkup } from './provision-settlement-review.js';
+import { provisionSettlementLaunchSummaryMarkup } from './provision-settlement-launch-summary.js';
 import { reportNavigationMarkup } from "./report-navigation.js";
 import { pendingReportPrintMarkup } from "./report-print.js";
 import { PAYROLL_LAUNCH_REPLY_ID, isSupplierPayrollMenu } from "../chat/supplier-payroll.js";
@@ -1685,7 +1686,7 @@ function renderPoll(message, busy, draft = "", databaseFilterMessage = null, act
     ? rawChangeTable
     : null;
   const presenceTable = message.detail_table || message.detailTable;
-  const provisionReview = provisionSettlementReviewMarkup(presenceTable);
+  const provisionReview = provisionSettlementReviewMarkup(presenceTable) || provisionSettlementLaunchSummaryMarkup(message);
   const rhidAttendanceReport = presenceTable?.kind === "rhid_attendance";
   const calendarPicker = isDateQuestion(message, options);
   const isPendingAttendanceList = message?.presentation === "accordion";
