@@ -9,6 +9,7 @@ on:
 permissions:
   contents: read
   actions: read
+  deployments: read
   pages: write
   id-token: write
 
@@ -71,15 +72,54 @@ jobs:
             const path = require('node:path');
             const { execFileSync } = require('node:child_process');
             const repo = context.repo;
-            const { data } = await github.rest.actions.listWorkflowRuns({
-              ...repo, workflow_id: 'pages.yml', branch: 'main', status: 'success', per_page: 30,
-            });
             const sources = [];
             const cutoff = Date.now() - 7 * 24 * 60 * 60 * 1000;
-            for (const run of data.workflow_runs) {
-              if (Date.parse(run.created_at) < cutoff || sources.length >= 8) break;
+            const candidates = [];
+            const runUrl = `https://github.com/${repo.owner}/${repo.repo}/actions/runs/`;
+            // Environment deployments are new for each attempt, even for an old rerun.
+            deploymentPages: for (let page = 1; ; page++) {
+              const { data: deployments } = await github.rest.repos.listDeployments({
+                ...repo, environment: 'github-pages', per_page: 30, page,
+              });
+              for (const deployment of deployments) {
+                if (Date.parse(deployment.created_at) < cutoff) break deploymentPages;
+                const statuses = [];
+                for (let statusPage = 1; ; statusPage++) {
+                  const { data } = await github.rest.repos.listDeploymentStatuses({
+                    ...repo, deployment_id: deployment.id, per_page: 100, page: statusPage,
+                  });
+                  statuses.push(...data);
+                  if (data.length < 100) break;
+                }
+                // An inactive deployment can still have been successfully served.
+                for (const status of statuses) {
+                  const createdAt = status.created_at || status.updated_at;
+                  const time = Date.parse(createdAt);
+                  const log = status.log_url || status.target_url || '';
+                  const match = log.startsWith(runUrl) && log.slice(runUrl.length).match(/^(\d+)(?:\/|$)/);
+                  if (status.state === 'success' && time >= cutoff && match) {
+                    candidates.push({ deployment, createdAt, time, runId: Number(match[1]) });
+                  }
+                }
+              }
+              if (deployments.length < 30) break;
+            }
+            // Completion order can differ from deployment creation order.
+            candidates.sort((a, b) => b.time - a.time || b.deployment.id - a.deployment.id);
+            const seen = new Set();
+            for (const candidate of candidates) {
+              if (sources.length >= 8) break;
+              const { data: run } = await github.rest.actions.getWorkflowRun({ ...repo, run_id: candidate.runId });
+              if (run.path !== '.github/workflows/pages.yml' || run.head_branch !== 'main'
+                || run.head_sha !== candidate.deployment.sha
+                || Date.parse(run.run_started_at) > candidate.time) continue;
+              const id = `${run.head_sha}-${run.id}-${run.run_attempt}`;
+              if (seen.has(id)) continue;
+              seen.add(id);
               const artifacts = await github.rest.actions.listWorkflowRunArtifacts({ ...repo, run_id: run.id, per_page: 100 });
-              const available = artifacts.data.artifacts.filter(artifact => !artifact.expired);
+              const available = artifacts.data.artifacts.filter(artifact => !artifact.expired
+                && Date.parse(artifact.created_at) >= Date.parse(run.run_started_at)
+                && Date.parse(artifact.created_at) <= candidate.time);
               const history = available.find(artifact => artifact.name === 'energetico-web-assets');
               const artifact = history || available.find(artifact => artifact.name === 'github-pages');
               if (!artifact) continue;
@@ -87,7 +127,7 @@ jobs:
               fs.mkdirSync(destination, { recursive: true });
               execFileSync('gh', ['run', 'download', String(run.id), '--repo', `${repo.owner}/${repo.repo}`, '--name', artifact.name, '--dir', destination], { stdio: 'inherit' });
               if (!history) execFileSync('tar', ['-xf', path.join(destination, 'artifact.tar'), '-C', destination]);
-              sources.push({ dir: history ? destination : path.join(destination, 'energetico'), createdAt: run.created_at, id: run.head_sha });
+              sources.push({ dir: history ? destination : path.join(destination, 'energetico'), createdAt: candidate.createdAt, id });
               // A retained archive already includes the complete recent history.
               if (history) break;
             }
@@ -97,14 +137,14 @@ jobs:
       - name: Preserve complete assets for already open Energético sessions
         env:
           PREVIOUS_ASSETS: ${{ steps.previous-assets.outputs.sources }}
-          BUILD_SHA: ${{ github.sha }}
+          BUILD_ID: ${{ github.sha }}-${{ github.run_id }}-${{ github.run_attempt }}
         run: |
           node --input-type=module <<'NODE'
           import { preserveEnergeticoAssets } from './scripts/preserve-energetico-assets.mjs';
           const result = await preserveEnergeticoAssets({
             currentDir: '_site/energetico',
             previousDirs: JSON.parse(process.env.PREVIOUS_ASSETS || '[]'),
-            buildId: process.env.BUILD_SHA,
+            buildId: process.env.BUILD_ID,
           });
           const { cohorts, ...summary } = result;
           console.log(JSON.stringify(summary));
