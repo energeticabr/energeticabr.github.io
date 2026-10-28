@@ -1,0 +1,217 @@
+--- a/worker/workflow.py
++++ b/worker/workflow.py
+@@ -1295,6 +1295,13 @@
+                 return self._retry_after_error(state, etag)
+             if option_next and state.get("option_pagination"):
+                 self._mark_processed(state, message_id)
++                step = (self._current_step(state) if state.get("flow") == "launch"
++                        and state.get("stage") == "selecting_fields" else None)
++                if (state.get("flow") == "launch" and step
++                        and step.get("key") == "unidade_lancamento"
++                        and step.get("auto_select_recommended")):
++                    state.pop("option_pagination", None)
++                    return self._prompt_next_or_summary(state, etag)
+                 return self._send_next_option_page(state, etag)
+             if (
+                 state.get("stage") in ACTIVE_STAGES
+@@ -20713,6 +20720,91 @@
+ 
+         return self._prompt_measurement_line_progress(state, etag)
+ 
++    def _launch_product_unit_option(self, snapshot: dict) -> dict | None:
++        selection = (snapshot.get("selections") or {}).get("produto_lancamento") or {}
++        product_id = None
++        for raw in (selection.get("id"), (selection.get("source_values") or {}).get("Id")):
++            if isinstance(raw, (int, str)) and not isinstance(raw, bool):
++                if re.fullmatch(r"[0-9]+", str(raw).strip()) and int(raw) > 0:
++                    product_id = int(raw)
++                    break
++        if product_id is None:
++            return None
++        options = self.sharepoint.get_options({
++            "key": "unidade_padrao_produto_lancamento",
++            "source": {
++                "type": "sharepoint_list", "list": "CADASTROPRODUTO",
++                "id_field": "Id", "label_field": "UNIDADE", "value_field": "UNIDADE",
++                "fields": ["Id", "UNIDADE"],
++                "filters": [{"field": "Id", "equals": product_id}],
++            },
++        }, {})
++        if len(options) != 1 or str(options[0].get("id")) != str(product_id):
++            return None
++        value = options[0].get("value")
++        if not isinstance(value, str) or not value.strip():
++            return None
++        return {**options[0], "value": value.strip(), "title": value.strip(), "recommended": True}
++
++    def _launch_product_unit_error(self, state, etag, *, blocked=False):
++        message = (
++            "❌ NÃO É SEGURO ALTERAR A UNIDADE DESTE LOTE: EXISTE UMA TENTATIVA DE POSTAGEM. "
++            "OS DADOS E REGISTROS JÁ POSTADOS FORAM PRESERVADOS. É NECESSÁRIO RECONCILIAR A TENTATIVA."
++            if blocked else
++            "❌ NÃO FOI POSSÍVEL CONFIRMAR UMA UNIDADE PADRÃO VÁLIDA PELO ID DO PRODUTO. "
++            "CORRIJA O CADASTRO DO PRODUTO E TENTE NOVAMENTE."
++        )
++        self._send_text(state, message)
++        self._send_error_recovery_actions(state)
++        etag = self._save(state, etag)
++        return {"status": "launch_product_unit_migration_blocked" if blocked else "missing_product_unit_default",
++                "field": "unidade_lancamento", "batch_id": state["batch_id"], "etag": etag}
++
++    def _launch_product_units_attempted(self, state):
++        return bool(
++            has_cash_checkpoint(state) or state.get("partial_submission_items")
++            or state.get("submission_failure") or state.get("sharepoint")
++            or state.get("launch_cash_receipt_continuation")
++            or state.get("launch_unit_write_batch_id") == state["batch_id"]
++            or load_cash_checkpoint(self, state)
++        )
++
++    def _guard_launch_product_units(self, state, etag, *, before_write=False):
++        if state.get("flow") != "launch" or not any(
++            step.get("key") == "unidade_lancamento" and step.get("auto_select_recommended")
++            for step in self._flow_config(state)["steps"]
++        ):
++            return None
++        attempted = self._launch_product_units_attempted(state)
++        # Old attempts may have written without leaving a complete local receipt.
++        # Only this version's pre-write marker proves normalization preceded them.
++        if attempted and (not before_write
++                          or state.get("launch_unit_write_batch_id") != state["batch_id"]
++                          or state.get("sharepoint")):
++            state["stage"] = "summarizing"
++            return self._launch_product_unit_error(state, etag, blocked=True)
++        snapshots = [*state.get("launch_lines", []), state]
++        try:
++            options = [self._launch_product_unit_option(snapshot) for snapshot in snapshots]
++        except Exception:
++            options = []
++        if not options or any(option is None for option in options):
++            state["stage"] = "summarizing"
++            return self._launch_product_unit_error(state, etag, blocked=attempted)
++        if attempted:
++            if any(snapshot.get("fields", {}).get("UN") != option["value"]
++                   for snapshot, option in zip(snapshots, options)):
++                state["stage"] = "summarizing"
++                return self._launch_product_unit_error(state, etag, blocked=True)
++            return None  # Never rewrite an attempted/frozen payload, even its labels.
++        # Validate every line first; a missing default must not migrate half a batch.
++        for snapshot, option in zip(snapshots, options):
++            snapshot.setdefault("fields", {})["UN"] = option["value"]
++            snapshot.setdefault("display_values", {})["UN"] = option["value"]
++            snapshot.setdefault("answers", {})["unidade_lancamento"] = option["value"]
++            snapshot.setdefault("selections", {})["unidade_lancamento"] = option
++        return None
++
+     def _prompt_next_or_summary(self, state: dict, etag: str | None) -> dict:
+         step = self._current_step(state)
+         flow = self._flow_config(state)
+@@ -21024,6 +21116,24 @@
+             # presets. The channel consumes this marker for this message.
+             state["_outbound_calendar_picker"] = True
+         if kind == "selection":
++            if (state.get("flow") == "launch" and step.get("key") == "unidade_lancamento"
++                    and step.get("auto_select_recommended")):
++                if self._launch_product_units_attempted(state):
++                    return self._launch_product_unit_error(state, etag, blocked=True)
++                state["options"] = []
++                state.pop("option_pagination", None)
++                try:
++                    selected = self._launch_product_unit_option(state)
++                except Exception:
++                    selected = None
++                if selected is None:
++                    for bucket in ("fields", "display_values"):
++                        state.setdefault(bucket, {}).pop(step.get("target_field"), None)
++                    state.setdefault("answers", {}).pop(step["key"], None)
++                    state.setdefault("selections", {}).pop(step["key"], None)
++                    return self._launch_product_unit_error(state, etag)
++                self._apply_selected_option(state, step, selected)
++                return self._prompt_next_or_summary(state, etag)
+             state["options"] = self._selection_options(state, step)
+             state["options"] = self._recommended_confirmation_options(
+                 state, step, state["options"]
+@@ -21364,6 +21474,12 @@
+             return provision_result
+         step = self._current_step(state)
+         if not step:
++            return self._prompt_next_or_summary(state, etag)
++        if (state.get("flow") == "launch" and step.get("key") == "unidade_lancamento"
++                and step.get("auto_select_recommended")):
++            # Old clients can still display the unit poll after a rollout.
++            # Resolve its product default instead of accepting a stale override.
++            self._mark_processed(state, event["message_id"])
+             return self._prompt_next_or_summary(state, etag)
+         product_guard = self._provision_product_guard(event,state,etag,step)
+         if product_guard is not None:
+@@ -28853,6 +28969,9 @@
+         return card
+ 
+     def _summarize_and_confirm(self, state: dict, etag: str | None) -> dict:
++        unit_result = self._guard_launch_product_units(state, etag)
++        if unit_result is not None:
++            return unit_result
+         description = state.get('provision_description') or {}
+         if description.get('review_version') == 1 and description.get('review_phase') == 'overview':
+             return self._description_review_prompt(state, etag)
+@@ -29323,6 +29442,10 @@
+     def _handle_confirmation_reply(
+         self, event: dict, state: dict, etag: str | None
+     ) -> dict:
++        if state.get("flow") == "launch" and self._launch_product_units_attempted(state):
++            unit_result = self._guard_launch_product_units(state, etag)
++            if unit_result is not None:
++                return unit_result
+         document_result = document_batch.confirmation(self, event, state, etag)
+         if document_result is not None:
+             return document_result
+@@ -29567,6 +29690,8 @@
+             "retornar postagem",
+             "retornar a postagem",
+         }:
++            if state.get("flow") == "launch":
++                return self._summarize_and_confirm(state, etag)
+             self._send_confirmation_actions(state)
+             card = self._send_summary_card(state)
+             state["stage"] = "awaiting_confirmation"
+@@ -31830,6 +31955,9 @@
+         return etag
+ 
+     def _commit(self, state: dict, etag: str | None) -> dict:
++        unit_result = self._guard_launch_product_units(state, etag, before_write=True)
++        if unit_result is not None:
++            return unit_result
+         employment_review = self._supplier_employment_review(state, etag)
+         if employment_review is not None:
+             return employment_review
+@@ -31895,6 +32023,9 @@
+                 return self._commit_provision_group(state, etag, flow)
+             if self._is_measurement_line_flow(state) and state.get("measurement_lines"):
+                 return self._commit_multiple_measurement_lines(state, etag, flow)
++            if state.get("flow") == "launch" and state.get("launch_unit_write_batch_id") != state["batch_id"]:
++                state["launch_unit_write_batch_id"] = state["batch_id"]
++                etag = self._save(state, etag)
+             if state.get("flow") == "launch" and state.get("launch_lines"):
+                 return self._commit_multiple_launch(state, etag, flow)
+             if document_batch.active(state):
+@@ -35714,6 +35845,9 @@
+         elif stage == "compressing_attachments":
+             return self._compress_attachments(state, etag)
+         elif stage == "awaiting_confirmation":
++            unit_result = self._guard_launch_product_units(state, etag)
++            if unit_result is not None:
++                return unit_result
+             self._send_confirmation_actions(state)
+             self._send_summary_card(state)
+         elif stage == LAUNCH_PENDING_ATTENDANCE_LINK_STAGE:
+--- a/worker/workflow_config.json
++++ b/worker/workflow_config.json
+@@ -13199,6 +13199,8 @@
+         {
+           "key": "unidade_lancamento",
+           "kind": "selection",
++          "auto_select_recommended": true,
++          "editable": false,
+           "target_field": "UN",
+           "prompt": "QUAL É A UNIDADE DE MEDIDA? A opção com ⭐ é o padrão do produto e estará obrigatoriamente entre as opções.",
+           "button_label": "ESCOLHER UNIDADE",
