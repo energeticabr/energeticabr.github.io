@@ -565,18 +565,18 @@ button { touch-action: manipulation; }
 .chat-main-provisions-shortcut { box-sizing: border-box; grid-column: 1; grid-row: 1; display: grid; place-items: center; width: 44px; height: 44px; margin-top: 12px; padding: 0; border: 0; border-radius: 12px; background: #103b6b; overflow:hidden; }
 .chat-main-provisions-shortcut img { display: block; width: 100%; height: 100%; object-fit: contain; }
 .chat-main-provisions-shortcut:focus-visible { outline: 3px solid var(--accent); outline-offset: 3px; }
-.chat-main-payment-ledger-shortcut { box-sizing:border-box; grid-column:1; grid-row:1; display:grid; place-items:center; align-self:start; width:44px; height:44px; margin-top:124px; padding:0; border:0; border-radius:12px; background:#000d4b; overflow:hidden; }
+.chat-main-payment-ledger-shortcut { box-sizing:border-box; grid-column:1; grid-row:1; display:grid; place-items:center; align-self:start; width:44px; height:44px; margin-top:180px; padding:0; border:0; border-radius:12px; background:#000d4b; overflow:hidden; }
 .chat-main-payment-ledger-shortcut img { display:block; width:100%; height:100%; object-fit:contain; }
 .chat-main-payment-ledger-shortcut:focus-visible { outline:3px solid var(--accent); outline-offset:3px; }
-.chat-main-provision-report-shortcut { margin-top:68px; }
+.chat-main-provision-report-shortcut { margin-top:124px; }
 .chat-main-provision-report-shortcut img { object-fit:contain; transform:none; mix-blend-mode:normal; }
-.chat-main-management-shortcut { margin-top:180px; }
-.chat-main-order-validation-shortcut { margin-top:236px; }
-.chat-main-quotation-shortcut { margin-top:292px; cursor:pointer; background:#f1f3f5; }
+.chat-main-management-shortcut { margin-top:236px; }
+.chat-main-order-validation-shortcut { margin-top:292px; }
+.chat-main-quotation-shortcut { margin-top:348px; cursor:pointer; background:#f1f3f5; }
 .chat-main-quotation-shortcut img { transform:none; mix-blend-mode:normal; object-fit:contain; }
-.chat-main-depreciation-shortcut { margin-top:348px; cursor:pointer; background:#999999; }
+.chat-main-depreciation-shortcut { margin-top:404px; cursor:pointer; background:#999999; }
 .chat-main-depreciation-shortcut img { transform:none; mix-blend-mode:normal; object-fit:contain; }
-.chat-main-document-control-shortcut { margin-top:406px; cursor:pointer; background:#89a0cf; }
+.chat-main-document-control-shortcut { margin-top:462px; cursor:pointer; background:#89a0cf; }
 .chat-main-document-control-shortcut img { transform:none; mix-blend-mode:normal; object-fit:contain; }
 .report-navigation { pointer-events:none; }
 .report-navigation .report-navigation-arrow { position:fixed; top:50%; transform:translateY(-50%); z-index:3; display:grid; place-items:center; box-sizing:border-box; width:var(--report-navigation-size,56px); height:var(--report-navigation-size,56px); min-width:44px; min-height:44px; padding:0; border:3px solid #b00000; border-radius:50%; background:white; color:#b00000; cursor:pointer; pointer-events:auto; touch-action:manipulation; }
@@ -587,9 +587,9 @@ button { touch-action: manipulation; }
 .report-navigation-arrow:disabled { opacity:.55; cursor:wait; }
 @media(max-height:500px) { .report-navigation .report-navigation-arrow { width:var(--report-navigation-size,46px); height:var(--report-navigation-size,46px); } }
 @media print { .report-navigation { display:none !important; } }
-.chat-main-task-association-shortcut { margin-top:462px; cursor:pointer; background:#618c25; }
+.chat-main-task-association-shortcut { margin-top:518px; cursor:pointer; background:#618c25; }
 .chat-main-task-association-shortcut img { transform:none; mix-blend-mode:normal; object-fit:contain; }
-.chat-main-delegated-deadline-shortcut { margin-top:518px; cursor:pointer; background:#618c25; }
+.chat-main-delegated-deadline-shortcut { margin-top:574px; cursor:pointer; background:#618c25; }
 .chat-main-delegated-deadline-shortcut img { transform:none; mix-blend-mode:normal; object-fit:contain; }
 .chat-pending-provisions__empty { margin: 10px 0; padding: 14px; border-radius: 12px; color: var(--brand); background: #edf7f3; }
 .chat-bubble {
@@ -1503,3 +1503,6 @@ button.chat-rhid-attendance-card__cluster:focus-visible { outline: 3px solid #15
   .chat-attachments summary { padding-block: 4px; }
   .chat-attachments summary button { min-height: 44px; padding-block: 7px !important; }
 }
+
+.chat-main-dda-shortcut { margin-top:68px; position:relative; background:#103b6b; }
+.chat-main-dda-label { position:absolute; bottom:0; left:0; right:0; padding:1px 0; background:#103b6b; color:#fff; font-size:10px; font-weight:800; line-height:12px; text-align:center; }

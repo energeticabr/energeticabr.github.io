@@ -56,7 +56,7 @@ test('mascote externo preserva largura de Pendências e abre provisões em celul
       assert.equal(layout.transcriptOverflow,false,'área rolável sem overflow lateral');
       assert.ok(layout.image&&layout.i.x>=layout.m.x&&layout.i.right<=layout.m.right&&layout.i.bottom<=layout.m.bottom);
       const shortcuts=await evaluate(`(()=>{const buttons=[...document.querySelectorAll('.chat-main-provisions-shortcut,.chat-main-payment-ledger-shortcut')];return buttons.map(b=>{const r=b.getBoundingClientRect();return {action:b.dataset.action,y:r.y,bottom:r.bottom,image:b.querySelector('img').naturalWidth>0};});})()`);
-assert.deepEqual(shortcuts.map(s=>s.action),['open-pending-provisions','open-provision-report','open-payment-ledger','open-management-report','open-order-validation-report','open-quotation-report','open-depreciation-report','open-document-control-report','open-task-association-report','open-delegated-deadline-report']);
+assert.deepEqual(shortcuts.map(s=>s.action),['open-pending-provisions','open-dda-report','open-provision-report','open-payment-ledger','open-management-report','open-order-validation-report','open-quotation-report','open-depreciation-report','open-document-control-report','open-task-association-report','open-delegated-deadline-report']);
       assert.ok(shortcuts.every((s,i)=>s.image&&(!i||s.y>=shortcuts[i-1].bottom+4)),JSON.stringify(shortcuts));
       const depreciationHit=await evaluate(`(()=>{const button=document.querySelector('[data-action=open-depreciation-report]'),r=button.getBoundingClientRect();return document.elementFromPoint(r.x+r.width/2,r.y+r.height/2)?.closest('[data-action]')?.dataset.action||'';})()`);
       assert.equal(depreciationHit,'open-depreciation-report','real touch on the seventh mascot must not hit an overlapping legacy avatar');
@@ -66,7 +66,7 @@ assert.deepEqual(shortcuts.map(s=>s.action),['open-pending-provisions','open-pro
       assert.ok(reportLayout.width>=44&&reportLayout.height>=44&&reportLayout.x>=0&&reportLayout.image);
       assert.equal(reportLayout.fill,'rgb(0, 13, 75)');
       const mascotFit=await evaluate(`(()=>{return [...document.querySelectorAll('.chat-message--external-provisions > button,.chat-message--external-cargos > button,.chat-main-commercial-shortcuts > button')].map(b=>{const i=b.querySelector('img'),r=b.getBoundingClientRect(),q=i.getBoundingClientRect(),s=getComputedStyle(i);return {action:b.dataset.action,source:i.naturalWidth,fit:s.objectFit,blend:s.mixBlendMode,transform:s.transform,inside:q.left>=r.left&&q.right<=r.right&&q.top>=r.top&&q.bottom<=r.bottom,fill:getComputedStyle(b).backgroundColor};});})()`);
-      assert.equal(mascotFit.length,22);
+      assert.equal(mascotFit.length,23);
       const commercialTop=await evaluate(`(()=>{const nav=document.querySelector('nav[aria-label="Relatórios comerciais"]'),bubble=document.querySelector('[data-reply-id=group_pending]').closest('.chat-bubble'),blue=document.querySelector('.chat-main-provisions-shortcut');const rect=n=>{const r=n.getBoundingClientRect();return {x:r.x,y:r.y,right:r.right,bottom:r.bottom,width:r.width,height:r.height};};return nav?{row:rect(nav),bubble:rect(bubble),blue:rect(blue),external:!bubble.contains(nav),buttons:[...nav.querySelectorAll('button')].map(b=>({action:b.dataset.action,...rect(b)}))}:null;})()`);
       assert.ok(commercialTop,'os quatro mascotes comerciais devem ter uma faixa acima do menu');
       assert.equal(commercialTop.external,true);

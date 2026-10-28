@@ -1,0 +1,26 @@
+<!doctype html>
+<html lang="pt-BR"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Relatório DDA — dados fictícios</title>
+<link rel="stylesheet" href="/src/styles.css"><link rel="stylesheet" href="/src/ui/payment-ledger.css"><link rel="stylesheet" href="/src/ui/dda-report.css"></head>
+<body><main id="app"></main><script type="module">
+import {createChatView} from '/src/ui/chat-view.js';
+import {createDdaReportView} from '/src/ui/dda-report-view.js';
+import {decorateReportPrint} from '/src/ui/report-print.js';
+import {decorateReportNavigation} from '/src/ui/report-navigation.js';
+const source=[
+ {id:'1',fields:{Title:'ALFA MATERIAIS — EXEMPLO',VENCIMENTO:'2026-10-28',VALOR:1250.35,SITUACAO:'Em aberto',DOCUMENTO:'EX-001',BANCO:'BANCO EXEMPLO',ULTIMA_CONSULTA:'2026-10-28T10:00:00Z'}},
+ {id:'2',fields:{Title:'BETA LOCAÇÕES — EXEMPLO',VENCIMENTO:'2026-10-29',VALOR:500,SITUACAO:'Em aberto',DOCUMENTO:'EX-002',BANCO:'BANCO EXEMPLO',ULTIMA_CONSULTA:'2026-10-28T10:00:00Z'}},
+ {id:'3',fields:{Title:'GAMA SERVIÇOS — EXEMPLO',VENCIMENTO:'2026-11-05',VALOR:2450,SITUACAO:'Em aberto',DOCUMENTO:'EX-003',BANCO:'BANCO MODELO',ULTIMA_CONSULTA:'2026-10-28T10:00:00Z'}},
+ {id:'4',fields:{Title:'DELTA — EXEMPLO PAGO',VENCIMENTO:'2026-10-26',VALOR:100,SITUACAO:'Pago',DOCUMENTO:'EX-004',BANCO:'BANCO MODELO'}}
+];
+window.ddaMirrorClicks=0;window.ddaPdfRows=0;
+const report=decorateReportPrint(decorateReportNavigation(createDdaReportView({document,now:()=>new Date('2026-10-28T12:00:00Z'),
+ data:{loadSnapshot:async()=>({rows:source}),listAttachments:async()=>{window.ddaMirrorClicks++;return [];},downloadAttachment:async()=>null},openMediaCollection:()=>{}}),{action:'open-dda-report',onNavigate:()=>report.close()}),
+ {action:'open-dda-report',previewMedia:async(source)=>{const url=URL.createObjectURL(await source);window.open(url,'_blank','noopener');}});
+const chat=createChatView(document.querySelector('#app'));chat.on('open-dda-report',()=>report.open());
+chat.render({sessionStatus:'authenticated',account:{name:'Demonstração'},draft:'',pendingFiles:[],messages:[{id:'home',role:'assistant',type:'poll',question:'QUAL ÁREA VOCÊ DESEJA ACESSAR?',options:[
+ {id:'group_pending',label:'⏳ PENDÊNCIAS'},...['SUPRIMENTOS','FINANCEIRO','DEMANDAS','RECURSOS HUMANOS','ETAPA OBRA','COMERCIAL','AUDITORIA E DOCUMENTOS','NB PARTICIPAÇÕES','GASTOS PESSOAIS','POWER BI'].map((label,i)=>({id:'group_'+i,label}))]}]});
+window.ddaReport=report;
+if(new URLSearchParams(location.search).has('report'))await report.open();
+document.documentElement.dataset.ready='true';
+</script></body></html>
