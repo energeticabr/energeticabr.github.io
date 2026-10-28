@@ -22,6 +22,19 @@ test('DDA shortcut is immediately below the first left mascot and dispatches its
  const dom=new JSDOM(markup),first=dom.window.document.querySelector('[data-action="open-pending-provisions"]'),dda=first?.nextElementSibling;
  assert.equal(dda?.dataset.action,'open-dda-report');assert.equal(commandFromTarget(dda)?.type,'open-dda-report');assert.match(dda.textContent,/DDA/);dom.window.close();
 });
+test('gallery receives the authenticated bank refresh callback and it expires with logout',async t=>{
+ let options,called=0;
+ const h=setup(t,{client:{sendText:async()=>({status:'processed',messages:[]}),
+ refreshDda:async()=>{called++;return {status:'succeeded',requestId:'a'.repeat(32)};},
+ getDdaRefreshStatus:async()=>{throw Error('unexpected polling');}},
+ registrationGalleryFactory:async input=>{options=input;return {open(){},close(){},destroy(){}};}});
+ await h.controller.start();
+ await h.view.emit('select-reply',{replyId:'action_dda_gallery',label:'GALERIA DDA'});
+ assert.equal(typeof options.refreshBank,'function');
+ await options.refreshBank({});assert.equal(called,1);
+ await h.view.emit('sign-out');
+ await assert.rejects(options.refreshBank({}));assert.equal(called,1);
+});
 test('report and gallery use separate instances, share read-only source and media, and expire at logout',async t=>{
  const h=setup(t);await h.controller.start();await h.view.emit('open-dda-report');assert.deepEqual(h.opened,['report']);assert.equal(h.factories[0].onCreate,undefined);
  await h.view.emit('select-reply',{replyId:'action_dda_gallery',label:'GALERIA DDA'});assert.deepEqual(h.opened,['report','gallery']);

@@ -1,4 +1,5 @@
 import { createDdaAutoReminder } from './chat/dda-auto-reminder.js';
+import { refreshDdaBank } from './chat/dda-bank-refresh.js';
 import { PAYROLL_LAUNCH_REPLY_ID, isSupplierPayrollMenu } from "./chat/supplier-payroll.js";
 import { MEAL_VOUCHER_REPLY_ID } from './chat/meal-voucher.js';
 import { createMealVoucherTray } from './chat/meal-voucher-tray.js';
@@ -9286,6 +9287,9 @@ export function createAppController({
           const factory = isDdaReport ? ddaReportFactory : registrationGalleryFactory;
           const panel = await factory({
             kind: sourceKind, data,
+            ...(!isDdaReport && sourceKind === 'dda' ? {
+              refreshBank: options => refreshDdaBank(client, { ...options, assertSession }),
+            } : {}),
             ...(isDdaReport ? { onClose: () => ddaAutoReminder.dismiss() } : {}),
             ...(["contractorEmployment", "dda"].includes(sourceKind) ? {} : { onCreate: galleryCreationHandler(replyId, assertSession) }),
             ...(["dda", "presenceDescriptions", "provisionDescription", "documents", "asset", "assetFunction", "assetProduct", "assetGroup", "workDiary", "quotes", "contracts", "contractLines", "measurements", "measurementLines", "stageDemonstratives", "constructionStages", "recurringTasks", "delegatedTasks"].includes(sourceKind) ? {
