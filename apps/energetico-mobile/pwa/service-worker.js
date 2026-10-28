@@ -17,15 +17,19 @@ self.addEventListener("fetch", event => {
   if (request.method !== "GET" || url.origin !== self.location.origin || !url.pathname.startsWith("/energetico/")) return;
   if (request.mode === "navigate") {
     event.respondWith(fetch(request).then(response => {
-      const copy = response.clone();
-      caches.open(CACHE_NAME).then(cache => cache.put("/energetico/", copy));
+      if (response.ok) {
+        const copy = response.clone();
+        caches.open(CACHE_NAME).then(cache => cache.put("/energetico/", copy));
+      }
       return response;
     }).catch(() => caches.match("/energetico/")));
     return;
   }
-  event.respondWith(caches.match(request).then(cached => cached || fetch(request).then(response => {
-    const copy = response.clone();
-    caches.open(CACHE_NAME).then(cache => cache.put(request, copy));
+  event.respondWith(caches.match(request).then(cached => cached?.ok ? cached : fetch(request).then(response => {
+    if (response.ok) {
+      const copy = response.clone();
+      caches.open(CACHE_NAME).then(cache => cache.put(request, copy));
+    }
     return response;
   })));
 });
