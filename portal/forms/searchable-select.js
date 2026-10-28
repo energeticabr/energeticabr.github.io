@@ -100,6 +100,15 @@ export function createSearchableSelect(root, config = {}) {
   let providerQuery = "";
   let providerMatches = new Set();
   let destroyed = false;
+  // An untouched blank search still represents the committed option. Restore
+  // required validation as soon as the user edits the query or closes it.
+  let pristineSelectedSearch = false;
+  let requiredBeforeSearch = null;
+  function restoreRequired() {
+    pristineSelectedSearch = false;
+    if (requiredBeforeSearch !== null) input.required = requiredBeforeSearch;
+    requiredBeforeSearch = null;
+  }
   const clearButton = config.clearable === true && !selectionOnly ? documentRef.createElement("button") : null;
   if (clearButton) {
     clearButton.type = "button";
@@ -140,6 +149,7 @@ export function createSearchableSelect(root, config = {}) {
 
   function choose(option, notify = true) {
     if (!option || !findOption(option.value)) return false;
+    restoreRequired();
     const changed = !selectedOption || optionKey(selectedOption.value) !== optionKey(option.value);
     selectedOption = option;
     syncClearButton();
@@ -182,6 +192,7 @@ export function createSearchableSelect(root, config = {}) {
 
   function onInput() {
     if (selectionOnly) { input.value = selectedOption?.label || ''; return; }
+    restoreRequired();
     providerMatches = new Set();
     if (!input.value && selectedOption) {
       selectedOption = null;
@@ -194,7 +205,15 @@ export function createSearchableSelect(root, config = {}) {
   }
 
   function openOptions() {
+    const startingSearch = !wantsOptions;
     wantsOptions = true;
+    if (startingSearch && !selectionOnly && config.clearSelectionLabelOnOpen === true
+      && selectedOption && input.value === selectedOption.label) {
+      pristineSelectedSearch = true;
+      requiredBeforeSearch = input.required === true;
+      input.required = false;
+      input.value = "";
+    }
     const clearEmptyLabel = !selectionOnly && config.clearEmptyLabelOnOpen === true
       && selectedOption
       && String(selectedOption.value ?? "") === ""
@@ -205,6 +224,10 @@ export function createSearchableSelect(root, config = {}) {
     renderOptions();
   }
 
+  function onEditStart() {
+    if (!selectionOnly && config.clearSelectionLabelOnOpen === true && !wantsOptions) openOptions();
+  }
+
   function onKeyDown(event) {
     if (selectionOnly && (event?.key?.length === 1 || ['Backspace', 'Delete'].includes(event?.key))) {
       event.preventDefault?.();
@@ -213,6 +236,8 @@ export function createSearchableSelect(root, config = {}) {
     }
     if (selectionOnly && event?.key === 'Enter' && !open) { event.preventDefault?.(); openOptions(); return; }
     if (event?.isComposing || event?.keyCode === 229) return;
+    if (!event?.ctrlKey && !event?.metaKey && !event?.altKey
+      && (event?.key?.length === 1 || ['Backspace', 'Delete'].includes(event?.key))) onEditStart();
     if (event?.key === "ArrowDown") {
       if (!open) {
         openOptions();
@@ -234,6 +259,7 @@ export function createSearchableSelect(root, config = {}) {
       choose(filteredOptions[activeIndex]);
     } else if (event?.key === "Escape") {
       if (open || wantsOptions) event.preventDefault?.();
+      restoreRequired();
       input.value = selectedOption?.label || "";
       wantsOptions = false;
       setExpanded(false);
@@ -241,6 +267,7 @@ export function createSearchableSelect(root, config = {}) {
   }
 
   function onBlur() {
+    restoreRequired();
     wantsOptions = false;
     input.value = selectedOption?.label || "";
     setExpanded(false);
@@ -254,8 +281,11 @@ export function createSearchableSelect(root, config = {}) {
   const blockEditing = event => event.preventDefault?.();
   const editEvents = ['beforeinput', 'paste', 'cut', 'drop'];
   if (selectionOnly) editEvents.forEach(name => input.addEventListener(name, blockEditing));
+  const searchStartEvents = ['beforeinput', 'paste', 'drop', 'compositionstart'];
+  if (!selectionOnly) searchStartEvents.forEach(name => input.addEventListener(name, onEditStart));
   const onClear = () => {
     if (input.disabled || input.readOnly) return;
+    restoreRequired();
     selectedOption = null;
     input.value = "";
     syncClearButton();
@@ -284,10 +314,15 @@ export function createSearchableSelect(root, config = {}) {
     getValue() {
       return selectedOption?.value ?? "";
     },
+    hasCurrentSelection() {
+      return Boolean(selectedOption) && (input.value === selectedOption.label
+        || pristineSelectedSearch && input.value === "");
+    },
     setValue(value) {
       if (destroyed) return false;
       const option = findOption(value);
       if (!option) {
+        restoreRequired();
         const changed = Boolean(selectedOption);
         selectedOption = null;
         syncClearButton();
@@ -314,6 +349,7 @@ export function createSearchableSelect(root, config = {}) {
         selectedOption = replacement;
         input.value = replacement.label;
       } else {
+        restoreRequired();
         selectedOption = null;
         input.value = "";
         if (previous) emit();
@@ -325,7 +361,7 @@ export function createSearchableSelect(root, config = {}) {
       if (preserveInput) {
         input.value = previous && query === previous.label && replacement ? replacement.label : query;
         if (reopen) openOptions();
-      } else wantsOptions = false;
+      } else { restoreRequired(); wantsOptions = false; }
     },
     search(query) {
       if (destroyed) return Object.freeze([]);
@@ -341,12 +377,14 @@ export function createSearchableSelect(root, config = {}) {
     destroy() {
       if (destroyed) return;
       destroyed = true;
+      restoreRequired();
       input.removeEventListener("input", onInput);
       input.removeEventListener("focus", openOptions);
       input.removeEventListener("click", openOptions);
       input.removeEventListener("keydown", onKeyDown);
       input.removeEventListener("blur", onBlur);
       if (selectionOnly) editEvents.forEach(name => input.removeEventListener(name, blockEditing));
+      if (!selectionOnly) searchStartEvents.forEach(name => input.removeEventListener(name, onEditStart));
       clearButton?.removeEventListener("click", onClear);
       clearButton?.removeEventListener("pointerdown", keepClearTarget);
       clearButton?.removeEventListener("mousedown", keepClearTarget);

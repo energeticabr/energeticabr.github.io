@@ -920,6 +920,7 @@ function bindChoiceSelectors(form, columns, options = {}) {
       id: `field-${column.name}`,
       label: column.label,
       selectionOnly,
+      clearSelectionLabelOnOpen: options.mode === "edit" && options.entity?.id === "lancamentos",
       clearable: options.mode === "edit" && !multiple && !column.readOnly,
       options: choices,
       value: multiple ? undefined : selectedOption?.value,
@@ -1131,7 +1132,7 @@ function bindChoiceSelectors(form, columns, options = {}) {
       const valid = Boolean(selectedOption)
         && String(selectedValue) === selectedOption.value
         && nativeValue === selectedOption.value
-        && inputValue === selectedOption.label;
+        && control.hasCurrentSelection();
       return Object.freeze({
         valid,
         name: column.name,
@@ -1239,6 +1240,7 @@ function bindRelationshipSelectors(form, columns, options = {}) {
         id: relationshipDomId(name),
         label: column.label,
         selectionOnly,
+        clearSelectionLabelOnOpen: options.mode === "edit" && options.entity?.id === "lancamentos",
         clearable: options.mode === "edit" && !multiple,
         options: multiple ? [] : initialOption ? [initialOption] : [],
         value: multiple ? undefined : initialOption?.value,
@@ -1355,7 +1357,7 @@ function bindRelationshipSelectors(form, columns, options = {}) {
         const valid = Boolean(selectedProof)
           && Number(control.getValue()) === selectedProof.id
           && hiddenValue === String(selectedProof.id)
-          && inputValue === selectedProof.label;
+          && control.hasCurrentSelection();
         return Object.freeze({
           valid,
           name,

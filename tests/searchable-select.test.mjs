@@ -113,6 +113,57 @@ function fixture(config = {}) {
   return { document, root, control, changes };
 }
 
+test('a fresh edit search starts empty and preserves the committed option until another is chosen', () => {
+  const { control, changes } = fixture({ value: 'ana', clearSelectionLabelOnOpen: true });
+  control.input.dispatch('focus');
+  assert.equal(control.input.value, '');
+  assert.equal(control.getValue(), 'ana');
+  assert.equal(control.visibleOptions().length, 3);
+  assert.deepEqual(changes, []);
+  control.input.value = 'bruno';
+  control.input.dispatch('input');
+  assert.deepEqual(control.visibleOptions().map(option => option.value), ['bruno']);
+  assert.equal(control.getValue(), 'ana');
+  control.listbox.children[0].dispatch('click');
+  assert.equal(control.getValue(), 'bruno');
+  assert.equal(changes.length, 1);
+});
+
+test('typing or pasting after choosing starts a new query without appending to the committed label', () => {
+  for (const name of ['beforeinput', 'paste', 'drop', 'compositionstart']) {
+    const { control, changes } = fixture({ value: 'ana', clearSelectionLabelOnOpen: true });
+    control.input.dispatch(name);
+    assert.equal(control.input.value, '', name);
+    assert.equal(control.getValue(), 'ana');
+    assert.deepEqual(changes, []);
+    control.input.value = 'car';
+    control.input.dispatch('input');
+    control.listbox.children[0].dispatch('click');
+    assert.equal(control.getValue(), 'carla');
+    control.input.dispatch(name);
+    assert.equal(control.input.value, '', `${name} after choosing with focus retained`);
+    assert.equal(control.getValue(), 'carla');
+  }
+});
+
+test('opening or refreshing an active edit query does not reset what the user is already typing', () => {
+  const { control } = fixture({ value: 'ana', clearSelectionLabelOnOpen: true });
+  control.input.dispatch('focus');
+  control.input.value = 'Ana Beatriz Almeida';
+  control.input.dispatch('input');
+  control.input.dispatch('click');
+  assert.equal(control.input.value, 'Ana Beatriz Almeida');
+  control.setOptions(OPTIONS, { preserveInput: true });
+  assert.equal(control.input.value, 'Ana Beatriz Almeida');
+  control.input.dispatch('blur');
+  assert.equal(control.input.value, 'Ana Beatriz Almeida');
+  control.input.dispatch('focus');
+  assert.equal(control.input.value, '');
+  control.input.dispatch('keydown', { key: 'Escape' });
+  assert.equal(control.input.value, 'Ana Beatriz Almeida');
+  assert.equal(control.getValue(), 'ana');
+});
+
 function type(control, value) {
   control.input.value = value;
   control.input.dispatch("input");

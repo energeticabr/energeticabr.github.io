@@ -1,0 +1,53 @@
+<!doctype html>
+<html lang="pt-BR">
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Validação local da pesquisa ao editar lançamentos</title>
+<link rel="stylesheet" href="../../apps/energetico-mobile/src/styles.css">
+<link rel="stylesheet" href="../../portal/styles/admin.css">
+<link rel="stylesheet" href="../../apps/energetico-mobile/src/ui/gallery-record-actions.css">
+<style>
+  #proof { position: fixed; z-index: 10000; bottom: 0; left: 0; right: 0; padding: 8px; background: #e1f4e8;
+    color: #14532d; font: 700 13px system-ui; text-align: center; pointer-events: none; }
+  #gallery { padding: 30px; }
+</style>
+<main id="gallery"><h1>Validação com dados fictícios</h1><p>Editar lançamento de demonstração</p></main>
+<output id="proof">TESTE LOCAL · Nenhum dado real alterado · 0 gravações</output>
+<script type="module">
+  import { createGalleryRecordActions } from '../../apps/energetico-mobile/src/ui/gallery-record-actions.js';
+
+  const catalog = ['ENGENHEIRO', ...Array.from({ length: 35 }, (_, i) => `MATERIAL ${i + 1}`), 'AÇO ESTRUTURAL', 'CIMENTO'];
+  const columns = [
+    { name: 'AGRUPAR', label: 'Agrupar', control: 'select', choices: ['473', '474'] },
+    { name: 'DATA', label: 'Data', control: 'date' },
+    { name: 'FILIAL', label: 'Filial', control: 'select', choices: ['OBRA DEMONSTRAÇÃO', 'FILIAL ALTERNATIVA'] },
+    { name: 'TIPOTRANSACAO', label: 'Tipo transação', control: 'select', choices: ['CUSTO', 'DESPESA'] },
+    { name: 'ETAPA', label: 'Etapa', control: 'select', choices: ['ESTRUTURA', 'ACABAMENTO'] },
+    { name: 'FORNECEDOR', label: 'Fornecedor', control: 'select', choices: ['FORNECEDOR ORIGINAL', 'EMPRESA NOVA'] },
+    { name: 'PRODUTO', label: 'Produto', control: 'select', choices: ['ENGENHEIRO'], powerApps: {
+      closed: true, preserveCurrentValue: true, optionSources: [{ kind: 'related', listName: 'CADASTROPRODUTO', valueField: 'PRODUTO' }],
+    } },
+    { name: 'DESCRICAO', label: 'Descrição', control: 'text' },
+  ].map(column => ({ ...column, editable: true, hidden: false }));
+  let writes = 0;
+  const row = { id: '42', fields: { AGRUPAR: '473', DATA: '2026-10-28', FILIAL: 'OBRA DEMONSTRAÇÃO',
+    TIPOTRANSACAO: 'CUSTO', ETAPA: 'ESTRUTURA', FORNECEDOR: 'FORNECEDOR ORIGINAL', PRODUTO: 'ENGENHEIRO', DESCRICAO: 'DADOS FICTÍCIOS' } };
+  const actions = createGalleryRecordActions({ document, host: document.querySelector('#gallery'), galleryTitle: 'GALERIA LANÇAMENTOS',
+    loadEditor: async () => ({ entity: { id: 'lancamentos', title: 'Lançamentos' }, columns, item: structuredClone(row),
+      contract: { hasForm: true, readOnly: false },
+      powerAppsOptionSearch: async (_column, _source, term) => {
+        await new Promise(resolve => setTimeout(resolve, 100));
+        const normalize = text => text.normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLowerCase();
+        return catalog.filter(label => normalize(label).includes(normalize(term))).slice(0, 20).map(value => ({ value, label: value }));
+      },
+    }),
+    saveEditor: async (_context, fields) => {
+      writes += 1;
+      document.querySelector('#proof').textContent = `TESTE LOCAL · Nenhum dado real alterado · ${writes} gravação fictícia`;
+      return { id: row.id, fields };
+    },
+    onChanged: async () => {},
+  });
+  document.querySelector('#gallery').append(actions.render(row));
+</script>
+</html>

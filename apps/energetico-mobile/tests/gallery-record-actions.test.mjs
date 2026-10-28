@@ -37,6 +37,87 @@ async function setup(t, overrides = {}) {
 const click = (ctx, action) => ctx.buttons.querySelector(`[data-gallery-action="${action}"]`).click();
 const key = (ctx, target, name, options = {}) => target.dispatchEvent(new ctx.dom.window.KeyboardEvent("keydown", { key: name, bubbles: true, cancelable: true, ...options }));
 
+test('launch editor dropdowns open with an empty editable filter and preserve the saved values until selection', async t => {
+  const names = ['AGRUPAR', 'FILIAL', 'TIPOTRANSACAO', 'APROVACAO', 'ETAPA', 'FORNECEDOR', 'PRODUTO'];
+  const ctx = await setup(t, { loadEditor: async id => ({ ...context(id),
+    entity: { id: 'lancamentos', title: 'Lançamentos' },
+    columns: names.map(name => ({ name, label: name, control: 'select', editable: true, choices: ['ATUAL', 'NOVO'] })),
+    item: { id, fields: Object.fromEntries(names.map(name => [name, 'ATUAL'])) },
+  }) });
+  click(ctx, 'edit'); await settle(); await settle();
+  for (const name of names) {
+    const input = ctx.get(`[data-searchable-field=${name}] [role=combobox]`);
+    input.click();
+    assert.equal(input.readOnly, false, name);
+    assert.equal(input.value, '', `${name} starts a fresh query`);
+    assert.equal(ctx.get(`[name=${name}]`).value, 'ATUAL', `${name} has not been changed by opening`);
+    input.value += 'nov';
+    input.dispatchEvent(new ctx.dom.window.Event('input', { bubbles: true }));
+    const choices = ctx.get(`[data-searchable-field=${name}] [role=listbox]`).querySelectorAll('[role=option]');
+    assert.deepEqual([...choices].map(option => option.textContent), ['NOVO']);
+    choices[0].click();
+    assert.equal(ctx.get(`[name=${name}]`).value, 'NOVO');
+  }
+  assert.equal(ctx.writes.length, 0);
+  ctx.get('form').dispatchEvent(new ctx.dom.window.Event('submit', { bubbles: true, cancelable: true }));
+  await settle();
+  for (const name of names) assert.equal(ctx.writes[0][2][name], 'NOVO');
+});
+
+for (const control of ['select', 'lookup']) test(`launch ${control} sends a new remote filter without the previous selection`, async t => {
+  const calls = [];
+  const ctx = await setup(t, { loadEditor: async id => ({ ...context(id),
+    entity: { id: 'lancamentos', title: 'Lançamentos' },
+    columns: [{ name: 'FORNECEDOR', label: 'Fornecedor', control, editable: true,
+      ...(control === 'select'
+        ? { choices: ['FORNECEDOR ATUAL'], powerApps: { closed: true, preserveCurrentValue: true,
+          optionSources: [{ kind: 'related', listName: 'FORNECEDORES', valueField: 'Title' }] } }
+        : { relation: { kind: 'lookup', listId: 'suppliers', displayField: 'Title', resolvable: true, multiple: false } }),
+    }],
+    item: { id, fields: { FORNECEDOR: 'FORNECEDOR ATUAL', FORNECEDORLookupId: 1 } },
+    powerAppsOptionSearch: async (_column, _source, term) => {
+      calls.push(term); return term ? [{ value: 'FORNECEDOR NOVO', label: 'FORNECEDOR NOVO' }] : [];
+    },
+    relationshipSearch: async (_column, term) => {
+      calls.push(term); return term ? [{ id: 2, label: 'FORNECEDOR NOVO' }] : [{ id: 1, label: 'FORNECEDOR ATUAL' }];
+    },
+  }) });
+  click(ctx, 'edit'); await settle(); await settle();
+  const input = ctx.get('.searchable-select-input'); input.click();
+  assert.equal(input.value, '');
+  input.value += 'novo'; input.dispatchEvent(new ctx.dom.window.Event('input', { bubbles: true }));
+  await new Promise(resolve => setTimeout(resolve, 350));
+  assert.equal(calls.at(-1), 'novo');
+  assert.equal(input.value, 'novo');
+  ctx.get('[role=option]').click();
+  ctx.get('form').dispatchEvent(new ctx.dom.window.Event('submit', { bubbles: true, cancelable: true }));
+  await settle();
+  assert.equal(ctx.writes[0][2][control === 'select' ? 'FORNECEDOR' : 'FORNECEDORLookupId'], control === 'select' ? 'FORNECEDOR NOVO' : 2);
+});
+
+for (const control of ['select', 'lookup']) for (const required of [true, false]) test(`opening an unchanged launch ${control} keeps submission valid, required ${required}`, async t => {
+  const ctx = await setup(t, { loadEditor: async id => ({ ...context(id),
+    entity: { id: 'lancamentos', title: 'Lançamentos' },
+    columns: [{ name: 'CLIENTE', label: 'Cliente', control, editable: true, required,
+      ...(control === 'select' ? { choices: ['ATUAL', 'OUTRO'] }
+        : { relation: { kind: 'lookup', listId: 'clients', displayField: 'Title', resolvable: true, multiple: false } }),
+    }],
+    item: { id, fields: { CLIENTE: 'ATUAL', CLIENTELookupId: 1 } },
+    relationshipSearch: async () => [{ id: 1, label: 'ATUAL' }],
+  }) });
+  click(ctx, 'edit'); await settle(); await settle();
+  const input = ctx.get('.searchable-select-input');
+  input.click();
+  input.value = 'VALOR INVENTADO'; input.dispatchEvent(new ctx.dom.window.Event('input', { bubbles: true }));
+  ctx.get('form').requestSubmit(); await settle();
+  assert.equal(ctx.writes.length, 0, 'a typed query is never a submitted choice');
+  key(ctx, input, 'Escape'); input.click();
+  assert.equal(input.value, '');
+  ctx.get('form').requestSubmit(); await settle();
+  assert.equal(ctx.writes.length, 1, 'opening without typing preserves the authorized selection even before blur');
+  assert.equal(ctx.writes[0][2][control === 'select' ? 'CLIENTE' : 'CLIENTELookupId'], control === 'select' ? 'ATUAL' : 1);
+});
+
 test('editor acquisition updates only its live mascot and completes after the form is mounted', async t => {
   const pending = deferred(); let options;
   const ctx = await setup(t, { loadEditor: (_id, input) => { options = input; return pending.promise; } });
