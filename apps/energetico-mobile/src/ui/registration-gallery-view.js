@@ -12,6 +12,7 @@ import { renderWorkDiaryCardDetails } from './work-diary-card.js';
 import { renderAssetGalleryCard } from './asset-gallery-card.js';
 import { renderDdaCard, updateDdaDueTones, ddaTodayKey } from './dda-card.js';
 import { createDdaSyncReceipt } from './dda-sync-receipt.js';
+import { createDdaPaymentConfirmation } from './dda-payment-confirmation.js';
 import { createDdaGalleryMetrics } from './dda-gallery-metrics.js';
 import { renderProvisionDescriptionCard, provisionDescriptionIcon } from './provision-description-card.js';
 import { createProvisionDescriptionDetail } from './provision-description-detail-view.js';
@@ -143,7 +144,7 @@ function knownAttachmentCount(row) {
   return null;
 }
 
-export function createRegistrationGallery({ document: doc = globalThis.document, kind, data, onHome, onCreate, openMediaCollection, refreshBank, descriptionTimeoutMs = 30_000 } = {}) {
+export function createRegistrationGallery({ document: doc = globalThis.document, kind, data, onHome, onCreate, openMediaCollection, refreshBank, confirmPayment, descriptionTimeoutMs = 30_000 } = {}) {
   const model = REGISTRATION_GALLERY_MODELS[kind];
   if (!model || !doc?.body || typeof data?.loadSnapshot !== "function") {
     throw new TypeError("Galeria de cadastro, documento e serviço de dados são obrigatórios.");
@@ -290,6 +291,14 @@ export function createRegistrationGallery({ document: doc = globalThis.document,
   const filterSources = new Map([...filterControls.keys()].map(field => [field, data.getFilterSource?.(field)]).filter(([, source]) => source));
   let pendingMutations = 0;
   let bankController = null;
+  const paymentConfirmation = kind === 'dda' ? createDdaPaymentConfirmation({ document: doc, host: root, confirmPayment,
+    onConfirmed: receipt => {
+      if (destroyed || root.hidden) return;
+      rows = rows.map(row => String(row.id) === String(receipt.itemId) && registrationRawField(row.fields, 'CHAVE_DDA', model) === receipt.key
+        ? { ...row, fields: { ...row.fields, PGTO_CONFIRMADO: true, PGTO_CONFIRMADO_EM: receipt.confirmedAt, PGTO_CONFIRMADO_POR: receipt.confirmedBy } } : row);
+      ddaSnapshot = { ...ddaSnapshot, rows };
+      populateFilters(); render();
+    } }) : null;
   const bankReceipt = kind === 'dda' ? createDdaSyncReceipt({ document: doc, host: root,
     format: (row, name) => rowFieldValue(row, name) || '—', onClose: () => refreshShortcut.sync() }) : null;
   const bankNotice = kind === 'dda' ? el('p', 'rg-dda-sync-notice') : null;
@@ -735,7 +744,12 @@ export function createRegistrationGallery({ document: doc = globalThis.document,
         const main = el("div", "rg-row-main");
         if (kind === 'workDiary') renderWorkDiaryCardDetails({ document: doc, container: main, rowId: row.id, title: primary, value: field => rowFieldValue(row, field) });
         else if (kind === 'asset') renderAssetGalleryCard({ document: doc, container: main, rowId: row.id, title: primary, value: field => rowFieldValue(row, field) });
-        else if (kind === 'dda') renderDdaCard({ document: doc, container: main, rowId: row.id, title: primary, value: field => rowFieldValue(row, field), raw: field => registrationRawField(row.fields, field, model) });
+        else if (kind === 'dda') renderDdaCard({ document: doc, container: main, rowId: row.id, title: primary, value: field => rowFieldValue(row, field), raw: field => registrationRawField(row.fields, field, model),
+          onConfirmPayment: trigger => {
+            if (destroyed || root.hidden || bankController || root.getAttribute('aria-busy') === 'true') return;
+            paymentConfirmation.show({ itemId: row.id, key: registrationRawField(row.fields, 'CHAVE_DDA', model),
+              supplier: primary, amount: rowFieldValue(row, 'VALOR'), due: rowFieldValue(row, 'VENCIMENTO') }, trigger);
+          } });
         else if (kind === 'provisionDescription') renderProvisionDescriptionCard({ document: doc, container: main, rowId: row.id, title: primary, value: field => rowFieldValue(row, field),
           onDetails: (id, trigger) => {
             if (!destroyed && !root.hidden && !attachmentLoading && !pendingMutations && root.getAttribute('aria-busy') !== 'true') descriptionDetail.open(id, trigger);
@@ -883,6 +897,7 @@ export function createRegistrationGallery({ document: doc = globalThis.document,
 
   function hide() {
     if (root.hidden) return;
+    paymentConfirmation?.close();
     bankReceipt?.close();
     bankController?.abort();
     if (bankNotice) bankNotice.hidden = true;
@@ -960,6 +975,6 @@ export function createRegistrationGallery({ document: doc = globalThis.document,
       root.hidden = false; root.focus(); startDdaClock(); await load();
     },
     close: hide,
-    destroy() { bankReceipt?.destroy(); bankController?.abort(); stopDdaClock(); loadController?.abort(); descriptionDetail?.destroy(); loadingScreen.destroy(); createShortcut.destroy(); refreshShortcut.destroy(); recordActions.destroy(); searchableFilters.destroy(); destroyed = true; request += 1; filterEpoch += 1; attachmentCountQueue = []; root.remove(); },
+    destroy() { paymentConfirmation?.destroy(); bankReceipt?.destroy(); bankController?.abort(); stopDdaClock(); loadController?.abort(); descriptionDetail?.destroy(); loadingScreen.destroy(); createShortcut.destroy(); refreshShortcut.destroy(); recordActions.destroy(); searchableFilters.destroy(); destroyed = true; request += 1; filterEpoch += 1; attachmentCountQueue = []; root.remove(); },
   };
 }

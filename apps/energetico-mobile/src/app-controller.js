@@ -9289,6 +9289,7 @@ export function createAppController({
             kind: sourceKind, data,
             ...(!isDdaReport && sourceKind === 'dda' ? {
               refreshBank: options => refreshDdaBank(client, { ...options, assertSession }),
+              confirmPayment: async options => { assertSession(); const receipt = await client.confirmDdaPayment(options); assertSession(); return receipt; },
             } : {}),
             ...(isDdaReport ? { onClose: () => ddaAutoReminder.dismiss() } : {}),
             ...(["contractorEmployment", "dda"].includes(sourceKind) ? {} : { onCreate: galleryCreationHandler(replyId, assertSession) }),

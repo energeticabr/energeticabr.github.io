@@ -5,6 +5,7 @@ import { createSharePointRepository } from "../../../../portal/data/sharepoint-r
 import { createSharePointAttachmentTransport } from "../../../../portal/data/attachments.js";
 import { createRegistrationGalleryFilterData } from "./registration-gallery-filter-data.js";
 import { FINANCIAL_GALLERY_MODELS } from './financial-gallery-models.js';
+import { ddaPaidManually } from './dda-payment-confirmation.js';
 import { createFinancialMovementEditor } from './financial-movement-editor.js';
 import { createProvisionDescriptionEditor, loadProvisionDescriptionStatusOptions } from "../../../../portal/forms/provision-description-edit.js";
 import { createAcquisitionProgress } from './acquisition-progress.js';
@@ -18,7 +19,7 @@ export const REGISTRATION_GALLERY_MODELS = Object.freeze({
   dda: Object.freeze({
     title: "GALERIA DDA", listName: "DDAS SICOOB", aliases: ["DDAS SICOOB"],
     nativeCard: true, readOnly: true, readTransport: "rest", showAttachments: true, recordLabel: "DDA",
-    restReadFields: ["ID", "Title", "VENCIMENTO", "EMISSAO", "VALOR", "SITUACAO", "CNPJ_FORNECEDOR", "DOCUMENTO", "BANCO", "VALOR_PAGAMENTO", "NOSSO_NUMERO", "LINHA_DIGITAVEL", "CODIGO_BARRAS", "PAGADOR", "CNPJ_PAGADOR", "BLOQUEADO", "MENSAGEM", "ULTIMA_CONSULTA"],
+    restReadFields: ["ID", "Title", "CHAVE_DDA", "PGTO_CONFIRMADO", "PGTO_CONFIRMADO_EM", "PGTO_CONFIRMADO_POR", "VENCIMENTO", "EMISSAO", "VALOR", "SITUACAO", "CNPJ_FORNECEDOR", "DOCUMENTO", "BANCO", "VALOR_PAGAMENTO", "NOSSO_NUMERO", "LINHA_DIGITAVEL", "CODIGO_BARRAS", "PAGADOR", "CNPJ_PAGADOR", "BLOQUEADO", "MENSAGEM", "ULTIMA_CONSULTA"],
     restExpandSystemFields: false,
     searchPlaceholder: "Pesquisar fornecedor, documento ou ID",
     fields: ["FORNECEDOR", "VENCIMENTO", "EMISSAO", "VALOR", "SITUACAO", "CNPJ_FORNECEDOR", "DOCUMENTO", "BANCO", "VALOR_PAGAMENTO", "NOSSO_NUMERO", "LINHA_DIGITAVEL", "CODIGO_BARRAS", "PAGADOR", "CNPJ_PAGADOR", "BLOQUEADO", "MENSAGEM", "ULTIMA_CONSULTA", "ID"],
@@ -201,6 +202,8 @@ export function registrationFieldKey(value) {
 }
 
 export function registrationRawField(fields, name, model) {
+  if (model === REGISTRATION_GALLERY_MODELS.dda && name === 'SITUACAO'
+    && ddaPaidManually(registrationRawField(fields, 'PGTO_CONFIRMADO', model))) return 'Pago';
   const accepted = [name, ...(model.fieldAliases?.[name] || [])].map(registrationFieldKey);
   return Object.entries(fields || {}).find(([key, value]) => value != null && accepted.includes(registrationFieldKey(key)))?.[1];
 }
