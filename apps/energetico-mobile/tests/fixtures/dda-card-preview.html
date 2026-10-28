@@ -11,7 +11,7 @@ const day=ddaTodayKey();
 const due=offset=>new Date(Date.parse(day+'T12:00:00Z')+offset*86400000).toISOString();
 const rows=[2,0,1].map((offset,index)=>({id:String(index+1),fields:{
  Title:['MATERIAIS EXEMPLO LTDA','ANDAIMES DEMONSTRAÇÃO LTDA','SERVIÇOS FICTÍCIOS S.A.'][index],
- VENCIMENTO:due(offset),EMISSAO:due(-7-index),VALOR:123.45+index,VALOR_PAGAMENTO:123.45+index,SITUACAO:'Em aberto',
+ CHAVE_DDA:String(index+1).repeat(64),VENCIMENTO:due(offset),EMISSAO:due(-7-index),VALOR:123.45+index,VALOR_PAGAMENTO:123.45+index,SITUACAO:'Em aberto',
  DOCUMENTO:'DOC-000'+index,CNPJ_FORNECEDOR:'00000000000000',BANCO:'BANCO DEMONSTRAÇÃO S.A.',
  NOSSO_NUMERO:'0000000000000000123456',CODIGO_BARRAS:'0'.repeat(44),LINHA_DIGITAVEL:'0'.repeat(47),
  PAGADOR:'EMPRESA FICTÍCIA LTDA',CNPJ_PAGADOR:'00000000000000',BLOQUEADO:false,ULTIMA_CONSULTA:new Date().toISOString(),Attachments:true
@@ -19,6 +19,7 @@ const rows=[2,0,1].map((offset,index)=>({id:String(index+1),fields:{
 let synced=false;
 const outcome=new URLSearchParams(location.search).get('outcome');
 const gallery=createRegistrationGallery({document,kind:'dda',onHome:()=>{},
+confirmPayment:async({itemId,key})=>{await new Promise(r=>setTimeout(r,200));const confirmedAt=new Date().toISOString(),confirmedBy='demonstracao@example.test';Object.assign(rows.find(row=>Number(row.id)===itemId).fields,{PGTO_CONFIRMADO:true,PGTO_CONFIRMADO_EM:confirmedAt,PGTO_CONFIRMADO_POR:confirmedBy});return {status:'confirmed',itemId,key,confirmedAt,confirmedBy};},
 refreshBank:async({onStatus})=>{onStatus('Consultando o Sicoob. Tempo decorrido: 00:03. A consulta completa costuma levar de 10 a 15 minutos. Dados fictícios de demonstração.');await new Promise(resolve=>setTimeout(resolve,300));if(outcome==='failed')throw Error('Não foi possível confirmar o resultado da consulta. Tente novamente.');const noNew=synced||outcome==='empty';const result={status:'succeeded',created:noNew?0:2,createdItemIds:noNew?[]:[2,3],elapsedMs:670000};synced=true;return result;},
 data:{loadSnapshot:async()=>({rows:synced?rows:rows.slice(0,1)}),listAttachments:async()=>[{fileName:'espelho-ficticio.pdf'}]},openMediaCollection:()=>{}});
 await gallery.open();

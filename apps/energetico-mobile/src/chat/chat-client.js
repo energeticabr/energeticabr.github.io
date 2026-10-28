@@ -1,3 +1,4 @@
+import { validateDdaPaymentReceipt } from './dda-payment-confirmation.js';
 import { validateAttachment } from "./file-policy.js";
 import { audioTranscriptionText } from "./audio-transcription.js";
 import { startDiaryProgress } from "./diary-attachment-progress.js";
@@ -604,6 +605,16 @@ export function createChatClient({
       || (requestId && receipt.requestId !== requestId)) throw new Error('A VM não confirmou a consulta DDA.');
     return receipt;
   }
+  async function confirmDdaPayment({ itemId, key, signal } = {}) {
+    if (!Number.isSafeInteger(itemId) || itemId <= 0 || itemId > 2147483647 || !/^[a-f0-9]{64}$/.test(String(key || ''))) throw new Error('DDA inválido para confirmação.');
+    const token = await cancellableToken(tokenProvider, signal);
+    const result = await request(chatUrl.href, {
+      method: 'POST', signal,
+      headers: { Accept: 'application/json', Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' },
+      body: JSON.stringify({ action: 'dda_payment_confirm', itemId, key }), cache: 'no-store', credentials: 'omit',
+    }, response => parsePortalResponse(response, 'A confirmação do pagamento DDA'));
+    return validateDdaPaymentReceipt(result?.ddaPaymentConfirmation, { itemId, key });
+  }
   function refreshDda(options) { return ddaRequest('dda_refresh', null, options); }
   function getDdaRefreshStatus(requestId, options) { return ddaRequest('dda_refresh_status', requestId, options); }
 
@@ -755,5 +766,5 @@ export function createChatClient({
     }, true);
   }
 
-  return Object.freeze({ sendText, sendFile, replaceAttachment, transcribeAudio, fetchMedia, getAttachments, launchGalleryRequest, uploadLaunchGalleryFile, getPendingProvisionSnapshot, getPendingNotesSnapshot, getRhidAttendanceReport, startRhidPendingValidation, startRhidDayValidation, getRhidAttendanceMonth, saveRhidAttendanceAdjustment, deleteRhidAttendanceAdjustment, refreshRhidAttendance, getRhidRefreshStatus, refreshRecurringProvisions, getRecurringProvisionRefreshStatus, refreshDda, getDdaRefreshStatus, deleteAttachment, deleteAllAttachments, compressAttachment, chooseAttachmentCompression, getCompletionMenu, prepareSignatureEvidence, confirmSignatureEvidence, verifySignatureEvidence, captureSignatureEvidence });
+  return Object.freeze({ sendText, sendFile, replaceAttachment, transcribeAudio, fetchMedia, getAttachments, launchGalleryRequest, uploadLaunchGalleryFile, getPendingProvisionSnapshot, getPendingNotesSnapshot, getRhidAttendanceReport, startRhidPendingValidation, startRhidDayValidation, getRhidAttendanceMonth, saveRhidAttendanceAdjustment, deleteRhidAttendanceAdjustment, refreshRhidAttendance, getRhidRefreshStatus, refreshRecurringProvisions, getRecurringProvisionRefreshStatus, refreshDda, getDdaRefreshStatus, confirmDdaPayment, deleteAttachment, deleteAllAttachments, compressAttachment, chooseAttachmentCompression, getCompletionMenu, prepareSignatureEvidence, confirmSignatureEvidence, verifySignatureEvidence, captureSignatureEvidence });
 }

@@ -107,3 +107,16 @@
 .dda-sync-fields dd { margin: 3px 0 0; font-weight: 700; color: #173949; }
 .dda-sync-fields > :last-child { grid-column: 1 / -1; }
 .dda-sync-dialog .gallery-record-dialog-buttons { position: sticky; bottom: 0; background: white; padding-top: 14px; }
+.rg-dda-confirm-payment { flex: 0 0 44px; width: 44px; height: 44px; display: grid; place-items: center; border: 1px solid #147655; border-radius: 10px; background: #e6f6ed; color: #126443; cursor: pointer; }
+.rg-dda-confirm-payment:disabled { background: #d6efdf; opacity: .7; cursor: default; }
+.rg-dda-confirm-payment:focus-visible { outline: 3px solid #1864ab; outline-offset: 2px; }
+.rg-dda-payment-audit { margin: 4px 0 12px; padding: 8px; border-radius: 8px; background: #eaf8ef; color: #205c41; font-size: .78rem; overflow-wrap: anywhere; }
+.rg-dda-payment-audit span { display: block; font-size: .72rem; margin-top: 3px; }
+.gallery-record-overlay.dda-payment-overlay { z-index: 22; padding: 16px; }
+.gallery-record-dialog.dda-payment-dialog { width: min(100%, 520px); max-height: calc(100dvh - 32px); overflow: auto; box-sizing: border-box; border-top: 6px solid #147655; }
+.dda-payment-dialog h2 { font-size: 1.2rem; color: #12394a; }
+.dda-payment-dialog p { line-height: 1.5; overflow-wrap: anywhere; }
+.dda-payment-summary { white-space: pre-line; padding: 12px; background: #eaf3f8; border-radius: 8px; font-weight: 700; }
+.dda-payment-dialog .gallery-record-dialog-buttons { flex-wrap: wrap; }
+.dda-payment-dialog .dda-payment-yes { background: #126443; color: white; border-color: #126443; }
+.dda-payment-feedback { color: #a71932; }
