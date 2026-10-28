@@ -1,5 +1,5 @@
 import {normalizeDdaReportRows,buildDdaReport} from '../chat/dda-report-model.js';
-import {ddaDueTone} from './dda-card.js';
+import {ddaDueTone,ddaTodayKey} from './dda-card.js';
 import {bindReportLandscape} from './report-landscape.js';
 import {addReportCloseControl} from './report-close-control.js';
 const LOGO=new URL('../../../../assets/logo-energetica-oficial.png',import.meta.url).href;
@@ -45,8 +45,12 @@ export function createDdaReportView({document:doc=globalThis.document,data,openM
   for(const label of ['ID','VENCIMENTO','FORNECEDOR','DOCUMENTO','BANCO','VALOR NOMINAL','SITUAÇÃO','ESPELHO']){const th=make('th','',label);th.scope='col';tr.append(th);}head.append(tr);table.append(head,body);
   for(const row of printAll?result.rows:result.rows.slice((page-1)*50,page*50)){
    const line=make('tr');line.dataset.ddaId=row.id;const due=make('td','ddr-due',date(row.due));due.dataset.dueTone=ddaDueTone(row.due,now());
-   const supplier=make('td','ddr-supplier',row.supplier),status=make('td','ddr-status',row.status);status.dataset.status=row.status;
-   if(row.checkedAt){const checked=new Date(row.checkedAt);if(Number.isFinite(checked.getTime()))status.append(make('small','',new Intl.DateTimeFormat('pt-BR',{timeZone:'America/Sao_Paulo',dateStyle:'short',timeStyle:'short'}).format(checked)));}
+   const supplier=make('td','ddr-supplier',row.supplier),status=make('td','ddr-status');status.dataset.status=row.status;
+   const overdue=row.status==='Vencido'||(row.status==='Em aberto'&&row.due&&row.due<ddaTodayKey(now()));
+   const cluster=make('div','ddr-status-cluster');cluster.dataset.statusTone=row.status==='Pago'?'paid':overdue?'overdue':row.status==='Em aberto'?'open':'neutral';
+   cluster.append(make('strong','',overdue?'Vencido':row.status));cluster.title='Situação na última consulta bancária: '+row.status;
+   if(row.checkedAt){const checked=new Date(row.checkedAt);if(Number.isFinite(checked.getTime()))cluster.append(make('small','',new Intl.DateTimeFormat('pt-BR',{timeZone:'America/Sao_Paulo',dateStyle:'short',timeStyle:'short'}).format(checked)));}
+   status.append(cluster);
    const files=make('td'),open=button('Abrir espelho do DDA '+row.id,'📎 Espelho');open.dataset.ddaMirror=row.id;open.disabled=typeof data.listAttachments!=='function'||typeof data.downloadAttachment!=='function'||typeof openMediaCollection!=='function';open.addEventListener('click',()=>void openMirror(row,open));files.append(open);
    line.append(make('td','ddr-id',row.id),due,supplier,make('td','',row.document||'—'),make('td','',row.bank||'—'),make('td','ddr-money',money(row.amount)),status,files);body.append(line);
   }
