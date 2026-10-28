@@ -55,7 +55,7 @@ function describe(root, dom, value) {
 const ids = root => [...root.querySelectorAll('tbody tr[data-task-id]')].map(node => Number(node.dataset.taskId));
 const metrics = root => Object.fromEntries([...root.querySelectorAll('[data-metric]')].map(node => [node.dataset.metric, Number(node.querySelector('strong').textContent)]));
 
-test('tenth left HOME mascot follows the old green report and emits the delegated action only when available', t => {
+test('eleventh left HOME mascot follows the old green report and emits the delegated action only when available', t => {
   const dom = new JSDOM('<main id="app"></main>');
   dom.window.HTMLCanvasElement.prototype.getContext = () => null;
   const chat = createChatView(dom.window.document.getElementById('app'));
@@ -68,8 +68,8 @@ test('tenth left HOME mascot follows the old green report and emits the delegate
   assert.equal(mascot.previousElementSibling.dataset.action, 'open-task-association-report');
   assert.equal(mascot.nextElementSibling.className, 'chat-bubble');
   const left = [...mascot.parentElement.children].filter(node => node.matches('button.chat-main-provisions-shortcut,button.chat-main-payment-ledger-shortcut'));
-  assert.equal(left.length, 10);
-  assert.equal(left[9], mascot);
+  assert.equal(left.length, 11);
+  assert.equal(left[10], mascot);
   assert.match(mascot.querySelector('img').src, /delegated-deadline\.png$/);
   mascot.querySelector('img').click();
   assert.equal(calls, 1);
