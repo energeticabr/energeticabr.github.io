@@ -35,6 +35,18 @@ test('gallery receives the authenticated bank refresh callback and it expires wi
  await h.view.emit('sign-out');
  await assert.rejects(options.refreshBank({}));assert.equal(called,1);
 });
+
+test('durable DDA results resume at app startup without opening gallery, foreground again, and detach on logout',async t=>{
+ let factoryOptions,galleryOptions,resumes=0,destroyed=0;
+ const monitor={resume:async()=>{resumes++;},destroy(){destroyed++;},start:async()=>{}};
+ const h=setup(t,{client:{sendText:async()=>({status:'processed',messages:[]}),getDdaRefreshPending:async()=>({status:'pending',requests:[]}),acknowledgeDdaRefresh:async()=>{}},
+  ddaSyncSessionFactory:options=>{factoryOptions=options;return monitor;},
+  registrationGalleryFactory:async options=>{galleryOptions=options;return {open(){},destroy(){}};}});
+ await h.controller.start();assert.equal(resumes,1);assert.equal(factoryOptions.accountKey,'dda-test');
+ await h.controller.handleForeground();assert.equal(resumes,2);
+ await h.view.emit('select-reply',{replyId:'action_dda_gallery',label:'GALERIA DDA'});assert.equal(galleryOptions.syncMonitor,monitor);
+ await h.view.emit('sign-out');assert.equal(destroyed,1);assert.equal(factoryOptions.isCurrent(),false);
+});
 test('report and gallery use separate instances, share read-only source and media, and expire at logout',async t=>{
  const h=setup(t);await h.controller.start();await h.view.emit('open-dda-report');assert.deepEqual(h.opened,['report']);assert.equal(h.factories[0].onCreate,undefined);
  await h.view.emit('select-reply',{replyId:'action_dda_gallery',label:'GALERIA DDA'});assert.deepEqual(h.opened,['report','gallery']);

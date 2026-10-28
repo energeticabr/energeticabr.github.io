@@ -144,7 +144,7 @@ function knownAttachmentCount(row) {
   return null;
 }
 
-export function createRegistrationGallery({ document: doc = globalThis.document, kind, data, onHome, onCreate, openMediaCollection, refreshBank, confirmPayment, descriptionTimeoutMs = 30_000 } = {}) {
+export function createRegistrationGallery({ document: doc = globalThis.document, kind, data, onHome, onCreate, openMediaCollection, refreshBank, syncMonitor, confirmPayment, descriptionTimeoutMs = 30_000 } = {}) {
   const model = REGISTRATION_GALLERY_MODELS[kind];
   if (!model || !doc?.body || typeof data?.loadSnapshot !== "function") {
     throw new TypeError("Galeria de cadastro, documento e serviço de dados são obrigatórios.");
@@ -305,6 +305,11 @@ export function createRegistrationGallery({ document: doc = globalThis.document,
   if (bankNotice) { bankNotice.hidden = true; bankNotice.setAttribute('role', 'status'); header.after(bankNotice); }
   async function manualRefresh() {
     if (kind !== 'dda') return load({ refresh: true });
+    if(syncMonitor){
+      try{await syncMonitor.start();}
+      catch(error){bankReceipt.show({status:'failed',message:String(error?.message||'Não foi possível iniciar a consulta.')},[],refresh);}
+      return;
+    }
     const controller = bankController = new AbortController();
     const current = () => !controller.signal.aborted && bankController === controller && !destroyed && !root.hidden;
     const notice = (text, state = 'running') => { if (current()) {
@@ -332,7 +337,14 @@ export function createRegistrationGallery({ document: doc = globalThis.document,
   }
   const refreshShortcut = attachGalleryRefreshButton({ document: doc, root, container: createShortcut.toolbar, header, button: refresh,
     onRefresh: manualRefresh,
-    isAvailable: () => !destroyed && !attachmentLoading && !pendingMutations });
+    isAvailable: () => !destroyed && !attachmentLoading && !pendingMutations && !syncMonitor?.running });
+  let managedWasRunning=Boolean(syncMonitor?.running);
+  const unsubscribeBank=kind==='dda'&&syncMonitor?syncMonitor.subscribe(state=>{
+    if(destroyed)return;
+    if(!root.hidden){bankNotice.hidden=!state.notice;bankNotice.textContent=state.notice;bankNotice.dataset.state='running';}
+    if(managedWasRunning&&!state.running&&!root.hidden)void load({refresh:true,preserveRowsOnError:true});
+    managedWasRunning=state.running;refreshShortcut.sync();
+  }):null;
   if (kind === 'dda') { refresh.title = 'Consultar Sicoob e sincronizar SharePoint'; refresh.setAttribute('aria-label', refresh.title); }
   if (kind === 'provisionDescription' || kind === 'dda') {
     const searchWrap = el('div', 'rg-provision-search');
@@ -975,6 +987,6 @@ export function createRegistrationGallery({ document: doc = globalThis.document,
       root.hidden = false; root.focus(); startDdaClock(); await load();
     },
     close: hide,
-    destroy() { paymentConfirmation?.destroy(); bankReceipt?.destroy(); bankController?.abort(); stopDdaClock(); loadController?.abort(); descriptionDetail?.destroy(); loadingScreen.destroy(); createShortcut.destroy(); refreshShortcut.destroy(); recordActions.destroy(); searchableFilters.destroy(); destroyed = true; request += 1; filterEpoch += 1; attachmentCountQueue = []; root.remove(); },
+    destroy() { unsubscribeBank?.(); paymentConfirmation?.destroy(); bankReceipt?.destroy(); bankController?.abort(); stopDdaClock(); loadController?.abort(); descriptionDetail?.destroy(); loadingScreen.destroy(); createShortcut.destroy(); refreshShortcut.destroy(); recordActions.destroy(); searchableFilters.destroy(); destroyed = true; request += 1; filterEpoch += 1; attachmentCountQueue = []; root.remove(); },
   };
 }

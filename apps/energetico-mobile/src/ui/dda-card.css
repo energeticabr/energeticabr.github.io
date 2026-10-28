@@ -96,6 +96,8 @@
 .dda-sync-dialog[data-dda-sync-result="failed"] { border-top: 6px solid #b4223d; }
 .dda-sync-dialog[data-dda-sync-result="partial"] { border-top: 6px solid #b67624; }
 .gallery-record-overlay.dda-sync-overlay { z-index: 20; padding: 16px; }
+.gallery-record-overlay.dda-sync-overlay--global { position: fixed; inset: 0; z-index: 2147483000; width: 100%; height: 100%; max-width: none; max-height: none; margin: 0; border: 0; box-sizing: border-box; padding: max(16px, env(safe-area-inset-top)) max(16px, env(safe-area-inset-right)) max(16px, env(safe-area-inset-bottom)) max(16px, env(safe-area-inset-left)); }
+.dda-sync-overlay--global::backdrop { background: transparent; }
 .gallery-record-dialog.dda-sync-dialog { width: min(100%, 560px); max-height: calc(100dvh - 32px); overflow: auto; box-sizing: border-box; }
 .dda-sync-summary { margin: 0 0 14px; color: #385266; }
 .dda-sync-items { list-style: none; padding: 0; margin: 0; display: grid; gap: 12px; }

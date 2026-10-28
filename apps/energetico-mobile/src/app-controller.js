@@ -1,5 +1,6 @@
 import { createDdaAutoReminder } from './chat/dda-auto-reminder.js';
 import { refreshDdaBank } from './chat/dda-bank-refresh.js';
+import { createDdaSyncSession } from './ui/dda-sync-session.js';
 import { PAYROLL_LAUNCH_REPLY_ID, isSupplierPayrollMenu } from "./chat/supplier-payroll.js";
 import { MEAL_VOUCHER_REPLY_ID } from './chat/meal-voucher.js';
 import { createMealVoucherTray } from './chat/meal-voucher-tray.js';
@@ -1021,6 +1022,7 @@ export function createAppController({
   recurringExpensesGalleryDataFactory = defaultRecurringExpensesGalleryDataFactory,
   registrationGalleryFactory = defaultRegistrationGalleryFactory,
   ddaReportFactory = defaultDdaReportFactory,
+  ddaSyncSessionFactory = createDdaSyncSession,
   enableDdaReminders = false,
   registrationGalleryDataFactory = defaultRegistrationGalleryDataFactory,
   pendingProvisionAttachmentsDataFactory = defaultPendingProvisionAttachmentsDataFactory,
@@ -1498,6 +1500,24 @@ export function createAppController({
   let pendingProvisionOpenRequest = null;
   let pendingProvisionLastAutoShownAt = null;
   let ddaReminderInteraction = 0;
+  let ddaSyncSession = null;
+  function disposeDdaSyncSession(){ddaSyncSession?.destroy();ddaSyncSession=null;}
+  function ensureDdaSyncSession(){
+    if(!account||stopped||sessionStatus!=='authenticated'||typeof client.getDdaRefreshPending!=='function'||typeof client.acknowledgeDdaRefresh!=='function')return null;
+    if(ddaSyncSession)return ddaSyncSession;
+    const owner=account,revision=sessionRevision;
+    const isCurrent=()=>!stopped&&account===owner&&sessionRevision===revision&&sessionStatus==='authenticated';
+    const assertSession=()=>{if(!isCurrent())throw Error('DDA_SESSION_ENDED');};
+    ddaSyncSession=ddaSyncSessionFactory({client,isCurrent,accountKey:owner.homeAccountId||owner.localAccountId||owner.idTokenClaims?.oid||owner.username||'',
+      loadRows:async({signal})=>{
+        assertSession();
+        const data=await registrationGalleryDataFactory({kind:'dda',assertSession,accountKey:owner.homeAccountId||owner.localAccountId||owner.idTokenClaims?.oid||owner.username||'',
+          userEmail:owner.username||owner.email||'',tokenProvider:async scopes=>{assertSession();const token=await auth.getToken(scopes);assertSession();return token;}});
+        const snapshot=await data.loadSnapshot({refresh:true,signal});assertSession();return snapshot.rows;
+      }});
+    return ddaSyncSession;
+  }
+  function resumeDdaSync(){void ensureDdaSyncSession()?.resume();}
   const ddaAutoReminder = createDdaAutoReminder({
     canOpen: canOpenAutomaticDda,
     enabled: () => enableDdaReminders && Boolean(account) && !stopped,
@@ -2166,6 +2186,7 @@ export function createAppController({
   }
 
   async function handleForeground() {
+    resumeDdaSync();
     armFlowReminder();
     if (attachmentReminderDetails()) scheduleAttachmentReminder();
     else cancelAttachmentReminder();
@@ -9289,6 +9310,7 @@ export function createAppController({
             kind: sourceKind, data,
             ...(!isDdaReport && sourceKind === 'dda' ? {
               refreshBank: options => refreshDdaBank(client, { ...options, assertSession }),
+              syncMonitor: ensureDdaSyncSession(),
               confirmPayment: async options => { assertSession(); const receipt = await client.confirmDdaPayment(options); assertSession(); return receipt; },
             } : {}),
             ...(isDdaReport ? { onClose: () => ddaAutoReminder.dismiss() } : {}),
@@ -10273,6 +10295,7 @@ export function createAppController({
   }
 
   async function signIn() {
+    disposeDdaSyncSession();
     ddaAutoReminder.reset();
     clearAttachmentUploadProgress();
     attachmentActionBusy = false;
@@ -10325,6 +10348,7 @@ export function createAppController({
       lastPresenceValidationDate = "";
       legacyDocumentLineFinalizeOption = null;
       sessionStatus = "authenticated";
+      resumeDdaSync();
       pendingProvisionLastAutoShownAt = null;
       pendingNotesSessionDismissed = false;
       pendingConstructionDiarySnapshot = null;
@@ -10380,6 +10404,7 @@ export function createAppController({
   }
 
   async function signOut() {
+    disposeDdaSyncSession();
     ddaAutoReminder.reset();
     clearOperationProgress();
     clearAttachmentUploadProgress();
@@ -11731,6 +11756,7 @@ export function createAppController({
     }
 
     sessionStatus = account ? "authenticated" : "signed-out";
+    resumeDdaSync();
     pendingProvisionLastAutoShownAt = null;
     pendingNotesSessionDismissed = false;
     pendingConstructionDiarySnapshot = null;
@@ -11799,6 +11825,7 @@ export function createAppController({
   }
 
   function stop() {
+    disposeDdaSyncSession();
     ddaAutoReminder.reset();
     clearOperationProgress();
     clearAttachmentUploadProgress();

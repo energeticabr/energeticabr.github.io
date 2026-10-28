@@ -3,8 +3,33 @@ import assert from 'node:assert/strict';
 import { JSDOM } from 'jsdom';
 import { createRegistrationGallery } from '../src/ui/registration-gallery-view.js';
 import { refreshDdaBank } from '../src/chat/dda-bank-refresh.js';
+import { createDdaSyncReceipt } from '../src/ui/dda-sync-receipt.js';
 const tick=()=>new Promise(resolve=>setImmediate(resolve));
 const id='a'.repeat(32);
+
+test('global receipt covers another screen and only Entendi acknowledges; teardown does not',async t=>{
+ const dom=new JSDOM('<body><main>OUTRA TELA</main></body>');t.after(()=>dom.window.close());
+ const doc=dom.window.document;let acknowledged=0;
+ const receipt=createDdaSyncReceipt({document:doc,host:doc.body,global:true,requireAcknowledgement:true,onAcknowledge:async()=>{acknowledged++;return true;},format:()=>''});
+ t.after(()=>receipt.destroy());
+ assert.equal(receipt.show({status:'succeeded',created:0},[]),true);
+ assert.notEqual(doc.querySelector('main').inert,true);
+ const popup=doc.querySelector('[data-dda-sync-result]');
+ popup.dispatchEvent(new dom.window.KeyboardEvent('keydown',{key:'Escape',bubbles:true}));
+ assert.ok(doc.querySelector('[data-dda-sync-result]'));assert.equal(acknowledged,0);
+ receipt.close();assert.equal(acknowledged,0);assert.notEqual(doc.querySelector('main').inert,true);
+ receipt.show({status:'failed'},[]);doc.querySelector('[data-dda-sync-result] button').click();await tick();
+ assert.equal(acknowledged,1);assert.equal(doc.querySelector('[data-dda-sync-result]'),null);
+});
+
+test('managed gallery closes without cancelling the global manual operation or duplicating its popup',async t=>{
+ const dom=new JSDOM('<body></body>');let starts=0,listener;const doc=dom.window.document;
+ const monitor={running:false,async start(){starts++;this.running=true;listener?.({running:true,notice:'Consultando'});},subscribe(fn){listener=fn;return()=>{listener=null;};}};
+ const gallery=createRegistrationGallery({document:doc,kind:'dda',data:{loadSnapshot:async()=>({rows:[]})},syncMonitor:monitor});
+ t.after(()=>{gallery.destroy();dom.window.close();});await gallery.open();doc.querySelector('[data-action="registration-refresh"]').click();await tick();
+ assert.equal(starts,1);assert.equal(doc.querySelector('[data-action="registration-refresh"]').disabled,true);
+ gallery.close();assert.equal(monitor.running,true);assert.equal(doc.querySelector('[data-dda-sync-result]'),null);
+});
 
 for(const outcome of ['empty','failed','reload-failed']) test(`DDA synchronization announces ${outcome} in a dismissible result and preserves cards`,async t=>{
  const dom=new JSDOM('<body></body>');const doc=dom.window.document;let loads=0;
