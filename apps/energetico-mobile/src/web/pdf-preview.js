@@ -1,5 +1,7 @@
 import { createPinchZoom } from "./pinch-zoom.js";
 import { beginLoadingTask } from "../ui/loading-task.js";
+import { readDdaCopyAction, positionDdaCopyButton } from './dda-pdf-copy.js';
+import { copyDdaText } from '../ui/dda-card.js';
 
 // Several canvases stay alive while the user scrolls. A lower per-page cap
 // avoids Safari/iOS dropping the whole preview when a PDF has many pages.
@@ -51,6 +53,7 @@ export function createPdfPreview({
   onPageChange = () => {},
   onError = () => {},
   onProgress,
+  onDdaCopyReady = () => {},
 } = {}) {
   const element = (tag, className, text) => {
     const node = documentRef.createElement(tag);
@@ -85,6 +88,21 @@ export function createPdfPreview({
     pageStatus.dataset.pdfPageStatus = '';pageStatus.setAttribute('aria-live', 'polite');root.append(pageStatus);
   }
   container.append(root);
+  const copyNotice = element('p', 'attachment-preview-dda-copy-notice');
+  copyNotice.setAttribute('role', 'status');root.append(copyNotice);
+  let ddaAction = null, ddaRead = null, copyPending = false;
+  async function copyDdaBarcode() {
+    if (destroyed || !ddaAction || copyPending) return false;
+    copyPending = true;
+    try {
+      await copyDdaText(documentRef, ddaAction.barcode);
+      if (!destroyed) copyNotice.textContent = 'Código de barras copiado (44 dígitos).';
+      return true;
+    } catch {
+      if (!destroyed) copyNotice.textContent = 'Não foi possível copiar. Use outro leitor para selecionar o código.';
+      return false;
+    } finally { copyPending = false; }
+  }
 
   let destroyed = false;
   let loadingTask = null;
@@ -190,6 +208,8 @@ export function createPdfPreview({
       const height = baseHeight * bounded;
       canvas.style.width = `${Math.round(width)}px`;
       canvas.style.height = `${Math.round(height)}px`;
+      const copyButton = canvas.parentElement?.querySelector('.attachment-preview-dda-copy-overlay');
+      if (copyButton && ddaAction) positionDdaCopyButton(copyButton, canvas, ddaAction.rect);
       if (canvas.parentElement) canvas.parentElement.style.width = `${Math.max(viewportWidth, width)}px`;
       surfaceWidth = Math.max(surfaceWidth, width);
     }
@@ -261,6 +281,19 @@ export function createPdfPreview({
       if (!context) throw new Error("O navegador não oferece canvas para este PDF.");
       renderTask = page.render({ canvasContext: context, viewport: scaled, annotationMode: 0 });
       await renderTask.promise;
+      if (pdf.numPages === 1 && !destroyed && generation === renderGeneration) {
+        ddaRead ||= readDdaCopyAction(page);
+        const action = await ddaRead;
+        if (action && !destroyed && generation === renderGeneration) {
+          ddaAction = action;
+          const copyButton = element('button', 'attachment-preview-dda-copy-overlay');
+          copyButton.type = 'button';copyButton.setAttribute('aria-label', 'Copiar linha digitável: copiar os 44 dígitos do código de barras');
+          copyButton.title = 'Copiar código de barras (44 dígitos)';
+          copyButton.addEventListener('click', () => { void copyDdaBarcode(); });
+          wrapper.append(copyButton);positionDdaCopyButton(copyButton, canvas, action.rect);
+          onDdaCopyReady(true);
+        }
+      }
     } catch (error) {
       canvas.width = canvas.height = 0;
       if (existingWrapper) canvas.remove(); else wrapper.remove();
@@ -516,6 +549,7 @@ export function createPdfPreview({
     ready,
     destroy,
     getCurrentPage,
+    copyDdaBarcode,
     hasRenderedPages: () => renderedCanvases.length > 0,
     hasRenderingErrors: () => Number(root.dataset.failedPages || 0) > 0,
     getSummary: () => {

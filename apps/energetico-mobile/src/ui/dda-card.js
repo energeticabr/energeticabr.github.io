@@ -52,7 +52,7 @@ export async function copyDdaText(doc,text){
  try{if(doc.defaultView?.navigator?.clipboard?.writeText){await doc.defaultView.navigator.clipboard.writeText(text);return;}}catch{}
  const focused=doc.activeElement,area=doc.createElement('textarea');
  area.value=text;area.readOnly=true;area.style.cssText='position:fixed;opacity:0;left:0;top:0;width:1px;height:1px';
- doc.body.append(area);
+ (focused?.closest?.('dialog[open]') || doc.querySelector('dialog[open]') || doc.body).append(area);
  try{area.focus();area.select();area.setSelectionRange(0,text.length);if(!doc.execCommand?.('copy'))throw new Error('COPY_UNAVAILABLE');}
  finally{area.remove();if(focused?.isConnected)focused.focus?.();}
 }

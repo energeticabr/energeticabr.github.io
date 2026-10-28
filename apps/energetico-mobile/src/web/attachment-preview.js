@@ -92,6 +92,10 @@ export function createAttachmentPreview({
   const status = element("p", "attachment-preview-status");
   status.setAttribute("role", "status");
   const footer = element("footer", "attachment-preview-footer");
+  const ddaCopyButton = element('button', 'attachment-preview-dda-copy', 'Copiar código de barras');
+  ddaCopyButton.type = 'button';ddaCopyButton.hidden = true;
+  ddaCopyButton.dataset.previewAction = 'copy-dda-barcode';
+  ddaCopyButton.addEventListener('click', () => { void active?.pdf?.copyDdaBarcode?.(); });
   const backButton = element("button", "attachment-preview-back", "Voltar ao chat");
   const addToTrayButton = element("button", "attachment-preview-add-to-tray", "📎 BARRA");
   addToTrayButton.setAttribute("aria-label", "Adicionar este anexo à barra");
@@ -146,7 +150,7 @@ export function createAttachmentPreview({
   collectionStatus.dataset.previewAction = "collection-status";
   nextButton.dataset.previewAction = "next";
   collectionNav.append(previousButton, collectionStatus, nextButton);
-  footer.append(collectionNav, addChoice, signActions, backButton, addToTrayButton, exportButton);
+  footer.append(collectionNav, addChoice, signActions, backButton, ddaCopyButton, addToTrayButton, exportButton);
   dialog.append(header, content, status, footer);
   documentRef.body.append(dialog);
   let active = null;
@@ -358,6 +362,8 @@ export function createAttachmentPreview({
   });
 
   function release() {
+    ddaCopyButton.hidden = true;
+    delete dialog.dataset.ddaCopy;
     if (!active) return;
     const previous = active;
     active = null;
@@ -648,6 +654,7 @@ export function createAttachmentPreview({
         session.pdf = createPdfPreview({
           blob, container: content, documentRef, signal: session.abort.signal,
           onProgress: value => presentationProgress(session, value),
+          onDdaCopyReady: available => { if (active === session) { ddaCopyButton.hidden = !available; if (available) dialog.dataset.ddaCopy = 'true'; else delete dialog.dataset.ddaCopy; } },
           fit: layout === 'report-pdf' ? 'page' : 'width',
           navigation: 'scroll',
           initialPage,
@@ -658,6 +665,7 @@ export function createAttachmentPreview({
           },
           onError: () => {
             if (active !== session) return;
+            ddaCopyButton.hidden = true;
             session.failed = true;
             session.signatureReady = false;
             signButton.disabled = stampButton.disabled = true;
@@ -685,6 +693,7 @@ export function createAttachmentPreview({
       if (active !== session) return;
       session.downloadComplete = true;
       session.pdf?.destroy();
+      ddaCopyButton.hidden = true;
       session.pdf = null;
       session.signatureReady = false;
       signButton.disabled = stampButton.disabled = true;

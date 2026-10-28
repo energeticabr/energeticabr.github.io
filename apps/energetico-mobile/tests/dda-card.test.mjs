@@ -46,10 +46,10 @@ test('DDA sorts the complete snapshot before pagination and keeps missing dates 
  gallery.destroy();dom.window.close();
 });
 test('clipboard fallback preserves leading zeros, restores focus, and fails truthfully',async()=>{
- const dom=new JSDOM('<body><button>Copiar</button></body>'),doc=dom.window.document;
+ const dom=new JSDOM('<body><dialog open><button>Copiar</button></dialog></body>'),doc=dom.window.document;
  const button=doc.querySelector('button');button.focus();
  Object.defineProperty(dom.window.navigator,'clipboard',{value:{writeText:async()=>{throw Error('unsupported')}}});
- let captured='';doc.execCommand=command=>{assert.equal(command,'copy');captured=doc.querySelector('textarea').value;return true;};
+ let captured='';doc.execCommand=command=>{assert.equal(command,'copy');assert.equal(doc.querySelector('textarea').parentElement,doc.querySelector('dialog'));captured=doc.querySelector('textarea').value;return true;};
  await copyDdaText(doc,'000123');assert.equal(captured,'000123');assert.equal(doc.activeElement,button);assert.equal(doc.querySelector('textarea'),null);
  doc.execCommand=()=>false;await assert.rejects(copyDdaText(doc,'000123'),/COPY_UNAVAILABLE/);
  assert.equal(doc.querySelector('textarea'),null);dom.window.close();

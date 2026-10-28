@@ -15,3 +15,4 @@ backend-patches/visit-existing-diary/** text eol=lf
 backend-patches/visit-existing-diary/source.patch whitespace=-blank-at-eol
 backend-patches/multiple-document-entry/** text eol=lf
 backend-patches/multiple-document-entry/source.patch whitespace=-blank-at-eol
+apps/energetico-mobile/tests/fixtures/*.pdf binary
