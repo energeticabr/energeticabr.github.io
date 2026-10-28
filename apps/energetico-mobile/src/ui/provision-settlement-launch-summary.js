@@ -2,7 +2,7 @@ import { escapeHtml } from './escape-html.js';
 
 const money = 'R\\$\\s*(-?(?:\\d{1,3}(?:\\.\\d{3})+|\\d+),\\d{2})';
 const rowPattern = new RegExp(`^PROVISÃO ([1-9]\\d*) — (.+) — QTD (.+) — TOTAL ${money}$`, 'u');
-const quantityPattern = /^-?\d+(?:[.,]\d+)*$/u;
+const quantityPattern = /^-?(?:\d+(?:[.,]\d+)?|\d{1,3}(?:\.\d{3})+(?:,\d+)?)$/u;
 
 function totalCurrency(cents) {
   const digits = (cents < 0n ? -cents : cents).toString().padStart(3, '0');
@@ -24,7 +24,8 @@ export function provisionSettlementLaunchSummaryMarkup(message) {
     const match = lines.shift().match(rowPattern);
     if (!match) return '';
     const [, id, product, quantity, amount] = match;
-    if (ids.has(id) || !product.trim() || !quantityPattern.test(quantity)) return '';
+    if (ids.has(id) || !product.trim() || !quantityPattern.test(quantity)
+      || / — (?:QTD|TOTAL) |PROVISÃO [1-9]\d* —/u.test(product)) return '';
     ids.add(id);
     cents += BigInt(amount.replace(/[.,]/gu, ''));
     rows.push({ id, product, quantity, amount });

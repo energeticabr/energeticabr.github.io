@@ -109,3 +109,25 @@ test('Sim e Não mantêm replies, opções desabilitadas e bloqueio durante envi
   assert.equal(root.querySelector('[data-reply-id="choice:submeter_lancamentos:1"]').disabled, true);
   assert.equal(root.querySelector('[data-reply-id="choice:submeter_lancamentos:2"]').disabled, false);
 });
+
+test('duas provisões concatenadas nunca viram uma linha com total parcial, mesmo com ID repetido', t => {
+  for (const secondId of ['348', '347']) {
+    const line = `PROVISÃO 347 — BRITA 01 — QTD 6 — TOTAL R$ 769,00 PROVISÃO ${secondId} — AREIA — QTD 1 — TOTAL R$ 1.234,56`;
+    const document = render(t, summary([line]));
+    assert.equal(document.querySelector('[data-provision-launch-summary]'), null);
+    assert.ok(document.body.textContent.includes(line));
+  }
+});
+
+test('quantidades malformadas mantêm texto e formatos decimais ou brasileiros válidos são preservados', t => {
+  for (const quantity of ['1,2,3', '1.2.3']) {
+    const message = summary([`PROVISÃO 347 — BRITA 01 — QTD ${quantity} — TOTAL R$ 769,00`]);
+    const document = render(t, message);
+    assert.equal(document.querySelector('[data-provision-launch-summary]'), null);
+    assert.ok(document.body.textContent.includes(message.question.split('\n')[1]));
+  }
+  for (const quantity of ['6', '6,25', '6.25', '1.234.567', '1.234,56']) {
+    const document = render(t, summary([`PROVISÃO 347 — BRITA 01 — QTD ${quantity} — TOTAL R$ 769,00`]));
+    assert.equal(document.querySelector('[data-provision-launch-summary] tbody td')?.textContent.trim(), quantity);
+  }
+});
