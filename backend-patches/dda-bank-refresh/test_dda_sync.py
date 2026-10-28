@@ -63,5 +63,18 @@ class QueueTests(unittest.TestCase):
             with self.assertRaises(ValueError):
                 handle_portal(OWNER, body, queue=self.queue)
 
+    def test_created_ids_are_validated_and_exposed_only_to_owner(self):
+        self.queue.worker("heartbeat")
+        job = self.queue.start(OWNER)
+        self.queue.worker("claim")
+        for ids in ([1, 1], [True, 2], [0, 2], ["1", 2], [1], [1, 2147483648], "1,2"):
+            with self.assertRaises(ValueError):
+                self.queue.worker("complete", {**job, "status": "succeeded", "created": 2, "createdItemIds": ids})
+            self.assertEqual(self.queue.status(OWNER, job["requestId"])["status"], "running")
+        self.queue.worker("complete", {**job, "status": "succeeded", "created": 2, "createdItemIds": [42, 43], "supplier": "DO NOT RETAIN"})
+        result = self.queue.status(OWNER, job["requestId"])
+        self.assertEqual(result["createdItemIds"], [42, 43])
+        self.assertNotIn("DO NOT RETAIN", (Path(self.tmp.name) / "state.json").read_text())
+
 if __name__ == "__main__":
     unittest.main()

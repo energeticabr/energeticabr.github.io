@@ -7,6 +7,38 @@ import { createRegistrationGallery } from '../src/ui/registration-gallery-view.j
 const id='a'.repeat(32);
 const tick=()=>new Promise(resolve=>setImmediate(resolve));
 
+test('new DDA popup identifies only confirmed created IDs across filters and closes without closing gallery',async()=>{
+ const dom=new JSDOM('<body></body>');const doc=dom.window.document;let loads=0;
+ const old={id:'1',fields:{Title:'EXISTENTE',VALOR:1}};
+ const added={id:'42',fields:{Title:'NOVO FICTICIO',VALOR:123.45,VENCIMENTO:'2026-11-10'}};
+ const concurrent={id:'99',fields:{Title:'OUTRA SINCRONIZACAO'}};
+ const gallery=createRegistrationGallery({document:doc,kind:'dda',
+ data:{async loadSnapshot(){return {rows:++loads===1?[old]:[old,added,concurrent]};}},
+ refreshBank:async()=>({status:'succeeded',created:2,createdItemIds:[42,43]})});
+ await gallery.open();
+ const search=doc.querySelector('input[type="search"]');search.value='EXISTENTE';search.dispatchEvent(new dom.window.Event('input'));
+ const button=doc.querySelector('[data-action="registration-refresh"]');button.click();button.click();await tick();await tick();
+ const popup=doc.querySelector('[data-dda-new-items]');assert.ok(popup);assert.equal(doc.querySelectorAll('[data-dda-new-items]').length,1);
+ assert.match(popup.textContent,/NOVO FICTICIO/);assert.match(popup.textContent,/ID 42/);assert.match(popup.textContent,/10\/11\/2026/);assert.match(popup.textContent,/123,45/);
+ assert.match(popup.textContent,/ID 43/);assert.doesNotMatch(popup.textContent,/EXISTENTE|OUTRA SINCRONIZACAO/);
+ assert.equal(doc.querySelector('.rg-header').inert,true);
+ popup.dispatchEvent(new dom.window.KeyboardEvent('keydown',{key:'Escape',bubbles:true}));
+ assert.equal(doc.querySelector('[data-dda-new-items]'),null);assert.equal(doc.querySelector('.rg-overlay').hidden,false);
+ assert.equal(doc.querySelector('.rg-header').inert,false);assert.equal(doc.activeElement,button);
+ gallery.destroy();dom.window.close();
+});
+
+test('no new DDA means no popup; verified creation still identifies ID if gallery read fails',async()=>{
+ const dom=new JSDOM('<body></body>');const doc=dom.window.document;let created=0,loads=0;
+ const gallery=createRegistrationGallery({document:doc,kind:'dda',data:{async loadSnapshot(){if(++loads>2)throw Error('offline');return {rows:[]};}},
+ refreshBank:async()=>({status:'succeeded',created,createdItemIds:created?[50]:[]})});
+ await gallery.open();const button=doc.querySelector('[data-action="registration-refresh"]');
+ button.click();await tick();await tick();assert.equal(doc.querySelector('[data-dda-new-items]'),null);
+ created=1;button.click();await tick();await tick();assert.match(doc.querySelector('[data-dda-new-items]').textContent,/ID 50/);
+ gallery.close();assert.equal(doc.querySelector('[data-dda-new-items]'),null);
+ gallery.destroy();dom.window.close();
+});
+
 test('bank refresh waits for confirmed completion and rejects offline, partial or mismatched receipts',async()=>{
  const calls=[];
  const client={async refreshDda(){calls.push('start');return {status:'queued',requestId:id};},
@@ -44,6 +76,7 @@ test('manual DDA button waits for bank before SharePoint, deduplicates clicks, p
  button.click();button.click();await tick();assert.deepEqual(events,['sharepoint','bank']);assert.equal(button.disabled,true);
  finish();await tick();await tick();assert.deepEqual(events,['sharepoint','bank','sharepoint']);
  assert.match(dom.window.document.body.textContent,/Sicoob.*SharePoint.*atualizados/i);
+ dom.window.document.querySelector('[data-dda-new-items] button').click();
  fail=true;button.click();await tick();
  assert.match(dom.window.document.body.textContent,/FICTICIO/);
  assert.match(dom.window.document.body.textContent,/não foi possível.*Sicoob/i);

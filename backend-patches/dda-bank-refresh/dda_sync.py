@@ -60,7 +60,7 @@ class Queue:
 
     @staticmethod
     def public(job):
-        result = {key: job[key] for key in ("requestId", "status", "code", "created", "updated", "verified") if key in job}
+        result = {key: job[key] for key in ("requestId", "status", "code", "created", "updated", "verified", "createdItemIds") if key in job}
         if "completedAt" in job:
             result["completedUtc"] = datetime.fromtimestamp(job["completedAt"], timezone.utc).isoformat()
         return result
@@ -111,6 +111,13 @@ class Queue:
                         if type(value) is not int or not 0 <= value <= 1000000:
                             raise ValueError("Invalid count")
                         job[key] = value
+                    if "createdItemIds" in payload:
+                        ids = payload["createdItemIds"]
+                        if (not isinstance(ids, list) or len(ids) != job["created"] or len(ids) > 10000
+                                or any(type(item) is not int or not 1 <= item <= 2147483647 for item in ids)
+                                or len(set(ids)) != len(ids)):
+                            raise ValueError("Invalid created item IDs")
+                        job["createdItemIds"] = ids
                 else:
                     job["code"] = "SYNC_FAILED"
             return {"ok": True}
@@ -129,7 +136,10 @@ def handle_portal(identity, body, queue=None):
 if __name__ == "__main__":
     try:
         operation = sys.argv[1] if len(sys.argv) == 2 else ""
-        payload = json.loads(sys.stdin.read(8192)) if operation == "complete" else None
+        raw = sys.stdin.read(131073) if operation == "complete" else ""
+        if len(raw) > 131072:
+            raise ValueError("Worker receipt too large")
+        payload = json.loads(raw) if operation == "complete" else None
         print(json.dumps(Queue().worker(operation, payload)))
     except Exception:
         print('{"ok":false,"code":"WORKER_COMMAND_FAILED"}')

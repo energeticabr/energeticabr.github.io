@@ -74,3 +74,15 @@
  .rg-dda-body > .rg-dda-field:nth-child(even), .rg-dda-footer > .rg-dda-field:nth-child(even) { padding-left: 2px; border-left: 0; }
 }
 .rg-dda-sync-notice { margin: 8px 0; padding: 12px; border: 1px solid #94b4e0; border-radius: 8px; background: #e6f0ff; color: #102c50; font-size: .85rem; overflow-wrap: anywhere; }
+.gallery-record-overlay.dda-sync-overlay { z-index: 20; padding: 16px; }
+.gallery-record-dialog.dda-sync-dialog { width: min(100%, 560px); max-height: calc(100dvh - 32px); overflow: auto; box-sizing: border-box; }
+.dda-sync-summary { margin: 0 0 14px; color: #385266; }
+.dda-sync-items { list-style: none; padding: 0; margin: 0; display: grid; gap: 12px; }
+.dda-sync-item { padding: 14px; border: 1px solid #bcd8d4; border-left: 4px solid #147666; border-radius: 12px; background: #eff9f6; min-width: 0; overflow-wrap: anywhere; }
+.dda-sync-item .rg-dda-id { display: inline-block; margin-bottom: 8px; }
+.dda-sync-supplier { display: block; color: #143a59; }
+.dda-sync-fields { display: grid; grid-template-columns: repeat(2,minmax(0,1fr)); gap: 12px; margin: 12px 0 0; }
+.dda-sync-fields dt { color: #4b6268; font-size: .85rem; }
+.dda-sync-fields dd { margin: 3px 0 0; font-weight: 700; color: #173949; }
+.dda-sync-fields > :last-child { grid-column: 1 / -1; }
+.dda-sync-dialog .gallery-record-dialog-buttons { position: sticky; bottom: 0; background: white; padding-top: 14px; }
