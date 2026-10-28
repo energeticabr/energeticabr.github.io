@@ -30,6 +30,7 @@ import "../ui/orders-linked-report.css";
 import "../ui/tasks-gallery.css";
 import "../ui/payment-ledger.css";
 import "../ui/provision-report.css";
+import "../ui/dda-report.css";
 import "../ui/order-validation-report.css";
 import "../ui/management-report.css";
 import "../ui/cargos.css";

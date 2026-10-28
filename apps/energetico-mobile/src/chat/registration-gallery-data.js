@@ -269,6 +269,16 @@ function galleryRepository(options) {
       if (property === 'getSnapshotColumns') return columnsFor;
       if (property === "getItemsPage") return async (site, list, ...args) => {
         const [page, columns] = await Promise.all([repository.getItemsPage(site, list, ...args), columnsFor(site, list, args[1])]);
+        // Financial totals must never silently omit malformed source records.
+        // Other galleries retain their existing permissive normalization.
+        if (options.strictSnapshot) {
+          if (!Array.isArray(page?.items) || typeof page.hasMore !== "boolean"
+            || (page.hasMore === false && page.nextLink)) throw new TypeError("Consulta DDA incompleta.");
+          for (const item of page.items) {
+            if (!item?.fields || typeof item.fields !== "object" || Array.isArray(item.fields)
+              || !normalizeGalleryItem(item)) throw new TypeError("Registro DDA inválido.");
+          }
+        }
         if (page?.hasMore === true && (typeof page.nextLink !== "string" || !page.nextLink)) throw new Error("A paginação da galeria não retornou o próximo cursor.");
         if (!Array.isArray(page?.items)) return page;
         const items = (Array.isArray(page?.items) ? page.items : []).map(item => {
@@ -299,7 +309,7 @@ export function createRegistrationGalleryData({ kind, ...options } = {}) {
       ...(model.restReadFields ? { restReadFields: model.restReadFields, restExpandSystemFields: model.restExpandSystemFields } : {}),
     } } };
   }
-  const repository = model.nativeCard ? galleryRepository(options) : options.repository;
+  const repository = model.nativeCard ? galleryRepository({ ...options, strictSnapshot: kind === "dda" }) : options.repository;
   const data = createOrdersGalleryData({
     ...options,
     ...(model.nativeCard ? { repository, snapshotColumns: true, preserveSourceOrder: model.sourceSort == null } : {}),

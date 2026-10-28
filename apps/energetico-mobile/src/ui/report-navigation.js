@@ -1,7 +1,7 @@
 // Visual mascot families in HOME order. Illustrated/gray mascots remain
 // singletons; families are never inferred from inherited button CSS.
 const GROUPS = [
- ['open-pending-provisions','open-provision-report','open-payment-ledger','open-management-report','open-order-validation-report','open-document-control-report'],
+ ['open-pending-provisions','open-dda-report','open-provision-report','open-payment-ledger','open-management-report','open-order-validation-report','open-document-control-report'],
  ['open-cargos-table','open-attendance-summary','open-stage-progress','open-supplier-payroll-report','open-supplier-workforce-report','open-contractor-control-report','open-pending-supplier-payments-report','open-pending-work-diaries-report'],
  ['open-commercial-receipts','open-commercial-milestones','open-commercial-documents','open-sac-pathologies'],
  ['open-task-association-report','open-delegated-deadline-report'],

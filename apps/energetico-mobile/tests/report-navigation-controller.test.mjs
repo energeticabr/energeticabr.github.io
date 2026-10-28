@@ -7,12 +7,13 @@ import { createConversationStore } from '../src/chat/conversation-store.js';
 // Literal routes catch wrong dispatch and cross-color navigation independently
 // of the helper's neighbor calculation. Only UI/network boundaries are doubled.
 const groups = [
-  ['open-pending-provisions', 'open-provision-report', 'open-payment-ledger', 'open-management-report', 'open-order-validation-report', 'open-document-control-report'],
+  ['open-pending-provisions', 'open-dda-report', 'open-provision-report', 'open-payment-ledger', 'open-management-report', 'open-order-validation-report', 'open-document-control-report'],
   ['open-cargos-table', 'open-attendance-summary', 'open-stage-progress', 'open-supplier-payroll-report', 'open-supplier-workforce-report', 'open-contractor-control-report', 'open-pending-supplier-payments-report', 'open-pending-work-diaries-report'],
   ['open-commercial-receipts', 'open-commercial-milestones', 'open-commercial-documents', 'open-sac-pathologies'],
   ['open-task-association-report', 'open-delegated-deadline-report'],
 ];
 const factories = {
+  'open-dda-report': 'ddaReportFactory',
   'open-provision-report': 'provisionReportFactory',
   'open-payment-ledger': 'paymentLedgerFactory',
   'open-management-report': 'managementReportFactory',
@@ -78,7 +79,7 @@ function harness(t, options = {}, { dom = true } = {}) {
     client: { async sendText(payload) { calls.push(payload); return { status: 'processed', messages: [] }; },
       getPendingProvisionSnapshot: async () => ({ rows: [] }) },
     pendingProvisionAttachmentsDataFactory: async () => ({ loadUpcomingPayments: async () => [] }),
-    ...Object.fromEntries(['paymentLedgerDataFactory', 'cargosDataFactory', 'attendanceSummaryDataFactory',
+    ...Object.fromEntries(['registrationGalleryDataFactory', 'paymentLedgerDataFactory', 'cargosDataFactory', 'attendanceSummaryDataFactory',
       'stageProgressDataFactory', 'supplierPayrollReportDataFactory', 'commercialReceiptsDataFactory', 'commercialMilestonesDataFactory',
       'commercialDocumentsDataFactory', 'sacPathologiesDataFactory', 'documentControlReportDataFactory',
       'quotationReportDataFactory', 'depreciationReportDataFactory', 'taskAssociationReportDataFactory', 'delegatedDeadlineReportDataFactory',
@@ -309,8 +310,8 @@ test('navigation invalidates an older pending gallery so its late panel cannot c
 test('a late pending snapshot cannot cover a newer HOME report after arrow navigation',async t=>{
  const query=deferred();let delayed=false;
  const h=harness(t,{client:{sendText:async()=>({status:'processed',messages:[]}),getPendingProvisionSnapshot:()=>delayed?query.promise:Promise.resolve({rows:[]})}});
- await h.controller.start();await h.view.emit('open-provision-report');delayed=true;
- const navigating=h.view.emit('navigate-mascot-report',{from:'open-provision-report',direction:'previous'});await tick();
+ await h.controller.start();await h.view.emit('open-dda-report');delayed=true;
+ const navigating=h.view.emit('navigate-mascot-report',{from:'open-dda-report',direction:'previous'});await tick();
  await h.view.emit('open-task-association-report');query.resolve({rows:[]});assert.equal(await navigating,false);await tick();
  assert.equal(h.renders.at(-1).pendingProvisions,null);assert.equal(h.panels.at(-1).action,'open-task-association-report');
 });

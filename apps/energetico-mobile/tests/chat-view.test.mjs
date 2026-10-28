@@ -266,7 +266,9 @@ test("atalho do mascote fica fora do cartão e abre provisões sem selecionar Pe
   const paymentShortcut = root.querySelector('[data-action="open-payment-ledger"]');
   const provisionReport = root.querySelector('[data-action="open-provision-report"]');
   assert.ok(provisionReport, 'o segundo mascote abre o relatório de provisões');
-  assert.equal(shortcut.nextElementSibling, provisionReport);
+  const ddaShortcut = root.querySelector('[data-action="open-dda-report"]');
+  assert.equal(shortcut.nextElementSibling, ddaShortcut);
+  assert.equal(ddaShortcut.nextElementSibling, provisionReport);
   assert.equal(provisionReport.nextElementSibling, paymentShortcut);
   assert.equal(bubble.contains(provisionReport), false);
   assert.notEqual(provisionReport.querySelector('img').src, shortcut.querySelector('img').src);
@@ -319,7 +321,7 @@ const returnedHomeOptions = [
 ];
 const returnedHomeActions = [
   'open-commercial-receipts', 'open-commercial-milestones', 'open-commercial-documents', 'open-sac-pathologies',
-  'open-pending-provisions', 'open-provision-report', 'open-payment-ledger', 'open-management-report',
+  'open-pending-provisions', 'open-dda-report', 'open-provision-report', 'open-payment-ledger', 'open-management-report',
   'open-order-validation-report', 'open-quotation-report', 'open-depreciation-report', 'open-document-control-report',
   'open-task-association-report', 'open-delegated-deadline-report', 'open-cargos-table', 'open-attendance-summary',
   'open-stage-progress', 'open-supplier-payroll-report', 'open-supplier-workforce-report', 'open-contractor-control-report',
@@ -377,7 +379,7 @@ test('retorno com aviso preserva restrições de contexto, permissão e busy dos
   }
   view.render(signedInState({ messages: [menu], activeText: { id: 'sending' } }));
   const busyButtons = [...root.querySelectorAll('.chat-message--assistant button[data-action^="open-"]')];
-  assert.equal(busyButtons.length, 22);
+  assert.equal(busyButtons.length, 23);
   assert.ok(busyButtons.every(button => button.disabled));
   root.querySelector('[data-action="open-payment-ledger"]').click();
   assert.deepEqual(opened, []);

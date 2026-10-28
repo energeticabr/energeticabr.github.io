@@ -297,6 +297,11 @@ async function defaultRecurringExpensesGalleryDataFactory(options) {
   return createRecurringExpensesGalleryData(options);
 }
 
+async function defaultDdaReportFactory(options) {
+  const { createDdaReportView } = await import("./ui/dda-report-view.js");
+  return createDdaReportView(options);
+}
+
 async function defaultRegistrationGalleryFactory(options) {
   if (options.kind === "contractorEmployment") {
     const { createContractorEmploymentView } = await import("./ui/contractor-employment-view.js");
@@ -455,6 +460,7 @@ const POWERBI_DASHBOARD_REPLY_ID = "action_powerbi_dashboard";
 const POWERBI_SCOPES = Object.freeze(["https://analysis.windows.net/powerbi/api/Report.Read.All"]);
 const REGISTRATION_GALLERY_KIND = Object.freeze({
   action_dda_gallery: "dda",
+  action_dda_report: "ddaReport",
   action_hr_gallery_presencas: "presenceDescriptions",
   action_hr_gallery_funcionarios: "contractorEmployment",
   action_financial_movement_gallery: 'financial_movement',
@@ -1012,6 +1018,7 @@ export function createAppController({
   recurringExpensesGalleryFactory = defaultRecurringExpensesGalleryFactory,
   recurringExpensesGalleryDataFactory = defaultRecurringExpensesGalleryDataFactory,
   registrationGalleryFactory = defaultRegistrationGalleryFactory,
+  ddaReportFactory = defaultDdaReportFactory,
   registrationGalleryDataFactory = defaultRegistrationGalleryDataFactory,
   pendingProvisionAttachmentsDataFactory = defaultPendingProvisionAttachmentsDataFactory,
   pendingConstructionDiaryDataFactory,
@@ -5674,6 +5681,7 @@ export function createAppController({
 
   function reportNavigationPanel(action) {
     switch (action) {
+      case 'open-dda-report': return registrationGalleries.get('ddaReport');
       case 'open-provision-report': return provisionReport;
       case 'open-payment-ledger': return paymentLedger;
       case 'open-management-report': return managementReport;
@@ -5767,6 +5775,7 @@ export function createAppController({
   function openMascotReport(target) {
     switch (target) {
       case 'open-pending-provisions': return openPendingProvisions();
+      case 'open-dda-report': return openRegistrationGallery('ddaReport', 'action_dda_report');
       case 'open-provision-report': return openPaymentLedger('provision');
       case 'open-payment-ledger': return openPaymentLedger();
       case 'open-management-report': return openPaymentLedger('management');
@@ -9180,6 +9189,9 @@ export function createAppController({
 
   async function openRegistrationGallery(kind, replyId) {
     if (!account || stopped || flowBusy()) return false;
+    const isDdaReport = kind === "ddaReport";
+    const sourceKind = isDdaReport ? "dda" : kind;
+    if (isDdaReport && store.getState().activeFlow) return false;
     disposeSupplierPayrollReport();
     disposeSacPathologiesReport();
     disposeQuotationReport();
@@ -9193,6 +9205,7 @@ export function createAppController({
     disposePendingSupplierPaymentsReport();
     disposePendingWorkDiariesReport();
     if (registrationGalleryOpenings.has(kind)) return registrationGalleryOpenings.get(kind);
+    if (isDdaReport) closeGalleryOverlays();
     const galleryAccount = account;
     const openingIsCurrent = galleryOpeningGuard(galleryAccount);
     const galleryRevision = sessionRevision;
@@ -9202,7 +9215,7 @@ export function createAppController({
     const opening = (async () => {
       try {
         if (!registrationGalleries.has(kind)) {
-          const data = await registrationGalleryDataFactory({ kind,assertSession, accountKey: galleryAccount.homeAccountId || galleryAccount.localAccountId || galleryAccount.idTokenClaims?.oid || "", userEmail: galleryAccount.username || galleryAccount.email || "", tokenProvider: async scopes => {
+          const data = await registrationGalleryDataFactory({ kind: sourceKind,assertSession, accountKey: galleryAccount.homeAccountId || galleryAccount.localAccountId || galleryAccount.idTokenClaims?.oid || "", userEmail: galleryAccount.username || galleryAccount.email || "", tokenProvider: async scopes => {
             assertSession();
             const token = await auth.getToken(scopes).catch(async error => {
               if (error?.code !== "AUTH_REQUIRED" || typeof auth.authorize !== "function") throw error;
@@ -9215,10 +9228,11 @@ export function createAppController({
           } });
           if (!openingIsCurrent()) return false;
           assertSession();
-          const panel = await registrationGalleryFactory({
-            kind, data,
-            ...(["contractorEmployment", "dda"].includes(kind) ? {} : { onCreate: galleryCreationHandler(replyId, assertSession) }),
-            ...(["dda", "presenceDescriptions", "provisionDescription", "documents", "asset", "assetFunction", "assetProduct", "assetGroup", "workDiary", "quotes", "contracts", "contractLines", "measurements", "measurementLines", "stageDemonstratives", "constructionStages", "recurringTasks", "delegatedTasks"].includes(kind) ? {
+          const factory = isDdaReport ? ddaReportFactory : registrationGalleryFactory;
+          const panel = await factory({
+            kind: sourceKind, data,
+            ...(["contractorEmployment", "dda"].includes(sourceKind) ? {} : { onCreate: galleryCreationHandler(replyId, assertSession) }),
+            ...(["dda", "presenceDescriptions", "provisionDescription", "documents", "asset", "assetFunction", "assetProduct", "assetGroup", "workDiary", "quotes", "contracts", "contractLines", "measurements", "measurementLines", "stageDemonstratives", "constructionStages", "recurringTasks", "delegatedTasks"].includes(sourceKind) ? {
               openMediaCollection: items => {
                 assertSession();
                 const collection = (Array.isArray(items) ? items : []).map(item => ({
@@ -9231,7 +9245,7 @@ export function createAppController({
             onHome: () => { assertSession(); return returnToMainMenu(); },
           });
           if (!openingIsCurrent()) { panel.destroy?.(); return false; }
-          registrationGalleries.set(kind, panel);
+          registrationGalleries.set(kind, isDdaReport ? decorateControllerReport(panel, 'open-dda-report') : panel);
         }
         await registrationGalleries.get(kind).open();
         return openingIsCurrent();
@@ -11461,6 +11475,7 @@ export function createAppController({
     bind("open-file", command => openFile(command.fileId));
     bind("share-attachment", command => shareAttachment(command.fileId));
     bind("close-pending-provisions", closePendingProvisions);
+    bind("open-dda-report", () => openRegistrationGallery("ddaReport", "action_dda_report"));
     bind("open-pending-provisions", openPendingProvisions);
     bind('print-pending-provisions', () => {
       if (!account || stopped || flowBusy() || !pendingProvisionSnapshot || pendingProvisionReminderOpen) return false;
