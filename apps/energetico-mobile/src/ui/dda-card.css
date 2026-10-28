@@ -32,6 +32,7 @@
 .rg-dda-core, .rg-dda-body, .rg-dda-codes, .rg-dda-footer { display: grid; min-width: 0; margin: 0; }
 .rg-dda-core { grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 6px; margin-bottom: 4px; }
 .rg-dda-body, .rg-dda-footer { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+.rg-dda-body .rg-dda-issued { grid-column: 1 / -1; border-right: 0; }
 .rg-dda-field { display: grid; min-width: 0; grid-template-columns: 21px minmax(0, 1fr); column-gap: 8px; align-content: center; padding: 9px 4px; line-height: 1.3; }
 .rg-dda-icon { display: block; width: 21px; height: 21px; grid-column: 1; grid-row: 1 / span 2; align-self: center; }
 .rg-dda-field dt, .rg-dda-field dd { grid-column: 2; min-width: 0; overflow-wrap: anywhere; }

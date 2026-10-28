@@ -11,7 +11,7 @@ const day=ddaTodayKey();
 const due=offset=>new Date(Date.parse(day+'T12:00:00Z')+offset*86400000).toISOString();
 const rows=[2,0,1].map((offset,index)=>({id:String(index+1),fields:{
  Title:['MATERIAIS EXEMPLO LTDA','ANDAIMES DEMONSTRAÇÃO LTDA','SERVIÇOS FICTÍCIOS S.A.'][index],
- VENCIMENTO:due(offset),VALOR:123.45+index,VALOR_PAGAMENTO:123.45+index,SITUACAO:'Em aberto',
+ VENCIMENTO:due(offset),EMISSAO:due(-7-index),VALOR:123.45+index,VALOR_PAGAMENTO:123.45+index,SITUACAO:'Em aberto',
  DOCUMENTO:'DOC-000'+index,CNPJ_FORNECEDOR:'00000000000000',BANCO:'BANCO DEMONSTRAÇÃO S.A.',
  NOSSO_NUMERO:'0000000000000000123456',CODIGO_BARRAS:'0'.repeat(44),LINHA_DIGITAVEL:'0'.repeat(47),
  PAGADOR:'EMPRESA FICTÍCIA LTDA',CNPJ_PAGADOR:'00000000000000',BLOQUEADO:false,ULTIMA_CONSULTA:new Date().toISOString(),Attachments:true

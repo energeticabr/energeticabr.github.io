@@ -18,14 +18,14 @@ export const REGISTRATION_GALLERY_MODELS = Object.freeze({
   dda: Object.freeze({
     title: "GALERIA DDA", listName: "DDAS SICOOB", aliases: ["DDAS SICOOB"],
     nativeCard: true, readOnly: true, readTransport: "rest", showAttachments: true, recordLabel: "DDA",
-    restReadFields: ["ID", "Title", "VENCIMENTO", "VALOR", "SITUACAO", "CNPJ_FORNECEDOR", "DOCUMENTO", "BANCO", "VALOR_PAGAMENTO", "NOSSO_NUMERO", "LINHA_DIGITAVEL", "CODIGO_BARRAS", "PAGADOR", "CNPJ_PAGADOR", "BLOQUEADO", "MENSAGEM", "ULTIMA_CONSULTA"],
+    restReadFields: ["ID", "Title", "VENCIMENTO", "EMISSAO", "VALOR", "SITUACAO", "CNPJ_FORNECEDOR", "DOCUMENTO", "BANCO", "VALOR_PAGAMENTO", "NOSSO_NUMERO", "LINHA_DIGITAVEL", "CODIGO_BARRAS", "PAGADOR", "CNPJ_PAGADOR", "BLOQUEADO", "MENSAGEM", "ULTIMA_CONSULTA"],
     restExpandSystemFields: false,
     searchPlaceholder: "Pesquisar fornecedor, documento ou ID",
-    fields: ["FORNECEDOR", "VENCIMENTO", "VALOR", "SITUACAO", "CNPJ_FORNECEDOR", "DOCUMENTO", "BANCO", "VALOR_PAGAMENTO", "NOSSO_NUMERO", "LINHA_DIGITAVEL", "CODIGO_BARRAS", "PAGADOR", "CNPJ_PAGADOR", "BLOQUEADO", "MENSAGEM", "ULTIMA_CONSULTA", "ID"],
+    fields: ["FORNECEDOR", "VENCIMENTO", "EMISSAO", "VALOR", "SITUACAO", "CNPJ_FORNECEDOR", "DOCUMENTO", "BANCO", "VALOR_PAGAMENTO", "NOSSO_NUMERO", "LINHA_DIGITAVEL", "CODIGO_BARRAS", "PAGADOR", "CNPJ_PAGADOR", "BLOQUEADO", "MENSAGEM", "ULTIMA_CONSULTA", "ID"],
     filterFields: ["FORNECEDOR", "SITUACAO", "BANCO"], dateRangeField: "VENCIMENTO",
     fieldAliases: { FORNECEDOR: ["Title", "Fornecedor"] },
-    fieldTypes: { VENCIMENTO: "date", VALOR: "currency", VALOR_PAGAMENTO: "currency", ULTIMA_CONSULTA: "datetime", BLOQUEADO: "boolean" },
-    fieldLabels: { FORNECEDOR: "Fornecedor", VENCIMENTO: "Vencimento", VALOR: "Valor nominal", SITUACAO: "Situação na última consulta", CNPJ_FORNECEDOR: "CPF/CNPJ fornecedor", DOCUMENTO: "Documento", BANCO: "Banco", VALOR_PAGAMENTO: "Valor para pagamento", NOSSO_NUMERO: "Nosso número", LINHA_DIGITAVEL: "Linha digitável", CODIGO_BARRAS: "Código de barras", PAGADOR: "Pagador", CNPJ_PAGADOR: "CPF/CNPJ pagador", BLOQUEADO: "Pagamento bloqueado", MENSAGEM: "Mensagem do banco", ULTIMA_CONSULTA: "Última consulta" },
+    fieldTypes: { VENCIMENTO: "date", EMISSAO: "date", VALOR: "currency", VALOR_PAGAMENTO: "currency", ULTIMA_CONSULTA: "datetime", BLOQUEADO: "boolean" },
+    fieldLabels: { FORNECEDOR: "Fornecedor", VENCIMENTO: "Vencimento", EMISSAO: "Emissão", VALOR: "Valor nominal", SITUACAO: "Situação na última consulta", CNPJ_FORNECEDOR: "CPF/CNPJ fornecedor", DOCUMENTO: "Documento", BANCO: "Banco", VALOR_PAGAMENTO: "Valor para pagamento", NOSSO_NUMERO: "Nosso número", LINHA_DIGITAVEL: "Linha digitável", CODIGO_BARRAS: "Código de barras", PAGADOR: "Pagador", CNPJ_PAGADOR: "CPF/CNPJ pagador", BLOQUEADO: "Pagamento bloqueado", MENSAGEM: "Mensagem do banco", ULTIMA_CONSULTA: "Última consulta" },
     sourceSort: {field:"VENCIMENTO",direction:"asc",type:"date"},
   }),
   presenceDescriptions: Object.freeze({
