@@ -32,3 +32,12 @@
 .provision-review .provision-review__scroll-hint, .provision-review .provision-review__readonly, .provision-review .provision-review__next { font-size: 12px; color: #435d68; }
 .provision-review__pending { display: flex; flex-wrap: wrap; justify-content: space-between; gap: 8px; padding: 10px; background: #e8f3ff; border-radius: 9px; }
 @media (min-width: 680px) { .provision-review__scroll-hint { display: none; } }
+
+.chat-message:has([data-provision-launch-summary]) { justify-content: center; gap: 0; }
+.chat-message:has([data-provision-launch-summary]) > .chat-avatar { display: none; }
+.chat-message.chat-message--assistant:has([data-provision-launch-summary]) > .chat-bubble { box-sizing: border-box; width: min(100%, 720px); max-width: 720px; min-width: 0; }
+.provision-launch-summary table { min-width: 0; }
+.provision-launch-summary__product-col { width: 46%; }
+.provision-launch-summary__quantity-col { width: 19%; }
+.provision-launch-summary .provision-launch-summary__id { color: #205780; font-size: 12px; }
+.provision-launch-summary .provision-launch-summary__question { margin: 14px 0 10px; font-weight: 700; }

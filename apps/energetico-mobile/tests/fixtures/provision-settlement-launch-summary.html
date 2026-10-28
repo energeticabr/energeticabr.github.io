@@ -1,0 +1,64 @@
+<!doctype html>
+<html lang="pt-BR"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Resumo da baixa de provisões — prévia fictícia</title><link rel="stylesheet" href="/src/styles.css"></head>
+<body><main id="app"></main><script type="module">
+import { createChatView } from '/src/ui/chat-view.js';
+import { reviewState } from '/tests/helpers/provision-settlement-review-fixture.mjs';
+const params = new URLSearchParams(location.search), multiple = params.get('sample') === 'multiple';
+const lines = multiple ? [
+  `PROVISÃO 347 — ${'BRITA-SEM-ESPAÇOS-'.repeat(7)} — QTD 6,25 — TOTAL R$ 769,00`,
+  'PROVISÃO 348 — AREIA MÉDIA LAVADA — QTD 1 — TOTAL R$ 1.234,56',
+  'PROVISÃO 349 — MATERIAL DE CONSTRUÇÃO — QTD 0,5 — TOTAL R$ 0,10',
+  'PROVISÃO 350 — MATERIAL DE CONSTRUÇÃO — QTD 1 — TOTAL R$ 0,20',
+] : ['PROVISÃO 347 — BRITA 01 — QTD 6 — TOTAL R$ 769,00'];
+const message = { id: 'synthetic-launch-summary', role: 'assistant', type: 'poll',
+  question: ['DESCRITIVO 30 — RESUMO DAS LINHAS:', ...lines,
+    ...(multiple ? ['ATENÇÃO: HÁ LANÇAMENTOS VINCULADOS. SIM EXIGE A SENHA PARA SUBSTITUÍ-LOS.'] : []),
+    'DESEJA ADICIONAR TODAS ESTAS LINHAS EM LANÇAMENTOS? SERÁ UTILIZADO UM ÚNICO PEDIDO PARA ESTE DESCRITIVO.'].join('\n'),
+  options: [
+    { id: 'choice:submeter_lancamentos:1', reply: 'choice:submeter_lancamentos:1', label: '✅ SIM' },
+    { id: 'choice:submeter_lancamentos:2', reply: 'choice:submeter_lancamentos:2', label: '❌ NÃO' },
+  ],
+};
+const currentState = extra => reviewState(message, { activeFlow: { id: 'payment_settlement', title: 'BAIXAR PAGAMENTO AGENDADO', stepKey: 'submeter_lancamentos' }, ...extra });
+const root = document.querySelector('#app'), view = createChatView(root), replies = [];
+view.on('select-reply', event => replies.push(event.replyId));
+view.render(currentState());
+await document.fonts.ready;
+await Promise.all([...document.images].map(image => image.complete ? Promise.resolve() : new Promise(done => {
+  image.addEventListener('load', done, { once: true }); image.addEventListener('error', done, { once: true });
+})));
+const frame = () => new Promise(done => requestAnimationFrame(() => requestAnimationFrame(done)));
+await frame();
+const card = root.querySelector('[data-provision-launch-summary]');
+let result = { missing: !card };
+if (card) {
+  const rect = node => { const box = node.getBoundingClientRect(); return { x: box.x, y: box.y, right: box.right, bottom: box.bottom }; };
+  const transcript = root.querySelector('.chat-transcript');
+  transcript.scrollTop = transcript.scrollHeight;
+  await frame();
+  const composer = rect(root.querySelector('[data-chat-form]'));
+  const buttons = ['1', '2'].map(id => root.querySelector(`[data-reply-id="choice:submeter_lancamentos:${id}"]`));
+  result = { missing: false, width: innerWidth, multiple,
+    rows: card.querySelectorAll('tbody tr').length,
+    total: card.querySelector('tfoot td').textContent,
+    pageOverflow: document.documentElement.scrollWidth > innerWidth + 1,
+    tableOverflow: card.querySelector('table').scrollWidth > card.querySelector('.provision-review__scroll').clientWidth + 1,
+    minFontSize: Math.min(...[...card.querySelectorAll('th,td,small,p')].map(node => parseFloat(getComputedStyle(node).fontSize))),
+    quantityFitsOnOneLine: [...card.querySelectorAll('tbody td:nth-child(2),thead th:nth-child(2)')].every(cell => {
+      const range = document.createRange(); range.selectNodeContents(cell);
+      return range.getBoundingClientRect().height <= parseFloat(getComputedStyle(cell).lineHeight) + 1;
+    }),
+    rowBackgrounds: [...card.querySelectorAll('tbody tr')].map(row => getComputedStyle(row.querySelector('td')).backgroundColor),
+    controlsReachable: buttons.every(button => { const box = rect(button), hit = document.elementFromPoint((box.x + box.right) / 2, (box.y + box.bottom) / 2); return box.y >= 0 && box.bottom <= composer.y + 1 && (hit === button || button.contains(hit)); }),
+  };
+  if (params.get('test') === '1') {
+    buttons.forEach(button => button.click());
+    result.replies = [...replies];
+    view.render(currentState({ activeText: { id: 'synthetic-request' } }));
+    result.busyDisabled = ['1', '2'].every(id => root.querySelector(`[data-reply-id="choice:submeter_lancamentos:${id}"]`).disabled);
+  }
+  if (params.get('test') !== '1') transcript.scrollTop = 0;
+}
+document.documentElement.dataset.layout = JSON.stringify(result);
+</script></body></html>
