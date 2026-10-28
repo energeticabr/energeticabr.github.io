@@ -6,7 +6,9 @@ import { setTimeout as delay } from "node:timers/promises";
 
 // Use an isolated test browser, an exact viewport, and the fixture's readiness
 // marker. A fixed virtual-time budget can capture an unfinished module/image load.
-export async function runBrowserLayout(browser, { width, height, url, safeAreaInsets, mediaType, colorScheme, mobile = false, gestureProbes = [], captureScreenshot = false, maxBuffer = 2_000_000, readyTimeoutMs = 30_000, startupTimeoutMs = 10_000 }) {
+// Cold CI runners can need more than ten seconds to publish DevToolsActivePort.
+// Keep the startup bounded at thirty seconds; layout assertions are unchanged.
+export async function runBrowserLayout(browser, { width, height, url, safeAreaInsets, mediaType, colorScheme, mobile = false, gestureProbes = [], captureScreenshot = false, maxBuffer = 2_000_000, readyTimeoutMs = 30_000, startupTimeoutMs = 30_000 }) {
   const temporaryRoot = resolve(tmpdir());
   const profile = await mkdtemp(join(temporaryRoot, "energetico-layout-"));
   const pending = new Map();
@@ -21,7 +23,7 @@ export async function runBrowserLayout(browser, { width, height, url, safeAreaIn
     child.stderr?.on('data', chunk => { browserStderr = (browserStderr + String(chunk)).slice(-2000); });
     let endpoint, lastEndpointContents;
     const startupDiagnostic = () => `Navegador: ${browser}. Último endpoint: ${JSON.stringify(lastEndpointContents ?? 'arquivo indisponível')}. ${browserStderr.trim()}`;
-    const startupAttempts = Math.ceil(Math.max(1000, Math.min(30_000, Number(startupTimeoutMs) || 10_000)) / 100);
+    const startupAttempts = Math.ceil(Math.max(1000, Math.min(30_000, Number(startupTimeoutMs) || 30_000)) / 100);
     for (let attempt = 0; attempt < startupAttempts; attempt += 1) {
       if (spawnError) throw spawnError;
       try {
