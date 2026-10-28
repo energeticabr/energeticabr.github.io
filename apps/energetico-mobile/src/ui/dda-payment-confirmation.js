@@ -12,6 +12,7 @@ export function createDdaPaymentConfirmation({ document: doc, host, confirmPayme
     doc.removeEventListener('focusin', keepFocus, true); old.overlay.remove();
     for (const [node, inert] of old.background) node.inert = inert;
     if (old.trigger?.isConnected && !host.hidden) old.trigger.focus();
+    else if (host.isConnected && !host.hidden) host.focus();
   }
   function show({ itemId, key, supplier, amount, due }, trigger) {
     if (current || host.hidden || !host.isConnected) return;

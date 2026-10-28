@@ -33,6 +33,8 @@ test('check asks confirmation; Cancel never writes; Yes writes once and shows pa
  assert.match(doc.querySelector('.rg-dda-status').textContent,/Pago/);
  assert.equal(doc.querySelector('[data-dda-confirm-payment]').disabled,true);
  assert.match(doc.querySelector('.rg-row--dda').textContent,/Confirmado pelo usuário/);
+ doc.querySelector('[data-dda-payment-cancel]').click();
+ assert.equal(doc.activeElement,doc.querySelector('.rg-overlay'));
 });
 
 for(const mode of ['failed','invalid'])test('payment '+mode+' never changes the card and allows retry',async t=>{

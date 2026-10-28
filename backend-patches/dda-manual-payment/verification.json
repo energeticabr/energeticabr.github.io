@@ -1,0 +1,15 @@
+{
+  "dateUtc": "2026-10-28",
+  "status": "checked_not_deployed",
+  "testsPassedLocal": 17,
+  "testsPassedVm": 17,
+  "schemaVerified": true,
+  "fields": {"PGTO_CONFIRMADO": "Boolean default false", "PGTO_CONFIRMADO_EM": "DateTime", "PGTO_CONFIRMADO_POR": "Text"},
+  "readAccessVerified": true,
+  "etagVerified": true,
+  "itemsModified": 0,
+  "rootsVerified": 2,
+  "moduleSha256": "04b390f41e521ac70629621a84d5629ad27c2dce860080db2ec51ab6a45f2941",
+  "bridgeSha256": "b091659f2aa0c8b22faa73921dd6af81ed9e89b869b4ef2db0e90c8dfb3d1d6a",
+  "manifestSha256": "658043f45439986620ca261902df4d8ff461263f8a4af2426874ddb3c58c85f6"
+}

@@ -1,0 +1,19 @@
+{
+  "version": 1,
+  "purpose": "DDA manual payment confirmation; no bank payment",
+  "baseFiles": {
+    "channel_bridge.py": "343812b729afe581ddf05c941bee18167499dd2674baf98f43f17123b144cd3a",
+    "clients.py": "44cf7b5c6e0d1a21fb400fbe0767f088ad061859349046ef0b20e8c79129658b",
+    "dda_sync.py": "b4dcebdf44abd1b6d8675c7c33d207201fa428c871c22ccfa37f1aa0b401669c"
+  },
+  "productionClientsSha256": "7be2fafc4abbca121157614e68f7f50d526d1aa2d279ffec11fe1004ac178dff",
+  "scopeSha256": "c4c98aefd252f28ef0c06427f8af03a8888f75914e1059ae5ab3c7e8bc26b885",
+  "candidateBridgeSha256": "b091659f2aa0c8b22faa73921dd6af81ed9e89b869b4ef2db0e90c8dfb3d1d6a",
+  "files": {
+    "dda_manual_payment.py": "04b390f41e521ac70629621a84d5629ad27c2dce860080db2ec51ab6a45f2941",
+    "install.py": "89985014852e37bc5f19718d4f8e7921205388b809f8c005bea4f22b5f070855",
+    "probe.py": "f15a89a6096e365046027133f101d14a8ece5c02a1bcdcf871c596d9114333f6",
+    "test_manual_payment.py": "a083e2bc2b5f0ae6c16ba4dcddf8e893194506ce3386a5eea72f49beb31db233",
+    "test_install.py": "619d9b3de07b2312a755d1d455c13ce5bfee3ec3e3b2429d4a35760072bd1bac"
+  }
+}
