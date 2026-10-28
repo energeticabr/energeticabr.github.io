@@ -75,6 +75,9 @@ export function renderDdaCard({document:doc,container,rowId,title,value,raw=valu
  const body=el('dl','rg-dda-body');
  pair(body,'DOCUMENTO','Documento','document');pair(body,'CNPJ_FORNECEDOR','CPF/CNPJ fornecedor','person');
  pair(body,'BANCO','Banco','bank');pair(body,'NOSSO_NUMERO','Nosso número','list');
+ const issued=pair(body,'EMISSAO','Emissão','calendar','rg-dda-issued');
+ const issuedKey=dayKey(raw('EMISSAO'));
+ issued.querySelector('dd').textContent=issuedKey?issuedKey.slice(8,10)+'/'+issuedKey.slice(5,7)+'/'+issuedKey.slice(0,4):'Não informada';
  container.append(body);
  const codes=el('dl','rg-dda-codes');
  const notice=el('p','rg-dda-copy-notice');notice.setAttribute('role','status');
