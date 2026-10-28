@@ -31,6 +31,19 @@ test('DDA source rejects malformed pages before the gallery can discard invalid 
  }
 });
 function setup(data,options={}){const dom=new JSDOM('<body><main id="app"><button id="home">DDA</button></main></body>',{url:'https://example.test'});dom.window.document.querySelector('button').focus();const view=createDdaReportView({document:dom.window.document,data,now,...options});return {dom,view,doc:dom.window.document};}
+test('status clusters distinguish overdue open bills from paid bills without changing bank filters',async()=>{
+ const source=[row(1,'Em aberto','2026-10-27'),row(2,'Em aberto','2026-10-28'),row(3,'Pago','2026-10-20'),row(4,'Não confirmado','2026-10-20'),row(5,'Baixado','2026-10-20')];
+ const {dom,view,doc}=setup({loadSnapshot:async()=>({rows:source})});await view.open();
+ const cluster=id=>doc.querySelector(`[data-dda-id="${id}"] .ddr-status-cluster`);
+ assert.equal(cluster(1)?.dataset.statusTone,'overdue');assert.match(cluster(1).textContent,/Vencido/);
+ assert.equal(cluster(2)?.dataset.statusTone,'open');assert.match(cluster(2).textContent,/Em aberto/);
+ assert.equal(doc.querySelectorAll('tbody tr').length,2);
+ const filter=doc.querySelector('[name=status]');filter.value='';filter.dispatchEvent(new dom.window.Event('change'));
+ assert.equal(cluster(3)?.dataset.statusTone,'paid');assert.match(cluster(3).textContent,/Pago/);
+ for(const id of [4,5])assert.equal(cluster(id)?.dataset.statusTone,'neutral');
+ assert.equal(source[0].fields.SITUACAO,'Em aberto');assert.ok(cluster(1).querySelector('small'));
+ view.destroy();dom.window.close();
+});
 test('report defaults open, can show all, resets on reopen and treats supplier text literally',async()=>{
  const a=row(1);a.fields.Title='<img src=x onerror=alert(1)>';
  const {dom,view,doc}=setup({loadSnapshot:async()=>({rows:[a,row(2,'Pago')]})});
