@@ -44,7 +44,7 @@ function brandedReceipt(doc, title, time, database, labels, ids, subtitle = 'Reg
   return card;
 }
 
-for (const text of [images, images.replace('DADOS DIÁRIO', 'DADOS DIARIO').replaceAll('\n', '\r\n')
+for (const text of [images, images.replace('ÀS 22:36', 'ÀS22:36'), images.replace('DADOS DIÁRIO', 'DADOS DIARIO').replaceAll('\n', '\r\n')
   .replace('✅ 🟢 ', '✅ *🟢 ').replace('. 🕒', '.* 🕒')]) {
   test('imagens confirmadas usam o cartão novo com horário e ID reais do diário', t => {
     const receipt = postingCompletion({ text });
@@ -80,6 +80,8 @@ for (const [name, text] of [
   ['registro alheio', images + '\n• PEDIDO: ID 229'],
   ['ID vazio', images + '\n• DIÁRIO DE OBRAS:'],
   ['falha parcial', images + '\nImagens parcialmente adicionadas.'],
+  ['operação interrompida', images + '\nOperação interrompida.'],
+  ['envio interrompido', images + '\nEnvio das imagens interrompido.'],
   ['pendente', images + '\nAs imagens estão pendentes.'],
   ['negativa', images.replace('ADICIONADAS', 'NÃO ADICIONADAS')],
   ['negativa posterior', images + '\nImagens não adicionadas.'],

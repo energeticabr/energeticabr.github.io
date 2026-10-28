@@ -12,7 +12,7 @@ function incompletePostingNotice(line, attachmentCompletion = false, diaryReceip
       // A named file is metadata, not a posting status. Later clauses (after
       // a comma, semicolon, etc.) still undergo the conservative status check.
       if (/^(?:(?:O|OS|A|AS|UM|UMA|UNS|UMAS)\s+)?(?:ANEXOS?|ARQUIVOS?|COMPROVANTES?|DOCUMENTOS?)\s*:\s*.+\.[a-z\d]{1,10}$/i.test(notice)) continue;
-      if (/\b(?:NAO|PENDENTES?|INCOMPLET[OA]S?|PARCIAL(?:MENTE)?|FALH(?:OU|ARAM)|CANCELAD[OA]S?|AGUARD(?:A|AM|ANDO)|EM PROCESSAMENTO)\b|\b(?:APENAS|SO(?:MENTE)?)\s+PARTE\b/i.test(notice)) return true;
+      if (/\b(?:NAO|PENDENTES?|INCOMPLET[OA]S?|PARCIAL(?:MENTE)?|FALH(?:OU|ARAM)|CANCELAD[OA]S?|INTERROMPID[OA]S?|AGUARD(?:A|AM|ANDO)|EM PROCESSAMENTO)\b|\b(?:APENAS|SO(?:MENTE)?)\s+PARTE\b/i.test(notice)) return true;
       continue;
     }
     if (/^(?:ANEXOS?|ARQUIVOS?|COMPROVANTES?|DOCUMENTOS?)\b/i.test(notice)) {
@@ -45,7 +45,7 @@ export function postingCompletion(message) {
     && /^•\s*PRESENÇAS:\s*IDS? [1-9]\d*(?:,\s*[1-9]\d*)*$/i.test(plain[2])) {
     return Object.freeze({ title: attendanceBatch[1], kind: 'attendance-batch', records: Object.freeze([]), notes: Object.freeze([]) });
   }
-  const heading = plain[0]?.match(/^(?:✅\s*)?(?:🟢\s*)?([\p{L}\d][\p{L}\d /()&.,-]* (?:GRAVAD[OA]S?|CRIAD[OA]S?|CADASTRAD[OA]S?|REGISTRAD[OA]S?|ATUALIZAD[OA]S?|VINCULAD[OA]S?|ELIMINAD[OA]S?|ADICIONAD[OA]S?|PREENCHID[OA]S?|APONTAD[OA]S?|BAIXADO)) NA BASE DE DADOS ([\p{L}\d][\p{L}\d /()&.,_-]*) ÀS ((?:[01]\d|2[0-3]):[0-5]\d)\.?\s*(?:🕒)?$/iu);
+  const heading = plain[0]?.match(/^(?:✅\s*)?(?:🟢\s*)?([\p{L}\d][\p{L}\d /()&.,-]* (?:GRAVAD[OA]S?|CRIAD[OA]S?|CADASTRAD[OA]S?|REGISTRAD[OA]S?|ATUALIZAD[OA]S?|VINCULAD[OA]S?|ELIMINAD[OA]S?|ADICIONAD[OA]S?|PREENCHID[OA]S?|APONTAD[OA]S?|BAIXADO)) NA BASE DE DADOS ([\p{L}\d][\p{L}\d /()&.,_-]*) ÀS\s*((?:[01]\d|2[0-3]):[0-5]\d)\.?\s*(?:🕒)?$/iu);
   if (!heading || !/^(?:🆔\s*)?REGISTROS CONFIRMADOS:$/i.test(plain[1] || '')) return null;
   const descriptionSettlement = /^PAGAMENTO AGENDADO BAIXADO$/i.test(heading[1]) && /^DESCRITIVOPROVIS[AÃ]O$/i.test(heading[2]);
   const settlement = descriptionSettlement || (/^PAGAMENTO AGENDADO BAIXADO$/i.test(heading[1]) && /^PROVIS[AÃ]O PGTOS$/i.test(heading[2]));
