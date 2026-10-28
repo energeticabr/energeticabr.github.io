@@ -36,9 +36,13 @@
 .rg-dda-status[data-status-tone="paid"] { color: #17613c; background: #eaf8ed; }
 .rg-dda-status[data-status-tone="scheduled"] { color: #174b9b; background: #ebf3ff; }
 .rg-dda-status dd { font-size: .76rem; }
-.rg-dda-field.rg-dda-code { grid-template-columns: 21px minmax(0, 1fr) 44px; border-bottom: 1px solid #edf1f5; }
-.rg-dda-code dd { font-size: .74rem; user-select: text; -webkit-user-select: text; }
-.rg-dda-copy { grid-column: 3; grid-row: 1 / span 2; align-self: center; display: grid; place-items: center; min-width: 44px; min-height: 44px; padding: 8px; border: 1px solid #dbe9f6; border-radius: 6px; color: #16468c; background: #edf5ff; cursor: pointer; }
+.rg-dda-codes { margin: 8px 0; padding: 0 6px; border: 1px solid #94b4e0; border-left: 4px solid #245da8; border-radius: 8px; background: #e6f0ff; }
+.rg-dda-field.rg-dda-code { grid-template-columns: 21px minmax(0, 1fr) 44px; border-bottom: 1px solid #b8ceec; color: #214d82; }
+.rg-dda-code:last-child { border-bottom: 0; }
+.rg-dda-code dt { color: #214d82; font-weight: 750; }
+.rg-dda-code dd { color: #102c50; font-size: .74rem; font-weight: 600; user-select: text; -webkit-user-select: text; }
+.rg-dda-copy { grid-column: 3; grid-row: 1 / span 2; align-self: center; display: grid; place-items: center; min-width: 44px; min-height: 44px; padding: 8px; border: 1px solid #245da8; border-radius: 6px; color: #fff; background: #245da8; cursor: pointer; }
+.rg-dda-copy:not(:disabled):hover { background: #19477f; border-color: #19477f; }
 .rg-dda-copy:disabled { opacity: .5; cursor: default; }
 .rg-dda-copy:focus-visible, .rg-dda-extra > summary:focus-visible { outline: 3px solid #d99500; outline-offset: 2px; }
 .rg-dda-copy-notice { margin: 0; color: #174b6b; font-size: .75rem; }
