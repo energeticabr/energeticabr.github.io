@@ -591,18 +591,20 @@ export function createChatClient({
     return deletion;
   }
 
-  async function ddaRequest(action, requestId, { signal } = {}) {
-    if (action === 'dda_refresh_status' && !/^[a-f0-9]{32}$/.test(String(requestId || ''))) throw new Error('Pedido DDA inválido.');
+  async function ddaRequest(action, requestId, { signal } = {}, extra = {}) {
+    if ((requestId || (action === 'dda_refresh_status' && extra.mode !== 'pending')) && !/^[a-f0-9]{32}$/.test(String(requestId || ''))) throw new Error('Pedido DDA inválido.');
     const token = await cancellableToken(tokenProvider, signal);
     const result = await request(chatUrl.href, {
       method: 'POST', signal,
       headers: { Accept: 'application/json', Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' },
-      body: JSON.stringify({ action, ...(requestId ? { requestId } : {}) }),
+      body: JSON.stringify({ action, ...(requestId ? { requestId } : {}), ...extra }),
       cache: 'no-store', credentials: 'omit',
     }, response => parsePortalResponse(response, 'A consulta DDA'), action === 'dda_refresh_status');
     const receipt = result?.ddaRefresh;
-    if (!receipt || !['queued', 'running', 'succeeded', 'failed', 'unavailable', 'busy'].includes(receipt.status)
-      || (requestId && receipt.requestId !== requestId)) throw new Error('A VM não confirmou a consulta DDA.');
+    const allowed=extra.mode==='pending'?['pending']:extra.acknowledge?['acknowledged']:['queued', 'running', 'succeeded', 'failed', 'unavailable', 'busy'];
+    if (!receipt || !allowed.includes(receipt.status)
+      || (action==='dda_refresh_status' && requestId && receipt.requestId !== requestId)
+      || (extra.mode==='pending' && !Array.isArray(receipt.requests))) throw new Error('A VM não confirmou a consulta DDA.');
     return receipt;
   }
   async function confirmDdaPayment({ itemId, key, signal } = {}) {
@@ -615,8 +617,10 @@ export function createChatClient({
     }, response => parsePortalResponse(response, 'A confirmação do pagamento DDA'));
     return validateDdaPaymentReceipt(result?.ddaPaymentConfirmation, { itemId, key });
   }
-  function refreshDda(options) { return ddaRequest('dda_refresh', null, options); }
+  function refreshDda(options) { return ddaRequest('dda_refresh', options?.requestId || null, options); }
   function getDdaRefreshStatus(requestId, options) { return ddaRequest('dda_refresh_status', requestId, options); }
+  function getDdaRefreshPending(options) { return ddaRequest('dda_refresh_status', null, options, {mode:'pending'}); }
+  function acknowledgeDdaRefresh(requestId, options) { return ddaRequest('dda_refresh_status', requestId, options, {acknowledge:true}); }
 
   async function refreshRhidAttendance() {
     const token = await acquireToken(tokenProvider);
@@ -766,5 +770,5 @@ export function createChatClient({
     }, true);
   }
 
-  return Object.freeze({ sendText, sendFile, replaceAttachment, transcribeAudio, fetchMedia, getAttachments, launchGalleryRequest, uploadLaunchGalleryFile, getPendingProvisionSnapshot, getPendingNotesSnapshot, getRhidAttendanceReport, startRhidPendingValidation, startRhidDayValidation, getRhidAttendanceMonth, saveRhidAttendanceAdjustment, deleteRhidAttendanceAdjustment, refreshRhidAttendance, getRhidRefreshStatus, refreshRecurringProvisions, getRecurringProvisionRefreshStatus, refreshDda, getDdaRefreshStatus, confirmDdaPayment, deleteAttachment, deleteAllAttachments, compressAttachment, chooseAttachmentCompression, getCompletionMenu, prepareSignatureEvidence, confirmSignatureEvidence, verifySignatureEvidence, captureSignatureEvidence });
+  return Object.freeze({ sendText, sendFile, replaceAttachment, transcribeAudio, fetchMedia, getAttachments, launchGalleryRequest, uploadLaunchGalleryFile, getPendingProvisionSnapshot, getPendingNotesSnapshot, getRhidAttendanceReport, startRhidPendingValidation, startRhidDayValidation, getRhidAttendanceMonth, saveRhidAttendanceAdjustment, deleteRhidAttendanceAdjustment, refreshRhidAttendance, getRhidRefreshStatus, refreshRecurringProvisions, getRecurringProvisionRefreshStatus, refreshDda, getDdaRefreshStatus, getDdaRefreshPending, acknowledgeDdaRefresh, confirmDdaPayment, deleteAttachment, deleteAllAttachments, compressAttachment, chooseAttachmentCompression, getCompletionMenu, prepareSignatureEvidence, confirmSignatureEvidence, verifySignatureEvidence, captureSignatureEvidence });
 }

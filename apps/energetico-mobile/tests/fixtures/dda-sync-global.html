@@ -1,0 +1,30 @@
+<!doctype html><html lang="pt-BR"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>DDA — recuperação de resultado (dados fictícios)</title>
+<link rel="stylesheet" href="/src/styles.css"><link rel="stylesheet" href="/src/ui/gallery-record-actions.css"><link rel="stylesheet" href="/src/ui/dda-card.css"><link rel="stylesheet" href="/src/ui/dda-report.css"></head>
+<body><main id="app" style="padding:24px"><h1>Energético</h1><h2>Auditoria e documentos</h2><p>Você está em outra tela do aplicativo.</p><button>Ver documentos</button></main>
+<script type="module">
+import {createDdaSyncSession} from '/src/ui/dda-sync-session.js';
+import {createDdaReportView} from '/src/ui/dda-report-view.js';
+const values=new Map(),id='a'.repeat(32);let acknowledged=false;
+const session=createDdaSyncSession({accountKey:'fixture-only',document,storage:{getItem:k=>values.get(k)||null,setItem:(k,v)=>values.set(k,v)},
+ client:{getDdaRefreshPending:async()=>({status:'pending',requests:acknowledged?[]:[{status:'succeeded',requestId:id,created:1,createdItemIds:[42]}]}),
+ acknowledgeDdaRefresh:async()=>{acknowledged=true;return {status:'acknowledged',requestId:id};}},
+ loadRows:async()=>[{id:'42',fields:{Title:'FORNECEDOR FICTÍCIO LTDA',VALOR:123.45,VENCIMENTO:'2026-11-01',DOCUMENTO:'EX-042'}}]});
+await session.resume();
+const lateReport=createDdaReportView({document,data:{loadSnapshot:async()=>({complete:true,rows:[]})}});
+await lateReport.open();await new Promise(r=>requestAnimationFrame(r));
+const topButton=document.querySelector('[data-dda-sync-result] button');topButton.focus();
+const concurrentPopupUsable=document.activeElement===topButton;
+session.suspend();lateReport.close();lateReport.destroy();
+const mainRestored=!document.querySelector('main').inert;
+await session.resume();await document.fonts.ready;await new Promise(r=>requestAnimationFrame(()=>requestAnimationFrame(r)));
+const dialog=document.querySelector('[data-dda-sync-result]'),bounds=dialog.getBoundingClientRect(),button=dialog.querySelector('button'),b=button.getBoundingClientRect();
+document.querySelector('main button').focus();
+document.documentElement.dataset.layout=JSON.stringify({
+ popup:dialog.dataset.ddaSyncResult,global:dialog.parentElement.parentElement===document.body,
+ backgroundBlocked:document.activeElement===button,focused:document.activeElement===button,concurrentPopupUsable,mainRestored,nativeModal:dialog.parentElement.matches(':modal'),
+ fits:bounds.left>=0&&bounds.right<=innerWidth+1&&bounds.top>=0&&bounds.bottom<=innerHeight+1,
+ buttonVisible:b.top>=bounds.top&&b.bottom<=bounds.bottom,overflow:dialog.scrollWidth>dialog.clientWidth+1,
+ text:dialog.textContent,acknowledged});
+document.documentElement.dataset.ready='true';window.ddaSyncPreview=session;
+</script></body></html>

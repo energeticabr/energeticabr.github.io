@@ -1,6 +1,6 @@
 import { formatDdaElapsed } from '../chat/dda-bank-refresh.js';
 /** Every terminal outcome is acknowledged; only confirmed IDs identify new records. */
-export function createDdaSyncReceipt({ document: doc, host, format, onClose = () => {} }) {
+export function createDdaSyncReceipt({ document: doc, host, format, onClose = () => {}, global = false, requireAcknowledgement = false, onAcknowledge = async () => true }) {
   let current = null;
   const el = (tag, cls, text) => {
     const node = doc.createElement(tag); node.className = cls;
@@ -14,13 +14,15 @@ export function createDdaSyncReceipt({ document: doc, host, format, onClose = ()
     const previous = current; current = null;
     if (!previous) return;
     doc.removeEventListener('focusin', keepFocus, true);
+    previous.observer?.disconnect();
+    if(previous.native&&previous.overlay.open)previous.overlay.close();
     previous.overlay.remove();
     for (const [node, inert] of previous.background) node.inert = inert;
     onClose();
     if (previous.trigger?.isConnected && !host.hidden) previous.trigger.focus({ preventScroll: true });
   }
   function show(result, rows, trigger) {
-    if (!['succeeded', 'failed', 'partial'].includes(result?.status) || host.hidden || !host.isConnected) return;
+    if (!['succeeded', 'failed', 'partial'].includes(result?.status) || host.hidden || !host.isConnected) return false;
     close();
     const hasNew = result.status !== 'failed' && Number.isSafeInteger(result.created) && result.created > 0;
     const title = result.status === 'failed' ? 'Atualização não confirmada'
@@ -29,12 +31,15 @@ export function createDdaSyncReceipt({ document: doc, host, format, onClose = ()
     const ids = result.createdItemIds;
     const validIds = Array.isArray(ids) && ids.length === result.created && ids.length <= 10000
       && ids.every(id => Number.isSafeInteger(id) && id > 0 && id <= 2147483647) && new Set(ids).size === ids.length;
-    const overlay = el('div', 'gallery-record-overlay dda-sync-overlay');
+    const overlay = el(global?'dialog':'div', 'gallery-record-overlay dda-sync-overlay');
+    const native=global&&typeof overlay.showModal==='function';
+    if(global)overlay.classList.add('dda-sync-overlay--global');
     const dialog = el('section', 'gallery-record-dialog dda-sync-dialog');
     dialog.dataset.ddaSyncResult = result.status;
     if (hasNew) dialog.dataset.ddaNewItems = '';
-    dialog.setAttribute('role', 'dialog'); dialog.setAttribute('aria-modal', 'true');
-    dialog.setAttribute('aria-label', title);
+    const semantic=native?overlay:dialog;
+    semantic.setAttribute('role', 'dialog'); semantic.setAttribute('aria-modal', 'true');
+    semantic.setAttribute('aria-label', title);
     dialog.append(el('h2', 'gallery-record-dialog-title', title));
     const summary = result.message || (hasNew ? `${result.created} ${result.created === 1 ? 'boleto criado' : 'boletos criados'} nesta sincronização.`
       : result.created === 0 ? 'Sicoob e SharePoint atualizados. Nenhum novo DDA foi encontrado.' : 'Sicoob e SharePoint atualizados.');
@@ -59,17 +64,31 @@ export function createDdaSyncReceipt({ document: doc, host, format, onClose = ()
     else if (hasNew) list.append(el('li', 'dda-sync-item', 'A sincronização confirmou a criação, mas não informou os IDs dos novos itens.'));
     if (hasNew) dialog.append(list);
     const button = el('button', 'gallery-record-dialog-button', 'Entendi'); button.type = 'button';
-    button.addEventListener('click', close);
+    button.addEventListener('click', async () => {
+      if(!requireAcknowledgement){close();return;}
+      button.disabled=true;
+      try{if(await onAcknowledge()!==false&&current?.dialog===dialog)close();}finally{button.disabled=false;}
+    });
     const actions = el('div', 'gallery-record-dialog-buttons'); actions.append(button); dialog.append(actions);
-    const background = [...host.children].map(node => [node, node.inert === true]);
+    // Global modal blocking belongs to the browser, never to a stale snapshot
+    // of another report's inert flags. Local gallery receipts retain their owner.
+    const background = global?[]:[...host.children].map(node => [node, node.inert === true]);
     for (const [node] of background) node.inert = true;
-    overlay.append(dialog); host.append(overlay); current = { overlay, dialog, button, trigger, background };
-    overlay.addEventListener('click', event => { event.stopPropagation(); if (event.target === overlay) close(); });
+    let observer=null;
+    if(global&&doc.defaultView?.MutationObserver){
+      observer=new doc.defaultView.MutationObserver(()=>{if(overlay.inert)overlay.inert=false;});
+      observer.observe(overlay,{attributes:true,attributeFilter:['inert']});
+    }
+    overlay.append(dialog); host.append(overlay); current = { overlay, dialog, button, trigger, background, native, observer };
+    if(native)overlay.showModal();else if(global)overlay.setAttribute('open','');
+    overlay.addEventListener('cancel',event=>{event.preventDefault();if(!requireAcknowledgement)close();});
+    overlay.addEventListener('click', event => { event.stopPropagation(); if (event.target === overlay && !requireAcknowledgement) close(); });
     overlay.addEventListener('keydown', event => {
-      if (event.key === 'Escape') { event.preventDefault(); event.stopPropagation(); close(); }
+      if (event.key === 'Escape') { event.preventDefault(); event.stopPropagation(); if(!requireAcknowledgement)close(); }
       if (event.key === 'Tab') { event.preventDefault(); event.stopPropagation(); button.focus(); }
     });
     doc.addEventListener('focusin', keepFocus, true); button.focus({ preventScroll: true });
+    return true;
   }
   return { show, close, destroy: close };
 }
