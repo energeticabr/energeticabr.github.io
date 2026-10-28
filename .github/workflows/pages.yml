@@ -8,6 +8,7 @@ on:
 
 permissions:
   contents: read
+  actions: read
   pages: write
   id-token: write
 
@@ -58,6 +59,67 @@ jobs:
           cp -- *.html CNAME robots.txt sitemap.xml .nojekyll _site/
           cp -- manifest.webmanifest portal-service-worker.js _site/
           cp -R apps/energetico-mobile/dist-pwa _site/energetico
+
+      - name: Download previously deployed Energético assets
+        id: previous-assets
+        uses: actions/github-script@v7
+        env:
+          GH_TOKEN: ${{ github.token }}
+        with:
+          script: |
+            const fs = require('node:fs');
+            const path = require('node:path');
+            const { execFileSync } = require('node:child_process');
+            const repo = context.repo;
+            const { data } = await github.rest.actions.listWorkflowRuns({
+              ...repo, workflow_id: 'pages.yml', branch: 'main', status: 'success', per_page: 30,
+            });
+            const sources = [];
+            const cutoff = Date.now() - 7 * 24 * 60 * 60 * 1000;
+            for (const run of data.workflow_runs) {
+              if (Date.parse(run.created_at) < cutoff || sources.length >= 8) break;
+              const artifacts = await github.rest.actions.listWorkflowRunArtifacts({ ...repo, run_id: run.id, per_page: 100 });
+              const available = artifacts.data.artifacts.filter(artifact => !artifact.expired);
+              const history = available.find(artifact => artifact.name === 'energetico-web-assets');
+              const artifact = history || available.find(artifact => artifact.name === 'github-pages');
+              if (!artifact) continue;
+              const destination = path.resolve('.previous-energetico', String(run.id));
+              fs.mkdirSync(destination, { recursive: true });
+              execFileSync('gh', ['run', 'download', String(run.id), '--repo', `${repo.owner}/${repo.repo}`, '--name', artifact.name, '--dir', destination], { stdio: 'inherit' });
+              if (!history) execFileSync('tar', ['-xf', path.join(destination, 'artifact.tar'), '-C', destination]);
+              sources.push({ dir: history ? destination : path.join(destination, 'energetico'), createdAt: run.created_at, id: run.head_sha });
+              // A retained archive already includes the complete recent history.
+              if (history) break;
+            }
+            core.setOutput('sources', JSON.stringify(sources));
+            core.info(`Restoring assets from ${sources.length} successful deployments.`);
+
+      - name: Preserve complete assets for already open Energético sessions
+        env:
+          PREVIOUS_ASSETS: ${{ steps.previous-assets.outputs.sources }}
+          BUILD_SHA: ${{ github.sha }}
+        run: |
+          node --input-type=module <<'NODE'
+          import { preserveEnergeticoAssets } from './scripts/preserve-energetico-assets.mjs';
+          const result = await preserveEnergeticoAssets({
+            currentDir: '_site/energetico',
+            previousDirs: JSON.parse(process.env.PREVIOUS_ASSETS || '[]'),
+            buildId: process.env.BUILD_SHA,
+          });
+          const { cohorts, ...summary } = result;
+          console.log(JSON.stringify(summary));
+          NODE
+
+      - name: Keep immutable Energético assets for the next deployment
+        uses: actions/upload-artifact@v4
+        with:
+          name: energetico-web-assets
+          overwrite: true
+          retention-days: 14
+          path: |
+            _site/energetico/assets
+            _site/energetico/asset-history.json
+            !_site/energetico/assets/**/*.map
 
       - name: Upload static site
         uses: actions/upload-pages-artifact@v3
