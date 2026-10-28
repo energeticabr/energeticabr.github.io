@@ -18,7 +18,7 @@ Run package contract tests:
 python -B -m pytest backend-patches/launch-product-default-unit/tests/test_deploy.py -q
 ```
 
-The regression suite in `regression/test_launch_default_product_unit.py` runs with the private backend's existing `tests/test_workflow.py` fixtures. Set `PYTHONPATH` to that backend's `worker` and `tests` directories and use its production dependencies with `DRY_RUN=true` and an isolated `LOCAL_DATA_DIR`. All 29 cases passed against the production-derived candidate; all 16 deployment contract tests passed. These checks use fictitious records and make no SharePoint writes.
+The regression suite in `regression/test_launch_default_product_unit.py` runs with the private backend's existing `tests/test_workflow.py` fixtures. Set `PYTHONPATH` to that backend's `worker` and `tests` directories and use its production dependencies with `DRY_RUN=true` and an isolated `LOCAL_DATA_DIR`. All 30 cases passed against the production-derived candidate; all 16 deployment contract tests passed. These checks use fictitious records and make no SharePoint writes.
 
 Generate the package using verified private snapshots:
 

@@ -14,7 +14,7 @@
                  return self._send_next_option_page(state, etag)
              if (
                  state.get("stage") in ACTIVE_STAGES
-@@ -20713,6 +20720,91 @@
+@@ -20713,6 +20720,95 @@
  
          return self._prompt_measurement_line_progress(state, etag)
  
@@ -85,6 +85,10 @@
 +        try:
 +            options = [self._launch_product_unit_option(snapshot) for snapshot in snapshots]
 +        except Exception:
++            # The marker was checked above. Keep a proven attempt's retry route
++            # when the catalog is unavailable; never thaw or rewrite its payload.
++            if attempted and before_write and state.get("stage") in {"committing", "submission_failed"}:
++                return self._launch_product_unit_error(state, etag, blocked=True)
 +            options = []
 +        if not options or any(option is None for option in options):
 +            state["stage"] = "summarizing"
@@ -106,7 +110,7 @@
      def _prompt_next_or_summary(self, state: dict, etag: str | None) -> dict:
          step = self._current_step(state)
          flow = self._flow_config(state)
-@@ -21024,6 +21116,24 @@
+@@ -21024,6 +21120,24 @@
              # presets. The channel consumes this marker for this message.
              state["_outbound_calendar_picker"] = True
          if kind == "selection":
@@ -131,7 +135,7 @@
              state["options"] = self._selection_options(state, step)
              state["options"] = self._recommended_confirmation_options(
                  state, step, state["options"]
-@@ -21364,6 +21474,12 @@
+@@ -21364,6 +21478,12 @@
              return provision_result
          step = self._current_step(state)
          if not step:
@@ -144,7 +148,7 @@
              return self._prompt_next_or_summary(state, etag)
          product_guard = self._provision_product_guard(event,state,etag,step)
          if product_guard is not None:
-@@ -28853,6 +28969,9 @@
+@@ -28853,6 +28973,9 @@
          return card
  
      def _summarize_and_confirm(self, state: dict, etag: str | None) -> dict:
@@ -154,7 +158,7 @@
          description = state.get('provision_description') or {}
          if description.get('review_version') == 1 and description.get('review_phase') == 'overview':
              return self._description_review_prompt(state, etag)
-@@ -29323,6 +29442,10 @@
+@@ -29323,6 +29446,10 @@
      def _handle_confirmation_reply(
          self, event: dict, state: dict, etag: str | None
      ) -> dict:
@@ -165,7 +169,7 @@
          document_result = document_batch.confirmation(self, event, state, etag)
          if document_result is not None:
              return document_result
-@@ -29567,6 +29690,8 @@
+@@ -29567,6 +29694,8 @@
              "retornar postagem",
              "retornar a postagem",
          }:
@@ -174,7 +178,7 @@
              self._send_confirmation_actions(state)
              card = self._send_summary_card(state)
              state["stage"] = "awaiting_confirmation"
-@@ -31830,6 +31955,9 @@
+@@ -31830,6 +31959,9 @@
          return etag
  
      def _commit(self, state: dict, etag: str | None) -> dict:
@@ -184,7 +188,7 @@
          employment_review = self._supplier_employment_review(state, etag)
          if employment_review is not None:
              return employment_review
-@@ -31895,6 +32023,9 @@
+@@ -31895,6 +32027,9 @@
                  return self._commit_provision_group(state, etag, flow)
              if self._is_measurement_line_flow(state) and state.get("measurement_lines"):
                  return self._commit_multiple_measurement_lines(state, etag, flow)
@@ -194,7 +198,7 @@
              if state.get("flow") == "launch" and state.get("launch_lines"):
                  return self._commit_multiple_launch(state, etag, flow)
              if document_batch.active(state):
-@@ -35714,6 +35845,9 @@
+@@ -35714,6 +35849,9 @@
          elif stage == "compressing_attachments":
              return self._compress_attachments(state, etag)
          elif stage == "awaiting_confirmation":

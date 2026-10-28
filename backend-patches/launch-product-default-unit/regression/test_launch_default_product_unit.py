@@ -335,6 +335,56 @@ class LaunchDefaultProductUnitTests(unittest.TestCase):
         self.assertEqual(state['fields'], frozen)
         self.assertEqual(self.h.sharepoint.items, posted)
 
+    def test_transient_catalog_error_keeps_current_attempt_retryable_without_duplicate_creates(self):
+        state, etag = self.pending_state()
+        state['fields']['CONTA'] = 'BANCO'
+        original_ensure = self.h.sharepoint.ensure_item
+        created_targets = []
+        lost_response = False
+
+        def ensure(token, fields, **kwargs):
+            nonlocal lost_response
+            target = kwargs.get('target_list')
+            existed = f'{target}:{token}' in self.h.sharepoint.tokens
+            item_id = original_ensure(token, fields, **kwargs)
+            if not existed:
+                created_targets.append(target)
+            if target == 'LANCAMENTOS' and not lost_response:
+                lost_response = True
+                raise RuntimeError('response lost after create')
+            return item_id
+
+        self.h.sharepoint.ensure_item = ensure
+        result = self.h.engine._commit(state, etag)
+        self.assertEqual(result['status'], 'submission_failed')
+        self.assertEqual(state['launch_unit_write_batch_id'], state['batch_id'])
+        posted = copy.deepcopy(self.h.sharepoint.items)
+        preserved_keys = ('fields', 'display_values', 'answers', 'selections', 'launch_lines',
+                          'launch_cash_writes', 'partial_submission_items', 'submission_failure',
+                          'launch_unit_write_batch_id')
+        frozen = {key: copy.deepcopy(state.get(key)) for key in preserved_keys}
+        original_options = self.h.sharepoint.get_options
+
+        def unavailable(step, context=None):
+            if step.get('source', {}).get('value_field') == 'UNIDADE':
+                raise RuntimeError('temporary catalog outage')
+            return original_options(step, context)
+
+        self.h.sharepoint.get_options = unavailable
+        result = self.h.engine._retry_after_error(state, self.h.state.load(state['key'])[1])
+        self.assertEqual(result['status'], 'launch_product_unit_migration_blocked')
+        self.assertEqual(state['stage'], 'committing')
+        self.assertEqual({key: state.get(key) for key in preserved_keys}, frozen)
+        self.assertEqual(self.h.sharepoint.items, posted)
+        self.assertEqual(created_targets.count('LANCAMENTOS'), 1)
+
+        self.h.sharepoint.get_options = original_options
+        result = self.h.engine._retry_after_error(state, result['etag'])
+        self.assertEqual(result['status'], 'completed')
+        self.assertEqual(self.h.sharepoint.items, posted)
+        self.assertEqual(created_targets.count('LANCAMENTOS'), 1)
+        self.assertEqual(created_targets.count('NOTASPENDENTES'), 1)
+
     def test_valid_batch_units_are_normalized_before_any_write(self):
         state, etag = self.pending_state(multiple=True)
         first = self.h.engine._current_launch_line_snapshot(state)
