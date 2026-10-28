@@ -12,7 +12,7 @@ function incompletePostingNotice(line, attachmentCompletion = false, diaryReceip
       // A named file is metadata, not a posting status. Later clauses (after
       // a comma, semicolon, etc.) still undergo the conservative status check.
       if (/^(?:(?:O|OS|A|AS|UM|UMA|UNS|UMAS)\s+)?(?:ANEXOS?|ARQUIVOS?|COMPROVANTES?|DOCUMENTOS?)\s*:\s*.+\.[a-z\d]{1,10}$/i.test(notice)) continue;
-      if (/\b(?:NAO|PENDENTES?|INCOMPLET[OA]S?|PARCIAL(?:MENTE)?|FALH(?:OU|ARAM)|CANCELAD[OA]S?|AGUARD(?:A|AM|ANDO)|EM PROCESSAMENTO)\b|\b(?:APENAS|SO(?:MENTE)?)\s+PARTE\b/i.test(notice)) return true;
+      if (/\b(?:NAO|PENDENTES?|INCOMPLET[OA]S?|PARCIAL(?:MENTE)?|FALH(?:OU|ARAM)|CANCELAD[OA]S?|INTERROMPID[OA]S?|AGUARD(?:A|AM|ANDO)|EM PROCESSAMENTO)\b|\b(?:APENAS|SO(?:MENTE)?)\s+PARTE\b/i.test(notice)) return true;
       continue;
     }
     if (/^(?:ANEXOS?|ARQUIVOS?|COMPROVANTES?|DOCUMENTOS?)\b/i.test(notice)) {
@@ -45,7 +45,7 @@ export function postingCompletion(message) {
     && /^•\s*PRESENÇAS:\s*IDS? [1-9]\d*(?:,\s*[1-9]\d*)*$/i.test(plain[2])) {
     return Object.freeze({ title: attendanceBatch[1], kind: 'attendance-batch', records: Object.freeze([]), notes: Object.freeze([]) });
   }
-  const heading = plain[0]?.match(/^(?:✅\s*)?(?:🟢\s*)?([\p{L}\d][\p{L}\d /()&.,-]* (?:GRAVAD[OA]S?|CRIAD[OA]S?|CADASTRAD[OA]S?|REGISTRAD[OA]S?|ATUALIZAD[OA]S?|VINCULAD[OA]S?|ELIMINAD[OA]S?|ADICIONAD[OA]S?|PREENCHID[OA]S?|APONTAD[OA]S?|BAIXADO)) NA BASE DE DADOS ([\p{L}\d][\p{L}\d /()&.,_-]*) ÀS ((?:[01]\d|2[0-3]):[0-5]\d)\.?\s*(?:🕒)?$/iu);
+  const heading = plain[0]?.match(/^(?:✅\s*)?(?:🟢\s*)?([\p{L}\d][\p{L}\d /()&.,-]* (?:GRAVAD[OA]S?|CRIAD[OA]S?|CADASTRAD[OA]S?|REGISTRAD[OA]S?|ATUALIZAD[OA]S?|VINCULAD[OA]S?|ELIMINAD[OA]S?|ADICIONAD[OA]S?|PREENCHID[OA]S?|APONTAD[OA]S?|BAIXADO)) NA BASE DE DADOS ([\p{L}\d][\p{L}\d /()&.,_-]*) ÀS\s*((?:[01]\d|2[0-3]):[0-5]\d)\.?\s*(?:🕒)?$/iu);
   if (!heading || !/^(?:🆔\s*)?REGISTROS CONFIRMADOS:$/i.test(plain[1] || '')) return null;
   const descriptionSettlement = /^PAGAMENTO AGENDADO BAIXADO$/i.test(heading[1]) && /^DESCRITIVOPROVIS[AÃ]O$/i.test(heading[2]);
   const settlement = descriptionSettlement || (/^PAGAMENTO AGENDADO BAIXADO$/i.test(heading[1]) && /^PROVIS[AÃ]O PGTOS$/i.test(heading[2]));
@@ -57,20 +57,23 @@ export function postingCompletion(message) {
   const constructionVisit = visitSubject && /^LAN[ÇC]AMENTOS$/i.test(heading[2]);
   const diaryCreationSubject = /^DI[ÁA]RIO DE OBRAS (?:CRIADO|GRAVADO)$/i.test(heading[1]);
   const diaryCreation = diaryCreationSubject && /^DI[ÁA]RIO DE OBRAS$/i.test(heading[2]);
-  const diaryReceipt = constructionVisit || diaryCreation;
+  const diaryImagesSubject = /^IMAGENS DO DI[ÁA]RIO DE OBRAS? ADICIONADAS$/i.test(heading[1]);
+  const diaryImages = diaryImagesSubject && /^DI[ÁA]RIO DE OBRAS$/i.test(heading[2]);
+  const diaryReceipt = constructionVisit || diaryCreation || diaryImages;
   if ((visitSubject && !constructionVisit) || (diaryCreationSubject && !diaryCreation)) return null;
+  if (diaryImagesSubject && !diaryImages) return null;
   if (/ APONTAD[OA]S?$/i.test(heading[1]) && !constructionVisit) return null;
   if (/ PREENCHID[OA]S?$/i.test(heading[1]) && !diary) return null;
   if (/ BAIXADO$/i.test(heading[1]) && !settlement) return null;
-  if (/ ADICIONAD[OA]S?$/i.test(heading[1]) && !attachmentCompletion) return null;
+  if (/ ADICIONAD[OA]S?$/i.test(heading[1]) && !attachmentCompletion && !diaryImages) return null;
   const records = [];
   const notes = [];
   let identifiers = 0;
   for (let i = 2; i < plain.length; i++) {
     const line = plain[i];
-    if ((settlement || attachmentCompletion || diaryReceipt) && incompletePostingNotice(line, attachmentCompletion, diaryReceipt)) return null;
+    if ((settlement || attachmentCompletion || diaryReceipt) && incompletePostingNotice(line, attachmentCompletion || diaryImages, diaryReceipt)) return null;
     if (/^(?:•\s*)?(?:⚠|🚨|❗|❕|AVISO\b|ATENÇÃO\b|ATENCAO\b)/i.test(line)) {
-      if (attachmentCompletion) return null; // Keep uncertain attachment results in full, without a green success claim.
+      if (attachmentCompletion || diaryImages) return null; // Keep uncertain attachment results in full, without a green success claim.
       notes.push(lines[i]);
       continue;
     }
@@ -114,7 +117,7 @@ export function postingCompletion(message) {
   const visitLabels = [/^LAN[ÇC]AMENTO$/i, /^PEDIDO$/i, /^DI[ÁA]RIO DE OBRAS$/i];
   if (constructionVisit && (records.length !== 3 || records.some(record => !/^ID [1-9]\d*$/.test(record.value))
     || !visitLabels.every(label => records.filter(record => label.test(record.label)).length === 1))) return null;
-  if (diaryCreation && (records.length !== 1 || !/^DI[ÁA]RIO DE OBRAS$/i.test(records[0].label)
+  if ((diaryCreation || diaryImages) && (records.length !== 1 || !/^DI[ÁA]RIO DE OBRAS$/i.test(records[0].label)
     || !/^ID [1-9]\d*$/.test(records[0].value))) return null;
-  return Object.freeze({ title: heading[1], database: heading[2], time: heading[3], records: Object.freeze(records), notes: Object.freeze(notes), ...(settlement ? { kind: 'provision-settlement' } : orderAttachments ? { kind: 'order-attachments' } : provisionAttachments ? { kind: 'provision-attachments' } : diary ? { kind: 'diary' } : constructionVisit ? { kind: 'construction-visit' } : diaryCreation ? { kind: 'diary-creation' } : {}) });
+  return Object.freeze({ title: heading[1], database: heading[2], time: heading[3], records: Object.freeze(records), notes: Object.freeze(notes), ...(settlement ? { kind: 'provision-settlement' } : orderAttachments ? { kind: 'order-attachments' } : provisionAttachments ? { kind: 'provision-attachments' } : diary ? { kind: 'diary' } : constructionVisit ? { kind: 'construction-visit' } : diaryCreation ? { kind: 'diary-creation' } : diaryImages ? { kind: 'diary-images' } : {}) });
 }
