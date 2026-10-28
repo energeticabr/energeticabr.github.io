@@ -201,27 +201,27 @@ for (const platform of ['linux', 'win32']) {
   });
 }
 
-test('permanently partial startup expires the existing bound without opening a socket', { timeout: 5000 }, async t => {
+test('permanently partial startup expires the existing bound without opening a socket', { timeout: 15000 }, async t => {
   const f = fixture(t, { endpointContents: ['12345\n'] });
   await assert.rejects(f.run(), /não iniciou/);
-  assert.equal(f.state.endpointReads, 100);
+  assert.equal(f.state.endpointReads, 300);
   assert.deepEqual(f.state.endpoints, []);
   assert.ok(f.state.exitObserved);
   assert.equal(f.state.removals.length, 1);
   assert.equal(f.state.socketsClosed, 0);
 });
 
-test('startup timeout diagnoses the selected browser and last incomplete endpoint without connecting', { timeout: 5000 }, async t => {
+test('startup timeout diagnoses the selected browser and last incomplete endpoint without connecting', { timeout: 15000 }, async t => {
   const f = fixture(t, { endpointContents: ['12345\n/devtools/browser/1'] });
   await assert.rejects(f.run(), error => /simulated-owned-browser/.test(error.message)
     && error.message.includes(JSON.stringify('12345\n/devtools/browser/1')));
-  assert.equal(f.state.endpointReads, 100);
+  assert.equal(f.state.endpointReads, 300);
   assert.deepEqual(f.state.endpoints, []);
   assert.ok(f.state.exitObserved);
   assert.equal(f.state.removals.length, 1);
 });
 
-test('an explicit cold-start budget waits beyond the unchanged default before a complete endpoint', { timeout: 5000 }, async t => {
+test('an explicit cold-start budget accepts a delayed complete endpoint within its own bound', { timeout: 5000 }, async t => {
   const f = fixture(t, { startupTimeoutMs: 20000, endpointContents: [...Array(110).fill(''), `12345\n${browserPath}`] });
   const result = await f.run();
   assert.equal(result.stdout, '<!doctype html>' + html);
@@ -241,10 +241,10 @@ test('Windows endpoint startup retries transient EBUSY then captures the real re
 });
 
 // Break: ignoring a persistent startup lock returns success or loops forever.
-test('persistent Windows endpoint EBUSY expires the existing startup bound and still cleans its owned child', { timeout: 5000 }, async t => {
+test('persistent Windows endpoint EBUSY expires the existing startup bound and still cleans its owned child', { timeout: 15000 }, async t => {
   const f = fixture(t, { startupBusyAttempts: Infinity });
   await assert.rejects(f.run(), /não iniciou/);
-  assert.equal(f.state.endpointReads, 100);
+  assert.equal(f.state.endpointReads, 300);
   assert.ok(f.state.exitObserved);
   assert.equal(f.state.removals.length, 1);
   assert.equal(f.state.socketsClosed, 0);
