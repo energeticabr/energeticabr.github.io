@@ -1,0 +1,9 @@
+<!doctype html><html lang="pt-BR"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>Espelho DDA - demonstração</title>
+<link rel="stylesheet" href="../../src/styles.css"><link rel="stylesheet" href="../../src/web/attachment-preview.css"></head>
+<body><p>Documento fictício para validar o layout e a cópia, sem consulta bancária.</p><button id="open">Abrir espelho de demonstração</button><label>Conferir código copiado <textarea id="check"></textarea></label><output id="result"></output>
+<script type="module">
+import {createAttachmentPreview} from '../../src/web/attachment-preview.js';
+const preview=createAttachmentPreview({documentRef:document,exportMedia:async()=>({status:'cancelled'})});
+document.querySelector('#open').addEventListener('click',async()=>{const blob=await (await fetch('./dda-mirror-v2.pdf')).blob();await preview.open(blob,'Espelho_DDA_Demonstracao.pdf');});
+document.querySelector('#check').addEventListener('input',event=>document.querySelector('#result').textContent=event.target.value==='00197100000000123451234567890123456789012345'?'44 dígitos corretos':'Confira a cópia');
+</script></body></html>
