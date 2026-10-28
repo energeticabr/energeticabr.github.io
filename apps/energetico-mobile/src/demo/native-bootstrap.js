@@ -57,6 +57,7 @@ export function createNativeBootstrap({ root, auth, native, config, fetchImpl = 
       closePreview: preview.close,
     } : ports;
     controller = createAppController({ auth: sessionAuth, native: appNative, recovery, view,
+      enableDdaReminders: !demo,
       store: createConversationStore({ historyMode: "current-step" }),
       client,
       pendingConstructionDiaryDataFactory: demo ? undefined : options => createPendingConstructionDiaryData({ ...options, fetchImpl }),

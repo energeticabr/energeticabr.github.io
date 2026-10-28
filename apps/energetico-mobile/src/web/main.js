@@ -91,6 +91,7 @@ async function start() {
   });
   view.on("sign-out", () => installView?.setReady(false));
   const controller = createAppController({
+    enableDdaReminders: true,
     auth,
     recovery: createRecoveryStorage(),
     store: createConversationStore({ historyMode: "current-step" }),
