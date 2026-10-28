@@ -10,6 +10,7 @@ import { REGISTRATION_GALLERY_MODELS, registrationFieldKey, registrationRawField
 import Decimal from "decimal.js";
 import { renderWorkDiaryCardDetails } from './work-diary-card.js';
 import { renderAssetGalleryCard } from './asset-gallery-card.js';
+import { renderDdaCard, updateDdaDueTones, ddaTodayKey } from './dda-card.js';
 import { renderProvisionDescriptionCard, provisionDescriptionIcon } from './provision-description-card.js';
 import { createProvisionDescriptionDetail } from './provision-description-detail-view.js';
 import { field, displayValue, paymentTotal } from './provision-payment-format.js';
@@ -287,7 +288,7 @@ export function createRegistrationGallery({ document: doc = globalThis.document,
   const refreshShortcut = attachGalleryRefreshButton({ document: doc, root, container: createShortcut.toolbar, header, button: refresh,
     onRefresh: () => load({ refresh: true }),
     isAvailable: () => !destroyed && !attachmentLoading && !pendingMutations });
-  if (kind === 'provisionDescription') {
+  if (kind === 'provisionDescription' || kind === 'dda') {
     const searchWrap = el('div', 'rg-provision-search');
     search.before(searchWrap); searchWrap.append(provisionDescriptionIcon(doc, 'search'), search);
     const filter = createShortcut.toolbar.querySelector('.gallery-filter-button');
@@ -660,6 +661,7 @@ export function createRegistrationGallery({ document: doc = globalThis.document,
       card.dataset.registrationRow = row.id;
       if (kind === 'workDiary') card.classList.add('rg-row--work-diary');
       if (kind === 'asset') card.classList.add('rg-row--asset');
+      if (kind === 'dda') card.classList.add('rg-row--dda');
       if (kind === 'provisionDescription') card.classList.add('rg-row--provision-description');
       card.setAttribute("role", "listitem");
       const primary = fieldValue(row.fields, model.fields[0], model) || `ID ${row.id}`;
@@ -695,6 +697,7 @@ export function createRegistrationGallery({ document: doc = globalThis.document,
         const main = el("div", "rg-row-main");
         if (kind === 'workDiary') renderWorkDiaryCardDetails({ document: doc, container: main, rowId: row.id, title: primary, value: field => rowFieldValue(row, field) });
         else if (kind === 'asset') renderAssetGalleryCard({ document: doc, container: main, rowId: row.id, title: primary, value: field => rowFieldValue(row, field) });
+        else if (kind === 'dda') renderDdaCard({ document: doc, container: main, rowId: row.id, title: primary, value: field => rowFieldValue(row, field), raw: field => registrationRawField(row.fields, field, model) });
         else if (kind === 'provisionDescription') renderProvisionDescriptionCard({ document: doc, container: main, rowId: row.id, title: primary, value: field => rowFieldValue(row, field),
           onDetails: (id, trigger) => {
             if (!destroyed && !root.hidden && !attachmentLoading && !pendingMutations && root.getAttribute('aria-busy') !== 'true') descriptionDetail.open(id, trigger);
@@ -838,6 +841,7 @@ export function createRegistrationGallery({ document: doc = globalThis.document,
 
   function hide() {
     if (root.hidden) return;
+    stopDdaClock();
     descriptionDetail?.close();
     loadController?.abort();
     loadingScreen.sync(false);
@@ -854,6 +858,25 @@ export function createRegistrationGallery({ document: doc = globalThis.document,
     returnFocus = null;
   }
   close.addEventListener("click", hide);
+  let ddaClock = null, ddaDay = '';
+  function refreshDdaDate() {
+    if (destroyed || root.hidden || kind !== 'dda') return;
+    const day = ddaTodayKey();
+    if (day !== ddaDay) { ddaDay = day; updateDdaDueTones(root); }
+  }
+  function stopDdaClock() {
+    if (ddaClock !== null) doc.defaultView?.clearInterval(ddaClock);
+    ddaClock = null;
+    doc.removeEventListener('visibilitychange', refreshDdaDate);
+    doc.defaultView?.removeEventListener('focus', refreshDdaDate);
+  }
+  function startDdaClock() {
+    if (kind !== 'dda') return;
+    stopDdaClock(); ddaDay = ''; refreshDdaDate();
+    ddaClock = doc.defaultView?.setInterval(refreshDdaDate, 60_000) ?? null;
+    doc.addEventListener('visibilitychange', refreshDdaDate);
+    doc.defaultView?.addEventListener('focus', refreshDdaDate);
+  }
   function applySearch() {
     if (searchComposing || committedSearch === search.value) return;
     committedSearch = search.value;
@@ -889,9 +912,9 @@ export function createRegistrationGallery({ document: doc = globalThis.document,
       if (destroyed) return;
       attachmentRequest += 1; attachmentLoading = false; returnFocus = doc.activeElement;
       searchComposing = false; committedSearch = search.value;
-      root.hidden = false; root.focus(); await load();
+      root.hidden = false; root.focus(); startDdaClock(); await load();
     },
     close: hide,
-    destroy() { loadController?.abort(); descriptionDetail?.destroy(); loadingScreen.destroy(); createShortcut.destroy(); refreshShortcut.destroy(); recordActions.destroy(); searchableFilters.destroy(); destroyed = true; request += 1; filterEpoch += 1; attachmentCountQueue = []; root.remove(); },
+    destroy() { stopDdaClock(); loadController?.abort(); descriptionDetail?.destroy(); loadingScreen.destroy(); createShortcut.destroy(); refreshShortcut.destroy(); recordActions.destroy(); searchableFilters.destroy(); destroyed = true; request += 1; filterEpoch += 1; attachmentCountQueue = []; root.remove(); },
   };
 }

@@ -1,0 +1,71 @@
+/* DDA presentation stays isolated from editable registration galleries. */
+.rg-overlay[data-gallery-kind="dda"] { color: #182b49; gap: 12px; }
+.rg-overlay[data-gallery-kind="dda"] .rg-title { color: #142846; }
+.rg-overlay[data-gallery-kind="dda"] .gallery-filter-button { display: inline-flex; align-items: center; justify-content: center; gap: 6px; }
+.rg-overlay[data-gallery-kind="dda"] .screen-nav-button::before { content: ''; width: 24px; height: 24px; background: #193557; mask: var(--dda-nav-icon) center / contain no-repeat; -webkit-mask: var(--dda-nav-icon) center / contain no-repeat; }
+.rg-overlay[data-gallery-kind="dda"] .screen-nav-button[data-navigation-icon="↩️"] { --dda-nav-icon: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24'%3E%3Cpath fill='none' stroke='black' stroke-width='2' stroke-linecap='round' stroke-linejoin='round' d='m8 3-5 5 5 5M3 8h11a6 6 0 0 1 0 12H6'/%3E%3C/svg%3E"); }
+.rg-overlay[data-gallery-kind="dda"] .screen-nav-button[data-navigation-icon="🏠"] { --dda-nav-icon: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24'%3E%3Cpath fill='black' d='m2 11 10-9 10 9h-3v11h-5v-7h-4v7H5V11Z'/%3E%3C/svg%3E"); }
+.rg-overlay[data-gallery-kind="dda"] .screen-navigation button.screen-nav-button { border-radius: 8px; border-color: #cbdce6; background: #fff; }
+.rg-row.rg-row--dda { padding: 10px; border-color: #dae5ec; box-shadow: 0 2px 8px #153e5b09; }
+.rg-row--dda .rg-row-layout { grid-template-columns: 62px minmax(0, 1fr); gap: 13px; }
+.rg-row--dda .rg-row-main { padding: 0; }
+.rg-row--dda .rg-row-file { border-radius: 6px; border-color: #d6e6ef; background: #e7f2f8; }
+.rg-row--dda .rg-row-file__label { display: none; }
+.rg-row--dda .rg-row-file__count { font-size: .65rem; }
+.rg-dda-heading { display: flex; align-items: start; justify-content: space-between; gap: 8px; margin-bottom: 10px; }
+.rg-dda-heading .rg-row-title { margin: 0; color: #123b77; font-size: 1rem; line-height: 1.25; }
+.rg-dda-id { flex-shrink: 0; padding: 3px 9px; border-radius: 5px; color: #193557; background: #e5eff6; font-size: .78rem; font-weight: 800; }
+.rg-dda-core, .rg-dda-body, .rg-dda-codes, .rg-dda-footer { display: grid; min-width: 0; margin: 0; }
+.rg-dda-core { grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 6px; margin-bottom: 4px; }
+.rg-dda-body, .rg-dda-footer { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+.rg-dda-field { display: grid; min-width: 0; grid-template-columns: 21px minmax(0, 1fr); column-gap: 8px; align-content: center; padding: 9px 4px; line-height: 1.3; }
+.rg-dda-icon { display: block; width: 21px; height: 21px; grid-column: 1; grid-row: 1 / span 2; align-self: center; }
+.rg-dda-field dt, .rg-dda-field dd { grid-column: 2; min-width: 0; overflow-wrap: anywhere; }
+.rg-dda-field dt { color: #617083; font-size: .65rem; font-weight: 650; }
+.rg-dda-field dd { margin: 2px 0 0; color: #182b49; font-size: .8rem; }
+.rg-dda-body > .rg-dda-field { border-bottom: 1px solid #edf1f5; }
+.rg-dda-body > .rg-dda-field:nth-child(even), .rg-dda-footer > .rg-dda-field:nth-child(even) { border-left: 1px solid #edf1f5; padding-left: 10px; }
+.rg-dda-field.rg-dda-metric { border-radius: 6px; padding: 8px; background: #f0f3f6; }
+.rg-dda-metric dd { font-weight: 800; font-size: .88rem; }
+.rg-dda-metric dt, .rg-dda-metric dd { color: inherit; }
+.rg-dda-due[data-due-tone="today"] { color: #b31d30; background: #ffedf0; }
+.rg-dda-due[data-due-tone="tomorrow"] { color: #994500; background: #fff0dc; }
+.rg-dda-due[data-due-tone="other"], .rg-dda-field.rg-dda-amount { color: #17613c; background: #eaf8ed; }
+.rg-dda-due-hint { grid-column: 2; font-size: .6rem; font-weight: 700; }
+.rg-dda-status[data-status-tone="open"] { color: #994500; background: #fff3e3; }
+.rg-dda-status[data-status-tone="paid"] { color: #17613c; background: #eaf8ed; }
+.rg-dda-status[data-status-tone="scheduled"] { color: #174b9b; background: #ebf3ff; }
+.rg-dda-status dd { font-size: .76rem; }
+.rg-dda-field.rg-dda-code { grid-template-columns: 21px minmax(0, 1fr) 44px; border-bottom: 1px solid #edf1f5; }
+.rg-dda-code dd { font-size: .74rem; user-select: text; -webkit-user-select: text; }
+.rg-dda-copy { grid-column: 3; grid-row: 1 / span 2; align-self: center; display: grid; place-items: center; min-width: 44px; min-height: 44px; padding: 8px; border: 1px solid #dbe9f6; border-radius: 6px; color: #16468c; background: #edf5ff; cursor: pointer; }
+.rg-dda-copy:disabled { opacity: .5; cursor: default; }
+.rg-dda-copy:focus-visible, .rg-dda-extra > summary:focus-visible { outline: 3px solid #d99500; outline-offset: 2px; }
+.rg-dda-copy-notice { margin: 0; color: #174b6b; font-size: .75rem; }
+.rg-dda-copy-notice:not(:empty) { padding: 6px 0; }
+.rg-dda-extra { border-top: 1px solid #edf1f5; }
+.rg-dda-extra > summary { min-height: 44px; align-content: center; color: #345674; font-size: .72rem; font-weight: 700; cursor: pointer; }
+@media (max-width: 500px) {
+ .rg-row.rg-row--dda { padding: 8px; }
+ .rg-row--dda .rg-row-layout { grid-template-columns: 44px minmax(0, 1fr); gap: 9px; }
+ .rg-dda-heading .rg-row-title { font-size: .88rem; }
+ .rg-dda-core { gap: 4px; }
+ .rg-dda-field { grid-template-columns: 17px minmax(0, 1fr); column-gap: 5px; padding: 8px 2px; }
+ .rg-dda-icon { width: 17px; height: 19px; }
+ .rg-dda-field dd { font-size: .73rem; }
+ .rg-dda-field dt { font-size: .6rem; }
+ .rg-dda-field.rg-dda-metric { grid-template-columns: minmax(0, 1fr); padding: 7px 5px; }
+ .rg-dda-metric > .rg-dda-icon { display: none; }
+ .rg-dda-metric dt, .rg-dda-metric dd, .rg-dda-due-hint { grid-column: 1; }
+ .rg-dda-metric dd { font-size: .76rem; }
+ .rg-dda-status dd { font-size: .7rem; }
+ .rg-dda-body > .rg-dda-field:nth-child(even), .rg-dda-footer > .rg-dda-field:nth-child(even) { padding-left: 5px; }
+ .rg-dda-field.rg-dda-code { grid-template-columns: 17px minmax(0, 1fr) 44px; }
+ .rg-dda-code dd { font-size: .7rem; }
+}
+@media (max-width: 350px) {
+ .rg-dda-core { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+ .rg-dda-status { grid-column: 1 / -1; }
+ .rg-dda-body, .rg-dda-footer { grid-template-columns: minmax(0, 1fr); }
+ .rg-dda-body > .rg-dda-field:nth-child(even), .rg-dda-footer > .rg-dda-field:nth-child(even) { padding-left: 2px; border-left: 0; }
+}
