@@ -70,3 +70,11 @@ test('closed loads and failed refresh cannot show stale rows or print stale tota
  view.close();data.loadSnapshot=()=>new Promise(r=>resolve=r);const pending=view.open();await settle();view.close();resolve({rows:[row(2)]});await pending;assert.equal(doc.querySelectorAll('tbody tr').length,0);
  view.destroy();dom.window.close();
 });
+
+test('automatic opening shows unpaid scheduled titles while manual reopening remains open-only',async()=>{
+ const {dom,view,doc}=setup({loadSnapshot:async()=>({rows:[row(1),row(2,'Agendado'),row(3,'Pago')]})});
+ await view.open({automatic:true,initialSnapshot:{rows:[row(1),row(2,'Agendado'),row(3,'Pago')]}});
+ assert.equal(doc.querySelector('[name=status]').value,'Não pagos');assert.equal(doc.querySelectorAll('tbody tr').length,2);
+ view.close();await view.open();assert.equal(doc.querySelector('[name=status]').value,'Em aberto');assert.equal(doc.querySelectorAll('tbody tr').length,1);
+ view.destroy();dom.window.close();
+});

@@ -1,3 +1,4 @@
+import { createDdaAutoReminder } from './chat/dda-auto-reminder.js';
 import { PAYROLL_LAUNCH_REPLY_ID, isSupplierPayrollMenu } from "./chat/supplier-payroll.js";
 import { MEAL_VOUCHER_REPLY_ID } from './chat/meal-voucher.js';
 import { createMealVoucherTray } from './chat/meal-voucher-tray.js';
@@ -1019,6 +1020,7 @@ export function createAppController({
   recurringExpensesGalleryDataFactory = defaultRecurringExpensesGalleryDataFactory,
   registrationGalleryFactory = defaultRegistrationGalleryFactory,
   ddaReportFactory = defaultDdaReportFactory,
+  enableDdaReminders = false,
   registrationGalleryDataFactory = defaultRegistrationGalleryDataFactory,
   pendingProvisionAttachmentsDataFactory = defaultPendingProvisionAttachmentsDataFactory,
   pendingConstructionDiaryDataFactory,
@@ -1494,6 +1496,47 @@ export function createAppController({
   let pendingProvisionSnapshotRevision = 0;
   let pendingProvisionOpenRequest = null;
   let pendingProvisionLastAutoShownAt = null;
+  let ddaReminderInteraction = 0;
+  const ddaAutoReminder = createDdaAutoReminder({
+    canOpen: canOpenAutomaticDda,
+    enabled: () => enableDdaReminders && Boolean(account) && !stopped,
+    onChange: () => render(),
+    loadSnapshot: async ({ signal }) => {
+      const owner = account, revision = sessionRevision, interaction = ddaReminderInteraction;
+      const assertSession = () => {
+        if (!owner || stopped || account !== owner || revision !== sessionRevision || signal.aborted || interaction !== ddaReminderInteraction) throw new Error('DDA_SESSION_ENDED');
+      };
+      assertSession();
+      const data = await registrationGalleryDataFactory({ kind: 'dda', assertSession,
+        accountKey: owner.homeAccountId || owner.localAccountId || owner.idTokenClaims?.oid || '',
+        userEmail: owner.username || owner.email || '',
+        tokenProvider: async scopes => { assertSession(); const token = await auth.getToken(scopes); assertSession(); return token; },
+      });
+      assertSession();
+      const snapshot = await data.loadSnapshot({ refresh: true, signal });
+      assertSession();
+      return snapshot;
+    },
+    open: options => {
+      const interaction = ddaReminderInteraction;
+      return openRegistrationGallery('ddaReport', 'action_dda_report', { ...options,
+        isCurrent: () => interaction === ddaReminderInteraction && options.isCurrent(),
+      });
+    },
+  });
+  function canOpenAutomaticDda() {
+    const state = store.getState();
+    if (!account || stopped || starting || sessionStatus !== 'authenticated' || flowBusy()
+      || state.activeFlow || state.draft?.trim() || state.pendingFiles.length
+      || pendingNoteLaunchOrderId || pendingConstructionDiaryFillingId
+      || (recoveryAccountId && !recoveryVerified) || recoveryPreview
+      || pendingProvisionSnapshot || pendingProvisionReminderOpen || pendingProvisionRequest
+      || mascotNavigationOpening || [...registrationGalleryOpenings.keys()].some(key => key !== 'ddaReport')) return false;
+    // Dialogs include PDF previews and other manually opened reports. Never
+    // replace them with a background reminder, including on native foreground.
+    return ![...(globalThis.document?.querySelectorAll('[role="dialog"], [aria-modal="true"]') || [])]
+      .some(node => !node.closest('[hidden], [aria-hidden="true"]') && node.getClientRects().length);
+  }
   let pendingProvisionReminderTimer = null;
   let pendingProvisionReminderRevision = 0;
   let pendingProvisionAttachmentsData = null;
@@ -2126,6 +2169,7 @@ export function createAppController({
     if (attachmentReminderDetails()) scheduleAttachmentReminder();
     else cancelAttachmentReminder();
     await refreshPendingProvisionSnapshot().then(refreshPendingConstructionDiaries);
+    void ddaAutoReminder.refresh();
     return true;
   }
 
@@ -2321,7 +2365,7 @@ export function createAppController({
     pendingProvisionReminderTimer = reminderTimeout(() => {
       pendingProvisionReminderTimer = null;
       if (stopped || revision !== pendingProvisionReminderRevision || !account) return;
-      void refreshPendingProvisionSnapshot();
+      void refreshPendingProvisionSnapshot().then(() => ddaAutoReminder.refresh());
     }, delayMs);
     const details = {
       title: FLOW_REMINDER_TITLE,
@@ -4604,6 +4648,7 @@ export function createAppController({
   }
 
   function render() {
+    queueMicrotask(() => { void ddaAutoReminder.drain(); });
     if (!flowBusy() || stopped || !account) {
       const waiters = [...idleWaiters];
       idleWaiters.clear();
@@ -4692,8 +4737,8 @@ export function createAppController({
       recoveryUncertain,
       pendingProvisions: pendingProvisionSnapshot,
       pendingProvisionOpening: Boolean(account && pendingProvisionOpenRequest),
-      pendingNotes: pendingNotesSnapshot,
-      pendingConstructionDiaries: pendingProvisionSnapshot || !pendingConstructionDiaryTime()
+      pendingNotes: ddaAutoReminder.pending && !pendingNoteLaunchOrderId ? null : pendingNotesSnapshot,
+      pendingConstructionDiaries: pendingProvisionSnapshot || (ddaAutoReminder.pending && !pendingConstructionDiaryFillingId) || !pendingConstructionDiaryTime()
         ? null : pendingConstructionDiarySnapshot,
       pendingConstructionDiaryFillingId,
       pendingConstructionDiaryError,
@@ -9187,7 +9232,8 @@ export function createAppController({
     return opening;
   }
 
-  async function openRegistrationGallery(kind, replyId) {
+  async function openRegistrationGallery(kind, replyId, openOptions = {}) {
+    if (openOptions.automatic && !openOptions.isCurrent?.()) return false;
     if (!account || stopped || flowBusy()) return false;
     const isDdaReport = kind === "ddaReport";
     const sourceKind = isDdaReport ? "dda" : kind;
@@ -9204,7 +9250,16 @@ export function createAppController({
     disposeGeneralSummaryReport();
     disposePendingSupplierPaymentsReport();
     disposePendingWorkDiariesReport();
-    if (registrationGalleryOpenings.has(kind)) return registrationGalleryOpenings.get(kind);
+    if (registrationGalleryOpenings.has(kind)) {
+      const pending = registrationGalleryOpenings.get(kind);
+      if (!isDdaReport || openOptions.automatic) return pending;
+      // A manual click cancels automatic eligibility but must retain its own
+      // intent after the shared factory finishes constructing the panel.
+      const owner = account, revision = sessionRevision, interaction = ddaReminderInteraction;
+      await pending;
+      if (stopped || account !== owner || sessionRevision !== revision || ddaReminderInteraction !== interaction) return false;
+      return openRegistrationGallery(kind, replyId, openOptions);
+    }
     if (isDdaReport) closeGalleryOverlays();
     const galleryAccount = account;
     const openingIsCurrent = galleryOpeningGuard(galleryAccount);
@@ -9231,6 +9286,7 @@ export function createAppController({
           const factory = isDdaReport ? ddaReportFactory : registrationGalleryFactory;
           const panel = await factory({
             kind: sourceKind, data,
+            ...(isDdaReport ? { onClose: () => ddaAutoReminder.dismiss() } : {}),
             ...(["contractorEmployment", "dda"].includes(sourceKind) ? {} : { onCreate: galleryCreationHandler(replyId, assertSession) }),
             ...(["dda", "presenceDescriptions", "provisionDescription", "documents", "asset", "assetFunction", "assetProduct", "assetGroup", "workDiary", "quotes", "contracts", "contractLines", "measurements", "measurementLines", "stageDemonstratives", "constructionStages", "recurringTasks", "delegatedTasks"].includes(sourceKind) ? {
               openMediaCollection: items => {
@@ -9247,7 +9303,8 @@ export function createAppController({
           if (!openingIsCurrent()) { panel.destroy?.(); return false; }
           registrationGalleries.set(kind, isDdaReport ? decorateControllerReport(panel, 'open-dda-report') : panel);
         }
-        await registrationGalleries.get(kind).open();
+        if (openOptions.automatic && !openOptions.isCurrent?.()) return false;
+        await registrationGalleries.get(kind).open(openOptions);
         return openingIsCurrent();
       } catch (error) {
         if (openingIsCurrent()) setSessionError(error, "Não foi possível abrir a galeria de cadastros.");
@@ -10211,6 +10268,7 @@ export function createAppController({
   }
 
   async function signIn() {
+    ddaAutoReminder.reset();
     clearAttachmentUploadProgress();
     attachmentActionBusy = false;
     attachmentCompressionReturnPoint = null;
@@ -10300,6 +10358,7 @@ export function createAppController({
         .map(item => item.id);
       await processFiles([...new Set([...importedIds, ...pendingIds])]);
       if (sharedResumeRequested) await resumeSharedFiles();
+      void ddaAutoReminder.refresh();
       return true;
     } catch (error) {
       if (stopped || sessionRevision !== signInRevision) return false;
@@ -10316,6 +10375,7 @@ export function createAppController({
   }
 
   async function signOut() {
+    ddaAutoReminder.reset();
     clearOperationProgress();
     clearAttachmentUploadProgress();
     attachmentActionBusy = false;
@@ -11108,6 +11168,8 @@ export function createAppController({
 
   function bind(type, handler) {
     unsubscribeCommands.push(view.on(type, command => {
+      if (type.startsWith('open-') || ['select-reply','send-text','finish-flow','navigate-mascot-report','draft-changed','fill-pending-construction-diary','launch-pending-note'].includes(type)) ddaReminderInteraction++;
+      if (type === 'open-dda-report' || command?.replyId === 'action_dda_report') ddaAutoReminder.reset();
       if ((payrollSheetCreate || payrollSheetCreateOpening)
         && (type.startsWith('open-') || type === 'select-reply' || type === 'send-text'
           || type === 'finish-flow' || type === 'navigate-mascot-report')
@@ -11728,9 +11790,11 @@ export function createAppController({
     else if (pendingAction === "action_hr_create_idfolha") await openPayrollSheetCreate();
     else if (pendingAction === "action_hr_gallery_folhapgto") await openHrPayrollGallery("FOLHAPGTO");
     else if (REGISTRATION_GALLERY_KIND[pendingAction]) await openRegistrationGallery(REGISTRATION_GALLERY_KIND[pendingAction], pendingAction);
+    if (!pendingAction) void ddaAutoReminder.refresh();
   }
 
   function stop() {
+    ddaAutoReminder.reset();
     clearOperationProgress();
     clearAttachmentUploadProgress();
     attachmentCompressionReturnPoint = null;

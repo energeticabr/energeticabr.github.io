@@ -20,11 +20,11 @@ export function normalizeDdaReportRows(snapshot){
 }
 export function buildDdaReport(rows,{status='Em aberto',bank='',search=''}={},now=new Date()){
  const query=ddaSearchKey(search),today=ddaTodayKey(now);
- const filtered=rows.filter(row=>(!status||row.status===status)&&(!bank||row.bank===bank)&&(!query||ddaSearchKey([row.id,row.supplier,row.document,row.bank].join(' ')).includes(query)))
+ const filtered=rows.filter(row=>(!status||(status==='Não pagos'?['Em aberto','Agendado'].includes(row.status):row.status===status))&&(!bank||row.bank===bank)&&(!query||ddaSearchKey([row.id,row.supplier,row.document,row.bank].join(' ')).includes(query)))
   .sort((a,b)=>(a.due||'9999').localeCompare(b.due||'9999')||Number(a.id)-Number(b.id));
  const missingAmounts=filtered.filter(row=>row.amount==null).length;
  return {rows:filtered,total:missingAmounts?null:filtered.reduce((sum,row)=>sum.plus(row.amount),new Money(0)).toFixed(2),missingAmounts,
   overdue:filtered.filter(row=>row.due&&row.due<today).length,today:filtered.filter(row=>row.due===today).length,
-  statuses:[...new Set(['Em aberto',...rows.map(row=>row.status)])].sort((a,b)=>a.localeCompare(b,'pt-BR')),
+  statuses:[...new Set(['Em aberto','Não pagos',...rows.map(row=>row.status)])].sort((a,b)=>a.localeCompare(b,'pt-BR')),
   banks:[...new Set(rows.map(row=>row.bank).filter(Boolean))].sort((a,b)=>a.localeCompare(b,'pt-BR'))};
 }
