@@ -45,7 +45,17 @@ export function createDdaReportView({document:doc=globalThis.document,data,openM
   for(const label of ['ID','VENCIMENTO','FORNECEDOR','DOCUMENTO','BANCO','VALOR NOMINAL','SITUAÇÃO','ESPELHO']){const th=make('th','',label);th.scope='col';tr.append(th);}head.append(tr);table.append(head,body);
   for(const row of printAll?result.rows:result.rows.slice((page-1)*50,page*50)){
    const line=make('tr');line.dataset.ddaId=row.id;const due=make('td','ddr-due',date(row.due));due.dataset.dueTone=ddaDueTone(row.due,now());
-   const supplier=make('td','ddr-supplier',row.supplier),status=make('td','ddr-status');status.dataset.status=row.status;
+   const supplier=make('td','ddr-supplier'),status=make('td','ddr-status');status.dataset.status=row.status;
+   supplier.append(make('span','ddr-supplier-name',row.supplier));
+   const history=make('div','ddr-supplier-count');history.dataset.ddaSupplierCount='';
+   if(row.supplierDdaCount!=null){
+    history.append(make('strong','',`${row.supplierDdaCount} ${row.supplierDdaCount===1?'DDA registrado':'DDAs registrados'}`),make('span','','no SharePoint'));
+    history.title='Total histórico do mesmo CNPJ na lista DDAS SICOOB, incluindo todos os status e datas, antes dos filtros.';
+   }else{
+    history.dataset.countState='unknown';history.append(make('span','','CNPJ indisponível'));
+    history.title='Contagem indisponível: o registro não possui um CNPJ utilizável. O nome do fornecedor não é usado para adivinhar vínculos.';
+   }
+   supplier.append(history);
    const overdue=row.status==='Vencido'||(row.status==='Em aberto'&&row.due&&row.due<ddaTodayKey(now()));
    const cluster=make('div','ddr-status-cluster');cluster.dataset.statusTone=row.status==='Pago'?'paid':overdue?'overdue':row.status==='Em aberto'?'open':'neutral';
    cluster.append(make('strong','',overdue?'Vencido':row.status));cluster.title='Situação na última consulta bancária: '+row.status;

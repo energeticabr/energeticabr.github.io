@@ -13,6 +13,10 @@ const source=[
  {id:'3',fields:{Title:'GAMA SERVIÇOS — EXEMPLO',VENCIMENTO:'2026-11-05',VALOR:2450,SITUACAO:'Em aberto',DOCUMENTO:'EX-003',BANCO:'BANCO MODELO',ULTIMA_CONSULTA:'2026-10-28T10:00:00Z'}},
  {id:'4',fields:{Title:'DELTA — EXEMPLO PAGO',VENCIMENTO:'2026-10-26',VALOR:100,SITUACAO:'Pago',DOCUMENTO:'EX-004',BANCO:'BANCO MODELO'}}
 ];
+source[0].fields.CNPJ_FORNECEDOR='00.111.111/0001-22';
+source[1].fields.CNPJ_FORNECEDOR='00999999000122';
+source[2].fields.CNPJ_FORNECEDOR='00888888000122';
+source[3].fields.CNPJ_FORNECEDOR='00111111000122';
 window.ddaMirrorClicks=0;window.ddaPdfRows=0;
 const report=decorateReportPrint(decorateReportNavigation(createDdaReportView({document,now:()=>new Date('2026-10-28T12:00:00Z'),
  data:{loadSnapshot:async()=>({rows:source}),listAttachments:async()=>{window.ddaMirrorClicks++;return [];},downloadAttachment:async()=>null},openMediaCollection:()=>{}}),{action:'open-dda-report',onNavigate:()=>report.close()}),
@@ -22,5 +26,21 @@ chat.render({sessionStatus:'authenticated',account:{name:'Demonstração'},draft
  {id:'group_pending',label:'⏳ PENDÊNCIAS'},...['SUPRIMENTOS','FINANCEIRO','DEMANDAS','RECURSOS HUMANOS','ETAPA OBRA','COMERCIAL','AUDITORIA E DOCUMENTOS','NB PARTICIPAÇÕES','GASTOS PESSOAIS','POWER BI'].map((label,i)=>({id:'group_'+i,label}))]}]});
 window.ddaReport=report;
 if(new URLSearchParams(location.search).has('report'))await report.open();
+if(new URLSearchParams(location.search).has('layout')){
+ await document.fonts.ready;
+ await Promise.all([...document.images].map(img=>img.decode().catch(()=>{})));
+ await new Promise(resolve=>requestAnimationFrame(()=>requestAnimationFrame(resolve)));
+ const content=document.querySelector('.ddr-content'),table=document.querySelector('.ddr-table');
+ document.documentElement.dataset.layout=JSON.stringify({
+  pageOverflow:document.documentElement.scrollWidth>innerWidth+1,
+  tableFits:table.offsetWidth<=content.clientWidth+1,
+  clusters:[...document.querySelectorAll('[data-dda-supplier-count]')].map(cluster=>({
+   label:cluster.textContent,below:cluster.offsetTop>=cluster.previousElementSibling.offsetTop+cluster.previousElementSibling.offsetHeight-1,
+   fits:cluster.scrollWidth<=cluster.clientWidth+1&&cluster.offsetWidth<=cluster.parentElement.clientWidth,
+   fontSize:parseFloat(getComputedStyle(cluster.querySelector('strong')||cluster).fontSize),
+   background:getComputedStyle(cluster).backgroundColor
+  }))
+ });
+}
 document.documentElement.dataset.ready='true';
 </script></body></html>
