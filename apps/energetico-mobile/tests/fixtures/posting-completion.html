@@ -43,6 +43,9 @@ const samples = {
   'diary-creation': `✅ 🟢 DIÁRIO DE OBRAS CRIADO NA BASE DE DADOS DIÁRIO DE OBRAS ÀS 09:42. 🕒
 🆔 REGISTROS CONFIRMADOS:
 • DIÁRIO DE OBRAS: ID 701`,
+  'diary-images': `✅ 🟢 IMAGENS DO DIÁRIO DE OBRA ADICIONADAS NA BASE DE DADOS DIÁRIO DE OBRAS ÀS22:36. 🕒
+🆔 REGISTROS CONFIRMADOS:
+• DIÁRIO DE OBRAS: ID 228`,
   'description-settlement': `✅ *🟢 PAGAMENTO AGENDADO BAIXADO NA BASE DE DADOS DESCRITIVOPROVISAO ÀS 00:09.* 🕒
 🆔 *REGISTROS CONFIRMADOS:*
 • DESCRITIVO DE PROVISÃO: ID 12
@@ -83,7 +86,7 @@ const samples = {
 };
 const sample = new URLSearchParams(location.search).get('sample') || 'multiple';
 view.render({ sessionStatus: 'authenticated', account: { name: 'Bernardo' }, draft: '', pendingFiles: [], attachments: [],
-  activeFlow: null, completionNavigation: { homeOnly: true, title: sample.startsWith('provision-attachments') ? '📎 ADICIONAR ANEXOS A UMA PROVISÃO DE PAGAMENTO' : sample.startsWith('order-attachments') ? '📎 ADICIONAR UM ANEXO A UM PEDIDO' : sample.startsWith('description-') ? '💰 BAIXAR PAGAMENTO AGENDADO' : sample === 'settlement' ? '💵 APONTAR PAGAMENTO DA PROVISÃO' : sample === 'diary' ? '📔 PREENCHER DIÁRIO DE OBRA' : sample === 'construction-visit' ? '🏗️ APONTAR VISITA EM OBRA' : sample === 'diary-creation' ? '📔 CRIAR DIÁRIO DE OBRAS' : 'POSTAGEM CONCLUÍDA' },
+  activeFlow: null, completionNavigation: { homeOnly: true, title: sample.startsWith('provision-attachments') ? '📎 ADICIONAR ANEXOS A UMA PROVISÃO DE PAGAMENTO' : sample.startsWith('order-attachments') ? '📎 ADICIONAR UM ANEXO A UM PEDIDO' : sample.startsWith('description-') ? '💰 BAIXAR PAGAMENTO AGENDADO' : sample === 'settlement' ? '💵 APONTAR PAGAMENTO DA PROVISÃO' : sample === 'diary' ? '📔 PREENCHER DIÁRIO DE OBRA' : sample === 'construction-visit' ? '🏗️ APONTAR VISITA EM OBRA' : sample === 'diary-creation' ? '📔 CRIAR DIÁRIO DE OBRAS' : sample === 'diary-images' ? '🖼️ ADICIONAR IMAGENS AO DIÁRIO DE OBRAS' : 'POSTAGEM CONCLUÍDA' },
   messages: [{ id: 'local-receipt', role: 'assistant', type: 'text', text: samples[sample] }],
 });
 await document.fonts.ready;
