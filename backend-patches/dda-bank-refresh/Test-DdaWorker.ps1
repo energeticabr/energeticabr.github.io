@@ -13,3 +13,14 @@ Assert (ConvertTo-DdaWorkerReceipt ($base|ConvertTo-Json -Compress) 0 $started).
 $base.failed=0;$base.verified='3'
 Assert (ConvertTo-DdaWorkerReceipt ($base|ConvertTo-Json -Compress) 0 $started).status 'failed'
 '6 worker receipt checks passed'
+$base.verified=3;$base.createdItemIds=@(42)
+$receipt=ConvertTo-DdaWorkerReceipt ($base|ConvertTo-Json -Compress) 0 $started
+Assert (@($receipt.createdItemIds).Count) 1
+Assert $receipt.createdItemIds[0] 42
+foreach($invalid in @(@(42,42),@(0),@('42'),@($true),@(2147483648),@())){
+ $base.createdItemIds=$invalid
+ Assert (ConvertTo-DdaWorkerReceipt ($base|ConvertTo-Json -Compress) 0 $started).status 'failed'
+}
+$base.created=0;$base.createdItemIds=@()
+Assert (ConvertTo-DdaWorkerReceipt ($base|ConvertTo-Json -Compress) 0 $started).status 'succeeded'
+'Created ID receipt checks passed'
