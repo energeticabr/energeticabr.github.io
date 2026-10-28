@@ -24,6 +24,7 @@ test('other posting cards remain readable on phone, tablet and PC with every ID 
         ['diary', ['ID 214']],
         ['construction-visit', ['ID 7001', 'ID 801', 'ID 901']],
         ['diary-creation', ['ID 701']],
+        ['diary-images', ['ID 228']],
         ['description-settlement', ['ID 12', 'ID 325', 'ID 406', 'ID 3570']],
         ['description-multiple', ['ID 12', 'ID 325', 'ID 326', 'ID 327', 'ID 406', 'ID 407', 'ID 408', 'ID 3570', 'ID 3571', 'ID 9007199254740993']],
         ['description-no-launch', ['ID 12', 'ID 325', 'ID 326']],
@@ -45,9 +46,9 @@ test('other posting cards remain readable on phone, tablet and PC with every ID 
         assert.deepEqual(layout.data.filter((_, i) => i % 2).map(field => field.text), expected);
         for (const field of layout.data) assert.ok(field.left >= 0 && field.right <= width && field.font >= 12 && !field.overflow, JSON.stringify({ width, sample, field }));
         if (sample === 'multiple') assert.equal(layout.details, '📎 Anexos enviados: 4');
-        if (sample === 'settlement' || sample === 'diary' || sample === 'construction-visit' || sample === 'diary-creation' || sample.startsWith('description-') || sample.startsWith('order-attachments') || sample.startsWith('provision-attachments')) {
+        if (sample === 'settlement' || sample === 'diary' || sample === 'construction-visit' || sample === 'diary-creation' || sample === 'diary-images' || sample.startsWith('description-') || sample.startsWith('order-attachments') || sample.startsWith('provision-attachments')) {
           assert.equal(layout.senderInsideCard, true);
-          assert.deepEqual(layout.sender.slice(0, 2).map(field => field.text), ['Energético', sample.startsWith('provision-attachments') ? '15:09' : sample.startsWith('order-attachments') ? '00:13' : sample === 'settlement' ? '06:18' : sample === 'diary' ? '23:29' : sample === 'construction-visit' ? '23:02' : sample === 'diary-creation' ? '09:42' : '00:09']);
+          assert.deepEqual(layout.sender.slice(0, 2).map(field => field.text), ['Energético', sample.startsWith('provision-attachments') ? '15:09' : sample.startsWith('order-attachments') ? '00:13' : sample === 'settlement' ? '06:18' : sample === 'diary' ? '23:29' : sample === 'construction-visit' ? '23:02' : sample === 'diary-creation' ? '09:42' : sample === 'diary-images' ? '22:36' : '00:09']);
           for (const field of layout.sender) assert.ok(field.left >= 0 && field.right <= width && field.width > 0 && field.height > 0, JSON.stringify({ width, sample, field }));
           assert.ok(layout.sender[0].right < layout.sender[2].left, 'sender and mascot must not overlap');
         }

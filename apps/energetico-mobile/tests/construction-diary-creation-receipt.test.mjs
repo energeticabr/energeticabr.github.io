@@ -12,6 +12,9 @@ const visit = `✅ *🟢 VISITA EM OBRA APONTADA NA BASE DE DADOS LANCAMENTOS À
 const creation = `✅ 🟢 DIÁRIO DE OBRAS GRAVADO NA BASE DE DADOS DIARIO DE OBRAS ÀS 09:42. 🕒
 🆔 REGISTROS CONFIRMADOS:
 • DIÁRIO DE OBRAS: ID 701`;
+const images = `✅ 🟢 IMAGENS DO DIÁRIO DE OBRA ADICIONADAS NA BASE DE DADOS DIÁRIO DE OBRAS ÀS 22:36. 🕒
+🆔 REGISTROS CONFIRMADOS:
+• DIÁRIO DE OBRAS: ID 228`;
 
 function documentFor(t, text, metadata = {}) {
   const dom = new JSDOM(renderChatMarkup({ sessionStatus: 'authenticated', account: { name: 'Teste' },
@@ -22,7 +25,7 @@ function documentFor(t, text, metadata = {}) {
   return dom.window.document;
 }
 
-function brandedReceipt(doc, title, time, database, labels, ids) {
+function brandedReceipt(doc, title, time, database, labels, ids, subtitle = 'Registrado na base de dados') {
   const card = doc.querySelector('.launch-completion--diary');
   assert.ok(card, 'a confirmação deve usar o mesmo cartão novo dos diários');
   assert.equal(card.querySelector('h2').textContent, title);
@@ -30,7 +33,7 @@ function brandedReceipt(doc, title, time, database, labels, ids) {
   assert.equal(card.querySelector('.launch-completion-sender time').textContent, time);
   assert.equal(card.querySelector('.launch-completion-sender img').alt, 'Mascote Energético');
   assert.equal(doc.querySelector('.chat-message--launch-completion > .chat-avatar'), null);
-  assert.equal(card.querySelector('.launch-completion__success p').textContent, 'Registrado na base de dados');
+  assert.equal(card.querySelector('.launch-completion__success p').textContent, subtitle);
   assert.equal(card.querySelector('.launch-completion__operation strong').textContent, database);
   assert.equal(card.querySelector('.launch-completion__operation span').textContent, `ÀS ${time}`);
   assert.deepEqual([...card.querySelectorAll('dt')].map(el => el.textContent.trim()), labels);
@@ -39,6 +42,57 @@ function brandedReceipt(doc, title, time, database, labels, ids) {
   assert.equal(card.querySelectorAll('button,input,form,[data-action]').length, 0);
   assert.doesNotMatch(card.textContent, /R\$|\d{2}\/\d{2}\/\d{4}/);
   return card;
+}
+
+for (const text of [images, images.replace('DADOS DIÁRIO', 'DADOS DIARIO').replaceAll('\n', '\r\n')
+  .replace('✅ 🟢 ', '✅ *🟢 ').replace('. 🕒', '.* 🕒')]) {
+  test('imagens confirmadas usam o cartão novo com horário e ID reais do diário', t => {
+    const receipt = postingCompletion({ text });
+    assert.equal(receipt?.kind, 'diary-images');
+    brandedReceipt(documentFor(t, text), 'IMAGENS DO DIÁRIO DE OBRA ADICIONADAS', '22:36',
+      text.includes('DADOS DIARIO') ? 'DIARIO DE OBRAS' : 'DIÁRIO DE OBRAS',
+      ['DIÁRIO DE OBRAS'], ['ID 228'], 'Adicionadas na base de dados');
+  });
+}
+
+test('imagens preservam ID grande, notas escapadas e anexos sem reenviar nem alterar metadados', t => {
+  const metadata = Object.freeze({ attachments: Object.freeze([Object.freeze({ id: 'qa-photo', name: 'foto-ficticia.jpg' })]) });
+  const text = images.replace('ID 228', 'ID 9007199254740993')
+    + '\n📎 Arquivo: foto-ficticia.jpg\nObservação: A & B <img src=x onerror=alert(1)>';
+  const doc = documentFor(t, text, metadata);
+  const card = doc.querySelector('.launch-completion--diary');
+  assert.ok(card);
+  assert.equal(card.querySelector('dd').textContent, 'ID 9007199254740993');
+  assert.match(card.querySelector('.launch-completion__details').textContent, /foto-ficticia\.jpg/);
+  assert.ok(card.querySelector('.launch-completion__details').textContent.includes('A & B <img src=x onerror=alert(1)>'));
+  assert.equal(doc.querySelector('img[src="x"]'), null);
+  assert.equal(card.querySelectorAll('button,input,form,[data-action]').length, 0);
+  assert.deepEqual(metadata.attachments, [{ id: 'qa-photo', name: 'foto-ficticia.jpg' }]);
+});
+
+for (const [name, text] of [
+  ['base errada', images.replace('DADOS DIÁRIO DE OBRAS', 'DADOS DOCUMENTOS')],
+  ['sem diário', images.replace('\n• DIÁRIO DE OBRAS: ID 228', '')],
+  ['ID inválido', images.replace('ID 228', 'ID inválido')],
+  ['ID zero', images.replace('ID 228', 'ID 0')],
+  ['ID duplicado', images + '\n• DIÁRIO DE OBRAS: ID 229'],
+  ['lista de IDs', images.replace('ID 228', 'IDS 228, 229')],
+  ['registro alheio', images + '\n• PEDIDO: ID 229'],
+  ['ID vazio', images + '\n• DIÁRIO DE OBRAS:'],
+  ['falha parcial', images + '\nImagens parcialmente adicionadas.'],
+  ['pendente', images + '\nAs imagens estão pendentes.'],
+  ['negativa', images.replace('ADICIONADAS', 'NÃO ADICIONADAS')],
+  ['negativa posterior', images + '\nImagens não adicionadas.'],
+  ['aviso', images + '\n⚠️ Confira as imagens pendentes.'],
+  ['falha', images + '\n❌ Falha ao enviar imagem.'],
+  ['adição desconhecida', images.replace('IMAGENS DO DIÁRIO DE OBRA', 'OUTRAS IMAGENS')],
+]) {
+  test(`imagens sem confirmação integral permanecem em texto: ${name}`, t => {
+    assert.equal(postingCompletion({ text }), null);
+    const doc = documentFor(t, text);
+    assert.equal(doc.querySelector('.launch-completion'), null);
+    assert.ok(doc.querySelector('.chat-bubble').textContent.includes(text));
+  });
 }
 
 for (const text of [visit, visit.replaceAll('*', '').replaceAll('\n', '\r\n')]) {
