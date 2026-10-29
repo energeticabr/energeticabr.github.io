@@ -28,13 +28,15 @@ function Write-AuxLog([string]$Path,[string]$Source,[string]$Code,[DateTimeOffse
     [IO.File]::AppendAllText((Join-Path $folder 'worker.jsonl'),$entry+"`n",(New-Object Text.UTF8Encoding($false)))
 }
 function Read-AuxState([string]$Path,[string]$Source){
-    $state=[ordered]@{version=1;source=$Source;lastNsu='000000000000000';maxNsu=$null;status='NEW';nextAllowedAt=$null;lastCompletedSlot=$null;pendingSlot=$null;hasMore=$false;awaitingCompletion=$false}
+    $state=[ordered]@{version=1;source=$Source;lastNsu='000000000000000';maxNsu=$null;status='NEW';nextAllowedAt=$null;lastCompletedSlot=$null;lastCompletedScheduledSlot=$null;lastCompletedManualSlot=$null;pendingSlot=$null;hasMore=$false;awaitingCompletion=$false}
     $statePath=Join-Path $Path 'state.json'
     if([IO.File]::Exists($statePath)){
         $saved=Read-AuxJson $statePath
         foreach($property in $saved.PSObject.Properties){$state[$property.Name]=$property.Value}
     }
     if($state.version -ne 1 -or $state.source -cne $Source){throw 'AUX_STATE_INVALID'}
+    if(-not $state.lastCompletedScheduledSlot -and $state.lastCompletedSlot -cmatch '^\d{4}-\d{2}-\d{2}-\d{2}$'){$state.lastCompletedScheduledSlot=$state.lastCompletedSlot}
+    if(-not $state.lastCompletedManualSlot -and $state.lastCompletedSlot -cmatch '^manual:[0-9a-f]{32}$'){$state.lastCompletedManualSlot=$state.lastCompletedSlot}
     $state.lastNsu=ConvertTo-AuxNsu ([string]$state.lastNsu) $Source
     if($null -ne $state.nextAllowedAt){$null=[DateTimeOffset]::Parse([string]$state.nextAllowedAt,[Globalization.CultureInfo]::InvariantCulture)}
     return $state
@@ -172,7 +174,7 @@ function Save-AuxResponse([string]$Path,$Journal,$State,[string]$Source,$Config,
     return [pscustomobject]@{rejected=$false;staged=$documents.Count;unhandled=$unhandled.Count}
 }
 function New-AuxResult([string]$Source,[string]$Status,$State,$Stats){
-    return [pscustomobject]@{source=$Source;status=$Status;lastNsu=$State.lastNsu;lastCompletedSlot=$State.lastCompletedSlot;pendingSlot=$State.pendingSlot;requests=$Stats.requests;staged=$Stats.staged;delivered=$Stats.delivered;unhandled=$Stats.unhandled}
+    return [pscustomobject]@{source=$Source;status=$Status;lastNsu=$State.lastNsu;lastCompletedSlot=$State.lastCompletedSlot;lastCompletedScheduledSlot=$State.lastCompletedScheduledSlot;lastCompletedManualSlot=$State.lastCompletedManualSlot;pendingSlot=$State.pendingSlot;requests=$Stats.requests;staged=$Stats.staged;delivered=$Stats.delivered;unhandled=$Stats.unhandled}
 }
 function Invoke-AuxiliaryFiscalSource {
     [CmdletBinding()]
@@ -236,6 +238,7 @@ function Invoke-AuxiliaryFiscalSource {
             }
             $currentNow=[DateTimeOffset](& $Clock)
             if(-not [string]::IsNullOrWhiteSpace([string]$state.pendingSlot) -and -not $state.hasMore -and $state.awaitingCompletion){
+                if($state.pendingSlot.StartsWith('manual:')){$state.lastCompletedManualSlot=$state.pendingSlot}else{$state.lastCompletedScheduledSlot=$state.pendingSlot}
                 $state.lastCompletedSlot=$state.pendingSlot;$state.pendingSlot=$null;$state.status='COMPLETED';$state.awaitingCompletion=$false;$state.nextAllowedAt=$currentNow.AddMinutes(65).ToString('o')
                 Write-AtomicJson (Join-Path $DataPath 'state.json') $state
                 Write-AuxLog $DataPath $Source 'SLOT_COMPLETED' $Now
@@ -244,7 +247,7 @@ function Invoke-AuxiliaryFiscalSource {
             if($state.hasMore -and -not [string]::IsNullOrWhiteSpace([string]$state.pendingSlot)){
                 $state.nextAllowedAt=$currentNow.ToString('o');Write-AtomicJson (Join-Path $DataPath 'state.json') $state
                 if($pages -ge $MaxBatches){return New-AuxResult $Source 'PAGE_LIMIT' $state $stats}
-            }elseif($state.lastCompletedSlot -ceq $Slot){return New-AuxResult $Source 'ALREADY_COMPLETED' $state $stats}
+            }elseif(($Slot.StartsWith('manual:') -and $state.lastCompletedManualSlot -ceq $Slot) -or (-not $Slot.StartsWith('manual:') -and $state.lastCompletedScheduledSlot -ceq $Slot)){return New-AuxResult $Source 'ALREADY_COMPLETED' $state $stats}
             if($null -ne $state.nextAllowedAt -and [DateTimeOffset]::Parse([string]$state.nextAllowedAt) -gt $currentNow){return New-AuxResult $Source 'COOLDOWN' $state $stats}
             if([string]::IsNullOrWhiteSpace([string]$state.pendingSlot)){$state.pendingSlot=$Slot}
             # A continuation authorizes only the next reserved attempt. Once it
@@ -288,7 +291,7 @@ function Invoke-AuxiliaryFiscalScheduledCycle {
             $state=Read-AuxState $path $source
             $pending=[IO.File]::Exists((Join-Path $path 'pending-response.json')) -or -not [string]::IsNullOrWhiteSpace([string]$state.pendingSlot)
             foreach($folder in @('outbox','scope-pending-date')){$directory=Join-Path $path $folder;if([IO.Directory]::Exists($directory) -and @(Get-ChildItem -LiteralPath $directory -Filter '*.json' -File).Count -gt 0){$pending=$true}}
-            if($state.lastCompletedSlot -ceq $slot -and -not $pending){$results.Add([pscustomobject]@{source=$source;status='ALREADY_COMPLETED'});continue}
+            if($state.lastCompletedScheduledSlot -ceq $slot -and -not $pending){$results.Add([pscustomobject]@{source=$source;status='ALREADY_COMPLETED'});continue}
             $sourceNow=$Now.Add($cycleElapsed.Elapsed)
             $result=& $SourceInvoker -Source $source -Config $Config -DataPath $path -Slot $slot -WorkerConfig $WorkerConfig -Now $sourceNow -MaxBatches $MaxBatches
             $results.Add($result)
