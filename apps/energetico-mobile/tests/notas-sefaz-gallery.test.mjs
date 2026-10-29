@@ -13,6 +13,51 @@ const sample = { id: '4', fields: { Title: 'FORNECEDOR FICTÍCIO', CHAVE_ACESSO:
   XML_URL: 'https://energeticaltda.sharepoint.com/sites/energetica/Documentos/nota.xml',
   DANFE_URL: { Url: 'https://energeticaltda.sharepoint.com/sites/energetica/Documentos/danfe.pdf', Description: 'DANFE' } } };
 
+test('filtros fiscais ativos ficam visíveis fora do painel e podem ser limpos preservando a busca da nota resumo antiga', async t => {
+  const dom = new JSDOM('<body/>'), doc = dom.window.document;
+  const rows = [
+    { id: '14', fields: { Title: 'FORNECEDORA FICTÍCIA ANTIGA', MODELO: '55', DATA_EMISSAO: '2026-08-28',
+      STATUS_IMPORTACAO: 'RESUMO_AGUARDANDO_XML', STATUS_DANFE: 'PENDENTE_GERACAO', VALOR_TOTAL_NOTA: 260 } },
+    { id: '22', fields: { ...sample.fields, Title: 'FORNECEDORA FICTÍCIA ANTIGA', MODELO: '55', DATA_EMISSAO: '2026-10-20' } },
+    { id: '33', fields: { ...sample.fields, Title: 'PRESTADOR FICTÍCIO', TIPO_FISCAL: 'NFS-e' } },
+  ];
+  const gallery = createRegistrationGallery({ document: doc, kind: 'notas_fiscais_sefaz', data: { loadSnapshot: async () => ({ rows }) } });
+  t.after(() => { gallery.destroy(); dom.window.close(); });
+  await gallery.open();
+  const ids = () => [...doc.querySelectorAll('[data-registration-row]')].map(node => node.dataset.registrationRow);
+  const search = doc.querySelector('[data-gallery-quick-search]');
+  const query = value => { search.value = value; search.dispatchEvent(new dom.window.Event('input', { bubbles: true })); };
+  query('FORNECEDORA FICTÍCIA ANTIGA');
+  assert.deepEqual(ids(), ['22', '14']);
+  query('14');
+  assert.deepEqual(ids(), ['14']);
+  const notice = doc.querySelector('[data-sefaz-active-filters]');
+  assert.ok(notice, 'aviso de filtros disponível');
+  assert.equal(notice.hidden, true);
+  const type = doc.querySelector('[data-filter-field="TIPO_FISCAL"]');
+  type.value = 'NFS-e'; type.dispatchEvent(new dom.window.Event('change', { bubbles: true }));
+  assert.deepEqual(ids(), []);
+  assert.equal(notice.hidden, false);
+  assert.match(notice.textContent, /Tipo fiscal: NFS-e/);
+  assert.equal(notice.closest('details'), null, 'aviso permanece fora do painel fechado');
+  gallery.close(); await gallery.open();
+  assert.equal(notice.hidden, false, 'filtro retido ao reabrir continua explícito');
+  const status = doc.querySelector('[data-filter-field="STATUS_IMPORTACAO"]');
+  status.value = 'RESUMO_AGUARDANDO_XML'; status.dispatchEvent(new dom.window.Event('change', { bubbles: true }));
+  const start = doc.querySelector('[data-date-bound="start"]'), end = doc.querySelector('[data-date-bound="end"]');
+  start.value = '2026-09-01'; start.dispatchEvent(new dom.window.Event('change', { bubbles: true }));
+  end.value = '2026-10-31'; end.dispatchEvent(new dom.window.Event('change', { bubbles: true }));
+  assert.match(notice.textContent, /Importação: RESUMO_AGUARDANDO_XML/);
+  assert.match(notice.textContent, /Data inicial: 01\/09\/2026/);
+  assert.match(notice.textContent, /Data final: 31\/10\/2026/);
+  notice.querySelector('button').click();
+  assert.deepEqual(ids(), ['14']);
+  assert.equal(search.value, '14');
+  for (const control of doc.querySelectorAll('[data-filter-field], [data-date-bound]')) assert.equal(control.value, '');
+  assert.equal(notice.hidden, true);
+  assert.equal(type.nextElementSibling.querySelector('.sfs-trigger').value, 'Todos', 'seletor visível acompanha limpeza');
+});
+
 test('galeria fiscal identifica e filtra NF-e, CT-e e NFS-e, com PDF próprio e chave nacional completa', async t => {
   const dom = new JSDOM('<body/>'), doc = dom.window.document, copied = [], opened = [], downloads = [];
   Object.defineProperty(dom.window.navigator, 'clipboard', {value:{writeText:async value => copied.push(value)}});

@@ -245,6 +245,16 @@ export function createRegistrationGallery({ document: doc = globalThis.document,
   refresh.type = "button";
   refresh.dataset.action = "registration-refresh";
   filterDisclosure.append(toolbar);
+  const activeFilterNotice = kind === 'notas_fiscais_sefaz' ? el('div', 'rg-source-notice rg-sefaz-active-filters') : null;
+  const activeFilterText = activeFilterNotice ? el('span') : null;
+  const clearFilters = activeFilterNotice ? el('button', 'rg-button', 'Limpar filtros') : null;
+  if (activeFilterNotice) {
+    activeFilterNotice.dataset.sefazActiveFilters = '';
+    activeFilterNotice.hidden = true;
+    activeFilterText.setAttribute('role', 'status');
+    clearFilters.type = 'button';
+    activeFilterNotice.append(activeFilterText, clearFilters);
+  }
   const feedback = el("p", "rg-feedback");
   feedback.setAttribute("role", "status");
   const list = el("div", "rg-list");
@@ -255,7 +265,7 @@ export function createRegistrationGallery({ document: doc = globalThis.document,
   const next = el("button", "rg-button", "Próxima"); next.type = "button";
   pagination.append(previous, pageText, next);
   const ddaMetrics = kind === 'dda' ? createDdaGalleryMetrics(doc) : null;
-  root.append(header, createShortcut.toolbar, filterDisclosure, ...(sortBar ? [sortBar] : []), ...(ddaMetrics ? [ddaMetrics.root] : []), feedback, list, pagination);
+  root.append(header, createShortcut.toolbar, filterDisclosure, ...(activeFilterNotice ? [activeFilterNotice] : []), ...(sortBar ? [sortBar] : []), ...(ddaMetrics ? [ddaMetrics.root] : []), feedback, list, pagination);
   if (model.sourceNotice) {
     const notice = el('p', 'rg-source-notice', model.sourceNotice);
     notice.dataset.sefazCoverage = 'pending';
@@ -780,6 +790,16 @@ export function createRegistrationGallery({ document: doc = globalThis.document,
 
   function render() {
     if (destroyed) return;
+    if (activeFilterNotice) {
+      const active = [...filterControls].filter(([, control]) => control.value)
+        .map(([field, control]) => `${fieldLabel(field)}: ${control.selectedOptions[0]?.textContent || control.value}`);
+      for (const [bound, control] of dateBounds) if (control.value) {
+        const [year, month, day] = control.value.split('-');
+        active.push(`${bound === 'start' ? 'Data inicial' : 'Data final'}: ${day}/${month}/${year}`);
+      }
+      activeFilterNotice.hidden = !active.length;
+      activeFilterText.textContent = active.length ? `Filtros ativos — ${active.join('; ')}` : '';
+    }
     ddaMetrics?.update(ddaSnapshot, { stale: loadFailed });
     createShortcut.sync();
     refreshShortcut.sync();
@@ -1065,6 +1085,13 @@ export function createRegistrationGallery({ document: doc = globalThis.document,
     applySearch();
   });
   search.addEventListener("compositionend", () => { searchComposing = false; applySearch(); });
+  clearFilters?.addEventListener('click', () => {
+    for (const control of filterControls.values()) control.value = '';
+    for (const control of dateBounds.values()) control.value = '';
+    searchableFilters.close(); searchableFilters.sync();
+    page = 1; attachmentNotice = ''; render();
+    search.focus();
+  });
   for (const [field, control] of filterControls) control.addEventListener("change", () => { page = 1; attachmentNotice = ""; void refreshDependentFilters(field); });
   for (const control of dateBounds.values()) control.addEventListener("change", () => { page = 1; attachmentNotice = ""; render(); });
   sortControl?.addEventListener("change", () => { page = 1; render(); });

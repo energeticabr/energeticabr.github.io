@@ -36,6 +36,14 @@ if (mode === 'menu') {
     { id: '5', fields: { Title: 'RESUMO FICTÍCIO — DOCUMENTOS PENDENTES', MODELO:'55', NUMERO_NOTA: '555', DATA_EMISSAO: '2026-10-28',
       VALOR_TOTAL_NOTA: 340, STATUS_IMPORTACAO: 'Resumo; XML pendente', CHAVE_ACESSO: '9'.repeat(44) } },
   ] }; } } }).open();
+  if (new URLSearchParams(location.search).has('activeFilters')) {
+    const type = document.querySelector('[data-filter-field="TIPO_FISCAL"]');
+    type.value = 'NF-e'; type.dispatchEvent(new Event('change', { bubbles: true }));
+    for (const [bound, value] of [['start', '2026-09-01'], ['end', '2026-10-31']]) {
+      const input = document.querySelector(`[data-date-bound="${bound}"]`);
+      input.value = value; input.dispatchEvent(new Event('change', { bubbles: true }));
+    }
+  }
 }
 if (new URLSearchParams(location.search).has('pwa')) {
   document.querySelectorAll('style,link[rel=stylesheet]').forEach(node => node.remove());
@@ -53,6 +61,13 @@ const expandedByClick = fiscalSections.every(section => section.open);
 const firstPair = document.querySelector('.chat-supplies-pair');
 const blue = firstPair?.querySelector('.chat-supplies-pair__primary button'), stack = firstPair?.querySelector('.chat-gallery-actions');
 document.documentElement.dataset.layout = JSON.stringify({ mode,
+  activeFilters: (() => {
+    const notice = document.querySelector('[data-sefaz-active-filters]');
+    if (!notice || notice.hidden) return null;
+    const button = notice.querySelector('button');
+    return { text: notice.textContent, outsidePanel: !notice.closest('details'),
+      width: rect(notice).width, scrollWidth: notice.scrollWidth, buttonWidth: rect(button).width, buttonHeight: rect(button).height };
+  })(),
   types: [...document.querySelectorAll('.rg-sefaz-type')].map(node=>node.textContent),
   withholdingIds: [...document.querySelectorAll('.rg-row--buyer-withholding')].map(node=>node.dataset.registrationRow),
   pdfLabels: [...document.querySelectorAll('.rg-sefaz-pdf-link')].map(node=>node.textContent),

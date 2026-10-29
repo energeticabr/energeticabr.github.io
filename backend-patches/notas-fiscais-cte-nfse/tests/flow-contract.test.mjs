@@ -8,14 +8,20 @@ import {createFlowFixture} from './flow-fixture.mjs';
 const fixture=createFlowFixture('contract');after(()=>fixture.cleanup());fixture.build();
 const root=fixture.root;
 const collectionActions=s=>s.actions.Janela_de_coleta?.actions??s.actions;
-test('fila de coleta usa o corte fixo de outubro e preserva os tres horarios',()=>{
+test('fila de coleta aceita ampliar o mes anterior e preserva os tres horarios',()=>{
+  const configPath=path.join(root,'config/energetica.json');
+  const original=fs.readFileSync(configPath);
+  const cfg=JSON.parse(original);
+  cfg.minimumIssueDate='2026-09-01';
+  fs.writeFileSync(configPath,JSON.stringify(cfg));
+  try {
   execFileSync(process.execPath,[path.join(root,'scripts/build-live-flows.mjs')]);
-  const cfg=JSON.parse(fs.readFileSync(path.join(root,'config/energetica.json')));
   const s=JSON.parse(fs.readFileSync(path.join(root,'powerautomate/05-Agendar-Coleta.definition.json')));
   const body=s.actions.Garantir_job.actions.Criar_job.inputs.parameters['parameters/body'];
   assert.ok(body.includes(`'START_DATE','${cfg.minimumIssueDate}T00:00:00-03:00'`));
   assert.ok(!body.includes('addDays(utcNow(),-90)'));
   assert.deepEqual(s.triggers.Recorrencia.recurrence.schedule.hours,[9,15,20]);
+  } finally {fs.writeFileSync(configPath,original);}
 });
 test('DANFE e anexo do item e so e disponibilizado apos gravacao',()=>{
   execFileSync(process.execPath,[path.join(root,'scripts/build-flows.mjs')]);
