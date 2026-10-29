@@ -7,6 +7,7 @@ import {createChatView} from '/src/ui/chat-view.js';
 import {createDdaReportView} from '/src/ui/dda-report-view.js';
 import {decorateReportPrint} from '/src/ui/report-print.js';
 import {decorateReportNavigation} from '/src/ui/report-navigation.js';
+import {createDdaSyncReceipt} from '/src/ui/dda-sync-receipt.js';
 const source=[
  {id:'1',fields:{Title:'ALFA MATERIAIS — EXEMPLO',VENCIMENTO:'2026-10-27',VALOR:1250.35,SITUACAO:'Em aberto',DOCUMENTO:'EX-001',BANCO:'BANCO EXEMPLO',ULTIMA_CONSULTA:'2026-10-28T10:00:00Z'}},
  {id:'2',fields:{Title:'BETA LOCAÇÕES — EXEMPLO',VENCIMENTO:'2026-10-29',VALOR:500,SITUACAO:'Em aberto',DOCUMENTO:'EX-002',BANCO:'BANCO EXEMPLO',ULTIMA_CONSULTA:'2026-10-28T10:00:00Z'}},
@@ -17,15 +18,41 @@ source[0].fields.CNPJ_FORNECEDOR='00.111.111/0001-22';
 source[1].fields.CNPJ_FORNECEDOR='00999999000122';
 source[2].fields.CNPJ_FORNECEDOR='00888888000122';
 source[3].fields.CNPJ_FORNECEDOR='00111111000122';
+source.forEach((row,index)=>row.fields.CHAVE_DDA=String(index+1).repeat(64));
+window.ddaPaymentCalls=0;
 window.ddaMirrorClicks=0;window.ddaPdfRows=0;
 const report=decorateReportPrint(decorateReportNavigation(createDdaReportView({document,now:()=>new Date('2026-10-28T12:00:00Z'),
- data:{loadSnapshot:async()=>({rows:source}),listAttachments:async()=>{window.ddaMirrorClicks++;return [];},downloadAttachment:async()=>null},openMediaCollection:()=>{}}),{action:'open-dda-report',onNavigate:()=>report.close()}),
+ data:{loadSnapshot:async()=>({rows:source}),listAttachments:async()=>{window.ddaMirrorClicks++;return [];},downloadAttachment:async()=>null},openMediaCollection:()=>{},
+ confirmPayment:async({itemId,key})=>{window.ddaPaymentCalls++;return {status:'confirmed',itemId,key,confirmedAt:'2026-10-28T18:00:00Z',confirmedBy:'demo@example.test'};}}),{action:'open-dda-report',onNavigate:()=>report.close()}),
  {action:'open-dda-report',previewMedia:async(source)=>{const url=URL.createObjectURL(await source);window.open(url,'_blank','noopener');}});
 const chat=createChatView(document.querySelector('#app'));chat.on('open-dda-report',()=>report.open());
 chat.render({sessionStatus:'authenticated',account:{name:'Demonstração'},draft:'',pendingFiles:[],messages:[{id:'home',role:'assistant',type:'poll',question:'QUAL ÁREA VOCÊ DESEJA ACESSAR?',options:[
  {id:'group_pending',label:'⏳ PENDÊNCIAS'},...['SUPRIMENTOS','FINANCEIRO','DEMANDAS','RECURSOS HUMANOS','ETAPA OBRA','COMERCIAL','AUDITORIA E DOCUMENTOS','NB PARTICIPAÇÕES','GASTOS PESSOAIS','POWER BI'].map((label,i)=>({id:'group_'+i,label}))]}]});
 window.ddaReport=report;
 if(new URLSearchParams(location.search).has('report'))await report.open();
+const paymentMode=new URLSearchParams(location.search).get('payment');
+if(paymentMode){
+ const filter=document.querySelector('[name=status]');filter.value='';filter.dispatchEvent(new Event('change'));
+ const check=document.querySelector('[data-dda-confirm-payment="1"]');check.scrollIntoView({block:'center'});check.click();
+ if(paymentMode==='confirmed'){
+  document.querySelector('[data-dda-payment-yes]').click();
+  for(let i=0;i<5;i++)await new Promise(r=>setTimeout(r,0));
+ }
+ await document.fonts.ready;await new Promise(r=>requestAnimationFrame(()=>requestAnimationFrame(r)));
+ const dialog=document.querySelector('[data-dda-payment-dialog]'),box=dialog.getBoundingClientRect();
+ const before={reportOpen:!report.element.hidden,reportInert:document.querySelector('.ddr-dialog').inert,
+  dialogVisible:box.width>0&&box.height>0,dialogFits:box.left>=-1&&box.top>=-1&&box.right<=innerWidth+1&&box.bottom<=innerHeight+1,
+  logicalDialogWidth:dialog.offsetWidth,focusInside:dialog.contains(document.activeElement),calls:window.ddaPaymentCalls,paid:document.querySelector('[data-dda-id="1"] .ddr-status').textContent.includes('Confirmado pelo usuário'),
+  otherUnchanged:document.querySelector('[data-dda-id="2"] .ddr-status').textContent.includes('Em aberto')};
+ const sync=createDdaSyncReceipt({document,host:document.body,global:true,requireAcknowledgement:true,onAcknowledge:()=>{}});
+ sync.show({status:'succeeded',requestId:'a'.repeat(32),created:0,updated:1},[]);
+ const globalDialog=document.querySelector('dialog.dda-sync-overlay--global');
+ before.globalFocusable=globalDialog?.contains(document.activeElement)===true;
+ sync.destroy();
+ document.querySelector('[data-dda-payment-cancel]').focus();
+ before.paymentFocusableAfterSync=dialog.contains(document.activeElement);
+ document.documentElement.dataset.payment=JSON.stringify(before);
+}
 if(new URLSearchParams(location.search).has('layout')){
  await document.fonts.ready;
  await Promise.all([...document.images].map(img=>img.decode().catch(()=>{})));
