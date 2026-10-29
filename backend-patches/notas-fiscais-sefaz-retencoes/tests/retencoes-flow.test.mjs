@@ -1,14 +1,37 @@
-import test from 'node:test';
+import test, {after} from 'node:test';
 import assert from 'node:assert/strict';
 import fs from 'node:fs';
 import {execFileSync} from 'node:child_process';
 import {evaluate} from './wdl.mjs';
+import {tmpdir} from 'node:os';
+import path from 'node:path';
+import {fileURLToPath} from 'node:url';
+
+// Run the overlay contract in an isolated fixture, including when the portal
+// discovers this file from another working directory. No tenant config is read.
+const source=path.resolve(path.dirname(fileURLToPath(import.meta.url)),'..');
+const tempBase=path.resolve(tmpdir());
+const fixture=fs.mkdtempSync(path.join(tempBase,'sefaz-retention-contract-'));
+after(()=>{
+  const target=path.resolve(fixture);
+  if(path.dirname(target)!==tempBase || !path.basename(target).startsWith('sefaz-retention-contract-')) throw new Error('Unsafe fixture cleanup path');
+  fs.rmSync(target,{recursive:true,force:true});
+});
+for(const dir of ['config','scripts','powerautomate']) fs.mkdirSync(path.join(fixture,dir));
+for(const name of ['build-flows.mjs','build-live-flows.mjs','build-retention-flow.mjs','danfe-flow.mjs']) fs.copyFileSync(path.join(source,'scripts',name),path.join(fixture,'scripts',name));
+fs.writeFileSync(path.join(fixture,'config/energetica.json'),JSON.stringify({
+  companyCnpj:'00000000000000',siteUrl:'https://example.sharepoint.com/sites/fixture',
+  queueSiteUrl:'https://example-my.sharepoint.com/personal/fixture',listTitle:'NOTAS_FISCAIS_SEFAZ',
+  libraryTitle:'DOCUMENTOS_FISCAIS_SEFAZ',libraryPath:'/sites/fixture/DOCUMENTOS_FISCAIS_SEFAZ',
+  queueListTitle:'SEFAZ_COLETA_FILA',minimumIssueDate:'2026-10-01',desktopFlowId:'FICTICIO',desktopRunMode:'attended',
+  scheduleTimeZone:'E. South America Standard Time',scheduleHours:[9,15,20],scheduleMinutes:[0],
+}));
+for(const script of ['build-flows.mjs','build-live-flows.mjs','build-retention-flow.mjs']) execFileSync(process.execPath,[path.join(fixture,'scripts',script)],{cwd:fixture});
+const read=name=>JSON.parse(fs.readFileSync(path.join(fixture,'powerautomate',name)));
 
 test('retencoes sao valores proprios e atualizacao completa limpa ausencias sem regredir em resumo',()=>{
-  execFileSync(process.execPath,['scripts/build-flows.mjs']);
-  execFileSync(process.execPath,['scripts/build-live-flows.mjs']);
-  const schema=JSON.parse(fs.readFileSync('powerautomate/schema-sharepoint.json'));
-  const flow=JSON.parse(fs.readFileSync('powerautomate/03-Receber-NFe.definition.json'));
+  const schema=read('schema-sharepoint.json');
+  const flow=read('03-Receber-NFe.definition.json');
   const fields=flow.actions.Documentos.actions.Campos_finais.inputs;
   for(const name of ['PIS_RETIDO','COFINS_RETIDA','CSLL_RETIDA','IRRF_RETIDO','INSS_RETIDO','ISS_RETIDO']){
     assert.equal(schema.fields.find(field=>field.name===name)?.type,'Currency');
@@ -20,7 +43,7 @@ test('retencoes sao valores proprios e atualizacao completa limpa ausencias sem 
 });
 
 test('carga de retencoes altera somente metadados de uma nota existente',()=>{
-  const flow=JSON.parse(fs.readFileSync('powerautomate/06-Atualizar-Retencoes.definition.json'));
+  const flow=read('06-Atualizar-Retencoes.definition.json');
   const actions=flow.actions.Atualizacoes.actions;
   assert.equal(actions.Conferir_unica.type,'ParseJson');
   assert.deepEqual(actions.Conferir_unica.inputs.schema.enum,[1]);
