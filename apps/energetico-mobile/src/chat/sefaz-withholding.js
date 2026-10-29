@@ -28,6 +28,9 @@ export function buyerWithholding(fields = {}) {
     const cents = centsOf(fields[field]);
     return cents > 0 ? [{field, label, cents}] : [];
   });
-  const totalCents = centsOf(fields.TOTAL_RETIDO) ?? amounts.reduce((sum, item) => sum + item.cents, 0);
+  const totalCents = amounts.reduce((sum, item) => sum + item.cents, 0);
+  // The document total may include another actor's retention; it only bounds the buyer components.
+  const documentCents = centsOf(fields.TOTAL_RETIDO);
+  if (documentCents !== null && totalCents > documentCents) return null;
   return Number.isSafeInteger(totalCents) && totalCents > 0 ? {amounts, total: totalCents / 100} : null;
 }

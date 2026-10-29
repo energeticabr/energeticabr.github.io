@@ -138,10 +138,10 @@ test('NFS-e mostra o agregado social uma vez e usa o total declarado sem somar a
   assert.equal(row.querySelector('[data-field="VALOR_LIQUIDO"] dd').textContent.replace(/\s/g,''),'R$266,98');
 });
 
-test('total explícito inclusive zero prevalece; NF-e sem total conhecido mantém soma dos componentes', () => {
+test('total documental limita componentes do comprador sem acrescentar retenção de ator desconhecido', () => {
   const base={...sample.fields,MODELO:'55',STATUS_IMPORTACAO:'XML_COMPLETO',STATUS_RETENCOES:'RETENCAO_INFORMADA_XML',PIS_RETIDO:6.5,COFINS_RETIDA:30,CSLL_RETIDA:10};
-  for(const [total,want] of [[13.02,13.02],['13.02',13.02],[undefined,46.5],[null,46.5],['',46.5]]) {
-    assert.equal(buyerWithholding({...base,TOTAL_RETIDO:total})?.total,want,String(total));
+  for(const [total,want] of [[13.02,null],['13.02',null],[46.5,46.5],[100,46.5],[undefined,46.5],[null,46.5],['',46.5]]) {
+    assert.equal(buyerWithholding({...base,TOTAL_RETIDO:total})?.total ?? null,want,String(total));
   }
   for(const zero of [0,'0.00']) assert.equal(buyerWithholding({...base,TOTAL_RETIDO:zero}),null,'zero declarado não herda soma antiga');
   for(const aggregate of [0,'0.00']) for(const total of [undefined,46.5]) {
@@ -149,7 +149,10 @@ test('total explícito inclusive zero prevalece; NF-e sem total conhecido manté
     assert.equal(result?.total,46.5,'agregado zero não apaga componentes NF-e antigos');
     assert.deepEqual(result.amounts.map(item=>item.field),['PIS_RETIDO','COFINS_RETIDA','CSLL_RETIDA']);
   }
-  assert.deepEqual(buyerWithholding({...base,PIS_RETIDO:null,COFINS_RETIDA:null,CSLL_RETIDA:null,TOTAL_RETIDO:13.02}),{amounts:[],total:13.02});
+  assert.equal(buyerWithholding({...base,PIS_RETIDO:null,COFINS_RETIDA:null,CSLL_RETIDA:null,TOTAL_RETIDO:13.02}),null,'total isolado não informa o responsável');
+  const service={...sample.fields,TIPO_FISCAL:'NFS-e',MODELO:'NFS-e',PAPEL_EMPRESA:'TOMADOR',STATUS_IMPORTACAO:'XML_COMPLETO',STATUS_RETENCOES:'RETENCAO_INFORMADA_XML'};
+  assert.equal(buyerWithholding({...service,ISS:50,TOTAL_RETIDO:50}),null,'ISS retido por outro ator não vira componente do comprador');
+  assert.deepEqual(buyerWithholding({...service,ISS:50,IRRF_RETIDO:100,TOTAL_RETIDO:150}),{amounts:[{field:'IRRF_RETIDO',label:'IRRF retido',cents:10000}],total:100});
 });
 
 test('NF-e não colore por impostos comuns, ausência, zero, saída, cancelamento ou resumo', async t => {
