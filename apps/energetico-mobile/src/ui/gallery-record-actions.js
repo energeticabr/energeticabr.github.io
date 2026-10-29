@@ -281,7 +281,7 @@ export function createGalleryRecordActions({ document, host, loadEditor, saveEdi
         });
         label.append(select);
         state.body.replaceChildren(label, button("Cancelar", "data-gallery-editor-cancel", "", close));
-        state.variantPicker = bindSearchableFilterSelects(state.body, {selectionOnly:true});
+        state.variantPicker = bindSearchableFilterSelects(state.body);
         state.body.querySelector('[role=combobox]').focus();
         task.complete();
         return;

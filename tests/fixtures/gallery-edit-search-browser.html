@@ -1,0 +1,49 @@
+<!doctype html>
+<html lang="pt-BR">
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Validação local da pesquisa nas galerias</title>
+<link rel="stylesheet" href="../../apps/energetico-mobile/src/styles.css">
+<link rel="stylesheet" href="../../portal/styles/admin.css">
+<link rel="stylesheet" href="../../apps/energetico-mobile/src/ui/gallery-record-actions.css">
+<style>
+  #proof { position:fixed;z-index:10000;bottom:0;left:0;right:0;padding:8px;background:#e1f4e8;color:#14532d;font:700 12px system-ui;text-align:center;pointer-events:none; }
+  #gallery {padding:24px;}
+</style>
+<main id="gallery"><h1>Galeria de demonstração</h1><p id="name"></p></main>
+<output id="proof">DADOS FICTÍCIOS · 0 gravações reais</output>
+<script type="module">
+  import { createGalleryRecordActions } from '../../apps/energetico-mobile/src/ui/gallery-record-actions.js';
+  import entities from '../../portal/catalog/entities.js';
+  const entity = entities.find(item => item.id === new URL(location.href).searchParams.get('entity'))
+    || entities.find(item => item.id === 'provisoes-de-pagamento');
+  document.querySelector('#name').textContent = entity.title;
+  const columns = [
+    {name:'PRODUTO',label:'Produto',control:'select',required:true,choices:['PRODUTO ORIGINAL','AÇO ESTRUTURAL','CIMENTO']},
+    {name:'FORNECEDOR',label:'Fornecedor',control:'lookup',required:true,relation:{kind:'lookup',listId:'demo',displayField:'Title',resolvable:true,multiple:false}},
+    {name:'RESPONSAVEL',label:'Responsável',control:'person',relation:{kind:'person',listId:'people',displayField:'Title',principalType:'peopleOnly',resolvable:true,multiple:false}},
+    {name:'STATUS',label:'Status',control:'select',choices:['ATIVO','PENDENTE']},
+    {name:'FIXO',label:'Campo bloqueado',control:'select',choices:['REGRA DO CADASTRO'],readOnly:true},
+  ].map(column => ({...column,editable:true,hidden:false}));
+  const row = {id:'42',fields:{PRODUTO:'PRODUTO ORIGINAL',FORNECEDOR:'FORNECEDOR ORIGINAL',FORNECEDORLookupId:1,
+    RESPONSAVEL:'PESSOA ORIGINAL',RESPONSAVELLookupId:10,STATUS:'ATIVO',FIXO:'REGRA DO CADASTRO'}};
+  let writes=0;
+  const actions=createGalleryRecordActions({document,host:document.querySelector('#gallery'),galleryTitle:entity.title,
+    loadEditor:async()=>({entity,columns,item:structuredClone(row),contract:{hasForm:true,readOnly:false},
+      relationshipSearch:async(column,term)=>{
+        await new Promise(resolve=>setTimeout(resolve,100));
+        const normalize=text=>text.normalize('NFD').replace(/[\u0300-\u036f]/g,'').toLowerCase();
+        const options=column.control==='person'?[{id:10,label:'PESSOA ORIGINAL'},{id:11,label:'ANA DEMONSTRAÇÃO'}]
+          :[{id:1,label:'FORNECEDOR ORIGINAL'},{id:2,label:'EMPRESA NOVA'}];
+        return options.filter(option=>normalize(option.label).includes(normalize(term)));
+      },
+    }),
+    saveEditor:async(_context,fields)=>{
+      writes++;
+      document.querySelector('#proof').textContent=`DADOS FICTÍCIOS · ${writes} gravação simulada · 0 gravações reais`;
+      return {id:row.id,fields};
+    },onChanged:async()=>{},
+  });
+  document.querySelector('#gallery').append(actions.render(row));
+</script>
+</html>

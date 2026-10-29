@@ -1,0 +1,26 @@
+<!doctype html>
+<html lang="pt-BR">
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Validação local da busca em Funcionários RH</title>
+<link rel="stylesheet" href="../../src/styles.css">
+<link rel="stylesheet" href="../../src/ui/registration-gallery.css">
+<link rel="stylesheet" href="../../src/ui/contractor-employment-view.css">
+<link rel="stylesheet" href="../../src/ui/searchable-filter-selects.css">
+<style>#proof{position:fixed;z-index:10000;bottom:0;left:0;right:0;padding:8px;background:#e1f4e8;color:#14532d;font:700 12px system-ui;text-align:center;pointer-events:none}</style>
+<output id="proof">DADOS FICTÍCIOS · 0 gravações reais</output>
+<script type="module">
+  import {createContractorEmploymentView} from '../../src/ui/contractor-employment-view.js';
+  const row={id:'4',eTag:'"1"',fields:{Title:'FUNCIONÁRIO DEMONSTRAÇÃO',CARGO:'PEDREIRO III',STATUS:'ATIVO',DATAADMISSAO:'2026-01-20',FILIAL:'OBRA DEMONSTRAÇÃO',IDFORNECEDORORIGEM:'17'}};
+  let writes=0;
+  const view=createContractorEmploymentView({document,data:{
+    loadSnapshot:async()=>({rows:[structuredClone(row)],columns:[]}),
+    save:async(_original,draft)=>{
+      writes++;Object.assign(row.fields,draft);
+      document.querySelector('#proof').textContent=`DADOS FICTÍCIOS · ${writes} gravação simulada · 0 gravações reais`;
+      return structuredClone(row);
+    },
+  }});
+  await view.open();
+</script>
+</html>
