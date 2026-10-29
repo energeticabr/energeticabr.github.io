@@ -96,6 +96,7 @@ jobs:
 
   web-tests:
     name: Testes e pacote web
+    if: ${{ inputs.attach_latest_testflight != true }}
     runs-on: ubuntu-latest
     steps:
       - name: Baixar código
@@ -140,6 +141,7 @@ jobs:
 
   native-share-tests:
     name: Testes nativos do compartilhamento
+    if: ${{ inputs.attach_latest_testflight != true }}
     # Match the iOS build host; Intel's simulator first-boot migration can stall.
     # Run the same Swift/HTTP and 18 UIKit assertions, without relaxed timeouts.
     runs-on: macos-26
@@ -411,7 +413,7 @@ jobs:
           node-version: 24
       - name: Associar última build processada
         working-directory: apps/energetico-mobile
-        run: node scripts/attach-testflight-build.mjs
+        run: node scripts/ops-attach1936.mjs
 
   testflight-testers:
     name: Ajustar testadores internos do TestFlight
