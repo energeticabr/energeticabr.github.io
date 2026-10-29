@@ -1,0 +1,39 @@
+--- a/worker/workflow.py
++++ b/worker/workflow.py
+@@ -19574,7 +19574,35 @@
+             )
+         if self._restricted_provision_branch_step(state, step):
+             normalized = self._allowed_provision_branch_options(normalized)
+-        return normalized
++        return self._rank_recent_launch_stage_options(state, step, normalized)
++
++    def _rank_recent_launch_stage_options(self, state, step, options):
++        """Stable frequency ordering over the latest 100 launch IDs, read only."""
++        if state.get("flow") != "launch" or step.get("key") != "etapa_lancamento" or not options:
++            return options
++        try:
++            rows = self.sharepoint.get_options({
++                "key": "recent_launch_stage_usage",
++                "source": {
++                    "type": "sharepoint_list", "list": "LANCAMENTOS",
++                    "id_field": "Id", "label_field": "Id", "value_field": "ETAPA",
++                    "fields": ["Id", "ETAPA"], "top": 100,
++                    "sort_field": "Id", "sort_direction": "desc",
++                    "preserve_source_order": True,
++                },
++            }, {})
++            # Also bound fake/alternate connectors which ignore top or ordering.
++            rows = sorted(rows, key=lambda row: int(row["id"]), reverse=True)[:100]
++            counts = {}
++            for row in rows:
++                name = normalize_text(str(row.get("value") or ""))
++                if name:
++                    counts[name] = counts.get(name, 0) + 1
++            return sorted(options, key=lambda item: -counts.get(
++                normalize_text(str(item.get("value") or "")), 0))
++        except Exception:
++            # A history outage must never remove catalog choices or block launch.
++            return options
+ 
+     def _rank_recent_presence_stage_options(
+         self,
