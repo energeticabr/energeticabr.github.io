@@ -1,0 +1,710 @@
+{
+  "$schema": "https://schema.management.azure.com/providers/Microsoft.Logic/schemas/2016-06-01/workflowdefinition.json#",
+  "contentVersion": "1.0.0.0",
+  "parameters": {
+    "$authentication": {
+      "defaultValue": {},
+      "type": "SecureObject"
+    },
+    "$connections": {
+      "defaultValue": {},
+      "type": "Object"
+    }
+  },
+  "triggers": {
+    "manual": {
+      "type": "Request",
+      "kind": "Button",
+      "inputs": {
+        "schema": {
+          "type": "object",
+          "properties": {}
+        }
+      }
+    }
+  },
+  "actions": {
+    "Localizar_fila": {
+      "type": "OpenApiConnection",
+      "inputs": {
+        "host": {
+          "apiId": "/providers/Microsoft.PowerApps/apis/shared_sharepointonline",
+          "connectionName": "shared_sharepointonline",
+          "operationId": "HttpRequest"
+        },
+        "parameters": {
+          "dataset": "https://energeticaltda-my.sharepoint.com/personal/bernardonotini_energeticabr_com",
+          "parameters/method": "GET",
+          "parameters/uri": "_api/web/lists?$select=Id,Title&$filter=Title eq 'SEFAZ_COLETA_FILA'",
+          "parameters/headers": {
+            "Accept": "application/json;odata=nometadata",
+            "Content-Type": "application/json;odata=nometadata"
+          }
+        },
+        "authentication": "@parameters('$authentication')"
+      },
+      "runAfter": {}
+    },
+    "Garantir_fila": {
+      "type": "If",
+      "expression": {
+        "equals": [
+          "@length(body('Localizar_fila')?['value'])",
+          0
+        ]
+      },
+      "actions": {
+        "Criar_fila": {
+          "type": "OpenApiConnection",
+          "inputs": {
+            "host": {
+              "apiId": "/providers/Microsoft.PowerApps/apis/shared_sharepointonline",
+              "connectionName": "shared_sharepointonline",
+              "operationId": "HttpRequest"
+            },
+            "parameters": {
+              "dataset": "https://energeticaltda-my.sharepoint.com/personal/bernardonotini_energeticabr_com",
+              "parameters/method": "POST",
+              "parameters/uri": "_api/web/lists",
+              "parameters/headers": {
+                "Accept": "application/json;odata=nometadata",
+                "Content-Type": "application/json;odata=nometadata"
+              },
+              "parameters/body": "{\"Title\":\"SEFAZ_COLETA_FILA\",\"BaseTemplate\":100,\"EnableAttachments\":false,\"EnableVersioning\":true,\"Description\":\"Solicitacoes de coleta direta SEFAZ. Apenas metadados de execucao.\"}"
+            },
+            "authentication": "@parameters('$authentication')"
+          },
+          "runAfter": {}
+        }
+      },
+      "else": {
+        "actions": {}
+      },
+      "runAfter": {
+        "Localizar_fila": [
+          "Succeeded"
+        ]
+      }
+    },
+    "Localizar_JOB_KEY": {
+      "type": "OpenApiConnection",
+      "inputs": {
+        "host": {
+          "apiId": "/providers/Microsoft.PowerApps/apis/shared_sharepointonline",
+          "connectionName": "shared_sharepointonline",
+          "operationId": "HttpRequest"
+        },
+        "parameters": {
+          "dataset": "https://energeticaltda-my.sharepoint.com/personal/bernardonotini_energeticabr_com",
+          "parameters/method": "GET",
+          "parameters/uri": "_api/web/lists/getbytitle('SEFAZ_COLETA_FILA')/fields?$select=InternalName&$filter=InternalName eq 'JOB_KEY'",
+          "parameters/headers": {
+            "Accept": "application/json;odata=nometadata",
+            "Content-Type": "application/json;odata=nometadata"
+          }
+        },
+        "authentication": "@parameters('$authentication')"
+      },
+      "runAfter": {
+        "Garantir_fila": [
+          "Succeeded"
+        ]
+      }
+    },
+    "Garantir_JOB_KEY": {
+      "type": "If",
+      "expression": {
+        "equals": [
+          "@length(body('Localizar_JOB_KEY')?['value'])",
+          0
+        ]
+      },
+      "actions": {
+        "Criar_JOB_KEY": {
+          "type": "OpenApiConnection",
+          "inputs": {
+            "host": {
+              "apiId": "/providers/Microsoft.PowerApps/apis/shared_sharepointonline",
+              "connectionName": "shared_sharepointonline",
+              "operationId": "HttpRequest"
+            },
+            "parameters": {
+              "dataset": "https://energeticaltda-my.sharepoint.com/personal/bernardonotini_energeticabr_com",
+              "parameters/method": "POST",
+              "parameters/uri": "_api/web/lists/getbytitle('SEFAZ_COLETA_FILA')/fields/createfieldasxml",
+              "parameters/headers": {
+                "Accept": "application/json;odata=nometadata",
+                "Content-Type": "application/json;odata=nometadata"
+              },
+              "parameters/body": "{\"parameters\":{\"SchemaXml\":\"<Field Type=\\\"Text\\\" Name=\\\"JOB_KEY\\\" StaticName=\\\"JOB_KEY\\\" DisplayName=\\\"JOB_KEY\\\" Required=\\\"TRUE\\\" Indexed=\\\"TRUE\\\" EnforceUniqueValues=\\\"TRUE\\\" />\",\"Options\":8}}"
+            },
+            "authentication": "@parameters('$authentication')"
+          },
+          "runAfter": {}
+        }
+      },
+      "else": {
+        "actions": {}
+      },
+      "runAfter": {
+        "Localizar_JOB_KEY": [
+          "Succeeded"
+        ]
+      }
+    },
+    "Localizar_STATUS": {
+      "type": "OpenApiConnection",
+      "inputs": {
+        "host": {
+          "apiId": "/providers/Microsoft.PowerApps/apis/shared_sharepointonline",
+          "connectionName": "shared_sharepointonline",
+          "operationId": "HttpRequest"
+        },
+        "parameters": {
+          "dataset": "https://energeticaltda-my.sharepoint.com/personal/bernardonotini_energeticabr_com",
+          "parameters/method": "GET",
+          "parameters/uri": "_api/web/lists/getbytitle('SEFAZ_COLETA_FILA')/fields?$select=InternalName&$filter=InternalName eq 'STATUS'",
+          "parameters/headers": {
+            "Accept": "application/json;odata=nometadata",
+            "Content-Type": "application/json;odata=nometadata"
+          }
+        },
+        "authentication": "@parameters('$authentication')"
+      },
+      "runAfter": {
+        "Garantir_JOB_KEY": [
+          "Succeeded"
+        ]
+      }
+    },
+    "Garantir_STATUS": {
+      "type": "If",
+      "expression": {
+        "equals": [
+          "@length(body('Localizar_STATUS')?['value'])",
+          0
+        ]
+      },
+      "actions": {
+        "Criar_STATUS": {
+          "type": "OpenApiConnection",
+          "inputs": {
+            "host": {
+              "apiId": "/providers/Microsoft.PowerApps/apis/shared_sharepointonline",
+              "connectionName": "shared_sharepointonline",
+              "operationId": "HttpRequest"
+            },
+            "parameters": {
+              "dataset": "https://energeticaltda-my.sharepoint.com/personal/bernardonotini_energeticabr_com",
+              "parameters/method": "POST",
+              "parameters/uri": "_api/web/lists/getbytitle('SEFAZ_COLETA_FILA')/fields/createfieldasxml",
+              "parameters/headers": {
+                "Accept": "application/json;odata=nometadata",
+                "Content-Type": "application/json;odata=nometadata"
+              },
+              "parameters/body": "{\"parameters\":{\"SchemaXml\":\"<Field Type=\\\"Text\\\" Name=\\\"STATUS\\\" StaticName=\\\"STATUS\\\" DisplayName=\\\"STATUS\\\" Indexed=\\\"TRUE\\\" />\",\"Options\":8}}"
+            },
+            "authentication": "@parameters('$authentication')"
+          },
+          "runAfter": {}
+        }
+      },
+      "else": {
+        "actions": {}
+      },
+      "runAfter": {
+        "Localizar_STATUS": [
+          "Succeeded"
+        ]
+      }
+    },
+    "Localizar_REQUESTED_AT": {
+      "type": "OpenApiConnection",
+      "inputs": {
+        "host": {
+          "apiId": "/providers/Microsoft.PowerApps/apis/shared_sharepointonline",
+          "connectionName": "shared_sharepointonline",
+          "operationId": "HttpRequest"
+        },
+        "parameters": {
+          "dataset": "https://energeticaltda-my.sharepoint.com/personal/bernardonotini_energeticabr_com",
+          "parameters/method": "GET",
+          "parameters/uri": "_api/web/lists/getbytitle('SEFAZ_COLETA_FILA')/fields?$select=InternalName&$filter=InternalName eq 'REQUESTED_AT'",
+          "parameters/headers": {
+            "Accept": "application/json;odata=nometadata",
+            "Content-Type": "application/json;odata=nometadata"
+          }
+        },
+        "authentication": "@parameters('$authentication')"
+      },
+      "runAfter": {
+        "Garantir_STATUS": [
+          "Succeeded"
+        ]
+      }
+    },
+    "Garantir_REQUESTED_AT": {
+      "type": "If",
+      "expression": {
+        "equals": [
+          "@length(body('Localizar_REQUESTED_AT')?['value'])",
+          0
+        ]
+      },
+      "actions": {
+        "Criar_REQUESTED_AT": {
+          "type": "OpenApiConnection",
+          "inputs": {
+            "host": {
+              "apiId": "/providers/Microsoft.PowerApps/apis/shared_sharepointonline",
+              "connectionName": "shared_sharepointonline",
+              "operationId": "HttpRequest"
+            },
+            "parameters": {
+              "dataset": "https://energeticaltda-my.sharepoint.com/personal/bernardonotini_energeticabr_com",
+              "parameters/method": "POST",
+              "parameters/uri": "_api/web/lists/getbytitle('SEFAZ_COLETA_FILA')/fields/createfieldasxml",
+              "parameters/headers": {
+                "Accept": "application/json;odata=nometadata",
+                "Content-Type": "application/json;odata=nometadata"
+              },
+              "parameters/body": "{\"parameters\":{\"SchemaXml\":\"<Field Type=\\\"DateTime\\\" Name=\\\"REQUESTED_AT\\\" StaticName=\\\"REQUESTED_AT\\\" DisplayName=\\\"REQUESTED_AT\\\" Format=\\\"DateTime\\\" />\",\"Options\":8}}"
+            },
+            "authentication": "@parameters('$authentication')"
+          },
+          "runAfter": {}
+        }
+      },
+      "else": {
+        "actions": {}
+      },
+      "runAfter": {
+        "Localizar_REQUESTED_AT": [
+          "Succeeded"
+        ]
+      }
+    },
+    "Localizar_START_DATE": {
+      "type": "OpenApiConnection",
+      "inputs": {
+        "host": {
+          "apiId": "/providers/Microsoft.PowerApps/apis/shared_sharepointonline",
+          "connectionName": "shared_sharepointonline",
+          "operationId": "HttpRequest"
+        },
+        "parameters": {
+          "dataset": "https://energeticaltda-my.sharepoint.com/personal/bernardonotini_energeticabr_com",
+          "parameters/method": "GET",
+          "parameters/uri": "_api/web/lists/getbytitle('SEFAZ_COLETA_FILA')/fields?$select=InternalName&$filter=InternalName eq 'START_DATE'",
+          "parameters/headers": {
+            "Accept": "application/json;odata=nometadata",
+            "Content-Type": "application/json;odata=nometadata"
+          }
+        },
+        "authentication": "@parameters('$authentication')"
+      },
+      "runAfter": {
+        "Garantir_REQUESTED_AT": [
+          "Succeeded"
+        ]
+      }
+    },
+    "Garantir_START_DATE": {
+      "type": "If",
+      "expression": {
+        "equals": [
+          "@length(body('Localizar_START_DATE')?['value'])",
+          0
+        ]
+      },
+      "actions": {
+        "Criar_START_DATE": {
+          "type": "OpenApiConnection",
+          "inputs": {
+            "host": {
+              "apiId": "/providers/Microsoft.PowerApps/apis/shared_sharepointonline",
+              "connectionName": "shared_sharepointonline",
+              "operationId": "HttpRequest"
+            },
+            "parameters": {
+              "dataset": "https://energeticaltda-my.sharepoint.com/personal/bernardonotini_energeticabr_com",
+              "parameters/method": "POST",
+              "parameters/uri": "_api/web/lists/getbytitle('SEFAZ_COLETA_FILA')/fields/createfieldasxml",
+              "parameters/headers": {
+                "Accept": "application/json;odata=nometadata",
+                "Content-Type": "application/json;odata=nometadata"
+              },
+              "parameters/body": "{\"parameters\":{\"SchemaXml\":\"<Field Type=\\\"DateTime\\\" Name=\\\"START_DATE\\\" StaticName=\\\"START_DATE\\\" DisplayName=\\\"START_DATE\\\" Format=\\\"DateTime\\\" />\",\"Options\":8}}"
+            },
+            "authentication": "@parameters('$authentication')"
+          },
+          "runAfter": {}
+        }
+      },
+      "else": {
+        "actions": {}
+      },
+      "runAfter": {
+        "Localizar_START_DATE": [
+          "Succeeded"
+        ]
+      }
+    },
+    "Localizar_NEXT_ATTEMPT_AT": {
+      "type": "OpenApiConnection",
+      "inputs": {
+        "host": {
+          "apiId": "/providers/Microsoft.PowerApps/apis/shared_sharepointonline",
+          "connectionName": "shared_sharepointonline",
+          "operationId": "HttpRequest"
+        },
+        "parameters": {
+          "dataset": "https://energeticaltda-my.sharepoint.com/personal/bernardonotini_energeticabr_com",
+          "parameters/method": "GET",
+          "parameters/uri": "_api/web/lists/getbytitle('SEFAZ_COLETA_FILA')/fields?$select=InternalName&$filter=InternalName eq 'NEXT_ATTEMPT_AT'",
+          "parameters/headers": {
+            "Accept": "application/json;odata=nometadata",
+            "Content-Type": "application/json;odata=nometadata"
+          }
+        },
+        "authentication": "@parameters('$authentication')"
+      },
+      "runAfter": {
+        "Garantir_START_DATE": [
+          "Succeeded"
+        ]
+      }
+    },
+    "Garantir_NEXT_ATTEMPT_AT": {
+      "type": "If",
+      "expression": {
+        "equals": [
+          "@length(body('Localizar_NEXT_ATTEMPT_AT')?['value'])",
+          0
+        ]
+      },
+      "actions": {
+        "Criar_NEXT_ATTEMPT_AT": {
+          "type": "OpenApiConnection",
+          "inputs": {
+            "host": {
+              "apiId": "/providers/Microsoft.PowerApps/apis/shared_sharepointonline",
+              "connectionName": "shared_sharepointonline",
+              "operationId": "HttpRequest"
+            },
+            "parameters": {
+              "dataset": "https://energeticaltda-my.sharepoint.com/personal/bernardonotini_energeticabr_com",
+              "parameters/method": "POST",
+              "parameters/uri": "_api/web/lists/getbytitle('SEFAZ_COLETA_FILA')/fields/createfieldasxml",
+              "parameters/headers": {
+                "Accept": "application/json;odata=nometadata",
+                "Content-Type": "application/json;odata=nometadata"
+              },
+              "parameters/body": "{\"parameters\":{\"SchemaXml\":\"<Field Type=\\\"DateTime\\\" Name=\\\"NEXT_ATTEMPT_AT\\\" StaticName=\\\"NEXT_ATTEMPT_AT\\\" DisplayName=\\\"NEXT_ATTEMPT_AT\\\" Format=\\\"DateTime\\\" />\",\"Options\":8}}"
+            },
+            "authentication": "@parameters('$authentication')"
+          },
+          "runAfter": {}
+        }
+      },
+      "else": {
+        "actions": {}
+      },
+      "runAfter": {
+        "Localizar_NEXT_ATTEMPT_AT": [
+          "Succeeded"
+        ]
+      }
+    },
+    "Localizar_COMPLETED_AT": {
+      "type": "OpenApiConnection",
+      "inputs": {
+        "host": {
+          "apiId": "/providers/Microsoft.PowerApps/apis/shared_sharepointonline",
+          "connectionName": "shared_sharepointonline",
+          "operationId": "HttpRequest"
+        },
+        "parameters": {
+          "dataset": "https://energeticaltda-my.sharepoint.com/personal/bernardonotini_energeticabr_com",
+          "parameters/method": "GET",
+          "parameters/uri": "_api/web/lists/getbytitle('SEFAZ_COLETA_FILA')/fields?$select=InternalName&$filter=InternalName eq 'COMPLETED_AT'",
+          "parameters/headers": {
+            "Accept": "application/json;odata=nometadata",
+            "Content-Type": "application/json;odata=nometadata"
+          }
+        },
+        "authentication": "@parameters('$authentication')"
+      },
+      "runAfter": {
+        "Garantir_NEXT_ATTEMPT_AT": [
+          "Succeeded"
+        ]
+      }
+    },
+    "Garantir_COMPLETED_AT": {
+      "type": "If",
+      "expression": {
+        "equals": [
+          "@length(body('Localizar_COMPLETED_AT')?['value'])",
+          0
+        ]
+      },
+      "actions": {
+        "Criar_COMPLETED_AT": {
+          "type": "OpenApiConnection",
+          "inputs": {
+            "host": {
+              "apiId": "/providers/Microsoft.PowerApps/apis/shared_sharepointonline",
+              "connectionName": "shared_sharepointonline",
+              "operationId": "HttpRequest"
+            },
+            "parameters": {
+              "dataset": "https://energeticaltda-my.sharepoint.com/personal/bernardonotini_energeticabr_com",
+              "parameters/method": "POST",
+              "parameters/uri": "_api/web/lists/getbytitle('SEFAZ_COLETA_FILA')/fields/createfieldasxml",
+              "parameters/headers": {
+                "Accept": "application/json;odata=nometadata",
+                "Content-Type": "application/json;odata=nometadata"
+              },
+              "parameters/body": "{\"parameters\":{\"SchemaXml\":\"<Field Type=\\\"DateTime\\\" Name=\\\"COMPLETED_AT\\\" StaticName=\\\"COMPLETED_AT\\\" DisplayName=\\\"COMPLETED_AT\\\" Format=\\\"DateTime\\\" />\",\"Options\":8}}"
+            },
+            "authentication": "@parameters('$authentication')"
+          },
+          "runAfter": {}
+        }
+      },
+      "else": {
+        "actions": {}
+      },
+      "runAfter": {
+        "Localizar_COMPLETED_AT": [
+          "Succeeded"
+        ]
+      }
+    },
+    "Localizar_LEASE_UNTIL": {
+      "type": "OpenApiConnection",
+      "inputs": {
+        "host": {
+          "apiId": "/providers/Microsoft.PowerApps/apis/shared_sharepointonline",
+          "connectionName": "shared_sharepointonline",
+          "operationId": "HttpRequest"
+        },
+        "parameters": {
+          "dataset": "https://energeticaltda-my.sharepoint.com/personal/bernardonotini_energeticabr_com",
+          "parameters/method": "GET",
+          "parameters/uri": "_api/web/lists/getbytitle('SEFAZ_COLETA_FILA')/fields?$select=InternalName&$filter=InternalName eq 'LEASE_UNTIL'",
+          "parameters/headers": {
+            "Accept": "application/json;odata=nometadata",
+            "Content-Type": "application/json;odata=nometadata"
+          }
+        },
+        "authentication": "@parameters('$authentication')"
+      },
+      "runAfter": {
+        "Garantir_COMPLETED_AT": [
+          "Succeeded"
+        ]
+      }
+    },
+    "Garantir_LEASE_UNTIL": {
+      "type": "If",
+      "expression": {
+        "equals": [
+          "@length(body('Localizar_LEASE_UNTIL')?['value'])",
+          0
+        ]
+      },
+      "actions": {
+        "Criar_LEASE_UNTIL": {
+          "type": "OpenApiConnection",
+          "inputs": {
+            "host": {
+              "apiId": "/providers/Microsoft.PowerApps/apis/shared_sharepointonline",
+              "connectionName": "shared_sharepointonline",
+              "operationId": "HttpRequest"
+            },
+            "parameters": {
+              "dataset": "https://energeticaltda-my.sharepoint.com/personal/bernardonotini_energeticabr_com",
+              "parameters/method": "POST",
+              "parameters/uri": "_api/web/lists/getbytitle('SEFAZ_COLETA_FILA')/fields/createfieldasxml",
+              "parameters/headers": {
+                "Accept": "application/json;odata=nometadata",
+                "Content-Type": "application/json;odata=nometadata"
+              },
+              "parameters/body": "{\"parameters\":{\"SchemaXml\":\"<Field Type=\\\"DateTime\\\" Name=\\\"LEASE_UNTIL\\\" StaticName=\\\"LEASE_UNTIL\\\" DisplayName=\\\"LEASE_UNTIL\\\" Format=\\\"DateTime\\\" />\",\"Options\":8}}"
+            },
+            "authentication": "@parameters('$authentication')"
+          },
+          "runAfter": {}
+        }
+      },
+      "else": {
+        "actions": {}
+      },
+      "runAfter": {
+        "Localizar_LEASE_UNTIL": [
+          "Succeeded"
+        ]
+      }
+    },
+    "Localizar_ERROR_SUMMARY": {
+      "type": "OpenApiConnection",
+      "inputs": {
+        "host": {
+          "apiId": "/providers/Microsoft.PowerApps/apis/shared_sharepointonline",
+          "connectionName": "shared_sharepointonline",
+          "operationId": "HttpRequest"
+        },
+        "parameters": {
+          "dataset": "https://energeticaltda-my.sharepoint.com/personal/bernardonotini_energeticabr_com",
+          "parameters/method": "GET",
+          "parameters/uri": "_api/web/lists/getbytitle('SEFAZ_COLETA_FILA')/fields?$select=InternalName&$filter=InternalName eq 'ERROR_SUMMARY'",
+          "parameters/headers": {
+            "Accept": "application/json;odata=nometadata",
+            "Content-Type": "application/json;odata=nometadata"
+          }
+        },
+        "authentication": "@parameters('$authentication')"
+      },
+      "runAfter": {
+        "Garantir_LEASE_UNTIL": [
+          "Succeeded"
+        ]
+      }
+    },
+    "Garantir_ERROR_SUMMARY": {
+      "type": "If",
+      "expression": {
+        "equals": [
+          "@length(body('Localizar_ERROR_SUMMARY')?['value'])",
+          0
+        ]
+      },
+      "actions": {
+        "Criar_ERROR_SUMMARY": {
+          "type": "OpenApiConnection",
+          "inputs": {
+            "host": {
+              "apiId": "/providers/Microsoft.PowerApps/apis/shared_sharepointonline",
+              "connectionName": "shared_sharepointonline",
+              "operationId": "HttpRequest"
+            },
+            "parameters": {
+              "dataset": "https://energeticaltda-my.sharepoint.com/personal/bernardonotini_energeticabr_com",
+              "parameters/method": "POST",
+              "parameters/uri": "_api/web/lists/getbytitle('SEFAZ_COLETA_FILA')/fields/createfieldasxml",
+              "parameters/headers": {
+                "Accept": "application/json;odata=nometadata",
+                "Content-Type": "application/json;odata=nometadata"
+              },
+              "parameters/body": "{\"parameters\":{\"SchemaXml\":\"<Field Type=\\\"Note\\\" Name=\\\"ERROR_SUMMARY\\\" StaticName=\\\"ERROR_SUMMARY\\\" DisplayName=\\\"ERROR_SUMMARY\\\" RichText=\\\"FALSE\\\" />\",\"Options\":8}}"
+            },
+            "authentication": "@parameters('$authentication')"
+          },
+          "runAfter": {}
+        }
+      },
+      "else": {
+        "actions": {}
+      },
+      "runAfter": {
+        "Localizar_ERROR_SUMMARY": [
+          "Succeeded"
+        ]
+      }
+    },
+    "Localizar_ATTEMPTS": {
+      "type": "OpenApiConnection",
+      "inputs": {
+        "host": {
+          "apiId": "/providers/Microsoft.PowerApps/apis/shared_sharepointonline",
+          "connectionName": "shared_sharepointonline",
+          "operationId": "HttpRequest"
+        },
+        "parameters": {
+          "dataset": "https://energeticaltda-my.sharepoint.com/personal/bernardonotini_energeticabr_com",
+          "parameters/method": "GET",
+          "parameters/uri": "_api/web/lists/getbytitle('SEFAZ_COLETA_FILA')/fields?$select=InternalName&$filter=InternalName eq 'ATTEMPTS'",
+          "parameters/headers": {
+            "Accept": "application/json;odata=nometadata",
+            "Content-Type": "application/json;odata=nometadata"
+          }
+        },
+        "authentication": "@parameters('$authentication')"
+      },
+      "runAfter": {
+        "Garantir_ERROR_SUMMARY": [
+          "Succeeded"
+        ]
+      }
+    },
+    "Garantir_ATTEMPTS": {
+      "type": "If",
+      "expression": {
+        "equals": [
+          "@length(body('Localizar_ATTEMPTS')?['value'])",
+          0
+        ]
+      },
+      "actions": {
+        "Criar_ATTEMPTS": {
+          "type": "OpenApiConnection",
+          "inputs": {
+            "host": {
+              "apiId": "/providers/Microsoft.PowerApps/apis/shared_sharepointonline",
+              "connectionName": "shared_sharepointonline",
+              "operationId": "HttpRequest"
+            },
+            "parameters": {
+              "dataset": "https://energeticaltda-my.sharepoint.com/personal/bernardonotini_energeticabr_com",
+              "parameters/method": "POST",
+              "parameters/uri": "_api/web/lists/getbytitle('SEFAZ_COLETA_FILA')/fields/createfieldasxml",
+              "parameters/headers": {
+                "Accept": "application/json;odata=nometadata",
+                "Content-Type": "application/json;odata=nometadata"
+              },
+              "parameters/body": "{\"parameters\":{\"SchemaXml\":\"<Field Type=\\\"Number\\\" Name=\\\"ATTEMPTS\\\" StaticName=\\\"ATTEMPTS\\\" DisplayName=\\\"ATTEMPTS\\\" Decimals=\\\"0\\\" />\",\"Options\":8}}"
+            },
+            "authentication": "@parameters('$authentication')"
+          },
+          "runAfter": {}
+        }
+      },
+      "else": {
+        "actions": {}
+      },
+      "runAfter": {
+        "Localizar_ATTEMPTS": [
+          "Succeeded"
+        ]
+      }
+    },
+    "Verificar_fila": {
+      "type": "OpenApiConnection",
+      "inputs": {
+        "host": {
+          "apiId": "/providers/Microsoft.PowerApps/apis/shared_sharepointonline",
+          "connectionName": "shared_sharepointonline",
+          "operationId": "HttpRequest"
+        },
+        "parameters": {
+          "dataset": "https://energeticaltda-my.sharepoint.com/personal/bernardonotini_energeticabr_com",
+          "parameters/method": "GET",
+          "parameters/uri": "_api/web/lists/getbytitle('SEFAZ_COLETA_FILA')?$select=Id,Title,EnableVersioning,EnableAttachments",
+          "parameters/headers": {
+            "Accept": "application/json;odata=nometadata",
+            "Content-Type": "application/json;odata=nometadata"
+          }
+        },
+        "authentication": "@parameters('$authentication')"
+      },
+      "runAfter": {
+        "Garantir_ATTEMPTS": [
+          "Succeeded"
+        ]
+      }
+    }
+  },
+  "outputs": {}
+}
