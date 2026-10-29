@@ -20,6 +20,9 @@ import androidx.test.platform.app.InstrumentationRegistry;
 import androidx.test.uiautomator.By;
 import androidx.test.uiautomator.UiDevice;
 import androidx.test.uiautomator.Until;
+import java.io.ByteArrayOutputStream;
+import java.io.IOException;
+import java.nio.charset.StandardCharsets;
 import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicBoolean;
@@ -113,6 +116,18 @@ public class ExampleInstrumentedTest {
         completed.await(5, TimeUnit.SECONDS);
     }
 
+    private String browserFailureDiagnostics(UiDevice device) {
+        try {
+            ByteArrayOutputStream hierarchy = new ByteArrayOutputStream();
+            device.dumpWindowHierarchy(hierarchy);
+            String safeHierarchy = new String(hierarchy.toByteArray(), StandardCharsets.UTF_8)
+                .replaceAll("(https?://[^?\\\"\\s<]+)\\?[^\\\"\\s<]+", "$1?[redacted]");
+            return "\nPacote atual: " + device.getCurrentPackageName() + "\n" + safeHierarchy;
+        } catch (IOException exception) {
+            return "\nNão foi possível capturar a hierarquia: " + exception.getClass().getSimpleName();
+        }
+    }
+
     @Test
     public void applicationIdMatchesMicrosoftRedirectRegistration() {
         Context appContext = InstrumentationRegistry.getInstrumentation().getTargetContext();
@@ -153,8 +168,12 @@ public class ExampleInstrumentedTest {
         Pattern microsoftPrompt = Pattern.compile(
             "(?i).*(sign in|pick an account|entrar|escolha uma conta).*"
         );
-        assertTrue("O navegador abriu, mas a página real da Microsoft não carregou",
-            device.wait(Until.hasObject(By.text(microsoftPrompt)), 30_000L));
+        boolean microsoftPageLoaded = device.wait(Until.hasObject(By.text(microsoftPrompt)), 30_000L);
+        if (!microsoftPageLoaded) {
+            String diagnostics = browserFailureDiagnostics(device);
+            System.out.println("MICROSOFT_BROWSER_FAILURE" + diagnostics);
+            assertTrue("O navegador abriu, mas a página real da Microsoft não carregou" + diagnostics, false);
+        }
 
         device.pressBack();
         device.wait(Until.hasObject(By.pkg(appPackage).depth(0)), 10_000L);
