@@ -39,6 +39,17 @@ test('NF-e não colore por impostos comuns, ausência, zero, saída, cancelament
   assert.equal(doc.querySelectorAll('.rg-sefaz-withholding').length,0);
 });
 
+test('retenção ausente em XML analisado é não informada; documento sem análise permanece pendente', async t => {
+  const dom=new JSDOM('<body/>'),doc=dom.window.document;
+  const gallery=createRegistrationGallery({document:doc,kind:'notas_fiscais_sefaz',data:{loadSnapshot:async()=>({rows:[
+    {id:'1',fields:{...sample.fields,STATUS_IMPORTACAO:'XML_COMPLETO',STATUS_RETENCOES:'NAO_INFORMADA_XML'}},
+    {id:'2',fields:{...sample.fields,STATUS_IMPORTACAO:'RESUMO_AGUARDANDO_XML'}},
+  ]})}});
+  t.after(()=>{gallery.destroy();dom.window.close();});await gallery.open();
+  assert.equal(doc.querySelector('[data-registration-row="1"] [data-field="INSS_RETIDO"] dd').textContent,'Não informado no XML');
+  assert.equal(doc.querySelector('[data-registration-row="2"] [data-field="INSS_RETIDO"] dd').textContent,'Pendente');
+});
+
 test('Suprimentos adds a third gray NF-e gallery below launches and expands the existing blue action', () => {
   const dom = new JSDOM(renderChatMarkup({ sessionStatus: 'authenticated', account: { name: 'Teste' }, messages: [{
     id: 'supplies', role: 'assistant', type: 'poll', question: 'SUPRIMENTOS\nQUAL FLUXO VOCÊ DESEJA INICIAR?',

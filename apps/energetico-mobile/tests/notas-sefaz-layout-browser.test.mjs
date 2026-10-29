@@ -17,11 +17,11 @@ test('NF-e gallery and three-gallery launch group fit narrow phones and Windows 
     devServer.middlewares.use('/__notas-built.css', (_req, res) => { res.setHeader('Content-Type', 'text/css'); res.end(css); });
   } }], server: { host: '127.0.0.1', port: 0, fs: { allow: [resolve(root, '../..')] } } });
   await server.listen(); t.after(() => server.close());
-  for (const [width, pwa, mode, expanded, withholding] of [[320, false, 'gallery'], [390, false, 'gallery'], [768, false, 'gallery'], [1365, false, 'gallery'],
+  for (const [width, pwa, mode, expanded, withholding, retentionNone] of [[320, false, 'gallery'], [390, false, 'gallery'], [768, false, 'gallery'], [1365, false, 'gallery'],
     [320, false, 'menu'], [390, false, 'menu'], [1365, false, 'menu'], [390, true, 'gallery'], [1365, true, 'gallery'], [320, true, 'menu'], [390, false, 'gallery', true], [320, false, 'gallery', true],
-    [320,false,'gallery',false,true], [390,false,'gallery',false,true], [390,true,'gallery',false,true], [320,false,'gallery',true,true]]) {
+    [320,false,'gallery',false,true], [390,false,'gallery',false,true], [390,true,'gallery',false,true], [320,false,'gallery',true,true], [390,false,'gallery',true,false,true]]) {
     const { stdout, screenshot } = await runBrowserLayout(browser, { width, height: expanded ? 1700 : 1100, mobile: width < 700,
-      url: `http://127.0.0.1:${server.httpServer.address().port}/tests/fixtures/notas-sefaz-responsive.html?mode=${mode}${pwa ? '&pwa' : ''}${expanded ? '&expanded' : ''}${withholding ? '&withholding' : ''}`,
+      url: `http://127.0.0.1:${server.httpServer.address().port}/tests/fixtures/notas-sefaz-responsive.html?mode=${mode}${pwa ? '&pwa' : ''}${expanded ? '&expanded' : ''}${withholding ? '&withholding' : ''}${retentionNone ? '&retentionNone' : ''}`,
       captureScreenshot: width === 390 && !pwa && Boolean(process.env.NOTAS_SEFAZ_SCREENSHOT_DIR) });
     const dom = new JSDOM(stdout), layout = JSON.parse(dom.window.document.documentElement.dataset.layout); dom.window.close();
     assert.equal(layout.overflow, false, `${width}/${pwa}/${mode}: page overflow`);

@@ -598,8 +598,11 @@ export function createRegistrationGallery({ document: doc = globalThis.document,
       const value = rowFieldValue(row, field);
       const absentCompleteNote = kind === 'notas_fiscais_sefaz' && ['OBSERVACOES_NOTA', 'INFORMACOES_FISCO'].includes(field)
         && registrationRawField(row.fields, 'STATUS_IMPORTACAO', model) === 'XML_COMPLETO';
+      const absentAnalyzedRetention = kind === 'notas_fiscais_sefaz' && Object.hasOwn(SEFAZ_RETENTION_FIELDS, field)
+        && registrationRawField(row.fields, 'STATUS_IMPORTACAO', model) === 'XML_COMPLETO'
+        && ['RETENCAO_INFORMADA_XML', 'NAO_INFORMADA_XML'].includes(registrationRawField(row.fields, 'STATUS_RETENCOES', model));
       const target = fiscalSections.find(section => section.fields.includes(field))?.content || details;
-      const pair = appendDocumentDetail(target, field, fieldLabel(field), value || (absentCompleteNote ? 'Não consta na nota' : model.emptyValue));
+      const pair = appendDocumentDetail(target, field, fieldLabel(field), value || (absentCompleteNote ? 'Não consta na nota' : absentAnalyzedRetention ? 'Não informado no XML' : model.emptyValue));
       if (pair && value && model.fieldTypes?.[field] === 'url') {
         const link = el('a', 'rg-document-link', `Abrir ${fieldLabel(field)}`);
         link.href = value;

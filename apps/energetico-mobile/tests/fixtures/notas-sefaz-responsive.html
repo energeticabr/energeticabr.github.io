@@ -24,6 +24,7 @@ if (mode === 'menu') {
     ULTIMO_DOCUMENTO_URL: 'https://energeticaltda.sharepoint.com/sites/energetica/Documentos/nota-ficticia.xml',
     DANFE_URL: 'https://energeticaltda.sharepoint.com/sites/energetica/Documentos/danfe-ficticio.pdf' };
   if (new URLSearchParams(location.search).has('withholding')) Object.assign(fields, {STATUS_IMPORTACAO:'XML_COMPLETO', STATUS_RETENCOES:'RETENCAO_INFORMADA_XML', PIS_RETIDO:6.5, COFINS_RETIDA:30, CSLL_RETIDA:10, IRRF_RETIDO:15, INSS_RETIDO:110, ISS_RETIDO:25});
+  if (new URLSearchParams(location.search).has('retentionNone')) Object.assign(fields, {STATUS_IMPORTACAO:'XML_COMPLETO',STATUS_RETENCOES:'NAO_INFORMADA_XML'});
   await createRegistrationGallery({ document, kind: 'notas_fiscais_sefaz', onHome() {}, data: { async loadSnapshot() { return { rows: [
     { id: '4', fields },
     { id: '5', fields: { Title: 'RESUMO FICTÍCIO — DOCUMENTOS PENDENTES', NUMERO_NOTA: '555', DATA_EMISSAO: '2026-10-28',
