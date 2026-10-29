@@ -21,7 +21,8 @@ class SettlementPayrollTests(launch_fixture.PerPaymentTests):
         self.current['fields']=copy.deepcopy(entries[0]['fields'])
         self.current['sharepoint']={**copy.deepcopy(rows[0]),'recorded_at':'2026-10-29T12:00:00Z'}
         if multi:
-            self.current['provision_description']={'parent_id':'7','entries':entries}
+            self.current['provision_description']={'parent_id':'7','entries':entries,
+                'journal':{'intent':{'DATA PGTO EFETUADO':'2026-10-29'},'children':{str(r['item_id']):copy.deepcopy(r) for r in rows}}}
             self.current['sharepoint']['line_items']=rows
         self.sharepoint.options_by_key['launch_payroll_supplier_contractors']=[
             {'id':1,'value':'SIM','source_values':{'EMPREITEIRO':'SIM'}}]
@@ -109,3 +110,39 @@ class SettlementPayrollTests(launch_fixture.PerPaymentTests):
         self.sharepoint.verify_item=original
         self.send('launch_payroll_type_salary')
         self.assertEqual(len(self.rows()),1)
+
+    def test_confirmed_date_overrides_old_group_entry_snapshot(self):
+        self.settlement(multi=True)
+        state,etag=self.load()
+        state['provision_description']['entries'][0]['fields']['DATA PGTO EFETUADO']='2026-10-15'
+        state['sharepoint']['line_items'][0]['expected_fields']={'DATA PGTO EFETUADO':'2026-10-29'}
+        state.pop('pending_launch_payroll',None)
+        state.pop('settlement_payroll_batch',None)
+        self.engine._notify_completed(state,etag)
+        self.send('launch_payroll_yes')
+        self.send('launch_payroll_selected:11')
+        self.choose(31)
+        self.send('launch_payroll_type_salary')
+        self.assertEqual(self.rows()[0]['DATA'],'2026-10-29')
+
+    def test_replayed_loading_retry_never_becomes_yes_consent(self):
+        original=self.sharepoint.get_options
+        def fail(step,ctx=None):
+            if step.get('key')=='launch_payroll_supplier_contractors':
+                raise RuntimeError('read outage')
+            return original(step,ctx)
+        self.sharepoint.get_options=fail
+        self.settlement()
+        self.sharepoint.get_options=original
+        self.send('launch_payroll_yes',message='loading-retry-fixed-id')
+        self.send('launch_payroll_yes',message='loading-retry-fixed-id')
+        self.assertIsNone(self.pending()['decision'])
+
+    def test_unconfirmed_group_keeps_frozen_journal_guard(self):
+        self.settlement(multi=True)
+        state,etag=self.load()
+        state['sharepoint']['line_items'][0]['verified']=False
+        result=self.engine._handle_frozen_provision({'kind':'text','reply_id':'launch_payroll_yes','message_id':'guard-test'},state,etag)
+        self.assertEqual(result['status'],'provision_submission_locked')
+        self.assertTrue(state['provision_description']['journal']['intent'])
+        self.assertFalse(self.sharepoint.items)

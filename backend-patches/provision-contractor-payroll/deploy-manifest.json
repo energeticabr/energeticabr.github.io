@@ -3,9 +3,14 @@
     "worker/workflow.py": {
       "before": "f3820c16cd46f75e18dfa3d96a9a515a72a1f23a85c036f16610e360df845530",
       "mirrorBefore": "f3820c16cd46f75e18dfa3d96a9a515a72a1f23a85c036f16610e360df845530",
-      "after": "0d18f9a776917950223fe4fad5f8a56b05b9981d24b611ae682f0d5983816ed6"
+      "after": "9d208eda2c53e05f6f5e098b911320d5fe9f98b0de85cc2831ef1a8a993403c1"
+    },
+    "worker/provision_description_settlement.py": {
+      "before": "8fd6c6b2a19b51785be50fd71b2456ad660b94b9fab55d786988f0a74e7bc59c",
+      "mirrorBefore": "8fd6c6b2a19b51785be50fd71b2456ad660b94b9fab55d786988f0a74e7bc59c",
+      "after": "39af07bed8f447eabb564c17b79b81f4a0579b86ff3b4e0081895e3d841ff063"
     }
   },
-  "patch": "81a1772e772da224b2d1bb12ab591d002256f2d10b569650d8fe7b95787287de",
-  "archive": "7003dc656d7632de94cd49ad199431fa304370ad69081c137e767203cbbd5afe"
+  "patch": "d094ecf2b4bfd6e9275ffd0b593626fbeca306c7fdce7e110e213f6a5aa5aa5e",
+  "archive": "19115291a4e33b04ee71fdf06e456daa8e863a476b383e864b45303ef45af654"
 }

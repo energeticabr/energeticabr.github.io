@@ -8,4 +8,6 @@ As perguntas ocorrem depois da baixa confirmada e antes do recibo final. NÃO co
 
 Os testes utilizam canal, workflow e estado otimista reais com SharePoint e dados fictícios. Cobrem baixa simples, em grupo, sem lançamento, recusa, fornecedor não empreiteiro, falha/retomada de consulta, folha de outro fornecedor, confirmação negativa da gravação e regressões do fluxo de lançamentos. Não há gravações financeiras em produção para QA. As prévias usam mensagens reais do canal fictício e o renderizador do app em 390 e 320 px.
 
-O pacote altera somente worker/workflow.py na VM e no espelho, com hashes independentes, lock, backup, rollback e verificação de saúde. O bundle integral permanece privado; apenas diff, manifesto e instalador são versionados. Android, iOS e PC/web consomem a alteração pelo serviço compartilhado, sem novos binários.
+O journal de baixa em grupo permanece congelado. Somente as respostas de texto nas quatro etapas de folha passam pelo bloqueio após a confirmação de todas as linhas. Os dados confirmados do recibo prevalecem sobre snapshots anteriores, e repetir uma mensagem de retomada não representa consentimento para vincular.
+
+O pacote altera worker/workflow.py e worker/provision_description_settlement.py na VM e no espelho, com hashes independentes, lock, backup, rollback e verificação de saúde. O bundle integral permanece privado; apenas diff, manifesto e instalador são versionados. Android, iOS e PC/web consomem a alteração pelo serviço compartilhado, sem novos binários.

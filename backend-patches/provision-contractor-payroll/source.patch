@@ -18,7 +18,7 @@
              return False
          for option in options:
              source = option.get("source_values") or {}
-@@ -31163,6 +31165,51 @@
+@@ -31163,6 +31165,52 @@
                  return self._launch_payroll_is_contractor(status)
          return False
  
@@ -35,6 +35,7 @@
 +                if provision_id <= 0:
 +                    raise ValueError("Provisão inválida")
 +                fields = snapshots.get(str(provision_id), state.get("fields") or {})
++                fields = {**fields, **(record.get("expected_fields") or {})}
 +                if str(fields.get("ID PROVISÃO")) != str(provision_id):
 +                    raise ValueError("Snapshot da provisão divergente")
 +                verified = record.get("verified")
@@ -70,7 +71,7 @@
      def _maybe_prompt_launch_payroll(
          self,
          state: dict,
-@@ -31170,7 +31217,7 @@
+@@ -31170,7 +31218,7 @@
          launch_items: list[dict],
      ) -> dict | None:
          """Ask about payroll only after the launch rows were saved successfully."""
@@ -79,7 +80,7 @@
              return None
  
          entries = []
-@@ -31194,7 +31241,7 @@
+@@ -31194,7 +31242,7 @@
              contractor = supplier_source.get("EMPREITEIRO")
              if contractor in {None, ""}:
                  contractor_enabled = self._launch_payroll_supplier_contractor(
@@ -88,7 +89,7 @@
                  )
              else:
                  contractor_enabled = self._launch_payroll_is_contractor(
-@@ -31207,6 +31254,8 @@
+@@ -31207,6 +31255,8 @@
                      "supplier": supplier,
                      "supplier_source_values": supplier_source,
                      "eligible": contractor_enabled,
@@ -97,7 +98,7 @@
                  }
              )
          eligible_ids = [
-@@ -31238,7 +31287,10 @@
+@@ -31238,7 +31288,10 @@
          pending = state.get("pending_launch_payroll") or {}
          entries = pending.get("entries") or []
          eligible_ids = ", ".join(pending.get("eligible_ids") or [])
@@ -109,17 +110,18 @@
              prompt = (
                  f"✅ O LANÇAMENTO {entries[0]['item_id']} DO FORNECEDOR "
                  f"{entries[0].get('supplier') or 'NÃO IDENTIFICADO'} FOI "
-@@ -31268,6 +31320,9 @@
+@@ -31268,6 +31321,10 @@
              return {"status": "duplicate", "message_id": message_id, "batch_id": state.get("batch_id")}
          command = _control_command(event.get("reply_id") or event.get("text") or "")
          pending = state.get("pending_launch_payroll") or {}
 +        if pending.get("settlement_loading"):
++            self._mark_processed(state, message_id)
 +            result = self._maybe_prompt_settlement_payroll(state, etag)
 +            return result if result is not None else self._notify_completed(state, etag)
          if command not in {
              normalize_text(LAUNCH_PAYROLL_YES_ID),
              normalize_text(LAUNCH_PAYROLL_NO_ID),
-@@ -31343,10 +31398,12 @@
+@@ -31343,10 +31400,12 @@
          step = {
              "key": "launch_payroll_entries",
              "prompt": (
@@ -135,7 +137,7 @@
              "presentation": "launch_payroll_multi_select",
              "source": {"type": "static"},
          }
-@@ -31599,7 +31656,7 @@
+@@ -31599,7 +31658,7 @@
                  step = {
                      "key": option_key,
                      "prompt": (
@@ -144,7 +146,7 @@
                          f"— {supplier} — VALOR TOTAL {total}. "
                          "A QUAL FOLHA DESEJA VINCULAR ESTE PAGAMENTO?"
                      ),
-@@ -31696,7 +31753,7 @@
+@@ -31696,7 +31755,7 @@
          fields = entry.get("fields") or {}
          total = self._launch_payroll_total(fields)
          prompt = (
@@ -153,7 +155,7 @@
              f"{_currency_display(total)}, QUAL O TIPO GASTO?"
          )
          self._send_actions(
-@@ -31762,6 +31819,13 @@
+@@ -31762,6 +31821,13 @@
              token = (
                  f"WA-launch-payroll-{state['batch_id']}-{launch_id}"
              )
@@ -167,7 +169,7 @@
              payroll_item_id = self.sharepoint.ensure_item(
                  token,
                  payroll_fields,
-@@ -31775,6 +31839,10 @@
+@@ -31775,6 +31841,10 @@
                  [],
                  target_list="FOLHAPGTO",
              )
@@ -178,7 +180,7 @@
          except Exception:
              self._send_text(
                  state,
-@@ -34167,6 +34235,11 @@
+@@ -34167,6 +34237,11 @@
          etag, receipt_recovery = CashReceiptFlow(self).complete(state, etag)
          if receipt_recovery is not None:
              return receipt_recovery
@@ -190,3 +192,23 @@
          item_id = state["sharepoint"]["item_id"]
          recorded_at = _parse_instant(state["sharepoint"].get("recorded_at"))
          if recorded_at is None:
+--- a/worker/provision_description_settlement.py
++++ b/worker/provision_description_settlement.py
+@@ -231,6 +231,17 @@
+                 return self._prompt_next_or_summary(state, etag)
+             except Exception as error:
+                 return self._submission_failed(state, etag, error)
++        # A confirmed group may continue only its optional payroll text flow;
++        # keep the durable settlement journal and all attachment/write guards.
++        if (state.get('flow') == 'payment_settlement' and event.get('kind') == 'text'
++                and state.get('stage') in {'asking_launch_payroll', 'selecting_launch_payroll_entries',
++                                          'selecting_launch_payroll_sheet', 'selecting_launch_payroll_type'}
++                and state.get('pending_launch_payroll')
++                and (state.get('settlement_payroll_batch') == state.get('batch_id')
++                     or state['pending_launch_payroll'].get('settlement_loading'))
++                and (state.get('sharepoint') or {}).get('line_items')
++                and all(_verified(row.get('verified')) for row in state['sharepoint']['line_items'])):
++            return None
+         if not (group.get('journal') or {}).get('intent') or state.get('stage') == 'completed':
+             return super()._handle_frozen_provision(event, state, etag)
+         if event.get('message_id') in state.get('processed_message_ids', []):

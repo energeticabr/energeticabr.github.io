@@ -80,13 +80,13 @@ def test_cached_assembly_compiles_only_python_sources(tmp_path, monkeypatch):
         return original_compile(path, **kwargs)
     monkeypatch.setattr(deploy.py_compile, 'compile', checked_compile)
     assert deploy.assemble(manifest) == candidate
-    assert compiled == ['worker/workflow.py']
+    assert compiled == list(deploy.FILES)
 
 
 def test_scoped_files_stage_and_shared_runner_pin():
     deploy = load('launch_unit_deploy_scope_test', ROOT / 'deploy.py')
     package = load('launch_unit_package_scope_test', ROOT / 'package.py')
-    expected = ('worker/workflow.py',)
+    expected = ('worker/workflow.py', 'worker/provision_description_settlement.py')
     assert deploy.FILES == package.FILES == expected
     assert deploy.NEW_HELPERS == ()
     assert deploy.STAGE.as_posix() == '/home/opc/provision-contractor-payroll-20261029/package'
