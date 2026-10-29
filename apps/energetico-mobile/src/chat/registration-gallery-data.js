@@ -20,7 +20,7 @@ export const REGISTRATION_GALLERY_MODELS = Object.freeze({
   notas_fiscais_sefaz: Object.freeze({
     title: "GALERIA NOTAS FISCAIS SEFAZ", listName: "NOTAS_FISCAIS_SEFAZ", aliases: ["NOTAS_FISCAIS_SEFAZ"], siteKey: "company",
     nativeCard: true, readOnly: true, readTransport: "rest", recordLabel: "nota fiscal", emptyValue: "Pendente",
-    sourceNotice: "Fonte: SEFAZ. Consulta dos últimos três meses; cobertura pendente de conferência. Resumos e documentos ainda não obtidos permanecem pendentes.",
+    sourceNotice: "Fonte: SEFAZ. Cobertura do período configurado pendente de conferência. Resumos e documentos ainda não obtidos permanecem pendentes.",
     restReadFields: ["ID", "Title", "CHAVE_ACESSO", "CNPJ_FORNECEDOR", "UF_FORNECEDOR", "NUMERO_NOTA", "SERIE", "DATA_EMISSAO", "DATA_EMISSAO_ORIGINAL", "VALOR_TOTAL_NOTA", "DESCONTOS", "VALOR_LIQUIDO", "ORIGEM_LIQUIDO", "SITUACAO", "STATUS_IMPORTACAO", "XML_URL", "ULTIMO_DOCUMENTO_URL", "DANFE_URL", "DIRECAO", "OBSERVACOES_NOTA", "INFORMACOES_FISCO", "NATUREZA_OPERACAO", "DESTINATARIO", "CNPJ_DESTINATARIO", "VALOR_PRODUTOS", "FRETE", "SEGURO", "OUTRAS_DESPESAS", "ICMS", "IPI", "PROTOCOLO", "MODELO", "STATUS_DANFE"],
     restExpandSystemFields: false,
     searchPlaceholder: "Pesquisar fornecedor, CNPJ, número, chave ou observações",
