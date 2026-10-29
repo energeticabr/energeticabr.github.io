@@ -40,6 +40,10 @@ test('NF-e renders confirmed values, preserves access-key text and exposes only 
   assert.equal(row.querySelector('[data-field="DATA_EMISSAO"] dd').textContent, '29/10/2026');
   assert.equal(row.querySelector('[data-field="XML_URL"] a').href, sample.fields.XML_URL);
   assert.equal(row.querySelector('[data-field="DANFE_URL"] a').href, sample.fields.DANFE_URL.Url);
+  assert.ok(row.querySelector('.rg-sefaz-layout > .rg-sefaz-pdf-rail [data-field="DANFE_URL"] a'));
+  assert.equal(row.querySelector('.rg-sefaz-pdf-link').getAttribute('aria-label'), 'Abrir DANFE PDF da nota 123');
+  assert.equal(row.querySelector('.rg-sefaz-pdf-glyph').textContent, 'PDF');
+  assert.equal(row.querySelectorAll('[data-field="DANFE_URL"] a').length, 1, 'um único atalho para o PDF específico da linha');
   assert.equal(row.querySelector('[data-field="ULTIMO_DOCUMENTO_URL"] dd').textContent, 'Pendente');
   assert.equal(doc.querySelector('[data-action="create-registration"]'), null);
   assert.equal(row.querySelector('[data-gallery-action]'), null);
@@ -191,6 +195,7 @@ test('NF-e document links open through the app preview with a lazy authenticated
   const link = doc.querySelector('[data-field="DANFE_URL"] a');
   assert.equal(link.dispatchEvent(new dom.window.MouseEvent('click', { bubbles: true, cancelable: true })), false);
   assert.equal(opened.length, 1);
+  assert.ok(link.closest('.rg-sefaz-pdf-rail'), 'o ícone à esquerda reutiliza o download autenticado e o visualizador');
   assert.equal(downloads.length, 0);
   assert.equal(opened[0][0].fileName, 'danfe.pdf');
   const signal = new AbortController().signal;
@@ -198,4 +203,22 @@ test('NF-e document links open through the app preview with a lazy authenticated
   assert.equal(blob.type, 'application/pdf');
   assert.equal(downloads[0][0], sample.fields.DANFE_URL.Url);
   assert.equal(downloads[0][1].signal, signal);
+});
+
+test('cada ícone PDF abre somente o DANFE anexado à sua própria nota', async t => {
+  const dom = new JSDOM('<body/>'), doc = dom.window.document;
+  const opened = [], downloads = [];
+  const urls = [4, 5].map(id => `https://energeticaltda.sharepoint.com/sites/energetica/Lists/NOTAS_FISCAIS_SEFAZ/Attachments/${id}/DANFE-${id}.pdf`);
+  const rows = urls.map((url, index) => ({ id: String(index + 4), fields: { ...sample.fields, DANFE_URL: url } }));
+  const gallery = createRegistrationGallery({ document: doc, kind: 'notas_fiscais_sefaz', data: {
+    loadSnapshot: async () => ({rows}),
+    downloadDocument: async url => { downloads.push(url); return new Blob(['%PDF-fictitious'], {type: 'application/pdf'}); },
+  }, openMediaCollection: items => opened.push(items) });
+  t.after(() => { gallery.destroy(); dom.window.close(); });
+  await gallery.open();
+  for (const link of doc.querySelectorAll('.rg-sefaz-pdf-link')) link.click();
+  assert.equal(opened.length, 2);
+  assert.deepEqual(opened.map(items => items[0].fileName), ['DANFE-4.pdf', 'DANFE-5.pdf']);
+  for (const items of opened) await items[0].source({});
+  assert.deepEqual(downloads, urls);
 });

@@ -27,6 +27,13 @@
 .rg-fiscal-section__summary:focus-visible { outline: 3px solid #e3aa19; outline-offset: 2px; border-radius: 8px; }
 .rg-fiscal-section__content { padding: 0 12px 12px; }
 .rg-fiscal-section:not([open]) > .rg-fiscal-section__content { display: none; }
+.rg-row-layout.rg-sefaz-layout { grid-template-columns: 52px minmax(0, 1fr); }
+.rg-sefaz-pdf-rail { min-width: 0; margin: 0; align-self: start; }
+.rg-sefaz-pdf-rail dt { display: none; }
+.rg-sefaz-pdf-link { flex-direction: column; justify-content: center; gap: 6px; width: 100%; min-height: 76px; padding: 8px 4px; font-size: .65rem; text-decoration: none; background: #fff5f6; border-color: #edc9d0; color: #9e1734; }
+.rg-sefaz-pdf-glyph, .rg-sefaz-pdf-rail--pending dd::before { display: grid; place-items: center; width: 30px; height: 38px; padding-top: 8px; border-radius: 3px; background: #d62042; color: #fff; clip-path: polygon(0 0, 70% 0, 100% 24%, 100% 100%, 0 100%); font-size: .6rem; font-weight: 850; }
+.rg-sefaz-pdf-rail--pending dd { display: grid; justify-items: center; gap: 6px; color: #647780; font-size: .65rem; text-align: center; }
+.rg-sefaz-pdf-rail--pending dd::before { content: 'PDF'; background: #98a6ad; }
 .rg-list { display: grid; gap: 9px; }
 .rg-row { padding: 12px; border: 1px solid #d6e3e7; border-radius: 11px; background: #fff; }
 .rg-row--documents { padding: 7px; box-shadow: 0 2px 12px #153e5b0a; }
@@ -41,6 +48,7 @@
 .rg-row-title { display: block; margin-bottom: 7px; color: #07566b; overflow-wrap: anywhere; }
 .rg-details { display: grid; grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); gap: 7px; margin: 0; }
 .rg-row--native .rg-details { grid-template-columns: repeat(auto-fit, minmax(min(100%, 150px), 1fr)); }
+.rg-row--sefaz .rg-details { grid-template-columns: repeat(auto-fit, minmax(min(100%, 100px), 1fr)); }
 .rg-row--native .rg-document-heading { flex-wrap: wrap; }
 .rg-detail { min-width: 0; }
 .rg-detail dt { color: #5c6d74; font-size: .75rem; font-weight: 700; }
