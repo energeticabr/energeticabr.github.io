@@ -16,11 +16,13 @@ export function createDdaReportView({document:doc=globalThis.document,data,openM
  const root=make('div','pl-overlay ddr-overlay');root.hidden=true;root.tabIndex=-1;root.setAttribute('aria-busy','false');
  const panel=make('section','pl-dialog ddr-dialog');panel.tabIndex=-1;panel.setAttribute('role','dialog');panel.setAttribute('aria-modal','true');panel.setAttribute('aria-label','Relatório DDA');
  const report=make('div','pl-report ddr-report'),toolbar=make('div','pl-filters ddr-toolbar');
- const refresh=button('Atualizar DDAs','⟳');refresh.className='pl-refresh';toolbar.append(refresh);
+ const header=make('header','ddr-header-row'),logo=make('img','ddr-header-logo'),title=make('h2','ddr-header-title','RELATÓRIO DDA'),filters=make('div','ddr-filter-row');
+ logo.src=LOGO;logo.alt='Energética Construtora';
+ const refresh=button('Atualizar DDAs','⟳');refresh.className='pl-refresh';header.append(logo,refresh,title);toolbar.append(header,filters);
  const controls={};
  for(const [name,label,tag] of [['status','Situação','select'],['bank','Banco','select'],['search','Pesquisar fornecedor, documento ou ID','input']]){
   const holder=make('label','ddr-filter'),control=make(tag);control.name=name;control.setAttribute('aria-label',label);if(tag==='input'){control.type='search';control.placeholder='Fornecedor, documento ou ID';}
-  holder.append(make('span','',label),control);toolbar.append(holder);controls[name]=control;
+  holder.append(make('span','',label),control);filters.append(holder);controls[name]=control;
  }
  const content=make('div','pl-table-scroll ddr-content');content.tabIndex=0;content.setAttribute('role','region');content.setAttribute('aria-label','DDAs da empresa');
  const notice=make('p','ddr-notice');notice.setAttribute('role','status');notice.hidden=true;
@@ -67,7 +69,6 @@ export function createDdaReportView({document:doc=globalThis.document,data,openM
  function render(){
   if(content.contains(doc.activeElement))panel.focus({preventScroll:true});content.replaceChildren();if(!rows)return;
   const currentDate=now(),today=ddaTodayKey(currentDate),result=buildDdaReport(rows,selected(),currentDate),pages=Math.max(1,Math.ceil(result.rows.length/50));page=Math.min(page,pages);
-  const heading=make('header','ddr-heading'),logo=make('img');logo.src=LOGO;logo.alt='Energética Construtora';heading.append(logo,make('h2','','RELATÓRIO DDA'));content.append(heading);
   const summary=make('div','ddr-summary');summary.dataset.ddaSummary='';
   for(const [label,value] of [['DDAs encontrados',result.rows.length],['Valor nominal total',money(result.total)],['Vencidos no filtro',result.overdue],['Vencem hoje',result.today]]){const metric=make('div','ddr-metric');metric.append(make('span','',label),make('strong','',value));summary.append(metric);}content.append(summary);
   content.append(make('p','ddr-source','Situação bancária ou pagamento confirmado pelo usuário. Ordenação pelo vencimento mais próximo.'));

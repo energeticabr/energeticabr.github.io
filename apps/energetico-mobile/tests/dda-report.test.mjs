@@ -4,7 +4,7 @@ import {JSDOM} from 'jsdom';
 import {normalizeDdaReportRows,buildDdaReport} from '../src/chat/dda-report-model.js';
 import {createDdaReportView} from '../src/ui/dda-report-view.js';
 import {createRegistrationGalleryData} from '../src/chat/registration-gallery-data.js';
-import {captureFilteredReport} from '../src/ui/report-print.js';
+import {captureFilteredReport,decorateReportPrint} from '../src/ui/report-print.js';
 const now=()=>new Date('2026-10-28T12:00:00Z');
 const row=(id,status='Em aberto',due='2026-10-29',amount=12.34)=>({id:String(id),fields:{Title:'Fornecedor '+id,SITUACAO:status,VENCIMENTO:due,VALOR:amount,DOCUMENTO:'DOC-'+id,BANCO:'Banco teste',ULTIMA_CONSULTA:'2026-10-28T10:00:00Z'}});
 const settle=async()=>{for(let i=0;i<5;i++)await new Promise(r=>setImmediate(r));};
@@ -31,6 +31,19 @@ test('DDA source rejects malformed pages before the gallery can discard invalid 
  }
 });
 function setup(data,options={}){const dom=new JSDOM('<body><main id="app"><button id="home">DDA</button></main></body>',{url:'https://example.test'});dom.window.document.querySelector('button').focus();const view=createDdaReportView({document:dom.window.document,data,now,...options});return {dom,view,doc:dom.window.document};}
+test('report header places logo before printer, title on the right and filters on the next line',async()=>{
+ const {dom,view:base,doc}=setup({loadSnapshot:async()=>({rows:[row(1)]})});
+ const view=decorateReportPrint(base,{action:'open-dda-report',previewMedia:async()=>{}});
+ await view.open();
+ const toolbar=doc.querySelector('.ddr-toolbar'),header=toolbar.querySelector('.ddr-header-row'),filters=toolbar.querySelector('.ddr-filter-row');
+ assert.ok(header);assert.ok(filters);assert.equal(toolbar.firstElementChild,header);assert.equal(toolbar.lastElementChild,filters);
+ assert.deepEqual([...header.children].map(element=>element.className),['ddr-header-logo','report-print-actions','ddr-header-title']);
+ assert.equal(header.querySelector('img').alt,'Energética Construtora');
+ assert.equal(header.querySelector('h2').textContent,'RELATÓRIO DDA');
+ assert.deepEqual([...filters.querySelectorAll('select,input')].map(control=>control.name),['status','bank','search']);
+ assert.equal(doc.querySelector('.ddr-content .ddr-heading'),null);
+ view.destroy();dom.window.close();
+});
 test('status clusters distinguish overdue open bills from paid bills without changing bank filters',async()=>{
  const source=[row(1,'Em aberto','2026-10-27'),row(2,'Em aberto','2026-10-28'),row(3,'Pago','2026-10-20'),row(4,'Não confirmado','2026-10-20'),row(5,'Baixado','2026-10-20')];
  const {dom,view,doc}=setup({loadSnapshot:async()=>({rows:source})});await view.open();

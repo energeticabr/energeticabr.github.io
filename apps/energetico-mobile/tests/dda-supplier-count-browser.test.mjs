@@ -21,6 +21,7 @@ test('supplier counts stay below names without overflow on narrow phones, landsc
    try{
     const layout=JSON.parse(dom.window.document.documentElement.dataset.layout);
     assert.equal(layout.pageOverflow,false,JSON.stringify({width,layout}));assert.equal(layout.tableFits,true);
+    assert.deepEqual(layout.reportHeader,{logoBeforePrinter:true,titleAfterPrinter:true,filtersBelow:true,filtersFit:true,titleVisible:true},JSON.stringify({width,layout:layout.reportHeader}));
     for(const header of layout.headers)assert.ok(header.fits,JSON.stringify({width,header}));
     assert.equal(layout.bankDocuments.length,3);
     assert.deepEqual(layout.bankDocuments[0].bank,'BANCO EXEMPLO');
