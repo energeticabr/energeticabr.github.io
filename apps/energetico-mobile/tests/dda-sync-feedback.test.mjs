@@ -34,7 +34,7 @@ test('managed gallery closes without cancelling the global manual operation or d
 for(const outcome of ['empty','failed','reload-failed']) test(`DDA synchronization announces ${outcome} in a dismissible result and preserves cards`,async t=>{
  const dom=new JSDOM('<body></body>');const doc=dom.window.document;let loads=0;
  const gallery=createRegistrationGallery({document:doc,kind:'dda',
-  data:{async loadSnapshot(){if(++loads>1&&outcome==='reload-failed')throw Error('offline');return {rows:[{id:'1',fields:{Title:'FICTICIO'}}]};}},
+  data:{async loadSnapshot(){if(++loads>1&&outcome==='reload-failed')throw Error('offline');return {rows:[{id:'1',fields:{Title:'FICTICIO',SITUACAO:'Em aberto'}}]};}},
   refreshBank:async()=>{if(outcome==='failed')throw Error('Consulta indisponível');return {status:'succeeded',created:0,updated:1,elapsedMs:670000};}});
  t.after(()=>{gallery.destroy();dom.window.close();});await gallery.open();
  const button=doc.querySelector('[data-action="registration-refresh"]');button.click();await tick();await tick();
