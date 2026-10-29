@@ -427,7 +427,10 @@ test("retoma validação de pedidos apenas com conta e escopos confirmados pelo 
   }
 });
 
-test("retoma a abertura da Galeria DDA após consentimento Microsoft", async () => {
+for (const [action, scopes] of [
+  ['action_dda_gallery', ['Sites.Read.All']],
+  ['action_notas_fiscais_sefaz_gallery', ['https://energeticaltda.sharepoint.com/AllSites.Read']],
+]) test(`retoma ${action} após consentimento Microsoft`, async () => {
   const account = { homeAccountId: "account-1", username: "pessoa@energeticabr.com" };
   const values = new Map();
   const storage = {
@@ -446,7 +449,7 @@ test("retoma a abertura da Galeria DDA após consentimento Microsoft", async () 
     },
   });
   await firstAuth.initialize();
-  await firstAuth.authorize(["Sites.Read.All"], { resumeAction: "action_dda_gallery" });
+  await firstAuth.authorize(scopes, { resumeAction: action });
 
   const resumedAuth = createBrowserAuth({
     storage,
@@ -454,14 +457,14 @@ test("retoma a abertura da Galeria DDA após consentimento Microsoft", async () 
     client: {
       async initialize() {},
       async handleRedirectPromise() {
-        return { account, accessToken: "gallery-token", scopes: ["Sites.Read.All"] };
+        return { account, accessToken: "gallery-token", scopes };
       },
       getAllAccounts() { return [account]; },
     },
   });
   await resumedAuth.initialize();
 
-  assert.equal(resumedAuth.consumePendingAction(), "action_dda_gallery");
+  assert.equal(resumedAuth.consumePendingAction(), action);
   assert.equal(resumedAuth.consumePendingAction(), null);
   assert.equal(values.size, 0);
 });

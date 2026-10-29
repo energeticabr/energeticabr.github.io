@@ -5033,10 +5033,11 @@ test("visita em obra aparece apenas no submenu Lançamentos, abaixo do anexo a p
   assert.doesNotMatch(suppliesDoc.querySelector(".chat-message--launch-menu .chat-choice-card").textContent, /QUAL FLUXO VOCÊ DESEJA INICIAR/);
   const supplyPairs = [...suppliesDoc.querySelectorAll(".chat-supplies-pair")];
   assert.deepEqual(supplyPairs.map(pair => [...pair.querySelectorAll("[data-reply-id]")].map(button => button.dataset.replyId)), [
-    ["new_document", "action_orders_gallery", "action_launch_gallery"],
+    ["new_document", "action_orders_gallery", "action_launch_gallery", "action_notas_fiscais_sefaz_gallery"],
     ["payment", "action_payment_programming_gallery", "action_provision_description_gallery", "action_recurring_expenses_gallery", "action_dda_gallery"],
   ]);
-  assert.equal((suppliesMarkup.match(/data-gallery-button/g) || []).length, 6);
+  assert.equal((suppliesMarkup.match(/data-gallery-button/g) || []).length, 7);
+  assert.equal(supplyPairs[0].classList.contains("chat-supplies-pair--three-galleries"), true);
   assert.equal(supplyPairs[1].classList.contains("chat-supplies-pair--four-galleries"), true);
   assert.deepEqual([...suppliesDoc.querySelectorAll(".chat-supplies-extras__primary [data-reply-id]")].map(button => button.dataset.replyId), ["registrations"]);
   assert.doesNotMatch(suppliesMarkup, /<article class="chat-message chat-message--assistant chat-message--launch-menu"><span class="chat-avatar/);
@@ -5131,7 +5132,7 @@ test("botões principais de Suprimentos ocupam a altura das galerias corresponde
   const pairs = [...dom.window.document.querySelectorAll(".chat-supplies-pair")];
   assert.deepEqual(pairs.map(pair => pair.querySelector(".chat-supplies-pair__primary [data-reply-id]")?.dataset.replyId), ["new_document", "payment"]);
   assert.deepEqual(pairs.map(pair => [...pair.querySelectorAll(".chat-gallery-actions button")].map(button => button.textContent)), [
-    ["PEDIDOS", "LANÇAMENTOS"],
+    ["PEDIDOS", "LANÇAMENTOS", "NOTAS FISCAIS SEFAZ"],
     ["PGTOS PREVISTOS", "DESCRITIVO PROVISÃO", "DESPESAS RECORRENTES", "GALERIA DDA"],
   ]);
   assert.match(styles, /\.chat-supplies-pair\s*\{[^}]*min-height:\s*calc\(2\s*\*\s*var\(--supplies-gallery-height\)\s*\+\s*var\(--supplies-gap\)\)/s);
@@ -5250,7 +5251,7 @@ test("botões de todas as galerias têm cantos arredondados como os azuis e mant
   const galleryButtons = [...dom.window.document.querySelectorAll(".chat-gallery-actions .chat-choice-button--gallery")];
 
   assert.equal(expectedRadius, "14px");
-  assert.equal(galleryButtons.length, 11);
+  assert.equal(galleryButtons.length, 12);
   for (const button of galleryButtons) {
     assert.equal(dom.window.getComputedStyle(button).borderRadius, expectedRadius, button.textContent);
     assert.equal(dom.window.getComputedStyle(button).backgroundColor, "rgb(69, 76, 83)", button.textContent);

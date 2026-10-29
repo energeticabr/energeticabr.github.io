@@ -16,6 +16,20 @@ const AUDIT_ALIASES = { Criado: ["Created"], Modificado: ["Modified"], "Criado p
 // Lista e campos das galerias baseadas nas telas Power Apps.
 export const REGISTRATION_GALLERY_MODELS = Object.freeze({
   ...FINANCIAL_GALLERY_MODELS,
+  notas_fiscais_sefaz: Object.freeze({
+    title: "GALERIA NOTAS FISCAIS SEFAZ", listName: "NOTAS_FISCAIS_SEFAZ", aliases: ["NOTAS_FISCAIS_SEFAZ"], siteKey: "company",
+    nativeCard: true, readOnly: true, readTransport: "rest", recordLabel: "nota fiscal", emptyValue: "Pendente",
+    sourceNotice: "Fonte: SEFAZ. Consulta dos últimos três meses; cobertura pendente de conferência. Resumos e documentos ainda não obtidos permanecem pendentes.",
+    restReadFields: ["ID", "Title", "CHAVE_ACESSO", "CNPJ_FORNECEDOR", "NUMERO_NOTA", "SERIE", "DATA_EMISSAO", "VALOR_TOTAL_NOTA", "DESCONTOS", "VALOR_LIQUIDO", "ORIGEM_LIQUIDO", "SITUACAO", "STATUS_IMPORTACAO", "XML_URL", "ULTIMO_DOCUMENTO_URL", "DANFE_URL", "DIRECAO"],
+    restExpandSystemFields: false,
+    searchPlaceholder: "Pesquisar fornecedor, CNPJ, número ou chave de acesso",
+    fields: ["FORNECEDOR", "NUMERO_NOTA", "SERIE", "DATA_EMISSAO", "CNPJ_FORNECEDOR", "VALOR_TOTAL_NOTA", "DESCONTOS", "VALOR_LIQUIDO", "ORIGEM_LIQUIDO", "SITUACAO", "STATUS_IMPORTACAO", "DIRECAO", "CHAVE_ACESSO", "XML_URL", "ULTIMO_DOCUMENTO_URL", "DANFE_URL", "ID"],
+    filterFields: ["FORNECEDOR", "SITUACAO", "STATUS_IMPORTACAO", "DIRECAO"], dateRangeField: "DATA_EMISSAO",
+    fieldAliases: { FORNECEDOR: ["Title"] },
+    fieldTypes: { DATA_EMISSAO: "date", VALOR_TOTAL_NOTA: "currency", DESCONTOS: "currency", VALOR_LIQUIDO: "currency", XML_URL: "url", ULTIMO_DOCUMENTO_URL: "url", DANFE_URL: "url" },
+    fieldLabels: { NUMERO_NOTA: "Número da nota", SERIE: "Série", DATA_EMISSAO: "Emissão", CNPJ_FORNECEDOR: "CNPJ fornecedor", VALOR_TOTAL_NOTA: "Valor total da nota", DESCONTOS: "Descontos", VALOR_LIQUIDO: "Valor líquido", ORIGEM_LIQUIDO: "Origem do valor líquido", SITUACAO: "Situação", STATUS_IMPORTACAO: "Importação", DIRECAO: "Direção", CHAVE_ACESSO: "Chave de acesso", XML_URL: "XML da NF-e", ULTIMO_DOCUMENTO_URL: "Último documento SEFAZ", DANFE_URL: "DANFE" },
+    sourceSort: { field: "DATA_EMISSAO", direction: "desc", type: "date" },
+  }),
   dda: Object.freeze({
     title: "GALERIA DDA", listName: "DDAS SICOOB", aliases: ["DDAS SICOOB"],
     nativeCard: true, readOnly: true, readTransport: "rest", showAttachments: true, recordLabel: "DDA",
@@ -306,6 +320,7 @@ function galleryRepository(options) {
 export function createRegistrationGalleryData({ kind, ...options } = {}) {
   const model = REGISTRATION_GALLERY_MODELS[kind];
   if (!model) throw new RangeError("Galeria de cadastro desconhecida.");
+  if (model.siteKey) options = { ...options, siteKey: model.siteKey };
   if (model.readTransport) {
     const siteKey = options.siteKey || "personal";
     const sites = options.siteConfig || SHAREPOINT_SITES;
@@ -329,6 +344,29 @@ export function createRegistrationGalleryData({ kind, ...options } = {}) {
     },
     listAttachments: data.listAttachments,
     downloadAttachment: data.downloadAttachment,
+    ...(kind === 'notas_fiscais_sefaz' ? {
+      async downloadDocument(rawUrl, downloadOptions = {}) {
+        options.assertSession?.();
+        const site = (options.siteConfig || SHAREPOINT_SITES)[model.siteKey];
+        let path;
+        try {
+          const url = new URL(rawUrl);
+          path = decodeURIComponent(url.pathname);
+          if (url.protocol !== 'https:' || url.hostname !== site.host || url.port || url.username || url.password
+            || !path.startsWith(`${site.path}/`) || /[\\\u0000-\u001f]/.test(path)
+            || path.split('/').some(segment => segment === '.' || segment === '..')) throw new Error();
+        } catch { throw new RangeError('O endereço do documento SEFAZ é inválido.'); }
+        const transport = createSharePointAttachmentTransport({ tokenProvider: options.tokenProvider,
+          allowedSites: [site], fetch: options.fetchImpl || globalThis.fetch });
+        // The shared transport rejects encoded path separators. Preserve only
+        // validated slashes while encoding filename spaces and OData quotes.
+        const resourcePath = encodeURIComponent(path.replaceAll("'", "''")).replaceAll('%2F', '/');
+        const result = await transport.request(site, `/_api/web/GetFileByServerRelativePath(decodedurl='${resourcePath}')/$value`,
+          { ...downloadOptions, method: 'GET', responseType: 'blob', permission: 'read' });
+        options.assertSession?.();
+        return result;
+      },
+    } : {}),
   });
   const filters = createRegistrationGalleryFilterData({ repository, siteKey: options.siteKey || "personal", kind });
   // Lists without an extracted edit form use only the model's proven fields
