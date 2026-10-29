@@ -77,6 +77,7 @@ if(new URLSearchParams(location.search).has('barcode')){
  panel.scrollIntoView({block:'center'});await document.fonts.ready;await new Promise(r=>requestAnimationFrame(()=>requestAnimationFrame(r)));
  const box=panel.getBoundingClientRect(),buttonBox=copy.getBoundingClientRect();
  Object.assign(state,{copied:window.ddaBarcodeCopies,feedback:panel.textContent.includes('Código de barras copiado.'),fits:box.left>=-1&&box.right<=innerWidth+1&&box.top>=-1&&box.bottom<=innerHeight+1,buttonFits:buttonBox.left>=box.left&&buttonBox.right<=box.right,expanded:arrow.getAttribute('aria-expanded')==='true',overflow:panel.scrollWidth>panel.clientWidth+1});
+ state.stripes=[...document.querySelectorAll('[data-dda-id]')].map(row=>getComputedStyle(row).backgroundColor);
  document.documentElement.dataset.barcode=JSON.stringify(state);
 }
 if(new URLSearchParams(location.search).has('layout')){

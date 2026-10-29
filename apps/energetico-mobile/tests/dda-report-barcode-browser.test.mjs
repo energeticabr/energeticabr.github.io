@@ -16,7 +16,7 @@ test('barcode disclosure fits mobile rotated report and desktop; copies only on 
   const dom=new JSDOM(result.stdout);
   try{const state=JSON.parse(dom.window.document.documentElement.dataset.barcode);
    for(const field of ['noAutoCopy','closed','feedback','fits','buttonFits','expanded'])assert.equal(state[field],true,JSON.stringify({width,field,state}));
-   assert.equal(state.overflow,false);assert.deepEqual(state.copied,['01234567890123456789012345678901234567890123']);
+   assert.deepEqual(state.stripes,['rgb(255, 255, 255)','rgb(239, 246, 250)','rgb(255, 255, 255)']);assert.equal(state.overflow,false);assert.deepEqual(state.copied,['01234567890123456789012345678901234567890123']);
    if(capture){mkdirSync(capture,{recursive:true});writeFileSync(join(capture,`dda-report-barcode-${width}.png`),result.screenshot);}
   }finally{dom.window.close();}
  }}finally{await server.close();}
