@@ -1,25 +1,28 @@
 import { createAppleClient } from './app-store-submission.mjs';
 import { attachLatestTestFlightBuild } from './attach-testflight-build.mjs';
 
-if (process.env.APP_STORE_BUILD !== '1936') throw new Error('Recovery is restricted to build 1936.');
+if (process.env.APP_STORE_BUILD !== '1945') throw new Error('Recovery is restricted to build 1945.');
 const client = createAppleClient(process.env, (url, init) => fetch(url, { ...init, signal: AbortSignal.timeout(60_000) }));
+let targetBuildId = '';
 const scoped = {
   async request(method, path, payload) {
     const groupWrite = method === 'POST' && /^\/v1\/betaGroups\/([^/]+)\/relationships\/builds$/.exec(path);
     if (groupWrite) {
-      if (payload?.data?.length !== 1 || payload.data[0]?.id !== '6fd0d8b9-e8dd-43ff-a85f-f91a8526cfbf') throw new Error('Unexpected build association blocked.');
-      path = '/v1/builds/6fd0d8b9-e8dd-43ff-a85f-f91a8526cfbf/relationships/betaGroups';
+      if (!targetBuildId || payload?.data?.length !== 1 || payload.data[0]?.id !== targetBuildId) throw new Error('Unexpected build association blocked.');
+      path = `/v1/builds/${targetBuildId}/relationships/betaGroups`;
       payload = { data: [{ type: 'betaGroups', id: groupWrite[1] }] };
     }
     if (method === 'GET' && path.startsWith('/v1/builds?')) {
       const query = new URL(path, 'https://api.appstoreconnect.apple.com');
-      query.searchParams.set('filter[version]', '1936');
+      query.searchParams.set('filter[version]', '1945');
       query.searchParams.set('limit', '5');
       path = query.pathname + query.search;
     }
     for (let attempt = 1; ; attempt += 1) {
       try {
-        return await client.request(method, path, payload);
+        const response = await client.request(method, path, payload);
+        if (method === 'GET' && path.startsWith('/v1/builds?')) targetBuildId = response.data?.find(build => build.attributes?.version === '1945')?.id || '';
+        return response;
       } catch (error) {
         if (method !== 'GET' || attempt >= 3 || !/timeout|timed out|aborted/i.test(String(error?.message || error))) throw error;
         console.log(`Read timeout; retry ${attempt}/2.`);
