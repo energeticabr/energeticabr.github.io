@@ -1,0 +1,19 @@
+<!doctype html><html><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><link rel="stylesheet" href="/src/styles.css"><link rel="stylesheet" href="/src/ui/payment-ledger.css"><link rel="stylesheet" href="/src/ui/dda-report.css"><link rel="stylesheet" href="/src/web/attachment-preview.css"></head><body><main id="app"></main><script type="module">
+import {createDdaReportView} from '/src/ui/dda-report-view.js';
+import {decorateReportPrint} from '/src/ui/report-print.js';
+import {createAttachmentPreview} from '/src/web/attachment-preview.js';
+const preview=createAttachmentPreview({canEmbedPdf:()=>false,exportMedia:async()=>{}});
+const count=Number(new URLSearchParams(location.search).get('count'))||23;
+const rows=Array.from({length:count},(_,i)=>({id:String(i+1),fields:{Title:'FORNECEDOR FICTÍCIO '+i,VENCIMENTO:'2026-11-20',VALOR:70,SITUACAO:'Em aberto',DOCUMENTO:'EX-'+i,BANCO:'BANCO EXEMPLO',CNPJ_FORNECEDOR:'00111111000122'}}));
+const report=decorateReportPrint(createDdaReportView({document,data:{loadSnapshot:async()=>({rows})}}),{action:'open-dda-report',previewMedia:preview.open,closePreview:preview.close});
+await report.open();document.querySelector('[data-action=print-report-pdf]').click();
+const start=performance.now();
+const timer=setInterval(()=>{
+ const status=document.querySelector('.attachment-preview-status'),canvas=document.querySelector('.attachment-preview-content canvas');
+ if((performance.now()-start>4000&&canvas&&!status?.querySelector('.app-loading'))||performance.now()-start>12000){clearInterval(timer);const result={canvas:Boolean(canvas),loading:Boolean(status?.querySelector('.app-loading')),status:status?.textContent,elapsed:performance.now()-start};
+  if(new URLSearchParams(location.search).has('close')){document.querySelector('.attachment-preview-close').click();result.returned=!report.element.hidden&&!document.querySelector('.attachment-preview-dialog').open&&document.querySelector('[name=status]').value==='Em aberto';}
+  document.documentElement.dataset.layout=JSON.stringify(result);
+ }
+},100);
+</script></body></html>
+

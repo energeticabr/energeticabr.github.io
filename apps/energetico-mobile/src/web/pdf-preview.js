@@ -335,8 +335,8 @@ export function createPdfPreview({
     windowTask = renderPageWindow(generation).finally(() => {
       windowTask = null;
       if (!destroyed && generation === renderGeneration) {
-        if (pendingPageIndex !== null) void queuePageWindow().catch(error => { if (!destroyed) onError(error); });
-        else refitPage();
+        if (pendingPageIndex !== null) return queuePageWindow().catch(error => { if (!destroyed) onError(error); });
+        return refitPage();
       }
     });
     return windowTask;
@@ -470,7 +470,10 @@ export function createPdfPreview({
     busy = false;
     showCurrentPage();
     root.setAttribute("aria-busy", "false");
-    refitPage();
+    // The loading overlay changes the available height. Readiness must include
+    // this refit; otherwise the caller sees temporarily cleared canvases and a
+    // later render reopens its 99% loader with nobody left awaiting completion.
+    await refitPage();
     finishProgress(generation);
   }
 
@@ -478,7 +481,7 @@ export function createPdfPreview({
     if (fit !== 'page' || destroyed || busy || !pdf || viewportSize() === fittedSize) return;
     // Render serially. Resizes during rendering are reconciled at its end,
     // so an orientation change cannot cancel or interleave PDF page tasks.
-    void renderAll(++renderGeneration).catch(error => { if (!destroyed) onError(error); });
+    return renderAll(++renderGeneration).catch(error => { if (!destroyed) onError(error); });
   }
   if (fit === 'page') {
     windowRef?.addEventListener('resize', refitPage);
