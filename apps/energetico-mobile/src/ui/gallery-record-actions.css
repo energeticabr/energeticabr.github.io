@@ -127,6 +127,28 @@
 .gallery-record-dialog--success .launch-completion { box-shadow: none; }
 .gallery-record-dialog--success .launch-completion__success p { margin: 0; line-height: 1.4; overflow-wrap: anywhere; }
 .gallery-record-dialog--success .gallery-record-dialog-buttons { margin: 12px; }
+.gallery-record-dialog--success .gallery-record-dialog-buttons,
+.gallery-record-dialog.dda-payment-dialog[data-state="success"] .gallery-record-dialog-buttons,
+.gallery-record-dialog.dda-sync-dialog[data-dda-sync-result] .gallery-record-dialog-buttons {
+  justify-content: center;
+}
+.gallery-record-dialog--success [data-gallery-receipt-close],
+.gallery-record-dialog.dda-payment-dialog[data-state="success"] .gallery-record-dialog-button,
+.gallery-record-dialog.dda-sync-dialog[data-dda-sync-result] .gallery-record-dialog-button {
+  box-sizing: border-box;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex: 1 1 100%;
+  width: 100%;
+  min-width: 0;
+  min-height: 64px;
+  padding: 16px 20px;
+  font-size: 1.125rem;
+  font-weight: 700;
+  line-height: 1.25;
+  text-align: center;
+}
 .gallery-record-dialog--success [data-gallery-receipt-close] { color: #fff; background: #17754d; border-color: #17754d; font-weight: 700; }
 .gallery-deletion-table { width: 100%; table-layout: fixed; border-collapse: collapse; background: #f2f7fa; }
 .gallery-deletion-table th, .gallery-deletion-table td { padding: 12px; border: 1px solid #d5e2e9; text-align: left; vertical-align: top; overflow-wrap: anywhere; font-size: 1rem; line-height: 1.4; }
