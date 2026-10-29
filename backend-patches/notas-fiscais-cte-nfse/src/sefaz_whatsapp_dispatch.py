@@ -16,7 +16,7 @@ import sqlite3
 import sys
 import time
 
-from fiscal_document import KEY_PATTERN, issue_day, parse_fiscal_xml
+from fiscal_document import KEY_PATTERN, issue_day, parse_fiscal_xml, child, text as xml_text, money
 
 ROOT = Path('/var/lib/energetica-whatsapp')
 DB = ROOT / 'whatsmeow/gateway.db'
@@ -26,6 +26,8 @@ FILES = ROOT / 'outbound-documents/sefaz-notifications'
 COMPANY = '38626750000146'
 NS = {'n': 'http://www.portalfiscal.inf.br/nfe'}
 MAX_REQUEST = 4_600_000
+RETENTION_SCHEMA = '''CREATE TABLE IF NOT EXISTS sefaz_notification_retention(
+    key TEXT PRIMARY KEY,amount TEXT NOT NULL,text TEXT NOT NULL,message_id INTEGER)'''
 
 
 def destination(config, dda):
@@ -47,6 +49,39 @@ def schema(c):
         text_id INTEGER,pdf_id INTEGER,created_at INTEGER NOT NULL,updated_at INTEGER NOT NULL);
         CREATE TABLE IF NOT EXISTS sefaz_notification_audit(
         key TEXT NOT NULL,code TEXT NOT NULL,created_at INTEGER NOT NULL,PRIMARY KEY(key,code));''')
+    c.execute(RETENTION_SCHEMA)
+
+
+def buyer_retention(fiscal):
+    """XML-declared buyer components, matching the gallery; never total minus net.
+
+    NFS-e NT007: vRetCSLL is already the aggregate retained PIS/COFINS/CSLL.
+    vPis/vCofins and ISS retained by an intermediary are not buyer components.
+    CT-e own taxes do not prove withholding and are intentionally not inferred.
+    """
+    invoice = fiscal.invoice
+    def amount(node, path):
+        value = xml_text(node, path)
+        return money(value) if value is not None else Decimal('0')
+    if fiscal.kind == 'nfeProc':
+        if xml_text(invoice, 'dest/CNPJ') != COMPANY or xml_text(invoice, 'emit/CNPJ') == COMPANY:
+            return Decimal('0')
+        group = child(invoice, 'total/retTrib')
+        federal = sum((amount(group, tag) for tag in ('vRetPIS', 'vRetCOFINS', 'vRetCSLL', 'vIRRF', 'vRetPrev')), Decimal('0'))
+        return federal + amount(invoice, 'total/ISSQNtot/vISSRet')
+    if fiscal.kind == 'NFSe':
+        dps = child(invoice, 'DPS/infDPS')
+        if xml_text(dps, 'toma/CNPJ') != COMPANY or xml_text(dps, 'prest/CNPJ') == COMPANY:
+            return Decimal('0')
+        trib = child(dps, 'valores/trib')
+        total = sum((amount(trib, 'tribFed/'+tag) for tag in ('vRetCSLL', 'vRetIRRF', 'vRetCP')), Decimal('0'))
+        if xml_text(trib, 'tribMun/tpRetISSQN') == '2':
+            total += amount(invoice, 'valores/vISSQN')
+        declared = xml_text(invoice, 'valores/vTotalRet')
+        if declared is not None and total > money(declared):
+            raise ValueError('INVALID_RETENTION_TOTAL')
+        return total
+    return Decimal('0')
 
 
 def require_initialized(c, group):
@@ -144,7 +179,7 @@ def validate(request):
         text = f'NOVA NOTA IDENTIFICADA DA EMPRESA *{company}* NO VALOR DE *R$ {value}*\nEmissão: {emission}'
     else:
         text = f'{label} DA EMPRESA *{company}* NO VALOR DE *R$ {value}*\nEmissão: {emission}'
-    return key, digest, pdf_hash, text, filename, pdf
+    return key, digest, pdf_hash, text, filename, pdf, buyer_retention(fiscal)
 
 
 def grant_gateway_read(path):
@@ -159,10 +194,11 @@ def grant_gateway_read(path):
 
 def stage(request, config, dda, db=DB, files=FILES):
     group = destination(config, dda)
-    key, xml_hash, pdf_hash, text, filename, pdf = validate(request)
+    key, xml_hash, pdf_hash, text, filename, pdf, retained = validate(request)
     with closing(sqlite3.connect(db, timeout=30)) as c, c:
         c.execute('BEGIN IMMEDIATE')
         require_initialized(c, group)
+        c.execute(RETENTION_SCHEMA)
         row = c.execute('SELECT state,xml_hash,pdf_hash FROM sefaz_notification_dispatch WHERE key=?', (key,)).fetchone()
         if row:
             if row[0] != 'baseline' and row[1:] != (xml_hash, pdf_hash):
@@ -195,6 +231,10 @@ def stage(request, config, dda, db=DB, files=FILES):
         now = int(time.time())
         c.execute('INSERT INTO sefaz_notification_dispatch VALUES(?,?,?,?,?,?,?,?,?,?,?,?)',
                   (key, group, xml_hash, pdf_hash, text, str(path), filename, 'staged', None, None, now, now))
+        if retained > 0:
+            value = format(retained, ',.2f').translate(str.maketrans({',': '.', '.': ','}))
+            warning = f'*ATENÇÃO : ESSA NOTA GEROU RETENÇÕES NO VALOR DE R$ {value}*'
+            c.execute('INSERT INTO sefaz_notification_retention VALUES(?,?,?,NULL)', (key, str(retained), warning))
     return {'status': 'staged', 'duplicate': False, 'key': key}
 
 
@@ -208,7 +248,8 @@ def drain(config, dda, db=DB):
         c.row_factory = sqlite3.Row
         c.execute('BEGIN IMMEDIATE')
         require_initialized(c, group)
-        # One unfinished invoice owns the destination until BOTH phases are
+        c.execute(RETENTION_SCHEMA)
+        # One unfinished invoice owns the destination until ALL its phases are
         # acknowledged. BEGIN IMMEDIATE makes selection and enqueue atomic
         # across concurrent drains. Rowid preserves staging order, including
         # when timestamps tie; an uncertain/blocked head must not be overtaken.
@@ -220,14 +261,16 @@ def drain(config, dda, db=DB):
             if row['group_id'] != group:
                 raise ValueError('DESTINATION_CHANGED')
             state = row['state']
-            for phase in ('text', 'pdf'):
+            retention = c.execute('SELECT * FROM sefaz_notification_retention WHERE key=?', (key,)).fetchone()
+            phases = ('text', 'pdf', 'retention') if retention else ('text', 'pdf')
+            for phase in phases:
                 completion = 'sefaz-new-' + key + '-' + phase
                 ack = c.execute('SELECT 1 FROM gateway_completion_messages WHERE completion_id=? AND chat_id=? AND message_id<>?',
                                 (completion, group, '')).fetchone()
                 if ack:
-                    state = 'sent' if phase == 'pdf' else 'text_sent'
+                    state = 'sent' if phase == phases[-1] else phase + '_sent'
                     continue
-                queued_id = row[phase + '_id']
+                queued_id = retention['message_id'] if phase == 'retention' else row[phase + '_id']
                 if queued_id is not None:
                     pending = c.execute('SELECT message,attempts FROM gateway_outbox WHERE id=?', (queued_id,)).fetchone()
                     if pending:
@@ -242,8 +285,8 @@ def drain(config, dda, db=DB):
                         audit(c, key, phase.upper() + '_UNCONFIRMED')
                     break
                 message = {'conversation_id': group, 'group_id': group, 'trackCompletionSuccess': True, 'completionId': completion}
-                if phase == 'text':
-                    message.update(type='text', text=row['text'])
+                if phase in ('text', 'retention'):
+                    message.update(type='text', text=retention['text'] if phase == 'retention' else row['text'])
                 else:
                     # The original SharePoint-confirmed bytes are retained; no regeneration or URL download.
                     path = Path(row['pdf_path'])
@@ -255,7 +298,10 @@ def drain(config, dda, db=DB):
                     message.update(type='document', path=str(path), fileName=row['file_name'], mimeType='application/pdf')
                 message_id = c.execute('INSERT INTO gateway_outbox(message,created_at) VALUES(?,?)',
                                        (json.dumps(message, ensure_ascii=False).encode('utf8'), int(time.time()))).lastrowid
-                c.execute('UPDATE sefaz_notification_dispatch SET ' + phase + '_id=? WHERE key=?', (message_id, key))
+                if phase == 'retention':
+                    c.execute('UPDATE sefaz_notification_retention SET message_id=? WHERE key=?', (message_id, key))
+                else:
+                    c.execute('UPDATE sefaz_notification_dispatch SET ' + phase + '_id=? WHERE key=?', (message_id, key))
                 state = phase + '_queued'
                 break
             c.execute('UPDATE sefaz_notification_dispatch SET state=?,updated_at=? WHERE key=?', (state, int(time.time()), key))
