@@ -71,7 +71,7 @@ test('authenticated bank methods send fixed actions and no bank credentials',asy
 test('manual DDA button waits for bank before SharePoint, deduplicates clicks, preserves cards on failure',async()=>{
  const dom=new JSDOM('<body></body>');const events=[];let finish;let fail=false;
  const gallery=createRegistrationGallery({document:dom.window.document,kind:'dda',
- data:{async loadSnapshot(){events.push('sharepoint');return {rows:[{id:'1',fields:{Title:'FICTICIO',VENCIMENTO:'2026-10-28'}}]};}},
+ data:{async loadSnapshot(){events.push('sharepoint');return {rows:[{id:'1',fields:{Title:'FICTICIO',SITUACAO:'Em aberto',VENCIMENTO:'2026-10-28'}}]};}},
  refreshBank:async()=>{events.push('bank');if(fail)throw Error('bank');await new Promise(resolve=>{finish=resolve;});return {status:'succeeded',created:1};}});
  await gallery.open();assert.deepEqual(events,['sharepoint']);
  const button=dom.window.document.querySelector('[data-action="registration-refresh"]');
@@ -95,7 +95,7 @@ test('closing gallery aborts bank wait and prevents a late SharePoint refresh',a
 test('successful bank query followed by failed SharePoint read preserves actual cards',async()=>{
  const dom=new JSDOM('<body></body>');let loads=0;
  const gallery=createRegistrationGallery({document:dom.window.document,kind:'dda',
- data:{async loadSnapshot(){if(++loads>1)throw Error('SharePoint unavailable');return {rows:[{id:'1',fields:{Title:'FICTICIO'}}]};}},
+ data:{async loadSnapshot(){if(++loads>1)throw Error('SharePoint unavailable');return {rows:[{id:'1',fields:{Title:'FICTICIO',SITUACAO:'Em aberto'}}]};}},
  refreshBank:async()=>({status:'succeeded'})});
  await gallery.open();assert.equal(dom.window.document.querySelectorAll('.rg-row--dda').length,1);
  dom.window.document.querySelector('[data-action="registration-refresh"]').click();await tick();await tick();
