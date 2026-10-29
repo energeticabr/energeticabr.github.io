@@ -12,7 +12,11 @@ Em Suprimentos, o grupo de LANÇAMENTOS apresenta três galerias cinza, nesta or
 - A fonte fiscal é exclusivamente SEFAZ. A interface não consulta SIEG, não cria notas e não executa importações ou manifestações.
 - A leitura segue todas as páginas da lista antes de apresentar os registros, com a proteção de paginação existente. A ordenação inicial é emissão mais recente primeiro.
 
-A coleta solicitada corresponde aos últimos três meses. A galeria informa que a cobertura ainda precisa de conferência; a presença de registros na lista não constitui prova de cobertura completa. Os filtros de emissão inicial/final permitem examinar os registros disponíveis sem impor um recorte adicional silencioso.
+A coleta está configurada desde 01/10/2026, mantendo a continuidade nos meses seguintes. A galeria informa que a cobertura ainda precisa de conferência; a presença de registros na lista não constitui prova de cobertura completa. Os filtros de emissão inicial/final permitem examinar os registros disponíveis sem impor um recorte adicional silencioso.
+
+## Destaque de retenção pelo comprador
+
+NF-e de entrada autorizada com XML completo e `STATUS_RETENCOES=RETENCAO_INFORMADA_XML` recebe fundo vermelho claro, borda vermelha e aviso visível quando existir valor positivo em `PIS_RETIDO`, `COFINS_RETIDA`, `CSLL_RETIDA`, `IRRF_RETIDO`, `INSS_RETIDO` ou `ISS_RETIDO`. Os valores aparecem em Tributos e encargos e a soma no aviso. O PDF permanece à esquerda e o líquido não é alterado. Saída, cancelada, resumo, zero e tributos gerais não acionam o destaque. Ausência desses valores significa “Não informada no XML”, sem concluir dispensa legal. A origem de cada campo e a implantação estão descritas em `backend-patches/notas-fiscais-sefaz-retencoes/docs/RETENCOES.md`.
 
 ## Contrato de dados
 

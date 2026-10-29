@@ -1,0 +1,357 @@
+{
+  "$schema": "https://schema.management.azure.com/providers/Microsoft.Logic/schemas/2016-06-01/workflowdefinition.json#",
+  "contentVersion": "1.0.0.0",
+  "parameters": {
+    "$authentication": {
+      "defaultValue": {},
+      "type": "SecureObject"
+    },
+    "$connections": {
+      "defaultValue": {},
+      "type": "Object"
+    }
+  },
+  "triggers": {
+    "manual": {
+      "type": "Request",
+      "kind": "Button",
+      "inputs": {
+        "schema": {
+          "type": "object",
+          "required": [
+            "source",
+            "updates"
+          ],
+          "properties": {
+            "source": {
+              "type": "string",
+              "enum": [
+                "SEFAZ_XML_ARCHIVE"
+              ]
+            },
+            "updates": {
+              "type": "array",
+              "maxItems": 100,
+              "items": {
+                "type": "object",
+                "required": [
+                  "key",
+                  "fields"
+                ],
+                "properties": {
+                  "key": {
+                    "type": "string",
+                    "minLength": 44,
+                    "maxLength": 44
+                  },
+                  "fields": {
+                    "type": "object",
+                    "required": [
+                      "STATUS_RETENCOES",
+                      "PIS_RETIDO",
+                      "COFINS_RETIDA",
+                      "CSLL_RETIDA",
+                      "IRRF_RETIDO",
+                      "INSS_RETIDO",
+                      "ISS_RETIDO"
+                    ],
+                    "properties": {
+                      "STATUS_RETENCOES": {
+                        "type": "string",
+                        "enum": [
+                          "RETENCAO_INFORMADA_XML",
+                          "NAO_INFORMADA_XML"
+                        ]
+                      },
+                      "PIS_RETIDO": {
+                        "type": [
+                          "number",
+                          "null"
+                        ]
+                      },
+                      "COFINS_RETIDA": {
+                        "type": [
+                          "number",
+                          "null"
+                        ]
+                      },
+                      "CSLL_RETIDA": {
+                        "type": [
+                          "number",
+                          "null"
+                        ]
+                      },
+                      "IRRF_RETIDO": {
+                        "type": [
+                          "number",
+                          "null"
+                        ]
+                      },
+                      "INSS_RETIDO": {
+                        "type": [
+                          "number",
+                          "null"
+                        ]
+                      },
+                      "ISS_RETIDO": {
+                        "type": [
+                          "number",
+                          "null"
+                        ]
+                      }
+                    }
+                  }
+                }
+              }
+            }
+          }
+        }
+      },
+      "runtimeConfiguration": {
+        "concurrency": {
+          "runs": 1
+        },
+        "secureData": {
+          "properties": [
+            "outputs"
+          ]
+        }
+      }
+    }
+  },
+  "actions": {
+    "Validar": {
+      "type": "ParseJson",
+      "inputs": {
+        "content": "@triggerBody()",
+        "schema": {
+          "type": "object",
+          "required": [
+            "source",
+            "updates"
+          ],
+          "properties": {
+            "source": {
+              "type": "string",
+              "enum": [
+                "SEFAZ_XML_ARCHIVE"
+              ]
+            },
+            "updates": {
+              "type": "array",
+              "maxItems": 100,
+              "items": {
+                "type": "object",
+                "required": [
+                  "key",
+                  "fields"
+                ],
+                "properties": {
+                  "key": {
+                    "type": "string",
+                    "minLength": 44,
+                    "maxLength": 44
+                  },
+                  "fields": {
+                    "type": "object",
+                    "required": [
+                      "STATUS_RETENCOES",
+                      "PIS_RETIDO",
+                      "COFINS_RETIDA",
+                      "CSLL_RETIDA",
+                      "IRRF_RETIDO",
+                      "INSS_RETIDO",
+                      "ISS_RETIDO"
+                    ],
+                    "properties": {
+                      "STATUS_RETENCOES": {
+                        "type": "string",
+                        "enum": [
+                          "RETENCAO_INFORMADA_XML",
+                          "NAO_INFORMADA_XML"
+                        ]
+                      },
+                      "PIS_RETIDO": {
+                        "type": [
+                          "number",
+                          "null"
+                        ]
+                      },
+                      "COFINS_RETIDA": {
+                        "type": [
+                          "number",
+                          "null"
+                        ]
+                      },
+                      "CSLL_RETIDA": {
+                        "type": [
+                          "number",
+                          "null"
+                        ]
+                      },
+                      "IRRF_RETIDO": {
+                        "type": [
+                          "number",
+                          "null"
+                        ]
+                      },
+                      "INSS_RETIDO": {
+                        "type": [
+                          "number",
+                          "null"
+                        ]
+                      },
+                      "ISS_RETIDO": {
+                        "type": [
+                          "number",
+                          "null"
+                        ]
+                      }
+                    }
+                  }
+                }
+              }
+            }
+          }
+        }
+      },
+      "runAfter": {}
+    },
+    "Atualizacoes": {
+      "type": "Foreach",
+      "foreach": "@body('Validar')?['updates']",
+      "actions": {
+        "Localizar_nota": {
+          "type": "OpenApiConnection",
+          "inputs": {
+            "host": {
+              "apiId": "/providers/Microsoft.PowerApps/apis/shared_sharepointonline",
+              "connectionName": "shared_sharepointonline",
+              "operationId": "HttpRequest"
+            },
+            "parameters": {
+              "dataset": "https://energeticaltda.sharepoint.com/sites/energetica",
+              "parameters/method": "GET",
+              "parameters/uri": "@concat('_api/web/lists/getbytitle(''NOTAS_FISCAIS_SEFAZ'')/items?$select=Id,CHAVE_ACESSO&$filter=CHAVE_ACESSO eq ''',items('Atualizacoes')?['key'],'''&$top=2')",
+              "parameters/headers": {
+                "Accept": "application/json;odata=verbose",
+                "Content-Type": "application/json;odata=nometadata"
+              }
+            },
+            "authentication": "@parameters('$authentication')"
+          },
+          "runAfter": {}
+        },
+        "Conferir_unica": {
+          "type": "ParseJson",
+          "inputs": {
+            "content": "@length(body('Localizar_nota')?['d']?['results'])",
+            "schema": {
+              "type": "integer",
+              "enum": [
+                1
+              ]
+            }
+          },
+          "runAfter": {
+            "Localizar_nota": [
+              "Succeeded"
+            ]
+          }
+        },
+        "Campos": {
+          "type": "Compose",
+          "inputs": {
+            "STATUS_RETENCOES": "@items('Atualizacoes')?['fields']?['STATUS_RETENCOES']",
+            "PIS_RETIDO": "@items('Atualizacoes')?['fields']?['PIS_RETIDO']",
+            "COFINS_RETIDA": "@items('Atualizacoes')?['fields']?['COFINS_RETIDA']",
+            "CSLL_RETIDA": "@items('Atualizacoes')?['fields']?['CSLL_RETIDA']",
+            "IRRF_RETIDO": "@items('Atualizacoes')?['fields']?['IRRF_RETIDO']",
+            "INSS_RETIDO": "@items('Atualizacoes')?['fields']?['INSS_RETIDO']",
+            "ISS_RETIDO": "@items('Atualizacoes')?['fields']?['ISS_RETIDO']"
+          },
+          "runAfter": {
+            "Conferir_unica": [
+              "Succeeded"
+            ]
+          }
+        },
+        "Atualizar": {
+          "type": "OpenApiConnection",
+          "inputs": {
+            "host": {
+              "apiId": "/providers/Microsoft.PowerApps/apis/shared_sharepointonline",
+              "connectionName": "shared_sharepointonline",
+              "operationId": "HttpRequest"
+            },
+            "parameters": {
+              "dataset": "https://energeticaltda.sharepoint.com/sites/energetica",
+              "parameters/method": "POST",
+              "parameters/uri": "@concat('_api/web/lists/getbytitle(''NOTAS_FISCAIS_SEFAZ'')/items(',string(first(body('Localizar_nota')?['d']?['results'])?['Id']),')')",
+              "parameters/headers": {
+                "Accept": "application/json;odata=verbose",
+                "Content-Type": "application/json;odata=nometadata",
+                "X-HTTP-Method": "MERGE",
+                "IF-MATCH": "@first(body('Localizar_nota')?['d']?['results'])?['__metadata']?['etag']"
+              },
+              "parameters/body": "@string(outputs('Campos'))"
+            },
+            "authentication": "@parameters('$authentication')"
+          },
+          "runAfter": {
+            "Campos": [
+              "Succeeded"
+            ]
+          }
+        }
+      },
+      "runtimeConfiguration": {
+        "concurrency": {
+          "repetitions": 1
+        }
+      },
+      "runAfter": {
+        "Validar": [
+          "Succeeded"
+        ]
+      }
+    },
+    "Revisao": {
+      "type": "OpenApiConnection",
+      "inputs": {
+        "host": {
+          "apiId": "/providers/Microsoft.PowerApps/apis/shared_sharepointonline",
+          "connectionName": "shared_sharepointonline",
+          "operationId": "HttpRequest"
+        },
+        "parameters": {
+          "dataset": "https://energeticaltda.sharepoint.com/sites/energetica",
+          "parameters/method": "GET",
+          "parameters/uri": "_api/web/lists/getbytitle('NOTAS_FISCAIS_SEFAZ')/items?$select=Id,CHAVE_ACESSO,STATUS_RETENCOES,PIS_RETIDO,COFINS_RETIDA,CSLL_RETIDA,IRRF_RETIDO,INSS_RETIDO,ISS_RETIDO&$top=5000",
+          "parameters/headers": {
+            "Accept": "application/json;odata=verbose",
+            "Content-Type": "application/json;odata=nometadata"
+          }
+        },
+        "authentication": "@parameters('$authentication')"
+      },
+      "runAfter": {
+        "Atualizacoes": [
+          "Succeeded"
+        ]
+      }
+    },
+    "Confirmados": {
+      "type": "Select",
+      "inputs": {
+        "from": "@body('Validar')?['updates']",
+        "select": "@item()?['key']"
+      },
+      "runAfter": {
+        "Revisao": [
+          "Succeeded"
+        ]
+      }
+    }
+  }
+}

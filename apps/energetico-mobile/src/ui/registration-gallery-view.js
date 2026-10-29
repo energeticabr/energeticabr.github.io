@@ -1,5 +1,6 @@
 import { placeGalleryQuickSearch } from './gallery-quick-search.js';
 import { decorateSefazInvoiceCard } from './sefaz-invoice-card.js';
+import { buyerWithholding, SEFAZ_RETENTION_FIELDS } from '../chat/sefaz-withholding.js';
 import { matchesGallerySearch } from '../chat/gallery-quick-search.js';
 import { applyScreenNavigation } from "./screen-navigation.js";
 import { attachGalleryRefreshButton } from './gallery-refresh.js';
@@ -578,7 +579,7 @@ export function createRegistrationGallery({ document: doc = globalThis.document,
     const fiscalSections = kind === 'notas_fiscais_sefaz' ? [
       { id: 'notes', label: 'Observações e informações ao fisco', fields: ['OBSERVACOES_NOTA', 'INFORMACOES_FISCO'] },
       { id: 'operation', label: 'Operação e destinatário', fields: ['NATUREZA_OPERACAO', 'DESTINATARIO', 'CNPJ_DESTINATARIO', 'VALOR_PRODUTOS'] },
-      { id: 'taxes', label: 'Tributos e encargos', fields: ['ICMS', 'IPI', 'FRETE', 'SEGURO', 'OUTRAS_DESPESAS'] },
+      { id: 'taxes', label: 'Tributos e encargos', fields: ['ICMS', 'IPI', 'FRETE', 'SEGURO', 'OUTRAS_DESPESAS', 'STATUS_RETENCOES', ...Object.keys(SEFAZ_RETENTION_FIELDS)] },
     ].map(section => {
       const disclosure = el('details', 'rg-fiscal-section');
       disclosure.dataset.fiscalSection = section.id;
@@ -856,7 +857,9 @@ export function createRegistrationGallery({ document: doc = globalThis.document,
             rail.setAttribute('aria-label', 'DANFE PDF pendente');
           }
           if (pdf) rail.append(pdf);
-          decorateSefazInvoiceCard({document: doc, container: main, pdfRail: rail});
+          const withholding = buyerWithholding(row.fields);
+          card.classList.toggle('rg-row--buyer-withholding', Boolean(withholding));
+          decorateSefazInvoiceCard({document: doc, container: main, pdfRail: rail, withholding});
           layout.append(main);
           card.append(layout);
         } else renderNativeDetails(card, row, primary);

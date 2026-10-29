@@ -13,6 +13,32 @@ const sample = { id: '4', fields: { Title: 'FORNECEDOR FICTÍCIO', CHAVE_ACESSO:
   XML_URL: 'https://energeticaltda.sharepoint.com/sites/energetica/Documentos/nota.xml',
   DANFE_URL: { Url: 'https://energeticaltda.sharepoint.com/sites/energetica/Documentos/danfe.pdf', Description: 'DANFE' } } };
 
+test('NF-e de entrada com retenção no XML destaca toda a linha e mantém o PDF próprio', async t => {
+  const dom = new JSDOM('<body/>'), doc = dom.window.document;
+  const fields = {...sample.fields, STATUS_RETENCOES:'RETENCAO_INFORMADA_XML', PIS_RETIDO:6.5, COFINS_RETIDA:30, CSLL_RETIDA:10, IRRF_RETIDO:15, INSS_RETIDO:110, ISS_RETIDO:25};
+  const gallery = createRegistrationGallery({document:doc,kind:'notas_fiscais_sefaz',data:{loadSnapshot:async()=>({rows:[{...sample,fields}]})}});
+  t.after(()=>{gallery.destroy();dom.window.close();}); await gallery.open();
+  const row = doc.querySelector('[data-registration-row="4"]');
+  assert.ok(row.classList.contains('rg-row--buyer-withholding'));
+  const warning = row.querySelector('.rg-sefaz-withholding');
+  assert.match(warning.textContent,/Retenção pelo comprador/);
+  assert.match(warning.textContent.replace(/\s/g,''),/R\$196,50/);
+  assert.equal(warning.closest('details'),null,'aviso visível sem expandir tributos');
+  for(const field of ['PIS_RETIDO','COFINS_RETIDA','CSLL_RETIDA','IRRF_RETIDO','INSS_RETIDO','ISS_RETIDO']) assert.equal(row.querySelector(`[data-field="${field}"]`).closest('details').dataset.fiscalSection,'taxes');
+  assert.equal(row.querySelector('.rg-sefaz-pdf-link').href,sample.fields.DANFE_URL.Url);
+  assert.equal(row.querySelector('[data-field="VALOR_LIQUIDO"] dd').textContent.replace(/\s/g,''),'R$1.250,50','não deduz retenção do líquido outra vez');
+});
+
+test('NF-e não colore por impostos comuns, ausência, zero, saída, cancelamento ou resumo', async t => {
+  const dom = new JSDOM('<body/>'), doc=dom.window.document;
+  const base={...sample.fields,STATUS_RETENCOES:'RETENCAO_INFORMADA_XML',INSS_RETIDO:110};
+  const variants=[{STATUS_RETENCOES:undefined},{STATUS_RETENCOES:'NAO_INFORMADA_XML'},{INSS_RETIDO:0},{INSS_RETIDO:null},{INSS_RETIDO:'R$ 110,00'},{INSS_RETIDO:-110},{INSS_RETIDO:NaN},{DIRECAO:'SAIDA'},{DIRECAO:undefined},{SITUACAO:'CANCELADA'},{SITUACAO:undefined},{STATUS_IMPORTACAO:'RESUMO_AGUARDANDO_XML'},{STATUS_RETENCOES:undefined,INSS_RETIDO:undefined,ICMS:180,ICMS_ST:40,OBSERVACOES_NOTA:'Sem retenção; tributos aproximados R$ 250,00'}];
+  const gallery=createRegistrationGallery({document:doc,kind:'notas_fiscais_sefaz',data:{loadSnapshot:async()=>({rows:variants.map((fields,i)=>({id:String(i+1),fields:{...base,...fields}}))})}});
+  t.after(()=>{gallery.destroy();dom.window.close();});await gallery.open();
+  assert.equal(doc.querySelectorAll('.rg-row--buyer-withholding').length,0);
+  assert.equal(doc.querySelectorAll('.rg-sefaz-withholding').length,0);
+});
+
 test('Suprimentos adds a third gray NF-e gallery below launches and expands the existing blue action', () => {
   const dom = new JSDOM(renderChatMarkup({ sessionStatus: 'authenticated', account: { name: 'Teste' }, messages: [{
     id: 'supplies', role: 'assistant', type: 'poll', question: 'SUPRIMENTOS\nQUAL FLUXO VOCÊ DESEJA INICIAR?',
