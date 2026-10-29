@@ -104,7 +104,7 @@ export function createDdaReportView({document:doc=globalThis.document,data,openM
    documentCluster.append(make('small','','Nº boleto'),make('strong','',row.document||'—'));
    bankDocument.append(bankCluster,documentCluster);
    const issued=make('td','ddr-issued-date');
-   if(row.issued){const formatted=date(row.issued),value=make('strong');value.append(make('span','',formatted.slice(0,6)),make('span','',formatted.slice(6)));issued.append(value,make('small','',`${daysSince(row.issued,today)} d`));}
+   if(row.issued)issued.append(make('strong','',date(row.issued)),make('small','',`${daysSince(row.issued,today)} d`));
    else issued.append(make('span','','Não informada'));
    const files=make('td'),actions=make('div','ddr-row-actions'),check=button((row.status==='Pago'?'Pagamento já confirmado do DDA ':'Confirmar pagamento do DDA ')+row.id,'✓');
    const pencil=button('Vincular DDA '+row.id+' a descritivo provisão','✎');pencil.className='ddr-provision-pencil';pencil.dataset.ddaProvisionPencil=row.id;
