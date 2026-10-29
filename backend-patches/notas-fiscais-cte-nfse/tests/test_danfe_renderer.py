@@ -53,11 +53,12 @@ class DanfeTests(unittest.TestCase):
         with self.assertRaises(ValueError):
             render_request(req)
 
-    def test_simplified_deliveries_have_distinct_correct_xml_paths(self):
+    def test_simplified_deliveries_keep_distinct_destinations_and_values(self):
         result = render_request(render_envelope(cte_xml('cteSimpProc', '2'), CTE_KEY))
         text = '\n'.join(p.extract_text() for p in PdfReader(io.BytesIO(base64.b64decode(result['pdfBase64']))).pages)
-        self.assertIn('infCte/det[1]/xMunFim', text)
-        self.assertIn('infCte/det[2]/xMunFim', text)
+        for value in ['Entrega 1', 'Entrega 2', 'Sao Paulo', 'Campinas', '600,00', '590,00', '400,00', '385,00']:
+            self.assertIn(value, text)
+        self.assertNotIn('infCte/det', text)
 
     def test_standard_cte_uses_actual_dacte_renderer_when_compatible(self):
         from danfe_renderer import Dacte

@@ -1,0 +1,606 @@
+{
+  "$schema": "https://schema.management.azure.com/providers/Microsoft.Logic/schemas/2016-06-01/workflowdefinition.json#",
+  "contentVersion": "1.0.0.0",
+  "parameters": {
+    "$authentication": {
+      "defaultValue": {},
+      "type": "SecureObject"
+    },
+    "$connections": {
+      "defaultValue": {},
+      "type": "Object"
+    }
+  },
+  "triggers": {
+    "manual": {
+      "type": "Request",
+      "kind": "Button",
+      "inputs": {
+        "schema": {
+          "type": "object",
+          "required": [
+            "source",
+            "companyCnpj",
+            "documents"
+          ],
+          "properties": {
+            "source": {
+              "type": "string",
+              "enum": [
+                "FISCAL_PDF_LAYOUT_REPAIR"
+              ]
+            },
+            "companyCnpj": {
+              "type": "string",
+              "enum": [
+                "38626750000146"
+              ]
+            },
+            "documents": {
+              "type": "array",
+              "maxItems": 10,
+              "items": {
+                "type": "object",
+                "required": [
+                  "key",
+                  "xmlSha256",
+                  "xmlBase64",
+                  "expectedSituation",
+                  "danfe"
+                ],
+                "properties": {
+                  "key": {
+                    "type": "string",
+                    "minLength": 50,
+                    "maxLength": 50
+                  },
+                  "xmlSha256": {
+                    "type": "string",
+                    "minLength": 64,
+                    "maxLength": 64
+                  },
+                  "xmlBase64": {
+                    "type": "string",
+                    "minLength": 20,
+                    "maxLength": 1500000
+                  },
+                  "expectedSituation": {
+                    "type": "string",
+                    "enum": [
+                      "AUTORIZADA",
+                      "CANCELADA",
+                      "SUBSTITUIDA"
+                    ]
+                  },
+                  "danfe": {
+                    "type": "object",
+                    "required": [
+                      "fileName",
+                      "pdfBase64",
+                      "sha256"
+                    ],
+                    "properties": {
+                      "fileName": {
+                        "type": "string",
+                        "minLength": 1,
+                        "maxLength": 120
+                      },
+                      "pdfBase64": {
+                        "type": "string",
+                        "minLength": 28,
+                        "maxLength": 2700000
+                      },
+                      "sha256": {
+                        "type": "string",
+                        "minLength": 64,
+                        "maxLength": 64
+                      }
+                    }
+                  }
+                }
+              }
+            }
+          }
+        }
+      },
+      "runtimeConfiguration": {
+        "concurrency": {
+          "runs": 1
+        },
+        "secureData": {
+          "properties": [
+            "outputs"
+          ]
+        }
+      }
+    }
+  },
+  "actions": {
+    "Validar_lote": {
+      "type": "ParseJson",
+      "inputs": {
+        "content": "@triggerBody()",
+        "schema": {
+          "type": "object",
+          "required": [
+            "source",
+            "companyCnpj",
+            "documents"
+          ],
+          "properties": {
+            "source": {
+              "type": "string",
+              "enum": [
+                "FISCAL_PDF_LAYOUT_REPAIR"
+              ]
+            },
+            "companyCnpj": {
+              "type": "string",
+              "enum": [
+                "38626750000146"
+              ]
+            },
+            "documents": {
+              "type": "array",
+              "maxItems": 10,
+              "items": {
+                "type": "object",
+                "required": [
+                  "key",
+                  "xmlSha256",
+                  "xmlBase64",
+                  "expectedSituation",
+                  "danfe"
+                ],
+                "properties": {
+                  "key": {
+                    "type": "string",
+                    "minLength": 50,
+                    "maxLength": 50
+                  },
+                  "xmlSha256": {
+                    "type": "string",
+                    "minLength": 64,
+                    "maxLength": 64
+                  },
+                  "xmlBase64": {
+                    "type": "string",
+                    "minLength": 20,
+                    "maxLength": 1500000
+                  },
+                  "expectedSituation": {
+                    "type": "string",
+                    "enum": [
+                      "AUTORIZADA",
+                      "CANCELADA",
+                      "SUBSTITUIDA"
+                    ]
+                  },
+                  "danfe": {
+                    "type": "object",
+                    "required": [
+                      "fileName",
+                      "pdfBase64",
+                      "sha256"
+                    ],
+                    "properties": {
+                      "fileName": {
+                        "type": "string",
+                        "minLength": 1,
+                        "maxLength": 120
+                      },
+                      "pdfBase64": {
+                        "type": "string",
+                        "minLength": 28,
+                        "maxLength": 2700000
+                      },
+                      "sha256": {
+                        "type": "string",
+                        "minLength": 64,
+                        "maxLength": 64
+                      }
+                    }
+                  }
+                }
+              }
+            }
+          }
+        }
+      },
+      "runtimeConfiguration": {
+        "secureData": {
+          "properties": [
+            "inputs"
+          ]
+        }
+      },
+      "runAfter": {}
+    },
+    "Documentos": {
+      "type": "Foreach",
+      "foreach": "@body('Validar_lote')?['documents']",
+      "actions": {
+        "Conferir_identidade": {
+          "type": "ParseJson",
+          "inputs": {
+            "content": "@if(and(equals(length(items('Documentos')?['key']),50),equals(replace(replace(replace(replace(replace(replace(replace(replace(replace(replace(items('Documentos')?['key'],'0',''),'1',''),'2',''),'3',''),'4',''),'5',''),'6',''),'7',''),'8',''),'9',''),''),equals(length(items('Documentos')?['xmlSha256']),64),equals(replace(replace(replace(replace(replace(replace(replace(replace(replace(replace(replace(replace(replace(replace(replace(replace(items('Documentos')?['xmlSha256'],'0',''),'1',''),'2',''),'3',''),'4',''),'5',''),'6',''),'7',''),'8',''),'9',''),'a',''),'b',''),'c',''),'d',''),'e',''),'f',''),''),equals(items('Documentos')?['danfe']?['fileName'],concat('DANFSe-',items('Documentos')?['key'],'-',substring(items('Documentos')?['xmlSha256'],0,16),'.pdf')),equals(length(items('Documentos')?['danfe']?['sha256']),64),equals(replace(replace(replace(replace(replace(replace(replace(replace(replace(replace(replace(replace(replace(replace(replace(replace(items('Documentos')?['danfe']?['sha256'],'0',''),'1',''),'2',''),'3',''),'4',''),'5',''),'6',''),'7',''),'8',''),'9',''),'a',''),'b',''),'c',''),'d',''),'e',''),'f',''),'')),json('{\"valid\":true}'),json('{}'))",
+            "schema": {
+              "type": "object",
+              "required": [
+                "valid"
+              ],
+              "properties": {
+                "valid": {
+                  "type": "boolean",
+                  "enum": [
+                    true
+                  ]
+                }
+              }
+            }
+          },
+          "runAfter": {}
+        },
+        "Localizar_nota": {
+          "type": "OpenApiConnection",
+          "inputs": {
+            "host": {
+              "apiId": "/providers/Microsoft.PowerApps/apis/shared_sharepointonline",
+              "connectionName": "shared_sharepointonline",
+              "operationId": "HttpRequest"
+            },
+            "parameters": {
+              "dataset": "https://energeticaltda.sharepoint.com/sites/energetica",
+              "parameters/method": "GET",
+              "parameters/uri": "@concat('_api/web/lists/getbytitle(''NOTAS_FISCAIS_SEFAZ'')/items?$select=*&$filter=CHAVE_ACESSO eq ''',items('Documentos')?['key'],'''&$top=2')",
+              "parameters/headers": {
+                "Accept": "application/json;odata=verbose"
+              }
+            },
+            "authentication": "@parameters('$authentication')"
+          },
+          "runAfter": {
+            "Conferir_identidade": [
+              "Succeeded"
+            ]
+          }
+        },
+        "Conferir_nota_unica": {
+          "type": "ParseJson",
+          "inputs": {
+            "content": "@if(equals(length(body('Localizar_nota')?['d']?['results']),1),json('{\"valid\":true}'),json('{}'))",
+            "schema": {
+              "type": "object",
+              "required": [
+                "valid"
+              ],
+              "properties": {
+                "valid": {
+                  "type": "boolean",
+                  "enum": [
+                    true
+                  ]
+                }
+              }
+            }
+          },
+          "runAfter": {
+            "Localizar_nota": [
+              "Succeeded"
+            ]
+          }
+        },
+        "Nota": {
+          "type": "Compose",
+          "inputs": "@first(body('Localizar_nota')?['d']?['results'])",
+          "runAfter": {
+            "Conferir_nota_unica": [
+              "Succeeded"
+            ]
+          }
+        },
+        "Conferir_estado": {
+          "type": "ParseJson",
+          "inputs": {
+            "content": "@if(and(equals(outputs('Nota')?['STATUS_IMPORTACAO'],'XML_COMPLETO'),equals(outputs('Nota')?['SITUACAO'],items('Documentos')?['expectedSituation']),equals(outputs('Nota')?['TIPO_FISCAL'],'NFS-e'),startsWith(outputs('Nota')?['XML_URL']?['Url'],'https://energeticaltda.sharepoint.com/sites/energetica/DOCUMENTOS_FISCAIS_SEFAZ/'),endsWith(outputs('Nota')?['XML_URL']?['Url'],concat('-',substring(items('Documentos')?['xmlSha256'],0,16),'.xml')),endsWith(outputs('Nota')?['DANFE_URL']?['Url'],concat('/',items('Documentos')?['danfe']?['fileName']))),json('{\"valid\":true}'),json('{}'))",
+            "schema": {
+              "type": "object",
+              "required": [
+                "valid"
+              ],
+              "properties": {
+                "valid": {
+                  "type": "boolean",
+                  "enum": [
+                    true
+                  ]
+                }
+              }
+            }
+          },
+          "runAfter": {
+            "Nota": [
+              "Succeeded"
+            ]
+          }
+        },
+        "Baixar_XML": {
+          "type": "OpenApiConnection",
+          "inputs": {
+            "host": {
+              "apiId": "/providers/Microsoft.PowerApps/apis/shared_sharepointonline",
+              "connectionName": "shared_sharepointonline",
+              "operationId": "GetFileContentByPath"
+            },
+            "parameters": {
+              "dataset": "https://energeticaltda.sharepoint.com/sites/energetica",
+              "path": "@substring(outputs('Nota')?['XML_URL']?['Url'],54)",
+              "inferContentType": false
+            },
+            "authentication": "@parameters('$authentication')"
+          },
+          "runtimeConfiguration": {
+            "secureData": {
+              "properties": [
+                "inputs",
+                "outputs"
+              ]
+            }
+          },
+          "runAfter": {
+            "Conferir_estado": [
+              "Succeeded"
+            ]
+          }
+        },
+        "Conferir_XML": {
+          "type": "ParseJson",
+          "inputs": {
+            "content": "@if(equals(body('Baixar_XML')?['$content'],items('Documentos')?['xmlBase64']),json('{\"valid\":true}'),json('{}'))",
+            "schema": {
+              "type": "object",
+              "required": [
+                "valid"
+              ],
+              "properties": {
+                "valid": {
+                  "type": "boolean",
+                  "enum": [
+                    true
+                  ]
+                }
+              }
+            }
+          },
+          "runAfter": {
+            "Baixar_XML": [
+              "Succeeded"
+            ]
+          }
+        },
+        "Localizar_anexo": {
+          "type": "OpenApiConnection",
+          "inputs": {
+            "host": {
+              "apiId": "/providers/Microsoft.PowerApps/apis/shared_sharepointonline",
+              "connectionName": "shared_sharepointonline",
+              "operationId": "HttpRequest"
+            },
+            "parameters": {
+              "dataset": "https://energeticaltda.sharepoint.com/sites/energetica",
+              "parameters/method": "GET",
+              "parameters/uri": "@concat(concat('_api/web/lists/getbytitle(''NOTAS_FISCAIS_SEFAZ'')/items(',string(int(outputs('Nota')?['Id'])),')'),'/AttachmentFiles(''',items('Documentos')?['danfe']?['fileName'],''')?$select=FileName,ServerRelativeUrl')",
+              "parameters/headers": {
+                "Accept": "application/json;odata=verbose"
+              }
+            },
+            "authentication": "@parameters('$authentication')"
+          },
+          "runAfter": {
+            "Conferir_XML": [
+              "Succeeded"
+            ]
+          }
+        },
+        "Metadados_anexo": {
+          "type": "OpenApiConnection",
+          "inputs": {
+            "host": {
+              "apiId": "/providers/Microsoft.PowerApps/apis/shared_sharepointonline",
+              "connectionName": "shared_sharepointonline",
+              "operationId": "GetFileMetadataByPath"
+            },
+            "parameters": {
+              "dataset": "https://energeticaltda.sharepoint.com/sites/energetica",
+              "path": "@substring(body('Localizar_anexo')?['d']?['ServerRelativeUrl'],17)"
+            },
+            "authentication": "@parameters('$authentication')"
+          },
+          "runtimeConfiguration": {
+            "secureData": {
+              "properties": [
+                "inputs",
+                "outputs"
+              ]
+            }
+          },
+          "runAfter": {
+            "Localizar_anexo": [
+              "Succeeded"
+            ]
+          }
+        },
+        "Atualizar_PDF": {
+          "type": "OpenApiConnection",
+          "inputs": {
+            "host": {
+              "apiId": "/providers/Microsoft.PowerApps/apis/shared_sharepointonline",
+              "connectionName": "shared_sharepointonline",
+              "operationId": "UpdateFile"
+            },
+            "parameters": {
+              "dataset": "https://energeticaltda.sharepoint.com/sites/energetica",
+              "id": "@body('Metadados_anexo')?['Id']",
+              "body": "@base64ToBinary(items('Documentos')?['danfe']?['pdfBase64'])"
+            },
+            "authentication": "@parameters('$authentication')"
+          },
+          "runtimeConfiguration": {
+            "secureData": {
+              "properties": [
+                "inputs",
+                "outputs"
+              ]
+            }
+          },
+          "runAfter": {
+            "Metadados_anexo": [
+              "Succeeded"
+            ]
+          }
+        },
+        "Baixar_PDF": {
+          "type": "OpenApiConnection",
+          "inputs": {
+            "host": {
+              "apiId": "/providers/Microsoft.PowerApps/apis/shared_sharepointonline",
+              "connectionName": "shared_sharepointonline",
+              "operationId": "GetFileContentByPath"
+            },
+            "parameters": {
+              "dataset": "https://energeticaltda.sharepoint.com/sites/energetica",
+              "path": "@substring(body('Localizar_anexo')?['d']?['ServerRelativeUrl'],17)",
+              "inferContentType": true
+            },
+            "authentication": "@parameters('$authentication')"
+          },
+          "runtimeConfiguration": {
+            "secureData": {
+              "properties": [
+                "inputs",
+                "outputs"
+              ]
+            }
+          },
+          "runAfter": {
+            "Atualizar_PDF": [
+              "Succeeded"
+            ]
+          }
+        },
+        "Conferir_PDF": {
+          "type": "ParseJson",
+          "inputs": {
+            "content": "@if(equals(body('Baixar_PDF')?['$content'],items('Documentos')?['danfe']?['pdfBase64']),json('{\"valid\":true}'),json('{}'))",
+            "schema": {
+              "type": "object",
+              "required": [
+                "valid"
+              ],
+              "properties": {
+                "valid": {
+                  "type": "boolean",
+                  "enum": [
+                    true
+                  ]
+                }
+              }
+            }
+          },
+          "runAfter": {
+            "Baixar_PDF": [
+              "Succeeded"
+            ]
+          }
+        },
+        "Nota_depois": {
+          "type": "OpenApiConnection",
+          "inputs": {
+            "host": {
+              "apiId": "/providers/Microsoft.PowerApps/apis/shared_sharepointonline",
+              "connectionName": "shared_sharepointonline",
+              "operationId": "HttpRequest"
+            },
+            "parameters": {
+              "dataset": "https://energeticaltda.sharepoint.com/sites/energetica",
+              "parameters/method": "GET",
+              "parameters/uri": "@concat(concat('_api/web/lists/getbytitle(''NOTAS_FISCAIS_SEFAZ'')/items(',string(int(outputs('Nota')?['Id'])),')'),'?$select=Id,CHAVE_ACESSO,SITUACAO,STATUS_IMPORTACAO,DANFE_URL')",
+              "parameters/headers": {
+                "Accept": "application/json;odata=verbose"
+              }
+            },
+            "authentication": "@parameters('$authentication')"
+          },
+          "runAfter": {
+            "Conferir_PDF": [
+              "Succeeded"
+            ]
+          }
+        },
+        "Conferir_estado_final": {
+          "type": "ParseJson",
+          "inputs": {
+            "content": "@if(and(equals(body('Nota_depois')?['d']?['Id'],outputs('Nota')?['Id']),equals(body('Nota_depois')?['d']?['CHAVE_ACESSO'],items('Documentos')?['key']),equals(body('Nota_depois')?['d']?['SITUACAO'],items('Documentos')?['expectedSituation']),equals(body('Nota_depois')?['d']?['STATUS_IMPORTACAO'],'XML_COMPLETO'),equals(body('Nota_depois')?['d']?['DANFE_URL']?['Url'],outputs('Nota')?['DANFE_URL']?['Url'])),json('{\"valid\":true}'),json('{}'))",
+            "schema": {
+              "type": "object",
+              "required": [
+                "valid"
+              ],
+              "properties": {
+                "valid": {
+                  "type": "boolean",
+                  "enum": [
+                    true
+                  ]
+                }
+              }
+            }
+          },
+          "runAfter": {
+            "Nota_depois": [
+              "Succeeded"
+            ]
+          }
+        }
+      },
+      "runtimeConfiguration": {
+        "concurrency": {
+          "repetitions": 1
+        }
+      },
+      "runAfter": {
+        "Validar_lote": [
+          "Succeeded"
+        ]
+      }
+    },
+    "Chaves_confirmadas": {
+      "type": "Select",
+      "inputs": {
+        "from": "@body('Validar_lote')?['documents']",
+        "select": {
+          "key": "@item()?['key']",
+          "pdfSha256": "@item()?['danfe']?['sha256']"
+        }
+      },
+      "runAfter": {
+        "Documentos": [
+          "Succeeded"
+        ]
+      }
+    },
+    "Recibo": {
+      "type": "Compose",
+      "inputs": {
+        "source": "FISCAL_PDF_LAYOUT_REPAIR",
+        "documents": "@body('Chaves_confirmadas')"
+      },
+      "runAfter": {
+        "Chaves_confirmadas": [
+          "Succeeded"
+        ]
+      }
+    }
+  },
+  "outputs": {}
+}

@@ -1,12 +1,12 @@
 # PDF e notificacao de NF-e, CT-e e NFS-e
 
-Implementacao offline verificada em 29/10/2026. Nenhuma consulta fiscal, certificado ou envio real de WhatsApp foi usado nesta tarefa. Os exemplos em `output/pdf/*teste.pdf` sao inteiramente ficticios, em homologacao, e foram rasterizados com Poppler e inspecionados visualmente.
+Componente offline de renderizacao verificado em29/10/2026. Recebe XML e devolve PDF, sem acessar certificado ou consultar distribuicao fiscal. Os exemplos de teste sao ficticios, em homologacao, e foram rasterizados e inspecionados. A implantacao real, a correcao dos nove anexos e a retomada das pendencias estao descritas em `PDF-LAYOUT-REPAIR.md`.
 
 ## Arquivos e instalacao posterior
 
-`fiscal_document.py` concentra a validacao do XML usada por `danfe_renderer.py` e `sefaz_whatsapp_dispatch.py`. Na publicacao posterior, copiar os tres arquivos para o mesmo diretorio de execucao. Esta tarefa nao publica o servidor nem altera PowerShell, fluxos ou galeria.
+`fiscal_document.py` concentra a validacao do XML usada pelo renderizador e notificador. Copiar `fiscal_document.py`, `fiscal_pdf_layout.py`, `danfe_renderer.py` e `sefaz_whatsapp_dispatch.py` para o mesmo diretorio, instalando os auxiliares antes dos consumidores. A configuracao e os estados existentes permanecem preservados.
 
-Nao ha dependencia nova: venv existente `.runtime/danfe-venv`, Python 3.12, BrazilFiscalReport 1.3.1, defusedxml 0.7.1, fpdf2 2.8.9, fonttools e python-barcode ja instalados. O espelho incorpora a fonte `barcode/fonts/DejaVuSansMono.ttf`; nao depende de fonte Windows no servidor. `pypdf` e Poppler sao usados na verificacao local. Caracteres sem glifo disponivel provocam falha, em vez de alterar silenciosamente o texto fiscal.
+Nao ha dependencia nova: venv existente `.runtime/danfe-venv`, Python 3.12, BrazilFiscalReport 1.3.1, defusedxml 0.7.1, fpdf2 2.8.9, fonttools e python-barcode ja instalados. O espelho incorpora fonte Sans TrueType existente no host; se nao houver DejaVu Sans, Liberation Sans ou Arial, usa a fonte Unicode `barcode/fonts/DejaVuSansMono.ttf` ja instalada. Nao depende de fonte Windows no servidor Linux. `pypdf` e Poppler sao usados na verificacao local. Caracteres sem glifo disponivel provocam falha, em vez de alterar silenciosamente o texto fiscal.
 
 ## Entrada, validacao e nomes
 
@@ -35,7 +35,7 @@ Para arquivar uma NFSe completa ja cancelada/substituida, o worker pode acrescen
 
 ## Conteudo dos espelhos
 
-Cabecalho identifica claramente `ESPELHO DO XML`, tipo, ambiente e eventual situacao historica. Nao usa logotipo oficial nem se apresenta como DANFSe oficial. Mostra fornecedor, chave, emissao com fuso literal, total, liquido quando explicito e SHA-256. A seguir lista valores e atributos literais com caminhos do XML, distinguindo grupos repetidos e entregas do CT-e simplificado. Assinatura digital permanece no XML original, sem imprimir seu bloco base64 no PDF.
+O cabecalho identifica o espelho fiscal, tipo, ambiente e eventual situacao historica. Nao usa logotipo oficial nem se apresenta como DANFSe oficial. O corpo apresenta secoes de identificacao, prestador/transportadora, tomador, servico/transporte, valores, tributos, retencoes e observacoes. Nao imprime caminhos ou tags do XML. Entregas do CT-e simplificado permanecem separadas, com destino e valores proprios. A chave completa aparece no rodape de todas as paginas. Assinatura digital e demais dados completos permanecem no XML original.
 
 Total do CT-e vem de `vPrest/vTPrest`; no simplificado, `total/vTPrest`. `vTRec`, `vRec` e `vTPrestLiq` nao substituem o total. NFS-e usa `DPS/infDPS/valores/vServPrest/vServ`; liquido e `infNFSe/valores/vLiq`, sem nova subtracao. Prestador vem de `prest`, nunca do tomador que eventualmente emitiu o documento. A emissao NFS-e usa `infNFSe/dhProc`, distinguindo a emissao anterior da DPS.
 
@@ -55,4 +55,13 @@ Texto NF-e permanece identico. CT-e/CT-eOS/NFS-e passam a identificar o tipo, co
 & .runtime/danfe-venv/Scripts/python.exe -m unittest discover -s tests -p 'test_*.py'
 ```
 
-A suite cobre NF-e existente, os tres tipos CT-e, NFSe, metadata falsificada, NSU19, chaves/modelo/ambiente/empresa divergentes, hash, XML invalido, corte mensal, recibo, deduplicacao e sequenciamento misto. Dacte foi exercitado de fato para o CT-e57 de teste. Quatro PDFs de exemplo foram abertos por rasterizacao: CT-e57 (1pagina), CT-eOS (4paginas), CT-e simplificado (4paginas) e NFS-e (2paginas). O PDF de teste nao e um documento fiscal emitido.
+A suite cobre NF-e existente, os tres tipos CT-e, NFSe, metadata falsificada, NSU19, chaves/modelo/ambiente/empresa divergentes, hash, XML invalido, corte mensal, recibo, deduplicacao e sequenciamento misto. Dacte foi exercitado de fato para o CT-e57 de teste. Quatro PDFs de exemplo foram abertos por rasterizacao: CT-e57 (1pagina), CT-eOS e CT-e simplificado; as previas atuais legiveis estao em `*-legivel-*.pdf`, substituindo o despejo tecnico de campos anterior. O PDF de teste nao e um documento fiscal emitido.
+# Espelhos legíveis de NFS-e e transporte
+
+`src/fiscal_pdf_layout.py` organiza o fallback de NFS-e, CT-e OS e CT-e simplificado em seções de leitura, sem despejar caminhos/tags do XML. A NF-e e a rota principal do DACTE modelo 57 continuam usando os renderizadores existentes.
+
+O A4 usa identificação, prestador/transportadora e tomador, serviço/transporte, totais, tributos, retenções e observações. O valor líquido é o campo explícito do XML e não sofre nova dedução. Ausências aparecem como não informadas; ISS comum não é promovido a retenção. Endereço do emitente só completa o prestador quando os identificadores concordam; código IBGE sem nome continua código, com a UF literal quando presente.
+
+O título identifica **ESPELHO DA NFS-e**, gerado do XML, sem logotipo ou QR oficial. Cabeçalho e rodapé se repetem nas páginas; cancelamento/substituição é marcado em todas. Descrições e observações têm quebra automática, sem corte. O corpo usa fonte de pelo menos 9 pt; rodapés de identificação são menores. Fontes TrueType existentes no host são incorporadas (DejaVu Sans, Liberation Sans ou Arial), com a fonte Unicode já fornecida por `python-barcode` como fallback; não há pacote novo.
+
+Testes offline: `python -m unittest discover -s tests -p test_fiscal_pdf_layout.py -v` e `python -m unittest discover -s tests -p test_danfe_renderer.py -v`. Prévias fictícias ficam em `output/pdf/*-legivel-*.pdf`, e o caso multilinha cancelado em `output/pdf/nfse-multilinha-cancelada-ficticia.pdf`.
