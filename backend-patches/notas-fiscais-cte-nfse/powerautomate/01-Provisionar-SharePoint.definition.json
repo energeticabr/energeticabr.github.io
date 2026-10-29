@@ -4476,6 +4476,138 @@
         ]
       }
     },
+    "Localizar_CONTRIB_SOCIAIS_RETIDAS": {
+      "type": "OpenApiConnection",
+      "inputs": {
+        "host": {
+          "apiId": "/providers/Microsoft.PowerApps/apis/shared_sharepointonline",
+          "connectionName": "shared_sharepointonline",
+          "operationId": "HttpRequest"
+        },
+        "parameters": {
+          "dataset": "https://energeticaltda.sharepoint.com/sites/energetica",
+          "parameters/method": "GET",
+          "parameters/uri": "_api/web/lists/getbytitle('NOTAS_FISCAIS_SEFAZ')/fields?$select=InternalName,TypeAsString&$filter=InternalName eq 'CONTRIB_SOCIAIS_RETIDAS'",
+          "parameters/headers": {
+            "Accept": "application/json;odata=nometadata",
+            "Content-Type": "application/json;odata=nometadata"
+          }
+        },
+        "authentication": "@parameters('$authentication')"
+      },
+      "runAfter": {
+        "Garantir_ISS_RETIDO": [
+          "Succeeded"
+        ]
+      }
+    },
+    "Garantir_CONTRIB_SOCIAIS_RETIDAS": {
+      "type": "If",
+      "expression": {
+        "equals": [
+          "@length(body('Localizar_CONTRIB_SOCIAIS_RETIDAS')?['value'])",
+          0
+        ]
+      },
+      "actions": {
+        "Criar_CONTRIB_SOCIAIS_RETIDAS": {
+          "type": "OpenApiConnection",
+          "inputs": {
+            "host": {
+              "apiId": "/providers/Microsoft.PowerApps/apis/shared_sharepointonline",
+              "connectionName": "shared_sharepointonline",
+              "operationId": "HttpRequest"
+            },
+            "parameters": {
+              "dataset": "https://energeticaltda.sharepoint.com/sites/energetica",
+              "parameters/method": "POST",
+              "parameters/uri": "_api/web/lists/getbytitle('NOTAS_FISCAIS_SEFAZ')/fields/createfieldasxml",
+              "parameters/headers": {
+                "Accept": "application/json;odata=nometadata",
+                "Content-Type": "application/json;odata=nometadata"
+              },
+              "parameters/body": "{\"parameters\":{\"SchemaXml\":\"<Field Type=\\\"Currency\\\" Name=\\\"CONTRIB_SOCIAIS_RETIDAS\\\" StaticName=\\\"CONTRIB_SOCIAIS_RETIDAS\\\" DisplayName=\\\"CONTRIB_SOCIAIS_RETIDAS\\\" Decimals=\\\"2\\\" LCID=\\\"1046\\\" />\",\"Options\":8}}"
+            },
+            "authentication": "@parameters('$authentication')"
+          },
+          "runAfter": {}
+        }
+      },
+      "else": {
+        "actions": {}
+      },
+      "runAfter": {
+        "Localizar_CONTRIB_SOCIAIS_RETIDAS": [
+          "Succeeded"
+        ]
+      }
+    },
+    "Localizar_TOTAL_RETIDO": {
+      "type": "OpenApiConnection",
+      "inputs": {
+        "host": {
+          "apiId": "/providers/Microsoft.PowerApps/apis/shared_sharepointonline",
+          "connectionName": "shared_sharepointonline",
+          "operationId": "HttpRequest"
+        },
+        "parameters": {
+          "dataset": "https://energeticaltda.sharepoint.com/sites/energetica",
+          "parameters/method": "GET",
+          "parameters/uri": "_api/web/lists/getbytitle('NOTAS_FISCAIS_SEFAZ')/fields?$select=InternalName,TypeAsString&$filter=InternalName eq 'TOTAL_RETIDO'",
+          "parameters/headers": {
+            "Accept": "application/json;odata=nometadata",
+            "Content-Type": "application/json;odata=nometadata"
+          }
+        },
+        "authentication": "@parameters('$authentication')"
+      },
+      "runAfter": {
+        "Garantir_CONTRIB_SOCIAIS_RETIDAS": [
+          "Succeeded"
+        ]
+      }
+    },
+    "Garantir_TOTAL_RETIDO": {
+      "type": "If",
+      "expression": {
+        "equals": [
+          "@length(body('Localizar_TOTAL_RETIDO')?['value'])",
+          0
+        ]
+      },
+      "actions": {
+        "Criar_TOTAL_RETIDO": {
+          "type": "OpenApiConnection",
+          "inputs": {
+            "host": {
+              "apiId": "/providers/Microsoft.PowerApps/apis/shared_sharepointonline",
+              "connectionName": "shared_sharepointonline",
+              "operationId": "HttpRequest"
+            },
+            "parameters": {
+              "dataset": "https://energeticaltda.sharepoint.com/sites/energetica",
+              "parameters/method": "POST",
+              "parameters/uri": "_api/web/lists/getbytitle('NOTAS_FISCAIS_SEFAZ')/fields/createfieldasxml",
+              "parameters/headers": {
+                "Accept": "application/json;odata=nometadata",
+                "Content-Type": "application/json;odata=nometadata"
+              },
+              "parameters/body": "{\"parameters\":{\"SchemaXml\":\"<Field Type=\\\"Currency\\\" Name=\\\"TOTAL_RETIDO\\\" StaticName=\\\"TOTAL_RETIDO\\\" DisplayName=\\\"TOTAL_RETIDO\\\" Decimals=\\\"2\\\" LCID=\\\"1046\\\" />\",\"Options\":8}}"
+            },
+            "authentication": "@parameters('$authentication')"
+          },
+          "runAfter": {}
+        }
+      },
+      "else": {
+        "actions": {}
+      },
+      "runAfter": {
+        "Localizar_TOTAL_RETIDO": [
+          "Succeeded"
+        ]
+      }
+    },
     "Localizar_ISS": {
       "type": "OpenApiConnection",
       "inputs": {
@@ -4496,7 +4628,7 @@
         "authentication": "@parameters('$authentication')"
       },
       "runAfter": {
-        "Garantir_ISS_RETIDO": [
+        "Garantir_TOTAL_RETIDO": [
           "Succeeded"
         ]
       }

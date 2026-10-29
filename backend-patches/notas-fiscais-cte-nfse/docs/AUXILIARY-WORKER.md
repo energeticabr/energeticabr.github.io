@@ -119,7 +119,7 @@ Um tipo fora de escopo não é publicado como CT-e/NFS-e nem contado como entreg
 
 ## Escopo e confirmação
 
-O corte padrão é `2026-10-01`, com prioridade para `Config.minimumIssueDate` e depois `WorkerConfig.minimumIssueDate`. A evidência de escopo inclui o lote atual e documentos de `archive`, `outbox`, `scope-excluded` e `scope-pending-date`. Evento pode usar a emissão do XML completo relacionado, inclusive quando está no mesmo lote. Somente `READY` entra na outbox; `BEFORE_SCOPE` fica excluído, e `PENDING_DATE`/`FUTURE_DATE` aguardam evidência sem bloquear o cursor de distribuição.
+O corte operacional configurado é **01/09/2026** (`2026-09-01`), com prioridade para `Config.minimumIssueDate` e depois `WorkerConfig.minimumIssueDate`. A ampliação preserva NSUs, filas e deduplicação; não apaga nem reinicia cursores. Quando ambas as configurações estão ausentes, o valor de compatibilidade do código continua `2026-10-01`; ele não substitui a configuração operacional. A evidência de escopo inclui o lote atual e documentos de `archive`, `outbox`, `scope-excluded` e `scope-pending-date`. Evento pode usar a emissão do XML completo relacionado, inclusive quando está no mesmo lote. Somente `READY` entra na outbox; `BEFORE_SCOPE` fica excluído, e `PENDING_DATE`/`FUTURE_DATE` aguardam evidência sem bloquear o cursor de distribuição.
 
 Cada envio contém até dez documentos e orçamento conservador de 1.500.000 bytes, reservando espaço para o envelope. O leitor próprio da outbox mantém a ordenação int64 e suporta IDs de 15–19 dígitos de NSU; o helper antigo de confirmação aceitava somente 15. Documento individual acima do limite permanece durável e gera `AUX_DOCUMENT_TOO_LARGE`, sem consulta adicional.
 
@@ -127,9 +127,11 @@ O recibo precisa conter `source='SEFAZ'` e `acknowledgedIds` com **exatamente to
 
 ## Horários e isolamento
 
-O scheduler calcula o último horário devido em `America/Sao_Paulo`/`E. South America Standard Time`. Usa `Config.scheduleHours`, depois `WorkerConfig.scheduleHours`, ou `[9,15,20]`. Antes das 09h, o último horário é o das 20h da véspera. Um slot já concluído não inicia nova rodada; outbox, journal e pendências de data continuam sendo retomados. Se uma rodada antiga ainda estiver pendente, sua conclusão conserva o slot original.
+As três fontes — NF-e, CT-e e NFS-e nacional — têm rodadas **todos os dias às 09h, 15h e 20h de Brasília**. O scheduler auxiliar calcula o último horário devido em `America/Sao_Paulo`/`E. South America Standard Time`. Usa `Config.scheduleHours`, depois `WorkerConfig.scheduleHours`, ou `[9,15,20]`. Antes das 09h, o último horário é o das 20h da véspera. Um slot já concluído não inicia nova rodada; outbox, journal e pendências de data continuam sendo retomados. Se uma rodada antiga ainda estiver pendente, sua conclusão conserva o slot original. A tarefa Windows verifica a fila a cada minuto, respeitando horários, estados e cooldowns; essa verificação não consulta os serviços fiscais a cada minuto.
 
 As fontes possuem locks, cursores, caixas de saída, journals e cooldowns separados. O ciclo tenta ambas mesmo quando uma lança erro. Não há dependência do estado operacional da NF-e.
+
+O Windows precisa permanecer ligado, conectado e com a sessão do usuário ativa e o A1 válido disponível no repositório desse usuário. A janela do aplicativo pode ficar fechada. NFS-e usa o runtime local `%LOCALAPPDATA%\Energetica\Runtime\FiscalPdf\Scripts\python.exe` para gerar o DANFSe do XML nacional, sem depender da API de PDF do ADN. Arial/Arial Bold e Microsoft Sans Serif vêm do Windows, sem exportação para o servidor. NF-e e CT-e usam o renderizador pelo SSH existente. Leiautes incompatíveis ficam pendentes e não geram relatório de campos como fallback. Consulte [PDF-CTE-NFSE.md](PDF-CTE-NFSE.md).
 
 ## Testes
 

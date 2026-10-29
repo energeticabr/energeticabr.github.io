@@ -269,6 +269,14 @@
       "type": "Currency"
     },
     {
+      "name": "CONTRIB_SOCIAIS_RETIDAS",
+      "type": "Currency"
+    },
+    {
+      "name": "TOTAL_RETIDO",
+      "type": "Currency"
+    },
+    {
       "name": "ISS",
       "type": "Currency"
     },

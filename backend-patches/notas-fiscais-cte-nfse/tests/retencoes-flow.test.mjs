@@ -33,7 +33,7 @@ test('retencoes sao valores proprios e atualizacao completa limpa ausencias sem 
   const schema=read('schema-sharepoint.json');
   const flow=read('03-Receber-NFe.definition.json');
   const fields=flow.actions.Documentos.actions.Campos_finais.inputs;
-  for(const name of ['PIS_RETIDO','COFINS_RETIDA','CSLL_RETIDA','IRRF_RETIDO','INSS_RETIDO','ISS_RETIDO']){
+  for(const name of ['PIS_RETIDO','COFINS_RETIDA','CSLL_RETIDA','IRRF_RETIDO','INSS_RETIDO','ISS_RETIDO','CONTRIB_SOCIAIS_RETIDAS','TOTAL_RETIDO']){
     assert.equal(schema.fields.find(field=>field.name===name)?.type,'Currency');
     for(const incoming of [{STATUS_IMPORTACAO:'RESUMO_AGUARDANDO_XML'},{STATUS_IMPORTACAO:'EVENTO_SEM_XML'}]) assert.equal(evaluate(fields[name],{outputs:{Existente:{STATUS_IMPORTACAO:'XML_COMPLETO',[name]:110},Novos_campos:incoming}}),110);
     assert.equal(evaluate(fields[name],{outputs:{Existente:{[name]:110},Novos_campos:{STATUS_IMPORTACAO:'XML_COMPLETO'}}}),null);
@@ -51,10 +51,36 @@ test('carga de retencoes altera somente metadados de uma nota existente',()=>{
   assert.equal(patch['parameters/headers']['X-HTTP-Method'],'MERGE');
   assert.ok(patch['parameters/headers']['IF-MATCH'].includes('etag'));
   assert.equal(patch['parameters/body'],"@string(outputs('Campos'))",'serializa valores numericos/null depois de avaliar as expressoes');
-  assert.deepEqual(Object.keys(actions.Campos.inputs).sort(),['STATUS_RETENCOES','PIS_RETIDO','COFINS_RETIDA','CSLL_RETIDA','IRRF_RETIDO','INSS_RETIDO','ISS_RETIDO'].sort());
-  const incoming={STATUS_RETENCOES:'RETENCAO_INFORMADA_XML',PIS_RETIDO:null,COFINS_RETIDA:0,CSLL_RETIDA:null,IRRF_RETIDO:15,INSS_RETIDO:110,ISS_RETIDO:null};
+  assert.deepEqual(Object.keys(actions.Campos.inputs).sort(),['STATUS_RETENCOES','PIS_RETIDO','COFINS_RETIDA','CSLL_RETIDA','IRRF_RETIDO','INSS_RETIDO','ISS_RETIDO','CONTRIB_SOCIAIS_RETIDAS','TOTAL_RETIDO'].sort());
+  const incoming={STATUS_RETENCOES:'RETENCAO_INFORMADA_XML',PIS_RETIDO:null,COFINS_RETIDA:null,CSLL_RETIDA:null,IRRF_RETIDO:null,INSS_RETIDO:null,ISS_RETIDO:null,CONTRIB_SOCIAIS_RETIDAS:13.02,TOTAL_RETIDO:13.02};
   const evaluated=Object.fromEntries(Object.entries(actions.Campos.inputs).map(([name,expression])=>[name,evaluate(expression,{items:{Atualizacoes:{fields:incoming}}})]));
   assert.deepEqual(JSON.parse(evaluate(patch['parameters/body'],{outputs:{Campos:evaluated}})),incoming);
   assert.ok(!JSON.stringify(flow).includes('Files/add'));
   assert.ok(!JSON.stringify(flow).includes('VALOR_LIQUIDO'));
+});
+
+test('helper de retencoes aceita somente NF-e55 e NFS-e50 validadas antes de consulta ou escrita',()=>{
+  const flow=read('06-Atualizar-Retencoes.definition.json'),a=flow.actions.Atualizacoes.actions;
+  const schema=flow.triggers.manual.inputs.schema;
+  assert.equal(schema.properties.updates.items.properties.key.minLength,44);
+  assert.equal(schema.properties.updates.items.properties.key.maxLength,50);
+  assert.equal(a.Localizar_nota.runAfter.Conferir_identidade[0],'Succeeded');
+  assert.equal(a.Campos.runAfter.Conferir_tipo[0],'Succeeded');
+  const nfe='31261012345678000123550010000001231000001234',nfse='1'.repeat(50);
+  const identity=key=>evaluate(a.Conferir_identidade.inputs.content,{items:{Atualizacoes:{key}}});
+  for(const key of [nfe,nfe.slice(0,6)+'12ABC6780001'+nfe.slice(18),nfse])assert.deepEqual(identity(key),{valid:true});
+  for(const key of [nfe+'1',nfse.slice(0,-1),nfe.replace('55','57'),"'"+nfse.slice(1),nfe.slice(0,6)+'12abc6780001'+nfe.slice(18)])assert.deepEqual(identity(key),{});
+  const stored=(key,row)=>evaluate(a.Conferir_tipo.inputs.content,{items:{Atualizacoes:{key}},body:{Localizar_nota:{d:{results:[row]}}}});
+  assert.deepEqual(stored(nfe,{CHAVE_ACESSO:nfe,TIPO_FISCAL:'NF-e',MODELO:'55'}),{valid:true});
+  assert.deepEqual(stored(nfse,{CHAVE_ACESSO:nfse,TIPO_FISCAL:'NFS-e',MODELO:'NFS-e'}),{valid:true});
+  for(const row of [{CHAVE_ACESSO:nfse,TIPO_FISCAL:'CT-e'}, {CHAVE_ACESSO:nfe,TIPO_FISCAL:'NFS-e'}])assert.deepEqual(stored(nfse,row),{});
+  assert.deepEqual(stored(nfe,{CHAVE_ACESSO:nfe,TIPO_FISCAL:'CT-e',MODELO:'57'}),{});
+});
+
+test('reanalise NFS-e limpa componentes antigos sem somar novamente o agregado ao total explicito',()=>{
+  const fields=read('03-Receber-NFe.definition.json').actions.Documentos.actions.Campos_finais.inputs;
+  const context={outputs:{Existente:{PIS_RETIDO:1.82,COFINS_RETIDA:8.40,CSLL_RETIDA:13.02},Novos_campos:{STATUS_IMPORTACAO:'XML_COMPLETO',TIPO_FISCAL:'NFS-e',CONTRIB_SOCIAIS_RETIDAS:13.02,TOTAL_RETIDO:13.02}}};
+  for(const name of ['PIS_RETIDO','COFINS_RETIDA','CSLL_RETIDA'])assert.equal(evaluate(fields[name],context),null);
+  assert.equal(evaluate(fields.CONTRIB_SOCIAIS_RETIDAS,context),13.02);
+  assert.equal(evaluate(fields.TOTAL_RETIDO,context),13.02);
 });

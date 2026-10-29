@@ -1,15 +1,27 @@
-# Espelhos fiscais legíveis
+# Correção para os PDFs fiscais padrão
 
-O renderizador de NFS-e e dos formatos CT-e sem DACTE disponível usa blocos legíveis com emitente/prestador, tomador, identificação, emissão original, serviço/transporte, valores, tributos e observações. O corpo não reproduz caminhos técnicos do XML. A fonte utiliza Sans Unicode já instalada no Windows ou Linux, incluindo os caminhos DejaVu Sans do Oracle Linux. `src/fiscal_pdf_layout.py` precisa acompanhar `danfe_renderer.py`; instalar o auxiliar antes do consumidor. NF-e e o caminho principal DACTE do CT-e57 permanecem inalterados.
+O caminho atual substitui os antigos espelhos de campos pelo DANFSe nacional v2.0, modelo NT 008, e pelo DACTE do CT-e modelo 57 versão 4.00. NF-e conserva seu DANFE. Falha ou leiaute sem suporte permanece pendente; não há relatório XML alternativo.
 
-Valores vêm dos campos literais. Ausência não vira zero; o líquido permanece o informado no XML, sem novo desconto de tributos. Os rótulos de retenção distinguem tomador/intermediário conforme os indicadores declarados. Nomes e endereços alternativos só vêm do emitente quando a identidade coincide. Descrições longas continuam nas páginas seguintes, com cabeçalho, chave, paginação e marca de cancelamento/substituição em todas as páginas.
+## Preparação e QA
 
-O documento se identifica como espelho do XML. O endpoint oficial de DANFSe retornou503 na verificação de29/10/2026; nenhum PDF oficial foi obtido nesse teste. O espelho não reproduz logomarca ou QR de autorização inventados.
+NFS-e usa `%LOCALAPPDATA%\Energetica\Runtime\FiscalPdf\Scripts\python.exe`, com `danfe_renderer.py`, `fiscal_document.py` e `national_danfse.py`. Arial, Arial Bold e Microsoft Sans Serif vêm do Windows e são incorporadas ao PDF, sem copiar fontes para o servidor. As versões estão em `config/danfe-requirements.txt`. A geração local não depende da API de PDF do ADN. NF-e e CT-e continuam no renderizador pelo SSH existente.
 
-## Correção de anexos já existentes
+Conferir XML original, chave, participantes, número, emissão, valores e hashes. Renderizar e inspecionar visualmente os documentos, inclusive observações e retenções. NFS-e cancelada/substituída recebe a marca da situação reconciliada. O líquido permanece o do XML, sem desconto adicional. Não gerar PDF de resumo ou modificar XML para contornar validação.
 
-`build-pdf-repair-flow.mjs` gera o fluxo07. O receptor autenticado aceita somente NFS-e existentes com XML completo, mesma chave, hash/arquivo vinculado e situação esperada. Confere os bytes do XML arquivado, atualiza exclusivamente o arquivo PDF já anexado, baixa o PDF para conferir igualdade de bytes e verifica novamente chave/situação/link. Não altera campos fiscais, não cria notas e não envia mensagens. O ACK confirma chave e hash do PDF. `Deploy-PdfRepairFlow.ps1` usa a conexão já autorizada e conserva os runs em `.runtime`; não é um webhook público.
+O instalador valida os 16 arquivos e pré-requisitos antes da promoção, conserva backup para rollback e verifica a preservação de configurações, cursores e dados. Conferir os hashes dos arquivos promovidos; sucesso na validação do pacote não comprova instalação nem correção de anexos.
 
-Na correção real, nove anexos foram substituídos;500campos foram comparados sem diferenças. Os envios SEFAZ foram suspensos durante a correção. Apenas quatro NFS-e ainda sem PDF enviado tiveram arquivo/hash atualizados na fila do servidor e na fila nativa. Documentos enviados ou em trânsito foram preservados; não houve reenvio automático de históricos. A retomada ocorreu somente após conferir os hashes e a situação dos documentos pendentes. As evidências ficam em `evidence/pdf-layout-repair-live.json`, `pdf-layout-pending-server.json` e `pdf-layout-dispatch-resumed.json`.
+## Substituição dos anexos
 
-Validação:45testes Python,18contratos Node, nove PDFs reais com fornecedor/chave/serviço/valores/emissão conferidos e cancelamento marcado. Oito notas couberam em uma página e uma em duas. As provas de produção têm somente contagens, estados e identificadores de execução; XMLs/PDFs reais e filas ficam fora do pacote de código.
+`scripts/build-pdf-repair-flow.mjs` prepara o receptor de correção 07, usando o transporte autenticado existente. Exige nota já cadastrada, chave, XML completo e hash vinculados, situação esperada e anexo existente. Atualiza exclusivamente o PDF do registro, baixa-o para comparar os bytes e verifica os vínculos novamente. O ACK deve corresponder exatamente à chave e ao hash do PDF enviado.
+
+Não criar notas novas ou alterar campos fiscais durante a correção. Geração local, início de upload e sucesso HTTP não substituem o ACK exato. Em falha, conservar a pendência.
+
+As notificações permanecem suspensas durante a troca controlada. Somente PDFs ainda não enviados podem ser substituídos na fila após reconciliação de chave, situação e hashes. Itens enviados ou em trânsito mantêm recibos e não são reenviados automaticamente. A retomada exige conferir anexos e pendências preservadas.
+
+## Rotina posterior
+
+NF-e, CT-e e NFS-e nacional têm rodadas diárias às **09h, 15h e 20h de Brasília**. Cada fonte conserva cursor, fila e limites. Verificar a fila Windows a cada minuto não equivale a consultar os serviços nesse intervalo. O corte configurado é **01/09/2026**, sem reiniciar NSUs ou histórico.
+
+O computador deve permanecer ligado, conectado e com a sessão do usuário Windows e o A1 disponíveis. Android, iOS e Windows consultam os anexos da mesma base. A disponibilidade do ADN não comprova cobertura de todas as prefeituras ou recuperação integral do período.
+
+XMLs/PDFs reais, filas, sessões, credenciais e evidências privadas ficam fora do overlay público. Uma correção só é concluída após QA e ACK de cada anexo; este guia não declara uma quantidade de reparos executados.

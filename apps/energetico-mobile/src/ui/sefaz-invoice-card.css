@@ -50,6 +50,7 @@
 .rg-row--sefaz [data-fiscal-section="operation"] .rg-sefaz-field { border-radius: 6px; border-color: #edf0f4; }
 .rg-row.rg-row--sefaz [data-fiscal-section="taxes"] > dl { grid-template-columns: repeat(4, minmax(0, 1fr)); }
 .rg-row--sefaz [data-fiscal-section="taxes"] .rg-sefaz-field { padding: 8px 4px; text-align: center; border: 0; }
+.rg-row--sefaz [data-field="CONTRIB_SOCIAIS_RETIDAS"] { grid-column: span 2; }
 .rg-row--sefaz [data-fiscal-section="taxes"] dd { font-size: .85rem; font-weight: 800; }
 .rg-row--sefaz .rg-sefaz-field--tax-blue { background: #eaf3ff; }
 .rg-row--sefaz .rg-sefaz-field--tax-purple { background: #f0edff; }

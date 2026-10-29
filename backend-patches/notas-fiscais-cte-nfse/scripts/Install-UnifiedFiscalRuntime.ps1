@@ -32,7 +32,8 @@ function Get-UnifiedHash([byte[]]$Bytes){
 }
 $files=@('src/Sefaz.psm1','src/Cte.psm1','src/Nfse.psm1','src/FiscalDocuments.psm1','src/AuxiliaryFiscal.psm1',
     'src/FlowTransport.psm1','src/Danfe.psm1','src/SefazWhatsApp.psm1','src/GapRecovery.psm1',
-    'scripts/PowerPlatform-Session.ps1','scripts/Invoke-Collector.ps1','scripts/Invoke-SefazWorker.ps1','scripts/Invoke-GapRecovery.ps1')
+    'scripts/PowerPlatform-Session.ps1','scripts/Invoke-Collector.ps1','scripts/Invoke-SefazWorker.ps1','scripts/Invoke-GapRecovery.ps1',
+    'src/danfe_renderer.py','src/fiscal_document.py','src/national_danfse.py')
 $root=[IO.Path]::GetFullPath($SourceRoot)
 $entries=New-Object 'Collections.Generic.List[object]'
 foreach($relative in $files){
@@ -40,8 +41,10 @@ foreach($relative in $files){
     if(-not [IO.File]::Exists($path)){throw 'UNIFIED_SOURCE_MISSING'}
     $bytes=[IO.File]::ReadAllBytes($path)
     $text=[Text.UTF8Encoding]::new($false,$true).GetString($bytes)
-    $tokens=$null;$errors=$null;$null=[Management.Automation.Language.Parser]::ParseInput($text,[ref]$tokens,[ref]$errors)
-    if($errors.Count -ne 0){throw 'UNIFIED_SOURCE_PARSE_FAILED'}
+    if($relative -notlike '*.py'){
+        $tokens=$null;$errors=$null;$null=[Management.Automation.Language.Parser]::ParseInput($text,[ref]$tokens,[ref]$errors)
+        if($errors.Count -ne 0){throw 'UNIFIED_SOURCE_PARSE_FAILED'}
+    }
     if($relative -ceq 'scripts/Invoke-SefazWorker.ps1'){
         $hook=$text.IndexOf('auxiliaryFiscalEnabled',[StringComparison]::Ordinal)
         $preflight=$text.IndexOf('SHARED_COOLDOWN_PREFLIGHT',[StringComparison]::Ordinal)
@@ -109,7 +112,7 @@ try{
  $installerLock=[IO.File]::Open((Join-Path $target 'unified-install.lock'),[IO.FileMode]::OpenOrCreate,[IO.FileAccess]::ReadWrite,[IO.FileShare]::None)
  $signature=Get-AuthenticodeSignature -LiteralPath $runtime
  if($signature.Status -ne 'Valid' -or $signature.SignerCertificate.Subject -notlike '*Microsoft Corporation*'){throw 'UNIFIED_RUNTIME_SIGNATURE_INVALID'}
- $allowed=@('src/Sefaz.psm1','src/Cte.psm1','src/Nfse.psm1','src/FiscalDocuments.psm1','src/AuxiliaryFiscal.psm1','src/FlowTransport.psm1','src/Danfe.psm1','src/SefazWhatsApp.psm1','src/GapRecovery.psm1','scripts/PowerPlatform-Session.ps1','scripts/Invoke-Collector.ps1','scripts/Invoke-SefazWorker.ps1','scripts/Invoke-GapRecovery.ps1')
+ $allowed=@('src/Sefaz.psm1','src/Cte.psm1','src/Nfse.psm1','src/FiscalDocuments.psm1','src/AuxiliaryFiscal.psm1','src/FlowTransport.psm1','src/Danfe.psm1','src/SefazWhatsApp.psm1','src/GapRecovery.psm1','scripts/PowerPlatform-Session.ps1','scripts/Invoke-Collector.ps1','scripts/Invoke-SefazWorker.ps1','scripts/Invoke-GapRecovery.ps1','src/danfe_renderer.py','src/fiscal_document.py','src/national_danfse.py')
  if(@($Package.files).Count -ne $allowed.Count){throw 'UNIFIED_MANIFEST_INVALID'}
  $seen=@{}
  foreach($entry in $Package.files){
@@ -117,6 +120,11 @@ try{
   $bytes=[Convert]::FromBase64String($entry.base64);if((Hash-Bytes $bytes) -cne $entry.sha256 -or $bytes.Length -ne $entry.length){throw 'UNIFIED_PAYLOAD_HASH_INVALID'}
   $staged=Join-Path (Join-Path $Staging 'files') $entry.relative;Write-Bytes $staged $bytes
  }
+ $localPython=Join-Path $env:LOCALAPPDATA 'Energetica/Runtime/FiscalPdf/Scripts/python.exe'
+ if(-not [IO.File]::Exists($localPython)){throw 'UNIFIED_LOCAL_PDF_RUNTIME_REQUIRED'}
+ $pythonCheck='import pathlib,sys; p=pathlib.Path(sys.argv[1]); [compile(f.read_bytes(),str(f),"exec") for f in p.glob("*.py")]; sys.path.insert(0,str(p)); from national_danfse import font_directory; font_directory(); import danfe_renderer, pypdf'
+ $null=& $localPython -B -c $pythonCheck (Join-Path $Staging 'files/src')
+ if($LASTEXITCODE -ne 0){throw 'UNIFIED_LOCAL_PDF_PREREQUISITE_FAILED'}
  foreach($name in $names){$task=Get-ScheduledTask -TaskName $name -ErrorAction SilentlyContinue;if($null -eq $task){if($name -ceq 'ENERGETICA-SEFAZ-Coletor'){throw 'UNIFIED_COLLECTOR_TASK_REQUIRED'};continue};$taskStates[$name]=[bool]$task.Settings.Enabled;Disable-ScheduledTask -TaskName $name|Out-Null}
  $deadline=[DateTimeOffset]::UtcNow.AddMinutes(3)
  while(Get-TaskActivity @($taskStates.Keys)){if([DateTimeOffset]::UtcNow -ge $deadline){throw 'UNIFIED_WORKER_NOT_IDLE'};Start-Sleep -Seconds 1}
@@ -147,7 +155,9 @@ try{
   $changed.Add([pscustomobject]@{path=$path;existed=$exists;backup=$backup;oldHash=$oldHash})
   Write-Bytes $path ([IO.File]::ReadAllBytes((Join-Path (Join-Path $Staging 'files') $entry.relative)))
   if((Get-FileHash -LiteralPath $path -Algorithm SHA256).Hash.ToLowerInvariant() -cne $entry.sha256){throw 'UNIFIED_NATIVE_HASH_INVALID'}
-  $tokens=$null;$errors=$null;$null=[Management.Automation.Language.Parser]::ParseFile($path,[ref]$tokens,[ref]$errors);if($errors.Count -ne 0){throw 'UNIFIED_NATIVE_PARSE_FAILED'}
+  if($entry.relative -notlike '*.py'){
+   $tokens=$null;$errors=$null;$null=[Management.Automation.Language.Parser]::ParseFile($path,[ref]$tokens,[ref]$errors);if($errors.Count -ne 0){throw 'UNIFIED_NATIVE_PARSE_FAILED'}
+  }
  }
  foreach($name in @('Sefaz','Cte','Nfse','FiscalDocuments','AuxiliaryFiscal','FlowTransport','Danfe','SefazWhatsApp','GapRecovery')){Import-Module (Join-Path $target ('src/'+$name+'.psm1')) -Force -DisableNameChecking}
  foreach($name in @('ConvertFrom-UnifiedFiscalXml','Invoke-CteDistribution','Invoke-NfseDistribution','Invoke-AuxiliaryFiscalScheduledCycle','Send-SefazBatch','Add-SefazDanfe','Invoke-SefazWhatsAppDrain')){if($null -eq (Get-Command $name -ErrorAction SilentlyContinue)){throw 'UNIFIED_NATIVE_COMMAND_MISSING'}}
