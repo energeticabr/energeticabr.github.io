@@ -1,0 +1,72 @@
+.rg-row.rg-row--sefaz { color: #10265b; border-color: #e0e5ec; border-radius: 12px; box-shadow: 0 2px 8px #14285c05; }
+.rg-row--sefaz .rg-sefaz-layout { display: block; }
+.rg-row--sefaz .rg-sefaz-heading { display: grid; grid-template-columns: 44px minmax(0, 1fr) auto; align-items: center; gap: 8px; margin-bottom: 10px; }
+.rg-row.rg-row--sefaz .rg-row-title { font-size: clamp(1.05rem, 4.5vw, 1.4rem); font-weight: 850; color: #071f59; overflow-wrap: anywhere; text-transform: uppercase; }
+.rg-row--sefaz .rg-document-id { align-self: start; margin-top: 4px; padding: 5px 9px; border-radius: 7px; background: #075c72; color: white; font-size: .85rem; font-weight: 800; white-space: nowrap; }
+.rg-row--sefaz .rg-sefaz-pdf-link { min-height: 56px; padding: 4px 2px; gap: 3px; font-size: .55rem; }
+.rg-row--sefaz .rg-sefaz-pdf-glyph, .rg-row--sefaz .rg-sefaz-pdf-rail--pending dd::before { width: 24px; height: 30px; padding-top: 6px; font-size: .5rem; }
+.rg-sefaz-clusters { display: grid; gap: 7px; }
+.rg-row.rg-row--sefaz .rg-sefaz-identification { grid-template-columns: 1.2fr .7fr 1fr; }
+.rg-row.rg-row--sefaz .rg-sefaz-supplier { grid-template-columns: minmax(0, 1.2fr) minmax(0, .9fr); }
+.rg-row.rg-row--sefaz .rg-sefaz-amounts { grid-template-columns: 1.15fr 1fr; grid-template-rows: 1fr 1fr; gap: 6px; }
+.rg-row--sefaz .rg-sefaz-field { display: grid; grid-template-columns: minmax(0, 1fr); align-content: center; gap: 2px 7px; padding: 8px; border: 1px solid #e4e7ed; border-radius: 9px; background: #fff; }
+.rg-row--sefaz .rg-sefaz-field:has(> .rg-sefaz-icon) { grid-template-columns: 22px minmax(0, 1fr); }
+.rg-row--sefaz .rg-sefaz-field > .rg-sefaz-icon { grid-column: 1; grid-row: 1 / span 2; align-self: center; }
+.rg-row--sefaz .rg-sefaz-field:has(> .rg-sefaz-icon) > :is(dt, dd) { grid-column: 2; }
+.rg-row--sefaz .rg-detail dt { color: #607083; font-size: .73rem; font-weight: 650; line-height: 1.25; }
+.rg-row--sefaz dd { color: #10265b; font-weight: 650; line-height: 1.28; }
+.rg-sefaz-icon { width: 22px; height: 25px; flex: 0 0 auto; color: #315376; }
+.rg-row.rg-row--sefaz :is([data-field="DATA_EMISSAO"], [data-field="SERIE"]) > .rg-sefaz-icon { grid-row: 1; }
+.rg-row.rg-row--sefaz :is([data-field="DATA_EMISSAO"], [data-field="SERIE"]) > dd { grid-column: 1 / -1; grid-row: 2; text-align: center; font-size: .9rem; }
+.rg-row.rg-row--sefaz [data-field="DATA_EMISSAO"] > dd { white-space: nowrap; }
+.rg-row--sefaz .rg-sefaz-field--total { grid-row: 1 / span 2; border: 0; background: #e9f5eb; min-height: 106px; }
+.rg-row--sefaz .rg-sefaz-field--total :is(dt, dd, .rg-sefaz-icon) { color: #21623d; }
+.rg-row.rg-row--sefaz .rg-sefaz-field--total > dd { grid-column: 1 / -1; font-size: clamp(1.25rem, 5.1vw, 1.7rem); font-weight: 850; }
+.rg-row--sefaz .rg-sefaz-field--net { background: #eaf3ff; border: 0; }
+.rg-row--sefaz .rg-sefaz-field--discount { background: #fff5df; border: 0; }
+.rg-row--sefaz .rg-sefaz-field--net dd, .rg-row--sefaz .rg-sefaz-field--discount dd { font-size: 1rem; font-weight: 800; }
+.rg-row--sefaz .rg-sefaz-field--discount :is(dd, .rg-sefaz-icon) { color: #6c4c20; }
+.rg-row--sefaz .rg-sefaz-section { margin-top: 8px; border-color: #e0e5ed; }
+.rg-row--sefaz .rg-fiscal-section__summary { display: flex; gap: 10px; align-items: center; padding: 9px 10px; color: #0b285d; line-height: 1.3; list-style: none; }
+.rg-row--sefaz .rg-fiscal-section__summary::-webkit-details-marker { display: none; }
+.rg-row--sefaz .rg-fiscal-section__summary > span { flex: 1; }
+.rg-row--sefaz .rg-fiscal-section__summary::after { content: ''; width: 8px; height: 8px; flex: 0 0 8px; margin: 0 4px 4px; border-right: 2px solid #315376; border-bottom: 2px solid #315376; transform: rotate(45deg); }
+.rg-row--sefaz .rg-sefaz-section[open] > summary::after { transform: rotate(225deg); margin-top: 7px; }
+.rg-row--sefaz .rg-fiscal-section__content { padding: 0 8px 8px; }
+.rg-row.rg-row--sefaz [data-fiscal-section="notes"] > dl { grid-template-columns: minmax(0, 1fr); }
+.rg-row--sefaz .rg-sefaz-field--notes { background: #f2f3f7; border: 0; }
+.rg-row--sefaz .rg-sefaz-field--fisco { background: #f1efff; border: 0; }
+.rg-row--sefaz :is(.rg-sefaz-field--notes, .rg-sefaz-field--fisco) { align-content: start; }
+.rg-row--sefaz :is(.rg-sefaz-field--notes, .rg-sefaz-field--fisco) > .rg-sefaz-icon { align-self: start; }
+.rg-row--sefaz :is(.rg-sefaz-field--notes, .rg-sefaz-field--fisco) dt { color: #10265b; font-weight: 800; margin-bottom: 3px; }
+.rg-row--sefaz :is(.rg-sefaz-field--notes, .rg-sefaz-field--fisco) dd { font-weight: 450; font-size: .9rem; }
+.rg-row.rg-row--sefaz [data-fiscal-section="operation"] > dl { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+.rg-row--sefaz [data-fiscal-section="operation"] .rg-sefaz-field { border-radius: 6px; border-color: #edf0f4; }
+.rg-row.rg-row--sefaz [data-fiscal-section="taxes"] > dl { grid-template-columns: repeat(4, minmax(0, 1fr)); }
+.rg-row--sefaz [data-fiscal-section="taxes"] .rg-sefaz-field { padding: 8px 4px; text-align: center; border: 0; }
+.rg-row--sefaz [data-fiscal-section="taxes"] dd { font-size: .85rem; font-weight: 800; }
+.rg-row--sefaz .rg-sefaz-field--tax-blue { background: #eaf3ff; }
+.rg-row--sefaz .rg-sefaz-field--tax-purple { background: #f0edff; }
+.rg-row--sefaz .rg-sefaz-field--tax-yellow { background: #fff5df; }
+.rg-row--sefaz .rg-sefaz-field--tax-rose { background: #fdebed; }
+.rg-row--sefaz .rg-sefaz-field--tax-yellow dd { color: #65451d; }
+.rg-row--sefaz .rg-sefaz-field--tax-rose dd { color: #76263a; }
+.rg-row--sefaz .rg-sefaz-field--expenses { grid-column: 1 / -1; background: #f4f5f8; text-align: left !important; padding-inline: 9px !important; }
+.rg-row.rg-row--sefaz .rg-sefaz-other { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+.rg-row--sefaz .rg-sefaz-other > .rg-detail { padding: 7px; border-bottom: 1px solid #edf0f4; }
+.rg-row--sefaz .rg-sefaz-other dd { font-size: .85rem; }
+.rg-row--sefaz dd[data-sefaz-status] { display: inline-block; justify-self: start; width: fit-content; padding: 3px 7px; border-radius: 20px; font-size: .7rem; font-weight: 800; background: #fff1cf; color: #65451d; text-transform: uppercase; }
+.rg-row--sefaz dd[data-sefaz-status="authorized"] { color: white; background: #1e7c3c; }
+.rg-row--sefaz dd[data-sefaz-status="cancelled"] { color: white; background: #a62a3b; }
+.rg-row--sefaz .rg-sefaz-key-value { display: grid; grid-template-columns: minmax(0, 1fr) 44px; align-items: center; gap: 4px; }
+.rg-sefaz-copy { display: grid; place-items: center; width: 44px; height: 44px; padding: 0; border: 0; background: transparent; color: #315376; cursor: pointer; border-radius: 7px; }
+.rg-sefaz-copy:focus-visible { outline: 3px solid #e3aa19; }
+.rg-sefaz-copy[data-copied="true"] > svg { color: #1e7c3c; }
+@media (max-width: 359px) {
+  .rg-row--sefaz .rg-sefaz-identification .rg-sefaz-field > .rg-sefaz-icon { display: none; }
+  .rg-row--sefaz .rg-sefaz-identification .rg-sefaz-field { grid-template-columns: minmax(0, 1fr); }
+  .rg-row--sefaz .rg-sefaz-identification .rg-sefaz-field > :is(dt, dd) { grid-column: 1; }
+  .rg-row--sefaz dd { font-size: .9rem; }
+  .rg-row.rg-row--sefaz [data-field="DATA_EMISSAO"] > dd { font-size: .75rem; }
+  .rg-row.rg-row--sefaz [data-fiscal-section="taxes"] > dl { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+}
