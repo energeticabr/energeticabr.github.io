@@ -184,8 +184,13 @@ function Invoke-AuxiliaryFiscalSource {
         $clockOrigin=$Now;$elapsed=[Diagnostics.Stopwatch]::StartNew()
         $Clock={return $clockOrigin.Add($elapsed.Elapsed)}.GetNewClosure()
     }
-    if($Slot -cnotmatch '^\d{4}-\d{2}-\d{2}-\d{2}$'){throw 'AUX_SLOT_INVALID'}
-    $null=[DateTime]::ParseExact($Slot,'yyyy-MM-dd-HH',[Globalization.CultureInfo]::InvariantCulture)
+    if($Slot -cmatch '^manual:[a-f0-9]{32}$'){
+        # A manual request has its own durable identity; it cannot be satisfied
+        # by a completed daily slot, and still shares the source cooldown.
+    }else{
+        if($Slot -cnotmatch '^\d{4}-\d{2}-\d{2}-\d{2}$'){throw 'AUX_SLOT_INVALID'}
+        $null=[DateTime]::ParseExact($Slot,'yyyy-MM-dd-HH',[Globalization.CultureInfo]::InvariantCulture)
+    }
     [IO.Directory]::CreateDirectory($DataPath)|Out-Null
     $lock=$null
     try{$lock=[IO.File]::Open((Join-Path $DataPath 'worker.lock'),[IO.FileMode]::OpenOrCreate,[IO.FileAccess]::ReadWrite,[IO.FileShare]::None)}catch [IO.IOException]{return [pscustomobject]@{source=$Source;status='LOCK_BUSY'}}

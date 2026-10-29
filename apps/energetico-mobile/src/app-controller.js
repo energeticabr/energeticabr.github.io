@@ -1,3 +1,4 @@
+import { createSefazSyncSession } from './ui/sefaz-sync-session.js';
 import { createDdaAutoReminder } from './chat/dda-auto-reminder.js';
 import { refreshDdaBank } from './chat/dda-bank-refresh.js';
 import { createDdaSyncSession } from './ui/dda-sync-session.js';
@@ -1024,6 +1025,7 @@ export function createAppController({
   registrationGalleryFactory = defaultRegistrationGalleryFactory,
   ddaReportFactory = defaultDdaReportFactory,
   ddaSyncSessionFactory = createDdaSyncSession,
+  sefazSyncSessionFactory = createSefazSyncSession,
   enableDdaReminders = false,
   registrationGalleryDataFactory = defaultRegistrationGalleryDataFactory,
   pendingProvisionAttachmentsDataFactory = defaultPendingProvisionAttachmentsDataFactory,
@@ -1501,6 +1503,19 @@ export function createAppController({
   let pendingProvisionOpenRequest = null;
   let pendingProvisionLastAutoShownAt = null;
   let ddaReminderInteraction = 0;
+  let sefazSyncSession = null;
+  function disposeSefazSyncSession(){sefazSyncSession?.destroy();sefazSyncSession=null;}
+  function ensureSefazSyncSession(){
+    if(!account||stopped||sessionStatus!=='authenticated'||!['refreshSefaz','getSefazRefreshStatus','getSefazRefreshPending','acknowledgeSefazRefresh'].every(name=>typeof client[name]==='function'))return null;
+    if(sefazSyncSession)return sefazSyncSession;
+    const owner=account,revision=sessionRevision;
+    const isCurrent=()=>!stopped&&account===owner&&sessionRevision===revision&&sessionStatus==='authenticated';
+    const accountKey=owner.homeAccountId||owner.localAccountId||owner.idTokenClaims?.oid||owner.username||'';
+    if(!accountKey)return null;
+    sefazSyncSession=sefazSyncSessionFactory({client,isCurrent,accountKey});
+    return sefazSyncSession;
+  }
+  function resumeSefazSync(){void ensureSefazSyncSession()?.resume();}
   let ddaSyncSession = null;
   function disposeDdaSyncSession(){ddaSyncSession?.destroy();ddaSyncSession=null;}
   function ensureDdaSyncSession(){
@@ -2151,6 +2166,7 @@ export function createAppController({
   }
 
   function handleBackground() {
+    sefazSyncSession?.suspend();
     // A WebView may be backgrounded without delivering the final pointerup.
     // Stop only the live canvas interaction so returning to the app cannot
     // append background coordinates to the previous signature stroke.
@@ -2188,6 +2204,7 @@ export function createAppController({
 
   async function handleForeground() {
     resumeDdaSync();
+    resumeSefazSync();
     armFlowReminder();
     if (attachmentReminderDetails()) scheduleAttachmentReminder();
     else cancelAttachmentReminder();
@@ -9334,6 +9351,7 @@ export function createAppController({
               syncMonitor: ensureDdaSyncSession(),
               confirmPayment: async options => { assertSession(); const receipt = await client.confirmDdaPayment(options); assertSession(); return receipt; },
             } : {}),
+            ...(sourceKind === 'notas_fiscais_sefaz' ? { syncMonitor: ensureSefazSyncSession() } : {}),
             ...(isDdaReport ? { onClose: () => ddaAutoReminder.dismiss() } : {}),
             ...(["contractorEmployment", "dda", "notas_fiscais_sefaz"].includes(sourceKind) ? {} : { onCreate: galleryCreationHandler(replyId, assertSession) }),
             ...(["notas_fiscais_sefaz", "dda", "presenceDescriptions", "provisionDescription", "documents", "asset", "assetFunction", "assetProduct", "assetGroup", "workDiary", "quotes", "contracts", "contractLines", "measurements", "measurementLines", "stageDemonstratives", "constructionStages", "recurringTasks", "delegatedTasks"].includes(sourceKind) ? {
@@ -10319,6 +10337,7 @@ export function createAppController({
 
   async function signIn() {
     disposeDdaSyncSession();
+    disposeSefazSyncSession();
     ddaAutoReminder.reset();
     clearAttachmentUploadProgress();
     attachmentActionBusy = false;
@@ -10372,6 +10391,7 @@ export function createAppController({
       legacyDocumentLineFinalizeOption = null;
       sessionStatus = "authenticated";
       resumeDdaSync();
+      resumeSefazSync();
       pendingProvisionLastAutoShownAt = null;
       pendingNotesSessionDismissed = false;
       pendingConstructionDiarySnapshot = null;
@@ -10428,6 +10448,7 @@ export function createAppController({
 
   async function signOut() {
     disposeDdaSyncSession();
+    disposeSefazSyncSession();
     ddaAutoReminder.reset();
     clearOperationProgress();
     clearAttachmentUploadProgress();
@@ -11780,6 +11801,7 @@ export function createAppController({
 
     sessionStatus = account ? "authenticated" : "signed-out";
     resumeDdaSync();
+    resumeSefazSync();
     pendingProvisionLastAutoShownAt = null;
     pendingNotesSessionDismissed = false;
     pendingConstructionDiarySnapshot = null;
@@ -11849,6 +11871,7 @@ export function createAppController({
 
   function stop() {
     disposeDdaSyncSession();
+    disposeSefazSyncSession();
     ddaAutoReminder.reset();
     clearOperationProgress();
     clearAttachmentUploadProgress();

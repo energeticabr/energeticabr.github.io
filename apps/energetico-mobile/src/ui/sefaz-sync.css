@@ -1,0 +1,15 @@
+.sefaz-sync-overlay { position: fixed; inset: 0; z-index: 2147483000; box-sizing: border-box; width: 100%; max-width: none; height: 100%; max-height: none; margin: 0; border: 0; padding: max(12px, env(safe-area-inset-top)) max(12px, env(safe-area-inset-right)) max(12px, env(safe-area-inset-bottom)) max(12px, env(safe-area-inset-left)); background: #0d263966; color: #142d3c; }
+.sefaz-sync-overlay[open] { display: grid; place-items: center; }
+.sefaz-sync-overlay::backdrop { background: #0d263966; }
+.sefaz-sync-dialog { box-sizing: border-box; width: min(100%, 500px); max-height: 100%; overflow: auto; padding: 22px; border-radius: 18px; background: #fff; box-shadow: 0 20px 70px #06243b33; overflow-wrap: anywhere; font: 15px/1.45 system-ui, sans-serif; }
+.sefaz-sync-dialog h2 { margin: 0 0 10px; font-size: 21px; line-height: 1.2; }
+.sefaz-sync-dialog p { margin: 10px 0; }
+.sefaz-sync-sources { list-style: none; margin: 16px 0; padding: 0; display: grid; gap: 10px; }
+.sefaz-sync-sources li { display: grid; gap: 4px; background: #f0f6f8; border: 1px solid #dce7ec; border-radius: 10px; padding: 10px 12px; }
+.sefaz-sync-sources span, .sefaz-sync-footnote { font-size: 13px; }
+.sefaz-sync-footnote { color: #516776; }
+.sefaz-sync-ack { display: block; margin: 18px 0 0 auto; min-height: 44px; padding: 10px 24px; border: 0; border-radius: 10px; background: #126380; color: white; font: 700 15px system-ui, sans-serif; cursor: pointer; }
+.sefaz-sync-ack:focus-visible { outline: 3px solid #edb94b; outline-offset: 3px; }
+.sefaz-sync-error { color: #a32d31; }
+.sefaz-sync-progress { white-space: pre-line; }
+@media (max-width: 350px) { .sefaz-sync-dialog { padding: 18px; } .sefaz-sync-dialog h2 { font-size: 19px; } }
