@@ -142,16 +142,19 @@ function ConvertFrom-NfseXml([string]$Text,[string]$Nsu,[string]$CompanyCnpj){
         Add-NfseField $f 'COFINS' $pis "./*[local-name()='vCofins']" -Money
         $retType=Get-NfseXmlValue $pis "./*[local-name()='tpRetPisCofins']"
         if($retType -and $retType -notin @('0','1','2','3','4','5','6','7','8','9')){throw 'Tipo de retencao PIS/COFINS desconhecido.'}
-        if($retType -in @('1','3','4','5','9')){Add-NfseField $f 'PIS_RETIDO' $pis "./*[local-name()='vPis']" -Money}
-        if($retType -in @('1','3','4','6','7')){Add-NfseField $f 'COFINS_RETIDA' $pis "./*[local-name()='vCofins']" -Money}
-        # CSLL, IRRF and previdencia use explicit retained values, never bases,
-        # rates, an aggregate retention total, or free-text descriptions.
-        foreach($pair in @(@('CSLL_RETIDA','vRetCSLL'),@('IRRF_RETIDO','vRetIRRF'),@('INSS_RETIDO','vRetCP'))){Add-NfseField $f $pair[0] $fed ("./*[local-name()='"+$pair[1]+"']") -Money}
+        # NT007 (09/02/2026), pp.4-6: vPis/vCofins are own tax debits;
+        # vRetCSLL aggregates retained PIS/COFINS/CSLL. The enum identifies
+        # retained taxes, not their individual amounts. Never split this total
+        # using own-debit amounts or relabel it as individual CSLL.
+        # https://www.gov.br/nfse/pt-br/biblioteca/documentacao-tecnica/rtc/nt-007-se-cgnfse-v1-0.pdf
+        Add-NfseField $f 'CONTRIB_SOCIAIS_RETIDAS' $fed "./*[local-name()='vRetCSLL']" -Money
+        Add-NfseField $f 'TOTAL_RETIDO' $values "./*[local-name()='vTotalRet']" -Money
+        foreach($pair in @(@('IRRF_RETIDO','vRetIRRF'),@('INSS_RETIDO','vRetCP'))){Add-NfseField $f $pair[0] $fed ("./*[local-name()='"+$pair[1]+"']") -Money}
         $issType=Get-NfseXmlValue $trib "./*[local-name()='tribMun']/*[local-name()='tpRetISSQN']"
         if($issType -and $issType -notin @('1','2','3')){throw 'Tipo de retencao ISSQN desconhecido.'}
         if($issType -eq '2'){Add-NfseField $f 'ISS_RETIDO' $values "./*[local-name()='vISSQN']" -Money}
         $f.STATUS_RETENCOES='NAO_INFORMADA_XML'
-        foreach($name in @('PIS_RETIDO','COFINS_RETIDA','CSLL_RETIDA','IRRF_RETIDO','INSS_RETIDO','ISS_RETIDO')){if($f.Contains($name) -and $f[$name] -gt 0){$f.STATUS_RETENCOES='RETENCAO_INFORMADA_XML'}}
+        foreach($name in @('CONTRIB_SOCIAIS_RETIDAS','TOTAL_RETIDO','IRRF_RETIDO','INSS_RETIDO','ISS_RETIDO')){if($f.Contains($name) -and $f[$name] -gt 0){$f.STATUS_RETENCOES='RETENCAO_INFORMADA_XML'}}
         $f.DIRECAO='TERCEIROS';$f.PAPEL_EMPRESA='TERCEIROS'
         $intermediary=Get-NfseXmlValue $dps "./*[local-name()='interm']/*[local-name()='CNPJ' or local-name()='CPF']"
         if($f.Contains('CNPJ_TOMADOR') -and $f.CNPJ_TOMADOR -ceq $CompanyCnpj){$f.DIRECAO='ENTRADA';$f.PAPEL_EMPRESA='TOMADOR'}

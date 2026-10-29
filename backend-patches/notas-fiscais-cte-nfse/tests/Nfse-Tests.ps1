@@ -15,6 +15,10 @@ $fixture=$fixture.Replace('__KEY__',$key)
 $federal='<piscofins><CST>01</CST><vBCPisCofins>9999.00</vBCPisCofins><vPis>6.50</vPis><vCofins>30.00</vCofins><tpRetPisCofins>3</tpRetPisCofins></piscofins><vRetCP>110.00</vRetCP><vRetIRRF>15.00</vRetIRRF><vRetCSLL>10.00</vRetCSLL>'
 function Parse([string]$Xml=$fixture.Replace('__FED__',$federal),[string]$Company=$company){ConvertFrom-NfseXml $Xml '7' $Company}
 $doc=Parse
+Equal $doc.fields.CONTRIB_SOCIAIS_RETIDAS ([decimal]10) 'national vRetCSLL is aggregate social contributions, not individual CSLL'
+Equal $doc.fields.Contains('CSLL_RETIDA') $false 'aggregate cannot fabricate individual CSLL'
+Equal $doc.fields.Contains('PIS_RETIDO') $false 'own PIS debit cannot fabricate withheld PIS'
+Equal $doc.fields.Contains('COFINS_RETIDA') $false 'own COFINS debit cannot fabricate withheld COFINS'
 Equal $doc.kind 'NFSe' 'full national service invoice recognized'
 Equal $doc.key $key '50 digit key is preserved'
 Equal $doc.nsu '000000000000007' 'NSU padded without arithmetic'
@@ -41,18 +45,31 @@ Equal $doc.fields.Contains('SERIE') $false 'DPS series is not NFS-e series'
 Equal $doc.fields.DATA_EMISSAO_ORIGINAL '2026-10-20T12:01:00-03:00' 'national generation time and timezone'
 Equal $doc.fields.OBSERVACOES_NOTA "Servico <b>literal</b>`nContrato ficticio" 'description and complementary text preserve literal text'
 Equal $doc.fields.INFORMACOES_FISCO 'Informacao do fisco' 'municipal fiscal text separate'
-foreach($p in @(@('PIS_RETIDO',6.50),@('COFINS_RETIDA',30),@('CSLL_RETIDA',10),@('IRRF_RETIDO',15),@('INSS_RETIDO',110),@('ISS_RETIDO',50))){Equal $doc.fields[$p[0]] ([decimal]$p[1]) ('explicit withheld '+$p[0])}
+foreach($p in @(@('CONTRIB_SOCIAIS_RETIDAS',10),@('IRRF_RETIDO',15),@('INSS_RETIDO',110),@('ISS_RETIDO',50))){Equal $doc.fields[$p[0]] ([decimal]$p[1]) ('explicit withheld '+$p[0])}
 Equal $doc.fields.STATUS_RETENCOES 'RETENCAO_INFORMADA_XML' 'positive explicit withholdings'
 $none=$fixture.Replace('__FED__','').Replace('<tpRetISSQN>2</tpRetISSQN>','<tpRetISSQN>1</tpRetISSQN>')
 Equal (Parse $none).fields.STATUS_RETENCOES 'NAO_INFORMADA_XML' 'tax base and ordinary ISS are not withholding'
 Equal (Parse $none).fields.Contains('ISS_RETIDO') $false 'missing withheld amount not invented zero'
 Equal (Parse ($none.Replace('<tpRetISSQN>1</tpRetISSQN>','<tpRetISSQN>3</tpRetISSQN>'))).fields.Contains('ISS_RETIDO') $false 'intermediary withholding excluded from buyer ISS'
-foreach($row in @(@('0',$false,$false),@('1',$true,$true),@('2',$false,$false),@('3',$true,$true),@('4',$true,$true),@('5',$true,$false),@('6',$false,$true),@('7',$false,$true),@('8',$false,$false),@('9',$true,$false))){
-    $fed='<piscofins><vPis>6.50</vPis><vCofins>30.00</vCofins><tpRetPisCofins>'+ $row[0]+'</tpRetPisCofins></piscofins>'
+foreach($retCode in @('0','1','2','3','4','5','6','7','8','9')){
+    $fed='<piscofins><vPis>6.50</vPis><vCofins>30.00</vCofins><tpRetPisCofins>'+ $retCode+'</tpRetPisCofins></piscofins>'
     $parsed=Parse ($none.Replace('<tribFed></tribFed>','<tribFed>'+$fed+'</tribFed>'))
-    Equal $parsed.fields.Contains('PIS_RETIDO') $row[1] ('official PIS retention code '+$row[0])
-    Equal $parsed.fields.Contains('COFINS_RETIDA') $row[2] ('official COFINS retention code '+$row[0])
+    Equal $parsed.fields.Contains('PIS_RETIDO') $false ('own PIS debit is not withholding with code '+$retCode)
+    Equal $parsed.fields.Contains('COFINS_RETIDA') $false ('own COFINS debit is not withholding with code '+$retCode)
 }
+$socialFed='<piscofins><vPis>1.82</vPis><vCofins>8.40</vCofins><tpRetPisCofins>3</tpRetPisCofins></piscofins><vRetCSLL>13.02</vRetCSLL>'
+$socialXml=$none.Replace('<tribFed></tribFed>','<tribFed>'+$socialFed+'</tribFed>').Replace('<vServ>1000.00</vServ>','<vServ>280.00</vServ>').Replace('<vLiq>763.50</vLiq>','<vTotalRet>13.02</vTotalRet><vLiq>266.98</vLiq>')
+$social=Parse $socialXml
+Equal $social.fields.CONTRIB_SOCIAIS_RETIDAS ([decimal]13.02) 'social aggregate is preserved once without adding own-debit PIS or COFINS'
+Equal $social.fields.TOTAL_RETIDO ([decimal]13.02) 'explicit vTotalRet is the authoritative declared total'
+Equal $social.fields.PIS ([decimal]1.82) 'own PIS amount remains separate'
+Equal $social.fields.COFINS ([decimal]8.40) 'own COFINS amount remains separate'
+Equal $social.fields.VALOR_LIQUIDO ([decimal]266.98) 'net remains XML literal without another deduction'
+foreach($component in @('PIS_RETIDO','COFINS_RETIDA','CSLL_RETIDA')){Equal $social.fields.Contains($component) $false ('no invented individual social withholding '+$component)}
+Equal (Parse ($socialXml.Replace('<vTotalRet>13.02</vTotalRet>',''))).fields.Contains('TOTAL_RETIDO') $false 'missing total retained is never inferred from gross net or component sums'
+Equal (Parse ($socialXml.Replace('<vTotalRet>13.02</vTotalRet>','<vTotalRet>0.00</vTotalRet>'))).fields.TOTAL_RETIDO ([decimal]0) 'explicit zero total is preserved'
+$onlyTotal=Parse ($none.Replace('<vLiq>763.50</vLiq>','<vTotalRet>13.02</vTotalRet><vLiq>763.50</vLiq>'))
+Equal $onlyTotal.fields.STATUS_RETENCOES 'RETENCAO_INFORMADA_XML' 'positive explicit total retained identifies withholding without inventing a breakdown'
 $ordinary=Parse ($none.Replace('<tribFed></tribFed>','<tribFed><piscofins><vBCPisCofins>9999.00</vBCPisCofins><vPis>6.50</vPis><vCofins>30.00</vCofins></piscofins><vRetIRRF>0.00</vRetIRRF></tribFed>'))
 Equal $ordinary.fields.Contains('PIS_RETIDO') $false 'tax value without retention type not inferred'
 Equal $ordinary.fields.IRRF_RETIDO ([decimal]0) 'explicit zero retained'

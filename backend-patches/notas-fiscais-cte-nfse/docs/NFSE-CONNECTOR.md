@@ -50,13 +50,16 @@ Aliases compartilhados: `VALOR_SERVICOS` conserva o mesmo `vServ` explicito; `IS
 | Campo compartilhado | Origem explicita e condicao |
 | --- | --- |
 | `ISS_RETIDO` | `infNFSe/valores/vISSQN`, somente `tpRetISSQN=2` (tomador). Codigo3, intermediario, nao alimenta este campo. |
-| `PIS_RETIDO` | `tribFed/piscofins/vPis`, somente `tpRetPisCofins` em 1,3,4,5,9. |
-| `COFINS_RETIDA` | `tribFed/piscofins/vCofins`, somente codigos1,3,4,6,7. |
-| `CSLL_RETIDA` | `tribFed/vRetCSLL`, valor explicito. |
+| `CONTRIB_SOCIAIS_RETIDAS` | `tribFed/vRetCSLL`, agregado de PIS/COFINS/CSLL retidos. Nao e CSLL individual. |
+| `TOTAL_RETIDO` | `infNFSe/valores/vTotalRet`, total literal explicitamente declarado. Ausente permanece ausente. |
 | `IRRF_RETIDO` | `tribFed/vRetIRRF`, valor explicito. |
 | `INSS_RETIDO` | `tribFed/vRetCP`, contribuicao previdenciaria retida explicita. |
 
-Os codigos PIS/COFINS de0a9 seguem `TSTipoRetPISCofins` do XSD atual; sem indicador, `vPis`/`vCofins` permanecem tributos proprios e nao retencao. Codigo de retencao sem valor nao gera numero. Ausencia permanece ausente; zero explicito permanece zero. `STATUS_RETENCOES=RETENCAO_INFORMADA_XML` exige ao menos um desses seis valores positivo; nos demais casos `NAO_INFORMADA_XML`, sem concluir dispensa tributaria. Nao se recalcula enquadramento fiscal ou liquido.
+Conforme a [NT007, versao1.0, pp.4-6, vigente desde09/02/2026](https://www.gov.br/nfse/pt-br/biblioteca/documentacao-tecnica/rtc/nt-007-se-cgnfse-v1-0.pdf), `vPis` e `vCofins` representam debitos de apuracao propria, e `vRetCSLL` agrega as contribuicoes sociais retidas. O codigo3 identifica retencao de PIS/COFINS/CSLL, mas nao informa seus valores individuais. O parser conserva PIS/COFINS proprios em `PIS`/`COFINS` e nao preenche `PIS_RETIDO`, `COFINS_RETIDA` ou `CSLL_RETIDA` para NFS-e a partir desses campos. Tampouco calcula uma CSLL residual subtraindo os debitos proprios do agregado.
+
+Por exemplo, `vPis=1.82`, `vCofins=8.40`, `vRetCSLL=13.02` e `vTotalRet=13.02` resultam em contribuicoes sociais agregadas13.02 e total retido13.02; nao em23.24 ou em CSLL individual2.80. O total explicito e apresentado uma unica vez, sem ser somado novamente ao agregado. A [NT008, leiaute DANFSe](https://www.gov.br/nfse/pt-br/biblioteca/documentacao-tecnica/rtc/nt-008-se-cgnfse-danfse-20260505.pdf) tambem identifica `vRetCSLL` como contribuicoes sociais retidas e distingue os debitos proprios de PIS/COFINS.
+
+Os codigos de0a9 continuam sendo validados, sem inferir quantias do indicador. Ausencia permanece ausente; zero explicito permanece zero. `STATUS_RETENCOES=RETENCAO_INFORMADA_XML` exige valor positivo em contribuicoes sociais agregadas, total retido, IRRF, INSS ou ISS retido; nos demais casos `NAO_INFORMADA_XML`, sem concluir dispensa tributaria. Nao se recalcula enquadramento fiscal ou liquido. Reanalise de XML completo envia nulos para limpar os componentes individuais incorretos de versoes anteriores. Eventos preservam a analise da nota e nao criam aviso ativo para canceladas.
 
 `kind=evento` exige `infEvento` registrado e correspondencia da chave com `EVT + chave50 + tipo6 + sequencial3`. Apenas eventos101101,105102,105104,305101 definem `SITUACAO=CANCELADA`. Solicitacao de analise fiscal101103 nao cancela a nota. Eventos nao criam data de emissao, valores, papel da empresa ou analise de retencoes. O worker deve atualizar somente a nota conhecida e preservar seus dados completos.
 

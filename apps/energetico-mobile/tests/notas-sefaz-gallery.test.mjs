@@ -4,6 +4,7 @@ import { JSDOM } from 'jsdom';
 import { renderChatMarkup } from '../src/ui/chat-view.js';
 import { createRegistrationGallery } from '../src/ui/registration-gallery-view.js';
 import { createRegistrationGalleryData } from '../src/chat/registration-gallery-data.js';
+import { buyerWithholding } from '../src/chat/sefaz-withholding.js';
 
 // All values in this file are fictitious; they never enter the live data source.
 const sample = { id: '4', fields: { Title: 'FORNECEDOR FICTÍCIO', CHAVE_ACESSO: '1'.repeat(44),
@@ -117,6 +118,38 @@ test('NF-e de entrada com retenção no XML destaca toda a linha e mantém o PDF
   for(const field of ['PIS_RETIDO','COFINS_RETIDA','CSLL_RETIDA','IRRF_RETIDO','INSS_RETIDO','ISS_RETIDO']) assert.equal(row.querySelector(`[data-field="${field}"]`).closest('details').dataset.fiscalSection,'taxes');
   assert.equal(row.querySelector('.rg-sefaz-pdf-link').href,sample.fields.DANFE_URL.Url);
   assert.equal(row.querySelector('[data-field="VALOR_LIQUIDO"] dd').textContent.replace(/\s/g,''),'R$1.250,50','não deduz retenção do líquido outra vez');
+});
+
+test('NFS-e mostra o agregado social uma vez e usa o total declarado sem somar apuração própria', async t => {
+  const fields = {...sample.fields, Title:'PRESTADOR FICTÍCIO DE SERVIÇOS', TIPO_FISCAL:'NFS-e', MODELO:'NFS-e',
+    PAPEL_EMPRESA:'TOMADOR', STATUS_IMPORTACAO:'XML_COMPLETO', STATUS_RETENCOES:'RETENCAO_INFORMADA_XML',
+    VALOR_TOTAL_NOTA:280, VALOR_LIQUIDO:266.98, TOTAL_RETIDO:13.02, CONTRIB_SOCIAIS_RETIDAS:13.02,
+    PIS_RETIDO:1.82, COFINS_RETIDA:8.4, CSLL_RETIDA:13.02};
+  assert.deepEqual(buyerWithholding(fields), {amounts:[{field:'CONTRIB_SOCIAIS_RETIDAS',label:'PIS/COFINS/CSLL retidos',cents:1302}],total:13.02});
+  const dom=new JSDOM('<body/>'),doc=dom.window.document;
+  const gallery=createRegistrationGallery({document:doc,kind:'notas_fiscais_sefaz',data:{loadSnapshot:async()=>({rows:[{id:'ficticia',fields}]})}});
+  t.after(()=>{gallery.destroy();dom.window.close();});await gallery.open();
+  const row=doc.querySelector('[data-registration-row="ficticia"]'),warning=row.querySelector('.rg-sefaz-withholding');
+  assert.ok(row.classList.contains('rg-row--buyer-withholding'));
+  assert.equal(warning.querySelector('strong').textContent.replace(/\s/g,''),'Retençãopelocomprador•R$13,02');
+  assert.equal(warning.querySelector('span').textContent.replace(/\s/g,''),'PIS/COFINS/CSLLretidos:R$13,02');
+  assert.equal(row.querySelector('[data-field="CONTRIB_SOCIAIS_RETIDAS"] dt').textContent,'PIS/COFINS/CSLL retidos');
+  assert.equal(row.querySelector('[data-field="CONTRIB_SOCIAIS_RETIDAS"]').closest('details').dataset.fiscalSection,'taxes');
+  assert.equal(row.querySelector('[data-field="VALOR_LIQUIDO"] dd').textContent.replace(/\s/g,''),'R$266,98');
+});
+
+test('total explícito inclusive zero prevalece; NF-e sem total conhecido mantém soma dos componentes', () => {
+  const base={...sample.fields,MODELO:'55',STATUS_IMPORTACAO:'XML_COMPLETO',STATUS_RETENCOES:'RETENCAO_INFORMADA_XML',PIS_RETIDO:6.5,COFINS_RETIDA:30,CSLL_RETIDA:10};
+  for(const [total,want] of [[13.02,13.02],['13.02',13.02],[undefined,46.5],[null,46.5],['',46.5]]) {
+    assert.equal(buyerWithholding({...base,TOTAL_RETIDO:total})?.total,want,String(total));
+  }
+  for(const zero of [0,'0.00']) assert.equal(buyerWithholding({...base,TOTAL_RETIDO:zero}),null,'zero declarado não herda soma antiga');
+  for(const aggregate of [0,'0.00']) for(const total of [undefined,46.5]) {
+    const result=buyerWithholding({...base,CONTRIB_SOCIAIS_RETIDAS:aggregate,TOTAL_RETIDO:total});
+    assert.equal(result?.total,46.5,'agregado zero não apaga componentes NF-e antigos');
+    assert.deepEqual(result.amounts.map(item=>item.field),['PIS_RETIDO','COFINS_RETIDA','CSLL_RETIDA']);
+  }
+  assert.deepEqual(buyerWithholding({...base,PIS_RETIDO:null,COFINS_RETIDA:null,CSLL_RETIDA:null,TOTAL_RETIDO:13.02}),{amounts:[],total:13.02});
 });
 
 test('NF-e não colore por impostos comuns, ausência, zero, saída, cancelamento ou resumo', async t => {
@@ -287,7 +320,7 @@ test('NF-e source uses company SharePoint REST with read-only authorization and 
       if (String(url).includes('/fields?')) value = [{ InternalName: 'Title', Title: 'Fornecedor', TypeAsString: 'Text' }];
       else if (String(url).includes('/items?')) {
         const query = new URL(String(url)).searchParams;
-        for (const name of ['TIPO_FISCAL','ORIGEM_FISCAL','TOMADOR','CNPJ_TOMADOR','PAPEL_EMPRESA','DESCRICAO_SERVICO','MUNICIPIO_PRESTACAO','CODIGO_SERVICO','ISS','VALOR_SERVICOS','CHAVE_ACESSO','DATA_EMISSAO','DATA_EMISSAO_ORIGINAL','VALOR_LIQUIDO','DESCONTOS','XML_URL','DANFE_URL','STATUS_IMPORTACAO','OBSERVACOES_NOTA','INFORMACOES_FISCO','NATUREZA_OPERACAO','CNPJ_DESTINATARIO','FRETE','PROTOCOLO']) assert.ok(query.get('$select').split(',').includes(name),name);
+        for (const name of ['TIPO_FISCAL','ORIGEM_FISCAL','TOMADOR','CNPJ_TOMADOR','PAPEL_EMPRESA','DESCRICAO_SERVICO','MUNICIPIO_PRESTACAO','CODIGO_SERVICO','ISS','VALOR_SERVICOS','CONTRIB_SOCIAIS_RETIDAS','TOTAL_RETIDO','CHAVE_ACESSO','DATA_EMISSAO','DATA_EMISSAO_ORIGINAL','VALOR_LIQUIDO','DESCONTOS','XML_URL','DANFE_URL','STATUS_IMPORTACAO','OBSERVACOES_NOTA','INFORMACOES_FISCO','NATUREZA_OPERACAO','CNPJ_DESTINATARIO','FRETE','PROTOCOLO']) assert.ok(query.get('$select').split(',').includes(name),name);
         assert.equal(query.has('$expand'), false);
         value = [{ Id: 4, ...sample.fields }];
       } else if (String(url).includes('/_api/web/lists?')) value = [{ Id: '11111111-2222-3333-4444-555555555555', Title: 'NOTAS_FISCAIS_SEFAZ', BaseTemplate: 100, Hidden: false }];

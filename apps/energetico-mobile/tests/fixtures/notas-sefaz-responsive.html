@@ -25,6 +25,12 @@ if (mode === 'menu') {
     DANFE_URL: 'https://energeticaltda.sharepoint.com/sites/energetica/Documentos/danfe-ficticio.pdf' };
   if (new URLSearchParams(location.search).has('withholding')) Object.assign(fields, {STATUS_IMPORTACAO:'XML_COMPLETO', STATUS_RETENCOES:'RETENCAO_INFORMADA_XML', PIS_RETIDO:6.5, COFINS_RETIDA:30, CSLL_RETIDA:10, IRRF_RETIDO:15, INSS_RETIDO:110, ISS_RETIDO:25});
   if (new URLSearchParams(location.search).has('retentionNone')) Object.assign(fields, {STATUS_IMPORTACAO:'XML_COMPLETO',STATUS_RETENCOES:'NAO_INFORMADA_XML'});
+  if (new URLSearchParams(location.search).has('aggregateWithholding')) Object.assign(fields, {
+    Title:'PRESTADOR FICTÍCIO — RETENÇÃO SOCIAL AGREGADA',TIPO_FISCAL:'NFS-e',MODELO:'NFS-e',PAPEL_EMPRESA:'TOMADOR',
+    CHAVE_ACESSO:'2'.repeat(50),STATUS_IMPORTACAO:'XML_COMPLETO',STATUS_RETENCOES:'RETENCAO_INFORMADA_XML',
+    VALOR_TOTAL_NOTA:280,VALOR_LIQUIDO:266.98,DESCONTOS:0,TOTAL_RETIDO:13.02,CONTRIB_SOCIAIS_RETIDAS:13.02,
+    PIS_RETIDO:1.82,COFINS_RETIDA:8.4,CSLL_RETIDA:13.02,
+  });
   const unified = new URLSearchParams(location.search).has('unified');
   const extraRows = unified ? [
     {id:'6',fields:{Title:'TRANSPORTADORA FICTÍCIA LTDA',TIPO_FISCAL:'CT-e',ORIGEM_FISCAL:'SEFAZ_CTE',MODELO:'57',NUMERO_NOTA:'654',SERIE:'001',DATA_EMISSAO:'2026-10-29',CNPJ_FORNECEDOR:'00000000000000',UF_FORNECEDOR:'MG',VALOR_TOTAL_NOTA:870,VALOR_LIQUIDO:870,DESCONTOS:0,SITUACAO:'Autorizada',STATUS_IMPORTACAO:'XML_COMPLETO',DIRECAO:'Entrada',PAPEL_EMPRESA:'TOMADOR;REMETENTE',TOMADOR:'TOMADOR FICTÍCIO',CNPJ_TOMADOR:'00000000000000',CHAVE_ACESSO:'6'.repeat(44),XML_URL:'https://energeticaltda.sharepoint.com/sites/energetica/Documentos/cte-ficticio.xml',DANFE_URL:'https://energeticaltda.sharepoint.com/sites/energetica/Documentos/dacte-ficticio.pdf'}},

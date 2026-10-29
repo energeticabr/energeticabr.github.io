@@ -42,7 +42,7 @@
                   "key": {
                     "type": "string",
                     "minLength": 44,
-                    "maxLength": 44
+                    "maxLength": 50
                   },
                   "fields": {
                     "type": "object",
@@ -53,7 +53,9 @@
                       "CSLL_RETIDA",
                       "IRRF_RETIDO",
                       "INSS_RETIDO",
-                      "ISS_RETIDO"
+                      "ISS_RETIDO",
+                      "CONTRIB_SOCIAIS_RETIDAS",
+                      "TOTAL_RETIDO"
                     ],
                     "properties": {
                       "STATUS_RETENCOES": {
@@ -94,6 +96,18 @@
                         ]
                       },
                       "ISS_RETIDO": {
+                        "type": [
+                          "number",
+                          "null"
+                        ]
+                      },
+                      "CONTRIB_SOCIAIS_RETIDAS": {
+                        "type": [
+                          "number",
+                          "null"
+                        ]
+                      },
+                      "TOTAL_RETIDO": {
                         "type": [
                           "number",
                           "null"
@@ -150,7 +164,7 @@
                   "key": {
                     "type": "string",
                     "minLength": 44,
-                    "maxLength": 44
+                    "maxLength": 50
                   },
                   "fields": {
                     "type": "object",
@@ -161,7 +175,9 @@
                       "CSLL_RETIDA",
                       "IRRF_RETIDO",
                       "INSS_RETIDO",
-                      "ISS_RETIDO"
+                      "ISS_RETIDO",
+                      "CONTRIB_SOCIAIS_RETIDAS",
+                      "TOTAL_RETIDO"
                     ],
                     "properties": {
                       "STATUS_RETENCOES": {
@@ -206,6 +222,18 @@
                           "number",
                           "null"
                         ]
+                      },
+                      "CONTRIB_SOCIAIS_RETIDAS": {
+                        "type": [
+                          "number",
+                          "null"
+                        ]
+                      },
+                      "TOTAL_RETIDO": {
+                        "type": [
+                          "number",
+                          "null"
+                        ]
                       }
                     }
                   }
@@ -221,6 +249,27 @@
       "type": "Foreach",
       "foreach": "@body('Validar')?['updates']",
       "actions": {
+        "Conferir_identidade": {
+          "type": "ParseJson",
+          "inputs": {
+            "content": "@if(or(and(equals(length(items('Atualizacoes')?['key']),50),equals(replace(replace(replace(replace(replace(replace(replace(replace(replace(replace(items('Atualizacoes')?['key'],'0',''),'1',''),'2',''),'3',''),'4',''),'5',''),'6',''),'7',''),'8',''),'9',''),'')),and(equals(length(items('Atualizacoes')?['key']),44),equals(substring(items('Atualizacoes')?['key'],20,2),'55'),equals(replace(replace(replace(replace(replace(replace(replace(replace(replace(replace(substring(items('Atualizacoes')?['key'],0,6),'0',''),'1',''),'2',''),'3',''),'4',''),'5',''),'6',''),'7',''),'8',''),'9',''),''),equals(replace(replace(replace(replace(replace(replace(replace(replace(replace(replace(replace(replace(replace(replace(replace(replace(replace(replace(replace(replace(replace(replace(replace(replace(replace(replace(replace(replace(replace(replace(replace(replace(replace(replace(replace(replace(substring(items('Atualizacoes')?['key'],6,12),'0',''),'1',''),'2',''),'3',''),'4',''),'5',''),'6',''),'7',''),'8',''),'9',''),'A',''),'B',''),'C',''),'D',''),'E',''),'F',''),'G',''),'H',''),'I',''),'J',''),'K',''),'L',''),'M',''),'N',''),'O',''),'P',''),'Q',''),'R',''),'S',''),'T',''),'U',''),'V',''),'W',''),'X',''),'Y',''),'Z',''),''),equals(replace(replace(replace(replace(replace(replace(replace(replace(replace(replace(substring(items('Atualizacoes')?['key'],18,26),'0',''),'1',''),'2',''),'3',''),'4',''),'5',''),'6',''),'7',''),'8',''),'9',''),''))),json('{\"valid\":true}'),json('{}'))",
+            "schema": {
+              "type": "object",
+              "required": [
+                "valid"
+              ],
+              "properties": {
+                "valid": {
+                  "type": "boolean",
+                  "enum": [
+                    true
+                  ]
+                }
+              }
+            }
+          },
+          "runAfter": {}
+        },
         "Localizar_nota": {
           "type": "OpenApiConnection",
           "inputs": {
@@ -232,7 +281,7 @@
             "parameters": {
               "dataset": "https://energeticaltda.sharepoint.com/sites/energetica",
               "parameters/method": "GET",
-              "parameters/uri": "@concat('_api/web/lists/getbytitle(''NOTAS_FISCAIS_SEFAZ'')/items?$select=Id,CHAVE_ACESSO&$filter=CHAVE_ACESSO eq ''',items('Atualizacoes')?['key'],'''&$top=2')",
+              "parameters/uri": "@concat('_api/web/lists/getbytitle(''NOTAS_FISCAIS_SEFAZ'')/items?$select=Id,CHAVE_ACESSO,TIPO_FISCAL,MODELO&$filter=CHAVE_ACESSO eq ''',items('Atualizacoes')?['key'],'''&$top=2')",
               "parameters/headers": {
                 "Accept": "application/json;odata=verbose",
                 "Content-Type": "application/json;odata=nometadata"
@@ -240,7 +289,11 @@
             },
             "authentication": "@parameters('$authentication')"
           },
-          "runAfter": {}
+          "runAfter": {
+            "Conferir_identidade": [
+              "Succeeded"
+            ]
+          }
         },
         "Conferir_unica": {
           "type": "ParseJson",
@@ -259,6 +312,31 @@
             ]
           }
         },
+        "Conferir_tipo": {
+          "type": "ParseJson",
+          "inputs": {
+            "content": "@if(and(equals(first(body('Localizar_nota')?['d']?['results'])?['CHAVE_ACESSO'],items('Atualizacoes')?['key']),or(and(equals(length(items('Atualizacoes')?['key']),50),equals(first(body('Localizar_nota')?['d']?['results'])?['TIPO_FISCAL'],'NFS-e')),and(equals(length(items('Atualizacoes')?['key']),44),equals(string(first(body('Localizar_nota')?['d']?['results'])?['MODELO']),'55'),or(empty(first(body('Localizar_nota')?['d']?['results'])?['TIPO_FISCAL']),equals(first(body('Localizar_nota')?['d']?['results'])?['TIPO_FISCAL'],'NF-e'))))),json('{\"valid\":true}'),json('{}'))",
+            "schema": {
+              "type": "object",
+              "required": [
+                "valid"
+              ],
+              "properties": {
+                "valid": {
+                  "type": "boolean",
+                  "enum": [
+                    true
+                  ]
+                }
+              }
+            }
+          },
+          "runAfter": {
+            "Conferir_unica": [
+              "Succeeded"
+            ]
+          }
+        },
         "Campos": {
           "type": "Compose",
           "inputs": {
@@ -268,10 +346,12 @@
             "CSLL_RETIDA": "@items('Atualizacoes')?['fields']?['CSLL_RETIDA']",
             "IRRF_RETIDO": "@items('Atualizacoes')?['fields']?['IRRF_RETIDO']",
             "INSS_RETIDO": "@items('Atualizacoes')?['fields']?['INSS_RETIDO']",
-            "ISS_RETIDO": "@items('Atualizacoes')?['fields']?['ISS_RETIDO']"
+            "ISS_RETIDO": "@items('Atualizacoes')?['fields']?['ISS_RETIDO']",
+            "CONTRIB_SOCIAIS_RETIDAS": "@items('Atualizacoes')?['fields']?['CONTRIB_SOCIAIS_RETIDAS']",
+            "TOTAL_RETIDO": "@items('Atualizacoes')?['fields']?['TOTAL_RETIDO']"
           },
           "runAfter": {
-            "Conferir_unica": [
+            "Conferir_tipo": [
               "Succeeded"
             ]
           }
@@ -327,7 +407,7 @@
         "parameters": {
           "dataset": "https://energeticaltda.sharepoint.com/sites/energetica",
           "parameters/method": "GET",
-          "parameters/uri": "_api/web/lists/getbytitle('NOTAS_FISCAIS_SEFAZ')/items?$select=Id,CHAVE_ACESSO,STATUS_RETENCOES,PIS_RETIDO,COFINS_RETIDA,CSLL_RETIDA,IRRF_RETIDO,INSS_RETIDO,ISS_RETIDO&$top=5000",
+          "parameters/uri": "_api/web/lists/getbytitle('NOTAS_FISCAIS_SEFAZ')/items?$select=Id,CHAVE_ACESSO,STATUS_RETENCOES,PIS_RETIDO,COFINS_RETIDA,CSLL_RETIDA,IRRF_RETIDO,INSS_RETIDO,ISS_RETIDO,CONTRIB_SOCIAIS_RETIDAS,TOTAL_RETIDO&$top=5000",
           "parameters/headers": {
             "Accept": "application/json;odata=verbose",
             "Content-Type": "application/json;odata=nometadata"
