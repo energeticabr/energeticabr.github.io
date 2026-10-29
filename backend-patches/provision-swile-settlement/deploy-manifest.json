@@ -1,0 +1,21 @@
+{
+  "files": {
+    "worker/provision_description_settlement.py": {
+      "before": "afe507b5bf32f2000a8797616bebbdcfd068a52d1146cfce916f47c8162ad8dc",
+      "mirrorBefore": "afe507b5bf32f2000a8797616bebbdcfd068a52d1146cfce916f47c8162ad8dc",
+      "after": "8fd6c6b2a19b51785be50fd71b2456ad660b94b9fab55d786988f0a74e7bc59c"
+    },
+    "worker/provision_parent_fanout.py": {
+      "before": "06aa5f3b7aeb6c74b0ee1411ed442d162e67a74f2bf8a790d3cb781820f8d409",
+      "mirrorBefore": "06aa5f3b7aeb6c74b0ee1411ed442d162e67a74f2bf8a790d3cb781820f8d409",
+      "after": "3ab97f2b5072e185b395eaf1d4104f070750a819852ebd57eea9f373f1da5b14"
+    },
+    "worker/payroll_row_attachments.py": {
+      "before": "62ed502c4b08f065b3c6b24e389a598483b39c3a2ab29a3b1e16d7abd0738b2f",
+      "mirrorBefore": "62ed502c4b08f065b3c6b24e389a598483b39c3a2ab29a3b1e16d7abd0738b2f",
+      "after": "86a31c0570dac56e2704205e2ece72c7feaece68f73ca65da0371b36cb07cd89"
+    }
+  },
+  "patch": "5ffe8691cf787b04e32e01f36259f0d053434761059c8ea8fbb9c45ddadc0901",
+  "archive": "a064a2f6da61d0593fc23b95c4e12a8474e3fd17c18ce5f2b46839ab98df3838"
+}

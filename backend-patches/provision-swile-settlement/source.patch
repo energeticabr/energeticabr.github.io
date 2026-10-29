@@ -1,0 +1,50 @@
+--- a/worker/provision_description_settlement.py
++++ b/worker/provision_description_settlement.py
+@@ -147,11 +147,13 @@
+             raise RuntimeError('Um único pedido exige a mesma filial em todas as linhas e no descritivo.')
+         suppliers = {_text(entry['fields']['FORNECEDOR']).casefold() for entry in entries}
+         declared_diversos = _text(group['parent'].get('FORNECEDOR')).casefold() == 'diversos'
+-        if len(suppliers) > 1 and not declared_diversos:
++        declared_swile = _text(group['parent'].get('FORNECEDOR')).casefold() == 'swile'
++        if len(suppliers) > 1 and not (declared_diversos or declared_swile):
+             raise RuntimeError('O descritivo de fornecedores diferentes precisa indicar fornecedor DIVERSOS.')
+         common = _common(group['common'])
+         fields = entries[0]['fields']
+-        supplier = 'DIVERSOS' if declared_diversos else fields['FORNECEDOR']
++        supplier = ('DIVERSOS' if declared_diversos else
++                    _text(group['parent']['FORNECEDOR']) if declared_swile else fields['FORNECEDOR'])
+         prior = ((group.get('journal') or {}).get('order_intent') or {}).get('fields') or {}
+         if len(suppliers) == 1 and _text(prior.get('FORNECEDOR')).casefold() in suppliers:
+             supplier = prior['FORNECEDOR']  # Preserve a previously frozen homogeneous order.
+--- a/worker/provision_parent_fanout.py
++++ b/worker/provision_parent_fanout.py
+@@ -75,8 +75,8 @@
+     if any(text(live.get(key)) != text(row.get(key)) for key in ('FILIAL',)):
+         return False
+     return (text(live.get('FORNECEDOR')) == text(row.get('FORNECEDOR')) or
+-            (text(live.get('FORNECEDOR')).casefold() == 'diversos'
+-             and text(parent_owner.get('FORNECEDOR')).casefold() == 'diversos'
++            (text(live.get('FORNECEDOR')).casefold() in {'diversos', 'swile'}
++             and text(parent_owner.get('FORNECEDOR')).casefold() == text(live.get('FORNECEDOR')).casefold()
+              and text(row.get('FILIAL')) == text(parent_owner.get('FILIAL'))))
+ 
+ 
+--- a/worker/payroll_row_attachments.py
++++ b/worker/payroll_row_attachments.py
+@@ -67,13 +67,13 @@
+     parent_owner = parent_version = None
+     if parent is not None:
+         live_order, _ = client.get_item_fields_with_etag(order_id, tuple(order_fields), target_list=ORDER)
+-        if _text(live_order.get('FORNECEDOR')).casefold() == 'diversos':
++        if _text(live_order.get('FORNECEDOR')).casefold() in {'diversos', 'swile'}:
+             parent_owner, parent_version = client.get_item_fields_with_etag(
+                 item_id(parent), tuple(order_fields), target_list='DESCRITIVOPROVISAO')
+-            if (_text(parent_owner.get('FORNECEDOR')).casefold() != 'diversos'
++            if (_text(parent_owner.get('FORNECEDOR')).casefold() != _text(live_order.get('FORNECEDOR')).casefold()
+                     or _text(parent_owner.get('FILIAL')) != _text(source.get('FILIAL'))
+                     or _text(live_order.get('FILIAL')) != _text(source.get('FILIAL'))):
+-                raise RuntimeError('O pedido DIVERSOS não corresponde ao descritivo e à filial da provisão.')
++                raise RuntimeError('O fornecedor do pedido agrupado não corresponde ao descritivo e à filial da provisão.')
+             order_fields['FORNECEDOR'] = live_order['FORNECEDOR']
+ 
+     def guard():
