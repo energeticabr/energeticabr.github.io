@@ -1,0 +1,192 @@
+--- a/worker/workflow.py
++++ b/worker/workflow.py
+@@ -31133,7 +31133,7 @@
+             raise ValueError("Lançamento sem quantidade, valor ou frete válido")
+         return unit * quantity + freight
+ 
+-    def _launch_payroll_supplier_contractor(self, supplier: str) -> bool:
++    def _launch_payroll_supplier_contractor(self, supplier: str, *, strict=False) -> bool:
+         if not supplier:
+             return False
+         step = {
+@@ -31152,6 +31152,8 @@
+         try:
+             options = self.sharepoint.get_options(step, {})
+         except Exception:
++            if strict:
++                raise
+             return False
+         for option in options:
+             source = option.get("source_values") or {}
+@@ -31163,6 +31165,51 @@
+                 return self._launch_payroll_is_contractor(status)
+         return False
+ 
++    def _maybe_prompt_settlement_payroll(self, state, etag):
++        """Optional payroll after confirmed settlement; never repeat financial posting."""
++        receipt = state.get("sharepoint") or {}
++        records = receipt.get("line_items") or [receipt]
++        group = state.get("provision_description") or {}
++        snapshots = {str(e["fields"]["ID PROVISÃO"]): e["fields"] for e in group.get("entries", [])}
++        items = []
++        try:
++            for record in records:
++                provision_id = int(record["item_id"])
++                if provision_id <= 0:
++                    raise ValueError("Provisão inválida")
++                fields = snapshots.get(str(provision_id), state.get("fields") or {})
++                if str(fields.get("ID PROVISÃO")) != str(provision_id):
++                    raise ValueError("Snapshot da provisão divergente")
++                verified = record.get("verified")
++                if not (verified is True or (isinstance(verified, dict)
++                        and verified.get("fields") is True and verified.get("attachments") is True)):
++                    raise ValueError("Baixa ainda não confirmada")
++                launch = record.get("launch_item") or {}
++                launch_id = launch.get("item_id") or fields.get("IDLANCAMENTOS")
++                if launch_id:
++                    launch_id = int(launch_id)
++                    if launch_id <= 0:
++                        raise ValueError("Lançamento inválido")
++                total = self._launch_payroll_total({"VALOR UNITÁRIO": fields.get("VALOR TOTAL"),
++                    "QUANTIDADE": fields.get("QTD"), "FRETE": fields.get("FRETE") or "0"})
++                # One payroll payment equals the whole paid amount, including freight.
++                items.append({"item_id": provision_id, "provision_id": provision_id, "launch_id": launch_id,
++                    "fields": {"FORNECEDOR": fields.get("FORNECEDOR"), "PRODUTO": fields.get("PRODUTO"),
++                               "VALOR UNITÁRIO": str(total), "QUANTIDADE": "1", "FRETE": "0",
++                               "DATA": fields.get("DATA PGTO EFETUADO"), "FILIAL": fields.get("FILIAL")}})
++            state["settlement_payroll_batch"] = state["batch_id"]
++            return self._maybe_prompt_launch_payroll(state, etag, items)
++        except Exception:
++            state.pop("settlement_payroll_batch", None)
++            state["pending_launch_payroll"] = {"settlement_loading": True}
++            state["stage"] = LAUNCH_PAYROLL_DECISION_STAGE
++            self._send_actions(state, "A BAIXA JÁ FOI CONFIRMADA. NÃO FOI POSSÍVEL CONSULTAR O VÍNCULO "
++                               "COM A FOLHA. SEUS DADOS FORAM PRESERVADOS.",
++                               [{"id": LAUNCH_PAYROLL_YES_ID, "title": "🔄 TENTAR NOVAMENTE", "reply": LAUNCH_PAYROLL_YES_ID}],
++                               allow_back=False)
++            etag = self._save(state, etag)
++            return {"status": "settlement_payroll_load_failed", "batch_id": state["batch_id"], "etag": etag}
++
+     def _maybe_prompt_launch_payroll(
+         self,
+         state: dict,
+@@ -31170,7 +31217,7 @@
+         launch_items: list[dict],
+     ) -> dict | None:
+         """Ask about payroll only after the launch rows were saved successfully."""
+-        if state.get("flow") != "launch" or not launch_items:
++        if state.get("flow") not in {"launch", "payment_settlement"} or not launch_items:
+             return None
+ 
+         entries = []
+@@ -31194,7 +31241,7 @@
+             contractor = supplier_source.get("EMPREITEIRO")
+             if contractor in {None, ""}:
+                 contractor_enabled = self._launch_payroll_supplier_contractor(
+-                    supplier
++                    supplier, strict=state.get("flow") == "payment_settlement"
+                 )
+             else:
+                 contractor_enabled = self._launch_payroll_is_contractor(
+@@ -31207,6 +31254,8 @@
+                     "supplier": supplier,
+                     "supplier_source_values": supplier_source,
+                     "eligible": contractor_enabled,
++                    **({"provision_id": item["provision_id"], "launch_id": item.get("launch_id")}
++                       if item.get("provision_id") else {}),
+                 }
+             )
+         eligible_ids = [
+@@ -31238,7 +31287,10 @@
+         pending = state.get("pending_launch_payroll") or {}
+         entries = pending.get("entries") or []
+         eligible_ids = ", ".join(pending.get("eligible_ids") or [])
+-        if len(entries) == 1:
++        if state.get("flow") == "payment_settlement":
++            prompt = ("✅ BAIXA CONFIRMADA. HÁ PAGAMENTO(S) DE EMPREITEIRO "
++                      f"NAS PROVISÕES {eligible_ids}. DESEJA VINCULAR À FOLHA DE PAGAMENTO (IDFOLHA)?")
++        elif len(entries) == 1:
+             prompt = (
+                 f"✅ O LANÇAMENTO {entries[0]['item_id']} DO FORNECEDOR "
+                 f"{entries[0].get('supplier') or 'NÃO IDENTIFICADO'} FOI "
+@@ -31268,6 +31320,9 @@
+             return {"status": "duplicate", "message_id": message_id, "batch_id": state.get("batch_id")}
+         command = _control_command(event.get("reply_id") or event.get("text") or "")
+         pending = state.get("pending_launch_payroll") or {}
++        if pending.get("settlement_loading"):
++            result = self._maybe_prompt_settlement_payroll(state, etag)
++            return result if result is not None else self._notify_completed(state, etag)
+         if command not in {
+             normalize_text(LAUNCH_PAYROLL_YES_ID),
+             normalize_text(LAUNCH_PAYROLL_NO_ID),
+@@ -31343,10 +31398,12 @@
+         step = {
+             "key": "launch_payroll_entries",
+             "prompt": (
+-                "MARQUE OS LANÇAMENTOS DE EMPREITEIRO QUE DESEJA INCLUIR "
+-                "NA FOLHA. OS DEMAIS NÃO SERÃO INCLUÍDOS."
++                ("MARQUE OS PAGAMENTOS DAS PROVISÕES DE EMPREITEIRO QUE DESEJA VINCULAR À FOLHA. "
++                 "OS DEMAIS NÃO SERÃO INCLUÍDOS." if state.get("flow") == "payment_settlement" else
++                 "MARQUE OS LANÇAMENTOS DE EMPREITEIRO QUE DESEJA INCLUIR "
++                 "NA FOLHA. OS DEMAIS NÃO SERÃO INCLUÍDOS.")
+             ),
+-            "button_label": "SELECIONAR LANÇAMENTOS",
++            "button_label": "SELECIONAR PAGAMENTOS" if state.get("flow") == "payment_settlement" else "SELECIONAR LANÇAMENTOS",
+             "presentation": "launch_payroll_multi_select",
+             "source": {"type": "static"},
+         }
+@@ -31599,7 +31656,7 @@
+                 step = {
+                     "key": option_key,
+                     "prompt": (
+-                        f"PAGAMENTO {index + 1} DE {len(selected_entries)} — LANÇAMENTO ID {launch_id} "
++                        f"PAGAMENTO {index + 1} DE {len(selected_entries)} — {'PROVISÃO' if entry.get('provision_id') else 'LANÇAMENTO'} ID {launch_id} "
+                         f"— {supplier} — VALOR TOTAL {total}. "
+                         "A QUAL FOLHA DESEJA VINCULAR ESTE PAGAMENTO?"
+                     ),
+@@ -31696,7 +31753,7 @@
+         fields = entry.get("fields") or {}
+         total = self._launch_payroll_total(fields)
+         prompt = (
+-            f"PARA O LANÇAMENTO DE ID {entry['item_id']}, COM VALOR TOTAL "
++            f"PARA {'A PROVISÃO' if entry.get('provision_id') else 'O LANÇAMENTO'} DE ID {entry['item_id']}, COM VALOR TOTAL "
+             f"{_currency_display(total)}, QUAL O TIPO GASTO?"
+         )
+         self._send_actions(
+@@ -31762,6 +31819,13 @@
+             token = (
+                 f"WA-launch-payroll-{state['batch_id']}-{launch_id}"
+             )
++            if entry.get("provision_id"):
++                payroll_fields["IDPROVISAO"] = int(entry["provision_id"])
++                if entry.get("launch_id"):
++                    payroll_fields["IDLANCAMENTO"] = int(entry["launch_id"])
++                else:
++                    payroll_fields.pop("IDLANCAMENTO", None)
++                token = f"WA-provision-payroll-{entry['provision_id']}"
+             payroll_item_id = self.sharepoint.ensure_item(
+                 token,
+                 payroll_fields,
+@@ -31775,6 +31839,10 @@
+                 [],
+                 target_list="FOLHAPGTO",
+             )
++            if entry.get("provision_id") and not (verification is True or (
++                    isinstance(verification, dict) and verification.get("fields") is True
++                    and verification.get("attachments") is True)):
++                raise RuntimeError("O vínculo à folha ainda não foi confirmado")
+         except Exception:
+             self._send_text(
+                 state,
+@@ -34167,6 +34235,11 @@
+         etag, receipt_recovery = CashReceiptFlow(self).complete(state, etag)
+         if receipt_recovery is not None:
+             return receipt_recovery
++        if (state.get("flow") == "payment_settlement"
++                and state.get("settlement_payroll_batch") != state.get("batch_id")):
++            payroll_prompt = self._maybe_prompt_settlement_payroll(state, etag)
++            if payroll_prompt is not None:
++                return payroll_prompt
+         item_id = state["sharepoint"]["item_id"]
+         recorded_at = _parse_instant(state["sharepoint"].get("recorded_at"))
+         if recorded_at is None:
