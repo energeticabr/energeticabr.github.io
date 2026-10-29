@@ -6,7 +6,10 @@ function clean(value,now){
  if(!validId(value?.requestId)||!['starting','queued','running','succeeded','failed'].includes(value.status))throw Error('INVALID_DDA_RECEIPT');
  const result={requestId:value.requestId,status:value.status,startedAt:Number.isFinite(value.startedAt)?value.startedAt:now};
  if(value.acknowledged===true&&terminal.has(value.status))result.acknowledged=true;
- if(terminal.has(value.status))result.completedAt=Number.isFinite(value.completedAt)?value.completedAt:now;
+ if(terminal.has(value.status)){
+  const serverTime=typeof value.completedUtc==='string'?Date.parse(value.completedUtc):NaN;
+  result.completedAt=Number.isFinite(value.completedAt)?value.completedAt:Number.isFinite(serverTime)?serverTime:now;
+ }
  if(['SYNC_FAILED','WORKER_UNAVAILABLE','BUSY'].includes(value.code))result.code=value.code;
  for(const key of ['created','updated','verified'])if(Number.isSafeInteger(value[key])&&value[key]>=0&&value[key]<=1000000)result[key]=value[key];
  const ids=value.createdItemIds;

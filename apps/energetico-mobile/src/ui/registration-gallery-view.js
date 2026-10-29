@@ -303,12 +303,12 @@ export function createRegistrationGallery({ document: doc = globalThis.document,
     format: (row, name) => rowFieldValue(row, name) || '—', onClose: () => refreshShortcut.sync() }) : null;
   const bankNotice = kind === 'dda' ? el('p', 'rg-dda-sync-notice') : null;
   if (bankNotice) { bankNotice.hidden = true; bankNotice.setAttribute('role', 'status'); header.after(bankNotice); }
-  let manualStartedThisVisit=false,returnPending=false,returnedForManual=false,bankState=null,lastManualResult=null;
+  let manualStartedThisVisit=false,manualStarting=false,manualRequestId=null,returnPending=false,returnedForManual=false,bankState=null,lastManualResult=null;
   const formatManualTime=value=>new Intl.DateTimeFormat('pt-BR',{dateStyle:'short',timeStyle:'short',timeZone:'America/Sao_Paulo'}).format(new Date(value));
   function showBankNotice(){
     if(!bankNotice||root.hidden)return;
-    const latest=bankState?.latest||lastManualResult;
-    const active=bankState?.running;
+    const latest=(bankState?.latest?.requestId===manualRequestId?bankState.latest:null)||lastManualResult;
+    const active=latest&&['starting','queued','running'].includes(latest.status);
     const terminal=latest?.status==='succeeded'||latest?.status==='failed';
     const visible=Boolean((manualStartedThisVisit&&active)||(returnPending&&returnedForManual&&(active||terminal)));
     bankNotice.hidden=!visible;if(!visible)return;
@@ -320,9 +320,10 @@ export function createRegistrationGallery({ document: doc = globalThis.document,
   async function manualRefresh() {
     if (kind !== 'dda') return load({ refresh: true });
     if(syncMonitor){
-      manualStartedThisVisit=true;returnPending=false;returnedForManual=false;lastManualResult=null;
+      manualStarting=true;returnPending=false;returnedForManual=false;lastManualResult=null;manualRequestId=null;
       try{await syncMonitor.start();}
-      catch(error){bankReceipt.show({status:'failed',message:String(error?.message||'Não foi possível iniciar a consulta.')},[],refresh);}
+      catch(error){if(!manualRequestId)manualStartedThisVisit=false;bankReceipt.show({status:'failed',message:String(error?.message||'Não foi possível iniciar a consulta.')},[],refresh);}
+      finally{manualStarting=false;}
       return;
     }
     const controller = bankController = new AbortController();
@@ -357,7 +358,8 @@ export function createRegistrationGallery({ document: doc = globalThis.document,
   const unsubscribeBank=kind==='dda'&&syncMonitor?syncMonitor.subscribe(state=>{
     if(destroyed)return;
     bankState=state;
-    if((manualStartedThisVisit||returnPending)&&state.latest&&(state.latest.status==='succeeded'||state.latest.status==='failed'))lastManualResult=state.latest;
+    if(manualStarting&&!manualRequestId&&state.latest?.requestId){manualRequestId=state.latest.requestId;manualStartedThisVisit=true;}
+    if((manualStartedThisVisit||returnPending)&&state.latest?.requestId===manualRequestId&&(state.latest.status==='succeeded'||state.latest.status==='failed'))lastManualResult=state.latest;
     showBankNotice();
     if(managedWasRunning&&!state.running&&!root.hidden)void load({refresh:true,preserveRowsOnError:true});
     managedWasRunning=state.running;refreshShortcut.sync();
@@ -931,7 +933,7 @@ export function createRegistrationGallery({ document: doc = globalThis.document,
     bankController?.abort();
     if (bankNotice) {
       if(manualStartedThisVisit){returnPending=true;manualStartedThisVisit=false;}
-      else if(returnedForManual&&!bankState?.running){returnPending=false;}
+      else if(returnedForManual&&!['starting','queued','running'].includes(((bankState?.latest?.requestId===manualRequestId?bankState.latest:null)||lastManualResult)?.status)){returnPending=false;}
       returnedForManual=false;bankNotice.hidden=true;
     }
     stopDdaClock();

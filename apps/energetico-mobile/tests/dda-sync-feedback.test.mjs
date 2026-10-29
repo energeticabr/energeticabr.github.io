@@ -66,13 +66,29 @@ test('an unresponsive bank status request settles on its deadline even if it ign
 
 for (const outcome of ['succeeded','failed']) test(`gallery return keeps the last manual ${outcome} result once, with completion time`,async t=>{
  const dom=new JSDOM('<body></body>'),doc=dom.window.document;let listener;const monitor={running:false,
-  async start(){this.running=true;listener({running:true,notice:'Consultando o Sicoob…',latest:{status:'running',startedAt:1000}});},
+  async start(){this.running=true;listener({running:true,notice:'Consultando o Sicoob…',latest:{requestId:id,status:'running',startedAt:1000}});},
   subscribe(fn){listener=fn;fn({running:false,notice:'',latest:null});return()=>{};}};
  const gallery=createRegistrationGallery({document:doc,kind:'dda',data:{loadSnapshot:async()=>({rows:[]})},syncMonitor:monitor});t.after(()=>{gallery.destroy();dom.window.close();});
  await gallery.open();doc.querySelector('[data-action="registration-refresh"]').click();await tick();gallery.close();await gallery.open();
  const notice=doc.querySelector('.rg-dda-sync-notice');assert.equal(notice.hidden,false);assert.match(notice.textContent,/Consultando/);assert.equal(notice.dataset.state,'running');
- gallery.close();monitor.running=false;listener({running:false,notice:'',latest:{status:outcome,completedAt:Date.parse('2026-10-29T12:34:00Z')}});
+ gallery.close();monitor.running=false;listener({running:false,notice:'',latest:{requestId:id,status:outcome,completedAt:Date.parse('2026-10-29T12:34:00Z')}});
  listener({running:false,notice:'',latest:null}); // The global popup was acknowledged before returning.
  await gallery.open();assert.equal(notice.hidden,false);assert.equal(notice.dataset.state,outcome);assert.match(notice.textContent,/29\/10\/2026.*09:34/);
  gallery.close();await gallery.open();assert.equal(notice.hidden,true);
+});
+
+test('a later report refresh cannot replace the gallery manual result',async t=>{
+ const dom=new JSDOM('<body></body>'),doc=dom.window.document;let listener;const other='b'.repeat(32);
+ const monitor={running:false,async start(){this.running=true;listener({running:true,notice:'A em andamento',latest:{requestId:id,status:'running',startedAt:1}});},subscribe(fn){listener=fn;fn({running:false,notice:'',latest:null});return()=>{};}};
+ const gallery=createRegistrationGallery({document:doc,kind:'dda',data:{loadSnapshot:async()=>({rows:[]})},syncMonitor:monitor});t.after(()=>{gallery.destroy();dom.window.close();});
+ await gallery.open();doc.querySelector('[data-action="registration-refresh"]').click();await tick();gallery.close();
+ monitor.running=false;listener({running:false,notice:'',latest:{requestId:id,status:'succeeded',completedAt:Date.parse('2026-10-29T12:34:00Z')}});
+ monitor.running=true;listener({running:true,notice:'B em andamento',latest:{requestId:other,status:'running',startedAt:2}});
+ await gallery.open();const notice=doc.querySelector('.rg-dda-sync-notice');assert.equal(notice.dataset.state,'succeeded');assert.match(notice.textContent,/FINALIZADA/);assert.doesNotMatch(notice.textContent,/B em andamento/);
+});
+test('a rejected manual start cannot claim a later unrelated result',async t=>{
+ const dom=new JSDOM('<body></body>'),doc=dom.window.document;let listener;const monitor={running:false,async start(){throw Error('offline');},subscribe(fn){listener=fn;fn({running:false,notice:'',latest:null});return()=>{};}};
+ const gallery=createRegistrationGallery({document:doc,kind:'dda',data:{loadSnapshot:async()=>({rows:[]})},syncMonitor:monitor});t.after(()=>{gallery.destroy();dom.window.close();});
+ await gallery.open();doc.querySelector('[data-action="registration-refresh"]').click();await tick();gallery.close();
+ listener({running:false,notice:'',latest:{requestId:id,status:'succeeded',completedAt:Date.now()}});await gallery.open();assert.equal(doc.querySelector('.rg-dda-sync-notice').hidden,true);
 });

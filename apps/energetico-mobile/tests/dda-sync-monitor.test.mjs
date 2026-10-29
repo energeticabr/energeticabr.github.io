@@ -68,3 +68,8 @@ test('monitor publishes a durable terminal completion timestamp to subscribers',
  assert.equal(states.at(-1).latest.completedAt,4000);assert.equal(states.at(-1).latest.status,'succeeded');
  assert.equal(JSON.parse([...h.saved.map.values()][0]).records[0].completedAt,4000);
 });
+
+test('server completion UTC time survives delayed recovery',async t=>{
+ const h=setup(t,{now:()=>500000});await h.monitor.start();h.setState({status:'failed',requestId:id,completedUtc:'1970-01-01T00:03:00+00:00'});await h.monitor.resume();
+ const states=[];h.monitor.subscribe(state=>states.push(state));assert.equal(states.at(-1).latest.completedAt,180000);
+});
