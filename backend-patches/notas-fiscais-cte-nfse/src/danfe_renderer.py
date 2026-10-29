@@ -13,9 +13,7 @@ import sys
 
 from brazilfiscalreport.danfe import Danfe
 from brazilfiscalreport.dacte import Dacte
-from fpdf import FPDF
-from fontTools.ttLib import TTFont
-from importlib.resources import files
+from fiscal_pdf_layout import render_fiscal_mirror
 from fiscal_document import COMPANY, KEY_PATTERN, parse_fiscal_xml
 
 NS = {'n': 'http://www.portalfiscal.inf.br/nfe'}
@@ -23,104 +21,8 @@ MAX_BASE64 = 1_500_000
 MAX_PDF = 2_000_000
 
 
-def _literal_rows(node, path='', ordinal=None):
-    local = node.tag.rsplit('}', 1)[-1]
-    if local == 'Signature':
-        return
-    current = path + '/' + local + (f'[{ordinal}]' if ordinal is not None else '')
-    for name, value in node.attrib.items():
-        yield current + '/@' + name, value
-    children = list(node)
-    if not children and node.text and node.text.strip():
-        yield current, node.text.strip()
-    counts, positions = {}, {}
-    for item in children:
-        counts[item.tag] = counts.get(item.tag, 0)+1
-    for item in children:
-        positions[item.tag] = positions.get(item.tag, 0)+1
-        yield from _literal_rows(item, current, positions[item.tag] if counts[item.tag] > 1 else None)
-
-
-def _amount_br(amount):
-    return format(amount, ',.2f').translate(str.maketrans({',': '.', '.': ','}))
-
-
 def _mirror_pdf(document, situation='AUTORIZADA'):
-    rows = list(_literal_rows(document.root))
-    if len(rows) > 4000 or sum(len(label)+len(value) for label, value in rows) > 400000:
-        raise ValueError('DANFE_MIRROR_LIMIT')
-    # The font is shipped by the already pinned python-barcode dependency.
-    # Embedded Unicode preserves Portuguese, literal markup and other supported
-    # characters without silently transliterating fiscal data.
-    font_path = str(files('barcode').joinpath('fonts/DejaVuSansMono.ttf'))
-    with TTFont(font_path) as font:
-        glyphs = font.getBestCmap()
-    characters = set(''.join(label+value for label, value in rows)+document.supplier)
-    if any(ord(c) not in glyphs for c in characters if c not in '\r\n\t'):
-        raise ValueError('DANFE_UNSUPPORTED_TEXT_GLYPH')
-
-    class Mirror(FPDF):
-        def header(self):
-            self.set_font('Fiscal', size=12)
-            self.set_text_color(28, 58, 85)
-            self.multi_cell(0, 7, 'ESPELHO DO XML - '+document.fiscal_type,
-                            new_x='LMARGIN', new_y='NEXT')
-            self.set_font('Fiscal', size=8)
-            self.set_text_color(55, 65, 75)
-            self.multi_cell(0, 5, ('HOMOLOGACAO - SEM VALOR FISCAL' if document.environment == '2'
-                                  else 'Ambiente informado no XML: PRODUCAO'),
-                            new_x='LMARGIN', new_y='NEXT')
-            if situation != 'AUTORIZADA':
-                self.set_font('Fiscal', size=11)
-                self.set_text_color(155, 35, 35)
-                self.multi_cell(0, 7, situation+' - REGISTRO FISCAL HISTORICO',
-                                new_x='LMARGIN', new_y='NEXT')
-            self.ln(3)
-
-        def footer(self):
-            self.set_y(-14)
-            self.set_font('Fiscal', size=7)
-            self.set_text_color(90, 90, 90)
-            self.cell(0, 5, f'Chave final {document.key[-12:]} | Pagina {self.page_no()}/{{nb}}', align='C')
-
-    pdf = Mirror(format='A4')
-    pdf.set_margins(14, 12, 14)
-    pdf.set_auto_page_break(auto=True, margin=20)
-    pdf.add_font('Fiscal', fname=font_path)
-    pdf.alias_nb_pages()
-    pdf.set_title('Espelho do XML - '+document.fiscal_type)
-    pdf.set_author('Energetica - leitura do XML fiscal')
-    pdf.add_page()
-
-    def line(value, size=9, color=(20, 25, 30)):
-        pdf.set_font('Fiscal', size=size)
-        pdf.set_text_color(*color)
-        pdf.multi_cell(0, 5, value, new_x='LMARGIN', new_y='NEXT')
-
-    line('Documento de consulta gerado a partir do XML original.', 8)
-    line(('Este espelho nao e o DANFSe oficial do ADN.' if document.kind == 'NFSe'
-          else 'Este espelho nao reproduz o leiaute oficial do DACTE.'), 8)
-    pdf.ln(3)
-    line('Chave de acesso: '+document.key)
-    line('Fornecedor: '+document.supplier)
-    line('Emissao registrada no XML: '+document.issued_at)
-    line('Valor total informado: R$ '+_amount_br(document.amount))
-    if document.net is not None:
-        line('Valor liquido informado: R$ '+_amount_br(document.net))
-    line('SHA-256 do XML: '+document.digest, 7)
-    pdf.ln(4)
-    line('CAMPOS DO XML - VALORES LITERAIS', 10, (28, 58, 85))
-    line('Tags e atributos preservados abaixo; assinatura digital permanece no XML.', 7)
-    pdf.ln(2)
-    for label, value in rows:
-        if pdf.will_page_break(15):
-            pdf.add_page()
-        line(label.lstrip('/'), 6.8, (85, 95, 105))
-        line(value, 8.5)
-        pdf.ln(2)
-        if pdf.page_no() > 100:
-            raise ValueError('DANFE_MIRROR_LIMIT')
-    return bytes(pdf.output())
+    return render_fiscal_mirror(document, situation)
 
 
 def render_request(request: dict) -> dict:

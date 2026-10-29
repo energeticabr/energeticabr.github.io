@@ -31,7 +31,7 @@ export function evaluate(text,context={}){
           greaterOrEquals:(a,b)=>a>=b,lessOrEquals:(a,b)=>a<=b,
           isInt:v=>{try{if(!/^[+-]?\d+$/.test(String(v)))return false;const n=BigInt(v);return n>=-9223372036854775808n&&n<=9223372036854775807n;}catch{return false;}},
           int:v=>{const n=BigInt(v);if(n< -9223372036854775808n||n>9223372036854775807n)throw new Error('WDL int64 overflow');return n>=BigInt(Number.MIN_SAFE_INTEGER)&&n<=BigInt(Number.MAX_SAFE_INTEGER)?Number(n):n;},
-          replace:(s,from,to)=>s.replaceAll(from,to),contains:(a,b)=>a.includes(b),split:(s,separator)=>s.split(separator),last:a=>a.at(-1),
+          replace:(s,from,to)=>s.replaceAll(from,to),contains:(a,b)=>a.includes(b),startsWith:(a,b)=>a.startsWith(b),endsWith:(a,b)=>a.endsWith(b),split:(s,separator)=>s.split(separator),last:a=>a.at(-1),
           length:v=>v.length,empty:v=>v==null||(Array.isArray(v)||typeof v==='string'?v.length===0:Object.keys(v).length===0),
           if:(a,b,c)=>a?b:c,coalesce:(...a)=>a.find(v=>v!==null&&v!==undefined)??null,
           first:a=>a?.[0]??null,createArray:(...a)=>a,setProperty:(o,k,v)=>({...o,[k]:v}),
