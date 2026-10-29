@@ -21,6 +21,8 @@ test('supplier counts stay below names without overflow on narrow phones, landsc
    try{
     const layout=JSON.parse(dom.window.document.documentElement.dataset.layout);
     assert.equal(layout.pageOverflow,false,JSON.stringify({width,layout}));assert.equal(layout.tableFits,true);
+    assert.deepEqual(layout.linkClusters.slice(0,2).map(link=>[link.text,link.state,link.fits]),[['ID 46','linked',true],['N/A','missing',true]]);
+    assert.equal(layout.linkClusters[1].background,'rgb(255, 234, 237)');
     assert.equal(layout.clusters.length,3);assert.match(layout.clusters[0].label,/2 DDAs registrados/);
     for(const cluster of layout.clusters){assert.ok(cluster.below&&cluster.fits,JSON.stringify({width,cluster}));assert.ok(cluster.fontSize>=12);assert.equal(cluster.background,'rgb(234, 242, 255)');}
     if(capture){mkdirSync(capture,{recursive:true});writeFileSync(join(capture,`dda-count-preview-${width}.png`),result.screenshot);}
