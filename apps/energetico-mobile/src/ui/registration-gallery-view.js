@@ -92,6 +92,12 @@ function fieldValue(fields, name, model) {
   if ((raw == null || raw === "") && model.fieldDefaults?.[name]) raw = model.fieldDefaults[name];
   const value = valueText(raw);
   const type = model.fieldTypes?.[name];
+  if (type === "url") {
+    try {
+      const url = new URL(typeof raw === "object" ? raw?.Url || raw?.url : value);
+      return url.protocol === "https:" && !url.username && !url.password ? url.href : "";
+    } catch { return ""; }
+  }
   if (type === "boolean") return raw === true || raw === 1 || value === "true" ? "Sim"
     : raw === false || raw === 0 || value === "false" ? "Não" : value;
   if (type === "datetime") {
@@ -248,6 +254,11 @@ export function createRegistrationGallery({ document: doc = globalThis.document,
   pagination.append(previous, pageText, next);
   const ddaMetrics = kind === 'dda' ? createDdaGalleryMetrics(doc) : null;
   root.append(header, createShortcut.toolbar, filterDisclosure, ...(sortBar ? [sortBar] : []), ...(ddaMetrics ? [ddaMetrics.root] : []), feedback, list, pagination);
+  if (model.sourceNotice) {
+    const notice = el('p', 'rg-source-notice', model.sourceNotice);
+    notice.dataset.sefazCoverage = 'pending';
+    list.before(notice);
+  }
   doc.body.append(root);
   const descriptionDetail = kind === 'provisionDescription' ? createProvisionDescriptionDetail({
     document: doc, host: root, background: [header, createShortcut.toolbar, filterDisclosure, sortBar, feedback, list, pagination].filter(Boolean),
@@ -571,7 +582,28 @@ export function createRegistrationGallery({ document: doc = globalThis.document,
         if (visibility.equals && selector !== visibility.equals || visibility.includes && !visibility.includes.includes(selector)) continue;
       }
       const value = rowFieldValue(row, field);
-      const pair = appendDocumentDetail(details, field, fieldLabel(field), value);
+      const absentCompleteNote = kind === 'notas_fiscais_sefaz' && ['OBSERVACOES_NOTA', 'INFORMACOES_FISCO'].includes(field)
+        && registrationRawField(row.fields, 'STATUS_IMPORTACAO', model) === 'XML_COMPLETO';
+      const pair = appendDocumentDetail(details, field, fieldLabel(field), value || (absentCompleteNote ? 'Não consta na nota' : model.emptyValue));
+      if (pair && value && model.fieldTypes?.[field] === 'url') {
+        const link = el('a', 'rg-document-link', `Abrir ${fieldLabel(field)}`);
+        link.href = value;
+        link.target = '_blank';
+        link.rel = 'noopener noreferrer';
+        if (typeof data.downloadDocument === 'function' && typeof openMediaCollection === 'function') {
+          link.addEventListener('click', event => {
+            event.preventDefault();
+            if (destroyed || root.hidden) return;
+            let fileName = new URL(value).pathname.split('/').at(-1) || 'documento';
+            try { fileName = decodeURIComponent(fileName); } catch { /* Retain the encoded real file name. */ }
+            const failed = () => { attachmentNotice = 'Não foi possível abrir o documento. Tente novamente.'; updateFeedback(); };
+            try {
+              void Promise.resolve(openMediaCollection([{ fileName, source: options => data.downloadDocument(value, options) }])).catch(failed);
+            } catch { failed(); }
+          });
+        }
+        pair.querySelector('dd').replaceChildren(link);
+      }
       const calculation = model.computedFields?.[field];
       if (pair && calculation) {
         const tone = computedValue(row.fields, calculation, model)?.tone;
@@ -742,7 +774,7 @@ export function createRegistrationGallery({ document: doc = globalThis.document,
       if (kind === 'dda') card.classList.add('rg-row--dda');
       if (kind === 'provisionDescription') card.classList.add('rg-row--provision-description');
       card.setAttribute("role", "listitem");
-      const primary = fieldValue(row.fields, model.fields[0], model) || `ID ${row.id}`;
+      const primary = fieldValue(row.fields, model.fields[0], model) || model.emptyValue || `ID ${row.id}`;
       if (model.showAttachments) {
         const layout = el("div", "rg-row-layout");
         const attachmentState = kind === 'provisionDescription' ? provisionAttachmentState(row) : null;
@@ -789,6 +821,8 @@ export function createRegistrationGallery({ document: doc = globalThis.document,
         else renderDocumentDetails(main, row, primary);
         layout.append(fileRail, main);
         card.append(layout);
+      } else if (model.nativeCard && model.readOnly) {
+        renderNativeDetails(card, row, primary);
       } else {
         card.append(el("strong", "rg-row-title", primary));
         const details = el("dl", "rg-details");

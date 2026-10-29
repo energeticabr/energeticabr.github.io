@@ -1914,6 +1914,31 @@ test("galerias de cadastro e documentos abrem localmente, reutilizam a tela e sÃ
   assert.deepEqual(destroyed.sort(), ["documents", "family", "group", "product", "subfamily"]);
 });
 
+test('NF-e SEFAZ opens locally as a read-only gallery, reuses its panel and disposes on logout', async t => {
+  const options = [], opened = [], destroyed = [];
+  const h = makeHarness({
+    registrationGalleryDataFactory: async ({ kind }) => ({ kind, loadSnapshot: async () => ({ rows: [] }) }),
+    registrationGalleryFactory: async config => {
+      options.push(config);
+      return { open() { opened.push(config.kind); }, destroy() { destroyed.push(config.kind); } };
+    },
+  });
+  t.after(() => h.controller.stop());
+  await h.controller.start();
+  const before = h.chatCalls.length;
+  await h.view.emit('select-reply', { replyId: 'action_notas_fiscais_sefaz_gallery' });
+  await h.view.emit('select-reply', { replyId: 'action_notas_fiscais_sefaz_gallery' });
+  assert.equal(options.length, 1);
+  assert.equal(options[0].kind, 'notas_fiscais_sefaz');
+  assert.equal(options[0].data.kind, 'notas_fiscais_sefaz');
+  assert.equal(options[0].onCreate, undefined);
+  assert.equal(typeof options[0].openMediaCollection, 'function');
+  assert.deepEqual(opened, ['notas_fiscais_sefaz', 'notas_fiscais_sefaz']);
+  assert.equal(h.chatCalls.length, before);
+  h.controller.stop();
+  assert.deepEqual(destroyed, ['notas_fiscais_sefaz']);
+});
+
 test("PDF da galeria de documentos pode ser adicionado Ã  barra como novo anexo", async t => {
   let callbacks;
   let previewOptions;

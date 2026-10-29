@@ -462,6 +462,7 @@ const RECURRING_EXPENSES_GALLERY_ID = "action_recurring_expenses_gallery";
 const POWERBI_DASHBOARD_REPLY_ID = "action_powerbi_dashboard";
 const POWERBI_SCOPES = Object.freeze(["https://analysis.windows.net/powerbi/api/Report.Read.All"]);
 const REGISTRATION_GALLERY_KIND = Object.freeze({
+  action_notas_fiscais_sefaz_gallery: "notas_fiscais_sefaz",
   action_dda_gallery: "dda",
   action_dda_report: "ddaReport",
   action_hr_gallery_presencas: "presenceDescriptions",
@@ -9316,8 +9317,8 @@ export function createAppController({
               confirmPayment: async options => { assertSession(); const receipt = await client.confirmDdaPayment(options); assertSession(); return receipt; },
             } : {}),
             ...(isDdaReport ? { onClose: () => ddaAutoReminder.dismiss() } : {}),
-            ...(["contractorEmployment", "dda"].includes(sourceKind) ? {} : { onCreate: galleryCreationHandler(replyId, assertSession) }),
-            ...(["dda", "presenceDescriptions", "provisionDescription", "documents", "asset", "assetFunction", "assetProduct", "assetGroup", "workDiary", "quotes", "contracts", "contractLines", "measurements", "measurementLines", "stageDemonstratives", "constructionStages", "recurringTasks", "delegatedTasks"].includes(sourceKind) ? {
+            ...(["contractorEmployment", "dda", "notas_fiscais_sefaz"].includes(sourceKind) ? {} : { onCreate: galleryCreationHandler(replyId, assertSession) }),
+            ...(["notas_fiscais_sefaz", "dda", "presenceDescriptions", "provisionDescription", "documents", "asset", "assetFunction", "assetProduct", "assetGroup", "workDiary", "quotes", "contracts", "contractLines", "measurements", "measurementLines", "stageDemonstratives", "constructionStages", "recurringTasks", "delegatedTasks"].includes(sourceKind) ? {
               openMediaCollection: items => {
                 assertSession();
                 const collection = (Array.isArray(items) ? items : []).map(item => ({

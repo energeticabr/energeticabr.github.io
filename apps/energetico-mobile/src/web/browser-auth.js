@@ -173,6 +173,7 @@ const RESUMABLE_ACTIONS = new Set([
   "action_orders_gallery",
   "action_recurring_expenses_gallery",
   "action_dda_gallery",
+  "action_notas_fiscais_sefaz_gallery",
   "action_powerbi_dashboard",
   "action_hr_gallery_idfolha",
   "action_hr_create_idfolha",

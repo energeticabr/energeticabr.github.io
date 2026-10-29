@@ -13,7 +13,7 @@ for (const [kind, model] of Object.entries(REGISTRATION_GALLERY_MODELS).filter((
       if (path.includes('/items')) return { value: [{ id: '1', eTag: '"v1"', fields: { Title: 'EXEMPLO', STATUS: 'ATIVO' } }] };
       if (path.includes('/lists')) return { value: [{ id: 'list-id', displayName: model.listName, list: { template: 'genericList' } }] };
       return { id: 'site-id' };
-    } }, { personal: { host: 'tenant.sharepoint.com', path: '/sites/test' } });
+    } }, { personal: { host: 'tenant.sharepoint.com', path: '/sites/test' }, company: { host: 'tenant.sharepoint.com', path: '/sites/company' } });
     assert.equal(Object.isFrozen(repository), true);
     const data = createRegistrationGalleryData({ kind, repository });
     const snapshot = await data.loadSnapshot();

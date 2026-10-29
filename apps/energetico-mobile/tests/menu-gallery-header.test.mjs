@@ -127,7 +127,7 @@ test("Supplies removes Obter Dados and pairs quotations while preserving existin
     ["action_supply_registrations"], ["action_new_quotation", "action_quote_gallery"], ["action_supply_fixed_assets"],
   ]);
   assert.deepEqual([...doc.querySelectorAll(".chat-supplies-pair")].map(ids), [
-    ["action_supply_launches", "action_orders_gallery", "action_launch_gallery"],
+    ["action_supply_launches", "action_orders_gallery", "action_launch_gallery", "action_notas_fiscais_sefaz_gallery"],
     ["action_supply_provisions", "action_payment_programming_gallery", "action_provision_description_gallery", "action_recurring_expenses_gallery", "action_dda_gallery"],
   ]);
   dom.window.close();
