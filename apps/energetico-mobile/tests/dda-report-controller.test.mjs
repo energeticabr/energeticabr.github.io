@@ -5,6 +5,13 @@ import {createAppController} from '../src/app-controller.js';
 import {createConversationStore} from '../src/chat/conversation-store.js';
 import {renderChatMarkup,commandFromTarget} from '../src/ui/chat-view.js';
 const tick=()=>new Promise(resolve=>setImmediate(resolve));
+test('report receives the authenticated payment callback and rejects it after logout',async t=>{
+ let calls=0;const h=setup(t,{client:{sendText:async()=>({status:'processed',messages:[]}),confirmDdaPayment:async options=>{calls++;return options;}}});
+ await h.controller.start();await h.view.emit('open-dda-report');
+ assert.equal(typeof h.factories[0].confirmPayment,'function');
+ await h.factories[0].confirmPayment({itemId:31,key:'a'.repeat(64)});assert.equal(calls,1);
+ await h.view.emit('sign-out');await assert.rejects(h.factories[0].confirmPayment({itemId:31,key:'a'.repeat(64)}));assert.equal(calls,1);
+});
 function setup(t,options={}){
  const handlers=new Map(),calls=[],opened=[],factories=[],renders=[],account={homeAccountId:'dda-test',name:'Teste'};let sequence=0;
  const store=createConversationStore({randomUUID:()=>String(++sequence)}),view={render(state){renders.push(state);},on(type,handler){handlers.set(type,handler);return()=>handlers.delete(type);},emit(type,command={}){return handlers.get(type)?.({type,...command});},focusComposer(){},destroy(){}};
