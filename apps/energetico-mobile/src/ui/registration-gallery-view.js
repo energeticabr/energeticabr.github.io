@@ -582,7 +582,9 @@ export function createRegistrationGallery({ document: doc = globalThis.document,
         if (visibility.equals && selector !== visibility.equals || visibility.includes && !visibility.includes.includes(selector)) continue;
       }
       const value = rowFieldValue(row, field);
-      const pair = appendDocumentDetail(details, field, fieldLabel(field), value || model.emptyValue);
+      const absentCompleteNote = kind === 'notas_fiscais_sefaz' && ['OBSERVACOES_NOTA', 'INFORMACOES_FISCO'].includes(field)
+        && registrationRawField(row.fields, 'STATUS_IMPORTACAO', model) === 'XML_COMPLETO';
+      const pair = appendDocumentDetail(details, field, fieldLabel(field), value || (absentCompleteNote ? 'Não consta na nota' : model.emptyValue));
       if (pair && value && model.fieldTypes?.[field] === 'url') {
         const link = el('a', 'rg-document-link', `Abrir ${fieldLabel(field)}`);
         link.href = value;

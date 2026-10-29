@@ -109,6 +109,15 @@ test('NF-e exibe o dia original do XML mesmo quando SharePoint normaliza timesta
   assert.equal(doc.querySelector('[data-field="DATA_EMISSAO"] dd').textContent,'29/10/2026');
 });
 
+test('NF-e completa distingue observacao ausente de resumo ainda pendente',async t=>{
+  const dom=new JSDOM('<body/>'),doc=dom.window.document;
+  const fields={...sample.fields,STATUS_IMPORTACAO:'XML_COMPLETO'};
+  const gallery=createRegistrationGallery({document:doc,kind:'notas_fiscais_sefaz',data:{loadSnapshot:async()=>({rows:[{id:'4',fields}]})}});
+  t.after(()=>{gallery.destroy();dom.window.close();});
+  await gallery.open();
+  for(const field of ['OBSERVACOES_NOTA','INFORMACOES_FISCO'])assert.equal(doc.querySelector(`[data-field="${field}"] dd`).textContent,'Não consta na nota');
+});
+
 test('NF-e source uses company SharePoint REST with read-only authorization and explicit fields', async () => {
   const calls = [], scopes = [];
   const data = createRegistrationGalleryData({ kind: 'notas_fiscais_sefaz',
