@@ -8,6 +8,7 @@ import {createDdaProvisionPicker} from './dda-provision-picker.js';
 const LOGO=new URL('../../../../assets/logo-energetica-oficial.png',import.meta.url).href;
 const money=value=>value==null?'Não disponível':new Intl.NumberFormat('pt-BR',{style:'currency',currency:'BRL'}).format(Number(value));
 const date=value=>value?value.slice(8,10)+'/'+value.slice(5,7)+'/'+value.slice(0,4):'Não informado';
+const daysSince=(day,today)=>Math.round((Date.parse(`${today}T00:00:00Z`)-Date.parse(`${day}T00:00:00Z`))/86400000);
 export function createDdaReportView({document:doc=globalThis.document,data,openMediaCollection,confirmPayment,syncMonitor,copyText,onClose=()=>{},now=()=>new Date()}={}){
  if(!doc?.body||typeof data?.loadSnapshot!=='function')throw new TypeError('O relatório requer a sessão SharePoint.');
  const make=(tag,cls='',value)=>{const node=doc.createElement(tag);node.className=cls;if(value!==undefined)node.textContent=String(value);return node;};
@@ -65,7 +66,7 @@ export function createDdaReportView({document:doc=globalThis.document,data,openM
  }
  function render(){
   if(content.contains(doc.activeElement))panel.focus({preventScroll:true});content.replaceChildren();if(!rows)return;
-  const result=buildDdaReport(rows,selected(),now()),pages=Math.max(1,Math.ceil(result.rows.length/50));page=Math.min(page,pages);
+  const currentDate=now(),today=ddaTodayKey(currentDate),result=buildDdaReport(rows,selected(),currentDate),pages=Math.max(1,Math.ceil(result.rows.length/50));page=Math.min(page,pages);
   const heading=make('header','ddr-heading'),logo=make('img');logo.src=LOGO;logo.alt='Energética Construtora';heading.append(logo,make('h2','','RELATÓRIO DDA'));content.append(heading);
   const summary=make('div','ddr-summary');summary.dataset.ddaSummary='';
   for(const [label,value] of [['DDAs encontrados',result.rows.length],['Valor nominal total',money(result.total)],['Vencidos no filtro',result.overdue],['Vencem hoje',result.today]]){const metric=make('div','ddr-metric');metric.append(make('span','',label),make('strong','',value));summary.append(metric);}content.append(summary);
@@ -73,9 +74,9 @@ export function createDdaReportView({document:doc=globalThis.document,data,openM
   if(result.missingAmounts)content.append(make('p','ddr-warning',`${result.missingAmounts} DDA(s) sem valor nominal válido. Total indisponível.`));
   if(!result.rows.length){content.append(make('p','ddr-empty','Nenhum DDA encontrado para os filtros selecionados.'));return;}
   const table=make('table','ddr-table');table.setAttribute('aria-label','DDAs da empresa');const head=make('thead'),tr=make('tr'),body=make('tbody');
-  for(const label of ['ID','VENCIMENTO','FORNECEDOR','DOCUMENTO','BANCO','VALOR NOMINAL','SITUAÇÃO','VINCULAÇÃO','AÇÕES']){const th=make('th','',label);th.scope='col';tr.append(th);}head.append(tr);table.append(head,body);
+  for(const label of ['ID','VENCIMENTO','FORNECEDOR','BANCO / BOLETO','DATA EMISSÃO','VALOR NOMINAL','SITUAÇÃO','VINCULAÇÃO','AÇÕES']){const th=make('th','',label);th.scope='col';tr.append(th);}head.append(tr);table.append(head,body);
   for(const row of printAll?result.rows:result.rows.slice((page-1)*50,page*50)){
-   const line=make('tr');line.dataset.ddaId=row.id;const due=make('td','ddr-due',date(row.due));due.dataset.dueTone=ddaDueTone(row.due,now());
+   const line=make('tr');line.dataset.ddaId=row.id;const due=make('td','ddr-due',date(row.due));due.dataset.dueTone=ddaDueTone(row.due,currentDate);
    const supplier=make('td','ddr-supplier'),status=make('td','ddr-status');status.dataset.status=row.status;
    supplier.append(make('span','ddr-supplier-name',row.supplier));
    const history=make('div','ddr-supplier-count');history.dataset.ddaSupplierCount='';
@@ -87,7 +88,7 @@ export function createDdaReportView({document:doc=globalThis.document,data,openM
     history.title='Contagem indisponível: o registro não possui um CNPJ utilizável. O nome do fornecedor não é usado para adivinhar vínculos.';
    }
    supplier.append(history);
-   const overdue=row.status==='Vencido'||(row.status==='Em aberto'&&row.due&&row.due<ddaTodayKey(now()));
+   const overdue=row.status==='Vencido'||(row.status==='Em aberto'&&row.due&&row.due<today);
    const cluster=make('div','ddr-status-cluster');cluster.dataset.statusTone=row.status==='Pago'?'paid':overdue?'overdue':row.status==='Em aberto'?'open':'neutral';
    cluster.append(make('strong','',overdue?'Vencido':row.status));cluster.title=row.paidManually?'Pagamento confirmado pelo usuário':'Situação na última consulta bancária: '+row.status;
    if(row.paidManually)cluster.append(make('small','','Confirmado pelo usuário'));
@@ -96,6 +97,14 @@ export function createDdaReportView({document:doc=globalThis.document,data,openM
    status.append(cluster);
    const link=make('td','ddr-link');const linkCluster=make('span','ddr-link-cluster',row.provisionId?`ID ${row.provisionId}`:'N/A');linkCluster.dataset.linkState=row.provisionId?'linked':'missing';
    linkCluster.title=row.provisionId?`Descritivo provisão vinculado: ID ${row.provisionId}`:'Nenhum descritivo provisão vinculado';link.append(linkCluster);
+   const bankDocument=make('td','ddr-bank-document'),bankCluster=make('div','ddr-bank-cluster'),documentCluster=make('div','ddr-document-cluster');
+   bankCluster.dataset.ddaBankCluster='';documentCluster.dataset.ddaDocumentCluster='';
+   bankCluster.append(make('small','','Banco emissor'),make('strong','',row.bank||'—'));
+   documentCluster.append(make('small','','Nº boleto'),make('strong','',row.document||'—'));
+   bankDocument.append(bankCluster,documentCluster);
+   const issued=make('td','ddr-issued-date');
+   if(row.issued){const formatted=date(row.issued),value=make('strong');value.append(make('span','',formatted.slice(0,6)),make('span','',formatted.slice(6)));issued.append(value,make('small','',`${daysSince(row.issued,today)} d`));}
+   else issued.append(make('span','','Não informada'));
    const files=make('td'),actions=make('div','ddr-row-actions'),check=button((row.status==='Pago'?'Pagamento já confirmado do DDA ':'Confirmar pagamento do DDA ')+row.id,'✓');
    const pencil=button('Vincular DDA '+row.id+' a descritivo provisão','✎');pencil.className='ddr-provision-pencil';pencil.dataset.ddaProvisionPencil=row.id;
    pencil.disabled=!data.provisionLink||!Number.isSafeInteger(Number(row.id))||Number(row.id)<=0;
@@ -105,7 +114,7 @@ export function createDdaReportView({document:doc=globalThis.document,data,openM
    check.addEventListener('click',()=>{if(destroyed||root.hidden||root.getAttribute('aria-busy')==='true')return;paymentConfirmation.show({itemId:row.id,key:row.key,supplier:row.supplier,amount:money(row.amount),due:date(row.due)},check);});
    const open=button('Abrir espelho do DDA '+row.id,'📎 Espelho');open.dataset.ddaMirror=row.id;open.disabled=typeof data.listAttachments!=='function'||typeof data.downloadAttachment!=='function'||typeof openMediaCollection!=='function';open.addEventListener('click',()=>void openMirror(row,open));actions.append(pencil,check,open);files.append(actions);
    line.dataset.stripe=String(body.querySelectorAll('[data-dda-id]').length%2);
-   line.append(make('td','ddr-id',row.id),due,supplier,make('td','',row.document||'—'),make('td','',row.bank||'—'),make('td','ddr-money',money(row.amount)),status,link,files);body.append(line);
+   line.append(make('td','ddr-id',row.id),due,supplier,bankDocument,issued,make('td','ddr-money',money(row.amount)),status,link,files);body.append(line);
    if(!printAll)addDdaReportBarcode({document:doc,row,line,actions,expanded:expandedBarcodes,copyText,isCurrent:()=>!destroyed&&!root.hidden&&root.getAttribute('aria-busy')!=='true'});
   }
   content.append(table);
