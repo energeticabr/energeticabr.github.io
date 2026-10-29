@@ -3,6 +3,14 @@ $ErrorActionPreference='Stop'
 Import-Module (Join-Path $PSScriptRoot 'Sefaz.psm1') -DisableNameChecking
 Import-Module (Join-Path $PSScriptRoot 'FiscalDocuments.psm1') -DisableNameChecking
 
+function Read-SefazNotificationJson([string]$Path){
+    # PowerShell 7.5+ otherwise turns ISO strings into DateTime. Casting those
+    # values back to text changes format and can fail parsing under pt-BR.
+    $parameters=@{}
+    if((Get-Command ConvertFrom-Json).Parameters.ContainsKey('DateKind')){$parameters.DateKind='String'}
+    return ([IO.File]::ReadAllText($Path)|ConvertFrom-Json @parameters)
+}
+
 function Write-SefazNotificationJson([string]$Path,$Value){
     [IO.Directory]::CreateDirectory((Split-Path $Path -Parent))|Out-Null
     $temporary=$Path+'.'+[Guid]::NewGuid().ToString('N')+'.tmp'
@@ -26,7 +34,7 @@ function Get-SefazNotificationBlockPath([string]$Root,[string]$Key){
 function Test-SefazNotificationBlocked([string]$Root,[string]$Key){
     $path=Get-SefazNotificationBlockPath $Root $Key
     if(-not [IO.File]::Exists($path)){return $false}
-    $block=Get-Content -LiteralPath $path -Raw|ConvertFrom-Json
+    $block=Read-SefazNotificationJson $path
     if($block.version -ne 1 -or $block.source -cne 'SEFAZ' -or $block.key -cne $Key -or $block.fiscalSituation -cnotin @('CANCELADA','SUBSTITUIDA')){throw 'WHATSAPP_FISCAL_BLOCK_INVALID'}
     return $true
 }
@@ -34,7 +42,7 @@ function Test-SefazNotificationBlocked([string]$Root,[string]$Key){
 function Set-SefazPendingNotificationSuppressed([string]$Root,[string]$Key){
     $path=Join-Path $Root ($Key+'.json')
     if(-not [IO.File]::Exists($path)){return}
-    $item=Get-Content -LiteralPath $path -Raw|ConvertFrom-Json
+    $item=Read-SefazNotificationJson $path
     if($item.request.document.key -cne $Key){throw 'WHATSAPP_QUEUE_IDENTITY_INVALID'}
     # A local tombstone cannot recall an item already handed to the remote queue.
     if($item.state -cne 'pending'){return}
@@ -67,7 +75,7 @@ function Save-SefazWhatsAppNotification([object[]]$Documents,$Receipt,[string]$R
             if(Test-SefazNotificationBlocked $Root ([string]$doc.key)){Set-SefazPendingNotificationSuppressed $Root ([string]$doc.key);continue}
             $path=Join-Path $Root ($doc.key+'.json')
             if([IO.File]::Exists($path)){
-                $existing=Get-Content -LiteralPath $path -Raw|ConvertFrom-Json
+                $existing=Read-SefazNotificationJson $path
                 if($existing.request.document.key -cne $doc.key){throw 'WHATSAPP_QUEUE_IDENTITY_INVALID'}
                 # A later import/update may render a PDF with a new creation
                 # timestamp. Keep the first confirmed notification immutable;
@@ -120,7 +128,7 @@ function Invoke-SefazWhatsAppDrain($Config,[string]$Root,[scriptblock]$Remote){
         foreach($file in @(Get-ChildItem -LiteralPath $Root -Filter '*.json' -File|Sort-Object Name)){
             $item=$null
             try{
-                $item=Get-Content -LiteralPath $file.FullName -Raw|ConvertFrom-Json
+                $item=Read-SefazNotificationJson $file.FullName
                 if($item.state -ne 'pending'){continue}
                 if(Test-SefazNotificationBlocked $Root ([string]$item.request.document.key)){
                     Set-SefazPendingNotificationSuppressed $Root ([string]$item.request.document.key)
