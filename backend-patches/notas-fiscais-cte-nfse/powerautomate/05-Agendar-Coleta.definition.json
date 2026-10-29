@@ -92,7 +92,7 @@
                 "Accept": "application/json;odata=nometadata",
                 "Content-Type": "application/json;odata=nometadata"
               },
-              "parameters/body": "@string(setProperty(setProperty(setProperty(setProperty(setProperty(json('{}'),'Title','Coleta direta SEFAZ - emissao desde 2026-10-01'),'JOB_KEY',outputs('Chave_job')),'STATUS','PENDING'),'REQUESTED_AT',utcNow()),'START_DATE','2026-10-01T00:00:00-03:00'))"
+              "parameters/body": "@string(setProperty(setProperty(setProperty(setProperty(setProperty(json('{}'),'Title','Coleta direta SEFAZ - emissao desde 2026-09-01'),'JOB_KEY',outputs('Chave_job')),'STATUS','PENDING'),'REQUESTED_AT',utcNow()),'START_DATE','2026-09-01T00:00:00-03:00'))"
             },
             "authentication": "@parameters('$authentication')"
           },

@@ -17,6 +17,9 @@
 .rg-input { width: 100%; min-width: 0; min-height: 44px; padding: 8px; border: 1px solid #a9c5ce; border-radius: 9px; background: #fff; font: inherit; }
 .rg-feedback { margin: 0; }
 .rg-source-notice { margin: 0; padding: 10px 12px; border: 1px solid #e2d5ad; border-radius: 9px; color: #625126; background: #fff9e9; font-size: .85rem; line-height: 1.4; }
+.rg-sefaz-active-filters { display: flex; flex-wrap: wrap; align-items: center; gap: 8px 12px; }
+.rg-sefaz-active-filters[hidden] { display: none; }
+.rg-sefaz-active-filters > span { flex: 1 1 220px; min-width: 0; overflow-wrap: anywhere; }
 .rg-document-link { display: inline-flex; align-items: center; min-height: 44px; max-width: 100%; padding: 6px 10px; border: 1px solid #bed5e2; border-radius: 8px; color: #07566b; background: #edf6fa; font-weight: 700; text-decoration: underline; overflow-wrap: anywhere; }
 .rg-document-link:focus-visible { outline: 3px solid #e3aa19; outline-offset: 2px; }
 .rg-overlay[data-gallery-kind="notas_fiscais_sefaz"] .rg-detail[data-field="CHAVE_ACESSO"] { grid-column: 1 / -1; }
