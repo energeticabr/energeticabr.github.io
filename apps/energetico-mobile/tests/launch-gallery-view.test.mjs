@@ -244,7 +244,7 @@ test('closing the gallery aborts counts without requiring the plus button', asyn
   await settle();
 });
 
-test('the launch pencil opens a selection-only editing form without a separate details action', async t => {
+test('the launch pencil opens a searchable editing form without a separate details action', async t => {
   const ctx = await setup(t, { request: async operation => operation === 'snapshot' ? snapshot() : detail({
     editFields: [
       { name: 'FORNECEDOR', label: 'Fornecedor', type: 'select', options: [
@@ -267,8 +267,12 @@ test('the launch pencil opens a selection-only editing form without a separate d
   assert.equal(supplier.tagName, 'SELECT');
   editor.querySelector('.sfs-trigger').click();
   const search = editor.querySelector('.sfs-search');
-  assert.equal(search.readOnly, true);
-  assert.deepEqual([...editor.querySelectorAll('.sfs-option')].map(option => option.textContent), ['Fornecedor A','Fornecedor B']);
+  assert.equal(search.readOnly, false);
+  assert.equal(search.value, '');
+  assert.deepEqual([...editor.querySelectorAll('.sfs-option')].map(option => option.textContent), ['Selecione','Fornecedor A','Fornecedor B']);
+  search.value = 'b'; search.dispatchEvent(new ctx.dom.window.Event('input', { bubbles: true }));
+  assert.equal(supplier.value, 'Fornecedor A', 'search text is not a selected value');
+  assert.deepEqual([...editor.querySelectorAll('.sfs-option')].map(option => option.textContent), ['Fornecedor B']);
   [...editor.querySelectorAll('.sfs-option')].find(option=>option.textContent==='Fornecedor B').click();
   assert.equal(supplier.value, 'Fornecedor B');
 });
@@ -285,13 +289,21 @@ test('editing a launch replaces a selected option and submits the replacement', 
   const stage = editor.querySelector('[name="ETAPA"]');
   editor.querySelector('.sfs-trigger').click();
   const search = editor.querySelector('.sfs-search');
-  assert.equal(search.readOnly, true);
+  assert.equal(search.readOnly, false);
+  assert.equal(search.value, '');
+  search.value = 'contab'; search.dispatchEvent(new ctx.dom.window.Event('input', { bubbles: true }));
   const replacement = [...editor.querySelectorAll('.sfs-option')].find(option=>option.textContent==='Contabilidade');
   replacement.dispatchEvent(new ctx.dom.window.MouseEvent('pointerdown', { bubbles: true }));
   search.dispatchEvent(new ctx.dom.window.FocusEvent('focusout', { bubbles: true, relatedTarget: null }));
   replacement.dispatchEvent(new ctx.dom.window.MouseEvent('pointerup', { bubbles: true }));
   assert.equal(stage.value, 'CONTABILIDADE');
   assert.match(editor.querySelector('.sfs-trigger').value, /Contabilidade/);
+  search.dispatchEvent(new ctx.dom.window.InputEvent('beforeinput', { inputType: 'insertText', data: 'alven', bubbles: true }));
+  assert.equal(search.value, '', 'typing again starts from zero while focus is retained');
+  search.value += 'alven'; search.dispatchEvent(new ctx.dom.window.Event('input', { bubbles: true }));
+  assert.deepEqual([...editor.querySelectorAll('.sfs-option')].map(option => option.textContent), ['Alvenaria e estruturas']);
+  assert.equal(stage.value, 'CONTABILIDADE');
+  search.dispatchEvent(new ctx.dom.window.KeyboardEvent('keydown', { key: 'Escape', bubbles: true, cancelable: true }));
   button(ctx.root(), 'SUBMETER').click();
   assert.match(ctx.root().querySelector('.lg-review').textContent, /Contabilidade/);
   button(ctx.root(), 'Confirmar alterações').click(); await settle();

@@ -1,0 +1,30 @@
+<!doctype html>
+<html lang="pt-BR">
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Teste local do editor de lançamentos</title>
+<link rel="stylesheet" href="../../src/styles.css">
+<link rel="stylesheet" href="../../src/ui/launch-gallery.css">
+<link rel="stylesheet" href="../../src/ui/searchable-filter-selects.css">
+<style>#proof{position:fixed;bottom:0;left:0;right:0;z-index:10000;padding:8px;background:#e1f4e8;color:#14532d;font:700 13px system-ui;text-align:center;pointer-events:none}</style>
+<output id="proof">TESTE LOCAL · Dados fictícios · Nenhuma gravação real</output>
+<script type="module">
+  import {createLaunchGallery} from '../../src/ui/launch-gallery-view.js';
+  const item={id:42,total:10,hasAttachments:false,fields:{AGRUPAR:473,DATA:'2026-10-28',FILIAL:'OBRA DEMONSTRAÇÃO',
+    FORNECEDOR:'FORNECEDOR ORIGINAL',PRODUTO:'ENGENHEIRO',ETAPA:'ESTRUTURA',QUANTIDADE:1,'VALOR UNITÁRIO':10,UN:'UN',Modified:'2026-10-28T10:00:00Z'}};
+  const choice=(name,label,values)=>({name,label,type:'select',options:values.map(value=>({value,label:value}))});
+  const editFields=[choice('AGRUPAR','Agrupar',['473','474']),{name:'DATA',label:'Data',type:'date'},
+    choice('FILIAL','Filial',['OBRA DEMONSTRAÇÃO','FILIAL ALTERNATIVA']),
+    choice('ETAPA','Etapa',['ESTRUTURA','ACABAMENTO']),
+    choice('FORNECEDOR','Fornecedor',['FORNECEDOR ORIGINAL','EMPRESA NOVA']),
+    choice('PRODUTO','Produto',['ENGENHEIRO',...Array.from({length:32},(_,i)=>`MATERIAL ${i+1}`),'AÇO ESTRUTURAL','CIMENTO']),
+    {name:'QUANTIDADE',label:'Quantidade',type:'number',required:true}];
+  const gallery=createLaunchGallery({document,request:async(operation,payload)=>{
+    if(operation==='snapshot')return{rows:[structuredClone(item)],count:1,page:1,pages:1,totals:{paid:10},filterOptions:{}};
+    if(operation==='detail')return{item:structuredClone(item),attachments:[],editFields};
+    if(operation==='update'){Object.assign(item.fields,payload.fields);document.querySelector('#proof').textContent='TESTE LOCAL · 1 gravação fictícia · Nenhum dado real alterado';return{ok:true,id:42};}
+    throw new Error(`Operação inesperada: ${operation}`);
+  }});
+  await gallery.open();
+</script>
+</html>

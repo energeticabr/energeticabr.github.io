@@ -1368,7 +1368,7 @@ export function createLaunchGallery({ document: documentRef = globalThis.documen
     actions.append(cancel, reviewButton);
     form.append(grid, actions); form.addEventListener('submit', event => { event.preventDefault(); if (!busy) reviewEditor(); });
     panel.insertBefore(form, reviewHost);
-    editor = { operation, form, controls, schemaState, attachmentsAdded: [], attachmentsRemoved: new Set(), pickers: bindSearchableFilterSelects(form, {selectionOnly:operation === 'update'}) };
+    editor = { operation, form, controls, schemaState, attachmentsAdded: [], attachmentsRemoved: new Set(), pickers: bindSearchableFilterSelects(form) };
     focus(form.querySelector('.sfs-trigger, input:not([hidden]), textarea') ?? form);
   }
   function reviewEditor() {
