@@ -1,6 +1,6 @@
 import { placeGalleryQuickSearch } from './gallery-quick-search.js';
 import { decorateSefazInvoiceCard } from './sefaz-invoice-card.js';
-import { buyerWithholding, SEFAZ_RETENTION_FIELDS } from '../chat/sefaz-withholding.js';
+import { fiscalDocumentType, buyerWithholding, SEFAZ_RETENTION_FIELDS } from '../chat/sefaz-withholding.js';
 import { matchesGallerySearch } from '../chat/gallery-quick-search.js';
 import { applyScreenNavigation } from "./screen-navigation.js";
 import { attachGalleryRefreshButton } from './gallery-refresh.js';
@@ -576,10 +576,13 @@ export function createRegistrationGallery({ document: doc = globalThis.document,
     heading.append(el("strong", "rg-row-title", primary), el("span", "rg-document-id", `ID ${row.id}`));
     container.append(heading);
     const details = el("dl", "rg-details");
+    const fiscalType = kind === 'notas_fiscais_sefaz' ? fiscalDocumentType(row.fields) : '';
+    const pdfLabel = {'CT-e':'DACTE','NFS-e':'DANFSe'}[fiscalType] || 'DANFE';
+    const fiscalLabel = field => kind === 'notas_fiscais_sefaz' ? ({DANFE_URL: `${pdfLabel} PDF`, XML_URL: fiscalType ? `XML da ${fiscalType}` : 'XML fiscal', ULTIMO_DOCUMENTO_URL: 'Último documento fiscal'}[field] || fieldLabel(field)) : fieldLabel(field);
     const fiscalSections = kind === 'notas_fiscais_sefaz' ? [
       { id: 'notes', label: 'Observações e informações ao fisco', fields: ['OBSERVACOES_NOTA', 'INFORMACOES_FISCO'] },
-      { id: 'operation', label: 'Operação e destinatário', fields: ['NATUREZA_OPERACAO', 'DESTINATARIO', 'CNPJ_DESTINATARIO', 'VALOR_PRODUTOS'] },
-      { id: 'taxes', label: 'Tributos e encargos', fields: ['ICMS', 'IPI', 'FRETE', 'SEGURO', 'OUTRAS_DESPESAS', 'STATUS_RETENCOES', ...Object.keys(SEFAZ_RETENTION_FIELDS)] },
+      { id: 'operation', label: fiscalType === 'NFS-e' ? 'Serviço e tomador' : fiscalType === 'CT-e' ? 'Transporte e tomador' : 'Operação e destinatário', fields: ['NATUREZA_OPERACAO', 'DESTINATARIO', 'CNPJ_DESTINATARIO', 'VALOR_PRODUTOS', 'TOMADOR', 'CNPJ_TOMADOR', 'PAPEL_EMPRESA', 'DESCRICAO_SERVICO', 'MUNICIPIO_PRESTACAO', 'CODIGO_SERVICO', 'VALOR_SERVICOS'] },
+      { id: 'taxes', label: 'Tributos e encargos', fields: ['ICMS', 'IPI', 'ISS', 'FRETE', 'SEGURO', 'OUTRAS_DESPESAS', 'STATUS_RETENCOES', ...Object.keys(SEFAZ_RETENTION_FIELDS)] },
     ].map(section => {
       const disclosure = el('details', 'rg-fiscal-section');
       disclosure.dataset.fiscalSection = section.id;
@@ -602,9 +605,9 @@ export function createRegistrationGallery({ document: doc = globalThis.document,
         && registrationRawField(row.fields, 'STATUS_IMPORTACAO', model) === 'XML_COMPLETO'
         && ['RETENCAO_INFORMADA_XML', 'NAO_INFORMADA_XML'].includes(registrationRawField(row.fields, 'STATUS_RETENCOES', model));
       const target = fiscalSections.find(section => section.fields.includes(field))?.content || details;
-      const pair = appendDocumentDetail(target, field, fieldLabel(field), value || (absentCompleteNote ? 'Não consta na nota' : absentAnalyzedRetention ? 'Não informado no XML' : model.emptyValue));
+      const pair = appendDocumentDetail(target, field, fiscalLabel(field), value || (absentCompleteNote ? 'Não consta na nota' : absentAnalyzedRetention ? 'Não informado no XML' : model.emptyValue));
       if (pair && value && model.fieldTypes?.[field] === 'url') {
-        const link = el('a', 'rg-document-link', `Abrir ${fieldLabel(field)}`);
+        const link = el('a', 'rg-document-link', `Abrir ${fiscalLabel(field)}`);
         link.href = value;
         link.target = '_blank';
         link.rel = 'noopener noreferrer';
@@ -846,23 +849,25 @@ export function createRegistrationGallery({ document: doc = globalThis.document,
           const layout = el('div', 'rg-row-layout rg-sefaz-layout');
           const main = el('div', 'rg-row-main');
           renderNativeDetails(main, row, primary);
+          const fiscalType = fiscalDocumentType(row.fields);
+          const pdfLabel = {'CT-e':'DACTE','NFS-e':'DANFSe'}[fiscalType] || 'DANFE';
           const pdf = main.querySelector('[data-field="DANFE_URL"]');
           const rail = el('dl', 'rg-sefaz-pdf-rail');
           const link = pdf?.querySelector('a');
           if (link) {
             link.classList.add('rg-sefaz-pdf-link');
-            link.setAttribute('aria-label', `Abrir DANFE PDF da nota ${rowFieldValue(row, 'NUMERO_NOTA') || row.id}`);
+            link.setAttribute('aria-label', `Abrir ${pdfLabel} PDF da nota ${rowFieldValue(row, 'NUMERO_NOTA') || row.id}`);
             const glyph = el('span', 'rg-sefaz-pdf-glyph', 'PDF');
             glyph.setAttribute('aria-hidden', 'true');
-            link.replaceChildren(glyph, el('span', '', 'DANFE'));
+            link.replaceChildren(glyph, el('span', '', pdfLabel));
           } else {
             rail.classList.add('rg-sefaz-pdf-rail--pending');
-            rail.setAttribute('aria-label', 'DANFE PDF pendente');
+            rail.setAttribute('aria-label', `${pdfLabel} PDF pendente`);
           }
           if (pdf) rail.append(pdf);
           const withholding = buyerWithholding(row.fields);
           card.classList.toggle('rg-row--buyer-withholding', Boolean(withholding));
-          decorateSefazInvoiceCard({document: doc, container: main, pdfRail: rail, withholding});
+          decorateSefazInvoiceCard({document: doc, container: main, pdfRail: rail, withholding, fiscalType});
           layout.append(main);
           card.append(layout);
         } else renderNativeDetails(card, row, primary);
