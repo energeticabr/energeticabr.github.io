@@ -26,6 +26,11 @@ test('NF-e gallery and three-gallery launch group fit narrow phones and Windows 
     assert.equal(layout.overflow, false, `${width}/${pwa}/${mode}: page overflow`);
     assert.deepEqual(layout.overflowingCards, [], `${width}/${pwa}/${mode}: card overflow`);
     if (mode === 'gallery') {
+      assert.equal(layout.disclosures.count, 6);
+      assert.equal(layout.disclosures.initiallyCollapsed, true);
+      assert.equal(layout.disclosures.initiallyHiddenFields, true);
+      assert.equal(layout.disclosures.expandedByClick, true);
+      for (const summary of layout.disclosures.summaries) assert.ok(summary.width >= 44 && summary.height >= 44, 'cabeçalho confortável para toque');
       assert.equal(layout.cards, 2);
       assert.equal(layout.links.length, 3);
       for (const link of layout.links) assert.ok(link.width >= 44 && link.height >= 44, `${width}: document link touch area ${JSON.stringify(link)}`);

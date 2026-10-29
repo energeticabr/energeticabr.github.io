@@ -36,18 +36,26 @@ if (new URLSearchParams(location.search).has('pwa')) {
 }
 await new Promise(resolve => requestAnimationFrame(() => requestAnimationFrame(resolve)));
 const rect = node => node.getBoundingClientRect();
+const fiscalSections = [...document.querySelectorAll('[data-fiscal-section]')];
+const initiallyCollapsed = fiscalSections.every(section => !section.open);
+const initiallyHiddenFields = fiscalSections.every(section => [...section.querySelectorAll('dd')].every(field => rect(field).height === 0));
+for (const section of fiscalSections) section.querySelector('summary').click();
+const expandedByClick = fiscalSections.every(section => section.open);
 const firstPair = document.querySelector('.chat-supplies-pair');
 const blue = firstPair?.querySelector('.chat-supplies-pair__primary button'), stack = firstPair?.querySelector('.chat-gallery-actions');
 document.documentElement.dataset.layout = JSON.stringify({ mode,
+  disclosures: { count: fiscalSections.length, initiallyCollapsed, initiallyHiddenFields, expandedByClick,
+    summaries: fiscalSections.map(section => ({ width: rect(section.querySelector('summary')).width, height: rect(section.querySelector('summary')).height })) },
   overflow: document.documentElement.scrollWidth > innerWidth + 1,
   overflowingCards: [...document.querySelectorAll('.rg-row,.rg-row *')].filter(node => node.clientWidth && node.scrollWidth > node.clientWidth + 1).map(node => node.className),
   cards: document.querySelectorAll('[data-registration-row]').length,
   links: [...document.querySelectorAll('.rg-document-link')].map(link => ({ width: rect(link).width, height: rect(link).height })),
   notes: [...document.querySelectorAll('[data-registration-row="4"] [data-field="OBSERVACOES_NOTA"], [data-registration-row="4"] [data-field="INFORMACOES_FISCO"]')].map(note => ({
     field: note.dataset.field, whiteSpace: getComputedStyle(note.querySelector('dd')).whiteSpace,
-    width: rect(note).width, containerWidth: rect(note.parentElement).width, text: note.querySelector('dd').textContent,
+    width: rect(note).width, containerWidth: rect(note.parentElement).width - parseFloat(getComputedStyle(note.parentElement).paddingLeft) - parseFloat(getComputedStyle(note.parentElement).paddingRight), text: note.querySelector('dd').textContent,
   })),
   menu: firstPair ? { blueHeight: rect(blue).height, galleriesHeight: rect(stack).height,
     actions: [...stack.querySelectorAll('button')].map(button => ({ id: button.dataset.replyId, top: rect(button).top, bottom: rect(button).bottom, color: getComputedStyle(button).backgroundColor })) } : null,
 });
+if (!new URLSearchParams(location.search).has('expanded')) for (const section of fiscalSections) section.querySelector('summary').click();
 </script></body></html>

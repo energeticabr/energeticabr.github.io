@@ -574,6 +574,18 @@ export function createRegistrationGallery({ document: doc = globalThis.document,
     heading.append(el("strong", "rg-row-title", primary), el("span", "rg-document-id", `ID ${row.id}`));
     container.append(heading);
     const details = el("dl", "rg-details");
+    const fiscalSections = kind === 'notas_fiscais_sefaz' ? [
+      { id: 'notes', label: 'Observações e informações ao fisco', fields: ['OBSERVACOES_NOTA', 'INFORMACOES_FISCO'] },
+      { id: 'operation', label: 'Operação e destinatário', fields: ['NATUREZA_OPERACAO', 'DESTINATARIO', 'CNPJ_DESTINATARIO', 'VALOR_PRODUTOS'] },
+      { id: 'taxes', label: 'Tributos e encargos', fields: ['ICMS', 'IPI', 'FRETE', 'SEGURO', 'OUTRAS_DESPESAS'] },
+    ].map(section => {
+      const disclosure = el('details', 'rg-fiscal-section');
+      disclosure.dataset.fiscalSection = section.id;
+      disclosure.append(el('summary', 'rg-fiscal-section__summary', section.label));
+      const content = el('dl', 'rg-details rg-fiscal-section__content');
+      disclosure.append(content);
+      return { ...section, disclosure, content };
+    }) : [];
     for (const field of model.fields) {
       if (field === "ID" || field === model.fields[0]) continue;
       const visibility = model.fieldVisibility?.[field];
@@ -584,7 +596,8 @@ export function createRegistrationGallery({ document: doc = globalThis.document,
       const value = rowFieldValue(row, field);
       const absentCompleteNote = kind === 'notas_fiscais_sefaz' && ['OBSERVACOES_NOTA', 'INFORMACOES_FISCO'].includes(field)
         && registrationRawField(row.fields, 'STATUS_IMPORTACAO', model) === 'XML_COMPLETO';
-      const pair = appendDocumentDetail(details, field, fieldLabel(field), value || (absentCompleteNote ? 'Não consta na nota' : model.emptyValue));
+      const target = fiscalSections.find(section => section.fields.includes(field))?.content || details;
+      const pair = appendDocumentDetail(target, field, fieldLabel(field), value || (absentCompleteNote ? 'Não consta na nota' : model.emptyValue));
       if (pair && value && model.fieldTypes?.[field] === 'url') {
         const link = el('a', 'rg-document-link', `Abrir ${fieldLabel(field)}`);
         link.href = value;
@@ -611,6 +624,7 @@ export function createRegistrationGallery({ document: doc = globalThis.document,
       }
     }
     container.append(details);
+    for (const section of fiscalSections) container.append(section.disclosure);
   }
 
   function filterSelections() {

@@ -70,6 +70,19 @@ test('NF-e mostra emissao e dados de conferencia com observacoes literais comple
   t.after(()=>{gallery.destroy();dom.window.close();});
   await gallery.open();
   const row=doc.querySelector('[data-registration-row="4"]');
+  const sections = [...row.querySelectorAll('details[data-fiscal-section]')];
+  assert.deepEqual(sections.map(section => section.dataset.fiscalSection), ['notes', 'operation', 'taxes']);
+  assert.ok(sections.every(section => !section.open), 'complementos começam recolhidos');
+  assert.equal(row.querySelector('[data-field="VALOR_TOTAL_NOTA"]').closest('details'), null, 'total continua visível');
+  assert.equal(row.querySelector('[data-field="DANFE_URL"]').closest('details'), null, 'PDF continua acessível');
+  for (const field of ['OBSERVACOES_NOTA', 'INFORMACOES_FISCO']) assert.equal(row.querySelector(`[data-field="${field}"]`).closest('details').dataset.fiscalSection, 'notes');
+  for (const field of ['NATUREZA_OPERACAO', 'DESTINATARIO', 'CNPJ_DESTINATARIO', 'VALOR_PRODUTOS']) assert.equal(row.querySelector(`[data-field="${field}"]`).closest('details').dataset.fiscalSection, 'operation');
+  for (const field of ['ICMS', 'IPI', 'FRETE', 'SEGURO', 'OUTRAS_DESPESAS']) assert.equal(row.querySelector(`[data-field="${field}"]`).closest('details').dataset.fiscalSection, 'taxes');
+  sections[0].querySelector('summary').click();
+  assert.equal(sections[0].open, true);
+  assert.equal(sections[1].open, false, 'cada seção abre de forma independente');
+  sections[0].querySelector('summary').click();
+  assert.equal(sections[0].open, false);
   assert.equal(row.querySelector('[data-field="DATA_EMISSAO"] dt').textContent,'Data de emissão');
   assert.equal(row.querySelector('[data-field="DATA_EMISSAO"] dd').textContent,'29/10/2026');
   for(const field of ['OBSERVACOES_NOTA','INFORMACOES_FISCO','DESTINATARIO','CNPJ_DESTINATARIO','NATUREZA_OPERACAO','PROTOCOLO','MODELO','UF_FORNECEDOR']) {
