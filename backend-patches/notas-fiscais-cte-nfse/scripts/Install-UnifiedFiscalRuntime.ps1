@@ -33,7 +33,7 @@ function Get-UnifiedHash([byte[]]$Bytes){
 $files=@('src/Sefaz.psm1','src/Cte.psm1','src/Nfse.psm1','src/FiscalDocuments.psm1','src/AuxiliaryFiscal.psm1',
     'src/FlowTransport.psm1','src/Danfe.psm1','src/SefazWhatsApp.psm1','src/GapRecovery.psm1',
     'scripts/PowerPlatform-Session.ps1','scripts/Invoke-Collector.ps1','scripts/Invoke-SefazWorker.ps1','scripts/Invoke-GapRecovery.ps1',
-    'src/danfe_renderer.py','src/fiscal_document.py','src/national_danfse.py')
+    'src/danfe_renderer.py','src/fiscal_document.py','src/national_danfse.py','src/ManualFiscalSync.psm1','scripts/Invoke-ManualFiscalSync.ps1')
 $root=[IO.Path]::GetFullPath($SourceRoot)
 $entries=New-Object 'Collections.Generic.List[object]'
 foreach($relative in $files){
@@ -93,7 +93,7 @@ function Get-TaskActivity([string[]]$Names){
 $target=Join-Path $env:LOCALAPPDATA 'Energetica/SefazIntegration'
 $runtime=Join-Path $env:LOCALAPPDATA 'Energetica/Runtime/PowerShell7/pwsh.exe'
 $workerPath=Join-Path $target 'config/worker.json';$collectorPath=Join-Path $target 'config/energetica.json'
-$names=@('ENERGETICA-SEFAZ-Coletor','ENERGETICA-SEFAZ-Recuperar-Gap')
+$names=@('ENERGETICA-SEFAZ-Coletor','ENERGETICA-SEFAZ-Recuperar-Gap','ENERGETICA-SEFAZ-Sincronizacao-Manual')
 $taskStates=@{};$locks=New-Object 'Collections.Generic.List[IDisposable]';$changed=New-Object 'Collections.Generic.List[object]'
 $installerLock=$null;$oldWorker=$null;$workerTouched=$false;$verified=$false;$restored=$true;$before=$null;$protected=@()
 $proof=[ordered]@{status='STARTED';at=[DateTimeOffset]::UtcNow.ToString('o');governmentRequests=0;sharepointRequests=0;whatsappRequests=0;files=@();dataFilesPreserved=0;configurationPreserved=$false;taskStatesRestored=$false;auxiliaryFiscalEnabled=$false;backupPath=(Join-Path $Staging 'backup')}
@@ -112,7 +112,7 @@ try{
  $installerLock=[IO.File]::Open((Join-Path $target 'unified-install.lock'),[IO.FileMode]::OpenOrCreate,[IO.FileAccess]::ReadWrite,[IO.FileShare]::None)
  $signature=Get-AuthenticodeSignature -LiteralPath $runtime
  if($signature.Status -ne 'Valid' -or $signature.SignerCertificate.Subject -notlike '*Microsoft Corporation*'){throw 'UNIFIED_RUNTIME_SIGNATURE_INVALID'}
- $allowed=@('src/Sefaz.psm1','src/Cte.psm1','src/Nfse.psm1','src/FiscalDocuments.psm1','src/AuxiliaryFiscal.psm1','src/FlowTransport.psm1','src/Danfe.psm1','src/SefazWhatsApp.psm1','src/GapRecovery.psm1','scripts/PowerPlatform-Session.ps1','scripts/Invoke-Collector.ps1','scripts/Invoke-SefazWorker.ps1','scripts/Invoke-GapRecovery.ps1','src/danfe_renderer.py','src/fiscal_document.py','src/national_danfse.py')
+ $allowed=@('src/Sefaz.psm1','src/Cte.psm1','src/Nfse.psm1','src/FiscalDocuments.psm1','src/AuxiliaryFiscal.psm1','src/FlowTransport.psm1','src/Danfe.psm1','src/SefazWhatsApp.psm1','src/GapRecovery.psm1','scripts/PowerPlatform-Session.ps1','scripts/Invoke-Collector.ps1','scripts/Invoke-SefazWorker.ps1','scripts/Invoke-GapRecovery.ps1','src/danfe_renderer.py','src/fiscal_document.py','src/national_danfse.py','src/ManualFiscalSync.psm1','scripts/Invoke-ManualFiscalSync.ps1')
  if(@($Package.files).Count -ne $allowed.Count){throw 'UNIFIED_MANIFEST_INVALID'}
  $seen=@{}
  foreach($entry in $Package.files){
@@ -132,10 +132,10 @@ try{
  if($cfg.companyCnpj -cne '38626750000146' -or [string]$cfg.environment -cne '1'){throw 'UNIFIED_COMPANY_CONFIG_INVALID'}
  $company=([string]$cfg.companyCnpj)+'-'+([string]$cfg.environment)
  $base=Join-Path $env:LOCALAPPDATA 'Energetica'
- $protected=@('Sefaz','SefazLive','SefazGapRecovery','SefazAuxLive','SefazKeyRecovery','SefazKeyRecoveryBatch2')|ForEach-Object{Join-Path $base $_}
+ $protected=@('Sefaz','SefazLive','SefazGapRecovery','SefazAuxLive','SefazKeyRecovery','SefazKeyRecoveryBatch2','SefazManualSync')|ForEach-Object{Join-Path $base $_}
  $evidenceFull=[IO.Path]::GetFullPath($EvidencePath)
  foreach($protectedRoot in $protected){$prefix=[IO.Path]::GetFullPath($protectedRoot).TrimEnd('\','/')+[IO.Path]::DirectorySeparatorChar;if($evidenceFull.StartsWith($prefix,[StringComparison]::OrdinalIgnoreCase)){throw 'UNIFIED_EVIDENCE_OVERLAPS_DATA'}}
- $lockPaths=@((Join-Path $base 'SefazLive/worker.lock'),(Join-Path $base ('SefazLive/'+$company+'/collector.lock')),(Join-Path $base 'SefazGapRecovery/worker.lock'),(Join-Path $base 'SefazGapRecovery/collector.lock'),(Join-Path $base ('SefazAuxLive/'+$company+'/CTE/worker.lock')),(Join-Path $base ('SefazAuxLive/'+$company+'/NFSE/worker.lock')),(Join-Path $base 'SefazLive/notifications/notifications.lock'))
+ $lockPaths=@((Join-Path $base 'SefazLive/worker.lock'),(Join-Path $base ('SefazLive/'+$company+'/collector.lock')),(Join-Path $base 'SefazGapRecovery/worker.lock'),(Join-Path $base 'SefazGapRecovery/collector.lock'),(Join-Path $base ('SefazAuxLive/'+$company+'/CTE/worker.lock')),(Join-Path $base ('SefazAuxLive/'+$company+'/NFSE/worker.lock')),(Join-Path $base 'SefazLive/notifications/notifications.lock'),(Join-Path $base 'SefazManualSync/worker.lock'))
  while($true){
   try{foreach($path in $lockPaths){if([IO.Directory]::Exists((Split-Path $path -Parent))){$locks.Add([IO.File]::Open($path,[IO.FileMode]::OpenOrCreate,[IO.FileAccess]::ReadWrite,[IO.FileShare]::None))}};break}
   catch{foreach($handle in $locks){$handle.Dispose()};$locks.Clear();if([DateTimeOffset]::UtcNow -ge $deadline){throw 'UNIFIED_RUNTIME_BUSY'};Start-Sleep -Seconds 1}

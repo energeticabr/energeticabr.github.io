@@ -1,3 +1,4 @@
+import { validateSefazReceipt, isSefazRequestId } from './sefaz-sync-receipt.js';
 import { validateDdaPaymentReceipt } from './dda-payment-confirmation.js';
 import { validateAttachment } from "./file-policy.js";
 import { audioTranscriptionText } from "./audio-transcription.js";
@@ -591,6 +592,32 @@ export function createChatClient({
     return deletion;
   }
 
+  async function sefazRequest(action, requestId, {signal} = {}, extra = {}) {
+    if (extra.mode !== 'pending' && !isSefazRequestId(requestId)) throw Error('Pedido fiscal inválido.');
+    const token = await cancellableToken(tokenProvider, signal);
+    const result = await request(chatUrl.href, {
+      method:'POST', signal,
+      headers:{Accept:'application/json', Authorization:'Bearer '+token, 'Content-Type':'application/json'},
+      body:JSON.stringify({action, ...(requestId ? {requestId} : {}), ...extra}), cache:'no-store', credentials:'omit',
+    }, response => parsePortalResponse(response, 'A consulta fiscal'), action === 'sefaz_refresh_status');
+    const receipt = result?.sefazRefresh;
+    if (extra.mode === 'pending') {
+      if (receipt?.status !== 'pending' || !Array.isArray(receipt.requests)) throw Error('Não foi possível recuperar as consultas fiscais.');
+      return {status:'pending',requests:receipt.requests.map(validateSefazReceipt)};
+    }
+    if (extra.acknowledge) {
+      if (receipt?.status !== 'acknowledged' || receipt.requestId !== requestId) throw Error('Reconhecimento fiscal não confirmado.');
+      return {status:'acknowledged',requestId};
+    }
+    const safe = validateSefazReceipt(receipt);
+    if (action === 'sefaz_refresh_status' && safe.requestId !== requestId) throw Error('Pedido fiscal divergente.');
+    return safe;
+  }
+  function refreshSefaz(options) { return sefazRequest('sefaz_refresh', options?.requestId, options); }
+  function getSefazRefreshStatus(requestId, options) { return sefazRequest('sefaz_refresh_status', requestId, options); }
+  function getSefazRefreshPending(options) { return sefazRequest('sefaz_refresh_status', null, options, {mode:'pending'}); }
+  function acknowledgeSefazRefresh(requestId, options) { return sefazRequest('sefaz_refresh_status', requestId, options, {acknowledge:true}); }
+
   async function ddaRequest(action, requestId, { signal } = {}, extra = {}) {
     if ((requestId || (action === 'dda_refresh_status' && extra.mode !== 'pending')) && !/^[a-f0-9]{32}$/.test(String(requestId || ''))) throw new Error('Pedido DDA inválido.');
     const token = await cancellableToken(tokenProvider, signal);
@@ -770,5 +797,5 @@ export function createChatClient({
     }, true);
   }
 
-  return Object.freeze({ sendText, sendFile, replaceAttachment, transcribeAudio, fetchMedia, getAttachments, launchGalleryRequest, uploadLaunchGalleryFile, getPendingProvisionSnapshot, getPendingNotesSnapshot, getRhidAttendanceReport, startRhidPendingValidation, startRhidDayValidation, getRhidAttendanceMonth, saveRhidAttendanceAdjustment, deleteRhidAttendanceAdjustment, refreshRhidAttendance, getRhidRefreshStatus, refreshRecurringProvisions, getRecurringProvisionRefreshStatus, refreshDda, getDdaRefreshStatus, getDdaRefreshPending, acknowledgeDdaRefresh, confirmDdaPayment, deleteAttachment, deleteAllAttachments, compressAttachment, chooseAttachmentCompression, getCompletionMenu, prepareSignatureEvidence, confirmSignatureEvidence, verifySignatureEvidence, captureSignatureEvidence });
+  return Object.freeze({ refreshSefaz, getSefazRefreshStatus, getSefazRefreshPending, acknowledgeSefazRefresh, sendText, sendFile, replaceAttachment, transcribeAudio, fetchMedia, getAttachments, launchGalleryRequest, uploadLaunchGalleryFile, getPendingProvisionSnapshot, getPendingNotesSnapshot, getRhidAttendanceReport, startRhidPendingValidation, startRhidDayValidation, getRhidAttendanceMonth, saveRhidAttendanceAdjustment, deleteRhidAttendanceAdjustment, refreshRhidAttendance, getRhidRefreshStatus, refreshRecurringProvisions, getRecurringProvisionRefreshStatus, refreshDda, getDdaRefreshStatus, getDdaRefreshPending, acknowledgeDdaRefresh, confirmDdaPayment, deleteAttachment, deleteAllAttachments, compressAttachment, chooseAttachmentCompression, getCompletionMenu, prepareSignatureEvidence, confirmSignatureEvidence, verifySignatureEvidence, captureSignatureEvidence });
 }

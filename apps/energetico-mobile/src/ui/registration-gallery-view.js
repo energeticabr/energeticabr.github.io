@@ -340,7 +340,18 @@ export function createRegistrationGallery({ document: doc = globalThis.document,
     bankNotice.textContent=active?(bankState.notice||'Consultando o Sicoob e atualizando o SharePoint…')
       :`${latest.status==='succeeded'?'ÚLTIMA ATUALIZAÇÃO MANUAL FINALIZADA':'ÚLTIMA ATUALIZAÇÃO MANUAL FALHOU'} EM ${formatManualTime(latest.completedAt)}.`;
   }
+  const fiscalNotice = kind === 'notas_fiscais_sefaz' ? el('p', 'rg-source-notice sefaz-sync-progress') : null;
+  if (fiscalNotice) { fiscalNotice.hidden=true; fiscalNotice.dataset.sefazSyncProgress=''; fiscalNotice.setAttribute('role','status'); header.after(fiscalNotice); }
   async function manualRefresh() {
+    if (kind === 'notas_fiscais_sefaz') {
+      try {
+        if (!syncMonitor) throw Error('A consulta fiscal está indisponível nesta versão. Atualize o aplicativo e tente novamente.');
+        await syncMonitor.start();
+      } catch (error) {
+        if (!destroyed && !root.hidden) { fiscalNotice.hidden=false; fiscalNotice.setAttribute('role','alert'); fiscalNotice.textContent=String(error?.message || 'Não foi possível iniciar a consulta fiscal.'); }
+      }
+      return;
+    }
     if (kind !== 'dda') return load({ refresh: true });
     if(syncMonitor){
       manualStarting=true;returnPending=false;returnedForManual=false;lastManualResult=null;manualRequestId=null;
@@ -387,6 +398,16 @@ export function createRegistrationGallery({ document: doc = globalThis.document,
     if(managedWasRunning&&!state.running&&!root.hidden)void load({refresh:true,preserveRowsOnError:true});
     managedWasRunning=state.running;refreshShortcut.sync();
   }):null;
+  let fiscalWasRunning=Boolean(syncMonitor?.running);
+  const unsubscribeFiscal=fiscalNotice && syncMonitor ? syncMonitor.subscribe(state=>{
+    if (destroyed) return;
+    fiscalNotice.hidden=!state.notice;
+    fiscalNotice.textContent=state.notice || '';
+    fiscalNotice.setAttribute('role','status');
+    if (fiscalWasRunning && !state.running && !root.hidden) void load({refresh:true,preserveRowsOnError:true});
+    fiscalWasRunning=state.running; refreshShortcut.sync();
+  }) : null;
+  if (fiscalNotice) { refresh.title='Consultar NF-e, CT-e e NFS-e nacional'; refresh.setAttribute('aria-label',refresh.title); }
   if (kind === 'dda') { refresh.title = 'Consultar Sicoob e sincronizar SharePoint'; refresh.setAttribute('aria-label', refresh.title); }
   if (kind === 'provisionDescription' || kind === 'dda') {
     const searchWrap = el('div', 'rg-provision-search');
@@ -1123,6 +1144,6 @@ export function createRegistrationGallery({ document: doc = globalThis.document,
       if(returnPending)returnedForManual=true;showBankNotice();await load();showBankNotice();
     },
     close: hide,
-    destroy() { unsubscribeBank?.(); paymentConfirmation?.destroy(); bankReceipt?.destroy(); bankController?.abort(); stopDdaClock(); loadController?.abort(); descriptionDetail?.destroy(); loadingScreen.destroy(); createShortcut.destroy(); refreshShortcut.destroy(); recordActions.destroy(); searchableFilters.destroy(); destroyed = true; request += 1; filterEpoch += 1; attachmentCountQueue = []; root.remove(); },
+    destroy() { unsubscribeFiscal?.(); unsubscribeBank?.(); paymentConfirmation?.destroy(); bankReceipt?.destroy(); bankController?.abort(); stopDdaClock(); loadController?.abort(); descriptionDetail?.destroy(); loadingScreen.destroy(); createShortcut.destroy(); refreshShortcut.destroy(); recordActions.destroy(); searchableFilters.destroy(); destroyed = true; request += 1; filterEpoch += 1; attachmentCountQueue = []; root.remove(); },
   };
 }

@@ -1,0 +1,19 @@
+<!doctype html><html lang="pt-BR"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Consulta fiscal — dados fictícios</title><link rel="stylesheet" href="/src/styles.css"></head>
+<body><main id="app" style="padding:24px"><h1>Energético</h1><h2>Documentos fictícios</h2><p>Você está em outra tela do aplicativo.</p><button>Ver documentos</button></main>
+<script type="module">
+import {createSefazSyncSession} from '/src/ui/sefaz-sync-session.js';
+const id='a'.repeat(32),status=new URL(location.href).searchParams.get('status')||'succeeded';let acknowledged=false;
+const result={requestId:id,status,startedUtc:'2026-10-29T10:00:00Z',completedUtc:'2026-10-29T10:01:00Z',sources:{NFE:{status:'succeeded',documents:0},CTE:{status:'succeeded',documents:2},NFSE:{status:'succeeded',documents:0}}};
+if(status==='partial')result.sources.NFSE={status:'failed',code:'DELIVERY_PENDING'};
+if(status==='failed')for(const key of ['NFE','CTE','NFSE'])result.sources[key]={status:'failed',code:'SYNC_FAILED'};
+const values=new Map(),session=createSefazSyncSession({accountKey:'fixture-only',document,storage:{getItem:k=>values.get(k)||null,setItem:(k,v)=>values.set(k,v)},
+client:{getSefazRefreshPending:async()=>({status:'pending',requests:acknowledged?[]:[result]}),acknowledgeSefazRefresh:async()=>{acknowledged=true;return {status:'acknowledged',requestId:id};}}});
+await session.resume();session.suspend();await session.resume();await document.fonts.ready;await new Promise(r=>requestAnimationFrame(()=>requestAnimationFrame(r)));
+const dialog=document.querySelector('[data-sefaz-sync-result]'),bounds=dialog.getBoundingClientRect(),button=dialog.querySelector('button'),b=button.getBoundingClientRect();
+document.querySelector('main button').focus();
+document.documentElement.dataset.layout=JSON.stringify({global:dialog.parentElement.parentElement===document.body,nativeModal:dialog.parentElement.matches(':modal'),
+focused:document.activeElement===button,fits:bounds.left>=0&&bounds.right<=innerWidth+1&&bounds.top>=0&&bounds.bottom<=innerHeight+1,
+buttonVisible:b.top>=bounds.top&&b.bottom<=bounds.bottom,overflow:dialog.scrollWidth>dialog.clientWidth+1,text:dialog.textContent,acknowledged});
+document.documentElement.dataset.ready='true';window.sefazSyncPreview=session;
+</script></body></html>
