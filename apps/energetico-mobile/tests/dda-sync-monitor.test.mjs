@@ -61,3 +61,10 @@ test('storage failure refuses a new start rather than silently losing the reques
  const h=setup(t,{storage:{getItem:()=>null,setItem:()=>{throw Error('quota');}}});
  await assert.rejects(h.monitor.start(),/salvar|registrar/i);assert.equal(h.calls.length,0);
 });
+
+test('monitor publishes a durable terminal completion timestamp to subscribers',async t=>{
+ let current=1000;const h=setup(t,{now:()=>current});const states=[];h.monitor.subscribe(value=>states.push(value));await h.monitor.start();
+ current=4000;h.setState({status:'succeeded',requestId:id,created:0});await h.monitor.resume();
+ assert.equal(states.at(-1).latest.completedAt,4000);assert.equal(states.at(-1).latest.status,'succeeded');
+ assert.equal(JSON.parse([...h.saved.map.values()][0]).records[0].completedAt,4000);
+});

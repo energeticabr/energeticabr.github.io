@@ -63,3 +63,16 @@ test('an unresponsive bank status request settles on its deadline even if it ign
  assert.match(outcome||'',/tempo|conexão|resposta/i);
  await pending;
 });
+
+for (const outcome of ['succeeded','failed']) test(`gallery return keeps the last manual ${outcome} result once, with completion time`,async t=>{
+ const dom=new JSDOM('<body></body>'),doc=dom.window.document;let listener;const monitor={running:false,
+  async start(){this.running=true;listener({running:true,notice:'Consultando o Sicoob…',latest:{status:'running',startedAt:1000}});},
+  subscribe(fn){listener=fn;fn({running:false,notice:'',latest:null});return()=>{};}};
+ const gallery=createRegistrationGallery({document:doc,kind:'dda',data:{loadSnapshot:async()=>({rows:[]})},syncMonitor:monitor});t.after(()=>{gallery.destroy();dom.window.close();});
+ await gallery.open();doc.querySelector('[data-action="registration-refresh"]').click();await tick();gallery.close();await gallery.open();
+ const notice=doc.querySelector('.rg-dda-sync-notice');assert.equal(notice.hidden,false);assert.match(notice.textContent,/Consultando/);assert.equal(notice.dataset.state,'running');
+ gallery.close();monitor.running=false;listener({running:false,notice:'',latest:{status:outcome,completedAt:Date.parse('2026-10-29T12:34:00Z')}});
+ listener({running:false,notice:'',latest:null}); // The global popup was acknowledged before returning.
+ await gallery.open();assert.equal(notice.hidden,false);assert.equal(notice.dataset.state,outcome);assert.match(notice.textContent,/29\/10\/2026.*09:34/);
+ gallery.close();await gallery.open();assert.equal(notice.hidden,true);
+});
