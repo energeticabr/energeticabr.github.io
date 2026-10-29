@@ -24,6 +24,7 @@ export const REGISTRATION_GALLERY_MODELS = Object.freeze({
     searchPlaceholder: "Pesquisar fornecedor, documento ou ID",
     fields: ["FORNECEDOR", "VENCIMENTO", "EMISSAO", "VALOR", "SITUACAO", "CNPJ_FORNECEDOR", "DOCUMENTO", "BANCO", "VALOR_PAGAMENTO", "NOSSO_NUMERO", "LINHA_DIGITAVEL", "CODIGO_BARRAS", "PAGADOR", "CNPJ_PAGADOR", "BLOQUEADO", "MENSAGEM", "ULTIMA_CONSULTA", "ID"],
     filterFields: ["FORNECEDOR", "SITUACAO", "BANCO"], dateRangeField: "VENCIMENTO",
+    defaultFilters: { SITUACAO: "Em aberto" }, filterChoices: { SITUACAO: ["Em aberto"] }, resetFiltersOnOpen: ["SITUACAO"],
     fieldAliases: { FORNECEDOR: ["Title", "Fornecedor"] },
     fieldTypes: { VENCIMENTO: "date", EMISSAO: "date", VALOR: "currency", VALOR_PAGAMENTO: "currency", ULTIMA_CONSULTA: "datetime", BLOQUEADO: "boolean" },
     fieldLabels: { FORNECEDOR: "Fornecedor", VENCIMENTO: "Vencimento", EMISSAO: "Emissão", VALOR: "Valor nominal", SITUACAO: "Situação na última consulta", CNPJ_FORNECEDOR: "CPF/CNPJ fornecedor", DOCUMENTO: "Documento", BANCO: "Banco", VALOR_PAGAMENTO: "Valor para pagamento", NOSSO_NUMERO: "Nosso número", LINHA_DIGITAVEL: "Linha digitável", CODIGO_BARRAS: "Código de barras", PAGADOR: "Pagador", CNPJ_PAGADOR: "CPF/CNPJ pagador", BLOQUEADO: "Pagamento bloqueado", MENSAGEM: "Mensagem do banco", ULTIMA_CONSULTA: "Última consulta" },

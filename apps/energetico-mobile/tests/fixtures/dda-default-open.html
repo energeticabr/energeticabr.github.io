@@ -1,0 +1,19 @@
+<!doctype html><html lang="pt-BR"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Galeria DDA — filtro padrão — dados fictícios</title>
+<link rel="stylesheet" href="../../src/styles.css"><link rel="stylesheet" href="../../src/ui/registration-gallery.css">
+<link rel="stylesheet" href="../../src/ui/searchable-filter-selects.css">
+<link rel="stylesheet" href="../../src/ui/gallery-record-actions.css"></head><body>
+<script type="module">
+import {createRegistrationGallery} from '../../src/ui/registration-gallery-view.js';
+const rows=['Em aberto','Pago','Não confirmado'].map((status,index)=>({id:String(index+1),fields:{
+ Title:['FORNECEDOR EM ABERTO FICTÍCIO','FORNECEDOR PAGO FICTÍCIO','FORNECEDOR NÃO CONFIRMADO FICTÍCIO'][index],
+ SITUACAO:status,VENCIMENTO:'2026-10-30',VALOR:100+index,VALOR_PAGAMENTO:100+index,BANCO:'BANCO DEMONSTRAÇÃO',DOCUMENTO:'FICTÍCIO-'+index
+}}));
+const gallery=createRegistrationGallery({document,kind:'dda',onHome:()=>{},data:{loadSnapshot:async()=>({rows})}});
+await gallery.open();document.querySelector('.rg-filters').open=true;
+await new Promise(resolve=>requestAnimationFrame(()=>requestAnimationFrame(resolve)));
+const status=document.querySelector('[data-filter-field="SITUACAO"]'),list=document.querySelector('.rg-list');
+document.documentElement.dataset.layout=JSON.stringify({status:status.value,label:status.selectedOptions[0]?.textContent,
+ cards:list.querySelectorAll('.rg-row--dda').length,paidHidden:!list.textContent.includes('FORNECEDOR PAGO'),
+ overflow:document.querySelector('.rg-overlay').scrollWidth>innerWidth+1});
+</script></body></html>

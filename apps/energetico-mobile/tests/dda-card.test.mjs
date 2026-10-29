@@ -38,8 +38,8 @@ test('copy rejection gives accurate feedback instead of claiming success',async(
  assert.match(main.textContent,/Não foi possível copiar/);dom.window.close();
 });
 test('DDA sorts the complete snapshot before pagination and keeps missing dates last',async()=>{
- const dom=new JSDOM('<body></body>');const rows=Array.from({length:22},(_,i)=>({id:String(i+1),fields:{Title:'Fornecedor fictício',VENCIMENTO:'2026-11-'+String(22-i).padStart(2,'0')}}));
- rows.unshift({id:'missing',fields:{Title:'Sem data'}});
+ const dom=new JSDOM('<body></body>');const rows=Array.from({length:22},(_,i)=>({id:String(i+1),fields:{Title:'Fornecedor fictício',SITUACAO:'Em aberto',VENCIMENTO:'2026-11-'+String(22-i).padStart(2,'0')}}));
+ rows.unshift({id:'missing',fields:{Title:'Sem data',SITUACAO:'Em aberto'}});
  const gallery=createRegistrationGallery({document:dom.window.document,kind:'dda',data:{loadSnapshot:async()=>({rows})}});
  await gallery.open();assert.equal(dom.window.document.querySelector('[data-registration-row]').dataset.registrationRow,'22');
  assert.equal(dom.window.document.querySelectorAll('[data-registration-row]').length,20);

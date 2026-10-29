@@ -5,6 +5,47 @@ import { createRegistrationGalleryData } from '../src/chat/registration-gallery-
 import { createRegistrationGallery } from '../src/ui/registration-gallery-view.js';
 
 const sample = { id:'7', fields:{Title:'Fornecedor fictício',VENCIMENTO:'2026-10-30T12:00:00Z',VALOR:123.45,VALOR_PAGAMENTO:123.45,SITUACAO:'Em aberto',CNPJ_FORNECEDOR:'11111111111111',LINHA_DIGITAVEL:'1'.repeat(47),CODIGO_BARRAS:'2'.repeat(44),ULTIMA_CONSULTA:'2026-10-27T20:00:00Z',Attachments:true} };
+
+test('DDA opens with Em aberto selected and hides bank-paid and manually paid rows',async t=>{
+ const dom=new JSDOM('<body/>'),doc=dom.window.document;
+ const gallery=createRegistrationGallery({document:doc,kind:'dda',data:{loadSnapshot:async()=>({rows:[sample,
+  {id:'8',fields:{...sample.fields,Title:'Pago no banco',SITUACAO:'Pago'}},
+  {id:'9',fields:{...sample.fields,Title:'Pago manualmente',PGTO_CONFIRMADO:true}}]})}});
+ t.after(()=>{gallery.destroy();dom.window.close();});
+ await gallery.open();
+ assert.equal(doc.querySelector('[data-filter-field="SITUACAO"]').value,'Em aberto');
+ assert.equal(doc.querySelectorAll('.rg-row--dda').length,1);
+ assert.match(doc.querySelector('.rg-list').textContent,/Fornecedor fictício/);
+ assert.doesNotMatch(doc.querySelector('.rg-list').textContent,/Pago no banco|Pago manualmente/);
+});
+
+for(const rows of [[],[{id:'8',fields:{...sample.fields,SITUACAO:'Pago'}}]])
+test('DDA keeps Em aberto selected without matching open records: '+rows.length,async t=>{
+ const dom=new JSDOM('<body/>'),doc=dom.window.document;
+ const gallery=createRegistrationGallery({document:doc,kind:'dda',data:{loadSnapshot:async()=>({rows})}});
+ t.after(()=>{gallery.destroy();dom.window.close();});await gallery.open();
+ assert.equal(doc.querySelector('[data-filter-field="SITUACAO"]').value,'Em aberto');
+ assert.equal(doc.querySelectorAll('.rg-row--dda').length,0);
+});
+
+test('DDA preserves explicit Todos during refresh and restores Em aberto when reopened',async t=>{
+ const dom=new JSDOM('<body/>'),doc=dom.window.document;
+ let refreshes=0;
+ const gallery=createRegistrationGallery({document:doc,kind:'dda',refreshBank:async()=>({status:'succeeded',created:0}),data:{loadSnapshot:async()=>{
+  refreshes++;return {rows:[sample,{id:'8',fields:{...sample.fields,SITUACAO:'Pago'}}]};
+ }}});
+ t.after(()=>{gallery.destroy();dom.window.close();});await gallery.open();
+ const status=doc.querySelector('[data-filter-field="SITUACAO"]');
+ status.value='';status.dispatchEvent(new dom.window.Event('change'));
+ await new Promise(resolve=>setImmediate(resolve));
+ assert.equal(doc.querySelectorAll('.rg-row--dda').length,2);
+ doc.querySelector('[data-action="registration-refresh"]').click();
+ await new Promise(resolve=>setImmediate(resolve));
+ assert.ok(refreshes>=2);assert.equal(status.value,'');
+ assert.equal(doc.querySelectorAll('.rg-row--dda').length,2);
+ gallery.close();await gallery.open();
+ assert.equal(status.value,'Em aberto');assert.equal(doc.querySelectorAll('.rg-row--dda').length,1);
+});
 test('DDA reads its list and PDFs without exposing mutations',async()=>{
  const calls=[];
  const data=createRegistrationGalleryData({kind:'dda',repository:{

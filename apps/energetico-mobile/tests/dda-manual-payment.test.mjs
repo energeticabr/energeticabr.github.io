@@ -30,10 +30,14 @@ test('check asks confirmation; Cancel never writes; Yes writes once and shows pa
  const yes=doc.querySelector('[data-dda-payment-yes]');yes.click();yes.click();await tick();assert.equal(calls,1);
  resolve(receipt);await tick();await tick();
  assert.match(doc.querySelector('[data-dda-payment-dialog]').textContent,/Pagamento confirmado/);
+ assert.equal(doc.querySelector('[data-filter-field="SITUACAO"]').value,'Em aberto');
+ assert.equal(doc.querySelector('.rg-row--dda'),null);
+ doc.querySelector('[data-dda-payment-cancel]').click();
+ const status=doc.querySelector('[data-filter-field="SITUACAO"]');
+ status.value='';status.dispatchEvent(new dom.window.Event('change'));await tick();
  assert.match(doc.querySelector('.rg-dda-status').textContent,/Pago/);
  assert.equal(doc.querySelector('[data-dda-confirm-payment]').disabled,true);
  assert.match(doc.querySelector('.rg-row--dda').textContent,/Confirmado pelo usuário/);
- doc.querySelector('[data-dda-payment-cancel]').click();
  assert.equal(doc.activeElement,doc.querySelector('.rg-overlay'));
 });
 

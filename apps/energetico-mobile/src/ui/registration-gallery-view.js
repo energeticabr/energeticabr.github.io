@@ -982,6 +982,9 @@ export function createRegistrationGallery({ document: doc = globalThis.document,
   return {
     async open() {
       if (destroyed) return;
+      if (root.hidden) for (const field of model.resetFiltersOnOpen || []) {
+        filterControls.get(field).value = model.defaultFilters[field];
+      }
       attachmentRequest += 1; attachmentLoading = false; returnFocus = doc.activeElement;
       searchComposing = false; committedSearch = search.value;
       root.hidden = false; root.focus(); startDdaClock(); await load();
