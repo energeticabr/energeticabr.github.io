@@ -3,10 +3,11 @@ import {ddaDueTone,ddaTodayKey} from './dda-card.js';
 import {bindReportLandscape} from './report-landscape.js';
 import {addReportCloseControl} from './report-close-control.js';
 import {createDdaPaymentConfirmation} from './dda-payment-confirmation.js';
+import {addDdaReportBarcode} from './dda-report-barcode.js';
 const LOGO=new URL('../../../../assets/logo-energetica-oficial.png',import.meta.url).href;
 const money=value=>value==null?'Não disponível':new Intl.NumberFormat('pt-BR',{style:'currency',currency:'BRL'}).format(Number(value));
 const date=value=>value?value.slice(8,10)+'/'+value.slice(5,7)+'/'+value.slice(0,4):'Não informado';
-export function createDdaReportView({document:doc=globalThis.document,data,openMediaCollection,confirmPayment,syncMonitor,onClose=()=>{},now=()=>new Date()}={}){
+export function createDdaReportView({document:doc=globalThis.document,data,openMediaCollection,confirmPayment,syncMonitor,copyText,onClose=()=>{},now=()=>new Date()}={}){
  if(!doc?.body||typeof data?.loadSnapshot!=='function')throw new TypeError('O relatório requer a sessão SharePoint.');
  const make=(tag,cls='',value)=>{const node=doc.createElement(tag);node.className=cls;if(value!==undefined)node.textContent=String(value);return node;};
  const button=(label,text=label)=>{const node=make('button','',text);node.type='button';node.setAttribute('aria-label',label);return node;};
@@ -25,6 +26,7 @@ export function createDdaReportView({document:doc=globalThis.document,data,openM
  const landscape=bindReportLandscape(root);addReportCloseControl({root,toolbar,onClose:close});
  let rows=null,controller=null,revision=0,filterRevision=0,page=1,printAll=false,destroyed=false,returnFocus=null,app=null,oldInert=false,oldOverflow='';
  let bankRunning=Boolean(syncMonitor?.running),bankNotice='',startingBank=false,reloadAfterPayment=false;
+ const expandedBarcodes=new Set();
  const paymentConfirmation=createDdaPaymentConfirmation({document:doc,host:root,confirmPayment,onClose:()=>{if(reloadAfterPayment)queueMicrotask(reloadFromBank);},onConfirmed:receipt=>{
   if(destroyed||root.hidden||!rows)return;
   const position=[content.scrollTop,content.scrollLeft];
@@ -91,7 +93,9 @@ export function createDdaReportView({document:doc=globalThis.document,data,openM
    check.disabled=row.status==='Pago'||!Number.isSafeInteger(Number(row.id))||Number(row.id)<=0||!/^[a-f0-9]{64}$/.test(row.key)||typeof confirmPayment!=='function';
    check.addEventListener('click',()=>{if(destroyed||root.hidden||root.getAttribute('aria-busy')==='true')return;paymentConfirmation.show({itemId:row.id,key:row.key,supplier:row.supplier,amount:money(row.amount),due:date(row.due)},check);});
    const open=button('Abrir espelho do DDA '+row.id,'📎 Espelho');open.dataset.ddaMirror=row.id;open.disabled=typeof data.listAttachments!=='function'||typeof data.downloadAttachment!=='function'||typeof openMediaCollection!=='function';open.addEventListener('click',()=>void openMirror(row,open));actions.append(check,open);files.append(actions);
+   line.dataset.stripe=String(body.querySelectorAll('[data-dda-id]').length%2);
    line.append(make('td','ddr-id',row.id),due,supplier,make('td','',row.document||'—'),make('td','',row.bank||'—'),make('td','ddr-money',money(row.amount)),status,files);body.append(line);
+   if(!printAll)addDdaReportBarcode({document:doc,row,line,actions,expanded:expandedBarcodes,copyText,isCurrent:()=>!destroyed&&!root.hidden&&root.getAttribute('aria-busy')!=='true'});
   }
   content.append(table);
   if(!printAll){const pager=make('nav','ddr-pager');pager.setAttribute('aria-label','Páginas do relatório');const previous=button('Página anterior','‹ Anterior'),next=button('Próxima página','Próxima ›');previous.disabled=page===1;next.disabled=page===pages;next.dataset.pageNext='';previous.addEventListener('click',()=>{page--;render();});next.addEventListener('click',()=>{page++;render();});pager.append(previous,make('span','',`Página ${page} de ${pages} • ${result.rows.length} DDA(s)`),next);content.append(pager);}
@@ -114,7 +118,7 @@ export function createDdaReportView({document:doc=globalThis.document,data,openM
   catch{if(active.signal.aborted||current!==revision||root.hidden||destroyed)return;rows=null;const error=make('p','','Não foi possível carregar os DDAs. Tente atualizar.');error.setAttribute('role','alert');content.replaceChildren(error);}
   finally{if(current===revision){root.setAttribute('aria-busy','false');syncRefreshButton();}}
  }
- function close(){if(root.hidden)return;reloadAfterPayment=false;paymentConfirmation.close();controller?.abort();revision++;rows=null;printAll=false;content.replaceChildren();showNotice();root.hidden=true;doc.body.style.overflow=oldOverflow;if(app)app.inert=oldInert;const target=returnFocus?.isConnected?returnFocus:doc.querySelector('[data-action="open-dda-report"]')||app;target?.focus?.();returnFocus=null;onClose();}
+ function close(){if(root.hidden)return;expandedBarcodes.clear();reloadAfterPayment=false;paymentConfirmation.close();controller?.abort();revision++;rows=null;printAll=false;content.replaceChildren();showNotice();root.hidden=true;doc.body.style.overflow=oldOverflow;if(app)app.inert=oldInert;const target=returnFocus?.isConnected?returnFocus:doc.querySelector('[data-action="open-dda-report"]')||app;target?.focus?.();returnFocus=null;onClose();}
  const filter=()=>{filterRevision++;printAll=false;page=1;render();content.scrollTop=0;showNotice();};
  controls.status.addEventListener('change',filter);controls.bank.addEventListener('change',filter);controls.search.addEventListener('input',filter);refresh.addEventListener('click',()=>void manualRefresh());
  const unsubscribeBank=syncMonitor?.subscribe(state=>{

@@ -21,7 +21,7 @@ export function normalizeDdaReportRows(snapshot){
   const id=text(row?.id);if(!/^\d+$/.test(id)||!row?.fields||typeof row.fields!=='object'||Array.isArray(row.fields)||ids.has(Number(id)))throw new TypeError('Registro DDA inválido.');ids.add(Number(id));
   const value=name=>registrationRawField(row.fields,name,REGISTRATION_GALLERY_MODELS.dda),number=registrationNumber(value('VALOR'));
   const amount=number!=null&&number>=0&&number<=Number.MAX_SAFE_INTEGER/100?new Money(number).toDecimalPlaces(2).toFixed(2):null;
-  return {id,key:text(value('CHAVE_DDA')),paidManually:ddaPaidManually(value('PGTO_CONFIRMADO')),confirmedAt:text(value('PGTO_CONFIRMADO_EM')),supplier:text(value('FORNECEDOR'))||'Fornecedor não informado',supplierCnpj:supplierCnpj(value('CNPJ_FORNECEDOR')),due:registrationDateKey(value('VENCIMENTO')),amount,status:status(value('SITUACAO')),document:text(value('DOCUMENTO')),bank:text(value('BANCO')),payer:text(value('PAGADOR')),checkedAt:text(value('ULTIMA_CONSULTA'))};
+  return {id,barcode:typeof value('CODIGO_BARRAS')==='string'?value('CODIGO_BARRAS').replace(/[\s.-]/g,''):'',key:text(value('CHAVE_DDA')),paidManually:ddaPaidManually(value('PGTO_CONFIRMADO')),confirmedAt:text(value('PGTO_CONFIRMADO_EM')),supplier:text(value('FORNECEDOR'))||'Fornecedor não informado',supplierCnpj:supplierCnpj(value('CNPJ_FORNECEDOR')),due:registrationDateKey(value('VENCIMENTO')),amount,status:status(value('SITUACAO')),document:text(value('DOCUMENTO')),bank:text(value('BANCO')),payer:text(value('PAGADOR')),checkedAt:text(value('ULTIMA_CONSULTA'))};
  });
  const counts=new Map();
  for(const row of normalized)if(row.supplierCnpj)counts.set(row.supplierCnpj,(counts.get(row.supplierCnpj)||0)+1);
