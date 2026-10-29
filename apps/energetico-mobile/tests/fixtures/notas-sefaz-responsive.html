@@ -23,6 +23,8 @@ if (mode === 'menu') {
     XML_URL: 'https://energeticaltda.sharepoint.com/sites/energetica/Documentos/nota-ficticia.xml',
     ULTIMO_DOCUMENTO_URL: 'https://energeticaltda.sharepoint.com/sites/energetica/Documentos/nota-ficticia.xml',
     DANFE_URL: 'https://energeticaltda.sharepoint.com/sites/energetica/Documentos/danfe-ficticio.pdf' };
+  if (new URLSearchParams(location.search).has('withholding')) Object.assign(fields, {STATUS_IMPORTACAO:'XML_COMPLETO', STATUS_RETENCOES:'RETENCAO_INFORMADA_XML', PIS_RETIDO:6.5, COFINS_RETIDA:30, CSLL_RETIDA:10, IRRF_RETIDO:15, INSS_RETIDO:110, ISS_RETIDO:25});
+  if (new URLSearchParams(location.search).has('retentionNone')) Object.assign(fields, {STATUS_IMPORTACAO:'XML_COMPLETO',STATUS_RETENCOES:'NAO_INFORMADA_XML'});
   await createRegistrationGallery({ document, kind: 'notas_fiscais_sefaz', onHome() {}, data: { async loadSnapshot() { return { rows: [
     { id: '4', fields },
     { id: '5', fields: { Title: 'RESUMO FICTÍCIO — DOCUMENTOS PENDENTES', NUMERO_NOTA: '555', DATA_EMISSAO: '2026-10-28',
@@ -36,6 +38,7 @@ if (new URLSearchParams(location.search).has('pwa')) {
 }
 await new Promise(resolve => requestAnimationFrame(() => requestAnimationFrame(resolve)));
 const rect = node => node.getBoundingClientRect();
+const withholdingRow = document.querySelector('.rg-row--buyer-withholding');
 const fiscalSections = [...document.querySelectorAll('[data-fiscal-section]')];
 const initiallyCollapsed = fiscalSections.every(section => !section.open);
 const initiallyHiddenFields = fiscalSections.every(section => [...section.querySelectorAll('dd')].every(field => rect(field).height === 0));
@@ -44,6 +47,7 @@ const expandedByClick = fiscalSections.every(section => section.open);
 const firstPair = document.querySelector('.chat-supplies-pair');
 const blue = firstPair?.querySelector('.chat-supplies-pair__primary button'), stack = firstPair?.querySelector('.chat-gallery-actions');
 document.documentElement.dataset.layout = JSON.stringify({ mode,
+  withholding: withholdingRow ? {background:getComputedStyle(withholdingRow).backgroundColor, border:getComputedStyle(withholdingRow).borderTopColor, text:withholdingRow.querySelector('.rg-sefaz-withholding').textContent} : null,
   disclosures: { count: fiscalSections.length, initiallyCollapsed, initiallyHiddenFields, expandedByClick,
     summaries: fiscalSections.map(section => ({ width: rect(section.querySelector('summary')).width, height: rect(section.querySelector('summary')).height })) },
   overflow: document.documentElement.scrollWidth > innerWidth + 1,

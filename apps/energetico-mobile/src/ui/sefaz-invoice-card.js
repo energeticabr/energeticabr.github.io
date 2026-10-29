@@ -21,8 +21,10 @@ function icon(doc, name) {
   return svg;
 }
 
+import { SEFAZ_RETENTION_FIELDS } from '../chat/sefaz-withholding.js';
+
 /** Presentation only: move the existing formatted fields and authenticated links. */
-export function decorateSefazInvoiceCard({document: doc, container, pdfRail}) {
+export function decorateSefazInvoiceCard({document: doc, container, pdfRail, withholding}) {
   const el = (tag, className, text) => { const node = doc.createElement(tag); node.className = className; if (text !== undefined) node.textContent = text; return node; };
   const heading = container.querySelector('.rg-document-heading');
   heading.classList.add('rg-sefaz-heading');
@@ -49,6 +51,14 @@ export function decorateSefazInvoiceCard({document: doc, container, pdfRail}) {
     cluster('amounts', [['VALOR_TOTAL_NOTA', 'money', 'total'], ['VALOR_LIQUIDO', 'coins', 'net'], ['DESCONTOS', 'tag', 'discount']]),
   );
   container.insertBefore(core, remaining);
+  if (withholding) {
+    const money = new Intl.NumberFormat('pt-BR', {style:'currency', currency:'BRL'});
+    const warning = el('div', 'rg-sefaz-withholding');
+    warning.setAttribute('role', 'note');
+    warning.append(el('strong', '', `Retenção pelo comprador • ${money.format(withholding.total)}`),
+      el('span', '', withholding.amounts.map(item => `${item.label}: ${money.format(item.cents / 100)}`).join(' • ')));
+    container.insertBefore(warning, core);
+  }
   const other = el('details', 'rg-fiscal-section'); other.dataset.fiscalSection = 'other';
   other.append(el('summary', 'rg-fiscal-section__summary', 'Outras informações'));
   remaining.classList.add('rg-fiscal-section__content', 'rg-sefaz-other');
@@ -63,6 +73,13 @@ export function decorateSefazInvoiceCard({document: doc, container, pdfRail}) {
   for (const field of ['NATUREZA_OPERACAO', 'DESTINATARIO', 'CNPJ_DESTINATARIO', 'VALOR_PRODUTOS']) decorate(field);
   const taxFields = container.querySelector('[data-fiscal-section="taxes"] > dl');
   for (const field of ['ICMS', 'IPI', 'FRETE', 'SEGURO', 'OUTRAS_DESPESAS']) { const pair = take(field); if (pair) taxFields.append(pair); }
+  for (const field of ['STATUS_RETENCOES', ...Object.keys(SEFAZ_RETENTION_FIELDS)]) {
+    const pair = decorate(field, null, field === 'STATUS_RETENCOES' ? 'expenses' : 'tax-rose');
+    if (pair) taxFields.append(pair);
+  }
+  const retentionStatus = take('STATUS_RETENCOES')?.querySelector('dd');
+  if (retentionStatus?.textContent === 'RETENCAO_INFORMADA_XML') retentionStatus.textContent = 'Retenção informada no XML';
+  if (retentionStatus?.textContent === 'NAO_INFORMADA_XML') retentionStatus.textContent = 'Não informada no XML';
   for (const field of ['SITUACAO', 'STATUS_IMPORTACAO', 'DIRECAO', 'ORIGEM_LIQUIDO', 'CHAVE_ACESSO', 'PROTOCOLO', 'MODELO', 'STATUS_DANFE', 'XML_URL', 'ULTIMO_DOCUMENTO_URL']) { const pair = take(field); if (pair) remaining.append(pair); }
   const status = take('SITUACAO')?.querySelector('dd');
   if (status) status.dataset.sefazStatus = /cancel/i.test(status.textContent) ? 'cancelled' : /autorizad/i.test(status.textContent) ? 'authorized' : 'pending';
