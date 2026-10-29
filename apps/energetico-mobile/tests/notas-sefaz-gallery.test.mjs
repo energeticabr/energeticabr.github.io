@@ -40,7 +40,7 @@ test('NF-e renders confirmed values, preserves access-key text and exposes only 
   assert.equal(row.querySelector('[data-field="DATA_EMISSAO"] dd').textContent, '29/10/2026');
   assert.equal(row.querySelector('[data-field="XML_URL"] a').href, sample.fields.XML_URL);
   assert.equal(row.querySelector('[data-field="DANFE_URL"] a').href, sample.fields.DANFE_URL.Url);
-  assert.ok(row.querySelector('.rg-sefaz-layout > .rg-sefaz-pdf-rail [data-field="DANFE_URL"] a'));
+  assert.ok(row.querySelector('.rg-sefaz-heading > .rg-sefaz-pdf-rail [data-field="DANFE_URL"] a'));
   assert.equal(row.querySelector('.rg-sefaz-pdf-link').getAttribute('aria-label'), 'Abrir DANFE PDF da nota 123');
   assert.equal(row.querySelector('.rg-sefaz-pdf-glyph').textContent, 'PDF');
   assert.equal(row.querySelectorAll('[data-field="DANFE_URL"] a').length, 1, 'um único atalho para o PDF específico da linha');
@@ -75,7 +75,7 @@ test('NF-e mostra emissao e dados de conferencia com observacoes literais comple
   await gallery.open();
   const row=doc.querySelector('[data-registration-row="4"]');
   const sections = [...row.querySelectorAll('details[data-fiscal-section]')];
-  assert.deepEqual(sections.map(section => section.dataset.fiscalSection), ['notes', 'operation', 'taxes']);
+  assert.deepEqual(sections.map(section => section.dataset.fiscalSection), ['notes', 'operation', 'taxes', 'other']);
   assert.ok(sections.every(section => !section.open), 'complementos começam recolhidos');
   assert.equal(row.querySelector('[data-field="VALOR_TOTAL_NOTA"]').closest('details'), null, 'total continua visível');
   assert.equal(row.querySelector('[data-field="DANFE_URL"]').closest('details'), null, 'PDF continua acessível');
@@ -94,7 +94,21 @@ test('NF-e mostra emissao e dados de conferencia com observacoes literais comple
   }
   assert.equal(row.querySelector('[data-field="FRETE"] dd').textContent.replace(/\s/g,''),'R$50,50');
   assert.equal(row.querySelector('[data-field="SEGURO"] dd').textContent.replace(/\s/g,''),'R$0,00');
+  for (const [field, tone] of [['VALOR_TOTAL_NOTA','total'], ['VALOR_LIQUIDO','net'], ['DESCONTOS','discount'], ['OBSERVACOES_NOTA','notes'], ['INFORMACOES_FISCO','fisco'], ['ICMS','tax-blue'], ['IPI','tax-purple'], ['FRETE','tax-yellow'], ['SEGURO','tax-rose']]) assert.ok(row.querySelector(`[data-field="${field}"]`).classList.contains(`rg-sefaz-field--${tone}`));
+  assert.equal(row.querySelector('[data-field="SITUACAO"] dd').dataset.sefazStatus, 'authorized');
   assert.equal(row.querySelector('script'),null,'observação deve ser texto, sem executar HTML');
+});
+
+test('NF-e copia a chave completa sem alterar o identificador exibido', async t => {
+  const dom = new JSDOM('<body/>'), doc = dom.window.document, copied = [];
+  Object.defineProperty(dom.window.navigator, 'clipboard', {value:{writeText:async value => {copied.push(value);}}});
+  const gallery = createRegistrationGallery({document:doc,kind:'notas_fiscais_sefaz',data:{loadSnapshot:async()=>({rows:[sample]})}});
+  t.after(()=>{gallery.destroy();dom.window.close();});
+  await gallery.open();
+  const button=doc.querySelector('.rg-sefaz-copy'); button.click(); await Promise.resolve();
+  assert.deepEqual(copied,[sample.fields.CHAVE_ACESSO]);
+  assert.equal(button.getAttribute('aria-label'),'Chave de acesso copiada');
+  assert.equal(doc.querySelector('[data-field="CHAVE_ACESSO"] dd').textContent,sample.fields.CHAVE_ACESSO);
 });
 
 test('NF-e data reads every page in the company list and offers no mutations', async () => {

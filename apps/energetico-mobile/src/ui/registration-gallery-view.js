@@ -1,4 +1,5 @@
 import { placeGalleryQuickSearch } from './gallery-quick-search.js';
+import { decorateSefazInvoiceCard } from './sefaz-invoice-card.js';
 import { matchesGallerySearch } from '../chat/gallery-quick-search.js';
 import { applyScreenNavigation } from "./screen-navigation.js";
 import { attachGalleryRefreshButton } from './gallery-refresh.js';
@@ -855,7 +856,8 @@ export function createRegistrationGallery({ document: doc = globalThis.document,
             rail.setAttribute('aria-label', 'DANFE PDF pendente');
           }
           if (pdf) rail.append(pdf);
-          layout.append(rail, main);
+          decorateSefazInvoiceCard({document: doc, container: main, pdfRail: rail});
+          layout.append(main);
           card.append(layout);
         } else renderNativeDetails(card, row, primary);
       } else {

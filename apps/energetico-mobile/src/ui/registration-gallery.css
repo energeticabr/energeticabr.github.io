@@ -1,5 +1,6 @@
 @import './gallery-create-shortcut.css';
 @import './dda-card.css';
+@import './sefaz-invoice-card.css';
 .rg-overlay[hidden] { display: none; }
 .rg-overlay { position: fixed; z-index: 1200; inset: 0; display: flex; flex-direction: column; gap: 12px; overflow: auto; padding: max(12px, env(safe-area-inset-top)) max(12px, env(safe-area-inset-right)) max(12px, env(safe-area-inset-bottom)) max(12px, env(safe-area-inset-left)); color: #173042; background: #f4f8f9; }
 .rg-header { position: sticky; top: 0; z-index: 1; display: flex; align-items: center; gap: 10px; padding-block: 4px; background: #f4f8f9; }
@@ -27,7 +28,6 @@
 .rg-fiscal-section__summary:focus-visible { outline: 3px solid #e3aa19; outline-offset: 2px; border-radius: 8px; }
 .rg-fiscal-section__content { padding: 0 12px 12px; }
 .rg-fiscal-section:not([open]) > .rg-fiscal-section__content { display: none; }
-.rg-row-layout.rg-sefaz-layout { grid-template-columns: 52px minmax(0, 1fr); }
 .rg-sefaz-pdf-rail { min-width: 0; margin: 0; align-self: start; }
 .rg-sefaz-pdf-rail dt { display: none; }
 .rg-sefaz-pdf-link { flex-direction: column; justify-content: center; gap: 6px; width: 100%; min-height: 76px; padding: 8px 4px; font-size: .65rem; text-decoration: none; background: #fff5f6; border-color: #edc9d0; color: #9e1734; }
@@ -48,7 +48,6 @@
 .rg-row-title { display: block; margin-bottom: 7px; color: #07566b; overflow-wrap: anywhere; }
 .rg-details { display: grid; grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); gap: 7px; margin: 0; }
 .rg-row--native .rg-details { grid-template-columns: repeat(auto-fit, minmax(min(100%, 150px), 1fr)); }
-.rg-row--sefaz .rg-details { grid-template-columns: repeat(auto-fit, minmax(min(100%, 100px), 1fr)); }
 .rg-row--native .rg-document-heading { flex-wrap: wrap; }
 .rg-detail { min-width: 0; }
 .rg-detail dt { color: #5c6d74; font-size: .75rem; font-weight: 700; }
