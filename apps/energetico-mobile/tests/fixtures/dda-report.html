@@ -19,13 +19,15 @@ source[1].fields.CNPJ_FORNECEDOR='00999999000122';
 source[2].fields.CNPJ_FORNECEDOR='00888888000122';
 source[3].fields.CNPJ_FORNECEDOR='00111111000122';
 source.forEach((row,index)=>row.fields.CHAVE_DDA=String(index+1).repeat(64));
+source.forEach(row=>row.fields.CODIGO_BARRAS='01234567890123456789012345678901234567890123');
+window.ddaBarcodeCopies=[];
 window.ddaPaymentCalls=0;
 window.ddaMirrorClicks=0;window.ddaPdfRows=0;
 const syncMode=new URLSearchParams(location.search).get('sync'),syncListeners=new Set();let syncRunning=false,syncStarts=0,snapshotLoads=0;
 const emitSync=running=>{syncRunning=running;for(const fn of syncListeners)fn({running,notice:running?'Consultando o Sicoob e atualizando o SharePoint…':''});};
 const syncMonitor=syncMode?{get running(){return syncRunning;},subscribe(fn){syncListeners.add(fn);fn({running:false,notice:''});return()=>syncListeners.delete(fn);},async start(){syncStarts++;emitSync(true);}}:undefined;
 const report=decorateReportPrint(decorateReportNavigation(createDdaReportView({document,now:()=>new Date('2026-10-28T12:00:00Z'),
- syncMonitor,data:{loadSnapshot:async()=>{snapshotLoads++;return {rows:source};},listAttachments:async()=>{window.ddaMirrorClicks++;return [];},downloadAttachment:async()=>null},openMediaCollection:()=>{},
+ copyText:async text=>{window.ddaBarcodeCopies.push(text);},syncMonitor,data:{loadSnapshot:async()=>{snapshotLoads++;return {rows:source};},listAttachments:async()=>{window.ddaMirrorClicks++;return [];},downloadAttachment:async()=>null},openMediaCollection:()=>{},
  confirmPayment:async({itemId,key})=>{window.ddaPaymentCalls++;return {status:'confirmed',itemId,key,confirmedAt:'2026-10-28T18:00:00Z',confirmedBy:'demo@example.test'};}}),{action:'open-dda-report',onNavigate:()=>report.close()}),
  {action:'open-dda-report',previewMedia:async(source)=>{const url=URL.createObjectURL(await source);window.open(url,'_blank','noopener');}});
 const chat=createChatView(document.querySelector('#app'));chat.on('open-dda-report',()=>report.open());
@@ -67,6 +69,16 @@ if(paymentMode){
  document.querySelector('[data-dda-payment-cancel]').focus();
  before.paymentFocusableAfterSync=dialog.contains(document.activeElement);
  document.documentElement.dataset.payment=JSON.stringify(before);
+}
+if(new URLSearchParams(location.search).has('barcode')){
+ const arrow=document.querySelector('[data-dda-toggle-barcode="1"]');arrow.click();
+ const state={noAutoCopy:window.ddaBarcodeCopies.length===0};arrow.click();state.closed=!document.querySelector('[data-dda-barcode-panel="1"]');arrow.click();
+ const panel=document.querySelector('[data-dda-barcode-panel="1"]'),copy=panel.querySelector('button');copy.click();await new Promise(r=>setTimeout(r,0));
+ panel.scrollIntoView({block:'center'});await document.fonts.ready;await new Promise(r=>requestAnimationFrame(()=>requestAnimationFrame(r)));
+ const box=panel.getBoundingClientRect(),buttonBox=copy.getBoundingClientRect();
+ Object.assign(state,{copied:window.ddaBarcodeCopies,feedback:panel.textContent.includes('Código de barras copiado.'),fits:box.left>=-1&&box.right<=innerWidth+1&&box.top>=-1&&box.bottom<=innerHeight+1,buttonFits:buttonBox.left>=box.left&&buttonBox.right<=box.right,expanded:arrow.getAttribute('aria-expanded')==='true',overflow:panel.scrollWidth>panel.clientWidth+1});
+ state.stripes=[...document.querySelectorAll('[data-dda-id]')].map(row=>getComputedStyle(row).backgroundColor);
+ document.documentElement.dataset.barcode=JSON.stringify(state);
 }
 if(new URLSearchParams(location.search).has('layout')){
  await document.fonts.ready;
