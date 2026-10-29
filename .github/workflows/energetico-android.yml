@@ -160,6 +160,17 @@ jobs:
           working-directory: apps/energetico-mobile/android
           script: chmod +x ./gradlew && ./gradlew :app:connectedDebugAndroidTest --no-daemon
 
+      - name: Guardar diagnóstico do teste de login
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: android-login-test-diagnostic
+          path: |
+            apps/energetico-mobile/android/app/build/outputs/androidTest-results/connected/
+            apps/energetico-mobile/android/app/build/reports/androidTests/connected/
+          if-no-files-found: warn
+          retention-days: 1
+
   debug-apk:
     name: Gerar APK de teste
     needs: auth-smoke-test
