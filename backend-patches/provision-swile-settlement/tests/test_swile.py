@@ -6,6 +6,7 @@ from urllib.parse import unquote, urlsplit
 from test_single_order import Fixture
 from test_scoped_fanout import ScopedFanoutTests
 import test_parent_fanout as files
+from payroll_row_attachments import propagate
 
 
 class SwileSettlementTests(unittest.TestCase):
@@ -77,6 +78,15 @@ class SwileAttachmentTests(ScopedFanoutTests):
         with self.assertRaises(RuntimeError):
             self.sync(expected_owners=self.owners)
         self.assertFalse(self.client.uploads)
+
+    def test_existing_exact_swile_child_order_does_not_require_swile_parent(self):
+        self.client.items[files.PARENT,7]['FORNECEDOR'] = 'DIVERSOS'
+        for kind, ident in ((files.CHILD,11),(files.LAUNCH,60),(files.ORDER,50)):
+            self.client.items[kind,ident]['FORNECEDOR'] = 'SWILE'
+        self.client.verify_item = lambda ident, fields, names, target_list=None: {
+            'fields': all(str(self.client.items[target_list,ident].get(k)) == str(v) for k,v in fields.items()),
+            'attachments': set(names) <= set(self.client.files[target_list,ident])}
+        propagate(self.client,11,copy.deepcopy(self.client.items[files.CHILD,11]),{},parent=7)
 
 
 if __name__ == '__main__':
