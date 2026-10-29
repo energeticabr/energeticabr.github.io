@@ -73,7 +73,7 @@ export function createDdaReportView({document:doc=globalThis.document,data,openM
   if(result.missingAmounts)content.append(make('p','ddr-warning',`${result.missingAmounts} DDA(s) sem valor nominal válido. Total indisponível.`));
   if(!result.rows.length){content.append(make('p','ddr-empty','Nenhum DDA encontrado para os filtros selecionados.'));return;}
   const table=make('table','ddr-table');table.setAttribute('aria-label','DDAs da empresa');const head=make('thead'),tr=make('tr'),body=make('tbody');
-  for(const label of ['ID','VENCIMENTO','FORNECEDOR','DOCUMENTO','BANCO','VALOR NOMINAL','SITUAÇÃO','AÇÕES']){const th=make('th','',label);th.scope='col';tr.append(th);}head.append(tr);table.append(head,body);
+  for(const label of ['ID','VENCIMENTO','FORNECEDOR','DOCUMENTO','BANCO','VALOR NOMINAL','SITUAÇÃO','VINCULAÇÃO','AÇÕES']){const th=make('th','',label);th.scope='col';tr.append(th);}head.append(tr);table.append(head,body);
   for(const row of printAll?result.rows:result.rows.slice((page-1)*50,page*50)){
    const line=make('tr');line.dataset.ddaId=row.id;const due=make('td','ddr-due',date(row.due));due.dataset.dueTone=ddaDueTone(row.due,now());
    const supplier=make('td','ddr-supplier'),status=make('td','ddr-status');status.dataset.status=row.status;
@@ -87,7 +87,6 @@ export function createDdaReportView({document:doc=globalThis.document,data,openM
     history.title='Contagem indisponível: o registro não possui um CNPJ utilizável. O nome do fornecedor não é usado para adivinhar vínculos.';
    }
    supplier.append(history);
-   if(row.provisionId)supplier.append(make('span','ddr-provision-linked',`Provisão #${row.provisionId}`));
    const overdue=row.status==='Vencido'||(row.status==='Em aberto'&&row.due&&row.due<ddaTodayKey(now()));
    const cluster=make('div','ddr-status-cluster');cluster.dataset.statusTone=row.status==='Pago'?'paid':overdue?'overdue':row.status==='Em aberto'?'open':'neutral';
    cluster.append(make('strong','',overdue?'Vencido':row.status));cluster.title=row.paidManually?'Pagamento confirmado pelo usuário':'Situação na última consulta bancária: '+row.status;
@@ -95,6 +94,8 @@ export function createDdaReportView({document:doc=globalThis.document,data,openM
    const statusDate=row.paidManually?row.confirmedAt:row.checkedAt;
    if(statusDate){const checked=new Date(statusDate);if(Number.isFinite(checked.getTime()))cluster.append(make('small','',new Intl.DateTimeFormat('pt-BR',{timeZone:'America/Sao_Paulo',dateStyle:'short',timeStyle:'short'}).format(checked)));}
    status.append(cluster);
+   const link=make('td','ddr-link');const linkCluster=make('span','ddr-link-cluster',row.provisionId?`ID ${row.provisionId}`:'N/A');linkCluster.dataset.linkState=row.provisionId?'linked':'missing';
+   linkCluster.title=row.provisionId?`Descritivo provisão vinculado: ID ${row.provisionId}`:'Nenhum descritivo provisão vinculado';link.append(linkCluster);
    const files=make('td'),actions=make('div','ddr-row-actions'),check=button((row.status==='Pago'?'Pagamento já confirmado do DDA ':'Confirmar pagamento do DDA ')+row.id,'✓');
    const pencil=button('Vincular DDA '+row.id+' a descritivo provisão','✎');pencil.className='ddr-provision-pencil';pencil.dataset.ddaProvisionPencil=row.id;
    pencil.disabled=!data.provisionLink||!Number.isSafeInteger(Number(row.id))||Number(row.id)<=0;
@@ -104,7 +105,7 @@ export function createDdaReportView({document:doc=globalThis.document,data,openM
    check.addEventListener('click',()=>{if(destroyed||root.hidden||root.getAttribute('aria-busy')==='true')return;paymentConfirmation.show({itemId:row.id,key:row.key,supplier:row.supplier,amount:money(row.amount),due:date(row.due)},check);});
    const open=button('Abrir espelho do DDA '+row.id,'📎 Espelho');open.dataset.ddaMirror=row.id;open.disabled=typeof data.listAttachments!=='function'||typeof data.downloadAttachment!=='function'||typeof openMediaCollection!=='function';open.addEventListener('click',()=>void openMirror(row,open));actions.append(pencil,check,open);files.append(actions);
    line.dataset.stripe=String(body.querySelectorAll('[data-dda-id]').length%2);
-   line.append(make('td','ddr-id',row.id),due,supplier,make('td','',row.document||'—'),make('td','',row.bank||'—'),make('td','ddr-money',money(row.amount)),status,files);body.append(line);
+   line.append(make('td','ddr-id',row.id),due,supplier,make('td','',row.document||'—'),make('td','',row.bank||'—'),make('td','ddr-money',money(row.amount)),status,link,files);body.append(line);
    if(!printAll)addDdaReportBarcode({document:doc,row,line,actions,expanded:expandedBarcodes,copyText,isCurrent:()=>!destroyed&&!root.hidden&&root.getAttribute('aria-busy')!=='true'});
   }
   content.append(table);

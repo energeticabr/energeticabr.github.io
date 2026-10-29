@@ -49,10 +49,22 @@ test('report pencil opens picker above report, stars likely option, links select
  const row={id:'31',fields:{Title:'SWILE DO BRASIL S.A.',SITUACAO:'Em aberto',VALOR:'58.21',VENCIMENTO:'2026-10-29'}};
  const view=createDdaReportView({document:doc,data:{loadSnapshot:async()=>({rows:[row]}),provisionLink:service},now:()=>new Date('2026-10-29T12:00:00Z')});
  t.after(()=>{view.destroy();dom.window.close();});await view.open();
+ assert.deepEqual([...doc.querySelectorAll('.ddr-table thead th')].map(cell=>cell.textContent).slice(-3),['SITUAÇÃO','VINCULAÇÃO','AÇÕES']);
+ assert.equal(doc.querySelector('[data-dda-id="31"] .ddr-link-cluster').textContent,'N/A');
+ assert.equal(doc.querySelector('[data-dda-id="31"] .ddr-link-cluster').dataset.linkState,'missing');
  doc.querySelector('[data-dda-provision-pencil="31"]').click();await tick();await tick();
  assert.match(doc.querySelector('.dda-provision-dialog').textContent,/A qual DESCRITIVO PROVISÃO DESEJA VINCULAR/);
  assert.match(doc.querySelector('.dda-provision-star').textContent,/MAIS PROVÁVEL/);
  assert.equal(state.writes.length,0);
  doc.querySelector('input[value="1"]').click();doc.querySelector('.dda-provision-save').click();await tick();await tick();
- assert.equal(state.linked,'1');assert.equal(view.element.hidden,false);assert.match(doc.querySelector('[data-dda-id="31"] .ddr-provision-linked').textContent,/Provisão #1/);
+ assert.equal(state.linked,'1');assert.equal(view.element.hidden,false);assert.equal(doc.querySelector('[data-dda-id="31"] .ddr-link-cluster').textContent,'ID 1');
+ assert.equal(doc.querySelector('[data-dda-id="31"] .ddr-link-cluster').dataset.linkState,'linked');
+});
+test('saved and invalid provision identifiers render in their own column after reopening',async t=>{
+ const dom=new JSDOM('<body><main id="app"></main></body>'),doc=dom.window.document;
+ const row=(id,link)=>({id:String(id),fields:{Title:'FORNECEDOR FICTÍCIO',SITUACAO:'Em aberto',VALOR:10,VENCIMENTO:'2026-10-29',DESCRITIVOPROVIS_x00c3_O:link}});
+ const view=createDdaReportView({document:doc,data:{loadSnapshot:async()=>({rows:[row(1,'46'),row(2,'inválido')]})}});
+ t.after(()=>{view.destroy();dom.window.close();});await view.open();
+ assert.equal(doc.querySelector('[data-dda-id="1"] .ddr-link-cluster').textContent,'ID 46');
+ assert.equal(doc.querySelector('[data-dda-id="2"] .ddr-link-cluster').textContent,'N/A');
 });
