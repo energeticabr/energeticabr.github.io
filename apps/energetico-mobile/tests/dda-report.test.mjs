@@ -44,6 +44,21 @@ test('status clusters distinguish overdue open bills from paid bills without cha
  assert.equal(source[0].fields.SITUACAO,'Em aberto');assert.ok(cluster(1).querySelector('small'));
  view.destroy();dom.window.close();
 });
+test('report groups bank and boleto number, then shows issue date and calendar days since issue',async()=>{
+ const issued=row(1);issued.fields.EMISSAO='2026-10-20T00:00:00Z';
+ const today=row(2);today.fields.EMISSAO='2026-10-28';
+ const unknown=row(3);unknown.fields.EMISSAO='';
+ const {dom,view,doc}=setup({loadSnapshot:async()=>({rows:[issued,today,unknown]})});await view.open();
+ assert.deepEqual([...doc.querySelectorAll('.ddr-table thead th')].map(cell=>cell.textContent),['ID','VENCIMENTO','FORNECEDOR','BANCO / BOLETO','DATA EMISSÃO','VALOR NOMINAL','SITUAÇÃO','VINCULAÇÃO','AÇÕES']);
+ const line=doc.querySelector('[data-dda-id="1"]');
+ assert.equal(line.querySelector('[data-dda-bank-cluster] strong').textContent,'Banco teste');
+ assert.equal(line.querySelector('[data-dda-document-cluster] strong').textContent,'DOC-1');
+ assert.equal(line.querySelector('.ddr-issued-date strong').textContent,'20/10/2026');
+ assert.equal(line.querySelector('.ddr-issued-date small').textContent,'8 d');
+ assert.equal(doc.querySelector('[data-dda-id="2"] .ddr-issued-date small').textContent,'0 d');
+ assert.equal(doc.querySelector('[data-dda-id="3"] .ddr-issued-date').textContent,'Não informada');
+ view.destroy();dom.window.close();
+});
 test('report defaults open, can show all, resets on reopen and treats supplier text literally',async()=>{
  const a=row(1);a.fields.Title='<img src=x onerror=alert(1)>';
  const {dom,view,doc}=setup({loadSnapshot:async()=>({rows:[a,row(2,'Pago')]})});
