@@ -49,6 +49,7 @@ document.documentElement.dataset.layout = JSON.stringify({ mode,
   overflow: document.documentElement.scrollWidth > innerWidth + 1,
   overflowingCards: [...document.querySelectorAll('.rg-row,.rg-row *')].filter(node => node.clientWidth && node.scrollWidth > node.clientWidth + 1).map(node => node.className),
   cards: document.querySelectorAll('[data-registration-row]').length,
+  pdfRails: [...document.querySelectorAll('.rg-sefaz-layout')].map(layout => ({ railRight: rect(layout.querySelector('.rg-sefaz-pdf-rail')).right, mainLeft: rect(layout.querySelector('.rg-row-main')).left })),
   links: [...document.querySelectorAll('.rg-document-link')].map(link => ({ width: rect(link).width, height: rect(link).height })),
   notes: [...document.querySelectorAll('[data-registration-row="4"] [data-field="OBSERVACOES_NOTA"], [data-registration-row="4"] [data-field="INFORMACOES_FISCO"]')].map(note => ({
     field: note.dataset.field, whiteSpace: getComputedStyle(note.querySelector('dd')).whiteSpace,

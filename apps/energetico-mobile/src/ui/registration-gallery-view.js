@@ -836,7 +836,28 @@ export function createRegistrationGallery({ document: doc = globalThis.document,
         layout.append(fileRail, main);
         card.append(layout);
       } else if (model.nativeCard && model.readOnly) {
-        renderNativeDetails(card, row, primary);
+        if (kind === 'notas_fiscais_sefaz') {
+          card.classList.add('rg-row--sefaz');
+          const layout = el('div', 'rg-row-layout rg-sefaz-layout');
+          const main = el('div', 'rg-row-main');
+          renderNativeDetails(main, row, primary);
+          const pdf = main.querySelector('[data-field="DANFE_URL"]');
+          const rail = el('dl', 'rg-sefaz-pdf-rail');
+          const link = pdf?.querySelector('a');
+          if (link) {
+            link.classList.add('rg-sefaz-pdf-link');
+            link.setAttribute('aria-label', `Abrir DANFE PDF da nota ${rowFieldValue(row, 'NUMERO_NOTA') || row.id}`);
+            const glyph = el('span', 'rg-sefaz-pdf-glyph', 'PDF');
+            glyph.setAttribute('aria-hidden', 'true');
+            link.replaceChildren(glyph, el('span', '', 'DANFE'));
+          } else {
+            rail.classList.add('rg-sefaz-pdf-rail--pending');
+            rail.setAttribute('aria-label', 'DANFE PDF pendente');
+          }
+          if (pdf) rail.append(pdf);
+          layout.append(rail, main);
+          card.append(layout);
+        } else renderNativeDetails(card, row, primary);
       } else {
         card.append(el("strong", "rg-row-title", primary));
         const details = el("dl", "rg-details");

@@ -26,6 +26,8 @@ test('NF-e gallery and three-gallery launch group fit narrow phones and Windows 
     assert.equal(layout.overflow, false, `${width}/${pwa}/${mode}: page overflow`);
     assert.deepEqual(layout.overflowingCards, [], `${width}/${pwa}/${mode}: card overflow`);
     if (mode === 'gallery') {
+      assert.equal(layout.pdfRails.length, 2);
+      assert.ok(layout.pdfRails.every(rail => rail.railRight <= rail.mainLeft), 'PDF à esquerda do conteúdo da própria nota');
       assert.equal(layout.disclosures.count, 6);
       assert.equal(layout.disclosures.initiallyCollapsed, true);
       assert.equal(layout.disclosures.initiallyHiddenFields, true);
