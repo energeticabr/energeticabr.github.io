@@ -9,8 +9,12 @@ $request={param($c,$n)$script:requests++;return 'synthetic response'}
 $parse={param($body,$cnpj) [pscustomobject]@{status='137';lastNsu='0';maxNsu='0';documents=@();unhandledDocuments=@()}}
 try{
  $path=Join-Path $root 'CTE'
+ [IO.Directory]::CreateDirectory($path)|Out-Null
+ @{version=1;source='CTE';lastNsu='0';lastCompletedSlot='2026-10-29-15'}|ConvertTo-Json|Set-Content (Join-Path $path 'state.json')
  $r=Invoke-AuxiliaryFiscalSource -Source CTE -DataPath $path -Config $config -Slot $slot -Now $now -Request $request -Parse $parse -SendBatch {throw 'empty response must not send'}
  if($r.status -cne 'COMPLETED' -or $r.lastCompletedSlot -cne $slot -or $script:requests -ne 1){throw 'MANUAL_SLOT_NOT_COLLECTED'}
+ $cycle=Invoke-AuxiliaryFiscalScheduledCycle -Config $config -WorkerConfig @{} -DataRoot $root -Now $now -SourceInvoker {param($Source)if($Source -ceq 'CTE'){throw 'daily slot must not repeat after manual completion'};[pscustomobject]@{source=$Source;status='TEST_SKIP'}}
+ if(($cycle.results|Where-Object source -eq CTE).status -cne 'ALREADY_COMPLETED'){throw 'MANUAL_COMPLETION_ERASED_DAILY_MARKER'}
  $r=Invoke-AuxiliaryFiscalSource -Source CTE -DataPath $path -Config $config -Slot $slot -Now $now -Request {throw 'must not repeat completed manual request'}
  if($r.status -cne 'ALREADY_COMPLETED'){throw 'MANUAL_SLOT_NOT_IDEMPOTENT'}
  $r=Invoke-AuxiliaryFiscalSource -Source CTE -DataPath $path -Config $config -Slot ('manual:'+('b'*32)) -Now $now -Request {throw 'must respect cooldown'}
@@ -21,7 +25,11 @@ try{
   $failed=$false;try{Invoke-AuxiliaryFiscalSource -Source CTE -DataPath $path -Config $config -Slot $bad -Request {throw 'must not request'}|Out-Null}catch{$failed=$true}
   if(-not $failed){throw 'INVALID_SLOT_ACCEPTED'}
  }
- Write-Output 'PASS ManualFiscalSlots 8 assertions'
+ $r=Invoke-AuxiliaryFiscalSource -Source CTE -DataPath $path -Config $config -Slot '2026-10-29-20' -Now $now.AddHours(2) -Request $request -Parse $parse
+ if($r.status -cne 'COMPLETED' -or $r.lastCompletedScheduledSlot -cne '2026-10-29-20' -or $r.lastCompletedManualSlot -cne $slot){throw 'DAILY_COMPLETION_ERASED_MANUAL_MARKER'}
+ $r=Invoke-AuxiliaryFiscalSource -Source CTE -DataPath $path -Config $config -Slot $slot -Now $now.AddHours(2) -Request {throw 'manual recovery must not repeat after daily'}
+ if($r.status -cne 'ALREADY_COMPLETED' -or $r.lastCompletedManualSlot -cne $slot){throw 'MANUAL_RECOVERY_AFTER_DAILY_FAILED'}
+ Write-Output 'PASS ManualFiscalSlots 11 assertions'
 }finally{
  if([IO.Directory]::Exists($root)){$resolved=[IO.Path]::GetFullPath($root);if((Split-Path $resolved -Parent) -cne $base -or (Split-Path $resolved -Leaf) -notlike 'manual-slot-test-*'){throw 'UNSAFE_TEST_CLEANUP'};Remove-Item -LiteralPath $resolved -Recurse -Force}
 }

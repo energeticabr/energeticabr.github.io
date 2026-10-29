@@ -10,6 +10,8 @@ Resultados locais são persistidos antes do progresso remoto. Uma falha SSH apó
 
 O diálogo pertence à sessão global autenticada, e não à galeria. Navegar, minimizar ou fechar o app não reconhece a operação. Ao abrir novamente, o app recupera pedidos e resultados da conta no servidor. Somente Entendi reconhece o resultado; perda de conexão no reconhecimento é retomada sem descartar o recibo. Outra conta não lê nem reconhece o pedido.
 
+CT-e e NFS-e mantêm `lastCompletedScheduledSlot` e `lastCompletedManualSlot` separados. A migração do estado antigo conserva o marcador conhecido; uma conclusão manual não apaga o horário diário concluído, e uma execução diária não apaga a confirmação manual necessária à recuperação após falha.
+
 ## Implantação
 
 1. Testar o módulo Python e o instalador `backend-patches/sefaz-manual-sync`; estagiar e executar `install.py --check`, depois `--deploy` com hashes revistos. Verificar a rota autenticada, além de `/health`.

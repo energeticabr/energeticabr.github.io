@@ -148,7 +148,7 @@ function Invoke-ManualFiscalSource {
  Import-Module (Join-Path $PSScriptRoot 'AuxiliaryFiscal.psm1') -DisableNameChecking
  $path=Join-Path $FiscalBase ('SefazAuxLive/'+$company+'/'+$Source)
  $native=Invoke-AuxiliaryFiscalSource -Source $Source -Config $config -WorkerConfig $worker -DataPath $path -Slot $slot -MaxBatches 1 -SendBatch $sender
- if($native.status -cin @('COMPLETED','ALREADY_COMPLETED') -and $native.lastCompletedSlot -ceq $slot){
+ if($native.status -cin @('COMPLETED','ALREADY_COMPLETED') -and $native.lastCompletedManualSlot -ceq $slot){
   $incomplete=$false
   foreach($folder in @('unhandled-pending','scope-pending-date','outbox')){if(@(Get-ChildItem -LiteralPath (Join-Path $path $folder) -Filter '*.json' -File -ErrorAction SilentlyContinue).Count -gt 0){$incomplete=$true}}
   if($incomplete){return @{status='failed';code='INCOMPLETE';documents=@($entry.deliveredIds).Count}}
