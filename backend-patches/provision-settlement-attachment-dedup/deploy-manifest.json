@@ -1,0 +1,18 @@
+{
+  "files": {
+    "worker/clients.py": {
+      "sourceBefore": "7be2fafc4abbca121157614e68f7f50d526d1aa2d279ffec11fe1004ac178dff",
+      "before": "7be2fafc4abbca121157614e68f7f50d526d1aa2d279ffec11fe1004ac178dff",
+      "mirrorBefore": "7be2fafc4abbca121157614e68f7f50d526d1aa2d279ffec11fe1004ac178dff",
+      "after": "b221bb102727ed0f9f36d0f116e7ddf2ea32b0c237fe1801f23829cebede882f"
+    },
+    "worker/payroll_row_attachments.py": {
+      "sourceBefore": "5439944608a983d677552e7619ac12592c08c018e9af75204ddbdc51f2e07580",
+      "before": "5439944608a983d677552e7619ac12592c08c018e9af75204ddbdc51f2e07580",
+      "mirrorBefore": "5439944608a983d677552e7619ac12592c08c018e9af75204ddbdc51f2e07580",
+      "after": "62ed502c4b08f065b3c6b24e389a598483b39c3a2ab29a3b1e16d7abd0738b2f"
+    }
+  },
+  "patch": "3ff6dcbf1e8c4083ca75a46b130a5a225c052034222661526b85e6a51c9957ce",
+  "archive": "81f3a012e407eac208b3727febeef82c0ff9c98007b0b9d85d66e971c7e4283e"
+}

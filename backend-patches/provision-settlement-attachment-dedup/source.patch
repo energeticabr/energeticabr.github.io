@@ -1,0 +1,28 @@
+--- a/worker/clients.py
++++ b/worker/clients.py
+@@ -2932,7 +2932,7 @@
+             return
+         endpoint = (
+             f"{self._list_endpoint(target_list)}/items({item_id})/"
+-            f"AttachmentFiles/add(FileName='{_odata(filename)}')"
++            f"AttachmentFiles/add(FileName='{quote(_odata(filename), safe='')}')"
+         )
+         try:
+             self._request(
+--- a/worker/payroll_row_attachments.py
++++ b/worker/payroll_row_attachments.py
+@@ -102,7 +102,13 @@
+     for kind, target in ((LAUNCH, launch_id), (ORDER, order_id)):
+         existing = {name: store.digest(kind, target, name) for name in sorted(store.names(kind, target))}
+         for original, deterministic, content, digest in sources:
+-            name = next((name for name, value in existing.items() if value == digest), deterministic)
++            if deterministic in existing and existing[deterministic] != digest:
++                raise RuntimeError('Conflito de conteúdo no destino; nenhum anexo foi substituído.')
++            # The SharePoint copier also delivers the child's original name.
++            # Keep that name so a later copy converges on the same attachment;
++            # reserve the child/hash namespace for genuine filename collisions.
++            preferred = original if original.casefold() not in {n.casefold() for n in existing} else deterministic
++            name = next((name for name, value in existing.items() if value == digest), preferred)
+             if name in existing and existing[name] != digest:
+                 raise RuntimeError('Conflito de conteúdo no destino; nenhum anexo foi substituído.')
+             plans.append((kind, target, original, name, content, digest, name in existing))
