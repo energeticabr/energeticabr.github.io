@@ -16,6 +16,10 @@ if (mode === 'menu') {
     CNPJ_FORNECEDOR: '00000000000000', NUMERO_NOTA: '123456', SERIE: '001', DATA_EMISSAO: '2026-10-29T12:00:00Z',
     VALOR_TOTAL_NOTA: 1250.5, DESCONTOS: 50.5, VALOR_LIQUIDO: 1200, ORIGEM_LIQUIDO: 'XML NF-e',
     SITUACAO: 'Autorizada', STATUS_IMPORTACAO: 'XML completo', DIRECAO: 'Entrada',
+    OBSERVACOES_NOTA: 'Pedido fictício 456.\nEntregar na obra após contato com o almoxarifado.\nReferência: '+ 'A'.repeat(160),
+    INFORMACOES_FISCO: 'Informação fiscal fictícia, conforme o XML.\nSegunda linha preservada.',
+    NATUREZA_OPERACAO: 'Venda de materiais para construção', DESTINATARIO: 'DESTINATÁRIO FICTÍCIO LTDA', CNPJ_DESTINATARIO: '00000000000000', UF_FORNECEDOR: 'MG',
+    VALOR_PRODUTOS: 1200, FRETE: 50.5, SEGURO: 0, OUTRAS_DESPESAS: 0, ICMS: 100, IPI: 0, PROTOCOLO: '000000000000000', MODELO: '55', STATUS_DANFE: 'Disponível',
     XML_URL: 'https://energeticaltda.sharepoint.com/sites/energetica/Documentos/nota-ficticia.xml',
     ULTIMO_DOCUMENTO_URL: 'https://energeticaltda.sharepoint.com/sites/energetica/Documentos/nota-ficticia.xml',
     DANFE_URL: 'https://energeticaltda.sharepoint.com/sites/energetica/Documentos/danfe-ficticio.pdf' };
@@ -39,6 +43,10 @@ document.documentElement.dataset.layout = JSON.stringify({ mode,
   overflowingCards: [...document.querySelectorAll('.rg-row,.rg-row *')].filter(node => node.clientWidth && node.scrollWidth > node.clientWidth + 1).map(node => node.className),
   cards: document.querySelectorAll('[data-registration-row]').length,
   links: [...document.querySelectorAll('.rg-document-link')].map(link => ({ width: rect(link).width, height: rect(link).height })),
+  notes: [...document.querySelectorAll('[data-registration-row="4"] [data-field="OBSERVACOES_NOTA"], [data-registration-row="4"] [data-field="INFORMACOES_FISCO"]')].map(note => ({
+    field: note.dataset.field, whiteSpace: getComputedStyle(note.querySelector('dd')).whiteSpace,
+    width: rect(note).width, containerWidth: rect(note.parentElement).width, text: note.querySelector('dd').textContent,
+  })),
   menu: firstPair ? { blueHeight: rect(blue).height, galleriesHeight: rect(stack).height,
     actions: [...stack.querySelectorAll('button')].map(button => ({ id: button.dataset.replyId, top: rect(button).top, bottom: rect(button).bottom, color: getComputedStyle(button).backgroundColor })) } : null,
 });

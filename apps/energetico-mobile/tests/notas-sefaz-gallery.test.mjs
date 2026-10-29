@@ -53,11 +53,31 @@ test('NF-e summary records leave missing amounts and documents pending without d
   const gallery = createRegistrationGallery({ document: doc, kind: 'notas_fiscais_sefaz', data: { loadSnapshot: async () => ({ rows: [{ id: '5', fields }] }) } });
   t.after(() => { gallery.destroy(); dom.window.close(); });
   await gallery.open();
-  for (const field of ['VALOR_LIQUIDO', 'DESCONTOS', 'XML_URL', 'DANFE_URL']) {
+  for (const field of ['VALOR_LIQUIDO', 'DESCONTOS', 'XML_URL', 'DANFE_URL', 'OBSERVACOES_NOTA', 'INFORMACOES_FISCO']) {
     const value = doc.querySelector(`[data-field="${field}"] dd`);
     assert.equal(value.textContent, 'Pendente');
     assert.equal(value.querySelector('a'), null);
   }
+});
+
+test('NF-e mostra emissao e dados de conferencia com observacoes literais completas', async t => {
+  const dom = new JSDOM('<body/>'), doc = dom.window.document;
+  const observation='Pedido 456\nEntregar na obra fictícia.\n<script>alert("texto literal")</script>\n'+'Referência adicional sem espaços: '+ 'A'.repeat(300);
+  const fields={...sample.fields, OBSERVACOES_NOTA:observation, INFORMACOES_FISCO:'Informações fiscais fictícias\nSegunda linha',
+    DESTINATARIO:'DESTINATÁRIO FICTÍCIO',CNPJ_DESTINATARIO:'00000000000000',UF_FORNECEDOR:'MG',NATUREZA_OPERACAO:'Venda de mercadorias',
+    VALOR_PRODUTOS:1200,FRETE:50.5,SEGURO:0,OUTRAS_DESPESAS:0,ICMS:100,IPI:0,PROTOCOLO:'000000000000000',MODELO:'55',STATUS_DANFE:'DISPONIVEL'};
+  const gallery=createRegistrationGallery({document:doc,kind:'notas_fiscais_sefaz',data:{loadSnapshot:async()=>({rows:[{id:'4',fields}]})}});
+  t.after(()=>{gallery.destroy();dom.window.close();});
+  await gallery.open();
+  const row=doc.querySelector('[data-registration-row="4"]');
+  assert.equal(row.querySelector('[data-field="DATA_EMISSAO"] dt').textContent,'Data de emissão');
+  assert.equal(row.querySelector('[data-field="DATA_EMISSAO"] dd').textContent,'29/10/2026');
+  for(const field of ['OBSERVACOES_NOTA','INFORMACOES_FISCO','DESTINATARIO','CNPJ_DESTINATARIO','NATUREZA_OPERACAO','PROTOCOLO','MODELO','UF_FORNECEDOR']) {
+    assert.equal(row.querySelector(`[data-field="${field}"] dd`).textContent,fields[field],field);
+  }
+  assert.equal(row.querySelector('[data-field="FRETE"] dd').textContent.replace(/\s/g,''),'R$50,50');
+  assert.equal(row.querySelector('[data-field="SEGURO"] dd').textContent.replace(/\s/g,''),'R$0,00');
+  assert.equal(row.querySelector('script'),null,'observação deve ser texto, sem executar HTML');
 });
 
 test('NF-e data reads every page in the company list and offers no mutations', async () => {
@@ -80,6 +100,15 @@ test('NF-e data reads every page in the company list and offers no mutations', a
   assert.equal(data.deleteRecord, undefined);
 });
 
+test('NF-e exibe o dia original do XML mesmo quando SharePoint normaliza timestamp em UTC', async t=>{
+  const dom=new JSDOM('<body/>'),doc=dom.window.document;
+  const fields={...sample.fields,DATA_EMISSAO:'2026-10-30T02:30:00Z',DATA_EMISSAO_ORIGINAL:'2026-10-29T23:30:00-03:00'};
+  const gallery=createRegistrationGallery({document:doc,kind:'notas_fiscais_sefaz',data:{loadSnapshot:async()=>({rows:[{id:'4',fields}]})}});
+  t.after(()=>{gallery.destroy();dom.window.close();});
+  await gallery.open();
+  assert.equal(doc.querySelector('[data-field="DATA_EMISSAO"] dd').textContent,'29/10/2026');
+});
+
 test('NF-e source uses company SharePoint REST with read-only authorization and explicit fields', async () => {
   const calls = [], scopes = [];
   const data = createRegistrationGalleryData({ kind: 'notas_fiscais_sefaz',
@@ -91,7 +120,7 @@ test('NF-e source uses company SharePoint REST with read-only authorization and 
       if (String(url).includes('/fields?')) value = [{ InternalName: 'Title', Title: 'Fornecedor', TypeAsString: 'Text' }];
       else if (String(url).includes('/items?')) {
         const query = new URL(String(url)).searchParams;
-        for (const name of ['CHAVE_ACESSO', 'VALOR_LIQUIDO', 'DESCONTOS', 'XML_URL', 'DANFE_URL', 'STATUS_IMPORTACAO']) assert.ok(query.get('$select').split(',').includes(name));
+        for (const name of ['CHAVE_ACESSO','DATA_EMISSAO','DATA_EMISSAO_ORIGINAL','VALOR_LIQUIDO','DESCONTOS','XML_URL','DANFE_URL','STATUS_IMPORTACAO','OBSERVACOES_NOTA','INFORMACOES_FISCO','NATUREZA_OPERACAO','CNPJ_DESTINATARIO','FRETE','PROTOCOLO']) assert.ok(query.get('$select').split(',').includes(name),name);
         assert.equal(query.has('$expand'), false);
         value = [{ Id: 4, ...sample.fields }];
       } else if (String(url).includes('/_api/web/lists?')) value = [{ Id: '11111111-2222-3333-4444-555555555555', Title: 'NOTAS_FISCAIS_SEFAZ', BaseTemplate: 100, Hidden: false }];

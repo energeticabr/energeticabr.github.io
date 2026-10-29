@@ -29,6 +29,12 @@ test('NF-e gallery and three-gallery launch group fit narrow phones and Windows 
       assert.equal(layout.cards, 2);
       assert.equal(layout.links.length, 3);
       for (const link of layout.links) assert.ok(link.width >= 44 && link.height >= 44, `${width}: document link touch area ${JSON.stringify(link)}`);
+      assert.equal(layout.notes.length,2);
+      for(const note of layout.notes){
+        assert.equal(note.whiteSpace,'pre-wrap',`${width}: observacoes preservam linhas`);
+        assert.ok(note.width >= note.containerWidth-2,`${width}: observacoes ocupam largura do cartao`);
+        assert.ok(note.text.includes('\n'),`${width}: texto completo multiline`);
+      }
     } else {
       assert.ok(Math.abs(layout.menu.blueHeight - layout.menu.galleriesHeight) < 1);
       assert.deepEqual(layout.menu.actions.map(action => action.id), ['action_orders_gallery', 'action_launch_gallery', 'action_notas_fiscais_sefaz_gallery']);

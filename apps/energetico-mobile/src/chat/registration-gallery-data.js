@@ -20,14 +20,14 @@ export const REGISTRATION_GALLERY_MODELS = Object.freeze({
     title: "GALERIA NOTAS FISCAIS SEFAZ", listName: "NOTAS_FISCAIS_SEFAZ", aliases: ["NOTAS_FISCAIS_SEFAZ"], siteKey: "company",
     nativeCard: true, readOnly: true, readTransport: "rest", recordLabel: "nota fiscal", emptyValue: "Pendente",
     sourceNotice: "Fonte: SEFAZ. Consulta dos últimos três meses; cobertura pendente de conferência. Resumos e documentos ainda não obtidos permanecem pendentes.",
-    restReadFields: ["ID", "Title", "CHAVE_ACESSO", "CNPJ_FORNECEDOR", "NUMERO_NOTA", "SERIE", "DATA_EMISSAO", "VALOR_TOTAL_NOTA", "DESCONTOS", "VALOR_LIQUIDO", "ORIGEM_LIQUIDO", "SITUACAO", "STATUS_IMPORTACAO", "XML_URL", "ULTIMO_DOCUMENTO_URL", "DANFE_URL", "DIRECAO"],
+    restReadFields: ["ID", "Title", "CHAVE_ACESSO", "CNPJ_FORNECEDOR", "UF_FORNECEDOR", "NUMERO_NOTA", "SERIE", "DATA_EMISSAO", "DATA_EMISSAO_ORIGINAL", "VALOR_TOTAL_NOTA", "DESCONTOS", "VALOR_LIQUIDO", "ORIGEM_LIQUIDO", "SITUACAO", "STATUS_IMPORTACAO", "XML_URL", "ULTIMO_DOCUMENTO_URL", "DANFE_URL", "DIRECAO", "OBSERVACOES_NOTA", "INFORMACOES_FISCO", "NATUREZA_OPERACAO", "DESTINATARIO", "CNPJ_DESTINATARIO", "VALOR_PRODUTOS", "FRETE", "SEGURO", "OUTRAS_DESPESAS", "ICMS", "IPI", "PROTOCOLO", "MODELO", "STATUS_DANFE"],
     restExpandSystemFields: false,
-    searchPlaceholder: "Pesquisar fornecedor, CNPJ, número ou chave de acesso",
-    fields: ["FORNECEDOR", "NUMERO_NOTA", "SERIE", "DATA_EMISSAO", "CNPJ_FORNECEDOR", "VALOR_TOTAL_NOTA", "DESCONTOS", "VALOR_LIQUIDO", "ORIGEM_LIQUIDO", "SITUACAO", "STATUS_IMPORTACAO", "DIRECAO", "CHAVE_ACESSO", "XML_URL", "ULTIMO_DOCUMENTO_URL", "DANFE_URL", "ID"],
+    searchPlaceholder: "Pesquisar fornecedor, CNPJ, número, chave ou observações",
+    fields: ["FORNECEDOR", "NUMERO_NOTA", "SERIE", "DATA_EMISSAO", "CNPJ_FORNECEDOR", "UF_FORNECEDOR", "VALOR_TOTAL_NOTA", "DESCONTOS", "VALOR_LIQUIDO", "OBSERVACOES_NOTA", "INFORMACOES_FISCO", "NATUREZA_OPERACAO", "DESTINATARIO", "CNPJ_DESTINATARIO", "VALOR_PRODUTOS", "FRETE", "SEGURO", "OUTRAS_DESPESAS", "ICMS", "IPI", "ORIGEM_LIQUIDO", "SITUACAO", "STATUS_IMPORTACAO", "DIRECAO", "CHAVE_ACESSO", "PROTOCOLO", "MODELO", "XML_URL", "ULTIMO_DOCUMENTO_URL", "DANFE_URL", "STATUS_DANFE", "ID"],
     filterFields: ["FORNECEDOR", "SITUACAO", "STATUS_IMPORTACAO", "DIRECAO"], dateRangeField: "DATA_EMISSAO",
     fieldAliases: { FORNECEDOR: ["Title"] },
-    fieldTypes: { DATA_EMISSAO: "date", VALOR_TOTAL_NOTA: "currency", DESCONTOS: "currency", VALOR_LIQUIDO: "currency", XML_URL: "url", ULTIMO_DOCUMENTO_URL: "url", DANFE_URL: "url" },
-    fieldLabels: { NUMERO_NOTA: "Número da nota", SERIE: "Série", DATA_EMISSAO: "Emissão", CNPJ_FORNECEDOR: "CNPJ fornecedor", VALOR_TOTAL_NOTA: "Valor total da nota", DESCONTOS: "Descontos", VALOR_LIQUIDO: "Valor líquido", ORIGEM_LIQUIDO: "Origem do valor líquido", SITUACAO: "Situação", STATUS_IMPORTACAO: "Importação", DIRECAO: "Direção", CHAVE_ACESSO: "Chave de acesso", XML_URL: "XML da NF-e", ULTIMO_DOCUMENTO_URL: "Último documento SEFAZ", DANFE_URL: "DANFE" },
+    fieldTypes: { DATA_EMISSAO: "date", VALOR_TOTAL_NOTA: "currency", DESCONTOS: "currency", VALOR_LIQUIDO: "currency", VALOR_PRODUTOS: "currency", FRETE: "currency", SEGURO: "currency", OUTRAS_DESPESAS: "currency", ICMS: "currency", IPI: "currency", XML_URL: "url", ULTIMO_DOCUMENTO_URL: "url", DANFE_URL: "url" },
+    fieldLabels: { NUMERO_NOTA: "Número da nota", SERIE: "Série", DATA_EMISSAO: "Data de emissão", CNPJ_FORNECEDOR: "CPF/CNPJ fornecedor", UF_FORNECEDOR: "UF do fornecedor", VALOR_TOTAL_NOTA: "Valor total da nota", DESCONTOS: "Descontos", VALOR_LIQUIDO: "Valor líquido", OBSERVACOES_NOTA: "Observações da nota", INFORMACOES_FISCO: "Informações ao fisco", NATUREZA_OPERACAO: "Natureza da operação", DESTINATARIO: "Destinatário", CNPJ_DESTINATARIO: "CPF/CNPJ destinatário", VALOR_PRODUTOS: "Valor dos produtos", FRETE: "Frete", SEGURO: "Seguro", OUTRAS_DESPESAS: "Outras despesas", ICMS: "ICMS", IPI: "IPI", ORIGEM_LIQUIDO: "Origem do valor líquido", SITUACAO: "Situação", STATUS_IMPORTACAO: "Importação", DIRECAO: "Direção", CHAVE_ACESSO: "Chave de acesso", PROTOCOLO: "Protocolo de autorização", MODELO: "Modelo", XML_URL: "XML da NF-e", ULTIMO_DOCUMENTO_URL: "Último documento SEFAZ", DANFE_URL: "DANFE PDF", STATUS_DANFE: "Situação do PDF" },
     sourceSort: { field: "DATA_EMISSAO", direction: "desc", type: "date" },
   }),
   dda: Object.freeze({
@@ -217,6 +217,8 @@ export function registrationFieldKey(value) {
 }
 
 export function registrationRawField(fields, name, model) {
+  if (model === REGISTRATION_GALLERY_MODELS.notas_fiscais_sefaz && name === 'DATA_EMISSAO'
+    && registrationDateKey(fields?.DATA_EMISSAO_ORIGINAL)) return fields.DATA_EMISSAO_ORIGINAL;
   if (model === REGISTRATION_GALLERY_MODELS.dda && name === 'SITUACAO'
     && ddaPaidManually(registrationRawField(fields, 'PGTO_CONFIRMADO', model))) return 'Pago';
   const accepted = [name, ...(model.fieldAliases?.[name] || [])].map(registrationFieldKey);
