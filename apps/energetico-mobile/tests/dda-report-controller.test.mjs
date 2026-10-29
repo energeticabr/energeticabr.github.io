@@ -52,6 +52,7 @@ test('durable DDA results resume at app startup without opening gallery, foregro
  await h.controller.start();assert.equal(resumes,1);assert.equal(factoryOptions.accountKey,'dda-test');
  await h.controller.handleForeground();assert.equal(resumes,2);
  await h.view.emit('select-reply',{replyId:'action_dda_gallery',label:'GALERIA DDA'});assert.equal(galleryOptions.syncMonitor,monitor);
+ await h.view.emit('open-dda-report');assert.equal(h.factories[0].syncMonitor,monitor);
  await h.view.emit('sign-out');assert.equal(destroyed,1);assert.equal(factoryOptions.isCurrent(),false);
 });
 test('report and gallery use separate instances, share read-only source and media, and expire at logout',async t=>{
