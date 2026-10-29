@@ -17,12 +17,12 @@ test('NF-e gallery and three-gallery launch group fit narrow phones and Windows 
     devServer.middlewares.use('/__notas-built.css', (_req, res) => { res.setHeader('Content-Type', 'text/css'); res.end(css); });
   } }], server: { host: '127.0.0.1', port: 0, fs: { allow: [resolve(root, '../..')] } } });
   await server.listen(); t.after(() => server.close());
-  for (const [width, pwa, mode, expanded, withholding, retentionNone] of [[320, false, 'gallery'], [390, false, 'gallery'], [768, false, 'gallery'], [1365, false, 'gallery'],
+  for (const [width, pwa, mode, expanded, withholding, retentionNone, unified] of [[320, false, 'gallery'], [390, false, 'gallery'], [768, false, 'gallery'], [1365, false, 'gallery'],
     [320, false, 'menu'], [390, false, 'menu'], [1365, false, 'menu'], [390, true, 'gallery'], [1365, true, 'gallery'], [320, true, 'menu'], [390, false, 'gallery', true], [320, false, 'gallery', true],
-    [320,false,'gallery',false,true], [390,false,'gallery',false,true], [390,true,'gallery',false,true], [320,false,'gallery',true,true], [390,false,'gallery',true,false,true]]) {
-    const { stdout, screenshot } = await runBrowserLayout(browser, { width, height: expanded ? 1700 : 1100, mobile: width < 700,
-      url: `http://127.0.0.1:${server.httpServer.address().port}/tests/fixtures/notas-sefaz-responsive.html?mode=${mode}${pwa ? '&pwa' : ''}${expanded ? '&expanded' : ''}${withholding ? '&withholding' : ''}${retentionNone ? '&retentionNone' : ''}`,
-      captureScreenshot: width === 390 && !pwa && Boolean(process.env.NOTAS_SEFAZ_SCREENSHOT_DIR) });
+    [320,false,'gallery',false,true], [390,false,'gallery',false,true], [390,true,'gallery',false,true], [320,false,'gallery',true,true], [390,false,'gallery',true,false,true], [320,false,'gallery',false,true,false,true], [390,false,'gallery',false,true,false,true], [320,false,'gallery',true,true,false,true], [390,true,'gallery',false,true,false,true]]) {
+    const { stdout, screenshot } = await runBrowserLayout(browser, { width, height: unified ? (expanded ? 4400 : 2400) : expanded ? 1700 : 1100, mobile: width < 700,
+      url: `http://127.0.0.1:${server.httpServer.address().port}/tests/fixtures/notas-sefaz-responsive.html?mode=${mode}${pwa ? '&pwa' : ''}${expanded ? '&expanded' : ''}${withholding ? '&withholding' : ''}${retentionNone ? '&retentionNone' : ''}${unified ? '&unified' : ''}`,
+      captureScreenshot: (width === 390 || (unified && width === 320)) && !pwa && Boolean(process.env.NOTAS_SEFAZ_SCREENSHOT_DIR) });
     const dom = new JSDOM(stdout), layout = JSON.parse(dom.window.document.documentElement.dataset.layout); dom.window.close();
     assert.equal(layout.overflow, false, `${width}/${pwa}/${mode}: page overflow`);
     assert.deepEqual(layout.overflowingCards, [], `${width}/${pwa}/${mode}: card overflow`);
@@ -33,10 +33,16 @@ test('NF-e gallery and three-gallery launch group fit narrow phones and Windows 
         assert.match(layout.withholding.text,/Retenção pelo comprador/);
         assert.match(layout.withholding.text.replace(/\s/g,''),/R\$196,50/);
       } else assert.equal(layout.withholding,null);
-      assert.equal(layout.pdfRails.length, 2);
+      assert.equal(layout.pdfRails.length, unified ? 5 : 2);
+      if(unified) {
+        assert.deepEqual(layout.types,['NF-e','CT-e','NFS-e','NFS-e','NF-e']);
+        assert.deepEqual(layout.withholdingIds,['4','7']);
+        assert.deepEqual(layout.pdfLabels,['PDFDANFE','PDFDACTE','PDFDANFSe','PDFDANFSe']);
+      }
+      assert.ok(layout.amountLines.every(lines => lines === 1), 'valores monetários visíveis sem dividir os dígitos');
       assert.ok(layout.emissionLines.every(lines => lines === 1), 'data de emissão inteira, sem quebrar os dígitos');
       assert.ok(layout.pdfRails.every(rail => rail.railRight <= rail.mainLeft), 'PDF à esquerda do conteúdo da própria nota');
-      assert.equal(layout.disclosures.count, 8);
+      assert.equal(layout.disclosures.count, unified ? 20 : 8);
       assert.notEqual(layout.clusterColors.notes, layout.clusterColors.fisco, 'observações e fisco têm fundos distintos');
       assert.equal(layout.clusterColors.total, 'rgb(233, 245, 235)');
       assert.equal(layout.clusterColors.net, 'rgb(234, 243, 255)');
@@ -45,8 +51,8 @@ test('NF-e gallery and three-gallery launch group fit narrow phones and Windows 
       assert.equal(layout.disclosures.initiallyHiddenFields, true);
       assert.equal(layout.disclosures.expandedByClick, true);
       for (const summary of layout.disclosures.summaries) assert.ok(summary.width >= 44 && summary.height >= 44, 'cabeçalho confortável para toque');
-      assert.equal(layout.cards, 2);
-      assert.equal(layout.links.length, 3);
+      assert.equal(layout.cards, unified ? 5 : 2);
+      assert.equal(layout.links.length, unified ? 9 : 3);
       for (const link of layout.links) assert.ok(link.width >= 44 && link.height >= 44, `${width}: document link touch area ${JSON.stringify(link)}`);
       assert.equal(layout.notes.length,2);
       for(const note of layout.notes){
@@ -60,7 +66,7 @@ test('NF-e gallery and three-gallery launch group fit narrow phones and Windows 
       assert.ok(layout.menu.actions[1].bottom <= layout.menu.actions[2].top);
       assert.ok(layout.menu.actions.every(action => action.color === 'rgb(69, 76, 83)'));
     }
-    if (screenshot) writeFileSync(join(process.env.NOTAS_SEFAZ_SCREENSHOT_DIR, `notas-sefaz-${mode}-${withholding ? 'retencao-' : ''}${expanded ? 'expanded-' : ''}390.png`), screenshot);
+    if (screenshot) writeFileSync(join(process.env.NOTAS_SEFAZ_SCREENSHOT_DIR, `notas-sefaz-${unified ? 'unified-' : ''}${mode}-${withholding ? 'retencao-' : ''}${expanded ? 'expanded-' : ''}${width}.png`), screenshot);
     t.diagnostic(`${width}px ${pwa ? 'PWA' : 'mobile'} ${mode}: fits without horizontal overflow`);
   }
 });

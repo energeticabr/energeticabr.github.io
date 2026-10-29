@@ -1,0 +1,817 @@
+{
+  "$schema": "https://schema.management.azure.com/providers/Microsoft.Logic/schemas/2016-06-01/workflowdefinition.json#",
+  "contentVersion": "1.0.0.0",
+  "parameters": {
+    "$authentication": {
+      "defaultValue": {},
+      "type": "SecureObject"
+    },
+    "$connections": {
+      "defaultValue": {},
+      "type": "Object"
+    }
+  },
+  "triggers": {
+    "Recorrencia": {
+      "type": "Recurrence",
+      "recurrence": {
+        "frequency": "Day",
+        "interval": 1,
+        "timeZone": "E. South America Standard Time",
+        "schedule": {
+          "hours": [
+            9,
+            15,
+            20
+          ],
+          "minutes": [
+            0
+          ]
+        }
+      },
+      "runtimeConfiguration": {
+        "concurrency": {
+          "runs": 1
+        }
+      }
+    }
+  },
+  "actions": {
+    "Inicializar_coleta": {
+      "type": "InitializeVariable",
+      "inputs": {
+        "variables": [
+          {
+            "name": "ContinuarColeta",
+            "type": "boolean",
+            "value": true
+          }
+        ]
+      },
+      "runAfter": {}
+    },
+    "Janela_de_coleta": {
+      "type": "Until",
+      "expression": "@equals(variables('ContinuarColeta'),false)",
+      "limit": {
+        "count": 200,
+        "timeout": "PT2H"
+      },
+      "actions": {
+        "Coletar_desktop": {
+          "type": "OpenApiConnection",
+          "inputs": {
+            "host": {
+              "apiId": "/providers/Microsoft.PowerApps/apis/shared_uiflow",
+              "connectionName": "shared_uiflow",
+              "operationId": "RunUIFlow_V2"
+            },
+            "parameters": {
+              "uiFlowId": "CONFIGURAR_NO_POWER_AUTOMATE",
+              "runMode": "attended",
+              "item/Command": "Collect",
+              "item/PayloadBase64": "e30="
+            },
+            "authentication": "@parameters('$authentication')"
+          },
+          "runAfter": {}
+        },
+        "Lote": {
+          "type": "Compose",
+          "inputs": "@json(body('Coletar_desktop')?['ResultJson'])",
+          "runAfter": {
+            "Coletar_desktop": [
+              "Succeeded"
+            ]
+          }
+        },
+        "Documentos": {
+          "type": "Foreach",
+          "foreach": "@outputs('Lote')?['documents']",
+          "actions": {
+            "Gravar_XML": {
+              "type": "OpenApiConnection",
+              "inputs": {
+                "host": {
+                  "apiId": "/providers/Microsoft.PowerApps/apis/shared_sharepointonline",
+                  "connectionName": "shared_sharepointonline",
+                  "operationId": "HttpRequest"
+                },
+                "parameters": {
+                  "dataset": "https://energeticaltda.sharepoint.com/sites/energetica",
+                  "parameters/method": "POST",
+                  "parameters/uri": "@concat('_api/web/GetFolderByServerRelativeUrl(''/sites/energetica/DOCUMENTOS_FISCAIS_SEFAZ'')/Files/add(url=''', items('Documentos')?['fileName'], ''',overwrite=true)')",
+                  "parameters/headers": {
+                    "Accept": "application/json;odata=nometadata",
+                    "Content-Type": "application/xml"
+                  },
+                  "parameters/body": "@base64ToBinary(items('Documentos')?['xmlBase64'])"
+                },
+                "authentication": "@parameters('$authentication')"
+              },
+              "runAfter": {
+                "Conferir_DANFE": [
+                  "Succeeded"
+                ]
+              }
+            },
+            "Localizar_nota": {
+              "type": "OpenApiConnection",
+              "inputs": {
+                "host": {
+                  "apiId": "/providers/Microsoft.PowerApps/apis/shared_sharepointonline",
+                  "connectionName": "shared_sharepointonline",
+                  "operationId": "HttpRequest"
+                },
+                "parameters": {
+                  "dataset": "https://energeticaltda.sharepoint.com/sites/energetica",
+                  "parameters/method": "GET",
+                  "parameters/uri": "@concat('_api/web/lists/getbytitle(''NOTAS_FISCAIS_SEFAZ'')/items?$select=*&$filter=CHAVE_ACESSO eq ''', items('Documentos')?['key'], '''&$top=1')",
+                  "parameters/headers": {
+                    "Accept": "application/json;odata=verbose",
+                    "Content-Type": "application/json;odata=nometadata"
+                  }
+                },
+                "authentication": "@parameters('$authentication')"
+              },
+              "runAfter": {
+                "Gravar_XML": [
+                  "Succeeded"
+                ]
+              }
+            },
+            "Existente": {
+              "type": "Compose",
+              "inputs": "@if(empty(body('Localizar_nota')?['d']?['results']), json('{}'), first(body('Localizar_nota')?['d']?['results']))",
+              "runAfter": {
+                "Localizar_nota": [
+                  "Succeeded"
+                ]
+              }
+            },
+            "Novos_campos": {
+              "type": "Compose",
+              "inputs": "@items('Documentos')?['fields']",
+              "runAfter": {
+                "Existente": [
+                  "Succeeded"
+                ]
+              }
+            },
+            "Campos_finais": {
+              "type": "Compose",
+              "inputs": {
+                "Title": "@if(and(equals(outputs('Existente')?['STATUS_IMPORTACAO'],'XML_COMPLETO'),not(equals(outputs('Novos_campos')?['STATUS_IMPORTACAO'],'XML_COMPLETO'))), outputs('Existente')?['Title'], coalesce(outputs('Novos_campos')?['Title'], outputs('Existente')?['Title']))",
+                "CHAVE_ACESSO": "@if(and(equals(outputs('Existente')?['STATUS_IMPORTACAO'],'XML_COMPLETO'),not(equals(outputs('Novos_campos')?['STATUS_IMPORTACAO'],'XML_COMPLETO'))), outputs('Existente')?['CHAVE_ACESSO'], coalesce(outputs('Novos_campos')?['CHAVE_ACESSO'], outputs('Existente')?['CHAVE_ACESSO']))",
+                "CNPJ_FORNECEDOR": "@if(and(equals(outputs('Existente')?['STATUS_IMPORTACAO'],'XML_COMPLETO'),not(equals(outputs('Novos_campos')?['STATUS_IMPORTACAO'],'XML_COMPLETO'))), outputs('Existente')?['CNPJ_FORNECEDOR'], coalesce(outputs('Novos_campos')?['CNPJ_FORNECEDOR'], outputs('Existente')?['CNPJ_FORNECEDOR']))",
+                "CNPJ_DESTINATARIO": "@if(and(equals(outputs('Existente')?['STATUS_IMPORTACAO'],'XML_COMPLETO'),not(equals(outputs('Novos_campos')?['STATUS_IMPORTACAO'],'XML_COMPLETO'))), outputs('Existente')?['CNPJ_DESTINATARIO'], coalesce(outputs('Novos_campos')?['CNPJ_DESTINATARIO'], outputs('Existente')?['CNPJ_DESTINATARIO']))",
+                "CNPJ_CONSULTADO": "@if(and(equals(outputs('Existente')?['STATUS_IMPORTACAO'],'XML_COMPLETO'),not(equals(outputs('Novos_campos')?['STATUS_IMPORTACAO'],'XML_COMPLETO'))), outputs('Existente')?['CNPJ_CONSULTADO'], coalesce(outputs('Novos_campos')?['CNPJ_CONSULTADO'], outputs('Existente')?['CNPJ_CONSULTADO']))",
+                "NUMERO_NOTA": "@if(and(equals(outputs('Existente')?['STATUS_IMPORTACAO'],'XML_COMPLETO'),not(equals(outputs('Novos_campos')?['STATUS_IMPORTACAO'],'XML_COMPLETO'))), outputs('Existente')?['NUMERO_NOTA'], coalesce(outputs('Novos_campos')?['NUMERO_NOTA'], outputs('Existente')?['NUMERO_NOTA']))",
+                "SERIE": "@if(and(equals(outputs('Existente')?['STATUS_IMPORTACAO'],'XML_COMPLETO'),not(equals(outputs('Novos_campos')?['STATUS_IMPORTACAO'],'XML_COMPLETO'))), outputs('Existente')?['SERIE'], coalesce(outputs('Novos_campos')?['SERIE'], outputs('Existente')?['SERIE']))",
+                "MODELO": "@if(and(equals(outputs('Existente')?['STATUS_IMPORTACAO'],'XML_COMPLETO'),not(equals(outputs('Novos_campos')?['STATUS_IMPORTACAO'],'XML_COMPLETO'))), outputs('Existente')?['MODELO'], coalesce(outputs('Novos_campos')?['MODELO'], outputs('Existente')?['MODELO']))",
+                "DESTINATARIO": "@if(and(equals(outputs('Existente')?['STATUS_IMPORTACAO'],'XML_COMPLETO'),not(equals(outputs('Novos_campos')?['STATUS_IMPORTACAO'],'XML_COMPLETO'))), outputs('Existente')?['DESTINATARIO'], coalesce(outputs('Novos_campos')?['DESTINATARIO'], outputs('Existente')?['DESTINATARIO']))",
+                "UF_FORNECEDOR": "@if(and(equals(outputs('Existente')?['STATUS_IMPORTACAO'],'XML_COMPLETO'),not(equals(outputs('Novos_campos')?['STATUS_IMPORTACAO'],'XML_COMPLETO'))), outputs('Existente')?['UF_FORNECEDOR'], coalesce(outputs('Novos_campos')?['UF_FORNECEDOR'], outputs('Existente')?['UF_FORNECEDOR']))",
+                "NATUREZA_OPERACAO": "@if(and(equals(outputs('Existente')?['STATUS_IMPORTACAO'],'XML_COMPLETO'),not(equals(outputs('Novos_campos')?['STATUS_IMPORTACAO'],'XML_COMPLETO'))), outputs('Existente')?['NATUREZA_OPERACAO'], coalesce(outputs('Novos_campos')?['NATUREZA_OPERACAO'], outputs('Existente')?['NATUREZA_OPERACAO']))",
+                "ORIGEM_LIQUIDO": "@if(and(equals(outputs('Existente')?['STATUS_IMPORTACAO'],'XML_COMPLETO'),not(equals(outputs('Novos_campos')?['STATUS_IMPORTACAO'],'XML_COMPLETO'))), outputs('Existente')?['ORIGEM_LIQUIDO'], coalesce(outputs('Novos_campos')?['ORIGEM_LIQUIDO'], outputs('Existente')?['ORIGEM_LIQUIDO']))",
+                "SITUACAO": "@if(or(equals(outputs('Existente')?['SITUACAO'],'CANCELADA'),equals(outputs('Existente')?['SITUACAO'],'SUBSTITUIDA')),outputs('Existente')?['SITUACAO'],coalesce(outputs('Novos_campos')?['SITUACAO'], outputs('Existente')?['SITUACAO']))",
+                "DIRECAO": "@if(and(equals(outputs('Existente')?['STATUS_IMPORTACAO'],'XML_COMPLETO'),not(equals(outputs('Novos_campos')?['STATUS_IMPORTACAO'],'XML_COMPLETO'))), outputs('Existente')?['DIRECAO'], coalesce(outputs('Novos_campos')?['DIRECAO'], outputs('Existente')?['DIRECAO']))",
+                "STATUS_IMPORTACAO": "@if(and(equals(outputs('Existente')?['STATUS_IMPORTACAO'],'XML_COMPLETO'),not(equals(outputs('Novos_campos')?['STATUS_IMPORTACAO'],'XML_COMPLETO'))), outputs('Existente')?['STATUS_IMPORTACAO'], coalesce(outputs('Novos_campos')?['STATUS_IMPORTACAO'], outputs('Existente')?['STATUS_IMPORTACAO']))",
+                "STATUS_DANFE": "@if(equals(outputs('Existente')?['STATUS_DANFE'],'DISPONIVEL'),'DISPONIVEL',if(and(equals(outputs('Existente')?['STATUS_IMPORTACAO'],'XML_COMPLETO'),not(equals(outputs('Novos_campos')?['STATUS_IMPORTACAO'],'XML_COMPLETO'))), outputs('Existente')?['STATUS_DANFE'], coalesce(outputs('Novos_campos')?['STATUS_DANFE'], outputs('Existente')?['STATUS_DANFE'])))",
+                "ULTIMO_NSU": "@if(greater(int(coalesce(outputs('Existente')?['ULTIMO_NSU'],'0')),int(coalesce(outputs('Novos_campos')?['ULTIMO_NSU'],'0'))),outputs('Existente')?['ULTIMO_NSU'],coalesce(outputs('Novos_campos')?['ULTIMO_NSU'], outputs('Existente')?['ULTIMO_NSU']))",
+                "TIPO_DOCUMENTO": "@if(and(equals(outputs('Existente')?['STATUS_IMPORTACAO'],'XML_COMPLETO'),not(equals(outputs('Novos_campos')?['STATUS_IMPORTACAO'],'XML_COMPLETO'))), outputs('Existente')?['TIPO_DOCUMENTO'], coalesce(outputs('Novos_campos')?['TIPO_DOCUMENTO'], outputs('Existente')?['TIPO_DOCUMENTO']))",
+                "TIPO_EVENTO": "@coalesce(outputs('Novos_campos')?['TIPO_EVENTO'], outputs('Existente')?['TIPO_EVENTO'])",
+                "PROTOCOLO": "@if(and(equals(outputs('Existente')?['STATUS_IMPORTACAO'],'XML_COMPLETO'),not(equals(outputs('Novos_campos')?['STATUS_IMPORTACAO'],'XML_COMPLETO'))), outputs('Existente')?['PROTOCOLO'], coalesce(outputs('Novos_campos')?['PROTOCOLO'], outputs('Existente')?['PROTOCOLO']))",
+                "DATA_EMISSAO_ORIGINAL": "@if(and(equals(outputs('Existente')?['STATUS_IMPORTACAO'],'XML_COMPLETO'),not(equals(outputs('Novos_campos')?['STATUS_IMPORTACAO'],'XML_COMPLETO'))), outputs('Existente')?['DATA_EMISSAO_ORIGINAL'], coalesce(outputs('Novos_campos')?['DATA_EMISSAO_ORIGINAL'], outputs('Existente')?['DATA_EMISSAO_ORIGINAL']))",
+                "STATUS_RETENCOES": "@if(and(equals(outputs('Existente')?['STATUS_IMPORTACAO'],'XML_COMPLETO'),not(equals(outputs('Novos_campos')?['STATUS_IMPORTACAO'],'XML_COMPLETO'))), outputs('Existente')?['STATUS_RETENCOES'], coalesce(outputs('Novos_campos')?['STATUS_RETENCOES'], outputs('Existente')?['STATUS_RETENCOES']))",
+                "TIPO_FISCAL": "@if(and(equals(outputs('Existente')?['STATUS_IMPORTACAO'],'XML_COMPLETO'),not(equals(outputs('Novos_campos')?['STATUS_IMPORTACAO'],'XML_COMPLETO'))), outputs('Existente')?['TIPO_FISCAL'], coalesce(outputs('Novos_campos')?['TIPO_FISCAL'], outputs('Existente')?['TIPO_FISCAL']))",
+                "ORIGEM_FISCAL": "@if(and(equals(outputs('Existente')?['STATUS_IMPORTACAO'],'XML_COMPLETO'),not(equals(outputs('Novos_campos')?['STATUS_IMPORTACAO'],'XML_COMPLETO'))), outputs('Existente')?['ORIGEM_FISCAL'], coalesce(outputs('Novos_campos')?['ORIGEM_FISCAL'], outputs('Existente')?['ORIGEM_FISCAL']))",
+                "TOMADOR": "@if(and(equals(outputs('Existente')?['STATUS_IMPORTACAO'],'XML_COMPLETO'),not(equals(outputs('Novos_campos')?['STATUS_IMPORTACAO'],'XML_COMPLETO'))), outputs('Existente')?['TOMADOR'], coalesce(outputs('Novos_campos')?['TOMADOR'], outputs('Existente')?['TOMADOR']))",
+                "CNPJ_TOMADOR": "@if(and(equals(outputs('Existente')?['STATUS_IMPORTACAO'],'XML_COMPLETO'),not(equals(outputs('Novos_campos')?['STATUS_IMPORTACAO'],'XML_COMPLETO'))), outputs('Existente')?['CNPJ_TOMADOR'], coalesce(outputs('Novos_campos')?['CNPJ_TOMADOR'], outputs('Existente')?['CNPJ_TOMADOR']))",
+                "PAPEL_EMPRESA": "@if(and(equals(outputs('Existente')?['STATUS_IMPORTACAO'],'XML_COMPLETO'),not(equals(outputs('Novos_campos')?['STATUS_IMPORTACAO'],'XML_COMPLETO'))), outputs('Existente')?['PAPEL_EMPRESA'], coalesce(outputs('Novos_campos')?['PAPEL_EMPRESA'], outputs('Existente')?['PAPEL_EMPRESA']))",
+                "MUNICIPIO_PRESTACAO": "@if(and(equals(outputs('Existente')?['STATUS_IMPORTACAO'],'XML_COMPLETO'),not(equals(outputs('Novos_campos')?['STATUS_IMPORTACAO'],'XML_COMPLETO'))), outputs('Existente')?['MUNICIPIO_PRESTACAO'], coalesce(outputs('Novos_campos')?['MUNICIPIO_PRESTACAO'], outputs('Existente')?['MUNICIPIO_PRESTACAO']))",
+                "CODIGO_SERVICO": "@if(and(equals(outputs('Existente')?['STATUS_IMPORTACAO'],'XML_COMPLETO'),not(equals(outputs('Novos_campos')?['STATUS_IMPORTACAO'],'XML_COMPLETO'))), outputs('Existente')?['CODIGO_SERVICO'], coalesce(outputs('Novos_campos')?['CODIGO_SERVICO'], outputs('Existente')?['CODIGO_SERVICO']))",
+                "DATA_EMISSAO_DPS": "@if(and(equals(outputs('Existente')?['STATUS_IMPORTACAO'],'XML_COMPLETO'),not(equals(outputs('Novos_campos')?['STATUS_IMPORTACAO'],'XML_COMPLETO'))), outputs('Existente')?['DATA_EMISSAO_DPS'], coalesce(outputs('Novos_campos')?['DATA_EMISSAO_DPS'], outputs('Existente')?['DATA_EMISSAO_DPS']))",
+                "SERIE_DPS": "@if(and(equals(outputs('Existente')?['STATUS_IMPORTACAO'],'XML_COMPLETO'),not(equals(outputs('Novos_campos')?['STATUS_IMPORTACAO'],'XML_COMPLETO'))), outputs('Existente')?['SERIE_DPS'], coalesce(outputs('Novos_campos')?['SERIE_DPS'], outputs('Existente')?['SERIE_DPS']))",
+                "FONTE_FISCAL": "@if(and(equals(outputs('Existente')?['STATUS_IMPORTACAO'],'XML_COMPLETO'),not(equals(outputs('Novos_campos')?['STATUS_IMPORTACAO'],'XML_COMPLETO'))), outputs('Existente')?['FONTE_FISCAL'], coalesce(outputs('Novos_campos')?['FONTE_FISCAL'], outputs('Existente')?['FONTE_FISCAL']))",
+                "NUMERO_DPS": "@if(and(equals(outputs('Existente')?['STATUS_IMPORTACAO'],'XML_COMPLETO'),not(equals(outputs('Novos_campos')?['STATUS_IMPORTACAO'],'XML_COMPLETO'))), outputs('Existente')?['NUMERO_DPS'], coalesce(outputs('Novos_campos')?['NUMERO_DPS'], outputs('Existente')?['NUMERO_DPS']))",
+                "ORIGEM_DATA_EMISSAO": "@if(and(equals(outputs('Existente')?['STATUS_IMPORTACAO'],'XML_COMPLETO'),not(equals(outputs('Novos_campos')?['STATUS_IMPORTACAO'],'XML_COMPLETO'))), outputs('Existente')?['ORIGEM_DATA_EMISSAO'], coalesce(outputs('Novos_campos')?['ORIGEM_DATA_EMISSAO'], outputs('Existente')?['ORIGEM_DATA_EMISSAO']))",
+                "REMETENTE": "@if(and(equals(outputs('Existente')?['STATUS_IMPORTACAO'],'XML_COMPLETO'),not(equals(outputs('Novos_campos')?['STATUS_IMPORTACAO'],'XML_COMPLETO'))), outputs('Existente')?['REMETENTE'], coalesce(outputs('Novos_campos')?['REMETENTE'], outputs('Existente')?['REMETENTE']))",
+                "CNPJ_REMETENTE": "@if(and(equals(outputs('Existente')?['STATUS_IMPORTACAO'],'XML_COMPLETO'),not(equals(outputs('Novos_campos')?['STATUS_IMPORTACAO'],'XML_COMPLETO'))), outputs('Existente')?['CNPJ_REMETENTE'], coalesce(outputs('Novos_campos')?['CNPJ_REMETENTE'], outputs('Existente')?['CNPJ_REMETENTE']))",
+                "EXPEDIDOR": "@if(and(equals(outputs('Existente')?['STATUS_IMPORTACAO'],'XML_COMPLETO'),not(equals(outputs('Novos_campos')?['STATUS_IMPORTACAO'],'XML_COMPLETO'))), outputs('Existente')?['EXPEDIDOR'], coalesce(outputs('Novos_campos')?['EXPEDIDOR'], outputs('Existente')?['EXPEDIDOR']))",
+                "CNPJ_EXPEDIDOR": "@if(and(equals(outputs('Existente')?['STATUS_IMPORTACAO'],'XML_COMPLETO'),not(equals(outputs('Novos_campos')?['STATUS_IMPORTACAO'],'XML_COMPLETO'))), outputs('Existente')?['CNPJ_EXPEDIDOR'], coalesce(outputs('Novos_campos')?['CNPJ_EXPEDIDOR'], outputs('Existente')?['CNPJ_EXPEDIDOR']))",
+                "RECEBEDOR": "@if(and(equals(outputs('Existente')?['STATUS_IMPORTACAO'],'XML_COMPLETO'),not(equals(outputs('Novos_campos')?['STATUS_IMPORTACAO'],'XML_COMPLETO'))), outputs('Existente')?['RECEBEDOR'], coalesce(outputs('Novos_campos')?['RECEBEDOR'], outputs('Existente')?['RECEBEDOR']))",
+                "CNPJ_RECEBEDOR": "@if(and(equals(outputs('Existente')?['STATUS_IMPORTACAO'],'XML_COMPLETO'),not(equals(outputs('Novos_campos')?['STATUS_IMPORTACAO'],'XML_COMPLETO'))), outputs('Existente')?['CNPJ_RECEBEDOR'], coalesce(outputs('Novos_campos')?['CNPJ_RECEBEDOR'], outputs('Existente')?['CNPJ_RECEBEDOR']))",
+                "PROTOCOLO_EVENTO": "@coalesce(outputs('Novos_campos')?['PROTOCOLO_EVENTO'], outputs('Existente')?['PROTOCOLO_EVENTO'])",
+                "SEQUENCIA_EVENTO": "@coalesce(outputs('Novos_campos')?['SEQUENCIA_EVENTO'], outputs('Existente')?['SEQUENCIA_EVENTO'])",
+                "STATUS_EVENTO": "@coalesce(outputs('Novos_campos')?['STATUS_EVENTO'], outputs('Existente')?['STATUS_EVENTO'])",
+                "VALOR_PRODUTOS": "@if(and(equals(outputs('Existente')?['STATUS_IMPORTACAO'],'XML_COMPLETO'),not(equals(outputs('Novos_campos')?['STATUS_IMPORTACAO'],'XML_COMPLETO'))), outputs('Existente')?['VALOR_PRODUTOS'], coalesce(outputs('Novos_campos')?['VALOR_PRODUTOS'], outputs('Existente')?['VALOR_PRODUTOS']))",
+                "VALOR_TOTAL_NOTA": "@if(and(equals(outputs('Existente')?['STATUS_IMPORTACAO'],'XML_COMPLETO'),not(equals(outputs('Novos_campos')?['STATUS_IMPORTACAO'],'XML_COMPLETO'))), outputs('Existente')?['VALOR_TOTAL_NOTA'], coalesce(outputs('Novos_campos')?['VALOR_TOTAL_NOTA'], outputs('Existente')?['VALOR_TOTAL_NOTA']))",
+                "DESCONTOS": "@if(and(equals(outputs('Existente')?['STATUS_IMPORTACAO'],'XML_COMPLETO'),not(equals(outputs('Novos_campos')?['STATUS_IMPORTACAO'],'XML_COMPLETO'))), outputs('Existente')?['DESCONTOS'], coalesce(outputs('Novos_campos')?['DESCONTOS'], outputs('Existente')?['DESCONTOS']))",
+                "VALOR_LIQUIDO": "@if(and(equals(outputs('Existente')?['STATUS_IMPORTACAO'],'XML_COMPLETO'),not(equals(outputs('Novos_campos')?['STATUS_IMPORTACAO'],'XML_COMPLETO'))), outputs('Existente')?['VALOR_LIQUIDO'], coalesce(outputs('Novos_campos')?['VALOR_LIQUIDO'], outputs('Existente')?['VALOR_LIQUIDO']))",
+                "VALOR_ORIGINAL_FATURA": "@if(and(equals(outputs('Existente')?['STATUS_IMPORTACAO'],'XML_COMPLETO'),not(equals(outputs('Novos_campos')?['STATUS_IMPORTACAO'],'XML_COMPLETO'))), outputs('Existente')?['VALOR_ORIGINAL_FATURA'], coalesce(outputs('Novos_campos')?['VALOR_ORIGINAL_FATURA'], outputs('Existente')?['VALOR_ORIGINAL_FATURA']))",
+                "DESCONTO_FATURA": "@if(and(equals(outputs('Existente')?['STATUS_IMPORTACAO'],'XML_COMPLETO'),not(equals(outputs('Novos_campos')?['STATUS_IMPORTACAO'],'XML_COMPLETO'))), outputs('Existente')?['DESCONTO_FATURA'], coalesce(outputs('Novos_campos')?['DESCONTO_FATURA'], outputs('Existente')?['DESCONTO_FATURA']))",
+                "FRETE": "@if(and(equals(outputs('Existente')?['STATUS_IMPORTACAO'],'XML_COMPLETO'),not(equals(outputs('Novos_campos')?['STATUS_IMPORTACAO'],'XML_COMPLETO'))), outputs('Existente')?['FRETE'], coalesce(outputs('Novos_campos')?['FRETE'], outputs('Existente')?['FRETE']))",
+                "SEGURO": "@if(and(equals(outputs('Existente')?['STATUS_IMPORTACAO'],'XML_COMPLETO'),not(equals(outputs('Novos_campos')?['STATUS_IMPORTACAO'],'XML_COMPLETO'))), outputs('Existente')?['SEGURO'], coalesce(outputs('Novos_campos')?['SEGURO'], outputs('Existente')?['SEGURO']))",
+                "OUTRAS_DESPESAS": "@if(and(equals(outputs('Existente')?['STATUS_IMPORTACAO'],'XML_COMPLETO'),not(equals(outputs('Novos_campos')?['STATUS_IMPORTACAO'],'XML_COMPLETO'))), outputs('Existente')?['OUTRAS_DESPESAS'], coalesce(outputs('Novos_campos')?['OUTRAS_DESPESAS'], outputs('Existente')?['OUTRAS_DESPESAS']))",
+                "IPI": "@if(and(equals(outputs('Existente')?['STATUS_IMPORTACAO'],'XML_COMPLETO'),not(equals(outputs('Novos_campos')?['STATUS_IMPORTACAO'],'XML_COMPLETO'))), outputs('Existente')?['IPI'], coalesce(outputs('Novos_campos')?['IPI'], outputs('Existente')?['IPI']))",
+                "ICMS": "@if(and(equals(outputs('Existente')?['STATUS_IMPORTACAO'],'XML_COMPLETO'),not(equals(outputs('Novos_campos')?['STATUS_IMPORTACAO'],'XML_COMPLETO'))), outputs('Existente')?['ICMS'], coalesce(outputs('Novos_campos')?['ICMS'], outputs('Existente')?['ICMS']))",
+                "PIS": "@if(and(equals(outputs('Existente')?['STATUS_IMPORTACAO'],'XML_COMPLETO'),not(equals(outputs('Novos_campos')?['STATUS_IMPORTACAO'],'XML_COMPLETO'))), outputs('Existente')?['PIS'], coalesce(outputs('Novos_campos')?['PIS'], outputs('Existente')?['PIS']))",
+                "COFINS": "@if(and(equals(outputs('Existente')?['STATUS_IMPORTACAO'],'XML_COMPLETO'),not(equals(outputs('Novos_campos')?['STATUS_IMPORTACAO'],'XML_COMPLETO'))), outputs('Existente')?['COFINS'], coalesce(outputs('Novos_campos')?['COFINS'], outputs('Existente')?['COFINS']))",
+                "ICMS_ST": "@if(and(equals(outputs('Existente')?['STATUS_IMPORTACAO'],'XML_COMPLETO'),not(equals(outputs('Novos_campos')?['STATUS_IMPORTACAO'],'XML_COMPLETO'))), outputs('Existente')?['ICMS_ST'], coalesce(outputs('Novos_campos')?['ICMS_ST'], outputs('Existente')?['ICMS_ST']))",
+                "ICMS_DESONERADO": "@if(and(equals(outputs('Existente')?['STATUS_IMPORTACAO'],'XML_COMPLETO'),not(equals(outputs('Novos_campos')?['STATUS_IMPORTACAO'],'XML_COMPLETO'))), outputs('Existente')?['ICMS_DESONERADO'], coalesce(outputs('Novos_campos')?['ICMS_DESONERADO'], outputs('Existente')?['ICMS_DESONERADO']))",
+                "FCP_ST": "@if(and(equals(outputs('Existente')?['STATUS_IMPORTACAO'],'XML_COMPLETO'),not(equals(outputs('Novos_campos')?['STATUS_IMPORTACAO'],'XML_COMPLETO'))), outputs('Existente')?['FCP_ST'], coalesce(outputs('Novos_campos')?['FCP_ST'], outputs('Existente')?['FCP_ST']))",
+                "IMPOSTO_IMPORTACAO": "@if(and(equals(outputs('Existente')?['STATUS_IMPORTACAO'],'XML_COMPLETO'),not(equals(outputs('Novos_campos')?['STATUS_IMPORTACAO'],'XML_COMPLETO'))), outputs('Existente')?['IMPOSTO_IMPORTACAO'], coalesce(outputs('Novos_campos')?['IMPOSTO_IMPORTACAO'], outputs('Existente')?['IMPOSTO_IMPORTACAO']))",
+                "PIS_RETIDO": "@if(equals(outputs('Novos_campos')?['STATUS_IMPORTACAO'],'XML_COMPLETO'),outputs('Novos_campos')?['PIS_RETIDO'],outputs('Existente')?['PIS_RETIDO'])",
+                "COFINS_RETIDA": "@if(equals(outputs('Novos_campos')?['STATUS_IMPORTACAO'],'XML_COMPLETO'),outputs('Novos_campos')?['COFINS_RETIDA'],outputs('Existente')?['COFINS_RETIDA'])",
+                "CSLL_RETIDA": "@if(equals(outputs('Novos_campos')?['STATUS_IMPORTACAO'],'XML_COMPLETO'),outputs('Novos_campos')?['CSLL_RETIDA'],outputs('Existente')?['CSLL_RETIDA'])",
+                "IRRF_RETIDO": "@if(equals(outputs('Novos_campos')?['STATUS_IMPORTACAO'],'XML_COMPLETO'),outputs('Novos_campos')?['IRRF_RETIDO'],outputs('Existente')?['IRRF_RETIDO'])",
+                "INSS_RETIDO": "@if(equals(outputs('Novos_campos')?['STATUS_IMPORTACAO'],'XML_COMPLETO'),outputs('Novos_campos')?['INSS_RETIDO'],outputs('Existente')?['INSS_RETIDO'])",
+                "ISS_RETIDO": "@if(equals(outputs('Novos_campos')?['STATUS_IMPORTACAO'],'XML_COMPLETO'),outputs('Novos_campos')?['ISS_RETIDO'],outputs('Existente')?['ISS_RETIDO'])",
+                "ISS": "@if(and(equals(outputs('Existente')?['STATUS_IMPORTACAO'],'XML_COMPLETO'),not(equals(outputs('Novos_campos')?['STATUS_IMPORTACAO'],'XML_COMPLETO'))), outputs('Existente')?['ISS'], coalesce(outputs('Novos_campos')?['ISS'], outputs('Existente')?['ISS']))",
+                "VALOR_SERVICOS": "@if(and(equals(outputs('Existente')?['STATUS_IMPORTACAO'],'XML_COMPLETO'),not(equals(outputs('Novos_campos')?['STATUS_IMPORTACAO'],'XML_COMPLETO'))), outputs('Existente')?['VALOR_SERVICOS'], coalesce(outputs('Novos_campos')?['VALOR_SERVICOS'], outputs('Existente')?['VALOR_SERVICOS']))",
+                "DESCONTO_CONDICIONADO": "@if(and(equals(outputs('Existente')?['STATUS_IMPORTACAO'],'XML_COMPLETO'),not(equals(outputs('Novos_campos')?['STATUS_IMPORTACAO'],'XML_COMPLETO'))), outputs('Existente')?['DESCONTO_CONDICIONADO'], coalesce(outputs('Novos_campos')?['DESCONTO_CONDICIONADO'], outputs('Existente')?['DESCONTO_CONDICIONADO']))",
+                "DESCONTO_INCONDICIONADO": "@if(and(equals(outputs('Existente')?['STATUS_IMPORTACAO'],'XML_COMPLETO'),not(equals(outputs('Novos_campos')?['STATUS_IMPORTACAO'],'XML_COMPLETO'))), outputs('Existente')?['DESCONTO_INCONDICIONADO'], coalesce(outputs('Novos_campos')?['DESCONTO_INCONDICIONADO'], outputs('Existente')?['DESCONTO_INCONDICIONADO']))",
+                "VALOR_LIQUIDO_FATURA": "@if(and(equals(outputs('Existente')?['STATUS_IMPORTACAO'],'XML_COMPLETO'),not(equals(outputs('Novos_campos')?['STATUS_IMPORTACAO'],'XML_COMPLETO'))), outputs('Existente')?['VALOR_LIQUIDO_FATURA'], coalesce(outputs('Novos_campos')?['VALOR_LIQUIDO_FATURA'], outputs('Existente')?['VALOR_LIQUIDO_FATURA']))",
+                "DATA_EMISSAO": "@if(and(equals(outputs('Existente')?['STATUS_IMPORTACAO'],'XML_COMPLETO'),not(equals(outputs('Novos_campos')?['STATUS_IMPORTACAO'],'XML_COMPLETO'))), outputs('Existente')?['DATA_EMISSAO'], coalesce(outputs('Novos_campos')?['DATA_EMISSAO'], outputs('Existente')?['DATA_EMISSAO']))",
+                "DATA_EVENTO": "@coalesce(outputs('Novos_campos')?['DATA_EVENTO'], outputs('Existente')?['DATA_EVENTO'])",
+                "OBSERVACOES_NOTA": "@if(and(equals(outputs('Existente')?['STATUS_IMPORTACAO'],'XML_COMPLETO'),not(equals(outputs('Novos_campos')?['STATUS_IMPORTACAO'],'XML_COMPLETO'))), outputs('Existente')?['OBSERVACOES_NOTA'], coalesce(outputs('Novos_campos')?['OBSERVACOES_NOTA'], outputs('Existente')?['OBSERVACOES_NOTA']))",
+                "INFORMACOES_FISCO": "@if(and(equals(outputs('Existente')?['STATUS_IMPORTACAO'],'XML_COMPLETO'),not(equals(outputs('Novos_campos')?['STATUS_IMPORTACAO'],'XML_COMPLETO'))), outputs('Existente')?['INFORMACOES_FISCO'], coalesce(outputs('Novos_campos')?['INFORMACOES_FISCO'], outputs('Existente')?['INFORMACOES_FISCO']))",
+                "DESCRICAO_SERVICO": "@if(and(equals(outputs('Existente')?['STATUS_IMPORTACAO'],'XML_COMPLETO'),not(equals(outputs('Novos_campos')?['STATUS_IMPORTACAO'],'XML_COMPLETO'))), outputs('Existente')?['DESCRICAO_SERVICO'], coalesce(outputs('Novos_campos')?['DESCRICAO_SERVICO'], outputs('Existente')?['DESCRICAO_SERVICO']))",
+                "ULTIMO_DOCUMENTO_URL": {
+                  "Url": "@concat('https://energeticaltda.sharepoint.com/sites/energetica/DOCUMENTOS_FISCAIS_SEFAZ/',items('Documentos')?['fileName'])",
+                  "Description": "Ultimo documento XML recebido"
+                },
+                "XML_URL": "@if(contains(createArray('nfeProc','cteProc','cteOSProc','cteSimpProc','NFSe'),items('Documentos')?['kind']),setProperty(setProperty(json('{}'),'Url',concat('https://energeticaltda.sharepoint.com/sites/energetica/DOCUMENTOS_FISCAIS_SEFAZ/',items('Documentos')?['fileName'])),'Description','XML completo do documento fiscal'),if(empty(outputs('Existente')?['XML_URL']),null,setProperty(setProperty(json('{}'),'Url',outputs('Existente')?['XML_URL']?['Url']),'Description',coalesce(outputs('Existente')?['XML_URL']?['Description'],''))))",
+                "DANFE_URL": "@if(empty(outputs('Existente')?['DANFE_URL']),null,setProperty(setProperty(json('{}'),'Url',outputs('Existente')?['DANFE_URL']?['Url']),'Description',coalesce(outputs('Existente')?['DANFE_URL']?['Description'],'')))"
+              },
+              "runAfter": {
+                "Novos_campos": [
+                  "Succeeded"
+                ]
+              }
+            },
+            "Criar_ou_atualizar": {
+              "type": "If",
+              "expression": {
+                "equals": [
+                  "@empty(body('Localizar_nota')?['d']?['results'])",
+                  true
+                ]
+              },
+              "actions": {
+                "Criar_nota": {
+                  "type": "OpenApiConnection",
+                  "inputs": {
+                    "host": {
+                      "apiId": "/providers/Microsoft.PowerApps/apis/shared_sharepointonline",
+                      "connectionName": "shared_sharepointonline",
+                      "operationId": "HttpRequest"
+                    },
+                    "parameters": {
+                      "dataset": "https://energeticaltda.sharepoint.com/sites/energetica",
+                      "parameters/method": "POST",
+                      "parameters/uri": "_api/web/lists/getbytitle('NOTAS_FISCAIS_SEFAZ')/items",
+                      "parameters/headers": {
+                        "Accept": "application/json;odata=nometadata",
+                        "Content-Type": "application/json;odata=nometadata"
+                      },
+                      "parameters/body": "@string(outputs('Campos_finais'))"
+                    },
+                    "authentication": "@parameters('$authentication')"
+                  },
+                  "runAfter": {}
+                }
+              },
+              "else": {
+                "actions": {
+                  "Atualizar_nota": {
+                    "type": "OpenApiConnection",
+                    "inputs": {
+                      "host": {
+                        "apiId": "/providers/Microsoft.PowerApps/apis/shared_sharepointonline",
+                        "connectionName": "shared_sharepointonline",
+                        "operationId": "HttpRequest"
+                      },
+                      "parameters": {
+                        "dataset": "https://energeticaltda.sharepoint.com/sites/energetica",
+                        "parameters/method": "POST",
+                        "parameters/uri": "@concat('_api/web/lists/getbytitle(''NOTAS_FISCAIS_SEFAZ'')/items(',string(outputs('Existente')?['Id']),')')",
+                        "parameters/headers": {
+                          "Accept": "application/json;odata=nometadata",
+                          "Content-Type": "application/json;odata=nometadata",
+                          "X-HTTP-Method": "MERGE",
+                          "IF-MATCH": "@outputs('Existente')?['__metadata']?['etag']"
+                        },
+                        "parameters/body": "@string(outputs('Campos_finais'))"
+                      },
+                      "authentication": "@parameters('$authentication')"
+                    },
+                    "runAfter": {}
+                  }
+                }
+              },
+              "runAfter": {
+                "Campos_finais": [
+                  "Succeeded"
+                ]
+              }
+            },
+            "Conferir_identidade": {
+              "type": "ParseJson",
+              "inputs": {
+                "content": "@if(and(contains(createArray('nfeProc','resNFe','procEventoNFe','resEvento','cteProc','cteOSProc','cteSimpProc','procEventoCTe','NFSe','evento'),items('Documentos')?['kind']),if(contains(createArray('NFSe','evento'),items('Documentos')?['kind']),and(equals(length(items('Documentos')?['key']),50),equals(replace(replace(replace(replace(replace(replace(replace(replace(replace(replace(items('Documentos')?['key'],'0',''),'1',''),'2',''),'3',''),'4',''),'5',''),'6',''),'7',''),'8',''),'9',''),'')),and(equals(length(items('Documentos')?['key']),44),equals(replace(replace(replace(replace(replace(replace(replace(replace(replace(replace(substring(items('Documentos')?['key'],0,6),'0',''),'1',''),'2',''),'3',''),'4',''),'5',''),'6',''),'7',''),'8',''),'9',''),''),equals(replace(replace(replace(replace(replace(replace(replace(replace(replace(replace(replace(replace(replace(replace(replace(replace(replace(replace(replace(replace(replace(replace(replace(replace(replace(replace(replace(replace(replace(replace(replace(replace(replace(replace(replace(replace(substring(items('Documentos')?['key'],6,12),'0',''),'1',''),'2',''),'3',''),'4',''),'5',''),'6',''),'7',''),'8',''),'9',''),'A',''),'B',''),'C',''),'D',''),'E',''),'F',''),'G',''),'H',''),'I',''),'J',''),'K',''),'L',''),'M',''),'N',''),'O',''),'P',''),'Q',''),'R',''),'S',''),'T',''),'U',''),'V',''),'W',''),'X',''),'Y',''),'Z',''),''),equals(replace(replace(replace(replace(replace(replace(replace(replace(replace(replace(substring(items('Documentos')?['key'],18,26),'0',''),'1',''),'2',''),'3',''),'4',''),'5',''),'6',''),'7',''),'8',''),'9',''),''))),and(greaterOrEquals(length(items('Documentos')?['nsu']),15),lessOrEquals(length(items('Documentos')?['nsu']),19),equals(replace(replace(replace(replace(replace(replace(replace(replace(replace(replace(items('Documentos')?['nsu'],'0',''),'1',''),'2',''),'3',''),'4',''),'5',''),'6',''),'7',''),'8',''),'9',''),''),isInt(items('Documentos')?['nsu'])),and(equals(length(items('Documentos')?['sha256']),64),equals(replace(replace(replace(replace(replace(replace(replace(replace(replace(replace(replace(replace(replace(replace(replace(replace(items('Documentos')?['sha256'],'0',''),'1',''),'2',''),'3',''),'4',''),'5',''),'6',''),'7',''),'8',''),'9',''),'a',''),'b',''),'c',''),'d',''),'e',''),'f',''),'')),equals(items('Documentos')?['id'],concat(items('Documentos')?['nsu'],'-',substring(items('Documentos')?['sha256'],0,16))),equals(items('Documentos')?['fileName'],concat(items('Documentos')?['key'],'-',items('Documentos')?['id'],'.xml')),equals(items('Documentos')?['fields']?['CHAVE_ACESSO'],items('Documentos')?['key']),equals(items('Documentos')?['fields']?['ULTIMO_NSU'],items('Documentos')?['nsu']),if(contains(createArray('nfeProc','cteProc','cteOSProc','cteSimpProc','NFSe'),items('Documentos')?['kind']),equals(items('Documentos')?['fields']?['STATUS_IMPORTACAO'],'XML_COMPLETO'),not(equals(items('Documentos')?['fields']?['STATUS_IMPORTACAO'],'XML_COMPLETO')))),json('{\"valido\":true}'),json('{}'))",
+                "schema": {
+                  "type": "object",
+                  "required": [
+                    "valido"
+                  ],
+                  "properties": {
+                    "valido": {
+                      "type": "boolean",
+                      "enum": [
+                        true
+                      ]
+                    }
+                  }
+                }
+              },
+              "runAfter": {}
+            },
+            "Conferir_DANFE": {
+              "type": "If",
+              "expression": {
+                "equals": [
+                  "@contains(createArray('nfeProc','cteProc','cteOSProc','cteSimpProc','NFSe'),items('Documentos')?['kind'])",
+                  true
+                ]
+              },
+              "actions": {
+                "Validar_pdf": {
+                  "type": "ParseJson",
+                  "inputs": {
+                    "content": "@items('Documentos')?['danfe']",
+                    "schema": {
+                      "type": "object",
+                      "required": [
+                        "fileName",
+                        "pdfBase64",
+                        "sha256"
+                      ],
+                      "properties": {
+                        "fileName": {
+                          "type": "string",
+                          "minLength": 1,
+                          "maxLength": 120
+                        },
+                        "pdfBase64": {
+                          "type": "string",
+                          "minLength": 28,
+                          "maxLength": 2700000
+                        },
+                        "sha256": {
+                          "type": "string",
+                          "minLength": 64,
+                          "maxLength": 64
+                        }
+                      }
+                    }
+                  },
+                  "runAfter": {}
+                },
+                "Conferir_identidade_pdf": {
+                  "type": "ParseJson",
+                  "inputs": {
+                    "content": "@if(and(equals(items('Documentos')?['danfe']?['fileName'],concat(if(equals(items('Documentos')?['kind'],'NFSe'),'DANFSe',if(contains(createArray('cteProc','cteOSProc','cteSimpProc'),items('Documentos')?['kind']),'DACTE','DANFE')),'-',items('Documentos')?['key'],'-',substring(items('Documentos')?['sha256'],0,16),'.pdf')),equals(length(items('Documentos')?['danfe']?['sha256']),64),equals(replace(replace(replace(replace(replace(replace(replace(replace(replace(replace(replace(replace(replace(replace(replace(replace(items('Documentos')?['danfe']?['sha256'],'0',''),'1',''),'2',''),'3',''),'4',''),'5',''),'6',''),'7',''),'8',''),'9',''),'a',''),'b',''),'c',''),'d',''),'e',''),'f',''),'')),json('{\"valido\":true}'),json('{}'))",
+                    "schema": {
+                      "type": "object",
+                      "required": [
+                        "valido"
+                      ],
+                      "properties": {
+                        "valido": {
+                          "type": "boolean",
+                          "enum": [
+                            true
+                          ]
+                        }
+                      }
+                    }
+                  },
+                  "runAfter": {
+                    "Validar_pdf": [
+                      "Succeeded"
+                    ]
+                  }
+                }
+              },
+              "else": {
+                "actions": {}
+              },
+              "runAfter": {
+                "Conferir_identidade": [
+                  "Succeeded"
+                ]
+              }
+            },
+            "Nota_apos_gravacao": {
+              "type": "OpenApiConnection",
+              "inputs": {
+                "host": {
+                  "apiId": "/providers/Microsoft.PowerApps/apis/shared_sharepointonline",
+                  "connectionName": "shared_sharepointonline",
+                  "operationId": "HttpRequest"
+                },
+                "parameters": {
+                  "dataset": "https://energeticaltda.sharepoint.com/sites/energetica",
+                  "parameters/method": "GET",
+                  "parameters/uri": "@concat('_api/web/lists/getbytitle(''NOTAS_FISCAIS_SEFAZ'')/items?$select=*&$filter=CHAVE_ACESSO eq ''', items('Documentos')?['key'], '''&$top=1')",
+                  "parameters/headers": {
+                    "Accept": "application/json;odata=verbose",
+                    "Content-Type": "application/json;odata=nometadata"
+                  }
+                },
+                "authentication": "@parameters('$authentication')"
+              },
+              "runAfter": {
+                "Criar_ou_atualizar": [
+                  "Succeeded"
+                ]
+              }
+            },
+            "Nota_gravada": {
+              "type": "Compose",
+              "inputs": "@first(body('Nota_apos_gravacao')?['d']?['results'])",
+              "runAfter": {
+                "Nota_apos_gravacao": [
+                  "Succeeded"
+                ]
+              }
+            },
+            "Anexar_DANFE": {
+              "type": "If",
+              "expression": {
+                "equals": [
+                  "@and(contains(createArray('nfeProc','cteProc','cteOSProc','cteSimpProc','NFSe'),items('Documentos')?['kind']),or(not(contains(createArray('CANCELADA','SUBSTITUIDA'),outputs('Nota_gravada')?['SITUACAO'])),equals(outputs('Nota_gravada')?['SITUACAO'],items('Documentos')?['fields']?['SITUACAO'])))",
+                  true
+                ]
+              },
+              "actions": {
+                "Localizar_anexo": {
+                  "type": "OpenApiConnection",
+                  "inputs": {
+                    "host": {
+                      "apiId": "/providers/Microsoft.PowerApps/apis/shared_sharepointonline",
+                      "connectionName": "shared_sharepointonline",
+                      "operationId": "HttpRequest"
+                    },
+                    "parameters": {
+                      "dataset": "https://energeticaltda.sharepoint.com/sites/energetica",
+                      "parameters/method": "GET",
+                      "parameters/uri": "@concat(concat('_api/web/lists/getbytitle(''NOTAS_FISCAIS_SEFAZ'')/items(',string(int(outputs('Nota_gravada')?['Id'])),')'),'/AttachmentFiles?$select=FileName,ServerRelativeUrl&$filter=FileName eq ''',items('Documentos')?['danfe']?['fileName'],'''')",
+                      "parameters/headers": {
+                        "Accept": "application/json;odata=nometadata",
+                        "Content-Type": "application/json;odata=nometadata"
+                      }
+                    },
+                    "authentication": "@parameters('$authentication')"
+                  },
+                  "runAfter": {}
+                },
+                "Criar_ou_substituir_anexo": {
+                  "type": "If",
+                  "expression": {
+                    "equals": [
+                      "@length(body('Localizar_anexo')?['value'])",
+                      0
+                    ]
+                  },
+                  "actions": {
+                    "Criar_anexo": {
+                      "type": "OpenApiConnection",
+                      "inputs": {
+                        "host": {
+                          "apiId": "/providers/Microsoft.PowerApps/apis/shared_sharepointonline",
+                          "connectionName": "shared_sharepointonline",
+                          "operationId": "CreateAttachment"
+                        },
+                        "parameters": {
+                          "dataset": "https://energeticaltda.sharepoint.com/sites/energetica",
+                          "table": "NOTAS_FISCAIS_SEFAZ",
+                          "itemId": "@int(outputs('Nota_gravada')?['Id'])",
+                          "displayName": "@items('Documentos')?['danfe']?['fileName']",
+                          "body": "@base64ToBinary(items('Documentos')?['danfe']?['pdfBase64'])"
+                        },
+                        "authentication": "@parameters('$authentication')"
+                      },
+                      "runAfter": {}
+                    }
+                  },
+                  "else": {
+                    "actions": {
+                      "Metadados_anexo": {
+                        "type": "OpenApiConnection",
+                        "inputs": {
+                          "host": {
+                            "apiId": "/providers/Microsoft.PowerApps/apis/shared_sharepointonline",
+                            "connectionName": "shared_sharepointonline",
+                            "operationId": "GetFileMetadataByPath"
+                          },
+                          "parameters": {
+                            "dataset": "https://energeticaltda.sharepoint.com/sites/energetica",
+                            "path": "@substring(first(body('Localizar_anexo')?['value'])?['ServerRelativeUrl'],17)"
+                          },
+                          "authentication": "@parameters('$authentication')"
+                        },
+                        "runAfter": {}
+                      },
+                      "Substituir_anexo": {
+                        "type": "OpenApiConnection",
+                        "inputs": {
+                          "host": {
+                            "apiId": "/providers/Microsoft.PowerApps/apis/shared_sharepointonline",
+                            "connectionName": "shared_sharepointonline",
+                            "operationId": "UpdateFile"
+                          },
+                          "parameters": {
+                            "dataset": "https://energeticaltda.sharepoint.com/sites/energetica",
+                            "id": "@body('Metadados_anexo')?['Id']",
+                            "body": "@base64ToBinary(items('Documentos')?['danfe']?['pdfBase64'])"
+                          },
+                          "authentication": "@parameters('$authentication')"
+                        },
+                        "runAfter": {
+                          "Metadados_anexo": [
+                            "Succeeded"
+                          ]
+                        }
+                      }
+                    }
+                  },
+                  "runAfter": {
+                    "Localizar_anexo": [
+                      "Succeeded"
+                    ]
+                  }
+                },
+                "Conferir_anexo": {
+                  "type": "OpenApiConnection",
+                  "inputs": {
+                    "host": {
+                      "apiId": "/providers/Microsoft.PowerApps/apis/shared_sharepointonline",
+                      "connectionName": "shared_sharepointonline",
+                      "operationId": "HttpRequest"
+                    },
+                    "parameters": {
+                      "dataset": "https://energeticaltda.sharepoint.com/sites/energetica",
+                      "parameters/method": "GET",
+                      "parameters/uri": "@concat(concat('_api/web/lists/getbytitle(''NOTAS_FISCAIS_SEFAZ'')/items(',string(int(outputs('Nota_gravada')?['Id'])),')'),'/AttachmentFiles(''',items('Documentos')?['danfe']?['fileName'],''')?$select=FileName,ServerRelativeUrl')",
+                      "parameters/headers": {
+                        "Accept": "application/json;odata=nometadata",
+                        "Content-Type": "application/json;odata=nometadata"
+                      }
+                    },
+                    "authentication": "@parameters('$authentication')"
+                  },
+                  "runAfter": {
+                    "Criar_ou_substituir_anexo": [
+                      "Succeeded"
+                    ]
+                  }
+                },
+                "Baixar_pdf": {
+                  "type": "OpenApiConnection",
+                  "inputs": {
+                    "host": {
+                      "apiId": "/providers/Microsoft.PowerApps/apis/shared_sharepointonline",
+                      "connectionName": "shared_sharepointonline",
+                      "operationId": "GetFileContentByPath"
+                    },
+                    "parameters": {
+                      "dataset": "https://energeticaltda.sharepoint.com/sites/energetica",
+                      "path": "@substring(body('Conferir_anexo')?['ServerRelativeUrl'],17)",
+                      "inferContentType": true
+                    },
+                    "authentication": "@parameters('$authentication')"
+                  },
+                  "runAfter": {
+                    "Conferir_anexo": [
+                      "Succeeded"
+                    ]
+                  }
+                },
+                "Conferir_integridade_pdf": {
+                  "type": "ParseJson",
+                  "inputs": {
+                    "content": "@if(equals(body('Baixar_pdf')?['$content'],items('Documentos')?['danfe']?['pdfBase64']),json('{\"valido\":true}'),json('{}'))",
+                    "schema": {
+                      "type": "object",
+                      "required": [
+                        "valido"
+                      ],
+                      "properties": {
+                        "valido": {
+                          "type": "boolean",
+                          "enum": [
+                            true
+                          ]
+                        }
+                      }
+                    }
+                  },
+                  "runAfter": {
+                    "Baixar_pdf": [
+                      "Succeeded"
+                    ]
+                  }
+                },
+                "Nota_apos_anexo": {
+                  "type": "OpenApiConnection",
+                  "inputs": {
+                    "host": {
+                      "apiId": "/providers/Microsoft.PowerApps/apis/shared_sharepointonline",
+                      "connectionName": "shared_sharepointonline",
+                      "operationId": "HttpRequest"
+                    },
+                    "parameters": {
+                      "dataset": "https://energeticaltda.sharepoint.com/sites/energetica",
+                      "parameters/method": "GET",
+                      "parameters/uri": "@concat(concat('_api/web/lists/getbytitle(''NOTAS_FISCAIS_SEFAZ'')/items(',string(int(outputs('Nota_gravada')?['Id'])),')'),'?$select=Id')",
+                      "parameters/headers": {
+                        "Accept": "application/json;odata=verbose",
+                        "Content-Type": "application/json;odata=nometadata"
+                      }
+                    },
+                    "authentication": "@parameters('$authentication')"
+                  },
+                  "runAfter": {
+                    "Conferir_integridade_pdf": [
+                      "Succeeded"
+                    ]
+                  }
+                },
+                "Campos_DANFE": {
+                  "type": "Compose",
+                  "inputs": {
+                    "STATUS_DANFE": "DISPONIVEL",
+                    "DANFE_URL": {
+                      "Url": "@concat('https://energeticaltda.sharepoint.com',body('Conferir_anexo')?['ServerRelativeUrl'])",
+                      "Description": "PDF - espelho do documento fiscal"
+                    }
+                  },
+                  "runAfter": {
+                    "Nota_apos_anexo": [
+                      "Succeeded"
+                    ]
+                  }
+                },
+                "Marcar_DANFE": {
+                  "type": "OpenApiConnection",
+                  "inputs": {
+                    "host": {
+                      "apiId": "/providers/Microsoft.PowerApps/apis/shared_sharepointonline",
+                      "connectionName": "shared_sharepointonline",
+                      "operationId": "HttpRequest"
+                    },
+                    "parameters": {
+                      "dataset": "https://energeticaltda.sharepoint.com/sites/energetica",
+                      "parameters/method": "POST",
+                      "parameters/uri": "@concat('_api/web/lists/getbytitle(''NOTAS_FISCAIS_SEFAZ'')/items(',string(int(outputs('Nota_gravada')?['Id'])),')')",
+                      "parameters/headers": {
+                        "Accept": "application/json;odata=nometadata",
+                        "Content-Type": "application/json;odata=nometadata",
+                        "X-HTTP-Method": "MERGE",
+                        "IF-MATCH": "@body('Nota_apos_anexo')?['d']?['__metadata']?['etag']"
+                      },
+                      "parameters/body": "@string(outputs('Campos_DANFE'))"
+                    },
+                    "authentication": "@parameters('$authentication')"
+                  },
+                  "runAfter": {
+                    "Campos_DANFE": [
+                      "Succeeded"
+                    ]
+                  }
+                }
+              },
+              "else": {
+                "actions": {}
+              },
+              "runAfter": {
+                "Nota_gravada": [
+                  "Succeeded"
+                ]
+              }
+            }
+          },
+          "runtimeConfiguration": {
+            "concurrency": {
+              "repetitions": 1
+            }
+          },
+          "runAfter": {
+            "Lote": [
+              "Succeeded"
+            ]
+          }
+        },
+        "Confirmar_lote": {
+          "type": "If",
+          "expression": {
+            "greater": [
+              "@length(outputs('Lote')?['documents'])",
+              0
+            ]
+          },
+          "actions": {
+            "Ids_processados": {
+              "type": "Select",
+              "inputs": {
+                "from": "@outputs('Lote')?['documents']",
+                "select": "@item()?['id']"
+              },
+              "runAfter": {}
+            },
+            "Confirmar_desktop": {
+              "type": "OpenApiConnection",
+              "inputs": {
+                "host": {
+                  "apiId": "/providers/Microsoft.PowerApps/apis/shared_uiflow",
+                  "connectionName": "shared_uiflow",
+                  "operationId": "RunUIFlow_V2"
+                },
+                "parameters": {
+                  "uiFlowId": "CONFIGURAR_NO_POWER_AUTOMATE",
+                  "runMode": "attended",
+                  "item/Command": "Acknowledge",
+                  "item/PayloadBase64": "@base64(string(setProperty(json('{}'),'ids',body('Ids_processados'))))"
+                },
+                "authentication": "@parameters('$authentication')"
+              },
+              "runAfter": {
+                "Ids_processados": [
+                  "Succeeded"
+                ]
+              }
+            }
+          },
+          "else": {
+            "actions": {}
+          },
+          "runAfter": {
+            "Documentos": [
+              "Succeeded"
+            ]
+          }
+        },
+        "Continuar_coleta": {
+          "type": "SetVariable",
+          "inputs": {
+            "name": "ContinuarColeta",
+            "value": "@greater(length(outputs('Lote')?['documents']),0)"
+          },
+          "runAfter": {
+            "Confirmar_lote": [
+              "Succeeded"
+            ]
+          }
+        }
+      },
+      "runAfter": {
+        "Inicializar_coleta": [
+          "Succeeded"
+        ]
+      }
+    },
+    "Conferir_limite": {
+      "type": "If",
+      "expression": {
+        "equals": [
+          "@variables('ContinuarColeta')",
+          true
+        ]
+      },
+      "actions": {
+        "Limite_atingido": {
+          "type": "Terminate",
+          "inputs": {
+            "runStatus": "Failed",
+            "runError": {
+              "code": "LIMITE_COLETA",
+              "message": "Limite de lotes/tempo atingido; documentos restantes preservados para o proximo horario."
+            }
+          },
+          "runAfter": {}
+        }
+      },
+      "else": {
+        "actions": {}
+      },
+      "runAfter": {
+        "Janela_de_coleta": [
+          "Succeeded"
+        ]
+      }
+    }
+  },
+  "outputs": {}
+}

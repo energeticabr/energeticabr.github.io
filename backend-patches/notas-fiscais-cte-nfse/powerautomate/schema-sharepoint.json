@@ -1,0 +1,324 @@
+{
+  "siteUrl": "https://energeticaltda.sharepoint.com/sites/energetica",
+  "listTitle": "NOTAS_FISCAIS_SEFAZ",
+  "libraryTitle": "DOCUMENTOS_FISCAIS_SEFAZ",
+  "fields": [
+    {
+      "name": "Title",
+      "displayName": "FORNECEDOR",
+      "type": "Text"
+    },
+    {
+      "name": "CHAVE_ACESSO",
+      "type": "Text"
+    },
+    {
+      "name": "CNPJ_FORNECEDOR",
+      "type": "Text"
+    },
+    {
+      "name": "CNPJ_DESTINATARIO",
+      "type": "Text"
+    },
+    {
+      "name": "CNPJ_CONSULTADO",
+      "type": "Text"
+    },
+    {
+      "name": "NUMERO_NOTA",
+      "type": "Text"
+    },
+    {
+      "name": "SERIE",
+      "type": "Text"
+    },
+    {
+      "name": "MODELO",
+      "type": "Text"
+    },
+    {
+      "name": "DESTINATARIO",
+      "type": "Text"
+    },
+    {
+      "name": "UF_FORNECEDOR",
+      "type": "Text"
+    },
+    {
+      "name": "NATUREZA_OPERACAO",
+      "type": "Text"
+    },
+    {
+      "name": "ORIGEM_LIQUIDO",
+      "type": "Text"
+    },
+    {
+      "name": "SITUACAO",
+      "type": "Text"
+    },
+    {
+      "name": "DIRECAO",
+      "type": "Text"
+    },
+    {
+      "name": "STATUS_IMPORTACAO",
+      "type": "Text"
+    },
+    {
+      "name": "STATUS_DANFE",
+      "type": "Text"
+    },
+    {
+      "name": "ULTIMO_NSU",
+      "type": "Text"
+    },
+    {
+      "name": "TIPO_DOCUMENTO",
+      "type": "Text"
+    },
+    {
+      "name": "TIPO_EVENTO",
+      "type": "Text"
+    },
+    {
+      "name": "PROTOCOLO",
+      "type": "Text"
+    },
+    {
+      "name": "DATA_EMISSAO_ORIGINAL",
+      "type": "Text"
+    },
+    {
+      "name": "STATUS_RETENCOES",
+      "type": "Text"
+    },
+    {
+      "name": "TIPO_FISCAL",
+      "type": "Text"
+    },
+    {
+      "name": "ORIGEM_FISCAL",
+      "type": "Text"
+    },
+    {
+      "name": "TOMADOR",
+      "type": "Text"
+    },
+    {
+      "name": "CNPJ_TOMADOR",
+      "type": "Text"
+    },
+    {
+      "name": "PAPEL_EMPRESA",
+      "type": "Text"
+    },
+    {
+      "name": "MUNICIPIO_PRESTACAO",
+      "type": "Text"
+    },
+    {
+      "name": "CODIGO_SERVICO",
+      "type": "Text"
+    },
+    {
+      "name": "DATA_EMISSAO_DPS",
+      "type": "Text"
+    },
+    {
+      "name": "SERIE_DPS",
+      "type": "Text"
+    },
+    {
+      "name": "FONTE_FISCAL",
+      "type": "Text"
+    },
+    {
+      "name": "NUMERO_DPS",
+      "type": "Text"
+    },
+    {
+      "name": "ORIGEM_DATA_EMISSAO",
+      "type": "Text"
+    },
+    {
+      "name": "REMETENTE",
+      "type": "Text"
+    },
+    {
+      "name": "CNPJ_REMETENTE",
+      "type": "Text"
+    },
+    {
+      "name": "EXPEDIDOR",
+      "type": "Text"
+    },
+    {
+      "name": "CNPJ_EXPEDIDOR",
+      "type": "Text"
+    },
+    {
+      "name": "RECEBEDOR",
+      "type": "Text"
+    },
+    {
+      "name": "CNPJ_RECEBEDOR",
+      "type": "Text"
+    },
+    {
+      "name": "PROTOCOLO_EVENTO",
+      "type": "Text"
+    },
+    {
+      "name": "SEQUENCIA_EVENTO",
+      "type": "Text"
+    },
+    {
+      "name": "STATUS_EVENTO",
+      "type": "Text"
+    },
+    {
+      "name": "VALOR_PRODUTOS",
+      "type": "Currency"
+    },
+    {
+      "name": "VALOR_TOTAL_NOTA",
+      "type": "Currency"
+    },
+    {
+      "name": "DESCONTOS",
+      "type": "Currency"
+    },
+    {
+      "name": "VALOR_LIQUIDO",
+      "type": "Currency"
+    },
+    {
+      "name": "VALOR_ORIGINAL_FATURA",
+      "type": "Currency"
+    },
+    {
+      "name": "DESCONTO_FATURA",
+      "type": "Currency"
+    },
+    {
+      "name": "FRETE",
+      "type": "Currency"
+    },
+    {
+      "name": "SEGURO",
+      "type": "Currency"
+    },
+    {
+      "name": "OUTRAS_DESPESAS",
+      "type": "Currency"
+    },
+    {
+      "name": "IPI",
+      "type": "Currency"
+    },
+    {
+      "name": "ICMS",
+      "type": "Currency"
+    },
+    {
+      "name": "PIS",
+      "type": "Currency"
+    },
+    {
+      "name": "COFINS",
+      "type": "Currency"
+    },
+    {
+      "name": "ICMS_ST",
+      "type": "Currency"
+    },
+    {
+      "name": "ICMS_DESONERADO",
+      "type": "Currency"
+    },
+    {
+      "name": "FCP_ST",
+      "type": "Currency"
+    },
+    {
+      "name": "IMPOSTO_IMPORTACAO",
+      "type": "Currency"
+    },
+    {
+      "name": "PIS_RETIDO",
+      "type": "Currency"
+    },
+    {
+      "name": "COFINS_RETIDA",
+      "type": "Currency"
+    },
+    {
+      "name": "CSLL_RETIDA",
+      "type": "Currency"
+    },
+    {
+      "name": "IRRF_RETIDO",
+      "type": "Currency"
+    },
+    {
+      "name": "INSS_RETIDO",
+      "type": "Currency"
+    },
+    {
+      "name": "ISS_RETIDO",
+      "type": "Currency"
+    },
+    {
+      "name": "ISS",
+      "type": "Currency"
+    },
+    {
+      "name": "VALOR_SERVICOS",
+      "type": "Currency"
+    },
+    {
+      "name": "DESCONTO_CONDICIONADO",
+      "type": "Currency"
+    },
+    {
+      "name": "DESCONTO_INCONDICIONADO",
+      "type": "Currency"
+    },
+    {
+      "name": "VALOR_LIQUIDO_FATURA",
+      "type": "Currency"
+    },
+    {
+      "name": "DATA_EMISSAO",
+      "type": "DateTime"
+    },
+    {
+      "name": "DATA_EVENTO",
+      "type": "DateTime"
+    },
+    {
+      "name": "OBSERVACOES_NOTA",
+      "type": "Note"
+    },
+    {
+      "name": "INFORMACOES_FISCO",
+      "type": "Note"
+    },
+    {
+      "name": "DESCRICAO_SERVICO",
+      "type": "Note"
+    },
+    {
+      "name": "XML_URL",
+      "type": "URL"
+    },
+    {
+      "name": "ULTIMO_DOCUMENTO_URL",
+      "type": "URL"
+    },
+    {
+      "name": "DANFE_URL",
+      "type": "URL"
+    }
+  ]
+}

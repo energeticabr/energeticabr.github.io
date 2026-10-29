@@ -24,11 +24,14 @@ function icon(doc, name) {
 import { SEFAZ_RETENTION_FIELDS } from '../chat/sefaz-withholding.js';
 
 /** Presentation only: move the existing formatted fields and authenticated links. */
-export function decorateSefazInvoiceCard({document: doc, container, pdfRail, withholding}) {
+export function decorateSefazInvoiceCard({document: doc, container, pdfRail, withholding, fiscalType}) {
   const el = (tag, className, text) => { const node = doc.createElement(tag); node.className = className; if (text !== undefined) node.textContent = text; return node; };
   const heading = container.querySelector('.rg-document-heading');
   heading.classList.add('rg-sefaz-heading');
   heading.prepend(pdfRail);
+  const identity = el('div', 'rg-sefaz-identity');
+  const title = heading.querySelector('.rg-row-title');
+  title.before(identity); identity.append(el('span', 'rg-sefaz-type', fiscalType || 'Tipo pendente'), title);
   const remaining = container.querySelector(':scope > .rg-details');
   const take = field => container.querySelector(`[data-field="${field}"]`);
   const decorate = (field, symbol, tone = '') => {
@@ -69,10 +72,10 @@ export function decorateSefazInvoiceCard({document: doc, container, pdfRail, wit
     const name = {notes: 'notes', operation: 'truck', taxes: 'taxes', other: 'document'}[section.dataset.fiscalSection];
     summary.replaceChildren(icon(doc, name), el('span', '', label));
   }
-  for (const [field, tone] of [['OBSERVACOES_NOTA', 'notes'], ['INFORMACOES_FISCO', 'fisco'], ['ICMS', 'tax-blue'], ['IPI', 'tax-purple'], ['FRETE', 'tax-yellow'], ['SEGURO', 'tax-rose'], ['OUTRAS_DESPESAS', 'expenses']]) decorate(field, field === 'OBSERVACOES_NOTA' ? 'notes' : field === 'INFORMACOES_FISCO' ? 'document' : null, tone);
-  for (const field of ['NATUREZA_OPERACAO', 'DESTINATARIO', 'CNPJ_DESTINATARIO', 'VALOR_PRODUTOS']) decorate(field);
+  for (const [field, tone] of [['OBSERVACOES_NOTA', 'notes'], ['INFORMACOES_FISCO', 'fisco'], ['ICMS', 'tax-blue'], ['ISS', 'tax-purple'], ['IPI', 'tax-purple'], ['FRETE', 'tax-yellow'], ['SEGURO', 'tax-rose'], ['OUTRAS_DESPESAS', 'expenses']]) decorate(field, field === 'OBSERVACOES_NOTA' ? 'notes' : field === 'INFORMACOES_FISCO' ? 'document' : null, tone);
+  for (const field of ['NATUREZA_OPERACAO', 'DESTINATARIO', 'CNPJ_DESTINATARIO', 'VALOR_PRODUTOS', 'TOMADOR', 'CNPJ_TOMADOR', 'PAPEL_EMPRESA', 'DESCRICAO_SERVICO', 'MUNICIPIO_PRESTACAO', 'CODIGO_SERVICO', 'VALOR_SERVICOS']) decorate(field);
   const taxFields = container.querySelector('[data-fiscal-section="taxes"] > dl');
-  for (const field of ['ICMS', 'IPI', 'FRETE', 'SEGURO', 'OUTRAS_DESPESAS']) { const pair = take(field); if (pair) taxFields.append(pair); }
+  for (const field of ['ICMS', 'IPI', 'ISS', 'FRETE', 'SEGURO', 'OUTRAS_DESPESAS']) { const pair = take(field); if (pair) taxFields.append(pair); }
   for (const field of ['STATUS_RETENCOES', ...Object.keys(SEFAZ_RETENTION_FIELDS)]) {
     const pair = decorate(field, null, field === 'STATUS_RETENCOES' ? 'expenses' : 'tax-rose');
     if (pair) taxFields.append(pair);
@@ -80,11 +83,11 @@ export function decorateSefazInvoiceCard({document: doc, container, pdfRail, wit
   const retentionStatus = take('STATUS_RETENCOES')?.querySelector('dd');
   if (retentionStatus?.textContent === 'RETENCAO_INFORMADA_XML') retentionStatus.textContent = 'Retenção informada no XML';
   if (retentionStatus?.textContent === 'NAO_INFORMADA_XML') retentionStatus.textContent = 'Não informada no XML';
-  for (const field of ['SITUACAO', 'STATUS_IMPORTACAO', 'DIRECAO', 'ORIGEM_LIQUIDO', 'CHAVE_ACESSO', 'PROTOCOLO', 'MODELO', 'STATUS_DANFE', 'XML_URL', 'ULTIMO_DOCUMENTO_URL']) { const pair = take(field); if (pair) remaining.append(pair); }
+  for (const field of ['TIPO_FISCAL', 'ORIGEM_FISCAL', 'SITUACAO', 'STATUS_IMPORTACAO', 'DIRECAO', 'ORIGEM_LIQUIDO', 'CHAVE_ACESSO', 'PROTOCOLO', 'MODELO', 'STATUS_DANFE', 'XML_URL', 'ULTIMO_DOCUMENTO_URL']) { const pair = take(field); if (pair) remaining.append(pair); }
   const status = take('SITUACAO')?.querySelector('dd');
   if (status) status.dataset.sefazStatus = /cancel/i.test(status.textContent) ? 'cancelled' : /autorizad/i.test(status.textContent) ? 'authorized' : 'pending';
   const key = take('CHAVE_ACESSO')?.querySelector('dd'), text = key?.textContent;
-  if (key && /^[0-9]{6}[A-Z0-9]{12}[0-9]{26}$/.test(text)) {
+  if (key && /^(?:[0-9]{6}[A-Z0-9]{12}[0-9]{26}|[0-9]{50})$/.test(text)) {
     const button = el('button', 'rg-sefaz-copy'); button.type = 'button'; button.setAttribute('aria-label', 'Copiar chave de acesso'); button.append(icon(doc, 'copy'));
     button.addEventListener('click', async () => {
       try { const clipboard = doc.defaultView?.navigator?.clipboard; if (!clipboard?.writeText) throw new Error('Unavailable'); await clipboard.writeText(text); button.setAttribute('aria-label', 'Chave de acesso copiada'); button.dataset.copied = 'true'; }

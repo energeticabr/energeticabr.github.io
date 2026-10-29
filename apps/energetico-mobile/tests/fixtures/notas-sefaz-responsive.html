@@ -1,4 +1,4 @@
-<!doctype html><html lang="pt-BR"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>Prévia fictícia — NF-e SEFAZ</title></head><body><main id="app"></main><script type="module">
+<!doctype html><html lang="pt-BR"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>Prévia fictícia — NF-e, CT-e e NFS-e</title></head><body><main id="app"></main><script type="module">
 import '../../src/styles.css';
 import '../../src/ui/registration-gallery.css';
 import '../../src/ui/searchable-filter-selects.css';
@@ -25,9 +25,15 @@ if (mode === 'menu') {
     DANFE_URL: 'https://energeticaltda.sharepoint.com/sites/energetica/Documentos/danfe-ficticio.pdf' };
   if (new URLSearchParams(location.search).has('withholding')) Object.assign(fields, {STATUS_IMPORTACAO:'XML_COMPLETO', STATUS_RETENCOES:'RETENCAO_INFORMADA_XML', PIS_RETIDO:6.5, COFINS_RETIDA:30, CSLL_RETIDA:10, IRRF_RETIDO:15, INSS_RETIDO:110, ISS_RETIDO:25});
   if (new URLSearchParams(location.search).has('retentionNone')) Object.assign(fields, {STATUS_IMPORTACAO:'XML_COMPLETO',STATUS_RETENCOES:'NAO_INFORMADA_XML'});
+  const unified = new URLSearchParams(location.search).has('unified');
+  const extraRows = unified ? [
+    {id:'6',fields:{Title:'TRANSPORTADORA FICTÍCIA LTDA',TIPO_FISCAL:'CT-e',ORIGEM_FISCAL:'SEFAZ_CTE',MODELO:'57',NUMERO_NOTA:'654',SERIE:'001',DATA_EMISSAO:'2026-10-29',CNPJ_FORNECEDOR:'00000000000000',UF_FORNECEDOR:'MG',VALOR_TOTAL_NOTA:870,VALOR_LIQUIDO:870,DESCONTOS:0,SITUACAO:'Autorizada',STATUS_IMPORTACAO:'XML_COMPLETO',DIRECAO:'Entrada',PAPEL_EMPRESA:'TOMADOR;REMETENTE',TOMADOR:'TOMADOR FICTÍCIO',CNPJ_TOMADOR:'00000000000000',CHAVE_ACESSO:'6'.repeat(44),XML_URL:'https://energeticaltda.sharepoint.com/sites/energetica/Documentos/cte-ficticio.xml',DANFE_URL:'https://energeticaltda.sharepoint.com/sites/energetica/Documentos/dacte-ficticio.pdf'}},
+    ...['TOMADOR','TERCEIRO'].map((role,index)=>({id:String(7+index),fields:{Title:role==='TOMADOR'?'PRESTADOR FICTÍCIO — SERVIÇO TOMADO':'PRESTADOR FICTÍCIO — TERCEIROS',TIPO_FISCAL:'NFS-e',ORIGEM_FISCAL:'ADN_NFSE',MODELO:'NFS-e',NUMERO_NOTA:String(789+index),DATA_EMISSAO:'2026-10-29',CNPJ_FORNECEDOR:'00000000000000',UF_FORNECEDOR:'MG',VALOR_TOTAL_NOTA:1500,VALOR_LIQUIDO:1475,DESCONTOS:0,SITUACAO:'Autorizada',STATUS_IMPORTACAO:'XML_COMPLETO',DIRECAO:'Entrada',PAPEL_EMPRESA:role,TOMADOR:'TOMADOR FICTÍCIO',CNPJ_TOMADOR:'00000000000000',DESCRICAO_SERVICO:'Manutenção fictícia de equipamentos.\nDescrição integral do serviço realizado.',MUNICIPIO_PRESTACAO:'Município fictício',CODIGO_SERVICO:'0101',VALOR_SERVICOS:1500,ISS:25,STATUS_RETENCOES:'RETENCAO_INFORMADA_XML',ISS_RETIDO:25,CHAVE_ACESSO:String(7+index).repeat(50),XML_URL:'https://energeticaltda.sharepoint.com/sites/energetica/Documentos/nfse-'+index+'-ficticia.xml',DANFE_URL:'https://energeticaltda.sharepoint.com/sites/energetica/Documentos/danfse-'+index+'-ficticio.pdf'}})),
+  ] : [];
   await createRegistrationGallery({ document, kind: 'notas_fiscais_sefaz', onHome() {}, data: { async loadSnapshot() { return { rows: [
     { id: '4', fields },
-    { id: '5', fields: { Title: 'RESUMO FICTÍCIO — DOCUMENTOS PENDENTES', NUMERO_NOTA: '555', DATA_EMISSAO: '2026-10-28',
+    ...extraRows,
+    { id: '5', fields: { Title: 'RESUMO FICTÍCIO — DOCUMENTOS PENDENTES', MODELO:'55', NUMERO_NOTA: '555', DATA_EMISSAO: '2026-10-28',
       VALOR_TOTAL_NOTA: 340, STATUS_IMPORTACAO: 'Resumo; XML pendente', CHAVE_ACESSO: '9'.repeat(44) } },
   ] }; } } }).open();
 }
@@ -47,6 +53,9 @@ const expandedByClick = fiscalSections.every(section => section.open);
 const firstPair = document.querySelector('.chat-supplies-pair');
 const blue = firstPair?.querySelector('.chat-supplies-pair__primary button'), stack = firstPair?.querySelector('.chat-gallery-actions');
 document.documentElement.dataset.layout = JSON.stringify({ mode,
+  types: [...document.querySelectorAll('.rg-sefaz-type')].map(node=>node.textContent),
+  withholdingIds: [...document.querySelectorAll('.rg-row--buyer-withholding')].map(node=>node.dataset.registrationRow),
+  pdfLabels: [...document.querySelectorAll('.rg-sefaz-pdf-link')].map(node=>node.textContent),
   withholding: withholdingRow ? {background:getComputedStyle(withholdingRow).backgroundColor, border:getComputedStyle(withholdingRow).borderTopColor, text:withholdingRow.querySelector('.rg-sefaz-withholding').textContent} : null,
   disclosures: { count: fiscalSections.length, initiallyCollapsed, initiallyHiddenFields, expandedByClick,
     summaries: fiscalSections.map(section => ({ width: rect(section.querySelector('summary')).width, height: rect(section.querySelector('summary')).height })) },
@@ -54,6 +63,7 @@ document.documentElement.dataset.layout = JSON.stringify({ mode,
   overflowingCards: [...document.querySelectorAll('.rg-row,.rg-row *')].filter(node => node.clientWidth && node.scrollWidth > node.clientWidth + 1).map(node => node.className),
   cards: document.querySelectorAll('[data-registration-row]').length,
   pdfRails: [...document.querySelectorAll('.rg-sefaz-layout')].map(layout => ({ railRight: rect(layout.querySelector('.rg-sefaz-pdf-rail')).right, mainLeft: rect(layout.querySelector('.rg-row-title')).left })),
+  amountLines: [...document.querySelectorAll('.rg-sefaz-amounts dd')].map(field => Math.round(rect(field).height / parseFloat(getComputedStyle(field).lineHeight))),
   emissionLines: [...document.querySelectorAll('[data-field="DATA_EMISSAO"] dd')].map(field => Math.round(rect(field).height / parseFloat(getComputedStyle(field).lineHeight))),
   clusterColors: mode === 'menu' ? {} : Object.fromEntries(['total','net','discount','notes','fisco','tax-blue','tax-purple','tax-yellow','tax-rose'].map(tone => [tone, getComputedStyle(document.querySelector(`.rg-sefaz-field--${tone}`)).backgroundColor])),
   links: [...document.querySelectorAll('.rg-document-link')].map(link => ({ width: rect(link).width, height: rect(link).height })),

@@ -13,6 +13,51 @@ const sample = { id: '4', fields: { Title: 'FORNECEDOR FICTÍCIO', CHAVE_ACESSO:
   XML_URL: 'https://energeticaltda.sharepoint.com/sites/energetica/Documentos/nota.xml',
   DANFE_URL: { Url: 'https://energeticaltda.sharepoint.com/sites/energetica/Documentos/danfe.pdf', Description: 'DANFE' } } };
 
+test('galeria fiscal identifica e filtra NF-e, CT-e e NFS-e, com PDF próprio e chave nacional completa', async t => {
+  const dom = new JSDOM('<body/>'), doc = dom.window.document, copied = [], opened = [], downloads = [];
+  Object.defineProperty(dom.window.navigator, 'clipboard', {value:{writeText:async value => copied.push(value)}});
+  const rows = [
+    {id:'1',fields:{...sample.fields,MODELO:'55'}},
+    {id:'2',fields:{...sample.fields,MODELO:'57',NUMERO_NOTA:'456',ORIGEM_FISCAL:'SEFAZ_CTE',PAPEL_EMPRESA:'TOMADOR',TOMADOR:'TOMADOR FICTÍCIO',CNPJ_TOMADOR:'00000000000000',DANFE_URL:'https://energeticaltda.sharepoint.com/sites/energetica/Documentos/dacte.pdf'}},
+    {id:'3',fields:{...sample.fields,TIPO_FISCAL:'NFS-e',MODELO:'NFS-e',ORIGEM_FISCAL:'ADN_NFSE',NUMERO_NOTA:'789',CHAVE_ACESSO:'3'.repeat(50),PAPEL_EMPRESA:'TOMADOR',TOMADOR:'TOMADOR FICTÍCIO',DESCRICAO_SERVICO:'Manutenção fictícia\nLinha completa',MUNICIPIO_PRESTACAO:'Município fictício',CODIGO_SERVICO:'0101',VALOR_SERVICOS:1250.5,ISS:25,DANFE_URL:'https://energeticaltda.sharepoint.com/sites/energetica/Documentos/danfse.pdf'}},
+    {id:'4',fields:{...sample.fields,MODELO:'67',DANFE_URL:null,DATA_EMISSAO:null,VALOR_TOTAL_NOTA:null}},
+  ];
+  const gallery=createRegistrationGallery({document:doc,kind:'notas_fiscais_sefaz',data:{loadSnapshot:async()=>({rows}),downloadDocument:async url=>{downloads.push(url);return new Blob(['%PDF-fictitious']);}},openMediaCollection:items=>opened.push(items)});
+  t.after(()=>{gallery.destroy();dom.window.close();}); await gallery.open();
+  assert.deepEqual([...doc.querySelectorAll('.rg-sefaz-type')].map(node=>node.textContent),['NF-e','CT-e','NFS-e','CT-e']);
+  for (const [id,label,num] of [['1','DANFE','123'],['2','DACTE','456'],['3','DANFSe','789']]) {
+    const link=doc.querySelector(`[data-registration-row="${id}"] .rg-sefaz-pdf-link`);
+    assert.equal(link.getAttribute('aria-label'),`Abrir ${label} PDF da nota ${num}`);
+    assert.equal(link.querySelector('span:last-child').textContent,label); link.click();
+  }
+  for(const items of opened) await items[0].source({});
+  assert.deepEqual(downloads,[sample.fields.DANFE_URL.Url,rows[1].fields.DANFE_URL,rows[2].fields.DANFE_URL]);
+  const nfse=doc.querySelector('[data-registration-row="3"]'); nfse.querySelector('.rg-sefaz-copy').click(); await Promise.resolve();
+  assert.deepEqual(copied,['3'.repeat(50)]);
+  assert.equal(nfse.querySelector('[data-field="CHAVE_ACESSO"] dd').textContent,'3'.repeat(50));
+  for(const name of ['TOMADOR','CNPJ_TOMADOR','PAPEL_EMPRESA','DESCRICAO_SERVICO','MUNICIPIO_PRESTACAO','CODIGO_SERVICO','VALOR_SERVICOS']) assert.equal(nfse.querySelector(`[data-field="${name}"]`).closest('details').dataset.fiscalSection,'operation');
+  assert.equal(nfse.querySelector('[data-field="ISS"]').closest('details').dataset.fiscalSection,'taxes');
+  assert.equal(doc.querySelector('[data-registration-row="1"] [data-field="TOMADOR"]'),null,'tomador é específico de transporte/serviço');
+  assert.equal(doc.querySelector('[data-registration-row="2"] [data-field="DESCRICAO_SERVICO"]'),null,'campos de NFS-e não ocupam o CT-e');
+  assert.equal(nfse.querySelector('[data-field="XML_URL"] dt').textContent,'XML da NFS-e');
+  assert.match(doc.querySelector('[data-sefaz-coverage]').textContent,/SEFAZ.*NF-e.*CT-e.*ADN.*NFS-e/);
+  const pending=doc.querySelector('[data-registration-row="4"]');
+  assert.equal(pending.querySelector('.rg-sefaz-pdf-rail').getAttribute('aria-label'),'DACTE PDF pendente');
+  for(const name of ['DATA_EMISSAO','VALOR_TOTAL_NOTA']) assert.equal(pending.querySelector(`[data-field="${name}"] dd`).textContent,'Pendente');
+  const filter=[...doc.querySelectorAll('select')].find(node=>[...node.options].some(option=>option.value==='NFS-e'));
+  assert.ok(filter,'filtro pelo tipo fiscal disponível'); filter.value='CT-e';filter.dispatchEvent(new dom.window.Event('change',{bubbles:true}));
+  assert.deepEqual([...doc.querySelectorAll('[data-registration-row]')].map(node=>node.dataset.registrationRow),['2','4']);
+});
+
+test('NFS-e só destaca retenção declarada quando a empresa é tomadora; terceiro, prestador e papel ausente não ficam vermelhos',async t=>{
+  const dom=new JSDOM('<body/>'),doc=dom.window.document;
+  const rows=['TOMADOR','TERCEIRO','PRESTADOR',undefined,'TOMADOR;INTERMEDIARIO','NAO_TOMADOR'].map((role,index)=>({id:String(index),fields:{...sample.fields,TIPO_FISCAL:'NFS-e',MODELO:'NFS-e',PAPEL_EMPRESA:role,STATUS_IMPORTACAO:'XML_COMPLETO',STATUS_RETENCOES:'RETENCAO_INFORMADA_XML',ISS_RETIDO:25}}));
+  rows.push({id:'cte',fields:{...sample.fields,MODELO:'57',PAPEL_EMPRESA:'REMETENTE; TOMADOR',STATUS_IMPORTACAO:'XML_COMPLETO',STATUS_RETENCOES:'RETENCAO_INFORMADA_XML',IRRF_RETIDO:15}});
+  const gallery=createRegistrationGallery({document:doc,kind:'notas_fiscais_sefaz',data:{loadSnapshot:async()=>({rows})}});
+  t.after(()=>{gallery.destroy();dom.window.close();});await gallery.open();
+  assert.deepEqual([...doc.querySelectorAll('.rg-row--buyer-withholding')].map(row=>row.dataset.registrationRow),['0','4','cte']);
+});
+
 test('NF-e de entrada com retenção no XML destaca toda a linha e mantém o PDF próprio', async t => {
   const dom = new JSDOM('<body/>'), doc = dom.window.document;
   const fields = {...sample.fields, STATUS_RETENCOES:'RETENCAO_INFORMADA_XML', PIS_RETIDO:6.5, COFINS_RETIDA:30, CSLL_RETIDA:10, IRRF_RETIDO:15, INSS_RETIDO:110, ISS_RETIDO:25};
@@ -197,7 +242,7 @@ test('NF-e source uses company SharePoint REST with read-only authorization and 
       if (String(url).includes('/fields?')) value = [{ InternalName: 'Title', Title: 'Fornecedor', TypeAsString: 'Text' }];
       else if (String(url).includes('/items?')) {
         const query = new URL(String(url)).searchParams;
-        for (const name of ['CHAVE_ACESSO','DATA_EMISSAO','DATA_EMISSAO_ORIGINAL','VALOR_LIQUIDO','DESCONTOS','XML_URL','DANFE_URL','STATUS_IMPORTACAO','OBSERVACOES_NOTA','INFORMACOES_FISCO','NATUREZA_OPERACAO','CNPJ_DESTINATARIO','FRETE','PROTOCOLO']) assert.ok(query.get('$select').split(',').includes(name),name);
+        for (const name of ['TIPO_FISCAL','ORIGEM_FISCAL','TOMADOR','CNPJ_TOMADOR','PAPEL_EMPRESA','DESCRICAO_SERVICO','MUNICIPIO_PRESTACAO','CODIGO_SERVICO','ISS','VALOR_SERVICOS','CHAVE_ACESSO','DATA_EMISSAO','DATA_EMISSAO_ORIGINAL','VALOR_LIQUIDO','DESCONTOS','XML_URL','DANFE_URL','STATUS_IMPORTACAO','OBSERVACOES_NOTA','INFORMACOES_FISCO','NATUREZA_OPERACAO','CNPJ_DESTINATARIO','FRETE','PROTOCOLO']) assert.ok(query.get('$select').split(',').includes(name),name);
         assert.equal(query.has('$expand'), false);
         value = [{ Id: 4, ...sample.fields }];
       } else if (String(url).includes('/_api/web/lists?')) value = [{ Id: '11111111-2222-3333-4444-555555555555', Title: 'NOTAS_FISCAIS_SEFAZ', BaseTemplate: 100, Hidden: false }];

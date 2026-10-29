@@ -1,0 +1,7 @@
+# CT-e e NFS-e na integração fiscal existente
+
+Overlay de código para a integração SEFAZ instalada no Windows. Mantém a lista NOTAS_FISCAIS_SEFAZ, o receptor autenticado e a fila sequencial de WhatsApp. Acrescenta distribuição oficial CT-e e NFS-e ADN, cursores separados, persistência antes do avanço, corte de emissão configurado e os horários09/15/20BRT. Não contém A1, chave privada, senha, token, XML real nem dados das filas.
+
+Aplicar os arquivos à raiz da integração existente, preservando config e dados. Provisionar e verificar as colunas e CHAVE_ACESSO64 antes do receptor. Instalar fiscal_document.py antes dos dois consumidores no servidor de PDFs/notificações. O instalador Windows valida por padrão e só altera o runtime com -Mode Install; preserva os estados e ativa auxiliaryFiscalEnabled após conferir o código. As configurações e dependências existentes são necessárias.
+
+Testes Node são independentes do cwd e do tenant: node --test backend-patches/notas-fiscais-cte-nfse/tests/*.test.mjs. A fixture cria uma configuração fictícia temporária. Testes PowerShell e Python são executados no contexto da integração; não são comandos de captura. Leia os documentos nesta pasta para contratos de cada fonte, PDF e agendamento. A disponibilidade de NFS-e no ADN não comprova cobertura de todos os municípios.
