@@ -6,6 +6,10 @@ function clean(value,now){
  if(!validId(value?.requestId)||!['starting','queued','running','succeeded','failed'].includes(value.status))throw Error('INVALID_DDA_RECEIPT');
  const result={requestId:value.requestId,status:value.status,startedAt:Number.isFinite(value.startedAt)?value.startedAt:now};
  if(value.acknowledged===true&&terminal.has(value.status))result.acknowledged=true;
+ if(terminal.has(value.status)){
+  const serverTime=typeof value.completedUtc==='string'?Date.parse(value.completedUtc):NaN;
+  result.completedAt=Number.isFinite(value.completedAt)?value.completedAt:Number.isFinite(serverTime)?serverTime:now;
+ }
  if(['SYNC_FAILED','WORKER_UNAVAILABLE','BUSY'].includes(value.code))result.code=value.code;
  for(const key of ['created','updated','verified'])if(Number.isSafeInteger(value[key])&&value[key]>=0&&value[key]<=1000000)result[key]=value[key];
  const ids=value.createdItemIds;
@@ -28,9 +32,10 @@ export function createDdaSyncMonitor({client,accountKey,storage,present=async()=
   try{storage.setItem(key,JSON.stringify({version:1,records:[...records.values()]}));}
   catch{throw Error('Não foi possível salvar o acompanhamento neste aparelho. Tente novamente.');}
  }
- function notify(){for(const listener of listeners)listener({running:running(),notice});}
+ function snapshot(){return {running:running(),notice,latest:[...records.values()].sort((a,b)=>b.startedAt-a.startedAt).at(0)??null};}
+ function notify(){const state=snapshot();for(const listener of listeners)listener(state);}
  function remember(value,previous){
-  const r=clean({...value,startedAt:previous?.startedAt??value.startedAt,acknowledged:previous?.acknowledged},now());
+  const r=clean({...value,startedAt:previous?.startedAt??value.startedAt,completedAt:previous?.completedAt??value.completedAt,acknowledged:previous?.acknowledged},now());
   if(previous&&previous.requestId!==r.requestId)records.delete(previous.requestId);
   records.set(r.requestId,r);persist();return r;
  }
@@ -108,7 +113,7 @@ export function createDdaSyncMonitor({client,accountKey,storage,present=async()=
   },
   resume(){discover=true;return cycle();},
   suspend(){showing=null;hide();},
-  subscribe(listener){listeners.add(listener);listener({running:running(),notice});return()=>listeners.delete(listener);},
+  subscribe(listener){listeners.add(listener);listener(snapshot());return()=>listeners.delete(listener);},
   get running(){return running();},get pendingCount(){return records.size;},
   destroy(){destroyed=true;controller?.abort();if(timer!==null)cancel(timer);timer=null;showing=null;hide();listeners.clear();},
  };

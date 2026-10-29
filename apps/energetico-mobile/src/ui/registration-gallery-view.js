@@ -303,11 +303,27 @@ export function createRegistrationGallery({ document: doc = globalThis.document,
     format: (row, name) => rowFieldValue(row, name) || '—', onClose: () => refreshShortcut.sync() }) : null;
   const bankNotice = kind === 'dda' ? el('p', 'rg-dda-sync-notice') : null;
   if (bankNotice) { bankNotice.hidden = true; bankNotice.setAttribute('role', 'status'); header.after(bankNotice); }
+  let manualStartedThisVisit=false,manualStarting=false,manualRequestId=null,returnPending=false,returnedForManual=false,bankState=null,lastManualResult=null;
+  const formatManualTime=value=>new Intl.DateTimeFormat('pt-BR',{dateStyle:'short',timeStyle:'short',timeZone:'America/Sao_Paulo'}).format(new Date(value));
+  function showBankNotice(){
+    if(!bankNotice||root.hidden)return;
+    const latest=(bankState?.latest?.requestId===manualRequestId?bankState.latest:null)||lastManualResult;
+    const active=latest&&['starting','queued','running'].includes(latest.status);
+    const terminal=latest?.status==='succeeded'||latest?.status==='failed';
+    const visible=Boolean((manualStartedThisVisit&&active)||(returnPending&&returnedForManual&&(active||terminal)));
+    bankNotice.hidden=!visible;if(!visible)return;
+    bankNotice.dataset.state=active?'running':latest.status;
+    bankNotice.setAttribute('role',latest?.status==='failed'&&!active?'alert':'status');
+    bankNotice.textContent=active?(bankState.notice||'Consultando o Sicoob e atualizando o SharePoint…')
+      :`${latest.status==='succeeded'?'ÚLTIMA ATUALIZAÇÃO MANUAL FINALIZADA':'ÚLTIMA ATUALIZAÇÃO MANUAL FALHOU'} EM ${formatManualTime(latest.completedAt)}.`;
+  }
   async function manualRefresh() {
     if (kind !== 'dda') return load({ refresh: true });
     if(syncMonitor){
+      manualStarting=true;returnPending=false;returnedForManual=false;lastManualResult=null;manualRequestId=null;
       try{await syncMonitor.start();}
-      catch(error){bankReceipt.show({status:'failed',message:String(error?.message||'Não foi possível iniciar a consulta.')},[],refresh);}
+      catch(error){if(!manualRequestId)manualStartedThisVisit=false;bankReceipt.show({status:'failed',message:String(error?.message||'Não foi possível iniciar a consulta.')},[],refresh);}
+      finally{manualStarting=false;}
       return;
     }
     const controller = bankController = new AbortController();
@@ -341,7 +357,10 @@ export function createRegistrationGallery({ document: doc = globalThis.document,
   let managedWasRunning=Boolean(syncMonitor?.running);
   const unsubscribeBank=kind==='dda'&&syncMonitor?syncMonitor.subscribe(state=>{
     if(destroyed)return;
-    if(!root.hidden){bankNotice.hidden=!state.notice;bankNotice.textContent=state.notice;bankNotice.dataset.state='running';}
+    bankState=state;
+    if(manualStarting&&!manualRequestId&&state.latest?.requestId){manualRequestId=state.latest.requestId;manualStartedThisVisit=true;}
+    if((manualStartedThisVisit||returnPending)&&state.latest?.requestId===manualRequestId&&(state.latest.status==='succeeded'||state.latest.status==='failed'))lastManualResult=state.latest;
+    showBankNotice();
     if(managedWasRunning&&!state.running&&!root.hidden)void load({refresh:true,preserveRowsOnError:true});
     managedWasRunning=state.running;refreshShortcut.sync();
   }):null;
@@ -912,7 +931,11 @@ export function createRegistrationGallery({ document: doc = globalThis.document,
     paymentConfirmation?.close();
     bankReceipt?.close();
     bankController?.abort();
-    if (bankNotice) bankNotice.hidden = true;
+    if (bankNotice) {
+      if(manualStartedThisVisit){returnPending=true;manualStartedThisVisit=false;}
+      else if(returnedForManual&&!['starting','queued','running'].includes(((bankState?.latest?.requestId===manualRequestId?bankState.latest:null)||lastManualResult)?.status)){returnPending=false;}
+      returnedForManual=false;bankNotice.hidden=true;
+    }
     stopDdaClock();
     descriptionDetail?.close();
     loadController?.abort();
@@ -987,7 +1010,8 @@ export function createRegistrationGallery({ document: doc = globalThis.document,
       }
       attachmentRequest += 1; attachmentLoading = false; returnFocus = doc.activeElement;
       searchComposing = false; committedSearch = search.value;
-      root.hidden = false; root.focus(); startDdaClock(); await load();
+      root.hidden = false; root.focus(); startDdaClock();
+      if(returnPending)returnedForManual=true;showBankNotice();await load();showBankNotice();
     },
     close: hide,
     destroy() { unsubscribeBank?.(); paymentConfirmation?.destroy(); bankReceipt?.destroy(); bankController?.abort(); stopDdaClock(); loadController?.abort(); descriptionDetail?.destroy(); loadingScreen.destroy(); createShortcut.destroy(); refreshShortcut.destroy(); recordActions.destroy(); searchableFilters.destroy(); destroyed = true; request += 1; filterEpoch += 1; attachmentCountQueue = []; root.remove(); },
