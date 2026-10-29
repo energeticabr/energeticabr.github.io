@@ -25,6 +25,17 @@ test('lists only unpaid provision descriptions and ranks supplier or exact total
  await assert.rejects(service.save({ddaId:'31',provisionId:'1'}),/pagamento efetuado/);
  assert.equal(state.writes.length,0);
 });
+test('same supplier and total recommend only the closest due date',()=>{
+ const options=[
+  {id:'47',supplier:'SWILE',amount:'1350',due:'2026-11-04'},
+  {id:'46',supplier:'SWILE',amount:'1350',due:'2026-10-28'},
+  {id:'48',supplier:'SWILE',amount:'1350',due:'2026-11-11'},
+ ];
+ const ranked=rankDdaProvisionOptions(options,{supplier:'SWILE DO BRASIL S.A.',amount:'1350',due:'2026-10-28'});
+ assert.deepEqual(ranked.map(item=>item.id),['46','47','48']);
+ assert.deepEqual(ranked.map(item=>item.recommended),[true,false,false]);
+ assert.equal(rankDdaProvisionOptions([{id:'1',supplier:'OUTRO',amount:'99',due:'2026-10-28'}],{supplier:'SWILE',amount:'1350',due:'2026-10-28'})[0].recommended,false);
+});
 test('saves only the provision ID with a version check and confirms SharePoint readback',async()=>{
  const {state,api}=repository(),service=createDdaProvisionLink({repository:api});
  const result=await service.save({ddaId:'31',provisionId:'2'});

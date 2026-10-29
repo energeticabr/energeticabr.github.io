@@ -3,7 +3,7 @@ const validId=value=>/^[1-9]\d*$/.test(String(value??''))&&Number.isSafeInteger(
 const nameKey=value=>String(value??'').normalize('NFD').replace(/[\u0300-\u036f]/g,'').toUpperCase().replace(/[^A-Z0-9]+/g,' ').trim();
 const tokens=value=>new Set(nameKey(value).split(' ').filter(part=>part.length>2&&!['LTDA','EIRELI','S A','SA','ME','EMPRESA'].includes(part)));
 const amountKey=value=>{let text=String(value??'').trim().replace(/R\$|\s/g,'');if(text.includes(','))text=text.replace(/\./g,'').replace(',','.');const number=/^\d+(?:\.\d+)?$/.test(text)?Number(text):null;return number!=null&&Number.isFinite(number)?Math.round(number*100):null;};
-export function rankDdaProvisionOptions(options,{supplier,amount}={}){
+export function rankDdaProvisionOptions(options,{supplier,amount,due}={}){
  const query=nameKey(supplier),parts=tokens(supplier),wanted=amountKey(amount);
  return options.map(item=>{
   const candidate=nameKey(item.supplier),other=tokens(item.supplier);
@@ -11,8 +11,10 @@ export function rankDdaProvisionOptions(options,{supplier,amount}={}){
   const similarity=query&&candidate?(query===candidate?1:shared/Math.max(parts.size,other.size,1)):0;
   const supplierMatch=similarity>=0.5;
   const amountMatch=wanted!=null&&amountKey(item.amount)===wanted;
-  return {...item,supplierMatch,amountMatch,score:(supplierMatch?2+similarity:0)+(amountMatch?2:0)};
- }).sort((a,b)=>b.score-a.score||Number(a.id)-Number(b.id)).map((item,index,all)=>({...item,recommended:item.score>0&&item.score===all[0].score}));
+  const dueTime=Date.parse(String(due||'').slice(0,10)),itemTime=Date.parse(String(item.due||'').slice(0,10));
+  const dueScore=(supplierMatch||amountMatch)&&Number.isFinite(dueTime)&&Number.isFinite(itemTime)?0.25/(1+Math.abs(dueTime-itemTime)/86400000):0;
+  return {...item,supplierMatch,amountMatch,score:(supplierMatch?2+similarity:0)+(amountMatch?2:0)+dueScore};
+ }).sort((a,b)=>b.score-a.score||Number(a.id)-Number(b.id)).map((item,index)=>({...item,recommended:index===0&&item.score>0}));
 }
 
 export function createDdaProvisionLink({repository,siteKey='personal',assertSession=()=>{}}){
