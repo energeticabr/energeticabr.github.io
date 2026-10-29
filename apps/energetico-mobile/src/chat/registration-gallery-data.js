@@ -6,6 +6,7 @@ import { createSharePointAttachmentTransport } from "../../../../portal/data/att
 import { createRegistrationGalleryFilterData } from "./registration-gallery-filter-data.js";
 import { FINANCIAL_GALLERY_MODELS } from './financial-gallery-models.js';
 import { ddaPaidManually } from './dda-payment-confirmation.js';
+import { createDdaProvisionLink } from './dda-provision-link.js';
 import { createFinancialMovementEditor } from './financial-movement-editor.js';
 import { createProvisionDescriptionEditor, loadProvisionDescriptionStatusOptions } from "../../../../portal/forms/provision-description-edit.js";
 import { createAcquisitionProgress } from './acquisition-progress.js';
@@ -19,15 +20,15 @@ export const REGISTRATION_GALLERY_MODELS = Object.freeze({
   dda: Object.freeze({
     title: "GALERIA DDA", listName: "DDAS SICOOB", aliases: ["DDAS SICOOB"],
     nativeCard: true, readOnly: true, readTransport: "rest", showAttachments: true, recordLabel: "DDA",
-    restReadFields: ["ID", "Title", "CHAVE_DDA", "PGTO_CONFIRMADO", "PGTO_CONFIRMADO_EM", "PGTO_CONFIRMADO_POR", "VENCIMENTO", "EMISSAO", "VALOR", "SITUACAO", "CNPJ_FORNECEDOR", "DOCUMENTO", "BANCO", "VALOR_PAGAMENTO", "NOSSO_NUMERO", "LINHA_DIGITAVEL", "CODIGO_BARRAS", "PAGADOR", "CNPJ_PAGADOR", "BLOQUEADO", "MENSAGEM", "ULTIMA_CONSULTA"],
+    restReadFields: ["ID", "Title", "CHAVE_DDA", "PGTO_CONFIRMADO", "PGTO_CONFIRMADO_EM", "PGTO_CONFIRMADO_POR", "VENCIMENTO", "EMISSAO", "VALOR", "SITUACAO", "CNPJ_FORNECEDOR", "DOCUMENTO", "BANCO", "VALOR_PAGAMENTO", "NOSSO_NUMERO", "LINHA_DIGITAVEL", "CODIGO_BARRAS", "PAGADOR", "CNPJ_PAGADOR", "BLOQUEADO", "MENSAGEM", "ULTIMA_CONSULTA", "DESCRITIVOPROVIS_x00c3_O"],
     restExpandSystemFields: false,
     searchPlaceholder: "Pesquisar fornecedor, documento ou ID",
-    fields: ["FORNECEDOR", "VENCIMENTO", "EMISSAO", "VALOR", "SITUACAO", "CNPJ_FORNECEDOR", "DOCUMENTO", "BANCO", "VALOR_PAGAMENTO", "NOSSO_NUMERO", "LINHA_DIGITAVEL", "CODIGO_BARRAS", "PAGADOR", "CNPJ_PAGADOR", "BLOQUEADO", "MENSAGEM", "ULTIMA_CONSULTA", "ID"],
+    fields: ["FORNECEDOR", "VENCIMENTO", "EMISSAO", "VALOR", "SITUACAO", "CNPJ_FORNECEDOR", "DOCUMENTO", "BANCO", "VALOR_PAGAMENTO", "NOSSO_NUMERO", "LINHA_DIGITAVEL", "CODIGO_BARRAS", "PAGADOR", "CNPJ_PAGADOR", "BLOQUEADO", "MENSAGEM", "ULTIMA_CONSULTA", "DESCRITIVOPROVIS_x00c3_O", "ID"],
     filterFields: ["FORNECEDOR", "SITUACAO", "BANCO"], dateRangeField: "VENCIMENTO",
     defaultFilters: { SITUACAO: "Em aberto" }, filterChoices: { SITUACAO: ["Em aberto"] }, resetFiltersOnOpen: ["SITUACAO"],
     fieldAliases: { FORNECEDOR: ["Title", "Fornecedor"] },
     fieldTypes: { VENCIMENTO: "date", EMISSAO: "date", VALOR: "currency", VALOR_PAGAMENTO: "currency", ULTIMA_CONSULTA: "datetime", BLOQUEADO: "boolean" },
-    fieldLabels: { FORNECEDOR: "Fornecedor", VENCIMENTO: "Vencimento", EMISSAO: "Emissão", VALOR: "Valor nominal", SITUACAO: "Situação na última consulta", CNPJ_FORNECEDOR: "CPF/CNPJ fornecedor", DOCUMENTO: "Documento", BANCO: "Banco", VALOR_PAGAMENTO: "Valor para pagamento", NOSSO_NUMERO: "Nosso número", LINHA_DIGITAVEL: "Linha digitável", CODIGO_BARRAS: "Código de barras", PAGADOR: "Pagador", CNPJ_PAGADOR: "CPF/CNPJ pagador", BLOQUEADO: "Pagamento bloqueado", MENSAGEM: "Mensagem do banco", ULTIMA_CONSULTA: "Última consulta" },
+    fieldLabels: { FORNECEDOR: "Fornecedor", VENCIMENTO: "Vencimento", EMISSAO: "Emissão", VALOR: "Valor nominal", SITUACAO: "Situação na última consulta", CNPJ_FORNECEDOR: "CPF/CNPJ fornecedor", DOCUMENTO: "Documento", BANCO: "Banco", VALOR_PAGAMENTO: "Valor para pagamento", NOSSO_NUMERO: "Nosso número", LINHA_DIGITAVEL: "Linha digitável", CODIGO_BARRAS: "Código de barras", PAGADOR: "Pagador", CNPJ_PAGADOR: "CPF/CNPJ pagador", BLOQUEADO: "Pagamento bloqueado", MENSAGEM: "Mensagem do banco", ULTIMA_CONSULTA: "Última consulta", DESCRITIVOPROVIS_x00c3_O: "Descritivo provisão" },
     sourceSort: {field:"VENCIMENTO",direction:"asc",type:"date"},
   }),
   presenceDescriptions: Object.freeze({
@@ -306,6 +307,7 @@ function galleryRepository(options) {
 export function createRegistrationGalleryData({ kind, ...options } = {}) {
   const model = REGISTRATION_GALLERY_MODELS[kind];
   if (!model) throw new RangeError("Galeria de cadastro desconhecida.");
+  const linkSiteConfig = options.siteConfig || SHAREPOINT_SITES;
   if (model.readTransport) {
     const siteKey = options.siteKey || "personal";
     const sites = options.siteConfig || SHAREPOINT_SITES;
@@ -329,6 +331,10 @@ export function createRegistrationGalleryData({ kind, ...options } = {}) {
     },
     listAttachments: data.listAttachments,
     downloadAttachment: data.downloadAttachment,
+    ...(kind === 'dda' ? { provisionLink: createDdaProvisionLink({
+      repository: galleryRepository({ ...options, siteConfig: linkSiteConfig, strictSnapshot: false }),
+      siteKey: options.siteKey || 'personal', assertSession: options.assertSession,
+    }) } : {}),
   });
   const filters = createRegistrationGalleryFilterData({ repository, siteKey: options.siteKey || "personal", kind });
   // Lists without an extracted edit form use only the model's proven fields
