@@ -1,6 +1,7 @@
 import test from "node:test";
 import assert from "node:assert/strict";
 import { JSDOM } from "jsdom";
+import entities from "../../../portal/catalog/entities.js";
 
 const settle = () => new Promise(resolve => setImmediate(resolve));
 const deferred = () => { let resolve, reject; const promise = new Promise((yes, no) => { resolve = yes; reject = no; }); return { promise, resolve, reject }; };
@@ -37,10 +38,10 @@ async function setup(t, overrides = {}) {
 const click = (ctx, action) => ctx.buttons.querySelector(`[data-gallery-action="${action}"]`).click();
 const key = (ctx, target, name, options = {}) => target.dispatchEvent(new ctx.dom.window.KeyboardEvent("keydown", { key: name, bubbles: true, cancelable: true, ...options }));
 
-test('launch editor dropdowns open with an empty editable filter and preserve the saved values until selection', async t => {
+for (const entity of entities.filter(item => item.available && item.galleryAvailable && item.capabilities.edit)) test(`gallery edit ${entity.id} starts a fresh filter and only saves a selected option`, async t => {
   const names = ['AGRUPAR', 'FILIAL', 'TIPOTRANSACAO', 'APROVACAO', 'ETAPA', 'FORNECEDOR', 'PRODUTO'];
   const ctx = await setup(t, { loadEditor: async id => ({ ...context(id),
-    entity: { id: 'lancamentos', title: 'Lançamentos' },
+    entity,
     columns: names.map(name => ({ name, label: name, control: 'select', editable: true, choices: ['ATUAL', 'NOVO'] })),
     item: { id, fields: Object.fromEntries(names.map(name => [name, 'ATUAL'])) },
   }) });
@@ -64,10 +65,10 @@ test('launch editor dropdowns open with an empty editable filter and preserve th
   for (const name of names) assert.equal(ctx.writes[0][2][name], 'NOVO');
 });
 
-for (const control of ['select', 'lookup']) test(`launch ${control} sends a new remote filter without the previous selection`, async t => {
+for (const entityId of ['lancamentos', 'documentos-operacionais', 'fornecedores']) for (const control of ['select', 'lookup', 'person']) test(`gallery edit ${entityId} ${control} sends a new remote filter without the previous selection`, async t => {
   const calls = [];
   const ctx = await setup(t, { loadEditor: async id => ({ ...context(id),
-    entity: { id: 'lancamentos', title: 'Lançamentos' },
+    entity: { id: entityId, title: entityId },
     columns: [{ name: 'FORNECEDOR', label: 'Fornecedor', control, editable: true,
       ...(control === 'select'
         ? { choices: ['FORNECEDOR ATUAL'], powerApps: { closed: true, preserveCurrentValue: true,
@@ -95,9 +96,9 @@ for (const control of ['select', 'lookup']) test(`launch ${control} sends a new 
   assert.equal(ctx.writes[0][2][control === 'select' ? 'FORNECEDOR' : 'FORNECEDORLookupId'], control === 'select' ? 'FORNECEDOR NOVO' : 2);
 });
 
-for (const control of ['select', 'lookup']) for (const required of [true, false]) test(`opening an unchanged launch ${control} keeps submission valid, required ${required}`, async t => {
+for (const entityId of ['lancamentos', 'provisoes-de-pagamento']) for (const control of ['select', 'lookup', 'person']) for (const required of [true, false]) test(`opening an unchanged gallery ${entityId} ${control} keeps submission valid, required ${required}`, async t => {
   const ctx = await setup(t, { loadEditor: async id => ({ ...context(id),
-    entity: { id: 'lancamentos', title: 'Lançamentos' },
+    entity: { id: entityId, title: entityId },
     columns: [{ name: 'CLIENTE', label: 'Cliente', control, editable: true, required,
       ...(control === 'select' ? { choices: ['ATUAL', 'OUTRO'] }
         : { relation: { kind: 'lookup', listId: 'clients', displayField: 'Title', resolvable: true, multiple: false } }),
@@ -332,7 +333,8 @@ test('editing a remote relationship browses options beyond the first search batc
   const input=ctx.get('[data-relation-searchable-root] [role=combobox]'); assert.equal(input.readOnly,false); input.click();
   await new Promise(r=>setTimeout(r,360));
   assert.ok(calls.every(c=>c.term===''&&c.browse===true));
-  assert.equal(input.value,'Cliente 1');
+  assert.equal(input.value,'');
+  assert.equal(ctx.get('[data-relation-value=CLIENTE]').value,'1');
   assert.equal(ctx.get('[data-relation-searchable-root] [role=listbox]').querySelectorAll('[role=option]').length,32);
   ctx.get('[data-relation-searchable-root] [role=listbox]').querySelectorAll('[role=option]')[31].click();
   assert.equal(input.value,'Cliente 32');
@@ -368,7 +370,7 @@ for (const name of ['TIPODOCUMENTO','TIPOHOMOLOGACAO','PESSOARELACIONADA','ETAPA
   const input=ctx.get('[role=combobox]');
   assert.equal(input.readOnly,false);
   input.click();await new Promise(r=>setTimeout(r,340));
-  assert.equal(input.value,current);
+  assert.equal(input.value,'');
   assert.equal(ctx.get('[role=listbox]').querySelectorAll('[role=option]').length,2);
   assert.deepEqual(calls.at(-1),{term:'',browse:true});
   ctx.get('[data-searchable-clear]').click();
@@ -389,7 +391,8 @@ test('remote dropdown read errors do not erase the current edit selection',async
   const ctx=await setup(t,{loadEditor:async id=>({...context(id),columns:[{name:'CLIENTE',label:'Cliente',control:'lookup',editable:true,relation:{kind:'lookup',listId:'clients',displayField:'Title',resolvable:true,multiple:false}}],item:{id,fields:{CLIENTELookupId:1,CLIENTE:'Cliente 1'}},relationshipSearch:async()=>{throw new Error('Sem conexão');}})});
   click(ctx,'edit');await settle();await settle();
   const input=ctx.get('[data-relation-searchable-root] input');input.click();await new Promise(r=>setTimeout(r,360));
-  assert.equal(input.value,'Cliente 1');assert.equal(ctx.get('[data-relation-value=CLIENTE]').value,'1');
+  assert.equal(input.value,'');assert.equal(ctx.get('[data-relation-value=CLIENTE]').value,'1');
+  key(ctx,input,'Escape');assert.equal(input.value,'Cliente 1');
 });
 
 for (const control of ['lookup','person']) test(`editable ${control} searches the full typed name and can save a cleared optional value`,async t=>{
@@ -802,13 +805,17 @@ test("saved editor locks fields after refresh failure and retries without a seco
 
 test("ambiguous Power Apps forms require a known variant before editing", async t => {
   const loads = [];
-  const ctx = await setup(t, { loadEditor: async (id, options) => { loads.push(options); return options?.formVariantId ? context(id) : { ...context(id), contract: { requiresVariantSelection: true, formVariants: [{ id: "form1", label: "Formulário comprovado" }] } }; } });
+  const ctx = await setup(t, { loadEditor: async (id, options) => { loads.push(options); return options?.formVariantId ? context(id) : { ...context(id), contract: { requiresVariantSelection: true, formVariants: [{ id: "form1", label: "Formulário comprovado" }, { id: "form2", label: "Cadastro alternativo" }] } }; } });
   click(ctx, "edit"); await settle();
   const select = ctx.get('[data-gallery-form-variant]');
   assert.ok(select); assert.equal(ctx.get('[data-dynamic-form]'), null);
   const input = ctx.get('[role=combobox]');
-  assert.ok(input); assert.equal(input.readOnly, true);
+  assert.ok(input); assert.equal(input.readOnly, false);
   input.focus();
+  input.value += 'comprovado';
+  input.dispatchEvent(new ctx.dom.window.Event('input', { bubbles: true }));
+  assert.deepEqual([...ctx.document.querySelectorAll('[role=option]')].map(option => option.textContent), ['Formulário comprovado']);
+  assert.equal(loads.length, 1, 'typing does not choose a form variant');
   [...ctx.document.querySelectorAll('[role=option]')].find(option=>option.textContent==='Formulário comprovado').click(); await settle(); await settle();
   assert.equal(loads.at(-1).formVariantId, "form1");
   assert.ok(ctx.get('[data-dynamic-form]'));

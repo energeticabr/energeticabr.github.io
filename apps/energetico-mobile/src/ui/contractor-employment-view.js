@@ -1,6 +1,7 @@
 import { filterContractorEmploymentRows } from '../chat/contractor-employment-data.js';
 import { CONTRACTOR_EMPLOYMENT_CARGOS, contractorEmploymentDate, validateContractorEmploymentDraft } from '../../../../portal/forms/contractor-employment.js';
 import { applyScreenNavigation } from './screen-navigation.js';
+import { bindSearchableFilterSelects } from './searchable-filter-selects.js';
 
 export function createContractorEmploymentView(container = {}, options = {}) {
   const { document: doc = container?.ownerDocument || globalThis.document, data, onHome } = container?.nodeType ? options : container;
@@ -33,7 +34,7 @@ export function createContractorEmploymentView(container = {}, options = {}) {
     wrapper.append(select); toolbar.append(wrapper); filters[name] = select;
     select.addEventListener('change', renderRows);
   }
-  const refresh = button('Atualizar', 'refresh', () => { if (!saving) { editor.replaceChildren(); load(); } });
+  const refresh = button('Atualizar', 'refresh', () => { if (!saving) { clearEditor(); load(); } });
   toolbar.append(refresh);
   const status = el('p', 'ce-status'); status.setAttribute('role', 'status');
   const alert = el('p', 'ce-error'); alert.setAttribute('role', 'alert');
@@ -42,14 +43,32 @@ export function createContractorEmploymentView(container = {}, options = {}) {
   const pendingDrafts = new Map();
   const unconfirmed = new Map();
   const unconfirmedMessage = () => [...new Set(unconfirmed.values())].join(' ');
-  let rows = [], columns = [], destroyed = false, saving = false, loaded = false, generation = 0, controller, previousFocus;
+  let rows = [], columns = [], destroyed = false, saving = false, loaded = false, generation = 0, controller, previousFocus, editorPickers;
+  function destroyEditorPickers() {
+    editorPickers?.destroy(); editorPickers = null;
+  }
+  function clearEditor() {
+    destroyEditorPickers(); editor.replaceChildren();
+  }
+  function bindEditorPickers() {
+    editorPickers = bindSearchableFilterSelects(editor);
+    for (const select of editor.querySelectorAll('select[required]')) {
+      select.parentElement.querySelector('[role="combobox"]')?.setAttribute('aria-required', 'true');
+    }
+  }
+  function restoreEditor(nodes) {
+    clearEditor(); editor.replaceChildren(...nodes);
+    bindEditorPickers();
+  }
   function setBusy(busy) {
     saving = busy; root.setAttribute('aria-busy', String(busy));
+    if (busy) editorPickers?.close();
     for (const control of root.querySelectorAll('button, input, select')) control.disabled = busy || control.dataset.unavailable === 'true';
+    editorPickers?.sync();
   }
   function hide() {
     if (saving) return;
-    generation++; controller?.abort(); root.hidden = true; editor.replaceChildren(); previousFocus?.focus?.();
+    generation++; controller?.abort(); root.hidden = true; clearEditor(); previousFocus?.focus?.();
   }
   function display(value) {
     return value === '' || value == null ? 'Não informado' : typeof value === 'object' ? JSON.stringify(value) : String(value);
@@ -90,8 +109,9 @@ export function createContractorEmploymentView(container = {}, options = {}) {
     if (!visible.length) list.append(el('p', '', rows.length ? 'Nenhum funcionário encontrado.' : 'Nenhum funcionário cadastrado. Esta base recebe somente futuros cadastros do app.'));
   }
   async function reviewConflict(row) {
-    if (saving) return;
+    if (saving || destroyed) return;
     const current = generation, previousNodes = [...editor.childNodes];
+    destroyEditorPickers();
     const panel = el('section', 'ce-conflict');
     panel.append(el('h2', '', 'Conferir versões atuais'), el('p', '', 'Consultando as versões atuais…'));
     editor.replaceChildren(panel); setBusy(true);
@@ -130,15 +150,17 @@ export function createContractorEmploymentView(container = {}, options = {}) {
         finally { if (!destroyed && generation === current) setBusy(false); }
       });
       accept.dataset.unavailable = String(!review.canRenew);
-      const cancel = button('Voltar sem alterar', 'cancel-conflict', () => editor.replaceChildren(...previousNodes));
+      const cancel = button('Voltar sem alterar', 'cancel-conflict', () => {
+        if (!saving && !destroyed && generation === current && editor.contains(panel)) restoreEditor(previousNodes);
+      });
       const actions = el('div', 'ce-actions'); actions.append(accept, cancel); panel.append(actions);
     } catch (cause) {
-      if (!destroyed && generation === current) { editor.replaceChildren(...previousNodes); alert.textContent = cause.message; }
+      if (!destroyed && generation === current) { restoreEditor(previousNodes); alert.textContent = cause.message; }
     } finally { if (!destroyed && generation === current) setBusy(false); }
   }
   function edit(row, inactivate = false, notice = '') {
-    if (saving) return;
-    alert.textContent = unconfirmedMessage(); editor.replaceChildren();
+    if (saving || destroyed) return;
+    alert.textContent = unconfirmedMessage(); clearEditor();
     const form = el('form'); form.noValidate = true;
     form.append(el('h2', '', (inactivate ? 'Inativar: ' : 'Editar: ') + (row.fields.Title || row.id)));
     if (notice) form.append(el('p', '', notice));
@@ -162,11 +184,11 @@ export function createContractorEmploymentView(container = {}, options = {}) {
     state.addEventListener('change', () => { if (state.value === 'ATIVO') termination.value = ''; updateRequirement(); });
     controls.DATAADMISSAO.addEventListener('change', updateRequirement); updateRequirement();
     const save = el('button', 'rg-button', 'Salvar'); save.type = 'submit';
-    const cancel = button('Cancelar', 'cancel-edit', () => { editor.replaceChildren(); alert.textContent = unconfirmedMessage(); });
+    const cancel = button('Cancelar', 'cancel-edit', () => { clearEditor(); alert.textContent = unconfirmedMessage(); });
     const actions = el('div', 'ce-actions'); actions.append(save, cancel); form.append(actions);
     form.addEventListener('submit', async event => {
       event.preventDefault();
-      if (saving || destroyed) return;
+      if (saving || destroyed || !editor.contains(form)) return;
       alert.textContent = unconfirmedMessage();
       try {
         const draft = validateContractorEmploymentDraft(Object.fromEntries(Object.entries(controls).map(([name, control]) => [name, control.value])));
@@ -176,7 +198,7 @@ export function createContractorEmploymentView(container = {}, options = {}) {
         if (destroyed) return;
         unconfirmed.delete(row.id); pendingDrafts.delete(row.id); alert.textContent = unconfirmedMessage();
         rows = rows.map(current => current.id === row.id ? saved : current);
-        editor.replaceChildren(); populateFilters(); renderRows(); status.textContent += ' • Atualização confirmada';
+        clearEditor(); populateFilters(); renderRows(); status.textContent += ' • Atualização confirmada';
       } catch (cause) {
         if (!destroyed) {
           const message = cause.message || 'Não foi possível confirmar a atualização.';
@@ -187,7 +209,9 @@ export function createContractorEmploymentView(container = {}, options = {}) {
       }
       finally { if (!destroyed) setBusy(false); }
     });
-    editor.append(form); controls.CARGO.focus();
+    editor.append(form);
+    bindEditorPickers();
+    form.querySelector('[role="combobox"]').focus();
   }
   function populateFilters() {
     for (const [name, control] of Object.entries(filters)) {
@@ -228,7 +252,7 @@ export function createContractorEmploymentView(container = {}, options = {}) {
   }
   search.addEventListener('input', renderRows);
   root.addEventListener('keydown', event => {
-    if (event.key === 'Escape') { event.preventDefault(); if (editor.childElementCount && !saving) editor.replaceChildren(); else hide(); }
+    if (event.key === 'Escape') { event.preventDefault(); if (editor.childElementCount && !saving) clearEditor(); else hide(); }
     if (event.key === 'Tab') {
       const controls = [...root.querySelectorAll('button:not(:disabled), input:not(:disabled), select:not(:disabled), summary')];
       if (event.shiftKey && doc.activeElement === controls[0]) { event.preventDefault(); controls.at(-1)?.focus(); }
@@ -236,8 +260,8 @@ export function createContractorEmploymentView(container = {}, options = {}) {
     }
   });
   return Object.freeze({
-    async open() { if (destroyed) return; previousFocus = doc.activeElement; root.hidden = false; root.focus(); await load(); },
+    async open() { if (destroyed || saving) return; clearEditor(); previousFocus = doc.activeElement; root.hidden = false; root.focus(); await load(); },
     close: hide,
-    destroy() { destroyed = true; generation++; controller?.abort(); root.remove(); },
+    destroy() { destroyed = true; generation++; controller?.abort(); clearEditor(); root.remove(); },
   });
 }

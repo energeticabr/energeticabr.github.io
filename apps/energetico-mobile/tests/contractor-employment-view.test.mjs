@@ -5,6 +5,191 @@ import * as subject from '../src/ui/contractor-employment-view.js';
 import { createContractorEmploymentFixture } from './helpers/contractor-employment-fixture.mjs';
 const tick = () => new Promise(resolve => setImmediate(resolve));
 const synthetic = { id: '4', eTag: '"1"', fields: { Title: 'Funcionário Exemplo', CARGO: '', DATAADMISSAO: '', STATUS: 'ATIVO', FILIAL: 'Obra A', IDFORNECEDORORIGEM: '17', field_6: 31, Author: 'Autor Exemplo', Created: '2026-01-01' } };
+function rhPicker(form, name) {
+  const select = form.querySelector(`[name="${name}"]`), field = select.parentElement;
+  const input = field.querySelector('[role="combobox"]');
+  assert.ok(input, `${name} must have a searchable editor`);
+  return { select, field, input, popup: field.querySelector('.sfs-popup') };
+}
+function filterRhPicker(window, picker, query) {
+  picker.input.click(); picker.input.value = query;
+  picker.input.dispatchEvent(new window.Event('input', { bubbles: true }));
+}
+function trackPickerListeners(t, window) {
+  const subscriptions = [];
+  for (const [target, types] of [[window.document, ['pointerup', 'pointercancel', 'pointerdown', 'click', 'scroll']], [window, ['resize']]]) {
+    const active = new Map(types.map(type => [type, new Set()])); subscriptions.push(active);
+    for (const method of ['addEventListener', 'removeEventListener']) {
+      const original = target[method];
+      t.mock.method(target, method, function (type, listener, options) {
+        if (active.has(type)) active.get(type)[method === 'addEventListener' ? 'add' : 'delete'](listener);
+        return original.call(this, type, listener, options);
+      });
+    }
+  }
+  return () => subscriptions.reduce((sum, types) => sum + [...types.values()].reduce((size, listeners) => size + listeners.size, 0), 0);
+}
+async function openRhEditor(t, customize = data => data) {
+  const dom = new JSDOM('<main></main>'), doc = dom.window.document, f = createContractorEmploymentFixture();
+  const listenerCount = trackPickerListeners(t, dom.window);
+  const view = subject.createContractorEmploymentView({ document: doc, data: customize(f.data) });
+  t.after(() => { view.destroy(); dom.window.close(); });
+  await view.open(); doc.querySelector('[data-employment-row="4"] [data-action="edit"]').click();
+  return { dom, doc, f, view, listenerCount, form: doc.querySelector('form') };
+}
+
+for (const [name, query, expected, initial] of [
+  ['CARGO', 'mestre', 'MESTRE DE OBRAS', 'PEDREIRO III'],
+  ['STATUS', 'inati', 'INATIVO', 'ATIVO'],
+]) test(`RH ${name} opens an empty editable search and only commits a chosen option`, async t => {
+  const dom = new JSDOM('<main></main>'), doc = dom.window.document, f = createContractorEmploymentFixture();
+  const view = subject.createContractorEmploymentView({ document: doc, data: f.data });
+  t.after(() => { view.destroy(); dom.window.close(); });
+  await view.open(); doc.querySelector('[data-employment-row="4"] [data-action="edit"]').click();
+  const select = doc.querySelector(`form [name="${name}"]`), field = select.parentElement;
+  const input = field.querySelector('[role="combobox"]');
+  assert.ok(input, `${name} must expose an editable search instead of only a native select`);
+  assert.equal(input.readOnly, false);
+  assert.equal(input.getAttribute('aria-required'), 'true', 'the visible search keeps the required-field announcement');
+  input.click();
+  assert.equal(input.value, '');
+  assert.equal(select.value, initial);
+  input.value = query; input.dispatchEvent(new dom.window.Event('input', { bubbles: true }));
+  const options = [...field.querySelectorAll('[role="option"]')];
+  assert.deepEqual(options.map(option => option.textContent), [expected]);
+  assert.equal(select.value, initial, 'filtering cannot replace the committed value');
+  options[0].click();
+  assert.equal(select.value, expected);
+  assert.equal(input.value, expected);
+  input.dispatchEvent(new dom.window.InputEvent('beforeinput', { inputType: 'insertText', data: query, bubbles: true }));
+  assert.equal(input.value, '', 'typing again must start a new search without deleting the selected label');
+  input.value += query; input.dispatchEvent(new dom.window.Event('input', { bubbles: true }));
+  assert.deepEqual([...field.querySelectorAll('[role="option"]')].map(option => option.textContent), [expected]);
+  input.dispatchEvent(new dom.window.KeyboardEvent('keydown', { key: 'Escape', bubbles: true, cancelable: true }));
+  assert.equal(select.value, expected); assert.equal(input.value, expected);
+  assert.ok(doc.querySelector('form'), 'Escape closes the search before the editor');
+  assert.equal(f.writes.length, 0);
+});
+
+test('RH typed text cannot fill a missing selection or replace the last chosen cargo when saving', async t => {
+  const { dom, doc, f, form } = await openRhEditor(t), cargo = rhPicker(form, 'CARGO');
+  cargo.select.value = '';
+  filterRhPicker(dom.window, cargo, 'mestre');
+  form.dispatchEvent(new dom.window.Event('submit', { bubbles: true, cancelable: true })); await tick();
+  assert.equal(f.writes.length, 0); assert.match(doc.querySelector('[role="alert"]').textContent, /cargo válido/);
+  cargo.field.querySelector('[role="option"]').click();
+  filterRhPicker(dom.window, cargo, 'CARGO INVENTADO');
+  assert.equal(cargo.field.querySelector('[role="option"]'), null);
+  form.dispatchEvent(new dom.window.Event('submit', { bubbles: true, cancelable: true })); await tick();
+  assert.equal(f.target.fields.CARGO, 'MESTRE DE OBRAS');
+  assert.equal(f.writes.length, 1); assert.equal(f.writes[0].fields.CARGO, 'MESTRE DE OBRAS');
+});
+
+test('RH searchable status preserves inactivation and explicit reactivation date rules', async t => {
+  const { dom, doc, f } = await openRhEditor(t);
+  doc.querySelector('[data-action="inactivate"]').click();
+  const form = doc.querySelector('form'), state = rhPicker(form, 'STATUS'), date = form.elements.DATADESLIGAMENTO;
+  assert.equal(state.select.value, 'INATIVO'); assert.equal(state.input.value, 'INATIVO'); assert.equal(date.required, true);
+  date.value = '2026-02-20';
+  filterRhPicker(dom.window, state, 'ativo');
+  [...state.field.querySelectorAll('[role="option"]')].find(option => option.textContent === 'ATIVO').click();
+  assert.equal(date.value, ''); assert.equal(date.required, false);
+  filterRhPicker(dom.window, state, 'inati'); state.field.querySelector('[role="option"]').click();
+  assert.equal(date.required, true);
+  form.dispatchEvent(new dom.window.Event('submit', { bubbles: true, cancelable: true })); await tick();
+  assert.equal(f.writes.length, 0); assert.match(doc.querySelector('[role="alert"]').textContent, /desligamento/);
+  state.select.value = ''; filterRhPicker(dom.window, state, 'ATIVO');
+  form.dispatchEvent(new dom.window.Event('submit', { bubbles: true, cancelable: true })); await tick();
+  assert.equal(f.writes.length, 0); assert.match(doc.querySelector('[role="alert"]').textContent, /status válido/);
+});
+
+for (const action of ['cancel', 'Escape', 'refresh', 'close', 'reopen', 'destroy']) test(`RH ${action} releases picker handlers and makes the discarded editor inert`, async t => {
+  const { dom, doc, f, form, view, listenerCount } = await openRhEditor(t), cargo = rhPicker(form, 'CARGO');
+  filterRhPicker(dom.window, cargo, 'mestre');
+  const staleOption = cargo.field.querySelector('[role="option"]');
+  assert.ok(listenerCount() > 0);
+  if (action === 'cancel') doc.querySelector('[data-action="cancel-edit"]').click();
+  else if (action === 'Escape') {
+    cargo.input.dispatchEvent(new dom.window.KeyboardEvent('keydown', { key: 'Escape', bubbles: true }));
+    assert.equal(doc.querySelector('form'), form); assert.equal(cargo.popup.hidden, true);
+    cargo.input.dispatchEvent(new dom.window.KeyboardEvent('keydown', { key: 'Escape', bubbles: true }));
+  } else if (action === 'refresh') { doc.querySelector('[data-action="refresh"]').click(); await tick(); }
+  else if (action === 'close') view.close();
+  else if (action === 'reopen') await view.open();
+  else view.destroy();
+  assert.equal(listenerCount(), 0, 'discarding the editor must remove its document and viewport listeners');
+  staleOption.click(); assert.equal(cargo.select.value, 'PEDREIRO III');
+  form.dispatchEvent(new dom.window.Event('submit', { bubbles: true, cancelable: true })); await tick();
+  assert.equal(f.writes.length, 0, 'a detached form must never save');
+  if (action !== 'destroy') {
+    if (action === 'close') await view.open();
+    doc.querySelector('[data-employment-row="4"] [data-action="edit"]').click();
+    assert.equal(doc.querySelectorAll('.ce-editor [role="combobox"]').length, 2);
+    const next = rhPicker(doc.querySelector('form'), 'CARGO'); filterRhPicker(dom.window, next, 'mestre');
+    let changes = 0; next.select.addEventListener('change', () => changes++);
+    next.field.querySelector('[role="option"]').click(); assert.equal(changes, 1);
+    doc.querySelector('[data-action="cancel-edit"]').click(); assert.equal(listenerCount(), 0);
+  }
+});
+
+test('RH busy save closes and locks pickers immediately and saves only once', async t => {
+  let release; const pending = new Promise(resolve => { release = resolve; });
+  const { dom, doc, f, form, view, listenerCount } = await openRhEditor(t, data => ({ ...data, save: async (...args) => { await pending; return data.save(...args); } }));
+  t.after(release);
+  const cargo = rhPicker(form, 'CARGO'); filterRhPicker(dom.window, cargo, 'mestre'); cargo.field.querySelector('[role="option"]').click();
+  filterRhPicker(dom.window, cargo, 'pedreiro');
+  const staleOption = cargo.field.querySelector('[role="option"]');
+  form.dispatchEvent(new dom.window.Event('submit', { bubbles: true, cancelable: true }));
+  assert.equal(cargo.popup.hidden, true, 'saving must close the popup synchronously');
+  assert.equal(cargo.input.disabled, true); assert.equal(cargo.select.disabled, true);
+  view.close(); assert.equal(doc.querySelector('.ce-overlay').hidden, false);
+  await view.open(); assert.equal(doc.querySelector('form'), form, 'reopening while saving must retain the active editor');
+  staleOption.click(); assert.equal(cargo.select.value, 'MESTRE DE OBRAS');
+  form.dispatchEvent(new dom.window.Event('submit', { bubbles: true, cancelable: true }));
+  release(); await tick();
+  assert.equal(f.writes.length, 1); assert.equal(doc.querySelector('form'), null); assert.equal(listenerCount(), 0);
+});
+
+test('RH conflict review suspends pickers and restores the draft without accumulating handlers', async t => {
+  const { dom, doc, f, form, listenerCount } = await openRhEditor(t);
+  let cargo = rhPicker(form, 'CARGO'); filterRhPicker(dom.window, cargo, 'mestre'); cargo.field.querySelector('[role="option"]').click();
+  const initialListeners = listenerCount();
+  for (let cycle = 0; cycle < 3; cycle++) {
+    filterRhPicker(dom.window, cargo, 'supervisor'); const staleOption = cargo.field.querySelector('[role="option"]');
+    doc.querySelector('[data-employment-row="4"] [data-action="review-conflict"]').click(); await tick();
+    assert.equal(listenerCount(), 0, 'detached conflict drafts must release their pickers');
+    staleOption.click(); assert.equal(cargo.select.value, 'MESTRE DE OBRAS');
+    doc.querySelector('[data-action="cancel-conflict"]').click();
+    assert.equal(doc.querySelector('form'), form); assert.equal(listenerCount(), initialListeners);
+    assert.equal(form.querySelectorAll('[role="combobox"]').length, 2);
+    cargo = rhPicker(form, 'CARGO'); assert.equal(cargo.select.value, 'MESTRE DE OBRAS');
+  }
+  doc.querySelector('[data-employment-row="4"] [data-action="review-conflict"]').click(); await tick();
+  doc.querySelector('[data-action="renew-baseline"]').click(); await tick();
+  assert.equal(listenerCount(), initialListeners);
+  assert.equal(doc.querySelectorAll('.ce-editor [role="combobox"]').length, 2);
+  form.dispatchEvent(new dom.window.Event('submit', { bubbles: true, cancelable: true })); await tick();
+  assert.equal(f.writes.length, 0, 'renewing a baseline invalidates the previous form');
+});
+
+test('RH pending update resumes searchable native choices and retains them after a failed save', async t => {
+  const { dom, doc, f, form, view, listenerCount } = await openRhEditor(t);
+  f.failTarget(true);
+  const cargo = rhPicker(form, 'CARGO'); filterRhPicker(dom.window, cargo, 'mestre'); cargo.field.querySelector('[role="option"]').click();
+  form.dispatchEvent(new dom.window.Event('submit', { bubbles: true, cancelable: true })); await tick();
+  assert.equal(cargo.input.disabled, false); assert.equal(cargo.select.value, 'MESTRE DE OBRAS');
+  const initialListeners = listenerCount();
+  view.close(); assert.equal(listenerCount(), 0); await view.open();
+  doc.querySelector('[data-employment-row="4"] [data-action="resume-pending"]').click();
+  const resumed = doc.querySelector('form'), picker = rhPicker(resumed, 'CARGO');
+  assert.equal(listenerCount(), initialListeners); assert.equal(picker.select.value, 'MESTRE DE OBRAS');
+  picker.input.click(); assert.equal(picker.input.value, '');
+  assert.equal(rhPicker(resumed, 'STATUS').select.value, 'ATIVO');
+  f.failTarget(false);
+  resumed.dispatchEvent(new dom.window.Event('submit', { bubbles: true, cancelable: true })); await tick();
+  assert.equal(f.target.fields.CARGO, 'MESTRE DE OBRAS'); assert.equal(f.writes.length, 2); assert.equal(listenerCount(), 0);
+});
+
 test('shows all target fields and incomplete RH data, and cancelling inactivation never saves', async () => {
   const dom = new JSDOM('<main></main>'), doc = dom.window.document, saved = [];
   const data = { loadSnapshot: async () => ({ rows: [synthetic], columns: [{ name: 'field_6', displayName: 'ENDEREÇO' }] }), save: async (...args) => { saved.push(args); return synthetic; } };
