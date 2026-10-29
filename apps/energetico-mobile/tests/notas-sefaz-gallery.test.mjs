@@ -14,6 +14,25 @@ const sample = { id: '4', fields: { Title: 'FORNECEDOR FICTÍCIO', CHAVE_ACESSO:
   XML_URL: 'https://energeticaltda.sharepoint.com/sites/energetica/Documentos/nota.xml',
   DANFE_URL: { Url: 'https://energeticaltda.sharepoint.com/sites/energetica/Documentos/danfe.pdf', Description: 'DANFE' } } };
 
+test('nota cancelada recebe marca diagonal vermelha somente no próprio cartão', async t => {
+  const dom = new JSDOM('<body/>'), doc = dom.window.document;
+  const rows = [
+    {id:'cancelada',fields:{...sample.fields,SITUACAO:'CANCELADA'}},
+    {id:'autorizada',fields:{...sample.fields,SITUACAO:'AUTORIZADA'}},
+  ];
+  const gallery=createRegistrationGallery({document:doc,kind:'notas_fiscais_sefaz',data:{loadSnapshot:async()=>({rows})}});
+  t.after(()=>{gallery.destroy();dom.window.close();});await gallery.open();
+  const cancelled=doc.querySelector('[data-registration-row="cancelada"]');
+  const authorized=doc.querySelector('[data-registration-row="autorizada"]');
+  assert.equal(cancelled.dataset.sefazCancelled,'true');
+  assert.equal(cancelled.getAttribute('aria-label'),'Nota fiscal cancelada');
+  assert.equal(cancelled.querySelectorAll('.rg-sefaz-cancelled-stamp').length,1);
+  assert.equal(cancelled.querySelector('.rg-sefaz-cancelled-stamp').textContent,'CANCELADA');
+  assert.equal(cancelled.querySelector('.rg-sefaz-cancelled-stamp').getAttribute('aria-hidden'),'true');
+  assert.equal(authorized.dataset.sefazCancelled,undefined);
+  assert.equal(authorized.querySelector('.rg-sefaz-cancelled-stamp'),null);
+});
+
 test('filtros fiscais ativos ficam visíveis fora do painel e podem ser limpos preservando a busca da nota resumo antiga', async t => {
   const dom = new JSDOM('<body/>'), doc = dom.window.document;
   const rows = [

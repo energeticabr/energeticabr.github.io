@@ -24,7 +24,7 @@ function icon(doc, name) {
 import { SEFAZ_RETENTION_FIELDS } from '../chat/sefaz-withholding.js';
 
 /** Presentation only: move the existing formatted fields and authenticated links. */
-export function decorateSefazInvoiceCard({document: doc, container, pdfRail, withholding, fiscalType}) {
+export function decorateSefazInvoiceCard({document: doc, card, container, pdfRail, withholding, fiscalType}) {
   const el = (tag, className, text) => { const node = doc.createElement(tag); node.className = className; if (text !== undefined) node.textContent = text; return node; };
   const heading = container.querySelector('.rg-document-heading');
   heading.classList.add('rg-sefaz-heading');
@@ -86,6 +86,10 @@ export function decorateSefazInvoiceCard({document: doc, container, pdfRail, wit
   for (const field of ['TIPO_FISCAL', 'ORIGEM_FISCAL', 'SITUACAO', 'STATUS_IMPORTACAO', 'DIRECAO', 'ORIGEM_LIQUIDO', 'CHAVE_ACESSO', 'PROTOCOLO', 'MODELO', 'STATUS_DANFE', 'XML_URL', 'ULTIMO_DOCUMENTO_URL']) { const pair = take(field); if (pair) remaining.append(pair); }
   const status = take('SITUACAO')?.querySelector('dd');
   if (status) status.dataset.sefazStatus = /cancel/i.test(status.textContent) ? 'cancelled' : /autorizad/i.test(status.textContent) ? 'authorized' : 'pending';
+  if (status?.dataset.sefazStatus === 'cancelled') {
+    card.dataset.sefazCancelled = 'true';
+    card.setAttribute('aria-label', 'Nota fiscal cancelada');
+  }
   const key = take('CHAVE_ACESSO')?.querySelector('dd'), text = key?.textContent;
   if (key && /^(?:[0-9]{6}[A-Z0-9]{12}[0-9]{26}|[0-9]{50})$/.test(text)) {
     const button = el('button', 'rg-sefaz-copy'); button.type = 'button'; button.setAttribute('aria-label', 'Copiar chave de acesso'); button.append(icon(doc, 'copy'));

@@ -31,6 +31,7 @@ if (mode === 'menu') {
     VALOR_TOTAL_NOTA:280,VALOR_LIQUIDO:266.98,DESCONTOS:0,TOTAL_RETIDO:13.02,CONTRIB_SOCIAIS_RETIDAS:13.02,
     PIS_RETIDO:1.82,COFINS_RETIDA:8.4,CSLL_RETIDA:13.02,
   });
+  if (new URLSearchParams(location.search).has('cancelled')) Object.assign(fields, {SITUACAO:'CANCELADA'});
   const unified = new URLSearchParams(location.search).has('unified');
   const extraRows = unified ? [
     {id:'6',fields:{Title:'TRANSPORTADORA FICTÍCIA LTDA',TIPO_FISCAL:'CT-e',ORIGEM_FISCAL:'SEFAZ_CTE',MODELO:'57',NUMERO_NOTA:'654',SERIE:'001',DATA_EMISSAO:'2026-10-29',CNPJ_FORNECEDOR:'00000000000000',UF_FORNECEDOR:'MG',VALOR_TOTAL_NOTA:870,VALOR_LIQUIDO:870,DESCONTOS:0,SITUACAO:'Autorizada',STATUS_IMPORTACAO:'XML_COMPLETO',DIRECAO:'Entrada',PAPEL_EMPRESA:'TOMADOR;REMETENTE',TOMADOR:'TOMADOR FICTÍCIO',CNPJ_TOMADOR:'00000000000000',CHAVE_ACESSO:'6'.repeat(44),XML_URL:'https://energeticaltda.sharepoint.com/sites/energetica/Documentos/cte-ficticio.xml',DANFE_URL:'https://energeticaltda.sharepoint.com/sites/energetica/Documentos/dacte-ficticio.pdf'}},
@@ -59,6 +60,7 @@ if (new URLSearchParams(location.search).has('pwa')) {
 await new Promise(resolve => requestAnimationFrame(() => requestAnimationFrame(resolve)));
 const rect = node => node.getBoundingClientRect();
 const withholdingRow = document.querySelector('.rg-row--buyer-withholding');
+const cancelledRow = document.querySelector('[data-sefaz-cancelled="true"]');
 const fiscalSections = [...document.querySelectorAll('[data-fiscal-section]')];
 const initiallyCollapsed = fiscalSections.every(section => !section.open);
 const initiallyHiddenFields = fiscalSections.every(section => [...section.querySelectorAll('dd')].every(field => rect(field).height === 0));
@@ -67,6 +69,7 @@ const expandedByClick = fiscalSections.every(section => section.open);
 const firstPair = document.querySelector('.chat-supplies-pair');
 const blue = firstPair?.querySelector('.chat-supplies-pair__primary button'), stack = firstPair?.querySelector('.chat-gallery-actions');
 document.documentElement.dataset.layout = JSON.stringify({ mode,
+  cancelled: cancelledRow ? (() => { const stamp=cancelledRow.querySelector('.rg-sefaz-cancelled-stamp'), row=rect(cancelledRow), mark=rect(stamp); return {text:stamp.textContent,color:getComputedStyle(stamp).color,pointerEvents:getComputedStyle(stamp).pointerEvents,rotation:getComputedStyle(stamp).transform,row:{left:row.left,right:row.right,top:row.top,bottom:row.bottom},mark:{left:mark.left,right:mark.right,top:mark.top,bottom:mark.bottom}}; })() : null,
   activeFilters: (() => {
     const notice = document.querySelector('[data-sefaz-active-filters]');
     if (!notice || notice.hidden) return null;

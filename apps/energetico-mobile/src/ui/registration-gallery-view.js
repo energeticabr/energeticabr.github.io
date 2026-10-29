@@ -908,7 +908,7 @@ export function createRegistrationGallery({ document: doc = globalThis.document,
           if (pdf) rail.append(pdf);
           const withholding = buyerWithholding(row.fields);
           card.classList.toggle('rg-row--buyer-withholding', Boolean(withholding));
-          decorateSefazInvoiceCard({document: doc, container: main, pdfRail: rail, withholding, fiscalType});
+          decorateSefazInvoiceCard({document: doc, card, container: main, pdfRail: rail, withholding, fiscalType});
           layout.append(main);
           card.append(layout);
         } else renderNativeDetails(card, row, primary);
@@ -929,6 +929,11 @@ export function createRegistrationGallery({ document: doc = globalThis.document,
       recordMain.append(...card.childNodes);
       if (!model.readOnly) card.classList.add('gallery-record-card');
       card.append(recordMain);
+      if (card.dataset.sefazCancelled === 'true') {
+        const cancelledStamp = el('span', 'rg-sefaz-cancelled-stamp', 'CANCELADA');
+        cancelledStamp.setAttribute('aria-hidden', 'true');
+        card.append(cancelledStamp);
+      }
       if (!model.readOnly) card.append(recordActions.render(row));
       list.append(card);
     }
