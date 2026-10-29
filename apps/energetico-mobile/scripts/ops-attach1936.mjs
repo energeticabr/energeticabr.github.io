@@ -5,6 +5,12 @@ if (process.env.APP_STORE_BUILD !== '1936') throw new Error('Recovery is restric
 const client = createAppleClient(process.env, (url, init) => fetch(url, { ...init, signal: AbortSignal.timeout(60_000) }));
 const scoped = {
   async request(method, path, payload) {
+    const groupWrite = method === 'POST' && /^\/v1\/betaGroups\/([^/]+)\/relationships\/builds$/.exec(path);
+    if (groupWrite) {
+      if (payload?.data?.length !== 1 || payload.data[0]?.id !== '6fd0d8b9-e8dd-43ff-a85f-f91a8526cfbf') throw new Error('Unexpected build association blocked.');
+      path = '/v1/builds/6fd0d8b9-e8dd-43ff-a85f-f91a8526cfbf/relationships/betaGroups';
+      payload = { data: [{ type: 'betaGroups', id: groupWrite[1] }] };
+    }
     if (method === 'GET' && path.startsWith('/v1/builds?')) {
       const query = new URL(path, 'https://api.appstoreconnect.apple.com');
       query.searchParams.set('filter[version]', '1936');
