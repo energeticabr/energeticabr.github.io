@@ -6,7 +6,7 @@ import {createDdaPaymentConfirmation} from './dda-payment-confirmation.js';
 const LOGO=new URL('../../../../assets/logo-energetica-oficial.png',import.meta.url).href;
 const money=value=>value==null?'Não disponível':new Intl.NumberFormat('pt-BR',{style:'currency',currency:'BRL'}).format(Number(value));
 const date=value=>value?value.slice(8,10)+'/'+value.slice(5,7)+'/'+value.slice(0,4):'Não informado';
-export function createDdaReportView({document:doc=globalThis.document,data,openMediaCollection,confirmPayment,onClose=()=>{},now=()=>new Date()}={}){
+export function createDdaReportView({document:doc=globalThis.document,data,openMediaCollection,confirmPayment,syncMonitor,onClose=()=>{},now=()=>new Date()}={}){
  if(!doc?.body||typeof data?.loadSnapshot!=='function')throw new TypeError('O relatório requer a sessão SharePoint.');
  const make=(tag,cls='',value)=>{const node=doc.createElement(tag);node.className=cls;if(value!==undefined)node.textContent=String(value);return node;};
  const button=(label,text=label)=>{const node=make('button','',text);node.type='button';node.setAttribute('aria-label',label);return node;};
@@ -24,7 +24,8 @@ export function createDdaReportView({document:doc=globalThis.document,data,openM
  report.append(toolbar,notice,content);panel.append(report);root.append(panel);doc.body.append(root);
  const landscape=bindReportLandscape(root);addReportCloseControl({root,toolbar,onClose:close});
  let rows=null,controller=null,revision=0,filterRevision=0,page=1,printAll=false,destroyed=false,returnFocus=null,app=null,oldInert=false,oldOverflow='';
- const paymentConfirmation=createDdaPaymentConfirmation({document:doc,host:root,confirmPayment,onConfirmed:receipt=>{
+ let bankRunning=Boolean(syncMonitor?.running),bankNotice='',startingBank=false,reloadAfterPayment=false;
+ const paymentConfirmation=createDdaPaymentConfirmation({document:doc,host:root,confirmPayment,onClose:()=>{if(reloadAfterPayment)queueMicrotask(reloadFromBank);},onConfirmed:receipt=>{
   if(destroyed||root.hidden||!rows)return;
   const position=[content.scrollTop,content.scrollLeft];
   rows=rows.map(row=>row.id===String(receipt.itemId)&&row.key===receipt.key
@@ -39,7 +40,21 @@ export function createDdaReportView({document:doc=globalThis.document,data,openM
    const current=controls[name].value;controls[name].replaceChildren(option('Todas',''),...[...new Set([...values,current].filter(Boolean))].map(value=>option(value,value)));controls[name].value=current;
   }
  }
- function showNotice(message=''){notice.textContent=message;notice.hidden=!message;}
+ function showNotice(message=''){const text=message||bankNotice;notice.textContent=text;notice.hidden=!text;}
+ function syncRefreshButton(){refresh.disabled=startingBank||bankRunning||root.getAttribute('aria-busy')==='true';}
+ function reloadFromBank(){
+  if(destroyed||root.hidden){reloadAfterPayment=false;return;}
+  if(paymentConfirmation.isOpen){reloadAfterPayment=true;return;}
+  reloadAfterPayment=false;void load();
+ }
+ async function manualRefresh(){
+  if(destroyed||root.hidden||refresh.disabled)return;
+  if(!syncMonitor)return load();
+  startingBank=true;syncRefreshButton();showNotice('Iniciando consulta ao Sicoob…');
+  try{await syncMonitor.start();}
+  catch{if(!destroyed&&!root.hidden)showNotice('Não foi possível iniciar a consulta ao Sicoob. Tente novamente.');}
+  finally{startingBank=false;syncRefreshButton();}
+ }
  function render(){
   if(content.contains(doc.activeElement))panel.focus({preventScroll:true});content.replaceChildren();if(!rows)return;
   const result=buildDdaReport(rows,selected(),now()),pages=Math.max(1,Math.ceil(result.rows.length/50));page=Math.min(page,pages);
@@ -97,14 +112,21 @@ export function createDdaReportView({document:doc=globalThis.document,data,openM
   if(root.hidden||destroyed)return;paymentConfirmation.close();controller?.abort();const current=++revision,active=controller=new AbortController();rows=null;printAll=false;root.setAttribute('aria-busy','true');refresh.disabled=true;showNotice();content.replaceChildren(make('p','','Carregando DDAs do SharePoint…'));
   try{const snapshot=initialSnapshot??await data.loadSnapshot({refresh:true,signal:active.signal});if(active.signal.aborted||current!==revision||root.hidden||destroyed)return;rows=normalizeDdaReportRows(snapshot);populate();render();}
   catch{if(active.signal.aborted||current!==revision||root.hidden||destroyed)return;rows=null;const error=make('p','','Não foi possível carregar os DDAs. Tente atualizar.');error.setAttribute('role','alert');content.replaceChildren(error);}
-  finally{if(current===revision){root.setAttribute('aria-busy','false');refresh.disabled=false;}}
+  finally{if(current===revision){root.setAttribute('aria-busy','false');syncRefreshButton();}}
  }
- function close(){if(root.hidden)return;paymentConfirmation.close();controller?.abort();revision++;rows=null;printAll=false;content.replaceChildren();showNotice();root.hidden=true;doc.body.style.overflow=oldOverflow;if(app)app.inert=oldInert;const target=returnFocus?.isConnected?returnFocus:doc.querySelector('[data-action="open-dda-report"]')||app;target?.focus?.();returnFocus=null;onClose();}
+ function close(){if(root.hidden)return;reloadAfterPayment=false;paymentConfirmation.close();controller?.abort();revision++;rows=null;printAll=false;content.replaceChildren();showNotice();root.hidden=true;doc.body.style.overflow=oldOverflow;if(app)app.inert=oldInert;const target=returnFocus?.isConnected?returnFocus:doc.querySelector('[data-action="open-dda-report"]')||app;target?.focus?.();returnFocus=null;onClose();}
  const filter=()=>{filterRevision++;printAll=false;page=1;render();content.scrollTop=0;showNotice();};
- controls.status.addEventListener('change',filter);controls.bank.addEventListener('change',filter);controls.search.addEventListener('input',filter);refresh.addEventListener('click',()=>void load());
+ controls.status.addEventListener('change',filter);controls.bank.addEventListener('change',filter);controls.search.addEventListener('input',filter);refresh.addEventListener('click',()=>void manualRefresh());
+ const unsubscribeBank=syncMonitor?.subscribe(state=>{
+  if(destroyed)return;
+  const finished=bankRunning&&!state.running;bankRunning=Boolean(state.running);bankNotice=state.notice||'';
+  if(!root.hidden)showNotice();
+  if(finished)reloadFromBank();
+  syncRefreshButton();
+ });
  root.addEventListener('click',event=>{if(event.target===root)close();});
  root.addEventListener('keydown',event=>{if(root.hidden)return;if(event.key==='Escape'){event.preventDefault();close();return;}if(event.key!=='Tab')return;const nodes=[...panel.querySelectorAll('button,input,select,[tabindex="0"]')].filter(node=>!node.disabled&&!node.closest('[hidden]')),first=nodes[0],last=nodes.at(-1);if(event.shiftKey&&(doc.activeElement===first||doc.activeElement===panel)){event.preventDefault();last?.focus();}else if(!event.shiftKey&&(doc.activeElement===last||doc.activeElement===panel)){event.preventDefault();first?.focus();}});
  return Object.freeze({element:root,async open({automatic=false,initialSnapshot}={}){if(destroyed)throw new Error('Relatório encerrado.');if(!root.hidden)return;returnFocus=doc.activeElement;app=doc.getElementById('app');oldInert=app?.inert||false;oldOverflow=doc.body.style.overflow;doc.body.style.overflow='hidden';if(app)app.inert=true;const initialStatus=automatic?'Não pagos':'Em aberto';controls.status.replaceChildren(option(initialStatus,initialStatus));controls.bank.replaceChildren(option('Todas',''));controls.search.value='';page=1;root.hidden=false;landscape.update();panel.focus();await load(initialSnapshot);},close,
   async preparePrint(){if(root.hidden||destroyed||!rows||root.getAttribute('aria-busy')==='true')throw new Error('Não foi possível imprimir: aguarde a consulta completa dos DDAs.');const current=revision,filters=filterRevision,position=[content.scrollTop,content.scrollLeft],oldPage=page;printAll=true;render();return()=>{if(root.hidden||destroyed||current!==revision||filters!==filterRevision)return;printAll=false;page=oldPage;render();[content.scrollTop,content.scrollLeft]=position;};},
-  destroy(){if(destroyed)return;close();paymentConfirmation.destroy();destroyed=true;landscape.destroy();root.remove();}});
+  destroy(){if(destroyed)return;close();paymentConfirmation.destroy();destroyed=true;unsubscribeBank?.();landscape.destroy();root.remove();}});
 }

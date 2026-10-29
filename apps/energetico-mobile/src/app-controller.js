@@ -9310,9 +9310,9 @@ export function createAppController({
             kind: sourceKind, data,
             ...(!isDdaReport && sourceKind === 'dda' ? {
               refreshBank: options => refreshDdaBank(client, { ...options, assertSession }),
-              syncMonitor: ensureDdaSyncSession(),
             } : {}),
             ...(sourceKind === 'dda' ? {
+              syncMonitor: ensureDdaSyncSession(),
               confirmPayment: async options => { assertSession(); const receipt = await client.confirmDdaPayment(options); assertSession(); return receipt; },
             } : {}),
             ...(isDdaReport ? { onClose: () => ddaAutoReminder.dismiss() } : {}),

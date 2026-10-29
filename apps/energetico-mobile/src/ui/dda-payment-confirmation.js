@@ -1,7 +1,7 @@
 import { validateDdaPaymentReceipt } from '../chat/dda-payment-confirmation.js';
 
 /** Acknowledges an existing payment; never sends a payment instruction to a bank. */
-export function createDdaPaymentConfirmation({ document: doc, host, confirmPayment, onConfirmed, timeoutMs = 35_000 }) {
+export function createDdaPaymentConfirmation({ document: doc, host, confirmPayment, onConfirmed, onClose = () => {}, timeoutMs = 35_000 }) {
   let current = null;
   const el = (tag, cls, text) => { const n = doc.createElement(tag); n.className = cls; if (text !== undefined) n.textContent = text; return n; };
   function focusables() { return current ? [...current.dialog.querySelectorAll('button:not(:disabled)')] : []; }
@@ -13,6 +13,7 @@ export function createDdaPaymentConfirmation({ document: doc, host, confirmPayme
     for (const [node, inert] of old.background) node.inert = inert;
     if (old.trigger?.isConnected && !host.hidden) old.trigger.focus();
     else if (host.isConnected && !host.hidden) host.focus();
+    onClose();
   }
   function show({ itemId, key, supplier, amount, due }, trigger) {
     if (current || host.hidden || !host.isConnected) return;
@@ -68,5 +69,5 @@ export function createDdaPaymentConfirmation({ document: doc, host, confirmPayme
     });
     doc.addEventListener('focusin', keepFocus, true); cancel.focus();
   }
-  return { show, close: () => close(true), destroy: () => close(true) };
+  return { get isOpen() { return current !== null; }, show, close: () => close(true), destroy: () => close(true) };
 }
