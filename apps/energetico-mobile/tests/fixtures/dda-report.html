@@ -91,6 +91,14 @@ if(new URLSearchParams(location.search).has('layout')){
  document.documentElement.dataset.layout=JSON.stringify({
   pageOverflow:document.documentElement.scrollWidth>innerWidth+1,
   tableFits:table.offsetWidth<=content.clientWidth+1,
+  reportHeader:(()=>{
+   const toolbar=document.querySelector('.ddr-toolbar'),top=toolbar.querySelector('.ddr-header-row'),logo=top.querySelector('.ddr-header-logo'),print=top.querySelector('.report-print-actions'),title=top.querySelector('.ddr-header-title'),filters=toolbar.querySelector('.ddr-filter-row');
+   return {logoBeforePrinter:logo.offsetLeft+logo.offsetWidth<=print.offsetLeft,
+    titleAfterPrinter:print.offsetLeft+print.offsetWidth<=title.offsetLeft,
+    filtersBelow:top.offsetTop+top.offsetHeight<=filters.offsetTop,
+    filtersFit:filters.offsetWidth<=toolbar.clientWidth+1,
+    titleVisible:title.getBoundingClientRect().width>0};
+  })(),
   headers:[...table.querySelectorAll('thead th')].map(cell=>({text:cell.textContent,fits:cell.scrollWidth<=cell.clientWidth+1})),
   bankDocuments:[...document.querySelectorAll('.ddr-bank-document')].map(cell=>{
    const bank=cell.querySelector('[data-dda-bank-cluster]'),number=cell.querySelector('[data-dda-document-cluster]');
