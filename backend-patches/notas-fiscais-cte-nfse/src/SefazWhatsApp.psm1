@@ -146,7 +146,7 @@ function Invoke-SefazWhatsAppDrain($Config,[string]$Root,[scriptblock]$Remote){
                 if($item.nextRetryAt -and [DateTimeOffset]::Parse([string]$item.nextRetryAt) -gt [DateTimeOffset]::UtcNow){continue}
                 if($attempted -ge 10){break};$attempted++
                 $answer=& $Remote $Config $item.request
-                if($null -eq $answer -or $answer.key -cne $item.request.document.key -or $answer.status -notin @('staged','text_queued','text_sent','pdf_queued','pdf_blocked','unconfirmed','sent','baseline','scope_excluded')){throw 'WHATSAPP_RECEIPT_INVALID'}
+                if($null -eq $answer -or $answer.key -cne $item.request.document.key -or $answer.status -notin @('staged','text_queued','text_sent','pdf_queued','retention_queued','pdf_blocked','unconfirmed','sent','baseline','scope_excluded')){throw 'WHATSAPP_RECEIPT_INVALID'}
                 $item.state=if($answer.status -eq 'scope_excluded'){'scope_excluded'}else{'remote_staged'};$item.code='';$item.nextRetryAt=$null
                 Write-SefazNotificationJson $file.FullName $item
                 $staged++

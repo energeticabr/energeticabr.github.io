@@ -47,6 +47,88 @@ def with_xml_replacement(request, before, after):
 
 
 class Notifications(unittest.TestCase):
+    def test_nfe_iss_retention_alone_and_with_federal_components(self):
+        for federal, expected in [('', '25,00'), ('<retTrib><vIRRF>15.00</vIRRF></retTrib>', '40,00')]:
+            req = with_xml_replacement(envelope(), '</total>', federal+'<ISSQNtot><vISSRet>25.00</vISSRet></ISSQNtot></total>')
+            fiscal = notify.parse_fiscal_xml(base64.b64decode(req['document']['xmlBase64']), KEY, notify.COMPANY, required_environment='1')
+            self.assertEqual(format(notify.buyer_retention(fiscal), '.2f').replace('.', ','), expected)
+
+    def test_retention_is_after_own_pdf_and_before_next_note_with_retry_dedup(self):
+        req = with_xml_replacement(envelope(), '</total>', '<retTrib><vRetPIS>12.34</vRetPIS><vRetCOFINS>20.00</vRetCOFINS><vRetCSLL>5.00</vRetCSLL><vIRRF>1.00</vIRRF><vRetPrev>2.00</vRetPrev></retTrib></total>')
+        self.stage(req)
+        second = KEY[:-4]+'0999'
+        self.stage(envelope(second))
+        for phase in ('text', 'pdf', 'retention'):
+            with ThreadPoolExecutor(max_workers=4) as pool:
+                list(pool.map(lambda _: self.drain(), range(4)))
+            messages = [m for _, m in self.queued()]
+            self.assertEqual([m['completionId'] for m in messages], ['sefaz-new-'+KEY+'-'+phase])
+            if phase == 'retention':
+                self.assertEqual(messages[0]['type'], 'text')
+                self.assertEqual(messages[0]['text'], '*ATENÇÃO : ESSA NOTA GEROU RETENÇÕES NO VALOR DE R$ 40,34*')
+                self.assertEqual(self.stage(req)['status'], 'retention_queued')
+            self.acknowledge(phase)
+        self.drain()
+        self.assertEqual(notify.status(KEY, self.db)['status'], 'sent')
+        self.assertEqual([m['completionId'] for _, m in self.queued()], ['sefaz-new-'+second+'-text'])
+
+    def test_nfse_warning_sums_only_buyer_components_and_not_own_pis_cofins(self):
+        raw = nfse_xml().replace(b'<tpRetISSQN>2', b'<tpRetISSQN>3').replace(b'</trib>', b'<tribFed><piscofins><vPis>100.00</vPis><vCofins>200.00</vCofins><tpRetPisCofins>3</tpRetPisCofins></piscofins><vRetCSLL>13.02</vRetCSLL><vRetIRRF>1.50</vRetIRRF><vRetCP>2.00</vRetCP></tribFed></trib>')
+        req = notification_envelope(raw, NFSE_KEY, 'NFSe', 'DANFSe')
+        req['document']['fields'] = {'TOTAL_RETIDO': 999999, 'ISS_RETIDO': 999999}
+        self.stage(req)
+        for phase in ('text', 'pdf'):
+            self.drain(); self.acknowledge(phase, key=NFSE_KEY)
+        self.drain()
+        self.assertEqual(self.queued()[0][1]['text'], '*ATENÇÃO : ESSA NOTA GEROU RETENÇÕES NO VALOR DE R$ 16,52*')
+
+    def test_non_buyer_or_only_total_or_own_tax_never_generates_warning(self):
+        variants = [nfse_xml().replace(b'<tpRetISSQN>2', b'<tpRetISSQN>1').replace(b'<vLiq>', b'<vTotalRet>78.50</vTotalRet><vLiq>'),
+                    nfse_xml().replace(b'<toma><CNPJ>38626750000146', b'<toma><CNPJ>44444444000144').replace(b'<interm><CNPJ>99999999000199', b'<interm><CNPJ>38626750000146')]
+        for i, raw in enumerate(variants):
+            key = NFSE_KEY[:-1]+str(i+5)
+            raw = raw.replace(NFSE_KEY.encode(), key.encode())
+            self.stage(notification_envelope(raw, key, 'NFSe', 'DANFSe'))
+            for phase in ('text', 'pdf'):
+                self.drain(); self.acknowledge(phase, key=key)
+            self.drain()
+            self.assertEqual(self.queued(), [])
+            self.assertEqual(notify.status(key, self.db)['status'], 'sent')
+
+    def test_inconsistent_retention_total_is_rejected(self):
+        raw = nfse_xml().replace(b'<vLiq>', b'<vTotalRet>1.00</vTotalRet><vLiq>')
+        with self.assertRaisesRegex(ValueError, 'INVALID_RETENTION_TOTAL'):
+            self.stage(notification_envelope(raw, NFSE_KEY, 'NFSe', 'DANFSe'))
+
+    def test_missing_warning_ack_blocks_next_invoice_without_reenqueuing(self):
+        self.stage(notification_envelope(nfse_xml(), NFSE_KEY, 'NFSe', 'DANFSe'))
+        self.stage()
+        for phase in ('text', 'pdf'):
+            self.drain(); self.acknowledge(phase, key=NFSE_KEY)
+        self.drain()
+        with self.connection() as db:
+            db.execute('DELETE FROM gateway_outbox')
+        self.drain(); self.drain()
+        self.assertEqual(self.queued(), [])
+        self.assertEqual(notify.status(NFSE_KEY, self.db)['status'], 'unconfirmed')
+        self.assertEqual(notify.status(KEY, self.db)['status'], 'staged')
+        self.acknowledge('retention', key=NFSE_KEY)
+        self.drain()
+        self.assertEqual([m['completionId'] for _, m in self.queued()], ['sefaz-new-'+KEY+'-text'])
+
+    def test_legacy_sent_history_is_not_reopened_by_retention_migration(self):
+        self.stage()
+        for phase in ('text', 'pdf'):
+            self.drain(); self.acknowledge(phase)
+        self.drain()
+        with self.connection() as db:
+            before = db.execute('SELECT * FROM sefaz_notification_dispatch ORDER BY rowid').fetchall()
+            db.execute('DROP TABLE sefaz_notification_retention')
+        self.drain()
+        with self.connection() as db:
+            self.assertEqual(before, db.execute('SELECT * FROM sefaz_notification_dispatch ORDER BY rowid').fetchall())
+        self.assertEqual(self.queued(), [])
+
     def test_cte_os_and_simplified_metadata_come_from_xml_without_using_net_as_total(self):
         for kind, key in [('cteOSProc', CTE_KEY[:20]+'67'+CTE_KEY[22:]), ('cteSimpProc', CTE_KEY)]:
             with self.subTest(kind=kind):
@@ -80,7 +162,7 @@ class Notifications(unittest.TestCase):
         self.stage(cte)
         self.stage(nfse)
         for key in [CTE_KEY, NFSE_KEY]:
-            for phase in ['text', 'pdf']:
+            for phase in (['text', 'pdf', 'retention'] if key == NFSE_KEY else ['text', 'pdf']):
                 self.drain()
                 self.assertEqual([m['completionId'] for _, m in self.queued()], ['sefaz-new-'+key+'-'+phase])
                 self.acknowledge(phase, key=key)

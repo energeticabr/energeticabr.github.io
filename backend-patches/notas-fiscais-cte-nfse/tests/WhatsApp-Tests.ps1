@@ -39,6 +39,10 @@ try{
     Assert-True ($script:stages -eq 2 -and $script:drains -ge 2) 'aceite duravel remoto encerra reenvio e reconcilia em separado'
     $queued=Get-Content -LiteralPath $path -Raw|ConvertFrom-Json
     Assert-True ($queued.state -eq 'remote_staged') 'registro local distingue enfileirado de efetivamente enviado'
+    $queued.state='pending';$queued.nextRetryAt=$null;$queued|ConvertTo-Json -Depth 35|Set-Content -LiteralPath $path -Encoding utf8
+    $null=Invoke-SefazWhatsAppDrain $cfg $root {param($Config,$Request);if($Request.mode -eq 'drain'){return [pscustomobject]@{status='reconciled'}};return [pscustomobject]@{status='retention_queued';key=$Request.document.key;duplicate=$true}}
+    $queued=Get-Content -LiteralPath $path -Raw|ConvertFrom-Json
+    Assert-True ($queued.state -eq 'remote_staged') 'retomada com aviso de retencao ja enfileirado nao reenvia nota'
     $disabled=[pscustomobject]@{whatsappEnabled=$false}
     $r=Invoke-SefazWhatsAppDrain $disabled $root {throw 'NAO_DEVE_CHAMAR'}
     Assert-True ($r.status -eq 'disabled') 'recurso desabilitado nao abre SSH'
@@ -65,5 +69,5 @@ try{
     Assert-True ($scopeItem.request.document.xmlBase64 -ceq $oldDoc.xmlBase64) 'excluded notification preserves original fiscal bytes'
     Write-Host "RESULTADO: $script:passed verificacoes WhatsApp aprovadas."
 }finally{
-    if([IO.Directory]::Exists($root)){Remove-Item -LiteralPath $root -Recurse -Force}
+    if([IO.Directory]::Exists($root)){$resolved=[IO.Path]::GetFullPath($root);$base=[IO.Path]::GetFullPath([IO.Path]::GetTempPath()).TrimEnd('\','/');if((Split-Path $resolved -Parent) -cne $base -or (Split-Path $resolved -Leaf) -notlike 'sefaz-whatsapp-tests-*'){throw 'UNSAFE_TEST_CLEANUP'};Remove-Item -LiteralPath $resolved -Recurse -Force}
 }
