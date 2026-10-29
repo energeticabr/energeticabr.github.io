@@ -1,0 +1,16 @@
+{
+  "files": {
+    "worker/workflow.py": {
+      "before": "f3820c16cd46f75e18dfa3d96a9a515a72a1f23a85c036f16610e360df845530",
+      "mirrorBefore": "f3820c16cd46f75e18dfa3d96a9a515a72a1f23a85c036f16610e360df845530",
+      "after": "9d208eda2c53e05f6f5e098b911320d5fe9f98b0de85cc2831ef1a8a993403c1"
+    },
+    "worker/provision_description_settlement.py": {
+      "before": "8fd6c6b2a19b51785be50fd71b2456ad660b94b9fab55d786988f0a74e7bc59c",
+      "mirrorBefore": "8fd6c6b2a19b51785be50fd71b2456ad660b94b9fab55d786988f0a74e7bc59c",
+      "after": "fd2ae494480a88b049fd2f45cda7275fcd8c54e7c6ec160da00c5d2e68c28a20"
+    }
+  },
+  "patch": "4b532c37261e6e2a59c6ad009597aebfc414e9d8216de95975e378ed8bec6193",
+  "archive": "efb9891e075dab5fa4d472926d0a3d74d36e2a2fe483f25cc6d6a9a0d8bceb16"
+}
