@@ -16,6 +16,84 @@ import { createAttachmentPreview } from '../src/web/attachment-preview.js';
 import { createNativePorts } from '../src/native/native-ports.js';
 import { scannedPages } from './helpers/scanned-pages.mjs';
 
+async function settlementTrayHarness(t, { uploaded = true, queued = true, transferFailure = false, fromMenu = false } = {}) {
+  const h = makeHarness({ historyMode: 'current-step' });
+  t.after(() => h.controller.stop());
+  h.client.getPendingProvisionSnapshot = async () => ({ due: true, sourceKind: 'provision-description',
+    rows: [{ id: '46', sourceKind: 'provision-description', supplier: 'SWILE' }] });
+  await h.controller.start();
+  const flow = { id: 'launch', contextId: 'source-context', title: 'EFETUAR LANÇAMENTO' };
+  if (fromMenu) flow.contextId = '';
+  const fresh = { id: 'fresh-proof', fileName: 'comprovante.pdf', mimeType: 'application/pdf', size: 5,
+    mediaUrl: '/api/portal-media/fresh-proof' };
+  const existing = { id: 'existing-proof', fileName: 'gravado.pdf', existing: true, mediaUrl: '/api/portal-media/existing-proof' };
+  h.store.ingestRemoteMessages([fromMenu
+    ? { type:'poll', question:'QUAL ÁREA VOCÊ DESEJA ACESSAR?', options:[{id:'group_pending',label:'PENDÊNCIAS'}] }
+    : { type: 'poll', question: 'QUAL É A DATA?', options: [] }], { activeFlow: fromMenu ? null : flow });
+  h.store.syncAttachments(uploaded ? [fresh, existing] : []);
+  if (queued) h.store.queueFiles([new File(['local'], 'local.pdf', { type: 'application/pdf' })]);
+  const calls=[];
+  const receipt={ requestId: 'transfer-request', contextId: flow.contextId, attachmentIds: [fresh.id] };
+  h.client.getAttachments = async () => uploaded ? [fresh] : [];
+  h.client.sendText = async payload => {
+    calls.push(payload);
+    if (payload.replyId === 'portal_transfer_attachments') {
+      assert.deepEqual(payload.homeAttachmentIds, [fresh.id]);
+      assert.equal(payload.expectedContextId, flow.contextId);
+      if (transferFailure) throw new Error('Falha na transferência');
+      return { status: 'processed', activeFlow: { ...flow, homeAttachmentTransfer: receipt }, attachments: [fresh, existing],
+        messages: [{ type: 'poll', question: 'TEM CERTEZA QUE DESEJA ABANDONAR ESTE FLUXO? OS ANEXOS SERÃO TRANSFERIDOS PARA O PRÓXIMO FLUXO.',
+          options: [{ id: 'portal_transfer_draft_discard', label: 'SIM, TRANSFERIR' }] }] };
+    }
+    if (payload.replyId === 'portal_transfer_draft_discard' || payload.replyId === 'portal_confirm_main_menu') {
+      if (uploaded) assert.deepEqual(payload.homeTransferReceipt, receipt);
+      return { status: 'processed', returned_to_main_menu: true, resetConversation: true, activeFlow: null,
+        attachments: uploaded ? [fresh] : [], results: uploaded ? [{ portal_transfer_decision: 'transfer' }] : [],
+        messages: [{ type: 'poll', question: 'QUAL ÁREA VOCÊ DESEJA ACESSAR?', options: [{ id: 'group_pending', label: 'PENDÊNCIAS' }] }] };
+    }
+    if (payload.replyId === 'group_pending') return { status: 'processed', activeFlow: null,
+      messages: [{ type: 'poll', question: 'PENDÊNCIAS', options: [{ id: 'pending_payment_settlement', label: 'BAIXAR PAGAMENTO AGENDADO' }] }] };
+    if (payload.replyId === 'pending_payment_settlement') return { status: 'processed', activeFlow: { id: 'payment_settlement', title: 'BAIXAR PAGAMENTO AGENDADO' },
+      attachments: uploaded ? [fresh] : [], messages: [{ type: 'poll', question: 'QUAL PAGAMENTO AGENDADO FOI PAGO?',
+        options: [{ id: 'provision_description:46', reply: 'provision_description:46', label: '46 - SWILE' }] }] };
+    if (payload.replyId === 'provision_description:46') return { status: 'processed', activeFlow: { id: 'payment_settlement', title: 'BAIXAR PAGAMENTO AGENDADO' },
+      messages: [{ type: 'poll', question: 'REVISE AS PROVISÕES DO DESCRITIVO', detail_table: { kind: 'provision_settlement_review', descriptionId: '46' },
+        options: [{ id: 'description_review_submit', label: 'SUBMETER' }] }] };
+    throw new Error('Atalho não deve postar registros: '+payload.replyId);
+  };
+  return { ...h, calls, fresh };
+}
+
+test('check da baixa transfere comprovantes novos e mantém arquivos locais sem incluir anexos já gravados', async t => {
+  const h=await settlementTrayHarness(t);
+  assert.equal(await h.view.emit('settle-pending-provision', { paymentId: '46' }), true, JSON.stringify({error:h.view.renders.at(-1).error,calls:h.calls,state:h.store.getState()}));
+  assert.deepEqual(h.calls.map(c=>c.replyId), ['portal_transfer_attachments','portal_transfer_draft_discard','group_pending','pending_payment_settlement','provision_description:46']);
+  assert.deepEqual(h.store.getState().attachments.map(a=>a.id), [h.fresh.id]);
+  assert.deepEqual(h.store.getState().pendingFiles.map(f=>f.file.name), ['local.pdf']);
+});
+
+test('check da baixa mantém arquivo ainda não enviado durante toda navegação até o descritivo', async t => {
+  const h=await settlementTrayHarness(t,{uploaded:false});
+  assert.equal(await h.view.emit('settle-pending-provision', {paymentId:'46'}),true, JSON.stringify({error:h.view.renders.at(-1).error,calls:h.calls}));
+  assert.deepEqual(h.store.getState().pendingFiles.map(f=>f.file.name),['local.pdf']);
+});
+
+test('check da baixa preserva bandeja quando a transferência falha e não escolhe provisão', async t => {
+  const h=await settlementTrayHarness(t,{transferFailure:true});
+  assert.equal(await h.view.emit('settle-pending-provision',{paymentId:'46'}),false);
+  assert.deepEqual(h.store.getState().attachments.map(a=>a.id),[h.fresh.id,'existing-proof']);
+  assert.deepEqual(h.store.getState().pendingFiles.map(f=>f.file.name),['local.pdf']);
+  assert.deepEqual(h.calls.map(c=>c.replyId),['portal_transfer_attachments']);
+});
+
+test('check da baixa preserva comprovante que já estava na bandeja do menu inicial', async t => {
+  const h=await settlementTrayHarness(t,{fromMenu:true});
+  assert.equal(await h.view.emit('settle-pending-provision',{paymentId:'46'}),true);
+  assert.deepEqual(h.store.getState().attachments.map(a=>a.id),[h.fresh.id]);
+  assert.deepEqual(h.store.getState().pendingFiles.map(f=>f.file.name),['local.pdf']);
+  assert.equal(h.calls[0].replyId,'portal_transfer_attachments');
+});
+
 function makeView() {
   const handlers = new Map();
   const renders = [];

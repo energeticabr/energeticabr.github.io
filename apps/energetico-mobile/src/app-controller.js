@@ -3469,6 +3469,17 @@ export function createAppController({
   async function enterScheduledPaymentSelection(poll, targetAccount, targetRevision, sourceKind) {
     if (isScheduledPaymentSelection(poll, currentAssistantActiveFlow(), sourceKind)) return poll;
 
+    const tray = store.getState();
+    const preserveTray = unsubmittedUserAttachments(tray.attachments).length > 0
+      || tray.pendingFiles.some(file => file.hideFromAttachmentTray !== true);
+    if (preserveTray) {
+      // Use the existing scoped transfer, even if the popup was opened over a menu.
+      // Local files stay queued; uploaded files move only after VM confirmation.
+      const returned = await returnToMainMenu() && await waitForResponseTransition();
+      if (!returned || stopped || account !== targetAccount || sessionRevision !== targetRevision) return null;
+      poll = currentAssistantPoll();
+    }
+
     const activeFlow = currentAssistantActiveFlow();
     const restartFromMainMenu = isSuppliesFlowMenu(poll, activeFlow);
     let entry = restartFromMainMenu ? null : scheduledSettlementEntry(poll);
@@ -3483,7 +3494,7 @@ export function createAppController({
           targetAccount, targetRevision,
           undefined, undefined, { autoDiscardExit: true, requireMenuResult: !diaryActive },
         );
-        if (!returned) return null;
+        if (!returned || stopped || account !== targetAccount || sessionRevision !== targetRevision) return null;
         poll = currentAssistantPoll();
         if (isDraftExitConfirmation(poll)) {
           setSessionError(new Error("A VM não confirmou o abandono do fluxo anterior. A baixa não foi iniciada."));
@@ -3515,6 +3526,7 @@ export function createAppController({
         String(pendingOption.reply || pendingOption.id || "group_pending"),
         targetAccount,
         targetRevision,
+        undefined, undefined, { allowAttachmentTrayNavigation: true },
       );
       if (!openedPending) return null;
       poll = currentAssistantPoll();
@@ -3528,6 +3540,7 @@ export function createAppController({
         String(provisionsOption.reply || provisionsOption.id || "pending_payment_provisions"),
         targetAccount,
         targetRevision,
+        undefined, undefined, { allowAttachmentTrayNavigation: true },
       );
       if (!openedProvisions) return null;
       poll = currentAssistantPoll();
@@ -3543,6 +3556,7 @@ export function createAppController({
       String(entry.reply || entry.id || ""),
       targetAccount,
       targetRevision,
+      undefined, undefined, { allowAttachmentTrayNavigation: true },
     );
     if (!entered) return null;
     poll = currentAssistantPoll();
@@ -3911,10 +3925,14 @@ export function createAppController({
         String(option.reply || option.id || id),
         targetAccount,
         targetRevision,
+        undefined, undefined, { allowAttachmentTrayNavigation: true },
       );
       if (!selected) return false;
       const nextPoll = currentAssistantPoll();
-      if (!isSettlementQuantityQuestion(nextPoll)) {
+      const review = nextPoll?.detail_table || nextPoll?.detailTable;
+      const groupedReview = sourceKind === "provision-description"
+        && review?.kind === "provision_settlement_review" && String(review.descriptionId) === id;
+      if (!isSettlementQuantityQuestion(nextPoll) && !groupedReview) {
         setSessionError(new Error("A VM recebeu o pagamento selecionado, mas não apresentou a pergunta de quantidade esperada. Confira o fluxo antes de continuar."));
         return false;
       }
@@ -9404,11 +9422,13 @@ export function createAppController({
     }
     const continuingWithoutAttachment = String(replyId || "").trim().toLowerCase() === "input_continue";
     const pendingError = pendingAttachmentGuard();
-    if (pendingError && !continuingWithoutAttachment && behavior.autoDiscardExit !== true) {
+    if (pendingError && !continuingWithoutAttachment && behavior.autoDiscardExit !== true
+      && behavior.allowAttachmentTrayNavigation !== true) {
       setSessionError(new Error(pendingError));
       return false;
     }
-    if (!continuingWithoutAttachment && behavior.autoDiscardExit !== true) {
+    if (!continuingWithoutAttachment && behavior.autoDiscardExit !== true
+      && behavior.allowAttachmentTrayNavigation !== true) {
       const attachmentVerification = verifyAttachmentSnapshotBeforeSubmit();
       if (attachmentVerification !== true && !await attachmentVerification) return false;
     }
