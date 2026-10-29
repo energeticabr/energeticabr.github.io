@@ -17,14 +17,15 @@ test('NF-e gallery and three-gallery launch group fit narrow phones and Windows 
     devServer.middlewares.use('/__notas-built.css', (_req, res) => { res.setHeader('Content-Type', 'text/css'); res.end(css); });
   } }], server: { host: '127.0.0.1', port: 0, fs: { allow: [resolve(root, '../..')] } } });
   await server.listen(); t.after(() => server.close());
-  for (const [width, pwa, mode, expanded, withholding, retentionNone, unified, activeFilters, aggregateWithholding] of [[320, false, 'gallery'], [390, false, 'gallery'], [768, false, 'gallery'], [1365, false, 'gallery'],
+  for (const [width, pwa, mode, expanded, withholding, retentionNone, unified, activeFilters, aggregateWithholding, cancelled] of [[320, false, 'gallery'], [390, false, 'gallery'], [768, false, 'gallery'], [1365, false, 'gallery'],
     [320, false, 'menu'], [390, false, 'menu'], [1365, false, 'menu'], [390, true, 'gallery'], [1365, true, 'gallery'], [320, true, 'menu'], [390, false, 'gallery', true], [320, false, 'gallery', true],
     [320,false,'gallery',false,true], [390,false,'gallery',false,true], [390,true,'gallery',false,true], [320,false,'gallery',true,true], [390,false,'gallery',true,false,true], [320,false,'gallery',false,true,false,true], [390,false,'gallery',false,true,false,true], [320,false,'gallery',true,true,false,true], [390,true,'gallery',false,true,false,true],
     ...[[320,false], [390,false], [1365,false], [390,true]].map(([width,pwa]) => [width,pwa,'gallery',false,false,false,false,true]),
-    ...[[320,false], [390,false], [1365,false], [390,true]].map(([width,pwa]) => [width,pwa,'gallery',false,false,false,false,false,true])]) {
+    ...[[320,false], [390,false], [1365,false], [390,true]].map(([width,pwa]) => [width,pwa,'gallery',false,false,false,false,false,true]),
+    ...[[320,false], [390,false], [1365,false], [390,true]].map(([width,pwa]) => [width,pwa,'gallery',false,false,false,false,false,false,true])]) {
     const { stdout, screenshot } = await runBrowserLayout(browser, { width, height: unified ? (expanded ? 4400 : 2400) : expanded ? 1700 : 1100, mobile: width < 700,
-      url: `http://127.0.0.1:${server.httpServer.address().port}/tests/fixtures/notas-sefaz-responsive.html?mode=${mode}${pwa ? '&pwa' : ''}${expanded ? '&expanded' : ''}${withholding ? '&withholding' : ''}${retentionNone ? '&retentionNone' : ''}${unified ? '&unified' : ''}${activeFilters ? '&activeFilters' : ''}${aggregateWithholding ? '&aggregateWithholding' : ''}`,
-      captureScreenshot: (width === 390 || ((unified || aggregateWithholding) && width === 320)) && !pwa && Boolean(process.env.NOTAS_SEFAZ_SCREENSHOT_DIR) });
+      url: `http://127.0.0.1:${server.httpServer.address().port}/tests/fixtures/notas-sefaz-responsive.html?mode=${mode}${pwa ? '&pwa' : ''}${expanded ? '&expanded' : ''}${withholding ? '&withholding' : ''}${retentionNone ? '&retentionNone' : ''}${unified ? '&unified' : ''}${activeFilters ? '&activeFilters' : ''}${aggregateWithholding ? '&aggregateWithholding' : ''}${cancelled ? '&cancelled' : ''}`,
+      captureScreenshot: (width === 390 || ((unified || aggregateWithholding || cancelled) && width === 320)) && !pwa && Boolean(process.env.NOTAS_SEFAZ_SCREENSHOT_DIR) });
     const dom = new JSDOM(stdout), layout = JSON.parse(dom.window.document.documentElement.dataset.layout); dom.window.close();
     assert.equal(layout.overflow, false, `${width}/${pwa}/${mode}: page overflow`);
     assert.deepEqual(layout.overflowingCards, [], `${width}/${pwa}/${mode}: card overflow`);
@@ -37,6 +38,14 @@ test('NF-e gallery and three-gallery launch group fit narrow phones and Windows 
       assert.ok(layout.activeFilters.buttonWidth >= 44 && layout.activeFilters.buttonHeight >= 44, 'limpar filtros acessível ao toque');
     }
     if (mode === 'gallery') {
+      if(cancelled){
+        assert.equal(layout.cancelled.text,'CANCELADA');
+        assert.equal(layout.cancelled.color,'rgb(190, 30, 45)');
+        assert.equal(layout.cancelled.pointerEvents,'none');
+        assert.notEqual(layout.cancelled.rotation,'none');
+        assert.ok(layout.cancelled.mark.left>=layout.cancelled.row.left-1&&layout.cancelled.mark.right<=layout.cancelled.row.right+1,'marca contida no cartão');
+        assert.ok(layout.cancelled.mark.top>=layout.cancelled.row.top-1&&layout.cancelled.mark.bottom<=layout.cancelled.row.bottom+1,'marca contida verticalmente');
+      } else assert.equal(layout.cancelled,null);
       if (withholding || aggregateWithholding) {
         assert.equal(layout.withholding.background,'rgb(255, 240, 240)');
         assert.equal(layout.withholding.border,'rgb(199, 57, 57)');
@@ -80,7 +89,7 @@ test('NF-e gallery and three-gallery launch group fit narrow phones and Windows 
       assert.ok(layout.menu.actions[1].bottom <= layout.menu.actions[2].top);
       assert.ok(layout.menu.actions.every(action => action.color === 'rgb(69, 76, 83)'));
     }
-    if (screenshot) writeFileSync(join(process.env.NOTAS_SEFAZ_SCREENSHOT_DIR, `notas-sefaz-${unified ? 'unified-' : ''}${mode}-${aggregateWithholding ? 'agregado-' : withholding ? 'retencao-' : ''}${expanded ? 'expanded-' : ''}${width}.png`), screenshot);
+    if (screenshot) writeFileSync(join(process.env.NOTAS_SEFAZ_SCREENSHOT_DIR, `notas-sefaz-${unified ? 'unified-' : ''}${mode}-${cancelled ? 'cancelada-' : aggregateWithholding ? 'agregado-' : withholding ? 'retencao-' : ''}${expanded ? 'expanded-' : ''}${width}.png`), screenshot);
     t.diagnostic(`${width}px ${pwa ? 'PWA' : 'mobile'} ${mode}: fits without horizontal overflow`);
   }
 });

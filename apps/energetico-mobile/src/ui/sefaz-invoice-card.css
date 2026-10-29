@@ -1,4 +1,5 @@
-.rg-row.rg-row--sefaz { color: #10265b; border-color: #e0e5ec; border-radius: 12px; box-shadow: 0 2px 8px #14285c05; }
+.rg-row.rg-row--sefaz { position: relative; isolation: isolate; overflow: hidden; color: #10265b; border-color: #e0e5ec; border-radius: 12px; box-shadow: 0 2px 8px #14285c05; }
+.rg-row--sefaz .rg-sefaz-cancelled-stamp { position: absolute; z-index: 3; top: 50%; left: 50%; width: 82%; box-sizing: border-box; transform: translate(-50%, -50%) rotate(-25deg); padding: .12em .25em; border: clamp(3px, .8vw, 6px) solid rgb(190 30 45 / .72); border-radius: 10px; background: rgb(255 255 255 / .22); color: #be1e2d; font-size: clamp(2rem, 10vw, 5rem); font-weight: 950; letter-spacing: .06em; line-height: 1; opacity: .72; text-align: center; text-transform: uppercase; white-space: nowrap; pointer-events: none; user-select: none; }
 .rg-row.rg-row--sefaz.rg-row--buyer-withholding { background: #fff0f0; border: 2px solid #c73939; }
 .rg-row--sefaz .rg-sefaz-withholding { display: grid; gap: 5px; padding: 10px; margin-bottom: 9px; border-radius: 8px; background: #ffdddd; color: #811e27; line-height: 1.4; overflow-wrap: anywhere; }
 .rg-sefaz-withholding strong { font-weight: 800; }
