@@ -11,7 +11,7 @@ export function addDdaReportBarcode({document:doc,row,line,actions,expanded,copy
   if(!open){toggle.removeAttribute('aria-controls');return;}
   toggle.setAttribute('aria-controls',id);
   detail=make('tr','ddr-barcode-detail');detail.dataset.ddaBarcodePanel=row.id;detail.id=id;
-  const cell=make('td'),panel=make('div','ddr-barcode-cluster'),text=make('div','ddr-barcode-text');cell.colSpan=8;
+  const cell=make('td'),panel=make('div','ddr-barcode-cluster'),text=make('div','ddr-barcode-text');cell.colSpan=9;
   const valid=/^\d{44}$/.test(row.barcode||'');
   text.append(make('strong','','Código de barras para pagamento'),make('code','',valid?row.barcode:'Código de barras não disponível.'));
   const copy=make('button','ddr-barcode-copy','⧉ Copiar código de barras');copy.type='button';copy.dataset.ddaCopyBarcode=row.id;copy.disabled=!valid;copy.setAttribute('aria-label','Copiar código de barras do DDA '+row.id);

@@ -11,7 +11,7 @@ async function setup(t,{copyText=async()=>{},barcode=code}={}){
 }
 test('each arrow toggles only its own barcode panel; opening never copies',async t=>{
  let copied=0;const h=await setup(t,{copyText:async()=>copied++});const arrows=h.doc.querySelectorAll('[data-dda-toggle-barcode]');assert.equal(arrows.length,2);assert.equal(arrows[0].getAttribute('aria-expanded'),'false');
- arrows[0].click();assert.equal(arrows[0].getAttribute('aria-expanded'),'true');assert.match(h.doc.querySelector('[data-dda-barcode-panel="1"]').textContent,new RegExp(code));assert.equal(copied,0);
+ arrows[0].click();assert.equal(arrows[0].getAttribute('aria-expanded'),'true');assert.match(h.doc.querySelector('[data-dda-barcode-panel="1"]').textContent,new RegExp(code));assert.equal(h.doc.querySelector('[data-dda-barcode-panel="1"] td').colSpan,h.doc.querySelectorAll('.ddr-table thead th').length);assert.equal(copied,0);
  arrows[1].click();arrows[0].click();assert.equal(h.doc.querySelector('[data-dda-barcode-panel="1"]'),null);assert.ok(h.doc.querySelector('[data-dda-barcode-panel="2"]'));assert.equal(copied,0);
 });
 test('copy writes only the 44 digits once and confirms success',async t=>{
