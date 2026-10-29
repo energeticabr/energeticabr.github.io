@@ -146,3 +146,16 @@ class SettlementPayrollTests(launch_fixture.PerPaymentTests):
         self.assertEqual(result['status'],'provision_submission_locked')
         self.assertTrue(state['provision_description']['journal']['intent'])
         self.assertFalse(self.sharepoint.items)
+
+    def test_new_conversation_with_no_state_still_opens_menu(self):
+        self.send('OPA')
+        self.assertIsNotNone(self.load()[0])
+
+    def test_stale_back_cannot_restore_pre_settlement_snapshot(self):
+        self.engine._push_navigation_state(self.current)
+        self.settlement(multi=True)
+        before,_=self.load()
+        self.send('navigation_back')
+        after,_=self.load()
+        self.assertEqual(after['provision_description']['journal'],before['provision_description']['journal'])
+        self.assertEqual(after['sharepoint'],before['sharepoint'])

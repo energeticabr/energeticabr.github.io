@@ -194,13 +194,13 @@
          if recorded_at is None:
 --- a/worker/provision_description_settlement.py
 +++ b/worker/provision_description_settlement.py
-@@ -231,6 +231,17 @@
+@@ -231,6 +231,25 @@
                  return self._prompt_next_or_summary(state, etag)
              except Exception as error:
                  return self._submission_failed(state, etag, error)
 +        # A confirmed group may continue only its optional payroll text flow;
 +        # keep the durable settlement journal and all attachment/write guards.
-+        if (state.get('flow') == 'payment_settlement' and event.get('kind') == 'text'
++        if (state and state.get('flow') == 'payment_settlement' and event.get('kind') == 'text'
 +                and state.get('stage') in {'asking_launch_payroll', 'selecting_launch_payroll_entries',
 +                                          'selecting_launch_payroll_sheet', 'selecting_launch_payroll_type'}
 +                and state.get('pending_launch_payroll')
@@ -208,7 +208,15 @@
 +                     or state['pending_launch_payroll'].get('settlement_loading'))
 +                and (state.get('sharepoint') or {}).get('line_items')
 +                and all(_verified(row.get('verified')) for row in state['sharepoint']['line_items'])):
-+            return None
++            # Dispatch directly: generic navigation must never restore a
++            # pre-settlement snapshot or discard this confirmed journal.
++            handlers = {
++                'asking_launch_payroll': self._handle_launch_payroll_decision_reply,
++                'selecting_launch_payroll_entries': self._handle_launch_payroll_entries_reply,
++                'selecting_launch_payroll_sheet': self._handle_launch_payroll_sheet_reply,
++                'selecting_launch_payroll_type': self._handle_launch_payroll_type_reply,
++            }
++            return handlers[state['stage']](event, state, etag)
          if not (group.get('journal') or {}).get('intent') or state.get('stage') == 'completed':
              return super()._handle_frozen_provision(event, state, etag)
          if event.get('message_id') in state.get('processed_message_ids', []):
