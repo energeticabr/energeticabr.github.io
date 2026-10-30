@@ -1,4 +1,5 @@
 import Decimal from 'decimal.js';
+import { expectedPayrollSalaryForSheets } from './supplier-payroll-salary.js';
 import {formatOperationsDate} from './operations-reports-model.js';
 
 const unnamed = 'Fornecedor não informado';
@@ -87,7 +88,8 @@ export function buildSupplierPayrollOverview(snapshot, { month = '', supplier = 
     const sheets = group.sheets.filter(s => !chosenMonth || s.month === chosenMonth)
       .sort((a, b) => Number(a.id) - Number(b.id));
     if (sheets.length) filtered.push({ key: group.key, supplier: group.supplier, profession: group.profession,
-      ids: sheets.map(s => s.id), sheets });
+      ids: sheets.map(s => s.id), sheets,
+      ...(snapshot.salaryExpectations ? { expectedSalaryCents: expectedPayrollSalaryForSheets(sheets, snapshot.salaryExpectations) } : {}) });
   }
   const professions = new Map(all.map(g => [identity(g.profession), g.profession]));
   return { groups: filtered, months: [...months].sort().reverse(), suppliers: all.map(g => g.supplier),

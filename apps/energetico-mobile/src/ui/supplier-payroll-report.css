@@ -33,6 +33,11 @@
 .spr-rubric-row { display:flex; justify-content:space-between; align-items:baseline; gap:4px; min-width:0; padding:4px 5px; border-radius:5px; background:var(--spr-type-bg); color:var(--spr-type-color); }
 .spr-rubric-label { min-width:0; overflow-wrap:anywhere; }
 .spr-rubric-value { flex-shrink:0; color:var(--spr-type-color,#b00000); white-space:nowrap; }
+.spr-rubric-row--salary { flex-wrap:wrap; }
+.spr-rubric-row--salary-wide { grid-column:1/-1; }
+.spr-rubric-value.spr-salary-values { display:flex; flex-wrap:wrap; column-gap:.25em; justify-content:flex-end; flex-shrink:1; min-width:0; max-width:100%; white-space:normal; }
+.spr-salary-paid,.spr-salary-comparison { white-space:nowrap; flex-shrink:0; }
+.spr-overlay[data-report-max-850="true"][data-report-min-650="true"] .spr-rubric-row--salary:not(.spr-rubric-row--salary-wide) { padding-block:1px; }
 .spr-metric { display:flex; align-items:center; gap:10px; min-width:0; }
 .spr-total-paid { background:#ffe9ee; border-radius:7px; padding:8px; }
 .spr-metric svg { flex:0 0 30px; width:30px; }
