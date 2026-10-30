@@ -1344,7 +1344,7 @@ export function createSharePointRepository(graph, siteConfig, { attachmentTransp
       parameters.set("$expand", `fields($select=${selectedFields.join(",")})`);
     }
     const fieldExpression = name => usesRestOptions ? name : `fields/${name}`;
-    const search = searchFields
+    const search = (term ? searchFields : [])
       .map(field => `startswith(${fieldExpression(field.name)},${graphStringLiteral(term)})`)
       .join(" or ");
     const fixedFilterExpression = filter => filter.operator === "starts-with"
@@ -1353,12 +1353,13 @@ export function createSharePointRepository(graph, siteConfig, { attachmentTransp
     const groupedFilters = fixedFilterGroups.length
       ? `(${fixedFilterGroups.map(group => `(${group.map(fixedFilterExpression).join(" and ")})`).join(" or ")})`
       : "";
-    parameters.set("$filter", [
-      searchFields.length > 1 ? `(${search})` : search,
+    const filter = [
+      search && searchFields.length > 1 ? `(${search})` : search,
       ...dependencyFields.map(dependency => `${fieldExpression(dependency.target.name)} eq ${metadataScalarLiteral(dependency.target, dependency.value)}`),
       ...fixedFilters.map(fixedFilterExpression),
       groupedFilters,
-    ].filter(Boolean).join(" and "));
+    ].filter(Boolean).join(" and ");
+    if (filter) parameters.set("$filter", filter);
     parameters.set("$top", String(limit));
     let items;
     if (usesRestOptions) {

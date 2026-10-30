@@ -297,7 +297,7 @@ export function createGalleryRecordData({ repository, siteKey = "personal", list
         if (retainedIds.has(selected)) continue;
         const proof = baseline.relationshipOptions.get(column.name)?.get(selected);
         if (!proof) throw new Error(`Selecione uma opção válida para ${column.label}.`);
-        const options = await repository.searchRelationshipOptions(siteKey, baseline.list.id, relation, proof.label, { limit: 40 });
+        const options = await repository.searchRelationshipOptions(siteKey, baseline.list.id, relation, proof.label, { limit: 20 });
         if (!options.some(option => String(option.id) === selected)) throw new Error(`Selecione uma opção válida para ${column.label}.`);
       }
       return;
@@ -311,7 +311,7 @@ export function createGalleryRecordData({ repository, siteKey = "personal", list
     if (remote.length !== 1 || typeof repository.searchPowerAppsOptions !== "function") throw new Error(`Selecione uma opção válida para ${column.label}.`);
     const source = remote[0], dependencies = dependenciesFor(source, columns, merged);
     for (const selected of pending) {
-      const options = await repository.searchPowerAppsOptions(siteKey, source, selected, dependencies, { limit: 40 });
+      const options = await repository.searchPowerAppsOptions(siteKey, source, selected, dependencies, { limit: 20 });
       if (!options.some(option => String(option.value) === selected)) throw new Error(`Selecione uma opção válida para ${column.label}.`);
     }
   }

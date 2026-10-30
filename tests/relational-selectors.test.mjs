@@ -65,6 +65,24 @@ function graphResponseSequence(responses) {
   };
 }
 
+test('empty Power Apps browsing retains fixed and dependent restrictions', async () => {
+  const graph = graphResponseSequence([
+    { id:'company-site' },
+    { value:[{ id:lookupListId,displayName:'CATÁLOGO',list:{template:'genericList'} }] },
+    { value:['Title','FILIAL','STATUS'].map(name => ({ name,indexed:true,text:{} })) },
+    { value:[{ id:'7',fields:{ Title:'OPÇÃO AUTORIZADA' } }] },
+  ]);
+  const repository = createSharePointRepository(graph,{company:site});
+  const options = await repository.searchPowerAppsOptions('company',{
+    kind:'dependent',listName:'CATÁLOGO',valueField:'Title',
+    dependsOn:[{fieldName:'FILIAL',targetField:'FILIAL'}],
+    fixedFilters:[{fieldName:'STATUS',operator:'eq',value:'ATIVO'}],
+  },'',{FILIAL:'OBRA TESTE'},{browse:true});
+  assert.deepEqual(options.map(option => option.value),['OPÇÃO AUTORIZADA']);
+  const filter = new URL(graph.calls.at(-1)[0],'https://graph.microsoft.com').searchParams.get('$filter');
+  assert.equal(filter,"fields/FILIAL eq 'OBRA TESTE' and fields/STATUS eq 'ATIVO'");
+});
+
 test("metadados Graph preservam a relação necessária ao seletor nominal", () => {
   const mapped = mapSharePointColumns([
     {
