@@ -1,0 +1,59 @@
+{
+  "scope": [
+    "worker/workflow.py",
+    "worker/financial_catalog_registration.py"
+  ],
+  "tests": {
+    "baseline": {
+      "total": 16,
+      "passed": 4,
+      "expectedFailures": 12
+    },
+    "candidate": {
+      "passed": 28,
+      "subtests": 8,
+      "engine": 16,
+      "deploymentGuards": 12
+    },
+    "command": "python -X utf8 -B -m pytest -q -p no:cacheprovider backend-patches/asset-group-inline-registration/tests",
+    "runtime": "private runtime-live: fresh production code/config plus existing mirror fake-service fixtures",
+    "provisionHookShims": false
+  },
+  "payload": {
+    "files": {
+      "worker/workflow.py": {
+        "before": "34b86edb93cbfe553fbf60e6931ef2f27abe4a97b9f4db475125ceeb8a0ada12",
+        "after": "be6b20c07535ff8e7c520e2cfaa750d48b2b23f4182059ef58772700e2258770"
+      },
+      "worker/financial_catalog_registration.py": {
+        "before": "342e2cbdf33efe5a612e12b571ba19c83af2421aa682bc5544861fde1fcca5bc",
+        "after": "8ed766f9474830844379c1f6f062fab50c2d97c3ca0f07ef1a740c1c1e0afe77"
+      }
+    },
+    "artifacts": {
+      "deploy-manifest.json": "9097f7b9fa2bcadfddabe1bb49182236ef5d8ca3c30c5be72f94b705e67c70a4",
+      "source.patch": "98bf88723390e3375568d9aa5d31cec8cfc20a1036b40d239b0a9831ca8069cd",
+      "source-files.tar": "fa76e2c168b24ce778ecebec2555d7dc2b39b288756bd290601284f13e778c09",
+      "deploy.py": "acb5a6ab96693858dce9a9b935a991c1a23c4c8f4533163ac8f99f1b45070471",
+      "shared-deploy.py": "01d979e4e9d525d35ab522e017d3454be75514f4fc42a1274cc89e7b0a21bbe2"
+    }
+  },
+  "unchangedConfig": "a951c15f30d78409101b7829bdf9bad3cf118ac7541c3dcaa705663e962bf069",
+  "runtimeModules": {
+    "worker/payment_provision_flow.py": "2e2f21ddfd4f831fb610115fa11e9dd94db4604ff8df2b30aea5b83115ce25c0",
+    "worker/payment_provision_group.py": "beafa846dd1f7dfb402c41cd995baedc7a33ac23a9b3112fdb48bbbda1ff6909",
+    "channel_bridge.py": "6f619c952737dc23eef7509ec0c0019867ebacdc2d03f29b08cc81c5abe5c70c",
+    "tests/test_workflow.py": "b65ce1defcc7747e3ddb009d3508b577dd1cec62379b65316486663f5c0c5dcd"
+  },
+  "previewPoll": {
+    "sha256": "78961adeda4ad746df51f69b700c782db85e624c123edbe4d73230dc1e4a99f3",
+    "syntheticRecordsOnly": true,
+    "serializer": "unchanged ChannelMessenger class from actual channel_bridge.py"
+  },
+  "packageCheck": "real payload hash/path/compile checks and check-only against local temporary baseline roots; no VM health check",
+  "remoteStage": "/home/opc/asset-group-inline-20261030/package",
+  "baselineVerifiedReadOnlyOnBothRoots": true,
+  "vmWrites": false,
+  "deployed": false,
+  "committed": false
+}

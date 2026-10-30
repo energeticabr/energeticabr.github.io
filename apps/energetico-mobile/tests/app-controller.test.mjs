@@ -3019,6 +3019,8 @@ test('gallery origin rejects a generic NOVO from an unrelated step', async t => 
 });
 
 const canonicalGalleryChildren = [
+  ['fixed asset group', 'action_asset_product_gallery', 'fixed_asset_product_registration', 'grupo_produto_imobilizado',
+    'fixed_asset_group_registration', 'financial_catalog_create', '➕ CADASTRAR GRUPO IMOBILIZADO', 'financial_catalog_registered'],
   ['movement institution', 'action_financial_movement_gallery', 'financial_movement', 'instituicao_movimentacao',
     'institution_registration', 'financial_catalog_create', '➕ CADASTRAR INSTITUIÇÃO', 'financial_catalog_registered'],
   ['movement investment', 'action_financial_movement_gallery', 'financial_movement', 'descricao_movimentacao',
