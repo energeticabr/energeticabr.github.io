@@ -4,6 +4,7 @@ import { createSharePointRepository } from '../../../../portal/data/sharepoint-r
 import { createPayrollSourceReader, payrollFieldKey } from './payroll-editor-policy.js';
 import { normalizePayrollMonth, summarizePayrollPayments } from './supplier-payroll-report-model.js';
 import { createPayrollProvisionReader, payrollProvisionId } from './payroll-provision-source.js';
+import { buildPayrollSalaryExpectations } from './supplier-payroll-salary.js';
 
 const site = 'personal';
 const unnamed = 'Fornecedor não informado';
@@ -14,6 +15,8 @@ const schema = {
   FOLHAPGTO: { supplier: ['FORNECEDOR'], type: ['TIPOPGTO', 'TIPOPAGAMENTO'], date: ['DATA'],
     payrollId: ['IDFOLHA'], launchId: ['IDLANCAMENTO'], unitValue: ['VALORUNITARIO'], quantity: ['QTD', 'QUANTIDADE'] },
   LANCAMENTOS: { unitValue: ['VALORUNITARIO'], quantity: ['QTD', 'QUANTIDADE'] },
+  FUNCIONARIOSRH: { supplierId: ['IDFORNECEDORORIGEM'], cargo: ['CARGO'] },
+  CARGOS: { cargo: ['CARGO'], salary: ['SALARIO'], effectiveDate: ['DATAREFERENCIA'] },
 };
 const identity = value => value.normalize('NFC').toLocaleLowerCase('pt-BR');
 const abortError = () => new DOMException('Consulta substituída ou cancelada.', 'AbortError');
@@ -66,6 +69,8 @@ function resolveSchema(columns, list) {
 function normalizeItem(item, fields, list) {
   const id = validId(item.id);
   const values = Object.fromEntries(Object.entries(fields).map(([key, name]) => [key, item.fields[name]]));
+  if (list === 'FUNCIONARIOSRH') return Object.freeze({ id, supplierId: scalar(values.supplierId), cargo: scalar(values.cargo) });
+  if (list === 'CARGOS') return Object.freeze({ id, cargo: scalar(values.cargo), salary: values.salary, effectiveDate: scalar(values.effectiveDate) });
   const supplier = scalar(values.supplier);
   if (list === 'FORNECEDORES') {
     return Object.freeze({ id, supplier, profession: scalar(values.profession) || unknownProfession });
@@ -151,7 +156,7 @@ async function readList(repository, list, signal) {
       signal, pageNumber: index % 100 + 1, maxPages: 100, ...(cursor ? { cursor } : {}),
     }), signal);
     if (!Array.isArray(page?.items) || page.items.length > 100 || typeof page.hasMore !== 'boolean'
-      || page.error || page.partial || page.aborted || page.truncated
+      || page.error || page.partial || page.aborted || page.truncated || page.complete !== undefined && page.complete !== true
       || page.batchCount !== undefined && page.batchCount !== page.items.length
       || page.nextLink != null && typeof page.nextLink !== 'string') throw new TypeError('Página SharePoint inválida ou incompleta.');
     const next = page.nextLink?.trim() || '';
@@ -185,7 +190,7 @@ function supplierProfessions(suppliers) {
   return professions;
 }
 
-/** Read-only report: three full scans per refresh; cached launch reads serve summaries and details. */
+/** Read-only report: full financial scans plus RH/cargo salary catalogs per refresh. */
 export function createSupplierPayrollReportData({ tokenProvider, repository: suppliedRepository,
   fetchImpl = globalThis.fetch, siteConfig = SHAREPOINT_SITES } = {}) {
   if (!suppliedRepository && typeof tokenProvider !== 'function') throw new TypeError('Sessão Microsoft ativa obrigatória.');
@@ -227,16 +232,28 @@ export function createSupplierPayrollReportData({ tokenProvider, repository: sup
     const abort = () => controller.abort(externalSignal.reason);
     externalSignal?.addEventListener('abort', abort, { once: true });
     try {
-      const [sheets, payments, suppliers] = await Promise.all([
+      const salaryController = new AbortController();
+      const abortSalary = () => salaryController.abort(signal.reason || abortError());
+      signal.addEventListener('abort', abortSalary, { once: true });
+      if (signal.aborted) abortSalary();
+      const salarySources = Promise.all([readList(repository, 'FUNCIONARIOSRH', salaryController.signal), readList(repository, 'CARGOS', salaryController.signal)])
+        .catch(error => { salaryController.abort(error); checkAbort(signal); return null; })
+        .finally(() => signal.removeEventListener('abort', abortSalary));
+      const [sheets, payments, suppliers, salaryCatalog] = await Promise.all([
         readList(repository, 'IDFOLHA', signal), readList(repository, 'FOLHAPGTO', signal),
         readList(repository, 'FORNECEDORES', signal),
+        salarySources,
       ]);
       checkAbort(signal);
       if (generation !== controller) throw abortError();
       const professions = supplierProfessions(suppliers);
       const enrichedSheets = sheets.map(s => ({ ...s, row: Object.freeze({ ...s.row,
         profession: professions.get(identity(s.sourceSupplier)) || unknownProfession }) }));
-      const snapshot = Object.freeze({ complete: true, sheets: Object.freeze(enrichedSheets.map(s => s.row)) });
+      const rows = Object.freeze(enrichedSheets.map(s => s.row));
+      const snapshot = Object.freeze({ complete: true, sheets: rows, ...(salaryCatalog ? {
+        salaryExpectations: buildPayrollSalaryExpectations({ sheets: enrichedSheets.map(s => ({ ...s.row, supplier: s.sourceSupplier })), suppliers,
+          employees: salaryCatalog[0], salaries: salaryCatalog[1] }),
+      } : {}) });
       cache = { controller, sheets: new Map(enrichedSheets.map(s => [s.row.id, s])), payments };
       return snapshot;
     } catch (error) { controller.abort(error); throw error; }

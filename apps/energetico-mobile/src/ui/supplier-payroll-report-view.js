@@ -46,6 +46,13 @@ export function createSupplierPayrollReportView({document:doc=globalThis.documen
  const invalidateDetails=()=>{for(const entry of entries)entry.controller?.abort();entries=[];};
  const alive=(entry,signal)=>!destroyed&&!root.hidden&&!signal.aborted&&entries.includes(entry);
  function paint(node,type){const appearance=payrollTypeAppearance(type);node.style.setProperty('--spr-type-color',appearance.color);node.style.setProperty('--spr-type-bg',appearance.background);return appearance;}
+ function fitSalaryRubrics(rubrics){
+  for(const row of rubrics.querySelectorAll('.spr-rubric-row--salary')){
+   row.classList.remove('spr-rubric-row--salary-wide');
+   const values=row.querySelector('.spr-salary-values');
+   if(values.clientWidth&&[...values.children].some(part=>part.scrollWidth>values.clientWidth+1))row.classList.add('spr-rubric-row--salary-wide');
+  }
+ }
  function typeClusters(rows){
   const clusters=make('div','spr-type-totals');clusters.setAttribute('aria-label','Somatórios por tipo de pagamento');
   for(const total of summarizePayrollPaymentsByType(rows)){
@@ -89,8 +96,21 @@ export function createSupplierPayrollReportView({document:doc=globalThis.documen
   entry.totalValue.textContent=money(totals.totalCents);entry.countValue.textContent=String(rows.length);entry.metrics.removeAttribute('aria-busy');
   const rubrics=summarizePayrollPaymentsByType(rows);
   entry.rubrics.replaceChildren();
-  for(const rubric of rubrics){const item=make('span','spr-rubric-row');paint(item,rubric.type);item.setAttribute('role','listitem');item.append(make('span','spr-rubric-label',`${rubric.type}: `),make('strong','spr-rubric-value',money(rubric.totalCents)));entry.rubrics.append(item);}
+  for(const rubric of rubrics){
+   const item=make('span','spr-rubric-row'),value=make('strong','spr-rubric-value');paint(item,rubric.type);item.setAttribute('role','listitem');
+   const salary=rubric.type.normalize('NFD').replace(/[\u0300-\u036f]/g,'').trim().toUpperCase()==='SALARIO';
+   if(salary){
+    item.classList.add('spr-rubric-row--salary');value.classList.add('spr-salary-values');
+    const paid=make('span','spr-salary-paid',money(rubric.totalCents)),comparison=make('span','spr-salary-comparison');
+    const expected=entry.group.expectedSalaryCents;
+    const amount=make('span','spr-salary-expected',Number.isSafeInteger(expected)&&expected>=0?money(expected):'Não informado');
+    paid.setAttribute('aria-label','Salário pago');amount.setAttribute('aria-label','Salário esperado');
+    comparison.append(doc.createTextNode(' / '),amount);value.append(paid,comparison);
+   }else value.textContent=money(rubric.totalCents);
+   item.append(make('span','spr-rubric-label',`${rubric.type}: `),value);entry.rubrics.append(item);
+  }
   if(!rubrics.length)entry.rubrics.textContent='Sem pagamentos';
+  fitSalaryRubrics(entry.rubrics);
   if(entry.card.open||printing)paymentTable(entry,rows);
  }
  async function loadGroup(entry){
@@ -159,7 +179,7 @@ export function createSupplierPayrollReportView({document:doc=globalThis.documen
   finally{if(current===revision){report.setAttribute('aria-busy','false');refresh.disabled=false;}}
  }
  function close(){if(root.hidden)return;paymentActions.close();launchActions.close();controller?.abort();revision++;invalidateDetails();rowCache.clear();snapshot=null;pendingReload=null;printing=false;pickers?.close();content.replaceChildren();root.hidden=true;doc.body.style.overflow=oldOverflow;if(app)app.inert=oldInert;returnFocus?.focus?.();returnFocus=null;onClose();}
- function orientationChanged() { landscape.update(); }
+ function orientationChanged() { landscape.update();for(const entry of entries)if(entry.loaded)fitSalaryRubrics(entry.rubrics); }
  refresh.addEventListener('click',()=>void load());root.addEventListener('click',e=>{if(e.target===root)close();});
  search.addEventListener('input',()=>{if(!printing){render();content.scrollTop=0;}});exportAll.addEventListener('click',()=>void exportGroups([...entries]));
  root.addEventListener('keydown',e=>{if(root.hidden)return;if(e.key==='Escape'){e.preventDefault();close();return;}if(e.key!=='Tab')return;const nodes=[...panel.querySelectorAll('button,input,select,summary,[tabindex="0"]')].filter(n=>!n.disabled&&!n.closest('[hidden]')&&n.tabIndex>=0),first=nodes[0],last=nodes.at(-1);if(e.shiftKey&&(doc.activeElement===first||doc.activeElement===panel)){e.preventDefault();last?.focus();}else if(!e.shiftKey&&(doc.activeElement===last||doc.activeElement===panel)){e.preventDefault();first?.focus();}});
