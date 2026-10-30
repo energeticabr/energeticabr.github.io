@@ -6,7 +6,7 @@ import { createGalleryCreationToolbar } from './gallery-create-shortcut.js';
 import { createLoadingIndicator } from "./loading-indicator.js";
 import { beginLoadingTask } from './loading-task.js';
 import { createGalleryLoadingScreen } from './gallery-loading-screen.js';
-import { createGalleryRecordActions } from './gallery-record-actions.js';
+import { createGalleryRecordActions, dismissGalleryOverlay } from './gallery-record-actions.js';
 import { galleryDeletionFields } from './gallery-deletion-receipt.js';
 import { bindAutoFilterForm } from './auto-filter-form.js';
 import { createGalleryAttachmentCounts } from './gallery-attachment-counts.js';
@@ -565,7 +565,13 @@ export function createOrdersGallery({
   });
   previous.addEventListener("click", () => { if (page > 1) { page -= 1; renderList(); } });
   next.addEventListener("click", () => { if (page < Math.ceil(filteredRows.length / pageSize)) { page += 1; renderList(); } });
-  closeButton.addEventListener("click", () => { close(); onClose?.(); });
+  function navigateBack() {
+    if (!opened || destroyed) return;
+    if (!detail.hidden) { closeDetails({ restoreFocus: true }); return; }
+    if (dismissGalleryOverlay(root)) return;
+    close(); onClose?.();
+  }
+  closeButton.addEventListener("click", navigateBack);
   homeButton.addEventListener("click", () => { close(); onHome?.(); });
 
   async function open() {

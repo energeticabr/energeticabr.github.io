@@ -1,0 +1,19 @@
+--- a/worker/workflow.py
++++ b/worker/workflow.py
+@@ -3288,8 +3288,6 @@
+             if not self._needs_abandon_confirmation(state):
+                 return self._return_to_main_menu(event, state or self._new_state(event, key), etag, key)
+             return self._prompt_portal_draft_exit(event, state, etag)
+-        if self._is_navigation_back(command) and self._back_would_leave_flow(state):
+-            return self._prompt_portal_draft_exit(event, state, etag)
+         if command in restart_commands or command in {"fim", LATENT_DIARY_ABANDON_ID, "abandonar diario de obras", "abandonar diario"}:
+             if self._needs_abandon_confirmation(state):
+                 return self._prompt_portal_draft_exit(event, state, etag)
+@@ -4132,7 +4130,6 @@
+                 state.update(conversation_identity)
+                 state.update(copy.deepcopy(parent_state))
+                 state["processed_message_ids"] = processed_message_ids
+-                state.pop("embedded_return", None)
+                 self._queue_draft_exit(state, draft)
+                 result = self._resend_current_prompt(state, etag)
+                 return {

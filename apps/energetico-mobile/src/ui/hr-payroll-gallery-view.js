@@ -3,7 +3,7 @@ import { applyScreenNavigation } from "./screen-navigation.js";
 import { attachGalleryRefreshButton } from './gallery-refresh.js';
 import { attachGalleryCreateShortcut } from './gallery-create-shortcut.js';
 import { createGalleryLoadingScreen } from './gallery-loading-screen.js';
-import { createGalleryRecordActions } from './gallery-record-actions.js';
+import { createGalleryRecordActions, dismissGalleryOverlay } from './gallery-record-actions.js';
 import { createHrPayrollReport } from "./hr-payroll-report-view.js";
 import { createMascotReportButton } from "./report-action-button.js";
 import { createPayrollPaymentComposer } from './payroll-payment-view.js';
@@ -332,7 +332,13 @@ export function createHrPayrollGallery({ document: documentOption,
     refreshShortcut.sync();
     onClose?.();
   }
-  close.addEventListener("click", closeGallery);
+  function navigateBack() {
+    if (!opened || destroyed) return;
+    if (payrollReport?.element && !payrollReport.element.hidden) { payrollReport.close(); return; }
+    if (dismissGalleryOverlay(root)) return;
+    closeGallery();
+  }
+  close.addEventListener("click", navigateBack);
   home?.addEventListener("click", () => { closeGallery(); onHome(); });
   previous.addEventListener("click", () => { if (page > 1) void loadPage(page - 1, pageCursors[page - 1] || null); });
   next.addEventListener("click", () => { if (hasMore) void loadPage(page + 1, pageCursors[page + 1]); });

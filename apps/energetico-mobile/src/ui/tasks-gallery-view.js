@@ -3,7 +3,7 @@ import { matchesGallerySearch } from '../chat/gallery-quick-search.js';
 import { applyScreenNavigation } from "./screen-navigation.js";
 import { attachGalleryRefreshButton } from './gallery-refresh.js';
 import { createGalleryLoadingScreen } from './gallery-loading-screen.js';
-import { createGalleryRecordActions } from './gallery-record-actions.js';
+import { createGalleryRecordActions, dismissGalleryOverlay } from './gallery-record-actions.js';
 import { galleryDeletionFields } from './gallery-deletion-receipt.js';
 import { bindAutoFilterForm } from './auto-filter-form.js';
 import { createGalleryAttachmentCounts, knownGalleryAttachmentCount } from './gallery-attachment-counts.js';
@@ -635,7 +635,15 @@ export function createTasksGallery({ document: documentRef = globalThis.document
   clearButton.addEventListener("click", () => { for (const [name, control] of controls) control.value = name === "status" ? DEFAULT_STATUS_FILTER : name === "sort" ? "fatal-asc" : name === "pageSize" ? "10" : ""; sortValue = "fatal-asc"; pageSize = 10; autoFilters.apply(); });
   previous.addEventListener("click", () => { if (page > 1) { page -= 1; renderList(); } });
   next.addEventListener("click", () => { if (page < Math.ceil(filteredRows.length / pageSize)) { page += 1; renderList(); } });
-  closeButton.addEventListener("click", () => { close(); onClose?.(); }); homeButton.addEventListener("click", () => { close(); onHome?.(); });
+  function navigateBack() {
+    if (!opened || destroyed) return;
+    if (dismissGalleryOverlay(root)) return;
+    if (!detail.hidden) {
+      detailsSession++; detail.hidden = true; detail.replaceChildren(); closeButton.focus(); return;
+    }
+    close(); onClose?.();
+  }
+  closeButton.addEventListener("click", navigateBack); homeButton.addEventListener("click", () => { close(); onHome?.(); });
 
   async function open() {
     if (destroyed) throw new Error("A Galeria de Tarefas foi encerrada.");

@@ -1,0 +1,11 @@
+{
+  "files": {
+    "worker/workflow.py": {
+      "before": "9d208eda2c53e05f6f5e098b911320d5fe9f98b0de85cc2831ef1a8a993403c1",
+      "mirrorBefore": "9d208eda2c53e05f6f5e098b911320d5fe9f98b0de85cc2831ef1a8a993403c1",
+      "after": "34b86edb93cbfe553fbf60e6931ef2f27abe4a97b9f4db475125ceeb8a0ada12"
+    }
+  },
+  "patch": "cf9e1aa150901ab5de8d70d0241e17ee51e768a9c39b3d2cf85478573c6b3cbb",
+  "archive": "63795c38b0939697f3b704767dd33dcd835902373f6184a268a0054772659bea"
+}

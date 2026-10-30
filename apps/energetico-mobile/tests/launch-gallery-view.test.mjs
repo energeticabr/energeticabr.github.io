@@ -2009,6 +2009,96 @@ test('Escape closes the detail screen before closing the gallery', async t => {
   assert.equal(ctx.root().hidden, false);
 });
 
+test('header Back returns review to its unsaved editor, then the gallery, without saving', async t => {
+  let closes = 0, homes = 0;
+  const ctx = await setup(t, { onClose: () => closes++, onHome: () => homes++ });
+  await ctx.gallery.open(); await showDetail(ctx);
+  const value = input(ctx, 'QUANTIDADE', '4');
+  button(ctx.root(), 'SUBMETER').click();
+  const back = ctx.root().querySelector('.screen-navigation').firstElementChild;
+  assert.equal(ctx.root().querySelector('.lg-review').hidden, false);
+  back.click();
+  assert.equal(ctx.root().hidden, false);
+  assert.equal(ctx.root().querySelector('.lg-review').hidden, true);
+  assert.equal(ctx.root().querySelector('.lg-detail').hidden, false);
+  assert.equal(value.value, '4', 'review Back retains the current editor draft');
+  assert.equal(closes, 0);
+  back.click();
+  assert.equal(ctx.root().querySelector('.lg-detail').hidden, true);
+  assert.equal(ctx.root().hidden, false);
+  assert.equal(closes, 0);
+  assert.deepEqual(mutations(ctx), []);
+  back.click();
+  assert.equal(ctx.root().hidden, true);
+  assert.equal(closes, 1);
+  assert.equal(homes, 0);
+});
+
+test('header Back keeps a launch confirmation and editor locked while saving', async t => {
+  const pending = deferred();
+  t.after(() => pending.resolve({ ok: true }));
+  const ctx = await setup(t, { request: async operation => {
+    if (operation === 'snapshot') return snapshot();
+    if (operation === 'detail') return detail();
+    if (operation === 'update') return pending.promise;
+    throw new Error(`Unexpected operation: ${operation}`);
+  } });
+  await ctx.gallery.open(); await showDetail(ctx);
+  input(ctx, 'QUANTIDADE', '4'); button(ctx.root(), 'SUBMETER').click();
+  button(ctx.root(), 'Confirmar alterações').click();
+  ctx.root().querySelector('.screen-navigation').firstElementChild.click();
+  assert.equal(ctx.root().hidden, false);
+  assert.equal(ctx.root().querySelector('.lg-review').hidden, false);
+  assert.equal(ctx.root().querySelector('.lg-detail').hidden, false);
+  assert.equal(mutations(ctx).length, 1);
+  pending.resolve({ ok: true }); await settle(); await settle();
+});
+
+test('header Back cancels a pending launch cluster and preserves the parent gallery', async t => {
+  const pending = deferred(); let signal;
+  const ctx = await setup(t, { request: async (operation, payload, options) => {
+    if (operation === 'snapshot' && payload.filters?.supplier) { signal = options.signal; return pending.promise; }
+    if (operation === 'snapshot') return snapshot();
+    throw new Error(`Unexpected operation: ${operation}`);
+  } });
+  await ctx.gallery.open();
+  const trigger = ctx.root().querySelector('[data-cluster-kind="supplier"]');
+  trigger.focus(); trigger.click();
+  assert.equal(ctx.root().querySelector('.lg-cluster-modal').hidden, false);
+  ctx.root().querySelector('.screen-navigation').firstElementChild.click();
+  assert.equal(signal.aborted, true);
+  assert.equal(ctx.root().querySelector('.lg-cluster-modal').hidden, true);
+  assert.equal(ctx.root().hidden, false);
+  assert.equal(ctx.document.activeElement, trigger);
+  pending.resolve(snapshot()); await settle();
+  assert.equal(ctx.root().querySelector('.lg-cluster-modal').hidden, true);
+  assert.deepEqual(mutations(ctx), []);
+});
+
+for (const control of ['header Back', 'Escape']) {
+  test(`${control} exits the launch gallery during a root attachment read and ignores the late viewer`, async t => {
+    const pending = deferred(); let viewers = 0, reads = 0;
+    const item = { ...row(), attachments: [{ fileName: 'proof.pdf', mimeType: 'application/pdf' }] };
+    const ctx = await setup(t, { request: async operation => {
+      if (operation === 'snapshot') return snapshot({ rows: [item] });
+      if (operation === 'attachment') { reads++; return pending.promise; }
+      throw new Error(`Unexpected operation: ${operation}`);
+    }, openMediaCollection: async () => { viewers++; } });
+    await ctx.gallery.open();
+    ctx.root().querySelector('.lg-record-media').click();
+    assert.equal(reads, 1);
+    assert.equal(ctx.root().getAttribute('aria-busy'), 'true');
+    if (control === 'header Back') ctx.root().querySelector('.screen-navigation').firstElementChild.click();
+    else ctx.root().dispatchEvent(new ctx.dom.window.KeyboardEvent('keydown', { key: 'Escape', bubbles: true }));
+    assert.equal(ctx.root().hidden, true);
+    pending.resolve({ fileName: 'proof.pdf', mediaUrl: '/api/portal-media/proof', mimeType: 'application/pdf' });
+    await settle(); await settle();
+    assert.equal(ctx.root().hidden, true);
+    assert.equal(viewers, 0);
+    assert.deepEqual(mutations(ctx), []);
+  });
+}
+
 test('edit is retained during list reload, explicitly reviewed, locked on save and retried without losing draft', async t => {
   const save = deferred(); let attempts = 0;
   const ctx = await setup(t, { request: async op => {

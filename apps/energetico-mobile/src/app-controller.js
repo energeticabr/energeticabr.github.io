@@ -11,7 +11,7 @@ import { PAYROLL_BREAKDOWN_REPLY_ID, isPayrollBreakdownMenu } from './chat/payro
 import { createMediaThumbnail } from "./web/media-thumbnail.js";
 import { signatureInkHash, signatureInkImage } from "./web/signature-trace.js";
 import { signatureLayoutGeometry } from './web/signature-document-layout.js';
-import { supportsFullNameDatabaseFilter, latestDatabaseFilter, preserveDatabaseFilterRegistrationOptions } from "./chat/database-filter.js";
+import { supportsFullNameDatabaseFilter, latestDatabaseFilter, preserveDatabaseFilterRegistrationOptions, isDatabaseRegistrationOption } from "./chat/database-filter.js";
 import { normalizePartialDateSubmission } from "./chat/date-input.js";
 import { recommendEffectivePaymentDate } from "./chat/launch-payment-date-options.js";
 import { attachmentFinishOption, isDiaryAttachmentPrompt, isDocumentAttachmentPrompt } from "./chat/attachment-finish.js";
@@ -531,6 +531,17 @@ const GALLERY_CREATION_ACTIONS = Object.freeze({
   action_delegated_tasks_gallery: ["action_delegated_task", "CRIAR UMA TAREFA DELEGADA"],
 });
 const DOCUMENT_SIGNING_REOPEN_LAST_ID = "document_signing_reopen_last";
+const GALLERY_EMBEDDED_REGISTRATIONS = [
+  [['register_supplier', 'NOVO_FORNECEDOR', 'payment_supplier_registration', 'new_quotation_supplier_registration'],
+    ['launch', 'payment', 'recurring_expense', 'new_quotation'], 'supply_supplier_registration'],
+  [['register_product'], ['launch', 'payment'], 'supply_product_registration'],
+  [['NOVO'], ['launch', 'payment'], 'supply_product_registration', ['produto_lancamento', 'produto_pagamento']],
+  [['register_subfamily', 'NOVO_SUBFAMILIA_PRODUTO'], ['supply_product_registration'], 'supply_subfamily_registration'],
+  [['register_family', 'NOVO_FAMILIA_SUBFAMILIA'], ['supply_subfamily_registration'], 'supply_family_registration'],
+  [['register_group', 'NOVO_GRUPO_FAMILIA'], ['supply_family_registration'], 'supply_group_registration'],
+  [['register_new_document_type'], ['document'], 'document_type_registration'],
+  [['register_new_document_group'], ['document_type_registration'], 'document_group_registration'],
+];
 const DOCUMENT_SIGNING_POSITION_BACK_ID = "document_signing_position_back";
 const DOCUMENT_LINE_FINALIZE_ID = "document_line_finalize";
 const EPI_ORDER_BLANK_REPLY_ID = "document_signing_epi_order_blank";
@@ -1073,6 +1084,7 @@ export function createAppController({
   let started = false;
   let stopped = false;
   let galleryOpeningRevision = 0;
+  let galleryCreationReturn = null;
   let mascotNavigationOpening = null;
   let launchGallery = null;
   let launchGalleryOpening = null;
@@ -6233,11 +6245,92 @@ export function createAppController({
     // Cached galleries survive report navigation; only account lifetime expires
     // their creation callback. The UI separately guards closed/destroyed panels.
     const creationAccount = account, creationRevision = sessionRevision;
-    return () => {
+    return async () => {
       if (stopped || account !== creationAccount || sessionRevision !== creationRevision || flowBusy()) return false;
       assertSession();
-      return sendText(action[1], action[0]);
+      const panel = REGISTRATION_GALLERY_KIND[galleryId]
+        ? registrationGalleries.get(REGISTRATION_GALLERY_KIND[galleryId])
+        : { [LAUNCH_GALLERY_ID]: launchGallery, [ORDERS_GALLERY_ID]: ordersGallery,
+          [TASKS_GALLERY_ID]: tasksGallery, [PAYMENT_PROGRAMMING_GALLERY_ID]: paymentProgrammingGallery,
+          [RECURRING_EXPENSES_GALLERY_ID]: recurringExpensesGallery }[galleryId];
+      const result = await sendText(action[1], action[0]);
+      const flow = store.getState().activeFlow;
+      if (result && panel && flow && account === creationAccount && sessionRevision === creationRevision && !stopped) {
+        galleryCreationReturn = { panel, account, revision: sessionRevision,
+          contexts: [{ id: flow.id, contextId: flow.contextId }] };
+      }
+      return result;
     };
+  }
+
+  function galleryContextMatches(flow, context) {
+    return Boolean(flow && context && flow.id === context.id
+      && String(flow.contextId || '') === String(context.contextId || ''));
+  }
+
+  function reconcileGalleryCreationReturn(previous, active, replyId, poll, result) {
+    const origin = galleryCreationReturn;
+    if (!origin) return;
+    const contexts = origin.contexts, current = contexts.at(-1);
+    if (origin.account !== account || origin.revision !== sessionRevision || stopped
+      || !galleryContextMatches(previous, current)) { galleryCreationReturn = null; return; }
+    const selected = poll?.options?.find(option => [option.reply, option.id].includes(replyId));
+    const ordinaryReply = !replyId || Boolean(selected) || ['input_continue', 'filter_query', 'filter_clear', 'refresh_options'].includes(replyId);
+    const back = replyId === NAVIGATION_BACK_ID;
+    const completed = hasCompletedSubmission(result);
+    const registered = result.results?.some(item => Object.entries(item || {})
+      .some(([key, value]) => /^embedded_.*_registered$/.test(key) && value === true));
+    const parent = contexts.findIndex(context => context.id === active?.id);
+    // A child may restore a suspended parent with updated registered fields.
+    if (parent >= 0 && parent < contexts.length - 1 && (back || ordinaryReply)
+      && (galleryContextMatches(active, contexts[parent]) || completed || registered)) {
+      contexts.splice(parent + 1);
+      contexts[parent] = { id: active.id, contextId: active.contextId };
+      return;
+    }
+    if (completed) { galleryCreationReturn = null; return; }
+    if (galleryContextMatches(active, current)) return;
+    // Backend contextId hashes include answers and step: retain only confirmed
+    // answers/current controls or Back within this exact owned flow.
+    if (active?.id === current.id && active.contextId && (back || ordinaryReply)) {
+      contexts[contexts.length - 1] = { id: active.id, contextId: active.contextId };
+      return;
+    }
+    const choice = String(selected?.id || '').match(/^choice:([^:]+):(.+)$/);
+    const rawReply = String(selected?.reply || replyId || '').replace(/^choice:[^:]+:/, '');
+    const target = selected && isDatabaseRegistrationOption(selected)
+      && GALLERY_EMBEDDED_REGISTRATIONS.find(([replies, parents, , steps]) => replies.includes(rawReply)
+        && parents.includes(previous.id) && (!steps || steps.includes(choice?.[1] || poll.databaseFilterKey)))?.[2];
+    if (target && active?.id === target && active.contextId && contexts.length < 8) {
+      contexts.push({ id: active.id, contextId: active.contextId });
+      return;
+    }
+    // Only Back leaving the root may consume the return point in its caller.
+    if (!back || contexts.length !== 1) galleryCreationReturn = null;
+  }
+
+  async function returnToPreviousFlowStep(command) {
+    const origin = galleryCreationReturn;
+    const ownsCurrent = origin && origin.account === account && origin.revision === sessionRevision
+      && galleryContextMatches(store.getState().activeFlow, origin.contexts.at(-1));
+    const canRestore = ownsCurrent && origin.contexts.length === 1;
+    if (!ownsCurrent) galleryCreationReturn = null;
+    // Back navigates even with files waiting in the tray, but never confirms
+    // an abandonment prompt or retries a pending Home/discard command.
+    const result = await sendText(command.label, command.replyId, { allowAttachmentTrayNavigation: true });
+    if (result && canRestore && galleryCreationReturn === origin && !stopped
+      && account === origin.account && sessionRevision === origin.revision
+      && !galleryContextMatches(store.getState().activeFlow, origin.contexts[0])) {
+      galleryCreationReturn = null;
+      closeGalleryOverlays();
+      try {
+        if (await origin.panel.open() === false) return false;
+      } catch (error) {
+        setSessionError(error, 'Não foi possível retornar à galeria.');
+        return false;
+      }
+    }
+    return result;
   }
 
   function disposePayrollSheetCreate() {
@@ -9469,7 +9562,8 @@ export function createAppController({
       epiFinalizeProgress?.phase === "advance"
       && String(replyId || "") === epiFinalizeProgress.advanceReplyId
     );
-    if (epiFinalizeProgress?.phase === "advance" && !epiFinalizeAdvanceRetry && behavior.autoDiscardExit !== true) {
+    if (epiFinalizeProgress?.phase === "advance" && !epiFinalizeAdvanceRetry && behavior.autoDiscardExit !== true
+      && replyId !== NAVIGATION_BACK_ID) {
       setSessionError(new Error("Escolha SIM para continuar os EPIs selecionados antes de finalizar."));
       return false;
     }
@@ -9767,6 +9861,8 @@ export function createAppController({
       const confirmed = store.confirmText(operation, staged?.immediate || presentationResult);
       let resumeEpiFinalize = false;
       if (confirmed) {
+        const active = store.getState().activeFlow;
+        reconcileGalleryCreationReturn(previousState.activeFlow, active, replyId, previousPoll, effectiveResult);
         if (hasPostedDocumentContinuation(effectiveResult, previousState.activeFlow, replyId || operation.text)) {
           // The VM verified this row and started the next one. Retire only
           // those references; new files and pending uploads belong to the next
@@ -10447,6 +10543,7 @@ export function createAppController({
   }
 
   async function signOut() {
+    galleryCreationReturn = null;
     disposeDdaSyncSession();
     disposeSefazSyncSession();
     ddaAutoReminder.reset();
@@ -11320,7 +11417,7 @@ export function createAppController({
           rhidAttendanceReportPreviousSnapshot = null;
           return store.restoreSnapshot(previous);
         }
-        return sendText(command.label, command.replyId, { autoDiscardExit: true });
+        return returnToPreviousFlowStep(command);
       }
       if (command.replyId === POWERBI_DASHBOARD_REPLY_ID) return openPowerBiDashboard();
       if (REGISTRATION_GALLERY_KIND[command.replyId]) return openRegistrationGallery(REGISTRATION_GALLERY_KIND[command.replyId], command.replyId);
@@ -11870,6 +11967,7 @@ export function createAppController({
   }
 
   function stop() {
+    galleryCreationReturn = null;
     disposeDdaSyncSession();
     disposeSefazSyncSession();
     ddaAutoReminder.reset();

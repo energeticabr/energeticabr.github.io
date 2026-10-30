@@ -5,7 +5,7 @@ import { attachGalleryRefreshButton } from './gallery-refresh.js';
 import { createGalleryCreationToolbar } from './gallery-create-shortcut.js';
 import { createGalleryLoadingScreen } from './gallery-loading-screen.js';
 import { bindSearchableFilterSelects } from './searchable-filter-selects.js';
-import { createGalleryRecordActions } from './gallery-record-actions.js';
+import { createGalleryRecordActions, dismissGalleryOverlay } from './gallery-record-actions.js';
 import { galleryDeletionFields } from './gallery-deletion-receipt.js';
 import { bindAutoFilterForm } from './auto-filter-form.js';
 import { createGalleryAttachmentCounts, knownGalleryAttachmentCount } from './gallery-attachment-counts.js';
@@ -609,7 +609,15 @@ export function createPaymentProgrammingGallery({
   });
   previous.addEventListener("click", () => { if (page > 1) { page -= 1; renderList(); } });
   next.addEventListener("click", () => { if (page < Math.ceil(filteredRows.length / pageSize)) { page += 1; renderList(); } });
-  closeButton.addEventListener("click", () => { close(); onClose?.(); });
+  function navigateBack() {
+    if (!opened || destroyed) return;
+    if (dismissGalleryOverlay(root)) return;
+    if (!detail.hidden) {
+      detailSession++; detail.hidden = true; detail.replaceChildren(); closeButton.focus(); return;
+    }
+    close(); onClose?.();
+  }
+  closeButton.addEventListener("click", navigateBack);
   homeButton.addEventListener("click", () => { close(); onHome?.(); });
 
   async function open() {
