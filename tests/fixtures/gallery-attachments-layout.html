@@ -1,0 +1,169 @@
+<!doctype html>
+<html lang="pt-BR">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1">
+  <meta http-equiv="Content-Security-Policy" content="default-src 'none'; script-src 'self' 'unsafe-inline'; style-src 'self' 'unsafe-inline'; img-src 'self' data:; font-src 'self'; connect-src 'none'; form-action 'none'; base-uri 'none'">
+  <title>Editor de galeria · anexos fictícios</title>
+  <link rel="stylesheet" href="../../apps/energetico-mobile/src/styles.css">
+  <link rel="stylesheet" href="../../apps/energetico-mobile/src/ui/gallery-record-actions.css">
+  <style>body { margin: 0; }</style>
+  <script>
+    window.addEventListener('error', event => {
+      document.documentElement.dataset.layout = JSON.stringify({ status: 'failed', error: event.message || `Resource failed: ${event.target?.src || event.target?.href}` });
+    }, true);
+    window.addEventListener('unhandledrejection', event => {
+      document.documentElement.dataset.layout = JSON.stringify({ status: 'failed', error: String(event.reason?.stack || event.reason) });
+    });
+  </script>
+</head>
+<body>
+  <main id="gallery"><h1>Anexos fictícios · nenhuma gravação real</h1></main>
+  <script type="module">
+    import { createGalleryRecordActions } from '../../apps/energetico-mobile/src/ui/gallery-record-actions.js';
+
+    const host = document.querySelector('#gallery');
+    const longName = `RELATÓRIO DE MANUTENÇÃO DO EQUIPAMENTO - ${'IDENTIFICACAOSEMESPACOS'.repeat(9)} - DOCUMENTAÇÃO COMPLEMENTAR.pdf`;
+    const encodedName = '%252Fsites%252Fficticio%252FLists%252FIMOBILIZADOS%252FAttachments%252F42%252FRELAT%25C3%2593RIO%2520DE%2520INSPE%25C3%2587%25C3%2583O%2520-%2520EQUIPAMENTO%252042.pdf';
+    const decodedName = 'RELATÓRIO DE INSPEÇÃO - EQUIPAMENTO 42.pdf';
+    const pendingName = `COMPROVANTE PENDENTE - ${'PAGAMENTOSEMESPACOS'.repeat(7)}.pdf`;
+    const savedFiles = [{ name: longName, size: 2048, type: 'application/pdf' }, { name: encodedName, size: 4096, type: 'application/pdf' }];
+    const failures = [], measurements = [], errors = [], securityViolations = [], submissions = [];
+    let mode = 'editable', releaseSave, reads = 0;
+    const frames = () => new Promise(resolve => requestAnimationFrame(() => requestAnimationFrame(resolve)));
+    const check = (condition, message) => { if (!condition) throw new Error(message); };
+    const expect = (condition, message) => { if (!condition) failures.push(message); };
+    async function until(predicate, message) {
+      const deadline = performance.now() + 6000;
+      while (!predicate()) {
+        if (performance.now() > deadline) throw new Error(`Timeout: ${message}`);
+        await new Promise(resolve => setTimeout(resolve, 15));
+      }
+    }
+    document.addEventListener('securitypolicyviolation', event => securityViolations.push(event.blockedURI));
+    const actions = createGalleryRecordActions({ document, host, actions: ['edit'], galleryTitle: 'IMOBILIZADOS FICTÍCIOS',
+      async loadEditor(id) {
+        return { entity: { id: 'fixture-attachments', title: 'Anexos do imobilizado' }, contract: { hasForm: true, readOnly: false },
+          item: { id, fields: { OBS: 'Dados fictícios' } },
+          columns: [{ name: 'OBS', label: 'Observação', control: 'text', editable: true, hidden: false }],
+          attachments: { enabled: true, canView: true, canEdit: mode !== 'readOnly', existingFiles: mode === 'empty' ? [] : savedFiles,
+            readExisting: async () => { reads++; throw new Error('Downloads não fazem parte desta fixture local.'); } },
+        };
+      },
+      async saveEditor(_context, fields, options) {
+        submissions.push({ fields, uploads: options.attachments.uploads.map(file => file.name), deletions: [...options.attachments.deletions] });
+        await new Promise(resolve => { releaseSave = resolve; });
+        return { id: '42', fields };
+      },
+      onChanged() {}, onError: error => errors.push(String(error.stack || error)),
+    });
+    host.append(actions.render({ id: '42', fields: { OBS: 'Dados fictícios' } }));
+    async function open(nextMode = 'editable') {
+      mode = nextMode;
+      host.querySelector('[data-gallery-action="edit"]').click();
+      await until(() => host.querySelector('[data-form-attachments]'), `${mode}: real attachment field`);
+      await frames();
+    }
+    const cancel = () => host.querySelector('[data-form-cancel]').click();
+    const rows = () => [...host.querySelectorAll('.attachment-row')];
+    const rect = node => { const r = node.getBoundingClientRect(); return { left: r.left, right: r.right, top: r.top, bottom: r.bottom, width: r.width, height: r.height }; };
+    const overlap = (a, b) => Math.min(a.right, b.right) - Math.max(a.left, b.left) > 1 && Math.min(a.bottom, b.bottom) - Math.max(a.top, b.top) > 1;
+
+    async function measure(stage) {
+      await frames();
+      const section = host.querySelector('[data-form-attachments]');
+      const heading = section.querySelector('h3');
+      const dialog = host.querySelector('[data-gallery-record-screen]');
+      const sectionRect = rect(section), headingRect = rect(heading);
+      const sectionStyle = getComputedStyle(section);
+      const contentWidth = section.clientWidth - parseFloat(sectionStyle.paddingLeft) - parseFloat(sectionStyle.paddingRight);
+      expect(Math.abs(headingRect.width - contentWidth) <= 2, `${stage}: attachment heading must fill the section width`);
+      expect(document.documentElement.scrollWidth <= innerWidth + 1 && dialog.scrollWidth <= dialog.clientWidth + 1, `${stage}: no horizontal overflow`);
+      const measuredRows = rows().map((row, index) => {
+        const box = rect(row), style = getComputedStyle(row), text = row.firstElementChild, textRect = rect(text);
+        const title = text.querySelector('strong'), range = document.createRange(); range.selectNodeContents(title);
+        const titleRects = [...range.getClientRects()].map(r => ({ left: r.left, right: r.right, top: r.top, bottom: r.bottom }));
+        const actions = row.querySelector('.attachment-actions'), actionRect = actions && rect(actions);
+        expect(['paddingTop', 'paddingRight', 'paddingBottom', 'paddingLeft'].every(side => parseFloat(style[side]) >= 10), `${stage}/row${index}: padding must be at least 10px`);
+        expect(parseFloat(style.borderTopLeftRadius) >= 6, `${stage}/row${index}: rounded row`);
+        expect(box.left >= sectionRect.left - 1 && box.right <= sectionRect.right + 1, `${stage}/row${index}: row fits section`);
+        expect(row.scrollWidth <= row.clientWidth + 1 && text.scrollWidth <= text.clientWidth + 1, `${stage}/row${index}: long filename must wrap without overflow`);
+        expect(titleRects.every(r => r.left >= textRect.left - 1 && r.right <= textRect.right + 1), `${stage}/row${index}: filename glyphs fit the text area`);
+        if (title.textContent === longName || title.textContent === pendingName) expect(titleRects.length > 1, `${stage}/row${index}: long filename actually wraps`);
+        const buttons = [...row.querySelectorAll('button')].map(button => ({ label: button.textContent.trim(), disabled: button.disabled, box: rect(button), textFits: button.scrollWidth <= button.clientWidth + 1 && button.scrollHeight <= button.clientHeight + 1 }));
+        if (actions) {
+          expect(actionRect.top >= textRect.bottom - 1, `${stage}/row${index}: action group belongs below filename and status`);
+          expect(actionRect.left >= box.left - 1 && actionRect.right <= box.right + 1, `${stage}/row${index}: action group fits row`);
+        }
+        for (const button of buttons) {
+          expect(button.box.width >= 43.5 && button.box.height >= 43.5, `${stage}/row${index}/${button.label}: usable 44px target`);
+          expect(button.textFits, `${stage}/row${index}/${button.label}: action text fits button`);
+          expect(!overlap(button.box, textRect), `${stage}/row${index}/${button.label}: action does not overlap filename or status`);
+          expect(button.box.left >= box.left - 1 && button.box.right <= box.right + 1, `${stage}/row${index}/${button.label}: action fits row`);
+        }
+        for (let a = 0; a < buttons.length; a++) for (let b = a + 1; b < buttons.length; b++) expect(!overlap(buttons[a].box, buttons[b].box), `${stage}/row${index}: buttons do not overlap`);
+        return { name: title.textContent, pending: row.classList.contains('is-pending'), removed: row.classList.contains('is-removed'), padding: style.padding, radius: style.borderTopLeftRadius, box, textRect, actionRect, buttons };
+      });
+      measurements.push({ stage, section: sectionRect, heading: headingRect, rows: measuredRows });
+    }
+
+    try {
+      await open();
+      check(rows().length === 2, 'Saved attachment rows rendered by the real form');
+      const encodedRow = rows().find(row => row.dataset.formAttachmentExisting === encodedName);
+      expect(encodedRow?.querySelector('strong').textContent === decodedName, 'encoded stored pathname displays its decoded basename');
+      check(encodedRow?.querySelector('[data-form-attachment-open]').dataset.formAttachmentOpen === encodedName, 'Display normalization must preserve the original action key');
+      await measure('saved');
+      const file = new File(['%PDF-1.4\nfixture only'], pendingName, { type: 'application/pdf' });
+      const transfer = new DataTransfer(); transfer.items.add(file);
+      const input = host.querySelector('[data-form-attachment-input]'); input.files = transfer.files;
+      input.dispatchEvent(new Event('change', { bubbles: true }));
+      check(rows().length === 3 && host.querySelector('[data-form-attachment-pending]'), 'Real file input stages a pending upload');
+      check(submissions.length === 0, 'Staging files cannot save');
+      await measure('pending');
+      host.querySelector('[data-form-attachment-remove-existing]').click();
+      check(host.querySelector('[data-form-attachment-removed]'), 'Remove stages a deletion');
+      check(submissions.length === 0, 'Staged deletion cannot save');
+      await measure('removed');
+      host.querySelector('[data-form-attachment-restore-existing]').click();
+      check(!host.querySelector('[data-form-attachment-removed]'), 'Restore reverses the deletion');
+      await measure('restored');
+      host.querySelector('[data-form-attachment-remove-upload]').click();
+      check(rows().length === 2 && !host.querySelector('[data-form-attachment-pending]'), 'Pending upload removal is local');
+      cancel();
+      check(submissions.length === 0, 'Cancel cannot persist attachment changes');
+      await open('empty');
+      check(rows().length === 0 && host.querySelector('.entity-empty')?.textContent.includes('Nenhum anexo'), 'Real empty state');
+      check(!host.querySelector('[data-form-attachment-input]').disabled, 'Empty editable state can add files');
+      await measure('empty'); cancel();
+      await open('readOnly');
+      check(!host.querySelector('[data-form-attachment-input],[data-form-attachment-remove-existing],[data-form-attachment-restore-existing]'), 'Read-only attachments have no mutation controls');
+      check(host.querySelectorAll('[data-form-attachment-open]').length === 2, 'Read-only attachments retain preview controls');
+      await measure('readOnly'); cancel();
+      await open();
+      host.querySelector('[name="OBS"]').value = 'Validação local de estado ocupado';
+      host.querySelector('[data-form-save]').click();
+      await until(() => releaseSave, 'simulated save begins');
+      check(host.querySelector('[data-gallery-record-screen]').getAttribute('aria-busy') === 'true', 'Real gallery mutation announces busy');
+      check([...host.querySelectorAll('[data-form-attachments] button,[data-form-attachment-input]')].every(control => control.disabled), 'Real busy state disables attachment controls');
+      await measure('busy');
+      check(submissions.length === 1 && submissions[0].uploads.length === 0 && submissions[0].deletions.length === 0, 'Restored and cancelled operations leave no attachment mutation');
+      releaseSave();
+      await until(() => host.querySelector('[data-gallery-edit-success]'), 'simulated success receipt');
+      host.querySelector('[data-gallery-receipt-close]').click();
+      await open();
+      const previewTransfer = new DataTransfer(); previewTransfer.items.add(file);
+      const previewInput = host.querySelector('[data-form-attachment-input]'); previewInput.files = previewTransfer.files;
+      previewInput.dispatchEvent(new Event('change', { bubbles: true }));
+      host.querySelector('[data-form-attachment-remove-existing]').click();
+      host.querySelector('[data-form-attachments]').scrollIntoView({ block: 'start' });
+      await frames();
+      check(reads === 0 && errors.length === 0 && securityViolations.length === 0, 'Fixture uses no downloads or external network');
+      document.documentElement.dataset.layout = JSON.stringify({ status: failures.length ? 'failed' : 'passed', failures, measurements, submissions, reads, errors, securityViolations, viewport: { width: innerWidth, height: innerHeight } });
+    } catch (error) {
+      releaseSave?.();
+      document.documentElement.dataset.layout = JSON.stringify({ status: 'failed', error: error.stack, failures, measurements, submissions, errors, securityViolations });
+    }
+  </script>
+</body>
+</html>

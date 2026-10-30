@@ -56,6 +56,33 @@ test("controle de Form exibe arquivos sem transformar Attachments em campo tecni
   assert.equal(formAttachmentFieldMarkup({ enabled: false }), "");
 });
 
+test("nomes SharePoint codificados recebem apenas um rótulo visual, preservando a identidade dos comandos", async () => {
+  const name = '%252fLists%252fIMOBILIZADOS%252fAttachments%252f8%252fRelat%25C3%25B3rio%2520de%2520vistoria.pdf';
+  const markup = formAttachmentRowsMarkup({ canView: true, canEdit: true, existingFiles: [{ name }] });
+  assert.match(markup, /<strong>Relatório de vistoria\.pdf<\/strong>/);
+  for (const attribute of ['existing', 'open', 'download', 'remove-existing']) {
+    assert.ok(markup.includes(`data-form-attachment-${attribute}="${name}"`), attribute);
+  }
+  const reads = [], draft = createFormAttachmentDraft({ existingFiles: [{ name }], readExisting: file => { reads.push(file.name); return new ArrayBuffer(1); } });
+  await draft.readFile(0);
+  assert.deepEqual(reads, [name]);
+  draft.removeExisting(name);
+  assert.deepEqual(draft.changes().deletions, [name]);
+  assert.match(formAttachmentRowsMarkup({ canView: true, canEdit: true, existingFiles: [{ name }], removedNames: [name] }), /<strong>Relatório de vistoria\.pdf<\/strong>/);
+});
+
+test("rótulos de anexos preservam nomes comuns e codificação inválida e escapam o texto exibido", () => {
+  for (const name of ['100%20concluído.pdf', 'AF8E5DF9-46ED-9C51.pdf', 'incorreto%ZZ.pdf']) {
+    assert.ok(formAttachmentRowsMarkup({ canView: true, existingFiles: [{ name }] }).includes(`<strong>${name}</strong>`));
+  }
+  const name = '%252fLists%252fIMOBILIZADOS%252fAttachments%252f8%252f%253Cimg%2520src=x%253E.pdf';
+  const markup = formAttachmentRowsMarkup({ canView: true, existingFiles: [{ name }] });
+  assert.match(markup, /<strong>&lt;img src=x&gt;\.pdf<\/strong>/);
+  assert.doesNotMatch(markup, /<img/);
+  const percentName = '%252fLists%252fIMOBILIZADOS%252fAttachments%252f8%252f100%2525%2520conclu%25C3%25ADdo.pdf';
+  assert.match(formAttachmentRowsMarkup({ canView: true, existingFiles: [{ name: percentName }] }), /<strong>100% concluído\.pdf<\/strong>/);
+});
+
 test("formulario injeta o controle apenas quando a variante declara anexos", () => {
   const entity = { title: "Lancamentos" };
   const columns = [{ name: "Title", label: "Filial", control: "text", editable: true }];
