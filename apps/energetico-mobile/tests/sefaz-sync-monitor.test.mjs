@@ -45,11 +45,29 @@ test('late response after account switch is cancelled and storage is partitioned
  resolve(receipt('succeeded'));await start;assert.equal(h.shown.length,0);const next=setup(t,{storage:h.storage,accountKey:'account-b'});await next.monitor.resume();assert.equal(next.monitor.pendingCount,0);
 });
 test('storage failure blocks new collection but authenticated server outcomes can still be shown',async t=>{
- const h=setup(t,{storage:{getItem:()=>null,setItem:()=>{throw Error('quota');}},client:{getSefazRefreshPending:async()=>({status:'pending',requests:[receipt('failed')]})}});
+ const h=setup(t,{storage:{getItem:()=>null,setItem:()=>{throw Error('quota');}},client:{getSefazRefreshPending:async()=>({status:'pending',requests:[receipt('failed')],lastSuccessfulUtc:'2026-10-29T09:01:00Z'})}});let latest;
+ h.monitor.subscribe(state=>{latest=state;});
  await assert.rejects(h.monitor.start(),/salvar|registrar/);assert.equal(h.calls.length,0);await h.monitor.resume();assert.equal(h.shown.length,1);
+ assert.equal(latest.lastSuccessfulAt,Date.parse('2026-10-29T09:01:00Z'));
  assert.equal(await h.shown[0].ack(),false,'cannot silently lose an unpersisted ACK');
 });
 test('corrupt server batch cannot overwrite saved request and sensitive data is not persisted',async t=>{
  const h=setup(t,{client:{getSefazRefreshPending:async()=>({status:'pending',requests:[receipt('succeeded'),{...receipt(),requestId:'bad'}]})}});await h.monitor.resume();assert.equal(h.monitor.pendingCount,0);assert.equal(h.shown.length,0);
  h.setState({...receipt('succeeded'),xml:'SECRET'});await h.monitor.start();assert.equal(h.shown.length,1);assert.doesNotMatch([...h.map.values()].join(''),/SECRET|xml/);
+});
+test('last successful completion survives acknowledgement and restart while partial results cannot replace it',async t=>{
+ const completed=Date.parse('2026-10-29T10:01:00Z'),h=setup(t);let latest;
+ h.monitor.subscribe(state=>{latest=state;});h.setState(receipt('succeeded'));await h.monitor.start();
+ assert.equal(latest.lastSuccessfulAt,completed);
+ await h.shown[0].ack();await h.monitor.resume();assert.equal(h.monitor.pendingCount,0);
+ h.monitor.destroy();const restored=setup(t,{storage:h.storage});restored.monitor.subscribe(state=>{latest=state;});
+ await restored.monitor.resume();assert.equal(latest.lastSuccessfulAt,completed);
+ restored.monitor.destroy();const partial=setup(t,{storage:h.storage,client:{getSefazRefreshPending:async()=>({status:'pending',requests:[{
+  ...receipt('partial'),completedUtc:'2026-10-29T11:01:00Z'}]})}});partial.monitor.subscribe(state=>{latest=state;});
+ await partial.monitor.resume();assert.equal(latest.lastSuccessfulAt,completed);
+});
+test('invalid server last-success timestamp preserves the valid local measurement',async t=>{
+ const completed=Date.parse('2026-10-29T10:01:00Z'),map=new Map([['energetico.sefaz-sync.v1:account-a',JSON.stringify({version:1,records:[],lastSuccessfulAt:completed})]]);
+ const h=setup(t,{storage:{getItem:key=>map.get(key)||null,setItem:(key,value)=>map.set(key,value)},client:{getSefazRefreshPending:async()=>({status:'pending',requests:[],lastSuccessfulUtc:'not-a-date'})}});let latest;
+ h.monitor.subscribe(state=>{latest=state;});await h.monitor.resume();assert.equal(latest.lastSuccessfulAt,completed);assert.match(latest.notice,/conexão/i);
 });

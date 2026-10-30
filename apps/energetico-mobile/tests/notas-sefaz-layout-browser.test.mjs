@@ -38,6 +38,10 @@ test('NF-e gallery and three-gallery launch group fit narrow phones and Windows 
       assert.ok(layout.activeFilters.buttonWidth >= 44 && layout.activeFilters.buttonHeight >= 44, 'limpar filtros acessível ao toque');
     }
     if (mode === 'gallery') {
+      assert.match(layout.lastSuccess.text,/Última atualização bem-sucedida/);
+      assert.match(layout.lastSuccess.text,/29\/10\/2026.*07:01/);
+      assert.equal(layout.lastSuccess.background,'rgb(238, 243, 245)');
+      assert.ok(layout.lastSuccess.scrollWidth <= layout.lastSuccess.width + 1, 'cluster da última atualização sem overflow');
       if(cancelled){
         assert.equal(layout.cancelled.text,'CANCELADA');
         assert.equal(layout.cancelled.color,'rgb(190, 30, 45)');

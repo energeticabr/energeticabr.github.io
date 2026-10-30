@@ -261,6 +261,19 @@ export function createRegistrationGallery({ document: doc = globalThis.document,
     clearFilters.type = 'button';
     activeFilterNotice.append(activeFilterText, clearFilters);
   }
+  const fiscalLastSuccess = kind === 'notas_fiscais_sefaz' ? el('div', 'rg-sefaz-last-success') : null;
+  const fiscalLastSuccessValue = fiscalLastSuccess ? el('strong', 'rg-sefaz-last-success__value', '—') : null;
+  if (fiscalLastSuccess) {
+    fiscalLastSuccess.dataset.sefazLastSuccess = '';
+    fiscalLastSuccess.setAttribute('role', 'status');
+    fiscalLastSuccess.setAttribute('aria-live', 'polite');
+    const icon = el('span', 'rg-sefaz-last-success__icon', '◷');
+    icon.setAttribute('aria-hidden', 'true');
+    const copy = el('span', 'rg-sefaz-last-success__copy');
+    fiscalLastSuccessValue.dataset.sefazLastSuccessValue = '';
+    copy.append(el('span', 'rg-sefaz-last-success__label', 'Última atualização bem-sucedida'), fiscalLastSuccessValue);
+    fiscalLastSuccess.append(icon, copy);
+  }
   const feedback = el("p", "rg-feedback");
   feedback.setAttribute("role", "status");
   const list = el("div", "rg-list");
@@ -271,7 +284,7 @@ export function createRegistrationGallery({ document: doc = globalThis.document,
   const next = el("button", "rg-button", "Próxima"); next.type = "button";
   pagination.append(previous, pageText, next);
   const ddaMetrics = kind === 'dda' ? createDdaGalleryMetrics(doc) : null;
-  root.append(header, createShortcut.toolbar, filterDisclosure, ...(activeFilterNotice ? [activeFilterNotice] : []), ...(sortBar ? [sortBar] : []), ...(ddaMetrics ? [ddaMetrics.root] : []), feedback, list, pagination);
+  root.append(header, ...(fiscalLastSuccess ? [fiscalLastSuccess] : []), createShortcut.toolbar, filterDisclosure, ...(activeFilterNotice ? [activeFilterNotice] : []), ...(sortBar ? [sortBar] : []), ...(ddaMetrics ? [ddaMetrics.root] : []), feedback, list, pagination);
   if (model.sourceNotice) {
     const notice = el('p', 'rg-source-notice', model.sourceNotice);
     notice.dataset.sefazCoverage = 'pending';
@@ -410,6 +423,7 @@ export function createRegistrationGallery({ document: doc = globalThis.document,
     fiscalNotice.hidden=!state.notice;
     fiscalNotice.textContent=state.notice || '';
     fiscalNotice.setAttribute('role','status');
+    fiscalLastSuccessValue.textContent=Number.isFinite(state.lastSuccessfulAt) ? formatManualTime(state.lastSuccessfulAt) : '—';
     if (fiscalWasRunning && !state.running && !root.hidden) void load({refresh:true,preserveRowsOnError:true});
     fiscalWasRunning=state.running; refreshShortcut.sync();
   }) : null;
