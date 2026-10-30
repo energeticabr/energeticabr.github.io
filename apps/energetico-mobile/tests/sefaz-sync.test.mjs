@@ -60,3 +60,16 @@ test('unsupported fiscal client shows error rather than pretending that a galler
  t.after(()=>{gallery.destroy();dom.window.close();});await gallery.open();dom.window.document.querySelector('[data-gallery-refresh]').click();await tick();
  assert.equal(loads,1);assert.match(dom.window.document.querySelector('[data-sefaz-sync-progress]').textContent,/indisponível/);
 });
+
+test('fiscal gallery shows a persistent neutral cluster with the last successful update',async t=>{
+ const dom=new JSDOM('<body/>'),doc=dom.window.document;let listener;
+ const monitor={running:false,subscribe(fn){listener=fn;fn({running:false,notice:'',lastSuccessfulAt:null});return()=>{};},async start(){}};
+ const gallery=createRegistrationGallery({document:doc,kind:'notas_fiscais_sefaz',syncMonitor:monitor,data:{loadSnapshot:async()=>({rows:[]})}});
+ t.after(()=>{gallery.destroy();dom.window.close();});await gallery.open();
+ const cluster=doc.querySelector('[data-sefaz-last-success]'),value=doc.querySelector('[data-sefaz-last-success-value]');
+ assert.ok(cluster);assert.match(cluster.textContent,/Última atualização bem-sucedida/);assert.equal(value.textContent,'—');
+ listener({running:false,notice:'',lastSuccessfulAt:Date.parse('2026-10-29T10:01:00Z')});
+ assert.match(value.textContent,/29\/10\/2026.*07:01/);assert.equal(cluster.hidden,false);
+ listener({running:true,notice:'NF-e: aguardando intervalo obrigatório',lastSuccessfulAt:Date.parse('2026-10-29T10:01:00Z')});
+ assert.match(value.textContent,/29\/10\/2026.*07:01/);
+});
