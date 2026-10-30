@@ -173,9 +173,15 @@ class Queue:
     def pending(self, identity):
         owner = self.authorize(identity)
         with self.locked() as state:
-            return {'status': 'pending', 'requests': [self.public(job) for job in sorted(
+            result = {'status': 'pending', 'requests': [self.public(job) for job in sorted(
                 state['jobs'].values(), key=lambda item: item['createdAt'])
                 if job['owner'] == owner and not job.get('acknowledgedAt')]}
+            successes = [job for job in state['jobs'].values()
+                         if job['owner'] == owner and job['status'] == 'succeeded']
+            if successes:
+                latest = max(successes, key=lambda job: timestamp(job['completedUtc']))
+                result['lastSuccessfulUtc'] = latest['completedUtc']
+            return result
 
     def acknowledge(self, identity, request_id):
         owner = self.authorize(identity)

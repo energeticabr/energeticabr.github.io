@@ -161,6 +161,24 @@ class QueueTests(unittest.TestCase):
         self.assertEqual(restarted.pending(OWNER)['requests'], [])
         self.assertEqual(self.start(), receipt)
 
+    def test_pending_preserves_latest_success_after_ack_and_ignores_later_partial_result(self):
+        self.start(); first = self.claim(); first_receipt = self.succeed(first)['job']
+        self.q.acknowledge(OWNER, first['requestId'])
+        self.now += 60
+        self.start('b'*32); partial = self.claim()
+        self.progress(partial, 'NFE', {'status': 'succeeded', 'documents': 1})
+        self.progress(partial, 'CTE', {'status': 'failed', 'code': 'SYNC_FAILED'})
+        self.progress(partial, 'NFSE', {'status': 'failed', 'code': 'SYNC_FAILED'})
+        self.finish(partial)
+
+        result = self.q.pending(OWNER)
+        self.assertEqual(result['lastSuccessfulUtc'], first_receipt['completedUtc'])
+        self.assertNotIn('lastSuccessfulUtc', self.q.pending(OTHER))
+
+        self.now += 60
+        self.start('c'*32); latest = self.claim(); latest_receipt = self.succeed(latest)['job']
+        self.assertEqual(self.q.pending(OWNER)['lastSuccessfulUtc'], latest_receipt['completedUtc'])
+
     def test_partial_failure_never_becomes_success(self):
         self.start(); job = self.claim()
         self.progress(job, 'NFE', {'status': 'succeeded', 'documents': 1})
