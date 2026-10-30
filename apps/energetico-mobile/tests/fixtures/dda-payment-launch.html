@@ -1,0 +1,260 @@
+<!doctype html>
+<html lang="pt-BR">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta http-equiv="Content-Security-Policy" content="default-src 'self' data: blob:; script-src 'self' 'unsafe-inline'; style-src 'self' 'unsafe-inline'; connect-src 'self' ws://127.0.0.1:*; form-action 'none'; object-src 'none'">
+  <title>Pagamento DDA → lançamento — dados fictícios</title>
+  <link rel="stylesheet" href="/src/styles.css">
+  <link rel="stylesheet" href="/src/ui/gallery-record-actions.css">
+  <link rel="stylesheet" href="/src/ui/dda-card.css">
+  <style>
+    /* Only the fake gallery/tray is styled here. The tested dialog uses product CSS. */
+    .fixture-screen { height: 100%; overflow-y: auto; padding: 20px; }
+    .fixture-content { max-width: 880px; margin: auto; }
+    .fixture-content h1 { font-size: 1.35rem; }
+    .fixture-card { padding: 18px; margin: 16px 0; border: 1px solid #b9cddd; border-radius: 14px; background: #fff; }
+    .fixture-card h2 { margin-top: 0; font-size: 1.1rem; overflow-wrap: anywhere; }
+    .fixture-card p { line-height: 1.45; overflow-wrap: anywhere; }
+    .fixture-card button { width: 100%; padding: 12px; border: 1px solid #07566b; border-radius: 8px; color: #fff; background: #07566b; }
+    .fixture-files { display: grid; gap: 10px; list-style: none; padding: 0; }
+    .fixture-files li { min-width: 0; padding: 12px; border: 1px solid #b9cddd; border-radius: 8px; background: #eef5f9; overflow-wrap: anywhere; }
+    .fixture-files strong, .fixture-files small { display: block; }
+    .fixture-files small { margin-top: 6px; }
+    [hidden] { display: none !important; }
+  </style>
+</head>
+<body>
+<main id="app" tabindex="-1">
+  <section class="fixture-screen" data-fake-gallery>
+    <div class="fixture-content">
+      <h1>Galeria DDA · demonstração</h1>
+      <p>Dados fictícios. Confirmação e lançamento simulados em memória.</p>
+      <article class="fixture-card">
+        <h2>ALFA MATERIAIS DE CONSTRUÇÃO — FORNECEDOR FICTÍCIO</h2>
+        <p>ID 42 · Documento EX-000042<br>R$ 1.250,35 · Vencimento 30/10/2026</p>
+        <p data-fake-payment-status>Em aberto</p>
+        <ul class="fixture-files" data-source-attachments aria-label="Anexos fictícios do DDA 42"></ul>
+        <button type="button" data-open-payment>Confirmar pagamento já realizado</button>
+      </article>
+      <article class="fixture-card">
+        <h2>BETA LOCAÇÕES — OUTRO DDA FICTÍCIO</h2>
+        <p>ID 43 · Documento EX-000043<br>R$ 480,00 · Vencimento 05/11/2026 · Em aberto</p>
+      </article>
+    </div>
+  </section>
+  <section class="fixture-screen" data-fake-launch hidden>
+    <div class="fixture-content">
+      <h1>Lançamento simulado</h1>
+      <p>Consumidor fictício do callback. Esta bandeja não testa a integração com o app-controller.</p>
+      <article class="fixture-card" data-fake-tray>
+        <h2>Anexos do DDA 42 · 2 arquivos</h2>
+        <ul class="fixture-files" data-tray-files aria-label="Bandeja simulada de anexos"></ul>
+        <p>Prévia local. Nenhum lançamento foi enviado.</p>
+      </article>
+    </div>
+  </section>
+</main>
+<script type="module">
+import { PDFDocument, StandardFonts } from 'pdf-lib';
+import { createDdaPaymentConfirmation } from '/src/ui/dda-payment-confirmation.js';
+
+try {
+  const scenario = new URLSearchParams(location.search).get('scenario') || 'offer';
+  const host = document.querySelector('#app');
+  const gallery = document.querySelector('[data-fake-gallery]');
+  const launch = document.querySelector('[data-fake-launch]');
+  const sourceList = document.querySelector('[data-source-attachments]');
+  const trayList = document.querySelector('[data-tray-files]');
+  const trigger = document.querySelector('[data-open-payment]');
+  const key = 'b'.repeat(64);
+  const frame = () => new Promise(resolve => requestAnimationFrame(() => requestAnimationFrame(resolve)));
+  const waitFor = async predicate => {
+    for (let i = 0; i < 100; i++) {
+      if (predicate()) return;
+      await new Promise(resolve => setTimeout(resolve, 10));
+    }
+    throw new Error('A transição esperada do diálogo não ocorreu.');
+  };
+  const files = [];
+  for (const [name, heading] of [
+    ['DANFE-EXEMPLO-000042-materiais-de-construcao.pdf', 'DANFE - MATERIAL FICTICIO - EX-000042'],
+    ['Comprovante-EXEMPLO-000042-pagamento-boleto.pdf', 'COMPROVANTE FICTICIO - EX-000042'],
+  ]) {
+    const pdf = await PDFDocument.create();
+    pdf.setCreationDate(new Date('2026-10-30T12:00:00Z'));
+    pdf.setModificationDate(new Date('2026-10-30T12:00:00Z'));
+    const page = pdf.addPage([595, 842]);
+    const font = await pdf.embedFont(StandardFonts.Helvetica);
+    page.drawText(heading, { x: 40, y: 780, size: 15, font });
+    page.drawText('DEMONSTRACAO SEM VALOR FISCAL OU FINANCEIRO', { x: 40, y: 750, size: 11, font });
+    page.drawText('DDA 42 - ALFA MATERIAIS - R$ 1.250,35 - 30/10/2026', { x: 40, y: 720, size: 11, font });
+    files.push(new File([await pdf.save()], name, { type: 'application/pdf', lastModified: 1793361600000 }));
+  }
+  const renderFiles = (list, values) => {
+    list.replaceChildren(...values.map(file => {
+      const li = document.createElement('li');
+      const name = document.createElement('strong'); name.textContent = file.name;
+      const meta = document.createElement('small'); meta.textContent = `PDF · ${file.size} bytes · fictício`;
+      li.append(name, meta); return li;
+    }));
+  };
+  renderFiles(sourceList, files);
+  const sourceMarkup = sourceList.innerHTML;
+  const state = { width: innerWidth, paymentCalls: 0, confirmedCalls: 0, launchRequests: [] };
+  const identity = request => ({ itemId: request.itemId, key: request.key,
+    signalIsAbortSignal: request.signal instanceof AbortSignal, abortedAtStart: request.signal?.aborted });
+  let pending, trayFiles = [];
+  const dialog = createDdaPaymentConfirmation({
+    document, host,
+    confirmPayment: async request => {
+      state.paymentCalls++; state.paymentIdentity = identity(request);
+      // No network, bank, SharePoint, or financial writes: an in-memory receipt only.
+      return { status: 'confirmed', itemId: 42, key, confirmedAt: '2026-10-30T12:00:00Z', confirmedBy: 'demo@example.test' };
+    },
+    onConfirmed: () => {
+      state.confirmedCalls++;
+      document.querySelector('[data-fake-payment-status]').textContent = 'Pagamento confirmado (simulado)';
+    },
+    onStartLaunch: request => {
+      state.launchRequests.push(identity(request));
+      return new Promise((resolve, reject) => { pending = { resolve, reject, request }; });
+    },
+  });
+  const button = selector => document.querySelector(selector);
+  trigger.addEventListener('click', () => dialog.show({
+    itemId: '42', key, supplier: 'ALFA MATERIAIS DE CONSTRUÇÃO — FORNECEDOR FICTÍCIO',
+    amount: 'R$ 1.250,35', due: '30/10/2026',
+  }, trigger));
+  const fits = node => {
+    const box = node.getBoundingClientRect();
+    return box.width > 0 && box.height > 0 && box.left >= -1 && box.top >= -1 && box.right <= innerWidth + 1 && box.bottom <= innerHeight + 1;
+  };
+  const measure = () => {
+    const modal = button('[data-dda-payment-dialog]');
+    const yes = button('[data-dda-launch-yes]'), no = button('[data-dda-payment-cancel]');
+    const controls = [no, yes];
+    const modalBox = modal.getBoundingClientRect();
+    const wordsUnbroken = controls.every(control => {
+      const text = control.firstChild;
+      return [...text.textContent.matchAll(/\S+/g)].every(match => {
+        const range = document.createRange();
+        range.setStart(text, match.index); range.setEnd(text, match.index + match[0].length);
+        return range.getClientRects().length === 1;
+      });
+    });
+    const yesStyle = getComputedStyle(yes);
+    const luminance = color => {
+      const rgb = color.match(/[\d.]+/g).slice(0, 3).map(Number).map(value => {
+        const component = value / 255;
+        return component <= .04045 ? component / 12.92 : ((component + .055) / 1.055) ** 2.4;
+      });
+      return rgb[0] * .2126 + rgb[1] * .7152 + rgb[2] * .0722;
+    };
+    const backgroundLuminance = luminance(yesStyle.backgroundColor), textLuminance = luminance(yesStyle.color);
+    let keyboardReachable = true;
+    for (const control of controls) {
+      control.focus(); keyboardReachable &&= document.activeElement === control;
+    }
+    no.focus();
+    modal.dispatchEvent(new KeyboardEvent('keydown', { key: 'Tab', bubbles: true, cancelable: true }));
+    keyboardReachable &&= document.activeElement === yes;
+    modal.dispatchEvent(new KeyboardEvent('keydown', { key: 'Tab', shiftKey: true, bubbles: true, cancelable: true }));
+    keyboardReachable &&= document.activeElement === no;
+    const textFits = [...modal.querySelectorAll('h2,p,button')].every(node => {
+      const ownBox = node.getBoundingClientRect();
+      const range = document.createRange(); range.selectNodeContents(node);
+      return [...range.getClientRects()].every(box => box.left >= modalBox.left - 1 && box.right <= modalBox.right + 1
+        && box.top >= modalBox.top - 1 && box.bottom <= modalBox.bottom + 1
+        && box.left >= ownBox.left - 1 && box.right <= ownBox.right + 1);
+    });
+    return {
+      title: modal.querySelector('h2').textContent, text: modal.textContent,
+      yesText: yes.textContent, noText: no.textContent,
+      buttonWidths: controls.map(control => control.getBoundingClientRect().width), wordsUnbroken,
+      yesBackground: yesStyle.backgroundColor, yesColor: yesStyle.color,
+      yesContrast: (Math.max(backgroundLuminance, textLuminance) + .05) / (Math.min(backgroundLuminance, textLuminance) + .05),
+      dialogFits: fits(modal), textFits,
+      overflow: modal.scrollWidth > modal.clientWidth + 1 || modal.scrollHeight > modal.clientHeight + 1,
+      buttonsFit: controls.every(node => { const box = node.getBoundingClientRect(); return fits(node) && box.left >= modalBox.left && box.right <= modalBox.right && box.height >= 44; }),
+      buttonsReachable: controls.every(node => {
+        const box = node.getBoundingClientRect(), hit = document.elementFromPoint(box.x + box.width / 2, box.y + box.height / 2);
+        return !node.disabled && (hit === node || node.contains(hit));
+      }),
+      keyboardReachable, backgroundInert: gallery.inert,
+      paymentControlPresent: Boolean(button('[data-dda-payment-yes]')),
+    };
+  };
+  trigger.click();
+  state.offeredBeforePayment = Boolean(button('[data-dda-launch-yes]'));
+  button('[data-dda-payment-yes]').click();
+  await waitFor(() => Boolean(button('[data-dda-launch-yes]')));
+  await document.fonts.ready; await frame();
+  state.offer = measure();
+
+  const beginLaunch = () => {
+    const yes = button('[data-dda-launch-yes]'); yes.click(); yes.click();
+  };
+  const completeFakeLaunch = () => {
+    // Only this fake consumer populates the tray; no app controller is imported.
+    if (pending.request.itemId !== 42 || pending.request.key !== key || pending.request.signal.aborted) {
+      pending.reject(new Error('Identidade incorreta no consumidor fictício.')); return;
+    }
+    trayFiles = [...files]; renderFiles(trayList, trayFiles);
+    gallery.hidden = true; launch.hidden = false;
+    pending.resolve(true);
+  };
+  if (['started', 'failed', 'retry'].includes(scenario)) {
+    beginLaunch(); await frame();
+    state.pending = {
+      open: dialog.isOpen,
+      controlsDisabled: [...button('[data-dda-payment-dialog]').querySelectorAll('button')].every(node => node.disabled),
+      noTray: launch.hidden && trayList.children.length === 0,
+      paymentCalls: state.paymentCalls, launchCalls: state.launchRequests.length,
+    };
+    if (scenario === 'started') {
+      completeFakeLaunch(); await waitFor(() => !dialog.isOpen);
+    } else {
+      if (scenario === 'retry') pending.reject(new Error('PRIVATE_FIXTURE_DOWNLOAD_ERROR'));
+      else pending.resolve(false);
+      await waitFor(() => Boolean(button('[data-dda-payment-dialog] [role="alert"]')));
+      await frame();
+      state.failure = {
+        open: dialog.isOpen,
+        controlsEnabled: [...button('[data-dda-payment-dialog]').querySelectorAll('button')].every(node => !node.disabled),
+        paymentControlPresent: Boolean(button('[data-dda-payment-yes]')),
+        paymentCalls: state.paymentCalls, launchCalls: state.launchRequests.length,
+        noTray: launch.hidden && trayList.children.length === 0,
+        message: button('[data-dda-payment-dialog] [role="alert"]').textContent,
+        privateErrorVisible: host.textContent.includes('PRIVATE_FIXTURE_DOWNLOAD_ERROR'), layout: measure(),
+      };
+      if (scenario === 'retry') {
+        beginLaunch(); completeFakeLaunch(); await waitFor(() => !dialog.isOpen);
+      }
+    }
+  } else if (scenario === 'declined') button('[data-dda-payment-cancel]').click();
+  await frame();
+  Object.assign(state, {
+    open: dialog.isOpen,
+    pageOverflow: document.documentElement.scrollWidth > innerWidth + 1,
+    sourceNames: files.map(file => file.name),
+    sourceFilesValid: (await Promise.all(files.map(async file => file.type === 'application/pdf' && file.size > 500 && (await file.text()).startsWith('%PDF-')))).every(Boolean),
+    sourceUnchanged: sourceList.innerHTML === sourceMarkup && sourceList.children.length === 2,
+    galleryVisible: !gallery.hidden,
+    focusRestored: document.activeElement === trigger,
+    backgroundRestored: !gallery.inert,
+    tray: { visible: !launch.hidden, label: launch.querySelector('h1').textContent,
+      fits: !launch.hidden && fits(button('[data-fake-tray]')),
+      overflow: !launch.hidden && trayList.scrollWidth > trayList.clientWidth + 1,
+      names: [...trayList.querySelectorAll('strong')].map(node => node.textContent),
+      sameFiles: trayFiles.length === 2 && trayFiles.every((file, index) => file === files[index]) },
+    externalResources: performance.getEntriesByType('resource').map(entry => entry.name)
+      .filter(url => /^https?:/.test(url) && new URL(url).origin !== location.origin),
+  });
+  document.documentElement.dataset.layout = JSON.stringify(state);
+} catch (error) {
+  document.documentElement.dataset.layout = JSON.stringify({ error: error.message });
+}
+</script>
+</body>
+</html>

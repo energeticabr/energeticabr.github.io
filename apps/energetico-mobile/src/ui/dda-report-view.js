@@ -9,7 +9,7 @@ const LOGO=new URL('../../../../assets/logo-energetica-oficial.png',import.meta.
 const money=value=>value==null?'Não disponível':new Intl.NumberFormat('pt-BR',{style:'currency',currency:'BRL'}).format(Number(value));
 const date=value=>value?value.slice(8,10)+'/'+value.slice(5,7)+'/'+value.slice(0,4):'Não informado';
 const daysSince=(day,today)=>Math.round((Date.parse(`${today}T00:00:00Z`)-Date.parse(`${day}T00:00:00Z`))/86400000);
-export function createDdaReportView({document:doc=globalThis.document,data,openMediaCollection,confirmPayment,syncMonitor,copyText,onClose=()=>{},now=()=>new Date()}={}){
+export function createDdaReportView({document:doc=globalThis.document,data,openMediaCollection,confirmPayment,onStartLaunch,syncMonitor,copyText,onClose=()=>{},now=()=>new Date()}={}){
  if(!doc?.body||typeof data?.loadSnapshot!=='function')throw new TypeError('O relatório requer a sessão SharePoint.');
  const make=(tag,cls='',value)=>{const node=doc.createElement(tag);node.className=cls;if(value!==undefined)node.textContent=String(value);return node;};
  const button=(label,text=label)=>{const node=make('button','',text);node.type='button';node.setAttribute('aria-label',label);return node;};
@@ -31,7 +31,7 @@ export function createDdaReportView({document:doc=globalThis.document,data,openM
  let rows=null,controller=null,revision=0,filterRevision=0,page=1,printAll=false,destroyed=false,returnFocus=null,app=null,oldInert=false,oldOverflow='';
  let bankRunning=Boolean(syncMonitor?.running),bankNotice='',startingBank=false,reloadAfterPayment=false;
  const expandedBarcodes=new Set();
- const paymentConfirmation=createDdaPaymentConfirmation({document:doc,host:root,confirmPayment,onClose:()=>{if(reloadAfterPayment)queueMicrotask(reloadFromBank);},onConfirmed:receipt=>{
+ const paymentConfirmation=createDdaPaymentConfirmation({document:doc,host:root,confirmPayment,onStartLaunch,onLaunchStarted:()=>close(),onClose:()=>{if(reloadAfterPayment)queueMicrotask(reloadFromBank);},onConfirmed:receipt=>{
   if(destroyed||root.hidden||!rows)return;
   const position=[content.scrollTop,content.scrollLeft];
   rows=rows.map(row=>row.id===String(receipt.itemId)&&row.key===receipt.key
