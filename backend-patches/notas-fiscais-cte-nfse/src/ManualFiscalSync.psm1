@@ -8,6 +8,60 @@ function Write-ManualFiscalJson([string]$Path,$Value){
   [IO.File]::Move($temp,$Path,$true)
  }finally{if([IO.File]::Exists($temp)){[IO.File]::Delete($temp)}}
 }
+function ConvertTo-ManualFiscalCreatedIds($Ids){
+ if($Ids -isnot [array]){throw 'MANUAL_CREATED_IDS_INVALID'}
+ foreach($id in $Ids){if(($id -isnot [int] -and $id -isnot [long]) -or $id -le 0 -or $id -gt 9007199254740991){throw 'MANUAL_CREATED_IDS_INVALID'}}
+ return ,@($Ids|Select-Object -Unique)
+}
+function Set-ManualFiscalCreationUnknown($Entry){
+ $Entry.creationEvidenceUnknown=$true
+ if($Entry.Contains('createdItemIds') -and @($Entry.createdItemIds).Count -eq 0){$Entry.Remove('createdItemIds')}
+}
+function Merge-ManualFiscalCreatedIds($Entry,$Result){
+ if($Result.Contains('createdItemIds')){$Result.createdItemIds=ConvertTo-ManualFiscalCreatedIds $Result.createdItemIds}
+ if($Entry.creationEvidenceUnknown){
+  Set-ManualFiscalCreationUnknown $Entry
+  if($Result.Contains('createdItemIds') -and @($Result.createdItemIds).Count -eq 0){$Result.Remove('createdItemIds')}
+ }
+ if($Entry.Contains('createdItemIds')){
+  $additional=@();if($Result.Contains('createdItemIds')){$additional=$Result.createdItemIds}
+  $Result.createdItemIds=ConvertTo-ManualFiscalCreatedIds @(@($Entry.createdItemIds)+$additional)
+ }
+ if($Result.Contains('createdItemIds')){$Entry.createdItemIds=$Result.createdItemIds}
+ return $Result
+}
+function Confirm-ManualFiscalDelivery($Entry,$Documents,$Receipt,[scriptblock]$Save){
+ $ids=@($Documents|ForEach-Object{[string]$_.id});$ackIds=@($Receipt.acknowledgedIds)
+ if($ackIds.Count -ne $ids.Count -or @($ackIds|Sort-Object -Unique).Count -ne $ids.Count -or @($ids|Where-Object {$_ -cnotin $ackIds}).Count -gt 0){throw 'MANUAL_DELIVERY_ACK'}
+ if(@($Entry.deliveredIds).Count -gt 0 -and -not $Entry.Contains('createdItemIds')){$Entry.creationEvidenceUnknown=$true}
+ if($Receipt.PSObject.Properties['createdItemIds']){
+  $created=ConvertTo-ManualFiscalCreatedIds $Receipt.createdItemIds
+  if($created.Count -gt 0 -or $Entry.Contains('createdItemIds') -or -not $Entry.creationEvidenceUnknown){
+   $existing=@();if($Entry.Contains('createdItemIds')){$existing=$Entry.createdItemIds}
+   $Entry.createdItemIds=ConvertTo-ManualFiscalCreatedIds @($existing+@($created))
+  }
+ }else{
+  Set-ManualFiscalCreationUnknown $Entry
+ }
+ $Entry.deliveredIds=@(@($Entry.deliveredIds)+$ids|Sort-Object -Unique)
+ $Entry.Remove('pendingDeliveryIds')
+ & $Save
+}
+function Invoke-ManualFiscalDelivery($Entry,$Documents,[scriptblock]$Deliver,[scriptblock]$Save){
+ # A persisted marker also covers process death before a lost reply can be caught.
+ if($Entry.Contains('pendingDeliveryIds') -and @($Entry.pendingDeliveryIds).Count -gt 0){Set-ManualFiscalCreationUnknown $Entry}
+ $Entry.pendingDeliveryIds=@($Documents|ForEach-Object{[string]$_.id})
+ $null=& $Save
+ try{
+  $receipt=& $Deliver $Documents
+  $null=Confirm-ManualFiscalDelivery $Entry $Documents $receipt $Save
+  return $receipt
+ }catch{
+  Set-ManualFiscalCreationUnknown $Entry
+  $null=& $Save
+  throw
+ }
+}
 function Assert-ManualFiscalResult($Result){
  if($Result -isnot [Collections.IDictionary] -or $Result.status -cnotin @('succeeded','waiting','failed')){throw 'MANUAL_RESULT_INVALID'}
  if($Result.Contains('documents') -and ($Result.documents -isnot [int] -and $Result.documents -isnot [long] -or $Result.documents -lt 0 -or $Result.documents -gt 1000000)){throw 'MANUAL_RESULT_INVALID'}
@@ -18,7 +72,8 @@ function Assert-ManualFiscalResult($Result){
   $null=[DateTimeOffset]::Parse([string]$Result.nextAllowedAt,[Globalization.CultureInfo]::InvariantCulture)
  }
  if($Result.status -ceq 'succeeded' -and $Result.Contains('code')){throw 'MANUAL_RESULT_INVALID'}
- foreach($key in $Result.Keys){if($key -cnotin @('status','documents','code','nextAllowedAt')){throw 'MANUAL_RESULT_INVALID'}}
+ if($Result.Contains('createdItemIds')){$null=ConvertTo-ManualFiscalCreatedIds $Result.createdItemIds}
+ foreach($key in $Result.Keys){if($key -cnotin @('status','documents','code','nextAllowedAt','createdItemIds')){throw 'MANUAL_RESULT_INVALID'}}
 }
 function Invoke-ManualFiscalQueue {
  param($Config,[ValidateSet('heartbeat','claim','renew','progress','complete')][string]$Operation,$Payload)
@@ -54,7 +109,14 @@ function Invoke-ManualFiscalSync {
   $path=Join-Path $DataRoot ($id+'.json')
   $record=if([IO.File]::Exists($path)){Get-Content -LiteralPath $path -Raw|ConvertFrom-Json -AsHashtable -DateKind String}else{@{version=1;requestId=$id;sources=@{}}}
   if($record.version -ne 1 -or $record.requestId -cne $id){throw 'MANUAL_RECORD_INVALID'}
-  foreach($s in @('CTE','NFSE','NFE')){if(-not $record.sources.Contains($s)){$record.sources[$s]=@{deliveredIds=@();result=$null}}}
+  foreach($s in @('CTE','NFSE','NFE')){
+   if(-not $record.sources.Contains($s)){
+    $entry=@{deliveredIds=@();result=$null}
+    if($job.sources[$s].Contains('createdItemIds')){$entry.createdItemIds=ConvertTo-ManualFiscalCreatedIds $job.sources[$s].createdItemIds}
+    elseif($job.sources[$s].status -ceq 'queued'){$entry.createdItemIds=@()}
+    $record.sources[$s]=$entry
+   }
+  }
   $writer=Get-Command Write-ManualFiscalJson
   $save={& $writer $path $record}.GetNewClosure()
   $renew={$r=& $Queue 'renew' @{requestId=$id;leaseToken=$token};if($r.ok -ne $true){throw 'MANUAL_LEASE_LOST'}}.GetNewClosure()
@@ -66,7 +128,8 @@ function Invoke-ManualFiscalSync {
     $held=$job.sources[$source].nextAllowedAt
     if($held -and [DateTimeOffset]::Parse([string]$held) -gt [DateTimeOffset]::UtcNow){continue}
     & $renew
-    $ack=& $Queue 'progress' @{requestId=$id;leaseToken=$token;source=$source;result=@{status='running';documents=@($entry.deliveredIds).Count}}
+    $running=Merge-ManualFiscalCreatedIds $entry @{status='running';documents=@($entry.deliveredIds).Count}
+    $ack=& $Queue 'progress' @{requestId=$id;leaseToken=$token;source=$source;result=$running}
     if($ack.ok -ne $true){throw 'MANUAL_PROGRESS_FAILED'}
     try{
      $result=& $RunSource $source $id $record $save $renew;Assert-ManualFiscalResult $result
@@ -76,8 +139,10 @@ function Invoke-ManualFiscalSync {
      # Never expose response bodies or invalidate an already durable success.
      $result=if($entry.result -and $entry.result.status -ceq 'succeeded'){$entry.result}else{@{status='waiting';code='SYNC_FAILED';nextAllowedAt=[DateTimeOffset]::UtcNow.AddMinutes(2).ToString("yyyy-MM-dd'T'HH:mm:ss.ffffff'Z'",[Globalization.CultureInfo]::InvariantCulture);documents=@($entry.deliveredIds).Count}}
     }
+    $result=Merge-ManualFiscalCreatedIds $entry $result
     $entry.result=$result;& $save
    }
+   $result=Merge-ManualFiscalCreatedIds $entry $result
    Assert-ManualFiscalResult $result
    $ack=& $Queue 'progress' @{requestId=$id;leaseToken=$token;source=$source;result=$result}
    if($ack.ok -ne $true){throw 'MANUAL_PROGRESS_FAILED'}
@@ -94,13 +159,13 @@ function Invoke-ManualFiscalSource {
  $config=Get-Content -LiteralPath $CollectorConfigPath -Raw|ConvertFrom-Json -DateKind String
  $company=$config.companyCnpj+'-'+$config.environment;$slot='manual:'+$RequestId
  $entry=$Record.sources[$Source];$notificationRoot=Join-Path $FiscalBase 'SefazLive/notifications';$sourceRoot=$PSScriptRoot
+ $invokeDelivery=Get-Command Invoke-ManualFiscalDelivery
  $sender={param($Documents,$FlowId,$EnvironmentId)
   & $Renew
   Import-Module (Join-Path $sourceRoot 'FlowTransport.psm1') -DisableNameChecking
-  $receipt=Send-SefazBatch -Documents $Documents -FlowId $worker.flowId -EnvironmentId $worker.environmentId -NotificationRoot $notificationRoot
-  $ids=@($Documents|ForEach-Object{[string]$_.id});$ackIds=@($receipt.acknowledgedIds)
-  if($ackIds.Count -ne $ids.Count -or @($ackIds|Sort-Object -Unique).Count -ne $ids.Count -or @($ids|Where-Object {$_ -cnotin $ackIds}).Count -gt 0){throw 'MANUAL_DELIVERY_ACK'}
-  $entry.deliveredIds=@(@($entry.deliveredIds)+$ids|Sort-Object -Unique);& $Save
+  $sendCommand=Get-Command Send-SefazBatch
+  $deliver={param($Batch) & $sendCommand -Documents $Batch -FlowId $worker.flowId -EnvironmentId $worker.environmentId -NotificationRoot $notificationRoot}.GetNewClosure()
+  $receipt=& $invokeDelivery $entry $Documents $deliver $Save
   & $Renew
   return $receipt
  }.GetNewClosure()

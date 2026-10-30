@@ -272,6 +272,13 @@
         ]
       }
     },
+    "Inicializar_ids_criados": {
+      "type": "InitializeVariable",
+      "inputs": {
+        "variables": [{"name": "CreatedItemIds", "type": "array", "value": []}]
+      },
+      "runAfter": {"Lote": ["Succeeded"]}
+    },
     "Documentos": {
       "type": "Foreach",
       "foreach": "@outputs('Lote')?['documents']",
@@ -636,6 +643,19 @@
             ]
           }
         },
+        "Confirmar_id_criado": {
+          "type": "If",
+          "expression": {"equals": ["@empty(body('Localizar_nota')?['d']?['results'])", true]},
+          "actions": {
+            "Registrar_id_criado": {
+              "type": "AppendToArrayVariable",
+              "inputs": {"name": "CreatedItemIds", "value": "@int(body('Criar_nota')?['Id'])"},
+              "runAfter": {}
+            }
+          },
+          "else": {"actions": {}},
+          "runAfter": {"Anexar_DANFE": ["Succeeded"]}
+        },
         "Anexar_DANFE": {
           "type": "If",
           "expression": {
@@ -898,7 +918,7 @@
         }
       },
       "runAfter": {
-        "Lote": [
+        "Inicializar_ids_criados": [
           "Succeeded"
         ]
       }
@@ -919,7 +939,8 @@
       "type": "Compose",
       "inputs": {
         "source": "SEFAZ",
-        "acknowledgedIds": "@body('Ids_confirmados')"
+        "acknowledgedIds": "@body('Ids_confirmados')",
+        "createdItemIds": "@variables('CreatedItemIds')"
       },
       "runAfter": {
         "Ids_confirmados": [

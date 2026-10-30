@@ -10,6 +10,12 @@ function Assert-SefazReceipt($Receipt,[string[]]$ExpectedIds){
     $actual=@($Receipt.acknowledgedIds)
     if($actual.Count -ne $ExpectedIds.Count -or @($actual|Select-Object -Unique).Count -ne $actual.Count){throw 'FLOW_RECEIPT_IDS_INVALID'}
     foreach($id in $ExpectedIds){if($actual -cnotcontains $id){throw 'FLOW_RECEIPT_INCOMPLETE'}}
+    if($Receipt.PSObject.Properties['createdItemIds']){
+        if($Receipt.createdItemIds -isnot [array]){throw 'FLOW_RECEIPT_CREATED_IDS_INVALID'}
+        foreach($id in $Receipt.createdItemIds){
+            if(($id -isnot [int] -and $id -isnot [long]) -or $id -le 0 -or $id -gt 9007199254740991){throw 'FLOW_RECEIPT_CREATED_IDS_INVALID'}
+        }
+    }
 }
 function ConvertTo-ValidatedSefazBatch([object[]]$Documents){
     if($Documents.Count -gt 10){throw 'FLOW_BATCH_TOO_LARGE'}
@@ -31,7 +37,9 @@ function Complete-SefazFlowDelivery([object[]]$Documents,$Receipt,[string]$RunId
         # WhatsApp are drained independently, including during SEFAZ cooldown.
         Save-SefazWhatsAppNotification $Documents $Receipt $NotificationRoot
     }
-    return [pscustomobject]@{source='SEFAZ';acknowledgedIds=@($Receipt.acknowledgedIds);runId=$RunId}
+    $result=[ordered]@{source='SEFAZ';acknowledgedIds=@($Receipt.acknowledgedIds);runId=$RunId}
+    if($Receipt.PSObject.Properties['createdItemIds']){$result.createdItemIds=@($Receipt.createdItemIds|Select-Object -Unique)}
+    return [pscustomobject]$result
 }
 function Test-SefazReceiptActionMissing($Failure){
     $status=$null

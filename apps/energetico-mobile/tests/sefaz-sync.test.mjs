@@ -3,10 +3,28 @@ import assert from 'node:assert/strict';
 import {JSDOM} from 'jsdom';
 import {createChatClient} from '../src/chat/chat-client.js';
 import {createRegistrationGallery} from '../src/ui/registration-gallery-view.js';
+import {validateSefazReceipt} from '../src/chat/sefaz-sync-receipt.js';
 const id='a'.repeat(32), tick=()=>new Promise(r=>setImmediate(r));
 export const receipt=(status='running')=>({requestId:id,status,startedUtc:'2026-10-29T10:00:00Z',
  ...(status==='succeeded'?{completedUtc:'2026-10-29T10:01:00Z'}:{}),
  sources:Object.fromEntries(['NFE','CTE','NFSE'].map(key=>[key,{status:status==='succeeded'?'succeeded':'queued',documents:0}]))});
+
+test('fiscal receipt preserves distinct created row IDs without retaining other fiscal data',()=>{
+ const value=receipt('succeeded');
+ value.sources.NFE={status:'succeeded',documents:4,createdItemIds:[71,72,71],accessKey:'not persisted'};
+ value.sources.CTE={status:'succeeded',documents:2,createdItemIds:[8]};
+ value.sources.NFSE={status:'succeeded',documents:1,createdItemIds:[]};
+ const validated=validateSefazReceipt(value);
+ assert.deepEqual(validated.sources.NFE,{status:'succeeded',documents:4,createdItemIds:[71,72]});
+ assert.deepEqual(validated.sources.CTE.createdItemIds,[8]);
+ assert.deepEqual(validated.sources.NFSE.createdItemIds,[]);
+ assert.notEqual(validated.sources.NFE.createdItemIds,value.sources.NFE.createdItemIds);
+});
+
+for(const invalid of [null,'12',{},[0],[-1],[1.5],[true],['12'],[Number.MAX_SAFE_INTEGER+1]]) test(`fiscal receipt rejects malformed created row IDs ${JSON.stringify(invalid)}`,()=>{
+ const value=receipt('succeeded');value.sources.NFE.createdItemIds=invalid;
+ assert.throws(()=>validateSefazReceipt(value));
+});
 
 test('fiscal client sends only fixed authenticated actions, validates complete sources and strips unexpected data',async()=>{
  const bodies=[];let value=receipt();

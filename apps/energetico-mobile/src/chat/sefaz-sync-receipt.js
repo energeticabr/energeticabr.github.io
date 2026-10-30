@@ -20,10 +20,13 @@ export function validateSefazReceipt(value) {
     if (!source || !statuses.includes(source.status)
       || (source.status === 'succeeded' && source.code !== undefined)
       || (source.documents !== undefined && (!Number.isSafeInteger(source.documents) || source.documents < 0))
+      || (source.createdItemIds !== undefined && (!Array.isArray(source.createdItemIds)
+        || source.createdItemIds.some(id => !Number.isSafeInteger(id) || id <= 0)))
       || (source.code !== undefined && !codes.includes(source.code))
       || (source.nextAllowedAt !== undefined && !utc(source.nextAllowedAt))) throw Error('Progresso fiscal inválido.');
     result.sources[key]={status:source.status};
     for (const field of ['documents','code','nextAllowedAt']) if (source[field] !== undefined) result.sources[key][field]=source[field];
+    if (source.createdItemIds !== undefined) result.sources[key].createdItemIds=[...new Set(source.createdItemIds)];
   }
   if (value.status === 'succeeded' && Object.values(result.sources).some(source=>source.status !== 'succeeded')) throw Error('Consulta fiscal ainda não concluída nas três fontes.');
   return result;

@@ -85,12 +85,16 @@ class Queue:
                     if job['sources'][source]['status'] not in SOURCE_TERMINAL:
                         job['sources'][source].update(status='failed', code='INCOMPLETE')
                         job['sources'][source].pop('nextAllowedAt', None)
+                        if job['sources'][source].get('createdItemIds') == []:
+                            job['sources'][source].pop('createdItemIds')
                 job['leaseUntil'] = 0
             elif job.get('leaseUntil', 0) <= now:
                 job['leaseUntil'] = 0
                 for result in job['sources'].values():
                     if result['status'] == 'running':
                         result.update(status='waiting', code='INCOMPLETE')
+                        if result.get('createdItemIds') == []:
+                            result.pop('createdItemIds')
                     if now - state['heartbeat'] > 180 and result['status'] == 'queued':
                         result.update(status='waiting', code='WORKER_UNAVAILABLE')
             self.derive(job)
@@ -187,7 +191,7 @@ class Queue:
 
     @staticmethod
     def result(value):
-        if not isinstance(value, dict) or not {'status'} <= set(value) <= {'status', 'documents', 'code', 'nextAllowedAt'}:
+        if not isinstance(value, dict) or not {'status'} <= set(value) <= {'status', 'documents', 'code', 'nextAllowedAt', 'createdItemIds'}:
             raise ValueError('Invalid source result')
         if value['status'] not in {'queued', 'running', 'waiting', 'succeeded', 'failed'}:
             raise ValueError('Invalid source status')
@@ -201,7 +205,13 @@ class Queue:
                 raise ValueError('Only waiting sources may specify retry time')
         if value['status'] == 'succeeded' and ('code' in value or 'nextAllowedAt' in value):
             raise ValueError('Success cannot include failure or cooldown')
-        return copy.deepcopy(value)
+        result = copy.deepcopy(value)
+        if 'createdItemIds' in result:
+            ids = result['createdItemIds']
+            if not isinstance(ids, list) or any(type(item) is not int or not 0 < item <= 9007199254740991 for item in ids):
+                raise ValueError('Invalid created SharePoint item IDs')
+            result['createdItemIds'] = list(dict.fromkeys(ids))
+        return result
 
     def worker(self, operation, payload=None):
         payload = {} if payload is None else payload
@@ -240,6 +250,10 @@ class Queue:
             job = state['jobs'].get(payload['requestId'])
             if not job or not secrets.compare_digest(job.get('leaseToken', ''), payload['leaseToken']):
                 raise ValueError('Stale fiscal worker lease')
+            if operation == 'progress':
+                previous = job['sources'][payload['source']]
+                if previous.get('createdItemIds') or ('createdItemIds' in previous and 'createdItemIds' in result):
+                    result['createdItemIds'] = list(dict.fromkeys(previous['createdItemIds'] + result.get('createdItemIds', [])))
             duplicate_complete = operation == 'complete' and job.get('releasedToken') == payload['leaseToken']
             duplicate_progress = operation == 'progress' and job['sources'][payload['source']] == result
             if job.get('leaseUntil', 0) <= now and not duplicate_complete and not duplicate_progress:

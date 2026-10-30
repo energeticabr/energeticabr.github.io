@@ -62,6 +62,23 @@ reenvia o recibo em vez de repetir a consulta fiscal. A confirmação de entrega
 continua vindo do coletor/Power Automate; este módulo não consulta governo,
 SharePoint ou WhatsApp e não armazena XML, notas, tokens ou certificados.
 
+O resultado de cada fonte aceita `createdItemIds` opcional: um array de inteiros
+positivos seguros para JavaScript (até `9007199254740991`). Duplicatas são
+removidas preservando a ordem. O worker só pode fornecer IDs de linhas cuja
+criação foi confirmada pelo SharePoint; `documents` inclui atualizações e os
+`acknowledgedIds` do coletor identificam documentos fiscais, não linhas.
+Campo ausente significa informação desconhecida/legada; `[]` exige confirmação
+explícita de nenhuma criação. A fila une a evidência confirmada entre progressos,
+preservando-a quando uma atualização omite o campo, em reinícios, troca de reserva
+e encerramento incompleto. A propriedade da solicitação continua limitando a
+leitura desses IDs à conta autenticada original.
+
+A implantação deve atualizar a validação da fila antes dos produtores. O
+`install.py` abaixo instala o hook pela primeira vez e recusa instalação duplicada;
+não é um atualizador de uma fila já instalada. Nessa situação, usar a rotina de
+atualização de código sob trava, com backup e comparação do hash implantado,
+preservando o estado privado e atualizando os dois mirrors do bridge.
+
 ## Verificação e instalação
 
 ```powershell

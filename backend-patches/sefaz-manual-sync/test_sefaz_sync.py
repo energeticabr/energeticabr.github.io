@@ -39,6 +39,86 @@ class QueueTests(unittest.TestCase):
             self.progress(job, source, {'status': 'succeeded', 'documents': 0})
         return self.finish(job)
 
+    def test_created_item_ids_are_optional_canonical_deduplicated_safe_integers(self):
+        self.assertEqual(self.q.result({'status': 'succeeded', 'documents': 8}),
+                         {'status': 'succeeded', 'documents': 8})
+        value = {'status': 'succeeded', 'createdItemIds': [42, 7, 42, 9007199254740991]}
+        result = self.q.result(value)
+        self.assertEqual(result['createdItemIds'], [42, 7, 9007199254740991])
+        self.assertEqual(value['createdItemIds'], [42, 7, 42, 9007199254740991])
+        self.assertEqual(self.q.result({'status': 'succeeded', 'createdItemIds': []})['createdItemIds'], [])
+        for ids in (None, '42', {}, [0], [-1], [True], [1.0], ['42'], [9007199254740992], [[42]]):
+            with self.subTest(ids=ids), self.assertRaises(ValueError):
+                self.q.result({'status': 'succeeded', 'createdItemIds': ids})
+
+    def test_confirmed_created_ids_survive_progress_restart_owner_polling_and_reply_replay(self):
+        self.start()
+        job = self.claim()
+        self.progress(job, 'NFE', {'status': 'waiting', 'documents': 12, 'createdItemIds': [42, 7, 42]})
+        # An older worker or a status-only progress event cannot erase durable creation evidence.
+        self.progress(job, 'NFE', {'status': 'running', 'documents': 12})
+        self.progress(job, 'NFE', {'status': 'succeeded', 'documents': 15, 'createdItemIds': [7, 99]})
+        self.progress(job, 'CTE', {'status': 'succeeded', 'documents': 9})
+        self.progress(job, 'NFSE', {'status': 'failed', 'createdItemIds': [101]})
+        self.finish(job)
+        restarted = self.module.Queue(self.root, clock=lambda: self.now)
+        receipt = restarted.pending(OWNER)['requests'][0]
+        self.assertEqual(receipt['sources']['NFE']['createdItemIds'], [42, 7, 99])
+        self.assertEqual(receipt['sources']['NFSE']['createdItemIds'], [101])
+        self.assertNotIn('createdItemIds', receipt['sources']['CTE'])
+        self.assertEqual(restarted.status(OWNER, job['requestId']), receipt)
+        self.assertEqual(restarted.pending(OTHER)['requests'], [])
+        with self.assertRaises(PermissionError):
+            restarted.status(OTHER, job['requestId'])
+        self.progress(job, 'NFE', {'status': 'succeeded', 'documents': 15, 'createdItemIds': [7, 99, 7]})
+        with self.assertRaises(ValueError):
+            self.progress(job, 'NFE', {'status': 'succeeded', 'documents': 15, 'createdItemIds': [100]})
+
+    def test_invalid_created_ids_never_commit_or_leak_extra_receipt_fields(self):
+        self.start()
+        job = self.claim()
+        before = (self.root / 'state.json').read_bytes()
+        for value in ({'status': 'succeeded', 'createdItemIds': ['123']},
+                      {'status': 'succeeded', 'createdItemIds': [123], 'private': 'not-public'}):
+            with self.assertRaises(ValueError):
+                self.progress(job, 'NFE', value)
+            self.assertEqual((self.root / 'state.json').read_bytes(), before)
+
+    def test_unknown_progress_revokes_empty_creation_evidence_but_keeps_positive_ids(self):
+        self.start()
+        job = self.claim()
+        self.progress(job, 'NFE', {'status': 'running', 'createdItemIds': []})
+        self.progress(job, 'NFE', {'status': 'waiting', 'code': 'DELIVERY_PENDING'})
+        source = self.q.status(OWNER, job['requestId'])['sources']['NFE']
+        self.assertNotIn('createdItemIds', source)
+        self.progress(job, 'CTE', {'status': 'running', 'createdItemIds': [51]})
+        self.progress(job, 'CTE', {'status': 'waiting', 'code': 'DELIVERY_PENDING'})
+        self.assertEqual(self.q.status(OWNER, job['requestId'])['sources']['CTE']['createdItemIds'], [51])
+
+    def test_interrupted_source_cannot_expire_with_a_false_zero_creation_claim(self):
+        self.start()
+        job = self.claim()
+        self.progress(job, 'NFE', {'status': 'running', 'createdItemIds': []})
+        self.now += self.module.MAX_REQUEST_SECONDS + 1
+        source = self.q.status(OWNER, job['requestId'])['sources']['NFE']
+        self.assertEqual(source['status'], 'failed')
+        self.assertNotIn('createdItemIds', source)
+
+    def test_created_ids_survive_expired_lease_and_incomplete_request(self):
+        self.start()
+        old = self.claim()
+        self.progress(old, 'CTE', {'status': 'running', 'createdItemIds': [301]})
+        self.now += self.module.LEASE_SECONDS + 1
+        replacement = self.claim()
+        self.assertEqual(replacement['sources']['CTE']['createdItemIds'], [301])
+        with self.assertRaises(ValueError):
+            self.progress(old, 'CTE', {'status': 'succeeded', 'createdItemIds': [302]})
+        self.progress(replacement, 'CTE', {'status': 'waiting', 'createdItemIds': [302]})
+        self.now += self.module.MAX_REQUEST_SECONDS + 1
+        source = self.q.status(OWNER, old['requestId'])['sources']['CTE']
+        self.assertEqual(source['status'], 'failed')
+        self.assertEqual(source['createdItemIds'], [301, 302])
+
     def test_retry_after_lost_create_reply_and_concurrent_clicks_coalesce(self):
         first = self.start()
         self.assertEqual(self.start(), first)

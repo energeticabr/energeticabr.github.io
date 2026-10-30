@@ -5,7 +5,12 @@
 .sefaz-sync-dialog h2 { margin: 0 0 10px; font-size: 21px; line-height: 1.2; }
 .sefaz-sync-dialog p { margin: 10px 0; }
 .sefaz-sync-sources { list-style: none; margin: 16px 0; padding: 0; display: grid; gap: 10px; }
-.sefaz-sync-sources li { display: grid; gap: 4px; background: #f0f6f8; border: 1px solid #dce7ec; border-radius: 10px; padding: 10px 12px; }
+.sefaz-sync-sources li { display: grid; grid-template-columns: minmax(56px, 82px) minmax(0, 1fr); align-items: start; gap: 12px; background: #f0f6f8; border: 1px solid #dce7ec; border-radius: 10px; padding: 10px 12px; min-width: 0; }
+.sefaz-sync-created-ids { display: grid; justify-items: start; align-content: start; gap: 5px; min-width: 0; padding-right: 10px; border-right: 1px solid #d3e0e7; }
+.sefaz-sync-created-ids .sefaz-sync-id-label { color: #516776; font-size: 11px; font-weight: 700; letter-spacing: .03em; }
+.sefaz-sync-created-id { box-sizing: border-box; max-width: 100%; padding: 3px 5px; border-radius: 5px; background: #dcecf5; color: #173b57; font-weight: 750; font-variant-numeric: tabular-nums; overflow-wrap: anywhere; }
+.sefaz-sync-id-empty { color: #627887; }
+.sefaz-sync-source-content { display: grid; gap: 4px; min-width: 0; }
 .sefaz-sync-sources span, .sefaz-sync-footnote { font-size: 13px; }
 .sefaz-sync-footnote { color: #516776; }
 .sefaz-sync-ack { display: block; margin: 18px 0 0 auto; min-height: 44px; padding: 10px 24px; border: 0; border-radius: 10px; background: #126380; color: white; font: 700 15px system-ui, sans-serif; cursor: pointer; }
