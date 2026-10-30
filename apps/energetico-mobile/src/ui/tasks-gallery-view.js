@@ -225,7 +225,17 @@ export function createTasksGallery({ document: documentRef = globalThis.document
     loadEditor: (id, options) => data.loadEditor(id, options),
     saveEditor: (context, fields, options) => runMutation(() => data.saveEditor(context, fields, options)),
     deleteItem: (id, options) => runMutation(() => data.deleteItem(id, options)),
-    onChanged: () => {
+    onChanged: ({ operation, id }) => {
+      if (operation === 'delete') {
+        if (!opened || destroyed) return;
+        const scrollTop = content.scrollTop, scrollLeft = content.scrollLeft, rootTop = root.scrollTop;
+        detail.hidden = true; detail.replaceChildren();
+        rows = rows.filter(row => String(row.id) !== String(id));
+        filterOptions(); updateMetrics();
+        applyLocalFilters({ preserveCards: true });
+        content.scrollTop = scrollTop; content.scrollLeft = scrollLeft; root.scrollTop = rootTop;
+        return true;
+      }
       detail.hidden = true; detail.replaceChildren();
       return loadSnapshot({ refresh: true });
     },
