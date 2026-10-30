@@ -66,6 +66,18 @@ def add_rest_boundary(client):
         assert set(names) <= set(item['attachments'])
         return {'fields': True, 'attachments': True}
     client.verify_item = verify
+    ensure_item = client.ensure_item
+    def ensure_with_identity(token, fields, target_list=None, idempotency_field=None, merge_existing=True):
+        ident = ensure_item(token, fields, target_list=target_list,
+            idempotency_field=idempotency_field, merge_existing=merge_existing)
+        if target_list == 'NOTASPENDENTES':
+            client.items[ident]['fields'].setdefault(idempotency_field or 'Title', token)
+        return ident
+    client.ensure_item = ensure_with_identity
+    def find_item(token, target_list=None, idempotency_field=None):
+        ident = client.tokens.get(f'{target_list}:{token}')
+        return {'Id': ident} if ident else None
+    client._find_item = find_item
 
 
 def source():
@@ -100,6 +112,12 @@ class BatchReviewTests(unittest.TestCase):
         attachment_path = patch.object(provision_attachment_sync, 'STATE_DIR', Path(temporary.name)/'sync')
         attachment_path.start()
         self.addCleanup(attachment_path.stop)
+        if os.name == 'nt':
+            from document_item_lock import document_item_lock
+            portable_lock = patch.object(provision_attachment_sync, 'parent_lock',
+                lambda directory, parent: document_item_lock(3 * 10**18 + int(parent)))
+            portable_lock.start()
+            self.addCleanup(portable_lock.stop)
         group = source()
         self.child_ids = [11, 12, 13, 14]
         self.h.sharepoint.items[7] = {'fields': {k: copy.deepcopy(v)
@@ -160,6 +178,14 @@ class BatchReviewTests(unittest.TestCase):
     def no_writes(self):
         self.assertEqual(self.h.sharepoint.update_calls, [])
         self.assertEqual(len(self.h.sharepoint.items), 5)
+
+    def assert_paid_write_order(self):
+        updates = self.h.sharepoint.update_calls
+        self.assertEqual([(call['target_list'], call['item_id']) for call in updates],
+            [('DESCRITIVOPROVISAO', 7), ('PROVISÃO PGTOS', 11),
+             ('PROVISÃO PGTOS', 12), ('PROVISÃO PGTOS', 13), ('DESCRITIVOPROVISAO', 7)])
+        self.assertIsNone(updates[0]['fields']['DATA PGTO EFETUADO'])
+        self.assertTrue(updates[-1]['fields']['DATA PGTO EFETUADO'])
 
     def prepare(self, launch=False):
         result = self.h.reply(reply_id='description_review_submit')
@@ -455,7 +481,7 @@ class BatchReviewTests(unittest.TestCase):
         self.assertEqual(self.h.reply('SIM')['status'], 'submission_failed')
         result = self.h.reply(reply_id='error_retry')
         self.assertEqual(result.get('status'), 'completed', (result, failed))
-        self.assertEqual(len(self.h.sharepoint.update_calls), 4)
+        self.assert_paid_write_order()
         self.assertEqual(len(self.h.sharepoint.items), 5)
 
     def scientific_values(self):
@@ -498,7 +524,7 @@ class BatchReviewTests(unittest.TestCase):
         self.assertTrue(lost, 'All accepted numeric values must reach the child writer')
         result = self.h.reply(reply_id='error_retry')
         self.assertEqual(result.get('status'), 'completed', result)
-        self.assertEqual(len(self.h.sharepoint.update_calls), 4)
+        self.assert_paid_write_order()
         self.assertEqual(len(self.h.sharepoint.items), 5)
 
     def test_persisted_line_picker_resumes_with_the_same_pending_provision_options(self):

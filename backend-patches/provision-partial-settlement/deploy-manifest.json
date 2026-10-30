@@ -1,0 +1,26 @@
+{
+  "files": {
+    "worker/provision_description_review.py": {
+      "after": "4364ed22c8f7e275e8d60ed69f0aae5691cd76d4bea06487f791cb072d3d5fc0",
+      "before": "df02b171380dec5dd349e980e49044a1644767b0ac77c1e888f687992182acca"
+    },
+    "worker/provision_description_settlement.py": {
+      "after": "bb4b610563da6697024c62b7786f486d49eabebd5eea1e623007ef440d77ce78",
+      "before": "fd2ae494480a88b049fd2f45cda7275fcd8c54e7c6ec160da00c5d2e68c28a20"
+    },
+    "worker/workflow.py": {
+      "after": "051268c3944d956cf40b81ba7e1558681387276df7694b61e5992fd2d0a39dad",
+      "before": "be6b20c07535ff8e7c520e2cfaa750d48b2b23f4182059ef58772700e2258770"
+    }
+  },
+  "guards": {
+    "worker/workflow_config.json": "a951c15f30d78409101b7829bdf9bad3cf118ac7541c3dcaa705663e962bf069"
+  },
+  "inputs": {
+    "deploy.py": "57927fd99625a59d5f3be004d22de8214cc6d2b3c5b876ba1787770c13bc741b",
+    "deploy.sh": "aef3e3f0354fb59fda021babdb0a726a1e9b0a38643a8d6490afd8a5e9063423",
+    "package.py": "3875c99252109bf6d0e7aac720bdb749364dd19468aedadc64f4cfc33037d068",
+    "source.patch": "ddf456671a9cc57836989b7fe0f9ab7592a6d21c5c4d587acce17428cd24c500"
+  },
+  "version": 1
+}

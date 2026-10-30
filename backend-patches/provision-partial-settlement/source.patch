@@ -1,0 +1,597 @@
+--- a/worker/workflow.py
++++ b/worker/workflow.py
+@@ -2736 +2736,14 @@
+-            return self._description_flow_config(state, self.config["sharepoint"]["payment_settlement_flow"])
++            flow = copy.deepcopy(self._description_flow_config(
++                state, self.config["sharepoint"]["payment_settlement_flow"]
++            ))
++            for step in flow["steps"]:
++                if step.get("key") == "etapa_baixa":
++                    terminals = step.setdefault("terminal_options", [])
++                    if not any(item.get("id") == "NOVA_ETAPA_BAIXA_PROVISAO" for item in terminals):
++                        terminals.insert(0, {
++                            "id": "NOVA_ETAPA_BAIXA_PROVISAO",
++                            "title": "➕ CADASTRAR ETAPA",
++                            "action": "start_embedded_payment_settlement_stage_registration",
++                        })
++                    step["terminal_options_first"] = True
++            return flow
+@@ -19573,0 +19587,4 @@
++        if state.get("flow") == "payment_settlement" and step.get("key") == "etapa_baixa":
++            normalized = sorted(normalized,
++                key=lambda item: item.get("id") != "NOVA_ETAPA_BAIXA_PROVISAO")
++        normalized = self._mark_settlement_branch_default(state, step, normalized)
+@@ -19574,0 +19592,36 @@
++
++    @staticmethod
++    def _settlement_original_branch(state):
++        embedded = state.get("embedded_return") or {}
++        parent = (embedded.get("state") or {}) if embedded.get("type") == "payment_settlement_stage_registration" else state
++        group = parent.get("provision_description") or {}
++        original = group.get("parent") or {}
++        if "FILIAL" in original:
++            return original["FILIAL"]
++        selected = ((parent.get("selections") or {}).get("provisao_para_baixa") or {}).get("source_values") or {}
++        if "FILIAL" in selected:
++            return selected["FILIAL"]
++        return (parent.get("fields") or {}).get("FILIAL")
++
++    def _mark_settlement_branch_default(self, state, step, options):
++        embedded = state.get("embedded_return") or {}
++        parent_question = state.get("flow") == "payment_settlement" and step.get("key") == "preencher_filial_baixa"
++        child_question = (state.get("flow") == "construction_stage_registration"
++            and embedded.get("type") == "payment_settlement_stage_registration"
++            and step.get("key") == "filial_cadastro_etapa_obra")
++        if not (parent_question or child_question):
++            return options
++        branch = self._settlement_original_branch(state)
++        if branch is None or not str(branch).strip():
++            return options
++        matches = [index for index, item in enumerate(options)
++            if not item.get("terminal_option") and item.get("value") is not None
++            and normalize_text(str(item["value"])) == normalize_text(str(branch))]
++        if len(matches) != 1:
++            return options
++        index = matches[0]
++        preferred = copy.deepcopy(options[index])
++        title = str(preferred.get("title") or preferred["value"]).strip()
++        preferred["title"] = title if title.startswith("⭐") else "⭐ " + title
++        preferred["recommended"] = True
++        return [preferred, *(copy.deepcopy(item) for pos, item in enumerate(options) if pos != index)]
+@@ -21946,0 +22000,2 @@
++        if selected.get("action") == "start_embedded_payment_settlement_stage_registration":
++            return self._start_embedded_payment_settlement_stage_registration(state, etag)
+@@ -24711,0 +24767,44 @@
++    def _start_embedded_payment_settlement_stage_registration(self, state, etag):
++        if (state.get("flow") != "payment_settlement"
++                or state.get("stage") != "selecting_fields"
++                or self._current_step(state).get("key") != "etapa_baixa"
++                or ((state.get("provision_description") or {}).get("journal") or {}).get("intent")):
++            raise RuntimeError("O cadastro de etapa exige a pergunta de etapa de uma baixa ainda não submetida")
++        return self._start_embedded_launch_registration(
++            state, etag, flow="construction_stage_registration",
++            return_type="payment_settlement_stage_registration",
++            heading="➕ *CADASTRO DE NOVA ETAPA*",
++        )
++
++    def _resume_settlement_with_registered_stage(self, state, etag, item_id):
++        embedded = state.get("embedded_return") or {}
++        if embedded.get("type") != "payment_settlement_stage_registration":
++            raise RuntimeError("Retorno do cadastro de etapa da baixa não encontrado")
++        parent = copy.deepcopy(embedded.get("state") or {})
++        child_fields = copy.deepcopy(state.get("fields") or {})
++        stage_name = child_fields.get("ETAPA")
++        if parent.get("flow") != "payment_settlement" or not str(stage_name or "").strip():
++            raise RuntimeError("O cadastro não confirmou a etapa ou o pagamento de origem")
++        if not str(item_id).isdigit() or int(item_id) <= 0:
++            raise RuntimeError("O cadastro não confirmou o ID da etapa")
++        processed = list(state.get("processed_message_ids", []))
++        state.update(parent)
++        state["processed_message_ids"] = processed
++        state["stage"], state["options"] = "selecting_fields", []
++        for key in ("embedded_return", "idempotency_token", "completion_trigger_message_id",
++                    "submission_failure", "summary_card", "selected_item_attachment_only"):
++            if key not in parent:
++                state.pop(key, None)
++        index, step = next((index, step) for index, step in enumerate(self._flow_config(state)["steps"])
++            if step.get("key") == "etapa_baixa")
++        state["step_index"] = index
++        if normalize_text(str(child_fields.get("FILIAL") or "")) == normalize_text(str(state.get("fields", {}).get("FILIAL") or "")):
++            self._apply_selected_option(state, step, {
++                "id": item_id, "title": str(stage_name), "value": stage_name,
++                "source_values": {"Id": item_id, "ETAPA": stage_name, "FILIAL": child_fields.get("FILIAL")},
++            })
++        else:
++            self._send_text(state, "ETAPA CADASTRADA EM OUTRA FILIAL. SELECIONE UMA ETAPA DA FILIAL DESTE PAGAMENTO PARA CONTINUAR A BAIXA.")
++        return {**self._prompt_next_or_summary(state, etag),
++            "embedded_settlement_stage_registered": True, "registered_stage_item_id": item_id}
++
+@@ -24890,0 +24990 @@
++            "payment_settlement",
+@@ -24946,0 +25047,2 @@
++        if return_type == "payment_settlement_stage_registration":
++            parent_keys = (*parent_keys, "provision_description", "idempotency_token")
+@@ -24961,0 +25064,3 @@
++        if return_type == "payment_settlement_stage_registration":
++            state.pop("provision_description", None)
++            state.pop("option_pagination", None)
+@@ -34374,0 +34480,2 @@
++        if embedded_type == "payment_settlement_stage_registration":
++            return self._resume_settlement_with_registered_stage(state, etag, item_id)
+--- a/worker/provision_description_settlement.py
++++ b/worker/provision_description_settlement.py
+@@ -9,0 +10 @@
++import re
+@@ -19 +20 @@
+-    from .provision_description_review import review_table
++    from .provision_description_review import review_table, provision_is_pending as _pending, provision_is_paid as _paid
+@@ -25 +26 @@
+-    from provision_description_review import review_table
++    from provision_description_review import review_table, provision_is_pending as _pending, provision_is_paid as _paid
+@@ -57,6 +57,0 @@
+-
+-
+-def _pending(row):
+-    return (_text(row.get('STATUS')).casefold() == 'pagamento previsto'
+-            and not _text(row.get('DATA PGTO EFETUADO'))
+-            and _text(row.get('PGTOAGENDADO')).casefold() != 'pago')
+@@ -133,0 +129,22 @@
++    def _description_existing_order(self, group, token):
++        links = {_identity(row['IDPEDIDO']) for row in group['original_children'] if _text(row.get('IDPEDIDO'))}
++        if len(links) > 1:
++            raise RuntimeError('O descritivo possui pedidos vinculados conflitantes. Nenhum vínculo será escolhido.')
++        finder = getattr(self.sharepoint, '_find_item', None)
++        found = finder(token, target_list='NOTASPENDENTES', idempotency_field='Title') if callable(finder) else None
++        token_id = _identity(found['Id']) if found else None
++        linked_id = next(iter(links), None)
++        if linked_id and token_id is None:
++            raise RuntimeError('A identidade do pedido vinculado não foi comprovada pelo token deste descritivo.')
++        if linked_id and token_id and linked_id != token_id:
++            raise RuntimeError('O pedido vinculado diverge do pedido idempotente do descritivo.')
++        ident = linked_id or token_id
++        if ident is None:
++            return None
++        fields, etag = self.sharepoint.get_item_fields_with_etag(int(ident),
++            ('Title', 'FILIAL', 'FORNECEDOR', 'VALORTOTAL', 'DATA PEDIDO', 'STATUS', 'FORMAPGTO', 'NOTA FISCAL', 'OBS'),
++            target_list='NOTASPENDENTES')
++        if _text(fields.pop('Title', None)) != token:
++            raise RuntimeError('A identidade do pedido mudou antes da leitura condicional. Nenhum pedido será reutilizado.')
++        return {'item_id': int(ident), 'fields': fields, 'etag': etag}
++
+@@ -148 +165 @@
+-        suppliers = {_text(entry['fields']['FORNECEDOR']).casefold() for entry in entries}
++        suppliers = {_text(row.get('FORNECEDOR')).casefold() for row in group['original_children']}
+@@ -160 +177,4 @@
+-        total = _sum(provision_line_total({**e['fields'], 'FRETE': e['fields'].get('FRETE') or '0'}) for e in entries)
++        selected_ids = {str(e['fields']['ID PROVISÃO']) for e in entries}
++        paid = [row for row in group['original_children'] if str(row['Id']) not in selected_ids and _paid(row)]
++        total = _sum(provision_line_total({**fields, 'FRETE': fields.get('FRETE') or '0'})
++                     for fields in [e['fields'] for e in entries] + paid)
+@@ -166 +186,12 @@
+-        return [{'token': f"WA-BAIXA-PEDIDO-DESCRITIVO-{group['parent_id']}", 'fields': order,
++        token = f"WA-BAIXA-PEDIDO-DESCRITIVO-{group['parent_id']}"
++        existing = self._description_existing_order(group, token)
++        if existing:
++            live = existing['fields']
++            if any(_text(live.get(key)) != _text(order[key]) for key in ('FILIAL', 'FORNECEDOR')):
++                raise RuntimeError('O fornecedor/filial do pedido existente não corresponde ao descritivo.')
++            if _date(live.get('DATA PEDIDO')) is None:
++                raise RuntimeError('A data original do pedido não foi confirmada.')
++            order = {**copy.deepcopy(live), 'VALORTOTAL': _canonical(total)}
++            if not _text(order.get('OBS')):
++                order.pop('OBS', None)
++        return [{'token': token, 'fields': order,
+@@ -188,0 +220,18 @@
++        action, separator, raw_ids = command.partition(':')
++        if (group and action in {'description_review_submit', 'description_review_edit'}
++                and event.get('kind') == 'text'):
++            if event.get('message_id') in state.get('processed_message_ids', []):
++                return {'status': 'duplicate', 'batch_id': state['batch_id']}
++            if ((group.get('journal') or {}).get('intent') or group.get('review_phase') != 'overview'
++                    or state.get('stage') not in {'selecting_fields', 'collecting_attachments'}):
++                self._send_text(state, 'A SELEÇÃO DESTA BAIXA NÃO PODE MAIS SER ALTERADA.')
++                return {'status': 'invalid_description_selection', 'batch_id': state['batch_id']}
++            try:
++                ids = raw_ids.split(',') if separator else group.get('selected_ids', [str(row['Id']) for row in group['children']])
++                self._description_validate_selection(state, ids)
++            except (ValueError, RuntimeError) as error:
++                self._send_text(state, str(error))
++                return {'status': 'invalid_description_selection', 'batch_id': state['batch_id']}
++            group['selected_ids'] = sorted(ids, key=int)
++            self._mark_processed(state, event.get('message_id'))
++            return self._description_review_selection(state, etag, {'value': 'submit' if action.endswith('submit') else 'edit'})
+@@ -337 +386 @@
+-                                       f"DO DESCRITIVO {group['parent_id']}?")
++                                       f"SELECIONADOS DO DESCRITIVO {group['parent_id']}?")
+@@ -486,0 +536 @@
++            'selected_ids': [str(child['Id']) for child in children],
+@@ -562,0 +613,11 @@
++    def _description_validate_selection(self, state, ids):
++        group = state['provision_description']
++        if (not isinstance(ids, list) or not ids or any(not isinstance(ident, str)
++                or re.fullmatch(r'[1-9][0-9]*', ident) is None for ident in ids)
++                or len(ids) != len(set(ids))):
++            raise ValueError('Selecione ao menos uma provisão pendente, com IDs válidos e sem repetição.')
++        pending = {str(row['Id']) for row in group['original_children'] if _pending(row)}
++        if not set(ids) <= pending:
++            raise ValueError('Uma linha selecionada é paga ou não pertence às provisões pendentes deste descritivo.')
++        self._description_preflight(state)
++
+@@ -564,0 +626 @@
++        self._description_validate_selection(state, group.get('selected_ids', [str(row['Id']) for row in group['children']]))
+@@ -567 +629 @@
+-        if selected.get('value') != 'submit' or not review_table(group)['canSubmit']:
++        if selected.get('value') != 'submit' or not review_table(group)['selectedValid']:
+@@ -571,0 +634,4 @@
++        chosen = set(group['selected_ids'])
++        group['review_entries'] = copy.deepcopy(group['entries'])
++        group['children'] = [row for row in group['children'] if str(row['Id']) in chosen]
++        group['entries'] = [entry for entry in group['entries'] if str(entry['fields']['ID PROVISÃO']) in chosen]
+@@ -776 +842 @@
+-        for item in sorted(group['original_children'], key=lambda item: int(item['Id'])):
++        for item in sorted(group['children'], key=lambda item: int(item['Id'])):
+@@ -806 +872,4 @@
+-        if set(expected) != set(actual):
++        journal = group.get('journal') or {}
++        added = set(actual) - set(expected)
++        if (not set(expected) <= set(actual) or (added and (not journal.get('intent')
++                or any(not _pending(actual[ident]) for ident in added)))):
+@@ -808 +876,0 @@
+-        journal = group.get('journal') or {}
+@@ -831,0 +900,196 @@
++    def _description_full_total(self, group, rows):
++        entries = {str(entry['fields']['ID PROVISÃO']): entry['fields'] for entry in group['entries']}
++        def amount(fields):
++            return provision_line_total({**fields, 'FRETE': fields.get('FRETE') or '0'})
++        try:
++            return _sum(amount(entries.get(str(row['Id']), row)) for row in rows)
++        except ValueError:
++            # An invalid, untouched, unselected amount must not block a valid
++            # subset or be replaced by zero. Preserve the authoritative parent
++            # total, applying only the exactly known edits to selected lines.
++            original = {str(row['Id']): row for row in group['original_children']}
++            if ({str(row['Id']) for row in rows} != set(original)
++                    or any(str(row['Id']) not in entries and any(not _same(key, row.get(key), original[str(row['Id'])].get(key))
++                        for key in ('QTD', 'VALOR TOTAL', 'FRETE')) for row in rows)):
++                raise
++            try:
++                base = _number(group['parent'].get('VALORTOTAL'), 'VALORTOTAL')
++            except ValueError:
++                return None
++            total = _sum([base] + [amount(fields) - amount(original[ident]) for ident, fields in entries.items()])
++            if total < 0:
++                raise ValueError('O total integral do descritivo não foi confirmado.')
++            return total
++
++    def _description_sync_selected_attachments(self, state):
++        """Preserve parent locking/provenance while never writing an unselected carrier."""
++        try:
++            from . import provision_attachment_sync as mirror
++        except ImportError:
++            import provision_attachment_sync as mirror
++        group = state['provision_description']
++        parent = int(group['parent_id'])
++        selected = {int(row['Id']): row for row in group['children']}
++        carrier = min(selected)
++        owner_fields = ('FORNECEDOR', 'FILIAL')
++        store = mirror.SharePointStore(self.sharepoint)
++        with mirror.parent_lock(mirror.STATE_DIR / 'locks', parent):
++            owner, version = self.sharepoint.get_item_fields_with_etag(parent, owner_fields, target_list=PARENT_LIST)
++            if any(_text(owner.get(key)) != _text(group['parent'].get(key)) for key in owner_fields):
++                raise RuntimeError('O fornecedor/filial do descritivo mudou antes da cópia de anexos.')
++            names = store.names(PARENT_LIST, parent)
++            rows = {}
++            for ident, original in selected.items():
++                live, _ = self.sharepoint.get_item_fields_with_etag(ident, CHILD_FIELDS, target_list=CHILD_LIST)
++                if (_identity(live.get('DESCRITIVOPROVISAO')) != str(parent)
++                        or any(_text(live.get(key)) != _text(original.get(key)) for key in owner_fields)):
++                    raise RuntimeError('O vínculo/fornecedor/filial da provisão selecionada mudou.')
++                rows[ident] = live
++
++            def guard():
++                current, current_version = self.sharepoint.get_item_fields_with_etag(parent, owner_fields, target_list=PARENT_LIST)
++                if current != owner or current_version != version or store.names(PARENT_LIST, parent) != names:
++                    raise RuntimeError('Descritivo ou coleção de anexos alterado durante a cópia.')
++                for ident, expected in rows.items():
++                    live, _ = self.sharepoint.get_item_fields_with_etag(ident, CHILD_FIELDS, target_list=CHILD_LIST)
++                    if live != expected:
++                        raise RuntimeError('Uma provisão selecionada mudou durante a cópia dos anexos.')
++
++            inventory = {name: store.digest(CHILD_LIST, carrier, name) for name in store.names(CHILD_LIST, carrier)}
++            for original in sorted(names):
++                guard()
++                content = store.content(PARENT_LIST, parent, original)
++                digest = mirror.sha(content)
++                row_copy = re.match(r'^PROV-([1-9][0-9]*)-([a-f0-9]{64})-', original)
++                if row_copy and row_copy[2] == digest:
++                    continue  # Row evidence must never become group-wide evidence.
++                name = next((name for name, value in inventory.items() if value == digest),
++                            'DESC-' + mirror.copy_name(parent, digest, original)[5:])
++                if name in inventory and inventory[name] != digest:
++                    raise RuntimeError('Conflito de conteúdo no anexo; nenhum arquivo foi substituído.')
++                guard()
++                if store.digest(PARENT_LIST, parent, original) != digest:
++                    raise RuntimeError('O conteúdo original foi alterado antes da cópia.')
++                if name not in inventory:
++                    try:
++                        self.sharepoint._ensure_attachment_local(carrier, name, content, target_list=CHILD_LIST)
++                    except Exception:
++                        if name not in store.names(CHILD_LIST, carrier) or store.digest(CHILD_LIST, carrier, name) != digest:
++                            raise
++                if store.digest(CHILD_LIST, carrier, name) != digest or store.digest(PARENT_LIST, parent, original) != digest:
++                    raise RuntimeError('A cópia do anexo não passou na conferência SHA-256.')
++                inventory[name] = digest
++            guard()
++        saved = ((group.get('journal') or {}).get('children') or {}).get(str(carrier))
++        if saved:
++            entry = next(entry for entry in group['entries'] if str(entry['fields']['ID PROVISÃO']) == str(carrier))
++            saved['attachment_propagation'] = propagate_payroll_row_attachments(self.sharepoint, carrier,
++                {**entry['fields'], **saved['expected_fields']}, saved, parent=group['parent_id'])
++
++    def _description_reopen_owned_parent(self, state, checkpoint):
++        """Recover an ambiguous final close before any conflict can abort preflight."""
++        group = state['provision_description']
++        journal = group.get('journal') or {}
++        intent = copy.deepcopy(journal.get('final_intent') or {})
++        if _date(intent.get('DATA PGTO EFETUADO')) is None:
++            return False
++        expected = {**{key: group['parent'].get(key) for key in PARENT_FIELDS}, **intent}
++        live, version = self.sharepoint.get_item_fields_with_etag(
++            int(group['parent_id']), PARENT_FIELDS, target_list=PARENT_LIST)
++        cleared = {**intent, 'DATA PGTO EFETUADO': None}
++        pending = journal.get('parent_reopen_intent') or {}
++        if not _text(live.get('DATA PGTO EFETUADO')):
++            if (pending.get('expected') == intent and all(_same(key, live.get(key), value)
++                    for key, value in {**expected, 'DATA PGTO EFETUADO': None}.items())):
++                if not _verified(self.sharepoint.verify_item(int(group['parent_id']),
++                        {'DATA PGTO EFETUADO': None}, [], target_list=PARENT_LIST)):
++                    raise RuntimeError('A reabertura do descritivo não foi confirmada.')
++                journal['final_intent'] = cleared
++                journal.pop('parent_reopen_intent', None)
++                checkpoint()
++            return False
++        if any(not _same(key, live.get(key), value) for key, value in expected.items()):
++            raise RuntimeError('O descritivo foi alterado por outro gravador; a data não será sobrescrita.')
++        # Retain the owned close until the clear is verified. A lost clear
++        # response is reconciled from this durable intent on the next retry.
++        journal['parent_reopen_intent'] = {'expected': intent}
++        checkpoint()
++        self.sharepoint.update_item_with_etag(int(group['parent_id']),
++            {'DATA PGTO EFETUADO': None}, version, target_list=PARENT_LIST)
++        if not _verified(self.sharepoint.verify_item(int(group['parent_id']),
++                {'DATA PGTO EFETUADO': None}, [], target_list=PARENT_LIST)):
++            raise RuntimeError('A reabertura do descritivo não foi confirmada.')
++        journal['final_intent'] = cleared
++        journal.pop('parent_reopen_intent', None)
++        checkpoint()
++        return True
++
++    def _description_finalize_parent(self, state, checkpoint, parent_fields, names):
++        group = state['provision_description']
++        journal = group['journal']
++        original = {str(row['Id']): row for row in group['original_children']}
++        original_ids = set(original)
++        frozen_orders = {_identity(row['IDPEDIDO']) for row in original.values() if _text(row.get('IDPEDIDO'))}
++        frozen_orders.update(str(record['item_id']) for record in (journal.get('shared_orders') or {}).values())
++
++        def keep_open(expected):
++            live, _ = self.sharepoint.get_item_fields_with_etag(int(group['parent_id']), PARENT_FIELDS, target_list=PARENT_LIST)
++            if any(not _same(key, live.get(key), value) for key, value in expected.items()):
++                raise RuntimeError('O descritivo mudou durante a revalidação dos filhos.')
++            self._description_reopen_owned_parent(state, checkpoint)
++
++        def snapshot():
++            source = self._description_read_for_settlement(group['parent_id'])
++            rows = source.get('CHILDREN') or []
++            ids = [_identity(row['Id']) for row in rows]
++            if (not rows or len(ids) != len(set(ids)) or not original_ids <= set(ids)
++                    or any(_identity(row.get('DESCRITIVOPROVISAO')) != group['parent_id'] for row in rows)):
++                raise RuntimeError('Não foi possível confirmar todos os vínculos antes de fechar o descritivo.')
++            orders = {_identity(row['IDPEDIDO']) for row in rows if _text(row.get('IDPEDIDO'))}
++            if len(orders) > 1 or not orders <= frozen_orders:
++                raise RuntimeError('Os pedidos vinculados mudaram durante a baixa. O descritivo exige nova conferência.')
++            for row in rows:
++                ident = str(row['Id'])
++                if ident not in original and not _pending(row):
++                    raise RuntimeError('Uma nova provisão não pendente foi vinculada durante a baixa. Revise antes de fechar o descritivo.')
++                if ident in original and ident not in journal['children'] and any(
++                        not _same(key, row.get(key), original[ident].get(key)) for key in CHILD_FIELDS):
++                    raise RuntimeError('Uma provisão não selecionada mudou durante a baixa. Revise antes de fechar o descritivo.')
++            return {str(row['Id']): row for row in rows}
++        for attempt in range(3):
++            actual = snapshot()
++            for ident, saved in journal['children'].items():
++                if any(not _same(key, actual[ident].get(key), value) for key, value in saved['expected_fields'].items()):
++                    raise RuntimeError('Uma provisão confirmada mudou antes do fechamento do descritivo.')
++            rows = list(actual.values())
++            paid = all(_paid(row) for row in rows)
++            full_total = self._description_full_total(group, rows)
++            final_fields = {**group['common'], **({'VALORTOTAL': _canonical(full_total)} if full_total is not None else {}),
++                'DATA PGTO EFETUADO': max(_date(row['DATA PGTO EFETUADO']) for row in rows).isoformat() if paid else None}
++            live, version = self.sharepoint.get_item_fields_with_etag(int(group['parent_id']), PARENT_FIELDS, target_list=PARENT_LIST)
++            if any(not _same(key, live.get(key), value) for key, value in parent_fields.items()):
++                if not journal.get('final_intent') or any(not _same(key, live.get(key), value)
++                        for key, value in journal['final_intent'].items()):
++                    raise RuntimeError('O descritivo mudou antes da confirmação final.')
++            journal['final_intent'] = copy.deepcopy(final_fields)
++            checkpoint()
++            if any(not _same(key, live.get(key), value) for key, value in final_fields.items()):
++                self.sharepoint.update_item_with_etag(int(group['parent_id']), final_fields, version, target_list=PARENT_LIST)
++            verified = self.sharepoint.verify_item(int(group['parent_id']), final_fields, names, target_list=PARENT_LIST)
++            if not _verified(verified):
++                raise RuntimeError('O estado final do descritivo não foi confirmado.')
++            try:
++                after = snapshot()
++            except Exception:
++                keep_open(final_fields)
++                raise
++            stable = set(actual) == set(after) and all(all(_same(key, row.get(key), after[ident].get(key))
++                for key in CHILD_FIELDS) for ident, row in actual.items())
++            if stable:
++                journal['parent'].update(verified=verified, expected_fields=copy.deepcopy(final_fields), parent_paid=paid)
++                return checkpoint()
++            # Child insertion does not necessarily change the parent's ETag.
++            # Undo a provisional closure before retrying the fresh full read.
++            keep_open(final_fields)
++        raise RuntimeError('As provisões continuam mudando; o descritivo foi mantido pendente para nova conferência.')
++
+@@ -834,0 +1099,7 @@
++            if _date(((group.get('journal') or {}).get('final_intent') or {}).get('DATA PGTO EFETUADO')) is not None:
++                def reopen_checkpoint():
++                    nonlocal etag
++                    etag = self._save(state, etag)
++                    return etag
++                with document_item_lock(10**18 + int(group['parent_id'])):
++                    self._description_reopen_owned_parent(state, reopen_checkpoint)
+@@ -836,3 +1107,8 @@
+-            expected_ids = {_identity(row['Id']) for row in group['original_children'] if _pending(row)}
+-            if len(entry_ids) != len(set(entry_ids)) or set(entry_ids) != expected_ids:
+-                raise RuntimeError('O resumo não contém exatamente uma linha para cada provisão pendente. Revise o descritivo.')
++            pending_ids = {_identity(row['Id']) for row in group['original_children'] if _pending(row)}
++            selected_ids = group.get('selected_ids', sorted(pending_ids, key=int))
++            if (not selected_ids or len(selected_ids) != len(set(selected_ids))
++                    or any(not isinstance(ident, str) or not re.fullmatch(r'[1-9][0-9]*', ident) for ident in selected_ids)
++                    or not set(selected_ids) <= pending_ids or len(entry_ids) != len(set(entry_ids))
++                    or set(entry_ids) != set(selected_ids)
++                    or {str(row['Id']) for row in group['children']} != set(selected_ids)):
++                raise RuntimeError('O resumo não contém exatamente as provisões pendentes selecionadas. Revise o descritivo.')
+@@ -865,3 +1140,0 @@
+-                    if any(_text(row.get('IDPEDIDO')) for row in group['original_children']):
+-                        raise RuntimeError('Este descritivo já possui pedido vinculado. Confira os vínculos existentes '
+-                                           'antes de gerar novos lançamentos; nenhum novo pedido foi criado.')
+@@ -882 +1155 @@
+-                if not common.get('DATA PGTO EFETUADO') or not _text(common.get('FORMAPGTO')):
++                if _date(common.get('DATA PGTO EFETUADO')) is None or not _text(common.get('FORMAPGTO')):
+@@ -883,0 +1157,5 @@
++                frozen_batch = {'selected_ids': sorted(selected_ids, key=int),
++                    'entries': copy.deepcopy(group['entries']), 'common': copy.deepcopy(common),
++                    'launch_settings': copy.deepcopy(group.get('launch_settings'))}
++                if journal.get('frozen_batch') is not None and journal['frozen_batch'] != frozen_batch:
++                    raise RuntimeError('A seleção e os valores da baixa iniciada não podem ser alterados.')
+@@ -885,3 +1163 @@
+-                total = _sum(provision_line_total({**(entries.get(str(item['Id']), {}).get('fields') or item),
+-                                                   'FRETE': (entries.get(str(item['Id']), {}).get('fields') or item).get('FRETE') or '0'})
+-                             for item in group['original_children'])
++                total = self._description_full_total(group, group['original_children'])
+@@ -891 +1167,2 @@
+-                parent_fields = {**common, 'VALORTOTAL': _canonical(total)}
++                parent_fields = {**common, 'DATA PGTO EFETUADO': None,
++                    **({'VALORTOTAL': _canonical(total)} if total is not None else {})}
+@@ -893,0 +1171 @@
++                verified_parent_fields = parent_fields
+@@ -897 +1175,4 @@
+-                    for key, expected_value in parent_fields.items():
++                    expected_parent = journal.get('final_intent') if journal.get('final_intent') and all(
++                        _same(key, parent_current.get(key), value) for key, value in journal['final_intent'].items()) else parent_fields
++                    verified_parent_fields = expected_parent
++                    for key, expected_value in expected_parent.items():
+@@ -905,4 +1185,0 @@
+-                    if _text(parent_current.get('DATA PGTO EFETUADO')) and any(
+-                        not _same(key, parent_current.get(key), value) for key, value in common.items()
+-                    ):
+-                        raise RuntimeError('O descritivo já registra outro pagamento. Não será sobrescrito.')
+@@ -910,0 +1188 @@
++                    journal['frozen_batch'] = frozen_batch
+@@ -924 +1202 @@
+-                            for key in ('intent', 'attachments', 'attachment_digests'):
++                            for key in ('intent', 'attachments', 'attachment_digests', 'frozen_batch'):
+@@ -936 +1214 @@
+-                parent_verification = self.sharepoint.verify_item(int(group['parent_id']), parent_fields, names,
++                parent_verification = self.sharepoint.verify_item(int(group['parent_id']), verified_parent_fields, names,
+@@ -942,9 +1220 @@
+-                try:
+-                    from .provision_attachment_sync import sync_parent_attachments
+-                except ImportError:
+-                    from provision_attachment_sync import sync_parent_attachments
+-                expected_owners = {str(row['Id']): {key: row.get(key) for key in ('FORNECEDOR', 'FILIAL')}
+-                                   for row in group['original_children']}
+-                parent_owner = {key: group['parent'].get(key) for key in ('FORNECEDOR', 'FILIAL')}
+-                sync_parent_attachments(self.sharepoint, int(group['parent_id']), expected_owners=expected_owners,
+-                                        expected_parent_owner=parent_owner)
++                self._description_sync_selected_attachments(state)
+@@ -961,3 +1231,13 @@
+-                        order_id = self.sharepoint.ensure_item(intent['token'], order_fields,
+-                            target_list='NOTASPENDENTES', idempotency_field='Title', merge_existing=False)
+-                        verified = self.sharepoint.verify_item(order_id, order_fields, [], target_list='NOTASPENDENTES')
++                        existing = self._description_existing_order(group, intent['token'])
++                        if existing:
++                            order_id = existing['item_id']
++                            if any(not _same(key, existing['fields'].get(key), value)
++                                   for key, value in order_fields.items() if key != 'VALORTOTAL'):
++                                raise RuntimeError('O pedido mudou antes da atualização do total acumulado.')
++                            if not _same('VALORTOTAL', existing['fields'].get('VALORTOTAL'), order_fields['VALORTOTAL']):
++                                self.sharepoint.update_item_with_etag(order_id, {'VALORTOTAL': order_fields['VALORTOTAL']},
++                                    existing['etag'], target_list='NOTASPENDENTES')
++                        else:
++                            order_id = self.sharepoint.ensure_item(intent['token'], order_fields,
++                                target_list='NOTASPENDENTES', idempotency_field='Title', merge_existing=False)
++                        verified = self.sharepoint.verify_item(order_id, {**order_fields, 'Title': intent['token']}, [], target_list='NOTASPENDENTES')
+@@ -1028,2 +1308,6 @@
+-                sync_parent_attachments(self.sharepoint, int(group['parent_id']), expected_owners=expected_owners,
+-                                        expected_parent_owner=parent_owner)
++                self._description_sync_selected_attachments(state)
++                def final_checkpoint():
++                    nonlocal etag
++                    etag = self._save(state, etag)
++                    return etag
++                etag = self._description_finalize_parent(state, final_checkpoint, parent_fields, names)
+@@ -1038,0 +1323 @@
++                               'parent_paid': journal['parent']['parent_paid'], 'selected_ids': sorted(selected_ids, key=int),
+--- a/worker/provision_description_review.py
++++ b/worker/provision_description_review.py
+@@ -2,0 +3 @@
++from datetime import datetime
+@@ -5 +6 @@
+-    from .payment_provision_group import _number, _currency, _canonical, _sum, provision_line_total
++    from .payment_provision_group import _number, _currency, _canonical, _sum, provision_line_total, provision_money
+@@ -7 +8 @@
+-    from payment_provision_group import _number, _currency, _canonical, _sum, provision_line_total
++    from payment_provision_group import _number, _currency, _canonical, _sum, provision_line_total, provision_money
+@@ -15,0 +17,21 @@
++def _source_text(value):
++    return '' if value is None else str(value).strip()
++
++
++def provision_is_pending(row):
++    return (_source_text(row.get('STATUS')).casefold() == 'pagamento previsto'
++            and not _source_text(row.get('DATA PGTO EFETUADO'))
++            and _source_text(row.get('PGTOAGENDADO')).casefold() != 'pago')
++
++
++def provision_is_paid(row):
++    for fmt in ('%Y-%m-%d', '%d/%m/%Y'):
++        try:
++            datetime.strptime(_source_text(row.get('DATA PGTO EFETUADO'))[:10], fmt)
++        except ValueError:
++            continue
++        return (_source_text(row.get('PGTOAGENDADO')).casefold() == 'pago'
++                or _source_text(row.get('STATUS')).casefold() == 'pagamento efetuado')
++    return False
++
++
+@@ -19 +41,2 @@
+-    pending = {str(row['Id']) for row in group['children']}
++    pending = {str(row['Id']) for row in group['original_children'] if provision_is_pending(row)}
++    selected = set(group.get('selected_ids', sorted(pending, key=int)))
+@@ -21 +44 @@
+-    valid_total = valid_pending = True
++    valid_total = valid_pending = valid_selected = True
+@@ -44,0 +68,2 @@
++            if item_id in selected:
++                valid_selected = False
+@@ -52 +77,5 @@
+-            'paid': item_id not in pending})
++            'paid': item_id not in pending, 'selected': item_id in selected and item_id in pending,
++            'canSubmit': item_id in pending and amount is not None,
++            **({'readonlyLabel': 'Indisponível para baixa — somente consulta'}
++                if item_id not in pending and not provision_is_paid(original) else {}),
++            **({'totalCents': str(int(provision_money(amount) * 100))} if amount is not None else {})})
+@@ -57 +86,3 @@
+-        'rows': rows, 'totalDisplay': _currency(_sum(totals)) if valid_total else 'VALOR PENDENTE',
++        'rows': rows, 'selectionEnabled': True,
++        'selectedIds': [row['id'] for row in rows if row['selected']],
++        'totalDisplay': _currency(_sum(totals)) if valid_total else 'VALOR PENDENTE',
+@@ -60 +91,2 @@
+-        'canSubmit': bool(pending) and valid_total and valid_pending}
++        'selectedValid': bool(selected) and selected <= pending and valid_selected,
++        'canSubmit': bool(pending) and valid_total and all(row['canSubmit'] for row in rows if row['id'] in pending)}

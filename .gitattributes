@@ -16,3 +16,6 @@ backend-patches/visit-existing-diary/source.patch whitespace=-blank-at-eol
 backend-patches/multiple-document-entry/** text eol=lf
 backend-patches/multiple-document-entry/source.patch whitespace=-blank-at-eol
 apps/energetico-mobile/tests/fixtures/*.pdf binary
+backend-patches/provision-partial-settlement/** text eol=lf
+backend-patches/provision-partial-settlement/source.patch whitespace=-blank-at-eol
+backend-patches/provision-settlement-stage/** text eol=lf
