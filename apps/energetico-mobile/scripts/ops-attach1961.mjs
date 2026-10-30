@@ -32,4 +32,3 @@ const scoped = {
   },
 };
 console.log(JSON.stringify(await attachLatestTestFlightBuild(scoped)));
-
