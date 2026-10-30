@@ -10,9 +10,10 @@ import { createServer } from 'vite';
 
 const appRoot = resolve(fileURLToPath(new URL('..', import.meta.url)));
 const browser = [process.env.CHROME_BIN, 'C:\\Program Files\\Google\\Chrome\\Application\\chrome.exe',
-  'C:\\Program Files (x86)\\Microsoft\\Edge\\Application\\msedge.exe'].find(path => path && existsSync(path));
+  'C:\\Program Files (x86)\\Microsoft\\Edge\\Application\\msedge.exe',
+  '/usr/bin/google-chrome', '/usr/bin/chromium'].find(path => path && existsSync(path));
 
-test('check fica acima da seta; popup de conclusão funciona em telas pequenas e desktop', { timeout: 90_000 }, async t => {
+test('rotação preserva tipografia; check e popup de conclusão funcionam em telas pequenas e desktop', { timeout: 120_000 }, async t => {
   if (!browser) return t.skip('Chrome/Edge indisponível');
   const server = await createServer({ root: appRoot, server: { host: '127.0.0.1', port: 0,
     fs: { allow: [resolve(appRoot, '../..')] } }, logLevel: 'silent' });
@@ -49,6 +50,39 @@ test('check fica acima da seta; popup de conclusão funciona em telas pequenas e
       for (let attempt = 0; attempt < 120; attempt++) { if (await evaluate(expression)) return; await delay(100); }
       assert.fail(`Não carregou: ${expression}`);
     };
+    const verifyRotation = async (selectors, width = 390, height = 844) => {
+      const resize = async (width, height) => {
+        await send('Emulation.setDeviceMetricsOverride', { width, height, deviceScaleFactor: 1, mobile: true,
+          screenOrientation: { type: width > height ? 'landscapePrimary' : 'portraitPrimary', angle: width > height ? 90 : 0 } }, sessionId);
+        await evaluate('new Promise(resolve => requestAnimationFrame(() => requestAnimationFrame(resolve)))');
+      };
+      const measure = () => evaluate(`(${JSON.stringify(selectors)}).map(selector => {
+        const element = document.querySelector(selector), style = getComputedStyle(element);
+        const range = document.createRange(); range.selectNodeContents(element);
+        return { selector, adjust: style.getPropertyValue('-webkit-text-size-adjust'), font: style.fontSize,
+          lineHeight: style.lineHeight, textHeight: range.getBoundingClientRect().height };
+      })`);
+      await resize(width, height);
+      const before = await measure();
+      for (const sample of before) assert.equal(sample.adjust, '100%', `Escala herdada em ${sample.selector}`);
+      for (let cycle = 0; cycle < 3; cycle++) {
+        await resize(height, width);
+        for (const sample of await measure()) assert.equal(sample.adjust, '100%', sample.selector);
+        await resize(width, height);
+        assert.deepEqual(await measure(), before, 'Voltar à vertical preserva fontes e altura do texto');
+      }
+      assert.equal(await evaluate('visualViewport.scale'), 1, 'Rotação não amplia a página');
+    };
+    // Exercise shared typography in chat and in a report mounted outside #app.
+    await send('Emulation.setDeviceMetricsOverride', { width: 390, height: 844, deviceScaleFactor: 1, mobile: true }, sessionId);
+    await send('Page.navigate', { url: `http://127.0.0.1:${server.httpServer.address().port}/tests/fixtures/app-zoom-guard.html` }, sessionId);
+    await waitFor('Boolean(document.documentElement.dataset.layout)');
+    await verifyRotation(['html', 'body', '.chat-messages', '#menu', '#search']);
+    await send('Page.navigate', { url: `http://127.0.0.1:${server.httpServer.address().port}/tests/fixtures/report-landscape.html?visual` }, sessionId);
+    await waitFor('Boolean(document.querySelector(".pl-overlay"))');
+    await evaluate('document.querySelector("#open").click()');
+    await waitFor('Boolean(document.querySelector("[role=dialog] tbody td"))');
+    await verifyRotation(['[role=dialog]', '[role=dialog] th', '[role=dialog] tbody td']);
     const clickBackdrop = async touch => {
       assert.equal(await evaluate(`document.elementFromPoint(2, 2)?.classList.contains('tg-completion-overlay')`), true);
       if (touch) {
@@ -69,6 +103,14 @@ test('check fica acima da seta; popup de conclusão funciona em telas pequenas e
       })`);
       assert.equal(defaults.label, 'TODAS, EXCETO CONCLUÍDA');
       assert.deepEqual(defaults.ids, ['175', '176'], 'inclui não iniciada e exclui concluída em todas as telas');
+      if (width <= 390) {
+        await verifyRotation(['html', 'body', '.tg-card', '.tg-description'], width, height);
+        if (process.env.ORIENTATION_SCREENSHOT_DIR) {
+          const shot = await send('Page.captureScreenshot', { format: 'png' }, sessionId);
+          writeFileSync(join(process.env.ORIENTATION_SCREENSHOT_DIR, `rotation-${width}.png`), Buffer.from(shot.data, 'base64'));
+        }
+        await send('Emulation.setDeviceMetricsOverride', { width, height, deviceScaleFactor: 1, mobile: false }, sessionId);
+      }
       const toolbar = await evaluate(`(() => {
         const search = document.querySelector('[data-gallery-quick-search]'), filter = document.querySelector('.tg-filter-toggle'), add = document.querySelector('[data-action="create-task"]');
         const a = search.getBoundingClientRect(), b = filter.getBoundingClientRect(), c = add.getBoundingClientRect(), style = getComputedStyle(add);
