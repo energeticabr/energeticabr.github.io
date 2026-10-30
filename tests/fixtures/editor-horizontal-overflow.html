@@ -1,0 +1,124 @@
+<!doctype html>
+<html lang="pt-BR">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1">
+  <meta http-equiv="Content-Security-Policy" content="default-src 'none'; script-src 'self' 'unsafe-inline'; style-src 'self'; img-src 'self' data:; connect-src 'none'; form-action 'none'; base-uri 'none'">
+  <title>Editor · medição local de deslocamento horizontal</title>
+  <script type="importmap">{"imports":{"decimal.js":"../../apps/energetico-mobile/node_modules/decimal.js/decimal.mjs"}}</script>
+  <!-- The same component sheets used by the app entry; no portal-only CSS. -->
+  <link rel="stylesheet" href="../../apps/energetico-mobile/src/styles.css">
+  <link rel="stylesheet" href="../../apps/energetico-mobile/src/ui/searchable-filter-selects.css">
+  <link rel="stylesheet" href="../../apps/energetico-mobile/src/ui/orders-linked-report.css">
+  <link rel="stylesheet" href="../../apps/energetico-mobile/src/ui/gallery-record-actions.css">
+</head>
+<body>
+  <main id="gallery"></main>
+  <script type="module">
+    import { createGalleryRecordActions } from '../../apps/energetico-mobile/src/ui/gallery-record-actions.js';
+    import { renderOrdersLinkedReport } from '../../apps/energetico-mobile/src/ui/orders-linked-report-view.js';
+
+    // A normal NF-e identifier is a legitimate unbroken 44-digit catalog value.
+    const invoice = 'NF-e 31261012345678000123550010000000421000000427 - FORNECEDORA DE MATERIAIS E EQUIPAMENTOS LTDA - PORTAS DE AÇO GALVANIZADO';
+    const observation = 'Conferir os materiais vinculados às notas fiscais e registrar a inspeção de recebimento antes da montagem no pavimento superior.';
+    const alternative = invoice.replace('31261012345678000123550010000000421000000427', '31261012345678000123550010000000431000000430');
+    const variantLabel = `Conferência dos documentos de recebimento - ${invoice}`;
+    const host = document.querySelector('#gallery');
+    let writes = 0;
+    const failures = [], samples = [];
+    const check = (condition, message) => { if (!condition) throw new Error(message); };
+    const frames = () => new Promise(resolve => requestAnimationFrame(() => requestAnimationFrame(resolve)));
+    const bounds = element => {
+      const r = element.getBoundingClientRect();
+      return { left: r.left, right: r.right, width: r.width, top: r.top, bottom: r.bottom };
+    };
+    async function until(predicate) {
+      const deadline = performance.now() + 5000;
+      while (!predicate()) {
+        if (performance.now() > deadline) throw new Error('O editor real não abriu.');
+        await new Promise(resolve => setTimeout(resolve, 15));
+      }
+    }
+    const actions = createGalleryRecordActions({ document, host, actions: ['edit'], galleryTitle: 'IMOBILIZADOS FICTÍCIOS',
+      loadEditor: async (id, { formVariantId } = {}) => !formVariantId
+        ? { contract: { requiresVariantSelection: true, formVariants: [{ id: 'fixture-form', label: variantLabel }] } }
+        : ({ entity: { id: 'fixture-editor-overflow', title: 'Documentos vinculados' },
+        contract: { hasForm: true, readOnly: false }, item: { id, fields: { FORNECEDORESLookupId: [1], FORNECEDORESLookupValue: [invoice], OBS: observation } },
+        columns: [
+          { name: 'FORNECEDORES', label: 'Fornecedores vinculados', control: 'lookup', allowMultipleValues: true, editable: true,
+            relation: { kind: 'lookup', listId: '11111111-1111-4111-8111-111111111111', displayField: 'Title', multiple: true, resolvable: false } },
+          { name: 'OBS', label: 'Observação', control: 'text', editable: true },
+        ],
+        relationshipSearch: async () => [{ id: 1, label: invoice, secondary: '' }, { id: 2, label: alternative, secondary: '' }],
+      }),
+      // Existing production report renderer and its own table-scroll CSS. No
+      // test-only width or gesture override: its 11-column table scrolls locally.
+      renderEditorExtra: () => renderOrdersLinkedReport(document, {
+        orderId: '42', order: { id: '42', fields: { FILIAL: 'FILIAL FICTÍCIA', FORNECEDOR: 'FORNECEDORA FICTÍCIA', VALORTOTAL: 0, STATUS: 'APROVADO' } },
+        divergences: { branch: [], supplier: [], paymentForm: [] }, active: [], deleted: [], activeGroups: [], deletedGroups: [],
+        summary: { orderTotal: 0, activeTotal: 0, difference: 0, totalDiffers: false, activeCount: 0, deletedCount: 0 },
+      }),
+      saveEditor: async () => { writes++; throw new Error('A fixture não permite gravações.'); },
+    });
+    host.append(actions.render({ id: '42', fields: { NOTAS: [invoice], OBS: observation } }));
+
+    async function measure(stage) {
+      await frames();
+      const screen = host.querySelector('[data-gallery-record-screen]');
+      const originalTop = screen.scrollTop;
+      screen.scrollLeft = 100000;
+      const acceptedScrollLeft = screen.scrollLeft;
+      const dimensions = { clientWidth: screen.clientWidth, scrollWidth: screen.scrollWidth, scrollLeft: acceptedScrollLeft };
+      screen.scrollLeft = 0; screen.scrollTop = originalTop;
+      const screenBounds = bounds(screen);
+      const sources = [...screen.querySelectorAll('.gallery-record-form-variant,.sfs,.sfs-popup,.sfs-option,.sfs-trigger,.dynamic-form-heading,.dynamic-form-grid,.dynamic-field,.dynamic-selected-items,.dynamic-selected-items li,.dynamic-selected-items li > span,.dynamic-selected-item-remove,.searchable-select-options,.searchable-select-options [role="option"]')]
+        .filter(element => !element.closest('[hidden]'))
+        .map(element => ({ tag: element.tagName, className: element.className, text: element.textContent.slice(0, 160), clientWidth: element.clientWidth, scrollWidth: element.scrollWidth, bounds: bounds(element) }));
+      const outside = sources.filter(source => source.bounds.left < screenBounds.left - 1 || source.bounds.right > screenBounds.right + 1);
+      samples.push({ stage, ...dimensions, bounds: screenBounds, outside, sources });
+      if (acceptedScrollLeft > 1) failures.push(`${stage}: editor accepts horizontal scrollLeft=${acceptedScrollLeft} (clientWidth=${dimensions.clientWidth}, scrollWidth=${dimensions.scrollWidth})`);
+      if (outside.length) failures.push(`${stage}: content outside editor: ${outside.map(source => source.className).join(', ')}`);
+    }
+
+    try {
+      host.querySelector('[data-gallery-action="edit"]').click();
+      await until(() => host.querySelector('.gallery-record-form-variant .sfs-trigger'));
+      host.querySelector('.gallery-record-form-variant .sfs-trigger').click();
+      await until(() => host.querySelector('.gallery-record-form-variant .sfs-option'));
+      await measure('form-variant-open');
+      [...host.querySelectorAll('.gallery-record-form-variant .sfs-option')].find(option => option.textContent === variantLabel).click();
+      await until(() => host.querySelector('.dynamic-selected-items li'));
+      check(host.querySelector('.dynamic-selected-items li > span').textContent === invoice, 'Real selected chip retains the whole catalog label');
+      check(host.querySelector('[data-relation-value="FORNECEDORES"]').value === '[1]', 'Native lookup chip retains its committed ID');
+      await measure('selected-chip');
+      const lookup = host.querySelector('[data-relation-field="FORNECEDORES"]');
+      const query = lookup.querySelector('.searchable-select-input'); query.focus(); query.click();
+      await until(() => lookup.querySelector('[data-relation-status]').textContent === '2 opção(ões) encontrada(s).');
+      check(!lookup.querySelector('.searchable-select-options').hidden, 'Native lookup options really open');
+      await measure('lookup-dropdown-open');
+      [...lookup.querySelectorAll('.searchable-select-options [role="option"]')].find(option => option.textContent === alternative).click();
+      check(lookup.querySelector('[data-relation-value]').value === '[1,2]', 'Selecting the long native lookup alternative adds its real ID');
+      check([...lookup.querySelectorAll('.dynamic-selected-items li > span')].some(chip => chip.textContent === alternative), 'Chosen label becomes a real multi chip');
+      await measure('chosen-lookup-chip');
+      const input = host.querySelector('[name="OBS"]');
+      input.focus(); input.setSelectionRange(input.value.length, input.value.length);
+      input.scrollLeft = 100000;
+      const internalPan = { clientWidth: input.clientWidth, scrollWidth: input.scrollWidth, scrollLeft: input.scrollLeft, value: input.value };
+      check(internalPan.scrollLeft > 0, 'Long text input must preserve its own horizontal caret pan');
+      check(input.value === observation, 'Internal pan cannot change the input value');
+      await measure('input-internal-pan');
+      input.blur();
+      const table = host.querySelector('.olr-table-scroll');
+      table.scrollLeft = 100000;
+      const nestedPan = { clientWidth: table.clientWidth, scrollWidth: table.scrollWidth, scrollLeft: table.scrollLeft };
+      check(nestedPan.scrollWidth <= nestedPan.clientWidth + 1 || nestedPan.scrollLeft > 0, 'Real report table keeps its own horizontal scroll');
+      await measure('nested-report-pan');
+      host.querySelector('.dynamic-selected-items').scrollIntoView({ block: 'start' });
+      await frames();
+      document.documentElement.dataset.layout = JSON.stringify({ status: failures.length ? 'failed' : 'passed', failures, samples, internalPan, nestedPan, writes, width: innerWidth, height: innerHeight, touchDrag: 'Not run: shared browser helper exposes pinch but no horizontal swipe API.' });
+    } catch (error) {
+      document.documentElement.dataset.layout = JSON.stringify({ status: 'failed', error: error.stack, failures, samples, writes });
+    }
+  </script>
+</body>
+</html>
