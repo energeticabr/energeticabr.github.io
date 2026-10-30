@@ -88,7 +88,7 @@ for (const [kind, create, selector, options = {}] of cases) {
     [...accepted.querySelectorAll('button')].find(button => button.textContent === 'Sim').click();
     await settle(); await settle();
     assert.deepEqual(ctx.calls.filter(([operation]) => operation === 'delete'), [['delete', '3479']]);
-    assert.equal(ctx.document.querySelector(selector), null, 'successful delete refreshes gallery');
+    assert.equal(ctx.document.querySelector(selector), null, 'successful delete removes the record from the gallery');
     const receipt = ctx.document.querySelector('[data-gallery-delete-success]');
     assert.ok(receipt, `${kind} keeps the success summary after the row disappears`);
     const table = receipt.querySelector('table');
@@ -111,7 +111,21 @@ for (const [kind, create, selector, options = {}] of cases) {
   });
 }
 
-for (const [kind, create, selector, options = {}] of cases) {
+test('tasks: confirmed deletion keeps its receipt and removes the row even when a new list read would fail', async t => {
+  const ctx = await setup(t, 'tasks', createTasksGallery, {});
+  ctx.document.querySelector('.tg-card [data-gallery-action="delete"]').click();
+  ctx.network.offline = true;
+  ctx.document.querySelector('[data-gallery-confirm="yes"]').click(); await settle(); await settle();
+  assert.ok(ctx.document.querySelector('[data-gallery-delete-success]'));
+  assert.equal(ctx.document.querySelector('.tg-card'), null);
+  assert.equal(ctx.document.querySelector('[data-gallery-refresh-retry]'), null);
+  assert.equal(ctx.document.querySelector('.gallery-record-dialog [role="alert"]').hidden, true);
+  ctx.document.querySelector('[data-gallery-receipt-close]').click();
+  assert.equal(ctx.document.querySelector('[data-gallery-record-dialog]'), null);
+  assert.deepEqual(ctx.calls.filter(([operation]) => operation === 'delete'), [['delete', '3479']]);
+});
+
+for (const [kind, create, selector, options = {}] of cases.filter(([kind]) => kind !== 'tasks')) {
   test(`${kind}: refresh failure preserves confirmed deletion receipt and retries only the read`, async t => {
     const ctx = await setup(t, kind, create, options);
     const trigger = ctx.document.querySelector(`${selector} [data-gallery-action="delete"]`);
