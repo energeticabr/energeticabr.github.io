@@ -4,6 +4,7 @@ import { canDeleteRhidAdjustment } from '../chat/rhid-adjustment-ownership.js';
 import { postingCompletion } from "../chat/posting-completion.js";
 import { postingCompletionMarkup } from "./posting-completion.js";
 import { provisionSettlementReviewMarkup } from './provision-settlement-review.js';
+import { createProvisionSettlementSelection } from './provision-settlement-selection.js';
 import { provisionSettlementLaunchSummaryMarkup } from './provision-settlement-launch-summary.js';
 import { reportNavigationMarkup } from "./report-navigation.js";
 import { pendingReportPrintMarkup } from "./report-print.js";
@@ -1702,7 +1703,7 @@ function renderPoll(message, busy, draft = "", databaseFilterMessage = null, act
     ? rawChangeTable
     : null;
   const presenceTable = message.detail_table || message.detailTable;
-  const provisionReview = provisionSettlementReviewMarkup(presenceTable) || provisionSettlementLaunchSummaryMarkup(message);
+  const provisionReview = provisionSettlementReviewMarkup(presenceTable, { busy, current: currentPoll }) || provisionSettlementLaunchSummaryMarkup(message);
   const rhidAttendanceReport = presenceTable?.kind === "rhid_attendance";
   const calendarPicker = isDateQuestion(message, options);
   const isPendingAttendanceList = message?.presentation === "accordion";
@@ -2739,6 +2740,12 @@ function renderSignedOut(status, error, showSettings, allowDemo) {
   </section>`;
 }
 
+function chatInteractionBusy(state, rhidReportBusy = false) {
+  return Boolean(state.activeText || state.attachmentUploadProgress || state.resuming || state.recoveryBlocked || state.recoveryUncertain || state.responseTransitionPending)
+    || (state.pendingFiles || []).some(item => item.status === "sending")
+    || rhidReportBusy === true || state.pendingProvisionOpening === true;
+}
+
 export function renderChatMarkup(state = {}, { showSettings = false, allowDemo = false, demo = false, signOutConfirm = false, pendingDocumentDelete = false, attachmentSource = false, datePicker = false, datePickerValue = "", signaturePad = false, signaturePadError = "", signaturePlacement = null, signaturePlacementStampApplied = false, attendanceSelectedIds = [], attendanceExpandedIds = [], attendanceIrregularityDialog = null, attendanceIrregularityChecking = false, launchPayrollSelectedIds = [], rhidAttendanceReport = null, rhidAttendanceAdjustment = null, rhidRefresh = null } = {}) {
   if (state.sessionStatus !== "authenticated") {
     return renderSignedOut(state.sessionStatus, state.error, showSettings, allowDemo);
@@ -2795,8 +2802,7 @@ export function renderChatMarkup(state = {}, { showSettings = false, allowDemo =
   const attachments = Array.isArray(state.attachments) ? state.attachments : [];
   const loadingProgress = (rhidAttendanceReport?.busy ? rhidAttendanceReport.progress : null)
     || (state.activeText ? state.diaryAttachmentProgress : state.attachmentUploadProgress) || state.operationProgress;
-  const busy = Boolean(state.activeText || state.attachmentUploadProgress || state.resuming || state.recoveryBlocked || state.recoveryUncertain || state.responseTransitionPending)
-    || pendingFiles.some(item => item.status === "sending") || rhidAttendanceReport?.busy === true || state.pendingProvisionOpening === true;
+  const busy = chatInteractionBusy(state, rhidAttendanceReport?.busy);
   const loading = Boolean(state.activeText || state.attachmentUploadProgress || state.resuming || state.responseTransitionPending || state.operationProgress)
     || pendingFiles.some(item => item.status === "sending") || rhidAttendanceReport?.busy === true || state.pendingProvisionOpening === true;
   const pendingAttachment = pendingFiles.length > 0;
@@ -2899,6 +2905,7 @@ export function createChatView(root, { onOpenSettings, onDemoAccess, onSignOut, 
   if (!root?.addEventListener) throw new TypeError("A tela do Energético requer um elemento raiz.");
   const cameraChooser = createCameraChooser(root.ownerDocument);
   const handlers = new Map();
+  const provisionSelection = createProvisionSettlementSelection(root, emit);
   let messageKey = "";
   let lastState = null;
   let pendingProvisionRenderDay = "";
@@ -4102,8 +4109,7 @@ export function createChatView(root, { onOpenSettings, onDemoAccess, onSignOut, 
       draft.placeholder = databaseFilter ? (databaseFilter.message?.acceptsCustomText === true ? "Filtre ou digite sua descrição…" : "Digite para filtrar…") : dateInput ? "DD/MM/AAAA" : documentIdInput ? "Digite o CPF ou CNPJ" : "Digite uma mensagem";
     }
     if (draft) draft.disabled = state.recoveryUncertain === true;
-    if (!draftOnly) composerBusy = Boolean(state.activeText || state.attachmentUploadProgress || state.resuming || state.responseTransitionPending || state.recoveryBlocked || state.recoveryUncertain || rhidAttendanceReportBusy)
-      || (state.pendingFiles || []).some(item => item.status === "sending");
+    if (!draftOnly) composerBusy = chatInteractionBusy(state, rhidAttendanceReportBusy);
     for (const action of draftOnly ? ["send-text"] : ["send-text", "capture-photo", "pick-files"]) {
       const button = composerControls[action];
       const disabled = composerBusy || (action === "send-text" && (
@@ -4431,6 +4437,7 @@ export function createChatView(root, { onOpenSettings, onDemoAccess, onSignOut, 
     }
     if (command.type === "send-text") return;
     event.preventDefault?.();
+    if (provisionSelection.handleReply(command, clickedAction)) return;
     if (command.type === "append-diary-activity") {
       const activePoll = [...(lastState?.messages || [])].reverse()
         .find(item => item?.role !== "user" && item?.type === "poll");
@@ -5457,6 +5464,7 @@ export function createChatView(root, { onOpenSettings, onDemoAccess, onSignOut, 
   }
 
   function change(event) {
+    if (provisionSelection.change(event)) return;
     if (["rhid-adjustment-time", "rhid-adjustment-reason"].includes(event.target?.dataset?.role)) { input(event); return; }
     const checkbox = event.target;
     if (checkbox?.matches?.('input[data-action="epi-product-select-all"]') && !checkbox.disabled) {
@@ -5568,6 +5576,7 @@ export function createChatView(root, { onOpenSettings, onDemoAccess, onSignOut, 
     }
     if (onlyDraftChanged(state)) {
       syncComposer(state, true);
+      provisionSelection.sync(state, chatInteractionBusy(state, rhidAttendanceReportBusy));
       lastState = state;
       return;
     }
@@ -5656,6 +5665,7 @@ export function createChatView(root, { onOpenSettings, onDemoAccess, onSignOut, 
       attendanceIrregularityChecking: Boolean(attendanceIrregularityPending),
       launchPayrollSelectedIds: [...launchPayrollSelectedIds],
     }), state, { preserveSignaturePad, preserveSignaturePlacement });
+    provisionSelection.sync(state, chatInteractionBusy(state, rhidAttendanceReportBusy));
     syncComposer(state);
     const attachments = root.querySelector?.(".chat-attachments");
     if (attachments) {
