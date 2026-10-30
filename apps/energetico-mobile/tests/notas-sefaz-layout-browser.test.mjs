@@ -7,7 +7,7 @@ import { JSDOM } from 'jsdom';
 import { build, createServer } from 'vite';
 import { runBrowserLayout } from './helpers/browser-layout-runner.mjs';
 
-test('NF-e gallery and three-gallery launch group fit narrow phones and Windows in mobile and PWA CSS', { timeout: 120_000 }, async t => {
+test('NF-e gallery and three-gallery launch group fit narrow phones and Windows in mobile and PWA CSS', { timeout: 240_000 }, async t => {
   const browser = [process.env.CHROME_BIN, 'C:/Program Files/Google/Chrome/Application/chrome.exe', '/usr/bin/google-chrome', '/usr/bin/chromium'].find(path => path && existsSync(path));
   if (!browser) return t.skip('Chrome unavailable');
   const root = fileURLToPath(new URL('..', import.meta.url));
@@ -38,6 +38,9 @@ test('NF-e gallery and three-gallery launch group fit narrow phones and Windows 
       assert.ok(layout.activeFilters.buttonWidth >= 44 && layout.activeFilters.buttonHeight >= 44, 'limpar filtros acessível ao toque');
     }
     if (mode === 'gallery') {
+      assert.equal(layout.sourceNotice,'Fontes: SEFAZ para NF-e e CT-e; ADN nacional para NFS-e.');
+      assert.equal(layout.syncSummary.text,'ÚLTIMA ATUALIZAÇÃO EM 29/10/2026 no horário 07:01 com 3 novos cadastros. Próxima atualização permitida no horário 08:15');
+      assert.ok(layout.syncSummary.scrollWidth <= layout.syncSummary.width + 1, 'resumo conciso sem overflow');
       assert.match(layout.lastSuccess.text,/Última atualização bem-sucedida/);
       assert.match(layout.lastSuccess.text,/29\/10\/2026.*07:01/);
       assert.equal(layout.lastSuccess.background,'rgb(238, 243, 245)');

@@ -347,6 +347,15 @@ export function createRegistrationGallery({ document: doc = globalThis.document,
   if (bankNotice) { bankNotice.hidden = true; bankNotice.setAttribute('role', 'status'); header.after(bankNotice); }
   let manualStartedThisVisit=false,manualStarting=false,manualRequestId=null,returnPending=false,returnedForManual=false,bankState=null,lastManualResult=null;
   const formatManualTime=value=>new Intl.DateTimeFormat('pt-BR',{dateStyle:'short',timeStyle:'short',timeZone:'America/Sao_Paulo'}).format(new Date(value));
+  const formatFiscalDate=value=>new Intl.DateTimeFormat('pt-BR',{day:'2-digit',month:'2-digit',year:'numeric',timeZone:'America/Sao_Paulo'}).format(new Date(value));
+  const formatFiscalClock=value=>new Intl.DateTimeFormat('pt-BR',{hour:'2-digit',minute:'2-digit',hour12:false,timeZone:'America/Sao_Paulo'}).format(new Date(value));
+  function fiscalSummary(state){
+    if(!Number.isFinite(state?.lastSuccessfulAt)||!Number.isSafeInteger(state?.lastSuccessfulCreatedCount)||state.lastSuccessfulCreatedCount<0)return '';
+    const count=state.lastSuccessfulCreatedCount,created=count===1?'1 novo cadastro':`${count} novos cadastros`;
+    let text=`ÚLTIMA ATUALIZAÇÃO EM ${formatFiscalDate(state.lastSuccessfulAt)} no horário ${formatFiscalClock(state.lastSuccessfulAt)} com ${created}.`;
+    if(Number.isFinite(state.nextAllowedAt))text+=` Próxima atualização permitida no horário ${formatFiscalClock(state.nextAllowedAt)}`;
+    return text;
+  }
   function showBankNotice(){
     if(!bankNotice||root.hidden)return;
     const latest=(bankState?.latest?.requestId===manualRequestId?bankState.latest:null)||lastManualResult;
@@ -420,8 +429,9 @@ export function createRegistrationGallery({ document: doc = globalThis.document,
   let fiscalWasRunning=Boolean(syncMonitor?.running);
   const unsubscribeFiscal=fiscalNotice && syncMonitor ? syncMonitor.subscribe(state=>{
     if (destroyed) return;
-    fiscalNotice.hidden=!state.notice;
-    fiscalNotice.textContent=state.notice || '';
+    const summary=fiscalSummary(state);
+    fiscalNotice.hidden=!(summary||state.notice);
+    fiscalNotice.textContent=summary || state.notice || '';
     fiscalNotice.setAttribute('role','status');
     fiscalLastSuccessValue.textContent=Number.isFinite(state.lastSuccessfulAt) ? formatManualTime(state.lastSuccessfulAt) : '—';
     if (fiscalWasRunning && !state.running && !root.hidden) void load({refresh:true,preserveRowsOnError:true});

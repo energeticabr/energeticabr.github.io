@@ -57,14 +57,25 @@ test('corrupt server batch cannot overwrite saved request and sensitive data is 
 });
 test('last successful completion survives acknowledgement and restart while partial results cannot replace it',async t=>{
  const completed=Date.parse('2026-10-29T10:01:00Z'),h=setup(t);let latest;
- h.monitor.subscribe(state=>{latest=state;});h.setState(receipt('succeeded'));await h.monitor.start();
+ const success=receipt('succeeded');success.sources.NFE.createdItemIds=[71,72];success.sources.CTE.createdItemIds=[72,73];
+ h.monitor.subscribe(state=>{latest=state;});h.setState(success);await h.monitor.start();
  assert.equal(latest.lastSuccessfulAt,completed);
+ assert.equal(latest.lastSuccessfulCreatedCount,3);
  await h.shown[0].ack();await h.monitor.resume();assert.equal(h.monitor.pendingCount,0);
  h.monitor.destroy();const restored=setup(t,{storage:h.storage});restored.monitor.subscribe(state=>{latest=state;});
- await restored.monitor.resume();assert.equal(latest.lastSuccessfulAt,completed);
+ await restored.monitor.resume();assert.equal(latest.lastSuccessfulAt,completed);assert.equal(latest.lastSuccessfulCreatedCount,3);
  restored.monitor.destroy();const partial=setup(t,{storage:h.storage,client:{getSefazRefreshPending:async()=>({status:'pending',requests:[{
   ...receipt('partial'),completedUtc:'2026-10-29T11:01:00Z'}]})}});partial.monitor.subscribe(state=>{latest=state;});
  await partial.monitor.resume();assert.equal(latest.lastSuccessfulAt,completed);
+ assert.equal(latest.lastSuccessfulCreatedCount,3);
+});
+test('server restores the last created count and monitor exposes the latest full-source cooldown',async t=>{
+ const waiting=receipt('waiting');waiting.sources.NFE={status:'waiting',code:'COOLDOWN',nextAllowedAt:'2026-10-29T11:00:00Z'};
+ waiting.sources.CTE={status:'waiting',code:'COOLDOWN',nextAllowedAt:'2026-10-29T11:15:00Z'};
+ const h=setup(t,{client:{getSefazRefreshPending:async()=>({status:'pending',requests:[waiting],lastSuccessfulUtc:'2026-10-29T09:01:00Z',lastSuccessfulCreatedItemIds:[80,81,80]}),getSefazRefreshStatus:async()=>waiting}});let latest;
+ h.monitor.subscribe(state=>{latest=state;});await h.monitor.resume();
+ assert.equal(latest.lastSuccessfulCreatedCount,2);
+ assert.equal(latest.nextAllowedAt,Date.parse('2026-10-29T11:15:00Z'));
 });
 test('invalid server last-success timestamp preserves the valid local measurement',async t=>{
  const completed=Date.parse('2026-10-29T10:01:00Z'),map=new Map([['energetico.sefaz-sync.v1:account-a',JSON.stringify({version:1,records:[],lastSuccessfulAt:completed})]]);

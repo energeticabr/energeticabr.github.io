@@ -162,7 +162,11 @@ class QueueTests(unittest.TestCase):
         self.assertEqual(self.start(), receipt)
 
     def test_pending_preserves_latest_success_after_ack_and_ignores_later_partial_result(self):
-        self.start(); first = self.claim(); first_receipt = self.succeed(first)['job']
+        self.start(); first = self.claim()
+        self.progress(first, 'NFE', {'status': 'succeeded', 'documents': 2, 'createdItemIds': [41, 42]})
+        self.progress(first, 'CTE', {'status': 'succeeded', 'documents': 1, 'createdItemIds': [42, 43]})
+        self.progress(first, 'NFSE', {'status': 'succeeded', 'documents': 0})
+        first_receipt = self.finish(first)['job']
         self.q.acknowledge(OWNER, first['requestId'])
         self.now += 60
         self.start('b'*32); partial = self.claim()
@@ -173,11 +177,14 @@ class QueueTests(unittest.TestCase):
 
         result = self.q.pending(OWNER)
         self.assertEqual(result['lastSuccessfulUtc'], first_receipt['completedUtc'])
+        self.assertEqual(result['lastSuccessfulCreatedItemIds'], [41, 42, 43])
         self.assertNotIn('lastSuccessfulUtc', self.q.pending(OTHER))
+        self.assertNotIn('lastSuccessfulCreatedItemIds', self.q.pending(OTHER))
 
         self.now += 60
         self.start('c'*32); latest = self.claim(); latest_receipt = self.succeed(latest)['job']
         self.assertEqual(self.q.pending(OWNER)['lastSuccessfulUtc'], latest_receipt['completedUtc'])
+        self.assertEqual(self.q.pending(OWNER)['lastSuccessfulCreatedItemIds'], [])
 
     def test_partial_failure_never_becomes_success(self):
         self.start(); job = self.claim()

@@ -27,21 +27,22 @@ for(const invalid of [null,'12',{},[0],[-1],[1.5],[true],['12'],[Number.MAX_SAFE
 });
 
 test('fiscal client sends only fixed authenticated actions, validates complete sources and strips unexpected data',async()=>{
- const bodies=[];let value=receipt(),lastSuccessfulUtc='2026-10-29T10:01:00Z';
+ const bodies=[];let value=receipt(),lastSuccessfulUtc='2026-10-29T10:01:00Z',lastSuccessfulCreatedItemIds=[71,72,71];
  const client=createChatClient({apiBaseUrl:'https://app.example.test',tokenProvider:async()=> 'fake',fetchImpl:async(url,options)=>{
   assert.equal(options.headers.Authorization,'Bearer fake');const body=JSON.parse(options.body);bodies.push(body);
-  const result=body.mode==='pending'?{status:'pending',requests:[value],lastSuccessfulUtc}:body.acknowledge?{status:'acknowledged',requestId:id}:value;
+  const result=body.mode==='pending'?{status:'pending',requests:[value],lastSuccessfulUtc,lastSuccessfulCreatedItemIds}:body.acknowledge?{status:'acknowledged',requestId:id}:value;
   return new Response(JSON.stringify({status:'processed',messages:[],sefazRefresh:result}),{status:200});
  }});
  assert.equal(typeof client.refreshSefaz,'function');
  await client.refreshSefaz({requestId:id,command:'never'});await client.getSefazRefreshStatus(id);
- assert.deepEqual(await client.getSefazRefreshPending(),{status:'pending',requests:[value],lastSuccessfulUtc});
+ assert.deepEqual(await client.getSefazRefreshPending(),{status:'pending',requests:[value],lastSuccessfulUtc,lastSuccessfulCreatedItemIds:[71,72]});
  await client.acknowledgeSefazRefresh(id);
  assert.deepEqual(bodies,[{action:'sefaz_refresh',requestId:id},{action:'sefaz_refresh_status',requestId:id},{action:'sefaz_refresh_status',mode:'pending'},{action:'sefaz_refresh_status',requestId:id,acknowledge:true}]);
  value={...receipt('succeeded'),sources:{...receipt().sources}};await assert.rejects(client.getSefazRefreshStatus(id));
  value=receipt('succeeded');value.sources.NFE.code='DELIVERY_PENDING';await assert.rejects(client.getSefazRefreshStatus(id));
  value={...receipt(),sources:{NFE:{status:'running'}}};await assert.rejects(client.getSefazRefreshPending());
  value=receipt();lastSuccessfulUtc='not-a-date';await assert.rejects(client.getSefazRefreshPending());
+ lastSuccessfulUtc='2026-10-29T10:01:00Z';lastSuccessfulCreatedItemIds=['71'];await assert.rejects(client.getSefazRefreshPending());
  value=receipt();value.sources.NFE.documents=-1;await assert.rejects(client.refreshSefaz({requestId:id}));
  await assert.rejects(client.refreshSefaz({requestId:'invalid'}));
 });
@@ -75,4 +76,16 @@ test('fiscal gallery shows a persistent neutral cluster with the last successful
  assert.match(value.textContent,/29\/10\/2026.*07:01/);assert.equal(cluster.hidden,false);
  listener({running:true,notice:'NF-e: aguardando intervalo obrigatório',lastSuccessfulAt:Date.parse('2026-10-29T10:01:00Z')});
  assert.match(value.textContent,/29\/10\/2026.*07:01/);
+});
+
+test('fiscal gallery uses the requested concise source and synchronization summaries',async t=>{
+ const dom=new JSDOM('<body/>'),doc=dom.window.document;let listener;
+ const monitor={running:false,subscribe(fn){listener=fn;fn({running:false,notice:''});return()=>{};},async start(){}};
+ const gallery=createRegistrationGallery({document:doc,kind:'notas_fiscais_sefaz',syncMonitor:monitor,data:{loadSnapshot:async()=>({rows:[]})}});
+ t.after(()=>{gallery.destroy();dom.window.close();});await gallery.open();
+ assert.equal(doc.querySelector('[data-sefaz-coverage]').textContent,'Fontes: SEFAZ para NF-e e CT-e; ADN nacional para NFS-e.');
+ listener({running:true,notice:'NF-e: aguardando o intervalo obrigatório da fonte fiscal',lastSuccessfulAt:Date.parse('2026-10-29T10:01:00Z'),lastSuccessfulCreatedCount:3,nextAllowedAt:Date.parse('2026-10-29T11:15:00Z')});
+ assert.equal(doc.querySelector('[data-sefaz-sync-progress]').textContent,'ÚLTIMA ATUALIZAÇÃO EM 29/10/2026 no horário 07:01 com 3 novos cadastros. Próxima atualização permitida no horário 08:15');
+ listener({running:false,notice:'',lastSuccessfulAt:Date.parse('2026-10-29T10:01:00Z'),lastSuccessfulCreatedCount:1,nextAllowedAt:null});
+ assert.equal(doc.querySelector('[data-sefaz-sync-progress]').textContent,'ÚLTIMA ATUALIZAÇÃO EM 29/10/2026 no horário 07:01 com 1 novo cadastro.');
 });

@@ -610,6 +610,11 @@ export function createChatClient({
           || !Number.isFinite(Date.parse(receipt.lastSuccessfulUtc))) throw Error('Não foi possível recuperar as consultas fiscais.');
         pending.lastSuccessfulUtc=receipt.lastSuccessfulUtc;
       }
+      if (receipt.lastSuccessfulCreatedItemIds !== undefined) {
+        const ids=receipt.lastSuccessfulCreatedItemIds;
+        if (!Array.isArray(ids) || ids.some(id=>!Number.isSafeInteger(id)||id<=0)) throw Error('Não foi possível recuperar as consultas fiscais.');
+        pending.lastSuccessfulCreatedItemIds=[...new Set(ids)];
+      }
       return pending;
     }
     if (extra.acknowledge) {
