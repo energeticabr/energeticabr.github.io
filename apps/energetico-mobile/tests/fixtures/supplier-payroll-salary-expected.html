@@ -1,0 +1,68 @@
+<!doctype html>
+<html lang="pt-BR"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Salário pago e esperado — dados fictícios</title></head><body><main id="app"></main><script type="module">
+import '/src/styles.css';
+import '/src/ui/searchable-filter-selects.css';
+import '/src/ui/payment-ledger.css';
+import '/src/ui/report-print.css';
+import '/src/ui/supplier-payroll-report.css';
+import { createSupplierPayrollReportView } from '/src/ui/supplier-payroll-report-view.js';
+import { decorateReportNavigation } from '/src/ui/report-navigation.js';
+import { decorateReportPrint } from '/src/ui/report-print.js';
+try {
+  const sheets = [
+    { id: '1', supplier: 'ALFA FICTÍCIO — VALORES ALTOS', profession: 'Cargo fictício A', month: '2026-10' },
+    { id: '2', supplier: 'BRAVO FICTÍCIO — SALÁRIO NÃO INFORMADO', profession: 'Cargo fictício B', month: '2026-10' },
+    { id: '9', supplier: 'CHARLIE FICTÍCIO — DUAS FOLHAS', profession: 'Cargo fictício C', month: '2026-10' },
+    { id: '10', supplier: 'CHARLIE FICTÍCIO — DUAS FOLHAS', profession: 'Cargo fictício C', month: '2026-10' },
+    { id: '4', supplier: 'DELTA FICTÍCIO — DÉCIMO TERCEIRO', profession: 'Cargo fictício D', month: '2026-10' },
+  ];
+  const salaryExpectations = { '1': 12345678900, '2': null, '9': 320050, '10': 320050, '4': 500000 };
+  const rows = [
+    { id: '101', payrollId: '1', type: 'Salário', totalCents: 9999999999 },
+    { id: '102', payrollId: '2', type: 'Salário', totalCents: 52700 },
+    { id: '109', payrollId: '9', type: 'salário', totalCents: 52700 },
+    { id: '110', payrollId: '10', type: 'salário', totalCents: 10000 },
+    { id: '104', payrollId: '4', type: '13 Salário', totalCents: 120000 },
+    { id: '105', payrollId: '1', type: 'Ajuda de Custo', totalCents: 60000 },
+  ].map(row => ({ ...row, date: '2026-10-05', launchId: String(Number(row.id) + 1000), quantity: 1, unitValue: row.totalCents / 100 }));
+  const view = decorateReportNavigation(decorateReportPrint(createSupplierPayrollReportView({ document,
+    now: () => new Date('2026-10-08T12:00:00Z'),
+    data: { loadSnapshot: async () => ({ complete: true, sheets, salaryExpectations }),
+      loadPaymentsForPayrollIds: async ids => rows.filter(row => ids.includes(row.payrollId)) },
+  }), { action: 'open-supplier-payroll-report' }), { action: 'open-supplier-payroll-report', onNavigate: async () => {} });
+  await view.open();
+  const frame = () => new Promise(resolve => requestAnimationFrame(() => requestAnimationFrame(resolve)));
+  for (let i = 0; i < 80 && view.element.querySelectorAll('.spr-salary-expected').length < 3; i++) await frame();
+  await Promise.all([...view.element.querySelectorAll('img')].map(image => image.decode().catch(() => {})));
+  await document.fonts.ready; await frame();
+  const root = view.element, content = root.querySelector('.spr-content'), portrait = root.dataset.reportPortrait === 'true';
+  const plain = node => node.textContent.replaceAll('\u00a0', ' ');
+  const contains = (outer, inner) => inner.left >= outer.left - 1 && inner.right <= outer.right + 1 && inner.top >= outer.top - 1 && inner.bottom <= outer.bottom + 1;
+  const salaryRows = [...root.querySelectorAll('summary .spr-rubric-row--salary')];
+  const amounts = salaryRows.map(row => {
+    const value = row.querySelector('.spr-salary-values'), rowBox = row.getBoundingClientRect(), valueBox = value.getBoundingClientRect();
+    const atoms = [...row.querySelectorAll('.spr-salary-paid,.spr-salary-expected')].map(node => {
+      const range = document.createRange(); range.selectNodeContents(node); const fragments = [...range.getClientRects()];
+      return { text: plain(node), whiteSpace: getComputedStyle(node).whiteSpace,
+        oneLine: new Set(fragments.map(rect => Math.round(portrait ? rect.left : rect.top))).size === 1,
+        fitsValue: fragments.every(rect => contains(valueBox, rect)), fitsRow: fragments.every(rect => contains(rowBox, rect)), color: getComputedStyle(node).color };
+    });
+    return { text: plain(value), width: row.clientWidth, scrollWidth: row.scrollWidth, atoms };
+  });
+  const cards = [...root.querySelectorAll('.spr-supplier')];
+  const unaffected = cards.find(card => card.querySelector('.spr-name').textContent.startsWith('DELTA'));
+  const result = { portrait, pageHorizontalOverflow: document.documentElement.scrollWidth > innerWidth + 1,
+    contentHorizontalOverflow: content.scrollWidth > content.clientWidth + 1,
+    salaryTexts: salaryRows.map(row => plain(row.querySelector('.spr-rubric-value'))), amounts,
+    noExpectedOn13Salary: !unaffected.querySelector('.spr-salary-expected'),
+    paid13: plain(unaffected.querySelector('.spr-rubric-value')),
+    otherRubricPaid: plain(cards[0].querySelector('.spr-rubric-row:not(.spr-rubric-row--salary) .spr-rubric-value')),
+    totalPaidUnchanged: plain(cards[0].querySelector('.spr-total-paid .spr-metric-value')),
+    allCardsFit: cards.every(card => card.scrollWidth <= card.clientWidth + 1),
+    noExternalResources: performance.getEntriesByType('resource').every(entry => new URL(entry.name, location.href).origin === location.origin),
+  };
+  content.scrollTop = 0; await frame();
+  document.documentElement.dataset.layout = JSON.stringify(result);
+} catch (error) { document.documentElement.dataset.layout = JSON.stringify({ error: error.stack || error.message }); }
+</script></body></html>

@@ -24,6 +24,64 @@ const payment = (id = '1', payroll = '2', launch = '71', supplier = 'Ana') => ({
     field_4: launch, field_5: 9999, field_6: 9999 } });
 const page = items => ({ items, hasMore: false, nextLink: '', batchCount: items.length });
 const deferred = () => { let resolve; const promise = new Promise(r => { resolve = r; }); return { promise, resolve }; };
+
+function salaryFixture({partial=false,incomplete=false,delayed=null}={}) {
+ const f=fixture(),getColumns=f.repository.getColumns,getPage=f.repository.getItemsPage;
+ f.repository.getColumns=async(site,list)=>list==='FUNCIONARIOSRH'
+  ?[{name:'origin',displayName:'IDFORNECEDORORIGEM'},{name:'role',displayName:'CARGO'}]
+  :list==='CARGOS'?[{name:'role',displayName:'CARGO'},{name:'rate',displayName:'SALÁRIO'},{name:'effective',displayName:'DATA REFERÊNCIA'}]:getColumns(site,list);
+ f.repository.getItemsPage=async(site,list,query,options)=>{
+  if(list==='FUNCIONARIOSRH')return delayed?delayed.promise:page([{id:'3',fields:{origin:'1',role:'PEDREIRO I'}}]);
+  if(list==='CARGOS'){
+   if(partial)return {...page([]),partial:true};
+   if(incomplete)return {...page([{id:'1',fields:{role:'PEDREIRO I',rate:'3000',effective:'2026-01-01'}}]),complete:false};
+   return options.cursor? page([{id:'2',fields:{role:'PEDREIRO I',rate:'3.200,50',effective:'2026-10-01'}}])
+    :{...page([{id:'1',fields:{role:'PEDREIRO I',rate:'3000',effective:'2026-01-01'}}]),hasMore:true,nextLink:'salary-page-2'};
+  }
+  return getPage(site,list,query,options);
+ };
+ return f;
+}
+test('complete RH origin and paginated cargo salary enrich selected competence without writes',async()=>{
+ const f=salaryFixture(),data=create({repository:f.repository}),snapshot=await data.loadSnapshot();
+ assert.deepEqual(snapshot.salaryExpectations,{'2':320050});assert.ok(Object.isFrozen(snapshot.salaryExpectations));
+ assert.equal((await data.loadPaymentsForPayrollIds(['2']))[0].totalCents,1502);assert.deepEqual(f.writes,[]);
+});
+test('missing supplier identity cannot match a real supplier named like the presentation fallback',async()=>{
+ const f=salaryFixture(),getPage=f.repository.getItemsPage;
+ f.repository.getItemsPage=(site,list,query,options)=>list==='FORNECEDORES'?Promise.resolve(page([vendor('1','Fornecedor não informado')]))
+  :list==='IDFOLHA'?Promise.resolve(page([sheet('2','')])):getPage(site,list,query,options);
+ const snapshot=await create({repository:f.repository}).loadSnapshot();
+ assert.equal(snapshot.sheets[0].supplier,'Fornecedor não informado');assert.equal(snapshot.salaryExpectations['2'],null);
+});
+test('incomplete salary source preserves paid report and never exposes partial expected salary',async()=>{
+ const f=salaryFixture({partial:true}),data=create({repository:f.repository}),snapshot=await data.loadSnapshot();
+ assert.equal(snapshot.salaryExpectations,undefined);
+ assert.equal((await data.loadPaymentsForPayrollIds(['2']))[0].totalCents,1502);assert.deepEqual(f.writes,[]);
+});
+test('explicitly incomplete salary page cannot provide a denominator even with hasMore false',async()=>{
+ const f=salaryFixture({incomplete:true}),data=create({repository:f.repository}),snapshot=await data.loadSnapshot();
+ assert.equal(snapshot.salaryExpectations,undefined);
+ assert.equal((await data.loadPaymentsForPayrollIds(['2']))[0].totalCents,1502);
+});
+test('failed salary catalog cancels the other optional salary read without canceling paid details',async()=>{
+ const held=deferred(),f=salaryFixture({partial:true,delayed:held}),getPage=f.repository.getItemsPage;let rhSignal;
+ f.repository.getItemsPage=(site,list,query,options)=>{if(list==='FUNCIONARIOSRH')rhSignal=options.signal;return getPage(site,list,query,options);};
+ const data=create({repository:f.repository}),snapshot=await data.loadSnapshot();
+ assert.equal(snapshot.salaryExpectations,undefined);assert.equal(rhSignal.aborted,true);
+ assert.equal((await data.loadPaymentsForPayrollIds(['2']))[0].totalCents,1502);
+ held.resolve(page([{id:'3',fields:{origin:'1',role:'PEDREIRO I'}}]));
+});
+test('late RH responses cannot replace a newer salary snapshot after refresh',async()=>{
+ const held=deferred(),f=salaryFixture({delayed:held}),data=create({repository:f.repository});
+ const old=data.loadSnapshot(),rejected=assert.rejects(old,{name:'AbortError'});
+ await new Promise(resolve=>setImmediate(resolve));
+ const getPage=f.repository.getItemsPage;
+ f.repository.getItemsPage=(site,list,query,options)=>list==='FUNCIONARIOSRH'
+  ?Promise.resolve(page([{id:'3',fields:{origin:'1',role:'PEDREIRO I'}}])):getPage(site,list,query,options);
+ const fresh=await data.loadSnapshot();await rejected;held.resolve(page([{id:'3',fields:{origin:'1',role:'OUTRO CARGO'}}]));
+ assert.deepEqual(fresh.salaryExpectations,{'2':320050});
+});
 test('report reads descriptive account and observation fields from the linked launch without extra reads or writes',async()=>{
  const f=fixture();const original=f.repository.getColumns;
  f.repository.getColumns=async(site,list)=>list==='LANCAMENTOS'?[...await original(site,list),
