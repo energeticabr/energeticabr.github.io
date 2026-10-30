@@ -14,18 +14,26 @@ function clean(value) {
   return result;
 }
 
+function confirmedTime(value) {
+  if (typeof value !== 'string' || !/T.*(?:Z|[+-]\d\d:\d\d)$/.test(value)) throw Error('Data fiscal inválida.');
+  const result=Date.parse(value);
+  if (!Number.isFinite(result)) throw Error('Data fiscal inválida.');
+  return result;
+}
+
 /** A session-owned durable intent; navigation never consumes a server result. */
 export function createSefazSyncMonitor({client,accountKey,storage,present=async()=>false,hide=()=>{},isVisible=()=>true,
   isCurrent=()=>true,now=Date.now,randomId=()=>globalThis.crypto.randomUUID().replaceAll('-',''),
   schedule=(fn,ms)=>setTimeout(fn,ms),cancel=clearTimeout,requestTimeoutMs=35000}={}) {
   if (typeof accountKey !== 'string' || !accountKey) throw Error('Conta fiscal não identificada.');
   const key=`energetico.sefaz-sync.v1:${encodeURIComponent(accountKey)}`,records=new Map(),listeners=new Set();
-  let destroyed=false,inFlight=null,timer=null,discover=false,showing=null,notice='',controller=null;
+  let destroyed=false,inFlight=null,timer=null,discover=false,showing=null,notice='',controller=null,lastSuccessfulAt=null;
   try {
     const saved=JSON.parse(storage?.getItem(key)||'null');
     if (saved?.version===1 && Array.isArray(saved.records)) {
       const safe=saved.records.map(clean);
       for (const row of safe) records.set(row.requestId,row);
+      if (Number.isFinite(saved.lastSuccessfulAt) && saved.lastSuccessfulAt >= 0) lastSuccessfulAt=saved.lastSuccessfulAt;
     }
   } catch { /* The authenticated server recovers corrupt/missing local state. */ }
   const current=()=>!destroyed && isCurrent();
@@ -33,15 +41,16 @@ export function createSefazSyncMonitor({client,accountKey,storage,present=async(
   function persist() {
     try {
       if (!storage?.setItem) throw Error('unavailable');
-      storage.setItem(key,JSON.stringify({version:1,records:[...records.values()]}));
+      storage.setItem(key,JSON.stringify({version:1,records:[...records.values()],lastSuccessfulAt}));
     } catch { throw Error('Não foi possível salvar o acompanhamento fiscal neste aparelho. Tente novamente.'); }
   }
-  function snapshot() { return {running:running(),notice,latest:[...records.values()].sort((a,b)=>b.startedAt-a.startedAt)[0]||null}; }
+  function snapshot() { return {running:running(),notice,latest:[...records.values()].sort((a,b)=>b.startedAt-a.startedAt)[0]||null,lastSuccessfulAt}; }
   function notify() { for (const listener of listeners) listener(snapshot()); }
   function remember(value,previous) {
     const next=clean({...value,acknowledged:previous?.acknowledged});
     if (previous && previous.requestId!==next.requestId) records.delete(previous.requestId);
     records.set(next.requestId,next);
+    if (next.status === 'succeeded') lastSuccessfulAt=Math.max(lastSuccessfulAt ?? 0,next.completedAt);
     // Server receipts are already durable; storage failure must not hide them.
     try { persist(); } catch { notice='O armazenamento local está indisponível. O resultado continua salvo no servidor.'; }
     return next;
@@ -90,6 +99,8 @@ export function createSefazSyncMonitor({client,accountKey,storage,present=async(
           const pending=await request(signal=>client.getSefazRefreshPending({signal}));
           if(pending?.status!=='pending'||!Array.isArray(pending.requests))throw Error('Resposta fiscal inválida.');
           const safe=pending.requests.map(validateSefazReceipt);
+          const serverSuccess=pending.lastSuccessfulUtc===undefined?null:confirmedTime(pending.lastSuccessfulUtc);
+          if(serverSuccess!==null && serverSuccess>(lastSuccessfulAt ?? 0)){lastSuccessfulAt=serverSuccess;persist();}
           for(const row of safe)remember(row,records.get(row.requestId));
         }catch{if(!current())return;notice='Sem conexão para recuperar as consultas fiscais. O acompanhamento será retomado automaticamente.';discover=true;}
       }
