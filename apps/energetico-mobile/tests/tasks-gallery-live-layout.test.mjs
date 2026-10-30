@@ -140,12 +140,17 @@ test('rotação preserva tipografia; check e popup de conclusão funcionam em te
       await waitFor(`Boolean(window.releaseCompletion)`);
       const loading = await evaluate(`(() => {
         const dialog = document.querySelector('.tg-completion-dialog'), rect = dialog.getBoundingClientRect();
+        const back = dialog.querySelector('[data-gallery-editor-back]'), backRect = back?.getBoundingClientRect();
         return { buttons: dialog.querySelectorAll('button').length, fields: dialog.querySelectorAll('input').length,
+          back: Boolean(back && back.textContent === '←' && back.type === 'button' && !back.disabled
+            && back.getAttribute('aria-label') === 'Voltar à galeria sem salvar'
+            && backRect.width >= 48 && backRect.height >= 48),
           loading: dialog.textContent.includes('Carregando conclusão'), focused: document.activeElement === dialog,
           fits: rect.left >= 0 && rect.right <= innerWidth && rect.top >= 0 && rect.bottom <= innerHeight,
           overflow: dialog.scrollWidth > dialog.clientWidth + 1 };
       })()`);
-      assert.equal(loading.buttons, 0, 'Cancelar não aparece antes dos demais controles');
+      assert.equal(loading.buttons, 1, 'a seta de retorno fica disponível durante o carregamento');
+      assert.equal(loading.back, true, 'a seta é acessível, visível e não submete o formulário');
       assert.equal(loading.fields, 0);
       assert.ok(loading.loading && loading.focused && loading.fits && !loading.overflow, JSON.stringify(loading));
       if (width === 390 && process.env.TASK_COMPLETION_LOADING_SCREENSHOT) {
@@ -171,7 +176,7 @@ test('rotação preserva tipografia; check e popup de conclusão funcionam em te
           overflow: dialog.scrollWidth > dialog.clientWidth + 1, inert: document.querySelector('.og-content').inert };
       })()`);
       assert.deepEqual(modal.fields, ['2026-10-03', 'CONCLUÍDA']);
-      assert.deepEqual(modal.buttons, [{ text: 'Cancelar', visible: true }, { text: 'Submeter', visible: true }]);
+      assert.deepEqual(modal.buttons, [{ text: '←', visible: true }, { text: 'Cancelar', visible: true }, { text: 'Submeter', visible: true }]);
       assert.ok(modal.visible && modal.fits && !modal.overflow && modal.inert, JSON.stringify(modal));
       if (width === 390 && process.env.TASK_COMPLETION_SCREENSHOT) {
         const shot = await send('Page.captureScreenshot', { format: 'png' }, sessionId);
