@@ -18,7 +18,8 @@ const RELATIONSHIP_MIN_LENGTH = 1;
 const RELATIONSHIP_LIMIT = 20;
 const POWERAPPS_OPTION_MIN_LENGTH = 1;
 const POWERAPPS_OPTION_LIMIT = 20;
-const SELECT_ONLY_OPTION_LIMIT = 2000;
+// 100 catalog pages of at most 100 rows; interactive queries keep their 20-row limit.
+const SELECT_ONLY_OPTION_LIMIT = 10000;
 
 function powerAppsFieldReference(value) {
   const field = String(value || "").trim();
@@ -83,7 +84,7 @@ function isConditionalPowerAppsSource(source) {
     || !powerAppsFieldReference(source?.selector?.fieldName)
     || !Array.isArray(source?.branches)
     || !source.branches.length
-    || !isConcretePowerAppsSource(source?.fallback)
+    || (!isConcretePowerAppsSource(source?.fallback) && source?.fallback?.kind !== "empty")
     || powerAppsAvailability(source.fallback) === false) return false;
   return source.branches.every(branch => {
     const operator = branch?.when?.operator;
@@ -275,6 +276,7 @@ function powerAppsDependencyValues(form, source, context = {}) {
 async function searchPowerAppsOptions(form, column, source, term, requestOptions, search, context = {}) {
   const concreteSource = resolvePowerAppsRemoteSource(form, source);
   if (!concreteSource) throw new Error("A origem Power Apps condicional não pôde ser resolvida com segurança.");
+  if (concreteSource.kind === "empty") return Object.freeze([]);
   const dependencies = powerAppsDependencyValues(form, concreteSource, context);
   const availability = powerAppsAvailability(concreteSource);
   if (!availability) return search(column, concreteSource, term, dependencies, requestOptions);

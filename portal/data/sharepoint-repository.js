@@ -46,6 +46,7 @@ const MAX_GRAPH_BATCH_SIZE = 100;
 const MAX_STRUCTURED_SEARCH_FIELDS = 8;
 const MAX_FILTER_OPTION_FIELDS = 24;
 const MAX_RELATIONSHIP_OPTIONS = 20;
+const MAX_OPTION_VALUE_LENGTH = 2000;
 const MIN_RELATIONSHIP_TERM_LENGTH = 1;
 const MAX_REST_BATCH_SIZE = 500;
 
@@ -102,12 +103,12 @@ function powerAppsFieldReference(value) {
   return field;
 }
 
-function powerAppsFieldReferences(values) {
+function powerAppsFieldReferences(values, { allowBlank = false } = {}) {
   if (values === undefined) return Object.freeze([]);
   if (!Array.isArray(values) || values.length > MAX_STRUCTURED_SEARCH_FIELDS) {
     throw new RangeError("A origem Power Apps possui campos de exibição ou pesquisa inválidos.");
   }
-  return Object.freeze(values.map(powerAppsFieldReference));
+  return Object.freeze(values.filter(value => !allowBlank || typeof value !== 'string' || value.trim()).map(powerAppsFieldReference));
 }
 
 function powerAppsOptionSource(source = {}) {
@@ -188,7 +189,8 @@ function powerAppsOptionSource(source = {}) {
           return Object.freeze({ kind: "literal", value: part.value });
         }
         if (part?.kind === "field") {
-          return Object.freeze({ kind: "field", fieldName: powerAppsFieldReference(part.fieldName) });
+          if (part.format !== undefined && part.format !== 'date-pt-BR') throw new Error('O formato do rótulo calculado Power Apps não foi comprovado.');
+          return Object.freeze({ kind: "field", fieldName: powerAppsFieldReference(part.fieldName), ...(part.format ? { format: part.format } : {}) });
         }
         if (part?.kind === "field-fallback" && typeof part.value === "string") {
           return Object.freeze({
@@ -208,7 +210,7 @@ function powerAppsOptionSource(source = {}) {
     dependencies: Object.freeze(dependencies),
     fixedFilters: Object.freeze(fixedFilters),
     fixedFilterGroups: Object.freeze(fixedFilterGroups),
-    searchFields: powerAppsFieldReferences(source.searchFields),
+    searchFields: powerAppsFieldReferences(source.searchFields, { allowBlank: true }),
     displayFields: powerAppsFieldReferences(source.displayFields),
     additionalFields,
     computedFields: Object.freeze(computedFields),
@@ -934,6 +936,12 @@ export function createSharePointRepository(graph, siteConfig, { attachmentTransp
       }
     }
 
+    // The recurring-expense workflow and its owned Form1_39 use LOCACOES.
+    // Keep an explicitly configured logical title authoritative when present.
+    if (!list && (normalizedAliases.has('DESPESASRECORRENTES') || normalizedAliases.has('DESPESAS RECORRENTES'))) {
+      list = lists.find(candidate => normalizeName(candidate.displayName) === 'LOCACOES');
+    }
+
     if (!list) {
       return {
         status: "missing",
@@ -1130,6 +1138,7 @@ export function createSharePointRepository(graph, siteConfig, { attachmentTransp
     const term = relationshipTerm(termValue, { allowEmpty: true });
     const limit = relationshipLimit(options.limit);
     const browse = options.browse === true && !term;
+    const pageSize = browse ? MAX_GRAPH_BATCH_SIZE : limit;
     if (relation?.resolvable !== true || relation?.multiple === true) {
       throw new Error("Esta relação não pode ser resolvida com segurança pelos metadados SharePoint.");
     }
@@ -1147,10 +1156,10 @@ export function createSharePointRepository(graph, siteConfig, { attachmentTransp
         if (!restTransport?.request) throw new Error("O transporte REST de leitura SharePoint nao foi configurado.");
         const collectionPath = restItemsCollectionPath(relatedListId);
         const parameters = restItemsQuery({
-          "$top": String(limit),
-          "$filter": `startswith(${displayField},${graphStringLiteral(term)})`,
+          "$top": String(pageSize),
+          ...(term ? { "$filter": `startswith(${displayField},${graphStringLiteral(term)})` } : {}),
         }, { fields: [displayField] });
-        if (browse) return Object.freeze((await getAllRestCollection(config, `${collectionPath}?${parameters}`, {method:'GET',permission:'read',signal:options.signal}, 'As opções relacionadas', limit)).map(canonicalRestItem).map(item => relationshipOption(item.id,item.fields[displayField])));
+        if (browse) return Object.freeze((await getAllRestCollection(config, `${collectionPath}?${parameters}`, {method:'GET',permission:'read',signal:options.signal}, 'As opções relacionadas', pageSize)).map(canonicalRestItem).map(item => relationshipOption(item.id,item.fields[displayField])));
         const payload = await restTransport.request(config, `${collectionPath}?${parameters}`, {
           method: "GET",
           permission: "read",
@@ -1165,10 +1174,10 @@ export function createSharePointRepository(graph, siteConfig, { attachmentTransp
       const parameters = new URLSearchParams();
       parameters.set("$select", "id");
       parameters.set("$expand", `fields($select=${displayField})`);
-      parameters.set("$filter", `startswith(fields/${displayField},${graphStringLiteral(term)})`);
-      parameters.set("$top", String(limit));
+      if (term) parameters.set("$filter", `startswith(fields/${displayField},${graphStringLiteral(term)})`);
+      parameters.set("$top", String(pageSize));
       const path = `/sites/${site.id}/lists/${encodeURIComponent(relatedListId)}/items?${parameters}`;
-      if (browse) return Object.freeze((await getPaged(path,{...options,pageLimit:limit})).map(item=>relationshipOption(item?.id,item?.fields?.[displayField])));
+      if (browse) return Object.freeze((await getPaged(path,{...options,pageLimit:pageSize})).map(item=>relationshipOption(item?.id,item?.fields?.[displayField])));
       const payload = await graph.request(path, { method: "GET", signal: options.signal });
       const items = boundedGraphItems(payload, limit);
       if (term && validatedItemsNextLink(payload?.["@odata.nextLink"], site.id, relatedListId)) {
@@ -1186,10 +1195,10 @@ export function createSharePointRepository(graph, siteConfig, { attachmentTransp
       const config = getSiteConfig(siteKey);
       const parameters = new URLSearchParams();
       parameters.set("$select", "Id,Title,Email,LoginName");
-      parameters.set("$filter", `startswith(Title,${graphStringLiteral(term)}) or startswith(Email,${graphStringLiteral(term)})`);
+      if (term) parameters.set("$filter", `startswith(Title,${graphStringLiteral(term)}) or startswith(Email,${graphStringLiteral(term)})`);
       parameters.set("$orderby", "Title asc");
-      parameters.set("$top", String(limit));
-      if (browse) return Object.freeze((await getAllRestCollection(config, `/_api/web/siteusers?${parameters}`, {method:'GET',signal:options.signal}, 'As opções de pessoas', limit)).map(user=>relationshipOption(user?.Id??user?.id,user?.Title??user?.title,user?.Email??user?.email)));
+      parameters.set("$top", String(pageSize));
+      if (browse) return Object.freeze((await getAllRestCollection(config, `/_api/web/siteusers?${parameters}`, {method:'GET',signal:options.signal}, 'As opções de pessoas', pageSize)).map(user=>relationshipOption(user?.Id??user?.id,user?.Title??user?.title,user?.Email??user?.email)));
       const payload = await restTransport.request(config, `/_api/web/siteusers?${parameters}`, { method: "GET", signal: options.signal });
       validatedRestNextLink(restNextLink(payload), config, "/_api/web/siteusers");
       const values = restCollection(payload);
@@ -1254,9 +1263,14 @@ export function createSharePointRepository(graph, siteConfig, { attachmentTransp
 
   async function searchPowerAppsOptions(siteKey, rawSource = {}, termValue, dependencyValues = {}, options = {}) {
     const source = powerAppsOptionSource(rawSource);
-    const term = relationshipTerm(termValue, { allowEmpty: true });
+    const exact = options.exactValue === true;
+    if (options.exactValue !== undefined && typeof options.exactValue !== 'boolean') throw new TypeError('A validação exata de opções deve ser booleana.');
+    if (exact && !['string','number','boolean'].includes(typeof termValue)) throw new TypeError('O valor da opção deve ser escalar.');
+    const term = exact ? String(termValue).trim() : relationshipTerm(termValue, { allowEmpty: true });
+    if (exact && (!term || term.length > MAX_OPTION_VALUE_LENGTH || /[\u0000-\u001f]/.test(term))) throw new RangeError(`O valor da opção deve conter entre 1 e ${MAX_OPTION_VALUE_LENGTH} caracteres válidos.`);
     const limit = relationshipLimit(options.limit);
     const browse = options.browse === true && !term;
+    const pageSize = browse ? MAX_GRAPH_BATCH_SIZE : limit;
     const dependencies = source.dependencies.flatMap(dependency => {
       const value = powerAppsDependencyValue(dependencyValues, dependency);
       return value === null ? [] : [Object.freeze({ ...dependency, value })];
@@ -1267,19 +1281,24 @@ export function createSharePointRepository(graph, siteConfig, { attachmentTransp
     }
 
     const columns = await getColumns(siteKey, relatedList.id, { signal: options.signal });
-    const valueField = powerAppsMetadataField(columns, source.valueField);
     const additionalFields = source.additionalFields.map(field => powerAppsMetadataField(columns, field));
     const computedByName = new Map(source.computedFields.map(computed => [computed.fieldName.toLocaleLowerCase("pt-BR"), computed]));
+    const computedDescriptor = computed => Object.freeze({
+      kind: 'computed', parts: Object.freeze(computed.parts.map(part => {
+        if (!['field','field-fallback'].includes(part.kind)) return part;
+        const field = powerAppsMetadataField(columns, part.fieldName);
+        if (part.format && !field.column?.dateTime) throw new Error('O formato de data do catálogo não corresponde aos metadados.');
+        return Object.freeze({ ...part, field });
+      })),
+    });
+    const computedValue = computedByName.get(source.valueField.toLocaleLowerCase('pt-BR'));
+    const valueDescriptor = computedValue ? computedDescriptor(computedValue)
+      : Object.freeze({ kind: 'field', field: powerAppsMetadataField(columns, source.valueField) });
     const resolveDescriptor = reference => {
-      if (/^(Value|Result)$/i.test(reference)) return Object.freeze({ kind: "field", field: valueField });
+      if (/^(Value|Result)$/i.test(reference)) return valueDescriptor;
       const computed = computedByName.get(reference.toLocaleLowerCase("pt-BR"));
       if (!computed) return Object.freeze({ kind: "field", field: powerAppsMetadataField(columns, reference) });
-      return Object.freeze({
-        kind: "computed",
-        parts: Object.freeze(computed.parts.map(part => part.kind === "field" || part.kind === "field-fallback"
-          ? Object.freeze({ ...part, field: powerAppsMetadataField(columns, part.fieldName) })
-          : part)),
-      });
+      return computedDescriptor(computed);
     };
     const searchDescriptors = (source.searchFields.length ? source.searchFields : [source.valueField]).map(resolveDescriptor);
     const displayDescriptors = (source.displayFields.length ? source.displayFields : [source.valueField]).map(resolveDescriptor);
@@ -1301,9 +1320,6 @@ export function createSharePointRepository(graph, siteConfig, { attachmentTransp
         }
       }
     }
-    if (!searchFields.length) {
-      throw new Error("Os SearchFields comprovados pelo Power Apps não são textuais nos metadados SharePoint.");
-    }
     const dependencyFields = dependencies.map(dependency => Object.freeze({
       ...dependency,
       target: powerAppsMetadataField(columns, dependency.targetField),
@@ -1316,12 +1332,34 @@ export function createSharePointRepository(graph, siteConfig, { attachmentTransp
       ...filter,
       target: powerAppsMetadataField(columns, filter.fieldName),
     }))));
+    const descriptorFields = descriptor => descriptor.kind === 'field' ? [descriptor.field]
+      : descriptor.parts.filter(part => part.kind === 'field' || part.kind === 'field-fallback').map(part => part.field);
+    const canonicalId = value => /^[1-9]\d{0,14}$/.test(String(value)) && Number.isSafeInteger(Number(value)) ? String(Number(value)) : '';
+    const identity = valueDescriptor.kind === 'field' ? valueDescriptor.field.name === 'ID'
+      : valueDescriptor.parts[0]?.kind === 'field' && valueDescriptor.parts[0].field.name === 'ID'
+        && (valueDescriptor.parts.length === 1 || valueDescriptor.parts[1]?.kind === 'literal' && valueDescriptor.parts[1].value.length > 0);
+    let identityId = identity ? canonicalId(term) : '';
+    if (exact && identity && !identityId && valueDescriptor.kind === 'computed') {
+      const prefix = /^([1-9]\d{0,14})/.exec(term)?.[1];
+      if (prefix && term.startsWith(prefix + valueDescriptor.parts[1]?.value)) identityId = canonicalId(prefix);
+    }
+    if (exact && identity && !identityId) return Object.freeze([]);
+    const scopeIds = [
+      ...dependencyFields.filter(field => field.target.name === 'ID').map(field => field.value),
+      ...fixedFilters.filter(field => field.target.name === 'ID' && field.operator === 'eq').map(field => field.value),
+    ].map(value => { const id = canonicalId(value); if (!id) throw new RangeError('O ID da origem Power Apps não é válido.'); return id; });
+    const directId = scopeIds[0] || identityId;
+    if (scopeIds.some(id => id !== directId) || identityId && directId !== identityId) return Object.freeze([]);
+    if (term && !exact && !directId && !searchFields.length) {
+      if (identity) return Object.freeze([]);
+      throw new Error("Os SearchFields comprovados pelo Power Apps não são textuais nos metadados SharePoint.");
+    }
     for (const field of [
       ...dependencyFields.map(item => item.target),
       ...fixedFilters.map(item => item.target),
       ...fixedFilterGroups.flatMap(group => group.map(item => item.target)),
     ]) {
-      if (field.column?.indexed !== true) {
+      if (!directId && field.column?.indexed !== true) {
         throw new Error(`O campo ${field.name} da origem Power Apps precisa estar indexado no SharePoint.`);
       }
     }
@@ -1331,12 +1369,14 @@ export function createSharePointRepository(graph, siteConfig, { attachmentTransp
     if (usesRestOptions && !restTransport?.request) throw new Error("O transporte REST de leitura SharePoint nao foi configurado.");
     const parameters = new URLSearchParams();
     const selectedFields = [...new Set([
-      valueField.name,
+      ...descriptorFields(valueDescriptor).map(field => field.name),
       ...displayDescriptors.flatMap(descriptor => descriptor.kind === "field"
         ? [descriptor.field.name]
         : descriptor.parts.filter(part => part.kind === "field" || part.kind === "field-fallback").map(part => part.field.name)),
       ...searchFields.map(field => field.name),
       ...additionalFields.map(field => field.name),
+      ...(directId ? [...dependencyFields.map(field => field.target.name), ...fixedFilters.map(field => field.target.name),
+        ...fixedFilterGroups.flatMap(group => group.map(field => field.target.name))] : []),
     ])];
     if (usesRestOptions) parameters.set("$select", [...new Set(["ID", ...selectedFields])].join(","));
     else {
@@ -1344,7 +1384,9 @@ export function createSharePointRepository(graph, siteConfig, { attachmentTransp
       parameters.set("$expand", `fields($select=${selectedFields.join(",")})`);
     }
     const fieldExpression = name => usesRestOptions ? name : `fields/${name}`;
-    const search = (term ? searchFields : [])
+    const exactField = exact && valueDescriptor.kind === 'field' ? valueDescriptor.field : null;
+    if (exactField && !directId && exactField.column?.indexed !== true) throw new Error(`O campo ${exactField.name} precisa estar indexado para validar a opção.`);
+    const search = exactField && !directId ? `${fieldExpression(exactField.name)} eq ${metadataScalarLiteral(exactField, term)}` : (term && !exact ? searchFields : [])
       .map(field => `startswith(${fieldExpression(field.name)},${graphStringLiteral(term)})`)
       .join(" or ");
     const fixedFilterExpression = filter => filter.operator === "starts-with"
@@ -1354,18 +1396,26 @@ export function createSharePointRepository(graph, siteConfig, { attachmentTransp
       ? `(${fixedFilterGroups.map(group => `(${group.map(fixedFilterExpression).join(" and ")})`).join(" or ")})`
       : "";
     const filter = [
-      search && searchFields.length > 1 ? `(${search})` : search,
+      search && !exact && searchFields.length > 1 ? `(${search})` : search,
       ...dependencyFields.map(dependency => `${fieldExpression(dependency.target.name)} eq ${metadataScalarLiteral(dependency.target, dependency.value)}`),
       ...fixedFilters.map(fixedFilterExpression),
       groupedFilters,
     ].filter(Boolean).join(" and ");
     if (filter) parameters.set("$filter", filter);
-    parameters.set("$top", String(limit));
+    parameters.set("$top", String(pageSize));
     let items;
-    if (usesRestOptions) {
+    if (directId) {
+      let item;
+      try { item = await getItem(siteKey, relatedList.id, directId, '', { restrictedFields: selectedFields, signal: options.signal }); }
+      catch (error) { throwIfAborted(options.signal); if (error?.status === 404) return Object.freeze([]); throw error; }
+      throwIfAborted(options.signal);
+      if (String(item?.id) !== directId || !item?.fields || Array.isArray(item.fields)
+        || item.fields.ID != null && canonicalId(item.fields.ID) !== directId) throw new TypeError('O catálogo retornou um ID diferente do solicitado.');
+      items = [usesRestOptions ? { ...item.fields, ID: item.id } : item];
+    } else if (usesRestOptions) {
       const collectionPath = `/_api/web/lists(guid'${listGuid(relatedList.id)}')/items`;
       if (browse) {
-        items = await getAllRestCollection(config, `${collectionPath}?${parameters}`, {method:'GET',permission:'read',signal:options.signal}, 'As opções Power Apps', limit);
+        items = await getAllRestCollection(config, `${collectionPath}?${parameters}`, {method:'GET',permission:'read',signal:options.signal}, 'As opções Power Apps', pageSize);
       } else {
       const payload = await restTransport.request(config, `${collectionPath}?${parameters}`, {
         method: "GET",
@@ -1381,7 +1431,7 @@ export function createSharePointRepository(graph, siteConfig, { attachmentTransp
     } else {
       const site = await getSite(siteKey, options);
       const path = `/sites/${site.id}/lists/${encodeURIComponent(relatedList.id)}/items?${parameters}`;
-      if (browse) items = await getPaged(path,{...options,pageLimit:limit});
+      if (browse) items = await getPaged(path,{...options,pageLimit:pageSize});
       else {
       const payload = await graph.request(path, { method: "GET", signal: options.signal });
       items = boundedGraphItems(payload, limit);
@@ -1394,8 +1444,32 @@ export function createSharePointRepository(graph, siteConfig, { attachmentTransp
     const seen = new Set();
     const values = [];
     for (const item of items) {
-      const fields = usesRestOptions ? item : item?.fields;
-      const rawValue = fields?.[valueField.name];
+      const originalFields = usesRestOptions ? item : item?.fields;
+      if (!originalFields || typeof originalFields !== 'object' || Array.isArray(originalFields)) throw new TypeError('O catálogo retornou campos inválidos.');
+      const fields = { ...originalFields, ...(originalFields.ID == null && item?.id ? { ID: item.id } : {}) };
+      const matches = (target, expected, operator = 'eq') => {
+        const actual = fields[target.name];
+        if (actual == null || !['string','number','boolean'].includes(typeof actual)) return false;
+        const a = metadataScalarLiteral(target, actual).toLocaleUpperCase('pt-BR');
+        const b = metadataScalarLiteral(target, expected).toLocaleUpperCase('pt-BR');
+        return operator === 'starts-with' ? String(actual).toLocaleUpperCase('pt-BR').startsWith(String(expected).toLocaleUpperCase('pt-BR')) : a === b;
+      };
+      if (directId && (!dependencyFields.every(field => matches(field.target, field.value))
+        || !fixedFilters.every(field => matches(field.target, field.value, field.operator))
+        || fixedFilterGroups.length && !fixedFilterGroups.some(group => group.every(field => matches(field.target, field.value, field.operator))))) continue;
+      if (directId && term && !exact && !identityId && !searchFields.some(field => String(fields[field.name] ?? '').toLocaleUpperCase('pt-BR').startsWith(term.toLocaleUpperCase('pt-BR')))) continue;
+      const readDescriptor = descriptor => descriptor.kind === 'field' ? fields[descriptor.field.name]
+        : descriptor.parts.map(part => {
+          if (part.kind === 'literal') return part.value;
+          const value = String(fields[part.field.name] ?? '');
+          if (part.format === 'date-pt-BR' && value.trim()) {
+            const date = /^(\d{4})-(\d{2})-(\d{2})(?:T|$)/.exec(value);
+            if (!date || Number.isNaN(Date.parse(value)) || new Date(value.slice(0,10)+'T00:00:00Z').toISOString().slice(0,10) !== value.slice(0,10)) throw new TypeError('O catálogo retornou uma data inválida.');
+            return date[3]+'/'+date[2]+'/'+date[1];
+          }
+          return part.kind === 'field-fallback' && !value.trim() ? part.value : value;
+        }).join('');
+      const rawValue = readDescriptor(valueDescriptor);
       const value = ["string", "number", "boolean"].includes(typeof rawValue) ? String(rawValue).trim() : "";
       if (!value) {
         throw new TypeError(`A origem Power Apps retornou ${valueField.name} sem um valor escalar válido.`);
@@ -1403,13 +1477,7 @@ export function createSharePointRepository(graph, siteConfig, { attachmentTransp
       if (seen.has(value)) continue;
       seen.add(value);
       const label = displayDescriptors
-        .map(descriptor => descriptor.kind === "field"
-          ? fields?.[descriptor.field.name]
-          : descriptor.parts.map(part => {
-            if (part.kind === "literal") return part.value;
-            const value = String(fields?.[part.field.name] ?? "");
-            return part.kind === "field-fallback" && !value.trim() ? part.value : value;
-          }).join(""))
+        .map(readDescriptor)
         .map(candidate => String(candidate ?? "").trim())
         .find(Boolean) || value;
       const data = Object.freeze(Object.fromEntries(additionalFields.map(field => [
@@ -1418,7 +1486,7 @@ export function createSharePointRepository(graph, siteConfig, { attachmentTransp
       ])));
       values.push(Object.freeze({ value, label, ...(additionalFields.length ? { data } : {}) }));
     }
-    return Object.freeze(values);
+    return Object.freeze(exact ? values.filter(option => option.value === term) : values);
   }
 
   function restrictedItemQuery(fields) {
@@ -1437,7 +1505,7 @@ export function createSharePointRepository(graph, siteConfig, { attachmentTransp
       if (!restTransport?.request) throw new Error("O transporte REST de leitura SharePoint nao foi configurado.");
       const collectionPath = restItemsCollectionPath(listId);
       const item = restItemNumber(itemId);
-      const parameters = restricted ? new URLSearchParams({ "$select": ["ID", ...options.restrictedFields].join(",") }) : restItemsQuery(query);
+      const parameters = restricted ? new URLSearchParams({ "$select": [...new Set(["ID", ...options.restrictedFields])].join(",") }) : restItemsQuery(query);
       const payload = await restTransport.request(config, `${collectionPath}(${item})?${parameters}`, {
         method: "GET",
         permission: "read",

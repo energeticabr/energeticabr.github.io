@@ -89,6 +89,8 @@ function concreteSources(source) {
 
 function sourceDependencies(source) {
   return [...(source?.dependsOn || []), ...(source?.selector ? [source.selector] : []),
+    ...(source?.availability?.lookup?.dependency ? [source.availability.lookup.dependency] : []),
+    ...(source?.availability?.candidateDependencies || []),
     ...(source?.branches || []).flatMap(branch => sourceDependencies(branch.source)),
     ...(source?.fallback ? sourceDependencies(source.fallback) : [])];
 }
@@ -113,6 +115,32 @@ function dependenciesFor(source, columns, fields) {
     if ((value == null || value === "") && dependency.optional) return [];
     return [[dependency.fieldName, value ?? ""]];
   }));
+}
+
+function availabilityRule(source) {
+  const rule = source?.availability;
+  const field = value => typeof value === 'string' && value.trim() && value.length <= 128 && !/[\u0000-\u001f]/.test(value);
+  const dependency = (value, target = false) => field(value?.fieldName) && (!target || field(value.targetField))
+    && (value.valueFrom === undefined || value.valueFrom === 'record')
+    && (value.optional === undefined || typeof value.optional === 'boolean')
+    && (value.transform === undefined || value.transform?.kind === 'split-first'
+      && typeof value.transform.separator === 'string' && value.transform.separator.length > 0
+      && value.transform.separator.length <= 20 && !/[\u0000-\u001f]/.test(value.transform.separator));
+  return ['related', 'filtered-list', 'dependent'].includes(source?.kind)
+    && rule?.kind === 'lookup-value-exists-or-blank'
+    && rule.whenBlank === 'source' && rule.whenFound === 'source' && rule.whenMissing === 'empty'
+    && field(rule.lookup?.listName) && field(rule.lookup?.matchField) && field(rule.lookup?.valueField)
+    && dependency(rule.lookup?.dependency) && field(rule.candidateField)
+    && (rule.candidateDependencies === undefined || Array.isArray(rule.candidateDependencies)
+      && rule.candidateDependencies.every(value => dependency(value, true)))
+    && (source.dependsOn === undefined || Array.isArray(source.dependsOn)
+      && source.dependsOn.every(value => dependency(value, true))) ? rule : null;
+}
+
+function dependencyText(value, dependency, transform = false) {
+  if (value != null && !['string', 'number', 'boolean'].includes(typeof value)) return null;
+  const text = String(value ?? '').trim();
+  return transform && dependency.transform ? text.split(dependency.transform.separator, 1)[0].trim() : text;
 }
 
 function typedColumns(rawColumns, entity, metadataOnly) {
@@ -226,6 +254,25 @@ export function createGalleryRecordData({ repository, siteKey = "personal", list
     contract = frozenCopy({ ...contract, formColumns: columns, ...(provisionLinked ? { readOnly: true } : {}) });
     const descriptors = new Map(columns.map(column => [column.name, column]));
     const relationshipOptions = new Map();
+    // Availability helpers may only use this record or values returned by its
+    // owned catalogs; a derived candidate also needs the matching lookup proof.
+    const optionValues = new Map(), availabilityProofs = new Map();
+    const provenDependency = (dependency, value, transform = false) => {
+      if (typeof value !== 'string' || !value.trim()) return false;
+      const original = dependencyText(recordValue(columns, item.fields, dependency.fieldName), dependency, transform);
+      if (original === value) return true;
+      if (dependency.valueFrom === 'record') return false;
+      const parent = columns.find(column => key(column.name) === key(dependency.fieldName) || key(column.label) === key(dependency.fieldName));
+      return parent?.editable && !parent.readOnly && !parent.hidden
+        && [...(optionValues.get(parent.name) || [])].some(candidate => dependencyText(candidate, dependency, transform) === value);
+    };
+    const provenDependencies = (source, values) => {
+      if (!values || typeof values !== 'object' || Array.isArray(values)) return false;
+      const dependencies = source.dependsOn || [];
+      return Object.keys(values).every(name => dependencies.some(dependency => dependency.fieldName === name))
+        && dependencies.every(dependency => !Object.hasOwn(values, dependency.fieldName)
+          ? dependency.optional === true : provenDependency(dependency, values[dependency.fieldName]));
+    };
     const allowedColumn = candidate => {
       const column = descriptors.get(candidate?.name);
       if (!column || !column.editable || column.readOnly || column.hidden) throw new Error("O campo solicitado não pertence ao formulário editável.");
@@ -242,9 +289,51 @@ export function createGalleryRecordData({ repository, siteKey = "personal", list
     const powerAppsOptionSearch = async (candidate, source, term, dependencies = {}, options = {}) => {
       const column = allowedColumn(candidate);
       const sources = (column.powerApps?.optionSources || []).flatMap(concreteSources);
-      if (!sources.some(proven => JSON.stringify(proven) === JSON.stringify(source))) throw new Error("A origem de opções do campo não foi comprovada.");
+      const sameSource = proven => JSON.stringify(proven) === JSON.stringify(source);
+      const original = sources.find(sameSource);
+      let lookupProof;
+      if (!original && !String(term ?? '').trim() && !column.powerApps?.ambiguous && !column.powerApps?.sharedControlAnchor) {
+        for (const proven of sources) {
+          const rule = availabilityRule(proven);
+          if (!rule) continue;
+          const lookupValue = source?.fixedFilters?.[0]?.value;
+          const lookupSource = { kind: 'filtered-list', ...(rule.lookup.entityId ? { entityId: rule.lookup.entityId } : {}),
+            listName: rule.lookup.listName, valueField: rule.lookup.valueField,
+            fixedFilters: [{ fieldName: rule.lookup.matchField, operator: 'eq', value: lookupValue }],
+            displayFields: [rule.lookup.valueField], searchFields: [rule.lookup.valueField] };
+          if (sameSource(lookupSource) && provenDependency(rule.lookup.dependency, lookupValue, true)
+            && provenDependencies(lookupSource, dependencies)) {
+            lookupProof = { proven, lookupValue };
+            break;
+          }
+          const { availability: _availability, ...base } = proven;
+          const candidateSource = value => ({ ...base,
+            ...(proven.kind === 'dependent' ? { dependsOn: rule.candidateDependencies?.length ? rule.candidateDependencies : proven.dependsOn } : {}),
+            fixedFilters: [...(proven.fixedFilters || []), { fieldName: rule.candidateField, operator: 'eq', value }] });
+          if ([...(availabilityProofs.get(proven)?.values() || [])].some(value => sameSource(candidateSource(value)))
+            && provenDependencies(source, dependencies)) {
+            lookupProof = { candidate: true };
+            break;
+          }
+        }
+      }
+      if (!original && !lookupProof) throw new Error("A origem de opções do campo não foi comprovada.");
       if (typeof repository.searchPowerAppsOptions !== "function") throw new Error("A origem de opções não está disponível.");
-      return repository.searchPowerAppsOptions(siteKey, source, term, dependencies, options);
+      if (lookupProof?.proven) availabilityProofs.get(lookupProof.proven)?.delete(lookupProof.lookupValue);
+      const results = await repository.searchPowerAppsOptions(siteKey, source, term, dependencies, options);
+      abort(options.signal);
+      if (lookupProof?.proven && Array.isArray(results) && results.length === 1
+        && ['string', 'number', 'boolean'].includes(typeof results[0]?.value)
+        && String(results[0].value).trim() && typeof results[0].label === 'string' && results[0].label.trim()) {
+        if (!availabilityProofs.has(lookupProof.proven)) availabilityProofs.set(lookupProof.proven, new Map());
+        availabilityProofs.get(lookupProof.proven).set(lookupProof.lookupValue, String(results[0].value).trim());
+      }
+      if (original && Array.isArray(results)) {
+        if (!optionValues.has(column.name)) optionValues.set(column.name, new Set());
+        for (const option of results) if (['string', 'number', 'boolean'].includes(typeof option?.value)
+          && String(option.value).trim() && typeof option.label === 'string' && option.label.trim()) optionValues.get(column.name).add(String(option.value).trim());
+      }
+      return results;
     };
     const isStatus = column => key(column.name) === 'STATUS' || key(column.label) === 'STATUS';
     const statusColumn = columns.find(isStatus) || (isPayrollSheet ? mapped.find(isStatus) : null);
@@ -286,7 +375,37 @@ export function createGalleryRecordData({ repository, siteKey = "personal", list
     return context;
   }
 
-  async function validateClosed(column, value, baseline, columns, merged) {
+  async function validateAvailability(column, source, columns, merged, signal) {
+    if (source.availability === undefined) return;
+    const failure = () => new Error(`A disponibilidade de ${column.label} não pôde ser comprovada.`);
+    const rule = availabilityRule(source);
+    if (!rule || column.powerApps?.ambiguous || column.powerApps?.sharedControlAnchor) throw failure();
+    const lookupValue = dependencyText(recordValue(columns, merged, rule.lookup.dependency.fieldName), rule.lookup.dependency, true);
+    if (lookupValue === null) throw failure();
+    if (!lookupValue) return; // The owned rule explicitly allows its base source when blank.
+    const requestOptions = { limit: 20, ...(signal ? { signal } : {}) };
+    const lookupSource = { kind: 'filtered-list', ...(rule.lookup.entityId ? { entityId: rule.lookup.entityId } : {}),
+      listName: rule.lookup.listName, valueField: rule.lookup.valueField,
+      fixedFilters: [{ fieldName: rule.lookup.matchField, operator: 'eq', value: lookupValue }],
+      displayFields: [rule.lookup.valueField], searchFields: [rule.lookup.valueField] };
+    const validOptions = options => Array.isArray(options) && options.length > 0 && options.every(option =>
+      ['string', 'number', 'boolean'].includes(typeof option?.value) && String(option.value).trim()
+      && typeof option.label === 'string' && option.label.trim());
+    // Re-read availability from its owned sources; opening a picker is not a
+    // proof that the same option remains available at submission time.
+    const lookupOptions = await repository.searchPowerAppsOptions(siteKey, lookupSource, '', {}, requestOptions);
+    abort(signal);
+    if (!validOptions(lookupOptions) || lookupOptions.length !== 1) throw failure();
+    const { availability: _availability, ...base } = source;
+    const candidateSource = { ...base,
+      ...(source.kind === 'dependent' ? { dependsOn: rule.candidateDependencies?.length ? rule.candidateDependencies : source.dependsOn } : {}),
+      fixedFilters: [...(source.fixedFilters || []), { fieldName: rule.candidateField, operator: 'eq', value: String(lookupOptions[0].value).trim() }] };
+    const candidateOptions = await repository.searchPowerAppsOptions(siteKey, candidateSource, '', dependenciesFor(candidateSource, columns, merged), requestOptions);
+    abort(signal);
+    if (!validOptions(candidateOptions)) throw failure();
+  }
+
+  async function validateClosed(column, value, baseline, columns, merged, signal) {
     const values = selections(value, column);
     if (!values.length) return;
     if (["lookup", "person"].includes(column.control)) {
@@ -306,12 +425,13 @@ export function createGalleryRecordData({ repository, siteKey = "personal", list
     const sources = column.powerApps?.optionSources || [];
     const literal = (column.powerApps?.choices?.length ? column.powerApps.choices : column.choices) || [];
     const pending = values.filter(selected => !literal.map(String).includes(selected));
-    if (!pending.length) return;
     const remote = sources.map(source => resolvedSource(source, columns, merged)).filter(source => ["related", "filtered-list", "dependent"].includes(source?.kind));
+    if (!pending.length && !remote.some(source => source.availability !== undefined)) return;
     if (remote.length !== 1 || typeof repository.searchPowerAppsOptions !== "function") throw new Error(`Selecione uma opção válida para ${column.label}.`);
     const source = remote[0], dependencies = dependenciesFor(source, columns, merged);
+    await validateAvailability(column, source, columns, merged, signal);
     for (const selected of pending) {
-      const options = await repository.searchPowerAppsOptions(siteKey, source, selected, dependencies, { limit: 20 });
+      const options = await repository.searchPowerAppsOptions(siteKey, source, selected, dependencies, { limit: 20, exactValue: true });
       if (!options.some(option => String(option.value) === selected)) throw new Error(`Selecione uma opção válida para ${column.label}.`);
     }
   }
@@ -481,7 +601,7 @@ export function createGalleryRecordData({ repository, siteKey = "personal", list
         const before = recordValue(columns, item.fields, dependency.fieldName), after = recordValue(columns, merged, dependency.fieldName);
         return JSON.stringify(before) !== JSON.stringify(after);
       });
-      if (Object.hasOwn(changed, name) || dependencyChanged) await validateClosed(column, merged[name], baseline, columns, merged);
+      if (Object.hasOwn(changed, name) || dependencyChanged) await validateClosed(column, merged[name], baseline, columns, merged, options.signal);
     }
     let eTag = version(item.eTag);
     if (baseline.sheetAttachments) {

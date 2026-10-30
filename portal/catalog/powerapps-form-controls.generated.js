@@ -5177,7 +5177,7 @@ const POWERAPPS_FORM_CONTROLS = deepFreeze({
           "kind": "related",
           "entityId": "lancamentos",
           "listName": "LANCAMENTOS",
-          "valueField": "DisplayText",
+          "valueField": "ID",
           "formula": "=AddColumns( Sort(LANCAMENTOS,ID,SortOrder.Descending), DisplayText, Text(ID) & \" - \" & FORNECEDOR & \" - \" & Text('DATA PGTO EFETUADO', \"[$-pt-BR]dd/mm/yyyy\") )",
           "displayFields": [
             "DisplayText"
@@ -5207,7 +5207,8 @@ const POWERAPPS_FORM_CONTROLS = deepFreeze({
                 },
                 {
                   "kind": "field",
-                  "fieldName": "DATA PGTO EFETUADO"
+                  "fieldName": "DATA PGTO EFETUADO",
+                  "format": "date-pt-BR"
                 }
               ]
             }
@@ -10700,7 +10701,7 @@ const POWERAPPS_FORM_CONTROLS = deepFreeze({
           "kind": "dependent",
           "entityId": "compras",
           "listName": "LANCAMENTOCOMPRAS",
-          "valueField": "Exibir",
+          "valueField": "ID",
           "formula": "=SortByColumns( AddColumns( Filter( LANCAMENTOCOMPRAS, FILIAL = DataCardValue251_1.Selected.FILIAL ), Exibir, Text(ID) & \" - \" & NOME & \" - \" & If( IsBlank(MOTIVOBAIXA), \"CONTRATO ATIVO\", MOTIVOBAIXA ) ), \"ID\", SortOrder.Ascending )",
           "dependsOn": [
             {
@@ -10971,7 +10972,7 @@ const POWERAPPS_FORM_CONTROLS = deepFreeze({
           "kind": "dependent",
           "entityId": "documentos-operacionais",
           "listName": "DOCUMENTOS_1",
-          "valueField": "Exibir",
+          "valueField": "ID",
           "formula": "=AddColumns( Filter( DOCUMENTOS_1, FILIAL = DataCardValue251_1.Selected.FILIAL, TIPODOCUMENTO = \"ESCRITURA TRANSFERÊNCIA OU CONTRATO CAIXA\" ), Exibir, Text(ID) & \" - \" & PESSOARELACIONADA & \" (\" & IMOVEL & \")\" )",
           "fixedFilters": [
             {
@@ -11058,7 +11059,7 @@ const POWERAPPS_FORM_CONTROLS = deepFreeze({
           "kind": "dependent",
           "entityId": "documentos-operacionais",
           "listName": "DOCUMENTOS_1",
-          "valueField": "Exibir",
+          "valueField": "ID",
           "formula": "=AddColumns( Filter( DOCUMENTOS_1, FILIAL = DataCardValue251_1.Selected.FILIAL, TIPODOCUMENTO = \"DETALHAMENTOS FISCAIS E COMPROVANTES\", STATUS=\"SUBMETIDO\" ), Exibir, Text(ID) & \" - \" & PESSOARELACIONADA & \" (\" & IMOVEL & \")\" )",
           "fixedFilters": [
             {
@@ -11249,7 +11250,7 @@ const POWERAPPS_FORM_CONTROLS = deepFreeze({
           "kind": "dependent",
           "entityId": "documentos-operacionais",
           "listName": "DOCUMENTOS_1",
-          "valueField": "Exibir",
+          "valueField": "ID",
           "formula": "=AddColumns( Filter( DOCUMENTOS_1, FILIAL = DataCardValue251_1.Selected.FILIAL, TIPODOCUMENTO = \"MATRÍCULA\", STATUS=\"SUBMETIDO\" ), Exibir, Text(ID) & \" - \" & PESSOARELACIONADA & \" (\" & IMOVEL & \")\" )",
           "fixedFilters": [
             {
@@ -11608,7 +11609,7 @@ const POWERAPPS_FORM_CONTROLS = deepFreeze({
           "kind": "dependent",
           "entityId": "documentos-operacionais",
           "listName": "DOCUMENTOS_1",
-          "valueField": "Exibir",
+          "valueField": "ID",
           "formula": "=AddColumns( Filter( DOCUMENTOS_1, FILIAL = DataCardValue251_1.Selected.FILIAL, TIPODOCUMENTO = \"PROPOSTA DE COMPRA E VENDA\", STATUS=\"SUBMETIDO\" ), Exibir, Text(ID) & \" - \" & PESSOARELACIONADA & \" (\" & IMOVEL & \")\" )",
           "fixedFilters": [
             {
@@ -15884,50 +15885,6 @@ const POWERAPPS_FORM_CONTROLS = deepFreeze({
       },
       "choices": [],
       "optionSources": [
-        {
-          "kind": "related",
-          "entityId": "orcamentos",
-          "listName": "ORCAMENTOS",
-          "valueField": "EXIBICAO",
-          "formula": "=SortByColumns( AddColumns( ORCAMENTOS, EXIBICAO, Text(ID) & \" - \" & Coalesce(FORNECEDOR, \"\") & \" (\" & Coalesce(ETAPA, \"\") & \")\" ), \"ID\", SortOrder.Descending )",
-          "displayFields": [
-            "EXIBICAO"
-          ],
-          "searchFields": [
-            "EXIBICAO"
-          ],
-          "computedFields": [
-            {
-              "fieldName": "EXIBICAO",
-              "parts": [
-                {
-                  "kind": "field",
-                  "fieldName": "ID"
-                },
-                {
-                  "kind": "literal",
-                  "value": " - "
-                },
-                {
-                  "kind": "field",
-                  "fieldName": "FORNECEDOR"
-                },
-                {
-                  "kind": "literal",
-                  "value": " ("
-                },
-                {
-                  "kind": "field",
-                  "fieldName": "ETAPA"
-                },
-                {
-                  "kind": "literal",
-                  "value": ")"
-                }
-              ]
-            }
-          ]
-        },
         {
           "kind": "related",
           "entityId": "orcamentos",
@@ -53704,7 +53661,7 @@ const POWERAPPS_FORM_VARIANTS = deepFreeze({
               "kind": "related",
               "entityId": "lancamentos",
               "listName": "LANCAMENTOS",
-              "valueField": "DisplayText",
+              "valueField": "ID",
               "formula": "=AddColumns( Sort(LANCAMENTOS,ID,SortOrder.Descending), DisplayText, Text(ID) & \" - \" & FORNECEDOR & \" - \" & Text('DATA PGTO EFETUADO', \"[$-pt-BR]dd/mm/yyyy\") )",
               "displayFields": [
                 "DisplayText"
@@ -53734,7 +53691,8 @@ const POWERAPPS_FORM_VARIANTS = deepFreeze({
                     },
                     {
                       "kind": "field",
-                      "fieldName": "DATA PGTO EFETUADO"
+                      "fieldName": "DATA PGTO EFETUADO",
+                      "format": "date-pt-BR"
                     }
                   ]
                 }
@@ -53784,7 +53742,7 @@ const POWERAPPS_FORM_VARIANTS = deepFreeze({
                   "kind": "related",
                   "entityId": "lancamentos",
                   "listName": "LANCAMENTOS",
-                  "valueField": "DisplayText",
+                  "valueField": "ID",
                   "formula": "=AddColumns( Sort(LANCAMENTOS,ID,SortOrder.Descending), DisplayText, Text(ID) & \" - \" & FORNECEDOR & \" - \" & Text('DATA PGTO EFETUADO', \"[$-pt-BR]dd/mm/yyyy\") )",
                   "displayFields": [
                     "DisplayText"
@@ -53814,7 +53772,8 @@ const POWERAPPS_FORM_VARIANTS = deepFreeze({
                         },
                         {
                           "kind": "field",
-                          "fieldName": "DATA PGTO EFETUADO"
+                          "fieldName": "DATA PGTO EFETUADO",
+                          "format": "date-pt-BR"
                         }
                       ]
                     }
@@ -91889,7 +91848,7 @@ const POWERAPPS_FORM_VARIANTS = deepFreeze({
               "kind": "dependent",
               "entityId": "compras",
               "listName": "LANCAMENTOCOMPRAS",
-              "valueField": "Exibir",
+              "valueField": "ID",
               "formula": "=SortByColumns( AddColumns( Filter( LANCAMENTOCOMPRAS, FILIAL = DataCardValue251_1.Selected.FILIAL ), Exibir, Text(ID) & \" - \" & NOME & \" - \" & If( IsBlank(MOTIVOBAIXA), \"CONTRATO ATIVO\", MOTIVOBAIXA ) ), \"ID\", SortOrder.Ascending )",
               "dependsOn": [
                 {
@@ -91977,7 +91936,7 @@ const POWERAPPS_FORM_VARIANTS = deepFreeze({
                   "kind": "dependent",
                   "entityId": "compras",
                   "listName": "LANCAMENTOCOMPRAS",
-                  "valueField": "Exibir",
+                  "valueField": "ID",
                   "formula": "=SortByColumns( AddColumns( Filter( LANCAMENTOCOMPRAS, FILIAL = DataCardValue251_1.Selected.FILIAL ), Exibir, Text(ID) & \" - \" & NOME & \" - \" & If( IsBlank(MOTIVOBAIXA), \"CONTRATO ATIVO\", MOTIVOBAIXA ) ), \"ID\", SortOrder.Ascending )",
                   "dependsOn": [
                     {
@@ -92393,7 +92352,7 @@ const POWERAPPS_FORM_VARIANTS = deepFreeze({
               "kind": "dependent",
               "entityId": "documentos-operacionais",
               "listName": "DOCUMENTOS_1",
-              "valueField": "Exibir",
+              "valueField": "ID",
               "formula": "=AddColumns( Filter( DOCUMENTOS_1, FILIAL = DataCardValue251_1.Selected.FILIAL, TIPODOCUMENTO = \"ESCRITURA TRANSFERÊNCIA OU CONTRATO CAIXA\" ), Exibir, Text(ID) & \" - \" & PESSOARELACIONADA & \" (\" & IMOVEL & \")\" )",
               "fixedFilters": [
                 {
@@ -92491,7 +92450,7 @@ const POWERAPPS_FORM_VARIANTS = deepFreeze({
                   "kind": "dependent",
                   "entityId": "documentos-operacionais",
                   "listName": "DOCUMENTOS_1",
-                  "valueField": "Exibir",
+                  "valueField": "ID",
                   "formula": "=AddColumns( Filter( DOCUMENTOS_1, FILIAL = DataCardValue251_1.Selected.FILIAL, TIPODOCUMENTO = \"ESCRITURA TRANSFERÊNCIA OU CONTRATO CAIXA\" ), Exibir, Text(ID) & \" - \" & PESSOARELACIONADA & \" (\" & IMOVEL & \")\" )",
                   "fixedFilters": [
                     {
@@ -92574,7 +92533,7 @@ const POWERAPPS_FORM_VARIANTS = deepFreeze({
               "kind": "dependent",
               "entityId": "documentos-operacionais",
               "listName": "DOCUMENTOS_1",
-              "valueField": "Exibir",
+              "valueField": "ID",
               "formula": "=AddColumns( Filter( DOCUMENTOS_1, FILIAL = DataCardValue251_1.Selected.FILIAL, TIPODOCUMENTO = \"DETALHAMENTOS FISCAIS E COMPROVANTES\", STATUS=\"SUBMETIDO\" ), Exibir, Text(ID) & \" - \" & PESSOARELACIONADA & \" (\" & IMOVEL & \")\" )",
               "fixedFilters": [
                 {
@@ -92677,7 +92636,7 @@ const POWERAPPS_FORM_VARIANTS = deepFreeze({
                   "kind": "dependent",
                   "entityId": "documentos-operacionais",
                   "listName": "DOCUMENTOS_1",
-                  "valueField": "Exibir",
+                  "valueField": "ID",
                   "formula": "=AddColumns( Filter( DOCUMENTOS_1, FILIAL = DataCardValue251_1.Selected.FILIAL, TIPODOCUMENTO = \"DETALHAMENTOS FISCAIS E COMPROVANTES\", STATUS=\"SUBMETIDO\" ), Exibir, Text(ID) & \" - \" & PESSOARELACIONADA & \" (\" & IMOVEL & \")\" )",
                   "fixedFilters": [
                     {
@@ -92974,7 +92933,7 @@ const POWERAPPS_FORM_VARIANTS = deepFreeze({
               "kind": "dependent",
               "entityId": "documentos-operacionais",
               "listName": "DOCUMENTOS_1",
-              "valueField": "Exibir",
+              "valueField": "ID",
               "formula": "=AddColumns( Filter( DOCUMENTOS_1, FILIAL = DataCardValue251_1.Selected.FILIAL, TIPODOCUMENTO = \"MATRÍCULA\", STATUS=\"SUBMETIDO\" ), Exibir, Text(ID) & \" - \" & PESSOARELACIONADA & \" (\" & IMOVEL & \")\" )",
               "fixedFilters": [
                 {
@@ -93077,7 +93036,7 @@ const POWERAPPS_FORM_VARIANTS = deepFreeze({
                   "kind": "dependent",
                   "entityId": "documentos-operacionais",
                   "listName": "DOCUMENTOS_1",
-                  "valueField": "Exibir",
+                  "valueField": "ID",
                   "formula": "=AddColumns( Filter( DOCUMENTOS_1, FILIAL = DataCardValue251_1.Selected.FILIAL, TIPODOCUMENTO = \"MATRÍCULA\", STATUS=\"SUBMETIDO\" ), Exibir, Text(ID) & \" - \" & PESSOARELACIONADA & \" (\" & IMOVEL & \")\" )",
                   "fixedFilters": [
                     {
@@ -93721,7 +93680,7 @@ const POWERAPPS_FORM_VARIANTS = deepFreeze({
               "kind": "dependent",
               "entityId": "documentos-operacionais",
               "listName": "DOCUMENTOS_1",
-              "valueField": "Exibir",
+              "valueField": "ID",
               "formula": "=AddColumns( Filter( DOCUMENTOS_1, FILIAL = DataCardValue251_1.Selected.FILIAL, TIPODOCUMENTO = \"PROPOSTA DE COMPRA E VENDA\", STATUS=\"SUBMETIDO\" ), Exibir, Text(ID) & \" - \" & PESSOARELACIONADA & \" (\" & IMOVEL & \")\" )",
               "fixedFilters": [
                 {
@@ -93824,7 +93783,7 @@ const POWERAPPS_FORM_VARIANTS = deepFreeze({
                   "kind": "dependent",
                   "entityId": "documentos-operacionais",
                   "listName": "DOCUMENTOS_1",
-                  "valueField": "Exibir",
+                  "valueField": "ID",
                   "formula": "=AddColumns( Filter( DOCUMENTOS_1, FILIAL = DataCardValue251_1.Selected.FILIAL, TIPODOCUMENTO = \"PROPOSTA DE COMPRA E VENDA\", STATUS=\"SUBMETIDO\" ), Exibir, Text(ID) & \" - \" & PESSOARELACIONADA & \" (\" & IMOVEL & \")\" )",
                   "fixedFilters": [
                     {
@@ -122892,7 +122851,7 @@ const POWERAPPS_FORM_VARIANTS = deepFreeze({
               "kind": "related",
               "entityId": "orcamentos",
               "listName": "ORCAMENTOS",
-              "valueField": "EXIBICAO",
+              "valueField": "ID",
               "formula": "=SortByColumns( AddColumns( ORCAMENTOS, EXIBICAO, Text(ID) & \" - \" & Coalesce(FORNECEDOR, \"\") & \" (\" & Coalesce(ETAPA, \"\") & \")\" ), \"ID\", SortOrder.Descending )",
               "displayFields": [
                 "EXIBICAO"
@@ -122976,7 +122935,7 @@ const POWERAPPS_FORM_VARIANTS = deepFreeze({
                   "kind": "related",
                   "entityId": "orcamentos",
                   "listName": "ORCAMENTOS",
-                  "valueField": "EXIBICAO",
+                  "valueField": "ID",
                   "formula": "=SortByColumns( AddColumns( ORCAMENTOS, EXIBICAO, Text(ID) & \" - \" & Coalesce(FORNECEDOR, \"\") & \" (\" & Coalesce(ETAPA, \"\") & \")\" ), \"ID\", SortOrder.Descending )",
                   "displayFields": [
                     "EXIBICAO"

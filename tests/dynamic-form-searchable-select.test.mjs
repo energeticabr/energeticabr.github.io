@@ -1356,7 +1356,78 @@ test("origem conditional com fallback vazio permanece fechada sem consultar outr
   await new Promise(resolve => setTimeout(resolve, 5));
   assert.equal(searches, 0);
   assert.equal(combo.listbox.children.length, 0);
+  assert.equal(fixture.powerAppsStatus.textContent, "Nenhuma opção encontrada.");
   controller.cleanup();
+});
+
+test("documents.NUMCONTRATO abre branches comprovadas com fallback empty e fecha ao sair delas", async () => {
+  const documentEntity = ENTITIES.find(item => item.id === "documentos-operacionais");
+  const column = resolvePowerAppsUiContract(documentEntity, [{
+    name: "NUMCONTRATO", label: "Número do contrato", control: "text", editable: true, hidden: false,
+  }], { mode: "edit" }).formColumns[0];
+  const values = { NUMCONTRATO: "41", TIPOHOMOLOGACAO: "HOMOLOGAÇÃO CONTRATO", FILIAL: "MATRIZ", PESSOARELACIONADA: "FORNECEDOR A" };
+  const fixture = choiceFormFixture("41", { name: "NUMCONTRATO", dependencies: values });
+  const calls = [];
+  const markup = formMarkup({ entity: documentEntity, columns: [column], mode: "edit", values });
+  // The real markup must mount the selector; the binding fixture alone would
+  // conceal the original failure by supplying a pre-existing combo mount.
+  assert.match(markup, /data-searchable-field="NUMCONTRATO"/);
+  assert.doesNotMatch(markup, /<select[^>]*name="NUMCONTRATO"[^>]*disabled/);
+  const controller = renderDynamicForm(fixture.root, {
+    entity: documentEntity, columns: [column], mode: "edit", values,
+    powerAppsOptionDebounceMs: 0,
+    async powerAppsOptionSearch(_column, source, term, dependencies) {
+      calls.push({ source, term, dependencies });
+      return [{ value: "42", label: "42 - CONTRATO COMPROVADO" }];
+    },
+  });
+  try {
+    const combo = mountedSearchable(fixture);
+    combo.input.dispatch("focus");
+    await new Promise(resolve => setTimeout(resolve, 10));
+    assert.equal(calls.length, 1);
+    assert.equal(calls[0].source.listName, "EMPREITEIRO");
+    assert.deepEqual(calls[0].source.fixedFilters, [{ fieldName: "STATUS", operator: "eq", value: "ATIVO" }]);
+    assert.deepEqual(calls[0].dependencies, { PESSOARELACIONADA: "FORNECEDOR A", FILIAL: "MATRIZ" });
+    assert.ok(combo.listbox.children.length > 0);
+    combo.input.dispatch("keydown", { key: "ArrowUp" });
+    combo.input.dispatch("keydown", { key: "Enter" });
+    assert.equal(fixture.native.value, "42");
+
+    const selector = fixture.dependencyControls.get("TIPOHOMOLOGACAO");
+    selector.value = "HOMOLOGAÇÃO FILIAL";
+    selector.dispatch("change");
+    await new Promise(resolve => setTimeout(resolve, 10));
+    assert.equal(calls.length, 1, "empty fallback must never reach a list provider");
+    assert.equal(fixture.native.value, "");
+    assert.equal(combo.listbox.children.length, 0);
+    assert.equal(fixture.powerAppsStatus.textContent, "Nenhuma opção encontrada.");
+
+    selector.value = "HOMOLOGAÇÃO COMERCIAL";
+    selector.dispatch("change");
+    await new Promise(resolve => setTimeout(resolve, 10));
+    assert.equal(calls.length, 2);
+    assert.equal(calls[1].source.listName, "LANCAMENTOCOMPRAS");
+    assert.deepEqual(calls[1].dependencies, { FILIAL: "MATRIZ", PESSOARELACIONADA: "FORNECEDOR A" });
+    combo.input.dispatch("focus");
+    await new Promise(resolve => setTimeout(resolve, 10));
+    assert.ok(combo.listbox.children.length > 0);
+  } finally { controller.cleanup(); }
+});
+
+test("fallback empty não libera branches malformadas nem fallbacks desconhecidos", () => {
+  const column = resolvePowerAppsUiContract(ENTITIES.find(item => item.id === "documentos-operacionais"), [{
+    name: "NUMCONTRATO", control: "text", editable: true, hidden: false,
+  }], { mode: "edit" }).formColumns[0];
+  const source = column.powerApps.optionSources[0];
+  for (const malformed of [
+    { ...source, fallback: { kind: "unresolved" } },
+    { ...source, branches: [{ when: { operator: "eq", values: ["HOMOLOGAÇÃO CONTRATO"] }, source: { kind: "dependent", listName: "OTHER", valueField: "ID" } }] },
+  ]) {
+    const markup = formMarkup({ entity, mode: "edit", columns: [{ ...column, powerApps: { ...column.powerApps, optionSources: [malformed] } }] });
+    assert.doesNotMatch(markup, /data-searchable-field="NUMCONTRATO"/);
+    assert.match(markup, /<select[^>]*name="NUMCONTRATO"[^>]*disabled/);
+  }
 });
 
 test("Na criação: ComboBox conditional múltiplo preserva os IDs atuais ao pesquisar e adicionar", async () => {

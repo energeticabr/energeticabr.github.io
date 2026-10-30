@@ -43,6 +43,8 @@ function fixture() {
       } }));
       const term = /startswith\([^,]+,'([^']+)'\)/.exec(filter)?.[1];
       if (term) return { value: rows.filter(row => row.fields[internalField].startsWith(term)) };
+      const exact = /^fields\/([A-Za-z0-9_]+) eq '([^']+)'$/.exec(filter);
+      if (exact) { assert.equal(exact[1],internalField); return { value:rows.filter(row=>row.fields[internalField]===exact[2]) }; }
       if (url.searchParams.has('$skiptoken')) return { value: rows.slice(20) };
       return { value: rows.slice(0,20), '@odata.nextLink': `https://graph.microsoft.com/v1.0/sites/test-site/lists/${list.id}/items?$skiptoken=page2` };
     }

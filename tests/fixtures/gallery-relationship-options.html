@@ -1,0 +1,263 @@
+<!doctype html>
+<html lang="pt-BR">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1">
+  <meta http-equiv="Content-Security-Policy" content="default-src 'none'; script-src 'self' 'unsafe-inline'; style-src 'self' 'unsafe-inline'; img-src 'self' data:; font-src 'self'; connect-src 'none'; form-action 'none'; base-uri 'none'">
+  <title>Editor de galeria · relações fictícias</title>
+  <script type="importmap">{"imports":{"decimal.js":"../../apps/energetico-mobile/node_modules/decimal.js/decimal.mjs"}}</script>
+  <script>
+    window.addEventListener('error', event => {
+      document.documentElement.dataset.layout = JSON.stringify({ status: 'failed', error: event.message || `Resource failed: ${event.target?.src || event.target?.href}` });
+    }, true);
+    window.addEventListener('unhandledrejection', event => {
+      document.documentElement.dataset.layout = JSON.stringify({ status: 'failed', error: String(event.reason?.stack || event.reason) });
+    });
+  </script>
+  <link rel="stylesheet" href="../../apps/energetico-mobile/src/styles.css">
+  <link rel="stylesheet" href="../../portal/styles/admin.css">
+  <link rel="stylesheet" href="../../apps/energetico-mobile/src/ui/gallery-record-actions.css">
+  <style>
+    #gallery { padding: 16px; }
+    #proof { position: fixed; inset: auto 0 0; z-index: 10000; padding: 8px; background: #e1f4e8; color: #14532d; font: 700 12px system-ui; text-align: center; pointer-events: none; }
+  </style>
+</head>
+<body>
+  <main id="gallery"><h1>Relações fictícias</h1></main>
+  <output id="proof">DADOS FICTÍCIOS · nenhuma conexão externa</output>
+  <script type="module">
+    import { createSharePointRepository } from '../../portal/data/sharepoint-repository.js';
+    import { createGalleryRecordData } from '../../apps/energetico-mobile/src/chat/gallery-record-data.js';
+    import { createGalleryRecordActions } from '../../apps/energetico-mobile/src/ui/gallery-record-actions.js';
+
+    const sourceId = '11111111-1111-4111-8111-111111111111';
+    const supplierId = '22222222-2222-4222-8222-222222222222';
+    const site = { host: 'tenant.sharepoint.com', path: '/sites/relationship-fixture', readTransport: 'graph', writeTransport: 'graph' };
+    const definitions = [
+      { field: 'FORNECEDOR', kind: 'lookup', prefix: 'FORNECEDOR', multiple: false },
+      { field: 'RESPONSAVEL', kind: 'person', prefix: 'PESSOA', multiple: false },
+      { field: 'FORNECEDORES', kind: 'lookup', prefix: 'FORNECEDOR', multiple: true },
+      { field: 'RESPONSAVEIS', kind: 'person', prefix: 'PESSOA', multiple: true },
+    ];
+    const name = (prefix, id) => `${prefix} ${String(id).padStart(2, '0')}`;
+    const fields = Object.fromEntries(definitions.flatMap(definition => [
+      [`${definition.field}LookupId`, definition.multiple ? [1] : 1],
+      [`${definition.field}LookupValue`, definition.multiple ? [name(definition.prefix, 1)] : name(definition.prefix, 1)],
+    ]));
+    const record = { id: '42', eTag: '"relationship-v1"', fields };
+    const columns = definitions.map(definition => ({ name: definition.field, displayName: definition.field, required: true,
+      ...(definition.kind === 'lookup'
+        ? { lookup: { listId: supplierId, columnName: 'Title', allowMultipleValues: definition.multiple } }
+        : { personOrGroup: { chooseFromType: 'peopleOnly', allowMultipleSelection: definition.multiple } }),
+    }));
+    const calls = [], writes = [], checks = [], errors = [], networkViolations = [];
+    let held, submitCount = 0, changedCount = 0, contextCount = 0;
+    const check = (condition, message) => { if (!condition) throw new Error(message); };
+    const same = (actual, expected, message) => check(JSON.stringify(actual) === JSON.stringify(expected), `${message}: ${JSON.stringify(actual)}`);
+    const sleep = ms => new Promise(resolve => setTimeout(resolve, ms));
+    const frames = () => new Promise(resolve => requestAnimationFrame(() => requestAnimationFrame(resolve)));
+    async function until(predicate, message) {
+      const deadline = performance.now() + 6000;
+      while (!predicate()) {
+        if (performance.now() > deadline) throw new Error(`Timeout: ${message}`);
+        await sleep(15);
+      }
+    }
+    document.addEventListener('securitypolicyviolation', event => networkViolations.push({ directive: event.violatedDirective, uri: event.blockedURI }));
+    window.addEventListener('error', event => errors.push(event.message));
+    window.addEventListener('unhandledrejection', event => errors.push(String(event.reason?.stack || event.reason)));
+
+    async function catalogPage(kind, rawPath, options) {
+      const url = new URL(rawPath, kind === 'lookup' ? 'https://graph.microsoft.com/v1.0/' : `https://${site.host}${site.path}/`);
+      const filter = url.searchParams.get('$filter') || '';
+      const term = /startswith\((?:fields\/)?(?:Title|Email),'([^']*)'\)/.exec(filter)?.[1] || '';
+      const call = { transport: kind === 'lookup' ? 'graph' : 'rest', kind, path: rawPath, filter, term, top: url.searchParams.get('$top'), page2: url.searchParams.has('$skiptoken') };
+      calls.push(call);
+      const rows = Array.from({ length: 25 }, (_, index) => kind === 'lookup'
+        ? { id: String(index + 1), fields: { Title: name('FORNECEDOR', index + 1) } }
+        : { Id: index + 1, Title: name('PESSOA', index + 1), Email: `pessoa${index + 1}@example.test`, LoginName: `fixture-user-${index + 1}` });
+      // Emulate the diagnosed SharePoint behavior, never JS startsWith('').
+      if (/startswith\([^,]+,''\)/.test(filter)) return { value: [] };
+      if (filter) {
+        check(term && (kind === 'lookup'
+          ? filter === `startswith(fields/Title,'${term}')`
+          : filter === `startswith(Title,'${term}') or startswith(Email,'${term}')`), 'Unexpected relationship predicate');
+        if (held?.kind === kind && held.term === term && !held.started) {
+          const pending = held;
+          pending.started = true; pending.signal = options.signal;
+          await new Promise(resolve => { pending.release = resolve; });
+          // Ignore abort to exercise production generation protection.
+          pending.completed = true;
+        }
+        return { value: rows.filter(row => kind === 'lookup' ? row.fields.Title.startsWith(term) : row.Title.startsWith(term) || row.Email.startsWith(term)) };
+      }
+      if (call.page2) return { value: rows.slice(20) };
+      const next = kind === 'lookup'
+        ? `https://graph.microsoft.com/v1.0/sites/fixture-site/lists/${supplierId}/items?$skiptoken=page2`
+        : `https://${site.host}${site.path}/_api/web/siteusers?$skiptoken=page2`;
+      return { value: rows.slice(0, 20), [kind === 'lookup' ? '@odata.nextLink' : 'odata.nextLink']: next };
+    }
+    // These two in-memory transports are the only mocks. No credentials,
+    // network client, ready-made editor context or real writes are available.
+    const graph = { async request(rawPath, options = {}) {
+      const url = new URL(rawPath, 'https://graph.microsoft.com/v1.0/');
+      check(url.origin === 'https://graph.microsoft.com', 'Unexpected Graph origin');
+      const method = options.method || 'GET';
+      if (method === 'PATCH') {
+        check(url.pathname.endsWith(`/lists/${sourceId}/items/42/fields`), 'Only fictitious item 42 may be patched');
+        check(options.headers?.['If-Match'] === record.eTag, 'PATCH must preserve the loaded version');
+        check(Object.keys(options.body).every(field => definitions.some(definition => `${definition.field}LookupId` === field)), 'PATCH must contain only LookupId fields');
+        writes.push({ path: rawPath, body: structuredClone(options.body), ifMatch: options.headers['If-Match'] });
+        for (const definition of definitions) {
+          const key = `${definition.field}LookupId`;
+          if (!Object.hasOwn(options.body, key)) continue;
+          record.fields[key] = structuredClone(options.body[key]);
+          record.fields[`${definition.field}LookupValue`] = definition.multiple ? options.body[key].map(id => name(definition.prefix, id)) : name(definition.prefix, options.body[key]);
+        }
+        return structuredClone(record.fields);
+      }
+      check(method === 'GET', `Forbidden Graph method: ${method}`);
+      if (url.pathname.endsWith('/lists')) return { value: [{ id: sourceId, displayName: 'FIXTURE RELATIONSHIPS', list: { template: 'genericList' } }] };
+      if (url.pathname.endsWith(`/lists/${sourceId}/columns`)) return { value: columns };
+      if (url.pathname.endsWith(`/lists/${supplierId}/columns`)) return { value: [{ name: 'Title', displayName: 'Fornecedor', indexed: true, text: {} }] };
+      if (url.pathname.endsWith(`/lists/${sourceId}/items/42`)) return structuredClone(record);
+      if (url.pathname.endsWith(`/lists/${supplierId}/items`)) return catalogPage('lookup', rawPath, options);
+      if (/\/sites\/tenant\.sharepoint\.com:/.test(url.pathname)) return { id: 'fixture-site' };
+      throw new Error(`Unmocked Graph request: ${method} ${rawPath}`);
+    } };
+    const restTransport = { async request(config, rawPath, options = {}) {
+      check(config.host === site.host && config.path === site.path, 'REST must use the same fictitious site');
+      check((options.method || 'GET') === 'GET', 'REST may only read fictitious people');
+      const url = new URL(rawPath, `https://${site.host}${site.path}/`);
+      check(url.origin === `https://${site.host}` && url.pathname.endsWith('/_api/web/siteusers'), 'Unexpected REST endpoint');
+      return catalogPage('person', rawPath, options);
+    } };
+    const repository = createSharePointRepository(graph, { company: site }, { restTransport });
+    check(Object.isFrozen(repository), 'Repository must be the real frozen repository');
+    const entity = Object.freeze({ id: 'fixture-native-relationships', title: 'RELAÇÕES FICTÍCIAS', siteKey: 'company', listNames: ['FIXTURE RELATIONSHIPS'], immutableFields: [], messageFields: [] });
+    const data = createGalleryRecordData({ repository, siteKey: 'company', listName: 'FIXTURE RELATIONSHIPS', metadataOnly: true, entity,
+      resolveList: () => repository.resolveList('company', ['FIXTURE RELATIONSHIPS']),
+    });
+    const host = document.querySelector('#gallery');
+    const actions = createGalleryRecordActions({ document, host, actions: ['edit'], galleryTitle: entity.title,
+      loadEditor: async (...args) => {
+        const context = await data.loadEditor(args[0], { ...args[1], includeAttachments: false });
+        check(Object.isFrozen(context) && context.contract.metadataOnly, 'Real service must produce the metadata editor context');
+        same(context.columns.map(column => column.control), ['lookup', 'person', 'lookup', 'person'], 'Native controls must survive contract resolution');
+        contextCount++;
+        return context;
+      },
+      saveEditor: async (...args) => { submitCount++; return data.saveEditor(...args); },
+      onChanged: () => { changedCount++; }, onError: error => errors.push(String(error.stack || error)),
+    });
+    host.append(actions.render(structuredClone(record)));
+    const trigger = host.querySelector('[data-gallery-action="edit"]');
+    async function openEditor() {
+      trigger.click();
+      await until(() => host.querySelectorAll('[data-relation-field]').length === definitions.length, 'real native relationship form');
+    }
+    function controls(field) {
+      const wrapper = host.querySelector(`[data-relation-field="${field}"]`);
+      check(wrapper, `Missing relationship field ${field}`);
+      return { wrapper, input: wrapper.querySelector('.searchable-select-input'), native: wrapper.querySelector('[data-relation-value]'), listbox: wrapper.querySelector('.searchable-select-options'), status: wrapper.querySelector('[data-relation-status]') };
+    }
+    const labels = control => [...control.listbox.querySelectorAll('[role="option"]')].map(option => option.textContent);
+    const type = (control, value) => { control.input.value = value; control.input.dispatchEvent(new Event('input', { bubbles: true })); };
+    async function search(control, term, count) {
+      type(control, term);
+      await until(() => control.status.textContent === (count ? `${count} opção(ões) encontrada(s).` : 'Nenhuma opção encontrada.'), `search ${term || '(empty)'}`);
+    }
+    function choose(control, label) {
+      const option = [...control.listbox.querySelectorAll('[role="option"]')].find(node => node.textContent === label);
+      check(option, `Missing selectable ${label}`); option.click();
+    }
+    async function browse(definition) {
+      const control = controls(definition.field), before = control.native.value;
+      control.input.focus(); control.input.click();
+      check(control.input.value === '', `${definition.field}: opening clears only the search label`);
+      check(control.native.value === before, `${definition.field}: opening preserves the committed IDs`);
+      await until(() => control.status.textContent === '25 opção(ões) encontrada(s).', `${definition.field}: browse both pages`);
+      check(labels(control).includes(name(definition.prefix, 2)) && labels(control).includes(name(definition.prefix, 25)), `${definition.field}: visible alternatives include page two`);
+      check(control.native.value === before && control.input.value === '', `${definition.field}: browse response preserves IDs and empty query`);
+      check(!control.listbox.hidden, 'Browse list must be visible');
+      return control;
+    }
+    async function rejectUnselectedQuery(control) {
+      host.querySelector('[data-form-save]').click();
+      await frames();
+      check(!host.querySelector('[data-form-errors]').hidden, 'Unselected query must report validation errors');
+      check(submitCount === 0 && writes.length === 0, 'No save callback or PATCH before valid selection');
+    }
+
+    try {
+      await openEditor();
+      // A genuinely cold open must browse instead of filtering by the current
+      // label. Cancelling that untouched context cannot reach persistence.
+      const cold = await browse(definitions[0]);
+      check(cold.native.value === '1', 'Cold open retains the initial lookup ID');
+      cold.input.blur();
+      check(cold.input.value === 'FORNECEDOR 01', 'Blur restores the selected label');
+      host.querySelector('[data-form-cancel]').click();
+      check(writes.length === 0 && submitCount === 0, 'Cancel must not write');
+      await openEditor();
+      for (const definition of definitions) {
+        const control = await browse(definition);
+        if (definition.multiple) check(control.listbox.getAttribute('aria-multiselectable') === 'true', 'Multiple relation must keep native multi behavior');
+        await search(control, name(definition.prefix, 25), 1);
+        same(labels(control), [name(definition.prefix, 25)], `${definition.field}: typed complete query`);
+        await rejectUnselectedQuery(control);
+        await search(control, 'NENHUMA CORRESPONDÊNCIA', 0);
+        same(labels(control), [], `${definition.field}: zero results`);
+        check(control.listbox.hidden, 'Zero results closes options');
+        const pageCount = calls.filter(call => call.kind === definition.kind && call.page2).length;
+        await search(control, '', 25);
+        check(calls.filter(call => call.kind === definition.kind && call.page2).length > pageCount, `${definition.field}: clearing reloads the second page`);
+        choose(control, name(definition.prefix, 25));
+        same(control.native.value, definition.multiple ? '[1,25]' : '25', `${definition.field}: replacement/addition commits IDs`);
+        if (definition.multiple) check(control.input.value === '', 'Multi selection clears the query after adding a chip');
+        else check(control.input.value === name(definition.prefix, 25), 'Single selection commits its label');
+        checks.push({ field: definition.field, kind: definition.kind, multiple: definition.multiple, secondPage: true, clearLabelPreserveIds: true, typedMatch: true, invalidSubmitBlocked: true, zeroResult: true, clearReload: true, replacement: true });
+      }
+      const staleControl = await browse(definitions[0]);
+      held = { kind: 'lookup', term: 'FORNECEDOR 02' };
+      type(staleControl, held.term);
+      await until(() => held.started, 'obsolete query started');
+      await search(staleControl, 'FORNECEDOR 24', 1);
+      same(labels(staleControl), ['FORNECEDOR 24'], 'Newer query wins');
+      check(held.signal.aborted, 'Previous request must be aborted');
+      held.release();
+      await until(() => held.completed, 'obsolete transport completed');
+      await frames();
+      same(labels(staleControl), ['FORNECEDOR 24'], 'Late obsolete query must be ignored');
+      choose(staleControl, 'FORNECEDOR 24');
+      check(submitCount === 0 && writes.length === 0, 'All interactions remain read only until valid submit');
+      host.querySelector('[data-form-save]').click();
+      await until(() => host.querySelector('[data-gallery-edit-success]'), 'shared action success receipt');
+      check(submitCount === 1 && writes.length === 1 && changedCount === 1, 'Exactly one conditional PATCH and gallery refresh');
+      same(writes[0].body, { FORNECEDORLookupId: 24, RESPONSAVELLookupId: 25, FORNECEDORESLookupId: [1, 25], RESPONSAVEISLookupId: [1, 25] }, 'Only typed LookupId replacements may be patched');
+      check(writes[0].ifMatch === '"relationship-v1"', 'Loaded ETag must survive save');
+      check(calls.every(call => !/startswith\([^,]+,''\)/.test(call.filter)), 'Unfiltered browsing must omit empty-prefix predicates');
+      check(calls.some(call => call.kind === 'lookup' && call.term === 'FORNECEDOR 24' && call.top === '20'), 'Graph lookup must revalidate through bounded typed search');
+      check(calls.some(call => call.kind === 'person' && call.term === 'PESSOA 25' && call.top === '20'), 'REST person must revalidate through bounded typed search');
+      host.querySelector('[data-gallery-receipt-close]').click();
+      await openEditor();
+      const preview = await browse(definitions[0]);
+      await search(preview, 'FORNECEDOR 25', 1);
+      preview.wrapper.scrollIntoView({ block: 'start' });
+      await frames();
+      const rect = preview.listbox.getBoundingClientRect();
+      check(rect.left >= -1 && rect.right <= innerWidth + 1, 'Relationship options fit the phone width');
+      check(!preview.listbox.hidden && labels(preview).includes('FORNECEDOR 25'), 'Second-page alternative remains visible for screenshot');
+      check(errors.length === 0 && networkViolations.length === 0, `Browser errors: ${JSON.stringify({ errors, networkViolations })}`);
+      check(writes.length === 1, 'Screenshot preview cannot write');
+      document.querySelector('#proof').textContent = 'LOOKUP + PESSOA + MÚLTIPLOS OK · 0 GRAVAÇÕES REAIS';
+      document.documentElement.dataset.layout = JSON.stringify({ status: 'passed', frozenRepository: Object.isFrozen(repository), contextCount, checks, staleGeneration: true, submitCount, changedCount, writes, calls, errors, networkViolations,
+        layout: { width: innerWidth, overflow: document.documentElement.scrollWidth > innerWidth, page25Visible: true } });
+    } catch (error) {
+      held?.release?.();
+      document.querySelector('#proof').textContent = `FALHOU: ${error.message}`;
+      document.documentElement.dataset.layout = JSON.stringify({ status: 'failed', error: error.stack, checks, writes, calls, errors, networkViolations });
+    }
+  </script>
+</body>
+</html>
