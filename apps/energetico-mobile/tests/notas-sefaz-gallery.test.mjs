@@ -243,7 +243,10 @@ test('NF-e renders confirmed values, preserves access-key text and exposes only 
   assert.equal(row.querySelector('[data-field="ULTIMO_DOCUMENTO_URL"] dd').textContent, 'Pendente');
   assert.equal(doc.querySelector('[data-action="create-registration"]'), null);
   assert.equal(row.querySelector('[data-gallery-action]'), null);
-  assert.match(doc.querySelector('[data-sefaz-coverage]').textContent, /cobertura.*pendente/i);
+  assert.equal(
+    doc.querySelector('[data-sefaz-coverage]').textContent,
+    'Fontes: SEFAZ para NF-e e CT-e; ADN nacional para NFS-e.'
+  );
 });
 
 test('NF-e summary records leave missing amounts and documents pending without deriving net value or active links', async t => {

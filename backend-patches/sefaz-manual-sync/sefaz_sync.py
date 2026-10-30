@@ -181,6 +181,11 @@ class Queue:
             if successes:
                 latest = max(successes, key=lambda job: timestamp(job['completedUtc']))
                 result['lastSuccessfulUtc'] = latest['completedUtc']
+                result['lastSuccessfulCreatedItemIds'] = list(dict.fromkeys(
+                    item_id
+                    for source in SOURCES
+                    for item_id in latest['sources'][source].get('createdItemIds', [])
+                ))
             return result
 
     def acknowledge(self, identity, request_id):
