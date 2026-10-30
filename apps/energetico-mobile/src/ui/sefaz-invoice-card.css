@@ -5,11 +5,11 @@
 .rg-sefaz-withholding strong { font-weight: 800; }
 .rg-sefaz-withholding span { font-size: .85rem; }
 .rg-row--sefaz .rg-sefaz-layout { display: block; }
-.rg-row--sefaz .rg-sefaz-heading { display: grid; grid-template-columns: 44px minmax(0, 1fr) auto; align-items: center; gap: 8px; margin-bottom: 10px; }
+.rg-row--sefaz .rg-sefaz-heading { display: grid; grid-template-columns: 52px minmax(0, 1fr) auto; align-items: center; gap: 8px; margin-bottom: 10px; }
 .rg-row.rg-row--sefaz .rg-row-title { font-size: clamp(1.05rem, 4.5vw, 1.4rem); font-weight: 850; color: #071f59; overflow-wrap: anywhere; text-transform: uppercase; }
 .rg-row--sefaz .rg-document-id { align-self: start; margin-top: 4px; padding: 5px 9px; border-radius: 7px; background: #075c72; color: white; font-size: .85rem; font-weight: 800; white-space: nowrap; }
-.rg-row--sefaz .rg-sefaz-pdf-link { min-height: 56px; padding: 4px 2px; gap: 3px; font-size: .55rem; }
-.rg-row--sefaz .rg-sefaz-pdf-glyph, .rg-row--sefaz .rg-sefaz-pdf-rail--pending dd::before { width: 24px; height: 30px; padding-top: 6px; font-size: .5rem; }
+.rg-row--sefaz .rg-sefaz-pdf-link { min-height: 64px; padding: 5px 3px; gap: 4px; font-size: .56rem; white-space: nowrap; }
+.rg-row--sefaz .rg-sefaz-pdf-glyph, .rg-row--sefaz .rg-sefaz-pdf-rail--pending dd::before { width: 26px; height: 33px; padding-top: 6px; font-size: .5rem; }
 .rg-sefaz-clusters { display: grid; gap: 7px; }
 .rg-row.rg-row--sefaz .rg-sefaz-identification { grid-template-columns: 1.2fr .7fr 1fr; }
 .rg-row.rg-row--sefaz .rg-sefaz-supplier { grid-template-columns: minmax(0, 1.2fr) minmax(0, .9fr); }

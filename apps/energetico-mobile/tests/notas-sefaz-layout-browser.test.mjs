@@ -65,6 +65,11 @@ test('NF-e gallery and three-gallery launch group fit narrow phones and Windows 
       assert.ok(layout.amountLines.every(lines => lines === 1), 'valores monetários visíveis sem dividir os dígitos');
       assert.ok(layout.emissionLines.every(lines => lines === 1), 'data de emissão inteira, sem quebrar os dígitos');
       assert.ok(layout.pdfRails.every(rail => rail.railRight <= rail.mainLeft), 'PDF à esquerda do conteúdo da própria nota');
+      for (const target of layout.pdfTargets) {
+        assert.ok(target.width >= 52, `${width}: ícone PDF mais largo para toque ${JSON.stringify(target)}`);
+        assert.ok(target.height >= 64, `${width}: ícone PDF mais alto para toque ${JSON.stringify(target)}`);
+        assert.equal(target.whiteSpace, 'nowrap', `${width}: DANFSe permanece em uma linha`);
+      }
       assert.equal(layout.disclosures.count, unified ? 20 : 8);
       assert.notEqual(layout.clusterColors.notes, layout.clusterColors.fisco, 'observações e fisco têm fundos distintos');
       assert.equal(layout.clusterColors.total, 'rgb(233, 245, 235)');
