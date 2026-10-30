@@ -27,7 +27,7 @@ class SingleReviewTests(test_batch_review.BatchReviewTests):
         self.upload_three()
         self.assertEqual(self.state()['stage'], 'selecting_fields')
         self.assertEqual({item['id'] for item in self.state()['options']},
-                         {'description_review_submit', 'description_review_edit'})
+                         {'description_review_submit', 'description_review_edit', 'description_review_edit_parent'})
         before = self.review_count()
         result = self.h.reply(reply_id='description_review_submit')
         self.assertEqual(result.get('field'), 'data_pgto_efetuado_baixa')

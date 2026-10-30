@@ -1,0 +1,221 @@
+--- a/worker/provision_description_settlement.py
++++ b/worker/provision_description_settlement.py
+@@ -11 +11,2 @@
+-from datetime import date, datetime, timedelta
++import secrets
++from datetime import date, datetime, timedelta, timezone
+@@ -16 +17 @@
+-    from .payment_provision_group import provision_line_total, _currency, _canonical, _sum, _number
++    from .payment_provision_group import provision_line_total, provision_money, _currency, _canonical, _sum, _number
+@@ -22 +23 @@
+-    from payment_provision_group import provision_line_total, _currency, _canonical, _sum, _number
++    from payment_provision_group import provision_line_total, provision_money, _currency, _canonical, _sum, _number
+@@ -60,0 +62,10 @@
++    if key in {'PGTOAGENDADO', 'DATAPGTOAGENDADO', 'DATAEXECUCAOAGENDAMENTO'} and _text(left) and _text(right):
++        # Match the editor's dateNumber convention: inputs without a zone are
++        # UTC; Graph may return Z/offsets while child Text preserves the input.
++        try:
++            def instant(value):
++                parsed = datetime.fromisoformat(_text(value).replace('Z', '+00:00'))
++                return parsed if parsed.tzinfo else parsed.replace(tzinfo=timezone.utc)
++            return instant(left) == instant(right)
++        except ValueError:
++            return _text(left) == _text(right)  # Legacy child marker PAGO.
+@@ -220,0 +232,2 @@
++        if action in {'description_review_parent_begin', 'description_review_parent_refresh'}:
++            return self._description_parent_edit_command(event, state, etag, command)
+@@ -224,0 +238,5 @@
++            if group.get('parent_editor'):
++                self._mark_processed(state, event.get('message_id'))
++                self._send_text(state, 'CONCLUA OU CANCELE A EDIÇÃO DO DESCRITIVO E ATUALIZE AS PROVISÕES ANTES DE CONTINUAR A BAIXA.')
++                return {**self._description_review_prompt(state, etag),
++                        'status': 'description_parent_edit_pending'}
+@@ -601 +619,150 @@
+-                {'id': 'description_review_edit', 'title': '✏️ EDITAR ALGUMA LINHA', 'value': 'edit'}]}}
++                {'id': 'description_review_edit', 'title': '✏️ EDITAR ALGUMA LINHA PROVISÃO', 'value': 'edit',
++                 'disabled': table['parentEditPending']},
++                {'id': 'description_review_edit_parent', 'title': '✏️ EDITAR O DESCRITIVO PROVISÃO',
++                 'value': 'edit_parent'}]}}
++
++    def _description_parent_edit_command(self, event, state, etag, command):
++        group = (state or {}).get('provision_description') or {}
++        if event.get('message_id') in (state or {}).get('processed_message_ids', []):
++            return {'status': 'duplicate', 'batch_id': state['batch_id']}
++        parts = command.split(':')
++        completed = (state or {}).get('description_parent_edit_receipt') or {}
++        if (state and event.get('kind') == 'text' and not group and len(parts) == 3 and parts[0] == 'description_review_parent_refresh'
++                and state.get('flow') == 'payment_settlement' and state.get('stage') == 'selecting_fields'
++                and state.get('step_index') == 0 and completed.get('batch_id') == state.get('batch_id')
++                and parts[1] == completed.get('parent_id') and parts[2] == completed.get('token')):
++            self._mark_processed(state, event.get('message_id'))
++            etag = self._save(state, etag)
++            return {**self._prompt_next_or_summary(state, etag), 'status': 'description_parent_refreshed',
++                    'descriptionParentId': parts[1], 'descriptionNoPending': True}
++        allowed = (state and state.get('flow') == 'payment_settlement' and group
++                   and event.get('kind') == 'text'
++                   and not (group.get('journal') or {}).get('intent')
++                   and len(parts) == 3 and parts[1] == group.get('parent_id')
++                   and group.get('review_phase') == 'overview')
++        if not allowed:
++            if state:
++                self._send_text(state, 'ESTA EDIÇÃO NÃO PERTENCE À REVISÃO ATUAL OU A BAIXA JÁ FOI INICIADA.')
++            return {'status': 'invalid_description_parent_edit'}
++        beginning = parts[0] == 'description_review_parent_begin'
++        editor = group.get('parent_editor')
++        if beginning:
++            ids = parts[2].split(',') if parts[2] else []
++            pending = {str(row['Id']) for row in group['original_children'] if _pending(row)}
++            if (state.get('stage') not in {'selecting_fields', 'collecting_attachments'}
++                    or group.get('editing_phase')
++                    or (self._current_step(state) or {}).get('key') != 'description_review'
++                    or any(re.fullmatch(r'[1-9][0-9]*', ident) is None for ident in ids)
++                    or len(ids) != len(set(ids)) or not set(ids) <= pending
++                    or (editor and set(editor['selected_ids']) != set(ids))):
++                self._send_text(state, 'A SELEÇÃO OU O CONTEXTO DO DESCRITIVO NÃO PODE SER ALTERADO DURANTE A EDIÇÃO.')
++                return {'status': 'invalid_description_parent_edit'}
++            group['selected_ids'] = sorted(ids, key=int)
++            if not editor:
++                group['parent_editor'] = {'token': secrets.token_hex(16), 'selected_ids': sorted(ids, key=int)}
++            state['navigation_history'] = []
++            self._mark_processed(state, event.get('message_id'))
++            return {**self._description_review_prompt(state, etag),
++                    'status': 'awaiting_description_parent_editor'}
++        token = parts[2]
++        if not editor:
++            if (token == group.get('last_parent_editor_token')
++                    and state.get('stage') in {'selecting_fields', 'collecting_attachments'}
++                    and not group.get('editing_phase')
++                    and (self._current_step(state) or {}).get('key') == 'description_review'):
++                self._mark_processed(state, event.get('message_id'))
++                return {**self._description_review_prompt(state, etag), 'status': 'description_parent_refreshed'}
++            return {'status': 'invalid_description_parent_edit'}
++        if token != editor['token']:
++            return {'status': 'invalid_description_parent_edit'}
++        try:
++            source = self._description_read_for_settlement(group['parent_id'])
++            self._description_rebase_after_parent_edit(state, source)
++        except Exception as error:
++            self._send_text(state, 'NÃO FOI POSSÍVEL CONFIRMAR A ATUALIZAÇÃO DAS PROVISÕES. '
++                'A BAIXA CONTINUA BLOQUEADA. TENTE ATUALIZAR NOVAMENTE. ' + str(error))
++            self._mark_processed(state, event.get('message_id'))
++            return {**self._description_review_prompt(state, etag),
++                    'status': 'description_parent_refresh_failed'}
++        self._mark_processed(state, event.get('message_id'))
++        if not state.get('provision_description'):
++            self._send_text(state, 'O DESCRITIVO ATUALIZADO NÃO POSSUI MAIS PROVISÕES PENDENTES. SELECIONE OUTRO PAGAMENTO.')
++            etag = self._save(state, etag)
++            return {**self._prompt_next_or_summary(state, etag), 'status': 'description_parent_refreshed',
++                    'descriptionParentId': parts[1], 'descriptionNoPending': True}
++        return {**self._description_review_prompt(state, etag), 'status': 'description_parent_refreshed'}
++
++    def _description_rebase_after_parent_edit(self, state, source):
++        group = state['provision_description']
++        parent_id = group['parent_id']
++        if _identity(source.get('Id')) != parent_id:
++            raise RuntimeError('O descritivo retornado não corresponde à edição atual.')
++        rows = source.get('CHILDREN')
++        if (source.get('partial') or source.get('truncated') or source.get('complete') is False
++                or not set(PARENT_FIELDS) <= source.keys() or not isinstance(rows, list) or not rows
++                or any(not isinstance(row, dict) or not {'Id', *CHILD_FIELDS} <= row.keys() for row in rows)
++                or len({_identity(row['Id']) for row in rows}) != len(rows)):
++            raise RuntimeError('A relação completa das provisões não foi confirmada.')
++        if any(_identity(row.get('DESCRITIVOPROVISAO')) != parent_id for row in rows):
++            raise RuntimeError('Uma provisão foi vinculada a outro descritivo.')
++        declared_pending = source.get('PENDING CHILD IDS')
++        actual_pending = {_identity(row['Id']) for row in rows if _pending(row)}
++        if (not isinstance(declared_pending, list)
++                or len({_identity(ident) for ident in declared_pending}) != len(declared_pending)
++                or {_identity(ident) for ident in declared_pending} != actual_pending):
++            raise RuntimeError('A relação de provisões pendentes está incompleta ou contraditória.')
++        if not _same('VALORTOTAL', group['parent'].get('VALORTOTAL'), source.get('VALORTOTAL')):
++            actual_total = provision_money(_sum(provision_line_total({**row, 'FRETE': row.get('FRETE') or '0'}) for row in rows))
++            if not _same('VALORTOTAL', source.get('VALORTOTAL'), actual_total):
++                raise RuntimeError('O valor total editado ainda não corresponde aos valores persistidos nas provisões.')
++        # The existing editor confirms its fanout before returning. Also reject
++        # a partial fanout at this independent read boundary, including Cancel.
++        for field in ('FILIAL', 'FORNECEDOR', 'DATA PREVISTO PGTO', 'DATA PGTO EFETUADO', 'FORMAPGTO', 'OBS',
++                      'PGTOAGENDADO', 'STATUS', 'DATAPGTOAGENDADO', 'DATAEXECUCAOAGENDAMENTO'):
++            if not _same(field, group['parent'].get(field), source.get(field)):
++                if field == 'FORNECEDOR' and _text(source.get(field)).upper() == 'DIVERSOS':
++                    continue
++                if field not in source or any(field not in row for row in rows):
++                    raise RuntimeError('A leitura da coluna ' + field + ' não foi confirmada em todas as provisões.')
++                if any(not _same(field, source.get(field), row.get(field)) for row in rows):
++                    raise RuntimeError('A sincronização da coluna ' + field + ' ainda não foi confirmada em todas as provisões.')
++        working = copy.deepcopy(state)
++        working['navigation_history'] = []
++        working.pop('edit_step_indices', None)
++        for key in ('existing_attachments', 'existing_attachments_target', 'existing_attachments_error', 'option_pagination'):
++            working.pop(key, None)
++        if not any(_pending(row) for row in rows):
++            working['description_parent_edit_receipt'] = {
++                'batch_id': state['batch_id'], 'parent_id': parent_id,
++                'token': group['parent_editor']['token']}
++            working.pop('provision_description', None)
++            for key in ('fields', 'answers', 'selections', 'display_values', 'sharepoint'):
++                working[key] = {}
++            working.update(stage='selecting_fields', step_index=0, options=[])
++        else:
++            self._description_start(working, copy.deepcopy(source))
++            refreshed = working['provision_description']
++            old_rows = {str(row['Id']): row for row in group['original_children']}
++            old_entries = {str(entry['fields']['ID PROVISÃO']): entry['fields'] for entry in group['entries']}
++            for entry in refreshed['entries']:
++                ident = entry['fields']['ID PROVISÃO']
++                if ident not in old_entries or ident not in old_rows:
++                    continue
++                product_changed = not _same('PRODUTO', old_rows[ident].get('PRODUTO'), entry['fields'].get('PRODUTO'))
++                if product_changed:
++                    entry['fields'].pop('TIPO DESPESA', None)
++                # Preserve local edits only where the stored source did not
++                # change. Persisted parent/child changes take precedence.
++                for field in ('PRODUTO', 'QTD', 'VALOR TOTAL', 'FRETE', 'TIPO DESPESA'):
++                    if field == 'TIPO DESPESA' and product_changed:
++                        continue
++                    if _same(field, old_rows[ident].get(field), entry['fields'].get(field)) and field in old_entries[ident]:
++                        entry['fields'][field] = copy.deepcopy(old_entries[ident][field])
++                entry['display_values'] = {field: _text(value) or 'EM BRANCO' for field, value in entry['fields'].items()}
++            eligible = {str(row['Id']) for row in refreshed['children']}
++            refreshed['selected_ids'] = [ident for ident in group['parent_editor']['selected_ids'] if ident in eligible]
++            refreshed['last_parent_editor_token'] = group['parent_editor']['token']
++            working['selections'] = {}
++            working['answers'] = {}
++        state.clear()
++        state.update(working)
+@@ -625,0 +793,5 @@
++        if selected.get('value') == 'edit_parent':
++            self._send_text(state, 'ATUALIZE O APLICATIVO PARA ABRIR AS COLUNAS DO DESCRITIVO. NENHUM REGISTRO FOI ALTERADO.')
++            return self._description_review_prompt(state, etag)
++        if group.get('parent_editor'):
++            return {**self._description_review_prompt(state, etag), 'status': 'description_parent_edit_pending'}
+@@ -1098,0 +1271,2 @@
++            if group.get('parent_editor'):
++                raise RuntimeError('Conclua a edição do descritivo e a releitura das provisões antes de confirmar a baixa.')
+--- a/worker/provision_description_review.py
++++ b/worker/provision_description_review.py
+@@ -38,0 +39 @@
++    parent_editor = group.get('parent_editor') or {}
+@@ -78 +79 @@
+-            'canSubmit': item_id in pending and amount is not None,
++            'canSubmit': item_id in pending and amount is not None and not parent_editor,
+@@ -86,0 +88,2 @@
++        'parentEditPending': bool(parent_editor),
++        **({'parentEditorToken': parent_editor['token']} if parent_editor else {}),
+@@ -91,2 +94,2 @@
+-        'selectedValid': bool(selected) and selected <= pending and valid_selected,
+-        'canSubmit': bool(pending) and valid_total and all(row['canSubmit'] for row in rows if row['id'] in pending)}
++        'selectedValid': bool(selected) and selected <= pending and valid_selected and not parent_editor,
++        'canSubmit': bool(selected) and selected <= pending and valid_total and not parent_editor and all(row['canSubmit'] for row in rows if row['id'] in pending)}
+--- a/worker/provision_description_query.py
++++ b/worker/provision_description_query.py
+@@ -38,0 +39 @@
++OPTIONAL_PARENT_FIELDS = ('STATUS', 'DATAPGTOAGENDADO', 'DATAEXECUCAOAGENDAMENTO')
+@@ -45 +46 @@
+-OPTIONAL_CHILD_FIELDS = ("ETAPA", "TIPO DESPESA")
++OPTIONAL_CHILD_FIELDS = ("ETAPA", "TIPO DESPESA", 'DATAPGTOAGENDADO', 'DATAEXECUCAOAGENDAMENTO')
+@@ -282 +283 @@
+-        projection = self._projection(PARENT_LIST, PARENT_FIELDS, aliases=PARENT_ALIASES)
++        projection = self._projection(PARENT_LIST, PARENT_FIELDS, aliases=PARENT_ALIASES, optional=OPTIONAL_PARENT_FIELDS)
+@@ -299 +300 @@
+-        projection = self._projection(PARENT_LIST, PARENT_FIELDS, aliases=PARENT_ALIASES)
++        projection = self._projection(PARENT_LIST, PARENT_FIELDS, aliases=PARENT_ALIASES, optional=OPTIONAL_PARENT_FIELDS)

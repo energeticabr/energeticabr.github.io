@@ -1,0 +1,16 @@
+.provision-parent-overlay { position: fixed; inset: 0; z-index: 2200; display: grid; place-items: center; padding: max(12px, env(safe-area-inset-top)) max(12px, env(safe-area-inset-right)) max(12px, env(safe-area-inset-bottom)) max(12px, env(safe-area-inset-left)); background: rgb(12 30 25 / 55%); overflow: hidden; }
+.provision-parent-dialog { box-sizing: border-box; width: min(100%, 720px); max-height: 100%; overflow-y: auto; overflow-x: hidden; background: #fff; color: #153b2d; border-radius: 16px; padding: 20px; box-shadow: 0 12px 50px #0004; font: 16px/1.45 system-ui, sans-serif; }
+.provision-parent-dialog h2 { font-size: 20px; margin: 0 0 12px; overflow-wrap: anywhere; }
+.provision-parent-dialog p { overflow-wrap: anywhere; }
+.provision-parent-columns { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 10px; }
+.provision-parent-dialog button { box-sizing: border-box; max-width: 100%; min-height: 48px; padding: 10px 14px; border: 1px solid #126443; border-radius: 10px; background: #fff; color: #124d36; font: inherit; white-space: normal; overflow-wrap: anywhere; cursor: pointer; }
+.provision-parent-dialog button:disabled { opacity: .6; cursor: wait; }
+.provision-parent-dialog [data-form-save] { background: #126443; color: #fff; }
+.provision-parent-dialog [data-provision-parent-back] { width: 100%; margin-top: 18px; }
+.provision-parent-dialog [role="alert"] { color: #8a2020; }
+.provision-parent-dialog form, .provision-parent-dialog .dynamic-form-grid, .provision-parent-dialog .dynamic-field { min-width: 0; max-width: 100%; }
+.provision-parent-dialog .dynamic-form-heading { display: none; }
+.provision-parent-dialog .dynamic-form-grid { display: grid; grid-template-columns: minmax(0, 1fr); gap: 12px; }
+.provision-parent-dialog input, .provision-parent-dialog select, .provision-parent-dialog textarea { box-sizing: border-box; width: 100%; min-width: 0; max-width: 100%; min-height: 44px; font-size: 16px; }
+.provision-parent-dialog [data-edit-form] .dynamic-form-actions { display: flex; flex-wrap: wrap; gap: 10px; }
+@media (max-width: 420px) { .provision-parent-dialog { padding: 16px; } .provision-parent-columns { grid-template-columns: minmax(0, 1fr); } .provision-parent-dialog [data-edit-form] .dynamic-form-actions { flex-direction: column; } .provision-parent-dialog .dynamic-form-actions button { width: 100%; } }

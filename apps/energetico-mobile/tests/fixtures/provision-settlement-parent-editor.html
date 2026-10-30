@@ -1,0 +1,85 @@
+<!doctype html>
+<html lang="pt-BR"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Editar descritivo — somente dados fictícios</title>
+<link rel="stylesheet" href="/src/styles.css"><link rel="stylesheet" href="/src/ui/gallery-record-actions.css">
+<link rel="stylesheet" href="/src/ui/provision-settlement-parent-editor.css"></head>
+<body><main id="app"></main><script type="module">
+import { createChatView } from '/src/ui/chat-view.js';
+import { createProvisionSettlementParentSession } from '/src/ui/provision-settlement-parent-session.js';
+import { createProvisionSettlementParentEditor } from '/src/ui/provision-settlement-parent-editor.js';
+import { parentEditorFixture } from '/tests/helpers/provision-parent-editor-fixture.mjs';
+import { reviewTable, reviewMessage, reviewState } from '/tests/helpers/provision-settlement-review-fixture.mjs';
+try {
+  const sample = new URLSearchParams(location.search).get('sample') || 'chooser';
+  const root = document.querySelector('#app'), view = createChatView(root), fixture = parentEditorFixture();
+  const token = 'a'.repeat(32), replies = []; let requests = 0, failRefresh = sample === 'refresh-failed';
+  const poll = pending => { const poll = reviewMessage(reviewTable({ selectionEnabled: true, selectedIds: ['11', '13'],
+    parentEditPending: pending, ...(pending ? { parentEditorToken: token } : {}) }));
+    poll.options[1].label = 'EDITAR ALGUMA LINHA PROVISÃO';
+    poll.options.push({ id: 'description_review_edit_parent', label: 'EDITAR O DESCRITIVO PROVISÃO' }); return poll; };
+  let state = reviewState(poll(false), { account: { homeAccountId: 'fictitious-account', name: 'Prévia fictícia' }, sessionRevision: 1 });
+  let editor;
+  const session = createProvisionSettlementParentSession({ getState: () => state, canInteract: () => true,
+    async sendText(text, replyId, behavior) {
+      if (text !== '') throw new Error('A fixture aceita apenas o protocolo de botões.');
+      replies.push(replyId); const pending = replyId.includes('_begin:') || failRefresh;
+      state = { ...state, messages: [poll(pending)] }; view.render(state); session.sync();
+      behavior?.onConfirmedResult?.({ status: pending ? 'description_parent_refresh_failed' : 'description_parent_refreshed', messages: state.messages }); return true;
+    },
+    createData: async () => fixture.data,
+    createEditor: async options => (editor = createProvisionSettlementParentEditor({ ...options, document, host: document.body })),
+  });
+  view.on('select-reply', event => { void session.begin(event.replyId); }); view.render(state);
+  const frame = () => new Promise(resolve => requestAnimationFrame(() => requestAnimationFrame(resolve)));
+  const wait = async check => { for (let i = 0; i < 150 && !check(); i++) await frame(); if (!check()) throw new Error(`Fixture não concluiu a operação esperada: ${document.querySelector('[data-provision-parent-dialog]')?.textContent}; writes=${JSON.stringify(fixture.writes)}`); };
+  await document.fonts.ready; await frame();
+  // All remote boundaries are in memory; checkbox/form interactions must not fetch.
+  window.fetch = () => { requests++; return Promise.reject(new Error('Rede proibida na fixture')); };
+  XMLHttpRequest.prototype.send = () => { requests++; throw new Error('Rede proibida na fixture'); };
+  const parentButton = root.querySelector('[data-reply-id="description_review_edit_parent"]');
+  const lineButton = root.querySelector('[data-reply-id="description_review_edit"]');
+  const result = { parentBelowLine: Boolean(lineButton.compareDocumentPosition(parentButton) & Node.DOCUMENT_POSITION_FOLLOWING) };
+  parentButton.click(); await wait(() => document.querySelector('[data-provision-parent-column]'));
+  result.beginIdentity = replies[0] === 'description_review_parent_begin:7:11,13';
+  result.pendingLocksTable = [...root.querySelectorAll('[data-provision-select-id], [data-provision-select-all]')].every(node => node.disabled)
+    && root.querySelector('[data-reply-id="description_review_submit"]').disabled && root.querySelector('[data-reply-id="description_review_edit"]').disabled;
+  result.realColumns = [...document.querySelectorAll('[data-provision-parent-column]')].map(node => node.dataset.provisionParentColumn);
+  const fits = node => { const b = node.getBoundingClientRect(); return b.width > 0 && b.left >= -1 && b.right <= innerWidth + 1; };
+  const reachable = async node => {
+    node.scrollIntoView({ block: 'center' }); await frame(); const b = node.getBoundingClientRect();
+    const hit = document.elementFromPoint(b.x + b.width / 2, b.y + b.height / 2);
+    return fits(node) && b.top >= 0 && b.bottom <= innerHeight && (node === hit || node.contains(hit));
+  };
+  result.chooserReachable = true;
+  for (const button of document.querySelectorAll('[data-provision-parent-column], [data-provision-parent-back]')) result.chooserReachable &&= await reachable(button);
+  document.querySelector('[data-provision-parent-dialog]').scrollTop = 0;
+  if (sample !== 'chooser') {
+    document.querySelector('[data-provision-parent-column="FILIAL"]').click(); await frame();
+    result.oneField = document.querySelectorAll('form [name]').length === 1;
+    result.realCatalog = [...document.querySelector('select[name="FILIAL"]').options].map(option => option.value).filter(Boolean);
+    const combo = document.querySelector('[role="combobox"]'); combo.focus(); combo.value = '002'; combo.dispatchEvent(new Event('input', { bubbles: true }));
+    document.querySelector('[role="option"]').click();
+    result.controlsReachable = true;
+    for (const button of document.querySelectorAll('form [data-form-save],form [data-form-cancel],[data-provision-parent-back]')) result.controlsReachable &&= await reachable(button);
+    document.querySelector('[data-provision-parent-dialog]').scrollTop = 0;
+    if (sample === 'refresh-failed') {
+      document.querySelector('[data-provision-parent-dialog] form').requestSubmit(); await wait(() => document.querySelector('[data-provision-parent-refresh-retry]'));
+      result.fanoutConfirmed = fixture.records.children.every(row => row.fields.FILIAL === '002 — UNIDADE DE TESTE');
+      result.writes = fixture.writes.map(write => [write.list, write.id, Object.keys(write.fields)]);
+      result.refreshIdentity = replies[1] === `description_review_parent_refresh:7:${token}`;
+      result.noResave = !document.querySelector('[data-provision-parent-dialog] form') && !document.querySelector('[data-provision-parent-save-retry]');
+      result.retryReachable = await reachable(document.querySelector('[data-provision-parent-refresh-retry]'));
+    }
+  }
+  await frame();
+  const dialog = document.querySelector('[data-provision-parent-dialog]'), box = dialog.getBoundingClientRect();
+  result.pageHorizontalOverflow = document.documentElement.scrollWidth > innerWidth + 1;
+  result.dialogFits = fits(dialog) && box.top >= -1 && box.bottom <= innerHeight + 1;
+  result.dialogHorizontalOverflow = dialog.scrollWidth > dialog.clientWidth + 1;
+  result.noNetwork = requests === 0;
+  result.minFieldHeight = sample === 'field' ? document.querySelector('[data-provision-parent-dialog] [role="combobox"]').getBoundingClientRect().height : null;
+  result.smallestButton = Math.min(...[...dialog.querySelectorAll('button')].filter(node => !node.closest('[hidden]')).map(node => node.getBoundingClientRect().width));
+  result.sample = sample;
+  document.documentElement.dataset.layout = JSON.stringify(result); document.documentElement.dataset.layoutReady = 'true';
+} catch (error) { document.documentElement.dataset.layout = JSON.stringify({ error: error.stack || error.message }); document.documentElement.dataset.layoutReady = 'true'; }
+</script></body></html>
