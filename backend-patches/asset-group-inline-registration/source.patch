@@ -1,0 +1,49 @@
+--- a/worker/workflow.py
++++ b/worker/workflow.py
+@@ -24897,6 +24897,7 @@
+             "supply_product_registration",
+             "supply_subfamily_registration",
+             "supply_family_registration",
++            "fixed_asset_product_registration",
+             "attendance_validation",
+             "construction_stage_demonstrative_create",
+         } | financial_catalog.FINANCIAL_FLOWS:
+--- a/worker/financial_catalog_registration.py
++++ b/worker/financial_catalog_registration.py
+@@ -13,6 +13,19 @@
+ 
+ def catalog(engine, state, step):
+     source = step.get('source') or {}
++    if (state.get('flow') == 'fixed_asset_product_registration'
++            and step.get('key') == 'grupo_produto_imobilizado'
++            and step.get('kind') == 'selection'
++            and source.get('type') == 'sharepoint_list'
++            and source.get('list') == 'GRUPO IMOBILIZADOS'
++            and source.get('label_field') == 'GRUPOIMOBILIZADOS'
++            and source.get('value_field') == 'GRUPOIMOBILIZADOS'):
++        child = engine.config['sharepoint'].get('fixed_asset_group_registration_flow', {})
++        if child.get('target_list') == source['list']:
++            return {'flow': 'fixed_asset_group_registration',
++                    'label': child.get('completion_subject', 'Grupo imobilizado'),
++                    'label_field': source['label_field'], 'value_field': source['value_field'],
++                    'first': True}
+     if (state.get('flow') not in FINANCIAL_FLOWS or step.get('kind') != 'selection'
+             or source.get('type') != 'sharepoint_list'):
+         return None
+@@ -33,8 +46,14 @@
+     displayed = copy.deepcopy(step)
+     terminals = displayed.setdefault('terminal_options', [])
+     if not any(str(o.get('id')) == CREATE_ID for o in terminals):
+-        terminals.append({'id': CREATE_ID, 'title': '➕ CADASTRAR ' + info['label'].upper(),
+-                          'action': CREATE_ACTION})
++        control = {'id': CREATE_ID, 'title': '➕ CADASTRAR ' + info['label'].upper(),
++                   'action': CREATE_ACTION}
++        if info.get('first'):
++            terminals.insert(0, control)
++        else:
++            terminals.append(control)
++    if info.get('first'):
++        displayed['terminal_options_first'] = True
+     return displayed
+ 
+ 

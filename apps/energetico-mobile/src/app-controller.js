@@ -532,6 +532,7 @@ const GALLERY_CREATION_ACTIONS = Object.freeze({
 });
 const DOCUMENT_SIGNING_REOPEN_LAST_ID = "document_signing_reopen_last";
 const GALLERY_EMBEDDED_REGISTRATIONS = [
+  [['financial_catalog_create'], ['fixed_asset_product_registration'], 'fixed_asset_group_registration', ['grupo_produto_imobilizado']],
   [['register_supplier', 'NOVO_FORNECEDOR', 'payment_supplier_registration', 'new_quotation_supplier_registration'],
     ['launch', 'payment', 'recurring_expense', 'new_quotation'], 'supply_supplier_registration'],
   [['register_product'], ['launch', 'payment'], 'supply_product_registration'],
