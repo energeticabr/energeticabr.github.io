@@ -390,7 +390,7 @@ jobs:
           APP_STORE_BUILD: ${{ github.run_number }}
           TESTFLIGHT_MAX_ATTEMPTS: 40
           TESTFLIGHT_POLL_MS: 30000
-        run: node scripts/ops-attach2005.mjs
+        run: node scripts/attach-testflight-build.mjs
 
   testflight-attach-existing:
     name: Associar build existente ao TestFlight
@@ -413,7 +413,7 @@ jobs:
           node-version: 24
       - name: Associar última build processada
         working-directory: apps/energetico-mobile
-        run: node scripts/attach-testflight-build.mjs
+        run: node scripts/ops-attach2005.mjs
 
   testflight-testers:
     name: Ajustar testadores internos do TestFlight
