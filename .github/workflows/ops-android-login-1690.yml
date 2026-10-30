@@ -1,0 +1,136 @@
+name: Validar login Android 1690
+
+on:
+  workflow_dispatch:
+  push:
+    branches:
+      - ops/validate-android-login-1690-20261030
+
+permissions:
+  contents: read
+
+concurrency:
+  group: android-login-1690-validation
+  cancel-in-progress: false
+
+jobs:
+  signature-gesture-lock:
+    name: Verificar trava dos gestos da assinatura
+    runs-on: ubuntu-latest
+    steps:
+      - name: Baixar histórico completo
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Confirmar revisão exata do aplicativo
+        run: test "$(git rev-parse HEAD:apps/energetico-mobile)" = "$(git rev-parse 5eea910cf7ce827ecab8e9bdbf3116f77d410b74:apps/energetico-mobile)"
+
+      - name: Preparar pnpm
+        uses: pnpm/action-setup@v4
+        with:
+          version: 11.19.0
+
+      - name: Preparar Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: 24
+
+      - name: Conferir regra, autorização e impressões digitais
+        working-directory: apps/energetico-mobile
+        env:
+          SIGNATURE_GESTURE_BASE_REF: ${{ github.event.pull_request.base.sha || (github.event.before != '0000000000000000000000000000000000000000' && github.event.before) || github.event.repository.default_branch }}
+        run: |
+          base_ref="$SIGNATURE_GESTURE_BASE_REF"
+          if ! git rev-parse --verify "${base_ref}^{commit}" >/dev/null 2>&1; then
+            base_ref="${{ github.event.repository.default_branch }}"
+          fi
+          pnpm guard:signature-gestures -- --base-ref "$base_ref"
+
+  auth-smoke-test:
+    name: Testar login Android no emulador
+    needs: signature-gesture-lock
+    runs-on: ubuntu-latest
+    steps:
+      - name: Baixar código
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Confirmar revisão exata do aplicativo
+        run: test "$(git rev-parse HEAD:apps/energetico-mobile)" = "$(git rev-parse 5eea910cf7ce827ecab8e9bdbf3116f77d410b74:apps/energetico-mobile)"
+
+      - name: Preparar pnpm
+        uses: pnpm/action-setup@v4
+        with:
+          version: 11.19.0
+
+      - name: Preparar Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: 24
+          cache: pnpm
+          cache-dependency-path: apps/energetico-mobile/pnpm-lock.yaml
+
+      - name: Preparar Java 21
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: 21
+
+      - name: Instalar dependências e sincronizar Android
+        working-directory: apps/energetico-mobile
+        run: |
+          pnpm install --frozen-lockfile
+          pnpm build
+          pnpm android:assets
+          pnpm cap:sync:android
+
+      - name: Confirmar acesso do Android à VM
+        shell: bash
+        run: |
+          set -euo pipefail
+          headers="$(mktemp)"
+          status="$(curl --silent --show-error \
+            --output /dev/null \
+            --dump-header "$headers" \
+            --write-out '%{http_code}' \
+            --request OPTIONS \
+            'https://163-176-171-217.sslip.io/api/portal-chat' \
+            --header 'Origin: https://localhost' \
+            --header 'Access-Control-Request-Method: POST' \
+            --header 'Access-Control-Request-Headers: Authorization, Content-Type')"
+          test "$status" = "204"
+          tr -d '\r' < "$headers" | grep -Fxi 'Access-Control-Allow-Origin: https://localhost'
+
+      - name: Compilar os mesmos APKs de teste antes de iniciar o emulador
+        working-directory: apps/energetico-mobile/android
+        run: chmod +x ./gradlew && ./gradlew :app:assembleDebug :app:assembleDebugAndroidTest --no-daemon
+
+      - name: Habilitar aceleração do emulador
+        run: |
+          echo 'KERNEL=="kvm", GROUP="kvm", MODE="0666", OPTIONS+="static_node=kvm"' | sudo tee /etc/udev/rules.d/99-kvm4all.rules
+          sudo udevadm control --reload-rules
+          sudo udevadm trigger --name-match=kvm
+
+      - name: Confirmar abertura do login Microsoft
+        uses: ReactiveCircus/android-emulator-runner@v2
+        with:
+          api-level: 35
+          target: google_apis
+          arch: x86_64
+          profile: pixel_6
+          disable-animations: true
+          working-directory: apps/energetico-mobile/android
+          script: bash "$GITHUB_WORKSPACE/.github/scripts/validate-android-login-1690.sh"
+
+      - name: Guardar diagnóstico do teste de login
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: android-login-test-diagnostic
+          path: |
+            apps/energetico-mobile/android/app/build/outputs/androidTest-results/connected/
+            apps/energetico-mobile/android/app/build/reports/androidTests/connected/
+          if-no-files-found: warn
+          retention-days: 1
