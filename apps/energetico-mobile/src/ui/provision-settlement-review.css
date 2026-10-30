@@ -33,6 +33,22 @@
 .provision-review__pending { display: flex; flex-wrap: wrap; justify-content: space-between; gap: 8px; padding: 10px; background: #e8f3ff; border-radius: 9px; }
 @media (min-width: 680px) { .provision-review__scroll-hint { display: none; } }
 
+/* Keep quantities intact; the table owns horizontal scrolling on small screens.
+   Product cells scroll too so they cannot cover the other columns. */
+[data-provision-settlement-review] table { min-width: 640px; }
+[data-provision-settlement-review] .provision-review__product-col { width: 160px; }
+[data-provision-settlement-review] .provision-review__quantity-col { width: 140px; }
+[data-provision-settlement-review] .provision-review__quantity { white-space: nowrap; overflow-wrap: normal; }
+[data-provision-settlement-review] tbody th,
+[data-provision-settlement-review] thead th:first-child { position: static; }
+.provision-review__select-col { width: 44px; }
+.provision-review .provision-review__select-cell { position: sticky; left: 0; z-index: 2; text-align: center; }
+.provision-review thead .provision-review__select-cell { z-index: 3; }
+.provision-review .provision-review__select-cell input,
+.provision-review__select-all input { width: 22px; min-width: 22px; height: 22px; min-height: 22px; margin: 0; accent-color: #087052; cursor: pointer; }
+.provision-review__select-all { display: flex; align-items: center; gap: 10px; min-height: 44px; margin-top: 8px; font-size: 14px; font-weight: 700; cursor: pointer; }
+.provision-review .provision-review__selection-summary { padding: 10px; background: #e2f3e9; border-radius: 9px; font-size: 13px; font-weight: 700; overflow-wrap: anywhere; }
+
 .chat-message:has([data-provision-launch-summary]) { justify-content: center; gap: 0; }
 .chat-message:has([data-provision-launch-summary]) > .chat-avatar { display: none; }
 .chat-message.chat-message--assistant:has([data-provision-launch-summary]) > .chat-bubble { box-sizing: border-box; width: min(100%, 720px); max-width: 720px; min-width: 0; }
