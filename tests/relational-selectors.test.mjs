@@ -35,6 +35,9 @@ for (const kind of ['lookup','powerapps']) test(`select-only ${kind} follows all
     : await repository.searchPowerAppsOptions('company',{kind:'related',listName:'CLIENTES',valueField:'Title'},'',{}, {browse:true});
   assert.equal(values.length,32); assert.equal(values.at(-1).label,'Opção 32');
   assert.equal(graph.calls.at(-1)[0],next);
+  const firstPage=graph.calls.find(([path])=>path.includes('/items?'))[0];
+  assert.equal(new URL(firstPage,'https://graph.microsoft.com').searchParams.has('$filter'),false,
+    'Opening an edit selector must browse its catalog without an empty-prefix predicate');
 });
 
 for(const kind of ['lookup','person']) test(`select-only ${kind} follows authorized REST pages`,async()=>{
@@ -49,6 +52,9 @@ for(const kind of ['lookup','person']) test(`select-only ${kind} follows authori
   }}});
   const values=await repository.searchRelationshipOptions('personal',sourceListId,{kind,listId:lookupListId,displayField:'Title',multiple:false,resolvable:true,principalType:'peopleOnly'},'',{browse:true});
   assert.deepEqual(values.map(v=>v.id),[1,2]); assert.equal(calls.at(-1),next);
+  const firstPage=calls.find(path=>path.includes(collection+'?'));
+  assert.equal(new URL(firstPage,'https://example.test').searchParams.has('$filter'),false,
+    'Opening a lookup or person selector must not issue startswith(field, empty)');
 });
 
 function graphResponseSequence(responses) {
@@ -491,6 +497,7 @@ test("Graph usa literais numericos sem aspas e preserva escape dos filtros textu
     { value: [
       { name: "Title", indexed: true, text: {} },
       { name: "ID", indexed: true, number: {} },
+      { name: "PARENTID", indexed: true, number: {} },
       { name: "ORDEM", indexed: true, number: {} },
       { name: "STATUS", indexed: true, text: {} },
     ] },
@@ -504,7 +511,7 @@ test("Graph usa literais numericos sem aspas e preserva escape dos filtros textu
     valueField: "ID",
     searchFields: ["Title"],
     displayFields: ["Title"],
-    dependsOn: [{ fieldName: "DOCUMENTO", targetField: "ID" }],
+    dependsOn: [{ fieldName: "DOCUMENTO", targetField: "PARENTID" }],
     fixedFilters: [
       { fieldName: "ORDEM", operator: "eq", value: 7.5 },
       { fieldName: "STATUS", operator: "eq", value: "D'ÁGUA" },
@@ -512,10 +519,10 @@ test("Graph usa literais numericos sem aspas e preserva escape dos filtros textu
   }, "doc", { DOCUMENTO: "42" });
 
   const filter = new URLSearchParams(graph.calls.at(-1)[0].split("?", 2)[1]).get("$filter");
-  assert.match(filter, /fields\/ID eq 42(?:\s|$)/);
+  assert.match(filter, /fields\/PARENTID eq 42(?:\s|$)/);
   assert.match(filter, /fields\/ORDEM eq 7\.5(?:\s|$)/);
   assert.match(filter, /fields\/STATUS eq 'D''ÁGUA'/);
-  assert.doesNotMatch(filter, /fields\/(?:ID|ORDEM) eq '/);
+  assert.doesNotMatch(filter, /fields\/(?:PARENTID|ORDEM) eq '/);
 });
 
 test("REST usa metadados para literais numericos e mantem texto escapado", async () => {
@@ -528,6 +535,7 @@ test("REST usa metadados para literais numericos e mantem texto escapado", async
         if (path.includes("/fields?")) return { value: [
           { InternalName: "Title", Title: "Title", TypeAsString: "Text", Indexed: true },
           { InternalName: "ID", Title: "ID", TypeAsString: "Counter", Indexed: true },
+          { InternalName: "PARENTID", Title: "PARENTID", TypeAsString: "Number", Indexed: true },
           { InternalName: "ORDEM", Title: "ORDEM", TypeAsString: "Number", Indexed: true },
           { InternalName: "STATUS", Title: "STATUS", TypeAsString: "Text", Indexed: true },
         ] };
@@ -543,7 +551,7 @@ test("REST usa metadados para literais numericos e mantem texto escapado", async
     valueField: "ID",
     searchFields: ["Title"],
     displayFields: ["Title"],
-    dependsOn: [{ fieldName: "DOCUMENTO", targetField: "ID" }],
+    dependsOn: [{ fieldName: "DOCUMENTO", targetField: "PARENTID" }],
     fixedFilters: [
       { fieldName: "ORDEM", operator: "eq", value: 7.5 },
       { fieldName: "STATUS", operator: "eq", value: "D'ÁGUA" },
@@ -552,10 +560,10 @@ test("REST usa metadados para literais numericos e mantem texto escapado", async
 
   const request = new URL(calls.find(path => path.includes("/items?")), `https://${personalSite.host}${personalSite.path}`);
   const filter = request.searchParams.get("$filter");
-  assert.match(filter, /ID eq 42(?:\s|$)/);
+  assert.match(filter, /PARENTID eq 42(?:\s|$)/);
   assert.match(filter, /ORDEM eq 7\.5(?:\s|$)/);
   assert.match(filter, /STATUS eq 'D''ÁGUA'/);
-  assert.doesNotMatch(filter, /(?:ID|ORDEM) eq '/);
+  assert.doesNotMatch(filter, /(?:PARENTID|ORDEM) eq '/);
 });
 
 test("provider omite dependencia opcional vazia e preserva filtros fixos", async () => {

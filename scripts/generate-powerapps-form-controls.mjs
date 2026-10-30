@@ -759,11 +759,22 @@ function computedFieldParts(value) {
       parts.push({ kind: "field-fallback", fieldName, value: fallback.value });
       continue;
     }
-    const fieldName = textCall?.name.toLowerCase() === "text"
+    const isText = textCall?.name.toLowerCase() === "text";
+    let format;
+    if (isText) {
+      if (textCall.args.length !== 1 && textCall.args.length !== 2) return null;
+      if (textCall.args.length === 2) {
+        const mask = scalarFormulaValue(textCall.args[1]);
+        if (!mask.translated || typeof mask.value !== "string"
+          || !/^(?:\[\$-pt-BR\])?dd\/mm\/yyyy$/i.test(mask.value)) return null;
+        format = "date-pt-BR";
+      }
+    }
+    const fieldName = isText
       ? fieldFormulaName(textCall.args[0])
       : fieldFormulaName(token);
     if (!fieldName) return null;
-    parts.push({ kind: "field", fieldName });
+    parts.push({ kind: "field", fieldName, ...(format ? { format } : {}) });
   }
   return parts.length ? parts : null;
 }
@@ -893,7 +904,31 @@ function selectedOutputField(update, controlNameValue) {
   return /^(Value|Result)$/i.test(value) ? "" : value;
 }
 
+function concatenatedOutputField(update, controlNameValue) {
+  const escaped = String(controlNameValue || "").replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+  const selectedItems = new RegExp(`^${escaped}\\.SelectedItems$`, "i");
+  const ownsSelection = expression => {
+    const source = unwrapGrouping(expression);
+    if (selectedItems.test(source)) return true;
+    const call = callExpression(source);
+    return call?.name.toLowerCase() === "filter" && ownsSelection(call.args[0] || "");
+  };
+  const fields = new Set();
+  for (const call of nestedFunctionCalls(update, "Concat")) {
+    if (!ownsSelection(call.args[0] || "") || ![2, 3].includes(call.args.length)) continue;
+    const parts = computedFieldParts(call.args[1]);
+    if (!parts || parts[0]?.kind !== "field" || parts[0].format) continue;
+    // Two-argument Concat may append its delimiter inside the row expression.
+    // A display concatenation with extra fields/literals is not a raw value.
+    if (parts.length !== 1 && !(call.args.length === 2 && parts.length === 2 && parts[1].kind === "literal")) continue;
+    fields.add(parts[0].fieldName);
+  }
+  return fields.size === 1 ? [...fields][0] : "";
+}
+
 function formulaValueField(formula, control, card) {
+  const concatenated = concatenatedOutputField(card.update, control.controlName);
+  if (concatenated) return concatenated;
   const source = normalizeFormula(formula).replace(/^=/, "").trim();
   const choices = source.match(/^Choices\s*\(\s*\[@[^\]]+\]\s*\.\s*(?:'([^']+)'|([A-Za-zÀ-ÖØ-öø-ÿ_][A-Za-zÀ-ÖØ-öø-ÿ0-9_]*))\s*\)$/i);
   if (choices) return choices[1] || choices[2];

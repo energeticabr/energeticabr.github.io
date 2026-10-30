@@ -106,7 +106,9 @@
         // JavaScript startsWith('') (which would conceal the regression).
         if (/startswith\([^,]+,''\)/.test(call.filter)) return { value: [] };
         const match = /^startswith\(fields\/([A-Za-z0-9_]+),'([^']+)'\)$/.exec(call.filter);
-        if (call.filter) check(match && match[1] === catalog.value, `${catalog.field}: filter must use the resolved internal name`);
+        const exact = /^fields\/([A-Za-z0-9_]+) eq '([^']+)'$/.exec(call.filter);
+        if (call.filter) check((match || exact) && (match || exact)[1] === catalog.value, `${catalog.field}: filter must use the resolved internal name`);
+        if (exact) { call.term=exact[2]; call.exact=true; return { value:rows.filter(row=>row.fields[catalog.value]===exact[2]) }; }
         if (match) {
           const term = match[2];
           call.term = term;
