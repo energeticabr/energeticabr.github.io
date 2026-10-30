@@ -72,12 +72,19 @@ export function createTaskCompletionDialog({ document: doc, host, data, today, o
     const buttons = el('div', 'gallery-record-dialog-buttons');
     const cancel = el('button', 'gallery-record-dialog-button tg-completion-cancel', 'Cancelar');
     cancel.type = 'button'; cancel.setAttribute('data-task-completion-cancel', '');
+    const header = el('header', 'gallery-editor-header');
+    const back = el('button', 'gallery-editor-back', '←');
+    back.type = 'button'; back.setAttribute('data-gallery-editor-back', '');
+    back.setAttribute('aria-label', 'Voltar à galeria sem salvar');
+    header.append(back, el('h2', 'gallery-record-dialog-title', `Concluir tarefa #${row.id}`));
     buttons.append(cancel);
-    dialog.append(el('h2', 'gallery-record-dialog-title', `Concluir tarefa #${row.id}`), message, body);
+    dialog.append(header, message, body);
     overlay.append(dialog); host.append(overlay);
     const current = { overlay, dialog, trigger, error: message, busy: false, persisted: false, abort: new AbortController() };
     state = current; onBlocked(true); dialog.focus({ preventScroll: true });
-    cancel.addEventListener('click', () => { if (active(current) && !current.busy) close(); });
+    const cancelEdit = () => { if (active(current) && !current.busy) close(); };
+    cancel.addEventListener('click', cancelEdit);
+    back.addEventListener('click', cancelEdit);
     overlay.addEventListener('click', event => {
       event.stopPropagation();
       if (event.target === overlay && active(current) && !current.busy) close();
@@ -136,7 +143,7 @@ export function createTaskCompletionDialog({ document: doc, host, data, today, o
           error(current, new Error('Informe uma data de conclusão válida.')); date.focus(); return;
         }
         pending = true; current.busy = true; message.hidden = true; dialog.setAttribute('aria-busy', 'true');
-        const inputs = [date, completed, cancel, submit]; inputs.forEach(input => { input.disabled = true; });
+        const inputs = [date, completed, cancel, back, submit]; inputs.forEach(input => { input.disabled = true; });
         try {
           if (current.needsReconcile) await reconcile();
           if (!active(current)) return;
@@ -167,7 +174,7 @@ export function createTaskCompletionDialog({ document: doc, host, data, today, o
           if (active(current)) {
             current.busy = false; dialog.setAttribute('aria-busy', 'false');
             date.disabled = completed.disabled = Boolean(current.persisted || current.needsReconcile);
-            cancel.disabled = submit.disabled = false;
+            cancel.disabled = back.disabled = submit.disabled = false;
           }
         }
       });

@@ -38,6 +38,76 @@ async function setup(t, overrides = {}) {
 const click = (ctx, action) => ctx.buttons.querySelector(`[data-gallery-action="${action}"]`).click();
 const key = (ctx, target, name, options = {}) => target.dispatchEvent(new ctx.dom.window.KeyboardEvent("keydown", { key: name, bubbles: true, cancelable: true, ...options }));
 
+test('top back cancels a pending editor read and ignores its late result', async t => {
+  const pending = deferred(); let signal;
+  const ctx = await setup(t, { loadEditor: (_id, options) => { signal = options.signal; return pending.promise; } });
+  click(ctx, 'edit');
+  const back = ctx.get('[data-gallery-editor-back]');
+  assert.ok(back, 'the loading editor needs a top back action');
+  back.click();
+  assert.equal(signal.aborted, true);
+  pending.resolve(context('42')); await settle(); await settle();
+  assert.equal(ctx.get('[data-gallery-record-screen]'), null);
+  assert.deepEqual(ctx.writes, []); assert.deepEqual(ctx.changes, []);
+});
+
+test('top back discards field and attachment drafts without changing the originating gallery', async t => {
+  const ctx = await setup(t, { loadEditor: async id => ({ ...context(id), attachments: {
+    enabled: true, canView: true, canEdit: true,
+    existingFiles: [{ name: 'ORIGINAL.pdf', size: 25, type: 'application/pdf' }],
+    readExisting: async () => new ArrayBuffer(1),
+  } }) });
+  const gallery = ctx.get('#gallery'), trigger = ctx.get('[data-gallery-action="edit"]');
+  gallery.dataset.filter = 'ATIVO'; gallery.dataset.page = '3'; gallery.scrollTop = 500;
+  let restoredFocus;
+  const focus = trigger.focus.bind(trigger);
+  trigger.focus = options => { restoredFocus = options; focus(options); };
+  trigger.click(); await settle(); await settle();
+  ctx.get('[name=Title]').value = 'Draft';
+  ctx.get('[data-form-attachment-remove-existing]').click();
+  const back = ctx.get('[data-gallery-editor-back]');
+  assert.ok(back, 'the ready editor needs a top back action');
+  assert.equal(back.type, 'button');
+  assert.equal(back.getAttribute('aria-label'), 'Voltar à galeria sem salvar');
+  back.click();
+  assert.equal(ctx.get('[data-gallery-record-screen]'), null);
+  assert.deepEqual(ctx.writes, []); assert.deepEqual(ctx.changes, []);
+  assert.equal(gallery.dataset.filter, 'ATIVO'); assert.equal(gallery.dataset.page, '3');
+  assert.equal(gallery.scrollTop, 500);
+  assert.equal(ctx.document.activeElement, trigger);
+  assert.equal(restoredFocus?.preventScroll, true);
+  trigger.click(); await settle(); await settle();
+  assert.equal(ctx.get('[name=Title]').value, 'Original');
+  assert.ok(ctx.get('[data-form-attachment-remove-existing]'));
+});
+
+for (const stage of ['variant', 'error']) test(`top back returns from editor ${stage} without reloading the gallery`, async t => {
+  const ctx = await setup(t, { loadEditor: async id => {
+    if (stage === 'error') throw new Error('Metadados indisponíveis');
+    return { ...context(id), contract: { requiresVariantSelection: true, formVariants: [{ id: 'form1', label: 'Formulário' }] } };
+  } });
+  click(ctx, 'edit'); await settle(); await settle();
+  const back = ctx.get('[data-gallery-editor-back]');
+  assert.ok(back); back.click();
+  assert.equal(ctx.get('[data-gallery-record-screen]'), null);
+  assert.deepEqual(ctx.writes, []); assert.deepEqual(ctx.changes, []);
+});
+
+test('top back cannot cancel an in-flight write and becomes available after a failed save', async t => {
+  const mutation = deferred();
+  const ctx = await setup(t, { saveEditor: () => mutation.promise });
+  click(ctx, 'edit'); await settle(); await settle();
+  const back = ctx.get('[data-gallery-editor-back]'); assert.ok(back);
+  ctx.get('[name=Title]').value = 'Draft';
+  ctx.get('form').dispatchEvent(new ctx.dom.window.Event('submit', { bubbles: true, cancelable: true }));
+  assert.equal(back.disabled, true);
+  back.click(); assert.ok(ctx.get('[data-gallery-record-screen]'));
+  mutation.reject(new Error('Falha temporária')); await settle();
+  assert.equal(back.disabled, false);
+  back.click(); assert.equal(ctx.get('[data-gallery-record-screen]'), null);
+  assert.deepEqual(ctx.changes, []);
+});
+
 for (const entity of entities.filter(item => item.available && item.galleryAvailable && item.capabilities.edit)) test(`gallery edit ${entity.id} starts a fresh filter and only saves a selected option`, async t => {
   const names = ['AGRUPAR', 'FILIAL', 'TIPOTRANSACAO', 'APROVACAO', 'ETAPA', 'FORNECEDOR', 'PRODUTO'];
   const ctx = await setup(t, { loadEditor: async id => ({ ...context(id),

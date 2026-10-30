@@ -11,8 +11,8 @@ export function createDdaPaymentConfirmation({ document: doc, host, confirmPayme
     const old = current; current = null; old.controller?.abort(); clearTimeout(old.timer);
     doc.removeEventListener('focusin', keepFocus, true); old.overlay.remove();
     for (const [node, inert] of old.background) node.inert = inert;
-    if (old.trigger?.isConnected && !host.hidden) old.trigger.focus();
-    else if (host.isConnected && !host.hidden) host.focus();
+    if (old.trigger?.isConnected && !host.hidden) old.trigger.focus({ preventScroll: true });
+    else if (host.isConnected && !host.hidden) host.focus({ preventScroll: true });
     onClose();
   }
   function show({ itemId, key, supplier, amount, due }, trigger) {
@@ -21,6 +21,12 @@ export function createDdaPaymentConfirmation({ document: doc, host, confirmPayme
     const dialog = el('section', 'gallery-record-dialog dda-payment-dialog'); dialog.dataset.ddaPaymentDialog = '';
     dialog.setAttribute('role', 'dialog'); dialog.setAttribute('aria-modal', 'true'); dialog.setAttribute('aria-label', 'Confirmar pagamento DDA'); dialog.tabIndex = -1;
     const title = el('h2', '', 'Confirma o pagamento deste DDA?');
+    const header = el('header', 'gallery-editor-header');
+    const back = el('button', 'gallery-editor-back', '←');
+    back.type = 'button'; back.setAttribute('data-gallery-editor-back', '');
+    back.setAttribute('aria-label', 'Voltar à galeria sem salvar');
+    back.addEventListener('click', () => close());
+    header.append(back, title);
     const summary = el('p', 'dda-payment-summary', supplier + ' · ID ' + itemId + '\n' + amount + ' · Vencimento ' + due);
     const note = el('p', '', 'Confirme somente se o boleto já foi pago. Esta ação registra a sua confirmação e retira o valor das pendências; não realiza um pagamento no banco.');
     const status = el('p', 'dda-payment-feedback'); status.setAttribute('role', 'status');
@@ -34,7 +40,7 @@ export function createDdaPaymentConfirmation({ document: doc, host, confirmPayme
     current = entry;
     yes.addEventListener('click', async () => {
       if (entry.busy || current !== entry) return;
-      entry.busy = true; yes.disabled = true; cancel.disabled = true; status.textContent = 'Registrando confirmação…';
+      entry.busy = true; yes.disabled = true; cancel.disabled = back.disabled = true; status.textContent = 'Registrando confirmação…';
       entry.controller = new AbortController();
       try {
         if (typeof confirmPayment !== 'function') throw new Error('Confirmação indisponível.');
@@ -54,11 +60,11 @@ export function createDdaPaymentConfirmation({ document: doc, host, confirmPayme
           status.setAttribute('role', 'alert'); dialog.dataset.state = 'failed';
         }
       } finally {
-        clearTimeout(entry.timer); entry.busy = false; yes.disabled = false; cancel.disabled = false;
+        clearTimeout(entry.timer); entry.busy = false; yes.disabled = false; cancel.disabled = back.disabled = false;
         if (current === entry) cancel.focus();
       }
     });
-    buttons.append(cancel, yes); dialog.append(title, summary, note, status, buttons); overlay.append(dialog); host.append(overlay);
+    buttons.append(cancel, yes); dialog.append(header, summary, note, status, buttons); overlay.append(dialog); host.append(overlay);
     overlay.addEventListener('keydown', event => {
       if (event.key === 'Escape') { event.preventDefault(); event.stopPropagation(); close(); }
       if (event.key === 'Tab') {

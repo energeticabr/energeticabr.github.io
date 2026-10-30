@@ -80,6 +80,43 @@ async function showDetail(ctx) {
 }
 const mutations = ctx => ctx.calls.filter(({ operation }) => !['snapshot', 'detail', 'attachment'].includes(operation));
 
+for (const rejected of [false, true]) test(`launch top back cancels pending detail and ignores late ${rejected ? 'error' : 'success'}`, async t => {
+  const pending = deferred(); let signal;
+  const ctx = await setup(t, { request: async (operation, _payload, options) => {
+    if (operation === 'snapshot') return snapshot();
+    if (operation === 'detail') { signal = options?.signal; return pending.promise; }
+    return {};
+  } });
+  await ctx.gallery.open();
+  const scroll = ctx.root().querySelector('.lg-content'); scroll.scrollTop = 187;
+  const trigger = ctx.root().querySelector('[data-gallery-action="edit"]'); trigger.focus(); trigger.click();
+  const back = ctx.root().querySelector('[data-gallery-editor-back]');
+  assert.ok(back, 'loading launch editor needs Back');
+  assert.equal(back.disabled, false);
+  back.click();
+  assert.equal(signal?.aborted, true);
+  assert.equal(scroll.scrollTop, 187); assert.equal(ctx.document.activeElement, trigger);
+  if (rejected) pending.reject(new Error('Late detail failure')); else pending.resolve(detail());
+  await settle(); await settle();
+  assert.equal(ctx.root().querySelector('.lg-detail').hidden, true);
+  assert.equal(ctx.root().querySelector('.lg-editor'), null);
+  assert.deepEqual(mutations(ctx), []);
+});
+
+test('launch detail error retains top back and returns without refreshing its gallery', async t => {
+  const ctx = await setup(t, { request: async operation => {
+    if (operation === 'snapshot') return snapshot();
+    throw new Error('Detail unavailable');
+  } });
+  await ctx.gallery.open(); await showDetail(ctx);
+  const snapshots = ctx.calls.filter(call => call.operation === 'snapshot').length;
+  const back = ctx.root().querySelector('[data-gallery-editor-back]');
+  assert.ok(back, 'failed launch editor needs Back'); back.click();
+  assert.equal(ctx.root().querySelector('.lg-detail').hidden, true);
+  assert.equal(ctx.calls.filter(call => call.operation === 'snapshot').length, snapshots);
+  assert.deepEqual(mutations(ctx), []);
+});
+
 test('X do anexo no editor de lancamentos so exclui apos SUBMETER e permite Retornar', async t => {
   let files = [{ fileName: 'um.pdf' }, { fileName: 'dois.png' }];
   const ctx = await setup(t, { request: async (operation, payload) => {
@@ -1980,25 +2017,62 @@ test('the pencil opens the over-gallery editing form and closes back to the gall
   assert.ok(panel.classList.contains('lg-detail-modal'));
   assert.ok(panel.querySelector('form.lg-editor'));
   assert.equal(panel.querySelector('table.lg-data-table'), null);
-  button(panel, 'Fechar edição').click();
+  panel.querySelector('[data-gallery-editor-back]').click();
   assert.equal(panel.hidden, true);
   assert.equal(ctx.root().hidden, false);
 });
 
-test('edit close button is on the left with an X before its accessible label', async t => {
+test('editor back arrow cancels dirty fields and attachments while retaining its originating gallery', async t => {
   const ctx = await setup(t);
-  const stylesheet = ctx.document.createElement('style');
-  stylesheet.textContent = readFileSync(new URL('../src/ui/launch-gallery.css', import.meta.url), 'utf8');
-  ctx.document.head.append(stylesheet);
+  await ctx.gallery.open();
+  const content = ctx.root().querySelector('.lg-content');
+  const origin = ctx.root().querySelector('[data-gallery-action="edit"]');
+  const card = origin.closest('.lg-record');
+  origin.focus(); content.scrollTop = 435; content.scrollLeft = 7;
+  const snapshotReads = ctx.calls.filter(call => call.operation === 'snapshot').length;
+  await showDetail(ctx);
+  input(ctx, 'QUANTIDADE', '99');
+  ctx.root().querySelector('[data-lg-attachment-remove="um.pdf"]').click();
+  const arrow = ctx.root().querySelector('.lg-detail [data-gallery-editor-back]');
+  assert.ok(arrow);
+  assert.equal(arrow.type, 'button');
+  assert.equal(arrow.textContent, '←');
+  assert.equal(arrow.getAttribute('aria-label'), 'Voltar à galeria sem salvar');
+  assert.equal(arrow.title, 'Voltar à galeria sem salvar');
+  assert.ok(arrow.closest('.gallery-editor-header'));
+  assert.equal(arrow.parentElement.firstElementChild, arrow);
+  let submits = 0;
+  ctx.root().querySelector('.lg-editor').addEventListener('submit', () => submits++);
+  content.scrollTop = 0; content.scrollLeft = 0;
+  arrow.click(); await settle();
+  assert.equal(ctx.root().querySelector('.lg-detail').hidden, true);
+  assert.equal(ctx.root().hidden, false);
+  assert.equal(ctx.root().querySelector('.lg-record'), card);
+  assert.equal(content.scrollTop, 435); assert.equal(content.scrollLeft, 7);
+  assert.equal(ctx.document.activeElement, origin);
+  assert.equal(ctx.calls.filter(call => call.operation === 'snapshot').length, snapshotReads);
+  assert.equal(mutations(ctx).length, 0); assert.equal(submits, 0);
+  await showDetail(ctx);
+  assert.equal(ctx.root().querySelector('[name="QUANTIDADE"]').value, '2.5');
+  assert.equal(ctx.root().querySelector('[data-lg-attachment-restore="um.pdf"]'), null);
+});
+
+test('editor back arrow cannot dismiss an in-flight launch save', async t => {
+  const pending = deferred();
+  const ctx = await setup(t, { request: async operation => operation === 'snapshot' ? snapshot() : operation === 'update' ? pending.promise : detail() });
+  t.after(() => pending.resolve({ ok: true }));
   await ctx.gallery.open(); await showDetail(ctx);
-  const close = button(ctx.root().querySelector('.lg-detail'), 'Fechar edição');
-  assert.equal(close.parentElement.firstElementChild, close);
-  assert.equal(close.getAttribute('aria-label'), 'Fechar edição');
-  assert.equal(ctx.dom.window.getComputedStyle(close).order, '0');
-  assert.equal(ctx.dom.window.getComputedStyle(close).display, 'inline-flex');
-  const iconRule = [...stylesheet.sheet.cssRules].find(rule =>
-    rule.selectorText === '.lg-detail-modal:not(.lg-cluster-modal) .lg-detail-close::before');
-  assert.match(iconRule?.style.content ?? '', /[×✕]/u);
+  input(ctx, 'QUANTIDADE', '3');
+  const arrow = ctx.root().querySelector('.lg-detail [data-gallery-editor-back]');
+  assert.ok(arrow);
+  button(ctx.root(), 'SUBMETER').click();
+  button(ctx.root(), 'Confirmar alterações').click(); await settle();
+  assert.equal(arrow.disabled, true);
+  arrow.click();
+  arrow.dispatchEvent(new ctx.dom.window.Event('click', { bubbles: true }));
+  assert.equal(ctx.root().querySelector('.lg-detail').hidden, false);
+  assert.equal(ctx.calls.filter(call => call.operation === 'update').length, 1);
+  pending.resolve({ ok: true }); await settle(); await settle();
 });
 
 test('Escape closes the detail screen before closing the gallery', async t => {

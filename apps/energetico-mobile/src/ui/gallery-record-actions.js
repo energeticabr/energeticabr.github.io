@@ -66,7 +66,7 @@ export function createGalleryRecordActions({ document, host, loadEditor, saveEdi
     previous?.variantPicker?.destroy();
     previous?.overlay.remove();
     syncRecordButtons();
-    if (previous?.focus?.isConnected && !previous.focus.disabled) previous.focus.focus();
+    if (previous?.focus?.isConnected && !previous.focus.disabled) previous.focus.focus({ preventScroll: true });
     else if (previous && !disposed && host?.isConnected && !host.hidden) {
       if (!host.hasAttribute('tabindex')) host.tabIndex = -1;
       host.focus({ preventScroll: true });
@@ -121,6 +121,17 @@ export function createGalleryRecordActions({ document, host, loadEditor, saveEdi
     (host || document.body).append(overlay);
     const state = { epoch, row, operation, overlay, dialog, error, body, focus: trigger || document.activeElement, busy: false, controller: null, loadEpoch: 0, mutationAbort: new AbortController() };
     session = state;
+    if (operation === 'edit') {
+      const header = element('header', 'gallery-editor-header');
+      const back = button('←', 'data-gallery-editor-back', '', () => {
+        if (active(state) && !state.busy) close();
+      });
+      back.className = 'gallery-editor-back';
+      back.setAttribute('aria-label', 'Voltar à galeria sem salvar');
+      back.title = 'Voltar à galeria sem salvar';
+      heading.before(header);
+      header.append(back, heading);
+    }
     overlay.addEventListener("click", event => {
       event.stopPropagation();
       if (event.target === overlay && active(state) && !state.busy) close();

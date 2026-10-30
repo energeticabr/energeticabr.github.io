@@ -1,0 +1,126 @@
+<!doctype html>
+<html lang="pt-BR">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1">
+  <meta http-equiv="Content-Security-Policy" content="default-src 'none'; script-src 'self' 'unsafe-inline'; style-src 'self'; img-src 'self' data:; connect-src 'none'; form-action 'none'; base-uri 'none'">
+  <title>Galeria · voltar do editor sem salvar</title>
+  <link rel="stylesheet" href="../../apps/energetico-mobile/src/styles.css">
+  <link rel="stylesheet" href="../../apps/energetico-mobile/src/ui/orders-gallery.css">
+  <link rel="stylesheet" href="../../apps/energetico-mobile/src/ui/gallery-record-actions.css">
+</head>
+<body>
+  <!-- Fictitious gallery state inside the actual app's scrollable gallery shell. -->
+  <main id="gallery" class="og-overlay">
+    <header class="og-header"><h1 class="og-title">Imobilizados fictícios</h1></header>
+    <div class="og-content" id="gallery-scroll">
+      <div class="og-filter-grid">
+        <label class="og-field"><span>Pesquisar</span><input class="og-input" id="query" value="EQUIPAMENTO"></label>
+        <label class="og-field"><span>Página</span><select class="og-input" id="page"><option>1</option><option>2</option><option selected>3</option></select></label>
+      </div>
+      <p class="og-list-status">Página 3 · 24 registros fictícios</p>
+      <div class="og-cards" id="records"></div>
+    </div>
+  </main>
+  <script type="module">
+    import { createGalleryRecordActions } from '../../apps/energetico-mobile/src/ui/gallery-record-actions.js';
+
+    const host = document.querySelector('#gallery'), scroll = document.querySelector('#gallery-scroll');
+    const records = document.querySelector('#records');
+    const id = '123456789012345';
+    const original = 'Equipamento fictício original';
+    const fileName = 'RELATÓRIO DE INSPEÇÃO - EQUIPAMENTO FICTÍCIO.pdf';
+    const errors = [], securityViolations = [], measurements = [];
+    let writes = 0, changed = 0, loads = 0;
+    const check = (condition, message) => { if (!condition) throw new Error(message); };
+    const frames = () => new Promise(resolve => requestAnimationFrame(() => requestAnimationFrame(resolve)));
+    const rect = element => { const r = element.getBoundingClientRect(); return { left: r.left, right: r.right, top: r.top, bottom: r.bottom, width: r.width, height: r.height }; };
+    async function until(predicate, message) {
+      const deadline = performance.now() + 5000;
+      while (!predicate()) {
+        if (performance.now() > deadline) throw new Error(`Timeout: ${message}`);
+        await new Promise(resolve => setTimeout(resolve, 15));
+      }
+    }
+    document.addEventListener('securitypolicyviolation', event => securityViolations.push(event.blockedURI));
+    const actions = createGalleryRecordActions({ document, host, actions: ['edit'], galleryTitle: 'IMOBILIZADOS FICTÍCIOS',
+      async loadEditor(recordId) {
+        loads++;
+        return { entity: { id: 'fixture-editor-back', title: 'Cadastro e inspeção dos equipamentos vinculados à obra e conferência da documentação de recebimento' },
+          contract: { hasForm: true, readOnly: false }, item: { id: recordId, fields: { DESCRICAO: original } },
+          columns: [{ name: 'DESCRICAO', label: 'Descrição do equipamento', control: 'text', editable: true }],
+          attachments: { enabled: true, canView: true, canEdit: true, existingFiles: [{ name: fileName, size: 2048, type: 'application/pdf' }],
+            readExisting: async () => { throw new Error('Nenhum download é permitido nesta fixture.'); } },
+        };
+      },
+      saveEditor: async () => { writes++; throw new Error('Nenhuma gravação é permitida nesta fixture.'); },
+      onChanged: () => { changed++; }, onError: error => errors.push(String(error.stack || error)),
+    });
+    let trigger;
+    for (let index = 0; index < 24; index++) {
+      const card = document.createElement('article'); card.className = 'og-card';
+      const heading = document.createElement('h2'); heading.textContent = `Equipamento fictício ${index + 1}`;
+      const description = document.createElement('p'); description.textContent = 'Registro local de conferência de materiais, inspeção e controle dos equipamentos vinculados à obra.';
+      card.append(heading, description);
+      if (index === 16) { card.append(actions.render({ id, fields: { DESCRICAO: original } })); trigger = card.querySelector('[data-gallery-action="edit"]'); }
+      records.append(card);
+    }
+    const galleryState = () => ({ query: document.querySelector('#query').value, page: document.querySelector('#page').value,
+      scrollTop: scroll.scrollTop, scrollLeft: scroll.scrollLeft, windowX: scrollX, windowY: scrollY, cardCount: records.children.length });
+    const measureHeader = () => {
+      const screen = host.querySelector('[data-gallery-record-screen]');
+      const back = screen.querySelector('[data-gallery-editor-back]');
+      check(back, 'Missing top-left gallery editor Back button');
+      check(back.type === 'button', 'Back must never submit the form');
+      check(back.getAttribute('aria-label') === 'Voltar à galeria sem salvar', 'Back has the exact accessible name');
+      check(back.textContent.trim() === '←', 'Back displays the left arrow');
+      const header = back.closest('.gallery-editor-header'), heading = header?.querySelector('h2');
+      check(header && heading && !back.disabled, 'Shared header and enabled Back are present');
+      const box = rect(back), headerBox = rect(header), headingBox = rect(heading);
+      check(box.width >= 48 && box.height >= 48, 'Back has a 48px target');
+      check(Math.abs(box.left - headerBox.left) <= 1 && box.left >= 0 && box.left <= 32, 'Back occupies the top-left header target');
+      check(box.top >= 0 && box.bottom <= innerHeight && box.top <= 64, 'Back is visible near the top');
+      check(box.right <= headingBox.left + 1 && headingBox.right <= innerWidth + 1, 'Long heading fits without overlapping Back');
+      check(screen.scrollWidth <= screen.clientWidth + 1, 'Editor has no horizontal overflow');
+      check(document.elementFromPoint(box.left + box.width / 2, box.top + box.height / 2)?.closest('[data-gallery-editor-back]') === back, 'Back is unobstructed and clickable');
+      measurements.push({ back: box, header: headerBox, heading: headingBox });
+      return back;
+    };
+    async function open() {
+      trigger.click();
+      await until(() => host.querySelector('[name="DESCRICAO"]'), 'real dynamic form');
+      await frames();
+      return measureHeader();
+    }
+    try {
+      trigger.closest('.og-card').scrollIntoView({ block: 'center' });
+      trigger.focus({ preventScroll: true }); await frames();
+      const baseline = galleryState(), triggerBefore = rect(trigger);
+      check(baseline.scrollTop > 0, 'Gallery really starts at a nonzero scroll position');
+      const back = await open();
+      const field = host.querySelector('[name="DESCRICAO"]'); field.value = 'RASCUNHO NÃO SALVO'; field.dispatchEvent(new Event('input', { bubbles: true }));
+      host.querySelector('[data-form-attachment-remove-existing]').click();
+      check(host.querySelector('[data-form-attachment-removed]'), 'Real attachment draft contains the staged deletion');
+      check(writes === 0 && changed === 0, 'Dirty field and staged deletion do not persist');
+      back.click(); await frames();
+      check(!host.querySelector('.gallery-record-overlay'), 'Back removes the editor overlay');
+      check(document.activeElement === trigger, 'Focus returns to the originating edit button');
+      const after = galleryState(), triggerAfter = rect(trigger);
+      check(JSON.stringify(after) === JSON.stringify(baseline), `Gallery query/page/scroll changed: ${JSON.stringify({ baseline, after })}`);
+      check(Math.abs(triggerAfter.top - triggerBefore.top) <= 1, 'Returning focus does not jump the gallery');
+      check(writes === 0 && changed === 0, 'Back cannot save or refresh the gallery');
+      const reopenedBack = await open();
+      check(host.querySelector('[name="DESCRICAO"]').value === original, 'Reopening discards the unsaved field');
+      check(!host.querySelector('[data-form-attachment-removed]') && host.querySelector('[data-form-attachment-existing]'), 'Reopening restores the saved attachment');
+      check(loads === 2 && writes === 0 && changed === 0, 'Only two editor loads, no mutations or gallery refresh');
+      check(errors.length === 0 && securityViolations.length === 0, 'No errors or network attempts');
+      // Leave the real reopened header at the top for screenshot inspection.
+      host.querySelector('[data-gallery-record-screen]').scrollTop = 0; await frames();
+      document.documentElement.dataset.layout = JSON.stringify({ status: 'passed', baseline, after, measurements, writes, changed, loads,
+        focusRestored: document.activeElement === reopenedBack || host.querySelector('[data-gallery-record-screen]').contains(document.activeElement), errors, securityViolations, width: innerWidth });
+    } catch (error) {
+      document.documentElement.dataset.layout = JSON.stringify({ status: 'failed', error: error.stack, measurements, writes, changed, loads, errors, securityViolations });
+    }
+  </script>
+</body>
+</html>
