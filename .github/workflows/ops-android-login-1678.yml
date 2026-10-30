@@ -2,6 +2,9 @@ name: Validar login Android 1678
 
 on:
   workflow_dispatch:
+  push:
+    branches:
+      - ops/validate-android-login-1678-20261030
 
 permissions:
   contents: read
