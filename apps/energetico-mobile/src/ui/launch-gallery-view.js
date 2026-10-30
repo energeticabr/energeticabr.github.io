@@ -206,6 +206,7 @@ export function createLaunchGallery({ document: documentRef = globalThis.documen
   let session = 0, listVersion = 0, detailVersion = 0;
   let listLoading = false, listBlocking = false, detailLoading = false, returnFocus;
   let current = null, selectedId = null, editor = null, review = null;
+  let editorOrigin = null, detailAbortController = null;
   let page = 1, pages = 0, needsDetailRefresh = false, pendingAttachmentName = null;
   let clusterVersion = 0, clusterReturnFocus = null, clusterAbortController = null, clusterTimer = null;
   const retryIds = new Map();
@@ -407,6 +408,7 @@ export function createLaunchGallery({ document: documentRef = globalThis.documen
     ],
     onEdit: async row => {
       if (!opened || destroyed || editor || !canChangeDetail()) return;
+      editorOrigin = { trigger: doc.activeElement, scrollTop: content.scrollTop, scrollLeft: content.scrollLeft };
       notify('');
       const epoch = session, version = detailVersion + 1;
       await loadDetail(row.id);
@@ -1213,16 +1215,19 @@ export function createLaunchGallery({ document: documentRef = globalThis.documen
   }
   async function loadDetail(id) {
     if (!opened || destroyed) return;
+    detailAbortController?.abort();
+    const controller = detailAbortController = new AbortController();
     selectedId = id;
     const version = ++detailVersion, epoch = session;
     detailLoading = true; panel.hidden = false;
     const indicator = createLoadingIndicator(doc, `Carregando edição de #${id}…`);
-    panel.replaceChildren(indicator); updateBusy();
+    panel.replaceChildren(editorHeader(id), indicator); updateBusy();
     const task = beginLoadingTask(indicator, {
+      signal: controller.signal,
       isCurrent: () => active(epoch) && version === detailVersion && !panel.hidden });
     task.prepared();
     try {
-      const result = await request('detail', { id }, { onProgress: task.report });
+      const result = await request('detail', { id }, { signal: controller.signal, onProgress: task.report });
       if (!active(epoch) || version !== detailVersion) return;
       if (!result?.item?.fields) throw new Error('Resposta de edição inválida');
       task.acquired();
@@ -1232,18 +1237,23 @@ export function createLaunchGallery({ document: documentRef = globalThis.documen
     } catch (error) {
       if (!active(epoch) || version !== detailVersion) return;
       current = null;
-      panel.replaceChildren(element('p', 'lg-error', failure(error, `Erro ao abrir #${id}`)),
+      panel.replaceChildren(editorHeader(id), element('p', 'lg-error', failure(error, `Erro ao abrir #${id}`)),
         button('Tentar novamente', () => loadDetail(id)), button('Fechar edição', dismissDetail));
     } finally {
       task.stop();
+      if (detailAbortController === controller) detailAbortController = null;
       if (active(epoch) && version === detailVersion) { detailLoading = false; updateBusy(); }
     }
   }
   function dismissDetail() {
     if (busy) return;
+    detailAbortController?.abort(); detailAbortController = null;
+    const origin = editorOrigin; editorOrigin = null;
     clearReview(); clearEditor();
     ++detailVersion; detailLoading = false; current = null; selectedId = null; pendingAttachmentName = null;
     panel.hidden = true; panel.replaceChildren(); updateBusy();
+    focus(origin?.trigger);
+    if (origin) { content.scrollTop = origin.scrollTop; content.scrollLeft = origin.scrollLeft; }
   }
   function clearEditor() {
     editor?.pickers?.destroy();
@@ -1256,15 +1266,20 @@ export function createLaunchGallery({ document: documentRef = globalThis.documen
     event.stopPropagation();
     if (event.target === reviewHost && !reviewHost.hidden && !busy) dismissReview();
   });
+  function editorHeader(id) {
+    const title = element('h2', 'lg-section-title', `Lançamento #${id}`);
+    const close = button('←', dismissDetail);
+    close.classList.add('gallery-editor-back');
+    close.dataset.galleryEditorBack = '';
+    close.setAttribute('aria-label', 'Voltar à galeria sem salvar');
+    close.title = 'Voltar à galeria sem salvar';
+    const detailHeader = element('div', 'lg-detail-header gallery-editor-header'); detailHeader.append(close, title);
+    return detailHeader;
+  }
   function renderDetail() {
     clearReview(); clearEditor();
     const item = current.item;
-    const title = element('h2', 'lg-section-title', `Lançamento #${item.id}`);
-    const close = button('Fechar edição', dismissDetail, { locked: false });
-    close.classList.add('lg-detail-close');
-    close.setAttribute('aria-label', 'Fechar edição');
-    const detailHeader = element('div', 'lg-detail-header'); detailHeader.append(close, title);
-    panel.replaceChildren(detailHeader);
+    panel.replaceChildren(editorHeader(item.id));
     panel.append(reviewHost);
     if (current.editFields?.length) beginEditor('update', { fromRender: true });
     else panel.insertBefore(element('p', 'lg-error', 'Os campos de edição deste lançamento não estão disponíveis.'), reviewHost);
@@ -1779,6 +1794,7 @@ export function createLaunchGallery({ document: documentRef = globalThis.documen
     recordActions.close();
     autoFilters.cancelPending();
     cancelClusterLoad();
+    detailAbortController?.abort(); detailAbortController = null;
     opened = false; ++session; ++listVersion; ++detailVersion; ++clusterVersion;
     if (detailLoading) needsDetailRefresh = true;
     listLoading = false; detailLoading = false; root.hidden = true;
@@ -1798,6 +1814,7 @@ export function createLaunchGallery({ document: documentRef = globalThis.documen
     autoFilters.destroy();
     attachmentCounts.destroy();
     cancelClusterLoad();
+    detailAbortController?.abort(); detailAbortController = null;
     opened = false; destroyed = true; ++session; ++listVersion; ++detailVersion; ++clusterVersion;
     retryIds.clear(); uncertainAttachments.clear(); root.removeEventListener('keydown', onKeyDown); root.remove();
     if (returnFocus?.isConnected) returnFocus.focus({ preventScroll: true });

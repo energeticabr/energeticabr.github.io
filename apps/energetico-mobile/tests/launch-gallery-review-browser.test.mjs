@@ -95,6 +95,21 @@ test('launch edit confirmation stays readable above the form on phones and deskt
         const shot = await send('Page.captureScreenshot', { format: 'png', captureBeyondViewport: false }, sessionId);
         writeFileSync(process.env.LAUNCH_REVIEW_SCREENSHOT, Buffer.from(shot.data, 'base64'));
       }
+      // The app imports the shared gallery stylesheet after launch-gallery.css.
+      await evaluate(`(() => { const style = document.createElement('style');
+        style.textContent = ${JSON.stringify(readFileSync(new URL('../src/ui/gallery-record-actions.css', import.meta.url), 'utf8'))};
+        document.head.append(style); document.querySelector('.lg-review-cancel').click(); })()`);
+      const arrow = await evaluate(`(() => { const button = document.querySelector('[data-gallery-editor-back]');
+        const box = button.getBoundingClientRect(), style = getComputedStyle(button);
+        return { width: box.width, height: box.height, x: box.left + box.width / 2, y: box.top + box.height / 2,
+          color: style.color, background: style.backgroundColor }; })()`);
+      assert.equal(arrow.width, 48); assert.equal(arrow.height, 48);
+      await send('Input.dispatchMouseEvent', { type: 'mouseMoved', x: arrow.x, y: arrow.y }, sessionId);
+      assert.equal(await evaluate(`getComputedStyle(document.querySelector('[data-gallery-editor-back]')).backgroundColor`),
+        'rgb(255, 255, 255)', 'Back arrow must keep its white background under the launch-button hover rule');
+      assert.notEqual(arrow.color, arrow.background);
+      assert.equal(await evaluate(`getComputedStyle(document.querySelector('.lg-detail-header .lg-section-title')).color`),
+        'rgb(255, 255, 255)', 'editor heading stays readable on its dark header');
     }
   } finally {
     for (const request of pending.values()) clearTimeout(request.timer);

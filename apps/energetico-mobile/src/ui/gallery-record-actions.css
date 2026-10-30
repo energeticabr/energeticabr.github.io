@@ -112,6 +112,31 @@
 .gallery-record-screen .dynamic-field input[readonly]:not([data-select-only]),
 .gallery-record-screen .dynamic-field input[readonly]:disabled { background: #eef3f5; color: #455a64; }
 .gallery-record-dialog-title { margin: 0 0 20px; font-size: 1.2rem; line-height: 1.4; }
+.gallery-editor-header { display: flex; align-items: center; gap: 12px; min-width: 0; margin-bottom: 20px; }
+.gallery-editor-header > h2 { min-width: 0; margin: 0; overflow-wrap: anywhere; }
+.lg-detail-header.gallery-editor-header > h2 { color: inherit; }
+.gallery-editor-back {
+  box-sizing: border-box;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  flex: 0 0 48px;
+  width: 48px;
+  min-width: 48px;
+  height: 48px;
+  padding: 0;
+  border: 1px solid #aec2ca;
+  border-radius: 10px;
+  background: #fff;
+  color: #173b57;
+  font: inherit;
+  font-size: 28px;
+  line-height: 1;
+  cursor: pointer;
+}
+.gallery-editor-back:focus-visible { outline: 3px solid #1565c0; outline-offset: 3px; }
+.gallery-editor-header .gallery-editor-back:hover:not(:disabled) { background: #fff; color: #173b57; }
+.gallery-editor-back:disabled { opacity: .55; cursor: wait; }
 .gallery-record-dialog-error { color: #a61b1b; background: #fff0f0; padding: 12px; border-radius: 8px; }
 .gallery-record-dialog-buttons { display: flex; justify-content: flex-end; gap: 12px; }
 .gallery-record-dialog-button {

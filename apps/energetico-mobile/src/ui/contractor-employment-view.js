@@ -160,9 +160,22 @@ export function createContractorEmploymentView(container = {}, options = {}) {
   }
   function edit(row, inactivate = false, notice = '') {
     if (saving || destroyed) return;
+    const origin = { trigger: doc.activeElement, scrollTop: root.scrollTop, scrollLeft: root.scrollLeft };
     alert.textContent = unconfirmedMessage(); clearEditor();
     const form = el('form'); form.noValidate = true;
-    form.append(el('h2', '', (inactivate ? 'Inativar: ' : 'Editar: ') + (row.fields.Title || row.id)));
+    const cancelEdit = () => {
+      if (saving || destroyed || root.hidden || !editor.contains(form)) return;
+      clearEditor(); alert.textContent = unconfirmedMessage();
+      if (origin.trigger?.isConnected) origin.trigger.focus({ preventScroll: true });
+      root.scrollTop = origin.scrollTop; root.scrollLeft = origin.scrollLeft;
+    };
+    const editorHeader = el('div', 'gallery-editor-header');
+    const editorBack = button('←', 'back-edit', cancelEdit);
+    editorBack.classList.add('gallery-editor-back'); editorBack.dataset.galleryEditorBack = '';
+    editorBack.setAttribute('aria-label', 'Voltar à galeria sem salvar');
+    editorBack.title = 'Voltar à galeria sem salvar';
+    editorHeader.append(editorBack, el('h2', '', (inactivate ? 'Inativar: ' : 'Editar: ') + (row.fields.Title || row.id)));
+    form.append(editorHeader);
     if (notice) form.append(el('p', '', notice));
     const controls = {};
     function field(name, label, choices) {
@@ -184,7 +197,7 @@ export function createContractorEmploymentView(container = {}, options = {}) {
     state.addEventListener('change', () => { if (state.value === 'ATIVO') termination.value = ''; updateRequirement(); });
     controls.DATAADMISSAO.addEventListener('change', updateRequirement); updateRequirement();
     const save = el('button', 'rg-button', 'Salvar'); save.type = 'submit';
-    const cancel = button('Cancelar', 'cancel-edit', () => { clearEditor(); alert.textContent = unconfirmedMessage(); });
+    const cancel = button('Cancelar', 'cancel-edit', cancelEdit);
     const actions = el('div', 'ce-actions'); actions.append(save, cancel); form.append(actions);
     form.addEventListener('submit', async event => {
       event.preventDefault();

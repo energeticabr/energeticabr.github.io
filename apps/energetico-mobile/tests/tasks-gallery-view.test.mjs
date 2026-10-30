@@ -181,7 +181,7 @@ test('falha de leitura após save verifica os campos antes de permitir nova grav
   assert.equal(ctx.root().querySelector('.tg-completion-dialog'), null);
 });
 
-test('carregamento não mostra Cancelar isolado e mantém o foco até exibir formulário e botões juntos', async t => {
+test('carregamento oferece somente voltar e mantém Cancelar/Submeter junto dos campos', async t => {
   const waiting = deferred();
   const ctx = await setup(t, { data: { loadEditor: async () => waiting.promise } });
   await ctx.gallery.open();
@@ -189,12 +189,16 @@ test('carregamento não mostra Cancelar isolado e mantém o foco até exibir for
   const dialog = ctx.root().querySelector('.tg-completion-dialog');
   assert.equal(ctx.document.activeElement, dialog);
   assert.match(dialog.textContent, /Carregando conclusão/);
-  assert.equal(dialog.querySelector('button'), null, 'nenhum botão deve aparecer antes dos campos');
+  const back = dialog.querySelector('[data-gallery-editor-back]');
+  assert.ok(back, 'voltar permanece disponível durante a leitura');
+  assert.deepEqual([...dialog.querySelectorAll('button')], [back], 'somente voltar aparece antes dos campos');
+  assert.equal(dialog.querySelector('[data-task-completion-cancel]'), null);
+  assert.equal(dialog.querySelector('[data-task-completion-submit]'), null);
   dialog.dispatchEvent(new ctx.dom.window.KeyboardEvent('keydown', { key: 'Tab', shiftKey: true, bubbles: true, cancelable: true }));
-  assert.equal(ctx.document.activeElement, dialog, 'Tab não pode focar um botão invisível ou fora do popup');
+  assert.equal(ctx.document.activeElement, back, 'Tab permanece no controle de voltar visível');
   waiting.resolve(completionContext('176')); await settle(); await settle();
   assert.ok(dialog.querySelector('[data-task-completion-form]'));
-  assert.deepEqual([...dialog.querySelectorAll('button')].map(button => button.textContent), ['Cancelar', 'Submeter']);
+  assert.deepEqual([...dialog.querySelectorAll('button')].map(button => button.textContent), ['←', 'Cancelar', 'Submeter']);
   dialog.focus();
   dialog.dispatchEvent(new ctx.dom.window.KeyboardEvent('keydown', { key: 'Tab', shiftKey: true, bubbles: true, cancelable: true }));
   assert.equal(ctx.document.activeElement, dialog.querySelector('[data-task-completion-submit]'));

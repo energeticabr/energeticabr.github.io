@@ -38,6 +38,35 @@ async function openRhEditor(t, customize = data => data) {
   return { dom, doc, f, view, listenerCount, form: doc.querySelector('form') };
 }
 
+for (const action of ['edit', 'inactivate']) test(`RH ${action} back arrow cancels without saving or losing gallery state`, async t => {
+  const dom = new JSDOM('<main></main>'), doc = dom.window.document, f = createContractorEmploymentFixture();
+  let reads = 0;
+  const view = subject.createContractorEmploymentView({ document: doc, data: { ...f.data, loadSnapshot: async (...args) => { reads++; return f.data.loadSnapshot(...args); } } });
+  t.after(() => { view.destroy(); dom.window.close(); });
+  await view.open();
+  const root = doc.querySelector('.ce-overlay');
+  const search = root.querySelector('[data-search]');
+  search.value = 'Funcionário'; search.dispatchEvent(new dom.window.Event('input'));
+  const origin = root.querySelector(`[data-employment-row="4"] [data-action="${action}"]`);
+  assert.ok(origin); origin.focus(); root.scrollTop = 360; root.scrollLeft = 4;
+  const cards = [...root.querySelectorAll('.ce-card')];
+  origin.click();
+  const form = root.querySelector('.ce-editor form');
+  const arrow = form.querySelector('[data-gallery-editor-back]');
+  assert.ok(arrow); assert.equal(arrow.type, 'button'); assert.equal(arrow.textContent, '←');
+  assert.equal(arrow.getAttribute('aria-label'), 'Voltar à galeria sem salvar');
+  assert.equal(arrow.title, 'Voltar à galeria sem salvar');
+  assert.ok(arrow.closest('.gallery-editor-header'));
+  const cargo = rhPicker(form, 'CARGO'); filterRhPicker(dom.window, cargo, 'mestre'); cargo.field.querySelector('[role="option"]').click();
+  let submits = 0; form.addEventListener('submit', () => submits++);
+  root.scrollTop = 0; root.scrollLeft = 0; arrow.click(); await tick();
+  assert.equal(root.hidden, false); assert.equal(root.querySelector('.ce-editor form'), null);
+  assert.equal(search.value, 'Funcionário'); assert.deepEqual([...root.querySelectorAll('.ce-card')], cards);
+  assert.equal(root.scrollTop, 360); assert.equal(root.scrollLeft, 4); assert.equal(doc.activeElement, origin);
+  assert.equal(reads, 1); assert.equal(f.writes.length, 0); assert.equal(submits, 0);
+  origin.click(); assert.equal(root.querySelector('[name="CARGO"]').value, 'PEDREIRO III');
+});
+
 for (const [name, query, expected, initial] of [
   ['CARGO', 'mestre', 'MESTRE DE OBRAS', 'PEDREIRO III'],
   ['STATUS', 'inati', 'INATIVO', 'ATIVO'],
@@ -141,6 +170,10 @@ test('RH busy save closes and locks pickers immediately and saves only once', as
   const staleOption = cargo.field.querySelector('[role="option"]');
   form.dispatchEvent(new dom.window.Event('submit', { bubbles: true, cancelable: true }));
   assert.equal(cargo.popup.hidden, true, 'saving must close the popup synchronously');
+  const arrow = form.querySelector('[data-gallery-editor-back]');
+  assert.ok(arrow); assert.equal(arrow.disabled, true); arrow.click();
+  arrow.dispatchEvent(new dom.window.Event('click', { bubbles: true }));
+  assert.equal(doc.querySelector('.ce-editor form'), form);
   assert.equal(cargo.input.disabled, true); assert.equal(cargo.select.disabled, true);
   view.close(); assert.equal(doc.querySelector('.ce-overlay').hidden, false);
   await view.open(); assert.equal(doc.querySelector('form'), form, 'reopening while saving must retain the active editor');
