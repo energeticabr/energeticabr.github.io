@@ -45,8 +45,10 @@ test('late response after account switch is cancelled and storage is partitioned
  resolve(receipt('succeeded'));await start;assert.equal(h.shown.length,0);const next=setup(t,{storage:h.storage,accountKey:'account-b'});await next.monitor.resume();assert.equal(next.monitor.pendingCount,0);
 });
 test('storage failure blocks new collection but authenticated server outcomes can still be shown',async t=>{
- const h=setup(t,{storage:{getItem:()=>null,setItem:()=>{throw Error('quota');}},client:{getSefazRefreshPending:async()=>({status:'pending',requests:[receipt('failed')]})}});
+ const h=setup(t,{storage:{getItem:()=>null,setItem:()=>{throw Error('quota');}},client:{getSefazRefreshPending:async()=>({status:'pending',requests:[receipt('failed')],lastSuccessfulUtc:'2026-10-29T09:01:00Z'})}});let latest;
+ h.monitor.subscribe(state=>{latest=state;});
  await assert.rejects(h.monitor.start(),/salvar|registrar/);assert.equal(h.calls.length,0);await h.monitor.resume();assert.equal(h.shown.length,1);
+ assert.equal(latest.lastSuccessfulAt,Date.parse('2026-10-29T09:01:00Z'));
  assert.equal(await h.shown[0].ack(),false,'cannot silently lose an unpersisted ACK');
 });
 test('corrupt server batch cannot overwrite saved request and sensitive data is not persisted',async t=>{

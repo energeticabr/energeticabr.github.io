@@ -27,18 +27,21 @@ for(const invalid of [null,'12',{},[0],[-1],[1.5],[true],['12'],[Number.MAX_SAFE
 });
 
 test('fiscal client sends only fixed authenticated actions, validates complete sources and strips unexpected data',async()=>{
- const bodies=[];let value=receipt();
+ const bodies=[];let value=receipt(),lastSuccessfulUtc='2026-10-29T10:01:00Z';
  const client=createChatClient({apiBaseUrl:'https://app.example.test',tokenProvider:async()=> 'fake',fetchImpl:async(url,options)=>{
   assert.equal(options.headers.Authorization,'Bearer fake');const body=JSON.parse(options.body);bodies.push(body);
-  const result=body.mode==='pending'?{status:'pending',requests:[value]}:body.acknowledge?{status:'acknowledged',requestId:id}:value;
+  const result=body.mode==='pending'?{status:'pending',requests:[value],lastSuccessfulUtc}:body.acknowledge?{status:'acknowledged',requestId:id}:value;
   return new Response(JSON.stringify({status:'processed',messages:[],sefazRefresh:result}),{status:200});
  }});
  assert.equal(typeof client.refreshSefaz,'function');
- await client.refreshSefaz({requestId:id,command:'never'});await client.getSefazRefreshStatus(id);await client.getSefazRefreshPending();await client.acknowledgeSefazRefresh(id);
+ await client.refreshSefaz({requestId:id,command:'never'});await client.getSefazRefreshStatus(id);
+ assert.deepEqual(await client.getSefazRefreshPending(),{status:'pending',requests:[value],lastSuccessfulUtc});
+ await client.acknowledgeSefazRefresh(id);
  assert.deepEqual(bodies,[{action:'sefaz_refresh',requestId:id},{action:'sefaz_refresh_status',requestId:id},{action:'sefaz_refresh_status',mode:'pending'},{action:'sefaz_refresh_status',requestId:id,acknowledge:true}]);
  value={...receipt('succeeded'),sources:{...receipt().sources}};await assert.rejects(client.getSefazRefreshStatus(id));
  value=receipt('succeeded');value.sources.NFE.code='DELIVERY_PENDING';await assert.rejects(client.getSefazRefreshStatus(id));
  value={...receipt(),sources:{NFE:{status:'running'}}};await assert.rejects(client.getSefazRefreshPending());
+ value=receipt();lastSuccessfulUtc='not-a-date';await assert.rejects(client.getSefazRefreshPending());
  value=receipt();value.sources.NFE.documents=-1;await assert.rejects(client.refreshSefaz({requestId:id}));
  await assert.rejects(client.refreshSefaz({requestId:'invalid'}));
 });

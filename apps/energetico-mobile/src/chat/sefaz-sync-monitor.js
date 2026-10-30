@@ -100,7 +100,10 @@ export function createSefazSyncMonitor({client,accountKey,storage,present=async(
           if(pending?.status!=='pending'||!Array.isArray(pending.requests))throw Error('Resposta fiscal inválida.');
           const safe=pending.requests.map(validateSefazReceipt);
           const serverSuccess=pending.lastSuccessfulUtc===undefined?null:confirmedTime(pending.lastSuccessfulUtc);
-          if(serverSuccess!==null && serverSuccess>(lastSuccessfulAt ?? 0)){lastSuccessfulAt=serverSuccess;persist();}
+          if(serverSuccess!==null && serverSuccess>(lastSuccessfulAt ?? 0)){
+            lastSuccessfulAt=serverSuccess;
+            try{persist();}catch{notice='O armazenamento local está indisponível. O resultado continua salvo no servidor.';}
+          }
           for(const row of safe)remember(row,records.get(row.requestId));
         }catch{if(!current())return;notice='Sem conexão para recuperar as consultas fiscais. O acompanhamento será retomado automaticamente.';discover=true;}
       }

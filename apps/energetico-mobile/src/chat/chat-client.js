@@ -603,7 +603,14 @@ export function createChatClient({
     const receipt = result?.sefazRefresh;
     if (extra.mode === 'pending') {
       if (receipt?.status !== 'pending' || !Array.isArray(receipt.requests)) throw Error('Não foi possível recuperar as consultas fiscais.');
-      return {status:'pending',requests:receipt.requests.map(validateSefazReceipt)};
+      const pending={status:'pending',requests:receipt.requests.map(validateSefazReceipt)};
+      if (receipt.lastSuccessfulUtc !== undefined) {
+        if (typeof receipt.lastSuccessfulUtc !== 'string'
+          || !/T.*(?:Z|[+-]\d\d:\d\d)$/.test(receipt.lastSuccessfulUtc)
+          || !Number.isFinite(Date.parse(receipt.lastSuccessfulUtc))) throw Error('Não foi possível recuperar as consultas fiscais.');
+        pending.lastSuccessfulUtc=receipt.lastSuccessfulUtc;
+      }
+      return pending;
     }
     if (extra.acknowledge) {
       if (receipt?.status !== 'acknowledged' || receipt.requestId !== requestId) throw Error('Reconhecimento fiscal não confirmado.');
