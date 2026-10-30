@@ -95,6 +95,7 @@ jobs:
         run: node scripts/app-store-submission.mjs
 
   web-tests:
+    if: ${{ !(github.event_name == 'workflow_dispatch' && inputs.attach_latest_testflight == true) }}
     name: Testes e pacote web
     runs-on: ubuntu-latest
     steps:
@@ -139,6 +140,7 @@ jobs:
         run: pnpm build
 
   native-share-tests:
+    if: ${{ !(github.event_name == 'workflow_dispatch' && inputs.attach_latest_testflight == true) }}
     name: Testes nativos do compartilhamento
     # Match the iOS build host; Intel's simulator first-boot migration can stall.
     # Run the same Swift/HTTP and 18 UIKit assertions, without relaxed timeouts.
