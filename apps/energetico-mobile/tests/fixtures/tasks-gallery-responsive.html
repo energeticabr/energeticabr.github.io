@@ -21,12 +21,14 @@
       field_7: '2026-10-05', Criado: '2026-10-03T10:00:00Z', field_10: 'OBRA',
     } }, { id: '175', hasAttachments: false, fields: { TAREFA: 'Tarefa não iniciada', STATUS: 'NÃO INICIADA' } },
       { id: '174', fields: { TAREFA: 'Tarefa concluída', STATUS: 'CONCLUÍDA', field_8: '2026-10-02' } }];
+    if (new URLSearchParams(location.search).has('delete')) rows.find(row => row.id === '188').fields.TAREFA = 'Tarefa de demonstração 188 — conferir documento da obra.';
     window.writes = [];
     window.createdTasks = 0;
     window.snapshots = 0;
     const gallery = createTasksGallery({ document, onCreate: () => { window.createdTasks++; }, now: () => new Date('2026-10-04T01:30:00Z'), data: {
       async loadSnapshot() { window.snapshots++; return { rows }; },
       async listAttachments(id) { return id === '176' ? [{ fileName: 'tarefa.pdf' }] : []; },
+      async deleteItem(id) { window.writes.push({ operation: 'delete', id }); rows.splice(rows.findIndex(row => row.id === id), 1); },
       async loadEditor(id) {
         if (window.holdCompletion) await new Promise(resolve => { window.releaseCompletion = resolve; });
         return { entity: { id: 'lancamentos-de-tarefas' }, item: { id, fields: {} },
@@ -35,7 +37,36 @@
       async saveEditor(context, fields) { window.writes.push({ id: context.item.id, fields });
         const row = rows.find(row => row.id === context.item.id); row.fields = { ...row.fields, ...fields }; return row; },
     } });
-    await gallery.open(); document.documentElement.dataset.ready = 'true';
+    await gallery.open();
+    if (new URLSearchParams(location.search).has('delete')) {
+      const frame = () => new Promise(resolve => requestAnimationFrame(() => requestAnimationFrame(resolve)));
+      await document.fonts.ready; await frame();
+      const root = document.querySelector('.tg-overlay'), content = root.querySelector('.og-content');
+      [...root.querySelectorAll('.og-pagination button')].find(button => button.textContent === 'Próxima página').click();
+      await frame();
+      const neighbor = root.querySelector('[data-item-id="189"]');
+      neighbor.querySelector('[data-action="expand"]').click();
+      const target = root.querySelector('[data-item-id="188"] [data-gallery-action="delete"]');
+      target.scrollIntoView({ block: 'center' }); target.focus({ preventScroll: true }); await frame();
+      const before = { content: content.scrollTop, root: root.scrollTop };
+      target.click(); root.querySelector('[data-gallery-confirm="yes"]').click(); await frame();
+      const state = {
+        snapshots: window.snapshots, writes: window.writes, before,
+        after: { content: content.scrollTop, root: root.scrollTop },
+        page: root.querySelector('.og-page-label').textContent,
+        removed: !root.querySelector('[data-item-id="188"]'),
+        sameNeighbor: root.querySelector('[data-item-id="189"]') === neighbor,
+        neighborExpanded: neighbor.querySelector('.tg-description').classList.contains('tg-description--expanded'),
+        receipt: Boolean(root.querySelector('[data-gallery-delete-success]')),
+        loading: root.dataset.galleryLoading === 'true',
+      };
+      if (new URLSearchParams(location.search).get('shot') !== 'success') {
+        root.querySelector('[data-gallery-receipt-close]').click(); await frame();
+        state.afterClose = { content: content.scrollTop, root: root.scrollTop };
+      }
+      document.documentElement.dataset.layout = JSON.stringify(state);
+    }
+    document.documentElement.dataset.ready = 'true';
   </script>
 </body>
 </html>

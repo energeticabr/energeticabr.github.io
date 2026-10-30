@@ -332,6 +332,79 @@ test('conclusão confirmada não depende de recarregar a galeria para mostrar su
   assert.equal(ctx.root().querySelector('.tg-completion-dialog'), null);
 });
 
+test('excluir na segunda página remove apenas a tarefa confirmada, sem recarregar ou perder a posição', async t => {
+  const rows = Array.from({ length: 25 }, (_, i) => ({ id: String(200 - i), hasAttachments: false,
+    fields: { TAREFA: `Obra tarefa ${200 - i}`, STATUS: 'EM ATENDIMENTO', FILIAL: 'OBRA' } }));
+  rows.push({ id: '300', fields: { TAREFA: 'Obra concluída', field_8: '2026-10-28', FILIAL: 'OBRA' } });
+  const deleting = deferred(), writes = [];
+  const ctx = await setup(t, { rows, data: { deleteItem: async id => { writes.push(id); await deleting.promise; } } });
+  await ctx.gallery.open();
+  const root = ctx.root(), content = root.querySelector('.og-content');
+  const search = root.querySelector('[name="search"]'); search.value = 'Obra';
+  const branch = root.querySelector('[name="branch"]'); branch.value = 'OBRA';
+  root.querySelector('[name="sort"]').value = 'id-desc';
+  branch.dispatchEvent(new ctx.dom.window.Event('change', { bubbles: true }));
+  root.querySelector('.tg-filters').open = true;
+  button(root, 'Próxima página').click();
+  const untouched = root.querySelector('[data-item-id="189"]');
+  Object.defineProperties(untouched.querySelector('.tg-description'), {
+    scrollHeight: { configurable: true, value: 120 }, clientHeight: { configurable: true, value: 42 },
+  });
+  untouched.querySelector('.tg-description').classList.add('tg-description--expanded');
+  content.scrollTop = 730; content.scrollLeft = 7; root.scrollTop = 32;
+  root.querySelector('[data-item-id="188"] [data-gallery-action="delete"]').click();
+  const confirm = root.querySelector('[data-gallery-confirm="yes"]'); confirm.click(); confirm.click();
+  assert.ok(root.querySelector('[data-item-id="188"]'), 'não remove antes da confirmação do servidor');
+  assert.equal(root.getAttribute('aria-busy'), 'false');
+  deleting.resolve(); await settle(); await settle();
+  assert.equal(ctx.calls.filter(([kind]) => kind === 'snapshot').length, 1, 'exclusão não busca outra lista');
+  assert.deepEqual(writes, ['188']);
+  assert.equal(root.querySelector('[data-item-id="188"]'), null);
+  assert.equal(root.querySelector('[data-item-id="189"]'), untouched);
+  assert.ok(untouched.querySelector('.tg-description').classList.contains('tg-description--expanded'));
+  assert.equal(root.querySelector('.og-page-label').textContent, 'Página 2 de 3');
+  assert.equal(root.querySelector('.og-list-status').textContent, '24 tarefa(s)');
+  assert.equal(root.querySelector('.tg-metric--done dd').textContent, '1');
+  assert.equal(root.querySelector('.tg-metric--pending dd').textContent, '24');
+  assert.equal(root.querySelector('.tg-metric--total dd').textContent, '25');
+  assert.equal(branch.value, 'OBRA'); assert.equal(search.value, 'Obra');
+  assert.equal(root.querySelector('[name="sort"]').value, 'id-desc');
+  assert.equal(root.querySelector('.tg-filters').open, true);
+  assert.ok(root.querySelector('[data-gallery-delete-success]'));
+  root.querySelector('[data-gallery-receipt-close]').click();
+  assert.equal(content.scrollTop, 730); assert.equal(content.scrollLeft, 7); assert.equal(root.scrollTop, 32);
+  assert.equal(root.querySelector('.og-page-label').textContent, 'Página 2 de 3');
+  assert.equal(root.querySelector('[data-gallery-record-dialog]'), null);
+});
+
+test('excluir a última tarefa da última página mantém a página existente mais próxima', async t => {
+  const rows = Array.from({ length: 11 }, (_, i) => ({ id: String(200 - i), fields: { TAREFA: `Tarefa ${200 - i}` } }));
+  const ctx = await setup(t, { rows, data: { deleteItem: async () => {} } }); await ctx.gallery.open();
+  const root = ctx.root(); button(root, 'Próxima página').click();
+  root.querySelector('[data-item-id="190"] [data-gallery-action="delete"]').click();
+  root.querySelector('[data-gallery-confirm="yes"]').click(); await settle(); await settle();
+  assert.equal(ctx.calls.filter(([kind]) => kind === 'snapshot').length, 1);
+  assert.equal(root.querySelector('.og-page-label').textContent, 'Página 1 de 1');
+  assert.equal(root.querySelectorAll('.tg-card').length, 10);
+  assert.equal(root.querySelector('[data-item-id="190"]'), null);
+  assert.ok(root.querySelector('[data-gallery-delete-success]'));
+});
+
+test('falha na exclusão mantém o cartão e permite tentar novamente sem recarregar a galeria', async t => {
+  let writes = 0;
+  const ctx = await setup(t, { data: { deleteItem: async () => { if (++writes === 1) throw new Error('Falha de conexão'); } } });
+  await ctx.gallery.open(); const root = ctx.root(), card = root.querySelector('[data-item-id="176"]');
+  card.querySelector('[data-gallery-action="delete"]').click();
+  root.querySelector('[data-gallery-confirm="yes"]').click(); await settle(); await settle();
+  assert.equal(root.querySelector('[data-item-id="176"]'), card);
+  assert.equal(root.querySelector('[data-gallery-delete-success]'), null);
+  assert.match(root.querySelector('.gallery-record-dialog-error').textContent, /Falha de conexão/);
+  root.querySelector('[data-gallery-confirm="yes"]').click(); await settle(); await settle();
+  assert.equal(writes, 2); assert.equal(ctx.calls.filter(([kind]) => kind === 'snapshot').length, 1);
+  assert.equal(root.querySelector('[data-item-id="176"]'), null);
+  assert.ok(root.querySelector('[data-gallery-delete-success]'));
+});
+
 test('concluir na segunda página preserva filtros, rolagem e os outros cartões sem carregar a galeria', async t => {
   t.mock.timers.enable({ apis: ['setTimeout'] });
   const rows = Array.from({ length: 25 }, (_, i) => ({ id: String(200 - i), hasAttachments: false,
