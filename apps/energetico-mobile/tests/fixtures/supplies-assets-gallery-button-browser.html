@@ -1,0 +1,60 @@
+<!doctype html>
+<html lang="pt-BR">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Suprimentos - botão galeria de imobilizados</title>
+  <link rel="stylesheet" href="../../src/styles.css">
+  <style>
+    body { margin: 0; min-height: 100vh; background: #eef7f8; }
+    #fixture { width: 100%; min-height: 100vh; }
+  </style>
+</head>
+<body>
+  <main id="fixture"></main>
+  <script type="module">
+    import { createChatView } from "../../src/ui/chat-view.js";
+
+    const root = document.querySelector("#fixture");
+    const view = createChatView(root);
+    view.render({
+      sessionStatus: "authenticated",
+      account: { name: "Usuário de Teste", username: "teste@example.invalid" },
+      draft: "",
+      pendingFiles: [],
+      activeText: null,
+      error: null,
+      messages: [{
+        id: "supplies-fixture",
+        role: "assistant",
+        type: "poll",
+        question: "📦 SUPRIMENTOS\nQUAL FLUXO VOCÊ DESEJA INICIAR?",
+        options: [
+          { id: "action_supply_launches", label: "🧾 LANÇAMENTOS", reply: "action_supply_launches" },
+          { id: "action_supply_provisions", label: "💳 PROVISÃO DE PAGAMENTO E DESPESAS RECORRENTES", reply: "action_supply_provisions" },
+          { id: "action_supply_registrations", label: "🗂️ EFETUAR CADASTROS", reply: "action_supply_registrations" },
+          { id: "action_new_quotation", label: "📝 NOVA COTAÇÃO", reply: "action_new_quotation" },
+          { id: "action_supply_fixed_assets", label: "🏷️ IMOBILIZADOS", reply: "action_supply_fixed_assets" },
+        ],
+      }],
+    });
+    requestAnimationFrame(() => {
+      const primary = root.querySelector('[data-reply-id="action_supply_fixed_assets"]');
+      const gallery = root.querySelector('[data-reply-id="action_asset_gallery"]');
+      if (new URLSearchParams(location.search).has("focusAssets")) primary.scrollIntoView({ block: "center" });
+      requestAnimationFrame(() => {
+        const primaryBox = primary.getBoundingClientRect();
+        const galleryBox = gallery.getBoundingClientRect();
+        document.documentElement.dataset.layout = JSON.stringify({
+          viewport: document.documentElement.clientWidth,
+          overflow: document.documentElement.scrollWidth > document.documentElement.clientWidth,
+          labels: [primary.textContent.trim(), gallery.textContent.trim()],
+          sameRow: Math.abs(primaryBox.top - galleryBox.top) < 2,
+          galleryInsideViewport: galleryBox.right <= document.documentElement.clientWidth,
+          usableTargets: primaryBox.width >= 100 && galleryBox.width >= 100 && primaryBox.height >= 48 && galleryBox.height >= 48,
+        });
+      });
+    });
+  </script>
+</body>
+</html>

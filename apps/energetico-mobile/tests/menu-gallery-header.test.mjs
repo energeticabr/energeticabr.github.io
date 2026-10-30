@@ -124,7 +124,7 @@ test("Supplies removes Obter Dados and pairs quotations while preserving existin
   const doc = dom.window.document;
   assert.equal(doc.querySelector('[data-reply-id="action_launch_report"]'), null);
   assert.deepEqual([...doc.querySelectorAll(".chat-supplies-extra-pair")].map(ids), [
-    ["action_supply_registrations"], ["action_new_quotation", "action_quote_gallery"], ["action_supply_fixed_assets"],
+    ["action_supply_registrations"], ["action_new_quotation", "action_quote_gallery"], ["action_supply_fixed_assets", "action_asset_gallery"],
   ]);
   assert.deepEqual([...doc.querySelectorAll(".chat-supplies-pair")].map(ids), [
     ["action_supply_launches", "action_orders_gallery", "action_launch_gallery", "action_notas_fiscais_sefaz_gallery"],
