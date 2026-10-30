@@ -81,4 +81,3 @@
 - [ ] Executar novamente `pnpm guard:signature-gestures`.
 - [ ] Executar a suíte móvel completa, build web/PWA e sincronizações Android/iOS aplicáveis.
 - [ ] Publicar a mesma revisão nos canais web/Windows, Android interno e TestFlight e acompanhar cada CI até estado terminal.
-
