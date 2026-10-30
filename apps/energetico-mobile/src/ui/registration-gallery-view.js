@@ -34,6 +34,12 @@ function valueText(value) {
   return String(value);
 }
 
+function isZeroFiscalValue(value) {
+  if (typeof value === 'number') return Number.isFinite(value) && value === 0;
+  const text = valueText(value).trim().replace(/^R\$\s*/i, '').replace(/\s/g, '');
+  return /^[-+]?0+(?:[.,]0+)?$/.test(text);
+}
+
 function normalizedFieldName(value) {
   return registrationFieldKey(value);
 }
@@ -635,8 +641,10 @@ export function createRegistrationGallery({ document: doc = globalThis.document,
       const absentAnalyzedRetention = kind === 'notas_fiscais_sefaz' && Object.hasOwn(SEFAZ_RETENTION_FIELDS, field)
         && registrationRawField(row.fields, 'STATUS_IMPORTACAO', model) === 'XML_COMPLETO'
         && ['RETENCAO_INFORMADA_XML', 'NAO_INFORMADA_XML'].includes(registrationRawField(row.fields, 'STATUS_RETENCOES', model));
+      const zeroRetention = kind === 'notas_fiscais_sefaz' && Object.hasOwn(SEFAZ_RETENTION_FIELDS, field)
+        && isZeroFiscalValue(registrationRawField(row.fields, field, model));
       const target = fiscalSections.find(section => section.fields.includes(field))?.content || details;
-      const pair = appendDocumentDetail(target, field, fiscalLabel(field), value || (absentCompleteNote ? 'Não consta na nota' : absentAnalyzedRetention ? 'Não informado no XML' : model.emptyValue));
+      const pair = appendDocumentDetail(target, field, fiscalLabel(field), zeroRetention ? '-' : value || (absentCompleteNote ? 'Não consta na nota' : absentAnalyzedRetention ? '-' : model.emptyValue));
       if (pair && value && model.fieldTypes?.[field] === 'url') {
         const link = el('a', 'rg-document-link', `Abrir ${fiscalLabel(field)}`);
         link.href = value;

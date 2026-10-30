@@ -59,6 +59,10 @@
 .rg-row--sefaz .rg-sefaz-field--tax-rose { background: #fdebed; }
 .rg-row--sefaz .rg-sefaz-field--tax-yellow dd { color: #65451d; }
 .rg-row--sefaz .rg-sefaz-field--tax-rose dd { color: #76263a; }
+.rg-row--sefaz .rg-sefaz-field--retention-neutral { background: #f2f4f6; }
+.rg-row--sefaz .rg-sefaz-field--retention-neutral dd { color: #465463; }
+.rg-row--sefaz .rg-sefaz-field--retention-positive { background: #fdebed; }
+.rg-row--sefaz .rg-sefaz-field--retention-positive dd { color: #76263a; }
 .rg-row--sefaz .rg-sefaz-field--expenses { grid-column: 1 / -1; background: #f4f5f8; text-align: left !important; padding-inline: 9px !important; }
 .rg-row.rg-row--sefaz .rg-sefaz-other { grid-template-columns: repeat(2, minmax(0, 1fr)); }
 .rg-row--sefaz .rg-sefaz-other > .rg-detail { padding: 7px; border-bottom: 1px solid #edf0f4; }
