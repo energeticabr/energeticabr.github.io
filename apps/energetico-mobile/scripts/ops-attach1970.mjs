@@ -1,7 +1,7 @@
 import { createAppleClient } from './app-store-submission.mjs';
 import { attachLatestTestFlightBuild } from './attach-testflight-build.mjs';
 
-if (process.env.APP_STORE_BUILD !== '1961') throw new Error('Recovery is restricted to build 1961.');
+if (process.env.APP_STORE_BUILD !== '1970') throw new Error('Recovery is restricted to build 1970.');
 const client = createAppleClient(process.env, (url, init) => fetch(url, { ...init, signal: AbortSignal.timeout(60_000) }));
 let targetBuildId = '';
 const scoped = {
@@ -14,14 +14,14 @@ const scoped = {
     }
     if (method === 'GET' && path.startsWith('/v1/builds?')) {
       const query = new URL(path, 'https://api.appstoreconnect.apple.com');
-      query.searchParams.set('filter[version]', '1961');
+      query.searchParams.set('filter[version]', '1970');
       query.searchParams.set('limit', '5');
       path = query.pathname + query.search;
     }
     for (let attempt = 1; ; attempt += 1) {
       try {
         const response = await client.request(method, path, payload);
-        if (method === 'GET' && path.startsWith('/v1/builds?')) targetBuildId = response.data?.find(build => build.attributes?.version === '1961')?.id || '';
+        if (method === 'GET' && path.startsWith('/v1/builds?')) targetBuildId = response.data?.find(build => build.attributes?.version === '1970')?.id || '';
         return response;
       } catch (error) {
         if (method !== 'GET' || attempt >= 3 || !/timeout|timed out|aborted/i.test(String(error?.message || error))) throw error;
