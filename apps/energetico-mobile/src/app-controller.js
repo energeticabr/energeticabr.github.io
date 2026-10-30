@@ -1,6 +1,7 @@
 import { createSefazSyncSession } from './ui/sefaz-sync-session.js';
 import { createDdaAutoReminder } from './chat/dda-auto-reminder.js';
 import { refreshDdaBank } from './chat/dda-bank-refresh.js';
+import { loadDdaPaymentLaunchFiles, waitForDdaPaymentLaunch, reconcileDdaLaunchAttachments } from './chat/dda-payment-launch.js';
 import { createDdaSyncSession } from './ui/dda-sync-session.js';
 import { PAYROLL_LAUNCH_REPLY_ID, isSupplierPayrollMenu } from "./chat/supplier-payroll.js";
 import { MEAL_VOUCHER_REPLY_ID } from './chat/meal-voucher.js';
@@ -1521,6 +1522,8 @@ export function createAppController({
   let pendingProvisionOpenRequest = null;
   let pendingProvisionLastAutoShownAt = null;
   let ddaReminderInteraction = 0;
+  const ddaPaymentLaunches = new Map();
+  let ddaPaymentLaunchAbort = null;
   let sefazSyncSession = null;
   function disposeSefazSyncSession(){sefazSyncSession?.destroy();sefazSyncSession=null;}
   function ensureSefazSyncSession(){
@@ -5638,6 +5641,8 @@ export function createAppController({
   }
 
   function disposeRegistrationGalleries() {
+    ddaPaymentLaunchAbort?.abort();
+    ddaPaymentLaunches.clear();
     for (const gallery of registrationGalleries.values()) gallery.destroy?.();
     registrationGalleries.clear();
     registrationGalleryOpenings.clear();
@@ -9388,6 +9393,96 @@ export function createAppController({
     return opening;
   }
 
+  function ddaPaymentLaunchHandler(data, assertSession) {
+    return async ({ itemId, key, signal } = {}) => {
+      assertSession();
+      if (signal?.aborted || ddaPaymentLaunchAbort || flowBusy()) return false;
+      const owner = account, revision = sessionRevision, interaction = ddaReminderInteraction;
+      const lifetime = new AbortController();
+      const current = () => !stopped && account === owner && sessionRevision === revision
+        && interaction === ddaReminderInteraction && !signal?.aborted && !lifetime.signal.aborted;
+      const assertCurrent = () => {
+        assertSession();
+        if (!current()) throw new DOMException('Transferência cancelada.', 'AbortError');
+      };
+      let textOperation;
+      const cancel = () => lifetime.abort();
+      lifetime.signal.addEventListener('abort', () => {
+        if (!stopped && account === owner && sessionRevision === revision
+          && textOperation && store.getState().activeText === textOperation) {
+          store.failText(textOperation, new Error('Transferência cancelada.'));
+        }
+      }, { once: true });
+      signal?.addEventListener('abort', cancel, { once: true });
+      ddaPaymentLaunchAbort = lifetime;
+      const identity = `${itemId}:${key}`;
+      try {
+        assertCurrent();
+        let entry = ddaPaymentLaunches.get(identity);
+        if (entry?.flow && !galleryContextMatches(store.getState().activeFlow, entry.flow)) return false;
+        if (!entry) {
+          const originalFlow = store.getState().activeFlow;
+          const files = await loadDdaPaymentLaunchFiles(data, { itemId, key, signal, cancellationSignal: lifetime.signal, assertCurrent });
+          assertCurrent();
+          if (store.getState().activeFlow !== originalFlow) return false;
+          entry = { files, flow: null, queued: false, uploaded: new Map() };
+          ddaPaymentLaunches.set(identity, entry);
+        }
+        if (!entry.flow) {
+          const started = await sendText('EFETUAR LANÇAMENTO', 'action_launch', {
+            allowAttachmentTrayNavigation: true, preserveDraft: true, preserveAttachmentTray: true,
+            cancelSignal: lifetime.signal, expectedFlowId: 'launch', isCurrent: current,
+            onRequest: () => { textOperation = store.getState().activeText; },
+          });
+          assertCurrent();
+          if (!started || !await waitForResponseTransition() || !current()
+            || store.getState().activeFlow?.id !== 'launch') return false;
+          entry.flow = store.getState().activeFlow;
+        }
+        assertCurrent();
+        if (!entry.queued) {
+          store.queueFiles(entry.files);
+          entry.queued = true;
+        }
+        for (const file of entry.files) {
+          assertCurrent();
+          if (!galleryContextMatches(store.getState().activeFlow, entry.flow)) return false;
+          const confirmedId = entry.uploaded.get(file);
+          if (confirmedId) {
+            if (!store.getState().attachments.some(item => item.id === confirmedId)) return false;
+            continue;
+          }
+          const pending = store.getState().pendingFiles.find(item => item.file === file);
+          if (!pending) return false; // Explicitly removed files must not reappear on retry.
+          const previousAttachments = store.getState().attachments;
+          const sent = await uploadFile(pending.id, { preserveFailedFiles: true,
+            signal: lifetime.signal, isCurrent: current, preserveAttachmentTray: true });
+          assertCurrent();
+          if (!await waitForResponseTransition() || !current() || store.getState().activeFlow?.id !== 'launch') return false;
+          entry.flow = store.getState().activeFlow;
+          const reconciled = reconcileDdaLaunchAttachments(previousAttachments, store.getState().attachments);
+          for (const [uploadedFile, id] of entry.uploaded) {
+            const renewed = reconciled.renewals.get(String(id));
+            if (renewed) entry.uploaded.set(uploadedFile, renewed.id);
+          }
+          if (!sent) return false;
+          const added = reconciled.added.find(item => item.fileName === file.name);
+          if (!added) return false;
+          entry.uploaded.set(file, added.id);
+        }
+        assertCurrent();
+        if (store.getState().activeFlow?.id !== 'launch'
+          || [...entry.uploaded.values()].some(id => !store.getState().attachments.some(item => item.id === id))) return false;
+        // UI consumes success before closing the dialog and its outer panel;
+        // closing either here would abort the signal before success is accepted.
+        return true;
+      } finally {
+        signal?.removeEventListener('abort', cancel);
+        if (ddaPaymentLaunchAbort === lifetime) ddaPaymentLaunchAbort = null;
+      }
+    };
+  }
+
   async function openRegistrationGallery(kind, replyId, openOptions = {}) {
     if (openOptions.automatic && !openOptions.isCurrent?.()) return false;
     if (!account || stopped || flowBusy()) return false;
@@ -9448,6 +9543,7 @@ export function createAppController({
             ...(sourceKind === 'dda' ? {
               syncMonitor: ensureDdaSyncSession(),
               confirmPayment: async options => { assertSession(); const receipt = await client.confirmDdaPayment(options); assertSession(); return receipt; },
+              onStartLaunch: ddaPaymentLaunchHandler(data, assertSession),
             } : {}),
             ...(sourceKind === 'notas_fiscais_sefaz' ? { syncMonitor: ensureSefazSyncSession() } : {}),
             ...(isDdaReport ? { onClose: () => ddaAutoReminder.dismiss() } : {}),
@@ -9642,7 +9738,7 @@ export function createAppController({
         preserveDraft: behavior.preserveDraft === true,
       });
       behavior.onRequest?.();
-      let result = preparePresenceResult(await client.sendText({
+      let result = preparePresenceResult(await waitForDdaPaymentLaunch(client.sendText({
         text: operation.text,
         ...(trackingDiary ? {
           progressSignal: progressAbort.signal,
@@ -9663,9 +9759,16 @@ export function createAppController({
           homeAttachmentIds: behavior.homeAttachmentIds, expectedContextId: behavior.expectedContextId,
         } : {}),
         ...(retryingAutomaticExit && pendingAutomaticExit?.homeTransferReceipt ? { homeTransferReceipt: pendingAutomaticExit.homeTransferReceipt } : {}),
-      }, genericProgress?.options));
+      }, genericProgress?.options), behavior.cancelSignal));
       remoteResponseReceived = true;
       if (stopped || account !== sendingAccount || sessionRevision !== sendingRevision) return false;
+      if (behavior.cancelSignal && behavior.isCurrent?.() === false) return false;
+      if (behavior.expectedFlowId && result.activeFlow?.id !== behavior.expectedFlowId) {
+        throw new Error('A VM não confirmou o início do lançamento. Tente novamente.');
+      }
+      if (behavior.preserveAttachmentTray === true) {
+        result = { ...result, attachments: reconcileDdaLaunchAttachments(previousState.attachments, result.attachments).attachments };
+      }
       if (trackingDiary && diaryAttachmentProgress?.percent === 100) {
         await paintDiaryCompletion();
         if (stopped || account !== sendingAccount || sessionRevision !== sendingRevision) return false;
@@ -9821,7 +9924,8 @@ export function createAppController({
         && !transferConfirmedInResponse
         && !hasAttachmentTransferPrompt(result.messages);
       const preserveTransferredAttachments = (
-        (attachmentTransferPending && previousState.attachments.length > 0
+        behavior.preserveAttachmentTray === true
+        || (attachmentTransferPending && previousState.attachments.length > 0
           && (transferConfirmedInResponse || attachmentTransferCompleted))
         || (result.started_new_flow_with_inactivity_attachment === true
           && Array.isArray(result.attachments) && result.attachments.length > 0)
@@ -9830,7 +9934,8 @@ export function createAppController({
         && attachmentTransferCompleted
         && !menuResult
         && isDifferentActiveFlow(previousState.activeFlow, result.activeFlow);
-      const transferAttachmentSnapshot = transferredAttachmentSnapshot(result, previousState.attachments);
+      const transferAttachmentSnapshot = behavior.preserveAttachmentTray === true
+        ? result.attachments : transferredAttachmentSnapshot(result, previousState.attachments);
       const effectiveResult = menuResult
         ? {
           ...result,
@@ -10147,7 +10252,8 @@ export function createAppController({
     return true;
   }
 
-  async function uploadFile(fileId, {preserveFailedFiles = false} = {}) {
+  async function uploadFile(fileId, {preserveFailedFiles = false, signal, isCurrent = () => true, preserveAttachmentTray = false} = {}) {
+    if (signal?.aborted || !isCurrent()) return false;
     if (!account || stopped || flowBusy() || (recoveryAccountId && !recoveryVerified)) return false;
     cancelAttachmentReminder();
     cancelResponseTransition();
@@ -10155,14 +10261,23 @@ export function createAppController({
     const uploadRevision = sessionRevision;
     const item = store.getState().pendingFiles.find(candidate => candidate.id === fileId);
     if (!item) return false;
+    const previousAttachments = store.getState().attachments;
     const previousAttachmentCount = store.getState().attachments.length;
     const uploadReturnPoint = captureAttachmentCompressionReturnPoint();
     cancelCompletionMenu();
     sessionError = null;
     let operation;
     const abort = new AbortController();
+    const cancelUpload = () => {
+      abort.abort();
+      if (!stopped && account === uploadAccount && sessionRevision === uploadRevision
+        && store.getState().pendingFiles.some(candidate => candidate.operationId === operation?.id)) {
+        store.markFileError(fileId, new Error('Transferência cancelada. Tente novamente.'));
+      }
+    };
+    signal?.addEventListener('abort', cancelUpload, { once: true });
     const currentUpload = () => !stopped && account === uploadAccount
-      && sessionRevision === uploadRevision && !abort.signal.aborted;
+      && sessionRevision === uploadRevision && !abort.signal.aborted && isCurrent();
     try {
       attachmentUploadAbort = abort;
       attachmentUploadProgress = { fileId, percent: 0 };
@@ -10173,7 +10288,7 @@ export function createAppController({
       if (cachedResult && (cachedResult.status !== "processed" || !Array.isArray(cachedResult.messages))) {
         throw new Error("A confirmação armazenada do anexo é inválida.");
       }
-      const result = cachedResult || await client.sendFile(item.file, {
+      let result = cachedResult || await waitForDdaPaymentLaunch(client.sendFile(item.file, {
         progressSignal: abort.signal,
         onProgress: value => {
           if (!currentUpload() || !store.getState().pendingFiles.some(candidate => candidate.operationId === operation?.id)
@@ -10186,14 +10301,34 @@ export function createAppController({
             render();
           }
         },
-      });
+      }), abort.signal);
       if (!currentUpload()) return false;
+      if (preserveAttachmentTray) {
+        const confirmsUpload = attachments => {
+          const added = reconcileDdaLaunchAttachments(previousAttachments, attachments).added;
+          return added.filter(attachment => attachment.fileName === item.file.name
+            && attachment.mimeType === item.file.type).length === 1;
+        };
+        // Only the original response or a real VM snapshot can confirm this
+        // file. A preservation merge of old files is never upload evidence.
+        if (!confirmsUpload(result.attachments)) {
+          const synchronized = await syncAttachmentSnapshotAfterUpload(uploadAccount, {
+            minimumCount: previousAttachmentCount + 1, isCurrent: currentUpload,
+            acceptAttachments: confirmsUpload,
+          });
+          if (!currentUpload()) return false;
+          if (!synchronized) throw new Error('A VM não confirmou este anexo. Tente novamente; o arquivo foi mantido na bandeja.');
+          result = { ...result, attachments: store.getState().attachments };
+        }
+      }
       attachmentRevision += 1;
       const menuResult = isMenuResult(result);
       const responseResult = menuResult
         ? { ...result, activeFlow: null, resetConversation: true, attachments: [] }
         : result;
-      const effectiveResult = withUploadedSignaturePlacementSources(responseResult, item);
+      const effectiveResult = withUploadedSignaturePlacementSources(preserveAttachmentTray && !menuResult
+        ? { ...responseResult, attachments: reconcileDdaLaunchAttachments(previousAttachments, responseResult.attachments).attachments }
+        : responseResult, item);
       const staged = stagedResponse(effectiveResult);
       const confirmed = store.confirmFile(operation, staged?.immediate || effectiveResult);
       if (confirmed) {
@@ -10279,6 +10414,7 @@ export function createAppController({
       else setSessionError(error, "Não foi possível enviar o arquivo.");
       return false;
     } finally {
+      signal?.removeEventListener('abort', cancelUpload);
       if (attachmentUploadAbort === abort) {
         clearAttachmentUploadProgress();
         if (!stopped && account === uploadAccount && sessionRevision === uploadRevision) render();
@@ -10741,7 +10877,7 @@ export function createAppController({
     return sharedResume;
   }
 
-  async function syncAttachmentSnapshotAfterUpload(snapshotAccount = account, { minimumCount = 0, isCurrent = () => true } = {}) {
+  async function syncAttachmentSnapshotAfterUpload(snapshotAccount = account, { minimumCount = 0, isCurrent = () => true, acceptAttachments = () => true } = {}) {
     if (!isCurrent() || !snapshotAccount || stopped || account !== snapshotAccount || typeof client.getAttachments !== "function") return false;
     // A large upload can be acknowledged before the attachment index is
     // visible to the follow-up snapshot request. Keep the form open while
@@ -10755,7 +10891,7 @@ export function createAppController({
         if (!isCurrent() || stopped || account !== snapshotAccount) return false;
         const confirmed = (Array.isArray(attachments) ? attachments : [])
           .filter(item => item?.id && item?.mediaUrl);
-        if (confirmed.length >= minimumCount) {
+        if (confirmed.length >= minimumCount && acceptAttachments(confirmed)) {
           attachmentRevision += 1;
           store.syncAttachments(attachments);
           hydrateMediaPreviews();
@@ -11344,7 +11480,10 @@ export function createAppController({
 
   function bind(type, handler) {
     unsubscribeCommands.push(view.on(type, command => {
-      if (type.startsWith('open-') || ['select-reply','send-text','finish-flow','navigate-mascot-report','draft-changed','fill-pending-construction-diary','launch-pending-note'].includes(type)) ddaReminderInteraction++;
+      if (type.startsWith('open-') || ['select-reply','send-text','finish-flow','navigate-mascot-report','draft-changed','fill-pending-construction-diary','launch-pending-note'].includes(type)) {
+        ddaPaymentLaunchAbort?.abort();
+        ddaReminderInteraction++;
+      }
       if (type === 'open-dda-report' || command?.replyId === 'action_dda_report') ddaAutoReminder.reset();
       if ((payrollSheetCreate || payrollSheetCreateOpening)
         && (type.startsWith('open-') || type === 'select-reply' || type === 'send-text'

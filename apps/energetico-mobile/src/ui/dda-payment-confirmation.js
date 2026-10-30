@@ -1,7 +1,7 @@
 import { validateDdaPaymentReceipt } from '../chat/dda-payment-confirmation.js';
 
 /** Acknowledges an existing payment; never sends a payment instruction to a bank. */
-export function createDdaPaymentConfirmation({ document: doc, host, confirmPayment, onConfirmed, onClose = () => {}, timeoutMs = 35_000 }) {
+export function createDdaPaymentConfirmation({ document: doc, host, confirmPayment, onConfirmed, onStartLaunch, onLaunchStarted = () => {}, onClose = () => {}, timeoutMs = 35_000, launchTimeoutMs = 120_000 }) {
   let current = null;
   const el = (tag, cls, text) => { const n = doc.createElement(tag); n.className = cls; if (text !== undefined) n.textContent = text; return n; };
   function focusables() { return current ? [...current.dialog.querySelectorAll('button:not(:disabled)')] : []; }
@@ -36,27 +36,50 @@ export function createDdaPaymentConfirmation({ document: doc, host, confirmPayme
     cancel.addEventListener('click', () => close());
     const background = [...host.children].map(node => [node, node.inert === true]);
     for (const [node] of background) node.inert = true;
-    const entry = { overlay, dialog, trigger, background, busy: false, controller: null, timer: null };
+    const entry = { overlay, dialog, trigger, background, busy: false, confirmed: false, controller: null, timer: null };
     current = entry;
     yes.addEventListener('click', async () => {
       if (entry.busy || current !== entry) return;
-      entry.busy = true; yes.disabled = true; cancel.disabled = back.disabled = true; status.textContent = 'Registrando confirmação…';
+      entry.busy = true; yes.disabled = true; cancel.disabled = back.disabled = true;
+      status.setAttribute('role', 'status');
+      status.textContent = entry.confirmed ? 'Preparando os anexos e iniciando o lançamento…' : 'Registrando confirmação…';
       entry.controller = new AbortController();
       try {
+        if (entry.confirmed) {
+          const expiry = new Promise((_, reject) => { entry.timer = setTimeout(() => { entry.controller.abort(); reject(new Error('Tempo de preparação excedido.')); }, launchTimeoutMs); });
+          const started = await Promise.race([
+            onStartLaunch({ itemId: Number(itemId), key, signal: entry.controller.signal }), expiry,
+          ]);
+          if (current !== entry || host.hidden || !host.isConnected) return;
+          if (!started) throw new Error('O lançamento não foi iniciado.');
+          close(true);
+          onLaunchStarted();
+          return;
+        }
         if (typeof confirmPayment !== 'function') throw new Error('Confirmação indisponível.');
         const expiry = new Promise((_, reject) => { entry.timer = setTimeout(() => { entry.controller.abort(); reject(new Error('Tempo de confirmação excedido.')); }, timeoutMs); });
         const result = validateDdaPaymentReceipt(await Promise.race([
           confirmPayment({ itemId: Number(itemId), key, signal: entry.controller.signal }), expiry,
         ]), { itemId, key });
         if (current !== entry || host.hidden || !host.isConnected) return;
+        entry.confirmed = true;
         onConfirmed(result);
         title.textContent = 'Pagamento confirmado';
         note.textContent = 'Registrado como pago por confirmação do usuário. Este DDA não compõe mais os valores pendentes.';
         status.textContent = ''; dialog.dataset.state = 'success';
-        yes.remove(); cancel.textContent = 'Entendi';
+        if (typeof onStartLaunch === 'function') {
+          dialog.dataset.ddaLaunchOffer = '';
+          note.textContent += '\nDeseja iniciar um lançamento usando os anexos deste DDA?';
+          delete yes.dataset.ddaPaymentYes; yes.dataset.ddaLaunchYes = '';
+          yes.textContent = 'Sim, iniciar lançamento';
+          cancel.textContent = 'Não, voltar à galeria';
+          back.setAttribute('aria-label', 'Voltar à galeria');
+        } else { yes.remove(); cancel.textContent = 'Entendi'; }
       } catch {
         if (current === entry && !host.hidden) {
-          status.textContent = 'Não foi possível confirmar a gravação. Tente novamente para verificar e concluir, sem duplicar a confirmação.';
+          status.textContent = entry.confirmed
+            ? 'O pagamento já está confirmado. Não foi possível iniciar o lançamento com os anexos. Tente novamente; a confirmação do pagamento não será repetida.'
+            : 'Não foi possível confirmar a gravação. Tente novamente para verificar e concluir, sem duplicar a confirmação.';
           status.setAttribute('role', 'alert'); dialog.dataset.state = 'failed';
         }
       } finally {

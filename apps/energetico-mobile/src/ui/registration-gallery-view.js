@@ -158,7 +158,7 @@ function knownAttachmentCount(row) {
   return null;
 }
 
-export function createRegistrationGallery({ document: doc = globalThis.document, kind, data, onHome, onCreate, openMediaCollection, refreshBank, syncMonitor, confirmPayment, descriptionTimeoutMs = 30_000 } = {}) {
+export function createRegistrationGallery({ document: doc = globalThis.document, kind, data, onHome, onCreate, openMediaCollection, refreshBank, syncMonitor, confirmPayment, onStartLaunch, descriptionTimeoutMs = 30_000 } = {}) {
   const model = REGISTRATION_GALLERY_MODELS[kind];
   if (!model || !doc?.body || typeof data?.loadSnapshot !== "function") {
     throw new TypeError("Galeria de cadastro, documento e serviço de dados são obrigatórios.");
@@ -320,7 +320,7 @@ export function createRegistrationGallery({ document: doc = globalThis.document,
   const filterSources = new Map([...filterControls.keys()].map(field => [field, data.getFilterSource?.(field)]).filter(([, source]) => source));
   let pendingMutations = 0;
   let bankController = null;
-  const paymentConfirmation = kind === 'dda' ? createDdaPaymentConfirmation({ document: doc, host: root, confirmPayment,
+  const paymentConfirmation = kind === 'dda' ? createDdaPaymentConfirmation({ document: doc, host: root, confirmPayment, onStartLaunch, onLaunchStarted: () => hide(),
     onConfirmed: receipt => {
       if (destroyed || root.hidden) return;
       rows = rows.map(row => String(row.id) === String(receipt.itemId) && registrationRawField(row.fields, 'CHAVE_DDA', model) === receipt.key
