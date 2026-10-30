@@ -19,7 +19,7 @@ test('NF-e gallery and three-gallery launch group fit narrow phones and Windows 
   await server.listen(); t.after(() => server.close());
   for (const [width, pwa, mode, expanded, withholding, retentionNone, unified, activeFilters, aggregateWithholding, cancelled] of [[320, false, 'gallery'], [390, false, 'gallery'], [768, false, 'gallery'], [1365, false, 'gallery'],
     [320, false, 'menu'], [390, false, 'menu'], [1365, false, 'menu'], [390, true, 'gallery'], [1365, true, 'gallery'], [320, true, 'menu'], [390, false, 'gallery', true], [320, false, 'gallery', true],
-    [320,false,'gallery',false,true], [390,false,'gallery',false,true], [390,true,'gallery',false,true], [320,false,'gallery',true,true], [390,false,'gallery',true,false,true], [320,false,'gallery',false,true,false,true], [390,false,'gallery',false,true,false,true], [320,false,'gallery',true,true,false,true], [390,true,'gallery',false,true,false,true],
+    [320,false,'gallery',false,true], [390,false,'gallery',false,true], [390,true,'gallery',false,true], [320,false,'gallery',true,true], [390,false,'gallery',true,true], [390,false,'gallery',true,false,true], [320,false,'gallery',false,true,false,true], [390,false,'gallery',false,true,false,true], [320,false,'gallery',true,true,false,true], [390,true,'gallery',false,true,false,true],
     ...[[320,false], [390,false], [1365,false], [390,true]].map(([width,pwa]) => [width,pwa,'gallery',false,false,false,false,true]),
     ...[[320,false], [390,false], [1365,false], [390,true]].map(([width,pwa]) => [width,pwa,'gallery',false,false,false,false,false,true]),
     ...[[320,false], [390,false], [1365,false], [390,true]].map(([width,pwa]) => [width,pwa,'gallery',false,false,false,false,false,false,true])]) {
@@ -54,8 +54,15 @@ test('NF-e gallery and three-gallery launch group fit narrow phones and Windows 
         if (aggregateWithholding) {
           assert.match(layout.withholding.text.replace(/\s/g,''),/PIS\/COFINS\/CSLLretidos:R\$13,02/);
           assert.doesNotMatch(layout.withholding.text,/23,24|1,82|8,40/);
+          assert.deepEqual(layout.retentionClusters.filter(item => item.row === '4' && item.positive).map(item => item.field), ['CONTRIB_SOCIAIS_RETIDAS']);
+          assert.ok(layout.retentionClusters.filter(item => item.row === '4' && ['PIS_RETIDO','COFINS_RETIDA','CSLL_RETIDA'].includes(item.field)).every(item => item.neutral), 'componentes não obrigatórios permanecem cinza');
         }
       } else assert.equal(layout.withholding,null);
+      if (retentionNone) {
+        assert.equal(layout.retentionStatuses[0], '-');
+        assert.ok(layout.retentionClusters.filter(item => item.row === '4').every(item => item.value === '-' && item.neutral && item.background === 'rgb(242, 244, 246)'), 'retenções ausentes usam traço e cinza neutro');
+      }
+      if (withholding && !aggregateWithholding) assert.deepEqual(layout.retentionClusters.filter(item => item.row === '4' && item.positive).map(item => item.field), ['PIS_RETIDO','COFINS_RETIDA','CSLL_RETIDA','IRRF_RETIDO','INSS_RETIDO','ISS_RETIDO'], 'somente retenções obrigatórias positivas usam vermelho');
       assert.equal(layout.pdfRails.length, unified ? 5 : 2);
       if(unified) {
         assert.deepEqual(layout.types,['NF-e','CT-e','NFS-e','NFS-e','NF-e']);
@@ -94,7 +101,7 @@ test('NF-e gallery and three-gallery launch group fit narrow phones and Windows 
       assert.ok(layout.menu.actions[1].bottom <= layout.menu.actions[2].top);
       assert.ok(layout.menu.actions.every(action => action.color === 'rgb(69, 76, 83)'));
     }
-    if (screenshot) writeFileSync(join(process.env.NOTAS_SEFAZ_SCREENSHOT_DIR, `notas-sefaz-${unified ? 'unified-' : ''}${mode}-${cancelled ? 'cancelada-' : aggregateWithholding ? 'agregado-' : withholding ? 'retencao-' : ''}${expanded ? 'expanded-' : ''}${width}.png`), screenshot);
+    if (screenshot) writeFileSync(join(process.env.NOTAS_SEFAZ_SCREENSHOT_DIR, `notas-sefaz-${unified ? 'unified-' : ''}${mode}-${cancelled ? 'cancelada-' : aggregateWithholding ? 'agregado-' : retentionNone ? 'retencao-vazia-' : withholding ? 'retencao-' : ''}${expanded ? 'expanded-' : ''}${width}.png`), screenshot);
     t.diagnostic(`${width}px ${pwa ? 'PWA' : 'mobile'} ${mode}: fits without horizontal overflow`);
   }
 });

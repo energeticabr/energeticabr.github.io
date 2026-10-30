@@ -76,13 +76,15 @@ export function decorateSefazInvoiceCard({document: doc, card, container, pdfRai
   for (const field of ['NATUREZA_OPERACAO', 'DESTINATARIO', 'CNPJ_DESTINATARIO', 'VALOR_PRODUTOS', 'TOMADOR', 'CNPJ_TOMADOR', 'PAPEL_EMPRESA', 'DESCRICAO_SERVICO', 'MUNICIPIO_PRESTACAO', 'CODIGO_SERVICO', 'VALOR_SERVICOS']) decorate(field);
   const taxFields = container.querySelector('[data-fiscal-section="taxes"] > dl');
   for (const field of ['ICMS', 'IPI', 'ISS', 'FRETE', 'SEGURO', 'OUTRAS_DESPESAS']) { const pair = take(field); if (pair) taxFields.append(pair); }
+  const mandatoryRetentionFields = new Set(withholding?.amounts?.map(item => item.field) || []);
   for (const field of ['STATUS_RETENCOES', ...Object.keys(SEFAZ_RETENTION_FIELDS)]) {
-    const pair = decorate(field, null, field === 'STATUS_RETENCOES' ? 'expenses' : 'tax-rose');
+    const tone = field === 'STATUS_RETENCOES' ? 'expenses' : mandatoryRetentionFields.has(field) ? 'retention-positive' : 'retention-neutral';
+    const pair = decorate(field, null, tone);
     if (pair) taxFields.append(pair);
   }
   const retentionStatus = take('STATUS_RETENCOES')?.querySelector('dd');
   if (retentionStatus?.textContent === 'RETENCAO_INFORMADA_XML') retentionStatus.textContent = 'Retenção informada no XML';
-  if (retentionStatus?.textContent === 'NAO_INFORMADA_XML') retentionStatus.textContent = 'Não informada no XML';
+  if (retentionStatus?.textContent === 'NAO_INFORMADA_XML') retentionStatus.textContent = '-';
   for (const field of ['TIPO_FISCAL', 'ORIGEM_FISCAL', 'SITUACAO', 'STATUS_IMPORTACAO', 'DIRECAO', 'ORIGEM_LIQUIDO', 'CHAVE_ACESSO', 'PROTOCOLO', 'MODELO', 'STATUS_DANFE', 'XML_URL', 'ULTIMO_DOCUMENTO_URL']) { const pair = take(field); if (pair) remaining.append(pair); }
   const status = take('SITUACAO')?.querySelector('dd');
   if (status) status.dataset.sefazStatus = /cancel/i.test(status.textContent) ? 'cancelled' : /autorizad/i.test(status.textContent) ? 'authorized' : 'pending';

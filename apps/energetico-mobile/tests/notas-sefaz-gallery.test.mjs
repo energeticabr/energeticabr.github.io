@@ -184,15 +184,29 @@ test('NF-e não colore por impostos comuns, ausência, zero, saída, cancelament
   assert.equal(doc.querySelectorAll('.rg-sefaz-withholding').length,0);
 });
 
-test('retenção ausente em XML analisado é não informada; documento sem análise permanece pendente', async t => {
+test('retenções vazias e zeradas usam traço cinza; somente retenção obrigatória positiva fica vermelha', async t => {
   const dom=new JSDOM('<body/>'),doc=dom.window.document;
   const gallery=createRegistrationGallery({document:doc,kind:'notas_fiscais_sefaz',data:{loadSnapshot:async()=>({rows:[
     {id:'1',fields:{...sample.fields,STATUS_IMPORTACAO:'XML_COMPLETO',STATUS_RETENCOES:'NAO_INFORMADA_XML'}},
-    {id:'2',fields:{...sample.fields,STATUS_IMPORTACAO:'RESUMO_AGUARDANDO_XML'}},
+    {id:'2',fields:{...sample.fields,STATUS_IMPORTACAO:'XML_COMPLETO',STATUS_RETENCOES:'NAO_INFORMADA_XML',PIS_RETIDO:0,COFINS_RETIDA:'0.00'}},
+    {id:'3',fields:{...sample.fields,STATUS_IMPORTACAO:'XML_COMPLETO',STATUS_RETENCOES:'RETENCAO_INFORMADA_XML',INSS_RETIDO:110}},
+    {id:'4',fields:{...sample.fields,STATUS_IMPORTACAO:'RESUMO_AGUARDANDO_XML'}},
   ]})}});
   t.after(()=>{gallery.destroy();dom.window.close();});await gallery.open();
-  assert.equal(doc.querySelector('[data-registration-row="1"] [data-field="INSS_RETIDO"] dd').textContent,'Não informado no XML');
-  assert.equal(doc.querySelector('[data-registration-row="2"] [data-field="INSS_RETIDO"] dd').textContent,'Pendente');
+  const absent=doc.querySelector('[data-registration-row="1"]');
+  assert.equal(absent.querySelector('[data-field="STATUS_RETENCOES"] dd').textContent,'-');
+  assert.equal(absent.querySelector('[data-field="INSS_RETIDO"] dd').textContent,'-');
+  assert.ok(absent.querySelector('[data-field="INSS_RETIDO"]').classList.contains('rg-sefaz-field--retention-neutral'));
+  assert.equal(absent.querySelector('.rg-sefaz-field--retention-positive'),null);
+  const zero=doc.querySelector('[data-registration-row="2"]');
+  for(const field of ['PIS_RETIDO','COFINS_RETIDA']) {
+    assert.equal(zero.querySelector(`[data-field="${field}"] dd`).textContent,'-');
+    assert.ok(zero.querySelector(`[data-field="${field}"]`).classList.contains('rg-sefaz-field--retention-neutral'));
+  }
+  const positive=doc.querySelector('[data-registration-row="3"] [data-field="INSS_RETIDO"]');
+  assert.equal(positive.querySelector('dd').textContent.replace(/\s/g,''),'R$110,00');
+  assert.ok(positive.classList.contains('rg-sefaz-field--retention-positive'));
+  assert.equal(doc.querySelector('[data-registration-row="4"] [data-field="INSS_RETIDO"] dd').textContent,'Pendente');
 });
 
 test('Suprimentos adds a third gray NF-e gallery below launches and expands the existing blue action', () => {
