@@ -62,11 +62,11 @@ test('DDA reads its list and PDFs without exposing mutations',async()=>{
  assert.equal((await data.listAttachments('7'))[0].fileName,'espelho.pdf');
  assert.equal((await data.downloadAttachment('7','espelho.pdf')).type,'application/pdf');
 });
-test('DDA shows supplier, due date, value and opens the mirror without editing',async()=>{
+test('DDA shows supplier, due date, value and opens DDA plus fiscal PDF on the same item',async()=>{
  const dom=new JSDOM('<!doctype html><body></body>');const opened=[];
  const gallery=createRegistrationGallery({document:dom.window.document,kind:'dda',data:{
   async loadSnapshot(){return {rows:[sample]};},
-  async listAttachments(){return [{fileName:'espelho.pdf'}];},
+  async listAttachments(){return [{fileName:'Espelho_DDA_abcd.pdf'},{fileName:'FISCAL-DANFE-3126.pdf'}];},
   async downloadAttachment(){return new Blob(['%PDF-test'],{type:'application/pdf'});}
  },openMediaCollection:items=>opened.push(items)});
  await gallery.open();const root=dom.window.document;
@@ -80,8 +80,9 @@ test('DDA shows supplier, due date, value and opens the mirror without editing',
  assert.equal(root.querySelector('[data-action="create-registration"]'),null);
  root.querySelector('[data-action="registration-attachments"]').click();
  await new Promise(resolve=>setImmediate(resolve));
- assert.equal(opened[0][0].fileName,'espelho.pdf');
+ assert.deepEqual(opened[0].map(item=>item.fileName),['Espelho_DDA_abcd.pdf','FISCAL-DANFE-3126.pdf']);
  assert.equal((await opened[0][0].source({})).type,'application/pdf');
+ assert.equal((await opened[0][1].source({})).type,'application/pdf');
  gallery.destroy();dom.window.close();
 });
 test('DDA uses authenticated SharePoint REST with read-only scope for private list discovery',async()=>{
