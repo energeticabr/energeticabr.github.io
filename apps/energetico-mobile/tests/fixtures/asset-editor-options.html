@@ -1,0 +1,285 @@
+<!doctype html>
+<html lang="pt-BR">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1">
+  <meta http-equiv="Content-Security-Policy" content="default-src 'none'; script-src 'self' 'unsafe-inline'; style-src 'self' 'unsafe-inline'; img-src 'self' data:; font-src 'self'; connect-src 'none'; form-action 'none'; base-uri 'none'">
+  <title>Imobilizados · regressão local dos oito seletores</title>
+  <script type="importmap">{"imports":{"decimal.js":"../../node_modules/decimal.js/decimal.mjs"}}</script>
+  <script>
+    // Publish startup failures too, instead of making the browser harness wait
+    // for a readiness marker that a failed module graph can never provide.
+    window.addEventListener('error', event => {
+      document.documentElement.dataset.layout = JSON.stringify({ status: 'failed', error: event.message || `Resource failed: ${event.target?.src || event.target?.href}` });
+    }, true);
+    window.addEventListener('unhandledrejection', event => {
+      document.documentElement.dataset.layout = JSON.stringify({ status: 'failed', error: String(event.reason?.stack || event.reason) });
+    });
+  </script>
+  <link rel="stylesheet" href="../../src/styles.css">
+  <link rel="stylesheet" href="../../../../portal/styles/admin.css">
+  <link rel="stylesheet" href="../../src/ui/gallery-record-actions.css">
+  <style>
+    #fixture-gallery { padding: 16px; }
+    #fixture-proof { position: fixed; inset: auto 0 0; z-index: 10000; padding: 8px; background: #e1f4e8; color: #14532d; font: 700 12px system-ui; text-align: center; pointer-events: none; }
+  </style>
+</head>
+<body>
+  <main id="fixture-gallery"><h1>Imobilizados fictícios</h1><p>Catálogos locais · item 42</p></main>
+  <output id="fixture-proof">DADOS FICTÍCIOS · nenhuma conexão externa</output>
+  <script type="module">
+    import { createSharePointRepository } from '../../../../portal/data/sharepoint-repository.js';
+    import { createRegistrationGalleryData } from '../../src/chat/registration-gallery-data.js';
+    import { createGalleryRecordActions } from '../../src/ui/gallery-record-actions.js';
+
+    // Actual internal/display column shapes, with wholly fictitious values.
+    const catalogs = [
+      { field: 'FUN_x00c7__x00c3_O', list: 'FUNCAOIMOBILIZADO', value: 'FUNCAO', display: 'FUNCAO' },
+      { field: 'FORNECEDOR', list: 'FORNECEDORES', value: 'Title', display: 'CADASTRO' },
+      { field: 'GRUPOIMOBILIZADO', list: 'GRUPO IMOBILIZADOS', value: 'GRUPOIMOBILIZADOS', display: 'GRUPOIMOBILIZADOS' },
+      { field: 'ITEM', list: 'CADASTROIMOBILIZADO', value: 'IMOBILIZADO', display: 'IMOBILIZADO' },
+      { field: 'FILIAL', list: 'FILIAIS', value: 'Title', display: 'FILIAL' },
+    ];
+    const literals = [
+      ['STATUS', ['ATIVO', 'INATIVO']],
+      ['CONDI_x00c7__x00c3_O', ['APLICADO EM OBRA', 'OCIOSO EM SEDE', 'IRRECUPERÁVEL', 'EXTRAVIADO']],
+      ['DEPRECIAR', ['SIM', 'NÃO']],
+    ];
+    const initialFields = Object.fromEntries([
+      ...catalogs.map(({ field }) => [field, 'ATUAL']),
+      ...literals.map(([field, choices]) => [field, choices[0]]),
+    ]);
+    const lists = ['IMOBILIZADOS', ...catalogs.map(({ list }) => list)].map((displayName, index) => ({
+      id: `fixture-list-${index}`, displayName, list: { template: 'genericList' },
+    }));
+    const calls = [], writes = [], errors = [], checks = [], networkViolations = [];
+    const record = { id: '42', eTag: '"fixture-v1"', fields: structuredClone(initialFields) };
+    let held, submitCount = 0, changedCount = 0;
+    const check = (condition, message) => { if (!condition) throw new Error(message); };
+    const same = (actual, expected, message) => check(JSON.stringify(actual) === JSON.stringify(expected), `${message}: ${JSON.stringify(actual)}`);
+    const sleep = ms => new Promise(resolve => setTimeout(resolve, ms));
+    const frames = () => new Promise(resolve => requestAnimationFrame(() => requestAnimationFrame(resolve)));
+    async function until(predicate, message) {
+      const deadline = performance.now() + 6000;
+      while (!predicate()) {
+        if (performance.now() > deadline) throw new Error(`Timeout: ${message}`);
+        await sleep(15);
+      }
+    }
+    document.addEventListener('securitypolicyviolation', event => networkViolations.push({ directive: event.violatedDirective, uri: event.blockedURI }));
+    window.addEventListener('error', event => errors.push(event.message));
+    window.addEventListener('unhandledrejection', event => errors.push(String(event.reason?.stack || event.reason)));
+
+    // Sole persistence boundary: this in-memory Graph double has no transport,
+    // token provider or access to any real list. Unknown requests fail closed.
+    const catalogGraph = { async request(rawPath, options = {}) {
+      const url = new URL(rawPath, 'https://graph.microsoft.com/v1.0/');
+      check(url.origin === 'https://graph.microsoft.com', 'Unexpected Graph origin');
+      const list = lists.find(candidate => url.pathname.includes(`/lists/${candidate.id}/`));
+      const method = options.method || 'GET';
+      const call = { path: rawPath, method, list: list?.displayName, filter: url.searchParams.get('$filter') || '', top: url.searchParams.get('$top'), page2: url.searchParams.has('$skiptoken') };
+      calls.push(call);
+      if (method === 'PATCH') {
+        check(url.pathname.endsWith('/lists/fixture-list-0/items/42/fields'), 'Only the fictitious asset can be patched');
+        check(options.headers?.['If-Match'] === record.eTag, 'PATCH requires the original ETag');
+        check(Object.keys(options.body).every(field => Object.hasOwn(initialFields, field)), 'Unexpected PATCH field');
+        writes.push({ path: rawPath, body: structuredClone(options.body), ifMatch: options.headers['If-Match'] });
+        Object.assign(record.fields, options.body);
+        return structuredClone(record.fields);
+      }
+      check(method === 'GET', `Forbidden fixture method: ${method}`);
+      if (url.pathname.endsWith('/lists')) return { value: lists };
+      if (url.pathname.endsWith('/columns') && list) {
+        if (list.id === 'fixture-list-0') return { value: Object.keys(initialFields).map(name => ({ name, displayName: name, text: {} })) };
+        const catalog = catalogs.find(candidate => candidate.list === list.displayName);
+        const columns = [{ name: catalog.value, displayName: catalog.display, indexed: true, text: {} }];
+        if (catalog.value !== 'Title') columns.push({ name: 'Title', displayName: 'Title', text: {} });
+        return { value: columns };
+      }
+      if (url.pathname.endsWith('/lists/fixture-list-0/items/42')) return structuredClone(record);
+      if (url.pathname.endsWith('/items') && list && list.id !== 'fixture-list-0') {
+        const catalog = catalogs.find(candidate => candidate.list === list.displayName);
+        const rows = Array.from({ length: 25 }, (_, index) => ({ id: String(index + 1), fields: {
+          Title: null, [catalog.value]: `OPÇÃO ${String(index + 1).padStart(2, '0')}`,
+        } }));
+        // Reproduce SharePoint's observed empty-prefix failure, rather than
+        // JavaScript startsWith('') (which would conceal the regression).
+        if (/startswith\([^,]+,''\)/.test(call.filter)) return { value: [] };
+        const match = /^startswith\(fields\/([A-Za-z0-9_]+),'([^']+)'\)$/.exec(call.filter);
+        if (call.filter) check(match && match[1] === catalog.value, `${catalog.field}: filter must use the resolved internal name`);
+        if (match) {
+          const term = match[2];
+          call.term = term;
+          if (held && held.field === catalog.field && held.term === term && !held.started) {
+            held.started = true;
+            held.signal = options.signal;
+            const pending = held;
+            await new Promise(resolve => { pending.release = resolve; });
+            // Deliberately ignore abort, like an already-completing transport.
+            pending.completed = true;
+          }
+          return { value: rows.filter(row => row.fields[catalog.value].startsWith(term)) };
+        }
+        if (call.page2) return { value: rows.slice(20) };
+        return { value: rows.slice(0, 20), '@odata.nextLink': `https://graph.microsoft.com/v1.0/sites/fixture-site/lists/${list.id}/items?$skiptoken=page2` };
+      }
+      if (/\/sites\/tenant\.sharepoint\.com:/.test(url.pathname)) return { id: 'fixture-site' };
+      throw new Error(`Unmocked Graph request: ${method} ${rawPath}`);
+    } };
+    const repository = createSharePointRepository(catalogGraph, { personal: { host: 'tenant.sharepoint.com', path: '/sites/asset-fixture' } });
+    check(Object.isFrozen(repository), 'Must exercise the actual frozen repository');
+    const data = createRegistrationGalleryData({ kind: 'asset', repository });
+    const host = document.querySelector('#fixture-gallery');
+    const actions = createGalleryRecordActions({ document, host, actions: ['edit'], galleryTitle: 'IMOBILIZADOS FICTÍCIOS',
+      loadEditor: data.loadEditor,
+      saveEditor: async (...args) => { submitCount++; return data.saveEditor(...args); },
+      onChanged: () => { changedCount++; },
+      onError: error => errors.push(String(error.stack || error)),
+    });
+    host.append(actions.render({ id: record.id, fields: structuredClone(initialFields) }));
+    const trigger = host.querySelector('[data-gallery-action="edit"]');
+    async function openEditor() {
+      trigger.click();
+      await until(() => host.querySelectorAll('select[name]').length === 8, 'real dynamic form with eight dropdowns');
+    }
+    function controls(field) {
+      const native = host.querySelector(`select[name="${field}"]`);
+      check(native, `Missing real native select: ${field}`);
+      const wrapper = native.closest('[data-searchable-field], [data-combobox-field]');
+      return { native, wrapper, input: wrapper.querySelector('[role="combobox"]'), listbox: wrapper.querySelector('[role="listbox"]'), status: wrapper.querySelector('[data-powerapps-option-status]') };
+    }
+    const labels = control => [...control.listbox.querySelectorAll('[role="option"]')].map(option => option.textContent);
+    function type(control, value) {
+      control.input.value = value;
+      control.input.dispatchEvent(new Event('input', { bubbles: true }));
+    }
+    function choose(control, value) {
+      const option = [...control.listbox.querySelectorAll('[role="option"]')].find(node => node.textContent === value);
+      check(option, `Missing selectable option ${value}`);
+      option.click();
+      check(control.native.value === value && control.input.value === value, `Selection did not commit ${value}`);
+      check(control.listbox.hidden, 'Choosing must close the listbox');
+    }
+    async function browse(field, currentValue) {
+      const control = controls(field);
+      control.input.focus();
+      control.input.click();
+      check(control.input.value === '', `${field}: opening must automatically clear the selected label`);
+      check(control.native.value === currentValue, `${field}: opening must preserve the committed value`);
+      await until(() => control.status.textContent === '25 opção(ões) encontrada(s).', `${field}: paginated catalog browse`);
+      check(labels(control).includes('OPÇÃO 01') && labels(control).includes('OPÇÃO 25'), `${field}: alternatives must include both pages`);
+      check(control.input.value === '' && control.native.value === currentValue, `${field}: response must preserve blank query and committed value`);
+      check(!control.listbox.hidden && control.input.getAttribute('aria-expanded') === 'true', `${field}: alternatives must be visible`);
+      return control;
+    }
+    async function filtered(control, value, count) {
+      type(control, value);
+      await until(() => control.status.textContent === (count ? `${count} opção(ões) encontrada(s).` : 'Nenhuma opção encontrada.'), `search ${value || '(empty)'}`);
+    }
+    async function preview(field = catalogs[0].field) {
+      if (!host.querySelector('select[name]')) await openEditor();
+      const control = await browse(field, record.fields[field]);
+      // Keep the second-page match directly readable in the screenshot; the
+      // full unfiltered 25-option browse was asserted immediately above.
+      await filtered(control, 'OPÇÃO 25', 1);
+      control.wrapper.scrollIntoView({ block: 'start' });
+      await frames();
+      const rect = control.listbox.getBoundingClientRect();
+      const page25 = control.listbox.querySelector('[role="option"]:last-child');
+      const page25Rect = page25.getBoundingClientRect();
+      check(page25.textContent === 'OPÇÃO 25' && page25Rect.top >= rect.top && page25Rect.bottom <= rect.bottom + 1, 'Screenshot must visibly show OPÇÃO 25');
+      check(rect.left >= -1 && rect.right <= innerWidth + 1, 'Dropdown must fit the viewport');
+      check(rect.top >= 0 && rect.bottom <= innerHeight - 24, 'Dropdown must be visible above the fixture proof');
+      check(getComputedStyle(control.listbox).overflowY === 'auto', 'Catalog list must scroll');
+      return { field, page25Visible: true, left: rect.left, right: rect.right, width: innerWidth, overflow: document.documentElement.scrollWidth > innerWidth };
+    }
+
+    try {
+      await openEditor();
+      // Opening and cancelling an untouched form must not write anything.
+      const untouched = await browse(catalogs[0].field, 'ATUAL');
+      untouched.input.blur();
+      check(untouched.input.value === 'ATUAL' && untouched.native.value === 'ATUAL', 'Blur restores the original label');
+      host.querySelector('[data-form-cancel]').click();
+      check(writes.length === 0 && submitCount === 0, 'Cancel must not persist');
+      await openEditor();
+
+      for (const catalog of catalogs) {
+        const control = await browse(catalog.field, 'ATUAL');
+        await filtered(control, 'OPÇÃO 25', 1);
+        same(labels(control), ['OPÇÃO 25'], `${catalog.field}: typed search`);
+        check(control.native.value === 'ATUAL', `${catalog.field}: searching must not commit`);
+        await filtered(control, 'SEM RESULTADO FICTÍCIO', 0);
+        same(labels(control), [], `${catalog.field}: zero results`);
+        check(control.listbox.hidden && control.input.getAttribute('aria-expanded') === 'false', 'Zero results closes listbox');
+        // Clear the query using an ordinary input event, not a fabricated
+        // controller state; this must initiate a fresh unfiltered browse.
+        const beforeReload = calls.filter(call => call.list === catalog.list && call.page2).length;
+        await filtered(control, '', 25);
+        check(calls.filter(call => call.list === catalog.list && call.page2).length > beforeReload, `${catalog.field}: clearing reloads page two`);
+        check(labels(control).includes('OPÇÃO 25'), `${catalog.field}: cleared browse includes second page`);
+        choose(control, 'OPÇÃO 25');
+        checks.push({ field: catalog.field, browse: true, secondPage: true, labelClearedValuePreserved: true, typedMatch: true, zeroResult: true, clearReload: true, replacement: true });
+      }
+      for (const [field, choices] of literals) {
+        const control = controls(field);
+        check(control.input.value === choices[0] && control.native.value === choices[0], `${field}: baseline`);
+        control.input.focus(); control.input.click();
+        check(control.input.value === '' && control.native.value === choices[0], `${field}: clear label and preserve value`);
+        same(labels(control), choices, `${field}: every literal alternative`);
+        type(control, choices[1]);
+        same(labels(control), [choices[1]], `${field}: filtered alternative`);
+        type(control, 'SEM RESULTADO FICTÍCIO');
+        same(labels(control), [], `${field}: zero results`);
+        type(control, '');
+        same(labels(control), choices, `${field}: clear filter`);
+        choose(control, choices[1]);
+        checks.push({ field, alternatives: choices, labelClearedValuePreserved: true, typedMatch: true, zeroResult: true, clearReload: true, replacement: true });
+      }
+      // Resolve an obsolete query after a newer one. The Graph double ignores
+      // cancellation so the production request generation guard is exercised.
+      const staleControl = await browse(catalogs[0].field, 'OPÇÃO 25');
+      held = { field: catalogs[0].field, term: 'OPÇÃO 01' };
+      type(staleControl, held.term);
+      await until(() => held.started, 'stale query started');
+      await filtered(staleControl, 'OPÇÃO 25', 1);
+      const latestLabels = labels(staleControl);
+      check(latestLabels.includes('OPÇÃO 25') && !latestLabels.includes('OPÇÃO 01'), 'Latest query must exclude the obsolete match');
+      check(held.signal.aborted, 'Superseded request must be aborted');
+      held.release();
+      await until(() => held.completed, 'stale transport completed');
+      await frames();
+      same(labels(staleControl), latestLabels, 'Late stale response must not replace current results');
+      choose(staleControl, 'OPÇÃO 25');
+      const staleGeneration = true;
+      check(writes.length === 0 && submitCount === 0, 'Interactions must not persist before submit');
+      const expectedPatch = Object.fromEntries([
+        ...catalogs.map(({ field }) => [field, 'OPÇÃO 25']),
+        ...literals.map(([field, choices]) => [field, choices[1]]),
+      ]);
+      host.querySelector('[data-form-save]').click();
+      await until(() => host.querySelector('[data-gallery-edit-success]'), 'real save success receipt');
+      check(submitCount === 1 && writes.length === 1 && changedCount === 1, 'Submit must issue exactly one simulated conditional PATCH and refresh');
+      same(Object.keys(writes[0].body).sort(), Object.keys(expectedPatch).sort(), 'PATCH field allowlist');
+      for (const [field, value] of Object.entries(expectedPatch)) check(writes[0].body[field] === value, `PATCH value ${field}`);
+      check(writes[0].ifMatch === '"fixture-v1"', 'Conditional PATCH preserves ETag');
+      check(calls.every(call => !/startswith\([^,]+,''\)/.test(call.filter)), 'Empty browsing must omit startswith entirely');
+      for (const catalog of catalogs) {
+        check(calls.some(call => call.list === catalog.list && call.page2), `${catalog.field}: actual second page requested`);
+        check(calls.some(call => call.list === catalog.list && call.term === 'OPÇÃO 25' && call.top === '20'), `${catalog.field}: bounded typed search/revalidation`);
+      }
+      host.querySelector('[data-gallery-receipt-close]').click();
+      document.querySelector('#fixture-proof').textContent = '8 SELETORES OK · 1 PATCH SIMULADO · 0 GRAVAÇÕES REAIS';
+      const layout = await preview();
+      check(errors.length === 0, `Browser/editor errors: ${errors.join('\n')}`);
+      check(networkViolations.length === 0, `CSP violations: ${JSON.stringify(networkViolations)}`);
+      check(writes.length === 1, 'Screenshot preview must not persist');
+      document.documentElement.dataset.layout = JSON.stringify({ status: 'passed', frozenRepository: Object.isFrozen(repository), checks, staleGeneration, submitCount, changedCount, writes, calls, errors, networkViolations, layout });
+    } catch (error) {
+      held?.release?.();
+      document.querySelector('#fixture-proof').textContent = `FALHOU: ${error.message}`;
+      document.documentElement.dataset.layout = JSON.stringify({ status: 'failed', error: error.stack, checks, writes, calls, errors, networkViolations });
+    }
+  </script>
+</body>
+</html>
