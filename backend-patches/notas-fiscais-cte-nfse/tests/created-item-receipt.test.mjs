@@ -7,10 +7,10 @@ const fixture=createFlowFixture('created-ids');after(()=>fixture.cleanup());fixt
 const receiver=fixture.read('03-Receber-NFe.definition.json');
 test('receipt records only successful native creation IDs after document delivery',()=>{
   assert.deepEqual(receiver.actions.Inicializar_ids_criados.inputs.variables,[{name:'CreatedItemIds',type:'array',value:[]}]);
-  assert.deepEqual(receiver.actions.Documentos.runAfter,{Inicializar_ids_criados:['Succeeded']});
+  assert.deepEqual(receiver.actions.Documentos.runAfter,{Inicializar_total_retencoes:['Succeeded']});
   assert.deepEqual(receiver.actions.Documentos.runtimeConfiguration.concurrency,{repetitions:1});
   const gate=receiver.actions.Documentos.actions.Confirmar_id_criado;
-  assert.deepEqual(gate.runAfter,{Anexar_DANFE:['Succeeded']});
+  assert.deepEqual(gate.runAfter,{Garantir_provisao_retencao:['Succeeded']});
   const condition=gate.expression.equals[0];
   for(const kind of ['nfeProc','cteProc','NFSe']){
     assert.equal(evaluate(condition,{items:{Documentos:{kind}},body:{Localizar_nota:{d:{results:[]}}}}),true);
