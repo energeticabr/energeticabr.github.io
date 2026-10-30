@@ -1,0 +1,126 @@
+<!doctype html>
+<html lang="pt-BR"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Seleção parcial de provisões — dados fictícios</title>
+<link rel="stylesheet" href="/src/styles.css"></head>
+<body><main id="app"></main><script type="module">
+import { createChatView } from '/src/ui/chat-view.js';
+import { reviewTable, reviewMessage, reviewState } from '/tests/helpers/provision-settlement-review-fixture.mjs';
+
+try {
+  const sample = new URLSearchParams(location.search).get('sample') || 'basic';
+  const table = reviewTable({ selectionEnabled: true, selectedValid: true,
+    rows: reviewTable().rows.map((row, index) => ({ ...row, canSubmit: !row.paid, totalCents: ['2400', '2000', '1600', '500'][index] })) });
+  if (sample === 'long') table.rows[0] = { ...table.rows[0], product: 'MATERIAL-FICTÍCIO-SEM-ESPAÇOS-'.repeat(5), quantityDisplay: '1.234.567,123456' };
+  if (sample === 'invalid') {
+    table.canSubmit = false; table.selectedValid = false;
+    table.rows[0] = { ...table.rows[0], canSubmit: false, totalDisplay: 'PENDENTE', totalCents: undefined };
+    table.notice = 'DADOS FICTÍCIOS: preencha os valores pendentes em EDITAR ALGUMA LINHA.';
+  }
+  const root = document.querySelector('#app'), view = createChatView(root), replies = [];
+  let otherCommands = 0;
+  view.on('select-reply', event => replies.push(event.replyId));
+  for (const type of ['send-text', 'draft-changed']) view.on(type, () => otherCommands++);
+  let state = reviewState(reviewMessage(table), { account: { name: 'Prévia fictícia', homeAccountId: 'fictitious-only' } });
+  view.render(state);
+  await document.fonts.ready;
+  await Promise.all([...document.images].map(image => image.decode().catch(() => {})));
+  const frame = () => new Promise(resolve => requestAnimationFrame(() => requestAnimationFrame(resolve)));
+  await frame();
+  const find = selector => root.querySelector(selector);
+  const check = id => find(`[data-provision-select-id="${id}"]`);
+  const checked = () => [...root.querySelectorAll('[data-provision-select-id]:checked')].map(node => node.dataset.provisionSelectId);
+  const change = (node, selected) => {
+    // A native click on a mixed select-all first selects everything. A second
+    // click clears it; checked=false alone also describes the mixed state.
+    if (node.indeterminate && !selected) node.click();
+    if (node.checked !== selected) node.click();
+  };
+  const button = command => find(`[data-reply-id="${command}"]`);
+  const fits = node => { const box = node.getBoundingClientRect(); return box.width > 0 && box.left >= -1 && box.right <= innerWidth + 1; };
+  const reachable = node => {
+    const box = node.getBoundingClientRect(), hit = document.elementFromPoint(box.x + box.width / 2, box.y + box.height / 2);
+    return box.top >= 0 && box.bottom <= innerHeight && (hit === node || node.contains(hit));
+  };
+  const result = {};
+  let checkboxRequests = 0;
+  const originalFetch = window.fetch, originalSend = XMLHttpRequest.prototype.send;
+  window.fetch = () => { checkboxRequests++; return Promise.reject(new Error('A fixture não permite requisições por checkbox.')); };
+  XMLHttpRequest.prototype.send = function () { checkboxRequests++; throw new Error('A fixture não permite requisições por checkbox.'); };
+  change(check('12'), false);
+  await frame();
+  result.localOnly = replies.length === 0 && otherCommands === 0 && checkboxRequests === 0;
+  window.fetch = originalFetch; XMLHttpRequest.prototype.send = originalSend;
+  result.allIndeterminate = find('[data-provision-select-all]').indeterminate;
+  result.paidDisabled = check('14').disabled && !check('14').checked;
+  view.render({ ...state, draft: 'observação fictícia' });
+  view.render(structuredClone({ ...state, draft: 'observação fictícia' }));
+  result.draftPreserved = checked().join(',') === '11,13';
+  change(find('[data-provision-select-all]'), false);
+  button('description_review_submit').click(); button('description_review_edit').click();
+  result.emptyBlocked = checked().length === 0 && button('description_review_submit').disabled && button('description_review_edit').disabled && replies.length === 0;
+  change(find('[data-provision-select-all]'), true); change(check('12'), false);
+  if (sample === 'invalid') {
+    result.invalidInitiallyBlocked = button('description_review_submit').disabled;
+    change(check('11'), false);
+    result.validSubsetAllowed = !button('description_review_submit').disabled;
+    button('description_review_submit').click();
+    result.validSubsetReply = replies.at(-1); replies.length = 0;
+    change(check('11'), true);
+    result.invalidReselectedBlocked = button('description_review_submit').disabled;
+  }
+  button('description_review_submit').click(); button('description_review_edit').click();
+  result.replies = [...replies];
+  view.render({ ...state, messages: [{ id: 'fake-edit-step', type: 'poll', role: 'assistant', question: 'Edite a linha fictícia', options: [] }], activeFlow: { ...state.activeFlow, stepKey: 'description_edit' } });
+  const afterEdit = { ...reviewMessage({ ...table, selectedIds: ['11', '13'], rows: table.rows.map(row => ({ ...row, selected: ['11', '13'].includes(row.id) })) }), id: 'fake-review-after-edit' };
+  state = { ...state, messages: [afterEdit] }; view.render(state);
+  result.restoredAfterEdit = checked().join(',') === '11,13';
+  await frame();
+
+  const review = find('[data-provision-settlement-review]'), region = review.querySelector('.provision-review__scroll');
+  const transcript = find('.chat-transcript'), cells = [...review.querySelectorAll('.provision-review__quantity')];
+  result.quantityNoWrap = cells.length === 5 && cells.every(cell => getComputedStyle(cell).whiteSpace === 'nowrap');
+  result.quantityTextFits = cells.every(cell => {
+    const range = document.createRange(); range.selectNodeContents(cell); const text = range.getBoundingClientRect(), box = cell.getBoundingClientRect();
+    return text.height <= parseFloat(getComputedStyle(cell).lineHeight) + 1 && text.left >= box.left - 1 && text.right <= box.right + 1;
+  });
+  result.checkboxesLeft = [...review.querySelectorAll('tbody tr')].every(row => row.cells[0].contains(row.querySelector('[data-provision-select-id]')));
+  result.selectAllBelow = Boolean(review.querySelector('table').compareDocumentPosition(find('[data-provision-select-all]')) & Node.DOCUMENT_POSITION_FOLLOWING);
+  result.regionFits = fits(region);
+  result.horizontalRegion = region.scrollWidth > region.clientWidth + 1 && ['auto', 'scroll'].includes(getComputedStyle(region).overflowX);
+  result.minFontSize = Math.min(...[...review.querySelectorAll('th,td,small,p')].map(node => parseFloat(getComputedStyle(node).fontSize)));
+  result.columnsReachable = true;
+  for (const header of review.querySelectorAll('thead th')) {
+    const stickyWidth = review.querySelector('thead th').offsetWidth;
+    region.scrollLeft = Math.max(0, header.offsetLeft - stickyWidth);
+    await frame();
+    const box = header.getBoundingClientRect(), clip = region.getBoundingClientRect();
+    result.columnsReachable &&= box.left >= clip.left - 1 && box.right <= clip.right + 1;
+  }
+  region.scrollLeft = 0;
+  check('11').scrollIntoView({ block: 'center' }); await frame();
+  result.checkboxReachable = reachable(check('11'));
+  transcript.scrollTop = transcript.scrollHeight; await frame();
+  result.controlsReachable = [button('description_review_submit'), button('description_review_edit'), find('[data-provision-select-all]')].every(reachable);
+  result.submitDisabled = button('description_review_submit').disabled;
+  result.editDisabled = button('description_review_edit').disabled;
+  result.checkedIds = checked();
+  result.pageHorizontalOverflow = document.documentElement.scrollWidth > innerWidth + 1;
+  view.render({ ...state, activeText: { id: 'fake-busy-request' } });
+  result.busyDisabled = [...root.querySelectorAll('[data-provision-select-id], [data-provision-select-all]')].every(node => node.disabled)
+    && button('description_review_submit').disabled && button('description_review_edit').disabled;
+  view.render(state); await frame();
+  find('.chat-transcript').scrollTop = find('.chat-transcript').scrollHeight; await frame();
+  const capture = new URLSearchParams(location.search).get('capture');
+  if (capture === 'table' || capture === 'quantity') {
+    find('.chat-transcript').scrollTop = 0;
+    if (capture === 'quantity') {
+      const scroll = find('.provision-review__scroll'), quantity = find('thead .provision-review__quantity');
+      scroll.scrollLeft = Math.max(0, quantity.offsetLeft - find('thead th').offsetWidth);
+    }
+    await frame();
+  }
+  document.documentElement.dataset.layout = JSON.stringify(result);
+} catch (error) {
+  document.documentElement.dataset.layout = JSON.stringify({ error: error.message });
+}
+</script></body></html>
