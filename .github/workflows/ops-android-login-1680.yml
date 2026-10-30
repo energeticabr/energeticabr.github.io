@@ -116,7 +116,7 @@ jobs:
           profile: pixel_6
           disable-animations: true
           working-directory: apps/energetico-mobile/android
-          script: chmod +x ./gradlew && ./gradlew :app:connectedDebugAndroidTest --no-daemon
+          script: bash "$GITHUB_WORKSPACE/.github/scripts/validate-android-login-1680.sh"
 
       - name: Guardar diagnóstico do teste de login
         if: failure()
