@@ -8,6 +8,7 @@ export function provisionSettlementReviewMarkup(table, { busy = false, current =
   const value = escapeHtml;
   const label = `Detalhamento das provisões do descritivo ${table.descriptionId}`;
   const selection = table.selectionEnabled === true;
+  busy = busy || table.parentEditPending === true;
   const selectedIds = selection ? serverSelectedProvisionIds(table) : [];
   const pendingCount = table.rows.filter(row => !row.paid).length;
   const readonlyNotice = table.rows.some(row => row.paid && text(row.readonlyLabel))

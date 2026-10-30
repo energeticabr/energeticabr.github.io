@@ -44,6 +44,7 @@ function hasValidityProjection(table) {
 }
 
 export function provisionSelectionCanSubmit(table, selectedIds) {
+  if (table.parentEditPending === true) return false;
   if (!selectedIds.length) return false;
   const selected = new Set(selectedIds), rows = table.rows.filter(row => !row.paid && selected.has(row.id));
   if (rows.length !== selected.size) return false;
@@ -64,23 +65,27 @@ export function createProvisionSettlementSelection(root, emit) {
     for (const checkbox of card.querySelectorAll('[data-provision-select-id]')) {
       const rowId = checkbox.dataset.provisionSelectId;
       checkbox.checked = chosen.includes(rowId);
-      checkbox.disabled = busy || !ids.includes(rowId);
+      checkbox.disabled = busy || table.parentEditPending === true || !ids.includes(rowId);
     }
     const all = card.querySelector('[data-provision-select-all]');
     if (all) {
       all.checked = ids.length > 0 && chosen.length === ids.length;
       all.indeterminate = chosen.length > 0 && chosen.length < ids.length;
-      all.disabled = busy || !ids.length;
+      all.disabled = busy || table.parentEditPending === true || !ids.length;
     }
     const summary = card.querySelector('[data-provision-selection-summary]');
     if (summary) summary.textContent = provisionSelectionSummary(table, chosen);
     for (const button of card.closest('.chat-choice-card')?.querySelectorAll('[data-action="select-reply"]') || []) {
       const command = button.dataset.replyId?.split(':')[0];
+      if (command === 'description_review_edit_parent') {
+        button.disabled = busy || !options.some(option => String(option.reply || option.id || '') === command && option.disabled !== true);
+        continue;
+      }
       if (!['description_review_submit', 'description_review_edit'].includes(command)) continue;
       const option = options.find(option => String(option.reply || option.id || '').split(':')[0] === command);
       const submit = command === 'description_review_submit';
       const optionDisabled = option?.disabled === true && !(submit && hasValidityProjection(table));
-      button.disabled = busy || !chosen.length || optionDisabled || (submit && !provisionSelectionCanSubmit(table, chosen));
+      button.disabled = busy || table.parentEditPending === true || !chosen.length || optionDisabled || (submit && !provisionSelectionCanSubmit(table, chosen));
     }
   }
   function sync(state, interactionBusy = true) {
@@ -105,7 +110,7 @@ export function createProvisionSettlementSelection(root, emit) {
   function change(event) {
     const checkbox = event.target;
     if (!checkbox?.matches?.('[data-provision-select-id], [data-provision-select-all]')) return false;
-    if (!card?.contains(checkbox) || checkbox.disabled || busy) return true;
+    if (!card?.contains(checkbox) || checkbox.disabled || busy || table.parentEditPending === true) return true;
     const ids = eligible();
     if (checkbox.hasAttribute('data-provision-select-all')) selected = new Set(checkbox.checked ? ids : []);
     else if (ids.includes(checkbox.dataset.provisionSelectId)) {
@@ -116,11 +121,19 @@ export function createProvisionSettlementSelection(root, emit) {
     return true;
   }
   function handleReply(command, target) {
+    if (command.type === 'select-reply' && command.replyId === 'description_review_edit_parent') {
+      const source = target?.closest('.chat-choice-card')?.querySelector('[data-provision-selection-active="true"]');
+      if (table && source === card && !busy && !target.disabled
+        && options.some(option => String(option.reply || option.id || '') === command.replyId && option.disabled !== true)) {
+        emit({ ...command, replyId: `description_review_parent_begin:${table.descriptionId}:${selectedIds().join(',')}` });
+      }
+      return true;
+    }
     if (command.type !== 'select-reply' || !/^description_review_(submit|edit)(?::.*)?$/.test(command.replyId || '')) return false;
     const source = target?.closest('.chat-choice-card')?.querySelector('[data-provision-selection-enabled="true"]');
     if (!source) return false; // Preserve plain legacy tables and commands.
     const base = command.replyId.split(':')[0], ids = selectedIds();
-    if (source === card && !busy && !target.disabled && ids.length && (base !== 'description_review_submit' || provisionSelectionCanSubmit(table, ids))) {
+    if (source === card && !busy && table.parentEditPending !== true && !target.disabled && ids.length && (base !== 'description_review_submit' || provisionSelectionCanSubmit(table, ids))) {
       emit({ ...command, replyId: `${base}:${ids.join(',')}` });
     }
     return true;

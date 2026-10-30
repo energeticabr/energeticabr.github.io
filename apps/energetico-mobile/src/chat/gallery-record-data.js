@@ -544,6 +544,14 @@ export function createGalleryRecordData({ repository, siteKey = "personal", list
     if (!fields || typeof fields !== "object" || Array.isArray(fields)) throw new TypeError("Os campos precisam ser um objeto.");
     const { columns, item, list } = baseline;
     const allowed = new Map(columns.filter(c => c.editable && !c.readOnly && !c.hidden).map(c => [inputName(c), c]));
+    const scoped = options.editedFields;
+    if (scoped !== undefined && (!metadataOnly || key(listName) !== 'DESCRITIVOPROVISAO'
+      || !Array.isArray(scoped) || scoped.length !== 1 || !allowed.has(scoped[0])
+      || !['FILIAL', 'FORNECEDOR', 'STATUS', 'VALORTOTAL', 'DATAPGTOEFETUADO', 'OBS', 'FORMAPGTO',
+        'PGTOAGENDADO', 'DATAPGTOAGENDADO', 'DATAEXECUCAOAGENDAMENTO', 'DATAPREVISTOPGTO'].includes(key(scoped[0]))
+      || Object.keys(fields).length !== 1 || !Object.hasOwn(fields, scoped[0]))) {
+      throw new Error('O campo informado não pertence ao escopo de edição.');
+    }
     for (const name of Object.keys(fields)) if (!allowed.has(name)) throw new Error(`O campo ${name} não é editável neste formulário.`);
     const raw = {}, direct = {};
     for (const [name, value] of Object.entries(fields)) {
@@ -564,9 +572,13 @@ export function createGalleryRecordData({ repository, siteKey = "personal", list
           || Number.isNaN(Date.parse(text)) || new Date(`${date}T00:00:00Z`).toISOString().slice(0, 10) !== date) throw new Error(`Informe uma data válida para o campo ${column.label}.`);
       }
     }
-    const validation = validateFormValues(raw, columns, entity, { mode: "edit" });
+    // A single-column editor validates required baseline values without sending
+    // their normalized representations back to SharePoint.
+    const requiredBaseline = scoped ? Object.fromEntries(columns.filter(c => c.required && c.editable && !c.readOnly && !c.hidden)
+      .map(c => [c.name, item.fields[inputName(c)] ?? item.fields[c.name] ?? ''])) : {};
+    const validation = validateFormValues({ ...requiredBaseline, ...raw }, columns, entity, { mode: "edit" });
     if (Object.keys(validation.errors).length) throw new Error(Object.values(validation.errors).join(" "));
-    const normalized = { ...validation.fields, ...direct };
+    const normalized = { ...Object.fromEntries(Object.entries(validation.fields).filter(([name]) => !scoped || scoped.includes(name))), ...direct };
     const sheetStatus = isPayrollSheet ? baseline.statusColumn : null;
     if (sheetStatus?.control === 'select' && !sheetStatus.allowMultipleValues) {
       const name = sheetStatus.name, original = item.fields[name];

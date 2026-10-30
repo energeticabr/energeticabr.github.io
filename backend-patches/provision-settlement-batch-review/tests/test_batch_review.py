@@ -130,6 +130,10 @@ class BatchReviewTests(unittest.TestCase):
             parent = copy.deepcopy(self.h.sharepoint.items[int(item_id)]['fields'])
             parent['CHILDREN'] = [copy.deepcopy(self.h.sharepoint.items[i]['fields'])
                                   for i in self.child_ids]
+            parent['PENDING CHILD IDS'] = [str(row['Id']) for row in parent['CHILDREN']
+                if str(row.get('STATUS') or '').strip().casefold() == 'pagamento previsto'
+                and not row.get('DATA PGTO EFETUADO')
+                and str(row.get('PGTOAGENDADO') or '').strip().casefold() != 'pago']
             return parent
         self.h.sharepoint.get_provision_description_for_settlement = fresh
         self.h.sharepoint.get_provision_description = fresh
@@ -218,7 +222,7 @@ class BatchReviewTests(unittest.TestCase):
         self.assertEqual(table['totalDisplay'], 'R$ 65,00')
         self.assertEqual(table['pendingTotalDisplay'], 'R$ 60,00')
         self.assertEqual({item['id'] for item in self.state()['options']},
-                         {'description_review_submit', 'description_review_edit'})
+                         {'description_review_submit', 'description_review_edit', 'description_review_edit_parent'})
         self.no_writes()
 
     def test_submit_skips_all_quantity_and_unit_price_confirmations(self):

@@ -1,4 +1,5 @@
 import { createSefazSyncSession } from './ui/sefaz-sync-session.js';
+import { createProvisionSettlementParentSession } from './ui/provision-settlement-parent-session.js';
 import { createDdaAutoReminder } from './chat/dda-auto-reminder.js';
 import { refreshDdaBank } from './chat/dda-bank-refresh.js';
 import { loadDdaPaymentLaunchFiles, waitForDdaPaymentLaunch, reconcileDdaLaunchAttachments } from './chat/dda-payment-launch.js';
@@ -323,6 +324,13 @@ async function defaultRegistrationGalleryDataFactory(options) {
   }
   const { createRegistrationGalleryData } = await import("./chat/registration-gallery-data.js");
   return createRegistrationGalleryData(options);
+}
+
+async function defaultProvisionSettlementParentEditorFactory(options) {
+  const [{ createProvisionSettlementParentEditor }] = await Promise.all([
+    import('./ui/provision-settlement-parent-editor.js'), import('./ui/provision-settlement-parent-editor.css'),
+  ]);
+  return createProvisionSettlementParentEditor(options);
 }
 
 async function defaultPendingProvisionAttachmentsDataFactory(options) {
@@ -1046,6 +1054,7 @@ export function createAppController({
   sefazSyncSessionFactory = createSefazSyncSession,
   enableDdaReminders = false,
   registrationGalleryDataFactory = defaultRegistrationGalleryDataFactory,
+  provisionSettlementParentEditorFactory = defaultProvisionSettlementParentEditorFactory,
   pendingProvisionAttachmentsDataFactory = defaultPendingProvisionAttachmentsDataFactory,
   pendingConstructionDiaryDataFactory,
   recentDiaryActivitiesDataFactory = defaultRecentDiaryActivitiesDataFactory,
@@ -1477,6 +1486,17 @@ export function createAppController({
   paymentProgrammingGalleryDataFactory = observeReportMutationFactory(paymentProgrammingGalleryDataFactory);
   recurringExpensesGalleryDataFactory = observeReportMutationFactory(recurringExpensesGalleryDataFactory);
   registrationGalleryDataFactory = observeReportMutationFactory(registrationGalleryDataFactory);
+  const provisionSettlementParent = createProvisionSettlementParentSession({
+    getState: () => ({ ...store.getState(), account, sessionStatus, sessionRevision }),
+    canInteract: () => !stopped && sessionStatus === 'authenticated' && !flowBusy() && !(recoveryAccountId && !recoveryVerified),
+    sendText,
+    createData: ({ assertSession }) => registrationGalleryDataFactory({ kind: 'provisionDescription', assertSession,
+      accountKey: account?.homeAccountId || account?.localAccountId || '', userEmail: account?.username || account?.email || '',
+      tokenProvider: ordersGalleryTokenProvider(assertSession),
+    }),
+    createEditor: provisionSettlementParentEditorFactory,
+    onError: error => setSessionError(error, 'Não foi possível abrir a edição do descritivo.'),
+  });
   pendingProvisionAttachmentsDataFactory = observeReportMutationFactory(pendingProvisionAttachmentsDataFactory);
   function cachedReportSource(namespace, source, assertQuery) {
     const owner = account, revision = sessionRevision;
@@ -4727,6 +4747,7 @@ export function createAppController({
   }
 
   function render() {
+    provisionSettlementParent.sync();
     queueMicrotask(() => { void ddaAutoReminder.drain(); });
     if (!flowBusy() || stopped || !account) {
       const waiters = [...idleWaiters];
@@ -9725,6 +9746,7 @@ export function createAppController({
           || replyId === PORTAL_TRANSFER_ATTACHMENTS_ID
           || replyId === EPI_ORDER_BLANK_REPLY_ID
           || replyId === EPI_SUPPLIER_DOCUMENT_BLANK_REPLY_ID
+          || /^description_review_parent_(?:begin:[1-9]\d*:(?:[1-9]\d*(?:,[1-9]\d*)*)?|refresh:[1-9]\d*:[a-f0-9]{32})$/i.test(String(replyId || ''))
           || continuingWithoutAttachment,
         // A second date (or a selected LOG row) must replace the previous
         // report instead of leaving an older day's table visible underneath.
@@ -10050,6 +10072,7 @@ export function createAppController({
         return false;
       }
       const succeeded = confirmed && !epiAdvanceError && (behavior.requireMenuResult !== true || menuResult);
+      if (succeeded) behavior.onConfirmedResult?.(effectiveResult);
       if (succeeded) completeOperationProgress(genericProgress, result);
       return succeeded;
     } catch (error) {
@@ -10684,6 +10707,7 @@ export function createAppController({
   }
 
   async function signOut() {
+    provisionSettlementParent.destroy();
     galleryCreationReturn = null;
     disposeDdaSyncSession();
     disposeSefazSyncSession();
@@ -11549,6 +11573,7 @@ export function createAppController({
       return formatted ? sendText(formatted) : false;
     });
     bind("select-reply", command => {
+      if (String(command.replyId || '').startsWith('description_review_parent_begin:')) return provisionSettlementParent.begin(command.replyId);
       if (command.replyId === PAYROLL_LAUNCH_REPLY_ID) return openSupplierPayroll();
       if (command.replyId === MEAL_VOUCHER_REPLY_ID) return openMealVoucher();
       if (command.replyId === PAYROLL_BREAKDOWN_REPLY_ID) return openPayrollBreakdown();
@@ -12000,6 +12025,7 @@ export function createAppController({
       if (!stopped) render();
     });
     unsubscribeStore = store.subscribe(() => {
+      provisionSettlementParent.sync();
       if (attendanceSummarySession && (flowBusy() || store.getState().activeFlow)) disposeAttendanceSummaryReport();
       if (stageProgressSession && (flowBusy() || store.getState().activeFlow)) disposeStageProgressReport();
       if (supplierPayrollReportSession && (flowBusy() || store.getState().activeFlow)) disposeSupplierPayrollReport();
@@ -12111,6 +12137,7 @@ export function createAppController({
   }
 
   function stop() {
+    provisionSettlementParent.destroy();
     galleryCreationReturn = null;
     disposeDdaSyncSession();
     disposeSefazSyncSession();
