@@ -9,6 +9,21 @@ function normalizedFileName(value) {
   return String(value || "").trim();
 }
 
+// Presentation only: remote commands must keep the original file.name.
+function attachmentDisplayName(value) {
+  const original = normalizedFileName(value);
+  let decoded = original;
+  for (let depth = 0; depth < 3; depth++) {
+    try {
+      const next = decodeURIComponent(decoded);
+      if (next === decoded) break;
+      decoded = next;
+    } catch { break; }
+  }
+  const name = /\/Lists\/[^/]+\/Attachments\/[1-9]\d*\/([^/]+)$/i.exec(decoded)?.[1];
+  return name && !/[\\\u0000-\u001f]/.test(name) ? name : original;
+}
+
 function frozenFiles(files = []) {
   return Object.freeze([...(files || [])]);
 }
@@ -62,9 +77,9 @@ export function formAttachmentRowsMarkup({
   return [
     ...visibleExisting.map(file => {
       const staged = removed.has(normalizedFileName(file?.name).toLocaleLowerCase("pt-BR"));
-      return `<article class="attachment-row${staged ? " is-removed" : ""}" ${staged ? `data-form-attachment-removed="${escapeHtml(file.name)}"` : `data-form-attachment-existing="${escapeHtml(file.name)}"`}><div><strong>${escapeHtml(file.name)}</strong><p>${staged ? "Exclusão pendente · será excluído somente ao submeter" : `${escapeHtml(formatBytes(file.size))} · Salvo no SharePoint`}</p></div><div class="attachment-actions">${staged ? "" : `<button type="button" class="button-secondary" data-form-attachment-open="${escapeHtml(file.name)}">Visualizar</button><button type="button" class="button-secondary" data-form-attachment-download="${escapeHtml(file.name)}">Baixar</button>`}${canEdit && !disabled ? staged ? `<button type="button" class="button-secondary" data-form-attachment-restore-existing="${escapeHtml(file.name)}">↶ Retornar</button>` : `<button type="button" class="button-danger" data-form-attachment-remove-existing="${escapeHtml(file.name)}" aria-label="Excluir ${escapeHtml(file.name)}">×</button>` : ""}</div></article>`;
+      return `<article class="attachment-row${staged ? " is-removed" : ""}" ${staged ? `data-form-attachment-removed="${escapeHtml(file.name)}"` : `data-form-attachment-existing="${escapeHtml(file.name)}"`}><div><strong>${escapeHtml(attachmentDisplayName(file.name))}</strong><p>${staged ? "Exclusão pendente · será excluído somente ao submeter" : `${escapeHtml(formatBytes(file.size))} · Salvo no SharePoint`}</p></div><div class="attachment-actions">${staged ? "" : `<button type="button" class="button-secondary" data-form-attachment-open="${escapeHtml(file.name)}">Visualizar</button><button type="button" class="button-secondary" data-form-attachment-download="${escapeHtml(file.name)}">Baixar</button>`}${canEdit && !disabled ? staged ? `<button type="button" class="button-secondary" data-form-attachment-restore-existing="${escapeHtml(file.name)}">↶ Retornar</button>` : `<button type="button" class="button-danger" data-form-attachment-remove-existing="${escapeHtml(file.name)}" aria-label="Excluir ${escapeHtml(attachmentDisplayName(file.name))}">×</button>` : ""}</div></article>`;
     }),
-    ...pendingFiles.map(file => `<article class="attachment-row is-pending" data-form-attachment-pending="${escapeHtml(file.name)}"><div><strong>${escapeHtml(file.name)}</strong><p>${escapeHtml(formatBytes(file.size))} · Será enviado ao salvar</p></div>${canEdit && !disabled ? `<div class="attachment-actions"><button type="button" class="button-secondary" data-form-attachment-open="${escapeHtml(file.name)}">Visualizar</button><button type="button" class="button-danger" data-form-attachment-remove-upload="${escapeHtml(file.name)}" aria-label="Retirar ${escapeHtml(file.name)}">×</button></div>` : ""}</article>`),
+    ...pendingFiles.map(file => `<article class="attachment-row is-pending" data-form-attachment-pending="${escapeHtml(file.name)}"><div><strong>${escapeHtml(attachmentDisplayName(file.name))}</strong><p>${escapeHtml(formatBytes(file.size))} · Será enviado ao salvar</p></div>${canEdit && !disabled ? `<div class="attachment-actions"><button type="button" class="button-secondary" data-form-attachment-open="${escapeHtml(file.name)}">Visualizar</button><button type="button" class="button-danger" data-form-attachment-remove-upload="${escapeHtml(file.name)}" aria-label="Retirar ${escapeHtml(attachmentDisplayName(file.name))}">×</button></div>` : ""}</article>`),
   ].join("") || '<p class="entity-empty">Nenhum anexo preparado.</p>';
 }
 
