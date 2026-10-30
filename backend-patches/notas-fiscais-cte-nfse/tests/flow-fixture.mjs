@@ -11,7 +11,7 @@ export function createFlowFixture(label='unified'){
   const prefix='fiscal-flow-'+label+'-';
   const root=fs.mkdtempSync(path.join(base,prefix));
   for(const folder of ['config','scripts','powerautomate','tests'])fs.mkdirSync(path.join(root,folder));
-  for(const name of ['build-flows.mjs','build-live-flows.mjs','danfe-flow.mjs'])fs.copyFileSync(path.join(source,'scripts',name),path.join(root,'scripts',name));
+  for(const name of ['build-flows.mjs','build-live-flows.mjs','danfe-flow.mjs','retention-provision-flow.mjs'])fs.copyFileSync(path.join(source,'scripts',name),path.join(root,'scripts',name));
   fs.copyFileSync(path.join(source,'tests/wdl.mjs'),path.join(root,'tests/wdl.mjs'));
   const config={companyCnpj:'00000000000000',siteUrl:'https://example.sharepoint.com/sites/energetica',
     queueSiteUrl:'https://example-my.sharepoint.com/personal/fixture',listTitle:'NOTAS_FISCAIS_SEFAZ',

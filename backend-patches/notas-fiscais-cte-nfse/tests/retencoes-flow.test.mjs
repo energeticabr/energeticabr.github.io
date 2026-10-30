@@ -18,7 +18,7 @@ after(()=>{
   fs.rmSync(target,{recursive:true,force:true});
 });
 for(const dir of ['config','scripts','powerautomate']) fs.mkdirSync(path.join(fixture,dir));
-for(const name of ['build-flows.mjs','build-live-flows.mjs','build-retention-flow.mjs','danfe-flow.mjs']) fs.copyFileSync(path.join(source,'scripts',name),path.join(fixture,'scripts',name));
+for(const name of ['build-flows.mjs','build-live-flows.mjs','build-retention-flow.mjs','danfe-flow.mjs','retention-provision-flow.mjs']) fs.copyFileSync(path.join(source,'scripts',name),path.join(fixture,'scripts',name));
 fs.writeFileSync(path.join(fixture,'config/energetica.json'),JSON.stringify({
   companyCnpj:'00000000000000',siteUrl:'https://example.sharepoint.com/sites/fixture',
   queueSiteUrl:'https://example-my.sharepoint.com/personal/fixture',listTitle:'NOTAS_FISCAIS_SEFAZ',

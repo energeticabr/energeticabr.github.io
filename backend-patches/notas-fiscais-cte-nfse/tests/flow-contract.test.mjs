@@ -136,7 +136,7 @@ test('cada horario escoa lotes sem limitar o dia a trinta documentos',()=>{
   const loop=s.actions.Janela_de_coleta;
   assert.ok(loop,'o horario deve repetir lotes disponiveis');
   assert.equal(loop.type,'Until');
-  assert.deepEqual(loop.runAfter,{Inicializar_coleta:['Succeeded']});
+  assert.deepEqual(loop.runAfter,{Inicializar_total_retencoes:['Succeeded']});
   assert.equal(evaluate(loop.expression,{variables:{ContinuarColeta:true}}),false);
   assert.equal(evaluate(loop.expression,{variables:{ContinuarColeta:false}}),true);
   const advance=loop.actions.Continuar_coleta;

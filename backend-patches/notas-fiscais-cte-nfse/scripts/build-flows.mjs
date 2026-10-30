@@ -2,6 +2,7 @@ import fs from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import {addDanfeActions,isFullDocument} from './danfe-flow.mjs';
+import {addRetentionProvisionActions,retentionProvisionVariable} from './retention-provision-flow.mjs';
 
 const root=path.resolve(path.dirname(fileURLToPath(import.meta.url)),'..');
 const cfg=JSON.parse(fs.readFileSync(path.join(root,'config/energetica.json'),'utf8'));
@@ -108,6 +109,7 @@ merge.DANFE_URL=`@${oldLink('DANFE_URL')}`;
 process.Campos_finais={type:'Compose',inputs:merge,runAfter:after('Novos_campos')};
 process.Criar_ou_atualizar={type:'If',expression:{equals:["@empty(body('Localizar_nota')?['d']?['results'])",true]},actions:{Criar_nota:sp('POST',`${listApi}/items`,"@string(outputs('Campos_finais'))")},else:{actions:{Atualizar_nota:sp('POST',`@concat(${wdlString(listApi+'/items(')},string(outputs('Existente')?['Id']),')')`,"@string(outputs('Campos_finais'))",undefined,{'X-HTTP-Method':'MERGE','IF-MATCH':"@outputs('Existente')?['__metadata']?['etag']"})}},runAfter:after('Campos_finais')};
 addDanfeActions(process,cfg);
+addRetentionProvisionActions(process,cfg);
 // Se uma escrita externa conflitar com ETag, falha sem ack; o replay rele o registro atualizado.
 sync.Documentos={type:'Foreach',foreach:"@outputs('Lote')?['documents']",actions:process,runtimeConfiguration:{concurrency:{repetitions:1}},runAfter:after('Lote')};
 sync.Confirmar_lote={type:'If',expression:{greater:["@length(outputs('Lote')?['documents'])",0]},actions:{
@@ -117,7 +119,8 @@ sync.Confirmar_lote={type:'If',expression:{greater:["@length(outputs('Lote')?['d
 sync.Continuar_coleta={type:'SetVariable',inputs:{name:'ContinuarColeta',value:"@greater(length(outputs('Lote')?['documents']),0)"},runAfter:after('Confirmar_lote')};
 const scheduledActions={
   Inicializar_coleta:{type:'InitializeVariable',inputs:{variables:[{name:'ContinuarColeta',type:'boolean',value:true}]},runAfter:{}},
-  Janela_de_coleta:{type:'Until',expression:"@equals(variables('ContinuarColeta'),false)",limit:{count:200,timeout:'PT2H'},actions:sync,runAfter:after('Inicializar_coleta')},
+  Inicializar_total_retencoes:retentionProvisionVariable('Inicializar_coleta'),
+  Janela_de_coleta:{type:'Until',expression:"@equals(variables('ContinuarColeta'),false)",limit:{count:200,timeout:'PT2H'},actions:sync,runAfter:after('Inicializar_total_retencoes')},
   Conferir_limite:{type:'If',expression:{equals:["@variables('ContinuarColeta')",true]},actions:{Limite_atingido:{type:'Terminate',inputs:{runStatus:'Failed',runError:{code:'LIMITE_COLETA',message:'Limite de lotes/tempo atingido; documentos restantes preservados para o proximo horario.'}},runAfter:{}}},else:{actions:{}},runAfter:after('Janela_de_coleta')},
 };
 const schedule={Recorrencia:{type:'Recurrence',recurrence:{frequency:'Day',interval:1,timeZone:cfg.scheduleTimeZone,schedule:{hours:cfg.scheduleHours,minutes:cfg.scheduleMinutes}},runtimeConfiguration:{concurrency:{runs:1}}}};

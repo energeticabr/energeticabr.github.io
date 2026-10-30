@@ -2,6 +2,7 @@ import fs from 'node:fs';
 import path from 'node:path';
 import {fileURLToPath} from 'node:url';
 import {addDanfeActions,danfeSchema,fiscalDocumentKinds} from './danfe-flow.mjs';
+import {retentionProvisionVariable} from './retention-provision-flow.mjs';
 const root=path.resolve(path.dirname(fileURLToPath(import.meta.url)),'..');
 const cfg=JSON.parse(fs.readFileSync(path.join(root,'config/energetica.json')));
 const source=JSON.parse(fs.readFileSync(path.join(root,'powerautomate/02-Sincronizar-NFe.definition.json')));
@@ -31,8 +32,8 @@ addDanfeActions(documents.actions,cfg);
 // receipt ensure attachments/delivery also completed before IDs are published.
 documents.actions.Confirmar_id_criado={type:'If',expression:{equals:["@empty(body('Localizar_nota')?['d']?['results'])",true]},actions:{
   Registrar_id_criado:{type:'AppendToArrayVariable',inputs:{name:'CreatedItemIds',value:"@int(body('Criar_nota')?['Id'])"},runAfter:{}},
-},else:{actions:{}},runAfter:{Anexar_DANFE:['Succeeded']}};
-documents.runAfter={Inicializar_ids_criados:['Succeeded']};
+},else:{actions:{}},runAfter:{Garantir_provisao_retencao:['Succeeded']}};
+documents.runAfter={Inicializar_total_retencoes:['Succeeded']};
 const batchSchema=structuredClone(receiving.triggers.manual.inputs.schema);
 function removeTriggerPatterns(value){
   if(!value||typeof value!=='object')return;
@@ -48,6 +49,7 @@ receiving.actions={
   Validar_lote:{type:'ParseJson',inputs:{content:'@triggerBody()',schema:batchSchema},runAfter:{}},
   Lote:{type:'Compose',inputs:"@body('Validar_lote')",runAfter:{Validar_lote:['Succeeded']}},
   Inicializar_ids_criados:{type:'InitializeVariable',inputs:{variables:[{name:'CreatedItemIds',type:'array',value:[]}]},runAfter:{Lote:['Succeeded']}},
+  Inicializar_total_retencoes:retentionProvisionVariable('Inicializar_ids_criados'),
   Documentos:documents,
   Ids_confirmados:{type:'Select',inputs:{from:"@triggerBody()?['documents']",select:"@item()?['id']"},runAfter:{Documentos:['Succeeded']}},
   Recibo:{type:'Compose',inputs:{source:'SEFAZ',acknowledgedIds:"@body('Ids_confirmados')",createdItemIds:"@variables('CreatedItemIds')"},runAfter:{Ids_confirmados:['Succeeded']}},

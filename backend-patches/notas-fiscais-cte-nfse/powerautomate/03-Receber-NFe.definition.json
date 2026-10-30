@@ -275,9 +275,36 @@
     "Inicializar_ids_criados": {
       "type": "InitializeVariable",
       "inputs": {
-        "variables": [{"name": "CreatedItemIds", "type": "array", "value": []}]
+        "variables": [
+          {
+            "name": "CreatedItemIds",
+            "type": "array",
+            "value": []
+          }
+        ]
       },
-      "runAfter": {"Lote": ["Succeeded"]}
+      "runAfter": {
+        "Lote": [
+          "Succeeded"
+        ]
+      }
+    },
+    "Inicializar_total_retencoes": {
+      "type": "InitializeVariable",
+      "inputs": {
+        "variables": [
+          {
+            "name": "RetentionParentTotal",
+            "type": "Float",
+            "value": 0
+          }
+        ]
+      },
+      "runAfter": {
+        "Inicializar_ids_criados": [
+          "Succeeded"
+        ]
+      }
     },
     "Documentos": {
       "type": "Foreach",
@@ -643,19 +670,6 @@
             ]
           }
         },
-        "Confirmar_id_criado": {
-          "type": "If",
-          "expression": {"equals": ["@empty(body('Localizar_nota')?['d']?['results'])", true]},
-          "actions": {
-            "Registrar_id_criado": {
-              "type": "AppendToArrayVariable",
-              "inputs": {"name": "CreatedItemIds", "value": "@int(body('Criar_nota')?['Id'])"},
-              "runAfter": {}
-            }
-          },
-          "else": {"actions": {}},
-          "runAfter": {"Anexar_DANFE": ["Succeeded"]}
-        },
         "Anexar_DANFE": {
           "type": "If",
           "expression": {
@@ -910,6 +924,354 @@
               "Succeeded"
             ]
           }
+        },
+        "Total_retido_comprador": {
+          "type": "Compose",
+          "inputs": "@if(equals(outputs('Campos_finais')?['TIPO_FISCAL'],'NFS-e'),add(add(add(float(coalesce(outputs('Campos_finais')?['CONTRIB_SOCIAIS_RETIDAS'],0)),float(coalesce(outputs('Campos_finais')?['IRRF_RETIDO'],0))),float(coalesce(outputs('Campos_finais')?['INSS_RETIDO'],0))),float(coalesce(outputs('Campos_finais')?['ISS_RETIDO'],0))),if(equals(outputs('Campos_finais')?['TIPO_FISCAL'],'NF-e'),add(add(add(add(add(float(coalesce(outputs('Campos_finais')?['PIS_RETIDO'],0)),float(coalesce(outputs('Campos_finais')?['COFINS_RETIDA'],0))),float(coalesce(outputs('Campos_finais')?['CSLL_RETIDA'],0))),float(coalesce(outputs('Campos_finais')?['IRRF_RETIDO'],0))),float(coalesce(outputs('Campos_finais')?['INSS_RETIDO'],0))),float(coalesce(outputs('Campos_finais')?['ISS_RETIDO'],0))),0))",
+          "runAfter": {
+            "Anexar_DANFE": [
+              "Succeeded"
+            ]
+          }
+        },
+        "Garantir_provisao_retencao": {
+          "type": "If",
+          "expression": "@and(equals(outputs('Campos_finais')?['STATUS_RETENCOES'],'RETENCAO_INFORMADA_XML'),equals(outputs('Campos_finais')?['STATUS_IMPORTACAO'],'XML_COMPLETO'),equals(outputs('Campos_finais')?['DIRECAO'],'ENTRADA'),equals(outputs('Campos_finais')?['SITUACAO'],'AUTORIZADA'),or(equals(outputs('Campos_finais')?['TIPO_FISCAL'],'NF-e'),equals(outputs('Campos_finais')?['TIPO_FISCAL'],'NFS-e')),greater(outputs('Total_retido_comprador'),0))",
+          "actions": {
+            "Vencimento_retencao": {
+              "type": "Compose",
+              "inputs": "@concat(formatDateTime(addToTime(outputs('Campos_finais')?['DATA_EMISSAO'],1,'Month'),'yyyy-MM'),'-20T00:00:00-03:00')",
+              "runAfter": {}
+            },
+            "Chave_rubrica_retencao": {
+              "type": "Compose",
+              "inputs": "@concat('RETENCAO-',formatDateTime(outputs('Vencimento_retencao'),'yyyy-MM'))",
+              "runAfter": {
+                "Vencimento_retencao": [
+                  "Succeeded"
+                ]
+              }
+            },
+            "Prefixo_filhos_retencao": {
+              "type": "Compose",
+              "inputs": "@concat(outputs('Chave_rubrica_retencao'),'-NOTA-')",
+              "runAfter": {
+                "Chave_rubrica_retencao": [
+                  "Succeeded"
+                ]
+              }
+            },
+            "Chave_provisao_retencao": {
+              "type": "Compose",
+              "inputs": "@concat('RETENCAO-NOTA-',outputs('Campos_finais')?['CHAVE_ACESSO'])",
+              "runAfter": {
+                "Prefixo_filhos_retencao": [
+                  "Succeeded"
+                ]
+              }
+            },
+            "Localizar_rubrica_retencao": {
+              "type": "OpenApiConnection",
+              "inputs": {
+                "host": {
+                  "apiId": "/providers/Microsoft.PowerApps/apis/shared_sharepointonline",
+                  "connectionName": "shared_sharepointonline",
+                  "operationId": "HttpRequest"
+                },
+                "parameters": {
+                  "dataset": "https://energeticaltda-my.sharepoint.com/personal/bernardonotini_energeticabr_com",
+                  "parameters/method": "GET",
+                  "parameters/uri": "@concat('_api/web/lists/getbytitle(''DESCRITIVOPROVISAO'')/items?$select=Id,FOLHAOPERACAO&$filter=FOLHAOPERACAO eq ''',outputs('Chave_rubrica_retencao'),'''&$top=2')",
+                  "parameters/headers": {
+                    "Accept": "application/json;odata=nometadata",
+                    "Content-Type": "application/json;odata=nometadata"
+                  }
+                },
+                "authentication": "@parameters('$authentication')"
+              },
+              "runAfter": {
+                "Chave_provisao_retencao": [
+                  "Succeeded"
+                ]
+              }
+            },
+            "Conferir_rubrica_unica": {
+              "type": "ParseJson",
+              "inputs": {
+                "content": "@length(body('Localizar_rubrica_retencao')?['value'])",
+                "schema": {
+                  "type": "integer",
+                  "enum": [
+                    0,
+                    1
+                  ]
+                }
+              },
+              "runAfter": {
+                "Localizar_rubrica_retencao": [
+                  "Succeeded"
+                ]
+              }
+            },
+            "Garantir_rubrica_retencao": {
+              "type": "If",
+              "expression": {
+                "equals": [
+                  "@length(body('Localizar_rubrica_retencao')?['value'])",
+                  0
+                ]
+              },
+              "actions": {
+                "Criar_rubrica_retencao": {
+                  "type": "OpenApiConnection",
+                  "inputs": {
+                    "host": {
+                      "apiId": "/providers/Microsoft.PowerApps/apis/shared_sharepointonline",
+                      "connectionName": "shared_sharepointonline",
+                      "operationId": "HttpRequest"
+                    },
+                    "parameters": {
+                      "dataset": "https://energeticaltda-my.sharepoint.com/personal/bernardonotini_energeticabr_com",
+                      "parameters/method": "POST",
+                      "parameters/uri": "_api/web/lists/getbytitle('DESCRITIVOPROVISAO')/items",
+                      "parameters/headers": {
+                        "Accept": "application/json;odata=nometadata",
+                        "Content-Type": "application/json;odata=nometadata"
+                      },
+                      "parameters/body": "@string(setProperty(setProperty(setProperty(setProperty(json('{}'),'Title',outputs('Chave_rubrica_retencao')),'FOLHAOPERACAO',outputs('Chave_rubrica_retencao')),'DATAPREVISTOPGTO',outputs('Vencimento_retencao')),'VALORTOTAL','0.00'))"
+                    },
+                    "authentication": "@parameters('$authentication')"
+                  },
+                  "runAfter": {}
+                }
+              },
+              "else": {
+                "actions": {}
+              },
+              "runAfter": {
+                "Conferir_rubrica_unica": [
+                  "Succeeded"
+                ]
+              }
+            },
+            "Rubrica_retencao": {
+              "type": "Compose",
+              "inputs": "@if(empty(body('Localizar_rubrica_retencao')?['value']),body('Criar_rubrica_retencao')?['Id'],first(body('Localizar_rubrica_retencao')?['value'])?['Id'])",
+              "runAfter": {
+                "Garantir_rubrica_retencao": [
+                  "Succeeded"
+                ]
+              }
+            },
+            "Localizar_provisao_retencao": {
+              "type": "OpenApiConnection",
+              "inputs": {
+                "host": {
+                  "apiId": "/providers/Microsoft.PowerApps/apis/shared_sharepointonline",
+                  "connectionName": "shared_sharepointonline",
+                  "operationId": "HttpRequest"
+                },
+                "parameters": {
+                  "dataset": "https://energeticaltda-my.sharepoint.com/personal/bernardonotini_energeticabr_com",
+                  "parameters/method": "GET",
+                  "parameters/uri": "@concat('_api/web/lists/getbytitle(''PROVISÃO PGTOS'')/items?$select=Id,FOLHAOPERACAO&$filter=FOLHAOPERACAO eq ''',outputs('Chave_provisao_retencao'),'''&$top=2')",
+                  "parameters/headers": {
+                    "Accept": "application/json;odata=nometadata",
+                    "Content-Type": "application/json;odata=nometadata"
+                  }
+                },
+                "authentication": "@parameters('$authentication')"
+              },
+              "runAfter": {
+                "Rubrica_retencao": [
+                  "Succeeded"
+                ]
+              }
+            },
+            "Conferir_provisao_unica": {
+              "type": "ParseJson",
+              "inputs": {
+                "content": "@length(body('Localizar_provisao_retencao')?['value'])",
+                "schema": {
+                  "type": "integer",
+                  "enum": [
+                    0,
+                    1
+                  ]
+                }
+              },
+              "runAfter": {
+                "Localizar_provisao_retencao": [
+                  "Succeeded"
+                ]
+              }
+            },
+            "Criar_se_ausente_provisao_retencao": {
+              "type": "If",
+              "expression": {
+                "equals": [
+                  "@length(body('Localizar_provisao_retencao')?['value'])",
+                  0
+                ]
+              },
+              "actions": {
+                "Criar_provisao_retencao": {
+                  "type": "OpenApiConnection",
+                  "inputs": {
+                    "host": {
+                      "apiId": "/providers/Microsoft.PowerApps/apis/shared_sharepointonline",
+                      "connectionName": "shared_sharepointonline",
+                      "operationId": "HttpRequest"
+                    },
+                    "parameters": {
+                      "dataset": "https://energeticaltda-my.sharepoint.com/personal/bernardonotini_energeticabr_com",
+                      "parameters/method": "POST",
+                      "parameters/uri": "_api/web/lists/getbytitle('PROVISÃO PGTOS')/items",
+                      "parameters/headers": {
+                        "Accept": "application/json;odata=nometadata",
+                        "Content-Type": "application/json;odata=nometadata"
+                      },
+                      "parameters/body": "@string(setProperty(setProperty(setProperty(setProperty(setProperty(setProperty(setProperty(json('{}'),'Title',concat(outputs('Prefixo_filhos_retencao'),outputs('Campos_finais')?['CHAVE_ACESSO'])),'FOLHAOPERACAO',outputs('Chave_provisao_retencao')),'DESCRITIVOPROVISAO',string(outputs('Rubrica_retencao'))),'DATAPREVISTOPGTO',outputs('Vencimento_retencao')),'QTD','1'),'VALORTOTAL',formatNumber(outputs('Total_retido_comprador'),'0.00','en-US')),'OBS',coalesce(outputs('Campos_finais')?['Title'],'')))"
+                    },
+                    "authentication": "@parameters('$authentication')"
+                  },
+                  "runAfter": {}
+                }
+              },
+              "else": {
+                "actions": {}
+              },
+              "runAfter": {
+                "Conferir_provisao_unica": [
+                  "Succeeded"
+                ]
+              }
+            },
+            "Zerar_total_rubrica": {
+              "type": "SetVariable",
+              "inputs": {
+                "name": "RetentionParentTotal",
+                "value": 0
+              },
+              "runAfter": {
+                "Criar_se_ausente_provisao_retencao": [
+                  "Succeeded"
+                ]
+              }
+            },
+            "Listar_provisoes_rubrica": {
+              "type": "OpenApiConnection",
+              "inputs": {
+                "host": {
+                  "apiId": "/providers/Microsoft.PowerApps/apis/shared_sharepointonline",
+                  "connectionName": "shared_sharepointonline",
+                  "operationId": "HttpRequest"
+                },
+                "parameters": {
+                  "dataset": "https://energeticaltda-my.sharepoint.com/personal/bernardonotini_energeticabr_com",
+                  "parameters/method": "GET",
+                  "parameters/uri": "@concat('_api/web/lists/getbytitle(''PROVISÃO PGTOS'')/items?$select=Id,VALORTOTAL&$filter=startswith(Title,''',outputs('Prefixo_filhos_retencao'),''')&$top=5000')",
+                  "parameters/headers": {
+                    "Accept": "application/json;odata=nometadata",
+                    "Content-Type": "application/json;odata=nometadata"
+                  }
+                },
+                "authentication": "@parameters('$authentication')"
+              },
+              "runAfter": {
+                "Zerar_total_rubrica": [
+                  "Succeeded"
+                ]
+              }
+            },
+            "Somar_provisoes_rubrica": {
+              "type": "Foreach",
+              "foreach": "@body('Listar_provisoes_rubrica')?['value']",
+              "actions": {
+                "Acumular_total_rubrica": {
+                  "type": "IncrementVariable",
+                  "inputs": {
+                    "name": "RetentionParentTotal",
+                    "value": "@float(coalesce(items('Somar_provisoes_rubrica')?['VALORTOTAL'],0))"
+                  },
+                  "runAfter": {}
+                }
+              },
+              "runtimeConfiguration": {
+                "concurrency": {
+                  "repetitions": 1
+                }
+              },
+              "runAfter": {
+                "Listar_provisoes_rubrica": [
+                  "Succeeded"
+                ]
+              }
+            },
+            "Atualizar_total_rubrica": {
+              "type": "OpenApiConnection",
+              "inputs": {
+                "host": {
+                  "apiId": "/providers/Microsoft.PowerApps/apis/shared_sharepointonline",
+                  "connectionName": "shared_sharepointonline",
+                  "operationId": "HttpRequest"
+                },
+                "parameters": {
+                  "dataset": "https://energeticaltda-my.sharepoint.com/personal/bernardonotini_energeticabr_com",
+                  "parameters/method": "POST",
+                  "parameters/uri": "@concat('_api/web/lists/getbytitle(''DESCRITIVOPROVISAO'')/items(',string(outputs('Rubrica_retencao')),')')",
+                  "parameters/headers": {
+                    "Accept": "application/json;odata=nometadata",
+                    "Content-Type": "application/json;odata=nometadata",
+                    "X-HTTP-Method": "MERGE",
+                    "IF-MATCH": "*"
+                  },
+                  "parameters/body": "@string(setProperty(json('{}'),'VALORTOTAL',formatNumber(variables('RetentionParentTotal'),'0.00','en-US')))"
+                },
+                "authentication": "@parameters('$authentication')"
+              },
+              "runAfter": {
+                "Somar_provisoes_rubrica": [
+                  "Succeeded"
+                ]
+              }
+            }
+          },
+          "else": {
+            "actions": {}
+          },
+          "runAfter": {
+            "Total_retido_comprador": [
+              "Succeeded"
+            ]
+          }
+        },
+        "Confirmar_id_criado": {
+          "type": "If",
+          "expression": {
+            "equals": [
+              "@empty(body('Localizar_nota')?['d']?['results'])",
+              true
+            ]
+          },
+          "actions": {
+            "Registrar_id_criado": {
+              "type": "AppendToArrayVariable",
+              "inputs": {
+                "name": "CreatedItemIds",
+                "value": "@int(body('Criar_nota')?['Id'])"
+              },
+              "runAfter": {}
+            }
+          },
+          "else": {
+            "actions": {}
+          },
+          "runAfter": {
+            "Garantir_provisao_retencao": [
+              "Succeeded"
+            ]
+          }
         }
       },
       "runtimeConfiguration": {
@@ -918,7 +1280,7 @@
         }
       },
       "runAfter": {
-        "Inicializar_ids_criados": [
+        "Inicializar_total_retencoes": [
           "Succeeded"
         ]
       }
