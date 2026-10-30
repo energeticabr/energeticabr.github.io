@@ -10,6 +10,18 @@ let dialogSequence = 0;
 
 const FOCUSABLE = 'button:not([disabled]), input:not([disabled]), select:not([disabled]), textarea:not([disabled]), a[href], [tabindex]:not([tabindex="-1"])';
 
+/** Back belongs to the topmost local dialog, including when its save blocks Escape. */
+export function dismissGalleryOverlay(host) {
+  const overlay = [...host.querySelectorAll('.gallery-record-overlay')].reverse()
+    .find(node => !node.closest('[hidden]'));
+  if (!overlay) return false;
+  // Reuse the dialog's cancellation, focus restoration and in-flight write guards.
+  overlay.dispatchEvent(new host.ownerDocument.defaultView.KeyboardEvent('keydown', {
+    key: 'Escape', bubbles: false, cancelable: true,
+  }));
+  return true;
+}
+
 /** Shared actions for gallery records; persistence remains owned by the gallery data layer. */
 export function createGalleryRecordActions({ document, host, loadEditor, saveEditor, deleteItem, onChanged, onError, onEdit, renderEditorExtra, getReceiptAttachments, readReceiptAttachment,
   galleryTitle, getDeletionSummary = row => galleryDeletionFields(row.fields || row),

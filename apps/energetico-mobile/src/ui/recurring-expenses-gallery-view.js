@@ -4,7 +4,7 @@ import { applyScreenNavigation } from "./screen-navigation.js";
 import { attachGalleryRefreshButton } from './gallery-refresh.js';
 import { attachGalleryCreateShortcut } from './gallery-create-shortcut.js';
 import { createGalleryLoadingScreen } from './gallery-loading-screen.js';
-import { createGalleryRecordActions } from './gallery-record-actions.js';
+import { createGalleryRecordActions, dismissGalleryOverlay } from './gallery-record-actions.js';
 import { galleryDeletionFields } from './gallery-deletion-receipt.js';
 import { bindAutoFilterForm } from './auto-filter-form.js';
 import { createGalleryAttachmentCounts, knownGalleryAttachmentCount } from './gallery-attachment-counts.js';
@@ -665,12 +665,17 @@ export function createRecurringExpensesGallery({
   next.addEventListener("click", () => {
     if (page < Math.ceil(filteredRows.length / pageSize)) { page += 1; renderList(); }
   });
-  closeButton.addEventListener("click", () => { close(); onClose?.(); });
+  function navigateBack() {
+    if (!opened || destroyed) return;
+    if (dismissGalleryOverlay(root)) return;
+    if (!detail.hidden) { closeDetails(); return; }
+    close(); onClose?.();
+  }
+  closeButton.addEventListener("click", navigateBack);
   homeButton.addEventListener("click", () => { close(); onHome?.(); });
   root.addEventListener("keydown", event => {
     if (event.key !== "Escape") return;
-    if (!detail.hidden) closeDetails();
-    else { close(); onClose?.(); }
+    navigateBack();
   });
 
   async function open() {

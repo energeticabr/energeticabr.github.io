@@ -5,7 +5,7 @@ import { attachGalleryRefreshButton } from './gallery-refresh.js';
 import { createLoadingIndicator } from "./loading-indicator.js";
 import { beginLoadingTask } from './loading-task.js';
 import { createGalleryLoadingScreen } from './gallery-loading-screen.js';
-import { createGalleryRecordActions } from './gallery-record-actions.js';
+import { createGalleryRecordActions, dismissGalleryOverlay } from './gallery-record-actions.js';
 import { galleryDeletionFields } from './gallery-deletion-receipt.js';
 import { bindAutoFilterForm } from './auto-filter-form.js';
 import { createGalleryAttachmentCounts, knownGalleryAttachmentCount } from './gallery-attachment-counts.js';
@@ -319,7 +319,7 @@ export function createLaunchGallery({ document: documentRef = globalThis.documen
   root.setAttribute('aria-busy', 'false');
   root.tabIndex = -1;
   const header = element('header', 'lg-header');
-  const back = button('Voltar', close, { locked: false });
+  const back = button('Voltar', navigateBack, { locked: false });
   const title = element('h1', 'lg-title', 'Galeria lançamentos');
   const home = button('Início', () => {
     close(); onHome?.();
@@ -1743,14 +1743,19 @@ export function createLaunchGallery({ document: documentRef = globalThis.documen
   function viewAttachment(fileName) {
     viewRecordAttachment(current.item.id, fileName);
   }
+  function navigateBack() {
+    if (!opened || destroyed || suspended) return;
+    if (dismissGalleryOverlay(root)) return;
+    if (!reviewHost.hidden) { if (!busy) dismissReview(); return; }
+    if (!clusterPanel.hidden) { closeCluster(); return; }
+    if (!panel.hidden) { dismissDetail(); return; }
+    close();
+  }
   function onKeyDown(event) {
     if (!opened || suspended || event.defaultPrevented) return;
     if (event.key === 'Escape') {
       event.preventDefault(); event.stopPropagation();
-      if (!reviewHost.hidden) { if (!busy) dismissReview(); return; }
-      if (!clusterPanel.hidden) { closeCluster(); return; }
-      if (!panel.hidden) { dismissDetail(); return; }
-      close(); return;
+      navigateBack(); return;
     }
     if (event.key !== 'Tab') return;
     const activeModal = !reviewHost.hidden ? reviewHost : !clusterPanel.hidden ? clusterPanel : !panel.hidden ? panel : root;

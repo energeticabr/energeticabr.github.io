@@ -2795,6 +2795,36 @@ const galleryCreationCases = [
 ];
 
 for (const [galleryId, factory, dataFactory, replyId, label, flow] of galleryCreationCases) {
+  test(`back from creation restores its origin ${galleryId} only after leaving the first field`, async t => {
+    let options, opened = 0, back = 0;
+    const activeFlow = { id: flow, title: label, contextId: `create-${galleryId}` };
+    const h = makeHarness({
+      [factory]: async value => { options = value; return { open() { opened++; }, close() {}, destroy() {} }; },
+      ...(dataFactory ? { [dataFactory]: async () => ({ loadSnapshot: async () => ({ rows: [] }) }) } : {}),
+    });
+    t.after(() => h.controller.stop());
+    await h.controller.start();
+    h.client.sendText = async payload => {
+      h.chatCalls.push(['text', payload]);
+      if (payload.replyId === replyId) return { status: 'awaiting_field', activeFlow,
+        messages: [{ type: 'poll', question: 'SEGUNDO CAMPO', options: [] }] };
+      assert.equal(payload.replyId, 'navigation_back');
+      back++;
+      return back === 1 ? { status: 'awaiting_field', activeFlow,
+        messages: [{ type: 'poll', question: 'PRIMEIRO CAMPO', options: [] }] }
+        : { status: 'awaiting_subaction', activeFlow: null,
+          messages: [{ type: 'poll', question: 'MENU DA ÁREA ANTERIOR', options: [] }] };
+    };
+    await h.view.emit('select-reply', { replyId: galleryId });
+    await options.onCreate();
+    assert.equal(opened, 1);
+    await h.view.emit('select-reply', { replyId: 'navigation_back', label: 'VOLTAR' });
+    assert.equal(opened, 1, 'a pergunta anterior continua no formulário');
+    assert.equal(h.store.getState().messages.at(-1).question, 'PRIMEIRO CAMPO');
+    await h.view.emit('select-reply', { replyId: 'navigation_back', label: 'VOLTAR' });
+    assert.equal(opened, 2, 'a galeria de origem volta a aparecer');
+    assert.equal(back, 2, 'nenhum comando de abandono foi enviado');
+  });
   test(`gallery create shortcut ${galleryId} starts its own existing flow`, async t => {
     let options;
     const h = makeHarness({
@@ -2832,6 +2862,243 @@ test('gallery creation callbacks cannot send after sign-out or controller stop',
   h.controller.stop();
   assert.equal(await options.onCreate(), false);
   assert.equal(h.chatCalls.length, before, 'expired callback never starts a workflow');
+});
+
+for (const scenario of ['failed-back', 'failed-home', 'different-context', 'home', 'reopen-fails']) {
+  test(`gallery return is scoped and retryable: ${scenario}`, async t => {
+    let options, opened = 0, mode = 'create';
+    const activeFlow = { id: 'fixed_asset_product_registration', title: 'CADASTRAR PRODUTO IMOBILIZADO', contextId: 'origin' };
+    const h = makeHarness({ registrationGalleryFactory: async value => {
+      options = value; return { open() {
+        opened++;
+        if (scenario === 'reopen-fails' && opened > 1) throw new Error('Falha ao reabrir galeria');
+      }, close() {}, destroy() {} };
+    }, registrationGalleryDataFactory: async () => ({ loadSnapshot: async () => ({ rows: [] }) }) });
+    t.after(() => h.controller.stop());
+    await h.controller.start();
+    h.client.sendText = async payload => {
+      h.chatCalls.push(['text', payload]);
+      if (mode === 'failed-back') throw new Error('Falha temporária ao voltar');
+      return { status: 'processed', activeFlow: ['create', 'failed-home'].includes(mode) ? activeFlow
+        : mode === 'different-context' ? { ...activeFlow, contextId: 'other' } : null,
+        messages: [{ type: 'poll', question: mode, options: [] }],
+        ...(payload.replyId === 'portal_confirm_main_menu' && mode !== 'failed-home' ? { returned_to_main_menu: true, resetConversation: true } : {}) };
+    };
+    await h.view.emit('select-reply', { replyId: 'action_asset_product_gallery' });
+    await options.onCreate();
+    if (scenario === 'reopen-fails') {
+      mode = 'menu';
+      assert.equal(await h.view.emit('select-reply', { replyId: 'navigation_back', label: 'VOLTAR' }), false);
+      assert.equal(opened, 2);
+      assert.equal(h.store.getState().activeFlow, null, 'não restaura um formulário antigo depois do retorno confirmado');
+      assert.match(h.view.renders.at(-1).error, /Falha ao reabrir galeria/);
+    } else if (scenario === 'failed-back' || scenario === 'failed-home') {
+      mode = scenario;
+      assert.equal(await h.view.emit('select-reply', { replyId: scenario === 'failed-home' ? 'navigation_main_menu' : 'navigation_back', label: 'VOLTAR' }), false);
+      assert.equal(opened, 1);
+      assert.equal(h.store.getState().activeFlow?.contextId, 'origin');
+      mode = 'menu';
+      assert.equal(await h.view.emit('select-reply', { replyId: 'navigation_back', label: 'VOLTAR' }), true);
+      assert.equal(opened, 2, 'a tentativa seguinte mantém a origem');
+    } else {
+      mode = scenario;
+      await h.view.emit('select-reply', { replyId: scenario === 'home' ? 'navigation_main_menu' : 'other_step', label: 'SELECIONAR' });
+      mode = 'menu';
+      await h.view.emit('select-reply', { replyId: 'navigation_back', label: 'VOLTAR' });
+      assert.equal(opened, 1, 'outra navegação não restaura uma galeria antiga');
+    }
+  });
+}
+
+async function embeddedGalleryReturnHarness(t, {
+  root = { id: 'launch', title: 'EFETUAR LANÇAMENTO', contextId: 'gallery-parent' },
+  galleryId = 'action_launch_gallery', initialOptions,
+} = {}) {
+  const registration = id => ({ id, reply: id, label: `CADASTRAR ${id}`, registrationAction: true });
+  let options, opened = 0;
+  const galleryFactory = async value => {
+    options = value;
+    return { open() { opened++; }, close() {}, destroy() {} };
+  };
+  const h = makeHarness({ launchGalleryFactory: galleryFactory, registrationGalleryFactory: galleryFactory,
+    registrationGalleryDataFactory: async () => ({ loadSnapshot: async () => ({ rows: [] }) }) });
+  t.after(() => h.controller.stop());
+  await h.controller.start();
+  let response = { activeFlow: root, messages: [{ type: 'poll', question: 'FORNECEDOR OU PRODUTO?',
+    options: initialOptions || [registration('register_supplier'), registration('register_product')] }] };
+  h.client.sendText = async payload => { h.chatCalls.push(['text', payload]); return { status: 'processed', ...response }; };
+  await h.view.emit('select-reply', { replyId: galleryId });
+  await options.onCreate();
+  return { ...h, root, registration, get opened() { return opened; },
+    async reply(replyId, activeFlow, options = [], results = []) {
+      response = { activeFlow, messages: [{ type: 'poll', question: activeFlow?.title || 'MENU ANTERIOR', options }], results };
+      return h.view.emit('select-reply', { replyId, label: replyId });
+    },
+  };
+}
+
+for (const childReturn of ['navigation_back', 'finish_child']) {
+  test(`gallery origin survives an embedded supplier and exact parent return via ${childReturn}`, async t => {
+    const h = await embeddedGalleryReturnHarness(t);
+    const child = { id: 'supply_supplier_registration', title: 'CADASTRAR FORNECEDOR', contextId: 'supplier-child' };
+    await h.reply('register_supplier', child, [h.registration('finish_child')]);
+    await h.reply(childReturn, h.root, [], childReturn === 'finish_child' ? [{ status: 'completed' }] : []);
+    assert.equal(h.opened, 1, 'returning from the child must show the parent form');
+    assert.equal(h.store.getState().activeFlow.contextId, h.root.contextId);
+    await h.reply('navigation_back', null);
+    assert.equal(h.opened, 2, 'only exiting the root form restores its gallery');
+    assert.equal(h.chatCalls.some(([, payload]) => payload.replyId === 'portal_draft_exit_discard'), false);
+  });
+}
+
+test('gallery origin tracks recognized registrations nested inside another child', async t => {
+  const h = await embeddedGalleryReturnHarness(t);
+  const product = { id: 'supply_product_registration', title: 'PRODUTO', contextId: 'product-child' };
+  const subfamily = { id: 'supply_subfamily_registration', title: 'SUBFAMÍLIA', contextId: 'subfamily-child' };
+  const family = { id: 'supply_family_registration', title: 'FAMÍLIA', contextId: 'family-child' };
+  await h.reply('register_product', product, [h.registration('register_subfamily')]);
+  await h.reply('register_subfamily', subfamily, [h.registration('register_family')]);
+  await h.reply('register_family', family);
+  for (const parent of [subfamily, product, h.root]) {
+    await h.reply('navigation_back', parent);
+    assert.equal(h.opened, 1);
+    assert.equal(h.store.getState().activeFlow.contextId, parent.contextId);
+  }
+  await h.reply('navigation_back', null);
+  assert.equal(h.opened, 2);
+});
+
+test('gallery origin follows real supplier replies and changing step hashes without reopening on internal Back', async t => {
+  const h = await embeddedGalleryReturnHarness(t);
+  const supplierQuestion = { ...h.root, contextId: 'supplier-question-hash' };
+  const nativeSupplier = { id: 'choice:fornecedor_lancamento:NOVO_FORNECEDOR', reply: 'NOVO_FORNECEDOR', label: '➕ CADASTRAR NOVO FORNECEDOR' };
+  // A normal free-text answer changes the backend's step/data hash.
+  const send = h.client.sendText;
+  h.client.sendText = async payload => {
+    h.chatCalls.push(['text', payload]);
+    return { status: 'processed', activeFlow: supplierQuestion, messages: [{ type: 'poll', question: 'FORNECEDOR?', options: [nativeSupplier] }] };
+  };
+  await h.controller.sendText('30/10/2026');
+  h.client.sendText = send;
+  const child = { id: 'supply_supplier_registration', title: 'FORNECEDOR', contextId: 'native-child' };
+  await h.reply('NOVO_FORNECEDOR', child);
+  await h.reply('navigation_back', supplierQuestion);
+  assert.equal(h.opened, 1);
+  await h.reply('navigation_back', h.root);
+  assert.equal(h.opened, 1, 'an earlier question hash is still the parent form');
+  await h.reply('navigation_back', { id: 'menu:supplies', contextId: 'menu-hash', title: 'SUPRIMENTOS' });
+  assert.equal(h.opened, 2);
+});
+
+test('gallery origin accepts native nested registration replies and a registered parent with updated fields', async t => {
+  const h = await embeddedGalleryReturnHarness(t);
+  const nativeProduct = { id: 'choice:produto_lancamento:NOVO', reply: 'NOVO', label: 'CADASTRAR NOVO PRODUTO' };
+  const product = { id: 'supply_product_registration', title: 'PRODUTO', contextId: 'product-hash' };
+  const subfamily = { id: 'supply_subfamily_registration', title: 'SUBFAMÍLIA', contextId: 'subfamily-hash' };
+  const nativeSubfamily = { id: 'choice:subfamilia_produto_cadastro:NOVO_SUBFAMILIA_PRODUTO', reply: 'NOVO_SUBFAMILIA_PRODUTO', label: 'CADASTRAR NOVA SUBFAMÍLIA' };
+  h.store.ingestRemoteMessages([{ type: 'poll', question: 'PRODUTO?', options: [nativeProduct] }], { activeFlow: h.root });
+  await h.reply('NOVO', product, [nativeSubfamily]);
+  await h.reply('NOVO_SUBFAMILIA_PRODUTO', subfamily, [{ id: 'confirm_yes', reply: 'confirm_yes', label: 'CONFIRMAR' }]);
+  const updatedProduct = { ...product, contextId: 'product-with-registered-subfamily' };
+  await h.reply('confirm_yes', updatedProduct, [], [{ status: 'awaiting_field', embedded_supply_subfamily_registered: true }]);
+  assert.equal(h.opened, 1);
+  await h.reply('navigation_back', h.root);
+  await h.reply('navigation_back', null);
+  assert.equal(h.opened, 2);
+});
+
+test('gallery origin rejects a generic NOVO from an unrelated step', async t => {
+  const h = await embeddedGalleryReturnHarness(t);
+  h.store.ingestRemoteMessages([{ type: 'poll', question: 'OUTRA SELEÇÃO?', options: [
+    { id: 'choice:unrelated_step:NOVO', reply: 'NOVO', label: 'CADASTRAR NOVO' },
+  ] }], { activeFlow: h.root });
+  await h.reply('NOVO', { id: 'supply_product_registration', contextId: 'unrelated-product' });
+  await h.reply('navigation_back', h.root);
+  await h.reply('navigation_back', null);
+  assert.equal(h.opened, 1);
+});
+
+const canonicalGalleryChildren = [
+  ['movement institution', 'action_financial_movement_gallery', 'financial_movement', 'instituicao_movimentacao',
+    'institution_registration', 'financial_catalog_create', '➕ CADASTRAR INSTITUIÇÃO', 'financial_catalog_registered'],
+  ['movement investment', 'action_financial_movement_gallery', 'financial_movement', 'descricao_movimentacao',
+    'investment_registration', 'financial_catalog_create', '➕ CADASTRAR INVESTIMENTO', 'financial_catalog_registered'],
+  ['investment institution', 'action_investment_gallery', 'investment_registration', 'instituicao_cadastro_investimento',
+    'institution_registration', 'financial_catalog_create', '➕ CADASTRAR INSTITUIÇÃO', 'financial_catalog_registered'],
+  ['demonstrative activity', 'action_stage_demonstrative_gallery', 'construction_stage_demonstrative_create', 'atividade_demonstrativo_etapa',
+    'hr_activity_registration', 'NOVO_DEMONSTRATIVO_ETAPA_ATIVIDADE', '➕ CRIAR NOVO DEMONSTRATIVO ETAPA', 'embedded_demonstrative_activity_registered'],
+];
+for (const [name, galleryId, parentId, step, childId, replyId, label, marker] of canonicalGalleryChildren) {
+  for (const path of ['back', 'registered', 'wrong-step', 'different-context']) {
+    test(`canonical gallery child ${name}: ${path}`, async t => {
+      const root = { id: parentId, title: name, contextId: `${name}-parent` };
+      const option = { id: `choice:${path === 'wrong-step' ? 'unrelated_step' : step}:${replyId}`, reply: replyId, label };
+      const h = await embeddedGalleryReturnHarness(t, { root, galleryId, initialOptions: [option] });
+      const child = { id: childId, title: 'CADASTRO AUXILIAR', contextId: `${name}-child` };
+      await h.reply(replyId, child, [{ id: 'confirm_yes', reply: 'confirm_yes', label: 'CONFIRMAR' }]);
+      assert.equal(h.opened, 1);
+      if (path === 'registered') {
+        const updatedParent = { ...root, contextId: `${name}-updated-parent` };
+        await h.reply('confirm_yes', updatedParent, [], [{ status: 'awaiting_field', [marker]: true }]);
+        assert.equal(h.opened, 1, 'registered child returns to the parent form');
+        assert.equal(h.store.getState().activeFlow.contextId, updatedParent.contextId);
+      } else {
+        if (path === 'different-context') await h.reply('unrelated_step', { ...child, contextId: 'unrelated-child-context' });
+        await h.reply('navigation_back', root);
+        assert.equal(h.opened, 1, 'child Back must not reopen the gallery');
+      }
+      await h.reply('navigation_back', null);
+      assert.equal(h.opened, ['wrong-step', 'different-context'].includes(path) ? 1 : 2);
+      assert.equal(h.chatCalls.some(([, payload]) => payload.replyId === 'portal_draft_exit_discard'), false);
+    });
+  }
+}
+
+for (const marker of [false, 'true']) {
+  test(`financial gallery child rejects a non-true completion marker: ${marker}`, async t => {
+    const root = { id: 'financial_movement', title: 'MOVIMENTAÇÃO', contextId: 'financial-parent' };
+    const option = { id: 'choice:instituicao_movimentacao:financial_catalog_create', reply: 'financial_catalog_create', label: '➕ CADASTRAR INSTITUIÇÃO' };
+    const h = await embeddedGalleryReturnHarness(t, { root, galleryId: 'action_financial_movement_gallery', initialOptions: [option] });
+    await h.reply(option.reply, { id: 'institution_registration', contextId: 'institution-child' }, [{ id: 'confirm_yes', label: 'CONFIRMAR' }]);
+    await h.reply('confirm_yes', { ...root, contextId: 'unacknowledged-parent' }, [], [{ status: 'awaiting_field', financial_catalog_registered: marker }]);
+    await h.reply('navigation_back', null);
+    assert.equal(h.opened, 1);
+  });
+}
+
+for (const invalidation of ['unrelated', 'wrong-child', 'missing-context', 'stale-registration', 'home', 'root-completed']) {
+  test(`gallery embedded origin invalidates on ${invalidation}`, async t => {
+    const h = await embeddedGalleryReturnHarness(t);
+    const child = { id: 'supply_supplier_registration', title: 'FORNECEDOR', contextId: 'supplier-child' };
+    if (invalidation === 'stale-registration') await h.reply('same_step', h.root);
+    if (invalidation === 'root-completed') {
+      await h.reply('confirm_yes', h.root, [], [{ status: 'completed' }]);
+    } else {
+      await h.reply('register_supplier', invalidation === 'wrong-child'
+        ? { ...child, id: 'supply_product_registration' }
+        : invalidation === 'missing-context' ? { ...child, contextId: '' } : child);
+      if (invalidation === 'unrelated') await h.reply('other_step', { ...child, contextId: 'unrelated-context' });
+      if (invalidation === 'home') await h.reply('navigation_main_menu', null);
+      await h.reply('navigation_back', h.root);
+    }
+    await h.reply('navigation_back', null);
+    assert.equal(h.opened, 1, 'an invalidated context must not revive the old gallery');
+  });
+}
+
+test('gallery origin survives a failed child Back without borrowing another parent context', async t => {
+  const h = await embeddedGalleryReturnHarness(t);
+  const child = { id: 'supply_supplier_registration', title: 'FORNECEDOR', contextId: 'supplier-child' };
+  await h.reply('register_supplier', child);
+  const send = h.client.sendText;
+  h.client.sendText = async () => { throw new Error('Back unavailable'); };
+  assert.equal(await h.view.emit('select-reply', { replyId: 'navigation_back', label: 'VOLTAR' }), false);
+  assert.equal(h.store.getState().activeFlow.contextId, child.contextId);
+  assert.equal(h.opened, 1);
+  h.client.sendText = send;
+  await h.reply('navigation_back', h.root);
+  await h.reply('navigation_back', null);
+  assert.equal(h.opened, 2);
 });
 
 test('cached gallery creation still works after a report navigation attempt', async t => {
@@ -8383,7 +8650,7 @@ test('casinha não apaga o texto nem informa sucesso se a VM não retornar ao me
   assert.match(h.view.renders.at(-1).error || '', /menu principal/i);
 });
 
-test('seta ao sair do fluxo abandona sem confirmação e retorna ao menu', async () => {
+test('seta não transforma uma confirmação de abandono em retorno automático ao menu', async () => {
   const h = makeHarness({ historyMode: 'current-step' });
   const activeFlow = { id: 'payment_provision', title: 'CRIAR UMA PROVISÃO DE PAGAMENTO', contextId: 'provision-2' };
   const calls = [];
@@ -8407,9 +8674,9 @@ test('seta ao sair do fluxo abandona sem confirmação e retorna ao menu', async
   ] }], { activeFlow });
 
   assert.equal(await h.view.emit('select-reply', { replyId: 'navigation_back', label: '↩️ RETORNAR À PERGUNTA ANTERIOR' }), true);
-  assert.deepEqual(calls.slice(before), ['navigation_back', 'portal_draft_exit_discard']);
-  assert.equal(h.store.getState().messages.at(-1).question, 'QUAL ÁREA VOCÊ DESEJA ACESSAR?');
-  assert.equal(h.view.renders.some(render => render.messages?.some(message => /ABANDONAR ESTE FLUXO/.test(message.question || ''))), false);
+  assert.deepEqual(calls.slice(before), ['navigation_back']);
+  assert.equal(h.store.getState().activeFlow.id, 'payment_provision');
+  assert.equal(h.store.getState().messages.at(-1).question, 'TEM CERTEZA QUE DESEJA ABANDONAR ESTE FLUXO?');
 });
 
 test('seta dentro do fluxo volta à pergunta anterior sem descartar o formulário', async () => {

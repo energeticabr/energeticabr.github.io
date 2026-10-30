@@ -6,7 +6,7 @@ import { applyScreenNavigation } from "./screen-navigation.js";
 import { attachGalleryRefreshButton } from './gallery-refresh.js';
 import { createGalleryCreationToolbar } from './gallery-create-shortcut.js';
 import { createGalleryLoadingScreen } from './gallery-loading-screen.js';
-import { createGalleryRecordActions } from './gallery-record-actions.js';
+import { createGalleryRecordActions, dismissGalleryOverlay } from './gallery-record-actions.js';
 import { bindSearchableFilterSelects } from './searchable-filter-selects.js';
 import { REGISTRATION_GALLERY_MODELS, registrationFieldKey, registrationRawField, registrationNumber, registrationDateKey, sortRegistrationRows } from "../chat/registration-gallery-data.js";
 import Decimal from "decimal.js";
@@ -1080,7 +1080,12 @@ export function createRegistrationGallery({ document: doc = globalThis.document,
     if (returnFocus?.isConnected) returnFocus.focus?.();
     returnFocus = null;
   }
-  close.addEventListener("click", hide);
+  function navigateBack() {
+    if (destroyed || root.hidden) return;
+    if (dismissGalleryOverlay(root)) return;
+    hide();
+  }
+  close.addEventListener("click", navigateBack);
   let ddaClock = null, ddaDay = '';
   function refreshDdaDate() {
     if (destroyed || root.hidden || kind !== 'dda') return;
@@ -1124,7 +1129,7 @@ export function createRegistrationGallery({ document: doc = globalThis.document,
   previous.addEventListener("click", () => { page -= 1; render(); });
   next.addEventListener("click", () => { page += 1; render(); });
   root.addEventListener("keydown", event => {
-    if (event.key === "Escape") { hide(); return; }
+    if (event.key === "Escape") { navigateBack(); return; }
     if (event.key !== "Tab" || root.hidden) return;
     const focusable = [...root.querySelectorAll("summary, button:not(:disabled), input:not(:disabled), select:not(:disabled)")]
       .filter(node => !node.disabled && !node.closest('[hidden], [inert], [aria-hidden="true"]')
