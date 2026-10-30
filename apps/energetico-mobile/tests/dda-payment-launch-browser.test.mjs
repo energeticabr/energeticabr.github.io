@@ -54,7 +54,8 @@ test('DDA payment launch offer fits and hands off the paid identity without reco
             for (const field of ['dialogFits', 'textFits', 'buttonsFit', 'buttonsReachable', 'keyboardReachable', 'backgroundInert']) {
               assert.equal(state.offer[field], true, `${field}: ${detail}`);
             }
-            assert.equal(state.offer.overflow, false, detail);
+            assert.equal(state.offer.horizontalOverflow, false, detail);
+            assert.equal(state.offer.verticalScrollAccessible, true, detail);
             assert.equal(state.offer.paymentControlPresent, false, detail);
             assert.equal(state.offer.wordsUnbroken, true, detail);
             assert.equal(state.offer.yesBackground, 'rgb(18, 100, 67)', detail);
@@ -87,7 +88,8 @@ test('DDA payment launch offer fits and hands off the paid identity without reco
               for (const field of ['dialogFits', 'textFits', 'buttonsFit', 'buttonsReachable', 'keyboardReachable']) {
                 assert.equal(state.failure.layout[field], true, `${field}: ${detail}`);
               }
-              assert.equal(state.failure.layout.overflow, false, detail);
+              assert.equal(state.failure.layout.horizontalOverflow, false, detail);
+              assert.equal(state.failure.layout.verticalScrollAccessible, true, detail);
               assert.equal(state.failure.layout.wordsUnbroken, true, detail);
               assert.equal(state.failure.layout.yesBackground, 'rgb(18, 100, 67)', detail);
               assert.equal(state.failure.layout.yesColor, 'rgb(255, 255, 255)', detail);

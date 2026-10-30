@@ -175,7 +175,12 @@ try {
       yesBackground: yesStyle.backgroundColor, yesColor: yesStyle.color,
       yesContrast: (Math.max(backgroundLuminance, textLuminance) + .05) / (Math.min(backgroundLuminance, textLuminance) + .05),
       dialogFits: fits(modal), textFits,
-      overflow: modal.scrollWidth > modal.clientWidth + 1 || modal.scrollHeight > modal.clientHeight + 1,
+      // A bounded dialog intentionally scrolls vertically for longer feedback.
+      // Classic scrollbars reduce the available text width on Linux/Windows.
+      horizontalOverflow: modal.scrollWidth > modal.clientWidth + 1,
+      verticalOverflow: modal.scrollHeight > modal.clientHeight + 1,
+      verticalScrollAccessible: modal.scrollHeight <= modal.clientHeight + 1
+        || ['auto', 'scroll'].includes(getComputedStyle(modal).overflowY),
       buttonsFit: controls.every(node => { const box = node.getBoundingClientRect(); return fits(node) && box.left >= modalBox.left && box.right <= modalBox.right && box.height >= 44; }),
       buttonsReachable: controls.every(node => {
         const box = node.getBoundingClientRect(), hit = document.elementFromPoint(box.x + box.width / 2, box.y + box.height / 2);
