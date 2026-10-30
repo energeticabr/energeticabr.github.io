@@ -11,7 +11,7 @@ import { PAYROLL_BREAKDOWN_REPLY_ID, isPayrollBreakdownMenu } from './chat/payro
 import { createMediaThumbnail } from "./web/media-thumbnail.js";
 import { signatureInkHash, signatureInkImage } from "./web/signature-trace.js";
 import { signatureLayoutGeometry } from './web/signature-document-layout.js';
-import { supportsFullNameDatabaseFilter, latestDatabaseFilter, preserveDatabaseFilterRegistrationOptions, isDatabaseRegistrationOption } from "./chat/database-filter.js";
+import { supportsFullNameDatabaseFilter, latestDatabaseFilter, preserveDatabaseFilterRegistrationOptions } from "./chat/database-filter.js";
 import { normalizePartialDateSubmission } from "./chat/date-input.js";
 import { recommendEffectivePaymentDate } from "./chat/launch-payment-date-options.js";
 import { attachmentFinishOption, isDiaryAttachmentPrompt, isDocumentAttachmentPrompt } from "./chat/attachment-finish.js";
@@ -541,6 +541,11 @@ const GALLERY_EMBEDDED_REGISTRATIONS = [
   [['register_group', 'NOVO_GRUPO_FAMILIA'], ['supply_family_registration'], 'supply_group_registration'],
   [['register_new_document_type'], ['document'], 'document_type_registration'],
   [['register_new_document_group'], ['document_type_registration'], 'document_group_registration'],
+  [['financial_catalog_create'], ['financial_movement'], 'institution_registration', ['instituicao_movimentacao']],
+  [['financial_catalog_create'], ['financial_movement'], 'investment_registration', ['descricao_movimentacao']],
+  [['financial_catalog_create'], ['investment_registration'], 'institution_registration', ['instituicao_cadastro_investimento']],
+  [['NOVO_DEMONSTRATIVO_ETAPA_ATIVIDADE'], ['construction_stage_demonstrative_create'],
+    'hr_activity_registration', ['atividade_demonstrativo_etapa']],
 ];
 const DOCUMENT_SIGNING_POSITION_BACK_ID = "document_signing_position_back";
 const DOCUMENT_LINE_FINALIZE_ID = "document_line_finalize";
@@ -6278,8 +6283,8 @@ export function createAppController({
     const ordinaryReply = !replyId || Boolean(selected) || ['input_continue', 'filter_query', 'filter_clear', 'refresh_options'].includes(replyId);
     const back = replyId === NAVIGATION_BACK_ID;
     const completed = hasCompletedSubmission(result);
-    const registered = result.results?.some(item => Object.entries(item || {})
-      .some(([key, value]) => /^embedded_.*_registered$/.test(key) && value === true));
+    const registered = result.results?.some(item => item?.financial_catalog_registered === true
+      || Object.entries(item || {}).some(([key, value]) => /^embedded_.*_registered$/.test(key) && value === true));
     const parent = contexts.findIndex(context => context.id === active?.id);
     // A child may restore a suspended parent with updated registered fields.
     if (parent >= 0 && parent < contexts.length - 1 && (back || ordinaryReply)
@@ -6298,8 +6303,7 @@ export function createAppController({
     }
     const choice = String(selected?.id || '').match(/^choice:([^:]+):(.+)$/);
     const rawReply = String(selected?.reply || replyId || '').replace(/^choice:[^:]+:/, '');
-    const target = selected && isDatabaseRegistrationOption(selected)
-      && GALLERY_EMBEDDED_REGISTRATIONS.find(([replies, parents, , steps]) => replies.includes(rawReply)
+    const target = selected && GALLERY_EMBEDDED_REGISTRATIONS.find(([replies, parents, , steps]) => replies.includes(rawReply)
         && parents.includes(previous.id) && (!steps || steps.includes(choice?.[1] || poll.databaseFilterKey)))?.[2];
     if (target && active?.id === target && active.contextId && contexts.length < 8) {
       contexts.push({ id: active.id, contextId: active.contextId });

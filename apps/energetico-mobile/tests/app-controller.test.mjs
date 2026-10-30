@@ -2910,20 +2910,24 @@ for (const scenario of ['failed-back', 'failed-home', 'different-context', 'home
   });
 }
 
-async function embeddedGalleryReturnHarness(t) {
-  const root = { id: 'launch', title: 'EFETUAR LANÇAMENTO', contextId: 'gallery-parent' };
+async function embeddedGalleryReturnHarness(t, {
+  root = { id: 'launch', title: 'EFETUAR LANÇAMENTO', contextId: 'gallery-parent' },
+  galleryId = 'action_launch_gallery', initialOptions,
+} = {}) {
   const registration = id => ({ id, reply: id, label: `CADASTRAR ${id}`, registrationAction: true });
   let options, opened = 0;
-  const h = makeHarness({ launchGalleryFactory: async value => {
+  const galleryFactory = async value => {
     options = value;
     return { open() { opened++; }, close() {}, destroy() {} };
-  } });
+  };
+  const h = makeHarness({ launchGalleryFactory: galleryFactory, registrationGalleryFactory: galleryFactory,
+    registrationGalleryDataFactory: async () => ({ loadSnapshot: async () => ({ rows: [] }) }) });
   t.after(() => h.controller.stop());
   await h.controller.start();
   let response = { activeFlow: root, messages: [{ type: 'poll', question: 'FORNECEDOR OU PRODUTO?',
-    options: [registration('register_supplier'), registration('register_product')] }] };
+    options: initialOptions || [registration('register_supplier'), registration('register_product')] }] };
   h.client.sendText = async payload => { h.chatCalls.push(['text', payload]); return { status: 'processed', ...response }; };
-  await h.view.emit('select-reply', { replyId: 'action_launch_gallery' });
+  await h.view.emit('select-reply', { replyId: galleryId });
   await options.onCreate();
   return { ...h, root, registration, get opened() { return opened; },
     async reply(replyId, activeFlow, options = [], results = []) {
@@ -3013,6 +3017,54 @@ test('gallery origin rejects a generic NOVO from an unrelated step', async t => 
   await h.reply('navigation_back', null);
   assert.equal(h.opened, 1);
 });
+
+const canonicalGalleryChildren = [
+  ['movement institution', 'action_financial_movement_gallery', 'financial_movement', 'instituicao_movimentacao',
+    'institution_registration', 'financial_catalog_create', '➕ CADASTRAR INSTITUIÇÃO', 'financial_catalog_registered'],
+  ['movement investment', 'action_financial_movement_gallery', 'financial_movement', 'descricao_movimentacao',
+    'investment_registration', 'financial_catalog_create', '➕ CADASTRAR INVESTIMENTO', 'financial_catalog_registered'],
+  ['investment institution', 'action_investment_gallery', 'investment_registration', 'instituicao_cadastro_investimento',
+    'institution_registration', 'financial_catalog_create', '➕ CADASTRAR INSTITUIÇÃO', 'financial_catalog_registered'],
+  ['demonstrative activity', 'action_stage_demonstrative_gallery', 'construction_stage_demonstrative_create', 'atividade_demonstrativo_etapa',
+    'hr_activity_registration', 'NOVO_DEMONSTRATIVO_ETAPA_ATIVIDADE', '➕ CRIAR NOVO DEMONSTRATIVO ETAPA', 'embedded_demonstrative_activity_registered'],
+];
+for (const [name, galleryId, parentId, step, childId, replyId, label, marker] of canonicalGalleryChildren) {
+  for (const path of ['back', 'registered', 'wrong-step', 'different-context']) {
+    test(`canonical gallery child ${name}: ${path}`, async t => {
+      const root = { id: parentId, title: name, contextId: `${name}-parent` };
+      const option = { id: `choice:${path === 'wrong-step' ? 'unrelated_step' : step}:${replyId}`, reply: replyId, label };
+      const h = await embeddedGalleryReturnHarness(t, { root, galleryId, initialOptions: [option] });
+      const child = { id: childId, title: 'CADASTRO AUXILIAR', contextId: `${name}-child` };
+      await h.reply(replyId, child, [{ id: 'confirm_yes', reply: 'confirm_yes', label: 'CONFIRMAR' }]);
+      assert.equal(h.opened, 1);
+      if (path === 'registered') {
+        const updatedParent = { ...root, contextId: `${name}-updated-parent` };
+        await h.reply('confirm_yes', updatedParent, [], [{ status: 'awaiting_field', [marker]: true }]);
+        assert.equal(h.opened, 1, 'registered child returns to the parent form');
+        assert.equal(h.store.getState().activeFlow.contextId, updatedParent.contextId);
+      } else {
+        if (path === 'different-context') await h.reply('unrelated_step', { ...child, contextId: 'unrelated-child-context' });
+        await h.reply('navigation_back', root);
+        assert.equal(h.opened, 1, 'child Back must not reopen the gallery');
+      }
+      await h.reply('navigation_back', null);
+      assert.equal(h.opened, ['wrong-step', 'different-context'].includes(path) ? 1 : 2);
+      assert.equal(h.chatCalls.some(([, payload]) => payload.replyId === 'portal_draft_exit_discard'), false);
+    });
+  }
+}
+
+for (const marker of [false, 'true']) {
+  test(`financial gallery child rejects a non-true completion marker: ${marker}`, async t => {
+    const root = { id: 'financial_movement', title: 'MOVIMENTAÇÃO', contextId: 'financial-parent' };
+    const option = { id: 'choice:instituicao_movimentacao:financial_catalog_create', reply: 'financial_catalog_create', label: '➕ CADASTRAR INSTITUIÇÃO' };
+    const h = await embeddedGalleryReturnHarness(t, { root, galleryId: 'action_financial_movement_gallery', initialOptions: [option] });
+    await h.reply(option.reply, { id: 'institution_registration', contextId: 'institution-child' }, [{ id: 'confirm_yes', label: 'CONFIRMAR' }]);
+    await h.reply('confirm_yes', { ...root, contextId: 'unacknowledged-parent' }, [], [{ status: 'awaiting_field', financial_catalog_registered: marker }]);
+    await h.reply('navigation_back', null);
+    assert.equal(h.opened, 1);
+  });
+}
 
 for (const invalidation of ['unrelated', 'wrong-child', 'missing-context', 'stale-registration', 'home', 'root-completed']) {
   test(`gallery embedded origin invalidates on ${invalidation}`, async t => {
