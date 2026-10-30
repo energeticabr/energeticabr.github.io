@@ -393,7 +393,7 @@ jobs:
         run: node scripts/attach-testflight-build.mjs
 
   testflight-attach-existing:
-    name: Associar build existente ao TestFlight
+    name: Verificar publicação iOS 2012 (somente leitura)
     if: ${{ github.event_name == 'workflow_dispatch' && inputs.attach_latest_testflight == true }}
     runs-on: ubuntu-latest
     environment: app-store-connect
@@ -415,9 +415,60 @@ jobs:
         uses: actions/setup-node@v4
         with:
           node-version: 24
-      - name: Associar última build processada
+      - name: Ler build 2012 e grupo interno (somente GET)
         working-directory: apps/energetico-mobile
-        run: node scripts/ops-attach2005.mjs
+        run: |
+          node --input-type=module <<'NODE'
+          import assert from 'node:assert/strict';
+          import { createAppleClient } from './scripts/app-store-submission.mjs';
+          const expected = { build: '2012', buildId: '902696e2-4924-47c7-8ecc-30bfe8fafc08', appId: '6809887853',
+            bundleId: 'br.com.energetica.energetico', group: 'ENERGETICO Validacao', mainRunId: '41084289925',
+            mergeSha: '5af9c3db6ab8c0e6d4564bfd18465540b5f28639' };
+          assert.equal(process.env.APP_STORE_BUILD, expected.build);
+          assert.equal(process.env.TESTFLIGHT_EXPECTED_MAIN_RUN_ID, expected.mainRunId);
+          assert.equal(process.env.TESTFLIGHT_EXPECTED_MERGE_SHA, expected.mergeSha);
+          assert.equal(process.env.TESTFLIGHT_EXPECTED_BUNDLE_ID, expected.bundleId);
+          const client = createAppleClient(process.env, (url, options) => {
+            assert.equal(options.method, 'GET', 'Apple writes are forbidden in this readback');
+            return fetch(url, { ...options, signal: AbortSignal.timeout(25_000) });
+          });
+          const read = path => client.request('GET', path);
+          const identity = await read(`/v1/apps/${expected.appId}`);
+          assert.equal(identity.data?.id, expected.appId);
+          assert.equal(identity.data?.attributes?.bundleId, expected.bundleId);
+          const builds = await read(`/v1/builds?${new URLSearchParams({ 'filter[app]': expected.appId, 'filter[version]': expected.build, limit: '5' })}`);
+          assert.ok(builds.data?.some(build => build.id === expected.buildId && build.attributes?.version === expected.build));
+          const groups = [], seen = new Set();
+          let path = `/v1/betaGroups?filter[app]=${expected.appId}`;
+          while (path) {
+            assert.ok(!seen.has(path) && seen.size < 30, 'Group pagination must be complete'); seen.add(path);
+            const page = await read(path); groups.push(...(page.data || [])); path = page.links?.next;
+          }
+          const group = groups.find(group => group.attributes?.name === expected.group
+            && (group.attributes.isInternal === true || group.attributes.isInternalGroup === true));
+          assert.ok(group, 'Existing internal group must be confirmed');
+          let verified = false;
+          for (let attempt = 1; attempt <= 12; attempt++) {
+            const [build, beta] = await Promise.all([
+              read(`/v1/builds/${expected.buildId}?include=betaGroups`), read(`/v1/builds/${expected.buildId}/buildBetaDetail`),
+            ]);
+            assert.equal(build.data?.id, expected.buildId);
+            assert.equal(build.data?.attributes?.version, expected.build);
+            assert.equal(build.data?.attributes?.processingState, 'VALID');
+            assert.equal(build.data?.attributes?.expired, false);
+            assert.ok(build.data?.relationships?.betaGroups?.data?.some(link => link.type === 'betaGroups' && link.id === group.id), 'Main association must already exist; no writes permitted');
+            const state = beta.data?.attributes?.internalBuildState;
+            console.log(`Read-only build 2012: VALID; internal state ${state}; existing internal group linked=true; ${attempt}/12.`);
+            if (state === 'IN_BETA_TESTING') {
+              console.log(JSON.stringify({ status: 'VERIFIED_READ_ONLY', build: expected.build, buildId: expected.buildId,
+                processingState: build.data.attributes.processingState, internalBuildState: state,
+                group: group.attributes.name, groupId: group.id, groupInternal: true, groupLinked: true, writeRequests: 0, provenance: expected }));
+              verified = true; break;
+            }
+            if (attempt < 12) await new Promise(resolve => setTimeout(resolve, 10_000));
+          }
+          assert.ok(verified, 'Readback did not confirm IN_BETA_TESTING');
+          NODE
 
   testflight-testers:
     name: Ajustar testadores internos do TestFlight
