@@ -388,7 +388,7 @@ jobs:
           APP_STORE_BUILD: ${{ github.run_number }}
           TESTFLIGHT_MAX_ATTEMPTS: 40
           TESTFLIGHT_POLL_MS: 30000
-        run: node scripts/attach-testflight-build.mjs
+        run: node scripts/ops-attach2003.mjs
 
   testflight-attach-existing:
     name: Associar build existente ao TestFlight
