@@ -4,8 +4,37 @@ import {JSDOM} from 'jsdom';
 import {createAppController} from '../src/app-controller.js';
 import {createConversationStore} from '../src/chat/conversation-store.js';
 import {createSefazSyncSession} from '../src/ui/sefaz-sync-session.js';
+import {createSefazSyncReceipt} from '../src/ui/sefaz-sync-receipt.js';
 const id='a'.repeat(32),tick=()=>new Promise(r=>setImmediate(r));
 const result={requestId:id,status:'succeeded',startedUtc:'2026-10-29T10:00:00Z',completedUtc:'2026-10-29T10:01:00Z',sources:{NFE:{status:'succeeded',documents:0},CTE:{status:'succeeded',documents:0},NFSE:{status:'succeeded',documents:0}}};
+
+test('each fiscal result cluster identifies only its added rows beside its source summary',async t=>{
+ const dom=new JSDOM('<body/>',{pretendToBeVisual:true});t.after(()=>dom.window.close());
+ let acknowledged=0;
+ const view=createSefazSyncReceipt({document:dom.window.document,onAcknowledge:async()=>{acknowledged++;return true;}});
+ t.after(()=>view.destroy());
+ view.show({...result,sources:{NFE:{status:'succeeded',documents:4,createdItemIds:[71,72]},
+  CTE:{status:'succeeded',documents:2,createdItemIds:[8]},NFSE:{status:'succeeded',documents:1,createdItemIds:[]}}});
+ const rows=[...dom.window.document.querySelectorAll('[data-sefaz-source]')];
+ assert.deepEqual(rows.map(row=>row.dataset.sefazSource),['NFE','CTE','NFSE']);
+ assert.deepEqual(rows.map(row=>[...row.querySelectorAll('[data-sefaz-created-id]')].map(node=>node.textContent)),[['#71','#72'],['#8'],[]]);
+ for(const row of rows) assert.ok(row.firstElementChild.classList.contains('sefaz-sync-created-ids'));
+ assert.match(rows[0].querySelector('.sefaz-sync-source-content').textContent,/NF-e.*4 documento/);
+ assert.match(rows[2].querySelector('.sefaz-sync-created-ids').getAttribute('aria-label'),/Sem linhas adicionadas/);
+ assert.equal(acknowledged,0);
+ dom.window.document.querySelector('.sefaz-sync-ack').click();await tick();
+ assert.equal(acknowledged,1);assert.equal(dom.window.document.querySelector('[data-sefaz-sync-result]'),null);
+});
+
+test('legacy fiscal counts are never converted into row IDs or claimed as zero additions',t=>{
+ const dom=new JSDOM('<body/>',{pretendToBeVisual:true});t.after(()=>dom.window.close());
+ const view=createSefazSyncReceipt({document:dom.window.document});t.after(()=>view.destroy());
+ view.show({...result,sources:{...result.sources,NFE:{status:'succeeded',documents:19}}});
+ assert.equal(dom.window.document.querySelectorAll('[data-sefaz-created-id]').length,0);
+ assert.match(dom.window.document.querySelector('.sefaz-sync-created-ids').getAttribute('aria-label'),/IDs não informados/);
+ assert.match(dom.window.document.querySelector('.sefaz-sync-created-ids').textContent,/Não informados/);
+ assert.match(dom.window.document.querySelector('[data-sefaz-source="NFE"]').textContent,/19 documento/);
+});
 test('global empty result survives navigation, Escape, app close/reopen; only Entendi acknowledges',async t=>{
  assert.equal(typeof createSefazSyncSession,'function');const dom=new JSDOM('<body><main>OUTRA TELA</main></body>',{url:'https://fixture.test',pretendToBeVisual:true});t.after(()=>dom.window.close());const doc=dom.window.document;let acks=0;
  const client={getSefazRefreshPending:async()=>({status:'pending',requests:acks?[]:[result]}),acknowledgeSefazRefresh:async()=>{acks++;return {status:'acknowledged',requestId:id};}};

@@ -26,6 +26,13 @@ receiving.triggers={manual:{type:'Request',kind:'Button',inputs:{
 // Nao e usado webhook anonimo/SAS nem endpoint HTTP publico de ingestao.
 const documents=structuredClone(source.actions.Janela_de_coleta.actions.Documentos);
 addDanfeActions(documents.actions,cfg);
+// Creation evidence comes from the successful POST response, never the later
+// lookup shared by both create and update paths. The sequential loop and final
+// receipt ensure attachments/delivery also completed before IDs are published.
+documents.actions.Confirmar_id_criado={type:'If',expression:{equals:["@empty(body('Localizar_nota')?['d']?['results'])",true]},actions:{
+  Registrar_id_criado:{type:'AppendToArrayVariable',inputs:{name:'CreatedItemIds',value:"@int(body('Criar_nota')?['Id'])"},runAfter:{}},
+},else:{actions:{}},runAfter:{Anexar_DANFE:['Succeeded']}};
+documents.runAfter={Inicializar_ids_criados:['Succeeded']};
 const batchSchema=structuredClone(receiving.triggers.manual.inputs.schema);
 function removeTriggerPatterns(value){
   if(!value||typeof value!=='object')return;
@@ -40,9 +47,10 @@ removeTriggerPatterns(batchSchema);
 receiving.actions={
   Validar_lote:{type:'ParseJson',inputs:{content:'@triggerBody()',schema:batchSchema},runAfter:{}},
   Lote:{type:'Compose',inputs:"@body('Validar_lote')",runAfter:{Validar_lote:['Succeeded']}},
+  Inicializar_ids_criados:{type:'InitializeVariable',inputs:{variables:[{name:'CreatedItemIds',type:'array',value:[]}]},runAfter:{Lote:['Succeeded']}},
   Documentos:documents,
   Ids_confirmados:{type:'Select',inputs:{from:"@triggerBody()?['documents']",select:"@item()?['id']"},runAfter:{Documentos:['Succeeded']}},
-  Recibo:{type:'Compose',inputs:{source:'SEFAZ',acknowledgedIds:"@body('Ids_confirmados')"},runAfter:{Ids_confirmados:['Succeeded']}},
+  Recibo:{type:'Compose',inputs:{source:'SEFAZ',acknowledgedIds:"@body('Ids_confirmados')",createdItemIds:"@variables('CreatedItemIds')"},runAfter:{Ids_confirmados:['Succeeded']}},
 };
 fs.writeFileSync(path.join(root,'powerautomate/03-Receber-NFe.definition.json'),JSON.stringify(receiving,null,2)+'\n');
 const sp=(method,uri,body,previous)=>({type:'OpenApiConnection',inputs:{host:{apiId:'/providers/Microsoft.PowerApps/apis/shared_sharepointonline',connectionName:'shared_sharepointonline',operationId:'HttpRequest'},parameters:{dataset:cfg.queueSiteUrl,'parameters/method':method,'parameters/uri':uri,'parameters/headers':{Accept:'application/json;odata=nometadata','Content-Type':'application/json;odata=nometadata'},...(body===undefined?{}:{'parameters/body':typeof body==='string'?body:JSON.stringify(body)})},authentication:"@parameters('$authentication')"},runAfter:previous?{[previous]:['Succeeded']}: {}});

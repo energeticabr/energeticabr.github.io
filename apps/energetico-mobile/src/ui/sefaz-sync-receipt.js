@@ -21,9 +21,20 @@ export function createSefazSyncReceipt({document:doc,onAcknowledge=async()=>fals
     dialog.append(el('h2','',title),el('p','',result.status==='succeeded'?'NF-e, CT-e e NFS-e nacional consultadas. Entregas ao SharePoint confirmadas.':'Confira o resultado de cada fonte. Os dados da galeria podem estar incompletos.'));
     const list=el('ul','sefaz-sync-sources');
     for(const [key,label] of Object.entries(SEFAZ_SOURCES)){
-      const row=el('li','');row.append(el('strong','',label),el('span','',sefazSourceSummary(result.sources[key])));list.append(row);
+      const source=result.sources[key],row=el('li','');row.dataset.sefazSource=key;
+      const ids=source.createdItemIds,identifiers=el('div','sefaz-sync-created-ids');
+      identifiers.setAttribute('aria-label',ids===undefined?'IDs não informados nesta consulta':ids.length?'IDs das linhas adicionadas':'Sem linhas adicionadas');
+      identifiers.append(el('strong','sefaz-sync-id-label','ID'));
+      if(ids?.length){
+        for(const id of new Set(ids)){
+          const badge=el('span','sefaz-sync-created-id',`#${id}`);badge.dataset.sefazCreatedId=String(id);identifiers.append(badge);
+        }
+      }else identifiers.append(el('span','sefaz-sync-id-empty',ids===undefined?'Não informados':'—'));
+      const content=el('div','sefaz-sync-source-content');
+      content.append(el('strong','',label),el('span','',sefazSourceSummary(source)));
+      row.append(identifiers,content);list.append(row);
     }
-    dialog.append(list,el('p','sefaz-sync-footnote','Os totais indicam documentos processados nesta consulta e podem incluir documentos já existentes.'));
+    dialog.append(list,el('p','sefaz-sync-footnote','Os IDs identificam as linhas adicionadas. Os totais indicam documentos processados nesta consulta e podem incluir documentos já existentes.'));
     const feedback=el('p','sefaz-sync-error');feedback.hidden=true;feedback.setAttribute('role','alert');
     const button=el('button','sefaz-sync-ack','Entendi');button.type='button';
     button.addEventListener('click',async()=>{

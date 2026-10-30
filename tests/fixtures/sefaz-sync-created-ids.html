@@ -1,0 +1,106 @@
+<!doctype html>
+<html lang="pt-BR">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1">
+  <meta http-equiv="Content-Security-Policy" content="default-src 'none'; script-src 'self' 'unsafe-inline'; style-src 'self'; img-src 'self' data:; connect-src 'none'; form-action 'none'; base-uri 'none'">
+  <title>Recibo fiscal · IDs fictícios por fonte</title>
+  <link rel="stylesheet" href="../../apps/energetico-mobile/src/styles.css">
+  <link rel="stylesheet" href="../../apps/energetico-mobile/src/ui/sefaz-sync.css">
+</head>
+<body>
+  <main><h1>Consulta fiscal fictícia</h1><button id="origin" type="button">Abrir recibo local</button></main>
+  <script type="module">
+    import { createSefazSyncReceipt } from '../../apps/energetico-mobile/src/ui/sefaz-sync-receipt.js';
+    import { validateSefazReceipt } from '../../apps/energetico-mobile/src/chat/sefaz-sync-receipt.js';
+
+    const keys = ['NFE', 'CTE', 'NFSE'];
+    const cases = [
+      { name: 'few', ids: { NFE: [123, 124, 125], CTE: [456], NFSE: [789, 790] } },
+      { name: 'many', ids: { NFE: Array.from({ length: 28 }, (_, index) => 10001 + index), CTE: Array.from({ length: 12 }, (_, index) => 20001 + index), NFSE: Array.from({ length: 8 }, (_, index) => 30001 + index) } },
+      { name: 'long', ids: { NFE: [2147483647], CTE: [2147483646], NFSE: [2147483645] } },
+      { name: 'zero', ids: { NFE: [], CTE: [], NFSE: [] } },
+      { name: 'legacy' },
+    ];
+    const measurements = [], errors = [], securityViolations = [];
+    let acknowledgements = 0;
+    const check = (condition, message) => { if (!condition) throw new Error(message); };
+    const same = (actual, expected, message) => check(JSON.stringify(actual) === JSON.stringify(expected), `${message}: ${JSON.stringify(actual)}`);
+    const frames = () => new Promise(resolve => requestAnimationFrame(() => requestAnimationFrame(resolve)));
+    const bounds = element => { const r = element.getBoundingClientRect(); return { left: r.left, right: r.right, top: r.top, bottom: r.bottom, width: r.width, height: r.height }; };
+    document.addEventListener('securitypolicyviolation', event => securityViolations.push(event.blockedURI));
+    window.addEventListener('error', event => errors.push(event.message));
+    const receipt = createSefazSyncReceipt({ document, onAcknowledge: async () => { acknowledgements++; return true; } });
+    function payload(item) {
+      return validateSefazReceipt({ requestId: 'a'.repeat(32), status: 'succeeded', startedUtc: '2026-10-30T10:00:00Z', completedUtc: '2026-10-30T10:01:00Z',
+        sources: Object.fromEntries(keys.map(key => [key, { status: 'succeeded', documents: item.ids ? item.ids[key].length : 4,
+          ...(item.ids ? { createdItemIds: item.ids[key] } : {}) }])) });
+    }
+    function contains(parent, child) {
+      return child.left >= parent.left - 1 && child.right <= parent.right + 1 && child.top >= parent.top - 1 && child.bottom <= parent.bottom + 1;
+    }
+    async function inspect(item) {
+      check(receipt.show(payload(item)), `${item.name}: real receipt opens`);
+      await document.fonts.ready; await frames();
+      const pane = document.querySelector('[data-sefaz-sync-result]'), paneBox = bounds(pane);
+      check(pane.parentElement.matches(':modal'), `${item.name}: actual native app dialog`);
+      check(paneBox.left >= 0 && paneBox.right <= innerWidth + 1 && paneBox.top >= 0 && paneBox.bottom <= innerHeight + 1, `${item.name}: receipt fits viewport`);
+      check(pane.scrollWidth <= pane.clientWidth + 1, `${item.name}: receipt has no horizontal overflow`);
+      same([...pane.querySelectorAll('[data-sefaz-source]')].map(row => row.dataset.sefazSource), keys, `${item.name}: all fiscal source clusters`);
+      const sources = [];
+      for (const key of keys) {
+        const row = pane.querySelector(`[data-sefaz-source="${key}"]`);
+        const ids = row.querySelector('.sefaz-sync-created-ids'), content = row.querySelector('.sefaz-sync-source-content');
+        check(ids && content && row.firstElementChild === ids, `${item.name}/${key}: real left ID column precedes source content`);
+        const rowBox = bounds(row), idsBox = bounds(ids), contentBox = bounds(content);
+        check(contains(rowBox, idsBox) && contains(rowBox, contentBox), `${item.name}/${key}: both columns remain inside their source cluster`);
+        check(idsBox.right <= contentBox.left + 1, `${item.name}/${key}: IDs are left of source text, not above or overlapping`);
+        const badges = [...row.querySelectorAll('[data-sefaz-created-id]')];
+        const expected = (item.ids?.[key] || []).map(String);
+        same(badges.map(badge => badge.dataset.sefazCreatedId), expected, `${item.name}/${key}: exact created IDs only`);
+        for (const badge of badges) {
+          check(badge.textContent === `#${badge.dataset.sefazCreatedId}`, `${item.name}/${key}: readable ID badge`);
+          const box = bounds(badge), range = document.createRange(); range.selectNodeContents(badge);
+          check(contains(idsBox, box), `${item.name}/${key}: every ID fits its left column`);
+          check(box.width > 0 && box.height > 0 && getComputedStyle(badge).visibility === 'visible', `${item.name}/${key}: no hidden ID`);
+          check(badge.scrollWidth <= badge.clientWidth + 1 && badge.scrollHeight <= badge.clientHeight + 1, `${item.name}/${key}: long ID is not clipped`);
+          check([...range.getClientRects()].every(r => r.left >= box.left - 1 && r.right <= box.right + 1), `${item.name}/${key}: ID glyphs wrap inside the badge`);
+        }
+        if (!badges.length) {
+          check(ids.querySelector('.sefaz-sync-id-empty')?.textContent === (item.name === 'legacy' ? 'Não informados' : '—'), `${item.name}/${key}: unknown and confirmed-empty IDs have distinct visible placeholders`);
+          if (item.name === 'legacy') check(content.textContent.includes('4 documento(s)'), `${key}: processed documents do not fabricate unknown created IDs`);
+          check(item.name === 'legacy' ? ids.getAttribute('aria-label').includes('não informados') : ids.getAttribute('aria-label').includes('Sem linhas'), `${item.name}/${key}: legacy and zero results remain distinct`);
+        }
+        // Walk the actual receipt scroller: all IDs must remain reachable even
+        // when a many-ID source is taller than a phone viewport.
+        for (const badge of badges) {
+          badge.scrollIntoView({ block: 'nearest', inline: 'nearest' }); await frames();
+          const box = bounds(badge), visiblePane = bounds(pane);
+          check(contains(visiblePane, box) && box.top >= 0 && box.bottom <= innerHeight + 1, `${item.name}/${key}: every badge can be viewed by scrolling`);
+        }
+        sources.push({ key, ids: expected, row: rowBox, identifiers: idsBox, content: contentBox });
+      }
+      const button = pane.querySelector('.sefaz-sync-ack');
+      button.scrollIntoView({ block: 'nearest' }); await frames();
+      const buttonBox = bounds(button);
+      check(button.textContent === 'Entendi' && !button.disabled && buttonBox.width >= 44 && buttonBox.height >= 44, `${item.name}: usable acknowledgement target`);
+      check(contains(bounds(pane), buttonBox) && buttonBox.top >= 0 && buttonBox.bottom <= innerHeight, `${item.name}: Entendi remains reachable`);
+      check(document.elementFromPoint(buttonBox.left + buttonBox.width / 2, buttonBox.top + buttonBox.height / 2)?.closest('.sefaz-sync-ack') === button, `${item.name}: Entendi is unobstructed`);
+      check(pane.scrollLeft === 0 && pane.scrollWidth <= pane.clientWidth + 1, `${item.name}: scrolling IDs introduces no blank horizontal pan`);
+      const before = acknowledgements; button.click(); await frames();
+      check(acknowledgements === before + 1 && !document.querySelector('[data-sefaz-sync-result]'), `${item.name}: real Entendi closes the receipt with an in-memory acknowledgement`);
+      measurements.push({ name: item.name, badgeCount: sources.reduce((total, source) => total + source.ids.length, 0), sources, button: buttonBox });
+    }
+    try {
+      document.querySelector('#origin').focus();
+      for (const item of cases) await inspect(item);
+      check(errors.length === 0 && securityViolations.length === 0, 'No browser errors or external network attempts');
+      receipt.show(payload(cases[0])); await frames();
+      document.querySelector('[data-sefaz-sync-result]').scrollTop = 0; await frames();
+      document.documentElement.dataset.layout = JSON.stringify({ status: 'passed', measurements, acknowledgements, errors, securityViolations, width: innerWidth, height: innerHeight });
+    } catch (error) {
+      document.documentElement.dataset.layout = JSON.stringify({ status: 'failed', error: error.stack, measurements, acknowledgements, errors, securityViolations });
+    }
+  </script>
+</body>
+</html>
