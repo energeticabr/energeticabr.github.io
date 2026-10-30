@@ -413,7 +413,7 @@ jobs:
           node-version: 24
       - name: Associar última build processada
         working-directory: apps/energetico-mobile
-        run: node scripts/ops-attach1970.mjs
+        run: node scripts/ops-attach1975.mjs
 
   testflight-testers:
     name: Ajustar testadores internos do TestFlight
