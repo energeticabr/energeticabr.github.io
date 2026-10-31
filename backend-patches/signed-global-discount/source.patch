@@ -1,0 +1,1153 @@
+--- a/worker/payment_provision_group.py
++++ b/worker/payment_provision_group.py
+@@ -30 +30 @@
+-def _number(raw, field, *, positive=False):
++def _number(raw, field, *, positive=False, allow_negative=False):
+@@ -40,0 +41,3 @@
++        sign = ""
++        if allow_negative and text.startswith("-"):
++            sign, text = "-", text[1:]
+@@ -50 +53 @@
+-            value = Decimal(text)
++            value = Decimal(sign + text)
+@@ -53 +56,2 @@
+-    if not value.is_finite() or value < 0 or (positive and value == 0):
++    if (not value.is_finite() or (value < 0 and not allow_negative)
++            or (positive and value <= 0)):
+@@ -109,0 +114,20 @@
++
++
++def parse_global_discount(raw, *, allow_zero=False, allow_fractional_positive=False):
++    """Signed BRL adjustment only: a negative discount increases the total."""
++    if isinstance(raw, str):
++        text = raw.strip().replace("\u00a0", "").replace(" ", "")
++        if text[:2].lower() == "r$":
++            text = text[2:]
++        sign = "-" if text.startswith("-") else ""
++        unsigned = text[1:] if sign else text
++        if "," in unsigned and "." in unsigned and unsigned.rfind(".") > unsigned.rfind(","):
++            if not re.fullmatch(r"(?:[0-9]+|[0-9]{1,3}(?:,[0-9]{3})+)\.[0-9]+", unsigned):
++                raise ValueError("Invalid provision number: DESCONTO GLOBAL")
++            unsigned = unsigned.replace(",", "")
++        raw = sign + unsigned
++    value = _number(raw, "DESCONTO GLOBAL", allow_negative=True)
++    if (not allow_zero and value == 0) or (
++            value != provision_money(value) and not (allow_fractional_positive and value > 0)):
++        raise ValueError("Informe um desconto ou acréscimo em reais, com no máximo duas casas decimais")
++    return value
+@@ -144,3 +168 @@
+-    discount = _number(raw_discount, "DESCONTO GLOBAL", positive=True)
+-    if discount != provision_money(discount):
+-        raise ValueError("Informe o desconto em reais, com no máximo duas casas decimais")
++    discount = parse_global_discount(raw_discount)
+@@ -182,2 +204,6 @@
+-        if actual != net or preview_total != net:
+-            raise ValueError("Não foi possível representar esse desconto com a precisão dos valores unitários")
++        try:
++            parent_transport = provision_money(_number(float(net), "TOTAL"))
++        except (ValueError, InvalidOperation, OverflowError) as exc:
++            raise ValueError("Não foi possível representar esse ajuste global com a precisão dos valores unitários") from exc
++        if actual != net or preview_total != net or parent_transport != net:
++            raise ValueError("Não foi possível representar esse ajuste global com a precisão dos valores unitários")
+--- a/worker/payment_provision_flow.py
++++ b/worker/payment_provision_flow.py
+@@ -215 +215 @@
+-                    "prompt": "💸 DESEJA APLICAR UM DESCONTO GLOBAL SOBRE O VALOR DA PROVISÃO?",
++                    "prompt": "💸 DESEJA APLICAR UM DESCONTO OU ACRÉSCIMO GLOBAL SOBRE O VALOR DA PROVISÃO?",
+@@ -220 +220 @@
+-                    "prompt": "💰 QUAL É O VALOR DO DESCONTO GLOBAL? Informe o valor em reais."}
++                    "prompt": "💰 QUAL É O VALOR DO DESCONTO GLOBAL? Informe em reais: positivo para desconto ou negativo para acréscimo. Ex.: -0,06 acrescenta R$ 0,06 ao total."}
+@@ -430,2 +430,5 @@
+-            rows.append({"label": "DESCONTO GLOBAL", "value": _currency(_number(discount["amount"], "DESCONTO"))
+-                         + " · " + _canonical(_number(discount["percentage"], "PERCENTUAL")) + "% nos produtos"})
++            signed_amount = _number(discount["amount"], "DESCONTO", allow_negative=True)
++            percentage = _number(discount["percentage"], "PERCENTUAL", allow_negative=True)
++            rows.append({"label": "ACRÉSCIMO GLOBAL" if signed_amount < 0 else "DESCONTO GLOBAL",
++                         "value": _currency(abs(signed_amount)) + " · "
++                         + _canonical(abs(percentage)) + "% nos produtos"})
+--- a/worker/workflow.py
++++ b/worker/workflow.py
+@@ -23,0 +24 @@
++    from .payment_provision_group import parse_global_discount
+@@ -29,0 +31 @@
++    from payment_provision_group import parse_global_discount
+@@ -47 +49 @@
+-from decimal import Decimal, InvalidOperation, ROUND_HALF_UP
++from decimal import Decimal, InvalidOperation, ROUND_HALF_UP, localcontext
+@@ -26331,4 +26333,14 @@
+-
+-        snapshots = list(state.get("launch_lines", []))
+-        if not state.get("current_launch_line_saved"):
+-            current = {"fields": copy.deepcopy(state.get("fields", {}))}
++        with localcontext() as calculation_context:
++            calculation_context.prec = 60
++
++            snapshots = list(state.get("launch_lines", []))
++            if not state.get("current_launch_line_saved"):
++                current = {"fields": copy.deepcopy(state.get("fields", {}))}
++                try:
++                    self._multi_launch_line_amounts(current)
++                except RuntimeError:
++                    pass
++                else:
++                    snapshots.append(current)
++            if not snapshots:
++                return None
+@@ -26336 +26348,10 @@
+-                self._multi_launch_line_amounts(current)
++                return sum(
++                    (
++                        quantity * unit_value + freight
++                        for quantity, unit_value, freight in (
++                            self._multi_launch_line_amounts(snapshot)
++                            for snapshot in snapshots
++                        )
++                    ),
++                    Decimal("0"),
++                )
+@@ -26338,18 +26359 @@
+-                pass
+-            else:
+-                snapshots.append(current)
+-        if not snapshots:
+-            return None
+-        try:
+-            return sum(
+-                (
+-                    quantity * unit_value + freight
+-                    for quantity, unit_value, freight in (
+-                        self._multi_launch_line_amounts(snapshot)
+-                        for snapshot in snapshots
+-                    )
+-                ),
+-                Decimal("0"),
+-            )
+-        except RuntimeError:
+-            return None
++                return None
+@@ -26395,19 +26399,27 @@
+-        allocations = [Decimal("0") for _ in merchandise]
+-        remaining = discount
+-        active = [index for index, capacity in enumerate(merchandise) if capacity > 0]
+-        while remaining > 0 and active:
+-            total_weight = sum((gross[index] for index in active), Decimal("0"))
+-            if total_weight <= 0:
+-                total_weight = sum(
+-                    (merchandise[index] - allocations[index] for index in active),
+-                    Decimal("0"),
+-                )
+-            capped = []
+-            for index in active:
+-                capacity = merchandise[index] - allocations[index]
+-                weight = gross[index] if total_weight > 0 else capacity
+-                share = remaining * weight / total_weight
+-                if share >= capacity:
+-                    capped.append(index)
+-            if capped:
+-                for index in capped:
++        with localcontext() as calculation_context:
++            calculation_context.prec = 60
++            if discount < 0:
++                # Acréscimos usam os mesmos pesos brutos, sem o teto de redução.
++                # Linhas gratuitas também podem receber acréscimo; se todo o lote
++                # for gratuito, pesos iguais mantêm o rateio definido.
++                weights = gross if sum(gross, Decimal("0")) > 0 else [
++                    Decimal("1") for _ in merchandise
++                ]
++                total_weight = sum(weights, Decimal("0"))
++                if not weights:
++                    raise ValueError("Nenhuma linha para aplicar o acréscimo")
++                allocations = [discount * weight / total_weight for weight in weights[:-1]]
++                allocations.append(discount - sum(allocations, Decimal("0")))
++                return allocations
++            allocations = [Decimal("0") for _ in merchandise]
++            remaining = discount
++            active = [index for index, capacity in enumerate(merchandise) if capacity > 0]
++            while remaining > 0 and active:
++                total_weight = sum((gross[index] for index in active), Decimal("0"))
++                if total_weight <= 0:
++                    total_weight = sum(
++                        (merchandise[index] - allocations[index] for index in active),
++                        Decimal("0"),
++                    )
++                capped = []
++                for index in active:
+@@ -26415,16 +26427,23 @@
+-                    allocations[index] += capacity
+-                    remaining -= capacity
+-                    active.remove(index)
+-                continue
+-
+-            assigned = Decimal("0")
+-            for index in active[:-1]:
+-                share = remaining * gross[index] / total_weight
+-                allocations[index] += share
+-                assigned += share
+-            allocations[active[-1]] += remaining - assigned
+-            remaining = Decimal("0")
+-
+-        if remaining > 0:
+-            raise ValueError("O desconto excede o valor dos produtos")
+-        return allocations
++                    weight = gross[index] if total_weight > 0 else capacity
++                    share = remaining * weight / total_weight
++                    if share >= capacity:
++                        capped.append(index)
++                if capped:
++                    for index in capped:
++                        capacity = merchandise[index] - allocations[index]
++                        allocations[index] += capacity
++                        remaining -= capacity
++                        active.remove(index)
++                    continue
++
++                assigned = Decimal("0")
++                for index in active[:-1]:
++                    share = remaining * gross[index] / total_weight
++                    allocations[index] += share
++                    assigned += share
++                allocations[active[-1]] += remaining - assigned
++                remaining = Decimal("0")
++
++            if remaining > 0:
++                raise ValueError("O desconto excede o valor dos produtos")
++            return allocations
+@@ -26435,15 +26454,17 @@
+-        self._remove_multi_launch_discount_adjustments(state)
+-        self._apply_multi_launch_freight_distribution(state)
+-        values = [
+-            self._multi_launch_line_amounts(snapshot)
+-            for snapshot in state.get("launch_lines", [])
+-        ]
+-        merchandise_total = sum(
+-            (quantity * unit for quantity, unit, _freight in values),
+-            Decimal("0"),
+-        )
+-        gross_total = sum(
+-            (quantity * unit + freight for quantity, unit, freight in values),
+-            Decimal("0"),
+-        )
+-        return values, merchandise_total, gross_total
++        with localcontext() as calculation_context:
++            calculation_context.prec = 60
++            self._remove_multi_launch_discount_adjustments(state)
++            self._apply_multi_launch_freight_distribution(state)
++            values = [
++                self._multi_launch_line_amounts(snapshot)
++                for snapshot in state.get("launch_lines", [])
++            ]
++            merchandise_total = sum(
++                (quantity * unit for quantity, unit, _freight in values),
++                Decimal("0"),
++            )
++            gross_total = sum(
++                (quantity * unit + freight for quantity, unit, freight in values),
++                Decimal("0"),
++            )
++            return values, merchandise_total, gross_total
+@@ -26453,22 +26474,104 @@
+-        lines = state.get("launch_lines", [])
+-        if not lines:
+-            return
+-        values, merchandise_total, gross_total = self._multi_launch_original_totals(
+-            state
+-        )
+-        metadata = state.get("multi_launch_discount", {})
+-        decision = state.get("answers", {}).get(
+-            "aplicar_desconto_global_lancamento"
+-        )
+-        if decision is None:
+-            enabled = bool(metadata.get("enabled"))
+-        else:
+-            enabled = normalize_text(str(decision)) == "sim"
+-
+-        requested_raw = state.get("answers", {}).get(
+-            "valor_desconto_global_lancamento"
+-        )
+-        if requested_raw in {None, ""}:
+-            requested_raw = metadata.get("discount", "0")
+-        discount = _parse_decimal(requested_raw, allow_zero=True) or Decimal("0")
+-        if not enabled or discount == 0:
++        with localcontext() as calculation_context:
++            calculation_context.prec = 60
++            lines = state.get("launch_lines", [])
++            if not lines:
++                return
++            values, merchandise_total, gross_total = self._multi_launch_original_totals(
++                state
++            )
++            metadata = state.get("multi_launch_discount", {})
++            decision = state.get("answers", {}).get(
++                "aplicar_desconto_global_lancamento"
++            )
++            if decision is None:
++                enabled = bool(metadata.get("enabled"))
++            else:
++                enabled = normalize_text(str(decision)) == "sim"
++
++            requested_raw = state.get("answers", {}).get(
++                "valor_desconto_global_lancamento"
++            )
++            if requested_raw in {None, ""}:
++                requested_raw = metadata.get("discount", "0")
++            discount = parse_global_discount(
++                requested_raw, allow_zero=True, allow_fractional_positive=True
++            ) if enabled else Decimal("0")
++            if not enabled or discount == 0:
++                state["multi_launch_discount"] = {
++                    "enabled": False,
++                    "discount": "0",
++                    "original_total": _decimal_storage(gross_total),
++                    "net_total": _decimal_storage(gross_total),
++                }
++                return
++            if discount > merchandise_total:
++                raise ValueError(
++                    "O desconto não pode exceder o valor total dos produtos"
++                )
++
++            merchandise = [quantity * unit for quantity, unit, _freight in values]
++            gross = [
++                quantity * unit + freight
++                for quantity, unit, freight in values
++            ]
++            allocations = self._proportional_discount_allocations(
++                merchandise, gross, discount
++            )
++            adjusted_units = [
++                unit - allocated / quantity
++                for (quantity, unit, _freight), allocated in zip(values, allocations)
++            ]
++            if discount < 0:
++                # SharePoint Number columns cross an IEEE-754 boundary. Freeze the
++                # representable unit prices and reject a cent mismatch before any
++                # snapshot receives the adjustment.
++                try:
++                    adjusted_units = [Decimal(str(float(unit))) for unit in adjusted_units]
++                    if any(not unit.is_finite() or unit < 0 for unit in adjusted_units):
++                        raise ValueError("Valor unitário não representável")
++                    expected = (gross_total - discount).quantize(Decimal("0.01"), rounding=ROUND_HALF_UP)
++                    preview = sum((quantity * unit + freight
++                                   for (quantity, _original, freight), unit in zip(values, adjusted_units)), Decimal("0"))
++                    transported = sum((Decimal(str(float(quantity))) * unit + Decimal(str(float(freight)))
++                                       for (quantity, _original, freight), unit in zip(values, adjusted_units)), Decimal("0"))
++                    if (preview.quantize(Decimal("0.01"), rounding=ROUND_HALF_UP) != expected
++                            or transported.quantize(Decimal("0.01"), rounding=ROUND_HALF_UP) != expected
++                            or Decimal(str(float(gross_total - discount))).quantize(
++                                Decimal("0.01"), rounding=ROUND_HALF_UP) != expected):
++                        raise ValueError("Total não representável em centavos")
++                except (ValueError, InvalidOperation, OverflowError) as exc:
++                    raise ValueError("Não foi possível representar esse acréscimo com a precisão dos valores unitários") from exc
++            adjustment_label = "ACRÉSCIMO GLOBAL" if discount < 0 else "DESCONTO GLOBAL"
++            for snapshot, amounts, allocated, adjusted_unit in zip(lines, values, allocations, adjusted_units):
++                quantity, original_unit, freight = amounts
++                fields = snapshot.setdefault("fields", {})
++                display = snapshot.setdefault("display_values", {})
++                original_description = fields.get("DESCRIÇÃO")
++                original_description_display = display.get("DESCRIÇÃO")
++                note = (
++                    f"{adjustment_label} APLICADO AO VALOR UNITÁRIO: DE "
++                    f"{_currency_display(original_unit)} PARA "
++                    f"{_currency_display(adjusted_unit)}."
++                )
++                description = str(original_description or "").strip()
++                adjusted_description = f"{description}\n{note}" if description else note
++                snapshot["discount_adjustment"] = {
++                    "original_unit_value": _decimal_storage(original_unit),
++                    "original_unit_display": _currency_display(original_unit),
++                    "allocated_discount": _decimal_storage(allocated),
++                    "original_line_total": _decimal_storage(
++                        quantity * original_unit + freight
++                    ),
++                    "adjusted_line_total": _decimal_storage(
++                        quantity * adjusted_unit + freight
++                    ),
++                    "description_field_present": "DESCRIÇÃO" in fields,
++                    "original_description": original_description,
++                    "description_display_present": "DESCRIÇÃO" in display,
++                    "original_description_display": original_description_display,
++                }
++                fields["VALOR UNITÁRIO"] = _decimal_storage(adjusted_unit)
++                display["VALOR UNITÁRIO"] = _currency_display(adjusted_unit)
++                fields["DESCRIÇÃO"] = adjusted_description
++                display["DESCRIÇÃO"] = adjusted_description
++
+@@ -26476,2 +26579,2 @@
+-                "enabled": False,
+-                "discount": "0",
++                "enabled": True,
++                "discount": _decimal_storage(discount),
+@@ -26479 +26582 @@
+-                "net_total": _decimal_storage(gross_total),
++                "net_total": _decimal_storage(gross_total - discount),
+@@ -26481,59 +26584,5 @@
+-            return
+-        if discount > merchandise_total:
+-            raise ValueError(
+-                "O desconto não pode exceder o valor total dos produtos"
+-            )
+-
+-        merchandise = [quantity * unit for quantity, unit, _freight in values]
+-        gross = [
+-            quantity * unit + freight
+-            for quantity, unit, freight in values
+-        ]
+-        allocations = self._proportional_discount_allocations(
+-            merchandise, gross, discount
+-        )
+-        for snapshot, amounts, allocated in zip(lines, values, allocations):
+-            quantity, original_unit, freight = amounts
+-            fields = snapshot.setdefault("fields", {})
+-            display = snapshot.setdefault("display_values", {})
+-            adjusted_unit = original_unit - (allocated / quantity)
+-            original_description = fields.get("DESCRIÇÃO")
+-            original_description_display = display.get("DESCRIÇÃO")
+-            note = (
+-                "DESCONTO GLOBAL APLICADO AO VALOR UNITÁRIO: DE "
+-                f"{_currency_display(original_unit)} PARA "
+-                f"{_currency_display(adjusted_unit)}."
+-            )
+-            description = str(original_description or "").strip()
+-            adjusted_description = f"{description}\n{note}" if description else note
+-            snapshot["discount_adjustment"] = {
+-                "original_unit_value": _decimal_storage(original_unit),
+-                "original_unit_display": _currency_display(original_unit),
+-                "allocated_discount": _decimal_storage(allocated),
+-                "original_line_total": _decimal_storage(
+-                    quantity * original_unit + freight
+-                ),
+-                "adjusted_line_total": _decimal_storage(
+-                    quantity * adjusted_unit + freight
+-                ),
+-                "description_field_present": "DESCRIÇÃO" in fields,
+-                "original_description": original_description,
+-                "description_display_present": "DESCRIÇÃO" in display,
+-                "original_description_display": original_description_display,
+-            }
+-            fields["VALOR UNITÁRIO"] = _decimal_storage(adjusted_unit)
+-            display["VALOR UNITÁRIO"] = _currency_display(adjusted_unit)
+-            fields["DESCRIÇÃO"] = adjusted_description
+-            display["DESCRIÇÃO"] = adjusted_description
+-
+-        state["multi_launch_discount"] = {
+-            "enabled": True,
+-            "discount": _decimal_storage(discount),
+-            "original_total": _decimal_storage(gross_total),
+-            "net_total": _decimal_storage(gross_total - discount),
+-        }
+-        last_fields = lines[-1].get("fields", {})
+-        last_display = lines[-1].get("display_values", {})
+-        for field in ("VALOR UNITÁRIO", "DESCRIÇÃO"):
+-            state.setdefault("fields", {})[field] = last_fields[field]
+-            state.setdefault("display_values", {})[field] = last_display[field]
++            last_fields = lines[-1].get("fields", {})
++            last_display = lines[-1].get("display_values", {})
++            for field in ("VALOR UNITÁRIO", "DESCRIÇÃO"):
++                state.setdefault("fields", {})[field] = last_fields[field]
++                state.setdefault("display_values", {})[field] = last_display[field]
+@@ -26561 +26610,2 @@
+-                "💰 INFORME UM NOVO VALOR DE DESCONTO GLOBAL."
++                "💰 INFORME UM NOVO VALOR DE DESCONTO GLOBAL. "
++                "PARA ACRÉSCIMO GLOBAL, USE UM VALOR NEGATIVO (EX.: -0,06 ACRESCENTA R$ 0,06)."
+@@ -27160,0 +27211,30 @@
++    def _handle_launch_global_discount_reply(self, event, state, etag, step) -> dict:
++        with localcontext() as calculation_context:
++            calculation_context.prec = 60
++            raw = (event.get("text") or event.get("reply_id") or "").strip()
++            try:
++                value = parse_global_discount(
++                    raw, allow_zero=bool(step.get("allow_zero")), allow_fractional_positive=True
++                )
++            except ValueError:
++                self._send_input_question(state, step["invalid_message"] + "\n" + step["prompt"])
++                self._save(state, etag)
++                return {"status": "invalid_number", "field": step["key"]}
++
++            # Validate against originals in a copy: a rejected input must retain
++            # the prior approved prices, notes and signed adjustment.
++            proposed = copy.deepcopy(state)
++            stored = _decimal_storage(value)
++            proposed.setdefault("answers", {})[step["key"]] = stored
++            proposed.setdefault("fields", {})[step["target_field"]] = stored
++            proposed.setdefault("display_values", {})[step["target_field"]] = _currency_display(value)
++            try:
++                self._apply_multi_launch_global_discount(proposed)
++            except ValueError as exc:
++                self._send_input_question(state, str(exc).upper() + "\n" + step["prompt"])
++                self._save(state, etag)
++                return {"status": "invalid_discount", "field": step["key"]}
++            state.update(proposed)
++            state["step_index"] += 1
++            return self._prompt_next_or_summary(state, etag)
++
+@@ -27161,0 +27242,2 @@
++        if step.get("key") == "valor_desconto_global_lancamento":
++            return self._handle_launch_global_discount_reply(event, state, etag, step)
+@@ -28884,30 +28966,23 @@
+-        lines = state.get("launch_lines", [])
+-        self._apply_multi_launch_freight_distribution(state)
+-        self._apply_multi_launch_global_discount(state)
+-        first = lines[0]
+-        order_type = first.get("answers", {}).get("pedido_lancamento", "EM BRANCO")
+-        order_id = first.get("fields", {}).get("AGRUPAR")
+-        if normalize_text(str(order_type)) == "novo pedido":
+-            grouping_display = (
+-                "NOVO ID ÚNICO A SER CRIADO — SERÁ APLICADO A TODAS AS "
+-                f"{len(lines)} LINHAS"
+-            )
+-        else:
+-            order_id = order_id or "EM BRANCO"
+-            grouping_display = (
+-                f"{order_id} — SERÁ APLICADO A TODAS AS {len(lines)} LINHAS"
+-            )
+-        rows = [
+-            {"label": "MODALIDADE", "value": "LANÇAMENTO MÚLTIPLO"},
+-            {"label": "TIPO DE PEDIDO", "value": str(order_type)},
+-            {"label": "AGRUPAR", "value": grouping_display},
+-            {"label": "QUANTIDADE DE LINHAS", "value": str(len(lines))},
+-            {
+-                "label": "DESTINO DOS ANEXOS",
+-                "value": f"EXCLUSIVAMENTE NA LINHA {len(lines)}",
+-            },
+-        ]
+-        grouping_supplier = state.get("multi_launch_grouping_supplier")
+-        if grouping_supplier not in {None, ""}:
+-            rows.insert(
+-                3,
++        with localcontext() as calculation_context:
++            calculation_context.prec = 60
++            lines = state.get("launch_lines", [])
++            self._apply_multi_launch_freight_distribution(state)
++            self._apply_multi_launch_global_discount(state)
++            first = lines[0]
++            order_type = first.get("answers", {}).get("pedido_lancamento", "EM BRANCO")
++            order_id = first.get("fields", {}).get("AGRUPAR")
++            if normalize_text(str(order_type)) == "novo pedido":
++                grouping_display = (
++                    "NOVO ID ÚNICO A SER CRIADO — SERÁ APLICADO A TODAS AS "
++                    f"{len(lines)} LINHAS"
++                )
++            else:
++                order_id = order_id or "EM BRANCO"
++                grouping_display = (
++                    f"{order_id} — SERÁ APLICADO A TODAS AS {len(lines)} LINHAS"
++                )
++            rows = [
++                {"label": "MODALIDADE", "value": "LANÇAMENTO MÚLTIPLO"},
++                {"label": "TIPO DE PEDIDO", "value": str(order_type)},
++                {"label": "AGRUPAR", "value": grouping_display},
++                {"label": "QUANTIDADE DE LINHAS", "value": str(len(lines))},
+@@ -28915,115 +28990,2 @@
+-                    "label": "FORNECEDOR PARA AGRUPAR O PEDIDO",
+-                    "value": state.get("display_values", {}).get(
+-                        "FORNECEDOR AGRUPADOR DO PEDIDO",
+-                        grouping_supplier,
+-                    ),
+-                },
+-            )
+-
+-        def common_display(field: str) -> str:
+-            raw_values = []
+-            for snapshot in lines:
+-                raw = snapshot.get("fields", {}).get(field)
+-                raw_values.append("" if raw in {None, ""} else str(raw).strip())
+-            if len(set(raw_values)) > 1:
+-                return "DIVERSOS"
+-            for snapshot in lines:
+-                value = snapshot.get("display_values", {}).get(field)
+-                if value not in {None, ""}:
+-                    return str(value)
+-            return "EM BRANCO"
+-
+-        common_fields = (
+-            ("DATA RMS", "DATA RMS"),
+-            ("DATA", "DATA"),
+-            ("DATA PGTO PREVISTO", "DATA PGTO PREVISTO"),
+-            ("DATA PGTO EFETUADO", "DATA PGTO EFETUADO"),
+-            ("FORNECEDOR", "FORNECEDOR"),
+-            ("FILIAL", "FILIAL"),
+-            ("ETAPA", "ETAPA"),
+-            ("CONTA", "CONTA"),
+-            ("DESCRIÇÃO", "DESCRIÇÃO"),
+-            ("TIPO TRANSAÇÃO", "TIPO TRANSAÇÃO"),
+-            ("CONCLUÍDO", "CONCLUÍDO"),
+-        )
+-        rows.extend(
+-            {"label": label, "value": common_display(field)}
+-            for field, label in common_fields
+-        )
+-
+-        combined_total = Decimal("0")
+-        line_fields = (
+-            ("PRODUTO", "PRODUTO"),
+-            ("UN", "UNIDADE"),
+-            ("TIPO DESPESA", "TIPO DE DESPESA"),
+-            ("QUANTIDADE", "QUANTIDADE"),
+-            ("VALOR UNITÁRIO", "VALOR UNITÁRIO"),
+-            ("FRETE", "FRETE"),
+-            ("DESCRIÇÃO", "DESCRIÇÃO"),
+-        )
+-        for index, snapshot in enumerate(lines, start=1):
+-            fields = snapshot.get("fields", {})
+-            display = snapshot.get("display_values", {})
+-            quantity = _parse_decimal(fields.get("QUANTIDADE", ""), allow_zero=True)
+-            unit_value = _parse_decimal(
+-                fields.get("VALOR UNITÁRIO", ""), allow_zero=True
+-            )
+-            freight = _parse_decimal(fields.get("FRETE", "0"), allow_zero=True)
+-            if quantity is not None and unit_value is not None and freight is not None:
+-                line_total = quantity * unit_value + freight
+-                combined_total += line_total
+-                total_display = _currency_display(line_total)
+-            else:
+-                total_display = "EM BRANCO"
+-            detail = [
+-                f"{label}: {display.get(field, 'EM BRANCO')}"
+-                for field, label in line_fields
+-            ]
+-            supplier = (
+-                str(display.get("FORNECEDOR") or "").strip()
+-                or str(fields.get("FORNECEDOR") or "").strip()
+-                or "EM BRANCO"
+-            )
+-            detail.insert(1, f"FORNECEDOR: {supplier}")
+-            edited_fields = state.get("multi_launch_edit_history", {}).get(
+-                str(index - 1), {}
+-            )
+-            if edited_fields:
+-                labels = self._launch_edit_labels()
+-                detail.append(
+-                    "CAMPOS EDITADOS: "
+-                    + ", ".join(
+-                        f"{labels.get(key, key)} = {value}"
+-                        for key, value in edited_fields.items()
+-                    )
+-                )
+-            detail.append(f"VALOR TOTAL: {total_display}")
+-            rows.append(
+-                {
+-                    "label": f"LINHA {index}",
+-                    "value": "\n".join(detail),
+-                }
+-            )
+-        discount_metadata = state.get("multi_launch_discount", {})
+-        original_total = _parse_decimal(
+-            discount_metadata.get("original_total", combined_total), allow_zero=True
+-        )
+-        discount = _parse_decimal(
+-            discount_metadata.get("discount", "0"), allow_zero=True
+-        )
+-        net_total = _parse_decimal(
+-            discount_metadata.get("net_total", combined_total), allow_zero=True
+-        )
+-        rows.extend(
+-            [
+-                {
+-                    "label": "VALOR TOTAL",
+-                    "value": _currency_display(original_total or Decimal("0")),
+-                },
+-                {
+-                    "label": "DESCONTO",
+-                    "value": _currency_display(discount or Decimal("0")),
+-                },
+-                {
+-                    "label": "VALOR TOTAL APÓS DESCONTOS",
+-                    "value": _currency_display(net_total or Decimal("0")),
++                    "label": "DESTINO DOS ANEXOS",
++                    "value": f"EXCLUSIVAMENTE NA LINHA {len(lines)}",
+@@ -29032,2 +28994,124 @@
+-        )
+-        return rows
++            grouping_supplier = state.get("multi_launch_grouping_supplier")
++            if grouping_supplier not in {None, ""}:
++                rows.insert(
++                    3,
++                    {
++                        "label": "FORNECEDOR PARA AGRUPAR O PEDIDO",
++                        "value": state.get("display_values", {}).get(
++                            "FORNECEDOR AGRUPADOR DO PEDIDO",
++                            grouping_supplier,
++                        ),
++                    },
++                )
++
++            def common_display(field: str) -> str:
++                raw_values = []
++                for snapshot in lines:
++                    raw = snapshot.get("fields", {}).get(field)
++                    raw_values.append("" if raw in {None, ""} else str(raw).strip())
++                if len(set(raw_values)) > 1:
++                    return "DIVERSOS"
++                for snapshot in lines:
++                    value = snapshot.get("display_values", {}).get(field)
++                    if value not in {None, ""}:
++                        return str(value)
++                return "EM BRANCO"
++
++            common_fields = (
++                ("DATA RMS", "DATA RMS"),
++                ("DATA", "DATA"),
++                ("DATA PGTO PREVISTO", "DATA PGTO PREVISTO"),
++                ("DATA PGTO EFETUADO", "DATA PGTO EFETUADO"),
++                ("FORNECEDOR", "FORNECEDOR"),
++                ("FILIAL", "FILIAL"),
++                ("ETAPA", "ETAPA"),
++                ("CONTA", "CONTA"),
++                ("DESCRIÇÃO", "DESCRIÇÃO"),
++                ("TIPO TRANSAÇÃO", "TIPO TRANSAÇÃO"),
++                ("CONCLUÍDO", "CONCLUÍDO"),
++            )
++            rows.extend(
++                {"label": label, "value": common_display(field)}
++                for field, label in common_fields
++            )
++
++            combined_total = Decimal("0")
++            line_fields = (
++                ("PRODUTO", "PRODUTO"),
++                ("UN", "UNIDADE"),
++                ("TIPO DESPESA", "TIPO DE DESPESA"),
++                ("QUANTIDADE", "QUANTIDADE"),
++                ("VALOR UNITÁRIO", "VALOR UNITÁRIO"),
++                ("FRETE", "FRETE"),
++                ("DESCRIÇÃO", "DESCRIÇÃO"),
++            )
++            for index, snapshot in enumerate(lines, start=1):
++                fields = snapshot.get("fields", {})
++                display = snapshot.get("display_values", {})
++                quantity = _parse_decimal(fields.get("QUANTIDADE", ""), allow_zero=True)
++                unit_value = _parse_decimal(
++                    fields.get("VALOR UNITÁRIO", ""), allow_zero=True
++                )
++                freight = _parse_decimal(fields.get("FRETE", "0"), allow_zero=True)
++                if quantity is not None and unit_value is not None and freight is not None:
++                    line_total = quantity * unit_value + freight
++                    combined_total += line_total
++                    total_display = _currency_display(line_total)
++                else:
++                    total_display = "EM BRANCO"
++                detail = [
++                    f"{label}: {display.get(field, 'EM BRANCO')}"
++                    for field, label in line_fields
++                ]
++                supplier = (
++                    str(display.get("FORNECEDOR") or "").strip()
++                    or str(fields.get("FORNECEDOR") or "").strip()
++                    or "EM BRANCO"
++                )
++                detail.insert(1, f"FORNECEDOR: {supplier}")
++                edited_fields = state.get("multi_launch_edit_history", {}).get(
++                    str(index - 1), {}
++                )
++                if edited_fields:
++                    labels = self._launch_edit_labels()
++                    detail.append(
++                        "CAMPOS EDITADOS: "
++                        + ", ".join(
++                            f"{labels.get(key, key)} = {value}"
++                            for key, value in edited_fields.items()
++                        )
++                    )
++                detail.append(f"VALOR TOTAL: {total_display}")
++                rows.append(
++                    {
++                        "label": f"LINHA {index}",
++                        "value": "\n".join(detail),
++                    }
++                )
++            discount_metadata = state.get("multi_launch_discount", {})
++            original_total = _parse_decimal(
++                discount_metadata.get("original_total", combined_total), allow_zero=True
++            )
++            discount = parse_global_discount(
++                discount_metadata.get("discount", "0"), allow_zero=True, allow_fractional_positive=True
++            )
++            net_total = _parse_decimal(
++                discount_metadata.get("net_total", combined_total), allow_zero=True
++            )
++            rows.extend(
++                [
++                    {
++                        "label": "VALOR TOTAL",
++                        "value": _currency_display(original_total or Decimal("0")),
++                    },
++                    {
++                        "label": "ACRÉSCIMO GLOBAL" if discount < 0 else "DESCONTO",
++                        "value": _currency_display(abs(discount)),
++                    },
++                    {
++                        "label": "VALOR TOTAL APÓS ACRÉSCIMO" if discount < 0 else "VALOR TOTAL APÓS DESCONTOS",
++                        "value": _currency_display(net_total or Decimal("0")),
++                    },
++                ]
++            )
++            return rows
+@@ -30675 +30759,4 @@
+-                "title": "💸 DESCONTO GLOBAL",
++                "title": "💸 ACRÉSCIMO GLOBAL" if parse_global_discount(
++                    state.get("multi_launch_discount", {}).get("discount", "0"),
++                    allow_zero=True, allow_fractional_positive=True
++                ) < 0 else "💸 DESCONTO GLOBAL",
+@@ -33592,20 +33679,17 @@
+-        lines = state.get("launch_lines", [])
+-        if not lines:
+-            raise RuntimeError("Nenhuma linha foi informada para o lançamento múltiplo")
+-
+-        # Defesa final: estados iniciados antes desta versão também recebem o
+-        # frete uma única vez, integralmente na última linha do lote.
+-        self._apply_multi_launch_freight_distribution(state)
+-        self._apply_multi_launch_global_discount(state)
+-
+-        combined_total = Decimal("0")
+-        for snapshot in lines:
+-            fields = snapshot.get("fields", {})
+-            quantity = _parse_decimal(fields.get("QUANTIDADE", ""), allow_zero=True)
+-            unit_value = _parse_decimal(
+-                fields.get("VALOR UNITÁRIO", ""), allow_zero=True
+-            )
+-            freight = _parse_decimal(fields.get("FRETE", "0"), allow_zero=True)
+-            if quantity is None or unit_value is None or freight is None:
+-                raise RuntimeError(
+-                    "Quantidade, valor unitário ou frete inválido em uma das linhas"
++        with localcontext() as calculation_context:
++            calculation_context.prec = 60
++            lines = state.get("launch_lines", [])
++            if not lines:
++                raise RuntimeError("Nenhuma linha foi informada para o lançamento múltiplo")
++
++            # Defesa final: estados iniciados antes desta versão também recebem o
++            # frete uma única vez, integralmente na última linha do lote.
++            self._apply_multi_launch_freight_distribution(state)
++            self._apply_multi_launch_global_discount(state)
++
++            combined_total = Decimal("0")
++            for snapshot in lines:
++                fields = snapshot.get("fields", {})
++                quantity = _parse_decimal(fields.get("QUANTIDADE", ""), allow_zero=True)
++                unit_value = _parse_decimal(
++                    fields.get("VALOR UNITÁRIO", ""), allow_zero=True
+@@ -33613,46 +33697,11 @@
+-            combined_total += quantity * unit_value + freight
+-
+-        discount_metadata = state.get("multi_launch_discount", {})
+-        if discount_metadata.get("enabled"):
+-            expected_net_total = _parse_decimal(
+-                discount_metadata.get("net_total"), allow_zero=True
+-            )
+-            if expected_net_total is not None:
+-                combined_total = expected_net_total
+-
+-        first_line = copy.deepcopy(lines[0])
+-        related_state = copy.deepcopy(state)
+-        self._restore_launch_line(related_state, first_line)
+-        grouping_supplier = state.get("multi_launch_grouping_supplier")
+-        if grouping_supplier not in {None, ""}:
+-            related_state.setdefault("fields", {})[
+-                "FORNECEDOR"
+-            ] = grouping_supplier
+-            related_state.setdefault("display_values", {})[
+-                "FORNECEDOR"
+-            ] = state.get("display_values", {}).get(
+-                "FORNECEDOR AGRUPADOR DO PEDIDO",
+-                grouping_supplier,
+-            )
+-        if discount_metadata.get("enabled"):
+-            adjustment = first_line.get("discount_adjustment", {})
+-            original_description = adjustment.get(
+-                "original_description",
+-                first_line.get("fields", {}).get("DESCRIÇÃO"),
+-            )
+-            original_total = _parse_decimal(
+-                discount_metadata.get("original_total"), allow_zero=True
+-            )
+-            global_discount = _parse_decimal(
+-                discount_metadata.get("discount"), allow_zero=True
+-            )
+-            net_total = _parse_decimal(
+-                discount_metadata.get("net_total"), allow_zero=True
+-            )
+-            if (
+-                original_total is None
+-                or global_discount is None
+-                or net_total is None
+-            ):
+-                raise RuntimeError(
+-                    "Não foi possível determinar os totais globais do desconto"
++                freight = _parse_decimal(fields.get("FRETE", "0"), allow_zero=True)
++                if quantity is None or unit_value is None or freight is None:
++                    raise RuntimeError(
++                        "Quantidade, valor unitário ou frete inválido em uma das linhas"
++                    )
++                combined_total += quantity * unit_value + freight
++
++            discount_metadata = state.get("multi_launch_discount", {})
++            if discount_metadata.get("enabled"):
++                expected_net_total = _parse_decimal(
++                    discount_metadata.get("net_total"), allow_zero=True
+@@ -33660 +33709,136 @@
+-            global_discount_note = "\n".join(
++                if expected_net_total is not None:
++                    combined_total = expected_net_total
++
++            first_line = copy.deepcopy(lines[0])
++            related_state = copy.deepcopy(state)
++            self._restore_launch_line(related_state, first_line)
++            grouping_supplier = state.get("multi_launch_grouping_supplier")
++            if grouping_supplier not in {None, ""}:
++                related_state.setdefault("fields", {})[
++                    "FORNECEDOR"
++                ] = grouping_supplier
++                related_state.setdefault("display_values", {})[
++                    "FORNECEDOR"
++                ] = state.get("display_values", {}).get(
++                    "FORNECEDOR AGRUPADOR DO PEDIDO",
++                    grouping_supplier,
++                )
++            if discount_metadata.get("enabled"):
++                adjustment = first_line.get("discount_adjustment", {})
++                original_description = adjustment.get(
++                    "original_description",
++                    first_line.get("fields", {}).get("DESCRIÇÃO"),
++                )
++                original_total = _parse_decimal(
++                    discount_metadata.get("original_total"), allow_zero=True
++                )
++                global_discount = parse_global_discount(
++                    discount_metadata.get("discount"), allow_zero=True, allow_fractional_positive=True
++                )
++                net_total = _parse_decimal(
++                    discount_metadata.get("net_total"), allow_zero=True
++                )
++                if (
++                    original_total is None
++                    or global_discount is None
++                    or net_total is None
++                ):
++                    raise RuntimeError(
++                        "Não foi possível determinar os totais globais do desconto"
++                    )
++                adjustment_label = "ACRÉSCIMO GLOBAL" if global_discount < 0 else "DESCONTO GLOBAL"
++                after_label = "ACRÉSCIMO" if global_discount < 0 else "DESCONTO"
++                global_discount_note = "\n".join(
++                    [
++                        f"{adjustment_label} DO LOTE:",
++                        f"VALOR GLOBAL: {_currency_display(original_total)}.",
++                        f"{adjustment_label}: {_currency_display(abs(global_discount))}.",
++                        f"VALOR GLOBAL APÓS {after_label}: {_currency_display(net_total)}.",
++                    ]
++                )
++                description_parts = []
++                if original_description not in {None, ""}:
++                    # A observação da primeira linha é preservada sem substituir
++                    # seu conteúdo pelo aviso proporcional daquela linha.
++                    description_parts.append(str(original_description))
++                description_parts.append(global_discount_note)
++                related_description = "\n".join(description_parts)
++                related_state.setdefault("fields", {})[
++                    "DESCRIÇÃO"
++                ] = related_description
++                related_state.setdefault("display_values", {})[
++                    "DESCRIÇÃO"
++                ] = related_description
++            related_state["fields"]["QUANTIDADE"] = "1"
++            related_state["fields"]["VALOR UNITÁRIO"] = _decimal_storage(
++                combined_total
++            )
++            related_state["fields"]["FRETE"] = "0"
++            related_item = self._ensure_related_item(related_state, flow)
++            if related_item:
++                order_id = str(related_item["item_id"])
++            else:
++                order_id = str(first_line.get("fields", {}).get("AGRUPAR", "")).strip()
++            if not order_id:
++                raise RuntimeError("Não foi possível determinar o pedido do lançamento")
++
++            target_list = flow["target_list"]
++            idempotency_field = flow.get("idempotency_field", "Title")
++            line_items = []
++            attachment_names = []
++            for index, snapshot in enumerate(lines, start=1):
++                line_fields = copy.deepcopy(snapshot.get("fields", {}))
++                line_fields["AGRUPAR"] = order_id
++                # Conversas iniciadas antes da configuração atual também devem
++                # criar cada linha do lote pendente de aprovação.
++                line_fields["APROVACAO"] = "PENDENTE DE APROVAÇÃO"
++                token = f"WA-launch-{state['batch_id']}-line-{index}"
++                try:
++                    item_id, etag = self._ensure_launch_item_checkpoint(
++                        state, etag, token, line_fields, target_list, idempotency_field
++                    )
++                    current_attachment_names = []
++                    if index == len(lines):
++                        for attachment in state.get("attachments", []):
++                            content = self.media_repository.read(attachment)
++                            self.sharepoint.ensure_attachment(
++                                item_id,
++                                attachment["sharepoint_name"],
++                                content,
++                                attachment.get("mime_type"),
++                                target_list=target_list,
++                            )
++                            current_attachment_names.append(attachment["sharepoint_name"])
++                        attachment_names = current_attachment_names
++                    verification = self.sharepoint.verify_item(
++                        item_id,
++                        line_fields,
++                        current_attachment_names,
++                        target_list=target_list,
++                    )
++                except Exception as exc:
++                    raise CashReceiptError(getattr(exc, "checkpoint_etag", etag)) from exc
++                line_items.append(
++                    {
++                        "line": index,
++                        "item_id": item_id,
++                        "fields": line_fields,
++                        "verified": verification,
++                    }
++                )
++
++            state["fields"] = copy.deepcopy(line_items[-1]["fields"])
++            state["display_values"] = copy.deepcopy(
++                lines[-1].get("display_values", {})
++            )
++            state["sharepoint"] = {
++                "item_id": line_items[-1]["item_id"],
++                "line_items": line_items,
++                "related_item": related_item,
++                "attachment_names": attachment_names,
++                "verified": all(item["verified"] for item in line_items),
++                "recorded_at": datetime.now(ZoneInfo("America/Sao_Paulo")).isoformat(),
++            }
++            return self._continue_confirmed_launch(
++                state,
++                etag,
+@@ -33662,105 +33846,12 @@
+-                    "DESCONTO GLOBAL DO LOTE:",
+-                    f"VALOR GLOBAL: {_currency_display(original_total)}.",
+-                    f"DESCONTO GLOBAL: {_currency_display(global_discount)}.",
+-                    f"VALOR GLOBAL APÓS DESCONTO: {_currency_display(net_total)}.",
+-                ]
+-            )
+-            description_parts = []
+-            if original_description not in {None, ""}:
+-                # A observação da primeira linha é preservada sem substituir
+-                # seu conteúdo pelo aviso proporcional daquela linha.
+-                description_parts.append(str(original_description))
+-            description_parts.append(global_discount_note)
+-            related_description = "\n".join(description_parts)
+-            related_state.setdefault("fields", {})[
+-                "DESCRIÇÃO"
+-            ] = related_description
+-            related_state.setdefault("display_values", {})[
+-                "DESCRIÇÃO"
+-            ] = related_description
+-        related_state["fields"]["QUANTIDADE"] = "1"
+-        related_state["fields"]["VALOR UNITÁRIO"] = _decimal_storage(
+-            combined_total
+-        )
+-        related_state["fields"]["FRETE"] = "0"
+-        related_item = self._ensure_related_item(related_state, flow)
+-        if related_item:
+-            order_id = str(related_item["item_id"])
+-        else:
+-            order_id = str(first_line.get("fields", {}).get("AGRUPAR", "")).strip()
+-        if not order_id:
+-            raise RuntimeError("Não foi possível determinar o pedido do lançamento")
+-
+-        target_list = flow["target_list"]
+-        idempotency_field = flow.get("idempotency_field", "Title")
+-        line_items = []
+-        attachment_names = []
+-        for index, snapshot in enumerate(lines, start=1):
+-            line_fields = copy.deepcopy(snapshot.get("fields", {}))
+-            line_fields["AGRUPAR"] = order_id
+-            # Conversas iniciadas antes da configuração atual também devem
+-            # criar cada linha do lote pendente de aprovação.
+-            line_fields["APROVACAO"] = "PENDENTE DE APROVAÇÃO"
+-            token = f"WA-launch-{state['batch_id']}-line-{index}"
+-            try:
+-                item_id, etag = self._ensure_launch_item_checkpoint(
+-                    state, etag, token, line_fields, target_list, idempotency_field
+-                )
+-                current_attachment_names = []
+-                if index == len(lines):
+-                    for attachment in state.get("attachments", []):
+-                        content = self.media_repository.read(attachment)
+-                        self.sharepoint.ensure_attachment(
+-                            item_id,
+-                            attachment["sharepoint_name"],
+-                            content,
+-                            attachment.get("mime_type"),
+-                            target_list=target_list,
+-                        )
+-                        current_attachment_names.append(attachment["sharepoint_name"])
+-                    attachment_names = current_attachment_names
+-                verification = self.sharepoint.verify_item(
+-                    item_id,
+-                    line_fields,
+-                    current_attachment_names,
+-                    target_list=target_list,
+-                )
+-            except Exception as exc:
+-                raise CashReceiptError(getattr(exc, "checkpoint_etag", etag)) from exc
+-            line_items.append(
+-                {
+-                    "line": index,
+-                    "item_id": item_id,
+-                    "fields": line_fields,
+-                    "verified": verification,
+-                }
+-            )
+-
+-        state["fields"] = copy.deepcopy(line_items[-1]["fields"])
+-        state["display_values"] = copy.deepcopy(
+-            lines[-1].get("display_values", {})
+-        )
+-        state["sharepoint"] = {
+-            "item_id": line_items[-1]["item_id"],
+-            "line_items": line_items,
+-            "related_item": related_item,
+-            "attachment_names": attachment_names,
+-            "verified": all(item["verified"] for item in line_items),
+-            "recorded_at": datetime.now(ZoneInfo("America/Sao_Paulo")).isoformat(),
+-        }
+-        return self._continue_confirmed_launch(
+-            state,
+-            etag,
+-            [
+-                {
+-                    "item_id": created["item_id"],
+-                    "fields": copy.deepcopy(created["fields"]),
+-                    "supplier_source_values": copy.deepcopy(
+-                        ((snapshot.get("selections") or {}).get(
+-                            "fornecedor_lancamento"
+-                        ) or {}).get("source_values") or {}
+-                    ),
+-                }
+-                for created, snapshot in zip(line_items, lines)
+-            ],
+-        )
++                    {
++                        "item_id": created["item_id"],
++                        "fields": copy.deepcopy(created["fields"]),
++                        "supplier_source_values": copy.deepcopy(
++                            ((snapshot.get("selections") or {}).get(
++                                "fornecedor_lancamento"
++                            ) or {}).get("source_values") or {}
++                        ),
++                    }
++                    for created, snapshot in zip(line_items, lines)
++                ],
++            )
+--- a/worker/workflow_config.json
++++ b/worker/workflow_config.json
+@@ -13357 +13357 @@
+-          "prompt": "💸 DESEJA APLICAR UM DESCONTO GLOBAL SOBRE O VALOR DO LANÇAMENTO?",
++          "prompt": "💸 DESEJA APLICAR UM DESCONTO OU ACRÉSCIMO GLOBAL SOBRE O VALOR DO LANÇAMENTO?",
+@@ -13392 +13392 @@
+-          "prompt": "💰 QUAL É O VALOR DO DESCONTO GLOBAL?",
++          "prompt": "💰 QUAL É O VALOR DO DESCONTO GLOBAL? PARA ACRÉSCIMO GLOBAL, USE UM VALOR NEGATIVO: -0,06 ACRESCENTA R$ 0,06.",
+@@ -13394 +13394 @@
+-          "invalid_message": "DIGITE UM VALOR DE DESCONTO VÁLIDO MAIOR QUE ZERO.",
++          "invalid_message": "DIGITE UM VALOR NÃO ZERO. POSITIVO APLICA DESCONTO; NEGATIVO APLICA ACRÉSCIMO GLOBAL COM ATÉ DUAS CASAS DECIMAIS.",

@@ -1,0 +1,27 @@
+name: Backend — desconto e acrescimo global
+
+on:
+  pull_request:
+    paths:
+      - 'backend-patches/signed-global-discount/**'
+      - '.github/workflows/backend-signed-global-discount.yml'
+  push:
+    branches: [main]
+    paths:
+      - 'backend-patches/signed-global-discount/**'
+      - '.github/workflows/backend-signed-global-discount.yml'
+
+permissions:
+  contents: read
+
+jobs:
+  package-contract:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - name: Validar pacote e instalacao sem dados reais
+        run: python -B -m unittest discover -s backend-patches/signed-global-discount -v

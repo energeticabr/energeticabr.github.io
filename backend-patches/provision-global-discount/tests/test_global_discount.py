@@ -105,7 +105,7 @@ class GlobalDiscountTests(unittest.TestCase):
         self.finish_lines()
         self.reply('1')
         original = copy.deepcopy(self.state['provision_lines'])
-        for raw in ['', '0', '-1', 'NaN', 'Infinity', '801', '0,001']:
+        for raw in ['', '0', '-0,001', 'NaN', 'Infinity', '801', '0,001']:
             with self.subTest(amount=raw):
                 self.reply(raw)
                 self.assertEqual(self.state['stage'], 'entering_provision_discount')

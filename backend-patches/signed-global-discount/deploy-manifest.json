@@ -1,0 +1,35 @@
+{
+  "files": {
+    "worker/payment_provision_flow.py": {
+      "after": "07c6a25fbfc3d85618e63c09d47db44f99a61fe2b87a534fa13ba1e0f3d4dd36",
+      "before": "2e2f21ddfd4f831fb610115fa11e9dd94db4604ff8df2b30aea5b83115ce25c0"
+    },
+    "worker/payment_provision_group.py": {
+      "after": "706c52203856365a674fc67d2eecb42b84093dd82525b1a617749cd4077fe64e",
+      "before": "beafa846dd1f7dfb402c41cd995baedc7a33ac23a9b3112fdb48bbbda1ff6909"
+    },
+    "worker/workflow.py": {
+      "after": "9e3b3c6162cb799affc1772e9fa31d8bdaa15a82e61565322c5d18abdc008244",
+      "before": "051268c3944d956cf40b81ba7e1558681387276df7694b61e5992fd2d0a39dad"
+    },
+    "worker/workflow_config.json": {
+      "after": "e72f874a925a2155906009dddb549131ceeb91d26071d3977a44330b22a6b4a3",
+      "before": "a951c15f30d78409101b7829bdf9bad3cf118ac7541c3dcaa705663e962bf069"
+    }
+  },
+  "inputs": {
+    "deploy.py": "00078766eaf0b1983b54fa0163cdf6786da343e4152e07e86c15310ab2351cb2",
+    "deploy.sh": "22fd1178efdc6073e849419dd43ec2127fcdfe1135b971c168ab3e0c36f22a1d",
+    "deployment_gate.sh": "ae5ed44ab6d6ab1edfecbc14dd3bbd59505e9f991962d1410f488e4a029eefb6",
+    "patch_backend.py": "4db4f832340a4ecfb0a715d5d2f70538df67c56f000d489e3401b30e5178bb65",
+    "shared-deploy.py": "01d979e4e9d525d35ab522e017d3454be75514f4fc42a1274cc89e7b0a21bbe2",
+    "source-files.tar": "ad32e7ae299b59194a148f4db5f9d0c5767de89556efc7f2e27f9c50b96604fa",
+    "source.patch": "cee0d2a23afaed54924383a5bd3ae9c97e291e476d4c3fed01ff0cb23cb39e5b"
+  },
+  "mirror": {
+    "worker/payment_provision_flow.py": "7c4b4984fef7479b2d2c74fa1e4cb751d86f47cf783137495e4ee7cc4c0cd3ff",
+    "worker/payment_provision_group.py": "5bce7fcb11e77bd643591874b1efc04ac7fecdd788ea387fa8a8b7d0ecb5d27c",
+    "worker/workflow.py": "051268c3944d956cf40b81ba7e1558681387276df7694b61e5992fd2d0a39dad",
+    "worker/workflow_config.json": "a951c15f30d78409101b7829bdf9bad3cf118ac7541c3dcaa705663e962bf069"
+  }
+}
