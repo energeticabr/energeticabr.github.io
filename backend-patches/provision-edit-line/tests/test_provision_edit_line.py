@@ -1,5 +1,7 @@
 """Create-payment provision row edits through the real engine; synthetic IO only."""
 import copy
+import importlib.util
+import os
 from decimal import Decimal
 from pathlib import Path
 import sys
@@ -210,6 +212,47 @@ class ProvisionEditLineTests(unittest.TestCase):
         self.reply('confirm_edit')
         self.assertEqual(self.state['stage'], 'editing_field_choice')
         self.assertNotIn('editing_provision_line_index', self.state)
+
+    def test_open_baseline_field_prompt_requires_row_before_direct_reply_after_update(self):
+        source_root = Path(discount_fixture.freight_fixture.ROOT)
+        baseline_root = Path(os.environ.get('ENERGETICA_PROVISION_EDIT_BASELINE_ROOT',
+                                            str(source_root.parent / 'baseline')))
+        source = baseline_root / 'worker/workflow.py'
+        self.assertTrue(source.is_file(), 'Provide the private provision-edit baseline snapshot')
+        spec = importlib.util.spec_from_file_location('_provision_edit_baseline', source)
+        baseline = importlib.util.module_from_spec(spec)
+        spec.loader.exec_module(baseline)
+        candidate = self.engine
+        legacy = baseline.WorkflowEngine(self.qa.fixture.config, self.store, None,
+                                         self.qa.messenger, self.catalog,
+                                         summary_builder=self.qa.fixture.summary)
+        self.qa.fixture.engine = legacy
+        self.state.pop('provision_discount', None)
+        self.state['provision_composition_complete'] = False
+        legacy._prompt_provision_question(self.state, self.qa.fixture.etag(), 'asking_provision_more')
+        self.reply('2')
+        self.reply('2')
+        self.reply('confirm_edit')
+        self.assertEqual(self.state['stage'], 'editing_field_choice')
+        steps = legacy._flow_config(self.state)['steps']
+        quantity = next(i for i, step in enumerate(steps) if step['key'] == 'quantidade_pagamento')
+        old_field = next(row for row in self.state['options'] if row.get('value') == quantity)
+        before = copy.deepcopy(self.state['provision_lines'])
+        # Reload the baseline's persisted prompt under the candidate and reply
+        # directly: do not call any prompt/resume method that would migrate it.
+        self.state, _ = self.store.load(self.state['key'])
+        self.qa.state = self.qa.fixture.state = self.state
+        self.qa.fixture.engine = candidate
+        message_id = f'qa-{self.qa.fixture.counter + 1}'
+        self.reply(str(old_field['id']))
+        self.assertEqual(self.state['stage'], 'editing_provision_line_choice')
+        self.assertNotIn('editing_provision_line_index', self.state)
+        self.assertIn(message_id, self.state['processed_message_ids'])
+        self.reply('9')
+        self.assertEqual(self.state['stage'], 'editing_provision_line_choice')
+        self.assertEqual(self.state['provision_lines'], before)
+        self.assertEqual([line['fields']['QTD'] for line in self.state['provision_lines']], ['2', '3'])
+        self.assertEqual(self.catalog.creates, [])
 
     def test_frozen_commit_remains_locked_and_payload_is_immutable(self):
         self.state['provision_commit'] = {'parent_id': 12, 'children': [{'fields': {'QTD': '2'}}]}

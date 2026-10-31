@@ -12,3 +12,5 @@ Constraints: no persisted financial record edits or tenant writes during QA; onl
 2. Implement the minimal line-choice and selected-row update; verify filtering, resume, back, repeated edits, sign-aware discounts, freight and untouched neighboring lines.
 3. Review the complete minimal patch independently; validate installer contracts and exact source pins.
 4. Merge green CI, deploy with gate/drain/backup/health/rollback, verify installed-source synthetic tests and published app opening.
+
+Review correction: an old field-choice question can remain open across deployment. Check the line-selection requirement at the reply boundary as well as prompt rendering, discarding the stale field reply and requiring a row before accepting any field change. Cover a real baseline-to-candidate direct reply without an explicit resume.

@@ -154,6 +154,10 @@
 @@ -30728 +30735 @@
 -        self._send_options(state, self._edit_step(), state["options"])
 +        self._send_options(state, self._provision_edit_field_question(state), state["options"])
-@@ -31171,0 +31179,2 @@
+@@ -31131,0 +31139,3 @@
++        if self._provision_line_edit_available(state) and state.get("editing_provision_line_index") is None:
++            self._mark_processed(state, event["message_id"])
++            return self._prompt_provision_question(state, etag, "editing_provision_line_choice")
+@@ -31171,0 +31182,2 @@
 +            if self._provision_line_edit_available(state) and state.get("editing_provision_line_index") is not None:
 +                return self._provision_cancel_line_edit(state, etag)
