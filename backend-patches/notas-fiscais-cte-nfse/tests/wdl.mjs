@@ -37,7 +37,7 @@ export function evaluate(text,context={}){
           first:a=>a?.[0]??null,createArray:(...a)=>a,setProperty:(o,k,v)=>({...o,[k]:v}),
           substring:(value,start,length)=>length===undefined?value.substring(start):value.substring(start,start+length),
           addToTime:(value,amount,unit)=>{if(unit!=='Month')throw new Error(`Unidade WDL nao coberta: ${unit}`);const m=/^(\d{4})-(\d{2})(.*)$/.exec(value);if(!m)throw new Error('Data WDL invalida');const index=Number(m[1])*12+Number(m[2])-1+Number(amount),year=Math.floor(index/12),month=index%12+1;return `${year}-${String(month).padStart(2,'0')}${m[3]}`;},
-          formatDateTime:(value,format)=>{const m=/^(\d{4})-(\d{2})/.exec(value);if(format==='yyyy-MM'&&m)return `${m[1]}-${m[2]}`;throw new Error(`Formato WDL nao coberto: ${format}`);},
+          formatDateTime:(value,format)=>{const m=/^(\d{4})-(\d{2})-(\d{2})(?:T(\d{2}):(\d{2}))?/.exec(value);if(format==='yyyy-MM'&&m)return `${m[1]}-${m[2]}`;if(format==='dd/MM/yyyy HH:mm'&&m)return `${m[3]}/${m[2]}/${m[1]} ${m[4]??'00'}:${m[5]??'00'}`;throw new Error(`Formato WDL nao coberto: ${format}`);},
           formatNumber:(value,format,locale)=>{
             if(format==='0.00'&&locale==='en-US')return Number(value).toFixed(2);
             if(format==='0.00'&&locale==='pt-BR')return Number(value).toFixed(2).replace('.',',');

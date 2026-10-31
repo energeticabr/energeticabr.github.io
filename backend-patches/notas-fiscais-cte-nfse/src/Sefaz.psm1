@@ -87,6 +87,11 @@ function ConvertFrom-FiscalXml([string]$Text,[string]$Nsu,[string]$CompanyCnpj) 
             $taxNotes=Get-FiscalAdditionalText $additional 'infAdFisco' 'obsFisco'
             if($null -ne $notes){$f.OBSERVACOES_NOTA=$notes}
             if($null -ne $taxNotes){$f.INFORMACOES_FISCO=$taxNotes}
+            $itemDescriptions=New-Object 'Collections.Generic.List[string]'
+            foreach($item in $inf.SelectNodes("./*[local-name()='det']/*[local-name()='prod']/*[local-name()='xProd']")){
+                if(-not [string]::IsNullOrWhiteSpace($item.InnerText)){$itemDescriptions.Add($item.InnerText.Trim())}
+            }
+            if($itemDescriptions.Count -gt 0){$f.DESCRICAO_ITENS=[string]::Join('; ',$itemDescriptions)}
             $moneyMap=@{VALOR_PRODUTOS='vProd';VALOR_TOTAL_NOTA='vNF';DESCONTOS='vDesc';FRETE='vFrete';SEGURO='vSeg';OUTRAS_DESPESAS='vOutro';IPI='vIPI';ICMS='vICMS';PIS='vPIS';COFINS='vCOFINS';ICMS_ST='vST';ICMS_DESONERADO='vICMSDeson';FCP_ST='vFCPST';IMPOSTO_IMPORTACAO='vII'}
             foreach($name in $moneyMap.Keys){Add-XmlField $f $name $tot ("./*[local-name()='"+$moneyMap[$name]+"']") -Money}
             $retention=$inf.SelectSingleNode("./*[local-name()='total']/*[local-name()='retTrib']")
