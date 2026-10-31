@@ -64,6 +64,29 @@ test('pai mensal e filho por nota usam chaves unicas e recusam resultados ambigu
   assert.equal(child.QTD,'1');
 });
 
+test('observacao identifica fornecedor emissao e produto ou servico da nota retida',()=>{
+  const inside=provision.actions;
+  const base={Vencimento_retencao:'2026-11-20T00:00:00-03:00',Chave_rubrica_retencao:'RETENCAO-2026-11',
+    Prefixo_filhos_retencao:'RETENCAO-2026-11-NOTA-',Chave_provisao_retencao:'RETENCAO-NOTA-'+fields().CHAVE_ACESSO,Rubrica_retencao:42,Total_retido_comprador:10};
+  const create=inside.Criar_se_ausente_provisao_retencao.actions.Criar_provisao_retencao.inputs.parameters['parameters/body'];
+  const nfeFields=fields({Title:'JM ESCORAMENTOS LTDA',DATA_EMISSAO:'2026-10-31T14:25:00-03:00'});
+  const nfe=JSON.parse(evaluate(create,{outputs:{...base,Campos_finais:nfeFields},items:{Documentos:{fields:{DESCRICAO_ITENS:'ESCORAMENTO METALICO; LOCACAO DE ANDAIME'}}}}));
+  assert.equal(nfe.OBS,'RAZÃO SOCIAL: JM ESCORAMENTOS LTDA | EMISSÃO: 31/10/2026 14:25 | PRODUTO/SERVIÇO: ESCORAMENTO METALICO; LOCACAO DE ANDAIME');
+  const nfseFields=fields({TIPO_FISCAL:'NFS-e',Title:'PRESTADORA TESTE LTDA',DATA_EMISSAO:'2026-10-30T09:08:00-03:00',DESCRICAO_SERVICO:'SERVICO DE ENGENHARIA'});
+  const nfse=JSON.parse(evaluate(create,{outputs:{...base,Campos_finais:nfseFields},items:{Documentos:{fields:nfseFields}}}));
+  assert.equal(nfse.OBS,'RAZÃO SOCIAL: PRESTADORA TESTE LTDA | EMISSÃO: 30/10/2026 09:08 | PRODUTO/SERVIÇO: SERVICO DE ENGENHARIA');
+});
+
+test('observacao usa traco para detalhe fiscal ausente sem impedir a provisao',()=>{
+  const inside=provision.actions;
+  const value=fields({Title:null,DATA_EMISSAO:null});
+  const outputs={Campos_finais:value,Vencimento_retencao:'2026-11-20T00:00:00-03:00',Chave_rubrica_retencao:'RETENCAO-2026-11',
+    Prefixo_filhos_retencao:'RETENCAO-2026-11-NOTA-',Chave_provisao_retencao:'RETENCAO-NOTA-'+fields().CHAVE_ACESSO,Rubrica_retencao:42,Total_retido_comprador:10};
+  const create=inside.Criar_se_ausente_provisao_retencao.actions.Criar_provisao_retencao.inputs.parameters['parameters/body'];
+  const child=JSON.parse(evaluate(create,{outputs,items:{Documentos:{fields:{}}}}));
+  assert.equal(child.OBS,'RAZÃO SOCIAL: - | EMISSÃO: - | PRODUTO/SERVIÇO: -');
+});
+
 test('grava valores de retencao com virgula e soma registros novos e legados sem alterar o valor',()=>{
   const inside=provision.actions;
   const shared={Campos_finais:fields({PIS_RETIDO:1347.58}),Vencimento_retencao:'2026-11-20T00:00:00-03:00',Chave_rubrica_retencao:'RETENCAO-2026-11',

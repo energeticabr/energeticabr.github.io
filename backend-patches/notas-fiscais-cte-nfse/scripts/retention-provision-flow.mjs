@@ -16,6 +16,14 @@ function objectBody(entries){
 
 const amount=name=>`float(coalesce(outputs('Campos_finais')?['${name}'],0))`;
 const sum=names=>names.reduce((left,name)=>left?`add(${left},${amount(name)})`:amount(name),'');
+const fiscal=value=>`outputs('Campos_finais')?['${value}']`;
+
+export function retentionObservationExpression(){
+  const supplier=fiscal('Title');
+  const issued=fiscal('DATA_EMISSAO');
+  const description=`coalesce(items('Documentos')?['fields']?['DESCRICAO_ITENS'],${fiscal('DESCRICAO_SERVICO')})`;
+  return `concat('RAZÃO SOCIAL: ',if(empty(${supplier}),'-',${supplier}),' | EMISSÃO: ',if(empty(${issued}),'-',formatDateTime(coalesce(${issued},'0001-01-01T00:00:00'),'dd/MM/yyyy HH:mm')),' | PRODUTO/SERVIÇO: ',if(empty(${description}),'-',${description}))`;
+}
 
 export function retentionTotalExpression(){
   const nfe=sum(['PIS_RETIDO','COFINS_RETIDA','CSLL_RETIDA','IRRF_RETIDO','INSS_RETIDO','ISS_RETIDO']);
@@ -53,7 +61,7 @@ export function addRetentionProvisionActions(actions,config){
       Title:"concat(outputs('Prefixo_filhos_retencao'),outputs('Campos_finais')?['CHAVE_ACESSO'])",
       FOLHAOPERACAO:"outputs('Chave_provisao_retencao')",DESCRITIVOPROVISAO:"string(outputs('Rubrica_retencao'))",
       DATAPREVISTOPGTO:"outputs('Vencimento_retencao')",QTD:"'1'",VALORTOTAL:"formatNumber(outputs('Total_retido_comprador'),'0.00','pt-BR')",
-      OBS:"coalesce(outputs('Campos_finais')?['Title'],'')",STATUS:"'PAGAMENTO PREVISTO'",FILIAL:"'004 - EDIFÍCIO XAVANTE'",
+      OBS:retentionObservationExpression(),STATUS:"'PAGAMENTO PREVISTO'",FILIAL:"'004 - EDIFÍCIO XAVANTE'",
     })),
   },else:{actions:{}},runAfter:after('Conferir_provisao_unica')};
   inside.Zerar_total_rubrica={type:'SetVariable',inputs:{name:'RetentionParentTotal',value:0},runAfter:after('Criar_se_ausente_provisao_retencao')};

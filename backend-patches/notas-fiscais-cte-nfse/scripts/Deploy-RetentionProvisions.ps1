@@ -24,7 +24,7 @@ function Get-StableSha256($value){
  $bytes=[Text.Encoding]::UTF8.GetBytes((Canonical $value))
  [Convert]::ToHexString([Security.Cryptography.SHA256]::HashData($bytes)).ToLowerInvariant()
 }
-$previousRetentionActionSha256='1911bb3eeb1c2f80e659213ae5d97d9d52ded435ccbeffcee7d26aa2732eba42'
+$previousRetentionActionSha256='36149e0dacdce743a9f45ec019f0086feb3d866fe9370ae31fc8f0717eb7339e'
 function Assert-Candidate {
  if($null -eq $candidate.actions.Documentos.actions.Garantir_provisao_retencao -or
     $candidate.actions.Inicializar_total_retencoes.inputs.variables[0].name -cne 'RetentionParentTotal' -or

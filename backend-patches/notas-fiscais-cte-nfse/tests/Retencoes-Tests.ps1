@@ -2,7 +2,7 @@ param([string]$ModulePath=(Join-Path $PSScriptRoot '../src/Sefaz.psm1'))
 $ErrorActionPreference='Stop'
 Import-Module $ModulePath -Force -DisableNameChecking
 $key='31261012345678000123550010000001231000001234'
-$xml='<nfeProc xmlns="http://www.portalfiscal.inf.br/nfe"><NFe><infNFe Id="NFe'+$key+'"><ide><mod>55</mod></ide><emit><CNPJ>12345678000123</CNPJ><xNome>FICTICIO</xNome></emit><dest><CNPJ>38626750000146</CNPJ></dest><total><ICMSTot><vNF>1000.00</vNF><vICMS>180.00</vICMS><vST>40.00</vST><vPIS>6.50</vPIS><vCOFINS>30.00</vCOFINS><vTotTrib>250.00</vTotTrib></ICMSTot>__RET__</total></infNFe></NFe><protNFe><infProt><cStat>100</cStat></infProt></protNFe></nfeProc>'
+$xml='<nfeProc xmlns="http://www.portalfiscal.inf.br/nfe"><NFe><infNFe Id="NFe'+$key+'"><ide><mod>55</mod></ide><emit><CNPJ>12345678000123</CNPJ><xNome>FICTICIO</xNome></emit><dest><CNPJ>38626750000146</CNPJ></dest><det nItem="1"><prod><xProd>ESCORAMENTO METALICO</xProd></prod></det><det nItem="2"><prod><xProd>LOCACAO DE ANDAIME</xProd></prod></det><total><ICMSTot><vNF>1000.00</vNF><vICMS>180.00</vICMS><vST>40.00</vST><vPIS>6.50</vPIS><vCOFINS>30.00</vCOFINS><vTotTrib>250.00</vTotTrib></ICMSTot>__RET__</total></infNFe></NFe><protNFe><infProt><cStat>100</cStat></infProt></protNFe></nfeProc>'
 function Equal($actual,$expected,$label){if($actual -cne $expected){throw "$label : expected [$expected], actual [$actual]"};$script:passed++}
 function Parse($ret){ConvertFrom-FiscalXml ($xml.Replace('__RET__',$ret)) '000000000000001' '38626750000146'}
 $script:passed=0
@@ -13,6 +13,7 @@ foreach($pair in @(@('PIS_RETIDO',6.50),@('COFINS_RETIDA',30),@('CSLL_RETIDA',10
 Equal $doc.fields.VALOR_TOTAL_NOTA ([decimal]1000) 'withholding does not change total'
 Equal $doc.fields.VALOR_LIQUIDO ([decimal]1000) 'withholding does not deduct net a second time'
 Equal $doc.fields.DIRECAO 'ENTRADA' 'buyer is company'
+Equal $doc.fields.DESCRICAO_ITENS 'ESCORAMENTO METALICO; LOCACAO DE ANDAIME' 'product descriptions preserve fiscal item order'
 $none=Parse ''
 Equal $none.fields.STATUS_RETENCOES 'NAO_INFORMADA_XML' 'normal taxes and substitution do not imply buyer withholding'
 Equal $none.fields.Contains('PIS_RETIDO') $false 'missing withholding is not invented zero'
