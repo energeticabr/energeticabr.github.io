@@ -1,4 +1,5 @@
 import { provisionChildrenTotal, provisionTextTotal } from './provision-parent-workflow.js';
+import { provisionDueFields, provisionEarliestUnpaidDue, sameProvisionDue, provisionChildrenStamp } from './provision-parent-due.js';
 
 const PARENT_LIST = ['DESCRITIVOPROVISAO'];
 const PAYMENT_DATES = ['DATAPGTOEFETUADO', 'DATAPGTOAGENDADO', 'DATAEXECUCAOAGENDAMENTO', 'PGTOAGENDADO'];
@@ -117,7 +118,7 @@ export function createProvisionPaymentEditor({ repository, siteKey = 'personal',
   }
 
   async function synchronizeTotals(record, { signal, expectedLink, skipMissing = false } = {}) {
-    const { parents, parentIds, childList, childId, linkName, totalName, amounts, parentColumns } = record;
+    const { parents, parentIds, childList, childId, linkName, totalName, amounts, parentColumns, dueName, dueFields } = record;
     const parent = async parentId => {
       try { return await read(parents.id,parentId,signal); }
       catch (error) { if (skipMissing && Number(error?.status) === 404) return null; throw error; }
@@ -128,28 +129,37 @@ export function createProvisionPaymentEditor({ repository, siteKey = 'personal',
         const child = rows.find(row => id(row.id) === childId);
         if (!child || String(child.fields?.[linkName] ?? '').trim() !== expectedLink) throw new Error('O vínculo mudou durante a sincronização dos descritivos.');
       }
-      return new Map(parentIds.map(parentId => [parentId, storedTotal(provisionChildrenTotal(rows.filter(row => String(row.fields?.[linkName] ?? '').trim() === parentId), amounts), parentColumns, totalName)]));
+      return new Map(parentIds.map(parentId => {
+        const children = rows.filter(row => String(row.fields?.[linkName] ?? '').trim() === parentId);
+        return [parentId, { total: storedTotal(provisionChildrenTotal(children, amounts), parentColumns, totalName),
+          due: provisionEarliestUnpaidDue(children, dueFields), stamp: provisionChildrenStamp(children) }];
+      }));
     };
+    const matches = (current, snapshot) => String(current.fields?.[totalName] ?? '') === String(snapshot.total)
+      && (!snapshot.due || sameProvisionDue(current.fields?.[dueName], snapshot.due));
     for (let attempt = 0; attempt < 3; attempt++) {
+      const observed = new Map();
       for (const parentId of parentIds) {
         const current = await parent(parentId);
         if (!current) continue;
-        const total = (await totalsNow()).get(parentId);
-        if (String(current.fields?.[totalName] ?? '') === String(total)) continue;
-        const patch = { [totalName]: total };
+        const snapshot = (await totalsNow()).get(parentId);
+        observed.set(parentId, snapshot.stamp);
+        if (matches(current, snapshot)) continue;
+        const patch = { [totalName]: snapshot.total };
+        if (snapshot.due && !sameProvisionDue(current.fields?.[dueName], snapshot.due)) patch[dueName] = snapshot.due;
         active(signal);
         try { await repository.updateItem(siteKey,parents.id,parentId,patch,{eTag:version(current),...(signal?{signal}:{})}); }
         catch (error) {
           const confirmed = await parent(parentId);
           if (!confirmed) continue;
-          if (String(confirmed.fields?.[totalName] ?? '') !== String(total) && Number(error?.status) !== 412) throw error;
+          if (!matches(confirmed, snapshot) && Number(error?.status) !== 412) throw error;
         }
       }
       const totals = await totalsNow();
       let confirmed = true;
       for (const parentId of parentIds) {
         const current = await parent(parentId);
-        if (current && String(current.fields?.[totalName] ?? '') !== String(totals.get(parentId))) confirmed = false;
+        if (current && (!matches(current, totals.get(parentId)) || observed.get(parentId) !== totals.get(parentId).stamp)) confirmed = false;
       }
       if (confirmed) return;
     }
@@ -189,6 +199,8 @@ export function createProvisionPaymentEditor({ repository, siteKey = 'personal',
     active(signal);
     if (!Array.isArray(parentColumns)) throw new Error('Metadados do descritivo indisponíveis.');
     const totalName = field(parentColumns, 'VALORTOTAL', ['text', 'number', 'currency']);
+    const dueName = field(parentColumns, 'DATAPREVISTOPGTO', ['dateTime']);
+    const dueFields = provisionDueFields(childColumns);
     const amounts = Object.fromEntries(['QTD','VALORTOTAL','FRETE'].map(name => [name, field(childColumns,name,['text','number','currency'])]));
     const parentIds = [...new Set([...(currentLink ? [id(currentLink)] : []), targetId])];
     for (const parentId of parentIds) await read(parents.id, parentId, signal);
@@ -203,12 +215,16 @@ export function createProvisionPaymentEditor({ repository, siteKey = 'personal',
     const listed = before.find(row => id(row.id) === childId);
     if (!listed || String(listed.fields?.[linkName] ?? '').trim() !== liveLink) throw new Error('O vínculo da provisão mudou durante a consulta.');
     const projected = before.map(row => id(row.id) === childId ? { ...row, fields: { ...current.fields, ...fields } } : row);
-    for (const parentId of parentIds) provisionChildrenTotal(projected.filter(row => String(row.fields?.[linkName] ?? '').trim() === parentId), amounts);
+    for (const parentId of parentIds) {
+      const children = projected.filter(row => String(row.fields?.[linkName] ?? '').trim() === parentId);
+      provisionChildrenTotal(children, amounts);
+      provisionEarliestUnpaidDue(children, dueFields);
+    }
     // The child scan is asynchronous: prove destination/source existence again
     // at the actual write boundary, not just before starting that scan.
     for (const parentId of parentIds) await read(parents.id,parentId,signal);
     const original = Object.fromEntries(Object.keys(fields).map(name=>[name,item.fields?.[name] ?? null]));
-    const record = {parents,parentIds,childList,childId,linkName,targetId,currentLink,totalName,amounts,parentColumns,
+    const record = {parents,parentIds,childList,childId,linkName,targetId,currentLink,totalName,amounts,parentColumns,dueName,dueFields,
       original,matches,matchesOriginal:row=>equal(row,original)};
     pendingRepairs.set(childId,record);
     try {
@@ -267,10 +283,12 @@ export function createProvisionPaymentEditor({ repository, siteKey = 'personal',
         const targetId = id(fields[linkName]);
         if (targetId !== currentLink) return await relink({ childList,childColumns,childId,item,fields:{...fields,[linkName]:targetId},linkName,currentLink,targetId,signal });
       }
-      const hasAmount = Object.keys(fields).some(name => ['VALORTOTAL', 'QTD', 'FRETE'].includes(key(name)));
-      const changedDates = DATE_FIELDS.filter(name => Object.keys(fields).some(candidate => key(candidate) === name));
-      let parentList, parentColumns, parentId, parentTotalName, childTotals;
-      if (currentLink && (hasAmount || changedDates.length)) {
+      const editedNames = new Set(Object.keys(fields).flatMap(name => [key(name), key(childColumns.find(column => column.name === name)?.displayName)]));
+      const hasAmount = ['VALORTOTAL', 'QTD', 'FRETE'].some(name => editedNames.has(name));
+      const changedDates = DATE_FIELDS.filter(name => editedNames.has(name));
+      const dueFields = provisionDueFields(childColumns);
+      let parentList, parentColumns, parentId, parentTotalName, childTotals, dueName;
+      if (currentLink && Object.keys(fields).length) {
         parentId = id(currentLink);
         parentList = await repository.resolveList(siteKey, PARENT_LIST, signal ? { signal } : {});
         active(signal);
@@ -279,12 +297,15 @@ export function createProvisionPaymentEditor({ repository, siteKey = 'personal',
         active(signal);
         if (!Array.isArray(parentColumns)) throw new Error('Metadados do descritivo indisponíveis.');
         parentTotalName = field(parentColumns, 'VALORTOTAL', ['text', 'number', 'currency']);
+        dueName = field(parentColumns, 'DATAPREVISTOPGTO', ['dateTime']);
         childTotals = Object.fromEntries(['QTD', 'VALORTOTAL', 'FRETE'].map(name => [name, field(childColumns, name, ['text', 'number', 'currency'])]));
         await read(parentList.id, parentId, signal);
         const before = await linked(childList.id, linkName, parentId, signal);
         if (!before.some(row => String(row.id) === childId)) throw new Error('A provisão não consta entre os itens vinculados ao descritivo.');
         if (hasAmount) provisionChildrenTotal(before.map(row => String(row.id) === childId
           ? { ...row, fields: { ...row.fields, ...fields } } : row), childTotals);
+        provisionEarliestUnpaidDue(before.map(row => String(row.id) === childId
+          ? { ...row, fields: { ...row.fields, ...fields } } : row), dueFields);
       }
       const current = await read(childList.id, childId, signal);
       if (String(current.fields?.[linkName] ?? '').trim() !== currentLink) throw new Error('O vínculo da provisão mudou. Reabra o registro.');
@@ -312,6 +333,8 @@ export function createProvisionPaymentEditor({ repository, siteKey = 'personal',
         const total = provisionChildrenTotal(rows, childTotals);
         const expectedTotal = storedTotal(total, parentColumns, parentTotalName);
         const patch = {};
+        const due = provisionEarliestUnpaidDue(rows, dueFields);
+        if (due && !sameProvisionDue(parent.fields?.[dueName], due)) patch[dueName] = due;
         if (hasAmount && String(parent.fields?.[parentTotalName] ?? '') !== String(expectedTotal)) {
           patch[parentTotalName] = expectedTotal;
         }
@@ -319,21 +342,23 @@ export function createProvisionPaymentEditor({ repository, siteKey = 'personal',
           const column = parentColumns.find(candidate => key(candidate.name) === name && candidate.dateTime);
           return column && blank(parent.fields?.[column.name]);
         })) {
-          for (const name of changedDates) {
+          for (const name of changedDates.filter(name => name !== 'DATAPREVISTOPGTO')) {
             const source = childColumns.find(column => key(column.name) === name && column.dateTime);
             const target = parentColumns.find(column => key(column.name) === name && column.dateTime && !column.readOnly);
             if (source && target && !blank(saved.fields?.[source.name])
-              && (name === 'DATAPREVISTOPGTO' || blank(parent.fields?.[target.name]))) {
+              && blank(parent.fields?.[target.name])) {
               patch[target.name] = saved.fields[source.name];
             }
           }
         }
         const confirmedTotal = async () => {
-          if (!hasAmount) return true;
           const latest = await read(parentList.id, parentId, signal);
           const linkedNow = await linked(childList.id, linkName, parentId, signal);
           if (!linkedNow.some(row => String(row.id) === childId)) throw new Error('O vínculo da provisão mudou durante a conferência.');
-          return String(latest.fields?.[parentTotalName] ?? '') === String(storedTotal(provisionChildrenTotal(linkedNow, childTotals), parentColumns, parentTotalName));
+          const latestDue = provisionEarliestUnpaidDue(linkedNow, dueFields);
+          return provisionChildrenStamp(rows) === provisionChildrenStamp(linkedNow)
+            && (!latestDue || sameProvisionDue(latest.fields?.[dueName], latestDue))
+            && (!hasAmount || String(latest.fields?.[parentTotalName] ?? '') === String(storedTotal(provisionChildrenTotal(linkedNow, childTotals), parentColumns, parentTotalName)));
         };
         const parentPatchMatches = row => Object.entries(patch).every(([name, value]) =>
           sameValue(row.fields?.[name], value, parentColumns.some(column => column.name === name && column.dateTime)));

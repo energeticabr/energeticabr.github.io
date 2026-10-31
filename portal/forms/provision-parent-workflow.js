@@ -1,4 +1,5 @@
 import { canReselectQueuedProvisionParent } from "./multi-entry.js";
+import { provisionDueFields, provisionEarliestUnpaidDue, sameProvisionDue, provisionChildrenStamp } from './provision-parent-due.js';
 
 const PAYMENT_MARKERS = ["DATAPGTOEFETUADO", "PGTOAGENDADO", "DATAPGTOAGENDADO", "DATAEXECUCAOAGENDAMENTO"];
 const PARENT_TEXT = ["Title", "FILIAL", "FORNECEDOR", "FORMAPGTO", "OBS", "VALORTOTAL"];
@@ -45,7 +46,7 @@ async function childContract(repository, entity, suppliedList) {
   const fields = Object.fromEntries(["Title", "QTD", "VALORTOTAL", "FRETE", "DESCRITIVOPROVISAO"].map(name => [name, resolveField(columns, name, "text")]));
   for (const name of ["STATUS", "PGTOAGENDADO"]) fields[name] = resolveField(columns, name, ["text", "choice"]);
   fields.DATAPGTOEFETUADO = resolveField(columns, "DATAPGTOEFETUADO", "dateTime");
-  return { list, columns, fields };
+  return { list, columns, fields, dueFields: provisionDueFields(columns) };
 }
 
 function hasPendingChild(items, child, parentId) {
@@ -241,30 +242,42 @@ async function recoverOrCreate(repository, siteKey, contract, payload, titleFiel
 }
 
 async function updateTotal(repository, entity, parent, child, state) {
-  for (let attempt = 0; attempt < 3; attempt++) {
-    const current = await repository.getItem(entity.siteKey, parent.list.id, state.parentId, "$expand=fields");
-    const eTag = requirePending(current, parent.fields, state.parentId);
+  const scan = async () => {
     const children = await matchingItems(repository, entity.siteKey, child.list, child.columns, child.fields.DESCRITIVOPROVISAO, state.parentId);
-    if (!Array.isArray(children) || !children.some(item => String(item.id) === state.childId)) throw new Error("A consulta completa ainda não confirmou a provisão salva para recalcular o total.");
+    if (!children.some(item => String(item.id) === state.childId)) throw new Error("A consulta completa ainda não confirmou a provisão salva para recalcular o total.");
     const seen = new Set();
     for (const item of children) {
       const id = positiveId(item.id);
       if (seen.has(id) || String(item.fields?.[child.fields.DESCRITIVOPROVISAO]) !== state.parentId) throw new Error("A consulta paginada retornou vínculo/identidade conflitante.");
       seen.add(id);
     }
-    const value = provisionChildrenTotal(children, child.fields);
+    return { total: provisionChildrenTotal(children, child.fields),
+      due: provisionEarliestUnpaidDue(children, child.dueFields), stamp: provisionChildrenStamp(children) };
+  };
+  for (let attempt = 0; attempt < 3; attempt++) {
+    const current = await repository.getItem(entity.siteKey, parent.list.id, state.parentId, "$expand=fields");
+    const eTag = requirePending(current, parent.fields, state.parentId);
+    const snapshot = await scan();
+    const value = snapshot.total;
     const storedValue = provisionTextTotal(value);
+    const patch = { [parent.fields.VALORTOTAL]: storedValue };
+    if (snapshot.due && !sameProvisionDue(current.fields?.[parent.fields.DATAPREVISTOPGTO], snapshot.due)) {
+      patch[parent.fields.DATAPREVISTOPGTO] = snapshot.due;
+    }
     try {
-      await repository.updateItem(entity.siteKey, parent.list.id, state.parentId, { [parent.fields.VALORTOTAL]: storedValue }, { eTag });
+      await repository.updateItem(entity.siteKey, parent.list.id, state.parentId, patch, { eTag });
       const readback = await repository.getItem(entity.siteKey, parent.list.id, state.parentId, "$expand=fields");
       requirePending(readback, parent.fields, state.parentId);
       if (decimalText(decimal(readback.fields?.[parent.fields.VALORTOTAL], "VALORTOTAL")) !== value) throw new Error("O total do descritivo não foi confirmado na releitura.");
-      return;
+      if (snapshot.due && !sameProvisionDue(readback.fields?.[parent.fields.DATAPREVISTOPGTO], snapshot.due)) throw new Error('O vencimento do descritivo não foi confirmado na releitura.');
+      const latest = await scan();
+      if (latest.stamp === snapshot.stamp) return;
     } catch (error) {
       if (error?.status !== 412 || attempt === 2) throw error;
       // Retry the entire read/compute/conditional-write, never the stale patch alone.
     }
   }
+  throw new Error('O conjunto de provisões mudou durante a confirmação do total e vencimento. Tente novamente.');
 }
 
 export async function persistProvisionParentWorkflow(repository, entity, suppliedList, options = {}) {
@@ -289,7 +302,9 @@ export async function persistProvisionParentWorkflow(repository, entity, supplie
         parentPayload[parent.fields[name]] = source ? fields[source.name] ?? null : null;
       }
       PAYMENT_MARKERS.forEach(name => { parentPayload[parent.fields[name]] = null; });
-      state = { siteKey: entity.siteKey, parentListId: parent.list.id, childListId: child.list.id, choice: selected, fields: freeze(fields), parentPayload: freeze(parentPayload), parentId: selected.mode === "existing" ? selected.id : "", parentAttempted: false, childAttempted: false, childId: "" };
+      const due = provisionEarliestUnpaidDue([{ fields }], child.dueFields);
+      if (due) parentPayload[parent.fields.DATAPREVISTOPGTO] = due;
+      state = { siteKey: entity.siteKey, parentListId: parent.list.id, childListId: child.list.id, choice: selected, fields: freeze(fields), parentPayload: freeze(parentPayload), derivedDueField: parent.fields.DATAPREVISTOPGTO, parentId: selected.mode === "existing" ? selected.id : "", parentAttempted: false, childAttempted: false, childId: "" };
     }
     if (state.siteKey !== entity.siteKey || state.parentListId !== parent.list.id || state.childListId !== child.list.id) throw new Error("A retentativa deve manter as mesmas listas e site da gravação original.");
     if (!state.parentAttempted && !state.childAttempted) {
@@ -298,9 +313,12 @@ export async function persistProvisionParentWorkflow(repository, entity, supplie
     }
     if (!state.childId) {
       if (state.choice.mode === "new") {
-        // Only the total may legitimately differ after a previous total update.
+        // These fields belong to the derived aggregate, not the frozen POST.
         const parentPayload = { ...state.parentPayload };
         if (state.parentId && state.childAttempted) delete parentPayload[parent.fields.VALORTOTAL];
+        if (state.parentId && state.childAttempted && state.derivedDueField === parent.fields.DATAPREVISTOPGTO) {
+          delete parentPayload[state.derivedDueField];
+        }
         const created = await recoverOrCreate(repository, entity.siteKey, parent, parentPayload, parent.fields.Title, state, "parent", PARENT_DATES.map(name => parent.fields[name]));
         state.parentEtag = requirePending(created, parent.fields, state.parentId);
       }

@@ -85,6 +85,51 @@ function fakeRepository() {
 const save = (repository, options = {}) => persistEntityRecordWithAttachments(repository, entity, list, { fields: baseFields, ...options });
 const choice = item => ({ mode: "existing", id: item.id, eTag: item.eTag });
 const linkedChild = (id, parentId, fields = {}) => ({ id, fields: { ...baseFields, QTD: "1", VALORTOTAL: "0", FRETE: "0", DESCRITIVOPROVISAO: parentId, DATAPGTOEFETUADO: null, PGTOAGENDADO: "PENDENTE", ...fields } });
+
+test('append derives the earliest unpaid due date from the full group instead of the first saved row', async () => {
+  const repo = fakeRepository();
+  seedPendingParent(repo);
+  repo.data.children.set('2', linkedChild('2', '10', { DATAPREVISTOPGTO: '03/02/2020' }));
+  repo.data.children.set('3', linkedChild('3', '10', { DATAPREVISTOPGTO: '2019-01-01', STATUS: 'PAGAMENTO EFETUADO', DATAPGTOEFETUADO: '2019-01-01' }));
+  await save(repo, { provisionParentChoice: choice(parent()) });
+  assert.match(repo.data.parents.get('10').fields.DATAPREVISTOPGTO, /^2020-02-03/);
+  assert.equal(repo.calls.filter(call => call[0] === 'update' && call[1] === 'children').length, 0);
+});
+
+test('append due-only race rereads the complete child group before reporting success', async () => {
+  const repo = fakeRepository(); seedPendingParent(repo);
+  repo.data.children.set('2', linkedChild('2', '10', { DATAPREVISTOPGTO: '2026-10-10' }));
+  const update = repo.updateItem;
+  let once = true;
+  repo.updateItem = async (...args) => {
+    const result = await update(...args);
+    if (once) { once = false; repo.data.children.get('2').fields.DATAPREVISTOPGTO = '2020-01-01'; }
+    return result;
+  };
+  await save(repo, { provisionParentChoice: choice(parent()) });
+  assert.match(repo.data.parents.get('10').fields.DATAPREVISTOPGTO, /^2020-01-01/);
+});
+
+test('lost child retry owns the derived parent fields and never resets a freshly recalculated due date', async () => {
+  const repo = fakeRepository(), create = repo.createItem, query = repo.getItems;
+  let lost = true;
+  repo.createItem = async (...args) => {
+    const result = await create(...args);
+    if (args[1] === 'children' && lost) throw new Error('lost child response');
+    return result;
+  };
+  repo.getItems = (...args) => args[1] === 'children' && lost ? [] : query(...args);
+  let failure;
+  try { await save(repo); } catch (error) { failure = error; }
+  assert.ok(failure?.retryItem);
+  lost = false;
+  repo.data.children.set('2', linkedChild('2', '20', { DATAPREVISTOPGTO: '2020-01-01' }));
+  repo.data.parents.get('20').fields.DATAPREVISTOPGTO = '2020-01-01T00:00:00Z';
+  await save(repo, { retryItem: failure.retryItem });
+  assert.equal(repo.data.parents.size, 1);
+  assert.equal(newChildCount(repo), 1);
+  assert.match(repo.data.parents.get('20').fields.DATAPREVISTOPGTO, /^2020-01-01/);
+});
 function seedPendingParent(repo, selected = parent()) {
   repo.data.parents.set(selected.id, selected);
   const childId = `900${selected.id}`;
@@ -161,7 +206,7 @@ test("default creation verifies new parent before child and preserves supplied c
 test("existing selection adds no parent and sums paid plus pending children without metadata writes", async () => {
   const repo = fakeRepository();
   const selected = parent(); seedPendingParent(repo, selected);
-  repo.data.children.set("1", { id: "1", fields: { DESCRITIVOPROVISAO: "10", QTD: "3", VALORTOTAL: "0.10", FRETE: "0", DATAPGTOEFETUADO: "2026-10-01" } });
+  repo.data.children.set("1", { id: "1", fields: { DESCRITIVOPROVISAO: "10", QTD: "3", VALORTOTAL: "0.10", FRETE: "0", DATAPGTOEFETUADO: "2026-10-01", PGTOAGENDADO: "PAGO" } });
   const saved = await save(repo, { provisionParentChoice: choice(selected) });
   assert.equal(saved.fields.DESCRITIVOPROVISAO, "10");
   assert.equal(repo.data.parents.size, 1);
@@ -220,7 +265,7 @@ test("412 retries fully requery children and use fresh parent ETag", async () =>
   let conflicts = 1;
   repo.updateItem = async (...args) => {
     if (conflicts--) {
-      repo.data.children.set("2", { id: "2", fields: { DESCRITIVOPROVISAO: "10", QTD: "1", VALORTOTAL: "2", FRETE: "0" } });
+      repo.data.children.set("2", { id: "2", fields: { DESCRITIVOPROVISAO: "10", QTD: "1", VALORTOTAL: "2", FRETE: "0", DATAPREVISTOPGTO: "2026-11-01" } });
       repo.data.parents.get("10").eTag += "+";
       throw Object.assign(new Error("412"), { status: 412 });
     }
@@ -228,8 +273,8 @@ test("412 retries fully requery children and use fresh parent ETag", async () =>
   };
   await save(repo, { provisionParentChoice: choice(parent()) });
   assert.equal(repo.data.parents.get("10").fields.VALORTOTAL, "28,225");
-  // One authoritative eligibility read, then both complete total attempts.
-  assert.equal(repo.calls.filter(call => call[0] === "query" && call[2].includes("DESCRITIVOPROVISAO")).length, 3);
+  // Eligibility, both complete CAS attempts and the post-write stability scan.
+  assert.equal(repo.calls.filter(call => call[0] === "query" && call[2].includes("DESCRITIVOPROVISAO")).length, 4);
   assert.equal(newChildCount(repo), 1);
   assert.equal(repo.data.children.size, 3); // Original pending + concurrent + newly saved.
 });
@@ -348,7 +393,7 @@ test("total includes repository Graph pagination instead of a first-page sum", a
   const repo = fakeRepository(); seedPendingParent(repo);
   const paged = createSharePointRepository({ async request(path) {
     if (path === "/sites/example.test:/finance") return { id: "site" };
-    if (path.includes("$skiptoken=next")) return { value: [{ id: "1", fields: { DESCRITIVOPROVISAO: "10", QTD: "2", VALORTOTAL: "1.1", FRETE: "0", DATAPGTOEFETUADO: "2026-01-01" } }] };
+    if (path.includes("$skiptoken=next")) return { value: [{ id: "1", fields: { DESCRITIVOPROVISAO: "10", QTD: "2", VALORTOTAL: "1.1", FRETE: "0", DATAPGTOEFETUADO: "2026-01-01", PGTOAGENDADO: "PAGO" } }] };
     if (path.startsWith("/sites/site/lists/children/items?")) return { value: [...repo.data.children.values()], "@odata.nextLink": "https://graph.microsoft.com/v1.0/sites/site/lists/children/items?$skiptoken=next" };
     throw new Error(`Unexpected path ${path}`);
   } }, { company: { host: "example.test", path: "/finance" } });
