@@ -41,7 +41,7 @@ export function addRetentionProvisionActions(actions,config){
   inside.Garantir_rubrica_retencao={type:'If',expression:{equals:["@length(body('Localizar_rubrica_retencao')?['value'])",0]},actions:{
     Criar_rubrica_retencao:sp(site,'POST',"_api/web/lists/getbytitle('DESCRITIVOPROVISAO')/items",objectBody({
       Title:"outputs('Chave_rubrica_retencao')",FOLHAOPERACAO:"outputs('Chave_rubrica_retencao')",
-      DATAPREVISTOPGTO:"outputs('Vencimento_retencao')",VALORTOTAL:"'0.00'",STATUS:"'PAGAMENTO PREVISTO'",
+      DATAPREVISTOPGTO:"outputs('Vencimento_retencao')",VALORTOTAL:"'0,00'",STATUS:"'PAGAMENTO PREVISTO'",
       FILIAL:"'004 - EDIFÍCIO XAVANTE'",
     })),
   },else:{actions:{}},runAfter:after('Conferir_rubrica_unica')};
@@ -52,17 +52,17 @@ export function addRetentionProvisionActions(actions,config){
     Criar_provisao_retencao:sp(site,'POST',"_api/web/lists/getbytitle('PROVISÃO PGTOS')/items",objectBody({
       Title:"concat(outputs('Prefixo_filhos_retencao'),outputs('Campos_finais')?['CHAVE_ACESSO'])",
       FOLHAOPERACAO:"outputs('Chave_provisao_retencao')",DESCRITIVOPROVISAO:"string(outputs('Rubrica_retencao'))",
-      DATAPREVISTOPGTO:"outputs('Vencimento_retencao')",QTD:"'1'",VALORTOTAL:"formatNumber(outputs('Total_retido_comprador'),'0.00','en-US')",
+      DATAPREVISTOPGTO:"outputs('Vencimento_retencao')",QTD:"'1'",VALORTOTAL:"formatNumber(outputs('Total_retido_comprador'),'0.00','pt-BR')",
       OBS:"coalesce(outputs('Campos_finais')?['Title'],'')",STATUS:"'PAGAMENTO PREVISTO'",FILIAL:"'004 - EDIFÍCIO XAVANTE'",
     })),
   },else:{actions:{}},runAfter:after('Conferir_provisao_unica')};
   inside.Zerar_total_rubrica={type:'SetVariable',inputs:{name:'RetentionParentTotal',value:0},runAfter:after('Criar_se_ausente_provisao_retencao')};
   inside.Listar_provisoes_rubrica=sp(site,'GET',"@concat('_api/web/lists/getbytitle(''PROVISÃO PGTOS'')/items?$select=Id,VALORTOTAL&$filter=startswith(Title,''',outputs('Prefixo_filhos_retencao'),''')&$top=5000')",undefined,'Zerar_total_rubrica');
   inside.Somar_provisoes_rubrica={type:'Foreach',foreach:"@body('Listar_provisoes_rubrica')?['value']",actions:{
-    Acumular_total_rubrica:{type:'IncrementVariable',inputs:{name:'RetentionParentTotal',value:"@float(coalesce(items('Somar_provisoes_rubrica')?['VALORTOTAL'],0))"},runAfter:{}},
+    Acumular_total_rubrica:{type:'IncrementVariable',inputs:{name:'RetentionParentTotal',value:"@float(replace(string(coalesce(items('Somar_provisoes_rubrica')?['VALORTOTAL'],0)),',','.'))"},runAfter:{}},
   },runtimeConfiguration:{concurrency:{repetitions:1}},runAfter:after('Listar_provisoes_rubrica')};
   inside.Atualizar_total_rubrica=sp(site,'POST',"@concat('_api/web/lists/getbytitle(''DESCRITIVOPROVISAO'')/items(',string(outputs('Rubrica_retencao')),')')",objectBody({
-    VALORTOTAL:"formatNumber(variables('RetentionParentTotal'),'0.00','en-US')",
+    VALORTOTAL:"formatNumber(variables('RetentionParentTotal'),'0.00','pt-BR')",
   }),'Somar_provisoes_rubrica',{'X-HTTP-Method':'MERGE','IF-MATCH':'*'});
   actions.Garantir_provisao_retencao={type:'If',expression:"@and(equals(outputs('Campos_finais')?['STATUS_RETENCOES'],'RETENCAO_INFORMADA_XML'),equals(outputs('Campos_finais')?['STATUS_IMPORTACAO'],'XML_COMPLETO'),equals(outputs('Campos_finais')?['DIRECAO'],'ENTRADA'),equals(outputs('Campos_finais')?['SITUACAO'],'AUTORIZADA'),or(equals(outputs('Campos_finais')?['TIPO_FISCAL'],'NF-e'),equals(outputs('Campos_finais')?['TIPO_FISCAL'],'NFS-e')),greater(outputs('Total_retido_comprador'),0))",actions:inside,else:{actions:{}},runAfter:after('Total_retido_comprador')};
 }

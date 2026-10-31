@@ -230,7 +230,7 @@ test('relinking includes exact decimal quantity and freight and catches a siblin
   };
   await f.data.saveEditor(await f.data.loadEditor('2'),{DESCRITIVOPROVISAO:'99'});
   assert.equal(f.records.parents.get('42').fields.VALORTOTAL,'20');
-  assert.equal(f.records.parents.get('99').fields.VALORTOTAL,'60.3');
+  assert.equal(f.records.parents.get('99').fields.VALORTOTAL,'60,3');
 });
 
 test('destination deletion during the child scan is caught before the move write', async () => {
@@ -362,7 +362,7 @@ test('quantity and freight preserve exact decimal totals when a provision amount
   Object.assign(f.records.children.get('3').fields, { QTD: '1', VALORTOTAL: '20', FRETE: '0' });
   f.records.parents.get('42').fields.VALORTOTAL = '20.3';
   await f.data.saveEditor(await f.data.loadEditor('2'), { VALORTOTAL: '0.20' });
-  assert.equal(f.records.parents.get('42').fields.VALORTOTAL, '20.55');
+  assert.equal(f.records.parents.get('42').fields.VALORTOTAL, '20,55');
 });
 
 test('a sibling changed during the parent write is included before synchronization reports success', async () => {

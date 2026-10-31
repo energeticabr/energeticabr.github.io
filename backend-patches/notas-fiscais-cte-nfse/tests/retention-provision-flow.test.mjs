@@ -64,6 +64,21 @@ test('pai mensal e filho por nota usam chaves unicas e recusam resultados ambigu
   assert.equal(child.QTD,'1');
 });
 
+test('grava valores de retencao com virgula e soma registros novos e legados sem alterar o valor',()=>{
+  const inside=provision.actions;
+  const shared={Campos_finais:fields({PIS_RETIDO:1347.58}),Vencimento_retencao:'2026-11-20T00:00:00-03:00',Chave_rubrica_retencao:'RETENCAO-2026-11',
+    Prefixo_filhos_retencao:'RETENCAO-2026-11-NOTA-',Chave_provisao_retencao:'RETENCAO-NOTA-'+fields().CHAVE_ACESSO,Rubrica_retencao:42,Total_retido_comprador:1347.58};
+  const parent=JSON.parse(evaluate(inside.Garantir_rubrica_retencao.actions.Criar_rubrica_retencao.inputs.parameters['parameters/body'],{outputs:shared}));
+  const child=JSON.parse(evaluate(inside.Criar_se_ausente_provisao_retencao.actions.Criar_provisao_retencao.inputs.parameters['parameters/body'],{outputs:shared}));
+  const total=JSON.parse(evaluate(inside.Atualizar_total_rubrica.inputs.parameters['parameters/body'],{variables:{RetentionParentTotal:4220.6}}));
+  assert.equal(parent.VALORTOTAL,'0,00');
+  assert.equal(child.VALORTOTAL,'1347,58');
+  assert.equal(total.VALORTOTAL,'4220,60');
+  const accumulate=inside.Somar_provisoes_rubrica.actions.Acumular_total_rubrica.inputs.value;
+  assert.equal(evaluate(accumulate,{items:{Somar_provisoes_rubrica:{VALORTOTAL:'1347,58'}}}),1347.58);
+  assert.equal(evaluate(accumulate,{items:{Somar_provisoes_rubrica:{VALORTOTAL:'13.02'}}}),13.02);
+});
+
 test('recalcula total do pai depois de garantir o filho e usa consulta mensal indexada',()=>{
   const inside=provision.actions;
   assert.deepEqual(inside.Zerar_total_rubrica.runAfter,{Criar_se_ausente_provisao_retencao:['Succeeded']});

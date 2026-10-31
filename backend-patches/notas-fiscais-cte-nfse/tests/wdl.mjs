@@ -38,7 +38,11 @@ export function evaluate(text,context={}){
           substring:(value,start,length)=>length===undefined?value.substring(start):value.substring(start,start+length),
           addToTime:(value,amount,unit)=>{if(unit!=='Month')throw new Error(`Unidade WDL nao coberta: ${unit}`);const m=/^(\d{4})-(\d{2})(.*)$/.exec(value);if(!m)throw new Error('Data WDL invalida');const index=Number(m[1])*12+Number(m[2])-1+Number(amount),year=Math.floor(index/12),month=index%12+1;return `${year}-${String(month).padStart(2,'0')}${m[3]}`;},
           formatDateTime:(value,format)=>{const m=/^(\d{4})-(\d{2})/.exec(value);if(format==='yyyy-MM'&&m)return `${m[1]}-${m[2]}`;throw new Error(`Formato WDL nao coberto: ${format}`);},
-          formatNumber:(value,format,locale)=>{if(format==='0.00'&&locale==='en-US')return Number(value).toFixed(2);throw new Error(`Numero WDL nao coberto: ${format}/${locale}`);},
+          formatNumber:(value,format,locale)=>{
+            if(format==='0.00'&&locale==='en-US')return Number(value).toFixed(2);
+            if(format==='0.00'&&locale==='pt-BR')return Number(value).toFixed(2).replace('.',',');
+            throw new Error(`Numero WDL nao coberto: ${format}/${locale}`);
+          },
           base64:v=>Buffer.from(v,'utf8').toString('base64'),base64ToBinary:v=>Buffer.from(v,'base64'),
         };
         if(!funcs[name])throw new Error(`Funcao WDL nao coberta pelo teste: ${name}`);

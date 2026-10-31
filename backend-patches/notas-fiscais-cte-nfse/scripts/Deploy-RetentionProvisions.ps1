@@ -20,6 +20,11 @@ function Api($method,$suffix,$body=$null){
 }
 function Flow(){Api GET ('/flows/'+$receiver+'?api-version=2016-11-01')}
 function Canonical($value){ConvertTo-StableJson $value}
+function Get-StableSha256($value){
+ $bytes=[Text.Encoding]::UTF8.GetBytes((Canonical $value))
+ [Convert]::ToHexString([Security.Cryptography.SHA256]::HashData($bytes)).ToLowerInvariant()
+}
+$previousRetentionActionSha256='1911bb3eeb1c2f80e659213ae5d97d9d52ded435ccbeffcee7d26aa2732eba42'
 function Assert-Candidate {
  if($null -eq $candidate.actions.Documentos.actions.Garantir_provisao_retencao -or
     $candidate.actions.Inicializar_total_retencoes.inputs.variables[0].name -cne 'RetentionParentTotal' -or
@@ -41,7 +46,12 @@ function Assert-NoDrift($flow){
  if($flow.properties.state -cne 'Started'){throw 'RETENTION_PROVISION_EXISTING_FLOW_NOT_STARTED'}
  $live=$flow.properties.definition.actions.Documentos.actions
  if($null -ne $live.Garantir_provisao_retencao){
-  Assert-Live $flow
+  $currentActionSha256=Get-StableSha256 $live.Garantir_provisao_retencao
+  $candidateActionSha256=Get-StableSha256 $candidate.actions.Documentos.actions.Garantir_provisao_retencao
+  if($currentActionSha256 -ceq $candidateActionSha256){Assert-Live $flow; return}
+  if($currentActionSha256 -cne $previousRetentionActionSha256){throw 'RETENTION_PROVISION_LIVE_DRIFT'}
+  if((Canonical $flow.properties.definition.actions.Inicializar_total_retencoes) -cne (Canonical $candidate.actions.Inicializar_total_retencoes)){throw 'RETENTION_PROVISION_LIVE_DRIFT'}
+  if($flow.properties.definition.actions.Documentos.actions.Confirmar_id_criado.runAfter.Garantir_provisao_retencao[0] -cne 'Succeeded'){throw 'RETENTION_PROVISION_LIVE_DRIFT'}
   return
  }
  if($null -eq $live.Anexar_DANFE -or $live.Confirmar_id_criado.runAfter.Anexar_DANFE[0] -cne 'Succeeded'){throw 'RETENTION_PROVISION_LIVE_DRIFT'}

@@ -139,6 +139,7 @@ function decimalText(value) {
 }
 
 export const provisionCanonicalTotal = value => decimalText(decimal(value, 'VALORTOTAL'));
+export const provisionTextTotal = value => provisionCanonicalTotal(value).replace('.', ',');
 
 export function provisionChildrenTotal(children, fields) {
   let amount = { units: 0n, scale: 0 };
@@ -252,8 +253,9 @@ async function updateTotal(repository, entity, parent, child, state) {
       seen.add(id);
     }
     const value = provisionChildrenTotal(children, child.fields);
+    const storedValue = provisionTextTotal(value);
     try {
-      await repository.updateItem(entity.siteKey, parent.list.id, state.parentId, { [parent.fields.VALORTOTAL]: value }, { eTag });
+      await repository.updateItem(entity.siteKey, parent.list.id, state.parentId, { [parent.fields.VALORTOTAL]: storedValue }, { eTag });
       const readback = await repository.getItem(entity.siteKey, parent.list.id, state.parentId, "$expand=fields");
       requirePending(readback, parent.fields, state.parentId);
       if (decimalText(decimal(readback.fields?.[parent.fields.VALORTOTAL], "VALORTOTAL")) !== value) throw new Error("O total do descritivo não foi confirmado na releitura.");
@@ -278,7 +280,7 @@ export async function persistProvisionParentWorkflow(repository, entity, supplie
       const fields = structuredClone(options.fields || {});
       const link = fields[child.fields.DESCRITIVOPROVISAO];
       if (!blank(link) && (selected.mode !== "existing" || String(link) !== selected.id)) throw new Error("A provisão já contém vínculo conflitante com outro descritivo.");
-      const initialTotal = decimalText(total(fields, child.fields));
+      const initialTotal = provisionTextTotal(decimalText(total(fields, child.fields)));
       const token = globalThis.crypto.randomUUID();
       if (blank(fields[child.fields.Title])) fields[child.fields.Title] = `provisao:${token}`;
       const parentPayload = { [parent.fields.Title]: `descritivo:${token}`, [parent.fields.VALORTOTAL]: initialTotal };

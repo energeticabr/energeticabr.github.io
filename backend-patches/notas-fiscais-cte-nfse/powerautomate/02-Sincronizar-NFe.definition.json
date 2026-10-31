@@ -834,7 +834,7 @@
                             "Accept": "application/json;odata=nometadata",
                             "Content-Type": "application/json;odata=nometadata"
                           },
-                          "parameters/body": "@string(setProperty(setProperty(setProperty(setProperty(setProperty(setProperty(json('{}'),'Title',outputs('Chave_rubrica_retencao')),'FOLHAOPERACAO',outputs('Chave_rubrica_retencao')),'DATAPREVISTOPGTO',outputs('Vencimento_retencao')),'VALORTOTAL','0.00'),'STATUS','PAGAMENTO PREVISTO'),'FILIAL','004 - EDIFÍCIO XAVANTE'))"
+                          "parameters/body": "@string(setProperty(setProperty(setProperty(setProperty(setProperty(setProperty(json('{}'),'Title',outputs('Chave_rubrica_retencao')),'FOLHAOPERACAO',outputs('Chave_rubrica_retencao')),'DATAPREVISTOPGTO',outputs('Vencimento_retencao')),'VALORTOTAL','0,00'),'STATUS','PAGAMENTO PREVISTO'),'FILIAL','004 - EDIFÍCIO XAVANTE'))"
                         },
                         "authentication": "@parameters('$authentication')"
                       },
@@ -927,7 +927,7 @@
                             "Accept": "application/json;odata=nometadata",
                             "Content-Type": "application/json;odata=nometadata"
                           },
-                          "parameters/body": "@string(setProperty(setProperty(setProperty(setProperty(setProperty(setProperty(setProperty(setProperty(setProperty(json('{}'),'Title',concat(outputs('Prefixo_filhos_retencao'),outputs('Campos_finais')?['CHAVE_ACESSO'])),'FOLHAOPERACAO',outputs('Chave_provisao_retencao')),'DESCRITIVOPROVISAO',string(outputs('Rubrica_retencao'))),'DATAPREVISTOPGTO',outputs('Vencimento_retencao')),'QTD','1'),'VALORTOTAL',formatNumber(outputs('Total_retido_comprador'),'0.00','en-US')),'OBS',coalesce(outputs('Campos_finais')?['Title'],'')),'STATUS','PAGAMENTO PREVISTO'),'FILIAL','004 - EDIFÍCIO XAVANTE'))"
+                          "parameters/body": "@string(setProperty(setProperty(setProperty(setProperty(setProperty(setProperty(setProperty(setProperty(setProperty(json('{}'),'Title',concat(outputs('Prefixo_filhos_retencao'),outputs('Campos_finais')?['CHAVE_ACESSO'])),'FOLHAOPERACAO',outputs('Chave_provisao_retencao')),'DESCRITIVOPROVISAO',string(outputs('Rubrica_retencao'))),'DATAPREVISTOPGTO',outputs('Vencimento_retencao')),'QTD','1'),'VALORTOTAL',formatNumber(outputs('Total_retido_comprador'),'0.00','pt-BR')),'OBS',coalesce(outputs('Campos_finais')?['Title'],'')),'STATUS','PAGAMENTO PREVISTO'),'FILIAL','004 - EDIFÍCIO XAVANTE'))"
                         },
                         "authentication": "@parameters('$authentication')"
                       },
@@ -988,7 +988,7 @@
                       "type": "IncrementVariable",
                       "inputs": {
                         "name": "RetentionParentTotal",
-                        "value": "@float(coalesce(items('Somar_provisoes_rubrica')?['VALORTOTAL'],0))"
+                        "value": "@float(replace(string(coalesce(items('Somar_provisoes_rubrica')?['VALORTOTAL'],0)),',','.'))"
                       },
                       "runAfter": {}
                     }
@@ -1022,7 +1022,7 @@
                         "X-HTTP-Method": "MERGE",
                         "IF-MATCH": "*"
                       },
-                      "parameters/body": "@string(setProperty(json('{}'),'VALORTOTAL',formatNumber(variables('RetentionParentTotal'),'0.00','en-US')))"
+                      "parameters/body": "@string(setProperty(json('{}'),'VALORTOTAL',formatNumber(variables('RetentionParentTotal'),'0.00','pt-BR')))"
                     },
                     "authentication": "@parameters('$authentication')"
                   },
