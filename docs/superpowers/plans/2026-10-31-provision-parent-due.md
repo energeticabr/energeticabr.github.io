@@ -13,3 +13,5 @@ Implementation:
 4. Verify focused regressions, signature protection, build, Linux runtime and browser end states. Merge green CI, publish backend, web/Windows, Android internal testing and iOS TestFlight for the same revision; verify each actual delivery.
 
 All financial test destinations are synthetic. Full backend sources, credentials and deployment archives remain private. Any bounded correction to the pictured description is limited to its planned due date and uses live child reconciliation and an ETag.
+
+Independent review correction: resolve the derived parent date as a writable target before any child mutation. A known read-only parent date must reject both ordinary edits and relinks without writing either list; preserve the existing read-only source-field display contract.

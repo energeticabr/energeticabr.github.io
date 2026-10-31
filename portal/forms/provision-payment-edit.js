@@ -29,6 +29,14 @@ function field(columns, name, types = ['text']) {
   return selected[0].name;
 }
 
+function writableParentDue(columns) {
+  const name = field(columns, 'DATAPREVISTOPGTO', ['dateTime']);
+  if (columns.find(column => column.name === name)?.readOnly) {
+    throw new Error('O vencimento do descritivo está somente leitura. Nenhuma provisão foi alterada.');
+  }
+  return name;
+}
+
 function sameValue(actual, expected, date) {
   if (blank(actual) && blank(expected)) return true;
   if (date && !blank(actual) && !blank(expected)) {
@@ -199,7 +207,7 @@ export function createProvisionPaymentEditor({ repository, siteKey = 'personal',
     active(signal);
     if (!Array.isArray(parentColumns)) throw new Error('Metadados do descritivo indisponíveis.');
     const totalName = field(parentColumns, 'VALORTOTAL', ['text', 'number', 'currency']);
-    const dueName = field(parentColumns, 'DATAPREVISTOPGTO', ['dateTime']);
+    const dueName = writableParentDue(parentColumns);
     const dueFields = provisionDueFields(childColumns);
     const amounts = Object.fromEntries(['QTD','VALORTOTAL','FRETE'].map(name => [name, field(childColumns,name,['text','number','currency'])]));
     const parentIds = [...new Set([...(currentLink ? [id(currentLink)] : []), targetId])];
@@ -297,7 +305,7 @@ export function createProvisionPaymentEditor({ repository, siteKey = 'personal',
         active(signal);
         if (!Array.isArray(parentColumns)) throw new Error('Metadados do descritivo indisponíveis.');
         parentTotalName = field(parentColumns, 'VALORTOTAL', ['text', 'number', 'currency']);
-        dueName = field(parentColumns, 'DATAPREVISTOPGTO', ['dateTime']);
+        dueName = writableParentDue(parentColumns);
         childTotals = Object.fromEntries(['QTD', 'VALORTOTAL', 'FRETE'].map(name => [name, field(childColumns, name, ['text', 'number', 'currency'])]));
         await read(parentList.id, parentId, signal);
         const before = await linked(childList.id, linkName, parentId, signal);

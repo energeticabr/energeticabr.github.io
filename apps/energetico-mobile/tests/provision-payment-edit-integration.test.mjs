@@ -547,3 +547,21 @@ test('an ordinary text edit also refreshes the derived parent due date', async (
     item: structuredClone(f.records.children.get('2')), fields: { OBS: 'Synthetic edit' } });
   assert.match(f.records.parents.get('42').fields.DATAPREVISTOPGTO, /^2020-01-01/);
 });
+
+for (const scenario of ['save', 'relink']) test(`read-only parent due rejects ${scenario} before any child or parent write`, async () => {
+  const f = fixture({ withTarget: scenario === 'relink' });
+  const before = structuredClone(f.records), columns = f.repository.getColumns, update = f.repository.updateItem;
+  f.repository.getColumns = async (...args) => (await columns(...args)).map(column =>
+    args[1] === 'parents' && column.name === 'DATAPREVISTOPGTO' ? { ...column, readOnly: true } : column);
+  f.repository.updateItem = (...args) => {
+    if (args[1] === 'parents' && Object.hasOwn(args[3], 'DATAPREVISTOPGTO')) {
+      throw Object.assign(new Error('Read-only parent date rejected'), { status: 400 });
+    }
+    return update(...args);
+  };
+  const editor = createProvisionPaymentEditor({ repository: f.repository });
+  await assert.rejects(editor.save({ list: { id: 'children' }, item: structuredClone(f.records.children.get('2')),
+    fields: scenario === 'relink' ? { DESCRITIVOPROVISAO: '99' } : { DATAPREVISTOPGTO: '2020-01-01' } }));
+  assert.deepEqual(f.writes, []);
+  assert.deepEqual(f.records, before);
+});
