@@ -245,10 +245,15 @@
 +                Decimal("0"),
 +            )
 +            return values, merchandise_total, gross_total
-@@ -26453,22 +26474,104 @@
+@@ -26453,2 +26474,5 @@
 -        lines = state.get("launch_lines", [])
 -        if not lines:
--            return
++        if has_cash_checkpoint(state):
++            # A started cash journal owns its already-adjusted snapshots. Never
++            # recompute them with a newer parser/precision on summary or retry.
++            # CashReceiptFlow still compares the submitted fields to its frozen
++            # payload, so genuinely changed data continues to fail closed.
+@@ -26456,19 +26480,104 @@
 -        values, merchandise_total, gross_total = self._multi_launch_original_totals(
 -            state
 -        )
@@ -372,15 +377,15 @@
 +                fields["DESCRIÇÃO"] = adjusted_description
 +                display["DESCRIÇÃO"] = adjusted_description
 +
-@@ -26476,2 +26579,2 @@
+@@ -26476,2 +26585,2 @@
 -                "enabled": False,
 -                "discount": "0",
 +                "enabled": True,
 +                "discount": _decimal_storage(discount),
-@@ -26479 +26582 @@
+@@ -26479 +26588 @@
 -                "net_total": _decimal_storage(gross_total),
 +                "net_total": _decimal_storage(gross_total - discount),
-@@ -26481,59 +26584,5 @@
+@@ -26481,59 +26590,5 @@
 -            return
 -        if discount > merchandise_total:
 -            raise ValueError(
@@ -445,11 +450,11 @@
 +            for field in ("VALOR UNITÁRIO", "DESCRIÇÃO"):
 +                state.setdefault("fields", {})[field] = last_fields[field]
 +                state.setdefault("display_values", {})[field] = last_display[field]
-@@ -26561 +26610,2 @@
+@@ -26561 +26616,2 @@
 -                "💰 INFORME UM NOVO VALOR DE DESCONTO GLOBAL."
 +                "💰 INFORME UM NOVO VALOR DE DESCONTO GLOBAL. "
 +                "PARA ACRÉSCIMO GLOBAL, USE UM VALOR NEGATIVO (EX.: -0,06 ACRESCENTA R$ 0,06)."
-@@ -27160,0 +27211,30 @@
+@@ -27160,0 +27217,30 @@
 +    def _handle_launch_global_discount_reply(self, event, state, etag, step) -> dict:
 +        with localcontext() as calculation_context:
 +            calculation_context.prec = 60
@@ -480,10 +485,10 @@
 +            state["step_index"] += 1
 +            return self._prompt_next_or_summary(state, etag)
 +
-@@ -27161,0 +27242,2 @@
+@@ -27161,0 +27248,2 @@
 +        if step.get("key") == "valor_desconto_global_lancamento":
 +            return self._handle_launch_global_discount_reply(event, state, etag, step)
-@@ -28884,30 +28966,23 @@
+@@ -28884,30 +28972,23 @@
 -        lines = state.get("launch_lines", [])
 -        self._apply_multi_launch_freight_distribution(state)
 -        self._apply_multi_launch_global_discount(state)
@@ -537,7 +542,7 @@
 +                {"label": "TIPO DE PEDIDO", "value": str(order_type)},
 +                {"label": "AGRUPAR", "value": grouping_display},
 +                {"label": "QUANTIDADE DE LINHAS", "value": str(len(lines))},
-@@ -28915,115 +28990,2 @@
+@@ -28915,115 +28996,2 @@
 -                    "label": "FORNECEDOR PARA AGRUPAR O PEDIDO",
 -                    "value": state.get("display_values", {}).get(
 -                        "FORNECEDOR AGRUPADOR DO PEDIDO",
@@ -655,7 +660,7 @@
 -                    "value": _currency_display(net_total or Decimal("0")),
 +                    "label": "DESTINO DOS ANEXOS",
 +                    "value": f"EXCLUSIVAMENTE NA LINHA {len(lines)}",
-@@ -29032,2 +28994,124 @@
+@@ -29032,2 +29000,124 @@
 -        )
 -        return rows
 +            grouping_supplier = state.get("multi_launch_grouping_supplier")
@@ -782,13 +787,13 @@
 +                ]
 +            )
 +            return rows
-@@ -30675 +30759,4 @@
+@@ -30675 +30765,4 @@
 -                "title": "💸 DESCONTO GLOBAL",
 +                "title": "💸 ACRÉSCIMO GLOBAL" if parse_global_discount(
 +                    state.get("multi_launch_discount", {}).get("discount", "0"),
 +                    allow_zero=True, allow_fractional_positive=True
 +                ) < 0 else "💸 DESCONTO GLOBAL",
-@@ -33592,20 +33679,17 @@
+@@ -33592,20 +33685,17 @@
 -        lines = state.get("launch_lines", [])
 -        if not lines:
 -            raise RuntimeError("Nenhuma linha foi informada para o lançamento múltiplo")
@@ -826,7 +831,7 @@
 +                quantity = _parse_decimal(fields.get("QUANTIDADE", ""), allow_zero=True)
 +                unit_value = _parse_decimal(
 +                    fields.get("VALOR UNITÁRIO", ""), allow_zero=True
-@@ -33613,46 +33697,11 @@
+@@ -33613,46 +33703,11 @@
 -            combined_total += quantity * unit_value + freight
 -
 -        discount_metadata = state.get("multi_launch_discount", {})
@@ -884,7 +889,7 @@
 +            if discount_metadata.get("enabled"):
 +                expected_net_total = _parse_decimal(
 +                    discount_metadata.get("net_total"), allow_zero=True
-@@ -33660 +33709,136 @@
+@@ -33660 +33715,136 @@
 -            global_discount_note = "\n".join(
 +                if expected_net_total is not None:
 +                    combined_total = expected_net_total
@@ -1022,7 +1027,7 @@
 +            return self._continue_confirmed_launch(
 +                state,
 +                etag,
-@@ -33662,105 +33846,12 @@
+@@ -33662,105 +33852,12 @@
 -                    "DESCONTO GLOBAL DO LOTE:",
 -                    f"VALOR GLOBAL: {_currency_display(original_total)}.",
 -                    f"DESCONTO GLOBAL: {_currency_display(global_discount)}.",

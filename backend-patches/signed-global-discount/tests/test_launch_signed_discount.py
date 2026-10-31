@@ -4,6 +4,8 @@ Set ENERGETICA_BACKEND_TEST_ROOT to the private backend snapshot. No tenant
 clients, credentials, production files or private source are bundled here.
 """
 import copy
+import importlib.util
+import os
 from decimal import Decimal, ROUND_HALF_UP, localcontext
 from pathlib import Path
 import sys
@@ -337,6 +339,60 @@ class LaunchSignedDiscountTests(unittest.TestCase):
             self.assertEqual(self.catalog.rows[key], row)
         self.assertEqual(len(self.catalog.creates), 3)
         self.assertEqual(self.total(), Decimal('830.06'))
+
+    def cash_retry(self, initial_engine, resumed_engine):
+        self.engine = initial_engine
+        for line in self.state['launch_lines']:
+            line['fields']['CONTA'] = 'DINHEIRO'
+        self.state['fields']['CONTA'] = 'DINHEIRO'
+        self.state['stage'] = 'committing'
+        self.catalog.fail_launch_verification = True
+        # Legacy payloads were frozen at the baseline's usual precision 28,
+        # even when this regression suite itself runs at ambient precision 16.
+        with localcontext() as legacy_context:
+            legacy_context.prec = 28
+            self.apply('0,06')
+            with self.assertRaises(CashReceiptError):
+                self.commit()
+        self.assertEqual(len(self.catalog.creates), 2)
+        frozen_lines = copy.deepcopy(self.state['launch_lines'])
+        frozen_journal = {token: copy.deepcopy(row['fields'])
+                          for token, row in self.state['launch_cash_writes'].items()}
+        frozen_rows = copy.deepcopy(self.catalog.rows)
+        self.state, _ = self.fixture.store.load(self.state['key'])
+        self.fixture.state = self.state
+        self.engine = resumed_engine
+        try:
+            resumed = self.commit()
+        except CashReceiptError:
+            self.fail('A started cash journal must resume with its frozen unit prices, without recalculation')
+        self.assertEqual(resumed['status'], 'synthetic_persisted')
+        self.assertEqual(self.state['launch_lines'], frozen_lines)
+        for token, fields in frozen_journal.items():
+            self.assertEqual(self.state['launch_cash_writes'][token]['fields'], fields)
+        for key, row in frozen_rows.items():
+            self.assertEqual(self.catalog.rows[key], row)
+        self.assertEqual(len(self.catalog.creates), 3)
+        self.assertEqual(self.total(), Decimal('829.94'))
+
+    def test_legacy_cash_discount_journal_resumes_without_recalculating_frozen_prices(self):
+        baseline_root = Path(os.environ.get('ENERGETICA_BACKEND_TEST_BASELINE_ROOT',
+                                             str(fixture.ROOT.parent / 'baseline')))
+        baseline_source = baseline_root / 'worker/workflow.py'
+        self.assertTrue(baseline_source.is_file(),
+                        'Provide the private baseline via ENERGETICA_BACKEND_TEST_BASELINE_ROOT')
+        spec = importlib.util.spec_from_file_location('_launch_signed_baseline', baseline_source)
+        baseline = importlib.util.module_from_spec(spec)
+        spec.loader.exec_module(baseline)
+        initial = baseline.WorkflowEngine(self.fixture.config, self.fixture.store, None,
+                                         self.fixture.messenger, self.catalog,
+                                         summary_builder=self.fixture.summary)
+        self.cash_retry(initial, self.engine)
+        first = next(iter(self.state['launch_cash_writes'].values()))
+        self.assertEqual(first['fields']['VALOR UNITÁRIO'], '99,99277108433734939759036145')
+
+    def test_current_cash_discount_journal_also_keeps_its_frozen_prices_on_retry(self):
+        self.cash_retry(self.engine, self.engine)
 
 
 if __name__ == '__main__':

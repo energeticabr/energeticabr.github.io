@@ -24,13 +24,18 @@
 - Existing draft resumes and retries preserve confirmations and frozen payloads.
 
 ## Tasks
-- [ ] Main: add failing provision tests, implement scoped parser and signed provision calculation/summary/prompt in private candidate; verify regressions.
-- [ ] Launch worker: add failing launch tests and implement signed launch handling, allocation, prompts and descriptions in private workflow/config only; verify positive regressions.
-- [ ] Main: integrate, publish minimal source.patch and tests, prepare pinned rollout and review.
-- [ ] Independent reviewer: review whole diff, numeric precision, retries and deployment scope.
+- [x] Main: add failing provision tests, implement scoped parser and signed provision calculation/summary/prompt in private candidate; verify regressions.
+- [x] Launch worker: add failing launch tests and implement signed launch handling, allocation, prompts and descriptions in private workflow/config only; verify positive regressions.
+- [x] Main: integrate, publish minimal source.patch and tests, prepare pinned rollout and review.
+- [x] Independent reviewer: review whole diff, numeric precision, retries and deployment scope.
 - [ ] Main: deploy reviewed hashes to common server, verify source/health and synthetic end state; open app and record delivery.
 
 ## Fix round 1
 - Four P2 findings accepted: low-context launch precision, legacy positive formats, numeric parent transport preflight, and installer candidate TOCTOU.
 - Main fixes shared parser compatibility and provision parent transport; launch worker owns precision and legacy positive caller compatibility; deployment worker owns install from validated bytes.
 - Existing raw first-freight tests have identical 4 failures/1 error on baseline and candidate; use their already-adapted 47-test provision-global-discount regression suite for the current workflow.
+
+## Fix round 2
+- The four original P2 findings were independently verified as addressed.
+- A baseline-to-candidate synthetic retry exposed recalculation of an already-started positive-discount cash journal at the new precision. Preserve the original frozen financial payload when resuming it.
+- Run the new legacy-resume regression before publication, alongside signed behavior, adapted provision regressions and installer contracts. All financial destinations remain synthetic.
