@@ -1,0 +1,27 @@
+name: Backend — escolher linha da provisao
+
+on:
+  pull_request:
+    paths:
+      - 'backend-patches/provision-edit-line/**'
+      - '.github/workflows/backend-provision-edit-line.yml'
+  push:
+    branches: [main]
+    paths:
+      - 'backend-patches/provision-edit-line/**'
+      - '.github/workflows/backend-provision-edit-line.yml'
+
+permissions:
+  contents: read
+
+jobs:
+  package-contract:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.9'
+      - name: Validar pacote e instalacao sem dados reais
+        run: python -B -m unittest discover -s backend-patches/provision-edit-line -v

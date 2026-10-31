@@ -1,0 +1,159 @@
+--- a/worker/payment_provision_flow.py
++++ b/worker/payment_provision_flow.py
+@@ -12 +12 @@
+-    from .logic import resolve_option
++    from .logic import resolve_option, filter_options
+@@ -17 +17 @@
+-    from logic import resolve_option
++    from logic import resolve_option, filter_options
+@@ -27,0 +28 @@
++    "editing_provision_line_choice",
+@@ -36,0 +38 @@
++    "editing_provision_line_index", "provision_line_edit_return",
+@@ -40,0 +43,106 @@
++    def _provision_line_edit_available(self, state):
++        return (self._provision_multiple(state) and bool(state.get("provision_lines"))
++                and not state.get("provision_commit"))
++
++    def _provision_edit_field_question(self, state):
++        step = self._edit_step()
++        index = state.get("editing_provision_line_index")
++        if self._provision_line_edit_available(state) and index is not None:
++            step = {**step, "prompt": f"QUAL DADO DA LINHA {index + 1} VOCÊ DESEJA EDITAR?"}
++        return step
++
++    def _provision_line_edit_options(self, state):
++        options = [{"id": 0, "title": "↩️ VOLTAR AO RESUMO", "value": "__back_to_summary__"}]
++        for index, line in enumerate(state["provision_lines"], 1):
++            fields, display = line.get("fields", {}), line.get("display_values", {})
++            product = display.get("PRODUTO") or fields.get("PRODUTO") or "SEM PRODUTO"
++            supplier = display.get("FORNECEDOR") or fields.get("FORNECEDOR") or "SEM FORNECEDOR"
++            options.append({"id": index, "title": f"LINHA {index} — {product} — {supplier}",
++                            "value": f"provision_line:{index - 1}"})
++        if self._flow_supports_summary_attachments(state):
++            options.append({"id": "edit_attachments", "title": "📎 ANEXOS DO LOTE",
++                            "value": "__edit_attachments__"})
++        if self._provision_discount_eligible(state):
++            options.append({"id": "edit_provision_discount", "title": "💸 DESCONTO / ACRÉSCIMO GLOBAL",
++                            "value": "__edit_provision_discount__"})
++        return options
++
++    def _handle_provision_line_edit_choice(self, event, state, etag):
++        self._mark_processed(state, event["message_id"])
++        raw = event.get("reply_id") or event.get("text") or ""
++        selected = resolve_option(raw, state["options"], "edit_provision_line")
++        if not selected:
++            matches = filter_options(raw, state["options"])
++            if matches:
++                self._send_filtered_options(state, self._provision_question(state), list(matches))
++                self._save(state, etag)
++                return {"status": "filtered_provision_lines", "batch_id": state["batch_id"]}
++            return self._prompt_provision_question(state, etag)
++        value = selected["value"]
++        if value == "__back_to_summary__":
++            return self._summarize_and_confirm(state, etag)
++        if value == "__edit_attachments__":
++            return self._prompt_attachment_edit_menu(state, etag)
++        if value == "__edit_provision_discount__":
++            self._provision_prepare_discount_edit(state)
++            state.setdefault("provision_discount", {}).pop("decision_complete", None)
++            return self._prompt_provision_question(state, etag, "asking_provision_discount")
++        index = int(value.split(":", 1)[1])
++        state["provision_line_edit_return"] = {
++            key: copy.deepcopy(state.get(key)) for key in (
++                "fields", "answers", "display_values", "selections", "step_index",
++                "provision_current_saved", "provision_composition_complete")}
++        state["editing_provision_line_index"] = index
++        for key in ("fields", "answers", "display_values", "selections"):
++            state[key] = copy.deepcopy(state["provision_lines"][index].get(key) or {})
++        state["answers"]["tipo_provisao_pagamento"] = "MULTIPLOS"
++        state.pop("option_pagination", None)
++        return self._prompt_edit_field(state, etag)
++
++    def _provision_restore_edit_cursor(self, state, edited=None):
++        index = state.pop("editing_provision_line_index")
++        previous = state.pop("provision_line_edit_return")
++        for key, value in previous.items():
++            state[key] = copy.deepcopy(value)
++        if edited is not None and index == len(state["provision_lines"]) - 1:
++            for key in ("fields", "answers", "display_values", "selections"):
++                state[key] = copy.deepcopy(edited[key])
++        state.pop("edit_step_indices", None)
++        state.pop("pending_past_date_confirmation", None)
++        state.pop("option_pagination", None)
++        state["options"] = []
++
++    def _provision_cancel_line_edit(self, state, etag):
++        self._provision_restore_edit_cursor(state)
++        pending = self._provision_discount_before_review(state, etag)
++        if pending is not None:
++            return pending
++        return self._prompt_provision_question(state, etag, "editing_provision_line_choice")
++
++    def _provision_line_edit_back(self, state, etag):
++        if not self._provision_line_edit_available(state):
++            return None
++        if state.get("stage") == "editing_provision_line_choice":
++            return self._summarize_and_confirm(state, etag)
++        if state.get("editing_provision_line_index") is None:
++            return None
++        if state.get("stage") == "editing_field_choice":
++            return self._provision_cancel_line_edit(state, etag)
++        if state.get("stage") == "selecting_fields":
++            index = state["editing_provision_line_index"]
++            for key in ("fields", "answers", "display_values", "selections"):
++                state[key] = copy.deepcopy(state["provision_lines"][index].get(key) or {})
++            state.pop("edit_step_indices", None)
++            state.pop("pending_past_date_confirmation", None)
++            return self._prompt_edit_field(state, etag)
++        return None
++
++    def _provision_finish_line_edit(self, state, etag):
++        index = state["editing_provision_line_index"]
++        snapshot = self._provision_snapshot(state)
++        state["provision_lines"][index] = snapshot
++        self._provision_restore_edit_cursor(state, snapshot)
++        state["step_index"] = len(self._flow_config(state)["steps"])
++        state["stage"] = "selecting_fields"
++        return self._provision_reference_or_continue(state, etag)
++
+@@ -54 +162,2 @@
+-        last = state["provision_lines"][-1]
++        index = state.get("editing_provision_line_index", -1)
++        last = state["provision_lines"][index]
+@@ -152 +261,3 @@
+-        additional = bool(lines) and (not state.get("provision_current_saved") or len(lines) > 1)
++        selected = state.get("editing_provision_line_index")
++        additional = (selected > 0 if selected is not None else
++                      bool(lines) and (not state.get("provision_current_saved") or len(lines) > 1))
+@@ -212,0 +324,3 @@
++        if stage == "editing_provision_line_choice":
++            return {"key": "edit_provision_line", "prompt": "QUAL LINHA DA PROVISÃO VOCÊ DESEJA EDITAR?",
++                    "source": {"options": self._provision_line_edit_options(state)}}
+@@ -288,0 +403,2 @@
++        if state.get("editing_provision_line_index") is not None:
++            return self._provision_finish_line_edit(state, etag)
+@@ -328,0 +445,2 @@
++        if state["stage"] == "editing_provision_line_choice":
++            return self._handle_provision_line_edit_choice(event, state, etag)
+--- a/worker/workflow.py
++++ b/worker/workflow.py
+@@ -4100,0 +4101,3 @@
++        provision_edit = self._provision_line_edit_back(state, etag)
++        if provision_edit is not None:
++            return provision_edit
+@@ -30278,0 +30282,2 @@
++            and not (self._provision_line_edit_available(state)
++                     and state.get("editing_provision_line_index") is not None)
+@@ -30296 +30301 @@
+-        if self._provision_discount_eligible(state):
++        if self._provision_discount_eligible(state) and state.get("editing_provision_line_index") is None:
+@@ -30692,0 +30698,2 @@
++        if self._provision_line_edit_available(state) and state.get("editing_provision_line_index") is None:
++            return self._prompt_provision_question(state, etag, "editing_provision_line_choice")
+@@ -30728 +30735 @@
+-        self._send_options(state, self._edit_step(), state["options"])
++        self._send_options(state, self._provision_edit_field_question(state), state["options"])
+@@ -31171,0 +31179,2 @@
++            if self._provision_line_edit_available(state) and state.get("editing_provision_line_index") is not None:
++                return self._provision_cancel_line_edit(state, etag)
