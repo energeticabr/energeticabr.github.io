@@ -41,7 +41,8 @@ export function addRetentionProvisionActions(actions,config){
   inside.Garantir_rubrica_retencao={type:'If',expression:{equals:["@length(body('Localizar_rubrica_retencao')?['value'])",0]},actions:{
     Criar_rubrica_retencao:sp(site,'POST',"_api/web/lists/getbytitle('DESCRITIVOPROVISAO')/items",objectBody({
       Title:"outputs('Chave_rubrica_retencao')",FOLHAOPERACAO:"outputs('Chave_rubrica_retencao')",
-      DATAPREVISTOPGTO:"outputs('Vencimento_retencao')",VALORTOTAL:"'0.00'",
+      DATAPREVISTOPGTO:"outputs('Vencimento_retencao')",VALORTOTAL:"'0.00'",STATUS:"'PAGAMENTO PREVISTO'",
+      FILIAL:"'004 - EDIFÍCIO XAVANTE'",
     })),
   },else:{actions:{}},runAfter:after('Conferir_rubrica_unica')};
   inside.Rubrica_retencao={type:'Compose',inputs:"@if(empty(body('Localizar_rubrica_retencao')?['value']),body('Criar_rubrica_retencao')?['Id'],first(body('Localizar_rubrica_retencao')?['value'])?['Id'])",runAfter:after('Garantir_rubrica_retencao')};
@@ -52,7 +53,7 @@ export function addRetentionProvisionActions(actions,config){
       Title:"concat(outputs('Prefixo_filhos_retencao'),outputs('Campos_finais')?['CHAVE_ACESSO'])",
       FOLHAOPERACAO:"outputs('Chave_provisao_retencao')",DESCRITIVOPROVISAO:"string(outputs('Rubrica_retencao'))",
       DATAPREVISTOPGTO:"outputs('Vencimento_retencao')",QTD:"'1'",VALORTOTAL:"formatNumber(outputs('Total_retido_comprador'),'0.00','en-US')",
-      OBS:"coalesce(outputs('Campos_finais')?['Title'],'')",
+      OBS:"coalesce(outputs('Campos_finais')?['Title'],'')",STATUS:"'PAGAMENTO PREVISTO'",FILIAL:"'004 - EDIFÍCIO XAVANTE'",
     })),
   },else:{actions:{}},runAfter:after('Conferir_provisao_unica')};
   inside.Zerar_total_rubrica={type:'SetVariable',inputs:{name:'RetentionParentTotal',value:0},runAfter:after('Criar_se_ausente_provisao_retencao')};

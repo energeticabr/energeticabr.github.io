@@ -54,9 +54,13 @@ test('pai mensal e filho por nota usam chaves unicas e recusam resultados ambigu
   const shared={Campos_finais:fields({PIS_RETIDO:1}),Vencimento_retencao:'2026-11-20T00:00:00-03:00',Chave_rubrica_retencao:'RETENCAO-2026-11',
     Prefixo_filhos_retencao:'RETENCAO-2026-11-NOTA-',Chave_provisao_retencao:'RETENCAO-NOTA-'+fields().CHAVE_ACESSO,Rubrica_retencao:42,Total_retido_comprador:1};
   const parent=JSON.parse(evaluate(inside.Garantir_rubrica_retencao.actions.Criar_rubrica_retencao.inputs.parameters['parameters/body'],{outputs:shared}));
-  assert.deepEqual(Object.keys(parent).sort(),['DATAPREVISTOPGTO','FOLHAOPERACAO','Title','VALORTOTAL'].sort());
+  assert.deepEqual(Object.keys(parent).sort(),['DATAPREVISTOPGTO','FILIAL','FOLHAOPERACAO','STATUS','Title','VALORTOTAL'].sort());
+  assert.equal(parent.STATUS,'PAGAMENTO PREVISTO');
+  assert.equal(parent.FILIAL,'004 - EDIFÍCIO XAVANTE');
   const child=JSON.parse(evaluate(inside.Criar_se_ausente_provisao_retencao.actions.Criar_provisao_retencao.inputs.parameters['parameters/body'],{outputs:shared}));
-  assert.deepEqual(Object.keys(child).sort(),['DATAPREVISTOPGTO','DESCRITIVOPROVISAO','FOLHAOPERACAO','OBS','QTD','Title','VALORTOTAL'].sort());
+  assert.deepEqual(Object.keys(child).sort(),['DATAPREVISTOPGTO','DESCRITIVOPROVISAO','FILIAL','FOLHAOPERACAO','OBS','QTD','STATUS','Title','VALORTOTAL'].sort());
+  assert.equal(child.STATUS,'PAGAMENTO PREVISTO');
+  assert.equal(child.FILIAL,'004 - EDIFÍCIO XAVANTE');
   assert.equal(child.QTD,'1');
 });
 

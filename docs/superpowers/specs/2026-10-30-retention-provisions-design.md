@@ -9,8 +9,8 @@ Whenever the authenticated fiscal collector persists an incoming authorized NF-e
 - The due date is the 20th day of the month following the invoice issue month.
 - All retained invoices with the same due month share one `DESCRITIVOPROVISAO` item.
 - A different due month receives a different description item.
-- The `PROVISÃO PGTOS` child stores only the required business data: `DATAPREVISTOPGTO`, `QTD=1`, `VALORTOTAL` equal to the buyer-withheld total, and `OBS` equal to the supplier corporate name. Other ordinary child fields remain blank.
-- The parent stores its due date and the sum of all linked retention children. Other ordinary parent fields remain blank.
+- The `PROVISÃO PGTOS` child stores only the required business data: `DATAPREVISTOPGTO`, `QTD=1`, `VALORTOTAL` equal to the buyer-withheld total, `OBS` equal to the supplier corporate name, `STATUS=PAGAMENTO PREVISTO`, and `FILIAL=004 - EDIFÍCIO XAVANTE`. Other ordinary child fields remain blank.
+- The parent stores its due date, the sum of all linked retention children, the same status, and the same branch. Other ordinary parent fields remain blank.
 - Technical idempotency uses the existing unique `FOLHAOPERACAO` columns: `RETENCAO-AAAA-MM` for the parent and `RETENCAO-NOTA-<CHAVE_ACESSO>` for the child. `Title` carries the same technical identifier and is not business data.
 - Existing parent and child items are reused. Replaying the same fiscal document repairs a missing parent total but never creates a second child.
 
