@@ -1,4 +1,4 @@
-import { provisionChildrenTotal } from './provision-parent-workflow.js';
+import { provisionChildrenTotal, provisionTextTotal } from './provision-parent-workflow.js';
 
 const PARENT_LIST = ['DESCRITIVOPROVISAO'];
 const PAYMENT_DATES = ['DATAPGTOEFETUADO', 'DATAPGTOAGENDADO', 'DATAEXECUCAOAGENDAMENTO', 'PGTOAGENDADO'];
@@ -6,6 +6,8 @@ const DATE_FIELDS = ['DATAPREVISTOPGTO', ...PAYMENT_DATES];
 const key = value => String(value || '').replace(/_x([0-9a-f]{4})_/gi, (_, hex) => String.fromCodePoint(parseInt(hex, 16)))
   .normalize('NFD').replace(/[\u0300-\u036f]/g, '').replace(/[^a-z0-9]/gi, '').toUpperCase();
 const blank = value => value == null || String(value).trim() === '';
+const storedTotal = (value, columns, name) => columns.find(column => column.name === name)?.text
+  ? provisionTextTotal(value) : Number(value);
 const id = value => {
   const text = String(value ?? '').trim();
   if (!/^[1-9]\d{0,14}$/.test(text)) throw new Error('O vínculo da provisão requer ID positivo.');
@@ -126,28 +128,28 @@ export function createProvisionPaymentEditor({ repository, siteKey = 'personal',
         const child = rows.find(row => id(row.id) === childId);
         if (!child || String(child.fields?.[linkName] ?? '').trim() !== expectedLink) throw new Error('O vínculo mudou durante a sincronização dos descritivos.');
       }
-      return new Map(parentIds.map(parentId => [parentId, provisionChildrenTotal(rows.filter(row => String(row.fields?.[linkName] ?? '').trim() === parentId), amounts)]));
+      return new Map(parentIds.map(parentId => [parentId, storedTotal(provisionChildrenTotal(rows.filter(row => String(row.fields?.[linkName] ?? '').trim() === parentId), amounts), parentColumns, totalName)]));
     };
     for (let attempt = 0; attempt < 3; attempt++) {
       for (const parentId of parentIds) {
         const current = await parent(parentId);
         if (!current) continue;
         const total = (await totalsNow()).get(parentId);
-        if (String(current.fields?.[totalName] ?? '') === total) continue;
-        const patch = { [totalName]: parentColumns.find(column => column.name === totalName).text ? total : Number(total) };
+        if (String(current.fields?.[totalName] ?? '') === String(total)) continue;
+        const patch = { [totalName]: total };
         active(signal);
         try { await repository.updateItem(siteKey,parents.id,parentId,patch,{eTag:version(current),...(signal?{signal}:{})}); }
         catch (error) {
           const confirmed = await parent(parentId);
           if (!confirmed) continue;
-          if (String(confirmed.fields?.[totalName] ?? '') !== total && Number(error?.status) !== 412) throw error;
+          if (String(confirmed.fields?.[totalName] ?? '') !== String(total) && Number(error?.status) !== 412) throw error;
         }
       }
       const totals = await totalsNow();
       let confirmed = true;
       for (const parentId of parentIds) {
         const current = await parent(parentId);
-        if (current && String(current.fields?.[totalName] ?? '') !== totals.get(parentId)) confirmed = false;
+        if (current && String(current.fields?.[totalName] ?? '') !== String(totals.get(parentId))) confirmed = false;
       }
       if (confirmed) return;
     }
@@ -308,9 +310,10 @@ export function createProvisionPaymentEditor({ repository, siteKey = 'personal',
         const rows = await linked(childList.id, linkName, parentId, signal);
         if (!rows.some(row => String(row.id) === childId)) throw new Error('O vínculo da provisão mudou durante a sincronização.');
         const total = provisionChildrenTotal(rows, childTotals);
+        const expectedTotal = storedTotal(total, parentColumns, parentTotalName);
         const patch = {};
-        if (hasAmount && String(parent.fields?.[parentTotalName] ?? '') !== total) {
-          patch[parentTotalName] = parentColumns.find(column => column.name === parentTotalName)?.text ? total : Number(total);
+        if (hasAmount && String(parent.fields?.[parentTotalName] ?? '') !== String(expectedTotal)) {
+          patch[parentTotalName] = expectedTotal;
         }
         if (rows.length === 1 && changedDates.length && PAYMENT_DATES.every(name => {
           const column = parentColumns.find(candidate => key(candidate.name) === name && candidate.dateTime);
@@ -330,7 +333,7 @@ export function createProvisionPaymentEditor({ repository, siteKey = 'personal',
           const latest = await read(parentList.id, parentId, signal);
           const linkedNow = await linked(childList.id, linkName, parentId, signal);
           if (!linkedNow.some(row => String(row.id) === childId)) throw new Error('O vínculo da provisão mudou durante a conferência.');
-          return String(latest.fields?.[parentTotalName] ?? '') === provisionChildrenTotal(linkedNow, childTotals);
+          return String(latest.fields?.[parentTotalName] ?? '') === String(storedTotal(provisionChildrenTotal(linkedNow, childTotals), parentColumns, parentTotalName));
         };
         const parentPatchMatches = row => Object.entries(patch).every(([name, value]) =>
           sameValue(row.fields?.[name], value, parentColumns.some(column => column.name === name && column.dateTime)));

@@ -152,7 +152,7 @@ test("default creation verifies new parent before child and preserves supplied c
   assert.equal(saved.fields.Title, "Documento explícito");
   assert.equal(saved.fields.DATAPGTOEFETUADO, "2026-10-01T00:00:00Z");
   const createdParent = repo.data.parents.get("20");
-  assert.equal(createdParent.fields.VALORTOTAL, "26.225");
+  assert.equal(createdParent.fields.VALORTOTAL, "26,225");
   assert.equal(createdParent.fields.OBS, "Nota");
   for (const marker of markers) assert.equal(createdParent.fields[marker], null);
   assert.ok(repo.calls.findIndex(call => call[0] === "get" && call[1] === "parents") < repo.calls.findIndex(call => call[0] === "create" && call[1] === "children"));
@@ -165,7 +165,7 @@ test("existing selection adds no parent and sums paid plus pending children with
   const saved = await save(repo, { provisionParentChoice: choice(selected) });
   assert.equal(saved.fields.DESCRITIVOPROVISAO, "10");
   assert.equal(repo.data.parents.size, 1);
-  assert.equal(repo.data.parents.get("10").fields.VALORTOTAL, "26.525");
+  assert.equal(repo.data.parents.get("10").fields.VALORTOTAL, "26,525");
   assert.equal(repo.data.parents.get("10").fields.OBS, "Original");
   assert.deepEqual(repo.calls.filter(call => call[0] === "update").map(call => Object.keys(call[3])), [["VALORTOTAL"]]);
 });
@@ -227,7 +227,7 @@ test("412 retries fully requery children and use fresh parent ETag", async () =>
     return update(...args);
   };
   await save(repo, { provisionParentChoice: choice(parent()) });
-  assert.equal(repo.data.parents.get("10").fields.VALORTOTAL, "28.225");
+  assert.equal(repo.data.parents.get("10").fields.VALORTOTAL, "28,225");
   // One authoritative eligibility read, then both complete total attempts.
   assert.equal(repo.calls.filter(call => call[0] === "query" && call[2].includes("DESCRITIVOPROVISAO")).length, 3);
   assert.equal(newChildCount(repo), 1);
@@ -244,7 +244,7 @@ test("bounded total conflicts checkpoint child and retry totals without another 
   repo.updateItem = update;
   await save(repo, { retryItem: error.retryItem });
   assert.equal(newChildCount(repo), 1);
-  assert.equal(repo.data.parents.get("10").fields.VALORTOTAL, "26.225");
+  assert.equal(repo.data.parents.get("10").fields.VALORTOTAL, "26,225");
 });
 
 test("malformed historic child stops total update and retains committed child checkpoint", async () => {
@@ -355,7 +355,7 @@ test("total includes repository Graph pagination instead of a first-page sum", a
   const query = repo.getItems;
   repo.getItems = (...args) => args[1] === "children" && String(args[2]).includes("DESCRITIVOPROVISAO") ? paged.getItems(...args) : query(...args);
   await save(repo, { provisionParentChoice: choice(parent()) });
-  assert.equal(repo.data.parents.get("10").fields.VALORTOTAL, "28.425");
+  assert.equal(repo.data.parents.get("10").fields.VALORTOTAL, "28,425");
 });
 
 test("revalidation occurs after title recovery query immediately before child POST", async () => {
@@ -395,7 +395,7 @@ test("internal names resolved by metadata are used for link, amount and parent d
   const renamed = Object.fromEntries(Object.entries(baseFields).map(([name, value]) => [`internal_${name}`, value]));
   const saved = await save(repo, { fields: renamed });
   assert.equal(saved.fields.internal_DESCRITIVOPROVISAO, "20");
-  assert.equal(repo.data.parents.get("20").fields.internal_VALORTOTAL, "26.225");
+  assert.equal(repo.data.parents.get("20").fields.internal_VALORTOTAL, "26,225");
   assert.equal(repo.data.parents.get("20").fields.internal_DATAPGTOEFETUADO, null);
 });
 
@@ -429,7 +429,7 @@ test("total readback mismatch checkpoints saved child for a total-only retry", a
   assert.equal(error.retryItem.provisionRetryState.childId, "100");
   repo.updateItem = update;
   await save(repo, { retryItem: error.retryItem });
-  assert.equal(repo.data.parents.get("10").fields.VALORTOTAL, "26.225");
+  assert.equal(repo.data.parents.get("10").fields.VALORTOTAL, "26,225");
   assert.equal(newChildCount(repo), 1);
 });
 
@@ -449,7 +449,7 @@ test("invalid pending selection before any write leaves fields and choice editab
   assert.equal(error.provisionRetryState, undefined);
   const saved = await save(repo, { fields: { ...baseFields, QTD: "1" }, provisionParentChoice: { mode: "new" } });
   assert.equal(saved.fields.QTD, "1");
-  assert.equal(repo.data.parents.get("20").fields.VALORTOTAL, "11.21");
+  assert.equal(repo.data.parents.get("20").fields.VALORTOTAL, "11,21");
 });
 
 test("unindexed Title and textual link use complete repository reads without unsupported Graph filters", async () => {
@@ -462,7 +462,7 @@ test("unindexed Title and textual link use complete repository reads without uns
   };
   const saved = await save(repo);
   assert.equal(saved.fields.DESCRITIVOPROVISAO, "20");
-  assert.equal(repo.data.parents.get("20").fields.VALORTOTAL, "26.225");
+  assert.equal(repo.data.parents.get("20").fields.VALORTOTAL, "26,225");
   assert.equal(repo.data.children.get("3").fields.DESCRITIVOPROVISAO, "99");
 });
 
@@ -490,7 +490,7 @@ test("same-parent queue explicitly reselects second prewrite-rejected row withou
   assert.deepEqual(queue.snapshot().map(row => row.status), ["success", "success"]);
   assert.equal(newChildCount(repo), 2);
   assert.equal(repo.data.parents.size, 1);
-  assert.equal(repo.data.parents.get("10").fields.VALORTOTAL, "52.45");
+  assert.equal(repo.data.parents.get("10").fields.VALORTOTAL, "52,45");
   assert.deepEqual(repo.calls.filter(call => call[0] === "upload").map(call => call[3]), ["PRIMEIRO.pdf", "SEGUNDO.pdf"]);
 });
 

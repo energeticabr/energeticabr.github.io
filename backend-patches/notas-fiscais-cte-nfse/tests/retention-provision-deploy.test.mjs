@@ -22,6 +22,13 @@ test('deploy refuses drift, preserves Started state and rereads the exact retent
   assert.match(text,/RETENTION_PROVISION_ACTION_MISMATCH/);
 });
 
+test('deploy permits only the pinned previous retention action during an intentional upgrade',()=>{
+  assert.match(text,/1911bb3eeb1c2f80e659213ae5d97d9d52ded435ccbeffcee7d26aa2732eba42/);
+  assert.match(text,/Get-StableSha256/);
+  assert.match(text,/RETENTION_PROVISION_LIVE_DRIFT/);
+  assert.doesNotMatch(text,/Assert-Live \$flow\s*\r?\n\s*return/);
+});
+
 test('deployment smoke is an empty fiscal batch and waits for terminal success',()=>{
   assert.match(text,/source='SEFAZ';companyCnpj='38626750000146';documents=@\(\)/);
   assert.match(text,/StartFlow \$receiver/);
