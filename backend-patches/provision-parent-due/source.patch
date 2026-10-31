@@ -1,0 +1,182 @@
+--- a/worker/payment_provision_flow.py
++++ b/worker/payment_provision_flow.py
+@@ -14 +14,2 @@
+-        provision_money, apply_provision_discount, restore_provision_discount, provision_parent_fields, provision_preview)
++        provision_money, apply_provision_discount, restore_provision_discount, provision_parent_fields, provision_preview,
++        earliest_unpaid_due, provision_due_date, provision_child_is_paid)
+@@ -15,0 +17 @@
++    from .document_item_lock import document_item_lock
+@@ -19 +21,2 @@
+-        provision_money, apply_provision_discount, restore_provision_discount, provision_parent_fields, provision_preview)
++        provision_money, apply_provision_discount, restore_provision_discount, provision_parent_fields, provision_preview,
++        earliest_unpaid_due, provision_due_date, provision_child_is_paid)
+@@ -20,0 +24 @@
++    from document_item_lock import document_item_lock
+@@ -617 +621,8 @@
+-                return validate_parent(self.sharepoint, progress["parent_selection"],
++                selection = copy.deepcopy(progress["parent_selection"])
++                if checkpoint.get("due_date") is not None:
++                    live = read_parent(self.sharepoint, progress["parent_id"])
++                    owned_dates = (checkpoint["due_date"], checkpoint.get("previous_due_date"))
++                    if any(value is not None and provision_due_date(live["fields"]["DATAPREVISTOPGTO"])
++                           == provision_due_date(value) for value in owned_dates):
++                        selection["fields"]["DATAPREVISTOPGTO"] = live["fields"]["DATAPREVISTOPGTO"]
++                return validate_parent(self.sharepoint, selection,
+@@ -624,0 +636,2 @@
++            if group.get("partial") or group.get("truncated") or group.get("complete") is False:
++                raise RuntimeError("A relação completa das provisões não foi confirmada")
+@@ -625,0 +639 @@
++            due = earliest_unpaid_due(group["CHILDREN"])
+@@ -633 +647,3 @@
+-            checkpoint.update(total=total, etag=current["etag"], verified=False)
++            checkpoint.update(total=total, due_date=due,
++                              previous_due_date=current["fields"]["DATAPREVISTOPGTO"],
++                              etag=current["etag"], verified=False)
+@@ -634,0 +651 @@
++            updates = {}
+@@ -635,0 +653,4 @@
++                updates["VALORTOTAL"] = total
++            if due is not None and provision_due_date(current["fields"]["DATAPREVISTOPGTO"]) != provision_due_date(due):
++                updates["DATAPREVISTOPGTO"] = due
++            if updates:
+@@ -637 +658 @@
+-                    self.sharepoint.update_item_with_etag(progress["parent_id"], {"VALORTOTAL": total},
++                    self.sharepoint.update_item_with_etag(progress["parent_id"], updates,
+@@ -644 +665,2 @@
+-            if not same_total(confirmed["fields"]["VALORTOTAL"], total):
++            if (not same_total(confirmed["fields"]["VALORTOTAL"], total)
++                    or (due is not None and provision_due_date(confirmed["fields"]["DATAPREVISTOPGTO"]) != provision_due_date(due))):
+@@ -646,0 +669,10 @@
++                continue
++            after = self.sharepoint.get_provision_description(progress["parent_id"])
++            if after.get("partial") or after.get("truncated") or after.get("complete") is False:
++                raise RuntimeError("A relação completa das provisões não foi confirmada")
++            after_total = linked_total(after, progress["parent_id"], [c["item_id"] for c in progress["children"]])
++            if progress.get("global_discount"):
++                after_total = _canonical(provision_money(_number(after_total, "VALORTOTAL")))
++            if (after_total != total or earliest_unpaid_due(after["CHILDREN"]) != due
++                    or sorted(group["CHILDREN"], key=lambda row: int(row["Id"]))
++                    != sorted(after["CHILDREN"], key=lambda row: int(row["Id"]))):
+@@ -650,0 +683,45 @@
++
++    def _provision_refresh_linked_parent_due(self, child_id, child_list):
++        """After verified single-child payment, update only the linked parent's due."""
++        child, _ = self.sharepoint.get_item_fields_with_etag(
++            int(child_id), ["DESCRITIVOPROVISAO"], target_list=child_list)
++        linked = child.get("DESCRITIVOPROVISAO")
++        if linked is None or (isinstance(linked, str) and not linked.strip()):
++            return
++        linked = parent_id(linked)
++
++        def children():
++            group = self._description_read_for_settlement(linked)
++            rows = group.get("CHILDREN")
++            if (parent_id(group.get("Id")) != linked or group.get("partial") or group.get("truncated")
++                    or group.get("complete") is False or not isinstance(rows, list) or not rows):
++                raise RuntimeError("A relação completa das provisões não foi confirmada")
++            ids = [parent_id(row.get("Id")) for row in rows]
++            if len(ids) != len(set(ids)) or any(parent_id(row.get("DESCRITIVOPROVISAO")) != linked for row in rows):
++                raise RuntimeError("Vínculos das provisões não confirmados")
++            settled = next((row for row in rows if parent_id(row["Id"]) == str(child_id)), None)
++            if settled is None or not provision_child_is_paid(settled):
++                raise RuntimeError("A consulta ainda não confirmou a provisão paga")
++            return sorted(rows, key=lambda row: int(row["Id"]))
++
++        # This is the grouped-settlement lock namespace. Group child commits
++        # never call this helper, since their caller already owns that lock.
++        with document_item_lock(10**18 + int(linked)):
++            for _attempt in range(3):
++                current = read_parent(self.sharepoint, linked, require_pending=False)
++                before = children()
++                due = earliest_unpaid_due(before)
++                if due is not None and provision_due_date(current["fields"]["DATAPREVISTOPGTO"]) != provision_due_date(due):
++                    try:
++                        self.sharepoint.update_item_with_etag(int(linked), {"DATAPREVISTOPGTO": due},
++                            current["etag"], target_list="DESCRITIVOPROVISAO")
++                    except HTTPError as exc:
++                        if exc.response is not None and exc.response.status_code == 412:
++                            continue
++                        raise
++                confirmed = read_parent(self.sharepoint, linked, require_pending=False)
++                after = children()
++                if (before == after and (due is None
++                        or provision_due_date(confirmed["fields"]["DATAPREVISTOPGTO"]) == provision_due_date(due))):
++                    return
++            raise RuntimeError("As provisões continuam mudando; a data do descritivo não foi confirmada")
+--- a/worker/workflow.py
++++ b/worker/workflow.py
+@@ -34176,0 +34177,4 @@
++            if not state.get("_description_child_commit"):
++                if not self._provision_verified(verification):
++                    raise RuntimeError("A gravação da provisão paga não foi confirmada")
++                self._provision_refresh_linked_parent_due(provision_id, flow["target_list"])
+--- a/worker/payment_provision_group.py
++++ b/worker/payment_provision_group.py
+@@ -10,0 +11 @@
++from datetime import date, datetime
+@@ -229,0 +231,42 @@
++def provision_due_date(raw):
++    """Read a calendar date without moving it across time zones."""
++    if isinstance(raw, datetime):
++        return raw.date()
++    if isinstance(raw, date):
++        return raw
++    if not isinstance(raw, str) or not raw.strip():
++        return None
++    text = raw.strip()
++    try:
++        if re.fullmatch(r"\d{2}/\d{2}/\d{4}", text):
++            return datetime.strptime(text, "%d/%m/%Y").date()
++        if re.fullmatch(r"\d{4}-\d{2}-\d{2}", text):
++            return date.fromisoformat(text)
++        if re.match(r"^\d{4}-\d{2}-\d{2}[T ]", text):
++            return datetime.fromisoformat(text.replace("Z", "+00:00")).date()
++    except ValueError:
++        pass
++    return None
++
++
++def provision_child_is_paid(fields):
++    """Payment requires a valid actual date plus the existing paid evidence."""
++    actual = _field(fields, "DATA PGTO EFETUADO", "DATAPGTOEFETUADO")
++    return provision_due_date(actual) is not None and (
++        str(fields.get("PGTOAGENDADO") or "").strip().casefold() == "pago"
++        or str(fields.get("STATUS") or "").strip().casefold() == "pagamento efetuado")
++
++
++def earliest_unpaid_due(children):
++    """Every not-proven-paid child counts; unknown unpaid due dates fail closed."""
++    dates = []
++    for fields in children:
++        if provision_child_is_paid(fields):
++            continue
++        due = provision_due_date(_field(fields, "DATA PREVISTO PGTO", "DATAPREVISTOPGTO"))
++        if due is None:
++            raise ValueError("Data prevista ausente ou inválida em uma provisão não comprovadamente paga")
++        dates.append(due)
++    return min(dates).isoformat() if dates else None
++
++
+@@ -251 +294,2 @@
+-        "DATAPREVISTOPGTO": _field(first, "DATA PREVISTO PGTO", "DATAPREVISTOPGTO"),
++        "DATAPREVISTOPGTO": earliest_unpaid_due(line.get("fields") or {} for line in lines)
++            or _field(first, "DATA PREVISTO PGTO", "DATAPREVISTOPGTO"),
+--- a/worker/provision_description_settlement.py
++++ b/worker/provision_description_settlement.py
+@@ -17 +17 @@
+-    from .payment_provision_group import provision_line_total, provision_money, _currency, _canonical, _sum, _number
++    from .payment_provision_group import provision_line_total, provision_money, _currency, _canonical, _sum, _number, earliest_unpaid_due
+@@ -23 +23 @@
+-    from payment_provision_group import provision_line_total, provision_money, _currency, _canonical, _sum, _number
++    from payment_provision_group import provision_line_total, provision_money, _currency, _canonical, _sum, _number, earliest_unpaid_due
+@@ -1217 +1217,2 @@
+-            if (not rows or len(ids) != len(set(ids)) or not original_ids <= set(ids)
++            if (source.get('partial') or source.get('truncated') or source.get('complete') is False
++                    or not rows or len(ids) != len(set(ids)) or not original_ids <= set(ids)
+@@ -1237 +1238,2 @@
+-            paid = all(_paid(row) for row in rows)
++            remaining_due = earliest_unpaid_due(rows)
++            paid = remaining_due is None and all(_paid(row) for row in rows)
+@@ -1240,0 +1243,2 @@
++            if remaining_due is not None:
++                final_fields['DATA PREVISTO PGTO'] = remaining_due

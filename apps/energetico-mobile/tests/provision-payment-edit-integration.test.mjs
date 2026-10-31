@@ -13,8 +13,8 @@ function fixture({ single = false, parentDates = {}, withTarget = false } = {}) 
       ...parentDates,
     } }]]),
     children: new Map([
-      ['2', { id: '2', eTag: 'c2', fields: { DESCRITIVOPROVISAO: '42', FILIAL: '004', FORNECEDOR: 'A', QTD: '1', VALORTOTAL: '10', FRETE: '0', DATAPGTOEFETUADO: null } }],
-      ...single ? [] : [['3', { id: '3', eTag: 'c3', fields: { DESCRITIVOPROVISAO: '42', FILIAL: '004', FORNECEDOR: 'A', QTD: '1', VALORTOTAL: '20', FRETE: '0', DATAPGTOEFETUADO: null } }]],
+      ['2', { id: '2', eTag: 'c2', fields: { DESCRITIVOPROVISAO: '42', FILIAL: '004', FORNECEDOR: 'A', QTD: '1', VALORTOTAL: '10', FRETE: '0', DATAPREVISTOPGTO: '2026-11-01', DATAPGTOEFETUADO: null } }],
+      ...single ? [] : [['3', { id: '3', eTag: 'c3', fields: { DESCRITIVOPROVISAO: '42', FILIAL: '004', FORNECEDOR: 'A', QTD: '1', VALORTOTAL: '20', FRETE: '0', DATAPREVISTOPGTO: '2026-11-01', DATAPGTOEFETUADO: null } }]],
     ]),
   };
   if (single) records.parents.get('42').fields.VALORTOTAL = '10';
@@ -23,13 +23,14 @@ function fixture({ single = false, parentDates = {}, withTarget = false } = {}) 
       ...structuredClone(records.parents.get('42').fields), FILIAL: '000', FORNECEDOR: 'B', OBS: 'Destino de teste', VALORTOTAL: '40',
     } });
     records.children.set('4', { id: '4', eTag: 'c4', fields: {
-      DESCRITIVOPROVISAO: '99', FILIAL: '000', FORNECEDOR: 'B', QTD: '2', VALORTOTAL: '20', FRETE: '0',
+      DESCRITIVOPROVISAO: '99', FILIAL: '000', FORNECEDOR: 'B', QTD: '2', VALORTOTAL: '20', FRETE: '0', DATAPREVISTOPGTO: '2026-11-01',
     } });
   }
   const columns = {
     parents: [...['FILIAL', 'FORNECEDOR', 'VALORTOTAL'].map(name => ({ name, text: {} })),
       ...['DATAPREVISTOPGTO', 'DATAPGTOEFETUADO', 'DATAPGTOAGENDADO', 'DATAEXECUCAOAGENDAMENTO', 'PGTOAGENDADO'].map(name => ({ name, dateTime: {} }))],
-    children: [...['DESCRITIVOPROVISAO', 'FILIAL', 'FORNECEDOR', 'QTD', 'VALORTOTAL', 'FRETE'].map(name => ({ name, text: {} })),
+    children: [...['DESCRITIVOPROVISAO', 'FILIAL', 'FORNECEDOR', 'QTD', 'VALORTOTAL', 'FRETE', 'PGTOAGENDADO'].map(name => ({ name, text: {} })),
+      { name: 'STATUS', choice: { choices: ['PAGAMENTO PREVISTO', 'PAGAMENTO EFETUADO', 'PAGO'] } },
       ...['DATAPREVISTOPGTO', 'DATAPGTOEFETUADO', 'DATAPGTOAGENDADO', 'DATAEXECUCAOAGENDAMENTO'].map(name => ({ name, dateTime: {} }))],
   };
   const writes = [];
@@ -393,4 +394,174 @@ test('an invalid edited amount is rejected before writing the child or the paren
   const f = fixture();
   await assert.rejects(f.data.saveEditor(await f.data.loadEditor('2'), { VALORTOTAL: 'NÃO É NÚMERO' }), /decimal|valor/i);
   assert.deepEqual(f.writes, []);
+});
+
+test('editing a due date derives the minimum across all unpaid siblings, including overdue BR dates', async () => {
+  const f = fixture();
+  f.records.children.get('2').fields.DATAPREVISTOPGTO = '2026-12-20';
+  f.records.children.get('3').fields.DATAPREVISTOPGTO = '01/02/2020';
+  await f.data.saveEditor(await f.data.loadEditor('2'), { DATAPREVISTOPGTO: '2027-01-01' });
+  assert.match(f.records.parents.get('42').fields.DATAPREVISTOPGTO, /^2020-02-01/);
+  assert.equal(f.records.children.get('3').fields.DATAPREVISTOPGTO, '01/02/2020');
+  assert.equal(f.writes.filter(write => write.list === 'children').length, 1);
+});
+
+for (const paid of [{ DATAPGTOEFETUADO: '2026-10-31' }, { STATUS: 'PAGAMENTO EFETUADO' }, { PGTOAGENDADO: 'PAGO' }]) {
+  test(`marking the earliest child paid advances only the parent due date: ${Object.keys(paid)[0]}`, async () => {
+    const f = fixture();
+    Object.assign(f.records.children.get('2').fields, Object.keys(paid)[0] === 'DATAPGTOEFETUADO'
+      ? { PGTOAGENDADO: 'PAGO' } : { DATAPGTOEFETUADO: '2026-10-31' });
+    f.records.children.get('2').fields.DATAPREVISTOPGTO = '2026-01-01';
+    f.records.children.get('3').fields.DATAPREVISTOPGTO = '2026-11-20';
+    await f.data.saveEditor(await f.data.loadEditor('2'), paid);
+    assert.match(f.records.parents.get('42').fields.DATAPREVISTOPGTO, /^2026-11-20/);
+    assert.equal(f.records.parents.get('42').fields.DATAPGTOEFETUADO, null);
+    assert.equal(f.records.children.get('3').fields.DATAPREVISTOPGTO, '2026-11-20');
+  });
+}
+
+test('future scheduling dates never remove an unpaid child from the minimum', async () => {
+  const f = fixture();
+  Object.assign(f.records.children.get('2').fields, { DATAPREVISTOPGTO: '2020-01-01', PGTOAGENDADO: '2035-02-01', DATAPGTOAGENDADO: '2035-02-01' });
+  f.records.children.get('3').fields.DATAPREVISTOPGTO = '2026-11-20';
+  await f.data.saveEditor(await f.data.loadEditor('3'), { DATAPREVISTOPGTO: '2026-12-20' });
+  assert.match(f.records.parents.get('42').fields.DATAPREVISTOPGTO, /^2020-01-01/);
+});
+
+test('when every child is paid, keep the historical parent due date', async () => {
+  const f = fixture({ parentDates: { DATAPREVISTOPGTO: '2026-09-04T00:00:00Z' } });
+  f.records.children.get('2').fields.DATAPGTOEFETUADO = '2026-10-01';
+  f.records.children.get('2').fields.STATUS = 'PAGAMENTO EFETUADO';
+  f.records.children.get('3').fields.PGTOAGENDADO = 'PAGO';
+  f.records.children.get('3').fields.DATAPGTOEFETUADO = '2026-10-01';
+  await f.data.saveEditor(await f.data.loadEditor('2'), { DATAPREVISTOPGTO: '2027-01-01' });
+  assert.equal(f.records.parents.get('42').fields.DATAPREVISTOPGTO, '2026-09-04T00:00:00Z');
+});
+
+test('relink derives due dates for both the old and new parents without fanout', async () => {
+  const f = fixture({ withTarget: true });
+  f.records.children.get('2').fields.DATAPREVISTOPGTO = '2026-10-02';
+  f.records.children.get('3').fields.DATAPREVISTOPGTO = '2026-11-09';
+  f.records.children.get('4').fields.DATAPREVISTOPGTO = '2026-12-01';
+  await f.data.saveEditor(await f.data.loadEditor('2'), { DESCRITIVOPROVISAO: '99' });
+  assert.match(f.records.parents.get('42').fields.DATAPREVISTOPGTO, /^2026-11-09/);
+  assert.match(f.records.parents.get('99').fields.DATAPREVISTOPGTO, /^2026-10-02/);
+  assert.deepEqual(f.writes.filter(write => write.list === 'children').map(write => write.fields), [{ DESCRITIVOPROVISAO: '99' }]);
+});
+
+test('due derivation rereads siblings after a parent write even when amounts did not change', async () => {
+  const f = fixture();
+  f.records.children.get('3').fields.DATAPREVISTOPGTO = '2026-10-01';
+  const update = f.repository.updateItem;
+  let once = true;
+  f.repository.updateItem = async (...args) => {
+    const result = await update(...args);
+    if (args[1] === 'parents' && once) { once = false; f.records.children.get('3').fields.DATAPREVISTOPGTO = '2026-12-02'; }
+    return result;
+  };
+  await f.data.saveEditor(await f.data.loadEditor('2'), { DATAPREVISTOPGTO: '2026-11-20' });
+  assert.match(f.records.parents.get('42').fields.DATAPREVISTOPGTO, /^2026-11-20/);
+});
+
+test('due-only ETag conflict retries from a fresh complete child scan', async () => {
+  const f = fixture();
+  f.records.children.get('3').fields.DATAPREVISTOPGTO = '2026-12-01';
+  const update = f.repository.updateItem;
+  let once = true;
+  f.repository.updateItem = async (...args) => {
+    if (args[1] === 'parents' && once) {
+      once = false;
+      f.records.parents.get('42').eTag += 'race';
+      f.records.children.get('3').fields.DATAPREVISTOPGTO = '2020-01-01';
+      throw Object.assign(new Error('conflict'), { status: 412 });
+    }
+    return update(...args);
+  };
+  await f.data.saveEditor(await f.data.loadEditor('2'), { DATAPREVISTOPGTO: '2026-11-20' });
+  assert.match(f.records.parents.get('42').fields.DATAPREVISTOPGTO, /^2020-01-01/);
+});
+
+test('relink repair recomputes dates from current unpaid children on both parents', async () => {
+  const f = fixture({ withTarget: true });
+  f.records.children.get('2').fields.DATAPREVISTOPGTO = '2026-10-02';
+  f.records.children.get('3').fields.DATAPREVISTOPGTO = '2026-11-09';
+  f.records.children.get('4').fields.DATAPREVISTOPGTO = '2026-12-01';
+  const context = await f.data.loadEditor('2'), update = f.repository.updateItem;
+  let once = true;
+  f.repository.updateItem = (...args) => {
+    if (args[1] === 'parents' && once) { once = false; throw new Error('offline'); }
+    return update(...args);
+  };
+  await assert.rejects(f.data.saveEditor(context, { DESCRITIVOPROVISAO: '99' }), /offline/);
+  f.records.children.get('4').fields.DATAPREVISTOPGTO = '2020-01-01';
+  await f.data.saveEditor(context, { DESCRITIVOPROVISAO: '99' });
+  assert.match(f.records.parents.get('42').fields.DATAPREVISTOPGTO, /^2026-11-09/);
+  assert.match(f.records.parents.get('99').fields.DATAPREVISTOPGTO, /^2020-01-01/);
+  assert.equal(f.writes.filter(write => write.list === 'children').length, 1);
+});
+
+test('an invalid unpaid sibling due date stops an edit before writing either record', async () => {
+  for (const value of [null, '2026-02-30']) {
+    const f = fixture();
+    f.records.children.get('3').fields.DATAPREVISTOPGTO = value;
+    await assert.rejects(f.data.saveEditor(await f.data.loadEditor('2'), { DATAPREVISTOPGTO: '2026-11-20' }), /vencimento|data/i);
+    assert.deepEqual(f.writes, []);
+  }
+});
+
+test('a continuously changing child set cannot be confirmed merely because its minimum stays equal', async () => {
+  const f = fixture();
+  f.records.children.get('3').fields.DATAPREVISTOPGTO = '2026-12-01';
+  const context = await f.data.loadEditor('2'), update = f.repository.updateItem, page = f.repository.getItemsPage;
+  let committed = false;
+  f.repository.updateItem = async (...args) => {
+    const result = await update(...args);
+    if (args[1] === 'children') committed = true;
+    return result;
+  };
+  f.repository.getItemsPage = async (...args) => {
+    if (args[1] === 'children' && committed) f.records.children.get('3').eTag += 'race';
+    return page(...args);
+  };
+  await assert.rejects(f.data.saveEditor(context, { DATAPREVISTOPGTO: '2026-11-20' }), /mudou|sincroniza/i);
+  assert.equal(f.writes.filter(write => write.list === 'children').length, 1);
+});
+
+test('editing a due date by a metadata-resolved internal name still updates the parent', async () => {
+  const f = fixture(), columns = f.repository.getColumns;
+  for (const child of f.records.children.values()) {
+    child.fields.internal_due = child.fields.DATAPREVISTOPGTO;
+    delete child.fields.DATAPREVISTOPGTO;
+  }
+  f.repository.getColumns = async (...args) => (await columns(...args)).map(column => args[1] === 'children' && column.name === 'DATAPREVISTOPGTO'
+    ? { ...column, name: 'internal_due', displayName: 'DATAPREVISTOPGTO' } : column);
+  const editor = createProvisionPaymentEditor({ repository: f.repository });
+  await editor.save({ list: { id: 'children' }, item: structuredClone(f.records.children.get('2')), fields: { internal_due: '2020-01-01' } });
+  assert.match(f.records.parents.get('42').fields.DATAPREVISTOPGTO, /^2020-01-01/);
+});
+
+test('an ordinary text edit also refreshes the derived parent due date', async () => {
+  const f = fixture();
+  f.records.children.get('3').fields.DATAPREVISTOPGTO = '2020-01-01';
+  await createProvisionPaymentEditor({ repository: f.repository }).save({ list: { id: 'children' },
+    item: structuredClone(f.records.children.get('2')), fields: { OBS: 'Synthetic edit' } });
+  assert.match(f.records.parents.get('42').fields.DATAPREVISTOPGTO, /^2020-01-01/);
+});
+
+for (const scenario of ['save', 'relink']) test(`read-only parent due rejects ${scenario} before any child or parent write`, async () => {
+  const f = fixture({ withTarget: scenario === 'relink' });
+  const before = structuredClone(f.records), columns = f.repository.getColumns, update = f.repository.updateItem;
+  f.repository.getColumns = async (...args) => (await columns(...args)).map(column =>
+    args[1] === 'parents' && column.name === 'DATAPREVISTOPGTO' ? { ...column, readOnly: true } : column);
+  f.repository.updateItem = (...args) => {
+    if (args[1] === 'parents' && Object.hasOwn(args[3], 'DATAPREVISTOPGTO')) {
+      throw Object.assign(new Error('Read-only parent date rejected'), { status: 400 });
+    }
+    return update(...args);
+  };
+  const editor = createProvisionPaymentEditor({ repository: f.repository });
+  await assert.rejects(editor.save({ list: { id: 'children' }, item: structuredClone(f.records.children.get('2')),
+    fields: scenario === 'relink' ? { DESCRITIVOPROVISAO: '99' } : { DATAPREVISTOPGTO: '2020-01-01' } }));
+  assert.deepEqual(f.writes, []);
+  assert.deepEqual(f.records, before);
 });
