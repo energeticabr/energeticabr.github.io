@@ -147,6 +147,8 @@ class GlobalDiscountTests(unittest.TestCase):
     def test_last_line_edit_recalculates_using_original_unit_prices(self):
         self.discount()
         self.reply('confirm_edit')
+        self.assertEqual(self.state['stage'], 'editing_provision_line_choice')
+        self.reply('2')
         index = next(i for i, step in enumerate(self.engine._flow_config(self.state)['steps'])
                      if step['key'] == 'valor_unitario_pagamento')
         self.reply(str(index + 1))
@@ -238,6 +240,8 @@ class GlobalDiscountTests(unittest.TestCase):
     def test_a_discount_too_large_after_price_edit_requests_a_new_amount(self):
         self.discount('700')
         self.reply('confirm_edit')
+        self.assertEqual(self.state['stage'], 'editing_provision_line_choice')
+        self.reply('2')
         index = next(i for i, step in enumerate(self.engine._flow_config(self.state)['steps'])
                      if step['key'] == 'valor_unitario_pagamento')
         self.reply(str(index + 1))
