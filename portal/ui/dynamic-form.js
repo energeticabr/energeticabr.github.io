@@ -1893,7 +1893,7 @@ export function renderDynamicForm(root, options = {}) {
   const onReloadConflict = () => { if (!disposed && !submitting) options.onReloadConflict?.(); };
   const onSubmit = async event => {
     event.preventDefault();
-    if (disposed || submitting || !form?.reportValidity?.()) return;
+    if (disposed || submitting || options.isSubmitBlocked?.() || !form?.reportValidity?.()) return;
     const relationshipValues = relationshipBindings.values();
     const rawValues = readValues(form, descriptors, { ...choiceBindings.values(), ...relationshipValues });
     const choiceProof = choiceBindings.validate();
@@ -1928,7 +1928,7 @@ export function renderDynamicForm(root, options = {}) {
       });
       if (options.mode === "edit") {
         const changes = buildEditChanges(editColumns, editBaseline, fields, relationshipLabels, attachmentChanges);
-        if (!await confirmEditChanges({ form, changes }) || disposed) return;
+        if (!await confirmEditChanges({ form, changes }) || disposed || options.isSubmitBlocked?.()) return;
       }
       form?.setAttribute?.("aria-busy", "true");
       controls.forEach(control => { control.disabled = true; });
@@ -1955,6 +1955,7 @@ export function renderDynamicForm(root, options = {}) {
   reloadConflict?.addEventListener("click", onReloadConflict);
   form?.addEventListener("submit", onSubmit);
   return Object.freeze({
+    getAttachmentChanges: () => attachmentBindings.changes(),
     cleanup() {
       disposed = true;
       cancelEditReview(form);

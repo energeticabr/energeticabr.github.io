@@ -1,0 +1,109 @@
+<!doctype html>
+<html lang="pt-BR">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta http-equiv="Content-Security-Policy" content="default-src 'self' data: blob:; script-src 'self' 'unsafe-inline'; style-src 'self' 'unsafe-inline'; connect-src 'self' ws://127.0.0.1:* ws://localhost:*; img-src 'self' data: blob:; font-src 'self' data:; object-src 'none'">
+  <title>Sincronizar conflito — somente dados fictícios</title>
+  <style>
+    /* Fixture counters only; the editor, conflict alert and review use actual styles. */
+    .fixture-counts { margin: 0 0 .75rem; padding: .5rem; background: #eef6ff; color: #123;
+      font: 13px/1.5 system-ui; overflow-wrap: anywhere; border: 1px solid #8bb3dd; }
+    .fixture-counts strong { display: block; }
+  </style>
+</head>
+<body>
+<main id="app"></main>
+<script type="module">
+import '../../src/styles.css';
+import '../../../../portal/styles/admin.css';
+import '../../src/ui/gallery-record-actions.css';
+import { createGalleryRecordActions } from '../../src/ui/gallery-record-actions.js';
+import { createGalleryRecordData } from '../../src/chat/gallery-record-data.js';
+import { SharePointConflictError } from '../../../../portal/data/sharepoint-repository.js';
+
+const stage = new URLSearchParams(location.search).get('stage') || 'conflict';
+const app = document.querySelector('#app');
+let server = { id: '42', eTag: '"v1"', fields: { Title: 'PRODUTO FICTÍCIO ORIGINAL', OBS: 'OBSERVAÇÃO FICTÍCIA ORIGINAL', VALOR: 10 } };
+const calls = { reads: 0, writes: 0, syncWrites: 0, uploads: 0, deletions: 0 };
+let syncing = false, readFailure = false, pendingRead = false;
+const counter = document.createElement('aside');
+counter.className = 'fixture-counts'; counter.setAttribute('data-fixture-counts', ''); counter.setAttribute('role', 'status');
+const update = () => {
+  counter.replaceChildren();
+  const title = document.createElement('strong'); title.textContent = `DADOS FICTÍCIOS · ${calls.syncWrites} gravações na sincronização`;
+  counter.append(title, `${calls.reads} leituras · ${calls.writes} tentativas de gravação · ${calls.uploads} uploads · ${calls.deletions} exclusões`);
+};
+const waitFor = async (check, message) => {
+  for (let n = 0; n < 300; n++) { if (check()) return; await new Promise(resolve => setTimeout(resolve, 10)); }
+  throw new Error(message);
+};
+const repository = {
+  async getColumns() { return [
+    { name: 'Title', displayName: 'Produto fictício', text: {} },
+    { name: 'OBS', displayName: 'Observação fictícia', text: {} },
+    { name: 'VALOR', displayName: 'Valor fictício', currency: {} },
+  ]; },
+  async getItem() {
+    calls.reads++; update();
+    if (pendingRead) await new Promise(() => {});
+    if (readFailure) throw new Error('Leitura fictícia indisponível. Tente sincronizar novamente.');
+    return structuredClone(server);
+  },
+  async updateItem(_site, _list, id, fields, options) {
+    calls.writes++; if (syncing) calls.syncWrites++; update();
+    if (options.eTag !== server.eTag) throw new SharePointConflictError({ message: 'Este registro fictício foi alterado por outra pessoa. Seus valores foram preservados para conferência.' });
+    server = { id, eTag: '"saved"', fields: { ...server.fields, ...fields } }; return structuredClone(server);
+  },
+};
+const data = createGalleryRecordData({ repository, listName: 'CONFLITO_FICTICIO', metadataOnly: true, resolveList: async () => ({ id: 'fixture-only' }) });
+const actions = createGalleryRecordActions({ document, host: app, ...data });
+app.append(actions.render(structuredClone(server)));
+const edit = (name, value) => {
+  const input = app.querySelector(`[name="${name}"]`); input.value = value;
+  input.dispatchEvent(new Event('input', { bubbles: true })); input.dispatchEvent(new Event('change', { bubbles: true }));
+};
+document.addEventListener('click', event => {
+  if (event.target.closest('[data-gallery-conflict-sync]')) {
+    readFailure = stage === 'failure'; pendingRead = stage === 'pending'; syncing = true;
+  }
+}, true);
+new MutationObserver(() => {
+  if (syncing && app.querySelector('[data-gallery-record-screen]')?.getAttribute('aria-busy') === 'false') {
+    syncing = false; update();
+  }
+}).observe(app, { subtree: true, attributes: true, attributeFilter: ['aria-busy'] });
+try {
+  app.querySelector('[data-gallery-action="edit"]').click();
+  await waitFor(() => app.querySelector('form'), 'Formulário fictício não abriu');
+  app.querySelector('.gallery-editor-header').after(counter); update();
+  edit('Title', 'AJUSTE LOCAL ANTIGO FICTÍCIO');
+  server = { id: '42', eTag: '"v2"', fields: { Title: 'PRODUTO FICTÍCIO ATUAL NO SERVIDOR', OBS: 'OBSERVAÇÃO ATUALIZADA POR TERCEIRO FICTÍCIO', VALOR: 25 } };
+  app.querySelector('form').requestSubmit();
+  await waitFor(() => document.querySelector('[data-edit-review-submit]'), 'Confirmação Antes/Depois não abriu');
+  document.querySelector('[data-edit-review-submit]').click();
+  await waitFor(() => app.querySelector('[data-gallery-conflict-sync]:not(:disabled)'), '412 precisa oferecer SINCRONIZAR habilitado');
+  if (stage !== 'conflict') {
+    app.querySelector('[data-gallery-conflict-sync]').click();
+    if (stage === 'pending') await waitFor(() => calls.reads === 2, 'GET fictício pendente não iniciou');
+    else if (stage === 'failure') await waitFor(() => app.querySelector('[role="alert"]').textContent.includes('Leitura fictícia indisponível'), 'Falha fictícia não apareceu');
+    else {
+      await waitFor(() => app.querySelector('[name="Title"]')?.value === 'PRODUTO FICTÍCIO ATUAL NO SERVIDOR', 'Valores atuais não foram carregados');
+      if (stage === 'review' || stage === 'edited') {
+        edit('Title', 'NOVO AJUSTE LOCAL FICTÍCIO');
+        if (stage === 'review') {
+          app.querySelector('form').requestSubmit();
+          await waitFor(() => document.querySelector('[data-edit-review]'), 'Nova confirmação não abriu');
+        }
+      }
+    }
+  }
+  update(); document.documentElement.dataset.ready = 'true';
+  window.conflictSyncFixture = { calls, actions, metrics: () => ({ ...calls, stage }) };
+} catch (error) {
+  document.documentElement.dataset.error = error.message;
+  console.error(error); update();
+}
+</script>
+</body>
+</html>
