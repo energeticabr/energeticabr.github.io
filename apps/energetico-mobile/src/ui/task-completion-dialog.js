@@ -1,6 +1,7 @@
 import { createLoadingIndicator } from './loading-indicator.js';
 import { beginLoadingTask } from './loading-task.js';
 import { postingCompletionMarkup } from './posting-completion.js';
+import { bindEditHighlights, buildEditChanges, cancelEditReview, confirmEditChanges } from '../../../../portal/ui/edit-review.js';
 
 const key = value => String(value || '').replace(/_x([0-9a-f]{4})_/gi, (_, hex) => String.fromCodePoint(parseInt(hex, 16)))
   .normalize('NFD').replace(/[\u0300-\u036f]/g, '').toUpperCase().replace(/[^A-Z0-9]/g, '');
@@ -17,6 +18,8 @@ export function createTaskCompletionDialog({ document: doc, host, data, today, o
   const active = current => !disposed && current === state;
   function close() {
     const previous = state; state = null;
+    if (previous?.form) cancelEditReview(previous.form);
+    previous?.highlights?.cleanup();
     previous?.abort.abort();
     clearTimeout(previous?.receiptTimer);
     previous?.finishReceipt?.();
@@ -124,6 +127,11 @@ export function createTaskCompletionDialog({ document: doc, host, data, today, o
       const submit = el('button', 'gallery-record-dialog-button tg-completion-submit', 'Submeter');
       submit.type = 'submit'; submit.setAttribute('data-task-completion-submit', '');
       buttons.append(submit); form.append(buttons); body.replaceChildren(form); date.focus({ preventScroll: true });
+      current.form = form;
+      const reviewColumns = [{ ...dateColumn, name: 'completionDate', control: 'date' }, { ...completedColumn, name: 'completed' }];
+      const baseline = { completionDate: context.item.fields?.[dateColumn.name], completed: context.item.fields?.[completedColumn.name] };
+      const readFields = () => ({ completionDate: date.value, completed: completed.value });
+      current.highlights = bindEditHighlights({ form, columns: reviewColumns, baseline, readFields });
       async function reconcile() {
         const latest = await data.loadEditor(row.id, { refresh: true, includeAttachments: false });
         if (!active(current)) return;
@@ -138,9 +146,19 @@ export function createTaskCompletionDialog({ document: doc, host, data, today, o
       }
       form.addEventListener('submit', async event => {
         event.preventDefault();
-        if (!active(current) || current.busy || pending) return;
+        if (!active(current) || current.busy || current.reviewing || pending) return;
         if (!current.persisted && !date.checkValidity()) {
           error(current, new Error('Informe uma data de conclusão válida.')); date.focus(); return;
+        }
+        if (!current.persisted && !current.needsReconcile) {
+          const fields = readFields();
+          const changes = buildEditChanges(reviewColumns, baseline, fields);
+          if (!changes.length) return;
+          current.reviewing = true;
+          let accepted;
+          try { accepted = await confirmEditChanges({ form, changes, title: `Revisar conclusão da tarefa #${row.id}`, signal: current.abort.signal }); }
+          finally { current.reviewing = false; }
+          if (!accepted || !active(current) || pending || fields.completionDate !== date.value) return;
         }
         pending = true; current.busy = true; message.hidden = true; dialog.setAttribute('aria-busy', 'true');
         const inputs = [date, completed, cancel, back, submit]; inputs.forEach(input => { input.disabled = true; });

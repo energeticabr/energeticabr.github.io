@@ -1,5 +1,6 @@
 import assert from "node:assert/strict";
 import test from "node:test";
+import { createReviewForm, submitAndConfirm } from './helpers/edit-review-dom.mjs';
 
 import { mapSharePointColumns, validateFormValues } from "../portal/data/column-mapper.js";
 import { createSharePointRepository } from "../portal/data/sharepoint-repository.js";
@@ -1093,7 +1094,8 @@ test("controlador Power Apps filtra opções fechadas a partir de uma letra", as
 
 function relationshipFormFixture(initial = {}) {
   const listeners = new Map();
-  const hidden = { name: "CLIENTE", value: String(initial.id || ""), disabled: false };
+  const hidden = createReviewForm().ownerDocument.createElement('input');
+  hidden.name = 'CLIENTE'; hidden.value = String(initial.id || '');
   const search = {
     value: String(initial.label || ""),
     disabled: false,
@@ -1128,7 +1130,7 @@ function relationshipFormFixture(initial = {}) {
     removeEventListener(name) { listeners.delete(`cancel:${name}`); },
   };
   const errors = { textContent: "", hidden: true };
-  const form = {
+  const form = createReviewForm({
     attributes: new Map(),
     elements: {
       namedItem(name) { return name === "CLIENTE" ? hidden : null; },
@@ -1139,7 +1141,7 @@ function relationshipFormFixture(initial = {}) {
     querySelectorAll(selector) { return selector === "[data-relation-field]" ? [container] : []; },
     addEventListener(name, listener) { listeners.set(`form:${name}`, listener); },
     removeEventListener(name) { listeners.delete(`form:${name}`); },
-  };
+  });
   const root = {
     innerHTML: "",
     querySelector(selector) {
@@ -1160,7 +1162,7 @@ function relationshipFormFixture(initial = {}) {
         target: { closest() { return { dataset: { relationOption: String(index) } }; } },
       });
     },
-    submit() { return listeners.get("form:submit")?.({ preventDefault() {} }); },
+    submit() { return submitAndConfirm(form, () => listeners.get("form:submit")?.({ preventDefault() {} })); },
   };
 }
 

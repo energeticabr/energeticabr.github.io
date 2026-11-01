@@ -260,6 +260,9 @@
         ...literals.map(([field, choices]) => [field, choices[1]]),
       ]);
       host.querySelector('[data-form-save]').click();
+      await until(() => document.querySelector('[data-edit-review-submit]'), 'review confirmation');
+      check(writes.length === 0, 'Opening edit review must not PATCH');
+      document.querySelector('[data-edit-review-submit]').click();
       await until(() => host.querySelector('[data-gallery-edit-success]'), 'real save success receipt');
       check(submitCount === 1 && writes.length === 1 && changedCount === 1, 'Submit must issue exactly one simulated conditional PATCH and refresh');
       same(Object.keys(writes[0].body).sort(), Object.keys(expectedPatch).sort(), 'PATCH field allowlist');

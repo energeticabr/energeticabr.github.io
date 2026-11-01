@@ -104,12 +104,12 @@ test('RH typed text cannot fill a missing selection or replace the last chosen c
   const { dom, doc, f, form } = await openRhEditor(t), cargo = rhPicker(form, 'CARGO');
   cargo.select.value = '';
   filterRhPicker(dom.window, cargo, 'mestre');
-  form.dispatchEvent(new dom.window.Event('submit', { bubbles: true, cancelable: true })); await tick();
+  form.dispatchEvent(new dom.window.Event('submit', { bubbles: true, cancelable: true })); doc.querySelector('[data-edit-review-submit]')?.click(); await tick(); await tick();
   assert.equal(f.writes.length, 0); assert.match(doc.querySelector('[role="alert"]').textContent, /cargo válido/);
   cargo.field.querySelector('[role="option"]').click();
   filterRhPicker(dom.window, cargo, 'CARGO INVENTADO');
   assert.equal(cargo.field.querySelector('[role="option"]'), null);
-  form.dispatchEvent(new dom.window.Event('submit', { bubbles: true, cancelable: true })); await tick();
+  form.dispatchEvent(new dom.window.Event('submit', { bubbles: true, cancelable: true })); doc.querySelector('[data-edit-review-submit]')?.click(); await tick(); await tick();
   assert.equal(f.target.fields.CARGO, 'MESTRE DE OBRAS');
   assert.equal(f.writes.length, 1); assert.equal(f.writes[0].fields.CARGO, 'MESTRE DE OBRAS');
 });
@@ -125,10 +125,10 @@ test('RH searchable status preserves inactivation and explicit reactivation date
   assert.equal(date.value, ''); assert.equal(date.required, false);
   filterRhPicker(dom.window, state, 'inati'); state.field.querySelector('[role="option"]').click();
   assert.equal(date.required, true);
-  form.dispatchEvent(new dom.window.Event('submit', { bubbles: true, cancelable: true })); await tick();
+  form.dispatchEvent(new dom.window.Event('submit', { bubbles: true, cancelable: true })); doc.querySelector('[data-edit-review-submit]')?.click(); await tick(); await tick();
   assert.equal(f.writes.length, 0); assert.match(doc.querySelector('[role="alert"]').textContent, /desligamento/);
   state.select.value = ''; filterRhPicker(dom.window, state, 'ATIVO');
-  form.dispatchEvent(new dom.window.Event('submit', { bubbles: true, cancelable: true })); await tick();
+  form.dispatchEvent(new dom.window.Event('submit', { bubbles: true, cancelable: true })); doc.querySelector('[data-edit-review-submit]')?.click(); await tick(); await tick();
   assert.equal(f.writes.length, 0); assert.match(doc.querySelector('[role="alert"]').textContent, /status válido/);
 });
 
@@ -148,7 +148,7 @@ for (const action of ['cancel', 'Escape', 'refresh', 'close', 'reopen', 'destroy
   else view.destroy();
   assert.equal(listenerCount(), 0, 'discarding the editor must remove its document and viewport listeners');
   staleOption.click(); assert.equal(cargo.select.value, 'PEDREIRO III');
-  form.dispatchEvent(new dom.window.Event('submit', { bubbles: true, cancelable: true })); await tick();
+  form.dispatchEvent(new dom.window.Event('submit', { bubbles: true, cancelable: true })); doc.querySelector('[data-edit-review-submit]')?.click(); await tick(); await tick();
   assert.equal(f.writes.length, 0, 'a detached form must never save');
   if (action !== 'destroy') {
     if (action === 'close') await view.open();
@@ -168,7 +168,7 @@ test('RH busy save closes and locks pickers immediately and saves only once', as
   const cargo = rhPicker(form, 'CARGO'); filterRhPicker(dom.window, cargo, 'mestre'); cargo.field.querySelector('[role="option"]').click();
   filterRhPicker(dom.window, cargo, 'pedreiro');
   const staleOption = cargo.field.querySelector('[role="option"]');
-  form.dispatchEvent(new dom.window.Event('submit', { bubbles: true, cancelable: true }));
+  form.dispatchEvent(new dom.window.Event('submit', { bubbles: true, cancelable: true })); doc.querySelector('[data-edit-review-submit]')?.click(); await tick();
   assert.equal(cargo.popup.hidden, true, 'saving must close the popup synchronously');
   const arrow = form.querySelector('[data-gallery-editor-back]');
   assert.ok(arrow); assert.equal(arrow.disabled, true); arrow.click();
@@ -178,7 +178,7 @@ test('RH busy save closes and locks pickers immediately and saves only once', as
   view.close(); assert.equal(doc.querySelector('.ce-overlay').hidden, false);
   await view.open(); assert.equal(doc.querySelector('form'), form, 'reopening while saving must retain the active editor');
   staleOption.click(); assert.equal(cargo.select.value, 'MESTRE DE OBRAS');
-  form.dispatchEvent(new dom.window.Event('submit', { bubbles: true, cancelable: true }));
+  form.dispatchEvent(new dom.window.Event('submit', { bubbles: true, cancelable: true })); doc.querySelector('[data-edit-review-submit]')?.click(); await tick();
   release(); await tick();
   assert.equal(f.writes.length, 1); assert.equal(doc.querySelector('form'), null); assert.equal(listenerCount(), 0);
 });
@@ -201,7 +201,7 @@ test('RH conflict review suspends pickers and restores the draft without accumul
   doc.querySelector('[data-action="renew-baseline"]').click(); await tick();
   assert.equal(listenerCount(), initialListeners);
   assert.equal(doc.querySelectorAll('.ce-editor [role="combobox"]').length, 2);
-  form.dispatchEvent(new dom.window.Event('submit', { bubbles: true, cancelable: true })); await tick();
+  form.dispatchEvent(new dom.window.Event('submit', { bubbles: true, cancelable: true })); doc.querySelector('[data-edit-review-submit]')?.click(); await tick(); await tick();
   assert.equal(f.writes.length, 0, 'renewing a baseline invalidates the previous form');
 });
 
@@ -209,7 +209,7 @@ test('RH pending update resumes searchable native choices and retains them after
   const { dom, doc, f, form, view, listenerCount } = await openRhEditor(t);
   f.failTarget(true);
   const cargo = rhPicker(form, 'CARGO'); filterRhPicker(dom.window, cargo, 'mestre'); cargo.field.querySelector('[role="option"]').click();
-  form.dispatchEvent(new dom.window.Event('submit', { bubbles: true, cancelable: true })); await tick();
+  form.dispatchEvent(new dom.window.Event('submit', { bubbles: true, cancelable: true })); doc.querySelector('[data-edit-review-submit]')?.click(); await tick(); await tick();
   assert.equal(cargo.input.disabled, false); assert.equal(cargo.select.value, 'MESTRE DE OBRAS');
   const initialListeners = listenerCount();
   view.close(); assert.equal(listenerCount(), 0); await view.open();
@@ -219,7 +219,7 @@ test('RH pending update resumes searchable native choices and retains them after
   picker.input.click(); assert.equal(picker.input.value, '');
   assert.equal(rhPicker(resumed, 'STATUS').select.value, 'ATIVO');
   f.failTarget(false);
-  resumed.dispatchEvent(new dom.window.Event('submit', { bubbles: true, cancelable: true })); await tick();
+  resumed.dispatchEvent(new dom.window.Event('submit', { bubbles: true, cancelable: true })); doc.querySelector('[data-edit-review-submit]')?.click(); await tick(); await tick();
   assert.equal(f.target.fields.CARGO, 'MESTRE DE OBRAS'); assert.equal(f.writes.length, 2); assert.equal(listenerCount(), 0);
 });
 
@@ -252,7 +252,7 @@ test('retains editor and shows explicit partial error without claiming successfu
     await view.open(); doc.querySelector('[data-action="edit"]').click();
     doc.querySelector('[name="CARGO"]').value = 'PEDREIRO III';
     doc.querySelector('[name="DATAADMISSAO"]').value = '2026-01-20';
-    doc.querySelector('form').dispatchEvent(new dom.window.Event('submit', { bubbles: true, cancelable: true }));
+    doc.querySelector('form').dispatchEvent(new dom.window.Event('submit', { bubbles: true, cancelable: true })); doc.querySelector('[data-edit-review-submit]')?.click(); await tick();
     await tick();
     assert.match(doc.querySelector('[role="alert"]').textContent, /espelho pendente/);
     assert.ok(doc.querySelector('form'));
@@ -285,10 +285,10 @@ test('inactivation validates dates before save and a valid submit updates the re
     await view.open(); doc.querySelector('[data-action="inactivate"]').click();
     const form = doc.querySelector('form'), date = doc.querySelector('[name="DATADESLIGAMENTO"]');
     for (const value of ['', '2026-01-19']) {
-      date.value = value; form.dispatchEvent(new dom.window.Event('submit', { bubbles: true, cancelable: true })); await tick();
+      date.value = value; form.dispatchEvent(new dom.window.Event('submit', { bubbles: true, cancelable: true })); doc.querySelector('[data-edit-review-submit]')?.click(); await tick(); await tick();
       assert.equal(writes.length, 0); assert.match(doc.querySelector('[role="alert"]').textContent, /desligamento|admissão/);
     }
-    date.value = '2026-01-20'; form.dispatchEvent(new dom.window.Event('submit', { bubbles: true, cancelable: true })); await tick();
+    date.value = '2026-01-20'; form.dispatchEvent(new dom.window.Event('submit', { bubbles: true, cancelable: true })); doc.querySelector('[data-edit-review-submit]')?.click(); await tick(); await tick();
     assert.equal(writes.length, 1);
     assert.equal(doc.querySelectorAll('[data-employment-row]').length, 1);
     assert.match(doc.querySelector('[data-employment-row]').textContent, /INATIVO/);
@@ -318,11 +318,11 @@ test('cargo edit cannot reactivate source; explicit status review shows RH-only 
   try {
     await view.open(); doc.querySelector('[data-employment-row="4"] [data-action="edit"]').click();
     doc.querySelector('[name="CARGO"]').value = 'MESTRE DE OBRAS';
-    doc.querySelector('form').dispatchEvent(new dom.window.Event('submit', { bubbles: true, cancelable: true })); await tick();
+    doc.querySelector('form').dispatchEvent(new dom.window.Event('submit', { bubbles: true, cancelable: true })); doc.querySelector('[data-edit-review-submit]')?.click(); await tick(); await tick();
     assert.deepEqual(f.writes.map(w => w.list), ['FUNCIONARIOSRH']); assert.equal(f.source.fields.STATUS, 'INATIVO');
     doc.querySelector('[data-employment-row="4"] [data-action="inactivate"]').click();
     doc.querySelector('[name="DATADESLIGAMENTO"]').value = '2026-02-20';
-    doc.querySelector('form').dispatchEvent(new dom.window.Event('submit', { bubbles: true, cancelable: true })); await tick();
+    doc.querySelector('form').dispatchEvent(new dom.window.Event('submit', { bubbles: true, cancelable: true })); doc.querySelector('[data-edit-review-submit]')?.click(); await tick(); await tick();
     assert.equal(f.writes.length, 1); assert.match(doc.querySelector('[role="alert"]').textContent, /diverge/);
     doc.querySelector('[data-employment-row="4"] [data-action="review-conflict"]').click(); await tick();
     const source = doc.querySelector('[data-conflict-source]');
@@ -332,10 +332,10 @@ test('cargo edit cannot reactivate source; explicit status review shows RH-only 
     assert.equal(doc.querySelector('[name="STATUS"]').value, 'INATIVO');
     assert.equal(doc.querySelector('[name="DATAADMISSAO"]').value, '2026-01-20');
     assert.equal(doc.querySelector('[name="DATADESLIGAMENTO"]').value, '');
-    doc.querySelector('form').dispatchEvent(new dom.window.Event('submit', { bubbles: true, cancelable: true })); await tick();
+    doc.querySelector('form').dispatchEvent(new dom.window.Event('submit', { bubbles: true, cancelable: true })); doc.querySelector('[data-edit-review-submit]')?.click(); await tick(); await tick();
     assert.equal(f.writes.length, 1); assert.match(doc.querySelector('[role="alert"]').textContent, /desligamento/);
     doc.querySelector('[name="DATADESLIGAMENTO"]').value = '2026-02-20';
-    doc.querySelector('form').dispatchEvent(new dom.window.Event('submit', { bubbles: true, cancelable: true })); await tick();
+    doc.querySelector('form').dispatchEvent(new dom.window.Event('submit', { bubbles: true, cancelable: true })); doc.querySelector('[data-edit-review-submit]')?.click(); await tick(); await tick();
     assert.equal(f.writes.length, 2); assert.equal(f.source.fields.STATUS, 'INATIVO');
   } finally { view.destroy(); dom.window.close(); }
 });
@@ -346,7 +346,7 @@ test('target partial conflict can be cancelled then renewed after a reviewed sup
   try {
     await view.open(); f.failTarget(true);
     doc.querySelector('[data-employment-row="4"] [data-action="edit"]').click(); doc.querySelector('[name="CARGO"]').value = 'MESTRE DE OBRAS';
-    doc.querySelector('form').dispatchEvent(new dom.window.Event('submit', { bubbles: true, cancelable: true })); await tick();
+    doc.querySelector('form').dispatchEvent(new dom.window.Event('submit', { bubbles: true, cancelable: true })); doc.querySelector('[data-edit-review-submit]')?.click(); await tick(); await tick();
     assert.equal(f.writes.length, 1); assert.match(doc.querySelector('[role="alert"]').textContent, /não foi confirmada/);
     f.target.fields.CARGO = 'SUPERVISOR DE OBRAS'; f.target.eTag = '"9"'; f.source.fields.STATUS = 'INATIVO'; f.source.eTag = '"9"'; f.failTarget(false);
     doc.querySelector('[data-action="refresh"]').click(); await tick();
@@ -359,7 +359,7 @@ test('target partial conflict can be cancelled then renewed after a reviewed sup
     assert.equal(doc.querySelector('[name="STATUS"]').value, 'ATIVO'); assert.equal(doc.querySelector('[name="CARGO"]').value, 'MESTRE DE OBRAS', 'the reviewed pending cargo intent survives renewal');
     assert.doesNotMatch(doc.querySelector('[role="status"]').textContent, /Atualização confirmada/);
     doc.querySelector('[name="CARGO"]').value = 'SERVENTE DE PEDREIRO III';
-    doc.querySelector('form').dispatchEvent(new dom.window.Event('submit', { bubbles: true, cancelable: true })); await tick();
+    doc.querySelector('form').dispatchEvent(new dom.window.Event('submit', { bubbles: true, cancelable: true })); doc.querySelector('[data-edit-review-submit]')?.click(); await tick(); await tick();
     assert.equal(f.writes.length, 2); assert.equal(f.source.fields.STATUS, 'INATIVO'); assert.match(doc.querySelector('[role="status"]').textContent, /Atualização confirmada/);
   } finally { view.destroy(); dom.window.close(); }
 });
@@ -372,7 +372,7 @@ test('review cannot discard an uncertain target write whose original ETag has no
   try {
     await view.open(); doc.querySelector('[data-employment-row="4"] [data-action="edit"]').click();
     doc.querySelector('[name="CARGO"]').value = 'MESTRE DE OBRAS';
-    doc.querySelector('form').dispatchEvent(new dom.window.Event('submit', { bubbles: true, cancelable: true })); await tick();
+    doc.querySelector('form').dispatchEvent(new dom.window.Event('submit', { bubbles: true, cancelable: true })); doc.querySelector('[data-edit-review-submit]')?.click(); await tick(); await tick();
     const review = doc.querySelector('[data-employment-row="4"] [data-action="review-conflict"]');
     assert.ok(review); review.click(); await tick();
     const renew = doc.querySelector('[data-action="renew-baseline"]');
@@ -390,12 +390,12 @@ test('a new partial save replaces any earlier success status until both records 
     await view.open();
     doc.querySelector('[data-employment-row="4"] [data-action="edit"]').click();
     doc.querySelector('[name="CARGO"]').value = 'MESTRE DE OBRAS';
-    doc.querySelector('form').dispatchEvent(new dom.window.Event('submit', { bubbles: true, cancelable: true })); await tick();
+    doc.querySelector('form').dispatchEvent(new dom.window.Event('submit', { bubbles: true, cancelable: true })); doc.querySelector('[data-edit-review-submit]')?.click(); await tick(); await tick();
     assert.match(doc.querySelector('[role="status"]').textContent, /Atualização confirmada/);
     failTarget(true);
     doc.querySelector('[data-employment-row="4"] [data-action="edit"]').click();
     doc.querySelector('[name="CARGO"]').value = 'SUPERVISOR DE OBRAS';
-    doc.querySelector('form').dispatchEvent(new dom.window.Event('submit', { bubbles: true, cancelable: true })); await tick();
+    doc.querySelector('form').dispatchEvent(new dom.window.Event('submit', { bubbles: true, cancelable: true })); doc.querySelector('[data-edit-review-submit]')?.click(); await tick(); await tick();
     assert.match(doc.querySelector('[role="alert"]').textContent, /não foi confirmada/);
     assert.doesNotMatch(doc.querySelector('[role="status"]').textContent, /Atualização confirmada/);
   } finally { view.destroy(); dom.window.close(); }
@@ -421,7 +421,25 @@ test('choosing reactivation explicitly clears the RH termination before synchron
     await view.open(); doc.querySelector('[data-employment-row="4"] [data-action="edit"]').click();
     const state = doc.querySelector('[name="STATUS"]'); state.value = 'ATIVO'; state.dispatchEvent(new dom.window.Event('change'));
     assert.equal(doc.querySelector('[name="DATADESLIGAMENTO"]').value, '');
-    doc.querySelector('form').dispatchEvent(new dom.window.Event('submit', { bubbles: true, cancelable: true })); await tick();
+    doc.querySelector('form').dispatchEvent(new dom.window.Event('submit', { bubbles: true, cancelable: true })); doc.querySelector('[data-edit-review-submit]')?.click(); await tick(); await tick();
     assert.equal(f.target.fields.DATADESLIGAMENTO, null); assert.deepEqual(f.writes[0].fields, { STATUS: 'ATIVO' });
   } finally { view.destroy(); dom.window.close(); }
+});
+
+
+test('RH fields are orange and require Before/After confirmation before saving', async t => {
+  const { dom, doc, f, form } = await openRhEditor(t);
+  const cargo = form.elements.namedItem('CARGO');
+  cargo.value = 'PEDREIRO II'; cargo.dispatchEvent(new dom.window.Event('change', { bubbles: true }));
+  assert.ok(cargo.closest('[data-edit-changed]'));
+  form.dispatchEvent(new dom.window.Event('submit', { bubbles: true, cancelable: true })); await tick();
+  const popup = doc.querySelector('[data-edit-review]');
+  assert.ok(popup); assert.match(popup.textContent, /Cargo/);
+  assert.match(popup.textContent, /PEDREIRO III/); assert.match(popup.textContent, /PEDREIRO II/);
+  assert.equal(f.writes.length, 0);
+  popup.querySelector('[data-edit-review-cancel]').click(); await tick();
+  assert.equal(cargo.value, 'PEDREIRO II'); assert.equal(f.writes.length, 0);
+  form.dispatchEvent(new dom.window.Event('submit', { bubbles: true, cancelable: true })); await tick();
+  doc.querySelector('[data-edit-review-submit]').click(); await tick(); await tick();
+  assert.ok(f.writes.length > 0);
 });

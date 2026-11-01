@@ -36,6 +36,7 @@ import { appendRecentDiaryActivity, diaryActivityInDraft } from "../chat/constru
 import { Capacitor, PowerBiZoom } from "../native/plugins.js";
 import { provisionDateKey, provisionDueState, provisionNumericValue } from "../chat/pending-provision-dates.js";
 import Decimal from "decimal.js";
+import { buildEditChanges, cancelEditReview, confirmEditChanges, ensureEditReviewStyles } from '../../../../portal/ui/edit-review.js';
 
 const MASCOT_URL = new URL("../../pwa/icons/mascote-192.png", import.meta.url).href;
 const PENDING_PROVISIONS_MASCOT_URL = new URL('../../../../assets/report-mascots/pending-provisions.png', import.meta.url).href;
@@ -2905,6 +2906,83 @@ export function commandFromTarget(target) {
 }
 
 export function createChatView(root, { onOpenSettings, onDemoAccess, onSignOut, ensureMicrophonePermission, transcribeAudio, demo = false } = {}) {
+  let customEditReview = null;
+  function clearCustomEditReview() {
+    const current = customEditReview;
+    customEditReview = null;
+    if (!current) return null;
+    const snapshot = { key: current.key, baseline: current.baseline, fields: current.readFields() };
+    current.abort.abort();
+    cancelEditReview(current.form);
+    current.form.removeEventListener('input', current.highlight);
+    current.form.removeEventListener('change', current.highlight);
+    return snapshot;
+  }
+  // These editors use dialog containers rather than HTML forms. Keep their
+  // original callbacks and compare only their actual persisted field inputs.
+  function bindCustomEditReview(state, previous) {
+    let key, form, columns, baseline, busy;
+    const dueId = String(state.pendingProvisionDateEditPaymentId || '');
+    if (dueId && (form = root.querySelector('.chat-pending-provision-date-edit'))) {
+      const row = state.pendingProvisions?.rows?.find(row => String(row.id) === dueId);
+      if (!row) return;
+      key = `due:${row.sourceKind ?? state.pendingProvisions?.sourceKind ?? ''}:${dueId}`;
+      columns = [{ name: 'pending-provision-due-date', label: 'Vencimento', control: 'date' }];
+      baseline = { 'pending-provision-due-date': provisionDateKey(row.dueDate) };
+      busy = state.pendingProvisionDateEditBusy;
+    } else if (attendanceIrregularityDialog && !attendanceIrregularityDialog.readFailed
+      && (form = root.querySelector('.chat-attendance-irregularity'))) {
+      key = `irregularity:${attendanceIrregularityDialog.pollKey}:${attendanceIrregularityDialog.id}`;
+      columns = [{ name: 'attendance-irregularity-reason', label: 'Justificativa', control: 'textarea', isMessage: true }];
+      // A saved justification skips this dialog; the verified persisted value here is empty.
+      baseline = { 'attendance-irregularity-reason': '' };
+      busy = attendanceIrregularityDialog.busy;
+    } else if (rhidAttendanceAdjustment?.previous
+      && (form = root.querySelector('.chat-rhid-adjustment'))) {
+      const adjustment = rhidAttendanceAdjustment;
+      key = `rhid:${adjustment.messageId}:${adjustment.personKey}:${adjustment.slot}:${adjustment.previous.id}`;
+      columns = [{ name: 'rhid-adjustment-time', label: 'Horário corrigido', control: 'time' },
+        { name: 'rhid-adjustment-reason', label: 'Justificativa', control: 'textarea', isMessage: true }];
+      baseline = { 'rhid-adjustment-time': adjustment.previous.time || '', 'rhid-adjustment-reason': adjustment.previous.reason || '' };
+      busy = adjustment.busy;
+    } else return;
+    key = JSON.stringify([state.sessionStatus, state.account?.homeAccountId ?? state.account?.username ?? state.account?.id ?? null, key]);
+    ensureEditReviewStyles(root.ownerDocument);
+    if (previous?.key === key) {
+      baseline = previous.baseline;
+      if (!busy) for (const column of columns) {
+        form.querySelector(`[data-role="${column.name}"]`).value = previous.fields[column.name] ?? '';
+      }
+    }
+    const readFields = () => Object.fromEntries(columns.map(column => [column.name,
+      String(form.querySelector(`[data-role="${column.name}"]`)?.value || '').trim()]));
+    const current = { key, form, columns, baseline, readFields, abort: new AbortController(), reviewing: false, submitted: false };
+    current.highlight = () => {
+      const changed = new Set(buildEditChanges(columns, baseline, readFields()).map(change => change.name));
+      for (const column of columns) form.querySelector(`[data-role="${column.name}"]`)
+        ?.toggleAttribute('data-edit-changed', changed.has(column.name));
+    };
+    form.addEventListener('input', current.highlight);
+    form.addEventListener('change', current.highlight);
+    customEditReview = current;
+    current.highlight();
+  }
+  async function reviewCustomEdit(title) {
+    const current = customEditReview;
+    if (!current || current.reviewing || current.submitted) return false;
+    const fields = current.readFields();
+    const changes = buildEditChanges(current.columns, current.baseline, fields);
+    if (!changes.length) return false;
+    current.highlight();
+    current.reviewing = true;
+    try {
+      const accepted = await confirmEditChanges({ form: current.form, changes, title, signal: current.abort.signal });
+      if (!accepted || customEditReview !== current || !current.form.isConnected
+        || JSON.stringify(fields) !== JSON.stringify(current.readFields())) return false;
+      current.submitted = true;
+      return true;
+    } finally { current.reviewing = false; }
+  }
   const signatureTrace = observeSignatureTrace(root);
   if (!root?.addEventListener) throw new TypeError("A tela do Energético requer um elemento raiz.");
   const cameraChooser = createCameraChooser(root.ownerDocument);
@@ -4256,6 +4334,8 @@ export function createChatView(root, { onOpenSettings, onDemoAccess, onSignOut, 
     }
     dialog.reason = reason;
     dialog.error = '';
+    if (!await reviewCustomEdit(`Revisar justificativa — ${dialog.label}`)
+      || attendanceIrregularityDialog !== dialog || attendanceSelectionPollKey !== dialog.pollKey) return;
     dialog.busy = true;
     rerenderAttendance();
     try {
@@ -4441,6 +4521,12 @@ export function createChatView(root, { onOpenSettings, onDemoAccess, onSignOut, 
     }
     if (command.type === "send-text") return;
     event.preventDefault?.();
+    if (command.type === 'save-pending-provision-due-date') {
+      const field = root.querySelector('[data-role="pending-provision-due-date"]');
+      if (!field?.value || !field.checkValidity() || lastState?.pendingProvisionDateEditBusy) return;
+      void reviewCustomEdit(`Revisar vencimento — ${command.paymentId}`).then(accepted => { if (accepted) emit(command); });
+      return;
+    }
     if (provisionSelection.handleReply(command, clickedAction)) return;
     if (command.type === "append-diary-activity") {
       const activePoll = [...(lastState?.messages || [])].reverse()
@@ -4627,7 +4713,7 @@ export function createChatView(root, { onOpenSettings, onDemoAccess, onSignOut, 
         messageId: command.messageId, personKey: command.personKey, slot: command.slot,
         personName: person.name, label, rhid: slot.rhidCandidates?.join(", ") || slot.rhid || "",
         effective: slot.effective || suggestedRhidAdjustmentTime(command.slot, table.reportDate), currentEffective: slot.adjustment?.time || "", previous: slot.adjustment || null,
-        reason: !slot.rhid && !slot.rhidCandidates?.length ? "NÃO APONTADO" : "", busy: false, error: "",
+        reason: slot.adjustment?.reason ?? (!slot.rhid && !slot.rhidCandidates?.length ? "NÃO APONTADO" : ""), busy: false, error: "",
         canDelete: canDeleteRhidAdjustment(slot.adjustment, lastState?.account),
       };
       if (lastState) { const state = lastState; lastState = null; render(state); }
@@ -4667,11 +4753,17 @@ export function createChatView(root, { onOpenSettings, onDemoAccess, onSignOut, 
         if (banner) banner.textContent = error;
         return;
       }
-      rhidAttendanceAdjustment = { ...rhidAttendanceAdjustment, effective: time, reason, busy: true, deleting: false, error: "" };
-      const { messageId, presenceId, personKey, slot, adjustmentId } = rhidAttendanceAdjustment;
-      if (lastState) { const state = lastState; lastState = null; render(state); }
-      emit({ type: "rhid-attendance-adjust-save", messageId, personKey, slot, time, reason,
-        ...(presenceId === undefined ? {} : { presenceId, adjustmentId }) });
+      const current = rhidAttendanceAdjustment;
+      const save = () => {
+        if (rhidAttendanceAdjustment !== current || current.busy) return;
+        rhidAttendanceAdjustment = { ...current, effective: time, reason, busy: true, deleting: false, error: "" };
+        const { messageId, presenceId, personKey, slot, adjustmentId } = rhidAttendanceAdjustment;
+        if (lastState) { const state = lastState; lastState = null; render(state); }
+        emit({ type: "rhid-attendance-adjust-save", messageId, personKey, slot, time, reason,
+          ...(presenceId === undefined ? {} : { presenceId, adjustmentId }) });
+      };
+      if (current.previous) void reviewCustomEdit(`Revisar correção — ${current.personName}`).then(accepted => { if (accepted) save(); });
+      else save();
       return;
     }
     if (command.type === "open-rhid-attendance-report") {
@@ -5004,7 +5096,7 @@ export function createChatView(root, { onOpenSettings, onDemoAccess, onSignOut, 
   }
 
   function input(event) {
-    if (rhidAttendanceAdjustment?.presenceId !== undefined && !rhidAttendanceAdjustment.busy) {
+    if (rhidAttendanceAdjustment && !rhidAttendanceAdjustment.busy) {
       const role = event.target?.dataset?.role;
       if (role === "rhid-adjustment-time" || role === "rhid-adjustment-reason") {
         rhidAttendanceAdjustment[role === "rhid-adjustment-time" ? "effective" : "reason"] = event.target.value;
@@ -5633,6 +5725,7 @@ export function createChatView(root, { onOpenSettings, onDemoAccess, onSignOut, 
     const previousScroll = root.querySelector?.('[role="log"]')?.scrollTop || 0;
     const trayScroll = root.querySelector?.(".chat-file-tray")?.scrollTop || 0;
     const nextMessageKey = (state.messages || []).map(message => message.id).join("|");
+    const previousCustomEdit = clearCustomEditReview();
     updateShell(renderChatMarkup(renderState, {
       showSettings: typeof onOpenSettings === "function",
       allowDemo: typeof onDemoAccess === "function",
@@ -5669,6 +5762,7 @@ export function createChatView(root, { onOpenSettings, onDemoAccess, onSignOut, 
       attendanceIrregularityChecking: Boolean(attendanceIrregularityPending),
       launchPayrollSelectedIds: [...launchPayrollSelectedIds],
     }), state, { preserveSignaturePad, preserveSignaturePlacement });
+    bindCustomEditReview(state, previousCustomEdit);
     provisionSelection.sync(state, chatInteractionBusy(state, rhidAttendanceReportBusy));
     syncComposer(state);
     const attachments = root.querySelector?.(".chat-attachments");
@@ -5866,6 +5960,7 @@ export function createChatView(root, { onOpenSettings, onDemoAccess, onSignOut, 
       return () => handlers.get(type)?.delete(handler);
     },
     destroy() {
+      clearCustomEditReview();
       cameraChooser.destroy();
       signatureTrace.destroy();
       root.removeEventListener("click", click);

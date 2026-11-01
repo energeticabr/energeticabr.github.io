@@ -53,7 +53,8 @@ const detail = (overrides = {}) => ({ item: row(), attachments: [{ fileName: 'um
 const settle = () => new Promise(resolve => setImmediate(resolve));
 const deferred = () => { let resolve, reject; const promise = new Promise((a, b) => { resolve = a; reject = b; }); return { promise, resolve, reject }; };
 function button(root, text) {
-  const found = [...root.querySelectorAll('button')].find(node => node.textContent.trim() === text && !node.closest('[hidden]'));
+  const popup = root.matches('.lg-review') ? root : root.querySelector('.lg-review:not([hidden])');
+  const found = [...(popup || root).querySelectorAll('button')].find(node => node.textContent.trim() === text && !node.closest('[hidden]'));
   assert.ok(found, `visible button: ${text}`);
   return found;
 }
@@ -138,7 +139,7 @@ test('X do anexo no editor de lancamentos so exclui apos SUBMETER e permite Reto
   ctx.root().querySelector('[data-lg-attachment-remove="um.pdf"]').click();
   button(ctx.root(), 'SUBMETER').click(); await settle();
   assert.deepEqual(files.map(file => file.fileName), ['um.pdf', 'dois.png']);
-  button(ctx.root(), 'Confirmar alterações').click(); await settle(); await settle();
+  button(ctx.root(), 'SUBMETER').click(); await settle(); await settle();
   assert.deepEqual(files.map(file => file.fileName), ['dois.png'], JSON.stringify(ctx.calls) + ' ' + ctx.root().textContent.slice(-500));
 });
 
@@ -159,7 +160,7 @@ test('edicao de campos e anexos confirma ambos sem repetir o update', async t =>
   input(ctx,'QUANTIDADE','3');
   ctx.root().querySelector('[data-lg-attachment-remove="um.pdf"]').click();
   button(ctx.root(),'SUBMETER').click(); await settle();
-  button(ctx.root(),'Confirmar alterações').click(); await settle(); await settle();
+  button(ctx.root(),'SUBMETER').click(); await settle(); await settle();
   assert.equal(quantity,3); assert.deepEqual(files,[]);
   assert.equal(ctx.calls.filter(call=>call.operation==='update').length,1);
 });
@@ -343,7 +344,7 @@ test('editing a launch replaces a selected option and submits the replacement', 
   search.dispatchEvent(new ctx.dom.window.KeyboardEvent('keydown', { key: 'Escape', bubbles: true, cancelable: true }));
   button(ctx.root(), 'SUBMETER').click();
   assert.match(ctx.root().querySelector('.lg-review').textContent, /Contabilidade/);
-  button(ctx.root(), 'Confirmar alterações').click(); await settle();
+  button(ctx.root(), 'SUBMETER').click(); await settle();
   assert.deepEqual(mutations(ctx), [{ operation: 'update', payload: {
     id: 17, fields: { ETAPA: 'CONTABILIDADE' }, confirm: true,
     expectedModified: '2026-09-18T12:34:56Z',
@@ -371,7 +372,7 @@ test('SUBMETER opens a modal table with only changed fields and saves only after
   assert.deepEqual([...popup.querySelectorAll('tbody tr')].map(row => [...row.cells].map(cell => cell.textContent)),
     [['Quantidade', '2.5', '3']]);
   assert.equal(mutations(ctx).length, 0);
-  button(popup, 'Confirmar alterações').click(); await settle();
+  button(popup, 'SUBMETER').click(); await settle();
   assert.deepEqual(mutations(ctx).map(({operation, payload}) => [operation, payload.fields]),
     [['update', {QUANTIDADE: 3}]]);
   const receipt = ctx.root().querySelector('[data-gallery-edit-success]');
@@ -402,13 +403,40 @@ test('modal review compares choice labels and dates without exposing unchanged f
   assert.equal(mutations(ctx).length, 0);
 });
 
+test('mixed launch edits cannot discard a selected file when submitting fields', async t => {
+  let uploads=0;
+  const ctx=await setup(t,{upload:async()=>{uploads++;return{fileName:'novo.pdf'};}});
+  await ctx.gallery.open();await showDetail(ctx);
+  input(ctx,'QUANTIDADE','3');
+  const file=new ctx.dom.window.File(['pdf'],'novo.pdf',{type:'application/pdf'});
+  const picker=selectAttachment(ctx,file);
+  button(ctx.root().querySelector('.lg-editor'),'SUBMETER').click();
+  assert.equal(ctx.root().querySelector('.lg-review').hidden,true,'pending file needs its explicit attachment step first');
+  assert.match(ctx.root().querySelector('[role="alert"]').textContent,/ADICIONAR ANEXO/);
+  assert.equal(mutations(ctx).length,0);assert.equal(uploads,0);
+  assert.equal(picker.files[0],file);assert.equal(ctx.root().querySelector('[name="QUANTIDADE"]').value,'3');
+});
+
+test('launch review uses SUBMETER/CANCELAR and numeric equivalents do not count as changes', async t => {
+  const ctx = await setup(t);
+  await ctx.gallery.open(); await showDetail(ctx);
+  const quantity = input(ctx, 'QUANTIDADE', '2.500');
+  assert.equal(quantity.closest('.lg-field').classList.contains('lg-field-modified'), false);
+  input(ctx, 'QUANTIDADE', '4');
+  assert.equal(quantity.closest('.lg-field').classList.contains('lg-field-modified'), true);
+  button(ctx.root().querySelector('.lg-editor'), 'SUBMETER').click();
+  const popup = ctx.root().querySelector('.lg-review');
+  assert.deepEqual([...popup.querySelectorAll('.lg-review-actions button')].map(control => control.textContent), ['CANCELAR', 'SUBMETER']);
+  assert.equal(mutations(ctx).length, 0);
+});
+
 test('cancel and Escape close only the review popup and preserve the edited draft', async t => {
   const ctx = await setup(t);
   await ctx.gallery.open(); await showDetail(ctx);
   const draft = input(ctx, 'QUANTIDADE', '4');
   const submit = button(ctx.root(), 'SUBMETER');
   submit.click();
-  button(ctx.root().querySelector('.lg-review'), 'Cancelar confirmação').click();
+  button(ctx.root().querySelector('.lg-review'), 'CANCELAR').click();
   assert.equal(ctx.root().querySelector('.lg-review').hidden, true);
   assert.equal(draft.value, '4');
   assert.equal(ctx.root().querySelector('.lg-detail').hidden, false);
@@ -444,7 +472,7 @@ test('Escape and backdrop cannot dismiss a confirmation while its save is pendin
   input(ctx, 'QUANTIDADE', '4');
   button(ctx.root(), 'SUBMETER').click();
   const popup = ctx.root().querySelector('.lg-review');
-  button(popup, 'Confirmar alterações').click();
+  button(popup, 'SUBMETER').click();
   popup.dispatchEvent(new ctx.dom.window.KeyboardEvent('keydown', { key: 'Escape', bubbles: true }));
   popup.click();
   assert.equal(popup.hidden, false);
@@ -513,11 +541,11 @@ test('modified editor inputs and searchable triggers have a visible orange fill'
   const status = form.querySelector('[name="CONCLUÍDO"]');
   assert.equal(ctx.dom.window.getComputedStyle(quantity).backgroundColor, 'rgb(255, 255, 255)');
   input(ctx, 'QUANTIDADE', '3');
-  assert.equal(ctx.dom.window.getComputedStyle(quantity).backgroundColor, 'rgb(255, 240, 214)');
+  assert.equal(ctx.dom.window.getComputedStyle(quantity).backgroundColor, 'rgb(255, 204, 128)');
   form.querySelector('.sfs-trigger').click();
   [...form.querySelectorAll('.sfs-option')].find(option => option.textContent === 'Finalizado').click();
   assert.equal(status.value, 'PEDIDO FINALIZADO');
-  assert.equal(ctx.dom.window.getComputedStyle(form.querySelector('.sfs-trigger')).backgroundColor, 'rgb(255, 240, 214)');
+  assert.equal(ctx.dom.window.getComputedStyle(form.querySelector('.sfs-trigger')).backgroundColor, 'rgb(255, 204, 128)');
 });
 
 test('dependent choice cleared by a branch change is highlighted until its original value is restored', async t => {
@@ -543,7 +571,7 @@ test('dependent choice cleared by a branch change is highlighted until its origi
   input(ctx, 'FILIAL', 'Obra B'); await settle();
   assert.equal(stage.value, '');
   assert.equal(stageField.classList.contains('lg-field-modified'), true);
-  assert.equal(ctx.dom.window.getComputedStyle(stageField.querySelector('.sfs-trigger')).backgroundColor, 'rgb(255, 240, 214)');
+  assert.equal(ctx.dom.window.getComputedStyle(stageField.querySelector('.sfs-trigger')).backgroundColor, 'rgb(255, 204, 128)');
   input(ctx, 'FILIAL', 'Obra A'); await settle();
   stage.closest('.lg-field').querySelector('.sfs-trigger').click();
   [...stageField.querySelectorAll('.sfs-option')].find(option => option.textContent === 'Etapa antiga').click();
@@ -602,7 +630,7 @@ test('edit modal shows compact dates and an attachment picker below the current 
   button(ctx.root(), 'SUBMETER').click();
   assert.deepEqual(ctx.root().querySelector('.lg-review')?.hidden, false);
   assert.match(ctx.root().querySelector('.lg-review').textContent, /18\/09\/2026/);
-  button(ctx.root(), 'Confirmar alterações').click(); await settle();
+  button(ctx.root(), 'SUBMETER').click(); await settle();
   assert.equal(mutations(ctx).at(-1).payload.fields.DATA, '2026-09-18');
 });
 
@@ -627,7 +655,7 @@ test('numeric mobile date entry inserts separators before review', async t => {
   assert.equal(date.inputMode, 'numeric');
   assert.equal(date.value, '18/10/2026');
   button(ctx.root(), 'SUBMETER').click();
-  button(ctx.root(), 'Confirmar alterações').click(); await settle();
+  button(ctx.root(), 'SUBMETER').click(); await settle();
   assert.equal(mutations(ctx).at(-1).payload.fields.DATA, '2026-10-18');
 });
 
@@ -2066,7 +2094,7 @@ test('editor back arrow cannot dismiss an in-flight launch save', async t => {
   const arrow = ctx.root().querySelector('.lg-detail [data-gallery-editor-back]');
   assert.ok(arrow);
   button(ctx.root(), 'SUBMETER').click();
-  button(ctx.root(), 'Confirmar alterações').click(); await settle();
+  button(ctx.root(), 'SUBMETER').click(); await settle();
   assert.equal(arrow.disabled, true);
   arrow.click();
   arrow.dispatchEvent(new ctx.dom.window.Event('click', { bubbles: true }));
@@ -2119,7 +2147,7 @@ test('header Back keeps a launch confirmation and editor locked while saving', a
   } });
   await ctx.gallery.open(); await showDetail(ctx);
   input(ctx, 'QUANTIDADE', '4'); button(ctx.root(), 'SUBMETER').click();
-  button(ctx.root(), 'Confirmar alterações').click();
+  button(ctx.root(), 'SUBMETER').click();
   ctx.root().querySelector('.screen-navigation').firstElementChild.click();
   assert.equal(ctx.root().hidden, false);
   assert.equal(ctx.root().querySelector('.lg-review').hidden, false);
@@ -2188,8 +2216,8 @@ test('edit is retained during list reload, explicitly reviewed, locked on save a
   button(ctx.root(), 'SUBMETER').click();
   assert.equal(mutations(ctx).length, 0);
   assert.match(ctx.root().querySelector('.lg-review').textContent, /3[.,]75/);
-  button(ctx.root(), 'Confirmar alterações').click();
-  button(ctx.root(), 'Confirmar alterações').click();
+  button(ctx.root(), 'SUBMETER').click();
+  button(ctx.root(), 'SUBMETER').click();
   assert.deepEqual(mutations(ctx), [{ operation: 'update', payload: { id: 17,
     fields: { QUANTIDADE: 3.75 },
     confirm: true, expectedModified: '2026-09-18T12:34:56Z' } }]);
@@ -2198,7 +2226,7 @@ test('edit is retained during list reload, explicitly reviewed, locked on save a
   assert.equal(field.value, '3.75');
   assert.equal(field.disabled, false);
   assert.match(ctx.root().textContent, /Conflito/);
-  button(ctx.root(), 'Confirmar alterações').click(); await settle();
+  button(ctx.root(), 'SUBMETER').click(); await settle();
   assert.equal(mutations(ctx).length, 2);
   assert.equal(ctx.root().querySelector('.lg-detail').hidden, true, 'confirmed edit returns to the gallery');
   assert.equal(ctx.root().querySelector('.lg-editor'), null);
@@ -2331,7 +2359,7 @@ for (const alreadyUploaded of [false, true]) for (const legacyBlank of [false, t
     assert.equal(popup.hidden, false, 'attachments count as a change without unrelated field edits');
     assert.match(popup.textContent, /IMG_4722\.jpeg/);
     assert.equal(uploads.length, alreadyUploaded ? 1 : 0, 'SUBMETER waits for confirmation');
-    button(popup, alreadyUploaded ? 'Confirmar alterações' : 'Enviar anexo').click(); await settle();
+    button(popup, alreadyUploaded ? 'SUBMETER' : 'Enviar anexo').click(); await settle();
     assert.equal(uploads.length, 1, 'finishing never reuploads a saved file');
     assert.equal(uploads[0].id, 17);
     assert.equal(uploads[0].file, file);
@@ -2353,7 +2381,7 @@ test('canceling attachment-only SUBMETER preserves the selected file and never u
   selectAttachment(ctx, file);
   button(ctx.root(), 'SUBMETER').click();
   assert.equal(ctx.root().querySelector('.lg-review').hidden, false);
-  button(ctx.root(), 'Cancelar confirmação').click();
+  button(ctx.root(), 'CANCELAR').click();
   assert.equal(ctx.root().querySelector('.lg-review').hidden, true);
   assert.equal(ctx.root().querySelector('.lg-attachment-picker').files[0], file);
   assert.equal(ctx.root().querySelector('.lg-detail').hidden, false);
@@ -2376,7 +2404,7 @@ test('attachment-only lost upload response keeps its reconciliation warning visi
   assert.match(ctx.root().querySelector('[role="alert"]').textContent, /arquivo com esse nome.*verifique/i);
   assert.equal(uploads, 1);
   button(ctx.root(), 'SUBMETER').click();
-  button(ctx.root(), 'Confirmar alterações').click(); await settle();
+  button(ctx.root(), 'SUBMETER').click(); await settle();
   assert.equal(ctx.root().querySelector('.lg-detail').hidden, true);
   assert.equal(uploads, 1);
   assert.equal(mutations(ctx).length, 0);
@@ -2406,7 +2434,7 @@ test('attachment-only finish waits for detail refresh and confirmed presence of 
   visible = true;
   button(ctx.root(), 'SUBMETER').click(); await settle();
   assert.equal(ctx.root().querySelector('.lg-review').hidden, false);
-  button(ctx.root(), 'Confirmar alterações').click(); await settle();
+  button(ctx.root(), 'SUBMETER').click(); await settle();
   assert.equal(ctx.root().querySelector('.lg-detail').hidden, true);
   assert.equal(uploads, 1);
   assert.equal(mutations(ctx).length, 0);
@@ -2444,7 +2472,7 @@ test('attachment-only summary lists each uploaded file and does not leak into a 
   assert.deepEqual([...ctx.root().querySelectorAll('.lg-review tbody tr')].map(tr => [...tr.cells].map(td => td.textContent)), [
     ['Anexo adicionado', '—', 'um-novo.jpeg'], ['Anexo adicionado', '—', 'outro.pdf'],
   ]);
-  button(ctx.root(), 'Confirmar alterações').click(); await settle();
+  button(ctx.root(), 'SUBMETER').click(); await settle();
   assert.match(ctx.root().querySelector('[data-gallery-edit-success]').textContent, /um-novo.jpeg/);
   ctx.root().querySelector('[data-gallery-receipt-close]').click();
   await showDetail(ctx);
@@ -2488,7 +2516,7 @@ test('adding an attachment preserves unsaved fields and refreshes the SharePoint
   button(ctx.root(), 'SUBMETER').click();
   assert.equal(ctx.root().querySelector('.lg-review').hidden, false);
   assert.deepEqual(ctx.calls.at(-1), { operation: 'detail', payload: { id: 17 } });
-  button(ctx.root(), 'Confirmar alterações').click(); await settle();
+  button(ctx.root(), 'SUBMETER').click(); await settle();
   assert.equal(ctx.calls.findLast(call => call.operation === 'update').payload.expectedModified, '2026-09-18T12:40:00Z');
   assert.equal(ctx.calls.findLast(call => call.operation === 'update').payload.fields.QUANTIDADE, 3);
   assert.equal(Object.hasOwn(ctx.calls.findLast(call => call.operation === 'update').payload.fields, 'DESCRIÇÃO'), false);
@@ -2534,7 +2562,7 @@ test('a failed detail refresh after upload keeps the draft and retries before re
   button(ctx.root(), 'SUBMETER').click(); await settle();
   assert.equal(ctx.root().querySelector('[name="QUANTIDADE"]').value, '4');
   assert.equal(ctx.root().querySelector('.lg-review').hidden, false);
-  button(ctx.root(), 'Confirmar alterações').click(); await settle();
+  button(ctx.root(), 'SUBMETER').click(); await settle();
   assert.equal(ctx.calls.findLast(call => call.operation === 'update').payload.expectedModified, 'new-version');
 });
 
@@ -2577,7 +2605,7 @@ test('lost upload response reconciles the stored file before another write', asy
   assert.equal(ctx.root().querySelector('[name="QUANTIDADE"]').value, '4');
   assert.deepEqual([...ctx.root().querySelectorAll('.lg-attachment-item')].map(node => node.textContent), ['📎 novo.pdf']);
   button(ctx.root(), 'SUBMETER').click();
-  button(ctx.root(), 'Confirmar alterações').click(); await settle();
+  button(ctx.root(), 'SUBMETER').click(); await settle();
   assert.equal(ctx.calls.findLast(call => call.operation === 'update').payload.expectedModified, 'new-version');
 });
 
@@ -2643,7 +2671,7 @@ test('cancelling an uncertain confirmation still checks the server before a new 
   selectAttachment(ctx, new ctx.dom.window.File(['novo'], 'novo.pdf'));
   button(ctx.root(), 'Adicionar anexo').click();
   button(ctx.root(), 'Enviar anexo').click(); await settle();
-  button(ctx.root(), 'Cancelar confirmação').click();
+  button(ctx.root(), 'CANCELAR').click();
   button(ctx.root(), 'Adicionar anexo').click();
   button(ctx.root(), 'Enviar anexo').click(); await settle();
   assert.equal(uploads, 1);
@@ -2659,7 +2687,7 @@ test('cancelling an uncertain attachment retry keeps its request identity', asyn
   selectAttachment(ctx, new ctx.dom.window.File(['novo'], 'novo.pdf', { type: 'application/pdf' }));
   button(ctx.root(), 'Adicionar anexo').click();
   button(ctx.root(), 'Enviar anexo').click(); await settle();
-  button(ctx.root(), 'Cancelar confirmação').click();
+  button(ctx.root(), 'CANCELAR').click();
   button(ctx.root(), 'Adicionar anexo').click();
   button(ctx.root(), 'Enviar anexo').click(); await settle();
   assert.equal(uploads.length, 2);
@@ -2764,7 +2792,7 @@ test('a confirmed edit returns to the gallery without reloading details or resen
   } });
   await ctx.gallery.open(); await showDetail(ctx);
   input(ctx, 'QUANTIDADE', '4');
-  button(ctx.root(), 'SUBMETER').click(); button(ctx.root(), 'Confirmar alterações').click(); await settle();
+  button(ctx.root(), 'SUBMETER').click(); button(ctx.root(), 'SUBMETER').click(); await settle();
   assert.equal(ctx.root().querySelector('.lg-editor'), null);
   assert.equal(ctx.root().querySelector('.lg-detail').hidden, true);
   assert.equal(details, 1);
@@ -2787,7 +2815,7 @@ test('confirmed edit restores gallery focus while its list refresh is pending', 
   await ctx.gallery.open(); await showDetail(ctx);
   input(ctx, 'QUANTIDADE', '4');
   button(ctx.root(), 'SUBMETER').click();
-  button(ctx.root(), 'Confirmar alterações').click(); await settle();
+  button(ctx.root(), 'SUBMETER').click(); await settle();
   assert.equal(ctx.root().querySelector('.lg-detail').hidden, true);
   assert.equal(ctx.document.activeElement, button(ctx.root(), 'Voltar'));
   refresh.resolve(snapshot()); await settle();
@@ -2806,7 +2834,7 @@ test('a stale edit refresh does not steal focus after closing and reopening the 
   await ctx.gallery.open(); await showDetail(ctx);
   input(ctx, 'QUANTIDADE', '4');
   button(ctx.root(), 'SUBMETER').click();
-  button(ctx.root(), 'Confirmar alterações').click(); await settle();
+  button(ctx.root(), 'SUBMETER').click(); await settle();
   ctx.gallery.close(); await ctx.gallery.open();
   const filter = ctx.root().querySelector('[name="id"]');
   filter.focus();
@@ -2824,7 +2852,7 @@ test('an edit refresh respects focus moved to a filter in the same gallery sessi
   await ctx.gallery.open(); await showDetail(ctx);
   input(ctx, 'QUANTIDADE', '4');
   button(ctx.root(), 'SUBMETER').click();
-  button(ctx.root(), 'Confirmar alterações').click(); await settle();
+  button(ctx.root(), 'SUBMETER').click(); await settle();
   const filter = ctx.root().querySelector('[name="id"]');
   filter.focus();
   refresh.resolve(snapshot()); await settle();

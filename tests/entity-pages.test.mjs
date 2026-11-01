@@ -2,6 +2,7 @@ import assert from "node:assert/strict";
 import fs from "node:fs";
 import path from "node:path";
 import test from "node:test";
+import { createReviewForm, submitAndConfirm } from './helpers/edit-review-dom.mjs';
 import { fileURLToPath } from "node:url";
 import { buildSuperAdminAccess, can } from "../portal/access/access-model.js";
 import { ENTITIES } from "../portal/catalog/entities.js";
@@ -834,20 +835,22 @@ function createApprovalRoot(options = {}) {
     get innerHTML() { return formMarkup; },
     set innerHTML(value) {
       formMarkup = value;
+      const form = createReviewForm();
       const fields = new Map([...value.matchAll(/<(?:input|select|textarea)\b[^>]*name="([^"]+)"[^>]*>/g)].map(match => {
         const valueMatch = match[0].match(/\bvalue="([^"]*)"/);
-        return [match[1], { name: match[1], value: valueMatch?.[1] || "", disabled: false }];
+        const input = form.ownerDocument.createElement('input');
+        input.name = match[1]; input.value = valueMatch?.[1] || '';
+        return [match[1], input];
       }));
-      const form = {
-        ...formControl(),
-        elements: {
+      Object.defineProperty(form, 'elements', { value: {
           namedItem(name) { return fields.get(name) || null; },
           *[Symbol.iterator]() { yield* fields.values(); },
-        },
+      } });
+      Object.assign(form, {
+        ...formControl(),
         reportValidity() { return true; },
-        setAttribute() {},
         querySelectorAll() { return []; },
-      };
+      });
       dynamicFormControls = {
         form,
         fields,
@@ -896,9 +899,13 @@ function createApprovalRoot(options = {}) {
       Object.entries(values).forEach(([name, value]) => {
         const field = dynamicFormControls?.fields.get(name);
         if (field) field.value = value;
-        else if (dynamicFormControls?.fields) dynamicFormControls.fields.set(name, { name, value, disabled: false });
+        else if (dynamicFormControls?.fields) {
+          const input = dynamicFormControls.form.ownerDocument.createElement('input');
+          input.name = name; input.value = value;
+          dynamicFormControls.fields.set(name, input);
+        }
       });
-      return dynamicFormControls?.form.trigger("submit");
+      return dynamicFormControls && submitAndConfirm(dynamicFormControls.form, () => dynamicFormControls.form.trigger("submit"));
     },
     submitQueue() { return queueHost.querySelector("[data-multi-entry-submit]")?.trigger("click"); },
     querySelector(selector) {
@@ -2403,8 +2410,9 @@ test("o formulario sinaliza salvamento e bloqueia novo envio enquanto aguarda", 
 function createDynamicFormRoot() {
   const listeners = new Map();
   const attributes = new Map();
-  const title = { name: "Title", value: "ANA", disabled: false };
-  const status = { name: "STATUS", value: "ATIVO", disabled: true };
+  const domForm = createReviewForm();
+  const title = domForm.ownerDocument.createElement('input'); title.name = 'Title'; title.value = 'ANA';
+  const status = domForm.ownerDocument.createElement('input'); status.name = 'STATUS'; status.value = 'ATIVO'; status.disabled = true;
   const cancel = {
     disabled: false,
     addEventListener(name, listener) { listeners.set(`cancel:${name}`, listener); },
@@ -2413,7 +2421,7 @@ function createDynamicFormRoot() {
   const save = { disabled: false, textContent: "Salvar alterações" };
   const errors = { textContent: "", hidden: true };
   const controls = [title, status, cancel, save];
-  const form = {
+  const form = createReviewForm({
     elements: {
       namedItem(name) { return controls.find(control => control.name === name) || null; },
       [Symbol.iterator]() { return controls[Symbol.iterator](); },
@@ -2422,7 +2430,7 @@ function createDynamicFormRoot() {
     setAttribute(name, value) { attributes.set(name, value); },
     addEventListener(name, listener) { listeners.set(`form:${name}`, listener); },
     removeEventListener(name) { listeners.delete(`form:${name}`); },
-  };
+  });
   const root = {
     innerHTML: "",
     querySelector(selector) {
@@ -2438,7 +2446,7 @@ function createDynamicFormRoot() {
     root,
     controls,
     attributes,
-    submit() { return listeners.get("form:submit")?.({ preventDefault() {} }); },
+    submit() { return submitAndConfirm(form, () => listeners.get("form:submit")?.({ preventDefault() {} })); },
     cancel() { return listeners.get("cancel:click")?.(); },
   };
 }
@@ -2457,6 +2465,7 @@ test("durante o salvamento bloqueia campos e cancelamento e restaura seus estado
   });
 
   const submission = fixture.submit();
+  await Promise.resolve();
   assert.equal(fixture.attributes.get("aria-busy"), "true");
   assert.equal(fixture.controls.every(control => control.disabled), true);
   fixture.cancel();

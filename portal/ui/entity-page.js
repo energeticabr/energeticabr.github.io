@@ -2417,6 +2417,7 @@ export function createEntityPage(root, context = {}) {
       values: state.formValues,
       relationshipLabels: state.formRelationshipLabels,
       retryState: state.formRetryState,
+      editBaseline: editing ? state.editingItem.fields || {} : undefined,
       error: state.error,
       submitLabel: !editing && contract.multiple ? "Adicionar à lista" : undefined,
       relationshipDebounceMs: context.relationshipDebounceMs,

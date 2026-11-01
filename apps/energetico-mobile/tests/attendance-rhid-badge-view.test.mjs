@@ -190,6 +190,7 @@ for (const presentation of presentations) {
       assert.equal(rowFor(root, "2102").querySelector("input").checked, false);
       dialog.querySelector('[data-role="attendance-irregularity-reason"]').value = "Sem batidas registradas.";
       dialog.querySelector('[data-action="attendance-irregularity-submit"]').click();
+      root.ownerDocument.querySelector('[data-edit-review-submit]').click();
       await new Promise(resolve => setTimeout(resolve, 0));
       assert.deepEqual(saves, [{ id: "2102", date: "2026-10-13", explanation: "Sem batidas registradas." }]);
     }

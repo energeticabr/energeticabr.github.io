@@ -1,5 +1,6 @@
 import assert from "node:assert/strict";
 import test from "node:test";
+import { createReviewForm, submitAndConfirm } from './helpers/edit-review-dom.mjs';
 
 import ENTITIES from "../portal/catalog/entities.js";
 import { resolvePowerAppsUiContract } from "../portal/catalog/powerapps-ui-contract.js";
@@ -259,7 +260,7 @@ function choiceFormFixture(initialValue = "PGTO EFETUADO", { multiple = false, n
     removeEventListener(name) { listeners.delete(`cancel:${name}`); },
   };
   const controls = [native, ...dependencyControls.values(), cancel, save];
-  const form = {
+  const form = createReviewForm({
     elements: {
       namedItem(fieldName) {
         if (fieldName === native.name) return native;
@@ -276,7 +277,7 @@ function choiceFormFixture(initialValue = "PGTO EFETUADO", { multiple = false, n
     },
     addEventListener(name, listener) { listeners.set(`form:${name}`, listener); },
     removeEventListener(name) { listeners.delete(`form:${name}`); },
-  };
+  });
   const root = {
     innerHTML: "",
     querySelector(selector) {
@@ -298,7 +299,7 @@ function choiceFormFixture(initialValue = "PGTO EFETUADO", { multiple = false, n
     powerAppsStatus,
     dependencyControls,
     errors,
-    submit() { return listeners.get("form:submit")?.({ preventDefault() {} }); },
+    submit() { return submitAndConfirm(form, () => listeners.get("form:submit")?.({ preventDefault() {} })); },
   };
 }
 
@@ -2159,7 +2160,7 @@ function relationshipFormFixture(initial = { id: 42, label: "CLIENTE ATUAL" }, {
     removeEventListener(name) { listeners.delete(`cancel:${name}`); },
   };
   const controls = [hidden, fallback, cancel, save];
-  const form = {
+  const form = createReviewForm({
     elements: {
       namedItem(fieldName) { return fieldName === hidden.name ? hidden : null; },
       [Symbol.iterator]() { return controls[Symbol.iterator](); },
@@ -2173,7 +2174,7 @@ function relationshipFormFixture(initial = { id: 42, label: "CLIENTE ATUAL" }, {
     },
     addEventListener(name, listener) { listeners.set(`form:${name}`, listener); },
     removeEventListener(name) { listeners.delete(`form:${name}`); },
-  };
+  });
   const root = {
     innerHTML: "",
     querySelector(selector) {
@@ -2194,7 +2195,7 @@ function relationshipFormFixture(initial = { id: 42, label: "CLIENTE ATUAL" }, {
     status,
     selectedItems,
     errors,
-    submit() { return listeners.get("form:submit")?.({ preventDefault() {} }); },
+    submit() { return submitAndConfirm(form, () => listeners.get("form:submit")?.({ preventDefault() {} })); },
   };
 }
 
