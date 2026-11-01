@@ -1,4 +1,5 @@
 import test from 'node:test';
+import { confirmPayrollProvisionEdit } from './helpers/payroll-provision-edit-review.mjs';
 import assert from 'node:assert/strict';
 import { createAppController } from '../src/app-controller.js';
 import { createConversationStore } from '../src/chat/conversation-store.js';
@@ -53,6 +54,8 @@ test('real controller plus actual editor closes only after authoritative barrier
   const document = dom.window.document; document.querySelector('[data-provision-parent-column="OBS"]').click();
   document.querySelector('[name="OBS"]').value = 'nova';
   document.querySelector('form').dispatchEvent(new dom.window.Event('submit', { bubbles: true, cancelable: true }));
+  assert.equal(f.writes.length, 0);
+  confirmPayrollProvisionEdit(document);
   for (let i = 0; i < 80 && document.querySelector('[data-provision-parent-dialog]'); i++) await new Promise(resolve => setImmediate(resolve));
   assert.equal(document.querySelector('[data-provision-parent-dialog]'), null, document.body.textContent);
   assert.equal(h.store.getState().messages.at(-1).detail_table.parentEditPending, false);

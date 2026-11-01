@@ -1,4 +1,5 @@
 import test from 'node:test';
+import { confirmPayrollProvisionEdit } from './helpers/payroll-provision-edit-review.mjs';
 import assert from 'node:assert/strict';
 import { File } from 'node:buffer';
 import { JSDOM } from 'jsdom';
@@ -162,7 +163,7 @@ async function open(t,f,extras={}) {
   doc.querySelector('[data-gallery-action=edit]').click();await settle();
   return {dom,doc,actions};
 }
-const submit=async(doc,dom)=>{doc.querySelector('form').dispatchEvent(new dom.window.Event('submit',{bubbles:true,cancelable:true}));await settle();};
+const submit=async(doc,dom)=>{doc.querySelector('form').dispatchEvent(new dom.window.Event('submit',{bubbles:true,cancelable:true}));confirmPayrollProvisionEdit(doc);await settle();};
 test('editor shows tray before submit and visible signed-receipt error without disabling SUBMETER',async t=>{
   const f=fixture({status:'INATIVO'}),{dom,doc}=await open(t,f);
   const tray=doc.querySelector('[data-sheet-attachments]');assert.ok(tray);
@@ -202,6 +203,8 @@ test('closing editor during upload cancels the following status update',async t=
   let finish;const original=f.repository.uploadAttachment;
   f.repository.uploadAttachment=(...args)=>new Promise(resolve=>{finish=async()=>{await original(...args);resolve();};});
   doc.querySelector('form').dispatchEvent(new dom.window.Event('submit',{bubbles:true,cancelable:true}));
+  assert.equal(typeof finish,'undefined');assert.deepEqual(updates(f),[]);
+  confirmPayrollProvisionEdit(doc);
   await settle();assert.equal(typeof finish,'function');actions.close();await finish();await settle();
   assert.deepEqual(updates(f),[]);
 });
@@ -240,7 +243,9 @@ test('late attachment listing during a failed save restores removable staged fil
   f.repository.uploadAttachment=()=>new Promise((_resolve,reject)=>{failUpload=()=>reject(new Error('Offline'));});
   const {dom,doc}=await open(t,f),input=doc.querySelector('[data-sheet-attachment-input]');
   Object.defineProperty(input,'files',{value:[receipt()]});input.dispatchEvent(new dom.window.Event('change',{bubbles:true}));
-  doc.querySelector('form').dispatchEvent(new dom.window.Event('submit',{bubbles:true,cancelable:true}));await settle();
+  doc.querySelector('form').dispatchEvent(new dom.window.Event('submit',{bubbles:true,cancelable:true}));
+  assert.equal(typeof failUpload,'undefined');
+  confirmPayrollProvisionEdit(doc);await settle();
   assert.equal(typeof failUpload,'function');resolveList([]);await settle();failUpload();await settle();
   assert.equal(doc.querySelector('[data-sheet-attachment-remove]').disabled,false);
 });

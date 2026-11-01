@@ -1,4 +1,5 @@
 import test from "node:test";
+import { confirmPayrollProvisionEdit } from './helpers/payroll-provision-edit-review.mjs';
 import assert from "node:assert/strict";
 import { JSDOM } from "jsdom";
 
@@ -30,6 +31,8 @@ test('payroll mutation invalidates a pending background snapshot and refreshes s
   await new Promise(resolve => setImmediate(resolve)); await new Promise(resolve => setImmediate(resolve));
   document.querySelector('[name=DATA]').value = '2026-09-29';
   document.querySelector('.gallery-record-dialog form').dispatchEvent(new dom.window.Event('submit', { bubbles: true, cancelable: true }));
+  assert.equal(date, '2026-09-28', 'first submit must not change saved payroll values');
+  confirmPayrollProvisionEdit(document);
   await new Promise(resolve => setImmediate(resolve));
   assert.equal(reads, 3);
   resolveOld(response('FOLHAPGTO', 1, [{ id: '3', DATA: '2026-09-28' }]));

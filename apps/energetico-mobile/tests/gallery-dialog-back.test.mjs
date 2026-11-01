@@ -78,6 +78,9 @@ test('task back is disabled and guarded during save, then available after failur
   await dialog.open({ id: '7' }, ctx.trigger);
   const back = backButton(ctx);
   ctx.host.querySelector('[data-task-completion-form]').dispatchEvent(new ctx.dom.window.Event('submit', { bubbles: true, cancelable: true }));
+  assert.equal(saves, 0, 'task review cannot start a write');
+  const review = ctx.doc.querySelector('[data-edit-review]'); assert.ok(review);
+  review.querySelector('[data-edit-review-submit]').click(); await settle();
   assert.equal(saves, 1); assert.equal(back.disabled, true);
   forceClick(ctx, back);
   assert.ok(ctx.host.querySelector('.tg-completion-dialog')); assert.equal(signal.aborted, false);
@@ -134,6 +137,9 @@ test('DDA provision back is disabled and guarded while linking, then recovers af
   t.after(() => dialog.destroy()); await dialog.show(provisionRow, ctx.trigger);
   const back = backButton(ctx); ctx.host.querySelector('input[type="radio"]').click();
   ctx.host.querySelector('.dda-provision-save').click();
+  assert.equal(writes, 0, 'link review cannot begin persistence');
+  const review = ctx.doc.querySelector('[data-edit-review]'); assert.ok(review);
+  review.querySelector('[data-edit-review-submit]').click(); await settle();
   assert.equal(writes, 1); assert.equal(back.disabled, true);
   forceClick(ctx, back);
   assert.equal(dialog.isOpen, true); assert.equal(signal.aborted, false);

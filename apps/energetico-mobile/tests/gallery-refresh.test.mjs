@@ -151,6 +151,9 @@ for (const entry of refreshCases) {
     const form = ctx.root.querySelector('[data-dynamic-form]'); assert.ok(form);
     ctx.state.savePending = deferred();
     form.dispatchEvent(new ctx.dom.window.Event('submit', { bubbles: true, cancelable: true })); await settle();
+    assert.notEqual(form.closest('.gallery-record-dialog').getAttribute('aria-busy'), 'true', 'review has not started saving');
+    const review = ctx.document.querySelector('[data-edit-review]'); assert.ok(review);
+    review.querySelector('[data-edit-review-submit]').click(); await settle();
     assert.equal(form.closest('.gallery-record-dialog').getAttribute('aria-busy'), 'true', 'save actually started');
     ctx.gallery.close(); await ctx.gallery.open(); await settle();
     const calls = ctx.state.calls.length;

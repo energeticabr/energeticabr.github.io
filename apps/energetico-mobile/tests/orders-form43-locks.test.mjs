@@ -1,4 +1,5 @@
 import test from 'node:test';
+import { confirmPayrollProvisionEdit } from './helpers/payroll-provision-edit-review.mjs';
 import assert from 'node:assert/strict';
 import { JSDOM } from 'jsdom';
 import { createOrdersGalleryData } from '../src/chat/orders-gallery-data.js';
@@ -213,6 +214,8 @@ test('a rejected STATUS save restores the effective native lock after the form r
   assert.equal(status.value, 'APROVADO');
   f.setActive([]);
   form.dispatchEvent(new dom.window.Event('submit', { bubbles: true, cancelable: true }));
+  assert.equal(f.writes.length, 0);
+  confirmPayrollProvisionEdit(dom.window.document);
   await tick(); await tick();
   assert.equal(f.writes.length, 0);
   assert.match(dom.window.document.querySelector('.gallery-record-dialog-error').textContent, /lançamento ativo/i);

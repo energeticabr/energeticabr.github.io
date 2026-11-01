@@ -81,6 +81,9 @@ for (const name of ['orders', 'tasks', 'payments', 'recurring', 'group', 'assetP
     ctx.root.querySelector('[name="Title"]').value = 'Changed';
     form.dispatchEvent(new ctx.dom.window.Event('submit', { bubbles: true, cancelable: true }));
     await settle();
+    assert.equal(saves, 0, 'review cannot start the in-flight write');
+    const review = ctx.document.querySelector('[data-edit-review]'); assert.ok(review);
+    review.querySelector('[data-edit-review-submit]').click(); await settle();
     assert.equal(saves, 1);
     ctx.back();
     assert.equal(signal.aborted, false);

@@ -1,4 +1,5 @@
 import test from 'node:test';
+import { confirmPayrollProvisionEdit } from './helpers/payroll-provision-edit-review.mjs';
 import assert from 'node:assert/strict';
 import {JSDOM} from 'jsdom';
 import * as model from '../src/chat/supplier-payroll-report-model.js';
@@ -92,6 +93,7 @@ test('submitting the real editor reloads source values and totals retaining mont
  const previous=globalThis.FormData;globalThis.FormData=dom.window.FormData;t.after(()=>{globalThis.FormData=previous;});
  root.querySelector('[data-spr-edit=payment]').click();await tick();await tick();
  root.querySelector('[name=memo]').value='Novo';root.querySelector('[name=memo]').dispatchEvent(new dom.window.Event('input',{bubbles:true}));root.querySelector('[data-dynamic-form]').dispatchEvent(new dom.window.Event('submit',{bubbles:true,cancelable:true}));
+ assert.equal(saves,0);confirmPayrollProvisionEdit(dom.window.document);
  await tick();await tick();await tick();
  assert.equal(saves,1,root.querySelector('.gallery-record-dialog-error')?.textContent);assert.equal(reads,2);assert.equal(root.querySelector('[name=month]').value,'2026-10');assert.equal(root.querySelector('details').open,true);
  assert.match(root.querySelector('.spr-type-total').textContent,/500,00/);assert.equal(root.querySelector('[data-gallery-record-screen]'),null);
@@ -102,7 +104,8 @@ test('saving while portrait invalidates cached money and reloads preserving the 
  const {view,root,dom}=await setup(t,{data:{loadSnapshot:async()=>{reads++;return snapshot;},loadPaymentsForPayrollIds:async()=>[{...rows[0],totalCents:amount}]},loadEditor:async id=>({entity:{id:'test'},columns:[{name:'memo',control:'text',editable:true}],item:{id,fields:{memo:'Original'}},contract:{hasForm:true,readOnly:false}}),saveEditor:async()=>{amount=20000;return {id:'45'};}});
  dom.window.matchMedia=()=>({matches:vertical});const previous=globalThis.FormData;globalThis.FormData=dom.window.FormData;t.after(()=>{globalThis.FormData=previous;});
  root.querySelector('[data-spr-edit=payment]').click();await tick();await tick();vertical=true;dom.window.dispatchEvent(new dom.window.Event('resize'));
- root.querySelector('[data-dynamic-form]').dispatchEvent(new dom.window.Event('submit',{bubbles:true,cancelable:true}));await tick();await tick();
+ root.querySelector('[data-dynamic-form]').dispatchEvent(new dom.window.Event('submit',{bubbles:true,cancelable:true}));
+ assert.equal(amount,10000);confirmPayrollProvisionEdit(dom.window.document);await tick();await tick();
  vertical=false;dom.window.dispatchEvent(new dom.window.Event('resize'));await tick();await tick();await tick();
  assert.equal(reads,2);assert.equal(root.querySelector('details').open,true);assert.match(root.querySelector('.spr-type-total').textContent,/200,00/);
 });

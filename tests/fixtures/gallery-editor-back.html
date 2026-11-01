@@ -3,7 +3,8 @@
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width,initial-scale=1">
-  <meta http-equiv="Content-Security-Policy" content="default-src 'none'; script-src 'self' 'unsafe-inline'; style-src 'self'; img-src 'self' data:; connect-src 'none'; form-action 'none'; base-uri 'none'">
+  <!-- The shared edit reviewer injects local styles; all data connections remain blocked. -->
+  <meta http-equiv="Content-Security-Policy" content="default-src 'none'; script-src 'self' 'unsafe-inline'; style-src 'self' 'unsafe-inline'; img-src 'self' data:; connect-src 'none'; form-action 'none'; base-uri 'none'">
   <title>Galeria · voltar do editor sem salvar</title>
   <link rel="stylesheet" href="../../apps/energetico-mobile/src/styles.css">
   <link rel="stylesheet" href="../../apps/energetico-mobile/src/ui/orders-gallery.css">

@@ -73,6 +73,9 @@ test('payroll editor fills phone and desktop viewports with locked financial val
       assert.equal(await evaluate(`document.querySelector('[data-gallery-record-screen] [name=IDLANCAMENTO]').value`),'3460');
       assert.equal(await evaluate(`document.querySelector('[data-searchable-root=IDLANCAMENTO] input').value`),'3460 - OUTRO EMPREITEIRO');
       await evaluate(`document.querySelector('[data-form-save]').click()`);
+      assert.equal(await evaluate(`window.savedFields.length`),0,'first submit only opens review');
+      assert.deepEqual(await evaluate(`(()=>{const review=document.querySelector('[data-edit-review]');return {open:review?.open,headers:[...review.querySelectorAll('th')].map(n=>n.textContent),labels:[...review.querySelectorAll('button')].map(n=>n.textContent)};})()`),{open:true,headers:['Campo','Antes','Depois'],labels:['CANCELAR','SUBMETER']});
+      await evaluate(`document.querySelector('[data-edit-review-confirm]').click()`);
       for(let n=0;n<100&&!(await evaluate(`window.savedFields.length===1`));n++)await delay(100);
       assert.deepEqual(await evaluate(`window.savedFields`),[{IDLANCAMENTO:3460}],await evaluate(`document.querySelector('[data-edit-form]')?.textContent`));
     }
