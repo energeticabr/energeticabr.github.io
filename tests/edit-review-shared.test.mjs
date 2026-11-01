@@ -199,6 +199,26 @@ test('search text alone is not a change; selecting and reverting colors the visi
   assert.equal(input.closest('[data-edit-changed]'), null);
 });
 
+test('required single choice explicit clear stays orange and invalid until the saved choice is restored', async t => {
+  const s = setup(t, { columns: [column('STATUS', 'select', { label: 'Status', required: true, choices: ['ABERTO', 'FECHADO'] })], values: { STATUS: 'ABERTO' } });
+  const input = s.form.querySelector('.searchable-select-input');
+  input.focus(); input.value = 'FECH'; input.dispatchEvent(new s.dom.window.Event('input', { bubbles: true }));
+  await tick(); assert.equal(input.closest('[data-edit-changed]'), null, 'unselected search is not an edit');
+  const clear = s.form.querySelector('button[aria-label="Limpar Status"]');
+  assert.ok(clear, 'exercise the actual single-choice clear button');
+  clear.click(); await tick();
+  assert.equal(s.input('STATUS').value, '');
+  assert.ok(input.closest('[data-edit-changed]'), 'explicitly cleared required choice remains changed');
+  assert.equal(s.dom.window.getComputedStyle(input).backgroundColor, 'rgb(255, 204, 128)');
+  s.submit(); await tick();
+  assert.equal(s.review(), null); assert.equal(s.calls.length, 0);
+  input.focus(); input.value = 'ABER'; input.dispatchEvent(new s.dom.window.Event('input', { bubbles: true }));
+  await tick(); assert.ok(input.closest('[data-edit-changed]'), 'search does not undo the explicit clear');
+  s.form.querySelector('[role=option]').click(); await tick();
+  assert.equal(s.input('STATUS').value, 'ABERTO');
+  assert.equal(input.closest('[data-edit-changed]'), null, 'restoring the saved selection removes orange');
+});
+
 test('lookup search is not a change; selecting a result reviews IDs and labels', async t => {
   const s = setup(t, { columns: [column('CLIENTE', 'lookup', { relation: { kind: 'lookup', listId: 'clientes', displayField: 'Title', resolvable: true } })], values: { CLIENTELookupId: 7, CLIENTELookupValue: 'ANTIGO' }, relationshipDebounceMs: 0, relationshipSearch: async () => [{ id: 9, label: 'NOVO' }] });
   const input = s.form.querySelector('.searchable-select-input');

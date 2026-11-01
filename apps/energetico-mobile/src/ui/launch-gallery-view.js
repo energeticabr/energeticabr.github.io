@@ -1411,6 +1411,12 @@ export function createLaunchGallery({ document: documentRef = globalThis.documen
     if (editor.schemaState?.loading) { notify('Aguarde a atualização das opções relacionadas.', true); return; }
     const fieldsChanged = editor.controls.some(editorFieldChanged);
     const removedAttachments = editor.operation === 'update' ? [...editor.attachmentsRemoved] : [];
+    if (editor.operation === 'update' && (fieldsChanged || removedAttachments.length)
+      && editor.form.querySelector('.lg-attachment-picker')?.files?.[0]) {
+      notify('Use ADICIONAR ANEXO para enviar o arquivo selecionado antes de submeter os demais dados. Suas alterações foram preservadas.', true);
+      focus(editor.form.querySelector('.lg-attachment-add button'));
+      return;
+    }
     if (editor.operation === 'update' && !fieldsChanged && !removedAttachments.length) {
       const file = editor.form.querySelector('.lg-attachment-picker')?.files?.[0];
       if (file) { reviewAttachment(file, { completeEditing: true }); return; }

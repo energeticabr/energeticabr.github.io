@@ -29,6 +29,7 @@ export function createDdaProvisionPicker({document:doc,host,service,onLinked,tim
    for(const item of visible){const label=el('label','dda-provision-option');if(item.recommended)label.append(el('strong','dda-provision-star','★ MAIS PROVÁVEL'));
     const choice=el('input');choice.type='radio';choice.name='dda-provision-choice';choice.value=item.id;choice.checked=entry.selected===item.id;choice.addEventListener('change',()=>{entry.selected=item.id;save.disabled=false;for(const option of list.children)option.toggleAttribute('data-edit-changed',option===label&&item.id!==String(row.provisionId||''));});
     const text=el('span','',`${item.label} · ${money(item.amount)}${item.due?' · Previsto '+String(item.due).slice(0,10).split('-').reverse().join('/'):''}`);
+    label.toggleAttribute('data-edit-changed',choice.checked&&item.id!==String(row.provisionId||''));
     label.append(choice,text);list.append(label);
    }
    feedback.textContent=entry.options.length?`${visible.length} descritivo(s) sem data de pagamento efetuado. Escolha um para vincular.`:'Nenhum descritivo provisão sem data de pagamento efetuado foi encontrado.';

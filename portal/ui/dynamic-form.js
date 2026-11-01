@@ -1869,13 +1869,16 @@ export function renderDynamicForm(root, options = {}) {
       const validation = validateFormValues(raw, descriptors, options.entity, { mode: "edit" });
       const fields = { ...validation.fields,
         ...choiceBindings.fields(), ...relationshipBindings.fields() };
-      // Required/invalid plain values still changed even when they cannot be
-      // submitted. Selector query text must continue to have no semantic value.
+      const choiceErrors = choiceBindings.validate().errors;
+      // Invalid plain values and explicitly cleared choices are still changes.
+      // Only a proven empty selector can use the raw fallback, never query text.
       for (const column of descriptors) {
-        if (validation.errors[column.name] && !["select", "lookup", "person"].includes(column.control)
+        const clearedChoice = column.control === "select" && !column.allowMultipleValues
+          && raw[column.name] === "" && !Object.hasOwn(choiceErrors, column.name);
+        if (validation.errors[column.name] && (clearedChoice || !["select", "lookup", "person"].includes(column.control))
           && Object.hasOwn(raw, column.name)) fields[column.name] = raw[column.name];
       }
-      const invalid = { ...choiceBindings.validate().errors, ...relationshipBindings.validate().errors };
+      const invalid = { ...choiceErrors, ...relationshipBindings.validate().errors };
       for (const name of Object.keys(invalid)) {
         delete fields[name];
         delete fields[`${name}LookupId`];

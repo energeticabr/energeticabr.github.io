@@ -403,6 +403,20 @@ test('modal review compares choice labels and dates without exposing unchanged f
   assert.equal(mutations(ctx).length, 0);
 });
 
+test('mixed launch edits cannot discard a selected file when submitting fields', async t => {
+  let uploads=0;
+  const ctx=await setup(t,{upload:async()=>{uploads++;return{fileName:'novo.pdf'};}});
+  await ctx.gallery.open();await showDetail(ctx);
+  input(ctx,'QUANTIDADE','3');
+  const file=new ctx.dom.window.File(['pdf'],'novo.pdf',{type:'application/pdf'});
+  const picker=selectAttachment(ctx,file);
+  button(ctx.root().querySelector('.lg-editor'),'SUBMETER').click();
+  assert.equal(ctx.root().querySelector('.lg-review').hidden,true,'pending file needs its explicit attachment step first');
+  assert.match(ctx.root().querySelector('[role="alert"]').textContent,/ADICIONAR ANEXO/);
+  assert.equal(mutations(ctx).length,0);assert.equal(uploads,0);
+  assert.equal(picker.files[0],file);assert.equal(ctx.root().querySelector('[name="QUANTIDADE"]').value,'3');
+});
+
 test('launch review uses SUBMETER/CANCELAR and numeric equivalents do not count as changes', async t => {
   const ctx = await setup(t);
   await ctx.gallery.open(); await showDetail(ctx);
