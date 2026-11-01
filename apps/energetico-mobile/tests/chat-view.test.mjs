@@ -1278,7 +1278,7 @@ test("menu RH mostra galerias IDFOLHA e FOLHA PGTO sem depender de opções do b
   assert.match(article, /chat-choice-columns--hr-galleries/);
   assert.match(article, /data-reply-id="action_hr_gallery_idfolha"[^>]*>[^]*?GALERIA IDFOLHA/);
   assert.match(article, /data-reply-id="action_hr_gallery_folhapgto"[^>]*>[^]*?GALERIA FOLHA PGTO/);
-  assert.match(article, /data-reply-id="action_hr_gallery_presencas"[^>]*>[^]*?GALERIA DE PRESENÇAS/);
+  assert.match(article, /data-reply-id="action_hr_gallery_presencas"[^>]*>[^]*?GALERIA DESCRITIVO PRESENÇA/);
   const dom = new JSDOM(article);
   const rows = [...dom.window.document.querySelectorAll('.chat-hr-menu-row')];
   assert.ok(rows[2]?.querySelector('[data-reply-id="action_hr_gallery_presencas"]'));

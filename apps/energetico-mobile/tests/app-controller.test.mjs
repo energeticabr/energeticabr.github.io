@@ -1090,15 +1090,16 @@ test("galeria de presenças conecta o visualizador de anexos sem enviar comando 
   assert.equal(h.chatCalls.length, before);
 });
 
-test("galeria validar presenças conecta o visualizador de anexos sem enviar comando à VM", async t => {
-  let opened = 0;
+test("atalhos antigos de presença compartilham uma única galeria de descritivos", async t => {
+  let opened = 0, created = 0;
   const h = makeHarness({
     registrationGalleryDataFactory: async ({ kind }) => {
-      assert.equal(kind, "presenceValidation");
+      assert.equal(kind, "presenceDescriptions");
       return { loadSnapshot: async () => ({ rows: [] }) };
     },
     registrationGalleryFactory: async ({ kind, openMediaCollection }) => {
-      assert.equal(kind, "presenceValidation");
+      created++;
+      assert.equal(kind, "presenceDescriptions");
       assert.equal(typeof openMediaCollection, "function");
       return { open() { opened++; }, destroy() {} };
     },
@@ -1107,7 +1108,9 @@ test("galeria validar presenças conecta o visualizador de anexos sem enviar com
   await h.controller.start();
   const before = h.chatCalls.length;
   await h.view.emit("select-reply", { replyId: "action_hr_gallery_validar_presencas" });
-  assert.equal(opened, 1);
+  await h.view.emit("select-reply", { replyId: "action_hr_gallery_presencas" });
+  assert.equal(opened, 2);
+  assert.equal(created, 1);
   assert.equal(h.chatCalls.length, before);
 });
 

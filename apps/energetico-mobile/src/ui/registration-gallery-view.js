@@ -864,7 +864,7 @@ export function createRegistrationGallery({ document: doc = globalThis.document,
     for (const row of visibleRows) {
       const card = el("article", model.nativeCard ? "rg-row rg-row--native" : model.showAttachments ? "rg-row rg-row--documents rg-row--document" : "rg-row");
       card.dataset.registrationRow = row.id;
-      if (kind === 'presenceValidation' && fieldValue(row.fields, 'PRESENCA', model).trim().toLocaleUpperCase('pt-BR') === 'AUSENTE') card.classList.add('rg-row--presence-absent');
+      if (kind === 'presenceDescriptions' && fieldValue(row.fields, 'PRESENCA', model).trim().toLocaleUpperCase('pt-BR') === 'AUSENTE') card.classList.add('rg-row--presence-absent');
       if (kind === 'workDiary') card.classList.add('rg-row--work-diary');
       if (kind === 'asset') card.classList.add('rg-row--asset');
       if (kind === 'dda') card.classList.add('rg-row--dda');
