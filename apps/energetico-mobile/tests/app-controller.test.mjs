@@ -1090,6 +1090,27 @@ test("galeria de presenças conecta o visualizador de anexos sem enviar comando 
   assert.equal(h.chatCalls.length, before);
 });
 
+test("galeria validar presenças conecta o visualizador de anexos sem enviar comando à VM", async t => {
+  let opened = 0;
+  const h = makeHarness({
+    registrationGalleryDataFactory: async ({ kind }) => {
+      assert.equal(kind, "presenceValidation");
+      return { loadSnapshot: async () => ({ rows: [] }) };
+    },
+    registrationGalleryFactory: async ({ kind, openMediaCollection }) => {
+      assert.equal(kind, "presenceValidation");
+      assert.equal(typeof openMediaCollection, "function");
+      return { open() { opened++; }, destroy() {} };
+    },
+  });
+  t.after(() => h.controller.stop());
+  await h.controller.start();
+  const before = h.chatCalls.length;
+  await h.view.emit("select-reply", { replyId: "action_hr_gallery_validar_presencas" });
+  assert.equal(opened, 1);
+  assert.equal(h.chatCalls.length, before);
+});
+
 test('popup keeps partial parent synchronization visible with pending child IDs instead of reporting success',async t=>{
  const message='O descritivo 306 foi salvo, mas a sincronização não foi concluída. Itens pendentes: 92.';
  const h=makeHarness({pendingProvisionAttachmentsDataFactory:async()=>({listAttachments:async()=>[],downloadAttachment:async()=>new Blob(),updateDueDate:async()=>{throw Object.assign(new Error(message),{code:'PROVISION_DESCRIPTION_SYNC_INCOMPLETE'});}})});

@@ -345,6 +345,7 @@ function hrGalleryAction(option) {
   return identifiers.includes("action_hr_gallery_idfolha")
     || identifiers.includes("action_hr_gallery_folhapgto")
     || identifiers.includes("action_hr_gallery_presencas")
+    || identifiers.includes("action_hr_gallery_validar_presencas")
     || identifiers.includes("action_hr_gallery_funcionarios");
 }
 
@@ -357,6 +358,7 @@ function hrPayrollGalleryOptions(options) {
     { id: "action_hr_gallery_idfolha", reply: "action_hr_gallery_idfolha", label: "📚 GALERIA IDFOLHA" },
     { id: "action_hr_gallery_folhapgto", reply: "action_hr_gallery_folhapgto", label: "💵 GALERIA FOLHA PGTO" },
     { id: "action_hr_gallery_presencas", reply: "action_hr_gallery_presencas", label: "📋 GALERIA DE PRESENÇAS" },
+    { id: "action_hr_gallery_validar_presencas", reply: "action_hr_gallery_validar_presencas", label: "✅ GALERIA VALIDAR PRESENÇAS" },
     { id: "action_hr_gallery_funcionarios", reply: "action_hr_gallery_funcionarios", label: "👷 FUNCIONÁRIOS RH" },
   ];
   return definitions.map(definition => options.find(option => draftReplyId(option).trim().toLowerCase() === definition.id) || definition);

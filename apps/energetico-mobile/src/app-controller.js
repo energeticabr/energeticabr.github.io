@@ -476,6 +476,7 @@ const REGISTRATION_GALLERY_KIND = Object.freeze({
   action_dda_gallery: "dda",
   action_dda_report: "ddaReport",
   action_hr_gallery_presencas: "presenceDescriptions",
+  action_hr_gallery_validar_presencas: "presenceValidation",
   action_hr_gallery_funcionarios: "contractorEmployment",
   action_financial_movement_gallery: 'financial_movement',
   action_investment_gallery: 'investment',
@@ -507,6 +508,7 @@ const REGISTRATION_GALLERY_KIND = Object.freeze({
 const DOCUMENT_SIGNING_EDIT_SIGNATURE_ID = "document_signing_edit_signature";
 const GALLERY_CREATION_ACTIONS = Object.freeze({
   action_hr_gallery_presencas: ["action_create_supplier_attendance", "CRIAR PRESENÇA DE FORNECEDOR"],
+  action_hr_gallery_validar_presencas: ["action_create_supplier_attendance", "CRIAR PRESENÇA DE FORNECEDOR"],
   action_financial_movement_gallery: ['action_financial_movement', 'APONTAR MOVIMENTAÇÃO'],
   action_investment_gallery: ['action_register_investment', 'CADASTRO INVESTIMENTO'],
   action_institution_gallery: ['action_register_institution', 'CADASTRO INSTITUIÇÃO'],
@@ -9569,7 +9571,7 @@ export function createAppController({
             ...(sourceKind === 'notas_fiscais_sefaz' ? { syncMonitor: ensureSefazSyncSession() } : {}),
             ...(isDdaReport ? { onClose: () => ddaAutoReminder.dismiss() } : {}),
             ...(["contractorEmployment", "dda", "notas_fiscais_sefaz"].includes(sourceKind) ? {} : { onCreate: galleryCreationHandler(replyId, assertSession) }),
-            ...(["notas_fiscais_sefaz", "dda", "presenceDescriptions", "provisionDescription", "documents", "asset", "assetFunction", "assetProduct", "assetGroup", "workDiary", "quotes", "contracts", "contractLines", "measurements", "measurementLines", "stageDemonstratives", "constructionStages", "recurringTasks", "delegatedTasks"].includes(sourceKind) ? {
+            ...(["notas_fiscais_sefaz", "dda", "presenceDescriptions", "presenceValidation", "provisionDescription", "documents", "asset", "assetFunction", "assetProduct", "assetGroup", "workDiary", "quotes", "contracts", "contractLines", "measurements", "measurementLines", "stageDemonstratives", "constructionStages", "recurringTasks", "delegatedTasks"].includes(sourceKind) ? {
               openMediaCollection: items => {
                 assertSession();
                 const collection = (Array.isArray(items) ? items : []).map(item => ({
