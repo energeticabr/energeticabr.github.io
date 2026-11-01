@@ -19,7 +19,7 @@ const AUDIT_FIELDS = ["ID", "Criado por", "Criado", "Modificado", "Modificado po
 const AUDIT_ALIASES = { Criado: ["Created"], Modificado: ["Modified"], "Criado por": ["Author"], "Modificado por": ["Editor"] };
 
 const PRESENCE_DESCRIPTION_MODEL = Object.freeze({
-    title: "GALERIA DE PRESENÇAS", screen: "G17- HISTÓRICODEMONSTRATIVOPRESENCA",
+    title: "GALERIA DESCRITIVO PRESENÇA", screen: "G17- HISTÓRICODEMONSTRATIVOPRESENCA",
     listName: "DESCRITIVOPRESENCA", aliases: ["DESCRITIVOPRESENCA", "DESCRITIVO PRESENCA"],
     nativeCard: true, showAttachments: true, recordLabel: "registro de presença", recordArticle: "o",
     searchPlaceholder: "Pesquisar fornecedor, atividade ou ID",
@@ -69,7 +69,6 @@ export const REGISTRATION_GALLERY_MODELS = Object.freeze({
     sourceSort: {field:"VENCIMENTO",direction:"asc",type:"date"},
   }),
   presenceDescriptions: PRESENCE_DESCRIPTION_MODEL,
-  presenceValidation: Object.freeze({ ...PRESENCE_DESCRIPTION_MODEL, title: "GALERIA VALIDAR PRESENÇAS" }),
   provisionDescription: Object.freeze({
     title: "GALERIA DESCRITIVO PROVISÃO",
     listName: "DESCRITIVOPROVISAO", aliases: ["DESCRITIVOPROVISAO"],

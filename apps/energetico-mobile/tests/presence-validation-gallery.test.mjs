@@ -5,13 +5,13 @@ import { REGISTRATION_GALLERY_MODELS, createRegistrationGalleryData } from '../s
 import { createRegistrationGallery } from '../src/ui/registration-gallery-view.js';
 
 test('validation gallery reads paginated DESCRITIVOPRESENCA and filters without writes', async () => {
-  const model = REGISTRATION_GALLERY_MODELS.presenceValidation;
+  const model = REGISTRATION_GALLERY_MODELS.presenceDescriptions;
   assert.ok(model, 'a separate validation gallery model is registered');
   assert.equal(model.listName, 'DESCRITIVOPRESENCA');
-  assert.equal(model.editFormVariant, REGISTRATION_GALLERY_MODELS.presenceDescriptions.editFormVariant);
-  assert.equal(model.title, 'GALERIA VALIDAR PRESENÇAS');
+  assert.match(model.editFormVariant, /Form20$/);
+  assert.equal(model.title, 'GALERIA DESCRITIVO PRESENÇA');
   const requested = [];
-  const data = createRegistrationGalleryData({ kind: 'presenceValidation', repository: {
+  const data = createRegistrationGalleryData({ kind: 'presenceDescriptions', repository: {
     async resolveList(site, aliases) { assert.equal(site, 'personal'); assert.equal(aliases[0], 'DESCRITIVOPRESENCA'); return { status: 'resolved', id: 'descritivos' }; },
     async getItemsPage(site, list, options) {
       assert.equal(list, 'descritivos'); requested.push(options);
@@ -26,7 +26,7 @@ test('validation gallery reads paginated DESCRITIVOPRESENCA and filters without 
   assert.equal(requested.length, 2);
   assert.deepEqual(snapshot.rows.map(row => row.id).sort(), ['42', '43']);
   const dom = new JSDOM('<body></body>'), opened = [];
-  const gallery = createRegistrationGallery({ document: dom.window.document, kind: 'presenceValidation', data: {
+  const gallery = createRegistrationGallery({ document: dom.window.document, kind: 'presenceDescriptions', data: {
     async loadSnapshot() { return snapshot; },
     async listAttachments(id) { return [{ fileName: `presenca-${id}.pdf` }]; },
     downloadAttachment(id, name) { return `${id}/${name}`; },

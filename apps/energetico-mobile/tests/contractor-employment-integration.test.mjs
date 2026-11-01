@@ -11,11 +11,11 @@ const inactive = { CARGO: 'PEDREIRO III', DATAADMISSAO: '2026-01-20', STATUS: 'I
 const tick = () => new Promise(resolve => setImmediate(resolve));
 const partial = error => error.code === 'CONTRACTOR_EMPLOYMENT_PARTIAL';
 
-test('RH menu places employees after the validation gallery without independent creation', () => {
+test('RH menu places employees after the presence description gallery without independent creation', () => {
   const html = renderChatMarkup({ sessionStatus: 'authenticated', account: { name: 'Synthetic' }, messages: [{ type: 'poll', question: '👥 RECURSOS HUMANOS\nQUAL FLUXO VOCÊ DESEJA INICIAR?', options: [{ id: 'action_create_supplier_attendance', label: 'PRESENÇA' }] }] });
   const dom = new JSDOM(html);
   const ids = [...dom.window.document.querySelectorAll('[data-reply-id]')].map(n => n.dataset.replyId);
-  assert.equal(ids[ids.indexOf('action_hr_gallery_validar_presencas') + 1], 'action_hr_gallery_funcionarios');
+  assert.equal(ids[ids.indexOf('action_hr_gallery_presencas') + 1], 'action_hr_gallery_funcionarios');
   dom.window.close();
 });
 test('actual default controller/token/repository/gallery loads paginated 27-field RH records and audit', async t => {
