@@ -18,6 +18,21 @@ const FISCAL_COMMON_FIELDS = ["TIPO_FISCAL", "ORIGEM_FISCAL", "TOMADOR", "CNPJ_T
 const AUDIT_FIELDS = ["ID", "Criado por", "Criado", "Modificado", "Modificado por"];
 const AUDIT_ALIASES = { Criado: ["Created"], Modificado: ["Modified"], "Criado por": ["Author"], "Modificado por": ["Editor"] };
 
+const PRESENCE_DESCRIPTION_MODEL = Object.freeze({
+    title: "GALERIA DE PRESENÇAS", screen: "G17- HISTÓRICODEMONSTRATIVOPRESENCA",
+    listName: "DESCRITIVOPRESENCA", aliases: ["DESCRITIVOPRESENCA", "DESCRITIVO PRESENCA"],
+    nativeCard: true, showAttachments: true, recordLabel: "registro de presença", recordArticle: "o",
+    searchPlaceholder: "Pesquisar fornecedor, atividade ou ID",
+    fields: ["FORNECEDOR", "ID", "DATA", "FILIAL", "PROFISSAO", "ATIVIDADEEXECUTADA", "IDDESCRITIVOETAPA", "ETAPA", "IMOVEL", "PRESENCA", "STATUS", "IRREGULARIDADES", "HORÁRIO", "HORARIOSAIDA1", "HORARIOENTRADA2", "HORARIOSAIDA2", "VLORDIARIO", "OBSERVAÇÃO", ...AUDIT_FIELDS],
+    filterFields: ["ID", "DATA", "FILIAL", "FORNECEDOR", "PRESENCA", "STATUS"],
+    dateFilterFields: ["DATA"],
+    fieldAliases: { ...AUDIT_ALIASES, "HORÁRIO": ["HOR_x00c1_RIO"], "OBSERVAÇÃO": ["OBSERVA_x00c7__x00c3_O"] },
+    fieldLabels: { DATA: "Data", FILIAL: "Filial", FORNECEDOR: "Fornecedor", PROFISSAO: "Profissão", ATIVIDADEEXECUTADA: "Atividade executada", IDDESCRITIVOETAPA: "ID descritivo etapa", ETAPA: "Etapa", IMOVEL: "Imóvel", PRESENCA: "Presença", STATUS: "Status", IRREGULARIDADES: "Irregularidades", "HORÁRIO": "Entrada 1", HORARIOSAIDA1: "Saída 1", HORARIOENTRADA2: "Entrada 2", HORARIOSAIDA2: "Saída 2", VLORDIARIO: "Valor diário", "OBSERVAÇÃO": "Observação" },
+    fieldTypes: { DATA: "date", VLORDIARIO: "currency" },
+    sourceSort: { field: "ID", direction: "desc", type: "number" },
+    editFormVariant: "G17- HISTÓRICODEMONSTRATIVOPRESENCA.pa.yaml#Form20",
+});
+
 // Lista e campos das galerias baseadas nas telas Power Apps.
 export const REGISTRATION_GALLERY_MODELS = Object.freeze({
   ...FINANCIAL_GALLERY_MODELS,
@@ -53,20 +68,8 @@ export const REGISTRATION_GALLERY_MODELS = Object.freeze({
     fieldLabels: { FORNECEDOR: "Fornecedor", VENCIMENTO: "Vencimento", EMISSAO: "Emissão", VALOR: "Valor nominal", SITUACAO: "Situação na última consulta", CNPJ_FORNECEDOR: "CPF/CNPJ fornecedor", DOCUMENTO: "Documento", BANCO: "Banco", VALOR_PAGAMENTO: "Valor para pagamento", NOSSO_NUMERO: "Nosso número", LINHA_DIGITAVEL: "Linha digitável", CODIGO_BARRAS: "Código de barras", PAGADOR: "Pagador", CNPJ_PAGADOR: "CPF/CNPJ pagador", BLOQUEADO: "Pagamento bloqueado", MENSAGEM: "Mensagem do banco", ULTIMA_CONSULTA: "Última consulta", DESCRITIVOPROVIS_x00c3_O: "Descritivo provisão" },
     sourceSort: {field:"VENCIMENTO",direction:"asc",type:"date"},
   }),
-  presenceDescriptions: Object.freeze({
-    title: "GALERIA DE PRESENÇAS", screen: "G17- HISTÓRICODEMONSTRATIVOPRESENCA",
-    listName: "DESCRITIVOPRESENCA", aliases: ["DESCRITIVOPRESENCA", "DESCRITIVO PRESENCA"],
-    nativeCard: true, showAttachments: true, recordLabel: "registro de presença", recordArticle: "o",
-    searchPlaceholder: "Pesquisar fornecedor, atividade ou ID",
-    fields: ["FORNECEDOR", "ID", "DATA", "FILIAL", "PROFISSAO", "ATIVIDADEEXECUTADA", "IDDESCRITIVOETAPA", "ETAPA", "IMOVEL", "PRESENCA", "STATUS", "IRREGULARIDADES", "HORÁRIO", "HORARIOSAIDA1", "HORARIOENTRADA2", "HORARIOSAIDA2", "VLORDIARIO", "OBSERVAÇÃO", ...AUDIT_FIELDS],
-    filterFields: ["ID", "DATA", "FILIAL", "FORNECEDOR", "PRESENCA", "STATUS"],
-    dateFilterFields: ["DATA"],
-    fieldAliases: { ...AUDIT_ALIASES, "HORÁRIO": ["HOR_x00c1_RIO"], "OBSERVAÇÃO": ["OBSERVA_x00c7__x00c3_O"] },
-    fieldLabels: { DATA: "Data", FILIAL: "Filial", FORNECEDOR: "Fornecedor", PROFISSAO: "Profissão", ATIVIDADEEXECUTADA: "Atividade executada", IDDESCRITIVOETAPA: "ID descritivo etapa", ETAPA: "Etapa", IMOVEL: "Imóvel", PRESENCA: "Presença", STATUS: "Status", IRREGULARIDADES: "Irregularidades", "HORÁRIO": "Entrada 1", HORARIOSAIDA1: "Saída 1", HORARIOENTRADA2: "Entrada 2", HORARIOSAIDA2: "Saída 2", VLORDIARIO: "Valor diário", "OBSERVAÇÃO": "Observação" },
-    fieldTypes: { DATA: "date", VLORDIARIO: "currency" },
-    sourceSort: { field: "ID", direction: "desc", type: "number" },
-    editFormVariant: "G17- HISTÓRICODEMONSTRATIVOPRESENCA.pa.yaml#Form20",
-  }),
+  presenceDescriptions: PRESENCE_DESCRIPTION_MODEL,
+  presenceValidation: Object.freeze({ ...PRESENCE_DESCRIPTION_MODEL, title: "GALERIA VALIDAR PRESENÇAS" }),
   provisionDescription: Object.freeze({
     title: "GALERIA DESCRITIVO PROVISÃO",
     listName: "DESCRITIVOPROVISAO", aliases: ["DESCRITIVOPROVISAO"],
