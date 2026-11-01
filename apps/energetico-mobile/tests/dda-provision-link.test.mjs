@@ -57,6 +57,14 @@ test('report pencil opens picker above report, stars likely option, links select
  assert.match(doc.querySelector('.dda-provision-star').textContent,/MAIS PROVÁVEL/);
  assert.equal(state.writes.length,0);
  doc.querySelector('input[value="1"]').click();doc.querySelector('.dda-provision-save').click();await tick();await tick();
+ assert.equal(state.writes.length,0,'the first submit only reviews the link');
+ assert.ok(doc.querySelector('[data-edit-review]'));
+ assert.match(doc.querySelector('[data-edit-review]').textContent,/Descritivo provisão/);
+ doc.querySelector('[data-edit-review-cancel]').click();await tick();
+ assert.equal(doc.querySelector('input[value="1"]').checked,true);
+ assert.equal(state.writes.length,0);
+ doc.querySelector('.dda-provision-save').click();await tick();
+ doc.querySelector('[data-edit-review-submit]').click();await tick();await tick();
  assert.equal(state.linked,'1');assert.equal(view.element.hidden,false);assert.equal(doc.querySelector('[data-dda-id="31"] .ddr-link-cluster').textContent,'ID 1');
  assert.equal(doc.querySelector('[data-dda-id="31"] .ddr-link-cluster').dataset.linkState,'linked');
 });

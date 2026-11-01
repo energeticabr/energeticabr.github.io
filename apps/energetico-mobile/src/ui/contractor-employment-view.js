@@ -1,3 +1,4 @@
+import { confirmEditChanges, ensureEditReviewStyles } from '../../../../portal/ui/edit-review.js';
 import { filterContractorEmploymentRows } from '../chat/contractor-employment-data.js';
 import { CONTRACTOR_EMPLOYMENT_CARGOS, contractorEmploymentDate, validateContractorEmploymentDraft } from '../../../../portal/forms/contractor-employment.js';
 import { applyScreenNavigation } from './screen-navigation.js';
@@ -43,11 +44,13 @@ export function createContractorEmploymentView(container = {}, options = {}) {
   const pendingDrafts = new Map();
   const unconfirmed = new Map();
   const unconfirmedMessage = () => [...new Set(unconfirmed.values())].join(' ');
-  let rows = [], columns = [], destroyed = false, saving = false, loaded = false, generation = 0, controller, previousFocus, editorPickers;
+  let rows = [], columns = [], destroyed = false, saving = false, loaded = false, generation = 0, controller, previousFocus, editorPickers, editReviewAbort;
+  ensureEditReviewStyles(doc);
   function destroyEditorPickers() {
     editorPickers?.destroy(); editorPickers = null;
   }
   function clearEditor() {
+    editReviewAbort?.abort(); editReviewAbort = null;
     destroyEditorPickers(); editor.replaceChildren();
   }
   function bindEditorPickers() {
@@ -196,15 +199,33 @@ export function createContractorEmploymentView(container = {}, options = {}) {
     const updateRequirement = () => { termination.required = state.value === 'INATIVO'; termination.min = controls.DATAADMISSAO.value; };
     state.addEventListener('change', () => { if (state.value === 'ATIVO') termination.value = ''; updateRequirement(); });
     controls.DATAADMISSAO.addEventListener('change', updateRequirement); updateRequirement();
-    const save = el('button', 'rg-button', 'Salvar'); save.type = 'submit';
+    const save = el('button', 'rg-button', 'SUBMETER'); save.type = 'submit';
     const cancel = button('Cancelar', 'cancel-edit', cancelEdit);
     const actions = el('div', 'ce-actions'); actions.append(save, cancel); form.append(actions);
+    const reviewAbort = new AbortController(); editReviewAbort = reviewAbort;
+    let reviewing = false;
+    const captions = { CARGO: 'Cargo', DATAADMISSAO: 'Data de admissão', STATUS: 'Status', DATADESLIGAMENTO: 'Data de desligamento' };
+    const baseline = Object.fromEntries(Object.keys(controls).map(name => [name,
+      name.startsWith('DATA') ? contractorEmploymentDate(row.fields[name]) : row.fields[name] || '',
+    ]));
+    const markModified = () => {
+      for (const [name, control] of Object.entries(controls)) control.parentElement.toggleAttribute('data-edit-changed', control.value !== baseline[name]);
+    };
+    form.addEventListener('input', markModified); form.addEventListener('change', markModified); markModified();
     form.addEventListener('submit', async event => {
       event.preventDefault();
-      if (saving || destroyed || !editor.contains(form)) return;
+      if (saving || reviewing || destroyed || !editor.contains(form)) return;
       alert.textContent = unconfirmedMessage();
       try {
         const draft = validateContractorEmploymentDraft(Object.fromEntries(Object.entries(controls).map(([name, control]) => [name, control.value])));
+        const shown = (name, value) => !value ? '—' : name.startsWith('DATA') ? value.split('-').reverse().join('/') : value;
+        const changes = Object.keys(controls).filter(name => (draft[name] || '') !== baseline[name]).map(name => ({
+          label: captions[name], before: shown(name, baseline[name]), after: shown(name, draft[name]),
+        }));
+        reviewing = true; editorPickers?.close();
+        const confirmed = await confirmEditChanges({ form, changes, title: 'Confirme as alterações', signal: reviewAbort.signal });
+        reviewing = false;
+        if (!confirmed || destroyed || reviewAbort.signal.aborted || !editor.contains(form)) return;
         setBusy(true);
         status.textContent = 'Atualização em andamento…';
         const saved = await data.save(row, draft, { signal: controller?.signal });
@@ -220,7 +241,7 @@ export function createContractorEmploymentView(container = {}, options = {}) {
           status.textContent = 'Atualização não confirmada.';
         }
       }
-      finally { if (!destroyed) setBusy(false); }
+      finally { reviewing = false; if (!destroyed) setBusy(false); }
     });
     editor.append(form);
     bindEditorPickers();

@@ -39,6 +39,7 @@ export function bindPayrollSheetAttachments(form, context, { isBusy, getReceiptA
   };
   function render() {
     if (disposed) return;
+    tray.toggleAttribute('data-edit-changed', files.length > 0 || removed.size > 0);
     list.replaceChildren();
     for (const file of [...saved, ...files]) {
       const pending = files.includes(file);

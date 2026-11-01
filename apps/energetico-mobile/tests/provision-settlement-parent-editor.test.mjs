@@ -24,7 +24,13 @@ async function harness(t, overrides = {}) {
         assert.ok(option, 'select actual catalog option'); option.click();
       } else input.value = value;
       input.dispatchEvent(new dom.window.Event('input', { bubbles: true })); input.dispatchEvent(new dom.window.Event('change', { bubbles: true }));
-      document.querySelector('form').dispatchEvent(new dom.window.Event('submit', { bubbles: true, cancelable: true })); await tick(); },
+      const writesBeforeReview = f.writes.length;
+      document.querySelector('form').dispatchEvent(new dom.window.Event('submit', { bubbles: true, cancelable: true })); await tick();
+      assert.equal(f.writes.length, writesBeforeReview, 'opening review never writes the parent or children');
+      const review = document.querySelector('[data-edit-review]'); assert.ok(review, 'chosen field requires review');
+      assert.equal(review.querySelectorAll('tbody tr').length, 1, 'review only the chosen field');
+      const submit = review.querySelector('[data-edit-review-submit]'); assert.ok(submit, 'explicit second Submeter');
+      submit.click(); await tick(); },
   };
 }
 test('chooser lists actual editable columns; one-field form keeps real predefined catalogs', async t => {
@@ -45,6 +51,22 @@ test('single-column save reuses original context and confirms immediate child fa
     ['parents', '7', { FILIAL: '002 — UNIDADE DE TESTE' }], ['children', '11', { FILIAL: '002 — UNIDADE DE TESTE' }], ['children', '12', { FILIAL: '002 — UNIDADE DE TESTE' }],
   ]);
   assert.equal(h.records.parents[0].fields.OBS, '  observação original  '); assert.equal(h.refreshes, 1);
+});
+test('canceling field review preserves the draft without parent fanout or host refresh', async t => {
+  const h = await harness(t); h.choose('OBS');
+  const form = h.document.querySelector('form'), input = form.querySelector('[name=OBS]');
+  input.value = 'nova observação'; input.dispatchEvent(new h.dom.window.Event('input', { bubbles: true }));
+  form.dispatchEvent(new h.dom.window.Event('submit', { bubbles: true, cancelable: true })); await tick();
+  const review = h.document.querySelector('[data-edit-review]'); assert.ok(review);
+  assert.match(review.querySelector('tbody').textContent, /observação original/);
+  assert.deepEqual(h.writes, []); assert.equal(h.refreshes, 0);
+  review.querySelector('[data-edit-review-cancel]').click(); await tick();
+  assert.equal(h.document.querySelector('[data-edit-review]'), null);
+  assert.equal(h.document.querySelector('form'), form); assert.equal(input.value, 'nova observação');
+  assert.deepEqual(h.writes, []); assert.equal(h.refreshes, 0);
+  await h.save('OBS', 'nova observação');
+  await settle(() => !h.document.querySelector('[data-provision-parent-dialog]'));
+  assert.equal(h.writes.length, 3); assert.equal(h.refreshes, 1);
 });
 test('refresh failure after saved fanout holds modal and offers refresh-only retry without resaving', async t => {
   let refreshes = 0;

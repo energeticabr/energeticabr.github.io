@@ -70,7 +70,7 @@ test('gallery exposes reviewed recovery after source success/target 412 and keep
   await view.open(); f.failTarget('412');
   doc.querySelector('[data-employment-row="4"] [data-action="inactivate"]').click();
   doc.querySelector('[name="DATADESLIGAMENTO"]').value = '2026-02-20';
-  doc.querySelector('form').dispatchEvent(new dom.window.Event('submit', { cancelable: true, bubbles: true })); await tick(); await tick();
+  doc.querySelector('form').dispatchEvent(new dom.window.Event('submit', { cancelable: true, bubbles: true })); doc.querySelector('[data-edit-review-submit]')?.click(); await tick(); await tick(); await tick();
   assert.equal(f.source.fields.STATUS, 'INATIVO'); assert.equal(f.target.fields.STATUS, 'ATIVO');
   view.destroy();
   view = createContractorEmploymentView({ document: doc, data: createContractorEmploymentData({ repository: f.repository, ...f.context }) });
@@ -81,7 +81,7 @@ test('gallery exposes reviewed recovery after source success/target 412 and keep
     assert.match(doc.querySelector('[data-conflict-source]').textContent, /INATIVO/);
     doc.querySelector('[data-action="renew-baseline"]').click(); await tick();
     assert.equal(doc.querySelector('[name="DATADESLIGAMENTO"]').value, '2026-02-20');
-    doc.querySelector('form').dispatchEvent(new dom.window.Event('submit', { cancelable: true, bubbles: true })); await tick(); await tick();
+    doc.querySelector('form').dispatchEvent(new dom.window.Event('submit', { cancelable: true, bubbles: true })); doc.querySelector('[data-edit-review-submit]')?.click(); await tick(); await tick(); await tick();
     assert.equal(f.target.fields.STATUS, 'INATIVO'); assert.equal(f.target.fields.FILIAL, 'Concurrent branch');
     assert.deepEqual(f.writes.map(w => w.list), ['source', 'target', 'target']);
     const reads = f.calls.filter(c => c.path.includes('/source/items/') && c.options.method === 'GET');

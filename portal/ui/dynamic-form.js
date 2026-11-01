@@ -6,9 +6,11 @@ import { createSearchableSelect } from "../forms/searchable-select.js?v=20260906
 import { applyPowerAppsDefaultValues } from "../forms/powerapps-defaults.js";
 import { createFormAttachmentDraft, formAttachmentFieldMarkup, formAttachmentRowsMarkup } from "../forms/form-attachments.js?v=20260831-image-preview-v1";
 import { attachmentViewerMarkup, bindAttachmentViewerBackdrop, createAttachmentPresenter, createAttachmentPreviewController } from "./attachments-panel.js?v=20260906-suprimentos-parity-v1";
+import { bindEditHighlights, buildEditChanges, cancelEditReview, confirmEditChanges } from "./edit-review.js";
 
 function valueForInput(value, control) {
   if (value === null || value === undefined) return "";
+  if (control === "date") return String(value).slice(0, 10);
   if (control === "datetime-local") return String(value).slice(0, 16);
   return String(value);
 }
@@ -1853,6 +1855,35 @@ export function renderDynamicForm(root, options = {}) {
   const provisaoPaymentStageBinding = bindProvisaoPaymentStage(form, options);
   const recurringExpenseBinding = bindRecurringExpenseRules(form, options);
   const imobilizadoDefaultsBinding = bindImobilizadoPowerAppsDefaults(form, options, choiceBindings);
+  const editBaseline = options.editBaseline ?? options.values ?? {};
+  // Review the persisted baseline, including retries, against the same normalized
+  // values used by submission. Search text has no semantic value until selected.
+  const editColumns = descriptors.map(column => (options.entity?.messageFields || []).includes(column.name)
+    ? { ...column, isMessage: true } : column);
+  const editHighlights = options.mode === "edit" ? bindEditHighlights({
+    form,
+    columns: editColumns,
+    baseline: editBaseline,
+    readFields() {
+      const raw = readValues(form, descriptors, { ...choiceBindings.values(), ...relationshipBindings.values() });
+      const validation = validateFormValues(raw, descriptors, options.entity, { mode: "edit" });
+      const fields = { ...validation.fields,
+        ...choiceBindings.fields(), ...relationshipBindings.fields() };
+      // Required/invalid plain values still changed even when they cannot be
+      // submitted. Selector query text must continue to have no semantic value.
+      for (const column of descriptors) {
+        if (validation.errors[column.name] && !["select", "lookup", "person"].includes(column.control)
+          && Object.hasOwn(raw, column.name)) fields[column.name] = raw[column.name];
+      }
+      const invalid = { ...choiceBindings.validate().errors, ...relationshipBindings.validate().errors };
+      for (const name of Object.keys(invalid)) {
+        delete fields[name];
+        delete fields[`${name}LookupId`];
+      }
+      return fields;
+    },
+    readAttachmentChanges: () => attachmentBindings.changes(),
+  }) : null;
   let submitting = false;
   const onCancel = () => { if (!disposed && !submitting) options.onCancel?.(); };
   const onClear = () => { if (!disposed && !submitting) showErrors(root, {}); };
@@ -1883,12 +1914,22 @@ export function renderDynamicForm(root, options = {}) {
     const fields = Object.freeze({ ...validation.fields, ...choiceBindings.fields(), ...relationshipBindings.fields() });
     showErrors(root, {});
     submitting = true;
-    form?.setAttribute?.("aria-busy", "true");
     const controls = Array.from(form?.elements || []);
     const disabledStates = controls.map(control => control.disabled === true);
-    controls.forEach(control => { control.disabled = true; });
-    if (save) { save.disabled = true; save.textContent = "Salvando..."; }
     try {
+      const externalChanges = options.mode === "edit" ? options.getEditAttachmentChanges?.() : undefined;
+      const effectiveChanges = externalChanges === undefined ? attachmentBindings.changes() : externalChanges;
+      const attachmentChanges = Object.freeze({
+        uploads: Object.freeze([...(effectiveChanges?.uploads || [])]),
+        deletions: Object.freeze([...(effectiveChanges?.deletions || [])]),
+      });
+      if (options.mode === "edit") {
+        const changes = buildEditChanges(editColumns, editBaseline, fields, relationshipLabels, attachmentChanges);
+        if (!await confirmEditChanges({ form, changes }) || disposed) return;
+      }
+      form?.setAttribute?.("aria-busy", "true");
+      controls.forEach(control => { control.disabled = true; });
+      if (save) { save.disabled = true; save.textContent = "Salvando..."; }
       const retryState = Object.freeze({
         displayValues: Object.freeze(Object.fromEntries(Object.entries(rawValues).map(([name, value]) => [
           name,
@@ -1896,7 +1937,7 @@ export function renderDynamicForm(root, options = {}) {
         ]))),
         choiceSelections: choiceBindings.selections(),
       });
-      await options.onSubmit?.(fields, rawValues, relationshipLabels, attachmentBindings.changes(), retryState);
+      await options.onSubmit?.(fields, rawValues, relationshipLabels, attachmentChanges, retryState);
     } finally {
       submitting = false;
       if (!disposed) {
@@ -1913,6 +1954,8 @@ export function renderDynamicForm(root, options = {}) {
   return Object.freeze({
     cleanup() {
       disposed = true;
+      cancelEditReview(form);
+      editHighlights?.cleanup();
       cancel?.removeEventListener("click", onCancel);
       clear?.removeEventListener("click", onClear);
       reloadConflict?.removeEventListener("click", onReloadConflict);

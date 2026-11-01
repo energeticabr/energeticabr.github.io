@@ -1,0 +1,33 @@
+<!doctype html>
+<html lang="pt-BR">
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Conferência de edição — dados fictícios</title>
+
+<body>
+<main id="fixture" class="gallery-record-dialog gallery-record-screen" style="font-family:Arial,sans-serif;max-width:52rem;margin:auto"></main>
+<p id="writes" role="status">0 gravações fictícias</p>
+<script type="module">
+  import '../../../../portal/styles/admin.css';
+  import '../../src/ui/gallery-record-actions.css';
+  import {renderDynamicForm} from '../../../../portal/ui/dynamic-form.js';
+  const host=document.querySelector('#fixture');
+  let writes=0;
+  renderDynamicForm(host,{
+    entity:{title:'Editar produto de teste'},mode:'edit',
+    columns:[
+      {name:'NOME',label:'Produto',control:'text',editable:true},
+      {name:'VALOR',label:'Valor unitário',control:'currency',editable:true},
+      {name:'STATUS',label:'Status',control:'select',choices:['ATIVO','INATIVO'],editable:true},
+    ],
+    values:{NOME:'PRODUTO DE TESTE',VALOR:10,STATUS:'ATIVO'},
+    attachments:{enabled:true,canView:true,canEdit:true,pendingFiles:[new File(['fictício'],'arquivo-ficticio.pdf',{type:'application/pdf'})]},
+    onSubmit:async()=>{document.querySelector('#writes').textContent=`${++writes} gravação fictícia`;},
+  });
+  for(const [name,value] of [['NOME','PRODUTO DE TESTE NOVO'],['VALOR','11.50']]){
+    const input=host.querySelector(`[name="${name}"]`);input.value=value;input.dispatchEvent(new Event('input',{bubbles:true}));
+  }
+  document.documentElement.dataset.ready='true';
+</script>
+</body>
+</html>

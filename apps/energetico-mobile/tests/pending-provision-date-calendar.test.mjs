@@ -22,7 +22,7 @@ test('vencimento oferece calendário nativo com o mesmo dia brasileiro da provis
   assert.equal(field.getAttribute('inputmode'), null);
 });
 
-test('tocar no campo solicita calendário e salvar envia o dia escolhido para a provisão certa', t => {
+test('tocar no campo solicita calendário e salvar envia o dia escolhido para a provisão certa', async t => {
   const { dom, root, view, field } = editor(t, { pendingProvisionDateEditValue: '05/10/2026' });
   const saved = [];
   view.on('save-pending-provision-due-date', command => saved.push(command));
@@ -39,6 +39,8 @@ test('tocar no campo solicita calendário e salvar envia o dia escolhido para a 
   assert.equal(field.value, '2026-10-09');
   assert.deepEqual(saved, [], 'escolher não grava sem Salvar');
   root.querySelector('[data-action="save-pending-provision-due-date"]').click();
+  root.ownerDocument.querySelector('[data-edit-review-submit]').click();
+  await new Promise(resolve => setImmediate(resolve));
   assert.deepEqual(saved.map(({ paymentId, value }) => ({ paymentId, value })), [
     { paymentId: '314', value: '09/10/2026' },
   ]);
@@ -64,7 +66,7 @@ test('vencimento fica bloqueado durante gravação e campo vazio não reaproveit
   view.on('save-pending-provision-due-date', command => saved.push(command));
   field.value = '';
   root.querySelector('[data-action="save-pending-provision-due-date"]').click();
-  assert.equal(saved[0].value, '');
+  assert.deepEqual(saved, [], 'data vazia não inicia revisão ou gravação');
   const busy = editor(t, { pendingProvisionDateEditBusy: true });
   let opens = 0;
   busy.field.showPicker = () => { opens++; };

@@ -335,12 +335,13 @@ export function createGalleryRecordActions({ document, host, loadEditor, saveEdi
         powerAppsOptionSearch: context.powerAppsOptionSearch,
         attachments: context.sheetAttachments ? { enabled: false } : context.attachments,
         onCancel: () => { if (active(state) && !state.busy) close(); },
+        getEditAttachmentChanges: () => state.sheetAttachmentBinding?.changes(),
         onSubmit: async (fields, _rawValues, _relationshipLabels, attachmentChanges) => {
           await mutate(state, () => {
             if (typeof saveEditor !== "function") throw new Error("Não foi possível salvar este registro. Tente novamente.");
             const readOnly = new Set(context.columns.filter(c => c.readOnly).flatMap(c => [c.name,...(['lookup','person'].includes(c.control)?[`${c.name}LookupId`]:[])]));
             const filtered = Object.fromEntries(Object.entries(fields).filter(([name]) => !readOnly.has(name)));
-            const attachments = state.sheetAttachmentBinding ? state.sheetAttachmentBinding.changes() : attachmentChanges;
+            const attachments = attachmentChanges;
             state.editChanges = galleryEditChanges(context, filtered, _relationshipLabels, attachments);
             return saveEditor(context, filtered, { attachments, signal: state.mutationAbort.signal });
           });

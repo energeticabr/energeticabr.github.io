@@ -28,7 +28,7 @@ test('actual portal mixed conflict review shows the individually read stored and
   const writesBeforeRenewal = f.writes.length;
   root.querySelector('[data-contractor-renew]').click(); await tick();
   assert.equal(f.writes.length, writesBeforeRenewal);
-  root.querySelector('form').dispatchEvent(new dom.window.Event('submit', { bubbles: true, cancelable: true })); await tick(); await tick();
+  root.querySelector('form').dispatchEvent(new dom.window.Event('submit', { bubbles: true, cancelable: true })); dom.window.document.querySelector('[data-edit-review-submit]')?.click(); await tick(); await tick(); await tick();
   assert.equal(f.source.fields.Title, 'REQUESTED TITLE');
   assert.equal(f.target.fields.STATUS, 'INATIVO'); assert.equal(f.storage.entries.size, 0);
 });
@@ -45,11 +45,11 @@ test('actual portal source 412 recovery does not use the generic full-source con
   statusInput.dispatchEvent(new dom.window.Event('input', { bubbles: true }));
   [...root.querySelectorAll('#field-STATUS-listbox [role="option"]')].find(option => option.textContent === 'INATIVO').click();
   f.failSource('412');
-  root.querySelector('form').dispatchEvent(new dom.window.Event('submit', { bubbles: true, cancelable: true })); await tick();
+  root.querySelector('form').dispatchEvent(new dom.window.Event('submit', { bubbles: true, cancelable: true })); dom.window.document.querySelector('[data-edit-review-submit]')?.click(); await tick(); await tick();
   const prompt = dom.window.document.querySelector('dialog form');
   assert.ok(prompt, root.textContent);
   prompt.querySelector('input').value = '2026-02-20';
-  prompt.dispatchEvent(new dom.window.Event('submit', { bubbles: true, cancelable: true })); await tick(); await tick();
+  prompt.dispatchEvent(new dom.window.Event('submit', { bubbles: true, cancelable: true })); dom.window.document.querySelector('[data-edit-review-submit]')?.click(); await tick(); await tick(); await tick();
   assert.ok(root.querySelector('[data-contractor-review]'));
   assert.equal(fullSourceReads(), initialReads);
 });
@@ -74,7 +74,7 @@ test('recreated actual portal exposes source/target 412 review and renews the or
   assert.equal(f.writes.length, before, 'review and renewal cannot mutate SharePoint');
   const form = root.querySelector('form');
   assert.ok(form);
-  form.dispatchEvent(new dom.window.Event('submit', { bubbles: true, cancelable: true })); await tick(); await tick();
+  form.dispatchEvent(new dom.window.Event('submit', { bubbles: true, cancelable: true })); dom.window.document.querySelector('[data-edit-review-submit]')?.click(); await tick(); await tick(); await tick();
   assert.equal(f.target.fields.STATUS, 'INATIVO', root.textContent);
   assert.equal(f.target.fields.DATADESLIGAMENTO, '2026-02-20');
   assert.equal(f.target.fields.FILIAL, 'Concurrent branch');

@@ -37,6 +37,15 @@ async function setup(t, overrides = {}) {
 }
 const click = (ctx, action) => ctx.buttons.querySelector(`[data-gallery-action="${action}"]`).click();
 const key = (ctx, target, name, options = {}) => target.dispatchEvent(new ctx.dom.window.KeyboardEvent("keydown", { key: name, bubbles: true, cancelable: true, ...options }));
+async function confirmReview(ctx) {
+  const review = ctx.get('[data-edit-review]');
+  assert.ok(review, 'valid edit submission must open its Before/After review');
+  assert.ok(review.querySelector('table'), 'review shows the field changes');
+  const submit = review.querySelector('[data-edit-review-submit]');
+  assert.ok(submit, 'review requires an explicit second Submeter click');
+  submit.click();
+  await settle();
+}
 
 test('top back cancels a pending editor read and ignores its late result', async t => {
   const pending = deferred(); let signal;
@@ -100,6 +109,7 @@ test('top back cannot cancel an in-flight write and becomes available after a fa
   const back = ctx.get('[data-gallery-editor-back]'); assert.ok(back);
   ctx.get('[name=Title]').value = 'Draft';
   ctx.get('form').dispatchEvent(new ctx.dom.window.Event('submit', { bubbles: true, cancelable: true }));
+  await confirmReview(ctx);
   assert.equal(back.disabled, true);
   back.click(); assert.ok(ctx.get('[data-gallery-record-screen]'));
   mutation.reject(new Error('Falha temporária')); await settle();
@@ -131,6 +141,7 @@ for (const entity of entities.filter(item => item.available && item.galleryAvail
   }
   assert.equal(ctx.writes.length, 0);
   ctx.get('form').dispatchEvent(new ctx.dom.window.Event('submit', { bubbles: true, cancelable: true }));
+  await confirmReview(ctx);
   await settle();
   for (const name of names) assert.equal(ctx.writes[0][2][name], 'NOVO');
 });
@@ -162,6 +173,7 @@ for (const entityId of ['lancamentos', 'documentos-operacionais', 'fornecedores'
   assert.equal(input.value, 'novo');
   ctx.get('[role=option]').click();
   ctx.get('form').dispatchEvent(new ctx.dom.window.Event('submit', { bubbles: true, cancelable: true }));
+  await confirmReview(ctx);
   await settle();
   assert.equal(ctx.writes[0][2][control === 'select' ? 'FORNECEDOR' : 'FORNECEDORLookupId'], control === 'select' ? 'FORNECEDOR NOVO' : 2);
 });
@@ -185,6 +197,7 @@ for (const entityId of ['lancamentos', 'provisoes-de-pagamento']) for (const con
   key(ctx, input, 'Escape'); input.click();
   assert.equal(input.value, '');
   ctx.get('form').requestSubmit(); await settle();
+  await confirmReview(ctx);
   assert.equal(ctx.writes.length, 1, 'opening without typing preserves the authorized selection even before blur');
   assert.equal(ctx.writes[0][2][control === 'select' ? 'CLIENTE' : 'CLIENTELookupId'], control === 'select' ? 'ATUAL' : 1);
 });
@@ -249,6 +262,7 @@ test('edit shows a modal table with confirmed changes and restores gallery focus
   trigger.click(); await settle(); await settle();
   ctx.get('[name=Title]').value = '<b>Novo</b>';
   ctx.get('form').dispatchEvent(new ctx.dom.window.Event('submit', { bubbles: true, cancelable: true }));
+  await confirmReview(ctx);
   await settle();
   const receipt = ctx.get('[data-gallery-edit-success]');
   assert.ok(receipt, 'save must show a receipt instead of silently closing');
@@ -271,6 +285,7 @@ test('rejected edit never shows a success receipt', async t => {
   const ctx = await setup(t, { saveEditor: async () => { throw new Error('Falha na gravação'); } });
   click(ctx, 'edit'); await settle(); await settle();
   ctx.get('form').dispatchEvent(new ctx.dom.window.Event('submit', { bubbles: true, cancelable: true }));
+  await confirmReview(ctx);
   await settle();
   assert.equal(ctx.get('[data-gallery-edit-success]'), null);
   assert.ok(ctx.get('[data-form-save]'));
@@ -342,6 +357,74 @@ test('gallery edit offers only cancel and submit, and cancel discards the draft'
   assert.equal(ctx.get('[name=Title]').value, 'Original');
 });
 
+for (const mixed of [false, true]) test(`external payroll sheet ${mixed ? 'mixed field/attachment' : 'attachment-only'} review cancels without writes and confirms the exact staged changes`, async t => {
+  const saves = [];
+  const ctx = await setup(t, {
+    loadEditor: async id => ({ ...context(id), sheetAttachments: {
+      list: async () => [{ name: 'ORIGINAL.pdf', size: 25, type: 'application/pdf' }],
+      read: async () => new ArrayBuffer(1),
+    } }),
+    saveEditor: async (loaded, fields, options) => {
+      saves.push({ id: loaded.item.id, fields, attachments: options.attachments });
+      return { ...loaded.item, fields };
+    },
+  });
+  click(ctx, 'edit'); await settle(); await settle();
+  const tray = ctx.get('[data-sheet-attachments]');
+  assert.ok(tray, 'use the external sheet binding');
+  assert.equal(tray.hasAttribute('data-edit-changed'), false, 'unchanged external tray is not orange');
+  assert.equal(ctx.get('[data-form-attachments]'), null, 'renderer attachment binding is disabled');
+  ctx.get('[data-sheet-attachment-remove-existing]').click();
+  assert.equal(tray.hasAttribute('data-edit-changed'), true, 'a deletion alone marks the external tray orange');
+  ctx.get('[data-sheet-attachment-restore-existing]').click();
+  assert.equal(tray.hasAttribute('data-edit-changed'), false, 'restoring the original attachment removes orange');
+  const upload = new ctx.dom.window.File(['receipt'], 'NOVO.pdf', { type: 'application/pdf' });
+  const picker = ctx.get('[data-sheet-attachment-input]');
+  Object.defineProperty(picker, 'files', { configurable: true, value: [upload] });
+  picker.dispatchEvent(new ctx.dom.window.Event('change', { bubbles: true }));
+  assert.equal(tray.hasAttribute('data-edit-changed'), true, 'an upload alone marks the external tray orange');
+  ctx.get('[data-sheet-attachment-remove]').click();
+  assert.equal(tray.hasAttribute('data-edit-changed'), false, 'removing the staged upload restores the original tray');
+  picker.dispatchEvent(new ctx.dom.window.Event('change', { bubbles: true }));
+  ctx.get('[data-sheet-attachment-remove-existing]').click();
+  assert.equal(tray.hasAttribute('data-edit-changed'), true, 'mixed upload/deletion stays orange');
+  if (mixed) {
+    const input = ctx.get('[name=Title]'); input.value = 'Atualizado';
+    input.dispatchEvent(new ctx.dom.window.Event('input', { bubbles: true }));
+  }
+  const form = ctx.get('[data-dynamic-form]');
+  const submit = () => form.dispatchEvent(new ctx.dom.window.Event('submit', { bubbles: true, cancelable: true }));
+  submit(); await settle();
+  const review = ctx.get('[data-edit-review]');
+  assert.ok(review);
+  assert.deepEqual(saves, [], 'opening review never saves fields or uploads/removes attachments');
+  const reviewedRows = [...review.querySelectorAll('tbody tr')].map(row => [...row.cells].map(cell => cell.textContent));
+  assert.ok(reviewedRows.some(row => row[0] === 'Anexo adicionado' && row[2] === 'NOVO.pdf'));
+  assert.ok(reviewedRows.some(row => row[0] === 'Anexo removido' && row[1] === 'ORIGINAL.pdf'));
+  assert.equal(reviewedRows.filter(row => row[0] === 'Título').length, mixed ? 1 : 0);
+  if (mixed) assert.ok(reviewedRows.some(row => row[0] === 'Título' && row[1] === 'Original' && row[2] === 'ATUALIZADO'));
+  review.querySelector('[data-edit-review-cancel]').click(); await settle();
+  assert.equal(ctx.get('[data-edit-review]'), null);
+  assert.deepEqual(saves, [], 'canceling review performs zero persistence');
+  assert.deepEqual(ctx.changes, [], 'canceling does not refresh the gallery');
+  assert.equal(ctx.get('[data-dynamic-form]'), form, 'cancel keeps the editor and file draft');
+  assert.equal(tray.hasAttribute('data-edit-changed'), true, 'canceling review keeps the staged tray orange');
+  assert.equal(ctx.get('[name=Title]').value, mixed ? 'Atualizado' : 'Original');
+  assert.ok(ctx.get('[data-sheet-attachment-restore-existing]'), 'pending deletion remains staged');
+  assert.match(ctx.get('[data-sheet-attachment-list]').textContent, /NOVO\.pdf/);
+  submit(); await settle();
+  assert.deepEqual(saves, [], 'reopening review still performs zero writes');
+  assert.deepEqual([...ctx.get('[data-edit-review]').querySelectorAll('tbody tr')].map(row => [...row.cells].map(cell => cell.textContent)), reviewedRows);
+  await confirmReview(ctx);
+  assert.equal(saves.length, 1);
+  assert.equal(saves[0].id, '42');
+  assert.equal(saves[0].fields.Title, mixed ? 'ATUALIZADO' : 'ORIGINAL');
+  assert.deepEqual(saves[0].attachments.uploads, [upload]);
+  assert.deepEqual(saves[0].attachments.deletions, ['ORIGINAL.pdf']);
+  assert.equal(ctx.changes.length, 1);
+  assert.ok(ctx.get('[data-gallery-edit-success]'));
+});
+
 test('provisao mostra anexos depois de DATAEXECUCAOAGENDAMENTO e envia exclusao somente ao submeter', async t => {
   const calls = [];
   const ctx = await setup(t, {
@@ -365,6 +448,7 @@ test('provisao mostra anexos depois de DATAEXECUCAOAGENDAMENTO e envia exclusao 
   assert.ok(ctx.get('[data-form-attachment-remove-existing]'));
   ctx.get('[data-form-attachment-remove-existing]').click();
   ctx.get('form').dispatchEvent(new ctx.dom.window.Event('submit',{bubbles:true,cancelable:true})); await settle();
+  await confirmReview(ctx);
   assert.deepEqual(calls[0].deletions,['PROVISAO.pdf']);
 });
 
@@ -391,6 +475,7 @@ test('editing dropdowns allow typing, deletion and paste but only save a selecte
   ctx.get('[role=option]').parentElement.querySelectorAll('[role=option]')[1].click();
   assert.equal(input.value,'PENDENTE');
   ctx.get('form').dispatchEvent(new ctx.dom.window.Event('submit',{bubbles:true,cancelable:true})); await settle();
+  await confirmReview(ctx);
   assert.equal(ctx.writes[0][2].STATUS,'PENDENTE');
 });
 
@@ -409,6 +494,7 @@ test('editing a remote relationship browses options beyond the first search batc
   ctx.get('[data-relation-searchable-root] [role=listbox]').querySelectorAll('[role=option]')[31].click();
   assert.equal(input.value,'Cliente 32');
   ctx.get('form').dispatchEvent(new ctx.dom.window.Event('submit',{bubbles:true,cancelable:true}));await settle();
+  await confirmReview(ctx);
   assert.equal(ctx.writes[0][2].CLIENTELookupId,32);
 });
 
@@ -454,6 +540,7 @@ for (const name of ['TIPODOCUMENTO','TIPOHOMOLOGACAO','PESSOARELACIONADA','ETAPA
   assert.ok(option,'a result absent from the initially displayed options must be selectable');
   option.click();
   ctx.get('form').dispatchEvent(new ctx.dom.window.Event('submit',{bubbles:true,cancelable:true}));await settle();
+  await confirmReview(ctx);
   assert.equal(ctx.writes[0][2][name],target);
 });
 
@@ -483,6 +570,7 @@ for (const control of ['lookup','person']) test(`editable ${control} searches th
   input.blur();
   assert.equal(input.value,'');assert.equal(ctx.get('[data-relation-value]').value,'');
   ctx.get('form').dispatchEvent(new ctx.dom.window.Event('submit',{bubbles:true,cancelable:true}));await settle();
+  await confirmReview(ctx);
   assert.equal(ctx.writes[0][2].PESSOALookupId,null);
 });
 
@@ -548,6 +636,7 @@ test('real document contract clears the selected type and revokes its old option
   const choices=[...ctx.document.querySelectorAll('[data-searchable-field=TIPODOCUMENTO] [role=option]')].map(option=>option.textContent);
   assert.deepEqual(choices,['CERTIDÃO FILIAL'],'old-category selections must not be offered again');
   ctx.get('form').dispatchEvent(new ctx.dom.window.Event('submit',{bubbles:true,cancelable:true}));await settle();
+  await confirmReview(ctx);
   assert.equal(ctx.writes[0][2].TIPODOCUMENTO,null);
 });
 
@@ -568,6 +657,7 @@ test('real document contract cascades homologation invalidation through person t
     assert.equal(ctx.get(`[data-searchable-field=${name}] [role=combobox]`).value,'',name);
   }
   ctx.get('form').dispatchEvent(new ctx.dom.window.Event('submit',{bubbles:true,cancelable:true}));await settle();
+  await confirmReview(ctx);
   assert.equal(ctx.writes[0][2].PESSOARELACIONADA,null);
   assert.equal(ctx.writes[0][2].TIPOMARCO,null);
 });
@@ -593,6 +683,7 @@ test('real contract provider result stays visible when search matches a hidden s
   assert.equal(option?.textContent,'23 - EMPRESA (CT-23)');
   option.click();
   ctx.get('form').dispatchEvent(new ctx.dom.window.Event('submit',{bubbles:true,cancelable:true}));await settle();
+  await confirmReview(ctx);
   assert.equal(ctx.writes[0][2].CONTRATO,'CT-23');assert.equal(ctx.writes[0][2].MEDICAOPARCIAL,'23');
 });
 
@@ -601,6 +692,7 @@ test('clearing the real shared contract selector clears its linked measurement i
   click(ctx,'edit');await settle();await settle();
   ctx.get('[data-searchable-field=CONTRATO] [data-searchable-clear]').click();
   ctx.get('form').dispatchEvent(new ctx.dom.window.Event('submit',{bubbles:true,cancelable:true}));await settle();
+  await confirmReview(ctx);
   assert.equal(ctx.writes[0][2].CONTRATO,null);assert.equal(ctx.writes[0][2].MEDICAOPARCIAL,null);
 });
 
@@ -614,6 +706,7 @@ test('clearing cascading selections terminates safely even with cyclic dependenc
   ctx.get('[data-searchable-field=A] [data-searchable-clear]').click();
   assert.equal(ctx.get('[name=A]').value,'');assert.equal(ctx.get('[name=B]').value,'');
   ctx.get('form').dispatchEvent(new ctx.dom.window.Event('submit',{bubbles:true,cancelable:true}));await settle();
+  await confirmReview(ctx);
   assert.deepEqual(ctx.writes[0][2],{A:null,B:null});
 });
 
@@ -640,6 +733,7 @@ test('payroll screen preserves edits while source values refresh and omits read-
   assert.equal(ctx.get('[name=VALORUNITARIO]').value, '300');
   assert.equal(date.value, '2026-09-29');
   ctx.get('[data-dynamic-form]').dispatchEvent(new ctx.dom.window.Event('submit', { bubbles: true, cancelable: true }));
+  await confirmReview(ctx);
   await settle();
   assert.deepEqual(ctx.writes[0][2], { DATA: '2026-09-29' });
 });
@@ -668,6 +762,7 @@ for(const [control,multiple] of [['lookup',false],['lookup',true],['person',true
   ],item:{id,fields:{DATA:'2026-09-28',FORNECEDORLookupId:multiple?[3]:3,...(withLabel?{FORNECEDOR:multiple?['CLEITON']:'CLEITON'}:{})}},relationshipSearch:async()=>{throw new Error('Fornecedor bloqueado não deve pesquisar');}})});
   click(ctx,'edit');await settle();await settle();ctx.get('[name=DATA]').value='2026-09-29';
   ctx.get('[data-dynamic-form]').dispatchEvent(new ctx.dom.window.Event('submit',{bubbles:true,cancelable:true}));await settle();
+  await confirmReview(ctx);
   assert.deepEqual(ctx.writes.map(row=>row[2]),[{DATA:'2026-09-29'}]);
 });
 
@@ -833,9 +928,11 @@ test("metadata editor retains failed fields and saves through callback", async t
   ctx.get('[name="Title"]').value = "Alterado";
   const form = ctx.get('[data-dynamic-form]');
   form.dispatchEvent(new ctx.dom.window.Event("submit", { bubbles: true, cancelable: true })); await settle();
+  await confirmReview(ctx);
   assert.match(ctx.get('[role="alert"]').textContent, /Falha ao salvar/);
   assert.equal(ctx.get('[name="Title"]').value, "Alterado");
   form.dispatchEvent(new ctx.dom.window.Event("submit", { bubbles: true, cancelable: true })); await settle();
+  await confirmReview(ctx);
   assert.equal(ctx.changes[0].operation, "edit");
   assert.equal(ctx.changes[0].item.fields.Title, "ALTERADO");
   assert.ok(ctx.get('[data-gallery-edit-success]'));
@@ -865,6 +962,7 @@ test("saved editor locks fields after refresh failure and retries without a seco
   });
   click(ctx, "edit"); await settle(); await settle();
   ctx.get('[data-dynamic-form]').dispatchEvent(new ctx.dom.window.Event("submit", { bubbles: true, cancelable: true })); await settle();
+  await confirmReview(ctx);
   assert.ok(ctx.get('[data-gallery-edit-success]'));
   assert.equal(ctx.get('[data-form-save]'), null);
   assert.equal(ctx.get('[data-gallery-receipt-close]').disabled, false);
@@ -910,6 +1008,7 @@ test("Power Apps choice keyboard selection stays inside editor and rejects arbit
   key(ctx, input, "ArrowDown"); key(ctx, input, "ArrowDown"); key(ctx, input, "Enter");
   assert.equal(ctx.writes.length, 0, "choice Enter does not submit the form");
   ctx.get('[data-dynamic-form]').dispatchEvent(new ctx.dom.window.Event("submit", { bubbles: true, cancelable: true })); await settle();
+  await confirmReview(ctx);
   assert.equal(ctx.writes[0][2].Status, "FECHADO");
 });
 

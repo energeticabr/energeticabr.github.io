@@ -117,6 +117,7 @@ export function createItemDetailPage(root, context = {}) {
       root.innerHTML = '<section class="entity-page"><div data-item-form></div></section>';
       formController = renderDynamicForm(root.querySelector("[data-item-form]"), {
         entity, columns: formColumns, mode: "edit", values: state.formValues || item.fields || {}, relationshipLabels: state.formRelationshipLabels, retryState: state.formRetryState, error: state.error, conflict: state.conflict,
+        editBaseline: item.fields || {},
         relationshipDebounceMs: context.relationshipDebounceMs,
         relationshipSearch: (column, term, options) => {
           if (typeof repository.searchRelationshipOptions !== "function") throw new Error("A pesquisa relacional do SharePoint não está disponível.");

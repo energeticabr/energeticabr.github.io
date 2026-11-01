@@ -128,6 +128,8 @@ test('submeter conclusão confirma ID e data no novo layout por 2 segundos e ret
   dialog.querySelector('[name="completionDate"]').value = '2026-10-02';
   const submit = dialog.querySelector('[data-task-completion-submit]');
   submit.click(); submit.click();
+  assert.equal(writes.length, 0, 'primeiro clique abre apenas revisão');
+  ctx.document.querySelector('[data-edit-review-submit]').click(); await settle();
   assert.deepEqual(writes, [['176', { field_8: '2026-10-02', field_12: 'CONCLUÍDA' }]]);
   assert.equal(submit.disabled, true);
   assert.equal(dialog.querySelector('[data-task-completion-cancel]').disabled, true);
@@ -171,10 +173,10 @@ test('falha de leitura após save verifica os campos antes de permitir nova grav
   } });
   await ctx.gallery.open();
   const dialog = await openCompletion(ctx);
-  dialog.querySelector('[data-task-completion-submit]').click(); await settle(); await settle();
+  await submitCompletion(dialog); await settle(); await settle();
   assert.equal(writes, 1);
   assert.equal(dialog.querySelector('[name="completionDate"]').disabled, true, 'não altera um envio ainda não reconciliado');
-  dialog.querySelector('[data-task-completion-submit]').click(); await settle(); await settle();
+  await submitCompletion(dialog); await settle(); await settle();
   assert.equal(writes, 1, 'o envio já reconhecido não é repetido com ETag antigo');
   assert.match(dialog.querySelector('.launch-completion')?.textContent || '', /03\/10\/2026/);
   t.mock.timers.tick(2000); await settle();
@@ -254,7 +256,7 @@ test('serviço real reconcilia escrita confirmada sem novo PATCH nem espera por 
   const ctx = await setup(t, { now: () => new Date('2026-10-03T12:00:00Z'), data });
   await ctx.gallery.open();
   const dialog = await openCompletion(ctx);
-  dialog.querySelector('[data-task-completion-submit]').click(); await settle(); await settle();
+  await submitCompletion(dialog); await settle(); await settle();
   assert.equal(writes, 1); assert.equal(reads, 2);
   assert.equal(fields.field_11, 'Descrição original');
   assert.match(dialog.querySelector('.launch-completion')?.textContent || '', /ID 176/);
@@ -287,7 +289,7 @@ test('conclusão normaliza responsável e data retornados pelo serviço real sem
   const root = ctx.root(), status = root.querySelector('[name="status"]'); status.value = '';
   status.dispatchEvent(new ctx.dom.window.Event('change', { bubbles: true }));
   const dialog = await openCompletion(ctx);
-  dialog.querySelector('[data-task-completion-submit]').click(); await settle(); await settle();
+  await submitCompletion(dialog); await settle(); await settle();
   t.mock.timers.tick(2000); await settle();
   assert.match(root.querySelector('.tg-modified').textContent, /03\/10\/2026, 12:00/);
   const search = root.querySelector('[name="search"]');
@@ -310,7 +312,7 @@ test('data vazia impede gravação; falha no save mantém valores para tentar no
   await settle();
   assert.equal(writes, 0);
   date.value = '2026-10-01';
-  dialog.querySelector('[data-task-completion-submit]').click(); await settle();
+  await submitCompletion(dialog); await settle();
   assert.equal(writes, 1);
   assert.match(dialog.querySelector('[role="alert"]').textContent, /Sem conexão/);
   assert.equal(dialog.querySelector('.launch-completion'), null, 'falha não vira mensagem de sucesso');
@@ -328,7 +330,7 @@ test('conclusão confirmada não depende de recarregar a galeria para mostrar su
   } });
   await ctx.gallery.open();
   const dialog = await openCompletion(ctx);
-  dialog.querySelector('[data-task-completion-submit]').click(); await settle(); await settle();
+  await submitCompletion(dialog); await settle(); await settle();
   assert.equal(writes, 1);
   assert.ok(dialog.querySelector('.launch-completion'));
   assert.equal(ctx.root().querySelector('[data-item-id="176"]'), null, 'a tarefa sai do filtro de pendentes sem consultar a lista');
@@ -427,7 +429,7 @@ test('concluir na segunda página preserva filtros, rolagem e os outros cartões
   content.scrollTop = 730; root.scrollTop = 32;
   root.querySelector('[data-item-id="188"] [data-action="complete"]').click(); await settle();
   const dialog = root.querySelector('.tg-completion-dialog');
-  dialog.querySelector('[data-task-completion-submit]').click(); await settle();
+  await submitCompletion(dialog); await settle();
   assert.equal(root.querySelector('[data-item-id="189"]'), untouched, 'não limpa a galeria enquanto grava');
   assert.equal(root.getAttribute('aria-busy'), 'false');
   saving.resolve(); await settle(); await settle();
@@ -457,7 +459,7 @@ test('conclusão com status Todos atualiza cartão e mantém a última página e
   status.dispatchEvent(new ctx.dom.window.Event('change', { bubbles: true }));
   button(root, 'Próxima página').click();
   const dialog = await openCompletion(ctx);
-  dialog.querySelector('[data-task-completion-submit]').click(); await settle(); await settle();
+  await submitCompletion(dialog); await settle(); await settle();
   assert.equal(root.querySelector('.og-page-label').textContent, 'Página 2 de 2');
   assert.equal(root.querySelector('[data-item-id="176"] .tg-status').textContent, 'CONCLUÍDA');
   assert.equal(root.querySelector('.og-list-status').textContent, '11 tarefa(s)');
@@ -474,7 +476,7 @@ test('concluir o único cartão da última página recua apenas uma página sem 
   await ctx.gallery.open();
   button(ctx.root(), 'Próxima página').click(); button(ctx.root(), 'Próxima página').click();
   const dialog = await openCompletion(ctx);
-  dialog.querySelector('[data-task-completion-submit]').click(); await settle(); await settle();
+  await submitCompletion(dialog); await settle(); await settle();
   assert.equal(ctx.root().querySelector('.og-page-label').textContent, 'Página 2 de 2');
   assert.equal(ctx.root().querySelectorAll('.tg-card').length, 10);
   assert.equal(ctx.root().querySelector('[data-item-id="176"]'), null);
@@ -506,7 +508,7 @@ test('fechar a galeria durante o sucesso libera a próxima edição e não deixa
   } });
   await ctx.gallery.open();
   const first = await openCompletion(ctx);
-  first.querySelector('[data-task-completion-submit]').click(); await settle(); await settle();
+  await submitCompletion(first); await settle(); await settle();
   assert.ok(first.querySelector('.launch-completion'));
   first.dispatchEvent(new ctx.dom.window.KeyboardEvent('keydown', { key: 'Escape', bubbles: true, cancelable: true }));
   assert.equal(first.isConnected, true, 'a confirmação permanece pelos 2 segundos');
@@ -517,7 +519,7 @@ test('fechar a galeria durante o sucesso libera a próxima edição e não deixa
   t.mock.timers.tick(2000); await settle();
   assert.equal(second.isConnected, true, 'o timer antigo não fecha a nova edição');
   assert.equal(writes, 1);
-  second.querySelector('[data-task-completion-submit]').click(); await settle(); await settle();
+  await submitCompletion(second); await settle(); await settle();
   assert.ok(second.querySelector('.launch-completion'));
   ctx.gallery.destroy(); await settle();
   t.mock.timers.tick(2000); await settle();
@@ -986,3 +988,9 @@ test("retorno ao menu e fechamento limpam a sessão visual da galeria", async t 
   ctx.gallery.close();
   assert.equal(ctx.root().hidden, true);
 });
+
+async function submitCompletion(dialog) {
+  dialog.querySelector('[data-task-completion-submit]').click();
+  const review = dialog.ownerDocument.querySelector('[data-edit-review]');
+  if (review) { review.querySelector('[data-edit-review-submit]').click(); await settle(); }
+}

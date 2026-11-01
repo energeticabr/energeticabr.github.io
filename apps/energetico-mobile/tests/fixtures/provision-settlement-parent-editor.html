@@ -63,7 +63,8 @@ try {
     for (const button of document.querySelectorAll('form [data-form-save],form [data-form-cancel],[data-provision-parent-back]')) result.controlsReachable &&= await reachable(button);
     document.querySelector('[data-provision-parent-dialog]').scrollTop = 0;
     if (sample === 'refresh-failed') {
-      document.querySelector('[data-provision-parent-dialog] form').requestSubmit(); await wait(() => document.querySelector('[data-provision-parent-refresh-retry]'));
+      document.querySelector('[data-provision-parent-dialog] form').requestSubmit(); await wait(() => document.querySelector('[data-edit-review-submit]'));
+      document.querySelector('[data-edit-review-submit]').click(); await wait(() => document.querySelector('[data-provision-parent-refresh-retry]'));
       result.fanoutConfirmed = fixture.records.children.every(row => row.fields.FILIAL === '002 — UNIDADE DE TESTE');
       result.writes = fixture.writes.map(write => [write.list, write.id, Object.keys(write.fields)]);
       result.refreshIdentity = replies[1] === `description_review_parent_refresh:7:${token}`;

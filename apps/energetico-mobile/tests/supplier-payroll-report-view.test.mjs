@@ -8,10 +8,10 @@ const {createSupplierPayrollReportView}=await import('../src/ui/supplier-payroll
 const snapshot={complete:true,sheets:[{id:'8',supplier:'Ana',month:'2026-10'},{id:'12',supplier:'Ana',month:'2026-10'},{id:'9',supplier:'Bruno',month:'2026-10'},{id:'7',supplier:'Ana',month:'2026-09'}]};
 const rows=[{id:'23',payrollId:'8',supplier:'Ana',type:'DIÁRIA',date:'2026-11-02',launchId:'60',unitValue:100,quantity:2,totalCents:20000}];
 const tick=()=>new Promise(r=>setImmediate(r));
-function setup(t,options={}){
+function setup(t,options={},editorOptions={}){
  assert.equal(typeof createSupplierPayrollReportView,'function','supplier payroll report must exist');
  const dom=new JSDOM('<main id="app"><button>Mascote</button></main>');dom.window.matchMedia=()=>({matches:false});
- const calls=[];const view=createSupplierPayrollReportView({document:dom.window.document,now:()=>new Date('2026-10-07T12:00:00Z'),data:{loadSnapshot:async()=>snapshot,loadPaymentsForPayrollIds:async ids=>{calls.push(ids);return rows.filter(row=>ids.includes(row.payrollId));},...options}});
+ const calls=[];const view=createSupplierPayrollReportView({document:dom.window.document,now:()=>new Date('2026-10-07T12:00:00Z'),data:{loadSnapshot:async()=>snapshot,loadPaymentsForPayrollIds:async ids=>{calls.push(ids);return rows.filter(row=>ids.includes(row.payrollId));},...options},...editorOptions});
  t.after(()=>{view.destroy();dom.window.close();});return {dom,view,root:view.element,calls};
 }
 test('fourth pink HOME mascot sits after stages before workforce and stays in its own navigation family',t=>{
@@ -38,6 +38,34 @@ test('expansion reuses summaries for selected sheet ids and keeps payment made n
  const {view,root,calls}=setup(t);await view.open();const detail=root.querySelector('details');detail.open=true;detail.dispatchEvent(new root.ownerDocument.defaultView.Event('toggle'));await tick();
  assert.deepEqual(calls,[['8','12'],['9']]);assert.match(detail.textContent,/02\/11\/2026.*23.*8.*DIÁRIA.*60.*100,00.*2.*200,00/s);
  assert.match(detail.querySelector('.spr-total').textContent,/200,00/);
+});
+
+for (const kind of ['payment', 'launch']) test(`${kind} report edit reviews before saving and cancel retains the draft without writes`, async t => {
+ const writes=[];
+ const loadEditor=async id=>({entity:{id:'test',title:'Registro'},contract:{hasForm:true,readOnly:false},
+  columns:[{name:'Title',label:'Título',control:'text',editable:true,required:true}],item:{id,fields:{Title:'Original'}}});
+ const saveEditor=async(context,fields)=>{writes.push({id:context.item.id,fields});return {...context.item,fields};};
+ const {view,root,dom}=setup(t,{},kind==='payment'?{loadEditor,saveEditor}:{loadLaunchEditor:loadEditor,saveLaunchEditor:saveEditor});
+ const oldFormData=globalThis.FormData;globalThis.FormData=dom.window.FormData;t.after(()=>{globalThis.FormData=oldFormData;});
+ await view.open();await tick();
+ const detail=root.querySelector('details');detail.open=true;detail.dispatchEvent(new dom.window.Event('toggle'));await tick();
+ const trigger=root.querySelector(`[data-spr-edit="${kind}"]`);assert.ok(trigger);trigger.click();await tick();await tick();
+ const document=dom.window.document,form=document.querySelector('[data-dynamic-form]');assert.ok(form);
+ const title=form.querySelector('[name=Title]');title.value='Atualizado';title.dispatchEvent(new dom.window.Event('input',{bubbles:true}));
+ form.requestSubmit();await tick();
+ const review=document.querySelector('[data-edit-review]');assert.ok(review);
+ assert.deepEqual(writes,[],'opening review never calls report persistence');
+ assert.deepEqual([...review.querySelectorAll('tbody tr')].map(row=>[...row.cells].map(cell=>cell.textContent)),[['Título','Original','ATUALIZADO']]);
+ review.querySelector('[data-edit-review-cancel]').click();await tick();
+ assert.deepEqual(writes,[],'canceling review does not save or refresh report data');
+ assert.equal(document.querySelector('[data-dynamic-form]'),form);assert.equal(title.value,'Atualizado');
+ assert.equal(root.querySelector('[name=month]').value,'2026-10');
+ form.requestSubmit();await tick();assert.deepEqual(writes,[]);
+ const submit=document.querySelector('[data-edit-review-submit]');assert.ok(submit,'explicit second Submeter is required');
+ submit.click();submit.click();await tick();await tick();
+ assert.deepEqual(writes,[{id:kind==='payment'?'23':'60',fields:{Title:'ATUALIZADO'}}]);
+ assert.ok(document.querySelector('[data-gallery-edit-success]'));
+ assert.equal(root.hidden,false);assert.equal(root.querySelector('[name=month]').value,'2026-10');
 });
 
 test('pending provision is visibly identified while its amount stays outside the paid total',async t=>{

@@ -1295,10 +1295,19 @@ export function createLaunchGallery({ document: documentRef = globalThis.documen
     const hex = [...bytes].map(value => value.toString(16).padStart(2, '0')).join('');
     return `${hex.slice(0, 8)}-${hex.slice(8, 12)}-${hex.slice(12, 16)}-${hex.slice(16, 20)}-${hex.slice(20)}`;
   }
+  function editorFieldChanged({ definition, control, initial }) {
+    if (control.type === 'checkbox') return control.checked !== initial;
+    const value = control.value;
+    if (['number', 'decimal', 'currency', 'integer'].includes(String(definition.type).toLowerCase())
+      && value !== '' && initial !== '' && Number.isFinite(Number(value)) && Number.isFinite(Number(initial))) {
+      return Number(value) !== Number(initial);
+    }
+    return String(value) !== String(initial);
+  }
   function beginEditor(operation, { fromRender = false } = {}) {
     if ((busy && !fromRender) || review) return;
     if (editor) {
-      if (editor.controls.some(({ control, initial }) => (control.type === 'checkbox' ? control.checked : control.value) !== initial)) {
+      if (editor.controls.some(editorFieldChanged)) {
         notify('Reveja ou cancele as alterações antes de iniciar outra operação.', true); return;
       }
       clearEditor();
@@ -1362,7 +1371,7 @@ export function createLaunchGallery({ document: documentRef = globalThis.documen
       const entry = { definition, control, initial: isCheck ? control.checked : control.value };
       const field = label(`${definition.label ?? definition.name}${definition.required ? ' *' : ''}`, control);
       const markModified = () => control.closest('.lg-field')?.classList.toggle('lg-field-modified', operation === 'update'
-        && (isCheck ? control.checked : control.value) !== entry.initial);
+        && editorFieldChanged(entry));
       const invalidate = () => { control.setCustomValidity(''); clearReview(); notify(''); markModified(); };
       if (type === 'date') control.addEventListener('input', () => { control.value = maskEditorDate(control.value); });
       control.addEventListener('input', invalidate);
@@ -1400,8 +1409,7 @@ export function createLaunchGallery({ document: documentRef = globalThis.documen
       return;
     }
     if (editor.schemaState?.loading) { notify('Aguarde a atualização das opções relacionadas.', true); return; }
-    const fieldsChanged = editor.controls.some(({ control, initial }) =>
-      (control.type === 'checkbox' ? control.checked : control.value) !== initial);
+    const fieldsChanged = editor.controls.some(editorFieldChanged);
     const removedAttachments = editor.operation === 'update' ? [...editor.attachmentsRemoved] : [];
     if (editor.operation === 'update' && !fieldsChanged && !removedAttachments.length) {
       const file = editor.form.querySelector('.lg-attachment-picker')?.files?.[0];
@@ -1429,7 +1437,7 @@ export function createLaunchGallery({ document: documentRef = globalThis.documen
         }
         control.setCustomValidity('');
       }
-      const unchanged = control.type === 'checkbox' ? value === initial : String(control.value) === String(initial);
+      const unchanged = !editorFieldChanged({ definition, control, initial });
       if (editor.operation === 'update' && unchanged) continue;
       fields[definition.name] = value;
       const shown = raw => {
@@ -1487,9 +1495,9 @@ export function createLaunchGallery({ document: documentRef = globalThis.documen
     }
     table.append(heading, body);
     const actions = element('div', 'lg-review-actions');
-    const cancel = button('Cancelar confirmação', dismissReview, { danger: true });
+    const cancel = button('CANCELAR', dismissReview, { danger: true });
     cancel.classList.add('lg-review-cancel');
-    const confirm = button(confirmText, commitReview);
+    const confirm = button(['update', 'attachment_remove', 'attachment_finish'].includes(operation) ? 'SUBMETER' : confirmText, commitReview);
     confirm.classList.add('lg-review-confirm');
     actions.append(cancel, confirm);
     const reviewError = element('p', 'lg-review-error lg-error');

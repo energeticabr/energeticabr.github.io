@@ -191,6 +191,8 @@ test('rotação preserva tipografia; check e popup de conclusão funcionam em te
       await evaluate(`document.querySelector('.tg-card[data-item-id="176"] [data-action="complete"]').click()`);
       await waitFor(`Boolean(document.querySelector('[data-task-completion-form]'))`);
       await evaluate(`document.querySelector('[data-task-completion-submit]').click()`);
+      await waitFor(`Boolean(document.querySelector('[data-edit-review]'))`);
+      await evaluate(`document.querySelector('[data-edit-review-submit]').click()`);
       await waitFor(`Boolean(document.querySelector('[data-task-completion-success]'))`);
       const receipt = await evaluate(`(() => {
         const dialog = document.querySelector('.tg-completion-dialog'), card = dialog.querySelector('.launch-completion');
@@ -232,6 +234,8 @@ test('rotação preserva tipografia; check e popup de conclusão funcionam em te
       })()`);
       await waitFor(`Boolean(document.querySelector('[data-task-completion-form]'))`);
       await evaluate(`document.querySelector('[data-task-completion-submit]').click()`);
+      await waitFor(`Boolean(document.querySelector('[data-edit-review]'))`);
+      await evaluate(`document.querySelector('[data-edit-review-submit]').click()`);
       await waitFor(`Boolean(document.querySelector('[data-task-completion-success]'))`);
       await waitFor(`!document.querySelector('.tg-completion-dialog')`);
       const preserved = await evaluate(`({ page: document.querySelector('.og-page-label').textContent,
