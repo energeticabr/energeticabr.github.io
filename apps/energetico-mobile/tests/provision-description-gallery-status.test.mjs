@@ -1,4 +1,5 @@
 import test from 'node:test';
+import { confirmPayrollProvisionEdit } from './helpers/payroll-provision-edit-review.mjs';
 import assert from 'node:assert/strict';
 import { JSDOM } from 'jsdom';
 import { createRegistrationGalleryData } from '../src/chat/registration-gallery-data.js';
@@ -216,6 +217,8 @@ test('changing the real STATUS dropdown saves parent and linked children and ref
   paidOption.click();
   assert.equal(status.value, paid);
   form.dispatchEvent(new v.dom.window.Event('submit', { bubbles: true, cancelable: true }));
+  assert.deepEqual(f.writes, []);
+  confirmPayrollProvisionEdit(v.dom.window.document);
   await waitFor(() => !v.root.querySelector('[data-gallery-record-screen]') && v.root.getAttribute('aria-busy') === 'false');
   assert.deepEqual(f.writes, [{ list: 'parents', id: '9', fields: { STATUS: paid } }, { list: 'children', id: '1', fields: { STATUS: paid } }]);
   assert.equal(f.parents[0].fields.STATUS, paid);

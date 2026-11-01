@@ -54,6 +54,8 @@ test('clique real abre calendário e teclado seleciona nova data em telas estrei
       assert.equal(await evaluate(`document.querySelector('[data-role="pending-provision-due-date"]').value`), '2026-10-06');
       assert.deepEqual(await evaluate('window.saved'), []);
       await tap('[data-action="save-pending-provision-due-date"]');
+      assert.deepEqual(await evaluate('window.saved'), [], 'first submit opens review without saving');
+      await tap('[data-edit-review-submit]');
       assert.deepEqual(await evaluate('window.saved'), [{ paymentId: '314', value: '06/10/2026' }]);
       await tap('[data-action="cancel-pending-provision-date-edit"]');
       assert.equal(await evaluate('window.cancelled'), 1);

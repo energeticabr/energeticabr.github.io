@@ -143,6 +143,9 @@
       await open();
       host.querySelector('[name="OBS"]').value = 'Validação local de estado ocupado';
       host.querySelector('[data-form-save]').click();
+      await until(() => document.querySelector('[data-edit-review]'), 'edit review opens');
+      check(!releaseSave && submissions.length === 0, 'Review cannot begin the simulated save');
+      document.querySelector('[data-edit-review-submit]').click();
       await until(() => releaseSave, 'simulated save begins');
       check(host.querySelector('[data-gallery-record-screen]').getAttribute('aria-busy') === 'true', 'Real gallery mutation announces busy');
       check([...host.querySelectorAll('[data-form-attachments] button,[data-form-attachment-input]')].every(control => control.disabled), 'Real busy state disables attachment controls');

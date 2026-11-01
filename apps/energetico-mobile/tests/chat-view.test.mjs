@@ -14,6 +14,15 @@ import { buildRhidAttendanceTable } from "../src/chat/rhid-attendance-table.js";
 import { createConversationStore } from "../src/chat/conversation-store.js";
 import { JSDOM } from "jsdom";
 
+
+async function confirmPendingEdit(root) {
+  const dialog = root.ownerDocument.querySelector('[data-edit-review]');
+  if (!dialog) return;
+  assert.deepEqual([...dialog.querySelectorAll('thead th')].map(node => node.textContent), ['Campo', 'Antes', 'Depois']);
+  dialog.querySelector('[data-edit-review-submit]').click();
+  await Promise.resolve(); await Promise.resolve();
+}
+
 function signedInState(overrides = {}) {
   return {
     sessionStatus: "authenticated",
@@ -1538,7 +1547,7 @@ test("dia RHID completo sem incongruência não oferece edição", () => {
   assert.doesNotMatch(markup, /data-action="rhid-attendance-adjust-open"/);
 });
 
-test("tocar em horário corrigido mostra RHID e ajuste e exige motivo para salvar novamente", () => {
+test("tocar em horário corrigido mostra RHID e ajuste e exige motivo para salvar novamente", async () => {
   const dom = new JSDOM('<main id="app"></main>');
   const root = dom.window.document.querySelector("#app");
   const view = createChatView(root);
@@ -1556,12 +1565,13 @@ test("tocar em horário corrigido mostra RHID e ajuste e exige motivo para salva
   assert.match(dialog.textContent, /RHID.*17:03/s);
   assert.match(dialog.textContent, /Ajustado.*17:00/s);
   assert.match(dialog.textContent, /Relógio conferido/);
-  assert.equal(root.querySelector('[data-role="rhid-adjustment-reason"]').value, "");
-  root.querySelector('[data-action="rhid-attendance-adjust-save"]').click();
+  assert.equal(root.querySelector('[data-role="rhid-adjustment-reason"]').value, "Relógio conferido");
+  root.querySelector('[data-role="rhid-adjustment-reason"]').value = "";
+  root.querySelector('[data-action="rhid-attendance-adjust-save"]').click(); await confirmPendingEdit(root);
   assert.equal(submitted.length, 0);
   assert.match(root.querySelector('[data-rhid-adjustment-dialog] [role="alert"]')?.textContent || "", /justificativa/i);
   root.querySelector('[data-role="rhid-adjustment-reason"]').value = "Correção revisada";
-  root.querySelector('[data-action="rhid-attendance-adjust-save"]').click();
+  root.querySelector('[data-action="rhid-attendance-adjust-save"]').click(); await confirmPendingEdit(root);
   assert.deepEqual(submitted, [{ type: "rhid-attendance-adjust-save", messageId: "rhid-edit", personKey: "rhid:23", slot: "exit2",
     time: "17:00", reason: "Correção revisada" }]);
   view.destroy();
@@ -1703,7 +1713,7 @@ test("lacuna RHID abre com horário sugerido para confirmação, inclusive sexta
   }
 });
 
-test("justificativa sugerida para lacuna RHID pode ser editada antes de salvar", () => {
+test("justificativa sugerida para lacuna RHID pode ser editada antes de salvar", async () => {
   const dom = new JSDOM('<main id="app"></main>');
   const root = dom.window.document.querySelector("#app");
   const view = createChatView(root);
@@ -1717,9 +1727,9 @@ test("justificativa sugerida para lacuna RHID pode ser editada antes de salvar",
     question: "RELATÓRIO RHID", options: [], detail_table: { ...table, reportDate: "2026-09-28" } }] }));
   root.querySelector('[data-action="rhid-attendance-adjust-open"][data-slot="exit2"]').click();
   const reason = root.querySelector('[data-role="rhid-adjustment-reason"]');
-  assert.equal(reason.value, "NÃO APONTADO");
+  assert.equal(reason.value, "Registro anterior", "editing preserves the persisted baseline");
   reason.value = "Ajuste conferido com o colaborador";
-  root.querySelector('[data-action="rhid-attendance-adjust-save"]').click();
+  root.querySelector('[data-action="rhid-attendance-adjust-save"]').click(); await confirmPendingEdit(root);
   assert.deepEqual(submitted, [{ type: "rhid-attendance-adjust-save", messageId: "rhid-blank-adjusted",
     personKey: "rhid:90", slot: "exit2", time: "17:00", reason: "Ajuste conferido com o colaborador" }]);
   view.destroy();
@@ -2813,7 +2823,7 @@ test("oferece lápis de edição de vencimento antes do check da provisão", () 
   dom.window.close();
 });
 
-test("tela de vencimento preenche calendário e envia DD/MM/AAAA para o pagamento correto", () => {
+test("tela de vencimento preenche calendário e envia DD/MM/AAAA para o pagamento correto", async () => {
   const dom = new JSDOM('<main id="app"></main>');
   const root = dom.window.document.querySelector("#app");
   const view = createChatView(root);
@@ -2833,6 +2843,8 @@ test("tela de vencimento preenche calendário e envia DD/MM/AAAA para o pagament
   assert.equal(input.value, "2026-10-24");
   const save = root.querySelector('[data-action="save-pending-provision-due-date"]');
   save.click();
+  assert.deepEqual(commands, [], "first submit only opens review");
+  await confirmPendingEdit(root);
   assert.deepEqual(commands.map(({ paymentId, value }) => ({ paymentId, value })), [
     { paymentId: "306", value: "24/10/2026" },
   ]);
@@ -3682,7 +3694,7 @@ test('presença com jornada irregular exige justificativa antes de entrar no lot
   assert.equal(root.querySelector('input[data-reply-id="2249"]').checked, false);
   root.querySelector('input[data-reply-id="2249"]').click();
   root.querySelector('[data-role="attendance-irregularity-reason"]').value = 'Saída antecipada autorizada.';
-  root.querySelector('[data-action="attendance-irregularity-submit"]').click();
+  root.querySelector('[data-action="attendance-irregularity-submit"]').click(); await confirmPendingEdit(root);
   await new Promise(resolve => setTimeout(resolve, 0));
   assert.deepEqual(saves.map(({ id, date, explanation }) => ({ id, date, explanation })),
     [{ id: '2249', date: '2026-10-12', explanation: 'Saída antecipada autorizada.' }]);
@@ -3804,7 +3816,7 @@ test('horários incompletos abrem o popup no checkbox e no botão do fornecedor'
   assert.deepEqual(replies, []);
   root.querySelector('input[data-reply-id="2266"]').click();
   root.querySelector('[data-role="attendance-irregularity-reason"]').value = 'Batida ausente confirmada.';
-  root.querySelector('[data-action="attendance-irregularity-submit"]').click();
+  root.querySelector('[data-action="attendance-irregularity-submit"]').click(); await confirmPendingEdit(root);
   await new Promise(resolve => setTimeout(resolve, 0));
   assert.deepEqual(saves, [{ id: '2266', date: '2026-10-16', explanation: 'Batida ausente confirmada.' }]);
   assert.equal(root.querySelector('input[data-reply-id="2266"]').checked, true);
@@ -3830,12 +3842,12 @@ test('botão individual irregular só prossegue após gravação; falha mantém 
   assert.deepEqual(replies, []);
   assert.match(root.querySelector('[data-attendance-irregularity-dialog]').textContent, /Jornada esperada: 7h30 a 8h30/);
   root.querySelector('[data-role="attendance-irregularity-reason"]').value = 'Compensação.';
-  root.querySelector('[data-action="attendance-irregularity-submit"]').click();
+  root.querySelector('[data-action="attendance-irregularity-submit"]').click(); await confirmPendingEdit(root);
   await new Promise(resolve => setTimeout(resolve, 0));
   assert.match(root.querySelector('[data-attendance-irregularity-dialog]').textContent, /Sem conexão/);
   assert.deepEqual(replies, []);
   fail = false;
-  root.querySelector('[data-action="attendance-irregularity-submit"]').click();
+  root.querySelector('[data-action="attendance-irregularity-submit"]').click(); await confirmPendingEdit(root);
   await new Promise(resolve => setTimeout(resolve, 0));
   assert.deepEqual(replies, ['pending_attendance_record:30']);
 });
@@ -3858,7 +3870,7 @@ test('selecionar todos solicita cada justificativa e cancelar não marca o próx
   assert.equal(root.querySelector('[data-attendance-irregularity-dialog]').textContent.includes('30 - A'), true);
   assert.deepEqual([...root.querySelectorAll('input[data-action="attendance-select-toggle"]:checked')].map(input => input.dataset.replyId), ['31']);
   root.querySelector('[data-role="attendance-irregularity-reason"]').value = 'Motivo A';
-  root.querySelector('[data-action="attendance-irregularity-submit"]').click();
+  root.querySelector('[data-action="attendance-irregularity-submit"]').click(); await confirmPendingEdit(root);
   await new Promise(resolve => setTimeout(resolve, 0));
   assert.equal(root.querySelector('[data-attendance-irregularity-dialog]').textContent.includes('32 - C'), true);
   root.querySelector('[data-action="attendance-irregularity-cancel"]').click();

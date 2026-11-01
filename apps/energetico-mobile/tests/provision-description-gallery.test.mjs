@@ -1,4 +1,5 @@
 import test from "node:test";
+import { confirmPayrollProvisionEdit } from './helpers/payroll-provision-edit-review.mjs';
 import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
 import { JSDOM } from "jsdom";
@@ -226,6 +227,8 @@ test("lápis abre o formulário real do pai e salva só campos comprovados com o
     } else form.querySelector(`[name="${name}"]`).value = value;
   }
   form.dispatchEvent(new dom.window.Event("submit", { bubbles: true, cancelable: true }));
+  assert.deepEqual(fixture.writes, []);
+  confirmPayrollProvisionEdit(doc);
   await waitFor(() => fixture.writes.length === 2 && !doc.querySelector('[data-gallery-record-screen]'));
   assert.ok(fixture.reads.length>=3,'baseline, conditional edit and readback are required');
   assert.ok(fixture.reads.filter(read=>read[1]==='parent-list-id').every(read=>JSON.stringify(read)===JSON.stringify(["personal", "parent-list-id", "9", "$expand=fields"])));

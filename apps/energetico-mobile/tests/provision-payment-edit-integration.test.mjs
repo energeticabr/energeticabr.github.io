@@ -1,4 +1,5 @@
 import test from 'node:test';
+import { confirmPayrollProvisionEdit } from './helpers/payroll-provision-edit-review.mjs';
 import assert from 'node:assert/strict';
 import { createPaymentProgrammingGalleryData, createPendingProvisionAttachmentsData } from '../src/chat/orders-gallery-data.js';
 import { createProvisionPaymentEditor } from '../../../portal/forms/provision-payment-edit.js';
@@ -195,6 +196,8 @@ test('the real provision form selects a description and submits the new link wit
   assert.ok(option); option.click();
   assert.equal(stored.value,'99');
   document.querySelector('form').dispatchEvent(new dom.window.Event('submit',{bubbles:true,cancelable:true}));
+  assert.equal(f.records.children.get('2').fields.DESCRITIVOPROVISAO,'42');
+  confirmPayrollProvisionEdit(document);
   await settle(); await settle();
   assert.equal(f.records.children.get('2').fields.DESCRITIVOPROVISAO,'99');
   assert.equal(f.records.parents.get('42').fields.VALORTOTAL,'20');

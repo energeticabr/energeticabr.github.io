@@ -1,4 +1,5 @@
 import test from 'node:test';
+import { confirmPayrollProvisionEdit } from './helpers/payroll-provision-edit-review.mjs';
 import assert from 'node:assert/strict';
 import { JSDOM } from 'jsdom';
 import { createHrPayrollGalleryData } from '../src/chat/orders-gallery-data.js';
@@ -70,6 +71,8 @@ async function openEditor(t, f) {
 
 async function submitEditor(document, dom, f) {
   document.querySelector('form').dispatchEvent(new dom.window.Event('submit', { bubbles: true, cancelable: true }));
+  assert.equal(f.writes.length, 0, 'first submit does not write the sheet');
+  confirmPayrollProvisionEdit(document);
   for (let n = 0; n < 100 && !f.writes.length; n++) await new Promise(setImmediate);
 }
 

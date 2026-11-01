@@ -1,4 +1,5 @@
 import test from "node:test";
+import { confirmPayrollProvisionEdit } from './helpers/payroll-provision-edit-review.mjs';
 import assert from "node:assert/strict";
 import { JSDOM } from "jsdom";
 
@@ -136,6 +137,8 @@ test("editing an order opens proven closed fields and saves through the versione
   assert.equal(form.querySelector('[name="FORNECEDOR"]').tagName, 'SELECT');
   form.querySelector('[name="OBS"]').value = 'Atualizado pelo teste';
   form.requestSubmit();
+  assert.equal(ctx.calls.some(([name]) => name === 'saveEditor'), false);
+  confirmPayrollProvisionEdit(form.ownerDocument);
   await settle(); await settle();
   assert.deepEqual(ctx.calls.find(([name]) => name === 'saveEditor'), ['saveEditor', '320', {
     FORNECEDOR: 'COFER', OBS: 'ATUALIZADO PELO TESTE',

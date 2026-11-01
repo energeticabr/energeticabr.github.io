@@ -232,6 +232,9 @@
       choose(staleControl, 'FORNECEDOR 24');
       check(submitCount === 0 && writes.length === 0, 'All interactions remain read only until valid submit');
       host.querySelector('[data-form-save]').click();
+      await until(() => document.querySelector('[data-edit-review]'), 'relationship edit review opens');
+      check(submitCount === 0 && writes.length === 0, 'Review cannot save or PATCH relationships');
+      document.querySelector('[data-edit-review-submit]').click();
       await until(() => host.querySelector('[data-gallery-edit-success]'), 'shared action success receipt');
       check(submitCount === 1 && writes.length === 1 && changedCount === 1, 'Exactly one conditional PATCH and gallery refresh');
       same(writes[0].body, { FORNECEDORLookupId: 24, RESPONSAVELLookupId: 25, FORNECEDORESLookupId: [1, 25], RESPONSAVEISLookupId: [1, 25] }, 'Only typed LookupId replacements may be patched');

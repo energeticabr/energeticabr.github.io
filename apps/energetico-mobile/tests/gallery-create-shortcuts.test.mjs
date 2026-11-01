@@ -172,6 +172,10 @@ for (const entry of galleryCases) {
       form.querySelector('[name="OBS"]').value = 'ALTERADO';
       form.dispatchEvent(new ctx.dom.window.Event('submit', { bubbles: true, cancelable: true }));
       await settle();
+      assert.equal(saves, 0, 'reviewing the edit cannot begin persistence');
+      const review = ctx.dom.window.document.querySelector('[data-edit-review]');
+      assert.ok(review, 'the real metadata edit requires a second Submeter click');
+      review.querySelector('[data-edit-review-submit]').click(); await settle();
       assert.equal(saves, 1);
       assert.equal(button.disabled, true);
       forceClick(ctx, button);
