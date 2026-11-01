@@ -3,8 +3,8 @@ import { createAttachmentPresenter } from "../../../../portal/ui/attachments-pan
 import { openPayrollReceiptPicker } from "./payroll-receipt-picker.js";
 
 /** Local staging only: uploads happen at the authenticated save boundary. */
-export function bindPayrollSheetAttachments(form, context, { isBusy, getReceiptAttachments, readReceiptAttachment } = {}) {
-  const doc = form.ownerDocument, files = [], saved = [], removed = new Set();
+export function bindPayrollSheetAttachments(form, context, { isBusy, getReceiptAttachments, readReceiptAttachment, initialChanges, initialSavedFiles } = {}) {
+  const doc = form.ownerDocument, files = [...(initialChanges?.uploads || [])], saved = [...(initialSavedFiles || [])], removed = new Set();
   let disposed = false, picker = null;
   const abort = new AbortController();
   const presenter = createAttachmentPresenter({ documentRef: doc, windowRef: doc.defaultView });
@@ -32,6 +32,7 @@ export function bindPayrollSheetAttachments(form, context, { isBusy, getReceiptA
     message.classList.toggle("gallery-record-dialog-error", error);
   };
   const key = name => name.trim().toLocaleLowerCase("pt-BR");
+  for (const name of initialChanges?.deletions || []) removed.add(key(name));
   const button = (text, handler) => {
     const node = element("button", text); node.type = "button"; node.disabled = Boolean(isBusy?.());
     node.addEventListener("click", () => { if (!disposed && !isBusy?.()) void handler(); });
@@ -98,11 +99,18 @@ export function bindPayrollSheetAttachments(form, context, { isBusy, getReceiptA
     select.dataset.sheetAttachmentTray = ""; tray.append(select);
   }
   form.querySelector(".dynamic-form-actions").before(tray);
-  render(); setMessage("Consultando anexos já salvos…");
-  void context.sheetAttachments.list({ signal: abort.signal }).then(result => {
+  const acceptInventory = result => {
     if (disposed) return;
-    saved.splice(0, saved.length, ...result); render(); setMessage("");
-  }).catch(error => setMessage(error.message, true));
+    saved.splice(0, saved.length, ...result);
+    const names = new Set(saved.map(file => key(file.name)));
+    for (const name of removed) if (!names.has(name)) removed.delete(name);
+    render(); setMessage("");
+  };
+  if (Array.isArray(initialSavedFiles)) acceptInventory(initialSavedFiles);
+  else {
+    render(); setMessage("Consultando anexos já salvos…");
+    void context.sheetAttachments.list({ signal: abort.signal }).then(acceptInventory).catch(error => setMessage(error.message, true));
+  }
   return Object.freeze({
     changes: () => ({ uploads: [...files], deletions: saved.filter(file => removed.has(key(file.name))).map(file => file.name) }),
     refresh: render,

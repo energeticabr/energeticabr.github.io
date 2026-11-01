@@ -63,6 +63,7 @@ export function createGalleryRecordActions({ document, host, loadEditor, saveEdi
     previous?.sheetAttachmentBinding?.cleanup?.();
     previous?.mutationAbort?.abort();
     previous?.readAbort?.abort();
+    previous?.syncAbort?.abort();
     previous?.variantPicker?.destroy();
     previous?.overlay.remove();
     syncRecordButtons();
@@ -75,9 +76,73 @@ export function createGalleryRecordActions({ document, host, loadEditor, saveEdi
 
   function showError(state, error) {
     if (!active(state)) return;
-    state.error.textContent = error?.message || "Não foi possível concluir a operação. Tente novamente.";
+    state.error.replaceChildren(element("span", "gallery-error-message", error?.message || "Não foi possível concluir a operação. Tente novamente."));
+    state.error.classList.toggle('gallery-record-dialog-error--conflict', Boolean(state.conflict && !state.persisted));
+    if (state.conflict && !state.persisted) {
+      const sync = button('SINCRONIZAR', 'data-gallery-conflict-sync', '', () => { void synchronizeEditor(state); });
+      sync.classList.add('gallery-conflict-sync');
+      sync.title = 'Carregar a versão mais recente do registro para continuar editando';
+      sync.disabled = Boolean(state.syncing || state.busy);
+      state.error.append(sync);
+    }
     state.error.hidden = false;
     void report(error);
+  }
+
+  async function synchronizeEditor(state) {
+    if (!active(state) || !state.conflict || state.busy || state.syncing || state.persisted) return;
+    state.syncing = true;
+    const controller = state.syncAbort = new AbortController(), version = ++state.loadEpoch;
+    const current = () => active(state) && version === state.loadEpoch && !controller.signal.aborted;
+    const controls = [...state.body.querySelectorAll('input,select,textarea,button')]
+      .filter(control => !control.matches('[data-form-cancel], [data-gallery-editor-cancel]'));
+    const disabled = controls.map(control => control.disabled);
+    controls.forEach(control => { control.disabled = true; });
+    const sync = state.error.querySelector('[data-gallery-conflict-sync]');
+    if (sync) { sync.disabled = true; sync.textContent = 'SINCRONIZANDO…'; }
+    state.dialog.setAttribute('aria-busy', 'true');
+    try {
+      const context = await loadEditor(state.row.id, { ...state.editorOptions, refresh: true, signal: controller.signal });
+      if (!current()) return;
+      if (String(context?.item?.id) !== String(state.row.id) || context.entity?.id !== state.context?.entity?.id
+        || !context.item?.fields || !context.contract?.hasForm || context.contract.readOnly || context.contract.requiresVariantSelection
+        || !Array.isArray(context.columns) || !context.columns.length) throw new Error('Não foi possível confirmar a versão atual deste formulário. Tente sincronizar novamente.');
+      const draft = state.sheetAttachmentBinding?.changes() || state.controller?.getAttachmentChanges?.() || { uploads: [], deletions: [] };
+      const sheetFiles = context.sheetAttachments ? await context.sheetAttachments.list({ signal: controller.signal }) : undefined;
+      if (!current()) return;
+      if (draft.uploads.length || draft.deletions.length) {
+        if (!context.sheetAttachments && (!context.attachments?.enabled || !context.attachments.canEdit)) {
+          throw new Error('Os anexos preparados foram preservados, mas a versão atual não permite editá-los. Confira os anexos antes de sincronizar.');
+        }
+        const files = sheetFiles || context.attachments.existingFiles || [];
+        if (!current()) return;
+        const names = new Set(files.map(file => String(file.name).trim().toLocaleLowerCase('pt-BR')));
+        if (draft.uploads.some(file => names.has(String(file.name).trim().toLocaleLowerCase('pt-BR')))) {
+          throw new Error('Um anexo preparado já existe na versão atual. Seus arquivos foram preservados; confira-os antes de sincronizar.');
+        }
+      }
+      if (!current()) return;
+      await populateEditor(state, state.editorOptions, { context, controller, draft, sheetFiles });
+      if (!active(state) || state.context !== context) return;
+      state.conflict = false;
+      state.error.replaceChildren(); state.error.hidden = true;
+      const status = element('p', 'gallery-sync-status', 'Dados sincronizados. Faça os novos ajustes e submeta novamente.');
+      status.setAttribute('role', 'status'); status.setAttribute('data-gallery-sync-status', '');
+      state.body.prepend(status);
+    } catch (error) {
+      if (active(state) && state.syncAbort === controller) showError(state, error);
+    } finally {
+      state.syncing = false;
+      if (state.readAbort !== controller) controller.abort();
+      if (state.syncAbort === controller) state.syncAbort = null;
+      if (active(state)) {
+        state.dialog.setAttribute('aria-busy', 'false');
+        controls.forEach((control, index) => { if (control.isConnected) control.disabled = disabled[index]; });
+        const retry = state.error.querySelector('[data-gallery-conflict-sync]');
+        if (retry) { retry.disabled = false; retry.textContent = 'SINCRONIZAR'; }
+        void state.fieldLocks?.refresh?.();
+      }
+    }
   }
 
   function button(text, attribute, value, handler) {
@@ -159,7 +224,7 @@ export function createGalleryRecordActions({ document, host, loadEditor, saveEdi
   }
 
   async function mutate(state, persist) {
-    if (!active(state) || state.busy || mutationPending) return;
+    if (!active(state) || state.busy || state.syncing || mutationPending) return;
     mutationPending = true;
     state.busy = true;
     state.error.hidden = true;
@@ -189,7 +254,10 @@ export function createGalleryRecordActions({ document, host, loadEditor, saveEdi
           state.refreshRetry = button("Tentar atualizar galeria", "data-gallery-refresh-retry", "", () => { void mutate(state, persist); });
           state.body.append(state.refreshRetry);
         }
-      } else showError(state, error);
+      } else {
+        if (active(state) && state.operation === 'edit' && (error?.status === 412 || error?.code === 'concurrent_change')) state.conflict = true;
+        showError(state, error);
+      }
     } finally {
       mutationPending = false;
       syncRecordButtons();
@@ -203,6 +271,8 @@ export function createGalleryRecordActions({ document, host, loadEditor, saveEdi
             : disabled[index];
         });
         if (state.refreshRetry) state.refreshRetry.disabled = false;
+        const sync = state.error.querySelector('[data-gallery-conflict-sync]');
+        if (sync) sync.disabled = false;
         state.sheetAttachmentBinding?.refresh?.();
       }
     }
@@ -261,28 +331,32 @@ export function createGalleryRecordActions({ document, host, loadEditor, saveEdi
     retry.focus();
   }
 
-  async function populateEditor(state, options = {}) {
+  async function populateEditor(state, options = {}, prepared = null) {
     if (!active(state)) return;
     const loadEpoch = ++state.loadEpoch;
     const current = () => active(state) && state.loadEpoch === loadEpoch;
-    state.readAbort?.abort();
-    const readAbort = state.readAbort = new AbortController();
-    state.controller?.cleanup?.();
-    state.fieldLocks?.cleanup?.();
-    state.sourceBinding?.cleanup?.();
-    state.sheetAttachmentBinding?.cleanup?.(); state.sheetAttachmentBinding = null;
-    state.variantPicker?.destroy(); state.variantPicker = null;
-    state.fieldLocks = null;
-    state.controller = null;
-    state.error.hidden = true;
+    const previousRead = state.readAbort;
+    const bindings = {};
+    const cleanup = target => {
+      target.controller?.cleanup?.(); target.fieldLocks?.cleanup?.(); target.sourceBinding?.cleanup?.();
+      target.sheetAttachmentBinding?.cleanup?.(); target.variantPicker?.destroy?.();
+    };
+    const readAbort = prepared?.controller || new AbortController();
+    let mounted = false;
+    if (!prepared) {
+      previousRead?.abort(); state.readAbort = readAbort; cleanup(state);
+      state.sheetAttachmentBinding = state.variantPicker = state.fieldLocks = state.sourceBinding = state.controller = null;
+      state.error.hidden = true;
+    }
+    const mount = prepared ? element('div') : state.body;
     const cancel = button("Cancelar", "data-gallery-editor-cancel", "", () => { if (active(state) && !state.busy) close(); });
     const indicator = createLoadingIndicator(document, "Carregando formulário…");
-    state.body.replaceChildren(indicator, cancel);
+    if (!prepared) state.body.replaceChildren(indicator, cancel);
     const task = beginLoadingTask(indicator, { signal: readAbort.signal, isCurrent: current });
     task.prepared();
     try {
       if (typeof loadEditor !== "function") throw new Error("Os metadados deste formulário não estão disponíveis. Tente novamente.");
-      const context = await loadEditor(state.row.id, { refresh: true, ...options, signal: readAbort.signal, onProgress: task.report });
+      const context = prepared?.context || await loadEditor(state.row.id, { refresh: true, ...options, signal: readAbort.signal, onProgress: task.report });
       if (!current()) return;
       if (context?.contract?.requiresVariantSelection) {
         const variants = context.contract.formVariants || [];
@@ -316,7 +390,7 @@ export function createGalleryRecordActions({ document, host, loadEditor, saveEdi
       task.acquired();
       const { renderDynamicForm } = await import("../../../../portal/ui/dynamic-form.js");
       if (!current()) return;
-      state.body.replaceChildren();
+      mount.replaceChildren();
       // Native date controls require their local input representation. Keep the
       // fetched record intact so defaults and persistence retain the baseline.
       const values = { ...context.item.fields };
@@ -325,15 +399,18 @@ export function createGalleryRecordActions({ document, host, loadEditor, saveEdi
         if (column.control === "date") values[column.name] = String(values[column.name]).slice(0, 10);
         if (column.control === "datetime-local") values[column.name] = String(values[column.name]).slice(0, 16);
       }
-      state.controller = renderDynamicForm(state.body, {
+      const editorBusy = () => state.busy || state.persisted || (state.syncing && state.context === context);
+      bindings.controller = renderDynamicForm(mount, {
         entity: context.entity,
         columns: context.columns,
         mode: "edit",
+        isSubmitBlocked: () => !mounted || editorBusy(),
         values,
         defaultContext: { record: context.item.fields },
         relationshipSearch: context.relationshipSearch,
         powerAppsOptionSearch: context.powerAppsOptionSearch,
-        attachments: context.sheetAttachments ? { enabled: false } : context.attachments,
+        attachments: context.sheetAttachments ? { enabled: false } : { ...context.attachments,
+          ...(prepared ? { pendingFiles: prepared.draft.uploads, removedNames: prepared.draft.deletions } : {}) },
         onCancel: () => { if (active(state) && !state.busy) close(); },
         getEditAttachmentChanges: () => state.sheetAttachmentBinding?.changes(),
         onSubmit: async (fields, _rawValues, _relationshipLabels, attachmentChanges) => {
@@ -361,23 +438,33 @@ export function createGalleryRecordActions({ document, host, loadEditor, saveEdi
       if (context.sheetAttachments) {
         const { bindPayrollSheetAttachments } = await import('./payroll-sheet-attachments.js');
         if (!current()) return;
-        state.sheetAttachmentBinding = bindPayrollSheetAttachments(state.body.querySelector('form'), context, {
-          isBusy: () => state.busy || state.persisted, getReceiptAttachments, readReceiptAttachment,
+        bindings.sheetAttachmentBinding = bindPayrollSheetAttachments(mount.querySelector('form'), context, {
+          isBusy: editorBusy, getReceiptAttachments, readReceiptAttachment, initialChanges: prepared?.draft,
+          initialSavedFiles: prepared?.sheetFiles,
         });
       }
-      state.fieldLocks = bindForm43FieldLocks(state.body, context, { isBusy: () => state.busy || state.persisted });
-      state.sourceBinding = bindPayrollEditorSource(state.body.querySelector('form'), context, {
-        isBusy: () => state.busy || state.persisted,
+      bindings.fieldLocks = bindForm43FieldLocks(mount, context, { isBusy: editorBusy });
+      bindings.sourceBinding = bindPayrollEditorSource(mount.querySelector('form'), context, {
+        isBusy: editorBusy,
         onError: error => showError(state, error),
         onRecovered: () => { if (active(state)) state.error.hidden = true; },
       });
+      if (!current()) return;
+      // The renderer retains its root for validation feedback and callbacks.
+      if (prepared) { cleanup(state); previousRead?.abort(); state.body.replaceChildren(mount); }
+      Object.assign(state, { controller: null, fieldLocks: null, sourceBinding: null, sheetAttachmentBinding: null }, bindings);
+      state.context = context; state.readAbort = readAbort;
+      state.editorOptions = { ...options, ...(context.contract.formVariant?.id ? { formVariantId: context.contract.formVariant.id } : {}) };
+      mounted = true;
       (state.body.querySelector('input:not([disabled]), select:not([disabled]), textarea:not([disabled])') || focusable(state)[0] || state.dialog).focus();
       task.complete();
     } catch (error) {
       if (!current()) return;
+      if (prepared) throw error;
       showError(state, error);
       editorRetry(state, options);
     } finally {
+      if (!mounted) { cleanup(bindings); if (prepared) readAbort.abort(); }
       task.stop();
     }
   }

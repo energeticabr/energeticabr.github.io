@@ -47,6 +47,52 @@ async function confirmReview(ctx) {
   await settle();
 }
 
+test('conflict warning synchronizes the server baseline and only saves new edits after review', async t => {
+  let version = 1, reads = 0, saves = 0;
+  const ctx = await setup(t, {
+    loadEditor: async id => { reads++; return { ...context(id), item: { id, eTag: `"v${version}"`, fields: { Title: version === 1 ? 'Original' : 'SERVIDOR' } } }; },
+    saveEditor: async (loaded, fields) => {
+      saves++;
+      if (version === 1) { version = 2; throw Object.assign(new Error('Este registro foi alterado por outra pessoa.'), { status: 412, code: 'concurrent_change' }); }
+      assert.equal(loaded.item.eTag, '"v2"'); assert.equal(fields.Title, 'NOVO AJUSTE');
+      return { ...loaded.item, fields };
+    },
+  });
+  click(ctx, 'edit'); await settle(); await settle();
+  ctx.get('[name="Title"]').value = 'Rascunho antigo';
+  ctx.get('form').requestSubmit(); await confirmReview(ctx); await settle();
+  const sync = ctx.get('[data-gallery-conflict-sync]');
+  assert.ok(sync); assert.equal(sync.textContent, 'SINCRONIZAR');
+  assert.ok(ctx.get('[role="alert"]').contains(sync));
+  sync.click(); await settle(); await settle();
+  assert.equal(reads, 2); assert.equal(saves, 1, 'sync only reads');
+  assert.equal(ctx.get('[name="Title"]').value, 'SERVIDOR');
+  ctx.get('[name="Title"]').value = 'Novo ajuste';
+  ctx.get('[name="Title"]').dispatchEvent(new ctx.dom.window.Event('input', { bubbles: true }));
+  await settle(); assert.ok(ctx.get('[name="Title"]').closest('[data-edit-changed]'));
+  ctx.get('form').requestSubmit();
+  assert.match(ctx.get('[data-edit-review]').textContent, /SERVIDOR/);
+  assert.doesNotMatch(ctx.get('[data-edit-review]').textContent, /Rascunho antigo/);
+  await confirmReview(ctx); await settle(); assert.equal(saves, 2);
+  assert.ok(ctx.get('[data-gallery-edit-success]'));
+});
+
+test('failed synchronization leaves the original form and draft ready to retry', async t => {
+  let reads = 0;
+  const ctx = await setup(t, {
+    loadEditor: async id => { if (++reads > 1) throw new Error('Consulta indisponível'); return context(id); },
+    saveEditor: async () => { throw Object.assign(new Error('Conflito de versão'), { status: 412 }); },
+  });
+  click(ctx, 'edit'); await settle(); await settle();
+  const originalForm = ctx.get('form'); ctx.get('[name="Title"]').value = 'Meu rascunho';
+  originalForm.requestSubmit(); await confirmReview(ctx); await settle();
+  ctx.get('[data-gallery-conflict-sync]').click(); await settle(); await settle();
+  assert.equal(ctx.get('form'), originalForm); assert.equal(ctx.get('[name="Title"]').value, 'Meu rascunho');
+  assert.match(ctx.get('[role="alert"]').textContent, /Consulta indisponível/);
+  assert.equal(ctx.get('[data-gallery-conflict-sync]').disabled, false);
+  assert.deepEqual(ctx.writes, []);
+});
+
 test('top back cancels a pending editor read and ignores its late result', async t => {
   const pending = deferred(); let signal;
   const ctx = await setup(t, { loadEditor: (_id, options) => { signal = options.signal; return pending.promise; } });

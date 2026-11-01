@@ -138,6 +138,17 @@
 .gallery-editor-header .gallery-editor-back:hover:not(:disabled) { background: #fff; color: #173b57; }
 .gallery-editor-back:disabled { opacity: .55; cursor: wait; }
 .gallery-record-dialog-error { color: #a61b1b; background: #fff0f0; padding: 12px; border-radius: 8px; }
+.gallery-record-dialog-error--conflict { display: flex; align-items: center; gap: 12px; }
+.gallery-record-dialog-error--conflict[hidden] { display: none; }
+.gallery-record-dialog-error--conflict > .gallery-error-message { flex: 1; min-width: 0; overflow-wrap: anywhere; }
+.gallery-record-dialog-error--conflict > .gallery-conflict-sync {
+  flex: 0 0 auto; min-width: max-content; max-width: none; min-height: 44px; margin-left: auto;
+  padding: 8px 10px; border: 1px solid #aec2ca; border-radius: 8px;
+  background: #fff; color: #173b57; font: inherit; font-size: .82rem; font-weight: 750;
+  white-space: nowrap; cursor: pointer;
+}
+.gallery-record-dialog-error--conflict > .gallery-conflict-sync:disabled { opacity: .65; cursor: wait; }
+.gallery-sync-status { padding: 12px; border-radius: 8px; color: #145c37; background: #e5f5ec; }
 .gallery-record-dialog-buttons { display: flex; justify-content: flex-end; gap: 12px; }
 .gallery-record-dialog-button {
   min-height: 44px;
