@@ -85,6 +85,22 @@ test('nome e ID do cadastro formam um botão aparente, com os demais dados fora 
   assert.ok(doc.querySelector('[data-asset-report="96"]'));
 });
 
+test('título do lançamento é um botão em bloco e abre o bem vinculado, mantendo os detalhes fora do clique', async t => {
+  const dom = domFor(t), doc = dom.window.document, calls = [];
+  const gallery = createRegistrationGallery({ document: doc, kind: 'assetLaunches', data: {
+    async loadSnapshot() { return { rows: [{ id: '275', fields: { IMOBILIZADO: 'GUINCHO DE TESTE', 'ID IMOBILIZADO': 96, FILIAL: 'FILIAL TESTE' } }] }; },
+    async loadAssetReport(id) { calls.push(id); return report(id); },
+  } }); t.after(() => gallery.destroy()); await gallery.open();
+  const button = doc.querySelector('.rg-document-heading button.rg-asset-report-open[data-asset-report-trigger]');
+  assert.ok(button, 'O título dos lançamentos deve usar o mesmo botão destacado do cadastro');
+  assert.equal(button.type, 'button'); assert.match(button.textContent, /GUINCHO DE TESTE/);
+  assert.match(button.textContent, /ID 275/); assert.match(button.textContent, /Ver cadastro e depreciações/);
+  assert.equal(doc.querySelector('.gallery-record-main').hasAttribute('role'), false);
+  doc.querySelector('.rg-details').click(); await tick(); assert.deepEqual(calls, []);
+  button.querySelector('.rg-row-title').click(); await tick(); assert.deepEqual(calls, ['96']);
+  assert.ok(doc.querySelector('[data-asset-report="96"]'));
+});
+
 test('Tab alcança o cartão nas duas galerias e sua ativação abre o relatório correto', async t => {
   for (const kind of ['asset', 'assetLaunches']) {
     const dom = domFor(t), doc = dom.window.document, calls = [];

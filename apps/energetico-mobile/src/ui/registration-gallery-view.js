@@ -970,20 +970,16 @@ export function createRegistrationGallery({ document: doc = globalThis.document,
       if (assetReport) {
         const assetId = kind === 'asset' ? String(row.id) : String(registrationNumber(registrationRawField(row.fields, 'ID IMOBILIZADO', model)) ?? '');
         if (/^[1-9]\d{0,14}$/.test(assetId)) {
-          let trigger = recordMain;
-          if (kind === 'asset') {
-            const heading = recordMain.querySelector('.rg-asset-heading');
-            trigger = el('button', 'rg-asset-report-open'); trigger.type = 'button';
-            trigger.append(...heading.childNodes); heading.append(trigger);
-          }
+          const heading = recordMain.querySelector(kind === 'asset' ? '.rg-asset-heading' : '.rg-document-heading');
+          const trigger = el('button', 'rg-asset-report-open'); trigger.type = 'button';
+          trigger.append(...heading.childNodes); heading.append(trigger);
           trigger.dataset.assetReportTrigger = row.id; trigger.dataset.registrationReportRow = row.id;
           trigger.setAttribute('role', 'button'); trigger.tabIndex = 0;
           trigger.setAttribute('aria-label', `Abrir cadastro e histórico de depreciação de ${primary}, imobilizado #${assetId}`);
           trigger.setAttribute('aria-haspopup', 'dialog'); trigger.setAttribute('aria-expanded', 'false');
           trigger.append(el('span', 'asset-report-cue', kind === 'asset' ? 'Ver depreciações →' : 'Ver cadastro e depreciações →'));
           const openReport = () => { if (!destroyed && !root.hidden && !attachmentLoading && !pendingMutations && root.getAttribute('aria-busy') !== 'true') assetReport.open(assetId, trigger); };
-          trigger.addEventListener('click', event => { if (kind === 'asset' || !event.target.closest('button, a, input, select, textarea')) openReport(); });
-          if (kind !== 'asset') trigger.addEventListener('keydown', event => { if (event.target === trigger && ['Enter', ' '].includes(event.key)) { event.preventDefault(); event.stopPropagation(); openReport(); } });
+          trigger.addEventListener('click', openReport);
         }
       }
       if (!model.readOnly) card.classList.add('gallery-record-card');

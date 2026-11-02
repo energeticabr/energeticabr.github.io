@@ -57,11 +57,11 @@ export function createAssetReportData({ repository, siteKey = 'personal', assert
   }
   async function readHistory(assetId, schema, signal, progress) {
     const link = schema.mapping.get('ID IMOBILIZADO');
-    const query = `$select=id&$expand=fields&$filter=fields/${link} eq ${assetId}&$top=200`;
+    const query = `$select=id&$expand=fields&$filter=fields/${link} eq ${assetId}&$top=100`;
     const rows = new Map(), visited = new Set(); let cursor;
-    for (let pageNumber = 1; pageNumber <= 1000; pageNumber++) {
+    for (let pageNumber = 1; pageNumber <= 100; pageNumber++) {
       check(signal);
-      const page = await repository.getItemsPage(siteKey, schema.id, query, { signal, pageNumber, maxPages: 1000,
+      const page = await repository.getItemsPage(siteKey, schema.id, query, { signal, pageNumber, maxPages: 100,
         headers: { Prefer: 'HonorNonIndexedQueriesWarningMayFailRandomly' }, ...(cursor ? { cursor } : {}) }); check(signal);
       if (!Array.isArray(page?.items) || typeof page.hasMore !== 'boolean' || !page.hasMore && page.nextLink) throw new Error('A paginação do histórico está incompleta.');
       for (const item of page.items) {
