@@ -309,6 +309,10 @@ async function defaultDdaReportFactory(options) {
 }
 
 async function defaultRegistrationGalleryFactory(options) {
+  if (options.kind === 'registrationMenu') {
+    const { createRegistrationGalleryMenu } = await import('./ui/registration-gallery-menu.js');
+    return createRegistrationGalleryMenu(options);
+  }
   if (options.kind === 'assetMenu') {
     const { createAssetGalleryMenu } = await import('./ui/asset-gallery-menu.js');
     return createAssetGalleryMenu(options);
@@ -496,6 +500,7 @@ const REGISTRATION_GALLERY_KIND = Object.freeze({
   action_documents_gallery: "documents",
   action_asset_gallery: "asset",
   action_asset_hub: 'assetMenu',
+  action_registration_hub: 'registrationMenu',
   action_asset_launches_gallery: 'assetLaunches',
   action_asset_function_gallery: "assetFunction",
   action_asset_product_gallery: "assetProduct",
@@ -1194,6 +1199,7 @@ export function createAppController({
   let recurringExpensesGalleryOpening = null;
   const registrationGalleries = new Map();
   const registrationGalleryOpenings = new Map();
+  const registrationGalleryOpenOptions = new WeakMap();
   let supplierPayroll = null;
   let supplierPayrollOpening = null;
   let mealVoucher = null;
@@ -6293,10 +6299,11 @@ export function createAppController({
         : { [LAUNCH_GALLERY_ID]: launchGallery, [ORDERS_GALLERY_ID]: ordersGallery,
           [TASKS_GALLERY_ID]: tasksGallery, [PAYMENT_PROGRAMMING_GALLERY_ID]: paymentProgrammingGallery,
           [RECURRING_EXPENSES_GALLERY_ID]: recurringExpensesGallery }[galleryId];
+      const openOptions = panel && registrationGalleryOpenOptions.get(panel);
       const result = await sendText(action[1], action[0]);
       const flow = store.getState().activeFlow;
       if (result && panel && flow && account === creationAccount && sessionRevision === creationRevision && !stopped) {
-        galleryCreationReturn = { panel, account, revision: sessionRevision,
+        galleryCreationReturn = { panel, openOptions, account, revision: sessionRevision,
           contexts: [{ id: flow.id, contextId: flow.contextId }] };
       }
       return result;
@@ -6363,7 +6370,7 @@ export function createAppController({
       galleryCreationReturn = null;
       closeGalleryOverlays();
       try {
-        if (await origin.panel.open() === false) return false;
+        if (await origin.panel.open(origin.openOptions) === false) return false;
       } catch (error) {
         setSessionError(error, 'Não foi possível retornar à galeria.');
         return false;
@@ -9517,6 +9524,7 @@ export function createAppController({
     if (!account || stopped || flowBusy()) return false;
     const isDdaReport = kind === "ddaReport";
     const sourceKind = isDdaReport ? "dda" : kind;
+    const isGalleryMenu = ['assetMenu', 'registrationMenu'].includes(sourceKind);
     if (isDdaReport && store.getState().activeFlow) return false;
     disposeSupplierPayrollReport();
     disposeSacPathologiesReport();
@@ -9540,7 +9548,7 @@ export function createAppController({
       if (stopped || account !== owner || sessionRevision !== revision || ddaReminderInteraction !== interaction) return false;
       return openRegistrationGallery(kind, replyId, openOptions);
     }
-    if (kind === 'assetMenu') {
+    if (isGalleryMenu) {
       // Returning to the chooser supersedes any earlier gallery request, even
       // when its transport has not settled after the panel was closed.
       galleryOpeningRevision++;
@@ -9556,7 +9564,7 @@ export function createAppController({
     const opening = (async () => {
       try {
         if (!registrationGalleries.has(kind)) {
-          const data = sourceKind === 'assetMenu' ? null : await registrationGalleryDataFactory({ kind: sourceKind,assertSession, accountKey: galleryAccount.homeAccountId || galleryAccount.localAccountId || galleryAccount.idTokenClaims?.oid || "", userEmail: galleryAccount.username || galleryAccount.email || "", tokenProvider: async scopes => {
+          const data = isGalleryMenu ? null : await registrationGalleryDataFactory({ kind: sourceKind,assertSession, accountKey: galleryAccount.homeAccountId || galleryAccount.localAccountId || galleryAccount.idTokenClaims?.oid || "", userEmail: galleryAccount.username || galleryAccount.email || "", tokenProvider: async scopes => {
             assertSession();
             const token = await auth.getToken(scopes).catch(async error => {
               if (error?.code !== "AUTH_REQUIRED" || typeof auth.authorize !== "function") throw error;
@@ -9572,11 +9580,19 @@ export function createAppController({
           const factory = isDdaReport ? ddaReportFactory : registrationGalleryFactory;
           const panel = await factory({
             kind: sourceKind, data,
-            ...(sourceKind === 'assetMenu' ? { onSelect: async target => {
+            ...(isGalleryMenu ? { onSelect: async target => {
               assertSession();
-              if (!['asset', 'assetLaunches'].includes(target) || flowBusy()) return false;
-              registrationGalleries.get('assetMenu')?.close();
-              return openRegistrationGallery(target, target === 'asset' ? 'action_asset_gallery' : 'action_asset_launches_gallery', { fromAssetMenu: true });
+              const targets = sourceKind === 'assetMenu' ? ['asset', 'assetLaunches'] : ['group', 'family', 'subfamily', 'product'];
+              if (!targets.includes(target) || flowBusy()) return false;
+              registrationGalleries.get(kind)?.close();
+              const targetReply = Object.keys(REGISTRATION_GALLERY_KIND).find(reply => REGISTRATION_GALLERY_KIND[reply] === target);
+              const selectionRevision = galleryOpeningRevision;
+              const opened = await openRegistrationGallery(target, targetReply, { fromGalleryMenu: kind });
+              if (!opened && !stopped && account === galleryAccount && sessionRevision === galleryRevision
+                && galleryOpeningRevision === selectionRevision) {
+                await openRegistrationGallery(kind, replyId, { error: 'Não foi possível abrir a galeria. Tente novamente.' });
+              }
+              return opened;
             } } : {}),
             ...(!isDdaReport && sourceKind === 'dda' ? {
               refreshBank: options => refreshDdaBank(client, { ...options, assertSession }),
@@ -9588,7 +9604,7 @@ export function createAppController({
             } : {}),
             ...(sourceKind === 'notas_fiscais_sefaz' ? { syncMonitor: ensureSefazSyncSession() } : {}),
             ...(isDdaReport ? { onClose: () => ddaAutoReminder.dismiss() } : {}),
-            ...(["contractorEmployment", "dda", "notas_fiscais_sefaz", 'assetMenu', 'assetLaunches'].includes(sourceKind) ? {} : { onCreate: galleryCreationHandler(replyId, assertSession) }),
+            ...(["contractorEmployment", "dda", "notas_fiscais_sefaz", 'assetMenu', 'registrationMenu', 'assetLaunches'].includes(sourceKind) ? {} : { onCreate: galleryCreationHandler(replyId, assertSession) }),
             ...(["notas_fiscais_sefaz", "dda", "presenceDescriptions", "provisionDescription", "documents", "asset", "assetFunction", "assetProduct", "assetGroup", "workDiary", "quotes", "contracts", "contractLines", "measurements", "measurementLines", "stageDemonstratives", "constructionStages", "recurringTasks", "delegatedTasks"].includes(sourceKind) ? {
               openMediaCollection: items => {
                 assertSession();
@@ -9605,9 +9621,13 @@ export function createAppController({
           registrationGalleries.set(kind, isDdaReport ? decorateControllerReport(panel, 'open-dda-report') : panel);
         }
         if (openOptions.automatic && !openOptions.isCurrent?.()) return false;
-        await registrationGalleries.get(kind).open({ ...openOptions,
+        const panel = registrationGalleries.get(kind);
+        const panelOpenOptions = { ...openOptions,
           ...(openOptions.fromAssetMenu ? { onBack: () => { assertSession(); return openRegistrationGallery('assetMenu', 'action_asset_hub'); } } : {}),
-        });
+          ...(openOptions.fromGalleryMenu ? { onBack: () => { assertSession(); return openRegistrationGallery(openOptions.fromGalleryMenu, openOptions.fromGalleryMenu === 'assetMenu' ? 'action_asset_hub' : 'action_registration_hub'); } } : {}),
+        };
+        registrationGalleryOpenOptions.set(panel, panelOpenOptions);
+        await panel.open(panelOpenOptions);
         return openingIsCurrent();
       } catch (error) {
         if (openingIsCurrent()) setSessionError(error, "Não foi possível abrir a galeria de cadastros.");
@@ -9781,6 +9801,12 @@ export function createAppController({
         silent: behavior.silent === true || behavior.epiFinalizeStep === true,
         preserveDraft: behavior.preserveDraft === true,
       });
+      // An accepted chat request owns navigation; slow gallery factories from
+      // the screen being left must not appear over the resulting conversation.
+      galleryOpeningRevision++;
+      launchGalleryOpening = ordersGalleryOpening = tasksGalleryOpening = null;
+      paymentProgrammingGalleryOpening = recurringExpensesGalleryOpening = hrPayrollGalleryOpening = null;
+      registrationGalleryOpenings.clear();
       behavior.onRequest?.();
       let result = preparePresenceResult(await waitForDdaPaymentLaunch(client.sendText({
         text: operation.text,

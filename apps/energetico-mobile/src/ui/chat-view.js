@@ -1032,6 +1032,16 @@ function assetGalleryOption() {
   return { id: "action_asset_hub", reply: "action_asset_hub", label: "IMOBILIZADOS" };
 }
 
+function isSupplyRegistrationOption(option) {
+  if (['action_supply_registrations', 'registrations'].includes(draftReplyId(option).trim().toLowerCase())) return true;
+  const label = normalizedDateText(option?.label || option?.title || "").replace(/[^\p{L}\p{N}\s]/gu, ' ').replace(/\s+/g, ' ').trim();
+  return /^(?:efetuar\s+)?cadastros$/.test(label);
+}
+
+function registrationGalleryHubOption() {
+  return { id: "action_registration_hub", reply: "action_registration_hub", label: "GALERIA DE CADASTROS" };
+}
+
 function suppliesOptionVisual(option) {
   const label = normalizedDateText(option?.label || option?.title || "");
   if (isLaunchFlowOption(option)) return { displayIcon: "🧾", displayLabel: "LANÇAMENTOS" };
@@ -1047,6 +1057,8 @@ function suppliesMenuChoices(options, galleries, busy) {
   const launches = options.find(isLaunchFlowOption);
   const payment = options.find(isSupplyPaymentOption);
   const others = options.filter(option => option !== launches && option !== payment);
+  const registration = others.find(option => ['action_supply_registrations', 'registrations'].includes(draftReplyId(option).trim().toLowerCase()))
+    || others.find(isSupplyRegistrationOption);
   const primary = option => option ? pollButton(option, busy, { suppliesButton: true, ...suppliesOptionVisual(option) }) : "";
   const gallery = (option, label) => option ? pollButton(option, busy, { galleryButton: true, displayLabel: label }) : "";
   const pair = (option, firstGallery, firstLabel, secondGallery, secondLabel, thirdGallery, thirdLabel, fourthGallery, fourthLabel) => `<div class="chat-supplies-pair${fourthGallery ? " chat-supplies-pair--four-galleries" : thirdGallery ? " chat-supplies-pair--three-galleries" : ""}">
@@ -1059,7 +1071,8 @@ function suppliesMenuChoices(options, galleries, busy) {
     <div class="chat-supplies-extras">${others.map(option => {
       const sideGallery = isSupplyQuoteOption(option)
         ? gallery(galleries.quotes, "GALERIA DE COTAÇÕES")
-        : isSupplyAssetOption(option) ? gallery(galleries.assets, "IMOBILIZADOS") : "";
+        : isSupplyAssetOption(option) ? gallery(galleries.assets, "IMOBILIZADOS")
+          : option === registration ? gallery(galleries.registrations, "GALERIA DE CADASTROS") : "";
       return `<div class="chat-supplies-extra-pair"><div class="chat-supplies-extras__primary">${primary(option)}</div>${sideGallery ? `<div class="chat-gallery-actions">${sideGallery}</div>` : ""}</div>`;
     }).join("")}</div>
   </div>`;
@@ -1112,11 +1125,12 @@ function menuOptionsWithoutApps(message, options) {
       && (!suppliesMenu || (replyId !== "action_launch_report" && !/\bobter\s+dados\b/.test(normalizedDateText(option?.label || option?.title || "")) && replyId !== "action_quote_gallery" && !['action_asset_gallery', 'action_asset_hub'].includes(replyId)))
       && (!pairedMenu || !pairedMenu.pairs.some(pair => pair.id === replyId))
       && !REGISTRATION_GALLERIES.some(gallery => gallery.id === replyId)
+      && replyId !== "action_registration_hub"
       && replyId !== "action_apps" && replyId !== "action_launch_gallery" && replyId !== "action_orders_gallery"
       && replyId !== "action_tasks_gallery" && replyId !== "action_payment_programming_gallery"
       && replyId !== "action_recurring_expenses_gallery" && replyId !== "action_dda_gallery" && replyId !== "action_notas_fiscais_sefaz_gallery" && replyId !== "action_provision_description_gallery";
   });
-  if (suppliesMenu) return [...filtered, ordersGalleryOption(), launchGalleryOption(), notasSefazGalleryOption(), paymentProgrammingGalleryOption(), provisionDescriptionGalleryOption(), recurringExpensesGalleryOption(), ddaGalleryOption(), ...(filtered.some(isSupplyQuoteOption) ? [quoteGalleryOption()] : []), ...(filtered.some(isSupplyAssetOption) ? [assetGalleryOption()] : [])];
+  if (suppliesMenu) return [...filtered, ordersGalleryOption(), launchGalleryOption(), notasSefazGalleryOption(), paymentProgrammingGalleryOption(), provisionDescriptionGalleryOption(), recurringExpensesGalleryOption(), ddaGalleryOption(), ...(filtered.some(isSupplyQuoteOption) ? [quoteGalleryOption()] : []), ...(filtered.some(isSupplyAssetOption) ? [assetGalleryOption()] : []), ...(filtered.some(isSupplyRegistrationOption) ? [registrationGalleryHubOption()] : [])];
   if (pairedMenu) return [...filtered, ...pairedMenu.pairs.filter(pair => filtered.some(option => galleryPairForOption(option, pairedMenu.pairs) === pair)).map(pair => ({ id: pair.id, reply: pair.id, label: pair.label }))];
   if (registrationsMenu) return [...filtered, ...REGISTRATION_GALLERIES];
   if (isAuditDocumentsMenu(message)) {
@@ -1647,7 +1661,7 @@ function renderPoll(message, busy, draft = "", databaseFilterMessage = null, act
     const replyId = draftReplyId(option).trim().toLowerCase();
     const groupedTaskAction = taskCreateOption && option === taskCreateOption;
     return !(hasCompressionPreview && compressionOptionIds.has(replyId))
-      && (!isLaunchMenu || (replyId !== "action_launch_gallery" && replyId !== "action_orders_gallery" && replyId !== "action_payment_programming_gallery" && replyId !== "action_recurring_expenses_gallery" && replyId !== "action_dda_gallery" && replyId !== "action_notas_fiscais_sefaz_gallery" && replyId !== "action_provision_description_gallery" && replyId !== "action_quote_gallery" && !['action_asset_gallery', 'action_asset_hub'].includes(replyId)))
+      && (!isLaunchMenu || (replyId !== "action_launch_gallery" && replyId !== "action_orders_gallery" && replyId !== "action_payment_programming_gallery" && replyId !== "action_recurring_expenses_gallery" && replyId !== "action_dda_gallery" && replyId !== "action_notas_fiscais_sefaz_gallery" && replyId !== "action_provision_description_gallery" && replyId !== "action_quote_gallery" && !['action_asset_gallery', 'action_asset_hub', 'action_registration_hub'].includes(replyId)))
       && (!pairedMenu || !pairedMenu.pairs.some(pair => pair.id === replyId))
       && (!isRegistrationMenu || !REGISTRATION_GALLERIES.some(gallery => gallery.id === replyId))
       && (!isAuditMenu || replyId !== "action_documents_gallery")
@@ -1743,6 +1757,9 @@ function renderPoll(message, busy, draft = "", databaseFilterMessage = null, act
   const assetGallery = isLaunchMenu
     ? displayOptions.find(option => draftReplyId(option).trim().toLowerCase() === "action_asset_hub")
     : null;
+  const registrationGallery = isLaunchMenu
+    ? displayOptions.find(option => draftReplyId(option).trim().toLowerCase() === "action_registration_hub")
+    : null;
   const documentsGallery = isAuditMenu
     ? displayOptions.find(option => draftReplyId(option).trim().toLowerCase() === "action_documents_gallery")
     : null;
@@ -1755,7 +1772,7 @@ function renderPoll(message, busy, draft = "", databaseFilterMessage = null, act
     ? isHrGalleryMenu
       ? `<div class="chat-choice-columns chat-choice-columns--hr-galleries">${hrChoices}</div>`
       : isLaunchMenu
-      ? suppliesMenuChoices(regularOptions, { orders: ordersGallery, launches: galleryOption, notasSefaz: notasSefazGallery, payments: paymentProgrammingGallery, provisionDescription: provisionDescriptionGallery, recurring: recurringExpensesGallery, dda: ddaGallery, quotes: quoteGallery, assets: assetGallery }, busy)
+      ? suppliesMenuChoices(regularOptions, { orders: ordersGallery, launches: galleryOption, notasSefaz: notasSefazGallery, payments: paymentProgrammingGallery, provisionDescription: provisionDescriptionGallery, recurring: recurringExpensesGallery, dda: ddaGallery, quotes: quoteGallery, assets: assetGallery, registrations: registrationGallery }, busy)
       : pairedMenu
         ? pairedGalleryMenuChoices(displayOptions, pairedMenu, busy)
       : isRegistrationMenu
