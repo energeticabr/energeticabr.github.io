@@ -380,6 +380,10 @@ export function createOrdersGallery({
       : /^(aprovado|pago)$/i.test(statusText.trim()) ? 'approved' : 'neutral';
     const status = el('span', `og-status og-status--${statusKind}`, statusText);
     headingCopy.append(status);
+    const openCue = el('span', 'og-open-cue');
+    openCue.setAttribute('aria-hidden', 'true');
+    openCue.append(el('span', '', 'Ver lançamentos'), icon('m9 5 7 7-7 7'));
+    headingCopy.append(openCue);
     const openOrder = el('button', 'og-card-id og-order-open', text(row.id));
     openOrder.type = 'button';
     openOrder.dataset.orderLinkedOpen = '';
