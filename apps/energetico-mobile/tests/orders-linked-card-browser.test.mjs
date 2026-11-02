@@ -1,7 +1,8 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { existsSync } from 'node:fs';
-import { mkdir, writeFile } from 'node:fs/promises';
+import { mkdir, writeFile, mkdtemp, rm } from 'node:fs/promises';
+import { tmpdir } from 'node:os';
 import { execFileSync } from 'node:child_process';
 import { resolve, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
@@ -33,15 +34,20 @@ async function serve() {
         `${baseline}:apps/energetico-mobile/src/ui/${name}`], { cwd: appRoot, encoding: 'utf8' }));
     }
   }
-  const server = await createServer({ root: appRoot, logLevel: 'silent',
-    server: { host: '127.0.0.1', port: 0, fs: { allow: [resolve(appRoot, '../..')] } },
+  const cacheDir = await mkdtemp(join(tmpdir(), 'orders-linked-vite-'));
+  let server;
+  const cleanup = async () => { try { await server?.close(); } finally { await rm(cacheDir, { recursive: true, force: true }); } };
+  try {
+    server = await createServer({ root: appRoot, cacheDir, logLevel: 'silent',
+    server: { host: '127.0.0.1', port: 0, fs: { allow: [resolve(appRoot, '../..'), cacheDir] } },
     plugins: [{ name: 'orders-linked-card-read-only-baseline', enforce: 'pre',
       transform(_code, id) {
         for (const [suffix, source] of replacements) if (id.replaceAll('\\', '/').endsWith(suffix)) return source;
       } }],
   });
   await server.listen();
-  return { server, url: `http://127.0.0.1:${server.httpServer.address().port}/tests/fixtures/orders-linked-card.html` };
+  return { cleanup, url: `http://127.0.0.1:${server.httpServer.address().port}/tests/fixtures/orders-linked-card.html` };
+  } catch (error) { await cleanup(); throw error; }
 }
 
 async function state(api) { return api.evaluate(`${fixture}.snapshot()`); }
@@ -175,7 +181,7 @@ async function assertCueLayout(api, id) {
 for (const [width, height] of [[320, 740], [390, 844], [1200, 900]]) {
   test(`order card real touch/keyboard, independent controls and context restoration at ${width}px`,
     { timeout: 120_000, skip: !browser && 'Chrome unavailable' }, async t => {
-      const { server, url } = await serve();
+      const { cleanup, url } = await serve();
       try {
         await withAttachmentBrowser(browser, { width, height }, async api => {
           await api.command('Network.enable');
@@ -298,13 +304,13 @@ for (const [width, height] of [[320, 740], [390, 844], [1200, 900]]) {
           assert.ok(requests.every(request => request.method === 'GET'), 'No network data writes');
           t.diagnostic(JSON.stringify({ width, layout, cueLayout, longHeaderLayout, hits, final }));
         });
-      } finally { await server.close(); }
+      } finally { await cleanup(); }
     });
 }
 
 test('linked card error/retry, wrong-order response and cancelled stale reads use the real report panel',
   { timeout: 90_000, skip: !browser && 'Chrome unavailable' }, async t => {
-    const { server, url } = await serve();
+    const { cleanup, url } = await serve();
     try {
       await withAttachmentBrowser(browser, { width: 390, height: 844 }, async api => {
         await api.navigate(url);
@@ -358,5 +364,5 @@ test('linked card error/retry, wrong-order response and cancelled stale reads us
         assert.deepEqual(final.errors, []);
         t.diagnostic(JSON.stringify(final));
       });
-    } finally { await server.close(); }
+    } finally { await cleanup(); }
   });
