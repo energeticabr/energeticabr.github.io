@@ -66,6 +66,63 @@ test('linked report reads the selected order and all exactly grouped active and 
   assert.equal(ctx.reads.filter(read => read.list === 'LANCAMENTOS').length, 2);
 });
 
+for (const computed of [true, false]) {
+  test(`linked report resolves renamed Title fields without counting SharePoint link mirrors (computed ${computed})`, async () => {
+    const ctx = harness();
+    const labels = { NOTASPENDENTES: 'FILIAL', LANCAMENTOS: 'FILIAL', ARQUIVOLANCAMENTOS: 'FORNECEDOR' };
+    const physical = list => `physical_${schemas[list].indexOf(labels[list])}`;
+    const rename = (list, item) => {
+      const fields = { ...item.fields, Title: item.fields[physical(list)] };
+      delete fields[physical(list)];
+      return { ...item, fields };
+    };
+    const getItem = ctx.repository.getItem, getPage = ctx.repository.getItemsPage;
+    ctx.repository.getColumns = async (_site, list) => [
+      ...columnsFor(list).map(column => column.name === physical(list) ? { ...column, name: 'Title' } : column),
+      ...['LinkTitle', 'LinkTitleNoMenu', 'LinkTitle2'].map(name => ({ name, displayName: labels[list], readOnly: true,
+        ...(computed ? { computed: true } : {}), hidden: name === 'LinkTitle2' })),
+    ];
+    ctx.repository.getItem = async (...args) => rename(args[1], await getItem(...args));
+    ctx.repository.getItemsPage = async (...args) => {
+      const page = await getPage(...args);
+      return { ...page, items: page.items.map(item => rename(args[1], item)) };
+    };
+    const result = await report(ctx);
+    assert.equal(result.order.fields.FILIAL, 'CENTRAL');
+    assert.equal(result.active[0].fields.FILIAL, 'CENTRAL');
+    assert.equal(result.deleted[0].fields.FORNECEDOR, 'COFER');
+    assert.deepEqual(result.active.map(row => row.id), ['12', '15']);
+    for (const read of ctx.reads.filter(read => read.query)) {
+      assert.match(read.query, /\$select=[^)]*Title/);
+      assert.doesNotMatch(read.query, /LinkTitle/);
+    }
+  });
+}
+
+test('linked report cannot establish FILIAL from link mirrors alone or choose between genuine data columns', async () => {
+  for (const mode of ['mirrors-only', 'real-duplicate']) {
+    const ctx = harness({ async getColumns(_site, list) {
+      if (list !== 'LANCAMENTOS') return columnsFor(list);
+      const columns = columnsFor(list);
+      if (mode === 'mirrors-only') return [...columns.filter(column => column.displayName !== 'FILIAL'),
+        { name: 'LinkTitle', displayName: 'FILIAL', readOnly: true }];
+      return [...columns, { name: 'OTHER_BRANCH', displayName: 'FILIAL', readOnly: true }];
+    } });
+    await assert.rejects(report(ctx), /FILIAL.*(comprovada|ambígua)/);
+    assert.equal(ctx.reads.some(read => read.list === 'LANCAMENTOS'), false, 'reject unproven column before querying rows');
+  }
+});
+
+test('FILIAL link mirrors in LANCAMENTOS metadata do not prevent reading the selected order', async () => {
+  const ctx = harness({ async getColumns(_site, list) {
+    return [...columnsFor(list), ...(list === 'LANCAMENTOS'
+      ? [{ name: 'LinkTitle', displayName: 'FILIAL', readOnly: true }, { name: 'LinkTitleNoMenu', displayName: 'FILIAL', readOnly: true }] : [])];
+  } });
+  const result = await report(ctx);
+  assert.equal(result.active[0].fields.FILIAL, 'CENTRAL');
+  assert.deepEqual(result.active.map(row => row.id), ['12', '15']);
+});
+
 test('gallery sync invalidates all linked report contracts, independent of visible order IDs', async () => {
   const columns = [];
   const ctx = harness({ async getColumns(_site, list) { columns.push(list); return columnsFor(list); } });

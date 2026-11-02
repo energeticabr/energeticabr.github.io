@@ -43,6 +43,29 @@ function setInput(ctx, name, value) {
   field.dispatchEvent(new ctx.dom.window.Event("change", { bubbles: true }));
 }
 
+test('order headings advertise linked launches with a decorative cue after the status', async t => {
+  const ctx = await setup(t);
+  await ctx.gallery.open();
+  for (const card of ctx.root().querySelectorAll('.og-card')) {
+    const heading = card.querySelector('.og-card-heading');
+    const cue = heading.querySelector('.og-heading-copy .og-open-cue');
+    assert.ok(cue, 'Every order header visibly offers Ver lançamentos');
+    assert.equal(cue.textContent, 'Ver lançamentos');
+    assert.equal(cue.previousElementSibling, heading.querySelector('.og-status'));
+    assert.equal(cue.getAttribute('aria-hidden'), 'true', 'The native button already supplies the accessible name');
+    assert.equal(cue.tagName, 'SPAN');
+    assert.equal(cue.hasAttribute('tabindex'), false);
+    assert.ok(cue.querySelector('svg path'), 'A right chevron accompanies the visible label');
+    const open = heading.querySelector('[data-order-linked-open]');
+    assert.equal(open.tagName, 'BUTTON');
+    assert.equal(open.getAttribute('aria-label'), `Abrir lançamentos vinculados ao pedido #${card.dataset.itemId}`);
+    assert.equal(heading.querySelectorAll('button').length, 1);
+    for (const action of ['edit', 'delete', 'attachments']) {
+      assert.equal(heading.contains(card.querySelector(`[data-action="${action}"]`)), false);
+    }
+  }
+});
+
 test("orders gallery mirrors Screen10 actions, sorting, filters and page sizes", async t => {
   const ctx = await setup(t);
   await ctx.gallery.open();

@@ -127,6 +127,51 @@ async function screenshot(api, name) {
   await writeFile(join(directory, `${name}.png`), Buffer.from(data, 'base64'));
 }
 
+async function assertCueLayout(api, id) {
+  const layout = await api.evaluate(`(() => {
+    const card = document.querySelector(${JSON.stringify(card(id))});
+    const heading = card.querySelector('.og-card-heading'), cue = heading.querySelector('.og-open-cue');
+    if (!cue) return { cuePresent: false };
+    const svg = cue.querySelector('svg'), label = cue.querySelector('span');
+    const rect = node => node.getBoundingClientRect();
+    const inside = (outer, inner) => inner.left >= outer.left - 1 && inner.right <= outer.right + 1
+      && inner.top >= outer.top - 1 && inner.bottom <= outer.bottom + 1;
+    const intersects = (a, b) => a.left < b.right && a.right > b.left && a.top < b.bottom && a.bottom > b.top;
+    const textFits = node => {
+      const range = document.createRange(); range.selectNodeContents(node);
+      return [...range.getClientRects()].every(r => inside(rect(node), r));
+    };
+    const children = [...heading.children, ...heading.querySelector('.og-heading-copy').children];
+    const actions = [...card.querySelectorAll('[data-action="edit"],[data-action="delete"]')];
+    const style = getComputedStyle(cue), headingStyle = getComputedStyle(heading), svgStyle = svg && getComputedStyle(svg);
+    const button = heading.querySelector('[data-order-linked-open]');
+    return { cuePresent: true, cueVisible: cue.checkVisibility(), text: cue.textContent,
+      cueDisplay: style.display, background: headingStyle.backgroundColor,
+      border: parseFloat(headingStyle.borderTopWidth), borderStyle: headingStyle.borderTopStyle,
+      labelFits: !!label && textFits(label), idFits: textFits(button),
+      childrenFit: children.every(node => inside(rect(heading), rect(node))),
+      actionsIndependent: children.every(node => actions.every(action => !intersects(rect(node), rect(action)))),
+      chevronVisible: !!svg && svg.checkVisibility() && rect(svg).width >= 12 && rect(svg).height >= 12
+        && svgStyle.visibility === 'visible' && inside(rect(cue), rect(svg))
+        && getComputedStyle(svg.querySelector('path')).stroke !== 'none',
+      contentOverflow: document.querySelector('.og-content').scrollWidth > document.querySelector('.og-content').clientWidth + 1,
+      documentOverflow: document.documentElement.scrollWidth > innerWidth + 1,
+      cueWidth: rect(cue).width, headingWidth: rect(heading).width };
+  })()`);
+  assert.equal(layout.cuePresent, true, 'The real header must render the visible open cue');
+  assert.equal(layout.text, 'Ver lançamentos');
+  assert.equal(layout.cueVisible, true);
+  assert.match(layout.cueDisplay, /^(inline-)?flex$/, 'Grid items compute inline-flex as flex');
+  assert.ok(!['rgba(0, 0, 0, 0)', 'rgb(255, 255, 255)'].includes(layout.background), 'Header has a soft blue background');
+  assert.ok(layout.border >= 1 && layout.borderStyle !== 'none', 'Header has a visible outline');
+  for (const name of ['labelFits', 'idFits', 'childrenFit', 'actionsIndependent', 'chevronVisible']) {
+    assert.equal(layout[name], true, `${name}: ${JSON.stringify(layout)}`);
+  }
+  assert.equal(layout.contentOverflow, false);
+  assert.equal(layout.documentOverflow, false);
+  return layout;
+}
+
 for (const [width, height] of [[320, 740], [390, 844], [1200, 900]]) {
   test(`order card real touch/keyboard, independent controls and context restoration at ${width}px`,
     { timeout: 120_000, skip: !browser && 'Chrome unavailable' }, async t => {
@@ -143,6 +188,7 @@ for (const [width, height] of [[320, 740], [390, 844], [1200, 900]]) {
           assert.equal(native.tag, 'BUTTON', 'ID must be a native [data-order-linked-open] button');
           assert.equal(native.type, 'button');
           assert.equal(native.disabled, false);
+          await assertCueLayout(api, '400');
 
           // Non-default query + status filter + sort and page two, with actual
           // real pagination input. Context must survive every report opening.
@@ -162,6 +208,7 @@ for (const [width, height] of [[320, 740], [390, 844], [1200, 900]]) {
           const hits = [];
           for (const [target, dismissal] of [
             [trigger(id), 'close'], [`${card(id)} h2`, 'Escape'],
+            [`${card(id)} .og-open-cue span`, 'close'], [`${card(id)} .og-open-cue svg`, 'Escape'],
             [`${card(id)} .og-card-fields dd`, 'close'],
             [`${card(id)} .og-value-cluster--total`, 'Escape'],
           ]) {
@@ -214,7 +261,7 @@ for (const [width, height] of [[320, 740], [390, 844], [1200, 900]]) {
           const final = await state(api);
           assert.deepEqual(final.editors, [id]);
           assert.deepEqual(final.media, [[`pedido-${id}.pdf`]]);
-          assert.deepEqual(final.reports.map(request => request.id), [id, id, id, id, id, id]);
+          assert.deepEqual(final.reports.map(request => request.id), Array(8).fill(id));
           assert.equal(final.writes, 0);
           assert.equal(final.loads, 1);
           assert.deepEqual(final.errors, []);
@@ -236,11 +283,20 @@ for (const [width, height] of [[320, 740], [390, 844], [1200, 900]]) {
           assert.equal(layout.cardsFit, true);
           if (width === 1200) assert.ok(layout.scrollbarGutter > 0, 'Desktop hit tests must include the standard scrollbar gutter');
           await screenshot(api, `orders-linked-card-${width}`);
+          const cueLayout = await assertCueLayout(api, id);
+          await api.evaluate(`(() => {
+            const card = document.querySelector(${JSON.stringify(card(id))});
+            card.querySelector('h2').textContent = 'FORNECEDOR SINTÉTICO COM NOME EXTENSO ' + 'ARMAÇÕES'.repeat(12);
+            card.querySelector('[data-order-linked-open]').textContent = '999999999999999';
+          })()`);
+          await reveal(api, trigger(id));
+          const longHeaderLayout = await assertCueLayout(api, id);
+          await screenshot(api, `orders-linked-card-long-${width}`);
           const requests = api.events.filter(event => event.method === 'Network.requestWillBeSent')
             .map(event => event.params.request).filter(request => /^https?:/.test(request.url));
           assert.ok(requests.every(request => new URL(request.url).origin === new URL(url).origin), 'No live network requests');
           assert.ok(requests.every(request => request.method === 'GET'), 'No network data writes');
-          t.diagnostic(JSON.stringify({ width, layout, hits, final }));
+          t.diagnostic(JSON.stringify({ width, layout, cueLayout, longHeaderLayout, hits, final }));
         });
       } finally { await server.close(); }
     });

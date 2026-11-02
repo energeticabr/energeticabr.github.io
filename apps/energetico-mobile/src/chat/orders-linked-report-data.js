@@ -110,10 +110,14 @@ export function createOrdersLinkedReportData({ repository, siteKey = 'personal' 
     const columns = await repository.getColumns(siteKey, list.id, signal ? { signal } : {});
     abort(signal);
     if (!Array.isArray(columns)) throw new Error(`Os metadados da lista ${name} não retornaram uma resposta válida.`);
+    // SharePoint repeats a renamed Title label on computed link mirrors.
+    // Only actual data columns can establish a unique field for this report.
+    const dataColumns = columns.filter(column => column?.computed !== true
+      && !/^LinkTitle(?:NoMenu|2)?$/i.test(String(column?.name ?? '')));
     const mapping = new Map();
     for (const label of SCHEMAS[name]) {
       const wanted = key(label);
-      const matches = columns.filter(column => key(column.displayName || column.label || column.name) === wanted || key(column.name) === wanted);
+      const matches = dataColumns.filter(column => key(column.displayName || column.label || column.name) === wanted || key(column.name) === wanted);
       const names = [...new Set(matches.map(column => column.name))];
       if (names.length !== 1 || !/^[A-Za-z_][A-Za-z0-9_]*$/.test(names[0])) {
         throw new Error(`A coluna ${label} da lista ${name} não pôde ser comprovada ou está ambígua.`);
