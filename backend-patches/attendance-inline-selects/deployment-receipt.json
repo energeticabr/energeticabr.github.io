@@ -1,0 +1,13 @@
+{
+  "status": "deployed",
+  "deployed_at_utc": "2026-11-02T17:02:32.232840Z",
+  "backup": "/var/backups/energetica-whatsapp/attendance-inline-20261102T170232232840Z",
+  "health": {"status":"ok","channel":"generic"},
+  "services": {"energetica-channel-bridge.service":"active","energetica-whatsmeow.service":"active"},
+  "after": {
+    "app":"34cbde67abb132f480df0c89a19246719c722342937f0106954d478d218f5250",
+    "build":"b4d024e0ef0fb578df0c24198c516efd7f106ba7af5fb1852fa9e1c567985106"
+  },
+  "production_data_writes": false,
+  "post_deploy_fixture_tests": {"run":15,"failures":0,"errors":0,"seconds":2.000}
+}

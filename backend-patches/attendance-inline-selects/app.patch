@@ -1,0 +1,251 @@
+--- a/worker/workflow.py
++++ b/worker/workflow.py
+@@ -1190,7 +1190,7 @@
+             if navigation_back:
+                 self._mark_processed(state, message_id)
+                 if state.get("stage") == "attendance_batch_action" and state.get("attendance_batch_origin") == "pending":
+-                    for batch_key in ("attendance_batch_records", "attendance_batch_changes", "attendance_batch_presence", "attendance_batch_origin", "attendance_batch_motivation", "attendance_batch_finalized_ids"):
++                    for batch_key in ("attendance_batch_records", "attendance_batch_changes", "attendance_batch_presence", "attendance_batch_origin", "attendance_batch_motivation", "attendance_batch_finalized_ids", "attendance_batch_row_changes", "attendance_inline_commands", "attendance_inline_catalog_errors"):
+                         state.pop(batch_key, None)
+                     state["flow"] = None
+                     state["stage"] = PENDING_ATTENDANCE_RECORD_STAGE
+@@ -5416,6 +5416,8 @@
+         self._mark_processed(state, event.get("message_id"))
+         state["attendance_batch_records"] = copy.deepcopy(records)
+         state["attendance_batch_changes"] = {}
++        for key in ("attendance_batch_row_changes", "attendance_inline_commands", "attendance_inline_catalog_errors"):
++            state.pop(key, None)
+         state["attendance_batch_presence"] = None
+         state["attendance_batch_origin"] = "pending" if pending_origin else "flow"
+         if pending_origin:
+@@ -5457,6 +5459,7 @@
+ 
+     def _prompt_attendance_batch_action(self, state: dict, etag: str | None) -> dict:
+         state["stage"] = "attendance_batch_action"
++        state.pop("attendance_inline_commands", None)
+         count = len(state["attendance_batch_records"])
+         finalized = state.get("attendance_batch_finalized_ids") or []
+         warning = (
+@@ -5482,19 +5485,124 @@
+         etag = self._save(state, etag)
+         return {"status": "awaiting_attendance_batch_action", "batch_id": state["batch_id"], "etag": etag}
+ 
++    def _attendance_inline_context(self, state: dict, option: dict) -> dict:
++        return {
++            **(option.get("source_values") or {}),
++            **(state.get("attendance_batch_changes") or {}),
++            **((state.get("attendance_batch_row_changes") or {}).get(str(option["value"])) or {}),
++        }
++
++    def _attendance_inline_editors(self, state: dict, rows: list[list[dict]]) -> None:
++        """Create a fresh, persisted whitelist; catalog reads never modify attendance."""
++        revision = secrets.token_hex(12)
++        commands = {}
++        errors = []
++        cache = {}
++        steps = {
++            step.get("target_field"): step
++            for step in self._attendance_validation_config().get("steps", [])
++            if step.get("edit_only")
++        }
++        labels = {"IDDESCRITIVOETAPA": "IDDESCRITIVO", "ATIVIDADEEXECUTADA": "ATIVIDADEEXECUTADA"}
++        for option, row in zip(state.get("attendance_batch_records", []), rows):
++            record_id = str(option["value"])
++            context = self._attendance_inline_context(state, option)
++            for field, label in labels.items():
++                cell = next(cell for cell in row if cell["label"] == label)
++                step = steps.get(field)
++                try:
++                    if not step:
++                        raise RuntimeError("Campo sem seletor configurado")
++                    # For list sources the adapter reads context only through value_from.
++                    # Unknown/conditional sources use the entire context, avoiding unsafe reuse.
++                    source = step.get("source") or {}
++                    if source.get("type") == "sharepoint_list" and not source.get("recommended"):
++                        dependencies = {f["value_from"] for f in source.get("filters", []) if f.get("value_from")}
++                        catalog_context = {key: context.get(key) for key in sorted(dependencies)}
++                    else:
++                        catalog_context = context
++                    key = json.dumps([step, catalog_context], sort_keys=True, default=str)
++                    if key not in cache:
++                        try:
++                            cache[key] = [copy.deepcopy(item) for item in self.sharepoint.get_options(step, context)
++                                          if not item.get("terminal_option") and not item.get("action")
++                                          and item.get("value") not in {None, ""}]
++                        except Exception as exc:
++                            cache[key] = exc
++                    if isinstance(cache[key], Exception):
++                        raise cache[key]
++                    catalog = cache[key]
++                except Exception:
++                    errors.append(f"{record_id}:{field}")
++                    continue
++                current = context.get(field)
++                current_reply = ""
++                choices = []
++                seen = set()
++                for item in catalog:
++                    value = item.get("value")
++                    identity = str(value)
++                    if identity in seen:
++                        continue
++                    seen.add(identity)
++                    reply = f"attendance_inline:{revision}:{record_id}:{field}:{len(choices)}"
++                    commands[reply] = {"record_id": record_id, "field": field, "option": copy.deepcopy(item)}
++                    choices.append({"value": reply, "label": str(item.get("title") or value)})
++                    if self._same_attendance_value(value, current):
++                        current_reply = reply
++                # Missing/inactive current values remain visible, but cannot be introduced elsewhere.
++                if current not in {None, ""} and not current_reply:
++                    reply = f"attendance_inline:{revision}:{record_id}:{field}:current"
++                    commands[reply] = {"record_id": record_id, "field": field, "noop": True}
++                    choices.insert(0, {"value": reply, "label": str(cell["value"])})
++                    current_reply = reply
++                cell["editor"] = {"value": current_reply, "options": choices}
++        state["attendance_inline_commands"] = commands
++        state["attendance_inline_catalog_errors"] = errors
++
++    def _handle_attendance_inline(self, command: str, state: dict, etag: str | None) -> dict:
++        selected = (state.get("attendance_inline_commands") or {}).get(command)
++        if not selected:
++            self._send_text(state, "⚠️ ESTA SELEÇÃO EXPIROU. USE A TABELA ATUALIZADA.")
++            return self._prompt_attendance_batch_confirmation(state, etag)
++        record = next((item for item in state.get("attendance_batch_records", [])
++                       if str(item["value"]) == selected["record_id"]), None)
++        if record is None or selected.get("noop"):
++            return self._prompt_attendance_batch_confirmation(state, etag)
++        field = selected["field"]
++        value = selected["option"]["value"]
++        context = self._attendance_inline_context(state, record)
++        if self._same_attendance_value(context.get(field), value):
++            return self._prompt_attendance_batch_confirmation(state, etag)
++        changes = state.setdefault("attendance_batch_row_changes", {}).setdefault(selected["record_id"], {})
++        changes[field] = value
++        source = selected["option"].get("source_values") or {}
++        if field == "IDDESCRITIVOETAPA":
++            for copied in ("IMOVEL", "ETAPA"):
++                if source.get(copied) not in {None, ""}:
++                    changes[copied] = source[copied]
++            changes["ATIVIDADEEXECUTADA"] = ""
++        elif field == "ATIVIDADEEXECUTADA" and source.get("ETAPA") not in {None, ""}:
++            changes["ETAPA"] = source["ETAPA"]
++        return self._prompt_attendance_batch_confirmation(state, etag)
++
++
+     def _attendance_batch_summary_rows(self, state: dict) -> list[list[dict]]:
+-        changes = state.get("attendance_batch_changes") or {}
+         presence = state.get("attendance_batch_presence") or "PENDENTE"
++        detail_cache = {}
+         rows = []
+         for option in state.get("attendance_batch_records", []):
+             source = option.get("source_values") or {}
++            changes = self._attendance_inline_context(state, option)
+             descriptor_id = changes.get("IDDESCRITIVOETAPA", source.get("IDDESCRITIVOETAPA"))
+             descriptor = str(descriptor_id or "EM BRANCO")
+             if descriptor_id not in {None, ""}:
+                 try:
+-                    detail = self.sharepoint.get_item_fields(
+-                        int(str(descriptor_id)), ["ATIVIDADEEXECUTADA"], target_list="DEMONSTRATIVOETAPA"
+-                    )
++                    if str(descriptor_id) not in detail_cache:
++                        detail_cache[str(descriptor_id)] = self.sharepoint.get_item_fields(
++                            int(str(descriptor_id)), ["ATIVIDADEEXECUTADA"], target_list="DEMONSTRATIVOETAPA"
++                        )
++                    detail = detail_cache[str(descriptor_id)]
+                 except Exception:
+                     detail = {}
+                 activity = str((detail or {}).get("ATIVIDADEEXECUTADA") or "").strip()
+@@ -5514,6 +5622,9 @@
+     def _prompt_attendance_batch_confirmation(self, state: dict, etag: str | None) -> dict:
+         state["stage"] = "attendance_batch_confirmation"
+         rows = self._attendance_batch_summary_rows(state)
++        self._attendance_inline_editors(state, rows)
++        if state["attendance_inline_catalog_errors"]:
++            self._send_text(state, "⚠️ NÃO FOI POSSÍVEL CARREGAR TODOS OS SELETORES. TENTE NOVAMENTE ANTES DE SUBMETER.")
+         state["_outbound_detail_table"] = {
+             "title": "📋 RESUMO DAS PRESENÇAS SELECIONADAS",
+             "kind": "presence",
+@@ -5529,6 +5640,7 @@
+             [
+                 {"id": "attendance_batch_confirm", "title": "✅ SUBMETER TODOS"},
+                 {"id": "attendance_batch_cancel", "title": "↩️ VOLTAR"},
++                *([{"id": "attendance_inline_retry", "title": "🔄 CARREGAR SELETORES"}] if state["attendance_inline_catalog_errors"] else []),
+             ],
+         )
+         state.pop("_outbound_detail_table", None)
+@@ -5664,6 +5776,18 @@
+                     changes[copied] = source[copied]
+         if field == "ATIVIDADEEXECUTADA" and source.get("ETAPA") not in {None, ""}:
+             changes["ETAPA"] = source["ETAPA"]
++        affected = {
++            "IDDESCRITIVOETAPA": {"IDDESCRITIVOETAPA", "IMOVEL", "ETAPA", "ATIVIDADEEXECUTADA"},
++            "IMOVEL": {"IMOVEL"},
++            "ATIVIDADEEXECUTADA": {"ATIVIDADEEXECUTADA", "ETAPA"},
++            "ETAPA": {"ETAPA", "ATIVIDADEEXECUTADA"},
++        }[field]
++        for row_changes in (state.get("attendance_batch_row_changes") or {}).values():
++            for changed in affected:
++                row_changes.pop(changed, None)
++            if field == "ETAPA":
++                row_changes["ATIVIDADEEXECUTADA"] = ""
++        state.pop("attendance_inline_commands", None)
+         state.pop("attendance_batch_active_field", None)
+         return self._prompt_attendance_batch_edit_menu(state, etag)
+ 
+@@ -5705,6 +5829,20 @@
+         self._mark_processed(state, event.get("message_id"))
+         if command == "attendance_batch_cancel":
+             return self._prompt_attendance_batch_action(state, etag)
++        if command.startswith("attendance_inline:"):
++            return self._handle_attendance_inline(command, state, etag)
++        if command == "attendance_inline_retry":
++            return self._prompt_attendance_batch_confirmation(state, etag)
++        if command == "attendance_batch_confirm" and state.get("attendance_inline_catalog_errors"):
++            result = self._prompt_attendance_batch_confirmation(state, etag)
++            return {**result, "status": "attendance_batch_catalog_unavailable"}
++        if command == "attendance_batch_confirm" and any(
++            "ATIVIDADEEXECUTADA" in changes and not str(changes["ATIVIDADEEXECUTADA"] or "").strip()
++            for changes in (state.get("attendance_batch_row_changes") or {}).values()
++        ):
++            self._send_text(state, "⚠️ SELECIONE A ATIVIDADE EXECUTADA DE CADA LINHA ALTERADA ANTES DE SUBMETER.")
++            result = self._prompt_attendance_batch_confirmation(state, etag)
++            return {**result, "status": "attendance_batch_incomplete"}
+         if command != "attendance_batch_confirm":
+             return self._prompt_attendance_batch_confirmation(state, etag)
+         records = state.get("attendance_batch_records") or []
+@@ -5721,7 +5859,8 @@
+         try:
+             for option in records:
+                 item_id = int(str(option["value"]))
+-                fields = list(dict.fromkeys(["PRESENCA", "DATA", *updates, *ATTENDANCE_CONSISTENCY_FIELDS]))
++                row_updates = {**updates, **((state.get("attendance_batch_row_changes") or {}).get(str(option["value"])) or {})}
++                fields = list(dict.fromkeys(["PRESENCA", "DATA", *row_updates, *ATTENDANCE_CONSISTENCY_FIELDS]))
+                 current, item_etag = self.sharepoint.get_item_fields_with_etag(
+                     item_id, fields, target_list="DESCRITIVOPRESENCA"
+                 )
+@@ -5733,7 +5872,7 @@
+                 final_fields = {
+                     **(option.get("source_values") or {}),
+                     **current,
+-                    **changes,
++                    **row_updates,
+                 }
+                 review = self._attendance_consistency_record(final_fields, item_id=item_id)
+                 if review:
+@@ -5746,6 +5885,7 @@
+                     "expected_day": expected_day,
+                     "original": {field: current.get(field) for field in fields},
+                     "etag": item_etag,
++                    "updates": row_updates,
+                 })
+         except Exception as exc:
+             self._send_text(state, f"⚠️ LOTE NÃO SUBMETIDO: {exc}")
+@@ -5896,7 +6036,7 @@
+                 + [str(item_id) for item_id in completed]
+             ))
+         state.pop("attendance_batch_commit", None)
+-        for key in ("attendance_batch_records", "attendance_batch_changes", "attendance_batch_presence", "attendance_batch_origin", "attendance_batch_motivation", "attendance_batch_finalized_ids"):
++        for key in ("attendance_batch_records", "attendance_batch_changes", "attendance_batch_presence", "attendance_batch_origin", "attendance_batch_motivation", "attendance_batch_finalized_ids", "attendance_batch_row_changes", "attendance_inline_commands", "attendance_inline_catalog_errors"):
+             state.pop(key, None)
+         if pending_origin:
+             state["flow"] = None
