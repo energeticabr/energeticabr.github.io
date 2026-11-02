@@ -1,0 +1,34 @@
+name: On-demand Windows workers
+
+on:
+  push:
+    paths:
+      - backend-patches/on-demand-workers/**
+      - .github/workflows/on-demand-workers.yml
+  pull_request:
+    paths:
+      - backend-patches/on-demand-workers/**
+      - .github/workflows/on-demand-workers.yml
+
+permissions:
+  contents: read
+
+jobs:
+  test:
+    strategy:
+      matrix:
+        os: [ubuntu-latest, windows-latest]
+    runs-on: ${{ matrix.os }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - name: Queue and notification tests
+        run: python -B -m unittest discover -s backend-patches/on-demand-workers -p "test_*.py" -v
+      - name: Existing DDA queue contracts
+        run: python -B -m unittest discover -s backend-patches/dda-bank-refresh -p "test_*.py" -v
+      - name: Windows agent validation
+        if: runner.os == 'Windows'
+        shell: pwsh
+        run: ./backend-patches/on-demand-workers/Test-DemandAgent.ps1

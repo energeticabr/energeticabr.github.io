@@ -10,7 +10,7 @@ O coletor atualizado inclui `createdItemIds`: somente IDs inteiros de registros 
 
 Fila única com trava entre processos, identidade responsável, heartbeat de 180 segundos e limite de execução de 45 minutos. Cliques concorrentes da mesma pessoa acompanham a execução ativa. Outra identidade não lê esse pedido. Estados parcial, indisponível, expirado ou sem recibo não geram sucesso. O agente local mantém heartbeat durante a consulta e limita o subprocesso a 40 minutos.
 
-A tarefa Windows executa a cada minuto com sessão iniciada; pode levar até um minuto para receber um pedido. O computador deve permanecer ligado. A tarefa diária 07/12/17 continua existindo. O parâmetro opcional `WaitForLockSeconds` do coletor permite aguardar uma execução diária concorrente, sem considerá-la automaticamente uma consulta nova. Fechar a galeria encerra seu acompanhamento, sem cancelar a importação em andamento.
+A instalação original executa a tarefa Windows a cada minuto com sessão iniciada. A migração para [acionamento sob demanda](../on-demand-workers/README.md) substitui esse gatilho por avisos do servidor e executa o worker com `-Once`. O computador deve permanecer ligado e com a sessão iniciada. A tarefa diária 07/12/17 continua existindo. O parâmetro opcional `WaitForLockSeconds` do coletor permite aguardar uma execução diária concorrente, sem considerá-la automaticamente uma consulta nova. Fechar a galeria encerra seu acompanhamento, sem cancelar a importação em andamento.
 
 ## Instalação e verificação
 
