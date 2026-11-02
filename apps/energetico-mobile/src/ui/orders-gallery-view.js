@@ -384,17 +384,18 @@ export function createOrdersGallery({
     const cardFields = el("dl", "og-card-fields");
     const summaries = [
       ['FILIAL', field(fields, FIELD_ALIASES.branch), 'M3 21V5l7-2v18M10 8h11v13M6 7h1m-1 4h1m-1 4h1m7-3h1m2-9h1m-1 4h1m-1 4h1'],
-      ['FORMA DE PAGAMENTO', field(fields, FIELD_ALIASES.paymentForm), 'M3 6h18v12H3zM3 10h18M7 15h4'],
+      ['FORMA DE PAGAMENTO', field(fields, FIELD_ALIASES.paymentForm), 'M3 6h18v12H3zM3 10h18M7 15h4', 'payment'],
       ['NOTA FISCAL', field(fields, FIELD_ALIASES.invoice), 'M6 2h9l4 4v16H6zM15 2v5h4M9 11h7M9 15h7M9 19h5'],
-      ['VALOR TOTAL', field(fields, FIELD_ALIASES.total), 'M12 2v20M16 6c-1-2-7-2-8 1-1 3 2 4 4 5s5 2 4 5c-1 3-7 3-9 1'],
+      ['VALOR TOTAL', field(fields, FIELD_ALIASES.total), 'M12 2v20M16 6c-1-2-7-2-8 1-1 3 2 4 4 5s5 2 4 5c-1 3-7 3-9 1', 'total'],
       ['CRIADO', field(fields, FIELD_ALIASES.created), 'M4 5h16v16H4zM8 2v6m8-6v6M4 10h16M8 14h3'],
       ['MODIFICADO', field(fields, FIELD_ALIASES.modified), 'M4 5h16v16H4zM8 2v6m8-6v6M4 10h16M12 14v3l2 1'],
       ['CRIADO POR', field(fields, ['CRIADO POR', 'AUTHOR', 'CREATED BY']), 'M12 12a4 4 0 1 0 0-8 4 4 0 0 0 0 8ZM4 21a8 8 0 0 1 16 0'],
       ['MODIFICADO POR', field(fields, ['MODIFICADO POR', 'EDITOR', 'MODIFIED BY']), 'M12 12a4 4 0 1 0 0-8 4 4 0 0 0 0 8ZM4 21a8 8 0 0 1 16 0'],
     ];
-    for (const [name, value, iconPath] of summaries) {
+    for (const [name, value, iconPath, valueTone] of summaries) {
       const pair = el('div', 'og-card-field');
-      pair.append(icon(iconPath, 'og-field-icon'), el('dt', '', name), el('dd', '', formatValue(name, value)));
+      const valueClass = valueTone ? `og-value-cluster og-value-cluster--${valueTone}` : '';
+      pair.append(icon(iconPath, 'og-field-icon'), el('dt', '', name), el('dd', valueClass, formatValue(name, value)));
       cardFields.append(pair);
     }
     const recordControls = recordActions.render(row);

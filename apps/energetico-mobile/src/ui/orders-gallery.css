@@ -448,6 +448,9 @@
 .og-orders-overlay .og-order-card .og-field-icon { grid-column: 1; grid-row: 1 / span 2; align-self: center; width: 15px; height: 15px; color: #456a8b; }
 .og-orders-overlay .og-order-card .og-card-field dt { grid-column: 2; color: #607789; font-size: .56rem; font-weight: 750; line-height: 1.05; }
 .og-orders-overlay .og-order-card .og-card-field dd { grid-column: 2; color: #123d70; font-size: .67rem; font-weight: 800; line-height: 1.18; white-space: normal; overflow-wrap: anywhere; }
+.og-orders-overlay .og-order-card .og-card-field dd.og-value-cluster { justify-self: start; align-self: start; min-width: 0; max-width: 100%; margin-top: 3px; padding: 4px 6px; border-radius: 6px; color: #fff; }
+.og-orders-overlay .og-order-card .og-card-field dd.og-value-cluster--total { background: #b51e2b; }
+.og-orders-overlay .og-order-card .og-card-field dd.og-value-cluster--payment { background: #123d70; }
 .og-orders-overlay .og-editor-report { display: block; margin: 12px 0 0; color: #123d70; border-color: #a9c6d8; background: #eff7fb; }
 .og-orders-overlay .og-detail.olr-detail { z-index: 1901; }
 @media (max-width: 360px) {
@@ -459,4 +462,5 @@
   .og-orders-overlay .og-order-card .og-card-heading { padding-right: 69px; }
   .og-orders-overlay .og-order-card .gallery-record-action { width: 31px; height: 31px; min-width: 31px; padding: 6px; }
   .og-orders-overlay .og-order-card .og-card-id { flex-basis: 40px; width: 40px; min-height: 40px; }
+  .og-orders-overlay .og-order-card .og-card-field dd.og-value-cluster { padding-inline: 3px; font-size: .6rem; }
 }
