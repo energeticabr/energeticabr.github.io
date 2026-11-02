@@ -22,7 +22,7 @@
 1. [x] Add `backend-patches/on-demand-workers/demand_watch.py` and unittest coverage. Test queued DDA, leased fiscal requests, due/future retries, terminal/empty queues, atomic file replacement and initial recovery. Implement inotify wait, bounded fixed-name event stream, periodic availability heartbeat and disconnect exit. Run red then green and all patch tests.
 2. [x] Add `DemandAgent.psm1`, `Start-DemandAgent.ps1` and a PowerShell test harness. Test invalid event rejection, fixed dispatch, concurrent-run suppression, startup recovery, windowless process startup and reconnect handling. Keep a single resident instance. Run red then green.
 3. [x] Add installation/reversal scripts, back up the exact current tasks, deploy server watcher without modifying the portal, and test a real SSH notification against isolated queues and a benign Windows scheduled task. Only then remove manual minute triggers and install the logon agent. Verify actual installed runtime and automatic schedules.
-4. [ ] Review the whole change, address findings, publish the tracked code and shared backend, and verify sustained idle operation plus event delivery. Record independent deployment evidence and limitations.
+4. [x] Review the whole change, address findings, publish the tracked code and shared backend, and verify sustained idle operation plus event delivery. Record independent deployment evidence and limitations.
 
 ## Review focus
 
@@ -31,3 +31,7 @@
 - Reconnect must rediscover queued work; duplicate events must not create concurrent task instances.
 - Heartbeat-only writes must not launch idle tasks.
 - Never interpolate an event into an executable command, task name or shell text.
+
+## Execution record
+
+Completed server and Windows installation. Ten Linux notification tests, eight existing DDA queue tests and sixteen PowerShell checks passed. The isolated SSH integration proved reconnect, one start for duplicate events, preserved exit code 37 and disabled-task disconnection. Invalid compiler staging left the prior agent and task definitions unchanged. Native production observation confirmed zero minute triggers on the two manual tasks, unchanged last-run times without demand and no visible consoles. CI on Windows and Linux passed for PR #706.
