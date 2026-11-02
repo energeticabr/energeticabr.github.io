@@ -123,7 +123,7 @@ export const REGISTRATION_GALLERY_MODELS = Object.freeze({
   assetLaunches: Object.freeze({
     title: 'LANÇAMENTOS IMOBILIZADOS', listName: 'LANCAMENTOSIMOBILIZADOS', aliases: ['LANCAMENTOSIMOBILIZADOS'],
     nativeCard: true, readOnly: true, recordLabel: 'lançamento de imobilizado',
-    fields: ['IMOBILIZADO', 'FILIAL', '% DEPRECIAÇÃO', 'DATA DE DEPRECIAÇÃO', 'VALOR DEPRECIAÇÃO', 'VALOR RESIDUAL', 'ID IMOBILIZADO', 'ID LANÇAMENTO'],
+    fields: ['IMOBILIZADO', 'FILIAL', '% DEPRECIAÇÃO', 'DATA DE DEPRECIAÇÃO', 'VALOR DEPRECIAÇÃO', 'VALOR RESIDUAL', 'ID IMOBILIZADO', 'ID LANÇAMENTO', 'NÚMERO DO PEDIDO'],
     filterFields: ['ID IMOBILIZADO', 'FILIAL'], dateRangeField: 'DATA DE DEPRECIAÇÃO',
     fieldAliases: {
       IMOBILIZADO: ['Title'],
@@ -133,8 +133,9 @@ export const REGISTRATION_GALLERY_MODELS = Object.freeze({
       'VALOR RESIDUAL': ['VALORRESIDUAL', 'VALOR_x0020_RESIDUAL'],
       'ID IMOBILIZADO': ['IDIMOBILIZADO', 'ID_x0020_IMOBILIZADO'],
       'ID LANÇAMENTO': ['IDLANCAMENTO'],
+      'NÚMERO DO PEDIDO': ['IDPEDIDO'],
     },
-    fieldTypes: { '% DEPRECIAÇÃO': 'percent', 'DATA DE DEPRECIAÇÃO': 'date', 'VALOR DEPRECIAÇÃO': 'currency', 'VALOR RESIDUAL': 'currency', 'ID IMOBILIZADO': 'number', 'ID LANÇAMENTO': 'number' },
+    fieldTypes: { '% DEPRECIAÇÃO': 'percent', 'DATA DE DEPRECIAÇÃO': 'date', 'VALOR DEPRECIAÇÃO': 'currency', 'VALOR RESIDUAL': 'currency', 'ID IMOBILIZADO': 'number', 'ID LANÇAMENTO': 'number', 'NÚMERO DO PEDIDO': 'number' },
     sourceSort: [{ field: 'DATA DE DEPRECIAÇÃO', direction: 'desc', type: 'date' }, { field: 'ID', direction: 'desc', type: 'number' }],
   }),
   assetFunction: Object.freeze({

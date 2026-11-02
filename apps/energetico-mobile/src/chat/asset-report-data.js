@@ -26,7 +26,7 @@ export function createAssetReportData({ repository, siteKey = 'personal', assert
       const matches = columns.filter(c => [c.name, c.displayName].some(value => accepted.includes(key(value))));
       const names = [...new Set(matches.map(c => c.name))];
       if (names.length > 1 || names.some(name => !/^[A-Za-z_][A-Za-z0-9_]*$/.test(name))
-        || prefix === 'history' && label !== 'ID LANÇAMENTO' && names.length !== 1) {
+        || prefix === 'history' && !['ID LANÇAMENTO', 'NÚMERO DO PEDIDO'].includes(label) && names.length !== 1) {
         throw new Error(`A coluna ${label} da lista ${model.listName} não pôde ser comprovada ou está ambígua.`);
       }
       if (names.length === 1) mapping.set(label, names[0]);

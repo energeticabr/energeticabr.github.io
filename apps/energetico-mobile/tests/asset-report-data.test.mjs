@@ -13,14 +13,14 @@ const assetColumns = [col('ITEM', 'IMOBILIZADO'), col('FILIAL', 'FILIAL'), col('
 const historyColumns = [col('Title', 'IMOBILIZADO'), col('FILIAL', 'FILIAL'), col('_x0025__x0020_DEPRECIA_x00c7__x0', '% DEPRECIAÇÃO', 'number'),
   col('DATA_x0020_DE_x0020_DEPRECIA_x00', 'DATA DE DEPRECIAÇÃO', 'dateTime'), col('VALOR_x0020_DEPRECIA_x00c7__x00c', 'VALOR DEPRECIAÇÃO', 'currency'),
   col('VALOR_x0020_RESIDUAL', 'VALOR RESIDUAL', 'currency'), col('ID_x0020_IMOBILIZADO', 'ID IMOBILIZADO', 'number'), col('IDLANCAMENTO', 'ID LANÇAMENTO', 'number'),
-  col('LinkTitle', 'IMOBILIZADO', 'text', { computed: false })];
+  col('IDPEDIDO', 'NÚMERO DO PEDIDO', 'number'), col('LinkTitle', 'IMOBILIZADO', 'text', { computed: false })];
 const history = (id, assetId = 96) => ({ id: String(id), fields: { Title: '', FILIAL: 'FILIAL DE TESTE',
   _x0025__x0020_DEPRECIA_x00c7__x0: 0.03, DATA_x0020_DE_x0020_DEPRECIA_x00: '2026-11-01T03:00:00Z',
   VALOR_x0020_DEPRECIA_x00c7__x00c: 0.1, VALOR_x0020_RESIDUAL: 4723.9, ID_x0020_IMOBILIZADO: assetId, IDLANCAMENTO: null } });
 function fixture({ count = 275, failPage, cycle = false, missingLink = false, otherParent = false, ambiguous = false } = {}) {
   const calls = [];
   const rows = Array.from({ length: count }, (_, i) => history(i + 1, i === 0 ? 95 : 96));
-  if (rows[1]) { rows[1].fields.IDLANCAMENTO = 4321; rows[1].fields.VALOR_x0020_DEPRECIA_x00c7__x00c = 0.2; }
+  if (rows[1]) { rows[1].fields.IDLANCAMENTO = 4321; rows[1].fields.IDPEDIDO = 494; rows[1].fields.VALOR_x0020_DEPRECIA_x00c7__x00c = 0.2; }
   const repository = {
     async resolveList(_site, aliases) { calls.push(['resolve', aliases[0]]); return { status: 'resolved', id: aliases[0] }; },
     async getColumns(_site, list) {
@@ -52,6 +52,7 @@ test('consulta cadastro por ID do bem e histórico completo por vínculo numéri
   assert.ok(result.history.every(row => row.fields['ID IMOBILIZADO'] === 96));
   assert.equal(result.history[0].id, '275');
   assert.equal(result.history.find(row => row.id === '2').fields['ID LANÇAMENTO'], 4321);
+  assert.equal(result.history.find(row => row.id === '2').fields['NÚMERO DO PEDIDO'], 494);
   assert.equal(result.history.find(row => row.id === '3').fields['ID LANÇAMENTO'], null);
   const details = result.asset.details;
   assert.ok(details.some(field => field.label === 'FUNÇÃO' && field.value === 'IÇAMENTO'));
@@ -101,6 +102,14 @@ test('vínculo ausente no registro e nome físico inválido falham sem apresenta
   invalid.repository.getColumns = async (...args) => (await getColumns(...args)).map(c => c.displayName === 'ID IMOBILIZADO' ? { ...c, name: 'campo inválido' } : c);
   await assert.rejects(invalid.data.loadAssetReport(96), /coluna|ID IMOBILIZADO/i);
   assert.equal(invalid.calls.filter(([kind]) => kind === 'page').length, 0);
+});
+
+test('colunas opcionais de pedido e lançamento ausentes em metadados legados não inventam vínculos', async () => {
+  const f = fixture({ count: 3 }), original = f.repository.getColumns;
+  f.repository.getColumns = async (...args) => (await original(...args)).filter(c => !['IDPEDIDO', 'IDLANCAMENTO'].includes(c.name));
+  const result = await f.data.loadAssetReport(96);
+  assert.equal(result.history.length, 2);
+  assert.equal(result.history[0].fields['NÚMERO DO PEDIDO'], undefined);
 });
 
 test('as fábricas das duas galerias expõem o relatório sem habilitar edição no histórico', async () => {

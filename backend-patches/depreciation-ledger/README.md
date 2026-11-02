@@ -23,3 +23,11 @@ node --test apps/energetico-mobile/tests/asset-launches-gallery.test.mjs
 ```
 
 Para rollback, compare primeiro a definição live com `definition-after.json` e verifique se houve execução após a publicação. Restaure exclusivamente a definição de `flow-before.json` mantendo as conexões originais. Não apague a lista, a coluna, nem os registros criados; revise qualquer depreciação já processada antes de uma reexecução.
+
+## Número do pedido
+
+`build-order-link.mjs` acrescenta somente `item/IDPEDIDO` ao histórico, a partir de `Create_item.body.AGRUPAR` (ID de NOTASPENDENTES). Valores nulos/vazios permanecem vazios. A criação financeira e o restante da definição não mudam.
+
+Para essa extensão, usar uma pasta de evidências nova e executar `Link-Orders.ps1 -Mode Prepare`, `Deploy.ps1 -Mode Probe`, `Deploy.ps1 -Mode Publish`, `Link-Orders.ps1 -Mode Backfill` e `Link-Orders.ps1 -Mode Verify`, todos com o mesmo EvidenceRoot. Prepare cria apenas a coluna numérica opcional NÚMERO DO PEDIDO e os backups; Probe verifica pedido numérico/nulo/vazio junto aos cálculos originais, sem conectores. Publish exige o hash exato aprovado.
+
+Backfill comprova a cadeia IDLANCAMENTO → AGRUPAR → pedido existente e usa MERGE de apenas IDPEDIDO com o ETag concreto da linha. Linhas sem ID financeiro ficam sem vínculo inferido. Verify exige preservação do campo nas linhas não planejadas e valor exato nas planejadas, além de preservar os demais dados. Após Backfill, use o Verify de Link-Orders, pois o verificador da primeira implantação exige que nenhum histórico tenha sido editado. Reexecutar Backfill mantém os valores já confirmados e não repete a escrita.
