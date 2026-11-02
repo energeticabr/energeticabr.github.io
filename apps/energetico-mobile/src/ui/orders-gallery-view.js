@@ -380,7 +380,14 @@ export function createOrdersGallery({
       : /^(aprovado|pago)$/i.test(statusText.trim()) ? 'approved' : 'neutral';
     const status = el('span', `og-status og-status--${statusKind}`, statusText);
     headingCopy.append(status);
-    heading.append(el('span', 'og-card-id', text(field(fields, ['ID']) ?? row.id)), headingCopy);
+    const openOrder = el('button', 'og-card-id og-order-open', text(row.id));
+    openOrder.type = 'button';
+    openOrder.dataset.orderLinkedOpen = '';
+    openOrder.dataset.baseDisabled = 'false';
+    openOrder.setAttribute('aria-label', `Abrir lançamentos vinculados ao pedido #${row.id}`);
+    openOrder.title = 'Ver lançamentos vinculados a este pedido';
+    openOrder.addEventListener('click', () => { void openLinkedDetails(row, openOrder); });
+    heading.append(openOrder, headingCopy);
     const cardFields = el("dl", "og-card-fields");
     const summaries = [
       ['FILIAL', field(fields, FIELD_ALIASES.branch), 'M3 21V5l7-2v18M10 8h11v13M6 7h1m-1 4h1m-1 4h1m7-3h1m2-9h1m-1 4h1m-1 4h1'],
@@ -524,7 +531,7 @@ export function createOrdersGallery({
       const failure = el('div', 'olr-failure'); failure.setAttribute('role', 'alert');
       failure.append(el('p', 'og-error', safeFailure(error, `Não foi possível conferir o pedido #${row.id}`)));
       const retry = el('button', 'og-button og-button--primary', 'Tentar novamente'); retry.type = 'button';
-      retry.addEventListener('click', () => { void openLinkedDetails(row); });
+      retry.addEventListener('click', () => { void openLinkedDetails(row, origin); });
       failure.append(retry);
       detail.replaceChildren(heading, failure);
     } finally {
