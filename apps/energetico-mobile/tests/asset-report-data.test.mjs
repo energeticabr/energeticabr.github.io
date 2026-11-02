@@ -4,6 +4,7 @@ import { execFileSync } from 'node:child_process';
 import { fileURLToPath } from 'node:url';
 import { createAssetReportData } from '../src/chat/asset-report-data.js';
 import { createRegistrationGalleryData } from '../src/chat/registration-gallery-data.js';
+import { createSharePointRepository } from '../../../portal/data/sharepoint-repository.js';
 
 const col = (name, displayName, type = 'text', extra = {}) => ({ name, displayName, [type]: {}, ...extra });
 const assetColumns = [col('ITEM', 'IMOBILIZADO'), col('FILIAL', 'FILIAL'), col('VALORESTIMADO', 'VALOR ESTIMADO', 'currency'),
@@ -63,6 +64,31 @@ test('consulta cadastro por ID do bem e histórico completo por vínculo numéri
   assert.ok(pages.every(call => !call[3].includes("eq '96'")));
   assert.equal(calls.find(([kind]) => kind === 'item')[3], '96');
   assert.ok(!Object.keys(data).some(key => /save|create|delete|patch/i.test(key)));
+});
+
+test('as duas galerias carregam três páginas de histórico pela camada real SharePoint sem exceder os limites', async () => {
+  for (const kind of ['asset', 'assetLaunches']) {
+    const f = fixture({ count: 275 }), pages = [];
+    const repository = createSharePointRepository({ async request(path) {
+      const url = new URL(path, 'https://graph.microsoft.com/v1.0');
+      if (path.includes('/columns')) return { value: path.includes('/IMOBILIZADOS/') ? assetColumns : historyColumns };
+      if (path.includes('/items/96')) return f.repository.getItem('personal', 'IMOBILIZADOS', '96');
+      if (path.includes('/LANCAMENTOSIMOBILIZADOS/items')) {
+        pages.push(path);
+        const start = Number(url.searchParams.get('$skiptoken') || 0);
+        return { value: f.rows.slice(start, start + 100), ...(start + 100 < f.rows.length ? {
+          '@odata.nextLink': `https://graph.microsoft.com/v1.0/sites/site-id/lists/LANCAMENTOSIMOBILIZADOS/items?$skiptoken=${start + 100}`,
+        } : {}) };
+      }
+      if (path.includes('/lists')) return { value: ['IMOBILIZADOS', 'LANCAMENTOSIMOBILIZADOS'].map(name => ({ id: name, displayName: name, list: { template: 'genericList' } })) };
+      return { id: 'site-id' };
+    } }, { personal: { host: 'tenant.sharepoint.com', path: '/sites/test', readTransport: 'graph' } });
+    const report = await createRegistrationGalleryData({ kind, repository }).loadAssetReport(96);
+    assert.equal(report.history.length, 274); assert.equal(report.historyTotal, 27.5);
+    assert.equal(report.assetId, '96'); assert.equal(pages.length, 3);
+    assert.equal(report.history[0].id, '275');
+    assert.ok(report.history.every(row => row.fields['ID IMOBILIZADO'] === 96));
+  }
 });
 
 test('ordena competência antes do ID, conserva zero e cadastro sem depreciações', async () => {

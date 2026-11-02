@@ -30,11 +30,11 @@ test('toque, teclado, cadastro e 31 depreciações cabem em 320/390/1365px sem p
     await withAttachmentBrowser(browser, { width, height: 900 }, async api => {
       await api.navigate(`http://127.0.0.1:${server.httpServer.address().port}/tests/fixtures/asset-report.html?kind=${kind}`);
       await api.wait('window.assetReportFixture?.ready');
-      if (kind === 'asset') {
+      {
         const cluster = await api.evaluate(`(() => { const button = document.querySelector('${trigger}'), style = getComputedStyle(button); return {tag:button.tagName,fill:style.backgroundColor,border:style.borderStyle,borderWidth:parseFloat(style.borderWidth),text:button.textContent,overflow:button.scrollWidth>button.clientWidth+1}; })()`);
         assert.equal(cluster.tag, 'BUTTON'); assert.equal(cluster.border, 'solid'); assert.ok(cluster.borderWidth >= 1);
-        assert.notEqual(cluster.fill, 'rgba(0, 0, 0, 0)'); assert.match(cluster.text, /Ver depreciações/); assert.equal(cluster.overflow, false);
-        if (width === 390) await shot(api, 'cadastro-nome-selecionavel-390');
+        assert.notEqual(cluster.fill, 'rgba(0, 0, 0, 0)'); assert.match(cluster.text, /Ver .*depreciações/); assert.equal(cluster.overflow, false);
+        if (width === 390) await shot(api, `${kind}-nome-selecionavel-390`);
       }
       await api.evaluate(`(() => { const input = document.querySelector('input[type="search"]'); input.value='GUINCHO'; input.dispatchEvent(new Event('input',{bubbles:true})); })()`);
       const before = await api.evaluate(`({page:document.querySelector('.rg-pagination').textContent, search:document.querySelector('input[type="search"]').value, scroll:document.querySelector('.rg-overlay').scrollTop})`);
