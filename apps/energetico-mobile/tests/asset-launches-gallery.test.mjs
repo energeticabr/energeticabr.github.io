@@ -11,6 +11,7 @@ const columns = [
   ['VALOR_x0020_DEPRECIA_x00c7__x00c', 'VALOR DEPRECIAÇÃO', 'currency'],
   ['VALOR_x0020_RESIDUAL', 'VALOR RESIDUAL', 'currency'],
   ['ID_x0020_IMOBILIZADO', 'ID IMOBILIZADO', 'number'],
+  ['IDLANCAMENTO', 'ID LANÇAMENTO', 'number'],
 ].map(([name, displayName, type]) => ({ name, displayName, [type]: {} }));
 const item = (id, name = '') => ({ id: String(id), fields: {
   Title: name, FILIAL: '001 - FILIAL TESTE', _x0025__x0020_DEPRECIA_x00c7__x0: 0.02,
@@ -53,6 +54,7 @@ test('galeria mostra reais, percentual, data e vínculo do bem; busca e filtros 
   const rows = [item(1, 'BETONEIRA DE TESTE'), item(2)];
   rows[1].fields.ID_x0020_IMOBILIZADO = 94;
   rows[1].fields.VALOR_x0020_DEPRECIA_x00c7__x00c = 0;
+  rows[0].fields.IDLANCAMENTO = 4321;
   const gallery = createRegistrationGallery({ document: dom.window.document, kind: 'assetLaunches', data: source(rows) });
   t.after(() => gallery.destroy()); await gallery.open();
   const doc = dom.window.document;
@@ -62,6 +64,8 @@ test('galeria mostra reais, percentual, data e vínculo do bem; busca e filtros 
   assert.match(card.textContent, /2%/); assert.doesNotMatch(card.textContent, /200%/);
   assert.match(card.textContent, /01\/11\/2026/);
   assert.equal(card.querySelector('[data-field="ID IMOBILIZADO"] dd').textContent, '2');
+  assert.equal(card.querySelector('[data-field="ID LANÇAMENTO"] dd').textContent, '4.321');
+  assert.equal(doc.querySelector('[data-registration-row="2"] [data-field="ID LANÇAMENTO"]'), null, 'registro legado não recebe um vínculo inventado');
   assert.match(doc.querySelector('[data-registration-row="2"]').textContent, /0,00/);
   assert.equal(doc.querySelector('[data-action="create-registration"]'), null);
   assert.equal(doc.querySelector('[data-gallery-action="edit"]'), null);
