@@ -1184,7 +1184,21 @@ function presenceSummaryGroupFill(groupIndex) {
   return `rgb(${208 + (packed & 31)}, ${208 + ((packed >> 5) & 31)}, ${208 + ((packed >> 10) & 31)})`;
 }
 
-function presenceDetailTableMarkup(table) {
+function presenceSummaryEditor(cell, row, { messageId, busy, current }) {
+  const field = normalizedDateText(cell.label).replace(/[^a-z]/g, "");
+  const descriptor = field === "iddescritivoetapaatividadeexecutada";
+  if ((!descriptor && field !== "atividadeexecutada") || !Array.isArray(cell.editor?.options)) return "";
+  const options = cell.editor.options.filter(option => typeof option?.value === "string"
+    && option.value.startsWith("attendance_inline:") && typeof option.label === "string");
+  if (!options.length) return "";
+  const value = String(cell.editor.value || "");
+  const selected = options.find(option => option.value === value);
+  const placeholder = descriptor ? "Selecione o IDDESCRITIVO" : "Selecione a atividade";
+  const supplier = presenceSummaryField(row, ["fornecedor"]);
+  return `<b class="chat-presence-editor">${escapeHtml(selected ? cell.value : placeholder)}<select data-action="attendance-inline-select" data-message-id="${escapeHtml(messageId)}" aria-label="${descriptor ? "IDDESCRITIVO" : "ATIVIDADE EXECUTADA"} de ${escapeHtml(supplier)}"${busy || !current ? " disabled" : ""}>${selected ? "" : `<option value="" disabled selected>${placeholder}</option>`}${options.map(option => `<option value="${escapeHtml(option.value)}"${option.value === value ? " selected" : ""}>${escapeHtml(option.label)}</option>`).join("")}</select></b>`;
+}
+
+function presenceDetailTableMarkup(table, context = {}) {
   if (!table) return "";
   const rows = Array.isArray(table) ? table : table.rows;
   if (!Array.isArray(rows) || !rows.length) return "";
@@ -1232,7 +1246,8 @@ function presenceDetailTableMarkup(table) {
       const label = batch
         ? `<span class="chat-presence-table-cell__label"><span class="chat-presence-table-cell__emoji" aria-hidden="true">${emoji}</span><span>${escapeHtml(cell.label || "Campo")}</span></span>`
         : `<span>${escapeHtml(cell.label || "Campo")}</span>`;
-      return `<div class="chat-presence-table-cell${cell.muted ? " is-muted" : ""}${cell.tone === "present" || cell.tone === "absent" ? ` chat-presence-table-cell--${cell.tone}` : ""}${cell.holiday ? " chat-presence-table-cell--holiday" : ""}" role="cell">${label}<b>${escapeHtml(cell.value ?? "-")}</b></div>`;
+      const value = batch ? presenceSummaryEditor(cell, row, context) : "";
+      return `<div class="chat-presence-table-cell${cell.muted ? " is-muted" : ""}${cell.tone === "present" || cell.tone === "absent" ? ` chat-presence-table-cell--${cell.tone}` : ""}${cell.holiday ? " chat-presence-table-cell--holiday" : ""}" role="cell">${label}${value || `<b>${escapeHtml(cell.value ?? "-")}</b>`}</div>`;
     }).join("")}</div>`;
   }).join("")}</div>`;
 }
@@ -1890,7 +1905,7 @@ function renderPoll(message, busy, draft = "", databaseFilterMessage = null, act
     ${launchPaymentSummary || rhidAttendanceReport || initialAreaMenu || isLaunchMenu || provisionReview ? "" : `<p>${attendanceDayQuestionMarkup(message) ?? formatQuestionText(presenceSummaryQuestion(changeTableQuestion(message, changeTable), presenceTable) || "Escolha uma opção")}</p>`}
     ${currentPoll ? singleLaunchConfirmationMarkup(message, activeFlow) : ""}
     ${changeTableMarkup(changeTable)}
-    ${provisionReview || presenceDetailTableMarkup(presenceTable)}
+    ${provisionReview || presenceDetailTableMarkup(presenceTable, { messageId: message.id, busy, current: currentPoll })}
     ${rhidAttendanceTableMarkup(presenceTable, message.id, rhidRefresh, activeFlow)}
     ${paymentAuditTableMarkup(paymentAuditTable)}
     ${launchPresencePaymentSummaryMarkup(launchPaymentSummary)}
@@ -5577,6 +5592,15 @@ export function createChatView(root, { onOpenSettings, onDemoAccess, onSignOut, 
   }
 
   function change(event) {
+    const attendanceSelect = event.target;
+    if (attendanceSelect?.matches?.('select[data-action="attendance-inline-select"]')) {
+      if (attendanceSelect.disabled || composerBusy) return;
+      const selected = attendanceSelect.selectedOptions[0];
+      if (!selected || selected.disabled || !selected.value.startsWith("attendance_inline:")) return;
+      emit({ type: "select-reply", messageId: attendanceSelect.dataset.messageId,
+        replyId: selected.value, label: selected.textContent });
+      return;
+    }
     if (provisionSelection.change(event)) return;
     if (["rhid-adjustment-time", "rhid-adjustment-reason"].includes(event.target?.dataset?.role)) { input(event); return; }
     const checkbox = event.target;

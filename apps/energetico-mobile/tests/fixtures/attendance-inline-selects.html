@@ -1,0 +1,17 @@
+<!doctype html><html lang="pt-BR"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><link rel="stylesheet" href="/src/styles.css"></head><body><main id="app"></main><script type="module">
+import {createChatView} from '/src/ui/chat-view.js';
+const view=createChatView(document.querySelector('#app'));
+const row=(name,id,activity)=>[
+ {label:'DATA',value:'02/11/2026'}, {label:'FORNECEDOR',value:name},
+ {label:'IDDESCRITIVO',value:id,editor:{value:'attendance_inline:'+name+':descriptor',options:[{value:'attendance_inline:'+name+':descriptor',label:id},{value:'attendance_inline:'+name+':next',label:'130 - ALVENARIA DE VEDAÇÃO COM EXECUÇÃO COMPLETA'}]}},
+ {label:'ATIVIDADEEXECUTADA',value:activity,editor:{value:activity?'attendance_inline:'+name+':activity':'',options:[{value:'attendance_inline:'+name+':activity',label:'CONCRETAGEM LAJE'},{value:'attendance_inline:'+name+':other',label:'ALVENARIA'}]}},
+ {label:'PRESENÇA',value:'AUSENTE',tone:'absent'}, {label:'MOTIVAÇÃO',value:'FERIADO'}];
+const state={sessionStatus:'authenticated',account:{name:'Teste'},draft:'',pendingFiles:[],activeFlow:{id:'attendance_validation',title:'VALIDAR PRESENÇAS APONTADAS'},messages:[{id:'confirmation',role:'assistant',type:'poll',question:'CONFIRMA A ATUALIZAÇÃO DESTAS PRESENÇAS?',detail_table:{kind:'presence',title:'RESUMO DAS PRESENÇAS SELECIONADAS',rows:[
+ row('FORNECEDOR FICTÍCIO COM NOME EXTENSO ALFA','129 - CONCRETAGEM LAJE COM PREPARAÇÃO COMPLETA','CONCRETAGEM LAJE'),
+ row('FORNECEDOR FICTÍCIO BETA','129 - CONCRETAGEM LAJE COM PREPARAÇÃO COMPLETA','CONCRETAGEM LAJE'),
+ row('FORNECEDOR FICTÍCIO GAMA','130 - ALVENARIA DE VEDAÇÃO COM EXECUÇÃO COMPLETA',''),
+]},options:[{id:'attendance_batch_confirm',reply:'attendance_batch_confirm',label:'SUBMETER TODOS'},{id:'attendance_batch_cancel',reply:'attendance_batch_cancel',label:'VOLTAR'}]}]};
+view.render(state);await document.fonts.ready;await new Promise(requestAnimationFrame);
+const selectors=[...document.querySelectorAll('.chat-presence-editor')];
+document.documentElement.dataset.layout=JSON.stringify({viewport:innerWidth,scrollWidth:document.documentElement.scrollWidth,selectors:selectors.map(node=>{const box=node.getBoundingClientRect(),select=node.querySelector('select'),s=select.getBoundingClientRect();return {left:box.left,right:box.right,height:box.height,scroll:node.scrollWidth,width:node.clientWidth,hitWidth:s.width,disabled:select.disabled,blank:select.value===''};}),colors:[...document.querySelectorAll('.chat-presence-table-row')].map(node=>getComputedStyle(node).backgroundColor)});
+</script></body></html>
