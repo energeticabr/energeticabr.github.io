@@ -5048,7 +5048,8 @@ test("visita em obra aparece apenas no submenu Lançamentos, abaixo do anexo a p
     ["new_document", "action_orders_gallery", "action_launch_gallery", "action_notas_fiscais_sefaz_gallery"],
     ["payment", "action_payment_programming_gallery", "action_provision_description_gallery", "action_recurring_expenses_gallery", "action_dda_gallery"],
   ]);
-  assert.equal((suppliesMarkup.match(/data-gallery-button/g) || []).length, 7);
+  assert.equal((suppliesMarkup.match(/data-gallery-button/g) || []).length, 8);
+  assert.ok(suppliesDoc.querySelector('.chat-supplies-extra-pair [data-reply-id="action_registration_hub"][data-gallery-button]'));
   assert.equal(supplyPairs[0].classList.contains("chat-supplies-pair--three-galleries"), true);
   assert.equal(supplyPairs[1].classList.contains("chat-supplies-pair--four-galleries"), true);
   assert.deepEqual([...suppliesDoc.querySelectorAll(".chat-supplies-extras__primary [data-reply-id]")].map(button => button.dataset.replyId), ["registrations"]);
@@ -5183,7 +5184,7 @@ test("Galeria Pgtos Previstos fica abaixo de Gal. Lançamentos e à direita da P
   assert.deepEqual([...dom.window.document.querySelectorAll(".chat-supplies-extras__primary [data-reply-id]")].map(button => button.dataset.replyId), ["registrations", "quote", "assets"]);
   assert.equal(dom.window.document.querySelector('[data-reply-id="data"]'), null);
   assert.deepEqual([...dom.window.document.querySelectorAll(".chat-supplies-extra-pair")].map(pair => [...pair.querySelectorAll("[data-reply-id]")].map(button => button.dataset.replyId)), [
-    ["registrations"], ["quote", "action_quote_gallery"], ["assets", "action_asset_hub"],
+    ["registrations", "action_registration_hub"], ["quote", "action_quote_gallery"], ["assets", "action_asset_hub"],
   ]);
   dom.window.close();
 });
