@@ -40,7 +40,11 @@ $plan|Select-Object Name,Backup|ConvertTo-Json|Set-Content -LiteralPath (Join-Pa
 $stopPath=Join-Path $root 'stop'
 $existing=Get-ScheduledTask -TaskName $agentName -TaskPath '\' -ErrorAction SilentlyContinue
 $oldAgentXml=$null;$wasRunning=$false;$priorStop=[IO.File]::Exists($stopPath)
-if($existing){$oldAgentXml=$folder.GetTask($agentName).Xml;$wasRunning=$folder.GetTask($agentName).State -in @(2,4)}
+if($existing){
+ $oldAgentXml=$folder.GetTask($agentName).Xml;$wasRunning=$folder.GetTask($agentName).State -in @(2,4)
+ $oldAgentXml|Set-Content -LiteralPath (Join-Path $backup 'agent-task.xml') -Encoding unicode
+ @{wasRunning=$wasRunning;stopPresent=$priorStop}|ConvertTo-Json|Set-Content -LiteralPath (Join-Path $backup 'agent-state.json') -Encoding utf8
+}
 $files=@('Start-DemandAgent.ps1','DemandAgent.psm1','WindowlessTask.cs')
 $hashes=foreach($file in $files){(Get-FileHash -LiteralPath (Join-Path $PSScriptRoot $file) -Algorithm SHA256).Hash}
 $sourceHash=[Convert]::ToHexString([Security.Cryptography.SHA256]::HashData([Text.Encoding]::UTF8.GetBytes(($hashes -join ':')))).Substring(0,16)
@@ -73,7 +77,11 @@ $managed=@('config.json','agent.xml')+@($names|ForEach-Object {$_+'.xml'})
 $previousFiles=@{}
 foreach($file in $managed){
  $path=Join-Path $root $file
- if([IO.File]::Exists($path)){$previousFiles[$file]=[IO.File]::ReadAllBytes($path)}
+ if([IO.File]::Exists($path)){
+  $previousFiles[$file]=[IO.File]::ReadAllBytes($path)
+  [IO.Directory]::CreateDirectory((Join-Path $backup 'files'))|Out-Null
+  [IO.File]::WriteAllBytes((Join-Path (Join-Path $backup 'files') $file),$previousFiles[$file])
+ }
 }
 try{
  [IO.File]::WriteAllText($stopPath,'stop')
