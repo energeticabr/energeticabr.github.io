@@ -26,6 +26,8 @@ test('menu e histórico de imobilizados cabem a 320, 390 e 1365 pixels', { timeo
     } else {
       assert.equal(layout.cards.length, 2); assert.ok(layout.cards.every(card => !card.overflow));
       assert.match(layout.cards[0].text, /86,76/); assert.match(layout.cards[0].text, /2%/);
+      assert.match(layout.cards[0].text, /ID LANÇAMENTO4\.321/);
+      assert.doesNotMatch(layout.cards[1].text, /ID LANÇAMENTO/);
       assert.match(layout.cards[1].text, /ID IMOBILIZADO94/); assert.equal(layout.actions, 0);
     }
     if (screenshot) writeFileSync(`${process.env.ASSET_LAUNCHES_SCREENSHOT_PREFIX}-${mode}.png`, screenshot);
