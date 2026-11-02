@@ -1,0 +1,34 @@
+<!doctype html><html lang="pt-BR"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>Galeria de cadastros — dados fictícios</title><link rel="stylesheet" href="/src/styles.css"><link rel="stylesheet" href="/src/ui/registration-gallery.css"></head>
+<body><main id="app"></main><script type="module">
+import { createChatView } from '/src/ui/chat-view.js';
+import { createRegistrationGalleryMenu } from '/src/ui/registration-gallery-menu.js';
+const view = createChatView(document.querySelector('#app'));
+const selected = [];
+const menu = createRegistrationGalleryMenu({ onHome() {}, onSelect: kind => { selected.push(kind); return true; } });
+view.on('select-reply', event => { if (event.replyId === 'action_registration_hub') menu.open(); });
+view.render({ sessionStatus: 'authenticated', account: { name: 'Prévia fictícia' }, pendingFiles: [], draft: '', messages: [{
+  id: 'supplies', role: 'assistant', type: 'poll', question: 'SUPRIMENTOS\nQUAL FLUXO VOCÊ DESEJA INICIAR?', options: [
+    { id: 'new_document', label: 'LANÇAMENTOS' }, { id: 'payment', label: 'PROVISÃO DE PAGAMENTO' },
+    { id: 'registrations', label: 'EFETUAR CADASTROS' }, { id: 'action_new_quotation', label: 'NOVA COTAÇÃO' },
+    { id: 'action_supply_fixed_assets', label: 'IMOBILIZADOS' },
+  ],
+}] });
+await document.fonts.ready;
+await Promise.all([...document.images].map(image => image.complete ? Promise.resolve() : new Promise(done => { image.onload = image.onerror = done; })));
+const primary = document.querySelector('[data-reply-id="registrations"]'), hub = document.querySelector('[data-reply-id="action_registration_hub"]');
+const rect = node => { const { x, y, right, bottom, width, height } = node.getBoundingClientRect(); return { x, y, right, bottom, width, height }; };
+const mode = new URLSearchParams(location.search).get('mode') || 'supplies';
+const pair = { primary: rect(primary), hub: rect(hub), background: getComputedStyle(hub).backgroundColor };
+if (mode === 'chooser') hub.click(); else hub.scrollIntoView({ block: 'center' });
+await new Promise(done => requestAnimationFrame(() => requestAnimationFrame(done)));
+const choices = [...document.querySelectorAll('[data-registration-gallery]')];
+const layout = { mode, pair, overflow: document.documentElement.scrollWidth > innerWidth + 1,
+  choices: choices.map(button => ({ kind: button.dataset.registrationGallery, label: button.textContent, ...rect(button), background: getComputedStyle(button).backgroundColor })),
+  menuVisible: !document.querySelector('.registration-gallery-menu').hidden };
+if (mode === 'chooser') {
+  for (const button of choices) { button.click(); await Promise.resolve(); menu.open(); }
+  layout.selected = selected;
+  layout.hitTargets = choices.every(button => { const box = rect(button); const hit = document.elementFromPoint(box.x + box.width / 2, box.y + box.height / 2); return hit === button || button.contains(hit); });
+}
+document.documentElement.dataset.layout = JSON.stringify(layout);
+</script></body></html>
