@@ -1,0 +1,99 @@
+<!doctype html>
+<html lang="pt-BR">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Pedidos selecionáveis: integração isolada</title>
+  <link rel="icon" href="data:,">
+  <link rel="stylesheet" href="../../src/styles.css">
+  <link rel="stylesheet" href="../../src/ui/orders-gallery.css">
+  <link rel="stylesheet" href="../../src/ui/orders-linked-report.css">
+  <link rel="stylesheet" href="../../src/ui/gallery-record-actions.css">
+</head>
+<body>
+  <button id="source">Pedidos</button>
+  <script type="module">
+    import { createOrdersGallery } from '../../src/ui/orders-gallery-view.js';
+    import { buildOrdersLinkedReport } from '../../src/chat/orders-linked-report-data.js';
+
+    // Only the injected read/transport boundary is synthetic. The gallery,
+    // action dialogs, linked-report builder, renderer and all CSS are real.
+    // No Graph client, credentials, live repository or persistence is used.
+    const rows = Array.from({ length: 24 }, (_, index) => {
+      const id = String(400 - index);
+      return { id, hasAttachments: true, fields: {
+        ID: id, FORNECEDOR: `FORNECEDOR SINTÉTICO ${id} ESCORAMENTO E ARMAÇÕES`,
+        FILIAL: 'FILIAL DE TESTE', FORMAPGTO: 'CAIXA', VALORTOTAL: 25,
+        STATUS: 'PENDENTE AUDITORIA', 'NOTA FISCAL': 'PENDENTE',
+        OBS: `Observação sintética do pedido ${id}`, 'OBS FISCAL': 'Somente teste',
+        Criado: '2026-10-01T12:00:00Z', Modificado: '2026-10-02T12:00:00Z',
+        'Criado por': 'Fixture', 'Modificado por': 'Fixture',
+      } };
+    });
+    let loads = 0, writes = 0, nextMode = 'ok';
+    const reports = [], editors = [], media = [], errors = [];
+    addEventListener('error', event => errors.push(event.message));
+    addEventListener('unhandledrejection', event => errors.push(String(event.reason)));
+    function reportFor(id) {
+      const order = rows.find(row => row.id === id);
+      const line = { AGRUPAR: id, DATA: '2026-10-02', FILIAL: 'FILIAL DE TESTE',
+        FORNECEDOR: order.fields.FORNECEDOR, CONTA: 'CAIXA', PRODUTO: `Produto ${id}`,
+        'DESCRIÇÃO': 'Fixture sem dados reais', QUANTIDADE: 2, 'VALOR UNITÁRIO': 10,
+        FRETE: 5, APROVACAO: 'APROVADO' };
+      return buildOrdersLinkedReport({ orderId: id, order,
+        active: [{ id: `${id}1`, fields: line },
+          // An adjacent prefix must never appear in the real rendered report.
+          { id: '999999', fields: { ...line, AGRUPAR: `${id}0`, PRODUTO: 'NÃO VINCULADO' } }],
+        deleted: [{ id: `${id}2`, fields: { ...line, 'ID 2': '7', DATAEXCLUSAO: '2026-10-03T12:00:00Z', 'Criado por': 'Fixture' } }],
+      });
+    }
+    const data = {
+      async loadSnapshot() { loads++; return { rows }; },
+      async listAttachments(id) { return [{ fileName: `pedido-${id}.pdf`, mimeType: 'application/pdf' }]; },
+      async loadEditor(id) {
+        editors.push(id);
+        return { entity: { id: 'pedidos', title: 'Pedido' }, item: rows.find(row => row.id === id),
+          columns: [{ name: 'FORNECEDOR', label: 'Fornecedor', control: 'text', editable: true }],
+          contract: { hasForm: true } };
+      },
+      async loadLinkedReport(id, { signal } = {}) {
+        const mode = nextMode; nextMode = 'ok';
+        const request = { id, signal, mode, settled: false };
+        reports.push(request);
+        if (mode === 'error') throw new Error('Falha sintética da leitura vinculada');
+        if (mode === 'wrong') return reportFor(id === '390' ? '389' : '390');
+        if (mode === 'hold') return new Promise(resolve => {
+          // Deliberately ignores abort to prove the real view rejects stale reads.
+          request.release = () => { request.settled = true; resolve(reportFor(id)); };
+        });
+        request.settled = true;
+        return reportFor(id);
+      },
+      async saveEditor() { writes++; throw new Error('Fixture forbids persistence'); },
+      async deleteItem() { writes++; throw new Error('Fixture forbids persistence'); },
+      async uploadAttachment() { writes++; throw new Error('Fixture forbids persistence'); },
+    };
+    const gallery = createOrdersGallery({ document, data,
+      async openMediaCollection(items) { media.push(items.map(item => item.fileName)); },
+    });
+    window.ordersLinkedFixture = {
+      mode(value) { nextMode = value; },
+      release(index) { const request = reports[index]; if (!request?.release) throw new Error('No held read'); request.release(); },
+      snapshot() {
+        return { loads, writes, editors: [...editors], media: [...media], errors: [...errors],
+          reports: reports.map(({ id, signal, mode, settled }) => ({ id, mode, settled, aborted: signal.aborted })) };
+      },
+      context() {
+        const root = document.querySelector('.og-overlay'), content = root.querySelector('.og-content');
+        return { scrollTop: content.scrollTop, scrollLeft: content.scrollLeft,
+          page: root.querySelector('.og-page-label').textContent,
+          filters: [...root.querySelectorAll('input[name],select[name]')].map(node => [node.name, node.value]),
+          ids: [...root.querySelectorAll('.og-card')].map(node => node.dataset.itemId),
+          disclosureOpen: root.querySelector('.og-filters').open };
+      },
+    };
+    await gallery.open();
+    document.documentElement.dataset.ready = 'true';
+  </script>
+</body>
+</html>
