@@ -1,0 +1,22 @@
+{
+  "linuxNotificationTests": 10,
+  "windowsAgentChecks": 16,
+  "manualMinuteTriggersRemoved": 2,
+  "existingDdaQueueTests": 8,
+  "integration": {
+    "taskExitCode": 37,
+    "isolatedQueues": true,
+    "at": "2026-11-01T21:35:41.1541043-03:00",
+    "connections": 2,
+    "taskStarts": 1,
+    "dispatches": 1,
+    "disabledTaskDisconnects": true
+  },
+  "serverSha256": "b345286a8899ece942877bd8d16cf90a9c108828cd57fafb9b8427a89e49b6f4",
+  "mobileSourceChanged": false,
+  "verifiedAt": "2026-11-02T00:38:43.0288487+00:00",
+  "failedStagingPreservesRunningAgent": true,
+  "portalRestarted": false,
+  "installedAgentSourceHash": "6619C8768255FDFB",
+  "automaticSchedulesPreserved": 5
+}
