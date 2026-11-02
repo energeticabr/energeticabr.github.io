@@ -160,6 +160,7 @@ function knownAttachmentCount(row) {
 
 export function createRegistrationGallery({ document: doc = globalThis.document, kind, data, onHome, onCreate, openMediaCollection, refreshBank, syncMonitor, confirmPayment, onStartLaunch, descriptionTimeoutMs = 30_000 } = {}) {
   const model = REGISTRATION_GALLERY_MODELS[kind];
+  let parentNavigation = null;
   if (!model || !doc?.body || typeof data?.loadSnapshot !== "function") {
     throw new TypeError("Galeria de cadastro, documento e serviço de dados são obrigatórios.");
   }
@@ -1117,6 +1118,7 @@ export function createRegistrationGallery({ document: doc = globalThis.document,
     if (destroyed || root.hidden) return;
     if (dismissGalleryOverlay(root)) return;
     hide();
+    void parentNavigation?.();
   }
   close.addEventListener("click", navigateBack);
   let ddaClock = null, ddaDay = '';
@@ -1176,8 +1178,9 @@ export function createRegistrationGallery({ document: doc = globalThis.document,
     focusable[next].focus();
   });
   return {
-    async open() {
+    async open(options = {}) {
       if (destroyed) return;
+      parentNavigation = typeof options.onBack === 'function' ? options.onBack : null;
       if (root.hidden) for (const field of model.resetFiltersOnOpen || []) {
         filterControls.get(field).value = model.defaultFilters[field];
       }
