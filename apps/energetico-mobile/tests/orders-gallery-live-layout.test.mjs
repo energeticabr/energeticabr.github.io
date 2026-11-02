@@ -12,14 +12,28 @@ const appRoot = resolve(fileURLToPath(new URL('..', import.meta.url)));
 const browser = [process.env.CHROME_BIN, 'C:\\Program Files\\Google\\Chrome\\Application\\chrome.exe',
   'C:\\Program Files (x86)\\Microsoft\\Edge\\Application\\msedge.exe'].find(path => path && existsSync(path));
 
+// Evaluate in the browser: wrapped text may share X coordinates with actions
+// while sitting below them. A collision must intersect on both axes.
+function headerOverlapsActions() {
+  const card = document.querySelector('.og-order-card[data-item-id="353"]');
+  const actions = [...card.querySelectorAll('.gallery-record-actions > button')].map(node => node.getBoundingClientRect());
+  const content = [...card.querySelectorAll('.og-card-heading h2, .og-card-id, .og-status, .og-open-cue')];
+  return content.some(node => {
+    const area = node.getBoundingClientRect();
+    return actions.some(action => area.left < action.right - 1 && area.right > action.left + 1
+      && area.top < action.bottom - 1 && area.bottom > action.top + 1);
+  });
+}
+
 test('Galeria Pedidos keeps compact paired cards and reachable controls on mobile and desktop', { timeout: 90_000 }, async t => {
   if (!browser) return t.skip('Chrome/Edge indisponível');
-  const server = await createServer({ root: appRoot, server: { host: '127.0.0.1', port: 0,
-    fs: { allow: [resolve(appRoot, '../..')] } }, logLevel: 'silent' });
   const profile = mkdtempSync(join(tmpdir(), 'orders-gallery-layout-'));
+  const cacheDir = join(profile, 'vite-cache');
   const pending = new Map();
-  let child, socket;
+  let server, child, socket;
   try {
+    server = await createServer({ root: appRoot, cacheDir, server: { host: '127.0.0.1', port: 0,
+      fs: { allow: [resolve(appRoot, '../..'), cacheDir] } }, logLevel: 'silent' });
     await server.listen();
     child = spawn(browser, ['--headless=new', '--disable-gpu', '--no-first-run', '--no-sandbox',
       '--remote-debugging-port=0', `--user-data-dir=${profile}`, 'about:blank'], { stdio: 'ignore' });
@@ -78,7 +92,7 @@ test('Galeria Pedidos keeps compact paired cards and reachable controls on mobil
           fieldColumns: getComputedStyle(card.querySelector('.og-card-fields')).gridTemplateColumns.split(' ').length,
           fieldCount: fields.length,
           actionsSideBySide: actions.length === 2 && Math.abs(actions[0].top - actions[1].top) < 1,
-          headerOverlap: card.querySelector('.og-card-heading h2').getBoundingClientRect().right > actions[0].left + 1,
+          headerOverlap: (${headerOverlapsActions.toString()})(),
           cardHeight: rect.height,
         };
       })()`);
@@ -89,6 +103,19 @@ test('Galeria Pedidos keeps compact paired cards and reachable controls on mobil
       assert.equal(layout.fieldColumns, 2, `Campos devem permanecer em duas colunas em ${width}px: ${JSON.stringify(layout)}`);
       assert.equal(layout.fieldCount, 8);
       assert.ok(layout.cardHeight < (width === 320 ? 480 : 400), `Cartão ainda está alto em ${width}px: ${JSON.stringify(layout)}`);
+      const detectsActualOverlap = await evaluate(`(() => {
+        const card = document.querySelector('.og-order-card[data-item-id="353"]');
+        const action = card.querySelector('.gallery-record-actions > button');
+        const title = card.querySelector('.og-card-heading h2').getBoundingClientRect();
+        const original = action.getAttribute('style');
+        try {
+          Object.assign(action.style, { position: 'fixed', left: title.left + 'px', top: title.top + 'px', width: title.width + 'px', height: title.height + 'px' });
+          return (${headerOverlapsActions.toString()})();
+        } finally {
+          if (original === null) action.removeAttribute('style'); else action.setAttribute('style', original);
+        }
+      })()`);
+      assert.equal(detectsActualOverlap, true, `A verificação deve detectar um botão cobrindo o fornecedor em ${width}px`);
       if (width === 390 && process.env.ORDERS_GALLERY_SCREENSHOT) {
         const shot = await send('Page.captureScreenshot', { format: 'png', captureBeyondViewport: false }, sessionId);
         writeFileSync(process.env.ORDERS_GALLERY_SCREENSHOT, Buffer.from(shot.data, 'base64'));
@@ -118,7 +145,7 @@ test('Galeria Pedidos keeps compact paired cards and reachable controls on mobil
     for (const request of pending.values()) clearTimeout(request.timer);
     socket?.close();
     if (child && child.exitCode === null) { const exited = new Promise(done => child.once('exit', done)); child.kill(); await Promise.race([exited, delay(3000)]); }
-    await server.close();
+    await server?.close();
     for (let attempt = 0; attempt < 12; attempt++) {
       try { rmSync(profile, { recursive: true, force: true, maxRetries: 5, retryDelay: 250 }); break; }
       catch (error) { if (error.code !== 'EPERM' && error.code !== 'EBUSY') throw error; await delay(300); }
