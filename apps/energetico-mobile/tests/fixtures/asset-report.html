@@ -1,0 +1,33 @@
+<!doctype html><html lang="pt-BR"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>Relatório do imobilizado</title></head><body><script type="module">
+import '../../src/styles.css';
+import '../../src/ui/registration-gallery.css';
+import '../../src/ui/gallery-record-actions.css';
+import '../../src/ui/searchable-filter-selects.css';
+import { createRegistrationGallery } from '../../src/ui/registration-gallery-view.js';
+const calls = [];
+const kind = new URLSearchParams(location.search).get('kind') || 'assetLaunches';
+const name = 'GUINCHO ELÉTRICO COLUNA 350 KG COM IDENTIFICAÇÃO EXTENSA PARA CONFERÊNCIA';
+const rows = [{ id: kind === 'asset' ? '96' : '275', hasAttachments: false, fields: { IMOBILIZADO: name, FILIAL: 'FILIAL FICTÍCIA', 'ID IMOBILIZADO': 96, '% DEPRECIAÇÃO': .03, 'DATA DE DEPRECIAÇÃO': '2026-11-01', 'VALOR DEPRECIAÇÃO': 146.1, 'VALOR RESIDUAL': 4723.9 } }];
+const gallery = createRegistrationGallery({ document, kind, data: {
+  async loadSnapshot() { return { rows }; },
+  async loadAssetReport(id) {
+    calls.push(id);
+    return { assetId: id, asset: { id, fields: { IMOBILIZADO: name }, details: [
+      { name: 'ITEM', label: 'Imobilizado', value: name, type: 'text' },
+      { name: 'PATRIMONIO', label: 'Número patrimônio', value: 'PATRIMÔNIO DE TESTE 000096', type: 'text' },
+      { name: 'FORNECEDOR', label: 'Fornecedor', value: 'FORNECEDOR FICTÍCIO DE EQUIPAMENTOS E MÁQUINAS COM NOME EXTENSO', type: 'text' },
+      { name: 'FILIAL', label: 'Filial', value: '004 - FILIAL FICTÍCIA', type: 'text' },
+      { name: 'COMPRA', label: 'Valor compra', value: 5000, type: 'currency' },
+      { name: 'RESIDUAL', label: 'Valor residual', value: 4723.9, type: 'currency' },
+      { name: 'PERCENTUAL', label: '% depreciação', value: 3, type: 'percentWhole' },
+      { name: 'DATA', label: 'Data compra', value: '2025-01-01T03:00:00Z', type: 'date' },
+    ] }, historyTotal: 4529.1, history: Array.from({ length: 31 }, (_, i) => ({ id: String(1030 - i), fields: {
+      'ID IMOBILIZADO': Number(id), FILIAL: 'FILIAL FICTÍCIA DE IDENTIFICAÇÃO EXTENSA', '% DEPRECIAÇÃO': .03,
+      'DATA DE DEPRECIAÇÃO': `${2026 - Math.floor(i / 12)}-${String(12 - i % 12).padStart(2, '0')}-01`,
+      'VALOR DEPRECIAÇÃO': 146.1, 'VALOR RESIDUAL': 4723.9 + i * 146.1, 'ID LANÇAMENTO': i === 0 ? 123456789012345 : null,
+    } })) };
+  },
+} });
+await gallery.open();
+window.assetReportFixture = { calls, gallery, ready: true };
+</script></body></html>
