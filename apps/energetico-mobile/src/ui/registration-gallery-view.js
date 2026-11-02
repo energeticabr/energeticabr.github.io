@@ -12,6 +12,7 @@ import { REGISTRATION_GALLERY_MODELS, registrationFieldKey, registrationRawField
 import Decimal from "decimal.js";
 import { renderWorkDiaryCardDetails } from './work-diary-card.js';
 import { renderAssetGalleryCard } from './asset-gallery-card.js';
+import { createAssetReportView } from './asset-report-view.js';
 import { renderDdaCard, updateDdaDueTones, ddaTodayKey } from './dda-card.js';
 import { createDdaSyncReceipt } from './dda-sync-receipt.js';
 import { createDdaPaymentConfirmation } from './dda-payment-confirmation.js';
@@ -299,6 +300,11 @@ export function createRegistrationGallery({ document: doc = globalThis.document,
     resolveTrigger: (id, original) => root.querySelector(`[data-action="description-provisions"][data-description-id="${id}"]`) || original,
   }) : null;
   const loadingScreen = createGalleryLoadingScreen({ root, header, label: 'Carregando registros…' });
+  const assetReport = ['asset', 'assetLaunches'].includes(kind) ? createAssetReportView({
+    document: doc, host: root, background: [...root.children],
+    loadReport: (id, options) => data.loadAssetReport(id, options),
+    resolveTrigger: (_id, trigger) => root.querySelector(`[data-asset-report-trigger="${trigger?.dataset.registrationReportRow}"]`) || trigger,
+  }) : null;
   const searchableFilters = bindSearchableFilterSelects(toolbar);
   const recordActions = createGalleryRecordActions({
     document: doc, host: root,
@@ -961,6 +967,20 @@ export function createRegistrationGallery({ document: doc = globalThis.document,
       }
       const recordMain = el('div', 'gallery-record-main');
       recordMain.append(...card.childNodes);
+      if (assetReport) {
+        const assetId = kind === 'asset' ? String(row.id) : String(registrationNumber(registrationRawField(row.fields, 'ID IMOBILIZADO', model)) ?? '');
+        const trigger = kind === 'asset' ? recordMain.querySelector('.rg-row-main') : recordMain;
+        if (trigger && /^[1-9]\d{0,14}$/.test(assetId)) {
+          trigger.dataset.assetReportTrigger = row.id; trigger.dataset.registrationReportRow = row.id;
+          trigger.setAttribute('role', 'button'); trigger.tabIndex = 0;
+          trigger.setAttribute('aria-label', `Abrir cadastro e histórico de depreciação de ${primary}, imobilizado #${assetId}`);
+          trigger.setAttribute('aria-haspopup', 'dialog'); trigger.setAttribute('aria-expanded', 'false');
+          trigger.append(el('span', 'asset-report-cue', 'Ver cadastro e depreciações →'));
+          const openReport = () => { if (!destroyed && !root.hidden && !attachmentLoading && !pendingMutations && root.getAttribute('aria-busy') !== 'true') assetReport.open(assetId, trigger); };
+          trigger.addEventListener('click', event => { if (!event.target.closest('button, a, input, select, textarea')) openReport(); });
+          trigger.addEventListener('keydown', event => { if (event.target === trigger && ['Enter', ' '].includes(event.key)) { event.preventDefault(); event.stopPropagation(); openReport(); } });
+        }
+      }
       if (!model.readOnly) card.classList.add('gallery-record-card');
       card.append(recordMain);
       if (card.dataset.sefazCancelled === 'true') {
@@ -1023,6 +1043,7 @@ export function createRegistrationGallery({ document: doc = globalThis.document,
 
   async function load({ refresh = hasLoaded, preserveRowsOnError = false } = {}) {
     const previousRows = rows;
+    assetReport?.close();
     descriptionDetail?.close();
     const current = ++request;
     loadController?.abort();
@@ -1090,6 +1111,7 @@ export function createRegistrationGallery({ document: doc = globalThis.document,
 
   function hide() {
     if (root.hidden) return;
+    assetReport?.close();
     paymentConfirmation?.close();
     bankReceipt?.close();
     bankController?.abort();
@@ -1166,7 +1188,7 @@ export function createRegistrationGallery({ document: doc = globalThis.document,
   root.addEventListener("keydown", event => {
     if (event.key === "Escape") { navigateBack(); return; }
     if (event.key !== "Tab" || root.hidden) return;
-    const focusable = [...root.querySelectorAll("summary, button:not(:disabled), input:not(:disabled), select:not(:disabled)")]
+    const focusable = [...root.querySelectorAll("summary, button:not(:disabled), input:not(:disabled), select:not(:disabled), [data-asset-report-trigger]")]
       .filter(node => !node.disabled && !node.closest('[hidden], [inert], [aria-hidden="true"]')
         && (node.tagName === "SUMMARY" || !node.closest("details:not([open])")));
     if (!focusable.length) { event.preventDefault(); root.focus(); return; }
@@ -1190,6 +1212,6 @@ export function createRegistrationGallery({ document: doc = globalThis.document,
       if(returnPending)returnedForManual=true;showBankNotice();await load();showBankNotice();
     },
     close: hide,
-    destroy() { unsubscribeFiscal?.(); unsubscribeBank?.(); paymentConfirmation?.destroy(); bankReceipt?.destroy(); bankController?.abort(); stopDdaClock(); loadController?.abort(); descriptionDetail?.destroy(); loadingScreen.destroy(); createShortcut.destroy(); refreshShortcut.destroy(); recordActions.destroy(); searchableFilters.destroy(); destroyed = true; request += 1; filterEpoch += 1; attachmentCountQueue = []; root.remove(); },
+    destroy() { unsubscribeFiscal?.(); unsubscribeBank?.(); paymentConfirmation?.destroy(); bankReceipt?.destroy(); bankController?.abort(); stopDdaClock(); loadController?.abort(); assetReport?.destroy(); descriptionDetail?.destroy(); loadingScreen.destroy(); createShortcut.destroy(); refreshShortcut.destroy(); recordActions.destroy(); searchableFilters.destroy(); destroyed = true; request += 1; filterEpoch += 1; attachmentCountQueue = []; root.remove(); },
   };
 }

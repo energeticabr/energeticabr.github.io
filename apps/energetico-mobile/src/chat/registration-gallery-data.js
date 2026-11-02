@@ -361,6 +361,16 @@ export function createRegistrationGalleryData({ kind, ...options } = {}) {
     } } };
   }
   const repository = model.nativeCard ? galleryRepository({ ...options, strictSnapshot: kind === "dda" }) : options.repository;
+  let assetReportService;
+  const assetReport = ['asset', 'assetLaunches'].includes(kind) ? {
+    async loadAssetReport(id, loadOptions) {
+      options.assertSession?.();
+      assetReportService ||= import('./asset-report-data.js').then(({ createAssetReportData }) => createAssetReportData({
+        repository, siteKey: options.siteKey || 'personal', assertSession: options.assertSession,
+      })).catch(error => { assetReportService = null; throw error; });
+      return (await assetReportService).loadAssetReport(id, loadOptions);
+    },
+  } : {};
   const data = createOrdersGalleryData({
     ...options,
     ...(model.nativeCard ? { repository, snapshotColumns: true, preserveSourceOrder: model.sourceSort == null } : {}),
@@ -370,6 +380,7 @@ export function createRegistrationGalleryData({ kind, ...options } = {}) {
   });
   if (!model.nativeCard) return data;
   if (model.readOnly) return Object.freeze({
+    ...assetReport,
     async loadSnapshot(loadOptions) {
       const snapshot = await data.loadSnapshot(loadOptions);
       return Object.freeze({ ...snapshot, rows: Object.freeze(sortRegistrationRows(snapshot.rows, model)) });
@@ -488,6 +499,7 @@ export function createRegistrationGalleryData({ kind, ...options } = {}) {
     });
   }
   return Object.freeze({ ...data,
+    ...assetReport,
     ...filters,
     ...(descriptionEditor ? { loadDescriptionGroup: (id, loadOptions) => loadDescriptionGroupWithProgress({
       repository, siteKey: options.siteKey || 'personal', normalizeItem: normalizeGalleryItem,
