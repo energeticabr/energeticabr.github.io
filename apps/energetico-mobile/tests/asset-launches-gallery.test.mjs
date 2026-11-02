@@ -12,6 +12,7 @@ const columns = [
   ['VALOR_x0020_RESIDUAL', 'VALOR RESIDUAL', 'currency'],
   ['ID_x0020_IMOBILIZADO', 'ID IMOBILIZADO', 'number'],
   ['IDLANCAMENTO', 'ID LANÇAMENTO', 'number'],
+  ['IDPEDIDO', 'NÚMERO DO PEDIDO', 'number'],
 ].map(([name, displayName, type]) => ({ name, displayName, [type]: {} }));
 const item = (id, name = '') => ({ id: String(id), fields: {
   Title: name, FILIAL: '001 - FILIAL TESTE', _x0025__x0020_DEPRECIA_x00c7__x0: 0.02,
@@ -55,6 +56,7 @@ test('galeria mostra reais, percentual, data e vínculo do bem; busca e filtros 
   rows[1].fields.ID_x0020_IMOBILIZADO = 94;
   rows[1].fields.VALOR_x0020_DEPRECIA_x00c7__x00c = 0;
   rows[0].fields.IDLANCAMENTO = 4321;
+  rows[0].fields.IDPEDIDO = 494;
   const gallery = createRegistrationGallery({ document: dom.window.document, kind: 'assetLaunches', data: source(rows) });
   t.after(() => gallery.destroy()); await gallery.open();
   const doc = dom.window.document;
@@ -65,6 +67,7 @@ test('galeria mostra reais, percentual, data e vínculo do bem; busca e filtros 
   assert.match(card.textContent, /01\/11\/2026/);
   assert.equal(card.querySelector('[data-field="ID IMOBILIZADO"] dd').textContent, '2');
   assert.equal(card.querySelector('[data-field="ID LANÇAMENTO"] dd').textContent, '4.321');
+  assert.equal(card.querySelector('[data-field="NÚMERO DO PEDIDO"] dd').textContent, '494');
   assert.equal(doc.querySelector('[data-registration-row="2"] [data-field="ID LANÇAMENTO"]'), null, 'registro legado não recebe um vínculo inventado');
   assert.match(doc.querySelector('[data-registration-row="2"]').textContent, /0,00/);
   assert.equal(doc.querySelector('[data-action="create-registration"]'), null);
@@ -72,7 +75,7 @@ test('galeria mostra reais, percentual, data e vínculo do bem; busca e filtros 
   assert.equal(doc.querySelector('[data-gallery-action="delete"]'), null);
   const search = doc.querySelector('input[type="search"]'); search.value = '94';
   search.dispatchEvent(new dom.window.Event('input', { bubbles: true }));
-  assert.deepEqual([...doc.querySelectorAll('[data-registration-row]')].map(node => node.dataset.registrationRow), ['2']);
+  assert.deepEqual([...doc.querySelectorAll('[data-registration-row]')].map(node => node.dataset.registrationRow), ['2', '1'], 'a busca também encontra o pedido 494');
   search.value = ''; search.dispatchEvent(new dom.window.Event('input', { bubbles: true }));
   const filter = doc.querySelector('[data-filter-field="ID IMOBILIZADO"]'); filter.value = '2';
   filter.dispatchEvent(new dom.window.Event('change', { bubbles: true }));

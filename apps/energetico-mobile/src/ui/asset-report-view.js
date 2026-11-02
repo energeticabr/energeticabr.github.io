@@ -62,9 +62,10 @@ export function createAssetReportView({ document: doc, host, background = [], lo
       const heading = el('header', 'asset-report-history-heading');
       heading.append(el('h4', '', format(row.fields['DATA DE DEPRECIAÇÃO'], 'date')), el('span', 'asset-report-line-id', `Registro #${row.id}`)); card.append(heading);
       const values = el('dl', 'asset-report-fields');
-      for (const [label, type] of [['FILIAL', 'text'], ['% DEPRECIAÇÃO', 'percent'], ['VALOR DEPRECIAÇÃO', 'currency'], ['VALOR RESIDUAL', 'currency'], ['ID LANÇAMENTO', 'text']]) {
+      for (const [label, type] of [['FILIAL', 'text'], ['% DEPRECIAÇÃO', 'percent'], ['VALOR DEPRECIAÇÃO', 'currency'], ['VALOR RESIDUAL', 'currency'], ['ID LANÇAMENTO', 'text'], ['NÚMERO DO PEDIDO', 'text']]) {
         const pair = el('div', 'asset-report-field'), dd = el('dd', '', format(row.fields[label], type));
         if (label === 'ID LANÇAMENTO') dd.dataset.historyFinancialId = '';
+        if (label === 'NÚMERO DO PEDIDO') dd.dataset.historyOrderId = '';
         if (label === 'FILIAL') pair.classList.add('asset-report-field--wide');
         pair.append(el('dt', '', label), dd); values.append(pair);
       }

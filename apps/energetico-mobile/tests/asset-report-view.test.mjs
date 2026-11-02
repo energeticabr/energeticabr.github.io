@@ -14,7 +14,7 @@ function report(id = '96') {
     { name: 'DATACOMPRA', label: 'Data compra', value: '2025-01-01T03:00:00Z', type: 'date' },
   ] }, historyTotal: 146.1, history: [
     { id: '275', fields: { IMOBILIZADO: '', FILIAL: 'FILIAL HISTÓRICA', 'ID IMOBILIZADO': Number(id), 'DATA DE DEPRECIAÇÃO': '2026-11-01T03:00:00Z',
-      '% DEPRECIAÇÃO': 0.03, 'VALOR DEPRECIAÇÃO': 146.1, 'VALOR RESIDUAL': 4723.9, 'ID LANÇAMENTO': 4321 } },
+      '% DEPRECIAÇÃO': 0.03, 'VALOR DEPRECIAÇÃO': 146.1, 'VALOR RESIDUAL': 4723.9, 'ID LANÇAMENTO': 4321, 'NÚMERO DO PEDIDO': 494 } },
     { id: '250', fields: { FILIAL: 'FILIAL HISTÓRICA', 'ID IMOBILIZADO': Number(id), 'DATA DE DEPRECIAÇÃO': '2026-10-01', '% DEPRECIAÇÃO': 0.03,
       'VALOR DEPRECIAÇÃO': 0, 'VALOR RESIDUAL': 4870, 'ID LANÇAMENTO': null } },
   ] };
@@ -45,6 +45,8 @@ test('toque nos cartões das duas galerias usa o ID do bem e retorna à mesma p�
     assert.equal(modal.querySelectorAll('[data-asset-history-row]').length, 2);
     assert.equal(modal.querySelector('[data-asset-history-row="250"] [data-history-financial-id]').textContent, '—');
     assert.match(modal.querySelector('[data-asset-history-row="275"] [data-history-financial-id]').textContent, /4321/);
+    assert.equal(modal.querySelector('[data-asset-history-row="275"] [data-history-order-id]').textContent, '494');
+    assert.equal(modal.querySelector('[data-asset-history-row="250"] [data-history-order-id]').textContent, '—');
     modal.dispatchEvent(new dom.window.KeyboardEvent('keydown', { key: 'Escape', bubbles: true }));
     assert.equal(doc.querySelector('[data-asset-report]'), null); assert.equal(root.hidden, false);
     assert.equal(search.value, 'GUINCHO'); assert.match(root.querySelector('.rg-pagination').textContent, /Página 2 de 2/);
@@ -67,7 +69,23 @@ test('anexos e editar permanecem independentes do relatório no cadastro', async
   assert.equal(edits, 1); assert.equal(reads, 0); assert.equal(doc.querySelector('[data-asset-report]'), null);
 });
 
-test('Tab alcança o cartão nas duas galerias e Enter abre o relatório correto', async t => {
+test('nome e ID do cadastro formam um botão aparente, com os demais dados fora do alvo de clique', async t => {
+  const dom = domFor(t), doc = dom.window.document, calls = [];
+  const gallery = createRegistrationGallery({ document: doc, kind: 'asset', data: {
+    async loadSnapshot() { return { rows: [{ id: '96', hasAttachments: false, fields: { IMOBILIZADO: 'GUINCHO ELÉTRICO COLUNA 350 KG' } }] }; },
+    async loadAssetReport(id) { calls.push(id); return report(id); },
+  } }); t.after(() => gallery.destroy()); await gallery.open();
+  const button = doc.querySelector('.rg-asset-heading button[data-asset-report-trigger]');
+  assert.ok(button, 'O nome deve ser um botão nativo no cabeçalho');
+  assert.match(button.textContent, /GUINCHO ELÉTRICO COLUNA 350 KG/); assert.match(button.textContent, /ID 96/);
+  assert.match(button.textContent, /Ver depreciações/); assert.equal(button.type, 'button');
+  assert.equal(doc.querySelector('.rg-row-main').hasAttribute('role'), false);
+  doc.querySelector('.rg-asset-values').click(); await tick(); assert.deepEqual(calls, []);
+  button.querySelector('.rg-row-title').click(); await tick(); assert.deepEqual(calls, ['96']);
+  assert.ok(doc.querySelector('[data-asset-report="96"]'));
+});
+
+test('Tab alcança o cartão nas duas galerias e sua ativação abre o relatório correto', async t => {
   for (const kind of ['asset', 'assetLaunches']) {
     const dom = domFor(t), doc = dom.window.document, calls = [];
     const gallery = createRegistrationGallery({ document: doc, kind, data: {
@@ -78,7 +96,7 @@ test('Tab alcança o cartão nas duas galerias e Enter abre o relatório correto
     const trigger = doc.querySelector('[data-asset-report-trigger]');
     for (let tabs = 0; tabs < 20 && doc.activeElement !== trigger; tabs++) doc.activeElement.dispatchEvent(new dom.window.KeyboardEvent('keydown', { key: 'Tab', bubbles: true, cancelable: true }));
     assert.equal(doc.activeElement, trigger);
-    trigger.dispatchEvent(new dom.window.KeyboardEvent('keydown', { key: 'Enter', bubbles: true, cancelable: true })); await tick();
+    trigger.click(); await tick();
     assert.deepEqual(calls, ['96']); assert.ok(doc.querySelector('[data-asset-report="96"]'));
   }
 });

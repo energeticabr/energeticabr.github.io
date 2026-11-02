@@ -15,5 +15,6 @@ for (let i = 0; i < rows.length; i++) {
   assert.equal(String(row.parent['item/DATADEPRECIA_x00c7__x00c3_O']).trim(), want.next);
   assert.equal(row.parent['item/VALORRESIDUAL'], want.parentResidual);
   assert.equal(Object.hasOwn(row.parent, 'item/HTML'), false);
+  if (columns.order) assert.equal(row[`item/${columns.order}`], [494, null, null][i], `case ${i}/order`);
 }
-process.stdout.write(JSON.stringify({ status: 'RUNTIME_PROBE_VERIFIED', cases: rows.length, checks: 27, externalWrites: 0 }) + '\n');
+process.stdout.write(JSON.stringify({ status: 'RUNTIME_PROBE_VERIFIED', cases: rows.length, checks: columns.order ? 30 : 27, externalWrites: 0 }) + '\n');

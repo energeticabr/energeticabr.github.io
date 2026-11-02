@@ -47,7 +47,7 @@ test('asset card places purchase/depreciated/residual values, flags, dates and r
   assert.deepEqual(fields('.rg-asset-dates'), ['DATA DEPRECIAÇÃO', 'DATA CADASTRO', 'DATA COMPRA', 'Criado', 'Modificado']);
   assert.deepEqual(fields('.rg-asset-details'), ['NÚMEROIMOBILIZADO', 'FORNECEDOR', 'FILIAL', 'QTD', 'Criado por', 'Modificado por']);
   assert.deepEqual([...card.querySelector('.rg-row-main').children].map(el => el.className),
-    ['rg-asset-heading', 'rg-asset-values', 'rg-asset-flags', 'rg-asset-dates', 'rg-asset-details', 'asset-report-cue']);
+    ['rg-asset-heading', 'rg-asset-values', 'rg-asset-flags', 'rg-asset-dates', 'rg-asset-details']);
   const text = field => card.querySelector(`[data-field="${field}"] dd`).textContent.replace(/\s+/g, ' ');
   assert.equal(text('VALOR ESTIMADO'), 'R$ 4.338,02');
   assert.equal(text('VALOR DEPRECIADO'), 'R$ 1.260,97');

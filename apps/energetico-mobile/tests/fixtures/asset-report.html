@@ -24,7 +24,7 @@ const gallery = createRegistrationGallery({ document, kind, data: {
     ] }, historyTotal: 4529.1, history: Array.from({ length: 31 }, (_, i) => ({ id: String(1030 - i), fields: {
       'ID IMOBILIZADO': Number(id), FILIAL: 'FILIAL FICTÍCIA DE IDENTIFICAÇÃO EXTENSA', '% DEPRECIAÇÃO': .03,
       'DATA DE DEPRECIAÇÃO': `${2026 - Math.floor(i / 12)}-${String(12 - i % 12).padStart(2, '0')}-01`,
-      'VALOR DEPRECIAÇÃO': 146.1, 'VALOR RESIDUAL': 4723.9 + i * 146.1, 'ID LANÇAMENTO': i === 0 ? 123456789012345 : null,
+      'VALOR DEPRECIAÇÃO': 146.1, 'VALOR RESIDUAL': 4723.9 + i * 146.1, 'ID LANÇAMENTO': i === 0 ? 123456789012345 : null, 'NÚMERO DO PEDIDO': i === 0 ? 494 : null,
     } })) };
   },
 } });

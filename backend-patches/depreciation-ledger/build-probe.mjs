@@ -9,11 +9,12 @@ export function buildReadOnlyProbe(definition) {
     { ID: 990002, ITEM: '', FILIAL: 'FILIAL FICTÍCIA', OData__x0025_DEPRECIACAO: '2', VALORRESIDUAL: '4.338,02', DATADEPRECIA_x00c7__x00c3_O: '2026-03-01T03:00:00Z' },
     { ID: 990003, ITEM: 'TESTE ZERO', FILIAL: 'FILIAL FICTÍCIA', OData__x0025_DEPRECIACAO: '3', VALORRESIDUAL: '0,00', DATADEPRECIA_x00c7__x00c3_O: '2026-11-01T03:00:00Z' },
   ];
+  fixtures.forEach((item, i) => { item.TEST_ORDER = [' 494 ', null, ''][i]; });
   const cloneCompose = name => ({ type: 'Compose', inputs: structuredClone(original[name].inputs), runAfter: structuredClone(original[name].runAfter || {}) });
   const actions = {
     Compose_3: { type: 'Compose', inputs: 'read-only runtime verification', runAfter: {} },
     Compose: cloneCompose('Compose'), Compose_1: cloneCompose('Compose_1'), Compose_2: cloneCompose('Compose_2'),
-    Create_item: { type: 'Compose', runAfter: { Compose_2: ['Succeeded'] }, inputs: { body: { ID: "@add(int(items('Apply_to_each')?['ID']), 1000000)" } } },
+    Create_item: { type: 'Compose', runAfter: { Compose_2: ['Succeeded'] }, inputs: { body: { ID: "@add(int(items('Apply_to_each')?['ID']), 1000000)", AGRUPAR: "@items('Apply_to_each')?['TEST_ORDER']" } } },
     Compose_4: { type: 'Compose', inputs: {}, runAfter: { Create_item: ['Succeeded'] } },
     Compose_5: { type: 'Compose', inputs: 'report unchanged in production', runAfter: { Compose_4: ['Succeeded'] } },
     [HISTORY_ACTION]: { type: 'Compose', runAfter: { Compose_5: ['Succeeded'] }, inputs: structuredClone(original[HISTORY_ACTION].inputs.parameters) },

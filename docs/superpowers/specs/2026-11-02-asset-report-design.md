@@ -9,3 +9,7 @@ Escolha de implementação: modal com rolagem própria e retorno à mesma busca,
 Consultas por ID com metadados comprovados, todas as páginas e falha explícita para paginação incompleta, metadados ambíguos ou cadastro indisponível. Cancelar ao fechar, trocar de bem, sair ou atualizar a galeria; respostas antigas não substituem o relatório atual. Texto SharePoint renderizado como texto, sem interpretar HTML legado. Estados de carregamento, vazio, erro e tentar novamente, teclado/foco e telas 320/390/1365px. Publicar web/Windows, Android interno e TestFlight.
 
 Autorização: o usuário solicitou execução direta e publicação, dispensando perguntas e aprovações intermediárias.
+
+## Nome selecionável no cadastro
+
+Pedido adicional do usuário: na GALERIA DE IMOBILIZADO o nome deve formar um cluster claramente selecionável. Transformar o cabeçalho nome/ID em botão nativo com fundo azul claro, contorno e indicação “Ver depreciações” com seta. A ativação abre o mesmo relatório cadastral e histórico do bem. Anexos, editar e excluir continuam independentes; os demais dados cadastrais não se tornam botões. Manter o cartão selecionável já solicitado na galeria LANÇAMENTOS IMOBILIZADOS.

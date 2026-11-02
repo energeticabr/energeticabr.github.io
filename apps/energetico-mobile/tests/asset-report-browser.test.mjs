@@ -13,7 +13,7 @@ const browser = [process.env.CHROME_BIN, 'C:/Program Files/Google/Chrome/Applica
 const trigger = '[data-asset-report-trigger]';
 const close = '[data-action="close-asset-report"]';
 async function key(api, value, code, number) {
-  await api.command('Input.dispatchKeyEvent', { type: 'keyDown', key: value, code, windowsVirtualKeyCode: number });
+  await api.command('Input.dispatchKeyEvent', { type: 'keyDown', key: value, code, windowsVirtualKeyCode: number, ...(value === 'Enter' ? { text: '\r' } : {}) });
   await api.command('Input.dispatchKeyEvent', { type: 'keyUp', key: value, code, windowsVirtualKeyCode: number });
 }
 async function shot(api, name) {
@@ -30,6 +30,12 @@ test('toque, teclado, cadastro e 31 depreciações cabem em 320/390/1365px sem p
     await withAttachmentBrowser(browser, { width, height: 900 }, async api => {
       await api.navigate(`http://127.0.0.1:${server.httpServer.address().port}/tests/fixtures/asset-report.html?kind=${kind}`);
       await api.wait('window.assetReportFixture?.ready');
+      if (kind === 'asset') {
+        const cluster = await api.evaluate(`(() => { const button = document.querySelector('${trigger}'), style = getComputedStyle(button); return {tag:button.tagName,fill:style.backgroundColor,border:style.borderStyle,borderWidth:parseFloat(style.borderWidth),text:button.textContent,overflow:button.scrollWidth>button.clientWidth+1}; })()`);
+        assert.equal(cluster.tag, 'BUTTON'); assert.equal(cluster.border, 'solid'); assert.ok(cluster.borderWidth >= 1);
+        assert.notEqual(cluster.fill, 'rgba(0, 0, 0, 0)'); assert.match(cluster.text, /Ver depreciações/); assert.equal(cluster.overflow, false);
+        if (width === 390) await shot(api, 'cadastro-nome-selecionavel-390');
+      }
       await api.evaluate(`(() => { const input = document.querySelector('input[type="search"]'); input.value='GUINCHO'; input.dispatchEvent(new Event('input',{bubbles:true})); })()`);
       const before = await api.evaluate(`({page:document.querySelector('.rg-pagination').textContent, search:document.querySelector('input[type="search"]').value, scroll:document.querySelector('.rg-overlay').scrollTop})`);
       await api.tap(`${trigger} .rg-row-title`); await api.wait('document.querySelector("[data-asset-history-row]")');
@@ -47,6 +53,7 @@ test('toque, teclado, cadastro e 31 depreciações cabem em 320/390/1365px sem p
       assert.equal(layout.order, true); assert.ok(layout.buttonHeight >= 44); assert.ok(layout.width <= width); assert.ok(layout.minFont >= 12);
       assert.match(layout.text, /4\.723,90/); assert.match(layout.text, /3%/); assert.doesNotMatch(layout.text, /300%/);
       assert.match(layout.text, /123456789012345/);
+      assert.match(layout.text, /NÚMERO DO PEDIDO494/);
       if (width === 390) await shot(api, `${kind}-cadastro-390`);
       await api.evaluate(`(() => { const dialog = document.querySelector('[data-asset-report]'); dialog.scrollTop += dialog.querySelector('.asset-report-history').getBoundingClientRect().top-dialog.getBoundingClientRect().top-95; })()`);
       if (width === 390) await shot(api, `${kind}-historico-390`);
@@ -58,7 +65,9 @@ test('toque, teclado, cadastro e 31 depreciações cabem em 320/390/1365px sem p
       assert.equal(await api.evaluate(`document.activeElement===document.querySelector('${trigger}')`), true, 'Tab deve alcançar o cartão');
       await key(api, 'Enter', 'Enter', 13); await api.wait('document.querySelector("[data-asset-history-row]")');
       await key(api, 'Escape', 'Escape', 27); await api.wait('!document.querySelector("[data-asset-report]")');
-      assert.deepEqual(await api.evaluate('window.assetReportFixture.calls'), ['96', '96']);
+      await key(api, ' ', 'Space', 32); await api.wait('document.querySelector("[data-asset-history-row]")');
+      await key(api, 'Escape', 'Escape', 27); await api.wait('!document.querySelector("[data-asset-report]")');
+      assert.deepEqual(await api.evaluate('window.assetReportFixture.calls'), ['96', '96', '96']);
       t.diagnostic(JSON.stringify({ width, kind, id: layout.id, cards: layout.cards, overflow: layout.overflow, fieldOverflow: layout.fieldOverflow, buttonHeight: layout.buttonHeight }));
     });
   }
