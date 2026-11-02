@@ -16,6 +16,23 @@ import { createAttachmentPreview } from '../src/web/attachment-preview.js';
 import { createNativePorts } from '../src/native/native-ports.js';
 import { scannedPages } from './helpers/scanned-pages.mjs';
 
+test('attendance inline choices accept only the current advertised option and preserve the draft',async t=>{
+ const h=makeHarness();t.after(()=>h.controller.stop());await h.controller.start();
+ const replyId='attendance_inline:revision:1814:descriptor:1';
+ const message={id:'attendance-summary-current',type:'poll',question:'CONFIRMA A ATUALIZAÇÃO DESTAS PRESENÇAS?',
+   detail_table:{kind:'presence',rows:[[{label:'IDDESCRITIVO',value:'129',editor:{value:'',options:[{value:replyId,label:'130 - ALVENARIA'}]}}]]},
+   options:[{id:'attendance_batch_confirm',label:'SUBMETER TODOS'}]};
+ h.store.ingestRemoteMessages([message],{activeFlow:{id:'attendance_validation',title:'VALIDAR PRESENÇAS'}});h.store.setDraft('observação ainda não enviada');
+ const calls=[];h.client.sendText=async payload=>{calls.push(payload);return {messages:[{...message,id:'updated-summary'}],activeFlow:{id:'attendance_validation'}};};
+ await h.view.emit('select-reply',{messageId:'old-summary',replyId,label:'130 - ALVENARIA'});
+ await h.view.emit('select-reply',{messageId:message.id,replyId:'attendance_inline:forged',label:'forjado'});
+ assert.equal(calls.length,0);
+ await h.view.emit('select-reply',{messageId:message.id,replyId,label:'texto não confiável'});
+ assert.equal(calls.length,1);assert.equal(calls[0].replyId,replyId);assert.equal(calls[0].text,'130 - ALVENARIA');
+ assert.equal(h.store.getState().draft,'observação ainda não enviada');
+ assert.equal(h.store.getState().messages.some(m=>m.role==='user'&&m.text==='130 - ALVENARIA'),false);
+});
+
 async function settlementTrayHarness(t, { uploaded = true, queued = true, transferFailure = false, fromMenu = false } = {}) {
   const h = makeHarness({ historyMode: 'current-step' });
   t.after(() => h.controller.stop());

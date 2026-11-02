@@ -671,6 +671,11 @@ button { touch-action: manipulation; }
 .chat-presence-table--batch .chat-presence-table-cell--present b { color: #166534; background: #cbf3dc; }
 .chat-presence-table--batch .chat-presence-table-cell--absent b { color: #991b1b; background: #fee2e2; }
 .chat-presence-table--batch .chat-presence-table-cell--holiday b { display: inline-block; width: fit-content; padding: 3px 8px; border: 1px solid #d7a620; border-radius: 8px; color: #79510a; background: #fff2b3; }
+.chat-presence-table--batch .chat-presence-table-cell b.chat-presence-editor { position: relative; width: 100%; box-sizing: border-box; padding: 6px 24px 6px 8px; border: 1px solid #82aaa0; border-radius: 9px; min-height: 36px; }
+.chat-presence-editor::after { content: "⌄"; position: absolute; right: 7px; top: 50%; transform: translateY(-50%); pointer-events: none; }
+.chat-presence-editor:focus-within { outline: 2px solid #18756a; outline-offset: 2px; }
+.chat-presence-editor select { position: absolute; inset: 0; width: 100%; height: 100%; opacity: 0; cursor: pointer; font: inherit; }
+.chat-presence-editor:has(select:disabled) { opacity: .65; }
 .chat-bubble:has(.chat-presence-table--batch) { flex: 1 1 0; max-width: none; min-width: 0; }
 .chat-bubble:has(.chat-rhid-attendance-table) { flex: 1 1 0; max-width: none; min-width: 0; }
 .chat-message--rhid-report { gap: 0; }

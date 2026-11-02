@@ -11621,6 +11621,16 @@ export function createAppController({
       return formatted ? sendText(formatted) : false;
     });
     bind("select-reply", command => {
+      if (String(command.replyId || '').startsWith('attendance_inline:')) {
+        const state = store.getState();
+        const poll = latestAssistantPoll(state.messages);
+        if (state.activeFlow?.id !== 'attendance_validation' || poll?.id !== command.messageId) return false;
+        const table = poll.detail_table || poll.detailTable;
+        const choice = table?.kind === 'presence' && table.rows?.flatMap(row => Array.isArray(row)
+          ? row.flatMap(cell => Array.isArray(cell?.editor?.options) ? cell.editor.options : []) : [])
+          .find(option => option.value === command.replyId && typeof option.label === 'string');
+        return choice ? sendText(choice.label, command.replyId, { silent: true, preserveDraft: true }) : false;
+      }
       if (String(command.replyId || '').startsWith('description_review_parent_begin:')) return provisionSettlementParent.begin(command.replyId);
       if (command.replyId === PAYROLL_LAUNCH_REPLY_ID) return openSupplierPayroll();
       if (command.replyId === MEAL_VOUCHER_REPLY_ID) return openMealVoucher();
