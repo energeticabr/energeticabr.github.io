@@ -117,17 +117,54 @@ const deferred = () => { let resolve; let reject; const promise = new Promise((y
 async function galleryHarness(t, loadLinkedReport) {
   const dom = new JSDOM('<button id="source">Abrir pedidos</button>', { url: 'https://example.test' });
   const rows = ['319', '320'].map(id => ({ id, hasAttachments: false, fields: { ID: id, FORNECEDOR: `CARTÃO ${id}` } }));
-  const calls = [];
+  const calls = [], editorCalls = [], snapshotCalls = [];
   const gallery = createOrdersGallery({ document: dom.window.document, data: {
-    async loadSnapshot() { return { rows }; },
-    async loadEditor(id) { return { entity: { id: 'pedidos', title: 'Pedido' }, item: { id, fields: { FORNECEDOR: `CARTÃO ${id}` } },
+    async loadSnapshot() { snapshotCalls.push(true); return { rows }; },
+    async loadEditor(id) { editorCalls.push(id); return { entity: { id: 'pedidos', title: 'Pedido' }, item: { id, fields: { FORNECEDOR: `CARTÃO ${id}` } },
       columns: [{ name: 'FORNECEDOR', label: 'Fornecedor', control: 'text', editable: true }], contract: { hasForm: true } }; },
     async loadLinkedReport(id, options) { calls.push([id, options]); return loadLinkedReport(id, options); },
   } });
   t.after(() => { gallery.destroy(); dom.window.close(); });
   await gallery.open();
-  return { gallery, calls, dom, root: dom.window.document.querySelector('.og-overlay'), panel: dom.window.document.querySelector('.og-detail') };
+  return { gallery, calls, editorCalls, snapshotCalls, dom, root: dom.window.document.querySelector('.og-overlay'), panel: dom.window.document.querySelector('.og-detail') };
 }
+
+test('selecting the order ID opens only its linked launches without entering editing or reloading the gallery', async t => {
+  const ctx = await galleryHarness(t, id => report(harness(), id));
+  const card = ctx.root.querySelector('.og-card[data-item-id="319"]');
+  const trigger = card.querySelector('button[data-order-linked-open]');
+  assert.ok(trigger, 'order ID must be a native selectable button');
+  assert.equal(trigger.type, 'button');
+  assert.match(trigger.getAttribute('aria-label'), /lançamentos.*319/i);
+  assert.equal(trigger.textContent, '319');
+  trigger.focus(); trigger.click();
+  for (let attempt = 0; attempt < 30 && !ctx.panel.querySelector('.olr-report'); attempt++) await tick();
+  assert.deepEqual(ctx.calls.map(call => call[0]), ['319']);
+  assert.deepEqual(ctx.editorCalls, []);
+  assert.equal(ctx.root.querySelector('[data-gallery-record-screen]'), null);
+  assert.equal(ctx.panel.querySelectorAll('.olr-launch-row--active').length, 2);
+  ctx.root.querySelector('.screen-navigation [aria-label="Voltar"]').click();
+  assert.equal(ctx.panel.hidden, true);
+  assert.equal(ctx.root.hidden, false);
+  assert.equal(ctx.root.querySelector('.og-card[data-item-id="319"]'), card);
+  assert.equal(ctx.dom.window.document.activeElement, trigger);
+  assert.equal(ctx.snapshotCalls.length, 1);
+});
+
+test('a directly selected order retries the same ID and returns focus to the order after recovery', async t => {
+  let attempts = 0;
+  const ctx = await galleryHarness(t, id => { if (!attempts++) throw new Error('Falha temporária'); return report(harness(), id); });
+  const trigger = ctx.root.querySelector('[data-item-id="319"] [data-order-linked-open]');
+  trigger.focus(); trigger.click(); await tick();
+  const retry = [...ctx.panel.querySelectorAll('button')].find(button => button.textContent === 'Tentar novamente');
+  assert.ok(retry); retry.focus(); retry.click();
+  for (let attempt = 0; attempt < 30 && !ctx.panel.querySelector('.olr-report'); attempt++) await tick();
+  assert.deepEqual(ctx.calls.map(call => call[0]), ['319', '319']);
+  assert.ok(ctx.panel.querySelector('.olr-report'));
+  ctx.panel.querySelector('button').click();
+  assert.equal(ctx.dom.window.document.activeElement, trigger);
+  assert.equal(ctx.snapshotCalls.length, 1);
+});
 
 async function openReport(ctx, id) {
   ctx.root.querySelector(`.og-card[data-item-id="${id}"] [data-gallery-action="edit"]`).click();
