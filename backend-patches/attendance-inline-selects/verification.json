@@ -1,0 +1,50 @@
+{
+  "date": "2026-11-02",
+  "app_regressions": {
+    "run": 15,
+    "failures": 0,
+    "errors": 0,
+    "seconds": 3.67
+  },
+  "build_regressions_with_production_helpers": {
+    "run": 15,
+    "failures": 0,
+    "errors": 0,
+    "seconds": 5.299
+  },
+  "deployment_safety": {
+    "run": 9,
+    "failures": 0,
+    "errors": 0,
+    "seconds": 0.122
+  },
+  "legacy_attendance_comparison": {
+    "run": 112,
+    "baseline_candidate_outcomes_identical": true,
+    "passing": 20,
+    "preexisting_failures": 87,
+    "preexisting_errors": 4,
+    "preexisting_skips": 1
+  },
+  "deploy_check": {
+    "status": "checked",
+    "health": {
+      "status": "ok",
+      "channel": "generic"
+    }
+  },
+  "manifest_sha256": "0f30087006563cc7050e213c8f3a4a17ba6f12486699439b21351999dc3328c7",
+  "sandbox_limitations": [
+    "Build helper snapshot cannot import provision_money before this patch; build workflow was tested using copied production helpers.",
+    "Legacy fixtures have preexisting behavior drift against the live workflow; their failures were compared, not removed."
+  ],
+  "production_data_writes": false,
+  "code_deployment": true,
+  "post_deploy_fixture_tests": {
+    "run": 15,
+    "failures": 0,
+    "errors": 0,
+    "seconds": 2.0,
+    "workflow_source": "/opt/energetica-whatsapp/worker/workflow.py"
+  }
+}
