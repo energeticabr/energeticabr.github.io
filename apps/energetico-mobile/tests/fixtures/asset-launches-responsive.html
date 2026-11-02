@@ -1,0 +1,31 @@
+<!doctype html><html lang="pt-BR"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>Lançamentos de imobilizados</title></head><body><script type="module">
+import '../../src/styles.css';
+import '../../src/ui/registration-gallery.css';
+import '../../src/ui/gallery-record-actions.css';
+import '../../src/ui/searchable-filter-selects.css';
+import { createAssetGalleryMenu } from '../../src/ui/asset-gallery-menu.js';
+import { createRegistrationGallery } from '../../src/ui/registration-gallery-view.js';
+const rows = [
+ { id: '1', fields: { IMOBILIZADO: 'BETONEIRA DE TESTE', FILIAL: '001 - FILIAL DE TESTE', '% DEPRECIAÇÃO': 0.02, 'DATA DE DEPRECIAÇÃO': '2026-11-01', 'VALOR DEPRECIAÇÃO': 86.76, 'VALOR RESIDUAL': 4251.26, 'ID IMOBILIZADO': 2 } },
+ { id: '2', fields: { IMOBILIZADO: '', FILIAL: 'FILIAL COM IDENTIFICAÇÃO EXTENSA PARA CONFERIR QUEBRA DE LINHA', '% DEPRECIAÇÃO': 0.03, 'DATA DE DEPRECIAÇÃO': '2025-06-01', 'VALOR DEPRECIAÇÃO': 0, 'VALOR RESIDUAL': 0, 'ID IMOBILIZADO': 94 } },
+];
+let gallery;
+const menu = createAssetGalleryMenu({ document, onHome() {}, async onSelect(kind) {
+ menu.close();
+ gallery = createRegistrationGallery({ document, kind, onHome() {}, data: { async loadSnapshot() { return { rows }; } } });
+ await gallery.open({ onBack: () => menu.open() }); return true;
+} });
+await menu.open();
+const mode = new URLSearchParams(location.search).get('mode') || 'menu';
+if (mode === 'gallery') { document.querySelector('[data-asset-gallery="assetLaunches"]').click(); while (!document.querySelector('[data-registration-row]')) await new Promise(resolve => requestAnimationFrame(resolve)); }
+await new Promise(resolve => requestAnimationFrame(() => requestAnimationFrame(resolve)));
+const rect = node => node.getBoundingClientRect();
+const active = document.querySelector('.rg-overlay:not([hidden])');
+const buttons = [...active.querySelectorAll('[data-asset-gallery]')];
+document.documentElement.dataset.layout = JSON.stringify({ mode,
+ overflow: active.scrollWidth > active.clientWidth,
+ buttons: buttons.map(button => ({ label: button.textContent, top: rect(button).top, bottom: rect(button).bottom, width: rect(button).width, height: rect(button).height })),
+ cards: [...active.querySelectorAll('[data-registration-row]')].map(card => ({ text: card.textContent, overflow: card.scrollWidth > card.clientWidth })),
+ actions: active.querySelectorAll('[data-gallery-action]').length,
+});
+</script></body></html>

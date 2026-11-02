@@ -5183,12 +5183,12 @@ test("Galeria Pgtos Previstos fica abaixo de Gal. Lançamentos e à direita da P
   assert.deepEqual([...dom.window.document.querySelectorAll(".chat-supplies-extras__primary [data-reply-id]")].map(button => button.dataset.replyId), ["registrations", "quote", "assets"]);
   assert.equal(dom.window.document.querySelector('[data-reply-id="data"]'), null);
   assert.deepEqual([...dom.window.document.querySelectorAll(".chat-supplies-extra-pair")].map(pair => [...pair.querySelectorAll("[data-reply-id]")].map(button => button.dataset.replyId)), [
-    ["registrations"], ["quote", "action_quote_gallery"], ["assets", "action_asset_gallery"],
+    ["registrations"], ["quote", "action_quote_gallery"], ["assets", "action_asset_hub"],
   ]);
   dom.window.close();
 });
 
-test("Suprimentos coloca Imobilizados cinza à direita e abre a galeria existente sem duplicar", t => {
+test("Suprimentos coloca Imobilizados cinza à direita e abre a escolha de galerias sem duplicar", t => {
   const dom = new JSDOM('<main id="app"></main>');
   const root = dom.window.document.querySelector("#app");
   const view = createChatView(root);
@@ -5214,14 +5214,15 @@ test("Suprimentos coloca Imobilizados cinza à direita e abre a galeria existent
   const assetPrimary = root.querySelector('[data-reply-id="action_supply_fixed_assets"]');
   const assetRow = assetPrimary?.closest(".chat-supplies-extra-pair");
   assert.deepEqual([...assetRow.querySelectorAll("[data-reply-id]")].map(button => button.dataset.replyId),
-    ["action_supply_fixed_assets", "action_asset_gallery"]);
-  const galleryButton = assetRow.querySelector('[data-reply-id="action_asset_gallery"]');
-  assert.equal(root.querySelectorAll('[data-reply-id="action_asset_gallery"]').length, 1);
+    ["action_supply_fixed_assets", "action_asset_hub"]);
+  const galleryButton = assetRow.querySelector('[data-reply-id="action_asset_hub"]');
+  assert.equal(root.querySelectorAll('[data-reply-id="action_asset_hub"]').length, 1);
+  assert.equal(root.querySelectorAll('[data-reply-id="action_asset_gallery"]').length, 0);
   assert.equal(galleryButton.textContent, "IMOBILIZADOS");
   assert.equal(galleryButton.hasAttribute("data-gallery-button"), true);
 
   galleryButton.click();
-  assert.deepEqual(selected, ["action_asset_gallery"]);
+  assert.deepEqual(selected, ["action_asset_hub"]);
 });
 
 test("menu de Demandas remove o avatar e coloca Galeria Tarefas à direita de Adicionar uma nova tarefa", () => {

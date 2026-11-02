@@ -40,7 +40,7 @@
     });
     requestAnimationFrame(() => {
       const primary = root.querySelector('[data-reply-id="action_supply_fixed_assets"]');
-      const gallery = root.querySelector('[data-reply-id="action_asset_gallery"]');
+      const gallery = root.querySelector('[data-reply-id="action_asset_hub"]');
       if (new URLSearchParams(location.search).has("focusAssets")) primary.scrollIntoView({ block: "center" });
       requestAnimationFrame(() => {
         const primaryBox = primary.getBoundingClientRect();
