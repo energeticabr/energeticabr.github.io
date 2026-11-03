@@ -78,6 +78,16 @@ test('toque, teclado, cadastro e 31 depreciações cabem em 320/390/1365px sem p
       assert.equal(registration.badgeOverflow, false);
       assert.deepEqual(registration.palette,{green:'rgb(22, 101, 52)',yellow:'rgb(113, 63, 18)',orange:'rgb(154, 52, 18)',red:'rgb(153, 27, 27)'});
       await shot(api, `${kind}-cadastro-${width}`);
+      const chartTrigger = '[data-action="open-depreciation-chart"]';
+      const cue = await api.evaluate(`(() => { const button=document.querySelector('${chartTrigger}'), field=button.parentElement, b=button.getBoundingClientRect(), f=field.getBoundingClientRect(); return {text:button.textContent, cover:b.width>=f.width-5 && b.height>=f.height-5}; })()`);
+      assert.match(cue.text, /gráfico/i); assert.equal(cue.cover, true);
+      await api.tap(chartTrigger); await api.wait('document.querySelector("[data-depreciation-chart]")');
+      const chartLayout = await api.evaluate(`(() => { const chart=document.querySelector('[data-depreciation-chart]'), svg=chart.querySelector('svg'); return {overflow:chart.scrollWidth>chart.clientWidth+1, viewport:document.documentElement.scrollWidth>innerWidth+1, dots:svg.querySelectorAll('circle').length, points:chart.querySelectorAll('[data-chart-point]').length, focus:document.activeElement.textContent}; })()`);
+      assert.equal(chartLayout.overflow, false); assert.equal(chartLayout.viewport, false);
+      assert.equal(chartLayout.dots, chartLayout.points); assert.ok(chartLayout.dots >= 31); assert.equal(chartLayout.focus, 'Fechar');
+      await shot(api, `${kind}-grafico-${width}`);
+      await key(api, 'Escape', 'Escape', 27); await api.wait('!document.querySelector("[data-depreciation-chart]")');
+      assert.equal(await api.evaluate(`document.activeElement===document.querySelector('${chartTrigger}')`), true);
       await api.evaluate(`(() => { const dialog = document.querySelector('[data-asset-report]'); dialog.scrollTop += dialog.querySelector('.asset-report-history').getBoundingClientRect().top-dialog.getBoundingClientRect().top-95; })()`);
       const historyClusters = await api.evaluate(`(() => {
         const card = document.querySelector('[data-asset-history-row]');

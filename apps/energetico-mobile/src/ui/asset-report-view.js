@@ -2,6 +2,7 @@ import { registrationNumber, registrationDateKey, registrationFieldKey } from '.
 import { createLoadingIndicator } from './loading-indicator.js';
 import { beginLoadingTask } from './loading-task.js';
 import Decimal from 'decimal.js';
+import { createDepreciationChart } from './depreciation-chart.js';
 
 const registrationGroups = [
   ['Valores', [['Valor compra', 'currency'], ['Valor residual', 'currency']]],
@@ -55,15 +56,27 @@ export function createAssetReportView({ document: doc, host, background = [], lo
   const controls = state => [...state.dialog.querySelectorAll('button:not([disabled])')];
   const focusInside = event => { if (current && !current.dialog.contains(event.target)) current.closeButton.focus({ preventScroll: true }); };
   function cancel(state) { clearTimeout(state.timer); state.timer = null; state.version++; state.controller?.abort(); state.controller = null; state.task?.stop(); }
+  function closeChart(state, restoreFocus = true) {
+    if (!state.chart) return;
+    state.chart.overlay.remove(); state.chart = null; state.body.inert = false; state.closeButton.inert = false;
+    if (restoreFocus) state.chartTrigger?.focus({ preventScroll: true });
+  }
+  function openChart(state, result, trigger) {
+    closeChart(state, false); state.chartTrigger = trigger;
+    state.chart = createDepreciationChart({ document: doc, result, onClose: () => closeChart(state) });
+    state.body.inert = true; state.closeButton.inert = true; state.dialog.append(state.chart.overlay);
+    state.chart.closeButton.focus({ preventScroll: true });
+  }
   function close() {
     const state = current; current = null; if (!state) return;
+    closeChart(state, false);
     cancel(state); doc.removeEventListener('focusin', focusInside, true); state.overlay.remove();
     for (const [node, inert, hidden] of state.background) { node.inert = inert; if (hidden == null) node.removeAttribute('aria-hidden'); else node.setAttribute('aria-hidden', hidden); }
     state.trigger?.setAttribute('aria-expanded', 'false');
     const trigger = resolveTrigger(state.id, state.trigger) || state.trigger; trigger?.setAttribute('aria-expanded', 'false');
     if (!host.hidden) { host.scrollTop = state.scrollTop; (trigger?.isConnected ? trigger : host).focus({ preventScroll: true }); }
   }
-  function content(result, id) {
+  function content(result, id, state) {
     if (String(result?.assetId) !== id || String(result?.asset?.id) !== id || !Array.isArray(result.asset.details) || !Array.isArray(result.history)) throw new Error('Resposta de outro imobilizado.');
     const body = el('article', 'asset-report-content');
     body.append(el('h3', 'asset-report-name', text(result.asset.fields?.IMOBILIZADO) || `Imobilizado #${id}`));
@@ -99,7 +112,16 @@ export function createAssetReportView({ document: doc, host, background = [], lo
         }
         if (['Imobilizado', 'Fornecedor'].includes(label)) pair.classList.add('asset-report-field--wide');
         if (type === 'currency') pair.classList.add('asset-report-field--amount');
-        pair.append(el('dt', '', label), value); details.append(pair);
+        pair.append(el('dt', '', label), value);
+        if (label === 'Valor residual') {
+          pair.classList.add('asset-report-field--chart');
+          const chartButton = el('button', 'asset-report-chart-trigger', 'Ver gráfico de depreciação ↗');
+          chartButton.type = 'button'; chartButton.dataset.action = 'open-depreciation-chart';
+          chartButton.setAttribute('aria-label', 'Valor residual: abrir gráfico do histórico de depreciação');
+          chartButton.addEventListener('click', () => openChart(state, result, chartButton));
+          pair.append(chartButton);
+        }
+        details.append(pair);
       }
       group.append(details); registration.append(group);
     }
@@ -146,7 +168,7 @@ export function createAssetReportView({ document: doc, host, background = [], lo
       if (typeof loadReport !== 'function') throw new Error('Consulta indisponível.');
       const result = await loadReport(state.id, { signal: controller.signal, onProgress: task.report });
       if (!active(state) || state.version !== version) return;
-      const report = content(result, state.id); task.acquired(); state.body.replaceChildren(report); state.dialog.setAttribute('aria-busy', 'false'); task.complete();
+      const report = content(result, state.id, state); task.acquired(); state.body.replaceChildren(report); state.dialog.setAttribute('aria-busy', 'false'); task.complete();
     } catch {
       task.stop(); if (!active(state) || state.version !== version) return;
       controller.abort(); failure(state, 'Não foi possível carregar o cadastro e todo o histórico deste imobilizado. Verifique a conexão e tente novamente.');

@@ -234,3 +234,47 @@ test('valores monetários decimais e percentuais muito próximos dos limites nã
     assert.ok(badge.classList.contains(`asset-report-depreciated--${color}`));
   }
 });
+
+test('valor residual abre gráfico cronológico com valores registrados e fecha voltando ao cartão', async t => {
+  const dom=domFor(t), doc=dom.window.document, result=report();
+  result.asset.details.push({name:'COMPRA',label:'Valor compra',value:5000,type:'currency'});
+  const view=createAssetReportView({document:doc,host:doc.querySelector('#host'),loadReport:async()=>result});
+  t.after(()=>view.destroy()); view.open('96',doc.querySelector('#trigger')); await tick();
+  const field=doc.querySelector('[data-asset-field="VALORRESIDUAL"]');
+  const trigger=field.querySelector('button[data-action="open-depreciation-chart"]');
+  assert.ok(trigger); assert.match(trigger.textContent,/gráfico/i);
+  trigger.click();
+  const chart=doc.querySelector('[data-depreciation-chart]');
+  assert.ok(chart); assert.equal(chart.getAttribute('role'),'dialog');
+  assert.ok(chart.querySelector('svg'));
+  assert.deepEqual([...chart.querySelectorAll('[data-chart-point]')].map(p=>[p.dataset.date,p.dataset.value]),[
+    ['2025-01-01','5000'],['2026-10-01','4870'],['2026-11-01','4723.9']
+  ]);
+  assert.match(chart.textContent,/01\/11\/2026/); assert.match(chart.textContent,/4\.723,90/);
+  chart.dispatchEvent(new dom.window.KeyboardEvent('keydown',{key:'Escape',bubbles:true,cancelable:true}));
+  assert.equal(doc.querySelector('[data-depreciation-chart]'),null);
+  assert.ok(doc.querySelector('[data-asset-report]')); assert.equal(doc.activeElement,trigger);
+});
+
+test('gráfico vazio explica a ausência de depreciações sem criar histórico', async t => {
+  const dom=domFor(t), doc=dom.window.document, result=report(); result.history=[]; result.historyTotal=0;
+  const view=createAssetReportView({document:doc,host:doc.querySelector('#host'),loadReport:async()=>result});
+  t.after(()=>view.destroy()); view.open('96'); await tick();
+  doc.querySelector('[data-action="open-depreciation-chart"]').click();
+  const chart=doc.querySelector('[data-depreciation-chart]');
+  assert.match(chart.textContent,/Nenhuma depreciação registrada/i);
+  assert.equal(chart.querySelectorAll('[data-chart-point]').length,0);
+});
+
+test('gráfico conserva o valor registrado mesmo quando aumenta e não antecipa compra posterior', async t => {
+  const dom=domFor(t), doc=dom.window.document, result=report();
+  result.asset.details.push({name:'COMPRA',label:'Valor compra',value:5000,type:'currency'});
+  result.asset.details.find(field=>field.name==='DATACOMPRA').value='2026-12-01';
+  result.history[0].fields['VALOR RESIDUAL']=4900;
+  const view=createAssetReportView({document:doc,host:doc.querySelector('#host'),loadReport:async()=>result});
+  t.after(()=>view.destroy()); view.open('96'); await tick();
+  doc.querySelector('[data-action="open-depreciation-chart"]').click();
+  const chart=doc.querySelector('[data-depreciation-chart]');
+  assert.deepEqual([...chart.querySelectorAll('[data-chart-point]')].map(p=>p.dataset.value),['4870','4900']);
+  assert.doesNotMatch(chart.textContent,/Compra/);
+});
