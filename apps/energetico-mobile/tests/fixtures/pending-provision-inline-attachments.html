@@ -1,0 +1,48 @@
+<!doctype html>
+<html lang="pt-BR"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1"><link rel="stylesheet" href="/src/styles.css"></head>
+<body><main id="app"></main><script type="module">
+import { createChatView } from '/src/ui/chat-view.js';
+const root=document.querySelector('#app'), view=createChatView(root);
+const rows=Array.from({length:12},(_,i)=>({id:String(i+1),supplier:'FORNECEDOR FICTÍCIO '+(i+1),
+  sourceKind:'provision-description',childCount:1,product:'PRODUTO DE TESTE',branch:'004 - EDIFÍCIO DE TESTE (TORRE FICTÍCIA)',
+  dueDate:'2026-11-03',totalDisplay:'R$ 150,00'}));
+const state={sessionStatus:'authenticated',account:{name:'Teste'},messages:[],pendingFiles:[],draft:'',
+  pendingProvisions:{due:true,sourceKind:'provision-description',rows},pendingProvisionExpandedPaymentId:'',
+  pendingProvisionAttachments:Object.fromEntries(rows.map(row=>[row.id,{status:row.id==='5'?'available':'empty',
+    items:row.id==='5'?[{fileName:'20261103-documento-ficticio-com-nome-muito-longo-para-verificar-quebras-em-telas-estreitas.pdf',size:2048}]:[]}]))};
+const render=()=>view.render({...state});
+view.on('toggle-pending-provision-attachments',({paymentId})=>{state.pendingProvisionExpandedPaymentId=state.pendingProvisionExpandedPaymentId===paymentId?'':paymentId;render();});
+view.on('pick-pending-provision-attachments',()=>{
+  state.pendingProvisionUploads={5:{items:[{id:'novo',fileName:'Novo-documento-ficticio-com-nome-longo-para-verificar-a-bandeja-em-celulares.pdf',status:'ready'}]}};
+  state.pendingProvisionUploadsRevision=(state.pendingProvisionUploadsRevision||0)+1;render();
+});
+render();
+const frame=()=>new Promise(resolve=>requestAnimationFrame(()=>requestAnimationFrame(resolve)));
+await document.fonts.ready;await frame();
+const list=()=>root.querySelector('.chat-pending-provisions__list');
+const arrow=id=>root.querySelector('[data-action="toggle-pending-provision-attachments"][data-payment-id="'+id+'"]');
+list().scrollTop=root.querySelector('article[data-payment-id="5"]').offsetTop-list().offsetTop;
+const before=list().scrollTop,top=arrow('5').getBoundingClientRect().top;
+arrow('5').click();await frame();
+const evidence={before,after:list().scrollTop,arrowShift:arrow('5').getBoundingClientRect().top-top};
+const tray=root.querySelector('.chat-pending-provision__upload-tray');
+evidence.trayAfterFiles=tray.compareDocumentPosition(root.querySelector('.chat-pending-provision__attachments'))&Node.DOCUMENT_POSITION_PRECEDING?true:false;
+tray.scrollIntoView({block:'center'});await frame();
+root.querySelector('[data-action="choose-pending-provision-attachment-source"]').click();await frame();
+const source=root.querySelector('[data-attachment-source-dialog] [data-value="files"]'),r=source.getBoundingClientRect();
+evidence.sourceClickable=source===document.elementFromPoint(r.left+r.width/2,r.top+r.height/2);
+source.click();await frame();
+evidence.queueVisible=Boolean(root.querySelector('.chat-pending-provision__upload-queue'));
+evidence.cancelVisible=Boolean(root.querySelector('[data-action="cancel-pending-provision-uploads"]'));
+evidence.submitVisible=Boolean(root.querySelector('[data-action="send-pending-provision-attachments"]'));
+const report=root.querySelector('.chat-pending-provisions--payments');
+evidence.horizontalOverflow=report.scrollWidth>report.clientWidth+1 || [...report.querySelectorAll('.chat-pending-provision__upload-tray')].some(el=>el.scrollWidth>el.clientWidth+1);
+root.querySelector('.chat-pending-provision__upload-tray').scrollIntoView({block:'center'});await frame();
+evidence.orange=getComputedStyle(arrow('6')).backgroundColor;
+arrow('6').click();await frame();
+evidence.emptyHasOnlyTray=!root.querySelector('article[data-payment-id="6"] .chat-pending-provision__attachments')&&Boolean(root.querySelector('article[data-payment-id="6"] .chat-pending-provision__upload-tray'));
+arrow('5').click();await frame();
+root.querySelector('.chat-pending-provision__upload-tray').scrollIntoView({block:'center'});await frame();
+document.documentElement.dataset.layout=JSON.stringify(evidence);
+document.documentElement.dataset.ready='true';
+</script></body></html>

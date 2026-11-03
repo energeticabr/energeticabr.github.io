@@ -24,14 +24,14 @@ test('pending report supplier/location and attachment-only disclosure fit320/390
     const result=await runBrowserLayout(chrome,{width,height:844,url,captureScreenshot:!!process.env.PENDING_LOCATION_SCREENSHOT_DIR&&width===390});
     const dom=new JSDOM(result.stdout),layout=JSON.parse(dom.window.document.documentElement.dataset.layout);dom.window.close();
     assert.equal(layout.geometry.length,4);
-    assert.deepEqual(layout.geometry.map(row=>row.arrowDisabled),[false,true,true,true]);
+    assert.deepEqual(layout.geometry.map(row=>row.arrowDisabled),[false,false,true,true]);
     for(const row of layout.geometry){assert.equal(row.supplierAbove,true,`${width}px ${row.id}`);assert.equal(row.locationInBlue,true);assert.equal(row.locationVisible,true);assert.equal(row.horizontalOverflow,false);}
     assert.equal(layout.geometry[0].location,'004 - EDIFÍCIO DE TESTE (TORRE A / APARTAMENTO 101)');
-    assert.equal(layout.disabledInvocations,0);assert.equal(layout.expanded,true);
+    assert.equal(layout.disabledInvocations,1);assert.equal(layout.expanded,true);
     assert.equal(layout.controls,'pending-provision-attachments-306');assert.equal(layout.retryEnables,true);
     assert.equal(layout.fits,true);assert.equal(layout.horizontalOverflow,false);
     if(result.screenshot){await mkdir(process.env.PENDING_LOCATION_SCREENSHOT_DIR,{recursive:true});await writeFile(join(process.env.PENDING_LOCATION_SCREENSHOT_DIR,'preview-fictitious-390.png'),result.screenshot);}
-    t.diagnostic(`${width}px: supplier first, location visible, only confirmed attachments selectable`);
+    t.diagnostic(`${width}px: supplier first, location visible, empty and confirmed attachments selectable`);
   }
 });
 
@@ -46,6 +46,6 @@ test('native touch expands only attachments and retry enables an independently f
     await evaluate('document.querySelector("[data-action=retry-pending-provision-attachments]").scrollIntoView({block:"center"})');
     await tap('[data-action="retry-pending-provision-attachments"]');
     assert.equal(await evaluate('document.querySelector("[data-payment-id=\\"309\\"] .chat-pending-provision__arrow").disabled'),false);
-    assert.equal(await evaluate('JSON.parse(document.documentElement.dataset.actions).toggles.every(id=>id==="306")'),true);
+    assert.equal(await evaluate('JSON.parse(document.documentElement.dataset.actions).toggles.every(id=>id==="306"||id==="307")'),true);
   });
 });

@@ -11787,15 +11787,15 @@ test('nova tentativa ressincroniza seleção recebida pela VM após NETWORK_UNCE
   assert.equal(h.view.renders.at(-1).pendingConstructionDiaries, null);
 });
 
-test('seta da provisão não expande quando não existem anexos', async t => {
+test('seta da provisão vazia expande para adicionar os primeiros anexos', async t => {
   const h = makeHarness();
   t.after(() => h.controller.stop());
   h.client.getPendingProvisionSnapshot = async () => ({ due: true, rows: [{ id: '306', branch: 'Obra A' }] });
   await h.controller.start();
   await new Promise(resolve => setImmediate(resolve));
   assert.equal(h.view.renders.at(-1).pendingProvisionAttachments['306'].status, 'empty');
-  assert.equal(await h.view.emit('toggle-pending-provision-attachments', { paymentId: '306' }), false);
-  assert.equal(h.view.renders.at(-1).pendingProvisionExpandedPaymentId, '');
+  assert.equal(await h.view.emit('toggle-pending-provision-attachments', { paymentId: '306' }), true);
+  assert.equal(h.view.renders.at(-1).pendingProvisionExpandedPaymentId, '306');
   assert.equal(await h.view.emit('toggle-pending-provision-attachments', { paymentId: '999' }), false);
 });
 
@@ -12293,3 +12293,56 @@ test('cargos abre uma vez, consulta na sessão e destrói ao sair',async t=>{
 test('cargos não ressuscita depois de encerrar a sessão',async()=>{
  let finish,opens=0,destroys=0;const h=makeHarness({cargosDataFactory:async()=>({}),cargosFactory:()=>new Promise(r=>{finish=r;})});await h.controller.start();const pending=h.view.emit('open-cargos-table');await new Promise(r=>setImmediate(r));h.controller.stop();finish({open(){opens++;},destroy(){destroys++;}});await pending;assert.equal(opens,0);assert.equal(destroys,1);
 });
+
+for (const source of ['photos', 'files', 'scan']) test('bandeja ' + source + ' adiciona ao descritivo vazio, cancela e submete ao mesmo registro', async t => {
+  const uploaded = [];
+  const h = makeHarness({ pendingProvisionAttachmentsDataFactory: async options => {
+    assert.equal(options.sourceKind, 'provision-description');
+    return {
+      listAttachments: async id => { assert.equal(id, '306'); return uploaded.map(file => ({fileName: file.name})); },
+      downloadAttachment: async () => new Blob(),
+      uploadAttachment: async (id, file) => { assert.equal(id, '306'); uploaded.push(file); },
+    };
+  } });
+  t.after(() => h.controller.stop());
+  h.client.getPendingProvisionSnapshot = async () => ({ due: true, sourceKind: 'provision-description', rows: [{id:'306'}] });
+  const file = new File(['conteudo'], 'novo.pdf', {type:'application/pdf'});
+  h.native.pickPhotos = async () => { assert.equal(source, 'photos'); return [file]; };
+  h.native.pickDocuments = async () => { assert.equal(source, 'files'); return [file]; };
+  h.native.scanDocument = async () => { assert.equal(source, 'scan'); return [file]; };
+  await h.controller.start(); await new Promise(resolve => setImmediate(resolve));
+  assert.equal(await h.view.emit('toggle-pending-provision-attachments', {paymentId:'306'}), true);
+  assert.equal(await h.view.emit('pick-pending-provision-attachments', {paymentId:'306', value:source}), true);
+  assert.deepEqual(h.view.renders.at(-1).pendingProvisionUploads['306'].items.map(item => item.fileName), ['novo.pdf']);
+  assert.equal(await h.view.emit('cancel-pending-provision-uploads', {paymentId:'306'}), true);
+  assert.equal(h.view.renders.at(-1).pendingProvisionUploads['306'], undefined);
+  assert.deepEqual(uploaded, []);
+  await h.view.emit('pick-pending-provision-attachments', {paymentId:'306', value:source});
+  assert.equal(await h.view.emit('send-pending-provision-attachments', {paymentId:'306'}), true);
+  assert.deepEqual(h.view.renders.at(-1).pendingProvisionAttachments['306'].items.map(item => item.fileName), ['novo.pdf']);
+  assert.equal(uploaded.length, 1);
+});
+
+test('picker de provisão descarta resultado após cancelar fila e bloqueia seleção simultânea', async t => {
+  let finish, picked = 0;
+  const h = makeHarness(); t.after(() => h.controller.stop());
+  h.client.getPendingProvisionSnapshot = async () => ({due:true, rows:[{id:'306'}]});
+  h.native.pickDocuments = async () => { picked++; return new Promise(resolve => {finish=resolve;}); };
+  await h.controller.start(); await new Promise(resolve => setImmediate(resolve));
+  await h.view.emit('toggle-pending-provision-attachments', {paymentId:'306'});
+  const picking = h.view.emit('pick-pending-provision-attachments', {paymentId:'306'});
+  await new Promise(resolve => setImmediate(resolve));
+  assert.equal(await h.view.emit('pick-pending-provision-attachments', {paymentId:'306'}), false);
+  assert.equal(picked, 1);
+  await h.view.emit('cancel-pending-provision-uploads', {paymentId:'306'});
+  finish([new File(['x'],'stale.pdf')]); await picking;
+  assert.equal(h.view.renders.at(-1).pendingProvisionUploads['306'], undefined);
+});
+
+test('anexos usam tipo da linha e bloqueiam operações durante envio', async t=>{
+ let release;const kinds=[],writes=[];const h=makeHarness({pendingProvisionAttachmentsDataFactory:async ({sourceKind})=>{kinds.push(sourceKind);return {listAttachments:async()=>[],downloadAttachment:async()=>new Blob(),uploadAttachment:async(id,file)=>{writes.push([sourceKind,file.name]);await new Promise(r=>release=r);}}}});t.after(()=>h.controller.stop());
+ h.client.getPendingProvisionSnapshot=async()=>({due:true,rows:[{id:'306',sourceKind:'provision-description'}]});h.native.pickDocuments=async()=>[new File(['a'],'a.pdf')];await h.controller.start();await new Promise(r=>setImmediate(r));
+ await h.view.emit('toggle-pending-provision-attachments',{paymentId:'306'});await h.view.emit('pick-pending-provision-attachments',{paymentId:'306'});const send=h.view.emit('send-pending-provision-attachments',{paymentId:'306'});await new Promise(r=>setImmediate(r));
+ assert.equal(await h.view.emit('edit-pending-provision-due-date',{paymentId:'306'}),false);assert.equal(await h.view.emit('dismiss-pending-provisions'),false);release();await send;assert.deepEqual(writes,[['provision-description','a.pdf']]);
+});
+test('fechar aviso invalida seletor de anexos pendente',async t=>{let finish;const h=makeHarness();t.after(()=>h.controller.stop());h.client.getPendingProvisionSnapshot=async()=>({due:true,rows:[{id:'306'}]});h.native.pickDocuments=async()=>new Promise(r=>finish=r);await h.controller.start();await new Promise(r=>setImmediate(r));await h.view.emit('toggle-pending-provision-attachments',{paymentId:'306'});const pick=h.view.emit('pick-pending-provision-attachments',{paymentId:'306'});await new Promise(r=>setImmediate(r));await h.view.emit('close-pending-provisions');finish([new File(['x'],'stale.pdf')]);await pick;assert.equal(h.view.renders.at(-1).pendingProvisionUploads['306']?.items.length||0,0);});

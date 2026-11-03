@@ -2852,7 +2852,7 @@ test("tela de vencimento preenche calendário e envia DD/MM/AAAA para o pagament
   dom.window.close();
 });
 
-test("popup consulta e encaminha anexos existentes sem oferecer bandeja de novos arquivos", () => {
+test("popup consulta e encaminha anexos existentes e oferece bandeja abaixo deles", () => {
   const dom = new JSDOM('<main id="app"></main>');
   const root = dom.window.document.querySelector("#app");
   const view = createChatView(root);
@@ -2867,10 +2867,10 @@ test("popup consulta e encaminha anexos existentes sem oferecer bandeja de novos
   }));
 
   assert.equal(root.querySelectorAll(".chat-pending-provision__attachments > li").length, 1);
-  assert.equal(root.querySelector('[data-action="pick-pending-provision-attachments"]'), null);
-  assert.equal(root.querySelector('[data-action="send-pending-provision-attachments"]'), null);
-  assert.equal(root.querySelector(".chat-pending-provision__upload-queue"), null);
-  assert.doesNotMatch(root.textContent, /novo\.pdf|Adicionar mais anexos/);
+  assert.ok(root.querySelector('[data-action="choose-pending-provision-attachment-source"]'));
+  assert.ok(root.querySelector('[data-action="send-pending-provision-attachments"]'));
+  assert.ok(root.querySelector(".chat-pending-provision__upload-queue"));
+  assert.match(root.textContent, /novo\.pdf/);
   root.querySelector('[data-action="open-pending-provision-attachment"]').click();
   root.querySelector('[data-action="share-pending-provision-attachment"]').click();
   assert.deepEqual(commands.map(command => command.type), [
@@ -2881,7 +2881,7 @@ test("popup consulta e encaminha anexos existentes sem oferecer bandeja de novos
   dom.window.close();
 });
 
-test("estado de uma fila antiga não reaparece no popup de provisões", () => {
+test("fila com conflito aparece para permitir remoção sem reenviar nomes repetidos", () => {
   const dom = new JSDOM('<main id="app"></main>');
   const root = dom.window.document.querySelector("#app");
   const view = createChatView(root);
@@ -2894,8 +2894,8 @@ test("estado de uma fila antiga não reaparece no popup de provisões", () => {
       busy: false, error: "Um arquivo com esse nome já existe.",
     } },
   }));
-  assert.equal(root.querySelector('[data-action="send-pending-provision-attachments"]'), null);
-  assert.doesNotMatch(root.textContent, /Nome repetido|já existe/i);
+  assert.equal(root.querySelector('[data-action="send-pending-provision-attachments"]').disabled, true);
+  assert.match(root.textContent, /Nome repetido|já existe/i);
   assert.ok(root.querySelector('[data-action="open-pending-provision-attachment"]'));
   view.destroy();
   dom.window.close();
@@ -9571,15 +9571,15 @@ test('filial e imóvel da provisão ficam visíveis juntos e a seta abre somente
     assert.equal(collapsed.window.document.querySelector('[data-field="property"]'), null);
     const arrow = collapsed.window.document.querySelector('[data-action="toggle-pending-provision-attachments"]');
     assert.ok(arrow, `seta presente com anexos ${status}`);
-    assert.equal(arrow.disabled, status !== 'available');
+    assert.equal(arrow.disabled, !['available', 'empty'].includes(status));
     assert.equal(arrow.getAttribute('aria-expanded'), 'false');
-    if (status === 'available') assert.equal(commandFromTarget(arrow).paymentId, '306');
+    if (['available', 'empty'].includes(status)) assert.equal(commandFromTarget(arrow).paymentId, '306');
     else assert.equal(commandFromTarget(arrow), null);
-    assert.equal(arrow.getAttribute('aria-controls'), status === 'available' ? 'pending-provision-attachments-306' : null);
+    assert.equal(arrow.getAttribute('aria-controls'), ['available', 'empty'].includes(status) ? 'pending-provision-attachments-306' : null);
     collapsed.window.close();
     const expanded = new JSDOM(renderChatMarkup({ ...state, pendingProvisionExpandedPaymentId: '306' }));
     assert.equal(expanded.window.document.querySelector('[data-field="branch"]').hidden, false);
-    assert.equal(expanded.window.document.querySelector('[data-action="toggle-pending-provision-attachments"]').getAttribute('aria-expanded'), String(status === 'available'));
+    assert.equal(expanded.window.document.querySelector('[data-action="toggle-pending-provision-attachments"]').getAttribute('aria-expanded'), String(['available', 'empty'].includes(status)));
     assert.equal(expanded.window.document.querySelector('[data-field="property"]'), null);
     expanded.window.close();
   }

@@ -50,11 +50,13 @@ const states = [
   { status: 'available', items: [{ fileName: '' }, { fileName: '   ' }, {}] },
   { status: 'available', items: [{ fileName: 123 }] },
 ];
-for (const attachments of states) test(`no attachment disclosure for ${JSON.stringify(attachments)}`, t => {
+for (const attachments of states) test(`tray disclosure requires successful lookup for ${JSON.stringify(attachments)}`, t => {
   const { card, arrow } = render(t, { attachments, expanded: '306' });
-  assert.equal(arrow.disabled, true);
-  assert.equal(arrow.getAttribute('aria-expanded'), 'false');
-  assert.equal(arrow.hasAttribute('aria-controls'), false);
+  const ready = ['available', 'empty'].includes(attachments.status);
+  assert.equal(arrow.disabled, !ready);
+  assert.equal(arrow.getAttribute('aria-expanded'), String(ready));
+  assert.equal(arrow.hasAttribute('aria-controls'), ready);
+  assert.equal(Boolean(card.querySelector('.chat-pending-provision__upload-tray')), ready);
   assert.equal(card.querySelector('.chat-pending-provision__attachments'), null);
   assert.equal(card.querySelector('[data-field="branch"]').closest('[hidden]'), null);
 });
