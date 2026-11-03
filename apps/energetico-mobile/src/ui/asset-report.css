@@ -29,6 +29,11 @@
 .asset-report-history-line .asset-report-field dd { font-weight: 600; }
 .asset-report-group .asset-report-field dd { font-weight: 600; }
 .asset-report-field--amount dd { color: #153e5e; font-size: 1.05rem; font-weight: 750; }
+.asset-report-depreciated { display: inline-block; max-width: 100%; box-sizing: border-box; padding: 1px 3px; border-radius: 4px; font-size: .75rem; line-height: 1.4; white-space: normal; }
+.asset-report-depreciated--green { color: #166534; background: #dcfce7; }
+.asset-report-depreciated--yellow { color: #713f12; background: #fef9c3; }
+.asset-report-depreciated--orange { color: #9a3412; background: #ffedd5; }
+.asset-report-depreciated--red { color: #991b1b; background: #fee2e2; }
 .asset-report-badge { display: inline-block; max-width: 100%; box-sizing: border-box; padding: 4px 10px; border: 1px solid #b8ced9; border-radius: 999px; background: #eaf2f7; color: #234e65; font-size: .85rem; font-weight: 750; }
 .asset-report-badge--active { background: #dcfce7; color: #166534; border-color: #86c99e; }
 .asset-report-badge--inactive { background: #fee2e2; color: #991b1b; border-color: #e9a0a0; }

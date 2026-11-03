@@ -1,6 +1,7 @@
 import { registrationNumber, registrationDateKey, registrationFieldKey } from '../chat/registration-gallery-data.js';
 import { createLoadingIndicator } from './loading-indicator.js';
 import { beginLoadingTask } from './loading-task.js';
+import Decimal from 'decimal.js';
 
 const registrationGroups = [
   ['Valores', [['Valor compra', 'currency'], ['Valor residual', 'currency']]],
@@ -34,6 +35,18 @@ function format(value, type) {
   return text(value);
 }
 
+function depreciationBand(percent) {
+  return percent.gt(50) ? 'red' : percent.gte(25) ? 'orange' : percent.gte(10) ? 'yellow' : 'green';
+}
+function depreciationText(percent, band) {
+  // Keep the usual one decimal, adding precision only when rounding would
+  // put the displayed percentage in a different color band.
+  let places = 1;
+  while (places < 20 && depreciationBand(percent.toDecimalPlaces(places)) !== band) places++;
+  const [whole, decimals] = percent.toFixed(places).split('.');
+  return `${whole.replace(/\B(?=(\d{3})+(?!\d))/g, '.')},${decimals.replace(/0+$/, '') || '0'}`;
+}
+
 export function createAssetReportView({ document: doc, host, background = [], loadReport, timeoutMs = 30_000,
   resolveTrigger = (_id, trigger) => trigger } = {}) {
   let current = null, destroyed = false;
@@ -59,7 +72,8 @@ export function createAssetReportView({ document: doc, host, background = [], lo
     const fields = new Map(result.asset.details.map(field => [registrationFieldKey(field.label), field]));
     const purchase = registrationNumber(fields.get(registrationFieldKey('Valor compra'))?.value);
     const residual = registrationNumber(fields.get(registrationFieldKey('Valor residual'))?.value);
-    const depreciated = purchase > 0 && residual != null ? (purchase - residual) / purchase * 100 : null;
+    const depreciated = purchase > 0 && residual != null
+      ? new Decimal(purchase).minus(residual).dividedBy(purchase).times(100) : null;
     for (const [title, definitions] of registrationGroups) {
       const group = el('section', 'asset-report-group');
       group.append(el('h4', '', title));
@@ -67,20 +81,25 @@ export function createAssetReportView({ document: doc, host, background = [], lo
       for (const [label, type] of definitions) {
         const field = fields.get(registrationFieldKey(label));
         const pair = el('div', 'asset-report-field'); pair.dataset.assetField = field?.name || label;
-        let caption = label;
-        if (label === 'Valor residual' && Number.isFinite(depreciated)) {
-          caption += ` (${new Intl.NumberFormat('pt-BR', { minimumFractionDigits: 1, maximumFractionDigits: 1 }).format(depreciated)}% depreciado)`;
-        }
         const value = el('dd');
         if (['Status', 'Depreciar'].includes(label)) {
           const badge = el('span', 'asset-report-badge', format(field?.value, type));
           const status = text(field?.value).trim().toUpperCase();
           if (label === 'Status' && ['ATIVO', 'INATIVO'].includes(status)) badge.classList.add(status === 'ATIVO' ? 'asset-report-badge--active' : 'asset-report-badge--inactive');
           value.append(badge);
-        } else value.textContent = format(field?.value, type);
+        } else {
+          value.textContent = format(field?.value, type);
+          if (label === 'Valor residual' && depreciated?.isFinite()) {
+            const band = depreciationBand(depreciated);
+            const percent = depreciationText(depreciated, band);
+            const badge = el('span', `asset-report-depreciated asset-report-depreciated--${band}`, `(${percent}% depreciado)`);
+            badge.dataset.depreciatedPercent = '';
+            value.append(doc.createTextNode(' '), badge);
+          }
+        }
         if (['Imobilizado', 'Fornecedor'].includes(label)) pair.classList.add('asset-report-field--wide');
         if (type === 'currency') pair.classList.add('asset-report-field--amount');
-        pair.append(el('dt', '', caption), value); details.append(pair);
+        pair.append(el('dt', '', label), value); details.append(pair);
       }
       group.append(details); registration.append(group);
     }

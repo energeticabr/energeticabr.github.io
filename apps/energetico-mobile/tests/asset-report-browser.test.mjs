@@ -54,15 +54,29 @@ test('toque, teclado, cadastro e 31 depreciações cabem em 320/390/1365px sem p
       assert.match(layout.text, /4\.723,90/); assert.match(layout.text, /3%/); assert.doesNotMatch(layout.text, /300%/);
       assert.match(layout.text, /123456789012345/);
       assert.match(layout.text, /NÚMERO DO PEDIDO494/);
-      assert.match(layout.text, /Valor residual \(5,5% depreciado\)/);
+      assert.match(layout.text, /Valor residualR\$\s*4\.723,90\s*\(5,5% depreciado\)/);
       assert.doesNotMatch(layout.text, /NÃO DEVE APARECER/);
       const registration = await api.evaluate(`(() => {
         const root = document.querySelector('[data-asset-registration]'), purchase = root.querySelector('[data-asset-field="COMPRA"]'), status = root.querySelector('[data-asset-field="STATUS"] dd span');
-        return { count:root.querySelectorAll('[data-asset-field]').length, next:purchase.nextElementSibling.dataset.assetField, status:status.textContent, background:getComputedStyle(status).backgroundColor };
+        const residual=purchase.nextElementSibling, badge=residual.querySelector('[data-depreciated-percent]');
+        const palette=Object.fromEntries(['green','yellow','orange','red'].map(band=>{
+          const sample=badge.cloneNode(true);sample.className='asset-report-depreciated asset-report-depreciated--'+band;
+          residual.append(sample);const color=getComputedStyle(sample).color;sample.remove();return [band,color];
+        }));
+        return { count:root.querySelectorAll('[data-asset-field]').length, next:residual.dataset.assetField, status:status.textContent, background:getComputedStyle(status).backgroundColor,
+          residualLabel:residual.querySelector('dt').textContent, residualValue:residual.querySelector('dd').textContent,
+          badgeColor:getComputedStyle(badge).color,badgeBackground:getComputedStyle(badge).backgroundColor,
+          badgeOverflow:badge.scrollWidth>badge.clientWidth+1,palette };
       })()`);
       assert.equal(registration.count, 13); assert.equal(registration.next, 'RESIDUAL');
       assert.equal(registration.status, kind === 'asset' ? 'INATIVO' : 'ATIVO');
       assert.equal(registration.background, kind === 'asset' ? 'rgb(254, 226, 226)' : 'rgb(220, 252, 231)');
+      assert.equal(registration.residualLabel, 'Valor residual');
+      assert.match(registration.residualValue, /^R\$\s*4\.723,90\s*\(5,5% depreciado\)$/);
+      assert.equal(registration.badgeColor, 'rgb(22, 101, 52)');
+      assert.equal(registration.badgeBackground, 'rgb(220, 252, 231)');
+      assert.equal(registration.badgeOverflow, false);
+      assert.deepEqual(registration.palette,{green:'rgb(22, 101, 52)',yellow:'rgb(113, 63, 18)',orange:'rgb(154, 52, 18)',red:'rgb(153, 27, 27)'});
       await shot(api, `${kind}-cadastro-${width}`);
       await api.evaluate(`(() => { const dialog = document.querySelector('[data-asset-report]'); dialog.scrollTop += dialog.querySelector('.asset-report-history').getBoundingClientRect().top-dialog.getBoundingClientRect().top-95; })()`);
       const historyClusters = await api.evaluate(`(() => {
