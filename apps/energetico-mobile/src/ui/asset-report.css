@@ -86,3 +86,23 @@
 .depreciation-chart-list { margin: 0; padding-left: 1.5em; }
 .depreciation-chart-list li { padding: 4px 0; }
 .depreciation-chart-empty { margin: 0; }
+.depreciation-branches { margin-top: 20px; padding: 14px; border: 1px solid #c9dce5; border-radius: 10px; background: #f4f9fc; min-width: 0; }
+.depreciation-chart-body .depreciation-branches h3 { margin: 0 0 6px; color: #07566b; }
+.depreciation-branches-intro, .depreciation-branches-empty { margin: 0 0 8px; color: #456572; font-size: .85rem; }
+.depreciation-branches-axis-title { margin: 10px 0 4px; color: #355867; font-size: .8rem; font-weight: 700; }
+.depreciation-branches-layout { display: grid; grid-template-columns: minmax(64px, auto) minmax(0, 1fr); gap: 6px; min-width: 0; }
+.depreciation-branches-axis { position: relative; height: 180px; margin-top: 44px; color: #355867; font-size: .72rem; text-align: right; }
+.depreciation-branches-axis span { position: absolute; right: 0; transform: translateY(-50%); white-space: nowrap; }
+.depreciation-branches-scroll { overflow-x: auto; overscroll-behavior-x: contain; min-width: 0; padding-bottom: 4px; }
+.depreciation-branches-scroll:focus-visible { outline: 3px solid #1565c0; outline-offset: 1px; }
+.depreciation-branches-columns { display: flex; width: max-content; min-width: 100%; align-items: flex-start; }
+.depreciation-branch-bar { flex: 1 0 122px; width: 122px; min-width: 0; text-align: center; }
+.depreciation-branch-value { height: 44px; display: flex; justify-content: center; align-items: center; padding: 0 3px; box-sizing: border-box; color: #07566b; font-size: .75rem; font-weight: 750; overflow-wrap: anywhere; }
+.depreciation-branch-track { position: relative; height: 180px; background: repeating-linear-gradient(to bottom, #d8e6eb 0 1px, transparent 1px 25%); }
+.depreciation-branch-zero { position: absolute; left: 0; right: 0; border-top: 1px solid #688795; z-index: 1; }
+.depreciation-branch-fill { position: absolute; left: 25%; width: 50%; background: #087b91; border-radius: 5px 5px 0 0; }
+.depreciation-branch-bar--total .depreciation-branch-fill { background: #c45c15; }
+.depreciation-branch-bar--total .depreciation-branch-value, .depreciation-branch-bar--total .depreciation-branch-name { color: #9a3412; font-weight: 800; }
+.depreciation-branch-name { padding: 8px 5px 0; color: #234e65; font-size: .75rem; font-weight: 700; overflow-wrap: anywhere; }
+.depreciation-branches-x { margin: 6px 0 0; color: #355867; font-size: .75rem; text-align: center; font-weight: 700; }
+.depreciation-branches-hint { margin: 5px 0 0; color: #456572; font-size: .75rem; }

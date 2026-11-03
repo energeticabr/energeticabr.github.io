@@ -3,6 +3,7 @@ import assert from 'node:assert/strict';
 import { JSDOM } from 'jsdom';
 import { createRegistrationGallery } from '../src/ui/registration-gallery-view.js';
 import { createAssetReportView } from '../src/ui/asset-report-view.js';
+import { createDepreciationBranchChart } from '../src/ui/depreciation-branch-chart.js';
 
 const tick = () => new Promise(resolve => setImmediate(resolve));
 function report(id = '96') {
@@ -295,4 +296,48 @@ test('gráfico mostra somente rótulos existentes quando há um ou dois registro
     assert.equal(labels.length,count);
     assert.equal(labels.at(-1).dataset.value,'4723.9');
   }
+});
+
+test('gráfico de barras soma os lançamentos por filial e mostra total como última barra', async t => {
+  const dom=domFor(t), doc=dom.window.document, result=report();
+  result.history = [
+    { id:'1', fields:{ 'ID IMOBILIZADO':96, FILIAL:'001 - MATRIZ', 'DATA DE DEPRECIAÇÃO':'2026-01-01', 'VALOR DEPRECIAÇÃO':0.1, 'VALOR RESIDUAL':100 }},
+    { id:'2', fields:{ 'ID IMOBILIZADO':96, FILIAL:'001 - MATRIZ', 'DATA DE DEPRECIAÇÃO':'2026-02-01', 'VALOR DEPRECIAÇÃO':0.2, 'VALOR RESIDUAL':99.8 }},
+    { id:'3', fields:{ 'ID IMOBILIZADO':96, FILIAL:'002 - FILIAL', 'DATA DE DEPRECIAÇÃO':'2026-03-01', 'VALOR DEPRECIAÇÃO':100.1, 'VALOR RESIDUAL':50 }},
+    { id:'4', fields:{ 'ID IMOBILIZADO':96, FILIAL:null, 'DATA DE DEPRECIAÇÃO':'2026-04-01', 'VALOR DEPRECIAÇÃO':53.81, 'VALOR RESIDUAL':0 }},
+  ];
+  const view=createAssetReportView({document:doc,host:doc.querySelector('#host'),loadReport:async()=>result});
+  t.after(()=>view.destroy()); view.open('96'); await tick();
+  doc.querySelector('[data-action="open-depreciation-chart"]').click();
+  const section=doc.querySelector('[data-depreciation-branches]');
+  assert.ok(section); assert.match(section.textContent,/Depreciação por filial/);
+  const bars=[...section.querySelectorAll('[data-branch-bar]')];
+  assert.deepEqual(bars.map(b=>[b.dataset.branch,b.dataset.amount]),[
+    ['001 - MATRIZ','0.3'], ['002 - FILIAL','100.1'], ['Filial não informada','53.81'], ['Total','154.21']
+  ]);
+  assert.ok(bars.at(-1).classList.contains('depreciation-branch-bar--total'));
+  assert.match(bars.at(-1).textContent,/154,21/);
+  assert.ok(doc.querySelector('.depreciation-chart-time').compareDocumentPosition(section) & dom.window.Node.DOCUMENT_POSITION_FOLLOWING);
+  const close=doc.querySelector('.depreciation-chart-close'), scroll=section.querySelector('[role="region"]');
+  close.focus(); close.dispatchEvent(new dom.window.KeyboardEvent('keydown',{key:'Tab',shiftKey:true,bubbles:true,cancelable:true})); assert.equal(doc.activeElement,scroll);
+  scroll.dispatchEvent(new dom.window.KeyboardEvent('keydown',{key:'Tab',bubbles:true,cancelable:true})); assert.equal(doc.activeElement,close);
+});
+
+test('gráfico de filiais mantém valores negativos e zero', async t => {
+  const dom=domFor(t),doc=dom.window.document,result=report();
+  result.history[0].fields['VALOR DEPRECIAÇÃO']=-1.5; result.history[1].fields['VALOR DEPRECIAÇÃO']=0;
+  result.history[1].fields.FILIAL='OUTRA';
+  const view=createAssetReportView({document:doc,host:doc.querySelector('#host'),loadReport:async()=>result});
+  t.after(()=>view.destroy());view.open('96');await tick();doc.querySelector('[data-action="open-depreciation-chart"]').click();
+  const bars=[...doc.querySelectorAll('[data-branch-bar]')];
+  assert.deepEqual(bars.map(b=>b.dataset.amount),['-1.5','0','-1.5']);
+  assert.ok(bars[0].querySelector('[data-bar-negative]'));
+  assert.equal(doc.querySelectorAll('.depreciation-branches-axis span').length,2);
+});
+
+test('gráfico não apresenta um total parcial se um valor do histórico for inválido', t => {
+  const dom=domFor(t),doc=dom.window.document;
+  const section=createDepreciationBranchChart({document:doc,history:[{fields:{FILIAL:'MATRIZ','VALOR DEPRECIAÇÃO':10}},{fields:{FILIAL:'OUTRA','VALOR DEPRECIAÇÃO':null}}]});
+  assert.match(section.textContent,/Não foi possível calcular/);
+  assert.equal(section.querySelectorAll('[data-branch-bar]').length,0);
 });
