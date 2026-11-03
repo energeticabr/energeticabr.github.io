@@ -26,7 +26,7 @@ import { attachmentFinishOption, isDiaryAttachmentPrompt, isDocumentAttachmentPr
 import { isRhidAttendanceDayFinalized, isRhidAttendanceRowDiscrepant, isRhidAttendanceRowWithoutPunches, isValidRhidReportDate, suggestedRhidAdjustmentTime, summarizeRhidAttendance } from "../chat/rhid-attendance-table.js";
 import { PRESENCE_OTHER_DATES_REPLY_ID } from "../chat/presence-date-scope.js";
 import { attendanceMissingPunchContext, attendanceValidationDate } from "../chat/attendance-rhid-badges.js";
-import { attendanceIrregularity } from "../chat/attendance-irregularity.js";
+import { attendanceIrregularity, isAttendanceHolidayReason } from "../chat/attendance-irregularity.js";
 import { createPowerBiDashboardView } from "./powerbi-dashboard-view.js";
 import { observeSignatureTrace } from "../web/signature-trace.js";
 import { createVoiceInputController } from "./voice-input.js";
@@ -2999,11 +2999,11 @@ export function createChatView(root, { onOpenSettings, onDemoAccess, onSignOut, 
     customEditReview = current;
     current.highlight();
   }
-  async function reviewCustomEdit(title) {
+  async function reviewCustomEdit(title, additionalChanges = []) {
     const current = customEditReview;
     if (!current || current.reviewing || current.submitted) return false;
     const fields = current.readFields();
-    const changes = buildEditChanges(current.columns, current.baseline, fields);
+    const changes = [...buildEditChanges(current.columns, current.baseline, fields), ...additionalChanges];
     if (!changes.length) return false;
     current.highlight();
     current.reviewing = true;
@@ -4366,17 +4366,23 @@ export function createChatView(root, { onOpenSettings, onDemoAccess, onSignOut, 
     }
     dialog.reason = reason;
     dialog.error = '';
-    if (!await reviewCustomEdit(`Revisar justificativa — ${dialog.label}`)
+    const holidayChanges = isAttendanceHolidayReason(reason)
+      ? [{ name: 'PRESENCA', label: 'Presença', before: 'PENDENTE', after: 'AUSENTE' },
+        { name: 'MOTIVACAO', label: 'Motivação', before: '—', after: 'FERIADO' }] : [];
+    if (!await reviewCustomEdit(`Revisar justificativa — ${dialog.label}`, holidayChanges)
       || attendanceIrregularityDialog !== dialog || attendanceSelectionPollKey !== dialog.pollKey) return;
     dialog.busy = true;
     rerenderAttendance();
     try {
       const save = [...(handlers.get('attendance-irregularity-save') || [])][0];
       if (!save) throw new Error('O salvamento da justificativa não está disponível.');
-      await save({ id: dialog.id, date: dialog.date, explanation: reason });
+      const saved = await save({ id: dialog.id, date: dialog.date, explanation: reason });
       if (attendanceIrregularityDialog !== dialog || attendanceSelectionPollKey !== dialog.pollKey) return;
       attendanceIrregularityDialog = null;
-      if (dialog.mode === 'direct') {
+      if (saved?.presence === 'AUSENTE') {
+        attendanceSelectedIds.delete(dialog.id);
+        nextAttendanceIrregularity();
+      } else if (dialog.mode === 'direct') {
         rerenderAttendance();
         emit({ type: 'select-reply', replyId: dialog.replyId, label: dialog.label });
       } else {
