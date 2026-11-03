@@ -1,0 +1,38 @@
+--- a/worker/provision_description_settlement.py
++++ b/worker/provision_description_settlement.py
+@@ -69,7 +69,7 @@
+             return instant(left) == instant(right)
+         except ValueError:
+             return _text(left) == _text(right)  # Legacy child marker PAGO.
+-    if key in {'DATA PGTO EFETUADO', 'DATA PREVISTO PGTO'} and _text(left) and _text(right):
++    if key in {'DATA PGTO EFETUADO', 'DATA PREVISTO PGTO', 'DATA PEDIDO'} and _text(left) and _text(right):
+         return _date(left) is not None and _date(left) == _date(right)
+     if key in {'QTD', 'VALOR TOTAL', 'FRETE', 'VALORTOTAL'} and _text(left) and _text(right):
+         try:
+@@ -203,6 +203,13 @@
+             if _date(live.get('DATA PEDIDO')) is None:
+                 raise RuntimeError('A data original do pedido não foi confirmada.')
+             order = {**copy.deepcopy(live), 'VALORTOTAL': _canonical(total)}
++            # SharePoint reads DateTime as ISO; keep the frozen order plan date-only.
++            frozen = prior or next((plan.get('fields') or {}
++                for plan in (group.get('journal') or {}).get('order_plan', [])
++                if plan.get('token') == token), {})
++            frozen_date = frozen.get('DATA PEDIDO')
++            order['DATA PEDIDO'] = (frozen_date if _same('DATA PEDIDO', live['DATA PEDIDO'], frozen_date)
++                                    else _date(live['DATA PEDIDO']).isoformat())
+             if not _text(order.get('OBS')):
+                 order.pop('OBS', None)
+         return [{'token': token, 'fields': order,
+--- a/worker/clients.py
++++ b/worker/clients.py
+@@ -3106,6 +3106,10 @@
+                 )
+             except ValueError:
+                 return False
++            if field_type == "DateTime" and actual_datetime.tzinfo is not None:
++                # A date-only expectation confirms a civil day, including
++                # values normalized to noon by downstream SharePoint flows.
++                return actual_datetime.astimezone(SAO_PAULO_TZ).date() == date.fromisoformat(expected)
+             return actual_datetime == expected_datetime
+         actual_number = _localized_decimal(actual)
+         expected_number = _localized_decimal(expected)
