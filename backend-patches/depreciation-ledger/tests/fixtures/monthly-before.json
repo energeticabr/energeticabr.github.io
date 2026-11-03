@@ -1,0 +1,593 @@
+{
+  "$schema": "https://schema.management.azure.com/providers/Microsoft.Logic/schemas/2016-06-01/workflowdefinition.json#",
+  "contentVersion": "undefined",
+  "parameters": {
+    "$authentication": {
+      "defaultValue": {},
+      "type": "SecureObject"
+    },
+    "$connections": {
+      "defaultValue": {},
+      "type": "Object"
+    }
+  },
+  "triggers": {
+    "Recurrence": {
+      "recurrence": {
+        "frequency": "Day",
+        "interval": 1,
+        "timeZone": "E. South America Standard Time",
+        "schedule": {
+          "hours": [
+            "7"
+          ]
+        }
+      },
+      "evaluatedRecurrence": {
+        "frequency": "Day",
+        "interval": 1,
+        "timeZone": "E. South America Standard Time",
+        "schedule": {
+          "hours": [
+            "7"
+          ]
+        }
+      },
+      "type": "Recurrence"
+    }
+  },
+  "actions": {
+    "Get_items": {
+      "runAfter": {},
+      "type": "OpenApiConnection",
+      "inputs": {
+        "parameters": {
+          "dataset": "https://example.invalid/site",
+          "table": "a9bdb746-d54b-40c4-bf6b-3c49e9b1cd6e",
+          "$filter": "DATADEPRECIA_x00c7__x00c3_O le '@{utcNow()}' and DEPRECIAR eq 'SIM'\n",
+          "$top": 500000
+        },
+        "host": {
+          "apiId": "/providers/Microsoft.PowerApps/apis/shared_sharepointonline",
+          "connectionName": "shared_sharepointonline",
+          "operationId": "GetItems"
+        },
+        "authentication": "@parameters('$authentication')"
+      }
+    },
+    "Apply_to_each": {
+      "foreach": "@outputs('Get_items')?['body/value']",
+      "actions": {
+        "Condition": {
+          "actions": {
+            "Append_to_array_variable": {
+              "type": "AppendToArrayVariable",
+              "inputs": {
+                "name": "NOVOHTML",
+                "value": "@{concat(variables('HTMLROWS'), outputs('Compose_7'), outputs('Compose_5'))}\n\n"
+              }
+            }
+          },
+          "runAfter": {
+            "Update_item": [
+              "Succeeded"
+            ]
+          },
+          "else": {
+            "actions": {
+              "Append_to_array_variable_1": {
+                "type": "AppendToArrayVariable",
+                "inputs": {
+                  "name": "NOVOHTML",
+                  "value": "@concat(variables('HTMLROWS'), outputs('Compose_5'))\r\n"
+                }
+              }
+            }
+          },
+          "expression": {
+            "and": [
+              {
+                "equals": [
+                  "@variables('isfistrow')",
+                  true
+                ]
+              }
+            ]
+          },
+          "type": "If"
+        },
+        "Get_items_1": {
+          "type": "OpenApiConnection",
+          "inputs": {
+            "parameters": {
+              "dataset": "https://example.invalid/site",
+              "table": "40d7ef08-594a-4835-85d7-036eb1a098e0",
+              "$top": 1000
+            },
+            "host": {
+              "apiId": "/providers/Microsoft.PowerApps/apis/shared_sharepointonline",
+              "connectionName": "shared_sharepointonline",
+              "operationId": "GetItems"
+            },
+            "authentication": "@parameters('$authentication')"
+          }
+        },
+        "Compose_3": {
+          "runAfter": {
+            "Get_items_1": [
+              "Succeeded"
+            ]
+          },
+          "type": "Compose",
+          "inputs": "add(int(coalesce(last(outputs('Get_items_1')?['body/value'])?['OData__x0049_D2'], 0)), 1)"
+        },
+        "Compose": {
+          "runAfter": {
+            "Compose_3": [
+              "Succeeded"
+            ]
+          },
+          "type": "Compose",
+          "inputs": "@div(\r\n    mul(\r\n        float(replace(string(coalesce(items('Apply_to_each')?['OData__x0025_DEPRECIACAO'], '0')), ',', '.')),\r\n        float(replace(replace(string(coalesce(items('Apply_to_each')?['VALORRESIDUAL'], '0')), '.', ''), ',', '.'))\r\n    ),\r\n    100\r\n)\r\n"
+        },
+        "Compose_1": {
+          "runAfter": {
+            "Compose": [
+              "Succeeded"
+            ]
+          },
+          "type": "Compose",
+          "inputs": "@{sub(\r\n    float(replace(replace(string(coalesce(items('Apply_to_each')?['VALORRESIDUAL'], '0')), '.', ''), ',', '.')),\r\n    outputs('Compose')\r\n)\r\n}\n"
+        },
+        "Compose_2": {
+          "runAfter": {
+            "Compose_1": [
+              "Succeeded"
+            ]
+          },
+          "type": "Compose",
+          "inputs": "\n\n@{formatDateTime(\r\n  startOfMonth(\r\n    addToTime(items('Apply_to_each')?['DATADEPRECIA_x00c7__x00c3_O'], 1, 'Month')\r\n  ),\r\n  'yyyy-MM-dd'\r\n)\r\n}"
+        },
+        "Compose_4": {
+          "runAfter": {
+            "Create_item": [
+              "Succeeded"
+            ]
+          },
+          "type": "Compose",
+          "inputs": {
+            "FILIAL": "@outputs('Create_item')?['body/Title']",
+            "TIPO TRANSAÇÃO": "CUSTO",
+            "DATA": "@utcNow()",
+            "DATA PGTO PREVISTO": "@outputs('Create_item')?['body/field_3']",
+            "DATA PGTO EFETUADO": "@outputs('Create_item')?['body/field_4']",
+            "ETAPA": "DEPRECIAÇÃO E AMORTIZAÇÃO",
+            "PRODUTO": "@outputs('Create_item')?['body/field_7']",
+            "QUANTIDADE": "1",
+            "VALOR UNITÁRIO": "@outputs('Compose')",
+            "CONTA": "DEPRECIAÇÃO E AMORTIZAÇÃO",
+            "CONCLUÍDO": "PEDIDO FINALIZADO",
+            "ID 2": "@string(add(int(coalesce(last(outputs('Get_items_1')?['body/value'])?['OData__x0049_D2'], 0)), 1))",
+            "TIPO DESPESA": "EQUIPAMENTOS / MÁQUINAS"
+          }
+        },
+        "Compose_5": {
+          "runAfter": {
+            "Compose_4": [
+              "Succeeded"
+            ]
+          },
+          "type": "Compose",
+          "inputs": "@concat('<tr>', string(outputs('Compose_4')?['PRODUTO']), '</tr>')"
+        },
+        "Update_item": {
+          "runAfter": {
+            "Create_depreciation_record": [
+              "Succeeded"
+            ]
+          },
+          "type": "OpenApiConnection",
+          "inputs": {
+            "parameters": {
+              "dataset": "https://example.invalid/site",
+              "table": "a9bdb746-d54b-40c4-bf6b-3c49e9b1cd6e",
+              "id": "@items('Apply_to_each')?['ID']",
+              "item/DATADEPRECIA_x00c7__x00c3_O": "@outputs('Compose_2')",
+              "item/VALORRESIDUAL": "@replace(\r\n  replace(\r\n    formatNumber(\r\n      sub(\r\n        float(replace(replace(string(coalesce(items('Apply_to_each')?['VALORRESIDUAL'], '0')), '.', ''), ',', '.')),\r\n        div(\r\n          mul(\r\n            float(replace(string(coalesce(items('Apply_to_each')?['OData__x0025_DEPRECIACAO'], '0')), ',', '.')),\r\n            float(replace(replace(string(coalesce(items('Apply_to_each')?['VALORRESIDUAL'], '0')), '.', ''), ',', '.'))\r\n          ),\r\n          100\r\n        )\r\n      ),\r\n    '#,##0.00'),\r\n    ',',\r\n    ''\r\n  ),\r\n  '.',\r\n  ','\r\n)\r\n"
+            },
+            "host": {
+              "apiId": "/providers/Microsoft.PowerApps/apis/shared_sharepointonline",
+              "connectionName": "shared_sharepointonline",
+              "operationId": "PatchItem"
+            },
+            "authentication": "@parameters('$authentication')"
+          }
+        },
+        "Set_variable": {
+          "runAfter": {
+            "Condition": [
+              "Succeeded"
+            ]
+          },
+          "type": "SetVariable",
+          "inputs": {
+            "name": "isfistrow",
+            "value": false
+          }
+        },
+        "Increment_variable": {
+          "runAfter": {
+            "Set_variable": [
+              "Succeeded"
+            ]
+          },
+          "type": "IncrementVariable",
+          "inputs": {
+            "name": "total",
+            "value": "@mul(\r\n    float(outputs('Create_item')?['body/field_8']),\r\n    float(outputs('Create_item')?['body/field_9']\r\n  ))\r\n\r\n\r\n\r\n"
+          }
+        },
+        "Create_item": {
+          "runAfter": {
+            "Compose_2": [
+              "Succeeded"
+            ]
+          },
+          "type": "OpenApiConnection",
+          "inputs": {
+            "parameters": {
+              "dataset": "https://example.invalid/site",
+              "table": "40d7ef08-594a-4835-85d7-036eb1a098e0",
+              "item/Title": "@items('Apply_to_each')?['FILIAL']",
+              "item/field_1": "CUSTO",
+              "item/field_2": "@\tutcNow()",
+              "item/field_3": "@items('Apply_to_each')?['DATADEPRECIA_x00c7__x00c3_O']",
+              "item/field_4": "@items('Apply_to_each')?['DATADEPRECIA_x00c7__x00c3_O']",
+              "item/field_5": "@items('Apply_to_each')?['FORNECEDOR']",
+              "item/field_6": "DEPRECIAÇÃO E AMORTIZAÇÃO",
+              "item/field_7": "@items('Apply_to_each')?['ITEM']",
+              "item/field_8": "@1",
+              "item/field_9": "@outputs('Compose')",
+              "item/field_14": "DEPRECIAÇÃO E AMORTIZAÇÃO",
+              "item/field_19": "PEDIDO FINALIZADO",
+              "item/TIPODESPESA": "EQUIPAMENTOS / MÁQUINAS",
+              "item/GERADESEMBOLSO": "NÃO",
+              "item/APROVACAO": "PENDENTE DE APROVAÇÃO",
+              "item/AGRUPAR": "@variables('AgruparPorFilial')?[items('Apply_to_each')?['FILIAL']]"
+            },
+            "host": {
+              "apiId": "/providers/Microsoft.PowerApps/apis/shared_sharepointonline",
+              "connectionName": "shared_sharepointonline",
+              "operationId": "PostItem"
+            },
+            "authentication": "@parameters('$authentication')"
+          }
+        },
+        "Create_depreciation_record": {
+          "runAfter": {
+            "Compose_5": [
+              "Succeeded"
+            ]
+          },
+          "type": "OpenApiConnection",
+          "inputs": {
+            "host": {
+              "apiId": "/providers/Microsoft.PowerApps/apis/shared_sharepointonline",
+              "connectionName": "shared_sharepointonline",
+              "operationId": "PostItem"
+            },
+            "retryPolicy": {
+              "type": "none"
+            },
+            "parameters": {
+              "dataset": "https://example.invalid/site",
+              "table": "f0f13292-f28c-4c09-8060-4d4af4664730",
+              "item/Title": "@coalesce(items('Apply_to_each')?['ITEM'], '')",
+              "item/FILIAL": "@items('Apply_to_each')?['FILIAL']",
+              "item/OData__x0025__x0020_DEPRECIA_x00c7__x0": "@div(float(replace(string(items('Apply_to_each')?['OData__x0025_DEPRECIACAO']), ',', '.')), 100)",
+              "item/DATA_x0020_DE_x0020_DEPRECIA_x00": "@items('Apply_to_each')?['DATADEPRECIA_x00c7__x00c3_O']",
+              "item/VALOR_x0020_DEPRECIA_x00c7__x00c": "@float(formatNumber(float(outputs('Compose')), '0.00', 'en-US'))",
+              "item/VALOR_x0020_RESIDUAL": "@float(formatNumber(float(outputs('Compose_1')), '0.00', 'en-US'))",
+              "item/ID_x0020_IMOBILIZADO": "@int(items('Apply_to_each')?['ID'])",
+              "item/IDLANCAMENTO": "@int(outputs('Create_item')?['body/ID'])",
+              "item/IDPEDIDO": "@if(empty(trim(string(coalesce(outputs('Create_item')?['body/AGRUPAR'], '')))), null, int(trim(string(outputs('Create_item')?['body/AGRUPAR']))))"
+            },
+            "authentication": "@parameters('$authentication')"
+          }
+        }
+      },
+      "runAfter": {
+        "Initialize_variable_3": [
+          "Succeeded"
+        ]
+      },
+      "type": "Foreach"
+    },
+    "Initialize_variable": {
+      "runAfter": {
+        "Compose_7": [
+          "Succeeded"
+        ]
+      },
+      "type": "InitializeVariable",
+      "inputs": {
+        "variables": [
+          {
+            "name": "HTMLROWS",
+            "type": "string",
+            "value": "\n"
+          }
+        ]
+      }
+    },
+    "Initialize_variable_1": {
+      "runAfter": {
+        "Initialize_variable": [
+          "Succeeded"
+        ]
+      },
+      "type": "InitializeVariable",
+      "inputs": {
+        "variables": [
+          {
+            "name": "NOVOHTML",
+            "type": "array"
+          }
+        ]
+      }
+    },
+    "Initialize_variable_2": {
+      "runAfter": {
+        "Initialize_variable_1": [
+          "Succeeded"
+        ]
+      },
+      "type": "InitializeVariable",
+      "inputs": {
+        "variables": [
+          {
+            "name": "isfistrow",
+            "type": "boolean",
+            "value": true
+          }
+        ]
+      }
+    },
+    "Compose_7": {
+      "runAfter": {
+        "Condition_2": [
+          "Succeeded"
+        ]
+      },
+      "type": "Compose",
+      "inputs": "<table>"
+    },
+    "Initialize_variable_3": {
+      "runAfter": {
+        "Initialize_variable_2": [
+          "Succeeded"
+        ]
+      },
+      "type": "InitializeVariable",
+      "inputs": {
+        "variables": [
+          {
+            "name": "total",
+            "type": "float"
+          }
+        ]
+      }
+    },
+    "Condition_1": {
+      "actions": {},
+      "runAfter": {
+        "Apply_to_each": [
+          "Succeeded"
+        ]
+      },
+      "else": {
+        "actions": {
+          "Compose_6": {
+            "type": "Compose",
+            "inputs": "@concat(\r\n  join(variables('NOVOHTML'), ''),\r\n  '<tr><td colspan=\"5\" style=\"padding:7px 4px;border:1px solid #d9e5ef;background:#eaf2f8;font-size:10px;font-weight:800;text-align:right;\">TOTAL</td><td style=\"padding:7px 4px;border:1px solid #d9e5ef;background:#eaf2f8;font-size:10px;font-weight:800;text-align:right;white-space:nowrap;\">R$ ',\r\n  replace(formatNumber(variables('total'), '##,##0.00'), '.', ','),\r\n  '</td><td style=\"padding:7px 4px;border:1px solid #d9e5ef;background:#eaf2f8;\"></td></tr>',\r\n  '</tbody></table>'\r\n)"
+          },
+          "Create_file": {
+            "runAfter": {
+              "Compose_6": [
+                "Succeeded"
+              ]
+            },
+            "type": "OpenApiConnection",
+            "inputs": {
+              "parameters": {
+                "folderPath": "/ENERGÉTICA",
+                "name": "DEPRECIAÇÃO.html",
+                "body": "@outputs('Compose_6')"
+              },
+              "host": {
+                "apiId": "/providers/Microsoft.PowerApps/apis/shared_onedriveforbusiness",
+                "connectionName": "shared_onedriveforbusiness",
+                "operationId": "CreateFile"
+              },
+              "authentication": "@parameters('$authentication')"
+            },
+            "runtimeConfiguration": {
+              "contentTransfer": {
+                "transferMode": "Chunked"
+              }
+            }
+          },
+          "Convert_file": {
+            "runAfter": {
+              "Create_file": [
+                "Succeeded"
+              ]
+            },
+            "type": "OpenApiConnection",
+            "inputs": {
+              "parameters": {
+                "id": "@outputs('Create_file')?['body/FileLocator']",
+                "type": "PDF"
+              },
+              "host": {
+                "apiId": "/providers/Microsoft.PowerApps/apis/shared_onedriveforbusiness",
+                "connectionName": "shared_onedriveforbusiness",
+                "operationId": "ConvertFile"
+              },
+              "authentication": "@parameters('$authentication')"
+            }
+          }
+        }
+      },
+      "expression": {
+        "and": [
+          {
+            "equals": [
+              "@variables('total')",
+              0
+            ]
+          }
+        ]
+      },
+      "type": "If"
+    },
+    "Initialize_variable_4": {
+      "runAfter": {
+        "Get_items": [
+          "Succeeded"
+        ]
+      },
+      "type": "InitializeVariable",
+      "inputs": {
+        "variables": [
+          {
+            "name": "FiliaisComNotasPendentes",
+            "type": "array",
+            "value": []
+          }
+        ]
+      }
+    },
+    "Initialize_variable_5": {
+      "runAfter": {
+        "Initialize_variable_4": [
+          "Succeeded"
+        ]
+      },
+      "type": "InitializeVariable",
+      "inputs": {
+        "variables": [
+          {
+            "name": "AgruparPorFilial",
+            "type": "object",
+            "value": {}
+          }
+        ]
+      }
+    },
+    "Condition_2": {
+      "actions": {
+        "Apply_to_each_filial_NOTASPENDENTES": {
+          "foreach": "@body('Get_items')?['value']",
+          "actions": {
+            "Condition_filial_sem_NOTASPENDENTES": {
+              "actions": {
+                "Create_item_1": {
+                  "type": "OpenApiConnection",
+                  "inputs": {
+                    "parameters": {
+                      "dataset": "https://example.invalid/site",
+                      "table": "dfffa843-823f-4da3-939b-aaafb5297893",
+                      "item/Title": "@items('Apply_to_each_filial_NOTASPENDENTES')?['FILIAL']",
+                      "item/FORNECEDOR": "ENERGÉTICA",
+                      "item/FILIAL": "@items('Apply_to_each_filial_NOTASPENDENTES')?['FILIAL']",
+                      "item/STATUS": "PENDENTE AUDITORIA",
+                      "item/FORMAPGTO": "DEPRECIAÇÃO E AMORTIZAÇÃO",
+                      "item/NOTAFISCAL": "PENDENTE",
+                      "item/OBSFISCAL": "DEPRECIAÇÃO E AMORTIZAÇÃO"
+                    },
+                    "host": {
+                      "apiId": "/providers/Microsoft.PowerApps/apis/shared_sharepointonline",
+                      "connectionName": "shared_sharepointonline",
+                      "operationId": "PostItem"
+                    },
+                    "authentication": "@parameters('$authentication')"
+                  }
+                },
+                "Append_to_array_variable_filial_NOTASPENDENTES": {
+                  "runAfter": {
+                    "Create_item_1": [
+                      "Succeeded"
+                    ]
+                  },
+                  "type": "AppendToArrayVariable",
+                  "inputs": {
+                    "name": "FiliaisComNotasPendentes",
+                    "value": "@items('Apply_to_each_filial_NOTASPENDENTES')?['FILIAL']"
+                  }
+                },
+                "Compose_MapaAgruparPorFilial_Atualizado": {
+                  "runAfter": {
+                    "Append_to_array_variable_filial_NOTASPENDENTES": [
+                      "Succeeded"
+                    ]
+                  },
+                  "type": "Compose",
+                  "inputs": "@setProperty(variables('AgruparPorFilial'), items('Apply_to_each_filial_NOTASPENDENTES')?['FILIAL'], string(outputs('Create_item_1')?['body/ID']))"
+                },
+                "Set_variable_AgruparPorFilial": {
+                  "runAfter": {
+                    "Compose_MapaAgruparPorFilial_Atualizado": [
+                      "Succeeded"
+                    ]
+                  },
+                  "type": "SetVariable",
+                  "inputs": {
+                    "name": "AgruparPorFilial",
+                    "value": "@outputs('Compose_MapaAgruparPorFilial_Atualizado')"
+                  }
+                }
+              },
+              "else": {
+                "actions": {}
+              },
+              "expression": {
+                "and": [
+                  {
+                    "not": {
+                      "contains": [
+                        "@variables('FiliaisComNotasPendentes')",
+                        "@items('Apply_to_each_filial_NOTASPENDENTES')?['FILIAL']"
+                      ]
+                    }
+                  }
+                ]
+              },
+              "type": "If"
+            }
+          },
+          "type": "Foreach"
+        }
+      },
+      "runAfter": {
+        "Initialize_variable_5": [
+          "Succeeded"
+        ]
+      },
+      "else": {
+        "actions": {}
+      },
+      "expression": {
+        "and": [
+          {
+            "greater": [
+              "@length(body('Get_items')?['value'])",
+              0
+            ]
+          }
+        ]
+      },
+      "type": "If"
+    }
+  }
+}
