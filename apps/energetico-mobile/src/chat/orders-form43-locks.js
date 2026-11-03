@@ -124,9 +124,9 @@ export function createForm43StatusPolicy({ repository, siteKey, orderId, orderCo
   }
   function assertApprovalDate(fields) {
     if (trim(fields[statusFieldName]).toUpperCase() !== 'APROVADO') return;
-    const names = mapping(orderColumns, ['DATAPGTOEFETUADO'], 'NOTASPENDENTES');
-    if (!linkedReportText(fields[names.get('DATAPGTOEFETUADO')]).trim()) {
-      throw new Error('Para aprovar, informe a data de submissão à auditoria (DATAPGTOEFETUADO).');
+    const names = mapping(orderColumns, ['DATA PEDIDO'], 'NOTASPENDENTES');
+    if (!linkedReportText(fields[names.get('DATA PEDIDO')]).trim()) {
+      throw new Error('Para aprovar, informe a DATA PEDIDO.');
     }
   }
   async function assertSubmit(fields, { signal } = {}) {

@@ -13,10 +13,11 @@ function fixture({ columns, fields, eTag = '"v1"', conflict = false } = {}) {
     async getColumns() { return columns || [
       { name: "OBS", text: {} }, { name: "STATUS", choice: { choices: ["PAGO", "PENDENTE AUDITORIA"] } },
       { name: "DATAPGTOEFETUADO", dateTime: { format: "dateOnly" } },
+      { name: "DATAPEDIDO", displayName: "DATA PEDIDO", dateTime: { format: "dateOnly" } },
       { name: "VALORTOTAL", currency: {} }, { name: "SECRET", text: {} },
       { name: "OBSFISCAL", text: {}, readOnly: true }, { name: "Created", dateTime: {} },
     ]; },
-    async getItem(site, list, id) { reads.push({ site, list, id }); return { id, eTag, fields: fields || { OBS: "ANTIGO", STATUS: "PAGO", DATAPGTOEFETUADO: "2026-09-30T03:00:00Z", VALORTOTAL: 500 } }; },
+    async getItem(site, list, id) { reads.push({ site, list, id }); return { id, eTag, fields: fields || { OBS: "ANTIGO", STATUS: "PAGO", DATAPGTOEFETUADO: "2026-10-01T03:00:00Z", DATAPEDIDO: "2026-09-30T03:00:00Z", VALORTOTAL: 500 } }; },
     async updateItem(site, list, id, values, options) {
       writes.push({ site, list, id, values, options });
       if (conflict) throw Object.assign(new Error("Conflito"), { status: 412 });
@@ -57,13 +58,13 @@ test("editor uses the verified order edit form and preserves typed closed descri
   assert.deepEqual(context.columns, context.contract.formColumns);
   assert.ok(!context.columns.some(c => ["Created", "SECRET", "OBSFISCAL"].includes(c.name)));
   assert.equal(context.columns.find(c => c.name === "STATUS").powerApps.closed, true);
-  assert.equal(context.columns.find(c => c.name === "DATAPGTOEFETUADO").control, "date");
+  assert.equal(context.columns.find(c => c.name === "DATAPEDIDO").control, "date");
   await assert.rejects(data.loadEditor("2", { formVariantId: "invented" }), /formulário|variante/i);
 });
 
 test("save pins the loaded version and only sends modified editable values", async () => {
   const f = fixture(), data = createOrdersGalleryData(f), context = await data.loadEditor("2");
-  await data.saveEditor(context, { OBS: "novo", STATUS: "PAGO", DATAPGTOEFETUADO: "2026-09-30", VALORTOTAL: 500 });
+  await data.saveEditor(context, { OBS: "novo", STATUS: "PAGO", DATAPEDIDO: "2026-09-30", VALORTOTAL: 500 });
   assert.equal(f.reads.length, 1);
   assert.deepEqual(f.writes[0].values, { OBS: "NOVO" });
   assert.deepEqual(f.writes[0].options, { eTag: '"v1"' });
@@ -276,4 +277,17 @@ for (const [control, metadata] of [
   assert.equal(f.searches.at(-1).term, "Relacionada");
   assert.deepEqual(f.writes[0].values, { FORNECEDORLookupId: [1, 3] });
   assert.deepEqual(f.writes[0].options, { eTag: '"v1"' });
+});
+
+
+test("orders editor saves the order date without touching the payment date", async () => {
+  const f = fixture(), data = createOrdersGalleryData(f), context = await data.loadEditor("452");
+  assert.equal(context.columns.find(c => c.name === "DATAPEDIDO").label, "DATA PEDIDO");
+  assert.ok(!context.columns.some(c => c.name === "DATAPGTOEFETUADO"));
+  await data.saveEditor(context, { DATAPEDIDO: "2026-10-25" });
+  assert.deepEqual(f.writes[0].values, { DATAPEDIDO: "2026-10-25" });
+  assert.equal(f.writes[0].options.eTag, '"v1"');
+  assert.equal(context.item.fields.DATAPGTOEFETUADO, "2026-10-01T03:00:00Z");
+  const reopened = await data.loadEditor("452");
+  await assert.rejects(data.saveEditor(reopened, { DATAPGTOEFETUADO: "2026-10-25" }), /não é editável/);
 });
