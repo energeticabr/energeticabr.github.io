@@ -27,6 +27,12 @@
 .asset-report-group .asset-report-field { padding: 10px; border: 1px solid #d8e5eb; border-radius: 8px; background: #fff; }
 .asset-report-history-line .asset-report-field { padding: 10px; border: 1px solid #d8e5eb; border-radius: 8px; background: #f4f9fc; box-sizing: border-box; }
 .asset-report-history-line .asset-report-field dd { font-weight: 600; }
+.asset-report-history-line .asset-report-history-field--red { background: #fee2e2; border-color: #e9a0a0; }
+.asset-report-history-line .asset-report-history-field--blue { background: #dbeafe; border-color: #93b9ea; }
+.asset-report-history-line .asset-report-history-field--green { background: #dcfce7; border-color: #86c99e; }
+.asset-report-history-line .asset-report-history-field--red dt, .asset-report-history-line .asset-report-history-field--red dd { color: #991b1b; }
+.asset-report-history-line .asset-report-history-field--blue dt, .asset-report-history-line .asset-report-history-field--blue dd { color: #1e40af; }
+.asset-report-history-line .asset-report-history-field--green dt, .asset-report-history-line .asset-report-history-field--green dd { color: #166534; }
 .asset-report-group .asset-report-field dd { font-weight: 600; }
 .asset-report-field--amount dd { color: #153e5e; font-size: 1.05rem; font-weight: 750; }
 .asset-report-depreciated { display: inline-block; max-width: 100%; box-sizing: border-box; padding: 1px 3px; border-radius: 4px; font-size: .75rem; line-height: 1.4; white-space: normal; }

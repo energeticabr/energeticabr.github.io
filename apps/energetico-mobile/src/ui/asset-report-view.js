@@ -142,6 +142,8 @@ export function createAssetReportView({ document: doc, host, background = [], lo
         if (label === 'NÚMERO DO PEDIDO') dd.dataset.historyOrderId = '';
         if (label === 'FILIAL') pair.classList.add('asset-report-field--wide');
         if (type === 'currency') pair.classList.add('asset-report-field--amount');
+        const historyColor = { '% DEPRECIAÇÃO': 'blue', 'VALOR DEPRECIAÇÃO': 'red', 'VALOR RESIDUAL': 'green' }[label];
+        if (historyColor) pair.classList.add(`asset-report-history-field--${historyColor}`);
         pair.append(el('dt', '', label), dd); values.append(pair);
       }
       card.append(values); lines.append(card);

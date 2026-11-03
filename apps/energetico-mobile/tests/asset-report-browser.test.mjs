@@ -95,6 +95,8 @@ test('toque, teclado, cadastro e 31 depreciações cabem em 320/390/1365px sem p
       })()`);
       assert.equal(historyClusters.length, 6);
       assert.ok(historyClusters.every(field => field.background !== 'rgba(0, 0, 0, 0)' && field.border >= 1 && field.padding >= 8), 'cada informação histórica deve ter caixa visual própria');
+      const historyColors = await api.evaluate(`(() => [...document.querySelectorAll('[data-asset-history-row]')].map(card => Object.fromEntries([...card.querySelectorAll('.asset-report-field')].map(field => [field.querySelector('dt').textContent, getComputedStyle(field).backgroundColor]))))()`);
+      assert.ok(historyColors.every(colors => colors['VALOR DEPRECIAÇÃO'] === 'rgb(254, 226, 226)' && colors['% DEPRECIAÇÃO'] === 'rgb(219, 234, 254)' && colors['VALOR RESIDUAL'] === 'rgb(220, 252, 231)'), 'todos os registros devem destacar valor depreciado em vermelho, percentual em azul e residual em verde');
       await shot(api, `${kind}-historico-${width}`);
       await api.tap(close); await api.wait('!document.querySelector("[data-asset-report]")');
       assert.deepEqual(await api.evaluate(`({page:document.querySelector('.rg-pagination').textContent, search:document.querySelector('input[type="search"]').value, scroll:document.querySelector('.rg-overlay').scrollTop})`), before);
