@@ -58,7 +58,7 @@ export function createAssetReportView({ document: doc, host, background = [], lo
   function cancel(state) { clearTimeout(state.timer); state.timer = null; state.version++; state.controller?.abort(); state.controller = null; state.task?.stop(); }
   function closeChart(state, restoreFocus = true) {
     if (!state.chart) return;
-    state.chart.overlay.remove(); state.chart = null; state.body.inert = false; state.closeButton.inert = false;
+    state.chart.destroy(); state.chart.overlay.remove(); state.chart = null; state.body.inert = false; state.closeButton.inert = false;
     if (restoreFocus) state.chartTrigger?.focus({ preventScroll: true });
   }
   function openChart(state, result, trigger) {

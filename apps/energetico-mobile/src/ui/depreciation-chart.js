@@ -21,6 +21,7 @@ export function depreciationPoints(result) {
 }
 
 export function createDepreciationChart({ document: doc, result, onClose }) {
+  let resizeObserver = null, frame = null, resizeHandler = null;
   const el = (tag, className = '', content) => {
     const node = doc.createElement(tag); node.className = className;
     if (content !== undefined) node.textContent = content;
@@ -58,6 +59,10 @@ export function createDepreciationChart({ document: doc, result, onClose }) {
       svg.append(svgEl('line', { x1: left, y1: yPos, x2: left + width, y2: yPos, class: 'depreciation-chart-grid' }));
     }
     svg.append(svgEl('polyline', { points: points.map((p, i) => x(times[i]) + ',' + y(p.value)).join(' '), class: 'depreciation-chart-line' }));
+    const selected = [...new Set([0, Math.floor((points.length - 1) / 2), points.length - 1])];
+    const connectors = selected.map(() => {
+      const line = svgEl('line', { class: 'depreciation-chart-leader' }); svg.append(line); return line;
+    });
     points.forEach((point, i) => {
       const circle = svgEl('circle', { cx: x(times[i]), cy: y(point.value), r: 4, class: 'depreciation-chart-dot' });
       const tooltip = svgEl('title'); tooltip.textContent = dateText(point.date) + ': ' + currency(point.value); circle.append(tooltip); svg.append(circle);
@@ -66,7 +71,41 @@ export function createDepreciationChart({ document: doc, result, onClose }) {
     const plot = el('div', 'depreciation-chart-plot');
     const scale = el('div', 'depreciation-chart-scale');
     scale.append(el('span', '', currency(max)), el('span', '', currency(min)));
-    plot.append(scale, svg); body.append(plot);
+    const area = el('div', 'depreciation-chart-plot-area');
+    area.append(svg);
+    const labels = selected.map(index => {
+      const point = points[index], label = el('span', 'depreciation-chart-point-label', currency(point.value));
+      label.dataset.chartLabel = ''; label.dataset.date = point.date; label.dataset.value = String(point.value);
+      label.setAttribute('aria-hidden', 'true'); area.append(label); return label;
+    });
+    const layoutLabels = () => {
+      const areaWidth = area.clientWidth, areaHeight = area.clientHeight;
+      if (!areaWidth || !areaHeight) return;
+      const occupied = [];
+      // Place the last point first, so it always gets the clearest position.
+      const order = selected.length === 3 ? [2, 0, 1] : selected.map((_, i) => i).reverse();
+      for (const i of order) {
+        const label = labels[i], point = points[selected[i]], pointX = x(times[selected[i]]) / 600 * areaWidth;
+        const pointY = y(point.value) / 220 * areaHeight;
+        const w = label.offsetWidth, h = label.offsetHeight;
+        const left = Math.max(0, Math.min(areaWidth - w, pointX - w / 2));
+        const candidates = [pointY - h - 6, pointY + 6];
+        for (let top = 0; top <= areaHeight - h; top += 8) candidates.push(top);
+        candidates.sort((a, b) => Math.abs(a - (pointY - h - 6)) - Math.abs(b - (pointY - h - 6)));
+        const safe = candidates.map(top => Math.max(0, Math.min(areaHeight - h, top)));
+        const top = safe.find(top => occupied.every(box => left + w + 3 <= box.left || box.left + box.width + 3 <= left || top + h + 3 <= box.top || box.top + box.height + 3 <= top)) ?? safe[0];
+        label.style.left = `${left}px`; label.style.top = `${top}px`; label.dataset.positioned = 'true';
+        occupied.push({ left, top, width: w, height: h });
+        const line = connectors[i];
+        line.setAttribute('x1', x(times[selected[i]])); line.setAttribute('y1', y(point.value));
+        line.setAttribute('x2', (left + w / 2) / areaWidth * 600); line.setAttribute('y2', (top + h / 2) / areaHeight * 220);
+      }
+    };
+    const view = doc.defaultView;
+    resizeHandler = layoutLabels; view?.addEventListener('resize', resizeHandler);
+    if (typeof view?.ResizeObserver === 'function') { resizeObserver = new view.ResizeObserver(layoutLabels); resizeObserver.observe(area); }
+    if (typeof view?.requestAnimationFrame === 'function') frame = view.requestAnimationFrame(layoutLabels);
+    plot.append(scale, area); body.append(plot);
     const dates = el('div', 'depreciation-chart-dates');
     dates.append(el('span', '', dateText(points[0].date)));
     if (first !== last) dates.append(el('span', '', dateText(points.at(-1).date)));
@@ -86,5 +125,5 @@ export function createDepreciationChart({ document: doc, result, onClose }) {
     if (event.key === 'Escape') { event.preventDefault(); event.stopPropagation(); onClose(); }
     else if (event.key === 'Tab') { event.preventDefault(); event.stopPropagation(); close.focus(); }
   });
-  return { overlay, closeButton: close };
+  return { overlay, closeButton: close, destroy() { resizeObserver?.disconnect(); if (frame != null) doc.defaultView?.cancelAnimationFrame?.(frame); if (resizeHandler) doc.defaultView?.removeEventListener('resize', resizeHandler); } };
 }

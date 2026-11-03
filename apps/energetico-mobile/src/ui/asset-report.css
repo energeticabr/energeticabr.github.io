@@ -72,7 +72,10 @@
 .depreciation-chart-axis-title { margin: 10px 0 0; color: #355867; font-size: .8rem; font-weight: 700; }
 .depreciation-chart-plot { display: grid; grid-template-columns: minmax(70px, auto) minmax(0, 1fr); gap: 6px; align-items: stretch; }
 .depreciation-chart-scale { display: flex; flex-direction: column; justify-content: space-between; padding: 12px 0; color: #355867; font-size: .75rem; text-align: right; }
-.depreciation-chart-body svg { display: block; width: 100%; height: 180px; overflow: hidden; }
+.depreciation-chart-plot-area { position: relative; min-width: 0; height: 220px; }
+.depreciation-chart-body svg { display: block; width: 100%; height: 100%; overflow: hidden; }
+.depreciation-chart-point-label { position: absolute; box-sizing: border-box; max-width: 100%; padding: 2px 4px; border: 1px solid #83bac5; border-radius: 4px; background: #fff; color: #07566b; font-size: .75rem; font-weight: 700; line-height: 1.25; overflow-wrap: anywhere; pointer-events: none; }
+.depreciation-chart-leader { stroke: #448b9a; stroke-width: 1.5; stroke-dasharray: 4 3; vector-effect: non-scaling-stroke; }
 .depreciation-chart-dates { display: flex; justify-content: space-between; gap: 8px; margin-left: 70px; color: #355867; font-size: .75rem; }
 .depreciation-chart-time { margin: 4px 0 0; color: #355867; font-size: .75rem; text-align: center; }
 .depreciation-chart-grid { stroke: #d8e6eb; stroke-width: 1; }
