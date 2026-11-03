@@ -1,4 +1,5 @@
 import { registrationDateKey, registrationNumber, registrationFieldKey } from '../chat/registration-gallery-data.js';
+import { createDepreciationBranchChart } from './depreciation-branch-chart.js';
 
 const currency = value => new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(value);
 const dateText = value => value.split('-').reverse().join('/');
@@ -39,6 +40,7 @@ export function createDepreciationChart({ document: doc, result, onClose }) {
   const points = depreciationPoints(result);
   if (!points.length) {
     body.append(el('p', 'depreciation-chart-empty', 'Nenhuma depreciação registrada para este imobilizado.'));
+    body.append(createDepreciationBranchChart({ document: doc, history: result.history }));
   } else {
     body.append(el('p', 'depreciation-chart-intro', 'Valor residual ao longo do tempo, conforme os registros de depreciação.'));
     const ns = 'http://www.w3.org/2000/svg';
@@ -110,6 +112,7 @@ export function createDepreciationChart({ document: doc, result, onClose }) {
     dates.append(el('span', '', dateText(points[0].date)));
     if (first !== last) dates.append(el('span', '', dateText(points.at(-1).date)));
     body.append(dates, el('p', 'depreciation-chart-time', 'Tempo'));
+    body.append(createDepreciationBranchChart({ document: doc, history: result.history }));
     body.append(el('h3', '', 'Valores registrados'));
     const list = el('ol', 'depreciation-chart-list');
     for (const point of points) {
@@ -123,7 +126,13 @@ export function createDepreciationChart({ document: doc, result, onClose }) {
   overlay.addEventListener('click', event => { event.stopPropagation(); if (event.target === overlay) onClose(); });
   overlay.addEventListener('keydown', event => {
     if (event.key === 'Escape') { event.preventDefault(); event.stopPropagation(); onClose(); }
-    else if (event.key === 'Tab') { event.preventDefault(); event.stopPropagation(); close.focus(); }
+    else if (event.key === 'Tab') {
+      event.stopPropagation();
+      const focusable = [...dialog.querySelectorAll('button:not([disabled]), [tabindex="0"]')];
+      const first = focusable[0], last = focusable.at(-1);
+      if (event.shiftKey && (doc.activeElement === first || !dialog.contains(doc.activeElement))) { event.preventDefault(); last?.focus(); }
+      else if (!event.shiftKey && (doc.activeElement === last || !dialog.contains(doc.activeElement))) { event.preventDefault(); first?.focus(); }
+    }
   });
   return { overlay, closeButton: close, destroy() { resizeObserver?.disconnect(); if (frame != null) doc.defaultView?.cancelAnimationFrame?.(frame); if (resizeHandler) doc.defaultView?.removeEventListener('resize', resizeHandler); } };
 }

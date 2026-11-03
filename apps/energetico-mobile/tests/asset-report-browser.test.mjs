@@ -91,6 +91,15 @@ test('toque, teclado, cadastro e 31 depreciações cabem em 320/390/1365px sem p
       assert.ok(labels.every(label=>label.inside), 'rótulos devem caber no gráfico');
       assert.ok(labels.every((a,i)=>labels.every((b,j)=>i===j||a.right<=b.left||b.right<=a.left||a.bottom<=b.top||b.bottom<=a.top)), 'rótulos não devem se sobrepor');
       await shot(api, `${kind}-grafico-${width}`);
+      await api.evaluate(`document.querySelector('[data-depreciation-branches]').scrollIntoView({block:'start'})`);
+      const barLayout = await api.evaluate(`(() => { const section=document.querySelector('[data-depreciation-branches]'), scroll=section.querySelector('.depreciation-branches-scroll'); const bars=[...section.querySelectorAll('[data-branch-bar]')]; return {bars:bars.map(b=>({name:b.dataset.branch,amount:b.dataset.amount,color:getComputedStyle(b.querySelector('.depreciation-branch-fill')).backgroundColor})), scrolling:scroll.scrollWidth>scroll.clientWidth, overflow:section.scrollWidth>section.clientWidth+1, hint:section.textContent.includes('Deslize')}; })()`);
+      assert.equal(barLayout.bars.length,4); assert.equal(barLayout.bars.at(-1).name,'Total'); assert.equal(barLayout.bars.at(-1).amount,'4529.1');
+      assert.notEqual(barLayout.bars[0].color,barLayout.bars.at(-1).color); assert.equal(barLayout.overflow,false);
+      if (width<=390) assert.equal(barLayout.scrolling,true); assert.equal(barLayout.hint,true);
+      await shot(api, `${kind}-barras-inicio-${width}`);
+      await api.evaluate(`(() => {const scroll=document.querySelector('.depreciation-branches-scroll');scroll.scrollLeft=scroll.scrollWidth;})()`);
+      assert.equal(await api.evaluate(`(() => {const s=document.querySelector('.depreciation-branches-scroll').getBoundingClientRect(), b=document.querySelector('.depreciation-branch-bar--total').getBoundingClientRect();return b.right<=s.right+1 && b.left>=s.left-1})()`),true);
+      await shot(api, `${kind}-barras-total-${width}`);
       await key(api, 'Escape', 'Escape', 27); await api.wait('!document.querySelector("[data-depreciation-chart]")');
       assert.equal(await api.evaluate(`document.activeElement===document.querySelector('${chartTrigger}')`), true);
       await api.evaluate(`(() => { const dialog = document.querySelector('[data-asset-report]'); dialog.scrollTop += dialog.querySelector('.asset-report-history').getBoundingClientRect().top-dialog.getBoundingClientRect().top-95; })()`);
