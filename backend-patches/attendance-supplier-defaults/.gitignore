@@ -1,0 +1,5 @@
+baseline/
+candidate/
+__pycache__/
+*.log
+*.patch
