@@ -39,7 +39,7 @@ async function findLatestBuild(client) {
   // App Store Connect uses `version` for the numeric build number (for example,
   // 256), not for the marketing version (for example, 1.0). The app filter and
   // upload ordering are therefore the reliable selectors for the latest upload.
-  const builds = await list(client, `/v1/builds?filter[app]=${APP_ID}&sort=-uploadedDate`);
+  const builds = await list(client, `/v1/apps/${APP_ID}/builds?limit=200`);
   const build = chooseLatestBuild(builds);
   return build;
 }
@@ -129,19 +129,8 @@ export async function attachLatestTestFlightBuild(client) {
 
 if (process.argv[1] && import.meta.url === pathToFileURL(process.argv[1]).href) {
   try {
-    const client = createAppleClient();
-    for (const initial of [`/v1/apps/${APP_ID}/builds?filter[version]=2101&limit=200`, `/v1/apps/${APP_ID}/builds?limit=200`]) {
-      try {
-        let path=initial, pages=0, count=0, target=[];
-        while(path && pages++ < 30 && !target.length) {
-          const page=await client.request('GET',path);
-          const builds=page.data || []; count+=builds.length;
-          target=builds.filter(b=>String(attr(b).version)==='2101').map(b=>({id:b.id,version:attr(b).version,processingState:attr(b).processingState,expired:attr(b).expired}));
-          path=page.links?.next;
-        }
-        console.log(JSON.stringify({initial,pages,count,target,hasNext:Boolean(path)}));
-      } catch (error) { console.log(JSON.stringify({ initial, error: String(error.message) })); }
-    }
+    const result = await attachLatestTestFlightBuild(createAppleClient());
+    console.log(JSON.stringify(result));
   } catch (error) {
     console.error(error.message);
     process.exitCode = 1;
