@@ -1,6 +1,16 @@
-import { registrationNumber, registrationDateKey } from '../chat/registration-gallery-data.js';
+import { registrationNumber, registrationDateKey, registrationFieldKey } from '../chat/registration-gallery-data.js';
 import { createLoadingIndicator } from './loading-indicator.js';
 import { beginLoadingTask } from './loading-task.js';
+
+const registrationGroups = [
+  ['Valores', [['Valor compra', 'currency'], ['Valor residual', 'currency']]],
+  ['Identificação', [
+    ['Imobilizado', 'text'], ['Número patrimônio', 'text'], ['Status', 'text'],
+    ['Quantidade', 'number'], ['Filial', 'text'], ['Fornecedor', 'text'],
+  ]],
+  ['Datas', [['Data cadastro', 'date'], ['Data compra', 'date']]],
+  ['Depreciação', [['Próxima depreciação', 'date'], ['% depreciação', 'percentWhole'], ['Depreciar', 'text']]],
+];
 
 function text(value) {
   if (value == null) return '';
@@ -46,12 +56,35 @@ export function createAssetReportView({ document: doc, host, background = [], lo
     body.append(el('h3', 'asset-report-name', text(result.asset.fields?.IMOBILIZADO) || `Imobilizado #${id}`));
     const registration = el('section', 'asset-report-registration'); registration.dataset.assetRegistration = '';
     registration.append(el('h3', '', 'Dados cadastrais'));
-    const details = el('dl', 'asset-report-fields');
-    for (const field of result.asset.details) {
-      const pair = el('div', 'asset-report-field'); pair.dataset.assetField = field.name;
-      pair.append(el('dt', '', field.label), el('dd', '', format(field.value, field.type))); details.append(pair);
+    const fields = new Map(result.asset.details.map(field => [registrationFieldKey(field.label), field]));
+    const purchase = registrationNumber(fields.get(registrationFieldKey('Valor compra'))?.value);
+    const residual = registrationNumber(fields.get(registrationFieldKey('Valor residual'))?.value);
+    const depreciated = purchase > 0 && residual != null ? (purchase - residual) / purchase * 100 : null;
+    for (const [title, definitions] of registrationGroups) {
+      const group = el('section', 'asset-report-group');
+      group.append(el('h4', '', title));
+      const details = el('dl', 'asset-report-fields');
+      for (const [label, type] of definitions) {
+        const field = fields.get(registrationFieldKey(label));
+        const pair = el('div', 'asset-report-field'); pair.dataset.assetField = field?.name || label;
+        let caption = label;
+        if (label === 'Valor residual' && Number.isFinite(depreciated)) {
+          caption += ` (${new Intl.NumberFormat('pt-BR', { minimumFractionDigits: 1, maximumFractionDigits: 1 }).format(depreciated)}% depreciado)`;
+        }
+        const value = el('dd');
+        if (['Status', 'Depreciar'].includes(label)) {
+          const badge = el('span', 'asset-report-badge', format(field?.value, type));
+          const status = text(field?.value).trim().toUpperCase();
+          if (label === 'Status' && ['ATIVO', 'INATIVO'].includes(status)) badge.classList.add(status === 'ATIVO' ? 'asset-report-badge--active' : 'asset-report-badge--inactive');
+          value.append(badge);
+        } else value.textContent = format(field?.value, type);
+        if (['Imobilizado', 'Fornecedor'].includes(label)) pair.classList.add('asset-report-field--wide');
+        if (type === 'currency') pair.classList.add('asset-report-field--amount');
+        pair.append(el('dt', '', caption), value); details.append(pair);
+      }
+      group.append(details); registration.append(group);
     }
-    registration.append(details); body.append(registration);
+    body.append(registration);
     const history = el('section', 'asset-report-history'); history.append(el('h3', '', 'Histórico de depreciação'));
     history.append(el('p', 'asset-report-summary', `${result.history.length} ${result.history.length === 1 ? 'depreciação' : 'depreciações'} • Total do histórico: ${format(result.historyTotal, 'currency')}`));
     if (!result.history.length) { const empty = el('p', 'asset-report-empty', 'Nenhuma depreciação registrada para este imobilizado.'); empty.dataset.assetReportEmpty = ''; history.append(empty); }

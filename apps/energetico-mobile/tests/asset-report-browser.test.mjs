@@ -54,7 +54,16 @@ test('toque, teclado, cadastro e 31 depreciações cabem em 320/390/1365px sem p
       assert.match(layout.text, /4\.723,90/); assert.match(layout.text, /3%/); assert.doesNotMatch(layout.text, /300%/);
       assert.match(layout.text, /123456789012345/);
       assert.match(layout.text, /NÚMERO DO PEDIDO494/);
-      if (width === 390) await shot(api, `${kind}-cadastro-390`);
+      assert.match(layout.text, /Valor residual \(5,5% depreciado\)/);
+      assert.doesNotMatch(layout.text, /NÃO DEVE APARECER/);
+      const registration = await api.evaluate(`(() => {
+        const root = document.querySelector('[data-asset-registration]'), purchase = root.querySelector('[data-asset-field="COMPRA"]'), status = root.querySelector('[data-asset-field="STATUS"] dd span');
+        return { count:root.querySelectorAll('[data-asset-field]').length, next:purchase.nextElementSibling.dataset.assetField, status:status.textContent, background:getComputedStyle(status).backgroundColor };
+      })()`);
+      assert.equal(registration.count, 13); assert.equal(registration.next, 'RESIDUAL');
+      assert.equal(registration.status, kind === 'asset' ? 'INATIVO' : 'ATIVO');
+      assert.equal(registration.background, kind === 'asset' ? 'rgb(254, 226, 226)' : 'rgb(220, 252, 231)');
+      await shot(api, `${kind}-cadastro-${width}`);
       await api.evaluate(`(() => { const dialog = document.querySelector('[data-asset-report]'); dialog.scrollTop += dialog.querySelector('.asset-report-history').getBoundingClientRect().top-dialog.getBoundingClientRect().top-95; })()`);
       if (width === 390) await shot(api, `${kind}-historico-390`);
       await api.tap(close); await api.wait('!document.querySelector("[data-asset-report]")');

@@ -21,6 +21,12 @@ const gallery = createRegistrationGallery({ document, kind, data: {
       { name: 'RESIDUAL', label: 'Valor residual', value: 4723.9, type: 'currency' },
       { name: 'PERCENTUAL', label: '% depreciação', value: 3, type: 'percentWhole' },
       { name: 'DATA', label: 'Data compra', value: '2025-01-01T03:00:00Z', type: 'date' },
+      { name: 'QTD', label: 'Quantidade', value: 1, type: 'number' },
+      { name: 'CADASTRO', label: 'Data cadastro', value: '2025-01-02', type: 'date' },
+      { name: 'PROXIMA', label: 'Próxima depreciação', value: '2027-01-01', type: 'date' },
+      { name: 'STATUS', label: 'Status', value: kind === 'asset' ? 'INATIVO' : 'ATIVO' },
+      { name: 'DEPRECIAR', label: 'Depreciar', value: 'SIM' },
+      { name: 'FUNCAO', label: 'Função', value: 'NÃO DEVE APARECER' },
     ] }, historyTotal: 4529.1, history: Array.from({ length: 31 }, (_, i) => ({ id: String(1030 - i), fields: {
       'ID IMOBILIZADO': Number(id), FILIAL: 'FILIAL FICTÍCIA DE IDENTIFICAÇÃO EXTENSA', '% DEPRECIAÇÃO': .03,
       'DATA DE DEPRECIAÇÃO': `${2026 - Math.floor(i / 12)}-${String(12 - i % 12).padStart(2, '0')}-01`,
