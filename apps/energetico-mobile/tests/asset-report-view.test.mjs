@@ -177,8 +177,8 @@ test('fechar ou atualizar a galeria aborta o relatório pendente', async t => {
     assert.doesNotMatch(registration.textContent, /FUNÇÃO|Título|Criado|NÃO MOSTRAR/);
     const purchase = registration.querySelector('[data-asset-field="COMPRA"]');
     assert.equal(purchase.nextElementSibling.dataset.assetField, 'VALORRESIDUAL');
-    assert.match(purchase.nextElementSibling.querySelector('dt').textContent, /30,5%/);
-    assert.match(purchase.nextElementSibling.querySelector('dd').textContent, /3\.015,51/);
+    assert.equal(purchase.nextElementSibling.querySelector('dt').textContent, 'Valor residual');
+    assert.match(purchase.nextElementSibling.querySelector('dd').textContent, /3\.015,51\s+\(30,5% depreciado\)/);
     const badge = registration.querySelector('[data-asset-field="STATUS"] dd span');
     assert.equal(badge.textContent, status);
     assert.equal(badge.classList.contains('asset-report-badge--active'), status === 'ATIVO');
@@ -195,7 +195,42 @@ test('percentual acumulado conserva residual zero e não inventa percentual com 
     result.asset.details.find(f => f.name === 'VALORRESIDUAL').value = residual;
     const view = createAssetReportView({ document: doc, host: doc.querySelector('#host'), loadReport: async () => result });
     t.after(() => view.destroy()); view.open('96'); await tick();
-    const label = doc.querySelector('[data-asset-field="VALORRESIDUAL"] dt').textContent;
-    if (expected) assert.ok(label.includes(expected), label); else assert.doesNotMatch(label, /%|NaN|Infinity/);
+    const field = doc.querySelector('[data-asset-field="VALORRESIDUAL"]');
+    assert.equal(field.querySelector('dt').textContent, 'Valor residual');
+    const value = field.querySelector('dd').textContent;
+    if (expected) assert.ok(value.includes(expected), value); else assert.doesNotMatch(value, /%|NaN|Infinity/);
+  }
+});
+
+test('faixas do percentual depreciado respeitam limites e ficam após o valor residual', async t => {
+  for (const [percent, color] of [[0,'green'], [9.9,'green'], [10,'yellow'], [24.9,'yellow'], [25,'orange'], [50,'orange'], [50.1,'red'], [100,'red']]) {
+    const dom=domFor(t), doc=dom.window.document, result=report();
+    result.asset.details.push({name:'COMPRA',label:'Valor compra',value:1000,type:'currency'});
+    result.asset.details.find(f=>f.name==='VALORRESIDUAL').value=1000-percent*10;
+    const view=createAssetReportView({document:doc,host:doc.querySelector('#host'),loadReport:async()=>result});
+    t.after(()=>view.destroy());view.open('96');await tick();
+    const field=doc.querySelector('[data-asset-field="VALORRESIDUAL"]');
+    const badge=field.querySelector('[data-depreciated-percent]');
+    assert.equal(field.querySelector('dt').textContent,'Valor residual');
+    assert.ok(badge,`percentual ausente em ${percent}%`);
+    assert.ok(badge.classList.contains(`asset-report-depreciated--${color}`),`${percent}% deve ser ${color}`);
+    assert.match(field.querySelector('dd').textContent,/^R\$\s.*\s\(\d/);
+    assert.match(badge.textContent,/% depreciado\)$/);
+  }
+});
+
+test('valores monetários decimais e percentuais muito próximos dos limites não contradizem a cor exibida', async t => {
+  for (const [purchase,residual,shown,color] of [
+    [0.3,0.27,'10,0','yellow'], [0.36,0.27,'25,0','orange'],
+    [10000,9001,'9,99','green'], [10000,7501,'24,99','yellow'], [10000,4996,'50,04','red'],
+  ]) {
+    const dom=domFor(t),doc=dom.window.document,result=report();
+    result.asset.details.push({name:'COMPRA',label:'Valor compra',value:purchase,type:'currency'});
+    result.asset.details.find(f=>f.name==='VALORRESIDUAL').value=residual;
+    const view=createAssetReportView({document:doc,host:doc.querySelector('#host'),loadReport:async()=>result});
+    t.after(()=>view.destroy());view.open('96');await tick();
+    const badge=doc.querySelector('[data-depreciated-percent]');
+    assert.equal(badge.textContent,`(${shown}% depreciado)`);
+    assert.ok(badge.classList.contains(`asset-report-depreciated--${color}`));
   }
 });
