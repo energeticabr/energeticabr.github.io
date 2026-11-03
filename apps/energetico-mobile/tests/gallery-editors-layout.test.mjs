@@ -20,11 +20,17 @@ test('all seven gallery editors fill the available phone and desktop space', {ti
   let child,socket;
   try {
     await server.listen();
-    child=spawn(browser,['--headless=new','--disable-gpu','--no-first-run','--no-sandbox','--remote-debugging-port=0',`--user-data-dir=${profile}`,'about:blank'],{stdio:'ignore'});
+    child=spawn(browser,['--headless=new','--disable-gpu','--no-first-run','--no-sandbox','--remote-debugging-port=0',`--user-data-dir=${profile}`,'about:blank'],{stdio:'ignore',windowsHide:true});
     const portFile=join(profile,'DevToolsActivePort');
-    for(let n=0;n<200&&!existsSync(portFile);n++) await delay(100);
-    assert.ok(existsSync(portFile));
-    const [port,path]=readFileSync(portFile,'utf8').trim().split(/\r?\n/);
+    let port,path;
+    for(let n=0;n<200;n++) {
+      if(existsSync(portFile)) {
+        [port,path]=readFileSync(portFile,'utf8').trim().split(/\r?\n/);
+        if(/^\d+$/.test(port||'') && /^\/devtools\/browser\/[\da-f-]+$/i.test(path||'')) break;
+      }
+      await delay(100);
+    }
+    assert.ok(port && path,'Chrome must finish writing its two-line endpoint');
     socket=new WebSocket(`ws://127.0.0.1:${port}${path}`);
     await new Promise((done,fail)=>{socket.addEventListener('open',done,{once:true});socket.addEventListener('error',fail,{once:true});});
     let sequence=0;

@@ -21,6 +21,14 @@ REQUEST = "f7d76b08-62b3-4507-9ee4-8c49f5fa1801"
 
 
 class ProgressTests(unittest.TestCase):
+    def test_pending_discovery_is_identity_scoped_and_does_not_wait_for_work(self):
+        registry = ProgressRegistry()
+        with registry.scope(OWNER, REQUEST):
+            emit_progress(62, 'photos')
+            self.assertEqual(registry.pending(OWNER)['percent'], 62)
+            self.assertEqual(registry.pending({'oid': 'other'})['status'], 'unavailable')
+        self.assertEqual(registry.pending(OWNER)['status'], 'unavailable')
+
     def setUp(self):
         self.now = 0
         self.registry = ProgressRegistry(clock=lambda: self.now, ttl=10, limit=2)

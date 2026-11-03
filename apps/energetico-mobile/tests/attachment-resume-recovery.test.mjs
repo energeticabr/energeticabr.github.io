@@ -23,6 +23,7 @@ function harness(t, { metadata = true, rejectedIds = [missingId], errorMessage =
   const client = createChatClient({ apiBaseUrl: 'https://energetico.test', tokenProvider: async () => 'test-session',
     fetchImpl: async (_url, options) => {
       const body = JSON.parse(options.body);
+      if (body.action === 'diary_evidence_pending') return json({ status: 'unavailable' });
       requests.push(body);
       if (body.action === 'attachment_snapshot') {
         if (afterFailure && hangingSnapshot) return new Promise(() => {});

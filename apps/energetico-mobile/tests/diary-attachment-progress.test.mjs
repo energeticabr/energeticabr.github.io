@@ -12,6 +12,43 @@ const settle = () => new Promise(setImmediate);
 const json = body => new Response(JSON.stringify(body), { headers: { 'Content-Type': 'application/json' } });
 const finished = { status: 'processed', messages: [], diaryEvidenceProgress: { requestId, percent: 100, status: 'complete', stage: 'ready' } };
 
+test('network loss after diary_finish rejoins that PDF and resumes once without duplicate finalization', async t => {
+  const store = createConversationStore(), events = new Map(), renders = [], requests = [];
+  const flow = { id: 'construction_diary_fill', contextId: 'preserved-diary', title: 'DIÁRIO' };
+  const attachment = { id: 'photo', fileName: 'foto.jpg', mimeType: 'image/jpeg', size: 1000, mediaUrl: '/api/portal-media/photo' };
+  let running = false, completed = false;
+  const client = createChatClient({ apiBaseUrl: 'https://example.com', tokenProvider: async () => 'token',
+    retryDelay: async () => { running = false; completed = true; },
+    fetchImpl: async (_url, options) => {
+      const body = JSON.parse(options.body); requests.push(body);
+      if (body.action === 'diary_evidence_pending') return json(running
+        ? { requestId, status: 'running', percent: 62, stage: 'photos' } : { status: 'unavailable' });
+      if (body.action === 'attachment_snapshot') return json({ status: 'processed', messages: [], attachments: [attachment] });
+      if (body.replyId === 'diary_finish') { running = true; throw new TypeError('network disconnected after request reached VM'); }
+      if (body.replyId === 'input_continue') {
+        assert.equal(running, false, 'resume must never wait behind the PDF lock');
+        return json({ status: 'processed', activeFlow: flow, attachments: [attachment], messages: [{ type: 'poll',
+          question: completed ? 'CONFIRMA O DIÁRIO?' : 'COMO DESEJA PROSSEGUIR COM AS EVIDÊNCIAS?',
+          options: [{ id: completed ? 'confirm_yes' : 'diary_finish', label: completed ? 'SIM' : 'FINALIZAR ANEXOS' }] }] });
+      }
+      throw new Error('unexpected mutation: ' + JSON.stringify(body));
+    } });
+  const controller = createAppController({ store, client,
+    auth: { initialize: async () => ({ homeAccountId: 'QA', name: 'QA' }) }, native: { importSharedItems: async () => [] },
+    view: { render: state => renders.push(state), on: (name, action) => { events.set(name, action); return () => events.delete(name); }, destroy() {} } });
+  t.after(() => controller.stop());
+  await controller.start();
+  assert.equal(await controller.sendText('FINALIZAR ANEXOS', 'diary_finish'), false);
+  store.setDraft('observação não enviada');
+  assert.equal(await events.get('retry-session')(), true);
+  assert.equal(requests.filter(body => body.replyId === 'diary_finish').length, 1);
+  assert.equal(requests.filter(body => body.replyId === 'input_continue').length, 2);
+  assert.ok(renders.some(state => state.resuming && state.diaryAttachmentProgress?.percent === 62));
+  assert.equal(store.getState().attachments[0].id, 'photo');
+  assert.equal(store.getState().draft, 'observação não enviada');
+  assert.equal(renders.at(-1).recoveryUncertain, false);
+});
+
 function clientHarness(t) {
   t.mock.timers.enable({ apis: ['setTimeout'] });
   let finish;

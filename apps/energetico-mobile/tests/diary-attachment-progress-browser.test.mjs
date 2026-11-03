@@ -17,7 +17,7 @@ test('diary percentage stays beside spinner inside loading card on phone and PC'
   for (const colorScheme of ['light', 'dark']) for (const [width, height] of [[320, 740], [390, 844], [1365, 768]]) {
     for (const percent of [0, 37, 100]) {
       const { stdout } = await runBrowserLayout(browser, { width, height, colorScheme,
-        url: `http://127.0.0.1:${server.httpServer.address().port}/tests/fixtures/diary-attachment-progress.html?percent=${percent}` });
+        url: `http://127.0.0.1:${server.httpServer.address().port}/tests/fixtures/diary-attachment-progress.html?percent=${percent}${percent === 37 ? '&resume=1' : ''}` });
       const dom = new JSDOM(stdout);
       const data = JSON.parse(dom.window.document.documentElement.dataset.layout); dom.window.close();
       assert.deepEqual(data, { percent: String(percent), adjacent: true, aligned: true, contained: true, overflow: false },

@@ -2,9 +2,9 @@ name: Diary attachment progress protocol
 on:
   push:
     branches: [main]
-    paths: ["backend-patches/diary-attachment-progress/**", ".github/workflows/diary-attachment-progress.yml"]
+    paths: ["backend-patches/diary-attachment-progress/**", "backend-patches/diary-network-recovery/**", ".github/workflows/diary-attachment-progress.yml"]
   pull_request:
-    paths: ["backend-patches/diary-attachment-progress/**", ".github/workflows/diary-attachment-progress.yml"]
+    paths: ["backend-patches/diary-attachment-progress/**", "backend-patches/diary-network-recovery/**", ".github/workflows/diary-attachment-progress.yml"]
 permissions:
   contents: read
 jobs:
@@ -16,3 +16,5 @@ jobs:
         with:
           python-version: "3.12"
       - run: python -m unittest discover -s backend-patches/diary-attachment-progress -p 'test*.py'
+      - run: pip install Pillow
+      - run: python -m unittest discover -s backend-patches/diary-network-recovery -p 'test*.py'
