@@ -85,6 +85,11 @@ test('toque, teclado, cadastro e 31 depreciações cabem em 320/390/1365px sem p
       const chartLayout = await api.evaluate(`(() => { const chart=document.querySelector('[data-depreciation-chart]'), svg=chart.querySelector('svg'); return {overflow:chart.scrollWidth>chart.clientWidth+1, viewport:document.documentElement.scrollWidth>innerWidth+1, dots:svg.querySelectorAll('circle').length, points:chart.querySelectorAll('[data-chart-point]').length, focus:document.activeElement.textContent}; })()`);
       assert.equal(chartLayout.overflow, false); assert.equal(chartLayout.viewport, false);
       assert.equal(chartLayout.dots, chartLayout.points); assert.ok(chartLayout.dots >= 31); assert.equal(chartLayout.focus, 'Fechar');
+      await api.wait(`(() => { const labels=[...document.querySelectorAll('[data-chart-label]')]; return labels.length === 3 && labels.every(n => n.dataset.positioned === 'true'); })()`);
+      const labels = await api.evaluate(`(() => { const root=document.querySelector('.depreciation-chart-plot-area').getBoundingClientRect(); return [...document.querySelectorAll('[data-chart-label]')].map(node=>{const r=node.getBoundingClientRect();return {text:node.textContent,value:node.dataset.value,left:r.left,right:r.right,top:r.top,bottom:r.bottom,inside:r.left>=root.left-1&&r.right<=root.right+1&&r.top>=root.top-1&&r.bottom<=root.bottom+1};}); })()`);
+      assert.equal(labels.length,3); assert.equal(labels.at(-1).value,'4723.9'); assert.match(labels.at(-1).text,/4\.723,90/);
+      assert.ok(labels.every(label=>label.inside), 'rótulos devem caber no gráfico');
+      assert.ok(labels.every((a,i)=>labels.every((b,j)=>i===j||a.right<=b.left||b.right<=a.left||a.bottom<=b.top||b.bottom<=a.top)), 'rótulos não devem se sobrepor');
       await shot(api, `${kind}-grafico-${width}`);
       await key(api, 'Escape', 'Escape', 27); await api.wait('!document.querySelector("[data-depreciation-chart]")');
       assert.equal(await api.evaluate(`document.activeElement===document.querySelector('${chartTrigger}')`), true);
@@ -112,4 +117,20 @@ test('toque, teclado, cadastro e 31 depreciações cabem em 320/390/1365px sem p
       t.diagnostic(JSON.stringify({ width, kind, id: layout.id, cards: layout.cards, overflow: layout.overflow, fieldOverflow: layout.fieldOverflow, buttonHeight: layout.buttonHeight }));
     });
   }
+});
+
+test('rótulos não se sobrepõem quando pontos têm a mesma data e o mesmo valor', { timeout: 60_000, skip: !browser && 'Chrome unavailable' }, async t => {
+  const cacheDir = await mkdtemp(join(tmpdir(), 'asset-chart-flat-'));
+  const server = await createServer({ root, cacheDir, logLevel: 'silent', server: { host: '127.0.0.1', port: 0, fs: { allow: [resolve(root, '../..'), cacheDir] } } });
+  t.after(async () => { await server.close(); await rm(cacheDir, { recursive: true, force: true }); }); await server.listen();
+  await withAttachmentBrowser(browser, { width: 320, height: 900 }, async api => {
+    await api.navigate(`http://127.0.0.1:${server.httpServer.address().port}/tests/fixtures/asset-report.html?kind=asset&scenario=flat`);
+    await api.wait('window.assetReportFixture?.ready');
+    await api.tap(trigger); await api.wait('document.querySelector("[data-asset-history-row]")');
+    await api.tap('[data-action="open-depreciation-chart"]');
+    await api.wait(`(() => {const a=[...document.querySelectorAll('[data-chart-label]')];return a.length===3&&a.every(n=>n.dataset.positioned==='true')})()`);
+    const labels=await api.evaluate(`[...document.querySelectorAll('[data-chart-label]')].map(n=>{const r=n.getBoundingClientRect();return {left:r.left,right:r.right,top:r.top,bottom:r.bottom}})`);
+    assert.ok(labels.every((a,i)=>labels.every((b,j)=>i===j||a.right<=b.left||b.right<=a.left||a.bottom<=b.top||b.bottom<=a.top)));
+    await shot(api,'flat-grafico-320');
+  });
 });

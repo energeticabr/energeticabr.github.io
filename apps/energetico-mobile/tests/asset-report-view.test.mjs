@@ -247,6 +247,10 @@ test('valor residual abre gráfico cronológico com valores registrados e fecha 
   const chart=doc.querySelector('[data-depreciation-chart]');
   assert.ok(chart); assert.equal(chart.getAttribute('role'),'dialog');
   assert.ok(chart.querySelector('svg'));
+  assert.deepEqual([...chart.querySelectorAll('[data-chart-label]')].map(p=>[p.dataset.date,p.dataset.value]),[
+    ['2025-01-01','5000'],['2026-10-01','4870'],['2026-11-01','4723.9']
+  ]);
+  assert.match(chart.querySelector('[data-chart-label]:last-of-type').textContent,/4\.723,90/);
   assert.deepEqual([...chart.querySelectorAll('[data-chart-point]')].map(p=>[p.dataset.date,p.dataset.value]),[
     ['2025-01-01','5000'],['2026-10-01','4870'],['2026-11-01','4723.9']
   ]);
@@ -277,4 +281,18 @@ test('gráfico conserva o valor registrado mesmo quando aumenta e não antecipa 
   const chart=doc.querySelector('[data-depreciation-chart]');
   assert.deepEqual([...chart.querySelectorAll('[data-chart-point]')].map(p=>p.dataset.value),['4870','4900']);
   assert.doesNotMatch(chart.textContent,/Compra/);
+});
+
+test('gráfico mostra somente rótulos existentes quando há um ou dois registros na mesma data', async t => {
+  for (const count of [1, 2]) {
+    const dom=domFor(t), doc=dom.window.document, result=report();
+    result.history=result.history.slice(0,count);
+    result.history.forEach(row => { row.fields['DATA DE DEPRECIAÇÃO']='2026-11-01'; });
+    const view=createAssetReportView({document:doc,host:doc.querySelector('#host'),loadReport:async()=>result});
+    t.after(()=>view.destroy()); view.open('96'); await tick();
+    doc.querySelector('[data-action="open-depreciation-chart"]').click();
+    const labels=[...doc.querySelectorAll('[data-chart-label]')];
+    assert.equal(labels.length,count);
+    assert.equal(labels.at(-1).dataset.value,'4723.9');
+  }
 });
