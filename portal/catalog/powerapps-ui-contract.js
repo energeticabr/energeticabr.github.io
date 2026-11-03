@@ -709,7 +709,12 @@ export function resolvePowerAppsUiContract(entity = {}, columns = [], options = 
   const gallerySort = safeGallerySort(declared.galleryVariant, columns, entityId)
     || GALLERY_DEFAULT_SORTS[entityId]
     || null;
-  const formColumns = selectColumns(contractColumns, declared.formFields, column => column.editable === true);
+  // Orders edit their own date. Keep the historical payment/audit column out
+  // of this editor rather than copying one date into the other stored field.
+  const formFields = entityId === "notas-pendentes" && declared.mode === "edit"
+    ? [...new Set(declared.formFields.map(field => field === "DATAPGTOEFETUADO" ? "DATAPEDIDO" : field))]
+    : declared.formFields;
+  const formColumns = selectColumns(contractColumns, formFields, column => column.editable === true);
   const signatureFields = (POWERAPPS_FORM_FIELDS[entityId] || [])
     .filter(field => canonicalFieldName(field) === "ASSINATURA");
   return Object.freeze({

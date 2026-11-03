@@ -128,9 +128,13 @@ test("todo controle fechado dos Forms create e edit permanece fechado no contrat
       const declared = getPowerAppsUiContract(entity.id, { mode });
       for (const variant of declared.formVariants) {
         variants += 1;
+        const editableName = name => entity.id === "notas-pendentes" && mode === "edit" && name === "DATAPGTOEFETUADO"
+          ? "DATAPEDIDO" : name;
         const columns = Object.entries(variant.fields)
           .filter(([name]) => name !== "{Attachments}")
-          .map(([name, field]) => editableColumn(name, { label: field.displayName || name }));
+          .map(([name, field]) => editableName(name) !== name
+            ? editableColumn("DATAPEDIDO", { label: "DATA PEDIDO", control: "date" })
+            : editableColumn(name, { label: field.displayName || name }));
         const resolved = resolvePowerAppsUiContract(entity, columns, {
           mode,
           formVariantId: variant.id,
@@ -147,8 +151,12 @@ test("todo controle fechado dos Forms create e edit permanece fechado no contrat
             );
             continue;
           }
-          const column = resolved.formColumns.find(candidate => candidate.name === name);
+          const column = resolved.formColumns.find(candidate => candidate.name === editableName(name));
           assert.ok(column, `${entity.id}:${mode}:${variant.id}:${name} não foi exposto`);
+          if (editableName(name) !== name) {
+            assert.equal(resolved.formColumns.some(candidate => candidate.name === name), false);
+            assert.equal(column.label, "DATA PEDIDO");
+          }
           if (field.closed === true) {
             assert.ok(
               ["select", "lookup", "person"].includes(column.control),

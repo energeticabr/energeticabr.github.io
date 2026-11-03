@@ -5,13 +5,13 @@ import { JSDOM } from 'jsdom';
 import { createOrdersGalleryData } from '../src/chat/orders-gallery-data.js';
 import { createGalleryRecordActions } from '../src/ui/gallery-record-actions.js';
 
-const fields = { FILIAL: 'CENTRAL', FORNECEDOR: 'COFER LTDA', VALORTOTAL: 25, NOTAFISCAL: 'SUBMISSÃO DISPENSADA', OBSFISCAL: 'REGULAR', CONSTACNO: 'SIM', STATUS: 'PENDENTE AUDITORIA', DATAPGTOEFETUADO: '2026-10-03' };
+const fields = { FILIAL: 'CENTRAL', FORNECEDOR: 'COFER LTDA', VALORTOTAL: 25, NOTAFISCAL: 'SUBMISSÃO DISPENSADA', OBSFISCAL: 'REGULAR', CONSTACNO: 'SIM', STATUS: 'PENDENTE AUDITORIA', DATAPEDIDO: '2026-10-03' };
 const orderColumns = [
   { name: 'FILIAL', displayName: 'FILIAL', text: {} }, { name: 'FORNECEDOR', displayName: 'FORNECEDOR', text: {} },
   { name: 'VALORTOTAL', displayName: 'VALORTOTAL', currency: {} }, { name: 'NOTAFISCAL', displayName: 'NOTA FISCAL', choice: { choices: ['PENDENTE', 'SUBMETIDO', 'SUBMISSÃO DISPENSADA'] } },
   { name: 'OBSFISCAL', displayName: 'OBS FISCAL', text: { allowMultipleLines: true } }, { name: 'CONSTACNO', displayName: 'CONSTACNO', choice: { choices: ['SIM', 'NÃO', 'DISPENSADO'] } },
   { name: 'STATUS', displayName: 'STATUS', choice: { choices: ['PENDENTE AUDITORIA', 'APROVADO'] } },
-  { name: 'DATAPGTOEFETUADO', displayName: 'DATAPGTOEFETUADO', dateTime: { format: 'dateOnly' } },
+  { name: 'DATAPEDIDO', displayName: 'DATAPEDIDO', dateTime: { format: 'dateOnly' } },
 ];
 const launchLabels = ['AGRUPAR', 'FILIAL', 'FORNECEDOR', 'QUANTIDADE', 'VALOR UNITÁRIO', 'FRETE'];
 const launchColumns = launchLabels.map((displayName, i) => ({ name: `launch_${i}`, displayName, text: {} }));
@@ -92,28 +92,28 @@ test('Form43 validates outgoing draft fields and preserves the originally loaded
   assert.equal(f.writes[0].options.eTag, '"loaded"');
 });
 
-test('blank audit date allows choosing STATUS but rejects submitting APROVADO without writes', async () => {
-  const f = fixture(); f.order.fields.DATAPGTOEFETUADO = '';
+test('blank order date allows choosing STATUS but rejects submitting APROVADO without writes', async () => {
+  const f = fixture(); f.order.fields.DATAPEDIDO = '';
   const context = await f.data.loadEditor('42');
   assert.equal((await context.evaluateFieldLocks({})).STATUS.editable, true, 'the source DisplayMode does not depend on the date');
-  await assert.rejects(f.data.saveEditor(context, { STATUS: 'APROVADO' }), /data.*auditoria|DATAPGTOEFETUADO/i);
+  await assert.rejects(f.data.saveEditor(context, { STATUS: 'APROVADO' }), /data.*pedido|DATAPEDIDO/i);
   assert.equal(f.writes.length, 0);
 });
 
-test('an approved draft with a newly supplied audit date passes with the originally loaded ETag', async () => {
-  const f = fixture(); f.order.fields.DATAPGTOEFETUADO = '';
+test('an approved draft with a newly supplied order date passes with the originally loaded ETag', async () => {
+  const f = fixture(); f.order.fields.DATAPEDIDO = '';
   const context = await f.data.loadEditor('42');
-  await f.data.saveEditor(context, { STATUS: 'APROVADO', DATAPGTOEFETUADO: '2026-10-03' });
+  await f.data.saveEditor(context, { STATUS: 'APROVADO', DATAPEDIDO: '2026-10-03' });
   assert.equal(f.writes[0].values.STATUS, 'APROVADO');
-  assert.ok(f.writes[0].values.DATAPGTOEFETUADO.startsWith('2026-10-03'));
+  assert.ok(f.writes[0].values.DATAPEDIDO.startsWith('2026-10-03'));
   assert.equal(f.writes[0].options.eTag, '"loaded"');
 });
 
-test('already approved edits require the current audit date even when STATUS is retained', async () => {
+test('already approved edits require the current order date even when STATUS is retained', async () => {
   const f = fixture(); f.order.fields.STATUS = 'APROVADO';
   const context = await f.data.loadEditor('42');
-  f.order.fields.DATAPGTOEFETUADO = '';
-  await assert.rejects(f.data.saveEditor(context, { OBSFISCAL: 'Nova conferência' }), /data.*auditoria|DATAPGTOEFETUADO/i);
+  f.order.fields.DATAPEDIDO = '';
+  await assert.rejects(f.data.saveEditor(context, { OBSFISCAL: 'Nova conferência' }), /data.*pedido|DATAPEDIDO/i);
   assert.equal(f.writes.length, 0);
 });
 
