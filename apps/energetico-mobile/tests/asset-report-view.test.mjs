@@ -41,7 +41,7 @@ test('toque nos cartões das duas galerias usa o ID do bem e retorna à mesma p�
     assert.ok(modal.textContent.indexOf('Dados cadastrais') < modal.textContent.indexOf('Histórico de depreciação'));
     assert.match(modal.textContent, /4\.723,90/); assert.match(modal.textContent, /146,10/); assert.match(modal.textContent, /01\/11\/2026/);
     assert.match(modal.textContent, /3%/); assert.doesNotMatch(modal.textContent, /300%/);
-    assert.equal(modal.querySelector('img'), null); assert.match(modal.textContent, /<img src=x/);
+    assert.equal(modal.querySelector('img'), null); assert.doesNotMatch(modal.textContent, /<img src=x/);
     assert.equal(modal.querySelectorAll('[data-asset-history-row]').length, 2);
     assert.equal(modal.querySelector('[data-asset-history-row="250"] [data-history-financial-id]').textContent, '—');
     assert.match(modal.querySelector('[data-asset-history-row="275"] [data-history-financial-id]').textContent, /4321/);
@@ -157,4 +157,45 @@ test('fechar ou atualizar a galeria aborta o relatório pendente', async t => {
   } }); t.after(() => gallery.destroy()); await gallery.open();
   doc.querySelector('[data-asset-report-trigger]').click(); gallery.close(); assert.equal(signals[0].aborted, true);
   await gallery.open(); doc.querySelector('[data-asset-report-trigger]').click(); await gallery.open(); assert.equal(signals[1].aborted, true);
+});
+
+ test('cadastro mostra somente campos solicitados, compra seguida do residual acumulado e status destacados', async t => {
+  for (const status of ['ATIVO', 'INATIVO', 'PENDENTE']) {
+    const dom = domFor(t), doc = dom.window.document, result = report();
+    result.asset.details.push(
+      { name: 'COMPRA', label: 'Valor compra', value: '4.338,02', type: 'currency' },
+      { name: 'STATUS', label: 'STATUS', value: status },
+      { name: 'TITLE', label: 'Título', value: 'NÃO MOSTRAR' },
+      { name: 'Created', label: 'Criado', value: '2025-01-01' },
+      { name: 'FORNECEDOR', label: 'FORNECEDOR', value: '<img src=x onerror=alert(1)>' },
+    );
+    result.asset.details.find(f => f.name === 'VALORRESIDUAL').value = '3.015,51';
+    const view = createAssetReportView({ document: doc, host: doc.querySelector('#host'), loadReport: async () => result });
+    t.after(() => view.destroy()); view.open('96', doc.querySelector('#trigger')); await tick();
+    const registration = doc.querySelector('[data-asset-registration]');
+    assert.equal(registration.querySelectorAll('[data-asset-field]').length, 13);
+    assert.doesNotMatch(registration.textContent, /FUNÇÃO|Título|Criado|NÃO MOSTRAR/);
+    const purchase = registration.querySelector('[data-asset-field="COMPRA"]');
+    assert.equal(purchase.nextElementSibling.dataset.assetField, 'VALORRESIDUAL');
+    assert.match(purchase.nextElementSibling.querySelector('dt').textContent, /30,5%/);
+    assert.match(purchase.nextElementSibling.querySelector('dd').textContent, /3\.015,51/);
+    const badge = registration.querySelector('[data-asset-field="STATUS"] dd span');
+    assert.equal(badge.textContent, status);
+    assert.equal(badge.classList.contains('asset-report-badge--active'), status === 'ATIVO');
+    assert.equal(badge.classList.contains('asset-report-badge--inactive'), status === 'INATIVO');
+    assert.equal(registration.querySelector('img'), null);
+    assert.match(registration.textContent, /<img src=x/);
+  }
+});
+
+test('percentual acumulado conserva residual zero e não inventa percentual com compra ausente ou zero', async t => {
+  for (const [purchase, residual, expected] of [[100, 100, '0,0%'], [100, 0, '100,0%'], [100, 75.54, '24,5%'], [0, 0, null], [null, 5, null], [100, null, null]]) {
+    const dom = domFor(t), doc = dom.window.document, result = report();
+    result.asset.details.push({ name: 'COMPRA', label: 'Valor compra', value: purchase, type: 'currency' });
+    result.asset.details.find(f => f.name === 'VALORRESIDUAL').value = residual;
+    const view = createAssetReportView({ document: doc, host: doc.querySelector('#host'), loadReport: async () => result });
+    t.after(() => view.destroy()); view.open('96'); await tick();
+    const label = doc.querySelector('[data-asset-field="VALORRESIDUAL"] dt').textContent;
+    if (expected) assert.ok(label.includes(expected), label); else assert.doesNotMatch(label, /%|NaN|Infinity/);
+  }
 });
