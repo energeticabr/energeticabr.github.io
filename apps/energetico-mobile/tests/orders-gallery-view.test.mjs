@@ -30,6 +30,24 @@ async function setup(t, overrides = {}) {
 }
 
 const settle = () => new Promise(resolve => setImmediate(resolve));
+
+test('order date cluster uses the saved order date below the supplier, independently of payment and creation dates', async t => {
+  const ctx = await setup(t, { rows: [
+    { id: '452', fields: { FORNECEDOR: 'FORNECEDOR FICTÍCIO', DATAPEDIDO: '2026-10-25T03:00:00Z', DATAPGTOEFETUADO: '2026-10-28T03:00:00Z', Created: '2026-10-26T03:00:00Z' } },
+    { id: '451', fields: { FORNECEDOR: 'SEM DATA', DATAPGTOEFETUADO: '2026-10-28T03:00:00Z', Created: '2026-10-26T03:00:00Z' } },
+    { id: '450', fields: { FORNECEDOR: 'NOME COM DATA ALIAS', 'DATA PEDIDO': '03/11/2026' } },
+  ] });
+  await ctx.gallery.open();
+  for (const [id, expected] of [['452', '25/10/2026'], ['451', '—'], ['450', '03/11/2026']]) {
+    const card = ctx.root().querySelector(`[data-item-id="${id}"]`);
+    const cluster = card.querySelector('.og-order-date');
+    assert.ok(cluster);
+    assert.equal(cluster.querySelector('.og-order-date-label').textContent, 'DATA PEDIDO');
+    assert.equal(cluster.querySelector('.og-order-date-value').textContent, expected);
+    assert.ok(card.querySelector('.og-heading-copy').contains(cluster));
+    assert.equal(cluster.querySelector('button'), null);
+  }
+});
 function button(root, text) {
   const found = [...root.querySelectorAll("button")].find(node => node.textContent.trim() === text && !node.closest("[hidden]"));
   assert.ok(found, `visible button: ${text}`);
