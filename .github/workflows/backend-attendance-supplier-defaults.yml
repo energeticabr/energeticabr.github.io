@@ -1,0 +1,23 @@
+name: Backend attendance supplier defaults
+on:
+  pull_request:
+    paths:
+      - 'backend-patches/attendance-supplier-defaults/**'
+      - '.github/workflows/backend-attendance-supplier-defaults.yml'
+  push:
+    branches: [main]
+    paths:
+      - 'backend-patches/attendance-supplier-defaults/**'
+      - '.github/workflows/backend-attendance-supplier-defaults.yml'
+permissions:
+  contents: read
+jobs:
+  deployment-tests:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+      - run: python -B -m unittest discover -s backend-patches/attendance-supplier-defaults -p test_deploy.py -v

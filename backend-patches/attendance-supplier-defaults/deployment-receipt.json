@@ -1,0 +1,10 @@
+{
+  "status": "deployed",
+  "backup": "/var/backups/energetica-whatsapp/attendance-defaults-20261103T214615605336Z",
+  "health": {"status": "ok", "channel": "generic"},
+  "after": {
+    "app": "908cb493e1fcfab7a1f25f9af009ae176c3e035e4cf53b55e3c035c15821e684",
+    "build": "d8cea6a925a4184e88705dd45314e60983c1efe4d55b85e2c7fdd45486eaac01"
+  },
+  "installed_engine_tests": {"passed": 33, "failed": 0, "external_services": "in-memory"}
+}
