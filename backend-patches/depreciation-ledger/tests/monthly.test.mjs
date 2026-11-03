@@ -26,6 +26,9 @@ test('overdue assets advance to the next current month and use current competenc
  const a=(await build()).actions.Apply_to_each.actions;
  assert.equal(a.Compose_2.inputs,"@outputs('Next_month')");
  assert.equal(a.Ensure_financial.actions.Create_new_financial.inputs.parameters['item/field_3'],"@outputs('Month_date')");
+ assert.equal(a.Ensure_financial.actions.Create_new_financial.inputs.parameters['item/field_4'],"@outputs('Month_date')");
+ assert.equal(a.Ensure_financial.actions.Create_new_financial.inputs.parameters['item/field_14'],'DEPRECIAÇÃO E AMORTIZAÇÃO');
+ assert.match(a.Ensure_financial.actions.Create_new_financial.inputs.parameters['item/DEPRECIACAOCHAVE'],/Month_key/);
 });
 test('financial and history creations are deduplicated and do not retry blind POSTs',async()=>{
  const a=(await build()).actions.Apply_to_each.actions;

@@ -260,6 +260,14 @@ export function createLaunchGallery({ document: documentRef = globalThis.documen
     }
     return undefined;
   }
+  function depreciationDate(fields, value) {
+    const depreciation = ['ETAPA', 'ETAPA OBRA', 'ETAPA DA OBRA', 'CONTA']
+      .some(name => key(display(field(fields, name))) === 'DEPRECIACAOEAMORTIZACAO');
+    // Older depreciation flows stored a calendar day at UTC midnight, which
+    // otherwise appears as the previous day in São Paulo.
+    return depreciation && /^\d{4}-\d{2}-\d{2}T00:00:00(?:\.0+)?Z$/i.test(String(value ?? ''))
+      ? formatEditorDate(value) : value;
+  }
   function summaryField(labelText, value, className = '', iconName = '') {
     if (value == null || display(value).trim() === '') return null;
     const pair = element('div', `lg-record-field${className ? ` ${className}` : ''}`);
@@ -793,7 +801,8 @@ export function createLaunchGallery({ document: documentRef = globalThis.documen
       const amount = amountFor(item);
       if (amount != null) accumulated += amount;
       else accumulatedComplete = false;
-      const date = field(fields, 'DATA DE COMPRA', 'DATA', 'DATA PGTO EFETUADO');
+      const primaryDate = field(fields, 'DATA DE COMPRA', 'DATA');
+      const date = primaryDate ?? depreciationDate(fields, field(fields, 'DATA PGTO EFETUADO'));
       const quantity = field(fields, 'QUANTIDADE', 'QTD');
       const unit = field(fields, 'UNIDADE', 'UN');
       const quantityLabel = [quantity, unit].filter(value => value != null && display(value).trim()).map(display).join(' ');
@@ -1094,7 +1103,7 @@ export function createLaunchGallery({ document: documentRef = globalThis.documen
     const total = summaryField('VALOR TOTAL', display(moneyFieldValue(totalValue)).replace(/\u00a0/g, ' '), '', 'money');
     const paidDate = field(fields, 'DATA PGTO EFETUADO', 'DATA DE PAGAMENTO', 'DATA PAGAMENTO');
     const paymentSummary = element('div', 'lg-record-payment-summary');
-    paymentSummary.append(summaryField('DATA PGTO EFETUADO', paidDate ?? '—', 'lg-record-payment-date', 'calendar'));
+    paymentSummary.append(summaryField('DATA PGTO EFETUADO', depreciationDate(fields, paidDate) ?? '—', 'lg-record-payment-date', 'calendar'));
     if (total) { total.classList.add('lg-record-total'); paymentSummary.append(total); }
     const headingActions = recordActions.render(item);
     headingActions.classList.add('lg-record-header-actions');
@@ -1108,7 +1117,7 @@ export function createLaunchGallery({ document: documentRef = globalThis.documen
     summaryFields.append(...[
       clusterAction('FORNECEDOR', supplier, 'supplier'),
       clusterAction('PEDIDO', group, 'order'),
-      !paidDate ? summaryField('PREVISTO', formatGalleryDate('DATA PGTO PREVISTO', plannedDate) ?? plannedDate,
+      !paidDate ? summaryField('PREVISTO', formatGalleryDate('DATA PGTO PREVISTO', depreciationDate(fields, plannedDate)) ?? depreciationDate(fields, plannedDate),
         'lg-record-payment-date', 'calendar') : null,
     ].filter(Boolean));
 
@@ -1140,7 +1149,7 @@ export function createLaunchGallery({ document: documentRef = globalThis.documen
     execution.append(element('h3', 'lg-record-section-title', '▦ Datas'));
     const dateEntries = [
       ['DATA DE COMPRA', field(fields, 'DATA DE COMPRA', 'DATA')],
-      ['DATA PREVISTO PGTO', field(fields, 'DATA PGTO PREVISTO', 'DATA PREVISTO PGTO', 'DATA PREVISTO')],
+      ['DATA PREVISTO PGTO', depreciationDate(fields, field(fields, 'DATA PGTO PREVISTO', 'DATA PREVISTO PGTO', 'DATA PREVISTO'))],
       ['DATA DE RMS', field(fields, 'DATA DE RMS', 'DATA RMS')],
       ['DATA DE LIQUIDAÇÃO', field(fields, 'DATA DE LIQUIDAÇÃO', 'DATA LIQUIDAÇÃO')],
       ['CRIADO', field(fields, 'CRIADO', 'CREATED')],
