@@ -81,6 +81,60 @@ async function showDetail(ctx) {
 }
 const mutations = ctx => ctx.calls.filter(({ operation }) => !['snapshot', 'detail', 'attachment'].includes(operation));
 
+test('midnight UTC payment dates keep their intended calendar day and unchanged fields are never resent', async t => {
+  const item = { ...row(2746), fields: { ...row().fields, ETAPA: 'DEPRECIAÇÃO E AMORTIZAÇÃO',
+    CONTA: 'DEPRECIAÇÃO E AMORTIZAÇÃO', 'DATA PGTO PREVISTO': '2026-04-01T00:00:00Z',
+    'DATA PGTO EFETUADO': '2026-04-01T00:00:00Z', Created: '2026-04-01T00:00:00Z' } };
+  const ctx = await setup(t, {request: async op => op === 'snapshot' ? snapshot({rows:[item]}) : detail({item, editFields:[
+    {name:'DATA PGTO PREVISTO',label:'Previsto',type:'date'},
+    {name:'DATA PGTO EFETUADO',label:'Efetuado',type:'date'},
+    {name:'CONTA',label:'Conta',type:'text'},
+    {name:'QUANTIDADE',label:'Quantidade',type:'number'},
+  ]})});
+  await ctx.gallery.open();
+  const card=ctx.root().querySelector('.lg-record');
+  assert.match(card.querySelector('.lg-record-payment-date').textContent,/01\/04\/2026/);
+  button(card,'Ver mais informações').click();
+  assert.match(card.querySelector('.lg-record-dates').textContent,/DATA PREVISTO PGTO01\/04\/2026/);
+  assert.match(card.querySelector('.lg-record-dates').textContent,/CRIADO31\/03\/2026/);
+  await showDetail(ctx);
+  assert.equal(ctx.root().querySelector('[name="DATA PGTO PREVISTO"]').value,'01/04/2026');
+  assert.equal(ctx.root().querySelector('[name="DATA PGTO EFETUADO"]').value,'01/04/2026');
+  input(ctx,'QUANTIDADE','3');
+  button(ctx.root(),'SUBMETER').click();
+  button(ctx.root(),'SUBMETER').click();await settle();
+  assert.deepEqual(mutations(ctx).at(-1).payload.fields,{QUANTIDADE:3});
+});
+
+test('ordinary payment instants and audit timestamps retain the existing local-time display', async t => {
+  const item={...row(),fields:{...row().fields,ETAPA:'CONSTRUÇÃO', 'DATA PGTO EFETUADO':'2026-04-01T00:00:00Z'}};
+  const ctx=await setup(t,{request:async op=>op==='snapshot'?snapshot({rows:[item]}):detail({item})});
+  await ctx.gallery.open();
+  assert.match(ctx.root().querySelector('.lg-record-payment-date').textContent,/31\/03\/2026/);
+});
+
+for (const stage of ['DEPRECIAÇÃO E AMORTIZAÇÃO', {LookupValue:'DEPRECIAÇÃO E AMORTIZAÇÃO'}]) {
+  test(`depreciation calendar dates are recognized through ETAPA DA OBRA (${typeof stage})`, async t => {
+    const fields={...row().fields,'ETAPA DA OBRA':stage,'DATA PGTO EFETUADO':'2026-04-01T00:00:00Z'};
+    delete fields.ETAPA; delete fields.CONTA;
+    const item={...row(),fields};
+    const ctx=await setup(t,{request:async op=>op==='snapshot'?snapshot({rows:[item]}):detail({item})});
+    await ctx.gallery.open();
+    assert.match(ctx.root().querySelector('.lg-record-payment-date').textContent,/01\/04\/2026/);
+  });
+}
+
+test('supplier launch table preserves the depreciation calendar date when payment is its date source', async t => {
+  const fields={...row().fields,ETAPA:'DEPRECIAÇÃO E AMORTIZAÇÃO','DATA PGTO EFETUADO':'2026-04-01T00:00:00Z'};
+  delete fields.DATA; delete fields['DATA DE COMPRA'];
+  const item={...row(),fields};
+  const ctx=await setup(t,{request:async op=>op==='snapshot'?snapshot({rows:[item]}):detail({item})});
+  await ctx.gallery.open();
+  ctx.root().querySelector('[data-cluster-kind="supplier"]').click();
+  await settle(); await settle();
+  assert.match(ctx.root().querySelector('.lg-cluster-table tbody').textContent,/01\/04\/2026/);
+});
+
 for (const rejected of [false, true]) test(`launch top back cancels pending detail and ignores late ${rejected ? 'error' : 'success'}`, async t => {
   const pending = deferred(); let signal;
   const ctx = await setup(t, { request: async (operation, _payload, options) => {
