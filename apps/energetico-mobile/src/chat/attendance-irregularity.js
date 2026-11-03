@@ -4,6 +4,10 @@ const PUNCH_SLOTS = [
   ['entry1', 'E1'], ['exit1', 'S1'], ['entry2', 'E2'], ['exit2', 'S2'],
 ];
 
+export function isAttendanceHolidayReason(value) {
+  return String(value ?? '').trim().toLocaleUpperCase('pt-BR') === 'FERIADO';
+}
+
 /** Allow up to 30 minutes either side of the workday; missing punches still require justification. */
 export function attendanceIrregularity({ date, minutes, punches, status } = {}) {
   if (!isValidRhidReportDate(date)) return null;
