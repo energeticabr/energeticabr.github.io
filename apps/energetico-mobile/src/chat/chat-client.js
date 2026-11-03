@@ -313,6 +313,8 @@ export function createChatClient({
   }
 
   async function waitForDiaryEvidence({ signal, onProgress } = {}) {
+    // The isolated demonstration has no corporate diary jobs or this action.
+    if (apiPrefix === '/api/demo') return;
     for (;;) {
       checkRequestCancellation(signal);
       const abort = new AbortController();

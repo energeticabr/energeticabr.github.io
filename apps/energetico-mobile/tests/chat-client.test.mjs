@@ -29,6 +29,13 @@ test('retomada do PDF aceita servidor antigo mas preserva falhas de rede e cance
   assert.equal(calls, 0);
 });
 
+test('retomada da demonstração não consulta processamento corporativo nem adquire token', async () => {
+  const client = clientWith(async () => { throw Error('sandbox não oferece essa consulta'); }, {
+    apiPrefix: '/api/demo', tokenProvider: async () => { throw Error('consulta indevida'); },
+  });
+  await client.waitForDiaryEvidence();
+});
+
 function jsonResponse(payload, status = 200) {
   return new Response(JSON.stringify(payload), {
     status,
