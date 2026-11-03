@@ -129,8 +129,13 @@ export async function attachLatestTestFlightBuild(client) {
 
 if (process.argv[1] && import.meta.url === pathToFileURL(process.argv[1]).href) {
   try {
-    const result = await attachLatestTestFlightBuild(createAppleClient());
-    console.log(JSON.stringify(result));
+    const client = createAppleClient();
+    for (const path of [`/v1/betaGroups?filter[app]=${APP_ID}`, `/v1/apps/${APP_ID}/betaGroups`]) {
+      try {
+        const groups = await list(client, path);
+        console.log(JSON.stringify({ path, count: groups.length, matches: groups.filter(g => String(attr(g).name || '').toUpperCase().includes('ENERGETICO')).map(g => ({ name: attr(g).name, isInternal: attr(g).isInternal, hasAccessToAllBuilds: attr(g).hasAccessToAllBuilds })) }));
+      } catch (error) { console.log(JSON.stringify({ path, error: String(error.message) })); }
+    }
   } catch (error) {
     console.error(error.message);
     process.exitCode = 1;
