@@ -34,4 +34,13 @@ Private complete logs, exact failure-name comparison, exported synthetic packets
 
 ## Publication
 
-The shared backend release is intended for the existing Android, iOS and Windows/web clients. The independent installed-hash and health receipt is recorded here after installation; a successful local test or preflight alone is not a publication claim.
+Published on 2026-11-03 at 15:38:44 UTC after independent review and merge of PR #731 (`25d970adcdb5b654669ae06c03167db68a0105b7`). The production installer returned `deployed` with health `ok` and installed SHA-256 `e653b998ee8c5c9281631ed5f55a9f1033c0fb900c76ee2984d1158e97f96da2`.
+
+- Reviewed manifest SHA-256: `ff964205c693be36797fe58d282aef2eeb27eb5dde82e32d167cec63db00cef6`.
+- Backup/receipt: `/var/backups/energetica-whatsapp/single-launch-order-supplier-20261103T153844998533Z`.
+- Independent post-install read verified the exact workflow digest, unchanged configuration and unchanged mirror digests listed above.
+- Both bridge and WhatsMeow services were active; the HTTP health response was `{"status":"ok","channel":"generic"}`; no temporary deployment gate remained.
+- All 14 feature tests were rerun against the exact installed production workflow module, with synthetic storage/catalog/media fixtures: PASS.
+- Android, iOS and Windows/web use this shared runtime. No app sources/bundles changed, so no new native binary or client reinstall is required for this feature.
+
+Independent review found no Critical or Important issue. The nonblocking deferred minor is additional visual-test coverage for long supplier names and typing through the frontend controller: the fixture covers short labels and the actual shared renderer, while filtering is exercised through the real ChannelBridge. Existing long-label wrapping was not modified.
