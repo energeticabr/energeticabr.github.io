@@ -11593,7 +11593,25 @@ export function createAppController({
 
   function bindCommands() {
     bind('attendance-irregularity-read', async command => getAttendanceIrregularitySource().read(command));
-    bind('attendance-irregularity-save', async command => getAttendanceIrregularitySource().save(command));
+    bind('attendance-irregularity-save', async command => {
+      const source = getAttendanceIrregularitySource(), guard = attendanceIrregularitySource;
+      const originalPoll = latestAssistantPoll(store.getState().messages);
+      const saved = await source.save(command);
+      guard.assertSession();
+      const poll = latestAssistantPoll(store.getState().messages);
+      if (saved?.presence === 'AUSENTE' && String(saved.id) === String(command.id) && saved.date === command.date
+        && poll?.id === originalPoll?.id && attendanceRhidPollEligible(poll)
+        && poll.presentation !== 'attendance_supplier_sync') {
+        const options = poll.options.filter(option => {
+          const context = attendanceRhidOptionContext(option, poll);
+          return context?.presenceId !== String(saved.id) || context.date !== saved.date;
+        });
+        if (options.length !== poll.options.length) store.replaceMessage(poll.id, {
+          ...poll, options, presenceDateKey: attendanceValidationDate(poll),
+        });
+      }
+      return saved;
+    });
     bind("draft-changed", command => {
       if (recoveryUncertain) return;
       draftEditRevision += 1;

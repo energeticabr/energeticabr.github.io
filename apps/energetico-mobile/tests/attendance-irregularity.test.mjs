@@ -64,6 +64,83 @@ test('salva apenas IRREGULARIDADES no registro e data esperados, com ETag', asyn
   assert.deepEqual(calls[1].slice(1), ['personal', 'list-id', '2249', { IRREGULARIDADES: 'Saída autorizada.' }, { eTag: '"2"' }]);
 });
 
+for (const explanation of ['FERIADO', 'feriado', '  FeRiAdO  ']) {
+  test(`submeter ${JSON.stringify(explanation)} grava ausência e motivo junto da justificativa, na mesma versão`, async () => {
+    const writes = [];
+    const repository = {
+      resolveList: async () => ({ status: 'resolved', id: 'presence-list' }),
+      getColumns: async () => [{ name: 'IRREGULARIDADES', text: { allowMultipleLines: true } }],
+      getItem: async () => ({ id: '2389', '@odata.etag': '"2"', fields: {
+        DATA: '2026-11-02T03:00:00Z', PRESENCA: 'PENDENTE', VLORDIARIO: '181', ATIVIDADEEXECUTADA: 'CONCRETAGEM LAJE',
+      } }),
+      updateItem: async (...args) => writes.push(args),
+    };
+    const result = await saveAttendanceIrregularity({ repository, id: '2389', date: '2026-11-02', explanation });
+    assert.deepEqual(writes, [['personal', 'presence-list', '2389', {
+      IRREGULARIDADES: explanation.trim(), PRESENCA: 'AUSENTE', MOTIVACAO: 'FERIADO',
+    }, { eTag: '"2"' }]]);
+    assert.deepEqual(result, { id: '2389', date: '2026-11-02', presence: 'AUSENTE' });
+  });
+}
+
+for (const explanation of ['Não foi feriado', 'Feriado trabalhado', 'Véspera de feriado', 'Saída autorizada.']) {
+  test(`justificativa ${JSON.stringify(explanation)} não altera presença nem motivação`, async () => {
+    let saved;
+    const repository = {
+      resolveList: async () => ({ status: 'resolved', id: 'presence-list' }),
+      getColumns: async () => [{ name: 'IRREGULARIDADES', text: { allowMultipleLines: true } }],
+      getItem: async () => ({ id: '2389', '@odata.etag': '"2"', fields: { DATA: '2026-11-02' } }),
+      updateItem: async (site, list, id, fields) => { saved = fields; },
+    };
+    const result = await saveAttendanceIrregularity({ repository, id: '2389', date: '2026-11-02', explanation });
+    assert.deepEqual(saved, { IRREGULARIDADES: explanation });
+    assert.deepEqual(result, { id: '2389', date: '2026-11-02' });
+  });
+}
+
+test('conflito ao submeter feriado não publica sucesso nem repete uma escrita parcial', async () => {
+  let writes = 0;
+  const repository = {
+    resolveList: async () => ({ status: 'resolved', id: 'presence-list' }),
+    getColumns: async () => [{ name: 'IRREGULARIDADES', text: { allowMultipleLines: true } }],
+    getItem: async () => ({ id: '2389', '@odata.etag': '"2"', fields: { DATA: '2026-11-02', PRESENCA: 'PENDENTE' } }),
+    updateItem: async () => { writes++; throw Object.assign(new Error('Versão alterada'), { status: 412 }); },
+  };
+  await assert.rejects(saveAttendanceIrregularity({ repository, id: '2389', date: '2026-11-02', explanation: 'FERIADO' }), /Versão alterada/);
+  assert.equal(writes, 1);
+});
+
+for (const presence of ['PRESENTE', 'AUSENTE', undefined]) {
+  test(`submeter feriado recusa sobrescrever presença atual ${presence ?? 'não consultada'}`, async () => {
+    let writes = 0;
+    const repository = {
+      resolveList: async () => ({ status: 'resolved', id: 'presence-list' }),
+      getColumns: async () => [{ name: 'IRREGULARIDADES', text: { allowMultipleLines: true } }],
+      getItem: async () => ({ id: '2389', '@odata.etag': '"9"', fields: {
+        DATA: '2026-11-02', PRESENCA: presence, MOTIVACAO: 'TRABALHOU',
+      } }),
+      updateItem: async () => { writes++; },
+    };
+    await assert.rejects(saveAttendanceIrregularity({ repository, id: '2389', date: '2026-11-02', explanation: 'FERIADO' }), /não está mais pendente/i);
+    assert.equal(writes, 0);
+  });
+}
+
+test('repetir submeter após feriado já gravado confirma o resultado sem nova escrita', async () => {
+  let writes = 0;
+  const repository = {
+    resolveList: async () => ({ status: 'resolved', id: 'presence-list' }),
+    getColumns: async () => [{ name: 'IRREGULARIDADES', text: { allowMultipleLines: true } }],
+    getItem: async () => ({ id: '2389', '@odata.etag': '"3"', fields: {
+      DATA: '2026-11-02', PRESENCA: 'AUSENTE', MOTIVACAO: 'FERIADO', IRREGULARIDADES: 'FERIADO',
+    } }),
+    updateItem: async () => { writes++; },
+  };
+  assert.deepEqual(await saveAttendanceIrregularity({ repository, id: '2389', date: '2026-11-02', explanation: 'FERIADO' }),
+    { id: '2389', date: '2026-11-02', presence: 'AUSENTE' });
+  assert.equal(writes, 0);
+});
+
 test('bloqueia texto vazio, coluna ausente e registro de outra data', async () => {
   const repository = {
     resolveList: async () => ({ status: 'resolved', id: 'list-id' }),

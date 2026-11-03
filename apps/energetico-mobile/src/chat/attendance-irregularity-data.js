@@ -3,6 +3,7 @@ import { createGraphClient } from '../../../../portal/data/graph-client.js';
 import { createSharePointRepository } from '../../../../portal/data/sharepoint-repository.js';
 import { createSharePointAttachmentTransport } from '../../../../portal/data/attachments.js';
 import { isValidRhidReportDate } from './rhid-attendance-table.js';
+import { isAttendanceHolidayReason } from './attendance-irregularity.js';
 
 function recordDate(value) {
   const raw = String(value ?? '').trim();
@@ -58,7 +59,7 @@ export async function readAttendanceIrregularity({ repository, tokenProvider, as
   return String(item.fields?.IRREGULARIDADES ?? '').trim();
 }
 
-/** Write one dedicated note field with the record's current version; never change PRESENCA here. */
+/** Save the note and any explicit holiday absence atomically using the current version. */
 export async function saveAttendanceIrregularity({ repository, tokenProvider, assertSession = () => {}, id, date, explanation } = {}) {
   const recordId = String(id ?? '').trim();
   const note = String(explanation ?? '').trim();
@@ -78,8 +79,16 @@ export async function saveAttendanceIrregularity({ repository, tokenProvider, as
   }
   const eTag = item.eTag || item['@odata.etag'] || item['odata.etag'];
   if (!eTag || eTag === '*') throw new Error('Não foi possível confirmar a versão do registro.');
+  const holiday = isAttendanceHolidayReason(note);
+  const fields = { IRREGULARIDADES: note, ...(holiday ? { PRESENCA: 'AUSENTE', MOTIVACAO: 'FERIADO' } : {}) };
   assertSession();
-  await repository.updateItem('personal', list.id, recordId, { IRREGULARIDADES: note }, { eTag });
+  if (holiday && String(item.fields?.PRESENCA ?? '').trim().toUpperCase() !== 'PENDENTE') {
+    if (Object.entries(fields).every(([field, value]) => item.fields?.[field] === value)) {
+      return { id: recordId, date, presence: 'AUSENTE' };
+    }
+    throw new Error('Esta presença não está mais pendente. Atualize a lista antes de prosseguir.');
+  }
+  await repository.updateItem('personal', list.id, recordId, fields, { eTag });
   assertSession();
-  return { id: recordId, date };
+  return { id: recordId, date, ...(holiday ? { presence: 'AUSENTE' } : {}) };
 }
