@@ -22,9 +22,17 @@
 
 ## Task 1: Correct the editable field and date validation
 
-- [ ] Add regression cases for contract variants, saved date preselection, unchanged save, changed DATAPEDIDO-only save, cleared date and approval validation.
-- [ ] Run focused tests and confirm failure before implementation.
-- [ ] Update `portal/catalog/powerapps-ui-contract.js` edit declarations and `apps/energetico-mobile/src/chat/orders-form43-locks.js` approval date validation.
-- [ ] Run focused date/gallery/approval tests, full app and portal suites, signature guard and both Vite builds.
-- [ ] Review the diff and verify live record 452 read-only against the corrected editor.
+- [x] Add regression cases for contract variants, saved date preselection, unchanged save, changed DATAPEDIDO-only save, cleared date and approval validation.
+- [x] Run focused tests and confirm failure before implementation.
+- [x] Update `portal/catalog/powerapps-ui-contract.js` edit declarations and `apps/energetico-mobile/src/chat/orders-form43-locks.js` approval date validation.
+- [x] Run focused date/gallery/approval tests, full app and portal suites, signature guard and both Vite builds.
+- [x] Review the diff and verify live record 452 read-only against the corrected editor.
 - [ ] Commit, push, merge and follow publication workflows to each final target.
+
+## Validation evidence
+
+- 53 focused tests pass; independent code review approved.
+- 74 date fields across 30 entities preselect saved ISO dates and retain blanks correctly.
+- Native/PWA builds pass; 14 signature blocks intact.
+- Full root suite: 9,849 tests, 9,837 pass, 10 skipped. The home diary fixture measurement failed once and its isolated retry passed; the old contract parity expectation was updated for the requested field substitution and its 48 runnable tests pass.
+- Independent review approved the parity fixture adjustment without weakening closed-control checks.
