@@ -1,0 +1,128 @@
+--- a/worker/workflow.py
++++ b/worker/workflow.py
+@@ -15,0 +16 @@
++import uuid
+@@ -21446,0 +21448,3 @@
++            order_supplier = self._prompt_single_launch_order_supplier(state, etag)
++            if order_supplier is not None:
++                return order_supplier
+@@ -22888,0 +22893,2 @@
++        if state.get("flow") == "launch" and step.get("key") == "fornecedor_lancamento":
++            state.pop("single_launch_order_supplier", None)
+@@ -28504,0 +28511,100 @@
++    def _single_launch_order_supplier_choice(self, state: dict) -> dict | None:
++        if (state.get("flow") != "launch" or normalize_text(str(state.get("answers", {}).get("tipo_lancamento") or "")) == "lancamento multiplo"
++                or state.get("launch_lines")
++                or normalize_text(str(self._context(state).get("pedido_lancamento", ""))) != "novo pedido"):
++            return None
++        supplier = str(state.get("fields", {}).get("FORNECEDOR") or "").strip()
++        if not supplier:
++            return None
++        choice = state.get("single_launch_order_supplier")
++        if not isinstance(choice, dict) or choice.get("launch_supplier") != supplier:
++            choice = {"launch_supplier": supplier, "phase": "confirm", "token": uuid.uuid4().hex}
++            state["single_launch_order_supplier"] = choice
++        return choice
++
++    def _single_launch_order_supplier_value(self, state: dict) -> str | None:
++        if (state.get("flow") != "launch" or normalize_text(str(state.get("answers", {}).get("tipo_lancamento") or "")) == "lancamento multiplo"
++                or state.get("launch_lines")):
++            return None
++        choice = state.get("single_launch_order_supplier") or {}
++        if (choice.get("phase") == "done"
++                and choice.get("launch_supplier") == state.get("fields", {}).get("FORNECEDOR")):
++            return choice.get("supplier")
++        return None
++
++    @staticmethod
++    def _single_launch_order_supplier_step() -> dict:
++        return {"key": "fornecedor_pedido_lancamento_unico", "kind": "selection",
++                "prompt": "QUAL É O FORNECEDOR QUE DEVE SER CADASTRADO NO PEDIDO?",
++                "button_label": "ESCOLHER FORNECEDOR DO PEDIDO",
++                "source": {"type": "sharepoint_list", "list": "FORNECEDORES",
++                           "id_field": "Id", "label_field": "CADASTRO", "value_field": "CADASTRO",
++                           "distinct": True, "fetch_all_pages": True}}
++
++    def _prompt_single_launch_order_supplier(self, state: dict, etag: str | None) -> dict | None:
++        choice = self._single_launch_order_supplier_choice(state)
++        if not choice or choice.get("phase") == "done":
++            return None
++        token = choice["token"]
++        if choice["phase"] == "confirm":
++            state["options"] = []
++            state.pop("option_pagination", None)
++            self._send_actions(state,
++                "DESEJA USAR O MESMO FORNECEDOR DO LANÇAMENTO PARA O PEDIDO?",
++                [{"id": f"single_order_supplier_yes:{token}", "title": "✅ SIM"},
++                 {"id": f"single_order_supplier_no:{token}", "title": "❌ NÃO, ESCOLHER OUTRO FORNECEDOR"}])
++        else:
++            step = self._single_launch_order_supplier_step()
++            if "options" not in choice:
++                catalog = self._selection_options(state, step)
++                choice["options"] = [{**option, "catalog_id": option["id"], "id": f"single_order_supplier:{token}:{option['id']}"}
++                                     for option in catalog if not option.get("terminal_option")]
++            state["options"] = copy.deepcopy(choice["options"])
++            self._send_options(state, step, state["options"])
++        etag = self._save(state, etag)
++        return {"status": "awaiting_single_launch_order_supplier", "batch_id": state["batch_id"],
++                "field": "fornecedor_pedido_lancamento_unico", "etag": etag}
++
++    def _handle_single_launch_order_supplier_reply(self, event: dict, state: dict, etag: str | None) -> dict | None:
++        previous = state.get("single_launch_order_supplier")
++        choice = self._single_launch_order_supplier_choice(state)
++        if not choice or choice.get("phase") == "done":
++            return None
++        if previous is not choice:
++            return self._prompt_single_launch_order_supplier(state, etag)
++        raw = str(event.get("reply_id") or event.get("text") or "").strip()
++        token = choice["token"]
++        if choice["phase"] == "confirm":
++            command = _control_command(raw)
++            if raw == f"single_order_supplier_yes:{token}" or command == "sim":
++                choice.update(phase="done", supplier=choice["launch_supplier"])
++                state["options"] = []
++                return self._prompt_next_or_summary(state, etag)
++            if raw == f"single_order_supplier_no:{token}" or command in {"nao", "nao escolher outro fornecedor"}:
++                choice["phase"] = "select"
++            return self._prompt_single_launch_order_supplier(state, etag)
++        step = self._single_launch_order_supplier_step()
++        options = choice.get("options", [])
++        if normalize_text(raw) in {"filter_clear", "limpar filtro", "refresh_options"}:
++            return self._prompt_single_launch_order_supplier(state, etag)
++        explicit_filter = event.get("reply_id") == "filter_query"
++        selected = resolve_option(raw, options, step["key"]) if not explicit_filter else None
++        if selected:
++            choice.update(phase="done", supplier=str(selected["value"]))
++            choice.pop("options", None)
++            state["options"] = []
++            state.pop("option_pagination", None)
++            return self._prompt_next_or_summary(state, etag)
++        # Explicit search never selects even if it equals an ID or full label.
++        # Stale control IDs are ignored instead of being interpreted as a query.
++        if raw.startswith(("choice:", "single_order_supplier")) and not explicit_filter:
++            return self._prompt_single_launch_order_supplier(state, etag)
++        query = str(event.get("text") or "") if explicit_filter else raw
++        terms = normalize_text(query).split()
++        matches = [option for option in options if all(term in normalize_text(
++            str(option.get("title", "")) + " " + str(option.get("catalog_id", ""))) for term in terms)]
++        displayed = step if matches else {**step, "prompt": "NENHUM FORNECEDOR ENCONTRADO. DIGITE OUTRO TEXTO PARA FILTRAR."}
++        self._send_filtered_options(state, displayed, matches)
++        etag = self._save(state, etag)
++        return {"status": "filtered_single_launch_order_suppliers", "batch_id": state["batch_id"], "etag": etag}
++
+@@ -28577,0 +28684,3 @@
++        order_supplier = self._handle_single_launch_order_supplier_reply(event, state, etag)
++        if order_supplier is not None:
++            return order_supplier
+@@ -28944,0 +29054,3 @@
++        order_supplier = self._single_launch_order_supplier_value(state)
++        if order_supplier and normalize_text(str(self._context(state).get("pedido_lancamento", ""))) == "novo pedido":
++            rows.append({"label": "FORNECEDOR DO PEDIDO", "value": order_supplier})
+@@ -31233,0 +31346,2 @@
++        if state.get("flow") == "launch" and step.get("key") == "fornecedor_lancamento":
++            state.pop("single_launch_order_supplier", None)
+@@ -35115,0 +35230,4 @@
++        order_supplier = self._single_launch_order_supplier_value(state)
++        if (order_supplier and normalize_text(str(related.get("target_list", ""))) == "notaspendentes"
++                and normalize_text(str(context.get("pedido_lancamento", ""))) == "novo pedido"):
++            context["FORNECEDOR"] = order_supplier
