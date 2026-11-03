@@ -28,13 +28,13 @@
 
 ## Task 1: Workflow and tests
 
-- [ ] Add failing behavioral tests against the production snapshot with synthetic fixtures: same/different supplier, filters/clear/empty, independent pending provisions and payroll payload, scope, stale controls, navigation and summary.
-- [ ] Run RED, implement the subquestion and order-only payload override in `worker/workflow.py`, run GREEN and relevant backend regression comparisons.
-- [ ] Archive a narrowly scoped patch, tests and release evidence in `backend-patches/single-launch-order-supplier/`.
+- [x] Add failing behavioral tests against the production snapshot with synthetic fixtures: same/different supplier, filters/clear/empty, independent pending provisions and payroll payload, scope, stale controls, navigation and summary.
+- [x] Run RED, implement the subquestion and order-only payload override in `worker/workflow.py`, run GREEN and relevant backend regression comparisons.
+- [x] Archive a narrowly scoped patch, tests and release evidence in `backend-patches/single-launch-order-supplier/`.
 
 ## Task 2: Review and publish
 
-- [ ] Obtain independent review and address meaningful findings with RED/GREEN tests.
-- [ ] Verify mobile protocol rendering with fictitious data and signature guard.
-- [ ] Commit and integrate the reviewable package. Install active source with hash pins, backup, shared deployment lock, health checks and rollback; do not synchronize the divergent mirror.
-- [ ] Independently confirm installed hashes and service health; report shared availability on all three platforms.
+- [x] Obtain independent review and address meaningful findings with RED/GREEN tests.
+- [x] Verify mobile protocol rendering with fictitious data and signature guard.
+- [x] Commit and integrate the reviewable package. Install active source with hash pins, backup, shared deployment lock, health checks and rollback; do not synchronize the divergent mirror.
+- [x] Independently confirm installed hashes and service health; report shared availability on all three platforms.
