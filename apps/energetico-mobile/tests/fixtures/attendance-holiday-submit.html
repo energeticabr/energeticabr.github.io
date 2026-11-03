@@ -1,0 +1,17 @@
+<!doctype html><html lang="pt-BR"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><link rel="stylesheet" href="/src/styles.css"></head><body><main id="app"></main><script type="module">
+import { createChatView } from '/src/ui/chat-view.js';
+const view = createChatView(document.querySelector('#app'));
+view.render({ sessionStatus:'authenticated',account:{name:'Teste'},draft:'',pendingFiles:[],
+ activeFlow:{id:'attendance_validation',title:'VALIDAR PRESENÇAS APONTADAS'},messages:[{
+  id:'holiday-review',role:'assistant',type:'poll',presentation:'attendance_multi_select',question:'VALIDAR PRESENÇAS',
+  options:[{id:'pending_attendance_record:1',label:'1 - FORNECEDOR FICTÍCIO COM NOME EXTENSO PARA VERIFICAÇÃO',date:'2026-11-02',
+   rhidBadge:{date:'2026-11-02',status:'absent',label:'AUSENTE'}}],
+ }] });
+document.querySelector('input[data-reply-id="1"]').click();
+document.querySelector('[data-role="attendance-irregularity-reason"]').value = 'FERIADO';
+document.querySelector('[data-action="attendance-irregularity-submit"]').click();
+await document.fonts.ready;await new Promise(requestAnimationFrame);
+const review = document.querySelector('[data-edit-review]'), box=review.getBoundingClientRect();
+document.documentElement.dataset.layout=JSON.stringify({scrollWidth:document.documentElement.scrollWidth,left:box.left,right:box.right,
+ rows:[...review.querySelectorAll('tbody tr')].map(row=>row.textContent),submit:review.querySelector('[data-edit-review-submit]').getBoundingClientRect().height});
+</script></body></html>

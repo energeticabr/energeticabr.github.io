@@ -65,7 +65,13 @@ test('toque, teclado, cadastro e 31 depreciações cabem em 320/390/1365px sem p
       assert.equal(registration.background, kind === 'asset' ? 'rgb(254, 226, 226)' : 'rgb(220, 252, 231)');
       await shot(api, `${kind}-cadastro-${width}`);
       await api.evaluate(`(() => { const dialog = document.querySelector('[data-asset-report]'); dialog.scrollTop += dialog.querySelector('.asset-report-history').getBoundingClientRect().top-dialog.getBoundingClientRect().top-95; })()`);
-      if (width === 390) await shot(api, `${kind}-historico-390`);
+      const historyClusters = await api.evaluate(`(() => {
+        const card = document.querySelector('[data-asset-history-row]');
+        return [...card.querySelectorAll('.asset-report-field')].map(node => { const style=getComputedStyle(node); return {background:style.backgroundColor,border:parseFloat(style.borderWidth),padding:parseFloat(style.paddingTop)}; });
+      })()`);
+      assert.equal(historyClusters.length, 6);
+      assert.ok(historyClusters.every(field => field.background !== 'rgba(0, 0, 0, 0)' && field.border >= 1 && field.padding >= 8), 'cada informação histórica deve ter caixa visual própria');
+      await shot(api, `${kind}-historico-${width}`);
       await api.tap(close); await api.wait('!document.querySelector("[data-asset-report]")');
       assert.deepEqual(await api.evaluate(`({page:document.querySelector('.rg-pagination').textContent, search:document.querySelector('input[type="search"]').value, scroll:document.querySelector('.rg-overlay').scrollTop})`), before);
       assert.equal(await api.evaluate(`document.activeElement===document.querySelector('${trigger}')`), true);
