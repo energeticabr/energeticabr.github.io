@@ -31,3 +31,45 @@ Para rollback, compare primeiro a definição live com `definition-after.json` e
 Para essa extensão, usar uma pasta de evidências nova e executar `Link-Orders.ps1 -Mode Prepare`, `Deploy.ps1 -Mode Probe`, `Deploy.ps1 -Mode Publish`, `Link-Orders.ps1 -Mode Backfill` e `Link-Orders.ps1 -Mode Verify`, todos com o mesmo EvidenceRoot. Prepare cria apenas a coluna numérica opcional NÚMERO DO PEDIDO e os backups; Probe verifica pedido numérico/nulo/vazio junto aos cálculos originais, sem conectores. Publish exige o hash exato aprovado.
 
 Backfill comprova a cadeia IDLANCAMENTO → AGRUPAR → pedido existente e usa MERGE de apenas IDPEDIDO com o ETag concreto da linha. Linhas sem ID financeiro ficam sem vínculo inferido. Verify exige preservação do campo nas linhas não planejadas e valor exato nas planejadas, além de preservar os demais dados. Após Backfill, use o Verify de Link-Orders, pois o verificador da primeira implantação exige que nenhum histórico tenha sido editado. Reexecutar Backfill mantém os valores já confirmados e não repete a escrita.
+# Monthly consolidation correction
+
+`monthly.mjs` replaces the daily, per-branch order creation with one monthly
+order shared by all eligible assets. The recurrence starts on the next day 01
+at 07:00 São Paulo and also checks the local day. A unique `DEPRECIACAOCHAVE`
+on orders stores `yyyy-MM`; on financial entries it stores `yyyy-MM|assetID`.
+Both columns are indexed and enforce uniqueness; runs and asset loops are serial.
+Financial and history records are reused on retry. An overdue asset posts once
+for the current month and advances directly to the following month.
+
+Orders start with a positive planned total. Final totals and PDF rows are rebuilt
+from the same complete set of linked financial entries. Multiple branches produce
+`DIVERSAS`; each child retains its own branch and supplier. Zero amounts create no
+entries or orders. Collections reaching the tenant's 5,000-row ceiling fail before
+processing assets or overwriting a total, instead of accepting a truncated set.
+
+Validation and publication commands, from a checkout with a live backup in an
+external evidence directory:
+
+```powershell
+node --test backend-patches/depreciation-ledger/tests/*.test.mjs
+node backend-patches/depreciation-ledger/monthly.mjs EVIDENCE/flow-before.json EVIDENCE/definition-after.json NEXT-YYYY-MM-01T07:00:00
+./backend-patches/depreciation-ledger/Monthly-Probe.ps1 -EvidenceRoot EVIDENCE
+./backend-patches/depreciation-ledger/Monthly-Probe.ps1 -EvidenceRoot EVIDENCE -Empty
+./backend-patches/depreciation-ledger/Monthly-Probe.ps1 -EvidenceRoot EVIDENCE -Completed
+./backend-patches/depreciation-ledger/Monthly-Deploy.ps1 -Mode Schema -EvidenceRoot EVIDENCE
+./backend-patches/depreciation-ledger/Monthly-Deploy.ps1 -Mode Publish -EvidenceRoot EVIDENCE
+./backend-patches/depreciation-ledger/Monthly-Deploy.ps1 -Mode Repair -EvidenceRoot EVIDENCE
+./backend-patches/depreciation-ledger/Monthly-Deploy.ps1 -Mode Verify -EvidenceRoot EVIDENCE
+```
+
+The runtime probes contain no connectors and never execute production. Publication
+requires their receipts to match the exact definition hash, checks for concurrent
+flow/connection changes and active executions, and reads back the saved definition.
+Only a server-generated `evaluatedRecurrence` identical to `recurrence` is normalized.
+The repair planner sums all linked entries, updates only the order total and branch,
+and preserves every financial/history record. It recycles only depreciation orders
+without financial/history references or attachments, with immediate rechecks and
+concrete ETags. Verification confirms idempotence and preservation of operational rows.
+
+This is a shared cloud backend correction. Android, iOS and Windows consume the
+same published flow and list values; no app binary changes are required.
