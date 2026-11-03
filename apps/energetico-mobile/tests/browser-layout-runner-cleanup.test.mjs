@@ -81,6 +81,9 @@ function fixture(t, { platform = 'win32', stubborn = false, forceFails = false, 
       switch (request.method) {
         case 'Target.createTarget': result = { targetId: 'owned-target' }; break;
         case 'Target.attachToTarget': result = { sessionId: 'owned-session' }; break;
+        case 'Emulation.setFocusEmulationEnabled':
+          assert.equal(request.sessionId, 'owned-session');
+          assert.deepEqual(request.params, { enabled: true }); result = {}; break;
         case 'Page.enable':
         case 'Emulation.setDeviceMetricsOverride':
         case 'Page.navigate':

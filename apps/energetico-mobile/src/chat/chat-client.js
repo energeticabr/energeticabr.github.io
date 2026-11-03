@@ -312,6 +312,47 @@ export function createChatClient({
     }, true);
   }
 
+  async function waitForDiaryEvidence({ signal, onProgress } = {}) {
+    // The isolated demonstration has no corporate diary jobs or this action.
+    if (apiPrefix === '/api/demo') return;
+    for (;;) {
+      checkRequestCancellation(signal);
+      const abort = new AbortController();
+      const cancel = () => abort.abort();
+      signal?.addEventListener('abort', cancel, { once: true });
+      const timeout = setTimeout(cancel, 8000);
+      let result;
+      try {
+        const token = await cancellableToken(tokenProvider, abort.signal);
+        result = await request(chatUrl.href, {
+          method: 'POST', signal: abort.signal,
+          headers: { Accept: 'application/json', Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' },
+          body: JSON.stringify({ action: 'diary_evidence_pending' }), cache: 'no-store', credentials: 'omit',
+        }, async response => {
+          if (response.status === 404) return { status: 'unavailable' };
+          const value = await readJson(response);
+          // Before this action existed, the bridge rejected its action-only
+          // payload as an empty message, before any workflow mutation.
+          if (response.status === 422 && value?.error === 'Mensagem vazia') return { status: 'unavailable' };
+          if (!response.ok) throw new Error('Não foi possível acompanhar o PDF. Verifique a conexão e retome a conversa.');
+          if (value?.status === 'unavailable') return value;
+          if (value?.status !== 'running' || typeof value.requestId !== 'string'
+              || !Number.isFinite(value.percent) || value.percent < 0 || value.percent > 99) {
+            throw new Error('A VM não confirmou o processamento do PDF.');
+          }
+          return value;
+        }, true);
+      } finally {
+        clearTimeout(timeout);
+        signal?.removeEventListener('abort', cancel);
+      }
+      checkRequestCancellation(signal);
+      if (result.status !== 'running') return;
+      onProgress?.(result);
+      await retryDelay(1000);
+    }
+  }
+
   async function uploadFile(file, { onProgress, progressSignal, uploadId } = {}, target = uploadUrl) {
     const fileName = validateAttachment(file);
     let previousPercent;
@@ -809,5 +850,5 @@ export function createChatClient({
     }, true);
   }
 
-  return Object.freeze({ refreshSefaz, getSefazRefreshStatus, getSefazRefreshPending, acknowledgeSefazRefresh, sendText, sendFile, replaceAttachment, transcribeAudio, fetchMedia, getAttachments, launchGalleryRequest, uploadLaunchGalleryFile, getPendingProvisionSnapshot, getPendingNotesSnapshot, getRhidAttendanceReport, startRhidPendingValidation, startRhidDayValidation, getRhidAttendanceMonth, saveRhidAttendanceAdjustment, deleteRhidAttendanceAdjustment, refreshRhidAttendance, getRhidRefreshStatus, refreshRecurringProvisions, getRecurringProvisionRefreshStatus, refreshDda, getDdaRefreshStatus, getDdaRefreshPending, acknowledgeDdaRefresh, confirmDdaPayment, deleteAttachment, deleteAllAttachments, compressAttachment, chooseAttachmentCompression, getCompletionMenu, prepareSignatureEvidence, confirmSignatureEvidence, verifySignatureEvidence, captureSignatureEvidence });
+  return Object.freeze({ waitForDiaryEvidence, refreshSefaz, getSefazRefreshStatus, getSefazRefreshPending, acknowledgeSefazRefresh, sendText, sendFile, replaceAttachment, transcribeAudio, fetchMedia, getAttachments, launchGalleryRequest, uploadLaunchGalleryFile, getPendingProvisionSnapshot, getPendingNotesSnapshot, getRhidAttendanceReport, startRhidPendingValidation, startRhidDayValidation, getRhidAttendanceMonth, saveRhidAttendanceAdjustment, deleteRhidAttendanceAdjustment, refreshRhidAttendance, getRhidRefreshStatus, refreshRecurringProvisions, getRecurringProvisionRefreshStatus, refreshDda, getDdaRefreshStatus, getDdaRefreshPending, acknowledgeDdaRefresh, confirmDdaPayment, deleteAttachment, deleteAllAttachments, compressAttachment, chooseAttachmentCompression, getCompletionMenu, prepareSignatureEvidence, confirmSignatureEvidence, verifySignatureEvidence, captureSignatureEvidence });
 }

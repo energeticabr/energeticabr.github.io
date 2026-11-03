@@ -2841,7 +2841,7 @@ export function renderChatMarkup(state = {}, { showSettings = false, allowDemo =
     .filter(item => item?.status !== "failed");
   const attachments = Array.isArray(state.attachments) ? state.attachments : [];
   const loadingProgress = (rhidAttendanceReport?.busy ? rhidAttendanceReport.progress : null)
-    || (state.activeText ? state.diaryAttachmentProgress : state.attachmentUploadProgress) || state.operationProgress;
+    || ((state.activeText || state.resuming) ? state.diaryAttachmentProgress : state.attachmentUploadProgress) || state.operationProgress;
   const busy = chatInteractionBusy(state, rhidAttendanceReport?.busy);
   const loading = Boolean(state.activeText || state.attachmentUploadProgress || state.resuming || state.responseTransitionPending || state.operationProgress)
     || pendingFiles.some(item => item.status === "sending") || rhidAttendanceReport?.busy === true || state.pendingProvisionOpening === true;

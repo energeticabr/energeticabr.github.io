@@ -16,6 +16,26 @@ import { createAttachmentPreview } from '../src/web/attachment-preview.js';
 import { createNativePorts } from '../src/native/native-ports.js';
 import { scannedPages } from './helpers/scanned-pages.mjs';
 
+test('retomada aguarda o PDF pendente antes de consultar a pergunta e preserva rascunho', async t => {
+  const h = makeHarness(); t.after(() => h.controller.stop());
+  await h.controller.start();
+  h.store.setDraft('observação preservada');
+  let release;
+  const pending = new Promise(resolve => { release = resolve; });
+  h.chatCalls.length = 0;
+  h.client.waitForDiaryEvidence = async ({ onProgress }) => {
+    onProgress({ percent: 62, status: 'running', stage: 'photos' });
+    await pending;
+  };
+  const resume = h.view.emit('retry-session');
+  await new Promise(resolve => setImmediate(resolve));
+  assert.equal(h.chatCalls.length, 0, 'não enfileira input_continue atrás da compactação');
+  assert.equal(h.view.renders.at(-1).diaryAttachmentProgress?.percent, 62);
+  release(); await resume;
+  assert.equal(h.chatCalls.filter(([kind, body]) => kind === 'text' && body.replyId === 'input_continue').length, 1);
+  assert.equal(h.store.getState().draft, 'observação preservada');
+});
+
 test('attendance inline choices accept only the current advertised option and preserve the draft',async t=>{
  const h=makeHarness();t.after(()=>h.controller.stop());await h.controller.start();
  const replyId='attendance_inline:revision:1814:descriptor:1';

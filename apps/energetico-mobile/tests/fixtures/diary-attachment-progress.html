@@ -3,11 +3,13 @@
 <body><main id="app"></main><script type="module">
 import { createChatView } from '/src/ui/chat-view.js';
 const percent = Number(new URL(location.href).searchParams.get('percent') || 37);
+const resuming = new URL(location.href).searchParams.has('resume');
 const view = createChatView(document.querySelector('#app'));
 view.render({
   sessionStatus: 'authenticated', account: { name: 'Bernardo' }, draft: '', pendingFiles: [],
   activeFlow: { id: 'construction_diary_fill', title: 'PREENCHER DIÁRIO DE OBRAS' },
-  activeText: { id: 'finalize-test', text: 'FINALIZAR ANEXOS' },
+  resuming,
+  activeText: resuming ? null : { id: 'finalize-test', text: 'FINALIZAR ANEXOS' },
   diaryAttachmentProgress: { percent, status: percent === 100 ? 'complete' : 'running' },
   attachments: Array.from({ length: 9 }, (_, i) => ({ id: 'photo-' + i, fileName: 'foto-' + i + '.jpg', mimeType: 'image/jpeg', size: 1000 })),
   messages: [{ id: 'evidence-actions', role: 'assistant', type: 'poll', question: '👉 📄 COMO DESEJA PROSSEGUIR COM AS EVIDÊNCIAS?',

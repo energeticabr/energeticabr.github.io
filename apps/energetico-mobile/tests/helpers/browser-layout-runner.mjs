@@ -74,6 +74,9 @@ export async function runBrowserLayout(browser, { width, height, url, safeAreaIn
     const { targetId } = await send("Target.createTarget", { url: "about:blank" });
     ({ sessionId } = await send("Target.attachToTarget", { targetId, flatten: true }));
     await send("Page.enable", {}, sessionId);
+    // These fixtures measure a visible page after requestAnimationFrame. An
+    // occluded headless target can otherwise suspend frames indefinitely.
+    await send("Emulation.setFocusEmulationEnabled", { enabled: true }, sessionId);
     await send("Emulation.setDeviceMetricsOverride", { width, height, deviceScaleFactor: 1, mobile }, sessionId);
     if (mediaType || colorScheme) await send("Emulation.setEmulatedMedia", {
       ...(mediaType ? { media: mediaType } : {}),

@@ -38,7 +38,7 @@ class ProgressRegistry:
     def _expire(self):
         now = self.clock()
         for key in list(self.jobs):
-            if now - self.jobs[key]["updated"] >= self.ttl:
+            if self.jobs[key]["status"] != "running" and now - self.jobs[key]["updated"] >= self.ttl:
                 del self.jobs[key]
 
     @staticmethod
@@ -53,6 +53,16 @@ class ProgressRegistry:
             job = self.jobs.get(key)
             return self._public(request_id, job) if job else {
                 "requestId": request_id, "percent": 0, "stage": "starting", "status": "unavailable"}
+
+    def pending(self, identity):
+        owner = self._key(identity, "pending")[:2]
+        with self.lock:
+            running = [(key, job) for key, job in self.jobs.items()
+                       if key[:2] == owner and job["status"] == "running"]
+            if not running:
+                return {"status": "unavailable"}
+            key, job = max(running, key=lambda entry: entry[1]["updated"])
+            return self._public(key[2], job)
 
     @contextmanager
     def scope(self, identity, request_id, *, observer=None):
