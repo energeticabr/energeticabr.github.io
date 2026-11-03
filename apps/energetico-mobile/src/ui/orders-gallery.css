@@ -430,7 +430,13 @@
 .og-orders-overlay .og-order-card .og-card-main { position: relative; grid-column: 2; grid-row: 1; min-width: 0; }
 .og-orders-overlay .og-order-card .og-card-heading { align-items: flex-start; gap: 7px; min-height: 65px; padding: 6px 82px 6px 6px; border: 1px solid #a9c6dc; border-radius: 6px; background: #eaf4fc; cursor: pointer; }
 .og-orders-overlay .og-order-card .og-card-id { display: grid; flex: 0 0 46px; width: 46px; min-height: 46px; place-items: center; padding: 4px; border-radius: 5px; font-size: 1.1rem; }
-.og-orders-overlay .og-heading-copy { display: grid; justify-items: start; align-content: start; gap: 4px; min-width: 0; }
+.og-orders-overlay .og-heading-copy { display: grid; flex: 1; grid-template-columns: minmax(0, 1fr) auto; justify-items: start; align-content: start; gap: 4px 6px; min-width: 0; }
+.og-orders-overlay .og-heading-copy h2 { grid-column: 1 / -1; }
+.og-orders-overlay .og-heading-copy .og-status { grid-column: 1; grid-row: 2; align-self: start; }
+.og-orders-overlay .og-heading-copy .og-open-cue { grid-column: 1 / -1; grid-row: 3; }
+.og-orders-overlay .og-order-date { grid-column: 2; grid-row: 2; align-self: start; display: grid; gap: 2px; padding: 4px 6px; border: 1px solid #9ab8d3; border-radius: 6px; color: #123d70; background: #dbeafa; line-height: 1.15; white-space: nowrap; }
+.og-orders-overlay .og-order-date-label { font-size: .52rem; font-weight: 750; }
+.og-orders-overlay .og-order-date-value { font-size: .7rem; font-weight: 850; font-variant-numeric: tabular-nums; }
 .og-orders-overlay .og-open-cue { display: inline-flex; align-items: center; gap: 5px; min-width: 0; max-width: 100%; padding: 4px 6px; border: 1px solid #a9c6dc; border-radius: 5px; color: #123d70; background: #fff; font-size: .7rem; font-weight: 800; line-height: 1.2; }
 .og-orders-overlay .og-open-cue > span { min-width: 0; overflow-wrap: anywhere; }
 .og-orders-overlay .og-open-cue svg { width: 14px; height: 14px; flex: none; }
@@ -460,6 +466,10 @@
 .og-orders-overlay .og-order-card .og-order-open:focus-visible::after { outline: 3px solid #123d70; outline-offset: 2px; }
 .og-orders-overlay .og-order-card .og-order-open:hover { background: #941b28; }
 .og-orders-overlay .og-detail.olr-detail { z-index: 1901; }
+@media (max-width: 560px) {
+  .og-orders-overlay .og-heading-copy .og-status { grid-column: 1 / -1; }
+  .og-orders-overlay .og-order-date { grid-row: 4; }
+}
 @media (max-width: 360px) {
   .og-orders-overlay .og-header { gap: 5px; }
   .og-orders-overlay .og-header .og-button { padding-inline: 6px; font-size: .7rem; }
@@ -468,6 +478,7 @@
   .og-orders-overlay .og-sort-field .og-input { width: 122px; }
   .og-orders-overlay .og-order-card .og-card-heading { flex-wrap: wrap; padding-right: 6px; }
   .og-orders-overlay .og-heading-copy { flex-basis: 100%; }
+  .og-orders-overlay .og-order-date { margin-right: 72px; }
   .og-orders-overlay .og-order-card .gallery-record-action { width: 31px; height: 31px; min-width: 31px; padding: 6px; }
   .og-orders-overlay .og-order-card .og-card-id { flex-basis: 40px; width: 40px; min-height: 40px; }
   .og-orders-overlay .og-order-card .og-order-open { flex-basis: 44px; min-width: 44px; min-height: 44px; }

@@ -33,6 +33,7 @@ const FIELD_ALIASES = Object.freeze({
   branch: ["FILIAL"], supplier: ["FORNECEDOR"], status: ["STATUS"], total: ["VALORTOTAL", "VALOR TOTAL"],
   paymentForm: ["FORMAPGTO", "FORMA PGTO", "FORMA DE PAGAMENTO"], invoice: ["NOTAFISCAL", "NOTA FISCAL"],
   paymentDate: ["DATAPGTOEFETUADO", "DATA PGTO EFETUADO"], created: ["CRIADO", "CREATED"],
+  orderDate: ["DATAPEDIDO", "DATA PEDIDO"],
   modified: ["MODIFICADO", "MODIFIED"],
 });
 
@@ -384,6 +385,10 @@ export function createOrdersGallery({
     openCue.setAttribute('aria-hidden', 'true');
     openCue.append(el('span', '', 'Ver lançamentos'), icon('m9 5 7 7-7 7'));
     headingCopy.append(openCue);
+    const orderDate = el('span', 'og-order-date');
+    orderDate.append(el('span', 'og-order-date-label', 'DATA PEDIDO'),
+      el('span', 'og-order-date-value', formatDate('DATA PEDIDO', field(fields, FIELD_ALIASES.orderDate)) || '—'));
+    headingCopy.append(orderDate);
     const openOrder = el('button', 'og-card-id og-order-open', text(row.id));
     openOrder.type = 'button';
     openOrder.dataset.orderLinkedOpen = '';
