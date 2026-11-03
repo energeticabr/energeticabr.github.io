@@ -276,7 +276,8 @@ button:disabled { cursor: wait; opacity: .55; }
 .chat-pending-provision__arrow { flex: 0 0 48px; display: grid; place-items: center; width: 48px; height: 48px; padding: 0; border: 1px solid transparent; border-radius: 12px; font-size: 1.7rem; font-weight: 850; line-height: 1; }
 .chat-pending-provision__arrow--available { border-color: #a21c1c; color: white; background: #b42318; }
 .chat-pending-provision__arrow--available:hover { background: #951b13; }
-.chat-pending-provision__arrow--empty { border-color: #c6c9cc; color: #72777c; background: #e1e3e5; cursor: not-allowed; }
+.chat-pending-provision__arrow--empty { border-color: #b85a06; color: #fff; background: #c56108; cursor: pointer; }
+.chat-pending-provision__arrow--empty:hover:not(:disabled) { background: #a84d02; }
 .chat-pending-provision__arrow--loading { border-color: #d9e0e2; color: #687b82; background: #eef3f4; cursor: wait; font-size: 1.2rem; }
 .chat-pending-provision__arrow--error { border-color: #d78b22; color: #8b5300; background: #fff4dd; }
 .chat-pending-provision__error { color: #8f1d1d; line-height: 1.35; overflow-wrap: anywhere; }
@@ -290,6 +291,17 @@ button:disabled { cursor: wait; opacity: .55; }
 .chat-pending-provision-attachment__details small { color: var(--muted); line-height: 1.3; }
 .chat-pending-provision-attachment__share { flex: 0 0 48px; display: grid; place-items: center; width: 48px; height: 48px; padding: 10px; border: 1px solid var(--brand); border-radius: 10px; color: var(--brand); background: white; }
 .chat-pending-provision-attachment__share svg { width: 24px; height: 24px; }
+.chat-pending-provision__upload-tray { display: grid; gap: 10px; min-width: 0; margin-top: 12px; padding: 12px; border: 2px dashed #7fa6b2; border-radius: 12px; background: #f3f8fa; }
+.chat-pending-provision__add-files { width: 100%; min-height: 52px; padding: 10px; border: 1px solid var(--brand); border-radius: 10px; background: white; color: var(--brand); font: inherit; font-weight: 750; }
+.chat-pending-provision__upload-queue { display: grid; gap: 8px; min-width: 0; padding: 0; margin: 0; list-style: none; }
+.chat-pending-provision__upload-queue li { display: flex; align-items: center; gap: 8px; min-width: 0; }
+.chat-pending-provision__upload-queue li > span { display: grid; flex: 1; min-width: 0; overflow-wrap: anywhere; }
+.chat-pending-provision__upload-queue small { color: var(--muted); }
+.chat-pending-provision__upload-queue button { flex: 0 0 44px; min-height: 44px; border: 1px solid #b42318; border-radius: 10px; color: #b42318; background: white; font-size: 1.4rem; }
+.chat-pending-provision__upload-tray .chat-confirmation__actions { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+.chat-pending-provision__upload-tray .chat-confirmation__actions button { min-width: 0; padding: 10px 4px; font-size: 1rem; overflow-wrap: anywhere; }
+.chat-pending-provision__upload-tray button:disabled { opacity: .55; cursor: not-allowed; }
+.chat-pending-provision__upload-tray .chat-pending-provision__error { margin: 0; }
 .chat-pending-provision-date-edit { width: min(100%, 560px); }
 .chat-pending-provision-date-edit__label { display: block; margin: 12px 0 4px; color: var(--text); font-weight: 750; }
 .chat-pending-provision-date-edit input { margin-top: 0; }

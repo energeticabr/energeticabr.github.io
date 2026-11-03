@@ -2014,6 +2014,7 @@ export function createAppController({
         status: String(item.status || "ready"),
       })),
       busy: state.busy === true,
+      picking: state.picking === true,
       error: String(state.error || ""),
     }]));
   }
@@ -2102,6 +2103,14 @@ export function createAppController({
     }
   }
 
+  function pendingUploadBusy() { return [...pendingProvisionUploads.values()].some(item => item.busy); }
+  function invalidatePendingPickers() {
+    for (const [id, item] of pendingProvisionUploads) if (item.picking) setPendingProvisionUploads(id, { ...item, picking: false });
+  }
+  function pendingAttachmentSource(id, snapshot = pendingProvisionSnapshot) {
+    const row = snapshot?.rows?.find(item => String(item?.id ?? '').trim() === String(id));
+    return row?.sourceKind || snapshot?.sourceKind || '';
+  }
   async function loadPendingProvisionAttachmentList(paymentId, context) {
     const id = String(paymentId || "").trim();
     if (!id || !pendingProvisionAttachmentLoadIsCurrent(context)) return false;
@@ -2109,7 +2118,7 @@ export function createAppController({
     setPendingProvisionAttachmentState(id, { ...current, status: "loading", error: "", actionError: "" });
     render();
     try {
-      const data = await getPendingProvisionAttachmentsData(context.targetAccount, context.targetRevision, context.snapshot?.sourceKind);
+      const data = await getPendingProvisionAttachmentsData(context.targetAccount, context.targetRevision, pendingAttachmentSource(id, context.snapshot));
       const items = await data.listAttachments(id);
       if (!pendingProvisionAttachmentLoadIsCurrent(context)) return false;
       const safeItems = (Array.isArray(items) ? items : [])
@@ -3098,7 +3107,8 @@ export function createAppController({
   }
 
   function closePendingProvisions() {
-    if (!pendingProvisionSnapshot) return false;
+    if (!pendingProvisionSnapshot || pendingUploadBusy()) return false;
+    invalidatePendingPickers();
     pendingProvisionReminderOpen = true;
     pendingProvisionReminderError = "";
     render();
@@ -3106,7 +3116,7 @@ export function createAppController({
   }
 
   function dismissPendingProvisions() {
-    if (pendingProvisionDeletion?.status === 'deleting') return false;
+    if (pendingProvisionDeletion?.status === 'deleting' || pendingUploadBusy()) return false;
     if (!pendingProvisionSnapshot) return false;
     pendingProvisionSnapshot = null;
     pendingProvisionReminderOpen = false;
@@ -3643,7 +3653,7 @@ export function createAppController({
     const id = String(paymentId || '').trim();
     const row = pendingProvisionSnapshot?.rows?.find(item => String(item?.id ?? '').trim() === id);
     if (!account || stopped || pendingProvisionReminderOpen || pendingProvisionDateEditPaymentId
-      || pendingProvisionSettlementPaymentId || pendingProvisionDeletion?.status === 'deleting' || !row
+      || pendingUploadBusy() || pendingProvisionSettlementPaymentId || pendingProvisionDeletion?.status === 'deleting' || !row
       || (pendingProvisionSnapshot.sourceKind !== 'provision-description' && row.sourceKind !== 'provision-description')) return false;
     const targetAccount = account, targetRevision = sessionRevision;
     const revision = ++pendingProvisionDeletionRevision;
@@ -3726,7 +3736,7 @@ export function createAppController({
   function editPendingProvisionDueDate(paymentId) {
     const id = String(paymentId || "").trim();
     const row = pendingProvisionSnapshot?.rows?.find(item => String(item?.id ?? "").trim() === id);
-    if (!account || stopped || pendingProvisionDeletion || pendingProvisionReminderOpen || pendingProvisionDateEditBusy || !row || !id) return false;
+    if (!account || stopped || pendingProvisionDeletion || pendingProvisionReminderOpen || pendingProvisionDateEditBusy || pendingUploadBusy() || !row || !id) return false;
     pendingProvisionDateEditPaymentId = id;
     pendingProvisionDateEditValue = pendingProvisionDateInputValue(row.dueDate);
     pendingProvisionDateEditError = "";
@@ -3806,17 +3816,25 @@ export function createAppController({
     }
   }
 
-  async function pickPendingProvisionAttachments(paymentId) {
+  async function pickPendingProvisionAttachments(paymentId, source = "files") {
     const id = String(paymentId || "").trim();
     if (!account || stopped || pendingProvisionReminderOpen || !id
       || pendingProvisionExpandedPaymentId !== id
-      || pendingProvisionAttachmentStates.get(id)?.status !== "available"
-      || typeof native.pickDocuments !== "function") return false;
+      || !['available', 'empty'].includes(pendingProvisionAttachmentStates.get(id)?.status)
+      || pendingProvisionUploads.get(id)?.busy || pendingProvisionUploads.get(id)?.picking) return false;
+    const picker = { photos: native.pickPhotos, files: native.pickDocuments, scan: native.scanDocument }[source];
+    if (typeof picker !== 'function') return false;
     const targetAccount = account;
     const targetRevision = sessionRevision;
+    const generation = pendingProvisionAttachmentGeneration;
+    const pickingState = { ...(pendingProvisionUploads.get(id) || {items: []}), picking: true, error: '' };
+    setPendingProvisionUploads(id, pickingState);
+    render();
+    const isCurrent = () => !stopped && account === targetAccount && sessionRevision === targetRevision
+      && pendingProvisionAttachmentGeneration === generation && pendingProvisionUploads.get(id) === pickingState;
     try {
-      const picked = Array.from(await native.pickDocuments() || []);
-      if (stopped || account !== targetAccount || sessionRevision !== targetRevision || !picked.length) return false;
+      const picked = Array.from(await picker.call(native) || []);
+      if (!isCurrent() || pendingProvisionExpandedPaymentId !== id || !picked.length) return false;
       const attachmentNames = new Set((pendingProvisionAttachmentStates.get(id)?.items || [])
         .map(item => String(item.fileName || "").toLocaleLowerCase("pt-BR")));
       const current = pendingProvisionUploads.get(id) || { items: [], busy: false, error: "" };
@@ -3838,12 +3856,13 @@ export function createAppController({
         queuedNames.add(key);
       }
       if (!additions.length) {
-        setPendingProvisionUploads(id, { ...current, error: "Não foi possível ler os arquivos selecionados." });
+        setPendingProvisionUploads(id, { ...current, picking: false, error: "Não foi possível ler os arquivos selecionados." });
         render();
         return false;
       }
       setPendingProvisionUploads(id, {
         ...current,
+        picking: false,
         items: [...(current.items || []), ...additions],
         error: additions.some(item => item.status === "conflict")
           ? "Um arquivo com esse nome já existe nesta provisão ou foi selecionado mais de uma vez. Remova ou renomeie o arquivo repetido."
@@ -3852,20 +3871,34 @@ export function createAppController({
       render();
       return true;
     } catch {
-      if (!stopped && account === targetAccount && sessionRevision === targetRevision) {
+      if (isCurrent()) {
         const current = pendingProvisionUploads.get(id) || { items: [], busy: false, error: "" };
-        setPendingProvisionUploads(id, { ...current, error: "Não foi possível selecionar os anexos. Tente novamente." });
+        setPendingProvisionUploads(id, { ...current, picking: false, error: "Não foi possível selecionar os anexos. Tente novamente." });
         render();
       }
       return false;
+    } finally {
+      if (isCurrent()) {
+        setPendingProvisionUploads(id, { ...pickingState, picking: false });
+        render();
+      }
     }
+  }
+
+  function cancelPendingProvisionUploads(paymentId) {
+    const id = String(paymentId || '').trim();
+    if (!pendingProvisionUploads.has(id) || pendingProvisionUploads.get(id)?.busy) return false;
+    pendingProvisionUploads.delete(id);
+    pendingProvisionUploadsRevision += 1;
+    render();
+    return true;
   }
 
   function removePendingProvisionUpload(paymentId, uploadId) {
     const id = String(paymentId || "").trim();
     const current = pendingProvisionUploads.get(id);
     const selectedId = String(uploadId || "");
-    if (!current || current.busy || !selectedId) return false;
+    if (!current || current.busy || current.picking || !selectedId) return false;
     const items = current.items.filter(item => String(item.id || item.file?.id || item.fileName || "") !== selectedId);
     if (items.length === current.items.length) return false;
     if (items.length) setPendingProvisionUploads(id, { ...current, items, error: "" });
@@ -3881,19 +3914,23 @@ export function createAppController({
     const id = String(paymentId || "").trim();
     const current = pendingProvisionUploads.get(id);
     const sendableItems = (current?.items || []).filter(item => item.status !== "conflict");
-    if (!account || stopped || pendingProvisionReminderOpen || !id || !sendableItems.length || current.busy
-      || pendingProvisionAttachmentStates.get(id)?.status !== "available") return false;
+    if (!account || stopped || pendingProvisionReminderOpen || !id || !sendableItems.length || current.busy || current.picking
+      || !['available', 'empty'].includes(pendingProvisionAttachmentStates.get(id)?.status)) return false;
     const targetAccount = account;
     const targetRevision = sessionRevision;
     let items = [...current.items];
-    setPendingProvisionUploads(id, { ...current, items, busy: true, error: "" });
+    const generation = pendingProvisionAttachmentGeneration, token = {};
+    const uploadCurrent = () => !stopped && account === targetAccount && sessionRevision === targetRevision && pendingProvisionAttachmentGeneration === generation && pendingProvisionUploads.get(id)?.uploadToken === token;
+    setPendingProvisionUploads(id, { ...current, items, busy: true, error: "", uploadToken: token });
     render();
     try {
-      const data = await getPendingProvisionAttachmentsData(targetAccount, targetRevision);
+      const data = await getPendingProvisionAttachmentsData(targetAccount, targetRevision, pendingAttachmentSource(id));
+      if (!uploadCurrent()) return false;
       if (typeof data.uploadAttachment !== "function" || typeof data.listAttachments !== "function") {
         throw new Error("O envio de anexos para esta provisão não está disponível.");
       }
       const before = await data.listAttachments(id, { refresh: true });
+      if (!uploadCurrent()) return false;
       const beforeNames = new Set((before || []).map(item => String(item.fileName || "").toLocaleLowerCase("pt-BR")));
       const conflicts = new Set();
       for (const staged of [...sendableItems]) {
@@ -3917,10 +3954,12 @@ export function createAppController({
         render();
         try {
           await data.uploadAttachment(id, staged.file);
+          if (!uploadCurrent()) return false;
           items = items.filter(item => item.file !== staged.file);
           setPendingProvisionUploads(id, { ...pendingProvisionUploads.get(id), items, busy: true });
           render();
         } catch {
+          if (!uploadCurrent()) return false;
           items = items.map(item => item.file === staged.file ? { ...item, status: "error", error: "O SharePoint não confirmou o envio." } : item);
           setPendingProvisionUploads(id, { ...pendingProvisionUploads.get(id), items, busy: true });
           render();
@@ -3929,6 +3968,7 @@ export function createAppController({
       if (stopped || account !== targetAccount || sessionRevision !== targetRevision) return false;
       const refreshed = await data.listAttachments(id, { refresh: true });
       if (stopped || account !== targetAccount || sessionRevision !== targetRevision) return false;
+      if (!uploadCurrent()) return false;
       const refreshedItems = (Array.isArray(refreshed) ? refreshed : []).filter(item => item?.fileName);
       const refreshedNames = new Set(refreshedItems.map(item => String(item.fileName).toLocaleLowerCase("pt-BR")));
       items = items.filter(item => !(item.status === "error"
@@ -3967,7 +4007,7 @@ export function createAppController({
   async function settlePendingProvision(paymentId) {
     const id = String(paymentId || "").trim();
     if (!account || stopped || pendingProvisionDeletion || flowBusy() || pendingProvisionReminderOpen
-      || pendingProvisionSettlementPaymentId || !id) return false;
+      || pendingUploadBusy() || pendingProvisionSettlementPaymentId || !id) return false;
     const row = pendingProvisionSnapshot?.rows?.find(item => String(item?.id ?? "").trim() === id);
     if (!row || row.settlementBlocked === true) return false;
     const sourceKind = pendingProvisionSnapshot.sourceKind || row.sourceKind;
@@ -4022,8 +4062,9 @@ export function createAppController({
     const id = String(paymentId || "").trim();
     if (!id || !pendingProvisionSnapshot.rows?.some(row => String(row.id ?? "").trim() === id)) return false;
     const entry = pendingProvisionAttachmentStates.get(id);
-    if (entry?.status !== 'available' || !Array.isArray(entry.items)
-      || !entry.items.some(item => typeof item?.fileName === 'string' && item.fileName.trim())) return false;
+    if (!['available', 'empty'].includes(entry?.status)) return false;
+    if (pendingUploadBusy()) return false;
+    invalidatePendingPickers();
     pendingProvisionExpandedPaymentId = pendingProvisionExpandedPaymentId === id ? "" : id;
     render();
     return true;
@@ -4044,7 +4085,7 @@ export function createAppController({
   }
 
   async function pendingProvisionAttachmentBlob(paymentId, attachment, targetAccount, targetRevision, options) {
-    const data = await getPendingProvisionAttachmentsData(targetAccount, targetRevision);
+    const data = await getPendingProvisionAttachmentsData(targetAccount, targetRevision, pendingAttachmentSource(paymentId));
     const payload = await data.downloadAttachment(paymentId, attachment.fileName, options);
     if (stopped || account !== targetAccount || sessionRevision !== targetRevision) return null;
     const mimeType = String(attachment.mimeType || "application/octet-stream");
@@ -12018,7 +12059,8 @@ export function createAppController({
     bind("retry-pending-provision-attachments", command => retryPendingProvisionAttachments(command.paymentId));
     bind("open-pending-provision-attachment", command => openPendingProvisionAttachment(command.paymentId, command.fileName));
     bind("share-pending-provision-attachment", command => sharePendingProvisionAttachment(command.paymentId, command.fileName));
-    bind("pick-pending-provision-attachments", command => pickPendingProvisionAttachments(command.paymentId));
+    bind("pick-pending-provision-attachments", command => pickPendingProvisionAttachments(command.paymentId, command.value));
+    bind("cancel-pending-provision-uploads", command => cancelPendingProvisionUploads(command.paymentId));
     bind("remove-pending-provision-upload", command => removePendingProvisionUpload(command.paymentId, command.uploadId));
     bind("send-pending-provision-attachments", command => sendPendingProvisionAttachments(command.paymentId));
     bind("rhid-attendance-report-generate", command => generateRhidAttendanceReport(command.value, {
