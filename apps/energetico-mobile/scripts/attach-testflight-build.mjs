@@ -129,8 +129,13 @@ export async function attachLatestTestFlightBuild(client) {
 
 if (process.argv[1] && import.meta.url === pathToFileURL(process.argv[1]).href) {
   try {
-    const result = await attachLatestTestFlightBuild(createAppleClient());
-    console.log(JSON.stringify(result));
+    const client = createAppleClient();
+    for (const path of [`/v1/builds?filter[app]=${APP_ID}&sort=-uploadedDate`, `/v1/apps/${APP_ID}/builds?sort=-uploadedDate`]) {
+      try {
+        const builds = await list(client, path);
+        console.log(JSON.stringify({ path, count: builds.length, target: builds.filter(b => String(attr(b).version) === '2101').map(b => ({version:attr(b).version, processingState:attr(b).processingState, expired:attr(b).expired})) }));
+      } catch (error) { console.log(JSON.stringify({ path, error: String(error.message) })); }
+    }
   } catch (error) {
     console.error(error.message);
     process.exitCode = 1;
