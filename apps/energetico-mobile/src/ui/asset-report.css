@@ -16,7 +16,7 @@
 .asset-report-registration, .asset-report-history-line { padding: 16px; border: 1px solid #cfdee5; border-radius: 12px; background: #fff; min-width: 0; }
 .asset-report-content h3 { margin: 0 0 14px; }
 .asset-report-history { margin-top: 24px; }
-.asset-report-summary { color: #355b6b; margin: 0 0 16px; font-weight: 600; }
+.asset-report-summary { color: #234e65; margin: 0 0 16px; padding: 12px; border: 1px solid #b8ced9; border-radius: 10px; background: #eaf4fc; font-weight: 700; }
 .asset-report-fields { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 14px 16px; margin: 0; }
 .asset-report-field { min-width: 0; }
 .asset-report-field dt { color: #58717c; font-size: .8rem; font-weight: 700; margin: 0 0 3px; }
@@ -25,6 +25,8 @@
 .asset-report-group { margin-top: 14px; padding: 14px; border: 1px solid #c9dce5; border-left: 4px solid #45859b; border-radius: 10px; background: #f4f9fc; min-width: 0; }
 .asset-report-group h4 { margin: 0 0 12px; color: #07566b; font-size: .95rem; }
 .asset-report-group .asset-report-field { padding: 10px; border: 1px solid #d8e5eb; border-radius: 8px; background: #fff; }
+.asset-report-history-line .asset-report-field { padding: 10px; border: 1px solid #d8e5eb; border-radius: 8px; background: #f4f9fc; box-sizing: border-box; }
+.asset-report-history-line .asset-report-field dd { font-weight: 600; }
 .asset-report-group .asset-report-field dd { font-weight: 600; }
 .asset-report-field--amount dd { color: #153e5e; font-size: 1.05rem; font-weight: 750; }
 .asset-report-badge { display: inline-block; max-width: 100%; box-sizing: border-box; padding: 4px 10px; border: 1px solid #b8ced9; border-radius: 999px; background: #eaf2f7; color: #234e65; font-size: .85rem; font-weight: 750; }
@@ -32,8 +34,8 @@
 .asset-report-badge--inactive { background: #fee2e2; color: #991b1b; border-color: #e9a0a0; }
 .asset-report-history-lines { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 14px; }
 .asset-report-history-heading { display: flex; justify-content: space-between; gap: 12px; align-items: center; margin-bottom: 14px; }
-.asset-report-history-heading h4 { margin: 0; color: #07566b; font-size: 1rem; }
-.asset-report-line-id { font-size: .8rem; color: #58717c; }
+.asset-report-history-heading h4 { margin: 0; padding: 6px 10px; border: 1px solid #b8d9df; border-radius: 8px; background: #e4f4f5; color: #07566b; font-size: 1rem; }
+.asset-report-line-id { padding: 5px 8px; border: 1px solid #d8e5eb; border-radius: 8px; background: #f4f8fa; font-size: .8rem; color: #48616c; }
 .asset-report-empty, .asset-report-error { padding: 16px; border-radius: 12px; background: #fff; }
 .asset-report-error { color: #9c2626; border: 1px solid #e2b9b9; }
 @media (max-width: 700px) {
@@ -44,5 +46,5 @@
 }
 @media (max-width: 360px) {
   .asset-report-group { padding: 10px; }
-  .asset-report-group .asset-report-fields { grid-template-columns: minmax(0, 1fr); gap: 10px; }
+  .asset-report-group .asset-report-fields, .asset-report-history-line .asset-report-fields { grid-template-columns: minmax(0, 1fr); gap: 10px; }
 }
