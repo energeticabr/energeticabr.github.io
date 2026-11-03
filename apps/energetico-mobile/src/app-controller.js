@@ -5225,6 +5225,14 @@ export function createAppController({
     try {
       if (dismissUnavailableAttachments) await dismissUnavailableAttachmentSelection();
       if (!currentConversation()) return false;
+      if (typeof client.waitForDiaryEvidence === 'function') {
+        await client.waitForDiaryEvidence({ signal: genericProgress.abort.signal, onProgress: value => {
+          if (!currentConversation()) return;
+          diaryAttachmentProgress = value;
+          render();
+        } });
+        if (!currentConversation()) return false;
+      }
       attachmentRevision += 1;
       let paymentProvisionAutoReplyError = null;
       const resumeRequest = client.sendText({ text: "", replyId: "input_continue" }, genericProgress.options);
@@ -5363,6 +5371,7 @@ export function createAppController({
       return false;
     } finally {
       clearOperationProgress(genericProgress);
+      diaryAttachmentProgress = null;
       resuming = false;
       if (!stopped) render();
     }

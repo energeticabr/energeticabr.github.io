@@ -5,6 +5,30 @@ import { createChatClient } from "../src/chat/chat-client.js";
 
 const API_BASE = "https://163-176-171-217.sslip.io";
 
+test('retomada acompanha o PDF existente sem reenviar a finalização', async () => {
+  const sent = [], progress = [];
+  const client = clientWith(async (_url, options) => {
+    sent.push(JSON.parse(options.body));
+    return jsonResponse(sent.length === 1
+      ? { requestId: 'original', status: 'running', percent: 62, stage: 'photos' }
+      : { status: 'unavailable' });
+  }, { retryDelay: async () => {} });
+  await client.waitForDiaryEvidence({ onProgress: value => progress.push(value.percent) });
+  assert.deepEqual(progress, [62]);
+  assert.deepEqual(sent, [{ action: 'diary_evidence_pending' }, { action: 'diary_evidence_pending' }]);
+});
+
+test('retomada do PDF aceita servidor antigo mas preserva falhas de rede e cancelamento', async () => {
+  await clientWith(async () => jsonResponse({}, 404)).waitForDiaryEvidence();
+  await clientWith(async () => jsonResponse({ error: 'Mensagem vazia' }, 422)).waitForDiaryEvidence();
+  await assert.rejects(clientWith(async () => jsonResponse({}, 500)).waitForDiaryEvidence());
+  const abort = new AbortController(); abort.abort();
+  let calls = 0;
+  await assert.rejects(clientWith(async () => { calls++; return jsonResponse({}); })
+    .waitForDiaryEvidence({ signal: abort.signal }), { name: 'AbortError' });
+  assert.equal(calls, 0);
+});
+
 function jsonResponse(payload, status = 200) {
   return new Response(JSON.stringify(payload), {
     status,
