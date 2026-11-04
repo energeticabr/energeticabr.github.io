@@ -14,7 +14,7 @@ final class SelectionTests: XCTestCase {
         point.press(forDuration: 1.3)
         let selected = NSPredicate { _, _ in
             let result = self.state(status)
-            return result["inside"] as? Bool == true && !(result["selected"] as? String ?? "").isEmpty
+            return result["anchorInTarget"] as? Bool == true && result["focusInTarget"] as? Bool == true && !(result["selected"] as? String ?? "").isEmpty
         }
         expectation(for: selected, evaluatedWith: status)
         waitForExpectations(timeout: 10)
@@ -22,8 +22,13 @@ final class SelectionTests: XCTestCase {
         screenshot.lifetime = .keepAlways
         add(screenshot)
         print("PDF_SELECTION_RESULT \(state(status))")
-        XCTAssertTrue(state(status)["inside"] as? Bool == true)
-        XCTAssertFalse((state(status)["selected"] as? String ?? "").isEmpty)
+        let result = state(status)
+        XCTAssertTrue(result["anchorInTarget"] as? Bool == true)
+        XCTAssertTrue(result["focusInTarget"] as? Bool == true)
+        XCTAssertTrue((result["lastTouch"] as? [String:Any])?["targetInPaymentSpan"] as? Bool == true)
+        let text = result["selected"] as? String ?? ""
+        XCTAssertNotNil(text.range(of: "^[0. ]+$", options: .regularExpression))
+        XCTAssertGreaterThan(text.count, 3)
     }
 
     private func state(_ status: XCUIElement) -> [String: Any] {

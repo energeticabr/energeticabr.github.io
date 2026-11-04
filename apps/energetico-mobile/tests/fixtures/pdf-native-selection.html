@@ -8,15 +8,24 @@ import { installAppZoomGuard } from '../../src/web/app-zoom-guard.js';
 installAppZoomGuard();
 const line = '00000.00000 00000.000000 00000.000000 0 00000000000000';
 let ready = false;
+let lastTouch = null;
 function report() {
   const span = [...document.querySelectorAll('.attachment-preview-pdf-text-layer span')].find(s => s.textContent === line);
   const rect = span?.getBoundingClientRect();
   const selection = getSelection();
-  window.webkit?.messageHandlers.status.postMessage({ready, selected: selection?.toString() || '',
+  window.webkit?.messageHandlers.status.postMessage({ready, selected: selection?.toString() || '', lastTouch,
+    anchorInTarget: selection?.anchorNode?.parentElement === span,
+    focusInTarget: selection?.focusNode?.parentElement === span,
     inside: Boolean(selection?.anchorNode?.parentElement?.closest('.attachment-preview-pdf-text-layer')),
     rect: rect && {x:rect.x, y:rect.y, width:rect.width, height:rect.height}});
 }
 document.addEventListener('selectionchange', report);
+document.addEventListener('touchstart', event => {
+  const touch = event.touches[0];
+  lastTouch = {x:touch?.clientX,y:touch?.clientY,targetInPaymentSpan:event.target.textContent === line,
+    viewportWidth:innerWidth, scale:visualViewport?.scale, offsetTop:visualViewport?.offsetTop};
+  report();
+}, {capture:true,passive:true});
 try {
   const pdf = await PDFDocument.create(), font = await pdf.embedFont(StandardFonts.Helvetica);
   const page = pdf.addPage([600,800]);

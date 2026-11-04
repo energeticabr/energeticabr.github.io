@@ -8,8 +8,10 @@ class AppDelegate: UIResponder, UIApplicationDelegate, WKScriptMessageHandler {
 
     func application(_ application: UIApplication, didFinishLaunchingWithOptions options: [UIApplication.LaunchOptionsKey: Any]?) -> Bool {
         let config = WKWebViewConfiguration()
+        config.defaultWebpagePreferences.preferredContentMode = .mobile
         config.userContentController.add(self, name: "status")
         let web = WKWebView(frame: .zero, configuration: config)
+        web.scrollView.contentInsetAdjustmentBehavior = .never
         web.allowsLinkPreview = false // Match the application's Capacitor configuration.
         web.accessibilityIdentifier = "pdf-webview"
         let controller = UIViewController()
