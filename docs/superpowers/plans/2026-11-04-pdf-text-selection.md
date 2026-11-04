@@ -14,3 +14,13 @@
 Constraints: preserve all 14 signature gesture blocks; no new dependencies; no changes to financial data or messages.
 
 Execution: inline, as requested by the user's standing instruction to execute without confirmation. Native worktree tool rejected the source outside this chat; isolated git worktree created inside the chat workspace instead.
+# Follow-up: native text stream compatibility
+
+The native WKWebView preflight (workflow 41893095045) renders a canvas but no text spans. Its captured exception is in PDF.js 6 `getTextContent`, whose `for await` consumption requires an asynchronous iterator on ReadableStream. Windows WebKit does not reproduce that missing operation.
+
+1. Reproduce both missing text overlay and missing DDA copy action with a stream lacking Symbol.asyncIterator, retaining all existing barcode validation.
+2. Add a shared text-content reader using streamTextContent/getReader/read, merging items/styles/lang as PDF.js does, releasing the reader on success/error. Preserve getTextContent fallback and pure XFA behavior.
+3. Use the reader in the viewer and the DDA copy-action check. Preserve zoom, rendering lifecycle, signatures and payment behavior.
+4. Verify multiple chunks, errors and lifecycle tests, the original private PDF locally, and a synthetic native preflight plus trusted long press. Keep real financial documents out of public CI.
+5. Run appropriate builds, full regression, signature guard and independent review on the integrated revision.
+6. Publish and verify Windows web, internal Android and TestFlight separately.

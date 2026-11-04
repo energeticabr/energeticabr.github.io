@@ -1,3 +1,5 @@
+import { readPdfTextContent } from './pdf-text-content.js';
+
 const ACTION = 'EnergeticoDdaCopyBarcode';
 function mod10(value) {
   const sum = [...value].reverse().reduce((total, digit, index) => {
@@ -24,7 +26,7 @@ export async function readDdaCopyAction(page) {
     if (typeof raw !== 'string' || raw.length > 250 || annotation.url || annotation.unsafeUrl || annotation.actions) return null;
     const {version,barcode,line} = JSON.parse(raw);
     if (version !== 2 || typeof barcode !== 'string' || typeof line !== 'string' || !validCodes(barcode,line)) return null;
-    const text = (await page.getTextContent()).items.map(item => item.str || '').join(' ').replace(/\D/g,'');
+    const text = (await readPdfTextContent(page)).items.map(item => item.str || '').join(' ').replace(/\D/g,'');
     if (!text.includes(barcode) || !text.includes(line)) return null;
     const viewport = page.getViewport({scale:1});
     if (!Array.isArray(annotation.rect) || annotation.rect.length !== 4 || !annotation.rect.every(Number.isFinite)) return null;

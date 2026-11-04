@@ -15,6 +15,19 @@ test('real generated PDF exposes one inert copy action with exact validated lead
  const ann=(await page.getAnnotations())[0];assert.equal(ann.action,'EnergeticoDdaCopyBarcode');assert.equal(ann.url,undefined);
  }finally{await task.destroy();}
 });
+
+test('real PDF copy action survives readable streams without asynchronous iteration', async () => {
+ const task=getDocument({data:new Uint8Array(await readFile(new URL('./fixtures/dda-mirror-v2.pdf',import.meta.url))),useSystemFonts:true});
+ try {
+  const pdf=await task.promise,page=await pdf.getPage(1),originalStream=page.streamTextContent.bind(page),streams=[];
+  page.streamTextContent=(...args)=>{const stream=originalStream(...args);Object.defineProperty(stream,Symbol.asyncIterator,{value:undefined});streams.push(stream);return stream;};
+  await assert.rejects(()=>page.getTextContent(),TypeError);
+  await streams[0].cancel(new Error('Unsupported asynchronous iteration control completed'));
+  const action=await readDdaCopyAction(page);
+  assert.equal(action?.barcode,'00197100000000123451234567890123456789012345');
+  assert.equal(action?.line.length,47);
+ } finally {await task.destroy();}
+});
 test('PDF button and footer copy 44 digits; switching documents disables detached controls',async()=>{
  const dom=new JSDOM('<body></body>',{url:'https://example.test/energetico/'}),doc=dom.window.document,copied=[];
  dom.window.HTMLCanvasElement.prototype.getContext=()=>({});
