@@ -19,6 +19,11 @@ on:
         required: true
         default: false
         type: boolean
+      use_intel_runner:
+        description: "Usar executor Intel quando os servidores ARM estiverem indisponíveis"
+        required: true
+        default: false
+        type: boolean
       capture_review_screenshots:
         description: "Capturar telas reais da demonstração nos simuladores iPhone e iPad"
         required: true
@@ -140,9 +145,9 @@ jobs:
 
   native-share-tests:
     name: Testes nativos do compartilhamento
-    # Match the iOS build host; Intel's simulator first-boot migration can stall.
-    # Run the same Swift/HTTP and 18 UIKit assertions, without relaxed timeouts.
-    runs-on: macos-26
+    # Keep ARM by default; Intel is an explicit fallback for runner capacity.
+    # Warm the runtime before the same Swift/HTTP and 18 UIKit assertions.
+    runs-on: ${{ inputs.use_intel_runner == true && 'macos-26-intel' || 'macos-26' }}
     steps:
       - name: Baixar código
         uses: actions/checkout@v4
@@ -155,6 +160,21 @@ jobs:
         run: |
           xcrun swiftc ios/ShareExtension/SharedInboxStore.swift ios/ShareExtension/SharedUploadProgress.swift tests/native-share/progress.swift tests/native-share/main.swift -o "$RUNNER_TEMP/energetico-share-tests"
           node scripts/verify-native-share.mjs "$RUNNER_TEMP/energetico-share-tests"
+      - name: Aquecer runtime do simulador no executor Intel
+        if: ${{ inputs.use_intel_runner == true }}
+        timeout-minutes: 15
+        shell: bash
+        run: |
+          set -euo pipefail
+          read -r prewarm_runtime prewarm_phone < <(xcrun simctl list --json | python3 -c 'import json,sys; d=json.load(sys.stdin); r=next(x for x in d["runtimes"] if x.get("isAvailable") and x["name"].startswith("iOS 26")); p=next((x for x in d["devicetypes"] if x["name"]=="iPhone 16"),next(x for x in d["devicetypes"] if x["name"].startswith("iPhone"))); print(r["identifier"],p["identifier"])')
+          prewarm_id=$(xcrun simctl create ENERGETICO-Share-Prewarm "$prewarm_phone" "$prewarm_runtime")
+          cleanup_prewarm() {
+            xcrun simctl shutdown "$prewarm_id" >/dev/null 2>&1 || true
+            xcrun simctl delete "$prewarm_id"
+          }
+          trap cleanup_prewarm EXIT
+          xcrun simctl boot "$prewarm_id"
+          xcrun simctl bootstatus "$prewarm_id" -b
       - name: Verificar o cluster abaixo do mascote no UIKit
         working-directory: apps/energetico-mobile
         run: node scripts/verify-native-share-preview.mjs
@@ -168,7 +188,7 @@ jobs:
 
   ios-simulator:
     name: Build iOS sem assinatura
-    runs-on: macos-26
+    runs-on: ${{ inputs.use_intel_runner == true && 'macos-26-intel' || 'macos-26' }}
     needs: [web-tests, native-share-tests]
     steps:
       - name: Baixar código
@@ -233,7 +253,7 @@ jobs:
   review-screenshots:
     name: Capturas reais para App Review
     if: ${{ github.event_name == 'workflow_dispatch' && inputs.capture_review_screenshots == true }}
-    runs-on: macos-26
+    runs-on: ${{ inputs.use_intel_runner == true && 'macos-26-intel' || 'macos-26' }}
     needs: ios-simulator
     environment: app-store-connect
     steps:
@@ -278,7 +298,7 @@ jobs:
   testflight:
     name: Distribuição TestFlight
     if: ${{ (github.event_name == 'push' && github.ref == 'refs/heads/main') || (github.event_name == 'workflow_dispatch' && inputs.distribute == true) }}
-    runs-on: macos-26
+    runs-on: ${{ inputs.use_intel_runner == true && 'macos-26-intel' || 'macos-26' }}
     needs:
       - web-tests
       - ios-simulator

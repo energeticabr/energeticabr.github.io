@@ -17,7 +17,20 @@ test("workflow mantém validação gratuita antes da distribuição TestFlight",
 
   assert.match(workflow, /^permissions:\s*\n\s+contents: read/m);
   assert.match(workflow, /workflow_dispatch:[\s\S]*distribute:[\s\S]*type: boolean/);
-  assert.match(workflow, /runs-on: macos-26/);
+  assert.ok(/use_intel_runner:[\s\S]*?default: false\s+type: boolean/.test(workflow), 'manual Intel fallback must be a boolean disabled by default');
+  for (const id of ['native-share-tests', 'ios-simulator', 'review-screenshots', 'testflight']) {
+    const nativeJob = workflow.match(new RegExp(`\\n  ${id}:\\n([\\s\\S]*?)(?=\\n  [\\w-]+:\\n|$)`))?.[1] || '';
+    const selector = nativeJob.match(/^    runs-on: \$\{\{ (.*) \}\}$/m)?.[1];
+    assert.ok(selector, `${id} must preserve ARM by default and allow a manual Intel fallback`);
+    for (const [event_name, inputs, expected] of [
+      ['push', {}, 'macos-26'], ['pull_request', {}, 'macos-26'],
+      ['workflow_dispatch', {}, 'macos-26'],
+      ['workflow_dispatch', { use_intel_runner: false }, 'macos-26'],
+      ['workflow_dispatch', { use_intel_runner: true }, 'macos-26-intel'],
+    ]) {
+      assert.equal(runInNewContext(selector, { github: { event_name }, inputs }, { timeout: 100 }), expected, `${id} ${event_name}`);
+    }
+  }
   assert.match(workflow, /CODE_SIGNING_ALLOWED=NO/);
   assert.match(workflow, /PlugIns\/ShareExtension\.appex/);
   assert.ok(testflightJob, "job TestFlight ausente");
