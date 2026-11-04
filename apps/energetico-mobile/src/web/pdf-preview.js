@@ -246,8 +246,10 @@ export function createPdfPreview({
   async function renderSelectableText(page, canvas, displayed, generation) {
     if (!TextLayer || !page.getTextContent || destroyed || generation !== renderGeneration) return;
     const node = element('div', 'attachment-preview-pdf-text');
-    node.style.width = canvas.style.width;
-    node.style.height = canvas.style.height;
+    // Pinching may have resized this canvas while its render was pending.
+    // The text viewport stays at its base size; applyZoom scales both together.
+    node.style.width = `${canvas.dataset.baseWidth}px`;
+    node.style.height = `${canvas.dataset.baseHeight}px`;
     node.style.top = `${canvas.offsetTop}px`;
     const layer = element('div', 'attachment-preview-pdf-text-layer');
     layer.style.setProperty('--total-scale-factor', displayed.scale * (displayed.userUnit || 1));
