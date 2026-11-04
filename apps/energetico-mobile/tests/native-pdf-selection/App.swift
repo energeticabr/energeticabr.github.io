@@ -8,11 +8,13 @@ class AppDelegate: UIResponder, UIApplicationDelegate, WKScriptMessageHandler {
 
     func application(_ application: UIApplication, didFinishLaunchingWithOptions options: [UIApplication.LaunchOptionsKey: Any]?) -> Bool {
         let config = WKWebViewConfiguration()
+        let arguments = ProcessInfo.processInfo.arguments
+        let mode = arguments.firstIndex(of: "--mode").flatMap { $0 + 1 < arguments.count ? arguments[$0 + 1] : nil } ?? "default"
         config.defaultWebpagePreferences.preferredContentMode = .mobile
         config.userContentController.add(self, name: "status")
         let web = WKWebView(frame: .zero, configuration: config)
         web.scrollView.contentInsetAdjustmentBehavior = .never
-        web.allowsLinkPreview = false // Match the application's Capacitor configuration.
+        web.allowsLinkPreview = mode == "previews" // Default matches Capacitor configuration.
         web.accessibilityIdentifier = "pdf-webview"
         let controller = UIViewController()
         controller.view.backgroundColor = .white
@@ -31,7 +33,7 @@ class AppDelegate: UIResponder, UIApplicationDelegate, WKScriptMessageHandler {
         window = UIWindow(frame: UIScreen.main.bounds)
         window?.rootViewController = controller
         window?.makeKeyAndVisible()
-        web.load(URLRequest(url: URL(string: "http://127.0.0.1:4179/tests/fixtures/pdf-native-selection.html")!))
+        web.load(URLRequest(url: URL(string: "http://127.0.0.1:4179/tests/fixtures/pdf-native-selection.html?mode=\(mode)")!))
         return true
     }
 

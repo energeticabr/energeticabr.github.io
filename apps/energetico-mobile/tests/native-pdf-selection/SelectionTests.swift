@@ -2,7 +2,17 @@ import XCTest
 
 final class SelectionTests: XCTestCase {
     func testLongPressSelectsPDFText() throws {
+        try checkSelection(mode: "default")
+    }
+    func testScopeExperiment() throws { try checkSelection(mode: "scope") }
+    func testLinkPreviewExperiment() throws { try checkSelection(mode: "previews") }
+    func testTransformExperiment() throws { try checkSelection(mode: "untransformed") }
+    func testVisibleTextExperiment() throws { try checkSelection(mode: "visible") }
+    func testReadableTextControl() throws { try checkSelection(mode: "readable") }
+
+    private func checkSelection(mode: String) throws {
         let app = XCUIApplication()
+        app.launchArguments = ["--mode", mode]
         app.launch()
         let status = app.staticTexts["pdf-status"]
         let ready = NSPredicate { _, _ in self.state(status)["ready"] as? Bool == true }
@@ -21,7 +31,7 @@ final class SelectionTests: XCTestCase {
         let screenshot = XCTAttachment(screenshot: app.screenshot())
         screenshot.lifetime = .keepAlways
         add(screenshot)
-        print("PDF_SELECTION_RESULT \(state(status))")
+        print("PDF_SELECTION_RESULT mode=\(mode) \(state(status))")
         let result = state(status)
         XCTAssertTrue(result["anchorInTarget"] as? Bool == true)
         XCTAssertTrue(result["focusInTarget"] as? Bool == true)

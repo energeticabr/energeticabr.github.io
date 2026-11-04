@@ -7,13 +7,14 @@ import { createAttachmentPreview } from '../../src/web/attachment-preview.js';
 import { installAppZoomGuard } from '../../src/web/app-zoom-guard.js';
 installAppZoomGuard();
 const line = '00000.00000 00000.000000 00000.000000 0 00000000000000';
+const mode = new URLSearchParams(location.search).get('mode') || 'default';
 let ready = false;
 let lastTouch = null;
 function report() {
   const span = [...document.querySelectorAll('.attachment-preview-pdf-text-layer span')].find(s => s.textContent === line);
   const rect = span?.getBoundingClientRect();
   const selection = getSelection();
-  window.webkit?.messageHandlers.status.postMessage({ready, selected: selection?.toString() || '', lastTouch,
+  window.webkit?.messageHandlers.status.postMessage({ready, mode, selected: selection?.toString() || '', lastTouch,
     anchorInTarget: selection?.anchorNode?.parentElement === span,
     focusInTarget: selection?.focusNode?.parentElement === span,
     inside: Boolean(selection?.anchorNode?.parentElement?.closest('.attachment-preview-pdf-text-layer')),
@@ -34,6 +35,19 @@ try {
   page.drawText('VALOR FICTICIO', {x:30,y:650,size:10,font});
   const preview = createAttachmentPreview({canEmbedPdf:()=>false});
   await preview.open(new Blob([await pdf.save()], {type:'application/pdf'}), 'Boleto_ficticio.pdf');
+  // Isolated diagnostic variants; production styles are never changed here.
+  if (mode === 'scope') {
+    const style = document.createElement('style');
+    style.textContent = '.attachment-preview-header,.attachment-preview-footer,.attachment-preview-status,.attachment-preview-pdf-canvas{-webkit-user-select:none;user-select:none}';
+    document.head.append(style);
+  }
+  if (mode === 'untransformed') {
+    const canvas = document.querySelector('canvas'), wrapper = document.querySelector('.attachment-preview-pdf-text');
+    wrapper.style.left = `${canvas.offsetLeft}px`; wrapper.style.transform = 'none';
+  }
+  const target = [...document.querySelectorAll('.attachment-preview-pdf-text-layer span')].find(s=>s.textContent===line);
+  if (mode === 'visible') target.style.color = 'black';
+  if (mode === 'readable') target.style.cssText = 'position:absolute;left:10px;top:40px;font-size:16px;transform:none;color:black';
   ready = true;
   report();
 } catch (error) { window.webkit?.messageHandlers.status.postMessage({error:String(error)}); }
