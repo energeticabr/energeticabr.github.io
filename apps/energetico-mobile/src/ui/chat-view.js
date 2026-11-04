@@ -1200,6 +1200,14 @@ function presenceSummaryEditor(cell, row, { messageId, busy, current }) {
   return `<b class="chat-presence-editor">${escapeHtml(selected ? cell.value : placeholder)}<select data-action="attendance-inline-select" data-message-id="${escapeHtml(messageId)}" aria-label="${descriptor ? "IDDESCRITIVO" : "ATIVIDADE EXECUTADA"} de ${escapeHtml(supplier)}"${busy || !current ? " disabled" : ""}>${selected ? "" : `<option value="" disabled selected>${placeholder}</option>`}${options.map(option => `<option value="${escapeHtml(option.value)}"${option.value === value ? " selected" : ""}>${escapeHtml(option.label)}</option>`).join("")}</select></b>`;
 }
 
+function attendanceCopyOfferMarkup(table, messageId, current, busy) {
+  const offer = table?.copy_offer;
+  if (!current || busy || !/^[a-f0-9]{12,64}$/.test(String(offer?.token || '')) || !Array.isArray(offer.targets) || !offer.targets.length) return '';
+  const targets = offer.targets.filter(item => /^\d+$/.test(String(item?.id || '')) && item?.name);
+  if (!targets.length) return '';
+  return `<div class="attendance-copy-backdrop" data-attendance-copy-token="${escapeHtml(offer.token)}" data-attendance-copy-message="${escapeHtml(messageId)}"><section class="attendance-copy-dialog" role="dialog" aria-modal="true" aria-label="Aplicar padrão a outros fornecedores"><div data-attendance-copy-question><h2>Aplicar o mesmo padrão a outros fornecedores?</h2>${offer.error ? `<p role="alert">${escapeHtml(offer.error)}</p>` : ""}<div class="attendance-copy-actions"><button type="button" data-action="attendance-copy-yes">SIM</button><button type="button" data-action="attendance-copy-no">NÃO</button></div></div><div data-attendance-copy-list hidden><h2>Selecione os fornecedores</h2><div class="attendance-copy-list">${targets.map(item => `<label><input type="checkbox" data-attendance-copy-id="${escapeHtml(item.id)}"><span>${escapeHtml(item.name)}${item.branch ? `<small>${escapeHtml(item.branch)}</small>` : ''}</span></label>`).join('')}</div><p data-attendance-copy-warning hidden>Selecione ao menos um fornecedor.</p><div class="attendance-copy-actions"><button type="button" data-action="attendance-copy-submit">SUBMETER</button><button type="button" data-action="attendance-copy-no">CANCELAR</button></div></div></section></div>`;
+}
+
 function presenceDetailTableMarkup(table, context = {}) {
   if (!table) return "";
   const rows = Array.isArray(table) ? table : table.rows;
@@ -1910,6 +1918,7 @@ function renderPoll(message, busy, draft = "", databaseFilterMessage = null, act
     ${changeTableMarkup(changeTable)}
     ${supplierDefaultsComparison}
     ${provisionReview || presenceDetailTableMarkup(presenceTable, { messageId: message.id, busy, current: currentPoll })}
+    ${attendanceCopyOfferMarkup(presenceTable, message.id, currentPoll, busy)}
     ${rhidAttendanceTableMarkup(presenceTable, message.id, rhidRefresh, activeFlow)}
     ${paymentAuditTableMarkup(paymentAuditTable)}
     ${launchPresencePaymentSummaryMarkup(launchPaymentSummary)}
@@ -4452,6 +4461,26 @@ export function createChatView(root, { onOpenSettings, onDemoAccess, onSignOut, 
   }
 
   function click(event) {
+    const copyButton = event.target?.closest?.('[data-action^="attendance-copy-"]');
+    if (copyButton) {
+      event.preventDefault();
+      const dialog = copyButton.closest('[data-attendance-copy-token]');
+      if (!dialog || composerBusy) return;
+      const action = copyButton.dataset.action;
+      if (action === 'attendance-copy-yes') {
+        dialog.querySelector('[data-attendance-copy-question]').hidden = true;
+        dialog.querySelector('[data-attendance-copy-list]').hidden = false;
+        dialog.querySelector('[data-attendance-copy-id]')?.focus();
+        return;
+      }
+      const ids = [...dialog.querySelectorAll('[data-attendance-copy-id]:checked')].map(input => input.dataset.attendanceCopyId);
+      if (action === 'attendance-copy-submit' && !ids.length) { dialog.querySelector('[data-attendance-copy-warning]').hidden = false; return; }
+      const token = dialog.dataset.attendanceCopyToken;
+      const replyId = action === 'attendance-copy-submit' ? `attendance_copy:${token}:${ids.join(',')}` : `attendance_copy_skip:${token}`;
+      emit({type:'select-reply', messageId:dialog.dataset.attendanceCopyMessage, replyId, label: action === 'attendance-copy-submit' ? 'Aplicar padrão' : 'Não aplicar padrão'});
+      return;
+    }
+
     const voiceAction = event.target?.closest?.('[data-action^="voice-"]')?.getAttribute?.("data-action");
     if (voiceAction) {
       if (voiceAction === "voice-pause" || voiceAction === "voice-resume") toggleVoiceInputPause(event);

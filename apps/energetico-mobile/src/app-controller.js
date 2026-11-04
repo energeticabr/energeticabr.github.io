@@ -11689,6 +11689,20 @@ export function createAppController({
       return formatted ? sendText(formatted) : false;
     });
     bind("select-reply", command => {
+      if (/^attendance_copy(?:_skip)?:/.test(String(command.replyId || ''))) {
+        const state = store.getState();
+        const poll = latestAssistantPoll(state.messages);
+        if (state.activeFlow?.id !== 'attendance_validation' || poll?.id !== command.messageId) return false;
+        const offer = (poll.detail_table || poll.detailTable)?.copy_offer;
+        const parts = String(command.replyId).split(':');
+        if (!offer || parts[1] !== offer.token) return false;
+        if (parts[0] === 'attendance_copy') {
+          const ids = (parts[2] || '').split(',');
+          const allowed = new Set((offer.targets || []).map(target => String(target.id)));
+          if (parts.length !== 3 || !ids.length || ids.some(id => !allowed.has(id)) || new Set(ids).size !== ids.length) return false;
+        } else if (parts[0] !== 'attendance_copy_skip' || parts.length !== 2) return false;
+        return sendText(command.label, command.replyId, { silent: true, preserveDraft: true });
+      }
       if (String(command.replyId || '').startsWith('attendance_inline:')) {
         const state = store.getState();
         const poll = latestAssistantPoll(state.messages);
