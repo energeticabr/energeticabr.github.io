@@ -11,7 +11,7 @@ export function pendingProvisionAttachmentTray(paymentId, upload = {}, locked = 
     ${items.length ? `<ul class="chat-pending-provision__upload-queue" aria-label="Novos anexos">${items.map(item => {
       const name = escapeHtml(item.fileName || 'arquivo');
       const status = item.status === 'conflict' ? 'Nome repetido' : item.status === 'error' ? 'Falha no envio' : item.status === 'uploading' ? 'Enviando…' : 'Pronto para enviar';
-      return `<li><span><strong>${name}</strong><small>${status}</small></span><button type="button" data-action="remove-pending-provision-upload" data-payment-id="${id}" data-upload-id="${escapeHtml(item.id || item.fileName)}" aria-label="Remover ${name}"${disabled}>×</button></li>`;
+      return `<li><span><strong>${name}</strong><small>${status}${item.error ? ` — ${escapeHtml(item.error)}` : ''}</small></span><button type="button" data-action="remove-pending-provision-upload" data-payment-id="${id}" data-upload-id="${escapeHtml(item.id || item.fileName)}" aria-label="Remover ${name}"${disabled}>×</button></li>`;
     }).join('')}</ul>
     <div class="chat-confirmation__actions">
       <button type="button" class="chat-confirmation__cancel" data-action="cancel-pending-provision-uploads" data-payment-id="${id}"${busy ? ' disabled' : ''}>Cancelar</button>

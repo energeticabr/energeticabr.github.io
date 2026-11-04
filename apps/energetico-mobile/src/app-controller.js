@@ -395,6 +395,20 @@ function errorMessage(error, fallback) {
   return error?.message || fallback;
 }
 
+function pendingProvisionUploadError(error) {
+  const validationMessages = new Set([
+    'O nome do arquivo não é permitido.', 'O tamanho do arquivo não é permitido.',
+    'O tipo deste arquivo não é permitido.', 'O arquivo selecionado não pode ser lido.',
+  ]);
+  if (error instanceof RangeError && validationMessages.has(error.message)) return error.message;
+  if ([401, 403].includes(Number(error?.status)) || error?.code === 'AUTH_REQUIRED') {
+    return 'A sessão Microsoft não autorizou o envio. Entre novamente e tente reenviar o arquivo.';
+  }
+  if (Number(error?.status) === 413) return 'O arquivo ultrapassa o tamanho aceito pelo SharePoint.';
+  if (Number(error?.status) === 429) return 'O SharePoint está limitando os envios. Aguarde e tente novamente.';
+  return 'O envio não foi confirmado. Confira a conexão e tente novamente.';
+}
+
 export function shouldRemoveSignedSource(targetId, preserveSource) {
   return Boolean(String(targetId || "").trim())
     && preserveSource !== true;
@@ -2012,6 +2026,7 @@ export function createAppController({
         fileName: String(item.file?.name || item.fileName || "arquivo"),
         size: Number(item.file?.size ?? item.size) || 0,
         status: String(item.status || "ready"),
+        error: String(item.error || ''),
       })),
       busy: state.busy === true,
       picking: state.picking === true,
@@ -3958,9 +3973,9 @@ export function createAppController({
           items = items.filter(item => item.file !== staged.file);
           setPendingProvisionUploads(id, { ...pendingProvisionUploads.get(id), items, busy: true });
           render();
-        } catch {
+        } catch (error) {
           if (!uploadCurrent()) return false;
-          items = items.map(item => item.file === staged.file ? { ...item, status: "error", error: "O SharePoint não confirmou o envio." } : item);
+          items = items.map(item => item.file === staged.file ? { ...item, status: "error", error: pendingProvisionUploadError(error) } : item);
           setPendingProvisionUploads(id, { ...pendingProvisionUploads.get(id), items, busy: true });
           render();
         }
@@ -3986,18 +4001,18 @@ export function createAppController({
         error: items.length
           ? conflicts.size || items.some(item => item.status === "conflict")
             ? "Corrija os nomes repetidos e reenvie os arquivos restantes."
-            : "Alguns anexos não foram confirmados; os arquivos restantes continuam na fila para nova tentativa."
+            : `${items.find(item => item.status === 'error')?.error || 'Alguns anexos não foram confirmados.'} Os arquivos restantes continuam na fila para nova tentativa.`
           : "",
       });
       render();
       return items.length === 0;
-    } catch {
+    } catch (error) {
       if (stopped || account !== targetAccount || sessionRevision !== targetRevision) return false;
       setPendingProvisionUploads(id, {
         ...pendingProvisionUploads.get(id),
         items: pendingProvisionUploads.get(id)?.items || items,
         busy: false,
-        error: "Não foi possível concluir o envio. Os arquivos continuam na fila para nova tentativa.",
+        error: `${pendingProvisionUploadError(error)} Os arquivos continuam na fila para nova tentativa.`,
       });
       render();
       return false;
