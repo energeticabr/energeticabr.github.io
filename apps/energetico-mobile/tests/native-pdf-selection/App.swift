@@ -39,6 +39,8 @@ class AppDelegate: UIResponder, UIApplicationDelegate, WKScriptMessageHandler {
 
     func userContentController(_ controller: WKUserContentController, didReceive message: WKScriptMessage) {
         if let data = try? JSONSerialization.data(withJSONObject: message.body, options: [.sortedKeys]), let json = String(data: data, encoding: .utf8) {
+            let output = FileManager.default.urls(for: .documentDirectory, in: .userDomainMask)[0].appendingPathComponent("pdf-status.json")
+            try? data.write(to: output, options: .atomic)
             status.accessibilityValue = json
             status.text = "PDF status"
             print("PDF_SELECTION_STATUS \(json)")

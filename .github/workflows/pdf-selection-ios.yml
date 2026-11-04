@@ -52,12 +52,29 @@ jobs:
         run: |
           xcrun simctl boot "$DEVICE"
           xcrun simctl bootstatus "$DEVICE" -b
+      - name: Inspect native text layer before accessibility automation
+        timeout-minutes: 8
+        working-directory: apps/energetico-mobile/tests/native-pdf-selection
+        run: |
+          set -eo pipefail
+          xcodebuild build -project PDFSelection.xcodeproj -scheme PDFSelection -destination "platform=iOS Simulator,id=$DEVICE" -derivedDataPath "$RUNNER_TEMP/pdf-build" CODE_SIGNING_ALLOWED=NO > "$RUNNER_TEMP/pdf-build.log" 2>&1
+          xcrun simctl install "$DEVICE" "$RUNNER_TEMP/pdf-build/Build/Products/Debug-iphonesimulator/PDFSelection.app"
+          xcrun simctl launch "$DEVICE" br.com.energetica.pdf-selection-test --mode default
+          APP_DATA=$(xcrun simctl get_app_container "$DEVICE" br.com.energetica.pdf-selection-test data)
+          for attempt in {1..120}; do
+            if [ -f "$APP_DATA/Documents/pdf-status.json" ] && python3 -c 'import json,sys; s=json.load(open(sys.argv[1])); sys.exit(0 if s.get("ready") or s.get("error") else 1)' "$APP_DATA/Documents/pdf-status.json"; then break; fi
+            sleep 1
+          done
+          cp "$APP_DATA/Documents/pdf-status.json" "$RUNNER_TEMP/pdf-native-ready.json"
+          cat "$RUNNER_TEMP/pdf-native-ready.json"
+          xcrun simctl io "$DEVICE" screenshot "$RUNNER_TEMP/pdf-native-ready.png"
+          python3 -c 'import json,sys; s=json.load(open(sys.argv[1])); sys.exit(0 if s.get("ready") and not s.get("error") else 1)' "$RUNNER_TEMP/pdf-native-ready.json"
       - name: Native iPhone long press
         timeout-minutes: 20
         working-directory: apps/energetico-mobile/tests/native-pdf-selection
         run: |
           set -o pipefail
-          xcodebuild test -project PDFSelection.xcodeproj -scheme PDFSelection -destination "platform=iOS Simulator,id=$DEVICE" -resultBundlePath "$RUNNER_TEMP/pdf-selection.xcresult" CODE_SIGNING_ALLOWED=NO | tee "$RUNNER_TEMP/pdf-native.log"
+          xcodebuild test -project PDFSelection.xcodeproj -scheme PDFSelection -destination "platform=iOS Simulator,id=$DEVICE" -parallel-testing-enabled NO -resultBundlePath "$RUNNER_TEMP/pdf-selection.xcresult" CODE_SIGNING_ALLOWED=NO | tee "$RUNNER_TEMP/pdf-native.log"
       - name: Export synthetic diagnostic screenshots
         if: always()
         run: |
@@ -73,4 +90,7 @@ jobs:
             ${{ runner.temp }}/pdf-vite.log
             ${{ runner.temp }}/pdf-selection.xcresult
             ${{ runner.temp }}/pdf-screenshots
+            ${{ runner.temp }}/pdf-build.log
+            ${{ runner.temp }}/pdf-native-ready.json
+            ${{ runner.temp }}/pdf-native-ready.png
           retention-days: 3
