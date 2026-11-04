@@ -19,3 +19,6 @@ apps/energetico-mobile/tests/fixtures/*.pdf binary
 backend-patches/provision-partial-settlement/** text eol=lf
 backend-patches/provision-partial-settlement/source.patch whitespace=-blank-at-eol
 backend-patches/provision-settlement-stage/** text eol=lf
+backend-patches/provision-single-unit-price/** text eol=lf
+backend-patches/provision-single-unit-price/patch_backend.py -text whitespace=cr-at-eol
+backend-patches/provision-single-unit-price/source.patch whitespace=-blank-at-eol
