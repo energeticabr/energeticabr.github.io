@@ -1,0 +1,14 @@
+<!doctype html><html lang="pt-BR"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><link rel="stylesheet" href="/src/styles.css"></head><body><main id="app"></main><script type="module">
+import {createChatView} from '/src/ui/chat-view.js';
+const root=document.querySelector('#app'),view=createChatView(root);
+const rows=[{supplier:'FORNECEDOR FICTÍCIO DE CONSTRUÇÃO COM NOME BASTANTE COMPRIDO',descriptor:{before:'118',after:'127'},activity:{before:'MONTAGEM DE FÔRMAS PARA CONCRETO',after:'EXECUÇÃO DE FUNDAÇÃO EM TUBULÃO'}},{supplier:'SEGUNDO FORNECEDOR FICTÍCIO COM NOME LONGO',descriptor:{before:'',after:'405'},activity:{before:'NENHUMA ATIVIDADE',after:'CONCRETAGEM DE LAJES E VIGAS'}}];
+view.render({sessionStatus:'authenticated',account:{name:'Teste'},draft:'',pendingFiles:[],messages:[{id:'review',role:'assistant',type:'poll',question:'VOCÊ QUER ALTERAR O PADRÃO DOS FORNECEDORES?\nTEXTO ALTERNATIVO',detail_table:{kind:'presence',variant:'supplier_defaults_comparison',available:true,rows},options:[{id:'attendance_supplier_defaults_yes',reply:'attendance_supplier_defaults_yes',label:'SIM, ALTERAR PADRÃO'},{id:'attendance_supplier_defaults_no',reply:'attendance_supplier_defaults_no',label:'NÃO, APENAS SUBMETER'},{id:'attendance_supplier_defaults_back',reply:'attendance_supplier_defaults_back',label:'VOLTAR AO RESUMO'}]}]});
+await document.fonts.ready;await new Promise(r=>requestAnimationFrame(()=>requestAnimationFrame(r)));
+const table=root.querySelector('.chat-supplier-defaults-table'),groups=[...table.tBodies],container=table.parentElement;
+const cells=[...table.querySelectorAll('th,td')];
+const result={rows:groups.map(g=>g.rows.length),colors:groups.map(g=>getComputedStyle(g).backgroundColor),
+  overflow:document.documentElement.scrollWidth>innerWidth+1||container.scrollWidth>container.clientWidth+1||cells.some(c=>c.scrollWidth>c.clientWidth+1),
+  supplierSpans:groups.map(g=>g.querySelector('th[rowspan="2"]')?.rowSpan),after:table.textContent.includes('EXECUÇÃO DE FUNDAÇÃO EM TUBULÃO'),
+  buttons:[...root.querySelectorAll('[data-action="select-reply"]')].map(x=>x.dataset.replyId),fallback:root.textContent.includes('TEXTO ALTERNATIVO')};
+document.documentElement.dataset.layout=JSON.stringify(result);document.documentElement.dataset.ready='true';
+</script></body></html>
