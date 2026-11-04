@@ -1,0 +1,60 @@
+<!doctype html>
+<html lang="pt-BR"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Seleção de PDF fictício</title><link rel="stylesheet" href="../../src/styles.css"><link rel="stylesheet" href="../../src/web/attachment-preview.css"></head>
+<body><script type="module">
+import { PDFDocument, StandardFonts, degrees } from 'pdf-lib';
+import { createAttachmentPreview } from '../../src/web/attachment-preview.js';
+const line = '34191.57007 00408.460699 09858.250005 4 16210000060000';
+const state = { checks: [] };
+try {
+  const pdf = await PDFDocument.create(), font = await pdf.embedFont(StandardFonts.Helvetica);
+  for (const rotation of [0, 90, 180, 270]) {
+    const page = pdf.addPage([600, 800]); page.setRotation(degrees(rotation));
+    page.drawText('BOLETO FICTICIO - teste de selecao', { x: 40, y: 750, size: 15, font });
+    page.drawText(line, { x: 40, y: 700, size: 12, font });
+    page.drawText('Valor: R$ 600,00', { x: 40, y: 660, size: 12, font });
+  }
+  const preview = createAttachmentPreview({ documentRef: document, exportMedia: async () => ({ status: 'cancelled' }) });
+  await preview.open(new Blob([await pdf.save()], { type: 'application/pdf' }), 'Boleto_ficticio.pdf');
+  const viewport = document.querySelector('.attachment-preview-pdf-viewport');
+  const measure = (zoomed) => {
+    for (const wrapper of document.querySelectorAll('.attachment-preview-pdf-page')) {
+      const canvas = wrapper.querySelector('canvas'), overlay = wrapper.querySelector('.attachment-preview-pdf-text');
+      const text = [...(overlay?.querySelectorAll('span') || [])].find(node => node.textContent === line);
+      if (!overlay || !text) throw new Error('Linha digitável não está disponível para seleção');
+      const c = canvas.getBoundingClientRect(), o = overlay.getBoundingClientRect(), r = text.getBoundingClientRect();
+      const range = document.createRange(); range.selectNodeContents(text);
+      const selection = getSelection(); selection.removeAllRanges(); selection.addRange(range);
+      const style = getComputedStyle(text);
+      state.checks.push({ page: wrapper.dataset.pageNumber, zoomed,
+        copied: selection.toString(), selectable: style.userSelect === 'text',
+        aligned: Math.abs(c.left-o.left)<1 && Math.abs(c.top-o.top)<1 && Math.abs(c.width-o.width)<1 && Math.abs(c.height-o.height)<1,
+        inside: r.left >= c.left-1 && r.top >= c.top-1 && r.right <= c.right+1 && r.bottom <= c.bottom+1,
+        fontSize: parseFloat(style.fontSize), width: r.width, height: r.height });
+      selection.removeAllRanges();
+    }
+  };
+  measure(false);
+  const firstText = [...document.querySelector('.attachment-preview-pdf-text').querySelectorAll('span')].find(node => node.textContent === line);
+  const firstBounds = firstText.getBoundingClientRect();
+  const target = document.elementFromPoint(firstBounds.left + firstBounds.width / 2, firstBounds.top + firstBounds.height / 2);
+  state.hitText = Boolean(target?.closest('.attachment-preview-pdf-text-layer'));
+  const press = new Event('touchstart', { bubbles: true, cancelable: true });
+  Object.defineProperty(press, 'touches', { value: [{ identifier: 0, clientX: firstBounds.left, clientY: firstBounds.top }] });
+  firstText.dispatchEvent(press);
+  state.singleTouchAllowed = !press.defaultPrevented;
+  const endPress = new Event('touchend', { bubbles: true }); Object.defineProperty(endPress, 'touches', { value: [] }); viewport.dispatchEvent(endPress);
+  const touch = (identifier, clientX) => ({ identifier, clientX, clientY: 240 });
+  const send = (type, touches) => { const event = new Event(type, { bubbles: true, cancelable: true }); Object.defineProperty(event, 'touches', { value: touches }); viewport.dispatchEvent(event); };
+  send('touchstart', [touch(1, 80), touch(2, 180)]);
+  send('touchmove', [touch(1, 30), touch(2, 280)]);
+  send('touchend', []);
+  measure(true);
+  state.zoomed = parseFloat(document.querySelector('canvas').style.width) > Number(document.querySelector('canvas').dataset.baseWidth);
+  state.overflow = document.documentElement.scrollWidth > innerWidth;
+  viewport.scrollTop = 0; viewport.scrollLeft = 0;
+  const selectionRange = document.createRange(); selectionRange.selectNodeContents(firstText); getSelection().addRange(selectionRange);
+} catch (error) { state.error = error.stack || String(error); }
+document.documentElement.dataset.result = JSON.stringify(state);
+document.documentElement.dataset.layout = 'ready';
+</script></body></html>
