@@ -1,0 +1,31 @@
+<!doctype html>
+<html lang="pt-BR"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Seleção nativa fictícia</title><link rel="stylesheet" href="../../src/styles.css"><link rel="stylesheet" href="../../src/web/attachment-preview.css"></head>
+<body><script type="module">
+import { PDFDocument, StandardFonts } from 'pdf-lib';
+import { createAttachmentPreview } from '../../src/web/attachment-preview.js';
+import { installAppZoomGuard } from '../../src/web/app-zoom-guard.js';
+installAppZoomGuard();
+const line = '00000.00000 00000.000000 00000.000000 0 00000000000000';
+let ready = false;
+function report() {
+  const span = [...document.querySelectorAll('.attachment-preview-pdf-text-layer span')].find(s => s.textContent === line);
+  const rect = span?.getBoundingClientRect();
+  const selection = getSelection();
+  window.webkit?.messageHandlers.status.postMessage({ready, selected: selection?.toString() || '',
+    inside: Boolean(selection?.anchorNode?.parentElement?.closest('.attachment-preview-pdf-text-layer')),
+    rect: rect && {x:rect.x, y:rect.y, width:rect.width, height:rect.height}});
+}
+document.addEventListener('selectionchange', report);
+try {
+  const pdf = await PDFDocument.create(), font = await pdf.embedFont(StandardFonts.Helvetica);
+  const page = pdf.addPage([600,800]);
+  page.drawText('DOCUMENTO FICTICIO PARA TESTE', {x:30,y:750,size:14,font});
+  page.drawText(line, {x:220,y:710,size:8,font});
+  page.drawText('VALOR FICTICIO', {x:30,y:650,size:10,font});
+  const preview = createAttachmentPreview({canEmbedPdf:()=>false});
+  await preview.open(new Blob([await pdf.save()], {type:'application/pdf'}), 'Boleto_ficticio.pdf');
+  ready = true;
+  report();
+} catch (error) { window.webkit?.messageHandlers.status.postMessage({error:String(error)}); }
+</script></body></html>

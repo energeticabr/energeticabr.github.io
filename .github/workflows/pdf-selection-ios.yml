@@ -1,0 +1,50 @@
+name: PDF native selection
+on:
+  workflow_dispatch:
+  push:
+    branches: [fix/pdf-text-selection-webkit-20261104]
+    paths:
+      - '.github/workflows/pdf-selection-ios.yml'
+      - 'apps/energetico-mobile/tests/native-pdf-selection/**'
+      - 'apps/energetico-mobile/tests/fixtures/pdf-native-selection.html'
+permissions:
+  contents: read
+jobs:
+  native-selection:
+    runs-on: macos-26
+    timeout-minutes: 25
+    steps:
+      - uses: actions/checkout@v4
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 10.11.0
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+      - run: pnpm install --frozen-lockfile
+        working-directory: apps/energetico-mobile
+      - name: Start synthetic fixture server
+        working-directory: apps/energetico-mobile
+        run: |
+          pnpm exec vite --host 127.0.0.1 --port 4179 --strictPort > "$RUNNER_TEMP/pdf-vite.log" 2>&1 &
+          for attempt in {1..30}; do
+            curl -fsS http://127.0.0.1:4179/tests/fixtures/pdf-native-selection.html >/dev/null && break
+            sleep 1
+          done
+      - run: brew install xcodegen
+      - name: Native iPhone long press
+        working-directory: apps/energetico-mobile/tests/native-pdf-selection
+        run: |
+          set -o pipefail
+          xcodegen generate
+          DEVICE=$(xcrun simctl list devices available -j | python3 -c 'import json,sys; print(next(d["udid"] for ds in json.load(sys.stdin)["devices"].values() for d in ds if d["name"].startswith("iPhone")))')
+          xcodebuild test -project PDFSelection.xcodeproj -scheme PDFSelection -destination "platform=iOS Simulator,id=$DEVICE" -resultBundlePath "$RUNNER_TEMP/pdf-selection.xcresult" CODE_SIGNING_ALLOWED=NO | tee "$RUNNER_TEMP/pdf-native.log"
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: pdf-native-selection
+          path: |
+            ${{ runner.temp }}/pdf-native.log
+            ${{ runner.temp }}/pdf-vite.log
+            ${{ runner.temp }}/pdf-selection.xcresult
+          retention-days: 3

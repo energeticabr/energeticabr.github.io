@@ -1,0 +1,40 @@
+name: PDFSelection
+options:
+  deploymentTarget:
+    iOS: "16.0"
+settings:
+  base:
+    SWIFT_VERSION: "5.0"
+    CODE_SIGNING_ALLOWED: NO
+    GENERATE_INFOPLIST_FILE: YES
+targets:
+  PDFSelection:
+    type: application
+    platform: iOS
+    sources: [App.swift]
+    info:
+      path: Info.plist
+      properties:
+        NSAppTransportSecurity:
+          NSAllowsArbitraryLoads: true
+        UILaunchScreen: {}
+    settings:
+      base:
+        PRODUCT_BUNDLE_IDENTIFIER: br.com.energetica.pdf-selection-test
+        INFOPLIST_KEY_UILaunchScreen_Generation: YES
+  PDFSelectionTests:
+    type: bundle.ui-testing
+    platform: iOS
+    sources: [SelectionTests.swift]
+    dependencies:
+      - target: PDFSelection
+    settings:
+      base:
+        PRODUCT_BUNDLE_IDENTIFIER: br.com.energetica.pdf-selection-ui-tests
+schemes:
+  PDFSelection:
+    build:
+      targets:
+        PDFSelection: all
+    test:
+      targets: [PDFSelectionTests]
