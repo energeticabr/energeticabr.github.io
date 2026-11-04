@@ -1,0 +1,68 @@
+--- a/worker/workflow.py
++++ b/worker/workflow.py
+@@ -863 +863,2 @@
+-                               "multi_launch_grouping_supplier_registration"}:
++                               "multi_launch_grouping_supplier_registration",
++                               "single_launch_order_supplier_registration"}:
+@@ -868 +869,3 @@
+-            )) or stale_reply == "NOVO_FORNECEDOR"
++                "choice:fornecedor_pedido_lancamento_unico:",
++                "single_order_supplier:", "single_order_supplier_yes:", "single_order_supplier_no:",
++            )) or stale_reply in {"NOVO_FORNECEDOR", "NOVO_FORNECEDOR_PEDIDO"}
+@@ -25065,0 +25069,4 @@
++        elif (parent_flow == "launch"
++              and (state.get("single_launch_order_supplier") or {}).get("phase") == "select"
++              and self._current_step(state).get("kind") == "supplier_pending_provision_check"):
++            return_type = "single_launch_order_supplier_registration"
+@@ -25459,0 +25467,2 @@
++        if return_type == "single_launch_order_supplier_registration":
++            parent_keys = (*parent_keys, "single_launch_order_supplier")
+@@ -25481 +25490,2 @@
+-                           "multi_launch_grouping_supplier_registration"}:
++                           "multi_launch_grouping_supplier_registration",
++                           "single_launch_order_supplier_registration"}:
+@@ -25620,0 +25631 @@
++            "single_launch_order_supplier_registration",
+@@ -25638 +25649,5 @@
+-        if return_type == "multi_launch_grouping_supplier_registration":
++        if return_type == "single_launch_order_supplier_registration":
++            choice = state["single_launch_order_supplier"]
++            choice.update(phase="done", supplier=str(supplier))
++            choice.pop("options", None)
++        elif return_type == "multi_launch_grouping_supplier_registration":
+@@ -28801,0 +28817,6 @@
++                "terminal_options_first": True,
++                "terminal_option": {
++                    "id": "NOVO_FORNECEDOR_PEDIDO",
++                    "title": "➕ CADASTRAR NOVO FORNECEDOR",
++                    "value": "__CADASTRAR_NOVO_FORNECEDOR__",
++                    "action": "start_embedded_supplier_registration"},
+@@ -28824 +28845 @@
+-            state["options"] = copy.deepcopy(choice["options"])
++            state["options"] = self._single_launch_order_supplier_options(choice)
+@@ -28828,0 +28850,9 @@
++
++    def _single_launch_order_supplier_options(self, choice: dict) -> list[dict]:
++        # Also upgrade catalogs cached by conversations opened before this release.
++        for option in choice.get("options", []):
++            supplier_id = option["catalog_id"]
++            supplier_name = str(option.get("value") or option.get("title") or "")
++            option["title"] = f"{supplier_id} - {supplier_name}"
++        return self._include_terminal_option(self._single_launch_order_supplier_step(),
++                                             copy.deepcopy(choice.get("options", [])))
+@@ -28849 +28879 @@
+-        options = choice.get("options", [])
++        options = self._single_launch_order_supplier_options(choice)
+@@ -28854,0 +28885,2 @@
++            if selected.get("action") == "start_embedded_supplier_registration":
++                return self._start_embedded_supplier_registration(state, etag)
+@@ -28866 +28898 @@
+-        matches = [option for option in options if all(term in normalize_text(
++        matches = [option for option in options if not option.get("terminal_option") and all(term in normalize_text(
+@@ -28869 +28901 @@
+-        self._send_filtered_options(state, displayed, matches)
++        self._send_filtered_options(state, displayed, self._include_terminal_option(step, matches))
+@@ -35061 +35093,2 @@
+-                             "multi_launch_grouping_supplier_registration"}:
++                             "multi_launch_grouping_supplier_registration",
++                             "single_launch_order_supplier_registration"}:
