@@ -4,6 +4,10 @@ on:
   push:
     branches:
       - main
+    paths-ignore:
+      - 'docs/**'
+      - 'backend-patches/**'
+      - '.github/workflows/backend-*.yml'
   workflow_dispatch:
 
 permissions:
