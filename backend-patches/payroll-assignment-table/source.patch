@@ -1,0 +1,108 @@
+--- a/worker/workflow.py
++++ b/worker/workflow.py
+@@ -32343,6 +32343,18 @@
+                     "current_sheet_launch_id", "current_sheet_option_key"):
+             pending.pop(key, None)
+ 
++    def _launch_payroll_assignment_prompt(self, state, prompt, entries):
++        rows = [{'id': str(entry.get('provision_id') or entry['item_id']),
++                 'supplier': str(entry.get('supplier') or (entry.get('fields') or {}).get('FORNECEDOR') or ''),
++                 'totalDisplay': _currency_display(self._launch_payroll_total(entry.get('fields') or {}))}
++                for entry in entries if not entry.get('FOLHAPGTO_ID')]
++        if not rows:
++            return prompt
++        state['_outbound_detail_table'] = {'kind': 'payroll_assignment', 'rows': rows}
++        # A complete readable fallback remains available to older clients/channels.
++        return prompt + '\n\nID | FORNECEDOR | VALOR TOTAL\n' + '\n'.join(
++            f"{row['id']} | {' '.join(row['supplier'].split())} | {row['totalDisplay']}" for row in rows)
++
+     def _prompt_launch_payroll_assignment_mode(self, state, etag, kind):
+         pending = state['pending_launch_payroll']
+         pending['awaiting_' + kind + '_mode'] = True
+@@ -32350,7 +32362,11 @@
+         state['options'] = []
+         state.pop('option_pagination', None)
+         label = 'IDFOLHA' if kind == 'sheet' else 'TIPO DE PAGAMENTO'
+-        self._send_actions(state, f'COMO DESEJA INDICAR O {label} DOS PAGAMENTOS?', [
++        affected = [entry for entry in pending.get('selected_entries') or []
++                    if not entry.get('FOLHAPGTO_ID') and (kind == 'type' or not entry.get('IDFOLHA'))]
++        prompt = self._launch_payroll_assignment_prompt(state,
++            f'COMO DESEJA INDICAR O {label} DOS PAGAMENTOS?', affected)
++        self._send_actions(state, prompt, [
+             {'id': f'launch_payroll_{kind}_mode_individual', 'title': 'INDICAR INDIVIDUALMENTE',
+              'reply': f'launch_payroll_{kind}_mode_individual'},
+             {'id': f'launch_payroll_{kind}_mode_shared', 'title': 'ATRIBUIR O MESMO VALOR PARA TODOS',
+@@ -32390,7 +32406,9 @@
+         state['options'] = copy.deepcopy(pending['shared_month_options'])
+         state.pop('option_pagination', None)
+         self._send_actions(state,
+-            'QUAL MÊS DESEJA APLICAR A TODOS? CADA PAGAMENTO SERÁ VINCULADO À FOLHA DO SEU FORNECEDOR.',
++            self._launch_payroll_assignment_prompt(state,
++                'QUAL MÊS DESEJA APLICAR A TODOS? CADA PAGAMENTO SERÁ VINCULADO À FOLHA DO SEU FORNECEDOR.',
++                [entry for entry in pending.get('selected_entries') or [] if not entry.get('IDFOLHA')]),
+             [{'id': f"choice:launch_payroll_shared_month:{option['id']}", 'title': option['title'],
+               'reply': f"choice:launch_payroll_shared_month:{option['id']}"} for option in state['options']],
+             allow_back=False)
+@@ -32514,8 +32532,7 @@
+                 step = {
+                     "key": option_key,
+                     "prompt": (
+-                        f"PAGAMENTO {index + 1} DE {len(selected_entries)} — {'PROVISÃO' if entry.get('provision_id') else 'LANÇAMENTO'} ID {launch_id} "
+-                        f"— {supplier} — VALOR TOTAL {total}. "
++                        f"PAGAMENTO {index + 1} DE {len(selected_entries)} — "
+                         "A QUAL FOLHA DESEJA VINCULAR ESTE PAGAMENTO?"
+                     ),
+                     "button_label": "ESCOLHER FOLHA",
+@@ -32624,16 +32641,16 @@
+         fields = entry.get("fields") or {}
+         total = self._launch_payroll_total(fields)
+         if pending.get('shared_type'):
+-            self._send_actions(state, f"TENTAR NOVAMENTE OS PAGAMENTOS RESTANTES COM O TIPO {pending['shared_type']}?", [
++            retry_prompt = self._launch_payroll_assignment_prompt(state,
++                f"TENTAR NOVAMENTE OS PAGAMENTOS RESTANTES COM O TIPO {pending['shared_type']}?", remaining)
++            self._send_actions(state, retry_prompt, [
+                 {'id': 'launch_payroll_type_retry', 'title': 'TENTAR NOVAMENTE', 'reply': 'launch_payroll_type_retry'}
+             ], allow_back=False)
+             state['stage'] = LAUNCH_PAYROLL_TYPE_STAGE
+             etag = self._save(state, etag)
+             return {'status': 'awaiting_launch_payroll_type_retry', 'batch_id': state['batch_id'], 'etag': etag}
+-        prompt = 'QUAL TIPO DE PAGAMENTO DESEJA ATRIBUIR A TODOS?' if shared else (
+-            f"PARA {'A PROVISÃO' if entry.get('provision_id') else 'O LANÇAMENTO'} DE ID {entry['item_id']}, COM VALOR TOTAL "
+-            f"{_currency_display(total)}, QUAL O TIPO GASTO?"
+-        )
++        prompt = 'QUAL TIPO DE PAGAMENTO DESEJA ATRIBUIR A TODOS?' if shared else 'QUAL O TIPO DE PAGAMENTO?'
++        prompt = self._launch_payroll_assignment_prompt(state, prompt, remaining if shared else [entry])
+         self._send_actions(
+             state,
+             prompt,
+@@ -37285,6 +37302,16 @@
+ 
+     def _display_step(self, state: dict, step: dict) -> dict:
+         """Resolve o valor automático exibido em perguntas de confirmação."""
++        pending = state.get('pending_launch_payroll') or {}
++        if (state.get('flow') in {'launch', 'payment_settlement'}
++                and state.get('stage') == LAUNCH_PAYROLL_SHEET_STAGE
++                and step.get('key') == pending.get('current_sheet_option_key')
++                and str(step.get('key') or '').startswith('launch_payroll_sheet_')):
++            entries = pending.get('selected_entries') or []
++            index = int(pending.get('sheet_entry_index', 0))
++            if 0 <= index < len(entries):
++                prompt = str(step.get('prompt') or '').split('\n\nID | FORNECEDOR | VALOR TOTAL')[0]
++                step = {**step, 'prompt': self._launch_payroll_assignment_prompt(state, prompt, [entries[index]])}
+         if step.get('key') == 'description_review' and state.get('flow') == 'payment_settlement':
+             state['_outbound_detail_table'] = copy.deepcopy(step['detail_table'])
+         if step.get("kind") == "date":
+--- a/channel_bridge.py
++++ b/channel_bridge.py
+@@ -971,6 +971,11 @@
+         if (
+             isinstance(detail_table, dict)
+             and (detail_table.get("kind") == "presence" or (
++                detail_table.get("kind") == "payroll_assignment"
++                and state.get("flow") in {"launch", "payment_settlement"}
++                and state.get("stage") in {"selecting_launch_payroll_sheet", "selecting_launch_payroll_type"}
++                and isinstance(state.get("pending_launch_payroll"), dict)
++            ) or (
+                 detail_table.get("kind") == "provision_settlement_review"
+                 and state.get("flow") == "payment_settlement"
+                 and (state.get("provision_description") or {}).get("review_version") == 1

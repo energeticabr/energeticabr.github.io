@@ -1559,3 +1559,15 @@ button.chat-rhid-attendance-card__cluster:focus-visible { outline: 3px solid #15
 .attendance-copy-actions { display: flex; gap: 8px; margin-top: 16px; }
 .attendance-copy-actions button { flex: 1; min-width: 0; min-height: 44px; border: 0; border-radius: 10px; background: #07576c; color: white; font-weight: 800; }
 .attendance-copy-dialog [hidden] { display: none !important; }
+
+.payroll-assignment { min-width: 0; max-width: 100%; margin: 10px 0 14px; }
+.payroll-assignment__scroll { max-width: 100%; overflow-x: auto; border: 1px solid #bad4d9; border-radius: 12px; }
+.payroll-assignment table { width: 100%; min-width: 200px; table-layout: fixed; border-collapse: collapse; font-size: 12px; line-height: 1.4; }
+.payroll-assignment__id { width: 34px; }
+.payroll-assignment__amount { width: 78px; }
+.payroll-assignment th, .payroll-assignment td { padding: 9px 6px; text-align: left; vertical-align: top; overflow-wrap: anywhere; border-bottom: 1px solid #d4e4e7; }
+.payroll-assignment thead th { color: #fff; background: #07576c; font-size: 10px; font-weight: 800; }
+.payroll-assignment tbody tr:nth-child(even) { background: #eef6f7; }
+.payroll-assignment tbody tr:last-child td { border-bottom: 0; }
+.payroll-assignment td:last-child { color: #a52922; text-align: right; font-weight: 800; }
+.payroll-assignment th:last-child { text-align: right; }
