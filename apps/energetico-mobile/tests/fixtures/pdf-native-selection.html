@@ -10,11 +10,16 @@ const line = '00000.00000 00000.000000 00000.000000 0 00000000000000';
 const mode = new URLSearchParams(location.search).get('mode') || 'default';
 let ready = false;
 let lastTouch = null;
+const diagnostics = [];
+window.__pdfSelectionDiagnostic = value => diagnostics.push(value);
 function report() {
   const span = [...document.querySelectorAll('.attachment-preview-pdf-text-layer span')].find(s => s.textContent === line);
   const rect = span?.getBoundingClientRect();
   const selection = getSelection();
-  window.webkit?.messageHandlers.status.postMessage({ready, mode, selected: selection?.toString() || '', lastTouch,
+  window.webkit?.messageHandlers.status.postMessage({ready, mode, diagnostics,
+    spans: [...document.querySelectorAll('.attachment-preview-pdf-text-layer span')].map(node => node.textContent),
+    canvases: document.querySelectorAll('.attachment-preview-pdf-canvas').length,
+    selected: selection?.toString() || '', lastTouch,
     anchorInTarget: selection?.anchorNode?.parentElement === span,
     focusInTarget: selection?.focusNode?.parentElement === span,
     inside: Boolean(selection?.anchorNode?.parentElement?.closest('.attachment-preview-pdf-text-layer')),
@@ -46,9 +51,12 @@ try {
     wrapper.style.left = `${canvas.offsetLeft}px`; wrapper.style.transform = 'none';
   }
   const target = [...document.querySelectorAll('.attachment-preview-pdf-text-layer span')].find(s=>s.textContent===line);
+  if (!target) throw new Error(`Payment span missing; diagnostics=${JSON.stringify(diagnostics)}`);
   if (mode === 'visible') target.style.color = 'black';
   if (mode === 'readable') target.style.cssText = 'position:absolute;left:10px;top:40px;font-size:16px;transform:none;color:black';
   ready = true;
   report();
-} catch (error) { window.webkit?.messageHandlers.status.postMessage({error:String(error)}); }
+} catch (error) { window.webkit?.messageHandlers.status.postMessage({error:String(error), stack:error.stack, diagnostics,
+  spans:[...document.querySelectorAll('.attachment-preview-pdf-text-layer span')].map(node=>node.textContent),
+  canvases:document.querySelectorAll('.attachment-preview-pdf-canvas').length}); }
 </script></body></html>

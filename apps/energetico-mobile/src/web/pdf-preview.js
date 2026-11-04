@@ -263,7 +263,9 @@ export function createPdfPreview({
       if (!content.items.some(item => item.str?.trim())) { releaseTextLayer(canvas); return; }
       text.renderer = new TextLayer({ textContentSource: content, container: layer, viewport: displayed });
       await text.renderer.render();
-    } catch {
+    } catch (error) {
+      // Synthetic native investigation only; do not merge this instrumentation.
+      windowRef?.__pdfSelectionDiagnostic?.({ error: String(error), stack: error.stack });
       // A damaged/missing text stream must not hide an otherwise readable page.
       releaseTextLayer(canvas);
     }

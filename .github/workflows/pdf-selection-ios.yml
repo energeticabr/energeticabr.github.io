@@ -58,6 +58,12 @@ jobs:
         run: |
           set -o pipefail
           xcodebuild test -project PDFSelection.xcodeproj -scheme PDFSelection -destination "platform=iOS Simulator,id=$DEVICE" -resultBundlePath "$RUNNER_TEMP/pdf-selection.xcresult" CODE_SIGNING_ALLOWED=NO | tee "$RUNNER_TEMP/pdf-native.log"
+      - name: Export synthetic diagnostic screenshots
+        if: always()
+        run: |
+          if [ -d "$RUNNER_TEMP/pdf-selection.xcresult" ]; then
+            xcrun xcresulttool export attachments --path "$RUNNER_TEMP/pdf-selection.xcresult" --output-path "$RUNNER_TEMP/pdf-screenshots"
+          fi
       - uses: actions/upload-artifact@v4
         if: always()
         with:
@@ -66,4 +72,5 @@ jobs:
             ${{ runner.temp }}/pdf-native.log
             ${{ runner.temp }}/pdf-vite.log
             ${{ runner.temp }}/pdf-selection.xcresult
+            ${{ runner.temp }}/pdf-screenshots
           retention-days: 3

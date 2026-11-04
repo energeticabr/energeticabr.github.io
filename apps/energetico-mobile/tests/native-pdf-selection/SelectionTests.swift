@@ -14,10 +14,20 @@ final class SelectionTests: XCTestCase {
         let app = XCUIApplication()
         app.launchArguments = ["--mode", mode]
         app.launch()
+        defer {
+            let screenshot = XCTAttachment(screenshot: app.screenshot())
+            screenshot.lifetime = .keepAlways
+            add(screenshot)
+        }
         let status = app.staticTexts["pdf-status"]
-        let ready = NSPredicate { _, _ in self.state(status)["ready"] as? Bool == true }
+        let ready = NSPredicate { _, _ in
+            let result = self.state(status)
+            return result["ready"] as? Bool == true || result["error"] != nil
+        }
         expectation(for: ready, evaluatedWith: status)
         waitForExpectations(timeout: 60)
+        print("PDF_SELECTION_READY_STATE mode=\(mode) \(state(status))")
+        XCTAssertNil(state(status)["error"])
         let rect = try XCTUnwrap(state(status)["rect"] as? [String: Double])
         let web = app.webViews.firstMatch
         let point = web.coordinate(withNormalizedOffset: .zero).withOffset(CGVector(dx: rect["x"]! + rect["width"]! * 0.4, dy: rect["y"]! + rect["height"]! / 2))
