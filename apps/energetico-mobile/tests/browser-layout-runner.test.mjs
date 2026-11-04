@@ -5,7 +5,9 @@ import {createServer} from 'node:http';
 import {runBrowserLayout} from './helpers/browser-layout-runner.mjs';
 const browser=[process.env.CHROME_BIN,'C:/Program Files/Google/Chrome/Application/chrome.exe','/usr/bin/google-chrome','/usr/bin/chromium'].find(path=>path&&existsSync(path));
 
-test('layout measurement still receives animation frames when Chrome creates the target in background',{timeout:20000},async t=>{
+// The outer budget must include the helper's bounded 30-second Chrome startup
+// plus connection and cleanup. The actual frame-readiness deadline stays 1s.
+test('layout measurement still receives animation frames when Chrome creates the target in background',{timeout:60000},async t=>{
  if(!browser)return t.skip('Chrome unavailable');
  const nativeSend=WebSocket.prototype.send;
  // Fault injection changes only the real browser target's initial visibility.

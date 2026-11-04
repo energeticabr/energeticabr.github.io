@@ -22,3 +22,7 @@ backend-patches/provision-settlement-stage/** text eol=lf
 backend-patches/provision-single-unit-price/** text eol=lf
 backend-patches/provision-single-unit-price/patch_backend.py -text whitespace=cr-at-eol
 backend-patches/provision-single-unit-price/source.patch whitespace=-blank-at-eol
+backend-patches/payroll-batch-assignment/** text eol=lf
+backend-patches/payroll-batch-assignment/source.patch whitespace=-blank-at-eol
+backend-patches/payroll-assignment-table/** text eol=lf
+backend-patches/payroll-assignment-table/source.patch whitespace=-blank-at-eol
