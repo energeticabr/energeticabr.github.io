@@ -1,0 +1,32 @@
+name: Diagnóstico dos testes iOS
+on:
+  push:
+    branches: [diagnose/ios-ci-regression-20261104]
+    paths: ['.github/workflows/ios-ci-focused.yml']
+permissions:
+  contents: read
+jobs:
+  focused:
+    runs-on: macos-26-intel
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 10.26.0
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+      - name: Reproduzir os dois arquivos no mesmo tipo de executor
+        working-directory: apps/energetico-mobile
+        run: |
+          set -eo pipefail
+          pnpm install --frozen-lockfile
+          pnpm assets:generate
+          node --test --test-concurrency=2 tests/app-controller.test.mjs tests/gallery-conflict-sync.test.mjs | tee "$RUNNER_TEMP/ios-ci-focused.log"
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: ios-ci-focused
+          path: ${{ runner.temp }}/ios-ci-focused.log
+          retention-days: 3
