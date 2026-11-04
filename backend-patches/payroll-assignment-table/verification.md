@@ -7,6 +7,8 @@
 - Native/web builds pass. Signature guard reports 14 intact blocks before and after changes.
 - Independent review found a pagination lifecycle gap and an instruction-removal issue; reproducing tests were added and both fixes passed follow-up review, with no remaining Critical/Important finding.
 
-Full app-suite completion and target-specific publication evidence are pending. The first full run reported a browser binary-upload test failure; it is under investigation and is not claimed as passing.
+Full app-suite completion and target-specific publication evidence are pending. The first full run reported a browser binary-upload test failure; the same two-test browser file subsequently passed unchanged in isolation. The first failure is retained in the private full log.
+
+The existing background-target browser diagnostic timed out at 20,001ms in CI. Its outer 20-second deadline was shorter than the helper's allowed 30-second startup budget. Independent review approved raising only that outer deadline to 60 seconds, retaining the 1-second measurement deadline, background-target injection and all assertions. No helper or application behavior changed; the updated diagnostic must pass in CI. The mismatch is confirmed, but cold startup is not claimed as the proven cause of that particular cancellation.
 
 The release must verify web/Windows, Play internal and TestFlight separately, and the pinned backend receipt and installed hashes. No financial records are used for validation.
