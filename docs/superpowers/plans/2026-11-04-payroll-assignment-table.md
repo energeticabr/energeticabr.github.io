@@ -11,6 +11,6 @@
 - [x] RED: renderer and real-channel tests for single, collective, remaining checkpoints, totals and scope.
 - [x] GREEN: component, responsive CSS and narrow backend presentation hooks; validate modes/filter/resume.
 - [x] Verify 320/390px with long fictitious supplier names; focused/full app tests, builds and guards; backend presentation regressions.
-- [ ] Independent review, CI, merge; publish pinned backend and web, Google Play internal and TestFlight for the same app revision; verify each target separately.
+- [x] Independent review, CI, merge; publish pinned backend and web, Google Play internal and TestFlight for the same app revision; verify each target separately.
 
 Review focus: original IDs on settlement rows; freight/decimal totals; only affected remaining rows after retry; escaping; table-only scrolling; no leaked metadata; readable old-client fallback.
