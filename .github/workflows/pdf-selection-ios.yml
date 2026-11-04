@@ -32,11 +32,16 @@ jobs:
       - name: Start synthetic fixture server
         working-directory: apps/energetico-mobile
         run: |
-          pnpm exec vite --host 127.0.0.1 --port 4179 --strictPort > "$RUNNER_TEMP/pdf-vite.log" 2>&1 &
+          mkdir -p public/pdfjs
+          for folder in cmaps standard_fonts wasm iccs; do
+            cp -R "node_modules/pdfjs-dist/$folder" public/pdfjs/
+          done
+          pnpm exec vite --base / --host 127.0.0.1 --port 4179 --strictPort > "$RUNNER_TEMP/pdf-vite.log" 2>&1 &
           for attempt in {1..30}; do
             curl -fsS http://127.0.0.1:4179/tests/fixtures/pdf-native-selection.html >/dev/null && break
             sleep 1
           done
+          curl -fsS http://127.0.0.1:4179/pdfjs/standard_fonts/FoxitSerif.pfb >/dev/null
       - run: brew install xcodegen
       - name: Select iOS 26 simulator
         working-directory: apps/energetico-mobile/tests/native-pdf-selection

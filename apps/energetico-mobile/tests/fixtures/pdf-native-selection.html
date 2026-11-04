@@ -17,6 +17,7 @@ function report() {
   const rect = span?.getBoundingClientRect();
   const selection = getSelection();
   window.webkit?.messageHandlers.status.postMessage({ready, mode, diagnostics,
+    streamAsyncIterator: typeof ReadableStream.prototype[Symbol.asyncIterator],
     spans: [...document.querySelectorAll('.attachment-preview-pdf-text-layer span')].map(node => node.textContent),
     canvases: document.querySelectorAll('.attachment-preview-pdf-canvas').length,
     selected: selection?.toString() || '', lastTouch,
@@ -57,6 +58,7 @@ try {
   ready = true;
   report();
 } catch (error) { window.webkit?.messageHandlers.status.postMessage({error:String(error), stack:error.stack, diagnostics,
+  streamAsyncIterator:typeof ReadableStream.prototype[Symbol.asyncIterator],
   spans:[...document.querySelectorAll('.attachment-preview-pdf-text-layer span')].map(node=>node.textContent),
   canvases:document.querySelectorAll('.attachment-preview-pdf-canvas').length}); }
 </script></body></html>
