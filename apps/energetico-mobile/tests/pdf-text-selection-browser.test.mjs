@@ -23,7 +23,7 @@ test('PDF payment line is selectable and aligned at every rotation before and af
         assert.equal(state.error, undefined, JSON.stringify({ width, state }));
         assert.equal(state.checks.length, 8);
         for (const check of state.checks) {
-          assert.equal(check.copied, '34191.57007 00408.460699 09858.250005 4 16210000060000');
+          assert.equal(check.copied, '00000.00000 00000.000000 00000.000000 0 00000000000000');
           for (const property of ['aligned', 'inside', 'selectable']) assert.equal(check[property], true, JSON.stringify({ width, property, check }));
           assert.ok(check.fontSize > 0 && check.width > 0 && check.height > 0);
         }
