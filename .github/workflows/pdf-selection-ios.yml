@@ -14,9 +14,11 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        os: [macos-26-intel]
+        os: [macos-15-intel]
     runs-on: ${{ matrix.os }}
     timeout-minutes: 45
+    env:
+      DEVELOPER_DIR: /Applications/Xcode_26.3.app/Contents/Developer
     steps:
       - uses: actions/checkout@v4
       - uses: pnpm/action-setup@v4
@@ -36,7 +38,7 @@ jobs:
             sleep 1
           done
       - run: brew install xcodegen
-      - name: Native iPhone long press
+      - name: Select iOS 26 simulator
         working-directory: apps/energetico-mobile/tests/native-pdf-selection
         run: |
           set -o pipefail
@@ -44,8 +46,17 @@ jobs:
           xcodegen generate
           xcrun simctl list devices available
           DEVICE=$(xcrun simctl list devices available -j | python3 -c 'import json,sys; data=json.load(sys.stdin)["devices"]; print(next(d["udid"] for runtime,ds in sorted(data.items(),reverse=True) if "iOS-26" in runtime for d in ds if d["name"].startswith("iPhone")))')
+          echo "DEVICE=$DEVICE" >> "$GITHUB_ENV"
+      - name: Boot iOS 26 simulator
+        timeout-minutes: 10
+        run: |
           xcrun simctl boot "$DEVICE"
           xcrun simctl bootstatus "$DEVICE" -b
+      - name: Native iPhone long press
+        timeout-minutes: 20
+        working-directory: apps/energetico-mobile/tests/native-pdf-selection
+        run: |
+          set -o pipefail
           xcodebuild test -project PDFSelection.xcodeproj -scheme PDFSelection -destination "platform=iOS Simulator,id=$DEVICE" -resultBundlePath "$RUNNER_TEMP/pdf-selection.xcresult" CODE_SIGNING_ALLOWED=NO | tee "$RUNNER_TEMP/pdf-native.log"
       - uses: actions/upload-artifact@v4
         if: always()
