@@ -27,7 +27,9 @@ test('tabela de revisão mantém totais e botões acessíveis no celular e Windo
         t.diagnostic(JSON.stringify(layout));
         assert.equal(layout.missing, false);
         assert.equal(layout.rowCount, 4);
-        assert.equal(layout.pageOverflow, false, 'a rolagem horizontal pertence somente à tabela');
+        assert.equal(layout.pageOverflow, false, 'a tela não deve exigir rolagem horizontal');
+        assert.equal(layout.horizontalOverflow, false, 'os valores precisam caber sem arraste lateral');
+        assert.equal(layout.valuesFitWithoutScroll, true);
         assert.ok(layout.minFontSize >= 12, 'não reduzir as letras para espremer colunas');
         assert.equal(layout.totalFullyVisible, true, 'a coluna do produto não pode encobrir os totais');
         assert.equal(layout.controlsReachable, true, 'ambos os botões devem estar alcançáveis acima do compositor');
@@ -36,7 +38,6 @@ test('tabela de revisão mantém totais e botões acessíveis no celular e Windo
         assert.deepEqual(layout.replies, sample === 'pending' ? ['description_review_edit'] : ['description_review_submit', 'description_review_edit']);
         assert.equal(layout.busyDisabled, true);
         assert.deepEqual(layout.rowBackgrounds, ['rgb(255, 255, 255)', 'rgb(232, 243, 255)', 'rgb(255, 255, 255)', 'rgb(232, 243, 255)']);
-        if (width < 680 && layout.horizontalOverflow) assert.equal(layout.scrollHintVisible, true);
       }
     }
   } finally { await server.close(); }

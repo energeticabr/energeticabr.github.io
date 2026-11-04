@@ -29,12 +29,10 @@
 .provision-review tfoot th, .provision-review tfoot td { color: #14543e; background: #e2f3e9; font-weight: 800; border-bottom: 0; }
 .provision-review tfoot th { text-align: left; }
 .provision-review tfoot td { text-align: right; }
-.provision-review .provision-review__scroll-hint, .provision-review .provision-review__readonly, .provision-review .provision-review__next { font-size: 12px; color: #435d68; }
+.provision-review .provision-review__readonly, .provision-review .provision-review__next { font-size: 12px; color: #435d68; }
 .provision-review__pending { display: flex; flex-wrap: wrap; justify-content: space-between; gap: 8px; padding: 10px; background: #e8f3ff; border-radius: 9px; }
-@media (min-width: 680px) { .provision-review__scroll-hint { display: none; } }
-
-/* Keep quantities intact; the table owns horizontal scrolling on small screens.
-   Product cells scroll too so they cannot cover the other columns. */
+/* Keep desktop quantities intact and product cells clear of other columns.
+   The phone layout below wraps whole fields instead of scrolling columns. */
 [data-provision-settlement-review] table { min-width: 640px; }
 [data-provision-settlement-review] .provision-review__product-col { width: 160px; }
 [data-provision-settlement-review] .provision-review__quantity-col { width: 140px; }
@@ -48,6 +46,44 @@
 .provision-review__select-all input { width: 22px; min-width: 22px; height: 22px; min-height: 22px; margin: 0; accent-color: #087052; cursor: pointer; }
 .provision-review__select-all { display: flex; align-items: center; gap: 10px; min-height: 44px; margin-top: 8px; font-size: 14px; font-weight: 700; cursor: pointer; }
 .provision-review .provision-review__selection-summary { padding: 10px; background: #e2f3e9; border-radius: 9px; font-size: 13px; font-weight: 700; overflow-wrap: anywhere; }
+
+/* Give the product its own line; numeric fields wrap as whole fields instead
+   of forcing the phone to pan a desktop-width table. */
+@media (max-width: 760px) {
+  [data-provision-settlement-review] .provision-review__scroll { box-sizing: border-box; }
+  [data-provision-settlement-review] table { display: block; min-width: 0; }
+  [data-provision-settlement-review] colgroup { display: none; }
+  [data-provision-settlement-review] thead {
+    position: absolute; width: 1px; height: 1px; padding: 0; margin: -1px;
+    overflow: hidden; clip-path: inset(50%); white-space: nowrap;
+  }
+  [data-provision-settlement-review] tbody,
+  [data-provision-settlement-review] tfoot { display: block; }
+  [data-provision-settlement-review] tbody tr {
+    position: relative; display: flex; flex-wrap: wrap;
+    border-bottom: 1px solid #d7e3eb; background: var(--provision-review-row);
+  }
+  [data-provision-settlement-review] tbody th {
+    box-sizing: border-box; flex: 1 0 100%; min-width: 0; max-width: 100%;
+    box-shadow: none; border-bottom: 0;
+  }
+  [data-provision-settlement-review] tbody tr:has(.provision-review__select-cell) > th { padding-left: 44px; }
+  [data-provision-settlement-review] tbody td:not(.provision-review__select-cell) {
+    box-sizing: border-box; flex: 1 1 max-content; max-width: 100%; min-width: 0;
+    border-bottom: 0; text-align: left; padding-top: 4px;
+  }
+  [data-provision-settlement-review] tbody td[data-label]::before {
+    content: attr(data-label); display: block; margin-bottom: 4px;
+    color: #435d68; font-size: 12px; font-weight: 700; white-space: normal;
+  }
+  [data-provision-settlement-review] tbody .provision-review__select-cell {
+    position: absolute; top: 8px; left: 0; width: 44px; height: 30px;
+    padding: 2px 8px; border: 0; box-sizing: border-box;
+  }
+  [data-provision-settlement-review] tfoot tr { display: flex; }
+  [data-provision-settlement-review] tfoot th { flex: 1; min-width: 0; }
+  [data-provision-settlement-review] tfoot td { min-width: 0; max-width: 60%; }
+}
 
 .chat-message:has([data-provision-launch-summary]) { justify-content: center; gap: 0; }
 .chat-message:has([data-provision-launch-summary]) > .chat-avatar { display: none; }

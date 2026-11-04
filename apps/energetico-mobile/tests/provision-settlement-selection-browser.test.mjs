@@ -7,7 +7,7 @@ import { JSDOM } from 'jsdom';
 import { createServer } from 'vite';
 import { runBrowserLayout } from './helpers/browser-layout-runner.mjs';
 
-test('partial provision review uses local selection and a bounded horizontal table with unbroken quantities', { timeout: 180_000 }, async t => {
+test('partial provision review shows every value without horizontal dragging and preserves local selection', { timeout: 180_000 }, async t => {
   const browser = [process.env.CHROME_BIN, 'C:/Program Files/Google/Chrome/Application/chrome.exe',
     '/usr/bin/google-chrome', '/usr/bin/chromium'].find(path => path && existsSync(path));
   if (!browser) return t.skip('Chrome unavailable');
@@ -20,7 +20,7 @@ test('partial provision review uses local selection and a bounded horizontal tab
     for (const [width, height] of [[320, 740], [390, 844], [1365, 900]]) for (const sample of ['basic', 'long', 'invalid']) {
       await t.test(`${sample} at ${width}px`, async () => {
         const result = await runBrowserLayout(browser, { width, height, captureScreenshot: Boolean(capture),
-          url: `http://127.0.0.1:${server.httpServer.address().port}/tests/fixtures/provision-settlement-selection.html?sample=${sample}` });
+          url: `http://127.0.0.1:${server.httpServer.address().port}/tests/fixtures/provision-settlement-selection.html?sample=${sample}${capture ? '&capture=table' : ''}` });
         if (capture) writeFileSync(join(capture, `provision-selection-${sample}-${width}.png`), result.screenshot);
         const dom = new JSDOM(result.stdout);
         try {
@@ -32,7 +32,8 @@ test('partial provision review uses local selection and a bounded horizontal tab
           }
           assert.equal(state.pageHorizontalOverflow, false, detail);
           assert.equal(state.regionFits, true, detail);
-          if (width <= 390) assert.equal(state.horizontalRegion, true, detail);
+          assert.equal(state.horizontalRegion, false, detail);
+          assert.equal(state.valuesFitWithoutScroll, true, detail);
           assert.equal(state.minFontSize >= 12, true, detail);
           assert.deepEqual(state.replies, sample === 'invalid'
             ? ['description_review_edit:11,13'] : ['description_review_submit:11,13', 'description_review_edit:11,13'], detail);
