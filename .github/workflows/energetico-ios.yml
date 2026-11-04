@@ -101,6 +101,7 @@ jobs:
 
   web-tests:
     name: Testes e pacote web
+    if: ${{ inputs.diagnose_pdf_selection != true }}
     runs-on: ubuntu-latest
     steps:
       - name: Baixar código
@@ -188,6 +189,7 @@ jobs:
 
   native-share-tests:
     name: Testes nativos do compartilhamento
+    if: ${{ inputs.diagnose_pdf_selection != true }}
     # Match the iOS build host; Intel's simulator first-boot migration can stall.
     # Run the same Swift/HTTP and 18 UIKit assertions, without relaxed timeouts.
     runs-on: macos-26
