@@ -1,0 +1,37 @@
+--- a/worker/provision_description_settlement.py
++++ b/worker/provision_description_settlement.py
+@@ -427,7 +427,9 @@
+                     elif key == 'autorizar_novo_lancamento_baixa' and any(
+                             _text(entry['fields'].get('IDLANCAMENTOS')) for entry in group['entries']):
+                         step['when'] = {'field': 'submeter_lancamentos', 'equals': 'SIM'}
+-        flow['attachments_after_fields'] = bool(launch_phase or group.get('prepared'))
++        flow['attachments_after_fields'] = bool(launch_phase or group.get('prepared')
++            or (group.get('review_version') == 1 and group.get('review_phase') == 'overview'
++                and state.get('edit_step_indices')))
+         return flow
+ 
+     def _description_launch_prompt(self, state):
+@@ -572,6 +574,23 @@
+                     'display_values': {key: _text(value) or 'EM BRANCO' for key, value in fields.items()},
+                     'relink_authorized': False})
+             self._description_load_child(state, 0, announce=False)
++            if len(all_children) == 1:
++                price = children[0].get('VALOR TOTAL')
++                missing_price = _text(price).upper() in {'', 'PENDENTE', 'VALOR PENDENTE'}
++                try:
++                    missing_price = missing_price or _number(price, 'VALOR TOTAL') == 0
++                except ValueError:
++                    pass
++                if missing_price:
++                    # Reuse one-field editing so validation, draft persistence
++                    # and the return to the overview follow the normal route.
++                    group.update(editing_phase='field', editing_index=0, editing_common=False)
++                    steps = self._flow_config(state)['steps']
++                    target = next(i for i, step in enumerate(steps)
++                                  if step['key'] == 'validar_valor_total_baixa')
++                    state['edit_step_indices'] = [target]
++                    state['step_index'] = target
++                    state['confirm_or_replace_number_modes']['validar_valor_total_baixa'] = 'enter_value'
+             return
+         if source.get('settlementBlocked') and len(children) > 1 and first_child_id is None:
+             state['provision_description']['choose_amount_line'] = True
