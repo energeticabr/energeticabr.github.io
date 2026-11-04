@@ -25,7 +25,7 @@ const buttons = [...active.querySelectorAll('[data-asset-gallery]')];
 document.documentElement.dataset.layout = JSON.stringify({ mode,
  overflow: active.scrollWidth > active.clientWidth,
  buttons: buttons.map(button => ({ label: button.textContent, top: rect(button).top, bottom: rect(button).bottom, width: rect(button).width, height: rect(button).height })),
- cards: [...active.querySelectorAll('[data-registration-row]')].map(card => ({ text: card.textContent, overflow: card.scrollWidth > card.clientWidth })),
+ cards: [...active.querySelectorAll('[data-registration-row]')].map(card => ({ id: card.dataset.registrationRow, text: card.textContent, overflow: card.scrollWidth > card.clientWidth })),
  actions: active.querySelectorAll('[data-gallery-action]').length,
 });
 </script></body></html>

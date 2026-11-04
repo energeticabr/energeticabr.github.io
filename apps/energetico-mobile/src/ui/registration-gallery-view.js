@@ -12,6 +12,7 @@ import { REGISTRATION_GALLERY_MODELS, registrationFieldKey, registrationRawField
 import Decimal from "decimal.js";
 import { renderWorkDiaryCardDetails } from './work-diary-card.js';
 import { renderAssetGalleryCard } from './asset-gallery-card.js';
+import { renderAssetLaunchesCard, assetLaunchesIcon } from './asset-launches-card.js';
 import { createAssetReportView } from './asset-report-view.js';
 import { renderDdaCard, updateDdaDueTones, ddaTodayKey } from './dda-card.js';
 import { createDdaSyncReceipt } from './dda-sync-receipt.js';
@@ -206,6 +207,14 @@ export function createRegistrationGallery({ document: doc = globalThis.document,
   if (model.filterFields) toolbar.classList.add("rg-toolbar--documents");
   const search = el("input", "rg-input");
   placeGalleryQuickSearch({ input: search, toolbar: createShortcut.toolbar });
+  if (kind === 'assetLaunches') {
+    const searchBox = el('div', 'rg-launch-search');
+    search.before(searchBox); searchBox.append(assetLaunchesIcon(doc, 'search'), search);
+    search.placeholder = 'Pesquisar em todos os campos (ID, nome, etc.)';
+    const filters = createShortcut.toolbar.querySelector('.gallery-filter-button');
+    filters.replaceChildren(assetLaunchesIcon(doc, 'filter'), doc.createTextNode('Filtros'));
+    if (home) { home.append(assetLaunchesIcon(doc, 'home')); home.classList.add('rg-launch-home'); }
+  }
   let committedSearch = search.value, searchComposing = false;
   const filterControls = new Map();
   for (const field of filterFields) {
@@ -287,6 +296,10 @@ export function createRegistrationGallery({ document: doc = globalThis.document,
   pagination.append(previous, pageText, next);
   const ddaMetrics = kind === 'dda' ? createDdaGalleryMetrics(doc) : null;
   root.append(header, ...(fiscalLastSuccess ? [fiscalLastSuccess] : []), createShortcut.toolbar, filterDisclosure, ...(activeFilterNotice ? [activeFilterNotice] : []), ...(sortBar ? [sortBar] : []), ...(ddaMetrics ? [ddaMetrics.root] : []), feedback, list, pagination);
+  if (kind === 'assetLaunches') {
+    const results = el('div', 'rg-launch-results');
+    list.before(results); results.append(feedback, sortBar);
+  }
   if (model.sourceNotice) {
     const notice = el('p', 'rg-source-notice', model.sourceNotice);
     notice.dataset.sefazCoverage = 'pending';
@@ -874,6 +887,7 @@ export function createRegistrationGallery({ document: doc = globalThis.document,
       if (kind === 'presenceDescriptions' && fieldValue(row.fields, 'PRESENCA', model).trim().toLocaleUpperCase('pt-BR') === 'AUSENTE') card.classList.add('rg-row--presence-absent');
       if (kind === 'workDiary') card.classList.add('rg-row--work-diary');
       if (kind === 'asset') card.classList.add('rg-row--asset');
+      if (kind === 'assetLaunches') card.classList.add('rg-row--asset-launch');
       if (kind === 'dda') card.classList.add('rg-row--dda');
       if (kind === 'provisionDescription') card.classList.add('rg-row--provision-description');
       card.setAttribute("role", "listitem");
@@ -951,7 +965,8 @@ export function createRegistrationGallery({ document: doc = globalThis.document,
           decorateSefazInvoiceCard({document: doc, card, container: main, pdfRail: rail, withholding, fiscalType});
           layout.append(main);
           card.append(layout);
-        } else renderNativeDetails(card, row, primary);
+        } else if (kind === 'assetLaunches') renderAssetLaunchesCard({ document: doc, container: card, rowId: row.id, title: primary, value: field => rowFieldValue(row, field) });
+        else renderNativeDetails(card, row, primary);
       } else {
         card.append(el("strong", "rg-row-title", primary));
         const details = el("dl", "rg-details");

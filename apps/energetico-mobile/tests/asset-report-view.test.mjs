@@ -35,7 +35,7 @@ test('toque nos cartões das duas galerias usa o ID do bem e retorna à mesma p�
     [...doc.querySelectorAll('.rg-pagination button')].find(b => b.textContent === 'Próxima').click();
     root.scrollTop = 440;
     const trigger = root.querySelector('[data-asset-report-trigger]'); trigger.focus(); trigger.click(); await tick();
-    const expectedId = kind === 'assetLaunches' ? '96' : '116';
+    const expectedId = kind === 'assetLaunches' ? '105' : '116';
     assert.deepEqual(calls, [expectedId]);
     const modal = doc.querySelector(`[data-asset-report="${expectedId}"]`); assert.ok(modal);
     assert.match(modal.textContent, /Dados cadastrais/); assert.match(modal.textContent, /Histórico de depreciação/);
@@ -97,7 +97,7 @@ test('título do lançamento é um botão em bloco e abre o bem vinculado, mante
   assert.equal(button.type, 'button'); assert.match(button.textContent, /GUINCHO DE TESTE/);
   assert.match(button.textContent, /ID 275/); assert.match(button.textContent, /Ver cadastro e depreciações/);
   assert.equal(doc.querySelector('.gallery-record-main').hasAttribute('role'), false);
-  doc.querySelector('.rg-details').click(); await tick(); assert.deepEqual(calls, []);
+  doc.querySelector('.rg-launch-amounts').click(); await tick(); assert.deepEqual(calls, []);
   button.querySelector('.rg-row-title').click(); await tick(); assert.deepEqual(calls, ['96']);
   assert.ok(doc.querySelector('[data-asset-report="96"]'));
 });
