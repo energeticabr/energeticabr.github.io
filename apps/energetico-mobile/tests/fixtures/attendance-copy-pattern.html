@@ -1,0 +1,10 @@
+<!doctype html><html lang="pt-BR"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><link rel="stylesheet" href="/src/styles.css"></head><body><main id="app"></main><script type="module">
+import {createChatView} from '/src/ui/chat-view.js';
+const root=document.querySelector('#app'),view=createChatView(root),events=[];view.on('select-reply',e=>events.push(e));
+const rows=[[{label:'FORNECEDOR',value:'ORIGEM FICTÍCIA'},{label:'IDDESCRITIVO',value:'130'},{label:'ATIVIDADEEXECUTADA',value:'ALVENARIA'},{label:'PRESENÇA',value:'PRESENTE'}]];
+const offer={token:'123456abcdef',targets:[{id:'42',name:'FORNECEDOR FICTÍCIO COM NOME BASTANTE COMPRIDO PARA O TESTE EM CELULAR',branch:'FILIAL 001'},{id:'43',name:'SEGUNDO FORNECEDOR FICTÍCIO'}]};
+view.render({sessionStatus:'authenticated',account:{name:'Teste'},activeFlow:{id:'attendance_validation'},draft:'',pendingFiles:[],messages:[{id:'review',role:'assistant',type:'poll',question:'CONFIRMA?',detail_table:{kind:'presence',rows,copy_offer:offer},options:[{id:'attendance_batch_confirm',reply:'attendance_batch_confirm',label:'SUBMETER TODOS'}]}]});
+root.querySelector('[data-action="attendance-copy-yes"]').click();await document.fonts.ready;await new Promise(r=>requestAnimationFrame(()=>requestAnimationFrame(r)));
+const dialog=root.querySelector('.attendance-copy-dialog'),list=root.querySelector('.attendance-copy-list');root.querySelector('[data-attendance-copy-id="43"]').click();root.querySelector('[data-action="attendance-copy-submit"]').click();
+const rect=dialog.getBoundingClientRect();document.documentElement.dataset.layout=JSON.stringify({overflow:document.documentElement.scrollWidth>innerWidth+1||rect.left<0||rect.right>innerWidth||list.scrollWidth>list.clientWidth+1,ids:events.map(e=>e.replyId),labels:list.querySelectorAll('label').length,actions:[...dialog.querySelectorAll('button')].filter(b=>b.offsetParent).map(b=>b.textContent)});document.documentElement.dataset.ready='true';
+</script></body></html>
