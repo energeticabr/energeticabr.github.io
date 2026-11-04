@@ -6860,6 +6860,29 @@ test("envia vários anexos ao SharePoint e mantém apenas o arquivo que falhou p
   ]);
 });
 
+test('pending provision validation failure explains the cause and preserves the file for retry', async t => {
+  const h = makeHarness({ pendingProvisionAttachmentsDataFactory: async () => ({
+    listAttachments: async () => [], downloadAttachment: async () => new Blob(),
+    uploadAttachment: async () => { throw new RangeError('O tipo deste arquivo não é permitido.'); },
+  }) });
+  t.after(() => h.controller.stop());
+  h.client.getPendingProvisionSnapshot = async () => ({ due: true, sourceKind: 'provision-description', rows: [{ id: '11' }] });
+  const file = new File(['synthetic'], 'foto.png', { type: 'image/png' });
+  h.native.pickPhotos = async () => [file];
+  await h.controller.start(); await new Promise(resolve => setImmediate(resolve));
+  await h.view.emit('toggle-pending-provision-attachments', { paymentId: '11' });
+  await h.view.emit('pick-pending-provision-attachments', { paymentId: '11', value: 'photos' });
+  assert.equal(await h.view.emit('send-pending-provision-attachments', { paymentId: '11' }), false);
+  const upload = h.view.renders.at(-1).pendingProvisionUploads['11'];
+  assert.equal(upload.busy, false);
+  assert.equal(upload.items.length, 1);
+  assert.equal(upload.items[0].fileName, file.name);
+  assert.equal(upload.items[0].size, file.size);
+  assert.equal(upload.items[0].status, 'error');
+  assert.match(upload.items[0].error, /tipo.*não é permitido/i);
+  assert.match(upload.error, /tipo.*não é permitido/i);
+});
+
 test("remove somente o arquivo repetido selecionado pelo identificador da fila", async t => {
   const h = makeHarness({ pendingProvisionAttachmentsDataFactory: async () => ({
     listAttachments: async () => [{ fileName: "anterior.pdf", size: 1 }],

@@ -104,7 +104,9 @@ export function createNativePorts({
       try {
         const response = await fetchImpl(source);
         if (!response.ok) throw new Error("Não foi possível ler a mídia selecionada.");
-        return await response.blob();
+        const blob = await response.blob();
+        return !blob.type || blob.type === 'application/octet-stream'
+          ? blob.slice(0, blob.size, `image/${mediaFormat(media, blob)}`) : blob;
       } catch (error) {
         lastError = error;
       }
@@ -113,7 +115,7 @@ export function createNativePorts({
     if (path) {
       try {
         const contents = await filesystem.readFile({ path });
-        return dataToBlob(contents.data, media?.metadata?.format ? `image/${media.metadata.format}` : fallbackType);
+        return dataToBlob(contents.data, `image/${mediaFormat(media, null, fallbackType.split('/').at(-1))}`);
       } catch (error) {
         lastError = error;
       }
@@ -122,9 +124,11 @@ export function createNativePorts({
   }
 
   function mediaFormat(media, blob, fallback = "jpeg") {
-    return String(media?.metadata?.format || media?.format || fallback).toLowerCase().replace(/^\./, "")
-      || String(blob?.type || "").split("/").at(-1)
-      || fallback;
+    const mimeFormat = String(blob?.type || '').split(';', 1)[0].toLowerCase().match(/^image\/([a-z0-9]+)$/)?.[1];
+    const pathFormat = String(media?.uri || media?.path || media?.webPath || '').split(/[?#]/, 1)[0].match(/\.([a-z0-9]+)$/i)?.[1];
+    const format = String(mimeFormat || media?.metadata?.format || media?.format || pathFormat || fallback)
+      .toLowerCase().replace(/^\./, '');
+    return format === 'jpg' ? 'jpeg' : format;
   }
 
   async function capturePhoto() {

@@ -7,6 +7,18 @@ const state = () => ({ sessionStatus: 'authenticated', account: {name:'Teste'}, 
   pendingProvisions: {due:true,rows:[{id:'306'}]},
   pendingProvisionAttachments: {306:{status:'empty',items:[]}} });
 
+test('failed file displays its escaped error reason and keeps submit enabled for retry', () => {
+  const dom = new JSDOM('<main id="app"></main>');
+  const root = dom.window.document.querySelector('#app'), view = createChatView(root);
+  view.render({ ...state(), pendingProvisionExpandedPaymentId: '306', pendingProvisionUploads: {
+    306: { items: [{ id: 'photo', fileName: 'foto.png', status: 'error', error: 'Formato inválido <script>blocked</script>' }] },
+  } });
+  assert.match(root.querySelector('.chat-pending-provision__upload-queue').textContent, /Formato inválido <script>blocked<\/script>/);
+  assert.equal(root.querySelector('.chat-pending-provision__upload-queue script'), null);
+  assert.equal(root.querySelector('[data-action="send-pending-provision-attachments"]').disabled, false);
+  view.destroy(); dom.window.close();
+});
+
 test('abrir anexos e atualizar fila preserva a rolagem do relatório', () => {
   const dom = new JSDOM('<main id="app"></main>');
   const root = dom.window.document.querySelector('#app'), view = createChatView(root);

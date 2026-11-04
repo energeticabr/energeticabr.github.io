@@ -23,7 +23,7 @@ test('inline attachment tray keeps report position and fits phones and Windows',
         captureScreenshot:Boolean(process.env.PROVISION_INLINE_SCREENSHOT_DIR)});
       const dom=new JSDOM(result.stdout),e=JSON.parse(dom.window.document.documentElement.dataset.layout);dom.window.close();
       assert.ok(e.before>0);assert.equal(e.after,e.before,JSON.stringify(e));assert.ok(Math.abs(e.arrowShift)<1);
-      for(const key of ['trayAfterFiles','sourceClickable','queueVisible','cancelVisible','submitVisible','emptyHasOnlyTray'])assert.equal(e[key],true,`${width}: ${key}`);
+      for(const key of ['trayAfterFiles','sourceClickable','queueVisible','cancelVisible','submitVisible','emptyHasOnlyTray','failureReasonVisible','retryEnabled'])assert.equal(e[key],true,`${width}: ${key}`);
       assert.equal(e.horizontalOverflow,false,`${width}: overflow`);
       assert.equal(e.orange,'rgb(197, 97, 8)');
       if(result.screenshot){await mkdir(process.env.PROVISION_INLINE_SCREENSHOT_DIR,{recursive:true});await writeFile(join(process.env.PROVISION_INLINE_SCREENSHOT_DIR,`tray-${width}.png`),result.screenshot);}
