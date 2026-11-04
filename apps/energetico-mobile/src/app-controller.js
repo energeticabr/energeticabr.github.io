@@ -1,4 +1,5 @@
 import { createSefazSyncSession } from './ui/sefaz-sync-session.js';
+import { resumeConversation } from './chat/resume-conversation.js';
 import { createProvisionSettlementParentSession } from './ui/provision-settlement-parent-session.js';
 import { createDdaAutoReminder } from './chat/dda-auto-reminder.js';
 import { refreshDdaBank } from './chat/dda-bank-refresh.js';
@@ -1017,6 +1018,8 @@ export function createAppController({
   recovery,
   mediaLoadTimeoutMs = 30_000,
   rhidReportTimeoutMs = 30_000,
+  conversationResumeTimeoutMs = 15_000,
+  conversationResumeRetryDelay,
   attendanceIrregularityDataFactory = createAttendanceIrregularityData,
   authTimeoutMs,
   authSignInTimeoutMs,
@@ -1248,6 +1251,7 @@ export function createAppController({
   let rhidAttendanceReportNavigationRevision = 0;
   let rhidRefreshRequest = null;
   let resuming = false;
+  let conversationResumeRecord = null;
   let attachmentActionBusy = false;
   const idleWaiters = new Set();
   let completionMenuTimer = null;
@@ -1420,6 +1424,7 @@ export function createAppController({
   function clearOperationProgress(record = foregroundProgress) {
     record?.task?.stop();
     record?.abort?.abort();
+    if (record && conversationResumeRecord === record) { conversationResumeRecord = null; resuming = false; diaryAttachmentProgress = null; }
     if (foregroundProgress === record) { foregroundProgress = null; operationProgress = null; }
   }
   function beginOperationProgress(label) {
@@ -4928,7 +4933,7 @@ export function createAppController({
       pendingProvisionUploads: pendingProvisionUploadsForView(),
       pendingProvisionUploadsRevision,
       signaturePlacement,
-      error: sessionError || state.error,
+      error: resuming ? null : sessionError || state.error,
     });
     if (activeDiaryPoll && recentDiaryActivitiesLoading && !recentDiaryActivitiesRequest) {
       const controller = new AbortController();
@@ -5271,30 +5276,29 @@ export function createAppController({
     cancelCompletionMenu();
     const conversationAccount = account;
     const conversationRevision = sessionRevision;
-    const currentConversation = () => account === conversationAccount && sessionRevision === conversationRevision && !stopped;
+    const currentConversation = () => account === conversationAccount && sessionRevision === conversationRevision && !stopped
+      && conversationResumeRecord === genericProgress && !genericProgress.abort.signal.aborted;
     const previousFlow = store.getState().activeFlow;
     const resumeDraftRevision = draftEditRevision;
-    const genericProgress = beginOperationProgress();
+    const genericProgress = beginOperationProgress('Restabelecendo conexão com a VM…');
+    conversationResumeRecord = genericProgress;
     sessionError = null;
     resuming = true;
     render();
     try {
       if (dismissUnavailableAttachments) await dismissUnavailableAttachmentSelection();
       if (!currentConversation()) return false;
-      if (typeof client.waitForDiaryEvidence === 'function') {
-        await client.waitForDiaryEvidence({ signal: genericProgress.abort.signal, onProgress: value => {
+      attachmentRevision += 1;
+      let paymentProvisionAutoReplyError = null;
+      const resumed = await resumeConversation(client, {
+        ...genericProgress.options, signal: genericProgress.abort.signal,
+        timeoutMs: conversationResumeTimeoutMs, retryDelay: conversationResumeRetryDelay,
+        onEvidenceProgress: value => {
           if (!currentConversation()) return;
           diaryAttachmentProgress = value;
           render();
-        } });
-        if (!currentConversation()) return false;
-      }
-      attachmentRevision += 1;
-      let paymentProvisionAutoReplyError = null;
-      const resumeRequest = client.sendText({ text: "", replyId: "input_continue" }, genericProgress.options);
-      const resumed = await (dismissUnavailableAttachments
-        ? withTimeout(resumeRequest, 30_000, "A retomada demorou demais. Seu rascunho foi preservado; tente novamente.")
-        : resumeRequest);
+        },
+      });
       if (!currentConversation()) return false;
       let result = preparePresenceResult(resumed);
       const blankPaymentFormOption = paymentProvisionBlankFormOption(
@@ -5303,10 +5307,10 @@ export function createAppController({
       );
       if (blankPaymentFormOption) {
         try {
-          result = preparePresenceResult(await client.sendText({
+          result = preparePresenceResult(await withTimeout(client.sendText({
             replyId: blankPaymentFormOption.replyId,
             omitText: true,
-          }, genericProgress?.options));
+          }, genericProgress?.options), conversationResumeTimeoutMs, 'A VM ainda não confirmou o avanço da provisão. Retome a conversa para conferir a etapa atual.'));
         } catch (error) {
           paymentProvisionAutoReplyError = error;
           result = paymentProvisionSyncNotice(result);
@@ -5319,11 +5323,11 @@ export function createAppController({
       recoverHomeExitIntent(result);
       let automaticExitCompleted = false;
       if (pendingAutomaticExit) {
-        result = preparePresenceResult(await client.sendText({
+        result = preparePresenceResult(await withTimeout(client.sendText({
           text: pendingAutomaticExit.label,
           replyId: pendingAutomaticExit.replyId,
           ...(pendingAutomaticExit.homeTransferReceipt ? { homeTransferReceipt: pendingAutomaticExit.homeTransferReceipt } : {}),
-        }, genericProgress?.options));
+        }, genericProgress?.options), conversationResumeTimeoutMs, 'A VM ainda não confirmou o retorno ao menu. Retome a conversa para conferir a etapa atual.'));
         if (!currentConversation()) return false;
         if (!isMenuResult(result)) throw new Error("A VM não confirmou o retorno ao menu principal. Tente novamente.");
         pendingAutomaticExit = null;
@@ -5401,9 +5405,8 @@ export function createAppController({
       // resposta do usuário.
       if (!menuResult && typeof client.getAttachments === "function") {
         try {
-          const snapshotRequest = client.getAttachments();
-          const attachments = await (dismissUnavailableAttachments
-            ? withTimeout(snapshotRequest, 15_000, "A consulta de anexos demorou demais.") : snapshotRequest);
+          const snapshotRequest = client.getAttachments({ signal: genericProgress.abort.signal });
+          const attachments = await withTimeout(snapshotRequest, conversationResumeTimeoutMs, "A consulta de anexos demorou demais.");
           if (currentConversation()) {
             attachmentRevision += 1;
             store.syncAttachments(attachments);
@@ -5426,10 +5429,9 @@ export function createAppController({
       if (currentConversation()) setSessionError(error, "Não foi possível retomar a conversa com a VM.");
       return false;
     } finally {
+      const ownsResume = conversationResumeRecord === genericProgress;
       clearOperationProgress(genericProgress);
-      diaryAttachmentProgress = null;
-      resuming = false;
-      if (!stopped) render();
+      if (ownsResume && !stopped) render();
     }
   }
 

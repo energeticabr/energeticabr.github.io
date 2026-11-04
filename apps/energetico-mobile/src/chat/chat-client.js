@@ -252,7 +252,9 @@ export function createChatClient({
     const operation = operationMonitor(onOperationProgress, progressSignal, messageId);
     let progress;
     try {
-    const token = await acquireToken(tokenProvider);
+    const resumeControl = replyId === 'input_continue' && !String(text || '').trim()
+      && !homeAttachmentIds && !homeTransferReceipt;
+    const token = await (resumeControl ? cancellableToken(tokenProvider, progressSignal) : acquireToken(tokenProvider));
     operation?.prepared();
     const blankEpiReply = EMPTY_EPI_REPLY_IDS.has(String(replyId || ""));
     const payload = {
@@ -286,6 +288,7 @@ export function createChatClient({
       body: JSON.stringify(payload),
       cache: "no-store",
       credentials: "omit",
+      ...(resumeControl && progressSignal ? { signal: progressSignal } : {}),
       }, response => parsePortalResponse(response, "O canal do Energético", { allowRecovery: true }));
       if (result.status === "processed" && !result.error
           && !result.results?.some(item => /error|fail|paused|invalid|unavailable|reupload/i.test(String(item?.status || "")))
@@ -334,7 +337,7 @@ export function createChatClient({
           // Before this action existed, the bridge rejected its action-only
           // payload as an empty message, before any workflow mutation.
           if (response.status === 422 && value?.error === 'Mensagem vazia') return { status: 'unavailable' };
-          if (!response.ok) throw new Error('Não foi possível acompanhar o PDF. Verifique a conexão e retome a conversa.');
+          if (!response.ok) throw Object.assign(new Error('Não foi possível acompanhar o PDF. Verifique a conexão e retome a conversa.'), { status: response.status });
           if (value?.status === 'unavailable') return value;
           if (value?.status !== 'running' || typeof value.requestId !== 'string'
               || !Number.isFinite(value.percent) || value.percent < 0 || value.percent > 99) {
@@ -457,14 +460,15 @@ export function createChatClient({
     return audioTranscriptionText(result);
   }
 
-  async function getAttachments() {
-    const token = await acquireToken(tokenProvider);
+  async function getAttachments({ signal } = {}) {
+    const token = await cancellableToken(tokenProvider, signal);
     const result = await request(chatUrl.href, {
       method: "POST",
       headers: { Accept: "application/json", Authorization: `Bearer ${token}`, "Content-Type": "application/json" },
       body: JSON.stringify({ action: "attachment_snapshot" }),
       cache: "no-store",
       credentials: "omit",
+      ...(signal ? { signal } : {}),
     }, response => parsePortalResponse(response, "A consulta de anexos"), true);
     if (!Array.isArray(result.attachments)) throw new Error("A VM não devolveu a lista de anexos.");
     return result.attachments;

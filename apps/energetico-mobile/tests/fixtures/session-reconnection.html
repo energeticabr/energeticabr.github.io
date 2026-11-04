@@ -1,0 +1,50 @@
+<!doctype html>
+<html lang="pt-BR"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><link rel="stylesheet" href="/src/styles.css"></head>
+<body><main id="app"></main><script type="module">
+import { createAppController } from '/src/app-controller.js';
+import { createChatClient } from '/src/chat/chat-client.js';
+import { createConversationStore } from '/src/chat/conversation-store.js';
+import { createRecoveryStorage } from '/src/web/recovery-storage.js';
+import { createChatView } from '/src/ui/chat-view.js';
+const root = document.querySelector('#app'), actualView = createChatView(root), store = createConversationStore({historyMode:'current-step'});
+let last, offline = true, preflights = 0, respond, arrived;
+const pendingResume = new Promise(resolve => { arrived = resolve; }), requests = [];
+const wire = createChatClient({apiBaseUrl:'https://example.test',tokenProvider:async()=> 'synthetic',retryDelay:async()=>{},
+  fetchImpl:async(_url,options)=>{
+    const body=JSON.parse(options.body);requests.push(body);
+    if(offline)throw new TypeError('Load failed');
+    if(body.action==='diary_evidence_pending'){
+      if(++preflights<=2)throw new TypeError('Load failed');
+      return Response.json({status:'unavailable'});
+    }
+    if(body.replyId==='input_continue'){arrived();return new Promise(resolve=>{respond=resolve;});}
+    throw new Error('Unexpected synthetic request');
+  }});
+const controller=createAppController({store,recovery:createRecoveryStorage(),
+  view:{...actualView,render(state){last=state;actualView.render(state);}},
+  auth:{initialize:async()=>({homeAccountId:'fictional-reconnection',name:'Teste'}),getToken:async()=> 'synthetic'},
+  native:{importSharedItems:async()=>[]},client:{sendText:wire.sendText,waitForDiaryEvidence:wire.waitForDiaryEvidence},
+  conversationResumeRetryDelay:async()=>{},conversationResumeTimeoutMs:5000,
+  pendingProvisionAttachmentsDataFactory:async()=>({loadUpcomingPayments:async()=>[],listAttachments:async()=>[]}),
+  pendingConstructionDiaryDataFactory:async()=>({loadPending:async()=>[]}),diaryFieldVisitDataFactory:async()=>({load:async()=>[]})});
+const frame=()=>new Promise(resolve=>requestAnimationFrame(()=>requestAnimationFrame(resolve)));
+await controller.start();
+store.setDraft('Rascunho fictício preservado');store.queueFiles([new File(['synthetic proof'],'comprovante-ficticio.pdf',{type:'application/pdf'})]);
+await document.fonts.ready;await frame();
+const overflow=()=>root.scrollWidth>innerWidth+1||document.documentElement.scrollWidth>innerWidth+1;
+const evidence={initialError:Boolean(root.querySelector('.error-banner')),initialBlocked:last.recoveryBlocked,overflow:overflow()};
+requests.length=0;offline=false;
+root.querySelector('[data-action="retry-session"]').click();
+await pendingResume;await frame();
+evidence.busy=last.resuming;evidence.oldErrorHidden=!root.querySelector('.error-banner');
+evidence.reconnectingVisible=root.textContent.includes('Restabelecendo conexão');evidence.overflow ||= overflow();
+respond(Response.json({status:'processed',stage:'choosing_group',activeFlow:null,attachments:[],
+  messages:[{type:'poll',question:'QUAL ÁREA VOCÊ DESEJA ACESSAR?',options:[{id:'group_supplies',label:'SUPRIMENTOS'}]}]}));
+for(let i=0;i<120&&last.resuming;i++)await frame();
+evidence.restored=!last.resuming&&!last.recoveryBlocked&&!last.error&&Boolean(root.querySelector('[data-reply-id="group_supplies"]'));
+evidence.composerEnabled=!root.querySelector('[data-role="draft"]').disabled;
+evidence.draftPreserved=store.getState().draft==='Rascunho fictício preservado';evidence.filesPreserved=store.getState().pendingFiles.length===1;
+evidence.onlyResumeCommands=requests.every(body=>body.action==='diary_evidence_pending'||body.replyId==='input_continue');
+evidence.overflow ||= overflow();
+document.documentElement.dataset.layout=JSON.stringify(evidence);document.documentElement.dataset.ready='true';
+</script></body></html>
