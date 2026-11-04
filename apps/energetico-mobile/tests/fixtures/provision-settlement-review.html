@@ -41,10 +41,14 @@ if (params.get('test') === '1') {
     const text = [...review.querySelectorAll('th,td,small,p')];
     const minFontSize = Math.min(...text.map(node => parseFloat(getComputedStyle(node).fontSize)));
     const rowBackgrounds = [...review.querySelectorAll('tbody tr')].map(row => getComputedStyle(row.querySelector('td')).backgroundColor);
-    scroll.scrollLeft = scroll.scrollWidth;
+    const valuesFitWithoutScroll = !horizontalOverflow && [...review.querySelectorAll('tbody td, tfoot td')].every(cell => {
+      const range = document.createRange(); range.selectNodeContents(cell); const text = range.getBoundingClientRect();
+      return text.width > 0 && text.height > 0 && text.left >= scrollBox.x - 1 && text.right <= scrollBox.right + 1;
+    });
+    scroll.scrollLeft = 0;
     await frame();
     const total = rect(review.querySelector('tbody tr td:last-child')), sticky = rect(review.querySelector('tbody th'));
-    const totalFullyVisible = total.right <= rect(scroll).right + 1 && total.x >= sticky.right - 1;
+    const totalFullyVisible = total.right <= rect(scroll).right + 1 && total.x >= rect(scroll).x - 1;
     transcript.scrollTop = transcript.scrollHeight;
     await frame();
     const composer = rect(root.querySelector('[data-chat-form]'));
@@ -53,8 +57,8 @@ if (params.get('test') === '1') {
     const controlsReachable = buttons.every(button => { const box = rect(button), hit = document.elementFromPoint(box.x + box.width / 2, box.y + box.height / 2); return box.y >= 0 && box.bottom <= composer.y + 1 && (hit === button || button.contains(hit)); });
     buttons.forEach(button => button.click());
     const result = { missing: false, width: innerWidth, sample, rowCount: review.querySelectorAll('tbody tr').length,
-      pageOverflow, scrollBox, horizontalOverflow, minFontSize, rowBackgrounds, totalFullyVisible, total, sticky,
-      controlsReachable, buttonBoxes, replies, scrollHintVisible: getComputedStyle(review.querySelector('.provision-review__scroll-hint')).display !== 'none',
+      pageOverflow, scrollBox, horizontalOverflow, valuesFitWithoutScroll, minFontSize, rowBackgrounds, totalFullyVisible, total, sticky,
+      controlsReachable, buttonBoxes, replies,
       submitDisabled: buttons[0].disabled, editDisabled: buttons[1].disabled };
     view.render(reviewState(message, { activeText: { id: 'synthetic-request' } }));
     result.busyDisabled = ['description_review_submit', 'description_review_edit'].every(id => root.querySelector(`[data-reply-id="${id}"]`).disabled);

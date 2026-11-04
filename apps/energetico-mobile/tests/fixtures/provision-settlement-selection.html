@@ -77,8 +77,8 @@ try {
   await frame();
 
   const review = find('[data-provision-settlement-review]'), region = review.querySelector('.provision-review__scroll');
-  const transcript = find('.chat-transcript'), cells = [...review.querySelectorAll('.provision-review__quantity')];
-  result.quantityNoWrap = cells.length === 5 && cells.every(cell => getComputedStyle(cell).whiteSpace === 'nowrap');
+  const transcript = find('.chat-transcript'), cells = [...review.querySelectorAll('tbody .provision-review__quantity')];
+  result.quantityNoWrap = cells.length === 4 && cells.every(cell => getComputedStyle(cell).whiteSpace === 'nowrap');
   result.quantityTextFits = cells.every(cell => {
     const range = document.createRange(); range.selectNodeContents(cell); const text = range.getBoundingClientRect(), box = cell.getBoundingClientRect();
     return text.height <= parseFloat(getComputedStyle(cell).lineHeight) + 1 && text.left >= box.left - 1 && text.right <= box.right + 1;
@@ -87,11 +87,16 @@ try {
   result.selectAllBelow = Boolean(review.querySelector('table').compareDocumentPosition(find('[data-provision-select-all]')) & Node.DOCUMENT_POSITION_FOLLOWING);
   result.regionFits = fits(region);
   result.horizontalRegion = region.scrollWidth > region.clientWidth + 1 && ['auto', 'scroll'].includes(getComputedStyle(region).overflowX);
+  result.valuesFitWithoutScroll = region.scrollWidth <= region.clientWidth + 1 && [...review.querySelectorAll('tbody td:not(.provision-review__select-cell), tfoot td')].every(cell => {
+    const range = document.createRange(); range.selectNodeContents(cell);
+    const text = range.getBoundingClientRect(), box = region.getBoundingClientRect();
+    return text.width > 0 && text.height > 0 && text.left >= box.left - 1 && text.right <= box.right + 1;
+  });
   result.minFontSize = Math.min(...[...review.querySelectorAll('th,td,small,p')].map(node => parseFloat(getComputedStyle(node).fontSize)));
   result.columnsReachable = true;
-  for (const header of review.querySelectorAll('thead th')) {
+  for (const header of review.querySelectorAll(innerWidth <= 760 ? 'tbody tr:first-child > :not(.provision-review__select-cell)' : 'thead th')) {
     const stickyWidth = review.querySelector('thead th').offsetWidth;
-    region.scrollLeft = Math.max(0, header.offsetLeft - stickyWidth);
+    region.scrollLeft = 0;
     await frame();
     const box = header.getBoundingClientRect(), clip = region.getBoundingClientRect();
     result.columnsReachable &&= box.left >= clip.left - 1 && box.right <= clip.right + 1;
