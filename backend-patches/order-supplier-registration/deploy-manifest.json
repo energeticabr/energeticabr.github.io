@@ -1,0 +1,19 @@
+{
+  "files": {
+    "worker/workflow.py": {
+      "before": "9b47b4448ead3a71a2b093758408c920969b3c36f43a4f63044f6c46beb181ad",
+      "after": "7c77bb2b4a4cf201120b8ca5f7d4efa4d56e3873343ecfa555dbb95386dfdc8d"
+    }
+  },
+  "mirror": {
+    "worker/workflow.py": "f9d768e9c6238a0f28e5377b14237692790cc16292c161d9af5e14c035d5c986"
+  },
+  "inputs": {
+    "deploy.py": "e037f295ccaaaeebf34103fe2158c0da65910069c225ac0245a140f8f2015a6d",
+    "deploy.sh": "8846b2b375b93ce45753994dc512840a4cb62e160c5c0ffce83b7025ce3aa6e1",
+    "deployment_gate.sh": "ae5ed44ab6d6ab1edfecbc14dd3bbd59505e9f991962d1410f488e4a029eefb6",
+    "patch_backend.py": "3e54c2e48a8900fe44b59b2a033935abf422ab8a2f39a459f29aaa145326bbd9",
+    "shared-deploy.py": "01d979e4e9d525d35ab522e017d3454be75514f4fc42a1274cc89e7b0a21bbe2",
+    "source.patch": "d3fe50584dc1439f6fa5b4cbb962d246e2cb47e4e7bf22c8aeadfb767721eb3b"
+  }
+}

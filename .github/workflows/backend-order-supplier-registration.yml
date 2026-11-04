@@ -1,0 +1,23 @@
+name: Backend order supplier registration
+on:
+  pull_request:
+    paths:
+      - 'backend-patches/order-supplier-registration/**'
+      - '.github/workflows/backend-order-supplier-registration.yml'
+  push:
+    branches: [main]
+    paths:
+      - 'backend-patches/order-supplier-registration/**'
+      - '.github/workflows/backend-order-supplier-registration.yml'
+permissions:
+  contents: read
+jobs:
+  installer-tests:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+      - run: python -B -m unittest discover -s backend-patches/order-supplier-registration -p test_deploy.py -v
