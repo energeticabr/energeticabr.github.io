@@ -219,7 +219,8 @@ jobs:
         working-directory: apps/energetico-mobile
         run: |
           pnpm assets:generate
-          pnpm test
+          # Keep every test; run files serially on the constrained Intel fallback.
+          pnpm exec node --test --test-concurrency=${{ inputs.use_intel_runner == true && '1' || '2' }} tests/*.test.mjs
           pnpm build
           pnpm cap:sync
           node scripts/configure-share-extension.mjs
