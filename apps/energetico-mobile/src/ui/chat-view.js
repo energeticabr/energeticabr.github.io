@@ -1,4 +1,5 @@
 import { pendingProvisionAttachmentTray } from './pending-provision-attachment-tray.js';
+import { payrollAssignmentTableMarkup } from './payroll-assignment-table.js';
 import { supplierDefaultsComparisonMarkup } from './attendance-supplier-defaults-comparison.js';
 import { loadingIndicatorMarkup } from "./loading-indicator.js";
 import { createCameraChooser } from './document-scanner.js';
@@ -1747,6 +1748,11 @@ function renderPoll(message, busy, draft = "", databaseFilterMessage = null, act
     ? rawChangeTable
     : null;
   const presenceTable = message.detail_table || message.detailTable;
+  const payrollAssignment = payrollAssignmentTableMarkup(presenceTable);
+  const payrollFallbackParts = payrollAssignment ? questionText.split('\n\nID | FORNECEDOR | VALOR TOTAL') : [];
+  const payrollQuestion = payrollAssignment && payrollFallbackParts.length === 2
+    ? [payrollFallbackParts[0], payrollFallbackParts[1].split('\n').slice(presenceTable.rows.length + 1).join('\n').trim()].filter(Boolean).join('\n\n')
+    : questionText;
   const supplierDefaultsComparison = supplierDefaultsComparisonMarkup(presenceTable);
   const provisionReview = provisionSettlementReviewMarkup(presenceTable, { busy, current: currentPoll }) || provisionSettlementLaunchSummaryMarkup(message);
   const rhidAttendanceReport = presenceTable?.kind === "rhid_attendance";
@@ -1913,10 +1919,11 @@ function renderPoll(message, busy, draft = "", databaseFilterMessage = null, act
     return `<div class="chat-launch-payroll-select">${selectAll}${records.join("")}${unavailableWarning}<button class="chat-launch-payroll-select__proceed" type="button" data-action="launch-payroll-select-proceed"${busy || !launchPayrollCurrent ? " disabled" : ""}>${proceedLabel}</button></div>`;
   })() : "";
   return `<div class="chat-choice-card${isPendingAttendanceList ? " chat-choice-card--pending-attendance" : ""}${isHrGalleryMenu ? " chat-choice-card--hr-galleries" : ""}">
-    ${launchPaymentSummary || rhidAttendanceReport || initialAreaMenu || isLaunchMenu || provisionReview ? "" : `<p>${supplierDefaultsComparison ? formatQuestionText(questionText.split(/\r?\n/)[0]) : attendanceDayQuestionMarkup(message) ?? formatQuestionText(presenceSummaryQuestion(changeTableQuestion(message, changeTable), presenceTable) || "Escolha uma opção")}</p>`}
+    ${launchPaymentSummary || rhidAttendanceReport || initialAreaMenu || isLaunchMenu || provisionReview ? "" : `<p>${payrollAssignment ? formatQuestionText(payrollQuestion) : supplierDefaultsComparison ? formatQuestionText(questionText.split(/\r?\n/)[0]) : attendanceDayQuestionMarkup(message) ?? formatQuestionText(presenceSummaryQuestion(changeTableQuestion(message, changeTable), presenceTable) || "Escolha uma opção")}</p>`}
     ${currentPoll ? singleLaunchConfirmationMarkup(message, activeFlow) : ""}
     ${changeTableMarkup(changeTable)}
     ${supplierDefaultsComparison}
+    ${payrollAssignment}
     ${provisionReview || presenceDetailTableMarkup(presenceTable, { messageId: message.id, busy, current: currentPoll })}
     ${attendanceCopyOfferMarkup(presenceTable, message.id, currentPoll, busy)}
     ${rhidAttendanceTableMarkup(presenceTable, message.id, rhidRefresh, activeFlow)}
