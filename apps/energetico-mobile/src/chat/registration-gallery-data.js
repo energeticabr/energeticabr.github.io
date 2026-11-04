@@ -123,6 +123,13 @@ export const REGISTRATION_GALLERY_MODELS = Object.freeze({
   assetLaunches: Object.freeze({
     title: 'LANÇAMENTOS IMOBILIZADOS', listName: 'LANCAMENTOSIMOBILIZADOS', aliases: ['LANCAMENTOSIMOBILIZADOS'],
     nativeCard: true, readOnly: true, recordLabel: 'lançamento de imobilizado',
+    defaultSort: 'name:asc', showSortOutsideFilters: true,
+    sortOptions: [
+      { value: 'name:asc', label: 'Nome (A–Z)', field: 'IMOBILIZADO', direction: 'asc', type: 'text' },
+      { value: 'name:desc', label: 'Nome (Z–A)', field: 'IMOBILIZADO', direction: 'desc', type: 'text' },
+      { value: 'recent:desc', label: 'Mais recentes', field: 'ID', direction: 'desc', type: 'number' },
+      { value: 'date:desc', label: 'Data de depreciação', field: 'DATA DE DEPRECIAÇÃO', direction: 'desc', type: 'date' },
+    ],
     fields: ['IMOBILIZADO', 'FILIAL', '% DEPRECIAÇÃO', 'DATA DE DEPRECIAÇÃO', 'VALOR DEPRECIAÇÃO', 'VALOR RESIDUAL', 'ID IMOBILIZADO', 'ID LANÇAMENTO', 'NÚMERO DO PEDIDO'],
     filterFields: ['ID IMOBILIZADO', 'FILIAL'], dateRangeField: 'DATA DE DEPRECIAÇÃO',
     fieldAliases: {

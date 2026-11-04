@@ -82,3 +82,22 @@ test('galeria mostra reais, percentual, data e vínculo do bem; busca e filtros 
   await new Promise(resolve => setImmediate(resolve));
   assert.deepEqual([...doc.querySelectorAll('[data-registration-row]')].map(node => node.dataset.registrationRow), ['1']);
 });
+
+test('ordena todos os lançamentos por nome antes de paginar e permite voltar aos mais recentes', async t => {
+  const dom = new JSDOM('<!doctype html><body></body>'); t.after(() => dom.window.close());
+  const rows = Array.from({ length: 65 }, (_, i) => item(i + 1, `Z EQUIPAMENTO ${i + 1}`));
+  rows[64] = item(65, 'ÁRVORE DE TESTE');
+  rows[0] = item(1, 'BETONEIRA DE TESTE');
+  const gallery = createRegistrationGallery({ document: dom.window.document, kind: 'assetLaunches', data: source(rows) });
+  t.after(() => gallery.destroy()); await gallery.open();
+  const doc = dom.window.document, sort = doc.querySelector('[data-gallery-sort]');
+  assert.ok(sort, 'ordenação disponível fora dos filtros');
+  assert.equal(sort.closest('details'), null);
+  assert.equal(sort.value, 'name:asc');
+  assert.deepEqual([...doc.querySelectorAll('[data-registration-row]')].slice(0, 2).map(n => n.dataset.registrationRow), ['65', '1']);
+  sort.value = 'recent:desc'; sort.dispatchEvent(new dom.window.Event('change', { bubbles: true }));
+  assert.deepEqual([...doc.querySelectorAll('[data-registration-row]')].slice(0, 2).map(n => n.dataset.registrationRow), ['65', '64']);
+  const search = doc.querySelector('input[type="search"]'); search.value = 'BETONEIRA';
+  search.dispatchEvent(new dom.window.Event('input', { bubbles: true }));
+  assert.deepEqual([...doc.querySelectorAll('[data-registration-row]')].map(n => n.dataset.registrationRow), ['1']);
+});
