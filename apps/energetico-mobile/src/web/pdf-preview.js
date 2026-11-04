@@ -107,6 +107,8 @@ export function createPdfPreview({
   let destroyed = false;
   let loadingTask = null;
   let pdf = null;
+  let TextLayer = null;
+  const textLayers = new Map();
   let renderTask = null;
   let renderGeneration = 0;
   let busy = true;
@@ -208,6 +210,11 @@ export function createPdfPreview({
       const height = baseHeight * bounded;
       canvas.style.width = `${Math.round(width)}px`;
       canvas.style.height = `${Math.round(height)}px`;
+      const text = textLayers.get(canvas)?.node;
+      if (text) {
+        text.style.top = `${canvas.offsetTop}px`;
+        text.style.transform = `translateX(-50%) scale(${bounded})`;
+      }
       const copyButton = canvas.parentElement?.querySelector('.attachment-preview-dda-copy-overlay');
       if (copyButton && ddaAction) positionDdaCopyButton(copyButton, canvas, ddaAction.rect);
       if (canvas.parentElement) canvas.parentElement.style.width = `${Math.max(viewportWidth, width)}px`;
@@ -228,10 +235,47 @@ export function createPdfPreview({
 
   const pinchZoom = createPinchZoom({ element: viewport, documentRef, onZoom: applyZoom });
 
+  function releaseTextLayer(canvas) {
+    const text = textLayers.get(canvas);
+    if (!text) return;
+    text.renderer?.cancel();
+    text.node.remove();
+    textLayers.delete(canvas);
+  }
+
+  async function renderSelectableText(page, canvas, displayed, generation) {
+    if (!TextLayer || !page.getTextContent || destroyed || generation !== renderGeneration) return;
+    const node = element('div', 'attachment-preview-pdf-text');
+    // Pinching may have resized this canvas while its render was pending.
+    // The text viewport stays at its base size; applyZoom scales both together.
+    node.style.width = `${canvas.dataset.baseWidth}px`;
+    node.style.height = `${canvas.dataset.baseHeight}px`;
+    node.style.top = `${canvas.offsetTop}px`;
+    const layer = element('div', 'attachment-preview-pdf-text-layer');
+    layer.style.setProperty('--total-scale-factor', displayed.scale * (displayed.userUnit || 1));
+    node.append(layer);
+    canvas.parentElement.append(node);
+    const text = { node, renderer: null };
+    textLayers.set(canvas, text);
+    try {
+      const content = await page.getTextContent();
+      if (destroyed || generation !== renderGeneration) { releaseTextLayer(canvas); return; }
+      if (!content.items.some(item => item.str?.trim())) { releaseTextLayer(canvas); return; }
+      text.renderer = new TextLayer({ textContentSource: content, container: layer, viewport: displayed });
+      await text.renderer.render();
+    } catch {
+      // A damaged/missing text stream must not hide an otherwise readable page.
+      releaseTextLayer(canvas);
+    }
+  }
+
   function clearRenderedPages() {
     // Include a canvas whose render promise is still pending, not just the
     // completed pages. A quick close/reopen must not double graphics memory.
-    for (const canvas of surface.querySelectorAll('canvas')) canvas.width = canvas.height = 0;
+    for (const canvas of surface.querySelectorAll('canvas')) {
+      releaseTextLayer(canvas);
+      canvas.width = canvas.height = 0;
+    }
     renderedCanvases = [];
     surface.replaceChildren();
     slotsReady = false; pageSlots = []; pendingPageIndex = null;
@@ -281,6 +325,7 @@ export function createPdfPreview({
       if (!context) throw new Error("O navegador não oferece canvas para este PDF.");
       renderTask = page.render({ canvasContext: context, viewport: scaled, annotationMode: 0 });
       await renderTask.promise;
+      await renderSelectableText(page, canvas, displayed, generation);
       if (pdf.numPages === 1 && !destroyed && generation === renderGeneration) {
         ddaRead ||= readDdaCopyAction(page);
         const action = await ddaRead;
@@ -295,6 +340,7 @@ export function createPdfPreview({
         }
       }
     } catch (error) {
+      releaseTextLayer(canvas);
       canvas.width = canvas.height = 0;
       if (existingWrapper) canvas.remove(); else wrapper.remove();
       throw error;
@@ -303,6 +349,7 @@ export function createPdfPreview({
       page.cleanup();
     }
     if (destroyed || generation !== renderGeneration) {
+      releaseTextLayer(canvas);
       canvas.width = canvas.height = 0;
       if (existingWrapper) canvas.remove(); else wrapper.remove();
       return false;
@@ -352,6 +399,7 @@ export function createPdfPreview({
       // canvas alone does not promptly free Safari's graphics memory.
       renderedCanvases = renderedCanvases.filter(canvas => {
         if (wanted.has(Number(canvas.parentElement?.dataset.pageNumber))) return true;
+        releaseTextLayer(canvas);
         canvas.width = canvas.height = 0; canvas.remove(); return false;
       });
       for (const index of indices) {
@@ -517,6 +565,7 @@ export function createPdfPreview({
     progress.prepared();
     const pdfjs = await loadPdfJs();
     if (destroyed) return;
+    TextLayer = pdfjs.TextLayer;
     reportProgress(1, { phase: 'imported' });
     const data = new Uint8Array(await blob.arrayBuffer());
     if (destroyed) return;
