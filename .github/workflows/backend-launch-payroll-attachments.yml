@@ -1,0 +1,23 @@
+name: Backend launch payroll attachments
+on:
+  pull_request:
+    paths:
+      - 'backend-patches/launch-payroll-attachments/**'
+      - '.github/workflows/backend-launch-payroll-attachments.yml'
+  push:
+    branches: [main]
+    paths:
+      - 'backend-patches/launch-payroll-attachments/**'
+      - '.github/workflows/backend-launch-payroll-attachments.yml'
+permissions:
+  contents: read
+jobs:
+  installer-tests:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+      - run: python -B -m unittest discover -s backend-patches/launch-payroll-attachments/tests -p test_deploy.py -v

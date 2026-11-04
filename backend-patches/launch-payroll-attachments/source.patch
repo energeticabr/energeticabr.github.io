@@ -1,0 +1,143 @@
+--- a/worker/workflow.py
++++ b/worker/workflow.py
+@@ -26,14 +26,14 @@
+     from .launch_cash_receipt import CashReceiptFlow, CashReceiptError, RECOVERY_STAGE as CASH_RECEIPT_RECOVERY_STAGE, has_cash_checkpoint, cash_checkpoint_pending, persist_cash_checkpoint, load_cash_checkpoint
+     from .document_item_lock import document_item_lock
+     from .provision_description_settlement import ProvisionDescriptionSettlement, group_options
+-    from .payroll_row_attachments import propagate as propagate_payroll_row_attachments
++    from .payroll_row_attachments import propagate as propagate_payroll_row_attachments, copy_launch_to_payroll
+ except ImportError:
+     from payment_provision_flow import PaymentProvisionFlow, PROVISION_STAGES, PROVISION_STATE_KEYS
+     from payment_provision_group import parse_global_discount
+     from launch_cash_receipt import CashReceiptFlow, CashReceiptError, RECOVERY_STAGE as CASH_RECEIPT_RECOVERY_STAGE, has_cash_checkpoint, cash_checkpoint_pending, persist_cash_checkpoint, load_cash_checkpoint
+     from document_item_lock import document_item_lock
+     from provision_description_settlement import ProvisionDescriptionSettlement, group_options
+-    from payroll_row_attachments import propagate as propagate_payroll_row_attachments
++    from payroll_row_attachments import propagate as propagate_payroll_row_attachments, copy_launch_to_payroll
+ try:
+     from . import financial_catalog_registration as financial_catalog
+     from . import construction_visit_diary as visit_diary
+@@ -32789,6 +32789,12 @@
+                 isinstance(verification, dict) and verification.get("fields") is True
+                 and verification.get("attachments") is True)):
+             raise RuntimeError("O vínculo à folha ainda não foi confirmado")
++        payroll_attachments = []
++        if payroll_fields.get("IDLANCAMENTO"):
++            payroll_attachments = copy_launch_to_payroll(
++                self.sharepoint, payroll_fields["IDLANCAMENTO"], payroll_item_id,
++                payroll_fields, fields,
++            )
+         entry["TIPOPGTO"] = selected_type
+         entry["FOLHAPGTO_ID"] = payroll_item_id
+         state.setdefault("sharepoint", {}).setdefault("folhapgto_rows", []).append(
+@@ -32797,6 +32803,7 @@
+                 "launch_item_id": launch_id,
+                 "fields": copy.deepcopy(payroll_fields),
+                 "verified": verification,
++                "attachments": payroll_attachments,
+             }
+         )
+ 
+--- a/worker/payroll_row_attachments.py
++++ b/worker/payroll_row_attachments.py
+@@ -1,4 +1,4 @@
+-"""Settlement-only child -> own launch + shared order attachment propagation.
++"""Verified attachment propagation between individual financial records.
+ 
+ No financial creation, parent enumeration, scheduler or persistent sync state.
+ """
+@@ -19,6 +19,94 @@
+ def _verified(value):
+     return value is True or (isinstance(value, dict) and value.get('fields') is True
+                              and value.get('attachments') is True)
++
++
++def copy_launch_to_payroll(client, launch, payroll, expected, source_expected):
++    """One destination file per source filename, including identical contents.
++
++    Success is a read-back checkpoint, never just a successful upload response.
++    The financial row is created by the caller's existing idempotent token.
++    """
++    launch, payroll = item_id(launch), item_id(payroll)
++    if item_id(expected.get('IDLANCAMENTO')) != launch:
++        raise RuntimeError('O lançamento não corresponde ao item da folha.')
++    ownership = {'FORNECEDOR': expected.get('FORNECEDOR')}
++    if _text(source_expected.get('FILIAL')):
++        ownership['FILIAL'] = source_expected['FILIAL']
++    if not _text(ownership['FORNECEDOR']):
++        raise RuntimeError('Fornecedor ausente na origem dos anexos.')
++    source, version = client.get_item_fields_with_etag(launch, list(ownership), target_list=LAUNCH)
++    if any(_text(source.get(key)) != _text(value) for key, value in ownership.items()):
++        raise RuntimeError('O fornecedor ou a filial do lançamento mudou antes da cópia.')
++
++    def guard():
++        current, current_version = client.get_item_fields_with_etag(launch, list(ownership), target_list=LAUNCH)
++        if current != source or current_version != version:
++            raise RuntimeError('Lançamento alterado durante a cópia dos anexos à folha.')
++        if not _verified(client.verify_item(payroll, expected, [], target_list='FOLHAPGTO')):
++            raise RuntimeError('O vínculo do item da folha mudou durante a cópia dos anexos.')
++
++    guard()
++    store = SharePointStore(client)
++    names = store.names(LAUNCH, launch)
++    source_names = {name.casefold() for name in names}
++    if len(source_names) != len(names):
++        raise RuntimeError('A origem contém nomes de anexo equivalentes no SharePoint.')
++    sources = []
++    for original in sorted(names):
++        content = store.content(LAUNCH, launch, original)
++        digest = sha(content)
++        # Filename identity matters: two source files with equal bytes are two
++        # attachments. Reserve a stable name only for a genuine target conflict.
++        suffix = copy_name(launch, digest, original).split('-', 3)[-1]
++        reserved = f'LANC-{launch}-{sha(original.encode("utf-8"))[:16]}-{digest}-{suffix}'
++        sources.append((original, reserved, content, digest))
++    existing = {name: store.digest('FOLHAPGTO', payroll, name)
++                for name in sorted(store.names('FOLHAPGTO', payroll))}
++    folded = {name.casefold(): name for name in existing}
++    plans = []
++    claimed = set()
++    for original, reserved, content, digest in sources:
++        matched = folded.get(original.casefold())
++        name = matched if matched is not None and existing[matched] == digest else original
++        if matched is not None and existing[matched] != digest:
++            # Another source may itself be named like our reserved fallback.
++            # Reserve the full source namespace before assigning any copy.
++            candidate, counter = reserved, 0
++            while candidate.casefold() in source_names or candidate.casefold() in claimed:
++                counter += 1
++                candidate = reserved.replace(f'-{digest}-', f'-{digest}-{counter}-', 1)
++            reserved = candidate
++            name = folded.get(reserved.casefold(), reserved)
++        if name.casefold() in claimed:
++            raise RuntimeError('Dois anexos de origem não podem compartilhar um arquivo na folha.')
++        if name in existing and existing[name] != digest:
++            raise RuntimeError('Conflito de conteúdo no anexo da folha; nenhum arquivo foi substituído.')
++        plans.append((original, name, content, digest, name in existing))
++        claimed.add(name.casefold())
++        existing[name] = digest
++        folded[name.casefold()] = name
++    guard()
++    for original, name, content, digest, reused in plans:
++        guard()
++        if not reused:
++            try:
++                client._ensure_attachment_local(payroll, name, content, target_list='FOLHAPGTO')
++            except Exception:
++                if name not in store.names('FOLHAPGTO', payroll) or store.digest('FOLHAPGTO', payroll, name) != digest:
++                    raise
++        if store.digest('FOLHAPGTO', payroll, name) != digest:
++            raise RuntimeError('Cópia do anexo à folha não confirmada por SHA-256.')
++    guard()
++    if store.names(LAUNCH, launch) != names:
++        raise RuntimeError('A coleção de anexos do lançamento mudou durante a cópia à folha.')
++    for original, name, content, digest, reused in plans:
++        if (store.digest(LAUNCH, launch, original) != digest
++                or store.digest('FOLHAPGTO', payroll, name) != digest):
++            raise RuntimeError('O conteúdo de origem ou destino mudou durante a cópia à folha.')
++    guard()
++    return [{'source': original, 'name': name, 'sha256': digest}
++            for original, name, content, digest, reused in plans]
+ 
+ 
+ def propagate(client, child, expected, record, parent=None):
