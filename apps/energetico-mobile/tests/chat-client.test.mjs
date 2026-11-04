@@ -36,6 +36,10 @@ test('retomada da demonstração não consulta processamento corporativo nem adq
   await client.waitForDiaryEvidence();
 });
 
+test('PDF preflight preserves temporary HTTP status so reconnection can retry a busy VM', async () => {
+  await assert.rejects(clientWith(async () => jsonResponse({}, 503)).waitForDiaryEvidence(), error => error.status === 503);
+});
+
 function jsonResponse(payload, status = 200) {
   return new Response(JSON.stringify(payload), {
     status,
@@ -52,6 +56,33 @@ function clientWith(fetchImpl, overrides = {}) {
     ...overrides,
   });
 }
+
+test('resume control cancellation aborts token acquisition before dispatching HTTP', async () => {
+  const abort = new AbortController();
+  let dispatched = 0;
+  const client = clientWith(async () => { dispatched++; return jsonResponse({ status: 'processed', messages: [] }); }, {
+    tokenProvider: () => new Promise(() => {}),
+  });
+  const pending = client.sendText({ text: '', replyId: 'input_continue' }, { progressSignal: abort.signal });
+  abort.abort();
+  const observed = await Promise.race([pending.then(() => 'resolved', error => error.name), new Promise(resolve => setTimeout(() => resolve('stuck'), 100))]);
+  assert.equal(observed, 'AbortError');
+  assert.equal(dispatched, 0);
+});
+
+test('resume control forwards cancellation to fetch without changing ordinary text retry policy', async () => {
+  const abort = new AbortController(); let signal;
+  const client = clientWith(async (_url, options) => { signal = options.signal; return jsonResponse({ status: 'processed', messages: [] }); });
+  await client.sendText({ text: '', replyId: 'input_continue' }, { progressSignal: abort.signal });
+  assert.equal(signal, abort.signal);
+});
+
+test('attachment snapshot forwards the resume cancellation signal to its request', async () => {
+  const abort = new AbortController(); let signal;
+  const client = clientWith(async (_url, options) => { signal = options.signal; return jsonResponse({ status: 'processed', messages: [], attachments: [] }); });
+  await client.getAttachments({ signal: abort.signal });
+  assert.equal(signal, abort.signal);
+});
 
 test("prepara e confirma integridade com PDFs reais no canal autenticado separado", async () => {
   const requests = [];
