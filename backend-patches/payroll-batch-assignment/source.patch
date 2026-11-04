@@ -1,0 +1,384 @@
+--- a/worker/workflow.py
++++ b/worker/workflow.py
+@@ -32222,7 +32222,7 @@
+             state, etag
+         )
+ 
+-    def _launch_payroll_sheets_for_supplier(self, supplier: str) -> list[dict]:
++    def _launch_payroll_sheets_for_supplier(self, supplier: str, *, month_key=None) -> list[dict]:
+         step = {
+             "key": "launch_payroll_sheets",
+             "source": {
+@@ -32244,6 +32244,8 @@
+             (self._shift_launch_payroll_month(current, 1), "PRÓXIMO MÊS", False),
+             (self._shift_launch_payroll_month(current, -1), "MÊS ANTERIOR", False),
+         ]
++        if month_key is not None:
++            month_order = [(tuple(month_key), 'MÊS ESCOLHIDO', False)]
+         valid_rows = []
+         for option in rows:
+             source = option.get("source_values") or {}
+@@ -32341,6 +32343,97 @@
+                     "current_sheet_launch_id", "current_sheet_option_key"):
+             pending.pop(key, None)
+ 
++    def _prompt_launch_payroll_assignment_mode(self, state, etag, kind):
++        pending = state['pending_launch_payroll']
++        pending['awaiting_' + kind + '_mode'] = True
++        state['stage'] = LAUNCH_PAYROLL_SHEET_STAGE if kind == 'sheet' else LAUNCH_PAYROLL_TYPE_STAGE
++        state['options'] = []
++        state.pop('option_pagination', None)
++        label = 'IDFOLHA' if kind == 'sheet' else 'TIPO DE PAGAMENTO'
++        self._send_actions(state, f'COMO DESEJA INDICAR O {label} DOS PAGAMENTOS?', [
++            {'id': f'launch_payroll_{kind}_mode_individual', 'title': 'INDICAR INDIVIDUALMENTE',
++             'reply': f'launch_payroll_{kind}_mode_individual'},
++            {'id': f'launch_payroll_{kind}_mode_shared', 'title': 'ATRIBUIR O MESMO VALOR PARA TODOS',
++             'reply': f'launch_payroll_{kind}_mode_shared'},
++        ], allow_back=False)
++        etag = self._save(state, etag)
++        return {'status': f'awaiting_launch_payroll_{kind}_mode', 'batch_id': state['batch_id'], 'etag': etag}
++
++    def _handle_launch_payroll_assignment_mode(self, event, state, etag, kind):
++        pending = state['pending_launch_payroll']
++        raw = _control_command(event.get('reply_id') or event.get('text') or '')
++        self._mark_processed(state, event.get('message_id'))
++        modes = {normalize_text(f'launch_payroll_{kind}_mode_{mode}'): mode
++                 for mode in ('individual', 'shared')}
++        if raw not in modes:
++            return self._prompt_launch_payroll_assignment_mode(state, etag, kind)
++        pending[kind + '_assignment_mode'] = modes[raw]
++        pending.pop('awaiting_' + kind + '_mode', None)
++        if kind == 'sheet':
++            return self._prompt_launch_payroll_sheet_for_current_supplier(state, etag)
++        return self._prompt_launch_payroll_type(state, etag)
++
++    def _prompt_launch_payroll_shared_month(self, state, etag):
++        pending = state['pending_launch_payroll']
++        # Freeze absolute months with the displayed question, including year rollover.
++        if not pending.get('shared_month_options'):
++            today = datetime.now(ZoneInfo('America/Sao_Paulo')).date()
++            current = (today.year, today.month)
++            pending['shared_month_options'] = [
++                {'id': offset, 'value': str(offset),
++                 'title': f'{self._launch_payroll_month_label(self._shift_launch_payroll_month(current, offset))} — {label}',
++                 'month': list(self._shift_launch_payroll_month(current, offset))}
++                for offset, label in ((0, '⭐ MÊS VIGENTE'), (-1, 'MÊS ANTERIOR'), (1, 'PRÓXIMO MÊS'))]
++        pending['awaiting_shared_month'] = True
++        pending['current_sheet_option_key'] = 'launch_payroll_shared_month'
++        state['stage'] = LAUNCH_PAYROLL_SHEET_STAGE
++        state['options'] = copy.deepcopy(pending['shared_month_options'])
++        state.pop('option_pagination', None)
++        self._send_actions(state,
++            'QUAL MÊS DESEJA APLICAR A TODOS? CADA PAGAMENTO SERÁ VINCULADO À FOLHA DO SEU FORNECEDOR.',
++            [{'id': f"choice:launch_payroll_shared_month:{option['id']}", 'title': option['title'],
++              'reply': f"choice:launch_payroll_shared_month:{option['id']}"} for option in state['options']],
++            allow_back=False)
++        etag = self._save(state, etag)
++        return {'status': 'awaiting_launch_payroll_shared_month', 'batch_id': state['batch_id'], 'etag': etag}
++
++    def _handle_launch_payroll_shared_month(self, event, state, etag):
++        pending = state['pending_launch_payroll']
++        selected = resolve_option(event.get('reply_id') or event.get('text') or '',
++                                  pending.get('shared_month_options') or [], 'launch_payroll_shared_month')
++        self._mark_processed(state, event.get('message_id'))
++        if not selected:
++            return self._prompt_launch_payroll_shared_month(state, etag)
++        target = tuple(selected['month'])
++        assignments = []
++        cache = {}
++        try:
++            for entry in pending.get('selected_entries') or []:
++                if entry.get('FOLHAPGTO_ID') or entry.get('IDFOLHA'):
++                    continue
++                supplier = str(entry.get('supplier') or '').strip()
++                if supplier not in cache:
++                    options = self._launch_payroll_sheets_for_supplier(supplier, month_key=target)
++                    cache[supplier] = {int(option['id']) for option in options
++                        if self._launch_payroll_month_key((option.get('source_values') or {}).get('MESREFERENCIA')) == target}
++                matches = cache[supplier]
++                if len(matches) == 1:
++                    assignments.append((entry, next(iter(matches))))
++        except Exception:
++            self._send_text(state, '❌ NÃO FOI POSSÍVEL CONSULTAR TODAS AS FOLHAS. TENTE NOVAMENTE O MESMO MÊS.')
++            result = self._prompt_launch_payroll_shared_month(state, etag)
++            return {**result, 'status': 'launch_payroll_shared_month_load_failed'}
++        # Resolve every supplier before changing the draft; failures cannot partly apply.
++        for entry, sheet_id in assignments:
++            entry['IDFOLHA'] = sheet_id
++        pending.pop('awaiting_shared_month', None)
++        pending['shared_month_applied'] = list(target)
++        if any(not entry.get('IDFOLHA') and not entry.get('FOLHAPGTO_ID')
++               for entry in pending.get('selected_entries') or []):
++            self._send_text(state, '⚠️ ALGUMAS LINHAS NÃO TÊM UMA ÚNICA FOLHA NO MÊS ESCOLHIDO. '
++                            'INDIQUE A FOLHA DESSAS LINHAS INDIVIDUALMENTE.')
++        return self._prompt_launch_payroll_sheet_for_current_supplier(state, etag)
++
+     def _prompt_launch_payroll_sheet_for_current_supplier(
+         self, state: dict, etag: str | None
+     ) -> dict:
+@@ -32358,11 +32451,18 @@
+                     "batch_id": state["batch_id"], "etag": etag}
+         index = int(pending.get("sheet_entry_index", 0))
+         selected_entries = pending.get("selected_entries") or []
++        remaining = [entry for entry in selected_entries
++                     if not entry.get('IDFOLHA') and not entry.get('FOLHAPGTO_ID')]
++        if len(remaining) > 1 and not pending.get('sheet_assignment_mode'):
++            return self._prompt_launch_payroll_assignment_mode(state, etag, 'sheet')
++        if (remaining and pending.get('sheet_assignment_mode') == 'shared'
++                and not pending.get('shared_month_applied')):
++            return self._prompt_launch_payroll_shared_month(state, etag)
+         # The historic method name remains compatible with persisted stages.
+         # The cursor and each answer now belong to one launch, not a supplier.
+         while index < len(selected_entries):
+             entry = selected_entries[index]
+-            if entry.get("FOLHAPGTO_ID"):
++            if entry.get("FOLHAPGTO_ID") or entry.get("IDFOLHA"):
+                 index += 1
+                 pending["sheet_entry_index"] = index
+                 continue
+@@ -32462,6 +32562,15 @@
+         if "sheet_entry_index" not in pending:
+             self._mark_processed(state, message_id)
+             return self._prompt_launch_payroll_sheet_for_current_supplier(state, etag)
++        if pending.get('awaiting_sheet_mode'):
++            return self._handle_launch_payroll_assignment_mode(event, state, etag, 'sheet')
++        if pending.get('awaiting_shared_month'):
++            return self._handle_launch_payroll_shared_month(event, state, etag)
++        remaining = [entry for entry in pending.get('selected_entries') or []
++                     if not entry.get('IDFOLHA') and not entry.get('FOLHAPGTO_ID')]
++        if len(remaining) > 1 and not pending.get('sheet_assignment_mode'):
++            self._mark_processed(state, message_id)
++            return self._prompt_launch_payroll_sheet_for_current_supplier(state, etag)
+         raw = event.get("reply_id") or event.get("text") or ""
+         selected = resolve_option(raw, state.get("options", []), pending.get("current_sheet_option_key"))
+         self._mark_processed(state, message_id)
+@@ -32507,10 +32616,21 @@
+             pending["type_index"] = index
+         if index >= len(entries):
+             return self._continue_launch_after_payroll(state, etag)
++        remaining = [entry for entry in entries if not entry.get('FOLHAPGTO_ID')]
++        if len(remaining) > 1 and not pending.get('type_assignment_mode'):
++            return self._prompt_launch_payroll_assignment_mode(state, etag, 'type')
++        shared = pending.get('type_assignment_mode') == 'shared'
+         entry = entries[index]
+         fields = entry.get("fields") or {}
+         total = self._launch_payroll_total(fields)
+-        prompt = (
++        if pending.get('shared_type'):
++            self._send_actions(state, f"TENTAR NOVAMENTE OS PAGAMENTOS RESTANTES COM O TIPO {pending['shared_type']}?", [
++                {'id': 'launch_payroll_type_retry', 'title': 'TENTAR NOVAMENTE', 'reply': 'launch_payroll_type_retry'}
++            ], allow_back=False)
++            state['stage'] = LAUNCH_PAYROLL_TYPE_STAGE
++            etag = self._save(state, etag)
++            return {'status': 'awaiting_launch_payroll_type_retry', 'batch_id': state['batch_id'], 'etag': etag}
++        prompt = 'QUAL TIPO DE PAGAMENTO DESEJA ATRIBUIR A TODOS?' if shared else (
+             f"PARA {'A PROVISÃO' if entry.get('provision_id') else 'O LANÇAMENTO'} DE ID {entry['item_id']}, COM VALOR TOTAL "
+             f"{_currency_display(total)}, QUAL O TIPO GASTO?"
+         )
+@@ -32518,7 +32638,11 @@
+             state,
+             prompt,
+             [
+-                {"id": option_id, "title": title, "reply": option_id}
++                {"id": (f"launch_payroll_type_for_{entry['item_id']}:{option_id}"
++                         if pending.get('type_assignment_mode') == 'individual' else option_id),
++                 "title": title,
++                 "reply": (f"launch_payroll_type_for_{entry['item_id']}:{option_id}"
++                            if pending.get('type_assignment_mode') == 'individual' else option_id)}
+                 for option_id, title in LAUNCH_PAYROLL_TYPE_OPTIONS
+             ],
+             allow_back=False,
+@@ -32537,7 +32661,27 @@
+         if len(pending.get("selected_entries") or []) > 1 and "sheet_entry_index" not in pending:
+             self._mark_processed(state, message_id)
+             return self._prompt_launch_payroll_sheet_for_current_supplier(state, etag)
++        if pending.get('awaiting_type_mode'):
++            return self._handle_launch_payroll_assignment_mode(event, state, etag, 'type')
++        if (len([entry for entry in pending.get('selected_entries') or [] if not entry.get('FOLHAPGTO_ID')]) > 1
++                and not pending.get('type_assignment_mode')):
++            self._mark_processed(state, message_id)
++            return self._prompt_launch_payroll_type(state, etag)
+         raw = _control_command(event.get("reply_id") or event.get("text") or "")
++        if pending.get('shared_type'):
++            self._mark_processed(state, message_id)
++            if raw != normalize_text('launch_payroll_type_retry'):
++                return self._prompt_launch_payroll_type(state, etag)
++            return self._apply_launch_payroll_type(state, etag, pending['shared_type'])
++        scoped = re.fullmatch(r'launch_payroll_type_for_(\d+):(launch_payroll_type_\w+)',
++                              str(event.get('reply_id') or event.get('text') or ''), flags=re.IGNORECASE)
++        if scoped:
++            entries = pending.get('selected_entries') or []
++            index = int(pending.get('type_index', 0))
++            if index >= len(entries) or str(entries[index]['item_id']) != scoped.group(1):
++                self._mark_processed(state, message_id)
++                return self._prompt_launch_payroll_type(state, etag)
++            raw = _control_command(scoped.group(2))
+         selected_type = next(
+             (
+                 title
+@@ -32554,61 +32698,80 @@
+             return self._prompt_launch_payroll_type(state, etag)
+ 
+         self._mark_processed(state, message_id)
+-        entry = entries[index]
+-        fields = entry.get("fields") or {}
+-        try:
+-            launch_id = int(str(entry.get("item_id")).strip())
+-            sheet_id = int(str(entry.get("IDFOLHA")).strip())
+-            unit_value = _parse_decimal(fields.get("VALOR UNITÁRIO"), allow_zero=True)
+-            quantity = _parse_decimal(fields.get("QUANTIDADE"), allow_zero=True)
+-            if launch_id <= 0 or sheet_id <= 0 or unit_value is None or quantity is None:
+-                raise ValueError("Dados obrigatórios do lançamento estão ausentes")
+-            payroll_fields = {
+-                "FORNECEDOR": str(fields.get("FORNECEDOR") or entry.get("supplier") or "").strip(),
+-                "TIPOPGTO": selected_type,
+-                "VALORUNITARIO": _decimal_storage(unit_value),
+-                "QTD": _decimal_storage(quantity),
+-                "DATA": str(fields.get("DATA") or "")[:10],
+-                "IDFOLHA": sheet_id,
+-                "IDLANCAMENTO": launch_id,
+-            }
+-            if not payroll_fields["FORNECEDOR"] or not payroll_fields["DATA"]:
+-                raise ValueError("Fornecedor ou data do lançamento estão ausentes")
+-            token = (
+-                f"WA-launch-payroll-{state['batch_id']}-{launch_id}"
+-            )
+-            if entry.get("provision_id"):
+-                payroll_fields["IDPROVISAO"] = int(entry["provision_id"])
+-                if entry.get("launch_id"):
+-                    payroll_fields["IDLANCAMENTO"] = int(entry["launch_id"])
+-                else:
+-                    payroll_fields.pop("IDLANCAMENTO", None)
+-                token = f"WA-provision-payroll-{entry['provision_id']}"
+-            payroll_item_id = self.sharepoint.ensure_item(
+-                token,
+-                payroll_fields,
+-                target_list="FOLHAPGTO",
+-                idempotency_field="Title",
+-                merge_existing=False,
+-            )
+-            verification = self.sharepoint.verify_item(
+-                payroll_item_id,
+-                payroll_fields,
+-                [],
+-                target_list="FOLHAPGTO",
+-            )
+-            if entry.get("provision_id") and not (verification is True or (
+-                    isinstance(verification, dict) and verification.get("fields") is True
+-                    and verification.get("attachments") is True)):
+-                raise RuntimeError("O vínculo à folha ainda não foi confirmado")
+-        except Exception:
+-            self._send_text(
+-                state,
+-                f"❌ NÃO FOI POSSÍVEL GRAVAR A LINHA DO LANÇAMENTO {entry.get('item_id')} "
+-                "EM FOLHAPGTO. A MESMA PERGUNTA SERÁ MANTIDA PARA NOVA TENTATIVA.",
+-            )
+-            return self._prompt_launch_payroll_type(state, etag)
+-
++        if pending.get('type_assignment_mode') == 'shared':
++            pending['shared_type'] = selected_type
++            # Freeze the collective choice before any remote write can succeed.
++            etag = self._save(state, etag)
++        return self._apply_launch_payroll_type(state, etag, selected_type)
++
++    def _apply_launch_payroll_type(self, state, etag, selected_type):
++        pending = state['pending_launch_payroll']
++        entries = pending.get('selected_entries') or []
++        index = int(pending.get('type_index', 0))
++        shared = pending.get('type_assignment_mode') == 'shared'
++        while index < len(entries):
++            entry = entries[index]
++            if not entry.get('FOLHAPGTO_ID'):
++                try:
++                    self._record_launch_payroll_type(state, entry, selected_type)
++                except Exception:
++                    self._send_text(state, f"❌ NÃO FOI POSSÍVEL CONFIRMAR O PAGAMENTO {entry.get('item_id')}. TENTE NOVAMENTE.")
++                    return self._prompt_launch_payroll_type(state, etag)
++            index += 1
++            pending['type_index'] = index
++            # Each verified line becomes a durable checkpoint before the next write.
++            etag = self._save(state, etag)
++            if not shared and index < len(entries):
++                return self._prompt_launch_payroll_type(state, etag)
++        self._send_text(state, f'✅ {len(entries)} PAGAMENTO(S) ADICIONADO(S) À FOLHAPGTO.')
++        return self._continue_launch_after_payroll(state, etag)
++
++    def _record_launch_payroll_type(self, state, entry, selected_type):
++        fields = entry.get('fields') or {}
++        launch_id = int(str(entry.get("item_id")).strip())
++        sheet_id = int(str(entry.get("IDFOLHA")).strip())
++        unit_value = _parse_decimal(fields.get("VALOR UNITÁRIO"), allow_zero=True)
++        quantity = _parse_decimal(fields.get("QUANTIDADE"), allow_zero=True)
++        if launch_id <= 0 or sheet_id <= 0 or unit_value is None or quantity is None:
++            raise ValueError("Dados obrigatórios do lançamento estão ausentes")
++        payroll_fields = {
++            "FORNECEDOR": str(fields.get("FORNECEDOR") or entry.get("supplier") or "").strip(),
++            "TIPOPGTO": selected_type,
++            "VALORUNITARIO": _decimal_storage(unit_value),
++            "QTD": _decimal_storage(quantity),
++            "DATA": str(fields.get("DATA") or "")[:10],
++            "IDFOLHA": sheet_id,
++            "IDLANCAMENTO": launch_id,
++        }
++        if not payroll_fields["FORNECEDOR"] or not payroll_fields["DATA"]:
++            raise ValueError("Fornecedor ou data do lançamento estão ausentes")
++        token = (
++            f"WA-launch-payroll-{state['batch_id']}-{launch_id}"
++        )
++        if entry.get("provision_id"):
++            payroll_fields["IDPROVISAO"] = int(entry["provision_id"])
++            if entry.get("launch_id"):
++                payroll_fields["IDLANCAMENTO"] = int(entry["launch_id"])
++            else:
++                payroll_fields.pop("IDLANCAMENTO", None)
++            token = f"WA-provision-payroll-{entry['provision_id']}"
++        payroll_item_id = self.sharepoint.ensure_item(
++            token,
++            payroll_fields,
++            target_list="FOLHAPGTO",
++            idempotency_field="Title",
++            merge_existing=False,
++        )
++        verification = self.sharepoint.verify_item(
++            payroll_item_id,
++            payroll_fields,
++            [],
++            target_list="FOLHAPGTO",
++        )
++        if not (verification is True or (
++                isinstance(verification, dict) and verification.get("fields") is True
++                and verification.get("attachments") is True)):
++            raise RuntimeError("O vínculo à folha ainda não foi confirmado")
+         entry["TIPOPGTO"] = selected_type
+         entry["FOLHAPGTO_ID"] = payroll_item_id
+         state.setdefault("sharepoint", {}).setdefault("folhapgto_rows", []).append(
+@@ -32619,15 +32782,6 @@
+                 "verified": verification,
+             }
+         )
+-        pending["type_index"] = index + 1
+-        if pending["type_index"] < len(entries):
+-            self._send_text(state, f"✅ LANÇAMENTO {launch_id} ADICIONADO À FOLHAPGTO.")
+-            return self._prompt_launch_payroll_type(state, etag)
+-        self._send_text(
+-            state,
+-            f"✅ {len(entries)} LANÇAMENTO(S) ADICIONADO(S) À FOLHAPGTO.",
+-        )
+-        return self._continue_launch_after_payroll(state, etag)
+ 
+     def _continue_launch_after_payroll(
+         self, state: dict, etag: str | None
+@@ -36741,11 +36895,11 @@
+         elif stage == LAUNCH_PAYROLL_SELECTION_STAGE:
+             self._send_launch_payroll_entry_selection(state, etag)
+         elif stage == LAUNCH_PAYROLL_SHEET_STAGE:
+-            self._prompt_launch_payroll_sheet_for_current_supplier(
++            return self._prompt_launch_payroll_sheet_for_current_supplier(
+                 state, etag
+             )
+         elif stage == LAUNCH_PAYROLL_TYPE_STAGE:
+-            self._prompt_launch_payroll_type(state, etag)
++            return self._prompt_launch_payroll_type(state, etag)
+         elif stage == "cancelled_confirmation":
+             self._send_cancelled_confirmation_actions(state)
+         elif stage == "submission_failed":

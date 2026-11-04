@@ -1,0 +1,23 @@
+name: Backend payroll batch assignment
+on:
+  pull_request:
+    paths:
+      - 'backend-patches/payroll-batch-assignment/**'
+      - '.github/workflows/backend-payroll-batch-assignment.yml'
+  push:
+    branches: [main]
+    paths:
+      - 'backend-patches/payroll-batch-assignment/**'
+      - '.github/workflows/backend-payroll-batch-assignment.yml'
+permissions:
+  contents: read
+jobs:
+  installer-tests:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+      - run: python -B -m unittest discover -s backend-patches/payroll-batch-assignment/tests -p test_deploy.py -v
