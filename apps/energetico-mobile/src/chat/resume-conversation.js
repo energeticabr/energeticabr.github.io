@@ -24,22 +24,36 @@ function retryable(error) {
     || [408, 425, 500, 502, 503, 504].includes(Number(error?.status));
 }
 
+function timeoutError() {
+  return Object.assign(new Error('A retomada demorou demais. Seu rascunho foi preservado; tente novamente.'), { code: 'RESUME_TIMEOUT' });
+}
+
 // Only the current-question control query is retried. User answers, uploads,
 // confirmations and the controller's subsequent automatic actions stay outside.
-export async function resumeConversation(client, { signal, timeoutMs = 15_000, retryDelay,
+export async function resumeConversation(client, { signal, timeoutMs = 15_000, maxWaitMs = 30_000, retryDelay,
   onEvidenceProgress, ...options } = {}) {
   const deadline = Math.max(1, Number(timeoutMs) || 15_000);
+  const lifetime = new AbortController();
+  const cancelLifetime = () => lifetime.abort(cancellation(signal));
+  check(signal);
+  signal?.addEventListener('abort', cancelLifetime, { once: true });
+  const progressByStage = new Map();
+  let totalTimer;
+  const touchTotal = () => {
+    clearTimeout(totalTimer);
+    totalTimer = setTimeout(() => lifetime.abort(timeoutError()), Math.max(1, Number(maxWaitMs) || 30_000));
+  };
+  touchTotal();
+  try {
   for (let attempt = 0; ; attempt++) {
-    check(signal);
+    check(lifetime.signal);
     const request = new AbortController();
-    const cancel = () => request.abort(cancellation(signal));
-    signal?.addEventListener('abort', cancel, { once: true });
+    const cancel = () => request.abort(cancellation(lifetime.signal));
+    lifetime.signal.addEventListener('abort', cancel, { once: true });
     let timer;
-    const progressByStage = new Map();
     const touch = () => {
       clearTimeout(timer);
-      timer = setTimeout(() => request.abort(Object.assign(new Error(
-        'A retomada demorou demais. Seu rascunho foi preservado; tente novamente.'), { code: 'RESUME_TIMEOUT' })), deadline);
+      timer = setTimeout(() => request.abort(timeoutError()), deadline);
     };
     touch();
     try {
@@ -50,7 +64,7 @@ export async function resumeConversation(client, { signal, timeoutMs = 15_000, r
             const key = JSON.stringify([value?.requestId, value?.stage]);
             const percent = Number.isFinite(value?.percent) ? value.percent : -1;
             if (!progressByStage.has(key) || percent > progressByStage.get(key)) {
-              progressByStage.set(key, percent); touch();
+              progressByStage.set(key, percent); touch(); touchTotal();
             }
             onEvidenceProgress?.(value);
           } });
@@ -67,22 +81,27 @@ export async function resumeConversation(client, { signal, timeoutMs = 15_000, r
       })();
       return await cancelable(work, request.signal);
     } catch (error) {
-      check(signal);
+      check(lifetime.signal);
       if (!retryable(error)) throw error;
       if (attempt >= 2) throw Object.assign(new Error(
         'Não foi possível restabelecer a conexão com a VM. Seu rascunho foi preservado; toque em Retomar conversa para tentar novamente.',
         { cause: error }), { code: 'RESUME_CONNECTION_FAILED' });
     } finally {
       clearTimeout(timer);
-      signal?.removeEventListener('abort', cancel);
+      lifetime.signal.removeEventListener('abort', cancel);
       request.abort();
     }
     const ms = (attempt + 1) * 750;
-    if (retryDelay) await cancelable(Promise.resolve().then(() => retryDelay(ms)), signal);
+    if (retryDelay) await cancelable(Promise.resolve().then(() => retryDelay(ms)), lifetime.signal);
     else {
       let timer;
-      try { await cancelable(new Promise(resolve => { timer = setTimeout(resolve, ms); }), signal); }
+      try { await cancelable(new Promise(resolve => { timer = setTimeout(resolve, ms); }), lifetime.signal); }
       finally { clearTimeout(timer); }
     }
+  }
+  } finally {
+    clearTimeout(totalTimer);
+    signal?.removeEventListener('abort', cancelLifetime);
+    lifetime.abort();
   }
 }

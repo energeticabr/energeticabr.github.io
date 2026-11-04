@@ -6,6 +6,8 @@
 
 **Implementation:** Add an abortable, bounded coordinator around only the preflight and `input_continue` control query. Retry transient connection failures with fresh controllers and bounded delays; reset the inactivity watchdog only for advancing PDF progress. Keep financial/text writes outside the retry loop. Forward cancellation for the exact empty `input_continue` control payload. Scope UI/progress ownership to the current resume attempt, hide stale errors while reconnecting, and release the busy state on timeout/cancel. Preserve local files and drafts without a destructive page reload.
 
+Preserve the existing total 30-second inactivity bound across attempts and backoff, in addition to the 15-second per-attempt watchdog. Only advancing PDF evidence renews the shared budget. The unchanged attachment-resume-recovery stalled-VM regression exposed the missing shared bound in the first CI run; it and new lifetime/backoff regressions passed after adding the coordinator lifetime controller.
+
 - [x] Reproduce the pictured failed-startup/manual-resume path with the real chat client and synthetic network failures.
 - [x] Cover a hung preflight, ignored cancellation/late response, transient recovery, persistent failure followed by another tap, progress during PDF processing, and sign-out.
 - [ ] Implement minimal coordinator/controller/client changes and run focused regressions, full suite, signature guard, builds, and 320/390px UI checks.

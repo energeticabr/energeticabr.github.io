@@ -33,7 +33,7 @@ test('advancing PDF evidence keeps the inactivity deadline alive and is followed
       aborted = signal.aborted;
     },
     sendText: async () => { resumes++; return 'restored'; },
-  }, { timeoutMs: 30, retryDelay: async () => {} });
+  }, { timeoutMs: 30, maxWaitMs: 30, retryDelay: async () => {} });
   assert.equal(result, 'restored');
   assert.equal(resumes, 1);
   assert.equal(aborted, false);
@@ -83,4 +83,32 @@ test('regressing PDF progress cannot extend the recovery watchdog indefinitely',
     }, { signal: abort.signal, timeoutMs: 20, retryDelay: async () => {} }), error => error.code === 'RESUME_CONNECTION_FAILED');
     assert.equal(reads, 3);
   } finally { clearTimeout(guard); }
+});
+
+test('the total inactivity cap releases recovery when the VM request never settles', async t => {
+  t.mock.timers.enable({ apis: ['setTimeout'] });
+  let settled = false, signal;
+  const pending = resumeConversation({ sendText: (_body, options) => {
+    signal = options.progressSignal; return new Promise(() => {});
+  } }).then(() => { settled = true; return 'unexpected success'; }, error => { settled = true; return error.code; });
+  await new Promise(setImmediate);
+  t.mock.timers.tick(30_000); await new Promise(setImmediate);
+  assert.equal(settled, true, 'all attempts share the established thirty-second inactivity budget');
+  assert.equal(await pending, 'RESUME_TIMEOUT');
+  assert.equal(signal.aborted, true);
+});
+
+test('the shared inactivity cap also cancels a pending retry delay', async t => {
+  t.mock.timers.enable({ apis: ['setTimeout'] });
+  let backoff = false, settled = false, requests = 0;
+  const pending = resumeConversation({ sendText: () => { requests++; return new Promise(() => {}); } }, {
+    timeoutMs: 20, maxWaitMs: 60, retryDelay: () => { backoff = true; return new Promise(() => {}); },
+  }).catch(error => { settled = true; return error.code; });
+  await new Promise(setImmediate); t.mock.timers.tick(20); await new Promise(setImmediate);
+  assert.equal(backoff, true);
+  assert.equal(settled, false);
+  t.mock.timers.tick(40); await new Promise(setImmediate);
+  assert.equal(settled, true);
+  assert.equal(await pending, 'RESUME_TIMEOUT');
+  assert.equal(requests, 1);
 });
