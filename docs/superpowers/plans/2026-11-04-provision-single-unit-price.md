@@ -10,4 +10,4 @@
 - [x] Observe the missing-price regression fail on current production source.
 - [x] Reuse the existing numeric input/edit completion route, then run grouped settlement regression suites (35 passed against installed source).
 - [x] Package the minimal source diff with pinned baseline/candidate hashes, backup and rollback; deploy and verify shared service health and installed hash.
-- [ ] Commit and publish the reviewable patch and verification evidence.
+- [x] Commit and publish the reviewable patch and verification evidence (PR #743).
