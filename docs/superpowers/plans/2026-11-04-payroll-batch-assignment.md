@@ -30,17 +30,17 @@
 
 **Files:** private baseline/candidate `worker/workflow.py`; public `backend-patches/payroll-batch-assignment/tests/test_batch_assignment.py` and `patch_backend.py`.
 
-- [ ] Write real ChannelBridge tests covering both modes, suppliers/months, persistence, invalid replies and retries.
-- [ ] Run against baseline and confirm expected missing-mode failures.
-- [ ] Add mode prompts inside the existing sheet/type stages. Resolve shared month independently and reuse verified per-line writes.
-- [ ] Run focused tests and compare full backend baseline/candidate failures.
+- [x] Write real ChannelBridge tests covering both modes, suppliers/months, persistence, invalid replies and retries.
+- [x] Run against baseline and confirm expected missing-mode failures.
+- [x] Add mode prompts inside the existing sheet/type stages. Resolve shared month independently and reuse verified per-line writes.
+- [x] Run focused tests and compare full backend baseline/candidate failures.
 
 ### Task 2: Review, publish and verify
 
 **Files:** public `backend-patches/payroll-batch-assignment/{deploy.py,deploy.sh,deployment_gate.sh,deploy-manifest.json,source.patch,README.md,verification.md}`.
 
-- [ ] Package only reviewed workflow changes with independent production/mirror hashes.
-- [ ] Exercise installer drift/rollback and actual app renderer with synthetic channel messages at 320/390 pixels.
-- [ ] Review the complete diff and fix material issues with reproducing tests.
-- [ ] Commit, push, merge and verify CI where applicable.
-- [ ] Deploy with ingress gate and verify installed digest, services and health; rerun focused tests using installed runtime.
+- [x] Package only reviewed workflow changes with independent production/mirror hashes.
+- [x] Exercise installer drift/rollback and actual app renderer with synthetic channel messages at 320/390 pixels.
+- [x] Review the complete diff and fix material issues with reproducing tests.
+- [x] Commit, push, merge and verify CI where applicable.
+- [x] Deploy with ingress gate and verify installed digest, services and health; rerun focused tests using installed runtime.

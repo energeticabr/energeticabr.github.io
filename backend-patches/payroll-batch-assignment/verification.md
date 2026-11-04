@@ -15,7 +15,22 @@
 
 ## Broader regression and publication
 
-Full private backend baseline/candidate comparison and production publication are pending. Local behavior tests, installer tests and source review alone are not publication evidence. The complete backend includes legacy failures; their exact comparison will be recorded before rollout.
+The complete private backend command (`python -B -m unittest discover -s tests -v`, through the snapshot runner) was compared on Windows with the same configuration and external fixtures. The runner releases failed TestCase objects after retaining their names and complete tracebacks, avoiding catalog retention on the small VM.
+
+| Revision | Tests | Failures | Errors | Skipped |
+| --- | ---: | ---: | ---: | ---: |
+| Baseline | 2210 | 1266 | 141 | 3 |
+| Candidate | 2210 | 1266 | 140 | 3 |
+
+New failing/error names: **zero**. The full legacy suite is **not green**. Existing failures include legacy workflow navigation expectations and the missing `test_watchdog_recovery_notice` import. The baseline-only `SignatureServiceTests.test_rejects_unauthorized_request` error was a local `ConnectionAbortedError: WinError 10053`; it did not recur on the candidate, and is not claimed as a production fix. Complete logs and exact failure-name JSON remain in the private task evidence.
+
+Implementation [PR #747](https://github.com/energeticabr/energeticabr.github.io/pull/747) merged as `f4a3627a8ecb5eb5829d78d69a9ecf3ca88cf23f`. Hosted PR checks passed: installer tests (8 seconds) and both signature checks (10 seconds each).
+
+The pinned package was deployed on 2026-11-04 at **16:23:06 UTC**. Manifest SHA-256: `cc58ccabf210b83c6dc74656eefab508a14cf3325552a7f9599d36540351af48`. The installer returned `deployed` / health `ok`; backup and receipt are under `/var/backups/energetica-whatsapp/payroll-batch-assignment-20261104T162306404803Z`.
+
+An independent post-install read confirmed both exact candidate hashes above. Production and mirror configuration hashes remained respectively `e72f874a925a2155906009dddb549131ceeb91d26071d3977a44330b22a6b4a3` and `a951c15f30d78409101b7829bdf9bad3cf118ac7541c3dcaa705663e962bf069`. Both services were active, HTTP health returned `{"status":"ok","channel":"generic"}`, and no temporary ingress gate remained.
+
+All **24 feature tests passed again using the installed production runtime**, with synthetic external records and temporary state. No real financial records, attachments or conversation files were changed by installation or validation.
 
 Android, iOS and Windows/web use the same published runtime; new client binaries are unnecessary for this patch.
 
