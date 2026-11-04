@@ -2,6 +2,7 @@ import { createPinchZoom } from "./pinch-zoom.js";
 import { beginLoadingTask } from "../ui/loading-task.js";
 import { readDdaCopyAction, positionDdaCopyButton } from './dda-pdf-copy.js';
 import { copyDdaText } from '../ui/dda-card.js';
+import { readPdfTextContent } from './pdf-text-content.js';
 
 // Several canvases stay alive while the user scrolls. A lower per-page cap
 // avoids Safari/iOS dropping the whole preview when a PDF has many pages.
@@ -244,7 +245,7 @@ export function createPdfPreview({
   }
 
   async function renderSelectableText(page, canvas, displayed, generation) {
-    if (!TextLayer || !page.getTextContent || destroyed || generation !== renderGeneration) return;
+    if (!TextLayer || (!page.getTextContent && !page.streamTextContent) || destroyed || generation !== renderGeneration) return;
     const node = element('div', 'attachment-preview-pdf-text');
     // Pinching may have resized this canvas while its render was pending.
     // The text viewport stays at its base size; applyZoom scales both together.
@@ -258,7 +259,7 @@ export function createPdfPreview({
     const text = { node, renderer: null };
     textLayers.set(canvas, text);
     try {
-      const content = await page.getTextContent();
+      const content = await readPdfTextContent(page);
       if (destroyed || generation !== renderGeneration) { releaseTextLayer(canvas); return; }
       if (!content.items.some(item => item.str?.trim())) { releaseTextLayer(canvas); return; }
       text.renderer = new TextLayer({ textContentSource: content, container: layer, viewport: displayed });

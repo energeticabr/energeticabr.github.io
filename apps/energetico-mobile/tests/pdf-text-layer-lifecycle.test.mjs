@@ -4,7 +4,7 @@ import { JSDOM } from 'jsdom';
 import { createPdfPreview } from '../src/web/pdf-preview.js';
 const tick = () => new Promise(resolve => setImmediate(resolve));
 
-function setup(t, { content = async () => ({ items: [{ str: 'Linha digitável' }], styles: {} }), render = () => Promise.resolve(), renderPage = () => Promise.resolve(), numPages = 1 } = {}) {
+function setup(t, { content = async () => ({ items: [{ str: 'Linha digitável' }], styles: {} }), streamContent, render = () => Promise.resolve(), renderPage = () => Promise.resolve(), numPages = 1 } = {}) {
   const dom = new JSDOM('<div id="pdf"></div>', { url: 'https://example.test/' });
   const documentRef = dom.window.document, container = documentRef.querySelector('#pdf');
   dom.window.HTMLCanvasElement.prototype.getContext = () => ({});
@@ -17,7 +17,7 @@ function setup(t, { content = async () => ({ items: [{ str: 'Linha digitável' }
   const pdf = { numPages, async getPage() { return {
     getViewport: ({ scale }) => ({ width: 600 * scale, height: 900 * scale, scale }),
     render: () => ({ promise: renderPage(), cancel() {} }),
-    getTextContent: content, cleanup() {},
+    getTextContent: content, ...(streamContent && { streamTextContent: streamContent }), cleanup() {},
   }; } };
   const viewer = createPdfPreview({ blob: new Blob(['PDF']), container, documentRef,
     fit: 'page', navigation: 'paged',
@@ -26,6 +26,24 @@ function setup(t, { content = async () => ({ items: [{ str: 'Linha digitável' }
   t.after(() => { viewer.destroy(); dom.window.close(); });
   return { viewer, container, documentRef, cancelled: () => cancelled, started: () => started };
 }
+
+test('PDF text remains selectable when its readable stream has no asynchronous iterator', async t => {
+  const streamContent = () => {
+    const stream = new ReadableStream({ start(controller) {
+      controller.enqueue({ items: [{ str: 'Linha digitável fictícia' }], styles: {}, lang: 'pt-BR' });
+      controller.close();
+    } });
+    Object.defineProperty(stream, Symbol.asyncIterator, { value: undefined });
+    return stream;
+  };
+  const { viewer, container, started } = setup(t, { streamContent,
+    content: async () => { for await (const chunk of streamContent()) { void chunk; } },
+  });
+  await viewer.ready;
+  assert.equal(viewer.hasRenderedPages(), true);
+  assert.equal(started(), 1, 'the text renderer must receive the extracted text on WebKit');
+  assert.ok(container.querySelector('.attachment-preview-pdf-text-layer'));
+});
 
 test('scanned pages remain visible without an empty text selection overlay', async t => {
   const { viewer, container } = setup(t, { content: async () => ({ items: [], styles: {} }) });
