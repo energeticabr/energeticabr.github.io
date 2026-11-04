@@ -1,0 +1,22 @@
+name: Verificar sincronização de etapa das presenças
+on:
+  push:
+    branches: [main]
+    paths:
+      - 'backend-patches/attendance-assignment-stage/**'
+      - '.github/workflows/attendance-stage-sync.yml'
+  pull_request:
+    paths:
+      - 'backend-patches/attendance-assignment-stage/**'
+      - '.github/workflows/attendance-stage-sync.yml'
+  workflow_dispatch:
+jobs:
+  deployment-guards:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+      - name: Testar proteção de implantação e rollback
+        run: python -B -m unittest discover -s backend-patches/attendance-assignment-stage -p 'test_deploy.py' -v
