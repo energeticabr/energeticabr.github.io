@@ -12,6 +12,8 @@
   pulados. O CI executa os testes do instalador no Linux.
 - Trava de assinatura: 14 blocos intactos; nenhum arquivo móvel foi alterado.
 - Revisão independente: sem problemas Critical ou Important.
+- 12 estados visuais (confirmação, catálogo, filtro e busca vazia em
+  320/390/1200 px) aprovados, com nomes longos, botões acessíveis e sem overflow.
 
 ## Limitação da suíte legada
 
@@ -28,6 +30,20 @@ da tarefa, fora do Git. Exemplos inalterados:
 
 ## Publicação
 
-As evidências de CI, implantação, hashes e saúde serão registradas após a
-publicação. Os testes sintéticos não cadastram fornecedores nem gravam
-lançamentos reais.
+- [PR #745](https://github.com/energeticabr/energeticabr.github.io/pull/745)
+  integrado como `8098aacef3964cb518def6b49fd2a53c6b8eca00`.
+- [CI da revisão](https://github.com/energeticabr/energeticabr.github.io/actions/runs/41839641404)
+  e [CI de main](https://github.com/energeticabr/energeticabr.github.io/actions/runs/41839879342):
+  sucesso; 37 testes do instalador no Linux, sem skips.
+- Na VM: 22 testes do fluxo e 37 do instalador aprovados antes da troca;
+  depois da instalação, os mesmos 22 testes passaram importando diretamente
+  `/opt/energetica-whatsapp/worker/workflow.py`.
+- Manifesto revisado: `ee6796591185dd0941ac9a02fe918dfe412eb221f82a23ad65d302bca15f8f36`.
+- Instalador retornou `deployed`, com saúde `ok` e hash instalado igual ao
+  candidato. Verificação independente confirmou novamente esse hash.
+- Backup: `/var/backups/energetica-whatsapp/order-supplier-registration-20261104T133823908593Z`.
+- Hash do espelho preservado: `f9d768e9c6238a0f28e5377b14237692790cc16292c161d9af5e14c035d5c986`.
+- Serviços ativos, saúde do bridge `ok`, gate removido após a instalação.
+- Android, iOS e Windows/web recebem esta mudança pelo backend compartilhado;
+  os bundles dos clientes não foram alterados. Não foi feito cadastro de
+  fornecedor nem lançamento real para validar a alteração.
