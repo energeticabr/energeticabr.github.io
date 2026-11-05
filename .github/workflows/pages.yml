@@ -19,7 +19,8 @@ permissions:
 
 concurrency:
   group: pages
-  cancel-in-progress: true
+  # Finish the current deployment; the newest main revision waits in the queue.
+  cancel-in-progress: false
 
 jobs:
   deploy:
@@ -71,6 +72,7 @@ jobs:
         env:
           GH_TOKEN: ${{ github.token }}
         with:
+          retries: 3
           script: |
             const fs = require('node:fs');
             const path = require('node:path');

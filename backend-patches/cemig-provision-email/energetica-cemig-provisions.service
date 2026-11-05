@@ -1,5 +1,5 @@
 [Unit]
-Description=Energetica - PDFs e valores Cemig Xavante recorrencia 33
+Description=Energetica - PDFs e valores Cemig recorrencias 4 e 33 por mes
 After=network-online.target
 Wants=network-online.target
 
