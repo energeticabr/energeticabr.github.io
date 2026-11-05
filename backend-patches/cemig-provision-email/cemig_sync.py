@@ -220,8 +220,11 @@ def reconcile(store, bill, files, dry_run=False):
             for f in files:
                 digest = sha256(f['content']).hexdigest()
                 if digest in existing: continue
-                # Same deterministic name on both sides; the normal mirror reuses its content hash.
-                name = f'{profile.supplier}-{bill.reference}-{digest}.pdf'
+                original_name = f'{profile.supplier}-{bill.reference}-{digest}.pdf'
+                # The standard mirror marks row evidence with PROV-child-hash.
+                # An unqualified parent original would fan out as a second DESC
+                # copy to paid launches/orders alongside the child's own copy.
+                name = original_name if kind == CHILD else f'PROV-{child}-{digest}-{original_name}'
                 current, _ = store.read(CHILD, child)
                 current_head, _ = store.read(PARENT, parent)
                 if fingerprint(current) != before[CHILD] or fingerprint(current_head) != before[PARENT]:
