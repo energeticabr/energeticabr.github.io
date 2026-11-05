@@ -28,5 +28,5 @@ const confirmed=writes===1&&!view.element.hidden&&document.querySelector('.ddr-l
 view.close();await view.open();
 document.querySelector('[data-dda-provision-pencil]').click();await frame();
 document.querySelector('input[type=radio]').click();await review();
-document.documentElement.dataset.layout=JSON.stringify({fits,hit,transform,dimensions,focusInside,writesBefore,cancelled,confirmed});
+document.documentElement.dataset.layout=JSON.stringify({fits,hit,transform,dimensions,bounds:{left:rect.left,right:rect.right,top:rect.top,bottom:rect.bottom},focusInside,writesBefore,cancelled,confirmed});
 </script></body></html>

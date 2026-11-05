@@ -35,8 +35,12 @@ export function ensureEditReviewStyles(document) {
        containing block. Apply the same orientation to the dialog itself. */
     @media (orientation: portrait) {
       .edit-review--landscape { position: fixed; inset: auto; top: 50%; left: 50%; margin: 0;
-        width: min(54rem, calc(100dvh - 2rem)); max-width: calc(100dvh - 2rem);
-        max-height: calc(100vw - 2rem); transform: translate(-50%, -50%) rotate(90deg); }
+        --review-edge-y: max(1rem, env(safe-area-inset-top), env(safe-area-inset-bottom));
+        --review-edge-x: max(1rem, env(safe-area-inset-left), env(safe-area-inset-right));
+        width: min(54rem, calc(100dvh - 2 * var(--review-edge-y)));
+        max-width: calc(100dvh - 2 * var(--review-edge-y));
+        max-height: calc(100vw - 2 * var(--review-edge-x));
+        transform: translate(-50%, -50%) rotate(90deg); }
     }
   `;
   (document.head || document.documentElement).append(style);
