@@ -1,5 +1,5 @@
 param([ValidateSet('Setup','Publish','Replay')][string]$Mode='Publish',[string]$QueueId,[string]$MessageId,
-      [ValidateSet('cemig','petranet')][string]$Provider='cemig')
+      [ValidateSet('cemig','petranet')][string]$Provider='cemig',[switch]$CreateReplay)
 $ErrorActionPreference='Stop'
 $authRoot='C:/Users/Bernardonotini/AppData/Local/Packages/OpenAI.Codex_2p2nqsd0c76g0/LocalCache/Local/Energetica/DdaMonitor'
 . (Join-Path $authRoot 'SharePointFlow.ps1')
@@ -48,15 +48,17 @@ if($Mode-eq'Setup'){
     if(-not $QueueId){throw 'QueueId required'}
     $state.queueId=$QueueId;Save-State
     $python='C:/Users/Bernardonotini/.cache/codex-runtimes/codex-primary-runtime/dependencies/python/python.exe'
-    foreach($kind in @('event','replay')){
+    $kinds=@('event')
+    if($CreateReplay){$kinds+=@('replay')}
+    foreach($kind in $kinds){
         $extra=@()
         if($kind-eq'replay'){$extra=@('--replay')}
         $definition=(& $python (Join-Path $PSScriptRoot 'flow_definition.py') $QueueId --provider $Provider @extra)|ConvertFrom-Json -AsHashtable
         $key=if($Provider-eq'cemig'){$kind}else{$kind+'_'+$Provider}
         $name=if($Provider-eq'petranet'){
-            if($kind-eq'event'){'PETRANET - receber faturas da recorrencia 14'}else{'PETRANET - recuperar fatura do email'}
+            if($kind-eq'event'){'PETRANET - buscar faturas diariamente - recorrencia 14'}else{'PETRANET - recuperar fatura do email'}
         }else{
-            if($kind-eq'event'){'CEMIG - receber faturas das recorrencias 4 e 33'}else{'CEMIG - recuperar fatura do email'}
+            if($kind-eq'event'){'CEMIG - buscar faturas diariamente - recorrencias 4 e 33'}else{'CEMIG - recuperar fatura do email'}
         }
         Set-CloudFlow $key $name $definition $connections
     }
