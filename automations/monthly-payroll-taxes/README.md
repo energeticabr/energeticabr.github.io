@@ -60,6 +60,12 @@ Cada POST financeiro exige uma intenção durável antes do envio; resposta ince
 registro confirmado para uma intenção anterior, o fluxo para e solicita conferência.
 Registros divergentes e PDFs de conteúdo diferente não são sobrescritos.
 
+Os nomes de arquivos de intenção substituem os dois-pontos das chaves por
+hífens antes da codificação da URI. O OneDrive decodifica nomes recebidos pelo
+conector e recusa dois-pontos, mesmo quando enviados como `%3A`. Leitura,
+reserva, criação e preflight usam a mesma transformação; as chaves financeiras
+no SharePoint e os nomes já válidos de intenções FOLHAPGTO são preservados.
+
 Execução manual fora do dia01 gera somente a prévia no namespace separado,
 sem descritivos/provisões/FOLHAPGTO. Isso não autoriza a carga inicial: esta possui
 plano privado próprio e verificação de ETags/estado pendente antes da substituição.
