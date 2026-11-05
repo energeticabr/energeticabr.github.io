@@ -72,6 +72,7 @@ jobs:
         env:
           GH_TOKEN: ${{ github.token }}
         with:
+          retries: 3
           script: |
             const fs = require('node:fs');
             const path = require('node:path');
