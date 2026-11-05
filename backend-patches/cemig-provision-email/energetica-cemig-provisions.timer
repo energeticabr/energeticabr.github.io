@@ -1,9 +1,9 @@
 [Unit]
-Description=Energetica - processar fila Cemig Xavante a cada minuto
+Description=Energetica - processar fila Cemig Xavante diariamente as 07h de Brasilia
 
 [Timer]
-OnBootSec=2min
-OnUnitInactiveSec=60s
+OnCalendar=*-*-* 07:00:00 America/Sao_Paulo
+AccuracySec=1min
 Persistent=true
 Unit=energetica-cemig-provisions.service
 
