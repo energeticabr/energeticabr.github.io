@@ -50,7 +50,7 @@ if($Mode-eq'Setup'){
         $extra=@()
         if($kind-eq'replay'){$extra=@('--replay')}
         $definition=(& $python (Join-Path $PSScriptRoot 'flow_definition.py') $QueueId @extra)|ConvertFrom-Json -AsHashtable
-        $name=if($kind-eq'event'){'CEMIG XAVANTE - receber faturas para recorrencia 33'}else{'CEMIG XAVANTE - recuperar fatura do email'}
+        $name=if($kind-eq'event'){'CEMIG - receber faturas das recorrencias 4 e 33'}else{'CEMIG - recuperar fatura do email'}
         Set-CloudFlow $kind $name $definition $connections
     }
 } else {

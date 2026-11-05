@@ -13,7 +13,7 @@ class FlowTests(unittest.TestCase):
 
     def test_ready_only_after_durable_envelope(self):
         d=definition('queue-guid')
-        actions=d['actions']['Only_Xavante']['actions']
+        actions=d['actions']['Only_configured_properties']['actions']
         self.assertEqual(actions['Store_original_email']['inputs']['parameters']['displayName'],'mail.json')
         self.assertEqual(actions['Mark_ready']['runAfter'],{'Store_original_email':['Succeeded']})
         self.assertIn('RECEIVING',str(actions['Create_queue']))
@@ -27,17 +27,24 @@ class FlowTests(unittest.TestCase):
     def test_protect_original_email_and_pdf_payloads(self):
         d=definition('queue-guid')
         self.assertEqual(d['actions']['Read_email']['runtimeConfiguration']['secureData']['properties'],['inputs','outputs'])
-        actions=d['actions']['Only_Xavante']['actions']
+        actions=d['actions']['Only_configured_properties']['actions']
         self.assertEqual(actions['Store_original_email']['runtimeConfiguration']['secureData']['properties'],['inputs','outputs'])
 
     def test_sharepoint_http_body_is_json_string_with_expressions(self):
-        actions=definition('queue-guid')['actions']['Only_Xavante']['actions']
+        actions=definition('queue-guid')['actions']['Only_configured_properties']['actions']
         body=actions['Create_queue']['inputs']['parameters']['parameters/body']
         self.assertIsInstance(body,str)
         self.assertIn('@{',body)
 
     def test_odata_quotes_escaped_inside_flow_expression(self):
-        action=definition('queue-guid')['actions']['Only_Xavante']['actions']['Mark_ready']
+        action=definition('queue-guid')['actions']['Only_configured_properties']['actions']['Mark_ready']
         self.assertIn("guid''queue-guid''",action['inputs']['parameters']['parameters/uri'])
+
+    def test_address_filter_includes_office_and_xavante_only(self):
+        condition=definition('queue-guid')['actions']['Only_configured_properties']['expression']
+        self.assertIn('OSCAR NIEMEYER',str(condition))
+        self.assertIn('ANTONIO TORRES DOS SANTOS',str(condition))
+        self.assertIn('1033',str(condition))
+        self.assertIn('904',str(condition))
 
 if __name__=='__main__':unittest.main()
