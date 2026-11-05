@@ -14,6 +14,10 @@ await report.open();
 await document.fonts.ready;
 await new Promise(r=>requestAnimationFrame(()=>requestAnimationFrame(r)));
 const state={overflow:document.documentElement.scrollWidth>innerWidth+1,rows:[],issued:[]};
+state.metrics=[...document.querySelectorAll('.ddr-metric')].map(card=>({
+ label:card.querySelector('span').textContent,value:card.querySelector('strong').textContent.replace(/\s/g,' '),
+ fits:card.scrollWidth<=card.clientWidth+1,top:card.offsetTop
+}));
 for(const due of document.querySelectorAll('.ddr-due')){
  const badge=due.querySelector('.ddr-due-days'),date=due.querySelector('.ddr-due-date');
  if(!badge){state.missing=due.textContent;continue;}
