@@ -82,6 +82,7 @@ class NativePreflight:
                 'div':lambda a,b:a/b, 'formatNumber':lambda value,pattern,locale:format(value,'.2f'),
                 'add':lambda a,b:a+b, 'base64ToBinary':lambda value:base64.b64decode(value,validate=True),
                 'json':json.loads, 'uriComponent':lambda value:quote(str(value),safe=''), 'decodeUriComponent':unquote,
+                'replace':lambda value,old,new:value.replace(old,new), 'workflow':lambda:{'run':{'name':'RUN123'}},
                 'base64':lambda value:value['$content'] if isinstance(value,dict) else base64.b64encode(value if isinstance(value,bytes) else value.encode()).decode(),
                 'setProperty':lambda value,key,item:{**value,key:item},
                 'variables':lambda name:self.variables[name], 'body':lambda name:self.bodies[name],
@@ -289,6 +290,32 @@ class MonthlyFlowTests(unittest.TestCase):
                 else:
                     previous = len(engine.calls); engine.run(final)
                     self.assertGreater(len(engine.calls),previous)
+
+    def test_intent_filenames_survive_onedrive_decoding_and_share_one_reservation_key(self):
+        fixture = preflight_fixture()
+        engine = NativePreflight(fixture)
+        generated = dict(actions_in(flow.build_definition()['actions']))
+        engine.items.update(Cada_Encargo='INSS', Conferir_Tipos='INSS',
+                            Cada_Fornecedor=fixture['plan']['rows'][0],
+                            Conferir_Pessoas=fixture['plan']['rows'][0])
+        engine.bodies['Reler_Provisao'] = {'value':[{'Id':123}]}
+        engine.bodies['Buscar_Preflight_Provisao'] = {'value':[{'Id':123}]}
+        names = []
+        for label in ('Descritivo','Provisao','Folha'):
+            with self.subTest(label=label):
+                paths = [engine.evaluate(generated[action+label]['inputs']['parameters'][field])
+                         for action,field in [('Ler_Intencao_','path'),
+                                              ('Reservar_Intencao_','destination'),
+                                              ('Conferir_Intencao_','path'),
+                                              ('Ler_Intencao_Preflight_','path')]]
+                self.assertEqual(len(set(paths)),1)
+                temporary = engine.evaluate(generated['Salvar_Intencao_'+label]['inputs']['parameters']['name'])
+                self.assertEqual('/'+temporary.replace('-RUN123.json','.json'),paths[0])
+                for path in paths+[temporary]:
+                    self.assertNotRegex(unquote(path).lstrip('/'), r'[:%*<>?/\\|"#]')
+                names.append(paths[0])
+        self.assertEqual(len(set(names)),3)
+        self.assertEqual(names[-1],'/ENCARGOS-INTENCAO-Folha-123.json')
 
     def test_recovery_paginates_current_hr_and_sheets_without_recalculating_salary(self):
         recovery = flow.build_definition()['actions']['Recuperar_Ou_Calcular']['actions']

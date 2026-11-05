@@ -103,7 +103,7 @@ def record_checks(actual, fields):
 
 
 def intent_path(label, value):
-    return "@concat('/ENCARGOS-INTENCAO-', uriComponent(concat('"+label+"-', string("+value+"))), '.json')"
+    return "@concat('/ENCARGOS-INTENCAO-', uriComponent(replace(concat('"+label+"-', string("+value+")), ':', '-')), '.json')"
 
 
 def parent_payload(tax, branches):
@@ -149,7 +149,7 @@ def ensure(guid, label, fields, field, value, previous=None, numeric=False, sour
     claim[guard]['runAfter'] = {'Ler_Intencao_'+label:['Succeeded','Failed','TimedOut']}
     temp = 'Salvar_Intencao_'+label
     claim[temp] = api('shared_onedriveforbusiness','CreateFile',{'folderPath':'/',
-        'name':"@concat('ENCARGOS-INTENCAO-', uriComponent("+token+"), '-', workflow()?['run']?['name'], '.json')",
+        'name':"@concat('ENCARGOS-INTENCAO-', uriComponent(replace("+token+", ':', '-')), '-', workflow()?['run']?['name'], '.json')",
         'body':"@string(addProperty(addProperty(json('{}'), 'run', workflow()?['run']?['name']), 'fields', outputs('"+fields_name+"')))"},guard)
     reserve = 'Reservar_Intencao_'+label
     claim[reserve] = api('shared_onedriveforbusiness','CopyDriveFile',{'id':"@body('"+temp+"')?['Id']",'destination':intent,'overwrite':False},temp)
