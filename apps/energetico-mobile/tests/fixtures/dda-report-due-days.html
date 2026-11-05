@@ -8,12 +8,12 @@ const dates=['2026-11-04','2026-11-05','2026-11-03','2026-11-09',null];
 const report=createDdaReportView({document,now:()=>new Date('2026-11-04T22:00:00-03:00'),
  data:{loadSnapshot:async()=>({rows:dates.map((due,i)=>({id:String(i+1),fields:{
   Title:'FORNECEDOR FICTÍCIO DE MATERIAIS E EQUIPAMENTOS PARA CONSTRUÇÃO LTDA',
-  VENCIMENTO:due,EMISSAO:'2026-10-23',VALOR:2500,SITUACAO:'Em aberto',BANCO:'BANCO EXEMPLO',DOCUMENTO:'EX-001'
+  VENCIMENTO:due,EMISSAO:i===4?null:'2026-10-23',VALOR:2500,SITUACAO:'Em aberto',BANCO:'BANCO EXEMPLO',DOCUMENTO:'EX-001'
  }}))})}});
 await report.open();
 await document.fonts.ready;
 await new Promise(r=>requestAnimationFrame(()=>requestAnimationFrame(r)));
-const state={overflow:document.documentElement.scrollWidth>innerWidth+1,rows:[]};
+const state={overflow:document.documentElement.scrollWidth>innerWidth+1,rows:[],issued:[]};
 for(const due of document.querySelectorAll('.ddr-due')){
  const badge=due.querySelector('.ddr-due-days'),date=due.querySelector('.ddr-due-date');
  if(!badge){state.missing=due.textContent;continue;}
@@ -22,7 +22,19 @@ for(const due of document.querySelectorAll('.ddr-due')){
  state.rows.push({text:badge.textContent,tone:due.dataset.dueTone,color:style.color,background:style.backgroundColor,
   dateColor:getComputedStyle(due).color,border:style.borderTopColor,fontSize:parseFloat(style.fontSize),height:badge.offsetHeight,
   below:badge.offsetTop>=date.offsetTop+date.offsetHeight,
+  centered:Math.abs(badge.offsetLeft+badge.offsetWidth/2-due.clientWidth/2)<=1,
   fits:badge.offsetWidth<=due.clientWidth&&badge.offsetLeft>=0&&badge.offsetLeft+badge.offsetWidth<=due.clientWidth,
+  printColorAdjust:style.printColorAdjust});
+}
+for(const cell of document.querySelectorAll('.ddr-issued-date')){
+ const badge=cell.querySelector('.ddr-issued-days'),date=cell.querySelector('strong');
+ if(!badge){state.missingIssued=cell.textContent;continue;}
+ const style=getComputedStyle(badge);
+ state.issued.push({text:badge.textContent,color:style.color,background:style.backgroundColor,
+  fontSize:parseFloat(style.fontSize),height:badge.offsetHeight,
+  below:badge.offsetTop>=date.offsetTop+date.offsetHeight,
+  centered:Math.abs(badge.offsetLeft+badge.offsetWidth/2-cell.clientWidth/2)<=1,
+  fits:badge.offsetWidth<=cell.clientWidth&&badge.offsetLeft>=0&&badge.offsetLeft+badge.offsetWidth<=cell.clientWidth,
   printColorAdjust:style.printColorAdjust});
 }
 document.documentElement.dataset.dueDays=JSON.stringify(state);
