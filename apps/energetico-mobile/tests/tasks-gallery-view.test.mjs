@@ -116,7 +116,7 @@ test('check verde abre apenas data conclusão e concluído; cancelar não grava 
   assert.equal(ctx.document.activeElement, trigger);
 });
 
-test('submeter conclusão confirma ID e data no novo layout por 2 segundos e retorna à galeria atualizada', async t => {
+test('submeter conclusão confirma ID e data por 1,5 segundo e retorna à galeria atualizada', async t => {
   t.mock.timers.enable({ apis: ['setTimeout'] });
   const writes = [], saving = deferred();
   const ctx = await setup(t, { now: () => new Date('2026-10-03T12:00:00Z'), data: {
@@ -140,7 +140,7 @@ test('submeter conclusão confirma ID e data no novo layout por 2 segundos e ret
   const receipt = dialog.querySelector('.launch-completion');
   assert.ok(receipt, 'confirmação usa o cartão compartilhado de sucesso');
   dialog.parentElement.click();
-  assert.equal(dialog.isConnected, true, 'preserva recibo de dois segundos');
+  assert.equal(dialog.isConnected, true, 'preserva recibo de 1,5 segundo');
   assert.equal(receipt.querySelector('h2').textContent, 'ATIVIDADE CONCLUÍDA!');
   assert.deepEqual([...receipt.querySelectorAll('.launch-completion__row')].map(row =>
     [row.querySelector('dt').textContent, row.querySelector('dd').textContent]), [
@@ -149,8 +149,8 @@ test('submeter conclusão confirma ID e data no novo layout por 2 segundos e ret
   assert.equal(receipt.getAttribute('role'), 'status');
   assert.equal(ctx.root().querySelector('[data-task-completion-form]'), null, 'formulário não pode ser submetido novamente durante a confirmação');
   assert.equal(ctx.root().querySelector('.og-content').inert, true);
-  t.mock.timers.tick(1999); await settle();
-  assert.equal(ctx.root().querySelector('.launch-completion'), receipt, 'permanece visível até completar os 2 segundos');
+  t.mock.timers.tick(1499); await settle();
+  assert.equal(ctx.root().querySelector('.launch-completion'), receipt, 'permanece visível até completar os 1,5 segundos');
   t.mock.timers.tick(1); await settle(); await settle();
   assert.equal(ctx.root().querySelector('.tg-completion-dialog'), null);
   assert.equal(ctx.root().hidden, false);
@@ -511,7 +511,7 @@ test('fechar a galeria durante o sucesso libera a próxima edição e não deixa
   await submitCompletion(first); await settle(); await settle();
   assert.ok(first.querySelector('.launch-completion'));
   first.dispatchEvent(new ctx.dom.window.KeyboardEvent('keydown', { key: 'Escape', bubbles: true, cancelable: true }));
-  assert.equal(first.isConnected, true, 'a confirmação permanece pelos 2 segundos');
+  assert.equal(first.isConnected, true, 'a confirmação permanece pelos 1,5 segundos');
   ctx.gallery.close(); await settle();
   await ctx.gallery.open();
   const second = await openCompletion(ctx);
@@ -994,3 +994,23 @@ async function submitCompletion(dialog) {
   const review = dialog.ownerDocument.querySelector('[data-edit-review]');
   if (review) { review.querySelector('[data-edit-review-submit]').click(); await settle(); }
 }
+
+test('botão fecha conclusão antes de 1,5 segundo e preserva a próxima janela', async t => {
+  t.mock.timers.enable({ apis: ['setTimeout'] });
+  const ctx = await setup(t, { data: {
+    loadEditor: async id => completionContext(id),
+    saveEditor: async (context, fields) => ({ ...context.item, fields }),
+  } });
+  await ctx.gallery.open();
+  const dialog = await openCompletion(ctx);
+  await submitCompletion(dialog); await settle(); await settle();
+  t.mock.timers.tick(500);
+  const dismiss = dialog.querySelector('[data-task-completion-close]');
+  assert.ok(dismiss); dismiss.click(); await settle();
+  assert.equal(dialog.isConnected, false);
+  ctx.root().querySelector('[data-gallery-action="delete"]').click();
+  const next = ctx.root().querySelector('[data-gallery-record-dialog]');
+  t.mock.timers.tick(5000); await settle();
+  assert.equal(next.isConnected, true);
+  assert.ok(next.querySelector('[data-gallery-confirm="yes"]'));
+});
