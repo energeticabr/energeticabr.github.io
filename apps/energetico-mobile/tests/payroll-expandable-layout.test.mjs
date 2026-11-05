@@ -6,7 +6,8 @@ import { join, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { spawn } from 'node:child_process';
 import { setTimeout as delay } from 'node:timers/promises';
-import { build, createServer } from 'vite';
+import { build } from 'vite';
+import { createIsolatedViteServer } from './helpers/isolated-vite-server.mjs';
 
 test('payroll mascot fits below delete and collapsed reports work on phone and desktop', {timeout:120_000}, async t => {
   const browser = [process.env.CHROME_BIN,'C:\\Program Files\\Google\\Chrome\\Application\\chrome.exe'].find(path=>path && existsSync(path));
@@ -14,7 +15,7 @@ test('payroll mascot fits below delete and collapsed reports work on phone and d
   const appRoot = resolve(fileURLToPath(new URL('..',import.meta.url)));
   const pwa = await build({configFile:false,root:join(appRoot,'pwa'),base:'/energetico/',logLevel:'silent',build:{write:false,sourcemap:false}});
   const pwaCss = pwa.output.filter(asset=>asset.type==='asset' && asset.fileName.endsWith('.css')).map(asset=>asset.source).join('\n');
-  const server = await createServer({root:appRoot,server:{host:'127.0.0.1',port:0,fs:{allow:[resolve(appRoot,'../..')]}},logLevel:'silent'});
+  const server = await createIsolatedViteServer({root:appRoot,server:{host:'127.0.0.1',port:0,fs:{allow:[resolve(appRoot,'../..')]}},logLevel:'silent'});
   const profile = mkdtempSync(join(tmpdir(),'payroll-expandable-layout-'));
   const pending = new Map();
   let child,socket;
@@ -22,10 +23,18 @@ test('payroll mascot fits below delete and collapsed reports work on phone and d
     await server.listen();
     child=spawn(browser,['--headless=new','--disable-gpu','--no-first-run','--no-sandbox','--remote-debugging-port=0',`--user-data-dir=${profile}`,'about:blank'],{stdio:'ignore'});
     const portFile=join(profile,'DevToolsActivePort');
-    for(let n=0;n<200&&!existsSync(portFile);n++) await delay(100);
-    assert.ok(existsSync(portFile));
-    const [port,path]=readFileSync(portFile,'utf8').trim().split(/\r?\n/);
-    socket=new WebSocket(`ws://127.0.0.1:${port}${path}`);
+    let endpoint;
+    // Chrome creates this file before both lines are fully written.
+    for(let n=0;n<200&&!endpoint;n++) {
+      try {
+        const [port,path]=readFileSync(portFile,'utf8').trim().split(/\r?\n/);
+        if(/^\d+$/.test(port||'') && Number(port)>0 && Number(port)<=65535
+          && /^\/devtools\/browser\/[\da-f-]{36}$/i.test(path||'')) endpoint=`ws://127.0.0.1:${port}${path}`;
+      } catch(error) { if(!['ENOENT','EBUSY'].includes(error.code)) throw error; }
+      if(!endpoint) await delay(100);
+    }
+    assert.ok(endpoint, 'Chrome must publish the complete two-line DevTools endpoint');
+    socket=new WebSocket(endpoint);
     await new Promise((done,fail)=>{socket.addEventListener('open',done,{once:true});socket.addEventListener('error',fail,{once:true});});
     let sequence=0;
     socket.addEventListener('message',event=>{const r=JSON.parse(event.data),p=pending.get(r.id);if(!p)return;pending.delete(r.id);clearTimeout(p.timer);r.error?p.fail(new Error(r.error.message)):p.done(r.result);});
