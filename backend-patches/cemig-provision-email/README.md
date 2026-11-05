@@ -1,0 +1,15 @@
+# Cemig Xavante → existing recurring provisions
+
+The production Outlook flow receives `CEMIG FATURA ONLINE` from `fatura@cemig.com.br`, rereads it with original attachments, validates the Xavante address and stores a complete `mail.json` in the private `CEMIG FATURAS FILA` SharePoint list. Its state changes from RECEIVING to READY only after the envelope upload succeeds. The OCI timer processes it each minute; aged RECEIVING entries recover after ten minutes and incomplete envelopes retry.
+
+The worker validates consumer unit `13.170.665.018-99`, address aliases 130/134, the invoice reference, due date and Decimal amount from the PDF. It selects only existing recurrence 33 child rows by their original DATA payment month, follows the actual `DESCRITIVOPROVISAO` link, and requires the parent to contain only that child. Missing records wait fifteen minutes before retry. Ambiguous or conflicting data goes to REVIEW, without financial writes. Original PDF bytes, existing attachments, payment dates and payment status are preserved. A paid record with a different amount requires review.
+
+Files are deduplicated by SHA-256 on both records, even when a previous upload has another filename. Original PDFs stay encrypted; their document prefix is used only in memory for extraction. The existing provision-parent lock coordinates with the attachment mirror. Financial writes use specific ETags, readback and conditional compensation on partial failure. A later completed delivery prevents an older email from reverting its invoice. Queue results retain the source email ID and outcome for audit.
+
+Run tests with `python -m unittest discover -s backend-patches/cemig-provision-email -p 'test_*.py'`.
+
+Deployment installs `cemig_sync.py`, tests and flow builder under `/opt/energetica-whatsapp/cemig-provisions`, with the two supplied systemd units. Use the existing dedicated account/environment; state and locks belong to `energetica-whatsapp`. Run dry checks as that account, not root. `cemig_sync.py --dry-run` reads without modifying SharePoint. `--queue N` rechecks an exact queue record. Enable the timer only after the deployed tests and real dry-run pass.
+
+`Publish-CemigFlows.ps1` uses existing authenticated Outlook/SharePoint connections. Setup is a one-time maintenance flow; it creates the queue and fields. Publish creates event ingestion and a temporary replay flow. Replay recovers an exact existing email ID without sending mail. Temporary setup/replay flows and their signed callbacks must be deleted after validation. Operational IDs are kept in the ignored local state file; no credentials or callback URLs are committed. Roll back by disabling the timer and stopping the event flow, retaining the queue and already confirmed attachments.
+
+This change updates server-side data consumed by the existing Android, iOS and Windows clients. It does not change mobile code or initiate payments.

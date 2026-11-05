@@ -1,0 +1,11 @@
+[Unit]
+Description=Energetica - processar fila Cemig Xavante a cada minuto
+
+[Timer]
+OnBootSec=2min
+OnUnitInactiveSec=60s
+Persistent=true
+Unit=energetica-cemig-provisions.service
+
+[Install]
+WantedBy=timers.target
