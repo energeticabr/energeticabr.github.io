@@ -1,6 +1,7 @@
 """Cloud connector ingestion; the server alone validates PDFs/financial targets."""
 import json
 import sys
+from cemig_sync import PROFILES
 
 SITE='https://energeticaltda-my.sharepoint.com/personal/bernardonotini_energeticabr_com'
 SECURE={'secureData':{'properties':['inputs','outputs']}}
@@ -41,23 +42,29 @@ def definition(queue_id,replay=False):
     queue_uri=f"_api/web/lists(guid'{queue_id}')/items"
     expression_uri=queue_uri.replace("'","''")
     actions={
-        'Create_queue':sp('POST',queue_uri,{'Title':"@concat('CEMIG XAVANTE ',body('Read_email')?['receivedDateTime'])",
+        'Create_queue':sp('POST',queue_uri,{'Title':"@concat('CEMIG ',body('Read_email')?['receivedDateTime'])",
             'MailId':"@body('Read_email')?['id']",'EmailReceived':"@body('Read_email')?['receivedDateTime']",'State':'RECEIVING'}),
         'Store_original_email':connector('shared_sharepointonline','CreateAttachment',{
             'dataset':SITE,'table':queue_id,'itemId':"@body('Create_queue')?['Id']",'displayName':'mail.json',
             'body':"@base64ToBinary(base64(string(body('Read_email'))))"},{'Create_queue':['Succeeded']}),
         'Mark_ready':sp('MERGE',f"@concat('{expression_uri}(',string(body('Create_queue')?['Id']),')')",
             {'State':'READY'},{'Store_original_email':['Succeeded']})}
+    body_expression="@toUpper(body('Read_email')?['body'])"
+    property_filters=[]
+    for profile in PROFILES:
+        parts=[{'contains':[body_expression,token]} for token in profile.address_tokens]
+        parts.append({'or':[{'contains':[body_expression,number]} for number in profile.numbers]})
+        if profile.room:parts.append({'contains':[body_expression,profile.room]})
+        property_filters.append({'and':parts})
     condition={'type':'If','expression':{'and':[
         {'equals':["@toLower(body('Read_email')?['from'])",'fatura@cemig.com.br']},
         {'equals':["@toUpper(body('Read_email')?['subject'])",'CEMIG FATURA ONLINE']},
-        {'contains':["@toUpper(body('Read_email')?['body'])",'XAVANTE']},
-        {'contains':["@toUpper(body('Read_email')?['body'])",'ANTONIO TORRES DOS SANTOS']}]},
+        {'or':property_filters}]},
         'actions':actions,'else':{'actions':{}},'runAfter':{'Read_email':['Succeeded']}}
     return {'$schema':'https://schema.management.azure.com/providers/Microsoft.Logic/schemas/2016-06-01/workflowdefinition.json#',
         'contentVersion':'1.0.0.0','parameters':{'$connections':{'defaultValue':{},'type':'Object'},
         '$authentication':{'defaultValue':{},'type':'SecureObject'}},'triggers':triggers,
-        'actions':{'Read_email':read,'Only_Xavante':condition},'outputs':{}}
+        'actions':{'Read_email':read,'Only_configured_properties':condition},'outputs':{}}
 
 
 if __name__=='__main__':

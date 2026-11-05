@@ -1,4 +1,4 @@
-"""Cemig Xavante: enrich existing recurrence 33 provisions; never create/pay one."""
+"""Enrich the exact monthly pair for the two configured Cemig consumer units."""
 from contextlib import contextmanager
 from dataclasses import dataclass
 from datetime import date, datetime, timedelta, timezone
@@ -29,6 +29,27 @@ class Wait(ValueError): pass
 class Review(ValueError): pass
 
 
+@dataclass(frozen=True)
+class Profile:
+    recurrence: str
+    branch: str
+    unit: str
+    address_tokens: tuple
+    numbers: tuple
+    room: str = ''
+
+
+PROFILES=(Profile('33',BRANCH,UNIT,('XAVANTE','ANTONIO TORRES DOS SANTOS'),('130','134')),
+          Profile('4','000 - ESCRITÓRIO CENTRAL','1003321701890',
+                  ('OSCAR NIEMEYER','VILA DA SERRA'),('1033',),'904'))
+
+
+def profile_for_unit(unit):
+    matches=[p for p in PROFILES if p.unit==unit]
+    if len(matches)!=1: raise Review('Instalacao Cemig nao configurada')
+    return matches[0]
+
+
 def normal(value):
     return ''.join(x for x in unicodedata.normalize('NFKD', str(value or '')) if not unicodedata.combining(x)).upper()
 
@@ -50,11 +71,21 @@ class Bill:
     unit: str = UNIT
 
 
-def parse_bill_text(text):
+def address_matches(text,profile):
+    return (all(token in text for token in profile.address_tokens)
+            and any(re.search(r'\b'+number+r'\b',text) for number in profile.numbers)
+            and (not profile.room or bool(re.search(r'\b'+profile.room+r'\b',text))))
+
+
+def parse_bill_text(text,profile=None):
     text = normal(text)
     units = {re.sub(r'\D', '', x) for x in re.findall(r'\b\d{2}\.\d{3}\.\d{3}\.\d{3}-\d{2}\b', text)}
-    if units != {UNIT} or 'CEMIG' not in text or 'XAVANTE' not in text:
-        raise Review('PDF nao corresponde a unidade Cemig do Xavante')
+    if len(units)!=1: raise Review('PDF sem uma unica unidade consumidora')
+    detected=profile_for_unit(next(iter(units)))
+    if profile is not None and profile!=detected: raise Review('Imovel do PDF difere do email')
+    profile=detected
+    if 'CEMIG' not in text or not address_matches(text,profile):
+        raise Review('PDF nao corresponde ao endereco configurado')
     pattern = r'\b(' + '|'.join(MONTHS) + r')/(20\d{2})\s+(\d{2}/\d{2}/20\d{2})\s+([\d.]+,\d{2})\b'
     matches = set(re.findall(pattern, text))
     if len(matches) != 1: raise Review('Cabecalho da fatura ausente ou ambiguo')
@@ -63,7 +94,7 @@ def parse_bill_text(text):
     except ValueError as exc: raise Review('Vencimento invalido no PDF') from exc
     amount = money(amount)
     if amount <= 0: raise Review('Fatura sem valor positivo')
-    return Bill(f'{year}-{MONTHS.index(month)+1:02}', due, amount)
+    return Bill(f'{year}-{MONTHS.index(month)+1:02}', due, amount,profile.unit)
 
 
 def validate_email(email):
@@ -72,14 +103,24 @@ def validate_email(email):
     if normal(email.get('subject')).strip() != 'CEMIG FATURA ONLINE':
         raise Review('Assunto fora do escopo')
     body = normal(html.unescape(re.sub(r'<[^>]+>', ' ', str(email.get('body', '')))))
-    if not all(x in body for x in ('XAVANTE', 'ANTONIO TORRES DOS SANTOS')):
-        raise Review('Endereco do email fora do Xavante')
-    if not re.search(r'\b(?:130|134)\b', body): raise Review('Numero do endereco fora do escopo')
+    matches=[p for p in PROFILES if address_matches(body,p)]
+    if len(matches)!=1: raise Review('Endereco do email ausente, ambiguo ou fora do escopo')
+    return matches[0]
 
 
-def extract_email(email):
+def pdf_password(profile,client=None):
+    if profile.recurrence=='33': return '3862'
+    if client is None: raise Review('Consulta do documento do titular indisponivel')
+    holder=client.get_item_fields(11,['Title','DOCUMENTOFORNECEDOR'],target_list='FORNECEDORES')
+    document=re.sub(r'\D','',str(holder.get('DOCUMENTOFORNECEDOR') or ''))
+    if normal(holder.get('Title'))!='BERNARDO' or len(document)!=11:
+        raise Review('Cadastro do titular da conta do escritorio nao confere')
+    return document[:4]
+
+
+def extract_email(email,password_resolver=None):
     from pypdf import PdfReader
-    validate_email(email)
+    profile=validate_email(email)
     files, bills, size = [], set(), 0
     for attachment in email.get('attachments') or []:
         name = str(attachment.get('name', ''))
@@ -91,29 +132,36 @@ def extract_email(email):
         if not content.startswith(b'%PDF-') or size > 30 * 1024 * 1024: raise Review('PDF invalido ou excessivo')
         try:
             reader = PdfReader(BytesIO(content))
-            if reader.is_encrypted and not reader.decrypt('3862'): raise Review('PDF nao pode ser aberto')
+        except Exception as exc: raise Review('Falha ao abrir PDF original') from exc
+        # Lookup is a network boundary: timeout/429/503 must reach the queue's RETRY path.
+        password=(password_resolver(profile) if password_resolver else pdf_password(profile)) if reader.is_encrypted else None
+        try:
+            if reader.is_encrypted:
+                if not reader.decrypt(password): raise Review('PDF nao pode ser aberto')
             if not 1 <= len(reader.pages) <= 20: raise Review('Quantidade de paginas inesperada')
             text = '\n'.join(page.extract_text() or '' for page in reader.pages)
         except Review: raise
         except Exception as exc: raise Review('Falha ao ler PDF original') from exc
         units = {re.sub(r'\D', '', x) for x in re.findall(r'\b\d{2}\.\d{3}\.\d{3}\.\d{3}-\d{2}\b', text)}
-        if units and units != {UNIT}: raise Review('Outro imovel em PDF do email')
+        if units and units != {profile.unit}: raise Review('Outro imovel em PDF do email')
         if re.search(r'\b(?:' + '|'.join(MONTHS) + r')/20\d{2}\s+\d{2}/\d{2}/20\d{2}\s+[\d.]+,\d{2}', normal(text)):
-            bills.add(parse_bill_text(text))
+            bills.add(parse_bill_text(text,profile=profile))
         files.append({'filename': name, 'content': content})
     if not files or len(bills) != 1: raise Review('Email sem uma fatura mensal inequivoca')
     return bills.pop(), files
 
 
-def scoped(row):
-    return (str(row.get('IDRECORRENCIA')) == '33' and normal(row.get('FORNECEDOR')) == 'CEMIG'
-            and normal(row.get('FILIAL')) == normal(BRANCH))
+def scoped(row,bill=None):
+    profile=profile_for_unit(bill.unit if bill else UNIT)
+    return (str(row.get('IDRECORRENCIA')) == profile.recurrence and normal(row.get('FORNECEDOR')) == 'CEMIG'
+            and normal(row.get('FILIAL')) == normal(profile.branch))
 
 
 def choose_target(rows, bill):
-    matches = [r for r in rows if scoped(r) and str(r.get('DATA', ''))[:7] == bill.due.isoformat()[:7]]
-    if not matches: raise Wait('Aguardando provisao da recorrencia 33 no mes do vencimento')
-    if len(matches) != 1: raise Review('Mais de uma provisao da recorrencia 33 no mesmo mes')
+    profile=profile_for_unit(bill.unit)
+    matches = [r for r in rows if scoped(r,bill) and str(r.get('DATA', ''))[:7] == bill.due.isoformat()[:7]]
+    if not matches: raise Wait(f'Aguardando provisao da recorrencia {profile.recurrence} no mes {bill.due:%Y-%m}')
+    if len(matches) != 1: raise Review(f'Mais de uma provisao da recorrencia {profile.recurrence} no mesmo mes')
     return matches[0]
 
 
@@ -126,6 +174,7 @@ def fingerprint(row): return {k: row.get(k) for k in BUSINESS}
 
 
 def reconcile(store, bill, files, dry_run=False):
+    profile=profile_for_unit(bill.unit)
     selected = choose_target(store.children(), bill)
     child = int(selected['Id'])
     raw_parent = str(selected.get('DESCRITIVOPROVISAO') or '')
@@ -134,18 +183,19 @@ def reconcile(store, bill, files, dry_run=False):
     with store.lock(parent):
         row, _ = store.read(CHILD, child)
         head, _ = store.read(PARENT, parent)
-        if (not scoped(row) or str(row.get('DESCRITIVOPROVISAO')) != str(parent)
+        if (not scoped(row,bill) or str(row.get('DESCRITIVOPROVISAO')) != str(parent)
                 or str(row.get('DATA',''))[:7] != bill.due.isoformat()[:7]): raise Review('Vinculo ou mes alterado')
         if int(choose_target(store.children(),bill)['Id']) != child: raise Review('Provisao do mes alterada')
-        if normal(head.get('FORNECEDOR')) != 'CEMIG' or normal(head.get('FILIAL')) != normal(BRANCH):
-            raise Review('Descritivo nao corresponde a Cemig Xavante')
+        if normal(head.get('FORNECEDOR')) != 'CEMIG' or normal(head.get('FILIAL')) != normal(profile.branch):
+            raise Review('Descritivo nao corresponde ao imovel da conta Cemig')
         siblings = [r for r in store.children() if str(r.get('DESCRITIVOPROVISAO')) == str(parent)]
         if len(siblings) != 1 or int(siblings[0]['Id']) != child: raise Review('Descritivo agrupado exige revisao')
         if (paid(row) or paid(head)) and any(money(r.get('VALORTOTAL')) != bill.amount for r in (row, head)):
             raise Review('Valor de registro ja pago difere da fatura; historico preservado')
         before = {CHILD: fingerprint(row), PARENT: fingerprint(head)}
         report = {'child': child, 'parent': parent, 'reference': bill.reference,
-                  'due': bill.due.isoformat(), 'amount': str(bill.amount), 'added': 0, 'updated': 0, 'plannedFiles': 0}
+                  'due': bill.due.isoformat(), 'amount': str(bill.amount),'unit':bill.unit,
+                  'recurrence':profile.recurrence, 'added': 0, 'updated': 0, 'plannedFiles': 0}
         for kind, ident in [(CHILD, child), (PARENT, parent)]:
             existing = {sha256(f['content']).hexdigest() for f in store.attachments(kind, ident)}
             for f in files:
@@ -196,7 +246,7 @@ def reconcile(store, bill, files, dry_run=False):
         for kind, ident in [(CHILD, child), (PARENT, parent)]:
             after, _ = store.read(kind, ident)
             if money(after.get('VALORTOTAL')) != bill.amount: raise RuntimeError('Total nao confirmado apos gravacao')
-            if kind == CHILD and (not scoped(after) or str(after.get('DESCRITIVOPROVISAO')) != str(parent)):
+            if kind == CHILD and (not scoped(after,bill) or str(after.get('DESCRITIVOPROVISAO')) != str(parent)):
                 raise Review('Vinculo alterado apos atualizacao')
             if not {sha256(f['content']).hexdigest() for f in files}.issubset(
                     {sha256(f['content']).hexdigest() for f in store.attachments(kind, ident)}):
@@ -243,6 +293,8 @@ def superseded(rows, bill, received):
         if row.get('State')!='DONE': continue
         try: previous=json.loads(row.get('Result') or '{}')
         except (ValueError,TypeError): continue
+        # Results from the original single-property release belong only to Xavante.
+        if (previous.get('unit') or UNIT)!=bill.unit: continue
         if previous.get('reference')!=bill.reference or str(previous.get('due',''))[:7]!=bill.due.isoformat()[:7]: continue
         if previous.get('emailReceived') and datetime.fromisoformat(previous['emailReceived'].replace('Z','+00:00'))>stamp:
             return True
@@ -273,7 +325,7 @@ def process_queue(client, dry_run=False, only=None):
             if not envelope: raise Wait('Envelope ainda nao confirmado')
             if len(envelope)>45*1024*1024: raise Review('Envelope excessivo')
             email=json.loads(envelope)
-            bill,files=extract_email(email)
+            bill,files=extract_email(email,lambda profile:pdf_password(profile,client))
             received=email.get('receivedDateTime')
             if not received: raise Review('Email sem data de recebimento')
             if superseded(rows,bill,received):

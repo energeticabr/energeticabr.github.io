@@ -1,5 +1,5 @@
 [Unit]
-Description=Energetica - processar fila Cemig Xavante diariamente as 07h de Brasilia
+Description=Energetica - processar fila Cemig diariamente as 07h de Brasilia
 
 [Timer]
 OnCalendar=*-*-* 07:00:00 America/Sao_Paulo
