@@ -1,0 +1,42 @@
+import test from 'node:test';
+import assert from 'node:assert/strict';
+import {existsSync,mkdirSync,writeFileSync} from 'node:fs';
+import {resolve,join} from 'node:path';
+import {fileURLToPath} from 'node:url';
+import {JSDOM} from 'jsdom';
+import {createServer} from 'vite';
+import {runBrowserLayout} from './helpers/browser-layout-runner.mjs';
+
+test('due-day badges match column colors with contrasting text and fit below dates on phones, desktop and print',{timeout:90000},async t=>{
+ const browser=[process.env.CHROME_BIN,'C:/Program Files/Google/Chrome/Application/chrome.exe','/usr/bin/google-chrome','/usr/bin/chromium'].find(p=>p&&existsSync(p));
+ if(!browser)return t.skip('Chrome unavailable');
+ const root=resolve(fileURLToPath(new URL('..',import.meta.url)));
+ const server=await createServer({root,server:{host:'127.0.0.1',port:0,fs:{allow:[resolve(root,'../..')]}},logLevel:'silent'});
+ try{
+  await server.listen();
+  for(const [width,height,mediaType] of [[320,740,'screen'],[390,844,'screen'],[844,390,'screen'],[1365,900,'screen'],[1365,900,'print']]){
+   const capture=process.env.DDA_DUE_DAYS_CAPTURE_DIR;
+   const result=await runBrowserLayout(browser,{width,height,mediaType,captureScreenshot:Boolean(capture),url:`http://127.0.0.1:${server.httpServer.address().port}/tests/fixtures/dda-report-due-days.html`});
+   const dom=new JSDOM(result.stdout);
+   try{
+    const state=JSON.parse(dom.window.document.documentElement.dataset.dueDays);
+    assert.equal(state.overflow,false,JSON.stringify({width,state}));
+    assert.equal(state.missing,'Não informado');
+    assert.deepEqual(state.rows.map(row=>row.text),['-1 d','0 d','1 d','5 d']);
+    for(const row of state.rows){
+     assert.ok(row.below&&row.fits,JSON.stringify({width,row}));
+     assert.equal(row.background,row.dateColor);
+     assert.equal(row.color,'rgb(255, 255, 255)');
+     assert.equal(row.border,'rgb(255, 255, 255)');
+     assert.ok(row.fontSize>=12);
+     assert.ok(row.height>=24,'badge padding must produce a clearly visible cluster');
+     assert.equal(row.printColorAdjust,'exact');
+    }
+    assert.equal(state.rows[1].background,'rgb(183, 24, 42)');
+    assert.equal(state.rows[2].background,'rgb(169, 75, 0)');
+    assert.equal(state.rows[3].background,'rgb(23, 100, 63)');
+    if(capture){mkdirSync(capture,{recursive:true});writeFileSync(join(capture,`dda-due-days-${width}-${mediaType}.png`),result.screenshot);}
+   }finally{dom.window.close();}
+  }
+ }finally{await server.close();}
+});

@@ -77,7 +77,9 @@ export function createDdaReportView({document:doc=globalThis.document,data,openM
   const table=make('table','ddr-table');table.setAttribute('aria-label','DDAs da empresa');const head=make('thead'),tr=make('tr'),body=make('tbody');
   for(const label of ['ID','VENCIMENTO','FORNECEDOR','BANCO / BOLETO','DATA EMISSÃO','VALOR NOMINAL','SITUAÇÃO','VINCULAÇÃO','AÇÕES']){const th=make('th','',label);th.scope='col';tr.append(th);}head.append(tr);table.append(head,body);
   for(const row of printAll?result.rows:result.rows.slice((page-1)*50,page*50)){
-   const line=make('tr');line.dataset.ddaId=row.id;const due=make('td','ddr-due',date(row.due));due.dataset.dueTone=ddaDueTone(row.due,currentDate);
+   const line=make('tr');line.dataset.ddaId=row.id;const due=make('td','ddr-due');due.dataset.dueTone=ddaDueTone(row.due,currentDate);
+   due.append(make('span','ddr-due-date',date(row.due)));
+   if(row.due)due.append(make('span','ddr-due-days',`${daysSince(today,row.due)} d`));
    const supplier=make('td','ddr-supplier'),status=make('td','ddr-status');status.dataset.status=row.status;
    supplier.append(make('span','ddr-supplier-name',row.supplier));
    const history=make('div','ddr-supplier-count');history.dataset.ddaSupplierCount='';
