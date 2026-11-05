@@ -19,3 +19,21 @@ test('attendance selectors retain wrapping labels and usable native hit areas at
   }finally{dom.window.close();}
  }}finally{await server.close();}
 });
+
+test('inline attendance edits keep the reading position through progress, responses and retry at phone and PC widths',{timeout:120000},async t=>{
+ const browser=[process.env.CHROME_BIN,'C:/Program Files/Google/Chrome/Application/chrome.exe','/usr/bin/google-chrome','/usr/bin/chromium'].find(p=>p&&existsSync(p));if(!browser)return t.skip('Chrome unavailable');
+ const server=await createServer({root:fileURLToPath(new URL('..',import.meta.url)),server:{host:'127.0.0.1',port:0},logLevel:'silent'});
+ try{await server.listen();for(const width of [320,390,1280]){
+  const result=await runBrowserLayout(browser,{width,height:900,url:`http://127.0.0.1:${server.httpServer.address().port}/tests/fixtures/attendance-inline-scroll.html`});
+  const dom=new JSDOM(result.stdout);try{
+   const layout=JSON.parse(dom.window.document.documentElement.dataset.layout);assert.equal(layout.error,undefined);
+   assert.ok(layout.before.scroll>1000,'fixture must be scrolled to a supplier far down the list');
+   for(const stage of ['busy','progress','descriptor','failed','activity']){
+    assert.ok(layout[stage].scroll>1000,`${width}px ${stage}: page jumped to the beginning`);
+    assert.ok(Math.abs(layout[stage].rowTop-layout.before.rowTop)<=1,`${width}px ${stage}: edited supplier moved ${JSON.stringify(layout)}`);
+   }
+   assert.equal(layout.clearedActivity,'');assert.equal(layout.draft,'rascunho preservado');
+   assert.equal(layout.nextScroll,0);assert.ok(layout.scrollWidth<=width);
+  }finally{dom.window.close();}
+ }}finally{await server.close();}
+});

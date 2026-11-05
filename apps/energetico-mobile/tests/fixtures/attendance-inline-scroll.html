@@ -1,0 +1,50 @@
+<!doctype html><html lang="pt-BR"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><link rel="stylesheet" href="/src/styles.css"></head><body><main id="app"></main><script type="module">
+import {createChatView} from '/src/ui/chat-view.js';
+import {createConversationStore} from '/src/chat/conversation-store.js';
+const root=document.querySelector('#app'),view=createChatView(root),store=createConversationStore({historyMode:'current-step'});
+const flow={id:'attendance_validation',contextId:'fictitious-day',title:'VALIDAR PRESENÇAS APONTADAS'};
+const frame=()=>new Promise(resolve=>requestAnimationFrame(()=>requestAnimationFrame(()=>requestAnimationFrame(resolve))));
+let version=0,operation;
+const rows=Array.from({length:24},(_,i)=>[
+ {label:'DATA',value:'04/11/2026'},{label:'FORNECEDOR',value:`FORNECEDOR FICTÍCIO ${i}`},
+ {label:'IDDESCRITIVOETAPA-ATIVIDADEEXECUTADA',value:'127 - EXECUÇÃO FUNDAÇÃO EM TUBULÃO',editor:{value:`attendance_inline:${i}:old`,options:[{value:`attendance_inline:${i}:old`,label:'127 - EXECUÇÃO FUNDAÇÃO EM TUBULÃO'},{value:`attendance_inline:${i}:new`,label:'130 - EXECUÇÃO DE ALVENARIA'}]}},
+ {label:'ATIVIDADEEXECUTADA',value:'EXECUÇÃO FORMA PILARES E VIGAS',editor:{value:`attendance_inline:${i}:activity`,options:[{value:`attendance_inline:${i}:activity`,label:'EXECUÇÃO FORMA PILARES E VIGAS'},{value:`attendance_inline:${i}:other`,label:'ALVENARIA'}]}},
+ {label:'PRESENÇA',value:'PRESENTE'}]);
+// Keep other activity groups below the edited supplier, as in a long daily summary.
+for(const i of [6,18,19,20,21,22,23]) rows[i][2]={...rows[i][2],value:i===6?'130 - EXECUÇÃO DE ALVENARIA':'146 - FERRAGEM ARRIMO'};
+const summary=()=>({id:`summary-${version++}`,role:'assistant',type:'poll',question:'CONFIRMA A ATUALIZAÇÃO DESTAS PRESENÇAS?',detail_table:{kind:'presence',rows},options:[{id:'attendance_batch_confirm',reply:'attendance_batch_confirm',label:'SUBMETER TODOS'},{id:'attendance_batch_cancel',reply:'attendance_batch_cancel',label:'VOLTAR'}]});
+const render=state=>view.render({...state,sessionStatus:'authenticated',account:{name:'Teste'}});
+store.subscribe(render);
+view.on('select-reply',command=>{
+ render({...store.getState(),operationProgress:{percent:0}});
+ render({...store.getState(),operationProgress:{percent:33}});
+ operation=store.beginText(command.label,{silent:true,preserveDraft:true});
+});
+const log=()=>root.querySelector('[role="log"]');
+const select=field=>root.querySelector(`select[aria-label="${field} de FORNECEDOR FICTÍCIO 12"]`);
+const position=()=>({scroll:log().scrollTop,rowTop:select('IDDESCRITIVO').closest('.chat-presence-table-row').getBoundingClientRect().top});
+const change=field=>{const node=select(field);node.selectedIndex=1;node.dispatchEvent(new Event('change',{bubbles:true}));};
+const confirm=()=>store.confirmText(operation,{activeFlow:flow,messages:[summary()]});
+try{
+ store.restoreSnapshot({activeFlow:flow,messages:[summary()],draft:'rascunho preservado'});
+ store.setDraft('rascunho preservado');
+ await document.fonts.ready;await frame();
+ const target=select('IDDESCRITIVO').closest('.chat-presence-table-row');
+ log().scrollTop=target.getBoundingClientRect().top-log().getBoundingClientRect().top+log().scrollTop-300;
+ await frame();const before=position();
+ change('IDDESCRITIVO');await frame();const busy=position();
+ render({...store.getState(),operationProgress:{percent:44}});await frame();const progress=position();
+ rows[12][2]={...rows[12][2],value:'130 - EXECUÇÃO DE ALVENARIA',editor:{...rows[12][2].editor,value:'attendance_inline:12:new'}};
+ rows[12][3]={...rows[12][3],value:'',editor:{...rows[12][3].editor,value:''}};
+ confirm();await frame();const descriptor=position(),clearedActivity=select('ATIVIDADE EXECUTADA').value;
+ change('ATIVIDADE EXECUTADA');await frame();
+ store.failText(operation,new Error('Falha fictícia de conexão'));await frame();const failed=position();
+ change('ATIVIDADE EXECUTADA');
+ rows[12][3]={...rows[12][3],value:'ALVENARIA',editor:{...rows[12][3].editor,value:'attendance_inline:12:other'}};
+ confirm();await frame();const activity=position(),draft=store.getState().draft;
+ operation=store.beginText('SUBMETER TODOS');
+ store.confirmText(operation,{activeFlow:flow,messages:[{id:'next-question',type:'poll',question:'PRÓXIMA PERGUNTA',options:[]}]});
+ await frame();
+ document.documentElement.dataset.layout=JSON.stringify({before,busy,progress,descriptor,failed,activity,clearedActivity,draft,nextScroll:log().scrollTop,scrollWidth:document.documentElement.scrollWidth});
+}catch(error){document.documentElement.dataset.layout=JSON.stringify({error:error.stack});}
+</script></body></html>
