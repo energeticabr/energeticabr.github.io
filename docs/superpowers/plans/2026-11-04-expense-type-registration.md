@@ -6,9 +6,9 @@
 
 **Execution:** Execução direta autorizada pelo usuário, sem novas confirmações.
 
-- [ ] Testar entrada, busca, página seguinte, vazio e seleção existente nos seletores de produto, lançamento e baixa.
-- [ ] Estender reconhecimento do catálogo e retorno usando TIPO como label/value, sem aplicar filtros de PRODUTO ao registro de tipo.
-- [ ] Atualizar menus persistidos antes da publicação e aceitar seus controles nas sessões já abertas.
-- [ ] Testar cadastro confirmado, duplicado, cancelamento, retorno aninhado e preservação de anexos/valores/idempotência.
-- [ ] Empacotar alteração reproduzível com hashes, conferir instalador, revisar e integrar PR.
-- [ ] Publicar no servidor com lock, gate, backup e health; validar o módulo instalado. O backend comum disponibiliza a função em Android, iOS e Windows sem novo binário.
+- [x] Testar entrada, busca, página seguinte, vazio e seleção existente nos seletores de produto, lançamento e baixa.
+- [x] Estender reconhecimento do catálogo e retorno usando TIPO como label/value, sem aplicar filtros de PRODUTO ao registro de tipo.
+- [x] Atualizar menus persistidos antes da publicação e aceitar seus controles nas sessões já abertas.
+- [x] Testar cadastro confirmado, duplicado, cancelamento, retorno aninhado e preservação de anexos/valores/idempotência.
+- [x] Empacotar alteração reproduzível com hashes, conferir instalador, revisar e integrar PR.
+- [x] Publicar no servidor com lock, gate, backup e health; validar o módulo instalado. O backend comum disponibiliza a função em Android, iOS e Windows sem novo binário.
