@@ -23,6 +23,20 @@
 - Release manifest SHA256:
   `5b782b9bdaafa94be43773383b7f3b3e53b45cb52fae49270248aabb23c3fb60`.
 
-Publication receipt is added only after the guarded rollout and installed-module
-verification finish. This backend-only change serves Android, iOS and Windows/web
-through their existing channel; no new mobile binary is required.
+## Published
+
+- PR #760 merged as `ce23ade193ab764b8646b65f4df5198de946ce2b`.
+- Installer CI succeeded on PR run `41954930719` and main run `41954989990`.
+- Linux server QA: 15 behavioral tests and all 38 installer tests passed.
+- Guarded deployment completed at `2026-11-05T02:24:39Z` (2026-11-04 local),
+  with bridge health `ok` and verified installed hashes. Backup:
+  `/var/backups/energetica-whatsapp/expense-type-registration-20261105T022439420452Z`.
+- Post-deployment: all 15 behavior tests passed again with imports explicitly
+  pinned to `/opt/energetica-whatsapp/worker`, using only synthetic adapters.
+- Runtime config SHA256 remained
+  `e72f874a925a2155906009dddb549131ceeb91d26071d3977a44330b22a6b4a3`;
+  both mirror module hashes stayed unchanged.
+- `publication.json` records the exact installed revisions. Android, iOS and
+  Windows/web receive the behavior through the existing shared channel;
+  no new binary or reinstall is required. Visual QA used the current renderer
+  with synthetic server polls; no authenticated production form was submitted.

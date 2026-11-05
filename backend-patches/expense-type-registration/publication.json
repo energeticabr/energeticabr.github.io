@@ -1,0 +1,27 @@
+{
+  "status": "deployed",
+  "pr": "https://github.com/energeticabr/energeticabr.github.io/pull/760",
+  "commit": "ce23ade193ab764b8646b65f4df5198de946ce2b",
+  "manifestSha256": "5b782b9bdaafa94be43773383b7f3b3e53b45cb52fae49270248aabb23c3fb60",
+  "backup": "/var/backups/energetica-whatsapp/expense-type-registration-20261105T022439420452Z",
+  "health": "ok",
+  "installed": {
+    "worker/workflow.py": "a67f18cdb52fe0648574256db409231bd9700b5ab6dfddfcae56bfc592d718af",
+    "worker/financial_catalog_registration.py": "3efb46b2f1a144cf4dc9ce001e02fac02723af6f9212d88c159eb4005e693fa4"
+  },
+  "tests": {
+    "behaviorBeforeDeployment": 15,
+    "installerLinux": 38,
+    "behaviorInstalledRuntime": 15,
+    "browserStates": 9,
+    "browserWidths": [320, 390, 1200],
+    "signatureBlocksIntact": 14,
+    "historicalBaselineCandidateSameFailureIdentities": true
+  },
+  "ci": {"pullRequest": 41954930719, "main": 41954989990},
+  "platforms": ["Android via shared backend", "iOS via shared backend", "Windows/web via shared backend"],
+  "clientBundleChanged": false,
+  "configChanged": false,
+  "mirrorChanged": false,
+  "productionBusinessRecordsWrittenForTests": false
+}
