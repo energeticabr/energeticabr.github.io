@@ -19,6 +19,9 @@ export function attendanceBulkEligible(option, poll) {
   if (attendanceClockExempt(option, poll)) return true;
   const badge = option.rhidBadge;
   if (!badge || !['present', 'inconsistent'].includes(badge.status)) return false;
+  // Ambiguous real punches have no resolved effective slot yet. They still
+  // belong in the existing irregularity review rather than the zero-punch set.
+  if (SLOTS.some(slot => badge.correction?.slots?.[slot]?.rhidCandidates?.some(time))) return true;
   // Explicit empty slots take precedence over a stale duration. Older badges
   // without slots can still prove a worked duration, but unknown states cannot.
   if (badge.punches && typeof badge.punches === 'object') return SLOTS.some(slot => time(badge.punches[slot]));

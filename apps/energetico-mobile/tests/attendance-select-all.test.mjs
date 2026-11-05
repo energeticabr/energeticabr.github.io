@@ -4,6 +4,7 @@ import { JSDOM } from 'jsdom';
 import { createChatView } from '../src/ui/chat-view.js';
 import { attendanceBadgeState } from './helpers/attendance-rhid-badge-fixture.mjs';
 import { attendanceBulkEligible, attendanceClockExempt } from '../src/chat/attendance-bulk-selection.js';
+import { buildAttendanceRhidBadge } from '../src/chat/attendance-rhid-badges.js';
 
 const date = '2026-11-04';
 const empty = { entry1: null, exit1: null, entry2: null, exit2: null };
@@ -73,6 +74,19 @@ test('ponto parcial continua exigindo a justificativa existente no lote', async 
   const { root, all, selected, reads } = mount(t, [option(2, 'PONTO PARCIAL', 'inconsistent', { punches: { ...empty, entry1: '07:00' } })]);
   all().click(); await tick();
   assert.deepEqual(selected(), []);
+  assert.deepEqual(reads, [{ id: '2', date }]);
+  assert.ok(root.querySelector('[data-attendance-irregularity-dialog]'));
+});
+
+test('batidas reais ambíguas continuam na conferência, mesmo sem horário efetivo resolvido', async t => {
+  const badge = buildAttendanceRhidBadge({ presenceId: '2', name: 'PONTO AMBÍGUO', date }, {
+    date, rows: [{ Id: 'rhid-2', ID_PESSOA_RHID: '2', NOME_COLABORADOR: 'PONTO AMBÍGUO', DATA_REFERENCIA: date,
+      BATIDAS_RHID: ['07:00', '07:05', '07:10'] }],
+  });
+  assert.equal(badge.status, 'inconsistent');
+  assert.ok(Object.values(badge.punches).every(value => !value));
+  const { root, all, reads } = mount(t, [{ ...option(2, 'PONTO AMBÍGUO'), rhidBadge: badge }]);
+  all().click(); await tick();
   assert.deepEqual(reads, [{ id: '2', date }]);
   assert.ok(root.querySelector('[data-attendance-irregularity-dialog]'));
 });
