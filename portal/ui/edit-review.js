@@ -31,6 +31,13 @@ export function ensureEditReviewStyles(document) {
     .edit-review-actions [data-edit-review-cancel] { background: #b51f24; border-color: #b51f24; color: #fff; }
     .edit-review :focus-visible { outline: 3px solid #784000; outline-offset: 2px; }
     @media(max-width: 400px) { .edit-review { padding: .6rem; } .edit-review th, .edit-review td { padding: .4rem; } }
+    /* Modal dialogs enter the browser top layer, outside the report's rotated
+       containing block. Apply the same orientation to the dialog itself. */
+    @media (orientation: portrait) {
+      .edit-review--landscape { position: fixed; inset: auto; top: 50%; left: 50%; margin: 0;
+        width: min(54rem, calc(100dvh - 2rem)); max-width: calc(100dvh - 2rem);
+        max-height: calc(100vw - 2rem); transform: translate(-50%, -50%) rotate(90deg); }
+    }
   `;
   (document.head || document.documentElement).append(style);
 }
@@ -151,6 +158,7 @@ export function confirmEditChanges({ form, changes, title = 'Confirma as altera√
   const previousInert = form.inert;
   const dialog = document.createElement('dialog');
   dialog.className = 'edit-review';
+  dialog.classList.toggle('edit-review--landscape', Boolean(form.closest('.report-landscape-viewport')));
   dialog.setAttribute('data-edit-review', '');
   dialog.setAttribute('aria-modal', 'true');
   dialog.setAttribute('aria-labelledby', `edit-review-title-${++reviewId}`);

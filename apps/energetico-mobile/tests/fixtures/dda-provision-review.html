@@ -1,0 +1,32 @@
+<!doctype html><html lang="pt-BR"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover"><title>Vinculação DDA fictícia</title></head><body><main id="app"></main><script type="module">
+import '../../src/styles.css';
+import '../../src/ui/payment-ledger.css';
+import '../../src/ui/dda-report.css';
+import {createDdaReportView} from '../../src/ui/dda-report-view.js';
+let writes=0;
+const frame=()=>new Promise(resolve=>requestAnimationFrame(()=>requestAnimationFrame(resolve)));
+const view=createDdaReportView({document,data:{
+ loadSnapshot:async()=>({rows:[{id:'28',fields:{Title:'FORNECEDOR FICTÍCIO',VALOR:360,SITUACAO:'Em aberto',VENCIMENTO:'2026-11-04'}}]}),
+ provisionLink:{loadOptions:async()=>[{id:'44',supplier:'FORNECEDOR FICTÍCIO',label:'#44 · FORNECEDOR FICTÍCIO',amount:720}],save:async()=>{writes++;return {ddaId:'28',provisionId:'44'};}}
+}});
+await view.open();
+document.querySelector('[data-dda-provision-pencil]').click();await frame();
+document.querySelector('input[type=radio]').click();
+async function review(){document.querySelector('.dda-provision-save').click();await frame();return document.querySelector('[data-edit-review]');}
+let dialog=await review();
+const rect=dialog.getBoundingClientRect(), buttons=[...dialog.querySelectorAll('button')];
+const fits=rect.left>=-1&&rect.top>=-1&&rect.right<=innerWidth+1&&rect.bottom<=innerHeight+1;
+const hit=buttons.every(button=>{const r=button.getBoundingClientRect();return document.elementFromPoint(r.x+r.width/2,r.y+r.height/2)===button;});
+const transform=getComputedStyle(dialog).transform;
+const dimensions={width:dialog.offsetWidth,height:dialog.offsetHeight};
+const focusInside=dialog.contains(document.activeElement),writesBefore=writes;
+dialog.querySelector('[data-edit-review-cancel]').click();await frame();
+const cancelled=writes===0&&document.querySelector('input[type=radio]').checked&&!document.querySelector('[data-edit-review]');
+dialog=await review();dialog.querySelector('[data-edit-review-submit]').click();await frame();
+const confirmed=writes===1&&!view.element.hidden&&document.querySelector('.ddr-link-cluster').textContent==='ID 44';
+// Leave the real confirmation open for the captured visual check.
+view.close();await view.open();
+document.querySelector('[data-dda-provision-pencil]').click();await frame();
+document.querySelector('input[type=radio]').click();await review();
+document.documentElement.dataset.layout=JSON.stringify({fits,hit,transform,dimensions,focusInside,writesBefore,cancelled,confirmed});
+</script></body></html>
