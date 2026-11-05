@@ -30,11 +30,16 @@ export function normalizeDdaReportRows(snapshot){
 }
 export function buildDdaReport(rows,{status='Em aberto',bank='',search=''}={},now=new Date()){
  const query=ddaSearchKey(search),today=ddaTodayKey(now);
+ const seventhDay=new Date(Date.parse(today+'T12:00:00Z')+7*86400000).toISOString().slice(0,10);
  const filtered=rows.filter(row=>(!status||(status==='Não pagos'?['Em aberto','Agendado'].includes(row.status):row.status===status))&&(!bank||row.bank===bank)&&(!query||ddaSearchKey([row.id,row.supplier,row.document,row.bank].join(' ')).includes(query)))
   .sort((a,b)=>(a.due||'9999').localeCompare(b.due||'9999')||Number(a.id)-Number(b.id));
  const missingAmounts=filtered.filter(row=>row.amount==null).length;
+ const dueToday=filtered.filter(row=>row.due===today);
+ const dueWithin7Days=filtered.filter(row=>row.due&&row.due>=today&&row.due<=seventhDay);
+ const totalAmount=items=>items.some(row=>row.amount==null)?null:items.reduce((sum,row)=>sum.plus(row.amount),new Money(0)).toFixed(2);
  return {rows:filtered,total:missingAmounts?null:filtered.reduce((sum,row)=>sum.plus(row.amount),new Money(0)).toFixed(2),missingAmounts,
-  overdue:filtered.filter(row=>row.due&&row.due<today).length,today:filtered.filter(row=>row.due===today).length,
+  overdue:filtered.filter(row=>row.due&&row.due<today).length,today:dueToday.length,
+  dueWithin7Days:dueWithin7Days.length,totalDueWithin7Days:totalAmount(dueWithin7Days),totalDueToday:totalAmount(dueToday),
   statuses:[...new Set(['Em aberto','Não pagos',...rows.map(row=>row.status)])].sort((a,b)=>a.localeCompare(b,'pt-BR')),
   banks:[...new Set(rows.map(row=>row.bank).filter(Boolean))].sort((a,b)=>a.localeCompare(b,'pt-BR'))};
 }

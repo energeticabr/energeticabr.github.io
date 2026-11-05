@@ -21,6 +21,14 @@ test('date-day clusters are compact and centered in their columns on phones, des
    try{
     const state=JSON.parse(dom.window.document.documentElement.dataset.dueDays);
     assert.equal(state.overflow,false,JSON.stringify({width,state}));
+    assert.equal(state.metrics.length,7);
+    assert.deepEqual(state.metrics.slice(4).map(({label,value})=>({label,value})),[
+     {label:'Qtd DDA vencendo em 7d',value:'3'},
+     {label:'Valor DDA vencendo em 7d',value:'R$ 7.500,00'},
+     {label:'Valor DDA vencendo hoje',value:'R$ 2.500,00'}
+    ]);
+    for(const metric of state.metrics)assert.ok(metric.fits,JSON.stringify({width,metric}));
+    assert.ok(state.metrics[4].top>state.metrics[0].top,'new metrics use a second row');
     assert.equal(state.missing,'Não informado');
     assert.deepEqual(state.rows.map(row=>row.text),['-1 d','0 d','1 d','5 d']);
     for(const row of state.rows){
