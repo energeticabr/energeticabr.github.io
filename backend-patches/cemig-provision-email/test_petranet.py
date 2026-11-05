@@ -146,10 +146,10 @@ class PetranetTests(unittest.TestCase):
     def test_petranet_event_filter_and_queue_preserve_cemig(self):
         before=definition('queue-guid')
         d=definition('queue-guid',provider='petranet')
-        trigger=d['triggers']['email']['inputs']['parameters']
-        self.assertEqual(trigger['from'],'boleto@grupopetranet.com.br')
-        self.assertEqual(trigger['subjectFilter'],'Boleto da Petranet internet')
-        condition=str(d['actions']['Only_configured_properties']['expression'])
+        search=d['actions']['Search_emails']['inputs']['parameters']
+        self.assertIn('from:boleto@grupopetranet.com.br',search['searchQuery'])
+        self.assertIn('subject:Petranet',search['searchQuery'])
+        condition=str(definition('queue-guid',replay=True,provider='petranet')['actions']['Only_configured_properties']['expression'])
         self.assertIn('BERNARDO NOTINI MOREIRA BAHIA',condition)
         self.assertNotIn('ANTONIO TORRES',condition)
         self.assertEqual(definition('queue-guid'),before)
