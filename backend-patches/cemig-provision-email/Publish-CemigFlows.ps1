@@ -1,4 +1,5 @@
-param([ValidateSet('Setup','Publish','Replay')][string]$Mode='Publish',[string]$QueueId,[string]$MessageId)
+param([ValidateSet('Setup','Publish','Replay')][string]$Mode='Publish',[string]$QueueId,[string]$MessageId,
+      [ValidateSet('cemig','petranet')][string]$Provider='cemig')
 $ErrorActionPreference='Stop'
 $authRoot='C:/Users/Bernardonotini/AppData/Local/Packages/OpenAI.Codex_2p2nqsd0c76g0/LocalCache/Local/Energetica/DdaMonitor'
 . (Join-Path $authRoot 'SharePointFlow.ps1')
@@ -28,6 +29,7 @@ $connections=@{
     shared_office365=$mail.properties.connectionReferences.shared_office365
 }
 if($Mode-eq'Setup'){
+    if($Provider-ne'cemig'){throw 'Petranet reuses the existing durable invoice queue'}
     $actions=[ordered]@{}
     $actions.Create_queue_list=New-DdaSpAction 'POST' '_api/web/lists' @{Title='CEMIG FATURAS FILA';BaseTemplate=100;AllowContentTypes=$false;OnQuickLaunch=$false;Description='Fila dos PDFs originais Cemig Xavante para a recorrencia 33; processamento OCI.'}
     $previous='Create_queue_list'
@@ -49,11 +51,17 @@ if($Mode-eq'Setup'){
     foreach($kind in @('event','replay')){
         $extra=@()
         if($kind-eq'replay'){$extra=@('--replay')}
-        $definition=(& $python (Join-Path $PSScriptRoot 'flow_definition.py') $QueueId @extra)|ConvertFrom-Json -AsHashtable
-        $name=if($kind-eq'event'){'CEMIG - receber faturas das recorrencias 4 e 33'}else{'CEMIG - recuperar fatura do email'}
-        Set-CloudFlow $kind $name $definition $connections
+        $definition=(& $python (Join-Path $PSScriptRoot 'flow_definition.py') $QueueId --provider $Provider @extra)|ConvertFrom-Json -AsHashtable
+        $key=if($Provider-eq'cemig'){$kind}else{$kind+'_'+$Provider}
+        $name=if($Provider-eq'petranet'){
+            if($kind-eq'event'){'PETRANET - receber faturas da recorrencia 14'}else{'PETRANET - recuperar fatura do email'}
+        }else{
+            if($kind-eq'event'){'CEMIG - receber faturas das recorrencias 4 e 33'}else{'CEMIG - recuperar fatura do email'}
+        }
+        Set-CloudFlow $key $name $definition $connections
     }
 } else {
     if(-not $MessageId){throw 'MessageId required'}
-    Invoke-Cloud 'replay' @{messageId=$MessageId}
+    $key=if($Provider-eq'cemig'){'replay'}else{'replay_'+$Provider}
+    Invoke-Cloud $key @{messageId=$MessageId}
 }
