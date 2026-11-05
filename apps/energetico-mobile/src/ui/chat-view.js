@@ -4318,7 +4318,7 @@ export function createChatView(root, { onOpenSettings, onDemoAccess, onSignOut, 
 
   function emit(command) {
     if (command.type === 'send-text' || command.type === 'date-selected' || command.type === 'finish-flow'
-      || (command.type === 'select-reply' && !String(command.replyId || '').startsWith('attendance_inline:'))) {
+      || (command.type === 'select-reply' && !/^attendance_(?:inline|copy|copy_skip):/.test(String(command.replyId || '')))) {
       attendanceInlineScroll = null;
     }
     handlers.get(command.type)?.forEach(handler => handler(command));
@@ -5744,13 +5744,14 @@ export function createChatView(root, { onOpenSettings, onDemoAccess, onSignOut, 
       attachmentSessionRevision++;
     }
     const newestPoll = [...(state.messages || [])].reverse().find(message => message?.role !== "user" && message?.type === "poll");
+    const attendanceTable = newestPoll?.detail_table || newestPoll?.detailTable;
     // Inline choices replace the confirmation table rather than advance to a
     // new question. Keep its reading position across progress and the reply.
     const preserveAttendanceScroll = attendanceInlineScroll
       && attendanceInlineScroll.sessionKey === sessionKey
       && state.activeFlow?.id === 'attendance_validation'
       && state.activeFlow.contextId === attendanceInlineScroll.contextId
-      && (newestPoll?.detail_table || newestPoll?.detailTable)?.kind === 'presence';
+      && attendanceTable?.kind === 'presence';
     if (!preserveAttendanceScroll) attendanceInlineScroll = null;
     const isAttendancePoll = isAttendanceSelectionPoll(newestPoll);
     const nextAttendancePollKey = isAttendancePoll ? String(newestPoll.id || newestPoll.question || "") : "";
@@ -5915,7 +5916,7 @@ export function createChatView(root, { onOpenSettings, onDemoAccess, onSignOut, 
       } else if (responseFinished || (messageChanged && !state.activeText)) resetTranscriptPosition(transcript);
       else transcript.scrollTop = messageChanged ? transcript.scrollHeight : previousScroll;
     }
-    if (!state.activeText && (lastState?.activeText || messageChanged)) attendanceInlineScroll = null;
+    if (!state.activeText && (lastState?.activeText || messageChanged) && !attendanceTable?.copy_offer) attendanceInlineScroll = null;
     if (responseFinished) resetComposerLayout();
     syncComposerInset();
     messageKey = nextMessageKey;
