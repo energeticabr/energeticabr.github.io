@@ -4,7 +4,7 @@ import {createConversationStore} from '/src/chat/conversation-store.js';
 const root=document.querySelector('#app'),view=createChatView(root),store=createConversationStore({historyMode:'current-step'});
 const flow={id:'attendance_validation',contextId:'fictitious-day',title:'VALIDAR PRESENÇAS APONTADAS'};
 const frame=()=>new Promise(resolve=>requestAnimationFrame(()=>requestAnimationFrame(()=>requestAnimationFrame(resolve))));
-let version=0,operation;
+let version=0,operation,copyOffer;
 const rows=Array.from({length:24},(_,i)=>[
  {label:'DATA',value:'04/11/2026'},{label:'FORNECEDOR',value:`FORNECEDOR FICTÍCIO ${i}`},
  {label:'IDDESCRITIVOETAPA-ATIVIDADEEXECUTADA',value:'127 - EXECUÇÃO FUNDAÇÃO EM TUBULÃO',editor:{value:`attendance_inline:${i}:old`,options:[{value:`attendance_inline:${i}:old`,label:'127 - EXECUÇÃO FUNDAÇÃO EM TUBULÃO'},{value:`attendance_inline:${i}:new`,label:'130 - EXECUÇÃO DE ALVENARIA'}]}},
@@ -12,7 +12,7 @@ const rows=Array.from({length:24},(_,i)=>[
  {label:'PRESENÇA',value:'PRESENTE'}]);
 // Keep other activity groups below the edited supplier, as in a long daily summary.
 for(const i of [6,18,19,20,21,22,23]) rows[i][2]={...rows[i][2],value:i===6?'130 - EXECUÇÃO DE ALVENARIA':'146 - FERRAGEM ARRIMO'};
-const summary=()=>({id:`summary-${version++}`,role:'assistant',type:'poll',question:'CONFIRMA A ATUALIZAÇÃO DESTAS PRESENÇAS?',detail_table:{kind:'presence',rows},options:[{id:'attendance_batch_confirm',reply:'attendance_batch_confirm',label:'SUBMETER TODOS'},{id:'attendance_batch_cancel',reply:'attendance_batch_cancel',label:'VOLTAR'}]});
+const summary=()=>({id:`summary-${version++}`,role:'assistant',type:'poll',question:'CONFIRMA A ATUALIZAÇÃO DESTAS PRESENÇAS?',detail_table:{kind:'presence',rows,copy_offer:copyOffer},options:[{id:'attendance_batch_confirm',reply:'attendance_batch_confirm',label:'SUBMETER TODOS'},{id:'attendance_batch_cancel',reply:'attendance_batch_cancel',label:'VOLTAR'}]});
 const render=state=>view.render({...state,sessionStatus:'authenticated',account:{name:'Teste'}});
 store.subscribe(render);
 view.on('select-reply',command=>{
@@ -41,10 +41,13 @@ try{
  store.failText(operation,new Error('Falha fictícia de conexão'));await frame();const failed=position();
  change('ATIVIDADE EXECUTADA');
  rows[12][3]={...rows[12][3],value:'ALVENARIA',editor:{...rows[12][3].editor,value:'attendance_inline:12:other'}};
+ copyOffer={token:'123456abcdef',targets:[{id:'42',name:'OUTRO FORNECEDOR FICTÍCIO'}]};
  confirm();await frame();const activity=position(),draft=store.getState().draft;
+ root.querySelector('[data-action="attendance-copy-no"]').click();await frame();
+ copyOffer=undefined;confirm();await frame();const copyFinished=position();
  operation=store.beginText('SUBMETER TODOS');
  store.confirmText(operation,{activeFlow:flow,messages:[{id:'next-question',type:'poll',question:'PRÓXIMA PERGUNTA',options:[]}]});
  await frame();
- document.documentElement.dataset.layout=JSON.stringify({before,busy,progress,descriptor,failed,activity,clearedActivity,draft,nextScroll:log().scrollTop,scrollWidth:document.documentElement.scrollWidth});
+ document.documentElement.dataset.layout=JSON.stringify({before,busy,progress,descriptor,failed,activity,copyFinished,clearedActivity,draft,nextScroll:log().scrollTop,scrollWidth:document.documentElement.scrollWidth});
 }catch(error){document.documentElement.dataset.layout=JSON.stringify({error:error.stack});}
 </script></body></html>

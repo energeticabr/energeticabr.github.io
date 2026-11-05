@@ -28,7 +28,7 @@ test('inline attendance edits keep the reading position through progress, respon
   const dom=new JSDOM(result.stdout);try{
    const layout=JSON.parse(dom.window.document.documentElement.dataset.layout);assert.equal(layout.error,undefined);
    assert.ok(layout.before.scroll>1000,'fixture must be scrolled to a supplier far down the list');
-   for(const stage of ['busy','progress','descriptor','failed','activity']){
+   for(const stage of ['busy','progress','descriptor','failed','activity','copyFinished']){
     assert.ok(layout[stage].scroll>1000,`${width}px ${stage}: page jumped to the beginning`);
     assert.ok(Math.abs(layout[stage].rowTop-layout.before.rowTop)<=1,`${width}px ${stage}: edited supplier moved ${JSON.stringify(layout)}`);
    }

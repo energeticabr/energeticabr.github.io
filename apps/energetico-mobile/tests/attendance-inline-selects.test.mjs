@@ -116,3 +116,21 @@ test('an inline command refused before processing does not pin a later submit in
  view.render({...current,messages:[poll([row('BETA')],'next-summary')]});
  assert.equal(root.querySelector('[role="log"]').scrollTop,0);
 });
+
+for(const apply of [false,true]) test(`the inline edit position survives ${apply ? 'applying' : 'declining'} the follow-up copy offer`,t=>{
+ const dom=new JSDOM('<main></main>'),root=dom.window.document.querySelector('main'),view=createChatView(root);
+ t.after(()=>{view.destroy();dom.window.close();});
+ const flow={id:'attendance_validation'},rows=[row('ALFA'),row('BETA')];
+ const current=state([poll(rows)],{activeFlow:flow});view.render(current);
+ root.querySelector('[role="log"]').scrollTop=700;
+ const select=root.querySelector('select');select.selectedIndex=1;select.dispatchEvent(new dom.window.Event('change',{bubbles:true}));
+ view.render({...current,activeText:{id:'edit'}});
+ const offered=poll(rows,'offered');offered.detail_table.copy_offer={token:'123456abcdef',targets:[{id:'42',name:'BETA'}]};
+ const offeredState=state([offered],{activeFlow:flow});view.render(offeredState);
+ assert.equal(root.querySelector('[role="log"]').scrollTop,700);
+ if(apply){root.querySelector('[data-action="attendance-copy-yes"]').click();root.querySelector('[data-attendance-copy-id]').checked=true;}
+ root.querySelector(`[data-action="attendance-copy-${apply ? 'submit' : 'no'}"]`).click();
+ view.render({...offeredState,activeText:{id:'copy'}});
+ view.render(state([poll(rows,'copy-finished')],{activeFlow:flow}));
+ assert.equal(root.querySelector('[role="log"]').scrollTop,700);
+});
