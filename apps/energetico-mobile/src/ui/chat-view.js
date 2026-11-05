@@ -3045,6 +3045,7 @@ export function createChatView(root, { onOpenSettings, onDemoAccess, onSignOut, 
   const provisionSelection = createProvisionSettlementSelection(root, emit);
   let messageKey = "";
   let lastState = null;
+  let attendanceInlineScroll = null;
   let pendingProvisionRenderDay = "";
   let powerBiDashboard = null;
   const attendanceSelectedIds = new Set();
@@ -4316,6 +4317,10 @@ export function createChatView(root, { onOpenSettings, onDemoAccess, onSignOut, 
   }
 
   function emit(command) {
+    if (command.type === 'send-text' || command.type === 'date-selected' || command.type === 'finish-flow'
+      || (command.type === 'select-reply' && !String(command.replyId || '').startsWith('attendance_inline:'))) {
+      attendanceInlineScroll = null;
+    }
     handlers.get(command.type)?.forEach(handler => handler(command));
   }
 
@@ -5652,6 +5657,13 @@ export function createChatView(root, { onOpenSettings, onDemoAccess, onSignOut, 
       if (attendanceSelect.disabled || composerBusy) return;
       const selected = attendanceSelect.selectedOptions[0];
       if (!selected || selected.disabled || !selected.value.startsWith("attendance_inline:")) return;
+      attendanceInlineScroll = {
+        top: root.querySelector('[role="log"]')?.scrollTop || 0,
+        label: attendanceSelect.getAttribute('aria-label'),
+        rowTop: attendanceSelect.closest('.chat-presence-table-row')?.getBoundingClientRect().top,
+        sessionKey: attachmentGestureSessionKey,
+        contextId: lastState?.activeFlow?.contextId,
+      };
       emit({ type: "select-reply", messageId: attendanceSelect.dataset.messageId,
         replyId: selected.value, label: selected.textContent });
       return;
@@ -5732,6 +5744,14 @@ export function createChatView(root, { onOpenSettings, onDemoAccess, onSignOut, 
       attachmentSessionRevision++;
     }
     const newestPoll = [...(state.messages || [])].reverse().find(message => message?.role !== "user" && message?.type === "poll");
+    // Inline choices replace the confirmation table rather than advance to a
+    // new question. Keep its reading position across progress and the reply.
+    const preserveAttendanceScroll = attendanceInlineScroll
+      && attendanceInlineScroll.sessionKey === sessionKey
+      && state.activeFlow?.id === 'attendance_validation'
+      && state.activeFlow.contextId === attendanceInlineScroll.contextId
+      && (newestPoll?.detail_table || newestPoll?.detailTable)?.kind === 'presence';
+    if (!preserveAttendanceScroll) attendanceInlineScroll = null;
     const isAttendancePoll = isAttendanceSelectionPoll(newestPoll);
     const nextAttendancePollKey = isAttendancePoll ? String(newestPoll.id || newestPoll.question || "") : "";
     if (rhidAttendanceAdjustment?.presenceId !== undefined
@@ -5883,9 +5903,19 @@ export function createChatView(root, { onOpenSettings, onDemoAccess, onSignOut, 
     const transcript = root.querySelector?.('[role="log"]');
     const messageChanged = messageKey !== nextMessageKey;
     if (transcript) {
-      if (responseFinished || (messageChanged && !state.activeText)) resetTranscriptPosition(transcript);
+      if (preserveAttendanceScroll) {
+        transcript.scrollTop = attendanceInlineScroll.top;
+        const anchor = [...transcript.querySelectorAll('select[data-action="attendance-inline-select"]')]
+          .find(select => select.dataset.messageId === String(newestPoll.id)
+            && select.getAttribute('aria-label') === attendanceInlineScroll.label);
+        const row = anchor?.closest('.chat-presence-table-row');
+        if (row && Number.isFinite(attendanceInlineScroll.rowTop)) {
+          transcript.scrollTop += row.getBoundingClientRect().top - attendanceInlineScroll.rowTop;
+        }
+      } else if (responseFinished || (messageChanged && !state.activeText)) resetTranscriptPosition(transcript);
       else transcript.scrollTop = messageChanged ? transcript.scrollHeight : previousScroll;
     }
+    if (!state.activeText && (lastState?.activeText || messageChanged)) attendanceInlineScroll = null;
     if (responseFinished) resetComposerLayout();
     syncComposerInset();
     messageKey = nextMessageKey;

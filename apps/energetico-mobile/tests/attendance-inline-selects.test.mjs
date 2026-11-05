@@ -58,3 +58,61 @@ test('server-confirmed row changes regroup fills for both the changed and matchi
  rendered=[...root.querySelectorAll('.chat-presence-table-row')];const byName=name=>rendered.find(r=>r.textContent.includes(name));
  assert.equal(byName('ALFA').style.backgroundColor,byName('GAMA').style.backgroundColor);assert.notEqual(byName('ALFA').style.backgroundColor,byName('BETA').style.backgroundColor);
 });
+
+for (const field of [0, 1]) test(`inline ${field === 0 ? 'descriptor' : 'activity'} edit keeps the transcript position through processing and the replacement summary`, t => {
+ const dom=new JSDOM('<main></main>'),root=dom.window.document.querySelector('main'),view=createChatView(root);
+ t.after(()=>{view.destroy();dom.window.close();});
+ const rows=[row('ALFA'),row('BETA')],flow={id:'attendance_validation',contextId:'day-1'};
+ const current=state([poll(rows)],{activeFlow:flow});view.render(current);
+ root.querySelector('[role="log"]').scrollTop=725;
+ const select=root.querySelectorAll('select')[field];select.selectedIndex=1;
+ select.dispatchEvent(new dom.window.Event('change',{bubbles:true}));
+ view.render({...current,activeText:{id:'sending'}});
+ assert.equal(root.querySelector('[role="log"]').scrollTop,725,'processing preserves the reading position');
+ view.render({...current,activeText:{id:'sending'},operationProgress:{percent:44}});
+ view.render(state([poll([row('ALFA','130 - ALVENARIA',''),rows[1]],'updated')],{activeFlow:flow}));
+ assert.equal(root.querySelector('[role="log"]').scrollTop,725,'server response must not restart the page');
+ // A normal navigation after the edit must still show the next question at its start.
+ view.render(state([{id:'next',role:'assistant',type:'poll',question:'PRÓXIMA PERGUNTA',options:[]}],{activeFlow:flow}));
+ assert.equal(root.querySelector('[role="log"]').scrollTop,0);
+});
+
+test('a failed inline edit retains the current position and permits a retry',t=>{
+ const dom=new JSDOM('<main></main>'),root=dom.window.document.querySelector('main'),view=createChatView(root);
+ t.after(()=>{view.destroy();dom.window.close();});
+ const current=state([poll([row('ALFA')])],{activeFlow:{id:'attendance_validation'}});
+ view.render(current);root.querySelector('[role="log"]').scrollTop=430;
+ const change=()=>{const select=root.querySelector('select');select.selectedIndex=1;select.dispatchEvent(new dom.window.Event('change',{bubbles:true}));};
+ change();view.render({...current,activeText:{id:'sending'}});view.render({...current,error:'Falha na conexão'});
+ assert.equal(root.querySelector('[role="log"]').scrollTop,430);
+ root.querySelector('[role="log"]').scrollTop=540;
+ change();
+ // The controller starts progress before beginText clears the previous error.
+ view.render({...current,error:'Falha na conexão',operationProgress:{percent:0}});
+ view.render({...current,error:'Falha na conexão',operationProgress:{percent:33}});
+ view.render({...current,activeText:{id:'retry'}});
+ view.render({...current,messages:[poll([row('ALFA','130 - ALVENARIA','')],'retried')]});
+ assert.equal(root.querySelector('[role="log"]').scrollTop,540);
+});
+
+test('unrelated navigation does not inherit an inline edit scroll position',t=>{
+ const dom=new JSDOM('<main></main>'),root=dom.window.document.querySelector('main'),view=createChatView(root);
+ t.after(()=>{view.destroy();dom.window.close();});
+ view.render(state([poll([row('ALFA')])],{activeFlow:{id:'attendance_validation'}}));
+ root.querySelector('[role="log"]').scrollTop=430;
+ const select=root.querySelector('select');select.selectedIndex=1;select.dispatchEvent(new dom.window.Event('change',{bubbles:true}));
+ view.render(state([poll([row('BETA')],'another-day')],{activeFlow:{id:'attendance_validation',contextId:'different-day'}}));
+ assert.equal(root.querySelector('[role="log"]').scrollTop,0);
+});
+
+test('an inline command refused before processing does not pin a later submit in the same flow',t=>{
+ const dom=new JSDOM('<main></main>'),root=dom.window.document.querySelector('main'),view=createChatView(root);
+ t.after(()=>{view.destroy();dom.window.close();});
+ const current=state([poll([row('ALFA')])],{activeFlow:{id:'attendance_validation'}});
+ view.render(current);root.querySelector('[role="log"]').scrollTop=430;
+ const select=root.querySelector('select');select.selectedIndex=1;select.dispatchEvent(new dom.window.Event('change',{bubbles:true}));
+ root.querySelector('[data-reply-id="attendance_batch_confirm"]').click();
+ view.render({...current,activeText:{id:'submit'}});
+ view.render({...current,messages:[poll([row('BETA')],'next-summary')]});
+ assert.equal(root.querySelector('[role="log"]').scrollTop,0);
+});
