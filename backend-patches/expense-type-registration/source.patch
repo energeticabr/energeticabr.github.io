@@ -1,0 +1,46 @@
+--- a/worker/workflow.py
++++ b/worker/workflow.py
+@@ -18893,0 +18894,8 @@
++        # Delayed parent choices/searches must never become a new type name.
++        if (state.get("flow") == "supply_material_type_registration"
++                and (state.get("embedded_return") or {}).get("type") == financial_catalog.RETURN_TYPE):
++            reply = str(event.get("reply_id") or "")
++            if (reply.startswith("choice:") or reply in {financial_catalog.CREATE_ID, "filter_query", "filter_clear", "refresh_options"}
++                    or self._is_option_next(reply)):
++                self._mark_processed(state, event.get("message_id"))
++                return self._resend_current_prompt(state, etag)
+@@ -19764,0 +19773,2 @@
++        if (financial_catalog.catalog(self, state, step) or {}).get("product_expense_type"):
++            step = financial_catalog.step_with_create(self, state, step)
+@@ -22089,0 +22100,3 @@
++        if (financial_catalog.catalog(self, state, step) or {}).get("product_expense_type"):
++            step = financial_catalog.step_with_create(self, state, step)
++            state["options"] = self._include_terminal_option(step, state.get("options", []))
+@@ -37150,0 +37164,4 @@
++        if (financial_catalog.catalog(self, state, step) or {}).get("product_expense_type"):
++            step = financial_catalog.step_with_create(self, state, step)
++            pagination["step"] = copy.deepcopy(step)
++            state["options"] = self._include_terminal_option(step, state.get("options", []))
+--- a/worker/financial_catalog_registration.py
++++ b/worker/financial_catalog_registration.py
+@@ -15,0 +16,12 @@
++    # Product expense types share one catalog, including product-derived choices.
++    # RECORRENTE/NÃO RECORRENTE is a separate static personal classification.
++    if (state.get('flow') in {'supply_product_registration', 'launch', 'payment_settlement'}
++            and step.get('kind') == 'selection'
++            and step.get('target_field', '').replace(' ', '') == 'TIPODESPESA'
++            and source.get('type') == 'sharepoint_list'
++            and source.get('list') in {'CADASTROTIPOMATERIAL', 'CADASTROPRODUTO'}):
++        child = engine.config['sharepoint'].get('supply_material_type_registration_flow', {})
++        if child.get('target_list') == 'CADASTROTIPOMATERIAL':
++            return {'flow': 'supply_material_type_registration', 'label': 'TIPO DESPESA',
++                    'label_field': 'TIPO', 'value_field': 'TIPO', 'first': True,
++                    'product_expense_type': True}
+@@ -46,0 +59,3 @@
++    if info.get('product_expense_type'):
++        # An empty catalog still has its create control; never select it as data.
++        displayed['auto_select_single'] = False
+@@ -98 +113,2 @@
+-    for condition in step.get('source', {}).get('filters', []):
++    conditions = [] if info.get('product_expense_type') else step.get('source', {}).get('filters', [])
++    for condition in conditions:
