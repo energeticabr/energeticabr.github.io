@@ -1,4 +1,4 @@
-"""Enrich the exact monthly pair for the two configured Cemig consumer units."""
+"""Enrich exact monthly provision pairs for configured utility invoices."""
 from contextlib import contextmanager
 from dataclasses import dataclass
 from datetime import date, datetime, timedelta, timezone
@@ -37,11 +37,13 @@ class Profile:
     address_tokens: tuple
     numbers: tuple
     room: str = ''
+    supplier: str = 'CEMIG'
 
 
 PROFILES=(Profile('33',BRANCH,UNIT,('XAVANTE','ANTONIO TORRES DOS SANTOS'),('130','134')),
           Profile('4','000 - ESCRITÓRIO CENTRAL','1003321701890',
-                  ('OSCAR NIEMEYER','VILA DA SERRA'),('1033',),'904'))
+                  ('OSCAR NIEMEYER','VILA DA SERRA'),('1033',),'904'),
+          Profile('14',BRANCH,'PETRANET-11721',('XAVANTE','ANTONIO TORRES DOS SANTOS'),('134',),supplier='PETRANET'))
 
 
 def profile_for_unit(unit):
@@ -98,12 +100,18 @@ def parse_bill_text(text,profile=None):
 
 
 def validate_email(email):
+    import petranet
+    if str(email.get('from','')).strip().lower()==petranet.SENDER:
+        if normal(email.get('subject')).strip()!=normal(petranet.SUBJECT):raise Review('Assunto fora do escopo')
+        try:petranet.parse_email(email.get('body',''))
+        except ValueError as exc:raise Review(str(exc)) from exc
+        return profile_for_unit(petranet.UNIT)
     if str(email.get('from', '')).strip().lower() != 'fatura@cemig.com.br':
         raise Review('Remetente fora do escopo')
     if normal(email.get('subject')).strip() != 'CEMIG FATURA ONLINE':
         raise Review('Assunto fora do escopo')
     body = normal(html.unescape(re.sub(r'<[^>]+>', ' ', str(email.get('body', '')))))
-    matches=[p for p in PROFILES if address_matches(body,p)]
+    matches=[p for p in PROFILES if p.supplier=='CEMIG' and address_matches(body,p)]
     if len(matches)!=1: raise Review('Endereco do email ausente, ambiguo ou fora do escopo')
     return matches[0]
 
@@ -121,6 +129,10 @@ def pdf_password(profile,client=None):
 def extract_email(email,password_resolver=None):
     from pypdf import PdfReader
     profile=validate_email(email)
+    invoice=None
+    if profile.supplier=='PETRANET':
+        import petranet
+        invoice=petranet.parse_email(email.get('body',''))
     files, bills, size = [], set(), 0
     for attachment in email.get('attachments') or []:
         name = str(attachment.get('name', ''))
@@ -134,6 +146,7 @@ def extract_email(email,password_resolver=None):
             reader = PdfReader(BytesIO(content))
         except Exception as exc: raise Review('Falha ao abrir PDF original') from exc
         # Lookup is a network boundary: timeout/429/503 must reach the queue's RETRY path.
+        if invoice and reader.is_encrypted:raise Review('Boleto Petranet criptografado exige revisao')
         password=(password_resolver(profile) if password_resolver else pdf_password(profile)) if reader.is_encrypted else None
         try:
             if reader.is_encrypted:
@@ -142,6 +155,12 @@ def extract_email(email,password_resolver=None):
             text = '\n'.join(page.extract_text() or '' for page in reader.pages)
         except Review: raise
         except Exception as exc: raise Review('Falha ao ler PDF original') from exc
+        if invoice:
+            try:petranet.validate_pdf(text,invoice)
+            except ValueError as exc:raise Review(str(exc)) from exc
+            bills.add(Bill(invoice.reference,invoice.due,invoice.amount,profile.unit))
+            files.append({'filename':name,'content':content})
+            continue
         units = {re.sub(r'\D', '', x) for x in re.findall(r'\b\d{2}\.\d{3}\.\d{3}\.\d{3}-\d{2}\b', text)}
         if units and units != {profile.unit}: raise Review('Outro imovel em PDF do email')
         if re.search(r'\b(?:' + '|'.join(MONTHS) + r')/20\d{2}\s+\d{2}/\d{2}/20\d{2}\s+[\d.]+,\d{2}', normal(text)):
@@ -153,7 +172,7 @@ def extract_email(email,password_resolver=None):
 
 def scoped(row,bill=None):
     profile=profile_for_unit(bill.unit if bill else UNIT)
-    return (str(row.get('IDRECORRENCIA')) == profile.recurrence and normal(row.get('FORNECEDOR')) == 'CEMIG'
+    return (str(row.get('IDRECORRENCIA')) == profile.recurrence and normal(row.get('FORNECEDOR')) == profile.supplier
             and normal(row.get('FILIAL')) == normal(profile.branch))
 
 
@@ -186,8 +205,8 @@ def reconcile(store, bill, files, dry_run=False):
         if (not scoped(row,bill) or str(row.get('DESCRITIVOPROVISAO')) != str(parent)
                 or str(row.get('DATA',''))[:7] != bill.due.isoformat()[:7]): raise Review('Vinculo ou mes alterado')
         if int(choose_target(store.children(),bill)['Id']) != child: raise Review('Provisao do mes alterada')
-        if normal(head.get('FORNECEDOR')) != 'CEMIG' or normal(head.get('FILIAL')) != normal(profile.branch):
-            raise Review('Descritivo nao corresponde ao imovel da conta Cemig')
+        if normal(head.get('FORNECEDOR')) != profile.supplier or normal(head.get('FILIAL')) != normal(profile.branch):
+            raise Review('Descritivo nao corresponde ao fornecedor e imovel da conta')
         siblings = [r for r in store.children() if str(r.get('DESCRITIVOPROVISAO')) == str(parent)]
         if len(siblings) != 1 or int(siblings[0]['Id']) != child: raise Review('Descritivo agrupado exige revisao')
         if (paid(row) or paid(head)) and any(money(r.get('VALORTOTAL')) != bill.amount for r in (row, head)):
@@ -202,7 +221,7 @@ def reconcile(store, bill, files, dry_run=False):
                 digest = sha256(f['content']).hexdigest()
                 if digest in existing: continue
                 # Same deterministic name on both sides; the normal mirror reuses its content hash.
-                name = f'CEMIG-{bill.reference}-{digest}.pdf'
+                name = f'{profile.supplier}-{bill.reference}-{digest}.pdf'
                 current, _ = store.read(CHILD, child)
                 current_head, _ = store.read(PARENT, parent)
                 if fingerprint(current) != before[CHILD] or fingerprint(current_head) != before[PARENT]:

@@ -1,4 +1,4 @@
-# Cemig → exact monthly recurring provision pairs
+# Utility invoices → exact monthly recurring provision pairs
 
 The production Outlook flow receives `CEMIG FATURA ONLINE` from `fatura@cemig.com.br`, rereads it with original attachments, validates one of the two configured properties and stores a complete `mail.json` in the private `CEMIG FATURAS FILA` SharePoint list. Its state changes from RECEIVING to READY only after the envelope upload succeeds. At the user's request the OCI timer processes the queue once daily, at 07:00 America/Sao_Paulo. Aged RECEIVING entries recover after ten minutes; incomplete envelopes retry during the next daily run. The event flow only captures emails; financial updates and destination attachments run on the daily schedule.
 
@@ -6,6 +6,11 @@ The production Outlook flow receives `CEMIG FATURA ONLINE` from `fatura@cemig.co
 | --- | --- | --- | --- |
 | 33 | 13.170.665.018-99 | Xavante, Antonio Torres dos Santos 130/134 | 004 - EDIFÍCIO XAVANTE |
 | 4 | 10.033.217.018-90 | Alameda Oscar Niemeyer 1033, room 904 | 000 - ESCRITÓRIO CENTRAL |
+| 14 | PETRANET customer 11721 | Antonio Torres dos Santos 134, Xavante | 004 - EDIFÍCIO XAVANTE |
+
+Petranet uses a separate Outlook subscription with the exact sender `boleto@grupopetranet.com.br` and subject `Boleto da Petranet internet`. It reuses the same technical queue and the same daily worker; the legacy Cemig queue/unit names remain unchanged. `petranet.py` cross-checks the email's invoice number, due date, total and bank line with every original PDF, including its beneficiary, customer and Xavante address. The reference is read from the email and the due month selects recurrence 14's pair. Inline logos are ignored. A missing historical description waits; the worker never borrows a description from another month or creates financial records. Paid matching totals allow missing originals only. Original PDFs are deduplicated by content hash, and newer successful deliveries prevent stale invoice values from being reapplied independently for each provider/account.
+
+Publish Petranet with `Publish-CemigFlows.ps1 -Mode Publish -Provider petranet -QueueId <existing-queue-id>`, then replay an exact email with `-Mode Replay -Provider petranet -MessageId <email-id>` if recovery is needed. Provider-specific event/replay state keys preserve the existing Cemig flows. Delete the temporary replay flow after verification and remove its ignored local state key. The default provider remains Cemig and its generated definitions are unchanged.
 
 The worker validates the email address and PDF unit against the same profile, then extracts the invoice reference, due date and Decimal amount. It selects exactly one existing child by recurrence, branch and original DATA payment month equal to the invoice due month. It follows only that child's actual `DESCRITIVOPROVISAO` link and requires the parent to contain only that child. No upload or value write is fanned out to the recurrence's other months. Missing monthly records become eligible after fifteen minutes and retry on the next daily run. Ambiguous or conflicting data goes to REVIEW without financial writes. Original PDF bytes, existing attachments, payment dates and payment status are preserved. A paid record with a different amount requires review.
 
