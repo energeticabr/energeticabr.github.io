@@ -1,0 +1,20 @@
+[Unit]
+Description=Energetica - PDFs e valores Cemig Xavante recorrencia 33
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=oneshot
+User=energetica-whatsapp
+Group=energetica-whatsapp
+WorkingDirectory=/opt/energetica-whatsapp
+EnvironmentFile=/etc/energetica-whatsapp.env
+ExecStart=/opt/energetica-whatsapp/.venv/bin/python /opt/energetica-whatsapp/cemig-provisions/cemig_sync.py
+TimeoutStartSec=10min
+UMask=0077
+NoNewPrivileges=true
+PrivateTmp=true
+ProtectHome=true
+ProtectSystem=strict
+ReadWritePaths=/var/lib/energetica-whatsapp
+MemoryMax=500M
