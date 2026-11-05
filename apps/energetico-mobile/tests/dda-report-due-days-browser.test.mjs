@@ -7,7 +7,7 @@ import {JSDOM} from 'jsdom';
 import {createServer} from 'vite';
 import {runBrowserLayout} from './helpers/browser-layout-runner.mjs';
 
-test('due-day badges match column colors with contrasting text and fit below dates on phones, desktop and print',{timeout:90000},async t=>{
+test('date-day clusters are compact and centered in their columns on phones, desktop and print',{timeout:90000},async t=>{
  const browser=[process.env.CHROME_BIN,'C:/Program Files/Google/Chrome/Application/chrome.exe','/usr/bin/google-chrome','/usr/bin/chromium'].find(p=>p&&existsSync(p));
  if(!browser)return t.skip('Chrome unavailable');
  const root=resolve(fileURLToPath(new URL('..',import.meta.url)));
@@ -24,17 +24,28 @@ test('due-day badges match column colors with contrasting text and fit below dat
     assert.equal(state.missing,'Não informado');
     assert.deepEqual(state.rows.map(row=>row.text),['-1 d','0 d','1 d','5 d']);
     for(const row of state.rows){
-     assert.ok(row.below&&row.fits,JSON.stringify({width,row}));
+     assert.ok(row.below&&row.fits&&row.centered,JSON.stringify({width,row}));
      assert.equal(row.background,row.dateColor);
      assert.equal(row.color,'rgb(255, 255, 255)');
      assert.equal(row.border,'rgb(255, 255, 255)');
-     assert.ok(row.fontSize>=12);
-     assert.ok(row.height>=24,'badge padding must produce a clearly visible cluster');
+     assert.ok(row.fontSize>10&&row.fontSize<12,'vencimento must be slightly smaller');
+     assert.ok(row.height>=20&&row.height<24,'vencimento cluster must be slightly more compact');
      assert.equal(row.printColorAdjust,'exact');
     }
     assert.equal(state.rows[1].background,'rgb(183, 24, 42)');
     assert.equal(state.rows[2].background,'rgb(169, 75, 0)');
     assert.equal(state.rows[3].background,'rgb(23, 100, 63)');
+    assert.equal(state.missingIssued,'Não informada');
+    assert.equal(state.issued.length,4);
+    for(const row of state.issued){
+     assert.equal(row.text,'12 d');
+     assert.ok(row.below&&row.fits&&row.centered,JSON.stringify({width,row}));
+     assert.ok(row.fontSize>10&&row.fontSize<12,'emissão must be slightly larger than before');
+     assert.ok(row.height>=20&&row.height<24);
+     assert.equal(row.background,'rgb(237, 241, 244)');
+     assert.equal(row.color,'rgb(69, 99, 117)');
+     assert.equal(row.printColorAdjust,'exact');
+    }
     if(capture){mkdirSync(capture,{recursive:true});writeFileSync(join(capture,`dda-due-days-${width}-${mediaType}.png`),result.screenshot);}
    }finally{dom.window.close();}
   }
