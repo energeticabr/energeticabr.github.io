@@ -1,0 +1,38 @@
+<!doctype html>
+<html lang="pt-BR">
+<meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Fechamento de recibos — dados fictícios</title>
+<body><main id="gallery"></main><script type="module">
+import '../../src/styles.css';
+import '../../src/ui/gallery-record-actions.css';
+import { createGalleryRecordActions } from '../../src/ui/gallery-record-actions.js';
+const host = document.querySelector('main');
+let writes = 0;
+const actions = createGalleryRecordActions({ document, host, galleryTitle: 'GALERIA TAREFAS',
+  deleteItem: async () => { writes++; }, onChanged: async () => {},
+});
+const delay = ms => new Promise(resolve => setTimeout(resolve, ms));
+async function complete(id) {
+  const buttons = actions.render({ id, fields: { Title: 'TAREFA FICTÍCIA COM NOME COMPRIDO PARA VERIFICAR A QUEBRA DE TEXTO' } });
+  host.append(buttons); buttons.querySelector('[data-gallery-action="delete"]').click();
+  document.querySelector('[data-gallery-confirm="yes"]').click();
+  while (!document.querySelector('[data-gallery-delete-success]')) await delay(10);
+}
+await complete('42');
+const dialog = document.querySelector('[data-gallery-record-dialog]');
+const rect = dialog.getBoundingClientRect();
+const result = { width: innerWidth, left: rect.left, right: rect.right, title: dialog.querySelector('h2').textContent };
+await delay(1700);
+result.autoClosed = !document.querySelector('[data-gallery-record-dialog]');
+await complete('43');
+document.querySelector('[data-gallery-receipt-close]').click();
+result.manualClosed = !document.querySelector('[data-gallery-record-dialog]');
+const next = actions.render({ id: '44' }); host.append(next);
+next.querySelector('[data-gallery-action="delete"]').click();
+await delay(1700);
+result.nextConfirmationPreserved = !!document.querySelector('[data-gallery-confirm="yes"]');
+result.writes = writes;
+actions.destroy();
+const output = document.createElement('pre'); output.id = 'layout-result'; output.textContent = JSON.stringify(result);
+document.body.append(output); document.documentElement.dataset.layout = 'ready';
+</script></body></html>

@@ -6,6 +6,7 @@ import { bindPayrollEditorSource } from './payroll-editor-source.js';
 import { postingCompletionMarkup } from './posting-completion.js';
 import { deletionReceipt, galleryDeletionFields } from './gallery-deletion-receipt.js';
 import { editReceipt, galleryEditChanges } from './gallery-edit-receipt.js';
+import { scheduleCompletionDismiss } from './completion-receipt-dismiss.js';
 let dialogSequence = 0;
 
 const FOCUSABLE = 'button:not([disabled]), input:not([disabled]), select:not([disabled]), textarea:not([disabled]), a[href], [tabindex]:not([tabindex="-1"])';
@@ -57,6 +58,7 @@ export function createGalleryRecordActions({ document, host, loadEditor, saveEdi
     epoch++;
     const previous = session;
     session = null;
+    previous?.cancelReceiptDismiss?.();
     previous?.controller?.cleanup?.();
     previous?.fieldLocks?.cleanup?.();
     previous?.sourceBinding?.cleanup?.();
@@ -76,6 +78,7 @@ export function createGalleryRecordActions({ document, host, loadEditor, saveEdi
 
   function showError(state, error) {
     if (!active(state)) return;
+    state.cancelReceiptDismiss?.();
     state.error.replaceChildren(element("span", "gallery-error-message", error?.message || "Não foi possível concluir a operação. Tente novamente."));
     state.error.classList.toggle('gallery-record-dialog-error--conflict', Boolean(state.conflict && !state.persisted));
     if (state.conflict && !state.persisted) {
@@ -304,6 +307,10 @@ export function createGalleryRecordActions({ document, host, loadEditor, saveEdi
     state.dialog.replaceChildren(state.body);
     state.dialog.scrollTop = 0;
     state.dialog.focus({ preventScroll: true });
+    state.cancelReceiptDismiss?.();
+    state.cancelReceiptDismiss = scheduleCompletionDismiss(() => {
+      if (active(state) && !state.busy) close();
+    });
   }
 
   function openDelete(row, trigger) {

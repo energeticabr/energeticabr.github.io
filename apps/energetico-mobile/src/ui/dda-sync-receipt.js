@@ -1,4 +1,5 @@
 import { formatDdaElapsed } from '../chat/dda-bank-refresh.js';
+import { scheduleCompletionDismiss } from './completion-receipt-dismiss.js';
 /** Every terminal outcome is acknowledged; only confirmed IDs identify new records. */
 export function createDdaSyncReceipt({ document: doc, host, format, onClose = () => {}, global = false, requireAcknowledgement = false, onAcknowledge = async () => true }) {
   let current = null;
@@ -13,6 +14,7 @@ export function createDdaSyncReceipt({ document: doc, host, format, onClose = ()
   function close() {
     const previous = current; current = null;
     if (!previous) return;
+    previous.cancelReceiptDismiss?.();
     doc.removeEventListener('focusin', keepFocus, true);
     previous.observer?.disconnect();
     if(previous.native&&previous.overlay.open)previous.overlay.close();
@@ -65,6 +67,8 @@ export function createDdaSyncReceipt({ document: doc, host, format, onClose = ()
     if (hasNew) dialog.append(list);
     const button = el('button', 'gallery-record-dialog-button', 'Entendi'); button.type = 'button';
     button.addEventListener('click', async () => {
+      if (current?.dialog !== dialog || button.disabled) return;
+      current.cancelReceiptDismiss?.();
       if(!requireAcknowledgement){close();return;}
       button.disabled=true;
       try{if(await onAcknowledge()!==false&&current?.dialog===dialog)close();}finally{button.disabled=false;}
@@ -88,6 +92,9 @@ export function createDdaSyncReceipt({ document: doc, host, format, onClose = ()
       if (event.key === 'Tab') { event.preventDefault(); event.stopPropagation(); button.focus(); }
     });
     doc.addEventListener('focusin', keepFocus, true); button.focus({ preventScroll: true });
+    if (result.status === 'succeeded') current.cancelReceiptDismiss = scheduleCompletionDismiss(() => {
+      if (current?.dialog === dialog) button.click();
+    });
     return true;
   }
   return { show, close, destroy: close };

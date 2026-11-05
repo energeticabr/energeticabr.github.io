@@ -1,6 +1,7 @@
 import { createLoadingIndicator } from './loading-indicator.js';
 import { beginLoadingTask } from './loading-task.js';
 import { postingCompletionMarkup } from './posting-completion.js';
+import { scheduleCompletionDismiss } from './completion-receipt-dismiss.js';
 import { bindEditHighlights, buildEditChanges, cancelEditReview, confirmEditChanges } from '../../../../portal/ui/edit-review.js';
 
 const key = value => String(value || '').replace(/_x([0-9a-f]{4})_/gi, (_, hex) => String.fromCodePoint(parseInt(hex, 16)))
@@ -21,7 +22,7 @@ export function createTaskCompletionDialog({ document: doc, host, data, today, o
     if (previous?.form) cancelEditReview(previous.form);
     previous?.highlights?.cleanup();
     previous?.abort.abort();
-    clearTimeout(previous?.receiptTimer);
+    previous?.cancelReceiptDismiss?.();
     previous?.finishReceipt?.();
     previous?.overlay.remove(); onBlocked(false);
     if (previous?.trigger?.isConnected) previous.trigger.focus({ preventScroll: true });
@@ -56,10 +57,14 @@ export function createTaskCompletionDialog({ document: doc, host, data, today, o
     receipt.setAttribute('role', 'status');
     receipt.setAttribute('aria-live', 'polite');
     receipt.setAttribute('aria-atomic', 'true');
+    const dismiss = el('button', 'gallery-record-dialog-button', 'VOLTAR À GALERIA');
+    dismiss.type = 'button'; dismiss.setAttribute('data-task-completion-close', '');
+    dismiss.addEventListener('click', () => { if (active(current)) close(); });
+    receipt.querySelector('footer').replaceChildren(dismiss);
     current.dialog.focus({ preventScroll: true });
     await new Promise(resolve => {
       current.finishReceipt = resolve;
-      current.receiptTimer = setTimeout(resolve, 2000);
+      current.cancelReceiptDismiss = scheduleCompletionDismiss(resolve);
     });
     if (active(current)) close();
   }

@@ -36,6 +36,52 @@ async function setup(t, overrides = {}) {
   return { dom, document, actions, row, buttons, writes, changes, errors, get };
 }
 const click = (ctx, action) => ctx.buttons.querySelector(`[data-gallery-action="${action}"]`).click();
+
+for (const operation of ['delete', 'edit']) {
+  test(`${operation} receipt closes after exactly 1500 ms without repeating the write`, async t => {
+    t.mock.timers.enable({ apis: ['setTimeout'] });
+    const ctx = await setup(t);
+    click(ctx, operation); await settle(); await settle();
+    t.mock.timers.tick(5000); await settle();
+    assert.ok(ctx.get('[data-gallery-record-dialog]'), 'confirmation/editor never expires');
+    if (operation === 'delete') ctx.get('[data-gallery-confirm="yes"]').click();
+    else {
+      ctx.get('[name="Title"]').value = 'Alterado';
+      ctx.get('form').requestSubmit(); await confirmReview(ctx);
+    }
+    await settle();
+    assert.ok(ctx.get('[data-gallery-receipt-close]'));
+    t.mock.timers.tick(1499); await settle();
+    assert.ok(ctx.get('[data-gallery-record-dialog]'));
+    t.mock.timers.tick(1); await settle();
+    assert.equal(ctx.get('[data-gallery-record-dialog]'), null);
+    assert.equal(ctx.writes.length, 1);
+    assert.equal(ctx.changes.length, 1);
+  });
+}
+
+test('manual receipt dismissal cancels its timer before another editor opens', async t => {
+  t.mock.timers.enable({ apis: ['setTimeout'] });
+  const ctx = await setup(t);
+  click(ctx, 'edit'); await settle(); await settle();
+  ctx.get('[name="Title"]').value = 'Alterado';
+  ctx.get('form').requestSubmit(); await confirmReview(ctx); await settle();
+  t.mock.timers.tick(500);
+  ctx.get('[data-gallery-receipt-close]').click();
+  assert.equal(ctx.get('[data-gallery-record-dialog]'), null);
+  click(ctx, 'edit'); await settle(); await settle();
+  const next = ctx.get('form');
+  t.mock.timers.tick(5000); await settle();
+  assert.equal(ctx.get('form'), next);
+});
+
+test('gallery refresh failure keeps its retry actionable past receipt expiry', async t => {
+  t.mock.timers.enable({ apis: ['setTimeout'] });
+  const ctx = await setup(t, { onChanged: async () => { throw new Error('Sem rede'); } });
+  click(ctx, 'delete'); ctx.get('[data-gallery-confirm="yes"]').click(); await settle();
+  t.mock.timers.tick(5000); await settle();
+  assert.ok(ctx.get('[data-gallery-refresh-retry]'));
+});
 const key = (ctx, target, name, options = {}) => target.dispatchEvent(new ctx.dom.window.KeyboardEvent("keydown", { key: name, bubbles: true, cancelable: true, ...options }));
 async function confirmReview(ctx) {
   const review = ctx.get('[data-edit-review]');
