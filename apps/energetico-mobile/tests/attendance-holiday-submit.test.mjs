@@ -3,7 +3,7 @@ import assert from 'node:assert/strict';
 import { JSDOM } from 'jsdom';
 import { createChatView } from '../src/ui/chat-view.js';
 
-function setup(t) {
+function setup(t, partialPunch = false) {
   const dom = new JSDOM('<main></main>'), root = dom.window.document.querySelector('main');
   const view = createChatView(root), replies = [];
   t.after(() => { view.destroy(); dom.window.close(); });
@@ -12,7 +12,9 @@ function setup(t) {
     draft: '', pendingFiles: [], messages: [{ id: 'holiday-pending', role: 'assistant', type: 'poll',
       presentation: 'attendance_multi_select', question: 'VALIDAR PRESENÇAS', options: ['1','2'].map(id => ({
         id: `pending_attendance_record:${id}`, label: `${id} - PESSOA ${id}`, date: '2026-11-02',
-        rhidBadge: { date: '2026-11-02', status: 'absent', label: 'AUSENTE' },
+        rhidBadge: partialPunch
+          ? { date: '2026-11-02', status: 'inconsistent', label: 'INCONSISTENTE', punches: { entry1: '07:00' } }
+          : { date: '2026-11-02', status: 'absent', label: 'AUSENTE' },
       })) }],
   });
   return { root, view, replies };
@@ -30,7 +32,9 @@ async function submit(root) {
 
 for (const mode of ['checkbox', 'individual', 'todos']) {
   test(`holiday ${mode} submit does not select or reopen the already validated presence`, async t => {
-    const { root, view, replies } = setup(t), saves = [];
+    // Bulk selection now skips zero-punch absences; partial punches still enter
+    // justification and must retain the holiday save/queue behavior.
+    const { root, view, replies } = setup(t, mode === 'todos'), saves = [];
     view.on('attendance-irregularity-save', async command => { saves.push(command.id); return { ...command, presence: 'AUSENTE' }; });
     root.querySelector(mode === 'todos' ? '[data-action="attendance-select-all"]'
       : mode === 'individual' ? 'button[data-reply-id="pending_attendance_record:1"]' : 'input[data-reply-id="1"]').click();

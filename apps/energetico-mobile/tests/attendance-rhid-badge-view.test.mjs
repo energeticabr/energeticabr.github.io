@@ -185,22 +185,17 @@ for (const presentation of presentations) {
     assert.ok(rowFor(root, "2102"));
     root.querySelector('[data-action="attendance-select-all"]').click();
     if (presentation !== "attendance_supplier_sync") {
-      const dialog = root.querySelector('[data-attendance-irregularity-dialog]');
-      assert.ok(dialog, "a ausência de batidas exige justificativa na seleção em lote");
+      assert.equal(root.querySelector('[data-attendance-irregularity-dialog]'), null, "ausentes ficam fora da seleção em lote");
       assert.equal(rowFor(root, "2102").querySelector("input").checked, false);
-      dialog.querySelector('[data-role="attendance-irregularity-reason"]').value = "Sem batidas registradas.";
-      dialog.querySelector('[data-action="attendance-irregularity-submit"]').click();
-      root.ownerDocument.querySelector('[data-edit-review-submit]').click();
-      await new Promise(resolve => setTimeout(resolve, 0));
-      assert.deepEqual(saves, [{ id: "2102", date: "2026-10-13", explanation: "Sem batidas registradas." }]);
+      assert.deepEqual(saves, []);
     }
     view.render(attendanceBadgeState(poll));
     assert.equal(rowFor(root, "2101").querySelector("input").checked, true);
-    assert.equal(rowFor(root, "2102").querySelector("input").checked, true);
+    assert.equal(rowFor(root, "2102").querySelector("input").checked, presentation === "attendance_supplier_sync");
     assert.equal(rowFor(root, "2103").querySelector("input").disabled, true);
     assert.equal(rowFor(root, "2103").querySelector("input").checked, false);
     root.querySelector('[data-action="attendance-select-proceed"]').click();
-    assert.equal(replies.at(-1).replyId, presentation === "attendance_supplier_sync" ? "supplier_sync_batch:2101,2102" : "attendance_batch:2101,2102");
+    assert.equal(replies.at(-1).replyId, presentation === "attendance_supplier_sync" ? "supplier_sync_batch:2101,2102" : "attendance_batch:2101");
     view.render(attendanceBadgeState(poll, { draft: "AUSENTE" }));
     assert.equal(root.querySelectorAll(".chat-attendance-select__row").length, 0, "badge text is not part of the supplier filter");
     assert.ok(root.querySelector('button[data-reply-id="pending_attendance_other_date"]'));

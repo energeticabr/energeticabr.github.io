@@ -30,6 +30,7 @@ import { isRhidAttendanceDayFinalized, isRhidAttendanceRowDiscrepant, isRhidAtte
 import { PRESENCE_OTHER_DATES_REPLY_ID } from "../chat/presence-date-scope.js";
 import { attendanceMissingPunchContext, attendanceValidationDate } from "../chat/attendance-rhid-badges.js";
 import { attendanceIrregularity, isAttendanceHolidayReason } from "../chat/attendance-irregularity.js";
+import { attendanceBulkEligible, attendanceClockExempt } from "../chat/attendance-bulk-selection.js";
 import { createPowerBiDashboardView } from "./powerbi-dashboard-view.js";
 import { observeSignatureTrace } from "../web/signature-trace.js";
 import { createVoiceInputController } from "./voice-input.js";
@@ -1831,6 +1832,7 @@ function renderPoll(message, busy, draft = "", databaseFilterMessage = null, act
     const selected = new Set((supplierSync && !currentPoll ? [] : attendanceSelectedIds).map(String));
     const records = [];
     const visibleIds = [];
+    const bulkIds = [];
     const controls = [];
     for (const option of choiceOptions) {
       const replyId = draftReplyId(option);
@@ -1842,6 +1844,7 @@ function renderPoll(message, busy, draft = "", databaseFilterMessage = null, act
       }
       const optionUnavailable = option.disabled || (!supplierSync && option.rhidBadge?.status === 'loading');
       if (!optionUnavailable) visibleIds.push(id);
+      if (!optionUnavailable && (supplierSync || attendanceBulkEligible(option, message))) bulkIds.push(id);
       const label = String(option.label || option.title || `${id} - FORNECEDOR`);
       const nameMarkup = formatChatText(label);
       const correctable = !supplierSync && !busy && currentPoll && !optionUnavailable && !attendanceIrregularityChecking
@@ -1879,7 +1882,7 @@ function renderPoll(message, busy, draft = "", databaseFilterMessage = null, act
           : `<div class="chat-attendance-select__row">${checkbox}<button type="button" data-action="select-reply" data-reply-id="${escapeHtml(replyId)}" data-label="${escapeHtml(label)}"${busy || !currentPoll || optionUnavailable || attendanceIrregularityChecking ? " disabled" : ""}>${recordMarkup}</button></div>`);
     }
     const selectAll = visibleIds.length
-      ? `<label class="chat-select-all"><input type="checkbox" data-action="attendance-select-all" aria-label="Selecionar todas as presenças"${visibleIds.every(id => selected.has(id)) ? " checked" : ""}${busy || !currentPoll || attendanceIrregularityChecking ? " disabled" : ""}><span>SELECIONAR TODOS</span></label>`
+      ? `<label class="chat-select-all"><input type="checkbox" data-action="attendance-select-all" aria-label="Selecionar todas as presenças"${bulkIds.length && bulkIds.every(id => selected.has(id)) ? " checked" : ""}${busy || !currentPoll || attendanceIrregularityChecking ? " disabled" : ""}><span>SELECIONAR TODOS</span></label>`
       : "";
     const submitLabel = supplierSync ? "SUBMETER" : "PROSSEGUIR";
     return `<div class="chat-attendance-select"${supplierSync ? ' data-supplier-sync="true"' : ""}>${records.join("")}${selectAll}<p class="chat-attendance-select__warning" role="alert" hidden>Para editar separadamente as presenças, todos os checkbox devem estar desmarcados.</p><button class="chat-attendance-select__proceed" type="button" data-action="attendance-select-proceed"${busy || !currentPoll || attendanceIrregularityChecking || !selected.size ? " disabled" : ""}>${submitLabel}${selected.size ? ` (${selected.size})` : ""}</button>${controls.join("")}</div>`;
@@ -3052,6 +3055,7 @@ export function createChatView(root, { onOpenSettings, onDemoAccess, onSignOut, 
   const attendanceExpandedIds = new Set();
   let attendanceSelectionPollKey = "";
   let attendanceOptions = new Map();
+  let attendanceSelectionPoll = null;
   let attendanceIrregularityDialog = null;
   let attendanceIrregularityPending = null;
   let attendanceIrregularityQueue = [];
@@ -5697,7 +5701,9 @@ export function createChatView(root, { onOpenSettings, onDemoAccess, onSignOut, 
         .map(input => String(input.dataset.replyId || ""));
       for (const id of ids) {
         if (!checkbox.checked) attendanceSelectedIds.delete(id);
-        else if (checkbox.closest('.chat-attendance-select')?.dataset.supplierSync === 'true' || !attendanceIrregularOption(id)) attendanceSelectedIds.add(id);
+        else if (checkbox.closest('.chat-attendance-select')?.dataset.supplierSync === 'true') attendanceSelectedIds.add(id);
+        else if (!attendanceBulkEligible(attendanceOptions.get(id), attendanceSelectionPoll)) continue;
+        else if (attendanceClockExempt(attendanceOptions.get(id), attendanceSelectionPoll) || !attendanceIrregularOption(id)) attendanceSelectedIds.add(id);
         else if (!attendanceSelectedIds.has(id)) attendanceIrregularityQueue.push(id);
       }
       if (attendanceIrregularityQueue.length && checkbox.checked) nextAttendanceIrregularity();
@@ -5772,6 +5778,7 @@ export function createChatView(root, { onOpenSettings, onDemoAccess, onSignOut, 
     const viewingRhid = (newestPoll?.detail_table || newestPoll?.detailTable)?.kind === "rhid_attendance";
     if (state.sessionStatus !== "authenticated" || (!viewingRhid && nextAttendancePollKey !== attendanceReportSelection?.key)) attendanceReportSelection = null;
     attendanceSelectionPollKey = nextAttendancePollKey;
+    attendanceSelectionPoll = isAttendancePoll ? newestPoll : null;
     attendanceOptions = new Map(isAttendancePoll ? (newestPoll.options || []).map(option => [attendanceSelectionId(option), option]).filter(([id]) => id) : []);
     const eligibleAttendanceIds = new Set(isAttendancePoll ? (newestPoll.options || []).filter(option => !option.disabled).map(attendanceSelectionId).filter(Boolean) : []);
     for (const id of attendanceSelectedIds) {
