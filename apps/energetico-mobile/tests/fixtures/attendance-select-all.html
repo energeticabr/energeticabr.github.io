@@ -1,0 +1,26 @@
+<!doctype html>
+<html lang="pt-BR"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><link rel="stylesheet" href="/src/styles.css"></head>
+<body><main id="app"></main><script type="module">
+import { createChatView } from '/src/ui/chat-view.js';
+const root = document.querySelector('#app'), view = createChatView(root), replies = [];
+view.on('select-reply', event => replies.push(event.replyId));
+const date = '2026-11-04';
+view.render({ sessionStatus: 'authenticated', account: { name: 'Teste' }, draft: '', pendingFiles: [],
+  activeFlow: { id: 'attendance_validation', title: 'VALIDAR PRESENÇAS APONTADAS' }, messages: [{
+    id: 'bulk-browser', role: 'assistant', type: 'poll', presentation: 'attendance_multi_select', question: 'VALIDAR PRESENÇAS',
+    options: ['FORNECEDOR FICTÍCIO PRESENTE COM NOME EXTENSO PARA VERIFICAÇÃO', 'FORNECEDOR FICTÍCIO AUSENTE', 'ISRAEL ESCORAMENTO E ARMAÇÕES', 'RAFAEL GONTIJO'].map((name, i) => ({
+      id: `pending_attendance_record:${i + 1}`, label: `${i + 1} - ${name}`, date,
+      rhidBadge: { status: i ? 'absent' : 'present', date, label: i ? 'AUSENTE' : '09h00', minutes: i ? 0 : 540,
+        punches: i ? { entry1: null, exit1: null, entry2: null, exit2: null } : { entry1: '07:00', exit1: '12:00', entry2: '13:00', exit2: '17:00' } },
+    })),
+  }] });
+root.querySelector('[data-action="attendance-select-all"]').click();
+root.querySelector('[data-action="attendance-select-proceed"]').click();
+await document.fonts.ready; await new Promise(requestAnimationFrame);
+document.documentElement.dataset.layout = JSON.stringify({
+  overflow: document.documentElement.scrollWidth > innerWidth,
+  selected: [...root.querySelectorAll('input[data-action="attendance-select-toggle"]:checked')].map(input => input.dataset.replyId),
+  allChecked: root.querySelector('[data-action="attendance-select-all"]').checked,
+  dialog: Boolean(root.querySelector('[data-attendance-irregularity-dialog]')), replies,
+});
+</script></body></html>

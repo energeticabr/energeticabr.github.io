@@ -3606,8 +3606,8 @@ for (const presentation of ["accordion", "attendance_multi_select"]) {
       id: "pending-july", role: "assistant", type: "poll", presentation,
       question: "PRESENÇAS PENDENTES DE 31/07/2026",
       options: [
-        { id: "pending_attendance_record:1814", reply: "pending_attendance_record:1814", label: "1814 - PRIMEIRO" },
-        { id: "pending_attendance_record:1815", reply: "pending_attendance_record:1815", label: "1815 - SEGUNDO" },
+        { id: "pending_attendance_record:1814", reply: "pending_attendance_record:1814", label: "1814 - PRIMEIRO", rhidBadge: { status: 'present', minutes: 540 } },
+        { id: "pending_attendance_record:1815", reply: "pending_attendance_record:1815", label: "1815 - SEGUNDO", rhidBadge: { status: 'present', minutes: 540 } },
         { id: "pending_attendance_other_date", reply: "pending_attendance_other_date", label: "📅 AVALIAR OUTRA DATA" },
       ],
     }] }));
