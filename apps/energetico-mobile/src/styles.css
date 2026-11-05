@@ -673,6 +673,7 @@ button { touch-action: manipulation; }
 .chat-supplier-defaults-table .chat-supplier-defaults-name { vertical-align: middle; font-size: 10px; font-weight: 800; }
 .chat-supplier-defaults-table small { display: block; margin-bottom: 4px; font-size: 9px; line-height: 1.25; font-weight: 750; color: #4b6770; }
 .chat-supplier-defaults-table .chat-supplier-defaults-name small { margin: 5px 0 0; font-weight: 600; }
+.chat-supplier-defaults-table .is-before { color: #b42318; font-weight: 750; }
 .chat-supplier-defaults-table .is-after { color: #07583e; font-weight: 750; }
 .chat-supplier-defaults-warning { margin: 0 !important; padding: 9px; background: #fff4dd; color: #74420a; font-size: .85rem; line-height: 1.35; }
 .chat-presence-table > strong { display: block; padding: 7px 10px; color: #12634f; background: #e7f5f0; font-size: 12px; text-align: center; }
