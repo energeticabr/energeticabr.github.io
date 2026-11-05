@@ -118,6 +118,15 @@ class SyncTests(unittest.TestCase):
         c.reconcile(s,self.bill,self.files)
         self.assertEqual(s.writes,[])
 
+    def test_parent_copy_is_child_evidence_not_an_independent_group_original(self):
+        from hashlib import sha256
+        c.reconcile(self.store,self.bill,self.files)
+        child_name=self.store.files[(c.CHILD,326)][0]['filename']
+        parent_name=self.store.files[(c.PARENT,13)][0]['filename']
+        digest=sha256(self.files[0]['content']).hexdigest()
+        self.assertEqual(parent_name,f'PROV-326-{digest}-{child_name}')
+        self.assertNotEqual(child_name,parent_name)
+
     def test_paid_conflicting_amount_blocks_all_writes_and_uploads(self):
         self.store.rows[(c.CHILD,326)]['PGTOAGENDADO']='PAGO'
         with self.assertRaises(c.Review): c.reconcile(self.store,self.bill,self.files)
