@@ -74,7 +74,9 @@
         // Walk the actual receipt scroller: all IDs must remain reachable even
         // when a many-ID source is taller than a phone viewport.
         for (const badge of badges) {
-          badge.scrollIntoView({ block: 'nearest', inline: 'nearest' }); await frames();
+          // Layout reads flush this instant scroll synchronously. Inspect the
+          // complete list before the success receipt's 1500 ms expiry.
+          badge.scrollIntoView({ block: 'nearest', inline: 'nearest', behavior: 'instant' });
           const box = bounds(badge), visiblePane = bounds(pane);
           check(contains(visiblePane, box) && box.top >= 0 && box.bottom <= innerHeight + 1, `${item.name}/${key}: every badge can be viewed by scrolling`);
         }

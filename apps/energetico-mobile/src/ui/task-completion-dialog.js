@@ -60,7 +60,7 @@ export function createTaskCompletionDialog({ document: doc, host, data, today, o
     const dismiss = el('button', 'gallery-record-dialog-button', 'VOLTAR À GALERIA');
     dismiss.type = 'button'; dismiss.setAttribute('data-task-completion-close', '');
     dismiss.addEventListener('click', () => { if (active(current)) close(); });
-    current.dialog.append(dismiss);
+    receipt.querySelector('footer').replaceChildren(dismiss);
     current.dialog.focus({ preventScroll: true });
     await new Promise(resolve => {
       current.finishReceipt = resolve;
