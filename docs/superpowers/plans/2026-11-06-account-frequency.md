@@ -8,6 +8,6 @@ User explicitly requested autonomous implementation and publication; execute inl
 
 - [x] Add behavior tests against real workflow fixtures: frequency, last-100 boundary, ties, accents, empty/failure fallback, refresh, filtering/pagination/selection, isolation and draft preservation. Baseline: 7 expected failures, no errors. Candidate: 10 pass.
 - [x] Add pinned patcher and minimal ranker for launch/conta_lancamento. Linux directed regressions, preserved stage/expense tests and installer tests: 64 pass. Signature guard: 14 protected blocks intact. Independent review: no material findings.
-- [ ] Review diff, package exact hashes with existing guarded installer, run preflight, publish with lock/gate/backup/rollback, independently verify installed behavior and service health. Commit and publish reviewable source patch and evidence.
+- [x] Review diff, package exact hashes with existing guarded installer, run preflight, publish with lock/gate/backup/rollback, independently verify installed behavior and service health. PR 785 merged; main CI passed. Installed regression: 10 pass; 100 live records/13 accounts independently matched; service and public HTTPS healthy; mirror unchanged. Full historical suite timed out at 90 seconds in both baseline and candidate.
 
 Review focus: source values rather than display IDs; blank accounts count in the 100-record window; new launches refresh ranking; unchanged choice IDs; history outage keeps payment available.
