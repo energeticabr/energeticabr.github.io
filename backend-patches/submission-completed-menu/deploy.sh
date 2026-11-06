@@ -2,7 +2,7 @@
 set -euo pipefail
 PACKAGE="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd)"
 PYTHON=/opt/energetica-whatsapp/.venv/bin/python
-[[ "$PACKAGE" == /home/opc/submission-menu-20261106/release ]]
+[[ "$PACKAGE" == /home/opc/submission-menu-20261106/release-v4 ]]
 [[ "$(id -u)" == 0 ]]
 [[ "$#" == 1 ]]
 # Validate reviewed package hashes before executing the staged gate.
@@ -11,7 +11,7 @@ PYTHON=/opt/energetica-whatsapp/.venv/bin/python
 # Do not reopen a staged script between verification and root execution.
 VERIFIED_GATE="$(< "$PACKAGE/deployment_gate.sh")"
 VERIFIED_GATE_SHA="$(printf '%s\n' "$VERIFIED_GATE" | sha256sum)"
-[[ "${VERIFIED_GATE_SHA%% *}" == ae5ed44ab6d6ab1edfecbc14dd3bbd59505e9f991962d1410f488e4a029eefb6 ]]
+[[ "${VERIFIED_GATE_SHA%% *}" == 4772b66c2bd678252651f1c7fa5234e56e52e100dc01866c83135520c5b1e298 ]]
 source /dev/stdin <<< "$VERIFIED_GATE"
 trap diary_release_ingress EXIT
 trap 'exit 1' HUP INT TERM
