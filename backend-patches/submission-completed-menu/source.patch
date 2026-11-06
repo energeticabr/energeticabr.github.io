@@ -1,0 +1,36 @@
+--- a/worker/workflow.py
++++ b/worker/workflow.py
+@@ -1383,2 +1383,6 @@
+-            and event.get("message_id")
+-            == state.get("completion_trigger_message_id")
++            and (
++                event.get("message_id") == state.get("completion_trigger_message_id")
++                or (event.get("kind") == "text" and _control_command(
++                    event.get("reply_id") or event.get("text") or ""
++                ) in {"sim", "confirm_yes"})
++            )
+@@ -1386,0 +1391,4 @@
++            # A second tap has a new ID; remember it before acknowledging it.
++            if event.get("message_id") not in state.get("processed_message_ids", []):
++                self._mark_processed(state, event["message_id"])
++                etag = self._save(state, etag)
+@@ -1394,0 +1403,8 @@
++            }
++
++        # Deduplicate before a completed batch can be replaced by a menu.
++        if state and event.get("message_id") in state.get("processed_message_ids", []):
++            return {
++                "status": "duplicate",
++                "message_id": event["message_id"],
++                "batch_id": state.get("batch_id"),
+@@ -1406,0 +1423,2 @@
++            # Retried old answers must remain duplicates after entering an area.
++            fresh["processed_message_ids"] = list(state.get("processed_message_ids", []))
+@@ -1409,7 +1426,0 @@
+-
+-        if state and event.get("message_id") in state.get("processed_message_ids", []):
+-            return {
+-                "status": "duplicate",
+-                "message_id": event["message_id"],
+-                "batch_id": state.get("batch_id"),
+-            }
