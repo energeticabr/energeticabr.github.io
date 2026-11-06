@@ -1561,14 +1561,17 @@ button.chat-rhid-attendance-card__cluster:focus-visible { outline: 3px solid #15
 .attendance-copy-actions button { flex: 1; min-width: 0; min-height: 44px; border: 0; border-radius: 10px; background: #07576c; color: white; font-weight: 800; }
 .attendance-copy-dialog [hidden] { display: none !important; }
 
+.chat-message--assistant:has(.payroll-assignment) > .chat-avatar { display: none; }
+.chat-message--assistant:has(.payroll-assignment) > .chat-bubble { box-sizing: border-box; flex: 1 1 100%; width: 100%; max-width: none; min-width: 0; }
 .payroll-assignment { min-width: 0; max-width: 100%; margin: 10px 0 14px; }
 .payroll-assignment__scroll { max-width: 100%; overflow-x: auto; border: 1px solid #bad4d9; border-radius: 12px; }
-.payroll-assignment table { width: 100%; min-width: 200px; table-layout: fixed; border-collapse: collapse; font-size: 12px; line-height: 1.4; }
-.payroll-assignment__id { width: 34px; }
-.payroll-assignment__amount { width: 78px; }
+.payroll-assignment table { width: 100%; min-width: 200px; table-layout: auto; border-collapse: collapse; font-size: 12px; line-height: 1.4; }
+.payroll-assignment__id, .payroll-assignment__amount { width: 1%; }
 .payroll-assignment th, .payroll-assignment td { padding: 9px 6px; text-align: left; vertical-align: top; overflow-wrap: anywhere; border-bottom: 1px solid #d4e4e7; }
 .payroll-assignment thead th { color: #fff; background: #07576c; font-size: 10px; font-weight: 800; }
 .payroll-assignment tbody tr:nth-child(even) { background: #eef6f7; }
 .payroll-assignment tbody tr:last-child td { border-bottom: 0; }
+.payroll-assignment td:first-child, .payroll-assignment td:nth-child(2) { font-weight: 800; }
+.payroll-assignment :is(th, td):first-child, .payroll-assignment :is(th, td):last-child { white-space: nowrap; overflow-wrap: normal; }
 .payroll-assignment td:last-child { color: #a52922; text-align: right; font-weight: 800; }
 .payroll-assignment th:last-child { text-align: right; }

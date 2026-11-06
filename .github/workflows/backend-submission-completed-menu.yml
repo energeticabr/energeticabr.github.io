@@ -1,0 +1,24 @@
+name: Backend completed submission replay
+on:
+  pull_request:
+    paths:
+      - 'backend-patches/submission-completed-menu/**'
+      - '.github/workflows/backend-submission-completed-menu.yml'
+  push:
+    branches: [main]
+    paths:
+      - 'backend-patches/submission-completed-menu/**'
+      - '.github/workflows/backend-submission-completed-menu.yml'
+permissions:
+  contents: read
+jobs:
+  installer-tests:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+      - run: python -B -m unittest discover -s backend-patches/submission-completed-menu -p test_deploy.py -v
+      - run: python -B -m unittest discover -s backend-patches/submission-completed-menu -p test_startup_wait.py -v
