@@ -1,0 +1,159 @@
+{
+  "baseline_tests": 30,
+  "candidate_tests": 30,
+  "baseline_failures": 37,
+  "candidate_failures": 35,
+  "new_failures": [],
+  "resolved": [
+    [
+      "test_launch_default_product_unit.LaunchDefaultProductUnitTests.test_each_additional_line_recomputes_the_default_without_changing_the_first",
+      ""
+    ],
+    [
+      "test_launch_default_product_unit.LaunchDefaultProductUnitTests.test_multiple_launch_first_line_also_uses_its_product_default",
+      ""
+    ]
+  ],
+  "existing_failures": [
+    [
+      "test_launch_default_product_unit.LaunchDefaultProductUnitTests.test_ambiguous_product_defaults_do_not_silently_pick_the_first",
+      ""
+    ],
+    [
+      "test_launch_default_product_unit.LaunchDefaultProductUnitTests.test_attempted_payload_cannot_reopen_summary_or_product_edit (resume=False)",
+      ""
+    ],
+    [
+      "test_launch_default_product_unit.LaunchDefaultProductUnitTests.test_attempted_payload_cannot_reopen_summary_or_product_edit (resume=True)",
+      ""
+    ],
+    [
+      "test_launch_default_product_unit.LaunchDefaultProductUnitTests.test_automatic_unit_does_not_read_the_legacy_unit_catalog",
+      ""
+    ],
+    [
+      "test_launch_default_product_unit.LaunchDefaultProductUnitTests.test_default_reinserted_by_the_catalog_is_used_even_without_a_numeric_unit_id",
+      ""
+    ],
+    [
+      "test_launch_default_product_unit.LaunchDefaultProductUnitTests.test_failed_non_cash_attempt_freezes_unit_before_retry_and_keeps_posted_record",
+      ""
+    ],
+    [
+      "test_launch_default_product_unit.LaunchDefaultProductUnitTests.test_homonymous_products_use_the_selected_id_instead_of_the_name",
+      ""
+    ],
+    [
+      "test_launch_default_product_unit.LaunchDefaultProductUnitTests.test_missing_or_invalid_id_and_default_never_guess_a_unit (product_id='NOVO', unit='UN')",
+      ""
+    ],
+    [
+      "test_launch_default_product_unit.LaunchDefaultProductUnitTests.test_missing_or_invalid_id_and_default_never_guess_a_unit (product_id=0, unit='UN')",
+      ""
+    ],
+    [
+      "test_launch_default_product_unit.LaunchDefaultProductUnitTests.test_missing_or_invalid_id_and_default_never_guess_a_unit (product_id=210, unit='   ')",
+      ""
+    ],
+    [
+      "test_launch_default_product_unit.LaunchDefaultProductUnitTests.test_missing_or_invalid_id_and_default_never_guess_a_unit (product_id=210, unit='')",
+      ""
+    ],
+    [
+      "test_launch_default_product_unit.LaunchDefaultProductUnitTests.test_missing_or_invalid_id_and_default_never_guess_a_unit (product_id=210, unit=12)",
+      ""
+    ],
+    [
+      "test_launch_default_product_unit.LaunchDefaultProductUnitTests.test_missing_or_invalid_id_and_default_never_guess_a_unit (product_id=210, unit=None)",
+      ""
+    ],
+    [
+      "test_launch_default_product_unit.LaunchDefaultProductUnitTests.test_missing_or_invalid_id_and_default_never_guess_a_unit (product_id=None, unit='UN')",
+      ""
+    ],
+    [
+      "test_launch_default_product_unit.LaunchDefaultProductUnitTests.test_missing_or_invalid_id_and_default_never_guess_a_unit (product_id=True, unit='UN')",
+      ""
+    ],
+    [
+      "test_launch_default_product_unit.LaunchDefaultProductUnitTests.test_missing_product_default_does_not_select_an_unrelated_unit_or_ask_for_one",
+      ""
+    ],
+    [
+      "test_launch_default_product_unit.LaunchDefaultProductUnitTests.test_non_unit_number_step_is_not_redirected_by_the_automatic_flag",
+      ""
+    ],
+    [
+      "test_launch_default_product_unit.LaunchDefaultProductUnitTests.test_old_filter_controls_apply_default_without_emitting_unit_poll (control='filter_clear')",
+      ""
+    ],
+    [
+      "test_launch_default_product_unit.LaunchDefaultProductUnitTests.test_old_filter_controls_apply_default_without_emitting_unit_poll (control='filter_query')",
+      ""
+    ],
+    [
+      "test_launch_default_product_unit.LaunchDefaultProductUnitTests.test_old_filter_controls_apply_default_without_emitting_unit_poll (control='refresh_options')",
+      ""
+    ],
+    [
+      "test_launch_default_product_unit.LaunchDefaultProductUnitTests.test_old_pagination_control_applies_default_without_emitting_unit_poll",
+      ""
+    ],
+    [
+      "test_launch_default_product_unit.LaunchDefaultProductUnitTests.test_old_quantity_stage_is_normalized_when_it_reaches_summary",
+      ""
+    ],
+    [
+      "test_launch_default_product_unit.LaunchDefaultProductUnitTests.test_old_unit_prompt_reply_is_migrated_to_the_product_default",
+      ""
+    ],
+    [
+      "test_launch_default_product_unit.LaunchDefaultProductUnitTests.test_precommit_normalizes_before_even_the_related_order_write",
+      ""
+    ],
+    [
+      "test_launch_default_product_unit.LaunchDefaultProductUnitTests.test_product_change_recomputes_unit_and_blocks_when_new_default_is_missing (unit='KG')",
+      ""
+    ],
+    [
+      "test_launch_default_product_unit.LaunchDefaultProductUnitTests.test_product_change_recomputes_unit_and_blocks_when_new_default_is_missing (unit=None)",
+      ""
+    ],
+    [
+      "test_launch_default_product_unit.LaunchDefaultProductUnitTests.test_product_id_can_fall_back_to_source_values_but_never_to_name",
+      ""
+    ],
+    [
+      "test_launch_default_product_unit.LaunchDefaultProductUnitTests.test_registered_product_resumes_with_its_id_and_unit_and_passes_summary_guard",
+      ""
+    ],
+    [
+      "test_launch_default_product_unit.LaunchDefaultProductUnitTests.test_resuming_a_draft_already_at_confirmation_rebuilds_summary_with_default",
+      ""
+    ],
+    [
+      "test_launch_default_product_unit.LaunchDefaultProductUnitTests.test_resuming_a_frozen_old_unit_step_never_changes_its_payload",
+      ""
+    ],
+    [
+      "test_launch_default_product_unit.LaunchDefaultProductUnitTests.test_resuming_an_old_unit_question_advances_without_showing_the_poll",
+      ""
+    ],
+    [
+      "test_launch_default_product_unit.LaunchDefaultProductUnitTests.test_returning_from_cancelled_confirmation_revalidates_unit",
+      ""
+    ],
+    [
+      "test_launch_default_product_unit.LaunchDefaultProductUnitTests.test_single_launch_uses_product_unit_and_asks_quantity_next",
+      ""
+    ],
+    [
+      "test_launch_default_product_unit.LaunchDefaultProductUnitTests.test_the_unit_is_not_offered_as_a_manual_summary_edit",
+      ""
+    ],
+    [
+      "test_launch_default_product_unit.LaunchDefaultProductUnitTests.test_transient_catalog_error_keeps_current_attempt_retryable_without_duplicate_creates",
+      ""
+    ]
+  ]
+}
