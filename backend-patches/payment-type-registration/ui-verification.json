@@ -1,0 +1,914 @@
+[
+  {
+    "width": 320,
+    "mode": "select",
+    "overflow": false,
+    "buttons": [
+      {
+        "text": "➕ CADASTRAR TIPO DE PAGAMENTO",
+        "command": {
+          "type": "select-reply",
+          "replyId": "launch_payroll_type_create",
+          "label": "➕ CADASTRAR TIPO DE PAGAMENTO"
+        },
+        "x": 74,
+        "right": 273.125,
+        "height": 50.40625
+      },
+      {
+        "text": "SALÁRIO",
+        "command": {
+          "type": "select-reply",
+          "replyId": "launch_payroll_type_salary",
+          "label": "SALÁRIO"
+        },
+        "x": 74,
+        "right": 273.125,
+        "height": 44
+      },
+      {
+        "text": "VALE REFEIÇÃO",
+        "command": {
+          "type": "select-reply",
+          "replyId": "launch_payroll_type_meal",
+          "label": "VALE REFEIÇÃO"
+        },
+        "x": 74,
+        "right": 273.125,
+        "height": 44
+      },
+      {
+        "text": "VALE TRANSPORTE",
+        "command": {
+          "type": "select-reply",
+          "replyId": "launch_payroll_type_transport",
+          "label": "VALE TRANSPORTE"
+        },
+        "x": 74,
+        "right": 273.125,
+        "height": 44
+      },
+      {
+        "text": "AJUDA DE CUSTO",
+        "command": {
+          "type": "select-reply",
+          "replyId": "launch_payroll_type_allowance",
+          "label": "AJUDA DE CUSTO"
+        },
+        "x": 74,
+        "right": 273.125,
+        "height": 44
+      },
+      {
+        "text": "13 SALÁRIO",
+        "command": {
+          "type": "select-reply",
+          "replyId": "launch_payroll_type_thirteenth",
+          "label": "13 SALÁRIO"
+        },
+        "x": 74,
+        "right": 273.125,
+        "height": 44
+      },
+      {
+        "text": "FÉRIAS E/OU ENCARGOS",
+        "command": {
+          "type": "select-reply",
+          "replyId": "launch_payroll_type_vacation_charges",
+          "label": "FÉRIAS E/OU ENCARGOS"
+        },
+        "x": 74,
+        "right": 273.125,
+        "height": 44
+      },
+      {
+        "text": "PREMIAÇÃO",
+        "command": {
+          "type": "select-reply",
+          "replyId": "launch_payroll_type_award",
+          "label": "PREMIAÇÃO"
+        },
+        "x": 74,
+        "right": 273.125,
+        "height": 44
+      }
+    ],
+    "filter": true
+  },
+  {
+    "width": 320,
+    "mode": "empty",
+    "overflow": false,
+    "buttons": [
+      {
+        "text": "➕ CADASTRAR TIPO DE PAGAMENTO",
+        "command": {
+          "type": "select-reply",
+          "replyId": "launch_payroll_type_create",
+          "label": "➕ CADASTRAR TIPO DE PAGAMENTO"
+        },
+        "x": 74,
+        "right": 285.4375,
+        "height": 50.40625
+      },
+      {
+        "text": "🔄 TENTAR NOVAMENTE",
+        "command": {
+          "type": "select-reply",
+          "replyId": "launch_payroll_type_refresh",
+          "label": "🔄 TENTAR NOVAMENTE"
+        },
+        "x": 74,
+        "right": 285.4375,
+        "height": 44
+      }
+    ],
+    "filter": true
+  },
+  {
+    "width": 320,
+    "mode": "name",
+    "overflow": false,
+    "buttons": [
+      {
+        "text": "❌ CANCELAR CADASTRO",
+        "command": {
+          "type": "select-reply",
+          "replyId": "launch_payroll_type_create_cancel:9bf773945f10f918e29e5e16",
+          "label": "❌ CANCELAR CADASTRO"
+        },
+        "x": 74,
+        "right": 285.4375,
+        "height": 44
+      }
+    ],
+    "filter": true
+  },
+  {
+    "width": 320,
+    "mode": "confirm",
+    "overflow": false,
+    "buttons": [
+      {
+        "text": "✅ CADASTRAR",
+        "command": {
+          "type": "select-reply",
+          "replyId": "launch_payroll_type_create_confirm:a412434eb0b84d64d8f421a3",
+          "label": "✅ CADASTRAR"
+        },
+        "x": 74,
+        "right": 285.4375,
+        "height": 44
+      },
+      {
+        "text": "❌ CANCELAR CADASTRO",
+        "command": {
+          "type": "select-reply",
+          "replyId": "launch_payroll_type_create_cancel:a412434eb0b84d64d8f421a3",
+          "label": "❌ CANCELAR CADASTRO"
+        },
+        "x": 74,
+        "right": 285.4375,
+        "height": 44
+      }
+    ],
+    "filter": true
+  },
+  {
+    "width": 320,
+    "mode": "page",
+    "overflow": false,
+    "buttons": [
+      {
+        "text": "➕ CADASTRAR TIPO DE PAGAMENTO",
+        "command": {
+          "type": "select-reply",
+          "replyId": "launch_payroll_type_create",
+          "label": "➕ CADASTRAR TIPO DE PAGAMENTO"
+        },
+        "x": 74,
+        "right": 273.125,
+        "height": 50.40625
+      },
+      {
+        "text": "TIPO FICTÍCIO 08 PARA PAGAMENTO DE SERVIÇOS E REEMBOLSOS",
+        "command": {
+          "type": "select-reply",
+          "replyId": "launch_payroll_type_catalog_108",
+          "label": "TIPO FICTÍCIO 08 PARA PAGAMENTO DE SERVIÇOS E REEMBOLSOS"
+        },
+        "x": 74,
+        "right": 273.125,
+        "height": 67.609375
+      },
+      {
+        "text": "TIPO FICTÍCIO 09 PARA PAGAMENTO DE SERVIÇOS E REEMBOLSOS",
+        "command": {
+          "type": "select-reply",
+          "replyId": "launch_payroll_type_catalog_109",
+          "label": "TIPO FICTÍCIO 09 PARA PAGAMENTO DE SERVIÇOS E REEMBOLSOS"
+        },
+        "x": 74,
+        "right": 273.125,
+        "height": 67.609375
+      },
+      {
+        "text": "TIPO FICTÍCIO 10 PARA PAGAMENTO DE SERVIÇOS E REEMBOLSOS",
+        "command": {
+          "type": "select-reply",
+          "replyId": "launch_payroll_type_catalog_110",
+          "label": "TIPO FICTÍCIO 10 PARA PAGAMENTO DE SERVIÇOS E REEMBOLSOS"
+        },
+        "x": 74,
+        "right": 273.125,
+        "height": 67.609375
+      },
+      {
+        "text": "TIPO FICTÍCIO 11 PARA PAGAMENTO DE SERVIÇOS E REEMBOLSOS",
+        "command": {
+          "type": "select-reply",
+          "replyId": "launch_payroll_type_catalog_111",
+          "label": "TIPO FICTÍCIO 11 PARA PAGAMENTO DE SERVIÇOS E REEMBOLSOS"
+        },
+        "x": 74,
+        "right": 273.125,
+        "height": 67.609375
+      },
+      {
+        "text": "TIPO FICTÍCIO 12 PARA PAGAMENTO DE SERVIÇOS E REEMBOLSOS",
+        "command": {
+          "type": "select-reply",
+          "replyId": "launch_payroll_type_catalog_112",
+          "label": "TIPO FICTÍCIO 12 PARA PAGAMENTO DE SERVIÇOS E REEMBOLSOS"
+        },
+        "x": 74,
+        "right": 273.125,
+        "height": 67.609375
+      },
+      {
+        "text": "TIPO FICTÍCIO 13 PARA PAGAMENTO DE SERVIÇOS E REEMBOLSOS",
+        "command": {
+          "type": "select-reply",
+          "replyId": "launch_payroll_type_catalog_113",
+          "label": "TIPO FICTÍCIO 13 PARA PAGAMENTO DE SERVIÇOS E REEMBOLSOS"
+        },
+        "x": 74,
+        "right": 273.125,
+        "height": 67.609375
+      },
+      {
+        "text": "TIPO FICTÍCIO 14 PARA PAGAMENTO DE SERVIÇOS E REEMBOLSOS",
+        "command": {
+          "type": "select-reply",
+          "replyId": "launch_payroll_type_catalog_114",
+          "label": "TIPO FICTÍCIO 14 PARA PAGAMENTO DE SERVIÇOS E REEMBOLSOS"
+        },
+        "x": 74,
+        "right": 273.125,
+        "height": 67.609375
+      },
+      {
+        "text": "TIPO FICTÍCIO 15 PARA PAGAMENTO DE SERVIÇOS E REEMBOLSOS",
+        "command": {
+          "type": "select-reply",
+          "replyId": "launch_payroll_type_catalog_115",
+          "label": "TIPO FICTÍCIO 15 PARA PAGAMENTO DE SERVIÇOS E REEMBOLSOS"
+        },
+        "x": 74,
+        "right": 273.125,
+        "height": 67.609375
+      },
+      {
+        "text": "⬅️ TIPOS ANTERIORES",
+        "command": {
+          "type": "select-reply",
+          "replyId": "launch_payroll_type_page_0",
+          "label": "⬅️ TIPOS ANTERIORES"
+        },
+        "x": 74,
+        "right": 273.125,
+        "height": 44
+      },
+      {
+        "text": "➡️ PRÓXIMOS TIPOS",
+        "command": {
+          "type": "select-reply",
+          "replyId": "launch_payroll_type_page_2",
+          "label": "➡️ PRÓXIMOS TIPOS"
+        },
+        "x": 74,
+        "right": 273.125,
+        "height": 44
+      }
+    ],
+    "filter": true
+  },
+  {
+    "width": 390,
+    "mode": "select",
+    "overflow": false,
+    "buttons": [
+      {
+        "text": "➕ CADASTRAR TIPO DE PAGAMENTO",
+        "command": {
+          "type": "select-reply",
+          "replyId": "launch_payroll_type_create",
+          "label": "➕ CADASTRAR TIPO DE PAGAMENTO"
+        },
+        "x": 74,
+        "right": 330.53125,
+        "height": 50.40625
+      },
+      {
+        "text": "SALÁRIO",
+        "command": {
+          "type": "select-reply",
+          "replyId": "launch_payroll_type_salary",
+          "label": "SALÁRIO"
+        },
+        "x": 74,
+        "right": 330.53125,
+        "height": 44
+      },
+      {
+        "text": "VALE REFEIÇÃO",
+        "command": {
+          "type": "select-reply",
+          "replyId": "launch_payroll_type_meal",
+          "label": "VALE REFEIÇÃO"
+        },
+        "x": 74,
+        "right": 330.53125,
+        "height": 44
+      },
+      {
+        "text": "VALE TRANSPORTE",
+        "command": {
+          "type": "select-reply",
+          "replyId": "launch_payroll_type_transport",
+          "label": "VALE TRANSPORTE"
+        },
+        "x": 74,
+        "right": 330.53125,
+        "height": 44
+      },
+      {
+        "text": "AJUDA DE CUSTO",
+        "command": {
+          "type": "select-reply",
+          "replyId": "launch_payroll_type_allowance",
+          "label": "AJUDA DE CUSTO"
+        },
+        "x": 74,
+        "right": 330.53125,
+        "height": 44
+      },
+      {
+        "text": "13 SALÁRIO",
+        "command": {
+          "type": "select-reply",
+          "replyId": "launch_payroll_type_thirteenth",
+          "label": "13 SALÁRIO"
+        },
+        "x": 74,
+        "right": 330.53125,
+        "height": 44
+      },
+      {
+        "text": "FÉRIAS E/OU ENCARGOS",
+        "command": {
+          "type": "select-reply",
+          "replyId": "launch_payroll_type_vacation_charges",
+          "label": "FÉRIAS E/OU ENCARGOS"
+        },
+        "x": 74,
+        "right": 330.53125,
+        "height": 44
+      },
+      {
+        "text": "PREMIAÇÃO",
+        "command": {
+          "type": "select-reply",
+          "replyId": "launch_payroll_type_award",
+          "label": "PREMIAÇÃO"
+        },
+        "x": 74,
+        "right": 330.53125,
+        "height": 44
+      }
+    ],
+    "filter": true
+  },
+  {
+    "width": 390,
+    "mode": "empty",
+    "overflow": false,
+    "buttons": [
+      {
+        "text": "➕ CADASTRAR TIPO DE PAGAMENTO",
+        "command": {
+          "type": "select-reply",
+          "replyId": "launch_payroll_type_create",
+          "label": "➕ CADASTRAR TIPO DE PAGAMENTO"
+        },
+        "x": 74,
+        "right": 342.828125,
+        "height": 50.40625
+      },
+      {
+        "text": "🔄 TENTAR NOVAMENTE",
+        "command": {
+          "type": "select-reply",
+          "replyId": "launch_payroll_type_refresh",
+          "label": "🔄 TENTAR NOVAMENTE"
+        },
+        "x": 74,
+        "right": 342.828125,
+        "height": 44
+      }
+    ],
+    "filter": true
+  },
+  {
+    "width": 390,
+    "mode": "name",
+    "overflow": false,
+    "buttons": [
+      {
+        "text": "❌ CANCELAR CADASTRO",
+        "command": {
+          "type": "select-reply",
+          "replyId": "launch_payroll_type_create_cancel:9bf773945f10f918e29e5e16",
+          "label": "❌ CANCELAR CADASTRO"
+        },
+        "x": 74,
+        "right": 342.828125,
+        "height": 44
+      }
+    ],
+    "filter": true
+  },
+  {
+    "width": 390,
+    "mode": "confirm",
+    "overflow": false,
+    "buttons": [
+      {
+        "text": "✅ CADASTRAR",
+        "command": {
+          "type": "select-reply",
+          "replyId": "launch_payroll_type_create_confirm:a412434eb0b84d64d8f421a3",
+          "label": "✅ CADASTRAR"
+        },
+        "x": 74,
+        "right": 342.828125,
+        "height": 44
+      },
+      {
+        "text": "❌ CANCELAR CADASTRO",
+        "command": {
+          "type": "select-reply",
+          "replyId": "launch_payroll_type_create_cancel:a412434eb0b84d64d8f421a3",
+          "label": "❌ CANCELAR CADASTRO"
+        },
+        "x": 74,
+        "right": 342.828125,
+        "height": 44
+      }
+    ],
+    "filter": true
+  },
+  {
+    "width": 390,
+    "mode": "page",
+    "overflow": false,
+    "buttons": [
+      {
+        "text": "➕ CADASTRAR TIPO DE PAGAMENTO",
+        "command": {
+          "type": "select-reply",
+          "replyId": "launch_payroll_type_create",
+          "label": "➕ CADASTRAR TIPO DE PAGAMENTO"
+        },
+        "x": 74,
+        "right": 330.53125,
+        "height": 50.40625
+      },
+      {
+        "text": "TIPO FICTÍCIO 08 PARA PAGAMENTO DE SERVIÇOS E REEMBOLSOS",
+        "command": {
+          "type": "select-reply",
+          "replyId": "launch_payroll_type_catalog_108",
+          "label": "TIPO FICTÍCIO 08 PARA PAGAMENTO DE SERVIÇOS E REEMBOLSOS"
+        },
+        "x": 74,
+        "right": 330.53125,
+        "height": 67.609375
+      },
+      {
+        "text": "TIPO FICTÍCIO 09 PARA PAGAMENTO DE SERVIÇOS E REEMBOLSOS",
+        "command": {
+          "type": "select-reply",
+          "replyId": "launch_payroll_type_catalog_109",
+          "label": "TIPO FICTÍCIO 09 PARA PAGAMENTO DE SERVIÇOS E REEMBOLSOS"
+        },
+        "x": 74,
+        "right": 330.53125,
+        "height": 67.609375
+      },
+      {
+        "text": "TIPO FICTÍCIO 10 PARA PAGAMENTO DE SERVIÇOS E REEMBOLSOS",
+        "command": {
+          "type": "select-reply",
+          "replyId": "launch_payroll_type_catalog_110",
+          "label": "TIPO FICTÍCIO 10 PARA PAGAMENTO DE SERVIÇOS E REEMBOLSOS"
+        },
+        "x": 74,
+        "right": 330.53125,
+        "height": 67.609375
+      },
+      {
+        "text": "TIPO FICTÍCIO 11 PARA PAGAMENTO DE SERVIÇOS E REEMBOLSOS",
+        "command": {
+          "type": "select-reply",
+          "replyId": "launch_payroll_type_catalog_111",
+          "label": "TIPO FICTÍCIO 11 PARA PAGAMENTO DE SERVIÇOS E REEMBOLSOS"
+        },
+        "x": 74,
+        "right": 330.53125,
+        "height": 67.609375
+      },
+      {
+        "text": "TIPO FICTÍCIO 12 PARA PAGAMENTO DE SERVIÇOS E REEMBOLSOS",
+        "command": {
+          "type": "select-reply",
+          "replyId": "launch_payroll_type_catalog_112",
+          "label": "TIPO FICTÍCIO 12 PARA PAGAMENTO DE SERVIÇOS E REEMBOLSOS"
+        },
+        "x": 74,
+        "right": 330.53125,
+        "height": 67.609375
+      },
+      {
+        "text": "TIPO FICTÍCIO 13 PARA PAGAMENTO DE SERVIÇOS E REEMBOLSOS",
+        "command": {
+          "type": "select-reply",
+          "replyId": "launch_payroll_type_catalog_113",
+          "label": "TIPO FICTÍCIO 13 PARA PAGAMENTO DE SERVIÇOS E REEMBOLSOS"
+        },
+        "x": 74,
+        "right": 330.53125,
+        "height": 67.609375
+      },
+      {
+        "text": "TIPO FICTÍCIO 14 PARA PAGAMENTO DE SERVIÇOS E REEMBOLSOS",
+        "command": {
+          "type": "select-reply",
+          "replyId": "launch_payroll_type_catalog_114",
+          "label": "TIPO FICTÍCIO 14 PARA PAGAMENTO DE SERVIÇOS E REEMBOLSOS"
+        },
+        "x": 74,
+        "right": 330.53125,
+        "height": 67.609375
+      },
+      {
+        "text": "TIPO FICTÍCIO 15 PARA PAGAMENTO DE SERVIÇOS E REEMBOLSOS",
+        "command": {
+          "type": "select-reply",
+          "replyId": "launch_payroll_type_catalog_115",
+          "label": "TIPO FICTÍCIO 15 PARA PAGAMENTO DE SERVIÇOS E REEMBOLSOS"
+        },
+        "x": 74,
+        "right": 330.53125,
+        "height": 67.609375
+      },
+      {
+        "text": "⬅️ TIPOS ANTERIORES",
+        "command": {
+          "type": "select-reply",
+          "replyId": "launch_payroll_type_page_0",
+          "label": "⬅️ TIPOS ANTERIORES"
+        },
+        "x": 74,
+        "right": 330.53125,
+        "height": 44
+      },
+      {
+        "text": "➡️ PRÓXIMOS TIPOS",
+        "command": {
+          "type": "select-reply",
+          "replyId": "launch_payroll_type_page_2",
+          "label": "➡️ PRÓXIMOS TIPOS"
+        },
+        "x": 74,
+        "right": 330.53125,
+        "height": 44
+      }
+    ],
+    "filter": true
+  },
+  {
+    "width": 1200,
+    "mode": "select",
+    "overflow": false,
+    "buttons": [
+      {
+        "text": "➕ CADASTRAR TIPO DE PAGAMENTO",
+        "command": {
+          "type": "select-reply",
+          "replyId": "launch_payroll_type_create",
+          "label": "➕ CADASTRAR TIPO DE PAGAMENTO"
+        },
+        "x": 84,
+        "right": 617,
+        "height": 48
+      },
+      {
+        "text": "SALÁRIO",
+        "command": {
+          "type": "select-reply",
+          "replyId": "launch_payroll_type_salary",
+          "label": "SALÁRIO"
+        },
+        "x": 629,
+        "right": 1162,
+        "height": 48
+      },
+      {
+        "text": "VALE REFEIÇÃO",
+        "command": {
+          "type": "select-reply",
+          "replyId": "launch_payroll_type_meal",
+          "label": "VALE REFEIÇÃO"
+        },
+        "x": 84,
+        "right": 617,
+        "height": 48
+      },
+      {
+        "text": "VALE TRANSPORTE",
+        "command": {
+          "type": "select-reply",
+          "replyId": "launch_payroll_type_transport",
+          "label": "VALE TRANSPORTE"
+        },
+        "x": 629,
+        "right": 1162,
+        "height": 48
+      },
+      {
+        "text": "AJUDA DE CUSTO",
+        "command": {
+          "type": "select-reply",
+          "replyId": "launch_payroll_type_allowance",
+          "label": "AJUDA DE CUSTO"
+        },
+        "x": 84,
+        "right": 617,
+        "height": 48
+      },
+      {
+        "text": "13 SALÁRIO",
+        "command": {
+          "type": "select-reply",
+          "replyId": "launch_payroll_type_thirteenth",
+          "label": "13 SALÁRIO"
+        },
+        "x": 629,
+        "right": 1162,
+        "height": 48
+      },
+      {
+        "text": "FÉRIAS E/OU ENCARGOS",
+        "command": {
+          "type": "select-reply",
+          "replyId": "launch_payroll_type_vacation_charges",
+          "label": "FÉRIAS E/OU ENCARGOS"
+        },
+        "x": 84,
+        "right": 617,
+        "height": 48
+      },
+      {
+        "text": "PREMIAÇÃO",
+        "command": {
+          "type": "select-reply",
+          "replyId": "launch_payroll_type_award",
+          "label": "PREMIAÇÃO"
+        },
+        "x": 629,
+        "right": 1162,
+        "height": 48
+      }
+    ],
+    "filter": true
+  },
+  {
+    "width": 1200,
+    "mode": "empty",
+    "overflow": false,
+    "buttons": [
+      {
+        "text": "➕ CADASTRAR TIPO DE PAGAMENTO",
+        "command": {
+          "type": "select-reply",
+          "replyId": "launch_payroll_type_create",
+          "label": "➕ CADASTRAR TIPO DE PAGAMENTO"
+        },
+        "x": 84,
+        "right": 617,
+        "height": 48
+      },
+      {
+        "text": "🔄 TENTAR NOVAMENTE",
+        "command": {
+          "type": "select-reply",
+          "replyId": "launch_payroll_type_refresh",
+          "label": "🔄 TENTAR NOVAMENTE"
+        },
+        "x": 629,
+        "right": 1162,
+        "height": 48
+      }
+    ],
+    "filter": true
+  },
+  {
+    "width": 1200,
+    "mode": "name",
+    "overflow": false,
+    "buttons": [
+      {
+        "text": "❌ CANCELAR CADASTRO",
+        "command": {
+          "type": "select-reply",
+          "replyId": "launch_payroll_type_create_cancel:9bf773945f10f918e29e5e16",
+          "label": "❌ CANCELAR CADASTRO"
+        },
+        "x": 243,
+        "right": 1003,
+        "height": 48
+      }
+    ],
+    "filter": true
+  },
+  {
+    "width": 1200,
+    "mode": "confirm",
+    "overflow": false,
+    "buttons": [
+      {
+        "text": "✅ CADASTRAR",
+        "command": {
+          "type": "select-reply",
+          "replyId": "launch_payroll_type_create_confirm:a412434eb0b84d64d8f421a3",
+          "label": "✅ CADASTRAR"
+        },
+        "x": 84,
+        "right": 617,
+        "height": 48
+      },
+      {
+        "text": "❌ CANCELAR CADASTRO",
+        "command": {
+          "type": "select-reply",
+          "replyId": "launch_payroll_type_create_cancel:a412434eb0b84d64d8f421a3",
+          "label": "❌ CANCELAR CADASTRO"
+        },
+        "x": 629,
+        "right": 1162,
+        "height": 48
+      }
+    ],
+    "filter": true
+  },
+  {
+    "width": 1200,
+    "mode": "page",
+    "overflow": false,
+    "buttons": [
+      {
+        "text": "➕ CADASTRAR TIPO DE PAGAMENTO",
+        "command": {
+          "type": "select-reply",
+          "replyId": "launch_payroll_type_create",
+          "label": "➕ CADASTRAR TIPO DE PAGAMENTO"
+        },
+        "x": 84,
+        "right": 609.5,
+        "height": 65.96875
+      },
+      {
+        "text": "TIPO FICTÍCIO 08 PARA PAGAMENTO DE SERVIÇOS E REEMBOLSOS",
+        "command": {
+          "type": "select-reply",
+          "replyId": "launch_payroll_type_catalog_108",
+          "label": "TIPO FICTÍCIO 08 PARA PAGAMENTO DE SERVIÇOS E REEMBOLSOS"
+        },
+        "x": 621.5,
+        "right": 1147,
+        "height": 65.96875
+      },
+      {
+        "text": "TIPO FICTÍCIO 09 PARA PAGAMENTO DE SERVIÇOS E REEMBOLSOS",
+        "command": {
+          "type": "select-reply",
+          "replyId": "launch_payroll_type_catalog_109",
+          "label": "TIPO FICTÍCIO 09 PARA PAGAMENTO DE SERVIÇOS E REEMBOLSOS"
+        },
+        "x": 84,
+        "right": 609.5,
+        "height": 65.96875
+      },
+      {
+        "text": "TIPO FICTÍCIO 10 PARA PAGAMENTO DE SERVIÇOS E REEMBOLSOS",
+        "command": {
+          "type": "select-reply",
+          "replyId": "launch_payroll_type_catalog_110",
+          "label": "TIPO FICTÍCIO 10 PARA PAGAMENTO DE SERVIÇOS E REEMBOLSOS"
+        },
+        "x": 621.5,
+        "right": 1147,
+        "height": 65.96875
+      },
+      {
+        "text": "TIPO FICTÍCIO 11 PARA PAGAMENTO DE SERVIÇOS E REEMBOLSOS",
+        "command": {
+          "type": "select-reply",
+          "replyId": "launch_payroll_type_catalog_111",
+          "label": "TIPO FICTÍCIO 11 PARA PAGAMENTO DE SERVIÇOS E REEMBOLSOS"
+        },
+        "x": 84,
+        "right": 609.5,
+        "height": 65.96875
+      },
+      {
+        "text": "TIPO FICTÍCIO 12 PARA PAGAMENTO DE SERVIÇOS E REEMBOLSOS",
+        "command": {
+          "type": "select-reply",
+          "replyId": "launch_payroll_type_catalog_112",
+          "label": "TIPO FICTÍCIO 12 PARA PAGAMENTO DE SERVIÇOS E REEMBOLSOS"
+        },
+        "x": 621.5,
+        "right": 1147,
+        "height": 65.96875
+      },
+      {
+        "text": "TIPO FICTÍCIO 13 PARA PAGAMENTO DE SERVIÇOS E REEMBOLSOS",
+        "command": {
+          "type": "select-reply",
+          "replyId": "launch_payroll_type_catalog_113",
+          "label": "TIPO FICTÍCIO 13 PARA PAGAMENTO DE SERVIÇOS E REEMBOLSOS"
+        },
+        "x": 84,
+        "right": 609.5,
+        "height": 65.96875
+      },
+      {
+        "text": "TIPO FICTÍCIO 14 PARA PAGAMENTO DE SERVIÇOS E REEMBOLSOS",
+        "command": {
+          "type": "select-reply",
+          "replyId": "launch_payroll_type_catalog_114",
+          "label": "TIPO FICTÍCIO 14 PARA PAGAMENTO DE SERVIÇOS E REEMBOLSOS"
+        },
+        "x": 621.5,
+        "right": 1147,
+        "height": 65.96875
+      },
+      {
+        "text": "TIPO FICTÍCIO 15 PARA PAGAMENTO DE SERVIÇOS E REEMBOLSOS",
+        "command": {
+          "type": "select-reply",
+          "replyId": "launch_payroll_type_catalog_115",
+          "label": "TIPO FICTÍCIO 15 PARA PAGAMENTO DE SERVIÇOS E REEMBOLSOS"
+        },
+        "x": 84,
+        "right": 609.5,
+        "height": 65.96875
+      },
+      {
+        "text": "⬅️ TIPOS ANTERIORES",
+        "command": {
+          "type": "select-reply",
+          "replyId": "launch_payroll_type_page_0",
+          "label": "⬅️ TIPOS ANTERIORES"
+        },
+        "x": 621.5,
+        "right": 1147,
+        "height": 65.96875
+      },
+      {
+        "text": "➡️ PRÓXIMOS TIPOS",
+        "command": {
+          "type": "select-reply",
+          "replyId": "launch_payroll_type_page_2",
+          "label": "➡️ PRÓXIMOS TIPOS"
+        },
+        "x": 84,
+        "right": 609.5,
+        "height": 48
+      }
+    ],
+    "filter": true
+  }
+]
