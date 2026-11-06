@@ -1,0 +1,21 @@
+<!doctype html><html lang="pt-BR"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><link rel="stylesheet" href="/src/styles.css"></head><body><main id="app"></main><script type="module">
+import {createChatView} from '/src/ui/chat-view.js';
+import fixture from './attendance-summary-registration.json';
+const view=createChatView(document.querySelector('#app'));
+const frame=()=>new Promise(resolve=>requestAnimationFrame(()=>requestAnimationFrame(resolve)));
+const state={sessionStatus:'authenticated',account:{name:'Teste'},draft:'',pendingFiles:[],activeFlow:{id:'attendance_validation',title:'VALIDAR PRESENÇAS APONTADAS'}};
+const render=message=>view.render({...state,messages:[{id:'summary-registration',role:'assistant',type:'poll',question:message.body,detail_table:message.detail_table,options:message.actions.map(action=>({...action,reply:action.reply||action.id,label:action.title}))}]});
+let selected;
+view.on('select-reply',event=>{selected=event.replyId;render(fixture.menu);});
+try{
+ render(fixture.summary);await document.fonts.ready;await frame();
+ const button=text=>[...document.querySelectorAll('button')].find(node=>node.textContent.includes(text));
+ const register=button('CADASTRAR'),submit=button('SUBMETER TODOS');
+ const boxes={register:register.getBoundingClientRect().toJSON(),submit:submit.getBoundingClientRect().toJSON()}; const order=boxes.register.top<boxes.submit.top;
+ if(location.search.includes('menu')){register.click();await frame();}
+ const log=document.querySelector('[role="log"]');log.scrollTop=log.scrollHeight;await frame();
+ const labels=[...document.querySelectorAll('button')].map(node=>node.textContent.trim());
+ document.documentElement.dataset.layout=JSON.stringify({order,boxes,selected,labels,scrollWidth:document.documentElement.scrollWidth});
+}catch(error){document.documentElement.dataset.layout=JSON.stringify({error:error.stack});}
+</script></body></html>
+
