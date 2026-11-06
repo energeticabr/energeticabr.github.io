@@ -22,9 +22,10 @@ function icon(doc, name) {
 }
 
 import { SEFAZ_RETENTION_FIELDS } from '../chat/sefaz-withholding.js';
+import { invoiceConstructionCno } from '../chat/sefaz-cno.js';
 
 /** Presentation only: move the existing formatted fields and authenticated links. */
-export function decorateSefazInvoiceCard({document: doc, card, container, pdfRail, withholding, fiscalType}) {
+export function decorateSefazInvoiceCard({document: doc, card, container, pdfRail, withholding, fiscalType, fields}) {
   const el = (tag, className, text) => { const node = doc.createElement(tag); node.className = className; if (text !== undefined) node.textContent = text; return node; };
   const heading = container.querySelector('.rg-document-heading');
   heading.classList.add('rg-sefaz-heading');
@@ -54,6 +55,17 @@ export function decorateSefazInvoiceCard({document: doc, card, container, pdfRai
     cluster('amounts', [['VALOR_TOTAL_NOTA', 'money', 'total'], ['VALOR_LIQUIDO', 'coins', 'net'], ['DESCONTOS', 'tag', 'discount']]),
   );
   container.insertBefore(core, remaining);
+  const cno = invoiceConstructionCno(fields);
+  const cnoCluster = el('div', 'rg-sefaz-cno');
+  cnoCluster.dataset.sefazCno = cno.status;
+  cnoCluster.setAttribute('role', 'note');
+  const cnoCopy = el('div', 'rg-sefaz-cno__copy');
+  cnoCopy.append(el('span', 'rg-sefaz-cno__label', cno.status === 'conflict' ? 'CNO errada' : 'CNO'),
+    el('strong', 'rg-sefaz-cno__value', cno.status === 'missing' ? 'CNO não informada' :
+      (cno.status === 'conflict' ? cno.conflicts : cno.numbers).join(' • ')));
+  if (cno.status === 'conflict') cnoCopy.append(el('span', 'rg-sefaz-cno__expected', `CNO correto da obra: ${cno.expected}`));
+  cnoCluster.append(icon(doc, 'location'), cnoCopy);
+  container.insertBefore(cnoCluster, core);
   if (withholding) {
     const money = new Intl.NumberFormat('pt-BR', {style:'currency', currency:'BRL'});
     const warning = el('div', 'rg-sefaz-withholding');
