@@ -44,7 +44,11 @@ if($Mode -eq 'Setup'){
 }elseif($Mode -eq 'Publish'){
  if(-not $state.queueId){throw 'QUEUE_SETUP_REQUIRED'}
  $python='C:/Users/Bernardonotini/.cache/codex-runtimes/codex-primary-runtime/dependencies/python/python.exe'
- $definition=(& $python (Join-Path $PSScriptRoot 'silva_flow_definition.py') $state.queueId)|ConvertFrom-Json -AsHashtable
+ $zone=[TimeZoneInfo]::FindSystemTimeZoneById('E. South America Standard Time')
+ $localNow=[TimeZoneInfo]::ConvertTimeFromUtc([datetime]::UtcNow,$zone)
+ $first=$localNow.Date.AddHours(6).AddMinutes(50)
+ if($first -le $localNow){$first=$first.AddDays(1)}
+ $definition=(& $python (Join-Path $PSScriptRoot 'silva_flow_definition.py') $state.queueId $first.ToString('yyyy-MM-ddTHH:mm:ss'))|ConvertFrom-Json -AsHashtable
  if($LASTEXITCODE -ne 0){throw 'FLOW_DEFINITION_FAILED'}
  $payload=@{properties=@{displayName='SILVA NOVAIS - buscar boletos e notas da Energetica diariamente';definition=$definition;connectionReferences=$connections;flowFailureAlertSubscribed=$false}}
  $created=if($state.flowId){Invoke-DdaFlowApi ('/'+$state.flowId) PATCH $payload}else{Invoke-DdaFlowApi '' POST $payload}

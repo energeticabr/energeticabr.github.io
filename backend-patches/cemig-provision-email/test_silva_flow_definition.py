@@ -3,6 +3,8 @@ import unittest
 from silva_flow_definition import definition
 
 class FlowTests(unittest.TestCase):
+    def test_schedule_requires_an_explicit_local_calendar_anchor(self):
+        with self.assertRaises(ValueError):definition('00000000-0000-0000-0000-000000000001')
     def setUp(self):self.flow=definition('00000000-0000-0000-0000-000000000001','2026-11-06T06:50:00')
     def test_single_daily_trigger_without_arrival_or_workstation(self):
         self.assertEqual(list(self.flow['triggers']),['daily'])

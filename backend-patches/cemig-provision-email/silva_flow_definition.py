@@ -1,9 +1,9 @@
 """Dedicated daily Asaas ingestion; only the OCI worker chooses financial targets."""
-from datetime import datetime,timedelta,timezone
 from flow_definition import connector,sp,SECURE
 from silva_novais import BILL_SENDER,NF_SENDER,NF_SUBJECT,COMPANY,QUEUE
 
 def definition(queue_id,start_time=None):
+    if not start_time:raise ValueError('Explicit Brasilia calendar start time required')
     actions={
         'Read_queue':sp('GET',f"_api/web/lists(guid'{queue_id}')/items?$select=Id,MailId,AttachmentFiles/FileName&$expand=AttachmentFiles&$top=5000",'')
     }
@@ -45,11 +45,10 @@ def definition(queue_id,start_time=None):
     for prefix in ('Charges','Invoices'):
         actions[prefix+'_Check_complete']['expression']['and']=guards
         actions[prefix+'_Check_complete']['runAfter']={'Read_queue':['Succeeded'],'Charges_Search':['Succeeded'],'Invoices_Search':['Succeeded']}
-    if start_time is None:start_time=(datetime.now(timezone.utc)+timedelta(days=1)).strftime('%Y-%m-%dT06:50:00')
     return {'$schema':'https://schema.management.azure.com/providers/Microsoft.Logic/schemas/2016-06-01/workflowdefinition.json#','contentVersion':'1.0.0.0',
             'parameters':{'$connections':{'defaultValue':{},'type':'Object'},'$authentication':{'defaultValue':{},'type':'SecureObject'}},
             'triggers':{'daily':{'type':'Recurrence','recurrence':{'frequency':'Day','interval':1,'timeZone':'E. South America Standard Time','startTime':start_time,'schedule':{'hours':[6],'minutes':[50]}},'runtimeConfiguration':{'concurrency':{'runs':1}}}},'actions':actions,'outputs':{}}
 
 if __name__=='__main__':
     import sys,json
-    print(json.dumps(definition(sys.argv[1]),ensure_ascii=False))
+    print(json.dumps(definition(sys.argv[1],sys.argv[2]),ensure_ascii=False))
