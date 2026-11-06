@@ -1,0 +1,38 @@
+{
+  "status": "deployed_and_verified",
+  "code_pr": "https://github.com/energeticabr/energeticabr.github.io/pull/785",
+  "merge_commit": "e0f8d794f0e7c2adcad5c2811239afb39873139b",
+  "manifest_sha256": "99d4e6e31618c66f5fc3b3ddd7528d0c6c910bebef2f4375b0a3b25eff17c32d",
+  "backup": "/var/backups/energetica-whatsapp/launch-account-frequency-20261106T183655309282Z",
+  "installed_sha256": {
+    "worker/workflow.py": "596d3faf2e18f7df380658bcc9020471473baeb6743540deda9bbd8dcaadd33e"
+  },
+  "independent_mirror_unchanged": true,
+  "service_health": "ok",
+  "public_https_health": "ok",
+  "baseline_regression_tests": {"run": 10, "failures": 7, "errors": 0},
+  "candidate_joint_tests": {"run": 64, "failures": 0, "errors": 0},
+  "post_deploy_regression_tests": {"run": 10, "failures": 0, "errors": 0},
+  "live_history_records_checked": 100,
+  "live_catalog_accounts_checked": 13,
+  "live_ranking_matches_independent_count": true,
+  "financial_writes_for_verification": 0,
+  "protected_signature_blocks_intact": 14,
+  "independent_review": "no material findings",
+  "main_ci": {
+    "url": "https://github.com/energeticabr/energeticabr.github.io/actions/runs/42272429635",
+    "conclusion": "success",
+    "head_sha": "e0f8d794f0e7c2adcad5c2811239afb39873139b"
+  },
+  "distribution": {
+    "Android": "shared backend deployed; existing client",
+    "iOS": "shared backend deployed; existing client",
+    "Windows_web": "shared backend deployed; existing client",
+    "client_bundles_changed": false,
+    "authenticated_client_ui_checked": false
+  },
+  "limitations": [
+    "Historical full workflow suite exceeded the 90-second execution limit on both baseline and candidate; neither full suite is declared passing.",
+    "Client screen was not inspected in an authenticated session; installed selector behavior was verified with live read-only SharePoint data and synthetic workflow state."
+  ]
+}
