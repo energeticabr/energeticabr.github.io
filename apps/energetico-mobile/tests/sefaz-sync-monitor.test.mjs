@@ -102,3 +102,13 @@ test('successful discovery clears a previous connection error even when no reque
  assert.equal(latest.notice,'');assert.equal(latest.lastSuccessfulAt,Date.parse('2026-11-03T05:17:03Z'));
  assert.equal(latest.running,false);
 });
+
+test('discovering a background completion clears the prior waiting progress',async t=>{
+ let finished=false,latest;
+ const waiting=receipt('waiting');waiting.sources.NFE={status:'waiting',code:'COOLDOWN',nextAllowedAt:'2026-10-29T11:00:00Z'};
+ const h=setup(t,{client:{refreshSefaz:async()=>waiting,getSefazRefreshPending:async()=>({status:'pending',requests:finished?[receipt('succeeded')]:[]})}});
+ h.monitor.subscribe(state=>{latest=state;});await h.monitor.start();assert.match(latest.notice,/intervalo obrigatório/);
+ finished=true;await h.monitor.resume();
+ assert.equal(latest.running,false);assert.equal(latest.notice,'');assert.equal(latest.nextAllowedAt,null);
+ assert.equal(h.shown.length,1);
+});

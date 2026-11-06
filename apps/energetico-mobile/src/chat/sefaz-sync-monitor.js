@@ -21,6 +21,9 @@ function confirmedTime(value) {
   return result;
 }
 
+const startingNotice='Solicitando consulta de NF-e, CT-e e NFS-e nacional…';
+const progressNotice=row=>`${sefazProgress(row)}\nVocê pode sair desta tela. O resultado será exibido ao concluir.`;
+
 /** A session-owned durable intent; navigation never consumes a server result. */
 export function createSefazSyncMonitor({client,accountKey,storage,present=async()=>false,hide=()=>{},isVisible=()=>true,
   isCurrent=()=>true,now=Date.now,randomId=()=>globalThis.crypto.randomUUID().replaceAll('-',''),
@@ -59,6 +62,7 @@ export function createSefazSyncMonitor({client,accountKey,storage,present=async(
     const next=clean({...value,acknowledged:previous?.acknowledged});
     if (previous && previous.requestId!==next.requestId) records.delete(previous.requestId);
     records.set(next.requestId,next);
+    if(previous && isSefazTerminal(next.status) && (notice===startingNotice || notice===progressNotice(previous)))notice='';
     if (next.status === 'succeeded' && next.completedAt >= (lastSuccessfulAt ?? 0)) {
       lastSuccessfulAt=next.completedAt;
       lastSuccessfulCreatedCount=createdCount(next);
@@ -136,7 +140,7 @@ export function createSefazSyncMonitor({client,accountKey,storage,present=async(
             const value=await request(signal=>row.status==='starting'?client.refreshSefaz({requestId:row.requestId,signal}):client.getSefazRefreshStatus(row.requestId,{signal}));
             if(row.status!=='starting'&&value?.requestId!==row.requestId)throw Error('Pedido fiscal divergente.');
             const next=remember(validateSefazReceipt(value),row);
-            notice=isSefazTerminal(next.status)?'':`${sefazProgress(next)}\nVocê pode sair desta tela. O resultado será exibido ao concluir.`;
+            notice=isSefazTerminal(next.status)?'':progressNotice(next);
           }
         }catch{if(!current())return;notice='Conexão interrompida ou resposta fiscal não confirmada. A solicitação foi preservada e será verificada novamente.';}
       }
@@ -151,7 +155,7 @@ export function createSefazSyncMonitor({client,accountKey,storage,present=async(
       const requestId=randomId();if(!isSefazRequestId(requestId))throw Error('Pedido fiscal inválido.');
       records.set(requestId,{requestId,status:'starting',startedAt:now()});
       try{persist();}catch(error){records.delete(requestId);throw error;}
-      notice='Solicitando consulta de NF-e, CT-e e NFS-e nacional…';notify();await cycle();
+      notice=startingNotice;notify();await cycle();
     },
     resume(){discover=true;return cycle();},
     suspend(){showing=null;hide();},
