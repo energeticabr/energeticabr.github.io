@@ -21,11 +21,15 @@ function confirmedTime(value) {
   return result;
 }
 
+const startingNotice='Solicitando consulta de NF-e, CT-e e NFS-e nacional…';
+const progressNotice=row=>`${sefazProgress(row)}\nVocê pode sair desta tela. O resultado será exibido ao concluir.`;
+
 /** A session-owned durable intent; navigation never consumes a server result. */
 export function createSefazSyncMonitor({client,accountKey,storage,present=async()=>false,hide=()=>{},isVisible=()=>true,
   isCurrent=()=>true,now=Date.now,randomId=()=>globalThis.crypto.randomUUID().replaceAll('-',''),
   schedule=(fn,ms)=>setTimeout(fn,ms),cancel=clearTimeout,requestTimeoutMs=35000}={}) {
   if (typeof accountKey !== 'string' || !accountKey) throw Error('Conta fiscal não identificada.');
+  const discoveryFailureNotice='Sem conexão para recuperar as consultas fiscais. O acompanhamento será retomado automaticamente.';
   const key=`energetico.sefaz-sync.v1:${encodeURIComponent(accountKey)}`,records=new Map(),listeners=new Set();
   let destroyed=false,inFlight=null,timer=null,discover=false,showing=null,notice='',controller=null,lastSuccessfulAt=null,lastSuccessfulCreatedCount=null;
   try {
@@ -49,7 +53,7 @@ export function createSefazSyncMonitor({client,accountKey,storage,present=async(
     return new Set(Object.values(receipt?.sources||{}).flatMap(source=>source.createdItemIds||[])).size;
   }
   function nextAllowedAt() {
-    const values=[...records.values()].flatMap(row=>Object.values(row.sources||{}).map(source=>Date.parse(source.nextAllowedAt)).filter(Number.isFinite));
+    const values=[...records.values()].filter(row=>!isSefazTerminal(row.status)).flatMap(row=>Object.values(row.sources||{}).filter(source=>source.status==='waiting').map(source=>Date.parse(source.nextAllowedAt)).filter(Number.isFinite));
     return values.length ? Math.max(...values) : null;
   }
   function snapshot() { return {running:running(),notice,latest:[...records.values()].sort((a,b)=>b.startedAt-a.startedAt)[0]||null,lastSuccessfulAt,lastSuccessfulCreatedCount,nextAllowedAt:nextAllowedAt()}; }
@@ -58,6 +62,7 @@ export function createSefazSyncMonitor({client,accountKey,storage,present=async(
     const next=clean({...value,acknowledged:previous?.acknowledged});
     if (previous && previous.requestId!==next.requestId) records.delete(previous.requestId);
     records.set(next.requestId,next);
+    if(previous && isSefazTerminal(next.status) && (notice===startingNotice || notice===progressNotice(previous)))notice='';
     if (next.status === 'succeeded' && next.completedAt >= (lastSuccessfulAt ?? 0)) {
       lastSuccessfulAt=next.completedAt;
       lastSuccessfulCreatedCount=createdCount(next);
@@ -111,6 +116,7 @@ export function createSefazSyncMonitor({client,accountKey,storage,present=async(
           if(pending?.status!=='pending'||!Array.isArray(pending.requests))throw Error('Resposta fiscal inválida.');
           const safe=pending.requests.map(validateSefazReceipt);
           const serverSuccess=pending.lastSuccessfulUtc===undefined?null:confirmedTime(pending.lastSuccessfulUtc);
+          if(notice===discoveryFailureNotice)notice='';
           if(serverSuccess!==null && serverSuccess>(lastSuccessfulAt ?? 0)){
             lastSuccessfulAt=serverSuccess;
             lastSuccessfulCreatedCount=Array.isArray(pending.lastSuccessfulCreatedItemIds)?new Set(pending.lastSuccessfulCreatedItemIds).size:null;
@@ -120,7 +126,7 @@ export function createSefazSyncMonitor({client,accountKey,storage,present=async(
             try{persist();}catch{notice='O armazenamento local está indisponível. O resultado continua salvo no servidor.';}
           }
           for(const row of safe)remember(row,records.get(row.requestId));
-        }catch{if(!current())return;notice='Sem conexão para recuperar as consultas fiscais. O acompanhamento será retomado automaticamente.';discover=true;}
+        }catch{if(!current())return;notice=discoveryFailureNotice;discover=true;}
       }
       for(const saved of [...records.values()]){
         if(!current())return;const row=records.get(saved.requestId);if(!row)continue;
@@ -134,7 +140,7 @@ export function createSefazSyncMonitor({client,accountKey,storage,present=async(
             const value=await request(signal=>row.status==='starting'?client.refreshSefaz({requestId:row.requestId,signal}):client.getSefazRefreshStatus(row.requestId,{signal}));
             if(row.status!=='starting'&&value?.requestId!==row.requestId)throw Error('Pedido fiscal divergente.');
             const next=remember(validateSefazReceipt(value),row);
-            notice=isSefazTerminal(next.status)?'':`${sefazProgress(next)}\nVocê pode sair desta tela. O resultado será exibido ao concluir.`;
+            notice=isSefazTerminal(next.status)?'':progressNotice(next);
           }
         }catch{if(!current())return;notice='Conexão interrompida ou resposta fiscal não confirmada. A solicitação foi preservada e será verificada novamente.';}
       }
@@ -149,7 +155,7 @@ export function createSefazSyncMonitor({client,accountKey,storage,present=async(
       const requestId=randomId();if(!isSefazRequestId(requestId))throw Error('Pedido fiscal inválido.');
       records.set(requestId,{requestId,status:'starting',startedAt:now()});
       try{persist();}catch(error){records.delete(requestId);throw error;}
-      notice='Solicitando consulta de NF-e, CT-e e NFS-e nacional…';notify();await cycle();
+      notice=startingNotice;notify();await cycle();
     },
     resume(){discover=true;return cycle();},
     suspend(){showing=null;hide();},

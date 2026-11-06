@@ -82,3 +82,33 @@ test('invalid server last-success timestamp preserves the valid local measuremen
  const h=setup(t,{storage:{getItem:key=>map.get(key)||null,setItem:(key,value)=>map.set(key,value)},client:{getSefazRefreshPending:async()=>({status:'pending',requests:[],lastSuccessfulUtc:'not-a-date'})}});let latest;
  h.monitor.subscribe(state=>{latest=state;});await h.monitor.resume();assert.equal(latest.lastSuccessfulAt,completed);assert.match(latest.notice,/conexão/i);
 });
+
+test('cooldowns on terminal requests do not advertise a future retry after completion',async t=>{
+ const completed=receipt('failed');
+ completed.sources.NFE={status:'failed',code:'INCOMPLETE',nextAllowedAt:'2026-10-30T11:15:00Z'};
+ const h=setup(t,{client:{getSefazRefreshPending:async()=>({status:'pending',requests:[completed]})}});let latest;
+ h.monitor.subscribe(state=>{latest=state;});await h.monitor.resume();
+ assert.equal(latest.running,false);assert.equal(latest.nextAllowedAt,null);
+});
+
+test('successful discovery clears a previous connection error even when no request is pending',async t=>{
+ let connected=false,latest;
+ const h=setup(t,{client:{getSefazRefreshPending:async()=>{
+  if(!connected)throw Error('offline');
+  return {status:'pending',requests:[],lastSuccessfulUtc:'2026-11-03T05:17:03Z',lastSuccessfulCreatedItemIds:[]};
+ }}});
+ h.monitor.subscribe(state=>{latest=state;});await h.monitor.resume();assert.match(latest.notice,/Sem conexão/);
+ connected=true;await h.monitor.resume();
+ assert.equal(latest.notice,'');assert.equal(latest.lastSuccessfulAt,Date.parse('2026-11-03T05:17:03Z'));
+ assert.equal(latest.running,false);
+});
+
+test('discovering a background completion clears the prior waiting progress',async t=>{
+ let finished=false,latest;
+ const waiting=receipt('waiting');waiting.sources.NFE={status:'waiting',code:'COOLDOWN',nextAllowedAt:'2026-10-29T11:00:00Z'};
+ const h=setup(t,{client:{refreshSefaz:async()=>waiting,getSefazRefreshPending:async()=>({status:'pending',requests:finished?[receipt('succeeded')]:[]})}});
+ h.monitor.subscribe(state=>{latest=state;});await h.monitor.start();assert.match(latest.notice,/intervalo obrigatório/);
+ finished=true;await h.monitor.resume();
+ assert.equal(latest.running,false);assert.equal(latest.notice,'');assert.equal(latest.nextAllowedAt,null);
+ assert.equal(h.shown.length,1);
+});
