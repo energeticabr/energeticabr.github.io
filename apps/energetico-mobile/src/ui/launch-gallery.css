@@ -291,7 +291,8 @@
 }
 .lg-record-summary { display: grid; gap: 8px; min-width: 0; }
 .lg-record-summary-fields { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 8px; min-width: 0; }
-.lg-record-summary-fields .lg-record-supplier { grid-column: 1 / -1; }
+.lg-record-summary-fields .lg-record-supplier,
+.lg-record-summary-fields .lg-record-order { grid-column: 1 / -1; }
 .lg-record-summary-fields .lg-record-field { padding-inline: 4px; }
 .lg-record-description, .lg-record-payment-method { grid-column: 1 / -1; padding-inline: 4px; }
 .lg-record-description .lg-record-value { white-space: pre-wrap; }
@@ -530,7 +531,8 @@
   .lg-record-status { grid-column: 1 / -1; justify-self: start; }
   .lg-record-dates { grid-template-columns: repeat(2, minmax(0, 1fr)); }
   .lg-record-summary-fields { grid-template-columns: repeat(2, minmax(0, 1fr)); }
-  .lg-record-summary-fields .lg-record-supplier { grid-column: 1 / -1; }
+  .lg-record-summary-fields .lg-record-supplier,
+  .lg-record-summary-fields .lg-record-order { grid-column: 1 / -1; }
   .lg-record-badges { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); }
   .lg-cluster-modal .lg-detail-header { align-items: flex-start; padding: 10px; }
   .lg-cluster-modal .lg-detail-header .lg-button { padding-inline: 8px; }
