@@ -1,0 +1,34 @@
+{
+  "status": "deployed_and_verified",
+  "code_pr": "https://github.com/energeticabr/energeticabr.github.io/pull/776",
+  "merge_commit": "fbe043488d9f1c5ffa8db03d037d36c156d51012",
+  "manifest_sha256": "faffed29493768bbab8e84ded1a2389d15f5b99740ea01b6de82efa50ca742b5",
+  "backup": "/var/backups/energetica-whatsapp/launch-expense-default-20261106T014707344854Z",
+  "installed_sha256": {
+    "worker/workflow.py": "79425c944c034e10794600190f797f23d6fe575d9bd37edfedc4f21ba60aeb5f",
+    "worker/financial_catalog_registration.py": "c65e38e83715ad1902714e1448aec19e797402feeeeda8eb21583d95a46c8ab0"
+  },
+  "independent_mirror_unchanged": true,
+  "service_health": "ok",
+  "public_https_health": "ok",
+  "post_deploy_regression_tests": {"run": 10, "failures": 0, "errors": 0},
+  "pre_deploy_preserved_registration_tests": {"run": 5, "failures": 0, "errors": 0},
+  "installer_tests": {"run": 38, "failures": 0, "errors": 0},
+  "protected_signature_blocks_intact": 14,
+  "main_ci": {
+    "url": "https://github.com/energeticabr/energeticabr.github.io/actions/runs/42146175566",
+    "conclusion": "success",
+    "head_sha": "fbe043488d9f1c5ffa8db03d037d36c156d51012"
+  },
+  "distribution": {
+    "Android": "shared backend deployed; existing client",
+    "iOS": "shared backend deployed; existing client",
+    "Windows_web": "shared backend deployed; existing client",
+    "client_bundles_changed": false,
+    "authenticated_client_ui_checked": false
+  },
+  "limitations": [
+    "Historical full workflow suite did not complete on the original baseline in six minutes and was interrupted.",
+    "Historical unit diagnostic retains pre-existing fixture failures; identities and comparison are recorded in legacy-unit-comparison.json."
+  ]
+}
