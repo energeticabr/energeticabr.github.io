@@ -1,0 +1,46 @@
+{
+  "list": "CADASTROTIPOPAGAMENTO",
+  "list_id": "ffe2bb77-45cc-4a8e-be06-9e33937c41fa",
+  "site": "https://energeticaltda-my.sharepoint.com/personal/bernardonotini_energeticabr_com",
+  "created": false,
+  "seeded": [
+    {
+      "id": 1,
+      "name": "SALÁRIO"
+    },
+    {
+      "id": 2,
+      "name": "VALE REFEIÇÃO"
+    },
+    {
+      "id": 3,
+      "name": "VALE TRANSPORTE"
+    },
+    {
+      "id": 4,
+      "name": "AJUDA DE CUSTO"
+    },
+    {
+      "id": 5,
+      "name": "13 SALÁRIO"
+    },
+    {
+      "id": 6,
+      "name": "FÉRIAS E/OU ENCARGOS"
+    },
+    {
+      "id": 7,
+      "name": "PREMIAÇÃO"
+    },
+    {
+      "id": 8,
+      "name": "INSS"
+    },
+    {
+      "id": 9,
+      "name": "FGTS"
+    }
+  ],
+  "catalog_count": 9,
+  "unique_key": true
+}
