@@ -237,6 +237,15 @@ def choose_target(rows,due,amount):
 
 def fingerprint(row):return {k:row.get(k) for k in BUSINESS}
 
+def related_order_files(store,row,amount):
+    raw=str(row.get('IDPEDIDO') or '')
+    if not raw:return []
+    if not re.fullmatch(r'[1-9]\d*',raw):raise Review('Vinculo de pedido invalido')
+    order,_=store.read('NOTASPENDENTES',int(raw))
+    if (normal(order.get('FORNECEDOR'))!=SUPPLIER or normal(order.get('FILIAL'))!=normal(BRANCH)
+            or money(order.get('VALORTOTAL'))!=amount):raise Review('Pedido vinculado diverge do fornecedor, filial ou valor')
+    return store.attachments('NOTASPENDENTES',int(raw))
+
 def backup(store,targets,root):
     for kind,ident in targets:
         folder=Path(root)/('child-' if kind==CHILD else 'parent-')/str(ident)
@@ -265,6 +274,12 @@ def attach_documents(store,due,amount,documents,dry_run=False,identity_reader=do
                 if len(siblings)!=1 or int(siblings[0]['Id'])!=child:raise Review('Descritivo compartilhado exige revisao')
             before[(kind,ident)]=fingerprint(row)
         if not dry_run and backup_root:backup(store,targets,backup_root)
+        # Legacy paid-order fanout copies by filename. Reuse a byte-identical
+        # original's existing name instead of creating a second financial copy.
+        originals=related_order_files(store,current,amount)
+        original_names={}
+        for f in sorted(originals,key=lambda f:f['filename']):
+            original_names.setdefault(sha256(f['content']).hexdigest(),f['filename'])
         report={'child':child,'parent':parent,'due':due.isoformat(),'amount':str(amount),'added':0,'planned':0,'existing':0}
         for kind,ident in targets:
             existing=store.attachments(kind,ident)
@@ -277,6 +292,9 @@ def attach_documents(store,due,amount,documents,dry_run=False,identity_reader=do
                     row,_=store.read(*key)
                     if fingerprint(row)!=expected:raise Review('Dados financeiros alterados durante captura')
                 name=f'SILVA-NOVAIS-{doc.kind.upper()}-{due.isoformat()}-{doc.charge}.pdf'
+                if digest in original_names:
+                    name=original_names[digest]
+                    if '/' in name or '\\' in name or len(name.encode('utf8'))>135:raise Review('Nome original do pedido exige revisao para espelhamento seguro')
                 if kind==PARENT:name=f'PROV-{child}-{digest}-{name}'
                 if dry_run:report['planned']+=1
                 else:
@@ -316,7 +334,7 @@ def process(client,root=STATE,dry_run=False):
             fiscal={s.pdf_url:s for s,r in entries if s.kind=='nfse'}
             if not fiscal:raise Wait('Aguardando email da nota fiscal da mesma cobranca')
             for source in fiscal.values():documents.append(validate_document(downloads.pdf(charge,'nfse',source.pdf_url),source))
-            existing=store.attachments(CHILD,int(selected['Id']))
+            existing=store.attachments(CHILD,int(selected['Id']))+related_order_files(store,selected,amount)
             source=Source('boleto',charge,amount,due,'https://www.asaas.com/b/pdf/'+charge)
             boleto=existing_boleto(existing,source,due)
             unavailable=None

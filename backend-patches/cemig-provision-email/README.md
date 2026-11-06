@@ -47,6 +47,12 @@ backups remain under `/var/lib/energetica-whatsapp/silva-novais` with restricted
 permissions. Never commit email envelopes, PDF files or signed download links.
 
 Existing files are deduplicated by SHA-256 and fiscal/charge identity. Existing
+linked orders are checked before selecting a new source filename: an identical
+invoice already archived under another name keeps that original name when added
+to the provision, preventing a second copy through legacy filename-based fanout.
+Only an order with matching supplier, branch and amount can provide that evidence.
+Original boletos already archived on the linked order can also be recovered.
+Existing
 description mirrors use the shared parent lock and `PROV-<child>-<sha256>-...`
 provenance. A replay also completes a missing description copy of a boleto already
 present on the child. Historical children without descriptions are handled without
