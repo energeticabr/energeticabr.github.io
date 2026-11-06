@@ -10,6 +10,7 @@ export function depreciationPoints(result) {
   const rows = result.history.map(row => ({
     date: registrationDateKey(row.fields['DATA DE DEPRECIAÇÃO']),
     value: registrationNumber(row.fields['VALOR RESIDUAL']),
+    depreciated: registrationNumber(row.fields['VALOR DEPRECIAÇÃO']),
     id: String(row.id), label: 'Depreciação',
   })).filter(point => point.date && point.value != null)
     .sort((a, b) => a.date.localeCompare(b.date) || Number(a.id) - Number(b.id));
@@ -116,7 +117,9 @@ export function createDepreciationChart({ document: doc, result, onClose }) {
     body.append(el('h3', '', 'Valores registrados'));
     const list = el('ol', 'depreciation-chart-list');
     for (const point of points) {
-      const item = el('li', '', dateText(point.date) + ' · ' + point.label + ' · ' + currency(point.value));
+      const amounts = point.label === 'Compra' ? currency(point.value)
+        : 'Depreciado: ' + (point.depreciated == null ? '—' : currency(point.depreciated)) + ' · Residual: ' + currency(point.value);
+      const item = el('li', '', dateText(point.date) + ' · ' + point.label + ' · ' + amounts);
       item.dataset.chartPoint = ''; item.dataset.date = point.date; item.dataset.value = String(point.value);
       list.append(item);
     }

@@ -85,6 +85,9 @@ test('toque, teclado, cadastro e 31 depreciações cabem em 320/390/1365px sem p
       const chartLayout = await api.evaluate(`(() => { const chart=document.querySelector('[data-depreciation-chart]'), svg=chart.querySelector('svg'); return {overflow:chart.scrollWidth>chart.clientWidth+1, viewport:document.documentElement.scrollWidth>innerWidth+1, dots:svg.querySelectorAll('circle').length, points:chart.querySelectorAll('[data-chart-point]').length, focus:document.activeElement.textContent}; })()`);
       assert.equal(chartLayout.overflow, false); assert.equal(chartLayout.viewport, false);
       assert.equal(chartLayout.dots, chartLayout.points); assert.ok(chartLayout.dots >= 31); assert.equal(chartLayout.focus, 'Fechar');
+      const recorded = await api.evaluate(`(() => { const items=[...document.querySelectorAll('[data-chart-point]')]; return {last:items.at(-1).textContent, overflow:items.some(node=>node.scrollWidth>node.clientWidth+1)}; })()`);
+      assert.match(recorded.last, /Depreciado: R\$\s*146,10 · Residual: R\$\s*4\.723,90/);
+      assert.equal(recorded.overflow, false);
       await api.wait(`(() => { const labels=[...document.querySelectorAll('[data-chart-label]')]; return labels.length === 3 && labels.every(n => n.dataset.positioned === 'true'); })()`);
       const labels = await api.evaluate(`(() => { const root=document.querySelector('.depreciation-chart-plot-area').getBoundingClientRect(); return [...document.querySelectorAll('[data-chart-label]')].map(node=>{const r=node.getBoundingClientRect();return {text:node.textContent,value:node.dataset.value,left:r.left,right:r.right,top:r.top,bottom:r.bottom,inside:r.left>=root.left-1&&r.right<=root.right+1&&r.top>=root.top-1&&r.bottom<=root.bottom+1};}); })()`);
       assert.equal(labels.length,3); assert.equal(labels.at(-1).value,'4723.9'); assert.match(labels.at(-1).text,/4\.723,90/);
@@ -100,6 +103,8 @@ test('toque, teclado, cadastro e 31 depreciações cabem em 320/390/1365px sem p
       await api.evaluate(`(() => {const scroll=document.querySelector('.depreciation-branches-scroll');scroll.scrollLeft=scroll.scrollWidth;})()`);
       assert.equal(await api.evaluate(`(() => {const s=document.querySelector('.depreciation-branches-scroll').getBoundingClientRect(), b=document.querySelector('.depreciation-branch-bar--total').getBoundingClientRect();return b.right<=s.right+1 && b.left>=s.left-1})()`),true);
       await shot(api, `${kind}-barras-total-${width}`);
+      await api.evaluate(`document.querySelector('.depreciation-chart-list').scrollIntoView({block:'start'})`);
+      await shot(api, `${kind}-valores-registrados-${width}`);
       await key(api, 'Escape', 'Escape', 27); await api.wait('!document.querySelector("[data-depreciation-chart]")');
       assert.equal(await api.evaluate(`document.activeElement===document.querySelector('${chartTrigger}')`), true);
       await api.evaluate(`(() => { const dialog = document.querySelector('[data-asset-report]'); dialog.scrollTop += dialog.querySelector('.asset-report-history').getBoundingClientRect().top-dialog.getBoundingClientRect().top-95; })()`);
