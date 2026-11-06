@@ -1,0 +1,11 @@
+[Unit]
+Description=Energetica - documentos Silva Novais diariamente as 07h10 Brasilia
+
+[Timer]
+OnCalendar=*-*-* 07:10:00 America/Sao_Paulo
+AccuracySec=1min
+Persistent=true
+Unit=energetica-silva-novais.service
+
+[Install]
+WantedBy=timers.target
