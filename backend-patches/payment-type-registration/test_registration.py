@@ -2,9 +2,12 @@
 import copy, os, sys, tempfile, unittest
 from pathlib import Path
 ROOT=Path(os.environ['PAYMENT_TYPE_SOURCE'])
-sys.path[:0]=[str(ROOT/'worker'),str(ROOT),str(ROOT/'tests')]
-import test_workflow as fixtures
+FIXTURES=Path(os.environ.get('PAYMENT_TYPE_FIXTURES',str(ROOT)))
+sys.path[:0]=[str(ROOT/'worker'),str(ROOT),str(FIXTURES/'tests')]
 import workflow
+import test_workflow as fixtures
+sys.path[:0]=[str(ROOT/'worker'),str(ROOT)]
+assert Path(workflow.__file__).resolve().parent == (ROOT/'worker').resolve()
 
 CREATE='launch_payroll_type_create'
 CONFIRM='launch_payroll_type_create_confirm'
