@@ -1,0 +1,24 @@
+{
+  "files": {
+    "worker/workflow.py": {
+      "before": "a67f18cdb52fe0648574256db409231bd9700b5ab6dfddfcae56bfc592d718af",
+      "after": "79425c944c034e10794600190f797f23d6fe575d9bd37edfedc4f21ba60aeb5f"
+    },
+    "worker/financial_catalog_registration.py": {
+      "before": "3efb46b2f1a144cf4dc9ce001e02fac02723af6f9212d88c159eb4005e693fa4",
+      "after": "c65e38e83715ad1902714e1448aec19e797402feeeeda8eb21583d95a46c8ab0"
+    }
+  },
+  "mirror": {
+    "worker/workflow.py": "7a78edb3acb1cc088a0f6240df396bed6d09c207cd9b22774ef6a46c77f987cb",
+    "worker/financial_catalog_registration.py": "8ed766f9474830844379c1f6f062fab50c2d97c3ca0f07ef1a740c1c1e0afe77"
+  },
+  "inputs": {
+    "deploy.py": "d43753015e5b2d5f44aa7b0778104fc9fbf1654b8f41a42de78f22218b7f082d",
+    "deploy.sh": "74c37f5406f360a95df44f92ffe88da1e58dcef2fc209d7e2ee16a1655b87c07",
+    "deployment_gate.sh": "ae5ed44ab6d6ab1edfecbc14dd3bbd59505e9f991962d1410f488e4a029eefb6",
+    "patch_backend.py": "42473a56b32b0c5229cd20f31df2dad8e0b149a868bb0697c8e6ba99eb1efb41",
+    "shared-deploy.py": "01d979e4e9d525d35ab522e017d3454be75514f4fc42a1274cc89e7b0a21bbe2",
+    "source.patch": "bf16723a90b697f20290a3852534355a28acb2ed5fa243283087700fc92007c9"
+  }
+}
