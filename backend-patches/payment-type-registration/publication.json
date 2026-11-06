@@ -1,0 +1,38 @@
+{
+  "status": "deployed",
+  "backup": "/var/backups/energetica-whatsapp/payment-type-registration-20261106T190847916882Z",
+  "health": {
+    "status": "ok",
+    "channel": "generic"
+  },
+  "after": {
+    "/opt/energetica-whatsapp/worker/workflow.py": "e654cbe2bd2b0931358bddc6924a2351297bc3cec70010c83f70451a6f1e0642",
+    "/opt/energetica-whatsapp/worker/financial_catalog_registration.py": "44b45fe98cf6233574bc40074d24dbf477dffcf3bc2271aaf81a59f4df8b2645"
+  },
+  "pr": "https://github.com/energeticabr/energeticabr.github.io/pull/789",
+  "merge_commit": "3e2991a435a2515b023dc19bf7344af01f487d1c",
+  "manifest_sha256": "ba5a31eebd878ff8e4d5f7a3243d9ac00c44551af7aa8819188d2429b4a0ced8",
+  "platforms": {
+    "Android": "published_shared_backend",
+    "iOS": "published_shared_backend",
+    "Windows/web": "published_shared_backend"
+  },
+  "installed_source_behavior_tests": {
+    "passed": 14,
+    "financial_data": "synthetic"
+  },
+  "regression_tests_passed": 10,
+  "installer_tests_passed": 38,
+  "schema_tests_passed": 3,
+  "visual_states_passed": 15,
+  "signature_blocks_intact": 14,
+  "live_catalog": {
+    "title": "CADASTROTIPOPAGAMENTO",
+    "id": "ffe2bb77-45cc-4a8e-be06-9e33937c41fa",
+    "count": 9,
+    "unique_key": true,
+    "read_write_by_app_account": true,
+    "replay_same_ids": true
+  },
+  "mirror_preserved": true
+}
