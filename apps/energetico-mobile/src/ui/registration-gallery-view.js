@@ -282,7 +282,7 @@ export function createRegistrationGallery({ document: doc = globalThis.document,
     icon.setAttribute('aria-hidden', 'true');
     const copy = el('span', 'rg-sefaz-last-success__copy');
     fiscalLastSuccessValue.dataset.sefazLastSuccessValue = '';
-    copy.append(el('span', 'rg-sefaz-last-success__label', 'Última atualização bem-sucedida'), fiscalLastSuccessValue);
+    copy.append(el('span', 'rg-sefaz-last-success__label', 'Última consulta manual bem-sucedida'), fiscalLastSuccessValue);
     fiscalLastSuccess.append(icon, copy);
   }
   const feedback = el("p", "rg-feedback");
@@ -372,9 +372,7 @@ export function createRegistrationGallery({ document: doc = globalThis.document,
   function fiscalSummary(state){
     if(!Number.isFinite(state?.lastSuccessfulAt)||!Number.isSafeInteger(state?.lastSuccessfulCreatedCount)||state.lastSuccessfulCreatedCount<0)return '';
     const count=state.lastSuccessfulCreatedCount,created=count===1?'1 novo cadastro':`${count} novos cadastros`;
-    let text=`ÚLTIMA ATUALIZAÇÃO EM ${formatFiscalDate(state.lastSuccessfulAt)} no horário ${formatFiscalClock(state.lastSuccessfulAt)} com ${created}.`;
-    if(Number.isFinite(state.nextAllowedAt))text+=` Próxima atualização permitida no horário ${formatFiscalClock(state.nextAllowedAt)}`;
-    return text;
+    return `ÚLTIMA CONSULTA MANUAL CONCLUÍDA EM ${formatFiscalDate(state.lastSuccessfulAt)} no horário ${formatFiscalClock(state.lastSuccessfulAt)} com ${created}.`;
   }
   function showBankNotice(){
     if(!bankNotice||root.hidden)return;
@@ -449,15 +447,20 @@ export function createRegistrationGallery({ document: doc = globalThis.document,
   let fiscalWasRunning=Boolean(syncMonitor?.running);
   const unsubscribeFiscal=fiscalNotice && syncMonitor ? syncMonitor.subscribe(state=>{
     if (destroyed) return;
-    const summary=fiscalSummary(state);
-    fiscalNotice.hidden=!(summary||state.notice);
-    fiscalNotice.textContent=summary || state.notice || '';
-    fiscalNotice.setAttribute('role','status');
+    const progress=state.notice || (Number.isFinite(state.nextAllowedAt) ? `Próxima tentativa a partir de ${formatManualTime(state.nextAllowedAt)}.` : '');
+    const text=state.running
+      ? `Consulta manual em andamento.\n${progress}\nO servidor continuará automaticamente. O botão será liberado ao concluir.`
+      : state.notice || fiscalSummary(state);
+    fiscalNotice.hidden=!text;
+    fiscalNotice.textContent=text;
+    fiscalNotice.setAttribute('role',state.notice && !state.running ? 'alert' : 'status');
+    refresh.title=state.running ? 'Consulta fiscal em andamento; aguardando conclusão automática' : 'Consultar NF-e, CT-e e NFS-e nacional';
+    refresh.setAttribute('aria-label',refresh.title);
     fiscalLastSuccessValue.textContent=Number.isFinite(state.lastSuccessfulAt) ? formatManualTime(state.lastSuccessfulAt) : '—';
     if (fiscalWasRunning && !state.running && !root.hidden) void load({refresh:true,preserveRowsOnError:true});
     fiscalWasRunning=state.running; refreshShortcut.sync();
   }) : null;
-  if (fiscalNotice) { refresh.title='Consultar NF-e, CT-e e NFS-e nacional'; refresh.setAttribute('aria-label',refresh.title); }
+  if (fiscalNotice && !syncMonitor) { refresh.title='Consultar NF-e, CT-e e NFS-e nacional'; refresh.setAttribute('aria-label',refresh.title); }
   if (kind === 'dda') { refresh.title = 'Consultar Sicoob e sincronizar SharePoint'; refresh.setAttribute('aria-label', refresh.title); }
   if (kind === 'provisionDescription' || kind === 'dda') {
     const searchWrap = el('div', 'rg-provision-search');

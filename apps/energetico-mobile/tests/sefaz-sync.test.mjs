@@ -71,7 +71,7 @@ test('fiscal gallery shows a persistent neutral cluster with the last successful
  const gallery=createRegistrationGallery({document:doc,kind:'notas_fiscais_sefaz',syncMonitor:monitor,data:{loadSnapshot:async()=>({rows:[]})}});
  t.after(()=>{gallery.destroy();dom.window.close();});await gallery.open();
  const cluster=doc.querySelector('[data-sefaz-last-success]'),value=doc.querySelector('[data-sefaz-last-success-value]');
- assert.ok(cluster);assert.match(cluster.textContent,/Última atualização bem-sucedida/);assert.equal(value.textContent,'—');
+ assert.ok(cluster);assert.match(cluster.textContent,/Última consulta manual bem-sucedida/);assert.equal(value.textContent,'—');
  listener({running:false,notice:'',lastSuccessfulAt:Date.parse('2026-10-29T10:01:00Z')});
  assert.match(value.textContent,/29\/10\/2026.*07:01/);assert.equal(cluster.hidden,false);
  listener({running:true,notice:'NF-e: aguardando intervalo obrigatório',lastSuccessfulAt:Date.parse('2026-10-29T10:01:00Z')});
@@ -85,7 +85,24 @@ test('fiscal gallery uses the requested concise source and synchronization summa
  t.after(()=>{gallery.destroy();dom.window.close();});await gallery.open();
  assert.equal(doc.querySelector('[data-sefaz-coverage]').textContent,'Fontes: SEFAZ para NF-e e CT-e; ADN nacional para NFS-e.');
  listener({running:true,notice:'NF-e: aguardando o intervalo obrigatório da fonte fiscal',lastSuccessfulAt:Date.parse('2026-10-29T10:01:00Z'),lastSuccessfulCreatedCount:3,nextAllowedAt:Date.parse('2026-10-29T11:15:00Z')});
- assert.equal(doc.querySelector('[data-sefaz-sync-progress]').textContent,'ÚLTIMA ATUALIZAÇÃO EM 29/10/2026 no horário 07:01 com 3 novos cadastros. Próxima atualização permitida no horário 08:15');
+ assert.match(doc.querySelector('[data-sefaz-sync-progress]').textContent,/NF-e: aguardando o intervalo obrigatório/);
+ assert.doesNotMatch(doc.querySelector('[data-sefaz-sync-progress]').textContent,/ÚLTIMA/);
  listener({running:false,notice:'',lastSuccessfulAt:Date.parse('2026-10-29T10:01:00Z'),lastSuccessfulCreatedCount:1,nextAllowedAt:null});
- assert.equal(doc.querySelector('[data-sefaz-sync-progress]').textContent,'ÚLTIMA ATUALIZAÇÃO EM 29/10/2026 no horário 07:01 com 1 novo cadastro.');
+ assert.equal(doc.querySelector('[data-sefaz-sync-progress]').textContent,'ÚLTIMA CONSULTA MANUAL CONCLUÍDA EM 29/10/2026 no horário 07:01 com 1 novo cadastro.');
+});
+
+test('historical manual success cannot hide a connection failure and pending refresh explains its disabled state',async t=>{
+ const dom=new JSDOM('<body/>'),doc=dom.window.document;let listener,running=true;
+ const previous={lastSuccessfulAt:Date.parse('2026-11-03T05:17:03Z'),lastSuccessfulCreatedCount:0};
+ const monitor={get running(){return running;},subscribe(fn){listener=fn;fn({running,notice:'NF-e: aguardando o intervalo obrigatório da fonte fiscal — próxima tentativa a partir de 06/11/2026, 09:11',...previous});return()=>{};},async start(){}};
+ const gallery=createRegistrationGallery({document:doc,kind:'notas_fiscais_sefaz',syncMonitor:monitor,data:{loadSnapshot:async()=>({rows:[]})}});
+ t.after(()=>{gallery.destroy();dom.window.close();});await gallery.open();
+ const button=doc.querySelector('[data-gallery-refresh]'),progress=doc.querySelector('[data-sefaz-sync-progress]');
+ assert.equal(button.disabled,true);assert.match(button.getAttribute('aria-label'),/andamento/);
+ assert.match(progress.textContent,/NF-e: aguardando/);assert.match(progress.textContent,/09:11/);
+ assert.match(progress.textContent,/automaticamente/);
+ assert.match(doc.querySelector('[data-sefaz-last-success-value]').textContent,/03\/11\/2026/);
+ running=false;listener({running,notice:'Sem conexão para recuperar as consultas fiscais.',...previous});await tick();
+ assert.equal(button.disabled,false);assert.match(progress.textContent,/Sem conexão/);
+ assert.equal(progress.getAttribute('role'),'alert');assert.doesNotMatch(button.getAttribute('aria-label'),/andamento/);
 });

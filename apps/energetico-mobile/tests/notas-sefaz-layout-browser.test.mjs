@@ -7,6 +7,27 @@ import { JSDOM } from 'jsdom';
 import { build, createServer } from 'vite';
 import { runBrowserLayout } from './helpers/browser-layout-runner.mjs';
 
+test('pending fiscal sync shows the cooldown and disabled-button reason alongside manual history on phones and Windows', {timeout:90000}, async t=>{
+  const browser=[process.env.CHROME_BIN,'C:/Program Files/Google/Chrome/Application/chrome.exe','/usr/bin/google-chrome','/usr/bin/chromium'].find(path=>path&&existsSync(path));
+  if(!browser)return t.skip('Chrome unavailable');
+  const root=fileURLToPath(new URL('..',import.meta.url));
+  const server=await createServer({root,logLevel:'silent',server:{host:'127.0.0.1',port:0,fs:{allow:[resolve(root,'../..')]}}});
+  await server.listen();t.after(()=>server.close());
+  for(const width of [320,390,1365]){
+    const {stdout,screenshot}=await runBrowserLayout(browser,{width,height:1100,mobile:width<700,
+      url:`http://127.0.0.1:${server.httpServer.address().port}/tests/fixtures/notas-sefaz-responsive.html?syncWaiting`,
+      captureScreenshot:Boolean(process.env.NOTAS_SEFAZ_SCREENSHOT_DIR)});
+    const dom=new JSDOM(stdout);const layout=JSON.parse(dom.window.document.documentElement.dataset.layout);dom.window.close();
+    assert.equal(layout.overflow,false);assert.equal(layout.refresh.disabled,true);
+    assert.match(layout.refresh.label,/andamento/);assert.match(layout.syncSummary.text,/09:11/);
+    assert.match(layout.syncSummary.text,/NF-e: aguardando/);assert.match(layout.syncSummary.text,/CT-e: concluída/);
+    assert.match(layout.syncSummary.text,/NFS-e nacional: concluída/);assert.match(layout.syncSummary.text,/automaticamente/);
+    assert.ok(layout.syncSummary.scrollWidth<=layout.syncSummary.width+1);
+    assert.match(layout.lastSuccess.text,/consulta manual/);assert.match(layout.lastSuccess.text,/29\/10\/2026/);
+    if(screenshot)writeFileSync(join(process.env.NOTAS_SEFAZ_SCREENSHOT_DIR,`sefaz-waiting-${width}.png`),screenshot);
+  }
+});
+
 test('NF-e gallery and three-gallery launch group fit narrow phones and Windows in mobile and PWA CSS', { timeout: 240_000 }, async t => {
   const browser = [process.env.CHROME_BIN, 'C:/Program Files/Google/Chrome/Application/chrome.exe', '/usr/bin/google-chrome', '/usr/bin/chromium'].find(path => path && existsSync(path));
   if (!browser) return t.skip('Chrome unavailable');
@@ -39,9 +60,9 @@ test('NF-e gallery and three-gallery launch group fit narrow phones and Windows 
     }
     if (mode === 'gallery') {
       assert.equal(layout.sourceNotice,'Fontes: SEFAZ para NF-e e CT-e; ADN nacional para NFS-e.');
-      assert.equal(layout.syncSummary.text,'ÚLTIMA ATUALIZAÇÃO EM 29/10/2026 no horário 07:01 com 3 novos cadastros. Próxima atualização permitida no horário 08:15');
+      assert.equal(layout.syncSummary.text,'ÚLTIMA CONSULTA MANUAL CONCLUÍDA EM 29/10/2026 no horário 07:01 com 3 novos cadastros.');
       assert.ok(layout.syncSummary.scrollWidth <= layout.syncSummary.width + 1, 'resumo conciso sem overflow');
-      assert.match(layout.lastSuccess.text,/Última atualização bem-sucedida/);
+      assert.match(layout.lastSuccess.text,/Última consulta manual bem-sucedida/);
       assert.match(layout.lastSuccess.text,/29\/10\/2026.*07:01/);
       assert.equal(layout.lastSuccess.background,'rgb(238, 243, 245)');
       assert.ok(layout.lastSuccess.scrollWidth <= layout.lastSuccess.width + 1, 'cluster da última atualização sem overflow');
