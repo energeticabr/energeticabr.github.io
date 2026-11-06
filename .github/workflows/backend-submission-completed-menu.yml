@@ -21,3 +21,4 @@ jobs:
         with:
           python-version: '3.11'
       - run: python -B -m unittest discover -s backend-patches/submission-completed-menu -p test_deploy.py -v
+      - run: python -B -m unittest discover -s backend-patches/submission-completed-menu -p test_startup_wait.py -v

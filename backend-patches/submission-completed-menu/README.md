@@ -25,17 +25,26 @@ novo binário nem reinstalação e não altera registros financeiros existentes.
   não é apresentada como aprovada nem substitui a suíte completa.
 - 38 testes do instalador passaram, incluindo hash, lock, gate, instalação
   atômica, backup e rollback. Trava de assinatura: 14 blocos intactos.
+- Três testes adicionais verificam inicialização lenta, falha com espera
+  limitada e tempo de proteção suficiente para verificação e rollback.
 - Revisão independente não encontrou problemas críticos ou importantes.
 
 ```sh
 SUBMISSION_MENU_SOURCE=/private/candidate python -B test_regression.py -v
 python -B test_deploy.py -v
+python -B test_startup_wait.py -v
 python -B package.py --baseline /private/baseline --candidate /private/candidate --stage /private/release
 ```
 
 O pacote fixa a revisão ativa, o espelho independente e todos os arquivos de
 publicação. `deploy.sh <hash-do-manifesto>` valida o pacote, drena as requisições,
 instala somente o arquivo autorizado e verifica a saúde após reiniciar.
+
+A primeira tentativa foi revertida corretamente: a inicialização ultrapassou
+a janela original de 15 tentativas. O pacote passou a permitir 60 tentativas,
+mantendo os mesmos critérios de saúde. O watchdog de liberação do gate foi
+ampliado para cobrir a verificação e eventual rollback; a liberação normal
+continua imediata na saída do instalador.
 
 Uma confirmação antiga com identificador nunca observado, entregue somente
 após abrir outra área, permanece sujeita à validação normal dessa área.

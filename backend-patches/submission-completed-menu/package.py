@@ -12,6 +12,20 @@ def digest(data):
     return hashlib.sha256(data).hexdigest()
 
 
+def shared_runner():
+    folder = Path(__file__).resolve().parent
+    runner = (folder.parent / 'launch-payroll-per-payment/deploy.py').read_bytes().replace(b'\r\n', b'\n')
+    if digest(runner) != '01d979e4e9d525d35ab522e017d3454be75514f4fc42a1274cc89e7b0a21bbe2':
+        raise RuntimeError('Original shared runner source drift')
+    # Observed startup exceeded the original fifteen-second polling window.
+    # Extend only this package; retain bounded failure and the same health checks.
+    runner = runner.replace(b'for attempt in range(15):', b'for attempt in range(60):')
+    runner = runner.replace(b'if attempt == 14: raise', b'if attempt == 59: raise')
+    if digest(runner) != SHARED_RUNNER_SHA:
+        raise RuntimeError('Shared runner source drift')
+    return runner
+
+
 def package(baseline, candidate, stage):
     folder = Path(__file__).resolve().parent
     diffs, pins = [], {}
@@ -24,9 +38,7 @@ def package(baseline, candidate, stage):
             after.decode().splitlines(keepends=True), fromfile='a/' + relative, tofile='b/' + relative, n=0)))
         pins[relative] = {'before': digest(before), 'after': digest(after)}
     (folder / 'source.patch').write_text(''.join(diffs), encoding='utf-8', newline='\n')
-    runner = (folder.parent / 'launch-payroll-per-payment/deploy.py').read_bytes().replace(b'\r\n', b'\n')
-    if digest(runner) != SHARED_RUNNER_SHA:
-        raise RuntimeError('Shared runner source drift')
+    runner = shared_runner()
     files = {name: (runner if name == 'shared-deploy.py' else
         (folder / name).read_bytes().replace(b'\r\n', b'\n')) for name in INPUTS}
     manifest = {'files': pins, 'mirror': MIRROR_PINS,

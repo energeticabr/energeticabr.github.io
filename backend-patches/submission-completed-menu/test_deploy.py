@@ -451,7 +451,7 @@ iptables() {
   echo "firewall $operation"
 }
 systemd-run() {
-  [[ "$*" == "--quiet --unit=energetica-diary-progress-release-$$ --on-active=120s /usr/sbin/iptables -D OUTPUT -o lo -d 127.0.0.1 -p tcp --dport 8765 --syn -m owner ! --uid-owner 0 -m comment --comment diary-progress-$$ -j REJECT --reject-with tcp-reset" ]] || return 9
+  [[ "$*" == "--quiet --unit=energetica-diary-progress-release-$$ --on-active=900s /usr/sbin/iptables -D OUTPUT -o lo -d 127.0.0.1 -p tcp --dport 8765 --syn -m owner ! --uid-owner 0 -m comment --comment diary-progress-$$ -j REJECT --reject-with tcp-reset" ]] || return 9
   echo watchdog
 }
 systemctl() { echo timer-stop; }
@@ -507,7 +507,7 @@ trap diary_release_ingress EXIT
             gate = base / 'deployment_gate.sh'
             gate.write_bytes(Path(__file__).with_name('deployment_gate.sh').read_bytes())
             shell = Path(__file__).with_name('deploy.sh').read_text()
-            shell = shell.replace('/home/opc/submission-menu-20261106/release',
+            shell = shell.replace('/home/opc/submission-menu-20261106/release-v3',
                                   '$(cd -- "' + base.as_posix() + '" && pwd)')
             shell = shell.replace('/opt/energetica-whatsapp/.venv/bin/python', Path(sys.executable).as_posix())
             (base / 'deploy.sh').write_bytes(shell.encode('utf-8'))
