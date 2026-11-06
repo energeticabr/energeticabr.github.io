@@ -27,4 +27,3 @@ test('actual backend registration messages render above submit and open both cho
   }
  }finally{await server.close();}
 });
-
