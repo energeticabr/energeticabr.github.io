@@ -9,3 +9,7 @@
 - Trava dos gestos de assinatura: 14 blocos intactos. Não houve alteração de cliente.
 
 Os testes funcionais não usam cadastros nem pagamentos reais. A criação real foi limitada à estrutura do catálogo e seus nove tipos operacionais. Publicação/checagem dos arquivos instalados são registradas separadamente em publication.json.
+
+## Publicação confirmada
+
+PR #789 integrado em 3e2991a435a2515b023dc19bf7344af01f487d1c. Deploy protegido concluído com saúde ok e hashes instalados iguais ao manifesto. Os 14 testes comportamentais passaram contra a fonte instalada, com fixtures explicitamente isoladas. Leitura real do catálogo confirmou nove tipos; espelho independente preservado. Evidências em publication.json.
