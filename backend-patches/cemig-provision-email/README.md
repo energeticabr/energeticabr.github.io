@@ -29,3 +29,29 @@ Deployment installs `cemig_sync.py`, tests and flow builder under `/opt/energeti
 `Publish-CemigFlows.ps1` uses existing authenticated Outlook/SharePoint connections. Setup is a one-time maintenance flow; it creates the queue and fields. Publish updates only the selected daily schedule unless temporary recovery was explicitly requested. Replay recovers an exact existing email ID without sending mail. Temporary setup/replay flows and their signed callbacks must be deleted after validation. Operational IDs are kept in the ignored local state file; no credentials or callback URLs are committed. Roll back by stopping the scheduled capture flow and, if needed, disabling the worker timer, retaining the queue and already confirmed attachments. Do not restore arrival subscriptions after the user's daily-only instruction.
 
 This change updates server-side data consumed by the existing Android, iOS and Windows clients. It does not change mobile code or initiate payments.
+## Silva Novais / Asaas
+
+`silva_novais.py` attaches the original NFS-e and boleto of Energética (CNPJ
+38.626.750/0001-46) to the exact provision from recurrence 28. It joins documents
+by the Asaas charge ID and selects the provision by its full due date, supplier,
+branch, product and amount. Invoice issue/competence month does not select the
+payment month. Financial values, payment status/dates and links are never written.
+
+`Publish-SilvaNovais.ps1 -Mode Setup` creates the dedicated durable SharePoint
+queue; `-Mode Publish` installs the daily 06:50 Brasilia Outlook search. `-Mode Run`
+performs an immediate capture through the daily trigger. The `energetica-silva-novais`
+systemd timer processes the queue at 07:10 America/Sao_Paulo, without Windows.
+Use `silva_novais.py --dry-run` to inspect targets/uploads, and `--seed <emails.json>`
+only for an explicitly requested historical recovery. Source cache and before-write
+backups remain under `/var/lib/energetica-whatsapp/silva-novais` with restricted
+permissions. Never commit email envelopes, PDF files or signed download links.
+
+Existing files are deduplicated by SHA-256 and fiscal/charge identity. Existing
+description mirrors use the shared parent lock and `PROV-<child>-<sha256>-...`
+provenance. A replay also completes a missing description copy of a boleto already
+present on the child. Historical children without descriptions are handled without
+creating new financial records. A paid charge is marked `BOLETO_INDISPONIVEL_QUITADO`
+only after its actual PDF download fails; its available NFS-e is still attached.
+The next daily run retries the unavailable original. A receipt is not relabeled
+as a boleto. Missing exact provisions remain `WAITING`; ambiguous identities are
+`REVIEW`; network/operational errors remain `RETRY`.
