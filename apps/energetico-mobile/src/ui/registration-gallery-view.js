@@ -965,7 +965,7 @@ export function createRegistrationGallery({ document: doc = globalThis.document,
           if (pdf) rail.append(pdf);
           const withholding = buyerWithholding(row.fields);
           card.classList.toggle('rg-row--buyer-withholding', Boolean(withholding));
-          decorateSefazInvoiceCard({document: doc, card, container: main, pdfRail: rail, withholding, fiscalType});
+          decorateSefazInvoiceCard({document: doc, card, container: main, pdfRail: rail, withholding, fiscalType, fields: row.fields});
           layout.append(main);
           card.append(layout);
         } else if (kind === 'assetLaunches') renderAssetLaunchesCard({ document: doc, container: card, rowId: row.id, title: primary, value: field => rowFieldValue(row, field) });
