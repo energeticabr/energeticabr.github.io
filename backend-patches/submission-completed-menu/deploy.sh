@@ -2,7 +2,7 @@
 set -euo pipefail
 PACKAGE="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd)"
 PYTHON=/opt/energetica-whatsapp/.venv/bin/python
-[[ "$PACKAGE" == /home/opc/submission-menu-20261106/release-v3 ]]
+[[ "$PACKAGE" == /home/opc/submission-menu-20261106/release-v4 ]]
 [[ "$(id -u)" == 0 ]]
 [[ "$#" == 1 ]]
 # Validate reviewed package hashes before executing the staged gate.

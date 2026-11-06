@@ -15,11 +15,11 @@ import types
 
 ROOT = Path('/opt/energetica-whatsapp')
 MIRROR = Path('/home/opc/energetica-build')
-STAGE = Path('/home/opc/submission-menu-20261106/release-v3')
+STAGE = Path('/home/opc/submission-menu-20261106/release-v4')
 BACKUPS = Path('/var/backups/energetica-whatsapp')
 LOCK = Path('/tmp/energetica-whatsapp-deploy.lock')
 FILES = ('worker/workflow.py',)
-BEFORE = {'worker/workflow.py': '596d3faf2e18f7df380658bcc9020471473baeb6743540deda9bbd8dcaadd33e'}
+BEFORE = {'worker/workflow.py': 'e654cbe2bd2b0931358bddc6924a2351297bc3cec70010c83f70451a6f1e0642'}
 MIRROR_PINS = {'worker/workflow.py': '7a78edb3acb1cc088a0f6240df396bed6d09c207cd9b22774ef6a46c77f987cb'}
 SHARED_RUNNER_SHA = '709dfc9f1cfc13670a0c819b2dde34149e996f4d8fff96e21a7f0edc8ec2f716'
 INPUTS = {'patch_backend.py', 'deploy.py', 'deploy.sh', 'deployment_gate.sh', 'shared-deploy.py', 'source.patch'}
