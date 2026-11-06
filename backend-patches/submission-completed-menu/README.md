@@ -13,6 +13,8 @@ na transição. Escolhas reais de área continuam funcionando com um clique.
 
 O backend é compartilhado por Android, iOS e Windows/web. A publicação não exige
 novo binário nem reinstalação e não altera registros financeiros existentes.
+Publicação e leitura independente concluídas em 06/11/2026 às 16:12 de Brasília:
+[`publication.json`](publication.json). Serviços ativos e acesso liberado.
 
 ## Validação
 
@@ -20,7 +22,7 @@ novo binário nem reinstalação e não altera registros financeiros existentes.
   Quatro reproduziram a falha antes da correção; outro comprovou a necessidade
   de persistir o identificador do segundo clique.
 - Sete testes existentes de conclusão/menu passaram.
-- Comparação ampliada de 13 testes existentes: baseline e candidato possuem
+- Comparação ampliada inicial de 13 testes existentes: baseline e candidato possuem
   as mesmas três falhas e dois erros legados; nenhuma falha nova. Essa seleção
   não é apresentada como aprovada nem substitui a suíte completa.
 - 38 testes do instalador passaram, incluindo hash, lock, gate, instalação

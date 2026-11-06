@@ -1,0 +1,38 @@
+{
+  "verified_at": "2026-11-06T19:12:37.698987+00:00",
+  "manifest": "85c191a915238830b3c8ef511ce3fa3c118aeb9f25359c8d9c989834cfdfbaea",
+  "source": "ec6879ce69308f923008289563c79c9c466338fa47846df8a71c8451008b34d6",
+  "mirror": "7a78edb3acb1cc088a0f6240df396bed6d09c207cd9b22774ef6a46c77f987cb",
+  "services": {
+    "energetica-channel-bridge": "active",
+    "energetica-whatsmeow": "active"
+  },
+  "health": {
+    "status": "ok",
+    "channel": "generic"
+  },
+  "ingress_released": true,
+  "receipt": {
+    "status": "deployed",
+    "backup": "/var/backups/energetica-whatsapp/submission-completed-menu-20261106T191150912779Z",
+    "health": {
+      "status": "ok",
+      "channel": "generic"
+    },
+    "after": {
+      "/opt/energetica-whatsapp/worker/workflow.py": "ec6879ce69308f923008289563c79c9c466338fa47846df8a71c8451008b34d6"
+    }
+  },
+  "platforms": [
+    "Android",
+    "iOS",
+    "Windows/web"
+  ],
+  "distribution": "shared-backend-no-client-binary",
+  "tests": {
+    "regression": 9,
+    "existing_completion": 7,
+    "installer": 38,
+    "startup": 3
+  }
+}
