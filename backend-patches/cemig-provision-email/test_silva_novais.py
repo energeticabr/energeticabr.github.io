@@ -83,6 +83,20 @@ class MemoryStore:
     def put(self,kind,ident,name,content):self.files[(kind,ident)].append({'filename':name,'content':content});self.puts.append((kind,ident,name))
 
 class ReconcileTests(unittest.TestCase):
+    def test_reuses_original_order_filename_to_avoid_legacy_fanout_duplicate(self):
+        store=MemoryStore(parent=False)
+        store.rows[(s.CHILD,701)]['IDPEDIDO']='501'
+        store.rows[('NOTASPENDENTES',501)]={'Id':501,'FORNECEDOR':s.SUPPLIER,'FILIAL':s.BRANCH,'VALORTOTAL':'123,45'}
+        store.files[('NOTASPENDENTES',501)]=[{'filename':'original-invoice.pdf','content':b'%PDF-same-original'}]
+        result=s.attach_documents(store,date(2026,11,10),Decimal('123.45'),[s.Document('nfse',CHARGE,b'%PDF-same-original','NF-123')],identity_reader=lambda b:None)
+        self.assertEqual(result['added'],1)
+        self.assertEqual(store.puts[0][2],'original-invoice.pdf')
+    def test_does_not_reuse_original_from_a_mismatched_linked_order(self):
+        store=MemoryStore(parent=False);store.rows[(s.CHILD,701)]['IDPEDIDO']='501'
+        store.rows[('NOTASPENDENTES',501)]={'Id':501,'FORNECEDOR':'OTHER SUPPLIER','FILIAL':s.BRANCH,'VALORTOTAL':'123,45'}
+        store.files[('NOTASPENDENTES',501)]=[{'filename':'original.pdf','content':b'%PDF-original'}]
+        with self.assertRaises(s.Review):s.attach_documents(store,date(2026,11,10),Decimal('123.45'),[s.Document('nfse',CHARGE,b'%PDF-original','NF-123')],identity_reader=lambda b:None)
+        self.assertEqual(store.puts,[])
     def test_existing_child_boleto_is_forwarded_to_finish_missing_parent_copy(self):
         source=s.Source('boleto',CHARGE,Decimal('123.45'),date(2026,11,10))
         original=s.Document('boleto',CHARGE,b'%PDF-existing-boleto','charge:'+CHARGE)
