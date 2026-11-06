@@ -1,0 +1,56 @@
+--- a/worker/workflow.py
++++ b/worker/workflow.py
+@@ -855,0 +856,9 @@
++        # Old pagination is dispatched before normal text handling. Route the
++        # obsolete expense question through default recovery first.
++        if (state and event.get("kind") == "text"
++                and self._is_option_next(event.get("reply_id"))
++                and state.get("flow") in {"launch", "payment_settlement"}
++                and state.get("stage") == "selecting_fields"):
++            step = self._current_step(state)
++            if step and step.get("key") in {"tipo_despesa_lancamento", "tipo_despesa_baixa"}:
++                return self._handle_text(event, state, etag)
+@@ -18893,0 +18903,13 @@
++        if financial_catalog.restore_legacy_product_expense_parent(state):
++            self._mark_processed(state, event.get("message_id"))
++            return self._prompt_next_or_summary(state, etag)
++        # Migrate a question left open before product defaults were restored.
++        # Ignore its stale create/search/page controls and reload the product type.
++        if (state.get("flow") in {"launch", "payment_settlement"}
++                and state.get("stage") == "selecting_fields"):
++            step = self._current_step(state)
++            if step and step.get("key") in {"tipo_despesa_lancamento", "tipo_despesa_baixa"}:
++                self._mark_processed(state, event.get("message_id"))
++                state["options"] = []
++                state.pop("option_pagination", None)
++                return self._prompt_next_or_summary(state, etag)
+@@ -36585,0 +36608,2 @@
++        if financial_catalog.restore_legacy_product_expense_parent(state):
++            return self._prompt_next_or_summary(state, etag)
+--- a/worker/financial_catalog_registration.py
++++ b/worker/financial_catalog_registration.py
+@@ -16 +16,2 @@
+-    # Product expense types share one catalog, including product-derived choices.
++    # Choose/create a type only while registering the product.
++    # Launch and settlement inherit CADASTROPRODUTO.TIPODESPESA automatically.
+@@ -18 +19 @@
+-    if (state.get('flow') in {'supply_product_registration', 'launch', 'payment_settlement'}
++    if (state.get('flow') == 'supply_product_registration'
+@@ -102,0 +104,13 @@
++def restore_legacy_product_expense_parent(state):
++    embedded = state.get('embedded_return') or {}
++    parent = embedded.get('state') or {}
++    if (state.get('flow') == 'supply_material_type_registration'
++            and embedded.get('type') == RETURN_TYPE
++            and parent.get('flow') in {'launch', 'payment_settlement'}):
++        restore_parent(state)
++        state['options'] = []
++        state.pop('option_pagination', None)
++        return True
++    return False
++
++
+@@ -103,0 +118,3 @@
++    # A child already committed before recovery must not replace the product type.
++    if restore_legacy_product_expense_parent(state):
++        return engine._prompt_next_or_summary(state, etag)

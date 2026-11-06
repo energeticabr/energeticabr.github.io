@@ -1,0 +1,23 @@
+name: Backend launch product expense default
+on:
+  pull_request:
+    paths:
+      - 'backend-patches/launch-expense-default/**'
+      - '.github/workflows/backend-launch-expense-default.yml'
+  push:
+    branches: [main]
+    paths:
+      - 'backend-patches/launch-expense-default/**'
+      - '.github/workflows/backend-launch-expense-default.yml'
+permissions:
+  contents: read
+jobs:
+  installer-tests:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+      - run: python -B -m unittest discover -s backend-patches/launch-expense-default -p test_deploy.py -v
