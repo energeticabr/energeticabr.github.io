@@ -1,0 +1,24 @@
+name: Backend payment type registration
+on:
+  pull_request:
+    paths:
+      - 'backend-patches/payment-type-registration/**'
+      - '.github/workflows/backend-payment-type-registration.yml'
+  push:
+    branches: [main]
+    paths:
+      - 'backend-patches/payment-type-registration/**'
+      - '.github/workflows/backend-payment-type-registration.yml'
+permissions:
+  contents: read
+jobs:
+  installer-tests:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+      - run: python -B -m unittest discover -s backend-patches/payment-type-registration -p test_deploy.py -v
+      - run: python -B -m unittest discover -s backend-patches/payment-type-registration -p test_schema.py -v
