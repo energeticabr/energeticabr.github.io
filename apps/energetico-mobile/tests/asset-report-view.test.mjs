@@ -261,6 +261,39 @@ test('valor residual abre gráfico cronológico com valores registrados e fecha 
   assert.ok(doc.querySelector('[data-asset-report]')); assert.equal(doc.activeElement,trigger);
 });
 
+test('detalhamento nas duas galerias mostra o depreciado registrado e o residual de cada data', async t => {
+  for (const kind of ['asset', 'assetLaunches']) {
+    const dom = domFor(t), doc = dom.window.document, result = report();
+    result.asset.details.push({ name: 'COMPRA', label: 'Valor compra', value: 5000, type: 'currency' });
+    // The recorded zero must win over the difference from the purchase value.
+    result.history[0].fields['VALOR DEPRECIAÇÃO'] = '146,10';
+    const gallery = createRegistrationGallery({ document: doc, kind, data: {
+      async loadSnapshot() { return { rows: [{ id: kind === 'asset' ? '96' : '275', fields: { IMOBILIZADO: 'GUINCHO', 'ID IMOBILIZADO': 96 } }] }; },
+      async loadAssetReport() { return result; },
+    } });
+    t.after(() => gallery.destroy()); await gallery.open();
+    doc.querySelector('[data-asset-report-trigger]').click(); await tick();
+    doc.querySelector('[data-action="open-depreciation-chart"]').click();
+    const points = [...doc.querySelectorAll('[data-chart-point]')].map(node => node.textContent.replace(/\s+/g, ' '));
+    assert.match(points[0], /01\/01\/2025 · Compra · R\$ 5\.000,00/);
+    assert.doesNotMatch(points[0], /Depreciado|Residual/);
+    assert.match(points[1], /01\/10\/2026 · Depreciação · Depreciado: R\$ 0,00 · Residual: R\$ 4\.870,00/);
+    assert.match(points[2], /01\/11\/2026 · Depreciação · Depreciado: R\$ 146,10 · Residual: R\$ 4\.723,90/);
+  }
+});
+
+test('detalhamento mantém depreciação negativa e não inventa valor ausente', async t => {
+  for (const [amount, expected] of [[-1.5, /Depreciado: -R\$\s*1,50/], [null, /Depreciado: —/]]) {
+    const dom = domFor(t), doc = dom.window.document, result = report();
+    result.history = [result.history[0]]; result.history[0].fields['VALOR DEPRECIAÇÃO'] = amount;
+    const view = createAssetReportView({ document: doc, host: doc.querySelector('#host'), loadReport: async () => result });
+    t.after(() => view.destroy()); view.open('96'); await tick();
+    doc.querySelector('[data-action="open-depreciation-chart"]').click();
+    assert.match(doc.querySelector('[data-chart-point]').textContent, expected);
+    assert.match(doc.querySelector('[data-chart-point]').textContent, /Residual: R\$\s*4\.723,90/);
+  }
+});
+
 test('gráfico vazio explica a ausência de depreciações sem criar histórico', async t => {
   const dom=domFor(t), doc=dom.window.document, result=report(); result.history=[]; result.historyTotal=0;
   const view=createAssetReportView({document:doc,host:doc.querySelector('#host'),loadReport:async()=>result});
