@@ -1,0 +1,30 @@
+<!doctype html>
+<html lang="pt-BR"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>Pagamentos fictícios</title></head>
+<body><main id="app"></main><script type="module">
+import '../../src/styles.css';
+import {renderChatMarkup} from '../../src/ui/chat-view.js';
+import {createConversationStore} from '../../src/chat/conversation-store.js';
+const store = createConversationStore({historyMode:'current-step'});
+const rows = [
+  {id:'3757', supplier:'FORNECEDOR FICTÍCIO DOS SANTOS', totalDisplay:'R$ 888,81'},
+  {id:'12345678', supplier:'FORNECEDOR FICTÍCIO COM NOME MUITO LONGO PARA CONFERÊNCIA COMPLETA', totalDisplay:'R$ 1.234.567,89'},
+];
+store.ingestRemoteMessages([{type:'poll', question:'PAGAMENTO 1 DE 1 — A QUAL FOLHA DESEJA VINCULAR ESTE PAGAMENTO?\n\nCASO DESEJE FILTRAR, DIGITE UM TEXTO.',
+  detail_table:{kind:'payroll_assignment',rows}, options:[{id:'month',reply:'month',label:'28 - ⭐ 11/2026 — MÊS VIGENTE'},{id:'previous',reply:'previous',label:'18 - 10/2026 — MÊS ANTERIOR'}]}],
+  {activeFlow:{id:'launch',title:'EFETUAR LANÇAMENTO'}});
+document.querySelector('#app').innerHTML = renderChatMarkup({sessionStatus:'authenticated',account:{name:'Teste'},draft:'',pendingFiles:[],...store.getState()});
+await document.fonts.ready;
+await new Promise(resolve=>requestAnimationFrame(()=>requestAnimationFrame(resolve)));
+const table = document.querySelector('.payroll-assignment table');
+const message = table.closest('.chat-message');
+const bubble = table.closest('.chat-bubble');
+const lineCount = node => {const range=document.createRange();range.selectNodeContents(node);return new Set([...range.getClientRects()].map(rect=>Math.round(rect.top))).size;};
+document.documentElement.dataset.layout=JSON.stringify({
+  cells:[...table.querySelectorAll('tbody tr')].map(row=>[...row.cells].map(cell=>({text:cell.textContent,lines:lineCount(cell),weight:Number(getComputedStyle(cell).fontWeight),fits:cell.scrollWidth<=cell.clientWidth+1}))),
+  avatarHidden:!message.querySelector(':scope > .chat-avatar') || getComputedStyle(message.querySelector(':scope > .chat-avatar')).display==='none',
+  fullWidth:Math.abs(bubble.getBoundingClientRect().width-message.getBoundingClientRect().width)<2,
+  tableFits:table.getBoundingClientRect().width<=table.parentElement.clientWidth+1,
+  overflow:document.documentElement.scrollWidth>innerWidth,
+  buttons:[...message.querySelectorAll('[data-reply-id]')].map(node=>({text:node.textContent,fits:node.getBoundingClientRect().right<=innerWidth})),
+});
+</script></body></html>
