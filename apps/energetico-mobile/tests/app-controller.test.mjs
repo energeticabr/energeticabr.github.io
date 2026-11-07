@@ -2235,6 +2235,7 @@ for (const includeAll of [true, false]) {
     let gallery, preview, closed = false;
     const uploaded = [], replies = [];
     let failedUploadId;
+    let menuAvailable = true;
     const h = makeHarness({
       registrationGalleryDataFactory: async () => ({ loadSnapshot: async () => ({ rows: [] }) }),
       registrationGalleryFactory: async options => {
@@ -2259,7 +2260,9 @@ for (const includeAll of [true, false]) {
           options: [{ id: "portal_draft_exit_discard", label: "SIM, ABANDONAR" }] }],
         attachments: [...attachments],
       };
-      if (replyId === "input_continue") return menuResponse();
+      if (replyId === "input_continue") return menuAvailable ? menuResponse() : {
+        status: "processed", activeFlow: { id: "payment", title: "CRIAR UMA PROVISÃO" }, messages: [],
+      };
       assert.equal(replyId, "action_payment_provision_attachment");
       return { status: "processed", activeFlow: { id: "payment_provision_attachment", title: "ADICIONAR ANEXOS A UMA PROVISÃO DE PAGAMENTO" }, attachments: [...attachments],
         messages: [{ type: "poll", question: "A QUAL PROVISÃO DE PAGAMENTO DESEJA ADICIONAR ANEXOS?", options: [] }] };
@@ -2292,10 +2295,15 @@ for (const includeAll of [true, false]) {
       assert.equal(failed.status, "failed");
       assert.equal(failed.file.name, "DANFE.pdf");
       assert.deepEqual(h.store.getState().attachments.map(item => item.fileName), ["anterior.pdf", "espelho.pdf"]);
+      menuAvailable = false;
+      assert.equal(await h.view.emit("retry-file", { fileId: failed.id }), false);
+      assert.equal(h.store.getState().pendingFiles[0].id, failed.id);
+      assert.deepEqual(uploaded, ["espelho.pdf"]);
+      menuAvailable = true;
       assert.equal(await h.view.emit("retry-file", { fileId: failed.id }), true);
     }
     assert.deepEqual(uploaded, includeAll ? ["espelho.pdf", "DANFE.pdf"] : ["DANFE.pdf"]);
-    assert.deepEqual(replies, ["input_continue"]);
+    assert.deepEqual(replies, Array(includeAll ? 3 : 1).fill("input_continue"));
     assert.equal(h.store.getState().activeFlow.id, menu.id);
     assert.equal(h.store.getState().draft, "texto preservado");
     assert.deepEqual(h.store.getState().attachments.map(item => item.fileName), ["anterior.pdf", ...uploaded]);

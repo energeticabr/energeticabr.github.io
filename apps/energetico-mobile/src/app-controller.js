@@ -6257,6 +6257,13 @@ export function createAppController({
     }
   }
 
+  function confirmGalleryAttachmentMenu() {
+    return sendText("", "input_continue", {
+      allowAttachmentTrayNavigation: true, preserveDraft: true, preserveAttachmentTray: true, silent: true,
+      requireAttachmentStagingMenu: true,
+    });
+  }
+
   function galleryAddToTray(assertSession) {
     return async ({ blob, fileName, attachments } = {}) => {
       assertSession();
@@ -6294,10 +6301,7 @@ export function createAppController({
       if (reuseMenu) {
         // A submenu already accepts staged files. Confirm it with the VM
         // before uploading so a draft opened on another device stays separate.
-        const synchronized = await sendText("", "input_continue", {
-          allowAttachmentTrayNavigation: true, preserveDraft: true, preserveAttachmentTray: true, silent: true,
-          requireAttachmentStagingMenu: true,
-        });
+        const synchronized = await confirmGalleryAttachmentMenu();
         assertSession();
         if (!synchronized) return false;
 
@@ -12310,7 +12314,11 @@ export function createAppController({
     // Keep the command available to native hosts that emit the legacy event
     // directly; the visible clip button now opens the source chooser first.
     bind("pick-files", () => queueSelectedFiles(() => native.pickDocuments()));
-    bind("retry-file", command => processFiles([command.fileId]));
+    bind("retry-file", async command => {
+      const item = store.getState().pendingFiles.find(file => file.id === command.fileId);
+      if (item?.file.galleryTrayUpload === true && !await confirmGalleryAttachmentMenu()) return false;
+      return processFiles([command.fileId]);
+    });
     bind("remove-file", command => removeFile(command.fileId));
     bind("remove-attachment", command => removeAttachment(command.fileId));
     bind("delete-all-attachments", () => removeAllAttachments());
