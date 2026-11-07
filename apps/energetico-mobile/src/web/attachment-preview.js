@@ -92,10 +92,10 @@ export function createAttachmentPreview({
   const status = element("p", "attachment-preview-status");
   status.setAttribute("role", "status");
   const footer = element("footer", "attachment-preview-footer");
-  const ddaCopyButton = element('button', 'attachment-preview-dda-copy', 'Copiar código de barras');
+  const ddaCopyButton = element('button', 'attachment-preview-dda-copy', 'Copiar linha digitável');
   ddaCopyButton.type = 'button';ddaCopyButton.hidden = true;
   ddaCopyButton.dataset.previewAction = 'copy-dda-barcode';
-  ddaCopyButton.addEventListener('click', () => { void active?.pdf?.copyDdaBarcode?.(); });
+  ddaCopyButton.addEventListener('click', () => { void active?.pdf?.copyDdaPaymentLine?.(); });
   const backButton = element("button", "attachment-preview-back", "Voltar ao chat");
   const addToTrayButton = element("button", "attachment-preview-add-to-tray", "📎 BARRA");
   addToTrayButton.setAttribute("aria-label", "Adicionar este anexo à barra");

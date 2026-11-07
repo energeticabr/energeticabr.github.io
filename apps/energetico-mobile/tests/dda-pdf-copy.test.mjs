@@ -28,7 +28,7 @@ test('real PDF copy action survives readable streams without asynchronous iterat
   assert.equal(action?.line.length,47);
  } finally {await task.destroy();}
 });
-test('PDF button and footer copy 44 digits; switching documents disables detached controls',async()=>{
+test('PDF button and footer copy the 47-digit payment line; switching documents disables detached controls',async()=>{
  const dom=new JSDOM('<body></body>',{url:'https://example.test/energetico/'}),doc=dom.window.document,copied=[];
  dom.window.HTMLCanvasElement.prototype.getContext=()=>({});
  Object.defineProperty(dom.window.navigator,'clipboard',{value:{writeText:async value=>copied.push(value)}});
@@ -43,8 +43,8 @@ test('PDF button and footer copy 44 digits; switching documents disables detache
   const inside=doc.querySelector('.attachment-preview-dda-copy-overlay'),footer=doc.querySelector('[data-preview-action="copy-dda-barcode"]');
   assert.ok(inside);assert.equal(footer.hidden,false);
   inside.click();await new Promise(r=>setImmediate(r));footer.click();await new Promise(r=>setImmediate(r));
-  assert.deepEqual(copied,['00197100000000123451234567890123456789012345','00197100000000123451234567890123456789012345']);
-  assert.match(doc.body.textContent,/copiado \(44 dígitos\)/);
+  assert.deepEqual(copied,Array(2).fill('00191234546789012345767890123457710000000012345'));
+  assert.match(doc.body.textContent,/copiada \(47 dígitos\)/);
   const canvas=inside.parentElement.querySelector('canvas');canvas.style.width='600px';canvas.style.height='900px';
   positionDdaCopyButton(inside,canvas,[.7,.4,.9,.5]);assert.equal(inside.style.top,'360px');assert.ok(Math.abs(parseFloat(inside.style.width)-120)<.001);
   await preview.open(new Blob(['Texto'],{type:'text/plain'}),'outro.txt');assert.equal(footer.hidden,true);

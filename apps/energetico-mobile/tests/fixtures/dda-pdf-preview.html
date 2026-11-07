@@ -5,5 +5,5 @@
 import {createAttachmentPreview} from '../../src/web/attachment-preview.js';
 const preview=createAttachmentPreview({documentRef:document,exportMedia:async()=>({status:'cancelled'})});
 document.querySelector('#open').addEventListener('click',async()=>{const blob=await (await fetch('./dda-mirror-v2.pdf')).blob();await preview.open(blob,'Espelho_DDA_Demonstracao.pdf');});
-document.querySelector('#check').addEventListener('input',event=>document.querySelector('#result').textContent=event.target.value==='00197100000000123451234567890123456789012345'?'44 dígitos corretos':'Confira a cópia');
+document.querySelector('#check').addEventListener('input',event=>document.querySelector('#result').textContent=event.target.value==='00191234546789012345767890123457710000000012345'?'47 dígitos corretos':'Confira a cópia');
 </script></body></html>

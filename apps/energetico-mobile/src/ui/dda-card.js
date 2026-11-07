@@ -1,4 +1,5 @@
 import { ddaPaidManually } from '../chat/dda-payment-confirmation.js';
+import { resolveDdaPaymentLine } from '../chat/dda-payment-line.js';
 const ICONS = {
  check:['M5 12l4 4L19 6'],
  calendar:['M4 5h16v16H4z','M8 2v6M16 2v6M4 10h16'],
@@ -103,16 +104,18 @@ export function renderDdaCard({document:doc,container,rowId,title,value,raw=valu
  container.append(body);
  const codes=el('dl','rg-dda-codes');
  const notice=el('p','rg-dda-copy-notice');notice.setAttribute('role','status');
+ const paymentLine=resolveDdaPaymentLine(raw('LINHA_DIGITAVEL'),raw('CODIGO_BARRAS'));
  for(const [field,label,symbol] of [['CODIGO_BARRAS','Código de barras','barcode'],['LINHA_DIGITAVEL','Linha digitável','line']]){
   const cell=pair(codes,field,label,symbol,'rg-dda-code');
-  const code=String(raw(field)??'');const button=el('button','rg-dda-copy');button.type='button';button.dataset.copyField=field;
-  button.setAttribute('aria-label','Copiar '+label.toLowerCase()+' do DDA '+rowId);button.title='Copiar '+label.toLowerCase();button.disabled=!code;
+  if(field==='LINHA_DIGITAVEL')cell.querySelector('dd').textContent=paymentLine||'Linha digitável não disponível.';
+  const button=el('button','rg-dda-copy');button.type='button';button.dataset.copyField=field;
+  button.setAttribute('aria-label','Copiar linha digitável do DDA '+rowId);button.title='Copiar linha digitável para pagamento';button.disabled=!paymentLine;
   button.append(icon(doc,'copy'));
   button.addEventListener('click',async()=>{
    button.disabled=true;
-   try{await copyText(code);notice.textContent=label+' copiado.';}
-   catch{notice.textContent='Não foi possível copiar. Selecione o código e copie manualmente.';}
-   finally{button.disabled=!code;}
+   try{await copyText(paymentLine);notice.textContent='Linha digitável copiada.';}
+   catch{notice.textContent='Não foi possível copiar. Selecione a linha digitável e copie manualmente.';}
+   finally{button.disabled=!paymentLine;}
   });cell.append(button);
  }
  container.append(codes,notice);
