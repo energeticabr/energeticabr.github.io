@@ -1,0 +1,35 @@
+{
+  "files": {
+    "/opt/energetica-whatsapp/worker/payment_provision_flow.py": {
+      "before": "1b948fe7c8b39dc9be902622b40e978143fbb16966aa7f1b4bd00cb97ab3d1e8",
+      "after": "0d8948152aff264dd9e31b9a6299e10d8afebe36eeab0104564d8e8d88978df9"
+    },
+    "/opt/energetica-whatsapp/worker/workflow.py": {
+      "before": "b1cb0da6725da068377858301dffc33f7e7153a5ca5649f3e2f78c95644320e0",
+      "after": "0007f637039c102da51cc1501888813ebdcc06fee4db60c2a667f728e166217d"
+    },
+    "/opt/energetica-whatsapp/channel_bridge.py": {
+      "before": "400ea70d439bf73db7ef2939b0177dcef0656e96741ad0ec70b9dc3f6abd61e2",
+      "after": "ef2f0c7a3618413d364632c4ae7741b062661e0385bcddcc642ed4235ac45331"
+    },
+    "/home/opc/energetica-build/worker/payment_provision_flow.py": {
+      "before": "7c4b4984fef7479b2d2c74fa1e4cb751d86f47cf783137495e4ee7cc4c0cd3ff",
+      "after": "9e466905cf2ead87ce210c151ace53c1710629627403bdfb8bc1505d459e2b8a"
+    },
+    "/home/opc/energetica-build/worker/workflow.py": {
+      "before": "53aee6c33b62c5723a098a66527be8c11d5051f863d7c19f2912a52c044f9b48",
+      "after": "6b7744fa957477f34a4df87772b9942366fb808344d0d0229c5c07a0b05cc740"
+    },
+    "/home/opc/energetica-build/channel_bridge.py": {
+      "before": "400ea70d439bf73db7ef2939b0177dcef0656e96741ad0ec70b9dc3f6abd61e2",
+      "after": "ef2f0c7a3618413d364632c4ae7741b062661e0385bcddcc642ed4235ac45331"
+    }
+  },
+  "inputs": {
+    "deploy.py": "8f1f83f4ebabdaafbace696542f8fc842154198ffaaa2877fc06be8d3f174fe7",
+    "patch_backend.py": "bb0cc51f54d9369683eb94acb374945572395c5f53ec7c8ede74724819176fde",
+    "source.patch": "3e4db1e8a8501fccc277cf7500653cc3f2b017527739ca2c026905ee1fb4f113",
+    "deploy.sh": "bc0b20b832467d79f126acc268ea929ee20144d37478ecb06148a4b9135519ac",
+    "deployment_gate.sh": "ae5ed44ab6d6ab1edfecbc14dd3bbd59505e9f991962d1410f488e4a029eefb6"
+  }
+}

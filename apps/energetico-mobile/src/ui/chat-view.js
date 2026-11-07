@@ -1,6 +1,7 @@
 import { pendingProvisionAttachmentTray } from './pending-provision-attachment-tray.js';
 import { payrollAssignmentTableMarkup } from './payroll-assignment-table.js';
 import { supplierDefaultsComparisonMarkup } from './attendance-supplier-defaults-comparison.js';
+import { provisionVariationChangesMarkup } from './provision-variation-changes.js';
 import { loadingIndicatorMarkup } from "./loading-indicator.js";
 import { createCameraChooser } from './document-scanner.js';
 import { canDeleteRhidAdjustment } from '../chat/rhid-adjustment-ownership.js';
@@ -1743,6 +1744,7 @@ function renderPoll(message, busy, draft = "", databaseFilterMessage = null, act
   const rawChangeTable = message.change_table || message.changeTable;
   const questionText = String(message.question || message.prompt || "");
   const changeTable = rawChangeTable
+    && rawChangeTable.kind !== 'provision_variation_changes'
     && Array.isArray(rawChangeTable.rows)
     && rawChangeTable.rows.length
     && /fornecedor/i.test(questionText)
@@ -1925,6 +1927,7 @@ function renderPoll(message, busy, draft = "", databaseFilterMessage = null, act
     ${launchPaymentSummary || rhidAttendanceReport || initialAreaMenu || isLaunchMenu || provisionReview ? "" : `<p>${payrollAssignment ? formatQuestionText(payrollQuestion) : supplierDefaultsComparison ? formatQuestionText(questionText.split(/\r?\n/)[0]) : attendanceDayQuestionMarkup(message) ?? formatQuestionText(presenceSummaryQuestion(changeTableQuestion(message, changeTable), presenceTable) || "Escolha uma opção")}</p>`}
     ${currentPoll ? singleLaunchConfirmationMarkup(message, activeFlow) : ""}
     ${changeTableMarkup(changeTable)}
+    ${provisionVariationChangesMarkup(rawChangeTable, questionText)}
     ${supplierDefaultsComparison}
     ${payrollAssignment}
     ${provisionReview || presenceDetailTableMarkup(presenceTable, { messageId: message.id, busy, current: currentPoll })}
