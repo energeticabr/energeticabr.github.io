@@ -3945,12 +3945,15 @@ export function createAppController({
       let confirmedRow;
       if (recalculateAmount) {
         // The edit synchronizes the date of the children. Never reuse the subtotal of the old day.
+        const readback = new AbortController();
         try {
-          const refreshed = await client.getPendingProvisionSnapshot();
+          const refreshed = await withTimeout(client.getPendingProvisionSnapshot({ signal: readback.signal }),
+            8_000, "O subtotal do novo vencimento não foi confirmado.");
           if (refreshed?.sourceKind === "provision-description") {
             confirmedRow = refreshed.rows.find(row => String(row?.id ?? "").trim() === id && row.dueDate === date);
           }
         } catch { /* The date is already saved; the new subtotal is unconfirmed. */ }
+        finally { readback.abort(); }
         if (stopped || account !== targetAccount || sessionRevision !== targetRevision || pendingProvisionDateEditPaymentId !== id) return false;
       }
       const updatedRows = (pendingProvisionSnapshot?.rows || []).flatMap(row => {

@@ -152,3 +152,36 @@ test("pencil refreshes the due subtotal after the grouped date is confirmed", as
   assert.equal(row.dueDate, "2026-10-13");
   assert.equal(Object.hasOwn(row, "amountDueDisplay"), false);
 });
+
+test("a slow subtotal read cannot leave the confirmed date edit busy", async t => {
+  t.mock.timers.enable({ apis: ["Date", "setTimeout"], now: new Date("2026-10-11T15:00:00Z") });
+  let saved = false;
+  let markRefresh;
+  const refreshStarted = new Promise(resolve => { markRefresh = resolve; });
+  const h = makeHarness({ pendingProvisionAttachmentsDataFactory: async () => ({
+    listAttachments: async () => [], downloadAttachment: async () => new Blob(),
+    updateDueDate: async () => { saved = true; },
+  }) });
+  h.client.getPendingProvisionSnapshot = async options => {
+    if (saved) {
+      markRefresh(options?.signal);
+      return new Promise(() => {});
+    }
+    return { due: true, sourceKind: "provision-description", rows: [{
+      id: "42", dueDate: "2026-10-12", total: "300", totalDisplay: "R$ 300,00",
+      amountDueDisplay: "R$ 100,00", childCount: 2,
+    }] };
+  };
+  t.after(() => h.controller.stop()); await h.controller.start();
+  await h.view.emit("edit-pending-provision-due-date", { paymentId: "42" });
+  const save = h.view.emit("save-pending-provision-due-date", { paymentId: "42", value: "13/10/2026" });
+  const signal = await refreshStarted;
+  t.mock.timers.tick(8_000);
+  assert.equal(await save, true);
+  assert.equal(signal.aborted, true);
+  const current = h.view.renders.at(-1);
+  assert.equal(current.pendingProvisionDateEditPaymentId, "");
+  assert.equal(current.pendingProvisions.rows[0].dueDate, "2026-10-13");
+  assert.equal(current.pendingProvisions.rows[0].amountDueDisplay, null);
+  assert.equal(current.pendingProvisions.totalsUnavailable, true);
+});
