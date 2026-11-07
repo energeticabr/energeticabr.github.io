@@ -1,21 +1,7 @@
 import { readPdfTextContent } from './pdf-text-content.js';
+import { ddaLineFromBarcode } from '../chat/dda-payment-line.js';
 
 const ACTION = 'EnergeticoDdaCopyBarcode';
-function mod10(value) {
-  const sum = [...value].reverse().reduce((total, digit, index) => {
-    const n = Number(digit) * (index % 2 ? 1 : 2); return total + Math.floor(n / 10) + n % 10;
-  }, 0);
-  return String((10 - sum % 10) % 10);
-}
-function validCodes(barcode, line) {
-  if (!/^\d{44}$/.test(barcode) || !/^\d{47}$/.test(line)) return false;
-  if (line.slice(0,4)+line[32]+line.slice(33)+line.slice(4,9)+line.slice(10,20)+line.slice(21,31) !== barcode) return false;
-  for (const [start,end,dv] of [[0,9,9],[10,20,20],[21,31,31]]) if (mod10(line.slice(start,end)) !== line[dv]) return false;
-  const raw = barcode.slice(0,4)+barcode.slice(5);
-  let dv = 11 - [...raw].reverse().reduce((sum,n,i) => sum + Number(n)*(2+i%8),0)%11;
-  if ([0,10,11].includes(dv)) dv = 1;
-  return String(dv) === barcode[4];
-}
 /** Recognizes only our inert named action; never runs PDF scripts or opens links. */
 export async function readDdaCopyAction(page) {
   try {
@@ -25,7 +11,7 @@ export async function readDdaCopyAction(page) {
     const annotation = matches[0], raw = annotation.contentsObj?.str;
     if (typeof raw !== 'string' || raw.length > 250 || annotation.url || annotation.unsafeUrl || annotation.actions) return null;
     const {version,barcode,line} = JSON.parse(raw);
-    if (version !== 2 || typeof barcode !== 'string' || typeof line !== 'string' || !validCodes(barcode,line)) return null;
+    if (version !== 2 || typeof barcode !== 'string' || typeof line !== 'string' || !line || ddaLineFromBarcode(barcode) !== line) return null;
     const text = (await readPdfTextContent(page)).items.map(item => item.str || '').join(' ').replace(/\D/g,'');
     if (!text.includes(barcode) || !text.includes(line)) return null;
     const viewport = page.getViewport({scale:1});

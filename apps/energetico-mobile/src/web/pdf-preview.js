@@ -93,15 +93,15 @@ export function createPdfPreview({
   const copyNotice = element('p', 'attachment-preview-dda-copy-notice');
   copyNotice.setAttribute('role', 'status');root.append(copyNotice);
   let ddaAction = null, ddaRead = null, copyPending = false;
-  async function copyDdaBarcode() {
+  async function copyDdaPaymentLine() {
     if (destroyed || !ddaAction || copyPending) return false;
     copyPending = true;
     try {
-      await copyDdaText(documentRef, ddaAction.barcode);
-      if (!destroyed) copyNotice.textContent = 'Código de barras copiado (44 dígitos).';
+      await copyDdaText(documentRef, ddaAction.line);
+      if (!destroyed) copyNotice.textContent = 'Linha digitável copiada (47 dígitos).';
       return true;
     } catch {
-      if (!destroyed) copyNotice.textContent = 'Não foi possível copiar. Use outro leitor para selecionar o código.';
+      if (!destroyed) copyNotice.textContent = 'Não foi possível copiar. Selecione a linha digitável no PDF.';
       return false;
     } finally { copyPending = false; }
   }
@@ -337,9 +337,10 @@ export function createPdfPreview({
         if (action && !destroyed && generation === renderGeneration) {
           ddaAction = action;
           const copyButton = element('button', 'attachment-preview-dda-copy-overlay');
-          copyButton.type = 'button';copyButton.setAttribute('aria-label', 'Copiar linha digitável: copiar os 44 dígitos do código de barras');
-          copyButton.title = 'Copiar código de barras (44 dígitos)';
-          copyButton.addEventListener('click', () => { void copyDdaBarcode(); });
+          copyButton.type = 'button';
+          copyButton.setAttribute('aria-label', 'Copiar linha digitável (47 dígitos)');
+          copyButton.title = 'Copiar linha digitável (47 dígitos)';
+          copyButton.addEventListener('click', () => { void copyDdaPaymentLine(); });
           wrapper.append(copyButton);positionDdaCopyButton(copyButton, canvas, action.rect);
           onDdaCopyReady(true);
         }
@@ -606,7 +607,7 @@ export function createPdfPreview({
     ready,
     destroy,
     getCurrentPage,
-    copyDdaBarcode,
+    copyDdaPaymentLine,
     hasRenderedPages: () => renderedCanvases.length > 0,
     hasRenderingErrors: () => Number(root.dataset.failedPages || 0) > 0,
     getSummary: () => {

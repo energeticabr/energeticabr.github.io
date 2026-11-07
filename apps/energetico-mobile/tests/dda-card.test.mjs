@@ -13,9 +13,9 @@ test('DDA due fills use Brasilia calendar dates and the requested other-date gre
  assert.equal(ddaDueTone('2026-02-31',now),'unknown');
  assert.equal(ddaDueTone('2027-01-01',new Date('2027-01-01T01:00:00Z')),'tomorrow');
 });
-test('DDA card retains fields, copies exact leading-zero codes and updates day without losing details',async()=>{
+test('DDA card retains fields, copies the same leading-zero payment line from both controls and updates day without losing details',async()=>{
  const dom=new JSDOM('<body><main></main></body>');const doc=dom.window.document,main=doc.querySelector('main'),copied=[];
- const fields={VENCIMENTO:'28/10/2026',VALOR:'R$ 40,00',SITUACAO:'Pago (liquidado)',DOCUMENTO:'DOC-1',CNPJ_FORNECEDOR:'11111111000191',BANCO:'Banco fictício',NOSSO_NUMERO:'000123',CODIGO_BARRAS:'0'+'1'.repeat(43),LINHA_DIGITAVEL:'0'+'2'.repeat(46),PAGADOR:'Empresa fictícia',BLOQUEADO:'Não',VALOR_PAGAMENTO:'R$ 40,00',CNPJ_PAGADOR:'22222222000191',ULTIMA_CONSULTA:'27/10/2026, 21:00',MENSAGEM:'<img onerror=alert(1)>'};
+ const fields={VENCIMENTO:'28/10/2026',VALOR:'R$ 40,00',SITUACAO:'Pago (liquidado)',DOCUMENTO:'DOC-1',CNPJ_FORNECEDOR:'11111111000191',BANCO:'Banco fictício',NOSSO_NUMERO:'000123',CODIGO_BARRAS:'00197100000000123451234567890123456789012345',LINHA_DIGITAVEL:'00191.23454 67890.123457 67890.123457 7 10000000012345',PAGADOR:'Empresa fictícia',BLOQUEADO:'Não',VALOR_PAGAMENTO:'R$ 40,00',CNPJ_PAGADOR:'22222222000191',ULTIMA_CONSULTA:'27/10/2026, 21:00',MENSAGEM:'<img onerror=alert(1)>'};
  renderDdaCard({document:doc,container:main,rowId:'7',title:'Fornecedor fictício',value:k=>fields[k]||'',raw:k=>fields[k],now,copyText:async text=>copied.push(text)});
  assert.equal(main.querySelector('[data-field="VENCIMENTO"]').dataset.dueTone,'tomorrow');
  assert.equal(main.querySelector('[data-field="SITUACAO"]').textContent.includes('Pago (liquidado)'),true);
@@ -24,7 +24,7 @@ test('DDA card retains fields, copies exact leading-zero codes and updates day w
  await new Promise(r=>setImmediate(r));
  main.querySelector('[data-copy-field="LINHA_DIGITAVEL"]').click();
  await new Promise(r=>setImmediate(r));
- assert.deepEqual(copied,[fields.CODIGO_BARRAS,fields.LINHA_DIGITAVEL]);
+ assert.deepEqual(copied,Array(2).fill('00191234546789012345767890123457710000000012345'));
  const details=main.querySelector('details');details.open=true;
  updateDdaDueTones(main,new Date('2026-10-28T12:00:00Z'));
  assert.equal(main.querySelector('[data-field="VENCIMENTO"]').dataset.dueTone,'today');
@@ -33,7 +33,7 @@ test('DDA card retains fields, copies exact leading-zero codes and updates day w
 });
 test('copy rejection gives accurate feedback instead of claiming success',async()=>{
  const dom=new JSDOM('<body><main></main></body>');const main=dom.window.document.querySelector('main');
- renderDdaCard({document:dom.window.document,container:main,rowId:'1',title:'Teste',value:k=>k==='CODIGO_BARRAS'?'1'.repeat(44):'',copyText:async()=>{throw Error('denied')}});
+ renderDdaCard({document:dom.window.document,container:main,rowId:'1',title:'Teste',value:k=>k==='CODIGO_BARRAS'?'00197100000000123451234567890123456789012345':'',copyText:async()=>{throw Error('denied')}});
  main.querySelector('[data-copy-field="CODIGO_BARRAS"]').click();await new Promise(r=>setImmediate(r));
  assert.match(main.textContent,/Não foi possível copiar/);dom.window.close();
 });

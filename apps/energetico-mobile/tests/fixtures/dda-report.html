@@ -22,7 +22,7 @@ source[1].fields.CNPJ_FORNECEDOR='00999999000122';
 source[2].fields.CNPJ_FORNECEDOR='00888888000122';
 source[3].fields.CNPJ_FORNECEDOR='00111111000122';
 source.forEach((row,index)=>row.fields.CHAVE_DDA=String(index+1).repeat(64));
-source.forEach(row=>row.fields.CODIGO_BARRAS='01234567890123456789012345678901234567890123');
+source.forEach(row=>row.fields.CODIGO_BARRAS='00197100000000123451234567890123456789012345');
 window.ddaBarcodeCopies=[];
 window.ddaPaymentCalls=0;
 window.ddaMirrorClicks=0;window.ddaPdfRows=0;
@@ -79,7 +79,7 @@ if(new URLSearchParams(location.search).has('barcode')){
  const panel=document.querySelector('[data-dda-barcode-panel="1"]'),copy=panel.querySelector('button');copy.click();await new Promise(r=>setTimeout(r,0));
  panel.scrollIntoView({block:'center'});await document.fonts.ready;await new Promise(r=>requestAnimationFrame(()=>requestAnimationFrame(r)));
  const box=panel.getBoundingClientRect(),buttonBox=copy.getBoundingClientRect();
- Object.assign(state,{copied:window.ddaBarcodeCopies,feedback:panel.textContent.includes('Código de barras copiado.'),fits:box.left>=-1&&box.right<=innerWidth+1&&box.top>=-1&&box.bottom<=innerHeight+1,buttonFits:buttonBox.left>=box.left&&buttonBox.right<=box.right,expanded:arrow.getAttribute('aria-expanded')==='true',overflow:panel.scrollWidth>panel.clientWidth+1});
+ Object.assign(state,{copied:window.ddaBarcodeCopies,feedback:panel.textContent.includes('Linha digitável copiada.'),fits:box.left>=-1&&box.right<=innerWidth+1&&box.top>=-1&&box.bottom<=innerHeight+1,buttonFits:buttonBox.left>=box.left&&buttonBox.right<=box.right,expanded:arrow.getAttribute('aria-expanded')==='true',overflow:panel.scrollWidth>panel.clientWidth+1});
  state.stripes=[...document.querySelectorAll('[data-dda-id]')].map(row=>getComputedStyle(row).backgroundColor);
  document.documentElement.dataset.barcode=JSON.stringify(state);
 }
