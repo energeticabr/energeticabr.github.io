@@ -1,0 +1,19 @@
+--- a/worker/workflow_config.json
++++ b/worker/workflow_config.json
+@@ -14674,7 +14674,15 @@
+             "id_field": "Id",
+             "label_field": "Title",
+             "value_field": "Title",
+-            "sort_field": "Title"
++            "sort_field": "Title",
++            "recommended": {
++              "list": "FORNECEDORES",
++              "match_field": "CADASTRO",
++              "match_value_from": "FORNECEDOR",
++              "value_field": "FILIAL",
++              "marker": "PADRÃO DO FORNECEDOR",
++              "ensure_option": false
++            }
+           }
+         },
+         {

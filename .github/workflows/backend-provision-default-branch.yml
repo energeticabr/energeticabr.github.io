@@ -1,0 +1,23 @@
+name: Backend provision default branch
+on:
+  pull_request:
+    paths:
+      - 'backend-patches/provision-default-branch/**'
+      - '.github/workflows/backend-provision-default-branch.yml'
+  push:
+    branches: [main]
+    paths:
+      - 'backend-patches/provision-default-branch/**'
+      - '.github/workflows/backend-provision-default-branch.yml'
+permissions:
+  contents: read
+jobs:
+  installer-tests:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.9'
+      - run: python -B -m unittest discover -s backend-patches/provision-default-branch/tests -p test_deploy.py -v
