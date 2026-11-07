@@ -40,6 +40,7 @@ import { subscribeDataMutations } from "../../../portal/data/data-mutations.js";
 import { decorateReportPrint, openFilteredReportPdf, preserveReportPdfReturn } from "./ui/report-print.js";
 import { beginLoadingTask } from "./ui/loading-task.js";
 import { createAcquisitionProgress } from "./chat/acquisition-progress.js";
+import { validateAttachment } from "./chat/file-policy.js";
 
 async function defaultSignPdfAttachment(input) {
   const module = await import("./web/pdf-signing.js");
@@ -626,6 +627,10 @@ function isMenuFlow(flow) {
   return String(flow?.id || "").trim().toLocaleLowerCase("pt-BR").startsWith("menu:");
 }
 
+function isAttachmentStagingSubmenu(flow) {
+  return flow?.id === "menu:choosing_action" || flow?.id === "menu:choosing_subaction";
+}
+
 function documentSigningFlow(flow) {
   return String(flow?.id || "").trim().toLocaleLowerCase("pt-BR") === "document_signing";
 }
@@ -819,8 +824,7 @@ function isMenuResult(result) {
     || result?.resetConversation === true
     || stage === "choosing_group"
     || (Array.isArray(result?.results) && result.results.some(item => item?.stage === "choosing_group"))
-    || hasMenuPrompt
-    || isMainMenuPrompt(responsePrompt);
+    || (!isAttachmentStagingSubmenu(result?.activeFlow) && (hasMenuPrompt || isMainMenuPrompt(responsePrompt)));
 }
 
 function hasAttachmentTransferPrompt(messages = []) {
@@ -6253,9 +6257,48 @@ export function createAppController({
     }
   }
 
+  function confirmGalleryAttachmentMenu() {
+    return sendText("", "input_continue", {
+      allowAttachmentTrayNavigation: true, preserveDraft: true, preserveAttachmentTray: true, silent: true,
+      requireAttachmentStagingMenu: true,
+    });
+  }
+
+  async function newGalleryTrayFiles(files, state, assertSession) {
+    const staged = [
+      ...state.pendingFiles.map(({ file }) => ({ file, fileName: file?.name, mimeType: file?.type, size: file?.size })),
+      ...unsubmittedUserAttachments(state.attachments).filter(item => item.mediaUrl),
+    ];
+    const additions = [];
+    for (const file of files) {
+      const matches = staged.filter(item => item.fileName === file.name
+        && item.mimeType === file.type && item.size === file.size);
+      let identical = false;
+      if (matches.length) {
+        const bytes = new Uint8Array(await file.arrayBuffer());
+        for (const item of matches) {
+          const blob = item.file || await withTimeout(client.fetchMedia(item, { maxBytes: file.size }),
+            mediaLoadTimeoutMs, "A leitura do anexo da barra demorou mais que o esperado.");
+          assertSession();
+          const previous = new Uint8Array(await blob.arrayBuffer());
+          if (bytes.length === previous.length && bytes.every((byte, index) => byte === previous[index])) {
+            identical = true;
+            break;
+          }
+        }
+      }
+      if (!identical) additions.push(file);
+    }
+    return additions;
+  }
+
   function galleryAddToTray(assertSession) {
     return async ({ blob, fileName, attachments } = {}) => {
       assertSession();
+      const initial = store.getState();
+      if (flowBusy()) return false;
+      const reuseMenu = isAttachmentStagingSubmenu(initial.activeFlow)
+        || (!initial.activeFlow && (initial.attachments.length > 0 || isMainMenuPrompt(latestAssistantPoll(initial.messages)?.question)));
       if (!blob || typeof blob.slice !== "function" || typeof blob.arrayBuffer !== "function") {
         throw new Error("O anexo selecionado não está disponível para adicionar.");
       }
@@ -6275,9 +6318,35 @@ export function createAppController({
         }
         const name = String(item?.fileName || fileName || "anexo");
         const type = String(attachmentBlob.type || "application/octet-stream");
-        files.push(typeof FileConstructor === "function"
+        const file = typeof FileConstructor === "function"
           ? new FileConstructor([attachmentBlob], name, { type })
-          : Object.assign(new Blob([attachmentBlob], { type }), { name }));
+          : Object.assign(new Blob([attachmentBlob], { type }), { name });
+        validateAttachment(file);
+        files.push(file);
+      }
+
+      if (store.getState().activeFlow !== initial.activeFlow || flowBusy()) return false;
+      if (reuseMenu) {
+        // A submenu already accepts staged files. Confirm it with the VM
+        // before uploading so a draft opened on another device stays separate.
+        const synchronized = await confirmGalleryAttachmentMenu();
+        if (!synchronized || !await waitForResponseTransition()) return false;
+        assertSession();
+        const menu = store.getState();
+        const additions = await newGalleryTrayFiles(files, menu, assertSession);
+        assertSession();
+        if (store.getState().activeFlow !== menu.activeFlow || flowBusy()) return false;
+
+        // Keep failed uploads in the tray with their original request IDs.
+        // Retrying one file there must never replay the other selected files.
+        for (const file of additions) {
+          file.uploadMessageId = newUploadMessageId();
+          file.galleryTrayUpload = true;
+        }
+        closeGalleryOverlays();
+        if (additions.length) await queueSelectedFiles(() => additions, { preserveFailedFiles: true });
+        assertSession();
+        return true;
       }
 
       const returnedToMenu = await sendText("", PORTAL_MAIN_MENU_CONFIRM_ID, { requireMenuResult: true });
@@ -10135,6 +10204,11 @@ export function createAppController({
       if (behavior.expectedFlowId && result.activeFlow?.id !== behavior.expectedFlowId) {
         throw new Error('A VM não confirmou o início do lançamento. Tente novamente.');
       }
+      if (behavior.requireAttachmentStagingMenu
+        && !isAttachmentStagingSubmenu(result.activeFlow)
+        && !(result.activeFlow === null && isMenuResult(result))) {
+        throw new Error("A VM está em outro fluxo. Confira a conversa antes de adicionar os anexos.");
+      }
       if (behavior.preserveAttachmentTray === true) {
         result = { ...result, attachments: reconcileDdaLaunchAttachments(previousState.attachments, result.attachments).attachments };
       }
@@ -10631,6 +10705,15 @@ export function createAppController({
     const uploadRevision = sessionRevision;
     const item = store.getState().pendingFiles.find(candidate => candidate.id === fileId);
     if (!item) return false;
+    if (item.file.galleryTrayUpload === true) {
+      const flow = store.getState().activeFlow;
+      if (flow && !isAttachmentStagingSubmenu(flow)) {
+        store.markFileError(fileId, new Error("Volte ao menu para enviar este anexo."));
+        return false;
+      }
+      preserveFailedFiles = true;
+      preserveAttachmentTray = true;
+    }
     const previousAttachments = store.getState().attachments;
     const previousAttachmentCount = store.getState().attachments.length;
     const uploadReturnPoint = captureAttachmentCompressionReturnPoint();
@@ -10692,7 +10775,8 @@ export function createAppController({
         }
       }
       attachmentRevision += 1;
-      const menuResult = isMenuResult(result);
+      const menuResult = isMenuResult(result) && (item.file.galleryTrayUpload !== true
+        || result.resetConversation === true || result.returned_to_main_menu === true);
       const responseResult = menuResult
         ? { ...result, activeFlow: null, resetConversation: true, attachments: [] }
         : result;
@@ -10708,7 +10792,7 @@ export function createAppController({
         persistRecovery();
         const hasRemoteAttachmentSnapshot = Array.isArray(effectiveResult.attachments)
           && effectiveResult.attachments.some(attachment => attachment?.id && attachment?.mediaUrl);
-        const uploadCompleted = isMenuResult(effectiveResult) || effectiveResult?.resetConversation === true
+        const uploadCompleted = menuResult || effectiveResult?.resetConversation === true
           || effectiveResult?.returned_to_main_menu === true
           || (Array.isArray(effectiveResult?.results) && effectiveResult.results.some(item => {
             const status = String(item?.status || "").trim().toLowerCase();
@@ -10803,7 +10887,7 @@ export function createAppController({
         while (!stopped && account === queuedAccount && flowBusy()) {
           await new Promise(resolve => idleWaiters.add(resolve));
         }
-        if (stopped || !account || account !== queuedAccount) return false;
+        if (stopped || !account || account !== queuedAccount || sessionRevision !== queuedRevision) return false;
         const pending = store.getState().pendingFiles.find(item => item.id === id);
         let uploaded = false;
         try {
@@ -11191,7 +11275,7 @@ export function createAppController({
     if (!force && flowBusy()) return false;
     const lastMessage = state.messages.at?.(-1) || state.messages[state.messages.length - 1];
     const lastMessageText = lastMessage?.question || lastMessage?.prompt || lastMessage?.text || "";
-    if (!state.activeFlow && isMainMenuPrompt(lastMessageText)) {
+    if (!state.activeFlow && !state.attachments.length && isMainMenuPrompt(lastMessageText)) {
       // Attachment snapshots belong to the active flow. Once the VM has
       // returned the main menu, a delayed foreground/page restore must not
       // bring back files consumed by the completed post.
@@ -12262,7 +12346,11 @@ export function createAppController({
     // Keep the command available to native hosts that emit the legacy event
     // directly; the visible clip button now opens the source chooser first.
     bind("pick-files", () => queueSelectedFiles(() => native.pickDocuments()));
-    bind("retry-file", command => processFiles([command.fileId]));
+    bind("retry-file", async command => {
+      const item = store.getState().pendingFiles.find(file => file.id === command.fileId);
+      if (item?.file.galleryTrayUpload === true && !await confirmGalleryAttachmentMenu()) return false;
+      return processFiles([command.fileId]);
+    });
     bind("remove-file", command => removeFile(command.fileId));
     bind("remove-attachment", command => removeAttachment(command.fileId));
     bind("delete-all-attachments", () => removeAllAttachments());
