@@ -2400,6 +2400,7 @@ function pendingProvisionsMarkup(
       </div>
     </div>`;
   }
+  const dueWindow = snapshot.openedManually ? "vencidas ou com vencimento em até 2 dias" : "vencidas, vencendo hoje ou amanhã";
   return `<div class="chat-confirmation-backdrop" data-popup-backdrop="true" data-popup-close-action="dismiss-pending-provisions" data-pending-provisions-dialog>
     <div class="chat-confirmation chat-pending-provisions chat-pending-provisions--payments" role="dialog" aria-modal="true" aria-labelledby="pending-provisions-title">
       ${reportNavigationMarkup('open-pending-provisions')}
@@ -2407,13 +2408,13 @@ function pendingProvisionsMarkup(
         ${pendingReportPrintMarkup()}
         <button class="chat-date-picker__close" type="button" data-action="dismiss-pending-provisions" ${uploadsBusy ? "disabled" : ""} data-immediate-action="true" aria-label="Fechar avisos de provisões pendentes" title="Fechar avisos">×</button>
         <button class="chat-pending-provisions__settings" type="button" data-action="close-pending-provisions" ${uploadsBusy ? "disabled" : ""} data-immediate-action="true" aria-label="Configurar lembrete das provisões" title="Configurar quando lembrar novamente">⚙️</button>
-        <div class="chat-pending-provisions__title"><h2 id="pending-provisions-title">Provisões de pagamento pendentes</h2><p>Vencidas ou com vencimento em até 2 dias (${rows.length}).</p></div>
+        <div class="chat-pending-provisions__title"><h2 id="pending-provisions-title">Provisões de pagamento pendentes</h2><p>Provisões ${dueWindow} (${rows.length}).</p></div>
       </div>
-      ${!rows.length ? '<p class="chat-pending-provisions__empty" role="status">Nenhuma provisão vencida ou com vencimento em até 2 dias.</p>' : ""}
+      ${!rows.length ? '<p class="chat-pending-provisions__empty" role="status">Nenhuma provisão pendente no período.</p>' : ""}
       ${snapshot.upcomingUnavailable || snapshot.totalsUnavailable ? `<p class="chat-pending-provision__error" role="status">${snapshot.sourceKind === "provision-description" && !snapshot.upcomingUnavailable
         ? "Há descritivos com valores não conferidos. Valores desconhecidos aparecem como —."
         : "Não foi possível conferir todos os valores e vencimentos. Valores não conferidos aparecem como —."}</p>` : ""}
-      <div class="chat-pending-provisions__list" role="list" aria-label="Provisões vencidas ou com vencimento em até 2 dias">
+      <div class="chat-pending-provisions__list" role="list" aria-label="Provisões ${dueWindow}">
         ${rows.map(row => {
           const paymentId = String(row.id ?? "").trim();
           const grouped = snapshot.sourceKind === "provision-description" || row.sourceKind === "provision-description";

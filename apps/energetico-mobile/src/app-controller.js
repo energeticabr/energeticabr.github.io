@@ -617,6 +617,7 @@ const AUTH_INITIALIZE_TIMEOUT_MS = 15_000;
 const AUTH_SIGN_IN_TIMEOUT_MS = 120_000;
 const PENDING_PROVISION_REMINDER_KEY = "energetico.pending-provision-reminder";
 const PENDING_PROVISION_AUTO_INTERVAL_MS = 30 * 60 * 1000;
+const PENDING_PROVISION_EVE_DISMISSAL_LIMIT = 2;
 const PENDING_PROVISION_ATTACHMENT_CONCURRENCY = 4;
 const DOCUMENT_LINE_SELECTION_KEY = "energetico.document-line-selection";
 const MEDIA_PREVIEW_MAX_BYTES = 5 * 1024 * 1024;
@@ -1594,6 +1595,7 @@ export function createAppController({
   let pendingProvisionSnapshotRevision = 0;
   let pendingProvisionOpenRequest = null;
   let pendingProvisionLastAutoShownAt = null;
+  let pendingProvisionEveDismissals = null;
   let ddaReminderInteraction = 0;
   const ddaPaymentLaunches = new Map();
   let ddaPaymentLaunchAbort = null;
@@ -2609,6 +2611,32 @@ export function createAppController({
     return Number.isFinite(until) && until > Date.now();
   }
 
+  function pendingProvisionEveDismissalCount(today) {
+    const saved = readPendingProvisionReminder(account)?.eveDismissals;
+    return Math.max(
+      pendingProvisionEveDismissals?.date === today ? pendingProvisionEveDismissals.count : 0,
+      saved?.date === today && Number.isInteger(saved.count) ? saved.count : 0,
+    );
+  }
+
+  function pendingProvisionAutomaticCutoff(today) {
+    return pendingProvisionEveDismissalCount(today) >= PENDING_PROVISION_EVE_DISMISSAL_LIMIT
+      ? today : provisionDayOffset(today, 1);
+  }
+
+  function recordPendingProvisionEveDismissal() {
+    if (!pendingProvisionSnapshot || pendingProvisionSnapshot.openedManually) return;
+    const today = provisionDateKey();
+    const tomorrow = provisionDayOffset(today, 1);
+    if (!pendingProvisionSnapshot.rows.some(row => provisionDateKey(row.dueDate) === tomorrow)) return;
+    const count = Math.min(pendingProvisionEveDismissalCount(today) + 1, PENDING_PROVISION_EVE_DISMISSAL_LIMIT);
+    pendingProvisionEveDismissals = { date: today, count };
+    writePendingProvisionReminder(account, {
+      ...readPendingProvisionReminder(account),
+      eveDismissals: pendingProvisionEveDismissals,
+    });
+  }
+
   function cancelScheduledPendingProvisionReminder() {
     pendingProvisionReminderRevision += 1;
     if (pendingProvisionReminderTimer !== null) clearTimeout(pendingProvisionReminderTimer);
@@ -2616,7 +2644,7 @@ export function createAppController({
     void native.cancelProvisionReminder?.();
   }
 
-  function schedulePendingProvisionReminder(delayMs) {
+  function schedulePendingProvisionReminder(delayMs, notify) {
     pendingProvisionReminderRevision += 1;
     const revision = pendingProvisionReminderRevision;
     if (pendingProvisionReminderTimer !== null) clearTimeout(pendingProvisionReminderTimer);
@@ -2625,9 +2653,13 @@ export function createAppController({
       if (stopped || revision !== pendingProvisionReminderRevision || !account) return;
       void refreshPendingProvisionSnapshot().then(() => ddaAutoReminder.refresh());
     }, delayMs);
+    if (!notify) {
+      void native.cancelProvisionReminder?.();
+      return;
+    }
     const details = {
       title: FLOW_REMINDER_TITLE,
-      body: "Há provisões de pagamento vencidas ou com vencimento em até 2 dias.",
+      body: "Há provisões de pagamento pendentes.",
       delayMs,
     };
     const schedule = native.scheduleProvisionReminder?.(details);
@@ -2692,8 +2724,13 @@ export function createAppController({
           rows = [...rowsById.values()];
         }
         if (!current() || suppressed()) return false;
+        const today = provisionDateKey();
+        if (!manual) {
+          const cutoff = pendingProvisionAutomaticCutoff(today);
+          rows = rows.filter(row => provisionDateKey(row.dueDate) <= cutoff);
+        }
         const totalsUnavailable = rows.some(row => row.amountDueDisplay === null || row.total == null || row.total === "");
-        const snapshot = { ...original, today: provisionDateKey(), rows, count: rows.length, due: rows.length > 0, upcomingUnavailable, totalsUnavailable };
+        const snapshot = { ...original, today, rows, count: rows.length, due: rows.length > 0, upcomingUnavailable, totalsUnavailable };
         if (manual) snapshot.openedManually = true;
         const due = snapshot?.due === true && Array.isArray(snapshot.rows) && snapshot.rows.length > 0;
         if (!due && !manual) {
@@ -3271,9 +3308,10 @@ export function createAppController({
     return true;
   }
 
-  function dismissPendingProvisions() {
+  function dismissPendingProvisions({ userDismissal = false } = {}) {
     if (pendingProvisionDeletion?.status === 'deleting' || pendingUploadBusy()) return false;
     if (!pendingProvisionSnapshot) return false;
+    if (userDismissal) recordPendingProvisionEveDismissal();
     pendingProvisionSnapshot = null;
     pendingProvisionReminderOpen = false;
     pendingProvisionReminderError = "";
@@ -3312,9 +3350,14 @@ export function createAppController({
       delayMs = Math.round(hours * 60 * 60 * 1000);
       saved = { mode: "hours", until: Date.now() + delayMs };
     }
+    recordPendingProvisionEveDismissal();
     writePendingProvisionReminder(account, { ...readPendingProvisionReminder(account), ...saved });
-    if (delayMs) schedulePendingProvisionReminder(delayMs);
-    else cancelScheduledPendingProvisionReminder();
+    if (delayMs) {
+      const reminderDay = provisionDateKey(new Date(Date.now() + delayMs));
+      const cutoff = pendingProvisionAutomaticCutoff(reminderDay);
+      const notify = pendingProvisionSnapshot.rows.some(row => provisionDateKey(row.dueDate) <= cutoff);
+      schedulePendingProvisionReminder(delayMs, notify);
+    } else cancelScheduledPendingProvisionReminder();
     pendingProvisionSnapshot = null;
     pendingProvisionReminderOpen = false;
     pendingProvisionReminderError = "";
@@ -3940,7 +3983,9 @@ export function createAppController({
       await data.updateDueDate(id, date);
       if (stopped || account !== targetAccount || sessionRevision !== targetRevision) return false;
 
-      const inWindow = date <= provisionDayOffset(new Date(), 2);
+      const today = provisionDateKey();
+      const cutoff = pendingProvisionSnapshot?.openedManually ? provisionDayOffset(today, 2) : pendingProvisionAutomaticCutoff(today);
+      const inWindow = date <= cutoff;
       const recalculateAmount = inWindow && sourceKind === "provision-description" && Object.hasOwn(selectedRow, "amountDueDisplay");
       let confirmedRow;
       if (recalculateAmount) {
@@ -11069,6 +11114,7 @@ export function createAppController({
     pendingProvisionSnapshotRevision += 1;
     pendingProvisionOpenRequest = null;
     pendingProvisionLastAutoShownAt = null;
+    pendingProvisionEveDismissals = null;
     clearPendingProvisionAttachmentState({ clearData: true });
     pendingProvisionSharePointAuthorization = null;
     lastPresenceValidationDate = "";
@@ -12248,7 +12294,7 @@ export function createAppController({
     bind('open-general-summary-report', openGeneralSummaryReport);
     bind('open-pending-supplier-payments-report', openPendingSupplierPaymentsReport);
     bind('open-pending-work-diaries-report', openPendingWorkDiariesReport);
-    bind("dismiss-pending-provisions", dismissPendingProvisions);
+    bind("dismiss-pending-provisions", () => dismissPendingProvisions({ userDismissal: true }));
     bind("dismiss-pending-notes", dismissPendingNotes);
     bind("dismiss-pending-construction-diaries", dismissPendingConstructionDiaries);
     bind("fill-pending-construction-diary", command => fillPendingConstructionDiary(command.diaryId));

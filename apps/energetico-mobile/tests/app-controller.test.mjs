@@ -730,7 +730,7 @@ test("grouped provisions switch the cached parent provider back to the legacy ch
       async updateDueDate(id, date) { dates.push([kind, id, date]); },
     };
   } });
-  t.mock.timers.enable({ apis: ["Date"], now: new Date("2026-10-11T15:00:00Z") });
+  t.mock.timers.enable({ apis: ["Date"], now: new Date("2026-10-12T15:00:00Z") });
   h.client.getPendingProvisionSnapshot = async () => grouped ? groupedPendingProvisionSnapshot() : { due: true, rows: [{ id: "306" }] };
   t.after(() => h.controller.stop());
   await h.controller.start();
@@ -958,7 +958,7 @@ test("grouped provisions blocked clicks keep all groups open without navigation 
       async updateDueDate(id, date) { dates.push([id, date]); },
     };
   } });
-  t.mock.timers.enable({ apis: ["Date"], now: new Date("2026-10-11T15:00:00Z") });
+  t.mock.timers.enable({ apis: ["Date"], now: new Date("2026-10-12T15:00:00Z") });
   h.client.getPendingProvisionSnapshot = async () => snapshot;
   t.after(() => h.controller.stop());
   await h.controller.start();
@@ -6200,6 +6200,79 @@ test('provisões voltam no retorno ao app após 30 minutos mesmo depois do X', a
   assert.equal(h.view.renders.at(-1).pendingProvisions.rows[0].id, '306');
 });
 
+test('aviso da véspera some após dois fechamentos e volta no vencimento', async t => {
+  t.mock.timers.enable({ apis: ['Date'], now: new Date('2026-11-07T12:00:00Z') });
+  const create = provisionCooldownHarness(t);
+  const due = { id: '306', supplier: 'TESTE', dueDate: '09/11/2026' };
+  const later = { id: '307', supplier: 'OUTRO', dueDate: '10/11/2026' };
+  const start = async (time, account, rows = [due, later]) => {
+    t.mock.timers.setTime(Date.parse(time));
+    const h = create(account);
+    h.client.getPendingProvisionSnapshot = async () => ({ sourceKind: 'provision-description', due: true, rows });
+    await h.controller.start();
+    return h;
+  };
+  const visible = h => h.view.renders.at(-1).pendingProvisions?.rows.map(row => row.id) ?? [];
+  const early = await start('2026-11-07T12:00:00Z');
+  assert.deepEqual(visible(early), []);
+  early.controller.stop();
+
+  const first = await start('2026-11-08T12:00:00Z');
+  assert.deepEqual(visible(first), ['306']);
+  await first.view.emit('dismiss-pending-provisions');
+  first.controller.stop();
+
+  const manual = await start('2026-11-08T12:15:00Z');
+  assert.deepEqual(visible(manual), []);
+  assert.equal(await manual.view.emit('open-pending-provisions'), true);
+  await manual.view.emit('dismiss-pending-provisions');
+  manual.controller.stop();
+
+  const second = await start('2026-11-08T12:30:00Z');
+  assert.deepEqual(visible(second), ['306']);
+  await second.view.emit('dismiss-pending-provisions');
+  second.controller.stop();
+
+  const capped = await start('2026-11-09T02:59:00Z');
+  assert.deepEqual(visible(capped), []);
+  assert.equal(await capped.view.emit('open-pending-provisions'), true);
+  assert.deepEqual(visible(capped), ['306', '307']);
+  await capped.view.emit('dismiss-pending-provisions');
+  capped.controller.stop();
+
+  const other = await start('2026-11-09T02:59:00Z', 'another-account');
+  assert.deepEqual(visible(other), ['306']);
+  other.controller.stop();
+
+  const today = await start('2026-11-09T03:00:00Z');
+  assert.deepEqual(visible(today), ['306', '307']);
+});
+
+test('fechamentos da véspera não suprimem provisões vencidas ou de hoje', async t => {
+  t.mock.timers.enable({ apis: ['Date'], now: new Date('2026-11-08T12:00:00Z') });
+  const h = provisionCooldownHarness(t)();
+  h.client.getPendingProvisionSnapshot = async () => ({
+    sourceKind: 'provision-description', due: true,
+    rows: [
+      { id: 'overdue', dueDate: '2026-11-07' },
+      { id: 'today', dueDate: '2026-11-08' },
+      { id: 'eve', dueDate: '2026-11-09' },
+      { id: 'later', dueDate: '2026-11-10' },
+    ],
+  });
+  await h.controller.start();
+  const visible = () => h.view.renders.at(-1).pendingProvisions.rows.map(row => row.id);
+  assert.deepEqual(visible(), ['overdue', 'today', 'eve']);
+  await h.view.emit('dismiss-pending-provisions');
+  t.mock.timers.setTime(Date.parse('2026-11-08T12:30:00Z'));
+  await h.controller.handleForeground();
+  assert.deepEqual(visible(), ['overdue', 'today', 'eve']);
+  await h.view.emit('dismiss-pending-provisions');
+  t.mock.timers.setTime(Date.parse('2026-11-08T13:00:00Z'));
+  await h.controller.handleForeground();
+  assert.deepEqual(visible(), ['overdue', 'today']);
+});
+
 test('mascote abre provisões durante o intervalo sem adiar a próxima abertura automática', async t => {
   t.mock.timers.enable({ apis: ['Date'], now: new Date('2026-10-05T12:00:00Z') });
   const create = provisionCooldownHarness(t);
@@ -6691,7 +6764,7 @@ test("confere totais dos vencidos por ID no SharePoint e oculta valores não con
   assert.equal(h.view.renders.at(-1).pendingProvisions.upcomingUnavailable, true);
 });
 
-test("mantém o vencimento editado nos próximos dois dias e remove somente a partir do terceiro", async t => {
+test("mantém o vencimento editado até amanhã no aviso e remove a partir de dois dias", async t => {
   t.mock.timers.enable({ apis: ["Date"], now: new Date("2026-09-30T15:00:00Z") });
   const h = makeHarness({ pendingProvisionAttachmentsDataFactory: async () => ({
     listAttachments: async () => [], downloadAttachment: async () => new Blob(), updateDueDate: async () => {},
@@ -6702,11 +6775,11 @@ test("mantém o vencimento editado nos próximos dois dias e remove somente a pa
   ] });
   await h.controller.start();
   await h.view.emit("edit-pending-provision-due-date", { paymentId: "306" });
-  await h.view.emit("save-pending-provision-due-date", { paymentId: "306", value: "02/10/2026" });
+  await h.view.emit("save-pending-provision-due-date", { paymentId: "306", value: "01/10/2026" });
   assert.deepEqual(h.view.renders.at(-1).pendingProvisions.rows.map(row => row.id), ["306", "307"]);
-  assert.equal(h.view.renders.at(-1).pendingProvisions.rows[0].dueDate, "02/10/2026");
+  assert.equal(h.view.renders.at(-1).pendingProvisions.rows[0].dueDate, "01/10/2026");
   await h.view.emit("edit-pending-provision-due-date", { paymentId: "306" });
-  await h.view.emit("save-pending-provision-due-date", { paymentId: "306", value: "03/10/2026" });
+  await h.view.emit("save-pending-provision-due-date", { paymentId: "306", value: "02/10/2026" });
   assert.deepEqual(h.view.renders.at(-1).pendingProvisions.rows.map(row => row.id), ["307"]);
 });
 
