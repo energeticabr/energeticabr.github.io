@@ -1,0 +1,17 @@
+[Unit]
+Description=Energético Sicoob bank statement collection
+Wants=network-online.target
+After=network-online.target
+
+[Service]
+Type=oneshot
+User=energetica-whatsapp
+Group=energetica-whatsapp
+EnvironmentFile=/etc/energetica-whatsapp.env
+StateDirectory=energetica-sicoob-movements
+StateDirectoryMode=0700
+UMask=0077
+ExecStart=/opt/energetica-whatsapp/.venv/bin/python /opt/energetica-whatsapp/sicoob-movements/sync_movements.py scheduled
+TimeoutStartSec=45min
+NoNewPrivileges=true
+PrivateTmp=true

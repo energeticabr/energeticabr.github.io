@@ -9,6 +9,7 @@ import { createGalleryLoadingScreen } from './gallery-loading-screen.js';
 import { createGalleryRecordActions, dismissGalleryOverlay } from './gallery-record-actions.js';
 import { bindSearchableFilterSelects } from './searchable-filter-selects.js';
 import { REGISTRATION_GALLERY_MODELS, registrationFieldKey, registrationRawField, registrationNumber, registrationDateKey, sortRegistrationRows } from "../chat/registration-gallery-data.js";
+import { isImportedFinancialMovement } from '../chat/financial-gallery-models.js';
 import Decimal from "decimal.js";
 import { renderWorkDiaryCardDetails } from './work-diary-card.js';
 import { renderAssetGalleryCard } from './asset-gallery-card.js';
@@ -681,7 +682,7 @@ export function createRegistrationGallery({ document: doc = globalThis.document,
     container.append(details);
   }
 
-  function renderNativeDetails(container, row, primary) {
+  function renderNativeDetails(container, row, primary, primaryField = model.fields[0]) {
     const heading = el("div", "rg-document-heading");
     heading.append(el("strong", "rg-row-title", primary), el("span", "rg-document-id", `ID ${row.id}`));
     container.append(heading);
@@ -702,7 +703,7 @@ export function createRegistrationGallery({ document: doc = globalThis.document,
       return { ...section, disclosure, content };
     }) : [];
     for (const field of model.fields) {
-      if (field === "ID" || field === model.fields[0]) continue;
+      if (field === "ID" || field === primaryField) continue;
       const visibility = model.fieldVisibility?.[field];
       if (visibility) {
         const selector = valueText(registrationRawField(row.fields, visibility.field, model));
@@ -943,7 +944,9 @@ export function createRegistrationGallery({ document: doc = globalThis.document,
       if (kind === 'dda') card.classList.add('rg-row--dda');
       if (kind === 'provisionDescription') card.classList.add('rg-row--provision-description');
       card.setAttribute("role", "listitem");
-      const primary = fieldValue(row.fields, model.fields[0], model) || model.emptyValue || `ID ${row.id}`;
+      const bankMovement = kind === 'financial_movement' && isImportedFinancialMovement(row.fields);
+      const primary = bankMovement ? rowFieldValue(row, 'RAZAOSOCIALRECEBEDOR') || 'N/A'
+        : fieldValue(row.fields, model.fields[0], model) || model.emptyValue || `ID ${row.id}`;
       if (model.showAttachments) {
         const layout = el("div", "rg-row-layout");
         const attachmentState = kind === 'provisionDescription' ? provisionAttachmentState(row) : null;
@@ -992,7 +995,7 @@ export function createRegistrationGallery({ document: doc = globalThis.document,
         else renderDocumentDetails(main, row, primary);
         layout.append(fileRail, main);
         card.append(layout);
-      } else if (model.nativeCard && model.readOnly) {
+      } else if (model.nativeCard && (model.readOnly || bankMovement)) {
         if (kind === 'notas_fiscais_sefaz') {
           card.classList.add('rg-row--sefaz');
           const layout = el('div', 'rg-row-layout rg-sefaz-layout');
@@ -1020,7 +1023,7 @@ export function createRegistrationGallery({ document: doc = globalThis.document,
           layout.append(main);
           card.append(layout);
         } else if (kind === 'assetLaunches') renderAssetLaunchesCard({ document: doc, container: card, rowId: row.id, title: primary, value: field => rowFieldValue(row, field) });
-        else renderNativeDetails(card, row, primary);
+        else renderNativeDetails(card, row, primary, bankMovement ? 'RAZAOSOCIALRECEBEDOR' : undefined);
       } else {
         card.append(el("strong", "rg-row-title", primary));
         const details = el("dl", "rg-details");
@@ -1051,14 +1054,14 @@ export function createRegistrationGallery({ document: doc = globalThis.document,
           trigger.addEventListener('click', openReport);
         }
       }
-      if (!model.readOnly) card.classList.add('gallery-record-card');
+      if (!model.readOnly && !bankMovement) card.classList.add('gallery-record-card');
       card.append(recordMain);
       if (card.dataset.sefazCancelled === 'true') {
         const cancelledStamp = el('span', 'rg-sefaz-cancelled-stamp', 'CANCELADA');
         cancelledStamp.setAttribute('aria-hidden', 'true');
         card.append(cancelledStamp);
       }
-      if (!model.readOnly) card.append(recordActions.render(row));
+      if (!model.readOnly && !bankMovement) card.append(recordActions.render(row));
       list.append(card);
     }
     updateFeedback(filtered.length);

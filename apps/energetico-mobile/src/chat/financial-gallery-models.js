@@ -1,5 +1,12 @@
 const auditFields = ['ID', 'Criado por', 'Criado', 'Modificado', 'Modificado por'];
 const auditAliases = { Criado: ['Created'], Modificado: ['Modified'], 'Criado por': ['Author'], 'Modificado por': ['Editor'] };
+const movementFields = ['INSTITUICAO', 'DESCRICAO', 'OPERACAO', 'VALOR'];
+const bankFields = ['RAZAOSOCIALRECEBEDOR', 'DATAPAGAMENTO', 'CONTAPAGADORA', 'CONTARECEBEDOR',
+  'DOCUMENTORECEBEDOR', 'REFERENCIABANCARIA', 'ORIGEMMOVIMENTACAO'];
+
+export function isImportedFinancialMovement(fields) {
+  return fields?.ORIGEMMOVIMENTACAO === 'SICOOB';
+}
 
 function model(title, listName, fields, fieldLabels, dateFields = []) {
   return Object.freeze({
@@ -14,10 +21,18 @@ function model(title, listName, fields, fieldLabels, dateFields = []) {
 
 export const FINANCIAL_GALLERY_MODELS = Object.freeze({
   financial_movement: Object.freeze({ ...model('DE MOVIMENTAÇÃO', 'MOVIMENTACOESFINANCEIRAS',
-    ['INSTITUICAO', 'DESCRICAO', 'OPERACAO', 'VALOR'],
-    { INSTITUICAO: 'Instituição', DESCRICAO: 'Descrição', OPERACAO: 'Operação', VALOR: 'Valor' }),
-    recordLabel: 'movimentação', recordArticle: 'a', searchPlaceholder: 'Pesquisar instituição, descrição ou operação',
-    fieldTypes: { VALOR: 'currency', Criado: 'date', Modificado: 'date' },
+    [...movementFields, ...bankFields],
+    { INSTITUICAO: 'Instituição', DESCRICAO: 'Descrição', OPERACAO: 'Operação', VALOR: 'Valor',
+      RAZAOSOCIALRECEBEDOR: 'Nome ou razão social do recebedor', DATAPAGAMENTO: 'Data do pagamento',
+      CONTAPAGADORA: 'Conta pagadora', CONTARECEBEDOR: 'Conta do recebedor',
+      DOCUMENTORECEBEDOR: 'CPF/CNPJ do recebedor', REFERENCIABANCARIA: 'Referência bancária',
+      ORIGEMMOVIMENTACAO: 'Origem' }),
+    metadataEditorFields: movementFields,
+    filterFields: ['ID', ...movementFields, 'RAZAOSOCIALRECEBEDOR', 'CONTAPAGADORA', 'ORIGEMMOVIMENTACAO'],
+    dateRangeField: 'DATAPAGAMENTO',
+    sourceSort: [{ field: 'DATAPAGAMENTO', direction: 'desc', type: 'date' }, { field: 'ID', direction: 'desc', type: 'number' }],
+    recordLabel: 'movimentação', recordArticle: 'a', searchPlaceholder: 'Pesquisar recebedor, conta ou descrição',
+    fieldTypes: { VALOR: 'currency', DATAPAGAMENTO: 'date', Criado: 'date', Modificado: 'date' },
     metadataEditorEntity: { id: 'financial-movement', title: 'Movimentação financeira', siteKey: 'personal', immutableFields: [], messageFields: [] },
   }),
   investment: model('INVESTIMENTOS', 'CADASTRO INVESTIMENTO',

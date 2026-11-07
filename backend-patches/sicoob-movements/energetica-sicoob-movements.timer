@@ -1,0 +1,10 @@
+[Unit]
+Description=Energético Sicoob statement collection at 09:00, 14:00 and 20:00 São Paulo time
+
+[Timer]
+OnCalendar=*-*-* 09,14,20:00:00 America/Sao_Paulo
+Persistent=true
+AccuracySec=1s
+
+[Install]
+WantedBy=timers.target
