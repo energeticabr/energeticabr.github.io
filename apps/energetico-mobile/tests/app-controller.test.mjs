@@ -6271,6 +6271,32 @@ test('fechamentos da véspera não suprimem provisões vencidas ou de hoje', asy
   t.mock.timers.setTime(Date.parse('2026-11-08T13:00:00Z'));
   await h.controller.handleForeground();
   assert.deepEqual(visible(), ['overdue', 'today']);
+
+  t.mock.timers.setTime(Date.parse('2026-11-09T03:00:00Z'));
+  await h.controller.handleForeground();
+  assert.deepEqual(visible(), ['overdue', 'today', 'eve', 'later']);
+});
+
+test('mascote mostra o período completo quando a consulta automática termina primeiro', async t => {
+  t.mock.timers.enable({ apis: ['Date'], now: new Date('2026-11-08T12:00:00Z') });
+  const h = provisionCooldownHarness(t)();
+  h.client.getPendingProvisionSnapshot = async () => ({ due: false, rows: [] });
+  await h.controller.start();
+
+  const read = deferred();
+  h.client.getPendingProvisionSnapshot = () => read.promise;
+  const foreground = h.controller.handleForeground();
+  await new Promise(resolve => setImmediate(resolve));
+  const opening = h.view.emit('open-pending-provisions');
+  read.resolve({ sourceKind: 'provision-description', due: true, rows: [
+    { id: '306', dueDate: '2026-11-09' },
+    { id: '307', dueDate: '2026-11-10' },
+  ] });
+  await foreground;
+  assert.equal(await opening, true);
+  const snapshot = h.view.renders.at(-1).pendingProvisions;
+  assert.equal(snapshot.openedManually, true);
+  assert.deepEqual(snapshot.rows.map(row => row.id), ['306', '307']);
 });
 
 test('mascote abre provisões durante o intervalo sem adiar a próxima abertura automática', async t => {
@@ -6781,6 +6807,10 @@ test("mantém o vencimento editado até amanhã no aviso e remove a partir de do
   await h.view.emit("edit-pending-provision-due-date", { paymentId: "306" });
   await h.view.emit("save-pending-provision-due-date", { paymentId: "306", value: "02/10/2026" });
   assert.deepEqual(h.view.renders.at(-1).pendingProvisions.rows.map(row => row.id), ["307"]);
+  t.mock.timers.setTime(Date.parse("2026-10-01T03:00:00Z"));
+  await h.controller.handleForeground();
+  const restored = h.view.renders.at(-1).pendingProvisions.rows.find(row => row.id === "306");
+  assert.equal(restored?.dueDate, "02/10/2026");
 });
 
 test("editor de vencimento não troca o dia brasileiro pelo prefixo UTC", async t => {

@@ -2299,9 +2299,9 @@ export function createAppController({
     }
   }
 
-  function beginPendingProvisionAttachmentDiscovery(snapshot) {
-    clearPendingProvisionAttachmentState();
-    const rows = Array.isArray(snapshot?.rows) ? snapshot.rows : [];
+  function beginPendingProvisionAttachmentDiscovery(snapshot, additionalRows) {
+    if (!additionalRows) clearPendingProvisionAttachmentState();
+    const rows = additionalRows ?? snapshot.rows;
     const context = {
       targetAccount: account,
       targetRevision: sessionRevision,
@@ -2624,6 +2624,15 @@ export function createAppController({
       ? today : provisionDayOffset(today, 1);
   }
 
+  function splitPendingProvisionRows(rows, cutoff) {
+    const visible = [], deferredRows = [];
+    for (const row of rows) {
+      const target = provisionDateKey(row.dueDate) <= cutoff ? visible : deferredRows;
+      target.push(row);
+    }
+    return { visible, deferredRows };
+  }
+
   function recordPendingProvisionEveDismissal() {
     if (!pendingProvisionSnapshot || pendingProvisionSnapshot.openedManually) return;
     const today = provisionDateKey();
@@ -2673,7 +2682,15 @@ export function createAppController({
       if (pendingProvisionSnapshot && (pendingProvisionSnapshot.today !== today || manual && !pendingProvisionSnapshot.openedManually)) {
         pendingProvisionSnapshot.today = today;
         if (manual) pendingProvisionSnapshot.openedManually = true;
-        render();
+        const cutoff = pendingProvisionSnapshot.openedManually ? provisionDayOffset(today, 2) : pendingProvisionAutomaticCutoff(today);
+        const { visible, deferredRows } = splitPendingProvisionRows(pendingProvisionSnapshot.deferredRows, cutoff);
+        pendingProvisionSnapshot.deferredRows = deferredRows;
+        if (visible.length) {
+          pendingProvisionSnapshot.rows = [...pendingProvisionSnapshot.rows, ...visible];
+          pendingProvisionSnapshot.count = pendingProvisionSnapshot.rows.length;
+          pendingProvisionSnapshot.totalsUnavailable ||= visible.some(row => row.amountDueDisplay === null || row.total == null || row.total === "");
+          beginPendingProvisionAttachmentDiscovery(pendingProvisionSnapshot, visible);
+        } else render();
       }
       return true;
     }
@@ -2725,12 +2742,12 @@ export function createAppController({
         }
         if (!current() || suppressed()) return false;
         const today = provisionDateKey();
+        let deferredRows = [];
         if (!manual) {
-          const cutoff = pendingProvisionAutomaticCutoff(today);
-          rows = rows.filter(row => provisionDateKey(row.dueDate) <= cutoff);
+          ({ visible: rows, deferredRows } = splitPendingProvisionRows(rows, pendingProvisionAutomaticCutoff(today)));
         }
         const totalsUnavailable = rows.some(row => row.amountDueDisplay === null || row.total == null || row.total === "");
-        const snapshot = { ...original, today, rows, count: rows.length, due: rows.length > 0, upcomingUnavailable, totalsUnavailable };
+        const snapshot = { ...original, today, rows, deferredRows, count: rows.length, due: rows.length > 0, upcomingUnavailable, totalsUnavailable };
         if (manual) snapshot.openedManually = true;
         const due = snapshot?.due === true && Array.isArray(snapshot.rows) && snapshot.rows.length > 0;
         if (!due && !manual) {
@@ -3984,9 +4001,10 @@ export function createAppController({
       if (stopped || account !== targetAccount || sessionRevision !== targetRevision) return false;
 
       const today = provisionDateKey();
-      const cutoff = pendingProvisionSnapshot?.openedManually ? provisionDayOffset(today, 2) : pendingProvisionAutomaticCutoff(today);
+      const consultationCutoff = provisionDayOffset(today, 2);
+      const cutoff = pendingProvisionSnapshot?.openedManually ? consultationCutoff : pendingProvisionAutomaticCutoff(today);
       const inWindow = date <= cutoff;
-      const recalculateAmount = inWindow && sourceKind === "provision-description" && Object.hasOwn(selectedRow, "amountDueDisplay");
+      const recalculateAmount = date <= consultationCutoff && sourceKind === "provision-description" && Object.hasOwn(selectedRow, "amountDueDisplay");
       let confirmedRow;
       if (recalculateAmount) {
         // The edit synchronizes the date of the children. Never reuse the subtotal of the old day.
@@ -4001,13 +4019,15 @@ export function createAppController({
         finally { readback.abort(); }
         if (stopped || account !== targetAccount || sessionRevision !== targetRevision || pendingProvisionDateEditPaymentId !== id) return false;
       }
+      let deferredRow;
       const updatedRows = (pendingProvisionSnapshot?.rows || []).flatMap(row => {
         if (String(row?.id ?? "").trim() !== id) return [row];
-        if (!inWindow) return [];
-        if (confirmedRow) return [confirmedRow];
-        return [{ ...row, dueDate: sourceKind === "provision-description"
+        const updated = confirmedRow || { ...row, dueDate: sourceKind === "provision-description"
           ? date : `${date.slice(8, 10)}/${date.slice(5, 7)}/${date.slice(0, 4)}`,
-          ...(recalculateAmount ? { amountDueDisplay: null, amountPaidDisplay: null } : {}) }];
+          ...(recalculateAmount ? { amountDueDisplay: null, amountPaidDisplay: null } : {}) };
+        if (inWindow) return [updated];
+        if (date <= consultationCutoff) deferredRow = updated;
+        return [];
       });
       pendingProvisionDateEditPaymentId = "";
       pendingProvisionDateEditValue = "";
@@ -4016,6 +4036,7 @@ export function createAppController({
       if (updatedRows.length) {
         const totalsUnavailable = updatedRows.some(row => row.amountDueDisplay === null || row.total == null || row.total === "");
         pendingProvisionSnapshot = { ...pendingProvisionSnapshot, due: true, count: updatedRows.length, rows: updatedRows, totalsUnavailable };
+        if (deferredRow) pendingProvisionSnapshot.deferredRows = [...pendingProvisionSnapshot.deferredRows, deferredRow];
         if (!updatedRows.some(row => String(row?.id ?? "").trim() === pendingProvisionExpandedPaymentId)) {
           pendingProvisionExpandedPaymentId = "";
         }
