@@ -60,7 +60,10 @@ export function decorateSefazInvoiceCard({document: doc, card, container, pdfRai
   cnoCluster.dataset.sefazCno = cno.status;
   cnoCluster.setAttribute('role', 'note');
   const cnoCopy = el('div', 'rg-sefaz-cno__copy');
-  cnoCopy.append(el('span', 'rg-sefaz-cno__label', cno.status === 'conflict' ? 'CNO errada' : 'CNO'),
+  if (cno.corrected && cno.status === 'valid') {
+    cnoCluster.dataset.sefazCnoCorrected = 'true';
+    cnoCopy.append(el('strong', 'rg-sefaz-cno__value', `CNO: ${cno.expected} - NOTA DE CORREÇÃO`));
+  } else cnoCopy.append(el('span', 'rg-sefaz-cno__label', cno.status === 'conflict' ? 'CNO errada' : 'CNO'),
     el('strong', 'rg-sefaz-cno__value', cno.status === 'missing' ? 'CNO não informada' :
       (cno.status === 'conflict' ? cno.conflicts : cno.numbers).join(' • ')));
   if (cno.status === 'conflict') cnoCopy.append(el('span', 'rg-sefaz-cno__expected', `CNO correto da obra: ${cno.expected}`));
