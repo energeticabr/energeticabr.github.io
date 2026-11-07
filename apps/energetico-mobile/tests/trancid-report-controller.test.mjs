@@ -4,6 +4,7 @@ import {JSDOM} from 'jsdom';
 import {createAppController} from '../src/app-controller.js';
 import {createConversationStore} from '../src/chat/conversation-store.js';
 import {renderChatMarkup,commandFromTarget} from '../src/ui/chat-view.js';
+import {createTrancidReportView} from '../src/ui/trancid-report-view.js';
 const tick=()=>new Promise(resolve=>setImmediate(resolve));
 function harness(t,options={}) {
  const handlers=new Map(),opens=[],factories=[],tokens=[],renders=[];let sequence=0;
@@ -56,6 +57,24 @@ test('automatic Trancid limit survives restart, is scoped by account and resets 
 test('automatic balance report waits behind an active draft',async t=>{
  const h=harness(t,{enableTrancidReminders:true});h.store.setDraft('Edição em andamento');await h.controller.start();for(let n=0;n<8;n++)await tick();assert.equal(h.opens.length,0);
  await h.view.emit('draft-changed',{value:''});for(let n=0;n<12;n++)await tick();assert.equal(h.opens.length,1);
+});
+test('closing the visible Trancid dialog before opening settles still counts that day',async t=>{
+ const old=globalThis.document,dom=new JSDOM('<body><main id="app"></main></body>');
+ globalThis.document=dom.window.document;
+ t.after(()=>{globalThis.document=old;dom.window.close();});
+ let visible=0;
+ const h=harness(t,{enableTrancidReminders:true,trancidReportFactory:input=>{
+  const panel=createTrancidReportView(input);
+  return {...panel,open(options){
+   const opening=panel.open(options);
+   if(!panel.element.hidden){visible++;panel.close();}
+   return opening;
+  }};
+ }});
+ await h.controller.start();for(let n=0;n<12;n++)await tick();
+ assert.equal(visible,1);
+ await h.controller.handleForeground();for(let n=0;n<12;n++)await tick();
+ assert.equal(visible,1);
 });
 test('late report factory cannot display after sign out',async t=>{
  let resolve,destroyed=0;const h=harness(t,{trancidReportFactory:()=>new Promise(r=>resolve=r)});await h.controller.start();const request=h.view.emit('open-trancid-report');await tick();await h.view.emit('sign-out');

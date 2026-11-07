@@ -51,13 +51,37 @@ export function createTrancidAutoReminder({
     if(!current())return false;
     queued=eligible(report)&&!shownToday(owner);notify();
     if(!queued||!canOpen())return false;
-    queued=false;opening=true;notify();
-    const opened=await open({automatic:true,initialSnapshot:report,isCurrent:()=>current()&&!shownToday(owner)&&canOpen()});
-    if (opened && current()) {
-     rememberOpening(owner);
-     visible = true;
-    } else if (current() && !shownToday(owner)) queued = !canOpen();
-    return Boolean(opened&&current());
+    const show = async () => {
+     if (!current()) return false;
+     if (shownToday(owner)) {
+      queued = false;
+      return false;
+     }
+     if (!canOpen()) return false;
+     queued = false;
+     opening = true;
+     notify();
+     let displayed = false;
+     const onDisplayed = () => {
+      if (displayed || !current()) return;
+      displayed = true;
+      rememberOpening(owner);
+      visible = true;
+     };
+     const opened = await open({
+      automatic: true,
+      initialSnapshot: report,
+      isCurrent: () => current() && !shownToday(owner) && canOpen(),
+      onDisplayed,
+     });
+     if (opened) onDisplayed();
+     if (!displayed && current() && !shownToday(owner)) queued = !canOpen();
+     return displayed && current();
+    };
+    const locks = globalThis.navigator?.locks;
+    return owner && locks?.request
+     ? await locks.request(STORAGE_PREFIX + owner, { signal: controller.signal }, show)
+     : await show();
    } catch {if(generation===revision)queued=false;return false;}
    finally {clearTimeout(timer);if(generation===revision){request=null;abort=null;opening=false;notify(queued);}}
   });
