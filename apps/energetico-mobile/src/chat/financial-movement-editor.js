@@ -1,4 +1,5 @@
 import Decimal from 'decimal.js';
+import { includesSearchText, normalizeSearchText } from '../../../../portal/core/search-text.js';
 import { createRegistrationGalleryFilterData } from './registration-gallery-filter-data.js';
 import { isImportedFinancialMovement } from './financial-gallery-models.js';
 
@@ -59,8 +60,8 @@ export function createFinancialMovementEditor(base, { repository, siteKey = 'per
           const field = Object.keys(SOURCES).find(name => JSON.stringify(source) === JSON.stringify(SOURCES[name]));
           if (!field) throw new Error('A origem das opções financeiras não foi reconhecida.');
           const available = await choices(field, dependencies, signal);
-          const query = String(term || '').toLocaleLowerCase('pt-BR');
-          return available.filter(option => option.label.toLocaleLowerCase('pt-BR').includes(query));
+          const query = normalizeSearchText(term);
+          return available.filter(option => includesSearchText(normalizeSearchText(option.label), query));
         },
       });
       contexts.set(context, { original, saving: false });

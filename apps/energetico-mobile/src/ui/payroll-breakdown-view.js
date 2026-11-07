@@ -1,6 +1,7 @@
+import { includesSearchText, normalizeSearchText } from '../../../../portal/core/search-text.js';
 import { PAYROLL_RUBRICS, payrollProvisionDates, validatePayrollBreakdown } from '../chat/payroll-breakdown.js';
 import { payrollBreakdownPeriods, payrollCombinedTotal } from '../chat/payroll-breakdown-history.js';
-import { payrollDecimal, payrollKey } from '../chat/supplier-payroll.js';
+import { payrollDecimal } from '../chat/supplier-payroll.js';
 import { payrollTaxType } from '../chat/payroll-tax-competence.js';
 import { applyScreenNavigation } from './screen-navigation.js';
 import { createLoadingIndicator, updateLoadingIndicator } from './loading-indicator.js';
@@ -116,7 +117,10 @@ export function createPayrollBreakdownView({ data, root, documentRef = globalThi
       const option = button(supplier.label, '', () => { draft.supplier = supplier; step = 'month'; error.hidden = true; render(); }); option.dataset.breakdownSupplier = supplier.id; list.append(option);
     }
     if (!suppliers.length) content.append(el('p', '', 'Nenhum fornecedor ativo e empreiteiro foi encontrado.'));
-    filter.addEventListener('input', () => { for (const child of list.children) child.hidden = !payrollKey(child.textContent).includes(payrollKey(filter.value)); });
+    filter.addEventListener('input', () => {
+      const query = normalizeSearchText(filter.value);
+      for (const child of list.children) child.hidden = !includesSearchText(normalizeSearchText(child.textContent), query);
+    });
   }
   function monthStep() {
     content.append(el('h2', '', 'Qual é o mês de referência?')); identity();

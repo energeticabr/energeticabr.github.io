@@ -1,13 +1,13 @@
-const fold = value => String(value ?? '').normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLocaleLowerCase('pt-BR');
+import { matchesSearchTerms, normalizeSearchText } from '../../../../portal/core/search-text.js';
 const numberFormat = new Intl.NumberFormat('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
 
 function searchableText(value) {
   if (value == null) return '';
-  if (Array.isArray(value)) return value.map(searchableText).join(' ');
+  if (Array.isArray(value)) return value.map(searchableText).join('\0');
   if (typeof value === 'object') {
     // Search human-readable lookup/person values, never opaque metadata.
     return ['LookupValue', 'Value', 'value', 'DisplayName', 'displayName', 'Title', 'title', 'Name', 'name', 'Email', 'email']
-      .filter(key => value[key] != null).map(key => searchableText(value[key])).join(' ');
+      .filter(key => value[key] != null).map(key => searchableText(value[key])).join('\0');
   }
   const raw = String(value);
   // A timestamp's civil date belongs to the view's timezone rules. Only
@@ -22,8 +22,7 @@ function searchableText(value) {
 }
 
 export function matchesGallerySearch(query, values) {
-  const terms = fold(query).trim().split(/\s+/).filter(Boolean);
-  if (!terms.length) return true;
-  const haystack = fold(searchableText(values));
-  return terms.every(term => haystack.includes(term));
+  const search = normalizeSearchText(query);
+  if (!search) return true;
+  return matchesSearchTerms(normalizeSearchText(searchableText(values)), search.split(' '));
 }

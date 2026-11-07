@@ -1,4 +1,5 @@
 import { normalizeCadastroValue } from "../core/utils.js";
+import { includesSearchText, normalizeSearchText } from "../core/search-text.js";
 
 const SYSTEM_COLUMNS = new Set([
   "ID", "CONTENTTYPE", "CONTENTTYPEID", "CREATED", "MODIFIED", "AUTHOR", "EDITOR",
@@ -186,14 +187,14 @@ function searchableValues(item, fields) {
 }
 
 export function sortAndFilterItems(items = [], entity = {}, options = {}) {
-  const search = String(options.search || "").trim().toLocaleLowerCase("pt-BR");
+  const search = normalizeSearchText(options.search);
   const status = String(options.status || "").trim();
   const statusFields = entity.statusFields || [];
   const searchFields = entity.searchFields || ["Title"];
   const sort = options.sort || { field: "Title", direction: "asc" };
   const filtered = (items || []).filter(item => {
     const fields = item?.fields || {};
-    const matchesSearch = !search || searchableValues(item, searchFields).toLocaleLowerCase("pt-BR").includes(search);
+    const matchesSearch = !search || includesSearchText(normalizeSearchText(searchableValues(item, searchFields)), search);
     const matchesStatus = !status || statusFields.some(field => String(fields[field] || "") === status);
     return matchesSearch && matchesStatus;
   }).slice();

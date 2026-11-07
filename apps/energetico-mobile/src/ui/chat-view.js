@@ -1,3 +1,4 @@
+import { matchesSearchTerms, normalizeSearchText } from '../../../../portal/core/search-text.js';
 import { pendingProvisionAttachmentTray } from './pending-provision-attachment-tray.js';
 import { payrollAssignmentTableMarkup } from './payroll-assignment-table.js';
 import { supplierDefaultsComparisonMarkup } from './attendance-supplier-defaults-comparison.js';
@@ -594,13 +595,13 @@ function databaseFilteredOptions(message, options, draft = "", enabled = true) {
   if (isSupplierGroupingDatabaseFilter(message)) return options;
   const query = String(draft || "").trim();
   if (!query || (query.split(/\s+/u).length > 2 && !supportsFullNameDatabaseFilter(message) && !isMultipleLaunchSupplierPoll(message))) return options;
-  const words = normalizedDateText(query).split(/\s+/u).filter(Boolean);
+  const words = normalizeSearchText(query).split(' ').filter(Boolean);
   if (!words.length) return options;
   return options.filter(option => {
     const replyId = String(option?.reply || option?.id || "").trim();
     if (replyId === PRESENCE_OTHER_DATES_REPLY_ID || replyId === 'pending_attendance_other_date') return true;
     if (isDatabaseRegistrationOption(option)) return true;
-    const searchable = normalizedDateText([
+    const searchable = normalizeSearchText([
       option?.label,
       option?.title,
       option?.name,
@@ -610,8 +611,8 @@ function databaseFilteredOptions(message, options, draft = "", enabled = true) {
       option?.value,
       option?.id,
       option?.reply,
-    ].filter(value => value != null).join(" "));
-    return words.every(word => searchable.includes(word));
+    ].filter(value => value != null).join("\0"));
+    return matchesSearchTerms(searchable, words);
   });
 }
 

@@ -1,11 +1,7 @@
 import { reportLayoutViewport, reportLayoutRect } from './report-landscape.js';
+import { includesSearchText, normalizeSearchText } from '../../../../portal/core/search-text.js';
 const enhanced = new WeakMap();
 let nextId = 0;
-
-function searchableText(value) {
-  return String(value).normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLocaleLowerCase().trim();
-}
-
 function createPicker(select, closeOthers, options = {}) {
   const doc = select.ownerDocument;
   const view = doc.defaultView;
@@ -166,8 +162,8 @@ function createPicker(select, closeOthers, options = {}) {
     list.style.maxHeight = `${Math.max(0, Math.min(240, height - 14))}px`;
   }
   function render() {
-    const query = selectionOnly ? '' : searchableText(search.value);
-    candidates = [...select.options].filter(option => !option.hidden && (!(selectionOnly || selectionActions) || option.value !== '') && (!query || searchableText(option.label).includes(query)));
+    const query = selectionOnly ? '' : normalizeSearchText(search.value);
+    candidates = [...select.options].filter(option => !option.hidden && (!(selectionOnly || selectionActions) || option.value !== '') && (!query || includesSearchText(normalizeSearchText(option.label), query)));
     list.replaceChildren(...candidates.map((option, index) => {
       const item = doc.createElement('div'); item.className = 'sfs-option'; item.id = `${id}-option-${index}`;
       item.setAttribute('role', 'option'); item.setAttribute('aria-selected', String(option.selected));

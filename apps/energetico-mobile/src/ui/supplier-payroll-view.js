@@ -1,3 +1,4 @@
+import { includesSearchText, normalizeSearchText } from '../../../../portal/core/search-text.js';
 import { applyScreenNavigation } from "./screen-navigation.js";
 import { bindSearchableFilterSelects } from './searchable-filter-selects.js';
 import {
@@ -239,17 +240,10 @@ export function createSupplierPayrollView({
     );
     empty.hidden = options.length > 0;
     filter.addEventListener("input", () => {
-      const search = filter.value
-        .normalize("NFD")
-        .replace(/[\u0300-\u036f]/g, "")
-        .toLowerCase();
+      const search = normalizeSearchText(filter.value);
       let visible = 0;
       for (const [el, label] of buttons) {
-        el.hidden = !label
-          .normalize("NFD")
-          .replace(/[\u0300-\u036f]/g, "")
-          .toLowerCase()
-          .includes(search);
+        el.hidden = !includesSearchText(normalizeSearchText(label), search);
         if (!el.hidden) visible++;
       }
       empty.hidden = visible > 0;

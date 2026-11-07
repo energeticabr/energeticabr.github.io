@@ -1,3 +1,5 @@
+import { containsSearchText } from '../../../../portal/core/search-text.js';
+
 const text = value => String(value ?? "").trim();
 const normalized = value => text(value).normalize("NFD").replace(/[\u0300-\u036f]/g, "").toLocaleUpperCase("pt-BR");
 const same = (left, right) => normalized(left) === normalized(right);
@@ -73,7 +75,7 @@ export function buildStageReport(snapshot, filters = {}, today = new Date().toIS
 export function buildTaskReport(snapshot, filters = {}, today = new Date().toISOString().slice(0, 10)) {
   const source = snapshot?.rows || [];
   const selected = source.filter(row => {
-    if (filters.search && !normalized(row.task).includes(normalized(filters.search))) return false;
+    if (filters.search && !containsSearchText(row.task, filters.search)) return false;
     return matches(row, filters, ["status", "difficulty", "association", "priority"]);
   }).sort((a, b) => dateKey(b.identifiedDate).localeCompare(dateKey(a.identifiedDate)) || Number(b.id) - Number(a.id)).slice(0, 2000);
   const byDate = new Map();

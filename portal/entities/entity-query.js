@@ -1,4 +1,5 @@
 import { displayColumnValue, sortAndFilterItems } from "../data/column-mapper.js";
+import { includesSearchText, normalizeSearchText, odataSearchPrefix, startsWithSearchText } from "../core/search-text.js";
 
 export const ENTITY_PAGE_SIZES = Object.freeze([10, 20, 50, 100]);
 export const ENTITY_MAX_INCREMENTAL_PAGES = 100;
@@ -154,7 +155,7 @@ export function buildEntityGraphRequest(entity = {}, columns = [], state = {}) {
       }
     } else {
       const field = searchableFields[0];
-      expressions.push(`startswith(fields/${field},${odataString(search)})`);
+      expressions.push(odataSearchPrefix(`fields/${field}`, search));
       filteredFields.add(field);
     }
   }
@@ -286,18 +287,18 @@ export function itemMatchesEntityQuery(item, entity = {}, state = {}) {
   if (!filtersMatch) return false;
   const search = query.search.trim();
   if (!search) return true;
-  const terms = [...new Set(search.split(/\s+/u).map(value => value.trim().toLocaleUpperCase("pt-BR")).filter(Boolean))];
+  const normalizedSearch = normalizeSearchText(search);
+  const terms = [...new Set(normalizedSearch.split(" "))];
   const definitions = entity.searchDefinitions?.length
     ? entity.searchDefinitions
     : [...new Set(entity.searchFields || ["Title"])].map(field => ({ kind: "contains", field }));
-  const normalizedSearch = search.toLocaleUpperCase("pt-BR");
   if (definitions.some(definition => (
     ["startsWith", "starts-with"].includes(definition.kind)
-    && fieldValue(item, definition.field).toLocaleUpperCase("pt-BR").startsWith(normalizedSearch)
+    && startsWithSearchText(normalizeSearchText(fieldValue(item, definition.field)), normalizedSearch)
   ))) return true;
   return terms.every(expected => definitions.some(definition => {
-      const actual = fieldValue(item, definition.field).toLocaleUpperCase("pt-BR");
-      return definition.kind === "contains" && actual.includes(expected);
+      return definition.kind === "contains"
+        && includesSearchText(normalizeSearchText(fieldValue(item, definition.field)), expected);
     }));
 }
 

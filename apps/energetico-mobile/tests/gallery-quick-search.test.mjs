@@ -2,6 +2,23 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import { JSDOM } from 'jsdom';
 import { galleryCases, galleryOptions } from './helpers/gallery-create-cases.mjs';
+import { matchesGallerySearch } from '../src/chat/gallery-quick-search.js';
+
+test('gallery search accepts decimal and spacing variants in text fields', () => {
+  const labels = ['Vergalhão 6.3', 'Vergalhão 6,3', 'Vergalhão 63', 'Vergalhão 8 MM', 'Vergalhão 8MM', 'Vergalhão 8 CM'];
+  for (const [query, expected] of [
+    ['6.3', labels.slice(0, 2)],
+    ['vergalhao 6,3', labels.slice(0, 2)],
+    ['8mm', labels.slice(3, 5)],
+    ['vergalhao 8 mm', labels.slice(3, 5)],
+    ['vergalhao8mm', labels.slice(3, 5)],
+  ]) {
+    assert.deepEqual(labels.filter(label => matchesGallerySearch(query, [label])), expected, query);
+  }
+  assert.equal(matchesGallerySearch('8 mm', ['8 rolos de 10 mm']), false);
+  assert.equal(matchesGallerySearch('8mm', ['8', 'MM']), false);
+  assert.equal(matchesGallerySearch('18mm', ['1 8 mm']), false);
+});
 
 const settle = () => new Promise(resolve => setTimeout(resolve, 230));
 for (const entry of galleryCases) {

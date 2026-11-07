@@ -1,4 +1,5 @@
 import { escapeHtml } from "../core/utils.js";
+import { includesSearchText, normalizeSearchText } from "../core/search-text.js";
 import { mapSharePointColumns } from "../data/column-mapper.js";
 import { classifyEntityAvailability, createAttachmentActions } from "../data/attachments.js?v=20260906-encoded-attachment-v3";
 import { resolvePowerAppsUiContract } from "../catalog/powerapps-ui-contract.js?v=20260906-suprimentos-parity-v1";
@@ -3140,15 +3141,15 @@ export function createEntityPage(root, context = {}) {
     const settlement = g1Settlements[kind];
     const dialog = g1SettlementDialog(kind);
     const supplier = dialog?.querySelector?.(`[data-g1-settlement-supplier="${kind}"]`)?.value || "";
-    const term = normalizedStatus(settlement.searches.items);
+    const term = normalizeSearchText(settlement.searches.items);
     return settlement.items.filter(item => {
       const fields = item.fields || {};
       const itemSupplier = String(fieldValue(fields, ["FORNECEDOR"]) || "");
       const itemDate = kind === "presence"
         ? fieldValue(fields, ["DATA"])
         : fieldValue(fields, ["DATAMEDICAO", "DATA MEDICAO", "DATA MEDIÇÃO"]);
-      const haystack = normalizedStatus(`${item.id} ${itemSupplier} ${shortDateValue(itemDate)}`);
-      return (!supplier || itemSupplier === supplier) && (!term || haystack.includes(term));
+      const haystack = normalizeSearchText(`${item.id} ${itemSupplier} ${shortDateValue(itemDate)}`);
+      return (!supplier || itemSupplier === supplier) && includesSearchText(haystack, term);
     });
   }
 
@@ -3205,14 +3206,14 @@ export function createEntityPage(root, context = {}) {
     const paymentSelect = dialog?.querySelector?.(`[data-g1-settlement-payment="${kind}"]`);
     const supplierSelect = dialog?.querySelector?.(`[data-g1-settlement-supplier="${kind}"]`);
     if (!paymentSelect || !supplierSelect) return;
-    const paymentTerm = normalizedStatus(settlement.searches.payment);
-    const payments = settlement.payments.filter(item => !paymentTerm || normalizedStatus(g1PaymentLabel(item)).includes(paymentTerm));
+    const paymentTerm = normalizeSearchText(settlement.searches.payment);
+    const payments = settlement.payments.filter(item => includesSearchText(normalizeSearchText(g1PaymentLabel(item)), paymentTerm));
     const previousPayment = paymentSelect.value;
     paymentSelect.innerHTML = payments.map(item => `<option value="${escapeHtml(item.id)}">${escapeHtml(g1PaymentLabel(item, kind === "presence"))}</option>`).join("");
     paymentSelect.value = payments.some(item => String(item.id) === String(previousPayment)) ? previousPayment : String(payments[0]?.id || "");
-    const supplierTerm = normalizedStatus(settlement.searches.supplier);
+    const supplierTerm = normalizeSearchText(settlement.searches.supplier);
     const suppliers = [...new Set(settlement.items.map(item => String(fieldValue(item.fields || {}, ["FORNECEDOR"]) || "")).filter(Boolean))]
-      .filter(value => !supplierTerm || normalizedStatus(value).includes(supplierTerm)).sort((a, b) => a.localeCompare(b, "pt-BR"));
+      .filter(value => includesSearchText(normalizeSearchText(value), supplierTerm)).sort((a, b) => a.localeCompare(b, "pt-BR"));
     const selectedPayment = settlement.payments.find(item => String(item.id) === String(paymentSelect.value));
     const paymentSupplier = String(g1FieldValue(selectedPayment?.fields || {}, "fornecedor") || "");
     const previousSupplier = supplierSelect.value;
