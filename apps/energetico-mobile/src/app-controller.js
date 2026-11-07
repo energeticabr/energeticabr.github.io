@@ -9496,7 +9496,7 @@ export function createAppController({
     return opening;
   }
 
-  function ddaPaymentLaunchHandler(data, assertSession) {
+  function ddaPaymentLaunchHandler(data, assertSession, { flowId = 'launch', replyId = 'action_launch', text = 'EFETUAR LANÇAMENTO' } = {}) {
     return async ({ itemId, key, signal } = {}) => {
       assertSession();
       if (signal?.aborted || ddaPaymentLaunchAbort || flowBusy()) return false;
@@ -9518,7 +9518,7 @@ export function createAppController({
       }, { once: true });
       signal?.addEventListener('abort', cancel, { once: true });
       ddaPaymentLaunchAbort = lifetime;
-      const identity = `${itemId}:${key}`;
+      const identity = `${flowId}:${itemId}:${key}`;
       try {
         assertCurrent();
         let entry = ddaPaymentLaunches.get(identity);
@@ -9532,14 +9532,14 @@ export function createAppController({
           ddaPaymentLaunches.set(identity, entry);
         }
         if (!entry.flow) {
-          const started = await sendText('EFETUAR LANÇAMENTO', 'action_launch', {
+          const started = await sendText(text, replyId, {
             allowAttachmentTrayNavigation: true, preserveDraft: true, preserveAttachmentTray: true,
-            cancelSignal: lifetime.signal, expectedFlowId: 'launch', isCurrent: current,
+            cancelSignal: lifetime.signal, expectedFlowId: flowId, isCurrent: current,
             onRequest: () => { textOperation = store.getState().activeText; },
           });
           assertCurrent();
           if (!started || !await waitForResponseTransition() || !current()
-            || store.getState().activeFlow?.id !== 'launch') return false;
+            || store.getState().activeFlow?.id !== flowId) return false;
           entry.flow = store.getState().activeFlow;
         }
         assertCurrent();
@@ -9561,7 +9561,7 @@ export function createAppController({
           const sent = await uploadFile(pending.id, { preserveFailedFiles: true,
             signal: lifetime.signal, isCurrent: current, preserveAttachmentTray: true });
           assertCurrent();
-          if (!await waitForResponseTransition() || !current() || store.getState().activeFlow?.id !== 'launch') return false;
+          if (!await waitForResponseTransition() || !current() || store.getState().activeFlow?.id !== flowId) return false;
           entry.flow = store.getState().activeFlow;
           const reconciled = reconcileDdaLaunchAttachments(previousAttachments, store.getState().attachments);
           for (const [uploadedFile, id] of entry.uploaded) {
@@ -9574,7 +9574,7 @@ export function createAppController({
           entry.uploaded.set(file, added.id);
         }
         assertCurrent();
-        if (store.getState().activeFlow?.id !== 'launch'
+        if (store.getState().activeFlow?.id !== flowId
           || [...entry.uploaded.values()].some(id => !store.getState().attachments.some(item => item.id === id))) return false;
         // UI consumes success before closing the dialog and its outer panel;
         // closing either here would abort the signal before success is accepted.
@@ -9668,6 +9668,9 @@ export function createAppController({
               syncMonitor: ensureDdaSyncSession(),
               confirmPayment: async options => { assertSession(); const receipt = await client.confirmDdaPayment(options); assertSession(); return receipt; },
               onStartLaunch: ddaPaymentLaunchHandler(data, assertSession),
+              onStartProvision: ddaPaymentLaunchHandler(data, assertSession, {
+                flowId: 'payment_provision', replyId: 'action_payment', text: 'CRIAR UMA PROVISÃO DE PAGAMENTO',
+              }),
             } : {}),
             ...(sourceKind === 'notas_fiscais_sefaz' ? { syncMonitor: ensureSefazSyncSession() } : {}),
             ...(isDdaReport ? { onClose: () => ddaAutoReminder.dismiss() } : {}),

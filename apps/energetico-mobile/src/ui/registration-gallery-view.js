@@ -160,7 +160,7 @@ function knownAttachmentCount(row) {
   return null;
 }
 
-export function createRegistrationGallery({ document: doc = globalThis.document, kind, data, onHome, onCreate, openMediaCollection, refreshBank, syncMonitor, confirmPayment, onStartLaunch, descriptionTimeoutMs = 30_000 } = {}) {
+export function createRegistrationGallery({ document: doc = globalThis.document, kind, data, onHome, onCreate, openMediaCollection, refreshBank, syncMonitor, confirmPayment, onStartLaunch, onStartProvision, descriptionTimeoutMs = 30_000 } = {}) {
   const model = REGISTRATION_GALLERY_MODELS[kind];
   let parentNavigation = null;
   if (!model || !doc?.body || typeof data?.loadSnapshot !== "function") {
@@ -353,6 +353,32 @@ export function createRegistrationGallery({ document: doc = globalThis.document,
   const filterSources = new Map([...filterControls.keys()].map(field => [field, data.getFilterSource?.(field)]).filter(([, source]) => source));
   let pendingMutations = 0;
   let bankController = null;
+  let provisionController = null;
+  async function startDdaProvision(row) {
+    if (destroyed || root.hidden || provisionController || bankController || attachmentLoading || root.getAttribute('aria-busy') === 'true') return;
+    const controller = new AbortController();
+    provisionController = controller;
+    const isCurrent = () => !destroyed && !root.hidden && provisionController === controller && !controller.signal.aborted;
+    const syncButtons = () => {
+      for (const button of root.querySelectorAll('[data-dda-create-provision]')) button.disabled = Boolean(provisionController);
+    };
+    syncButtons();
+    attachmentNotice = 'Carregando anexos para criar a provisão…'; updateFeedback();
+    try {
+      const started = await onStartProvision({ itemId: Number(row.id),
+        key: registrationRawField(row.fields, 'CHAVE_DDA', model), signal: controller.signal });
+      if (!isCurrent()) return;
+      if (!started) throw new Error('Transferência não confirmada.');
+      hide();
+    } catch {
+      if (isCurrent()) {
+        attachmentNotice = 'Não foi possível iniciar a provisão com os anexos do DDA. Tente novamente.';
+        updateFeedback();
+      }
+    } finally {
+      if (provisionController === controller) { provisionController = null; syncButtons(); }
+    }
+  }
   const paymentConfirmation = kind === 'dda' ? createDdaPaymentConfirmation({ document: doc, host: root, confirmPayment, onStartLaunch, onLaunchStarted: () => hide(),
     onConfirmed: receipt => {
       if (destroyed || root.hidden) return;
@@ -928,8 +954,10 @@ export function createRegistrationGallery({ document: doc = globalThis.document,
         if (kind === 'workDiary') renderWorkDiaryCardDetails({ document: doc, container: main, rowId: row.id, title: primary, value: field => rowFieldValue(row, field) });
         else if (kind === 'asset') renderAssetGalleryCard({ document: doc, container: main, rowId: row.id, title: primary, value: field => rowFieldValue(row, field) });
         else if (kind === 'dda') renderDdaCard({ document: doc, container: main, rowId: row.id, title: primary, value: field => rowFieldValue(row, field), raw: field => registrationRawField(row.fields, field, model),
+          onCreateProvision: typeof onStartProvision === 'function' ? () => { void startDdaProvision(row); } : undefined,
+          provisionBusy: Boolean(provisionController),
           onConfirmPayment: trigger => {
-            if (destroyed || root.hidden || bankController || root.getAttribute('aria-busy') === 'true') return;
+            if (destroyed || root.hidden || bankController || provisionController || root.getAttribute('aria-busy') === 'true') return;
             paymentConfirmation.show({ itemId: row.id, key: registrationRawField(row.fields, 'CHAVE_DDA', model),
               supplier: primary, amount: rowFieldValue(row, 'VALOR'), due: rowFieldValue(row, 'VENCIMENTO') }, trigger);
           } });
@@ -1130,6 +1158,9 @@ export function createRegistrationGallery({ document: doc = globalThis.document,
 
   function hide() {
     if (root.hidden) return;
+    if (provisionController) attachmentNotice = '';
+    provisionController?.abort();
+    provisionController = null;
     assetReport?.close();
     paymentConfirmation?.close();
     bankReceipt?.close();
@@ -1231,6 +1262,6 @@ export function createRegistrationGallery({ document: doc = globalThis.document,
       if(returnPending)returnedForManual=true;showBankNotice();await load();showBankNotice();
     },
     close: hide,
-    destroy() { unsubscribeFiscal?.(); unsubscribeBank?.(); paymentConfirmation?.destroy(); bankReceipt?.destroy(); bankController?.abort(); stopDdaClock(); loadController?.abort(); assetReport?.destroy(); descriptionDetail?.destroy(); loadingScreen.destroy(); createShortcut.destroy(); refreshShortcut.destroy(); recordActions.destroy(); searchableFilters.destroy(); destroyed = true; request += 1; filterEpoch += 1; attachmentCountQueue = []; root.remove(); },
+    destroy() { provisionController?.abort(); provisionController = null; unsubscribeFiscal?.(); unsubscribeBank?.(); paymentConfirmation?.destroy(); bankReceipt?.destroy(); bankController?.abort(); stopDdaClock(); loadController?.abort(); assetReport?.destroy(); descriptionDetail?.destroy(); loadingScreen.destroy(); createShortcut.destroy(); refreshShortcut.destroy(); recordActions.destroy(); searchableFilters.destroy(); destroyed = true; request += 1; filterEpoch += 1; attachmentCountQueue = []; root.remove(); },
   };
 }

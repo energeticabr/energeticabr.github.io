@@ -1,4 +1,4 @@
-import test from 'node:test';
+import nodeTest from 'node:test';
 import assert from 'node:assert/strict';
 import { JSDOM } from 'jsdom';
 import { createAppController } from '../src/app-controller.js';
@@ -10,7 +10,10 @@ const key = 'a'.repeat(64);
 const request = signal => ({ itemId: 31, key, signal });
 const tick = () => new Promise(resolve => setImmediate(resolve));
 const deferred = () => { let resolve; const promise = new Promise(r => { resolve = r; }); return { promise, resolve }; };
-const launch = { id: 'launch', contextId: 'fake-launch', title: 'EFETUAR LANÇAMENTO' };
+for (const target of [{ id: 'launch', reply: 'action_launch', text: 'EFETUAR LANÇAMENTO', callback: 'onStartLaunch' },
+  { id: 'payment_provision', reply: 'action_payment', text: 'CRIAR UMA PROVISÃO DE PAGAMENTO', callback: 'onStartProvision' }]) {
+const test = (name, ...args) => nodeTest(`${target.id}: ${name}`, ...args);
+const launch = { id: target.id, contextId: `fake-${target.id}`, title: target.text };
 const remote = (id, fileName) => ({ id, fileName, mimeType: 'application/pdf', size: 8, mediaUrl: `/api/portal-media/${id}` });
 
 async function setup(t, { kind = 'report', data: dataOverrides = {}, client: clientOverrides = {} } = {}) {
@@ -40,7 +43,7 @@ async function setup(t, { kind = 'report', data: dataOverrides = {}, client: cli
     ...clientOverrides,
   };
   const sendLaunch = client.sendText;
-  client.sendText = (payload, options) => payload.replyId === 'action_launch'
+  client.sendText = (payload, options) => payload.replyId === target.reply
     ? sendLaunch(payload, options) : Promise.resolve({ status: 'processed', messages: [] });
   const controller = createAppController({ store, view, client,
     auth: { initialize: async () => ({ homeAccountId: 'fake-dda-owner', name: 'Teste fictício' }), getToken: async () => 'fake', signOut: async () => {} },
@@ -61,17 +64,17 @@ async function setup(t, { kind = 'report', data: dataOverrides = {}, client: cli
 
 for (const kind of ['report', 'dda']) test(`${kind}: exact DDA files become visible uploaded launch attachments without posting`, async t => {
   const h = await setup(t, { kind });
-  assert.equal(typeof h.options.onStartLaunch, 'function');
+  assert.equal(typeof h.options[target.callback], 'function');
   const previous = remote('existing', 'anterior.pdf');
   h.store.syncAttachments([previous]); h.store.setDraft('rascunho fictício');
   const abort = new AbortController();
-  assert.equal(await h.options.onStartLaunch(request(abort.signal)), true);
+  assert.equal(await h.options[target.callback](request(abort.signal)), true);
   assert.deepEqual(h.calls.filter(c => c[0] !== 'close').map(c => c[0]), ['list', 'download', 'download', 'text', 'upload', 'upload']);
   assert.deepEqual(h.calls[0], ['list', 31, { refresh: true, signal: abort.signal }]);
   assert.deepEqual(h.calls.filter(c => c[0] === 'download').map(c => c.slice(1, 3)), [[31, 'espelho.pdf'], [31, 'boleto.pdf']]);
   for (const call of h.calls.filter(c => c[0] === 'download')) assert.equal(call[3].signal, abort.signal);
-  assert.deepEqual(h.calls.find(c => c[0] === 'text')[1], { text: 'EFETUAR LANÇAMENTO', replyId: 'action_launch' });
-  assert.equal(h.store.getState().activeFlow.id, 'launch');
+  assert.deepEqual(h.calls.find(c => c[0] === 'text')[1], { text: target.text, replyId: target.reply });
+  assert.equal(h.store.getState().activeFlow.id, target.id);
   assert.deepEqual(h.store.getState().attachments.map(f => f.fileName), ['anterior.pdf', 'espelho.pdf', 'boleto.pdf']);
   assert.equal(h.store.getState().draft, 'rascunho fictício');
   assert.equal(h.store.getState().pendingFiles.length, 0);
@@ -79,7 +82,7 @@ for (const kind of ['report', 'dda']) test(`${kind}: exact DDA files become visi
   t.after(() => dom.window.close());
   for (const name of ['anterior.pdf', 'espelho.pdf', 'boleto.pdf']) assert.ok(dom.window.document.querySelector('.chat-file-tray').textContent.includes(name));
   const count = h.calls.length;
-  assert.equal(await h.options.onStartLaunch(request(new AbortController().signal)), true);
+  assert.equal(await h.options[target.callback](request(new AbortController().signal)), true);
   assert.equal(h.calls.length, count, 'retry does not navigate or upload duplicates');
 });
 
@@ -88,13 +91,13 @@ test('a failed second download leaves flow and tray untouched; retry never confi
   const old = remote('old', 'guardado.pdf'); h.store.syncAttachments([old]);
   const original = h.data.downloadAttachment;
   h.data.downloadAttachment = async (...args) => { if (args[1] === 'boleto.pdf') throw new Error('fake download failure'); return original(...args); };
-  await assert.rejects(h.options.onStartLaunch(request()), /download/);
+  await assert.rejects(h.options[target.callback](request()), /download/);
   assert.equal(h.store.getState().activeFlow, null);
   assert.deepEqual(h.store.getState().attachments.map(f => f.id), ['old']);
   assert.equal(h.store.getState().pendingFiles.length, 0);
   assert.equal(h.calls.some(c => ['text', 'upload'].includes(c[0])), false);
   h.data.downloadAttachment = original;
-  assert.equal(await h.options.onStartLaunch(request()), true);
+  assert.equal(await h.options[target.callback](request()), true);
   assert.equal(h.calls.filter(c => c[0] === 'list').length, 2);
 });
 
@@ -102,7 +105,7 @@ for (const end of ['abort', 'logout', 'stop', 'navigate']) test(`${end} during d
   const wait = deferred();
   const h = await setup(t, { data: { downloadAttachment: () => wait.promise } });
   const abort = new AbortController();
-  const pending = h.options.onStartLaunch(request(abort.signal)).catch(error => error);
+  const pending = h.options[target.callback](request(abort.signal)).catch(error => error);
   await tick();
   if (end === 'abort') abort.abort();
   if (end === 'logout') await h.view.emit('sign-out');
@@ -117,7 +120,7 @@ for (const end of ['abort', 'logout', 'stop', 'navigate']) test(`${end} during d
 
 test('unexpected flow response is not success and never uploads', async t => {
   const h = await setup(t, { client: { sendText: async () => ({ status: 'processed', messages: [], activeFlow: { id: 'other' } }) } });
-  assert.notEqual(await h.options.onStartLaunch(request()).catch(error => error), true);
+  assert.notEqual(await h.options[target.callback](request()).catch(error => error), true);
   assert.equal(h.calls.some(c => c[0] === 'upload'), false);
 });
 
@@ -125,11 +128,11 @@ test('retry after upload failure reuses launch and sends only unconfirmed files'
   const h = await setup(t);
   const upload = h.client.sendFile; let fail = true;
   h.client.sendFile = async (file, options) => { if (file.name === 'boleto.pdf' && fail) throw new Error('fake upload failure'); return upload(file, options); };
-  assert.notEqual(await h.options.onStartLaunch(request()).catch(error => error), true);
+  assert.notEqual(await h.options[target.callback](request()).catch(error => error), true);
   assert.deepEqual(h.store.getState().attachments.map(f => f.fileName), ['espelho.pdf']);
   assert.deepEqual(h.store.getState().pendingFiles.map(f => f.file.name), ['boleto.pdf']);
   fail = false;
-  assert.equal(await h.options.onStartLaunch(request()), true);
+  assert.equal(await h.options[target.callback](request()), true);
   assert.equal(h.calls.filter(c => c[0] === 'text').length, 1);
   assert.deepEqual(h.store.getState().attachments.map(f => f.fileName), ['espelho.pdf', 'boleto.pdf']);
   assert.equal(h.store.getState().pendingFiles.length, 0);
@@ -138,7 +141,7 @@ test('retry after upload failure reuses launch and sends only unconfirmed files'
 test('pending tray files survive navigation but are not uploaded by the DDA handoff', async t => {
   const h = await setup(t);
   h.store.queueFiles([new File(['fake'], 'pessoal.pdf', { type: 'application/pdf' })]);
-  assert.equal(await h.options.onStartLaunch(request()), true);
+  assert.equal(await h.options[target.callback](request()), true);
   assert.deepEqual(h.store.getState().pendingFiles.map(f => f.file.name), ['pessoal.pdf']);
   assert.deepEqual(h.uploaded.map(f => f.fileName), ['espelho.pdf', 'boleto.pdf']);
 });
@@ -146,7 +149,7 @@ test('pending tray files survive navigation but are not uploaded by the DDA hand
 test('cancellation while launch response is pending does not install the late flow', async t => {
   const wait = deferred(), abort = new AbortController();
   const h = await setup(t, { client: { sendText: () => wait.promise } });
-  const pending = h.options.onStartLaunch(request(abort.signal)).catch(error => error);
+  const pending = h.options[target.callback](request(abort.signal)).catch(error => error);
   await tick(); abort.abort();
   wait.resolve({ status: 'processed', messages: [], activeFlow: launch });
   assert.notEqual(await pending, true);
@@ -159,14 +162,14 @@ test('concurrent offers do not duplicate navigation or uploads', async t => {
   const wait = deferred(); const h = await setup(t);
   const original = h.data.listAttachments;
   h.data.listAttachments = async (...args) => { await wait.promise; return original(...args); };
-  const first = h.options.onStartLaunch(request());
-  const second = h.options.onStartLaunch(request());
+  const first = h.options[target.callback](request());
+  const second = h.options[target.callback](request());
   wait.resolve(); await Promise.all([first, second]);
   assert.equal(h.calls.filter(c => c[0] === 'text').length, 1);
   assert.equal(h.uploaded.length, 2);
 });
 
-test('real offer consumes success before its panel closes and aborts the modal signal', async t => {
+if (target.id === 'launch') test('real offer consumes success before its panel closes and aborts the modal signal', async t => {
   const h = await setup(t);
   const dom = new JSDOM('<main id="host"><button id="trigger">DDA fictício</button></main>');
   t.after(() => dom.window.close());
@@ -175,7 +178,7 @@ test('real offer consumes success before its panel closes and aborts the modal s
   const dialog = createDdaPaymentConfirmation({ document: doc, host,
     confirmPayment: async () => ({ status: 'confirmed', itemId: 31, key, confirmedBy: 'Fictício', confirmedAt: '2026-10-30T12:00:00Z' }),
     onConfirmed() {},
-    onStartLaunch: async input => { offeredSignal = input.signal; const result = await h.options.onStartLaunch(input); accepted = result; return result; },
+    onStartLaunch: async input => { offeredSignal = input.signal; const result = await h.options[target.callback](input); accepted = result; return result; },
     onLaunchStarted: () => h.panel.close(),
   });
   t.after(() => dialog.destroy());
@@ -196,14 +199,14 @@ test('handoff preserves existing uploaded tray even when each upload response co
   h.store.syncAttachments([remote('existing', 'pessoal.pdf')]);
   h.client.sendFile = async file => ({ status: 'processed', messages: [], activeFlow: launch,
     attachments: [remote(file.name, file.name)] });
-  assert.equal(await h.options.onStartLaunch(request()), true);
+  assert.equal(await h.options[target.callback](request()), true);
   assert.deepEqual(h.store.getState().attachments.map(f => f.fileName), ['pessoal.pdf', 'espelho.pdf', 'boleto.pdf']);
 });
 
 for (const end of ['abort', 'logout', 'stop', 'navigate']) test(`${end} during upload cannot install late files or continue the batch`, async t => {
   const wait = deferred(), abort = new AbortController(); let uploads = 0, uploadSignal;
   const h = await setup(t, { client: { sendFile: (file, options) => { uploads++; uploadSignal = options.progressSignal; return wait.promise; } } });
-  const pending = h.options.onStartLaunch(request(abort.signal)).catch(error => error);
+  const pending = h.options[target.callback](request(abort.signal)).catch(error => error);
   await tick();
   assert.equal(uploads, 1);
   if (end === 'abort') abort.abort();
@@ -221,8 +224,8 @@ for (const end of ['abort', 'logout', 'stop', 'navigate']) test(`${end} during u
 test('a DDA with no attachments still opens normal launch preserving the tray', async t => {
   const h = await setup(t, { data: { listAttachments: async () => [] } });
   h.store.syncAttachments([remote('old', 'guardado.pdf')]);
-  assert.equal(await h.options.onStartLaunch(request()), true);
-  assert.equal(h.store.getState().activeFlow.id, 'launch');
+  assert.equal(await h.options[target.callback](request()), true);
+  assert.equal(h.store.getState().activeFlow.id, target.id);
   assert.deepEqual(h.store.getState().attachments.map(f => f.id), ['old']);
   assert.equal(h.uploaded.length, 0);
 });
@@ -234,7 +237,7 @@ for (const phase of ['list', 'download', 'navigation', 'upload']) test(`cancelle
   if (phase === 'download') h.data.downloadAttachment = () => wait.promise;
   if (phase === 'navigation') h.client.sendText = () => wait.promise;
   if (phase === 'upload') h.client.sendFile = () => wait.promise;
-  const pending = h.options.onStartLaunch(request(abort.signal)).catch(error => error);
+  const pending = h.options[target.callback](request(abort.signal)).catch(error => error);
   await tick(); abort.abort();
   const result = await Promise.race([pending, tick().then(() => 'still waiting')]);
   // Release the fake transport even on a failing assertion, to leave no task running.
@@ -249,20 +252,20 @@ for (const phase of ['list', 'download', 'navigation', 'upload']) test(`cancelle
 test('a missing launch confirmation cannot reuse a previous launch as successful navigation', async t => {
   const h = await setup(t, { kind: 'dda', client: { sendText: async () => ({ status: 'processed', messages: [] }) } });
   h.store.ingestRemoteMessages([], { activeFlow: launch });
-  assert.notEqual(await h.options.onStartLaunch(request()).catch(error => error), true);
+  assert.notEqual(await h.options[target.callback](request()).catch(error => error), true);
   assert.equal(h.uploaded.length, 0);
 });
 
 test('other registration galleries never receive the DDA launch handoff', async t => {
   const h = await setup(t, { kind: 'asset' });
   assert.equal(h.options.kind, 'asset');
-  assert.equal(h.options.onStartLaunch, undefined);
+  assert.equal(h.options[target.callback], undefined);
 });
 
 test('navigation during pending text clears busy immediately and late response cannot change the new draft', async t => {
   const wait = deferred(), h = await setup(t);
   h.client.sendText = () => wait.promise;
-  const pending = h.options.onStartLaunch(request()).catch(error => error);
+  const pending = h.options[target.callback](request()).catch(error => error);
   await tick(); assert.ok(h.store.getState().activeText);
   await h.view.emit('draft-changed', { value: 'outra tarefa fictícia' });
   assert.equal(h.store.getState().activeText, null);
@@ -285,7 +288,7 @@ test('upload without receipt waits for real attachment snapshots before removing
     snapshots.push(h.store.getState().pendingFiles.map(file => file.file.name));
     return [remote('old', 'anterior.pdf'), ...uploaded];
   };
-  assert.equal(await h.options.onStartLaunch(request()), true);
+  assert.equal(await h.options[target.callback](request()), true);
   assert.deepEqual(snapshots, [['espelho.pdf', 'boleto.pdf'], ['boleto.pdf']]);
   assert.deepEqual(h.store.getState().attachments.map(file => file.fileName), ['anterior.pdf', 'espelho.pdf', 'boleto.pdf']);
   assert.equal(h.store.getState().pendingFiles.length, 0);
@@ -296,11 +299,11 @@ test('upload lacking receipt and snapshot keeps its pending file for a successfu
   h.store.syncAttachments([remote('old', 'anterior.pdf')]);
   const upload = h.client.sendFile;
   h.client.sendFile = async () => ({ status: 'processed', messages: [], activeFlow: launch });
-  assert.equal(await h.options.onStartLaunch(request()), false);
+  assert.equal(await h.options[target.callback](request()), false);
   assert.deepEqual(h.store.getState().pendingFiles.map(file => file.file.name), ['espelho.pdf', 'boleto.pdf']);
   assert.equal(h.store.getState().pendingFiles[0].status, 'failed');
   h.client.sendFile = upload;
-  assert.equal(await h.options.onStartLaunch(request()), true);
+  assert.equal(await h.options[target.callback](request()), true);
   assert.equal(h.calls.filter(c => c[0] === 'text').length, 1);
   assert.equal(h.store.getState().pendingFiles.length, 0);
 });
@@ -318,7 +321,7 @@ test('renewed public IDs reconcile existing and earlier DDA uploads without dupl
       { ...remote(`new-${sequence}`, file.name), size: file.size, mimeType: file.type },
     ] };
   };
-  assert.equal(await h.options.onStartLaunch(request()), true);
+  assert.equal(await h.options[target.callback](request()), true);
   assert.deepEqual(h.store.getState().attachments.map(file => file.fileName), ['anterior.pdf', 'espelho.pdf', 'boleto.pdf']);
   const confirmed = h.store.getState().attachments;
   let queries = 0, replies = 0;
@@ -334,6 +337,8 @@ test('preservation does not coalesce files sharing a name but having different m
   const old = remote('old', 'mesmo-nome.pdf'), other = { ...remote('other', 'mesmo-nome.pdf'), size: 99 };
   h.store.syncAttachments([old]);
   h.client.sendText = async () => ({ status: 'processed', messages: [], activeFlow: launch, attachments: [other] });
-  assert.equal(await h.options.onStartLaunch(request()), true);
+  assert.equal(await h.options[target.callback](request()), true);
   assert.deepEqual(h.store.getState().attachments.map(file => file.id), ['old', 'other']);
 });
+
+}
