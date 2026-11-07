@@ -2168,11 +2168,13 @@ test("adicionar anexo mantém a galeria aberta se a VM não retornar ao menu pri
   assert.equal(h.store.getState().activeFlow.id, "document_signing");
 });
 
-test("galeria reutiliza todos os anexos escolhidos e abre o menu principal antes de enviá-los à barra", async t => {
+test("galeria reutiliza todos os anexos escolhidos quando a conversa já está no menu principal", async t => {
   let callbacks;
   let previewOptions;
   let galleryCloseCount = 0;
   const uploadedFiles = [];
+  const remote = [];
+  const menu = { type: "poll", question: "QUAL ÁREA VOCÊ DESEJA ACESSAR?", options: [] };
   const h = makeHarness({
     registrationGalleryDataFactory: async ({ kind }) => ({ kind, loadSnapshot: async () => ({ rows: [] }) }),
     registrationGalleryFactory: async options => {
@@ -2185,15 +2187,18 @@ test("galeria reutiliza todos os anexos escolhidos e abre o menu principal antes
     h.chatCalls.push(["text", payload]);
     return {
       status: "processed",
+      activeFlow: null,
       returned_to_main_menu: true,
-      messages: [{ type: "poll", question: "QUAL ÁREA VOCÊ DESEJA ACESSAR?", options: [] }],
+      messages: [menu],
     };
   };
   h.client.sendFile = async file => {
     assert.equal(galleryCloseCount, 1, "a galeria deve fechar antes do primeiro envio de anexo");
     uploadedFiles.push(file);
     h.chatCalls.push(["file", file.name]);
-    return { status: "processed", messages: [{ type: "text", text: `Recebi ${file.name}` }] };
+    const id = `remote-${uploadedFiles.length}`;
+    remote.push({ id, fileName: file.name, mimeType: file.type, size: file.size, mediaUrl: `/api/portal-media/${id}` });
+    return { status: "processed", activeFlow: null, messages: [menu], attachments: [...remote] };
   };
   t.after(() => h.controller.stop());
   await h.controller.start();
@@ -2215,12 +2220,121 @@ test("galeria reutiliza todos os anexos escolhidos e abre o menu principal antes
   }), true);
 
   assert.deepEqual(h.chatCalls.slice(-3), [
-    ["text", { text: "", replyId: "portal_confirm_main_menu" }],
+    ["text", { text: "", replyId: "input_continue" }],
     ["file", "comprovante.pdf"],
     ["file", "foto.jpg"],
   ]);
   assert.deepEqual(await Promise.all(uploadedFiles.map(file => file.text())), ["PDF", "imagem"]);
   assert.deepEqual(uploadedFiles.map(file => file.type), ["application/pdf", "image/jpeg"]);
+  assert.deepEqual(h.store.getState().attachments.map(file => file.fileName), ["comprovante.pdf", "foto.jpg"]);
+});
+
+
+for (const includeAll of [true, false]) {
+  test(`DDA PDF viewer stages ${includeAll ? "all attachments" : "only the open attachment"} for an existing provision without abandoning Suprimentos`, async t => {
+    let gallery, preview, closed = false;
+    const uploaded = [], replies = [];
+    let failedUploadId;
+    const h = makeHarness({
+      registrationGalleryDataFactory: async () => ({ loadSnapshot: async () => ({ rows: [] }) }),
+      registrationGalleryFactory: async options => {
+        gallery = options;
+        return { open() {}, close() { closed = true; }, destroy() {} };
+      },
+    });
+    h.native.previewMediaCollection = async (_items, options) => { preview = options; };
+    t.after(() => h.controller.stop());
+    await h.controller.start();
+    const menu = { id: "menu:choosing_action", title: "SUPRIMENTOS", contextId: "supplies" };
+    const supplies = { type: "poll", question: "👉 📦 SUPRIMENTOS\nQUAL FLUXO VOCÊ DESEJA INICIAR?", options: [] };
+    const attachments = [{ id: "prior", fileName: "anterior.pdf", mimeType: "application/pdf", size: 7, mediaUrl: "/api/portal-media/prior" }];
+    const menuResponse = () => ({ status: "processed", activeFlow: menu, messages: [supplies], attachments: [...attachments] });
+    h.store.ingestRemoteMessages([supplies], menuResponse());
+    h.store.setDraft("texto preservado");
+    h.client.sendText = async ({ replyId }) => {
+      replies.push(replyId);
+      if (replyId === "portal_confirm_main_menu") return {
+        status: "processed", activeFlow: { id: "menu:confirming_portal_draft_exit" },
+        messages: [{ type: "poll", question: "TEM CERTEZA QUE DESEJA ABANDONAR ESTE FLUXO?",
+          options: [{ id: "portal_draft_exit_discard", label: "SIM, ABANDONAR" }] }],
+        attachments: [...attachments],
+      };
+      if (replyId === "input_continue") return menuResponse();
+      assert.equal(replyId, "action_payment_provision_attachment");
+      return { status: "processed", activeFlow: { id: "payment_provision_attachment", title: "ADICIONAR ANEXOS A UMA PROVISÃO DE PAGAMENTO" }, attachments: [...attachments],
+        messages: [{ type: "poll", question: "A QUAL PROVISÃO DE PAGAMENTO DESEJA ADICIONAR ANEXOS?", options: [] }] };
+    };
+    h.client.sendFile = async file => {
+      if (includeAll && file.name === "DANFE.pdf" && !failedUploadId) {
+        failedUploadId = file.uploadMessageId;
+        throw new Error("Falha temporária no DANFE");
+      }
+      if (failedUploadId && file.name === "DANFE.pdf") assert.equal(file.uploadMessageId, failedUploadId);
+      uploaded.push(file.name);
+      const id = `file-${uploaded.length}`;
+      attachments.push({ id, fileName: file.name, mimeType: file.type, size: file.size, mediaUrl: `/api/portal-media/${id}` });
+      return menuResponse();
+    };
+    await h.view.emit("select-reply", { replyId: "action_dda_gallery" });
+    const first = new Blob(["espelho"], { type: "application/pdf" });
+    const second = new Blob(["DANFE"], { type: "application/pdf" });
+    const items = [{ fileName: "espelho.pdf", source: first }, { fileName: "DANFE.pdf", source: async () => second }];
+    await gallery.openMediaCollection(items);
+
+    assert.equal(await preview.onAddToTray({
+      blob: includeAll ? first : second,
+      fileName: includeAll ? items[0].fileName : items[1].fileName,
+      attachments: includeAll ? items : [{ fileName: items[1].fileName, source: second }],
+    }), true);
+    assert.equal(closed, true);
+    if (includeAll) {
+      const [failed] = h.store.getState().pendingFiles;
+      assert.equal(failed.status, "failed");
+      assert.equal(failed.file.name, "DANFE.pdf");
+      assert.deepEqual(h.store.getState().attachments.map(item => item.fileName), ["anterior.pdf", "espelho.pdf"]);
+      assert.equal(await h.view.emit("retry-file", { fileId: failed.id }), true);
+    }
+    assert.deepEqual(uploaded, includeAll ? ["espelho.pdf", "DANFE.pdf"] : ["DANFE.pdf"]);
+    assert.deepEqual(replies, ["input_continue"]);
+    assert.equal(h.store.getState().activeFlow.id, menu.id);
+    assert.equal(h.store.getState().draft, "texto preservado");
+    assert.deepEqual(h.store.getState().attachments.map(item => item.fileName), ["anterior.pdf", ...uploaded]);
+    await h.view.emit("select-reply", { replyId: "action_payment_provision_attachment", label: "ADICIONAR ANEXOS A UMA PROVISÃO DE PAGAMENTO" });
+    assert.equal(h.store.getState().activeFlow.id, "payment_provision_attachment");
+    assert.deepEqual(h.store.getState().attachments.map(item => item.fileName), ["anterior.pdf", ...uploaded]);
+  });
+}
+
+test("DDA PDF viewer does not upload or replace the tray when the VM has opened another flow", async t => {
+  let gallery, preview, closed = false;
+  const h = makeHarness({
+    registrationGalleryDataFactory: async () => ({ loadSnapshot: async () => ({ rows: [] }) }),
+    registrationGalleryFactory: async options => {
+      gallery = options;
+      return { open() {}, close() { closed = true; }, destroy() {} };
+    },
+  });
+  h.native.previewMediaCollection = async (_items, options) => { preview = options; };
+  t.after(() => h.controller.stop());
+  await h.controller.start();
+  const menu = { id: "menu:choosing_action", title: "SUPRIMENTOS", contextId: "supplies" };
+  h.store.ingestRemoteMessages([], { activeFlow: menu });
+  h.store.setDraft("rascunho");
+  h.client.sendText = async ({ replyId }) => {
+    assert.equal(replyId, "input_continue");
+    return { status: "processed", activeFlow: { id: "payment", title: "CRIAR UMA PROVISÃO" },
+      messages: [{ type: "poll", question: "QUAL A FILIAL?", options: [] }] };
+  };
+  h.client.sendFile = async () => assert.fail("O PDF não pode ser enviado ao fluxo aberto em outra sessão");
+  await h.view.emit("select-reply", { replyId: "action_dda_gallery" });
+  const blob = new Blob(["espelho"], { type: "application/pdf" });
+  await gallery.openMediaCollection([{ fileName: "espelho.pdf", source: blob }]);
+
+  assert.equal(await preview.onAddToTray({ blob, fileName: "espelho.pdf" }), false);
+  assert.equal(closed, false);
+  assert.deepEqual(h.store.getState().activeFlow, menu);
+  assert.equal(h.store.getState().draft, "rascunho");
+  assert.deepEqual(h.store.getState().pendingFiles, []);
 });
 
 test("abrir Power BI obtém token delegado, solicita consentimento e navega ao menu pela casa", async t => {
