@@ -59,16 +59,23 @@ export async function copyDdaText(doc,text){
  finally{area.remove();if(focused?.isConnected)focused.focus?.();}
 }
 /** Compact presentation only: never changes bank status or financial values. */
-export function renderDdaCard({document:doc,container,rowId,title,value,raw=value,now=new Date(),copyText=text=>copyDdaText(doc,text),onConfirmPayment}){
+export function renderDdaCard({document:doc,container,rowId,title,value,raw=value,now=new Date(),copyText=text=>copyDdaText(doc,text),onConfirmPayment,onCreateProvision,provisionBusy=false}){
  const el=(tag,cls,text)=>{const e=doc.createElement(tag);e.className=cls;if(text!==undefined)e.textContent=text;return e;};
  const heading=el('div','rg-dda-heading');heading.append(el('strong','rg-row-title',title),el('span','rg-dda-id','ID '+rowId));container.append(heading);
+ const actions=el('div','rg-dda-card-actions');
  if(onConfirmPayment){
   const paid=ddaPaidManually(raw('PGTO_CONFIRMADO'))||/^(pago|liquidado)(\b|$)/i.test(String(value('SITUACAO')));
   const button=el('button','rg-dda-confirm-payment');button.type='button';button.dataset.ddaConfirmPayment=String(rowId);
   button.disabled=paid;button.setAttribute('aria-label',paid?'Pagamento já confirmado do DDA '+rowId:'Confirmar pagamento do DDA '+rowId);
-  button.title=paid?'Pagamento confirmado':'Confirmar pagamento';button.append(icon(doc,'check'));heading.append(button);
+  button.title=paid?'Pagamento confirmado':'Confirmar pagamento';button.append(icon(doc,'check'));actions.append(button);
   button.addEventListener('click',()=>onConfirmPayment(button));
  }
+ if(onCreateProvision){
+  const button=el('button','rg-dda-create-provision','PROVISÃO');button.type='button';button.dataset.ddaCreateProvision=String(rowId);
+  button.disabled=provisionBusy;button.setAttribute('aria-label','Criar provisão de pagamento com anexos do DDA '+rowId);
+  button.addEventListener('click',()=>onCreateProvision(button));actions.append(button);
+ }
+ if(actions.childNodes.length)heading.append(actions);
  const pair=(parent,field,label,symbol,cls='')=>{
   const cell=el('div','rg-dda-field '+cls);cell.dataset.field=field;
   cell.append(icon(doc,symbol),el('dt','',label),el('dd','',value(field)||'—'));parent.append(cell);return cell;
