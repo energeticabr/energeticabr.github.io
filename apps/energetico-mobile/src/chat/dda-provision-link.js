@@ -4,7 +4,23 @@ import {provisionDescriptionLinkColumn} from './provision-description-detail-dat
 export const DDA_PROVISION_FIELD='DESCRITIVOPROVIS_x00c3_O';
 const validId=value=>/^[1-9]\d*$/.test(String(value??''))&&Number.isSafeInteger(Number(value));
 const nameKey=value=>String(value??'').normalize('NFD').replace(/[\u0300-\u036f]/g,'').toUpperCase().replace(/[^A-Z0-9]+/g,' ').trim();
-const tokens=value=>new Set(nameKey(value).split(' ').filter(part=>part.length>2&&!['LTDA','EIRELI','S A','SA','ME','EMPRESA'].includes(part)));
+const legalNameTokens=new Set(['LTDA','LIMITADA','EIRELI','SA','EPP','MEI','ME','DO','DA','DE','DOS','DAS','NO','NA','NOS','NAS','EM','AO','AOS','OS','AS','UM','UMA','S','A','E','O']);
+const genericNameTokens=new Set(['EMPRESA','COMERCIO','COMERCIAL','COMERCIAIS','INDUSTRIA','INDUSTRIAL','SERVICOS','BRASIL','FORNECEDOR','NAO','INFORMADO','ENGENHARIA','CONSTRUCAO','CONSTRUCOES','CONCRETO','CONCRETOS','MATERIAL','MATERIAIS']);
+const tokens=value=>new Set(nameKey(value).split(' ').filter(part=>part&&!legalNameTokens.has(part)));
+function nameCoverage(parts,other){
+ if(!parts.size||!other.size)return 0;
+ const shared=[...parts].filter(part=>other.has(part)).length;
+ return 0.7*shared/Math.min(parts.size,other.size)+0.3*shared/Math.max(parts.size,other.size);
+}
+function supplierSimilarity(parts,other){
+ const distinctive=set=>new Set([...set].filter(part=>!genericNameTokens.has(part)));
+ const left=distinctive(parts),right=distinctive(other);
+ if(!left.size||!right.size)return 0;
+ // A shortened supplier name can contain only the distinctive part of its legal name.
+ const identity=[...left].join('')===[...right].join('')?1:nameCoverage(left,right);
+ // Generic sector words may refine an existing name match, never establish one.
+ return identity>=0.5?0.8*identity+0.2*nameCoverage(parts,other):0;
+}
 const amountKey=value=>{let text=String(value??'').trim().replace(/R\$|\s/g,'');if(text.includes(','))text=text.replace(/\./g,'').replace(',','.');const number=/^\d+(?:\.\d+)?$/.test(text)?Number(text):null;return number!=null&&Number.isFinite(number)?Math.round(number*100):null;};
 const columnKey=value=>nameKey(String(value??'').replace(/_x([0-9a-f]{4})_/gi,(_,hex)=>String.fromCodePoint(parseInt(hex,16)))).replace(/ /g,'');
 function childField(fields,columns,...aliases){
@@ -16,11 +32,9 @@ function childField(fields,columns,...aliases){
  }
 }
 export function rankDdaProvisionOptions(options,{supplier,amount,due}={}){
- const query=nameKey(supplier),parts=tokens(supplier),wanted=amountKey(amount);
- return options.map(item=>{
-  const candidate=nameKey(item.supplier),other=tokens(item.supplier);
-  const shared=[...parts].filter(part=>other.has(part)).length;
-  const similarity=query&&candidate?(query===candidate?1:shared/Math.max(parts.size,other.size,1)):0;
+ const parts=tokens(supplier),wanted=amountKey(amount);
+ const ranked=options.map(item=>{
+  const similarity=supplierSimilarity(parts,tokens(item.supplier));
   const supplierMatch=similarity>=0.5;
   const totalMatch=wanted!=null&&amountKey(item.amount)===wanted;
   const matches=(item.provisions||[]).filter(line=>wanted!=null&&amountKey(line.amount)===wanted);
@@ -32,7 +46,11 @@ export function rankDdaProvisionOptions(options,{supplier,amount,due}={}){
   // A matching line's own due date is stronger evidence than its group's due date.
   const dueScore=amountMatch?Math.max(totalMatch?proximity(item.due):0,...matches.map(line=>proximity(line.due))):supplierMatch?proximity(item.due):0;
   return {...item,supplierMatch,amountMatch,matchedProvision,score:(supplierMatch?2+similarity:0)+(amountMatch?2:0)+dueScore};
- }).sort((a,b)=>b.score-a.score||Number(a.id)-Number(b.id)).map((item,index)=>({...item,recommended:index===0&&item.score>0}));
+ });
+ const hasAmountMatch=ranked.some(item=>item.amountMatch);
+ return ranked.sort((a,b)=>Number(b.amountMatch)-Number(a.amountMatch)||b.score-a.score||Number(a.id)-Number(b.id)).map((item,index)=>({
+  ...item,recommended:index===0&&item.score>0,matchReason:item.amountMatch?'amount':!hasAmountMatch&&item.supplierMatch?'supplier':'',
+ }));
 }
 
 export function createDdaProvisionLink({repository,siteKey='personal',assertSession=()=>{}}){

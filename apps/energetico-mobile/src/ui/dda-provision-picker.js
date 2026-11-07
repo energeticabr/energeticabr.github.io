@@ -32,6 +32,7 @@ export function createDdaProvisionPicker({document:doc,host,service,onLinked,tim
     label.toggleAttribute('data-edit-changed',choice.checked&&item.id!==String(row.provisionId||''));
     label.append(choice,text);
     if(item.matchedProvision){const line=item.matchedProvision;label.append(el('span','dda-provision-line-match',`Provisão #${line.id} · ${money(line.amount)}${line.due?' · Previsto '+String(line.due).slice(0,10).split('-').reverse().join('/'):''} · mesmo valor deste DDA`));}
+    if(item.matchReason==='supplier')label.append(el('span','dda-provision-name-match','Nome do fornecedor semelhante ao DDA'));
     list.append(label);
    }
    feedback.textContent=entry.options.length?`${visible.length} descritivo(s) sem data de pagamento efetuado. Escolha um para vincular.`:'Nenhum descritivo provisão sem data de pagamento efetuado foi encontrado.';

@@ -12,9 +12,9 @@ test('DDA link review follows landscape and keeps cancel and submit usable',{tim
  if(!browser)return t.skip('Chrome unavailable');
  const root=resolve(fileURLToPath(new URL('..',import.meta.url)));
  const server=await createServer({root,server:{host:'127.0.0.1',port:0,fs:{allow:[resolve(root,'../..')]}},logLevel:'silent'});
- try{await server.listen();for(const [width,height,safeAreaInsets] of [[320,740],[390,844],[844,390],[1365,900],[390,844,{top:59,bottom:34,left:11,right:23}]]){
+ try{await server.listen();for(const [width,height,safeAreaInsets,nameFallback] of [[320,740],[390,844],[844,390],[1365,900],[390,844,{top:59,bottom:34,left:11,right:23}],[390,844,undefined,true],[1365,900,undefined,true]]){
   const capture=process.env.DDA_REVIEW_CAPTURE_DIR;
-  const result=await runBrowserLayout(browser,{width,height,safeAreaInsets,captureScreenshot:Boolean(capture),url:`http://127.0.0.1:${server.httpServer.address().port}/tests/fixtures/dda-provision-review.html`});
+  const result=await runBrowserLayout(browser,{width,height,safeAreaInsets,captureScreenshot:Boolean(capture),url:`http://127.0.0.1:${server.httpServer.address().port}/tests/fixtures/dda-provision-review.html${nameFallback?'?fallback=1':''}`});
   const dom=new JSDOM(result.stdout);
   try{const state=JSON.parse(dom.window.document.documentElement.dataset.layout);
    for(const key of ['pickerMatch','pickerFits','fits','hit','focusInside','cancelled','confirmed'])assert.equal(state[key],true,JSON.stringify({width,key,state}));
@@ -23,7 +23,7 @@ test('DDA link review follows landscape and keeps cancel and submit usable',{tim
    if(height>width){const matrix=state.transform.match(/^matrix\(([^)]+)\)$/)?.[1].split(',').map(Number);
     assert.ok(matrix&&Math.abs(matrix[1]-1)<.001&&Math.abs(matrix[2]+1)<.001,'confirmation must share the report rotation: '+JSON.stringify({width,state}));
    }else assert.equal(state.transform,'none');
-   if(capture){mkdirSync(capture,{recursive:true});writeFileSync(join(capture,`dda-review-${width}${safeAreaInsets?'-safearea':''}.png`),result.screenshot);}
+   if(capture){mkdirSync(capture,{recursive:true});writeFileSync(join(capture,`dda-review-${width}${safeAreaInsets?'-safearea':''}${nameFallback?'-name':''}.png`),result.screenshot);}
   }finally{dom.window.close();}
  }}finally{await server.close();}
 });
