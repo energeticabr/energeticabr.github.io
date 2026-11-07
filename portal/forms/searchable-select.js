@@ -1,3 +1,5 @@
+import { matchesSearchTerms, normalizeSearchText } from '../core/search-text.js';
+
 let nextSearchableSelectId = 1;
 
 function optionKey(value) {
@@ -181,11 +183,11 @@ export function createSearchableSelect(root, config = {}) {
 
   function filterOptions(query) {
     const normalized = normalizeText(query);
-    const terms = normalized.split(/\s+/).filter(Boolean);
+    const terms = normalizeSearchText(query).split(' ').filter(Boolean);
     filteredOptions = Object.freeze(allOptions.filter(option => {
       if (normalized === providerQuery && providerMatches.has(optionKey(option.value))) return true;
-      const searchable = normalizeText(`${option.label} ${String(option.value)}`);
-      return terms.every(term => searchable.includes(term));
+      const searchable = normalizeSearchText(`${option.label}\0${String(option.value)}`);
+      return matchesSearchTerms(searchable, terms);
     }));
     return filteredOptions;
   }

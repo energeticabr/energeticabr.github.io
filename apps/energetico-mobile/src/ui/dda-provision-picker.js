@@ -1,3 +1,4 @@
+import { includesSearchText, normalizeSearchText } from '../../../../portal/core/search-text.js';
 import {confirmEditChanges,ensureEditReviewStyles} from '../../../../portal/ui/edit-review.js';
 import {rankDdaProvisionOptions} from '../chat/dda-provision-link.js';
 
@@ -25,7 +26,7 @@ export function createDdaProvisionPicker({document:doc,host,service,onLinked,tim
   const cancelEdit=()=>{if(current===entry&&!entry.busy)close();};cancel.addEventListener('click',cancelEdit);back.addEventListener('click',cancelEdit);
   overlay.addEventListener('keydown',event=>{if(event.key==='Escape'&&!entry.busy){event.preventDefault();event.stopPropagation();close();}if(event.key==='Tab'){const nodes=[...dialog.querySelectorAll('button:not(:disabled),input:not(:disabled)')];const index=nodes.indexOf(doc.activeElement);if(nodes.length){event.preventDefault();event.stopPropagation();nodes[(index+(event.shiftKey?-1:1)+nodes.length)%nodes.length].focus();}}});
   function render(){
-   if(current!==entry)return;list.replaceChildren();const term=search.value.trim().toLowerCase();const visible=entry.options.filter(item=>!term||`${item.id} ${item.supplier}`.toLowerCase().includes(term));
+   if(current!==entry)return;list.replaceChildren();const term=normalizeSearchText(search.value);const visible=entry.options.filter(item=>includesSearchText(normalizeSearchText(`${item.id} ${item.supplier}`),term));
    for(const item of visible){const label=el('label','dda-provision-option');if(item.recommended)label.append(el('strong','dda-provision-star','★ MAIS PROVÁVEL'));
     const choice=el('input');choice.type='radio';choice.name='dda-provision-choice';choice.value=item.id;choice.checked=entry.selected===item.id;choice.addEventListener('change',()=>{entry.selected=item.id;save.disabled=false;for(const option of list.children)option.toggleAttribute('data-edit-changed',option===label&&item.id!==String(row.provisionId||''));});
     const text=el('span','',`${item.label} · ${money(item.amount)}${item.due?' · Previsto '+String(item.due).slice(0,10).split('-').reverse().join('/'):''}`);

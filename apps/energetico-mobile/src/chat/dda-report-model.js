@@ -1,4 +1,5 @@
 import Decimal from 'decimal.js';
+import { includesSearchText, normalizeSearchText } from '../../../../portal/core/search-text.js';
 import {REGISTRATION_GALLERY_MODELS,registrationRawField,registrationDateKey,registrationNumber} from './registration-gallery-data.js';
 import {ddaTodayKey} from '../ui/dda-card.js';
 import {ddaPaidManually} from './dda-payment-confirmation.js';
@@ -29,9 +30,9 @@ export function normalizeDdaReportRows(snapshot){
  return Object.freeze(normalized.map(row=>Object.freeze({...row,supplierDdaCount:row.supplierCnpj?counts.get(row.supplierCnpj):null})));
 }
 export function buildDdaReport(rows,{status='Em aberto',bank='',search=''}={},now=new Date()){
- const query=ddaSearchKey(search),today=ddaTodayKey(now);
+ const query=normalizeSearchText(search),today=ddaTodayKey(now);
  const seventhDay=new Date(Date.parse(today+'T12:00:00Z')+7*86400000).toISOString().slice(0,10);
- const filtered=rows.filter(row=>(!status||(status==='Não pagos'?['Em aberto','Agendado'].includes(row.status):row.status===status))&&(!bank||row.bank===bank)&&(!query||ddaSearchKey([row.id,row.supplier,row.document,row.bank].join(' ')).includes(query)))
+ const filtered=rows.filter(row=>(!status||(status==='Não pagos'?['Em aberto','Agendado'].includes(row.status):row.status===status))&&(!bank||row.bank===bank)&&(!query||includesSearchText(normalizeSearchText([row.id,row.supplier,row.document,row.bank].join(' ')),query)))
   .sort((a,b)=>(a.due||'9999').localeCompare(b.due||'9999')||Number(a.id)-Number(b.id));
  const missingAmounts=filtered.filter(row=>row.amount==null).length;
  const dueToday=filtered.filter(row=>row.due===today);

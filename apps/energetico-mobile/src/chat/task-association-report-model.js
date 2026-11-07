@@ -1,3 +1,5 @@
+import { includesSearchText, normalizeSearchSeparators } from '../../../../portal/core/search-text.js';
+
 const DATE_FIELDS = ["createdDate", "dueDate"];
 const TEXT_FIELDS = ["description", "association", "status", "priority", "difficulty", "supplier"];
 const REQUIRED_FIELDS = ["id", ...DATE_FIELDS, ...TEXT_FIELDS];
@@ -106,7 +108,7 @@ export function buildTaskAssociationOverview(snapshot, filters = {}, todayISO) {
     throw new TypeError("O filtro de status deve ser um array de textos válidos.");
   }
   const statuses = selectedStatuses.map(key);
-  const description = key(filters.description);
+  const description = normalizeSearchSeparators(key(filters.description));
   const idText = text(filters.id);
   const id = idText ? identifier(idText) : null;
   const dueDate = calendarDate(filters.dueDate);
@@ -119,7 +121,7 @@ export function buildTaskAssociationOverview(snapshot, filters = {}, todayISO) {
   ])));
   const grouped = new Map();
   for (const row of source) {
-    if (statuses.length && !statuses.includes(key(row.status)) || description && !key(row.description).includes(description)
+    if (statuses.length && !statuses.includes(key(row.status)) || description && !includesSearchText(normalizeSearchSeparators(key(row.description)), description)
       || id !== null && row.id !== id || dueDate && row.dueDate !== dueDate
       || EXACT_FILTERS.some(field => selections[field] && key(row[field]) !== selections[field])) continue;
     if (!grouped.has(row.association)) grouped.set(row.association, []);

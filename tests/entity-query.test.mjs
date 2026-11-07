@@ -118,6 +118,21 @@ test("traduz um filtro exato indexado e uma busca unica em prefixo para o Graph"
   assert.equal(new URLSearchParams(searched.query).get("$filter"), "startswith(fields/Title,'O''HARA')");
 });
 
+test("pesquisa local e indexada aceita separadores e unidades equivalentes", () => {
+  const searchEntity = { searchFields: ["Title"] };
+  const searchColumns = [{ name: "Title", control: "text", indexed: true }];
+  const decimal = buildEntityGraphRequest(searchEntity, searchColumns, { search: "6.3" });
+  assert.equal(new URLSearchParams(decimal.query).get("$filter"),
+    "(startswith(fields/Title,'6.3') or startswith(fields/Title,'6,3'))");
+  const unit = buildEntityGraphRequest(searchEntity, searchColumns, { search: "8mm" });
+  assert.equal(new URLSearchParams(unit.query).get("$filter"),
+    "(startswith(fields/Title,'8mm') or startswith(fields/Title,'8 mm'))");
+  assert.equal(itemMatchesEntityQuery({ fields: { Title: "Vergalhão 6,3" } }, searchEntity, { search: "6.3" }), true);
+  assert.equal(itemMatchesEntityQuery({ fields: { Title: "Vergalhão 8 MM" } }, searchEntity, { search: "8mm" }), true);
+  assert.equal(itemMatchesEntityQuery({ fields: { Title: "Vergalhão 63" } }, searchEntity, { search: "6.3" }), false);
+  assert.equal(itemMatchesEntityQuery({ fields: { Title: "8 rolos de 10 mm" } }, searchEntity, { search: "8 mm" }), false);
+});
+
 test("nao percorre a lista quando a busca ou os filtros nao sao seguros no Graph", () => {
   const graphColumns = [
     { name: "Title", label: "Titulo", control: "text", indexed: true },

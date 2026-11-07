@@ -1,4 +1,5 @@
 import { ACTIONS, buildDefaultAccess, isSuperAdmin } from "../access/access-model.js";
+import { includesSearchText, normalizeSearchText } from "../core/search-text.js";
 import { escapeHtml, formatDateTime, normalizeEmail } from "../core/utils.js";
 import { SECURITY_APPLY_CONFIRMATION } from "../security/sharepoint-acl-service.js";
 
@@ -74,8 +75,8 @@ export function createAccessPage(root, {
   }
 
   function filteredUsers() {
-    const needle = state.search.trim().toLocaleLowerCase("pt-BR");
-    return state.users.filter(user => !needle || `${user.name} ${user.email}`.toLocaleLowerCase("pt-BR").includes(needle));
+    const needle = normalizeSearchText(state.search);
+    return state.users.filter(user => !needle || includesSearchText(normalizeSearchText(`${user.name} ${user.email}`), needle));
   }
 
   function render() {

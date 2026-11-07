@@ -1,27 +1,20 @@
 import { displayColumnValue } from "../data/column-mapper.js";
-
-function searchableText(value) {
-  return String(value ?? "")
-    .normalize("NFD")
-    .replace(/[\u0300-\u036f]/g, "")
-    .toLocaleUpperCase("pt-BR");
-}
+import { matchesSearchTerms, normalizeSearchText } from "../core/search-text.js";
 
 export function normalizeGallerySearchTerms(value, limit = 8) {
   const maximum = Math.max(1, Math.min(12, Number(limit) || 8));
-  const terms = searchableText(value).trim().split(/\s+/).filter(Boolean);
+  const terms = normalizeSearchText(value).toLocaleUpperCase("pt-BR").split(" ").filter(Boolean);
   return Object.freeze([...new Set(terms)].slice(0, maximum));
 }
 
 export function matchesGallerySearchTerms(fields = {}, searchFields = [], terms = []) {
-  const normalizedTerms = (terms || []).map(searchableText).filter(Boolean);
+  const normalizedTerms = (terms || []).map(normalizeSearchText).filter(Boolean);
   if (!normalizedTerms.length) return true;
   const haystack = [...new Set(searchFields || [])]
     .map(name => displayColumnValue(fields, { name }))
     .filter(value => value !== "Não informado")
-    .map(searchableText)
-    .join(" ");
-  return normalizedTerms.every(term => haystack.includes(term));
+    .join("\0");
+  return matchesSearchTerms(normalizeSearchText(haystack), normalizedTerms);
 }
 
 function shortDatePtBR(value, dateOnly = false) {

@@ -5,6 +5,7 @@ import {
   permissionMaskValue,
   permissionMaskSignature,
 } from "../security/sharepoint-permissions.js";
+import { normalizeSearchText, odataSearchPrefix, startsWithSearchText } from "../core/search-text.js";
 
 function normalizeName(value) {
   return String(value || "")
@@ -1097,7 +1098,7 @@ export function createSharePointRepository(graph, siteConfig, { attachmentTransp
         const collectionPath = restItemsCollectionPath(listId);
         const parameters = restItemsQuery({
           "$top": String(pageSize),
-          "$filter": `startswith(${field},${graphStringLiteral(term)})`,
+          "$filter": odataSearchPrefix(field, term),
         }, { fields });
         const payload = await restTransport.request(config, `${collectionPath}?${parameters}`, {
           method: "GET",
@@ -1112,7 +1113,7 @@ export function createSharePointRepository(graph, siteConfig, { attachmentTransp
         const parameters = new URLSearchParams();
         parameters.set("$expand", "fields");
         parameters.set("$top", String(pageSize));
-        parameters.set("$filter", `startswith(fields/${field},${graphStringLiteral(term)})`);
+        parameters.set("$filter", odataSearchPrefix(`fields/${field}`, term));
         const path = `/sites/${site.id}/lists/${encodeURIComponent(listId)}/items?${parameters}`;
         const payload = await graph.request(path, { method: "GET", signal: options.signal });
         items = boundedGraphItems(payload, pageSize);
@@ -1157,7 +1158,7 @@ export function createSharePointRepository(graph, siteConfig, { attachmentTransp
         const collectionPath = restItemsCollectionPath(relatedListId);
         const parameters = restItemsQuery({
           "$top": String(pageSize),
-          ...(term ? { "$filter": `startswith(${displayField},${graphStringLiteral(term)})` } : {}),
+          ...(term ? { "$filter": odataSearchPrefix(displayField, term) } : {}),
         }, { fields: [displayField] });
         if (browse) return Object.freeze((await getAllRestCollection(config, `${collectionPath}?${parameters}`, {method:'GET',permission:'read',signal:options.signal}, 'As opções relacionadas', pageSize)).map(canonicalRestItem).map(item => relationshipOption(item.id,item.fields[displayField])));
         const payload = await restTransport.request(config, `${collectionPath}?${parameters}`, {
@@ -1174,7 +1175,7 @@ export function createSharePointRepository(graph, siteConfig, { attachmentTransp
       const parameters = new URLSearchParams();
       parameters.set("$select", "id");
       parameters.set("$expand", `fields($select=${displayField})`);
-      if (term) parameters.set("$filter", `startswith(fields/${displayField},${graphStringLiteral(term)})`);
+      if (term) parameters.set("$filter", odataSearchPrefix(`fields/${displayField}`, term));
       parameters.set("$top", String(pageSize));
       const path = `/sites/${site.id}/lists/${encodeURIComponent(relatedListId)}/items?${parameters}`;
       if (browse) return Object.freeze((await getPaged(path,{...options,pageLimit:pageSize})).map(item=>relationshipOption(item?.id,item?.fields?.[displayField])));
@@ -1195,7 +1196,7 @@ export function createSharePointRepository(graph, siteConfig, { attachmentTransp
       const config = getSiteConfig(siteKey);
       const parameters = new URLSearchParams();
       parameters.set("$select", "Id,Title,Email,LoginName");
-      if (term) parameters.set("$filter", `startswith(Title,${graphStringLiteral(term)}) or startswith(Email,${graphStringLiteral(term)})`);
+      if (term) parameters.set("$filter", [odataSearchPrefix("Title", term), odataSearchPrefix("Email", term)].join(" or "));
       parameters.set("$orderby", "Title asc");
       parameters.set("$top", String(pageSize));
       if (browse) return Object.freeze((await getAllRestCollection(config, `/_api/web/siteusers?${parameters}`, {method:'GET',signal:options.signal}, 'As opções de pessoas', pageSize)).map(user=>relationshipOption(user?.Id??user?.id,user?.Title??user?.title,user?.Email??user?.email)));
@@ -1387,7 +1388,7 @@ export function createSharePointRepository(graph, siteConfig, { attachmentTransp
     const exactField = exact && valueDescriptor.kind === 'field' ? valueDescriptor.field : null;
     if (exactField && !directId && exactField.column?.indexed !== true) throw new Error(`O campo ${exactField.name} precisa estar indexado para validar a opção.`);
     const search = exactField && !directId ? `${fieldExpression(exactField.name)} eq ${metadataScalarLiteral(exactField, term)}` : (term && !exact ? searchFields : [])
-      .map(field => `startswith(${fieldExpression(field.name)},${graphStringLiteral(term)})`)
+      .map(field => odataSearchPrefix(fieldExpression(field.name), term))
       .join(" or ");
     const fixedFilterExpression = filter => filter.operator === "starts-with"
       ? `startswith(${fieldExpression(filter.target.name)},${graphStringLiteral(filter.value)})`
@@ -1457,7 +1458,8 @@ export function createSharePointRepository(graph, siteConfig, { attachmentTransp
       if (directId && (!dependencyFields.every(field => matches(field.target, field.value))
         || !fixedFilters.every(field => matches(field.target, field.value, field.operator))
         || fixedFilterGroups.length && !fixedFilterGroups.some(group => group.every(field => matches(field.target, field.value, field.operator))))) continue;
-      if (directId && term && !exact && !identityId && !searchFields.some(field => String(fields[field.name] ?? '').toLocaleUpperCase('pt-BR').startsWith(term.toLocaleUpperCase('pt-BR')))) continue;
+      if (directId && term && !exact && !identityId
+        && !searchFields.some(field => startsWithSearchText(normalizeSearchText(fields[field.name]), normalizeSearchText(term)))) continue;
       const readDescriptor = descriptor => descriptor.kind === 'field' ? fields[descriptor.field.name]
         : descriptor.parts.map(part => {
           if (part.kind === 'literal') return part.value;

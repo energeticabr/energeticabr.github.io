@@ -1,3 +1,5 @@
+import { includesSearchText, normalizeSearchSeparators } from '../../../../portal/core/search-text.js';
+
 const DATE_FIELDS = ["createdDate", "dueDate"];
 const TEXT_FIELDS = ["description", "association", "responsible", "status", "priority", "difficulty"];
 const REQUIRED_FIELDS = ["id", ...DATE_FIELDS, ...TEXT_FIELDS];
@@ -131,7 +133,7 @@ export function buildDelegatedDeadlineOverview(snapshot, filters = {}, todayISO)
     throw new TypeError("O filtro de status deve ser um array de textos válidos.");
   }
   const statuses = selectedStatuses.map(key);
-  const description = key(filters.description);
+  const description = normalizeSearchSeparators(key(filters.description));
   const selections = Object.fromEntries(EXACT_FILTERS.map(field => [field, key(filters[field])]));
   const metrics = Object.freeze({ total: source.length, pending: source.filter(pending).length,
     completed: source.filter(row => row.status === COMPLETED).length });
@@ -139,7 +141,7 @@ export function buildDelegatedDeadlineOverview(snapshot, filters = {}, todayISO)
     Object.freeze([...new Set(source.map(row => row[field]).filter(Boolean))].sort(collator.compare)),
   ])));
   const filtered = source.filter(row => !(statuses.length && !statuses.includes(row.status))
-    && !(description && !key(row.description).includes(description))
+    && !(description && !includesSearchText(normalizeSearchSeparators(key(row.description)), description))
     && EXACT_FILTERS.every(field => !selections[field] || key(row[field]) === selections[field]));
   filtered.sort(newestFirst);
   const displayed = filtered.slice(0, DETAIL_LIMIT);

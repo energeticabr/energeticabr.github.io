@@ -1,3 +1,4 @@
+import { includesSearchText, normalizeSearchText } from '../../../../portal/core/search-text.js';
 import { bindReportLandscape } from './report-landscape.js';
 import { addReportCloseControl } from './report-close-control.js';
 import {buildSupplierPayrollOverview,currentPayrollMonth,summarizePayrollPayments,summarizePayrollPaymentsByType,payrollReferencePeriod,payrollTypeAppearance,buildPayrollReportCsv} from '../chat/supplier-payroll-report-model.js';
@@ -138,8 +139,8 @@ export function createSupplierPayrollReportView({document:doc=globalThis.documen
  function render(){
   invalidateDetails();content.replaceChildren();showNotice('');if(!snapshot)return;
   const result=buildSupplierPayrollOverview(snapshot,selected());
-  const term=search.value.trim().normalize('NFD').replace(/[\u0300-\u036f]/g,'').toLocaleLowerCase('pt-BR');
-  for(const group of result.groups.filter(g=>`${g.supplier} ${g.profession} ${g.ids.join(' ')}`.normalize('NFD').replace(/[\u0300-\u036f]/g,'').toLocaleLowerCase('pt-BR').includes(term))){
+  const term=normalizeSearchText(search.value);
+  for(const group of result.groups.filter(g=>includesSearchText(normalizeSearchText(`${g.supplier} ${g.profession} ${g.ids.join(' ')}`),term))){
    const card=make('details','spr-supplier'),summary=make('summary'),detail=make('div','spr-detail');detail.hidden=true;
    const identity=make('span','spr-identity'),profile=make('span','spr-profile'),sheet=make('span','spr-sheet-block');
    const words=group.supplier.trim().split(/\s+/),initials=words[0].slice(0,1)+(words.length>1?words.at(-1).slice(0,1):'');

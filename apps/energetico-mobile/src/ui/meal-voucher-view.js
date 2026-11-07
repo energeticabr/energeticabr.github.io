@@ -1,3 +1,4 @@
+import { includesSearchText, normalizeSearchText } from '../../../../portal/core/search-text.js';
 import { mealVoucherLines, mealVoucherTotal, mealVoucherKey, validateMealVoucherDraft } from '../chat/meal-voucher.js';
 import { createLoadingIndicator, updateLoadingIndicator } from './loading-indicator.js';
 import { beginLoadingTask } from './loading-task.js';
@@ -216,7 +217,7 @@ export function createMealVoucherView({ data, root, documentRef = globalThis.doc
       }
     }
     table.append(tbody); content.append(table);
-    search.addEventListener('input', () => { const term = mealVoucherKey(search.value); for (const row of tbody.children) row.hidden = !mealVoucherKey(row.querySelector('strong').textContent).includes(term); });
+    search.addEventListener('input', () => { const term = normalizeSearchText(search.value); for (const row of tbody.children) row.hidden = !includesSearchText(normalizeSearchText(row.querySelector('strong').textContent), term); });
     const total = el('p', 'meal-voucher-total'); total.dataset.mealTotal = ''; content.append(total); totals();
     footer.append(button('Seguir', 'data-meal-next', async () => {
       try { branch(); } catch (cause) { showError(cause); return; }

@@ -9,6 +9,25 @@ const module = await import('../src/ui/searchable-filter-selects.js').catch(erro
 });
 const settle = () => new Promise(resolve => setImmediate(resolve));
 
+test('searchable filter keeps both option labels for equivalent input', t => {
+  const dom = new JSDOM('<section><select><option>Aço 6.3</option><option>Aço 6,3</option><option>Aço 63</option><option>Aço 8 MM</option><option>Aço 8MM</option><option>Aço 8 CM</option></select></section>');
+  const doc = dom.window.document;
+  const binding = module.bindSearchableFilterSelects(doc.querySelector('section'));
+  t.after(() => { binding.destroy(); dom.window.close(); });
+  const search = doc.querySelector('.sfs-search');
+  search.click();
+  for (const [query, expected] of [
+    ['6,3', ['Aço 6.3', 'Aço 6,3']],
+    ['aço 6.3', ['Aço 6.3', 'Aço 6,3']],
+    ['8mm', ['Aço 8 MM', 'Aço 8MM']],
+    ['8 mm', ['Aço 8 MM', 'Aço 8MM']],
+  ]) {
+    search.value = query;
+    search.dispatchEvent(new dom.window.Event('input', { bubbles: true }));
+    assert.deepEqual([...doc.querySelectorAll('[role=option]')].map(option => option.textContent), expected, query);
+  }
+});
+
 test('selection-only edit picker cannot erase or type and allows choosing another option',t=>{
   const dom=new JSDOM('<form><label>Status<select><option selected>ATIVO</option><option>PENDENTE</option></select></label></form>');
   const doc=dom.window.document,select=doc.querySelector('select');

@@ -1,3 +1,4 @@
+import { containsSearchText } from '../../../../portal/core/search-text.js';
 import { SHAREPOINT_SITES } from '../../../../portal/config.js';
 import { createGraphClient } from '../../../../portal/data/graph-client.js';
 import { createSharePointRepository } from '../../../../portal/data/sharepoint-repository.js';
@@ -7,7 +8,7 @@ const text = value => value == null ? '' : typeof value === 'object' ? JSON.stri
 const key = value => text(value).normalize('NFD').replace(/[\u0300-\u036f]/g, '').trim().toLocaleUpperCase('pt-BR');
 export function filterContractorEmploymentRows(rows, filters = {}) {
   return rows.filter(row => ['STATUS', 'FILIAL', 'CARGO'].every(name => !filters[name] || key(row.fields?.[name]) === key(filters[name]))
-    && (!filters.search || key([row.id, ...Object.values(row.fields || {}), row.createdBy, row.lastModifiedBy, row.createdDateTime, row.lastModifiedDateTime].map(text).join(' ')).includes(key(filters.search))));
+    && (!filters.search || containsSearchText([row.id, ...Object.values(row.fields || {}), row.createdBy, row.lastModifiedBy, row.createdDateTime, row.lastModifiedDateTime].map(text).join(' '), filters.search)));
 }
 /** Gallery and supplier form use the same RH-only editor and status checkpoint rules. */
 export function createContractorEmploymentData(options = {}) {
