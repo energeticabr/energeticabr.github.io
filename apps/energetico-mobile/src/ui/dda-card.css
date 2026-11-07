@@ -112,6 +112,17 @@
 .rg-dda-confirm-payment { flex: 0 0 44px; width: 44px; height: 44px; display: grid; place-items: center; border: 1px solid #147655; border-radius: 10px; background: #e6f6ed; color: #126443; cursor: pointer; }
 .rg-dda-confirm-payment:disabled { background: #d6efdf; opacity: .7; cursor: default; }
 .rg-dda-confirm-payment:focus-visible { outline: 3px solid #1864ab; outline-offset: 2px; }
+.rg-dda-heading .rg-row-title { min-width: 0; overflow-wrap: anywhere; }
+.rg-dda-card-actions { display: flex; flex-direction: column; align-items: center; gap: 6px; flex-shrink: 0; }
+.rg-dda-create-provision { min-height: 44px; padding: 6px; border: 1px solid #245da8; border-radius: 8px; color: #fff; background: #245da8; font: inherit; font-size: .62rem; font-weight: 800; cursor: pointer; white-space: nowrap; }
+.rg-dda-create-provision:disabled { opacity: .6; cursor: wait; }
+.rg-dda-create-provision:focus-visible { outline: 3px solid #d99500; outline-offset: 2px; }
+@media (max-width: 350px) {
+ .rg-dda-heading:has(.rg-dda-create-provision) { display: grid; grid-template-columns: minmax(0, 1fr) auto; }
+ .rg-dda-heading:has(.rg-dda-create-provision) .rg-row-title { grid-column: 1; grid-row: 1; }
+ .rg-dda-heading:has(.rg-dda-create-provision) .rg-dda-id { grid-column: 1; grid-row: 2; justify-self: start; }
+ .rg-dda-heading:has(.rg-dda-create-provision) .rg-dda-card-actions { grid-column: 2; grid-row: 1 / span 2; }
+}
 .rg-dda-payment-audit { margin: 4px 0 12px; padding: 8px; border-radius: 8px; background: #eaf8ef; color: #205c41; font-size: .78rem; overflow-wrap: anywhere; }
 .rg-dda-payment-audit span { display: block; font-size: .72rem; margin-top: 3px; }
 .gallery-record-overlay.dda-payment-overlay { z-index: 22; padding: 16px; }

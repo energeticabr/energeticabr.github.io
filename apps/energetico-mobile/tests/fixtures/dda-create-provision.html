@@ -1,0 +1,43 @@
+<!doctype html><html lang="pt-BR"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<link rel="stylesheet" href="../../src/styles.css"><link rel="stylesheet" href="../../src/ui/registration-gallery.css">
+<link rel="stylesheet" href="../../src/ui/gallery-record-actions.css"><title>Provisão DDA fictícia</title></head><body>
+<script type="module">
+import { createRegistrationGallery } from '../../src/ui/registration-gallery-view.js';
+const scenario = new URLSearchParams(location.search).get('scenario') || 'idle';
+const calls = [];
+const gallery = createRegistrationGallery({ document, kind: 'dda',
+  data: { loadSnapshot: async () => ({ rows: [{ id: '7', fields: {
+    Title: 'FORNECEDOR FICTÍCIO DE MATERIAIS E TRANSPORTES COM NOME LONGO LTDA', CHAVE_DDA: '7'.repeat(64),
+    SITUACAO: 'Em aberto', VENCIMENTO: '2026-12-20', EMISSAO: '2026-11-06', VALOR: 360,
+    DOCUMENTO: '147', BANCO: 'BANCO FICTÍCIO', Attachments: true,
+  } }] }) },
+  confirmPayment: () => { throw Error('Provisão não confirma pagamento'); },
+  onStartProvision: async input => { calls.push({ itemId: input.itemId, key: input.key });
+    if (scenario === 'failed') throw Error('fake failure'); return true; },
+});
+try {
+  await gallery.open(); await document.fonts.ready;
+  await new Promise(resolve => requestAnimationFrame(() => requestAnimationFrame(resolve)));
+  const root = document.querySelector('[data-gallery-kind="dda"]');
+  const button = document.querySelector('[data-dda-create-provision]');
+  const check = document.querySelector('[data-dda-confirm-payment]');
+  const b = button.getBoundingClientRect(), c = check.getBoundingClientRect();
+  const title = document.querySelector('.rg-dda-heading .rg-row-title').firstChild;
+  const wordsUnbroken = [...title.textContent.matchAll(/\S+/g)].every(match => {
+    const range = document.createRange(); range.setStart(title, match.index); range.setEnd(title, match.index + match[0].length);
+    return range.getClientRects().length === 1;
+  });
+  const state = { width: innerWidth, label: button.textContent, belowCheck: b.top >= c.bottom,
+    wordsUnbroken,
+    aligned: Math.abs((b.left+b.width/2)-(c.left+c.width/2)) < 1,
+    buttonFits: b.left >= 0 && b.right <= innerWidth && button.scrollWidth <= button.clientWidth,
+    touchTarget: b.height >= 44,
+    overflow: document.documentElement.scrollWidth > innerWidth || root.scrollWidth > root.clientWidth,
+  };
+  if (scenario !== 'idle') { button.click(); await new Promise(resolve => setTimeout(resolve, 20)); }
+  state.calls = calls; state.closed = root.hidden;
+  state.retryEnabled = !button.disabled;
+  state.failureVisible = root.textContent.includes('Não foi possível iniciar a provisão');
+  document.documentElement.dataset.layout = JSON.stringify(state);
+} catch(error) { document.documentElement.dataset.layout = JSON.stringify({ error: error.message }); }
+</script></body></html>
