@@ -1,8 +1,6 @@
-// Current collector contract: these four cards must all be present. A newly
-// enrolled card requires updating this set and the complete-snapshot contract;
-// until then an unfamiliar ID rejects the export instead of showing partial totals.
-const CARD_IDS = Object.freeze(['06850000084216', '06850000084217', '06850000084218', '06850000084219']);
-const cardIds = new Set(CARD_IDS);
+// The collector currently tracks four cards. Their private IDs come exclusively
+// from the authenticated snapshot; a changed count requires a contract update.
+const CARD_COUNT = 4;
 const dateFormatter = new Intl.DateTimeFormat('en-CA', { timeZone: 'America/Sao_Paulo',
   year: 'numeric', month: '2-digit', day: '2-digit' });
 
@@ -38,7 +36,10 @@ function calendarDate(milliseconds) {
   const parts = Object.fromEntries(dateFormatter.formatToParts(milliseconds).map(part => [part.type, part.value]));
   return `${parts.year}-${parts.month}-${parts.day}`;
 }
-function card(value) { if (!cardIds.has(value)) invalid('Cartão Trancid ausente ou desconhecido.'); return value; }
+function card(value) {
+  if (typeof value !== 'string' || !/^\d{14}$/.test(value)) invalid('Cartão Trancid deve conter exatamente 14 dígitos.');
+  return value;
+}
 function source(value) {
   const result = text(value);
   let url;
@@ -88,7 +89,7 @@ function inspectSnapshot(input) {
         invalid('Relógios da execução Trancid inconsistentes.');
       }
       const sourceUrl = source(body.source_url);
-      if (!Array.isArray(body.balances) || body.balances.length !== CARD_IDS.length) invalid('Consulta Trancid não contém todos os cartões.');
+      if (!Array.isArray(body.balances) || body.balances.length !== CARD_COUNT) invalid('Consulta Trancid não contém todos os cartões.');
       for (const entry of body.balances) {
         object(entry);
         const cardId = card(entry.card);
@@ -136,9 +137,12 @@ function inspectSnapshot(input) {
       report_at: report?.value ?? null, previous_cents: previousCents, balance_cents: balanceCents,
       delta_cents: deltaCents, kind, source_url: source(row.source_url) });
   });
-  if (CARD_IDS.some(id => !observations.some(entry => entry.card === id))) invalid('Snapshot Trancid não contém observações de todos os cartões.');
+  const cardIds = Object.freeze([...new Set(observations.map(entry => entry.card))].sort());
+  // Every successful run already contains four unique IDs. Requiring the same
+  // union across runs and positions also rejects substituted or missing cards.
+  if (cardIds.length !== CARD_COUNT) invalid('Snapshot Trancid contém conjuntos de cartões incompletos ou divergentes.');
   return { snapshot: Object.freeze({ schema_version: 1, currency: 'BRL', money_unit: 'centavos',
-    positions: Object.freeze(positions), runs: Object.freeze(runs) }), observations, lastRun };
+    positions: Object.freeze(positions), runs: Object.freeze(runs) }), observations, lastRun, cardIds };
 }
 
 /** Validate the entire private export before making any financial data available. */
@@ -156,12 +160,12 @@ function validMonth(value) {
 
 /** Current balances always use the latest observation; month selects history only. */
 export function buildTrancidReport(input, { month, now = new Date() } = {}) {
-  const { observations, lastRun } = inspectSnapshot(input);
+  const { observations, lastRun, cardIds } = inspectSnapshot(input);
   const nowMs = now instanceof Date ? now.getTime() : timestamp(now).milliseconds;
   if (!Number.isFinite(nowMs)) invalid('Data atual inválida.');
   const today = calendarDate(nowMs);
   const selected = month === undefined ? today.slice(0, 7) : validMonth(month);
-  const byCard = new Map(CARD_IDS.map(id => [id, { current: null, days: new Map() }]));
+  const byCard = new Map(cardIds.map(id => [id, { current: null, days: new Map() }]));
   let lastObservation, firstDate;
   for (const entry of observations) {
     const record = byCard.get(entry.card);
@@ -177,7 +181,7 @@ export function buildTrancidReport(input, { month, now = new Date() } = {}) {
     cursor = mon === 12 ? `${year + 1}-01` : `${year}-${String(mon + 1).padStart(2, '0')}`;
   }
   let totalCents = 0, lowCount = 0;
-  const cards = CARD_IDS.map(id => {
+  const cards = cardIds.map(id => {
     const { current, days } = byCard.get(id), history = [];
     const start = `${selected}-01` > firstDate ? `${selected}-01` : firstDate;
     for (let date = start; date.slice(0, 7) === selected && date <= today; date = nextDate(date)) {

@@ -1,4 +1,4 @@
-"""Publication contracts; external SharePoint transport is the only fake."""
+"""Publication contracts using fictitious card configuration and SharePoint transport."""
 import hashlib
 import json
 from pathlib import Path
@@ -10,7 +10,16 @@ from unittest.mock import patch
 
 from file_sync import publish_database
 from monitor import Monitor
-from test_monitor import payload
+
+CARDS = ['00000000000101', '00000000000102', '00000000000103', '00000000000104']
+
+
+def payload(day='2026-11-07', values=None):
+    return {'checked_at': day+'T18:02:00-03:00', 'report_generated_at': day+'T18:01:00-03:00',
+            'source_url': 'http://trancid.ddns.net:8082/frmRelConsultaSaldoCartao.aspx',
+            'balances': [{'card': card, 'employee': 'PESSOA FICTÍCIA '+str(index+1),
+                          'balance': (values or {}).get(card, amount)}
+                         for index, (card, amount) in enumerate(zip(CARDS, ['5,50', '22,00', '27,50', '38,50']))]}
 
 
 class PrivateDrive:
@@ -39,7 +48,11 @@ class PrivateDrive:
 
 class FileSyncTests(unittest.TestCase):
     def setUp(self):
+        configured = patch('monitor.TRACKED', set(CARDS))
+        configured.start()
+        self.addCleanup(configured.stop)
         self.tmp = tempfile.TemporaryDirectory()
+        (Path(self.tmp.name) / 'cargas_observadas.json').write_text('{"orders": []}', encoding='utf-8')
         self.monitor = Monitor(Path(self.tmp.name) / 'db.sqlite3')
         self.drive = PrivateDrive()
         initial = payload()
@@ -52,7 +65,8 @@ class FileSyncTests(unittest.TestCase):
         self.tmp.cleanup()
 
     def publish(self):
-        with patch('file_sync.client_from_environment', return_value=self.drive):
+        with patch('file_sync.client_from_environment', return_value=self.drive), \
+                patch('pdf_report.Path', return_value=Path(self.tmp.name) / 'pdf_report.py'):
             return publish_database(self.monitor)
 
     def snapshot(self):
@@ -61,7 +75,7 @@ class FileSyncTests(unittest.TestCase):
 
     def test_combined_file_preserves_financial_rows_unchanged_days_and_errors(self):
         self.monitor.ingest(payload('2026-11-08'))
-        self.monitor.ingest(payload('2026-11-09', {'06850000084216': '0,00'}))
+        self.monitor.ingest(payload('2026-11-09', {CARDS[0]: '0,00'}))
         self.monitor.failure('2026-11-10', 'Consulta indisponível', '2026-11-10T18:02:00-03:00')
         self.monitor.mark_published('positions', 1, 71)
         result = self.publish()
@@ -95,7 +109,7 @@ class FileSyncTests(unittest.TestCase):
 
         def insert_between_reads(sql):
             if not committed and sql.upper().startswith('SELECT * FROM RUNS'):
-                committed.append(writer.ingest(payload('2026-11-08', {'06850000084216': '0,00'})))
+                committed.append(writer.ingest(payload('2026-11-08', {CARDS[0]: '0,00'})))
 
         self.monitor.db.set_trace_callback(insert_between_reads)
         try:

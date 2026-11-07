@@ -24,6 +24,30 @@ test('current balances preserve all card digits and distinguish real zero from t
     variationCents: null, status: 'observed', checkedAt: '2026-11-06T07:00:00-03:00' }]);
 });
 
+test('the authenticated snapshot supplies all four card IDs and the report orders them without a public ID allowlist', () => {
+  const row = run(1, '2026-11-06T07:00:00-03:00');
+  const body = JSON.parse(row.snapshot);
+  const suppliedCards = ['10000000000004', '10000000000002', '10000000000001', '10000000000003'];
+  body.balances.forEach((entry, index) => { entry.card = suppliedCards[index]; });
+  row.snapshot = JSON.stringify(body);
+  const result = build(snapshot([row]), options);
+  assert.deepEqual(result.cards.map(entry => [entry.card, entry.supplier, entry.balanceCents]), [
+    ['10000000000001', 'Caio Exemplo', 3999], ['10000000000002', 'Bia Exemplo', 4000],
+    ['10000000000003', 'Davi Exemplo', 0], ['10000000000004', 'Ana Exemplo', 5000],
+  ]);
+  assert.equal(result.lowCount, 2); assert.equal(result.totalCents, 12999);
+});
+
+test('different successful-run card sets and extra or missing baseline cards reject the entire snapshot', () => {
+  const first = run(1, '2026-11-05T07:00:00-03:00'), second = run(2, '2026-11-06T07:00:00-03:00');
+  const body = JSON.parse(second.snapshot); body.balances[0].card = '00000000000105'; second.snapshot = JSON.stringify(body);
+  assert.throws(() => build(snapshot([first, second]), options), TypeError);
+  const extraPosition = position(1, null, '2026-11-06T07:00:00-03:00', 5000, { card: '00000000000105' });
+  assert.throws(() => build(snapshot([first], [extraPosition]), options), TypeError);
+  const missing = cards.slice(0, 3).map((card, index) => position(index + 1, null, '2026-11-06T07:00:00-03:00', 5000, { card }));
+  assert.throws(() => build(snapshot([], missing), options), TypeError);
+});
+
 test('daily snapshots include unchanged balances and compare with the previous calendar day across months', () => {
   const data = snapshot([
     run(1, '2026-10-31T07:00:00-03:00', ['55,00', '40,00', '39,99', '0,00']),
@@ -139,7 +163,7 @@ test('incomplete, malformed, unsafe and duplicate money data rejects rather than
     value => { value.runs[0].snapshot = '{'; },
     value => { const body = JSON.parse(value.runs[0].snapshot); body.balances.pop(); value.runs[0].snapshot = JSON.stringify(body); },
     value => { const body = JSON.parse(value.runs[0].snapshot); body.balances.push(body.balances[0]); value.runs[0].snapshot = JSON.stringify(body); },
-    value => { const body = JSON.parse(value.runs[0].snapshot); body.balances[0].card = '06850000084220'; value.runs[0].snapshot = JSON.stringify(body); },
+    value => { const body = JSON.parse(value.runs[0].snapshot); body.balances[0].card = '0000000000010'; value.runs[0].snapshot = JSON.stringify(body); },
     ...[undefined, null, '', ' ', false, 0, '1.00', '1,001', 'abc', '90.071.992.547.409,92', '-1,00'].map(balance => value => {
       const body = JSON.parse(value.runs[0].snapshot); body.balances[0].balance = balance; value.runs[0].snapshot = JSON.stringify(body);
     }),
