@@ -976,6 +976,7 @@ button.chat-rhid-attendance-card__cluster:focus-visible { outline: 3px solid #15
 .chat-presence-date-summary strong { color: #12634f; }
 .chat-presence-date-summary small { color: #60747d; font-size: 10px; }
 .chat-choice-list { display: grid; width: min(100%, 1120px); margin-inline: auto; gap: clamp(8px, 1vw, 14px); }
+.chat-choice-list > button[data-reply-id="attendance_batch_register"] { grid-column: 1 / -1; }
 .chat-diary-recent-activities { margin-top: 12px; }
 .chat-diary-recent-activities[hidden], .chat-diary-recent-activities button[hidden] { display: none !important; }
 .chat-diary-recent-activities > p { margin: 0 0 10px; font-size: .9em; color: #285c68; }
