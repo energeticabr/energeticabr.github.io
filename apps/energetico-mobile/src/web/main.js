@@ -37,6 +37,7 @@ import "../ui/cargos.css";
 import "../ui/attendance-summary.css";
 import "../ui/stage-progress.css";
 import "../ui/supplier-payroll-report.css";
+import "../ui/trancid-report.css";
 import "../ui/commercial-receipts.css";
 import "../ui/commercial-milestones.css";
 import "../ui/commercial-documents.css";
@@ -92,6 +93,7 @@ async function start() {
   view.on("sign-out", () => installView?.setReady(false));
   const controller = createAppController({
     enableDdaReminders: true,
+    enableTrancidReminders: true,
     auth,
     recovery: createRecoveryStorage(),
     store: createConversationStore({ historyMode: "current-step" }),

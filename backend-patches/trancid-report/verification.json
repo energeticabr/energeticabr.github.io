@@ -1,0 +1,138 @@
+{
+  "verified_at_utc": "2026-11-07 02:26:01 UTC",
+  "scope": "Atomic private combined SharePoint report snapshot; existing OCI collector unchanged",
+  "baseline_sha256": "6ccb14b120955b6a71a3164c6d5fcdbe09c1d499337a9669d4e934d534b8c7ab",
+  "deployed_sha256": "5e50268ecdd4ba1679ec12937e7ad22c67b11cac913512736d6a86146b5c7f29",
+  "backup": "/opt/energetica-whatsapp/trancid-monitor/file_sync.py.before-report-snapshot-20261107",
+  "deployment": {
+    "target": "/opt/energetica-whatsapp/trancid-monitor/file_sync.py",
+    "owner": "root",
+    "group": "energetica-whatsapp",
+    "mode": "0640",
+    "baseline_checked_before_replace": true,
+    "collector_lock_held": true,
+    "atomic_replace": true
+  },
+  "snapshot": {
+    "path": "Documents/TRANCID/report_snapshot.json",
+    "schema_version": 1,
+    "currency": "BRL",
+    "money_unit": "centavos",
+    "fields": [
+      "positions",
+      "runs"
+    ],
+    "omitted_field": "sharepoint_id",
+    "consistent_sqlite_transaction": true,
+    "local_file_mode": "0600"
+  },
+  "tests": {
+    "local_python": "3.12.14",
+    "vm_python": "3.9.25",
+    "full_suite_local_passed": 19,
+    "full_suite_vm_passed": 19,
+    "vm_full_suite_retested_after_deploy": true,
+    "local_command": "python -m unittest discover -v",
+    "vm_command": "python -m unittest test_file_sync test_collector test_monitor test_run -v",
+    "local_exit_code": 0,
+    "vm_exit_code": 0,
+    "focused_tests": [
+      "combined financial data + unchanged days + failures + preserved existing publications",
+      "concurrent SQLite writer cannot mix positions/runs revisions",
+      "combined-file SHA256 readback mismatch rejects publication"
+    ],
+    "red_evidence": [
+      "Original publisher: 3 failures because combined file missing / mismatch never checked",
+      "Combined file before read transaction: concurrency test failed runs count 2 != 1"
+    ]
+  },
+  "sync_command": "env_run.py run.py sync",
+  "sync_exit_code": 0,
+  "sync_result": {
+    "duplicate": false,
+    "slot": "2026-11-06",
+    "published": {
+      "files": [
+        {
+          "file": "posicoes.json",
+          "url": "https://energeticaltda-my.sharepoint.com/personal/bernardonotini_energeticabr_com/Documents/TRANCID/posicoes.json",
+          "sha256": "657bd9d28a21dcdff303816b2519190e72e7246fc484889ce361603d76411c4b"
+        },
+        {
+          "file": "consultas.json",
+          "url": "https://energeticaltda-my.sharepoint.com/personal/bernardonotini_energeticabr_com/Documents/TRANCID/consultas.json",
+          "sha256": "96152f55a4c604138304cf14cab1a0dc415accd0be118db76a496658abc8b4d5"
+        },
+        {
+          "file": "trancid.sqlite3",
+          "url": "https://energeticaltda-my.sharepoint.com/personal/bernardonotini_energeticabr_com/Documents/TRANCID/trancid.sqlite3",
+          "sha256": "830dfde60d934c8da4e2ae71ca2707916f362a2f25b359abdb353787f7e24d24"
+        },
+        {
+          "file": "report_snapshot.json",
+          "url": "https://energeticaltda-my.sharepoint.com/personal/bernardonotini_energeticabr_com/Documents/TRANCID/report_snapshot.json",
+          "sha256": "236403102ad98592c6408878cd0f0e4c00d9999a189199dfc573b1d8943bfe0e"
+        },
+        {
+          "file": "Relatorio_cartoes_Trancid.pdf",
+          "url": "https://energeticaltda-my.sharepoint.com/personal/bernardonotini_energeticabr_com/Documents/TRANCID/Relatorio_cartoes_Trancid.pdf",
+          "sha256": "563802d0d876512fa4df23e42117e3b2463044a3a7553056f6d3e28cd09514ce"
+        }
+      ],
+      "positions": 4,
+      "runs": 6
+    },
+    "status": "ok"
+  },
+  "independent_readback": {
+    "verified_files": [
+      {
+        "file": "posicoes.json",
+        "sha256": "657bd9d28a21dcdff303816b2519190e72e7246fc484889ce361603d76411c4b",
+        "bytes": 2104
+      },
+      {
+        "file": "consultas.json",
+        "sha256": "96152f55a4c604138304cf14cab1a0dc415accd0be118db76a496658abc8b4d5",
+        "bytes": 3786
+      },
+      {
+        "file": "trancid.sqlite3",
+        "sha256": "830dfde60d934c8da4e2ae71ca2707916f362a2f25b359abdb353787f7e24d24",
+        "bytes": 24576
+      },
+      {
+        "file": "report_snapshot.json",
+        "sha256": "236403102ad98592c6408878cd0f0e4c00d9999a189199dfc573b1d8943bfe0e",
+        "bytes": 5821
+      },
+      {
+        "file": "Relatorio_cartoes_Trancid.pdf",
+        "sha256": "563802d0d876512fa4df23e42117e3b2463044a3a7553056f6d3e28cd09514ce",
+        "bytes": 10047
+      }
+    ],
+    "positions": 4,
+    "runs": 6,
+    "card_count": 4,
+    "total_cents": 9350,
+    "low_count": 4,
+    "successful_runs": 2,
+    "error_runs": 4,
+    "sqlite_integrity": "ok",
+    "matches_sqlite": true,
+    "read_only_verification": true
+  },
+  "timer": {
+    "name": "energetica-trancid.timer",
+    "enabled": true,
+    "active": true,
+    "schedule": "18:00 America/Sao_Paulo daily",
+    "next_trigger_utc": "2026-11-07T21:00:00Z",
+    "unchanged": true
+  },
+  "collection_invoked": false,
+  "login_changed": false,
+  "permissions_expanded": false,
+  "credentials_in_evidence": false
+}
