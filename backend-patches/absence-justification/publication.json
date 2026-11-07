@@ -1,0 +1,26 @@
+{
+  "status": "deployed",
+  "deployedAtUtc": "2026-11-07T02:13:45.803703Z",
+  "manifestSha256": "e427737e47b00cd23af169a6d4d91be4480e1d85cf9edd01a26dbcdee4ac8953",
+  "sourceCommit": "ac9f84ed99d6a9956eeafc3d4010eaa0a22bff75",
+  "installed": {
+    "worker/workflow.py": "4c9e6ccc218cc216c34272918661b77be8223245d22beb987c0a32e8f462320f"
+  },
+  "backup": "/var/backups/energetica-whatsapp/absence-justification-20261107T021345803703Z",
+  "health": { "status": "ok", "channel": "generic" },
+  "targets": ["Android shared backend", "iOS shared backend", "Windows/web shared backend"],
+  "nativeBinaryRequired": false,
+  "validation": {
+    "realEngineRegressionTestsPassed": 14,
+    "supplierMethodTestsPassed": 5,
+    "linuxDeploymentTestsPassed": 38,
+    "protectedSignatureBlocksIntact": 14,
+    "historicalAttendanceTests": 113,
+    "historicalBaselineFailures": 87,
+    "historicalBaselineErrors": 4,
+    "historicalBaselineSkipped": 1,
+    "historicalCandidateIdenticalToBaseline": true,
+    "newHistoricalFailures": 0,
+    "independentReview": "approved"
+  }
+}
