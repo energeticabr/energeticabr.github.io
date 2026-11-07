@@ -9895,7 +9895,7 @@ export function createAppController({
               confirmPayment: async options => { assertSession(); const receipt = await client.confirmDdaPayment(options); assertSession(); return receipt; },
               onStartLaunch: ddaPaymentLaunchHandler(data, assertSession),
               onStartProvision: ddaPaymentLaunchHandler(data, assertSession, {
-                flowId: 'payment_provision', replyId: 'action_payment', text: 'CRIAR UMA PROVISÃO DE PAGAMENTO',
+                flowId: 'payment', replyId: 'action_payment', text: 'CRIAR UMA PROVISÃO DE PAGAMENTO',
               }),
             } : {}),
             ...(sourceKind === 'notas_fiscais_sefaz' ? { syncMonitor: ensureSefazSyncSession() } : {}),
