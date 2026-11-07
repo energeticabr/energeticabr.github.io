@@ -17,7 +17,7 @@ test('DDA link review follows landscape and keeps cancel and submit usable',{tim
   const result=await runBrowserLayout(browser,{width,height,safeAreaInsets,captureScreenshot:Boolean(capture),url:`http://127.0.0.1:${server.httpServer.address().port}/tests/fixtures/dda-provision-review.html`});
   const dom=new JSDOM(result.stdout);
   try{const state=JSON.parse(dom.window.document.documentElement.dataset.layout);
-   for(const key of ['fits','hit','focusInside','cancelled','confirmed'])assert.equal(state[key],true,JSON.stringify({width,key,state}));
+   for(const key of ['pickerMatch','pickerFits','fits','hit','focusInside','cancelled','confirmed'])assert.equal(state[key],true,JSON.stringify({width,key,state}));
    assert.equal(state.writesBefore,0);
    if(safeAreaInsets){assert.ok(state.bounds.top>=59&&state.bounds.bottom<=810&&state.bounds.left>=11&&state.bounds.right<=367,'review must avoid the phone safe areas: '+JSON.stringify(state));}
    if(height>width){const matrix=state.transform.match(/^matrix\(([^)]+)\)$/)?.[1].split(',').map(Number);

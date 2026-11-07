@@ -30,7 +30,9 @@ export function createDdaProvisionPicker({document:doc,host,service,onLinked,tim
     const choice=el('input');choice.type='radio';choice.name='dda-provision-choice';choice.value=item.id;choice.checked=entry.selected===item.id;choice.addEventListener('change',()=>{entry.selected=item.id;save.disabled=false;for(const option of list.children)option.toggleAttribute('data-edit-changed',option===label&&item.id!==String(row.provisionId||''));});
     const text=el('span','',`${item.label} · ${money(item.amount)}${item.due?' · Previsto '+String(item.due).slice(0,10).split('-').reverse().join('/'):''}`);
     label.toggleAttribute('data-edit-changed',choice.checked&&item.id!==String(row.provisionId||''));
-    label.append(choice,text);list.append(label);
+    label.append(choice,text);
+    if(item.matchedProvision){const line=item.matchedProvision;label.append(el('span','dda-provision-line-match',`Provisão #${line.id} · ${money(line.amount)}${line.due?' · Previsto '+String(line.due).slice(0,10).split('-').reverse().join('/'):''} · mesmo valor deste DDA`));}
+    list.append(label);
    }
    feedback.textContent=entry.options.length?`${visible.length} descritivo(s) sem data de pagamento efetuado. Escolha um para vincular.`:'Nenhum descritivo provisão sem data de pagamento efetuado foi encontrado.';
   }
