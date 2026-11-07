@@ -32,13 +32,13 @@ test('new pink wheelbarrow mascot sits immediately below workforce and launches 
 });
 test('new entry navigates strictly between pink workforce and pink pending payments',()=>{
  assert.deepEqual(getReportNeighbors(action),{previous:'open-supplier-workforce-report',next:'open-pending-supplier-payments-report'});
- assert.deepEqual(getReportNeighbors('open-supplier-workforce-report'),{previous:'open-supplier-payroll-report',next:action});
+ assert.deepEqual(getReportNeighbors('open-supplier-workforce-report'),{previous:'open-trancid-report',next:action});
  assert.deepEqual(getReportNeighbors('open-pending-supplier-payments-report'),{previous:action,next:'open-pending-work-diaries-report'});
  assert.equal(REPORT_PDF_TITLES[action],'Controle de empreiteiros');assert.equal(getReportNeighbors('open-commercial-receipts').previous,null);
 });
 test('pink rail preserves uniform fill and even spacing below the separate orange row',t=>{
  const dom=new JSDOM(renderChatMarkup(home),{url:'https://example.test/'});t.after(()=>dom.window.close());const style=dom.window.document.createElement('style');style.textContent=readFileSync(new URL('../src/styles.css',import.meta.url),'utf8');dom.window.document.head.append(style);
- const actions=['open-cargos-table','open-attendance-summary','open-stage-progress','open-supplier-payroll-report','open-supplier-workforce-report',action,'open-pending-supplier-payments-report','open-pending-work-diaries-report'];
+ const actions=['open-cargos-table','open-attendance-summary','open-stage-progress','open-supplier-payroll-report','open-trancid-report','open-supplier-workforce-report',action,'open-pending-supplier-payments-report','open-pending-work-diaries-report'];
  let bottom=0;for(const name of actions){const node=dom.window.document.querySelector(`[data-action="${name}"]`);assert.ok(node,name);const css=dom.window.getComputedStyle(node);assert.ok(parseFloat(css.marginTop)>=bottom+4,name);bottom=parseFloat(css.marginTop)+parseFloat(css.height);}
  const css=dom.window.getComputedStyle(dom.window.document.querySelector(`[data-action="${action}"]`));assert.equal(css.backgroundColor,'rgb(207, 117, 122)');
  const row=dom.window.document.querySelector('nav[aria-label="Relatórios comerciais"]');assert.ok(row);assert.equal(row.querySelectorAll('button').length,4);assert.equal(dom.window.getComputedStyle(row).display,'flex');
