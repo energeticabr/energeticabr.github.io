@@ -1499,10 +1499,10 @@ button.chat-rhid-attendance-card__cluster:focus-visible { outline: 3px solid #15
 .chat-main-stage-progress-shortcut:focus-visible { outline:3px solid var(--accent); outline-offset:3px; }
 .chat-main-supplier-payroll-report-shortcut { grid-column:3; grid-row:1; align-self:start; margin-top:180px; width:44px; height:44px; padding:0; border:0; border-radius:10px; background:#cf757a; overflow:hidden; cursor:pointer; }
 .chat-main-supplier-payroll-report-shortcut:focus-visible { outline:3px solid var(--accent); outline-offset:3px; }
-.chat-main-pending-supplier-payments-shortcut { grid-column:3; grid-row:1; align-self:start; margin-top:348px; width:44px; height:44px; padding:0; border:0; border-radius:10px; background:#cf757a; overflow:hidden; cursor:pointer; }
-.chat-main-pending-work-diaries-shortcut { grid-column:3; grid-row:1; align-self:start; margin-top:404px; width:44px; height:44px; padding:0; border:0; border-radius:10px; background:#cf757a; overflow:hidden; cursor:pointer; }
-.chat-main-supplier-workforce-shortcut { grid-column:3; grid-row:1; align-self:start; margin-top:236px; width:44px; height:44px; padding:0; border:0; border-radius:10px; background:#cf757a; overflow:hidden; cursor:pointer; }
-.chat-main-contractor-control-shortcut { grid-column:3; grid-row:1; align-self:start; margin-top:292px; width:44px; height:44px; padding:0; border:0; border-radius:10px; background:#cf757a; overflow:hidden; cursor:pointer; }
+.chat-main-pending-supplier-payments-shortcut { grid-column:3; grid-row:1; align-self:start; margin-top:404px; width:44px; height:44px; padding:0; border:0; border-radius:10px; background:#cf757a; overflow:hidden; cursor:pointer; }
+.chat-main-pending-work-diaries-shortcut { grid-column:3; grid-row:1; align-self:start; margin-top:460px; width:44px; height:44px; padding:0; border:0; border-radius:10px; background:#cf757a; overflow:hidden; cursor:pointer; }
+.chat-main-supplier-workforce-shortcut { grid-column:3; grid-row:1; align-self:start; margin-top:292px; width:44px; height:44px; padding:0; border:0; border-radius:10px; background:#cf757a; overflow:hidden; cursor:pointer; }
+.chat-main-contractor-control-shortcut { grid-column:3; grid-row:1; align-self:start; margin-top:348px; width:44px; height:44px; padding:0; border:0; border-radius:10px; background:#cf757a; overflow:hidden; cursor:pointer; }
 .chat-main-contractor-control-shortcut:focus-visible { outline:3px solid var(--accent); outline-offset:3px; }
 .chat-main-supplier-workforce-shortcut:focus-visible { outline:3px solid var(--accent); outline-offset:3px; }
 .chat-main-pending-supplier-payments-shortcut:focus-visible { outline:3px solid var(--accent); outline-offset:3px; }
@@ -1583,3 +1583,6 @@ button.chat-rhid-attendance-card__cluster:focus-visible { outline: 3px solid #15
 .payroll-assignment :is(th, td):first-child, .payroll-assignment :is(th, td):last-child { white-space: nowrap; overflow-wrap: normal; }
 .payroll-assignment td:last-child { color: #a52922; text-align: right; font-weight: 800; }
 .payroll-assignment th:last-child { text-align: right; }
+
+.chat-main-trancid-report-shortcut { grid-column:3; grid-row:1; align-self:start; margin-top:236px; width:44px; height:44px; padding:0; border:0; border-radius:10px; background:#cf757a; overflow:hidden; cursor:pointer; }
+.chat-main-trancid-report-shortcut:focus-visible { outline:3px solid var(--accent); outline-offset:3px; }

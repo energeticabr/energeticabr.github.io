@@ -22,26 +22,26 @@ function harness(t,options={}) {
  const controller=createAppController({store,view,auth,client:{sendText:async payload=>{calls.push(payload);return {status:'processed',messages:[]};}},native:{importSharedItems:async()=>[]},pendingProvisionAttachmentsDataFactory:async()=>({loadUpcomingPayments:async()=>[]}),supplierWorkforceReportViewFactory:async({data,onClose})=>{const panel={data,opens:0,destroys:0,open(){this.opens++;},close(){onClose?.();},destroy(){this.destroys++;}};panels.push(panel);return panel;},supplierWorkforceReportDataFactory:async()=>({loadSnapshot:async()=>({rows:[],count:0})}),...options,auth});
  t.after(()=>controller.stop());return {controller,view,store,auth,panels,calls};
 }
-test('fifth right workforce mascot follows payroll, before orange, and dispatches its own local report',t=>{
+test('sixth right workforce mascot follows Trancid, before contractor control, and dispatches its own local report',t=>{
  const dom=new JSDOM('<main id="app"></main>');dom.window.HTMLCanvasElement.prototype.getContext=()=>null;
  const view=createChatView(dom.window.document.querySelector('#app'));t.after(()=>{view.destroy();dom.window.close();});
  let opened=0;view.on(action,()=>opened++);view.render(home);
  const mascot=dom.window.document.querySelector(`[data-action="${action}"]`);assert.ok(mascot);
- assert.equal(mascot.previousElementSibling.dataset.action,'open-supplier-payroll-report');assert.equal(mascot.nextElementSibling.dataset.action,'open-contractor-control-report');
+ assert.equal(mascot.previousElementSibling.dataset.action,'open-trancid-report');assert.equal(mascot.nextElementSibling.dataset.action,'open-contractor-control-report');
  assert.equal(mascot.closest('.chat-bubble'),null);assert.match(mascot.querySelector('img').src,/supplier-workforce\.png$/);
  mascot.querySelector('img').click();assert.equal(opened,1);
  view.render({...home,activeText:{id:'busy'}});const busy=dom.window.document.querySelector(`[data-action="${action}"]`);assert.equal(busy.disabled,true);busy.click();assert.equal(opened,1);
  assert.doesNotMatch(renderChatMarkup({...home,activeFlow:'busy'}),/data-action="open-supplier-workforce-report"/);
 });
-test('last pink has only previous to payroll and payroll gains next, without reaching orange',()=>{
- assert.deepEqual(getReportNeighbors(action),{previous:'open-supplier-payroll-report',next:'open-contractor-control-report'});
- assert.deepEqual(getReportNeighbors('open-supplier-payroll-report'),{previous:'open-stage-progress',next:action});
+test('workforce navigation stays between Trancid and contractor control in the pink rail',()=>{
+ assert.deepEqual(getReportNeighbors(action),{previous:'open-trancid-report',next:'open-contractor-control-report'});
+ assert.deepEqual(getReportNeighbors('open-trancid-report'),{previous:'open-supplier-payroll-report',next:action});
  assert.equal(getReportNeighbors('open-commercial-receipts').previous,null);
  assert.equal(REPORT_PDF_TITLES[action],'Fornecedores por filial, imóvel e profissão');
 });
 test('right rail keeps pink fill and an even gap with orange mascots in their separate top row',t=>{
  const dom=new JSDOM(renderChatMarkup(home));t.after(()=>dom.window.close());const css=dom.window.document.createElement('style');css.textContent=readFileSync(new URL('../src/styles.css',import.meta.url),'utf8');dom.window.document.head.append(css);
- const actions=['open-cargos-table','open-attendance-summary','open-stage-progress','open-supplier-payroll-report',action,'open-pending-supplier-payments-report'];
+ const actions=['open-cargos-table','open-attendance-summary','open-stage-progress','open-supplier-payroll-report','open-trancid-report',action,'open-contractor-control-report','open-pending-supplier-payments-report','open-pending-work-diaries-report'];
  assert.deepEqual([...dom.window.document.querySelectorAll('.chat-main-commercial-shortcuts > button')].map(b=>b.dataset.action),['open-commercial-receipts','open-commercial-milestones','open-commercial-documents','open-sac-pathologies']);
  let previousBottom=0;for(const name of actions){const node=dom.window.document.querySelector(`[data-action="${name}"]`),style=dom.window.getComputedStyle(node);const top=parseFloat(style.marginTop),height=parseFloat(style.height);assert.ok(top>=previousBottom+4,name);previousBottom=top+height;}
  const style=dom.window.getComputedStyle(dom.window.document.querySelector(`[data-action="${action}"]`));assert.equal(style.backgroundColor,'rgb(207, 117, 122)');assert.equal(style.gridColumn,'3');
@@ -79,12 +79,12 @@ for(const moment of ['before','after'])test(`report rejects auth account drift $
 test('refresh cancels the old token query so a late consent error cannot prompt',async t=>{
  const token=deferred();let tokens=0,grants=0;const h=harness(t,{auth:{getToken:()=>++tokens===1?token.promise:Promise.resolve('fresh'),authorize:async()=>{grants++;}},supplierWorkforceReportDataFactory:async({tokenProvider})=>({loadSnapshot:()=>tokenProvider()})});await h.controller.start();await h.view.emit(action);const data=h.panels[0].data,old=data.loadSnapshot(),rejected=assert.rejects(old,{name:'AbortError'});await tick();assert.equal(await data.loadSnapshot(),'fresh');await rejected;token.reject(Object.assign(Error('old consent'),{code:'AUTH_REQUIRED'}));await tick();assert.equal(grants,0);
 });
-test('new pink navigates to both payroll and diaries and rejects forged direction',async t=>{
- let payroll=0,diaries=0;const h=harness(t,{supplierPayrollReportFactory:async()=>({open(){payroll++;},close(){},destroy(){}}),supplierPayrollReportDataFactory:async()=>({loadSnapshot:async()=>({complete:true,sheets:[]}),loadPaymentsForPayrollIds:async()=>[]}),contractorControlReportViewFactory:async()=>({open(){diaries++;},close(){},destroy(){}})});
+test('workforce navigates to Trancid and contractor control and rejects a forged direction',async t=>{
+ let trancid=0,contractors=0;const h=harness(t,{trancidReportFactory:async()=>({open(){trancid++;},close(){},destroy(){}}),contractorControlReportViewFactory:async()=>({open(){contractors++;},close(){},destroy(){}})});
  await h.controller.start();await h.view.emit(action);
  assert.equal(await h.view.emit('navigate-mascot-report',{from:action,direction:'orange'}),false);
- assert.equal(await h.view.emit('navigate-mascot-report',{from:action,direction:'next'}),true);assert.equal(diaries,1);
- await h.view.emit(action);assert.equal(await h.view.emit('navigate-mascot-report',{from:action,direction:'previous'}),true);assert.equal(payroll,1);
+ assert.equal(await h.view.emit('navigate-mascot-report',{from:action,direction:'next'}),true);assert.equal(contractors,1);
+ await h.view.emit(action);assert.equal(await h.view.emit('navigate-mascot-report',{from:action,direction:'previous'}),true);assert.equal(trancid,1);
 });
 const browserAccount={homeAccountId:'diary-user',username:'person@example.invalid'},pendingKey='energetico:msal-pending-action:v1';
 test('default production financial factory reaches readonly source without a replaced data factory',async t=>{
