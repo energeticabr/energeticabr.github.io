@@ -105,12 +105,15 @@
         // Reproduce SharePoint's observed empty-prefix failure, rather than
         // JavaScript startsWith('') (which would conceal the regression).
         if (/startswith\([^,]+,''\)/.test(call.filter)) return { value: [] };
-        const match = /^startswith\(fields\/([A-Za-z0-9_]+),'([^']+)'\)$/.exec(call.filter);
+        const prefixes = [...call.filter.matchAll(/startswith\(fields\/([A-Za-z0-9_]+),'([^']+)'\)/g)];
         const exact = /^fields\/([A-Za-z0-9_]+) eq '([^']+)'$/.exec(call.filter);
-        if (call.filter) check((match || exact) && (match || exact)[1] === catalog.value, `${catalog.field}: filter must use the resolved internal name`);
+        if (call.filter) check(exact?.[1] === catalog.value || (
+          prefixes.length > 0 && prefixes.every(prefix => prefix[1] === catalog.value)
+          && call.filter === (prefixes.length === 1 ? prefixes[0][0] : `(${prefixes.map(prefix => prefix[0]).join(' or ')})`)
+        ), `${catalog.field}: filter must use the resolved internal name`);
         if (exact) { call.term=exact[2]; call.exact=true; return { value:rows.filter(row=>row.fields[catalog.value]===exact[2]) }; }
-        if (match) {
-          const term = match[2];
+        if (prefixes.length) {
+          const term = prefixes[0][2];
           call.term = term;
           if (held && held.field === catalog.field && held.term === term && !held.started) {
             held.started = true;
@@ -120,7 +123,7 @@
             // Deliberately ignore abort, like an already-completing transport.
             pending.completed = true;
           }
-          return { value: rows.filter(row => row.fields[catalog.value].startsWith(term)) };
+          return { value: rows.filter(row => prefixes.some(prefix => row.fields[catalog.value].startsWith(prefix[2]))) };
         }
         if (call.page2) return { value: rows.slice(20) };
         return { value: rows.slice(0, 20), '@odata.nextLink': `https://graph.microsoft.com/v1.0/sites/fixture-site/lists/${list.id}/items?$skiptoken=page2` };
