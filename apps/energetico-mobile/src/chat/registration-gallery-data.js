@@ -509,6 +509,7 @@ export function createRegistrationGalleryData({ kind, ...options } = {}) {
   return Object.freeze({ ...data,
     ...assetReport,
     ...filters,
+    ...(kind === 'financial_movement' ? { getFilterSource: () => null } : {}),
     ...(descriptionEditor ? { loadDescriptionGroup: (id, loadOptions) => loadDescriptionGroupWithProgress({
       repository, siteKey: options.siteKey || 'personal', normalizeItem: normalizeGalleryItem,
       assertSession: options.assertSession || (() => {}),

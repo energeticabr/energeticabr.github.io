@@ -1,5 +1,6 @@
 import Decimal from 'decimal.js';
 import { createRegistrationGalleryFilterData } from './registration-gallery-filter-data.js';
+import { isImportedFinancialMovement } from './financial-gallery-models.js';
 
 const FIELDS = ['INSTITUICAO', 'DESCRICAO', 'OPERACAO', 'VALOR'];
 const SOURCES = Object.freeze({
@@ -28,10 +29,18 @@ export function createFinancialMovementEditor(base, { repository, siteKey = 'per
     if (field === 'DESCRICAO' && !String(dependencies?.INSTITUICAO || '').trim()) return [];
     return catalogs.loadFilterOptions(field, { filters: dependencies, signal, refresh: true });
   }
+  function assertManual(item) {
+    if (isImportedFinancialMovement(item.fields)) throw new Error('O pagamento importado do Sicoob é somente para consulta.');
+  }
   return Object.freeze({
-    deleteItem: base.deleteItem,
+    async deleteItem(id, options = {}) {
+      const { item } = await base.loadEditor(id, { includeAttachments: false, signal: options.signal });
+      assertManual(item);
+      return base.deleteItem(id, { ...options, eTag: options.eTag ?? item.eTag });
+    },
     async loadEditor(id, options = {}) {
       const original = await base.loadEditor(id, options);
+      assertManual(original.item);
       const columns = FIELDS.map(name => {
         const column = original.columns.find(c => c.name === name);
         if (!column?.editable || column.readOnly) throw new Error(`O campo ${name} não está disponível para edição.`);

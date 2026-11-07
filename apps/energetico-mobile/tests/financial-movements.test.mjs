@@ -3,6 +3,7 @@ import assert from 'node:assert/strict';
 import { JSDOM } from 'jsdom';
 import { renderChatMarkup } from '../src/ui/chat-view.js';
 import { createRegistrationGalleryData } from '../src/chat/registration-gallery-data.js';
+import { createRegistrationGallery } from '../src/ui/registration-gallery-view.js';
 import { renderDynamicForm } from '../../../portal/ui/dynamic-form.js';
 
 test('financial first menu pairs movement creation and gallery while keeping registrations',()=>{
@@ -76,4 +77,54 @@ test('movement editor uses dependent closed choices and rejects foreign descript
   assert.equal(writes.length,1);
   assert.equal(writes[0][3].VALOR,'2000,5');
   assert.equal(writes[0][4].eTag,'"v1"');
+});
+
+test('movement gallery shows and searches imported Sicoob data while preserving manual actions', async () => {
+  const rows = [
+    { id: '1', fields: { INSTITUICAO: 'BANCO QA', DESCRICAO: 'CDB QA', OPERACAO: 'APLICAÇÃO', VALOR: '10,50' } },
+    { id: '2', fields: { INSTITUICAO: 'SICOOB', DESCRICAO: 'PIX ENVIADO', OPERACAO: 'DÉBITO',
+      VALOR: '22,45', DATAPAGAMENTO: '2026-10-03T12:00:00Z', RAZAOSOCIALRECEBEDOR: 'FAVORECIDO FICTÍCIO LTDA (MARCA QA)',
+      CONTAPAGADORA: '001234', REFERENCIABANCARIA: 'REF-TESTE-2', ORIGEMMOVIMENTACAO: 'SICOOB' } },
+    { id: '3', fields: { INSTITUICAO: 'SICOOB', DESCRICAO: 'BOLETO', OPERACAO: 'DÉBITO',
+      VALOR: '18,00', DATAPAGAMENTO: '2026-10-02T12:00:00Z', RAZAOSOCIALRECEBEDOR: 'N/A', ORIGEMMOVIMENTACAO: 'SICOOB' } },
+  ];
+  const repository = {
+    async resolveList() { return { status: 'resolved', id: 'MOVIMENTACOESFINANCEIRAS' }; },
+    async getColumns() {
+      return [...new Set(rows.flatMap(row => Object.keys(row.fields)))].map(name => ({
+        name, displayName: name, ...(name === 'DATAPAGAMENTO' ? { dateTime: { format: 'dateOnly' } } : { text: {} }),
+      }));
+    },
+    async getItemsPage() { return { items: rows, hasMore: false }; },
+    async getItem(_site, _list, id) { return { ...rows.find(row => row.id === id), eTag: '"v1"' }; },
+    async deleteItem() { assert.fail('Imported payments cannot be deleted by the gallery'); },
+  };
+  const data = createRegistrationGalleryData({ kind: 'financial_movement', repository });
+  const dom = new JSDOM('<body></body>');
+  const gallery = createRegistrationGallery({ document: dom.window.document, kind: 'financial_movement', data });
+  try {
+    await gallery.open();
+    const cards = [...dom.window.document.querySelectorAll('[data-registration-row]')];
+    const bank = cards.find(card => card.textContent.includes('FAVORECIDO FICTÍCIO LTDA'));
+    const manual = cards.find(card => card.textContent.includes('CDB QA'));
+    assert.ok(bank, 'the imported payee is visible');
+    assert.match(bank.textContent, /FAVORECIDO FICTÍCIO LTDA \(MARCA QA\)/);
+    assert.ok(cards.some(card => card.querySelector('.rg-row-title').textContent === 'N/A'));
+    assert.match(bank.textContent, /03\/10\/2026/);
+    assert.match(bank.textContent, /001234/);
+    assert.match(bank.textContent, /22,45/);
+    assert.doesNotMatch(bank.textContent, /Editar|Excluir/);
+    assert.ok(manual.querySelector('[aria-label*="Editar"]'));
+    const institution = dom.window.document.querySelector('[data-filter-field="INSTITUICAO"]');
+    assert.ok([...institution.options].some(option => option.value === 'SICOOB'));
+    const search = dom.window.document.querySelector('[data-gallery-quick-search]');
+    search.value = 'favorecido ficticio';
+    search.dispatchEvent(new dom.window.Event('input', { bubbles: true }));
+    assert.equal(dom.window.document.querySelectorAll('[data-registration-row]').length, 1);
+    await assert.rejects(data.loadEditor('2'), /importado/i);
+    await assert.rejects(data.deleteItem('2'), /importado/i);
+  } finally {
+    gallery.destroy();
+    dom.window.close();
+  }
 });
