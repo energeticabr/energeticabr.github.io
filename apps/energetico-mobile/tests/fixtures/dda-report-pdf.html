@@ -98,6 +98,9 @@ try {
     : [side === 'left' ? box.left / 2 : (innerWidth + box.right) / 2, innerHeight / 2];
   const side = direction => document.elementFromPoint(...sidePoint(direction));
   state.sideGaps = side('left') === dialog && side('right') === dialog && getComputedStyle(dialog, '::backdrop').backgroundColor !== 'rgb(0, 0, 0)';
+  const canvas = element('.attachment-preview-pdf-page:not([hidden]) canvas');
+  state.canvasPixels = canvas.width * canvas.height;
+  state.rasterDensity = Math.min(canvas.width / parseFloat(canvas.style.width), canvas.height / parseFloat(canvas.style.height));
   state.files = [title.textContent];
   if (previous.disabled && !next.disabled) next.click();
   await ready('outro.PDF');

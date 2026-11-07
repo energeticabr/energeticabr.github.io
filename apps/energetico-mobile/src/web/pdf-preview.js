@@ -7,6 +7,7 @@ import { readPdfTextContent } from './pdf-text-content.js';
 // Several canvases stay alive while the user scrolls. A lower per-page cap
 // avoids Safari/iOS dropping the whole preview when a PDF has many pages.
 const MAX_CANVAS_PIXELS = 2_000_000;
+const MAX_WINDOW_PIXELS = MAX_CANVAS_PIXELS * 3;
 const MAX_CANVAS_SIDE = 4096;
 const MAX_PDF_BYTES = 60_000_000;
 const WINDOWED_PAGE_THRESHOLD = 12;
@@ -118,6 +119,8 @@ export function createPdfPreview({
   let windowed = false, slotsReady = false, pageSlots = [], pendingPageIndex = null, windowTask = null;
   const failedPageNumbers = new Set();
   const windowRef = documentRef.defaultView;
+  const screenDensity = Math.min(3, Math.max(1, Number(pixelRatio) || 1));
+  const longDocumentDensity = Math.min(2, screenDensity);
   let resizeObserver = null;
   let fittedSize = '';
   let reportedPage = null;
@@ -298,11 +301,21 @@ export function createPdfPreview({
       ? Math.min(availableWidth / natural.width, availableHeight / natural.height)
       : availableWidth / natural.width;
     const displayed = page.getViewport({ scale: displayScale });
+    // Reserve some detail for zoom on single-page documents. Long previews
+    // keep the lower density to bound memory across their retained pages.
+    const targetDensity = pageNumbers.length > WINDOWED_PAGE_THRESHOLD
+      ? longDocumentDensity
+      : screenDensity * (pageNumbers.length === 1 ? 1.5 : 1);
+    const displayArea = displayed.width * displayed.height;
+    // Share the extra detail across retained pages while preserving the
+    // previous resolution when the shared budget would reduce it.
+    const extraDetailLimit = Math.sqrt(MAX_WINDOW_PIXELS / pageNumbers.length / displayArea);
     const outputRatio = Math.min(
-      Math.max(1, Number(pixelRatio) || 1), 2,
+      targetDensity,
+      Math.max(longDocumentDensity, extraDetailLimit),
       MAX_CANVAS_SIDE / displayed.width,
       MAX_CANVAS_SIDE / displayed.height,
-      Math.sqrt(MAX_CANVAS_PIXELS / (displayed.width * displayed.height)),
+      Math.sqrt(MAX_CANVAS_PIXELS / displayArea),
     );
     const scaled = page.getViewport({ scale: displayScale * outputRatio });
     const wrapper = existingWrapper || element("div", "attachment-preview-pdf-page");
@@ -374,8 +387,8 @@ export function createPdfPreview({
     let pixels = 0;
     for (const candidate of candidates) {
       const slot = pageSlots[candidate]; if (!slot) continue;
-      const cost = Math.min(MAX_CANVAS_PIXELS, (slot.width + 1) * (slot.height + 1) * Math.min(2, Math.max(1, Number(pixelRatio) || 1)) ** 2);
-      if (pixels + cost > MAX_CANVAS_PIXELS * 3) continue;
+      const cost = Math.min(MAX_CANVAS_PIXELS, (slot.width + 1) * (slot.height + 1) * longDocumentDensity ** 2);
+      if (pixels + cost > MAX_WINDOW_PIXELS) continue;
       indices.push(candidate); pixels += cost;
     }
     return indices;
