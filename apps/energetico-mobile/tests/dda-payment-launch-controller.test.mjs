@@ -11,7 +11,7 @@ const request = signal => ({ itemId: 31, key, signal });
 const tick = () => new Promise(resolve => setImmediate(resolve));
 const deferred = () => { let resolve; const promise = new Promise(r => { resolve = r; }); return { promise, resolve }; };
 for (const target of [{ id: 'launch', reply: 'action_launch', text: 'EFETUAR LANÇAMENTO', callback: 'onStartLaunch' },
-  { id: 'payment_provision', reply: 'action_payment', text: 'CRIAR UMA PROVISÃO DE PAGAMENTO', callback: 'onStartProvision' }]) {
+  { id: 'payment', reply: 'action_payment', text: 'CRIAR UMA PROVISÃO DE PAGAMENTO', callback: 'onStartProvision' }]) {
 const test = (name, ...args) => nodeTest(`${target.id}: ${name}`, ...args);
 const launch = { id: target.id, contextId: `fake-${target.id}`, title: target.text };
 const remote = (id, fileName) => ({ id, fileName, mimeType: 'application/pdf', size: 8, mediaUrl: `/api/portal-media/${id}` });
