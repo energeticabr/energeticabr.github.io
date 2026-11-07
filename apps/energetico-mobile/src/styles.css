@@ -326,6 +326,7 @@ button:disabled { cursor: wait; opacity: .55; }
 .chat-pending-provision__amounts span:not(.chat-pending-provision__icon) { color: var(--muted); font-weight: 650; }
 .chat-pending-provision__amounts strong { font-size: clamp(1.18rem, 4.5vw, 2.3rem); line-height: 1.2; overflow-wrap: anywhere; }
 .chat-pending-provision__amounts > .chat-pending-provision__supplier-name { grid-column: 1 / -1; color: #123f50; font-size: clamp(1.05rem, 3.6vw, 1.5rem); font-weight: 850; }
+.chat-pending-provision__paid-amount { display: inline-block; max-width: 100%; overflow-wrap: anywhere; }
 .chat-pending-provision__retry { justify-self: start; min-height: 44px; margin-top: 6px; padding: 8px 12px; border: 1px solid #d78b22; border-radius: 10px; color: #8b5300; background: #fff4dd; font: inherit; font-weight: 700; }
 .chat-pending-provision__total { align-self: stretch; align-content: center; padding-left: 14px; border-left: 1px solid var(--due-border); }
 .chat-pending-provision__total--split strong { font-size: clamp(1rem, 4vw, 1.9rem); }

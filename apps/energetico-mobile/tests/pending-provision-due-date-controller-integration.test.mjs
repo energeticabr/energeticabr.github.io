@@ -141,7 +141,7 @@ test("pencil refreshes the due subtotal after the grouped date is confirmed", as
   h.client.getPendingProvisionSnapshot = async () => ({
     due: true, sourceKind: "provision-description", rows: [{
       id: "42", dueDate: date, totalDisplay: "R$ 300,00", childCount: 2,
-      ...(date === "2026-10-12" ? { amountDueDisplay: "R$ 100,00" } : {}),
+      ...(date === "2026-10-12" ? { amountDueDisplay: "R$ 100,00", amountPaidDisplay: "R$ 200,00" } : {}),
     }],
   });
   t.after(() => h.controller.stop()); await h.controller.start();
@@ -151,6 +151,7 @@ test("pencil refreshes the due subtotal after the grouped date is confirmed", as
   const row = h.view.renders.at(-1).pendingProvisions.rows.find(row => row.id === "42");
   assert.equal(row.dueDate, "2026-10-13");
   assert.equal(Object.hasOwn(row, "amountDueDisplay"), false);
+  assert.equal(row.amountPaidDisplay, undefined);
 });
 
 test("a slow subtotal read cannot leave the confirmed date edit busy", async t => {
@@ -169,7 +170,7 @@ test("a slow subtotal read cannot leave the confirmed date edit busy", async t =
     }
     return { due: true, sourceKind: "provision-description", rows: [{
       id: "42", dueDate: "2026-10-12", total: "300", totalDisplay: "R$ 300,00",
-      amountDueDisplay: "R$ 100,00", childCount: 2,
+      amountDueDisplay: "R$ 100,00", amountPaidDisplay: "R$ 200,00", childCount: 2,
     }] };
   };
   t.after(() => h.controller.stop()); await h.controller.start();
@@ -183,5 +184,6 @@ test("a slow subtotal read cannot leave the confirmed date edit busy", async t =
   assert.equal(current.pendingProvisionDateEditPaymentId, "");
   assert.equal(current.pendingProvisions.rows[0].dueDate, "2026-10-13");
   assert.equal(current.pendingProvisions.rows[0].amountDueDisplay, null);
+  assert.equal(current.pendingProvisions.rows[0].amountPaidDisplay, null);
   assert.equal(current.pendingProvisions.totalsUnavailable, true);
 });

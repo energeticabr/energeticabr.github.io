@@ -28,7 +28,9 @@ test('pending report supplier/location and attachment-only disclosure fit320/390
     for(const row of layout.geometry){assert.equal(row.supplierAbove,true,`${width}px ${row.id}`);assert.equal(row.locationInBlue,true);assert.equal(row.locationVisible,true);assert.equal(row.horizontalOverflow,false);}
     assert.equal(layout.geometry[0].location,'004 - EDIFÍCIO DE TESTE (TORRE A / APARTAMENTO 101)');
     assert.equal(layout.geometry[0].amount,'R$ 21.600,00 / R$ 61.600,00');
+    assert.match(layout.geometry[0].supplier,/CONSTRUÇÃO \(R\$ 40\.000,00 PAGOS\)$/);
     assert.equal(layout.geometry[1].amount,'R$ 225,00');
+    assert.equal(layout.geometry[1].supplier,'SWILE FICTÍCIO');
     assert.ok(layout.geometry.every(row=>row.amountFits),`${width}px: all values fit their field`);
     assert.equal(layout.disabledInvocations,1);assert.equal(layout.expanded,true);
     assert.equal(layout.controls,'pending-provision-attachments-306');assert.equal(layout.retryEnables,true);

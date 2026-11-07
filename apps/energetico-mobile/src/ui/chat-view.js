@@ -2422,6 +2422,8 @@ function pendingProvisionsMarkup(
           const splitAmount = grouped && Object.hasOwn(row, "amountDueDisplay");
           const totalDisplay = grouped ? row.totalDisplay || "—" : pendingProvisionAmount(row.total);
           const amountDisplay = splitAmount ? `${row.amountDueDisplay ?? "—"} / ${totalDisplay}` : totalDisplay;
+          const paidAmount = grouped && row.amountPaidDisplay
+            ? ` <span class="chat-pending-provision__paid-amount">(${escapeHtml(row.amountPaidDisplay)} PAGOS)</span>` : "";
           const attachmentState = attachmentsByPayment?.[paymentId] || { status: "loading", items: [] };
           const attachmentItems = (Array.isArray(attachmentState.items) ? attachmentState.items : [])
             .filter(item => typeof item?.fileName === 'string' && item.fileName.trim());
@@ -2445,7 +2447,7 @@ function pendingProvisionsMarkup(
             : "";
           return `<article class="chat-pending-provision chat-pending-provision--payment chat-pending-provision--${timing.kind}" role="listitem" data-payment-id="${escapeHtml(paymentId)}">
             <div class="chat-pending-provision__amounts">
-              <strong class="chat-pending-provision__supplier-name" data-field="supplier">${escapeHtml(row.supplier || "Fornecedor não informado")}</strong>
+              <strong class="chat-pending-provision__supplier-name" data-field="supplier">${escapeHtml(row.supplier || "Fornecedor não informado")}${paidAmount}</strong>
               <div class="chat-pending-provision__due" data-field="dueDate">${pendingProvisionIcon("calendar")}<div><span>Vencimento</span><strong>${escapeHtml(timing.date)}</strong><small class="chat-pending-provision__timing">${escapeHtml(timing.label)}</small></div></div>
               <div class="chat-pending-provision__total${splitAmount ? " chat-pending-provision__total--split" : ""}" data-field="total"><span>Valor</span><strong>${escapeHtml(amountDisplay)}</strong></div>
             </div>
