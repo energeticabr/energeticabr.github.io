@@ -17,8 +17,8 @@ for (const timezone of ['UTC', 'America/Sao_Paulo']) {
     });
     assert.ifError(result.error);
     assert.equal(result.status, 0, `${timezone}\n${result.stdout}\n${result.stderr}`);
-    assert.match(result.stdout, /^# tests 19$/m, 'all 19 regressions must actually execute');
-    assert.match(result.stdout, /^# pass 19$/m);
+    assert.match(result.stdout, /^# tests 21$/m, 'all 21 regressions must actually execute');
+    assert.match(result.stdout, /^# pass 21$/m);
     assert.match(result.stdout, /^# fail 0$/m);
   });
 }
