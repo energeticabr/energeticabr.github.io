@@ -2227,11 +2227,23 @@ test("galeria reutiliza todos os anexos escolhidos quando a conversa já está n
   assert.deepEqual(await Promise.all(uploadedFiles.map(file => file.text())), ["PDF", "imagem"]);
   assert.deepEqual(uploadedFiles.map(file => file.type), ["application/pdf", "image/jpeg"]);
   assert.deepEqual(h.store.getState().attachments.map(file => file.fileName), ["comprovante.pdf", "foto.jpg"]);
+  remote[0] = { ...remote[0], id: "updated-pdf", mediaUrl: "/api/portal-media/updated-pdf" };
+  h.client.getAttachments = async () => [...remote];
+  h.client.compressAttachment = async id => {
+    h.chatCalls.push(["compress-attachment", id]);
+    return { status: "processed", messages: [], attachments: [...remote] };
+  };
+  await h.view.emit("compress-attachment", { fileId: "remote-1" });
+  assert.deepEqual(h.chatCalls.at(-1), ["compress-attachment", "updated-pdf"]);
+  assert.deepEqual(h.store.getState().attachments.map(file => file.id), ["updated-pdf", "remote-2"]);
 });
 
 
-for (const includeAll of [true, false]) {
-  test(`DDA PDF viewer stages ${includeAll ? "all attachments" : "only the open attachment"} for an existing provision without abandoning Suprimentos`, async t => {
+for (const selection of ["todos", "somente o aberto", "com cópias já na barra"]) {
+  test(`DDA PDF viewer stages the chosen files (${selection}) for an existing provision without abandoning Suprimentos`, async t => {
+    const includeAll = selection !== "somente o aberto";
+    const existingFiles = selection === "com cópias já na barra";
+    const retryUpload = includeAll && !existingFiles;
     let gallery, preview, closed = false;
     const uploaded = [], replies = [];
     let failedUploadId;
@@ -2249,6 +2261,13 @@ for (const includeAll of [true, false]) {
     const menu = { id: "menu:choosing_action", title: "SUPRIMENTOS", contextId: "supplies" };
     const supplies = { type: "poll", question: "👉 📦 SUPRIMENTOS\nQUAL FLUXO VOCÊ DESEJA INICIAR?", options: [] };
     const attachments = [{ id: "prior", fileName: "anterior.pdf", mimeType: "application/pdf", size: 7, mediaUrl: "/api/portal-media/prior" }];
+    const first = new Blob(["espelho"], { type: "application/pdf" });
+    const second = new Blob(["DANFE"], { type: "application/pdf" });
+    h.client.fetchMedia = async item => item.fileName === "espelho.pdf" ? first : new Blob(["outro"], { type: second.type });
+    if (existingFiles) {
+      attachments.push({ id: "espelho", fileName: "espelho.pdf", mimeType: first.type, size: first.size, mediaUrl: "/api/portal-media/espelho" });
+      attachments.push({ id: "different", fileName: "DANFE.pdf", mimeType: second.type, size: second.size, mediaUrl: "/api/portal-media/different" });
+    }
     const menuResponse = () => ({ status: "processed", activeFlow: menu, messages: [supplies], attachments: [...attachments] });
     h.store.ingestRemoteMessages([supplies], menuResponse());
     h.store.setDraft("texto preservado");
@@ -2268,7 +2287,7 @@ for (const includeAll of [true, false]) {
         messages: [{ type: "poll", question: "A QUAL PROVISÃO DE PAGAMENTO DESEJA ADICIONAR ANEXOS?", options: [] }] };
     };
     h.client.sendFile = async file => {
-      if (includeAll && file.name === "DANFE.pdf" && !failedUploadId) {
+      if (retryUpload && file.name === "DANFE.pdf" && !failedUploadId) {
         failedUploadId = file.uploadMessageId;
         throw new Error("Falha temporária no DANFE");
       }
@@ -2279,8 +2298,6 @@ for (const includeAll of [true, false]) {
       return menuResponse();
     };
     await h.view.emit("select-reply", { replyId: "action_dda_gallery" });
-    const first = new Blob(["espelho"], { type: "application/pdf" });
-    const second = new Blob(["DANFE"], { type: "application/pdf" });
     const items = [{ fileName: "espelho.pdf", source: first }, { fileName: "DANFE.pdf", source: async () => second }];
     await gallery.openMediaCollection(items);
 
@@ -2290,11 +2307,14 @@ for (const includeAll of [true, false]) {
       attachments: includeAll ? items : [{ fileName: items[1].fileName, source: second }],
     }), true);
     assert.equal(closed, true);
-    if (includeAll) {
+    if (retryUpload) {
       const [failed] = h.store.getState().pendingFiles;
       assert.equal(failed.status, "failed");
       assert.equal(failed.file.name, "DANFE.pdf");
       assert.deepEqual(h.store.getState().attachments.map(item => item.fileName), ["anterior.pdf", "espelho.pdf"]);
+      assert.equal(await preview.onAddToTray({ blob: first, fileName: "espelho.pdf", attachments: items }), true);
+      assert.deepEqual(h.store.getState().pendingFiles.map(item => item.id), [failed.id]);
+      assert.deepEqual(uploaded, ["espelho.pdf"]);
       menuAvailable = false;
       assert.equal(await h.view.emit("retry-file", { fileId: failed.id }), false);
       assert.equal(h.store.getState().pendingFiles[0].id, failed.id);
@@ -2302,14 +2322,15 @@ for (const includeAll of [true, false]) {
       menuAvailable = true;
       assert.equal(await h.view.emit("retry-file", { fileId: failed.id }), true);
     }
-    assert.deepEqual(uploaded, includeAll ? ["espelho.pdf", "DANFE.pdf"] : ["DANFE.pdf"]);
-    assert.deepEqual(replies, Array(includeAll ? 3 : 1).fill("input_continue"));
+    assert.deepEqual(uploaded, retryUpload ? ["espelho.pdf", "DANFE.pdf"] : ["DANFE.pdf"]);
+    assert.deepEqual(replies, Array(retryUpload ? 4 : 1).fill("input_continue"));
     assert.equal(h.store.getState().activeFlow.id, menu.id);
     assert.equal(h.store.getState().draft, "texto preservado");
-    assert.deepEqual(h.store.getState().attachments.map(item => item.fileName), ["anterior.pdf", ...uploaded]);
+    const expectedFiles = ["anterior.pdf", ...(existingFiles ? ["espelho.pdf", "DANFE.pdf"] : []), ...uploaded];
+    assert.deepEqual(h.store.getState().attachments.map(item => item.fileName), expectedFiles);
     await h.view.emit("select-reply", { replyId: "action_payment_provision_attachment", label: "ADICIONAR ANEXOS A UMA PROVISÃO DE PAGAMENTO" });
     assert.equal(h.store.getState().activeFlow.id, "payment_provision_attachment");
-    assert.deepEqual(h.store.getState().attachments.map(item => item.fileName), ["anterior.pdf", ...uploaded]);
+    assert.deepEqual(h.store.getState().attachments.map(item => item.fileName), expectedFiles);
   });
 }
 

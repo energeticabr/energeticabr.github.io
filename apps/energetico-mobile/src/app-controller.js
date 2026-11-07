@@ -6264,6 +6264,34 @@ export function createAppController({
     });
   }
 
+  async function newGalleryTrayFiles(files, state, assertSession) {
+    const staged = [
+      ...state.pendingFiles.map(({ file }) => ({ file, fileName: file?.name, mimeType: file?.type, size: file?.size })),
+      ...unsubmittedUserAttachments(state.attachments).filter(item => item.mediaUrl),
+    ];
+    const additions = [];
+    for (const file of files) {
+      const matches = staged.filter(item => item.fileName === file.name
+        && item.mimeType === file.type && item.size === file.size);
+      let identical = false;
+      if (matches.length) {
+        const bytes = new Uint8Array(await file.arrayBuffer());
+        for (const item of matches) {
+          const blob = item.file || await withTimeout(client.fetchMedia(item, { maxBytes: file.size }),
+            mediaLoadTimeoutMs, "A leitura do anexo da barra demorou mais que o esperado.");
+          assertSession();
+          const previous = new Uint8Array(await blob.arrayBuffer());
+          if (bytes.length === previous.length && bytes.every((byte, index) => byte === previous[index])) {
+            identical = true;
+            break;
+          }
+        }
+      }
+      if (!identical) additions.push(file);
+    }
+    return additions;
+  }
+
   function galleryAddToTray(assertSession) {
     return async ({ blob, fileName, attachments } = {}) => {
       assertSession();
@@ -6302,17 +6330,21 @@ export function createAppController({
         // A submenu already accepts staged files. Confirm it with the VM
         // before uploading so a draft opened on another device stays separate.
         const synchronized = await confirmGalleryAttachmentMenu();
+        if (!synchronized || !await waitForResponseTransition()) return false;
         assertSession();
-        if (!synchronized) return false;
+        const menu = store.getState();
+        const additions = await newGalleryTrayFiles(files, menu, assertSession);
+        assertSession();
+        if (store.getState().activeFlow !== menu.activeFlow || flowBusy()) return false;
 
         // Keep failed uploads in the tray with their original request IDs.
         // Retrying one file there must never replay the other selected files.
-        for (const file of files) {
+        for (const file of additions) {
           file.uploadMessageId = newUploadMessageId();
           file.galleryTrayUpload = true;
         }
         closeGalleryOverlays();
-        await queueSelectedFiles(() => files, { preserveFailedFiles: true });
+        if (additions.length) await queueSelectedFiles(() => additions, { preserveFailedFiles: true });
         assertSession();
         return true;
       }
@@ -11243,7 +11275,7 @@ export function createAppController({
     if (!force && flowBusy()) return false;
     const lastMessage = state.messages.at?.(-1) || state.messages[state.messages.length - 1];
     const lastMessageText = lastMessage?.question || lastMessage?.prompt || lastMessage?.text || "";
-    if (!state.activeFlow && isMainMenuPrompt(lastMessageText)) {
+    if (!state.activeFlow && !state.attachments.length && isMainMenuPrompt(lastMessageText)) {
       // Attachment snapshots belong to the active flow. Once the VM has
       // returned the main menu, a delayed foreground/page restore must not
       // bring back files consumed by the completed post.
