@@ -26,9 +26,10 @@ try {
   }, openMediaCollection: items => preview.openCollection(items) });
   await gallery.open();
   const waitFor = async condition => { for (let i = 0; i < 300; i++) { if (condition()) return; await new Promise(resolve => setTimeout(resolve, 30)); } throw new Error('PDF não terminou de renderizar'); };
-  const ready = () => document.querySelectorAll('.attachment-preview-pdf-text').length > 0;
+  const ready = text => document.querySelector('.attachment-preview-content')?.textContent.includes(text)
+    && document.querySelectorAll('.attachment-preview-pdf-canvas').length > 0;
   document.querySelector('.rg-sefaz-pdf-link').click();
-  await waitFor(ready);
+  await waitFor(() => ready('DANFE FICTICIO'));
   const state = () => ({ title: document.querySelector('.attachment-preview-title').textContent,
     position: document.querySelector('.attachment-preview-collection-status').textContent,
     nextDisabled: document.querySelector('.attachment-preview-collection-next').disabled,
@@ -36,13 +37,13 @@ try {
     text: document.querySelector('.attachment-preview-content').textContent });
   const first = state();
   document.querySelector('.attachment-preview-collection-next').click();
-  await waitFor(() => ready() && document.querySelector('.attachment-preview-title').textContent === correction);
+  await waitFor(() => ready('CARTA DE CORRECAO FICTICIA') && document.querySelector('.attachment-preview-title').textContent === correction);
   const next = state();
   document.querySelector('.attachment-preview-collection-previous').click();
-  await waitFor(() => ready() && document.querySelector('.attachment-preview-title').textContent === fileName);
+  await waitFor(() => ready('DANFE FICTICIO') && document.querySelector('.attachment-preview-title').textContent === fileName);
   const back = state();
   document.querySelector('.attachment-preview-collection-next').click();
-  await waitFor(() => ready() && document.querySelector('.attachment-preview-title').textContent === correction);
+  await waitFor(() => ready('CARTA DE CORRECAO FICTICIA') && document.querySelector('.attachment-preview-title').textContent === correction);
   const dialog = document.querySelector('dialog'), nav = document.querySelector('.attachment-preview-collection-nav');
   document.documentElement.dataset.layout = JSON.stringify({ first, next, back, listed, downloads,
     overflow: document.documentElement.scrollWidth > innerWidth,
