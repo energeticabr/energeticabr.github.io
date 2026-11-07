@@ -4,6 +4,7 @@ import {JSDOM} from 'jsdom';
 import {createAppController} from '../src/app-controller.js';
 import {createConversationStore} from '../src/chat/conversation-store.js';
 import {renderChatMarkup,commandFromTarget} from '../src/ui/chat-view.js';
+import {createTrancidReportView} from '../src/ui/trancid-report-view.js';
 const tick=()=>new Promise(resolve=>setImmediate(resolve));
 function harness(t,options={}) {
  const handlers=new Map(),opens=[],factories=[],tokens=[],renders=[];let sequence=0;
@@ -28,14 +29,52 @@ test('manual report loads with Microsoft token and old report loader rejects aft
  const h=harness(t);await h.controller.start();assert.equal(await h.view.emit('open-trancid-report'),true);assert.equal(h.tokens.length,1);
  await h.view.emit('sign-out');await assert.rejects(h.factories[0].loadReport({}),/sessão|session|encerrad/i);
 });
-test('low balances automatically open once at startup and again on next foreground',async t=>{
+test('automatic Trancid limit survives restart, is scoped by account and resets at Brasília midnight',async t=>{
+ t.mock.timers.enable({apis:['Date'],now:new Date('2026-11-08T02:30:00Z')});
+ const previousStorage=Object.getOwnPropertyDescriptor(globalThis,'localStorage'),values=new Map();
+ Object.defineProperty(globalThis,'localStorage',{configurable:true,
+  value:{getItem:key=>values.get(key)??null,setItem:(key,value)=>values.set(key,value)}});
+ t.after(()=>{if(previousStorage)Object.defineProperty(globalThis,'localStorage',previousStorage);else delete globalThis.localStorage;});
  const h=harness(t,{enableTrancidReminders:true});await h.controller.start();for(let n=0;n<12;n++)await tick();assert.equal(h.opens.length,1);assert.equal(h.opens[0].automatic,true);
  h.factories[0].onClose();for(let n=0;n<4;n++)await tick();assert.equal(h.opens.length,1);
- await h.controller.handleForeground();for(let n=0;n<12;n++)await tick();assert.equal(h.opens.length,2);
+ await h.controller.handleForeground();for(let n=0;n<12;n++)await tick();assert.equal(h.opens.length,1);
+ h.controller.stop();
+
+ const other=harness(t,{enableTrancidReminders:true,auth:{initialize:async()=>({homeAccountId:'trancid-other'}),getToken:async()=> 'token'}});
+ await other.controller.start();for(let n=0;n<12;n++)await tick();assert.equal(other.opens.length,1);
+ other.controller.stop();
+
+ t.mock.timers.setTime(Date.parse('2026-11-08T02:59:59Z'));
+ const restarted=harness(t,{enableTrancidReminders:true});
+ await restarted.controller.start();for(let n=0;n<12;n++)await tick();assert.equal(restarted.opens.length,0);
+ assert.equal(await restarted.view.emit('open-trancid-report'),true);
+ assert.equal(restarted.opens[0].automatic,undefined);
+ restarted.factories[0].onClose();
+ t.mock.timers.setTime(Date.parse('2026-11-08T03:00:00Z'));
+ await restarted.controller.handleForeground();for(let n=0;n<12;n++)await tick();
+ assert.equal(restarted.opens.length,2);assert.equal(restarted.opens[1].automatic,true);
 });
 test('automatic balance report waits behind an active draft',async t=>{
  const h=harness(t,{enableTrancidReminders:true});h.store.setDraft('Edição em andamento');await h.controller.start();for(let n=0;n<8;n++)await tick();assert.equal(h.opens.length,0);
  await h.view.emit('draft-changed',{value:''});for(let n=0;n<12;n++)await tick();assert.equal(h.opens.length,1);
+});
+test('closing the visible Trancid dialog before opening settles still counts that day',async t=>{
+ const old=globalThis.document,dom=new JSDOM('<body><main id="app"></main></body>');
+ globalThis.document=dom.window.document;
+ t.after(()=>{globalThis.document=old;dom.window.close();});
+ let visible=0;
+ const h=harness(t,{enableTrancidReminders:true,trancidReportFactory:input=>{
+  const panel=createTrancidReportView(input);
+  return {...panel,open(options){
+   const opening=panel.open(options);
+   if(!panel.element.hidden){visible++;panel.close();}
+   return opening;
+  }};
+ }});
+ await h.controller.start();for(let n=0;n<12;n++)await tick();
+ assert.equal(visible,1);
+ await h.controller.handleForeground();for(let n=0;n<12;n++)await tick();
+ assert.equal(visible,1);
 });
 test('late report factory cannot display after sign out',async t=>{
  let resolve,destroyed=0;const h=harness(t,{trancidReportFactory:()=>new Promise(r=>resolve=r)});await h.controller.start();const request=h.view.emit('open-trancid-report');await tick();await h.view.emit('sign-out');

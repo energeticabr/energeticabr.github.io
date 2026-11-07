@@ -1632,6 +1632,7 @@ export function createAppController({
   function resumeDdaSync(){void ensureDdaSyncSession()?.resume();}
   const trancidAutoReminder = createTrancidAutoReminder({
     enabled: () => enableTrancidReminders && Boolean(account) && !stopped,
+    accountKey: () => account?.homeAccountId || account?.localAccountId || account?.idTokenClaims?.oid || account?.username || '',
     canOpen: canOpenAutomaticTrancid,
     onChange: () => render(),
     loadReport: options => loadTrancidReport({ ...options, interactive: false }),
