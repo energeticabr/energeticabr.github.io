@@ -6,11 +6,11 @@ import {createDdaReportView} from '../src/ui/dda-report-view.js';
 const tick=()=>new Promise(resolve=>setImmediate(resolve));
 const provision=(id,supplier,amount,date)=>({id:String(id),fields:{FORNECEDOR:supplier,VALORTOTAL:amount,...(date?{DATAPGTOEFETUADO:date}:{})}});
 function repository(){
- const state={items:[provision(1,'SWILE DO BRASIL S.A.','58,21'),provision(2,'OUTRO FORNECEDOR','58,21'),provision(3,'SWILE DO BRASIL S.A.','100','2026-10-28')],linked:'',writes:[]};
+ const state={items:[provision(1,'SWILE DO BRASIL S.A.','58,21'),provision(2,'OUTRO FORNECEDOR','58,21'),provision(3,'SWILE DO BRASIL S.A.','100','2026-10-28')],children:[],linked:'',writes:[]};
  const api={
-  resolveList:async(_site,[name])=>({status:'resolved',id:name==='DDAS SICOOB'?'dda':'provision'}),
-  getColumns:async()=>[{name:DDA_PROVISION_FIELD,readOnly:false}],
-  getItems:async()=>state.items,
+  resolveList:async(_site,[name])=>({status:'resolved',id:name==='DDAS SICOOB'?'dda':name==='DESCRITIVOPROVISAO'?'provision':'children'}),
+  getColumns:async(_site,list)=>list==='children'?[{name:'DESCRITIVOPROVISAO',text:{}}]:[{name:DDA_PROVISION_FIELD,readOnly:false}],
+  getItems:async(_site,list)=>list==='children'?state.children:state.items,
   getItem:async(_site,list,id)=>list==='provision'?state.items.find(item=>item.id===String(id)):{id:String(id),eTag:'"version-1"',fields:{[DDA_PROVISION_FIELD]:state.linked}},
   updateItem:async(_site,list,id,fields,options)=>{state.writes.push({list,id,fields,options});state.linked=fields[DDA_PROVISION_FIELD];return {fields:{[DDA_PROVISION_FIELD]:state.linked}};},
  };return {state,api};
@@ -24,6 +24,59 @@ test('lists only unpaid provision descriptions and ranks supplier or exact total
  state.items[0].fields.DATAPGTOEFETUADO='2026-10-29';
  await assert.rejects(service.save({ddaId:'31',provisionId:'1'}),/pagamento efetuado/);
  assert.equal(state.writes.length,0);
+});
+test('loads unpaid child amounts with quantity and freight under their actual parent and explains the match',async t=>{
+ const {state,api}=repository();
+ state.items=[provision(1,'CONCRETEIRA FICTÍCIA','15000'),provision(2,'CONCRETEIRA FICTÍCIA','10000')];
+ const child=(id,parent,price,extra={})=>({id:String(id),fields:{DESCRITIVOPROVISAO:parent,VALORTOTAL:price,...extra}});
+ state.children=[
+  child(101,'1','2.750,00',{QTD:'2',FRETE:'16,67',DATAPREVISTOPGTO:'06/11/2026'}),
+  child(102,'1','9483,33'),
+  child(103,'2','5516,67',{DATAPGTOEFETUADO:'2026-11-05'}),
+  child(104,'999','5516,67'),child(105,'2','inválido'),
+  child(106,'2','5516,67',{STATUS:'PAGAMENTO EFETUADO'}),
+  child(107,'2','5516,67',{PGTOAGENDADO:'PAGO'}),
+ ];
+ const service=createDdaProvisionLink({repository:api});
+ const options=await service.loadOptions();
+ const ranked=rankDdaProvisionOptions(options,{supplier:'CONCRETEIRA FICTÍCIA',amount:'5.516,67',due:'2026-11-06'});
+ assert.equal(ranked[0].id,'1');assert.equal(ranked[0].amountMatch,true);
+ assert.equal(ranked[0].matchedProvision.id,'101');assert.equal(ranked[0].matchedProvision.amount,5516.67);
+ assert.equal(ranked[0].matchedProvision.due,'2026-11-06');
+ assert.equal(ranked[1].amountMatch,false);assert.equal(state.writes.length,0);
+ const dom=new JSDOM('<body><main></main></body>');
+ const {createDdaProvisionPicker}=await import('../src/ui/dda-provision-picker.js');
+ const picker=createDdaProvisionPicker({document:dom.window.document,host:dom.window.document.querySelector('main'),service});
+ t.after(()=>{picker.destroy();dom.window.close();});
+ await picker.show({id:'37',supplier:'CONCRETEIRA FICTÍCIA',amount:5516.67,due:'2026-11-06'});
+ const option=dom.window.document.querySelector('.dda-provision-star').closest('label');
+ assert.match(option.textContent,/Provisão #101/);assert.match(option.textContent,/5\.516,67/);
+ assert.equal(option.querySelector('input').checked,false);assert.equal(state.writes.length,0);
+});
+test('resolves a child due-date internal name from SharePoint metadata',async()=>{
+ const {state,api}=repository(),columns=api.getColumns;
+ api.getColumns=async(site,list,...rest)=>list==='children'?[{name:'DESCRITIVOPROVISAO',text:{}},{name:'internal_due',displayName:'DATA PREVISTO PGTO'}]:columns(site,list,...rest);
+ state.children=[{id:'101',fields:{DESCRITIVOPROVISAO:'1',VALORTOTAL:'58,21',internal_due:'2026-11-06'}}];
+ const options=await createDdaProvisionLink({repository:api}).loadOptions();
+ assert.equal(options[0].provisions[0].due,'2026-11-06');
+});
+test('uses the due date of an amount-matching child and retains exact parent total matching',()=>{
+ const options=[
+  {id:'1',supplier:'CONCRETEIRA',amount:15000,due:'2026-11-06',provisions:[{id:'101',amount:5516.67,due:'2026-12-06'}]},
+  {id:'2',supplier:'CONCRETEIRA',amount:20000,due:'2026-12-06',provisions:[{id:'201',amount:5516.67,due:'2026-11-06'},{id:'202',amount:50,due:'2026-11-06'}]},
+ ];
+ const ranked=rankDdaProvisionOptions(options,{supplier:'CONCRETEIRA',amount:5516.67,due:'2026-11-06'});
+ assert.equal(ranked[0].id,'2');assert.equal(ranked[0].matchedProvision.id,'201');
+ assert.deepEqual(ranked.map(item=>item.recommended),[true,false]);
+ assert.equal(rankDdaProvisionOptions([...options,{id:'3',supplier:'CONCRETEIRA',amount:5516.67,due:'2026-11-06'}],{supplier:'CONCRETEIRA',amount:5516.67,due:'2026-11-06'}).find(item=>item.id==='3').amountMatch,true);
+ assert.equal(rankDdaProvisionOptions(options,{supplier:'OUTRO',amount:'inválido'})[0].recommended,false);
+});
+test('does not silently rank incomplete child reads or invalid parent-link metadata',async()=>{
+ const {api}=repository(),read=api.getItems;
+ api.getItems=async(site,list,...rest)=>list==='children'?null:read(site,list,...rest);
+ await assert.rejects(createDdaProvisionLink({repository:api}).loadOptions(),/incompleta/);
+ api.getItems=read;api.getColumns=async(_site,list)=>list==='children'?[]:[{name:DDA_PROVISION_FIELD}];
+ await assert.rejects(createDdaProvisionLink({repository:api}).loadOptions(),/metadados/);
 });
 test('same supplier and total recommend only the closest due date',()=>{
  const options=[

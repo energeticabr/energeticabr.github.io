@@ -68,7 +68,8 @@ permissions:
 
 concurrency:
   group: energetico-ios-${{ github.ref }}-${{ github.event_name == 'workflow_dispatch' && (inputs.validate_app_store || inputs.submit_app_store) && 'app-store' || 'build' }}
-  cancel-in-progress: ${{ !(github.event_name == 'workflow_dispatch' && (inputs.validate_app_store || inputs.submit_app_store)) }}
+  # Finish the active main release; only the newest pending revision waits.
+  cancel-in-progress: ${{ github.ref != 'refs/heads/main' && !(github.event_name == 'workflow_dispatch' && (inputs.validate_app_store || inputs.submit_app_store)) }}
 
 jobs:
   app-store-review:

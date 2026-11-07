@@ -7,10 +7,13 @@ let writes=0;
 const frame=()=>new Promise(resolve=>requestAnimationFrame(()=>requestAnimationFrame(resolve)));
 const view=createDdaReportView({document,data:{
  loadSnapshot:async()=>({rows:[{id:'28',fields:{Title:'FORNECEDOR FICTÍCIO',VALOR:360,SITUACAO:'Em aberto',VENCIMENTO:'2026-11-04'}}]}),
- provisionLink:{loadOptions:async()=>[{id:'44',supplier:'FORNECEDOR FICTÍCIO',label:'#44 · FORNECEDOR FICTÍCIO',amount:720}],save:async()=>{writes++;return {ddaId:'28',provisionId:'44'};}}
+ provisionLink:{loadOptions:async()=>[{id:'44',supplier:'FORNECEDOR FICTÍCIO',label:'#44 · FORNECEDOR FICTÍCIO',amount:720,provisions:[{id:'101',amount:360,due:'2026-11-04'},{id:'102',amount:360,due:'2026-12-04'}]}],save:async()=>{writes++;return {ddaId:'28',provisionId:'44'};}}
 }});
 await view.open();
 document.querySelector('[data-dda-provision-pencil]').click();await frame();
+const match=document.querySelector('.dda-provision-line-match'),matchRect=match.getBoundingClientRect();
+const pickerMatch=match.textContent.includes('Provisão #101')&&match.textContent.includes('360,00')&&document.querySelectorAll('.dda-provision-star').length===1;
+const pickerFits=matchRect.left>=-1&&matchRect.top>=-1&&matchRect.right<=innerWidth+1&&matchRect.bottom<=innerHeight+1;
 document.querySelector('input[type=radio]').click();
 async function review(){document.querySelector('.dda-provision-save').click();await frame();return document.querySelector('[data-edit-review]');}
 let dialog=await review();
@@ -28,5 +31,5 @@ const confirmed=writes===1&&!view.element.hidden&&document.querySelector('.ddr-l
 view.close();await view.open();
 document.querySelector('[data-dda-provision-pencil]').click();await frame();
 document.querySelector('input[type=radio]').click();await review();
-document.documentElement.dataset.layout=JSON.stringify({fits,hit,transform,dimensions,bounds:{left:rect.left,right:rect.right,top:rect.top,bottom:rect.bottom},focusInside,writesBefore,cancelled,confirmed});
+document.documentElement.dataset.layout=JSON.stringify({pickerMatch,pickerFits,fits,hit,transform,dimensions,bounds:{left:rect.left,right:rect.right,top:rect.top,bottom:rect.bottom},focusInside,writesBefore,cancelled,confirmed});
 </script></body></html>
