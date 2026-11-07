@@ -19,7 +19,7 @@ const until = async (check, label) => {
   }
   throw new Error(`Tempo esgotado: ${label}`);
 };
-const rows = [1, 2, 3, 4, 5].map(id => ({ id: String(id), fields: {
+const rows = Array.from({ length: 18 }, (_, index) => index + 1).map(id => ({ id: String(id), fields: {
   Title: `Fornecedor fictício ${id}`, SITUACAO: 'Em aberto', VENCIMENTO: '2026-11-20', VALOR: 120, BANCO: 'Banco Exemplo',
 } }));
 const preview = createAttachmentPreview({ documentRef: document });
@@ -45,11 +45,28 @@ try {
   icon.scrollIntoView({ block: 'center', inline: 'nearest' });
   icon.focus({ preventScroll: true });
   const row = element('[data-dda-id="2"]'), first = element('[data-dda-id="1"]');
-  const id = row.querySelector('.ddr-id'), arrow = element('.report-navigation-arrow--previous');
+  const cluster = row.querySelector('.ddr-id-cluster');
+  const arrows = [element('.report-navigation-arrow--previous'), element('.report-navigation-arrow--next')];
   const rotated = innerHeight > innerWidth;
   const logicalAxis = rect => rotated ? (rect.top + rect.bottom) / 2 : (rect.left + rect.right) / 2;
-  state.iconBeforeId = id.contains(icon) && icon.nextElementSibling.textContent === '2';
-  state.aligned = Math.abs(logicalAxis(arrow.getBoundingClientRect()) - logicalAxis(icon.getBoundingClientRect())) <= 2;
+  state.idAboveIcon = cluster?.textContent === '2' && cluster.nextElementSibling === icon
+    && cluster.offsetTop + cluster.offsetHeight <= icon.offsetTop
+    && parseFloat(getComputedStyle(cluster).borderRadius) > 0;
+  state.blueLargerIcon = getComputedStyle(icon).color === 'rgb(34, 91, 151)'
+    && parseFloat(getComputedStyle(icon.querySelector('svg')).width) > 28;
+  const initialScroll = content.scrollTop;
+  const beforeScroll = arrows.map(arrow => arrow.getBoundingClientRect());
+  content.scrollTop += 180;
+  const afterScroll = arrows.map(arrow => arrow.getBoundingClientRect());
+  const middle = rotated ? innerWidth / 2 : innerHeight / 2;
+  state.fixedSideArrows = content.scrollTop > initialScroll && arrows.every((arrow, index) => {
+    const rect = beforeScroll[index], after = afterScroll[index];
+    const blockCenter = rotated ? (rect.left + rect.right) / 2 : (rect.top + rect.bottom) / 2;
+    return getComputedStyle(arrow).position === 'fixed' && Math.abs(blockCenter - middle) <= 1
+      && rect.left === after.left && rect.top === after.top;
+  }) && logicalAxis(beforeScroll[0]) < (rotated ? innerHeight : innerWidth) / 4
+    && logicalAxis(beforeScroll[1]) > 3 * (rotated ? innerHeight : innerWidth) / 4;
+  content.scrollTop = initialScroll;
   state.stripesFillWidth = first.offsetWidth === content.clientWidth && row.offsetWidth === content.clientWidth
     && getComputedStyle(first).backgroundColor === 'rgb(255, 255, 255)' && getComputedStyle(row).backgroundColor === 'rgb(239, 246, 250)';
   state.tableFits = table.offsetWidth <= content.clientWidth + 1;
@@ -106,6 +123,11 @@ try {
   await openPdf(2, 'espelho.pdf');
   state.reportPreserved = row.isConnected && !report.element.hidden && content.scrollTop === savedScroll;
   state.downloads = downloads;
+  if (new URLSearchParams(location.search).has('capture')) {
+    close.click();
+    content.scrollTop = 0;
+    await new Promise(resolve => requestAnimationFrame(resolve));
+  }
 } catch (error) { state.error = error.message; }
 document.documentElement.dataset.layout = JSON.stringify(state);
 </script></body></html>
