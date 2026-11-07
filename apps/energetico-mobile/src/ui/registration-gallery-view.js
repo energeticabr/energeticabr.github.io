@@ -727,11 +727,34 @@ export function createRegistrationGallery({ document: doc = globalThis.document,
           link.addEventListener('click', event => {
             event.preventDefault();
             if (destroyed || root.hidden) return;
+            const current = ++attachmentRequest;
             let fileName = new URL(value).pathname.split('/').at(-1) || 'documento';
             try { fileName = decodeURIComponent(fileName); } catch { /* Retain the encoded real file name. */ }
-            const failed = () => { attachmentNotice = 'Não foi possível abrir o documento. Tente novamente.'; updateFeedback(); };
+            const isCurrent = () => !destroyed && !root.hidden && current === attachmentRequest;
+            const failed = () => { if (isCurrent()) { attachmentNotice = 'Não foi possível abrir o documento. Tente novamente.'; updateFeedback(); } };
             try {
-              void Promise.resolve(openMediaCollection([{ fileName, source: options => data.downloadDocument(value, options) }])).catch(failed);
+              const original = { fileName, source: options => data.downloadDocument(value, options) };
+              if (kind === 'notas_fiscais_sefaz' && field === 'DANFE_URL'
+                && typeof data.listAttachments === 'function' && typeof data.downloadAttachment === 'function') {
+                void (async () => {
+                  // Corrections can arrive after the gallery snapshot. Read this
+                  // invoice's current attachments each time its PDF is opened.
+                  const attachments = await data.listAttachments(row.id, { refresh: true });
+                  if (!isCurrent()) return;
+                  if (!Array.isArray(attachments)) throw new Error('Consulta de anexos incompleta.');
+                  const seen = new Set([fileName.toLowerCase()]);
+                  const others = attachments.filter(item => {
+                    const key = String(item?.fileName || '').toLowerCase();
+                    if (!key || seen.has(key)) return false;
+                    seen.add(key); return true;
+                  }).sort((a, b) => Number(/^CCe-.*\.pdf$/i.test(b.fileName)) - Number(/^CCe-.*\.pdf$/i.test(a.fileName))
+                    || a.fileName.localeCompare(b.fileName, 'pt-BR', { numeric: true }));
+                  await openMediaCollection([original, ...others.map(item => ({
+                    fileName: item.fileName,
+                    source: options => data.downloadAttachment(row.id, item.fileName, options),
+                  }))]);
+                })().catch(failed);
+              } else void Promise.resolve(openMediaCollection([original])).catch(failed);
             } catch { failed(); }
           });
         }

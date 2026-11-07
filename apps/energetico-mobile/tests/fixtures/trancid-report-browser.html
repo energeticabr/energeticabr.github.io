@@ -1,0 +1,52 @@
+<!doctype html>
+<html lang="pt-BR">
+<head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>Trancid — layout com dados fictícios</title>
+<style>html,body{margin:0;padding:0;font-family:Arial,sans-serif}</style></head>
+<body><main id="app"><button id="trigger">Abrir Trancid</button></main>
+<script type="module">
+import '../../src/styles.css';
+import '../../src/ui/trancid-report.css';
+import '../../src/ui/report-print.css';
+try {
+  const {createTrancidReportView} = await import('../../src/ui/trancid-report-view.js');
+  const {decorateReportNavigation} = await import('../../src/ui/report-navigation.js');
+  const {decorateReportPrint,captureFilteredReport} = await import('../../src/ui/report-print.js');
+  const report = {
+    month:'2026-11', months:['2026-10','2026-11'], lastCheckedAt:'2026-11-06T18:00:00Z', lastError:null, totalCents:143999, lowCount:1,
+    cards:Array.from({length:8},(_,index)=>({
+      card:`1234567890123${index}`, supplier:index===0?'ANA FORNECEDORA DE TESTE COM NOME MUITO EXTENSO PARA CONFERIR A QUEBRA COMPLETA':index===1?'FORNECEDORSEMESPAÇOSCOMNOMEMUITOEXTENSOPARATESTARAQUEBRADALINHA':`FORNECEDOR FICTÍCIO ${index+1}`,
+      balanceCents:index===0?3999:20000, low:index===0, observedAt:'2026-11-06T18:00:00Z',
+      history:[{date:'2026-11-01',balanceCents:5000,variationCents:0,status:'observed',checkedAt:'2026-11-01T18:00:00Z'},
+        {date:'2026-11-02',balanceCents:null,variationCents:null,status:'unavailable',checkedAt:null},
+        {date:'2026-11-03',balanceCents:4375,variationCents:null,status:'observed',checkedAt:'2026-11-03T18:00:00Z'},
+        {date:'2026-11-04',balanceCents:3999,variationCents:-376,status:'observed',checkedAt:'2026-11-04T18:00:00Z'}],
+    })),
+  };
+  let loads=0;
+  const view=decorateReportPrint(decorateReportNavigation(createTrancidReportView({loadReport:async ({month})=>{loads++;return {...report,month};}}),{action:'open-trancid-report',onNavigate:async()=>{}}),{action:'open-trancid-report'});
+  document.getElementById('trigger').focus(); await view.open({initialSnapshot:report});
+  const root=view.element; root.querySelector('details').open=true;
+  await new Promise(resolve=>requestAnimationFrame(()=>requestAnimationFrame(resolve)));
+  const rect=node=>{const {left,right,top,bottom,width,height}=node.getBoundingClientRect();return {left,right,top,bottom,width,height};};
+  const dialog=root.querySelector('[role=dialog]'), body=root.querySelector('.trancid-body'), toolbar=root.querySelector('.trancid-toolbar');
+  const controls=[...root.querySelectorAll('button,select')].map(node=>({...rect(node),label:node.getAttribute('aria-label')}));
+  const first=root.querySelector('details'), table=first.querySelector('table');
+  const printed=captureFilteredReport(root);
+  document.documentElement.dataset.layout=JSON.stringify({
+    loads, dialog:rect(dialog), transform:getComputedStyle(dialog).transform,
+    documentOverflow:document.documentElement.scrollWidth-innerWidth,
+    bodyOverflow:body.scrollWidth-body.clientWidth, toolbarOverflow:toolbar.scrollWidth-toolbar.clientWidth,
+    scrollable:body.scrollHeight>body.clientHeight, controls,
+    cards:[...root.querySelectorAll('[data-trancid-card]')].map(node=>({...rect(node),summary:rect(node.querySelector('summary'))})),
+    table:rect(table), tableOverflow:table.scrollWidth-table.clientWidth,
+    headerCells:[...table.tHead.rows[0].cells].map(node=>({...rect(node),text:node.textContent})),
+    name:rect(first.querySelector('.trancid-supplier')),cardNumber:rect(first.querySelector('.trancid-card-number')),
+    balanceColors:[...root.querySelectorAll('.trancid-balance')].map(node=>getComputedStyle(node).color),
+    arrows:[...root.querySelectorAll('.report-navigation-arrow')].map(rect),
+    actions:[...root.querySelectorAll('.report-print-actions > button')].map(rect),
+    body:rect(body), navigation:root.querySelector('.report-navigation')?rect(root.querySelector('.report-navigation')):null,
+    pdfFilters:printed.filters,pdfTables:printed.pages[0].blocks.filter(block=>block.type==='table').map(block=>block.rows.length),
+    busy:root.getAttribute('aria-busy'),month:root.querySelector('[name=month]').value,year:root.querySelector('[name=year]').value,
+  });
+} catch(error) {document.documentElement.dataset.layout=JSON.stringify({error:String(error.stack||error)});}
+</script></body></html>
