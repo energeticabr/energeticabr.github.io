@@ -13,9 +13,15 @@ test('strict R$40 threshold preserves real zero and ignores unavailable or malfo
   const h=harness();h.setAmount(value);await h.reminder.refresh();assert.equal(h.opened.length,expected,String(value));
  }
 });
-test('opens once per foreground, dismissal never immediately reopens, next foreground checks again',async()=>{
- const h=harness();await h.reminder.refresh();assert.equal(h.opened.length,1);
+test('counts only a successful opening and checks again on the next day',async()=>{
+ let day='2026-11-07',allowOpening=false;
+ const h=harness({today:()=>day,open:async value=>{if(!allowOpening)return false;h.opened.push(value);return true;}});
+ await h.reminder.refresh();assert.equal(h.opened.length,0);
+ allowOpening=true;
+ await h.reminder.foreground();assert.equal(h.opened.length,1);
  h.reminder.dismiss();await h.reminder.refresh();await h.reminder.drain();assert.equal(h.opened.length,1);
+ await h.reminder.foreground();assert.equal(h.opened.length,1);
+ day='2026-11-08';
  await h.reminder.foreground();assert.equal(h.opened.length,2);
 });
 test('deferred alert rechecks current source before display and never replaces another dialog',async()=>{
