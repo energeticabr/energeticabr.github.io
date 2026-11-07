@@ -3962,7 +3962,7 @@ export function createAppController({
         if (confirmedRow) return [confirmedRow];
         return [{ ...row, dueDate: sourceKind === "provision-description"
           ? date : `${date.slice(8, 10)}/${date.slice(5, 7)}/${date.slice(0, 4)}`,
-          ...(recalculateAmount ? { amountDueDisplay: null } : {}) }];
+          ...(recalculateAmount ? { amountDueDisplay: null, amountPaidDisplay: null } : {}) }];
       });
       pendingProvisionDateEditPaymentId = "";
       pendingProvisionDateEditValue = "";

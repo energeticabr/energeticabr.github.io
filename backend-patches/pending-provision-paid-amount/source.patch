@@ -1,0 +1,47 @@
+--- a/worker/provision_description_settlement.py
++++ b/worker/provision_description_settlement.py
+@@ -113,6 +113,13 @@
+     return options
+ 
+ 
++def _snapshot_amount(children):
++    totals = (provision_line_total({
++        **child, 'FRETE': child.get('FRETE') if _text(child.get('FRETE')) else '0',
++    }) for child in children)
++    return _currency(_sum(totals))
++
++
+ def group_snapshot(groups, today):
+     rows = []
+     for group in groups:
+@@ -121,21 +128,23 @@
+             continue
+         children = group.get('CHILDREN') or []
+         pending_ids = list(group.get('PENDING CHILD IDS') or [])
+-        amount_due = {}
++        amounts = {}
+         if len(children) > 1 and not group.get('settlementBlocked'):
+             pending = set(pending_ids)
+             dates = [(child, _date(child.get('DATA PREVISTO PGTO')))
+                      for child in children if str(child['Id']) in pending]
+             due_lines = [child for child, child_due in dates if child_due == due]
+             if not due_lines or any(child_due is None for _, child_due in dates):
+-                amount_due['amountDueDisplay'] = None
++                amounts['amountDueDisplay'] = None
+             elif len(due_lines) < len(children):
+-                totals = (provision_line_total({
+-                    **child, 'FRETE': child.get('FRETE') if _text(child.get('FRETE')) else '0',
+-                }) for child in due_lines)
+-                amount_due['amountDueDisplay'] = _currency(_sum(totals))
++                amounts['amountDueDisplay'] = _snapshot_amount(due_lines)
++                scheduled_dates = {_date(child.get('DATA PREVISTO PGTO')) for child in children}
++                if scheduled_dates - {None, due}:
++                    paid_lines = [child for child in children if _paid(child)]
++                    if paid_lines:
++                        amounts['amountPaidDisplay'] = _snapshot_amount(paid_lines)
+         rows.append({
+-            **amount_due,
++            **amounts,
+             'id': _identity(group['Id']), 'sourceKind': SOURCE_KIND,
+             'dueDate': due.isoformat(), 'supplier': _text(group.get('FORNECEDOR')),
+             'branch': _text(group.get('FILIAL')), 'property': _joined(children, 'IMOVEL'),

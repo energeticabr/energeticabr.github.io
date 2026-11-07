@@ -27,6 +27,19 @@ for (const sourceKind of ['provision-description', 'legacy']) test(`supplier is 
   assert.doesNotMatch(card.querySelector('.chat-pending-provision__supplier-info').textContent, /FORNECEDOR FICTÍCIO/);
 });
 
+test('supplier heading and print show the confirmed paid amount for a grouped provision', t => {
+  const { dom, card } = render(t, { values: { amountDueDisplay: 'R$ 50,00', amountPaidDisplay: 'R$ 100,00' } });
+  const supplier = 'FORNECEDOR FICTÍCIO (R$ 100,00 PAGOS)';
+  assert.equal(card.querySelector('[data-field="supplier"]').textContent, supplier);
+  const blocks = captureFilteredReport(dom.window.document.querySelector('[data-pending-provisions-dialog]')).pages[0].blocks;
+  assert.ok(blocks.some(block => block.runs?.map(run => run.text).join('').includes(supplier)));
+});
+
+test('legacy rows never append a grouped paid amount', t => {
+  const { card } = render(t, { sourceKind: 'legacy', values: { amountPaidDisplay: 'R$ 100,00' } });
+  assert.equal(card.querySelector('[data-field="supplier"]').textContent, 'FORNECEDOR FICTÍCIO');
+});
+
 for (const [values, expected] of [
   [{}, '004 - OBRA A (TORRE B)'],
   [{ branch: '', property: '' }, '—'],
