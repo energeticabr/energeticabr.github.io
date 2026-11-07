@@ -2419,6 +2419,9 @@ function pendingProvisionsMarkup(
           const grouped = snapshot.sourceKind === "provision-description" || row.sourceKind === "provision-description";
           const groupDetails = grouped ? `<div class="chat-pending-provision__field" data-field="descriptionId"><span>Descritivo</span><strong>${escapeHtml(paymentId)}</strong></div><div class="chat-pending-provision__field" data-field="childCount"><span>Itens vinculados</span><strong>${escapeHtml(row.childCount)} ${row.childCount === 1 ? "item" : "itens"}</strong></div>` : "";
           const timing = provisionDueState(row.dueDate);
+          const splitAmount = grouped && Object.hasOwn(row, "amountDueDisplay");
+          const totalDisplay = grouped ? row.totalDisplay || "—" : pendingProvisionAmount(row.total);
+          const amountDisplay = splitAmount ? `${row.amountDueDisplay ?? "—"} / ${totalDisplay}` : totalDisplay;
           const attachmentState = attachmentsByPayment?.[paymentId] || { status: "loading", items: [] };
           const attachmentItems = (Array.isArray(attachmentState.items) ? attachmentState.items : [])
             .filter(item => typeof item?.fileName === 'string' && item.fileName.trim());
@@ -2444,7 +2447,7 @@ function pendingProvisionsMarkup(
             <div class="chat-pending-provision__amounts">
               <strong class="chat-pending-provision__supplier-name" data-field="supplier">${escapeHtml(row.supplier || "Fornecedor não informado")}</strong>
               <div class="chat-pending-provision__due" data-field="dueDate">${pendingProvisionIcon("calendar")}<div><span>Vencimento</span><strong>${escapeHtml(timing.date)}</strong><small class="chat-pending-provision__timing">${escapeHtml(timing.label)}</small></div></div>
-              <div class="chat-pending-provision__total" data-field="total"><span>Valor</span><strong>${escapeHtml(grouped ? row.totalDisplay || "—" : pendingProvisionAmount(row.total))}</strong></div>
+              <div class="chat-pending-provision__total${splitAmount ? " chat-pending-provision__total--split" : ""}" data-field="total"><span>Valor</span><strong>${escapeHtml(amountDisplay)}</strong></div>
             </div>
             <div class="chat-pending-provision__supplier" data-field="summary"><div class="chat-pending-provision__supplier-info">${groupDetails}<div class="chat-pending-provision__field" data-field="product"><span>Produto</span><strong>${escapeHtml(pendingProvisionValue(row.product))}</strong></div><div class="chat-pending-provision__field" data-field="branch"><span>FILIAL</span><strong>${escapeHtml(pendingProvisionLocation(row))}</strong></div></div><div class="chat-pending-provision__actions">${edit}${check}${remove}${arrow}</div></div>
             ${grouped && row.amountError ? `<p class="chat-pending-provision__error" data-field="amountError" role="status">Baixa bloqueada: ${escapeHtml(row.amountError)}</p>` : ""}

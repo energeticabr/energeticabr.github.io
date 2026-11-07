@@ -129,3 +129,26 @@ test("pencil heals an old child when the parent already has the selected date an
   assert.equal(h.view.renders.at(-1).pendingProvisionDateEditPaymentId, "");
   assert.equal(h.view.renders.at(-1).pendingProvisions.rows.find(row => row.id === "42").dueDate, "2026-10-13");
 });
+
+test("pencil refreshes the due subtotal after the grouped date is confirmed", async t => {
+  t.mock.timers.enable({ apis: ["Date"], now: new Date("2026-10-11T15:00:00Z") });
+  let date = "2026-10-12";
+  const h = makeHarness({ pendingProvisionAttachmentsDataFactory: async () => ({
+    listAttachments: async () => [],
+    downloadAttachment: async () => new Blob(),
+    updateDueDate: async (_id, newDate) => { date = newDate; },
+  }) });
+  h.client.getPendingProvisionSnapshot = async () => ({
+    due: true, sourceKind: "provision-description", rows: [{
+      id: "42", dueDate: date, totalDisplay: "R$ 300,00", childCount: 2,
+      ...(date === "2026-10-12" ? { amountDueDisplay: "R$ 100,00" } : {}),
+    }],
+  });
+  t.after(() => h.controller.stop()); await h.controller.start();
+  await new Promise(resolve => setImmediate(resolve));
+  await h.view.emit("edit-pending-provision-due-date", { paymentId: "42" });
+  assert.equal(await h.view.emit("save-pending-provision-due-date", { paymentId: "42", value: "13/10/2026" }), true);
+  const row = h.view.renders.at(-1).pendingProvisions.rows.find(row => row.id === "42");
+  assert.equal(row.dueDate, "2026-10-13");
+  assert.equal(Object.hasOwn(row, "amountDueDisplay"), false);
+});

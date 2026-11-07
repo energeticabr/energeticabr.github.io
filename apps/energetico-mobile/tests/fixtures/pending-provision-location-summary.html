@@ -6,7 +6,8 @@ import { createChatView } from '/src/ui/chat-view.js';
 const root = document.querySelector('#app'), view = createChatView(root);
 const rows = [
   { id:'306', supplier:'FORNECEDOR FICTÍCIO DE MATERIAIS E SERVIÇOS PARA CONSTRUÇÃO', product:'MATERIAL DE TESTE',
-    branch:'004 - EDIFÍCIO DE TESTE', property:'TORRE A / APARTAMENTO 101', dueDate:'2026-10-26', totalDisplay:'R$ 150,00', childCount:2 },
+    branch:'004 - EDIFÍCIO DE TESTE', property:'TORRE A / APARTAMENTO 101', dueDate:'2026-10-26',
+    amountDueDisplay:'R$ 21.600,00', totalDisplay:'R$ 61.600,00', childCount:2 },
   { id:'307', supplier:'SWILE FICTÍCIO', product:'VALE ALIMENTAÇÃO', branch:'000 - ESCRITÓRIO', property:'TODOS',
     dueDate:'2026-10-28', totalDisplay:'R$ 225,00', childCount:1 },
   { id:'308', supplier:'CONSULTA FICTÍCIA EM ANDAMENTO', product:'ITEM DE TESTE', branch:'004 - OBRA', property:'TORRE B',
@@ -42,9 +43,11 @@ const cards = [...root.querySelectorAll('.chat-pending-provision--payment')];
 const geometry = cards.map(card=>{
   const supplier=card.querySelector('[data-field="supplier"]'), due=card.querySelector('[data-field="dueDate"]');
   const branch=card.querySelector('[data-field="branch"]'), blue=card.querySelector('.chat-pending-provision__supplier');
+  const amount=card.querySelector('[data-field="total"] strong');
   const s=supplier.getBoundingClientRect(),d=due.getBoundingClientRect(),b=branch.getBoundingClientRect(),box=blue.getBoundingClientRect();
   return {id:card.dataset.paymentId,supplierAbove:s.bottom<=d.top+1,locationInBlue:b.top>=box.top&&b.bottom<=box.bottom,
     locationVisible:branch.checkVisibility(),location:branch.querySelector('strong').textContent,
+    amount:amount.textContent,amountFits:amount.checkVisibility()&&amount.scrollWidth<=amount.clientWidth+1,
     horizontalOverflow:card.scrollWidth>card.clientWidth+1,arrowDisabled:card.querySelector('.chat-pending-provision__arrow').disabled};
 });
 for(const id of ['307','308','309']) root.querySelector(`[data-payment-id="${id}"] .chat-pending-provision__arrow`).click();

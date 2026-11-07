@@ -1,0 +1,19 @@
+{
+  "files": {
+    "/opt/energetica-whatsapp/worker/provision_description_settlement.py": {
+      "before": "baac76a2cd78558a1becc91cecd38800600fda8a63fbd076e881ce788ff4c720",
+      "after": "5de8d41e2aaa706d7c51cccb02a3855ed5c45aed370d3d44cded08c3437f9a93"
+    },
+    "/home/opc/energetica-build/worker/provision_description_settlement.py": {
+      "before": "f692a17d3467e0a515aeaa9300e1672e7203df929ed3734e95756a9030003cc3",
+      "after": "105b7c25c6b0bc0f014f5f9fcbcbac404f96afd514220fe31b5c0367c2c5f3a2"
+    }
+  },
+  "inputs": {
+    "deploy.py": "f061a65cb390fe1521fdfe49ce193000827e456489783ef22b2c7fecaf4aba5b",
+    "patch_backend.py": "29dbcd97afd113390a81093be602210472960b0c60ab175242a67b0a6be73bb3",
+    "source.patch": "f03368534b40ab54c74dd63aa634c53e5f117004b847fc9bcd0b3a0c1ef71124",
+    "deploy.sh": "691f0eea004e82af2738d8866c80aab0615c9d7620f8ee57a179303d16f8cda9",
+    "deployment_gate.sh": "ae5ed44ab6d6ab1edfecbc14dd3bbd59505e9f991962d1410f488e4a029eefb6"
+  }
+}

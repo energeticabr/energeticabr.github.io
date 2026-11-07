@@ -1,0 +1,31 @@
+--- a/worker/provision_description_settlement.py
++++ b/worker/provision_description_settlement.py
+@@ -120,12 +120,27 @@
+         if due is None or due > today + timedelta(days=2):
+             continue
+         children = group.get('CHILDREN') or []
++        pending_ids = list(group.get('PENDING CHILD IDS') or [])
++        amount_due = {}
++        if len(children) > 1 and not group.get('settlementBlocked'):
++            pending = set(pending_ids)
++            dates = [(child, _date(child.get('DATA PREVISTO PGTO')))
++                     for child in children if str(child['Id']) in pending]
++            due_lines = [child for child, child_due in dates if child_due == due]
++            if not due_lines or any(child_due is None for _, child_due in dates):
++                amount_due['amountDueDisplay'] = None
++            elif len(due_lines) < len(children):
++                totals = (provision_line_total({
++                    **child, 'FRETE': child.get('FRETE') if _text(child.get('FRETE')) else '0',
++                }) for child in due_lines)
++                amount_due['amountDueDisplay'] = _currency(_sum(totals))
+         rows.append({
++            **amount_due,
+             'id': _identity(group['Id']), 'sourceKind': SOURCE_KIND,
+             'dueDate': due.isoformat(), 'supplier': _text(group.get('FORNECEDOR')),
+             'branch': _text(group.get('FILIAL')), 'property': _joined(children, 'IMOVEL'),
+             'product': _joined(children, 'PRODUTO'), 'childCount': len(children),
+-            'pendingChildIds': list(group.get('PENDING CHILD IDS') or []),
++            'pendingChildIds': pending_ids,
+             'total': None if group.get('settlementBlocked') else str(group['VALOR TOTAL DESCRITIVO']),
+             'totalDisplay': group['totalDisplay'],
+             'settlementBlocked': bool(group.get('settlementBlocked')),

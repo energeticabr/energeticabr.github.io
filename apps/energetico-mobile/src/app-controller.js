@@ -2692,7 +2692,7 @@ export function createAppController({
           rows = [...rowsById.values()];
         }
         if (!current() || suppressed()) return false;
-        const totalsUnavailable = rows.some(row => row.total == null || row.total === "");
+        const totalsUnavailable = rows.some(row => row.amountDueDisplay === null || row.total == null || row.total === "");
         const snapshot = { ...original, today: provisionDateKey(), rows, count: rows.length, due: rows.length > 0, upcomingUnavailable, totalsUnavailable };
         if (manual) snapshot.openedManually = true;
         const due = snapshot?.due === true && Array.isArray(snapshot.rows) && snapshot.rows.length > 0;
@@ -3940,18 +3940,34 @@ export function createAppController({
       await data.updateDueDate(id, date);
       if (stopped || account !== targetAccount || sessionRevision !== targetRevision) return false;
 
+      const inWindow = date <= provisionDayOffset(new Date(), 2);
+      const recalculateAmount = inWindow && sourceKind === "provision-description" && Object.hasOwn(selectedRow, "amountDueDisplay");
+      let confirmedRow;
+      if (recalculateAmount) {
+        // The edit synchronizes the date of the children. Never reuse the subtotal of the old day.
+        try {
+          const refreshed = await client.getPendingProvisionSnapshot();
+          if (refreshed?.sourceKind === "provision-description") {
+            confirmedRow = refreshed.rows.find(row => String(row?.id ?? "").trim() === id && row.dueDate === date);
+          }
+        } catch { /* The date is already saved; the new subtotal is unconfirmed. */ }
+        if (stopped || account !== targetAccount || sessionRevision !== targetRevision || pendingProvisionDateEditPaymentId !== id) return false;
+      }
       const updatedRows = (pendingProvisionSnapshot?.rows || []).flatMap(row => {
         if (String(row?.id ?? "").trim() !== id) return [row];
-        if (date > provisionDayOffset(new Date(), 2)) return [];
+        if (!inWindow) return [];
+        if (confirmedRow) return [confirmedRow];
         return [{ ...row, dueDate: sourceKind === "provision-description"
-          ? date : `${date.slice(8, 10)}/${date.slice(5, 7)}/${date.slice(0, 4)}` }];
+          ? date : `${date.slice(8, 10)}/${date.slice(5, 7)}/${date.slice(0, 4)}`,
+          ...(recalculateAmount ? { amountDueDisplay: null } : {}) }];
       });
       pendingProvisionDateEditPaymentId = "";
       pendingProvisionDateEditValue = "";
       pendingProvisionDateEditError = "";
       pendingProvisionDateEditBusy = false;
       if (updatedRows.length) {
-        pendingProvisionSnapshot = { ...pendingProvisionSnapshot, due: true, count: updatedRows.length, rows: updatedRows };
+        const totalsUnavailable = updatedRows.some(row => row.amountDueDisplay === null || row.total == null || row.total === "");
+        pendingProvisionSnapshot = { ...pendingProvisionSnapshot, due: true, count: updatedRows.length, rows: updatedRows, totalsUnavailable };
         if (!updatedRows.some(row => String(row?.id ?? "").trim() === pendingProvisionExpandedPaymentId)) {
           pendingProvisionExpandedPaymentId = "";
         }

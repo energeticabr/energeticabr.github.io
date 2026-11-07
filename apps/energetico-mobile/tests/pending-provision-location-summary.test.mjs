@@ -100,3 +100,22 @@ test('printing includes the visible combined location without revealing separate
   assert.match(text, /FILIAL/); assert.match(text, /004 - OBRA A \(TORRE B\)/);
   assert.equal((text.match(/TORRE B/g) || []).length, 1);
 });
+
+test('Valor distinguishes the amount due from the description total in the card and PDF', t => {
+  const { dom, card } = render(t, { values: { amountDueDisplay: 'R$ 21.600,00', totalDisplay: 'R$ 61.600,00' } });
+  assert.equal(card.querySelector('[data-field="total"] strong').textContent, 'R$ 21.600,00 / R$ 61.600,00');
+  const blocks = captureFilteredReport(dom.window.document.querySelector('[data-pending-provisions-dialog]')).pages[0].blocks;
+  assert.ok(blocks.some(block => block.runs?.map(run => run.text).join('').includes('R$ 21.600,00 / R$ 61.600,00')));
+});
+
+test('Valor keeps a single total when all items fall due together or only one is linked', t => {
+  for (const childCount of [1, 3]) {
+    const { card } = render(t, { values: { childCount, totalDisplay: 'R$ 61.600,00' } });
+    assert.equal(card.querySelector('[data-field="total"] strong').textContent, 'R$ 61.600,00');
+  }
+});
+
+test('Valor distinguishes an unconfirmed subtotal from the confirmed total', t => {
+  const { card } = render(t, { values: { amountDueDisplay: null, totalDisplay: 'R$ 61.600,00' } });
+  assert.equal(card.querySelector('[data-field="total"] strong').textContent, '— / R$ 61.600,00');
+});
