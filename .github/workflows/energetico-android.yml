@@ -30,7 +30,8 @@ permissions:
 
 concurrency:
   group: energetico-android-${{ github.ref }}
-  cancel-in-progress: true
+  # Finish the active main release; only the newest pending revision waits.
+  cancel-in-progress: ${{ github.ref != 'refs/heads/main' }}
 
 jobs:
   layout-browser-diagnostic:
