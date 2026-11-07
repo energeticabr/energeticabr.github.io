@@ -89,6 +89,63 @@ test('same supplier and total recommend only the closest due date',()=>{
  assert.deepEqual(ranked.map(item=>item.recommended),[true,false,false]);
  assert.equal(rankDdaProvisionOptions([{id:'1',supplier:'OUTRO',amount:'99',due:'2026-10-28'}],{supplier:'SWILE',amount:'1350',due:'2026-10-28'})[0].recommended,false);
 });
+test('without an amount match promotes abbreviated and similarly written supplier names above unrelated descriptions',()=>{
+ const ranked=rankDdaProvisionOptions([
+  {id:'1',supplier:'LOCAMÁQUINAS LTDA',amount:200},
+  {id:'2',supplier:'CONCRETIZAR',amount:9000},
+  {id:'3',supplier:'CONCRETIZAR CONCRETOS',amount:8000},
+  {id:'4',supplier:'OUTRA COMERCIAL LTDA',amount:100},
+ ],{supplier:'CONCRETIZAR CONCRETOS COMERCIAL LTDA',amount:5516.67});
+ assert.deepEqual(ranked.map(item=>item.id),['3','2','1','4']);
+ assert.deepEqual(ranked.map(item=>item.matchReason),['supplier','supplier','','']);
+ assert.deepEqual(ranked.map(item=>item.recommended),[true,false,false,false]);
+ assert.equal(ranked.some(item=>item.amountMatch),false);
+ const joined=rankDdaProvisionOptions([{id:'1',supplier:'ARCELOR MITTAL',amount:12}],{supplier:'ARCELORMITTAL BRASIL S.A.',amount:50});
+ assert.equal(joined[0].supplierMatch,true);assert.equal(joined[0].matchReason,'supplier');
+ for(const supplier of ['', 'COMERCIO LTDA', 'Fornecedor não informado']){
+  assert.equal(rankDdaProvisionOptions([{id:'1',supplier:'OUTRO COMERCIO LTDA',amount:20}],{supplier,amount:50})[0].recommended,false);
+ }
+ assert.equal(rankDdaProvisionOptions([{id:'1',supplier:'BETA COMERCIAL LTDA',amount:20}],{supplier:'ALFA COMERCIAL LTDA',amount:50})[0].recommended,false);
+});
+test('exact amounts remain above name-only matches and suppress the name fallback reason',()=>{
+ const ranked=rankDdaProvisionOptions([
+  {id:'1',supplier:'CONCRETIZAR',amount:9000},
+  {id:'2',supplier:'OUTRO',amount:5516.67},
+  {id:'3',supplier:'TERCEIRO',amount:15000,provisions:[{id:'101',amount:5516.67}]},
+ ],{supplier:'CONCRETIZAR',amount:5516.67});
+ assert.deepEqual(ranked.map(item=>item.id),['2','3','1']);
+ assert.deepEqual(ranked.map(item=>item.matchReason),['amount','amount','']);
+ assert.equal(ranked[0].recommended,true);
+});
+test('name fallback keeps short brand names',()=>{
+ for(const supplier of ['3M','HP','X']){
+  const ranked=rankDdaProvisionOptions([{id:'1',supplier:`${supplier} LTDA`,amount:20}],{supplier,amount:50});
+  assert.equal(ranked[0].supplierMatch,true,supplier);assert.equal(ranked[0].matchReason,'supplier');
+ }
+});
+test('name fallback rejects overlap only in generic sector words',()=>{
+ for(const sector of ['ENGENHARIA','CONCRETOS','CONSTRUCOES']){
+  const ranked=rankDdaProvisionOptions([{id:'1',supplier:`BETA ${sector} SERVICOS LTDA`,amount:20}],{supplier:`ALFA ${sector} LTDA`,amount:50});
+  assert.equal(ranked[0].recommended,false,sector);assert.equal(ranked[0].matchReason,'');
+ }
+});
+test('name fallback explains the suggestion and keeps manual selection and saving',async t=>{
+ const dom=new JSDOM('<body><main></main></body>');
+ const {createDdaProvisionPicker}=await import('../src/ui/dda-provision-picker.js');
+ let writes=0;
+ const picker=createDdaProvisionPicker({document:dom.window.document,host:dom.window.document.querySelector('main'),service:{loadOptions:async()=>[
+  {id:'1',supplier:'OUTRO',label:'#1 · OUTRO',amount:100},
+  {id:'2',supplier:'CONCRETIZAR',label:'#2 · CONCRETIZAR',amount:9000},
+ ],save:async()=>{writes++;}}});
+ t.after(()=>{picker.destroy();dom.window.close();});
+ await picker.show({id:'37',supplier:'CONCRETIZAR CONCRETOS COMERCIAL LTDA',amount:5516.67});
+ const option=dom.window.document.querySelector('.dda-provision-option');
+ assert.equal(option.querySelector('input').value,'2');
+ assert.match(option.textContent,/Nome do fornecedor semelhante ao DDA/);
+ assert.equal(option.querySelector('input').checked,false);
+ assert.equal(dom.window.document.querySelector('.dda-provision-save').disabled,true);
+ assert.equal(writes,0);
+});
 test('saves only the provision ID with a version check and confirms SharePoint readback',async()=>{
  const {state,api}=repository(),service=createDdaProvisionLink({repository:api});
  const result=await service.save({ddaId:'31',provisionId:'2'});
