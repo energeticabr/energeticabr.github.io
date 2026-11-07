@@ -29,9 +29,9 @@ export function createDdaReportView({document:doc=globalThis.document,data,openM
  report.append(toolbar,notice,content);panel.append(report);root.append(panel);doc.body.append(root);
  const landscape=bindReportLandscape(root);addReportCloseControl({root,toolbar,onClose:close});
  let rows=null,controller=null,revision=0,filterRevision=0,page=1,printAll=false,destroyed=false,returnFocus=null,app=null,oldInert=false,oldOverflow='';
- let bankRunning=Boolean(syncMonitor?.running),bankNotice='',startingBank=false,reloadAfterPayment=false;
+ let bankRunning=Boolean(syncMonitor?.running),bankNotice='',startingBank=false,reloadPending=false,pdfRequest=null;
  const expandedBarcodes=new Set();
- const paymentConfirmation=createDdaPaymentConfirmation({document:doc,host:root,confirmPayment,onStartLaunch,onLaunchStarted:()=>close(),onClose:()=>{if(reloadAfterPayment)queueMicrotask(reloadFromBank);},onConfirmed:receipt=>{
+ const paymentConfirmation=createDdaPaymentConfirmation({document:doc,host:root,confirmPayment,onStartLaunch,onLaunchStarted:()=>close(),onClose:resumeBankReload,onConfirmed:receipt=>{
   if(destroyed||root.hidden||!rows)return;
   const position=[content.scrollTop,content.scrollLeft];
   rows=rows.map(row=>row.id===String(receipt.itemId)&&row.key===receipt.key
@@ -53,10 +53,20 @@ export function createDdaReportView({document:doc=globalThis.document,data,openM
  }
  function showNotice(message=''){const text=message||bankNotice;notice.textContent=text;notice.hidden=!text;}
  function syncRefreshButton(){refresh.disabled=startingBank||bankRunning||root.getAttribute('aria-busy')==='true';}
- function reloadFromBank(){
-  if(destroyed||root.hidden){reloadAfterPayment=false;return;}
-  if(paymentConfirmation.isOpen){reloadAfterPayment=true;return;}
-  reloadAfterPayment=false;void load();
+ function resumeBankReload(){if(reloadPending)queueMicrotask(()=>{if(reloadPending)void reloadFromBank();});}
+ async function reloadFromBank(){
+  if(destroyed||root.hidden){reloadPending=false;return;}
+  if(paymentConfirmation.isOpen||pdfRequest){reloadPending=true;return;}
+  reloadPending=false;
+  const position=[content.scrollTop,content.scrollLeft];
+  const focused=doc.activeElement,focusedRow=focused?.closest('[data-dda-id]')?.dataset.ddaId;
+  const focusSelector=focused?.matches('[data-dda-pdf]')?`[data-dda-pdf="${focusedRow}"]`
+   :focused?.matches('[data-dda-mirror]')?`[data-dda-mirror="${focusedRow}"]`:null;
+  const loading=load(),current=revision,filters=filterRevision;
+  await loading;
+  if(current!==revision||filters!==filterRevision||root.hidden)return;
+  [content.scrollTop,content.scrollLeft]=position;
+  if(focusSelector&&doc.activeElement===doc.body)(content.querySelector(focusSelector)||panel).focus({preventScroll:true});
  }
  async function manualRefresh(){
   if(destroyed||root.hidden||refresh.disabled)return;
@@ -115,33 +125,48 @@ export function createDdaReportView({document:doc=globalThis.document,data,openM
    check.className='ddr-confirm-payment';check.dataset.ddaConfirmPayment=row.id;check.title=check.getAttribute('aria-label');
    check.disabled=row.status==='Pago'||!Number.isSafeInteger(Number(row.id))||Number(row.id)<=0||!/^[a-f0-9]{64}$/.test(row.key)||typeof confirmPayment!=='function';
    check.addEventListener('click',()=>{if(destroyed||root.hidden||root.getAttribute('aria-busy')==='true')return;paymentConfirmation.show({itemId:row.id,key:row.key,supplier:row.supplier,amount:money(row.amount),due:date(row.due)},check);});
-   const open=button('Abrir espelho do DDA '+row.id,'📎 Espelho');open.dataset.ddaMirror=row.id;open.disabled=typeof data.listAttachments!=='function'||typeof data.downloadAttachment!=='function'||typeof openMediaCollection!=='function';open.addEventListener('click',()=>void openMirror(row,open));actions.append(pencil,check,open);files.append(actions);
+   const open=button('Abrir espelho do DDA '+row.id,'📎 Espelho');open.dataset.ddaMirror=row.id;open.disabled=typeof data.listAttachments!=='function'||typeof data.downloadAttachment!=='function'||typeof openMediaCollection!=='function';open.addEventListener('click',()=>void openPdfs(row,open));actions.append(pencil,check,open);files.append(actions);
+   const id=make('td','ddr-id');
+   if(!printAll){
+    const pdf=button('Abrir PDFs do DDA '+row.id,'');pdf.dataset.ddaPdf=row.id;pdf.className='ddr-open-pdf';pdf.title=pdf.getAttribute('aria-label');pdf.disabled=open.disabled;
+    pdf.innerHTML='<svg viewBox="0 0 32 32" aria-hidden="true" focusable="false"><path d="M8 2h11l6 6v22H8z M19 2v7h6" fill="none" stroke="currentColor" stroke-width="2" stroke-linejoin="round"/><rect x="2" y="13" width="28" height="11" rx="2" fill="currentColor"/><text x="16" y="21" fill="white" font-size="8" font-weight="700" text-anchor="middle">PDF</text></svg>';
+    pdf.addEventListener('click',()=>void openPdfs(row,pdf));
+    const identity=make('div','ddr-row-identity');identity.append(pdf,make('span','',row.id));id.append(identity);
+   }else id.textContent=row.id;
    line.dataset.stripe=String(body.querySelectorAll('[data-dda-id]').length%2);
-   line.append(make('td','ddr-id',row.id),due,supplier,bankDocument,issued,make('td','ddr-money',money(row.amount)),status,link,files);body.append(line);
+   line.append(id,due,supplier,bankDocument,issued,make('td','ddr-money',money(row.amount)),status,link,files);body.append(line);
    if(!printAll)addDdaReportBarcode({document:doc,row,line,actions,expanded:expandedBarcodes,copyText,isCurrent:()=>!destroyed&&!root.hidden&&root.getAttribute('aria-busy')!=='true'});
   }
   content.append(table);
   if(!printAll){const pager=make('nav','ddr-pager');pager.setAttribute('aria-label','Páginas do relatório');const previous=button('Página anterior','‹ Anterior'),next=button('Próxima página','Próxima ›');previous.disabled=page===1;next.disabled=page===pages;next.dataset.pageNext='';previous.addEventListener('click',()=>{page--;render();});next.addEventListener('click',()=>{page++;render();});pager.append(previous,make('span','',`Página ${page} de ${pages} • ${result.rows.length} DDA(s)`),next);content.append(pager);}
  }
- async function openMirror(row,button){
-  const current=revision,active=controller;if(root.hidden||destroyed||!rows||root.getAttribute('aria-busy')==='true')return;button.disabled=true;showNotice();
-  const currentView=()=>!destroyed&&!root.hidden&&current===revision&&button.isConnected&&!active?.signal.aborted;
+ async function openPdfs(row,trigger){
+  if(root.hidden||destroyed||!rows||pdfRequest||root.getAttribute('aria-busy')==='true')return;
+  const request=pdfRequest={},signal=controller.signal;
+  trigger.disabled=true;showNotice();
+  const currentView=()=>pdfRequest===request&&!signal.aborted&&trigger.isConnected;
+  const finish=()=>{if(pdfRequest===request){pdfRequest=null;resumeBankReload();}};
+  let previewStarted=false;
   try{
-   const attachments=await data.listAttachments(row.id,{signal:active?.signal});if(!currentView())return;
+   const attachments=await data.listAttachments(row.id,{signal});if(!currentView())return;
    if(!Array.isArray(attachments))throw new Error('INVALID_ATTACHMENTS');
    const files=attachments.filter(item=>typeof item?.fileName==='string'&&/\.pdf$/i.test(item.fileName));
-   if(!files.length){showNotice('Este DDA ainda não possui espelho PDF anexado.');return;}
-   await openMediaCollection(files.map(item=>({fileName:item.fileName,source:options=>{if(destroyed||root.hidden||current!==revision)throw new Error('A consulta do DDA foi encerrada.');return data.downloadAttachment(row.id,item.fileName,options);}})));
-  }catch{if(currentView())showNotice('Não foi possível abrir o espelho. Tente novamente.');}
-  finally{if(currentView())button.disabled=false;}
+   if(!files.length){showNotice('Este DDA ainda não possui PDF anexado.');return;}
+   trigger.disabled=false;
+   await openMediaCollection(files.map(({fileName})=>({fileName,source:options=>{
+    signal.throwIfAborted();return data.downloadAttachment(row.id,fileName,{...options,signal:options?.signal??signal});
+   }})),{layout:'dda-report-pdf',signal,onClose:finish,resolveReturnFocus:()=>trigger.isConnected?trigger:panel});
+   previewStarted=true;
+  }catch{if(currentView())showNotice('Não foi possível abrir os PDFs. Tente novamente.');}
+  finally{if(trigger.isConnected&&!signal.aborted)trigger.disabled=false;if(!previewStarted)finish();}
  }
  async function load(initialSnapshot){
-  if(root.hidden||destroyed)return;paymentConfirmation.close();provisionPicker.close();controller?.abort();const current=++revision,active=controller=new AbortController();rows=null;printAll=false;root.setAttribute('aria-busy','true');refresh.disabled=true;showNotice();content.replaceChildren(make('p','','Carregando DDAs do SharePoint…'));
+  if(root.hidden||destroyed)return;paymentConfirmation.close();provisionPicker.close();pdfRequest=null;controller?.abort();const current=++revision,active=controller=new AbortController();rows=null;printAll=false;root.setAttribute('aria-busy','true');refresh.disabled=true;showNotice();content.replaceChildren(make('p','','Carregando DDAs do SharePoint…'));
   try{const snapshot=initialSnapshot??await data.loadSnapshot({refresh:true,signal:active.signal});if(active.signal.aborted||current!==revision||root.hidden||destroyed)return;rows=normalizeDdaReportRows(snapshot);populate();render();}
   catch{if(active.signal.aborted||current!==revision||root.hidden||destroyed)return;rows=null;const error=make('p','','Não foi possível carregar os DDAs. Tente atualizar.');error.setAttribute('role','alert');content.replaceChildren(error);}
   finally{if(current===revision){root.setAttribute('aria-busy','false');syncRefreshButton();}}
  }
- function close(){if(root.hidden)return;expandedBarcodes.clear();reloadAfterPayment=false;paymentConfirmation.close();provisionPicker.close();controller?.abort();revision++;rows=null;printAll=false;content.replaceChildren();showNotice();root.hidden=true;doc.body.style.overflow=oldOverflow;if(app)app.inert=oldInert;const target=returnFocus?.isConnected?returnFocus:doc.querySelector('[data-action="open-dda-report"]')||app;target?.focus?.();returnFocus=null;onClose();}
+ function close(){if(root.hidden)return;expandedBarcodes.clear();reloadPending=false;pdfRequest=null;paymentConfirmation.close();provisionPicker.close();controller?.abort();revision++;rows=null;printAll=false;content.replaceChildren();showNotice();root.hidden=true;doc.body.style.overflow=oldOverflow;if(app)app.inert=oldInert;const target=returnFocus?.isConnected?returnFocus:doc.querySelector('[data-action="open-dda-report"]')||app;target?.focus?.();returnFocus=null;onClose();}
  const filter=()=>{filterRevision++;printAll=false;page=1;render();content.scrollTop=0;showNotice();};
  controls.status.addEventListener('change',filter);controls.bank.addEventListener('change',filter);controls.search.addEventListener('input',filter);refresh.addEventListener('click',()=>void manualRefresh());
  const unsubscribeBank=syncMonitor?.subscribe(state=>{

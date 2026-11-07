@@ -278,7 +278,7 @@ export function createAttachmentPreview({
 
   function updateCollectionNavigation() {
     const hasCollection = Boolean(collection?.items?.length);
-    collectionNav.hidden = !hasCollection;
+    collectionNav.hidden = !hasCollection || (collection.layout === 'dda-report-pdf' && collection.items.length === 1);
     if (!hasCollection) return;
     const last = collection.items.length - 1;
     previousButton.disabled = collection.index <= 0;
@@ -395,9 +395,15 @@ export function createAttachmentPreview({
     returnFocus = null;
   }
 
+  function releaseCollection() {
+    const previous = collection;
+    collection = null;
+    previous?.cleanup?.();
+  }
+
   function close() {
     release();
-    collection = null;
+    releaseCollection();
     addToTrayHandler = null;
     updateCollectionNavigation();
     if (dialog.open) {
@@ -462,10 +468,13 @@ export function createAttachmentPreview({
     if (destroyed) throw new Error("O visualizador já foi encerrado.");
     if (!dialog.open) returnFocus = typeof resolveReturnFocus === "function" ? resolveReturnFocus : documentRef.activeElement;
     release();
-    dialog.dataset.layout = ['flow-summary', 'report-pdf'].includes(layout) ? layout : "media";
+    const ddaReport = layout === 'dda-report-pdf';
+    dialog.dataset.layout = ['flow-summary', 'report-pdf', 'dda-report-pdf'].includes(layout) ? layout : "media";
     const reportLayout = dialog.dataset.layout !== "media";
-    closeButton.textContent = reportLayout ? "❌" : "Fechar";
-    closeButton.setAttribute("aria-label", reportLayout ? "Fechar relatório" : "Fechar");
+    closeButton.textContent = ddaReport ? '×' : reportLayout ? '❌' : 'Fechar';
+    closeButton.setAttribute('aria-label', ddaReport ? 'Fechar PDF' : reportLayout ? 'Fechar relatório' : 'Fechar');
+    previousButton.textContent = ddaReport ? '‹ PDF anterior' : '‹ Anterior';
+    nextButton.textContent = ddaReport ? 'Próximo PDF ›' : 'Próximo ›';
     backButton.hidden = reportLayout;
     const session = { abort: new AbortController(), urls: new Set(), blob: null, pdf: null, zoom: null, kind: null, fileName: String(fileName || "arquivo"), onClose, onSign, onStamp, onAppendPages, layout,
       progress: 0, failed: false, loader: createLoadingIndicator(documentRef, 'Carregando arquivo…', { progress: 0, progressLabel: 'Carregamento do anexo' }) };
@@ -655,8 +664,9 @@ export function createAttachmentPreview({
           blob, container: content, documentRef, signal: session.abort.signal,
           onProgress: value => presentationProgress(session, value),
           onDdaCopyReady: available => { if (active === session) { ddaCopyButton.hidden = !available; if (available) dialog.dataset.ddaCopy = 'true'; else delete dialog.dataset.ddaCopy; } },
-          fit: layout === 'report-pdf' ? 'page' : 'width',
-          navigation: 'scroll',
+          fit: ddaReport || layout === 'report-pdf' ? 'page' : 'width',
+          navigation: ddaReport ? 'paged' : 'scroll',
+          rotatesWithViewport: ddaReport,
           initialPage,
           onPageChange: page => {
             if (active !== session) return;
@@ -706,30 +716,42 @@ export function createAttachmentPreview({
       }
       explain(session, session.blob
         ? "Não foi possível mostrar este arquivo. Se o PDF tiver senha ou estiver danificado, tente abri-lo em outro app."
-        : "Não foi possível carregar este arquivo. Feche esta janela e tente novamente no chat.");
+        : `Não foi possível carregar este arquivo. Feche esta janela e tente novamente ${ddaReport ? 'no relatório DDA' : 'no chat'}.`);
       if (!session.blob) showPreviewStatus(session, "O arquivo ainda não está disponível para salvar.");
     }
   }
 
   async function open(blobOrPromise, fileName = "arquivo", { onAddToTray, onAppendPages, returnLabel = "Voltar ao chat", onClose, onSign, onStamp, resolveReturnFocus, layout, initialPage } = {}) {
     backButton.textContent = returnLabel;
-    collection = null;
+    releaseCollection();
     addToTrayHandler = typeof onAddToTray === "function" ? onAddToTray : null;
     updateCollectionNavigation();
     return openOne(blobOrPromise, fileName, { onClose: typeof onClose === "function" ? onClose : undefined, onSign, onStamp, onAppendPages, resolveReturnFocus, layout, initialPage });
   }
 
-  async function openCollection(items, { onAddToTray, initialIndex = 0 } = {}) {
+  async function openCollection(items, { onAddToTray, initialIndex = 0, layout, resolveReturnFocus, signal, onClose } = {}) {
+    signal?.throwIfAborted();
     backButton.textContent = "Voltar ao chat";
     const normalized = (Array.isArray(items) ? items : [])
       .map(item => ({ source: item?.source, fileName: String(item?.fileName || "arquivo") }))
       .filter(item => item.source != null);
     if (!normalized.length) throw new Error("Nenhum anexo disponível.");
+    releaseCollection();
     addToTrayHandler = typeof onAddToTray === "function" ? onAddToTray : null;
     const index = Number.isInteger(initialIndex) && initialIndex >= 0 && initialIndex < normalized.length ? initialIndex : 0;
-    collection = { items: normalized, index };
+    const owner = collection = { items: normalized, index, layout, cleanup() {
+      signal?.removeEventListener('abort', abort);
+      onClose?.();
+    } };
+    function abort() { if (collection === owner) close(); }
+    signal?.addEventListener('abort', abort, { once: true });
     updateCollectionNavigation();
-    return openOne(normalized[index].source, normalized[index].fileName);
+    try {
+      return await openOne(normalized[index].source, normalized[index].fileName, { layout, resolveReturnFocus });
+    } catch (error) {
+      if (collection === owner) close();
+      throw error;
+    }
   }
 
   async function moveCollection(delta) {
@@ -739,7 +761,7 @@ export function createAttachmentPreview({
     collection.index = index;
     updateCollectionNavigation();
     const item = collection.items[index];
-    await openOne(item.source, item.fileName);
+    await openOne(item.source, item.fileName, { layout: collection.layout });
   }
 
   previousButton.addEventListener("click", () => { void moveCollection(-1); });
@@ -755,7 +777,7 @@ export function createAttachmentPreview({
     if (event.target === dialog) close();
   });
   dialog.addEventListener("cancel", event => { event.preventDefault(); close(); });
-  dialog.addEventListener("close", () => { if (!dialog.open) finishClosed(); });
+  dialog.addEventListener("close", () => { if (!dialog.open) close(); });
   exportButton.addEventListener("click", async () => {
     const session = active;
     if (!session?.blob || typeof exportMedia !== "function") return;

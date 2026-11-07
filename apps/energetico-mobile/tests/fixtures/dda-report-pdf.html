@@ -1,0 +1,111 @@
+<!doctype html>
+<html lang="pt-BR"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>PDFs do Relatório DDA — dados fictícios</title>
+<link rel="stylesheet" href="/src/styles.css"><link rel="stylesheet" href="/src/ui/payment-ledger.css"><link rel="stylesheet" href="/src/ui/dda-report.css"><link rel="stylesheet" href="/src/web/attachment-preview.css"></head>
+<body><main id="app"></main><script type="module">
+import { PDFDocument } from 'pdf-lib';
+import { createDdaReportView } from '/src/ui/dda-report-view.js';
+import { decorateReportNavigation } from '/src/ui/report-navigation.js';
+import { createAttachmentPreview } from '/src/web/attachment-preview.js';
+
+const state = {}, downloads = [];
+const element = selector => document.querySelector(selector);
+const tick = () => new Promise(resolve => setTimeout(resolve, 20));
+const until = async (check, label) => {
+  for (let attempt = 0; attempt < 300; attempt++) {
+    const result = check();
+    if (result) return result;
+    await tick();
+  }
+  throw new Error(`Tempo esgotado: ${label}`);
+};
+const rows = [1, 2, 3, 4, 5].map(id => ({ id: String(id), fields: {
+  Title: `Fornecedor fictício ${id}`, SITUACAO: 'Em aberto', VENCIMENTO: '2026-11-20', VALOR: 120, BANCO: 'Banco Exemplo',
+} }));
+const preview = createAttachmentPreview({ documentRef: document });
+const report = decorateReportNavigation(createDdaReportView({ document, openMediaCollection: preview.openCollection, data: {
+  loadSnapshot: async () => ({ rows }),
+  listAttachments: async id => (id === '2' ? ['espelho.pdf', 'outro.PDF', 'imagem.jpg'] : id === '1' ? ['unico.pdf'] : []).map(fileName => ({ fileName })),
+  downloadAttachment: async (id, fileName) => {
+    downloads.push([id, fileName]);
+    const pdf = await PDFDocument.create();
+    pdf.addPage([540, 320]).drawText(`DDA ${id} - ${fileName}`, { x: 30, y: 250, size: 22 });
+    return new Blob([await pdf.save()], { type: 'application/pdf' });
+  },
+} }), { action: 'open-dda-report' });
+
+try {
+  await report.open();
+  const search = element('[name=search]');
+  search.value = 'Fornecedor fictício';
+  search.dispatchEvent(new Event('input'));
+  const content = element('.ddr-content'), table = element('.ddr-table');
+  const icon = element('[data-dda-pdf="2"]');
+  if (!icon) throw new Error('Ícone do PDF ausente na linha 2');
+  icon.scrollIntoView({ block: 'center', inline: 'nearest' });
+  icon.focus({ preventScroll: true });
+  const row = element('[data-dda-id="2"]'), first = element('[data-dda-id="1"]');
+  const id = row.querySelector('.ddr-id'), arrow = element('.report-navigation-arrow--previous');
+  const rotated = innerHeight > innerWidth;
+  const logicalAxis = rect => rotated ? (rect.top + rect.bottom) / 2 : (rect.left + rect.right) / 2;
+  state.iconBeforeId = id.contains(icon) && icon.nextElementSibling.textContent === '2';
+  state.aligned = Math.abs(logicalAxis(arrow.getBoundingClientRect()) - logicalAxis(icon.getBoundingClientRect())) <= 2;
+  state.stripesFillWidth = first.offsetWidth === content.clientWidth && row.offsetWidth === content.clientWidth
+    && getComputedStyle(first).backgroundColor === 'rgb(255, 255, 255)' && getComputedStyle(row).backgroundColor === 'rgb(239, 246, 250)';
+  state.tableFits = table.offsetWidth <= content.clientWidth + 1;
+  const savedScroll = content.scrollTop;
+  const dialog = element('.attachment-preview-dialog');
+  const close = element('.attachment-preview-close');
+  const title = element('.attachment-preview-title');
+  const previous = element('[data-preview-action=previous]'), next = element('[data-preview-action=next]');
+  const openPdf = async (id, name) => {
+    element(`[data-dda-pdf="${id}"]`).click();
+    await ready(name);
+  };
+  const ready = async name => {
+    await until(() => {
+      const canvas = element('.attachment-preview-pdf[aria-busy="false"] .attachment-preview-pdf-page:not([hidden]) canvas');
+      if (!dialog.open || title.textContent !== name || !canvas || !element('.attachment-preview-status').textContent.includes('100%')) return false;
+      return canvas.getContext('2d').getImageData(canvas.width - 1, canvas.height - 1, 1, 1).data[0] === 255;
+    }, `página renderizada de ${name}`);
+    await new Promise(resolve => requestAnimationFrame(() => requestAnimationFrame(resolve)));
+  };
+  const preserved = () => !report.element.hidden && row.isConnected && search.value === 'Fornecedor fictício'
+    && content.scrollTop === savedScroll && content.scrollLeft === 0 && document.activeElement === icon;
+  await openPdf(2, 'espelho.pdf');
+  const box = dialog.getBoundingClientRect();
+  state.viewerFits = box.left >= 0 && box.top >= 0 && box.right <= innerWidth && box.bottom <= innerHeight;
+  state.horizontal = dialog.offsetWidth > dialog.offsetHeight && (rotated ? box.height > box.width : box.width > box.height);
+  state.leftClose = logicalAxis(close.getBoundingClientRect()) < logicalAxis(title.getBoundingClientRect()) && close.textContent.includes('×');
+  const sidePoint = side => rotated ? [innerWidth / 2, side === 'left' ? box.top / 2 : (innerHeight + box.bottom) / 2]
+    : [side === 'left' ? box.left / 2 : (innerWidth + box.right) / 2, innerHeight / 2];
+  const side = direction => document.elementFromPoint(...sidePoint(direction));
+  state.sideGaps = side('left') === dialog && side('right') === dialog && getComputedStyle(dialog, '::backdrop').backgroundColor !== 'rgb(0, 0, 0)';
+  state.files = [title.textContent];
+  if (previous.disabled && !next.disabled) next.click();
+  await ready('outro.PDF');
+  state.files.push(title.textContent);
+  if (!previous.disabled && next.disabled) previous.click();
+  await ready('espelho.pdf');
+  state.files.push(title.textContent);
+  close.click();
+  state.xCloses = !dialog.open && preserved();
+  await openPdf(2, 'espelho.pdf');
+  side('left').click();
+  state.leftCloses = !dialog.open && preserved();
+  await openPdf(2, 'espelho.pdf');
+  side('right').click();
+  state.rightCloses = !dialog.open && preserved();
+  await openPdf(1, 'unico.pdf');
+  state.singleNoArrows = previous.parentElement.hidden;
+  dialog.dispatchEvent(new Event('cancel', { cancelable: true }));
+  state.escapeCloses = !dialog.open && !report.element.hidden;
+  element('[data-dda-pdf="3"]').click();
+  await until(() => !element('.ddr-notice').hidden, 'aviso de ausência de PDF');
+  state.emptyNotice = !dialog.open && element('.ddr-notice').textContent.includes('não possui');
+  await openPdf(2, 'espelho.pdf');
+  state.reportPreserved = row.isConnected && !report.element.hidden && content.scrollTop === savedScroll;
+  state.downloads = downloads;
+} catch (error) { state.error = error.message; }
+document.documentElement.dataset.layout = JSON.stringify(state);
+</script></body></html>

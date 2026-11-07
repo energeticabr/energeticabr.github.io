@@ -49,6 +49,7 @@ export function createPdfPreview({
   pixelRatio = globalThis.devicePixelRatio || 1,
   fit = 'width',
   navigation = 'paged',
+  rotatesWithViewport = false,
   initialPage = 1,
   pageFilter = () => true,
   onPageChange = () => {},
@@ -187,7 +188,7 @@ export function createPdfPreview({
     if (pageStatus) pageStatus.textContent = `${pageIndex + 1} de ${pageNumbers.length}`;
     if (currentPage !== reportedPage) { reportedPage = currentPage; onPageChange(currentPage); }
   }
-  viewport.addEventListener('scroll', showCurrentPage, { passive: true });
+  if (continuous) viewport.addEventListener('scroll', showCurrentPage, { passive: true });
   function movePage(delta) {
     if (destroyed || busy) return;
     pageIndex = Math.max(0, Math.min(pageNumbers.length - 1, pageIndex + delta));showCurrentPage();
@@ -227,8 +228,11 @@ export function createPdfPreview({
     }
     if (bounded !== previousZoom && midpoint && ratio > 0) {
       const bounds = viewport.getBoundingClientRect?.() || { left: 0, top: 0 };
-      const x = Number(midpoint.clientX) - Number(bounds.left || 0);
-      const y = Number(midpoint.clientY) - Number(bounds.top || 0);
+      // The horizontal DDA viewer turns clockwise when the device is upright.
+      const rotated = rotatesWithViewport && windowRef?.matchMedia?.('(orientation: portrait)')?.matches;
+      const [x, y] = rotated
+        ? [midpoint.clientY - bounds.top, bounds.right - midpoint.clientX]
+        : [midpoint.clientX - (bounds.left || 0), midpoint.clientY - (bounds.top || 0)];
       viewport.scrollLeft = Math.max(0, (viewport.scrollLeft + x) * ratio - x);
       viewport.scrollTop = Math.max(0, (viewport.scrollTop + y) * ratio - y);
     }

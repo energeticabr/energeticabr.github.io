@@ -6288,7 +6288,7 @@ export function createAppController({
     };
   }
 
-  function openGalleryMedia(sourceItems, assertSession) {
+  function openGalleryMedia(sourceItems, assertSession, previewOptions) {
     assertSession();
     const items = (Array.isArray(sourceItems) ? sourceItems : []).map(item => ({
       ...item,
@@ -6297,14 +6297,17 @@ export function createAppController({
     })).filter(item => item.source != null);
     const first = items[0];
     if (!first) return undefined;
-    const options = { onAddToTray: galleryAddToTray(assertSession) };
+    const options = { onAddToTray: galleryAddToTray(assertSession), ...previewOptions };
     if (typeof native.previewMediaCollection === "function") {
       return native.previewMediaCollection(items, options);
     }
     if (typeof native.previewMedia === "function") {
       return native.previewMedia(first.source, first.fileName, options);
     }
-    return showMedia(first.source, first.fileName);
+    return showMedia(first.source, first.fileName).then(result => {
+      previewOptions?.onClose?.();
+      return result;
+    });
   }
 
   function ordersGalleryTokenProvider(assertSession, resumeAction = ORDERS_GALLERY_ID) {
@@ -9902,13 +9905,13 @@ export function createAppController({
             ...(isDdaReport ? { onClose: () => ddaAutoReminder.dismiss() } : {}),
             ...(["contractorEmployment", "dda", "notas_fiscais_sefaz", 'assetMenu', 'registrationMenu', 'assetLaunches'].includes(sourceKind) ? {} : { onCreate: galleryCreationHandler(replyId, assertSession) }),
             ...(["notas_fiscais_sefaz", "dda", "presenceDescriptions", "provisionDescription", "documents", "asset", "assetFunction", "assetProduct", "assetGroup", "workDiary", "quotes", "contracts", "contractLines", "measurements", "measurementLines", "stageDemonstratives", "constructionStages", "recurringTasks", "delegatedTasks"].includes(sourceKind) ? {
-              openMediaCollection: items => {
+              openMediaCollection: (items, previewOptions) => {
                 assertSession();
                 const collection = (Array.isArray(items) ? items : []).map(item => ({
                   fileName: String(item?.fileName || "arquivo"),
                   source: item?.source,
                 })).filter(item => item.source != null);
-                return openGalleryMedia(collection, assertSession);
+                return openGalleryMedia(collection, assertSession, previewOptions);
               },
             } : {}),
             onHome: () => { assertSession(); return returnToMainMenu(); },
