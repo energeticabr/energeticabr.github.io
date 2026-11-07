@@ -33,7 +33,7 @@ function makeHarness({ pendingProvisionAttachmentsDataFactory } = {}) {
 }
 
 test("pencil uses selected row sourceKind with the real paginated adapter, even when a legacy provider is cached", async t => {
-  t.mock.timers.enable({ apis: ["Date"], now: new Date("2026-10-11T15:00:00Z") });
+  t.mock.timers.enable({ apis: ["Date"], now: new Date("2026-10-12T15:00:00Z") });
   const fixture = createProvisionDueDateFixture(), kinds = [];
   const h = makeHarness({ pendingProvisionAttachmentsDataFactory: async options => {
     kinds.push(options.sourceKind || "legacy");
@@ -75,7 +75,7 @@ for (const failure of ["transport", "readback"]) test("pencil real adapter keeps
 });
 
 test("pencil switches the cached provider by explicit row kind within a mixed snapshot", async t => {
-  t.mock.timers.enable({ apis: ["Date"], now: new Date("2026-10-11T15:00:00Z") });
+  t.mock.timers.enable({ apis: ["Date"], now: new Date("2026-10-12T15:00:00Z") });
   const kinds = [], writes = [];
   const h = makeHarness({ pendingProvisionAttachmentsDataFactory: async options => {
     kinds.push(options.sourceKind);
@@ -109,7 +109,7 @@ test("pencil rejects an unknown explicit row source instead of guessing from its
 });
 
 test("pencil heals an old child when the parent already has the selected date and row kind overrides a legacy snapshot", async t => {
-  t.mock.timers.enable({ apis: ["Date"], now: new Date("2026-10-11T15:00:00Z") });
+  t.mock.timers.enable({ apis: ["Date"], now: new Date("2026-10-12T15:00:00Z") });
   const fixture = createProvisionDueDateFixture();
   // Match the adapter's local-midnight serialization, not the developer's UTC-3.
   const alreadySelectedDate = new Date(2026, 9, 13).toISOString();
@@ -131,7 +131,7 @@ test("pencil heals an old child when the parent already has the selected date an
 });
 
 test("pencil refreshes the due subtotal after the grouped date is confirmed", async t => {
-  t.mock.timers.enable({ apis: ["Date"], now: new Date("2026-10-11T15:00:00Z") });
+  t.mock.timers.enable({ apis: ["Date"], now: new Date("2026-10-12T15:00:00Z") });
   let date = "2026-10-12";
   const h = makeHarness({ pendingProvisionAttachmentsDataFactory: async () => ({
     listAttachments: async () => [],
@@ -155,7 +155,7 @@ test("pencil refreshes the due subtotal after the grouped date is confirmed", as
 });
 
 test("a slow subtotal read cannot leave the confirmed date edit busy", async t => {
-  t.mock.timers.enable({ apis: ["Date", "setTimeout"], now: new Date("2026-10-11T15:00:00Z") });
+  t.mock.timers.enable({ apis: ["Date", "setTimeout"], now: new Date("2026-10-12T15:00:00Z") });
   let saved = false;
   let markRefresh;
   const refreshStarted = new Promise(resolve => { markRefresh = resolve; });
