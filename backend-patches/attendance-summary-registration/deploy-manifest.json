@@ -1,0 +1,12 @@
+{
+  "app": {
+    "relative": "worker/workflow.py",
+    "before": "ec6879ce69308f923008289563c79c9c466338fa47846df8a71c8451008b34d6",
+    "after": "b1cb0da6725da068377858301dffc33f7e7153a5ca5649f3e2f78c95644320e0"
+  },
+  "build": {
+    "relative": "worker/workflow.py",
+    "before": "7a78edb3acb1cc088a0f6240df396bed6d09c207cd9b22774ef6a46c77f987cb",
+    "after": "53aee6c33b62c5723a098a66527be8c11d5051f863d7c19f2912a52c044f9b48"
+  }
+}

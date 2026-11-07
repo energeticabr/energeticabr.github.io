@@ -1,0 +1,185 @@
+{
+  "summary": {
+    "type": "actions",
+    "body": "CONFIRMA A ATUALIZAÇÃO DESTAS PRESENÇAS?\n31/07/2026 | FORNECEDOR TESTE | 119 - PADRÃO DO DEMONSTRATIVO | MONTAGEM DE FORMAS | PRESENTE\n31/07/2026 | FORNECEDOR TESTE BETA | 119 - PADRÃO DO DEMONSTRATIVO | MONTAGEM DE FORMAS | PRESENTE",
+    "actions": [
+      {
+        "id": "attendance_batch_register",
+        "title": "➕ CADASTRAR"
+      },
+      {
+        "id": "attendance_batch_confirm",
+        "title": "✅ SUBMETER TODOS"
+      },
+      {
+        "id": "attendance_batch_cancel",
+        "title": "↩️ VOLTAR"
+      },
+      {
+        "id": "navigation_back",
+        "title": "↩️ RETORNAR À PERGUNTA ANTERIOR",
+        "reply": "navigation_back",
+        "navigation_back": true
+      },
+      {
+        "id": "navigation_main_menu",
+        "title": "🏠 RETORNAR AO MENU INICIAL",
+        "reply": "navigation_main_menu",
+        "navigation_main_menu": true
+      }
+    ],
+    "detail_table": {
+      "title": "📋 RESUMO DAS PRESENÇAS SELECIONADAS",
+      "kind": "presence",
+      "rows": [
+        [
+          {
+            "label": "DATA",
+            "value": "31/07/2026"
+          },
+          {
+            "label": "FORNECEDOR",
+            "value": "FORNECEDOR TESTE"
+          },
+          {
+            "label": "IDDESCRITIVO",
+            "value": "119 - PADRÃO DO DEMONSTRATIVO",
+            "editor": {
+              "value": "attendance_inline:e89bb4502e06c249cce51647:1814:IDDESCRITIVOETAPA:0",
+              "options": [
+                {
+                  "value": "attendance_inline:e89bb4502e06c249cce51647:1814:IDDESCRITIVOETAPA:0",
+                  "label": "119 - PADRÃO DO DEMONSTRATIVO (FORNECEDOR TESTE - TODOS)"
+                },
+                {
+                  "value": "attendance_inline:e89bb4502e06c249cce51647:1814:IDDESCRITIVOETAPA:1",
+                  "label": "405 - ALVENARIA (FORNECEDOR ALTERADO - BLOCO A)"
+                }
+              ]
+            }
+          },
+          {
+            "label": "ATIVIDADEEXECUTADA",
+            "value": "MONTAGEM DE FORMAS",
+            "editor": {
+              "value": "attendance_inline:e89bb4502e06c249cce51647:1814:ATIVIDADEEXECUTADA:current",
+              "options": [
+                {
+                  "value": "attendance_inline:e89bb4502e06c249cce51647:1814:ATIVIDADEEXECUTADA:current",
+                  "label": "MONTAGEM DE FORMAS"
+                },
+                {
+                  "value": "attendance_inline:e89bb4502e06c249cce51647:1814:ATIVIDADEEXECUTADA:0",
+                  "label": "ARMAÇÃO DE VIGAS"
+                },
+                {
+                  "value": "attendance_inline:e89bb4502e06c249cce51647:1814:ATIVIDADEEXECUTADA:1",
+                  "label": "CONCRETAGEM DE VIGAS"
+                }
+              ]
+            }
+          },
+          {
+            "label": "PRESENÇA",
+            "value": "PRESENTE",
+            "tone": "present"
+          }
+        ],
+        [
+          {
+            "label": "DATA",
+            "value": "31/07/2026"
+          },
+          {
+            "label": "FORNECEDOR",
+            "value": "FORNECEDOR TESTE BETA"
+          },
+          {
+            "label": "IDDESCRITIVO",
+            "value": "119 - PADRÃO DO DEMONSTRATIVO",
+            "editor": {
+              "value": "attendance_inline:e89bb4502e06c249cce51647:1815:IDDESCRITIVOETAPA:0",
+              "options": [
+                {
+                  "value": "attendance_inline:e89bb4502e06c249cce51647:1815:IDDESCRITIVOETAPA:0",
+                  "label": "119 - PADRÃO DO DEMONSTRATIVO (FORNECEDOR TESTE - TODOS)"
+                },
+                {
+                  "value": "attendance_inline:e89bb4502e06c249cce51647:1815:IDDESCRITIVOETAPA:1",
+                  "label": "405 - ALVENARIA (FORNECEDOR ALTERADO - BLOCO A)"
+                }
+              ]
+            }
+          },
+          {
+            "label": "ATIVIDADEEXECUTADA",
+            "value": "MONTAGEM DE FORMAS",
+            "editor": {
+              "value": "attendance_inline:e89bb4502e06c249cce51647:1815:ATIVIDADEEXECUTADA:current",
+              "options": [
+                {
+                  "value": "attendance_inline:e89bb4502e06c249cce51647:1815:ATIVIDADEEXECUTADA:current",
+                  "label": "MONTAGEM DE FORMAS"
+                },
+                {
+                  "value": "attendance_inline:e89bb4502e06c249cce51647:1815:ATIVIDADEEXECUTADA:0",
+                  "label": "ARMAÇÃO DE VIGAS"
+                },
+                {
+                  "value": "attendance_inline:e89bb4502e06c249cce51647:1815:ATIVIDADEEXECUTADA:1",
+                  "label": "CONCRETAGEM DE VIGAS"
+                }
+              ]
+            }
+          },
+          {
+            "label": "PRESENÇA",
+            "value": "PRESENTE",
+            "tone": "present"
+          }
+        ]
+      ]
+    },
+    "delay_seconds": 0,
+    "revoke_completion_id": null,
+    "poll_lane": null,
+    "message_scope_id": null,
+    "revoke_scope_id": null
+  },
+  "menu": {
+    "type": "actions",
+    "body": "➕ O QUE DESEJA CADASTRAR?",
+    "actions": [
+      {
+        "id": "attendance_batch_register_descriptor",
+        "title": "🏷️ DESCRITIVO ETAPA"
+      },
+      {
+        "id": "attendance_batch_register_activity",
+        "title": "⚙️ ATIVIDADE EXECUTADA"
+      },
+      {
+        "id": "attendance_batch_register_back",
+        "title": "↩️ VOLTAR AO RESUMO"
+      },
+      {
+        "id": "navigation_back",
+        "title": "↩️ RETORNAR À PERGUNTA ANTERIOR",
+        "reply": "navigation_back",
+        "navigation_back": true
+      },
+      {
+        "id": "navigation_main_menu",
+        "title": "🏠 RETORNAR AO MENU INICIAL",
+        "reply": "navigation_main_menu",
+        "navigation_main_menu": true
+      }
+    ],
+    "detail_table": null,
+    "delay_seconds": 0,
+    "revoke_completion_id": null,
+    "poll_lane": null,
+    "message_scope_id": null,
+    "revoke_scope_id": null
+  }
+}
