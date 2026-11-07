@@ -1,6 +1,7 @@
 // The collector currently tracks four cards. Their private IDs come exclusively
 // from the authenticated snapshot; a changed count requires a contract update.
 const CARD_COUNT = 4;
+const MAX_SAFE_CENTS = BigInt(Number.MAX_SAFE_INTEGER);
 const dateFormatter = new Intl.DateTimeFormat('en-CA', { timeZone: 'America/Sao_Paulo',
   year: 'numeric', month: '2-digit', day: '2-digit' });
 
@@ -49,10 +50,14 @@ function source(value) {
 }
 function money(value) {
   const amount = text(value);
-  if (!/^(?:0|[1-9]\d*|[1-9]\d{0,2}(?:\.\d{3})+),\d{2}$/.test(amount)) invalid('Saldo Trancid inválido.');
+  if (!/^-?(?:0|[1-9]\d*|[1-9]\d{0,2}(?:\.\d{3})+),\d{2}$/.test(amount)) invalid('Saldo Trancid inválido.');
   const cents = BigInt(amount.replaceAll('.', '').replace(',', ''));
-  if (cents > BigInt(Number.MAX_SAFE_INTEGER)) invalid('Saldo Trancid excede a precisão segura.');
+  if (cents > MAX_SAFE_CENTS || cents < -MAX_SAFE_CENTS) invalid('Saldo Trancid excede a precisão segura.');
   return Number(cents);
+}
+function calculatedCents(value, message) {
+  if (value > MAX_SAFE_CENTS || value < -MAX_SAFE_CENTS) throw new RangeError(message);
+  return Number(value);
 }
 function later(a, b) {
   return !b || a.time > b.time || a.time === b.time && (a.rank > b.rank || a.rank === b.rank && a.priority > b.priority);
@@ -117,10 +122,10 @@ function inspectSnapshot(input) {
     positionIds.add(id);
     const runId = integer(row.run_id, { nullable: true, minimum: 1 }), cardId = card(row.card);
     const checked = timestamp(row.checked_at), report = row.report_at === null ? null : timestamp(row.report_at);
-    const employee = text(row.employee), balanceCents = integer(row.balance_cents, { minimum: 0 });
-    const previousCents = integer(row.previous_cents, { nullable: true, minimum: 0 });
+    const employee = text(row.employee), balanceCents = integer(row.balance_cents);
+    const previousCents = integer(row.previous_cents, { nullable: true });
     const deltaCents = integer(row.delta_cents, { nullable: true });
-    if (previousCents !== null && (deltaCents === null || balanceCents - previousCents !== deltaCents)) invalid('Variação financeira Trancid inconsistente.');
+    if (previousCents !== null && (deltaCents === null || BigInt(balanceCents) - BigInt(previousCents) !== BigInt(deltaCents))) invalid('Variação financeira Trancid inconsistente.');
     const kind = text(row.kind);
     if (!['Inicial', 'Alteração'].includes(kind)) invalid('Tipo de posição Trancid inválido.');
     const key = `${runId ?? checked.time}:${cardId}`;
@@ -180,23 +185,24 @@ export function buildTrancidReport(input, { month, now = new Date() } = {}) {
     const [year, mon] = cursor.split('-').map(Number);
     cursor = mon === 12 ? `${year + 1}-01` : `${year}-${String(mon + 1).padStart(2, '0')}`;
   }
-  let totalCents = 0, lowCount = 0;
+  let total = 0n, lowCount = 0;
   const cards = cardIds.map(id => {
     const { current, days } = byCard.get(id), history = [];
     const start = `${selected}-01` > firstDate ? `${selected}-01` : firstDate;
     for (let date = start; date.slice(0, 7) === selected && date <= today; date = nextDate(date)) {
       const observation = days.get(date), previous = days.get(nextDate(date, -1));
       history.push(Object.freeze({ date, balanceCents: observation?.balanceCents ?? null,
-        variationCents: observation && previous ? observation.balanceCents - previous.balanceCents : null,
+        variationCents: observation && previous ? calculatedCents(BigInt(observation.balanceCents) - BigInt(previous.balanceCents),
+          'Variação Trancid excede a precisão monetária segura.') : null,
         status: observation ? 'observed' : 'unavailable', checkedAt: observation?.checkedAt ?? null }));
     }
-    totalCents += current.balanceCents;
-    if (!Number.isSafeInteger(totalCents)) throw new RangeError('Total Trancid excede a precisão monetária segura.');
+    total += BigInt(current.balanceCents);
     const low = current.balanceCents < 4000;
     if (low) lowCount++;
     return Object.freeze({ card: id, supplier: current.supplier, balanceCents: current.balanceCents,
       low, observedAt: current.checkedAt, history: Object.freeze(history) });
   });
+  const totalCents = calculatedCents(total, 'Total Trancid excede a precisão monetária segura.');
   return Object.freeze({ month: selected, months: Object.freeze([...months].sort().reverse()),
     lastCheckedAt: lastRun && !later(lastObservation, lastRun) ? lastRun.value : lastObservation.checkedAt,
     lastError: lastRun?.row.status === 'error' ? lastRun.row.error : null,

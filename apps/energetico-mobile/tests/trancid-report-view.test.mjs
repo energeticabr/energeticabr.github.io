@@ -168,3 +168,8 @@ test('exported PDF preserves the negative variation sign and every card digit', 
   assert.match(text.join(' '), /-R\$\s*6,25/);
   assert.match(text.join(' '), /12345678901234/);
 });
+
+test('daily history also highlights balances below forty, including zero and negative amounts',async t=>{
+ const ctx=setup(t),data=report();data.cards[0].history=[3999,4000,0,-100].map((balanceCents,index)=>({date:`2026-11-0${index+1}`,balanceCents,variationCents:null,status:'observed'}));
+ await ctx.view.open({initialSnapshot:data});assert.deepEqual([...ctx.root.querySelectorAll('[data-trancid-card]:first-child [data-history-balance]')].map(cell=>cell.classList.contains('trancid-balance--low')),[true,false,true,true]);
+});

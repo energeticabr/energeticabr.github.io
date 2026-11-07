@@ -95,6 +95,7 @@ export function createTrancidReportView({ document: doc = globalThis.document, l
         const tr = make('tr'); tr.dataset.historyDate = row.date;
         const date = make('th', '', dateLabel(row.date)); date.scope = 'row';
         const balance = make('td', 'trancid-history-balance', money(row.balanceCents)); balance.dataset.historyBalance = '';
+        if (isMoney(row.balanceCents) && row.balanceCents < 4000) balance.classList.add('trancid-balance--low');
         const delta = make('td', 'trancid-history-variation', variationLabel(row.variationCents)); delta.dataset.historyVariation = '';
         if (isMoney(row.variationCents) && row.variationCents < 0) delta.classList.add('trancid-history-variation--negative');
         if (isMoney(row.variationCents) && row.variationCents > 0) delta.classList.add('trancid-history-variation--positive');

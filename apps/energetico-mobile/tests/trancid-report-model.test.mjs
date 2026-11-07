@@ -61,6 +61,44 @@ test('daily snapshots include unchanged balances and compare with the previous c
   assert.deepEqual(result.months, ['2026-11', '2026-10']);
 });
 
+test('negative source balances and previous positions retain exact daily variation and trigger the below-R$40 warning', () => {
+  const before = '2026-11-05T07:00:00-03:00', current = '2026-11-06T07:00:00-03:00';
+  const data = snapshot([
+    run(1, before, ['5,00', '-2,00', '0,00', '0,00']),
+    run(2, current, ['-1,00', '-3,00', '0,00', '0,00']),
+  ], [
+    position(1, 1, before, 500),
+    position(2, 2, current, -100, { previous_cents: 500, delta_cents: -600, kind: 'Alteração' }),
+    position(3, 2, current, -300, { card: cards[1], employee: 'Bia Exemplo', previous_cents: -200,
+      delta_cents: -100, kind: 'Alteração' }),
+  ]);
+  const result = build(data, options);
+  assert.deepEqual(result.cards[0].history.map(day => [day.balanceCents, day.variationCents]), [[500, null], [-100, -600]]);
+  assert.equal(result.cards[0].balanceCents, -100); assert.equal(result.cards[0].low, true);
+  assert.equal(result.cards[1].history[1].variationCents, -100);
+  assert.equal(result.totalCents, -400); assert.equal(result.lowCount, 4);
+  assert.equal(model.validateTrancidSnapshot(data).positions[2].previous_cents, -200);
+});
+
+test('signed safe-cent limits remain exact, including totals whose intermediate sums exceed the number range', () => {
+  const at = '2026-11-06T07:00:00-03:00';
+  const minimum = build(snapshot([run(1, at, ['-90.071.992.547.409,91', '0,00', '0,00', '0,00'])]), options);
+  assert.equal(minimum.cards[0].balanceCents, Number.MIN_SAFE_INTEGER);
+  assert.equal(minimum.totalCents, Number.MIN_SAFE_INTEGER); assert.equal(minimum.cards[0].low, true);
+  const cancelled = build(snapshot([run(1, at, ['90.071.992.547.409,91', '90.071.992.547.409,91',
+    '-90.071.992.547.409,91', '-90.071.992.547.409,91'])]), options);
+  assert.equal(cancelled.totalCents, 0); assert.equal(cancelled.lowCount, 2);
+});
+
+test('negative total underflow and unsafe signed daily differences reject rather than rounding centavos', () => {
+  const at = '2026-11-06T07:00:00-03:00';
+  assert.throws(() => build(snapshot([run(1, at, ['-90.071.992.547.409,91', '-0,01', '0,00', '0,00'])]), options), RangeError);
+  assert.throws(() => build(snapshot([
+    run(1, '2026-11-05T07:00:00-03:00', ['-90.071.992.547.409,91', '0,00', '0,00', '0,00']),
+    run(2, at, ['90.071.992.547.409,91', '0,00', '0,00', '0,00']),
+  ]), options), RangeError);
+});
+
 test('same-day initial and daily observations select latest checked_at, then the higher run ID on an exact tie', () => {
   const at = '2026-11-06T10:00:00.611765-03:00';
   const data = snapshot([
@@ -164,11 +202,13 @@ test('incomplete, malformed, unsafe and duplicate money data rejects rather than
     value => { const body = JSON.parse(value.runs[0].snapshot); body.balances.pop(); value.runs[0].snapshot = JSON.stringify(body); },
     value => { const body = JSON.parse(value.runs[0].snapshot); body.balances.push(body.balances[0]); value.runs[0].snapshot = JSON.stringify(body); },
     value => { const body = JSON.parse(value.runs[0].snapshot); body.balances[0].card = '0000000000010'; value.runs[0].snapshot = JSON.stringify(body); },
-    ...[undefined, null, '', ' ', false, 0, '1.00', '1,001', 'abc', '90.071.992.547.409,92', '-1,00'].map(balance => value => {
+    ...[undefined, null, '', ' ', false, 0, '1.00', '1,001', 'abc', '90.071.992.547.409,92',
+      '-90.071.992.547.409,92', '-', '--1,00', '+1,00', '-1.00', '-1,001'].map(balance => value => {
       const body = JSON.parse(value.runs[0].snapshot); body.balances[0].balance = balance; value.runs[0].snapshot = JSON.stringify(body);
     }),
     value => { value.positions = [position(1, 1, '2026-11-06T07:00:00-03:00', null)]; },
     value => { value.positions = [position(1, 1, '2026-11-06T07:00:00-03:00', Number.MAX_SAFE_INTEGER + 1)]; },
+    value => { value.positions = [position(1, 1, '2026-11-06T07:00:00-03:00', Number.MIN_SAFE_INTEGER - 1)]; },
     value => { value.positions = [position(1, 1, '2026-11-06T07:00:00-03:00', 550)]; },
     value => { const row = position(1, 1, '2026-11-06T07:00:00-03:00'); value.positions = [row, { ...row, id: 2 }]; },
     value => { value.runs.push({ ...value.runs[0] }); },
