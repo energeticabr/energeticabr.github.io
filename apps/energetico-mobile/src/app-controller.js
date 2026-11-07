@@ -6304,7 +6304,10 @@ export function createAppController({
     if (typeof native.previewMedia === "function") {
       return native.previewMedia(first.source, first.fileName, options);
     }
-    return showMedia(first.source, first.fileName, options);
+    return showMedia(first.source, first.fileName).then(result => {
+      previewOptions?.onClose?.();
+      return result;
+    });
   }
 
   function ordersGalleryTokenProvider(assertSession, resumeAction = ORDERS_GALLERY_ID) {

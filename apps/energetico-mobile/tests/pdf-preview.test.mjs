@@ -319,12 +319,7 @@ test('scrolling to a failed report page disables signing and scrolling back rest
   assert.equal(changes.at(-1), 1);
 });
 
-test("PDF amplia ao afastar dois dedos no visualizador", async t => {
-  const { viewer, container, documentRef } = setup(t);
-  await viewer.ready;
-  const viewport = container.querySelector(".attachment-preview-pdf-viewport");
-  const initialWidth = parseFloat(container.querySelector("canvas").style.width);
-  Object.defineProperty(viewport, "getBoundingClientRect", { value: () => ({ left: 0, top: 0 }) });
+function pinchPdf(viewport, documentRef) {
   const pointer = (type, pointerId, clientX, clientY) => {
     const event = new documentRef.defaultView.Event(type, { bubbles: true, cancelable: true });
     Object.defineProperties(event, {
@@ -339,7 +334,27 @@ test("PDF amplia ao afastar dois dedos no visualizador", async t => {
   viewport.dispatchEvent(pointer("pointerdown", 1, 100, 300));
   viewport.dispatchEvent(pointer("pointerdown", 2, 200, 300));
   viewport.dispatchEvent(pointer("pointermove", 2, 300, 300));
+}
+
+test("PDF amplia ao afastar dois dedos no visualizador", async t => {
+  const { viewer, container, documentRef } = setup(t);
+  await viewer.ready;
+  const viewport = container.querySelector(".attachment-preview-pdf-viewport");
+  const initialWidth = parseFloat(container.querySelector("canvas").style.width);
+  pinchPdf(viewport, documentRef);
   assert.ok(parseFloat(container.querySelector("canvas").style.width) > initialWidth);
+});
+
+test('pinching a rotated DDA PDF keeps the same logical point under the fingers', async t => {
+  const { viewer, container, documentRef } = setup(t, { fit: 'page', rotatesWithViewport: true });
+  documentRef.defaultView.matchMedia = query => ({ matches: query === '(orientation: portrait)' });
+  await viewer.ready;
+  const viewport = container.querySelector('.attachment-preview-pdf-viewport');
+  viewport.getBoundingClientRect = () => ({ left: 30, top: 60, right: 350, bottom: 760 });
+  pinchPdf(viewport, documentRef);
+  viewport.dispatchEvent(new documentRef.defaultView.Event('scroll'));
+  assert.ok(viewport.scrollLeft > 0);
+  assert.ok(Math.abs(viewport.scrollLeft / 240 - viewport.scrollTop / 150) < 1e-8);
 });
 
 test("PDF mantém canvas abaixo de 4 milhões de pixels e libera memória ao destruir", async t => {

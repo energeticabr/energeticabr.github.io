@@ -473,6 +473,8 @@ export function createAttachmentPreview({
     const reportLayout = dialog.dataset.layout !== "media";
     closeButton.textContent = ddaReport ? '×' : reportLayout ? '❌' : 'Fechar';
     closeButton.setAttribute('aria-label', ddaReport ? 'Fechar PDF' : reportLayout ? 'Fechar relatório' : 'Fechar');
+    previousButton.textContent = ddaReport ? '‹ PDF anterior' : '‹ Anterior';
+    nextButton.textContent = ddaReport ? 'Próximo PDF ›' : 'Próximo ›';
     backButton.hidden = reportLayout;
     const session = { abort: new AbortController(), urls: new Set(), blob: null, pdf: null, zoom: null, kind: null, fileName: String(fileName || "arquivo"), onClose, onSign, onStamp, onAppendPages, layout,
       progress: 0, failed: false, loader: createLoadingIndicator(documentRef, 'Carregando arquivo…', { progress: 0, progressLabel: 'Carregamento do anexo' }) };
@@ -664,6 +666,7 @@ export function createAttachmentPreview({
           onDdaCopyReady: available => { if (active === session) { ddaCopyButton.hidden = !available; if (available) dialog.dataset.ddaCopy = 'true'; else delete dialog.dataset.ddaCopy; } },
           fit: ddaReport || layout === 'report-pdf' ? 'page' : 'width',
           navigation: ddaReport ? 'paged' : 'scroll',
+          rotatesWithViewport: ddaReport,
           initialPage,
           onPageChange: page => {
             if (active !== session) return;

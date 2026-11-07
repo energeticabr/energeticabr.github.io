@@ -59,9 +59,14 @@ export function createDdaReportView({document:doc=globalThis.document,data,openM
   if(paymentConfirmation.isOpen||pdfRequest){reloadPending=true;return;}
   reloadPending=false;
   const position=[content.scrollTop,content.scrollLeft];
+  const focused=doc.activeElement,focusedRow=focused?.closest('[data-dda-id]')?.dataset.ddaId;
+  const focusSelector=focused?.matches('[data-dda-pdf]')?`[data-dda-pdf="${focusedRow}"]`
+   :focused?.matches('[data-dda-mirror]')?`[data-dda-mirror="${focusedRow}"]`:null;
   const loading=load(),current=revision,filters=filterRevision;
   await loading;
-  if(current===revision&&filters===filterRevision&&!root.hidden)[content.scrollTop,content.scrollLeft]=position;
+  if(current!==revision||filters!==filterRevision||root.hidden)return;
+  [content.scrollTop,content.scrollLeft]=position;
+  if(focusSelector&&doc.activeElement===doc.body)(content.querySelector(focusSelector)||panel).focus({preventScroll:true});
  }
  async function manualRefresh(){
   if(destroyed||root.hidden||refresh.disabled)return;
@@ -149,7 +154,7 @@ export function createDdaReportView({document:doc=globalThis.document,data,openM
    if(!files.length){showNotice('Este DDA ainda não possui PDF anexado.');return;}
    trigger.disabled=false;
    await openMediaCollection(files.map(({fileName})=>({fileName,source:options=>{
-    signal.throwIfAborted();return data.downloadAttachment(row.id,fileName,options);
+    signal.throwIfAborted();return data.downloadAttachment(row.id,fileName,{...options,signal:options?.signal??signal});
    }})),{layout:'dda-report-pdf',signal,onClose:finish,resolveReturnFocus:()=>trigger.isConnected?trigger:panel});
    previewStarted=true;
   }catch{if(currentView())showNotice('Não foi possível abrir os PDFs. Tente novamente.');}

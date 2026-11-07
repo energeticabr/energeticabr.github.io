@@ -30,7 +30,8 @@ test('bank completion keeps the DDA under the PDF until close, then restores its
  const content=h.doc.querySelector('.ddr-content');content.scrollTop=90;
  h.doc.querySelector('[data-dda-pdf]').click();await tick();assert.equal(preview.layout,'dda-report-pdf');
  h.emit(true);h.emit(false);await tick();assert.equal(h.counts().loads,1);assert.equal(preview.signal.aborted,false);
- preview.onClose();await tick();assert.equal(h.counts().loads,2);assert.equal(content.scrollTop,90);assert.equal(h.view.element.hidden,false);
+ preview.resolveReturnFocus().focus();preview.onClose();await tick();assert.equal(h.counts().loads,2);assert.equal(content.scrollTop,90);assert.equal(h.view.element.hidden,false);
+ assert.equal(h.doc.activeElement,h.doc.querySelector('[data-dda-pdf]'));
  h.doc.querySelector('[data-dda-pdf]').click();await tick();h.view.close();assert.equal(preview.signal.aborted,true);
 });
 test('start failure is visible without exposing internal errors and allows retry',async t=>{

@@ -61,6 +61,13 @@ test('report and gallery use separate instances, share read-only source and medi
  await h.factories[0].openMediaCollection([{fileName:'espelho.pdf',source:new Blob(['pdf'])}]);assert.equal(h.calls.at(-1)[0].fileName,'espelho.pdf');
  await h.view.emit('sign-out');assert.ok(h.calls.includes('destroy'));assert.throws(()=>h.factories[0].openMediaCollection([]));
 });
+test('report releases the PDF request after the export-only media fallback',async t=>{
+ const calls=[];
+ const h=setup(t,{native:{importSharedItems:async()=>[],exportMedia:async(_blob,fileName)=>calls.push(fileName)}});
+ await h.controller.start();await h.view.emit('open-dda-report');
+ await h.factories[0].openMediaCollection([{fileName:'espelho.pdf',source:new Blob(['pdf'])}],{layout:'dda-report-pdf',onClose:()=>calls.push('closed')});
+ assert.deepEqual(calls,['espelho.pdf','closed']);
+});
 test('DDA report resumes after authentication and late factories cannot open after logout',async t=>{
  const h=setup(t,{auth:{consumePendingAction:()=> 'action_dda_report'}});await h.controller.start();assert.deepEqual(h.opened,['report']);
  let resolve,destroyed=0,opens=0;const late=setup(t,{ddaReportFactory:()=>new Promise(r=>resolve=r)});await late.controller.start();const request=late.view.emit('open-dda-report');await tick();await late.view.emit('sign-out');resolve({open(){opens++;},destroy(){destroyed++;}});await request;assert.equal(opens,0);assert.equal(destroyed,1);
