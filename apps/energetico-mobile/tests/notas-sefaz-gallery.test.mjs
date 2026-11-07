@@ -418,6 +418,59 @@ test('NF-e document links open through the app preview with a lazy authenticated
   assert.equal(downloads[0][1].signal, signal);
 });
 
+test('DANFE abre com cartas de correção da mesma nota, sem duplicar o original e consultando anexos atuais', async t => {
+  const dom = new JSDOM('<body/>'), doc = dom.window.document;
+  const opened = [], listed = [], downloads = [];
+  const files = ['comprovante.pdf', 'CCe-ficticia-110110-02.pdf', 'danfe.pdf', 'CCe-ficticia-110110-01.pdf'];
+  const gallery = createRegistrationGallery({ document: doc, kind: 'notas_fiscais_sefaz', data: {
+    loadSnapshot: async () => ({ rows: [sample, { id: '5', fields: { ...sample.fields, NUMERO_NOTA: '999' } }] }),
+    listAttachments: async (id, options) => { listed.push([id, options]); return files.map(fileName => ({ fileName })); },
+    downloadDocument: async (url, options) => { downloads.push(['document', url, options]); return new Blob(['%PDF-original']); },
+    downloadAttachment: async (id, name, options) => { downloads.push(['attachment', id, name, options]); return new Blob(['%PDF-correction']); },
+  }, openMediaCollection: items => opened.push(items) });
+  t.after(() => { gallery.destroy(); dom.window.close(); });
+  await gallery.open();
+  doc.querySelector('[data-registration-row="4"] .rg-sefaz-pdf-link').click();
+  await new Promise(resolve => setImmediate(resolve));
+  assert.equal(opened.length, 1);
+  assert.deepEqual(opened[0].map(item => item.fileName), ['danfe.pdf', 'CCe-ficticia-110110-01.pdf', 'CCe-ficticia-110110-02.pdf', 'comprovante.pdf']);
+  assert.deepEqual(listed, [['4', { refresh: true }]]);
+  assert.equal(downloads.length, 0, 'arquivos só são baixados ao navegar');
+  const signal = new AbortController().signal;
+  await opened[0][0].source({ signal });
+  await opened[0][1].source({ signal });
+  assert.deepEqual(downloads, [['document', sample.fields.DANFE_URL.Url, { signal }], ['attachment', '4', files[3], { signal }]]);
+  files.push('CCe-ficticia-110110-03.pdf');
+  doc.querySelector('[data-registration-row="4"] .rg-sefaz-pdf-link').click();
+  await new Promise(resolve => setImmediate(resolve));
+  assert.equal(opened[1].length, 5, 'nova carta aparece ao reabrir sem reutilizar cache antigo');
+});
+
+test('consulta de anexos do DANFE não abre visualizador após fechar a galeria nem oculta falhas de consulta', async t => {
+  const dom = new JSDOM('<body/>'), doc = dom.window.document;
+  let finish;
+  const opened = [];
+  const data = { loadSnapshot: async () => ({ rows: [sample] }),
+    listAttachments: () => new Promise(resolve => { finish = resolve; }),
+    downloadAttachment: async () => new Blob(), downloadDocument: async () => new Blob() };
+  const gallery = createRegistrationGallery({ document: doc, kind: 'notas_fiscais_sefaz', data,
+    openMediaCollection: items => opened.push(items) });
+  t.after(() => { gallery.destroy(); dom.window.close(); });
+  await gallery.open();
+  doc.querySelector('.rg-sefaz-pdf-link').click();
+  gallery.close();
+  assert.equal(typeof finish, 'function', 'atalho consulta os anexos da nota');
+  await gallery.open();
+  finish([]);
+  await new Promise(resolve => setImmediate(resolve));
+  assert.equal(opened.length, 0);
+  data.listAttachments = async () => { throw new Error('offline'); };
+  doc.querySelector('.rg-sefaz-pdf-link').click();
+  await new Promise(resolve => setImmediate(resolve));
+  assert.equal(opened.length, 0);
+  assert.match(doc.querySelector('.rg-feedback').textContent, /Não foi possível abrir o documento/);
+});
+
 test('cada ícone PDF abre somente o DANFE anexado à sua própria nota', async t => {
   const dom = new JSDOM('<body/>'), doc = dom.window.document;
   const opened = [], downloads = [];
