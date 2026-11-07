@@ -1,0 +1,142 @@
+--- a/worker/workflow.py
++++ b/worker/workflow.py
+@@ -1214 +1214 @@
+-                    for batch_key in ("attendance_batch_records", "attendance_batch_changes", "attendance_batch_presence", "attendance_batch_origin", "attendance_batch_motivation", "attendance_batch_finalized_ids", "attendance_batch_row_changes", "attendance_inline_commands", "attendance_inline_catalog_errors"):
++                    for batch_key in ("attendance_batch_records", "attendance_batch_changes", "attendance_batch_presence", "attendance_batch_origin", "attendance_batch_motivation", "attendance_batch_justifications", "attendance_batch_finalized_ids", "attendance_batch_row_changes", "attendance_inline_commands", "attendance_inline_catalog_errors"):
+@@ -5463 +5463 @@
+-        for key in ("attendance_batch_row_changes", "attendance_inline_commands", "attendance_inline_catalog_errors"):
++        for key in ("attendance_batch_row_changes", "attendance_inline_commands", "attendance_inline_catalog_errors", "attendance_batch_justifications", "attendance_batch_motivation"):
+@@ -5840,0 +5841,17 @@
++    def _attendance_saved_justification(self, record_id, expected_date) -> str:
++        """Read the modal's latest note for this exact record and date."""
++        identifier = str(record_id or "").strip()
++        expected_day = str(expected_date or "")[:10]
++        if not identifier.isdigit() or not expected_day:
++            raise RuntimeError("REGISTRO OU DATA DA PRESENÇA INVÁLIDOS")
++        current = self.sharepoint.get_item_fields(
++            int(identifier), ["DATA", "IRREGULARIDADES"], target_list="DESCRITIVOPRESENCA")
++        if str(current.get("DATA") or "")[:10] != expected_day:
++            raise RuntimeError("A DATA DA PRESENÇA MUDOU. ATUALIZE A LISTA.")
++        return str(current.get("IRREGULARIDADES") or "").strip()
++
++    @staticmethod
++    def _attendance_batch_absence_motivation(state: dict, option: dict) -> str:
++        return ((state.get("attendance_batch_justifications") or {}).get(str(option["value"]))
++                or state.get("attendance_batch_motivation") or "NÃO APONTADO")
++
+@@ -5869,2 +5886,2 @@
+-            if presence == "AUSENTE" and state.get("attendance_batch_motivation"):
+-                rows[-1].append({"label": "MOTIVAÇÃO", "value": state["attendance_batch_motivation"]})
++            if presence == "AUSENTE":
++                rows[-1].append({"label": "MOTIVAÇÃO", "value": self._attendance_batch_absence_motivation(state, option)})
+@@ -5970,0 +5988 @@
++            state.pop("attendance_batch_justifications", None)
+@@ -5974,0 +5993 @@
++            state.pop("attendance_batch_justifications", None)
+@@ -5979,0 +5999 @@
++            state.pop("attendance_batch_motivation", None)
+@@ -6108,0 +6129,12 @@
++        records = state.get("attendance_batch_records") or []
++        notes = {
++            str(option["value"]): self._attendance_saved_justification(
++                option["value"], (option.get("source_values") or {}).get("DATA"))
++            for option in records
++        }
++        state["attendance_batch_justifications"] = notes
++        missing = [identifier for identifier, note in notes.items() if not note]
++        if records and not missing:
++            return self._prompt_attendance_batch_confirmation(state, etag)
++        prompt = ("🔴 DIGITE A MOTIVAÇÃO DA AUSÊNCIA PARA OS IDs SEM JUSTIFICATIVA: "
++                  + ", ".join(missing) + ". OU SELECIONE NÃO APONTADO.")
+@@ -6122 +6154 @@
+-                "prompt": "🔴 DIGITE A MOTIVAÇÃO DA AUSÊNCIA PARA TODOS OS IDs OU SELECIONE NÃO APONTADO.",
++                "prompt": prompt,
+@@ -6208 +6240,3 @@
+-                fields = list(dict.fromkeys(["PRESENCA", "DATA", "FORNECEDOR", "FILIAL", "IDDESCRITIVOETAPA", "ATIVIDADEEXECUTADA", *row_updates, *ATTENDANCE_CONSISTENCY_FIELDS]))
++                if presence == "AUSENTE":
++                    row_updates["MOTIVACAO"] = self._attendance_batch_absence_motivation(state, option)
++                fields = list(dict.fromkeys(["PRESENCA", "DATA", "FORNECEDOR", "FILIAL", "IDDESCRITIVOETAPA", "ATIVIDADEEXECUTADA", "IRREGULARIDADES", *row_updates, *ATTENDANCE_CONSISTENCY_FIELDS]))
+@@ -6216,0 +6251,5 @@
++                if presence == "AUSENTE" and state.get("attendance_batch_justifications") is not None:
++                    current_note = str(current.get("IRREGULARIDADES") or "").strip()
++                    if current_note != state["attendance_batch_justifications"].get(str(option["value"]), ""):
++                        self._send_text(state, "⚠️ A JUSTIFICATIVA MUDOU. CONFIRA O RESUMO ATUALIZADO ANTES DE SUBMETER.")
++                        return self._prompt_attendance_batch_motivation(state, etag)
+@@ -6407 +6446 @@
+-        for key in ("attendance_batch_records", "attendance_batch_changes", "attendance_batch_presence", "attendance_batch_origin", "attendance_batch_motivation", "attendance_batch_finalized_ids", "attendance_batch_row_changes", "attendance_inline_commands", "attendance_inline_catalog_errors"):
++        for key in ("attendance_batch_records", "attendance_batch_changes", "attendance_batch_presence", "attendance_batch_origin", "attendance_batch_motivation", "attendance_batch_justifications", "attendance_batch_finalized_ids", "attendance_batch_row_changes", "attendance_inline_commands", "attendance_inline_catalog_errors"):
+@@ -21456,0 +21496,14 @@
++        if (state.get("flow") == "attendance_validation" and step
++                and step.get("key") == "motivacao_ausencia_presenca"
++                and not state.get("edit_step_indices")):
++            note = self._attendance_saved_justification(
++                state.get("fields", {}).get("ID PRESENÇA"),
++                state.get("fields", {}).get("DATA"))
++            if note:
++                self._apply_selected_option(state, step, {
++                    "id": "saved_justification", "title": note, "value": note})
++                state["attendance_justification_default"] = {
++                    "record_id": str(state["fields"]["ID PRESENÇA"]),
++                    "date": str(state["fields"]["DATA"])[:10], "note": note}
++                state["step_index"] += 1
++                return self._prompt_next_or_summary(state, etag)
+@@ -23733,0 +23787 @@
++        state.pop("attendance_justification_default", None)
+@@ -23821,0 +23876 @@
++        state.pop("attendance_justification_default", None)
+@@ -29585 +29640,10 @@
+-            updates.update(MOTIVACAO=state["fields"].get("MOTIVACAO") or "NÃO APONTADO", VLORDIARIO="0", IDPGTO="AUSENTE")
++            motivation = state["fields"].get("MOTIVACAO") or "NÃO APONTADO"
++            default = state.get("attendance_justification_default")
++            if default:
++                notes = default.setdefault("supplier_notes", {})
++                identifier = str(record["item_id"])
++                if identifier not in notes:
++                    notes[identifier] = self._attendance_saved_justification(
++                        record["item_id"], record["source_values"].get("DATA"))
++                motivation = notes[identifier] or "NÃO APONTADO"
++            updates.update(MOTIVACAO=motivation, VLORDIARIO="0", IDPGTO="AUSENTE")
+@@ -31796,0 +31861,2 @@
++        if step.get("key") == "motivacao_ausencia_presenca":
++            state.pop("attendance_justification_default", None)
+@@ -34186,0 +34253,3 @@
++                default = state.get("attendance_justification_default")
++                if default and presence == "AUSENTE":
++                    fields = list(dict.fromkeys([*fields, "IRREGULARIDADES"]))
+@@ -34196,0 +34266,6 @@
++                        continue
++                    if field == "IRREGULARIDADES" and default and presence == "AUSENTE":
++                        expected_note = default["supplier_notes"][str(item_id)]
++                        if str(current.get(field) or "").strip() != expected_note:
++                            default.pop("supplier_notes", None)
++                            raise RuntimeError(f"A JUSTIFICATIVA DO ID {item_id} MUDOU. CONFIRA O RESUMO ATUALIZADO")
+@@ -34221,0 +34297,17 @@
++        justification_etag = None
++        default = state.get("attendance_justification_default")
++        if (state.get("flow") == "attendance_validation" and default
++                and state.get("fields", {}).get("PRESENCA") == "AUSENTE"
++                and state.get("fields", {}).get("MOTIVACAO") == default["note"]):
++            current, justification_etag = self.sharepoint.get_item_fields_with_etag(
++                int(default["record_id"]), ["DATA", "IRREGULARIDADES"], target_list="DESCRITIVOPRESENCA")
++            if str(current.get("DATA") or "")[:10] != default["date"]:
++                raise RuntimeError("A DATA DA PRESENÇA MUDOU. ATUALIZE A LISTA.")
++            if str(current.get("IRREGULARIDADES") or "").strip() != default["note"]:
++                steps = self._flow_config(state)["steps"]
++                index = next(i for i, item in enumerate(steps) if item["key"] == "motivacao_ausencia_presenca")
++                self._clear_step_value(state, steps[index])
++                state.update(stage="selecting_fields", step_index=index, options=[])
++                state.pop("edit_step_indices", None)
++                self._send_text(state, "⚠️ A JUSTIFICATIVA MUDOU. CONFIRA A MOTIVAÇÃO ATUALIZADA ANTES DE SUBMETER.")
++                return self._prompt_next_or_summary(state, etag)
+@@ -34284,5 +34376,6 @@
+-                self.sharepoint.update_item(
+-                    item_id,
+-                    expected_fields,
+-                    target_list=target_list,
+-                )
++                if justification_etag is not None:
++                    self.sharepoint.update_item_with_etag(
++                        item_id, expected_fields, justification_etag, target_list=target_list)
++                else:
++                    self.sharepoint.update_item(
++                        item_id, expected_fields, target_list=target_list)
