@@ -24,3 +24,37 @@
 .ddr-issued-date .ddr-issued-days{background:#edf1f4;border-color:#c1ced6;color:#456375;font-weight:700}
 .dda-provision-line-match{flex-basis:100%;font-size:12px;color:#166445;overflow-wrap:anywhere}
 .dda-provision-name-match{flex-basis:100%;font-size:12px;color:#805200;overflow-wrap:anywhere}
+
+.ddr-dialog {
+  --ddr-panel-inset: 12px;
+  --ddr-arrow-inset: calc(var(--ddr-panel-inset) + 6px);
+  --ddr-nav-size: var(--report-navigation-size, 46px);
+  position: relative;
+}
+.ddr-overlay[data-report-portrait="true"] .ddr-dialog { --ddr-panel-inset: 3px; }
+.ddr-overlay[data-report-action="open-dda-report"] .report-close-bar {
+  padding-inline: calc(var(--ddr-nav-size) + 12px);
+}
+.ddr-overlay .ddr-dialog .report-navigation-arrow {
+  position: absolute;
+  top: var(--ddr-panel-inset);
+  transform: none;
+}
+.ddr-overlay[data-report-portrait="true"] .ddr-dialog .report-navigation-arrow { top: max(3px, env(safe-area-inset-right)); }
+.ddr-overlay .ddr-dialog .report-navigation-arrow--previous { left: var(--ddr-arrow-inset); }
+.ddr-overlay .ddr-dialog .report-navigation-arrow--next { right: var(--ddr-arrow-inset); }
+.ddr-content { padding-inline: 0; }
+.ddr-row-identity { display: flex; align-items: center; gap: 5px; }
+.ddr-overlay .ddr-table .ddr-open-pdf {
+  display: grid;
+  place-items: center;
+  flex: 0 0 var(--ddr-nav-size);
+  min-height: 44px;
+  padding: 4px;
+  color: #a51c2a;
+  background: transparent;
+  border-color: transparent;
+}
+.ddr-open-pdf svg { width: 28px; height: 28px; }
+.ddr-open-pdf:focus-visible { outline: 3px solid #236ca6; outline-offset: -2px; }
+@media print { .ddr-open-pdf { display: none !important; } }

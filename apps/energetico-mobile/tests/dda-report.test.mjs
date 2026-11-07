@@ -101,7 +101,7 @@ test('changing filters while printing cancels the expansion and stale restoratio
 });
 test('mirror opens only on click and late attachment replies after close are ignored',async()=>{
  let resolve,reads=0;const opened=[];const data={loadSnapshot:async()=>({rows:[row(1)]}),listAttachments:async()=>{reads++;return [{fileName:'espelho.pdf'}];},downloadAttachment:async()=>new Blob(['%PDF'],{type:'application/pdf'})};
- const {dom,view,doc}=setup(data,{openMediaCollection:items=>opened.push(items)});await view.open();assert.equal(reads,0);doc.querySelector('[data-dda-mirror]').click();await settle();assert.equal(opened[0][0].fileName,'espelho.pdf');assert.equal((await opened[0][0].source({})).type,'application/pdf');
+ const {dom,view,doc}=setup(data,{openMediaCollection:(items,{onClose})=>{opened.push(items);onClose();}});await view.open();assert.equal(reads,0);doc.querySelector('[data-dda-mirror]').click();await settle();assert.equal(opened[0][0].fileName,'espelho.pdf');assert.equal((await opened[0][0].source({})).type,'application/pdf');
  data.listAttachments=()=>new Promise(r=>resolve=r);doc.querySelector('[data-dda-mirror]').click();await settle();view.close();resolve([{fileName:'late.pdf'}]);await settle();assert.equal(opened.length,1);
  view.destroy();dom.window.close();
 });
