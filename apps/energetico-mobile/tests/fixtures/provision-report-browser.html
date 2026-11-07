@@ -28,7 +28,7 @@ try {
   const recurrences=[{...base,id:'7',status:'ATIVO',startDate:'2026-10-03',modified:'2026-10-01T12:00:00Z'},{...base,id:'8',status:'ATIVO',startDate:'2026-01-01',modified:'2026-10-01T12:00:00Z'},
     {...base,id:'9',status:'INATIVO',supplier:'FORNECEDOR INATIVO COM NOME EXTENSO LTDA.',product:'EQUIPAMENTO COM UMA DESCRIÇÃO LONGA PARA QUEBRAR SEM PERDER INFORMAÇÕES',modified:'2026-10-10T12:30:00Z'}];let loads=0;
   const grouped=new URLSearchParams(location.search).has('grouped');
-  const descriptions=grouped?[{id:'42',branch:'FILIAL DO PAI',supplier:'FORNECEDOR DE REFERÊNCIA',dueDate:'2026-10-25'},
+  const descriptions=grouped?[{id:'42',branch:'FILIAL DO PAI',supplier:'FORNECEDOR DE REFERÊNCIA',dueDate:'2026-10-09'},
     {id:'43',branch:'FILIAL DO PAI',supplier:'FORNECEDOR DE REFERÊNCIA',dueDate:'2026-10-25'}]:[];
   if(grouped){provisions[0].descriptionId='42';provisions[0].branch='FILIAL DO PAI';provisions[0].supplier='FORNECEDOR DE REFERÊNCIA';provisions[1].descriptionId='42';provisions[2].descriptionId='43';}
   const preview=createAttachmentPreview({canEmbedPdf:()=>false,exportMedia:async()=>{}});
@@ -100,7 +100,7 @@ try {
         summaryFill:getComputedStyle(summary).backgroundColor,childFill:getComputedStyle(controlled[0]).backgroundColor,
         equalBranch:controlled[0].querySelector('[data-column=branch]').textContent,
         equalSupplier:controlled[0].querySelector('[data-column=supplier]').textContent,
-        equalStatus:controlled[0].querySelector('[data-column=status]').textContent,
+        firstStatus:controlled[0].querySelector('[data-column=status]').textContent,
         differentBranch:controlled[1].querySelector('[data-column=branch]').textContent,
         originalIds:controlled.map(node=>node.dataset.id),originalDates:controlled.map(node=>node.querySelector('[data-column=dueDate]').textContent),
         branch:summary.querySelector('[data-column=branch] span').textContent,supplier:summary.querySelector('[data-column=supplier]').textContent,

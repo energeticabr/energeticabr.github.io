@@ -256,9 +256,9 @@ test('multi-item description starts collapsed and expands original linked rows w
   assert.equal(root.querySelector('[data-metric=pendingTotal]').textContent.replace(/\s/g,''),'R$0,10');
 });
 
-// Break: expanded items repeat the summary's branch, supplier, date and status
-// instead of reserving their cells for differences and each item's own value.
-test('expanded description omits only equal parent fields while preserving item details',async t=>{
+// Break: the first installment loses its date and status when both match
+// the summary, leaving it ambiguous in a group with different due dates.
+test('expanded installments with different due dates show each date and payment status',async t=>{
   const first={...row,id:'501',descriptionId:'42',branch:'Filial do pai',supplier:'Fornecedor do pai',
     product:'Areia',dueDate:'2026-10-20',schedule:'PENDENTE',status:'PAGAMENTO PREVISTO',total:120};
   const second={...first,id:'502',branch:'Outra filial',supplier:'Outro fornecedor',product:'Cimento',
@@ -271,20 +271,41 @@ test('expanded description omits only equal parent fields while preserving item 
   assert.deepEqual([...branch.firstElementChild.children].map(node=>node.localName),['span','button']);
   const toggle=branch.querySelector('button');toggle.click();
   const equal=root.querySelector('tr[data-id="501"]'),different=root.querySelector('tr[data-id="502"]');
-  for(const name of ['branch','supplier','dueDate','schedule','status']){
+  for(const name of ['branch','supplier','schedule']){
     assert.equal(equal.querySelector(`[data-column="${name}"]`).textContent,'',`${name} repeats the parent`);
   }
-  assert.match(equal.querySelector('[data-column=status]').getAttribute('aria-label'),/PAGAMENTO PREVISTO · VENCE EM 15 DIAS/);
+  assert.equal(equal.querySelector('[data-column=dueDate]').textContent,'20/10/2026');
+  assert.deepEqual([...equal.querySelector('[data-column=status]').children].map(node=>node.textContent.trim()),
+    ['PAGAMENTO PREVISTO','VENCE EM 15 DIAS']);
   const {captureFilteredReport}=await import('../src/ui/report-print.js');
   const exported=captureFilteredReport(root,{title:'Provisões'}).pages[0].blocks.find(block=>block.type==='table');
-  for(const column of [0,1,3,4,6]){
+  for(const column of [0,1,4]){
     assert.deepEqual(exported.rows[3].cells[column].runs,[],`PDF repeats parent column ${column}`);
   }
+  assert.equal(exported.rows[3].cells[3].runs.map(run=>run.text).join('').trim(),'20/10/2026');
+  assert.match(exported.rows[3].cells[6].runs.map(run=>run.text).join(' '),/PAGAMENTO PREVISTO.*VENCE EM 15 DIAS/);
   assert.match(equal.querySelector('[data-column=product]').textContent,/^Areia \(Conferir quantidade\)$/);
   assert.match(equal.querySelector('[data-column=total]').textContent,/120,00/);
   assert.equal(different.querySelector('[data-column=branch]').textContent,'Outra filial');
   assert.equal(different.querySelector('[data-column=supplier]').textContent,'Outro fornecedor');
   assert.equal(different.querySelector('[data-column=dueDate]').textContent,'21/10/2026');
+  assert.deepEqual([...different.querySelector('[data-column=status]').children].map(node=>node.textContent.trim()),
+    ['PAGAMENTO PREVISTO','VENCE EM 16 DIAS']);
   assert.match(different.querySelector('[data-column=product]').textContent,/^Cimento \(Conferir quantidade\)$/);
   assert.match(different.querySelector('[data-column=total]').textContent,/80,00/);
+});
+
+test('expanded items with the same due date keep shared date and status in the summary',async t=>{
+  const first={...row,id:'501',descriptionId:'42',dueDate:'2026-10-20'};
+  const descriptions=[{id:'42',branch:first.branch,supplier:first.supplier,dueDate:first.dueDate}];
+  const {view,root}=setup(t,async()=>({provisions:[first,{...first,id:'502'}],recurrences:[recurrence],descriptions}));
+  await view.open();
+  const summary=root.querySelector('tr[data-description-id="42"]');
+  summary.querySelector('button').click();
+  assert.equal(summary.querySelector('[data-column=dueDate]').textContent,'20/10/2026');
+  assert.match(summary.querySelector('[data-column=status]').textContent,/VENCE EM 15 DIAS/);
+  for(const child of root.querySelectorAll('.pr-description-child:not([hidden])')){
+    assert.equal(child.querySelector('[data-column=dueDate]').textContent,'');
+    assert.equal(child.querySelector('[data-column=status]').textContent,'');
+  }
 });

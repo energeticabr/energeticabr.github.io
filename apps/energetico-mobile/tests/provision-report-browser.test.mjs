@@ -115,14 +115,14 @@ test('grouped provision rows fit phone and PC canvases when expanded without cha
       assert.equal(result.error,undefined);const probe=result.groupProbe;
       assert.ok(probe.collapsedHidden);assert.equal(probe.expanded,'true');assert.ok(probe.focusKept);
       assert.deepEqual(probe.originalIds,['301','302']);assert.deepEqual(probe.originalDates,['09/10/2026','11/10/2026']);
-      assert.equal(probe.branch,'FILIAL DO PAI');assert.equal(probe.supplier,'FORNECEDOR DE REFERÊNCIA');assert.equal(probe.date,'25/10/2026');
+      assert.equal(probe.branch,'FILIAL DO PAI');assert.equal(probe.supplier,'FORNECEDOR DE REFERÊNCIA');assert.equal(probe.date,'09/10/2026');
       assert.ok(probe.toggleRect.left>=probe.branchTextRect.right-1,`${width}px: arrow must be right of branch text`);
       assert.equal(probe.branchDisplay,'table-cell',`${width}px: FILIAL must stay in the table grid`);
       assert.ok(Math.abs((probe.toggleRect.top+probe.toggleRect.height/2)-(probe.branchTextRect.top+probe.branchTextRect.height/2))<=3,`${width}px: arrow must share the branch line`);
       assert.ok(probe.toggleRect.right<=probe.branchRect.right+1,`${width}px: arrow escapes the branch cell`);
       assert.ok(probe.toggleRect.width>=27,`${width}px: arrow shrank below the existing 28px logical control size (${probe.toggleRect.width}px)`);
       assert.equal(probe.equalBranch,'');assert.equal(probe.equalSupplier,'');
-      assert.match(probe.equalStatus,/VENCIDO HÁ 2 DIAS/,`${width}px: differing due status must remain visible`);
+      assert.match(probe.firstStatus,/PAGAMENTO PREVISTO.*VENCIDO HÁ 2 DIAS/,`${width}px: the first installment must show its status and countdown`);
       assert.equal(probe.differentBranch,'004 - EDIFÍCIO XAVANTE');
       assert.notEqual(probe.childFill,probe.summaryFill,`${width}px: expanded child must have a distinct fill`);
       assert.equal(probe.total.replace(/\s/g,''),'R$123.456.911,68');assert.equal(probe.products.length,2);

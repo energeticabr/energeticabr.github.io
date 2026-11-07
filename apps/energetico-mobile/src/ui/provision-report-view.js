@@ -138,9 +138,11 @@ export function createProvisionReportView({document:doc=globalThis.document,data
       const branch=tr.querySelector('[data-column=branch]'),toggle=button('pr-group-toggle','↓',`Expandir itens do descritivo ${row.id}`);
       const branchContent=make('div','pr-group-branch-content');branchContent.append(make('span','',row.branch||'—'),toggle);
       branch.classList.add('pr-group-branch');branch.replaceChildren(branchContent);
+      const mixedDueDates=row.children.some(item=>item.dueDate!==row.children[0].dueDate);
+      const duplicateColumns=mixedDueDates?['branch','supplier','schedule']:['branch','supplier','dueDate','schedule','status'];
       const children=row.children.map((item,index)=>{
         const child=provisionRow(item,today);child.classList.add('pr-description-child');child.id=`pr-description-${instance}-${revision}-${row.id}-${index}`;
-        for(const name of ['branch','supplier','dueDate','schedule','status']){
+        for(const name of duplicateColumns){
           const parentText=name==='branch'?branch.querySelector('span').textContent:tr.querySelector(`[data-column="${name}"]`).textContent;
           const detail=child.querySelector(`[data-column="${name}"]`);
           if(detail.textContent.replace(/\s+/g,' ').trim()!==parentText.replace(/\s+/g,' ').trim())continue;
