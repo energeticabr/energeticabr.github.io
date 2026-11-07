@@ -1642,7 +1642,7 @@ export function createAppController({
       || state.activeFlow || state.draft?.trim() || state.pendingFiles.length
       || pendingNoteLaunchOrderId || pendingConstructionDiaryFillingId
       || (recoveryAccountId && !recoveryVerified) || recoveryPreview
-      || pendingProvisionReminderOpen || pendingProvisionRequest
+      || pendingProvisionSnapshot?.openedManually || pendingProvisionReminderOpen || pendingProvisionRequest
       || mascotNavigationOpening || registrationGalleryOpenings.size
       || [launchGalleryOpening, ordersGalleryOpening, tasksGalleryOpening, paymentLedgerOpening,
         cargosTableOpening, attendanceSummaryOpening, rhidMonthlyOpening, stageProgressOpening,
@@ -2638,8 +2638,9 @@ export function createAppController({
     if (!account || stopped || typeof client.getPendingProvisionSnapshot !== "function") return false;
     if (pendingProvisionReminderOpen || pendingProvisionSnapshot) {
       const today = provisionDateKey();
-      if (pendingProvisionSnapshot && pendingProvisionSnapshot.today !== today) {
+      if (pendingProvisionSnapshot && (pendingProvisionSnapshot.today !== today || manual && !pendingProvisionSnapshot.openedManually)) {
         pendingProvisionSnapshot.today = today;
+        if (manual) pendingProvisionSnapshot.openedManually = true;
         render();
       }
       return true;
@@ -2693,6 +2694,7 @@ export function createAppController({
         if (!current() || suppressed()) return false;
         const totalsUnavailable = rows.some(row => row.total == null || row.total === "");
         const snapshot = { ...original, today: provisionDateKey(), rows, count: rows.length, due: rows.length > 0, upcomingUnavailable, totalsUnavailable };
+        if (manual) snapshot.openedManually = true;
         const due = snapshot?.due === true && Array.isArray(snapshot.rows) && snapshot.rows.length > 0;
         if (!due && !manual) {
           cancelScheduledPendingProvisionReminder();
@@ -5044,7 +5046,7 @@ export function createAppController({
       recoveryWarning,
       recoveryBlocked: Boolean(recoveryAccountId && !recoveryVerified),
       recoveryUncertain,
-      pendingProvisions: trancidAutoReminder.pending && !pendingProvisionReminderOpen ? null : pendingProvisionSnapshot,
+      pendingProvisions: trancidAutoReminder.pending && !pendingProvisionReminderOpen && !pendingProvisionSnapshot?.openedManually ? null : pendingProvisionSnapshot,
       pendingProvisionOpening: Boolean(account && pendingProvisionOpenRequest),
       pendingNotes: (trancidAutoReminder.pending || ddaAutoReminder.pending) && !pendingNoteLaunchOrderId ? null : pendingNotesSnapshot,
       pendingConstructionDiaries: pendingProvisionSnapshot || ((trancidAutoReminder.pending || ddaAutoReminder.pending) && !pendingConstructionDiaryFillingId) || !pendingConstructionDiaryTime()

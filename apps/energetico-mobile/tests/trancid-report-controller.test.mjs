@@ -69,3 +69,9 @@ test('closing another dialog resumes a deferred automatic report without a chat 
  const h=harness(t,{enableTrancidReminders:true});await h.controller.start();for(let n=0;n<8;n++)await tick();assert.equal(h.opens.length,0);
  other.hidden=true;for(let n=0;n<12;n++)await tick();assert.equal(h.opens.length,1);
 });
+test('automatic Trancid warning waits until a manually opened provisions report is dismissed',async t=>{
+ let resolve,provisionReads=0;const h=harness(t,{enableTrancidReminders:true,client:{sendText:async()=>({status:'processed',messages:[]}),getPendingProvisionSnapshot:async()=>({sourceKind:'provision-description',rows:++provisionReads>1?[{id:'sample',supplier:'FORNECEDOR EXEMPLO',total:700}]:[]})},trancidReportDataFactory:async()=>({loadSnapshot:async()=>new Promise(r=>resolve=r)})});
+ await h.controller.start();await tick();assert.equal(await h.view.emit('open-pending-provisions'),true);assert.ok(h.renders.at(-1).pendingProvisions);
+ resolve(h.report);for(let n=0;n<8;n++)await tick();assert.equal(h.opens.length,0);
+ await h.view.emit('dismiss-pending-provisions');await tick();resolve(h.report);for(let n=0;n<8;n++)await tick();assert.equal(h.opens.length,1);
+});
