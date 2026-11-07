@@ -19,13 +19,13 @@ test('DDA report opens PDFs for the chosen row and closes only the horizontal vi
       const { stdout, screenshot } = await runBrowserLayout(browser, {
         width, height, captureScreenshot: Boolean(capture),
         safeAreaInsets: width === 390 ? { top: 59, bottom: 34, left: 0, right: 0 } : undefined,
-        url: `http://127.0.0.1:${server.httpServer.address().port}/tests/fixtures/dda-report-pdf.html`,
+        url: `http://127.0.0.1:${server.httpServer.address().port}/tests/fixtures/dda-report-pdf.html${capture ? '?capture=report' : ''}`,
       });
       const { window } = new JSDOM(stdout);
       try {
         const state = JSON.parse(window.document.documentElement.dataset.layout);
         assert.equal(state.error, undefined, JSON.stringify({ width, state }));
-        for (const field of ['iconBeforeId', 'aligned', 'stripesFillWidth', 'tableFits', 'viewerFits', 'horizontal', 'leftClose', 'sideGaps', 'xCloses', 'leftCloses', 'rightCloses', 'escapeCloses', 'reportPreserved', 'singleNoArrows', 'emptyNotice']) {
+        for (const field of ['idAboveIcon', 'blueLargerIcon', 'fixedSideArrows', 'stripesFillWidth', 'tableFits', 'viewerFits', 'horizontal', 'leftClose', 'sideGaps', 'xCloses', 'leftCloses', 'rightCloses', 'escapeCloses', 'reportPreserved', 'singleNoArrows', 'emptyNotice']) {
           assert.equal(state[field], true, JSON.stringify({ width, field, state }));
         }
         assert.deepEqual(state.files, ['espelho.pdf', 'outro.PDF', 'espelho.pdf']);
