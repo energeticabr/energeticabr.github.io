@@ -70,6 +70,65 @@ test('an unrelated order number in a CNO correction cannot validate the work', (
   assert.deepEqual(result.numbers, ['90.025.44060/73']);
 });
 
+test('explicit replacement overrides the quoted original even when the original had the correct work CNO', () => {
+  for (const replacement of ['leia-se CNO 90.025.44069/72.', 'leia-se 90.025.44069/72.', 'considerar o correto 90.025.44069/72.']) {
+    const result = invoiceConstructionCno(correctedFields([correction(2, `Onde consta CNO 90.025.44060/72, ${replacement}`)]));
+    assert.equal(result.status, 'conflict');
+    assert.deepEqual(result.numbers, ['90.025.44069/72']);
+    assert.deepEqual(result.conflicts, ['90.025.44069/72']);
+  }
+});
+
+test('an explicitly removed quoted CNO never validates the work and a supplied replacement takes effect', () => {
+  for (const [text, status, numbers] of [
+    ['CNO 90.025.44060/72 deve ser removido desta nota.', 'missing', []],
+    ['Substituir CNO 90.025.44060/72 por 90.025.44060/73.', 'conflict', ['90.025.44060/73']],
+    ['Remover CNO 90.025.44060/72 e informar CNO 90.025.44060/73.', 'conflict', ['90.025.44060/73']],
+  ]) {
+    const result = invoiceConstructionCno(correctedFields([correction(2, text)]));
+    assert.equal(result.status, status, text);
+    assert.deepEqual(result.numbers, numbers, text);
+  }
+});
+
+test('common explicit replacement clauses cannot leave a quoted original CNO green', () => {
+  for (const text of [
+    'Substituir o CNO 90.025.44060/72 pelo CNO 90.025.44060/73.',
+    'CNO 90.025.44060/72 está incorreto; o correto é 90.025.44060/73.',
+  ]) {
+    const result = invoiceConstructionCno(correctedFields([correction(2, text)]));
+    assert.equal(result.status, 'conflict', text);
+    assert.deepEqual(result.numbers, ['90.025.44060/73']);
+  }
+});
+
+test('distinct final CNOs remain conflicting even when one is the expected work registration', () => {
+  for (const text of [
+    'CNOs: 90.025.44060/72 e 90.025.44060/73.',
+    'Onde consta CNO 90.025.44069/72, leia-se CNO 90.025.44060/72. Onde consta CNO 90.025.44069/72, leia-se CNO 90.025.44060/73.',
+  ]) {
+    const result = invoiceConstructionCno(correctedFields([correction(2, text)]));
+    assert.equal(result.status, 'conflict', text);
+    assert.deepEqual(result.numbers, ['90.025.44060/72', '90.025.44060/73']);
+    assert.deepEqual(result.conflicts, ['90.025.44060/73']);
+  }
+});
+
+test('an explicit CORRECAO DE CNO destination overrides quoted source data without favoring the expected work', () => {
+  for (const [destination, status] of [['90.025.44060/72', 'valid'], ['90.025.44060/73', 'conflict']]) {
+    const result = invoiceConstructionCno(correctedFields([correction(2,
+      `CNO=90.030.04746/68, ENDERECO=RUA FICTÍCIA. CNO=90.025.44060/72, CORRECAO DE CNO ${destination}`)]));
+    assert.equal(result.status, status);
+    assert.deepEqual(result.numbers, [destination]);
+  }
+});
+
+test('a replacement after the same CNO mention overrides its CORRECAO DE prefix', () => {
+  const result = invoiceConstructionCno(correctedFields([correction(2, 'CORRECAO DE CNO 90.025.44060/73, leia-se 90.025.44060/72')]));
+  assert.equal(result.status, 'valid');
+  assert.deepEqual(result.numbers, ['90.025.44060/72']);
+});
+
 test('CC-e identity supports alphanumeric issuer positions and rejects letters outside the issuer', () => {
   const fieldsForKey = eventKey => ({CHAVE_ACESSO:eventKey,OBSERVACOES_NOTA:'CNO 900254406972',
     CARTAS_CORRECAO_JSON:JSON.stringify({version:1,key:eventKey,events:[{...correction(),
