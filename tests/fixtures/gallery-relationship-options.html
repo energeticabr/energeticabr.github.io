@@ -70,7 +70,8 @@
     async function catalogPage(kind, rawPath, options) {
       const url = new URL(rawPath, kind === 'lookup' ? 'https://graph.microsoft.com/v1.0/' : `https://${site.host}${site.path}/`);
       const filter = url.searchParams.get('$filter') || '';
-      const term = /startswith\((?:fields\/)?(?:Title|Email),'([^']*)'\)/.exec(filter)?.[1] || '';
+      const prefixes = [...filter.matchAll(/startswith\((fields\/Title|Title|Email),'([^']+)'\)/g)];
+      const term = prefixes[0]?.[2] || '';
       const call = { transport: kind === 'lookup' ? 'graph' : 'rest', kind, path: rawPath, filter, term, top: url.searchParams.get('$top'), page2: url.searchParams.has('$skiptoken') };
       calls.push(call);
       const rows = Array.from({ length: 25 }, (_, index) => kind === 'lookup'
@@ -79,9 +80,12 @@
       // Emulate the diagnosed SharePoint behavior, never JS startsWith('').
       if (/startswith\([^,]+,''\)/.test(filter)) return { value: [] };
       if (filter) {
-        check(term && (kind === 'lookup'
-          ? filter === `startswith(fields/Title,'${term}')`
-          : filter === `startswith(Title,'${term}') or startswith(Email,'${term}')`), 'Unexpected relationship predicate');
+        const group = field => {
+          const clauses = prefixes.filter(prefix => prefix[1] === field).map(prefix => prefix[0]);
+          return clauses.length > 1 ? `(${clauses.join(' or ')})` : clauses[0];
+        };
+        const expected = kind === 'lookup' ? group('fields/Title') : [group('Title'), group('Email')].join(' or ');
+        check(term && filter === expected, 'Unexpected relationship predicate');
         if (held?.kind === kind && held.term === term && !held.started) {
           const pending = held;
           pending.started = true; pending.signal = options.signal;
@@ -89,7 +93,8 @@
           // Ignore abort to exercise production generation protection.
           pending.completed = true;
         }
-        return { value: rows.filter(row => kind === 'lookup' ? row.fields.Title.startsWith(term) : row.Title.startsWith(term) || row.Email.startsWith(term)) };
+        return { value: rows.filter(row => prefixes.some(prefix =>
+          (kind === 'lookup' ? row.fields.Title : row[prefix[1]]).startsWith(prefix[2]))) };
       }
       if (call.page2) return { value: rows.slice(20) };
       const next = kind === 'lookup'
