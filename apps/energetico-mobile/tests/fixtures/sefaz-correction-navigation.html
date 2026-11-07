@@ -1,0 +1,51 @@
+<!doctype html><html lang="pt-BR"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>Navegação fiscal fictícia</title></head><body><script type="module">
+import '../../src/styles.css';
+import '../../src/ui/registration-gallery.css';
+import '../../src/web/attachment-preview.css';
+import { PDFDocument, StandardFonts } from 'pdf-lib';
+import { createRegistrationGallery } from '../../src/ui/registration-gallery-view.js';
+import { createAttachmentPreview } from '../../src/web/attachment-preview.js';
+try {
+  const fileName = 'DANFE-NOTA-FISCAL-FICTICIA-COM-NOME-LONGO.pdf';
+  const correction = 'CCe-NOTA-FISCAL-FICTICIA-110110-01.pdf';
+  const pdf = async text => {
+    const doc = await PDFDocument.create();
+    const font = await doc.embedFont(StandardFonts.Helvetica);
+    doc.addPage([595, 842]).drawText(text, { x: 36, y: 780, size: 16, font });
+    return new Blob([await doc.save()], { type: 'application/pdf' });
+  };
+  const original = await pdf('DANFE FICTICIO'), corrected = await pdf('CARTA DE CORRECAO FICTICIA');
+  const downloads = [], listed = [];
+  const preview = createAttachmentPreview({ exportMedia: async () => {} });
+  const gallery = createRegistrationGallery({ document, kind: 'notas_fiscais_sefaz', data: {
+    loadSnapshot: async () => ({ rows: [{ id: '4', fields: { Title: 'FORNECEDOR FICTICIO', NUMERO_NOTA: '123',
+      DANFE_URL: `https://energeticaltda.sharepoint.com/sites/energetica/Lists/NOTAS_FISCAIS_SEFAZ/Attachments/4/${fileName}` } }] }),
+    listAttachments: async (id, options) => { listed.push({ id, refresh: options.refresh }); return [{ fileName: correction }, { fileName }]; },
+    downloadDocument: async () => { downloads.push('danfe'); return original; },
+    downloadAttachment: async (id, name) => { downloads.push(`${id}:${name}`); return corrected; },
+  }, openMediaCollection: items => preview.openCollection(items) });
+  await gallery.open();
+  const waitFor = async condition => { for (let i = 0; i < 300; i++) { if (condition()) return; await new Promise(resolve => setTimeout(resolve, 30)); } throw new Error('PDF não terminou de renderizar'); };
+  const ready = () => document.querySelectorAll('.attachment-preview-pdf-text').length > 0;
+  document.querySelector('.rg-sefaz-pdf-link').click();
+  await waitFor(ready);
+  const state = () => ({ title: document.querySelector('.attachment-preview-title').textContent,
+    position: document.querySelector('.attachment-preview-collection-status').textContent,
+    nextDisabled: document.querySelector('.attachment-preview-collection-next').disabled,
+    previousDisabled: document.querySelector('.attachment-preview-collection-previous').disabled,
+    text: document.querySelector('.attachment-preview-content').textContent });
+  const first = state();
+  document.querySelector('.attachment-preview-collection-next').click();
+  await waitFor(() => ready() && document.querySelector('.attachment-preview-title').textContent === correction);
+  const next = state();
+  document.querySelector('.attachment-preview-collection-previous').click();
+  await waitFor(() => ready() && document.querySelector('.attachment-preview-title').textContent === fileName);
+  const back = state();
+  document.querySelector('.attachment-preview-collection-next').click();
+  await waitFor(() => ready() && document.querySelector('.attachment-preview-title').textContent === correction);
+  const dialog = document.querySelector('dialog'), nav = document.querySelector('.attachment-preview-collection-nav');
+  document.documentElement.dataset.layout = JSON.stringify({ first, next, back, listed, downloads,
+    overflow: document.documentElement.scrollWidth > innerWidth,
+    navOverflow: nav.scrollWidth > nav.clientWidth + 1, dialogWidth: dialog.getBoundingClientRect().width });
+} catch (error) { document.documentElement.dataset.layout = JSON.stringify({ error: String(error.stack || error) }); }
+</script></body></html>
