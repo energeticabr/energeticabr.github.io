@@ -35,6 +35,15 @@ if (mode === 'menu') {
   const cnoState = new URLSearchParams(location.search).get('cno');
   if (cnoState === 'valid') fields.OBSERVACOES_NOTA += '\nCNO 90.025.44060/72';
   if (cnoState === 'conflict') fields.OBSERVACOES_NOTA += '\nCNO 900254406972';
+  if (cnoState === 'corrected') {
+    fields.OBSERVACOES_NOTA += '\nCNO 900254406972';
+    fields.CARTAS_CORRECAO_JSON = JSON.stringify({version:1,key:fields.CHAVE_ACESSO,events:[{
+      eventId:`ID110110${fields.CHAVE_ACESSO}01`,eventType:'110110',cStat:'135',sequence:1,
+      protocol:'123456789012345',issuedAt:'2026-11-06T10:00:00-03:00',
+      correction:'Onde consta CNO 90.025.44069/72, leia-se CNO 90.025.44060/72.',
+      xmlSha256:'a'.repeat(64),pdfSha256:'b'.repeat(64),fileName:`CCe-${fields.CHAVE_ACESSO}-110110-01.pdf`,
+    }]});
+  }
   const unified = new URLSearchParams(location.search).has('unified');
   const extraRows = unified ? [
     {id:'6',fields:{Title:'TRANSPORTADORA FICTÍCIA LTDA',TIPO_FISCAL:'CT-e',ORIGEM_FISCAL:'SEFAZ_CTE',MODELO:'57',NUMERO_NOTA:'654',SERIE:'001',DATA_EMISSAO:'2026-10-29',CNPJ_FORNECEDOR:'00000000000000',UF_FORNECEDOR:'MG',VALOR_TOTAL_NOTA:870,VALOR_LIQUIDO:870,DESCONTOS:0,SITUACAO:'Autorizada',STATUS_IMPORTACAO:'XML_COMPLETO',DIRECAO:'Entrada',PAPEL_EMPRESA:'TOMADOR;REMETENTE',TOMADOR:'TOMADOR FICTÍCIO',CNPJ_TOMADOR:'00000000000000',CHAVE_ACESSO:'6'.repeat(44),XML_URL:'https://energeticaltda.sharepoint.com/sites/energetica/Documentos/cte-ficticio.xml',DANFE_URL:'https://energeticaltda.sharepoint.com/sites/energetica/Documentos/dacte-ficticio.pdf'}},
