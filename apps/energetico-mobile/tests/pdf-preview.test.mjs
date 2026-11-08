@@ -43,7 +43,7 @@ test("prévia do PDF no celular remove o limite lateral herdado do tablet", asyn
   );
 });
 
-function setup(t, { renderPage, ...options } = {}) {
+function setup(t, { renderPage, numPages = 3, ...options } = {}) {
   const dom = new JSDOM("<div id=pdf></div>", { url: "https://example.test/energetico/" });
   const documentRef = dom.window.document;
   const stopPageZoom = installAppZoomGuard(documentRef);
@@ -53,7 +53,7 @@ function setup(t, { renderPage, ...options } = {}) {
   let cleaned = 0;
   let input;
   const pdf = {
-    numPages: 3,
+    numPages,
     async getPage(number) {
       return {
         getViewport: ({ scale }) => ({ width: 600 * scale, height: 900 * scale }),
@@ -357,12 +357,37 @@ test('pinching a rotated DDA PDF keeps the same logical point under the fingers'
   assert.ok(Math.abs(viewport.scrollLeft / 240 - viewport.scrollTop / 150) < 1e-8);
 });
 
-test("PDF mantém canvas abaixo de 4 milhões de pixels e libera memória ao destruir", async t => {
+test("PDF rolável aproveita a densidade 3x da tela sem alterar o tamanho da página", async t => {
+  const { viewer, container } = setup(t, { pixelRatio: 3 });
+  const viewport = container.querySelector(".attachment-preview-pdf-viewport");
+  Object.defineProperty(viewport, "clientWidth", { value: 320 });
+  await viewer.ready;
+  const canvases = container.querySelectorAll("canvas");
+  assert.equal(canvases.length, 3);
+  for (const canvas of canvases) {
+    assert.equal(parseFloat(canvas.style.width), 312);
+    assert.equal(canvas.width, 936);
+    assert.equal(canvas.height, 1404);
+  }
+});
+
+test("PDF rolável de 12 páginas limita o total de pixels retidos em uma tela 3x", async t => {
+  const { viewer, container } = setup(t, { pixelRatio: 3, numPages: 12 });
+  const viewport = container.querySelector(".attachment-preview-pdf-viewport");
+  Object.defineProperty(viewport, "clientWidth", { value: 390 });
+  await viewer.ready;
+  const canvases = [...container.querySelectorAll("canvas")];
+  assert.equal(canvases.length, 12);
+  const pixels = canvases.reduce((sum, canvas) => sum + canvas.width * canvas.height, 0);
+  assert.ok(pixels <= 12 * 764 * 1146, "Pixels retidos: " + pixels);
+});
+
+test("PDF mantém canvas dentro do limite de 2 milhões de pixels e libera memória ao destruir", async t => {
   const { viewer, container, destroyed } = setup(t, { pixelRatio: 4 });
   Object.defineProperty(container, "clientWidth", { value: 8000 });
   await viewer.ready;
   const canvas = container.querySelector("canvas");
-  assert.ok(canvas.width * canvas.height <= 4_000_000);
+  assert.ok(canvas.width * canvas.height <= 2_000_000);
   assert.ok(canvas.width <= 4096 && canvas.height <= 4096);
   viewer.destroy();
   assert.equal(canvas.width * canvas.height, 0);

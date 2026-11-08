@@ -8,7 +8,7 @@ import { setTimeout as delay } from "node:timers/promises";
 // marker. A fixed virtual-time budget can capture an unfinished module/image load.
 // Cold CI runners can need more than ten seconds to publish DevToolsActivePort.
 // Keep the startup bounded at thirty seconds; layout assertions are unchanged.
-export async function runBrowserLayout(browser, { width, height, url, safeAreaInsets, mediaType, colorScheme, mobile = false, gestureProbes = [], captureScreenshot = false, maxBuffer = 2_000_000, readyTimeoutMs = 30_000, startupTimeoutMs = 30_000 }) {
+export async function runBrowserLayout(browser, { width, height, url, safeAreaInsets, mediaType, colorScheme, mobile = false, deviceScaleFactor = 1, gestureProbes = [], captureScreenshot = false, maxBuffer = 2_000_000, readyTimeoutMs = 30_000, startupTimeoutMs = 30_000 }) {
   const temporaryRoot = resolve(tmpdir());
   const profile = await mkdtemp(join(temporaryRoot, "energetico-layout-"));
   const pending = new Map();
@@ -77,7 +77,7 @@ export async function runBrowserLayout(browser, { width, height, url, safeAreaIn
     // These fixtures measure a visible page after requestAnimationFrame. An
     // occluded headless target can otherwise suspend frames indefinitely.
     await send("Emulation.setFocusEmulationEnabled", { enabled: true }, sessionId);
-    await send("Emulation.setDeviceMetricsOverride", { width, height, deviceScaleFactor: 1, mobile }, sessionId);
+    await send("Emulation.setDeviceMetricsOverride", { width, height, deviceScaleFactor, mobile }, sessionId);
     if (mediaType || colorScheme) await send("Emulation.setEmulatedMedia", {
       ...(mediaType ? { media: mediaType } : {}),
       ...(colorScheme ? { features: [{ name: "prefers-color-scheme", value: colorScheme }] } : {}),
