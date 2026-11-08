@@ -1,4 +1,5 @@
 import { invoiceXmlFacts, projectNfeRows } from '../chat/nfe-report-model.js';
+import { PDF_ATTACHMENT_ICON } from './report-pdf-attachment-icon.js';
 
 const PAGE_SIZE = 12;
 const money = new Intl.NumberFormat('pt-BR', { style:'currency', currency:'BRL' });
@@ -134,8 +135,11 @@ export function createNfeReportView({ document:doc = globalThis.document, data, 
     const identity = make('div', 'nfe-identity');
     const pdfLabel = row.type === 'NFS-e' ? 'DANFSe' : 'DANFE';
     if (row.pdfName && typeof openMediaCollection === 'function') {
-      const pdf = button('PDF', () => void openPdf(row, pdf), 'nfe-pdf');
-      pdf.setAttribute('aria-label', `Abrir ${pdfLabel} da nota ${row.number || row.id}`);
+      const label = `Abrir ${pdfLabel} da nota ${row.number || row.id}`;
+      const pdf = button('', () => void openPdf(row, pdf), 'nfe-pdf');
+      pdf.setAttribute('aria-label', label);
+      pdf.title = label;
+      pdf.innerHTML = PDF_ATTACHMENT_ICON;
       identity.append(pdf);
     } else identity.append(make('span', 'nfe-pdf nfe-pdf--pending', 'PDF pendente'));
     const copy = make('div', 'nfe-supplier');

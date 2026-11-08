@@ -5,6 +5,7 @@ import {addReportCloseControl} from './report-close-control.js';
 import {createDdaPaymentConfirmation} from './dda-payment-confirmation.js';
 import {addDdaReportBarcode} from './dda-report-barcode.js';
 import {createDdaProvisionPicker} from './dda-provision-picker.js';
+import {PDF_ATTACHMENT_ICON} from './report-pdf-attachment-icon.js';
 const LOGO=new URL('../../../../assets/logo-energetica-oficial.png',import.meta.url).href;
 const money=value=>value==null?'Não disponível':new Intl.NumberFormat('pt-BR',{style:'currency',currency:'BRL'}).format(Number(value));
 const date=value=>value?value.slice(8,10)+'/'+value.slice(5,7)+'/'+value.slice(0,4):'Não informado';
@@ -175,7 +176,7 @@ export function createDdaReportView({document:doc=globalThis.document,data,openM
     identity.append(make('span','ddr-id-cluster',row.id));id.append(identity);
    if(!printAll){
     const pdf=button('Abrir PDFs do DDA '+row.id,'');pdf.dataset.ddaPdf=row.id;pdf.className='ddr-open-pdf';pdf.title=pdf.getAttribute('aria-label');pdf.disabled=open.disabled;
-    pdf.innerHTML='<svg viewBox="0 0 32 32" aria-hidden="true" focusable="false"><path d="M8 2h11l6 6v22H8z M19 2v7h6" fill="none" stroke="currentColor" stroke-width="2" stroke-linejoin="round"/><rect x="2" y="13" width="28" height="11" rx="2" fill="currentColor"/><text x="16" y="21" fill="white" font-size="8" font-weight="700" text-anchor="middle">PDF</text></svg>';
+    pdf.innerHTML=PDF_ATTACHMENT_ICON;
     pdf.addEventListener('click',()=>void openPdfs(row,pdf));
      identity.append(pdf);
     }

@@ -27,7 +27,7 @@ const report = decorateReportNavigation(createNfeReportView({ data:{
   async loadSnapshot(){ return { rows:[
     { id:'2', fields:{ ...common, TIPO_FISCAL:'NFS-e', DATA_EMISSAO:'2026-11-08', NUMERO_NOTA:'205',
       Title:'Serviços de Engenharia e Manutenção Industrial — Fornecedor Exemplo Ltda.',
-      STATUS_RETENCOES:'NAO_INFORMADA_XML' } },
+      STATUS_RETENCOES:'NAO_INFORMADA_XML', DANFE_URL:'https://example.test/danfse.pdf' } },
     { id:'3', fields:{ ...common, TIPO_FISCAL:'NF-e', DATA_EMISSAO:'2026-11-07', NUMERO_NOTA:'14',
       Title:'Comércio de Materiais Exemplo Ltda.', CNPJ_FORNECEDOR:'00.000.000/0000-00', CHAVE_ACESSO:key,
       XML_URL:'https://example.test/nota.xml', DANFE_URL:'https://example.test/nota.pdf',
@@ -61,11 +61,15 @@ if (!new URLSearchParams(location.search).has('home')) {
   });
 }
 const reportBody = panel.querySelector('.nfe-body');
+const pdf = panel.querySelector('[data-invoice-id="2"] button.nfe-pdf');
+const supplier = panel.querySelector('[data-invoice-id="2"] .nfe-supplier');
 document.documentElement.dataset.layout = JSON.stringify({
   provisions, orange, nfe, dda,
   open:!report.element.hidden, cardIds:[...panel.querySelectorAll('.nfe-card')].map(card=>card.dataset.invoiceId),
   overflow:reportBody.scrollWidth > reportBody.clientWidth || document.documentElement.scrollWidth > innerWidth,
-  mei:hasMei(),
+  mei:hasMei(), pdfOnLeft:pdf ? box(pdf).right <= box(supplier).x : false,
+  pdfIconWidth:pdf?.querySelector('svg') ? box(pdf.querySelector('svg')).width : 0,
+  pdfTargetHeight:pdf ? box(pdf).height : 0,
 });
 document.documentElement.dataset.ready = 'true';
 </script>

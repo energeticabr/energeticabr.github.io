@@ -21,13 +21,16 @@ test('NFE opens a responsive fiscal report from the new blue position', { timeou
       const result = await runBrowserLayout(browser, { width, height:844, url, captureScreenshot:Boolean(capture) });
       const dom = new JSDOM(result.stdout);
       try {
-        const { provisions, orange, nfe, dda, open, cardIds, overflow, mei } = JSON.parse(dom.window.document.documentElement.dataset.layout);
+        const { provisions, orange, nfe, dda, open, cardIds, overflow, mei, pdfOnLeft, pdfIconWidth, pdfTargetHeight } = JSON.parse(dom.window.document.documentElement.dataset.layout);
         assert.equal(provisions.y, orange.y);
         assert.equal(orange.x - provisions.x, 56);
         assert.equal(nfe.x, provisions.x);
         assert.equal(nfe.y - provisions.y, 68);
         assert.equal(dda.y - nfe.y, 56);
         assert.deepEqual({ open, cardIds, overflow, mei }, { open:true, cardIds:['2','3'], overflow:false, mei:true });
+        assert.equal(pdfOnLeft, true);
+        assert.equal(pdfIconWidth, 34);
+        assert.ok(pdfTargetHeight >= 44);
         if (capture) {
           mkdirSync(capture, {recursive:true});
           writeFileSync(join(capture, `nfe-${width}.png`), result.screenshot);

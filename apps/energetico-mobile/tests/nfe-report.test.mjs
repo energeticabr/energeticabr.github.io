@@ -146,7 +146,12 @@ test('report shows the fiscal facts, filters by supplier and opens the exact att
   await new Promise(resolve => setImmediate(resolve));
   const root = panel.element;
   assert.match(root.querySelector('.nfe-card').textContent, /ELÉTRICA TESTE LTDA.*06\/11\/2026.*MEI.*Retenção informada.*CNO consta/);
-  root.querySelector('button.nfe-pdf').click();
+  const card = root.querySelector('.nfe-card');
+  const pdf = card.querySelector('button.nfe-pdf');
+  assert.equal(card.querySelector('.nfe-identity').firstElementChild, pdf);
+  assert.equal(pdf.getAttribute('aria-label'), 'Abrir DANFE da nota 140');
+  assert.equal(pdf.querySelector('svg[aria-hidden="true"] text')?.textContent, 'PDF');
+  pdf.click();
   await new Promise(resolve => setImmediate(resolve));
   assert.deepEqual(downloads, [['10', pdfName]]);
   const search = root.querySelector('input');
