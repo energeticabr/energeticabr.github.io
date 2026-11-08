@@ -33,7 +33,10 @@ const report = decorateReportNavigation(createNfeReportView({ data:{
       XML_URL:'https://example.test/nota.xml', DANFE_URL:'https://example.test/nota.pdf',
       OBSERVACOES_NOTA:'CNO 90.025.44060/72', STATUS_RETENCOES:'RETENCAO_INFORMADA_XML' } },
   ] }; },
-  async downloadDocument(){ return new Blob([`<NFe xmlns="http://www.portalfiscal.inf.br/nfe"><infNFe Id="NFe${key}"><emit><CRT>4</CRT></emit></infNFe></NFe>`]); },
+  async downloadDocument(){
+    await new Promise(resolve => setTimeout(resolve, 250));
+    return new Blob([`<NFe xmlns="http://www.portalfiscal.inf.br/nfe"><infNFe Id="NFe${key}"><emit><CRT>4</CRT></emit></infNFe></NFe>`]);
+  },
 }, openMediaCollection:async()=>{} }), {action:'open-nfe-report'});
 view.on('open-nfe-report', () => report.open());
 const box = node => {
@@ -43,17 +46,26 @@ const box = node => {
 const mascot = action => document.querySelector(`[data-action="open-${action}"]`);
 const provisions = box(mascot('pending-provisions')), orange = box(mascot('commercial-receipts')),
   nfe = box(mascot('nfe-report')), dda = box(mascot('dda-report'));
+const panel = report.element.querySelector('.nfe-panel');
+const hasMei = () => [...panel.querySelectorAll('[data-invoice-id="3"] .nfe-facts dd')]
+  .some(field => field.textContent === 'MEI');
 if (!new URLSearchParams(location.search).has('home')) {
   mascot('nfe-report').click();
-  await new Promise(resolve => setTimeout(resolve, 100));
+  await new Promise(resolve => {
+    const finish = () => { clearTimeout(timer); observer.disconnect(); resolve(); };
+    const check = () => { if (hasMei()) finish(); };
+    const observer = new MutationObserver(check);
+    const timer = setTimeout(finish, 10000);
+    observer.observe(panel, { childList:true, subtree:true, characterData:true });
+    check();
+  });
 }
-const panel = report.element.querySelector('.nfe-panel');
 const reportBody = panel.querySelector('.nfe-body');
 document.documentElement.dataset.layout = JSON.stringify({
   provisions, orange, nfe, dda,
   open:!report.element.hidden, cardIds:[...panel.querySelectorAll('.nfe-card')].map(card=>card.dataset.invoiceId),
   overflow:reportBody.scrollWidth > reportBody.clientWidth || document.documentElement.scrollWidth > innerWidth,
-  mei:panel.textContent.includes('MEI'),
+  mei:hasMei(),
 });
 document.documentElement.dataset.ready = 'true';
 </script>
