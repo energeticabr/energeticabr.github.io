@@ -2,6 +2,7 @@ import { reportLayoutRect } from './report-landscape.js';
 const LOGO = new URL('../../../../assets/logo-energetica-oficial.png', import.meta.url).href;
 export const REPORT_PDF_TITLES = Object.freeze({
  'open-dda-report':'Relatório DDA',
+ 'open-nfe-report':'Relatório de notas fiscais',
  'open-general-summary-report':'Resumo geral',
  'open-pending-provisions':'Provisões de pagamento pendentes',
  'open-provision-report':'Provisões de pagamento e despesas recorrentes',
