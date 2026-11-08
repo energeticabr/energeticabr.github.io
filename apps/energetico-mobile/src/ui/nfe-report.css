@@ -37,7 +37,6 @@
   font-size: 16px;
 }
 .nfe-panel .nfe-body { padding-top: 4px; overflow: auto; }
-.nfe-panel:has(> .report-navigation) .nfe-body { margin-inline: calc(var(--report-navigation-size, 56px) + 10px); }
 .nfe-metrics {
   position: relative;
   display: grid;

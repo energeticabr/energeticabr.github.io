@@ -22,7 +22,8 @@ test('NFE opens the horizontal fiscal table from the blue mascot in portrait and
       const dom = new JSDOM(result.stdout);
       try {
         const { provisions, orange, nfe, dda, open, rowIds, overflow, tableScrolls, rotated, mei, pdfOnLeft, metricsAbove,
-          headerControls, amountFits, pdfIconWidth, pdfTargetHeight } = JSON.parse(dom.window.document.documentElement.dataset.layout);
+          headerControls, amountFits, pdfIconWidth, pdfTargetHeight, reportBodyWidth, availableReportWidth, overlayArrows
+        } = JSON.parse(dom.window.document.documentElement.dataset.layout);
         assert.equal(provisions.y, orange.y);
         assert.equal(orange.x - provisions.x, 56);
         assert.equal(nfe.x, provisions.x);
@@ -30,6 +31,8 @@ test('NFE opens the horizontal fiscal table from the blue mascot in portrait and
         assert.equal(dda.y - nfe.y, 56);
         assert.deepEqual({ open, rowIds, overflow, mei }, { open:true, rowIds:['2','3'], overflow:false, mei:true });
         assert.equal(rotated, height > width);
+        assert.equal(reportBodyWidth, availableReportWidth, 'the report uses the width behind the navigation arrows');
+        assert.equal(overlayArrows, 2);
         assert.equal(tableScrolls, width === 320);
         assert.equal(pdfOnLeft, true);
         assert.equal(metricsAbove, true);
