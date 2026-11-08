@@ -1579,7 +1579,9 @@ export function createSharePointRepository(graph, siteConfig, { attachmentTransp
   }
 
   async function createItem(siteKey, listId, fields, options = {}) {
+    throwIfAborted(options.signal);
     await authorize("create", siteKey, listId);
+    throwIfAborted(options.signal);
     const config = getSiteConfig(siteKey);
     if (siteTransport(config, "write") === "rest") {
       if (!restTransport?.request) throw new Error("O transporte REST de escrita SharePoint nao foi configurado.");
@@ -1596,10 +1598,12 @@ export function createSharePointRepository(graph, siteConfig, { attachmentTransp
       }
     }
     const site = await getSite(siteKey, options);
+    throwIfAborted(options.signal);
     return graph.request(`/sites/${site.id}/lists/${encodeURIComponent(listId)}/items`, {
       method: "POST",
       scopes: ["Sites.ReadWrite.All"],
       body: { fields },
+      ...(options.signal ? { signal: options.signal } : {}),
     });
   }
 

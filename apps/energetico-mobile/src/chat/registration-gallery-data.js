@@ -8,6 +8,7 @@ import { FINANCIAL_GALLERY_MODELS } from './financial-gallery-models.js';
 import { ddaPaidManually } from './dda-payment-confirmation.js';
 import { createDdaProvisionLink } from './dda-provision-link.js';
 import { createNfeOrderLink, NFE_ORDER_FIELD } from './nfe-order-link.js';
+import { createNfeProposalData } from './nfe-proposal-data.js';
 import { createFinancialMovementEditor } from './financial-movement-editor.js';
 import { createProvisionDescriptionEditor, loadProvisionDescriptionStatusOptions } from "../../../../portal/forms/provision-description-edit.js";
 import { createAcquisitionProgress } from './acquisition-progress.js';
@@ -388,49 +389,55 @@ export function createRegistrationGalleryData({ kind, ...options } = {}) {
     listMissingCode: `registration_${kind}_list_missing`,
   });
   if (!model.nativeCard) return data;
-  if (model.readOnly) return Object.freeze({
-    ...assetReport,
-    async loadSnapshot(loadOptions) {
-      const snapshot = await data.loadSnapshot(loadOptions);
-      return Object.freeze({ ...snapshot, rows: Object.freeze(sortRegistrationRows(snapshot.rows, model)) });
-    },
-    listAttachments: data.listAttachments,
-    downloadAttachment: data.downloadAttachment,
-    ...(kind === 'notas_fiscais_sefaz' ? {
-      orderLink: createNfeOrderLink({
-        repository: galleryRepository({ ...options, siteConfig: {
-          ...options.siteConfig,
-          company: { ...options.siteConfig.company, writeTransport:'rest' },
-        } }),
-        assertSession: options.assertSession,
-      }),
-      async downloadDocument(rawUrl, downloadOptions = {}) {
-        options.assertSession?.();
-        const site = (options.siteConfig || SHAREPOINT_SITES)[model.siteKey];
-        let path;
-        try {
-          const url = new URL(rawUrl);
-          path = decodeURIComponent(url.pathname);
-          if (url.protocol !== 'https:' || url.hostname !== site.host || url.port || url.username || url.password
-            || !path.startsWith(`${site.path}/`) || /[\\\u0000-\u001f]/.test(path)
-            || path.split('/').some(segment => segment === '.' || segment === '..')) throw new Error();
-        } catch { throw new RangeError('O endereço do documento SEFAZ é inválido.'); }
-        const transport = createSharePointAttachmentTransport({ tokenProvider: options.tokenProvider,
-          allowedSites: [site], fetch: options.fetchImpl || globalThis.fetch });
-        // The shared transport rejects encoded path separators. Preserve only
-        // validated slashes while encoding filename spaces and OData quotes.
-        const resourcePath = encodeURIComponent(path.replaceAll("'", "''")).replaceAll('%2F', '/');
-        const result = await transport.request(site, `/_api/web/GetFileByServerRelativePath(decodedurl='${resourcePath}')/$value`,
-          { ...downloadOptions, method: 'GET', responseType: 'blob', permission: 'read' });
-        options.assertSession?.();
-        return result;
+  if (model.readOnly) {
+    const readOnlyData = {
+      ...assetReport,
+      async loadSnapshot(loadOptions) {
+        const snapshot = await data.loadSnapshot(loadOptions);
+        return Object.freeze({ ...snapshot, rows: Object.freeze(sortRegistrationRows(snapshot.rows, model)) });
       },
-    } : {}),
-    ...(kind === 'dda' ? { provisionLink: createDdaProvisionLink({
-      repository: galleryRepository({ ...options, siteConfig: linkSiteConfig, strictSnapshot: false }),
-      siteKey: options.siteKey || 'personal', assertSession: options.assertSession,
-    }) } : {}),
-  });
+      listAttachments: data.listAttachments,
+      downloadAttachment: data.downloadAttachment,
+      ...(kind === 'notas_fiscais_sefaz' ? {
+        async downloadDocument(rawUrl, downloadOptions = {}) {
+          options.assertSession?.();
+          const site = (options.siteConfig || SHAREPOINT_SITES)[model.siteKey];
+          let path;
+          try {
+            const url = new URL(rawUrl);
+            path = decodeURIComponent(url.pathname);
+            if (url.protocol !== 'https:' || url.hostname !== site.host || url.port || url.username || url.password
+              || !path.startsWith(`${site.path}/`) || /[\\\u0000-\u001f]/.test(path)
+              || path.split('/').some(segment => segment === '.' || segment === '..')) throw new Error();
+          } catch { throw new RangeError('O endereço do documento SEFAZ é inválido.'); }
+          const transport = createSharePointAttachmentTransport({ tokenProvider: options.tokenProvider,
+            allowedSites: [site], fetch: options.fetchImpl || globalThis.fetch });
+          // The shared transport rejects encoded path separators. Preserve only
+          // validated slashes while encoding filename spaces and OData quotes.
+          const resourcePath = encodeURIComponent(path.replaceAll("'", "''")).replaceAll('%2F', '/');
+          const result = await transport.request(site, `/_api/web/GetFileByServerRelativePath(decodedurl='${resourcePath}')/$value`,
+            { ...downloadOptions, method: 'GET', responseType: 'blob', permission: 'read' });
+          options.assertSession?.();
+          return result;
+        },
+      } : {}),
+      ...(kind === 'dda' ? { provisionLink: createDdaProvisionLink({
+        repository: galleryRepository({ ...options, siteConfig: linkSiteConfig, strictSnapshot: false }),
+        siteKey: options.siteKey || 'personal', assertSession: options.assertSession,
+      }) } : {}),
+    };
+    if (kind !== 'notas_fiscais_sefaz') return Object.freeze(readOnlyData);
+    const fiscalSites = { ...options.siteConfig, company: { ...options.siteConfig.company, writeTransport:'rest' } };
+    const fiscalRepository = galleryRepository({ ...options, siteConfig:fiscalSites });
+    return Object.freeze({
+      ...readOnlyData,
+      orderLink:createNfeOrderLink({ repository:fiscalRepository, assertSession:options.assertSession }),
+      proposal:createNfeProposalData({
+        repository:fiscalRepository, fiscalData:readOnlyData, siteConfig:fiscalSites,
+        tokenProvider:options.tokenProvider, assertSession:options.assertSession,
+      }),
+    });
+  }
   const filters = createRegistrationGalleryFilterData({ repository, siteKey: options.siteKey || "personal", kind });
   // Lists without an extracted edit form use only the model's proven fields
   // with their real SharePoint metadata in the metadata editor.

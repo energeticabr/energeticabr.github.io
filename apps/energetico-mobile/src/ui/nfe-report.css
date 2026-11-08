@@ -180,3 +180,122 @@
 }
 .nfe-report .dda-provision-search { min-width: 0; font-size: 16px; }
 .nfe-report .dda-provision-option { overflow-wrap: anywhere; }
+.nfe-report .nfe-picker-header {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 8px;
+}
+.nfe-report .nfe-picker-header h2 { margin: 0; overflow-wrap: anywhere; }
+.nfe-report .dda-provision-dialog .nfe-propose-launch {
+  border-color: #07566b;
+  background: #07566b;
+  color: #fff;
+  white-space: nowrap;
+}
+.nfe-proposal-overlay {
+  position: absolute;
+  inset: 0;
+  z-index: 32;
+  display: grid;
+  place-items: center;
+  padding: 10px;
+  background: #112f4770;
+}
+.nfe-proposal-dialog {
+  box-sizing: border-box;
+  display: flex;
+  flex-direction: column;
+  width: min(960px, 100%);
+  max-height: calc(var(--report-height, 100dvh) - 20px);
+  min-height: 0;
+  overflow: hidden;
+  border: 1px solid #a7c1cd;
+  border-radius: 12px;
+  background: #fff;
+  color: #17394b;
+  box-shadow: 0 12px 40px #102b4744;
+  color-scheme: light;
+}
+.nfe-proposal-header, .nfe-proposal-footer {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 8px;
+  padding: 8px 12px;
+  background: #eaf4f7;
+}
+.nfe-proposal-header h2 { margin: 0; font-size: clamp(14px, calc(2 * var(--report-vw, 1vw)), 19px); }
+.nfe-proposal-form {
+  display: flex;
+  flex: 1 1 auto;
+  flex-direction: column;
+  min-height: 0;
+}
+.nfe-proposal-body { min-height: 0; overflow: auto; overscroll-behavior: contain; padding: 10px 12px; }
+.nfe-proposal-body:empty, .nfe-proposal-status:empty { display: none; }
+.nfe-proposal-reference, .nfe-proposal-attachment, .nfe-proposal-hint {
+  margin: 0 0 6px;
+  font-size: 13px;
+  overflow-wrap: anywhere;
+}
+.nfe-proposal-attachment, .nfe-proposal-hint { color: #456375; }
+.nfe-proposal-status { margin: 0; padding: 6px 12px; font-size: 13px; }
+.nfe-proposal-status[role="alert"] { background: #fff0f2; color: #8b2730; }
+.nfe-proposal-fields {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(min(100%, 150px), 1fr));
+  gap: 8px;
+  min-width: 0;
+  margin: 8px 0;
+  padding: 0;
+  border: 0;
+}
+.nfe-proposal-fields label { display: grid; min-width: 0; gap: 3px; font-size: 13px; font-weight: 700; }
+.nfe-proposal-fields :is(select,input) {
+  box-sizing: border-box;
+  width: 100%;
+  min-width: 0;
+  min-height: 40px;
+  padding: 5px 7px;
+  border: 1px solid #a7c1cd;
+  border-radius: 6px;
+  background: #fff;
+  color: #17394b;
+  font: inherit;
+  font-size: 16px;
+}
+.nfe-proposal-line {
+  margin: 6px 0;
+  border: 1px solid #c8dde4;
+  border-radius: 7px;
+  background: #f3f8fb;
+  overflow-wrap: anywhere;
+}
+.nfe-proposal-line summary { padding: 8px 10px; cursor: pointer; }
+.nfe-proposal-line summary small { display: block; margin: 3px 0 0 17px; font-size: 12px; }
+.nfe-proposal-line-editor { padding: 0 10px; }
+.nfe-proposal-footer strong { min-width: 0; font-size: 13px; overflow-wrap: anywhere; }
+.nfe-proposal-dialog button {
+  min-height: 44px;
+  border: 1px solid #8fb2c1;
+  border-radius: 7px;
+  padding: 5px 10px;
+  background: #fff;
+  color: #17394b;
+  font: inherit;
+  font-size: 13px;
+  font-weight: 800;
+  cursor: pointer;
+}
+.nfe-proposal-dialog .nfe-proposal-submit { background: #07566b; color: #fff; }
+.nfe-proposal-dialog button:disabled { opacity: .55; cursor: default; }
+@media print { .nfe-proposal-overlay { display: none !important; } }
+.nfe-proposal-fields .nfe-proposal-unit-check {
+  grid-column: 1 / -1;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+.nfe-proposal-unit-check[hidden] { display: none !important; }
+.nfe-proposal-unit-check input[type="checkbox"] { width: 20px; min-height: 20px; accent-color: #07566b; }

@@ -1,6 +1,7 @@
 import { invoiceXmlFacts, NFE_SUPPLIER_REGIMES, projectNfeRows, rankNfeOrderOptions } from '../chat/nfe-report-model.js';
 import { nfeOrderId } from '../chat/nfe-order-link.js';
 import { createReportLinkPicker } from './dda-provision-picker.js';
+import { createNfeProposalView } from './nfe-proposal-view.js';
 import { addReportCloseControl } from './report-close-control.js';
 import { bindReportLandscape } from './report-landscape.js';
 import { PDF_ATTACHMENT_ICON } from './report-pdf-attachment-icon.js';
@@ -155,6 +156,10 @@ export function createNfeReportView({ document:doc = globalThis.document, data, 
   let rows = null, page = 1, request, pageRequest, pageFacts, pdfRequest, returnFocus, app, oldInert, oldOverflow;
   const xmlFacts = new Map();
   const orderLink = data.orderLink;
+  const proposal = data.proposal && createNfeProposalView({
+    document:doc, host:root, service:data.proposal,
+    onPosted(receipt) { showLinked(receipt); picker?.close(); },
+  });
   const picker = orderLink && createReportLinkPicker({
     document:doc, host:root, copy:ORDER_PICKER_COPY,
     loadOptions:async (row, signal) => rankNfeOrderOptions(await orderLink.loadOptions({ signal }), row),
@@ -163,13 +168,16 @@ export function createNfeReportView({ document:doc = globalThis.document, data, 
     receiptId:receipt => receipt.orderId,
     rowAmount:row => row.total,
     resolveReturnFocus:trigger => list.querySelector(`[data-invoice-id="${trigger?.dataset.invoiceLink}"] .nfe-link-linked`) || closeButton,
-    onLinked({ invoiceId, orderId }) {
-      if (root.hidden || !rows) return;
-      rows = rows.map(row => row.id === invoiceId ? { ...row, orderId } : row);
-      const cell = list.querySelector(`[data-invoice-id="${invoiceId}"] .nfe-link`);
-      cell?.replaceChildren(linkedCluster(orderId));
-    },
+    onLinked:showLinked,
+    onPropose:proposal && ((row, trigger) => void proposal.show(row, trigger)),
   });
+
+  function showLinked({ invoiceId, orderId }) {
+    if (root.hidden || !rows || !nfeOrderId(invoiceId) || !nfeOrderId(orderId)) return;
+    rows = rows.map(row => row.id === invoiceId ? { ...row, orderId } : row);
+    const cell = list.querySelector(`[data-invoice-id="${invoiceId}"] .nfe-link`);
+    cell?.replaceChildren(linkedCluster(orderId));
+  }
 
   function linkedCluster(orderId) {
     const cluster = make('span', 'nfe-link-cluster nfe-link-linked', `ID ${orderId}`);
@@ -460,6 +468,7 @@ export function createNfeReportView({ document:doc = globalThis.document, data, 
 
   function close() {
     if (root.hidden) return;
+    proposal?.close();
     picker?.close();
     request?.abort();
     pageRequest?.abort();

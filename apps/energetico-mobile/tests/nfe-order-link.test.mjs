@@ -97,8 +97,8 @@ test('fiscal gallery adapter pages Graph orders and uses scoped REST versioned r
         linked = writes.at(-1).IDPEDIDO;
         return new Response(null, { status:204 });
       }
-      assert.equal(target.searchParams.get('$select'), 'ID,IDPEDIDO');
       withVersion = options.headers.Accept.endsWith('minimalmetadata');
+      assert.equal(target.searchParams.get('$select'), withVersion ? 'ID,IDPEDIDO,NFEPROPOSTA' : 'ID,IDPEDIDO');
       return json({ ID:10, IDPEDIDO:linked, ...(withVersion ? { 'odata.etag':'"5"' } : {}) });
     },
   });
@@ -108,4 +108,15 @@ test('fiscal gallery adapter pages Graph orders and uses scoped REST versioned r
   assert.deepEqual(writes, [{ IDPEDIDO:37 }]);
   assert.ok(scopes.includes(company + '/AllSites.Write'));
   assert.equal(withVersion, false, 'the final request reads back the stored link');
+});
+
+test('manual order selection respects a reserved fiscal proposal', async () => {
+  let writes = 0;
+  const service = createNfeOrderLink({ repository:{
+    resolveList:async site => ({ status:'resolved',id:site }),
+    getItem:async (site, list, id) => ({ id,eTag:'"1"',fields:site === 'company' ? { NFEPROPOSTA:'reserved' } : {} }),
+    updateItem:async () => { writes++; },
+  } });
+  await assert.rejects(service.save({ invoiceId:'11',orderId:'22' }), /envio reservado/i);
+  assert.equal(writes, 0);
 });

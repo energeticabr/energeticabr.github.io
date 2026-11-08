@@ -28,6 +28,23 @@ const key = '1'.repeat(44);
 const common = { STATUS_IMPORTACAO:'XML_COMPLETO', SITUACAO:'AUTORIZADA', VALOR_TOTAL_NOTA:2500 };
 let orderId = null;
 const report = decorateReportPrint(decorateReportNavigation(createNfeReportView({ data:{
+  proposal:{
+    async load(){ return {
+      fiscal:{ issueDate:'2026-11-08', dueDate:'2026-11-12', total:'2500.00', lines:[
+        { number:'1', description:'Descrição fictícia de serviço para conferir a largura do editor e do seletor', unit:'UN', quantity:'2', unitPrice:'1250', adjustment:'0', discount:'0' },
+      ] },
+      catalog:{
+        suppliers:[{ id:'21',label:'Fornecedor Exemplo',branch:'Obra A' }],
+        branches:[{ id:'22',label:'Obra A' },{ id:'23',label:'Obra B' }],
+        products:[{ id:'24',label:'Serviço de teste com descrição longa para revisão do relatório',unit:'UN',expenseType:'SERVIÇOS' }],
+        stages:[{ id:'25',label:'Etapa A',branch:'Obra A' },{ id:'26',label:'Etapa B',branch:'Obra B' }],
+        accounts:[],history:[],
+      },
+      draft:{ supplierId:'21',branchId:'22',accountId:'',date:'2026-11-08',lines:[
+        { number:'1',productId:'24',stageId:'25',quantity:'2',unitPrice:'1250',adjustment:'0',discount:'0',date:'2026-11-08',dueDate:'2026-11-12' },
+      ] },
+    }; },
+  },
   orderLink:{
     async loadOptions(){ return [
       { id:'31', supplier:'Fornecedor diferente', amount:3600 },
@@ -126,6 +143,24 @@ if (!report.element.hidden) {
   await new Promise(resolve => setTimeout(resolve, 0));
   const picker = report.element.querySelector('.dda-provision-dialog');
   const pickerRect = box(picker);
+  const propose = picker.querySelector('[data-nfe-propose-launch]');
+  const proposePosition = isBefore(picker.querySelector('h2'), propose, 'inline');
+  propose.click();
+  await new Promise(resolve => setTimeout(resolve, 0));
+  const proposal = report.element.querySelector('.nfe-proposal-dialog');
+  const proposalRect = box(proposal);
+  const editor = proposal.querySelector('details');
+  editor.open = true;
+  editor.dispatchEvent(new Event('toggle'));
+  const branch = proposal.querySelector('[name="branchId"]');
+  branch.value = '23';
+  branch.dispatchEvent(new Event('change'));
+  const changedStage = proposal.querySelector('[name="stageId"]').value;
+  const proposalBody = proposal.querySelector('.nfe-proposal-body');
+  const proposalScroll = proposalBody.scrollHeight > proposalBody.clientHeight;
+  const proposalSubmit = box(proposal.querySelector('[data-nfe-proposal-submit]'));
+  proposal.querySelector('.nfe-proposal-header button').click();
+  const pickerRestored = propose.isConnected && !picker.closest('[inert]') && document.activeElement === propose;
   const selection = picker.querySelector('input[value="32"]');
   selection.click();
   picker.querySelector('.dda-provision-save').click();
@@ -137,6 +172,8 @@ if (!report.element.hidden) {
     && rect.right <= innerWidth + 1 && rect.bottom <= innerHeight + 1;
   document.documentElement.dataset.orderLink = JSON.stringify({
     pickerFits:fit(pickerRect),
+    proposePosition, proposalFits:fit(proposalRect), proposalSubmitFits:fit(proposalSubmit),
+    proposalScroll, changedStage, pickerRestored,
     reviewFits:fit(reviewRect),
     linked:panel.querySelector('[data-invoice-id="2"] .nfe-link-linked')?.textContent,
     remainingPencils:panel.querySelectorAll('.nfe-link-pencil').length,
