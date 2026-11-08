@@ -9,6 +9,7 @@ const codes = {
   'NF-e': { '1':'Simples Nacional', '2':'Simples Nacional · excesso de sublimite', '3':'Regime normal', '4':'MEI' },
   'NFS-e': { '1':'Não optante pelo Simples Nacional', '2':'MEI', '3':'Simples Nacional · ME/EPP' },
 };
+export const NFE_SUPPLIER_REGIMES = [...new Set(Object.values(codes).flatMap(Object.values))];
 const namespaces = { 'NF-e':'http://www.portalfiscal.inf.br/nfe', 'NFS-e':'http://www.sped.fazenda.gov.br/nfse' };
 function attachmentName(value) {
   try {

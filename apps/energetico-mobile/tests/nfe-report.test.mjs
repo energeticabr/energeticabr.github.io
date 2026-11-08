@@ -207,3 +207,87 @@ test('NFE printer captures all filtered pages with XML facts and preserves the p
   assert.equal(pdf.type, 'application/pdf');
   assert.ok((await PDFDocument.load(await pdf.arrayBuffer())).getPageCount() > 0);
 });
+
+test('fiscal filters cover every page and combine document, search and XML classifications', async t => {
+  const dom = new JSDOM('<main id="app"></main>');
+  const { document, Event } = dom.window;
+  const notes = Array.from({ length:13 }, (_, index) => ({
+    id:String(index + 20),
+    fields:{ ...invoice.fields, Title:'Materiais Exemplo', XML_URL:xmlUrl,
+      OBSERVACOES_NOTA:'', STATUS_RETENCOES:'NAO_INFORMADA_XML' },
+  }));
+  const service = {
+    id:'19', fields:{ ...invoice.fields, Title:'Serviço Exemplo', TIPO_FISCAL:'NFS-e',
+      CHAVE_ACESSO:serviceKey, XML_URL:xmlUrl + '?service', OBSERVACOES_NOTA:'',
+      STATUS_RETENCOES:'NAO_INFORMADA_XML', VALOR_TOTAL_NOTA:25 },
+  };
+  notes.push(service,
+    { id:'18', fields:{ ...invoice.fields, OBSERVACOES_NOTA:'CNO 12.345.67890/12', XML_URL:xmlUrl + '?normal' } },
+    { id:'17', fields:{ ...service.fields, XML_URL:xmlUrl + '?unavailable' } },
+    { id:'16', fields:{ ...service.fields, STATUS_IMPORTACAO:'RESUMO' } });
+  const downloaded = [];
+  const panel = createNfeReportView({ document, data:{
+    loadSnapshot:async () => ({ rows:notes }),
+    downloadDocument:async url => {
+      downloaded.push(url);
+      if (url.endsWith('?unavailable')) throw new Error('Indisponível');
+      if (url.endsWith('?service')) return new Blob([serviceXml('900254406072')]);
+      return new Blob([issuerXml.replace('<CRT>4', url.endsWith('?normal') ? '<CRT>3' : '<CRT>2')]);
+    },
+  } });
+  t.after(() => { panel.destroy(); dom.window.close(); });
+  await panel.open();
+  const { element } = panel;
+  const ids = () => [...element.querySelectorAll('tbody tr')].map(row => row.dataset.invoiceId);
+  const filter = (name, value, event = 'change') => {
+    const control = element.querySelector('select[name="' + name + '"], input[name="' + name + '"]');
+    assert.ok(control, name);
+    control.value = value;
+    assert.equal(control.value, value);
+    control.dispatchEvent(new Event(event));
+  };
+  const settle = () => new Promise(resolve => setImmediate(resolve));
+
+  assert.equal(ids().includes('19'), false);
+  assert.equal(downloaded.includes(xmlUrl + '?service'), false);
+  filter('retention', 'yes');
+  filter('cno', 'valid');
+  filter('regime', 'MEI');
+  filter('document', 'NFS-e');
+  filter('search', 'servico', 'input');
+  await settle();
+  assert.deepEqual(ids(), ['19']);
+  assert.deepEqual([...element.querySelectorAll('.nfe-metrics dd')].slice(0, 2)
+    .map(node => node.textContent.replace(/\s/g, ' ')), ['1', 'R$ 25,00']);
+  const snapshot = await panel.capturePrint({ title:'Notas filtradas' });
+  const printed = snapshot.pages[0].blocks.find(block => block.type === 'table');
+  assert.equal(printed.rows.length, 2);
+  assert.match(JSON.stringify(printed.rows[1]), /Serviço Exemplo.*MEI.*Retenção informada.*CNO consta/);
+
+  filter('search', '', 'input');
+  filter('document', '');
+  filter('regime', '');
+  filter('cno', 'conflict');
+  await settle();
+  assert.deepEqual(ids(), ['18']);
+
+  filter('retention', 'no');
+  filter('cno', 'missing');
+  filter('regime', 'Simples Nacional');
+  await settle();
+  assert.equal(ids().length, 12);
+  assert.equal(element.querySelector('.nfe-metrics dd').textContent, '13');
+  element.querySelector('.nfe-pager button:last-child').click();
+  assert.deepEqual(ids(), ['20']);
+  filter('regime', 'Regime normal');
+  await settle();
+  assert.deepEqual(ids(), []);
+  filter('retention', 'yes');
+  filter('cno', '');
+  await settle();
+  assert.deepEqual(ids(), ['18']);
+
+  panel.close();
+  await panel.open();
+  assert.deepEqual([...element.querySelectorAll('.nfe-filters select')].map(select => select.value), ['', '', '', '']);
+});
