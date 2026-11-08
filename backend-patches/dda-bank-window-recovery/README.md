@@ -4,7 +4,7 @@ Se uma janela da consulta histórica falhar por erro de transporte após as quat
 
 A instalação modifica apenas o módulo `DdaMonitor.psm1` do coletor OCI. A API, os clientes e os horários agendados permanecem compatíveis. O instalador exige o hash da versão base para não sobrepor alterações de outra publicação, testa uma cópia isolada e aplica a troca com a trava já usada pelo coletor.
 
-Na VM OCI, em um diretório de preparação com os dois arquivos deste pacote:
+Na VM OCI, em um diretório de preparação sob controle do operador, use os dois arquivos revisados deste pacote:
 
 ```sh
 sudo python3 install_dda_window_recovery.py Test-DdaWindowRecovery.ps1
