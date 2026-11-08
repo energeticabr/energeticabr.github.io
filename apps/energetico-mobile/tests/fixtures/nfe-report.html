@@ -82,6 +82,10 @@ document.documentElement.dataset.layout = JSON.stringify({
   provisions, orange, nfe, dda,
   open:!report.element.hidden, rowIds:[...panel.querySelectorAll('tbody tr')].map(row=>row.dataset.invoiceId),
   overflow:document.documentElement.scrollWidth > innerWidth,
+  reportBodyWidth:reportBody.offsetWidth,
+  availableReportWidth:reportBody.parentElement.clientWidth,
+  overlayArrows:[...panel.querySelectorAll('.report-navigation-arrow')].filter(arrow =>
+    getComputedStyle(arrow).position === 'fixed' && arrow.offsetWidth > 0).length,
   tableScrolls:reportBody.scrollWidth > reportBody.clientWidth,
   amountFits:amountFitsCell(),
   rotated, mei:hasMei(), pdfOnLeft:Boolean(isBefore(pdf,supplier,'inline')),
