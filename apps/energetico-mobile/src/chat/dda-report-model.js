@@ -4,18 +4,15 @@ import {REGISTRATION_GALLERY_MODELS,registrationRawField,registrationDateKey,reg
 import {ddaTodayKey} from '../ui/dda-card.js';
 import {ddaPaidManually} from './dda-payment-confirmation.js';
 import {resolveDdaPaymentLine} from './dda-payment-line.js';
+import {ddaBankSchedule,normalizeDdaStatus} from './dda-bank-status.js';
 const Money=Decimal.clone({precision:40});
-export const ddaSearchKey=value=>String(value??'').normalize('NFD').replace(/[\u0300-\u036f]/g,'').trim().toLowerCase();
+export {ddaSearchKey} from './dda-bank-status.js';
 const text=value=>typeof value==='string'||typeof value==='number'?String(value).trim():'';
 const provisionId=value=>{const id=text(value);return /^[1-9]\d*$/.test(id)&&Number.isSafeInteger(Number(id))?id:'';};
 function supplierCnpj(value){
  const key=text(value).toUpperCase().replace(/[\s./-]/g,'');
  // An opaque identity key, not a tax-document validation or name-based guess.
  return /^[A-Z0-9]{14}$/.test(key)&&!/^([A-Z0-9])\1+$/.test(key)?key:null;
-}
-function status(value){
- const label=text(value),key=ddaSearchKey(label).replace(/\s+/g,' ');
- return ({'em aberto':'Em aberto',agendado:'Agendado',pago:'Pago','pago (liquidado)':'Pago',liquidado:'Pago',baixado:'Baixado','nao confirmado':'Não confirmado'})[key]||label||'Não informado';
 }
 export function normalizeDdaReportRows(snapshot){
  if(!Array.isArray(snapshot?.rows)||snapshot.hasMore===true||snapshot.complete===false)throw new TypeError('Consulta DDA incompleta.');
@@ -25,7 +22,8 @@ export function normalizeDdaReportRows(snapshot){
   const value=name=>registrationRawField(row.fields,name,REGISTRATION_GALLERY_MODELS.dda),number=registrationNumber(value('VALOR'));
   const amount=number!=null&&number>=0&&number<=Number.MAX_SAFE_INTEGER/100?new Money(number).toDecimalPlaces(2).toFixed(2):null;
   const paymentLine=resolveDdaPaymentLine(value('LINHA_DIGITAVEL'),value('CODIGO_BARRAS'));
-  return {id,paymentLine,key:text(value('CHAVE_DDA')),paidManually:ddaPaidManually(value('PGTO_CONFIRMADO')),confirmedAt:text(value('PGTO_CONFIRMADO_EM')),supplier:text(value('FORNECEDOR'))||'Fornecedor não informado',supplierCnpj:supplierCnpj(value('CNPJ_FORNECEDOR')),due:registrationDateKey(value('VENCIMENTO')),issued:registrationDateKey(value('EMISSAO')),amount,status:status(value('SITUACAO')),document:text(value('DOCUMENTO')),bank:text(value('BANCO')),payer:text(value('PAGADOR')),checkedAt:text(value('ULTIMA_CONSULTA')),provisionId:provisionId(value('DESCRITIVOPROVIS_x00c3_O'))};
+  const schedule=Object.freeze(ddaBankSchedule(value));
+  return {id,paymentLine,key:text(value('CHAVE_DDA')),paidManually:ddaPaidManually(value('PGTO_CONFIRMADO')),confirmedAt:text(value('PGTO_CONFIRMADO_EM')),supplier:text(value('FORNECEDOR'))||'Fornecedor não informado',supplierCnpj:supplierCnpj(value('CNPJ_FORNECEDOR')),due:registrationDateKey(value('VENCIMENTO')),issued:registrationDateKey(value('EMISSAO')),amount,status:normalizeDdaStatus(value('SITUACAO')),schedule,document:text(value('DOCUMENTO')),bank:text(value('BANCO')),payer:text(value('PAGADOR')),checkedAt:text(value('ULTIMA_CONSULTA')),provisionId:provisionId(value('DESCRITIVOPROVIS_x00c3_O'))};
  });
  const counts=new Map();
  for(const row of normalized)if(row.supplierCnpj)counts.set(row.supplierCnpj,(counts.get(row.supplierCnpj)||0)+1);

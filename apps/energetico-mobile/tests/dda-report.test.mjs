@@ -3,7 +3,7 @@ import assert from 'node:assert/strict';
 import {JSDOM} from 'jsdom';
 import {normalizeDdaReportRows,buildDdaReport} from '../src/chat/dda-report-model.js';
 import {createDdaReportView} from '../src/ui/dda-report-view.js';
-import {createRegistrationGalleryData} from '../src/chat/registration-gallery-data.js';
+import {createRegistrationGalleryData,REGISTRATION_GALLERY_MODELS} from '../src/chat/registration-gallery-data.js';
 import {captureFilteredReport,decorateReportPrint} from '../src/ui/report-print.js';
 const now=()=>new Date('2026-10-28T12:00:00Z');
 const row=(id,status='Em aberto',due='2026-10-29',amount=12.34)=>({id:String(id),fields:{Title:'Fornecedor '+id,SITUACAO:status,VENCIMENTO:due,VALOR:amount,DOCUMENTO:'DOC-'+id,BANCO:'Banco teste',ULTIMA_CONSULTA:'2026-10-28T10:00:00Z'}});
@@ -19,7 +19,8 @@ test('unknown status and missing amounts never become open or zero; malformed an
  const report=buildDdaReport(rows,undefined,now());assert.deepEqual(report.rows.map(r=>r.id),['3','2']);assert.equal(report.total,null);assert.equal(report.missingAmounts,1);assert.equal(report.today,1);
  for(const snapshot of [{},{rows:[],hasMore:true},{rows:[row(1),row(1)]},{rows:[{id:1}]}])assert.throws(()=>normalizeDdaReportRows(snapshot));
 });
-test('complete authenticated DDA source includes later pages and has no mutations',async()=>{
+test('complete authenticated DDA source requests the bank status, includes later pages and has no mutations',async()=>{
+ assert.ok(REGISTRATION_GALLERY_MODELS.dda.restReadFields.includes('STATUS_DDA'));
  let calls=0;const data=createRegistrationGalleryData({kind:'dda',repository:{resolveList:async()=>({status:'resolved',id:'dda'}),getColumns:async()=>[],getItemsPage:async()=>++calls===1?{items:[row(1)],hasMore:true,nextLink:'page2'}:{items:[row(2)],hasMore:false}}});
  const report=buildDdaReport(normalizeDdaReportRows(await data.loadSnapshot()),undefined,now());assert.equal(calls,2);assert.equal(report.rows.length,2);assert.equal(report.total,'24.68');assert.equal(data.saveEditor,undefined);
 });
@@ -71,6 +72,43 @@ test('report groups bank and boleto number, then shows issue date and calendar d
  assert.equal(doc.querySelector('[data-dda-id="2"] .ddr-issued-date small').textContent,'0 d');
  assert.equal(doc.querySelector('[data-dda-id="3"] .ddr-issued-date').textContent,'Não informada');
  view.destroy();dom.window.close();
+});
+test('report places the bank scheduling badge above the existing situation, independently of manual confirmation',async()=>{
+ const source=[
+  row(1),row(2,'Agendado'),row(3,'Em aberto','2026-10-27'),
+  row(4,'Agendado'),row(5,'Não confirmado'),row(6,''),row(7,'Agendado'),
+ ];
+ Object.assign(source[0].fields,{STATUS_DDA:' AGENDADO '});
+ Object.assign(source[1].fields,{STATUS_DDA:'Agendado',PGTO_CONFIRMADO:true});
+ Object.assign(source[3].fields,{STATUS_DDA:'Não confirmado'});
+ Object.assign(source[6].fields,{STATUS_DDA:'Em aberto'});
+ const {dom,view,doc}=setup({loadSnapshot:async()=>({rows:source})});
+ try{
+  await view.open();
+  const filter=doc.querySelector('[name=status]');filter.value='';filter.dispatchEvent(new dom.window.Event('change'));
+  const expected=[
+   ['AGENDADO','scheduled','Em aberto'],['AGENDADO','scheduled','Pago'],
+   ['NÃO AGENDADO','unscheduled','Vencido'],
+   ['AGENDAMENTO NÃO CONFIRMADO','unknown','Agendado'],
+   ['AGENDAMENTO NÃO CONFIRMADO','unknown','Não confirmado'],
+   ['AGENDAMENTO NÃO CONFIRMADO','unknown','Não informado'],
+   ['NÃO AGENDADO','unscheduled','Agendado'],
+  ];
+  for(const [index,[label,state,situation]] of expected.entries()){
+   const cell=doc.querySelector(`[data-dda-id="${index+1}"] .ddr-status`);
+   const badge=cell.querySelector('.ddr-schedule-cluster');
+   assert.equal(badge?.textContent,label);
+   assert.equal(badge.dataset.scheduleState,state);
+   assert.equal(badge.nextElementSibling,cell.querySelector('.ddr-status-cluster'));
+   assert.equal(badge.nextElementSibling.querySelector('strong').textContent,situation);
+  }
+  const restore=await view.preparePrint();
+  const snapshot=captureFilteredReport(view.element,{title:'Relatório DDA'});
+  const table=snapshot.pages[0].blocks.find(block=>block.type==='table');
+  const labels=table.rows.slice(1).map(row=>row.cells[6].runs[0].text.trim());
+  assert.deepEqual(labels,['NÃO AGENDADO',...expected.filter((_,index)=>index!==2).map(([label])=>label)]);
+  restore();
+ }finally{view.destroy();dom.window.close();}
 });
 test('report defaults open, can show all, resets on reopen and treats supplier text literally',async()=>{
  const a=row(1);a.fields.Title='<img src=x onerror=alert(1)>';

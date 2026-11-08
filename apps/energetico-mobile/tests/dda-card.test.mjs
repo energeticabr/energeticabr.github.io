@@ -37,6 +37,25 @@ test('copy rejection gives accurate feedback instead of claiming success',async(
  main.querySelector('[data-copy-field="CODIGO_BARRAS"]').click();await new Promise(r=>setImmediate(r));
  assert.match(main.textContent,/Não foi possível copiar/);dom.window.close();
 });
+test('DDA details show the bank scheduling state independently of the visible situation',()=>{
+ const dom=new JSDOM('<body><main></main></body>'),doc=dom.window.document,main=doc.querySelector('main');
+ try{
+  for(const [bankStatus,situation,expected,state] of [
+   ['Agendado','Pago','AGENDADO','scheduled'],
+   ['Em aberto','Em aberto','NÃO AGENDADO','unscheduled'],
+   ['Não confirmado','Agendado','AGENDAMENTO NÃO CONFIRMADO','unknown'],
+  ]){
+   const fields={STATUS_DDA:bankStatus,SITUACAO:situation,PGTO_CONFIRMADO:situation==='Pago'};
+   main.replaceChildren();
+   renderDdaCard({document:doc,container:main,rowId:'1',title:'Fornecedor fictício',value:field=>fields[field]});
+   const detail=main.querySelector('details [data-field="AGENDAMENTO"]');
+   assert.ok(detail);
+   assert.equal(detail.querySelector('dt').textContent,'Agendamento');
+   assert.equal(detail.querySelector('dd').textContent,expected);
+   assert.equal(detail.dataset.scheduleState,state);
+  }
+ }finally{dom.window.close();}
+});
 test('DDA sorts the complete snapshot before pagination and keeps missing dates last',async()=>{
  const dom=new JSDOM('<body></body>');const rows=Array.from({length:22},(_,i)=>({id:String(i+1),fields:{Title:'Fornecedor fictício',SITUACAO:'Em aberto',VENCIMENTO:'2026-11-'+String(22-i).padStart(2,'0')}}));
  rows.unshift({id:'missing',fields:{Title:'Sem data',SITUACAO:'Em aberto'}});

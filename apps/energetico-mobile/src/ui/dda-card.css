@@ -63,6 +63,8 @@
 .rg-dda-copy-notice { margin: 0; color: #174b6b; font-size: .75rem; }
 .rg-dda-copy-notice:not(:empty) { padding: 6px 0; }
 .rg-dda-extra { border-top: 1px solid #edf1f5; }
+.rg-dda-schedule[data-schedule-state="scheduled"] { color: #17643f; background: #eaf8ee; }
+.rg-dda-schedule[data-schedule-state="scheduled"] dd { color: inherit; }
 .rg-dda-extra > summary { min-height: 44px; align-content: center; color: #345674; font-size: .72rem; font-weight: 700; cursor: pointer; }
 @media (max-width: 500px) {
  .rg-row.rg-row--dda { padding: 8px; }

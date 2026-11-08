@@ -1,5 +1,6 @@
 import { ddaPaidManually } from '../chat/dda-payment-confirmation.js';
 import { resolveDdaPaymentLine } from '../chat/dda-payment-line.js';
+import { ddaBankSchedule } from '../chat/dda-bank-status.js';
 const ICONS = {
  check:['M5 12l4 4L19 6'],
  calendar:['M4 5h16v16H4z','M8 2v6M16 2v6M4 10h16'],
@@ -122,6 +123,10 @@ export function renderDdaCard({document:doc,container,rowId,title,value,raw=valu
  const footer=el('dl','rg-dda-footer');pair(footer,'PAGADOR','Pagador','person');pair(footer,'BLOQUEADO','Pagamento bloqueado','lock');container.append(footer);
  const extra=el('details','rg-dda-extra');extra.append(el('summary','','Mais detalhes'));
  const detail=el('dl','rg-dda-body');
+ const schedule=ddaBankSchedule(raw);
+ const scheduleField=pair(detail,'AGENDAMENTO','Agendamento','calendar','rg-dda-schedule');
+ scheduleField.dataset.scheduleState=schedule.state;
+ scheduleField.querySelector('dd').textContent=schedule.label;
  pair(detail,'VALOR_PAGAMENTO','Valor para pagamento','money');pair(detail,'CNPJ_PAGADOR','CPF/CNPJ pagador','person');
  pair(detail,'ULTIMA_CONSULTA','Última consulta','clock');
  if(value('MENSAGEM'))pair(detail,'MENSAGEM','Mensagem do banco','document');

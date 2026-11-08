@@ -21,6 +21,15 @@ test('date-day clusters are compact and centered in their columns on phones, des
    try{
     const state=JSON.parse(dom.window.document.documentElement.dataset.dueDays);
     assert.equal(state.overflow,false,JSON.stringify({width,state}));
+    assert.deepEqual([...new Set(state.schedules.map(badge=>badge.text))].sort(),['AGENDADO','AGENDAMENTO NÃO CONFIRMADO','NÃO AGENDADO']);
+    for(const badge of state.schedules){
+     assert.ok(badge.above&&badge.sameWidth&&badge.fits,JSON.stringify({width,badge}));
+     assert.equal(badge.printColorAdjust,'exact');
+     if(badge.state==='scheduled'){
+      assert.equal(badge.color,'rgb(23, 100, 63)');
+      assert.equal(badge.background,'rgb(234, 248, 238)');
+     }
+    }
     assert.equal(state.metrics.length,7);
     assert.deepEqual(state.metrics.slice(4).map(({label,value})=>({label,value})),[
      {label:'Qtd DDA vencendo em 7d',value:'3'},
