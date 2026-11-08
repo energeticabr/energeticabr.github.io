@@ -30,7 +30,7 @@ const report = decorateReportPrint(decorateReportNavigation(createNfeReportView(
     { id:'2', fields:{ ...common, TIPO_FISCAL:'NFS-e', DATA_EMISSAO:'2026-11-08', NUMERO_NOTA:'205',
       Title:'Serviços de Engenharia e Manutenção Industrial — Fornecedor Exemplo Ltda.',
       STATUS_RETENCOES:'NAO_INFORMADA_XML', DANFE_URL:'https://example.test/danfse.pdf' } },
-    { id:'3', fields:{ ...common, TIPO_FISCAL:'NF-e', DATA_EMISSAO:'2026-11-07', NUMERO_NOTA:'14',
+    { id:'3', fields:{ ...common, TIPO_FISCAL:'NF-e', DATA_EMISSAO:'2026-11-07', NUMERO_NOTA:'14', VALOR_TOTAL_NOTA:98765432.10,
       Title:'Comércio de Materiais Exemplo Ltda.', CNPJ_FORNECEDOR:'00.000.000/0000-00', CHAVE_ACESSO:key,
       XML_URL:'https://example.test/nota.xml', DANFE_URL:'https://example.test/nota.pdf',
       OBSERVACOES_NOTA:'CNO 90.025.44060/72', STATUS_RETENCOES:'RETENCAO_INFORMADA_XML' } },
@@ -66,6 +66,14 @@ const reportBody = panel.querySelector('.nfe-body');
 const pdf = panel.querySelector('[data-invoice-id="2"] button.nfe-pdf');
 const supplier = panel.querySelector('[data-invoice-id="2"] .nfe-supplier');
 const rotated = report.element.dataset.reportPortrait === 'true';
+const amount = panel.querySelector('[data-invoice-id="3"] .nfe-money');
+function amountFitsCell() {
+  if (!amount) return false;
+  const range = document.createRange();
+  range.selectNodeContents(amount);
+  const cell = box(amount);
+  return [...range.getClientRects()].every(rect => rotated ? rect.bottom <= cell.bottom + 1 : rect.right <= cell.right + 1);
+}
 const isBefore = (first, second, axis) => first && second &&
   (axis === 'inline'
     ? rotated ? box(first).bottom <= box(second).y : box(first).right <= box(second).x
@@ -75,6 +83,7 @@ document.documentElement.dataset.layout = JSON.stringify({
   open:!report.element.hidden, rowIds:[...panel.querySelectorAll('tbody tr')].map(row=>row.dataset.invoiceId),
   overflow:document.documentElement.scrollWidth > innerWidth,
   tableScrolls:reportBody.scrollWidth > reportBody.clientWidth,
+  amountFits:amountFitsCell(),
   rotated, mei:hasMei(), pdfOnLeft:Boolean(isBefore(pdf,supplier,'inline')),
   metricsAbove:Boolean(isBefore(panel.querySelector('.nfe-metrics'), panel.querySelector('table'), 'block')),
   headerControls:!!panel.querySelector('.nfe-header [data-action="print-report-pdf"]') &&

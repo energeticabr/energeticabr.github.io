@@ -110,7 +110,7 @@
 .nfe-pdf-pending { text-align: center; }
 .nfe-type { color: #245d93; }
 .nfe-date, .nfe-money { font-weight: 700; font-variant-numeric: tabular-nums; }
-.nfe-table :is(time, .nfe-money) { white-space: nowrap; }
+.nfe-table time { white-space: nowrap; }
 .nfe-fact, .nfe-note-status {
   padding: 5px;
   border: 1px solid #c8dde4;

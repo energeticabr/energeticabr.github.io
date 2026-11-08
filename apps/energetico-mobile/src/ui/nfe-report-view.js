@@ -77,6 +77,7 @@ export function createNfeReportView({ document:doc = globalThis.document, data, 
   feedback.setAttribute('role', 'status');
   const pdfFeedback = make('p', 'nfe-pdf-feedback');
   pdfFeedback.hidden = true;
+  pdfFeedback.dataset.reportScreenOnly = '';
   pdfFeedback.setAttribute('role', 'status');
   const table = make('table', 'nfe-table');
   table.setAttribute('aria-label', 'Notas fiscais por data de emissão');
@@ -183,7 +184,7 @@ export function createNfeReportView({ document:doc = globalThis.document, data, 
     const dateText = make(row.date ? 'time' : 'span', '', displayDate(row.date));
     if (row.date) dateText.dateTime = row.date;
     date.append(dateText);
-    const amount = make('td', 'nfe-money', row.total === null ? 'Não informado' : money.format(row.total));
+    const amount = make('td', 'nfe-money', row.total === null ? 'Não informado' : money.format(row.total).replace(/\u00a0/g, ' '));
     line.append(id, note, supplier, date, amount);
     const fields = { row, line };
     for (const name of ['regime', 'retention', 'cno']) {
