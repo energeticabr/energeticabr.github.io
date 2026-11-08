@@ -24,9 +24,9 @@ function setup(t,options={}){
   ddaReportFactory:async options=>{factories.push(options);return panel();},...options,auth});
  t.after(()=>controller.stop());return {controller,view,store,auth,calls,opened,factories,renders};
 }
-test('DDA shortcut is immediately below the first left mascot and dispatches its own report',()=>{
+test('DDA shortcut stays below the NFE shortcut and dispatches its own report',()=>{
  const markup=renderChatMarkup({sessionStatus:'authenticated',account:{name:'Teste'},messages:[{role:'assistant',type:'poll',question:'QUAL ÁREA VOCÊ DESEJA ACESSAR?',options:[{id:'group_pending',label:'PENDÊNCIAS'},{id:'group_supplies',label:'SUPRIMENTOS'},{id:'group_financial',label:'FINANCEIRO'},{id:'group_hr',label:'RECURSOS HUMANOS'}]}],attachments:[],draft:'',busy:false});
- const dom=new JSDOM(markup),first=dom.window.document.querySelector('[data-action="open-pending-provisions"]'),dda=first?.nextElementSibling;
+ const dom=new JSDOM(markup),first=dom.window.document.querySelector('[data-action="open-nfe-report"]'),dda=first?.nextElementSibling;
  assert.equal(dda?.dataset.action,'open-dda-report');assert.equal(commandFromTarget(dda)?.type,'open-dda-report');assert.match(dda.textContent,/DDA/);dom.window.close();
 });
 test('gallery receives the authenticated bank refresh callback and it expires with logout',async t=>{

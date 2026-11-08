@@ -323,6 +323,11 @@ async function defaultDdaReportFactory(options) {
   return createDdaReportView(options);
 }
 
+async function defaultNfeReportFactory(options) {
+  const { createNfeReportView } = await import("./ui/nfe-report-view.js");
+  return createNfeReportView(options);
+}
+
 async function defaultRegistrationGalleryFactory(options) {
   if (options.kind === 'registrationMenu') {
     const { createRegistrationGalleryMenu } = await import('./ui/registration-gallery-menu.js');
@@ -513,6 +518,7 @@ const REGISTRATION_GALLERY_KIND = Object.freeze({
   action_notas_fiscais_sefaz_gallery: "notas_fiscais_sefaz",
   action_dda_gallery: "dda",
   action_dda_report: "ddaReport",
+  action_nfe_report: "nfeReport",
   action_hr_gallery_presencas: "presenceDescriptions",
   action_hr_gallery_validar_presencas: "presenceDescriptions",
   action_hr_gallery_funcionarios: "contractorEmployment",
@@ -1099,6 +1105,7 @@ export function createAppController({
   recurringExpensesGalleryDataFactory = defaultRecurringExpensesGalleryDataFactory,
   registrationGalleryFactory = defaultRegistrationGalleryFactory,
   ddaReportFactory = defaultDdaReportFactory,
+  nfeReportFactory = defaultNfeReportFactory,
   ddaSyncSessionFactory = createDdaSyncSession,
   sefazSyncSessionFactory = createSefazSyncSession,
   enableDdaReminders = false,
@@ -6137,6 +6144,7 @@ export function createAppController({
   function reportNavigationPanel(action) {
     switch (action) {
       case 'open-dda-report': return registrationGalleries.get('ddaReport');
+      case 'open-nfe-report': return registrationGalleries.get('nfeReport');
       case 'open-provision-report': return provisionReport;
       case 'open-payment-ledger': return paymentLedger;
       case 'open-management-report': return managementReport;
@@ -6233,6 +6241,7 @@ export function createAppController({
     switch (target) {
       case 'open-pending-provisions': return openPendingProvisions();
       case 'open-dda-report': return openRegistrationGallery('ddaReport', 'action_dda_report');
+      case 'open-nfe-report': return openRegistrationGallery('nfeReport', 'action_nfe_report');
       case 'open-provision-report': return openPaymentLedger('provision');
       case 'open-payment-ledger': return openPaymentLedger();
       case 'open-management-report': return openPaymentLedger('management');
@@ -9888,9 +9897,10 @@ export function createAppController({
     if (openOptions.automatic && !openOptions.isCurrent?.()) return false;
     if (!account || stopped || flowBusy()) return false;
     const isDdaReport = kind === "ddaReport";
-    const sourceKind = isDdaReport ? "dda" : kind;
+    const isNfeReport = kind === "nfeReport";
+    const sourceKind = isDdaReport ? "dda" : isNfeReport ? "notas_fiscais_sefaz" : kind;
     const isGalleryMenu = ['assetMenu', 'registrationMenu'].includes(sourceKind);
-    if (isDdaReport && store.getState().activeFlow) return false;
+    if ((isDdaReport || isNfeReport) && store.getState().activeFlow) return false;
     disposeSupplierPayrollReport();
     disposeSacPathologiesReport();
     disposeQuotationReport();
@@ -9919,7 +9929,7 @@ export function createAppController({
       galleryOpeningRevision++;
       registrationGalleryOpenings.clear();
       closeGalleryOverlays();
-    } else if (isDdaReport) closeGalleryOverlays();
+    } else if (isDdaReport || isNfeReport) closeGalleryOverlays();
     const galleryAccount = account;
     const openingIsCurrent = galleryOpeningGuard(galleryAccount);
     const galleryRevision = sessionRevision;
@@ -9942,7 +9952,7 @@ export function createAppController({
           } });
           if (!openingIsCurrent()) return false;
           assertSession();
-          const factory = isDdaReport ? ddaReportFactory : registrationGalleryFactory;
+          const factory = isDdaReport ? ddaReportFactory : isNfeReport ? nfeReportFactory : registrationGalleryFactory;
           const panel = await factory({
             kind: sourceKind, data,
             ...(isGalleryMenu ? { onSelect: async target => {
@@ -9970,7 +9980,7 @@ export function createAppController({
                 flowId: 'payment', replyId: 'action_payment', text: 'CRIAR UMA PROVISÃO DE PAGAMENTO',
               }),
             } : {}),
-            ...(sourceKind === 'notas_fiscais_sefaz' ? { syncMonitor: ensureSefazSyncSession() } : {}),
+            ...(sourceKind === 'notas_fiscais_sefaz' && !isNfeReport ? { syncMonitor: ensureSefazSyncSession() } : {}),
             ...(isDdaReport ? { onClose: () => ddaAutoReminder.dismiss() } : {}),
             ...(["contractorEmployment", "dda", "notas_fiscais_sefaz", 'assetMenu', 'registrationMenu', 'assetLaunches'].includes(sourceKind) ? {} : { onCreate: galleryCreationHandler(replyId, assertSession) }),
             ...(["notas_fiscais_sefaz", "dda", "presenceDescriptions", "provisionDescription", "documents", "asset", "assetFunction", "assetProduct", "assetGroup", "workDiary", "quotes", "contracts", "contractLines", "measurements", "measurementLines", "stageDemonstratives", "constructionStages", "recurringTasks", "delegatedTasks"].includes(sourceKind) ? {
@@ -9986,7 +9996,8 @@ export function createAppController({
             onHome: () => { assertSession(); return returnToMainMenu(); },
           });
           if (!openingIsCurrent()) { panel.destroy?.(); return false; }
-          registrationGalleries.set(kind, isDdaReport ? decorateControllerReport(panel, 'open-dda-report') : panel);
+          const reportAction = isDdaReport ? 'open-dda-report' : isNfeReport ? 'open-nfe-report' : '';
+          registrationGalleries.set(kind, reportAction ? decorateControllerReport(panel, reportAction) : panel);
         }
         if (openOptions.automatic && !openOptions.isCurrent?.()) return false;
         const panel = registrationGalleries.get(kind);
@@ -12360,6 +12371,7 @@ export function createAppController({
     bind("share-attachment", command => shareAttachment(command.fileId));
     bind("close-pending-provisions", closePendingProvisions);
     bind("open-dda-report", () => openRegistrationGallery("ddaReport", "action_dda_report"));
+    bind("open-nfe-report", () => openRegistrationGallery("nfeReport", "action_nfe_report"));
     bind("open-pending-provisions", openPendingProvisions);
     bind('print-pending-provisions', () => {
       if (!account || stopped || flowBusy() || !pendingProvisionSnapshot || pendingProvisionReminderOpen) return false;
