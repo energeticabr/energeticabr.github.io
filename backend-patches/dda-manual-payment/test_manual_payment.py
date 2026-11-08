@@ -74,6 +74,24 @@ class ManualPaymentTests(unittest.TestCase):
         self.assertEqual(self.call(identity={'oid': 'second', 'email': 'second@example.com'}), first)
         self.assertEqual(len(self.repo.writes), 1)
 
+    def test_confirming_a_current_bank_schedule_records_paid_schedule_atomically(self):
+        self.repo.row.update(STATUS_DDA='Agendado', DDA_CICLO_AGENDAMENTO='AGENDADO',
+                             STATUS_CONSULTADO_EM='2026-10-28T13:00:00Z',
+                             ULTIMA_CONSULTA='2026-10-28T13:00:00Z')
+        self.call()
+        self.assertEqual(self.repo.writes[0][1]['DDA_CICLO_AGENDAMENTO'], 'PAGO_AGENDADO')
+        self.assertEqual(self.repo.row['DDA_CICLO_AGENDAMENTO'], 'PAGO_AGENDADO')
+        self.assertEqual(self.repo.row['STATUS_DDA'], 'Agendado')
+        self.call()
+        self.assertEqual(len(self.repo.writes), 1)
+
+    def test_newer_bank_read_blocks_confirmation_of_an_older_schedule(self):
+        self.repo.row.update(STATUS_DDA='Agendado', DDA_CICLO_AGENDAMENTO='AGENDADO',
+                             STATUS_CONSULTADO_EM='2026-10-28T12:00:00Z',
+                             ULTIMA_CONSULTA='2026-10-28T13:00:00Z')
+        self.call()
+        self.assertNotIn('DDA_CICLO_AGENDAMENTO', self.repo.writes[0][1])
+
     def test_denies_missing_identity_and_non_owner_before_reading(self):
         for identity in ({'email': 'owner@example.com'}, {'oid': 'other', 'email': 'other@example.com'}):
             with self.assertRaises(PermissionError):
