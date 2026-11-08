@@ -43,6 +43,27 @@
 }
 .ddr-schedule-cluster[data-schedule-state="paid"] { overflow-wrap: anywhere; }
 .ddr-schedule-cluster .ddr-settlement-pending { color: #8a4000; font-weight: 700; }
+.ddr-table tr.ddr-scheduled-unlinked,
+.ddr-table tr.ddr-scheduled-unlinked > td {
+  background: #ffc5cc;
+  print-color-adjust: exact;
+  -webkit-print-color-adjust: exact;
+}
+.ddr-scheduled-unlinked .ddr-due-date { color: #71101e; }
+.ddr-link-warning {
+  display: block;
+  box-sizing: border-box;
+  width: max-content;
+  max-width: 100%;
+  margin-top: 5px;
+  padding: 4px 6px;
+  border-radius: 6px;
+  background: #a5142a;
+  color: #fff;
+  font-size: 10px;
+  font-weight: 800;
+  line-height: 1.25;
+}
 .ddr-summary{grid-template-columns:repeat(12,minmax(0,1fr))}.ddr-metric{grid-column:span 3;min-width:0;overflow-wrap:anywhere}.ddr-metric:nth-child(n+5){grid-column:span 4}
 .ddr-due-days,.ddr-issued-date .ddr-issued-days{display:block;width:max-content;box-sizing:border-box;max-width:100%;margin:5px auto 0;padding:3px 6px;border:1px solid #fff;border-radius:6px;font-size:11px;font-weight:800;line-height:1.2;font-variant-numeric:tabular-nums;text-align:center;white-space:nowrap;print-color-adjust:exact;-webkit-print-color-adjust:exact}
 .ddr-due-days{background:var(--ddr-due-accent);color:#fff;box-shadow:0 1px 3px #17394b33}
