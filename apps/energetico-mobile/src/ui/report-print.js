@@ -37,11 +37,19 @@ function textColor(node){for(let n=node;n;n=n.parentElement){const parsed=color(
 function background(node,stop){for(let n=node;n&&n!==stop;n=n.parentElement){const parsed=color(styleOf(n)?.backgroundColor);if(parsed)return parsed;}return null;}
 function hidden(node){return Boolean(node.closest('[hidden]'))||styleOf(node)?.display==='none'||styleOf(node)?.visibility==='hidden';}
 function loadError(root){return [...root.querySelectorAll('[role="status"],[role="alert"],[class*="-notice"]')].some(node=>!node.classList.contains('report-pdf-status')&&!hidden(node)&&/^(?:Não foi possível|Falha na consulta|Data inválida|A data inicial não pode)/i.test(node.textContent.trim()));}
+function paintedBorderWidth(width,style){
+ return style&&style!=='none'&&style!=='hidden' ? parseFloat(width)||0 : 0;
+}
 function boxOf(style){
- const fill=color(style?.backgroundColor);
- const border=parseFloat(style?.borderBottomWidth)>0?color(style.borderBottomColor):null;
- const accent=parseFloat(style?.borderLeftWidth)>parseFloat(style?.borderRightWidth)?color(style.borderLeftColor):null;
- const topAccent=parseFloat(style?.borderTopWidth)>parseFloat(style?.borderBottomWidth)?color(style.borderTopColor):null;
+ if(!style)return null;
+ const fill=color(style.backgroundColor);
+ const bottom=paintedBorderWidth(style.borderBottomWidth,style.borderBottomStyle);
+ const left=paintedBorderWidth(style.borderLeftWidth,style.borderLeftStyle);
+ const right=paintedBorderWidth(style.borderRightWidth,style.borderRightStyle);
+ const top=paintedBorderWidth(style.borderTopWidth,style.borderTopStyle);
+ const border=bottom?color(style.borderBottomColor):null;
+ const accent=left>right?color(style.borderLeftColor):null;
+ const topAccent=top>bottom?color(style.borderTopColor):null;
  if(!fill&&!border&&!accent&&!topAccent)return null;
  return {fill,border,accent,topAccent,radius:parseFloat(style.borderTopLeftRadius)||0};
 }
@@ -118,12 +126,15 @@ function tableBlock(table,root){
  return {type:'table',widths,rows};
 }
 function cardRows(node){
- if(![...node.classList].some(name=>name==='ddr-summary'||name.endsWith('-cards')||name.endsWith('-metrics')))return null;
+ const grid=[...node.classList].some(name=>name==='ddr-summary'||/-(?:cards|metrics|indicators)$/.test(name));
+ if(!grid&&node.tagName!=='HEADER')return null;
  const gridStyle=styleOf(node);
- if(gridStyle?.display!=='grid'||node.querySelector('table'))return null;
- const rows=new Map();
  const children=[...node.children].filter(child=>!child.matches(OMIT)&&!hidden(child));
- if(!children.length)return null;
+ const banner=node.tagName==='HEADER'&&gridStyle?.display==='flex'&&gridStyle.flexDirection==='row'
+   &&children.length===2&&/^H[1-6]$/.test(children[0].tagName)&&boxOf(styleOf(children[1]));
+ if((!grid||gridStyle?.display!=='grid')&&!banner)return null;
+ if(!children.length||node.querySelector('table'))return null;
+ const rows=new Map();
  // Offset coordinates stay in the report's logical axes on rotated phones.
  const left=Math.min(...children.map(child=>child.offsetLeft));
  const gridWidth=node.clientWidth-(parseFloat(gridStyle.paddingLeft)||0)-(parseFloat(gridStyle.paddingRight)||0);
@@ -138,11 +149,21 @@ function cardRows(node){
    runs:runsOf(element,{keepLines:true}),size:parseFloat(styleOf(element)?.fontSize)||12,
   })).filter(line=>line.runs.length);
   if(!lines.length)return null;
-  const row=rows.get(child.offsetTop)||[];
+  const rowTop=banner?0:child.offsetTop;
+  const row=rows.get(rowTop)||[];
   row.push({width:width/gridWidth,left:(child.offsetLeft-left)/gridWidth,lines,box:boxOf(style),align:style.textAlign});
-  rows.set(child.offsetTop,row);
+  rows.set(rowTop,row);
  }
- return rows.size?{type:'cards',rows:[...rows.values()]}:null;
+ if(banner){
+  // The flex children have intrinsic widths on screen. Give them paper
+  // columns so the fixed PDF type sizes still fit on wide desktop reports.
+  const [title,badge]=rows.get(0);
+  badge.width=Math.min(0.4,Math.max(0.15,badge.width));
+  badge.left=1-badge.width;
+  badge.align='center';
+  title.width=badge.left-0.01;
+ }
+ return {type:'cards',rows:[...rows.values()],box:banner?boxOf(gridStyle):null};
 }
 function readBlocks(root){
  const blocks=[];

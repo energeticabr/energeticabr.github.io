@@ -209,6 +209,15 @@ test("paints an overflowing cell cluster on every page while preserving its sele
   assertInsidePages(pages);
 });
 
+test("does not create a final page for a cluster's bottom padding", async t => {
+  const runs = [{ text: Array.from({ length: 83 }, (_, index) => `MARCADOR ${index + 1}`).join("\n") }];
+  const { pages } = await inspect(t, await build(snapshot([{ type: "table", widths: [1], rows: [
+    { header: false, cells: [cell("", 0, { runs, parts: [{ runs, box: { fill: [0, 0, 0.5] } }] })] },
+  ] }])));
+  assert.equal(pages.length, 2);
+  assert.ok(pages.at(-1).items.some(item => item.str === "MARCADOR 83"));
+});
+
 // Ignoring spans/widths makes a merged heading wrap like a narrow cell;
 // ignoring runs loses bold/red text or the green cell background.
 test("honors colspan geometry, proportional widths, alignment and rich text", async t => {

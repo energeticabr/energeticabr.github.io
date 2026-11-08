@@ -236,7 +236,7 @@ export async function buildFilteredReportPdf(snapshot, { logoBytes } = {}) {
   }
 
   function renderCards(block) {
-    const gap = 7, padding = 8;
+    const gap = 7, padding = block.box ? 4 : 8;
     for (const row of block.rows) {
       if (row.some(card => CONTENT_WIDTH * Math.min(card.width, 1 - card.left) < 36)) {
         for (const card of row) for (const line of card.lines) renderText(line.runs, 10, false, card.box?.fill);
@@ -256,11 +256,15 @@ export async function buildFilteredReportPdf(snapshot, { logoBytes } = {}) {
         continue;
       }
       if (y - height < BOTTOM) addPage();
+      const rowFill = color(block.box?.fill, [1, 1, 1]);
+      if (block.box) drawBox(block.box, MARGIN, y, CONTENT_WIDTH, height, rowFill);
       for (const card of cards) {
         const x = MARGIN + card.left * CONTENT_WIDTH;
-        const fill = color(card.box?.fill, [1, 1, 1]);
-        if (card.box) drawBox(card.box, x, y, card.width, height, fill);
-        let top = y - padding;
+        const fill = color(card.box?.fill, rowFill);
+        const cardHeight = block.box ? card.height : height;
+        const cardTop = y - (height - cardHeight) / 2;
+        if (card.box) drawBox(card.box, x, cardTop, card.width, cardHeight, fill);
+        let top = cardTop - padding;
         for (const { line, points, leading } of card.lines) {
           drawAligned(line, x + padding, card.width - 2 * padding, top - points, points, fill, card.align);
           top -= leading;
@@ -281,12 +285,12 @@ export async function buildFilteredReportPdf(snapshot, { logoBytes } = {}) {
         const padding = Math.min(CELL_PADDING, width / 8);
         const innerWidth = width - 2 * padding;
         let length = 0;
-        const parts = (cell.parts || [{ runs: cell.runs }]).map(part => {
+        const parts = (cell.parts || [{ runs: cell.runs }]).map((part, index, entries) => {
           const inset = part.box ? Math.max(0, Math.min(part.box.accent ? 5 : 4, (innerWidth - 12) / 2, innerWidth / 8)) : 0;
           const lines = wrapRuns(part.runs, TABLE_SIZE, innerWidth - 2 * inset, row.header);
           const partWidth = part.compact ? Math.min(innerWidth, Math.max(...lines.map(lineWidth)) + 2 * inset + 2) : innerWidth;
           const start = length;
-          length += lines.length + (part.box ? 1 : 0);
+          length += lines.length + (part.box && index < entries.length - 1 ? 1 : 0);
           return { ...part, start, end: length, x: x + padding + (part.compact && part.centered ? (innerWidth - partWidth) / 2 : 0),
             width: partWidth, inset, lines };
         });
@@ -312,7 +316,11 @@ export async function buildFilteredReportPdf(snapshot, { logoBytes } = {}) {
         const fill = color(part.box?.fill, background);
         const partTop = top - (first - offset) * TABLE_LEADING;
         const continued = last < part.end;
-        if (part.box) drawBox(part.box, part.x, partTop, part.width, (last - first) * TABLE_LEADING - (continued ? 0 : 2), fill);
+        const trailing = part.end === part.start + part.lines.length;
+        if (part.box) {
+          const bottomPadding = continued ? 0 : trailing ? 4 : -2;
+          drawBox(part.box, part.x, partTop, part.width, (last - first) * TABLE_LEADING + bottomPadding, fill);
+        }
         const insetTop = part.box ? (continued ? 2 : 4) : 0;
         for (let index = first; index < last; index++) {
           const line = part.lines[index - part.start];

@@ -13,7 +13,7 @@ test('all sixteen custom mascot reports generate real PDFs and preserve phone fi
  const app=resolve(fileURLToPath(new URL('..',import.meta.url))),server=await createServer({root:app,server:{host:'127.0.0.1',port:0},logLevel:'silent'});
  try{
   await server.listen();
-  for(const [width,height]of [[740,360],[844,390]]){
+  for(const [width,height]of [[740,360],[844,390],[1600,900]]){
    const {stdout}=await runBrowserLayout(browser,{width,height,readyTimeoutMs:90000,url:`http://127.0.0.1:${server.httpServer.address().port}/tests/fixtures/home-provisions-mascot.html?print=1&verify=1`});
    const dom=new JSDOM(stdout);try{
     const result=JSON.parse(dom.window.document.documentElement.dataset.layout);assert.equal(result.error,undefined,result.error);assert.equal(result.results.length,16);
@@ -21,10 +21,14 @@ test('all sixteen custom mascot reports generate real PDFs and preserve phone fi
     assert.deepEqual(result.viewer,{open:true,canvas:true,forward:true,back:null,close:'❌',automaticShare:false,returned:true});
     assert.match(result.results.find(report=>report.action==='open-payment-ledger').text,/SERVENTE DE PEDREIRO/);
     assert.match(result.results.find(report=>report.action==='open-depreciation-report').text,/VIBRADOR DE CONCRETO/);
-    const {cards,fills}=result.results.find(report=>report.action==='open-quotation-report').layout;
-    assert.ok(cards.every(Boolean),'quotation metrics are searchable');
-    assert.equal(new Set(cards.map(([,y])=>y)).size,1,'quotation metrics keep the four-column grid');
-    assert.equal(new Set(cards.map(([x])=>x)).size,4);
+    for(const action of ['open-quotation-report','open-commercial-receipts']){
+     const {cards}=result.results.find(report=>report.action===action).layout;
+     assert.ok(cards.every(Boolean),`${action}: metrics are searchable`);
+     assert.equal(new Set(cards.map(([,y])=>y)).size,1,`${action}: metrics keep the four-column grid`);
+     assert.equal(new Set(cards.map(([x])=>x)).size,4);
+    }
+    const {banner,fills}=result.results.find(report=>report.action==='open-quotation-report').layout;
+    assert.ok(banner.every(Boolean)&&banner[1][0]-banner[0][0]>500&&Math.abs(banner[1][1]-banner[0][1])<6,`quotation count stays beside its title: ${JSON.stringify(banner)}`);
     assert.ok(fills.includes('#1d4ed8'),'quotation ID retains the blue badge');
     if(process.env.REPORT_PDF_QA_DIR){mkdirSync(process.env.REPORT_PDF_QA_DIR,{recursive:true});for(const sample of dom.window.document.querySelectorAll('[data-pdf-sample]'))writeFileSync(resolve(process.env.REPORT_PDF_QA_DIR,`${sample.dataset.pdfSample}-${width}.pdf`),Buffer.from(sample.textContent,'base64'));}
    }finally{dom.window.close();}
