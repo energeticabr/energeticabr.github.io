@@ -62,6 +62,12 @@ test('authenticated manual confirmation validates identity and receipt and sends
  await assert.rejects(client.confirmDdaPayment({itemId:31,key:'wrong'}));
 });
 
+test('manual confirmation receipt rejects a present schedule value that is not boolean',async()=>{
+ const client=createChatClient({apiBaseUrl:'https://example.test',tokenProvider:async()=>'test-only',
+  fetchImpl:async()=>Response.json({status:'processed',messages:[],ddaPaymentConfirmation:{...receipt,paidBySchedule:'false'}})});
+ await assert.rejects(client.confirmDdaPayment({itemId:31,key}),/A gravação do pagamento não foi confirmada/);
+});
+
 test('an unresponsive confirmation stops on deadline without showing payment success',async t=>{
  t.mock.timers.enable({apis:['setTimeout']});
  const dom=new JSDOM('<body><main></main></body>'),doc=dom.window.document;let confirmed=0;

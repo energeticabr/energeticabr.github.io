@@ -41,7 +41,7 @@ export function createDdaReportView({document:doc=globalThis.document,data,openM
   if(destroyed||root.hidden||!rows)return;
   const confirmed=rows.find(row=>row.id===String(receipt.itemId)&&row.key===receipt.key);
   if(!confirmed)return;
-  const paidBySchedule=confirmed.paidBySchedule||ddaWasScheduledAt(confirmed,receipt.confirmedAt);
+  const paidBySchedule=receipt.paidBySchedule??(confirmed.paidBySchedule||ddaWasScheduledAt(confirmed,receipt.confirmedAt));
   rows=rows.map(row=>row===confirmed?Object.freeze({...row,status:'Pago',paidManually:true,paidBySchedule,confirmedAt:receipt.confirmedAt}):row);
   if(paidBySchedule)settledProvisionIds.delete(confirmed.provisionId);
   populate();renderKeepingPosition();
