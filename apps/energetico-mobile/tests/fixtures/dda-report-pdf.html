@@ -28,8 +28,10 @@ const report = decorateReportNavigation(createDdaReportView({ document, openMedi
   listAttachments: async id => (id === '2' ? ['espelho.pdf', 'outro.PDF', 'imagem.jpg'] : id === '1' ? ['unico.pdf'] : []).map(fileName => ({ fileName })),
   downloadAttachment: async (id, fileName) => {
     downloads.push([id, fileName]);
+    if (fileName === 'espelho.pdf') return (await fetch('./dda-mirror-v2.pdf')).blob();
     const pdf = await PDFDocument.create();
     pdf.addPage([540, 320]).drawText(`DDA ${id} - ${fileName}`, { x: 30, y: 250, size: 22 });
+    if (fileName === 'outro.PDF') pdf.addPage([540, 320]).drawText('Segunda página fictícia', { x: 30, y: 250, size: 22 });
     return new Blob([await pdf.save()], { type: 'application/pdf' });
   },
 } }), { action: 'open-dda-report' });
@@ -99,14 +101,23 @@ try {
   const side = direction => document.elementFromPoint(...sidePoint(direction));
   state.sideGaps = side('left') === dialog && side('right') === dialog && getComputedStyle(dialog, '::backdrop').backgroundColor !== 'rgb(0, 0, 0)';
   const canvas = element('.attachment-preview-pdf-page:not([hidden]) canvas');
+  const viewport = element('.attachment-preview-pdf-viewport');
+  state.initialWidthRatio = canvas.offsetWidth / viewport.clientWidth;
+  state.copyAvailable = !element('[data-preview-action="copy-dda-barcode"]').hidden;
+  viewport.scrollTop = viewport.scrollHeight;
+  state.portraitScrolls = viewport.scrollTop > 0;
   state.canvasPixels = canvas.width * canvas.height;
   state.rasterDensity = Math.min(canvas.width / parseFloat(canvas.style.width), canvas.height / parseFloat(canvas.style.height));
   state.files = [title.textContent];
   if (previous.disabled && !next.disabled) next.click();
   await ready('outro.PDF');
+  const pdfNextPage = element('[data-pdf-action="next-page"]');
+  pdfNextPage?.click();
+  state.multiPageNavigation = element('[data-pdf-page-status]')?.textContent === '2 de 2';
   state.files.push(title.textContent);
   if (!previous.disabled && next.disabled) previous.click();
   await ready('espelho.pdf');
+  state.reopenedAtTop = element('.attachment-preview-pdf-viewport').scrollTop === 0;
   state.files.push(title.textContent);
   close.click();
   state.xCloses = !dialog.open && preserved();

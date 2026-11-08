@@ -40,7 +40,7 @@ async function loadLocalPdfJs() {
   return pdfjs;
 }
 
-/** Renders a scrollable document, or a complete page with report navigation. */
+/** Renders a PDF with continuous scrolling or page navigation. */
 export function createPdfPreview({
   blob,
   container,
@@ -49,7 +49,7 @@ export function createPdfPreview({
   loadPdfJs = loadLocalPdfJs,
   pixelRatio = globalThis.devicePixelRatio || 1,
   fit = 'width',
-  navigation = 'paged',
+  navigation = fit === 'page' ? 'paged' : 'scroll',
   rotatesWithViewport = false,
   initialPage = 1,
   pageFilter = () => true,
@@ -66,7 +66,13 @@ export function createPdfPreview({
   };
   const root = element("section", "attachment-preview-pdf");
   root.dataset.fit = fit;
-  const continuous = fit !== 'page' || navigation === 'scroll';
+  const continuous = navigation === 'scroll';
+  const refitOnResize = fit === 'page' || !continuous;
+  const pagedWidth = fit === 'width' && !continuous;
+  // A width-fitted page can reach the canvas cap even on a phone.
+  const windowedPageThreshold = pagedWidth
+    ? Math.floor(MAX_WINDOW_PIXELS / MAX_CANVAS_PIXELS)
+    : WINDOWED_PAGE_THRESHOLD;
   root.dataset.navigation = continuous ? 'scroll' : 'paged';
   const viewport = element("div", "attachment-preview-pdf-viewport");
   const surface = element("div", "attachment-preview-pdf-surface");
@@ -76,8 +82,10 @@ export function createPdfPreview({
   root.append(viewport);
   let pageNavigation = null, previousPageButton = null, nextPageButton = null, pageStatus = null;
   let pageNumbers = [], pageIndex = 0;
-  if (fit === 'page' && !continuous) {
-    viewport.setAttribute('aria-label', 'Página inteira do PDF; use Anterior e Próxima ou dois dedos para ampliar');
+  if (!continuous) {
+    viewport.setAttribute('aria-label', fit === 'page'
+      ? 'Página inteira do PDF; use Anterior e Próxima ou dois dedos para ampliar'
+      : 'Página do PDF; deslize para ler, use Anterior e Próxima ou dois dedos para ampliar');
     pageNavigation = element('nav', 'attachment-preview-pdf-navigation');
     pageNavigation.setAttribute('aria-label', 'Páginas do relatório');pageNavigation.hidden = true;
     previousPageButton = element('button', '', '‹ Anterior');nextPageButton = element('button', '', 'Próxima ›');
@@ -124,7 +132,9 @@ export function createPdfPreview({
   let resizeObserver = null;
   let fittedSize = '';
   let reportedPage = null;
-  const viewportSize = () => `${viewport.clientWidth}:${viewport.clientHeight}`;
+  const viewportSize = () => pagedWidth
+    ? String(viewport.clientWidth)
+    : `${viewport.clientWidth}:${viewport.clientHeight}`;
   let progressDetail = { phase: 'prepared' };
   const progress = beginLoadingTask(value => onProgress?.({ ...value, ...progressDetail }), {
     signal, isCurrent: () => !destroyed,
@@ -164,7 +174,7 @@ export function createPdfPreview({
     if (destroyed || busy) return null;
     // A resize changes intersections before the canvases are refitted. Keep
     // the last stable employee and disable signing until its page is restored.
-    if (fit === 'page' && viewportSize() !== fittedSize) return null;
+    if (refitOnResize && viewportSize() !== fittedSize) return null;
     if (continuous) {
       pageIndex = visiblePageIndex();
     }
@@ -289,6 +299,11 @@ export function createPdfPreview({
     slotsReady = false; pageSlots = []; pendingPageIndex = null;
   }
 
+  function getDisplayScale(natural, availableWidth, availableHeight) {
+    const widthScale = availableWidth / natural.width;
+    return fit === 'page' && availableHeight > 0 ? Math.min(widthScale, availableHeight / natural.height) : widthScale;
+  }
+
   async function renderPage(page, number, generation, existingWrapper) {
     const natural = page.getViewport({ scale: 1 });
     if (!(natural.width > 0 && natural.height > 0 && Number.isFinite(natural.width + natural.height))) {
@@ -296,10 +311,8 @@ export function createPdfPreview({
     }
     const availableWidth = Math.max(1, viewport.clientWidth
       ? viewport.clientWidth - 8 : (container.clientWidth || 360) - 32);
-    const availableHeight = Math.max(1, viewport.clientHeight - 8);
-    const displayScale = fit === 'page' && viewport.clientHeight > 0
-      ? Math.min(availableWidth / natural.width, availableHeight / natural.height)
-      : availableWidth / natural.width;
+    const availableHeight = viewport.clientHeight ? Math.max(1, viewport.clientHeight - 8) : 0;
+    const displayScale = getDisplayScale(natural, availableWidth, availableHeight);
     const displayed = page.getViewport({ scale: displayScale });
     // Reserve some detail for zoom on single-page documents. Long previews
     // keep the lower density to bound memory across their retained pages.
@@ -309,7 +322,8 @@ export function createPdfPreview({
     const displayArea = displayed.width * displayed.height;
     // Share the extra detail across retained pages while preserving the
     // previous resolution when the shared budget would reduce it.
-    const extraDetailLimit = Math.sqrt(MAX_WINDOW_PIXELS / pageNumbers.length / displayArea);
+    const retainedPages = windowed && !continuous ? 1 : pageNumbers.length;
+    const extraDetailLimit = Math.sqrt(MAX_WINDOW_PIXELS / retainedPages / displayArea);
     const outputRatio = Math.min(
       targetDensity,
       Math.max(longDocumentDensity, extraDetailLimit),
@@ -468,7 +482,7 @@ export function createPdfPreview({
         failed = true; failedPageNumbers.add(number);
       } finally { page?.cleanup(); }
       const availableWidth = Math.max(1, viewport.clientWidth - 8), availableHeight = Math.max(120, viewport.clientHeight - 8);
-      const scale = failed ? 1 : Math.min(availableWidth / natural.width, availableHeight / natural.height);
+      const scale = failed ? 1 : getDisplayScale(natural, availableWidth, availableHeight);
       const node = element('div', 'attachment-preview-pdf-page'); node.dataset.pageNumber = String(number);
       const width = failed ? availableWidth : Math.floor(natural.width * scale), height = failed ? availableHeight : Math.floor(natural.height * scale);
       node.style.height = `${height}px`;
@@ -520,7 +534,7 @@ export function createPdfPreview({
         wrapper.dataset.pageNumber = String(number);
         // A full-page error slot keeps a failed last employee reachable: a
         // short placeholder would clamp scrolling onto the healthy neighbour.
-        if (fit === 'page') wrapper.style.minHeight = `${Math.max(120, viewport.clientHeight - 8)}px`;
+        if (refitOnResize) wrapper.style.minHeight = `${Math.max(120, viewport.clientHeight - 8)}px`;
         if (!continuous) wrapper.hidden = number !== pageNumbers[pageIndex];
         wrapper.append(element("p", "attachment-preview-pdf-page-error", `Não foi possível mostrar a página ${number}.`));
         surface.append(wrapper);
@@ -545,12 +559,12 @@ export function createPdfPreview({
   }
 
   function refitPage() {
-    if (fit !== 'page' || destroyed || busy || !pdf || viewportSize() === fittedSize) return;
+    if (!refitOnResize || destroyed || busy || !pdf || viewportSize() === fittedSize) return;
     // Render serially. Resizes during rendering are reconciled at its end,
     // so an orientation change cannot cancel or interleave PDF page tasks.
     return renderAll(++renderGeneration).catch(error => { if (!destroyed) onError(error); });
   }
-  if (fit === 'page') {
+  if (refitOnResize) {
     windowRef?.addEventListener('resize', refitPage);
     if (windowRef?.ResizeObserver) {
       resizeObserver = new windowRef.ResizeObserver(refitPage);
@@ -607,7 +621,7 @@ export function createPdfPreview({
     if (destroyed) return;
     pageNumbers = Array.from({ length: pdf.numPages }, (_, i) => i + 1).filter(n => pageFilter(n, pdf.numPages));
     pageIndex = Math.max(0, pageNumbers.indexOf(initialPage));
-    windowed = fit === 'page' && pageNumbers.length > WINDOWED_PAGE_THRESHOLD;
+    windowed = refitOnResize && pageNumbers.length > windowedPageThreshold;
     renderGeneration += 1;
     try {
       await renderAll(renderGeneration);

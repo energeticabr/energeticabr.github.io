@@ -382,6 +382,22 @@ test("PDF rolável de 12 páginas limita o total de pixels retidos em uma tela 3
   assert.ok(pixels <= 12 * 764 * 1146, "Pixels retidos: " + pixels);
 });
 
+test("PDF paginado ajustado à largura renderiza sob demanda quando há muitas páginas", async t => {
+  const { viewer, container } = setup(t, { fit: 'width', navigation: 'paged', numPages: 12, pixelRatio: 3 });
+  const viewport = container.querySelector('.attachment-preview-pdf-viewport');
+  Object.defineProperties(viewport, { clientWidth: { value: 780 }, clientHeight: { value: 250 } });
+  await viewer.ready;
+  const canvases = () => [...viewport.querySelectorAll('canvas')];
+  assert.equal(canvases().length, 1);
+  assert.equal(canvases()[0].style.width, '772px');
+  const first = canvases()[0];
+  container.querySelector('[data-pdf-action="next-page"]').click();
+  await tick();
+  assert.equal(viewer.getCurrentPage(), 2);
+  assert.equal(canvases().length, 1);
+  assert.equal(first.width, 0);
+});
+
 test("PDF mantém canvas dentro do limite de 2 milhões de pixels e libera memória ao destruir", async t => {
   const { viewer, container, destroyed } = setup(t, { pixelRatio: 4 });
   Object.defineProperty(container, "clientWidth", { value: 8000 });
