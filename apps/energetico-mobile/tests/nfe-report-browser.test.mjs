@@ -23,7 +23,7 @@ test('NFE opens the horizontal fiscal table from the blue mascot in portrait and
       try {
         const { provisions, orange, nfe, dda, open, rowIds, overflow, tableScrolls, rotated, mei, pdfOnLeft, metricsAbove,
           headerControls, amountFits, pdfIconWidth, pdfTargetHeight, reportBodyWidth, availableReportWidth, overlayArrows,
-          filterNames, filtersFit
+          filterNames, filtersFit, taxHeading, taxStacked, pencilHeight
         } = JSON.parse(dom.window.document.documentElement.dataset.layout);
         assert.equal(provisions.y, orange.y);
         assert.equal(orange.x - provisions.x, 56);
@@ -43,6 +43,12 @@ test('NFE opens the horizontal fiscal table from the blue mascot in portrait and
         assert.ok(pdfTargetHeight >= 44);
         assert.deepEqual(filterNames, ['document', 'retention', 'cno', 'regime']);
         assert.equal(filtersFit, true);
+        assert.equal(taxHeading, 'TIPO FORNECEDOR/ RETENÇÃO');
+        assert.equal(taxStacked, true);
+        assert.ok(pencilHeight >= 44);
+        assert.deepEqual(JSON.parse(dom.window.document.documentElement.dataset.orderLink), {
+          pickerFits:true, reviewFits:true, linked:'ID 32', remainingPencils:1,
+        });
         assert.deepEqual(JSON.parse(dom.window.document.documentElement.dataset.meiRows), ['3']);
         if (capture) {
           mkdirSync(capture, {recursive:true});

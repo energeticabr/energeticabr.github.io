@@ -1,4 +1,6 @@
-import { invoiceXmlFacts, NFE_SUPPLIER_REGIMES, projectNfeRows } from '../chat/nfe-report-model.js';
+import { invoiceXmlFacts, NFE_SUPPLIER_REGIMES, projectNfeRows, rankNfeOrderOptions } from '../chat/nfe-report-model.js';
+import { nfeOrderId } from '../chat/nfe-order-link.js';
+import { createReportLinkPicker } from './dda-provision-picker.js';
 import { addReportCloseControl } from './report-close-control.js';
 import { bindReportLandscape } from './report-landscape.js';
 import { PDF_ATTACHMENT_ICON } from './report-pdf-attachment-icon.js';
@@ -12,6 +14,22 @@ const cnoLabels = { valid:'CNO consta', conflict:'CNO divergente', missing:'CNO 
 const searchKey = value => value.toLowerCase().normalize('NFD').replace(/\p{Diacritic}/gu, '');
 const displayDate = value => value ? value.split('-').reverse().join('/') : 'Não informada';
 const xmlKey = row => `${row.key}|${row.xmlUrl}`;
+const ORDER_PICKER_COPY = {
+  title:'A QUAL PEDIDO DESEJA VINCULAR?',
+  dialogLabel:'Vincular nota fiscal a pedido',
+  sourceLabel:'Nota fiscal',
+  targetLabel:'Pedido',
+  searchLabel:'Buscar pedido por fornecedor, filial ou ID',
+  listLabel:'Pedidos disponíveis',
+  loading:'Carregando pedidos…',
+  options:count => count ? `${count} pedido(s). Escolha um para vincular.` : 'Nenhum pedido corresponde à busca.',
+  empty:'Nenhum pedido disponível.',
+  loadError:'Não foi possível carregar os pedidos. Feche e tente novamente.',
+  receipt:id => `Nota vinculada ao pedido #${id}.`,
+  recommendation:'★ RECOMENDADO',
+  reviewDetails:true,
+};
+const PENCIL_ICON = '<svg viewBox="0 0 24 24" width="21" height="21" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m14 6 4 4M4 20l4-1 12-12a2.8 2.8 0 0 0-4-4L4 15z"/></svg>';
 
 function classifyFiscalFacts(row, facts) {
   let retention = row.retention;
@@ -110,7 +128,7 @@ export function createNfeReportView({ document:doc = globalThis.document, data, 
   const table = make('table', 'nfe-table');
   table.setAttribute('aria-label', 'Notas fiscais por data de emissão');
   const columns = make('tr');
-  for (const label of ['ID', 'Nota fiscal', 'Fornecedor', 'Emissão', 'Valor da nota', 'Tipo do fornecedor · XML', 'Retenção no XML', 'Cadastro da obra']) {
+  for (const label of ['ID', 'Nota fiscal', 'Fornecedor', 'Emissão', 'Valor da nota', 'TIPO FORNECEDOR/ RETENÇÃO', 'Cadastro da obra', 'VINCULAÇÃO']) {
     const heading = make('th', '', label);
     heading.scope = 'col';
     columns.append(heading);
@@ -136,6 +154,44 @@ export function createNfeReportView({ document:doc = globalThis.document, data, 
 
   let rows = null, page = 1, request, pageRequest, pageFacts, pdfRequest, returnFocus, app, oldInert, oldOverflow;
   const xmlFacts = new Map();
+  const orderLink = data.orderLink;
+  const picker = orderLink && createReportLinkPicker({
+    document:doc, host:root, copy:ORDER_PICKER_COPY,
+    loadOptions:async (row, signal) => rankNfeOrderOptions(await orderLink.loadOptions({ signal }), row),
+    saveLink:(row, orderId, signal) => orderLink.save({ invoiceId:row.id, orderId, signal }),
+    currentLink:row => row.orderId,
+    receiptId:receipt => receipt.orderId,
+    rowAmount:row => row.total,
+    resolveReturnFocus:trigger => list.querySelector(`[data-invoice-id="${trigger?.dataset.invoiceLink}"] .nfe-link-linked`) || closeButton,
+    onLinked({ invoiceId, orderId }) {
+      if (root.hidden || !rows) return;
+      rows = rows.map(row => row.id === invoiceId ? { ...row, orderId } : row);
+      const cell = list.querySelector(`[data-invoice-id="${invoiceId}"] .nfe-link`);
+      cell?.replaceChildren(linkedCluster(orderId));
+    },
+  });
+
+  function linkedCluster(orderId) {
+    const cluster = make('span', 'nfe-link-cluster nfe-link-linked', `ID ${orderId}`);
+    cluster.tabIndex = -1;
+    return cluster;
+  }
+
+  function orderLinkCell(row, interactive) {
+    const cell = make('td', 'nfe-link');
+    if (row.orderId) cell.append(linkedCluster(row.orderId));
+    else if (interactive) {
+      const pencil = button('', () => void picker?.show(row, pencil), 'nfe-link-cluster nfe-link-pencil');
+      pencil.dataset.invoiceLink = row.id;
+      pencil.dataset.reportScreenOnly = '';
+      pencil.innerHTML = PENCIL_ICON;
+      pencil.title = `Vincular nota ${row.number || row.id} a um pedido`;
+      pencil.setAttribute('aria-label', pencil.title);
+      pencil.disabled = !picker || !nfeOrderId(row.id);
+      cell.append(pencil);
+    } else cell.textContent = '—';
+    return cell;
+  }
 
   function changePage(value) {
     page = value;
@@ -202,14 +258,17 @@ export function createNfeReportView({ document:doc = globalThis.document, data, 
     const amount = make('td', 'nfe-money', row.total === null ? 'Não informado' : money.format(row.total).replace(/\u00a0/g, ' '));
     line.append(id, note, supplier, date, amount);
     const fields = { row, line };
-    for (const name of ['regime', 'retention', 'cno']) {
-      const cell = make('td');
+    const taxCell = make('td');
+    const taxStack = make('div', 'nfe-tax-stack');
+    taxCell.append(taxStack);
+    const workCell = make('td');
+    for (const [name, container] of [['regime', taxStack], ['retention', taxStack], ['cno', workCell]]) {
       const cluster = make('div', 'nfe-fact');
       fields[name] = make('strong');
       cluster.append(fields[name]);
-      cell.append(cluster);
-      line.append(cell);
+      container.append(cluster);
     }
+    line.append(taxCell, workCell, orderLinkCell(row, includePdf));
     renderXmlFacts(fields, xmlFacts.get(xmlKey(row)));
     return fields;
   }
@@ -314,7 +373,7 @@ export function createNfeReportView({ document:doc = globalThis.document, data, 
   }
 
   async function capturePrint(options) {
-    if (root.hidden || !rows) throw new Error('Aguarde a consulta das notas fiscais.');
+    if (root.hidden || !rows || picker?.isOpen) throw new Error('Aguarde a consulta das notas fiscais.');
     const { signal } = pageRequest;
     await pageFacts;
     signal.throwIfAborted();
@@ -401,6 +460,7 @@ export function createNfeReportView({ document:doc = globalThis.document, data, 
 
   function close() {
     if (root.hidden) return;
+    picker?.close();
     request?.abort();
     pageRequest?.abort();
     rows = null;
@@ -419,6 +479,7 @@ export function createNfeReportView({ document:doc = globalThis.document, data, 
   for (const select of selects) select.addEventListener('change', applyFilters);
   root.addEventListener('click', event => { if (event.target === root) close(); });
   root.addEventListener('keydown', event => {
+    if (picker?.isOpen) return;
     if (event.key === 'Escape') { event.preventDefault(); close(); }
     if (event.key !== 'Tab') return;
     const controls = [...panel.querySelectorAll('button,input,select,[tabindex="0"]')].filter(node => !node.disabled && !node.closest('[hidden]'));

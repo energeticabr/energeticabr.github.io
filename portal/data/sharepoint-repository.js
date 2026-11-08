@@ -1511,6 +1511,7 @@ export function createSharePointRepository(graph, siteConfig, { attachmentTransp
       const payload = await restTransport.request(config, `${collectionPath}(${item})?${parameters}`, {
         method: "GET",
         permission: "read",
+        ...(options.includeVersion ? { headers: { Accept: "application/json;odata=minimalmetadata" } } : {}),
         ...(options.signal ? { signal: options.signal } : {}),
       });
       return canonicalRestItem(payload);

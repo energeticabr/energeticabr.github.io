@@ -151,3 +151,32 @@
 .nfe-report[data-report-compact-height="true"] .nfe-pair dd { margin-top: 2px; font-size: 16px; }
 .nfe-report[data-report-compact-height="true"] .nfe-table { font-size: 11px; }
 .nfe-report[data-report-compact-height="true"] .nfe-table :is(th, td) { padding-block: 6px; }
+.nfe-tax-stack { display: grid; gap: 4px; }
+.nfe-table th:last-child, .nfe-link { text-align: center; }
+.nfe-link-cluster {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  max-width: 100%;
+  min-height: 36px;
+  padding: 4px 8px;
+  border: 1px solid #93caaa;
+  border-left: 4px solid #27814d;
+  border-radius: 8px;
+  background: #eaf8ee;
+  color: #17643f;
+  font: inherit;
+  font-weight: 800;
+  print-color-adjust: exact;
+}
+.nfe-link-pencil {
+  min-width: 44px;
+  min-height: 44px;
+  border-color: #f2b8c0;
+  border-left-color: #c3233b;
+  background: #ffeaed;
+  color: #a5142a;
+  cursor: pointer;
+}
+.nfe-report .dda-provision-search { min-width: 0; font-size: 16px; }
+.nfe-report .dda-provision-option { overflow-wrap: anywhere; }

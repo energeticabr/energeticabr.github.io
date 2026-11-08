@@ -1,6 +1,8 @@
 import { REGISTRATION_GALLERY_MODELS, registrationDateKey, registrationNumber, registrationRawField } from './registration-gallery-data.js';
 import { fiscalDocumentType, buyerWithholding } from './sefaz-withholding.js';
 import { invoiceConstructionCno } from './sefaz-cno.js';
+import { fiscalSupplierSimilarity } from './dda-provision-link.js';
+import { NFE_ORDER_FIELD, nfeOrderId } from './nfe-order-link.js';
 
 const model = REGISTRATION_GALLERY_MODELS.notas_fiscais_sefaz;
 const text = value => String(value ?? '').trim();
@@ -21,6 +23,26 @@ function attachmentName(value) {
 const nfeKey = /^[0-9]{6}[A-Z0-9]{12}[0-9]{26}$/;
 const nfseKey = /^[0-9]{50}$/;
 
+export function rankNfeOrderOptions(options, { supplier, total }) {
+  const wanted = registrationNumber(total);
+  const cents = wanted === null ? null : Math.round(wanted * 100);
+  // Compare in cents. The R$1 minimum keeps small rounding differences useful.
+  const tolerance = cents === null ? 0 : Math.max(100, Math.abs(cents) * 0.05);
+  return options.map(item => {
+    const amount = registrationNumber(item.amount);
+    const difference = cents === null || amount === null ? Infinity : Math.abs(cents - Math.round(amount * 100));
+    const similarity = fiscalSupplierSimilarity(supplier, item.supplier);
+    const amountMatch = difference <= tolerance;
+    const supplierMatch = similarity >= 0.5;
+    const priority = (amountMatch ? 2 : 0) + (supplierMatch ? 1 : 0);
+    const matchDetail = amountMatch && supplierMatch ? 'Valor próximo e razão social semelhante'
+      : amountMatch ? 'Valor próximo' : supplierMatch ? 'Razão social semelhante' : '';
+    return { ...item, priority, similarity, difference, recommended:priority > 0, matchDetail };
+  }).sort((a, b) => b.priority - a.priority ||
+    (a.priority >= 2 ? a.difference - b.difference : b.similarity - a.similarity) ||
+    b.similarity - a.similarity || a.difference - b.difference || Number(b.id) - Number(a.id));
+}
+
 export function projectNfeRows(rows) {
   return rows.flatMap(({ id, fields = {} }) => {
     const type = fiscalDocumentType(fields);
@@ -38,7 +60,7 @@ export function projectNfeRows(rows) {
     const key = text(fields.CHAVE_ACESSO);
     const validKey = (type === 'NF-e' ? nfeKey : nfseKey).test(key);
     return [{
-      id:String(id), type, date, issuedAt:date ? Date.parse(rawDate.toString().includes('/') ? date : rawDate) : 0,
+      id:String(id), orderId:nfeOrderId(fields[NFE_ORDER_FIELD]), type, date, issuedAt:date ? Date.parse(rawDate.toString().includes('/') ? date : rawDate) : 0,
       supplier:text(fields.Title) || text(fields.FORNECEDOR),
       taxId:text(fields.CNPJ_FORNECEDOR), key, number:text(fields.NUMERO_NOTA),
       total:complete ? registrationNumber(fields.VALOR_TOTAL_NOTA) : null,

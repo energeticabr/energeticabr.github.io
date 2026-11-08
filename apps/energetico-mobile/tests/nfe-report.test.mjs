@@ -291,3 +291,67 @@ test('fiscal filters cover every page and combine document, search and XML class
   await panel.open();
   assert.deepEqual([...element.querySelectorAll('.nfe-filters select')].map(select => select.value), ['', '', '', '']);
 });
+
+test('NFE opens PEDIDOS with ranked suggestions, preserves the report and displays the verified link', async t => {
+  const dom = new JSDOM('<main id="app"></main>');
+  const { document } = dom.window;
+  let saved = '';
+  let failOnce = true;
+  const writes = [];
+  const report = createNfeReportView({ document, data:{
+    loadSnapshot:async () => ({ rows:[{ ...invoice, fields:{ ...invoice.fields, IDPEDIDO:saved } }] }),
+    downloadDocument:async () => new Blob([issuerXml]),
+    orderLink:{
+      loadOptions:async () => [
+        { id:'38', supplier:'Outro fornecedor', amount:2200 },
+        { id:'37', supplier:'Elétrica Teste', amount:1490 },
+      ],
+      async save({ invoiceId, orderId }) {
+        writes.push([invoiceId, orderId]);
+        if (failOnce) { failOnce = false; throw new Error('conflito'); }
+        saved = orderId;
+        return { invoiceId, orderId };
+      },
+    },
+  } });
+  t.after(() => { report.destroy(); dom.window.close(); });
+  await report.open();
+  const { element } = report;
+  const tick = () => new Promise(resolve => setImmediate(resolve));
+  const pencil = () => element.querySelector('.nfe-link-pencil');
+  assert.equal(element.querySelector('th:last-child').textContent, 'VINCULAÇÃO');
+  const body = element.querySelector('.nfe-body');
+  body.scrollLeft = 80;
+  body.scrollTop = 120;
+  pencil().click();
+  await tick();
+  const picker = element.querySelector('.dda-provision-dialog');
+  assert.match(picker.textContent, /PEDIDO/);
+  const choices = [...picker.querySelectorAll('input[type=radio]')];
+  assert.deepEqual(choices.map(input => [input.value, input.checked]), [['37',false], ['38',false]]);
+  assert.match(choices[0].parentElement.textContent, /razão social/i);
+  assert.deepEqual(writes, []);
+  choices[0].click();
+  for (let i = 0; i < 2; i++) {
+    picker.querySelector('.dda-provision-save').click();
+    const review = document.querySelector('[data-edit-review]');
+    assert.match(review.textContent, /Elétrica Teste/);
+    review.querySelector('[data-edit-review-confirm]').click();
+    await tick();
+    if (i === 0) {
+      assert.ok(pencil());
+      assert.equal(choices[0].disabled, false);
+      assert.match(picker.querySelector('[role=alert]').textContent, /não foi possível confirmar/i);
+    }
+  }
+  assert.deepEqual(writes, [['10','37'],['10','37']]);
+  assert.ok(choices.every(input => input.disabled));
+  assert.equal(pencil(), null);
+  assert.equal(element.querySelector('.nfe-link-linked').textContent, 'ID 37');
+  assert.equal(body.scrollLeft, 80);
+  assert.equal(body.scrollTop, 120);
+  report.close();
+  await report.open();
+  assert.equal(element.querySelector('.nfe-link-linked').textContent, 'ID 37');
+  assert.equal(pencil(), null);
+});
