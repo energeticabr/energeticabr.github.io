@@ -48,6 +48,8 @@ test('NFE opens the horizontal fiscal table from the blue mascot in portrait and
         assert.ok(pencilHeight >= 44);
         assert.deepEqual(JSON.parse(dom.window.document.documentElement.dataset.orderLink), {
           pickerFits:true, reviewFits:true, linked:'ID 32', remainingPencils:1,
+          proposePosition:true, proposalFits:true, proposalSubmitFits:true,
+          proposalScroll:width !== 1365, changedStage:'26', pickerRestored:true,
         });
         assert.deepEqual(JSON.parse(dom.window.document.documentElement.dataset.meiRows), ['3']);
         if (capture) {

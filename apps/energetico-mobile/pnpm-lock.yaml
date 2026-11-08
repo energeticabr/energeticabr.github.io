@@ -41,6 +41,9 @@ importers:
       decimal.js:
         specifier: 10.6.0
         version: 10.6.0
+      pako:
+        specifier: 1.0.11
+        version: 1.0.11
       pdf-lib:
         specifier: 1.17.1
         version: 1.17.1

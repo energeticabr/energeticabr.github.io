@@ -27,7 +27,7 @@ export function createDdaProvisionPicker({service, ...options}){
  });
 }
 
-export function createReportLinkPicker({document:doc,host,copy,loadOptions,saveLink,currentLink,receiptId,rowAmount,onLinked,onClose,resolveReturnFocus,timeoutMs=35000}){
+export function createReportLinkPicker({document:doc,host,copy,loadOptions,saveLink,currentLink,receiptId,rowAmount,onLinked,onClose,resolveReturnFocus,onPropose,timeoutMs=35000}){
  let current=null;ensureEditReviewStyles(doc);
  const el=(tag,cls='',value)=>{const node=doc.createElement(tag);node.className=cls;if(value!==undefined)node.textContent=String(value);return node;};
  const money=value=>{let text=String(value??'').trim().replace(/R\$|\s/g,'');if(text.includes(','))text=text.replace(/\./g,'').replace(',','.');const number=/^-?\d+(?:\.\d+)?$/.test(text)?Number(text):NaN;return Number.isFinite(number)?new Intl.NumberFormat('pt-BR',{style:'currency',currency:'BRL'}).format(number):'Valor não informado';};
@@ -46,6 +46,13 @@ export function createReportLinkPicker({document:doc,host,copy,loadOptions,saveL
   const title=el('h2','',copy.title);
   const header=el('header','gallery-editor-header'),back=el('button','gallery-editor-back','←');
   back.type='button';back.setAttribute('data-gallery-editor-back','');back.setAttribute('aria-label','Voltar à galeria sem salvar');header.append(back,title);
+  let propose;
+  if(onPropose){
+   propose=el('button','nfe-propose-launch','PROPOR LANÇAMENTO');
+   propose.type='button';propose.dataset.nfeProposeLaunch='';
+   propose.addEventListener('click',()=>onPropose(row,propose));
+   header.classList.add('nfe-picker-header');header.append(propose);
+  }
   const summary=el('p','dda-provision-summary',`${row.supplier} · ${copy.sourceLabel} #${row.id} · ${money(rowAmount(row))}`);
   const search=el('input','dda-provision-search');search.type='search';search.placeholder='Buscar fornecedor ou ID';search.setAttribute('aria-label',copy.searchLabel);
   const feedback=el('p','dda-provision-feedback',copy.loading);feedback.setAttribute('role','status');
@@ -85,6 +92,7 @@ export function createReportLinkPicker({document:doc,host,copy,loadOptions,saveL
    entry.reviewing=false;
    if(!accepted||current!==entry||host.hidden)return;
    entry.busy=true;save.disabled=cancel.disabled=back.disabled=search.disabled=true;feedback.textContent='Gravando vínculo no SharePoint…';
+   if(propose)propose.disabled=true;
    const radios=[...list.querySelectorAll('input')];
    for(const radio of radios)radio.disabled=true;
    const write=new AbortController();
@@ -92,7 +100,7 @@ export function createReportLinkPicker({document:doc,host,copy,loadOptions,saveL
    entry.controller.signal.addEventListener('abort',cancelWrite,{once:true});
    let timer;try{const receipt=await Promise.race([saveLink(row,selected,write.signal),new Promise((_,reject)=>{timer=setTimeout(()=>{write.abort();reject(new Error('timeout'));},timeoutMs);})]);
     if(current!==entry||host.hidden)return;onLinked?.(receipt);feedback.setAttribute('role','status');feedback.textContent=copy.receipt(receiptId(receipt));save.remove();cancel.disabled=false;cancel.textContent='Concluir';
-   }catch{if(current===entry){feedback.textContent='Não foi possível confirmar o vínculo no SharePoint. Atualize e tente novamente.';feedback.setAttribute('role','alert');cancel.disabled=false;save.disabled=false;search.disabled=false;for(const radio of radios)radio.disabled=false;}}
+   }catch{if(current===entry){feedback.textContent='Não foi possível confirmar o vínculo no SharePoint. Atualize e tente novamente.';feedback.setAttribute('role','alert');cancel.disabled=false;save.disabled=false;search.disabled=false;if(propose)propose.disabled=false;for(const radio of radios)radio.disabled=false;}}
    finally{clearTimeout(timer);entry.controller.signal.removeEventListener('abort',cancelWrite);entry.busy=false;back.disabled=false;if(current===entry)cancel.focus();}
   });
   try{const options=await loadOptions(row,entry.controller.signal);if(current!==entry||host.hidden)return;entry.options=options;render();}

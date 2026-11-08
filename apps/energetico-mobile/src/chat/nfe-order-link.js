@@ -1,4 +1,5 @@
 export const NFE_ORDER_FIELD = 'IDPEDIDO';
+export const NFE_PROPOSAL_FIELD = 'NFEPROPOSTA';
 
 export function nfeOrderId(value) {
   const id = String(value ?? '').trim();
@@ -45,13 +46,16 @@ export function createNfeOrderLink({ repository, assertSession = () => {} }) {
     const [target, current] = await Promise.all([
       repository.getItem('personal', orders, orderId, '$expand=fields($select=ID)', { signal }),
       repository.getItem('company', invoices, invoiceId, undefined,
-        { signal, restrictedFields:[NFE_ORDER_FIELD], includeVersion:true }),
+        { signal, restrictedFields:[NFE_ORDER_FIELD, NFE_PROPOSAL_FIELD], includeVersion:true }),
     ]);
     active();
     if (nfeOrderId(target?.id) !== orderId) throw new Error('O pedido escolhido está indisponível.');
     const eTag = current?.eTag || current?.['@odata.etag'];
     if (nfeOrderId(current?.id) !== invoiceId || !current.fields || !eTag || eTag === '*') {
       throw new Error('Não foi possível verificar a versão atual da nota.');
+    }
+    if (current.fields[NFE_PROPOSAL_FIELD]) {
+      throw new Error('Esta nota tem um envio reservado. Use PROPOR LANÇAMENTO para retomar.');
     }
     const existing = current.fields[NFE_ORDER_FIELD];
     if (nfeOrderId(existing) === orderId) return { invoiceId, orderId };

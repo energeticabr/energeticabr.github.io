@@ -355,3 +355,67 @@ test('NFE opens PEDIDOS with ranked suggestions, preserves the report and displa
   assert.equal(element.querySelector('.nfe-link-linked').textContent, 'ID 37');
   assert.equal(pencil(), null);
 });
+
+test('NFE pencil opens the proposal beside order choices and submits the edited catalog draft', async t => {
+  const dom = new JSDOM('<main id="app"></main>');
+  const { document, Event } = dom.window;
+  const writes = [];
+  const fiscal = { issueDate:'2026-11-06', dueDate:'2026-11-15', total:'1500.00', lines:[
+    { number:'1', description:'CIMENTO EXEMPLO', unit:'SC', quantity:'3', unitPrice:'500', adjustment:'0', discount:'0' },
+  ] };
+  const catalog = {
+    suppliers:[{ id:'1',label:'ELÉTRICA TESTE LTDA',branch:'OBRA A' },{ id:'2',label:'OUTRO',branch:'OBRA B' }],
+    branches:[{ id:'10',label:'OBRA A' },{ id:'11',label:'OBRA B' }],
+    products:[{ id:'20',label:'CIMENTO EXEMPLO',unit:'SACO',expenseType:'MATERIAL' }],
+    stages:[{ id:'30',label:'FUNDAÇÃO',branch:'OBRA A' },{ id:'31',label:'ESTRUTURA',branch:'OBRA B' }],
+    accounts:[{ id:'40',label:'CONTA TESTE' }],history:[],
+  };
+  const draft = {
+    supplierId:'1', branchId:'10', accountId:'40', date:fiscal.issueDate,
+    lines:[{ ...fiscal.lines[0], productId:'20',stageId:'30',date:fiscal.issueDate,dueDate:fiscal.dueDate }],
+  };
+  const report = createNfeReportView({ document, data:{
+    loadSnapshot:async () => ({ rows:[invoice] }),
+    downloadDocument:async () => new Blob([issuerXml]),
+    orderLink:{ loadOptions:async () => [], async save() { throw new Error('unexpected'); } },
+    proposal:{
+      load:async () => ({ fiscal,catalog,draft,reserved:false }),
+      async submit(row, edited) {
+        writes.push([row.id, structuredClone(edited)]);
+        return { invoiceId:row.id, orderId:'48', launchIds:['61'] };
+      },
+    },
+  } });
+  t.after(() => { report.destroy(); dom.window.close(); });
+  await report.open();
+  const tick = () => new Promise(resolve => setImmediate(resolve));
+  const root = report.element;
+  root.querySelector('.nfe-link-pencil').click();
+  root.querySelector('[data-nfe-propose-launch]').click();
+  await tick();
+  assert.ok(root.querySelector('.nfe-proposal-dialog'));
+  assert.equal(writes.length, 0);
+  const select = root.querySelector('[name="supplierId"]');
+  select.value = '2';
+  select.dispatchEvent(new Event('change',{ bubbles:true }));
+  assert.equal(root.querySelector('[name="branchId"]').value, '11');
+  assert.equal(root.querySelector('[name="accountId"]').value, '');
+  root.querySelector('[name="accountId"]').value = '40';
+  root.querySelector('[name="accountId"]').dispatchEvent(new Event('change',{ bubbles:true }));
+  const line = root.querySelector('.nfe-proposal-line');
+  line.open = true;
+  line.dispatchEvent(new Event('toggle'));
+  const stage = line.querySelector('[name="stageId"]');
+  assert.deepEqual([...stage.options].map(option => option.value), ['', '31']);
+  assert.equal(stage.value, '31');
+  const input = line.querySelector('[name="discount"]');
+  input.value = '5,00';
+  input.dispatchEvent(new Event('input',{ bubbles:true }));
+  assert.match(root.querySelector('[data-nfe-proposal-total]').textContent, /1\.495,00/);
+  root.querySelector('[data-nfe-proposal-submit]').click();
+  await tick();
+  assert.equal(writes[0][0], '10');
+  assert.deepEqual([writes[0][1].supplierId,writes[0][1].branchId,writes[0][1].lines[0].stageId,writes[0][1].lines[0].discount],
+    ['2','11','31','5,00']);
+  assert.equal(root.querySelector('.nfe-link-linked').textContent, 'ID 48');
+});
