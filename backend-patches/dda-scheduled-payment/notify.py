@@ -127,12 +127,16 @@ def main():
         print(json.dumps({'eligible': sum(event_for(row, payer) is not None for row in rows),
                           'destinationVerified': True}))
         return
-    print(json.dumps(deliver(DB, group, payer, rows)))
+    result = deliver(DB, group, payer, rows)
+    print(json.dumps(result))
+    if result['unconfirmed']:
+        print('DDA_NOTICE_DELIVERY_UNCONFIRMED', file=sys.stderr)
+        return 1
 
 
 if __name__ == '__main__':
     try:
-        main()
+        sys.exit(main())
     except Exception as exc:
         print(json.dumps({'status': 'failed', 'kind': type(exc).__name__}), file=sys.stderr)
         sys.exit(1)
