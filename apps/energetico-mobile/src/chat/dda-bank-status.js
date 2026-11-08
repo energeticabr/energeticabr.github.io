@@ -18,6 +18,11 @@ export function normalizeDdaStatus(value) {
   return statusLabels.get(ddaSearchKey(label).replace(/\s+/g, ' ')) || label || 'Não informado';
 }
 
+export function isDdaOpenStatus(value) {
+  const status = normalizeDdaStatus(value);
+  return status === 'Em aberto' || status === 'Agendado';
+}
+
 const scheduleLabels = {
   scheduled: 'AGENDADO',
   unscheduled: 'NÃO AGENDADO',

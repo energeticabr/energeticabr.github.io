@@ -221,7 +221,8 @@ export function createPaymentLedgerView({ document: doc = globalThis.document, d
           if (description.trim()) runs.push({ ...style, text: description, bold: descriptionBold });
           if (runs.length) { runs[0].text = runs[0].text.trimStart(); runs.at(-1).text = runs.at(-1).text.trimEnd(); }
         } else runs = [{ ...style, text: normalized(values[column]).trim() || '—' }];
-        return { ...template, runs, background };
+        const { column: position, colSpan, align, verticalAlign } = template;
+        return { column: position, colSpan, align, verticalAlign, runs, background };
       });
       rows.push({ header: false, cells });
     }
