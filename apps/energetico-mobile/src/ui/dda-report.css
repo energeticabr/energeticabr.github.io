@@ -49,6 +49,7 @@
   print-color-adjust: exact;
   -webkit-print-color-adjust: exact;
 }
+.ddr-scheduled-unlinked .ddr-due-date { color: #71101e; }
 .ddr-link-warning {
   display: block;
   box-sizing: border-box;

@@ -27,6 +27,7 @@ test('DDA date and linkage clusters fit on phones, desktop and print',{timeout:9
     assert.equal(unlinked.warning,'ATENÇÃO');
     assert.ok(unlinked.below&&unlinked.fits,JSON.stringify({width,unlinked}));
     assert.equal(unlinked.rowBackground,'rgb(255, 197, 204)');
+    assert.equal(unlinked.dueDateColor,'rgb(113, 16, 30)');
     assert.ok(unlinked.cellBackgrounds.every(background=>background===unlinked.rowBackground));
     assert.equal(state.linkRows.find(row=>row.id==='2').link,'ID 8');
     assert.ok(state.linkRows.filter(row=>row!==unlinked).every(row=>row.rowBackground!==unlinked.rowBackground));

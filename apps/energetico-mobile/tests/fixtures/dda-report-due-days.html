@@ -22,6 +22,7 @@ state.linkRows=[...document.querySelectorAll('[data-dda-id]')].map(row=>{
   below:Boolean(warning&&warning.offsetTop>=link.offsetTop+link.offsetHeight),
   fits:Boolean(warning&&warning.scrollWidth<=warning.clientWidth+1),
   rowBackground:getComputedStyle(row).backgroundColor,
+  dueDateColor:getComputedStyle(row.querySelector('.ddr-due-date')).color,
   cellBackgrounds:[...row.cells].map(cell=>getComputedStyle(cell).backgroundColor)};
 });
 state.schedules=[...document.querySelectorAll('.ddr-schedule-cluster')].map(badge=>{
