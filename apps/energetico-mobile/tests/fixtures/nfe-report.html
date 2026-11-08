@@ -4,6 +4,7 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <link rel="stylesheet" href="/src/styles.css">
+<link rel="stylesheet" href="/src/ui/payment-ledger.css">
 <link rel="stylesheet" href="/src/ui/nfe-report.css">
 </head>
 <body>
@@ -12,6 +13,7 @@
 import { createChatView } from '/src/ui/chat-view.js';
 import { createNfeReportView } from '/src/ui/nfe-report-view.js';
 import { decorateReportNavigation } from '/src/ui/report-navigation.js';
+import { decorateReportPrint } from '/src/ui/report-print.js';
 
 const view = createChatView(document.querySelector('#app'));
 view.render({ sessionStatus:'authenticated', account:{name:'Teste'}, messages:[{ role:'assistant', type:'poll',
@@ -23,12 +25,12 @@ view.render({ sessionStatus:'authenticated', account:{name:'Teste'}, messages:[{
 }] });
 const key = '1'.repeat(44);
 const common = { STATUS_IMPORTACAO:'XML_COMPLETO', SITUACAO:'AUTORIZADA', VALOR_TOTAL_NOTA:2500 };
-const report = decorateReportNavigation(createNfeReportView({ data:{
+const report = decorateReportPrint(decorateReportNavigation(createNfeReportView({ data:{
   async loadSnapshot(){ return { rows:[
     { id:'2', fields:{ ...common, TIPO_FISCAL:'NFS-e', DATA_EMISSAO:'2026-11-08', NUMERO_NOTA:'205',
       Title:'Serviços de Engenharia e Manutenção Industrial — Fornecedor Exemplo Ltda.',
       STATUS_RETENCOES:'NAO_INFORMADA_XML', DANFE_URL:'https://example.test/danfse.pdf' } },
-    { id:'3', fields:{ ...common, TIPO_FISCAL:'NF-e', DATA_EMISSAO:'2026-11-07', NUMERO_NOTA:'14',
+    { id:'3', fields:{ ...common, TIPO_FISCAL:'NF-e', DATA_EMISSAO:'2026-11-07', NUMERO_NOTA:'14', VALOR_TOTAL_NOTA:98765432.10,
       Title:'Comércio de Materiais Exemplo Ltda.', CNPJ_FORNECEDOR:'00.000.000/0000-00', CHAVE_ACESSO:key,
       XML_URL:'https://example.test/nota.xml', DANFE_URL:'https://example.test/nota.pdf',
       OBSERVACOES_NOTA:'CNO 90.025.44060/72', STATUS_RETENCOES:'RETENCAO_INFORMADA_XML' } },
@@ -37,7 +39,7 @@ const report = decorateReportNavigation(createNfeReportView({ data:{
     await new Promise(resolve => setTimeout(resolve, 250));
     return new Blob([`<NFe xmlns="http://www.portalfiscal.inf.br/nfe"><infNFe Id="NFe${key}"><emit><CRT>4</CRT></emit></infNFe></NFe>`]);
   },
-}, openMediaCollection:async()=>{} }), {action:'open-nfe-report'});
+}, openMediaCollection:async()=>{} }), {action:'open-nfe-report'}), {action:'open-nfe-report'});
 view.on('open-nfe-report', () => report.open());
 const box = node => {
   const {x,y,right,bottom,width,height} = node.getBoundingClientRect();
@@ -47,7 +49,7 @@ const mascot = action => document.querySelector(`[data-action="open-${action}"]`
 const provisions = box(mascot('pending-provisions')), orange = box(mascot('commercial-receipts')),
   nfe = box(mascot('nfe-report')), dda = box(mascot('dda-report'));
 const panel = report.element.querySelector('.nfe-panel');
-const hasMei = () => [...panel.querySelectorAll('[data-invoice-id="3"] .nfe-facts dd')]
+const hasMei = () => [...panel.querySelectorAll('[data-invoice-id="3"] .nfe-fact strong')]
   .some(field => field.textContent === 'MEI');
 if (!new URLSearchParams(location.search).has('home')) {
   mascot('nfe-report').click();
@@ -63,13 +65,31 @@ if (!new URLSearchParams(location.search).has('home')) {
 const reportBody = panel.querySelector('.nfe-body');
 const pdf = panel.querySelector('[data-invoice-id="2"] button.nfe-pdf');
 const supplier = panel.querySelector('[data-invoice-id="2"] .nfe-supplier');
+const rotated = report.element.dataset.reportPortrait === 'true';
+const amount = panel.querySelector('[data-invoice-id="3"] .nfe-money');
+function amountFitsCell() {
+  if (!amount) return false;
+  const range = document.createRange();
+  range.selectNodeContents(amount);
+  const cell = box(amount);
+  return [...range.getClientRects()].every(rect => rotated ? rect.bottom <= cell.bottom + 1 : rect.right <= cell.right + 1);
+}
+const isBefore = (first, second, axis) => first && second &&
+  (axis === 'inline'
+    ? rotated ? box(first).bottom <= box(second).y : box(first).right <= box(second).x
+    : rotated ? box(first).x >= box(second).right : box(first).bottom <= box(second).y);
 document.documentElement.dataset.layout = JSON.stringify({
   provisions, orange, nfe, dda,
-  open:!report.element.hidden, cardIds:[...panel.querySelectorAll('.nfe-card')].map(card=>card.dataset.invoiceId),
-  overflow:reportBody.scrollWidth > reportBody.clientWidth || document.documentElement.scrollWidth > innerWidth,
-  mei:hasMei(), pdfOnLeft:pdf ? box(pdf).right <= box(supplier).x : false,
-  pdfIconWidth:pdf?.querySelector('svg') ? box(pdf.querySelector('svg')).width : 0,
-  pdfTargetHeight:pdf ? box(pdf).height : 0,
+  open:!report.element.hidden, rowIds:[...panel.querySelectorAll('tbody tr')].map(row=>row.dataset.invoiceId),
+  overflow:document.documentElement.scrollWidth > innerWidth,
+  tableScrolls:reportBody.scrollWidth > reportBody.clientWidth,
+  amountFits:amountFitsCell(),
+  rotated, mei:hasMei(), pdfOnLeft:Boolean(isBefore(pdf,supplier,'inline')),
+  metricsAbove:Boolean(isBefore(panel.querySelector('.nfe-metrics'), panel.querySelector('table'), 'block')),
+  headerControls:!!panel.querySelector('.nfe-header [data-action="print-report-pdf"]') &&
+    !!panel.querySelector('.report-close-bar .report-close-control'),
+  pdfIconWidth:pdf?.querySelector('svg')?.getBoundingClientRect().width ?? 0,
+  pdfTargetHeight:pdf?.offsetHeight ?? 0,
 });
 document.documentElement.dataset.ready = 'true';
 </script>
