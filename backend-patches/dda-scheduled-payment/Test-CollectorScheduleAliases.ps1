@@ -23,4 +23,13 @@ $paidRows=@(Invoke-SicoobDdaQuery @query -Situacao 3)
 if($scheduledRows.Count -ne 1 -or $scheduledRows[0].codigoTipoSituacaoBoleto -ne 99 -or (Get-DdaReconciledStatus $item $scheduledRows).status -ne 'Agendado'){throw 'SCHEDULE_ALIAS_NOT_RECONCILED'}
 if($paidRows.Count -ne 1 -or $paidRows[0].codigoTipoSituacaoBoleto -ne 23 -or (Get-DdaReconciledStatus $item $paidRows).status -ne 'Pago'){throw 'PAID_ALIAS_NOT_RECONCILED'}
 if((Get-DdaReconciledStatus $item $fixtures).confirmed){throw 'CONFLICT_MARKED_CONFIRMED'}
+$script:testItem=$item
+$script:writeAttempts=0
+$receipt=Invoke-DdaStatusReconciliation -BankRows $scheduledRows -Remote {param($request)
+ if($request.mode -eq 'list'){return @{value=@($script:testItem)}}
+ $script:writeAttempts++
+ if($script:writeAttempts -eq 1){throw 'SIMULATED_CONCURRENT_EDIT'}
+ @{Id=$request.id;STATUS_DDA=$request.status;STATUS_CONSULTADO_EM=$request.checkedAt}
+}
+if($receipt.verified -ne 1 -or $script:writeAttempts -ne 2){throw 'STATUS_WRITE_RETRY_FAILED'}
 'PASS: OCI bank response variants survive the scan, are reconciled, and ambiguous evidence is rejected.'

@@ -62,6 +62,18 @@ def event_for(row, payer):
     return event, text
 
 
+def queued_notice(db, outbox_id, completion, group):
+    row = db.execute('SELECT message FROM gateway_outbox WHERE id=?', (outbox_id,)).fetchone()
+    if row is None:
+        return False
+    try:
+        message = json.loads(row[0])
+    except (TypeError, ValueError, UnicodeError):
+        return False
+    return (isinstance(message, dict) and message.get('completionId') == completion
+            and message.get('conversation_id') == message.get('group_id') == group)
+
+
 def deliver(database, group, payer, rows):
     if not re.fullmatch(r'\d+(?:-\d+)?@g\.us', group) or not re.fullmatch(r'\d{14}', payer):
         raise ValueError('INVALID_DDA_NOTICE_DESTINATION')
@@ -91,7 +103,7 @@ def deliver(database, group, payer, rows):
             sent = db.execute("""SELECT 1 FROM gateway_completion_messages
                                  WHERE completion_id=? AND chat_id=? AND message_id<>''""",
                               (completion, group)).fetchone()
-            queued = db.execute('SELECT 1 FROM gateway_outbox WHERE id=?', (outbox_id,)).fetchone()
+            queued = not sent and queued_notice(db, outbox_id, completion, group)
             result['sent' if sent else 'queued' if queued else 'unconfirmed'] += 1
     return result
 

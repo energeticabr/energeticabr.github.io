@@ -64,6 +64,8 @@ def main(stage):
     sharepoint = replace_once(sharepoint,
         '$parsed=0;if([int]::TryParse([string]$_.codigoTipoSituacaoBoleto,[ref]$parsed)){$parsed}else{-1}',
         'Get-DdaBankStatusCode $_')
+    sharepoint = replace_once(sharepoint, '   $result=& $Remote $payload',
+        '   try{$result=& $Remote $payload}catch{$result=& $Remote $payload}')
 
     notice_dir = ROOT / 'dda-scheduled-payment'
     notice_dir.mkdir(mode=0o750, exist_ok=True)

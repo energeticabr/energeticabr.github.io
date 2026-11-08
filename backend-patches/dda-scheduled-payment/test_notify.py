@@ -59,6 +59,15 @@ class ScheduledPaymentNotificationTests(unittest.TestCase):
         with closing(sqlite3.connect(self.db)) as db, db:
             self.assertEqual(db.execute('SELECT COUNT(*) FROM gateway_outbox').fetchone()[0], 1)
 
+    def test_reused_outbox_row_id_does_not_count_as_pending_delivery(self):
+        deliver(self.db, GROUP, PAYER, [row()])
+        with closing(sqlite3.connect(self.db)) as db, db:
+            item = db.execute('SELECT id FROM gateway_outbox').fetchone()[0]
+            db.execute('DELETE FROM gateway_outbox WHERE id=?', (item,))
+            db.execute('INSERT INTO gateway_outbox VALUES(?,?,?)',
+                       (item, json.dumps({'completionId': 'different-event'}), 1))
+        self.assertEqual(deliver(self.db, GROUP, PAYER, [row()])['unconfirmed'], 1)
+
     def test_reads_after_short_page_until_empty(self):
         pages = iter([{'value': [row(9)]}, {'value': [row(14, CHAVE_DDA='b' * 64)]}, {'value': []}])
         queries = []

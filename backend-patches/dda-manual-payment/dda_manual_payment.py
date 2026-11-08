@@ -83,7 +83,7 @@ def _receipt(row, item_id, key):
     return {'status': 'processed', 'messages': [], 'ddaPaymentConfirmation': {
         'status': 'confirmed', 'itemId': item_id, 'key': key,
         'confirmedAt': parsed.astimezone(timezone.utc).isoformat().replace('+00:00', 'Z'),
-        'confirmedBy': actor}}
+        'confirmedBy': actor, 'paidBySchedule': row.get(SCHEDULE_FIELD) == PAID_BY_SCHEDULE}}
 
 
 def _active_schedule(row):
