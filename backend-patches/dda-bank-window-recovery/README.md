@@ -1,6 +1,6 @@
 # Recuperação de consultas DDA ao Sicoob
 
-Se uma janela da consulta histórica falhar por erro de transporte após as quatro tentativas existentes, o coletor a consulta uma única vez em duas janelas menores e consecutivas. Cada metade usa a política normal de tentativa e a mesma sessão bancária. Se alguma falhar, o coletor não emite um resultado parcial; o recibo registra o intervalo que falhou. Erros de autenticação, TLS e rejeições HTTP continuam seguindo suas regras atuais.
+Se uma janela da consulta histórica falhar por erro de transporte após as quatro tentativas existentes, o coletor a consulta uma única vez em duas janelas menores e consecutivas. Cada metade usa a política normal de tentativa e a mesma sessão bancária. Se alguma falhar, o coletor não emite um resultado parcial. Para falhas de transporte, o recibo registra o intervalo que não respondeu. Erros de autenticação, TLS e rejeições HTTP continuam seguindo suas regras atuais.
 
 A instalação modifica apenas o módulo `DdaMonitor.psm1` do coletor OCI. A API, os clientes e os horários agendados permanecem compatíveis. O instalador exige o hash da versão base para não sobrepor alterações de outra publicação, testa uma cópia isolada e aplica a troca com a trava já usada pelo coletor.
 
