@@ -7,7 +7,7 @@ import {JSDOM} from 'jsdom';
 import {createServer} from 'vite';
 import {runBrowserLayout} from './helpers/browser-layout-runner.mjs';
 
-test('date-day clusters are compact and centered in their columns on phones, desktop and print',{timeout:90000},async t=>{
+test('DDA date and linkage clusters fit on phones, desktop and print',{timeout:90000},async t=>{
  const browser=[process.env.CHROME_BIN,'C:/Program Files/Google/Chrome/Application/chrome.exe','/usr/bin/google-chrome','/usr/bin/chromium'].find(p=>p&&existsSync(p));
  if(!browser)return t.skip('Chrome unavailable');
  const root=resolve(fileURLToPath(new URL('..',import.meta.url)));
@@ -21,6 +21,15 @@ test('date-day clusters are compact and centered in their columns on phones, des
    try{
     const state=JSON.parse(dom.window.document.documentElement.dataset.dueDays);
     assert.equal(state.overflow,false,JSON.stringify({width,state}));
+    assert.deepEqual(state.linkRows.filter(row=>row.warning).map(row=>row.id),['1']);
+    const unlinked=state.linkRows.find(row=>row.id==='1');
+    assert.equal(unlinked.link,'N/A');
+    assert.equal(unlinked.warning,'ATENÇÃO');
+    assert.ok(unlinked.below&&unlinked.fits,JSON.stringify({width,unlinked}));
+    assert.equal(unlinked.rowBackground,'rgb(255, 197, 204)');
+    assert.ok(unlinked.cellBackgrounds.every(background=>background===unlinked.rowBackground));
+    assert.equal(state.linkRows.find(row=>row.id==='2').link,'ID 8');
+    assert.ok(state.linkRows.filter(row=>row!==unlinked).every(row=>row.rowBackground!==unlinked.rowBackground));
     assert.deepEqual([...new Set(state.schedules.map(badge=>badge.text))].sort(),['AGENDADO','AGENDAMENTO NÃO CONFIRMADO','NÃO AGENDADO']);
     for(const badge of state.schedules){
      assert.ok(badge.above&&badge.sameWidth&&badge.fits,JSON.stringify({width,badge}));

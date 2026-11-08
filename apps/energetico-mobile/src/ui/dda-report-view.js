@@ -155,6 +155,10 @@ export function createDdaReportView({document:doc=globalThis.document,data,openM
    status.append(schedule,cluster);
    const link=make('td','ddr-link');const linkCluster=make('span','ddr-link-cluster',row.provisionId?`ID ${row.provisionId}`:'N/A');linkCluster.dataset.linkState=row.provisionId?'linked':'missing';
    linkCluster.title=row.provisionId?`Descritivo provisão vinculado: ID ${row.provisionId}`:'Nenhum descritivo provisão vinculado';link.append(linkCluster);
+   if(schedule.dataset.scheduleState==='scheduled'&&!row.provisionId){
+    line.classList.add('ddr-scheduled-unlinked');
+    link.append(make('span','ddr-link-warning','ATENÇÃO'));
+   }
    const bankDocument=make('td','ddr-bank-document'),bankCluster=make('div','ddr-bank-cluster'),documentCluster=make('div','ddr-document-cluster');
    bankCluster.dataset.ddaBankCluster='';documentCluster.dataset.ddaDocumentCluster='';
    bankCluster.append(make('small','','Banco emissor'),make('strong','',row.bank||'—'));
