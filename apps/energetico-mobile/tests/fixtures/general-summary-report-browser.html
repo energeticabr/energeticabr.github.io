@@ -13,7 +13,21 @@ try {
   const {decorateReportPrint, captureFilteredReport, REPORT_PDF_TITLES} = await import('../../src/ui/report-print.js');
   const {decorateReportNavigation} = await import('../../src/ui/report-navigation.js');
   const {buildFilteredReportPdf} = await import('../../src/chat/filtered-report-pdf.js');
-  const {PDFDocument} = await import('pdf-lib');
+  const {getDocument, GlobalWorkerOptions} = await import('pdfjs-dist/legacy/build/pdf.mjs');
+  GlobalWorkerOptions.workerSrc = (await import('pdfjs-dist/legacy/build/pdf.worker.min.mjs?url')).default;
+  async function inspectPdf(snapshot, logoBytes) {
+    const blob = await buildFilteredReportPdf(snapshot, {logoBytes});
+    const bytes = new Uint8Array(await blob.arrayBuffer()), header = new TextDecoder().decode(bytes.slice(0, 5));
+    const task = getDocument({data:bytes});
+    try {
+      const pdf = await task.promise, items = [];
+      for (let index = 1; index <= pdf.numPages; index++) {
+        const page = await pdf.getPage(index);
+        items.push(...(await page.getTextContent()).items.map(item => item.str));
+      }
+      return {title:(await pdf.getMetadata()).info.Title, header, pages:pdf.numPages, text:items.join(' ').replace(/\s+/g, ' ')};
+    } finally {await task.destroy();}
+  }
   const app = document.getElementById('app'), tools = document.getElementById('app-tools');
   const state = {sessionStatus:'authenticated', account:{name:'Pessoa Exemplo', username:'person@example.invalid'},
     draft:'Rascunho preservado', messages:[{id:'1', type:'text', role:'assistant', text:'Qual é a obra?'}], pendingFiles:[], activeText:null, error:null};
@@ -54,9 +68,7 @@ try {
   const content = root.querySelector('.gsr-content'), toolbar = root.querySelector('.gsr-toolbar');
   const group = name => root.querySelector(`.gsr-group--${name}`);
   const restore = await view.preparePrint(), capture = captureFilteredReport(root, {title:REPORT_PDF_TITLES[action]}); restore();
-  const blob = await buildFilteredReportPdf(capture, {logoBytes:new Uint8Array(await (await fetch(logo.src)).arrayBuffer())});
-  const bytes = new Uint8Array(await blob.arrayBuffer()), pdf = await PDFDocument.load(bytes);
-  const capturedText = snapshot => snapshot.pages.flatMap(page => page.blocks).flatMap(block => block.runs?.map(run => run.text) || []).join(' ');
+  const logoBytes = new Uint8Array(await (await fetch(logo.src)).arrayBuffer());
   const layout = {header:headerData, loads, metricCount:root.querySelectorAll('[data-metric]').length,
     portraitBlocked:Boolean(root.querySelector('[class*="orientation"]:not([hidden])')), logoLoaded:logo.naturalWidth > 0,
     documentOverflow:Math.max(0, document.documentElement.scrollWidth - innerWidth),
@@ -67,11 +79,11 @@ try {
     groupWidthRatios:Object.fromEntries(['documents', 'tasks', 'works', 'commercial'].map(name => [name, rect(group(name)).width])),
     rows:Object.fromEntries(['documents', 'tasks', 'works', 'commercial'].map(name => [name, rect(group(name)).top])),
     actions:[...toolbar.querySelector('.report-print-actions').children].map(node => ({...rect(node), label:node.getAttribute('aria-label')})),
-    pdf:{title:capture.title, header:new TextDecoder().decode(bytes.slice(0, 5)), pages:pdf.getPageCount(), text:capturedText(capture)}};
+    pdf:await inspectPdf(capture, logoBytes)};
   partial = true; root.querySelector('[aria-label="Atualizar resumo geral"]').click(); await view.open();
   const restorePartial = await view.preparePrint(), partialCapture = captureFilteredReport(root, {title:'Resumo geral'}); restorePartial();
   layout.partial = {value:root.querySelector('[data-metric="documents"]').textContent,
-    visible:!root.querySelector('.gsr-warnings').hidden, text:capturedText(partialCapture)};
+    visible:!root.querySelector('.gsr-warnings').hidden, text:(await inspectPdf(partialCapture, logoBytes)).text};
   view.close(); layout.closed = root.hidden; layout.appInert = app.inert; layout.restoredHeaderFocus = document.activeElement === shortcut;
   view.destroy(); chat.destroy(); installer.destroy();
   document.documentElement.dataset.layout = JSON.stringify(layout);
