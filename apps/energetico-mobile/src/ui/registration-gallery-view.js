@@ -16,6 +16,7 @@ import { renderAssetGalleryCard } from './asset-gallery-card.js';
 import { renderAssetLaunchesCard, assetLaunchesIcon } from './asset-launches-card.js';
 import { createAssetReportView } from './asset-report-view.js';
 import { renderDdaCard, updateDdaDueTones, ddaTodayKey } from './dda-card.js';
+import { isDdaOpenStatus } from '../chat/dda-bank-status.js';
 import { createDdaSyncReceipt } from './dda-sync-receipt.js';
 import { createDdaPaymentConfirmation } from './dda-payment-confirmation.js';
 import { createDdaGalleryMetrics } from './dda-gallery-metrics.js';
@@ -897,7 +898,9 @@ export function createRegistrationGallery({ document: doc = globalThis.document,
           continue;
         }
         const value = rowFieldValue(row, field);
-        if (model.substringFilters?.includes(field)) {
+        if (kind === 'dda' && field === 'SITUACAO' && control.value === 'Em aberto') {
+          if (!isDdaOpenStatus(value)) return false;
+        } else if (model.substringFilters?.includes(field)) {
           if (!value.toLocaleLowerCase("pt-BR").includes(control.value.toLocaleLowerCase("pt-BR"))) return false;
         } else if (value !== control.value) return false;
       }

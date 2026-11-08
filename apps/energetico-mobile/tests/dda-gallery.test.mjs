@@ -6,17 +6,23 @@ import { createRegistrationGallery } from '../src/ui/registration-gallery-view.j
 
 const sample = { id:'7', fields:{Title:'Fornecedor fictício',VENCIMENTO:'2026-10-30T12:00:00Z',VALOR:123.45,VALOR_PAGAMENTO:123.45,SITUACAO:'Em aberto',CNPJ_FORNECEDOR:'11111111111111',LINHA_DIGITAVEL:'1'.repeat(47),CODIGO_BARRAS:'2'.repeat(44),ULTIMA_CONSULTA:'2026-10-27T20:00:00Z',Attachments:true} };
 
-test('DDA opens with Em aberto selected and hides bank-paid and manually paid rows',async t=>{
+test('DDA Em aberto includes scheduled rows while paid and unconfirmed rows are hidden',async t=>{
  const dom=new JSDOM('<body/>'),doc=dom.window.document;
  const gallery=createRegistrationGallery({document:doc,kind:'dda',data:{loadSnapshot:async()=>({rows:[sample,
   {id:'8',fields:{...sample.fields,Title:'Pago no banco',SITUACAO:'Pago'}},
-  {id:'9',fields:{...sample.fields,Title:'Pago manualmente',PGTO_CONFIRMADO:true}}]})}});
+  {id:'9',fields:{...sample.fields,Title:'Pago manualmente',SITUACAO:'Agendado',PGTO_CONFIRMADO:true}},
+  {id:'10',fields:{...sample.fields,Title:'Fornecedor agendado',SITUACAO:'Agendado'}},
+  {id:'11',fields:{...sample.fields,Title:'Consulta incerta',SITUACAO:'Não confirmado'}}]})}});
  t.after(()=>{gallery.destroy();dom.window.close();});
  await gallery.open();
- assert.equal(doc.querySelector('[data-filter-field="SITUACAO"]').value,'Em aberto');
- assert.equal(doc.querySelectorAll('.rg-row--dda').length,1);
+ const status=doc.querySelector('[data-filter-field="SITUACAO"]');
+ assert.equal(status.value,'Em aberto');
+ assert.equal(doc.querySelectorAll('.rg-row--dda').length,2);
  assert.match(doc.querySelector('.rg-list').textContent,/Fornecedor fictício/);
- assert.doesNotMatch(doc.querySelector('.rg-list').textContent,/Pago no banco|Pago manualmente/);
+ assert.match(doc.querySelector('.rg-list').textContent,/Fornecedor agendado/);
+ assert.doesNotMatch(doc.querySelector('.rg-list').textContent,/Pago no banco|Pago manualmente|Consulta incerta/);
+ status.value='Agendado';status.dispatchEvent(new dom.window.Event('change'));
+ assert.deepEqual([...doc.querySelectorAll('.rg-row--dda')].map(row=>row.dataset.registrationRow),['10']);
 });
 
 for(const rows of [[],[{id:'8',fields:{...sample.fields,SITUACAO:'Pago'}}]])

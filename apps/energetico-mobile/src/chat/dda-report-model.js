@@ -4,7 +4,7 @@ import {REGISTRATION_GALLERY_MODELS,registrationRawField,registrationDateKey,reg
 import {ddaTodayKey} from '../ui/dda-card.js';
 import {ddaPaidManually} from './dda-payment-confirmation.js';
 import {resolveDdaPaymentLine} from './dda-payment-line.js';
-import {ddaBankSchedule,normalizeDdaStatus} from './dda-bank-status.js';
+import {ddaBankSchedule,isDdaOpenStatus,normalizeDdaStatus} from './dda-bank-status.js';
 const Money=Decimal.clone({precision:40});
 export {ddaSearchKey} from './dda-bank-status.js';
 const text=value=>typeof value==='string'||typeof value==='number'?String(value).trim():'';
@@ -51,7 +51,8 @@ export function normalizeDdaReportRows(snapshot){
 export function buildDdaReport(rows,{status='Em aberto',bank='',search='',settledProvisionIds}={},now=new Date()){
  const query=normalizeSearchText(search),today=ddaTodayKey(now);
  const seventhDay=new Date(Date.parse(today+'T12:00:00Z')+7*86400000).toISOString().slice(0,10);
- const matchesStatus=row=>!status||(status==='Não pagos'?['Em aberto','Agendado'].includes(row.status):row.status===status);
+ const openFilter=status==='Em aberto'||status==='Não pagos';
+ const matchesStatus=row=>!status||(openFilter?isDdaOpenStatus(row.status):row.status===status);
  const filtered=rows.filter(row=>(matchesStatus(row)||ddaSettlementPending(row,settledProvisionIds))&&(!bank||row.bank===bank)&&(!query||includesSearchText(normalizeSearchText([row.id,row.supplier,row.document,row.bank].join(' ')),query)))
   .sort((a,b)=>(a.due||'9999').localeCompare(b.due||'9999')||Number(a.id)-Number(b.id));
  const inStatus=filtered.filter(matchesStatus);

@@ -12,8 +12,8 @@ const report=(rows,filters)=>buildDdaReport(normalizeDdaReportRows({rows}),filte
 
 test('due metrics include today and day seven, exclude overdue and day eight, and sum cents exactly in Sao Paulo',()=>{
  const result=report(source);
- assert.equal(result.dueWithin7Days,4);
- assert.equal(result.totalDueWithin7Days,'30.30');
+ assert.equal(result.dueWithin7Days,5);
+ assert.equal(result.totalDueWithin7Days,'70.30');
  assert.equal(result.totalDueToday,'0.30');
  assert.equal(result.today,2);
  assert.equal(report(source,{status:'Não pagos'}).totalDueWithin7Days,'70.30');
