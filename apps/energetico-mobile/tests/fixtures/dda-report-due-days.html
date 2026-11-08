@@ -17,10 +17,16 @@ await new Promise(r=>requestAnimationFrame(()=>requestAnimationFrame(r)));
 const state={overflow:document.documentElement.scrollWidth>innerWidth+1,rows:[],issued:[]};
 state.schedules=[...document.querySelectorAll('.ddr-schedule-cluster')].map(badge=>{
  const style=getComputedStyle(badge),existing=badge.nextElementSibling;
+ const label=badge.querySelector('strong').firstChild,word=document.createRange();
+ const wordsFit=[...label.textContent.matchAll(/\S+/g)].every(match=>{
+  word.setStart(label,match.index);
+  word.setEnd(label,match.index+match[0].length);
+  return word.getClientRects().length===1;
+ });
  return {text:badge.textContent,state:badge.dataset.scheduleState,color:style.color,background:style.backgroundColor,
   sameWidth:badge.offsetWidth===existing.offsetWidth,
   above:badge.offsetTop+badge.offsetHeight<existing.offsetTop,
-  fits:badge.scrollWidth<=badge.clientWidth+1,
+  fits:wordsFit&&badge.scrollWidth<=badge.clientWidth+1,
   printColorAdjust:style.printColorAdjust};
 });
 state.metrics=[...document.querySelectorAll('.ddr-metric')].map(card=>({

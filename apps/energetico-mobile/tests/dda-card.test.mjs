@@ -40,12 +40,15 @@ test('copy rejection gives accurate feedback instead of claiming success',async(
 test('DDA details show the bank scheduling state independently of the visible situation',()=>{
  const dom=new JSDOM('<body><main></main></body>'),doc=dom.window.document,main=doc.querySelector('main');
  try{
-  for(const [bankStatus,situation,expected,state] of [
+  for(const [bankStatus,situation,expected,state,timestamps={}] of [
    ['Agendado','Pago','AGENDADO','scheduled'],
    ['Em aberto','Em aberto','NÃO AGENDADO','unscheduled'],
    ['Não confirmado','Agendado','AGENDAMENTO NÃO CONFIRMADO','unknown'],
+   ['Agendado','Em aberto','AGENDAMENTO NÃO CONFIRMADO','unknown',{
+    ULTIMA_CONSULTA:'2026-10-28T12:00:00Z',STATUS_CONSULTADO_EM:'2026-10-28T11:00:00Z',
+   }],
   ]){
-   const fields={STATUS_DDA:bankStatus,SITUACAO:situation,PGTO_CONFIRMADO:situation==='Pago'};
+   const fields={STATUS_DDA:bankStatus,SITUACAO:situation,PGTO_CONFIRMADO:situation==='Pago',...timestamps};
    main.replaceChildren();
    renderDdaCard({document:doc,container:main,rowId:'1',title:'Fornecedor fictício',value:field=>fields[field]});
    const detail=main.querySelector('details [data-field="AGENDAMENTO"]');

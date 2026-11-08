@@ -28,8 +28,12 @@ export function ddaBankSchedule(readField) {
   const bankStatus = String(readField('STATUS_DDA') ?? '').trim();
   // Legacy SITUACAO represents the bank status unless the reader overlays a manual confirmation.
   const status = normalizeDdaStatus(bankStatus || (!ddaPaidManually(readField('PGTO_CONFIRMADO')) && readField('SITUACAO')));
+  // The open-title scan can update the record before the separate status reconciliation finishes.
+  const awaitingReconciliation = Date.parse(readField('ULTIMA_CONSULTA')) > Date.parse(readField('STATUS_CONSULTADO_EM'));
   let state = 'unknown';
-  if (status === 'Agendado') state = 'scheduled';
-  else if (['Em aberto', 'Pago', 'Baixado'].includes(status)) state = 'unscheduled';
+  if (!awaitingReconciliation) {
+    if (status === 'Agendado') state = 'scheduled';
+    else if (['Em aberto', 'Pago', 'Baixado'].includes(status)) state = 'unscheduled';
+  }
   return { state, label: scheduleLabels[state] };
 }
