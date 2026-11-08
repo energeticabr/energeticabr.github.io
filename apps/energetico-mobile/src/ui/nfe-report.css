@@ -153,6 +153,7 @@
 .nfe-report[data-report-compact-height="true"] .nfe-table :is(th, td) { padding-block: 6px; }
 .nfe-tax-stack { display: grid; gap: 4px; }
 .nfe-table th:last-child, .nfe-link { text-align: center; }
+.nfe-link-controls { display: grid; justify-items: center; gap: 4px; }
 .nfe-link-cluster {
   display: inline-flex;
   align-items: center;
@@ -169,14 +170,18 @@
   font-weight: 800;
   print-color-adjust: exact;
 }
+:is(.nfe-link-pencil, .nfe-link-edit) { min-width: 44px; min-height: 44px; cursor: pointer; }
 .nfe-link-pencil {
-  min-width: 44px;
-  min-height: 44px;
   border-color: #f2b8c0;
   border-left-color: #c3233b;
   background: #ffeaed;
   color: #a5142a;
-  cursor: pointer;
+}
+.nfe-link-edit {
+  border-color: #efbf8b;
+  border-left-color: #c66a08;
+  background: #fff0dc;
+  color: #a44b05;
 }
 .nfe-report .dda-provision-search { min-width: 0; font-size: 16px; }
 .nfe-report .dda-provision-option { overflow-wrap: anywhere; }

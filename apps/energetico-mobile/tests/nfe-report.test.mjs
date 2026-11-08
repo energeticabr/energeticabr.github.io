@@ -306,8 +306,8 @@ test('NFE opens PEDIDOS with ranked suggestions, preserves the report and displa
         { id:'38', supplier:'Outro fornecedor', amount:2200 },
         { id:'37', supplier:'Elétrica Teste', amount:1490 },
       ],
-      async save({ invoiceId, orderId }) {
-        writes.push([invoiceId, orderId]);
+      async save({ invoiceId, orderId, expectedOrderId }) {
+        writes.push([invoiceId, orderId, expectedOrderId]);
         if (failOnce) { failOnce = false; throw new Error('conflito'); }
         saved = orderId;
         return { invoiceId, orderId };
@@ -344,15 +344,37 @@ test('NFE opens PEDIDOS with ranked suggestions, preserves the report and displa
       assert.match(picker.querySelector('[role=alert]').textContent, /não foi possível confirmar/i);
     }
   }
-  assert.deepEqual(writes, [['10','37'],['10','37']]);
+  assert.deepEqual(writes, [['10','37',''],['10','37','']]);
   assert.ok(choices.every(input => input.disabled));
   assert.equal(pencil(), null);
   assert.equal(element.querySelector('.nfe-link-linked').textContent, 'ID 37');
   assert.equal(body.scrollLeft, 80);
   assert.equal(body.scrollTop, 120);
+  picker.querySelector('.gallery-record-dialog-button').click();
+  const edit = element.querySelector('.nfe-link-edit');
+  assert.equal(element.querySelector('.nfe-link-linked').nextElementSibling, edit);
+  assert.equal(document.activeElement, edit);
+  edit.click();
+  await tick();
+  const editor = element.querySelector('.dda-provision-dialog');
+  assert.equal(editor.querySelector('input[type=radio]:checked').value, '37');
+  const submit = editor.querySelector('.dda-provision-save');
+  assert.equal(submit.disabled, true);
+  editor.querySelector('input[value="38"]').click();
+  editor.querySelector('input[value="37"]').click();
+  assert.equal(submit.disabled, true);
+  editor.querySelector('input[value="38"]').click();
+  submit.click();
+  const changes = document.querySelector('[data-edit-review]');
+  assert.match(changes.textContent, /ID 37.*#38/s);
+  changes.querySelector('[data-edit-review-confirm]').click();
+  await tick();
+  assert.deepEqual(writes.at(-1), ['10','38','37']);
+  assert.equal(element.querySelector('.nfe-link-linked').textContent, 'ID 38');
+  assert.ok(element.querySelector('.nfe-link-edit'));
   report.close();
   await report.open();
-  assert.equal(element.querySelector('.nfe-link-linked').textContent, 'ID 37');
+  assert.equal(element.querySelector('.nfe-link-linked').textContent, 'ID 38');
   assert.equal(pencil(), null);
 });
 

@@ -34,9 +34,12 @@ export function createNfeOrderLink({ repository, assertSession = () => {} }) {
     });
   }
 
-  async function save({ invoiceId:rawInvoice, orderId:rawOrder, signal }) {
+  async function save({ invoiceId:rawInvoice, orderId:rawOrder, expectedOrderId, signal }) {
     const invoiceId = nfeOrderId(rawInvoice), orderId = nfeOrderId(rawOrder);
-    if (!invoiceId || !orderId) throw new RangeError('ID de nota ou pedido inválido.');
+    const expected = String(expectedOrderId ?? '').trim();
+    if (!invoiceId || !orderId || (expected && !nfeOrderId(expected))) {
+      throw new RangeError('ID de nota ou pedido inválido.');
+    }
     const active = () => { assertSession(); signal?.throwIfAborted(); };
     active();
     const [invoices, orders] = await Promise.all([
@@ -57,9 +60,11 @@ export function createNfeOrderLink({ repository, assertSession = () => {} }) {
     if (current.fields[NFE_PROPOSAL_FIELD]) {
       throw new Error('Esta nota tem um envio reservado. Use PROPOR LANÇAMENTO para retomar.');
     }
-    const existing = current.fields[NFE_ORDER_FIELD];
-    if (nfeOrderId(existing) === orderId) return { invoiceId, orderId };
-    if (String(existing ?? '').trim()) throw new Error('A nota já está vinculada. Atualize o relatório.');
+    const existing = String(current.fields[NFE_ORDER_FIELD] ?? '').trim();
+    if (existing === orderId) return { invoiceId, orderId };
+    if (existing !== expected) {
+      throw new Error(expected ? 'O vínculo da nota mudou. Atualize o relatório.' : 'A nota já está vinculada. Atualize o relatório.');
+    }
 
     const saved = await repository.updateItem('company', invoices, invoiceId, { [NFE_ORDER_FIELD]:Number(orderId) },
       { eTag, signal, readbackFields:[NFE_ORDER_FIELD] });

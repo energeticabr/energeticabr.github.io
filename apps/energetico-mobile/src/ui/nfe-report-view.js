@@ -163,41 +163,51 @@ export function createNfeReportView({ document:doc = globalThis.document, data, 
   const picker = orderLink && createReportLinkPicker({
     document:doc, host:root, copy:ORDER_PICKER_COPY,
     loadOptions:async (row, signal) => rankNfeOrderOptions(await orderLink.loadOptions({ signal }), row),
-    saveLink:(row, orderId, signal) => orderLink.save({ invoiceId:row.id, orderId, signal }),
+    saveLink:(row, orderId, signal) => orderLink.save({ invoiceId:row.id, orderId, expectedOrderId:row.orderId, signal }),
     currentLink:row => row.orderId,
+    selectCurrent:true,
     receiptId:receipt => receipt.orderId,
     rowAmount:row => row.total,
-    resolveReturnFocus:trigger => list.querySelector(`[data-invoice-id="${trigger?.dataset.invoiceLink}"] .nfe-link-linked`) || closeButton,
+    resolveReturnFocus:trigger => list.querySelector(`[data-invoice-id="${trigger?.dataset.invoiceLink}"] .nfe-link-edit`) || closeButton,
     onLinked:showLinked,
     onPropose:proposal && ((row, trigger) => void proposal.show(row, trigger)),
   });
 
   function showLinked({ invoiceId, orderId }) {
     if (root.hidden || !rows || !nfeOrderId(invoiceId) || !nfeOrderId(orderId)) return;
-    rows = rows.map(row => row.id === invoiceId ? { ...row, orderId } : row);
+    const previous = rows.find(row => row.id === invoiceId);
+    if (!previous) return;
+    const updated = { ...previous, orderId };
+    rows = rows.map(row => row === previous ? updated : row);
     const cell = list.querySelector(`[data-invoice-id="${invoiceId}"] .nfe-link`);
-    cell?.replaceChildren(linkedCluster(orderId));
+    if (cell) renderOrderLink(cell, updated, true);
   }
 
-  function linkedCluster(orderId) {
-    const cluster = make('span', 'nfe-link-cluster nfe-link-linked', `ID ${orderId}`);
-    cluster.tabIndex = -1;
-    return cluster;
+  function renderOrderLink(cell, row, interactive) {
+    if (!interactive) {
+      if (row.orderId) cell.append(make('span', 'nfe-link-cluster nfe-link-linked', `ID ${row.orderId}`));
+      else cell.textContent = '—';
+      return;
+    }
+
+    const controls = make('div', 'nfe-link-controls');
+    if (row.orderId) controls.append(make('span', 'nfe-link-cluster nfe-link-linked', `ID ${row.orderId}`));
+    const pencil = button('', () => void picker?.show(row, pencil),
+      row.orderId ? 'nfe-link-cluster nfe-link-edit' : 'nfe-link-cluster nfe-link-pencil');
+    pencil.dataset.invoiceLink = row.id;
+    pencil.dataset.reportScreenOnly = '';
+    pencil.innerHTML = PENCIL_ICON;
+    pencil.title = row.orderId ? `Editar pedido vinculado à nota ${row.number || row.id}`
+      : `Vincular nota ${row.number || row.id} a um pedido`;
+    pencil.setAttribute('aria-label', pencil.title);
+    pencil.disabled = !picker || !nfeOrderId(row.id);
+    controls.append(pencil);
+    cell.replaceChildren(controls);
   }
 
   function orderLinkCell(row, interactive) {
     const cell = make('td', 'nfe-link');
-    if (row.orderId) cell.append(linkedCluster(row.orderId));
-    else if (interactive) {
-      const pencil = button('', () => void picker?.show(row, pencil), 'nfe-link-cluster nfe-link-pencil');
-      pencil.dataset.invoiceLink = row.id;
-      pencil.dataset.reportScreenOnly = '';
-      pencil.innerHTML = PENCIL_ICON;
-      pencil.title = `Vincular nota ${row.number || row.id} a um pedido`;
-      pencil.setAttribute('aria-label', pencil.title);
-      pencil.disabled = !picker || !nfeOrderId(row.id);
-      cell.append(pencil);
-    } else cell.textContent = '—';
+    renderOrderLink(cell, row, interactive);
     return cell;
   }
 

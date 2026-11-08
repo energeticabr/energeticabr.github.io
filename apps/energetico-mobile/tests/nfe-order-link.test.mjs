@@ -56,6 +56,14 @@ test('reads PEDIDOS and writes only the selected ID to an unlinked note with its
   rows.push(order('38','Outro',500));
   await assert.rejects(service.save({ invoiceId:'10', orderId:'38' }), /já está vinculada/i);
   assert.deepEqual(writes, [['company','company','10',{ IDPEDIDO:37 },'"v1"']]);
+
+  await assert.rejects(service.save({ invoiceId:'10', orderId:'38', expectedOrderId:'36' }), /vínculo.*mudou/i);
+  assert.equal(writes.length, 1);
+  assert.deepEqual(await service.save({ invoiceId:'10', orderId:'38', expectedOrderId:'37' }),
+    { invoiceId:'10', orderId:'38' });
+  await service.save({ invoiceId:'10', orderId:'38', expectedOrderId:'37' });
+  assert.deepEqual(writes.at(-1), ['company','company','10',{ IDPEDIDO:38 },'"v1"']);
+  assert.equal(writes.length, 2);
 });
 
 

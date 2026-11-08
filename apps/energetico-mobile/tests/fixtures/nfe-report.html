@@ -170,7 +170,12 @@ if (!report.element.hidden) {
   await new Promise(resolve => setTimeout(resolve, 0));
   const fit = rect => rect.width > 0 && rect.height > 0 && rect.x >= -1 && rect.y >= -1
     && rect.right <= innerWidth + 1 && rect.bottom <= innerHeight + 1;
+  const linked = panel.querySelector('[data-invoice-id="2"] .nfe-link-linked');
+  const linkedPencil = linked.nextElementSibling;
   document.documentElement.dataset.orderLink = JSON.stringify({
+    orangePencilBelow:linkedPencil.classList.contains('nfe-link-edit') && isBefore(linked, linkedPencil, 'block'),
+    orangeColor:getComputedStyle(linkedPencil).color,
+    orangeTargetHeight:linkedPencil.offsetHeight,
     pickerFits:fit(pickerRect),
     proposePosition, proposalFits:fit(proposalRect), proposalSubmitFits:fit(proposalSubmit),
     proposalScroll, changedStage, pickerRestored,

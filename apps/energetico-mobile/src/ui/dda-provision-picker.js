@@ -27,7 +27,7 @@ export function createDdaProvisionPicker({service, ...options}){
  });
 }
 
-export function createReportLinkPicker({document:doc,host,copy,loadOptions,saveLink,currentLink,receiptId,rowAmount,onLinked,onClose,resolveReturnFocus,onPropose,timeoutMs=35000}){
+export function createReportLinkPicker({document:doc,host,copy,loadOptions,saveLink,currentLink,receiptId,rowAmount,onLinked,onClose,resolveReturnFocus,onPropose,selectCurrent=false,timeoutMs=35000}){
  let current=null;ensureEditReviewStyles(doc);
  const el=(tag,cls='',value)=>{const node=doc.createElement(tag);node.className=cls;if(value!==undefined)node.textContent=String(value);return node;};
  const money=value=>{let text=String(value??'').trim().replace(/R\$|\s/g,'');if(text.includes(','))text=text.replace(/\./g,'').replace(',','.');const number=/^-?\d+(?:\.\d+)?$/.test(text)?Number(text):NaN;return Number.isFinite(number)?new Intl.NumberFormat('pt-BR',{style:'currency',currency:'BRL'}).format(number):'Valor não informado';};
@@ -41,19 +41,20 @@ export function createReportLinkPicker({document:doc,host,copy,loadOptions,saveL
  }
  async function show(row,trigger){
   if(current||host.hidden||!loadOptions)return;
+  const linkedId=String(currentLink(row)||'');
   const overlay=el('div','gallery-record-overlay dda-provision-overlay'),dialog=el('section','gallery-record-dialog dda-provision-dialog');
   dialog.setAttribute('role','dialog');dialog.setAttribute('aria-modal','true');dialog.setAttribute('aria-label',copy.dialogLabel);dialog.tabIndex=-1;
   const title=el('h2','',copy.title);
   const header=el('header','gallery-editor-header'),back=el('button','gallery-editor-back','←');
   back.type='button';back.setAttribute('data-gallery-editor-back','');back.setAttribute('aria-label','Voltar à galeria sem salvar');header.append(back,title);
   let propose;
-  if(onPropose){
+  if(onPropose&&!linkedId){
    propose=el('button','nfe-propose-launch','PROPOR LANÇAMENTO');
    propose.type='button';propose.dataset.nfeProposeLaunch='';
    propose.addEventListener('click',()=>onPropose(row,propose));
    header.classList.add('nfe-picker-header');header.append(propose);
   }
-  const summary=el('p','dda-provision-summary',`${row.supplier} · ${copy.sourceLabel} #${row.id} · ${money(rowAmount(row))}`);
+  const summary=el('p','dda-provision-summary',`${row.supplier} · ${copy.sourceLabel} #${row.id} · ${money(rowAmount(row))}${selectCurrent&&linkedId?` · Pedido atual ID ${linkedId}`:''}`);
   const search=el('input','dda-provision-search');search.type='search';search.placeholder='Buscar fornecedor ou ID';search.setAttribute('aria-label',copy.searchLabel);
   const feedback=el('p','dda-provision-feedback',copy.loading);feedback.setAttribute('role','status');
   const list=el('div','dda-provision-options');list.setAttribute('role','radiogroup');list.setAttribute('aria-label',copy.listLabel);
@@ -61,15 +62,14 @@ export function createReportLinkPicker({document:doc,host,copy,loadOptions,saveL
   cancel.type=save.type='button';save.disabled=true;
   actions.append(cancel,save);dialog.append(header,summary,search,feedback,list,actions);overlay.append(dialog);
   const background=[...host.children].map(node=>[node,node.inert===true]);for(const [node] of background)node.inert=true;
-  const entry={overlay,dialog,trigger,background,controller:new AbortController(),options:[],selected:null,busy:false,reviewing:false};current=entry;host.append(overlay);dialog.focus();
+  const entry={overlay,dialog,trigger,background,controller:new AbortController(),options:[],selected:selectCurrent&&linkedId||null,busy:false,reviewing:false};current=entry;host.append(overlay);dialog.focus();
   const cancelEdit=()=>{if(current===entry&&!entry.busy)close();};cancel.addEventListener('click',cancelEdit);back.addEventListener('click',cancelEdit);
   overlay.addEventListener('keydown',event=>{if(event.key==='Escape'&&!entry.busy){event.preventDefault();event.stopPropagation();close();}if(event.key==='Tab'){const nodes=[...dialog.querySelectorAll('button:not(:disabled),input:not(:disabled)')];const index=nodes.indexOf(doc.activeElement);if(nodes.length){event.preventDefault();event.stopPropagation();nodes[(index+(event.shiftKey?-1:1)+nodes.length)%nodes.length].focus();}}});
-  const linkedId=String(currentLink(row)||'');
   const optionText=item=>`${item.label || `#${item.id} · ${item.supplier}`} · ${money(item.amount)}`;
   function render(){
    if(current!==entry)return;list.replaceChildren();const term=normalizeSearchText(search.value);const visible=entry.options.filter(item=>includesSearchText(normalizeSearchText(`${item.id} ${item.supplier} ${item.label||''}`),term));
    for(const item of visible){const label=el('label','dda-provision-option');if(item.recommended)label.append(el('strong','dda-provision-star',copy.recommendation || '★ MAIS PROVÁVEL'));
-    const choice=el('input');choice.type='radio';choice.name='dda-provision-choice';choice.value=item.id;choice.checked=entry.selected===item.id;choice.addEventListener('change',()=>{entry.selected=item.id;save.disabled=false;for(const option of list.children)option.toggleAttribute('data-edit-changed',option===label&&item.id!==linkedId);});
+    const choice=el('input');choice.type='radio';choice.name='dda-provision-choice';choice.value=item.id;choice.checked=entry.selected===item.id;choice.addEventListener('change',()=>{entry.selected=item.id;save.disabled=selectCurrent&&item.id===linkedId;for(const option of list.children)option.toggleAttribute('data-edit-changed',option===label&&item.id!==linkedId);});
     const text=el('span','',`${optionText(item)}${item.due?' · Previsto '+String(item.due).slice(0,10).split('-').reverse().join('/'):''}`);
     label.toggleAttribute('data-edit-changed',choice.checked&&item.id!==linkedId);
     label.append(choice,text);
