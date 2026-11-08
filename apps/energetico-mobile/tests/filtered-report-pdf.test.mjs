@@ -186,6 +186,38 @@ test("splits an oversized row without losing any token or later rows, repeating 
   assertInsidePages(pages);
 });
 
+test("paints an overflowing cell cluster on every page while preserving its selectable text", async t => {
+  const runs = [{ text: "Z".repeat(6000) + " FIM_CLUSTER", bold: true, color: [1, 1, 1] }];
+  const { pages, text } = await inspect(t, await build(snapshot([{ type: "table", widths: [1, 3], rows: [
+    { header: true, cells: [cell("GRUPO"), cell("SITUAÇÃO", 1)] },
+    { header: false, cells: [cell("", 0, { runs, parts: [{ runs, box: { fill: [0, 0, 0.5], radius: 6 } }] }), cell("Ao lado", 1)] },
+    { header: false, cells: [cell("PRÓXIMO"), cell("Outra situação", 1)] },
+  ] }])));
+  assert.ok(pages.length >= 2);
+  assert.equal(text.replace(/[^Z]/g, "").length, 6000);
+  assert.equal(text.match(/FIM_CLUSTER/g)?.length, 1);
+  assert.match(text, /PRÓXIMO/);
+  for (const { page, items } of pages) {
+    assert.ok(items.some(item => item.str === "GRUPO"));
+    const events = await paintEvents(page);
+    for (const [index, line] of events.entries()) {
+      if (line.type !== "text" || !/Z|FIM_CLUSTER/.test(line.text)) continue;
+      assert.equal(line.fill, "#ffffff");
+      assert.ok(events.slice(0, index).some(paint => paint.type === "fill" && paint.fill === "#000080"));
+    }
+  }
+  assertInsidePages(pages);
+});
+
+test("does not create a final page for a cluster's bottom padding", async t => {
+  const runs = [{ text: Array.from({ length: 83 }, (_, index) => `MARCADOR ${index + 1}`).join("\n") }];
+  const { pages } = await inspect(t, await build(snapshot([{ type: "table", widths: [1], rows: [
+    { header: false, cells: [cell("", 0, { runs, parts: [{ runs, box: { fill: [0, 0, 0.5] } }] })] },
+  ] }])));
+  assert.equal(pages.length, 2);
+  assert.ok(pages.at(-1).items.some(item => item.str === "MARCADOR 83"));
+});
+
 // Ignoring spans/widths makes a merged heading wrap like a narrow cell;
 // ignoring runs loses bold/red text or the green cell background.
 test("honors colspan geometry, proportional widths, alignment and rich text", async t => {

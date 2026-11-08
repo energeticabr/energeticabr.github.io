@@ -4,6 +4,8 @@ import { readFile } from 'node:fs/promises';
 import { JSDOM } from 'jsdom';
 import { createPaymentLedgerView } from '../src/ui/payment-ledger-view.js';
 import { captureFilteredReport } from '../src/ui/report-print.js';
+import { buildFilteredReportPdf } from '../src/chat/filtered-report-pdf.js';
+import { getDocument } from 'pdfjs-dist/legacy/build/pdf.mjs';
 
 const css=await readFile(new URL('../src/ui/payment-ledger.css',import.meta.url),'utf8');
 const base={paymentDate:'2026-10-02',supplier:'Alfa',branch:'Xavante',account:'Caixa',order:'358',
@@ -94,8 +96,18 @@ test('capturePrint matches captureFilteredReport for every column and styled run
   assert.equal(typeof actual.view.capturePrint,'function');
   const restore=oracle.view.preparePrint();
   const expected=captureFilteredReport(oracle.root,{title:'Pagamentos completos'});restore();
-  assert.deepEqual(actual.view.capturePrint({title:'Pagamentos completos'}),expected);
+  const captured=actual.view.capturePrint({title:'Pagamentos completos'});
+  assert.deepEqual(captured,expected);
   assert.equal(actual.root.querySelectorAll('tbody tr').length,200);
+  const blob=await buildFilteredReportPdf(captured);
+  const task=getDocument({data:new Uint8Array(await blob.arrayBuffer()),useSystemFonts:true});
+  try{
+    const pdf=await task.promise,text=[];
+    for(let index=1;index<=pdf.numPages;index++)text.push(...(await(await pdf.getPage(index)).getTextContent()).items.map(item=>item.str));
+    const rendered=text.join(' ');
+    assert.equal(rendered.match(/<script>Texto literal<\/script>/g)?.length,126);
+    assert.equal(rendered.match(/Serviço/g)?.length,125);
+  }finally{await task.destroy();}
 });
 
 test('capturePrint rejects closed, loading, failed and invalid-date states and captures empty filters without stale data',async t=>{
