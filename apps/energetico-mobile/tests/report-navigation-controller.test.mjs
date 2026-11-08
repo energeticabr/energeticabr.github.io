@@ -7,13 +7,14 @@ import { createConversationStore } from '../src/chat/conversation-store.js';
 // Literal routes catch wrong dispatch and cross-color navigation independently
 // of the helper's neighbor calculation. Only UI/network boundaries are doubled.
 const groups = [
-  ['open-pending-provisions', 'open-dda-report', 'open-provision-report', 'open-payment-ledger', 'open-management-report', 'open-order-validation-report', 'open-document-control-report'],
+  ['open-pending-provisions', 'open-nfe-report', 'open-dda-report', 'open-provision-report', 'open-payment-ledger', 'open-management-report', 'open-order-validation-report', 'open-document-control-report'],
   ['open-cargos-table', 'open-attendance-summary', 'open-stage-progress', 'open-supplier-payroll-report', 'open-trancid-report', 'open-supplier-workforce-report', 'open-contractor-control-report', 'open-pending-supplier-payments-report', 'open-pending-work-diaries-report'],
   ['open-commercial-receipts', 'open-commercial-milestones', 'open-commercial-documents', 'open-sac-pathologies'],
   ['open-task-association-report', 'open-delegated-deadline-report'],
 ];
 const factories = {
   'open-dda-report': 'ddaReportFactory',
+  'open-nfe-report': 'nfeReportFactory',
   'open-provision-report': 'provisionReportFactory',
   'open-payment-ledger': 'paymentLedgerFactory',
   'open-management-report': 'managementReportFactory',
@@ -91,8 +92,8 @@ function harness(t, options = {}, { dom = true } = {}) {
   return { controller, view, handlers, store, calls, renders, panels, document };
 }
 
-test('every one of the sixteen separately opened mascot reports receives an accessible PDF printer',async t=>{
- for(const action of Object.keys(factories)){
+test('printable mascot reports receive an accessible PDF printer',async t=>{
+ for(const action of Object.keys(factories).filter(action=>action!=='open-nfe-report')){
   const h=harness(t);await h.controller.start();assert.equal(await h.view.emit(action),true,action);
   const printer=h.panels.at(-1).element.querySelector('[data-action="print-report-pdf"]');
   assert.ok(printer,action);assert.match(printer.getAttribute('aria-label'),/PDF/);assert.equal(printer.tagName,'BUTTON');
@@ -311,11 +312,25 @@ test('navigation invalidates an older pending gallery so its late panel cannot c
 test('a late pending snapshot cannot cover a newer HOME report after arrow navigation',async t=>{
  const query=deferred();let delayed=false;
  const h=harness(t,{client:{sendText:async()=>({status:'processed',messages:[]}),getPendingProvisionSnapshot:()=>delayed?query.promise:Promise.resolve({rows:[]})}});
- await h.controller.start();await h.view.emit('open-dda-report');delayed=true;
- const navigating=h.view.emit('navigate-mascot-report',{from:'open-dda-report',direction:'previous'});await tick();
+ await h.controller.start();await h.view.emit('open-nfe-report');delayed=true;
+ const navigating=h.view.emit('navigate-mascot-report',{from:'open-nfe-report',direction:'previous'});await tick();
  await h.view.emit('open-task-association-report');query.resolve({rows:[]});assert.equal(await navigating,false);await tick();
  assert.equal(h.renders.at(-1).pendingProvisions,null);assert.equal(h.panels.at(-1).action,'open-task-association-report');
 });
+test('a slow NFE factory cannot cover a manually opened DDA report', async t => {
+ const factory = deferred();
+ let nfeOpens = 0, nfeDestroys = 0;
+ const h = harness(t, { nfeReportFactory:() => factory.promise });
+ await h.controller.start();
+ const opening = h.view.emit('open-nfe-report');
+ await tick();
+ assert.equal(await h.view.emit('open-dda-report'), true);
+ factory.resolve({ open(){ nfeOpens++; }, destroy(){ nfeDestroys++; } });
+ assert.equal(await opening, false);
+ assert.deepEqual([nfeOpens, nfeDestroys], [0, 1]);
+ assert.equal(h.panels.at(-1).element.hidden, false);
+});
+
 test('a late management factory cannot open over cargos after arrow navigation is superseded',async t=>{
  const factory=deferred();let opens=0,destroys=0;
  const h=harness(t,{managementReportFactory:()=>factory.promise});await h.controller.start();await h.view.emit('open-payment-ledger');
