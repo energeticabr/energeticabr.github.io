@@ -371,7 +371,7 @@ function renderRoute(route, session) {
     }
     const feedback = navigationFeedback.consume(entity.id);
     return createLazyPage(portalShell.content, async () => {
-      const { createEntityPage } = await import("./ui/entity-page.js?v=20260906-suprimentos-parity-v1");
+      const { createEntityPage } = await import("./ui/entity-page.js?v=20260906-suprimentos-parity-v1&gallery=20261107-pagination-scroll-v1");
       if (generation !== routeRenderGeneration) return undefined;
       return createEntityPage(portalShell.content, {
         entity,

@@ -2124,8 +2124,10 @@ test("a tabela nao anuncia ordenacao quando a consulta filtrada nao suporta orde
   assert.doesNotMatch(markup, /aria-sort="ascending"/);
 });
 
-test("a galeria avanca pelo nextLink, conta o ultimo lote e volta pelo cache sem nova leitura", async () => {
+test("a galeria avança pelo nextLink e volta pelo cache, abrindo cada página no começo", async () => {
   const root = createInteractiveRoot();
+  const viewport = { scrollTop: 300, scrollLeft: 10 };
+  root.ownerDocument = { scrollingElement: viewport };
   const access = buildSuperAdminAccess("admin@energeticabr.com", "Admin", [{ id: "comercial" }]);
   const calls = [];
   const nextLink = "https://graph.microsoft.com/v1.0/sites/personal/lists/clientes-list/items?$skiptoken=2";
@@ -2144,8 +2146,10 @@ test("a galeria avanca pelo nextLink, conta o ultimo lote e volta pelo cache sem
     },
   });
   await page.ready;
+  assert.equal(viewport.scrollTop, 300);
 
   await root.control("[data-entity-next]").trigger("click");
+  assert.equal(viewport.scrollTop, 0);
   assert.equal(calls.length, 2);
   assert.equal(calls[1].cursor, nextLink);
   assert.equal(calls[1].pageNumber, 2);
@@ -2153,7 +2157,9 @@ test("a galeria avanca pelo nextLink, conta o ultimo lote e volta pelo cache sem
   assert.match(root.innerHTML, /Último lote: 1 registro/);
   assert.match(root.innerHTML, /fim da lista/i);
 
+  viewport.scrollTop = 300;
   await root.control("[data-entity-prev]").trigger("click");
+  assert.deepEqual(viewport, { scrollTop: 0, scrollLeft: 10 });
   assert.equal(calls.length, 2, "a pagina anterior conhecida deve vir do cache incremental");
   assert.match(root.innerHTML, /Página 1/);
   page.cleanup();

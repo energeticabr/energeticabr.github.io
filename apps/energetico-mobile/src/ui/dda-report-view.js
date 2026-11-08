@@ -138,7 +138,24 @@ export function createDdaReportView({document:doc=globalThis.document,data,openM
    if(!printAll)addDdaReportBarcode({document:doc,row,line,actions,expanded:expandedBarcodes,copyText,isCurrent:()=>!destroyed&&!root.hidden&&root.getAttribute('aria-busy')!=='true'});
   }
   content.append(table);
-  if(!printAll){const pager=make('nav','ddr-pager');pager.setAttribute('aria-label','Páginas do relatório');const previous=button('Página anterior','‹ Anterior'),next=button('Próxima página','Próxima ›');previous.disabled=page===1;next.disabled=page===pages;next.dataset.pageNext='';previous.addEventListener('click',()=>{page--;render();});next.addEventListener('click',()=>{page++;render();});pager.append(previous,make('span','',`Página ${page} de ${pages} • ${result.rows.length} DDA(s)`),next);content.append(pager);}
+  if (!printAll) {
+   const pager = make('nav', 'ddr-pager');
+   pager.setAttribute('aria-label', 'Páginas do relatório');
+   const previous = button('Página anterior', '‹ Anterior');
+   const next = button('Próxima página', 'Próxima ›');
+   previous.disabled = page === 1;
+   next.disabled = page === pages;
+   next.dataset.pageNext = '';
+   function changePage(targetPage) {
+    page = targetPage;
+    render();
+    content.scrollTop = 0;
+   }
+   previous.addEventListener('click', () => { if (!previous.disabled) changePage(page - 1); });
+   next.addEventListener('click', () => { if (!next.disabled) changePage(page + 1); });
+   pager.append(previous, make('span', '', `Página ${page} de ${pages} • ${result.rows.length} DDA(s)`), next);
+   content.append(pager);
+  }
  }
  async function openPdfs(row,trigger){
   if(root.hidden||destroyed||!rows||pdfRequest||root.getAttribute('aria-busy')==='true')return;

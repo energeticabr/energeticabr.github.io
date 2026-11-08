@@ -633,8 +633,13 @@ export function createTasksGallery({ document: documentRef = globalThis.document
   });
   doc.defaultView?.addEventListener("resize", refreshExpandButtons);
   clearButton.addEventListener("click", () => { for (const [name, control] of controls) control.value = name === "status" ? DEFAULT_STATUS_FILTER : name === "sort" ? "fatal-asc" : name === "pageSize" ? "10" : ""; sortValue = "fatal-asc"; pageSize = 10; autoFilters.apply(); });
-  previous.addEventListener("click", () => { if (page > 1) { page -= 1; renderList(); } });
-  next.addEventListener("click", () => { if (page < Math.ceil(filteredRows.length / pageSize)) { page += 1; renderList(); } });
+  function changePage(targetPage) {
+    page = targetPage;
+    renderList();
+    content.scrollTop = 0;
+  }
+  previous.addEventListener("click", () => { if (page > 1) changePage(page - 1); });
+  next.addEventListener("click", () => { if (page < Math.ceil(filteredRows.length / pageSize)) changePage(page + 1); });
   function navigateBack() {
     if (!opened || destroyed) return;
     if (dismissGalleryOverlay(root)) return;

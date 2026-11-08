@@ -145,14 +145,14 @@ export function createHrPayrollGallery({ document: documentOption,
       // A pre-save background response must never replace the saved record.
       session += 1;
       busy = false;
-      return loadPage(page, pageCursors[page] || null, false, true);
+      return loadPage(page, { refresh: true });
     },
   });
   const paymentComposer = gallery === 'FOLHAPGTO' && typeof loadPaymentOptions === 'function' && typeof savePayment === 'function'
     ? createPayrollPaymentComposer({document:doc,host:root,loadOptions:loadPaymentOptions,
       save: (...args) => runMutation(() => savePayment(...args)), onSaved:async()=>{
       session += 1;busy=false;
-      await loadPage(1,null,false,true);
+      await loadPage(1, { refresh: true });
     }}) : null;
   const add = element('button', 'hr-gallery-button hr-gallery-add-payment', '+');
   const createShortcut = attachGalleryCreateShortcut({ document: doc, root, toolbar, filterToggle: toggle, button: add,
@@ -169,7 +169,7 @@ export function createHrPayrollGallery({ document: documentOption,
     onRefresh: async () => {
       autoFilters.sync();
       invalidateRelatedReports?.();
-      await loadPage(page, pageCursors[page] || null, false, true);
+      await loadPage(page, { refresh: true });
     },
     isAvailable: () => opened && !destroyed && !busy && !pendingMutations && !paymentComposer?.isOpen() });
   async function runMutation(operation) {
@@ -186,7 +186,7 @@ export function createHrPayrollGallery({ document: documentOption,
     catch(error) {session+=1;busy=false;loadingScreen.sync(false);status.textContent=error.message;cards.replaceChildren();hasMore=false;updateControls();return;}
     session+=1;busy=false;pageCursors.splice(0,pageCursors.length,null,null);
     // Filters update atomically without interrupting an in-progress dropdown.
-    void loadPage(1,null,true);
+    void loadPage(1, { quiet: true });
   }
   const autoFilters=bindAutoFilterForm(filterForm,applyFilters);
   clearFilters.addEventListener('click',()=>{filterForm.reset();autoFilters.sync();applyFilters();});
@@ -247,7 +247,9 @@ export function createHrPayrollGallery({ document: documentOption,
     refreshShortcut.sync();
   }
 
-  async function loadPage(targetPage, cursor = pageCursors[targetPage] || null, quiet = false, refresh = false) {
+  async function loadPage(targetPage, {
+    cursor = pageCursors[targetPage] || null, quiet = false, refresh = false, scrollToTop = false,
+  } = {}) {
     if (!opened || destroyed || busy) return;
     busy = true;
     loadingScreen.sync(!quiet);
@@ -289,6 +291,7 @@ export function createHrPayrollGallery({ document: documentOption,
         throw new Error("Resposta da galeria inválida.");
       }
       task?.acquired();
+      const previousPage = page;
       page = result.page;
       if (refresh) pageCursors.splice(page + 1);
       pageCursors[page] = page === 1 ? null : cursor;
@@ -296,6 +299,7 @@ export function createHrPayrollGallery({ document: documentOption,
       hasMore = result.hasMore === true && Boolean(result.nextCursor);
       if(!quiet || !filterForm.contains(doc.activeElement)) syncFilterOptions(result);
       drawRows(result.rows);
+      if (scrollToTop && page !== previousPage) content.scrollTop = 0;
       if(Number.isInteger(result.count)) status.textContent=`${result.count} registro(s) encontrado(s) · ${result.rows.length} nesta página.`;
       task?.complete();
     } catch(error) {
@@ -304,7 +308,7 @@ export function createHrPayrollGallery({ document: documentOption,
         cards.replaceChildren();
         const retry = element("button", "hr-gallery-button hr-gallery-retry", "Tentar novamente");
         retry.type = "button";
-        retry.addEventListener("click", () => { void loadPage(targetPage, cursor, false, refresh); });
+        retry.addEventListener("click", () => { void loadPage(targetPage, { cursor, refresh, scrollToTop }); });
         cards.append(retry);
       }
       return false;
@@ -340,11 +344,11 @@ export function createHrPayrollGallery({ document: documentOption,
   }
   close.addEventListener("click", navigateBack);
   home?.addEventListener("click", () => { closeGallery(); onHome(); });
-  previous.addEventListener("click", () => { if (page > 1) void loadPage(page - 1, pageCursors[page - 1] || null); });
-  next.addEventListener("click", () => { if (hasMore) void loadPage(page + 1, pageCursors[page + 1]); });
+  previous.addEventListener("click", () => { if (page > 1) void loadPage(page - 1, { scrollToTop: true }); });
+  next.addEventListener("click", () => { if (hasMore) void loadPage(page + 1, { scrollToTop: true }); });
   const refreshSource = () => {
     if (gallery === 'FOLHAPGTO' && opened && !destroyed && doc.visibilityState !== 'hidden' && !recordActions.isEditing() && !paymentComposer?.isOpen()) {
-      void loadPage(page, pageCursors[page] || null, true, true);
+      void loadPage(page, { quiet: true, refresh: true });
     }
   };
   doc.defaultView?.addEventListener('focus', refreshSource);
@@ -363,7 +367,7 @@ export function createHrPayrollGallery({ document: documentOption,
       hasMore = false;
       pageCursors.splice(0, pageCursors.length, null, null);
       autoFilters.sync();
-      await loadPage(1,null,false,true);
+      await loadPage(1, { refresh: true });
       return true;
     },
     close: closeGallery,

@@ -2637,6 +2637,7 @@ export function createEntityPage(root, context = {}) {
         });
         return data;
       }
+      const previousPage = state.page;
       state.page = data.items.page;
       state.galleryVariantId = data.uiContract?.galleryVariant?.id || state.galleryVariantId;
       if (!state.galleryDefaultsApplied) {
@@ -2646,6 +2647,7 @@ export function createEntityPage(root, context = {}) {
       if (!state.gallerySortOverride && data.queryState?.sort) state.sort = data.queryState.sort;
       pageCache.set(state.page, data);
       render({ preserveToolbar });
+      if (options.scrollToTop && state.page !== previousPage) scrollGalleryToTop();
       void hydrateMetricItems(token);
       return data;
     } catch (error) {
@@ -2845,16 +2847,16 @@ export function createEntityPage(root, context = {}) {
       const nextPage = state.page + 1;
       if (pageCache.has(nextPage)) return showCachedPage(nextPage);
       if (state.data.query?.mode === "bounded-client-query") {
-        return refresh({ pageNumber: nextPage, preserveToolbar: true });
+        return refresh({ pageNumber: nextPage, preserveToolbar: true, scrollToTop: true });
       }
       if (!state.data?.nextLink) return undefined;
-      return refresh({ cursor: state.data.nextLink, pageNumber: nextPage, loadedBefore: state.data.items.loadedCount, preserveToolbar: true });
+      return refresh({ cursor: state.data.nextLink, pageNumber: nextPage, loadedBefore: state.data.items.loadedCount, preserveToolbar: true, scrollToTop: true });
     });
     resultsRoot?.querySelector("[data-entity-last]")?.addEventListener("click", () => {
       const lastPage = Number(state.data?.items?.pages) || 1;
       if (state.data?.items?.totalKnown !== true || lastPage <= state.page) return undefined;
       if (pageCache.has(lastPage)) return showCachedPage(lastPage);
-      return refresh({ pageNumber: lastPage, preserveToolbar: true });
+      return refresh({ pageNumber: lastPage, preserveToolbar: true, scrollToTop: true });
     });
     signatureGalleryBinding = bindSignatureGallery(resultsRoot, {
       host: root.querySelector("[data-signature-dialog-host]"),
@@ -3426,14 +3428,21 @@ export function createEntityPage(root, context = {}) {
     bindResults();
   }
 
+  function scrollGalleryToTop() {
+    const viewport = root.ownerDocument?.scrollingElement;
+    if (viewport) viewport.scrollTop = 0;
+  }
+
   function showCachedPage(pageNumber) {
     const data = pageCache.get(pageNumber);
     if (!data) return undefined;
     abortActive();
     const token = ++generation;
+    const pageChanged = state.page !== pageNumber;
     state.page = pageNumber;
     state.data = data;
     render();
+    if (pageChanged) scrollGalleryToTop();
     void hydrateMetricItems(token);
     return data;
   }
