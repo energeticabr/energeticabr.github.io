@@ -99,15 +99,20 @@ test('DDA uses authenticated SharePoint REST with read-only scope for private li
     if(query.has('$expand')) return new Response('{"error":{"code":"BadGateway"}}',{status:502,headers:{'Content-Type':'application/json'}});
     assert.ok(query.get('$select').split(',').includes('Title'));
     assert.ok(query.get('$select').split(',').includes('VENCIMENTO'));
+    assert.ok(query.get('$select').split(',').includes('STATUS_DDA'));
+    assert.ok(query.get('$select').split(',').includes('STATUS_CONSULTADO_EM'));
     assert.equal(query.get('$select').includes('*'),false);
-    value=[{Id:7,...sample.fields}];
+    value=[{Id:7,...sample.fields,STATUS_DDA:'Agendado',STATUS_CONSULTADO_EM:'2026-10-27T16:00:00Z'}];
    }
    else if(String(url).includes('/_api/web/lists?')) value=[{Id:'11111111-2222-3333-4444-555555555555',Title:'DDAS SICOOB',BaseTemplate:100,Hidden:false}];
    else throw new Error('Unexpected test request '+url);
    return new Response(JSON.stringify({value}),{status:200,headers:{'Content-Type':'application/json'}});
   },
  });
- assert.equal((await data.loadSnapshot()).rows[0].id,'7');
+ const [row]=(await data.loadSnapshot()).rows;
+ assert.equal(row.id,'7');
+ assert.equal(row.fields.STATUS_DDA,'Agendado');
+ assert.equal(row.fields.STATUS_CONSULTADO_EM,'2026-10-27T16:00:00Z');
  assert.ok(calls.every(url=>url.startsWith('https://tenant.sharepoint.com/sites/test/_api/')));
  assert.ok(scopes.every(scope=>scope==='https://tenant.sharepoint.com/AllSites.Read'));
 });

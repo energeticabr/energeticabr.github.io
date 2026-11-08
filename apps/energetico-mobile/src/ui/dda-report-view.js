@@ -107,7 +107,11 @@ export function createDdaReportView({document:doc=globalThis.document,data,openM
    if(row.paidManually)cluster.append(make('small','','Confirmado pelo usuário'));
    const statusDate=row.paidManually?row.confirmedAt:row.checkedAt;
    if(statusDate){const checked=new Date(statusDate);if(Number.isFinite(checked.getTime()))cluster.append(make('small','',new Intl.DateTimeFormat('pt-BR',{timeZone:'America/Sao_Paulo',dateStyle:'short',timeStyle:'short'}).format(checked)));}
-   status.append(cluster);
+   const schedule=make('div','ddr-schedule-cluster');
+   schedule.dataset.scheduleState=row.schedule.state;
+   schedule.title='Agendamento na última consulta ao Sicoob';
+   schedule.append(make('strong','',row.schedule.label));
+   status.append(schedule,cluster);
    const link=make('td','ddr-link');const linkCluster=make('span','ddr-link-cluster',row.provisionId?`ID ${row.provisionId}`:'N/A');linkCluster.dataset.linkState=row.provisionId?'linked':'missing';
    linkCluster.title=row.provisionId?`Descritivo provisão vinculado: ID ${row.provisionId}`:'Nenhum descritivo provisão vinculado';link.append(linkCluster);
    const bankDocument=make('td','ddr-bank-document'),bankCluster=make('div','ddr-bank-cluster'),documentCluster=make('div','ddr-document-cluster');
