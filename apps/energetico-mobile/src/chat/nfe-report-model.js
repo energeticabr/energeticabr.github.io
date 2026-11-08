@@ -7,7 +7,7 @@ const text = value => String(value ?? '').trim();
 const url = value => text(typeof value === 'object' ? value?.Url ?? value?.url : value);
 const codes = {
   'NF-e': { '1':'Simples Nacional', '2':'Simples Nacional · excesso de sublimite', '3':'Regime normal', '4':'MEI' },
-  'NFS-e': { '1':'Não optante pelo Simples Nacional', '2':'MEI', '3':'Simples Nacional · ME/EPP', '4':'Opção pelo Simples pendente' },
+  'NFS-e': { '1':'Não optante pelo Simples Nacional', '2':'MEI', '3':'Simples Nacional · ME/EPP' },
 };
 const namespaces = { 'NF-e':'http://www.portalfiscal.inf.br/nfe', 'NFS-e':'http://www.sped.fazenda.gov.br/nfse' };
 function attachmentName(value) {
@@ -33,7 +33,7 @@ export function projectNfeRows(rows) {
     const retention = !complete ? 'unknown' : retentionCode === 'RETENCAO_INFORMADA_XML' ? 'yes'
       : retentionCode === 'NAO_INFORMADA_XML' ? 'no' : 'unknown';
     const cno = invoiceConstructionCno(fields);
-    const cnoState = cno.status === 'missing' && !complete && !cno.corrected ? 'unknown' : cno.status;
+    const cnoState = cno.status === 'missing' && (!complete || type === 'NFS-e') && !cno.corrected ? 'unknown' : cno.status;
     const key = text(fields.CHAVE_ACESSO);
     const validKey = (type === 'NF-e' ? nfeKey : nfseKey).test(key);
     return [{
@@ -53,24 +53,33 @@ function fiscalChild(parent, name, namespace) {
   return [...(parent?.children || [])].find(node => node.localName === name && node.namespaceURI === namespace);
 }
 
-// Read the issuer's regime from the full XML and bind it to this report row's access key.
-export function invoiceSupplierRegime(xml, { type, key }, DOMParser) {
-  if (/<!DOCTYPE|<!ENTITY/i.test(xml) || !Object.hasOwn(codes, type)) return '';
+// Read the supplemental fiscal fields only after binding the full XML to the row's access key.
+export function invoiceXmlFacts(xml, { type, key }, DOMParser) {
+  if (/<!DOCTYPE|<!ENTITY/i.test(xml) || !Object.hasOwn(codes, type)) return null;
   const namespace = namespaces[type];
   const doc = new DOMParser().parseFromString(xml, 'application/xml');
   const root = doc.documentElement;
-  if (root?.namespaceURI !== namespace) return '';
+  if (root?.namespaceURI !== namespace) return null;
   const child = (node, name) => fiscalChild(node, name, namespace);
+  const regime = code => Object.hasOwn(codes[type], code) ? codes[type][code] : '';
   if (type === 'NF-e') {
     const invoice = root.localName === 'NFe' ? root : root.localName === 'nfeProc' ? child(root, 'NFe') : null;
     const info = child(invoice, 'infNFe');
-    if (info?.getAttribute('Id') !== `NFe${key}` || !nfeKey.test(key)) return '';
+    if (info?.getAttribute('Id') !== `NFe${key}` || !nfeKey.test(key)) return null;
     const code = child(child(info, 'emit'), 'CRT')?.textContent.trim();
-    return Object.hasOwn(codes[type], code) ? codes[type][code] : '';
+    return { regime:regime(code) };
   }
   const info = root.localName === 'NFSe' ? child(root, 'infNFSe') : null;
-  if (info?.getAttribute('Id') !== `NFS${key}` || !nfseKey.test(key)) return '';
-  const provider = child(child(child(info, 'DPS'), 'infDPS'), 'prest');
+  if (info?.getAttribute('Id') !== `NFS${key}` || !nfseKey.test(key)) return null;
+  const dps = child(child(info, 'DPS'), 'infDPS');
+  if (!dps) return null;
+  const provider = child(dps, 'prest');
   const code = child(child(provider, 'regTrib'), 'opSimpNac')?.textContent.trim();
-  return Object.hasOwn(codes[type], code) ? codes[type][code] : '';
+  const workCode = child(child(child(dps, 'serv'), 'obra'), 'cObra')?.textContent.trim() || '';
+  const tax = child(child(dps, 'valores'), 'trib');
+  const iss = child(child(tax, 'tribMun'), 'tpRetISSQN')?.textContent.trim();
+  const social = child(child(child(tax, 'tribFed'), 'piscofins'), 'tpRetPisCofins')?.textContent.trim();
+  // The explicit NFS-e codes also declare retention when the projected amount is absent.
+  const declaresRetention = /^[23]$/.test(iss) || /^[13-9]$/.test(social);
+  return { regime:regime(code), workCode, declaresRetention };
 }

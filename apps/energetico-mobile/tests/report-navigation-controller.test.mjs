@@ -317,6 +317,20 @@ test('a late pending snapshot cannot cover a newer HOME report after arrow navig
  await h.view.emit('open-task-association-report');query.resolve({rows:[]});assert.equal(await navigating,false);await tick();
  assert.equal(h.renders.at(-1).pendingProvisions,null);assert.equal(h.panels.at(-1).action,'open-task-association-report');
 });
+test('a slow NFE factory cannot cover a manually opened DDA report', async t => {
+ const factory = deferred();
+ let nfeOpens = 0, nfeDestroys = 0;
+ const h = harness(t, { nfeReportFactory:() => factory.promise });
+ await h.controller.start();
+ const opening = h.view.emit('open-nfe-report');
+ await tick();
+ assert.equal(await h.view.emit('open-dda-report'), true);
+ factory.resolve({ open(){ nfeOpens++; }, destroy(){ nfeDestroys++; } });
+ assert.equal(await opening, false);
+ assert.deepEqual([nfeOpens, nfeDestroys], [0, 1]);
+ assert.equal(h.panels.at(-1).element.hidden, false);
+});
+
 test('a late management factory cannot open over cargos after arrow navigation is superseded',async t=>{
  const factory=deferred();let opens=0,destroys=0;
  const h=harness(t,{managementReportFactory:()=>factory.promise});await h.controller.start();await h.view.emit('open-payment-ledger');

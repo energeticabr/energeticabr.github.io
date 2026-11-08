@@ -1,12 +1,12 @@
-import { invoiceSupplierRegime, projectNfeRows } from '../chat/nfe-report-model.js';
+import { invoiceXmlFacts, projectNfeRows } from '../chat/nfe-report-model.js';
 
 const PAGE_SIZE = 12;
 const money = new Intl.NumberFormat('pt-BR', { style:'currency', currency:'BRL' });
 const retentionLabels = { yes:'Retenção informada', no:'Sem retenção informada', unknown:'Retenção não confirmada' };
-const cnoLabels = { valid:'CNO consta', conflict:'CNO divergente', missing:'CNO não consta', unknown:'CNO não confirmada' };
+const cnoLabels = { valid:'CNO consta', conflict:'CNO divergente', missing:'CNO não consta', unknown:'CNO não confirmada', workCode:'CNO/CEI informado' };
 const searchKey = value => value.toLowerCase().normalize('NFD').replace(/\p{Diacritic}/gu, '');
 const displayDate = value => value ? value.split('-').reverse().join('/') : 'Não informada';
-const regimeKey = row => `${row.key}|${row.xmlUrl}`;
+const xmlKey = row => `${row.key}|${row.xmlUrl}`;
 
 export function createNfeReportView({ document:doc = globalThis.document, data, openMediaCollection }) {
   const make = (tag, className = '', text) => {
@@ -48,13 +48,9 @@ export function createNfeReportView({ document:doc = globalThis.document, data, 
   search.type = 'search';
   search.placeholder = 'Fornecedor, CNPJ ou nota';
   const type = make('select');
-  const retention = make('select');
-  const cno = make('select');
   for (const [control, label, options] of [
     [search, 'Pesquisar', []],
     [type, 'Documento', [['', 'Todos'], ['NF-e','NF-e'], ['NFS-e','NFS-e']]],
-    [retention, 'Retenção no XML', [['','Todas'], ...Object.entries(retentionLabels)]],
-    [cno, 'CNO', [['','Todas'], ...Object.entries(cnoLabels)]],
   ]) {
     const field = make('label', '', label);
     for (const [value, name] of options) {
@@ -83,7 +79,7 @@ export function createNfeReportView({ document:doc = globalThis.document, data, 
   doc.body.append(root);
 
   let rows = null, page = 1, request, pageRequest, pdfRequest, returnFocus, app, oldInert, oldOverflow;
-  const regimes = new Map();
+  const xmlFacts = new Map();
 
   function changePage(value) {
     page = value;
@@ -95,11 +91,41 @@ export function createNfeReportView({ document:doc = globalThis.document, data, 
   function pair(target, label, value, tone = '', detail = '') {
     const entry = make('div', 'nfe-pair');
     if (tone) entry.dataset.tone = tone;
-    const description = make('dd', '', value);
-    if (detail) description.append(make('small', '', detail));
+    const description = make('dd');
+    setValue(description, value, detail);
     entry.append(make('dt', '', label), description);
     target.append(entry);
     return description;
+  }
+
+  function setValue(description, value, detail = '') {
+    description.textContent = value;
+    if (detail) description.append(make('small', '', detail));
+  }
+
+  function renderXmlFacts({ row, regime, retention, cno }, facts) {
+    const unavailable = facts === null;
+    const pending = facts === undefined && Boolean(row.xmlUrl);
+    setValue(regime, facts?.regime || (unavailable ? 'Consulta indisponível' : pending ? 'Consultando…' : 'Não informado'));
+    const retained = row.withholding ? `Pelo comprador · ${money.format(row.withholding.total)}` : '';
+    let retentionState = row.retention;
+    if (facts?.declaresRetention) retentionState = 'yes';
+    else if (row.type === 'NFS-e' && retentionState === 'no' && !facts) retentionState = 'unknown';
+    setValue(retention, retentionLabels[retentionState], retained);
+    retention.parentElement.dataset.tone = retentionState === 'yes' ? 'warning' : '';
+
+    let cnoState = row.cnoState;
+    let detail = row.cno.numbers.join(' · ');
+    if (detail && row.cno.corrected) detail += ' · Carta de correção';
+    if (row.type === 'NFS-e' && cnoState === 'unknown' && facts) {
+      const code = facts.workCode;
+      const expected = row.cno.expected;
+      const isWorkCno = /^[\d.\s/-]+$/.test(code) && code.replace(/\D/g, '') === expected.replace(/\D/g, '');
+      cnoState = isWorkCno ? 'valid' : code ? 'workCode' : 'missing';
+      detail = isWorkCno ? expected : code;
+    }
+    setValue(cno, cnoLabels[cnoState], detail);
+    cno.parentElement.dataset.tone = cnoState;
   }
 
   function card(row) {
@@ -125,31 +151,32 @@ export function createNfeReportView({ document:doc = globalThis.document, data, 
     if (row.date) dateText.dateTime = row.date;
     date.append(dateText);
     pair(facts, 'Valor da nota', row.total === null ? 'Não informado' : money.format(row.total));
-    const regime = pair(facts, 'Tipo do fornecedor · XML',
-      regimes.get(regimeKey(row)) || (row.xmlUrl ? 'Consultando…' : 'Não informado'));
-    const retained = row.withholding ? `Pelo comprador · ${money.format(row.withholding.total)}` : '';
-    pair(facts, 'Retenção no XML', retentionLabels[row.retention], row.retention === 'yes' ? 'warning' : '', retained);
-    const cnoDetail = row.cno.numbers.join(' · ') + (row.cno.corrected && row.cno.numbers.length ? ' · Carta de correção' : '');
-    pair(facts, 'Cadastro da obra', cnoLabels[row.cnoState], row.cnoState, cnoDetail);
+    const fields = {
+      row,
+      regime:pair(facts, 'Tipo do fornecedor · XML', ''),
+      retention:pair(facts, 'Retenção no XML', ''),
+      cno:pair(facts, 'Cadastro da obra', ''),
+    };
+    renderXmlFacts(fields, xmlFacts.get(xmlKey(row)));
     record.append(identity, facts);
     list.append(record);
-    return { row, regime };
+    return fields;
   }
 
-  async function loadRegimes(cards, signal) {
-    const queue = cards.filter(({row}) => row.xmlUrl && !regimes.has(regimeKey(row)));
+  async function loadXmlFacts(cards, signal) {
+    const queue = cards.filter(({row}) => row.xmlUrl && !xmlFacts.has(xmlKey(row)));
     const loadOne = async () => {
       for (let item = queue.shift(); item && !signal.aborted; item = queue.shift()) {
-        const { row, regime } = item;
+        const { row } = item;
         try {
           const blob = await data.downloadDocument(row.xmlUrl, { signal });
           signal.throwIfAborted();
-          const value = invoiceSupplierRegime(await blob.text(), row, doc.defaultView.DOMParser) || 'Não informado';
+          const facts = invoiceXmlFacts(await blob.text(), row, doc.defaultView.DOMParser);
           signal.throwIfAborted();
-          regimes.set(regimeKey(row), value);
-          regime.textContent = value;
+          xmlFacts.set(xmlKey(row), facts);
+          renderXmlFacts(item, facts);
         } catch {
-          if (!signal.aborted) regime.textContent = 'Consulta indisponível';
+          if (!signal.aborted) renderXmlFacts(item, null);
         }
       }
     };
@@ -162,8 +189,7 @@ export function createNfeReportView({ document:doc = globalThis.document, data, 
     list.replaceChildren();
     const terms = searchKey(search.value.trim()).split(/\s+/).filter(Boolean);
     const visible = (rows || []).filter(row =>
-      (!type.value || row.type === type.value) && (!retention.value || row.retention === retention.value) &&
-      (!cno.value || row.cnoState === cno.value) &&
+      (!type.value || row.type === type.value) &&
       terms.every(term => searchKey([row.supplier, row.number, row.taxId, row.key, row.taxId.replace(/\D/g, '')].join(' ')).includes(term)));
     const pages = Math.max(1, Math.ceil(visible.length / PAGE_SIZE));
     page = Math.min(page, pages);
@@ -171,14 +197,14 @@ export function createNfeReportView({ document:doc = globalThis.document, data, 
     pager.hidden = pages === 1;
     metrics.replaceChildren();
     pair(metrics, 'Notas encontradas', String(visible.length));
-    pair(metrics, 'Com retenção no XML', String(visible.filter(row => row.retention === 'yes').length), 'warning');
-    pair(metrics, 'Com CNO na nota', String(visible.filter(row => ['valid','conflict'].includes(row.cnoState)).length), 'valid');
+    pair(metrics, 'Última emissão', visible[0]?.date ? displayDate(visible[0].date) : '—');
+    pair(metrics, 'Com XML completo', String(visible.filter(row => row.complete).length), 'valid');
     if (rows) feedback.textContent = visible.length ? 'Da emissão mais recente para a mais antiga.' : 'Nenhuma nota fiscal encontrada.';
     const cards = visible.slice((page - 1) * PAGE_SIZE, page * PAGE_SIZE).map(card);
     previous.disabled = page === 1;
     next.disabled = page === pages;
     pageLabel.textContent = `Página ${page} de ${pages}`;
-    void loadRegimes(cards, pageRequest.signal);
+    void loadXmlFacts(cards, pageRequest.signal);
   }
 
   async function openPdf(row, trigger) {
@@ -219,7 +245,7 @@ export function createNfeReportView({ document:doc = globalThis.document, data, 
     request = new AbortController();
     const { signal } = request;
     rows = null;
-    regimes.clear();
+    xmlFacts.clear();
     pdfRequest = null;
     pdfFeedback.hidden = true;
     refresh.disabled = true;
@@ -246,7 +272,7 @@ export function createNfeReportView({ document:doc = globalThis.document, data, 
     request?.abort();
     pageRequest?.abort();
     rows = null;
-    regimes.clear();
+    xmlFacts.clear();
     list.replaceChildren();
     root.hidden = true;
     if (app) app.inert = oldInert;
@@ -257,7 +283,7 @@ export function createNfeReportView({ document:doc = globalThis.document, data, 
   }
 
   search.addEventListener('input', () => { page = 1; render(); });
-  for (const control of [type, retention, cno]) control.addEventListener('change', () => { page = 1; render(); });
+  type.addEventListener('change', () => { page = 1; render(); });
   root.addEventListener('click', event => { if (event.target === root) close(); });
   root.addEventListener('keydown', event => {
     if (event.key === 'Escape') { event.preventDefault(); close(); }
@@ -279,7 +305,7 @@ export function createNfeReportView({ document:doc = globalThis.document, data, 
       if (app) app.inert = true;
       doc.body.style.overflow = 'hidden';
       page = 1;
-      search.value = type.value = retention.value = cno.value = '';
+      search.value = type.value = '';
       root.hidden = false;
       body.scrollTop = 0;
       closeButton.focus();

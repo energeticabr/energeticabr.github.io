@@ -4,7 +4,7 @@ import { JSDOM } from 'jsdom';
 import { createAppController } from '../src/app-controller.js';
 import { createConversationStore } from '../src/chat/conversation-store.js';
 import { renderChatMarkup, commandFromTarget } from '../src/ui/chat-view.js';
-import { projectNfeRows, invoiceSupplierRegime } from '../src/chat/nfe-report-model.js';
+import { projectNfeRows, invoiceXmlFacts } from '../src/chat/nfe-report-model.js';
 import { createNfeReportView } from '../src/ui/nfe-report-view.js';
 
 test('NFE uses the DDA drawing and opens its own report from the home menu', () => {
@@ -66,6 +66,11 @@ const invoice = { id:'10', fields:{
   STATUS_RETENCOES:'RETENCAO_INFORMADA_XML', IRRF_RETIDO:15, TOTAL_RETIDO:15, VALOR_TOTAL_NOTA:1500,
   OBSERVACOES_NOTA:'CNO 90.025.44060/72',
 } };
+const serviceXml = code => `<NFSe xmlns="http://www.sped.fazenda.gov.br/nfse"><infNFSe Id="NFS${serviceKey}">
+  <DPS><infDPS><prest><regTrib><opSimpNac>2</opSimpNac></regTrib></prest>
+  <serv><obra><cObra>${code}</cObra></obra></serv>
+  <valores><trib><tribMun><tpRetISSQN>3</tpRetISSQN></tribMun></trib></valores>
+  </infDPS></DPS></infNFSe></NFSe>`;
 const issuerXml = `<nfeProc xmlns="http://www.portalfiscal.inf.br/nfe"><NFe><infNFe Id="NFe${key}">
   <emit><CRT>4</CRT></emit></infNFe></NFe></nfeProc>`;
 
@@ -88,7 +93,7 @@ test('supplier regime comes from the issuer of the matching fiscal XML', () => {
   const dom = new JSDOM();
   try {
     const { DOMParser } = dom.window;
-    const parse = (xml, type = 'NF-e', id = key) => invoiceSupplierRegime(xml, {type, key:id}, DOMParser);
+    const parse = (xml, type = 'NF-e', id = key) => invoiceXmlFacts(xml, {type, key:id}, DOMParser)?.regime || '';
     assert.equal(parse(issuerXml), 'MEI');
     assert.equal(parse(issuerXml, 'NF-e', '3'.repeat(44)), '');
     assert.equal(parse(issuerXml.replace('<emit>', '<dest>').replace('</emit>', '</dest>')), '');
@@ -97,6 +102,24 @@ test('supplier regime comes from the issuer of the matching fiscal XML', () => {
     assert.equal(parse(service, 'NFS-e', serviceKey), 'Simples Nacional · ME/EPP');
     assert.equal(parse('<!DOCTYPE NFe>' + issuerXml), '');
   } finally { dom.window.close(); }
+});
+
+test('NFS-e reads a CNO/CEI and declared ISS retention even if missing from the SharePoint projection', async t => {
+  const dom = new JSDOM('<main id="app"></main>');
+  const services = ['900254406072','123456789012'].map((code, index) => ({
+    id:String(index + 1), fields:{ TIPO_FISCAL:'NFS-e', CHAVE_ACESSO:serviceKey, XML_URL:`${xmlUrl}?${code}`,
+      STATUS_IMPORTACAO:'XML_COMPLETO', STATUS_RETENCOES:'NAO_INFORMADA_XML' },
+  }));
+  const panel = createNfeReportView({ document:dom.window.document, data:{
+    loadSnapshot:async () => ({ rows:services }),
+    downloadDocument:async url => new Blob([serviceXml(url.split('?').at(-1))]),
+  } });
+  t.after(() => { panel.destroy(); dom.window.close(); });
+  await panel.open();
+  await new Promise(resolve => setImmediate(resolve));
+  const note = id => panel.element.querySelector(`[data-invoice-id="${id}"]`).textContent;
+  assert.match(note('1'), /MEI.*Retenção informada.*CNO consta.*90\.025\.44060\/72/);
+  assert.match(note('2'), /Retenção informada.*CNO\/CEI informado.*123456789012/);
 });
 
 test('report shows the fiscal facts, filters by supplier and opens the exact attached PDF', async t => {

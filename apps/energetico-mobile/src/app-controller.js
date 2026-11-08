@@ -9923,13 +9923,13 @@ export function createAppController({
       if (stopped || account !== owner || sessionRevision !== revision || ddaReminderInteraction !== interaction) return false;
       return openRegistrationGallery(kind, replyId, openOptions);
     }
-    if (isGalleryMenu) {
-      // Returning to the chooser supersedes any earlier gallery request, even
+    if (isGalleryMenu || isNfeReport) {
+      // Opening a new destination supersedes earlier gallery requests, even
       // when its transport has not settled after the panel was closed.
       galleryOpeningRevision++;
       registrationGalleryOpenings.clear();
       closeGalleryOverlays();
-    } else if (isDdaReport || isNfeReport) closeGalleryOverlays();
+    } else if (isDdaReport) closeGalleryOverlays();
     const galleryAccount = account;
     const openingIsCurrent = galleryOpeningGuard(galleryAccount);
     const galleryRevision = sessionRevision;
@@ -11952,6 +11952,12 @@ export function createAppController({
       if (type.startsWith('open-') || ['select-reply','send-text','finish-flow','navigate-mascot-report','draft-changed','fill-pending-construction-diary','launch-pending-note'].includes(type)) {
         ddaPaymentLaunchAbort?.abort();
         ddaReminderInteraction++;
+      }
+      if (registrationGalleryOpenings.has('nfeReport') && type !== 'open-nfe-report' && command?.replyId !== 'action_nfe_report'
+        && (type.startsWith('open-') || ['select-reply', 'send-text', 'finish-flow'].includes(type))) {
+        galleryOpeningRevision++;
+        registrationGalleryOpenings.clear();
+        registrationGalleries.get('nfeReport')?.close();
       }
       if (type === 'open-trancid-report') trancidAutoReminder.handled();
       else if (trancidReportSession && type.startsWith('open-')) disposeTrancidReport();
