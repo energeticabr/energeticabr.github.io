@@ -42,7 +42,17 @@
       const frame = () => new Promise(resolve => requestAnimationFrame(() => requestAnimationFrame(resolve)));
       await document.fonts.ready; await frame();
       const root = document.querySelector('.tg-overlay'), content = root.querySelector('.og-content');
-      [...root.querySelectorAll('.og-pagination button')].find(button => button.textContent === 'Próxima página').click();
+      const [previous, next] = root.querySelectorAll('.og-pagination button');
+      const changePage = async button => {
+        content.scrollTop = content.scrollHeight;
+        const from = content.scrollTop;
+        button.click();
+        await frame();
+        return { from, to: content.scrollTop, page: root.querySelector('.og-page-label').textContent };
+      };
+      const forward = await changePage(next);
+      const back = await changePage(previous);
+      next.click();
       await frame();
       const neighbor = root.querySelector('[data-item-id="189"]');
       neighbor.querySelector('[data-action="expand"]').click();
@@ -51,6 +61,7 @@
       const before = { content: content.scrollTop, root: root.scrollTop };
       target.click(); root.querySelector('[data-gallery-confirm="yes"]').click(); await frame();
       const state = {
+        forward, back,
         snapshots: window.snapshots, writes: window.writes, before,
         after: { content: content.scrollTop, root: root.scrollTop },
         page: root.querySelector('.og-page-label').textContent,

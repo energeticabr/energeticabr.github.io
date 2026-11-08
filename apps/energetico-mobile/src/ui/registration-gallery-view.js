@@ -1259,8 +1259,13 @@ export function createRegistrationGallery({ document: doc = globalThis.document,
   for (const [field, control] of filterControls) control.addEventListener("change", () => { page = 1; attachmentNotice = ""; void refreshDependentFilters(field); });
   for (const control of dateBounds.values()) control.addEventListener("change", () => { page = 1; attachmentNotice = ""; render(); });
   sortControl?.addEventListener("change", () => { page = 1; render(); });
-  previous.addEventListener("click", () => { page -= 1; render(); });
-  next.addEventListener("click", () => { page += 1; render(); });
+  function changePage(targetPage) {
+    page = targetPage;
+    render();
+    root.scrollTop = 0;
+  }
+  previous.addEventListener("click", () => { if (!previous.disabled) changePage(page - 1); });
+  next.addEventListener("click", () => { if (!next.disabled) changePage(page + 1); });
   root.addEventListener("keydown", event => {
     if (event.key === "Escape") { navigateBack(); return; }
     if (event.key !== "Tab" || root.hidden) return;

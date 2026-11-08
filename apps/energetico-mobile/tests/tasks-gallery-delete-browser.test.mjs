@@ -7,7 +7,7 @@ import { createServer } from 'vite';
 import { JSDOM } from 'jsdom';
 import { runBrowserLayout } from './helpers/browser-layout-runner.mjs';
 
-test('deleting a task keeps the real browser scroll and second page through the success popup', { timeout: 90000 }, async t => {
+test('task pagination opens at the top and deletion keeps the real browser scroll through the success popup', { timeout: 90000 }, async t => {
   const browser = [process.env.CHROME_BIN, 'C:/Program Files/Google/Chrome/Application/chrome.exe', '/usr/bin/google-chrome', '/usr/bin/chromium'].find(path => path && existsSync(path));
   if (!browser) return t.skip('Chrome unavailable');
   const root = resolve(fileURLToPath(new URL('..', import.meta.url)));
@@ -20,6 +20,11 @@ test('deleting a task keeps the real browser scroll and second page through the 
       const dom = new JSDOM(result.stdout);
       try {
         const state = JSON.parse(dom.window.document.documentElement.dataset.layout), diagnostic = JSON.stringify({ width, state });
+        for (const [direction, page] of [['forward', 2], ['back', 1]]) {
+          assert.ok(state[direction].from > 0, diagnostic);
+          assert.equal(state[direction].to, 0, diagnostic);
+          assert.equal(state[direction].page, `Página ${page} de 3`, diagnostic);
+        }
         assert.equal(state.snapshots, 1, diagnostic);
         assert.deepEqual(state.writes, [{ operation: 'delete', id: '188' }], diagnostic);
         assert.equal(state.page, 'Página 2 de 3', diagnostic);

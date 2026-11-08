@@ -661,10 +661,13 @@ export function createRecurringExpensesGallery({
     filterPanel.hidden = !filterPanel.hidden;
     filterButton.setAttribute("aria-expanded", String(!filterPanel.hidden));
   });
-  previous.addEventListener("click", () => { if (page > 1) { page -= 1; renderList(); } });
-  next.addEventListener("click", () => {
-    if (page < Math.ceil(filteredRows.length / pageSize)) { page += 1; renderList(); }
-  });
+  function changePage(targetPage) {
+    page = targetPage;
+    renderList();
+    content.scrollTop = 0;
+  }
+  previous.addEventListener("click", () => { if (page > 1) changePage(page - 1); });
+  next.addEventListener("click", () => { if (page < Math.ceil(filteredRows.length / pageSize)) changePage(page + 1); });
   function navigateBack() {
     if (!opened || destroyed) return;
     if (dismissGalleryOverlay(root)) return;

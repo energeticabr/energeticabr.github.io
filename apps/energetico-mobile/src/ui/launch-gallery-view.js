@@ -385,8 +385,8 @@ export function createLaunchGallery({ document: documentRef = globalThis.documen
   const listStatus = element('div', 'lg-list-status'); listStatus.setAttribute('aria-live', 'polite');
   const cards = element('div', 'lg-cards'); cards.setAttribute('aria-label', 'Lançamentos');
   const pagination = element('nav', 'lg-pagination'); pagination.setAttribute('aria-label', 'Páginas de lançamentos');
-  const previous = button('Página anterior', () => loadSnapshot({ ...applied, page: page - 1 }), { locked: false, disabled: true });
-  const next = button('Próxima página', () => loadSnapshot({ ...applied, page: page + 1 }), { locked: false, disabled: true });
+  const previous = button('Página anterior', () => loadSnapshot({ ...applied, page: page - 1 }, { scrollToTop: true }), { locked: false, disabled: true });
+  const next = button('Próxima página', () => loadSnapshot({ ...applied, page: page + 1 }, { scrollToTop: true }), { locked: false, disabled: true });
   const pageLabel = element('span', 'lg-page-label');
   pagination.append(previous, pageLabel, next);
   const panel = element('section', 'lg-detail lg-detail-modal'); panel.hidden = true; panel.tabIndex = -1;
@@ -480,7 +480,7 @@ export function createLaunchGallery({ document: documentRef = globalThis.documen
     }
     notify(''); return loadSnapshot(data, { refresh, blocking: refresh || blocking });
   }
-  async function loadSnapshot(data = applied, { refresh = false, blocking = true } = {}) {
+  async function loadSnapshot(data = applied, { refresh = false, blocking = true, scrollToTop = false } = {}) {
     if (!opened || destroyed || !root.isConnected) return;
     attachmentCounts.reset();
     const version = ++listVersion, epoch = session;
@@ -502,6 +502,7 @@ export function createLaunchGallery({ document: documentRef = globalThis.documen
       if (!blocking && !matchesCurrentFilters()) { autoFilters.invalidate(); return; }
       if (!Array.isArray(result?.rows)) throw new Error('Resposta de lançamentos inválida');
       task.acquired();
+      const previousPage = page;
       page = result.page ?? data.page; pages = result.pages ?? 1;
       totals.replaceChildren(...TOTALS.map(([totalKey, title]) => {
         const pair = element('div', `lg-total lg-total-${totalKey}`);
@@ -522,6 +523,7 @@ export function createLaunchGallery({ document: documentRef = globalThis.documen
       void attachmentCounts.request(result.rows.filter(item => recordMedia(item)));
       listStatus.replaceChildren(element('p', 'lg-hint', result.rows.length ? `${result.count ?? result.rows.length} lançamento(s)` : 'Nenhum lançamento encontrado para estes filtros.'));
       pageLabel.textContent = `Página ${pages ? page : 0} de ${pages}`;
+      if (scrollToTop && page !== previousPage) content.scrollTop = 0;
       task.complete();
       return true;
     } catch (error) {
@@ -530,7 +532,7 @@ export function createLaunchGallery({ document: documentRef = globalThis.documen
       listStatus.replaceChildren(element('p', 'lg-error', failure(error, 'Erro ao carregar lançamentos')),
         button('Tentar novamente', () => {
           autoFilters.sync();
-          return matchesCurrentFilters() ? loadSnapshot(data, { refresh, blocking }) : applyFilters({ refresh, blocking });
+          return matchesCurrentFilters() ? loadSnapshot(data, { refresh, blocking, scrollToTop }) : applyFilters({ refresh, blocking });
         }, { locked: false }));
       return false;
     } finally {
