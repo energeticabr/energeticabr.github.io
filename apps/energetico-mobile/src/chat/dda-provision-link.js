@@ -1,8 +1,15 @@
 import {provisionDateKey,provisionTotal} from './pending-provision-dates.js';
 import {provisionDescriptionLinkColumn} from './provision-description-detail-data.js';
+import {provisionChildPaid,provisionDateKey as paymentDateKey,provisionDueFields} from '../../../../portal/forms/provision-parent-due.js';
 
 export const DDA_PROVISION_FIELD='DESCRITIVOPROVIS_x00c3_O';
 const validId=value=>/^[1-9]\d*$/.test(String(value??''))&&Number.isSafeInteger(Number(value));
+const CHILD_LISTS=['PROVISÃO PGTOS','PROVISAO PGTOS','PROVISAO PAGAMENTOS'];
+function hasItemIdentity(item,expectedId=String(item?.id)){
+ const fields=item?.fields,fieldId=fields?.ID??fields?.id;
+ return validId(item?.id)&&String(item.id)===expectedId&&fields&&typeof fields==='object'&&!Array.isArray(fields)
+  &&(fieldId==null||String(fieldId).trim()===expectedId);
+}
 const nameKey=value=>String(value??'').normalize('NFD').replace(/[\u0300-\u036f]/g,'').toUpperCase().replace(/[^A-Z0-9]+/g,' ').trim();
 const legalNameTokens=new Set(['LTDA','LIMITADA','EIRELI','SA','EPP','MEI','ME','DO','DA','DE','DOS','DAS','NO','NA','NOS','NAS','EM','AO','AOS','OS','AS','UM','UMA','S','A','E','O']);
 const genericNameTokens=new Set(['EMPRESA','COMERCIO','COMERCIAL','COMERCIAIS','INDUSTRIA','INDUSTRIAL','SERVICOS','BRASIL','FORNECEDOR','NAO','INFORMADO','ENGENHARIA','CONSTRUCAO','CONSTRUCOES','CONCRETO','CONCRETOS','MATERIAL','MATERIAIS']);
@@ -69,7 +76,7 @@ export function createDdaProvisionLink({repository,siteKey='personal',assertSess
   if(!columns.some(column=>column.name===DDA_PROVISION_FIELD&&!column.readOnly))throw new Error('Coluna de vínculo DDA indisponível.');
   const items=await repository.getItems(siteKey,provision.id,'?$expand=fields',{signal});assertSession();
   if(!Array.isArray(items))throw new Error('Consulta de provisões incompleta.');
-  const children=await repository.resolveList(siteKey,['PROVISÃO PGTOS','PROVISAO PGTOS','PROVISAO PAGAMENTOS'],{signal});assertSession();
+  const children=await repository.resolveList(siteKey,CHILD_LISTS,{signal});assertSession();
   if(children?.status!=='resolved'||!children.id)throw new Error('Lista de provisões indisponível.');
   const childColumns=await repository.getColumns(siteKey,children.id,{signal});assertSession();
   const linkName=provisionDescriptionLinkColumn(childColumns);
@@ -92,6 +99,42 @@ export function createDdaProvisionLink({repository,siteKey='personal',assertSess
    due:item.fields.DATAPREVISTOPGTO||'',label:`#${item.id} · ${item.fields.FORNECEDOR||'Fornecedor não informado'}`,provisions:byParent.get(String(item.id))||[],
   }));
  }
+ async function loadSettledProvisionIds(provisionIds,{signal}={}){
+  const candidates=new Set(provisionIds.filter(validId).map(String)),settled=new Set();
+  if(!candidates.size)return settled;
+  const active=()=>{assertSession();signal?.throwIfAborted();};
+  active();
+  const [parents,children]=await Promise.all([
+   repository.resolveList(siteKey,['DESCRITIVOPROVISAO'],{signal}),
+   repository.resolveList(siteKey,CHILD_LISTS,{signal}),
+  ]);
+  active();
+  if([parents,children].some(list=>list?.status!=='resolved'||!list.id))throw new Error('Listas de provisão indisponíveis.');
+  const columns=await repository.getColumns(siteKey,children.id,{signal});active();
+  const linkName=provisionDescriptionLinkColumn(columns),paymentFields=provisionDueFields(columns);
+  // The repository follows every page and rejects partial or malformed collections.
+  const lines=await repository.getItems(siteKey,children.id,'?$expand=fields',{signal});active();
+  if(!Array.isArray(lines))throw new Error('Consulta de provisões incompleta.');
+  const seen=new Set(),allPaid=new Map();
+  for(const line of lines){
+   if(!hasItemIdentity(line)||seen.has(String(line.id)))throw new Error('Consulta de provisões inválida.');
+   seen.add(String(line.id));
+   const rawLink=line.fields[linkName];
+   if(rawLink!=null&&typeof rawLink!=='string'&&typeof rawLink!=='number')throw new Error('Vínculo de provisão inválido.');
+   const parent=String(rawLink??'').trim();
+   if(candidates.has(parent))allPaid.set(parent,allPaid.get(parent)!==false&&provisionChildPaid(line.fields,paymentFields));
+  }
+  const checkParent=async id=>{
+   let item;
+   try{item=await repository.getItem(siteKey,parents.id,id,'?$expand=fields',{signal});}
+   catch{active();return;}
+   active();
+   if(hasItemIdentity(item,id)&&paymentDateKey(item.fields.DATAPGTOEFETUADO))settled.add(id);
+  };
+  const paidGroups=[...candidates].filter(id=>allPaid.get(id)===true);
+  for(let offset=0;offset<paidGroups.length;offset+=8)await Promise.all(paidGroups.slice(offset,offset+8).map(checkParent));
+  return settled;
+ }
  async function save({ddaId,provisionId,signal}){
   if(!validId(ddaId)||!validId(provisionId))throw new RangeError('ID de vínculo inválido.');
   assertSession();const {dda,provision}=await lists(signal);
@@ -105,5 +148,5 @@ export function createDdaProvisionLink({repository,siteKey='personal',assertSess
   if(String(saved?.fields?.[DDA_PROVISION_FIELD]??'')!==String(provisionId))throw new Error('O vínculo não foi confirmado no SharePoint.');
   return {ddaId:String(ddaId),provisionId:String(provisionId)};
  }
- return Object.freeze({loadOptions,save});
+ return Object.freeze({loadOptions,loadSettledProvisionIds,save});
 }

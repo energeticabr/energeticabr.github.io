@@ -14,6 +14,8 @@ const source=[
  {id:'3',fields:{Title:'GAMA SERVIÇOS — EXEMPLO',VENCIMENTO:'2026-11-05',VALOR:2450,SITUACAO:'Em aberto',DOCUMENTO:'EX-003',BANCO:'BANCO MODELO',ULTIMA_CONSULTA:'2026-10-28T10:00:00Z'}},
  {id:'4',fields:{Title:'DELTA — EXEMPLO PAGO',VENCIMENTO:'2026-10-26',VALOR:100,SITUACAO:'Pago',DOCUMENTO:'EX-004',BANCO:'BANCO MODELO'}}
 ];
+const settlementLayout=new URLSearchParams(location.search).has('settlement');
+if(settlementLayout)source[3].fields.DDA_CICLO_AGENDAMENTO='PAGO_AGENDADO';
 source[0].fields.CNPJ_FORNECEDOR='00.111.111/0001-22';
 source[0].fields.DESCRITIVOPROVIS_x00c3_O='46';
 source[0].fields.EMISSAO='2026-10-20T00:00:00Z';
@@ -38,6 +40,13 @@ chat.render({sessionStatus:'authenticated',account:{name:'Demonstração'},draft
  {id:'group_pending',label:'⏳ PENDÊNCIAS'},...['SUPRIMENTOS','FINANCEIRO','DEMANDAS','RECURSOS HUMANOS','ETAPA OBRA','COMERCIAL','AUDITORIA E DOCUMENTOS','NB PARTICIPAÇÕES','GASTOS PESSOAIS','POWER BI'].map((label,i)=>({id:'group_'+i,label}))]}]});
 window.ddaReport=report;
 if(new URLSearchParams(location.search).has('report'))await report.open();
+if(settlementLayout){
+ await document.fonts.ready;await new Promise(resolve=>requestAnimationFrame(()=>requestAnimationFrame(resolve)));
+ const badge=document.querySelector('[data-dda-id="4"] .ddr-schedule-cluster'),note=badge?.querySelector('.ddr-settlement-pending');
+ document.documentElement.dataset.settlement=JSON.stringify({label:badge?.querySelector('strong').textContent,pending:note?.textContent,
+  fits:badge?.scrollWidth<=badge?.clientWidth+1&&note?.scrollWidth<=note?.clientWidth+1,
+  aligned:badge?.offsetWidth===badge?.nextElementSibling.offsetWidth});
+}
 if(syncMode){
  const refresh=document.querySelector('.pl-refresh');refresh.click();refresh.click();await new Promise(r=>setTimeout(r,0));
  const state={starts:syncStarts,disabledWhileRunning:refresh.disabled,progressVisible:!document.querySelector('.ddr-notice').hidden};

@@ -60,7 +60,8 @@ class ManualPaymentTests(unittest.TestCase):
     def test_confirms_only_override_fields_with_server_actor_and_readback(self):
         result = self.call()['ddaPaymentConfirmation']
         self.assertEqual(result, {'status': 'confirmed', 'itemId': 7, 'key': KEY,
-                                 'confirmedAt': '2026-10-28T13:45:00Z', 'confirmedBy': 'owner@example.com'})
+                                 'confirmedAt': '2026-10-28T13:45:00Z', 'confirmedBy': 'owner@example.com',
+                                 'paidBySchedule': False})
         self.assertEqual(self.repo.writes, [(7, {'PGTO_CONFIRMADO': True,
                            'PGTO_CONFIRMADO_EM': '2026-10-28T13:45:00Z',
                            'PGTO_CONFIRMADO_POR': 'owner@example.com'}, '"1"')])
@@ -73,6 +74,27 @@ class ManualPaymentTests(unittest.TestCase):
         self.allowed.add('second@example.com')
         self.assertEqual(self.call(identity={'oid': 'second', 'email': 'second@example.com'}), first)
         self.assertEqual(len(self.repo.writes), 1)
+
+    def test_confirming_a_current_bank_schedule_records_paid_schedule_atomically(self):
+        self.repo.row.update(STATUS_DDA='Agendado', DDA_CICLO_AGENDAMENTO='AGENDADO',
+                             STATUS_CONSULTADO_EM='2026-10-28T13:00:00Z',
+                             ULTIMA_CONSULTA='2026-10-28T13:00:00Z')
+        result = self.call()['ddaPaymentConfirmation']
+        self.assertIs(result['paidBySchedule'], True)
+        self.assertEqual(self.repo.writes[0][1]['DDA_CICLO_AGENDAMENTO'], 'PAGO_AGENDADO')
+        self.assertEqual(self.repo.row['DDA_CICLO_AGENDAMENTO'], 'PAGO_AGENDADO')
+        self.assertEqual(self.repo.row['STATUS_DDA'], 'Agendado')
+        result = self.call()['ddaPaymentConfirmation']
+        self.assertIs(result['paidBySchedule'], True)
+        self.assertEqual(len(self.repo.writes), 1)
+
+    def test_newer_bank_read_blocks_confirmation_of_an_older_schedule(self):
+        self.repo.row.update(STATUS_DDA='Agendado', DDA_CICLO_AGENDAMENTO='AGENDADO',
+                             STATUS_CONSULTADO_EM='2026-10-28T12:00:00Z',
+                             ULTIMA_CONSULTA='2026-10-28T13:00:00Z')
+        result = self.call()['ddaPaymentConfirmation']
+        self.assertIs(result['paidBySchedule'], False)
+        self.assertNotIn('DDA_CICLO_AGENDAMENTO', self.repo.writes[0][1])
 
     def test_denies_missing_identity_and_non_owner_before_reading(self):
         for identity in ({'email': 'owner@example.com'}, {'oid': 'other', 'email': 'other@example.com'}):

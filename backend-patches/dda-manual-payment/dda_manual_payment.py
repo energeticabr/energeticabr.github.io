@@ -6,6 +6,9 @@ from datetime import datetime, timezone
 
 SCOPE_PATH = Path('/var/lib/energetica-whatsapp/dda-sync/manual-payment-scope.json')
 AUDIT_FIELDS = ('PGTO_CONFIRMADO', 'PGTO_CONFIRMADO_EM', 'PGTO_CONFIRMADO_POR')
+SCHEDULE_FIELD = 'DDA_CICLO_AGENDAMENTO'
+PAID_BY_SCHEDULE = 'PAGO_AGENDADO'
+SCHEDULE_READ_FIELDS = (SCHEDULE_FIELD, 'STATUS_DDA', 'STATUS_CONSULTADO_EM', 'ULTIMA_CONSULTA')
 
 
 class ConcurrentUpdate(RuntimeError):
@@ -28,14 +31,17 @@ class SharePointRepository:
 
     def read(self, item_id):
         payload = self.client._request('GET', f"web/lists(guid'{self.list_id}')/items({item_id})",
-            params={'$select': ','.join(('Id', 'CHAVE_DDA', 'CNPJ_PAGADOR', *AUDIT_FIELDS))},
+            params={'$select': ','.join(('Id', 'CHAVE_DDA', 'CNPJ_PAGADOR', *AUDIT_FIELDS, *SCHEDULE_READ_FIELDS))},
             headers={'Accept': 'application/json;odata=verbose'})
         row = dict(payload.get('d', payload))
         row['_etag'] = row.get('__metadata', {}).get('etag')
         return row
 
     def confirm(self, item_id, fields, etag):
-        if set(fields) != set(AUDIT_FIELDS) or not etag or etag == '*':
+        writable = set(AUDIT_FIELDS)
+        if fields.get(SCHEDULE_FIELD) == PAID_BY_SCHEDULE:
+            writable.add(SCHEDULE_FIELD)
+        if set(fields) != writable or not etag or etag == '*':
             raise ValueError('Confirmação DDA inválida.')
         try:
             self.client._request('POST', f"web/lists(guid'{self.list_id}')/items({item_id})",
@@ -77,7 +83,20 @@ def _receipt(row, item_id, key):
     return {'status': 'processed', 'messages': [], 'ddaPaymentConfirmation': {
         'status': 'confirmed', 'itemId': item_id, 'key': key,
         'confirmedAt': parsed.astimezone(timezone.utc).isoformat().replace('+00:00', 'Z'),
-        'confirmedBy': actor}}
+        'confirmedBy': actor, 'paidBySchedule': row.get(SCHEDULE_FIELD) == PAID_BY_SCHEDULE}}
+
+
+def _active_schedule(row):
+    if row.get(SCHEDULE_FIELD) == PAID_BY_SCHEDULE:
+        return False
+    if row.get('STATUS_DDA') != 'Agendado' and row.get(SCHEDULE_FIELD) != 'AGENDADO':
+        return False
+    try:
+        checked = datetime.fromisoformat(str(row.get('STATUS_CONSULTADO_EM')).replace('Z', '+00:00'))
+        latest = datetime.fromisoformat(str(row.get('ULTIMA_CONSULTA')).replace('Z', '+00:00'))
+        return checked.tzinfo is not None and latest.tzinfo is not None and latest <= checked
+    except ValueError:
+        return False
 
 
 def handle_portal(identity, body, repository, *, allowed_emails=None, now=None):
@@ -109,6 +128,8 @@ def handle_portal(identity, body, repository, *, allowed_emails=None, now=None):
         fields = {'PGTO_CONFIRMADO': True,
                   'PGTO_CONFIRMADO_EM': instant.astimezone(timezone.utc).isoformat(timespec='seconds').replace('+00:00', 'Z'),
                   'PGTO_CONFIRMADO_POR': email}
+        if _active_schedule(row):
+            fields[SCHEDULE_FIELD] = PAID_BY_SCHEDULE
         try:
             repository.confirm(item_id, fields, etag)
         except ConcurrentUpdate:
@@ -121,5 +142,7 @@ def handle_portal(identity, body, repository, *, allowed_emails=None, now=None):
         audit = receipt['ddaPaymentConfirmation']
         if audit['confirmedBy'] != email or audit['confirmedAt'] != fields['PGTO_CONFIRMADO_EM']:
             raise RuntimeError('Auditoria da confirmação divergiu. Consulte novamente.')
+        if SCHEDULE_FIELD in fields and persisted.get(SCHEDULE_FIELD) != PAID_BY_SCHEDULE:
+            raise RuntimeError('SharePoint não confirmou o pagamento agendado. Consulte novamente.')
         return receipt
     raise RuntimeError('DDA foi alterado simultaneamente. Consulte novamente.')

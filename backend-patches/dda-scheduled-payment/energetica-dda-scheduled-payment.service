@@ -1,0 +1,19 @@
+[Unit]
+Description=Energética - avisos de pagamentos DDA agendados confirmados
+After=network-online.target energetica-whatsmeow.service
+Wants=network-online.target
+
+[Service]
+Type=oneshot
+User=energetica-whatsapp
+Group=energetica-whatsapp
+EnvironmentFile=/etc/energetica-whatsapp.env
+Environment=PYTHONDONTWRITEBYTECODE=1
+ExecStart=/opt/energetica-whatsapp/.venv/bin/python /opt/energetica-whatsapp/dda-scheduled-payment/notify.py
+TimeoutStartSec=120
+UMask=0077
+NoNewPrivileges=true
+PrivateTmp=true
+ProtectSystem=strict
+ProtectHome=true
+ReadWritePaths=/var/lib/energetica-whatsapp/whatsmeow

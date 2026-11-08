@@ -1,0 +1,10 @@
+[Unit]
+Description=Consultar confirmações de pagamentos DDA agendados
+
+[Timer]
+OnBootSec=2min
+OnUnitInactiveSec=1min
+AccuracySec=15s
+
+[Install]
+WantedBy=timers.target

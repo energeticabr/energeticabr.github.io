@@ -1,4 +1,4 @@
-import {normalizeDdaReportRows,buildDdaReport} from '../chat/dda-report-model.js';
+import {normalizeDdaReportRows,buildDdaReport,ddaSettlementPending,ddaWasScheduledAt} from '../chat/dda-report-model.js';
 import {ddaDueTone,ddaTodayKey} from './dda-card.js';
 import {bindReportLandscape} from './report-landscape.js';
 import {addReportCloseControl} from './report-close-control.js';
@@ -9,6 +9,11 @@ const LOGO=new URL('../../../../assets/logo-energetica-oficial.png',import.meta.
 const money=value=>value==null?'Não disponível':new Intl.NumberFormat('pt-BR',{style:'currency',currency:'BRL'}).format(Number(value));
 const date=value=>value?value.slice(8,10)+'/'+value.slice(5,7)+'/'+value.slice(0,4):'Não informado';
 const daysSince=(day,today)=>Math.round((Date.parse(`${today}T00:00:00Z`)-Date.parse(`${day}T00:00:00Z`))/86400000);
+const ROW_CONTROLS=['data-dda-pdf','data-dda-mirror','data-dda-confirm-payment','data-dda-provision-pencil','data-dda-toggle-barcode','data-dda-copy-barcode'];
+function rowControlSelector(element){
+ const attribute=ROW_CONTROLS.find(name=>element?.hasAttribute(name));
+ return attribute?`[${attribute}="${element.getAttribute(attribute)}"]`:null;
+}
 export function createDdaReportView({document:doc=globalThis.document,data,openMediaCollection,confirmPayment,onStartLaunch,syncMonitor,copyText,onClose=()=>{},now=()=>new Date()}={}){
  if(!doc?.body||typeof data?.loadSnapshot!=='function')throw new TypeError('O relatório requer a sessão SharePoint.');
  const make=(tag,cls='',value)=>{const node=doc.createElement(tag);node.className=cls;if(value!==undefined)node.textContent=String(value);return node;};
@@ -30,18 +35,23 @@ export function createDdaReportView({document:doc=globalThis.document,data,openM
  const landscape=bindReportLandscape(root);addReportCloseControl({root,toolbar,onClose:close});
  let rows=null,controller=null,revision=0,filterRevision=0,page=1,printAll=false,destroyed=false,returnFocus=null,app=null,oldInert=false,oldOverflow='';
  let bankRunning=Boolean(syncMonitor?.running),bankNotice='',startingBank=false,reloadPending=false,pdfRequest=null;
+ let settledProvisionIds=new Set(),settlementRequest=null,settlementRenderPending=false;
  const expandedBarcodes=new Set();
- const paymentConfirmation=createDdaPaymentConfirmation({document:doc,host:root,confirmPayment,onStartLaunch,onLaunchStarted:()=>close(),onClose:resumeBankReload,onConfirmed:receipt=>{
+ const paymentConfirmation=createDdaPaymentConfirmation({document:doc,host:root,confirmPayment,onStartLaunch,onLaunchStarted:()=>close(),onClose:resumeDeferredRefresh,resolveReturnFocus:replacementControl,onConfirmed:receipt=>{
   if(destroyed||root.hidden||!rows)return;
-  const position=[content.scrollTop,content.scrollLeft];
-  rows=rows.map(row=>row.id===String(receipt.itemId)&&row.key===receipt.key
-   ?Object.freeze({...row,status:'Pago',paidManually:true,confirmedAt:receipt.confirmedAt}):row);
-  populate();render();[content.scrollTop,content.scrollLeft]=position;
+  const confirmed=rows.find(row=>row.id===String(receipt.itemId)&&row.key===receipt.key);
+  if(!confirmed)return;
+  const paidBySchedule=receipt.paidBySchedule??(confirmed.paidBySchedule||ddaWasScheduledAt(confirmed,receipt.confirmedAt));
+  rows=rows.map(row=>row===confirmed?Object.freeze({...row,status:'Pago',paidManually:true,paidBySchedule,confirmedAt:receipt.confirmedAt}):row);
+  if(paidBySchedule)settledProvisionIds.delete(confirmed.provisionId);
+  populate();renderKeepingPosition();
+  if(paidBySchedule)void recheckSettlement();
  }});
- const provisionPicker=createDdaProvisionPicker({document:doc,host:root,service:data.provisionLink,onLinked:receipt=>{
-  if(destroyed||root.hidden||!rows)return;const position=[content.scrollTop,content.scrollLeft];
+ const provisionPicker=createDdaProvisionPicker({document:doc,host:root,service:data.provisionLink,onClose:resumeDeferredRefresh,resolveReturnFocus:replacementControl,onLinked:receipt=>{
+  if(destroyed||root.hidden||!rows)return;
   rows=rows.map(row=>row.id===receipt.ddaId?Object.freeze({...row,provisionId:receipt.provisionId}):row);
-  render();[content.scrollTop,content.scrollLeft]=position;
+  settledProvisionIds.delete(receipt.provisionId);
+  renderKeepingPosition();void recheckSettlement();
  }});
  const selected=()=>Object.fromEntries(Object.entries(controls).map(([key,node])=>[key,node.value]));
  const option=(label,value)=>Object.assign(make('option','',label),{value});
@@ -53,24 +63,52 @@ export function createDdaReportView({document:doc=globalThis.document,data,openM
  }
  function showNotice(message=''){const text=message||bankNotice;notice.textContent=text;notice.hidden=!text;}
  function syncRefreshButton(){refresh.disabled=startingBank||bankRunning||root.getAttribute('aria-busy')==='true';}
- function resumeBankReload(){if(reloadPending)queueMicrotask(()=>{if(reloadPending)void reloadFromBank();});}
+ function replacementControl(trigger){
+  const selector=rowControlSelector(trigger),replacement=selector&&content.querySelector(selector);
+  return replacement&&!replacement.disabled?replacement:panel;
+ }
+ function reportPosition(){return [content.scrollTop,content.scrollLeft,doc.activeElement];}
+ function restoreReportPosition([top,left,focused]){
+  content.scrollTop=top;content.scrollLeft=left;
+  if(rowControlSelector(focused)&&[doc.body,panel].includes(doc.activeElement))replacementControl(focused).focus({preventScroll:true});
+ }
+ function renderKeepingPosition(){const position=reportPosition();render();restoreReportPosition(position);}
+ function nestedViewOpen(){return paymentConfirmation.isOpen||provisionPicker.isOpen||pdfRequest;}
+ function renderSettlement(){
+  if(!settlementRenderPending||nestedViewOpen())return;
+  settlementRenderPending=false;renderKeepingPosition();
+ }
+ function resumeDeferredRefresh(){
+  if(reloadPending||settlementRenderPending)queueMicrotask(()=>{
+   if(destroyed||root.hidden)return;
+   if(reloadPending)void reloadFromBank();else renderSettlement();
+  });
+ }
+ function cancelSettlement(){settlementRequest?.abort();settlementRequest=null;settlementRenderPending=false;}
+ async function recheckSettlement(){
+  settlementRequest?.abort();
+  const ids=[...new Set(rows.filter(row=>row.paidBySchedule&&row.provisionId).map(row=>row.provisionId))];
+  if(!ids.length||typeof data.provisionLink?.loadSettledProvisionIds!=='function')return;
+  const request=settlementRequest=new AbortController();
+  let verified=new Set();
+  try{
+   const result=await data.provisionLink.loadSettledProvisionIds(ids,{signal:request.signal});
+   if(result instanceof Set)verified=new Set(ids.filter(id=>result.has(id)));
+  }catch{/* Keep scheduled payments visible when SharePoint cannot prove settlement. */}
+  if(request!==settlementRequest||request.signal.aborted||root.hidden||destroyed)return;
+  settlementRequest=null;
+  if(verified.size===settledProvisionIds.size&&[...verified].every(id=>settledProvisionIds.has(id)))return;
+  settledProvisionIds=verified;settlementRenderPending=true;renderSettlement();
+ }
  async function reloadFromBank(){
   if(destroyed||root.hidden){reloadPending=false;return;}
-  if(paymentConfirmation.isOpen||pdfRequest){reloadPending=true;return;}
+  if(nestedViewOpen()){reloadPending=true;return;}
   reloadPending=false;
-  const position=[content.scrollTop,content.scrollLeft];
-  const focused=doc.activeElement,focusedRow=focused?.closest('[data-dda-id]')?.dataset.ddaId;
-  const focusSelector=focused?.matches('[data-dda-pdf]')?`[data-dda-pdf="${focusedRow}"]`
-   :focused?.matches('[data-dda-mirror]')?`[data-dda-mirror="${focusedRow}"]`:null;
-  const loading=load(),current=revision,filters=filterRevision;
-  await loading;
-  if(current!==revision||filters!==filterRevision||root.hidden)return;
-  [content.scrollTop,content.scrollLeft]=position;
-  if(focusSelector&&doc.activeElement===doc.body)(content.querySelector(focusSelector)||panel).focus({preventScroll:true});
+  await load(undefined,reportPosition());
  }
  async function manualRefresh(){
   if(destroyed||root.hidden||refresh.disabled)return;
-  if(!syncMonitor)return load();
+  if(!syncMonitor)return reloadFromBank();
   startingBank=true;syncRefreshButton();showNotice('Iniciando consulta ao Sicoob…');
   try{await syncMonitor.start();}
   catch{if(!destroyed&&!root.hidden)showNotice('Não foi possível iniciar a consulta ao Sicoob. Tente novamente.');}
@@ -78,10 +116,11 @@ export function createDdaReportView({document:doc=globalThis.document,data,openM
  }
  function render(){
   if(content.contains(doc.activeElement))panel.focus({preventScroll:true});content.replaceChildren();if(!rows)return;
-  const currentDate=now(),today=ddaTodayKey(currentDate),result=buildDdaReport(rows,selected(),currentDate),pages=Math.max(1,Math.ceil(result.rows.length/50));page=Math.min(page,pages);
+  const currentDate=now(),today=ddaTodayKey(currentDate),result=buildDdaReport(rows,{...selected(),settledProvisionIds},currentDate),pages=Math.max(1,Math.ceil(result.rows.length/50));page=Math.min(page,pages);
   const summary=make('div','ddr-summary');summary.dataset.ddaSummary='';
   for(const [label,value,hint] of [['DDAs encontrados',result.rows.length],['Valor nominal total',money(result.total)],['Vencidos no filtro',result.overdue],['Vencem hoje',result.today],['Qtd DDA vencendo em 7d',result.dueWithin7Days,'De hoje até daqui a 7 dias, inclusive, conforme os filtros.'],['Valor DDA vencendo em 7d',money(result.totalDueWithin7Days),'De hoje até daqui a 7 dias, inclusive, conforme os filtros.'],['Valor DDA vencendo hoje',money(result.totalDueToday),'Vencimento hoje, conforme os filtros.']]){const metric=make('div','ddr-metric');if(hint)metric.title=hint;metric.append(make('span','',label),make('strong','',value));summary.append(metric);}content.append(summary);
   content.append(make('p','ddr-source','Situação bancária ou pagamento confirmado pelo usuário. Ordenação pelo vencimento mais próximo.'));
+  if(result.visibleOutsideStatus)content.append(make('p','ddr-source',`${result.visibleOutsideStatus} DDA(s) pagos por agendamento aparecem com baixa pendente e ficam fora dos totais da situação selecionada.`));
   if(result.missingAmounts)content.append(make('p','ddr-warning',`${result.missingAmounts} DDA(s) sem valor nominal válido. Total indisponível.`));
   if(!result.rows.length){content.append(make('p','ddr-empty','Nenhum DDA encontrado para os filtros selecionados.'));return;}
   const table=make('table','ddr-table');table.setAttribute('aria-label','DDAs da empresa');const head=make('thead'),tr=make('tr'),body=make('tbody');
@@ -103,14 +142,15 @@ export function createDdaReportView({document:doc=globalThis.document,data,openM
    supplier.append(history);
    const overdue=row.status==='Vencido'||(row.status==='Em aberto'&&row.due&&row.due<today);
    const cluster=make('div','ddr-status-cluster');cluster.dataset.statusTone=row.status==='Pago'?'paid':overdue?'overdue':row.status==='Em aberto'?'open':'neutral';
-   cluster.append(make('strong','',overdue?'Vencido':row.status));cluster.title=row.paidManually?'Pagamento confirmado pelo usuário':'Situação na última consulta bancária: '+row.status;
+   cluster.append(make('strong','',overdue?'Vencido':row.status));cluster.title=row.paidManually?'Pagamento confirmado pelo usuário':row.paidBySchedule?'Pagamento por agendamento':'Situação na última consulta bancária: '+row.status;
    if(row.paidManually)cluster.append(make('small','','Confirmado pelo usuário'));
    const statusDate=row.paidManually?row.confirmedAt:row.checkedAt;
    if(statusDate){const checked=new Date(statusDate);if(Number.isFinite(checked.getTime()))cluster.append(make('small','',new Intl.DateTimeFormat('pt-BR',{timeZone:'America/Sao_Paulo',dateStyle:'short',timeStyle:'short'}).format(checked)));}
    const schedule=make('div','ddr-schedule-cluster');
-   schedule.dataset.scheduleState=row.schedule.state;
-   schedule.title='Agendamento na última consulta ao Sicoob';
-   schedule.append(make('strong','',row.schedule.label));
+   schedule.dataset.scheduleState=row.paidBySchedule?'paid':row.schedule.state;
+   schedule.title=row.paidBySchedule?'Pagamento por agendamento':'Agendamento na última consulta ao Sicoob';
+   schedule.append(make('strong','',row.paidBySchedule?'PAGO POR AGENDAMENTO':row.schedule.label));
+   if(ddaSettlementPending(row,settledProvisionIds))schedule.append(make('small','ddr-settlement-pending','Baixa pendente'));
    status.append(schedule,cluster);
    const link=make('td','ddr-link');const linkCluster=make('span','ddr-link-cluster',row.provisionId?`ID ${row.provisionId}`:'N/A');linkCluster.dataset.linkState=row.provisionId?'linked':'missing';
    linkCluster.title=row.provisionId?`Descritivo provisão vinculado: ID ${row.provisionId}`:'Nenhum descritivo provisão vinculado';link.append(linkCluster);
@@ -166,7 +206,7 @@ export function createDdaReportView({document:doc=globalThis.document,data,openM
   const request=pdfRequest={},signal=controller.signal;
   trigger.disabled=true;showNotice();
   const currentView=()=>pdfRequest===request&&!signal.aborted&&trigger.isConnected;
-  const finish=()=>{if(pdfRequest===request){pdfRequest=null;resumeBankReload();}};
+  const finish=()=>{if(pdfRequest===request){pdfRequest=null;resumeDeferredRefresh();}};
   let previewStarted=false;
   try{
    const attachments=await data.listAttachments(row.id,{signal});if(!currentView())return;
@@ -181,13 +221,14 @@ export function createDdaReportView({document:doc=globalThis.document,data,openM
   }catch{if(currentView())showNotice('Não foi possível abrir os PDFs. Tente novamente.');}
   finally{if(trigger.isConnected&&!signal.aborted)trigger.disabled=false;if(!previewStarted)finish();}
  }
- async function load(initialSnapshot){
-  if(root.hidden||destroyed)return;paymentConfirmation.close();provisionPicker.close();pdfRequest=null;controller?.abort();const current=++revision,active=controller=new AbortController();rows=null;printAll=false;root.setAttribute('aria-busy','true');refresh.disabled=true;showNotice();content.replaceChildren(make('p','','Carregando DDAs do SharePoint…'));
-  try{const snapshot=initialSnapshot??await data.loadSnapshot({refresh:true,signal:active.signal});if(active.signal.aborted||current!==revision||root.hidden||destroyed)return;rows=normalizeDdaReportRows(snapshot);populate();render();}
+ async function load(initialSnapshot,position){
+  if(root.hidden||destroyed)return;paymentConfirmation.close();provisionPicker.close();pdfRequest=null;controller?.abort();cancelSettlement();const current=++revision,active=controller=new AbortController(),filters=filterRevision;rows=null;settledProvisionIds=new Set();printAll=false;root.setAttribute('aria-busy','true');refresh.disabled=true;showNotice();content.replaceChildren(make('p','','Carregando DDAs do SharePoint…'));
+  try{const snapshot=initialSnapshot??await data.loadSnapshot({refresh:true,signal:active.signal});if(active.signal.aborted||current!==revision||root.hidden||destroyed)return;rows=normalizeDdaReportRows(snapshot);populate();render();if(position&&filters===filterRevision)restoreReportPosition(position);}
   catch{if(active.signal.aborted||current!==revision||root.hidden||destroyed)return;rows=null;const error=make('p','','Não foi possível carregar os DDAs. Tente atualizar.');error.setAttribute('role','alert');content.replaceChildren(error);}
   finally{if(current===revision){root.setAttribute('aria-busy','false');syncRefreshButton();}}
+  if(rows&&current===revision)await recheckSettlement();
  }
- function close(){if(root.hidden)return;expandedBarcodes.clear();reloadPending=false;pdfRequest=null;paymentConfirmation.close();provisionPicker.close();controller?.abort();revision++;rows=null;printAll=false;content.replaceChildren();showNotice();root.hidden=true;doc.body.style.overflow=oldOverflow;if(app)app.inert=oldInert;const target=returnFocus?.isConnected?returnFocus:doc.querySelector('[data-action="open-dda-report"]')||app;target?.focus?.();returnFocus=null;onClose();}
+ function close(){if(root.hidden)return;expandedBarcodes.clear();reloadPending=false;pdfRequest=null;paymentConfirmation.close();provisionPicker.close();controller?.abort();cancelSettlement();revision++;rows=null;printAll=false;content.replaceChildren();showNotice();root.hidden=true;doc.body.style.overflow=oldOverflow;if(app)app.inert=oldInert;const target=returnFocus?.isConnected?returnFocus:doc.querySelector('[data-action="open-dda-report"]')||app;target?.focus?.();returnFocus=null;onClose();}
  const filter=()=>{filterRevision++;printAll=false;page=1;render();content.scrollTop=0;showNotice();};
  controls.status.addEventListener('change',filter);controls.bank.addEventListener('change',filter);controls.search.addEventListener('input',filter);refresh.addEventListener('click',()=>void manualRefresh());
  const unsubscribeBank=syncMonitor?.subscribe(state=>{

@@ -12,7 +12,7 @@ export function provisionDueFields(columns = []) {
   }));
 }
 
-function day(value) {
+export function provisionDateKey(value) {
   const text = String(value ?? '').trim();
   const iso = text.match(/^(\d{4})-(\d{2})-(\d{2})(?:T\d{2}:\d{2}(?::\d{2}(?:\.\d+)?)?(?:Z|[+-]\d{2}:\d{2})?)?$/);
   const br = text.match(/^(\d{2})\/(\d{2})\/(\d{4})$/);
@@ -25,18 +25,22 @@ function day(value) {
 }
 
 export function sameProvisionDue(left, right) {
-  const a = day(left), b = day(right);
+  const a = provisionDateKey(left), b = provisionDateKey(right);
   return a && b ? a === b : String(left ?? '') === String(right ?? '');
+}
+
+export function provisionChildPaid(fields, names) {
+  // Same proof as provision_description_review.provision_is_paid: a real
+  // payment date AND a final payment marker. Scheduling alone proves nothing.
+  return Boolean(provisionDateKey(fields[names.DATAPGTOEFETUADO])) && (status(fields[names.PGTOAGENDADO]) === 'PAGO'
+    || status(fields[names.STATUS]) === 'PAGAMENTO EFETUADO');
 }
 
 export function provisionEarliestUnpaidDue(children, names = provisionDueFields()) {
   let earliest = '';
   for (const { fields = {} } of children) {
-    // Same proof as provision_description_review.provision_is_paid: a real
-    // payment date AND a final payment marker. Scheduling alone proves nothing.
-    if (day(fields[names.DATAPGTOEFETUADO]) && (status(fields[names.PGTOAGENDADO]) === 'PAGO'
-      || status(fields[names.STATUS]) === 'PAGAMENTO EFETUADO')) continue;
-    const due = day(fields[names.DATAPREVISTOPGTO]);
+    if (provisionChildPaid(fields, names)) continue;
+    const due = provisionDateKey(fields[names.DATAPREVISTOPGTO]);
     if (!due) throw new Error('Provisão não comprovadamente paga sem data de vencimento válida; recálculo interrompido.');
     if (!earliest || due < earliest) earliest = due;
   }

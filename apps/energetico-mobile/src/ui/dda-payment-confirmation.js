@@ -1,7 +1,7 @@
 import { validateDdaPaymentReceipt } from '../chat/dda-payment-confirmation.js';
 
 /** Acknowledges an existing payment; never sends a payment instruction to a bank. */
-export function createDdaPaymentConfirmation({ document: doc, host, confirmPayment, onConfirmed, onStartLaunch, onLaunchStarted = () => {}, onClose = () => {}, timeoutMs = 35_000, launchTimeoutMs = 120_000 }) {
+export function createDdaPaymentConfirmation({ document: doc, host, confirmPayment, onConfirmed, onStartLaunch, onLaunchStarted = () => {}, onClose = () => {}, resolveReturnFocus, timeoutMs = 35_000, launchTimeoutMs = 120_000 }) {
   let current = null;
   const el = (tag, cls, text) => { const n = doc.createElement(tag); n.className = cls; if (text !== undefined) n.textContent = text; return n; };
   function focusables() { return current ? [...current.dialog.querySelectorAll('button:not(:disabled)')] : []; }
@@ -11,8 +11,8 @@ export function createDdaPaymentConfirmation({ document: doc, host, confirmPayme
     const old = current; current = null; old.controller?.abort(); clearTimeout(old.timer);
     doc.removeEventListener('focusin', keepFocus, true); old.overlay.remove();
     for (const [node, inert] of old.background) node.inert = inert;
-    if (old.trigger?.isConnected && !host.hidden) old.trigger.focus({ preventScroll: true });
-    else if (host.isConnected && !host.hidden) host.focus({ preventScroll: true });
+    const target = old.trigger?.isConnected && !old.trigger.disabled ? old.trigger : resolveReturnFocus?.(old.trigger) || host;
+    if (target.isConnected && !host.hidden) target.focus({ preventScroll: true });
     onClose();
   }
   function show({ itemId, key, supplier, amount, due }, trigger) {
