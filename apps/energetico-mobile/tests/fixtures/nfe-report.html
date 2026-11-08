@@ -5,6 +5,7 @@
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <link rel="stylesheet" href="/src/styles.css">
 <link rel="stylesheet" href="/src/ui/payment-ledger.css">
+<link rel="stylesheet" href="/src/ui/dda-report.css">
 <link rel="stylesheet" href="/src/ui/nfe-report.css">
 </head>
 <body>
@@ -25,9 +26,17 @@ view.render({ sessionStatus:'authenticated', account:{name:'Teste'}, messages:[{
 }] });
 const key = '1'.repeat(44);
 const common = { STATUS_IMPORTACAO:'XML_COMPLETO', SITUACAO:'AUTORIZADA', VALOR_TOTAL_NOTA:2500 };
+let orderId = null;
 const report = decorateReportPrint(decorateReportNavigation(createNfeReportView({ data:{
+  orderLink:{
+    async loadOptions(){ return [
+      { id:'31', supplier:'Fornecedor diferente', amount:3600 },
+      { id:'32', supplier:'Serviços de Engenharia e Manutenção Industrial — Fornecedor Exemplo', amount:2490 },
+    ]; },
+    async save({ invoiceId, orderId:selected }) { orderId = selected; return { invoiceId, orderId }; },
+  },
   async loadSnapshot(){ return { rows:[
-    { id:'2', fields:{ ...common, TIPO_FISCAL:'NFS-e', DATA_EMISSAO:'2026-11-08', NUMERO_NOTA:'205',
+    { id:'2', fields:{ ...common, IDPEDIDO:orderId, TIPO_FISCAL:'NFS-e', DATA_EMISSAO:'2026-11-08', NUMERO_NOTA:'205',
       Title:'Serviços de Engenharia e Manutenção Industrial — Fornecedor Exemplo Ltda.',
       STATUS_RETENCOES:'NAO_INFORMADA_XML', DANFE_URL:'https://example.test/danfse.pdf' } },
     { id:'3', fields:{ ...common, TIPO_FISCAL:'NF-e', DATA_EMISSAO:'2026-11-07', NUMERO_NOTA:'14', VALOR_TOTAL_NOTA:98765432.10,
@@ -90,7 +99,7 @@ const filtersFit = [...fiscalControls, panel.querySelector('input[name="search"]
     });
 });
 const rowIds = () => [...panel.querySelectorAll('tbody tr')].map(row => row.dataset.invoiceId);
-document.documentElement.dataset.layout = JSON.stringify({
+const layout = {
   provisions, orange, nfe, dda,
   open:!report.element.hidden, rowIds:rowIds(),
   overflow:document.documentElement.scrollWidth > innerWidth,
@@ -107,8 +116,32 @@ document.documentElement.dataset.layout = JSON.stringify({
   pdfTargetHeight:pdf?.offsetHeight ?? 0,
   filterNames:fiscalControls.map(control => control.name),
   filtersFit,
-});
+  taxHeading:panel.querySelector('th:nth-child(6)')?.textContent,
+  taxStacked:Boolean(isBefore(...panel.querySelectorAll('[data-invoice-id="3"] .nfe-tax-stack .nfe-fact'), 'block')),
+  pencilHeight:panel.querySelector('.nfe-link-pencil')?.offsetHeight,
+};
 if (!report.element.hidden) {
+  const pencil = panel.querySelector('[data-invoice-id="2"] .nfe-link-pencil');
+  pencil.click();
+  await new Promise(resolve => setTimeout(resolve, 0));
+  const picker = report.element.querySelector('.dda-provision-dialog');
+  const pickerRect = box(picker);
+  const selection = picker.querySelector('input[value="32"]');
+  selection.click();
+  picker.querySelector('.dda-provision-save').click();
+  const review = document.querySelector('[data-edit-review]');
+  const reviewRect = box(review);
+  review.querySelector('[data-edit-review-confirm]').click();
+  await new Promise(resolve => setTimeout(resolve, 0));
+  const fit = rect => rect.width > 0 && rect.height > 0 && rect.x >= -1 && rect.y >= -1
+    && rect.right <= innerWidth + 1 && rect.bottom <= innerHeight + 1;
+  document.documentElement.dataset.orderLink = JSON.stringify({
+    pickerFits:fit(pickerRect),
+    reviewFits:fit(reviewRect),
+    linked:panel.querySelector('[data-invoice-id="2"] .nfe-link-linked')?.textContent,
+    remainingPencils:panel.querySelectorAll('.nfe-link-pencil').length,
+  });
+  picker.querySelector('.gallery-record-dialog-button').click();
   const regime = panel.querySelector('select[name="regime"]');
   if (regime) {
     regime.value = 'MEI';
@@ -118,6 +151,7 @@ if (!report.element.hidden) {
     regime.dispatchEvent(new Event('change'));
   }
 }
+document.documentElement.dataset.layout = JSON.stringify(layout);
 document.documentElement.dataset.ready = 'true';
 </script>
 </body>

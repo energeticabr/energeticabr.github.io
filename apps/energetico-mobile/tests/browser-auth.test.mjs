@@ -431,6 +431,7 @@ for (const [action, scopes] of [
   ['action_dda_gallery', ['Sites.Read.All']],
   ['home-trancid-card-report', ['Sites.Read.All']],
   ['action_notas_fiscais_sefaz_gallery', ['https://energeticaltda.sharepoint.com/AllSites.Read']],
+  ['action_nfe_report', ['https://energeticaltda.sharepoint.com/AllSites.Write']],
 ]) test(`retoma ${action} após consentimento Microsoft`, async () => {
   const account = { homeAccountId: "account-1", username: "pessoa@energeticabr.com" };
   const values = new Map();

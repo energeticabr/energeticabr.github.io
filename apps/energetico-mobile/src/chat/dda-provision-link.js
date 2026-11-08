@@ -28,6 +28,12 @@ function supplierSimilarity(parts,other){
  // Generic sector words may refine an existing name match, never establish one.
  return identity>=0.5?0.8*identity+0.2*nameCoverage(parts,other):0;
 }
+export function fiscalSupplierSimilarity(supplier, candidate) {
+ const left=tokens(supplier),right=tokens(candidate);
+ const exact=[...left].join(' ');
+ if(left.size>1&&exact!=='FORNECEDOR NAO INFORMADO'&&exact===[...right].join(' '))return 1;
+ return supplierSimilarity(left,right);
+}
 const amountKey=value=>{let text=String(value??'').trim().replace(/R\$|\s/g,'');if(text.includes(','))text=text.replace(/\./g,'').replace(',','.');const number=/^\d+(?:\.\d+)?$/.test(text)?Number(text):null;return number!=null&&Number.isFinite(number)?Math.round(number*100):null;};
 const columnKey=value=>nameKey(String(value??'').replace(/_x([0-9a-f]{4})_/gi,(_,hex)=>String.fromCodePoint(parseInt(hex,16)))).replace(/ /g,'');
 function childField(fields,columns,...aliases){
