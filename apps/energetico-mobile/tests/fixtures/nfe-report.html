@@ -33,7 +33,10 @@ const report = decorateReportNavigation(createNfeReportView({ data:{
       XML_URL:'https://example.test/nota.xml', DANFE_URL:'https://example.test/nota.pdf',
       OBSERVACOES_NOTA:'CNO 90.025.44060/72', STATUS_RETENCOES:'RETENCAO_INFORMADA_XML' } },
   ] }; },
-  async downloadDocument(){ return new Blob([`<NFe xmlns="http://www.portalfiscal.inf.br/nfe"><infNFe Id="NFe${key}"><emit><CRT>4</CRT></emit></infNFe></NFe>`]); },
+  async downloadDocument(){
+    await new Promise(resolve => setTimeout(resolve, 250));
+    return new Blob([`<NFe xmlns="http://www.portalfiscal.inf.br/nfe"><infNFe Id="NFe${key}"><emit><CRT>4</CRT></emit></infNFe></NFe>`]);
+  },
 }, openMediaCollection:async()=>{} }), {action:'open-nfe-report'});
 view.on('open-nfe-report', () => report.open());
 const box = node => {
@@ -44,8 +47,18 @@ const mascot = action => document.querySelector(`[data-action="open-${action}"]`
 const provisions = box(mascot('pending-provisions')), orange = box(mascot('commercial-receipts')),
   nfe = box(mascot('nfe-report')), dda = box(mascot('dda-report'));
 if (!new URLSearchParams(location.search).has('home')) {
+  const hydrated = new Promise(resolve => {
+    const observer = new MutationObserver(() => {
+      const fields = report.element.querySelectorAll('[data-invoice-id="3"] dt');
+      const regime = [...fields].find(field => field.textContent === 'Tipo do fornecedor · XML')?.nextElementSibling;
+      if (!regime || regime.textContent === 'Consultando…') return;
+      observer.disconnect();
+      resolve();
+    });
+    observer.observe(report.element, { subtree:true, childList:true, characterData:true });
+  });
   mascot('nfe-report').click();
-  await new Promise(resolve => setTimeout(resolve, 100));
+  await hydrated;
 }
 const panel = report.element.querySelector('.nfe-panel');
 const reportBody = panel.querySelector('.nfe-body');
