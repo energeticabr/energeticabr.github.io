@@ -22,11 +22,17 @@ test('copies a formatted bank line when the barcode is absent',async t=>{
  h.doc.querySelector('[data-dda-toggle-barcode]').click();h.doc.querySelector('[data-dda-copy-barcode]').click();
  assert.deepEqual(calls,[code]);
 });
-test('disables copy for truncated lines, invalid checksums and two different valid codes',async t=>{
+test('copies the payment line for a bank identified only by its ISPB',async t=>{
+ const calls=[];const h=await setup(t,{barcode:'98808000000018236121234567890123456789012345',copyText:async text=>calls.push(text)});
+ h.doc.querySelector('[data-dda-toggle-barcode]').click();h.doc.querySelector('[data-dda-copy-barcode]').click();
+ assert.deepEqual(calls,['98801234516789012345767890123457800000001823612']);
+});
+test('disables copy for truncated, invalid, conflicting or ambiguous codes',async t=>{
  const records=[
   {barcode:'',line:code.slice(0,-3)},
   {barcode:'00198100000000123451234567890123456789012345',line:code.slice(0,-1)+'6'},
   {barcode:barcodeFixture,line:'00191234546789012345767890123465510000000012345'},
+  {barcode:'84691000000000012340000000000000000000000044'},
  ];
  for(const fields of records){
   const h=await setup(t,{...fields,copyText:async()=>assert.fail('Invalid or conflicting data reached the clipboard')});

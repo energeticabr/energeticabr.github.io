@@ -7,8 +7,8 @@ function mod10(value) {
 }
 
 export function ddaLineFromBarcode(barcode) {
-  // Boleto de cobrança em reais: banco, moeda 9, DV geral, fator, valor e campo livre.
-  if (!/^\d{3}9\d{40}$/.test(barcode)) return '';
+  // Na variante 9880, o fator é zero e o ISPB ocupa o campo do valor.
+  if (!/^(?:\d{3}9\d{40}|9880\d0{6}\d{33})$/.test(barcode)) return '';
   const data = barcode.slice(0, 4) + barcode.slice(5);
   const sum = [...data].reverse().reduce((total, digit, index) =>
     total + Number(digit) * (2 + index % 8), 0);
@@ -28,13 +28,16 @@ function stripFormatting(value) {
 
 export function resolveDdaPaymentLine(rawLine, rawBarcode) {
   const line = stripFormatting(rawLine);
-  const fromBarcode = ddaLineFromBarcode(stripFormatting(rawBarcode));
+  const barcode = stripFormatting(rawBarcode);
+  const fromBarcode = ddaLineFromBarcode(barcode);
   if (/^\d{47}$/.test(line)) {
-    const barcode = line.slice(0, 4) + line.slice(32, 47)
+    const reconstructed = line.slice(0, 4) + line.slice(32, 47)
       + line.slice(4, 9) + line.slice(10, 20) + line.slice(21, 31);
-    if (ddaLineFromBarcode(barcode) === line) {
+    if (ddaLineFromBarcode(reconstructed) === line) {
       return fromBarcode && fromBarcode !== line ? '' : line;
     }
   }
+  // Um prefixo de arrecadação pode coincidir com o formato de cobrança de 44 dígitos.
+  if (/^8[1-79][6-9]/.test(barcode)) return '';
   return fromBarcode;
 }
