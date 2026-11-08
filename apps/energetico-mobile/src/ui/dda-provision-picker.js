@@ -2,11 +2,18 @@ import { includesSearchText, normalizeSearchText } from '../../../../portal/core
 import {confirmEditChanges,ensureEditReviewStyles} from '../../../../portal/ui/edit-review.js';
 import {rankDdaProvisionOptions} from '../chat/dda-provision-link.js';
 
-export function createDdaProvisionPicker({document:doc,host,service,onLinked,timeoutMs=35000}){
+export function createDdaProvisionPicker({document:doc,host,service,onLinked,onClose,resolveReturnFocus,timeoutMs=35000}){
  let current=null;ensureEditReviewStyles(doc);
  const el=(tag,cls='',value)=>{const node=doc.createElement(tag);node.className=cls;if(value!==undefined)node.textContent=String(value);return node;};
  const money=value=>{let text=String(value??'').trim().replace(/R\$|\s/g,'');if(text.includes(','))text=text.replace(/\./g,'').replace(',','.');const number=/^\d+(?:\.\d+)?$/.test(text)?Number(text):NaN;return Number.isFinite(number)?new Intl.NumberFormat('pt-BR',{style:'currency',currency:'BRL'}).format(number):'Valor não informado';};
- function close(){if(!current)return;const entry=current;current=null;entry.controller.abort();entry.overlay.remove();for(const [node,inert] of entry.background)node.inert=inert;if(entry.trigger?.isConnected&&!host.hidden)entry.trigger.focus({preventScroll:true});else if(host.isConnected&&!host.hidden)host.focus({preventScroll:true});}
+ function close(){
+  if(!current)return;
+  const entry=current;current=null;entry.controller.abort();entry.overlay.remove();
+  for(const [node,inert] of entry.background)node.inert=inert;
+  const target=entry.trigger?.isConnected?entry.trigger:resolveReturnFocus?.(entry.trigger)||host;
+  if(target.isConnected&&!host.hidden)target.focus({preventScroll:true});
+  onClose?.();
+ }
  async function show(row,trigger){
   if(current||host.hidden||!service)return;
   const overlay=el('div','gallery-record-overlay dda-provision-overlay'),dialog=el('section','gallery-record-dialog dda-provision-dialog');
