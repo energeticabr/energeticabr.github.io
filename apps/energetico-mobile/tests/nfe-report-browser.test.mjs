@@ -22,7 +22,8 @@ test('NFE opens the horizontal fiscal table from the blue mascot in portrait and
       const dom = new JSDOM(result.stdout);
       try {
         const { provisions, orange, nfe, dda, open, rowIds, overflow, tableScrolls, rotated, mei, pdfOnLeft, metricsAbove,
-          headerControls, amountFits, pdfIconWidth, pdfTargetHeight, reportBodyWidth, availableReportWidth, overlayArrows
+          headerControls, amountFits, pdfIconWidth, pdfTargetHeight, reportBodyWidth, availableReportWidth, overlayArrows,
+          filterNames, filtersFit
         } = JSON.parse(dom.window.document.documentElement.dataset.layout);
         assert.equal(provisions.y, orange.y);
         assert.equal(orange.x - provisions.x, 56);
@@ -40,6 +41,9 @@ test('NFE opens the horizontal fiscal table from the blue mascot in portrait and
         assert.equal(amountFits, true, 'a long amount stays inside its column');
         assert.equal(pdfIconWidth, 34);
         assert.ok(pdfTargetHeight >= 44);
+        assert.deepEqual(filterNames, ['document', 'retention', 'cno', 'regime']);
+        assert.equal(filtersFit, true);
+        assert.deepEqual(JSON.parse(dom.window.document.documentElement.dataset.meiRows), ['3']);
         if (capture) {
           mkdirSync(capture, {recursive:true});
           writeFileSync(join(capture, `nfe-${width}.png`), result.screenshot);

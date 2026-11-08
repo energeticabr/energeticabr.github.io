@@ -1,4 +1,4 @@
-import { invoiceXmlFacts, projectNfeRows } from '../chat/nfe-report-model.js';
+import { invoiceXmlFacts, NFE_SUPPLIER_REGIMES, projectNfeRows } from '../chat/nfe-report-model.js';
 import { addReportCloseControl } from './report-close-control.js';
 import { bindReportLandscape } from './report-landscape.js';
 import { PDF_ATTACHMENT_ICON } from './report-pdf-attachment-icon.js';
@@ -12,6 +12,24 @@ const cnoLabels = { valid:'CNO consta', conflict:'CNO divergente', missing:'CNO 
 const searchKey = value => value.toLowerCase().normalize('NFD').replace(/\p{Diacritic}/gu, '');
 const displayDate = value => value ? value.split('-').reverse().join('/') : 'Não informada';
 const xmlKey = row => `${row.key}|${row.xmlUrl}`;
+
+function classifyFiscalFacts(row, facts) {
+  let retention = row.retention;
+  if (facts?.declaresRetention) retention = 'yes';
+  else if (row.type === 'NFS-e' && retention === 'no' && !facts) retention = 'unknown';
+
+  let cno = row.cnoState;
+  let cnoDetail = row.cno.numbers.join(' · ');
+  if (cnoDetail && row.cno.corrected) cnoDetail += ' · Carta de correção';
+  if (row.type === 'NFS-e' && cno === 'unknown' && facts) {
+    const code = facts.workCode;
+    const expected = row.cno.expected;
+    const isWorkCno = /^[\d.\s/-]+$/.test(code) && code.replace(/\D/g, '') === expected.replace(/\D/g, '');
+    cno = isWorkCno ? 'valid' : code ? 'workCode' : 'missing';
+    cnoDetail = isWorkCno ? expected : code;
+  }
+  return { regime:facts?.regime || '', retention, cno, cnoDetail };
+}
 
 export function createNfeReportView({ document:doc = globalThis.document, data, openMediaCollection }) {
   const make = (tag, className = '', text) => {
@@ -58,9 +76,19 @@ export function createNfeReportView({ document:doc = globalThis.document, data, 
   search.placeholder = 'Fornecedor, CNPJ ou nota';
   const type = make('select');
   type.name = 'document';
+  const retentionFilter = make('select');
+  retentionFilter.name = 'retention';
+  const cnoFilter = make('select');
+  cnoFilter.name = 'cno';
+  const regimeFilter = make('select');
+  regimeFilter.name = 'regime';
+  const selects = [type, retentionFilter, cnoFilter, regimeFilter];
   for (const [control, label, options] of [
     [type, 'Documento', [['', 'Todos'], ['NF-e','NF-e'], ['NFS-e','NFS-e']]],
     [search, 'Pesquisar fornecedor, CNPJ ou nota', []],
+    [retentionFilter, 'Retenção', [['', 'Todas'], ['yes', 'Com retenção'], ['no', 'Sem retenção']]],
+    [cnoFilter, 'CNO', [['', 'Todas'], ['valid', 'CNO correta'], ['conflict', 'CNO incorreta'], ['missing', 'Sem CNO']]],
+    [regimeFilter, 'Tipo de empresa', [['', 'Todos'], ...NFE_SUPPLIER_REGIMES.map(regime => [regime, regime])]],
   ]) {
     const field = make('label');
     for (const [value, name] of options) {
@@ -128,28 +156,15 @@ export function createNfeReportView({ document:doc = globalThis.document, data, 
   }
 
   function renderXmlFacts({ row, regime, retention, cno }, facts) {
+    const status = classifyFiscalFacts(row, facts);
     const unavailable = facts === null;
     const pending = facts === undefined && Boolean(row.xmlUrl);
-    setValue(regime, facts?.regime || (unavailable ? 'Consulta indisponível' : pending ? 'Consultando…' : 'Não informado'));
+    setValue(regime, status.regime || (unavailable ? 'Consulta indisponível' : pending ? 'Consultando…' : 'Não informado'));
     const retained = row.withholding ? `Pelo comprador · ${money.format(row.withholding.total)}` : '';
-    let retentionState = row.retention;
-    if (facts?.declaresRetention) retentionState = 'yes';
-    else if (row.type === 'NFS-e' && retentionState === 'no' && !facts) retentionState = 'unknown';
-    setValue(retention, retentionLabels[retentionState], retained);
-    retention.parentElement.dataset.tone = retentionState === 'yes' ? 'warning' : '';
-
-    let cnoState = row.cnoState;
-    let detail = row.cno.numbers.join(' · ');
-    if (detail && row.cno.corrected) detail += ' · Carta de correção';
-    if (row.type === 'NFS-e' && cnoState === 'unknown' && facts) {
-      const code = facts.workCode;
-      const expected = row.cno.expected;
-      const isWorkCno = /^[\d.\s/-]+$/.test(code) && code.replace(/\D/g, '') === expected.replace(/\D/g, '');
-      cnoState = isWorkCno ? 'valid' : code ? 'workCode' : 'missing';
-      detail = isWorkCno ? expected : code;
-    }
-    setValue(cno, cnoLabels[cnoState], detail);
-    cno.parentElement.dataset.tone = cnoState;
+    setValue(retention, retentionLabels[status.retention], retained);
+    retention.parentElement.dataset.tone = status.retention === 'yes' ? 'warning' : '';
+    setValue(cno, cnoLabels[status.cno], status.cnoDetail);
+    cno.parentElement.dataset.tone = status.cno;
   }
 
   function reportRow(row, includePdf = true) {
@@ -199,37 +214,77 @@ export function createNfeReportView({ document:doc = globalThis.document, data, 
     return fields;
   }
 
-  async function loadXmlFacts(entries, signal) {
-    const queue = entries.filter(({row}) => row.xmlUrl && !xmlFacts.has(xmlKey(row)));
+  async function loadXmlFacts(candidates, signal, onLoaded) {
+    const queue = new Map(candidates.filter(row => row.xmlUrl && !xmlFacts.has(xmlKey(row)))
+      .map(row => [xmlKey(row), row]));
+    const pending = queue.entries();
     const loadOne = async () => {
-      for (let item = queue.shift(); item && !signal.aborted; item = queue.shift()) {
-        const { row } = item;
+      for (const [key, row] of pending) {
+        if (signal.aborted) return;
+        let facts = null;
         try {
           const blob = await data.downloadDocument(row.xmlUrl, { signal });
           signal.throwIfAborted();
-          const facts = invoiceXmlFacts(await blob.text(), row, doc.defaultView.DOMParser);
-          signal.throwIfAborted();
-          xmlFacts.set(xmlKey(row), facts);
-          renderXmlFacts(item, facts);
-        } catch {
-          if (!signal.aborted) renderXmlFacts(item, null);
-        }
+          facts = invoiceXmlFacts(await blob.text(), row, doc.defaultView.DOMParser);
+        } catch { /* Leave unavailable XML unclassified. */ }
+        if (signal.aborted) return;
+        xmlFacts.set(key, facts);
+        onLoaded?.(key, facts);
       }
     };
-    await Promise.all(Array.from({ length:Math.min(3, queue.length) }, loadOne));
+    await Promise.all(Array.from({ length:Math.min(3, queue.size) }, loadOne));
   }
 
-  function filteredRows() {
+  function candidateRows() {
     const terms = searchKey(search.value.trim()).split(/\s+/).filter(Boolean);
     return (rows || []).filter(row =>
       (!type.value || row.type === type.value) &&
       terms.every(term => searchKey([row.supplier, row.number, row.taxId, row.key, row.taxId.replace(/\D/g, '')].join(' ')).includes(term)));
   }
 
+  function needsFilterXml(row) {
+    if (!row.xmlUrl) return false;
+    const service = row.type === 'NFS-e';
+    const readRetention = service && row.retention !== 'yes';
+    const readCno = service && row.cnoState === 'unknown';
+    if (retentionFilter.value && !readRetention && row.retention !== retentionFilter.value) return false;
+    if (cnoFilter.value && !readCno && row.cnoState !== cnoFilter.value) return false;
+    return regimeFilter.value || (retentionFilter.value && readRetention) || (cnoFilter.value && readCno);
+  }
+
+  function filteredRows(candidates) {
+    if (!retentionFilter.value && !cnoFilter.value && !regimeFilter.value) return candidates;
+    return candidates.filter(row => {
+      const { regime, retention, cno } = classifyFiscalFacts(row, xmlFacts.get(xmlKey(row)));
+      return (!retentionFilter.value || retentionFilter.value === retention) &&
+        (!cnoFilter.value || cnoFilter.value === cno) &&
+        (!regimeFilter.value || regimeFilter.value === regime ||
+          (regimeFilter.value === 'Simples Nacional' && regime.startsWith('Simples Nacional · ')));
+    });
+  }
+
   function render() {
     pageRequest?.abort();
     pageRequest = new AbortController();
-    const visible = filteredRows();
+    const { signal } = pageRequest;
+    const candidates = candidateRows();
+    const pending = candidates.filter(row => needsFilterXml(row) && !xmlFacts.has(xmlKey(row)));
+    if (!pending.length) {
+      pageFacts = renderPage(candidates, signal);
+      return;
+    }
+    body.setAttribute('aria-busy', 'true');
+    metrics.hidden = table.hidden = pager.hidden = true;
+    list.replaceChildren();
+    feedback.textContent = 'Consultando XMLs para aplicar os filtros…';
+    pageFacts = loadXmlFacts(pending, signal).then(() => {
+      if (!signal.aborted) return renderPage(candidates, signal);
+    });
+  }
+
+  function renderPage(candidates, signal) {
+    body.removeAttribute('aria-busy');
+    const visible = filteredRows(candidates);
     const pages = Math.max(1, Math.ceil(visible.length / PAGE_SIZE));
     page = Math.min(page, pages);
     metrics.hidden = !rows;
@@ -242,13 +297,20 @@ export function createNfeReportView({ document:doc = globalThis.document, data, 
     metric('Valor total sem canceladas', amounts.length ? money.format(cents / 100) : '—');
     metric('Última emissão', visible[0]?.date ? displayDate(visible[0].date) : '—');
     metric('Com XML completo', String(visible.filter(row => row.complete).length));
-    if (rows) feedback.textContent = visible.length ? 'Da emissão mais recente para a mais antiga.' : 'Nenhuma nota fiscal encontrada.';
+    if (rows) {
+      feedback.textContent = visible.length ? 'Da emissão mais recente para a mais antiga.' : 'Nenhuma nota fiscal encontrada.';
+      if (candidates.some(row => needsFilterXml(row) && xmlFacts.get(xmlKey(row)) === null)) {
+        feedback.textContent += ' Alguns XMLs estão indisponíveis. Use Atualizar para tentar novamente.';
+      }
+    }
     const entries = visible.slice((page - 1) * PAGE_SIZE, page * PAGE_SIZE).map(row => reportRow(row));
     list.replaceChildren(...entries.map(({ line }) => line));
     previous.disabled = page === 1;
     next.disabled = page === pages;
     pageLabel.textContent = `Página ${page} de ${pages}`;
-    pageFacts = loadXmlFacts(entries, pageRequest.signal);
+    return loadXmlFacts(entries.map(({ row }) => row), signal, (key, facts) => {
+      for (const entry of entries) if (xmlKey(entry.row) === key) renderXmlFacts(entry, facts);
+    });
   }
 
   async function capturePrint(options) {
@@ -256,11 +318,11 @@ export function createNfeReportView({ document:doc = globalThis.document, data, 
     const { signal } = pageRequest;
     await pageFacts;
     signal.throwIfAborted();
-    const entries = filteredRows().map(row => reportRow(row, false));
-    await loadXmlFacts(entries, signal);
+    const visible = filteredRows(candidateRows());
+    await loadXmlFacts(visible, signal);
     signal.throwIfAborted();
     const printRows = make('tbody');
-    printRows.append(...entries.map(({ line }) => line));
+    printRows.append(...visible.map(row => reportRow(row, false).line));
     const { scrollTop, scrollLeft } = body;
     list.replaceWith(printRows);
     // Capture the full table once and leave the live page and its XML nodes intact.
@@ -354,7 +416,7 @@ export function createNfeReportView({ document:doc = globalThis.document, data, 
 
   const applyFilters = () => { page = 1; render(); body.scrollTop = 0; };
   search.addEventListener('input', applyFilters);
-  type.addEventListener('change', applyFilters);
+  for (const select of selects) select.addEventListener('change', applyFilters);
   root.addEventListener('click', event => { if (event.target === root) close(); });
   root.addEventListener('keydown', event => {
     if (event.key === 'Escape') { event.preventDefault(); close(); }
@@ -377,7 +439,8 @@ export function createNfeReportView({ document:doc = globalThis.document, data, 
       if (app) app.inert = true;
       doc.body.style.overflow = 'hidden';
       page = 1;
-      search.value = type.value = '';
+      search.value = '';
+      for (const select of selects) select.value = '';
       root.hidden = false;
       landscape.update();
       body.scrollTop = 0;

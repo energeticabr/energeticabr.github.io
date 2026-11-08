@@ -78,14 +78,25 @@ const isBefore = (first, second, axis) => first && second &&
   (axis === 'inline'
     ? rotated ? box(first).bottom <= box(second).y : box(first).right <= box(second).x
     : rotated ? box(first).x >= box(second).right : box(first).bottom <= box(second).y);
+const fiscalControls = [...panel.querySelectorAll('.nfe-filters select')];
+const arrows = [...panel.querySelectorAll('.report-navigation-arrow')].filter(arrow =>
+  getComputedStyle(arrow).position === 'fixed' && arrow.offsetWidth > 0);
+const filtersFit = [...fiscalControls, panel.querySelector('input[name="search"]')].every(control => {
+  const rect = box(control);
+  return rect.width > 0 && rect.height > 0 && rect.x >= -1 && rect.y >= -1 &&
+    rect.right <= innerWidth + 1 && rect.bottom <= innerHeight + 1 && arrows.every(arrow => {
+      const edge = box(arrow);
+      return rect.right <= edge.x || rect.x >= edge.right || rect.bottom <= edge.y || rect.y >= edge.bottom;
+    });
+});
+const rowIds = () => [...panel.querySelectorAll('tbody tr')].map(row => row.dataset.invoiceId);
 document.documentElement.dataset.layout = JSON.stringify({
   provisions, orange, nfe, dda,
-  open:!report.element.hidden, rowIds:[...panel.querySelectorAll('tbody tr')].map(row=>row.dataset.invoiceId),
+  open:!report.element.hidden, rowIds:rowIds(),
   overflow:document.documentElement.scrollWidth > innerWidth,
   reportBodyWidth:reportBody.offsetWidth,
   availableReportWidth:reportBody.parentElement.clientWidth,
-  overlayArrows:[...panel.querySelectorAll('.report-navigation-arrow')].filter(arrow =>
-    getComputedStyle(arrow).position === 'fixed' && arrow.offsetWidth > 0).length,
+  overlayArrows:arrows.length,
   tableScrolls:reportBody.scrollWidth > reportBody.clientWidth,
   amountFits:amountFitsCell(),
   rotated, mei:hasMei(), pdfOnLeft:Boolean(isBefore(pdf,supplier,'inline')),
@@ -94,7 +105,19 @@ document.documentElement.dataset.layout = JSON.stringify({
     !!panel.querySelector('.report-close-bar .report-close-control'),
   pdfIconWidth:pdf?.querySelector('svg')?.getBoundingClientRect().width ?? 0,
   pdfTargetHeight:pdf?.offsetHeight ?? 0,
+  filterNames:fiscalControls.map(control => control.name),
+  filtersFit,
 });
+if (!report.element.hidden) {
+  const regime = panel.querySelector('select[name="regime"]');
+  if (regime) {
+    regime.value = 'MEI';
+    regime.dispatchEvent(new Event('change'));
+    document.documentElement.dataset.meiRows = JSON.stringify(rowIds());
+    regime.value = '';
+    regime.dispatchEvent(new Event('change'));
+  }
+}
 document.documentElement.dataset.ready = 'true';
 </script>
 </body>

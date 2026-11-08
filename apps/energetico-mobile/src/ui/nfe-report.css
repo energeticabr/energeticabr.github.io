@@ -21,7 +21,12 @@
   overflow-wrap: anywhere;
 }
 .nfe-header > .pl-refresh { width: 44px; }
-.nfe-filters { display: grid; grid-template-columns: minmax(120px, 1fr) minmax(0, 2fr); gap: 10px; }
+.nfe-filters { display: grid; grid-template-columns: minmax(0, .85fr) minmax(0, 2fr) repeat(2, minmax(0, 1fr)) minmax(0, 1.45fr); gap: 10px; }
+.nfe-report[data-report-max-680="true"] .nfe-filters {
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  padding-inline: calc(var(--report-navigation-size, 46px) + 10px);
+}
+.nfe-report[data-report-max-680="true"] .nfe-filters label:nth-child(2) { grid-column: span 2; }
 .nfe-filters label { min-width: 0; display: grid; gap: 4px; color: #17394b; font-size: 12px; font-weight: 700; }
 .nfe-filters :is(input, select) {
   box-sizing: border-box;
