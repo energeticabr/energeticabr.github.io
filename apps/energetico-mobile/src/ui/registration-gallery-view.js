@@ -16,6 +16,7 @@ import { renderAssetGalleryCard } from './asset-gallery-card.js';
 import { renderAssetLaunchesCard, assetLaunchesIcon } from './asset-launches-card.js';
 import { createAssetReportView } from './asset-report-view.js';
 import { renderDdaCard, updateDdaDueTones, ddaTodayKey } from './dda-card.js';
+import { isDdaOpenStatus } from '../chat/dda-bank-status.js';
 import { createDdaSyncReceipt } from './dda-sync-receipt.js';
 import { createDdaPaymentConfirmation } from './dda-payment-confirmation.js';
 import { createDdaGalleryMetrics } from './dda-gallery-metrics.js';
@@ -508,6 +509,8 @@ export function createRegistrationGallery({ document: doc = globalThis.document,
   function rowFieldValue(row, field) {
     if (field === "ID") return String(row.id || "");
     if (model.nativeCard && ["Criado por", "Modificado por"].includes(field)) return documentAuthorValue(row, field);
+    if (kind === 'dda' && field === 'SITUACAO'
+      && String(registrationRawField(row.fields, 'DDA_CICLO_AGENDAMENTO', model) ?? '').trim() === 'PAGO_AGENDADO') return 'Pago';
     if (kind === 'provisionDescription' && field === 'STATUS') {
       const status = fieldValue(row.fields, field, model);
       // Legacy parents have an empty textual STATUS; execution dates provide
@@ -897,7 +900,9 @@ export function createRegistrationGallery({ document: doc = globalThis.document,
           continue;
         }
         const value = rowFieldValue(row, field);
-        if (model.substringFilters?.includes(field)) {
+        if (kind === 'dda' && field === 'SITUACAO' && control.value === 'Em aberto') {
+          if (!isDdaOpenStatus(value)) return false;
+        } else if (model.substringFilters?.includes(field)) {
           if (!value.toLocaleLowerCase("pt-BR").includes(control.value.toLocaleLowerCase("pt-BR"))) return false;
         } else if (value !== control.value) return false;
       }

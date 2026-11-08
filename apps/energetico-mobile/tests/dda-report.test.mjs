@@ -8,10 +8,10 @@ import {captureFilteredReport,decorateReportPrint} from '../src/ui/report-print.
 const now=()=>new Date('2026-10-28T12:00:00Z');
 const row=(id,status='Em aberto',due='2026-10-29',amount=12.34)=>({id:String(id),fields:{Title:'Fornecedor '+id,SITUACAO:status,VENCIMENTO:due,VALOR:amount,DOCUMENTO:'DOC-'+id,BANCO:'Banco teste',ULTIMA_CONSULTA:'2026-10-28T10:00:00Z'}});
 const settle=async()=>{for(let i=0;i<5;i++)await new Promise(r=>setImmediate(r));};
-test('open-only default includes overdue and distant bills, sorts dates and sums money precisely',()=>{
+test('open default includes scheduled, overdue and distant bills, sorts dates and sums money precisely',()=>{
  const rows=normalizeDdaReportRows({rows:[row(1,'Pago'),row(2,'Em Aberto','2026-10-20',0.1),row(3,' EM ABERTO ','2027-01-01',0.2),row(4,'Agendado'),row(5,'Não confirmado'),row(6,'Baixado')]});
  const report=buildDdaReport(rows,undefined,now());
- assert.deepEqual(report.rows.map(r=>r.id),['2','3']);assert.equal(report.total,'0.30');assert.equal(report.overdue,1);
+ assert.deepEqual(report.rows.map(r=>r.id),['2','4','3']);assert.equal(report.total,'12.64');assert.equal(report.overdue,1);
  assert.equal(buildDdaReport(rows,{status:''},now()).rows.length,6);
 });
 test('unknown status and missing amounts never become open or zero; malformed and partial snapshots reject',()=>{
@@ -150,10 +150,15 @@ test('closed loads and failed refresh cannot show stale rows or print stale tota
  view.destroy();dom.window.close();
 });
 
-test('automatic opening shows unpaid scheduled titles while manual reopening remains open-only',async()=>{
+test('automatic and manual opening both show scheduled titles, with a separate scheduled filter',async()=>{
  const {dom,view,doc}=setup({loadSnapshot:async()=>({rows:[row(1),row(2,'Agendado'),row(3,'Pago')]})});
  await view.open({automatic:true,initialSnapshot:{rows:[row(1),row(2,'Agendado'),row(3,'Pago')]}});
  assert.equal(doc.querySelector('[name=status]').value,'Não pagos');assert.equal(doc.querySelectorAll('tbody tr').length,2);
- view.close();await view.open();assert.equal(doc.querySelector('[name=status]').value,'Em aberto');assert.equal(doc.querySelectorAll('tbody tr').length,1);
+ view.close();await view.open();
+ const status=doc.querySelector('[name=status]');
+ assert.equal(status.value,'Em aberto');assert.equal(doc.querySelectorAll('tbody tr').length,2);
+ assert.equal(doc.querySelector('[data-dda-id="2"] .ddr-schedule-cluster').textContent,'AGENDADO');
+ status.value='Agendado';status.dispatchEvent(new dom.window.Event('change'));
+ assert.deepEqual([...doc.querySelectorAll('tbody tr')].map(row=>row.dataset.ddaId),['2']);
  view.destroy();dom.window.close();
 });
