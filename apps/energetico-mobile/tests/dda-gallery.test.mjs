@@ -12,7 +12,8 @@ test('DDA Em aberto includes scheduled rows while paid and unconfirmed rows are 
   {id:'8',fields:{...sample.fields,Title:'Pago no banco',SITUACAO:'Pago'}},
   {id:'9',fields:{...sample.fields,Title:'Pago manualmente',SITUACAO:'Agendado',PGTO_CONFIRMADO:true}},
   {id:'10',fields:{...sample.fields,Title:'Fornecedor agendado',SITUACAO:'Agendado'}},
-  {id:'11',fields:{...sample.fields,Title:'Consulta incerta',SITUACAO:'Não confirmado'}}]})}});
+  {id:'11',fields:{...sample.fields,Title:'Consulta incerta',SITUACAO:'Não confirmado'}},
+  {id:'12',fields:{...sample.fields,Title:'Pagamento agendado confirmado',SITUACAO:'Agendado',DDA_CICLO_AGENDAMENTO:'PAGO_AGENDADO'}}]})}});
  t.after(()=>{gallery.destroy();dom.window.close();});
  await gallery.open();
  const status=doc.querySelector('[data-filter-field="SITUACAO"]');
@@ -20,9 +21,11 @@ test('DDA Em aberto includes scheduled rows while paid and unconfirmed rows are 
  assert.equal(doc.querySelectorAll('.rg-row--dda').length,2);
  assert.match(doc.querySelector('.rg-list').textContent,/Fornecedor fictício/);
  assert.match(doc.querySelector('.rg-list').textContent,/Fornecedor agendado/);
- assert.doesNotMatch(doc.querySelector('.rg-list').textContent,/Pago no banco|Pago manualmente|Consulta incerta/);
+ assert.doesNotMatch(doc.querySelector('.rg-list').textContent,/Pago no banco|Pago manualmente|Consulta incerta|Pagamento agendado confirmado/);
  status.value='Agendado';status.dispatchEvent(new dom.window.Event('change'));
  assert.deepEqual([...doc.querySelectorAll('.rg-row--dda')].map(row=>row.dataset.registrationRow),['10']);
+ status.value='Pago';status.dispatchEvent(new dom.window.Event('change'));
+ assert.deepEqual([...doc.querySelectorAll('.rg-row--dda')].map(row=>row.dataset.registrationRow),['8','9','12']);
 });
 
 for(const rows of [[],[{id:'8',fields:{...sample.fields,SITUACAO:'Pago'}}]])

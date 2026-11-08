@@ -509,6 +509,8 @@ export function createRegistrationGallery({ document: doc = globalThis.document,
   function rowFieldValue(row, field) {
     if (field === "ID") return String(row.id || "");
     if (model.nativeCard && ["Criado por", "Modificado por"].includes(field)) return documentAuthorValue(row, field);
+    if (kind === 'dda' && field === 'SITUACAO'
+      && String(registrationRawField(row.fields, 'DDA_CICLO_AGENDAMENTO', model) ?? '').trim() === 'PAGO_AGENDADO') return 'Pago';
     if (kind === 'provisionDescription' && field === 'STATUS') {
       const status = fieldValue(row.fields, field, model);
       // Legacy parents have an empty textual STATUS; execution dates provide
