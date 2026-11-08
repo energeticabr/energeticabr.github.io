@@ -7,7 +7,7 @@ import { createServer } from 'vite';
 import { JSDOM } from 'jsdom';
 import { runBrowserLayout } from './helpers/browser-layout-runner.mjs';
 
-test('NFE opens a responsive fiscal report from the new blue position', { timeout:90000 }, async t => {
+test('NFE opens the horizontal fiscal table from the blue mascot in portrait and landscape', { timeout:90000 }, async t => {
   const browser = [process.env.CHROME_BIN,'C:/Program Files/Google/Chrome/Application/chrome.exe','/usr/bin/google-chrome','/usr/bin/chromium']
     .find(path => path && existsSync(path));
   if (!browser) return t.skip('Chrome unavailable');
@@ -17,18 +17,23 @@ test('NFE opens a responsive fiscal report from the new blue position', { timeou
   try {
     await server.listen();
     const url = `http://127.0.0.1:${server.httpServer.address().port}/tests/fixtures/nfe-report.html`;
-    for (const width of [320,390,1365]) {
-      const result = await runBrowserLayout(browser, { width, height:844, url, captureScreenshot:Boolean(capture) });
+    for (const [width,height] of [[320,568],[390,844],[844,390],[1365,900]]) {
+      const result = await runBrowserLayout(browser, { width, height, url, captureScreenshot:Boolean(capture) });
       const dom = new JSDOM(result.stdout);
       try {
-        const { provisions, orange, nfe, dda, open, cardIds, overflow, mei, pdfOnLeft, pdfIconWidth, pdfTargetHeight } = JSON.parse(dom.window.document.documentElement.dataset.layout);
+        const { provisions, orange, nfe, dda, open, rowIds, overflow, tableScrolls, rotated, mei, pdfOnLeft, metricsAbove,
+          headerControls, pdfIconWidth, pdfTargetHeight } = JSON.parse(dom.window.document.documentElement.dataset.layout);
         assert.equal(provisions.y, orange.y);
         assert.equal(orange.x - provisions.x, 56);
         assert.equal(nfe.x, provisions.x);
         assert.equal(nfe.y - provisions.y, 68);
         assert.equal(dda.y - nfe.y, 56);
-        assert.deepEqual({ open, cardIds, overflow, mei }, { open:true, cardIds:['2','3'], overflow:false, mei:true });
+        assert.deepEqual({ open, rowIds, overflow, mei }, { open:true, rowIds:['2','3'], overflow:false, mei:true });
+        assert.equal(rotated, height > width);
+        assert.equal(tableScrolls, width === 320);
         assert.equal(pdfOnLeft, true);
+        assert.equal(metricsAbove, true);
+        assert.equal(headerControls, true);
         assert.equal(pdfIconWidth, 34);
         assert.ok(pdfTargetHeight >= 44);
         if (capture) {

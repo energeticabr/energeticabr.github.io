@@ -1,11 +1,14 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { JSDOM } from 'jsdom';
+import { PDFDocument } from 'pdf-lib';
 import { createAppController } from '../src/app-controller.js';
 import { createConversationStore } from '../src/chat/conversation-store.js';
 import { renderChatMarkup, commandFromTarget } from '../src/ui/chat-view.js';
 import { projectNfeRows, invoiceXmlFacts } from '../src/chat/nfe-report-model.js';
+import { buildFilteredReportPdf } from '../src/chat/filtered-report-pdf.js';
 import { createNfeReportView } from '../src/ui/nfe-report-view.js';
+import { decorateReportPrint } from '../src/ui/report-print.js';
 
 test('NFE uses the DDA drawing and opens its own report from the home menu', () => {
   const dom = new JSDOM(renderChatMarkup({ sessionStatus:'authenticated', account:{ name:'Teste' }, messages:[
@@ -145,10 +148,11 @@ test('report shows the fiscal facts, filters by supplier and opens the exact att
   await panel.open();
   await new Promise(resolve => setImmediate(resolve));
   const root = panel.element;
-  assert.match(root.querySelector('.nfe-card').textContent, /ELÉTRICA TESTE LTDA.*06\/11\/2026.*MEI.*Retenção informada.*CNO consta/);
-  const card = root.querySelector('.nfe-card');
-  const pdf = card.querySelector('button.nfe-pdf');
-  assert.equal(card.querySelector('.nfe-identity').firstElementChild, pdf);
+  const row = root.querySelector('table tbody tr');
+  assert.match(row.textContent, /ELÉTRICA TESTE LTDA.*06\/11\/2026.*MEI.*Retenção informada.*CNO consta/);
+  const pdf = row.querySelector('button.nfe-pdf');
+  assert.ok(row.cells[0].contains(pdf));
+  assert.equal(root.querySelector('.nfe-metrics').nextElementSibling.className, 'nfe-feedback');
   assert.equal(pdf.getAttribute('aria-label'), 'Abrir DANFE da nota 140');
   assert.equal(pdf.querySelector('svg[aria-hidden="true"] text')?.textContent, 'PDF');
   pdf.click();
@@ -157,11 +161,49 @@ test('report shows the fiscal facts, filters by supplier and opens the exact att
   const search = root.querySelector('input');
   search.value = 'eletrica';
   search.dispatchEvent(new dom.window.Event('input'));
-  assert.ok(root.querySelector('.nfe-card'));
+  assert.ok(root.querySelector('table tbody tr'));
   search.value = 'empresa inexistente';
   search.dispatchEvent(new dom.window.Event('input'));
-  assert.equal(root.querySelector('.nfe-card'), null);
+  assert.equal(root.querySelector('table tbody tr'), null);
   panel.close();
   assert.equal(document.activeElement, opener);
   assert.equal(document.getElementById('app').inert, false);
+});
+
+test('NFE printer captures all filtered pages with XML facts and preserves the page in view', async t => {
+  const dom = new JSDOM('<main id="app"></main>');
+  const rows = Array.from({ length:13 }, (_, i) => ({ ...invoice, id:String(i + 1),
+    fields:{ ...invoice.fields, Title:`Fornecedor ${i + 1}`, NUMERO_NOTA:String(100 + i),
+      SITUACAO:i === 11 ? 'CANCELADA' : 'AUTORIZADA', STATUS_IMPORTACAO:i === 12 ? 'RESUMO' : 'XML_COMPLETO' } }));
+  rows.push({ id:'14', fields:{ ...invoice.fields, TIPO_FISCAL:'NFS-e', Title:'Serviço fora do filtro' } });
+  let resolvePreview;
+  const preview = new Promise(resolve => { resolvePreview = resolve; });
+  const panel = decorateReportPrint(createNfeReportView({ document:dom.window.document, data:{
+    loadSnapshot:async () => ({ rows }), downloadDocument:async () => new Blob([issuerXml]),
+  } }), {
+    action:'open-nfe-report', loadLogo:async () => new Uint8Array(), buildPdf:async snapshot => snapshot,
+    previewMedia:resolvePreview,
+  });
+  t.after(() => { panel.destroy(); dom.window.close(); });
+  await panel.open();
+  const { element } = panel;
+  const type = element.querySelector('select');
+  type.value = 'NF-e';
+  type.dispatchEvent(new dom.window.Event('change'));
+  const measures = [...element.querySelectorAll('.nfe-metrics dd')].map(node => node.textContent.replace(/\s/g, ' '));
+  assert.deepEqual(measures, ['13', 'R$ 16.500,00', '06/11/2026', '12']);
+  element.querySelector('.nfe-pager button:last-child').click();
+  const currentRow = element.querySelector('tbody tr');
+  assert.equal(currentRow.dataset.invoiceId, '1');
+  element.querySelector('[data-action="print-report-pdf"]').click();
+  const snapshot = await preview;
+  const table = snapshot.pages[0].blocks.find(block => block.type === 'table');
+  assert.equal(snapshot.title, 'Relatório de notas fiscais');
+  assert.equal(table.rows.length, 14);
+  assert.match(JSON.stringify(table.rows.at(-1)), /Fornecedor 1.*MEI/);
+  assert.doesNotMatch(JSON.stringify(table), /Serviço fora do filtro/);
+  assert.equal(element.querySelector('tbody tr'), currentRow);
+  const pdf = await buildFilteredReportPdf(snapshot);
+  assert.equal(pdf.type, 'application/pdf');
+  assert.ok((await PDFDocument.load(await pdf.arrayBuffer())).getPageCount() > 0);
 });
