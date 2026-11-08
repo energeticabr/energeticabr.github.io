@@ -46,7 +46,10 @@ test('NFE opens the horizontal fiscal table from the blue mascot in portrait and
         assert.equal(taxHeading, 'TIPO FORNECEDOR/ RETENÇÃO');
         assert.equal(taxStacked, true);
         assert.ok(pencilHeight >= 44);
-        assert.deepEqual(JSON.parse(dom.window.document.documentElement.dataset.orderLink), {
+        const { orangeTargetHeight, ...orderLink } = JSON.parse(dom.window.document.documentElement.dataset.orderLink);
+        assert.ok(orangeTargetHeight >= 44);
+        assert.deepEqual(orderLink, {
+          orangePencilBelow:true, orangeColor:'rgb(164, 75, 5)',
           pickerFits:true, reviewFits:true, linked:'ID 32', remainingPencils:1,
           proposePosition:true, proposalFits:true, proposalSubmitFits:true,
           proposalScroll:width !== 1365, changedStage:'26', pickerRestored:true,
