@@ -189,7 +189,7 @@ if(new URLSearchParams(location.search).has('print')){
   const results=[];
   try{
    const logoBytes=new Uint8Array(await(await fetch(report.element.querySelector('img').src)).arrayBuffer());
-   const {getDocument,GlobalWorkerOptions}=await import('pdfjs-dist/legacy/build/pdf.mjs');GlobalWorkerOptions.workerSrc=(await import('pdfjs-dist/legacy/build/pdf.worker.min.mjs?url')).default;
+   const {getDocument,GlobalWorkerOptions,OPS}=await import('pdfjs-dist/legacy/build/pdf.mjs');GlobalWorkerOptions.workerSrc=(await import('pdfjs-dist/legacy/build/pdf.worker.min.mjs?url')).default;
    for(const [action,panel]of panels){
     document.documentElement.dataset.pdfProgress=action;
     await panel.open();await new Promise(resolve=>requestAnimationFrame(resolve));
@@ -199,8 +199,14 @@ if(new URLSearchParams(location.search).has('print')){
     const snapshot=captureFilteredReport(panel.element,{title:REPORT_PDF_TITLES[action]});restore?.();
     const pdf=await buildFilteredReportPdf(snapshot,{logoBytes});
     const task=getDocument({data:new Uint8Array(await pdf.arrayBuffer())});const parsed=await task.promise;
-    const text=[];for(let page=1;page<=parsed.numPages;page++)text.push(...(await(await parsed.getPage(page)).getTextContent()).items.map(item=>item.str));
-    results.push({action,bytes:pdf.size,pages:parsed.numPages,text:text.join(' '),printer:Boolean(control&&!control.disabled),fits:r.left>=0&&r.right<=innerWidth+1,filterWidth:filters?.scrollWidth,filterClient:filters?.clientWidth,filterHeight:filters?.getBoundingClientRect().height});
+    const items=[];for(let page=1;page<=parsed.numPages;page++)items.push(...(await(await parsed.getPage(page)).getTextContent()).items);
+    let layout;
+    if(action==='open-quotation-report'){
+     const page=await parsed.getPage(1),operators=await page.getOperatorList();
+     layout={cards:['COTAÇÕES ATIVAS','COTAÇÕES INATIVAS','TOTAL DE COTAÇÕES','PENDENTE SOLICITAÇÃO'].map(label=>items.find(item=>item.str===label)?.transform.slice(4)),
+      fills:operators.argsArray.filter((_,i)=>operators.fnArray[i]===OPS.setFillRGBColor).map(args=>args[0])};
+    }
+    results.push({action,bytes:pdf.size,pages:parsed.numPages,text:items.map(item=>item.str).join(' '),layout,printer:Boolean(control&&!control.disabled),fits:r.left>=0&&r.right<=innerWidth+1,filterWidth:filters?.scrollWidth,filterClient:filters?.clientWidth,filterHeight:filters?.getBoundingClientRect().height});
     if(['open-depreciation-report','open-payment-ledger','open-quotation-report','open-task-association-report'].includes(action)){
      const bytes=new Uint8Array(await pdf.arrayBuffer()),output=document.createElement('output');output.dataset.pdfSample=action;output.hidden=true;output.textContent=btoa(Array.from(bytes,b=>String.fromCharCode(b)).join(''));document.body.append(output);
     }

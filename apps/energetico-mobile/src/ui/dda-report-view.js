@@ -124,7 +124,7 @@ export function createDdaReportView({document:doc=globalThis.document,data,openM
   if(result.missingAmounts)content.append(make('p','ddr-warning',`${result.missingAmounts} DDA(s) sem valor nominal válido. Total indisponível.`));
   if(!result.rows.length){content.append(make('p','ddr-empty','Nenhum DDA encontrado para os filtros selecionados.'));return;}
   const table=make('table','ddr-table');table.setAttribute('aria-label','DDAs da empresa');const head=make('thead'),tr=make('tr'),body=make('tbody');
-  for(const label of ['ID','VENCIMENTO','FORNECEDOR','BANCO / BOLETO','DATA EMISSÃO','VALOR NOMINAL','SITUAÇÃO','VINCULAÇÃO','AÇÕES']){const th=make('th','',label);th.scope='col';tr.append(th);}head.append(tr);table.append(head,body);
+  for(const label of ['ID','VENCIMENTO','FORNECEDOR','BANCO / BOLETO','DATA EMISSÃO','VALOR NOMINAL','SITUAÇÃO','VINCULAÇÃO','AÇÕES']){const th=make('th','',label);th.scope='col';if(label==='AÇÕES')th.dataset.reportScreenOnly='';tr.append(th);}head.append(tr);table.append(head,body);
   for(const row of printAll?result.rows:result.rows.slice((page-1)*50,page*50)){
    const line=make('tr');line.dataset.ddaId=row.id;const due=make('td','ddr-due');due.dataset.dueTone=ddaDueTone(row.due,currentDate);
    due.append(make('span','ddr-due-date',date(row.due)));
@@ -170,13 +170,15 @@ export function createDdaReportView({document:doc=globalThis.document,data,openM
    check.disabled=row.status==='Pago'||!Number.isSafeInteger(Number(row.id))||Number(row.id)<=0||!/^[a-f0-9]{64}$/.test(row.key)||typeof confirmPayment!=='function';
    check.addEventListener('click',()=>{if(destroyed||root.hidden||root.getAttribute('aria-busy')==='true')return;paymentConfirmation.show({itemId:row.id,key:row.key,supplier:row.supplier,amount:money(row.amount),due:date(row.due)},check);});
    const open=button('Abrir espelho do DDA '+row.id,'📎 Espelho');open.dataset.ddaMirror=row.id;open.disabled=typeof data.listAttachments!=='function'||typeof data.downloadAttachment!=='function'||typeof openMediaCollection!=='function';open.addEventListener('click',()=>void openPdfs(row,open));actions.append(pencil,check,open);files.append(actions);
-   const id=make('td','ddr-id');
+    files.dataset.reportScreenOnly='';
+    const id=make('td','ddr-id'),identity=make('div','ddr-row-identity');
+    identity.append(make('span','ddr-id-cluster',row.id));id.append(identity);
    if(!printAll){
     const pdf=button('Abrir PDFs do DDA '+row.id,'');pdf.dataset.ddaPdf=row.id;pdf.className='ddr-open-pdf';pdf.title=pdf.getAttribute('aria-label');pdf.disabled=open.disabled;
     pdf.innerHTML='<svg viewBox="0 0 32 32" aria-hidden="true" focusable="false"><path d="M8 2h11l6 6v22H8z M19 2v7h6" fill="none" stroke="currentColor" stroke-width="2" stroke-linejoin="round"/><rect x="2" y="13" width="28" height="11" rx="2" fill="currentColor"/><text x="16" y="21" fill="white" font-size="8" font-weight="700" text-anchor="middle">PDF</text></svg>';
     pdf.addEventListener('click',()=>void openPdfs(row,pdf));
-    const identity=make('div','ddr-row-identity');identity.append(make('span','ddr-id-cluster',row.id),pdf);id.append(identity);
-   }else id.textContent=row.id;
+     identity.append(pdf);
+    }
    line.dataset.stripe=String(body.querySelectorAll('[data-dda-id]').length%2);
    line.append(id,due,supplier,bankDocument,issued,make('td','ddr-money',money(row.amount)),status,link,files);body.append(line);
    if(!printAll)addDdaReportBarcode({document:doc,row,line,actions,expanded:expandedBarcodes,copyText,isCurrent:()=>!destroyed&&!root.hidden&&root.getAttribute('aria-busy')!=='true'});

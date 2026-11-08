@@ -24,6 +24,14 @@ function validateSnapshot(snapshot) {
     if (!Array.isArray(page?.blocks)) invalid();
     for (const block of page.blocks) {
       if (block?.type === "text") validateRuns(block.runs);
+      else if (block?.type === "cards") {
+        if (!Array.isArray(block.rows) || block.rows.some(row => !Array.isArray(row) || !row.length)) invalid();
+        for (const row of block.rows) for (const card of row) {
+          if (!Number.isFinite(card?.width) || card.width <= 0 || !Number.isFinite(card.left) || card.left < 0
+            || !Array.isArray(card.lines)) invalid();
+          for (const line of card.lines) validateRuns(line.runs);
+        }
+      }
       else if (block?.type === "table") {
         if (!Array.isArray(block.widths) || !block.widths.length
           || block.widths.some(width => !Number.isFinite(width) || width <= 0)
@@ -36,6 +44,10 @@ function validateSnapshot(snapshot) {
               || !Number.isInteger(cell.colSpan) || cell.colSpan < 1
               || cell.column + cell.colSpan > block.widths.length) invalid();
             validateRuns(cell.runs);
+            if (cell.parts) {
+              if (!Array.isArray(cell.parts)) invalid();
+              for (const part of cell.parts) validateRuns(part.runs);
+            }
           }
         }
       } else invalid();
@@ -85,8 +97,7 @@ export async function buildFilteredReportPdf(snapshot, { logoBytes } = {}) {
     const back = luminance(background);
     const contrast = (Math.max(front, back) + 0.05) / (Math.min(front, back) + 0.05);
     if (contrast >= 3) return foreground;
-    // Inline badge fills are not captured: compare against the actual PDF
-    // block/cell fill and choose the highest-contrast ink when necessary.
+    // Choose the highest-contrast ink against the rendered surface.
     return (back + 0.05) / 0.05 >= 1.05 / (back + 0.05) ? [0, 0, 0] : [1, 1, 1];
   }
 
@@ -168,6 +179,37 @@ export async function buildFilteredReportPdf(snapshot, { logoBytes } = {}) {
     flush();
   }
 
+  function lineWidth(line) {
+    return line.reduce((sum, glyph) => sum + glyph.width, 0);
+  }
+
+  function drawAligned(line, x, width, baseline, size, fill, align) {
+    if (align === "center") x += (width - lineWidth(line)) / 2;
+    else if (align === "right" || align === "end") x += width - lineWidth(line);
+    drawLine(line, x, baseline, size, fill);
+  }
+
+  function drawBox(box, x, top, width, height, fill) {
+    const border = box.border ? { borderColor: rgb(...color(box.border)), borderWidth: 0.6 } : {};
+    const r = Math.max(0, Math.min(box.radius * 0.65 || 0, width / 2, height / 2));
+    if (r) {
+      const path = `M ${r} 0 H ${width - r} Q ${width} 0 ${width} ${r} V ${height - r}
+        Q ${width} ${height} ${width - r} ${height} H ${r} Q 0 ${height} 0 ${height - r}
+        V ${r} Q 0 0 ${r} 0 Z`;
+      page.drawSvgPath(path, { x, y: top, color: rgb(...fill), ...border });
+    } else {
+      page.drawRectangle({ x, y: top - height, width, height, color: rgb(...fill), ...border });
+    }
+    if (box.accent && height > 2 * r) {
+      page.drawLine({ start: { x: x + 1.4, y: top - r }, end: { x: x + 1.4, y: top - height + r },
+        thickness: 2.2, color: rgb(...color(box.accent)) });
+    }
+    if (box.topAccent && width > 2 * r) {
+      page.drawLine({ start: { x: x + r, y: top - 1.4 }, end: { x: x + width - r, y: top - 1.4 },
+        thickness: 2.2, color: rgb(...color(box.topAccent)) });
+    }
+  }
+
   function addPage() {
     page = pdf.addPage([PAGE_WIDTH, PAGE_HEIGHT]);
     y = TOP;
@@ -193,6 +235,41 @@ export async function buildFilteredReportPdf(snapshot, { logoBytes } = {}) {
     y -= heading ? 8 : 5;
   }
 
+  function renderCards(block) {
+    const gap = 7, padding = 8;
+    for (const row of block.rows) {
+      if (row.some(card => CONTENT_WIDTH * Math.min(card.width, 1 - card.left) < 36)) {
+        for (const card of row) for (const line of card.lines) renderText(line.runs, 10, false, card.box?.fill);
+        continue;
+      }
+      const cards = row.map(card => {
+        const width = CONTENT_WIDTH * Math.min(card.width, 1 - card.left);
+        const lines = card.lines.flatMap(({ runs, size }) => {
+          const points = Math.max(8, Math.min(15, Number(size) * 0.85 || 10));
+          return wrapRuns(runs, points, width - 2 * padding).map(line => ({ line, points, leading: points * 1.3 }));
+        });
+        return { ...card, width, lines, height: lines.reduce((sum, line) => sum + line.leading, 2 * padding) };
+      });
+      const height = Math.max(...cards.map(card => card.height));
+      if (height > TOP - BOTTOM) {
+        for (const card of row) for (const line of card.lines) renderText(line.runs, 10, false, card.box?.fill);
+        continue;
+      }
+      if (y - height < BOTTOM) addPage();
+      for (const card of cards) {
+        const x = MARGIN + card.left * CONTENT_WIDTH;
+        const fill = color(card.box?.fill, [1, 1, 1]);
+        if (card.box) drawBox(card.box, x, y, card.width, height, fill);
+        let top = y - padding;
+        for (const { line, points, leading } of card.lines) {
+          drawAligned(line, x + padding, card.width - 2 * padding, top - points, points, fill, card.align);
+          top -= leading;
+        }
+      }
+      y -= height + gap;
+    }
+  }
+
   function layoutTable(block) {
     const total = block.widths.reduce((sum, width) => sum + width, 0);
     const edges = [MARGIN];
@@ -202,9 +279,20 @@ export async function buildFilteredReportPdf(snapshot, { logoBytes } = {}) {
         const x = edges[cell.column];
         const width = edges[cell.column + cell.colSpan] - x;
         const padding = Math.min(CELL_PADDING, width / 8);
-        return { ...cell, x, width, padding, lines: wrapRuns(cell.runs, TABLE_SIZE, width - 2 * padding, row.header) };
+        const innerWidth = width - 2 * padding;
+        let length = 0;
+        const parts = (cell.parts || [{ runs: cell.runs }]).map(part => {
+          const inset = part.box ? Math.max(0, Math.min(part.box.accent ? 5 : 4, (innerWidth - 12) / 2, innerWidth / 8)) : 0;
+          const lines = wrapRuns(part.runs, TABLE_SIZE, innerWidth - 2 * inset, row.header);
+          const partWidth = part.compact ? Math.min(innerWidth, Math.max(...lines.map(lineWidth)) + 2 * inset + 2) : innerWidth;
+          const start = length;
+          length += lines.length + (part.box ? 1 : 0);
+          return { ...part, start, end: length, x: x + padding + (part.compact && part.centered ? (innerWidth - partWidth) / 2 : 0),
+            width: partWidth, inset, lines };
+        });
+        return { ...cell, x, width, parts, length };
       });
-      const length = Math.max(1, ...cells.map(cell => cell.lines.length));
+      const length = Math.max(1, ...cells.map(cell => cell.length));
       return { header: row.header, cells, length, height: length * TABLE_LEADING + 2 * CELL_PADDING };
     });
   }
@@ -215,14 +303,23 @@ export async function buildFilteredReportPdf(snapshot, { logoBytes } = {}) {
       const background = color(cell.background || (row.header ? [0.92, 0.95, 0.97] : [1, 1, 1]), [1, 1, 1]);
       page.drawRectangle({ x: cell.x, y: y - height, width: cell.width, height,
         color: rgb(...background), borderColor: rgb(0.78, 0.81, 0.85), borderWidth: 0.4 });
-      for (let index = 0; index < length; index++) {
-        const line = cell.lines[offset + index];
-        if (!line) continue;
-        const lineWidth = line.reduce((sum, glyph) => sum + glyph.width, 0);
-        let x = cell.x + cell.padding;
-        if (cell.align === "right") x = cell.x + cell.width - cell.padding - lineWidth;
-        else if (cell.align === "center") x = cell.x + (cell.width - lineWidth) / 2;
-        drawLine(line, x, y - CELL_PADDING - TABLE_SIZE - index * TABLE_LEADING, TABLE_SIZE, background);
+      const middle = cell.verticalAlign === "middle" && length === row.length ? (row.length - cell.length) * TABLE_LEADING / 2 : 0;
+      const top = y - CELL_PADDING - middle;
+      for (const part of cell.parts) {
+        const first = Math.max(part.start, offset);
+        const last = Math.min(part.end, offset + length);
+        if (first >= last || first >= part.start + part.lines.length) continue;
+        const fill = color(part.box?.fill, background);
+        const partTop = top - (first - offset) * TABLE_LEADING;
+        const continued = last < part.end;
+        if (part.box) drawBox(part.box, part.x, partTop, part.width, (last - first) * TABLE_LEADING - (continued ? 0 : 2), fill);
+        const insetTop = part.box ? (continued ? 2 : 4) : 0;
+        for (let index = first; index < last; index++) {
+          const line = part.lines[index - part.start];
+          if (!line) continue;
+          const baseline = top - TABLE_SIZE - (index - offset) * TABLE_LEADING - insetTop;
+          drawAligned(line, part.x + part.inset, part.width - 2 * part.inset, baseline, TABLE_SIZE, fill, part.centered ? "center" : cell.align);
+        }
       }
     }
     y -= height;
@@ -271,6 +368,7 @@ export async function buildFilteredReportPdf(snapshot, { logoBytes } = {}) {
     if (index > 0 && blocks.length) addPage();
     for (const block of blocks) {
       if (block.type === "text") renderText(block.runs, block.heading ? 13 : 10, block.heading, block.background);
+      else if (block.type === "cards") renderCards(block);
       else renderTable(block);
     }
   }

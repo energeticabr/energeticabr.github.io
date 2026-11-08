@@ -21,6 +21,11 @@ test('all sixteen custom mascot reports generate real PDFs and preserve phone fi
     assert.deepEqual(result.viewer,{open:true,canvas:true,forward:true,back:null,close:'❌',automaticShare:false,returned:true});
     assert.match(result.results.find(report=>report.action==='open-payment-ledger').text,/SERVENTE DE PEDREIRO/);
     assert.match(result.results.find(report=>report.action==='open-depreciation-report').text,/VIBRADOR DE CONCRETO/);
+    const {cards,fills}=result.results.find(report=>report.action==='open-quotation-report').layout;
+    assert.ok(cards.every(Boolean),'quotation metrics are searchable');
+    assert.equal(new Set(cards.map(([,y])=>y)).size,1,'quotation metrics keep the four-column grid');
+    assert.equal(new Set(cards.map(([x])=>x)).size,4);
+    assert.ok(fills.includes('#1d4ed8'),'quotation ID retains the blue badge');
     if(process.env.REPORT_PDF_QA_DIR){mkdirSync(process.env.REPORT_PDF_QA_DIR,{recursive:true});for(const sample of dom.window.document.querySelectorAll('[data-pdf-sample]'))writeFileSync(resolve(process.env.REPORT_PDF_QA_DIR,`${sample.dataset.pdfSample}-${width}.pdf`),Buffer.from(sample.textContent,'base64'));}
    }finally{dom.window.close();}
   }
