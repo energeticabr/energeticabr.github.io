@@ -25,12 +25,13 @@ test('DDA report opens PDFs for the chosen row and closes only the horizontal vi
       try {
         const state = JSON.parse(window.document.documentElement.dataset.layout);
         assert.equal(state.error, undefined, JSON.stringify({ width, state }));
-        for (const field of ['idAboveIcon', 'blueLargerIcon', 'fixedSideArrows', 'stripesFillWidth', 'tableFits', 'viewerFits', 'horizontal', 'leftClose', 'sideGaps', 'xCloses', 'leftCloses', 'rightCloses', 'escapeCloses', 'reportPreserved', 'singleNoArrows', 'emptyNotice']) {
+        assert.ok(state.initialWidthRatio >= .95 && state.initialWidthRatio <= 1, JSON.stringify({ width, state }));
+        for (const field of ['idAboveIcon', 'blueLargerIcon', 'fixedSideArrows', 'stripesFillWidth', 'tableFits', 'viewerFits', 'horizontal', 'leftClose', 'sideGaps', 'xCloses', 'leftCloses', 'rightCloses', 'escapeCloses', 'reportPreserved', 'singleNoArrows', 'emptyNotice', 'copyAvailable', 'portraitScrolls', 'multiPageNavigation', 'reopenedAtTop']) {
           assert.equal(state[field], true, JSON.stringify({ width, field, state }));
         }
         assert.ok(state.canvasPixels <= 2_000_000, JSON.stringify({ width, state }));
         if (width < 900) {
-          assert.ok(state.rasterDensity >= 2.98, JSON.stringify({ width, state }));
+          assert.ok(state.rasterDensity >= 1.45, JSON.stringify({ width, state }));
         }
         assert.deepEqual(state.files, ['espelho.pdf', 'outro.PDF', 'espelho.pdf']);
         assert.deepEqual(state.downloads, [['2', 'espelho.pdf'], ['2', 'outro.PDF'], ['2', 'espelho.pdf'], ['2', 'espelho.pdf'], ['2', 'espelho.pdf'], ['1', 'unico.pdf'], ['2', 'espelho.pdf']]);

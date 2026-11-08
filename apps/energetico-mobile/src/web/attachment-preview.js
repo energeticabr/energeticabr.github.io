@@ -664,7 +664,7 @@ export function createAttachmentPreview({
           blob, container: content, documentRef, signal: session.abort.signal,
           onProgress: value => presentationProgress(session, value),
           onDdaCopyReady: available => { if (active === session) { ddaCopyButton.hidden = !available; if (available) dialog.dataset.ddaCopy = 'true'; else delete dialog.dataset.ddaCopy; } },
-          fit: ddaReport || layout === 'report-pdf' ? 'page' : 'width',
+          fit: layout === 'report-pdf' ? 'page' : 'width',
           navigation: ddaReport ? 'paged' : 'scroll',
           rotatesWithViewport: ddaReport,
           initialPage,
