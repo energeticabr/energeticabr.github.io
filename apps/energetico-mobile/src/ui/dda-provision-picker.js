@@ -1,5 +1,6 @@
 import { includesSearchText, normalizeSearchText } from '../../../../portal/core/search-text.js';
 import {confirmEditChanges,ensureEditReviewStyles} from '../../../../portal/ui/edit-review.js';
+import {bindBackdropDismiss} from '../../../../portal/ui/backdrop-dismiss.js';
 import {rankDdaProvisionOptions} from '../chat/dda-provision-link.js';
 
 const DDA_COPY = {
@@ -65,6 +66,7 @@ export function createReportLinkPicker({document:doc,host,copy,loadOptions,saveL
   const background=[...host.children].map(node=>[node,node.inert===true]);for(const [node] of background)node.inert=true;
   const entry={overlay,dialog,trigger,background,controller:new AbortController(),options:[],selected:selectCurrent&&linkedId||null,busy:false,reviewing:false};current=entry;host.append(overlay);dialog.focus();
   const cancelEdit=()=>{if(current===entry&&!entry.busy)close();};cancel.addEventListener('click',cancelEdit);back.addEventListener('click',cancelEdit);
+  bindBackdropDismiss(overlay,()=>{if(!entry.reviewing)cancelEdit();});
   overlay.addEventListener('keydown',event=>{if(event.key==='Escape'&&!entry.busy){event.preventDefault();event.stopPropagation();close();}if(event.key==='Tab'){const nodes=[...dialog.querySelectorAll('button:not(:disabled),input:not(:disabled)')];const index=nodes.indexOf(doc.activeElement);if(nodes.length){event.preventDefault();event.stopPropagation();nodes[(index+(event.shiftKey?-1:1)+nodes.length)%nodes.length].focus();}}});
   const optionText=item=>`${item.label || `#${item.id} · ${item.supplier}`} · ${money(item.amount)}`;
   function render(){
@@ -89,7 +91,7 @@ export function createReportLinkPicker({document:doc,host,copy,loadOptions,saveL
    if(!choice)return;
    entry.reviewing=true;
    const after=copy.reviewDetails ? optionText(choice) : `ID ${selected}`;
-   const accepted=await confirmEditChanges({form:dialog,signal:entry.controller.signal,title:'Confirme as alterações',changes:selected===linkedId?[]:[{label:copy.targetLabel,before:linkedId?`ID ${linkedId}`:'—',after}]});
+   const accepted=await confirmEditChanges({form:dialog,signal:entry.controller.signal,dismissOnBackdrop:true,title:'Confirme as alterações',changes:selected===linkedId?[]:[{label:copy.targetLabel,before:linkedId?`ID ${linkedId}`:'—',after}]});
    entry.reviewing=false;
    if(!accepted||current!==entry||host.hidden)return;
    entry.busy=true;save.disabled=cancel.disabled=back.disabled=search.disabled=true;feedback.setAttribute('role','status');feedback.textContent='Gravando vínculo no SharePoint…';
@@ -117,7 +119,7 @@ export function createReportLinkPicker({document:doc,host,copy,loadOptions,saveL
     if(current!==entry||host.hidden)return;
     if(receipt?.requiresSharedConfirmation&&sharedLinkQuestion){
      const confirmed=await confirmEditChanges({
-      form:dialog,signal:entry.controller.signal,title:sharedLinkQuestion,cancelLabel:'Não',confirmLabel:'Sim',
+      form:dialog,signal:entry.controller.signal,dismissOnBackdrop:true,title:sharedLinkQuestion,cancelLabel:'Não',confirmLabel:'Sim',
      });
      if(current!==entry||host.hidden)return;
      if(!confirmed){

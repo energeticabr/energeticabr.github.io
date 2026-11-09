@@ -1,4 +1,5 @@
 import Decimal from 'decimal.js';
+import { bindBackdropDismiss } from '../../../../portal/ui/backdrop-dismiss.js';
 import {
   nfeProposalAmounts, nfeProposalStages, nfeProposalUnitMismatch, updateNfeProposalBranch,
   updateNfeProposalProduct, updateNfeProposalSupplier, validateNfeProposal,
@@ -44,7 +45,8 @@ export function createNfeProposalView({ document:doc, host, service, onPosted })
     dialog.tabIndex = -1;
     const header = el('header', 'nfe-proposal-header');
     const title = el('h2', '', 'RELATÓRIO PROPOSTO DE LANÇAMENTOS');
-    const closeControl = button('Voltar', () => { if (!entry.busy) close(); });
+    const cancel = () => { if (current === entry && !entry.busy) close(); };
+    const closeControl = button('Voltar', cancel);
     header.append(title, closeControl);
     const form = el('form', 'nfe-proposal-form');
     form.noValidate = true;
@@ -75,6 +77,7 @@ export function createNfeProposalView({ document:doc, host, service, onPosted })
     current = entry;
     host.append(overlay);
     dialog.focus({ preventScroll:true });
+    bindBackdropDismiss(overlay, cancel);
 
     const isCurrent = () => current === entry && !signal.aborted;
     const feedback = (text, error = false) => {
@@ -93,7 +96,7 @@ export function createNfeProposalView({ document:doc, host, service, onPosted })
         event.stopPropagation();
         if (event.isComposing || event.keyCode === 229) return;
         event.preventDefault();
-        if (!entry.busy) close();
+        cancel();
       }
       if (event.key !== 'Tab') return;
       const controls = [...dialog.querySelectorAll('button,select,input,summary')].filter(node =>

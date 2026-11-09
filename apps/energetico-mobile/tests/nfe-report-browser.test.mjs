@@ -56,10 +56,12 @@ test('NFE opens the horizontal fiscal table from the blue mascot in portrait and
       const result = await runBrowserLayout(browser, { width, height, url, captureScreenshot:Boolean(capture) });
       const dom = new JSDOM(result.stdout);
       try {
+        const layout = JSON.parse(dom.window.document.documentElement.dataset.layout);
+        assert.equal(layout.error, undefined);
         const { provisions, orange, sicoob, nfe, dda, open, rowIds, overflow, tableScrolls, rotated, mei, pdfOnLeft, metricsAbove,
           headerControls, amountFits, pdfIconWidth, pdfTargetHeight, reportBodyWidth, availableReportWidth, overlayArrows,
           filterNames, filtersFit, taxHeading, taxStacked, invalidCno, pencilHeight
-        } = JSON.parse(dom.window.document.documentElement.dataset.layout);
+        } = layout;
         assert.equal(provisions.y, orange.y);
         assert.equal(orange.x - provisions.x, 56);
         assert.equal(nfe.x, provisions.x);
@@ -90,6 +92,8 @@ test('NFE opens the horizontal fiscal table from the blue mascot in portrait and
           pickerFits:true, reviewFits:true, linked:'ID 32', remainingPencils:1,
           proposePosition:true, proposalFits:true, proposalSubmitFits:true,
           proposalScroll:width !== 1365, changedStage:'26', pickerRestored:true,
+          insideKeepsPicker:true, dragKeepsPicker:true, pickerBackdropCloses:true, proposalBackdropCloses:true,
+          insideKeepsReview:true, reviewBackdropCloses:true,
           pickerResults:{ supplierId:true, branchId:true, accountId:true, productId:true, stageId:true },
         });
         assert.deepEqual(JSON.parse(dom.window.document.documentElement.dataset.meiRows), ['3']);

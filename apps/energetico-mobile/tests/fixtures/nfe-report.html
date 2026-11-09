@@ -11,6 +11,11 @@
 </head>
 <body>
 <main id="app"></main>
+<script>
+addEventListener('error', event => {
+  document.documentElement.dataset.layout = JSON.stringify({ error:event.message });
+});
+</script>
 <script type="module">
 import { createChatView } from '/src/ui/chat-view.js';
 import { createNfeReportView } from '/src/ui/nfe-report-view.js';
@@ -141,9 +146,32 @@ const layout = {
 };
 if (!report.element.hidden) {
   const pencil = panel.querySelector('[data-invoice-id="2"] .nfe-link-pencil');
-  pencil.click();
-  await new Promise(resolve => setTimeout(resolve, 0));
-  const picker = report.element.querySelector('.dda-provision-dialog');
+  const clickBackdrop = (layer, { bounds = layer.getBoundingClientRect(), start = layer } = {}) => {
+    for (const x of [Math.max(0, bounds.left) + 2, Math.min(innerWidth, bounds.right) - 2]) {
+      for (const y of [Math.max(0, bounds.top) + 2, Math.min(innerHeight, bounds.bottom) - 2]) {
+        if (document.elementFromPoint(x, y) !== layer) continue;
+        const point = { bubbles:true, clientX:x, clientY:y, detail:1 };
+        start.dispatchEvent(new PointerEvent('pointerdown', point));
+        layer.dispatchEvent(new PointerEvent('click', point));
+        return true;
+      }
+    }
+    return false;
+  };
+  const openPicker = async () => {
+    pencil.click();
+    await new Promise(resolve => setTimeout(resolve, 0));
+    return report.element.querySelector('.dda-provision-dialog');
+  };
+  const firstPicker = await openPicker();
+  firstPicker.querySelector('h2').click();
+  const insideKeepsPicker = firstPicker.isConnected;
+  firstPicker.querySelector('input[value="32"]').click();
+  const dragKeepsPicker = clickBackdrop(firstPicker.parentElement, {start:firstPicker}) && firstPicker.isConnected;
+  const pickerBackdropCloses = clickBackdrop(firstPicker.parentElement) && !firstPicker.isConnected &&
+    !report.element.hidden && document.activeElement === pencil && orderId === null;
+  if (firstPicker.isConnected) firstPicker.querySelector('.gallery-record-dialog-button').click();
+  const picker = await openPicker();
   const pickerRect = box(picker);
   const propose = picker.querySelector('[data-nfe-propose-launch]');
   const proposePosition = isBefore(picker.querySelector('h2'), propose, 'inline');
@@ -196,14 +224,22 @@ if (!report.element.hidden) {
   const proposalBody = proposal.querySelector('.nfe-proposal-body');
   const proposalScroll = proposalBody.scrollHeight > proposalBody.clientHeight;
   const proposalSubmit = box(proposal.querySelector('[data-nfe-proposal-submit]'));
-  proposal.querySelector('.nfe-proposal-header button').click();
+  const proposalBackdropCloses = clickBackdrop(proposal.parentElement) && !proposal.isConnected;
+  if (proposal.isConnected) proposal.querySelector('.nfe-proposal-header button').click();
   const pickerRestored = propose.isConnected && !picker.closest('[inert]') && document.activeElement === propose;
   const selection = picker.querySelector('input[value="32"]');
   selection.click();
   picker.querySelector('.dda-provision-save').click();
   const review = document.querySelector('[data-edit-review]');
   const reviewRect = box(review);
-  review.querySelector('[data-edit-review-confirm]').click();
+  review.querySelector('h2').click();
+  const insideKeepsReview = review.isConnected;
+  const reviewBackdropCloses = clickBackdrop(review, {bounds:{left:0, top:0, right:innerWidth, bottom:innerHeight}}) &&
+    !review.isConnected && picker.isConnected && selection.checked && orderId === null;
+  if (review.isConnected) review.querySelector('[data-edit-review-cancel]').click();
+  await new Promise(resolve => setTimeout(resolve, 0));
+  picker.querySelector('.dda-provision-save').click();
+  document.querySelector('[data-edit-review-confirm]').click();
   await new Promise(resolve => setTimeout(resolve, 0));
   const fit = rect => rect.width > 0 && rect.height > 0 && rect.x >= -1 && rect.y >= -1
     && rect.right <= innerWidth + 1 && rect.bottom <= innerHeight + 1;
@@ -216,6 +252,7 @@ if (!report.element.hidden) {
     pickerFits:fit(pickerRect),
     proposePosition, proposalFits:fit(proposalRect), proposalSubmitFits:fit(proposalSubmit),
     proposalScroll, changedStage, pickerRestored, pickerResults,
+    insideKeepsPicker, dragKeepsPicker, pickerBackdropCloses, proposalBackdropCloses, insideKeepsReview, reviewBackdropCloses,
     reviewFits:fit(reviewRect),
     linked:panel.querySelector('[data-invoice-id="2"] .nfe-link-linked')?.textContent,
     remainingPencils:panel.querySelectorAll('.nfe-link-pencil').length,
