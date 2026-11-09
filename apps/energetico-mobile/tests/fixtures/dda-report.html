@@ -54,7 +54,7 @@ if(settlementLayout){
  const paidBackgrounds=[...new Set([paidRow,...paidRow.cells].map(cell=>getComputedStyle(cell).backgroundColor))];
  const openBackground=getComputedStyle(document.querySelector('[data-dda-id="1"]')).backgroundColor;
  action?.click();
- await Promise.resolve();
+ await new Promise(resolve=>setTimeout(resolve,0));
  document.documentElement.dataset.settlement=JSON.stringify({label:badge?.querySelector('strong').textContent,pending:note?.textContent,
   fits:badge?.scrollWidth<=badge?.clientWidth+1&&note?.scrollWidth<=note?.clientWidth+1,
   aligned:badge?.offsetWidth===badge?.nextElementSibling.offsetWidth,
