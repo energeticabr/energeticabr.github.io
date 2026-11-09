@@ -315,11 +315,21 @@ function galleryRepository(options) {
     });
   }
   const columnCache = new Map();
-  const columnsFor = (site, list, options = {}) => {
-    if (!columnCache.has(list)) columnCache.set(list, typeof repository.getColumns === 'function'
-      ? Promise.resolve(repository.getColumns(site, list, options.signal ? { signal: options.signal } : {}))
-        .catch(error => { columnCache.delete(list); throw error; }) : Promise.resolve([]));
-    return columnCache.get(list);
+  const pendingColumns = new Map();
+  const columnsFor = (site, list, { signal } = {}) => {
+    const key = `${site}:${list}`;
+    if (columnCache.has(key)) return columnCache.get(key);
+    const pending = pendingColumns.get(key);
+    if (pending && pending.signal === signal) return pending.promise;
+    const request = { signal };
+    request.promise = Promise.resolve(repository.getColumns?.(site, list, signal ? { signal } : {}) ?? [])
+      .then(columns => {
+        if (!signal?.aborted) columnCache.set(key, columns);
+        return columns;
+      })
+      .finally(() => { if (pendingColumns.get(key) === request) pendingColumns.delete(key); });
+    pendingColumns.set(key, request);
+    return request.promise;
   };
   // A frozen repository cannot be the Proxy target when returning adapters
   // for its methods. Forward through an empty facade to preserve invariants.

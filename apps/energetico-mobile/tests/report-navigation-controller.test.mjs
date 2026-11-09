@@ -381,6 +381,31 @@ test('a closed Sicoob report can reopen before the aborted read finishes', async
  assert.equal(await opening, false);
 });
 
+test('a canceled Sicoob read cannot start a late authorization redirect', async t => {
+ const token = Promise.withResolvers();
+ let authorizations = 0;
+ const h = harness(t, {
+   auth: {
+     getToken: scopes => scopes.includes('movement-test') ? token.promise : Promise.resolve('token'),
+     authorize: async () => { authorizations++; },
+   },
+   registrationGalleryDataFactory: async ({ tokenProvider }) => ({
+     async loadSnapshot({ signal }) {
+       await tokenProvider(['movement-test'], { signal });
+       return { rows: [] };
+     },
+   }),
+   sicoobTransactionReportFactory: options => createSicoobTransactionReportView({ ...options, document: h.document }),
+ });
+ await h.controller.start();
+ const opening = h.view.emit('open-sicoob-transaction-report');
+ await tick();
+ h.document.querySelector('.sicoob-transaction-overlay .report-close-control').click();
+ token.reject(Object.assign(new Error('Authorization required'), { code: 'AUTH_REQUIRED' }));
+ assert.equal(await opening, false);
+ assert.equal(authorizations, 0);
+});
+
 test('a late management factory cannot open over cargos after arrow navigation is superseded',async t=>{
  const factory=deferred();let opens=0,destroys=0;
  const h=harness(t,{managementReportFactory:()=>factory.promise});await h.controller.start();await h.view.emit('open-payment-ledger');

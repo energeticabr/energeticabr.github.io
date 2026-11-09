@@ -115,7 +115,8 @@ export function createGraphClient(tokenProvider, environment = {}) {
   async function request(path, options = {}) {
     const url = graphUrl(path);
     const scopes = options.scopes || DEFAULT_SCOPES;
-    const token = await tokenProvider(scopes);
+    if (options.signal?.aborted) throw abortedRequestError();
+    const token = await tokenProvider(scopes, { signal: options.signal });
     if (!token) {
       throw new GraphRequestError({
         status: 401,

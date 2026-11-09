@@ -10130,11 +10130,12 @@ export function createAppController({
     const opening = (async () => {
       try {
         if (!registrationGalleries.has(kind)) {
-          const data = isGalleryMenu ? null : await registrationGalleryDataFactory({ kind: sourceKind,assertSession, accountKey: galleryAccount.homeAccountId || galleryAccount.localAccountId || galleryAccount.idTokenClaims?.oid || "", userEmail: galleryAccount.username || galleryAccount.email || "", tokenProvider: async scopes => {
+          const data = isGalleryMenu ? null : await registrationGalleryDataFactory({ kind: sourceKind,assertSession, accountKey: galleryAccount.homeAccountId || galleryAccount.localAccountId || galleryAccount.idTokenClaims?.oid || "", userEmail: galleryAccount.username || galleryAccount.email || "", tokenProvider: async (scopes, { signal } = {}) => {
             assertSession();
             const token = await auth.getToken(scopes).catch(async error => {
               if (error?.code !== "AUTH_REQUIRED" || typeof auth.authorize !== "function") throw error;
-              if (isSicoobTransactionReport && registrationGalleries.get(kind)?.element?.hidden) throw error;
+              assertSession();
+              signal?.throwIfAborted();
               await auth.authorize(scopes, { resumeAction: replyId });
               assertSession();
               return auth.getToken(scopes);
