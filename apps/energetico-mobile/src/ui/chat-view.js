@@ -403,6 +403,10 @@ function insertPowerBiAfterPersonalExpenses(options) {
   return [...options.slice(0, index + 1), powerBiDashboardOption(), ...options.slice(index + 1)];
 }
 
+function isAttachmentAreaQuestion(question) {
+  return /DESEJA\s+UTILIZAR\s+ELES\s+EM\s+QUAL\s+FLUXO/i.test(question);
+}
+
 function draftMenuOptions(message) {
   const question = String(message?.question || message?.prompt || "");
   const isMainAreaMenu = /QUAL\s+(?:ÁREA|AREA)[\s\S]*DESEJA\s+ACESSAR/i.test(question);
@@ -413,8 +417,7 @@ function draftMenuOptions(message) {
   // LOG DE AÇÕES belongs to the Auditoria e Documentos submenu. Filter it
   // from the root area chooser even if an older VM response still includes
   // the legacy option there; do not synthesize it into the root menu.
-  const isRootAreaMenu = isMainAreaMenu
-    || /DESEJA\s+UTILIZAR\s+ELES\s+EM\s+QUAL\s+FLUXO/i.test(question);
+  const isRootAreaMenu = isMainAreaMenu || isAttachmentAreaQuestion(question);
   const menuOptions = isRootAreaMenu
     ? options
       .filter(option => String(option?.reply || option?.id || "").trim().toLowerCase() !== "audit_log")
@@ -915,7 +918,8 @@ function hasInitialAreaMenuHeading(message) {
 
 function isInitialAreaSelectionMenu(message) {
   return hasInitialAreaMenuHeading(message)
-    || (isAutomaticMainMenuMessage(message)
+    || ((isAutomaticMainMenuMessage(message)
+        || (message?.type === "poll" && isAttachmentAreaQuestion(message.question || message.prompt || message.text)))
       && Array.isArray(message.options)
       && message.options.some(option => /^group_/i.test(draftReplyId(option).trim())));
 }

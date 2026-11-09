@@ -370,6 +370,37 @@ for (const [variant, field, separator] of [
   });
 }
 
+test('menu de escolha de fluxo para anexos mantém os mascotes clicáveis e a bandeja', t => {
+  const dom = new JSDOM('<main id="app"></main>'), root = dom.window.document.querySelector('#app');
+  const view = createChatView(root);
+  t.after(() => { view.destroy(); dom.window.close(); });
+  const opened = [], selected = [];
+  returnedHomeActions.forEach(action => view.on(action, () => opened.push(action)));
+  view.on('select-reply', event => selected.push(event.replyId));
+  const home = { id: 'home', role: 'assistant', type: 'poll', question: returnedHomeQuestion, options: returnedHomeOptions };
+  const menu = { ...home, id: 'attachment-flow-menu',
+    question: '📎 1 ANEXO(S) RECEBIDO(S), DESEJA UTILIZAR ELES EM QUAL FLUXO?',
+    options: [...returnedHomeOptions, { id: 'navigation_back', label: '↩️ RETORNAR À PERGUNTA ANTERIOR' }],
+  };
+  const state = signedInState({ messages: [home, menu], attachments: [{
+    id: 'received-test', fileName: 'Anexo de teste.pdf', mimeType: 'application/pdf', mediaUrl: '/test.pdf',
+  }] });
+  view.render(state);
+  const shortcuts = [...root.querySelectorAll('.chat-transcript button[data-action^="open-"]')];
+  assert.deepEqual(shortcuts.map(button => button.dataset.action), returnedHomeActions);
+  assert.ok(shortcuts.every(button => !button.disabled && button.closest('.chat-bubble') === null));
+  assert.ok(root.querySelector('.chat-flow-status [data-reply-id="navigation_back"]'));
+  assert.match(root.querySelector('.chat-attachments').textContent, /Anexo de teste\.pdf/);
+  shortcuts.forEach(button => button.querySelector('img').click());
+  assert.deepEqual(opened, returnedHomeActions);
+  assert.deepEqual(selected, []);
+  root.querySelectorAll('.chat-transcript [data-reply-id="group_supplies"]').item(1).click();
+  assert.deepEqual(selected, ['group_supplies']);
+
+  view.render({ ...state, messages: [{ ...menu, options: [{ id: 'confirm', label: 'CONFIRMAR' }] }] });
+  assert.equal(root.querySelector('.chat-transcript button[data-action^="open-"]'), null);
+});
+
 test('retorno com aviso preserva restrições de contexto, permissão e busy dos mascotes', t => {
   const dom = new JSDOM('<main id="app"></main>'), root = dom.window.document.querySelector('#app');
   const view = createChatView(root);
