@@ -7,8 +7,8 @@ const { buildRhidAttendanceTable, isRhidAttendanceDayFinalized, isRhidAttendance
 
 test("sugere horários apenas para dias úteis e diferencia a saída de sexta-feira", () => {
   assert.equal(suggestedRhidAdjustmentTime("entry1", "2026-09-29"), "07:00");
-  assert.equal(suggestedRhidAdjustmentTime("exit1", "2026-09-29"), "12:00");
-  assert.equal(suggestedRhidAdjustmentTime("entry2", "2026-09-29"), "13:00");
+  assert.equal(suggestedRhidAdjustmentTime("exit1", "2026-09-29"), "11:00");
+  assert.equal(suggestedRhidAdjustmentTime("entry2", "2026-09-29"), "12:00");
   assert.equal(suggestedRhidAdjustmentTime("exit2", "2026-09-28"), "17:00");
   assert.equal(suggestedRhidAdjustmentTime("exit2", "2026-10-02"), "16:00");
   assert.equal(suggestedRhidAdjustmentTime("exit2", "2026-10-03"), "");

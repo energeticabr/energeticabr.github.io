@@ -33,7 +33,7 @@ test('interactive fixture leaves empty E1 available for manual correction withou
   } finally { await server.close(); await rm(temporary, { recursive: true, force: true, maxRetries: 5, retryDelay: 250 }); }
 });
 
-for (const [slot, suggested, displayed] of [['entry1', '07:00', 'E1- 07:00'], ['exit1', '12:00', 'S1- 12:00']]) {
+for (const [slot, suggested, displayed] of [['entry1', '07:00', 'E1- 07:00'], ['exit1', '11:00', 'S1- 11:00']]) {
 test(`missing ${slot} correction fits phone and Windows and saves back to the same presence`, { timeout: 180000 }, async t => {
   const chrome = [process.env.CHROME_BIN, 'C:\\Program Files\\Google\\Chrome\\Application\\chrome.exe', '/usr/bin/google-chrome', '/usr/bin/chromium'].find(path => path && existsSync(path));
   if (!chrome) return t.skip('Chrome unavailable');
