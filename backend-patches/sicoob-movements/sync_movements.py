@@ -26,6 +26,8 @@ KEY = 'CHAVEIMPORTACAO'
 UNKNOWN = 'N/A'
 PAYMENT = re.compile(r'\b(?:PIX|TED|DOC|PGTO|PAGTO|PAGAMENTO|TRANSF|TRANSFERENCIA|BOLETO|TITULO|CONVENIO)\b|\bDEB(?:ITO)?\.? AUTOMATICO\b|\bCOMPRA (?:NO )?CARTAO\b')
 NON_PAYMENT = re.compile(r'\b(?:TARIFA|TARIFAS|SAQUE|APLICACAO|RESGATE|ESTORNO|IOF)\b')
+COMPENSATED_BOLETO = 'DEB.TIT.COMPE EFETIVADO'
+BANK_DOCUMENT = re.compile(r'(?:[A-Z0-9]{2}\.[A-Z0-9]{3}\.[A-Z0-9]{3}[/ ][A-Z0-9]{4}-\d{2}|\d{3}\.\d{3}\.\d{3}-\d{2})', re.I)
 
 
 def monthly_windows(start, end):
@@ -59,6 +61,17 @@ def tax_id(value):
     if re.fullmatch(r'[0-9]{11}|[A-Z0-9]{12}[0-9]{2}', raw) and len(set(raw)) > 1:
         return raw
     return ''
+
+
+def bank_receiver(entry):
+    fields = text(entry.get('descInfComplementar')).split('|@')
+    name = re.match(r'^FAV\.:\s*(.+)$', fields[0].strip(), re.I)
+    documents = {tax_id(field) for field in fields[1:] if BANK_DOCUMENT.fullmatch(field.strip())}
+    documents.discard('')
+    document = tax_id(entry.get('cpfCnpj'))
+    if not document and len(documents) == 1:
+        document = next(iter(documents))
+    return document, text(name.group(1)) if name else ''
 
 
 def receiver_names(rows):
@@ -125,14 +138,14 @@ def payment_rows(payload, start, end, account, names, excluded=None):
         if not start <= paid <= end:
             continue
         label = bank_label(entry.get('descricao'))
-        if not PAYMENT.search(label) or NON_PAYMENT.search(label):
+        if (not PAYMENT.search(label) and label != COMPENSATED_BOLETO) or NON_PAYMENT.search(label):
             if excluded is not None:
                 excluded.append(1)
             continue
         transaction = text(entry.get('transactionId'))
         if not transaction:
             raise ValueError('Bank debit is missing transactionId')
-        document = tax_id(entry.get('cpfCnpj'))
+        document, bank_name = bank_receiver(entry)
         reference = text(entry.get('numeroDocumento')) or transaction
         description = ' | '.join(filter(None, (text(entry.get('descricao')), text(entry.get('descInfComplementar')))))
         key = hashlib.sha256(f'SICOOB\0{account}\0{transaction}'.encode()).hexdigest()
@@ -141,7 +154,7 @@ def payment_rows(payload, start, end, account, names, excluded=None):
             'VALOR': money(entry.get('valor')), 'DATAPAGAMENTO': f'{paid.isoformat()}T12:00:00Z',
             'CONTAPAGADORA': account, 'DESCRICAO': (description or 'DÉBITO SICOOB')[:255],
             'REFERENCIABANCARIA': reference[:255], 'ORIGEMMOVIMENTACAO': 'SICOOB',
-            'RAZAOSOCIALRECEBEDOR': (names.get(document) or UNKNOWN)[:255],
+            'RAZAOSOCIALRECEBEDOR': (bank_name or names.get(document) or UNKNOWN)[:255],
         }
         if document:
             row['DOCUMENTORECEBEDOR'] = document

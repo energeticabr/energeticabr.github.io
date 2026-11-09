@@ -44,8 +44,20 @@ try {
             throw 'SICOOB_INVALID_MONTH_WINDOW'
         }
         $uri = "https://api.sicoob.com.br/conta-corrente/v4/extrato/$($first.Month)/$($first.Year)?diaInicial=$($first.Day)&diaFinal=$($last.Day)&numeroContaCorrente=$account&agruparCNAB=false"
-        $result = Invoke-DdaBankRequest {
-            Invoke-WebRequest -Uri $uri -Certificate $cert -Headers $headers -TimeoutSec 45 -MaximumRedirection 0
+        for ($attempt = 0; $attempt -lt 4; $attempt++) {
+            try {
+                $result = Invoke-DdaBankRequest {
+                    Invoke-WebRequest -Uri $uri -Certificate $cert -Headers $headers -TimeoutSec 45 -MaximumRedirection 0
+                }
+                break
+            } catch {
+                if ([int]$_.Exception.Response.StatusCode -ne 403 -or
+                    $_.ErrorDetails.Message -notmatch '"moreInformation"\s*:\s*"Not registered to plan"') {
+                    throw
+                }
+                if ($attempt -eq 3) { throw 'SICOOB_EXTRATO_PLAN_NOT_REGISTERED' }
+                Start-Sleep -Seconds ([math]::Pow(2, $attempt + 1))
+            }
         }
         $results.Add([string]$result.Content)
     }

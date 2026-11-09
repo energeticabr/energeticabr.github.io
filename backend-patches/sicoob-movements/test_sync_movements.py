@@ -124,3 +124,23 @@ class MovementImportTests(unittest.TestCase):
         stored['VALOR'] = row['VALOR']
         self.assertFalse(save_movement(Existing(), row))
         self.assertEqual(row['RAZAOSOCIALRECEBEDOR'], 'Recebedor confirmado')
+
+    def test_reads_sicoob_favoured_party_and_structured_document(self):
+        payload = {'transacoes': [
+            self.transaction(cpfCnpj=None, descInfComplementar='FAV.: Empresa Fictícia LTDA|@Transferência Pix|@12.345.678 0001-95|@'),
+            self.transaction(transactionId='bank-2', cpfCnpj=None, descInfComplementar='Pagamento Pix|@***.456.789-**|@'),
+        ]}
+        rows = payment_rows(payload, BACKFILL_START, BACKFILL_END, '12', {})
+        self.assertEqual(rows[0]['RAZAOSOCIALRECEBEDOR'], 'Empresa Fictícia LTDA')
+        self.assertEqual(rows[0]['DOCUMENTORECEBEDOR'], '12345678000195')
+        self.assertEqual(rows[1]['RAZAOSOCIALRECEBEDOR'], 'N/A')
+        self.assertNotIn('DOCUMENTORECEBEDOR', rows[1])
+
+    def test_includes_settled_interbank_boleto_and_excludes_service_package(self):
+        payload = {'transacoes': [
+            self.transaction(descricao='DÉB.TIT.COMPE EFETIVADO'),
+            self.transaction(transactionId='bank-2', descricao='DÉBITO PACOTE SERVIÇOS'),
+        ]}
+        rows = payment_rows(payload, BACKFILL_START, BACKFILL_END, '12', {})
+        self.assertEqual(len(rows), 1)
+        self.assertIn('DÉB.TIT.COMPE EFETIVADO', rows[0]['DESCRICAO'])
