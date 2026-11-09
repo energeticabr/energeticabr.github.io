@@ -17,7 +17,7 @@ await document.fonts.ready;
 await new Promise(r=>requestAnimationFrame(()=>requestAnimationFrame(r)));
 const state={overflow:document.documentElement.scrollWidth>innerWidth+1,rows:[],issued:[]};
 state.linkRows=[...document.querySelectorAll('[data-dda-id]')].map(row=>{
- const link=row.querySelector('.ddr-link-cluster'),warning=link.nextElementSibling;
+ const link=row.querySelector('.ddr-link-cluster'),warning=row.querySelector('.ddr-link-warning');
  return {id:row.dataset.ddaId,link:link.textContent,warning:warning?.textContent??null,
   below:Boolean(warning&&warning.offsetTop>=link.offsetTop+link.offsetHeight),
   fits:Boolean(warning&&warning.scrollWidth<=warning.clientWidth+1),
