@@ -2,6 +2,7 @@
 <html lang="pt-BR"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1"><link rel="stylesheet" href="/src/styles.css"><link rel="stylesheet" href="/src/ui/payment-ledger.css"><link rel="stylesheet" href="/src/ui/management-report.css"><link rel="stylesheet" href="/src/ui/searchable-filter-selects.css"><link rel="stylesheet" href="/src/ui/cargos.css"></head>
 <body><main id="app"></main><script type="module">
 import { createChatView } from '/src/ui/chat-view.js';
+import { rhidMascotDay } from '/src/chat/rhid-mascot-report.js';
 import { createPaymentLedgerView } from '/src/ui/payment-ledger-view.js';
 import { createCargosView } from '/src/ui/cargos-view.js';
 import { createManagementReportView } from '/src/ui/management-report-view.js';
@@ -38,6 +39,15 @@ const state={sessionStatus:'authenticated',account:{name:'Bernardo'},draft:'',pe
   {id:'action_contractor_reports',reply:'action_contractor_reports',label:'📑 RELATÓRIOS'}
 ]}]};
 const view=createChatView(document.querySelector('#app'));
+const rhidDay='2026-11-09';
+const rhidRows=[{ ID_PESSOA_RHID:'1', NOME_COLABORADOR:'Profissional de exemplo com nome longo',
+  BATIDAS_RHID:'07:13;12:55', ADMIN_AJUSTES:{ exit1:{ time:'11:58' } } }];
+const rhidMascot={ today:rhidDay, start:rhidDay, end:rhidDay, mode:'today', filters:{},
+  directory:[{name:rhidRows[0].NOME_COLABORADOR, profession:'Mestre de obras', branch:'Filial de exemplo'}],
+  days:[rhidMascotDay(rhidRows,rhidDay)] };
+view.on('open-rhid-mascot-report',()=>view.render({...state,rhidMascot}));
+view.on('rhid-mascot-period',()=>view.render({...state,rhidMascot:{...rhidMascot,mode:'period',start:'2026-11-01'}}));
+view.on('close-rhid-mascot-report',()=>view.render(state));
 window.opened=0;window.selected=[];
 window.reportOpened=0;
 window.reportLoads=0;
