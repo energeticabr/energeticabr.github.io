@@ -54,14 +54,15 @@ test('NFE opens the horizontal fiscal table from the blue mascot in portrait and
       const result = await runBrowserLayout(browser, { width, height, url, captureScreenshot:Boolean(capture) });
       const dom = new JSDOM(result.stdout);
       try {
-        const { provisions, orange, nfe, dda, open, rowIds, overflow, tableScrolls, rotated, mei, pdfOnLeft, metricsAbove,
+        const { provisions, orange, sicoob, nfe, dda, open, rowIds, overflow, tableScrolls, rotated, mei, pdfOnLeft, metricsAbove,
           headerControls, amountFits, pdfIconWidth, pdfTargetHeight, reportBodyWidth, availableReportWidth, overlayArrows,
-          filterNames, filtersFit, taxHeading, taxStacked, pencilHeight
+          filterNames, filtersFit, taxHeading, taxStacked, invalidCno, pencilHeight
         } = JSON.parse(dom.window.document.documentElement.dataset.layout);
         assert.equal(provisions.y, orange.y);
         assert.equal(orange.x - provisions.x, 56);
         assert.equal(nfe.x, provisions.x);
-        assert.equal(nfe.y - provisions.y, 68);
+        assert.equal(sicoob.y - provisions.y, 68);
+        assert.equal(nfe.y - sicoob.y, 56);
         assert.equal(dda.y - nfe.y, 56);
         assert.deepEqual({ open, rowIds, overflow, mei }, { open:true, rowIds:['2','3'], overflow:false, mei:true });
         assert.equal(rotated, height > width);
@@ -78,6 +79,7 @@ test('NFE opens the horizontal fiscal table from the blue mascot in portrait and
         assert.equal(filtersFit, true);
         assert.equal(taxHeading, 'TIPO FORNECEDOR/ RETENÇÃO');
         assert.equal(taxStacked, true);
+        assert.match(invalidCno ?? '', /CNO inválido.*90\.025\.4406\/72/);
         assert.ok(pencilHeight >= 44);
         const { orangeTargetHeight, ...orderLink } = JSON.parse(dom.window.document.documentElement.dataset.orderLink);
         assert.ok(orangeTargetHeight >= 44);

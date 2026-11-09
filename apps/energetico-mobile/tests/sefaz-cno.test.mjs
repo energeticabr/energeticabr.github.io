@@ -228,7 +228,7 @@ test('CNO does not infer a work registration from supplier, access key or order 
 });
 
 test('labeled incomplete or overlong CNO is invalid and keeps the reported number', () => {
-  for (const raw of ['90.025.4406/72', '1900254406072', '9002544060721', '90.025.44060/72.9']) {
+  for (const raw of ['7', '123', '90.025.4406/72', '1900254406072', '9002544060721', '90.025.44060/72.9']) {
     const result = invoiceConstructionCno({OBSERVACOES_NOTA:`CNO: ${raw} RUA FICTÍCIA 134`});
     assert.equal(result.status, 'invalid');
     assert.deepEqual(result.invalidNumbers, [raw]);
