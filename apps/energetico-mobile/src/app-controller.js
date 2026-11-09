@@ -22,6 +22,7 @@ import { attachmentFinishOption, isDiaryAttachmentPrompt, isDocumentAttachmentPr
 import { isDiaryAttachmentFinalization, paintDiaryCompletion } from "./chat/diary-attachment-progress.js";
 import { audioTranscriptionText, isAudioFile, isConstructionDiaryFlow } from "./chat/audio-transcription.js";
 import { buildRhidAttendanceTable, isRhidAttendanceDayFinalized, isValidRhidReportDate, rhidIrregularCountsByDate, rhidUpdateLabel, shiftRhidReportDate } from "./chat/rhid-attendance-table.js";
+import { rhidMascotDay, rhidMascotFilters, rhidMascotMonths, rhidMascotPageSize } from './chat/rhid-mascot-report.js';
 import { attendanceMissingPunchContext, attendanceRhidOptionContext, attendanceRhidPollEligible, attendanceValidationDate, buildAttendanceRhidBadge } from "./chat/attendance-rhid-badges.js";
 import { createAttendanceIrregularityData } from './chat/attendance-irregularity-data.js';
 import {
@@ -1281,6 +1282,7 @@ export function createAppController({
   const rhidPendingValidationRequests = new Set();
   let rhidAttendanceReportPreviousSnapshot = null;
   let rhidAttendanceReportNavigationRevision = 0;
+  let rhidMascot = null;
   let rhidRefreshRequest = null;
   let resuming = false;
   let conversationResumeRecord = null;
@@ -2910,6 +2912,121 @@ export function createAppController({
     return request;
   }
 
+  function disposeRhidMascot() {
+    rhidMascot?.lifetime.abort();
+    rhidMascot?.query?.abort();
+    rhidMascot = null;
+  }
+
+  async function loadRhidMascotPeriod(start, end, mode) {
+    const report = rhidMascot;
+    if (!report || report.saving) return false;
+    report.query?.abort();
+    const query = new AbortController();
+    const current = () => rhidMascot === report && report.query === query && !query.signal.aborted;
+    Object.assign(report, { start, end, mode, query, page: 0, today: provisionDateKey(), busy: true, error: '' });
+    render();
+    try {
+      const months = rhidMascotMonths(start, end, report.today);
+      const rowsByDay = new Map();
+      if (start === end) {
+        const result = await withTimeout(client.getRhidAttendanceReport(start, { signal: query.signal }),
+          rhidReportTimeoutMs, 'A consulta RHID demorou demais.');
+        if (result?.date !== start || !Array.isArray(result.rows)) throw new Error('A VM não confirmou o relatório do dia.');
+        rowsByDay.set(start, result.rows);
+      } else {
+        for (const month of months) {
+          const result = await withTimeout(client.getRhidAttendanceMonth(month, { signal: query.signal }),
+            rhidReportTimeoutMs, 'A consulta mensal do RHID demorou demais.');
+          if (!current()) return false;
+          if (result?.month !== month || !Array.isArray(result.rows)) throw new Error('A VM não confirmou as batidas do período.');
+          for (const row of result.rows) {
+            const day = String(row?.DATA_REFERENCIA || '').slice(0, 10);
+            if (!isValidRhidReportDate(day) || !day.startsWith(month) || day < start || day > end) continue;
+            if (!rowsByDay.has(day)) rowsByDay.set(day, []);
+            rowsByDay.get(day).push(row);
+          }
+        }
+      }
+      if (!current()) return false;
+      for (const [date, rows] of rowsByDay) {
+        rowsByDay.set(date, withConfirmedAttendanceAdjustments({ date, rows }, date, { acknowledge: true }).rows);
+      }
+      report.rowsByDay = rowsByDay;
+      report.days = [...rowsByDay].sort(([left], [right]) => right.localeCompare(left))
+        .map(([date, rows]) => rhidMascotDay(rows, date));
+      return true;
+    } catch (error) {
+      if (current()) {
+        report.days = [];
+        report.rowsByDay = new Map();
+        report.error = error?.message || 'Não foi possível consultar as presenças RHID.';
+      }
+      return false;
+    } finally {
+      if (current()) {
+        report.busy = false;
+        render();
+      }
+      query.abort();
+    }
+  }
+
+  function openRhidMascotReport() {
+    if (!account || stopped || flowBusy() || store.getState().activeFlow || rhidMascot) return false;
+    const today = provisionDateKey();
+    const report = { today, days: [], filters: {}, directory: [], directoryBusy: true, lifetime: new AbortController() };
+    rhidMascot = report;
+    const { signal } = report.lifetime;
+    const current = () => rhidMascot === report && !signal.aborted;
+    const loadDirectory = async () => {
+      const source = await attendanceSummaryDataFactory({ tokenProvider: async scopes => {
+        if (!current()) throw new DOMException('Consulta cancelada.', 'AbortError');
+        return auth.getToken(scopes);
+      } });
+      if (!current()) return [];
+      return source.loadSupplierDirectory({ signal });
+    };
+    void withTimeout(loadDirectory(), rhidReportTimeoutMs, 'A consulta de fornecedores demorou demais.')
+      .then(directory => { if (current()) report.directory = directory; })
+      .catch(() => { if (current()) report.directoryError = true; })
+      .finally(() => { if (current()) { report.directoryBusy = false; render(); } });
+    return loadRhidMascotPeriod(today, today, 'today');
+  }
+
+  async function fillRhidMascotPunch({ messageId, personKey, slot, time, reason }) {
+    const report = rhidMascot;
+    const date = messageId.slice('rhid-mascot:'.length);
+    const person = report?.days.find(table => table.reportDate === date)?.people.find(item => item.personKey === personKey);
+    const punch = person?.slots[slot];
+    if (!report || report.busy || report.saving || !punch || punch.source !== 'empty' || punch.rhidCandidates.length
+      || !/^(?:[01]\d|2[0-3]):[0-5]\d$/.test(String(time || '')) || !String(reason || '').trim()) {
+      view.setRhidAttendanceAdjustmentStatus?.({ error: 'A batida não está mais disponível. Atualize o relatório RHID.' });
+      return false;
+    }
+    report.saving = true;
+    try {
+      const saved = await client.saveRhidAttendanceAdjustment({ date, personKey, slot, time, reason: reason.trim(), fillMissing: true });
+      if (rhidMascot !== report) return false;
+      if (saved?.time !== time) throw new Error('A VM não confirmou o ajuste de ponto RHID.');
+      attendanceRhidConfirmedAdjustments.set(JSON.stringify([date, personKey, slot]), {
+        date, personKey, slot, adjustment: { ...saved, reason: reason.trim() },
+      });
+      clearAttendanceRhidBadges(date);
+      const { rows } = withConfirmedAttendanceAdjustments({ date, rows: report.rowsByDay.get(date) }, date);
+      report.rowsByDay.set(date, rows);
+      report.days = report.days.map(day => day.reportDate === date ? rhidMascotDay(rows, date) : day);
+      view.closeRhidAttendanceAdjustment?.();
+      render();
+      return true;
+    } catch (error) {
+      if (rhidMascot === report) view.setRhidAttendanceAdjustmentStatus?.({ error: error?.message || 'Não foi possível salvar o horário.' });
+      return false;
+    } finally {
+      report.saving = false;
+    }
+  }
+
   async function generateRhidAttendanceReport(selectedDate, { openPdf = false, replaceMessageId = "" } = {}) {
     const day = String(selectedDate || "").trim();
     const requestKey = replaceMessageId ? `message:${String(replaceMessageId)}` : "new-report";
@@ -3223,6 +3340,9 @@ export function createAppController({
   }
 
   async function saveRhidAttendanceAdjustment({ messageId, presenceId, personKey, slot, time, reason, adjustmentId, revisionId, remove = false } = {}) {
+    if (!remove && String(messageId || '').startsWith('rhid-mascot:')) {
+      return fillRhidMascotPunch({ messageId, personKey, slot, time, reason });
+    }
     if (remove && presenceId !== undefined) return false;
     if (presenceId !== undefined) return saveAttendanceMissingPunch({ messageId, presenceId, personKey, slot, time, reason, adjustmentId });
     const id = String(messageId || "").trim();
@@ -5128,6 +5248,7 @@ export function createAppController({
     const signaturePlacement = syncSignaturePlacement();
     view.render({
       ...state,
+      rhidMascot: rhidMascot ? { ...rhidMascot } : null,
       diaryAttachmentProgress,
       attachmentUploadProgress,
       operationProgress,
@@ -11164,6 +11285,7 @@ export function createAppController({
     clearDiaryFieldVisits();
     clearAttendanceRhidBadges();
     disposeRhidMonthlyReport();
+    disposeRhidMascot();
     pendingAutomaticExit = null;
     rhidAttendanceReportPreviousSnapshot = null;
     rhidAttendanceReportRequests.clear();
@@ -12451,6 +12573,43 @@ export function createAppController({
       replaceMessageId: command.messageId || "",
     }));
     bind("open-rhid-monthly-report", openRhidMonthlyReport);
+    bind('open-rhid-mascot-report', openRhidMascotReport);
+    bind('close-rhid-mascot-report', () => {
+      if (!rhidMascot || rhidMascot.saving) return false;
+      disposeRhidMascot();
+      view.closeRhidAttendanceAdjustment?.();
+      render();
+      return true;
+    });
+    const loadRhidMascotToday = () => {
+      const today = provisionDateKey();
+      return loadRhidMascotPeriod(today, today, 'today');
+    };
+    bind('rhid-mascot-today', loadRhidMascotToday);
+    bind('rhid-mascot-period', () => {
+      const today = provisionDateKey();
+      return loadRhidMascotPeriod(`${today.slice(0, 7)}-01`, today, 'period');
+    });
+    bind('rhid-mascot-apply', ({ start, end }) => loadRhidMascotPeriod(start, end, 'period'));
+    bind('rhid-mascot-reload', () => {
+      if (!rhidMascot) return false;
+      return rhidMascot.mode === 'today' ? loadRhidMascotToday() : loadRhidMascotPeriod(rhidMascot.start, rhidMascot.end, 'period');
+    });
+    bind('rhid-mascot-filter', ({ field, value }) => {
+      if (!rhidMascot || !Object.hasOwn(rhidMascotFilters, field)) return false;
+      rhidMascot.filters = { ...rhidMascot.filters, [field]: value };
+      rhidMascot.page = 0;
+      render();
+      return true;
+    });
+    bind('rhid-mascot-page', ({ value }) => {
+      if (!rhidMascot || rhidMascot.busy || !['-1', '1'].includes(value)) return false;
+      const page = rhidMascot.page + Number(value);
+      if (page < 0 || page * rhidMascotPageSize >= rhidMascot.days.length) return false;
+      rhidMascot.page = page;
+      render();
+      return true;
+    });
     bind("rhid-attendance-report-today", command => generateRhidAttendanceReport(command.value));
     bind("attendance-validation-hours", command => {
       if (!account || stopped || flowBusy()) return false;
@@ -12669,6 +12828,7 @@ export function createAppController({
     unsubscribeReportMutations = null;
     pendingLiveSignatureCapture = null;
     disposeRhidMonthlyReport();
+    disposeRhidMascot();
     pendingAutomaticExit = null;
     rhidAttendanceReportPreviousSnapshot = null;
     pendingNoteLaunchProgress = null;

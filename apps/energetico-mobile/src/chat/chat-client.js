@@ -600,7 +600,7 @@ export function createChatClient({
     return summary;
   }
 
-  async function saveRhidAttendanceAdjustment({ date, personKey, slot, time, reason } = {}) {
+  async function saveRhidAttendanceAdjustment({ date, personKey, slot, time, reason, fillMissing = false } = {}) {
     if (!validIsoDate(date)) throw new Error("Selecione uma data válida para o ajuste RHID.");
     if (!/^(?:rhid|id):[^\s:]+$/.test(String(personKey || ""))) throw new Error("Colaborador RHID inválido.");
     if (!["entry1", "exit1", "entry2", "exit2"].includes(slot)) throw new Error("Campo de ponto inválido.");
@@ -610,7 +610,8 @@ export function createChatClient({
     const result = await request(chatUrl.href, {
       method: "POST",
       headers: { Accept: "application/json", Authorization: `Bearer ${token}`, "Content-Type": "application/json" },
-      body: JSON.stringify({ action: "rhid_attendance_adjust", date, personKey, slot, time, reason: String(reason).trim() }),
+      body: JSON.stringify({ action: fillMissing === true ? "rhid_attendance_fill_missing" : "rhid_attendance_adjust",
+        date, personKey, slot, time, reason: String(reason).trim() }),
       cache: "no-store",
       credentials: "omit",
     }, response => parsePortalResponse(response, "O ajuste de ponto RHID"));

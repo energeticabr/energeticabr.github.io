@@ -6,6 +6,7 @@ import { provisionVariationChangesMarkup } from './provision-variation-changes.j
 import { loadingIndicatorMarkup } from "./loading-indicator.js";
 import { createCameraChooser } from './document-scanner.js';
 import { canDeleteRhidAdjustment } from '../chat/rhid-adjustment-ownership.js';
+import { filterRhidMascotDays, rhidMascotFilters, rhidMascotPageSize } from '../chat/rhid-mascot-report.js';
 import { postingCompletion } from "../chat/posting-completion.js";
 import { postingCompletionMarkup } from "./posting-completion.js";
 import { provisionSettlementReviewMarkup } from './provision-settlement-review.js';
@@ -1271,7 +1272,7 @@ function presenceDetailTableMarkup(table, context = {}) {
   }).join("")}</div>`;
 }
 
-function rhidAttendanceTableMarkup(table, messageId, rhidRefresh = null, activeFlow = null) {
+function rhidAttendanceTableMarkup(table, messageId, rhidRefresh = null, activeFlow = null, mascot = false) {
   if (table?.kind !== "rhid_attendance" || !Array.isArray(table.headers) || !Array.isArray(table.rows)) return "";
   const headers = table.headers;
   const rows = table.rows.filter(Array.isArray);
@@ -1287,7 +1288,7 @@ function rhidAttendanceTableMarkup(table, messageId, rhidRefresh = null, activeF
   const updateHeading = /DADOS ATUALIZADOS NO RELÓGIO DE PONTO/i.test(updateLabel)
     ? "DADOS ATUALIZADOS NO RELÓGIO DE PONTO" : "ÚLTIMA COLETA DO RHID";
   const pairCount = Math.max(1, Math.floor((headers.length - 2) / 2));
-  const navigation = dateLabel && messageId
+  const navigation = !mascot && dateLabel && messageId
     ? `<nav class="chat-rhid-date-navigation" aria-label="Navegação por data do relatório RHID">
       <button class="chat-rhid-date-navigation__button" type="button" data-action="rhid-attendance-report-navigate" data-message-id="${escapeHtml(messageId)}" data-value="-1" aria-label="Dia anterior" title="Dia anterior"${table.navigationBusy === true ? " disabled" : ""}>←</button>
       <button class="chat-rhid-date-navigation__date" type="button" data-action="open-rhid-attendance-report" data-message-id="${escapeHtml(messageId)}" aria-label="Escolher data do relatório RHID" title="Abrir calendário"${table.navigationBusy === true ? " disabled" : ""}><time datetime="${escapeHtml(date)}">${dateLabel}</time></button>
@@ -1300,7 +1301,7 @@ function rhidAttendanceTableMarkup(table, messageId, rhidRefresh = null, activeF
   </section>`;
   return `<section class="chat-rhid-attendance-table chat-rhid-attendance-report" aria-label="Relatório de presenças RHID">
     ${navigation}
-    <header class="chat-rhid-attendance-report__header">
+    ${mascot ? `<h2 class="chat-rhid-mascot__date"><time datetime="${escapeHtml(date)}">${dateLabel}</time></h2>` : `<header class="chat-rhid-attendance-report__header">
       <div class="chat-rhid-attendance-report__identity">${Number.isSafeInteger(table.pendingValidationCount) && table.pendingValidationCount > 0 && dateLabel && messageId
         ? '<button class="chat-rhid-attendance-report__validate" type="button" data-action="rhid-day-validation-open" data-message-id="' + escapeHtml(messageId) + '" aria-label="Validar presenças pendentes de ' + escapeHtml(dateLabel) + '"' + (table.navigationBusy === true ? " disabled" : "") + '>VALIDAR PRESENÇAS</button>'
         : '<span class="chat-rhid-attendance-report__kicker">RELATÓRIO DIÁRIO</span><h2>Presenças RHID</h2>'}</div>
@@ -1308,7 +1309,7 @@ function rhidAttendanceTableMarkup(table, messageId, rhidRefresh = null, activeF
       <div class="chat-rhid-attendance-report__updated" title="${escapeHtml(updateLabel)}"><span>${escapeHtml(updateHeading)}</span><strong>${escapeHtml(updateTime)}</strong></div>
       <div class="chat-rhid-attendance-report__date"><span>DATA DO RELATÓRIO</span><time datetime="${escapeHtml(date)}">${escapeHtml(dateLabel || "—")}</time></div>
     </header>
-    ${updateLabel ? `<p class="chat-rhid-attendance-report__updated-detail">${escapeHtml(updateLabel)}</p>` : ""}
+    ${updateLabel ? `<p class="chat-rhid-attendance-report__updated-detail">${escapeHtml(updateLabel)}</p>` : ""}`}
     <div class="chat-rhid-attendance-report__summary" aria-label="Resumo do relatório RHID">
       <div><strong class="chat-rhid-attendance-report__summary-value">${String(summary.collaborators).padStart(2, "0")}</strong><span>COLABORADORES</span></div>
       <div><strong class="chat-rhid-attendance-report__summary-value">${String(summary.withPunches).padStart(2, "0")}</strong><span>COM MARCAÇÃO</span></div>
@@ -1343,7 +1344,10 @@ function rhidAttendanceTableMarkup(table, messageId, rhidRefresh = null, activeF
             const tone = source === "added" ? "added" : source === "corrected" ? "corrected" : isTime ? slot.startsWith("entry") ? "entry" : "exit" : "empty";
             const className = `chat-rhid-attendance-card__cluster chat-rhid-attendance-card__cluster--${tone}`;
             const content = `<span>${escapeHtml(label)}</span><strong class="${valueClass}">${escapeHtml(value)}${marker}</strong>`;
-            return editable
+            const canEdit = mascot
+              ? person?.personKey && slotDetail?.source === 'empty' && !slotDetail.rhidCandidates.length
+              : editable;
+            return canEdit
               ? `<button class="${className}" type="button" data-action="rhid-attendance-adjust-open" data-message-id="${escapeHtml(messageId)}" data-person-key="${escapeHtml(person.personKey)}" data-slot="${slot}" aria-label="Editar ${escapeHtml(label)} de ${escapeHtml(name)}: ${escapeHtml(value)}${provisional ? ` (${warning})` : ""}">${content}</button>`
               : `<div class="${className}">${content}</div>`;
           };
@@ -1353,15 +1357,64 @@ function rhidAttendanceTableMarkup(table, messageId, rhidRefresh = null, activeF
         const isPartial = /\(parcial\)/i.test(totalText);
         const displayTotal = totalText.replace(/\s*\(parcial\)/i, "").trim() || "—";
         const pendingId = person?.pendingPresenceIds?.find(id => /^[1-9]\d*$/.test(String(id)));
-        const validateButton = pendingId && person?.personKey && messageId && isValidRhidReportDate(table.reportDate)
+        const validateButton = !mascot && pendingId && person?.personKey && messageId && isValidRhidReportDate(table.reportDate)
           ? `<button class="chat-rhid-attendance-card__validate" type="button" data-action="rhid-presence-validate-open" data-message-id="${escapeHtml(messageId)}" data-person-key="${escapeHtml(person.personKey)}" data-value="${escapeHtml(pendingId)}" aria-label="Validar presença de ${escapeHtml(name)} em ${escapeHtml(dateLabel)}" title="ID de presença ${escapeHtml(pendingId)}"${activeFlow?.id === "attendance_validation" ? " disabled" : ""}>VALIDAR PRESENÇA</button>`
           : "";
         return `<article class="chat-rhid-attendance-card ${rowClass}" role="listitem">
-          <div class="chat-rhid-attendance-card__main"><div class="chat-rhid-attendance-card__person"><h3>${escapeHtml(name)}</h3>${validateButton}${noPunches ? `<span class="chat-rhid-attendance-card__missing">SEM MARCAÇÃO</span>` : ""}</div><div class="chat-rhid-attendance-card__details"><div class="chat-rhid-attendance-card__slots">${slots}</div><div class="chat-rhid-attendance-card__total"><span>TOTAL DE HORAS/DIA</span><strong>${escapeHtml(displayTotal)}</strong>${isPartial ? `<small>PARCIAL</small>` : ""}</div></div></div>
+          <div class="chat-rhid-attendance-card__main"><div class="chat-rhid-attendance-card__person"><h3>${escapeHtml(name)}</h3>${validateButton}${noPunches ? `<span class="chat-rhid-attendance-card__missing">SEM MARCAÇÃO</span>` : ""}</div>
+          ${mascot && (person.profession || person.branch || person.property) ? `<p class="chat-rhid-mascot__registration">${[person.profession, person.branch, person.property].filter(Boolean).map(escapeHtml).join(' · ')}</p>` : ''}
+          <div class="chat-rhid-attendance-card__details"><div class="chat-rhid-attendance-card__slots">${slots}</div><div class="chat-rhid-attendance-card__total"><span>TOTAL DE HORAS/DIA</span><strong>${escapeHtml(displayTotal)}</strong>${isPartial ? `<small>PARCIAL</small>` : ""}</div></div></div>
           ${person?.issues?.length ? `<ul class="chat-rhid-attendance-card__issues" aria-label="Inconsistências">${person.issues.map(issue => `<li>${escapeHtml(issue)}</li>`).join("")}</ul>` : ""}
         </article>`;
       }).join("")}
     </div>` : `<p class="chat-rhid-attendance-table__empty" role="status">Nenhuma presença foi encontrada para esta data.</p>`}
+  </section>`;
+}
+
+function rhidMascotReportMarkup(report) {
+  const { days, options } = filterRhidMascotDays(report.days, report.directory, report.filters);
+  const period = report.mode === 'period';
+  const page = report.page || 0;
+  const pageCount = Math.ceil(days.length / rhidMascotPageSize);
+  const visibleDays = days.slice(page * rhidMascotPageSize, (page + 1) * rhidMascotPageSize);
+  return `<section class="chat-rhid-mascot" data-rhid-mascot-report aria-labelledby="rhid-mascot-title">
+    <header class="chat-rhid-mascot__header">
+      <button type="button" data-action="close-rhid-mascot-report" aria-label="Voltar ao menu" title="Voltar ao menu">←</button>
+      <h1 id="rhid-mascot-title" tabindex="-1">Presenças RHID</h1>
+      <button type="button" data-action="rhid-mascot-reload" aria-label="Atualizar relatório" title="Atualizar relatório"${report.busy ? ' disabled' : ''}>↻</button>
+    </header>
+    <div class="chat-rhid-mascot__filters">
+      <div class="chat-rhid-mascot__modes">
+        <button type="button" data-action="rhid-mascot-today" aria-pressed="${!period}">Hoje</button>
+        <button type="button" data-action="rhid-mascot-period" aria-pressed="${period}">Diversas datas</button>
+      </div>
+      ${period ? `<div class="chat-rhid-mascot__dates">
+        <label>De<input type="date" name="rhid-start" value="${escapeHtml(report.start)}" max="${report.today}"></label>
+        <label>Até<input type="date" name="rhid-end" value="${escapeHtml(report.end)}" max="${report.today}"></label>
+        <button type="button" data-action="rhid-mascot-apply">Aplicar período</button>
+      </div>` : ''}
+      <div class="chat-rhid-mascot__selects">${Object.entries(rhidMascotFilters).map(([field, label]) => {
+        const selected = report.filters[field] || '';
+        const choices = options[field];
+        return `<label>${label}<select name="rhid-${field}" data-rhid-filter="${field}"${report.busy || (!selected && !choices.length) ? ' disabled' : ''}>
+          <option value="">Todos</option>
+          ${selected && !choices.some(([key]) => key === selected) ? `<option value="${escapeHtml(selected)}" selected>${escapeHtml(selected)}</option>` : ''}
+          ${choices.map(([key, value]) => `<option value="${escapeHtml(key)}"${key === selected ? ' selected' : ''}>${escapeHtml(value)}</option>`).join('')}
+        </select></label>`;
+      }).join('')}</div>
+      ${report.directoryBusy ? '<p role="status">Carregando filtros do cadastro…</p>'
+        : report.directoryError ? '<p role="status">Cadastro indisponível. O filtro por nome continua disponível.</p>'
+          : period ? '<p>Profissão, filial e imóvel seguem o cadastro atual.</p>' : ''}
+    </div>
+    ${report.busy ? loadingIndicatorMarkup('Consultando presenças RHID…', { compact: true }) : report.error
+      ? `<p class="error-banner" role="alert">${escapeHtml(report.error)}</p>`
+      : visibleDays.length ? visibleDays.map(table => rhidAttendanceTableMarkup(table, `rhid-mascot:${table.reportDate}`, null, null, true)).join('')
+        : '<p class="chat-rhid-attendance-table__empty" role="status">Nenhuma presença encontrada com estes filtros.</p>'}
+    ${!report.busy && !report.error && pageCount > 1 ? `<nav class="chat-rhid-mascot__header" aria-label="Páginas do período RHID">
+      <button type="button" data-action="rhid-mascot-page" data-value="-1" aria-label="Página anterior"${page === 0 ? ' disabled' : ''}>←</button>
+      <span class="chat-rhid-mascot__page">Página ${page + 1} de ${pageCount}</span>
+      <button type="button" data-action="rhid-mascot-page" data-value="1" aria-label="Próxima página"${page + 1 === pageCount ? ' disabled' : ''}>→</button>
+    </nav>` : ''}
   </section>`;
 }
 
@@ -2090,11 +2143,12 @@ function renderMessage(message, account, busy, { finalSignedDocument = false, dr
     const provisionOption = initialAreaMenu && currentPoll && !activeFlow
       ? (message.options || []).find(option => draftReplyId(option).trim().toLowerCase() === "group_pending") : null;
     const cargosShortcut = initialAreaMenu && currentPoll && !activeFlow ? `<button class="chat-main-cargos-shortcut" type="button" data-action="open-cargos-table" aria-label="Abrir tabela de cargos" title="Tabela de cargos"${busy ? ' disabled' : ''}><img src="${CARGOS_MASCOT_URL}" alt="Mascote da tabela de cargos"></button>` : '';
+    const rhidShortcut = cargosShortcut ? `<button class="chat-main-rhid-shortcut" type="button" data-action="open-rhid-mascot-report" aria-label="Abrir relatório de presenças RHID" title="Relatório de presenças RHID"${busy ? ' disabled' : ''}><span class="chat-main-rhid-shortcut__art"><img src="${ATTENDANCE_SUMMARY_MASCOT_URL}" alt=""><svg viewBox="0 0 20 20" aria-hidden="true"><circle cx="10" cy="10" r="8"/><path d="M10 5v5l3 2"/></svg></span><span>RHID</span></button>` : '';
     const attendanceShortcut = cargosShortcut ? `<button class="chat-main-attendance-summary-shortcut" type="button" data-action="open-attendance-summary" aria-label="Abrir resumo de presenças e ausências" title="Resumo de presenças e ausências"${busy ? ' disabled' : ''}><img src="${ATTENDANCE_SUMMARY_MASCOT_URL}" alt="Mascote do resumo de presenças"></button><button class="chat-main-stage-progress-shortcut" type="button" data-action="open-stage-progress" aria-label="Abrir relatório de etapas e atividades" title="Etapas e atividades da obra"${busy ? ' disabled' : ''}><img src="${STAGE_PROGRESS_MASCOT_URL}" alt="Mascote do relatório de etapas"></button><button class="chat-main-supplier-payroll-report-shortcut" type="button" data-action="open-supplier-payroll-report" aria-label="Abrir folhas de pagamento por fornecedor" title="Folhas de pagamento por fornecedor"${busy ? ' disabled' : ''}><img src="${SUPPLIER_PAYROLL_REPORT_MASCOT_URL}" alt="Energético com folha de pagamento"></button><button class="chat-main-trancid-report-shortcut" type="button" data-action="open-trancid-report" aria-label="Abrir saldos e histórico dos cartões Trancid" title="Cartões Trancid"${busy ? ' disabled' : ''}><img src="${TRANCID_REPORT_MASCOT_URL}" alt="Energético com ônibus e cartão de transporte"></button><button class="chat-main-supplier-workforce-shortcut" type="button" data-action="open-supplier-workforce-report" aria-label="Abrir fornecedores por filial, imóvel e profissão" title="Fornecedores por filial, imóvel e profissão"${busy ? ' disabled' : ''}><img src="${SUPPLIER_WORKFORCE_REPORT_MASCOT_URL}" alt="Energético com martelete"></button><button class="chat-main-contractor-control-shortcut" type="button" data-action="open-contractor-control-report" aria-label="Abrir controle de empreiteiros" title="Controle de empreiteiros"${busy ? ' disabled' : ''}><img src="${CONTRACTOR_CONTROL_REPORT_MASCOT_URL}" alt="Energético com carrinho de mão"></button><button class="chat-main-pending-supplier-payments-shortcut" type="button" data-action="open-pending-supplier-payments-report" aria-label="Abrir pagamentos pendentes por fornecedor" title="Pagamentos pendentes por fornecedor"${busy ? ' disabled' : ''}><img src="${PENDING_SUPPLIER_PAYMENTS_REPORT_MASCOT_URL}" alt="Energético com ferramentas e tijolos"></button><button class="chat-main-pending-work-diaries-shortcut" type="button" data-action="open-pending-work-diaries-report" aria-label="Abrir diários de obras pendentes" title="Diários de obras pendentes"${busy ? ' disabled' : ''}><img src="${PENDING_WORK_DIARIES_REPORT_MASCOT_URL}" alt="Energético com colher de pedreiro e tijolos"></button>` : '';
     const topProvisionShortcut = provisionOption ? `<button class="chat-main-provisions-shortcut" type="button" data-action="open-pending-provisions" aria-label="Abrir provisões de pagamento pendentes" title="Provisões de pagamento pendentes"${busy || provisionOption.disabled ? " disabled" : ""}><img src="${PENDING_PROVISIONS_MASCOT_URL}" alt="Mascote Energético"></button>` : "";
     const commercialShortcut = cargosShortcut ? `<nav class="chat-main-commercial-shortcuts" aria-label="Relatórios comerciais"><button class="chat-main-commercial-receipts-shortcut" type="button" data-action="open-commercial-receipts" aria-label="Abrir relatório comercial de contratos e pagamentos" title="Contratos e pagamentos"${busy ? ' disabled' : ''}><img src="${COMMERCIAL_RECEIPTS_MASCOT_URL}" alt="Mascote do relatório comercial"></button><button class="chat-main-commercial-milestones-shortcut" type="button" data-action="open-commercial-milestones" aria-label="Abrir andamento comercial dos imóveis" title="Andamento comercial dos imóveis"${busy ? ' disabled' : ''}><img src="${COMMERCIAL_MILESTONES_MASCOT_URL}" alt="Mascote do andamento comercial"></button><button class="chat-main-commercial-documents-shortcut" type="button" data-action="open-commercial-documents" aria-label="Abrir pendências documentais dos imóveis" title="Pendências documentais dos imóveis"${busy ? ' disabled' : ''}><img src="${COMMERCIAL_DOCUMENTS_MASCOT_URL}" alt="Mascote das pendências documentais"></button><button class="chat-main-sac-pathologies-shortcut" type="button" data-action="open-sac-pathologies" aria-label="Abrir acompanhamento de patologias" title="Acompanhamento de patologias"${busy ? ' disabled' : ''}><img src="${SAC_PATHOLOGIES_MASCOT_URL}" alt="Mascote do acompanhamento de patologias"></button></nav>` : '';
     const provisionShortcut = provisionOption ? `<button class="chat-main-payment-ledger-shortcut chat-main-nfe-shortcut" type="button" data-action="open-nfe-report" aria-label="Abrir relatório de notas fiscais" title="Relatório de notas fiscais"${busy ? " disabled" : ""}><img src="${PENDING_PROVISIONS_MASCOT_URL}" alt=""><span class="chat-main-dda-label" aria-hidden="true">NFE</span></button><button class="chat-main-payment-ledger-shortcut chat-main-dda-shortcut" type="button" data-action="open-dda-report" aria-label="Abrir relatório DDA" title="Relatório DDA"${busy ? " disabled" : ""}><img src="${PENDING_PROVISIONS_MASCOT_URL}" alt="Mascote do relatório DDA"><span class="chat-main-dda-label" aria-hidden="true">DDA</span></button><button class="chat-main-payment-ledger-shortcut chat-main-provision-report-shortcut" type="button" data-action="open-provision-report" aria-label="Abrir relatório de provisões e despesas recorrentes" title="Relatório de provisões e despesas recorrentes"${busy ? " disabled" : ""}><img src="${PROVISION_REPORT_MASCOT_URL}" alt="Mascote do relatório de provisões"></button><button class="chat-main-payment-ledger-shortcut" type="button" data-action="open-payment-ledger" aria-label="Abrir relatório de pagamentos" title="Relatório de pagamentos"${busy ? " disabled" : ""}><img src="${PAYMENT_LEDGER_MASCOT_URL}" alt="Mascote do relatório de pagamentos"></button><button class="chat-main-payment-ledger-shortcut chat-main-management-shortcut" type="button" data-action="open-management-report" aria-label="Abrir resumo gerencial de gastos" title="Resumo gerencial de gastos"${busy ? " disabled" : ""}><img src="${MANAGEMENT_REPORT_MASCOT_URL}" alt="Mascote do resumo gerencial de gastos"></button><button class="chat-main-payment-ledger-shortcut chat-main-order-validation-shortcut" type="button" data-action="open-order-validation-report" aria-label="Abrir validação de notas pendentes e pedidos para baixa" title="Validação de notas pendentes e pedidos para baixa"${busy ? " disabled" : ""}><img src="${ORDER_VALIDATION_MASCOT_URL}" alt="Mascote da validação de notas"></button><button class="chat-main-payment-ledger-shortcut chat-main-quotation-shortcut" type="button" data-action="open-quotation-report" aria-label="Abrir cotações e orçamentos" title="Cotações e orçamentos"${busy ? " disabled" : ""}><img src="${QUOTATION_REPORT_MASCOT_URL}" alt="Mascote de cotações e orçamentos"></button><button class="chat-main-payment-ledger-shortcut chat-main-depreciation-shortcut" type="button" data-action="open-depreciation-report" aria-label="Abrir controle de depreciação do imobilizado" title="Controle de depreciação do imobilizado"${busy ? " disabled" : ""}><img src="${DEPRECIATION_REPORT_MASCOT_URL}" alt="Mascote do controle de depreciação"></button><button class="chat-main-payment-ledger-shortcut chat-main-document-control-shortcut" type="button" data-action="open-document-control-report" aria-label="Abrir controle de documentos" title="Controle de documentos"${busy ? " disabled" : ""}><img src="${DOCUMENT_CONTROL_REPORT_MASCOT_URL}" alt="Mascote do controle de documentos"></button><button class="chat-main-payment-ledger-shortcut chat-main-task-association-shortcut" type="button" data-action="open-task-association-report" aria-label="Abrir atividades por associação" title="Atividades por associação"${busy ? " disabled" : ""}><img src="${TASK_ASSOCIATION_REPORT_MASCOT_URL}" alt="Mascote das atividades por associação"></button><button class="chat-main-payment-ledger-shortcut chat-main-delegated-deadline-shortcut" type="button" data-action="open-delegated-deadline-report" aria-label="Abrir tarefas delegadas por data fatal" title="Tarefas delegadas por data fatal"${busy ? ' disabled' : ''}><img src="${DELEGATED_DEADLINE_REPORT_MASCOT_URL}" alt="Mascote das tarefas delegadas por data fatal"></button>` : "";
-    return `<article class="chat-message chat-message--assistant${initialAreaMenu ? " chat-message--initial-area-menu" : ""}${provisionShortcut ? " chat-message--external-provisions" : ""}${cargosShortcut ? " chat-message--external-cargos" : ""}${commercialShortcut ? " chat-message--commercial-top" : ""}${launchMenu ? " chat-message--launch-menu" : ""}${pairedMenu ? ` chat-message--${pairedMenu.kind}-menu` : ""}${registrationMenu ? " chat-message--registration-menu" : ""}${auditMenu ? " chat-message--audit-menu" : ""}${taskMenu ? " chat-message--demand-menu" : ""}${hrGalleryMenu ? " chat-message--hr-gallery-menu" : ""}${rhidReport ? " chat-message--rhid-report" : ""}${supplierComparison ? " chat-message--supplier-comparison" : ""}${launchPayment ? " chat-message--launch-payment" : ""}">${initialAreaMenu || launchMenu || pairedMenu || registrationMenu || auditMenu || taskMenu || hrGalleryMenu || rhidReport || launchPayment || supplierComparison ? "" : assistantAvatar()}${topProvisionShortcut}${commercialShortcut}${provisionShortcut}<div class="chat-bubble">${rhidReport || initialAreaMenu || launchMenu ? "" : attendanceHeader}${renderPoll(message, busy, draft, databaseFilterMessage, activeFlow, attendanceSelectedIds, currentPoll, rhidRefresh, launchPayrollSelectedIds, launchPayrollCurrent, attendanceExpandedIds, attendanceIrregularityChecking)}</div>${cargosShortcut}${attendanceShortcut}</article>`;
+    return `<article class="chat-message chat-message--assistant${initialAreaMenu ? " chat-message--initial-area-menu" : ""}${provisionShortcut ? " chat-message--external-provisions" : ""}${cargosShortcut ? " chat-message--external-cargos" : ""}${commercialShortcut ? " chat-message--commercial-top" : ""}${launchMenu ? " chat-message--launch-menu" : ""}${pairedMenu ? ` chat-message--${pairedMenu.kind}-menu` : ""}${registrationMenu ? " chat-message--registration-menu" : ""}${auditMenu ? " chat-message--audit-menu" : ""}${taskMenu ? " chat-message--demand-menu" : ""}${hrGalleryMenu ? " chat-message--hr-gallery-menu" : ""}${rhidReport ? " chat-message--rhid-report" : ""}${supplierComparison ? " chat-message--supplier-comparison" : ""}${launchPayment ? " chat-message--launch-payment" : ""}">${initialAreaMenu || launchMenu || pairedMenu || registrationMenu || auditMenu || taskMenu || hrGalleryMenu || rhidReport || launchPayment || supplierComparison ? "" : assistantAvatar()}${topProvisionShortcut}${commercialShortcut}${provisionShortcut}<div class="chat-bubble">${rhidReport || initialAreaMenu || launchMenu ? "" : attendanceHeader}${renderPoll(message, busy, draft, databaseFilterMessage, activeFlow, attendanceSelectedIds, currentPoll, rhidRefresh, launchPayrollSelectedIds, launchPayrollCurrent, attendanceExpandedIds, attendanceIrregularityChecking)}</div>${rhidShortcut}${cargosShortcut}${attendanceShortcut}</article>`;
   }
   if (message.type === "image" || message.type === "document") {
     const label = message.caption || message.fileName || "Arquivo gerado";
@@ -2554,7 +2608,8 @@ function rhidAttendanceAdjustmentMarkup(adjustment) {
   const { personName, label, rhid, effective, currentEffective, previous, reason, busy, deleting, canDelete, error } = adjustment;
   return `<div class="chat-confirmation-backdrop" data-popup-backdrop="true" data-popup-close-action="rhid-attendance-adjust-cancel" data-rhid-adjustment-dialog>
     <div class="chat-confirmation chat-rhid-adjustment" role="dialog" aria-modal="true" aria-labelledby="rhid-adjustment-title">
-      <h2 id="rhid-adjustment-title">Corrigir ${escapeHtml(label)} — ${escapeHtml(personName)}</h2>
+      <h2 id="rhid-adjustment-title">${adjustment.reportDate ? 'Preencher' : 'Corrigir'} ${escapeHtml(label)} — ${escapeHtml(personName)}</h2>
+      ${adjustment.reportDate ? `<p>Data <time datetime="${escapeHtml(adjustment.reportDate)}">${escapeHtml(adjustment.reportDate.split('-').reverse().join('/'))}</time></p>` : ''}
       <div class="chat-rhid-adjustment__history"><p>RHID: <strong>${escapeHtml(rhid || "não registrado")}</strong></p><p>Ajustado: <strong>${escapeHtml(currentEffective || "não informado")}</strong></p>
       ${previous ? `<p>Último ajuste: ${escapeHtml(previous.reason || "—")} · ${escapeHtml(previous.actorName || "administrador")}</p>` : ""}</div>
       <label for="rhid-adjustment-time">Horário corrigido</label><input id="rhid-adjustment-time" type="time" data-role="rhid-adjustment-time" value="${escapeHtml(effective || "")}"${busy ? " disabled" : ""}>
@@ -2871,9 +2926,9 @@ export function renderChatMarkup(state = {}, { showSettings = false, allowDemo =
   const rhidAttendanceReportPage = isRhidAttendanceReportMessage(latestAssistantMessage);
   const transcriptMessages = rhidAttendanceReportPage
     ? visibleMessages.slice(visibleMessages.lastIndexOf(latestAssistantMessage)) : visibleMessages;
-  const showPendingReminders = !rhidAttendanceReport?.open && !rhidAttendanceReportPage;
+  const showPendingReminders = !state.rhidMascot && !rhidAttendanceReport?.open && !rhidAttendanceReportPage;
   const completedCreation = state.completionNavigation?.homeOnly === true;
-  const showFlowStatus = Boolean(state.activeFlow || inferredIntermediateFlow || completedCreation || rhidAttendanceReportPage);
+  const showFlowStatus = !state.rhidMascot && Boolean(state.activeFlow || inferredIntermediateFlow || completedCreation || rhidAttendanceReportPage);
   // Falhas são notificadas no banner de erro; não devem permanecer na barra
   // suspensa como se ainda estivessem aguardando envio.
   const pendingFiles = (Array.isArray(state.pendingFiles) ? state.pendingFiles : [])
@@ -2892,10 +2947,10 @@ export function renderChatMarkup(state = {}, { showSettings = false, allowDemo =
   const voiceInputVisible = shouldShowVoiceInput(state, latestAssistantMessage, visibleMessages, databaseFilter, generatedSignatureChoice);
   const diaryActivitiesInput = isDiaryNumberedTextPrompt(state);
   const draftValue = diaryActivitiesInput ? numberDiaryActivityDraft(state.draft).value : state.draft || "";
-  const headerReportDisabled = busy || rhidRefresh?.busy || signOutConfirm;
+  const headerReportDisabled = busy || rhidRefresh?.busy || signOutConfirm || Boolean(state.rhidMascot);
   const headerReportAttributes = `type="button" data-action="open-rhid-attendance-today" aria-label="Abrir relatório de presenças RHID de hoje" title="Relatório de presenças RHID de hoje"${headerReportDisabled ? " disabled" : ""}`;
 
-  return `<section class="chat-shell">
+  return `<section class="chat-shell${state.rhidMascot ? ' chat-shell--rhid-mascot' : ''}">
     <header class="chat-header">
       <button class="chat-header-avatar-shortcut" ${headerReportAttributes}>${assistantAvatar()}</button>
       <span><button class="chat-header-name-shortcut" ${headerReportAttributes}><strong>Energético</strong></button><small>${demo ? `<span data-demo-banner role="status">Demonstração — dados fictícios</span>` : `${escapeHtml(firstName)}, conectado à VM`}</small></span>
@@ -2907,7 +2962,7 @@ export function renderChatMarkup(state = {}, { showSettings = false, allowDemo =
     ${state.error ? `<div class="error-banner" role="alert"><span>${escapeHtml(state.error)}</span><button type="button" data-action="retry-session"${state.resuming || state.activeText ? " disabled" : ""}>Retomar conversa</button></div>` : ""}
     <div class="chat-transcript" role="log" aria-live="polite" aria-relevant="additions text">
       ${state.recoveryWarning ? `<p class="error-banner" role="alert">${escapeHtml(state.recoveryWarning)}</p>` : ""}
-      ${rhidAttendanceReport?.open
+      ${state.rhidMascot ? rhidMascotReportMarkup(state.rhidMascot) : rhidAttendanceReport?.open
         ? rhidAttendanceReport.busy
           ? rhidAttendanceReportLoadingMarkup(rhidAttendanceReport.date, rhidAttendanceReport.progress)
           : rhidAttendanceReportMarkup(rhidAttendanceReport)
@@ -4207,7 +4262,7 @@ export function createChatView(root, { onOpenSettings, onDemoAccess, onSignOut, 
       && lastState.account?.homeAccountId === state.account?.homeAccountId
        && (!state.recoveryReference || Boolean(lastState.draft) === Boolean(state.draft))
        && [
-         "messages", "attachments", "pendingFiles", "activeText", "activeFlow", "resuming", "diaryAttachmentProgress", "attachmentUploadProgress", "operationProgress",
+         "messages", "attachments", "pendingFiles", "activeText", "activeFlow", "resuming", "diaryAttachmentProgress", "attachmentUploadProgress", "operationProgress", "rhidMascot",
          "responseTransitionPending", "error", "recoveryPreview", "recoveryReference",
          "recoveryReferenceCount", "recoveryWarning", "recoveryBlocked", "recoveryUncertain", "signaturePlacement",
          "pendingProvisions", "pendingProvisionOpening", "pendingConstructionDiaries", "pendingConstructionDiaryFillingId", "pendingConstructionDiaryError", "pendingNotes", "pendingNoteLaunchOrderId", "pendingProvisionReminderOpen",
@@ -4324,6 +4379,7 @@ export function createChatView(root, { onOpenSettings, onDemoAccess, onSignOut, 
     const template = root.ownerDocument.createElement('template');
     template.innerHTML = markup;
     const nextShell = template.content.querySelector('.chat-shell');
+    shell.classList.toggle('chat-shell--rhid-mascot', Boolean(state.rhidMascot));
     // Never detach the composer: restoring focus on a new field resets the iOS keyboard.
     for (const child of [...shell.children]) {
       if (child !== composer && !preservedOverlays.includes(child)) child.remove();
@@ -4627,6 +4683,11 @@ export function createChatView(root, { onOpenSettings, onDemoAccess, onSignOut, 
     }
     if (command.type === "send-text") return;
     event.preventDefault?.();
+    if (command.type === 'rhid-mascot-apply') {
+      emit({ type: command.type, start: root.querySelector('[name="rhid-start"]')?.value || '',
+        end: root.querySelector('[name="rhid-end"]')?.value || '' });
+      return;
+    }
     if (command.type === 'save-pending-provision-due-date') {
       const field = root.querySelector('[data-role="pending-provision-due-date"]');
       if (!field?.value || !field.checkValidity() || lastState?.pendingProvisionDateEditBusy) return;
@@ -4815,18 +4876,22 @@ export function createChatView(root, { onOpenSettings, onDemoAccess, onSignOut, 
     }
     if (command.type === "rhid-attendance-adjust-open") {
       const message = lastState?.messages?.find(item => String(item?.id || "") === String(command.messageId || ""));
-      const table = message?.detail_table || message?.detailTable;
+      const mascotDate = String(command.messageId || '').match(/^rhid-mascot:(\d{4}-\d{2}-\d{2})$/)?.[1];
+      const table = mascotDate ? lastState?.rhidMascot?.days.find(day => day.reportDate === mascotDate)
+        : message?.detail_table || message?.detailTable;
       const person = table?.people?.find(item => item.personKey === command.personKey);
       const slot = person?.slots?.[command.slot];
-      if (!person || !slot || !isRhidAttendanceDayFinalized(table.reportDate)) return;
+      if (!person || !slot || (mascotDate ? slot.source !== 'empty' || slot.rhidCandidates.length
+        : !isRhidAttendanceDayFinalized(table.reportDate))) return;
       const label = { entry1: "Entrada 1", exit1: "Saída 1", entry2: "Entrada 2", exit2: "Saída 2" }[command.slot];
       if (!label) return;
       rhidAttendanceAdjustment = {
         messageId: command.messageId, personKey: command.personKey, slot: command.slot,
         personName: person.name, label, rhid: slot.rhidCandidates?.join(", ") || slot.rhid || "",
-        effective: slot.effective || suggestedRhidAdjustmentTime(command.slot, table.reportDate), currentEffective: slot.adjustment?.time || "", previous: slot.adjustment || null,
+        effective: mascotDate ? '' : slot.effective || suggestedRhidAdjustmentTime(command.slot, table.reportDate), currentEffective: slot.adjustment?.time || "", previous: slot.adjustment || null,
         reason: slot.adjustment?.reason ?? (!slot.rhid && !slot.rhidCandidates?.length ? "NÃO APONTADO" : ""), busy: false, error: "",
         canDelete: canDeleteRhidAdjustment(slot.adjustment, lastState?.account),
+        ...(mascotDate ? { reportDate: mascotDate } : {}),
       };
       if (lastState) { const state = lastState; lastState = null; render(state); }
       return;
@@ -5672,6 +5737,12 @@ export function createChatView(root, { onOpenSettings, onDemoAccess, onSignOut, 
   }
 
   function change(event) {
+    const filter = event.target?.dataset?.rhidFilter;
+    if (filter) {
+      emit({ type: 'rhid-mascot-filter', field: filter, value: event.target.value });
+      root.querySelector(`[data-rhid-filter="${filter}"]`)?.focus({ preventScroll: true });
+      return;
+    }
     const attendanceSelect = event.target;
     if (attendanceSelect?.matches?.('select[data-action="attendance-inline-select"]')) {
       if (attendanceSelect.disabled || composerBusy) return;
@@ -5864,6 +5935,10 @@ export function createChatView(root, { onOpenSettings, onDemoAccess, onSignOut, 
     const responseFinished = Boolean(lastState?.activeText && !state.activeText && !state.error);
     const pendingReportScroll = root.querySelector('.chat-pending-provisions--payments .chat-pending-provisions__list')?.scrollTop;
     const previousScroll = root.querySelector?.('[role="log"]')?.scrollTop || 0;
+    const mascotWasOpen = Boolean(root.querySelector('[data-rhid-mascot-report]'));
+    const mascotDateDraft = state.rhidMascot && state.rhidMascot.query === lastState?.rhidMascot?.query
+      ? ['rhid-start', 'rhid-end'].map(name => [name, root.querySelector(`[name="${name}"]`)?.value])
+      : [];
     const trayScroll = root.querySelector?.(".chat-file-tray")?.scrollTop || 0;
     const nextMessageKey = (state.messages || []).map(message => message.id).join("|");
     const previousCustomEdit = clearCustomEditReview();
@@ -5903,6 +5978,10 @@ export function createChatView(root, { onOpenSettings, onDemoAccess, onSignOut, 
       attendanceIrregularityChecking: Boolean(attendanceIrregularityPending),
       launchPayrollSelectedIds: [...launchPayrollSelectedIds],
     }), state, { preserveSignaturePad, preserveSignaturePlacement });
+    for (const [name, value] of mascotDateDraft) {
+      const field = root.querySelector(`[name="${name}"]`);
+      if (field && value !== undefined) field.value = value;
+    }
     const pendingReportList = root.querySelector('.chat-pending-provisions--payments .chat-pending-provisions__list');
     if (pendingReportList && pendingReportScroll !== undefined) pendingReportList.scrollTop = pendingReportScroll;
     bindCustomEditReview(state, previousCustomEdit);
@@ -5936,7 +6015,11 @@ export function createChatView(root, { onOpenSettings, onDemoAccess, onSignOut, 
         if (row && Number.isFinite(attendanceInlineScroll.rowTop)) {
           transcript.scrollTop += row.getBoundingClientRect().top - attendanceInlineScroll.rowTop;
         }
-      } else if (responseFinished || (messageChanged && !state.activeText)) resetTranscriptPosition(transcript);
+      } else if (state.rhidMascot) {
+        const samePage = state.rhidMascot.page === lastState?.rhidMascot?.page;
+        transcript.scrollTop = mascotWasOpen && samePage && !state.rhidMascot.busy ? previousScroll : 0;
+      }
+      else if (responseFinished || (messageChanged && !state.activeText)) resetTranscriptPosition(transcript);
       else transcript.scrollTop = messageChanged ? transcript.scrollHeight : previousScroll;
     }
     if (!state.activeText && (lastState?.activeText || messageChanged) && !attendanceTable?.copy_offer) attendanceInlineScroll = null;
@@ -5955,6 +6038,8 @@ export function createChatView(root, { onOpenSettings, onDemoAccess, onSignOut, 
     if (datePickerOpen) {
       root.querySelector('[data-role="date-picker"]')?.focus?.();
     }
+    if (!mascotWasOpen && state.rhidMascot) root.querySelector('#rhid-mascot-title')?.focus({ preventScroll: true });
+    if (mascotWasOpen && !state.rhidMascot) root.querySelector('[data-action="open-rhid-mascot-report"]')?.focus();
     if (rhidAttendanceReportOpen && !root.inert) {
       const reportDialog = root.querySelector('[data-rhid-attendance-report-dialog]');
       const focusTarget = rhidAttendanceReportBusy || rhidAttendanceReportError || rhidAttendanceMonthError

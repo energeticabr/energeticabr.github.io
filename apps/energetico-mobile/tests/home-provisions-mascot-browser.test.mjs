@@ -66,7 +66,7 @@ assert.deepEqual(shortcuts.map(s=>s.action),['open-pending-provisions','open-nfe
       assert.ok(reportLayout.width>=44&&reportLayout.height>=44&&reportLayout.x>=0&&reportLayout.image);
       assert.equal(reportLayout.fill,'rgb(0, 13, 75)');
       const mascotFit=await evaluate(`(()=>{return [...document.querySelectorAll('.chat-message--external-provisions > button,.chat-message--external-cargos > button,.chat-main-commercial-shortcuts > button')].map(b=>{const i=b.querySelector('img'),r=b.getBoundingClientRect(),q=i.getBoundingClientRect(),s=getComputedStyle(i);return {action:b.dataset.action,source:i.naturalWidth,fit:s.objectFit,blend:s.mixBlendMode,transform:s.transform,inside:q.left>=r.left&&q.right<=r.right&&q.top>=r.top&&q.bottom<=r.bottom,fill:getComputedStyle(b).backgroundColor};});})()`);
-      assert.equal(mascotFit.length,25);
+      assert.equal(mascotFit.length,26);
       const commercialTop=await evaluate(`(()=>{const nav=document.querySelector('nav[aria-label="Relatórios comerciais"]'),bubble=document.querySelector('[data-reply-id=group_pending]').closest('.chat-bubble'),blue=document.querySelector('.chat-main-provisions-shortcut');const rect=n=>{const r=n.getBoundingClientRect();return {x:r.x,y:r.y,right:r.right,bottom:r.bottom,width:r.width,height:r.height};};return nav?{row:rect(nav),bubble:rect(bubble),blue:rect(blue),external:!bubble.contains(nav),buttons:[...nav.querySelectorAll('button')].map(b=>({action:b.dataset.action,...rect(b)}))}:null;})()`);
       assert.ok(commercialTop,'os quatro mascotes comerciais devem ter uma faixa acima do menu');
       assert.equal(commercialTop.external,true);
@@ -82,6 +82,25 @@ assert.deepEqual(shortcuts.map(s=>s.action),['open-pending-provisions','open-nfe
       assert.ok(mascotFit.every(m=>m.source>=256&&m.fit==='contain'&&m.blend==='normal'&&m.transform==='none'&&m.inside),'sharp full-body mascots without cropping or color blending: '+JSON.stringify(mascotFit));
       assert.ok(mascotFit.filter(m=>m.action.startsWith('open-commercial-')||m.action==='open-sac-pathologies').every(m=>m.fill==='rgb(173, 62, 8)'),'orange fills remain uniform');
       assert.ok(mascotFit.filter(m=>['open-task-association-report','open-delegated-deadline-report'].includes(m.action)).every(m=>m.fill==='rgb(97, 140, 37)'),'both green report backgrounds remain uniform');
+      const rhidPosition=await evaluate(`(()=>{
+        const rhid=document.querySelector('.chat-main-rhid-shortcut'), red=document.querySelector('.chat-main-cargos-shortcut');
+        const r=rhid.getBoundingClientRect(),c=red.getBoundingClientRect();
+        return {above:r.bottom<c.top,aligned:Math.abs(r.left-c.left)<1,label:rhid.textContent,
+          hit:document.elementFromPoint(r.x+r.width/2,r.y+r.height/2)?.closest('button')===rhid};
+      })()`);
+      assert.deepEqual(rhidPosition,{above:true,aligned:true,label:'RHID',hit:true});
+      await evaluate(`document.querySelector('.chat-main-rhid-shortcut').click()`);
+      await evaluate(`document.querySelector('[data-action=rhid-mascot-period]').click()`);
+      const rhidFit=await evaluate(`(()=>{
+        const report=document.querySelector('.chat-rhid-mascot'), transcript=document.querySelector('.chat-transcript');
+        const composer=document.querySelector('.chat-composer'), adjusted=report.querySelector('.chat-rhid-attendance-card__cluster--added');
+        return {noOverflow:transcript.scrollWidth<=transcript.clientWidth+1, color:getComputedStyle(adjusted).backgroundColor,
+          composerHidden:getComputedStyle(composer).display==='none', dates:report.querySelectorAll('input[type=date]').length,
+          datesFit:[...report.querySelectorAll('input[type=date]')].every(input=>input.getBoundingClientRect().right<=report.getBoundingClientRect().right)};
+      })()`);
+      assert.deepEqual(rhidFit,{noOverflow:true,color:'rgb(185, 228, 246)',composerHidden:true,dates:2,datesFit:true});
+      if(width===390&&!pwa&&process.env.RHID_MASCOT_SCREENSHOT){const shot=await send('Page.captureScreenshot',{format:'png'},sessionId);writeFileSync(process.env.RHID_MASCOT_SCREENSHOT,Buffer.from(shot.data,'base64'));}
+      await evaluate(`document.querySelector('[data-action=close-rhid-mascot-report]').click()`);
       await evaluate(`document.querySelector('[data-action=open-payment-ledger]').click()`);
       assert.equal(await evaluate('window.reportOpened'),1);
       if(width<844){

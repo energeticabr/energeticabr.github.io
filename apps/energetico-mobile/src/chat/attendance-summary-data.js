@@ -7,8 +7,9 @@ const SITE = "personal";
 const WINDOW_PAGES = 100;
 // An overall runaway guard rejects the entire load; it never publishes truncated totals.
 const MAX_TOTAL_PAGES = 10_000;
-const LISTS = { suppliers: ["FORNECEDORES"], presences: ["DESCRITIVOPRESENCA", "DESCRITIVO PRESENCA"] };
-const SCHEMA = { suppliers: [["CADASTRO"], ["STATUS"]], presences: [["DATA"], ["FILIAL"], ["FORNECEDOR"],
+const LISTS = { suppliers: ["FORNECEDORES"], directory: ["FORNECEDORES"], presences: ["DESCRITIVOPRESENCA", "DESCRITIVO PRESENCA"] };
+const SCHEMA = { suppliers: [["CADASTRO"], ["STATUS"]], directory: [["CADASTRO"], ["PROFISSAO", "PROFISSÃO"], ["FILIAL"], ["IMOVEL", "IMÓVEL"]],
+  presences: [["DATA"], ["FILIAL"], ["FORNECEDOR"],
   ["PROFISSAO", "PROFISSÃO"], ["PRESENCA", "PRESENÇA"], ["STATUS"],
   ["VLORDIARIO", "VALOR DIÁRIO", "VALOR DIARIO"], ["IDPGTO", "ID PGTO"]] };
 const columnKey = value => String(value ?? "").replace(/_x([0-9a-f]{4})_/gi, (_, code) => String.fromCodePoint(Number.parseInt(code, 16)))
@@ -55,8 +56,8 @@ function moneyIsValid(value) {
 }
 
 function normalizeItem(item, columns, kind) {
-  const row = kind === "suppliers" ? normalizeRhSupplier(item, columns) : normalizeRhPresence(item, columns);
-  if (kind === "suppliers") return row;
+  if (kind !== "presences") return normalizeRhSupplier(item, columns);
+  const row = normalizeRhPresence(item, columns);
   const parsed = new Date(`${row.date}T12:00:00Z`);
   if (!row.date || !Number.isFinite(parsed.getTime()) || parsed.toISOString().slice(0, 10) !== row.date
     || !row.presence) throw new TypeError("Registro de presença com data ou presença inválida.");
@@ -127,5 +128,11 @@ export function createAttendanceSummaryData({ tokenProvider, repository: supplie
       externalSignal?.removeEventListener("abort", abort);
     }
   }
-  return Object.freeze({ loadSnapshot });
+  function loadSupplierDirectory({ signal = new AbortController().signal } = {}) {
+    const repository = suppliedRepository || createSharePointRepository(createGraphClient(
+      scopes => abortable(() => tokenProvider(scopes, { signal }), signal),
+    ), SHAREPOINT_SITES);
+    return loadList(repository, "directory", signal);
+  }
+  return Object.freeze({ loadSnapshot, loadSupplierDirectory });
 }
