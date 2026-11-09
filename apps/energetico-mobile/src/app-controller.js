@@ -1759,9 +1759,10 @@ export function createAppController({
 
   const ddaAutoReminder = createDdaAutoReminder({
     canOpen: canOpenAutomaticDda,
+    interaction: () => ddaReminderInteraction,
     enabled: () => enableDdaReminders && Boolean(account) && !stopped,
     onChange: () => render(),
-    loadSnapshot: async ({ signal }) => {
+    loadData: async ({ signal }) => {
       const owner = account, revision = sessionRevision, interaction = ddaReminderInteraction;
       const assertSession = () => {
         if (!owner || stopped || account !== owner || revision !== sessionRevision || signal.aborted || interaction !== ddaReminderInteraction) throw new Error('DDA_SESSION_ENDED');
@@ -1775,7 +1776,7 @@ export function createAppController({
       assertSession();
       const snapshot = await data.loadSnapshot({ refresh: true, signal });
       assertSession();
-      return snapshot;
+      return { snapshot, provisionLink: data.provisionLink };
     },
     open: options => {
       const interaction = ddaReminderInteraction;
@@ -1788,7 +1789,7 @@ export function createAppController({
     const state = store.getState();
     if (!account || stopped || starting || sessionStatus !== 'authenticated' || flowBusy()
       || state.activeFlow || state.draft?.trim() || state.pendingFiles.length
-      || pendingNoteLaunchOrderId || pendingConstructionDiaryFillingId
+      || pendingNoteLaunchOrderId || pendingConstructionDiaryFillingId || pendingProvisionSettlementPaymentId
       || (recoveryAccountId && !recoveryVerified) || recoveryPreview
       || trancidAutoReminder.pending || trancidReportOpening || pendingProvisionSnapshot || pendingProvisionReminderOpen || pendingProvisionRequest
       || mascotNavigationOpening || [...registrationGalleryOpenings.keys()].some(key => key !== 'ddaReport')) return false;
@@ -4379,26 +4380,42 @@ export function createAppController({
 
   async function settlePendingProvision(paymentId) {
     const id = String(paymentId || "").trim();
-    if (!account || stopped || pendingProvisionDeletion || flowBusy() || pendingProvisionReminderOpen
-      || pendingUploadBusy() || pendingProvisionSettlementPaymentId || !id) return false;
     const row = pendingProvisionSnapshot?.rows?.find(item => String(item?.id ?? "").trim() === id);
     if (!row || row.settlementBlocked === true) return false;
     const sourceKind = pendingProvisionSnapshot.sourceKind || row.sourceKind;
+    return startProvisionSettlement(id, sourceKind);
+  }
+
+  async function startProvisionSettlement(id, sourceKind, { closeDdaReport } = {}) {
+    if (!account || stopped || pendingProvisionDeletion || flowBusy() || pendingProvisionReminderOpen
+      || pendingUploadBusy() || pendingProvisionSettlementPaymentId || !/^\d+$/.test(id)) return false;
+    const state = store.getState();
+    if (closeDdaReport && (state.activeFlow || state.draft?.trim())) return false;
 
     const targetAccount = account;
     const targetRevision = sessionRevision;
     pendingProvisionSettlementPaymentId = id;
     // The check is an explicit shortcut: leave the notice immediately, then
     // discard the old flow through the VM before selecting this provision.
-    hidePendingProvisionsForSettlement();
     try {
+      closeDdaReport?.();
+      hidePendingProvisionsForSettlement();
       let poll = currentAssistantPoll();
       if (!isScheduledPaymentSelection(poll, currentAssistantActiveFlow(), sourceKind)) {
         poll = await enterScheduledPaymentSelection(poll, targetAccount, targetRevision, sourceKind);
         if (!poll) return false;
       }
 
-      const option = scheduledPaymentOption(poll, id, sourceKind);
+      let option = scheduledPaymentOption(poll, id, sourceKind);
+      if (!option && closeDdaReport && latestDatabaseFilter([poll])?.key === 'provisao_para_baixa') {
+        const searched = await sendSettlementReply(id, 'filter_query', targetAccount, targetRevision,
+          undefined, undefined, { silent: true, preserveDraft: true, allowAttachmentTrayNavigation: true });
+        if (!searched) return false;
+        poll = currentAssistantPoll();
+        if (isScheduledPaymentSelection(poll, currentAssistantActiveFlow(), sourceKind)) {
+          option = scheduledPaymentOption(poll, id, sourceKind);
+        }
+      }
       if (!option) {
         hidePendingProvisionsForSettlement();
         setSessionError(new Error(`Não encontrei o pagamento ${id} na lista da VM. O fluxo continua disponível para seleção manual.`));
@@ -10102,7 +10119,15 @@ export function createAppController({
               }),
             } : {}),
             ...(sourceKind === 'notas_fiscais_sefaz' && !isNfeReport ? { syncMonitor: ensureSefazSyncSession() } : {}),
-            ...(isDdaReport ? { onClose: () => ddaAutoReminder.dismiss() } : {}),
+            ...(isDdaReport ? {
+              onClose: () => ddaAutoReminder.dismiss(),
+              onStartSettlement: id => {
+                assertSession();
+                const panel = registrationGalleries.get(kind);
+                if (!/^[1-9]\d*$/.test(id) || !panel || panel.element?.hidden) return false;
+                return startProvisionSettlement(id, 'provision-description', { closeDdaReport: () => panel.close() });
+              },
+            } : {}),
             ...(["contractorEmployment", "dda", "notas_fiscais_sefaz", 'assetMenu', 'registrationMenu', 'assetLaunches'].includes(sourceKind) ? {} : { onCreate: galleryCreationHandler(replyId, assertSession) }),
             ...(["notas_fiscais_sefaz", "dda", "presenceDescriptions", "provisionDescription", "documents", "asset", "assetFunction", "assetProduct", "assetGroup", "workDiary", "quotes", "contracts", "contractLines", "measurements", "measurementLines", "stageDemonstratives", "constructionStages", "recurringTasks", "delegatedTasks"].includes(sourceKind) ? {
               openMediaCollection: (items, previewOptions) => {
@@ -10128,6 +10153,7 @@ export function createAppController({
         };
         registrationGalleryOpenOptions.set(panel, panelOpenOptions);
         await panel.open(panelOpenOptions);
+        if (openOptions.automatic && panel.element?.hidden) return false;
         return openingIsCurrent();
       } catch (error) {
         if (openingIsCurrent()) setSessionError(error, "Não foi possível abrir a galeria de cadastros.");
@@ -12301,7 +12327,14 @@ export function createAppController({
       }
       if (command.replyId === "navigation_main_menu") {
         rhidAttendanceReportPreviousSnapshot = null;
-        return returnToMainMenu();
+        const revision = sessionRevision, interaction = ddaReminderInteraction;
+        const returning = returnToMainMenu();
+        if (!returning || !enableDdaReminders) return returning;
+        return returning.then(async sent => {
+          if (sent && await waitForResponseTransition()
+            && revision === sessionRevision && interaction === ddaReminderInteraction) void ddaAutoReminder.refresh();
+          return sent;
+        });
       }
       if (command.replyId === "attachment_upload_skip") {
         discardExpiredTemporaryAttachment();

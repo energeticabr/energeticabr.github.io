@@ -5,7 +5,8 @@ const row=(id,status='Em aberto',due='2026-10-28')=>({id:String(id),fields:{SITU
 const tick=()=>new Promise(resolve=>setImmediate(resolve));
 function setup(options={}){
  let safe=true,time=Date.parse('2026-10-28T12:00:00Z'),rows=[row(1)],reads=0;const opened=[];
- const reminder=createDdaAutoReminder({loadSnapshot:async()=>{reads++;return {rows};},canOpen:()=>safe,open:async opts=>{opened.push(opts);return true;},now:()=>time,...options});
+ const {loadSnapshot=async()=>{reads++;return {rows};},loadSettledProvisionIds,...rest}=options;
+ const reminder=createDdaAutoReminder({loadData:async input=>({snapshot:await loadSnapshot(input),provisionLink:{loadSettledProvisionIds}}),canOpen:()=>safe,open:async opts=>{opened.push(opts);return true;},now:()=>time,...rest});
  return {reminder,opened,setSafe:v=>safe=v,setRows:v=>rows=v,advance:v=>time+=v,get reads(){return reads;}};
 }
 test('waits behind provisions, opens once, and repeats only after the reminder interval',async()=>{
@@ -28,4 +29,49 @@ test('late reads after reset, failures and malformed snapshots never open',async
 test('coalesces reads and rechecks eligibility after a deferred reminder',async()=>{
  const h=setup();h.setSafe(false);await Promise.all([h.reminder.refresh(),h.reminder.refresh()]);assert.equal(h.reads,1);
  h.setRows([row(1,'Pago')]);h.setSafe(true);await h.reminder.drain();assert.equal(h.opened.length,0);
+});
+
+test('a pending paid DDA repeats at each check from 15h Brasília, even within the morning interval',async()=>{
+ const paid=row(2,'Pago','2026-11-02');
+ paid.fields.DESCRITIVOPROVIS_x00c3_O='56';
+ let time=Date.parse('2026-10-28T17:59:00Z'),settled=false;
+ const h=setup({
+  now:()=>time,
+  loadSnapshot:async()=>({rows:[paid]}),
+  loadSettledProvisionIds:async ids=>{assert.deepEqual(ids,['56']);return new Set(settled?ids:[]);},
+ });
+ assert.equal(await h.reminder.refresh(),true);
+ h.reminder.dismiss();
+ assert.equal(await h.reminder.refresh(),false);
+ time+=60_000;
+ assert.equal(await h.reminder.refresh(),true);
+ assert.equal(await h.reminder.refresh(),false);
+ h.reminder.dismiss();
+ assert.equal(await h.reminder.refresh(),true);
+ h.reminder.dismiss();
+ settled=true;
+ assert.equal(await h.reminder.refresh(),false);
+ assert.equal(h.opened.length,3);
+});
+
+test('a newer visit replaces a stale settlement check without opening the old snapshot',async()=>{
+ const paid=row(2,'Pago');
+ paid.fields.DESCRITIVOPROVIS_x00c3_O='56';
+ let interaction=0,rejectOld,oldSignal;
+ const h=setup({
+  interaction:()=>interaction,
+  loadSnapshot:async()=>({rows:[paid]}),
+  loadSettledProvisionIds:async (ids,{signal})=>{
+   if(interaction)return new Set(ids);
+   oldSignal=signal;
+   return new Promise((_,reject)=>{rejectOld=reject;});
+  },
+ });
+ const stale=h.reminder.refresh();await tick();
+ interaction++;
+ assert.equal(await h.reminder.refresh(),false);
+ assert.equal(oldSignal.aborted,true);
+ rejectOld(new Error('DDA_SESSION_ENDED'));
+ assert.equal(await stale,false);
+ assert.deepEqual(h.opened,[]);
 });

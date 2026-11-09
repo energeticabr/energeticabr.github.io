@@ -4,7 +4,6 @@ import {existsSync} from 'node:fs';
 import {resolve} from 'node:path';
 import {fileURLToPath} from 'node:url';
 import {JSDOM} from 'jsdom';
-import {createServer} from 'vite';
 import {createSharePointRepository} from '../../../portal/data/sharepoint-repository.js';
 import {createChatClient} from '../src/chat/chat-client.js';
 import {createDdaProvisionLink} from '../src/chat/dda-provision-link.js';
@@ -13,6 +12,7 @@ import {REGISTRATION_GALLERY_MODELS} from '../src/chat/registration-gallery-data
 import {createDdaReportView} from '../src/ui/dda-report-view.js';
 import {captureFilteredReport} from '../src/ui/report-print.js';
 import {runBrowserLayout} from './helpers/browser-layout-runner.mjs';
+import {createIsolatedViteServer} from './helpers/isolated-vite-server.mjs';
 
 const now=()=>new Date('2026-11-08T12:00:00Z');
 const paidAt='2026-11-07T15:00:00Z';
@@ -33,7 +33,7 @@ function setup(t,data,options={}){
  return {doc,view,filter,ids};
 }
 
-test('only proven schedule provenance qualifies a paid DDA for the settlement exception',()=>{
+test('only proven schedule provenance qualifies a paid DDA for the scheduled payment label',()=>{
  const normalized=normalizeDdaReportRows({rows:[
   row(1,paid),row(2,{...scheduled,...audited}),row(3,{...audited,SITUACAO:'Agendado'}),
   row(4,{...scheduled,...audited,ULTIMA_CONSULTA:'2026-11-08T12:00:00Z'}),
@@ -61,6 +61,45 @@ test('scheduled payments bypass only situation and remain outside the selected s
  filter('search','Fornecedor 2');assert.deepEqual(ids(),['2']);
  filter('status','Pago');assert.deepEqual(ids(),['2']);
  assert.match(doc.querySelector('[data-dda-summary]').textContent,/50,00/);
+});
+
+test('bank-paid and manually confirmed linked DDAs offer the exact provision until settlement',async t=>{
+ let settled=false,liveLink='90',verify;
+ const starts=[];
+ const manuallyPaid=row(34,{...audited,STATUS_DDA:'Em aberto',DESCRITIVOPROVIS_x00c3_O:'56'});
+ const {doc,view,filter,ids}=setup(t,{
+  loadSnapshot:async()=>({rows:[
+   row(1),row(10,{SITUACAO:'Pago',STATUS_DDA:'Pago',DESCRITIVOPROVIS_x00c3_O:'8'}),
+   manuallyPaid,row(50,{SITUACAO:'Pago'}),row(51,{SITUACAO:'Baixado',DESCRITIVOPROVIS_x00c3_O:'70'}),
+  ]}),
+  async loadItem(id){assert.equal(id,'34');return {...manuallyPaid,fields:{...manuallyPaid.fields,DESCRITIVOPROVIS_x00c3_O:liveLink}};},
+  provisionLink:{async loadSettledProvisionIds(ids){
+   assert.deepEqual(ids,['8','56']);
+   if(!settled)await new Promise(resolve=>{verify=resolve;});
+   return new Set(settled?['56']:[]);
+  }},
+ },{onStartSettlement:async id=>{starts.push(id);return false;}});
+ const opening=view.open({automatic:true});await tick();
+ const button=()=>doc.querySelector('[data-dda-settle-provision="34"]');
+ assert.deepEqual(ids(),['1','10','34']);
+ assert.equal(button().disabled,true);
+ verify();await opening;
+ const action=button();
+ assert.equal(action.textContent,'Dar baixa');
+ assert.match(doc.querySelector('[data-dda-id="34"] .ddr-status-cluster').textContent,/Pago.*Baixa pendente/s);
+ action.click();await tick();
+ assert.deepEqual(starts,[]);
+ assert.match(doc.querySelector('.ddr-notice').textContent,/vínculo mudou/);
+ liveLink='56';
+ action.click();action.click();await tick();
+ assert.deepEqual(starts,['56']);
+ assert.deepEqual(ids(),['1','10','34']);
+ settled=true;
+ doc.querySelector('[aria-label="Atualizar DDAs"]').click();await tick();
+ assert.deepEqual(ids(),['1','10']);
+ filter('status','Pago');
+ assert.deepEqual(ids(),['10','34','50']);
+ assert.equal(doc.querySelector('[data-dda-settle-provision="34"]'),null);
 });
 
 test('the pending row participates in pagination and filtered print, and disappears only after verified settlement',async t=>{
@@ -157,11 +196,11 @@ test('all child pages are considered once for every exact parent; legacy parent 
  assert.equal(inventories,1);assert.equal(pages,2);
 });
 
-test('the paid schedule badge and pending label fit the status column on phones and desktop',{timeout:60000},async t=>{
+test('the pending payment badge and settlement button fit on phones and desktop',{timeout:60000},async t=>{
  const browser=[process.env.CHROME_BIN,'C:/Program Files/Google/Chrome/Application/chrome.exe','/usr/bin/google-chrome','/usr/bin/chromium'].find(path=>path&&existsSync(path));
  if(!browser)return t.skip('Chrome unavailable');
  const root=resolve(fileURLToPath(new URL('..',import.meta.url)));
- const server=await createServer({root,server:{host:'127.0.0.1',port:0,fs:{allow:[resolve(root,'../..')]}},logLevel:'silent'});
+ const server=await createIsolatedViteServer({root,server:{host:'127.0.0.1',port:0,fs:{allow:[resolve(root,'../..')]}},logLevel:'silent'});
  try{
   await server.listen();
   for(const [width,height] of [[320,740],[390,844],[1365,900]]){
@@ -169,7 +208,7 @@ test('the paid schedule badge and pending label fit the status column on phones 
    const dom=new JSDOM(result.stdout);
    try{
     const layout=JSON.parse(dom.window.document.documentElement.dataset.settlement);
-    assert.deepEqual(layout,{label:'PAGO POR AGENDAMENTO',pending:'Baixa pendente',fits:true,aligned:true},JSON.stringify({width,layout}));
+    assert.deepEqual(layout,{label:'PAGO POR AGENDAMENTO',pending:'Baixa pendente',fits:true,aligned:true,actionFits:true,selected:'56'},JSON.stringify({width,layout}));
    }finally{dom.window.close();}
   }
  }finally{await server.close();}

@@ -326,6 +326,8 @@ function galleryRepository(options) {
   return new Proxy(Object.create(null), {
     get(_target, property) {
       if (property === 'getSnapshotColumns') return columnsFor;
+      if (property === 'getItem' && options.strictSnapshot) return (site, list, id, query, readOptions) =>
+        repository.getItem(site, list, id, query, { ...readOptions, restrictedFields: siteConfig[site]?.restReadFields });
       if (property === "getItemsPage") return async (site, list, ...args) => {
         const [page, columns] = await Promise.all([repository.getItemsPage(site, list, ...args), columnsFor(site, list, args[1])]);
         // Financial totals must never silently omit malformed source records.
@@ -421,7 +423,7 @@ export function createRegistrationGalleryData({ kind, ...options } = {}) {
           return result;
         },
       } : {}),
-      ...(kind === 'dda' ? { provisionLink: createDdaProvisionLink({
+      ...(kind === 'dda' ? { loadItem: data.loadItem, provisionLink: createDdaProvisionLink({
         repository: galleryRepository({ ...options, siteConfig: linkSiteConfig, strictSnapshot: false }),
         siteKey: options.siteKey || 'personal', assertSession: options.assertSession,
       }) } : {}),

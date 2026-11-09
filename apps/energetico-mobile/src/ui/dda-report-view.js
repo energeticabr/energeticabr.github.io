@@ -1,4 +1,4 @@
-import {normalizeDdaReportRows,buildDdaReport,ddaSettlementPending,ddaWasScheduledAt} from '../chat/dda-report-model.js';
+import {normalizeDdaReportRows,buildDdaReport,ddaSettlementPending,ddaWasScheduledAt,readDdaSettledProvisionIds} from '../chat/dda-report-model.js';
 import {ddaDueTone,ddaTodayKey} from './dda-card.js';
 import {bindReportLandscape} from './report-landscape.js';
 import {addReportCloseControl} from './report-close-control.js';
@@ -10,12 +10,12 @@ const LOGO=new URL('../../../../assets/logo-energetica-oficial.png',import.meta.
 const money=value=>value==null?'Não disponível':new Intl.NumberFormat('pt-BR',{style:'currency',currency:'BRL'}).format(Number(value));
 const date=value=>value?value.slice(8,10)+'/'+value.slice(5,7)+'/'+value.slice(0,4):'Não informado';
 const daysSince=(day,today)=>Math.round((Date.parse(`${today}T00:00:00Z`)-Date.parse(`${day}T00:00:00Z`))/86400000);
-const ROW_CONTROLS=['data-dda-pdf','data-dda-mirror','data-dda-confirm-payment','data-dda-provision-pencil','data-dda-toggle-barcode','data-dda-copy-barcode'];
+const ROW_CONTROLS=['data-dda-pdf','data-dda-mirror','data-dda-confirm-payment','data-dda-provision-pencil','data-dda-settle-provision','data-dda-toggle-barcode','data-dda-copy-barcode'];
 function rowControlSelector(element){
  const attribute=ROW_CONTROLS.find(name=>element?.hasAttribute(name));
  return attribute?`[${attribute}="${element.getAttribute(attribute)}"]`:null;
 }
-export function createDdaReportView({document:doc=globalThis.document,data,openMediaCollection,confirmPayment,onStartLaunch,syncMonitor,copyText,onClose=()=>{},now=()=>new Date()}={}){
+export function createDdaReportView({document:doc=globalThis.document,data,openMediaCollection,confirmPayment,onStartLaunch,onStartSettlement,syncMonitor,copyText,onClose=()=>{},now=()=>new Date()}={}){
  if(!doc?.body||typeof data?.loadSnapshot!=='function')throw new TypeError('O relatório requer a sessão SharePoint.');
  const make=(tag,cls='',value)=>{const node=doc.createElement(tag);node.className=cls;if(value!==undefined)node.textContent=String(value);return node;};
  const button=(label,text=label)=>{const node=make('button','',text);node.type='button';node.setAttribute('aria-label',label);return node;};
@@ -36,7 +36,7 @@ export function createDdaReportView({document:doc=globalThis.document,data,openM
  const landscape=bindReportLandscape(root);addReportCloseControl({root,toolbar,onClose:close});
  let rows=null,controller=null,revision=0,filterRevision=0,page=1,printAll=false,destroyed=false,returnFocus=null,app=null,oldInert=false,oldOverflow='';
  let bankRunning=Boolean(syncMonitor?.running),bankNotice='',startingBank=false,reloadPending=false,pdfRequest=null;
- let settledProvisionIds=new Set(),settlementRequest=null,settlementRenderPending=false;
+ let settledProvisionIds=new Set(),settlementVerified=false,settlementRequest=null,settlementRenderPending=false,settlementOpening=false;
  const expandedBarcodes=new Set();
  const paymentConfirmation=createDdaPaymentConfirmation({document:doc,host:root,confirmPayment,onStartLaunch,onLaunchStarted:()=>close(),onClose:resumeDeferredRefresh,resolveReturnFocus:replacementControl,onConfirmed:receipt=>{
   if(destroyed||root.hidden||!rows)return;
@@ -44,13 +44,15 @@ export function createDdaReportView({document:doc=globalThis.document,data,openM
   if(!confirmed)return;
   const paidBySchedule=receipt.paidBySchedule??(confirmed.paidBySchedule||ddaWasScheduledAt(confirmed,receipt.confirmedAt));
   rows=rows.map(row=>row===confirmed?Object.freeze({...row,status:'Pago',paidManually:true,paidBySchedule,confirmedAt:receipt.confirmedAt}):row);
-  if(paidBySchedule)settledProvisionIds.delete(confirmed.provisionId);
+  if(confirmed.provisionId)settlementVerified=false;
+  settledProvisionIds.delete(confirmed.provisionId);
   populate();renderKeepingPosition();
-  if(paidBySchedule)void recheckSettlement();
+  if(confirmed.provisionId)void recheckSettlement();
  }});
  const provisionPicker=createDdaProvisionPicker({document:doc,host:root,service:data.provisionLink,onClose:resumeDeferredRefresh,resolveReturnFocus:replacementControl,onLinked:receipt=>{
   if(destroyed||root.hidden||!rows)return;
   rows=rows.map(row=>row.id===receipt.ddaId?Object.freeze({...row,provisionId:receipt.provisionId}):row);
+  settlementVerified=false;
   settledProvisionIds.delete(receipt.provisionId);
   renderKeepingPosition();void recheckSettlement();
  }});
@@ -88,18 +90,36 @@ export function createDdaReportView({document:doc=globalThis.document,data,openM
  function cancelSettlement(){settlementRequest?.abort();settlementRequest=null;settlementRenderPending=false;}
  async function recheckSettlement(){
   settlementRequest?.abort();
-  const ids=[...new Set(rows.filter(row=>row.paidBySchedule&&row.provisionId).map(row=>row.provisionId))];
-  if(!ids.length||typeof data.provisionLink?.loadSettledProvisionIds!=='function')return;
   const request=settlementRequest=new AbortController();
-  let verified=new Set();
-  try{
-   const result=await data.provisionLink.loadSettledProvisionIds(ids,{signal:request.signal});
-   if(result instanceof Set)verified=new Set(ids.filter(id=>result.has(id)));
-  }catch{/* Keep scheduled payments visible when SharePoint cannot prove settlement. */}
+  const verified=await readDdaSettledProvisionIds(rows,data.provisionLink,request.signal);
   if(request!==settlementRequest||request.signal.aborted||root.hidden||destroyed)return;
   settlementRequest=null;
-  if(verified.size===settledProvisionIds.size&&[...verified].every(id=>settledProvisionIds.has(id)))return;
-  settledProvisionIds=verified;settlementRenderPending=true;renderSettlement();
+  const settled=verified??new Set();
+  if(settlementVerified===Boolean(verified)&&settled.size===settledProvisionIds.size&&[...settled].every(id=>settledProvisionIds.has(id)))return;
+  settlementVerified=Boolean(verified);
+  settledProvisionIds=settled;settlementRenderPending=true;renderSettlement();
+ }
+ async function startSettlement(row,trigger){
+  if(root.hidden||destroyed||settlementOpening||!settlementVerified||!rows?.includes(row)||!ddaSettlementPending(row,settledProvisionIds))return;
+  const signal=controller.signal;
+  const current=()=>!signal.aborted&&trigger.isConnected&&rows?.includes(row);
+  settlementOpening=true;trigger.disabled=true;showNotice();
+  try{
+   const item=await data.loadItem(row.id,{signal});
+   if(!current()||nestedViewOpen())return;
+   const live=item&&normalizeDdaReportRows({rows:[item]})[0];
+   if(live?.id!==row.id||live.status!=='Pago'||live.provisionId!==row.provisionId||live.key!==row.key){
+    showNotice('O DDA ou seu vínculo mudou no SharePoint. Atualize o relatório antes de dar baixa.');
+    return;
+   }
+   if(!settlementVerified||!ddaSettlementPending(row,settledProvisionIds))return;
+   if(await onStartSettlement(row.provisionId))return;
+   if(current())showNotice('Não foi possível abrir a baixa da provisão. Confira se há um rascunho ou outra operação em andamento.');
+  }catch{
+   if(current())showNotice('Não foi possível conferir o DDA ou abrir a baixa da provisão. Tente novamente.');
+  }finally{
+   settlementOpening=false;trigger.disabled=!settlementVerified;
+  }
  }
  async function reloadFromBank(){
   if(destroyed||root.hidden){reloadPending=false;return;}
@@ -121,7 +141,7 @@ export function createDdaReportView({document:doc=globalThis.document,data,openM
   const summary=make('div','ddr-summary');summary.dataset.ddaSummary='';
   for(const [label,value,hint] of [['DDAs encontrados',result.rows.length],['Valor nominal total',money(result.total)],['Vencidos no filtro',result.overdue],['Vencem hoje',result.today],['Qtd DDA vencendo em 7d',result.dueWithin7Days,'De hoje até daqui a 7 dias, inclusive, conforme os filtros.'],['Valor DDA vencendo em 7d',money(result.totalDueWithin7Days),'De hoje até daqui a 7 dias, inclusive, conforme os filtros.'],['Valor DDA vencendo hoje',money(result.totalDueToday),'Vencimento hoje, conforme os filtros.']]){const metric=make('div','ddr-metric');if(hint)metric.title=hint;metric.append(make('span','',label),make('strong','',value));summary.append(metric);}content.append(summary);
   content.append(make('p','ddr-source','Situação bancária ou pagamento confirmado pelo usuário. Ordenação pelo vencimento mais próximo.'));
-  if(result.visibleOutsideStatus)content.append(make('p','ddr-source',`${result.visibleOutsideStatus} DDA(s) pagos por agendamento aparecem com baixa pendente e ficam fora dos totais da situação selecionada.`));
+  if(result.visibleOutsideStatus)content.append(make('p','ddr-source',`${result.visibleOutsideStatus} DDA(s) pagos com baixa pendente ficam fora dos totais da situação selecionada.`));
   if(result.missingAmounts)content.append(make('p','ddr-warning',`${result.missingAmounts} DDA(s) sem valor nominal válido. Total indisponível.`));
   if(!result.rows.length){content.append(make('p','ddr-empty','Nenhum DDA encontrado para os filtros selecionados.'));return;}
   const table=make('table','ddr-table');table.setAttribute('aria-label','DDAs da empresa');const head=make('thead'),tr=make('tr'),body=make('tbody');
@@ -151,11 +171,12 @@ export function createDdaReportView({document:doc=globalThis.document,data,openM
    schedule.dataset.scheduleState=row.paidBySchedule?'paid':row.schedule.state;
    schedule.title=row.paidBySchedule?'Pagamento por agendamento':'Agendamento na última consulta ao Sicoob';
    schedule.append(make('strong','',row.paidBySchedule?'PAGO POR AGENDAMENTO':row.schedule.label));
-   if(ddaSettlementPending(row,settledProvisionIds))schedule.append(make('small','ddr-settlement-pending','Baixa pendente'));
+   const pendingSettlement=ddaSettlementPending(row,settledProvisionIds);
+   if(pendingSettlement)(row.paidBySchedule?schedule:cluster).append(make('small','ddr-settlement-pending','Baixa pendente'));
    status.append(schedule,cluster);
    const link=make('td','ddr-link');const linkCluster=make('span','ddr-link-cluster',row.provisionId?`ID ${row.provisionId}`:'N/A');linkCluster.dataset.linkState=row.provisionId?'linked':'missing';
    linkCluster.title=row.provisionId?`Descritivo provisão vinculado: ID ${row.provisionId}`:'Nenhum descritivo provisão vinculado';link.append(linkCluster);
-   if(schedule.dataset.scheduleState==='scheduled'&&!row.provisionId){
+   if((schedule.dataset.scheduleState==='scheduled'||pendingSettlement)&&!row.provisionId){
     line.classList.add('ddr-scheduled-unlinked');
     link.append(make('span','ddr-link-warning','ATENÇÃO'));
    }
@@ -175,6 +196,13 @@ export function createDdaReportView({document:doc=globalThis.document,data,openM
    check.disabled=row.status==='Pago'||!Number.isSafeInteger(Number(row.id))||Number(row.id)<=0||!/^[a-f0-9]{64}$/.test(row.key)||typeof confirmPayment!=='function';
    check.addEventListener('click',()=>{if(destroyed||root.hidden||root.getAttribute('aria-busy')==='true')return;paymentConfirmation.show({itemId:row.id,key:row.key,supplier:row.supplier,amount:money(row.amount),due:date(row.due)},check);});
    const open=button('Abrir espelho do DDA '+row.id,'📎 Espelho');open.dataset.ddaMirror=row.id;open.disabled=typeof data.listAttachments!=='function'||typeof data.downloadAttachment!=='function'||typeof openMediaCollection!=='function';open.addEventListener('click',()=>void openPdfs(row,open));actions.append(pencil,check,open);files.append(actions);
+   if(!printAll&&pendingSettlement&&row.provisionId&&typeof onStartSettlement==='function'&&typeof data.loadItem==='function'){
+    const settle=button(`Dar baixa na provisão ${row.provisionId} do DDA ${row.id}`,'Dar baixa');
+    settle.className='ddr-settle-provision';settle.dataset.ddaSettleProvision=row.id;
+    settle.disabled=!settlementVerified;
+    if(settle.disabled)settle.title='A baixa fica disponível após a conferência da provisão no SharePoint.';
+    settle.addEventListener('click',()=>void startSettlement(row,settle));actions.append(settle);
+   }
     files.dataset.reportScreenOnly='';
     const id=make('td','ddr-id'),identity=make('div','ddr-row-identity');
     identity.append(make('span','ddr-id-cluster',row.id));id.append(identity);
@@ -228,12 +256,12 @@ export function createDdaReportView({document:doc=globalThis.document,data,openM
   }catch{if(currentView())showNotice('Não foi possível abrir os PDFs. Tente novamente.');}
   finally{if(trigger.isConnected&&!signal.aborted)trigger.disabled=false;if(!previewStarted)finish();}
  }
- async function load(initialSnapshot,position){
-  if(root.hidden||destroyed)return;paymentConfirmation.close();provisionPicker.close();pdfRequest=null;controller?.abort();cancelSettlement();const current=++revision,active=controller=new AbortController(),filters=filterRevision;rows=null;settledProvisionIds=new Set();printAll=false;root.setAttribute('aria-busy','true');refresh.disabled=true;showNotice();content.replaceChildren(make('p','','Carregando DDAs do SharePoint…'));
-  try{const snapshot=initialSnapshot??await data.loadSnapshot({refresh:true,signal:active.signal});if(active.signal.aborted||current!==revision||root.hidden||destroyed)return;rows=normalizeDdaReportRows(snapshot);populate();render();if(position&&filters===filterRevision)restoreReportPosition(position);}
+ async function load(initialSnapshot,position,initialSettledProvisionIds){
+  if(root.hidden||destroyed)return;paymentConfirmation.close();provisionPicker.close();pdfRequest=null;controller?.abort();cancelSettlement();const current=++revision,active=controller=new AbortController(),filters=filterRevision;rows=null;settledProvisionIds=new Set();settlementVerified=false;printAll=false;root.setAttribute('aria-busy','true');refresh.disabled=true;showNotice();content.replaceChildren(make('p','','Carregando DDAs do SharePoint…'));
+  try{const snapshot=initialSnapshot??await data.loadSnapshot({refresh:true,signal:active.signal});if(active.signal.aborted||current!==revision||root.hidden||destroyed)return;rows=normalizeDdaReportRows(snapshot);if(initialSettledProvisionIds){settledProvisionIds=new Set(initialSettledProvisionIds);settlementVerified=true;}populate();render();if(position&&filters===filterRevision)restoreReportPosition(position);}
   catch{if(active.signal.aborted||current!==revision||root.hidden||destroyed)return;rows=null;const error=make('p','','Não foi possível carregar os DDAs. Tente atualizar.');error.setAttribute('role','alert');content.replaceChildren(error);}
   finally{if(current===revision){root.setAttribute('aria-busy','false');syncRefreshButton();}}
-  if(rows&&current===revision)await recheckSettlement();
+  if(rows&&current===revision&&!initialSettledProvisionIds)await recheckSettlement();
  }
  function close(){if(root.hidden)return;expandedBarcodes.clear();reloadPending=false;pdfRequest=null;paymentConfirmation.close();provisionPicker.close();controller?.abort();cancelSettlement();revision++;rows=null;printAll=false;content.replaceChildren();showNotice();root.hidden=true;doc.body.style.overflow=oldOverflow;if(app)app.inert=oldInert;const target=returnFocus?.isConnected?returnFocus:doc.querySelector('[data-action="open-dda-report"]')||app;target?.focus?.();returnFocus=null;onClose();}
  const filter=()=>{filterRevision++;printAll=false;page=1;render();content.scrollTop=0;showNotice();};
@@ -247,7 +275,7 @@ export function createDdaReportView({document:doc=globalThis.document,data,openM
  });
  root.addEventListener('click',event=>{if(event.target===root)close();});
  root.addEventListener('keydown',event=>{if(root.hidden)return;if(event.key==='Escape'){event.preventDefault();close();return;}if(event.key!=='Tab')return;const nodes=[...panel.querySelectorAll('button,input,select,[tabindex="0"]')].filter(node=>!node.disabled&&!node.closest('[hidden]')),first=nodes[0],last=nodes.at(-1);if(event.shiftKey&&(doc.activeElement===first||doc.activeElement===panel)){event.preventDefault();last?.focus();}else if(!event.shiftKey&&(doc.activeElement===last||doc.activeElement===panel)){event.preventDefault();first?.focus();}});
- return Object.freeze({element:root,async open({automatic=false,initialSnapshot}={}){if(destroyed)throw new Error('Relatório encerrado.');if(!root.hidden)return;returnFocus=doc.activeElement;app=doc.getElementById('app');oldInert=app?.inert||false;oldOverflow=doc.body.style.overflow;doc.body.style.overflow='hidden';if(app)app.inert=true;const initialStatus=automatic?'Não pagos':'Em aberto';controls.status.replaceChildren(option(initialStatus,initialStatus));controls.bank.replaceChildren(option('Todas',''));controls.search.value='';page=1;root.hidden=false;landscape.update();panel.focus();await load(initialSnapshot);},close,
+ return Object.freeze({element:root,async open({automatic=false,initialSnapshot,initialSettledProvisionIds}={}){if(destroyed)throw new Error('Relatório encerrado.');if(!root.hidden)return;returnFocus=doc.activeElement;app=doc.getElementById('app');oldInert=app?.inert||false;oldOverflow=doc.body.style.overflow;doc.body.style.overflow='hidden';if(app)app.inert=true;const initialStatus=automatic?'Não pagos':'Em aberto';controls.status.replaceChildren(option(initialStatus,initialStatus));controls.bank.replaceChildren(option('Todas',''));controls.search.value='';page=1;root.hidden=false;landscape.update();panel.focus();await load(initialSnapshot,undefined,initialSettledProvisionIds);},close,
   async preparePrint(){if(root.hidden||destroyed||!rows||root.getAttribute('aria-busy')==='true')throw new Error('Não foi possível imprimir: aguarde a consulta completa dos DDAs.');const current=revision,filters=filterRevision,position=[content.scrollTop,content.scrollLeft],oldPage=page;printAll=true;render();return()=>{if(root.hidden||destroyed||current!==revision||filters!==filterRevision)return;printAll=false;page=oldPage;render();[content.scrollTop,content.scrollLeft]=position;};},
   destroy(){if(destroyed)return;close();paymentConfirmation.destroy();destroyed=true;unsubscribeBank?.();landscape.destroy();root.remove();}});
 }
