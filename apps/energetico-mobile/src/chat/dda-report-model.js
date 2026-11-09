@@ -17,7 +17,19 @@ export function ddaWasScheduledAt(row,confirmedAt){
 }
 
 export function ddaSettlementPending(row,settledProvisionIds){
- return Boolean(settledProvisionIds&&row.paidBySchedule&&!settledProvisionIds.has(row.provisionId));
+ return Boolean(settledProvisionIds&&row.status==='Pago'
+  &&(row.provisionId||row.paidBySchedule)&&!settledProvisionIds.has(row.provisionId));
+}
+
+export async function readDdaSettledProvisionIds(rows,provisionLink,signal){
+ const ids=[...new Set(rows.filter(row=>row.status==='Pago'&&row.provisionId).map(row=>row.provisionId))];
+ if(!ids.length)return new Set();
+ if(typeof provisionLink?.loadSettledProvisionIds!=='function')return null;
+ try{
+  const settled=await provisionLink.loadSettledProvisionIds(ids,{signal});
+  if(settled instanceof Set)return new Set(ids.filter(id=>settled.has(id)));
+ }catch{/* Keep paid DDAs pending when SharePoint cannot verify settlement. */}
+ return null;
 }
 
 function supplierCnpj(value){
@@ -53,7 +65,7 @@ export function buildDdaReport(rows,{status='Em aberto',bank='',search='',settle
  const seventhDay=new Date(Date.parse(today+'T12:00:00Z')+7*86400000).toISOString().slice(0,10);
  const openFilter=status==='Em aberto'||status==='Não pagos';
  const matchesStatus=row=>!status||(openFilter?isDdaOpenStatus(row.status):row.status===status);
- const filtered=rows.filter(row=>(matchesStatus(row)||ddaSettlementPending(row,settledProvisionIds))&&(!bank||row.bank===bank)&&(!query||includesSearchText(normalizeSearchText([row.id,row.supplier,row.document,row.bank].join(' ')),query)))
+ const filtered=rows.filter(row=>(matchesStatus(row)||(openFilter&&ddaSettlementPending(row,settledProvisionIds)))&&(!bank||row.bank===bank)&&(!query||includesSearchText(normalizeSearchText([row.id,row.supplier,row.document,row.bank].join(' ')),query)))
   .sort((a,b)=>(a.due||'9999').localeCompare(b.due||'9999')||Number(a.id)-Number(b.id));
  const inStatus=filtered.filter(matchesStatus);
  const missingAmounts=inStatus.filter(row=>row.amount==null).length;

@@ -42,7 +42,13 @@
   color: #17643f;
 }
 .ddr-schedule-cluster[data-schedule-state="paid"] { overflow-wrap: anywhere; }
-.ddr-schedule-cluster .ddr-settlement-pending { color: #8a4000; font-weight: 700; }
+.ddr-status .ddr-settlement-pending { color: #8a4000; font-weight: 700; }
+.ddr-table .ddr-settle-provision {
+  min-height: 44px;
+  background: #fff0db;
+  border-color: #d8ae55;
+  color: #704b00;
+}
 .ddr-table tr.ddr-scheduled-unlinked,
 .ddr-table tr.ddr-scheduled-unlinked > td {
   background: #ffc5cc;

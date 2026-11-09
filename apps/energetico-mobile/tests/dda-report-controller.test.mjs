@@ -68,12 +68,62 @@ test('report releases the PDF request after the export-only media fallback',asyn
  await h.factories[0].openMediaCollection([{fileName:'espelho.pdf',source:new Blob(['pdf'])}],{layout:'dda-report-pdf',onClose:()=>calls.push('closed')});
  assert.deepEqual(calls,['espelho.pdf','closed']);
 });
+
+for(const exactMatch of [true,false])test(`DDA settlement only selects the exact linked parent (match: ${exactMatch})`,async t=>{
+ const calls=[];
+ let options,closed=0;
+ const pending={id:'payment_settlement',stepKey:'provisao_para_baixa'};
+ const poll=(question,options,activeFlow=null,extra={})=>({status:'processed',activeFlow,messages:[{role:'assistant',type:'poll',question,options,...extra}]});
+ const h=setup(t,{
+  enableDdaReminders:false,
+  client:{sendText:async payload=>{
+   calls.push(payload.replyId);
+   switch(payload.replyId){
+    case 'input_continue':return {status:'processed',messages:[]};
+    case 'portal_confirm_main_menu':return poll('QUAL ÁREA VOCÊ DESEJA ACESSAR?', [{id:'group_pending',label:'PENDÊNCIAS'}]);
+    case 'group_pending':return poll('PENDÊNCIAS',[{id:'pending_payment_settlement',label:'BAIXAR PAGAMENTO AGENDADO'}]);
+    case 'pending_payment_settlement':return poll('QUAL PAGAMENTO AGENDADO FOI PAGO?', [],pending,{databaseFilter:true,databaseFilterKey:'provisao_para_baixa'});
+    case 'filter_query':
+     assert.equal(payload.text,'56');
+     return poll('QUAL PAGAMENTO AGENDADO FOI PAGO?', [
+      {id:'choice:provisao_para_baixa:56',label:'56 - FILHO'},
+      ...(exactMatch?[{id:'choice:provisao_para_baixa:provision_description:56',reply:'provision_description:56',label:'DESCRITIVO 56'}]:[]),
+     ],pending,{databaseFilter:true,databaseFilterKey:'provisao_para_baixa'});
+    case 'provision_description:56':return poll('REVISE A BAIXA',[],{id:'payment_settlement'},{detailTable:{kind:'provision_settlement_review',descriptionId:'56'}});
+    default:throw new Error('Unexpected reply '+payload.replyId);
+   }
+  }},
+  ddaReportFactory:async input=>{options=input;return {open(){},close(){closed++;},destroy(){}};},
+ });
+ await h.controller.start();await h.view.emit('open-dda-report');
+ assert.equal(await options.onStartSettlement('56'),exactMatch);
+ assert.equal(closed,1);
+ assert.deepEqual(calls,['input_continue','portal_confirm_main_menu','group_pending','pending_payment_settlement','filter_query',...(exactMatch?['provision_description:56']:[])]);
+});
 test('DDA report resumes after authentication and late factories cannot open after logout',async t=>{
  const h=setup(t,{auth:{consumePendingAction:()=> 'action_dda_report'}});await h.controller.start();assert.deepEqual(h.opened,['report']);
  let resolve,destroyed=0,opens=0;const late=setup(t,{ddaReportFactory:()=>new Promise(r=>resolve=r)});await late.controller.start();const request=late.view.emit('open-dda-report');await tick();await late.view.emit('sign-out');resolve({open(){opens++;},destroy(){destroyed++;}});await request;assert.equal(opens,0);assert.equal(destroyed,1);
 });
 
 const autoRow={id:'1',fields:{SITUACAO:'Em aberto',VENCIMENTO:'2020-01-01',VALOR:12}};
+test('the automatic DDA returns after 15h when the user goes back to the main menu',async t=>{
+ t.mock.timers.enable({apis:['Date'],now:new Date('2026-11-09T18:00:00Z')});
+ const h=setup(t,{
+  client:{sendText:async()=>({status:'processed',activeFlow:null,messages:[{
+   role:'assistant',type:'poll',question:'QUAL ÁREA VOCÊ DESEJA ACESSAR?',options:[{id:'group_pending',label:'PENDÊNCIAS'}],
+  }]})},
+  registrationGalleryDataFactory:async()=>({loadSnapshot:async()=>({rows:[autoRow]})}),
+ });
+ await h.controller.start();
+ for(let i=0;i<8;i++)await tick();
+ assert.deepEqual(h.opened,['report']);
+ h.factories[0].onClose();await tick();
+ assert.deepEqual(h.opened,['report']);
+ assert.equal(await h.view.emit('select-reply',{replyId:'navigation_main_menu'}),true);
+ for(let i=0;i<8;i++)await tick();
+ assert.deepEqual(h.opened,['report','report']);
+});
+
 test('automatic DDA waits for the real provision dismiss command and does not repeat',async t=>{
  const h=setup(t,{client:{sendText:async()=>({status:'processed',messages:[]}),getPendingProvisionSnapshot:async()=>({sourceKind:'provision-description',rows:[{id:'9',dueDate:'2020-01-01',total:10}]})},registrationGalleryDataFactory:async()=>({loadSnapshot:async()=>({rows:[autoRow]})})});
  await h.controller.start();await tick();assert.deepEqual(h.opened,[]);

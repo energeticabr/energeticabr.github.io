@@ -113,6 +113,13 @@ test('DDA uses authenticated SharePoint REST with read-only scope for private li
     assert.equal(query.get('$select').includes('*'),false);
     value=[{Id:7,...sample.fields,STATUS_DDA:'Agendado',STATUS_CONSULTADO_EM:'2026-10-27T16:00:00Z'}];
    }
+   else if(String(url).includes('/items(7)?')) {
+    const query=new URL(String(url)).searchParams;
+    assert.equal(query.has('$expand'),false);
+    const fields=query.get('$select').split(',');
+    for(const name of ['CHAVE_DDA','SITUACAO','PGTO_CONFIRMADO','DESCRITIVOPROVIS_x00c3_O'])assert.ok(fields.includes(name));
+    return Response.json({Id:7,...sample.fields,SITUACAO:'Pago',DESCRITIVOPROVIS_x00c3_O:'56'});
+   }
    else if(String(url).includes('/_api/web/lists?')) value=[{Id:'11111111-2222-3333-4444-555555555555',Title:'DDAS SICOOB',BaseTemplate:100,Hidden:false}];
    else throw new Error('Unexpected test request '+url);
    return new Response(JSON.stringify({value}),{status:200,headers:{'Content-Type':'application/json'}});
@@ -122,6 +129,10 @@ test('DDA uses authenticated SharePoint REST with read-only scope for private li
  assert.equal(row.id,'7');
  assert.equal(row.fields.STATUS_DDA,'Agendado');
  assert.equal(row.fields.STATUS_CONSULTADO_EM,'2026-10-27T16:00:00Z');
+ const current=await data.loadItem('7');
+ assert.equal(current.id,'7');
+ assert.equal(current.fields.SITUACAO,'Pago');
+ assert.equal(current.fields.DESCRITIVOPROVIS_x00c3_O,'56');
  assert.ok(calls.every(url=>url.startsWith('https://tenant.sharepoint.com/sites/test/_api/')));
  assert.ok(scopes.every(scope=>scope==='https://tenant.sharepoint.com/AllSites.Read'));
 });
