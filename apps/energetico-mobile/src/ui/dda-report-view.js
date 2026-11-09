@@ -228,6 +228,11 @@ export function createDdaReportView({document:doc=globalThis.document,data,openM
    status.append(schedule,cluster);
    const link=make('td','ddr-link');const linkCluster=make('span','ddr-link-cluster',row.provisionId?`ID ${row.provisionId}`:'N/A');linkCluster.dataset.linkState=row.provisionId?'linked':'missing';
    linkCluster.title=row.provisionId?`Descritivo provisão vinculado: ID ${row.provisionId}`:'Nenhum descritivo provisão vinculado';link.append(linkCluster);
+   const pencil=button('Vincular DDA '+row.id+' a descritivo provisão','✎');pencil.className='ddr-provision-pencil';pencil.dataset.ddaProvisionPencil=row.id;
+   pencil.dataset.linkState=linkCluster.dataset.linkState;
+   pencil.disabled=printAll||!data.provisionLink||!Number.isSafeInteger(Number(row.id))||Number(row.id)<=0;
+   pencil.addEventListener('click',()=>{if(destroyed||root.hidden||root.getAttribute('aria-busy')==='true')return;void provisionPicker.show(row,pencil);});
+   link.append(pencil);
    if((schedule.dataset.scheduleState==='scheduled'||pendingSettlement)&&!row.provisionId){
     line.classList.add('ddr-scheduled-unlinked');
     link.append(make('span','ddr-link-warning','ATENÇÃO'));
@@ -241,15 +246,12 @@ export function createDdaReportView({document:doc=globalThis.document,data,openM
    if(row.issued)issued.append(make('strong','',date(row.issued)),make('small','ddr-issued-days',`${daysSince(row.issued,today)} d`));
    else issued.append(make('span','','Não informada'));
    const files=make('td'),actions=make('div','ddr-row-actions'),check=button(row.provisionId?'Iniciar baixa da provisão '+row.provisionId+' do DDA '+row.id:'Vincule um descritivo de pagamento ao DDA '+row.id+' para iniciar a baixa','✓');
-   const pencil=button('Vincular DDA '+row.id+' a descritivo provisão','✎');pencil.className='ddr-provision-pencil';pencil.dataset.ddaProvisionPencil=row.id;
-   pencil.disabled=!data.provisionLink||!Number.isSafeInteger(Number(row.id))||Number(row.id)<=0;
-   pencil.addEventListener('click',()=>{if(destroyed||root.hidden||root.getAttribute('aria-busy')==='true')return;void provisionPicker.show(row,pencil);});
    check.className='ddr-provision-check';check.dataset.ddaProvisionCheck=row.id;
    check.disabled=printAll||!canStartSettlement(row);
    check.title=row.provisionId&&settledProvisionIds.has(row.provisionId)?'Provisão já baixada':row.provisionId&&!settlementVerified
     ?'A baixa fica disponível após a conferência da provisão no SharePoint.':check.getAttribute('aria-label');
    check.addEventListener('click',()=>askSettlement(row,check));
-   const open=button('Abrir espelho do DDA '+row.id,'📎 Espelho');open.dataset.ddaMirror=row.id;open.disabled=typeof data.listAttachments!=='function'||typeof data.downloadAttachment!=='function'||typeof openMediaCollection!=='function';open.addEventListener('click',()=>void openPdfs(row,open));actions.append(pencil,check,open);files.append(actions);
+   const open=button('Abrir espelho do DDA '+row.id,'📎 Espelho');open.dataset.ddaMirror=row.id;open.disabled=typeof data.listAttachments!=='function'||typeof data.downloadAttachment!=='function'||typeof openMediaCollection!=='function';open.addEventListener('click',()=>void openPdfs(row,open));actions.append(check,open);files.append(actions);
    if(!printAll&&pendingSettlement&&row.provisionId&&typeof onStartSettlement==='function'&&typeof data.loadItem==='function'){
     const settle=button(`Dar baixa na provisão ${row.provisionId} do DDA ${row.id}`,'Dar baixa');
     settle.className='ddr-settle-provision';settle.dataset.ddaSettleProvision=row.id;
