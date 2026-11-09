@@ -3,6 +3,7 @@ import {
   nfeProposalAmounts, nfeProposalStages, nfeProposalUnitMismatch, updateNfeProposalBranch,
   updateNfeProposalProduct, updateNfeProposalSupplier, validateNfeProposal,
 } from '../chat/nfe-proposal-model.js';
+import { bindSearchableFilterSelects } from './searchable-filter-selects.js';
 
 const money = new Intl.NumberFormat('pt-BR', { style:'currency', currency:'BRL' });
 const displayDate = date => date ? date.split('-').reverse().join('/') : 'Não informado';
@@ -65,6 +66,12 @@ export function createNfeProposalView({ document:doc, host, service, onPosted })
     for (const [node] of background) node.inert = true;
     const entry = { overlay, background, trigger, controller:new AbortController(), manualStages:new Set(), busy:false, reserved:false };
     const signal = entry.controller.signal;
+    const pickers = new Map();
+    function destroyPickers() {
+      for (const picker of pickers.values()) picker.destroy();
+      pickers.clear();
+    }
+    signal.addEventListener('abort', destroyPickers, { once:true });
     current = entry;
     host.append(overlay);
     dialog.focus({ preventScroll:true });
@@ -83,13 +90,15 @@ export function createNfeProposalView({ document:doc, host, service, onPosted })
 
     overlay.addEventListener('keydown', event => {
       if (event.key === 'Escape') {
-        event.preventDefault();
         event.stopPropagation();
+        if (event.isComposing || event.keyCode === 229) return;
+        event.preventDefault();
         if (!entry.busy) close();
       }
       if (event.key !== 'Tab') return;
       const controls = [...dialog.querySelectorAll('button,select,input,summary')].filter(node =>
-        !node.matches(':disabled') && (!node.closest('details:not([open])') || node.tagName === 'SUMMARY'));
+        !node.matches(':disabled,[tabindex="-1"]') && !node.closest('[hidden]') &&
+        (!node.closest('details:not([open])') || node.tagName === 'SUMMARY'));
       if (!controls.length) return;
       const index = controls.indexOf(doc.activeElement);
       if (index === -1 || (event.shiftKey ? index === 0 : index === controls.length - 1)) {
@@ -116,7 +125,7 @@ export function createNfeProposalView({ document:doc, host, service, onPosted })
     }
 
     function field(container, label, name, type, onChange) {
-      const wrapper = el('label');
+      const wrapper = el('label', type === 'select' ? 'nfe-proposal-select' : '');
       const control = el(type === 'select' ? 'select' : 'input');
       control.name = name;
       if (type !== 'select') {
@@ -169,6 +178,7 @@ export function createNfeProposalView({ document:doc, host, service, onPosted })
 
     function render() {
       const { draft, fiscal, catalog } = entry;
+      destroyPickers();
       body.replaceChildren();
       summaries = [];
       stageControls = [];
@@ -183,6 +193,7 @@ export function createNfeProposalView({ document:doc, host, service, onPosted })
         entry.draft = updateNfeProposalSupplier(entry.draft, value, catalog);
         branch.value = entry.draft.branchId;
         account.value = entry.draft.accountId;
+        pickers.get(headerFields)?.sync();
         updateStages();
       });
       const branch = field(headerFields, 'Filial', 'branchId', 'select', value => {
@@ -196,6 +207,7 @@ export function createNfeProposalView({ document:doc, host, service, onPosted })
       populate(branch, catalog.branches, draft.branchId, 'Selecione a filial');
       populate(account, catalog.accounts, draft.accountId, 'Selecione a conta');
       orderDate.value = draft.date;
+      pickers.set(headerFields, bindSearchableFilterSelects(headerFields, { report:true }));
       const list = el('div', 'nfe-proposal-lines');
       body.append(list);
       fiscal.lines.forEach((original, index) => {
@@ -207,7 +219,14 @@ export function createNfeProposalView({ document:doc, host, service, onPosted })
         details.append(summary, editor);
         list.append(details);
         details.addEventListener('toggle', () => {
-          if (!details.open) { editor.replaceChildren(); stageControls[index] = null; return; }
+          if (!isCurrent() || !body.contains(editor)) return;
+          if (!details.open) {
+            pickers.get(editor)?.destroy();
+            pickers.delete(editor);
+            editor.replaceChildren();
+            stageControls[index] = null;
+            return;
+          }
           if (editor.hasChildNodes()) return;
           const line = entry.draft.lines[index];
           const fields = el('fieldset', 'nfe-proposal-fields');
@@ -250,6 +269,7 @@ export function createNfeProposalView({ document:doc, host, service, onPosted })
           fields.append(unitCheck);
           syncUnit();
           lock();
+          pickers.set(editor, bindSearchableFilterSelects(fields, { report:true }));
         });
       });
       refreshTotals();

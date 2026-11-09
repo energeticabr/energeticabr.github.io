@@ -256,8 +256,14 @@
   padding: 0;
   border: 0;
 }
-.nfe-proposal-fields label { display: grid; min-width: 0; gap: 3px; font-size: 13px; font-weight: 700; }
-.nfe-proposal-fields :is(select,input) {
+.nfe-proposal-fields :is(label,.nfe-proposal-select) {
+  display: grid;
+  min-width: 0;
+  gap: 3px;
+  font-size: 13px;
+  font-weight: 700;
+}
+.nfe-proposal-fields label > input, .nfe-proposal-select .sfs-trigger {
   box-sizing: border-box;
   width: 100%;
   min-width: 0;
@@ -281,7 +287,7 @@
 .nfe-proposal-line summary small { display: block; margin: 3px 0 0 17px; font-size: 12px; }
 .nfe-proposal-line-editor { padding: 0 10px; }
 .nfe-proposal-footer strong { min-width: 0; font-size: 13px; overflow-wrap: anywhere; }
-.nfe-proposal-dialog button {
+.nfe-proposal-dialog :is(.nfe-proposal-header,.nfe-proposal-footer) button {
   min-height: 44px;
   border: 1px solid #8fb2c1;
   border-radius: 7px;
@@ -294,7 +300,7 @@
   cursor: pointer;
 }
 .nfe-proposal-dialog .nfe-proposal-submit { background: #07566b; color: #fff; }
-.nfe-proposal-dialog button:disabled { opacity: .55; cursor: default; }
+.nfe-proposal-dialog :is(.nfe-proposal-header,.nfe-proposal-footer) button:disabled { opacity: .55; cursor: default; }
 @media print { .nfe-proposal-overlay { display: none !important; } }
 .nfe-proposal-fields .nfe-proposal-unit-check {
   grid-column: 1 / -1;

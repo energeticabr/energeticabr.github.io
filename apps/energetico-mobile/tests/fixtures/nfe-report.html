@@ -7,6 +7,7 @@
 <link rel="stylesheet" href="/src/ui/payment-ledger.css">
 <link rel="stylesheet" href="/src/ui/dda-report.css">
 <link rel="stylesheet" href="/src/ui/nfe-report.css">
+<link rel="stylesheet" href="/src/ui/searchable-filter-selects.css">
 </head>
 <body>
 <main id="app"></main>
@@ -38,7 +39,7 @@ const report = decorateReportPrint(decorateReportNavigation(createNfeReportView(
         branches:[{ id:'22',label:'Obra A' },{ id:'23',label:'Obra B' }],
         products:[{ id:'24',label:'Serviço de teste com descrição longa para revisão do relatório',unit:'UN',expenseType:'SERVIÇOS' }],
         stages:[{ id:'25',label:'Etapa A',branch:'Obra A' },{ id:'26',label:'Etapa B',branch:'Obra B' }],
-        accounts:[],history:[],
+        accounts:[{ id:'27',label:'Cartão de teste' }],history:[],
       },
       draft:{ supplierId:'21',branchId:'22',accountId:'',date:'2026-11-08',lines:[
         { number:'1',productId:'24',stageId:'25',quantity:'2',unitPrice:'1250',adjustment:'0',discount:'0',date:'2026-11-08',dueDate:'2026-11-12' },
@@ -153,9 +154,44 @@ if (!report.element.hidden) {
   const editor = proposal.querySelector('details');
   editor.open = true;
   editor.dispatchEvent(new Event('toggle'));
-  const branch = proposal.querySelector('[name="branchId"]');
-  branch.value = '23';
-  branch.dispatchEvent(new Event('change'));
+  const pickerResults = {};
+  for (const [name, query, expected, value] of [
+    ['supplierId','exemplo','Fornecedor Exemplo','21'],
+    ['branchId','obra b','Obra B','23'],
+    ['accountId','cartao','Cartão de teste','27'],
+    ['productId','servico de teste','Serviço de teste com descrição longa para revisão do relatório','24'],
+    ['stageId','etapa b','Etapa B','26'],
+  ]) {
+    const select = proposal.querySelector('[name="' + name + '"]');
+    const field = select.nextElementSibling;
+    const trigger = field?.querySelector('.sfs-trigger');
+    const popup = field?.querySelector('.sfs-popup');
+    const search = field?.querySelector('.sfs-report-search');
+    if (!trigger || !popup || !search) { pickerResults[name] = false; continue; }
+    trigger.click();
+    const popupRect = box(popup);
+    search.focus({preventScroll:true});
+    const searchRect = box(search);
+    const searchIsVisible = document.elementFromPoint(
+      searchRect.x + searchRect.width / 2, searchRect.y + searchRect.height / 2) === search;
+    const setQuery = value => {
+      search.value = value;
+      search.dispatchEvent(new Event('input', {bubbles:true}));
+    };
+    setQuery('sem resultado');
+    const empty = !popup.querySelector('.sfs-empty').hidden && !popup.querySelector('.sfs-option');
+    setQuery(query);
+    const [match, ...otherOptions] = popup.querySelectorAll('.sfs-option');
+    const matchRect = match && box(match);
+    const canSelect = matchRect && document.elementFromPoint(
+      matchRect.x + matchRect.width / 2, matchRect.y + matchRect.height / 2) === match;
+    const matching = match?.textContent === expected && !otherOptions.length;
+    match?.click();
+    pickerResults[name] = select.hidden && searchIsVisible && canSelect && empty && matching && popup.hidden &&
+      select.value === value && trigger.value === expected &&
+      popupRect.x >= 0 && popupRect.y >= 0 && popupRect.right <= innerWidth && popupRect.bottom <= innerHeight &&
+      (rotated ? searchRect.height > searchRect.width : searchRect.width > searchRect.height);
+  }
   const changedStage = proposal.querySelector('[name="stageId"]').value;
   const proposalBody = proposal.querySelector('.nfe-proposal-body');
   const proposalScroll = proposalBody.scrollHeight > proposalBody.clientHeight;
@@ -179,7 +215,7 @@ if (!report.element.hidden) {
     orangeTargetHeight:linkedPencil.offsetHeight,
     pickerFits:fit(pickerRect),
     proposePosition, proposalFits:fit(proposalRect), proposalSubmitFits:fit(proposalSubmit),
-    proposalScroll, changedStage, pickerRestored,
+    proposalScroll, changedStage, pickerRestored, pickerResults,
     reviewFits:fit(reviewRect),
     linked:panel.querySelector('[data-invoice-id="2"] .nfe-link-linked')?.textContent,
     remainingPencils:panel.querySelectorAll('.nfe-link-pencil').length,
