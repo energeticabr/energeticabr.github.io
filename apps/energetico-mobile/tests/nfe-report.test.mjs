@@ -125,22 +125,25 @@ test('NFS-e reads a CNO/CEI and declared ISS retention even if missing from the 
   assert.match(note('2'), /Retenção informada.*CNO\/CEI informado.*123456789012/);
 });
 
-test('report shows the fiscal facts, filters by supplier and opens the exact attached PDF', async t => {
+test('report shows fiscal facts, filters by supplier and opens the exact DANFE followed by its correction PDFs', async t => {
   const dom = new JSDOM('<main id="app"><button data-action="open-nfe-report">NFE</button></main>');
   const { document } = dom.window;
   const opener = document.querySelector('button');
   const downloads = [];
+  const firstCorrection = `CCe-${key}-110110-01.pdf`;
+  const secondCorrection = `CCe-${key}-110110-02.pdf`;
   const panel = createNfeReportView({ document, data:{
     loadSnapshot:async () => ({ rows:[invoice] }),
     downloadDocument:async () => new Blob([issuerXml]),
-    listAttachments:async id => {
+    listAttachments:async (id, { refresh }) => {
       assert.equal(id, '10');
-      return [{ fileName:'Outra-nota.pdf' }, { fileName:pdfName }];
+      assert.equal(refresh, true);
+      return ['Outra-nota.pdf', secondCorrection, pdfName, firstCorrection, firstCorrection.toUpperCase(),
+        firstCorrection.replace(key, '3'.repeat(44)), firstCorrection.replace('.pdf', '.xml')].map(fileName => ({ fileName }));
     },
     downloadAttachment:async (id, name) => { downloads.push([id, name]); },
   }, openMediaCollection:async (items, options) => {
-    assert.equal(items.length, 1);
-    await items[0].source();
+    for (const item of items) await item.source();
     options.onClose();
   } });
   t.after(() => { panel.destroy(); dom.window.close(); });
@@ -157,7 +160,7 @@ test('report shows the fiscal facts, filters by supplier and opens the exact att
   assert.equal(pdf.querySelector('svg[aria-hidden="true"] text')?.textContent, 'PDF');
   pdf.click();
   await new Promise(resolve => setImmediate(resolve));
-  assert.deepEqual(downloads, [['10', pdfName]]);
+  assert.deepEqual(downloads, [['10', pdfName], ['10', firstCorrection], ['10', secondCorrection]]);
   const search = root.querySelector('input');
   search.value = 'eletrica';
   search.dispatchEvent(new dom.window.Event('input'));
@@ -168,6 +171,34 @@ test('report shows the fiscal facts, filters by supplier and opens the exact att
   panel.close();
   assert.equal(document.activeElement, opener);
   assert.equal(document.getElementById('app').inert, false);
+});
+
+test('a registered CC-e stays accessible in the report while the DANFE is pending', async t => {
+  const dom = new JSDOM('<main id="app"></main>');
+  const fileName = `CCe-${key}-110110-01.pdf`;
+  const fields = { ...invoice.fields, DANFE_URL:'', STATUS_IMPORTACAO:'EVENTO_SEM_XML',
+    CARTAS_CORRECAO_JSON:JSON.stringify({ version:1, key, events:[{
+      eventId:`ID110110${key}01`, sequence:1, eventType:'110110', cStat:'135', protocol:'1'.repeat(15),
+      correction:'Corrigir a descrição do material.', issuedAt:'2026-11-07T08:00:00-03:00',
+      xmlSha256:'a'.repeat(64), pdfSha256:'b'.repeat(64), fileName,
+    }] }),
+  };
+  const shown = [];
+  const panel = createNfeReportView({ document:dom.window.document, data:{
+    loadSnapshot:async () => ({ rows:[{ id:'10', fields }] }),
+    listAttachments:async () => [{ fileName }],
+    downloadAttachment:async (id, name) => { shown.push([id, name]); },
+  }, openMediaCollection:async (items, options) => {
+    await items[0].source();
+    options.onClose();
+  } });
+  t.after(() => { panel.destroy(); dom.window.close(); });
+  await panel.open();
+  const row = panel.element.querySelector('tbody tr');
+  assert.match(row.textContent, /1 CC-e/);
+  row.querySelector('button.nfe-pdf').click();
+  await new Promise(resolve => setImmediate(resolve));
+  assert.deepEqual(shown, [['10', fileName]]);
 });
 
 test('NFE printer captures all filtered pages with XML facts and preserves the page in view', async t => {

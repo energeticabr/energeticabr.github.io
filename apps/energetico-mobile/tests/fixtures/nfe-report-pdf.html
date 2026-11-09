@@ -1,0 +1,89 @@
+<!doctype html>
+<html lang="pt-BR"><head><meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>PDFs do relatório NF-e — dados fictícios</title>
+<link rel="stylesheet" href="/src/styles.css">
+<link rel="stylesheet" href="/src/ui/payment-ledger.css">
+<link rel="stylesheet" href="/src/ui/nfe-report.css">
+<link rel="stylesheet" href="/src/web/attachment-preview.css">
+</head><body><main id="app"></main><script type="module">
+import { PDFDocument, rgb } from 'pdf-lib';
+import { createNfeReportView } from '/src/ui/nfe-report-view.js';
+import { decorateReportNavigation } from '/src/ui/report-navigation.js';
+import { createAttachmentPreview } from '/src/web/attachment-preview.js';
+
+const key = '1'.repeat(44);
+const danfe = `DANFE-${key}-deadbeefdeadbeef.pdf`;
+const correction = `CCe-${key}-110110-01.pdf`;
+const service = 'DANFSe.pdf';
+const find = selector => document.querySelector(selector);
+const preview = createAttachmentPreview({ documentRef:document, exportMedia:async () => {} });
+const report = decorateReportNavigation(createNfeReportView({ document, data:{
+  loadSnapshot:async () => ({ rows:[
+    { id:'1', fields:{ MODELO:'55', CHAVE_ACESSO:key, DANFE_URL:`https://example.test/${danfe}` } },
+    { id:'2', fields:{ TIPO_FISCAL:'NFS-e', DANFE_URL:`https://example.test/${service}` } },
+  ] }),
+  listAttachments:async id => (id === '1' ? [correction, danfe] : [service]).map(fileName => ({ fileName })),
+  downloadAttachment:async (_id, fileName) => {
+    const pdf = await PDFDocument.create();
+    const label = fileName === correction ? 'CARTA DE CORRECAO FICTICIA' : 'DOCUMENTO FISCAL FICTICIO';
+    const page = pdf.addPage([595,842]);
+    page.drawRectangle({x:28,y:760,width:539,height:55,borderWidth:1,borderColor:rgb(.15,.22,.3),color:rgb(.95,.97,.99)});
+    page.drawText(label,{x:44,y:779,size:18});
+    for (let y = 722; y > 50; y -= 48) page.drawText('Fornecedor Exemplo LTDA     |     Documento de teste', { x:44,y,size:13 });
+    return new Blob([await pdf.save()], {type:'application/pdf'});
+  },
+}, openMediaCollection:(items, options) => preview.openCollection(items, {...options,onAddToTray:async () => true}) }),
+{ action:'open-nfe-report' });
+
+const state = {};
+const dialog = find('.attachment-preview-dialog');
+const nav = find('.attachment-preview-collection-nav');
+const close = find('.attachment-preview-close');
+const title = find('.attachment-preview-title');
+const content = find('.attachment-preview-content');
+const footer = find('.attachment-preview-footer');
+const ready = async () => {
+  for (let attempt = 0; attempt < 250; attempt++) {
+    if (dialog.open && content.querySelector('.attachment-preview-pdf-canvas')
+      && find('.attachment-preview-status').textContent.includes('100%')) return;
+    await new Promise(resolve => setTimeout(resolve,20));
+  }
+  throw Error('O PDF não terminou de renderizar');
+};
+try {
+  await report.open();
+  const trigger = find('[data-invoice-id="1"] .nfe-pdf');
+  trigger.focus();
+  trigger.click();
+  await ready();
+  const viewport = content.querySelector('.attachment-preview-pdf-viewport');
+  const page = content.querySelector('canvas');
+  state.widthRatio = page.offsetWidth / viewport.clientWidth;
+  state.heightRatio = viewport.clientHeight / dialog.clientHeight;
+  state.compact = close.textContent === '×' && close.offsetLeft < title.offsetLeft
+    && find('.attachment-preview-back').hidden && footer.clientHeight <= 64;
+  const bounds = dialog.getBoundingClientRect();
+  state.fits = bounds.top >= 0 && bounds.left >= 0 && bounds.right <= innerWidth && bounds.bottom <= innerHeight;
+  state.danfe = title.textContent === danfe;
+  state.count = nav.querySelector('span').textContent;
+  nav.querySelector('.attachment-preview-collection-next').click();
+  if (state.count === '1 de 2') {
+    await ready();
+    state.correction = title.textContent === 'Carta de correção (CC-e) · 01'
+      && content.textContent.includes('CARTA DE CORRECAO FICTICIA');
+    nav.querySelector('.attachment-preview-collection-previous').click();
+    await ready();
+    state.backToDanfe = title.textContent === danfe;
+  }
+  close.click();
+  state.reportPreserved = !dialog.open && !report.element.hidden && document.activeElement === trigger;
+  find('[data-invoice-id="2"] .nfe-pdf').click();
+  await ready();
+  state.singleNoArrows = nav.hidden;
+  close.click();
+  trigger.click();
+  await ready();
+} catch (error) { state.error = String(error.stack || error); }
+document.documentElement.dataset.layout = JSON.stringify(state);
+</script></body></html>

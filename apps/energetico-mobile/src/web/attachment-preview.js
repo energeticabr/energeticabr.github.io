@@ -175,6 +175,7 @@ export function createAttachmentPreview({
   // Keep that latest status ready to restore when the operation is cancelled.
   function showPreviewStatus(session, ...nodes) {
     if (active !== session) return;
+    status.removeAttribute('data-complete');
     session.statusContent = nodes.filter(node => node != null).map(node => typeof node === "string" ? documentRef.createTextNode(node) : node);
     if (!session.appendFeedback) status.replaceChildren(...session.statusContent);
   }
@@ -276,9 +277,11 @@ export function createAttachmentPreview({
     if (event.target !== appendButton && !appendMenu.contains(event.target)) setAppendMenuOpen(false);
   });
 
+  const isCompactReportPdf = layout => layout === 'dda-report-pdf' || layout === 'nfe-report-pdf';
+
   function updateCollectionNavigation() {
     const hasCollection = Boolean(collection?.items?.length);
-    collectionNav.hidden = !hasCollection || (collection.layout === 'dda-report-pdf' && collection.items.length === 1);
+    collectionNav.hidden = !hasCollection || (isCompactReportPdf(collection.layout) && collection.items.length === 1);
     if (!hasCollection) return;
     const last = collection.items.length - 1;
     previousButton.disabled = collection.index <= 0;
@@ -443,6 +446,7 @@ export function createAttachmentPreview({
     session.previewReady = true;
     const badge = session.loader.querySelector('[role="progressbar"]');
     showPreviewStatus(session, badge, ` ${message}`);
+    status.setAttribute('data-complete', '');
   }
 
   async function showNativePdf(session) {
@@ -468,13 +472,14 @@ export function createAttachmentPreview({
     if (destroyed) throw new Error("O visualizador já foi encerrado.");
     if (!dialog.open) returnFocus = typeof resolveReturnFocus === "function" ? resolveReturnFocus : documentRef.activeElement;
     release();
-    const ddaReport = layout === 'dda-report-pdf';
-    dialog.dataset.layout = ['flow-summary', 'report-pdf', 'dda-report-pdf'].includes(layout) ? layout : "media";
+    const compactReport = isCompactReportPdf(layout);
+    dialog.dataset.layout = compactReport || ['flow-summary', 'report-pdf'].includes(layout) ? layout : "media";
+    dialog.toggleAttribute('data-compact-report-pdf', compactReport);
     const reportLayout = dialog.dataset.layout !== "media";
-    closeButton.textContent = ddaReport ? '×' : reportLayout ? '❌' : 'Fechar';
-    closeButton.setAttribute('aria-label', ddaReport ? 'Fechar PDF' : reportLayout ? 'Fechar relatório' : 'Fechar');
-    previousButton.textContent = ddaReport ? '‹ PDF anterior' : '‹ Anterior';
-    nextButton.textContent = ddaReport ? 'Próximo PDF ›' : 'Próximo ›';
+    closeButton.textContent = compactReport ? '×' : reportLayout ? '❌' : 'Fechar';
+    closeButton.setAttribute('aria-label', compactReport ? 'Fechar PDF' : reportLayout ? 'Fechar relatório' : 'Fechar');
+    previousButton.textContent = compactReport ? '‹ PDF anterior' : '‹ Anterior';
+    nextButton.textContent = compactReport ? 'Próximo PDF ›' : 'Próximo ›';
     backButton.hidden = reportLayout;
     const session = { abort: new AbortController(), urls: new Set(), blob: null, pdf: null, zoom: null, kind: null, fileName: String(fileName || "arquivo"), onClose, onSign, onStamp, onAppendPages, layout,
       progress: 0, failed: false, loader: createLoadingIndicator(documentRef, 'Carregando arquivo…', { progress: 0, progressLabel: 'Carregamento do anexo' }) };
@@ -483,7 +488,9 @@ export function createAttachmentPreview({
       session.progress = Math.max(session.progress, value.percent);
       updateLoadingIndicator(session.loader, { progress: session.progress, progressLabel: value.progressLabel });
     }, { signal: session.abort.signal, isCurrent: () => active === session && !session.failed });
-    title.textContent = session.fileName;
+    const correction = layout === 'nfe-report-pdf' && /^CCe-.+-110110-(\d{2})\.pdf$/i.exec(session.fileName);
+    title.textContent = correction ? `Carta de correção (CC-e) · ${correction[1]}` : session.fileName;
+    title.title = compactReport ? session.fileName : '';
     updateCollectionNavigation();
     showPreviewStatus(session, session.loader);
     exportButton.disabled = true;
@@ -665,8 +672,8 @@ export function createAttachmentPreview({
           onProgress: value => presentationProgress(session, value),
           onDdaCopyReady: available => { if (active === session) { ddaCopyButton.hidden = !available; if (available) dialog.dataset.ddaCopy = 'true'; else delete dialog.dataset.ddaCopy; } },
           fit: layout === 'report-pdf' ? 'page' : 'width',
-          navigation: ddaReport ? 'paged' : 'scroll',
-          rotatesWithViewport: ddaReport,
+          navigation: compactReport ? 'paged' : 'scroll',
+          rotatesWithViewport: compactReport,
           initialPage,
           onPageChange: page => {
             if (active !== session) return;
@@ -716,7 +723,7 @@ export function createAttachmentPreview({
       }
       explain(session, session.blob
         ? "Não foi possível mostrar este arquivo. Se o PDF tiver senha ou estiver danificado, tente abri-lo em outro app."
-        : `Não foi possível carregar este arquivo. Feche esta janela e tente novamente ${ddaReport ? 'no relatório DDA' : 'no chat'}.`);
+        : `Não foi possível carregar este arquivo. Feche esta janela e tente novamente ${compactReport ? 'no relatório' : 'no chat'}.`);
       if (!session.blob) showPreviewStatus(session, "O arquivo ainda não está disponível para salvar.");
     }
   }

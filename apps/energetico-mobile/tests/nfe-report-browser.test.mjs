@@ -1,11 +1,44 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { existsSync, mkdirSync, writeFileSync } from 'node:fs';
-import { join } from 'node:path';
+import { join, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { createServer } from 'vite';
 import { JSDOM } from 'jsdom';
 import { runBrowserLayout } from './helpers/browser-layout-runner.mjs';
+
+test('NF-e PDFs use the compact DDA viewport and navigate between the DANFE and correction', { timeout:120000 }, async t => {
+  const browser = [process.env.CHROME_BIN,'C:/Program Files/Google/Chrome/Application/chrome.exe','/usr/bin/google-chrome','/usr/bin/chromium']
+    .find(path => path && existsSync(path));
+  if (!browser) return t.skip('Chrome unavailable');
+  const root = resolve(fileURLToPath(new URL('..', import.meta.url)));
+  const server = await createServer({ root, cacheDir:'node_modules/.vite-nfe-report-pdf',
+    optimizeDeps:{ noDiscovery:true, force:true, include:['decimal.js', 'pdf-lib', 'pdfjs-dist'] },
+    server:{ host:'127.0.0.1', port:0, hmr:false, watch:null }, logLevel:'silent' });
+  const capture = process.env.NFE_PDF_CAPTURE_DIR;
+  try {
+    await server.listen();
+    const url = `http://127.0.0.1:${server.httpServer.address().port}/tests/fixtures/nfe-report-pdf.html`;
+    for (const [width,height] of [[844,390],[320,568],[390,844],[1365,900]]) {
+      const { stdout, screenshot } = await runBrowserLayout(browser, { width, height, url, captureScreenshot:Boolean(capture) });
+      const dom = new JSDOM(stdout);
+      const state = JSON.parse(dom.window.document.documentElement.dataset.layout);
+      dom.window.close();
+      const details = JSON.stringify({ width, height, state });
+      assert.equal(state.error, undefined, details);
+      assert.ok(state.widthRatio >= .95, details);
+      assert.ok(state.heightRatio >= .60, details);
+      for (const field of ['compact', 'fits', 'danfe', 'correction', 'backToDanfe', 'reportPreserved', 'singleNoArrows']) {
+        assert.equal(state[field], true, `${field} ${details}`);
+      }
+      assert.equal(state.count, '1 de 2', details);
+      if (screenshot) {
+        mkdirSync(capture, {recursive:true});
+        writeFileSync(join(capture, `nfe-pdf-${width}.png`), screenshot);
+      }
+    }
+  } finally { await server.close(); }
+});
 
 test('NFE opens the horizontal fiscal table from the blue mascot in portrait and landscape', { timeout:90000 }, async t => {
   const browser = [process.env.CHROME_BIN,'C:/Program Files/Google/Chrome/Application/chrome.exe','/usr/bin/google-chrome','/usr/bin/chromium']

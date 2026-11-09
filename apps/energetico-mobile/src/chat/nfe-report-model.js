@@ -1,6 +1,6 @@
 import { REGISTRATION_GALLERY_MODELS, registrationDateKey, registrationNumber, registrationRawField } from './registration-gallery-data.js';
 import { fiscalDocumentType, buyerWithholding } from './sefaz-withholding.js';
-import { invoiceConstructionCno } from './sefaz-cno.js';
+import { invoiceConstructionCno, registeredInvoiceCorrections } from './sefaz-cno.js';
 import { fiscalSupplierSimilarity } from './dda-provision-link.js';
 import { NFE_ORDER_FIELD, nfeOrderId } from './nfe-order-link.js';
 
@@ -67,6 +67,7 @@ export function projectNfeRows(rows) {
       retention, withholding, cno, cnoState, complete, cancelled,
       xmlUrl:complete && validKey ? url(fields.XML_URL) : '',
       pdfName:attachmentName(fields.DANFE_URL),
+      correctionCount:type === 'NF-e' ? new Set(registeredInvoiceCorrections(fields).map(event => event.sequence)).size : 0,
     }];
   }).sort((a, b) => b.date.localeCompare(a.date) || (b.issuedAt || 0) - (a.issuedAt || 0)
     || b.id.localeCompare(a.id, 'pt-BR', {numeric:true}));

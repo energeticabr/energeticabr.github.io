@@ -249,8 +249,9 @@ export function createNfeReportView({ document:doc = globalThis.document, data, 
     identity.append(make('span', 'nfe-id', row.id));
     id.append(identity);
     const pdfLabel = row.type === 'NFS-e' ? 'DANFSe' : 'DANFE';
-    if (includePdf && row.pdfName && typeof openMediaCollection === 'function') {
-      const label = `Abrir ${pdfLabel} da nota ${row.number || row.id}`;
+    if (includePdf && (row.pdfName || row.correctionCount) && typeof openMediaCollection === 'function') {
+      const documents = !row.pdfName ? 'cartas de correção' : row.correctionCount ? `${pdfLabel} e cartas de correção` : pdfLabel;
+      const label = `Abrir ${documents} da nota ${row.number || row.id}`;
       const pdf = button('', () => void openPdf(row, pdf), 'nfe-pdf');
       pdf.setAttribute('aria-label', label);
       pdf.title = label;
@@ -265,6 +266,11 @@ export function createNfeReportView({ document:doc = globalThis.document, data, 
       const state = make('small', 'nfe-note-status', status);
       state.dataset.tone = row.cancelled ? 'conflict' : 'warning';
       note.append(state);
+    }
+    if (row.correctionCount) {
+      const badge = make('small', 'nfe-note-status', `${row.correctionCount} CC-e`);
+      badge.title = 'Cartas de Correção Eletrônicas';
+      note.append(badge);
     }
     const supplier = make('td', 'nfe-supplier');
     supplier.append(make('strong', '', row.supplier || 'Razão social não informada'));
@@ -425,16 +431,26 @@ export function createNfeReportView({ document:doc = globalThis.document, data, 
     try {
       const attachments = await data.listAttachments(row.id, { signal, refresh:true });
       if (!isCurrent()) return;
-      const match = attachments.find(item => item.fileName?.toLowerCase() === row.pdfName.toLowerCase());
-      if (!match) throw new Error('PDF ausente no item fiscal');
+      const names = attachments.map(item => item?.fileName).filter(name => typeof name === 'string');
+      const main = row.pdfName && names.find(name => name.toLowerCase() === row.pdfName.toLowerCase());
+      const corrections = new Map();
+      if (row.type === 'NF-e') {
+        for (const name of names) {
+          const event = /^CCe-([0-9]{6}[A-Z0-9]{12}[0-9]{26})-110110-(0[1-9]|1[0-9]|20)\.pdf$/i.exec(name);
+          if (event && event[1].toUpperCase() === row.key && !corrections.has(event[2])) corrections.set(event[2], name);
+        }
+      }
+      const correctionFiles = [...corrections.keys()].sort().map(sequence => corrections.get(sequence));
+      const files = main ? [main, ...correctionFiles.filter(name => name.toLowerCase() !== main.toLowerCase())] : correctionFiles;
+      if (!files.length) throw new Error('PDF ausente no item fiscal');
       trigger.disabled = false;
-      await openMediaCollection([{
-        fileName:match.fileName,
+      await openMediaCollection(files.map(fileName => ({
+        fileName,
         source:options => {
           signal.throwIfAborted();
-          return data.downloadAttachment(row.id, match.fileName, { ...options, signal:options?.signal ?? signal });
+          return data.downloadAttachment(row.id, fileName, { ...options, signal:options?.signal ?? signal });
         },
-      }], { signal, onClose:finish, resolveReturnFocus:() => trigger.isConnected ? trigger : closeButton });
+      })), { layout:'nfe-report-pdf', signal, onClose:finish, resolveReturnFocus:() => trigger.isConnected ? trigger : closeButton });
       opened = true;
     } catch {
       if (isCurrent()) {
