@@ -4,16 +4,21 @@ import { existsSync } from 'node:fs';
 import { resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { JSDOM } from 'jsdom';
-import { createServer } from 'vite';
 import { runBrowserLayout } from './helpers/browser-layout-runner.mjs';
+import { createIsolatedViteServer } from './helpers/isolated-vite-server.mjs';
 
 test('accepted heavy upload keeps the VM compression prompt without a false error on phone and PC', { timeout: 180000 }, async t => {
   const browser = [process.env.CHROME_BIN, '/usr/bin/google-chrome', '/usr/bin/chromium', 'C:/Program Files/Google/Chrome/Application/chrome.exe'].find(path => path && existsSync(path));
   if (!browser) return t.skip('Chrome unavailable');
   const root = resolve(fileURLToPath(new URL('..', import.meta.url)));
-  const server = await createServer({ root, server: { host: '127.0.0.1', port: 0, fs: { allow: [resolve(root, '../..')] } }, logLevel: 'silent' });
-  await server.listen();
+  const server = await createIsolatedViteServer({
+    root,
+    optimizeDeps: { noDiscovery: true, include: ['decimal.js', 'pdf-lib', 'pako', '@capacitor/core'] },
+    server: { host: '127.0.0.1', port: 0, hmr: false, watch: null, fs: { allow: [resolve(root, '../..')] } },
+    logLevel: 'silent',
+  });
   try {
+    await server.listen();
     for (const [width, height] of [[390, 844], [1365, 900]]) {
       for (const receipt of [false, true]) for (const keep of [false, true]) {
         const query = new URLSearchParams({ ...(receipt ? { receipt: '1' } : {}), ...(keep ? { keep: '1' } : {}) });
