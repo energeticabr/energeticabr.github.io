@@ -10,7 +10,10 @@ import { setTimeout as delay } from "node:timers/promises";
 // Keep the startup bounded at thirty seconds; layout assertions are unchanged.
 export async function runBrowserLayout(browser, { width, height, url, safeAreaInsets, mediaType, colorScheme, mobile = false, deviceScaleFactor = 1, gestureProbes = [], captureScreenshot = false, maxBuffer = 2_000_000, readyTimeoutMs = 30_000, startupTimeoutMs = 30_000 }) {
   const temporaryRoot = resolve(tmpdir());
-  const profile = await mkdtemp(join(temporaryRoot, "energetico-layout-"));
+  const runDirectory = await mkdtemp(join(temporaryRoot, "energetico-layout-"));
+  // Chrome uses the profile path's last two components for its Windows app ID.
+  // Keep that ID stable without sharing browser data between parallel runs.
+  const profile = join(runDirectory, "energetico-layout-profile");
   const pending = new Map();
   let child, socket, sequence = 0, sessionId, onLoaded, spawnError, browserStderr = '';
   try {
@@ -160,10 +163,10 @@ export async function runBrowserLayout(browser, { width, height, url, safeAreaIn
       }
       if (!stopped) throw new Error("O navegador de testes não encerrou; limpeza não concluída.");
     }
-    // Remove only the exact profile uniquely created above, never a shared root.
-    if (dirname(resolve(profile)) !== temporaryRoot || !basename(profile).startsWith("energetico-layout-")) {
+    // Remove only the exact directory uniquely created above, never a shared root.
+    if (dirname(resolve(runDirectory)) !== temporaryRoot || !basename(runDirectory).startsWith("energetico-layout-")) {
       throw new Error("Perfil temporário fora do diretório autorizado.");
     }
-    await rm(profile, { recursive: true, force: true, maxRetries: 5, retryDelay: 250 });
+    await rm(runDirectory, { recursive: true, force: true, maxRetries: 5, retryDelay: 250 });
   }
 }

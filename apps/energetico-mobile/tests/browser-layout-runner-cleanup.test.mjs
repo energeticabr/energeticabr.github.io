@@ -15,8 +15,9 @@ function fixture(t, { platform = 'win32', stubborn = false, forceFails = false, 
   const child = new EventEmitter();
   Object.assign(child, { pid: ownedPid, exitCode: null, signalCode: null });
   const root = path.resolve('simulated-layout-tmp');
-  const profile = path.join(root, 'energetico-layout-owned');
+  const runDirectory = path.join(root, 'energetico-layout-owned');
   const state = { exitObserved: false, removals: [], signals: [], commands: [], unsafe: [], socketsClosed: 0, endpointReads: 0, endpoints: [] };
+  let profile;
   const timers = new Set();
   const later = (callback, ms, ...args) => {
     const timer = setTimeout(() => {
@@ -111,7 +112,11 @@ function fixture(t, { platform = 'win32', stubborn = false, forceFails = false, 
   const imports = {
     'node:child_process': {
       spawn(file, args) {
-        if (file !== 'simulated-owned-browser' || !args.includes(`--user-data-dir=${profile}`)) return unsafe(`spawn ${file}`);
+        const profileArgument = args.find(arg => arg.startsWith('--user-data-dir='));
+        profile = profileArgument?.slice('--user-data-dir='.length);
+        if (file !== 'simulated-owned-browser' || !profile ||
+            (profile !== runDirectory && path.dirname(profile) !== runDirectory)) return unsafe(`spawn ${file}`);
+        state.profile = profile;
         return child;
       },
       execFile,
@@ -121,7 +126,7 @@ function fixture(t, { platform = 'win32', stubborn = false, forceFails = false, 
       spawnSync() { return unsafe('spawnSync'); },
     },
     'node:fs/promises': {
-      async mkdtemp(prefix) { assert.equal(prefix, path.join(root, 'energetico-layout-')); return profile; },
+      async mkdtemp(prefix) { assert.equal(prefix, path.join(root, 'energetico-layout-')); return runDirectory; },
       async readFile(file) {
         assert.equal(file, path.join(profile, 'DevToolsActivePort'));
         state.endpointReads++;
@@ -132,7 +137,7 @@ function fixture(t, { platform = 'win32', stubborn = false, forceFails = false, 
       },
       async rm(file, options) {
         state.removals.push(file);
-        if (file !== profile || !options.recursive) return unsafe(`rm ${file}`);
+        if (file !== runDirectory || !options.recursive) return unsafe(`rm ${file}`);
         assert.ok(state.exitObserved, 'profile removal must follow the owned child exit event');
         if (removalError) throw removalError;
       },
@@ -164,6 +169,14 @@ function fixture(t, { platform = 'win32', stubborn = false, forceFails = false, 
     },
   };
 }
+
+test('the Chrome profile has a constant basename inside its unique temporary directory', { timeout: 1500 }, async t => {
+  const f = fixture(t);
+  await f.run();
+  assert.equal(path.basename(f.state.profile), 'energetico-layout-profile');
+  assert.equal(path.dirname(f.state.profile), f.state.removals[0]);
+  f.audit();
+});
 
 test('confirmed cleanup preserves the captured stdout', { timeout: 1500 }, async t => {
   const f = fixture(t);
