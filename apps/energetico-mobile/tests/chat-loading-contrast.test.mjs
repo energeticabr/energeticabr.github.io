@@ -18,11 +18,15 @@ test('cartão de processamento se destaca do fundo no celular e desktop, claro e
   try {
     await server.listen();
     const url = `http://127.0.0.1:${server.httpServer.address().port}/tests/fixtures/chat-loading-contrast.html`;
-    for (const colorScheme of ['light', 'dark']) for (const [width, height] of [[390, 844], [1365, 768]]) {
+    for (const colorScheme of ['light', 'dark']) for (const [width, height] of [[320, 640], [390, 844], [1365, 768]]) {
       const { stdout } = await runBrowserLayout(browser, { width, height, colorScheme, url });
       const dom = new JSDOM(stdout);
       const result = JSON.parse(dom.window.document.documentElement.dataset.layout);
       dom.window.close();
+      assert.ok(result.backdropTranslucentBlack, `${colorScheme} ${width}x${height}: fundo preto translúcido`);
+      assert.ok(result.backdropCoversViewport, `${colorScheme} ${width}x${height}: fundo cobre a tela`);
+      assert.ok(result.cardCentered, `${colorScheme} ${width}x${height}: cartão centralizado`);
+      assert.ok(result.backdropAllowsPointerEvents, `${colorScheme} ${width}x${height}: interação existente preservada`);
       assert.equal(result.cardVisible, true, `${colorScheme} ${width}x${height}`);
       assert.ok(result.contrast >= 1.12, `${colorScheme} ${width}x${height}: contraste ${result.contrast.toFixed(2)}`);
       assert.ok(result.borderWidth >= 1, `${colorScheme} ${width}x${height}: borda ${result.borderWidth}`);

@@ -10,15 +10,28 @@
     return normalized <= 0.04045 ? normalized / 12.92 : ((normalized + 0.055) / 1.055) ** 2.4;
   }).reduce((sum, channel, index) => sum + channel * [0.2126, 0.7152, 0.0722][index], 0);
   const background = rgb(getComputedStyle(document.body).backgroundColor);
-  const card = document.querySelector('.chat-progress .app-loading');
+  const progress = document.querySelector('.chat-progress');
+  const backdropStyle = getComputedStyle(progress);
+  const backdrop = rgb(backdropStyle.backgroundColor);
+  const [red, green, blue, backdropAlpha = 1] = backdrop;
+  const dimmedBackground = background.map((channel, index) =>
+    backdropAlpha * backdrop[index] + (1 - backdropAlpha) * channel);
+  const viewport = progress.getBoundingClientRect();
+  const card = progress.querySelector('.app-loading');
+  const bounds = card.getBoundingClientRect();
   const style = getComputedStyle(card);
   const cardColor = rgb(style.backgroundColor);
   const alpha = cardColor[3] ?? 1;
-  const visibleCard = cardColor.slice(0, 3).map((channel, index) => alpha * channel + (1 - alpha) * background[index]);
-  const a = luminance(visibleCard), b = luminance(background);
+  const visibleCard = cardColor.slice(0, 3).map((channel, index) => alpha * channel + (1 - alpha) * dimmedBackground[index]);
+  const a = luminance(visibleCard), b = luminance(dimmedBackground);
   document.documentElement.dataset.layout = JSON.stringify({
+    backdropTranslucentBlack: red === 0 && green === 0 && blue === 0 && backdropAlpha > 0 && backdropAlpha < 1,
+    backdropCoversViewport: viewport.top === 0 && viewport.left === 0 && viewport.right === innerWidth && viewport.bottom === innerHeight,
+    backdropAllowsPointerEvents: backdropStyle.pointerEvents === 'none',
+    cardCentered: Math.abs((bounds.left + bounds.right) / 2 - innerWidth / 2) < 1
+      && Math.abs((bounds.top + bounds.bottom) / 2 - innerHeight / 2) < 1,
     contrast: (Math.max(a, b) + 0.05) / (Math.min(a, b) + 0.05),
     borderWidth: parseFloat(style.borderTopWidth),
-    cardVisible: card.getBoundingClientRect().width > 0,
+    cardVisible: bounds.width > 0,
   });
 </script></body></html>
