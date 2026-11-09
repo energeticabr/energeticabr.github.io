@@ -25,15 +25,14 @@ function mentionedCnos(value) {
 // This projection is published by the server only after validating the fiscal
 // event and attaching its verified PDF to this invoice. Never use loose JSON,
 // another invoice's event, or an unregistered correction to validate the CNO.
-function applicableCorrection(fields) {
+export function registeredInvoiceCorrections(fields) {
   const key = fields.CHAVE_ACESSO;
-  if (typeof key !== 'string' || !/^[0-9]{6}[A-Z0-9]{12}[0-9]{26}$/.test(key) || typeof fields.CARTAS_CORRECAO_JSON !== 'string') return null;
+  if (typeof key !== 'string' || !/^[0-9]{6}[A-Z0-9]{12}[0-9]{26}$/.test(key) || typeof fields.CARTAS_CORRECAO_JSON !== 'string') return [];
   let projection;
-  try { projection = JSON.parse(fields.CARTAS_CORRECAO_JSON); } catch { return null; }
-  if (!projection || projection.version !== 1 || projection.key !== key || !Array.isArray(projection.events)) return null;
-  const applicable = [];
-  for (const event of projection.events) {
-    if (!event || typeof event !== 'object' || !Number.isInteger(event.sequence) || event.sequence < 1 || event.sequence > 20) continue;
+  try { projection = JSON.parse(fields.CARTAS_CORRECAO_JSON); } catch { return []; }
+  if (!projection || projection.version !== 1 || projection.key !== key || !Array.isArray(projection.events)) return [];
+  return projection.events.filter(event => {
+    if (!event || typeof event !== 'object' || !Number.isInteger(event.sequence) || event.sequence < 1 || event.sequence > 20) return false;
     const seq = String(event.sequence).padStart(2, '0');
     if (event.eventId !== `ID110110${key}${seq}` || event.eventType !== '110110' || event.cStat !== '135'
       || typeof event.protocol !== 'string' || !/^[0-9]{15}$/.test(event.protocol)
@@ -41,7 +40,14 @@ function applicableCorrection(fields) {
       || typeof event.issuedAt !== 'string' || !/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(?:\.\d+)?(?:Z|[+-]\d{2}:\d{2})$/.test(event.issuedAt) || !Number.isFinite(Date.parse(event.issuedAt))
       || typeof event.xmlSha256 !== 'string' || !/^[a-f0-9]{64}$/.test(event.xmlSha256)
       || typeof event.pdfSha256 !== 'string' || !/^[a-f0-9]{64}$/.test(event.pdfSha256)
-      || event.fileName !== `CCe-${key}-110110-${seq}.pdf`) continue;
+      || event.fileName !== `CCe-${key}-110110-${seq}.pdf`) return false;
+    return true;
+  });
+}
+
+function applicableCorrection(fields) {
+  const applicable = [];
+  for (const event of registeredInvoiceCorrections(fields)) {
     if (!/\b(?:CNOs?|Cadastro\s+Nacional\s+de\s+Obras)\b/i.test(event.correction)) continue;
     // Read labeled CNOs and explicit replacement clauses only. A separate
     // order number must never validate the work's CNO. A later CNO removal
