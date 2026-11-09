@@ -20,7 +20,7 @@ const paymentOptions = [
   { id: "1", reply: "1", label: "1 - CONTA A" },
 ];
 
-function state({ options = paymentOptions, flow = "payment_settlement", question, draft = "" } = {}) {
+function state({ options = paymentOptions, flow = "payment_settlement", question, draft = "", presentation } = {}) {
   return {
     sessionStatus: "authenticated",
     account: { name: "Bernardo Notini", username: "teste@example.com" },
@@ -35,6 +35,7 @@ function state({ options = paymentOptions, flow = "payment_settlement", question
       question: question || "💳 QUAL É A FORMA DE PAGAMENTO? CASO DESEJE FILTRAR, DIGITE UM TEXTO.",
       databaseFilter: true,
       databaseFilterKey: "forma_pgto_baixa",
+      presentation,
       options,
     }],
   };
@@ -50,6 +51,28 @@ test("forma de pagamento da baixa de provisão usa ID numérico crescente, não 
   t.after(() => dom.window.close());
   assert.deepEqual(replies(dom.window.document), ["1", "2", "3", "4", "5", "6", "7", "8", "9", "10", "11", "12", "13", "14"]);
   assert.deepEqual(paymentOptions, before, "a lista recebida não deve ser alterada");
+});
+
+test("ordem por frequência recebida do servidor é mantida ao filtrar e selecionar", t => {
+  const dom = new JSDOM('<main id="app"></main>');
+  const root = dom.window.document.querySelector("#app");
+  const view = createChatView(root);
+  t.after(() => { view.destroy(); dom.window.close(); });
+  const selected = [];
+  view.on("select-reply", event => selected.push(event));
+  const options = ["10", "5", "11", "7"].map(id => ({
+    ...paymentOptions.find(option => option.id === id),
+    reply: `choice:forma_pgto_baixa:${id}`,
+  }));
+  const ranked = { options, presentation: "payment_method_frequency" };
+  const before = structuredClone(options);
+  view.render(state(ranked));
+  assert.deepEqual(replies(root), ["10", "5", "11", "7"].map(id => `choice:forma_pgto_baixa:${id}`));
+  view.render(state({ ...ranked, draft: "sicoob" }));
+  assert.deepEqual(replies(root), ["10", "5", "7"].map(id => `choice:forma_pgto_baixa:${id}`));
+  root.querySelector('[data-reply-id="choice:forma_pgto_baixa:10"]').click();
+  assert.equal(selected[0].replyId, "choice:forma_pgto_baixa:10");
+  assert.deepEqual(options, before);
 });
 
 test("filtrar formas de pagamento conserva a ordem crescente e envia o ID original ao clicar", t => {

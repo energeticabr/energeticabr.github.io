@@ -1,0 +1,52 @@
+--- a/worker/workflow.py
++++ b/worker/workflow.py
+@@ -20169,7 +20169,38 @@
+                 key=lambda item: item.get("id") != "NOVA_ETAPA_BAIXA_PROVISAO")
+         normalized = self._mark_settlement_branch_default(state, step, normalized)
+         normalized = self._rank_recent_launch_stage_options(state, step, normalized)
+-        return self._rank_recent_launch_account_options(state, step, normalized)
++        normalized = self._rank_recent_launch_account_options(state, step, normalized)
++        return self._rank_settlement_payment_method_options(state, step, normalized)
++
++    def _rank_settlement_payment_method_options(self, state, step, options):
++        """Rank methods by frequency in the 100 most recently paid scheduled provisions."""
++        if state.get("flow") != "payment_settlement" or step.get("key") != "forma_pgto_baixa" or not options:
++            return options
++        # Sort after the catalog query so its deduplication keeps the same IDs.
++        options = sorted(options, key=lambda item: (
++            int(item["id"]) if str(item["id"]).isdecimal() else float("inf")
++        ))
++        try:
++            rows = self.sharepoint.get_options({
++                "key": "recent_settlement_payment_methods",
++                "source": {
++                    "type": "sharepoint_list", "list": "PROVISÃO PGTOS",
++                    "id_field": "Id", "label_field": "Id", "value_field": "FORMAPGTO",
++                    "filters": [{"field": "PGTOAGENDADO", "equals": "PAGO"}],
++                    "top": 100, "sort_field": "DATAPGTOEFETUADO", "sort_direction": "desc",
++                    "preserve_source_order": True,
++                },
++            }, {})
++        except Exception:
++            # The catalog remains usable during a history outage.
++            return options
++        counts = {}
++        for row in rows[:100]:
++            method = normalize_text(str(row.get("value") or ""))
++            if method:
++                counts[method] = counts.get(method, 0) + 1
++        return sorted(options, key=lambda item: -counts.get(
++            normalize_text(str(item.get("value") or "")), 0))
+ 
+     def _rank_recent_launch_account_options(self, state, step, options):
+         """Rank account choices by use in the latest 100 launches, read only."""
+--- a/worker/workflow_config.json
++++ b/worker/workflow_config.json
+@@ -16419,6 +16419,7 @@
+           "target_field": "FORMAPGTO",
+           "prompt": "QUAL É A FORMA DE PAGAMENTO?",
+           "button_label": "ESCOLHER CONTA",
++          "presentation": "payment_method_frequency",
+           "source": {
+             "type": "sharepoint_list",
+             "list": "CADASTROCONTA",

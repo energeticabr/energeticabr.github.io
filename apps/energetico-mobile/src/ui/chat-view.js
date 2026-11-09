@@ -675,6 +675,7 @@ function orderProvisionPaymentMethodOptions(message, options, activeFlow) {
   if (activeFlow?.id !== "payment_settlement") return options;
   const question = normalizedDateText(message?.question || message?.prompt || message?.text);
   if (!/\bforma\s+de\s+pagamento\b/u.test(question)) return options;
+  if (message.presentation === "payment_method_frequency") return options;
 
   // Only rearrange database choices. Non-numeric controls keep their slots,
   // and the original objects/reply IDs are preserved for submission.
