@@ -173,6 +173,11 @@ function malformedPunchTimes(value) {
     .filter(time => !/^(?:[01]?\d|2[0-3]):[0-5]\d$/.test(time)));
 }
 
+function isEmptyRhidPunchSource(value) {
+  return value === null || Array.isArray(value) && value.length === 0
+    || typeof value === "string" && /^(?:\[\s*\])?$/.test(value.trim());
+}
+
 function totalFromSlots(times) {
   let minutes = 0;
   let completed = 0;
@@ -255,8 +260,10 @@ export function buildRhidAttendanceTable(rows = [], { includeNonRegular = false 
     if (!people.has(key)) people.set(key, {
       personKey: rhidId ? `rhid:${rhidId}` : id ? `id:${id}` : "",
       name: name || `ID ${id}`, times: new Set(), duplicates: [], malformed: [], inactive: false, adjustments: {}, pendingPresenceIds: new Set(),
+      emptyPunchSource: true,
     });
     const person = people.get(key);
+    person.emptyPunchSource &&= isEmptyRhidPunchSource(row.BATIDAS_RHID);
     for (const pendingId of Array.isArray(row.pendingPresenceIds) ? row.pendingPresenceIds : []) {
       if (/^[1-9]\d*$/.test(String(pendingId))) person.pendingPresenceIds.add(String(pendingId));
     }
@@ -322,7 +329,7 @@ export function buildRhidAttendanceTable(rows = [], { includeNonRegular = false 
     for (const time of person.malformed) issues.push(`Batida inválida do RHID: ${time}`);
     const ordered = RHID_SLOTS.map(([slot]) => slots[slot].effective).filter(Boolean);
     if (ordered.some((time, index) => index > 0 && time <= ordered[index - 1])) issues.push("Horários fora de ordem cronológica");
-    return { personKey: person.personKey, name: person.name, rawPunches: person.punches,
+    return { personKey: person.personKey, name: person.name, rawPunches: person.punches, emptyPunchSource: person.emptyPunchSource,
       pendingPresenceIds: [...person.pendingPresenceIds], slots, issues };
   });
 

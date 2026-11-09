@@ -22,7 +22,7 @@ import { attachmentFinishOption, isDiaryAttachmentPrompt, isDocumentAttachmentPr
 import { isDiaryAttachmentFinalization, paintDiaryCompletion } from "./chat/diary-attachment-progress.js";
 import { audioTranscriptionText, isAudioFile, isConstructionDiaryFlow } from "./chat/audio-transcription.js";
 import { buildRhidAttendanceTable, isRhidAttendanceDayFinalized, isValidRhidReportDate, rhidIrregularCountsByDate, rhidUpdateLabel, shiftRhidReportDate } from "./chat/rhid-attendance-table.js";
-import { rhidMascotDay, rhidMascotFilters, rhidMascotMonths, rhidMascotPageSize } from './chat/rhid-mascot-report.js';
+import { rhidMascotAmbiguousNames, rhidMascotDay, rhidMascotFilters, rhidMascotMonths, rhidMascotPageSize } from './chat/rhid-mascot-report.js';
 import { attendanceMissingPunchContext, attendanceRhidOptionContext, attendanceRhidPollEligible, attendanceValidationDate, buildAttendanceRhidBadge } from "./chat/attendance-rhid-badges.js";
 import { createAttendanceIrregularityData } from './chat/attendance-irregularity-data.js';
 import {
@@ -477,6 +477,7 @@ const TASKS_GALLERY_ID = "action_tasks_gallery";
 const PAYMENT_LEDGER_ID = 'action_payment_ledger';
 const CARGOS_TABLE_ID = 'action_cargos_table';
 const ATTENDANCE_SUMMARY_ID = 'action_attendance_summary';
+const RHID_MASCOT_ACTION = 'open-rhid-mascot-report';
 const STAGE_PROGRESS_ID = 'action_stage_progress';
 const STAGE_PROGRESS_SCOPES = Object.freeze(['Sites.Read.All']);
 const SUPPLIER_PAYROLL_REPORT_ID = 'action_supplier_payroll_report';
@@ -2925,10 +2926,15 @@ export function createAppController({
     report.query?.abort();
     const query = new AbortController();
     const current = () => rhidMascot === report && report.query === query && !query.signal.aborted;
-    Object.assign(report, { start, end, mode, query, page: 0, today: provisionDateKey(), busy: true, error: '' });
+    Object.assign(report, { start, end, mode, query, page: 0, today: provisionDateKey(), busy: true, error: '',
+      comparisonError: false, comparisonAuthorizationRequired: false });
     render();
     try {
       const months = rhidMascotMonths(start, end, report.today);
+      const comparison = withTimeout(report.source.then(source => source.loadRhidPresences({ start, end, signal: query.signal })),
+        rhidReportTimeoutMs, 'A consulta do Descritivo Presença demorou demais.').then(
+        rows => ({ rows }), error => ({ rows: null, authorizationRequired: error?.code === 'AUTH_REQUIRED' }),
+      );
       const rowsByDay = new Map();
       if (start === end) {
         const result = await withTimeout(client.getRhidAttendanceReport(start, { signal: query.signal }),
@@ -2949,13 +2955,23 @@ export function createAppController({
           }
         }
       }
+      const { rows: descriptiveRows, authorizationRequired } = await comparison;
       if (!current()) return false;
+      const descriptiveByDay = new Map();
+      for (const row of descriptiveRows || []) {
+        if (!descriptiveByDay.has(row.date)) descriptiveByDay.set(row.date, []);
+        descriptiveByDay.get(row.date).push(row);
+      }
+      report.comparisonError = descriptiveRows === null;
+      report.comparisonAuthorizationRequired = authorizationRequired && typeof auth.authorize === 'function';
+      report.descriptiveByDay = descriptiveByDay;
       for (const [date, rows] of rowsByDay) {
         rowsByDay.set(date, withConfirmedAttendanceAdjustments({ date, rows }, date, { acknowledge: true }).rows);
       }
       report.rowsByDay = rowsByDay;
+      report.ambiguousNames = rhidMascotAmbiguousNames(rowsByDay);
       report.days = [...rowsByDay].sort(([left], [right]) => right.localeCompare(left))
-        .map(([date, rows]) => rhidMascotDay(rows, date));
+        .map(([date, rows]) => rhidMascotDay(rows, date, report.comparisonError ? null : descriptiveByDay.get(date) || [], report.ambiguousNames));
       return true;
     } catch (error) {
       if (current()) {
@@ -2980,19 +2996,42 @@ export function createAppController({
     rhidMascot = report;
     const { signal } = report.lifetime;
     const current = () => rhidMascot === report && !signal.aborted;
-    const loadDirectory = async () => {
-      const source = await attendanceSummaryDataFactory({ tokenProvider: async scopes => {
-        if (!current()) throw new DOMException('Consulta cancelada.', 'AbortError');
-        return auth.getToken(scopes);
-      } });
-      if (!current()) return [];
-      return source.loadSupplierDirectory({ signal });
-    };
-    void withTimeout(loadDirectory(), rhidReportTimeoutMs, 'A consulta de fornecedores demorou demais.')
+    report.source = Promise.resolve().then(() => attendanceSummaryDataFactory({ tokenProvider: async scopes => {
+      if (!current()) throw new DOMException('Consulta cancelada.', 'AbortError');
+      return auth.getToken(scopes);
+    } }));
+    loadRhidMascotDirectory(report);
+    return loadRhidMascotPeriod(today, today, 'today');
+  }
+
+  function loadRhidMascotDirectory(report) {
+    const { signal } = report.lifetime;
+    const current = () => rhidMascot === report && !signal.aborted;
+    report.directoryBusy = true;
+    report.directoryError = false;
+    void withTimeout(report.source.then(source => current() ? source.loadSupplierDirectory({ signal }) : []),
+      rhidReportTimeoutMs, 'A consulta de fornecedores demorou demais.')
       .then(directory => { if (current()) report.directory = directory; })
       .catch(() => { if (current()) report.directoryError = true; })
       .finally(() => { if (current()) { report.directoryBusy = false; render(); } });
-    return loadRhidMascotPeriod(today, today, 'today');
+  }
+
+  async function authorizeRhidMascotComparison() {
+    const report = rhidMascot;
+    if (!report?.comparisonAuthorizationRequired || report.authorizing) return false;
+    report.authorizing = true;
+    render();
+    try {
+      await auth.authorize(['Sites.Read.All'], { resumeAction: RHID_MASCOT_ACTION });
+      if (rhidMascot !== report) return false;
+      loadRhidMascotDirectory(report);
+      return await loadRhidMascotPeriod(report.start, report.end, report.mode);
+    } catch {
+      return false;
+    } finally {
+      report.authorizing = false;
+      if (rhidMascot === report) render();
+    }
   }
 
   async function fillRhidMascotPunch({ messageId, personKey, slot, time, reason }) {
@@ -3016,7 +3055,8 @@ export function createAppController({
       clearAttendanceRhidBadges(date);
       const { rows } = withConfirmedAttendanceAdjustments({ date, rows: report.rowsByDay.get(date) }, date);
       report.rowsByDay.set(date, rows);
-      report.days = report.days.map(day => day.reportDate === date ? rhidMascotDay(rows, date) : day);
+      const descriptiveRows = report.comparisonError ? null : report.descriptiveByDay.get(date) || [];
+      report.days = report.days.map(day => day.reportDate === date ? rhidMascotDay(rows, date, descriptiveRows, report.ambiguousNames) : day);
       view.closeRhidAttendanceAdjustment?.();
       render();
       return true;
@@ -12606,7 +12646,8 @@ export function createAppController({
       replaceMessageId: command.messageId || "",
     }));
     bind("open-rhid-monthly-report", openRhidMonthlyReport);
-    bind('open-rhid-mascot-report', openRhidMascotReport);
+    bind(RHID_MASCOT_ACTION, openRhidMascotReport);
+    bind('rhid-mascot-authorize', authorizeRhidMascotComparison);
     bind('close-rhid-mascot-report', () => {
       if (!rhidMascot || rhidMascot.saving) return false;
       disposeRhidMascot();
@@ -12811,6 +12852,7 @@ export function createAppController({
     else if (pendingAction === ORDER_VALIDATION_REPORT_ID) await openPaymentLedger('validation');
     else if (pendingAction === CARGOS_TABLE_ID) await openCargosTable();
     else if (pendingAction === ATTENDANCE_SUMMARY_ID) await openAttendanceSummary();
+    else if (pendingAction === RHID_MASCOT_ACTION) await openRhidMascotReport();
     else if (pendingAction === STAGE_PROGRESS_ID) await openStageProgress();
     else if (pendingAction === SUPPLIER_PAYROLL_REPORT_ID) await openSupplierPayrollReport();
     else if (pendingAction === TRANCID_REPORT_ID) await openTrancidReport();

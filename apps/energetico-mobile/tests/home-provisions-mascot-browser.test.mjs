@@ -94,11 +94,15 @@ assert.deepEqual(shortcuts.map(s=>s.action),['open-pending-provisions','open-nfe
       const rhidFit=await evaluate(`(()=>{
         const report=document.querySelector('.chat-rhid-mascot'), transcript=document.querySelector('.chat-transcript');
         const composer=document.querySelector('.chat-composer'), adjusted=report.querySelector('.chat-rhid-attendance-card__cluster--added');
+        const mismatch=report.querySelector('.chat-rhid-attendance-card--presence-mismatch');
+        const pending=report.querySelector('.chat-rhid-attendance-card--presence-pending');
         return {noOverflow:transcript.scrollWidth<=transcript.clientWidth+1, color:getComputedStyle(adjusted).backgroundColor,
+          mismatch:getComputedStyle(mismatch).backgroundColor,pending:getComputedStyle(pending).backgroundColor,
           composerHidden:getComputedStyle(composer).display==='none', dates:report.querySelectorAll('input[type=date]').length,
           datesFit:[...report.querySelectorAll('input[type=date]')].every(input=>input.getBoundingClientRect().right<=report.getBoundingClientRect().right)};
       })()`);
-      assert.deepEqual(rhidFit,{noOverflow:true,color:'rgb(185, 228, 246)',composerHidden:true,dates:2,datesFit:true});
+      assert.deepEqual(rhidFit,{noOverflow:true,color:'rgb(185, 228, 246)',mismatch:'rgb(255, 240, 223)',
+        pending:'rgb(255, 247, 207)',composerHidden:true,dates:2,datesFit:true});
       if(width===390&&!pwa&&process.env.RHID_MASCOT_SCREENSHOT){const shot=await send('Page.captureScreenshot',{format:'png'},sessionId);writeFileSync(process.env.RHID_MASCOT_SCREENSHOT,Buffer.from(shot.data,'base64'));}
       await evaluate(`document.querySelector('[data-action=close-rhid-mascot-report]').click()`);
       await evaluate(`document.querySelector('[data-action=open-payment-ledger]').click()`);
