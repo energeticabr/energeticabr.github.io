@@ -56,6 +56,11 @@
   -webkit-print-color-adjust: exact;
 }
 .ddr-scheduled-unlinked .ddr-due-date { color: #71101e; }
+.ddr-table tr[data-dda-paid],
+.ddr-table tr[data-dda-paid] > td {
+  background: #e0f2e6;
+  print-color-adjust: exact;
+}
 .ddr-link-warning {
   display: block;
   box-sizing: border-box;

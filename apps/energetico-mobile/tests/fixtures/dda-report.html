@@ -15,7 +15,7 @@ const source=[
  {id:'4',fields:{Title:'DELTA — EXEMPLO PAGO',VENCIMENTO:'2026-10-26',VALOR:100,SITUACAO:'Pago',DOCUMENTO:'EX-004',BANCO:'BANCO MODELO'}}
 ];
 const settlementLayout=new URLSearchParams(location.search).has('settlement');
-if(settlementLayout)Object.assign(source[3].fields,{DDA_CICLO_AGENDAMENTO:'PAGO_AGENDADO',DESCRITIVOPROVIS_x00c3_O:'56'});
+if(settlementLayout)Object.assign(source[3].fields,{VENCIMENTO:'2026-10-28',DDA_CICLO_AGENDAMENTO:'PAGO_AGENDADO',DESCRITIVOPROVIS_x00c3_O:'56'});
 source[0].fields.CNPJ_FORNECEDOR='00.111.111/0001-22';
 source[0].fields.DESCRITIVOPROVIS_x00c3_O='46';
 source[0].fields.EMISSAO='2026-10-20T00:00:00Z';
@@ -49,13 +49,16 @@ if(settlementLayout){
  await document.fonts.ready;await new Promise(resolve=>requestAnimationFrame(()=>requestAnimationFrame(resolve)));
  const badge=document.querySelector('[data-dda-id="4"] .ddr-schedule-cluster'),note=badge?.querySelector('.ddr-settlement-pending');
  const action=document.querySelector('[data-dda-settle-provision="4"]');
+ const paidRow=badge.closest('tr');
+ const paidBackgrounds=[...new Set([paidRow,...paidRow.cells].map(cell=>getComputedStyle(cell).backgroundColor))];
+ const openBackground=getComputedStyle(document.querySelector('[data-dda-id="1"]')).backgroundColor;
  action?.click();
  await Promise.resolve();
  document.documentElement.dataset.settlement=JSON.stringify({label:badge?.querySelector('strong').textContent,pending:note?.textContent,
   fits:badge?.scrollWidth<=badge?.clientWidth+1&&note?.scrollWidth<=note?.clientWidth+1,
   aligned:badge?.offsetWidth===badge?.nextElementSibling.offsetWidth,
   actionFits:action?.offsetWidth>0&&action.offsetWidth<=action.parentElement.clientWidth,
-  selected:document.documentElement.dataset.ddaSettlementSelected});
+  selected:document.documentElement.dataset.ddaSettlementSelected,paidBackgrounds,openBackground});
 }
 if(syncMode){
  const refresh=document.querySelector('.pl-refresh');refresh.click();refresh.click();await new Promise(r=>setTimeout(r,0));

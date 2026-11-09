@@ -200,7 +200,10 @@ test('the pending payment badge and settlement button fit on phones and desktop'
  const browser=[process.env.CHROME_BIN,'C:/Program Files/Google/Chrome/Application/chrome.exe','/usr/bin/google-chrome','/usr/bin/chromium'].find(path=>path&&existsSync(path));
  if(!browser)return t.skip('Chrome unavailable');
  const root=resolve(fileURLToPath(new URL('..',import.meta.url)));
- const server=await createIsolatedViteServer({root,server:{host:'127.0.0.1',port:0,fs:{allow:[resolve(root,'../..')]}},logLevel:'silent'});
+ const server=await createIsolatedViteServer({
+  root,logLevel:'silent',optimizeDeps:{noDiscovery:true,include:['decimal.js','pdf-lib','pako','@capacitor/core']},
+  server:{host:'127.0.0.1',port:0,hmr:false,fs:{allow:[resolve(root,'../..')]}},
+ });
  try{
   await server.listen();
   for(const [width,height] of [[320,740],[390,844],[1365,900]]){
@@ -208,7 +211,10 @@ test('the pending payment badge and settlement button fit on phones and desktop'
    const dom=new JSDOM(result.stdout);
    try{
     const layout=JSON.parse(dom.window.document.documentElement.dataset.settlement);
-    assert.deepEqual(layout,{label:'PAGO POR AGENDAMENTO',pending:'Baixa pendente',fits:true,aligned:true,actionFits:true,selected:'56'},JSON.stringify({width,layout}));
+    assert.deepEqual(layout,{
+     label:'PAGO POR AGENDAMENTO',pending:'Baixa pendente',fits:true,aligned:true,actionFits:true,selected:'56',
+     paidBackgrounds:['rgb(224, 242, 230)'],openBackground:'rgb(255, 255, 255)',
+    },JSON.stringify({width,layout}));
    }finally{dom.window.close();}
   }
  }finally{await server.close();}
