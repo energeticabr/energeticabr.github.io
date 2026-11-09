@@ -218,13 +218,32 @@ test('CNO recognizes complete labeled numbers and presentation punctuation acros
   }
 });
 
-test('CNO does not infer a work registration from supplier, access key, order reference or partial number', () => {
+test('CNO does not infer a work registration from supplier, access key or order reference', () => {
   for (const fields of [{}, {Title:'CNO 900254406072'}, {CHAVE_ACESSO:'900254406072'.repeat(3)},
-    ...['Pedido 900254406072', 'CNO 1900254406072', 'CNO 9002544060721',
-      'CNO 90.025.44060/72.9', 'CNO não informado; pedido 900254406072'].map(OBSERVACOES_NOTA=>({OBSERVACOES_NOTA}))]) {
+    ...['Pedido 900254406072', 'CNO não informado; pedido 900254406072'].map(OBSERVACOES_NOTA=>({OBSERVACOES_NOTA}))]) {
     assert.deepEqual(invoiceConstructionCno(fields), {
       status:'missing', numbers:[], conflicts:[], expected:'90.025.44060/72',
     });
+  }
+});
+
+test('labeled incomplete or overlong CNO is invalid and keeps the reported number', () => {
+  for (const raw of ['7', '123', '90.025.4406/72', '1900254406072', '9002544060721', '90.025.44060/72.9']) {
+    const result = invoiceConstructionCno({OBSERVACOES_NOTA:`CNO: ${raw} RUA FICTÍCIA 134`});
+    assert.equal(result.status, 'invalid');
+    assert.deepEqual(result.invalidNumbers, [raw]);
+  }
+  assert.equal(invoiceConstructionCno({CNO:'90.025.4406/72'}).status, 'invalid');
+  assert.equal(invoiceConstructionCno({OBSERVACOES_NOTA:'CNOs: 90.025.44060/72 e 90.025.4406/72'}).status, 'invalid');
+  assert.equal(invoiceConstructionCno({OBSERVACOES_NOTA:'CNO 90.025.44060/72, 134 metros'}).status, 'valid');
+});
+
+test('registered correction can replace an incomplete number and cannot validate an incomplete replacement', () => {
+  const incomplete = '90.025.4406/72';
+  const complete = '90.025.44060/72';
+  for (const [original, replacement, status] of [[incomplete, complete, 'valid'], [complete, incomplete, 'invalid']]) {
+    const event = correction(1, `Onde consta CNO ${original}, leia-se ${replacement}.`);
+    assert.equal(invoiceConstructionCno(correctedFields([event], `CNO ${original}`)).status, status);
   }
 });
 
