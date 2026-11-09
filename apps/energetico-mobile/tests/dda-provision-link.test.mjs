@@ -6,11 +6,11 @@ import {createDdaReportView} from '../src/ui/dda-report-view.js';
 const tick=()=>new Promise(resolve=>setImmediate(resolve));
 const provision=(id,supplier,amount,date)=>({id:String(id),fields:{FORNECEDOR:supplier,VALORTOTAL:amount,...(date?{DATAPGTOEFETUADO:date}:{})}});
 function repository(){
- const state={items:[provision(1,'SWILE DO BRASIL S.A.','58,21'),provision(2,'OUTRO FORNECEDOR','58,21'),provision(3,'SWILE DO BRASIL S.A.','100','2026-10-28')],children:[],linked:'',writes:[]};
+ const state={items:[provision(1,'SWILE DO BRASIL S.A.','58,21'),provision(2,'OUTRO FORNECEDOR','58,21'),provision(3,'SWILE DO BRASIL S.A.','100','2026-10-28')],children:[],ddaRows:[],linked:'',writes:[]};
  const api={
   resolveList:async(_site,[name])=>({status:'resolved',id:name==='DDAS SICOOB'?'dda':name==='DESCRITIVOPROVISAO'?'provision':'children'}),
   getColumns:async(_site,list)=>list==='children'?[{name:'DESCRITIVOPROVISAO',text:{}}]:[{name:DDA_PROVISION_FIELD,readOnly:false}],
-  getItems:async(_site,list)=>list==='children'?state.children:state.items,
+  getItems:async(_site,list)=>list==='dda'?state.ddaRows:list==='children'?state.children:state.items,
   getItem:async(_site,list,id)=>list==='provision'?state.items.find(item=>item.id===String(id)):{id:String(id),eTag:'"version-1"',fields:{[DDA_PROVISION_FIELD]:state.linked}},
   updateItem:async(_site,list,id,fields,options)=>{state.writes.push({list,id,fields,options});state.linked=fields[DDA_PROVISION_FIELD];return {fields:{[DDA_PROVISION_FIELD]:state.linked}};},
  };return {state,api};
@@ -162,6 +162,8 @@ test('report pencil opens picker above report, stars likely option, links select
  assert.deepEqual([...doc.querySelectorAll('.ddr-table thead th')].map(cell=>cell.textContent).slice(-3),['SITUAÇÃO','VINCULAÇÃO','AÇÕES']);
  assert.equal(doc.querySelector('[data-dda-id="31"] .ddr-link-cluster').textContent,'N/A');
  assert.equal(doc.querySelector('[data-dda-id="31"] .ddr-link-cluster').dataset.linkState,'missing');
+ assert.equal(doc.querySelector('.ddr-link [data-dda-provision-pencil="31"]')?.dataset.linkState,'missing');
+ assert.equal(doc.querySelector('.ddr-row-actions [data-dda-provision-pencil]'),null);
  doc.querySelector('[data-dda-provision-pencil="31"]').click();await tick();await tick();
  assert.match(doc.querySelector('.dda-provision-dialog').textContent,/A qual DESCRITIVO PROVISÃO DESEJA VINCULAR/);
  assert.match(doc.querySelector('.dda-provision-star').textContent,/MAIS PROVÁVEL/);
@@ -183,6 +185,7 @@ test('report pencil opens picker above report, stars likely option, links select
  doc.querySelector('[data-edit-review-submit]').click();await tick();await tick();
  assert.equal(state.linked,'1');assert.equal(view.element.hidden,false);assert.equal(doc.querySelector('[data-dda-id="31"] .ddr-link-cluster').textContent,'ID 1');
  assert.equal(doc.querySelector('[data-dda-id="31"] .ddr-link-cluster').dataset.linkState,'linked');
+ assert.equal(doc.querySelector('.ddr-link-cluster + [data-dda-provision-pencil="31"]')?.dataset.linkState,'linked');
 });
 test('saved and invalid provision identifiers render in their own column after reopening',async t=>{
  const dom=new JSDOM('<body><main id="app"></main></body>'),doc=dom.window.document;
@@ -191,4 +194,60 @@ test('saved and invalid provision identifiers render in their own column after r
  t.after(()=>{view.destroy();dom.window.close();});await view.open();
  assert.equal(doc.querySelector('[data-dda-id="1"] .ddr-link-cluster').textContent,'ID 46');
  assert.equal(doc.querySelector('[data-dda-id="2"] .ddr-link-cluster').textContent,'N/A');
+});
+
+test('a link on a DDA outside the report requires Yes and No only closes the duplicate confirmation',async t=>{
+ const dom=new JSDOM('<body><main id="app"></main></body>'),doc=dom.window.document,{state,api}=repository();
+ const service=createDdaProvisionLink({repository:api});
+ const row={id:'31',fields:{Title:'FORNECEDOR FICTÍCIO',SITUACAO:'Em aberto',VALOR:58.21}};
+ const view=createDdaReportView({document:doc,data:{loadSnapshot:async()=>({rows:[row]}),provisionLink:service}});
+ t.after(()=>{view.destroy();dom.window.close();});await view.open();
+ doc.querySelector('[data-dda-provision-pencil="31"]').click();await tick();
+ state.ddaRows=[{id:'77',fields:{[DDA_PROVISION_FIELD]:'1'}}];
+ doc.querySelector('input[value="1"]').click();
+ async function submit(){
+  doc.querySelector('.dda-provision-save').click();await tick();
+  doc.querySelector('[data-edit-review-submit]').click();await tick();
+  const popup=doc.querySelector('[data-edit-review]');
+  assert.match(popup?.textContent??'',/Tem certeza que deseja atribuir dois DDAS ao mesmo descritivo provisão\?/);
+  assert.equal(state.writes.length,0);
+  return popup;
+ }
+ let popup=await submit();
+ const no=popup.querySelector('[data-edit-review-cancel]');
+ assert.equal(no.textContent,'Não');no.click();await tick();
+ assert.equal(doc.querySelector('[data-edit-review]'),null);
+ assert.equal(doc.querySelector('input[value="1"]').checked,true);
+ assert.equal(doc.querySelector('.dda-provision-save').disabled,false);
+ assert.equal(state.writes.length,0);
+ popup=await submit();
+ const yes=popup.querySelector('[data-edit-review-submit]');
+ assert.equal(yes.textContent,'Sim');yes.click();yes.click();await tick();
+ assert.equal(state.writes.length,1);
+ assert.equal(state.writes[0].id,'31');
+ assert.deepEqual(state.writes[0].fields,{[DDA_PROVISION_FIELD]:'1'});
+ assert.equal(doc.querySelector('.ddr-link-cluster').textContent,'ID 1');
+});
+
+test('an unchanged link is idempotent even when another DDA uses that provision',async()=>{
+ const {state,api}=repository(),service=createDdaProvisionLink({repository:api});
+ state.linked='2';state.ddaRows=[{id:'77',fields:{[DDA_PROVISION_FIELD]:'2'}}];
+ assert.deepEqual(await service.save({ddaId:'31',provisionId:'2'}),{ddaId:'31',provisionId:'2'});
+ assert.equal(state.writes.length,0);
+});
+
+test('confirming the shared link cannot overwrite an edit made while the popup was open',async()=>{
+ const {state,api}=repository(),getItem=api.getItem;
+ let changed=false;
+ api.getItem=async(site,list,id,...rest)=>{
+  const item=await getItem(site,list,id,...rest);
+  return list==='dda'&&changed?{...item,eTag:'version-2',fields:{[DDA_PROVISION_FIELD]:'3'}}:item;
+ };
+ state.ddaRows=[{id:'77',fields:{[DDA_PROVISION_FIELD]:2}}];
+ const service=createDdaProvisionLink({repository:api});
+ const proposed=await service.save({ddaId:'31',provisionId:'2'});
+ assert.equal(proposed.requiresSharedConfirmation,true);
+ changed=true;
+ await assert.rejects(service.save({ddaId:'31',provisionId:'2',sharedLinkETag:proposed.eTag}),/alterado durante a confirmação/);
+ assert.equal(state.writes.length,0);
 });

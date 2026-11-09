@@ -4,21 +4,28 @@ import {existsSync,mkdirSync,writeFileSync} from 'node:fs';
 import {resolve,join} from 'node:path';
 import {fileURLToPath} from 'node:url';
 import {JSDOM} from 'jsdom';
-import {createServer} from 'vite';
+import {createIsolatedViteServer} from './helpers/isolated-vite-server.mjs';
 import {runBrowserLayout} from './helpers/browser-layout-runner.mjs';
 
 test('DDA link review follows landscape and keeps cancel and submit usable',{timeout:120000},async t=>{
  const browser=[process.env.CHROME_BIN,'C:/Program Files/Google/Chrome/Application/chrome.exe','/usr/bin/google-chrome','/usr/bin/chromium'].find(p=>p&&existsSync(p));
  if(!browser)return t.skip('Chrome unavailable');
  const root=resolve(fileURLToPath(new URL('..',import.meta.url)));
- const server=await createServer({root,server:{host:'127.0.0.1',port:0,fs:{allow:[resolve(root,'../..')]}},logLevel:'silent'});
+ const server=await createIsolatedViteServer({root,logLevel:'silent',optimizeDeps:{noDiscovery:true,include:['decimal.js','pdf-lib','pako','@capacitor/core']},server:{host:'127.0.0.1',port:0,hmr:false,fs:{allow:[resolve(root,'../..')]}}});
  try{await server.listen();for(const [width,height,safeAreaInsets,nameFallback] of [[320,740],[390,844],[844,390],[1365,900],[390,844,{top:59,bottom:34,left:11,right:23}],[390,844,undefined,true],[1365,900,undefined,true]]){
-  const capture=process.env.DDA_REVIEW_CAPTURE_DIR;
-  const result=await runBrowserLayout(browser,{width,height,safeAreaInsets,captureScreenshot:Boolean(capture),url:`http://127.0.0.1:${server.httpServer.address().port}/tests/fixtures/dda-provision-review.html${nameFallback?'?fallback=1':''}`});
+  const capture=process.env.DDA_REVIEW_CAPTURE_DIR,duplicate=!nameFallback;
+  const result=await runBrowserLayout(browser,{width,height,safeAreaInsets,captureScreenshot:Boolean(capture),url:`http://127.0.0.1:${server.httpServer.address().port}/tests/fixtures/dda-provision-review.html${nameFallback?'?fallback=1':'?duplicate=1'}`});
   const dom=new JSDOM(result.stdout);
   try{const state=JSON.parse(dom.window.document.documentElement.dataset.layout);
    for(const key of ['pickerMatch','pickerFits','fits','hit','focusInside','cancelled','confirmed'])assert.equal(state[key],true,JSON.stringify({width,key,state}));
    assert.equal(state.writesBefore,0);
+   assert.deepEqual(state.beforePencil,{inColumn:true,below:true,background:'rgb(181, 31, 51)'});
+   assert.deepEqual(state.afterPencil,{inColumn:true,below:true,background:'rgb(255, 182, 96)'});
+   if(duplicate){
+    assert.equal(state.duplicateFits,true);
+    assert.equal(state.duplicateNo,true);
+    assert.equal(state.duplicateTransform.split(",").slice(0,4).join(","),state.transform.split(",").slice(0,4).join(","));
+   }
    if(safeAreaInsets){assert.ok(state.bounds.top>=59&&state.bounds.bottom<=810&&state.bounds.left>=11&&state.bounds.right<=367,'review must avoid the phone safe areas: '+JSON.stringify(state));}
    if(height>width){const matrix=state.transform.match(/^matrix\(([^)]+)\)$/)?.[1].split(',').map(Number);
     assert.ok(matrix&&Math.abs(matrix[1]-1)<.001&&Math.abs(matrix[2]+1)<.001,'confirmation must share the report rotation: '+JSON.stringify({width,state}));

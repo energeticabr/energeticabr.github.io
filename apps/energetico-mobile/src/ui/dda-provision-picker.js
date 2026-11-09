@@ -20,14 +20,15 @@ export function createDdaProvisionPicker({service, ...options}){
  return createReportLinkPicker({
   ...options, copy:DDA_COPY,
   loadOptions:service && (async (row, signal)=>rankDdaProvisionOptions(await service.loadOptions({signal}),row)),
-  saveLink:(row,id,signal)=>service.save({ddaId:row.id,provisionId:id,signal}),
+  saveLink:(row,id,signal,sharedLinkETag)=>service.save({ddaId:row.id,provisionId:id,signal,sharedLinkETag}),
+  sharedLinkQuestion:'Tem certeza que deseja atribuir dois DDAS ao mesmo descritivo provisão?',
   currentLink:row=>row.provisionId,
   receiptId:receipt=>receipt.provisionId,
   rowAmount:row=>row.amount,
  });
 }
 
-export function createReportLinkPicker({document:doc,host,copy,loadOptions,saveLink,currentLink,receiptId,rowAmount,onLinked,onClose,resolveReturnFocus,onPropose,selectCurrent=false,timeoutMs=35000}){
+export function createReportLinkPicker({document:doc,host,copy,loadOptions,saveLink,currentLink,receiptId,rowAmount,onLinked,onClose,resolveReturnFocus,onPropose,sharedLinkQuestion,selectCurrent=false,timeoutMs=35000}){
  let current=null;ensureEditReviewStyles(doc);
  const el=(tag,cls='',value)=>{const node=doc.createElement(tag);node.className=cls;if(value!==undefined)node.textContent=String(value);return node;};
  const money=value=>{let text=String(value??'').trim().replace(/R\$|\s/g,'');if(text.includes(','))text=text.replace(/\./g,'').replace(',','.');const number=/^-?\d+(?:\.\d+)?$/.test(text)?Number(text):NaN;return Number.isFinite(number)?new Intl.NumberFormat('pt-BR',{style:'currency',currency:'BRL'}).format(number):'Valor não informado';};
@@ -91,17 +92,63 @@ export function createReportLinkPicker({document:doc,host,copy,loadOptions,saveL
    const accepted=await confirmEditChanges({form:dialog,signal:entry.controller.signal,title:'Confirme as alterações',changes:selected===linkedId?[]:[{label:copy.targetLabel,before:linkedId?`ID ${linkedId}`:'—',after}]});
    entry.reviewing=false;
    if(!accepted||current!==entry||host.hidden)return;
-   entry.busy=true;save.disabled=cancel.disabled=back.disabled=search.disabled=true;feedback.textContent='Gravando vínculo no SharePoint…';
+   entry.busy=true;save.disabled=cancel.disabled=back.disabled=search.disabled=true;feedback.setAttribute('role','status');feedback.textContent='Gravando vínculo no SharePoint…';
    if(propose)propose.disabled=true;
    const radios=[...list.querySelectorAll('input')];
    for(const radio of radios)radio.disabled=true;
-   const write=new AbortController();
-   const cancelWrite=()=>write.abort();
-   entry.controller.signal.addEventListener('abort',cancelWrite,{once:true});
-   let timer;try{const receipt=await Promise.race([saveLink(row,selected,write.signal),new Promise((_,reject)=>{timer=setTimeout(()=>{write.abort();reject(new Error('timeout'));},timeoutMs);})]);
-    if(current!==entry||host.hidden)return;onLinked?.(receipt);feedback.setAttribute('role','status');feedback.textContent=copy.receipt(receiptId(receipt));save.remove();cancel.disabled=false;cancel.textContent='Concluir';
-   }catch{if(current===entry){feedback.textContent='Não foi possível confirmar o vínculo no SharePoint. Atualize e tente novamente.';feedback.setAttribute('role','alert');cancel.disabled=false;save.disabled=false;search.disabled=false;if(propose)propose.disabled=false;for(const radio of radios)radio.disabled=false;}}
-   finally{clearTimeout(timer);entry.controller.signal.removeEventListener('abort',cancelWrite);entry.busy=false;back.disabled=false;if(current===entry)cancel.focus();}
+   async function writeSelection(sharedLinkETag){
+    entry.controller.signal.throwIfAborted();
+    const write=new AbortController();
+    const cancelWrite=()=>write.abort();
+    entry.controller.signal.addEventListener('abort',cancelWrite,{once:true});
+    let timer;
+    try{
+     const deadline=new Promise((_,reject)=>{
+      timer=setTimeout(()=>{write.abort();reject(new Error('timeout'));},timeoutMs);
+     });
+     return await Promise.race([saveLink(row,selected,write.signal,sharedLinkETag),deadline]);
+    }finally{
+     clearTimeout(timer);
+     entry.controller.signal.removeEventListener('abort',cancelWrite);
+    }
+   }
+   try{
+    let receipt=await writeSelection();
+    if(current!==entry||host.hidden)return;
+    if(receipt?.requiresSharedConfirmation&&sharedLinkQuestion){
+     const confirmed=await confirmEditChanges({
+      form:dialog,signal:entry.controller.signal,title:sharedLinkQuestion,cancelLabel:'Não',confirmLabel:'Sim',
+     });
+     if(current!==entry||host.hidden)return;
+     if(!confirmed){
+      render();
+      return;
+     }
+     receipt=await writeSelection(receipt.eTag);
+     if(current!==entry||host.hidden)return;
+    }
+    onLinked?.(receipt);
+    feedback.setAttribute('role','status');
+    feedback.textContent=copy.receipt(receiptId(receipt));
+    save.remove();
+    cancel.textContent='Concluir';
+   }catch{
+    if(current===entry){
+     feedback.textContent='Não foi possível confirmar o vínculo no SharePoint. Atualize e tente novamente.';
+     feedback.setAttribute('role','alert');
+    }
+   }finally{
+    entry.busy=false;
+    if(current===entry){
+     cancel.disabled=back.disabled=false;
+     if(save.isConnected){
+      save.disabled=search.disabled=false;
+      if(propose)propose.disabled=false;
+      for(const radio of list.querySelectorAll('input'))radio.disabled=false;
+     }
+     (save.isConnected?save:cancel).focus();
+    }
+   }
   });
   try{const options=await loadOptions(row,entry.controller.signal);if(current!==entry||host.hidden)return;entry.options=options;render();}
   catch{if(current===entry){feedback.textContent=copy.loadError;feedback.setAttribute('role','alert');}}

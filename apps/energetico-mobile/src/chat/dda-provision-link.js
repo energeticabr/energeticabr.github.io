@@ -141,7 +141,7 @@ export function createDdaProvisionLink({repository,siteKey='personal',assertSess
   for(let offset=0;offset<paidGroups.length;offset+=8)await Promise.all(paidGroups.slice(offset,offset+8).map(checkParent));
   return settled;
  }
- async function save({ddaId,provisionId,signal}){
+ async function save({ddaId,provisionId,signal,sharedLinkETag}){
   if(!validId(ddaId)||!validId(provisionId))throw new RangeError('ID de vínculo inválido.');
   assertSession();const {dda,provision}=await lists(signal);
   const target=await repository.getItem(siteKey,provision.id,provisionId,'?$expand=fields',{signal});
@@ -149,7 +149,17 @@ export function createDdaProvisionLink({repository,siteKey='personal',assertSess
   const current=await repository.getItem(siteKey,dda.id,ddaId,'?$expand=fields',{signal});
   const eTag=current?.eTag||current?.['@odata.etag']||current?.fields?.['@odata.etag'];
   if(!current?.fields||!eTag)throw new Error('Não foi possível verificar a versão atual do DDA.');
-  if(String(current.fields[DDA_PROVISION_FIELD]??'')===String(provisionId))return {ddaId:String(ddaId),provisionId:String(provisionId)};
+  if(String(current.fields[DDA_PROVISION_FIELD]??'').trim()===String(provisionId))return {ddaId:String(ddaId),provisionId:String(provisionId)};
+  if(sharedLinkETag&&eTag!==sharedLinkETag)throw new Error('O DDA foi alterado durante a confirmação do vínculo.');
+  if(!sharedLinkETag){
+   // Read all pages with only the link column, independently of the report filters.
+   const items=await repository.getItems(siteKey,dda.id,`?$select=id&$expand=fields($select=${DDA_PROVISION_FIELD})`,{signal});
+   if(!Array.isArray(items)||items.some(item=>!hasItemIdentity(item)))throw new Error('Consulta de vínculos DDA incompleta.');
+   const shared=items.some(item=>String(item.id)!==String(ddaId)
+    &&String(item.fields[DDA_PROVISION_FIELD]??'').trim()===String(provisionId));
+   if(shared)return {requiresSharedConfirmation:true,eTag};
+  }
+  assertSession();signal?.throwIfAborted();
   const saved=await repository.updateItem(siteKey,dda.id,ddaId,{[DDA_PROVISION_FIELD]:String(provisionId)},{eTag,signal});assertSession();
   if(String(saved?.fields?.[DDA_PROVISION_FIELD]??'')!==String(provisionId))throw new Error('O vínculo não foi confirmado no SharePoint.');
   return {ddaId:String(ddaId),provisionId:String(provisionId)};
