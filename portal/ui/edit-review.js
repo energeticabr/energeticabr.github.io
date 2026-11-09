@@ -151,7 +151,7 @@ export function bindEditHighlights({ form, columns, baseline = {}, readFields, r
 export function cancelEditReview(form) { reviews.get(form)?.cancel(); }
 
 /** A local modal only: persistence remains the caller's responsibility. */
-export function confirmEditChanges({ form, changes, title = 'Confirma as alterações?', signal }) {
+export function confirmEditChanges({ form, changes, title = 'Confirma as alterações?', signal, cancelLabel = 'CANCELAR', confirmLabel = 'SUBMETER' }) {
   if (signal?.aborted) return Promise.resolve(false);
   if (reviews.has(form)) return reviews.get(form).promise;
   const document = form?.ownerDocument;
@@ -166,11 +166,12 @@ export function confirmEditChanges({ form, changes, title = 'Confirma as altera�
   dialog.setAttribute('data-edit-review', '');
   dialog.setAttribute('aria-modal', 'true');
   dialog.setAttribute('aria-labelledby', `edit-review-title-${++reviewId}`);
-  dialog.innerHTML = `<h2 id="edit-review-title-${reviewId}">${escapeHtml(title)}</h2>
-    <table><thead><tr><th scope="col">Campo</th><th scope="col">Antes</th><th scope="col">Depois</th></tr></thead>
+  const reviewTable = changes ? `<table><thead><tr><th scope="col">Campo</th><th scope="col">Antes</th><th scope="col">Depois</th></tr></thead>
     <tbody>${changes.map(change => `<tr><td>${escapeHtml(change.label)}</td><td>${escapeHtml(change.before)}</td><td>${escapeHtml(change.after)}</td></tr>`).join('')}</tbody></table>
-    ${changes.length ? '' : '<p>Nenhuma alteração identificada.</p>'}
-    <div class="edit-review-actions"><button type="button" data-edit-review-cancel>CANCELAR</button><button type="button" data-edit-review-confirm data-edit-review-submit>SUBMETER</button></div>`;
+    ${changes.length ? '' : '<p>Nenhuma alteração identificada.</p>'}` : '';
+  dialog.innerHTML = `<h2 id="edit-review-title-${reviewId}">${escapeHtml(title)}</h2>
+    ${reviewTable}
+    <div class="edit-review-actions"><button type="button" data-edit-review-cancel>${escapeHtml(cancelLabel)}</button><button type="button" data-edit-review-confirm data-edit-review-submit>${escapeHtml(confirmLabel)}</button></div>`;
   const confirm = dialog.querySelector('[data-edit-review-confirm]');
   const cancel = dialog.querySelector('[data-edit-review-cancel]');
   let resolve;
