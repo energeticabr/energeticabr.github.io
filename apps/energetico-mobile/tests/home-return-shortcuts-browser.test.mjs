@@ -22,8 +22,9 @@ test('retorno com aviso e anexo restaura mascotes e abre relatório real em320/3
       try {
         const layout = JSON.parse(dom.window.document.documentElement.dataset.layout);
         assert.equal(layout.submenuIcons, 0);
-        assert.equal(layout.count, 26);
-        assert.equal(new Set(layout.actions).size, 26, 'sem mascotes duplicados');
+        assert.equal(layout.count, 27);
+        assert.equal(new Set(layout.actions).size, 27, 'sem mascotes duplicados');
+        assert.ok(layout.actions.includes('open-sicoob-transaction-report'));
         assert.ok(layout.buttons.every(button => button.external && button.loaded && button.width >= 44 && button.height >= 44
           && button.left >= 0 && button.right <= width + 1), JSON.stringify({ width, layout }));
         assert.equal(layout.overflow, false);

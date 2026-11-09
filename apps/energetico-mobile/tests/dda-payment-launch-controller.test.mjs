@@ -16,7 +16,7 @@ const test = (name, ...args) => nodeTest(`${target.id}: ${name}`, ...args);
 const launch = { id: target.id, contextId: `fake-${target.id}`, title: target.text };
 const remote = (id, fileName) => ({ id, fileName, mimeType: 'application/pdf', size: 8, mediaUrl: `/api/portal-media/${id}` });
 
-async function setup(t, { kind = 'report', data: dataOverrides = {}, client: clientOverrides = {} } = {}) {
+async function setup(t, { kind = 'dda', data: dataOverrides = {}, client: clientOverrides = {} } = {}) {
   const handlers = new Map(), factories = [], calls = [], uploaded = [];
   const store = createConversationStore();
   const view = { render() {}, focusComposer() {}, destroy() {},
@@ -62,8 +62,8 @@ async function setup(t, { kind = 'report', data: dataOverrides = {}, client: cli
   return { controller, store, view, calls, data, client, options: factories[0], uploaded, panel };
 }
 
-for (const kind of ['report', 'dda']) test(`${kind}: exact DDA files become visible uploaded launch attachments without posting`, async t => {
-  const h = await setup(t, { kind });
+test('exact DDA gallery files become visible uploaded launch attachments without posting', async t => {
+  const h = await setup(t);
   assert.equal(typeof h.options[target.callback], 'function');
   const previous = remote('existing', 'anterior.pdf');
   h.store.syncAttachments([previous]); h.store.setDraft('rascunho fictício');
@@ -256,9 +256,8 @@ test('a missing launch confirmation cannot reuse a previous launch as successful
   assert.equal(h.uploaded.length, 0);
 });
 
-test('other registration galleries never receive the DDA launch handoff', async t => {
-  const h = await setup(t, { kind: 'asset' });
-  assert.equal(h.options.kind, 'asset');
+for (const kind of ['report', 'asset']) test(`${kind} never receives the DDA gallery launch handoff`, async t => {
+  const h = await setup(t, { kind });
   assert.equal(h.options[target.callback], undefined);
 });
 
