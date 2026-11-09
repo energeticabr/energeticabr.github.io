@@ -77,6 +77,22 @@ const serviceXml = code => `<NFSe xmlns="http://www.sped.fazenda.gov.br/nfse"><i
 const issuerXml = `<nfeProc xmlns="http://www.portalfiscal.inf.br/nfe"><NFe><infNFe Id="NFe${key}">
   <emit><CRT>4</CRT></emit></infNFe></NFe></nfeProc>`;
 
+test('report separates an incomplete CNO from a missing CNO and exposes the reported number', async t => {
+  const dom = new JSDOM('<body/>');
+  const document = dom.window.document;
+  const rows = [{ ...invoice, fields:{ ...invoice.fields, OBSERVACOES_NOTA:'CNO: 90.025.4406/72 RUA FICTÍCIA 134' } },
+    { id:'9', fields:{ ...invoice.fields, OBSERVACOES_NOTA:'' } }];
+  const report = createNfeReportView({ document, data:{ loadSnapshot:async () => ({ rows }), fetchInvoiceXml:async () => issuerXml } });
+  t.after(() => { report.destroy(); dom.window.close(); });
+  await report.open();
+  const badge = document.querySelector('[data-invoice-id="10"] [data-tone="invalid"]');
+  assert.match(badge?.textContent ?? '', /CNO inválido.*90\.025\.4406\/72/);
+  const filter = document.querySelector('select[name="cno"]');
+  filter.value = 'invalid';
+  filter.dispatchEvent(new dom.window.Event('change'));
+  assert.deepEqual([...document.querySelectorAll('[data-invoice-id]')].map(row => row.dataset.invoiceId), ['10']);
+});
+
 test('fiscal rows follow the original emission calendar and distinguish incomplete XML', () => {
   const [pending, complete, noRetention] = projectNfeRows([
     invoice,

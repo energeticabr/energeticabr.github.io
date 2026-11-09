@@ -59,7 +59,7 @@ const report = decorateReportPrint(decorateReportNavigation(createNfeReportView(
     { id:'3', fields:{ ...common, TIPO_FISCAL:'NF-e', DATA_EMISSAO:'2026-11-07', NUMERO_NOTA:'14', VALOR_TOTAL_NOTA:98765432.10,
       Title:'Comércio de Materiais Exemplo Ltda.', CNPJ_FORNECEDOR:'00.000.000/0000-00', CHAVE_ACESSO:key,
       XML_URL:'https://example.test/nota.xml', DANFE_URL:'https://example.test/nota.pdf',
-      OBSERVACOES_NOTA:'CNO 90.025.44060/72', STATUS_RETENCOES:'RETENCAO_INFORMADA_XML' } },
+      OBSERVACOES_NOTA:'CNO: 90.025.4406/72', STATUS_RETENCOES:'RETENCAO_INFORMADA_XML' } },
   ] }; },
   async downloadDocument(){
     await new Promise(resolve => setTimeout(resolve, 250));
@@ -72,7 +72,7 @@ const box = node => {
   return {x,y,right,bottom,width,height};
 };
 const mascot = action => document.querySelector(`[data-action="open-${action}"]`);
-const provisions = box(mascot('pending-provisions')), orange = box(mascot('commercial-receipts')),
+const provisions = box(mascot('pending-provisions')), orange = box(mascot('commercial-receipts')), sicoob = box(mascot('sicoob-transaction-report')),
   nfe = box(mascot('nfe-report')), dda = box(mascot('dda-report'));
 const panel = report.element.querySelector('.nfe-panel');
 const hasMei = () => [...panel.querySelectorAll('[data-invoice-id="3"] .nfe-fact strong')]
@@ -117,7 +117,7 @@ const filtersFit = [...fiscalControls, panel.querySelector('input[name="search"]
 });
 const rowIds = () => [...panel.querySelectorAll('tbody tr')].map(row => row.dataset.invoiceId);
 const layout = {
-  provisions, orange, nfe, dda,
+  provisions, orange, sicoob, nfe, dda,
   open:!report.element.hidden, rowIds:rowIds(),
   overflow:document.documentElement.scrollWidth > innerWidth,
   reportBodyWidth:reportBody.offsetWidth,
@@ -135,6 +135,7 @@ const layout = {
   filtersFit,
   taxHeading:panel.querySelector('th:nth-child(6)')?.textContent,
   taxStacked:Boolean(isBefore(...panel.querySelectorAll('[data-invoice-id="3"] .nfe-tax-stack .nfe-fact'), 'block')),
+  invalidCno:panel.querySelector('[data-invoice-id="3"] [data-tone="invalid"]')?.textContent,
   pencilHeight:panel.querySelector('.nfe-link-pencil')?.offsetHeight,
 };
 if (!report.element.hidden) {
