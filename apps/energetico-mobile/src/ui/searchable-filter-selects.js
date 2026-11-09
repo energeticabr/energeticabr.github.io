@@ -305,6 +305,26 @@ function createPicker(select, closeOthers, options = {}) {
     if (selectionReset !== null) view.clearTimeout(selectionReset);
     selectionReset = null;
   }
+  function suppressTouchClick() {
+    // WebKit can hit-test the compatibility mouse events after the picker
+    // closes and deliver them to a different control underneath.
+    const controller = new view.AbortController();
+    const capture = { capture:true, signal:controller.signal };
+    function finish() {
+      view.clearTimeout(timer);
+      controller.abort();
+    }
+    function consume(event) {
+      if (event.detail === 0) return;
+      event.preventDefault();
+      event.stopImmediatePropagation();
+      if (event.type === 'click') finish();
+    }
+    const timer = view.setTimeout(finish, 500);
+    doc.addEventListener('pointerdown', finish, capture);
+    doc.addEventListener('mousedown', consume, capture);
+    doc.addEventListener('click', consume, capture);
+  }
   function onOptionPointerUp(event) {
     if (!selectingOption) return;
     const target = event.target.closest?.('.sfs-option, .sfs-selection-actions button');
@@ -325,7 +345,12 @@ function createPicker(select, closeOthers, options = {}) {
       }
       if (list.contains(target)) {
         const index = [...list.children].indexOf(target);
-        if (candidates[index]) { choose(candidates[index]); return; }
+        const option = candidates[index];
+        if (option && !disabled(option)) {
+          if (reportPicker && !select.multiple && event.pointerType === 'touch') suppressTouchClick();
+          choose(option);
+          return;
+        }
       }
     }
     selectionReset = view.setTimeout(() => { selectingOption = false; pressedOption = null; selectionReset = null; }, 0);

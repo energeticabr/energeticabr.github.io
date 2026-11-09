@@ -62,6 +62,32 @@ test('explicit Localizar itens focus searches accents without applying an unknow
   assert.equal(ctx.doc.activeElement, ctx.trigger); assert.equal(ctx.trigger.readOnly, true);
 });
 
+test('a report option tap does not click a control revealed when the list closes', t => {
+  const ctx = setup(t);
+  ctx.trigger.click();
+  ctx.search().focus();
+  ctx.type('aco');
+  const { PointerEvent, MouseEvent } = ctx.dom.window;
+  const option = ctx.list.firstElementChild;
+  const outside = ctx.doc.querySelector('#outside');
+  const touch = { bubbles:true, pointerType:'touch', pointerId:1, isPrimary:true };
+  option.dispatchEvent(new PointerEvent('pointerdown', touch));
+  option.dispatchEvent(new PointerEvent('pointerup', touch));
+  assert.equal(ctx.select.value, 'aco');
+  assert.equal(ctx.popup.hidden, true);
+
+  let activations = 0;
+  outside.addEventListener('click', () => { activations++; });
+  const mouse = { bubbles:true, cancelable:true, detail:1 };
+  assert.equal(outside.dispatchEvent(new MouseEvent('mousedown', mouse)), false);
+  outside.dispatchEvent(new MouseEvent('click', mouse));
+  assert.equal(activations, 0);
+  outside.click();
+  outside.dispatchEvent(new PointerEvent('pointerdown', { bubbles:true, pointerType:'mouse' }));
+  outside.dispatchEvent(new MouseEvent('click', mouse));
+  assert.equal(activations, 2);
+});
+
 test('closing selection clears only the search and restores non-editable field focus', t => {
   const ctx = setup(t); ctx.select.value = 'cimento'; ctx.binding.sync();
   ctx.trigger.click(); ctx.search().focus(); ctx.type('p40');
