@@ -10166,8 +10166,8 @@ export function createAppController({
             ...(!isDdaReport && sourceKind === 'dda' ? {
               refreshBank: options => refreshDdaBank(client, { ...options, assertSession }),
             } : {}),
-            ...(sourceKind === 'dda' ? {
-              syncMonitor: ensureDdaSyncSession(),
+            ...(sourceKind === 'dda' ? { syncMonitor: ensureDdaSyncSession() } : {}),
+            ...(!isDdaReport && sourceKind === 'dda' ? {
               confirmPayment: async options => { assertSession(); const receipt = await client.confirmDdaPayment(options); assertSession(); return receipt; },
               onStartLaunch: ddaPaymentLaunchHandler(data, assertSession),
               onStartProvision: ddaPaymentLaunchHandler(data, assertSession, {

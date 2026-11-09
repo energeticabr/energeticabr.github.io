@@ -5,7 +5,6 @@ import {resolve} from 'node:path';
 import {fileURLToPath} from 'node:url';
 import {JSDOM} from 'jsdom';
 import {createSharePointRepository} from '../../../portal/data/sharepoint-repository.js';
-import {createChatClient} from '../src/chat/chat-client.js';
 import {createDdaProvisionLink} from '../src/chat/dda-provision-link.js';
 import {buildDdaReport,normalizeDdaReportRows} from '../src/chat/dda-report-model.js';
 import {REGISTRATION_GALLERY_MODELS} from '../src/chat/registration-gallery-data.js';
@@ -74,7 +73,7 @@ test('bank-paid and manually confirmed linked DDAs offer the exact provision unt
   ]}),
   async loadItem(id){assert.equal(id,'34');return {...manuallyPaid,fields:{...manuallyPaid.fields,DESCRITIVOPROVIS_x00c3_O:liveLink}};},
   provisionLink:{async loadSettledProvisionIds(ids){
-   assert.deepEqual(ids,['8','56']);
+   assert.deepEqual(ids,['8','56','70']);
    if(!settled)await new Promise(resolve=>{verify=resolve;});
    return new Set(settled?['56']:[]);
   }},
@@ -120,28 +119,12 @@ test('the pending row participates in pagination and filtered print, and disappe
  view.close();await view.open();assert.equal(lookups,3);assert.equal(ids().includes('52'),false);
 });
 
-test('confirmed scheduled DDA remains visible immediately and retains the manual audit label',async t=>{
- const data={loadSnapshot:async()=>({rows:[row(1,{...scheduled,DDA_CICLO_AGENDAMENTO:'AGENDADO'}),row(2)]})};
- const {doc,view,ids}=setup(t,data,{confirmPayment:async()=>({status:'confirmed',itemId:1,key,confirmedAt:paidAt,confirmedBy:'test@example.test'})});
- await view.open();
- doc.querySelector('[data-dda-confirm-payment="1"]').click();doc.querySelector('[data-dda-payment-yes]').click();await tick();
+test('an already confirmed scheduled DDA remains visible with its manual audit label',async t=>{
+ const data={loadSnapshot:async()=>({rows:[row(1,{...scheduled,...audited,DDA_CICLO_AGENDAMENTO:'AGENDADO'}),row(2)]})};
+ const {doc,view,ids}=setup(t,data);await view.open();
  assert.deepEqual(ids(),['1','2']);
  assert.match(doc.querySelector('[data-dda-id="1"] .ddr-status').textContent,/PAGO POR AGENDAMENTO.*Baixa pendente.*Confirmado pelo usuário/s);
- assert.ok(doc.querySelector('[data-dda-confirm-payment="1"]').disabled);
-});
-
-for(const paidBySchedule of [true,false])test(`manual confirmation uses authoritative schedule value ${paidBySchedule} over a stale report`,async t=>{
- const staleFields=paidBySchedule?{}:{...scheduled,DDA_CICLO_AGENDAMENTO:'AGENDADO'};
- const data={loadSnapshot:async()=>({rows:[row(1,staleFields),row(2)]})};
- const receipt={status:'confirmed',itemId:1,key,confirmedAt:paidAt,confirmedBy:'test@example.test',paidBySchedule};
- const client=createChatClient({apiBaseUrl:'https://example.test',tokenProvider:async()=>'test-only',
-  fetchImpl:async()=>Response.json({status:'processed',messages:[],ddaPaymentConfirmation:receipt})});
- const {doc,view,ids}=setup(t,data,{confirmPayment:client.confirmDdaPayment});
- await view.open();
- doc.querySelector('[data-dda-confirm-payment="1"]').click();doc.querySelector('[data-dda-payment-yes]').click();await tick();
- assert.equal(doc.querySelector('[data-dda-payment-dialog]').dataset.state,'success');
- assert.deepEqual(ids(),paidBySchedule?['1','2']:['2']);
- if(paidBySchedule)assert.match(doc.querySelector('[data-dda-id="1"] .ddr-status').textContent,/PAGO POR AGENDAMENTO.*Baixa pendente/s);
+ assert.ok(doc.querySelector('[data-dda-provision-check="1"]').disabled);
 });
 
 test('relink aborts proof for the old parent and preserves report position and row focus',async t=>{

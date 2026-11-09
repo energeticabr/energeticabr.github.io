@@ -5,12 +5,18 @@ import {createAppController} from '../src/app-controller.js';
 import {createConversationStore} from '../src/chat/conversation-store.js';
 import {renderChatMarkup,commandFromTarget} from '../src/ui/chat-view.js';
 const tick=()=>new Promise(resolve=>setImmediate(resolve));
-test('report receives the authenticated payment callback and rejects it after logout',async t=>{
- let calls=0;const h=setup(t,{client:{sendText:async()=>({status:'processed',messages:[]}),confirmDdaPayment:async options=>{calls++;return options;}}});
+test('only the gallery receives the authenticated payment callback and it expires after logout',async t=>{
+ let calls=0,gallery;const h=setup(t,{
+  client:{sendText:async()=>({status:'processed',messages:[]}),confirmDdaPayment:async options=>{calls++;return options;}},
+  registrationGalleryFactory:async options=>{gallery=options;return {open(){},close(){},destroy(){}};},
+ });
  await h.controller.start();await h.view.emit('open-dda-report');
- assert.equal(typeof h.factories[0].confirmPayment,'function');
- await h.factories[0].confirmPayment({itemId:31,key:'a'.repeat(64)});assert.equal(calls,1);
- await h.view.emit('sign-out');await assert.rejects(h.factories[0].confirmPayment({itemId:31,key:'a'.repeat(64)}));assert.equal(calls,1);
+ assert.equal(h.factories[0].confirmPayment,undefined);assert.equal(h.factories[0].onStartLaunch,undefined);
+ const settle=h.factories[0].onStartSettlement;
+ await h.view.emit('select-reply',{replyId:'action_dda_gallery',label:'GALERIA DDA'});
+ await gallery.confirmPayment({itemId:31,key:'a'.repeat(64)});assert.equal(calls,1);
+ await h.view.emit('sign-out');await assert.rejects(gallery.confirmPayment({itemId:31,key:'a'.repeat(64)}));assert.equal(calls,1);
+ assert.throws(()=>settle('56'));
 });
 function setup(t,options={}){
  const handlers=new Map(),calls=[],opened=[],factories=[],renders=[],account={homeAccountId:'dda-test',name:'Teste'};let sequence=0;
