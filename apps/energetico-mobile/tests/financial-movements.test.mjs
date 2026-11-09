@@ -32,6 +32,39 @@ test('movement gallery reads MOVIMENTACOESFINANCEIRAS and all its pages',async()
   assert.equal(result.rows.length,2);
 });
 
+test('a reopened movement snapshot does not share columns with an aborted snapshot', async () => {
+  const started = Promise.withResolvers();
+  const previousColumns = Promise.withResolvers();
+  const first = new AbortController();
+  const second = new AbortController();
+  let columnReads = 0;
+  const data = createRegistrationGalleryData({
+    kind: 'financial_movement',
+    repository: {
+      async resolveList() { return { status: 'resolved', id: 'movement' }; },
+      async getColumns(_site, _list, { signal }) {
+        columnReads++;
+        if (signal === first.signal) {
+          started.resolve();
+          await previousColumns.promise;
+          signal.throwIfAborted();
+        }
+        return [];
+      },
+      async getItemsPage() { return { items: [{ id: '1', fields: { VALOR: 1 } }], hasMore: false }; },
+    },
+  });
+  const old = data.loadSnapshot({ signal: first.signal });
+  const rejected = assert.rejects(old, { name: 'AbortError' });
+  await started.promise;
+  first.abort();
+  const current = data.loadSnapshot({ signal: second.signal });
+  previousColumns.resolve();
+  await rejected;
+  assert.equal((await current).rows.length, 1);
+  assert.equal(columnReads, 2);
+});
+
 test('movement editor uses dependent closed choices and rejects foreign descriptions before writing',async(t)=>{
   const writes=[];
   const item={id:'1',eTag:'"v1"',fields:{INSTITUICAO:'BANCO A',DESCRICAO:'CDB A',OPERACAO:'APLICAÇÃO',VALOR:'1234,56'}};

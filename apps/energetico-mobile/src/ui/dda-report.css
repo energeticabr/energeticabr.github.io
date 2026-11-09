@@ -108,4 +108,19 @@
 }
 .ddr-open-pdf svg { width: 34px; height: 34px; }
 .ddr-open-pdf:focus-visible { outline: 3px solid #236ca6; outline-offset: -2px; }
+
+.sicoob-transaction-filters .ddr-filter { min-width: 108px; }
+.sicoob-transaction-filters .ddr-filter:has(input[type="date"]) { flex: 1; }
+.sicoob-transaction-filters .ddr-filter:has(input[type="search"]) { min-width: 170px; }
+.sicoob-transaction-filters input[type="date"] { min-width: 0; }
+.sicoob-transaction-overlay:has(.report-navigation) .ddr-content { padding-inline: calc(var(--report-navigation-size, 46px) + 12px); }
+.sicoob-transaction-summary .ddr-metric { grid-column: span 6; }
+.sicoob-transaction-table th:nth-child(1) { width: 13%; }
+.sicoob-transaction-table th:nth-child(2) { width: 25%; }
+.sicoob-transaction-table th:nth-child(3) { width: 25%; }
+.sicoob-transaction-table th:nth-child(4) { width: 23%; }
+.sicoob-transaction-table th:nth-child(5) { width: 14%; }
+.sicoob-transaction-table td:first-child { white-space: nowrap; }
+.sicoob-transaction-table td:last-child { text-align: right; }
+.sicoob-transaction-table small { display: block; margin-top: 3px; color: #456375; }
 @media print { .ddr-open-pdf { display: none !important; } }

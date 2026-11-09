@@ -68,7 +68,7 @@ test('last left HOME mascot follows the old green report and emits the delegated
   assert.equal(mascot.previousElementSibling.dataset.action, 'open-task-association-report');
   assert.equal(mascot.nextElementSibling.className, 'chat-bubble');
   const left = [...mascot.parentElement.children].filter(node => node.matches('button.chat-main-provisions-shortcut,button.chat-main-payment-ledger-shortcut'));
-  assert.equal(left.length, 12);
+  assert.equal(left.length, 13);
   assert.equal(left.at(-1), mascot);
   assert.match(mascot.querySelector('img').src, /delegated-deadline\.png$/);
   mascot.querySelector('img').click();

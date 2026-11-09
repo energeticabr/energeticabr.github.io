@@ -8,8 +8,9 @@ import {createCargosView} from '../src/ui/cargos-view.js';
 const {getReportNeighbors,decorateReportNavigation}=await import('../src/ui/report-navigation.js').catch(error=>{if(error.code==='ERR_MODULE_NOT_FOUND')return {};throw error;});
 
 for(const [action,previous,next] of [
- ['open-pending-provisions',null,'open-nfe-report'],
- ['open-nfe-report','open-pending-provisions','open-dda-report'],
+ ['open-pending-provisions',null,'open-sicoob-transaction-report'],
+ ['open-sicoob-transaction-report','open-pending-provisions','open-nfe-report'],
+ ['open-nfe-report','open-sicoob-transaction-report','open-dda-report'],
  ['open-dda-report','open-nfe-report','open-provision-report'],
  ['open-provision-report','open-dda-report','open-payment-ledger'],
  ['open-payment-ledger','open-provision-report','open-management-report'],

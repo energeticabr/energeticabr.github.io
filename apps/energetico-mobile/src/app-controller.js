@@ -329,6 +329,11 @@ async function defaultNfeReportFactory(options) {
   return createNfeReportView(options);
 }
 
+async function defaultSicoobTransactionReportFactory(options) {
+  const { createSicoobTransactionReportView } = await import("./ui/sicoob-transaction-report-view.js");
+  return createSicoobTransactionReportView(options);
+}
+
 async function defaultRegistrationGalleryFactory(options) {
   if (options.kind === 'registrationMenu') {
     const { createRegistrationGalleryMenu } = await import('./ui/registration-gallery-menu.js');
@@ -521,6 +526,7 @@ const REGISTRATION_GALLERY_KIND = Object.freeze({
   action_dda_gallery: "dda",
   action_dda_report: "ddaReport",
   action_nfe_report: "nfeReport",
+  action_sicoob_transaction_report: "sicoobTransactionReport",
   action_hr_gallery_presencas: "presenceDescriptions",
   action_hr_gallery_validar_presencas: "presenceDescriptions",
   action_hr_gallery_funcionarios: "contractorEmployment",
@@ -1108,6 +1114,7 @@ export function createAppController({
   registrationGalleryFactory = defaultRegistrationGalleryFactory,
   ddaReportFactory = defaultDdaReportFactory,
   nfeReportFactory = defaultNfeReportFactory,
+  sicoobTransactionReportFactory = defaultSicoobTransactionReportFactory,
   ddaSyncSessionFactory = createDdaSyncSession,
   sefazSyncSessionFactory = createSefazSyncSession,
   enableDdaReminders = false,
@@ -6323,6 +6330,7 @@ export function createAppController({
     switch (action) {
       case 'open-dda-report': return registrationGalleries.get('ddaReport');
       case 'open-nfe-report': return registrationGalleries.get('nfeReport');
+      case 'open-sicoob-transaction-report': return registrationGalleries.get('sicoobTransactionReport');
       case 'open-provision-report': return provisionReport;
       case 'open-payment-ledger': return paymentLedger;
       case 'open-management-report': return managementReport;
@@ -6420,6 +6428,7 @@ export function createAppController({
       case 'open-pending-provisions': return openPendingProvisions();
       case 'open-dda-report': return openRegistrationGallery('ddaReport', 'action_dda_report');
       case 'open-nfe-report': return openRegistrationGallery('nfeReport', 'action_nfe_report');
+      case 'open-sicoob-transaction-report': return openRegistrationGallery('sicoobTransactionReport', 'action_sicoob_transaction_report');
       case 'open-provision-report': return openPaymentLedger('provision');
       case 'open-payment-ledger': return openPaymentLedger();
       case 'open-management-report': return openPaymentLedger('management');
@@ -10076,9 +10085,13 @@ export function createAppController({
     if (!account || stopped || flowBusy()) return false;
     const isDdaReport = kind === "ddaReport";
     const isNfeReport = kind === "nfeReport";
-    const sourceKind = isDdaReport ? "dda" : isNfeReport ? "notas_fiscais_sefaz" : kind;
+    const isSicoobTransactionReport = kind === "sicoobTransactionReport";
+    const sourceKind = isDdaReport ? "dda" : isNfeReport ? "notas_fiscais_sefaz"
+      : isSicoobTransactionReport ? "financial_movement" : kind;
+    const reportAction = isDdaReport ? 'open-dda-report' : isNfeReport ? 'open-nfe-report'
+      : isSicoobTransactionReport ? 'open-sicoob-transaction-report' : '';
     const isGalleryMenu = ['assetMenu', 'registrationMenu'].includes(sourceKind);
-    if ((isDdaReport || isNfeReport) && store.getState().activeFlow) return false;
+    if (reportAction && store.getState().activeFlow) return false;
     disposeSupplierPayrollReport();
     disposeSacPathologiesReport();
     disposeQuotationReport();
@@ -10101,7 +10114,7 @@ export function createAppController({
       if (stopped || account !== owner || sessionRevision !== revision || ddaReminderInteraction !== interaction) return false;
       return openRegistrationGallery(kind, replyId, openOptions);
     }
-    if (isGalleryMenu || isNfeReport) {
+    if (isGalleryMenu || isNfeReport || isSicoobTransactionReport) {
       // Opening a new destination supersedes earlier gallery requests, even
       // when its transport has not settled after the panel was closed.
       galleryOpeningRevision++;
@@ -10117,10 +10130,12 @@ export function createAppController({
     const opening = (async () => {
       try {
         if (!registrationGalleries.has(kind)) {
-          const data = isGalleryMenu ? null : await registrationGalleryDataFactory({ kind: sourceKind,assertSession, accountKey: galleryAccount.homeAccountId || galleryAccount.localAccountId || galleryAccount.idTokenClaims?.oid || "", userEmail: galleryAccount.username || galleryAccount.email || "", tokenProvider: async scopes => {
+          const data = isGalleryMenu ? null : await registrationGalleryDataFactory({ kind: sourceKind,assertSession, accountKey: galleryAccount.homeAccountId || galleryAccount.localAccountId || galleryAccount.idTokenClaims?.oid || "", userEmail: galleryAccount.username || galleryAccount.email || "", tokenProvider: async (scopes, { signal } = {}) => {
             assertSession();
             const token = await auth.getToken(scopes).catch(async error => {
               if (error?.code !== "AUTH_REQUIRED" || typeof auth.authorize !== "function") throw error;
+              assertSession();
+              signal?.throwIfAborted();
               await auth.authorize(scopes, { resumeAction: replyId });
               assertSession();
               return auth.getToken(scopes);
@@ -10130,7 +10145,8 @@ export function createAppController({
           } });
           if (!openingIsCurrent()) return false;
           assertSession();
-          const factory = isDdaReport ? ddaReportFactory : isNfeReport ? nfeReportFactory : registrationGalleryFactory;
+          const factory = isDdaReport ? ddaReportFactory : isNfeReport ? nfeReportFactory
+            : isSicoobTransactionReport ? sicoobTransactionReportFactory : registrationGalleryFactory;
           const panel = await factory({
             kind: sourceKind, data,
             ...(isGalleryMenu ? { onSelect: async target => {
@@ -10168,7 +10184,8 @@ export function createAppController({
                 return startProvisionSettlement(id, 'provision-description', { closeDdaReport: () => panel.close() });
               },
             } : {}),
-            ...(["contractorEmployment", "dda", "notas_fiscais_sefaz", 'assetMenu', 'registrationMenu', 'assetLaunches'].includes(sourceKind) ? {} : { onCreate: galleryCreationHandler(replyId, assertSession) }),
+            ...(isSicoobTransactionReport ? { onClose: () => registrationGalleryOpenings.delete(kind) } : {}),
+            ...(reportAction || ["contractorEmployment", "dda", "notas_fiscais_sefaz", 'assetMenu', 'registrationMenu', 'assetLaunches'].includes(sourceKind) ? {} : { onCreate: galleryCreationHandler(replyId, assertSession) }),
             ...(["notas_fiscais_sefaz", "dda", "presenceDescriptions", "provisionDescription", "documents", "asset", "assetFunction", "assetProduct", "assetGroup", "workDiary", "quotes", "contracts", "contractLines", "measurements", "measurementLines", "stageDemonstratives", "constructionStages", "recurringTasks", "delegatedTasks"].includes(sourceKind) ? {
               openMediaCollection: (items, previewOptions) => {
                 assertSession();
@@ -10182,7 +10199,6 @@ export function createAppController({
             onHome: () => { assertSession(); return returnToMainMenu(); },
           });
           if (!openingIsCurrent()) { panel.destroy?.(); return false; }
-          const reportAction = isDdaReport ? 'open-dda-report' : isNfeReport ? 'open-nfe-report' : '';
           registrationGalleries.set(kind, reportAction ? decorateControllerReport(panel, reportAction) : panel);
         }
         if (openOptions.automatic && !openOptions.isCurrent?.()) return false;
@@ -10193,7 +10209,7 @@ export function createAppController({
         };
         registrationGalleryOpenOptions.set(panel, panelOpenOptions);
         await panel.open(panelOpenOptions);
-        if (openOptions.automatic && panel.element?.hidden) return false;
+        if ((openOptions.automatic || isSicoobTransactionReport) && panel.element?.hidden) return false;
         return openingIsCurrent();
       } catch (error) {
         if (openingIsCurrent()) setSessionError(error, "Não foi possível abrir a galeria de cadastros.");
@@ -12141,11 +12157,16 @@ export function createAppController({
         ddaPaymentLaunchAbort?.abort();
         ddaReminderInteraction++;
       }
-      if (registrationGalleryOpenings.has('nfeReport') && type !== 'open-nfe-report' && command?.replyId !== 'action_nfe_report'
-        && (type.startsWith('open-') || ['select-reply', 'send-text', 'finish-flow'].includes(type))) {
-        galleryOpeningRevision++;
-        registrationGalleryOpenings.clear();
-        registrationGalleries.get('nfeReport')?.close();
+      if (type.startsWith('open-') || ['select-reply', 'send-text', 'finish-flow'].includes(type)) {
+        const pendingReports = [
+          ['nfeReport', 'open-nfe-report', 'action_nfe_report'],
+          ['sicoobTransactionReport', 'open-sicoob-transaction-report', 'action_sicoob_transaction_report'],
+        ].filter(([kind, action, reply]) => registrationGalleryOpenings.has(kind) && type !== action && command?.replyId !== reply);
+        if (pendingReports.length) {
+          galleryOpeningRevision++;
+          registrationGalleryOpenings.clear();
+          for (const [kind] of pendingReports) registrationGalleries.get(kind)?.close();
+        }
       }
       if (type === 'open-trancid-report') trancidAutoReminder.handled();
       else if (trancidReportSession && type.startsWith('open-')) disposeTrancidReport();
@@ -12573,6 +12594,7 @@ export function createAppController({
     bind("close-pending-provisions", closePendingProvisions);
     bind("open-dda-report", () => openRegistrationGallery("ddaReport", "action_dda_report"));
     bind("open-nfe-report", () => openRegistrationGallery("nfeReport", "action_nfe_report"));
+    bind("open-sicoob-transaction-report", () => openRegistrationGallery("sicoobTransactionReport", "action_sicoob_transaction_report"));
     bind("open-pending-provisions", openPendingProvisions);
     bind('print-pending-provisions', () => {
       if (!account || stopped || flowBusy() || !pendingProvisionSnapshot || pendingProvisionReminderOpen) return false;

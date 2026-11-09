@@ -276,7 +276,15 @@ test("atalho do mascote fica fora do cartão e abre provisões sem selecionar Pe
   const provisionReport = root.querySelector('[data-action="open-provision-report"]');
   assert.ok(provisionReport, 'o segundo mascote abre o relatório de provisões');
   const ddaShortcut = root.querySelector('[data-action="open-dda-report"]');
-  assert.equal(root.querySelector('[data-action="open-nfe-report"]').nextElementSibling, ddaShortcut);
+  const nfeShortcut = root.querySelector('[data-action="open-nfe-report"]');
+  const sicoobShortcut = root.querySelector('[data-action="open-sicoob-transaction-report"]');
+  assert.equal(root.querySelector('.chat-main-payment-ledger-shortcut'), sicoobShortcut);
+  assert.equal(sicoobShortcut.nextElementSibling, nfeShortcut);
+  assert.equal(nfeShortcut.nextElementSibling, ddaShortcut);
+  let sicoobReportOpened = 0;
+  view.on('open-sicoob-transaction-report', () => sicoobReportOpened++);
+  sicoobShortcut.click();
+  assert.equal(sicoobReportOpened, 1);
   assert.equal(ddaShortcut.nextElementSibling, provisionReport);
   assert.equal(provisionReport.nextElementSibling, paymentShortcut);
   assert.equal(bubble.contains(provisionReport), false);
@@ -330,7 +338,7 @@ const returnedHomeOptions = [
 ];
 const returnedHomeActions = [
   'open-pending-provisions', 'open-commercial-receipts', 'open-commercial-milestones', 'open-commercial-documents', 'open-sac-pathologies',
-  'open-nfe-report', 'open-dda-report', 'open-provision-report', 'open-payment-ledger', 'open-management-report',
+  'open-sicoob-transaction-report', 'open-nfe-report', 'open-dda-report', 'open-provision-report', 'open-payment-ledger', 'open-management-report',
   'open-order-validation-report', 'open-quotation-report', 'open-depreciation-report', 'open-document-control-report',
   'open-task-association-report', 'open-delegated-deadline-report', 'open-rhid-mascot-report', 'open-cargos-table', 'open-attendance-summary',
   'open-stage-progress', 'open-supplier-payroll-report', 'open-trancid-report', 'open-supplier-workforce-report', 'open-contractor-control-report',
@@ -419,7 +427,7 @@ test('retorno com aviso preserva restrições de contexto, permissão e busy dos
   }
   view.render(signedInState({ messages: [menu], activeText: { id: 'sending' } }));
   const busyButtons = [...root.querySelectorAll('.chat-message--assistant button[data-action^="open-"]')];
-  assert.equal(busyButtons.length, 26);
+  assert.equal(busyButtons.length, 27);
   assert.ok(busyButtons.every(button => button.disabled));
   root.querySelector('[data-action="open-payment-ledger"]').click();
   assert.deepEqual(opened, []);
