@@ -1,6 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { existsSync, writeFileSync } from 'node:fs';
+import { resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { createServer } from 'vite';
 import { JSDOM } from 'jsdom';
@@ -10,8 +11,10 @@ test('retorno com aviso e anexo restaura mascotes e abre relatório real em320/3
   const browser = [process.env.CHROME_BIN, 'C:/Program Files/Google/Chrome/Application/chrome.exe', '/usr/bin/google-chrome', '/usr/bin/chromium']
     .find(path => path && existsSync(path));
   if (!browser) return t.skip('Chrome unavailable');
-  const server = await createServer({ root: fileURLToPath(new URL('..', import.meta.url)),
-    server: { host: '127.0.0.1', port: 0 }, logLevel: 'silent' });
+  const root = fileURLToPath(new URL('..', import.meta.url));
+  const server = await createServer({ root, cacheDir: 'node_modules/.vite-home-return',
+    optimizeDeps: { noDiscovery: true, force: true, include: ['decimal.js'] },
+    server: { host: '127.0.0.1', port: 0, hmr: false, watch: null, fs: { allow: [resolve(root, '../..')] } }, logLevel: 'silent' });
   try {
     await server.listen();
     for (const width of [320, 390, 1365]) {
@@ -24,6 +27,7 @@ test('retorno com aviso e anexo restaura mascotes e abre relatório real em320/3
         assert.equal(layout.submenuIcons, 0);
         assert.equal(layout.count, 27);
         assert.equal(new Set(layout.actions).size, layout.count, 'sem mascotes duplicados');
+        assert.ok(layout.actions.includes('open-sicoob-transaction-report'));
         assert.ok(layout.buttons.every(button => button.external && button.loaded && button.width >= 44 && button.height >= 44
           && button.left >= 0 && button.right <= width + 1), JSON.stringify({ width, layout }));
         assert.equal(layout.overflow, false);
