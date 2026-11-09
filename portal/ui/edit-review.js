@@ -1,4 +1,5 @@
 import { escapeHtml, normalizeCadastroValue } from '../core/utils.js';
+import { bindBackdropDismiss } from './backdrop-dismiss.js';
 
 const reviews = new WeakMap();
 let reviewId = 0;
@@ -151,7 +152,7 @@ export function bindEditHighlights({ form, columns, baseline = {}, readFields, r
 export function cancelEditReview(form) { reviews.get(form)?.cancel(); }
 
 /** A local modal only: persistence remains the caller's responsibility. */
-export function confirmEditChanges({ form, changes, title = 'Confirma as alterações?', signal, cancelLabel = 'CANCELAR', confirmLabel = 'SUBMETER' }) {
+export function confirmEditChanges({ form, changes, title = 'Confirma as alterações?', signal, cancelLabel = 'CANCELAR', confirmLabel = 'SUBMETER', dismissOnBackdrop = false }) {
   if (signal?.aborted) return Promise.resolve(false);
   if (reviews.has(form)) return reviews.get(form).promise;
   const document = form?.ownerDocument;
@@ -216,6 +217,12 @@ export function confirmEditChanges({ form, changes, title = 'Confirma as altera�
   document.body.append(dialog);
   confirm.addEventListener('click', onConfirm);
   cancel.addEventListener('click', onCancel);
+  if (dismissOnBackdrop) bindBackdropDismiss(dialog, () => finish(false), event => {
+    if (event.target !== dialog) return false;
+    // Native modal backdrops target the dialog itself, as does its own padding.
+    const { left, top, right, bottom } = dialog.getBoundingClientRect();
+    return event.clientX < left || event.clientX >= right || event.clientY < top || event.clientY >= bottom;
+  });
   dialog.addEventListener('cancel', onCancel);
   dialog.addEventListener('close', onClose);
   document.addEventListener('keydown', keydown, true);
