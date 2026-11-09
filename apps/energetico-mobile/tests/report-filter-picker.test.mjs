@@ -3,8 +3,25 @@ import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
 import { JSDOM } from 'jsdom';
 import { bindSearchableFilterSelects } from '../src/ui/searchable-filter-selects.js';
+import { reportLayoutViewport } from '../src/ui/report-landscape.js';
 
 const css = readFileSync(new URL('../src/ui/searchable-filter-selects.css', import.meta.url), 'utf8');
+
+test('a safe frame maps a panned portrait viewport into rotated report coordinates', t => {
+  const dom = new JSDOM('<main class="report-landscape-viewport" data-report-portrait="true"><div style="padding:10px 10px 10px 68px"><select></select></div></main>');
+  t.after(() => dom.window.close());
+  const root = dom.window.document.querySelector('main');
+  root.style.setProperty('--report-width', '852px');
+  root.style.setProperty('--report-height', '393px');
+  const frame = root.firstElementChild;
+  Object.defineProperty(dom.window, 'visualViewport', {
+    value:{ width:350, height:450, offsetTop:80, offsetLeft:18 },
+  });
+  assert.deepEqual(reportLayoutViewport(frame.firstElementChild, frame), {
+    rotated:true, left:80, top:25, width:450, height:350,
+  });
+});
+
 function setup(t, { multiple = false } = {}) {
   const dom = new JSDOM('<style></style><form><label>PRODUTO<select name="product"><option value="">Todos</option><option value="aco">Aço estrutural</option><option value="cimento">Cimento</option></select></label><button type="button" id="outside">Fora</button></form>');
   const doc = dom.window.document, select = doc.querySelector('select');

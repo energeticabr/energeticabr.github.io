@@ -33,9 +33,33 @@ export function bindReportLandscape(root) {
   return Object.freeze({update,destroy(){destroyed=true;win.removeEventListener('resize',update);win.removeEventListener('orientationchange',update);}});
 }
 
-export function reportLayoutViewport(element) {
+function insetReportViewport(viewport, frame, width, height) {
+  const padding = frame.ownerDocument.defaultView.getComputedStyle(frame);
+  const top = Math.max(viewport.top, parseFloat(padding.paddingTop) || 0);
+  const left = Math.max(viewport.left, parseFloat(padding.paddingLeft) || 0);
+  const right = Math.min(viewport.left + viewport.width, width - (parseFloat(padding.paddingRight) || 0));
+  const bottom = Math.min(viewport.top + viewport.height, height - (parseFloat(padding.paddingBottom) || 0));
+  return { rotated:viewport.rotated, top, left, width:Math.max(0, right - left), height:Math.max(0, bottom - top) };
+}
+
+export function reportLayoutViewport(element, frame) {
   const root = element.closest('.report-landscape-viewport'), win = element.ownerDocument.defaultView;
+  const viewport = win.visualViewport;
   if (root?.dataset.reportPortrait === 'true') {
+    const width = parseFloat(root.style.getPropertyValue('--report-width'));
+    const height = parseFloat(root.style.getPropertyValue('--report-height'));
+    if (frame) {
+      // Rotate the visible viewport too, so the physical keyboard cannot cover the search.
+      const visibleWidth = viewport?.width || height;
+      const visible = {
+        rotated:true,
+        top:height - (viewport?.offsetLeft || 0) - visibleWidth,
+        left:viewport?.offsetTop || 0,
+        width:viewport?.height || width,
+        height:visibleWidth,
+      };
+      return insetReportViewport(visible, frame, width, height);
+    }
     // Pickers share this rotated containing block. Both axes must include
     // backdrop and panel padding to keep menus within the visible report.
     const style=win.getComputedStyle(root);
@@ -46,11 +70,11 @@ export function reportLayoutViewport(element) {
     const left=(parseFloat(style.paddingLeft)||0)+(parseFloat(panelStyle?.paddingLeft)||0);
     const right=(parseFloat(style.paddingRight)||0)+(parseFloat(panelStyle?.paddingRight)||0);
     return {rotated:true,top,left,
-      width:Math.max(0,parseFloat(root.style.getPropertyValue('--report-width'))-left-right),
-      height:Math.max(0,parseFloat(root.style.getPropertyValue('--report-height'))-top-bottom)};
+      width:Math.max(0,width-left-right),
+      height:Math.max(0,height-top-bottom)};
   }
-  const viewport=win.visualViewport;
-  return {rotated:false,top:viewport?.offsetTop||0,left:viewport?.offsetLeft||0,width:viewport?.width||win.innerWidth,height:viewport?.height||win.innerHeight};
+  const visible = {rotated:false,top:viewport?.offsetTop||0,left:viewport?.offsetLeft||0,width:viewport?.width||win.innerWidth,height:viewport?.height||win.innerHeight};
+  return frame ? insetReportViewport(visible, frame, win.innerWidth, win.innerHeight) : visible;
 }
 
 export function reportLayoutRect(element) {

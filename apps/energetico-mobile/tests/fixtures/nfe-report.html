@@ -2,7 +2,7 @@
 <html lang="pt-BR">
 <head>
 <meta charset="utf-8">
-<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
 <link rel="stylesheet" href="/src/styles.css">
 <link rel="stylesheet" href="/src/ui/payment-ledger.css">
 <link rel="stylesheet" href="/src/ui/dda-report.css">
@@ -190,6 +190,7 @@ if (!report.element.hidden) {
   editor.open = true;
   editor.dispatchEvent(new Event('toggle'));
   const pickerResults = {};
+  const popupBounds = [];
   for (const [name, query, expected, value] of [
     ['supplierId','exemplo','Fornecedor Exemplo','21'],
     ['branchId','obra b','Obra B','23'],
@@ -205,6 +206,7 @@ if (!report.element.hidden) {
     if (!trigger || !popup || !search) { pickerResults[name] = false; continue; }
     trigger.click();
     const popupRect = box(popup);
+    popupBounds.push(popupRect);
     search.focus({preventScroll:true});
     const searchRect = box(search);
     const searchIsVisible = document.elementFromPoint(
@@ -231,6 +233,7 @@ if (!report.element.hidden) {
   const proposalBody = proposal.querySelector('.nfe-proposal-body');
   const proposalScroll = proposalBody.scrollHeight > proposalBody.clientHeight;
   const proposalSubmit = box(proposal.querySelector('[data-nfe-proposal-submit]'));
+  document.documentElement.dataset.proposalBounds = JSON.stringify([box(proposal), proposalSubmit, ...popupBounds]);
   const proposalBackdropCloses = clickBackdrop(proposal.parentElement) && !proposal.isConnected;
   if (proposal.isConnected) proposal.querySelector('.nfe-proposal-header button').click();
   const pickerRestored = propose.isConnected && !picker.closest('[inert]') && document.activeElement === propose;

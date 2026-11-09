@@ -38,6 +38,8 @@ export function createNfeProposalView({ document:doc, host, service, onPosted })
   async function show(row, trigger) {
     if (host.hidden || current) return;
     const overlay = el('div', 'nfe-proposal-overlay');
+    overlay.toggleAttribute('data-iphone', doc.defaultView.navigator.userAgent.includes('iPhone'));
+    const pickerOptions = { report:true, reportFrame:overlay };
     const dialog = el('section', 'nfe-proposal-dialog');
     dialog.setAttribute('role', 'dialog');
     dialog.setAttribute('aria-modal', 'true');
@@ -210,7 +212,7 @@ export function createNfeProposalView({ document:doc, host, service, onPosted })
       populate(branch, catalog.branches, draft.branchId, 'Selecione a filial');
       populate(account, catalog.accounts, draft.accountId, 'Selecione a conta');
       orderDate.value = draft.date;
-      pickers.set(headerFields, bindSearchableFilterSelects(headerFields, { report:true }));
+      pickers.set(headerFields, bindSearchableFilterSelects(headerFields, pickerOptions));
       const list = el('div', 'nfe-proposal-lines');
       body.append(list);
       fiscal.lines.forEach((original, index) => {
@@ -272,7 +274,7 @@ export function createNfeProposalView({ document:doc, host, service, onPosted })
           fields.append(unitCheck);
           syncUnit();
           lock();
-          pickers.set(editor, bindSearchableFilterSelects(fields, { report:true }));
+          pickers.set(editor, bindSearchableFilterSelects(fields, pickerOptions));
         });
       });
       refreshTotals();

@@ -199,20 +199,36 @@
   white-space: nowrap;
 }
 .nfe-proposal-overlay {
+  --nfe-proposal-safe-top: max(10px, calc(env(safe-area-inset-top, 0px) + 8px));
+  --nfe-proposal-safe-right: max(10px, calc(env(safe-area-inset-right, 0px) + 8px));
+  --nfe-proposal-safe-bottom: max(10px, calc(env(safe-area-inset-bottom, 0px) + 8px));
+  --nfe-proposal-safe-left: max(10px, calc(env(safe-area-inset-left, 0px) + 8px));
+  --nfe-proposal-iphone-edge: 0px;
   position: absolute;
   inset: 0;
   z-index: 32;
   display: grid;
+  grid-template: minmax(0, 1fr) / minmax(0, 1fr);
   place-items: center;
-  padding: 10px;
+  padding: var(--nfe-proposal-safe-top) max(var(--nfe-proposal-safe-right), var(--nfe-proposal-iphone-edge))
+    var(--nfe-proposal-safe-bottom) max(var(--nfe-proposal-safe-left), var(--nfe-proposal-iphone-edge));
   background: #112f4770;
+}
+.nfe-proposal-overlay[data-iphone] {
+  /* WKWebView can expose zero insets even when the iPhone status bar overlays the page. */
+  --nfe-proposal-iphone-edge: 68px;
+}
+.nfe-report[data-report-portrait="true"] .nfe-proposal-overlay {
+  /* A clockwise rotation maps the physical top (camera) to the logical left. */
+  padding: var(--nfe-proposal-safe-right) var(--nfe-proposal-safe-bottom)
+    var(--nfe-proposal-safe-left) max(var(--nfe-proposal-safe-top), var(--nfe-proposal-iphone-edge));
 }
 .nfe-proposal-dialog {
   box-sizing: border-box;
   display: flex;
   flex-direction: column;
   width: min(960px, 100%);
-  max-height: calc(var(--report-height, 100dvh) - 20px);
+  max-height: 100%;
   min-height: 0;
   overflow: hidden;
   border: 1px solid #a7c1cd;

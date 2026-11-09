@@ -101,7 +101,7 @@ function createPicker(select, closeOthers, options = {}) {
   }
   function positionPopup() {
     if (popup.hidden || destroyed) return;
-    const viewport = reportLayoutViewport(select);
+    const viewport = reportLayoutViewport(select, options.reportFrame);
     let top = viewport.top;
     let bottom = top + viewport.height;
     let left = viewport.left;
@@ -120,16 +120,16 @@ function createPicker(select, closeOthers, options = {}) {
       } else {
         reportViewport = { width: viewportWidth, height: viewportHeight, keyboardOpen: false };
       }
-      // Fixed panels do not inherit the app header's safe-area spacing. Read
-      // resolved env() insets from the backdrop, including after rotation.
-      const safeArea = view.getComputedStyle(backdrop);
-      const safeTop = viewport.rotated ? 0 : parseFloat(safeArea.paddingTop) || 0;
-      const safeBottom = viewport.rotated ? 0 : parseFloat(safeArea.paddingBottom) || 0;
-      const safeLeft = viewport.rotated ? 0 : parseFloat(safeArea.paddingLeft) || 0;
-      const safeRight = viewport.rotated ? 0 : parseFloat(safeArea.paddingRight) || 0;
+      // Rotated viewports and explicit frames already include their safe insets.
+      const safeArea = viewport.rotated || options.reportFrame ? null : view.getComputedStyle(backdrop);
+      const safeTop = parseFloat(safeArea?.paddingTop) || 0;
+      const safeBottom = parseFloat(safeArea?.paddingBottom) || 0;
+      const safeLeft = parseFloat(safeArea?.paddingLeft) || 0;
+      const safeRight = parseFloat(safeArea?.paddingRight) || 0;
       const usableWidth = right - left - safeLeft - safeRight;
       const width = Math.max(0, Math.min(480, usableWidth - 24));
-      const height = Math.max(0, Math.min(640, (selectionActions ? viewportHeight : reportViewport.height) - safeTop - safeBottom - 24));
+      const availableHeight = selectionActions || options.reportFrame ? viewportHeight : reportViewport.height;
+      const height = Math.max(0, Math.min(640, availableHeight - safeTop - safeBottom - 24));
       popup.dataset.placement = 'expanded';
       popup.style.width = `${width}px`;
       popup.style.left = `${left + safeLeft + (usableWidth - width) / 2}px`;

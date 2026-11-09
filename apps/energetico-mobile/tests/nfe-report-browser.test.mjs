@@ -104,6 +104,31 @@ test('NFE opens the horizontal fiscal table from the blue mascot in portrait and
         }
       } finally { dom.window.close(); }
     }
+    const userAgent = 'Mozilla/5.0 (iPhone; CPU iPhone OS 26_0 like Mac OS X) AppleWebKit/605.1.15';
+    for (const [width,height,safeAreaInsets,safeTop,safeLeft,safeRight] of [
+      [390,844,{top:72,bottom:34},80,10,10],
+      [320,568,{top:0,bottom:0},68,10,10],
+      [393,852,{top:0,bottom:0},68,10,10],
+      [844,390,{left:74,right:74,bottom:21},10,82,82],
+      [852,393,{left:0,right:0},10,68,68],
+    ]) {
+      const { stdout } = await runBrowserLayout(browser, { width, height, url, mobile:true, safeAreaInsets, userAgent });
+      const dom = new JSDOM(stdout);
+      try {
+        const { proposalBackdropCloses, pickerResults } = JSON.parse(dom.window.document.documentElement.dataset.orderLink);
+        const bounds = JSON.parse(dom.window.document.documentElement.dataset.proposalBounds);
+        assert.equal(bounds.length, 7, 'proposal, submit and all five dropdowns');
+        for (const rect of bounds) {
+          const info = JSON.stringify({width,height,safeAreaInsets,rect});
+          assert.ok(rect.width > 0 && rect.height > 0, info);
+          assert.ok(rect.y >= safeTop - 1 && rect.x >= safeLeft - 1, info);
+          assert.ok(rect.bottom <= height - Math.max(10, (safeAreaInsets.bottom || 0) + 8) + 1, info);
+          assert.ok(rect.right <= width - safeRight + 1, info);
+        }
+        assert.equal(proposalBackdropCloses, true);
+        assert.deepEqual(pickerResults, { supplierId:true, branchId:true, accountId:true, productId:true, stageId:true });
+      } finally { dom.window.close(); }
+    }
     if (capture) {
       const { screenshot } = await runBrowserLayout(browser, {width:390,height:844,url:`${url}?home`,captureScreenshot:true});
       writeFileSync(join(capture,'home-390.png'), screenshot);
