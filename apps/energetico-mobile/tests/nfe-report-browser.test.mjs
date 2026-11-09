@@ -28,7 +28,7 @@ test('NF-e PDFs use the compact DDA viewport and navigate between the DANFE and 
       assert.equal(state.error, undefined, details);
       assert.ok(state.widthRatio >= .95, details);
       assert.ok(state.heightRatio >= .60, details);
-      for (const field of ['compact', 'fits', 'danfe', 'correction', 'backToDanfe', 'reportPreserved', 'singleNoArrows']) {
+      for (const field of ['compact', 'fits', 'danfe', 'correction', 'backToDanfe', 'reportPreserved', 'singleNoArrows', 'exportErrorVisible']) {
         assert.equal(state[field], true, `${field} ${details}`);
       }
       assert.equal(state.count, '1 de 2', details);

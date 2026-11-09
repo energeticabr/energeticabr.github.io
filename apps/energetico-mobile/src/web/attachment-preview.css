@@ -174,7 +174,7 @@
   text-overflow: ellipsis;
   white-space: nowrap;
 }
-.attachment-preview-dialog[data-layout="nfe-report-pdf"] .attachment-preview-status[data-complete] {
+.attachment-preview-dialog[data-layout="nfe-report-pdf"] .attachment-preview-status:has(> [data-preview-complete]) {
   position: absolute;
   width: 1px;
   height: 1px;

@@ -17,7 +17,7 @@ const danfe = `DANFE-${key}-deadbeefdeadbeef.pdf`;
 const correction = `CCe-${key}-110110-01.pdf`;
 const service = 'DANFSe.pdf';
 const find = selector => document.querySelector(selector);
-const preview = createAttachmentPreview({ documentRef:document, exportMedia:async () => {} });
+const preview = createAttachmentPreview({ documentRef:document, exportMedia:async () => { throw Error('Exportação fictícia indisponível'); } });
 const report = decorateReportNavigation(createNfeReportView({ document, data:{
   loadSnapshot:async () => ({ rows:[
     { id:'1', fields:{ MODELO:'55', CHAVE_ACESSO:key, DANFE_URL:`https://example.test/${danfe}` } },
@@ -62,7 +62,7 @@ try {
   state.widthRatio = page.offsetWidth / viewport.clientWidth;
   state.heightRatio = viewport.clientHeight / dialog.clientHeight;
   state.compact = close.textContent === '×' && close.offsetLeft < title.offsetLeft
-    && find('.attachment-preview-back').hidden && footer.clientHeight <= 64;
+    && !nav.hidden && nav.clientHeight > 0 && find('.attachment-preview-back').hidden && footer.clientHeight <= 64;
   const bounds = dialog.getBoundingClientRect();
   state.fits = bounds.top >= 0 && bounds.left >= 0 && bounds.right <= innerWidth && bounds.bottom <= innerHeight;
   state.danfe = title.textContent === danfe;
@@ -81,6 +81,11 @@ try {
   find('[data-invoice-id="2"] .nfe-pdf').click();
   await ready();
   state.singleNoArrows = nav.hidden;
+  const exportButton = find('.attachment-preview-export');
+  exportButton.click();
+  await Promise.resolve();
+  const status = find('.attachment-preview-status');
+  state.exportErrorVisible = status.textContent.includes('Tente novamente') && status.clientHeight > 1;
   close.click();
   trigger.click();
   await ready();

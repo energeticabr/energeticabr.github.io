@@ -175,7 +175,6 @@ export function createAttachmentPreview({
   // Keep that latest status ready to restore when the operation is cancelled.
   function showPreviewStatus(session, ...nodes) {
     if (active !== session) return;
-    status.removeAttribute('data-complete');
     session.statusContent = nodes.filter(node => node != null).map(node => typeof node === "string" ? documentRef.createTextNode(node) : node);
     if (!session.appendFeedback) status.replaceChildren(...session.statusContent);
   }
@@ -445,8 +444,8 @@ export function createAttachmentPreview({
     session.progressTask.complete();
     session.previewReady = true;
     const badge = session.loader.querySelector('[role="progressbar"]');
+    if (session.layout === 'nfe-report-pdf') badge?.setAttribute('data-preview-complete', '');
     showPreviewStatus(session, badge, ` ${message}`);
-    status.setAttribute('data-complete', '');
   }
 
   async function showNativePdf(session) {
@@ -723,7 +722,7 @@ export function createAttachmentPreview({
       }
       explain(session, session.blob
         ? "Não foi possível mostrar este arquivo. Se o PDF tiver senha ou estiver danificado, tente abri-lo em outro app."
-        : `Não foi possível carregar este arquivo. Feche esta janela e tente novamente ${compactReport ? 'no relatório' : 'no chat'}.`);
+        : `Não foi possível carregar este arquivo. Feche esta janela e tente novamente ${layout === 'dda-report-pdf' ? 'no relatório DDA' : compactReport ? 'no relatório de notas fiscais' : 'no chat'}.`);
       if (!session.blob) showPreviewStatus(session, "O arquivo ainda não está disponível para salvar.");
     }
   }
