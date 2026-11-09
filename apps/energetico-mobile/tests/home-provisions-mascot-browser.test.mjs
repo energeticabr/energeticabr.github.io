@@ -39,7 +39,7 @@ test('mascote externo preserva largura de Pendências e abre provisões em celul
     const send=(method,params={},sessionId)=>new Promise((done,fail)=>{const id=++seq,timer=setTimeout(()=>{pending.delete(id);fail(new Error(method+' timed out'));},15000);pending.set(id,{done,fail,timer});socket.send(JSON.stringify({id,method,params,sessionId}));});
     const {targetId}=await send('Target.createTarget',{url:'about:blank'});
     const {sessionId}=await send('Target.attachToTarget',{targetId,flatten:true});
-    const evaluate=async expression=>{const r=await send('Runtime.evaluate',{expression,returnByValue:true},sessionId);assert.ok(!r.exceptionDetails,JSON.stringify(r.exceptionDetails));return r.result.value;};
+    const evaluate=async (expression,awaitPromise=false)=>{const r=await send('Runtime.evaluate',{expression,returnByValue:true,awaitPromise},sessionId);assert.ok(!r.exceptionDetails,JSON.stringify(r.exceptionDetails));return r.result.value;};
     for(const [width,pwa] of [[320,false],[390,false],[768,false],[1365,false],[390,true]]) {
       await send('Emulation.setDeviceMetricsOverride',{width,height:844,deviceScaleFactor:1,mobile:false},sessionId);
       await send('Page.navigate',{url:`http://127.0.0.1:${server.httpServer.address().port}/tests/fixtures/home-provisions-mascot.html?width=${width}&pwa=${pwa}`},sessionId);
@@ -56,7 +56,7 @@ test('mascote externo preserva largura de Pendências e abre provisões em celul
       assert.equal(layout.transcriptOverflow,false,'área rolável sem overflow lateral');
       assert.ok(layout.image&&layout.i.x>=layout.m.x&&layout.i.right<=layout.m.right&&layout.i.bottom<=layout.m.bottom);
       const shortcuts=await evaluate(`(()=>{const buttons=[...document.querySelectorAll('.chat-main-provisions-shortcut,.chat-main-payment-ledger-shortcut')];return buttons.map(b=>{const r=b.getBoundingClientRect();return {action:b.dataset.action,y:r.y,bottom:r.bottom,image:b.querySelector('img').naturalWidth>0};});})()`);
-assert.deepEqual(shortcuts.map(s=>s.action),['open-pending-provisions','open-nfe-report','open-dda-report','open-provision-report','open-payment-ledger','open-management-report','open-order-validation-report','open-quotation-report','open-depreciation-report','open-document-control-report','open-task-association-report','open-delegated-deadline-report']);
+assert.deepEqual(shortcuts.map(s=>s.action),['open-pending-provisions','open-sicoob-transaction-report','open-nfe-report','open-dda-report','open-provision-report','open-payment-ledger','open-management-report','open-order-validation-report','open-quotation-report','open-depreciation-report','open-document-control-report','open-task-association-report','open-delegated-deadline-report']);
       assert.ok(shortcuts.every((s,i)=>s.image&&(!i||s.y>=shortcuts[i-1].bottom+4)),JSON.stringify(shortcuts));
       const depreciationHit=await evaluate(`(()=>{const button=document.querySelector('[data-action=open-depreciation-report]'),r=button.getBoundingClientRect();return document.elementFromPoint(r.x+r.width/2,r.y+r.height/2)?.closest('[data-action]')?.dataset.action||'';})()`);
       assert.equal(depreciationHit,'open-depreciation-report','real touch on the seventh mascot must not hit an overlapping legacy avatar');
@@ -66,7 +66,7 @@ assert.deepEqual(shortcuts.map(s=>s.action),['open-pending-provisions','open-nfe
       assert.ok(reportLayout.width>=44&&reportLayout.height>=44&&reportLayout.x>=0&&reportLayout.image);
       assert.equal(reportLayout.fill,'rgb(0, 13, 75)');
       const mascotFit=await evaluate(`(()=>{return [...document.querySelectorAll('.chat-message--external-provisions > button,.chat-message--external-cargos > button,.chat-main-commercial-shortcuts > button')].map(b=>{const i=b.querySelector('img'),r=b.getBoundingClientRect(),q=i.getBoundingClientRect(),s=getComputedStyle(i);return {action:b.dataset.action,source:i.naturalWidth,fit:s.objectFit,blend:s.mixBlendMode,transform:s.transform,inside:q.left>=r.left&&q.right<=r.right&&q.top>=r.top&&q.bottom<=r.bottom,fill:getComputedStyle(b).backgroundColor};});})()`);
-      assert.equal(mascotFit.length,26);
+      assert.equal(mascotFit.length,27);
       const commercialTop=await evaluate(`(()=>{const nav=document.querySelector('nav[aria-label="Relatórios comerciais"]'),bubble=document.querySelector('[data-reply-id=group_pending]').closest('.chat-bubble'),blue=document.querySelector('.chat-main-provisions-shortcut');const rect=n=>{const r=n.getBoundingClientRect();return {x:r.x,y:r.y,right:r.right,bottom:r.bottom,width:r.width,height:r.height};};return nav?{row:rect(nav),bubble:rect(bubble),blue:rect(blue),external:!bubble.contains(nav),buttons:[...nav.querySelectorAll('button')].map(b=>({action:b.dataset.action,...rect(b)}))}:null;})()`);
       assert.ok(commercialTop,'os quatro mascotes comerciais devem ter uma faixa acima do menu');
       assert.equal(commercialTop.external,true);
@@ -74,7 +74,28 @@ assert.deepEqual(shortcuts.map(s=>s.action),['open-pending-provisions','open-nfe
       assert.ok(commercialTop.row.bottom+8<=commercialTop.bubble.y,'o cartão branco desce para abrir espaço à faixa');
       assert.ok(Math.abs(commercialTop.buttons[0].x-commercialTop.blue.x-56)<=1,'primeiro laranja deslocado uma casa para a direita');
       assert.ok(Math.abs(commercialTop.buttons[0].y-commercialTop.blue.y)<=1,'provisões e laranjas na mesma faixa');
-      assert.ok(Math.abs(shortcuts[1].y-layout.p.y)<=1,'NFE na vaga anterior, alinhada a Pendências');
+      assert.ok(Math.abs(shortcuts[1].y-layout.p.y)<=1,'Sicoob na vaga anterior, alinhada a Pendências');
+      const sicoobFit = await evaluate(`(async () => {
+        const button = document.querySelector('[data-action="open-sicoob-transaction-report"]');
+        const hit = button.getBoundingClientRect();
+        if (document.elementFromPoint(hit.x + hit.width / 2, hit.y + hit.height / 2)?.closest('button') !== button) return null;
+        button.click();
+        await new Promise(requestAnimationFrame);
+        const report = document.querySelector('.sicoob-transaction-overlay');
+        const content = report.querySelector('.ddr-content');
+        const dialog = report.querySelector('[role="dialog"]').getBoundingClientRect();
+        const fit = {
+          visible: !report.hidden && dialog.width > 0 && dialog.height > 0,
+          portrait: report.dataset.reportPortrait,
+          text: report.querySelector('tbody tr')?.textContent,
+          fits: content.clientHeight > 70 && content.scrollWidth <= content.clientWidth + 1,
+        };
+        report.querySelector('.report-close-control').click();
+        return { ...fit, closed: report.hidden };
+      })()`, true);
+      assert.ok(sicoobFit?.visible && sicoobFit.fits && sicoobFit.closed, JSON.stringify(sicoobFit));
+      assert.equal(sicoobFit.portrait, String(width < 844));
+      assert.match(sicoobFit.text, /Loja Exemplo.*PIX ENVIADO.*1\.250,99/);
       assert.ok(commercialTop.buttons.every((b,i)=>b.width>=44&&b.height>=44&&Math.abs(b.y-commercialTop.row.y)<=1&&b.x>=0&&b.right<=width&&(!i||b.x>=commercialTop.buttons[i-1].right+8)),JSON.stringify(commercialTop));
       const pinkActions=mascotFit.filter(m=>['open-cargos-table','open-attendance-summary','open-stage-progress','open-supplier-payroll-report','open-trancid-report','open-supplier-workforce-report','open-contractor-control-report','open-pending-supplier-payments-report','open-pending-work-diaries-report'].includes(m.action));
       assert.deepEqual(pinkActions.map(m=>m.action),['open-cargos-table','open-attendance-summary','open-stage-progress','open-supplier-payroll-report','open-trancid-report','open-supplier-workforce-report','open-contractor-control-report','open-pending-supplier-payments-report','open-pending-work-diaries-report']);
