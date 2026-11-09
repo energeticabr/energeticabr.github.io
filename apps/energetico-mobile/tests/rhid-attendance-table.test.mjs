@@ -15,6 +15,23 @@ test("sugere horários apenas para dias úteis e diferencia a saída de sexta-fe
   assert.equal(suggestedRhidAdjustmentTime("entry1", "2026-02-30"), "");
 });
 
+test("horário sugerido para almoço respeita os limites da jornada", () => {
+  const date = "2026-09-29";
+  assert.equal(suggestedRhidAdjustmentTime("entry2", date, {
+    exit1: { effective: "12:10" }, exit2: { effective: "13:00" },
+  }), "");
+  assert.equal(suggestedRhidAdjustmentTime("exit1", date, {
+    entry1: { effective: "11:30" },
+  }), "");
+});
+
+test("batidas de almoço ambíguas exigem conferência manual", () => {
+  const date = "2026-09-29";
+  const slots = { exit1: { rhidCandidates: ["11:05", "11:15", "11:25"] } };
+  assert.equal(suggestedRhidAdjustmentTime("exit1", date, slots), "");
+  assert.equal(suggestedRhidAdjustmentTime("entry2", date, slots), "");
+});
+
 test("horários azuis confirmados entram no total; lacunas cinzas continuam parciais", () => {
   const table = buildRhidAttendanceTable([{ Id: 8, ID_PESSOA_RHID: "8", NOME_COLABORADOR: "BERNARDO",
     BATIDAS_RHID: "12:00; 13:00; 17:00",
