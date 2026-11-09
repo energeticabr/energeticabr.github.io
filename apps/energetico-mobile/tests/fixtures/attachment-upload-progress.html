@@ -47,7 +47,7 @@ if (params.get('mode') === 'network') {
   view.render({ ...state, attachmentUploadProgress: { fileId: 'test-file', percent } });
   await document.fonts.ready;
   const badge = root.querySelector('[role="progressbar"]'), spinner = root.querySelector('.app-loading__spinner');
-  const b = badge.getBoundingClientRect(), s = spinner.getBoundingClientRect(), c = root.querySelector('.chat-progress').getBoundingClientRect();
+  const b = badge.getBoundingClientRect(), s = spinner.getBoundingClientRect(), c = root.querySelector('.chat-progress .app-loading').getBoundingClientRect();
   document.documentElement.dataset.layout = JSON.stringify({ percent: badge.textContent,
     adjacent: b.left >= s.right && b.left - s.right <= 16,
     aligned: Math.abs((b.top + b.height / 2) - (s.top + s.height / 2)) <= 2,
