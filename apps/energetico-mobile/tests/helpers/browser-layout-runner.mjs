@@ -8,7 +8,7 @@ import { setTimeout as delay } from "node:timers/promises";
 // marker. A fixed virtual-time budget can capture an unfinished module/image load.
 // Cold CI runners can need more than ten seconds to publish DevToolsActivePort.
 // Keep the startup bounded at thirty seconds; layout assertions are unchanged.
-export async function runBrowserLayout(browser, { width, height, url, safeAreaInsets, mediaType, colorScheme, mobile = false, deviceScaleFactor = 1, gestureProbes = [], captureScreenshot = false, maxBuffer = 2_000_000, readyTimeoutMs = 30_000, startupTimeoutMs = 30_000 }) {
+export async function runBrowserLayout(browser, { width, height, url, safeAreaInsets, userAgent, mediaType, colorScheme, mobile = false, deviceScaleFactor = 1, gestureProbes = [], captureScreenshot = false, maxBuffer = 2_000_000, readyTimeoutMs = 30_000, startupTimeoutMs = 30_000 }) {
   const temporaryRoot = resolve(tmpdir());
   const profile = await mkdtemp(join(temporaryRoot, "energetico-layout-"));
   const pending = new Map();
@@ -83,6 +83,7 @@ export async function runBrowserLayout(browser, { width, height, url, safeAreaIn
       ...(colorScheme ? { features: [{ name: "prefers-color-scheme", value: colorScheme }] } : {}),
     }, sessionId);
     if (safeAreaInsets) await send("Emulation.setSafeAreaInsetsOverride", { insets: safeAreaInsets }, sessionId);
+    if (userAgent) await send("Emulation.setUserAgentOverride", { userAgent }, sessionId);
     let loadTimer;
     const loaded = new Promise((done, fail) => {
       onLoaded = () => { clearTimeout(loadTimer); done(); };
