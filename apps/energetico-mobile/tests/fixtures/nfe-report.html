@@ -146,13 +146,15 @@ const layout = {
 };
 if (!report.element.hidden) {
   const pencil = panel.querySelector('[data-invoice-id="2"] .nfe-link-pencil');
-  const clickBackdrop = (layer, { bounds = layer.getBoundingClientRect(), start = layer } = {}) => {
+  const clickBackdrop = (layer, { bounds = layer.getBoundingClientRect(), start = layer, end } = {}) => {
     for (const x of [Math.max(0, bounds.left) + 2, Math.min(innerWidth, bounds.right) - 2]) {
       for (const y of [Math.max(0, bounds.top) + 2, Math.min(innerHeight, bounds.bottom) - 2]) {
         if (document.elementFromPoint(x, y) !== layer) continue;
         const point = { bubbles:true, clientX:x, clientY:y, detail:1 };
         start.dispatchEvent(new PointerEvent('pointerdown', point));
-        layer.dispatchEvent(new PointerEvent('click', point));
+        const release = { ...point, ...end };
+        layer.dispatchEvent(new PointerEvent('pointerup', release));
+        layer.dispatchEvent(new PointerEvent('click', release));
         return true;
       }
     }
@@ -163,11 +165,16 @@ if (!report.element.hidden) {
     await new Promise(resolve => setTimeout(resolve, 0));
     return report.element.querySelector('.dda-provision-dialog');
   };
-  const firstPicker = await openPicker();
+  let firstPicker = await openPicker();
   firstPicker.querySelector('h2').click();
   const insideKeepsPicker = firstPicker.isConnected;
   firstPicker.querySelector('input[value="32"]').click();
   const dragKeepsPicker = clickBackdrop(firstPicker.parentElement, {start:firstPicker}) && firstPicker.isConnected;
+  const firstBounds = box(firstPicker);
+  const capturedDragKeepsPicker = clickBackdrop(firstPicker.parentElement, {
+    end:{clientX:firstBounds.x + firstBounds.width / 2, clientY:firstBounds.y + firstBounds.height / 2},
+  }) && firstPicker.isConnected;
+  if (!firstPicker.isConnected) firstPicker = await openPicker();
   const pickerBackdropCloses = clickBackdrop(firstPicker.parentElement) && !firstPicker.isConnected &&
     !report.element.hidden && document.activeElement === pencil && orderId === null;
   if (firstPicker.isConnected) firstPicker.querySelector('.gallery-record-dialog-button').click();
@@ -252,7 +259,8 @@ if (!report.element.hidden) {
     pickerFits:fit(pickerRect),
     proposePosition, proposalFits:fit(proposalRect), proposalSubmitFits:fit(proposalSubmit),
     proposalScroll, changedStage, pickerRestored, pickerResults,
-    insideKeepsPicker, dragKeepsPicker, pickerBackdropCloses, proposalBackdropCloses, insideKeepsReview, reviewBackdropCloses,
+    insideKeepsPicker, dragKeepsPicker, capturedDragKeepsPicker, pickerBackdropCloses, proposalBackdropCloses,
+    insideKeepsReview, reviewBackdropCloses,
     reviewFits:fit(reviewRect),
     linked:panel.querySelector('[data-invoice-id="2"] .nfe-link-linked')?.textContent,
     remainingPencils:panel.querySelectorAll('.nfe-link-pencil').length,

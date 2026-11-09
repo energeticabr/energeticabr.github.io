@@ -92,7 +92,8 @@ test('NFE opens the horizontal fiscal table from the blue mascot in portrait and
           pickerFits:true, reviewFits:true, linked:'ID 32', remainingPencils:1,
           proposePosition:true, proposalFits:true, proposalSubmitFits:true,
           proposalScroll:width !== 1365, changedStage:'26', pickerRestored:true,
-          insideKeepsPicker:true, dragKeepsPicker:true, pickerBackdropCloses:true, proposalBackdropCloses:true,
+          insideKeepsPicker:true, dragKeepsPicker:true, capturedDragKeepsPicker:true,
+          pickerBackdropCloses:true, proposalBackdropCloses:true,
           insideKeepsReview:true, reviewBackdropCloses:true,
           pickerResults:{ supplierId:true, branchId:true, accountId:true, productId:true, stageId:true },
         });
