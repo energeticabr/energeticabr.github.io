@@ -47,6 +47,28 @@ test("loadSnapshot returns complete frozen RH-normalized supplier and presence d
   assert.deepEqual(calls.filter(call => call[0] === "resolve").map(call => call[1]).sort(), ["DESCRITIVOPRESENCA", "FORNECEDORES"]);
 });
 
+test("RHID reads only the selected period and attendance columns across all pages", async () => {
+  const { repository, calls } = fixture({
+    async getItemsPage(_site, list, query, options) {
+      assert.equal(list, "DESCRITIVOPRESENCA");
+      const params = new URLSearchParams(query);
+      assert.equal(params.get("$filter"), "fields/field_0 ge '2026-10-03T00:00:00Z' and fields/field_0 lt '2026-10-05T00:00:00Z'");
+      assert.equal(params.get("$expand"), "fields($select=field_0,field_2,field_4)");
+      if (!options.cursor) return { items: [presence()], hasMore: true, nextLink: "next" };
+      assert.equal(options.cursor, "next");
+      const pending = presence(2);
+      pending.fields.field_0 = "2026-10-04T03:00:00Z";
+      pending.fields.field_4 = "PENDENTE";
+      return { items: [pending], hasMore: false };
+    },
+  });
+  assert.deepEqual(await create({ repository }).loadRhidPresences({ start: "2026-10-03", end: "2026-10-04" }), [
+    { date: "2026-10-03", supplier: "Ana", presence: "PRESENTE" },
+    { date: "2026-10-04", supplier: "Ana", presence: "PENDENTE" },
+  ]);
+  assert.deepEqual(calls, [["resolve", "DESCRITIVOPRESENCA"]]);
+});
+
 test("renamed Title resolves CADASTRO without confusing SharePoint computed title links", async () => {
   const { repository } = fixture({
     async getColumns(_site, list) {

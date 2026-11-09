@@ -1283,6 +1283,10 @@ function rhidAttendanceTableMarkup(table, messageId, rhidRefresh = null, activeF
   const date = String(table.reportDate || "");
   const dateLabel = isValidRhidReportDate(date) ? `${date.slice(8, 10)}/${date.slice(5, 7)}/${date.slice(0, 4)}` : "";
   const summary = summarizeRhidAttendance(rows);
+  if (mascot) {
+    summary.withPunches = table.people.filter(person => person.rawPunches.length).length;
+    summary.withoutPunches = summary.collaborators - summary.withPunches;
+  }
   const updateLabel = String(table.updateLabel || "").trim();
   const updateTime = updateLabel.match(/\b(?:[01]\d|2[0-3]):[0-5]\d\b/)?.[0] || "—";
   const updateHeading = /DADOS ATUALIZADOS NO RELÓGIO DE PONTO/i.test(updateLabel)
@@ -1315,13 +1319,21 @@ function rhidAttendanceTableMarkup(table, messageId, rhidRefresh = null, activeF
       <div><strong class="chat-rhid-attendance-report__summary-value">${String(summary.withPunches).padStart(2, "0")}</strong><span>COM MARCAÇÃO</span></div>
       <div><strong class="chat-rhid-attendance-report__summary-value chat-rhid-attendance-report__summary-value--missing">${String(summary.withoutPunches).padStart(2, "0")}</strong><span>SEM MARCAÇÃO</span></div>
     </div>
-    <div class="chat-rhid-attendance-report__toolbar"><strong>📋 PRESENÇAS</strong></div>
+    <div class="chat-rhid-attendance-report__toolbar"><strong>📋 ${mascot ? 'PRESENÇAS E AUSÊNCIAS' : 'PRESENÇAS'}</strong></div>
     ${rows.length ? `<div class="chat-rhid-attendance-report__cards" role="list" aria-label="Cartões de presenças RHID">
       ${rows.map((row, rowIndex) => {
         const person = table.people?.[rowIndex];
         const noPunches = isRhidAttendanceRowWithoutPunches(row);
         const discrepant = isRhidAttendanceRowDiscrepant(row, table.reportDate);
-        const rowClass = noPunches ? "chat-rhid-attendance-card--no-punches" : discrepant || person?.issues?.length ? "chat-rhid-attendance-card--discrepant" : "";
+        const comparison = mascot ? person.presenceComparison : null;
+        let rowClass = '';
+        if (comparison?.mismatch) rowClass = 'chat-rhid-attendance-card--presence-mismatch';
+        else if (comparison?.pending) rowClass = 'chat-rhid-attendance-card--presence-pending';
+        else if (!mascot && noPunches) rowClass = 'chat-rhid-attendance-card--no-punches';
+        else if (!noPunches && (discrepant || person?.issues?.length)) rowClass = 'chat-rhid-attendance-card--discrepant';
+        const missingLabel = mascot
+          ? person.emptyPunchSource ? 'SEM BATIDA NO RELÓGIO' : 'DADOS DO RELÓGIO INCOMPLETOS'
+          : 'SEM MARCAÇÃO';
         const name = row[0] ?? "—";
         const total = row[row.length - 1] ?? "—";
         const slots = Array.from({ length: pairCount }, (_, index) => {
@@ -1345,7 +1357,7 @@ function rhidAttendanceTableMarkup(table, messageId, rhidRefresh = null, activeF
             const className = `chat-rhid-attendance-card__cluster chat-rhid-attendance-card__cluster--${tone}`;
             const content = `<span>${escapeHtml(label)}</span><strong class="${valueClass}">${escapeHtml(value)}${marker}</strong>`;
             const canEdit = mascot
-              ? person?.personKey && slotDetail?.source === 'empty' && !slotDetail.rhidCandidates.length
+              ? person?.personKey && (person.rawPunches.length || !noPunches) && slotDetail?.source === 'empty' && !slotDetail.rhidCandidates.length
               : editable;
             return canEdit
               ? `<button class="${className}" type="button" data-action="rhid-attendance-adjust-open" data-message-id="${escapeHtml(messageId)}" data-person-key="${escapeHtml(person.personKey)}" data-slot="${slot}" aria-label="Editar ${escapeHtml(label)} de ${escapeHtml(name)}: ${escapeHtml(value)}${provisional ? ` (${warning})` : ""}">${content}</button>`
@@ -1361,7 +1373,8 @@ function rhidAttendanceTableMarkup(table, messageId, rhidRefresh = null, activeF
           ? `<button class="chat-rhid-attendance-card__validate" type="button" data-action="rhid-presence-validate-open" data-message-id="${escapeHtml(messageId)}" data-person-key="${escapeHtml(person.personKey)}" data-value="${escapeHtml(pendingId)}" aria-label="Validar presença de ${escapeHtml(name)} em ${escapeHtml(dateLabel)}" title="ID de presença ${escapeHtml(pendingId)}"${activeFlow?.id === "attendance_validation" ? " disabled" : ""}>VALIDAR PRESENÇA</button>`
           : "";
         return `<article class="chat-rhid-attendance-card ${rowClass}" role="listitem">
-          <div class="chat-rhid-attendance-card__main"><div class="chat-rhid-attendance-card__person"><h3>${escapeHtml(name)}</h3>${validateButton}${noPunches ? `<span class="chat-rhid-attendance-card__missing">SEM MARCAÇÃO</span>` : ""}</div>
+          <div class="chat-rhid-attendance-card__main"><div class="chat-rhid-attendance-card__person"><h3>${escapeHtml(name)}</h3>${validateButton}${(mascot ? !person.rawPunches.length : noPunches) ? `<span class="chat-rhid-attendance-card__missing">${missingLabel}</span>` : ""}</div>
+          ${comparison ? `<p class="chat-rhid-mascot__comparison">${escapeHtml(comparison.label)}${comparison.mismatch && comparison.pending ? ' <span>Pendente também no Descritivo</span>' : ''}</p>` : ''}
           ${mascot && (person.profession || person.branch || person.property) ? `<p class="chat-rhid-mascot__registration">${[person.profession, person.branch, person.property].filter(Boolean).map(escapeHtml).join(' · ')}</p>` : ''}
           <div class="chat-rhid-attendance-card__details"><div class="chat-rhid-attendance-card__slots">${slots}</div><div class="chat-rhid-attendance-card__total"><span>TOTAL DE HORAS/DIA</span><strong>${escapeHtml(displayTotal)}</strong>${isPartial ? `<small>PARCIAL</small>` : ""}</div></div></div>
           ${person?.issues?.length ? `<ul class="chat-rhid-attendance-card__issues" aria-label="Inconsistências">${person.issues.map(issue => `<li>${escapeHtml(issue)}</li>`).join("")}</ul>` : ""}
@@ -1406,6 +1419,10 @@ function rhidMascotReportMarkup(report) {
         : report.directoryError ? '<p role="status">Cadastro indisponível. O filtro por nome continua disponível.</p>'
           : period ? '<p>Profissão, filial e imóvel seguem o cadastro atual.</p>' : ''}
     </div>
+    ${report.comparisonError ? '<p class="error-banner" role="status">Descritivo Presença indisponível. As batidas do RHID estão visíveis sem comparação.</p>' : ''}
+    ${report.comparisonAuthorizationRequired ? `<div class="chat-rhid-mascot__filters">
+      <button type="button" data-action="rhid-mascot-authorize"${report.authorizing ? ' disabled' : ''}>Autorizar leitura do Descritivo Presença</button>
+    </div>` : ''}
     ${report.busy ? loadingIndicatorMarkup('Consultando presenças RHID…', { compact: true }) : report.error
       ? `<p class="error-banner" role="alert">${escapeHtml(report.error)}</p>`
       : visibleDays.length ? visibleDays.map(table => rhidAttendanceTableMarkup(table, `rhid-mascot:${table.reportDate}`, null, null, true)).join('')

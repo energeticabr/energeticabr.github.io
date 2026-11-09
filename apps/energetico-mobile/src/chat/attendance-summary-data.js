@@ -2,13 +2,16 @@ import { SHAREPOINT_SITES } from "../../../../portal/config.js";
 import { createGraphClient } from "../../../../portal/data/graph-client.js";
 import { createSharePointRepository } from "../../../../portal/data/sharepoint-repository.js";
 import { normalizeRhSupplier, normalizeRhPresence } from "./rh-reports-model.js";
+import { isValidRhidReportDate, shiftRhidReportDate } from "./rhid-attendance-table.js";
 
 const SITE = "personal";
 const WINDOW_PAGES = 100;
 // An overall runaway guard rejects the entire load; it never publishes truncated totals.
 const MAX_TOTAL_PAGES = 10_000;
-const LISTS = { suppliers: ["FORNECEDORES"], directory: ["FORNECEDORES"], presences: ["DESCRITIVOPRESENCA", "DESCRITIVO PRESENCA"] };
+const PRESENCE_LIST = ["DESCRITIVOPRESENCA", "DESCRITIVO PRESENCA"];
+const LISTS = { suppliers: ["FORNECEDORES"], directory: ["FORNECEDORES"], presences: PRESENCE_LIST, rhid: PRESENCE_LIST };
 const SCHEMA = { suppliers: [["CADASTRO"], ["STATUS"]], directory: [["CADASTRO"], ["PROFISSAO", "PROFISSÃO"], ["FILIAL"], ["IMOVEL", "IMÓVEL"]],
+  rhid: [["DATA"], ["FORNECEDOR"], ["PRESENCA", "PRESENÇA"]],
   presences: [["DATA"], ["FILIAL"], ["FORNECEDOR"],
   ["PROFISSAO", "PROFISSÃO"], ["PRESENCA", "PRESENÇA"], ["STATUS"],
   ["VLORDIARIO", "VALOR DIÁRIO", "VALOR DIARIO"], ["IDPGTO", "ID PGTO"]] };
@@ -56,6 +59,11 @@ function moneyIsValid(value) {
 }
 
 function normalizeItem(item, columns, kind) {
+  if (kind === "rhid") {
+    const { date, supplier, presence } = normalizeRhPresence(item, columns);
+    if (!isValidRhidReportDate(date)) throw new TypeError("Registro do Descritivo Presença com data inválida.");
+    return Object.freeze({ date, supplier, presence });
+  }
   if (kind !== "presences") return normalizeRhSupplier(item, columns);
   const row = normalizeRhPresence(item, columns);
   const parsed = new Date(`${row.date}T12:00:00Z`);
@@ -66,11 +74,18 @@ function normalizeItem(item, columns, kind) {
   return Object.freeze({ ...row, dailyValue: moneyIsValid(rawMoney) ? row.dailyValue : null });
 }
 
-async function loadList(repository, kind, signal) {
+async function loadList(repository, kind, signal, range) {
   const resolved = await abortable(() => repository.resolveList(SITE, LISTS[kind], { signal }), signal);
   if (resolved?.status !== "resolved" || !resolved.id) throw new Error(`A lista ${LISTS[kind][0]} não está disponível nesta conta.`);
   const columns = validateSchema(await abortable(() => repository.getColumns(SITE, resolved.id, { signal }), signal), kind);
-  const query = new URLSearchParams({ $expand: "fields", $top: "100" }).toString();
+  const params = new URLSearchParams({ $expand: "fields", $top: "100" });
+  if (range) {
+    const fields = columns.map(column => column.name);
+    const dateField = `fields/${fields[0]}`;
+    params.set("$expand", `fields($select=${fields.join(",")})`);
+    params.set("$filter", `${dateField} ge '${range.start}T00:00:00Z' and ${dateField} lt '${shiftRhidReportDate(range.end, 1)}T00:00:00Z'`);
+  }
+  const query = params.toString();
   const rows = []; const ids = new Set(); const cursors = new Set(); let cursor = "";
   for (let pageIndex = 0; pageIndex < MAX_TOTAL_PAGES; pageIndex++) {
     const page = await abortable(() => repository.getItemsPage(SITE, resolved.id, query, {
@@ -108,6 +123,10 @@ export function createAttendanceSummaryData({ tokenProvider, repository: supplie
   if (suppliedRepository && ["resolveList", "getColumns", "getItemsPage"].some(name => typeof suppliedRepository[name] !== "function")) {
     throw new TypeError("Repositório SharePoint inválido para o relatório.");
   }
+  const repositoryFor = signal => suppliedRepository || createSharePointRepository(createGraphClient(
+    scopes => abortable(() => tokenProvider(scopes, { signal }), signal),
+  ), SHAREPOINT_SITES);
+
   async function loadSnapshot({ signal: externalSignal } = {}) {
     abortIfNeeded(externalSignal);
     const controller = new AbortController();
@@ -115,9 +134,7 @@ export function createAttendanceSummaryData({ tokenProvider, repository: supplie
     const abort = () => controller.abort(externalSignal.reason);
     externalSignal?.addEventListener("abort", abort, { once: true });
     try {
-      const repository = suppliedRepository || createSharePointRepository(createGraphClient(
-        scopes => abortable(() => tokenProvider(scopes, { signal }), signal),
-      ), SHAREPOINT_SITES);
+      const repository = repositoryFor(signal);
       const [suppliers, presences] = await Promise.all([loadList(repository, "suppliers", signal), loadList(repository, "presences", signal)]);
       abortIfNeeded(signal);
       return Object.freeze({ complete: true, suppliers, presences });
@@ -129,10 +146,14 @@ export function createAttendanceSummaryData({ tokenProvider, repository: supplie
     }
   }
   function loadSupplierDirectory({ signal = new AbortController().signal } = {}) {
-    const repository = suppliedRepository || createSharePointRepository(createGraphClient(
-      scopes => abortable(() => tokenProvider(scopes, { signal }), signal),
-    ), SHAREPOINT_SITES);
-    return loadList(repository, "directory", signal);
+    return loadList(repositoryFor(signal), "directory", signal);
   }
-  return Object.freeze({ loadSnapshot, loadSupplierDirectory });
+  async function loadRhidPresences({ start, end, signal = new AbortController().signal } = {}) {
+    if (!isValidRhidReportDate(start) || !isValidRhidReportDate(end) || start > end) {
+      throw new RangeError("Período inválido para o Descritivo Presença.");
+    }
+    const rows = await loadList(repositoryFor(signal), "rhid", signal, { start, end });
+    return rows.filter(row => row.date >= start && row.date <= end);
+  }
+  return Object.freeze({ loadSnapshot, loadSupplierDirectory, loadRhidPresences });
 }

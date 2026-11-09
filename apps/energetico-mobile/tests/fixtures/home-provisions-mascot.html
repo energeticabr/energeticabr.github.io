@@ -41,10 +41,14 @@ const state={sessionStatus:'authenticated',account:{name:'Bernardo'},draft:'',pe
 const view=createChatView(document.querySelector('#app'));
 const rhidDay='2026-11-09';
 const rhidRows=[{ ID_PESSOA_RHID:'1', NOME_COLABORADOR:'Profissional de exemplo com nome longo',
-  BATIDAS_RHID:'07:13;12:55', ADMIN_AJUSTES:{ exit1:{ time:'11:58' } } }];
+  BATIDAS_RHID:'07:13;12:55', ADMIN_AJUSTES:{ exit1:{ time:'11:58' } } },
+  { ID_PESSOA_RHID:'2', NOME_COLABORADOR:'Outro colaborador de exemplo', BATIDAS_RHID:'07:18' }];
 const rhidMascot={ today:rhidDay, start:rhidDay, end:rhidDay, mode:'today', filters:{},
   directory:[{name:rhidRows[0].NOME_COLABORADOR, profession:'Mestre de obras', branch:'Filial de exemplo'}],
-  days:[rhidMascotDay(rhidRows,rhidDay)] };
+  days:[rhidMascotDay(rhidRows,rhidDay,[
+    {supplier:rhidRows[0].NOME_COLABORADOR,presence:'AUSENTE'},
+    {supplier:rhidRows[1].NOME_COLABORADOR,presence:'PENDENTE'},
+  ])] };
 view.on('open-rhid-mascot-report',()=>view.render({...state,rhidMascot}));
 view.on('rhid-mascot-period',()=>view.render({...state,rhidMascot:{...rhidMascot,mode:'period',start:'2026-11-01'}}));
 view.on('close-rhid-mascot-report',()=>view.render(state));
