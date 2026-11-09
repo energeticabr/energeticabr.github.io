@@ -96,11 +96,13 @@ function catalogStageUsage(catalog) {
   return usage;
 }
 
-function proposedStage(catalog, branchId, productId) {
+function proposedStage(catalog, branchId, productId, number) {
   const product = select(catalog.products, productId);
   if (!product) return '';
   const stages = nfeProposalStages(catalog, branchId);
   if (stages.length < 2) return selectionId(stages[0]);
+  const learned = catalog.learning?.stage(number, branchId, productId);
+  if (select(stages, learned)) return learned;
   const counts = catalogStageUsage(catalog).get(nfeProposalKey(product.label));
   if (!counts) return '';
   const branch = nfeProposalKey(stages[0].branch);
@@ -114,7 +116,7 @@ function proposedStage(catalog, branchId, productId) {
 
 export function updateNfeProposalBranch(draft, branchId, catalog) {
   return { ...draft, branchId, lines:draft.lines.map(line => ({
-    ...line, stageId:proposedStage(catalog, branchId, line.productId),
+    ...line, stageId:proposedStage(catalog, branchId, line.productId, line.number),
   })) };
 }
 
@@ -127,7 +129,7 @@ export function updateNfeProposalSupplier(draft, supplierId, catalog) {
 
 export function updateNfeProposalProduct(draft, number, productId, catalog) {
   return { ...draft, lines:draft.lines.map(line => line.number === number
-    ? { ...line, productId, unitReviewed:false, stageId:proposedStage(catalog, draft.branchId, productId) } : line) };
+    ? { ...line, productId, unitReviewed:false, stageId:proposedStage(catalog, draft.branchId, productId, number) } : line) };
 }
 
 export function buildNfeProposal(invoice, fiscal, catalog) {
@@ -136,12 +138,16 @@ export function buildNfeProposal(invoice, fiscal, catalog) {
     return { option, name, terms:words(name), unitKey:nfeProposalKey(option.unit) };
   });
   const lines = fiscal.lines.map(line => ({
-    number:line.number, productId:selectionId(proposedProduct(line, products)), stageId:'',
+    number:line.number, productId:catalog.learning?.product(line) || selectionId(proposedProduct(line, products)), stageId:'',
     quantity:line.quantity, unitPrice:line.unitPrice, discount:line.discount, adjustment:line.adjustment,
     date:fiscal.issueDate, dueDate:fiscal.dueDate || '', unitReviewed:false,
   }));
-  const supplierId = selectionId(proposedSupplier(invoice, catalog.suppliers));
-  return updateNfeProposalSupplier({ date:fiscal.issueDate, lines }, supplierId, catalog);
+  const header = catalog.learning?.header;
+  const supplierId = header?.supplierId || selectionId(proposedSupplier(invoice, catalog.suppliers));
+  let draft = updateNfeProposalSupplier({ date:fiscal.issueDate, lines }, supplierId, catalog);
+  if (header?.branchId && header.branchId !== draft.branchId) draft = updateNfeProposalBranch(draft, header.branchId, catalog);
+  if (header?.accountId) draft.accountId = header.accountId;
+  return draft;
 }
 
 function decimal(value, label) {
