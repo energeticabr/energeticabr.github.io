@@ -14,7 +14,7 @@ test('NF-e PDFs use the compact DDA viewport and navigate between the DANFE and 
   const root = resolve(fileURLToPath(new URL('..', import.meta.url)));
   const server = await createServer({ root, cacheDir:'node_modules/.vite-nfe-report-pdf',
     optimizeDeps:{ noDiscovery:true, force:true, include:['decimal.js', 'pdf-lib', 'pdfjs-dist'] },
-    server:{ host:'127.0.0.1', port:0, hmr:false, watch:null }, logLevel:'silent' });
+    server:{ host:'127.0.0.1', port:0, hmr:false, watch:null, fs:{allow:[resolve(root, '../..')]} }, logLevel:'silent' });
   const capture = process.env.NFE_PDF_CAPTURE_DIR;
   try {
     await server.listen();
@@ -44,8 +44,10 @@ test('NFE opens the horizontal fiscal table from the blue mascot in portrait and
   const browser = [process.env.CHROME_BIN,'C:/Program Files/Google/Chrome/Application/chrome.exe','/usr/bin/google-chrome','/usr/bin/chromium']
     .find(path => path && existsSync(path));
   if (!browser) return t.skip('Chrome unavailable');
-  const server = await createServer({ root:fileURLToPath(new URL('..', import.meta.url)),
-    server:{ host:'127.0.0.1', port:0 }, logLevel:'silent' });
+  const root = resolve(fileURLToPath(new URL('..', import.meta.url)));
+  const server = await createServer({ root, cacheDir:'node_modules/.vite-nfe-report',
+    optimizeDeps:{ noDiscovery:true, force:true, include:['decimal.js'] },
+    server:{ host:'127.0.0.1', port:0, hmr:false, watch:null, fs:{allow:[resolve(root, '../..')]} }, logLevel:'silent' });
   const capture = process.env.NFE_CAPTURE_DIR;
   try {
     await server.listen();
@@ -88,6 +90,7 @@ test('NFE opens the horizontal fiscal table from the blue mascot in portrait and
           pickerFits:true, reviewFits:true, linked:'ID 32', remainingPencils:1,
           proposePosition:true, proposalFits:true, proposalSubmitFits:true,
           proposalScroll:width !== 1365, changedStage:'26', pickerRestored:true,
+          pickerResults:{ supplierId:true, branchId:true, accountId:true, productId:true, stageId:true },
         });
         assert.deepEqual(JSON.parse(dom.window.document.documentElement.dataset.meiRows), ['3']);
         if (capture) {
