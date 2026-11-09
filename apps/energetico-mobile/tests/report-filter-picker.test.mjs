@@ -62,6 +62,38 @@ test('explicit Localizar itens focus searches accents without applying an unknow
   assert.equal(ctx.doc.activeElement, ctx.trigger); assert.equal(ctx.trigger.readOnly, true);
 });
 
+test('a report option tap does not click a control revealed when the list closes', t => {
+  const ctx = setup(t);
+  const { PointerEvent, MouseEvent } = ctx.dom.window;
+  const outside = ctx.doc.querySelector('#outside');
+  function tapOption(query) {
+    ctx.trigger.click();
+    ctx.search().focus();
+    ctx.type(query);
+    const option = ctx.list.firstElementChild;
+    const touch = { bubbles:true, pointerType:'touch', pointerId:1, isPrimary:true };
+    option.dispatchEvent(new PointerEvent('pointerdown', touch));
+    option.dispatchEvent(new PointerEvent('pointerup', touch));
+  }
+  tapOption('aco');
+  assert.equal(ctx.select.value, 'aco');
+  assert.equal(ctx.popup.hidden, true);
+
+  let activations = 0;
+  outside.addEventListener('click', () => { activations++; });
+  const mouse = { bubbles:true, cancelable:true, detail:1 };
+  outside.click();
+  assert.equal(activations, 1);
+  assert.equal(outside.dispatchEvent(new MouseEvent('mousedown', mouse)), false);
+  outside.dispatchEvent(new MouseEvent('click', mouse));
+  assert.equal(activations, 1);
+  tapOption('cimento');
+  assert.equal(ctx.select.value, 'cimento');
+  outside.dispatchEvent(new PointerEvent('pointerdown', { bubbles:true, pointerType:'mouse' }));
+  outside.dispatchEvent(new MouseEvent('click', mouse));
+  assert.equal(activations, 2);
+});
+
 test('closing selection clears only the search and restores non-editable field focus', t => {
   const ctx = setup(t); ctx.select.value = 'cimento'; ctx.binding.sync();
   ctx.trigger.click(); ctx.search().focus(); ctx.type('p40');
