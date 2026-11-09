@@ -8,8 +8,8 @@ async function setup(t,openMediaCollection){
  let running=false,starts=0,loads=0,destroys=0,fail=false;
  const emit=value=>{running=value;for(const fn of listeners)fn({running,notice:running?'Consultando o Sicoob…':''});};
  const monitor={get running(){return running;},subscribe(fn){listeners.add(fn);fn({running,notice:''});return()=>listeners.delete(fn);},async start(){starts++;if(fail)throw Error('private credential');emit(true);},destroy(){destroys++;}};
- const row={id:'1',fields:{Title:'EXEMPLO',SITUACAO:'Em aberto',CHAVE_DDA:'a'.repeat(64),VALOR:10,VENCIMENTO:'2026-11-01'}};
- const view=createDdaReportView({document:doc,syncMonitor:monitor,openMediaCollection,data:{loadSnapshot:async()=>{loads++;return {rows:[row]};},listAttachments:async()=>[{fileName:'espelho.pdf'}],downloadAttachment:async()=>new Blob()},confirmPayment:async()=>({status:'confirmed',itemId:1,key:'a'.repeat(64),confirmedAt:'2026-10-28T18:00:00Z',confirmedBy:'test@example.test'})});
+ const row={id:'1',fields:{Title:'EXEMPLO',SITUACAO:'Em aberto',DESCRITIVOPROVIS_x00c3_O:'56',CHAVE_DDA:'a'.repeat(64),VALOR:10,VENCIMENTO:'2026-11-01'}};
+ const view=createDdaReportView({document:doc,syncMonitor:monitor,openMediaCollection,onStartSettlement:async()=>true,data:{loadItem:async()=>row,provisionLink:{loadSettledProvisionIds:async()=>new Set()},loadSnapshot:async()=>{loads++;return {rows:[row]};},listAttachments:async()=>[{fileName:'espelho.pdf'}],downloadAttachment:async()=>new Blob()}});
  t.after(()=>{view.destroy();dom.window.close();});await view.open();
  return {doc,dom,view,emit,fail:()=>fail=true,counts:()=>({starts,loads,destroys,listeners:listeners.size}),refresh:doc.querySelector('.pl-refresh')};
 }
@@ -21,8 +21,8 @@ test('report refresh starts bank once, displays progress and reloads SharePoint 
 test('closing report never cancels the monitor; reopening catches up and destroy only unsubscribes',async t=>{
  const h=await setup(t);h.refresh.click();await tick();h.view.close();h.emit(false);await tick();assert.equal(h.counts().loads,1);await h.view.open();assert.equal(h.counts().loads,2);h.view.destroy();assert.equal(h.counts().destroys,0);assert.equal(h.counts().listeners,0);
 });
-test('bank completion waits for payment dialog acknowledgement before refreshing',async t=>{
- const h=await setup(t);h.doc.querySelector('[data-dda-confirm-payment]').click();h.emit(true);h.emit(false);await tick();assert.equal(h.counts().loads,1);assert.ok(h.doc.querySelector('[data-dda-payment-dialog]'));h.doc.querySelector('[data-dda-payment-cancel]').click();await tick();assert.equal(h.counts().loads,2);assert.equal(h.view.element.hidden,false);
+test('bank completion waits for settlement confirmation dismissal before refreshing',async t=>{
+ const h=await setup(t);h.doc.querySelector('[data-dda-provision-check]').click();h.emit(true);h.emit(false);await tick();assert.equal(h.counts().loads,1);assert.ok(h.doc.querySelector('[data-dda-settlement-dialog]'));h.doc.querySelector('[data-dda-settlement-no]').click();await tick();assert.equal(h.counts().loads,2);assert.equal(h.view.element.hidden,false);
 });
 test('bank completion keeps the DDA under the PDF until close, then restores its scroll position',async t=>{
  let preview;

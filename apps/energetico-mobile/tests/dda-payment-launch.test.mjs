@@ -3,7 +3,6 @@ import assert from 'node:assert/strict';
 import { JSDOM } from 'jsdom';
 import { createDdaPaymentConfirmation } from '../src/ui/dda-payment-confirmation.js';
 import { createRegistrationGallery } from '../src/ui/registration-gallery-view.js';
-import { createDdaReportView } from '../src/ui/dda-report-view.js';
 const tick = () => new Promise(resolve => setImmediate(resolve));
 const key = 'a'.repeat(64);
 const receipt = { status:'confirmed',itemId:31,key,confirmedAt:'2026-10-30T12:00:00Z',confirmedBy:'test@example.test' };
@@ -57,14 +56,14 @@ test('closing during launch aborts transfer and ignores late success',async t=>{
   assert.equal(h.dialog.isOpen,false);assert.equal(h.doc.querySelector('[data-dda-payment-dialog]'),null);
 });
 
-for(const mode of ['gallery','report'])test(mode+' passes the post-payment launch callback',async t=>{
+test('the gallery passes the post-payment launch callback',async t=>{
   const dom=new JSDOM('<body/>'),doc=dom.window.document;let launched;
   const options={document:doc,data:{loadSnapshot:async()=>({rows:[row]})},confirmPayment:async()=>receipt,
     onStartLaunch:async request=>{launched=request;return true;}};
-  const panel=mode==='gallery'?createRegistrationGallery({...options,kind:'dda'}):createDdaReportView(options);
+  const panel=createRegistrationGallery({...options,kind:'dda'});
   t.after(()=>{panel.destroy();dom.window.close();});await panel.open();
   doc.querySelector('[data-dda-confirm-payment]').click();doc.querySelector('[data-dda-payment-yes]').click();await tick();
   const yes=doc.querySelector('[data-dda-launch-yes]');assert.ok(yes);
   yes.click();await tick();assert.equal(launched.itemId,31);assert.equal(launched.key,key);
-  assert.equal(doc.querySelector(mode==='gallery'?'.rg-overlay':'.ddr-overlay').hidden,true,'the source panel must reveal the launch flow');
+  assert.equal(doc.querySelector('.rg-overlay').hidden,true,'the source panel must reveal the launch flow');
 });

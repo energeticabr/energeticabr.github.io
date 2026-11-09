@@ -1,8 +1,7 @@
-import {normalizeDdaReportRows,buildDdaReport,ddaSettlementPending,ddaWasScheduledAt,readDdaSettledProvisionIds} from '../chat/dda-report-model.js';
+import {normalizeDdaReportRows,buildDdaReport,ddaSettlementPending,readDdaSettledProvisionIds} from '../chat/dda-report-model.js';
 import {ddaDueTone,ddaTodayKey} from './dda-card.js';
 import {bindReportLandscape} from './report-landscape.js';
 import {addReportCloseControl} from './report-close-control.js';
-import {createDdaPaymentConfirmation} from './dda-payment-confirmation.js';
 import {addDdaReportBarcode} from './dda-report-barcode.js';
 import {createDdaProvisionPicker} from './dda-provision-picker.js';
 import {PDF_ATTACHMENT_ICON} from './report-pdf-attachment-icon.js';
@@ -10,12 +9,12 @@ const LOGO=new URL('../../../../assets/logo-energetica-oficial.png',import.meta.
 const money=value=>value==null?'Não disponível':new Intl.NumberFormat('pt-BR',{style:'currency',currency:'BRL'}).format(Number(value));
 const date=value=>value?value.slice(8,10)+'/'+value.slice(5,7)+'/'+value.slice(0,4):'Não informado';
 const daysSince=(day,today)=>Math.round((Date.parse(`${today}T00:00:00Z`)-Date.parse(`${day}T00:00:00Z`))/86400000);
-const ROW_CONTROLS=['data-dda-pdf','data-dda-mirror','data-dda-confirm-payment','data-dda-provision-pencil','data-dda-settle-provision','data-dda-toggle-barcode','data-dda-copy-barcode'];
+const ROW_CONTROLS=['data-dda-pdf','data-dda-mirror','data-dda-provision-check','data-dda-provision-pencil','data-dda-settle-provision','data-dda-toggle-barcode','data-dda-copy-barcode'];
 function rowControlSelector(element){
  const attribute=ROW_CONTROLS.find(name=>element?.hasAttribute(name));
  return attribute?`[${attribute}="${element.getAttribute(attribute)}"]`:null;
 }
-export function createDdaReportView({document:doc=globalThis.document,data,openMediaCollection,confirmPayment,onStartLaunch,onStartSettlement,syncMonitor,copyText,onClose=()=>{},now=()=>new Date()}={}){
+export function createDdaReportView({document:doc=globalThis.document,data,openMediaCollection,onStartSettlement,syncMonitor,copyText,onClose=()=>{},now=()=>new Date()}={}){
  if(!doc?.body||typeof data?.loadSnapshot!=='function')throw new TypeError('O relatório requer a sessão SharePoint.');
  const make=(tag,cls='',value)=>{const node=doc.createElement(tag);node.className=cls;if(value!==undefined)node.textContent=String(value);return node;};
  const button=(label,text=label)=>{const node=make('button','',text);node.type='button';node.setAttribute('aria-label',label);return node;};
@@ -38,17 +37,7 @@ export function createDdaReportView({document:doc=globalThis.document,data,openM
  let bankRunning=Boolean(syncMonitor?.running),bankNotice='',startingBank=false,reloadPending=false,pdfRequest=null;
  let settledProvisionIds=new Set(),settlementVerified=false,settlementRequest=null,settlementRenderPending=false,settlementOpening=false;
  const expandedBarcodes=new Set();
- const paymentConfirmation=createDdaPaymentConfirmation({document:doc,host:root,confirmPayment,onStartLaunch,onLaunchStarted:()=>close(),onClose:resumeDeferredRefresh,resolveReturnFocus:replacementControl,onConfirmed:receipt=>{
-  if(destroyed||root.hidden||!rows)return;
-  const confirmed=rows.find(row=>row.id===String(receipt.itemId)&&row.key===receipt.key);
-  if(!confirmed)return;
-  const paidBySchedule=receipt.paidBySchedule??(confirmed.paidBySchedule||ddaWasScheduledAt(confirmed,receipt.confirmedAt));
-  rows=rows.map(row=>row===confirmed?Object.freeze({...row,status:'Pago',paidManually:true,paidBySchedule,confirmedAt:receipt.confirmedAt}):row);
-  if(confirmed.provisionId)settlementVerified=false;
-  settledProvisionIds.delete(confirmed.provisionId);
-  populate();renderKeepingPosition();
-  if(confirmed.provisionId)void recheckSettlement();
- }});
+ let settlementDialog=null;
  const provisionPicker=createDdaProvisionPicker({document:doc,host:root,service:data.provisionLink,onClose:resumeDeferredRefresh,resolveReturnFocus:replacementControl,onLinked:receipt=>{
   if(destroyed||root.hidden||!rows)return;
   rows=rows.map(row=>row.id===receipt.ddaId?Object.freeze({...row,provisionId:receipt.provisionId}):row);
@@ -76,7 +65,7 @@ export function createDdaReportView({document:doc=globalThis.document,data,openM
   if(rowControlSelector(focused)&&[doc.body,panel].includes(doc.activeElement))replacementControl(focused).focus({preventScroll:true});
  }
  function renderKeepingPosition(){const position=reportPosition();render();restoreReportPosition(position);}
- function nestedViewOpen(){return paymentConfirmation.isOpen||provisionPicker.isOpen||pdfRequest;}
+ function nestedViewOpen(){return settlementDialog||provisionPicker.isOpen||pdfRequest;}
  function renderSettlement(){
   if(!settlementRenderPending||nestedViewOpen())return;
   settlementRenderPending=false;renderKeepingPosition();
@@ -91,35 +80,96 @@ export function createDdaReportView({document:doc=globalThis.document,data,openM
  async function recheckSettlement(){
   settlementRequest?.abort();
   const request=settlementRequest=new AbortController();
-  const verified=await readDdaSettledProvisionIds(rows,data.provisionLink,request.signal);
+  const verified=await readDdaSettledProvisionIds(rows,data.provisionLink,request.signal,{includeUnpaid:true});
   if(request!==settlementRequest||request.signal.aborted||root.hidden||destroyed)return;
   settlementRequest=null;
-  const settled=verified??new Set();
+  const settled=verified??settledProvisionIds;
   if(settlementVerified===Boolean(verified)&&settled.size===settledProvisionIds.size&&[...settled].every(id=>settledProvisionIds.has(id)))return;
   settlementVerified=Boolean(verified);
   settledProvisionIds=settled;settlementRenderPending=true;renderSettlement();
  }
- async function startSettlement(row,trigger){
-  if(root.hidden||destroyed||settlementOpening||!settlementVerified||!rows?.includes(row)||!ddaSettlementPending(row,settledProvisionIds))return;
+ function canStartSettlement(row){
+  return settlementVerified&&row.provisionId&&!settledProvisionIds.has(row.provisionId)
+   &&Number.isSafeInteger(Number(row.id))&&Number(row.id)>0
+   &&typeof onStartSettlement==='function'&&typeof data.loadItem==='function';
+ }
+ async function readSettlementItem(id,signal){
+  signal.throwIfAborted();
+  const lookup=new AbortController(),abort=()=>lookup.abort(signal.reason);
+  signal.addEventListener('abort',abort,{once:true});
+  const interrupted=new Promise((_,reject)=>lookup.signal.addEventListener('abort',()=>reject(lookup.signal.reason),{once:true}));
+  const timeout=setTimeout(()=>lookup.abort(),30_000);
+  try{return await Promise.race([data.loadItem(id,{signal:lookup.signal}),interrupted]);}
+  finally{clearTimeout(timeout);signal.removeEventListener('abort',abort);}
+ }
+ async function startSettlement(row,trigger,{fromCheck=false,onError=showNotice}={}){
+  const available=()=>canStartSettlement(row)&&(fromCheck||ddaSettlementPending(row,settledProvisionIds));
+  if(root.hidden||destroyed||settlementOpening||!rows?.includes(row)||!available())return false;
   const signal=controller.signal;
   const current=()=>!signal.aborted&&trigger.isConnected&&rows?.includes(row);
   settlementOpening=true;trigger.disabled=true;showNotice();
   try{
-   const item=await data.loadItem(row.id,{signal});
-   if(!current()||nestedViewOpen())return;
+   const item=await readSettlementItem(row.id,signal);
+   if(!current()||(!fromCheck&&nestedViewOpen()))return false;
    const live=item&&normalizeDdaReportRows({rows:[item]})[0];
-   if(live?.id!==row.id||live.status!=='Pago'||live.provisionId!==row.provisionId||live.key!==row.key){
-    showNotice('O DDA ou seu vínculo mudou no SharePoint. Atualize o relatório antes de dar baixa.');
-    return;
+   if(live?.id!==row.id||live.provisionId!==row.provisionId||live.key!==row.key||(!fromCheck&&live.status!=='Pago')){
+    onError('O DDA ou seu vínculo mudou no SharePoint. Atualize o relatório antes de dar baixa.');
+    return false;
    }
-   if(!settlementVerified||!ddaSettlementPending(row,settledProvisionIds))return;
-   if(await onStartSettlement(row.provisionId))return;
-   if(current())showNotice('Não foi possível abrir a baixa da provisão. Confira se há um rascunho ou outra operação em andamento.');
+   if(!available())return false;
+   if(await onStartSettlement(row.provisionId))return true;
+   if(current())onError('Não foi possível abrir a baixa da provisão. Confira se há um rascunho ou outra operação em andamento.');
   }catch{
-   if(current())showNotice('Não foi possível conferir o DDA ou abrir a baixa da provisão. Tente novamente.');
+   if(current())onError('Não foi possível conferir o DDA ou abrir a baixa da provisão. Tente novamente.');
   }finally{
-   settlementOpening=false;trigger.disabled=!settlementVerified;
+   settlementOpening=false;trigger.disabled=!available();
   }
+  return false;
+ }
+ function closeSettlementDialog(){
+  if(!settlementDialog)return;
+  const {overlay,trigger}=settlementDialog;settlementDialog=null;
+  overlay.remove();panel.inert=false;
+  (trigger.isConnected&&!trigger.disabled?trigger:replacementControl(trigger)).focus({preventScroll:true});
+  resumeDeferredRefresh();
+ }
+ function askSettlement(row,trigger){
+  if(root.hidden||destroyed||root.getAttribute('aria-busy')==='true'||nestedViewOpen()||settlementOpening
+   ||!rows?.includes(row)||!canStartSettlement(row))return;
+  const overlay=make('div','gallery-record-overlay dda-payment-overlay');
+  const dialog=make('section','gallery-record-dialog dda-payment-dialog');dialog.dataset.ddaSettlementDialog='';
+  const question='Deseja iniciar a baixa da provisão de pagamento vinculada?';
+  dialog.setAttribute('role','dialog');dialog.setAttribute('aria-modal','true');dialog.setAttribute('aria-label',question);dialog.tabIndex=-1;
+  const summary=make('p','dda-payment-summary',row.supplier+' · DDA '+row.id+'\nDescritivo de pagamento: ID '+row.provisionId);
+  const feedback=make('p','dda-payment-feedback');feedback.setAttribute('role','status');
+  const buttons=make('div','gallery-record-dialog-buttons');
+  const no=button('Não'),yes=button('Sim');no.dataset.ddaSettlementNo='';yes.dataset.ddaSettlementYes='';yes.className='dda-payment-yes';
+  buttons.append(no,yes);dialog.append(make('h2','',question),summary,feedback,buttons);overlay.append(dialog);
+  const entry=settlementDialog={overlay,trigger};
+  no.addEventListener('click',closeSettlementDialog);
+  yes.addEventListener('click',async()=>{
+   if(yes.disabled||settlementDialog!==entry)return;
+   no.disabled=yes.disabled=true;feedback.setAttribute('role','status');feedback.textContent='Conferindo o vínculo e abrindo a baixa…';dialog.focus();
+   const started=await startSettlement(row,trigger,{fromCheck:true,onError:message=>{
+    feedback.setAttribute('role','alert');feedback.textContent=message;
+   }});
+   if(settlementDialog!==entry)return;
+   if(started){closeSettlementDialog();return;}
+   if(feedback.getAttribute('role')!=='alert'){
+    feedback.setAttribute('role','alert');feedback.textContent='Não foi possível iniciar a baixa. Atualize o relatório e tente novamente.';
+   }
+   no.disabled=false;yes.disabled=!canStartSettlement(row);no.focus();
+  });
+  overlay.addEventListener('keydown',event=>{
+   if(event.key==='Escape'){event.preventDefault();event.stopPropagation();if(!no.disabled)closeSettlementDialog();}
+   if(event.key==='Tab'){
+    event.preventDefault();event.stopPropagation();
+    const items=[no,yes].filter(node=>!node.disabled);
+    if(items.length<2)(items[0]||dialog).focus();
+    else (doc.activeElement===no?yes:no).focus();
+   }
+  });
+  panel.inert=true;root.append(overlay);no.focus();
  }
  async function reloadFromBank(){
   if(destroyed||root.hidden){reloadPending=false;return;}
@@ -190,13 +240,15 @@ export function createDdaReportView({document:doc=globalThis.document,data,openM
    const issued=make('td','ddr-issued-date');
    if(row.issued)issued.append(make('strong','',date(row.issued)),make('small','ddr-issued-days',`${daysSince(row.issued,today)} d`));
    else issued.append(make('span','','Não informada'));
-   const files=make('td'),actions=make('div','ddr-row-actions'),check=button((row.status==='Pago'?'Pagamento já confirmado do DDA ':'Confirmar pagamento do DDA ')+row.id,'✓');
+   const files=make('td'),actions=make('div','ddr-row-actions'),check=button(row.provisionId?'Iniciar baixa da provisão '+row.provisionId+' do DDA '+row.id:'Vincule um descritivo de pagamento ao DDA '+row.id+' para iniciar a baixa','✓');
    const pencil=button('Vincular DDA '+row.id+' a descritivo provisão','✎');pencil.className='ddr-provision-pencil';pencil.dataset.ddaProvisionPencil=row.id;
    pencil.disabled=!data.provisionLink||!Number.isSafeInteger(Number(row.id))||Number(row.id)<=0;
    pencil.addEventListener('click',()=>{if(destroyed||root.hidden||root.getAttribute('aria-busy')==='true')return;void provisionPicker.show(row,pencil);});
-   check.className='ddr-confirm-payment';check.dataset.ddaConfirmPayment=row.id;check.title=check.getAttribute('aria-label');
-   check.disabled=row.status==='Pago'||!Number.isSafeInteger(Number(row.id))||Number(row.id)<=0||!/^[a-f0-9]{64}$/.test(row.key)||typeof confirmPayment!=='function';
-   check.addEventListener('click',()=>{if(destroyed||root.hidden||root.getAttribute('aria-busy')==='true')return;paymentConfirmation.show({itemId:row.id,key:row.key,supplier:row.supplier,amount:money(row.amount),due:date(row.due)},check);});
+   check.className='ddr-provision-check';check.dataset.ddaProvisionCheck=row.id;
+   check.disabled=printAll||!canStartSettlement(row);
+   check.title=row.provisionId&&settledProvisionIds.has(row.provisionId)?'Provisão já baixada':row.provisionId&&!settlementVerified
+    ?'A baixa fica disponível após a conferência da provisão no SharePoint.':check.getAttribute('aria-label');
+   check.addEventListener('click',()=>askSettlement(row,check));
    const open=button('Abrir espelho do DDA '+row.id,'📎 Espelho');open.dataset.ddaMirror=row.id;open.disabled=typeof data.listAttachments!=='function'||typeof data.downloadAttachment!=='function'||typeof openMediaCollection!=='function';open.addEventListener('click',()=>void openPdfs(row,open));actions.append(pencil,check,open);files.append(actions);
    if(!printAll&&pendingSettlement&&row.provisionId&&typeof onStartSettlement==='function'&&typeof data.loadItem==='function'){
     const settle=button(`Dar baixa na provisão ${row.provisionId} do DDA ${row.id}`,'Dar baixa');
@@ -259,13 +311,13 @@ export function createDdaReportView({document:doc=globalThis.document,data,openM
   finally{if(trigger.isConnected&&!signal.aborted)trigger.disabled=false;if(!previewStarted)finish();}
  }
  async function load(initialSnapshot,position,initialSettledProvisionIds){
-  if(root.hidden||destroyed)return;paymentConfirmation.close();provisionPicker.close();pdfRequest=null;controller?.abort();cancelSettlement();const current=++revision,active=controller=new AbortController(),filters=filterRevision;rows=null;settledProvisionIds=new Set();settlementVerified=false;printAll=false;root.setAttribute('aria-busy','true');refresh.disabled=true;showNotice();content.replaceChildren(make('p','','Carregando DDAs do SharePoint…'));
-  try{const snapshot=initialSnapshot??await data.loadSnapshot({refresh:true,signal:active.signal});if(active.signal.aborted||current!==revision||root.hidden||destroyed)return;rows=normalizeDdaReportRows(snapshot);if(initialSettledProvisionIds){settledProvisionIds=new Set(initialSettledProvisionIds);settlementVerified=true;}populate();render();if(position&&filters===filterRevision)restoreReportPosition(position);}
+  if(root.hidden||destroyed)return;closeSettlementDialog();provisionPicker.close();pdfRequest=null;controller?.abort();cancelSettlement();const current=++revision,active=controller=new AbortController(),filters=filterRevision;rows=null;settledProvisionIds=new Set();settlementVerified=false;printAll=false;root.setAttribute('aria-busy','true');refresh.disabled=true;showNotice();content.replaceChildren(make('p','','Carregando DDAs do SharePoint…'));
+  try{const snapshot=initialSnapshot??await data.loadSnapshot({refresh:true,signal:active.signal});if(active.signal.aborted||current!==revision||root.hidden||destroyed)return;rows=normalizeDdaReportRows(snapshot);if(initialSettledProvisionIds){settledProvisionIds=new Set(initialSettledProvisionIds);settlementVerified=!rows.some(row=>row.provisionId&&row.status!=='Pago');}populate();render();if(position&&filters===filterRevision)restoreReportPosition(position);}
   catch{if(active.signal.aborted||current!==revision||root.hidden||destroyed)return;rows=null;const error=make('p','','Não foi possível carregar os DDAs. Tente atualizar.');error.setAttribute('role','alert');content.replaceChildren(error);}
   finally{if(current===revision){root.setAttribute('aria-busy','false');syncRefreshButton();}}
-  if(rows&&current===revision&&!initialSettledProvisionIds)await recheckSettlement();
+  if(rows&&current===revision&&!settlementVerified)await recheckSettlement();
  }
- function close(){if(root.hidden)return;expandedBarcodes.clear();reloadPending=false;pdfRequest=null;paymentConfirmation.close();provisionPicker.close();controller?.abort();cancelSettlement();revision++;rows=null;printAll=false;content.replaceChildren();showNotice();root.hidden=true;doc.body.style.overflow=oldOverflow;if(app)app.inert=oldInert;const target=returnFocus?.isConnected?returnFocus:doc.querySelector('[data-action="open-dda-report"]')||app;target?.focus?.();returnFocus=null;onClose();}
+ function close(){if(root.hidden)return;expandedBarcodes.clear();reloadPending=false;pdfRequest=null;closeSettlementDialog();provisionPicker.close();controller?.abort();cancelSettlement();revision++;rows=null;printAll=false;content.replaceChildren();showNotice();root.hidden=true;doc.body.style.overflow=oldOverflow;if(app)app.inert=oldInert;const target=returnFocus?.isConnected?returnFocus:doc.querySelector('[data-action="open-dda-report"]')||app;target?.focus?.();returnFocus=null;onClose();}
  const filter=()=>{filterRevision++;printAll=false;page=1;render();content.scrollTop=0;showNotice();};
  controls.status.addEventListener('change',filter);controls.bank.addEventListener('change',filter);controls.search.addEventListener('input',filter);refresh.addEventListener('click',()=>void manualRefresh());
  const unsubscribeBank=syncMonitor?.subscribe(state=>{
@@ -279,5 +331,5 @@ export function createDdaReportView({document:doc=globalThis.document,data,openM
  root.addEventListener('keydown',event=>{if(root.hidden)return;if(event.key==='Escape'){event.preventDefault();close();return;}if(event.key!=='Tab')return;const nodes=[...panel.querySelectorAll('button,input,select,[tabindex="0"]')].filter(node=>!node.disabled&&!node.closest('[hidden]')),first=nodes[0],last=nodes.at(-1);if(event.shiftKey&&(doc.activeElement===first||doc.activeElement===panel)){event.preventDefault();last?.focus();}else if(!event.shiftKey&&(doc.activeElement===last||doc.activeElement===panel)){event.preventDefault();first?.focus();}});
  return Object.freeze({element:root,async open({automatic=false,initialSnapshot,initialSettledProvisionIds}={}){if(destroyed)throw new Error('Relatório encerrado.');if(!root.hidden)return;returnFocus=doc.activeElement;app=doc.getElementById('app');oldInert=app?.inert||false;oldOverflow=doc.body.style.overflow;doc.body.style.overflow='hidden';if(app)app.inert=true;const initialStatus=automatic?'Não pagos':'Em aberto';controls.status.replaceChildren(option(initialStatus,initialStatus));controls.bank.replaceChildren(option('Todas',''));controls.search.value='';page=1;root.hidden=false;landscape.update();panel.focus();await load(initialSnapshot,undefined,initialSettledProvisionIds);},close,
   async preparePrint(){if(root.hidden||destroyed||!rows||root.getAttribute('aria-busy')==='true')throw new Error('Não foi possível imprimir: aguarde a consulta completa dos DDAs.');const current=revision,filters=filterRevision,position=[content.scrollTop,content.scrollLeft],oldPage=page;printAll=true;render();return()=>{if(root.hidden||destroyed||current!==revision||filters!==filterRevision)return;printAll=false;page=oldPage;render();[content.scrollTop,content.scrollLeft]=position;};},
-  destroy(){if(destroyed)return;close();paymentConfirmation.destroy();destroyed=true;unsubscribeBank?.();landscape.destroy();root.remove();}});
+  destroy(){if(destroyed)return;close();destroyed=true;unsubscribeBank?.();landscape.destroy();root.remove();}});
 }

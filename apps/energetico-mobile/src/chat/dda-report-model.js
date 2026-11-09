@@ -11,7 +11,7 @@ const text=value=>typeof value==='string'||typeof value==='number'?String(value)
 const provisionId=value=>{const id=text(value);return /^[1-9]\d*$/.test(id)&&Number.isSafeInteger(Number(id))?id:'';};
 const auditTime=value=>/^\d{4}-\d{2}-\d{2}T.*(?:Z|[+-]\d{2}:\d{2})$/.test(value)?Date.parse(value):NaN;
 
-export function ddaWasScheduledAt(row,confirmedAt){
+function ddaWasScheduledAt(row,confirmedAt){
  const observedAt=auditTime(row.scheduledAt);
  return Number.isFinite(observedAt)&&observedAt<=auditTime(confirmedAt);
 }
@@ -21,8 +21,8 @@ export function ddaSettlementPending(row,settledProvisionIds){
   &&(row.provisionId||row.paidBySchedule)&&!settledProvisionIds.has(row.provisionId));
 }
 
-export async function readDdaSettledProvisionIds(rows,provisionLink,signal){
- const ids=[...new Set(rows.filter(row=>row.status==='Pago'&&row.provisionId).map(row=>row.provisionId))];
+export async function readDdaSettledProvisionIds(rows,provisionLink,signal,{includeUnpaid=false}={}){
+ const ids=[...new Set(rows.filter(row=>row.provisionId&&(includeUnpaid||row.status==='Pago')).map(row=>row.provisionId))];
  if(!ids.length)return new Set();
  if(typeof provisionLink?.loadSettledProvisionIds!=='function')return null;
  try{
