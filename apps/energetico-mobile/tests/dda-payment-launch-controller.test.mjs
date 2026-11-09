@@ -16,7 +16,7 @@ const test = (name, ...args) => nodeTest(`${target.id}: ${name}`, ...args);
 const launch = { id: target.id, contextId: `fake-${target.id}`, title: target.text };
 const remote = (id, fileName) => ({ id, fileName, mimeType: 'application/pdf', size: 8, mediaUrl: `/api/portal-media/${id}` });
 
-async function setup(t, { kind = 'report', data: dataOverrides = {}, client: clientOverrides = {} } = {}) {
+async function setup(t, { kind = 'dda', data: dataOverrides = {}, client: clientOverrides = {} } = {}) {
   const handlers = new Map(), factories = [], calls = [], uploaded = [];
   const store = createConversationStore();
   const view = { render() {}, focusComposer() {}, destroy() {},
@@ -49,21 +49,20 @@ async function setup(t, { kind = 'report', data: dataOverrides = {}, client: cli
     auth: { initialize: async () => ({ homeAccountId: 'fake-dda-owner', name: 'Teste fictício' }), getToken: async () => 'fake', signOut: async () => {} },
     native: { importSharedItems: async () => [] },
     registrationGalleryDataFactory: async () => data,
-    registrationGalleryFactory: factory, ddaReportFactory: factory,
+    registrationGalleryFactory: factory,
     pendingProvisionAttachmentsDataFactory: async () => ({ loadUpcomingPayments: async () => [] }),
     pendingConstructionDiaryDataFactory: async () => ({ loadPending: async () => [] }),
     diaryFieldVisitDataFactory: async () => ({ load: async () => [] }),
   });
   t.after(() => controller.stop());
   await controller.start();
-  if (kind === 'report') await view.emit('open-dda-report');
-  else await view.emit('select-reply', { replyId: kind === 'dda' ? 'action_dda_gallery' : 'action_asset_gallery', label: 'GALERIA' });
+  await view.emit('select-reply', { replyId: kind === 'dda' ? 'action_dda_gallery' : 'action_asset_gallery', label: 'GALERIA' });
   calls.length = 0;
   return { controller, store, view, calls, data, client, options: factories[0], uploaded, panel };
 }
 
-for (const kind of ['report', 'dda']) test(`${kind}: exact DDA files become visible uploaded launch attachments without posting`, async t => {
-  const h = await setup(t, { kind });
+test('exact DDA files become visible uploaded launch attachments without posting', async t => {
+  const h = await setup(t);
   assert.equal(typeof h.options[target.callback], 'function');
   const previous = remote('existing', 'anterior.pdf');
   h.store.syncAttachments([previous]); h.store.setDraft('rascunho fictício');
@@ -250,7 +249,7 @@ for (const phase of ['list', 'download', 'navigation', 'upload']) test(`cancelle
 });
 
 test('a missing launch confirmation cannot reuse a previous launch as successful navigation', async t => {
-  const h = await setup(t, { kind: 'dda', client: { sendText: async () => ({ status: 'processed', messages: [] }) } });
+  const h = await setup(t, { client: { sendText: async () => ({ status: 'processed', messages: [] }) } });
   h.store.ingestRemoteMessages([], { activeFlow: launch });
   assert.notEqual(await h.options[target.callback](request()).catch(error => error), true);
   assert.equal(h.uploaded.length, 0);
