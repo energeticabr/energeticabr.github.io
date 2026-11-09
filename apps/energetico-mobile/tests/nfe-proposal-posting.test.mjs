@@ -1,6 +1,8 @@
 import assert from 'node:assert/strict';
+import { createHash } from 'node:crypto';
 import test from 'node:test';
-import { createNfeProposalPosting } from '../src/chat/nfe-proposal-posting.js';
+import { createNfeProposalPosting, decodeNfeStoredRecord } from '../src/chat/nfe-proposal-posting.js';
+import { createNfeLearningExample, createNfeLearningModel } from '../src/chat/nfe-proposal-learning.js';
 
 const key = '35261112345678000123550010000000011000000011';
 const pdfName = `DANFE-${key}-0123456789abcdef.pdf`;
@@ -57,6 +59,9 @@ function fixture() {
       assert.equal(list, 'NOTAS_FISCAIS_SEFAZ');
       assert.equal(id, '7');
       if (eTag !== `\"${state.revision}\"`) throw new Error('ETag conflict');
+      if (state.rejectLearning && fields.NFEAPRENDIZADO) {
+        throw Object.assign(new Error('NFEAPRENDIZADO is read-only'), { status:400 });
+      }
       events.push(fields.IDPEDIDO ? 'link' : 'reserve');
       Object.assign(fiscal, fields);
       state.revision++;
@@ -106,12 +111,13 @@ function fixture() {
   };
   async function prepare(_row, input) {
     if (state.prepareUnavailable) throw new Error('catalog unavailable');
-    return { draft:input, orderFields:{ FORNECEDOR:'Fornecedor fictício', VALORTOTAL:15, DATAPEDIDO:'2026-11-08T12:00:00Z',
+    return { draft:input, learning:state.learning, orderFields:{ FORNECEDOR:'Fornecedor fictício', VALORTOTAL:15, DATAPEDIDO:'2026-11-08T12:00:00Z',
       STATUS:'PENDENTE AUDITORIA', NOTAFISCAL:'SUBMETIDO' },
       launchFields:input.lines.map(({ number,account }) => ({ number, fields:{ field_14:account, field_8:1, field_2:'2026-11-08T12:00:00Z' } })) };
   }
   const service = () => createNfeProposalPosting({ repository, assertSession:() => {},
     authorizeWrite:async () => { if (state.unauthorized) throw new Error('write consent denied'); },
+    resolveLearningScope:async () => state.scope ?? 'a'.repeat(64),
     prepare, downloadPdf:async () => { state.onDownload?.(); return state.sourcePdf; } });
   return { fiscal, tables, files, events, state, service };
 }
@@ -126,6 +132,49 @@ test('reserves, creates the order, confirms its PDF, creates both launches and l
   assert.equal(fiscal.NFEPROPOSTA, null);
   assert.deepEqual(tables.LANCAMENTOS.map(({ fields }) => [fields.AGRUPAR,fields.field_14]), [['40','A'],['40','B']]);
   assert.deepEqual(files.get(pdfName), await pdf.arrayBuffer());
+});
+
+test('publishes one learning example atomically with the confirmed link after a retry', async () => {
+  const { fiscal,events,state,service } = fixture();
+  const example = { version:1, issuer:'issuer', lines:[{ productId:'71', changed:['productId'] }] };
+  state.learning = { scope:'a'.repeat(64), example };
+  state.rejectLine = `${key}-2`;
+  await assert.rejects(service().submit(invoice,draft), /launch creation unavailable/);
+  assert.equal(fiscal.NFEAPRENDIZADO, undefined);
+  assert.equal(fiscal.NFEAPRENDIZCHAVE, undefined);
+  state.rejectLine = null;
+  state.learning = undefined;
+  state.loseLink = true;
+  await service().submit(invoice, await service().loadReservation(invoice));
+  assert.equal(fiscal.IDPEDIDO, 40);
+  assert.equal(fiscal.NFEAPRENDIZCHAVE, 'a'.repeat(64));
+  const { at, ...confirmedExample } = JSON.parse(fiscal.NFEAPRENDIZADO);
+  assert.ok(Number.isFinite(at));
+  assert.deepEqual(confirmedExample, example);
+  await service().submit(invoice,draft);
+  assert.equal(events.filter(event => event === 'link').length, 1);
+});
+
+test('completes financial posting if SharePoint rejects the learning column', async () => {
+  const { fiscal,events,state,service } = fixture();
+  state.learning = { scope:'a'.repeat(64), example:{ version:1, lines:[] } };
+  state.rejectLearning = true;
+  assert.deepEqual(await service().submit(invoice,draft), expected);
+  assert.equal(fiscal.IDPEDIDO, 40);
+  assert.equal(fiscal.NFEAPRENDIZADO, undefined);
+  assert.deepEqual(events, ['reserve','NOTASPENDENTES:40','attach','LANCAMENTOS:50','LANCAMENTOS:51','promote','link']);
+});
+
+test('resuming a proposal with a different Microsoft account does not publish its correction', async () => {
+  const { fiscal,state,service } = fixture();
+  state.learning = { scope:'a'.repeat(64), example:{ version:1, lines:[] } };
+  state.rejectLine = `${key}-2`;
+  await assert.rejects(service().submit(invoice,draft), /launch creation unavailable/);
+  state.rejectLine = null;
+  state.scope = 'b'.repeat(64);
+  assert.deepEqual(await service().submit(invoice,await service().loadReservation(invoice)), expected);
+  assert.equal(fiscal.IDPEDIDO, 40);
+  assert.equal(fiscal.NFEAPRENDIZADO, undefined);
 });
 
 test('reopens a partial attempt with its frozen payload and resumes in a different service instance', async () => {
@@ -273,15 +322,29 @@ test('keeps a large fiscal draft within the multiline reservation limit and reop
   assert.deepEqual(await service().submit(invoice,largeDraft), expected);
 });
 
-test('stores and reloads a reviewed NF-e draft with 990 fiscal lines', async () => {
+test('reserves a reviewed NF-e with 990 distinct corrected lines and keeps all examples', async () => {
   const { fiscal,state,service } = fixture();
   const manyLines = { lines:Array.from({ length:990 }, (_, index) => ({ number:index + 1, account:'A', productId:'1296',
     stageId:'3121', quantity:'10', unitPrice:'9.81', adjustment:'0.00', discount:'0.00', date:'2026-11-08', dueDate:'2026-12-08' })) };
+  const digest = value => createHash('sha256').update(value).digest('hex');
+  const source = { lines:manyLines.lines.map(({number}) => ({
+    number, code:digest('code'+number), description:digest('description'+number).repeat(2), unit:'UN',
+  })) };
+  const learnerInvoice = { ...invoice, learningIssuerHash:'b'.repeat(64) };
+  const baseline = { lines:manyLines.lines.map(line => ({ ...line, productId:'' })) };
+  state.learning = { scope:'a'.repeat(64), example:createNfeLearningExample(learnerInvoice,source,baseline,manyLines) };
   state.rejectAttachment = true;
   await assert.rejects(service().submit(invoice,manyLines), /attachment upload unavailable/);
   assert.match(fiscal.NFEPROPOSTA, /^gzip:/);
   assert.ok(fiscal.NFEPROPOSTA.length < 63000);
   assert.deepEqual(await service().loadReservation(invoice), manyLines);
+  const reservation = JSON.parse(await decodeNfeStoredRecord(fiscal.NFEPROPOSTA));
+  const saved = JSON.parse(await decodeNfeStoredRecord(reservation.learning.data));
+  assert.equal(saved.lines.length, 990);
+  assert.equal(saved.compact, true);
+  const model = createNfeLearningModel([saved], learnerInvoice, source, { products:[{ id:'1296' }] });
+  assert.equal(model.product(source.lines.at(-1)), '1296');
+  assert.equal(model.product({ ...source.lines[0],description:'another product' }), '');
 });
 
 test('never replaces a different document already stored under the exact DANFE name', async () => {

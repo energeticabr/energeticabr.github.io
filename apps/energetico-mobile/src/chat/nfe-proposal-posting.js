@@ -2,6 +2,9 @@ import { NFE_ORDER_FIELD, nfeOrderId } from './nfe-order-link.js';
 import { fiscalDocumentType } from './sefaz-withholding.js';
 
 const RESERVATION = 'NFEPROPOSTA';
+export const NFE_LEARNING_FIELD = 'NFEAPRENDIZADO';
+export const NFE_LEARNING_SCOPE = 'NFEAPRENDIZCHAVE';
+const LEARNING_FIELDS = [NFE_LEARNING_FIELD, NFE_LEARNING_SCOPE];
 const ORDER_ORIGIN = 'NFEORIGEM';
 const LINE_ORIGIN = 'NFELINHA';
 const ORDER_FISCAL_STATUS = 'NOTAFISCAL';
@@ -106,7 +109,7 @@ async function encodeReservation(value) {
   throw new Error('A proposta excede o tamanho aceito pela reserva fiscal.');
 }
 
-async function decodeReservation(value) {
+export async function decodeNfeStoredRecord(value) {
   if (typeof value !== 'string' || value.length > RESERVATION_LIMIT) throw new Error();
   if (!value.startsWith(GZIP_PREFIX)) return value;
   const bytes = Uint8Array.from(atob(value.slice(GZIP_PREFIX.length)), character => character.charCodeAt(0));
@@ -126,7 +129,7 @@ async function decodeReservation(value) {
 async function readReservation(value, { id, key, pdfName, xmlUrl, number }) {
   if (blank(value)) return null;
   try {
-    const stored = JSON.parse(await decodeReservation(value));
+    const stored = JSON.parse(await decodeNfeStoredRecord(value));
     if (!record(stored?.draft) || stored.version !== 1 || stored.invoiceId !== id || stored.key !== key || stored.pdfName !== pdfName
       || stored.xmlUrl !== xmlUrl || stored.number !== number
       || !SHA256.test(stored.pdfHash) || !SHA256.test(stored.inputHash) || !SHA256.test(stored.planHash)) throw new Error();
@@ -144,7 +147,7 @@ function sameField(name, actual, expected) {
   return actual === expected;
 }
 
-export function createNfeProposalPosting({ repository, assertSession = () => {}, authorizeWrite, prepare, downloadPdf }) {
+export function createNfeProposalPosting({ repository, assertSession = () => {}, authorizeWrite, prepare, downloadPdf, resolveLearningScope }) {
   function active(signal) {
     assertSession();
     signal?.throwIfAborted();
@@ -186,30 +189,69 @@ export function createNfeProposalPosting({ repository, assertSession = () => {},
     }
     const linked = nfeOrderId(fields[NFE_ORDER_FIELD]);
     if (!linked && !blank(fields[NFE_ORDER_FIELD])) throw new Error('O vínculo atual da nota fiscal está inválido.');
-    return { eTag, linked, rawReservation:fields[RESERVATION], reservation:await readReservation(fields[RESERVATION], invoice) };
+    return { eTag, linked, fields, rawReservation:fields[RESERVATION], reservation:await readReservation(fields[RESERVATION], invoice) };
   }
 
-  async function readFiscal(list, invoice, signal) {
+  async function readFiscal(list, invoice, signal, extraFields = []) {
     active(signal);
     const item = await repository.getItem('company', list, invoice.id, undefined,
-      { signal, restrictedFields:INVOICE_FIELDS, includeVersion:true });
+      { signal, restrictedFields:[...INVOICE_FIELDS, ...extraFields], includeVersion:true });
     const current = await inspectFiscal(item, invoice);
     active(signal);
     return current;
   }
 
-  async function writeFiscal(list, invoice, current, fields, signal) {
+  async function writeFiscal(list, invoice, current, fields, signal, extraFields = []) {
     active(signal);
     try {
       await repository.updateItem('company', list, invoice.id, fields,
-        { eTag:current.eTag, signal, readbackFields:INVOICE_FIELDS, includeVersion:true });
+        { eTag:current.eTag, signal, readbackFields:[...INVOICE_FIELDS, ...extraFields], includeVersion:true });
     } catch (error) {
       // A 412 and a response lost after a successful MERGE both require a fresh read.
-      const latest = await readFiscal(list, invoice, signal);
+      const latest = await readFiscal(list, invoice, signal, extraFields);
       if (latest.eTag === current.eTag) throw error;
       return latest;
     }
-    return readFiscal(list, invoice, signal);
+    return readFiscal(list, invoice, signal, extraFields);
+  }
+
+  function learningDigest(planHash, scope, data) {
+    return sha256(new TextEncoder().encode(canonicalJson([planHash, scope, data])));
+  }
+
+  async function confirmedLearning(stored, row) {
+    const { learning, planHash } = stored;
+    if (!SHA256.test(learning?.scope) || !SHA256.test(learning.digest) || typeof learning.data !== 'string'
+      || !learning.data || learning.data.length > RESERVATION_LIMIT
+      || learning.scope !== await resolveLearningScope?.(row)
+      || learning.digest !== await learningDigest(planHash, learning.scope, learning.data)) return null;
+    return { [NFE_LEARNING_FIELD]:learning.data, [NFE_LEARNING_SCOPE]:learning.scope };
+  }
+
+  function learningColumnsUnavailable(error) {
+    return [400,403,404].includes(error?.status)
+      && LEARNING_FIELDS.some(field => String(error?.message).toUpperCase().includes(field));
+  }
+
+  async function finishLink(list, invoice, reserved, orderId, orderList, orderFields, learning, signal) {
+    const link = { [NFE_ORDER_FIELD]:Number(orderId), [RESERVATION]:null };
+    async function confirm(extra = [], fields = link) {
+      let current = await readFiscal(list, invoice, signal, extra);
+      if (!current.linked && current.rawReservation === reserved) {
+        await promoteOrder(orderList, orderId, orderFields, invoice.key, signal);
+        current = await writeFiscal(list, invoice, current, fields, signal, extra);
+      }
+      if (current.linked !== orderId || current.reservation
+        || extra.some(field => !blank(current.fields[field]))
+          && extra.some(field => current.fields[field] !== fields[field])) {
+        throw new Error('O vínculo do pedido não foi confirmado na nota fiscal. Atualize o relatório e retome.');
+      }
+    }
+    if (learning) {
+      try { return await confirm(LEARNING_FIELDS, { ...link, ...learning }); }
+      catch (error) { if (!learningColumnsUnavailable(error)) throw error; }
+    }
+    return confirm();
   }
 
   async function findFinancial(list, column, token, signal) {
@@ -317,7 +359,7 @@ export function createNfeProposalPosting({ repository, assertSession = () => {},
     return current.reservation?.draft ?? null;
   }
 
-  async function submit(row, draft, { signal, onProgress } = {}) {
+  async function submit(row, draft, { signal, onProgress, baseline, manualStages } = {}) {
     active(signal);
     const invoice = identify(row);
     const source = { ...row, ...invoice };
@@ -345,14 +387,27 @@ export function createNfeProposalPosting({ repository, assertSession = () => {},
     const pdfHash = await pdfFingerprint(pdf);
     active(signal);
 
-    const prepared = normalizePayload(await prepare(source, JSON.parse(input), { signal }));
+    const candidate = await prepare(source, JSON.parse(input), {
+      signal, baseline:current.reservation || current.linked ? null : baseline, manualStages,
+    });
+    const prepared = normalizePayload(candidate);
     if (prepared.orderFields[ORDER_FISCAL_STATUS] !== ORDER_SUBMITTED) {
       throw new Error('A proposta não confirmou a situação fiscal final do pedido.');
     }
     const planHash = await sha256(encoder.encode(canonicalJson(prepared)));
     if (!current.linked && !current.reservation) {
-      const next = await encodeReservation({ version:1, invoiceId:invoice.id, key:invoice.key, pdfName:invoice.pdfName,
-        xmlUrl:invoice.xmlUrl, number:invoice.number, inputHash, pdfHash, planHash, draft:prepared.draft });
+      const reservation = { version:1, invoiceId:invoice.id, key:invoice.key, pdfName:invoice.pdfName,
+        xmlUrl:invoice.xmlUrl, number:invoice.number, inputHash, pdfHash, planHash, draft:prepared.draft };
+      let next;
+      if (SHA256.test(candidate.learning?.scope) && record(candidate.learning?.example)) {
+        try {
+          const data = await encodeReservation({ ...candidate.learning.example, at:Date.now() });
+          const scope = candidate.learning.scope;
+          const digest = await learningDigest(planHash, scope, data);
+          next = await encodeReservation({ ...reservation, learning:{ scope, data, digest } });
+        } catch { /* A training example exceeding SharePoint limits cannot prevent financial submission. */ }
+      }
+      next ??= await encodeReservation(reservation);
       current = await writeFiscal(fiscalList, invoice, current, { [RESERVATION]:next }, signal);
     }
     const stored = current.reservation;
@@ -389,12 +444,8 @@ export function createNfeProposalPosting({ repository, assertSession = () => {},
           readFinancial(launches, id, fields, { signal })));
       }
       await ensurePdf(orders, orderId, invoice.pdfName, pdf, pdfHash, true, signal);
-      current = await readFiscal(fiscalList, invoice, signal);
-      if (!current.linked && current.rawReservation === reserved) {
-        await promoteOrder(orders, orderId, prepared.orderFields, invoice.key, signal);
-        current = await writeFiscal(fiscalList, invoice, current, { [NFE_ORDER_FIELD]:Number(orderId), [RESERVATION]:null }, signal);
-      }
-      if (current.linked !== orderId || current.reservation) throw new Error('O vínculo do pedido não foi confirmado na nota fiscal. Atualize o relatório e retome.');
+      const learning = await confirmedLearning(stored, source);
+      await finishLink(fiscalList, invoice, reserved, orderId, orders, prepared.orderFields, learning, signal);
     }
     active(signal);
     return { invoiceId:invoice.id, orderId, launchIds:confirmed.map(item => item.id) };

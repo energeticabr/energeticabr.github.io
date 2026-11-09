@@ -1,6 +1,10 @@
 import { validateAttachment } from '../../../../portal/data/attachments.js';
 import { buildNfeProposal, nfeProposalKey, validateNfeProposal } from './nfe-proposal-model.js';
-import { createNfeProposalPosting } from './nfe-proposal-posting.js';
+import {
+  createNfeProposalPosting, decodeNfeStoredRecord, NFE_LEARNING_FIELD, NFE_LEARNING_SCOPE,
+} from './nfe-proposal-posting.js';
+import { createNfeLearningExample, createNfeLearningModel, nfeLearningIssuerHash } from './nfe-proposal-learning.js';
+import { nfeOrderId, NFE_ORDER_FIELD } from './nfe-order-link.js';
 import { parseNfeProposalXml } from './nfe-proposal-xml.js';
 
 const clean = value => String(value ?? '').trim();
@@ -74,8 +78,48 @@ export function materializeNfeProposal(row, fiscal, draft, catalog) {
 }
 
 export function createNfeProposalData({ repository, fiscalData, tokenProvider, siteConfig,
-  assertSession = () => {}, DOMParser = globalThis.DOMParser }) {
+  accountKey, userEmail, assertSession = () => {}, DOMParser = globalThis.DOMParser }) {
   const active = signal => { assertSession(); signal?.throwIfAborted(); };
+  const learner = clean(accountKey || userEmail).toLowerCase();
+
+  async function learningIdentity(row) {
+    if (!learner) return null;
+    const issuer = await nfeLearningIssuerHash(row);
+    if (!issuer) return null;
+    return { invoice:{ ...row, learningIssuerHash:issuer }, scope:await fingerprint(JSON.stringify([learner, issuer])) };
+  }
+
+  async function loadExamples(row, signal) {
+    try {
+      const identity = await learningIdentity(row);
+      active(signal);
+      if (!identity) return null;
+      const { invoice, scope } = identity;
+      const list = await repository.resolveList('company', ['NOTAS_FISCAIS_SEFAZ'], { signal });
+      if (list?.status !== 'resolved' || !list.id) return null;
+      const select = [NFE_ORDER_FIELD, NFE_LEARNING_FIELD, NFE_LEARNING_SCOPE].join(',');
+      const items = await repository.getItems('company', list.id,
+        `$select=${select}&$filter=${NFE_LEARNING_SCOPE} eq '${scope}'&$top=200`, { signal });
+      active(signal);
+      if (!Array.isArray(items)) return null;
+      const examples = [];
+      for (const item of items) {
+        const fields = item?.fields;
+        if (String(item?.id) === row.id || !nfeOrderId(fields?.[NFE_ORDER_FIELD])
+          || fields[NFE_LEARNING_SCOPE] !== scope) continue;
+        try {
+          const example = JSON.parse(await decodeNfeStoredRecord(fields[NFE_LEARNING_FIELD]));
+          if (example?.version === 1 && example.issuer === invoice.learningIssuerHash && Number.isFinite(example.at)) examples.push(example);
+        } catch { /* Ignore malformed examples and retain the verified history. */ }
+      }
+      active(signal);
+      examples.sort((left, right) => right.at - left.at);
+      return { invoice, examples };
+    } catch {
+      active(signal);
+      return null;
+    }
+  }
   async function authorizeWrite({ signal } = {}) {
     active(signal);
     if (typeof tokenProvider !== 'function') return;
@@ -143,13 +187,20 @@ export function createNfeProposalData({ repository, fiscalData, tokenProvider, s
 
   const posting = createNfeProposalPosting({
     repository, assertSession, authorizeWrite, downloadPdf,
-    async prepare(row, draft, { signal }) {
+    resolveLearningScope:async row => (await learningIdentity(row))?.scope,
+    async prepare(row, draft, { signal, baseline, manualStages }) {
       const [{ fiscal, xmlHash }, catalog] = await Promise.all([loadXml(row, signal), loadCatalog(signal)]);
       active(signal);
       if (draft.reviewStamp !== await reviewStamp(draft, catalog, xmlHash)) {
         throw new Error('O XML ou os cadastros desta proposta mudaram. Reabra o relatório para conferir os dados.');
       }
-      return materializeNfeProposal(row, fiscal, draft, catalog);
+      const proposal = materializeNfeProposal(row, fiscal, draft, catalog);
+      if (baseline) {
+        const identity = await learningIdentity(row);
+        const example = identity && createNfeLearningExample(identity.invoice, fiscal, baseline, proposal.draft, manualStages);
+        if (example) proposal.learning = { scope:identity.scope, example };
+      }
+      return proposal;
     },
   });
 
@@ -157,15 +208,24 @@ export function createNfeProposalData({ repository, fiscalData, tokenProvider, s
     async load(row, { signal } = {}) {
       const reserved = await posting.loadReservation(row, { signal });
       await authorizeWrite({ signal });
-      const [{ fiscal, xmlHash }, catalog] = await Promise.all([loadXml(row, signal), loadCatalog(signal, !reserved)]);
+      const [{ fiscal, xmlHash }, catalog, learning] = await Promise.all([
+        loadXml(row, signal), loadCatalog(signal, !reserved), reserved ? null : loadExamples(row, signal),
+      ]);
       active(signal);
-      return { fiscal, catalog, xmlHash, draft:reserved || buildNfeProposal(row, fiscal, catalog), reserved:Boolean(reserved) };
+      if (learning?.examples.length) {
+        const model = createNfeLearningModel(learning.examples, learning.invoice, fiscal, catalog);
+        const lines = new Map(fiscal.lines.map(line => [line.number, line]));
+        catalog.learning = { ...model, stage:(number, branchId, productId) => model.stage(lines.get(number), branchId, productId) };
+      }
+      const draft = reserved || buildNfeProposal(row, fiscal, catalog);
+      const baseline = learning ? { ...draft, lines:draft.lines.map(line => ({ ...line })) } : null;
+      return { fiscal, catalog, xmlHash, draft, baseline, reserved:Boolean(reserved) };
     },
     loadReservation:posting.loadReservation,
-    async submit(row, draft, { signal, catalog, xmlHash, onProgress } = {}) {
+    async submit(row, draft, { signal, catalog, xmlHash, onProgress, baseline, manualStages } = {}) {
       const reviewed = draft.reviewStamp ? draft : { ...draft, reviewStamp:await reviewStamp(draft, catalog, xmlHash) };
       active(signal);
-      return posting.submit(row, reviewed, { signal, onProgress });
+      return posting.submit(row, reviewed, { signal, onProgress, baseline, manualStages });
     },
   });
 }

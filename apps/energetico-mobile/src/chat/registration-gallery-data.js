@@ -427,7 +427,9 @@ export function createRegistrationGalleryData({ kind, ...options } = {}) {
       }) } : {}),
     };
     if (kind !== 'notas_fiscais_sefaz') return Object.freeze(readOnlyData);
-    const fiscalSites = { ...options.siteConfig, company: { ...options.siteConfig.company, writeTransport:'rest' } };
+    const fiscalSites = { ...options.siteConfig, company: {
+      ...options.siteConfig.company, writeTransport:'rest', restReadFields:[],
+    } };
     const fiscalRepository = galleryRepository({ ...options, siteConfig:fiscalSites });
     return Object.freeze({
       ...readOnlyData,
@@ -435,6 +437,7 @@ export function createRegistrationGalleryData({ kind, ...options } = {}) {
       proposal:createNfeProposalData({
         repository:fiscalRepository, fiscalData:readOnlyData, siteConfig:fiscalSites,
         tokenProvider:options.tokenProvider, assertSession:options.assertSession,
+        accountKey:options.accountKey, userEmail:options.userEmail,
       }),
     });
   }

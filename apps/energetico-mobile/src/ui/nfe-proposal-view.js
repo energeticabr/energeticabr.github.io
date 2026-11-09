@@ -63,7 +63,7 @@ export function createNfeProposalView({ document:doc, host, service, onPosted })
     overlay.append(dialog);
     const background = [...host.children].map(node => [node, node.inert === true]);
     for (const [node] of background) node.inert = true;
-    const entry = { overlay, background, trigger, controller:new AbortController(), busy:false, reserved:false };
+    const entry = { overlay, background, trigger, controller:new AbortController(), manualStages:new Set(), busy:false, reserved:false };
     const signal = entry.controller.signal;
     current = entry;
     host.append(overlay);
@@ -179,12 +179,14 @@ export function createNfeProposalView({ document:doc, host, service, onPosted })
       if (!fiscal.dueDate) body.append(el('p', 'nfe-proposal-hint', 'O XML não informa um vencimento único. Confira a data de cada item.'));
       if (catalog.historyUnavailable) body.append(el('p', 'nfe-proposal-hint', 'Histórico de uso indisponível. Selecione as etapas pelo cadastro da filial.'));
       const supplier = field(headerFields, 'Fornecedor', 'supplierId', 'select', value => {
+        entry.manualStages.clear();
         entry.draft = updateNfeProposalSupplier(entry.draft, value, catalog);
         branch.value = entry.draft.branchId;
         account.value = entry.draft.accountId;
         updateStages();
       });
       const branch = field(headerFields, 'Filial', 'branchId', 'select', value => {
+        entry.manualStages.clear();
         entry.draft = updateNfeProposalBranch(entry.draft, value, catalog);
         updateStages();
       });
@@ -227,12 +229,16 @@ export function createNfeProposalView({ document:doc, host, service, onPosted })
             if (!entry.reserved && !entry.busy) entry.draft.lines[index].unitReviewed = unitReviewed.checked;
           });
           const product = field(fields, 'Produto', 'productId', 'select', value => {
+            entry.manualStages.delete(String(line.number));
             entry.draft = updateNfeProposalProduct(entry.draft, line.number, value, catalog);
             updateStages();
             syncUnit();
           });
           populate(product, catalog.products, line.productId, 'Selecione o produto');
-          stageControls[index] = field(fields, 'Etapa', 'stageId', 'select', value => { entry.draft.lines[index].stageId = value; });
+          stageControls[index] = field(fields, 'Etapa', 'stageId', 'select', value => {
+            entry.draft.lines[index].stageId = value;
+            entry.manualStages.add(String(line.number));
+          });
           updateStages();
           for (const [label, name, type] of [
             ['Quantidade','quantity','decimal'], ['Valor unitário','unitPrice','decimal'], ['Desconto','discount','decimal'],
@@ -262,7 +268,8 @@ export function createNfeProposalView({ document:doc, host, service, onPosted })
       feedback('Gravando pedido, lançamentos e PDF no SharePoint…');
       try {
         const receipt = await service.submit(row, entry.draft, {
-          signal, catalog:entry.catalog, xmlHash:entry.xmlHash,
+          signal, catalog:entry.catalog, xmlHash:entry.xmlHash, baseline:entry.baseline,
+          manualStages:new Set(entry.manualStages),
           onProgress({ completedLines, totalLines }) {
             if (isCurrent()) feedback(`Lançamentos conferidos ${completedLines} de ${totalLines}.`);
           },
