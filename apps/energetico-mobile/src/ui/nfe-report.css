@@ -129,7 +129,7 @@
   background: #fff1d7;
   color: #704300;
 }
-.nfe-table [data-tone="conflict"] { border-color: #f2b8c0; border-left-color: #c3233b; background: #ffeaec; color: #8b2730; }
+.nfe-table [data-tone="conflict"], .nfe-table [data-tone="invalid"] { border-color: #f2b8c0; border-left-color: #c3233b; background: #ffeaec; color: #8b2730; }
 .nfe-fact small { color: inherit; }
 .nfe-pager { display: flex; justify-content: center; align-items: center; flex-wrap: wrap; gap: 12px; margin: 10px 0; font-size: 12px; }
 .nfe-pager button {

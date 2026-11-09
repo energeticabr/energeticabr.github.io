@@ -11,7 +11,7 @@ const PAGE_SIZE = 12;
 const LOGO = new URL('../../../../assets/logo-energetica-oficial.png', import.meta.url).href;
 const money = new Intl.NumberFormat('pt-BR', { style:'currency', currency:'BRL' });
 const retentionLabels = { yes:'Retenção informada', no:'Sem retenção informada', unknown:'Retenção não confirmada' };
-const cnoLabels = { valid:'CNO consta', conflict:'CNO divergente', missing:'CNO não consta', unknown:'CNO não confirmada', workCode:'CNO/CEI informado' };
+const cnoLabels = { valid:'CNO consta', conflict:'CNO divergente', invalid:'CNO inválido', missing:'CNO não consta', unknown:'CNO não confirmada', workCode:'CNO/CEI informado' };
 const searchKey = value => value.toLowerCase().normalize('NFD').replace(/\p{Diacritic}/gu, '');
 const displayDate = value => value ? value.split('-').reverse().join('/') : 'Não informada';
 const xmlKey = row => `${row.key}|${row.xmlUrl}`;
@@ -39,6 +39,7 @@ function classifyFiscalFacts(row, facts) {
 
   let cno = row.cnoState;
   let cnoDetail = row.cno.numbers.join(' · ');
+  if (row.cno.invalidNumbers?.length) cnoDetail += ` · CNO correto da obra: ${row.cno.expected}`;
   if (cnoDetail && row.cno.corrected) cnoDetail += ' · Carta de correção';
   if (row.type === 'NFS-e' && cno === 'unknown' && facts) {
     const code = facts.workCode;
@@ -106,7 +107,7 @@ export function createNfeReportView({ document:doc = globalThis.document, data, 
     [type, 'Documento', [['', 'Todos'], ['NF-e','NF-e'], ['NFS-e','NFS-e']]],
     [search, 'Pesquisar fornecedor, CNPJ ou nota', []],
     [retentionFilter, 'Retenção', [['', 'Todas'], ['yes', 'Com retenção'], ['no', 'Sem retenção']]],
-    [cnoFilter, 'CNO', [['', 'Todas'], ['valid', 'CNO correta'], ['conflict', 'CNO incorreta'], ['missing', 'Sem CNO']]],
+    [cnoFilter, 'CNO', [['', 'Todas'], ['valid', 'CNO correta'], ['conflict', 'CNO divergente'], ['invalid', 'CNO inválido'], ['missing', 'Sem CNO']]],
     [regimeFilter, 'Tipo de empresa', [['', 'Todos'], ...NFE_SUPPLIER_REGIMES.map(regime => [regime, regime])]],
   ]) {
     const field = make('label');

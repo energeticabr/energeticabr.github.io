@@ -63,10 +63,15 @@ export function decorateSefazInvoiceCard({document: doc, card, container, pdfRai
   if (cno.corrected && cno.status === 'valid') {
     cnoCluster.dataset.sefazCnoCorrected = 'true';
     cnoCopy.append(el('strong', 'rg-sefaz-cno__value', `CNO: ${cno.expected} - NOTA DE CORREÇÃO`));
-  } else cnoCopy.append(el('span', 'rg-sefaz-cno__label', cno.status === 'conflict' ? 'CNO errada' : 'CNO'),
-    el('strong', 'rg-sefaz-cno__value', cno.status === 'missing' ? 'CNO não informada' :
-      (cno.status === 'conflict' ? cno.conflicts : cno.numbers).join(' • ')));
-  if (cno.status === 'conflict') cnoCopy.append(el('span', 'rg-sefaz-cno__expected', `CNO correto da obra: ${cno.expected}`));
+  } else {
+    const label = cno.status === 'conflict' ? 'CNO errada' : cno.status === 'invalid' ? 'CNO inválido' : 'CNO';
+    const values = cno.status === 'valid' ? cno.numbers : [...cno.conflicts, ...(cno.invalidNumbers ?? [])];
+    cnoCopy.append(el('span', 'rg-sefaz-cno__label', label),
+      el('strong', 'rg-sefaz-cno__value', values.join(' • ') || 'CNO não informada'));
+  }
+  if (cno.status === 'conflict' || cno.status === 'invalid') {
+    cnoCopy.append(el('span', 'rg-sefaz-cno__expected', `CNO correto da obra: ${cno.expected}`));
+  }
   cnoCluster.append(icon(doc, 'location'), cnoCopy);
   container.insertBefore(cnoCluster, core);
   if (withholding) {
