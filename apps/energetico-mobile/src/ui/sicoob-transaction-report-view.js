@@ -36,7 +36,7 @@ function projectTransactions(snapshot) {
   }).sort((a, b) => b.date.localeCompare(a.date) || b.id.localeCompare(a.id, 'pt-BR', { numeric: true }));
 }
 
-export function createSicoobTransactionReportView({ document: doc = globalThis.document, data } = {}) {
+export function createSicoobTransactionReportView({ document: doc = globalThis.document, data, onClose } = {}) {
   const make = (tag, className = '', value = '') => {
     const node = doc.createElement(tag);
     node.className = className;
@@ -168,7 +168,7 @@ export function createSicoobTransactionReportView({ document: doc = globalThis.d
       recipient.append(make('strong', 'ddr-supplier-name', transaction.recipient));
       if (transaction.document) recipient.append(make('small', '', transaction.document));
       const description = row.insertCell();
-      description.textContent = transaction.description || '—';
+      description.append(make('span', '', transaction.description || '—'));
       if (transaction.operation) description.append(make('small', '', transaction.operation));
       const details = row.insertCell();
       for (const [label, value] of [
@@ -243,6 +243,7 @@ export function createSicoobTransactionReportView({ document: doc = globalThis.d
     const fallback = doc.querySelector('[data-action="open-sicoob-transaction-report"]');
     (returnFocus?.isConnected ? returnFocus : fallback)?.focus();
     returnFocus = null;
+    onClose?.();
   }
 
   refresh.addEventListener('click', load);

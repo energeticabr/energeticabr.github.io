@@ -10134,6 +10134,7 @@ export function createAppController({
             assertSession();
             const token = await auth.getToken(scopes).catch(async error => {
               if (error?.code !== "AUTH_REQUIRED" || typeof auth.authorize !== "function") throw error;
+              if (isSicoobTransactionReport && registrationGalleries.get(kind)?.element?.hidden) throw error;
               await auth.authorize(scopes, { resumeAction: replyId });
               assertSession();
               return auth.getToken(scopes);
@@ -10182,6 +10183,7 @@ export function createAppController({
                 return startProvisionSettlement(id, 'provision-description', { closeDdaReport: () => panel.close() });
               },
             } : {}),
+            ...(isSicoobTransactionReport ? { onClose: () => registrationGalleryOpenings.delete(kind) } : {}),
             ...(reportAction || ["contractorEmployment", "dda", "notas_fiscais_sefaz", 'assetMenu', 'registrationMenu', 'assetLaunches'].includes(sourceKind) ? {} : { onCreate: galleryCreationHandler(replyId, assertSession) }),
             ...(["notas_fiscais_sefaz", "dda", "presenceDescriptions", "provisionDescription", "documents", "asset", "assetFunction", "assetProduct", "assetGroup", "workDiary", "quotes", "contracts", "contractLines", "measurements", "measurementLines", "stageDemonstratives", "constructionStages", "recurringTasks", "delegatedTasks"].includes(sourceKind) ? {
               openMediaCollection: (items, previewOptions) => {
@@ -10206,7 +10208,7 @@ export function createAppController({
         };
         registrationGalleryOpenOptions.set(panel, panelOpenOptions);
         await panel.open(panelOpenOptions);
-        if (openOptions.automatic && panel.element?.hidden) return false;
+        if ((openOptions.automatic || isSicoobTransactionReport) && panel.element?.hidden) return false;
         return openingIsCurrent();
       } catch (error) {
         if (openingIsCurrent()) setSessionError(error, "Não foi possível abrir a galeria de cadastros.");

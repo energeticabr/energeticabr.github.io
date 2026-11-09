@@ -34,6 +34,8 @@ import '/src/ui/task-association-report.css';
 import { createTaskAssociationReportView } from '/src/ui/task-association-report-view.js';
 import '/src/ui/dda-report.css';
 import { createSicoobTransactionReportView } from '/src/ui/sicoob-transaction-report-view.js';
+import { decorateReportNavigation } from '/src/ui/report-navigation.js';
+import { decorateReportPrint } from '/src/ui/report-print.js';
 const state={sessionStatus:'authenticated',account:{name:'Bernardo'},draft:'',pendingFiles:[],messages:[{id:'home',role:'assistant',type:'poll',question:'QUAL ÁREA VOCÊ DESEJA ACESSAR?',options:[
   {id:'group_pending',reply:'group_pending',label:'⏳ PENDÊNCIAS (45)',tone:'danger'},
   ...[['supplies','📦 SUPRIMENTOS'],['demands','📋 DEMANDAS'],['human_resources','👥 RECURSOS HUMANOS'],['construction','🏗️ ETAPA OBRA'],['commercial','📈 COMERCIAL'],['audit','🔎 AUDITORIA E DOCUMENTOS'],['nb','🏢 NB PARTICIPAÇÕES'],['personal_expenses','💰 GASTOS PESSOAIS']].map(([id,label])=>({id:'group_'+id,reply:'group_'+id,label})),
@@ -42,13 +44,15 @@ const state={sessionStatus:'authenticated',account:{name:'Bernardo'},draft:'',pe
 ]}]};
 const view=createChatView(document.querySelector('#app'));
 view.on('open-sicoob-transaction-report', () => {
-  const sicoobReport = createSicoobTransactionReportView({ data: { async loadSnapshot() {
+  const source = createSicoobTransactionReportView({ data: { async loadSnapshot() {
     return { rows: [{ id: '1', fields: {
       ORIGEMMOVIMENTACAO: 'SICOOB', DATAPAGAMENTO: '2026-11-09T12:00:00Z', OPERACAO: 'DÉBITO',
       RAZAOSOCIALRECEBEDOR: 'Comércio e Serviços de Exemplo Ltda. (Loja Exemplo)', DESCRICAO: 'PIX ENVIADO',
       CONTAPAGADORA: '00001-5', REFERENCIABANCARIA: 'EXEMPLO-1234', VALOR: 1250.99,
     } }] };
   } } });
+  const action = 'open-sicoob-transaction-report';
+  const sicoobReport = decorateReportPrint(decorateReportNavigation(source, { action }), { action });
   sicoobReport.element.querySelector('.report-close-control').addEventListener('click', sicoobReport.destroy, { once: true });
   return sicoobReport.open();
 });

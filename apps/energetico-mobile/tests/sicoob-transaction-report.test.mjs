@@ -2,6 +2,7 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import { JSDOM } from 'jsdom';
 import { createSicoobTransactionReportView } from '../src/ui/sicoob-transaction-report-view.js';
+import { captureFilteredReport } from '../src/ui/report-print.js';
 
 const payment = (id, fields = {}) => ({
   id: String(id),
@@ -44,6 +45,10 @@ test('shows all imported payments across pages and prepares all filtered rows fo
     assert.equal(rowCount(), 2);
     const restore = await view.preparePrint();
     assert.equal(rowCount(), 52);
+    const pdf = captureFilteredReport(root);
+    const table = pdf.pages.flatMap(page => page.blocks).find(block => block.type === 'table');
+    assert.equal(table.rows.filter(row => !row.header).length, 52);
+    assert.equal(table.rows[1].cells[2].runs.map(run => run.text).join(''), 'TED DÉBITO');
     restore();
     assert.equal(rowCount(), 2);
     const search = root.querySelector('input[type="search"]');

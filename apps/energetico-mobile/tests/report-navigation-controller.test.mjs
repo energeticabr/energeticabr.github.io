@@ -3,6 +3,7 @@ import assert from 'node:assert/strict';
 import { JSDOM } from 'jsdom';
 import { createAppController } from '../src/app-controller.js';
 import { createConversationStore } from '../src/chat/conversation-store.js';
+import { createSicoobTransactionReportView } from '../src/ui/sicoob-transaction-report-view.js';
 
 // Literal routes catch wrong dispatch and cross-color navigation independently
 // of the helper's neighbor calculation. Only UI/network boundaries are doubled.
@@ -352,6 +353,32 @@ test('a pending Sicoob report reads the movement gallery and cannot open over a 
  assert.equal(await opening, false);
  assert.deepEqual([opens, destroys], [0, 1]);
  assert.equal(h.panels.at(-1).action, 'open-nfe-report');
+});
+
+test('a closed Sicoob report can reopen before the aborted read finishes', async t => {
+ const first = deferred();
+ let reads = 0;
+ let signal;
+ const h = harness(t, {
+   registrationGalleryDataFactory: async () => ({
+     loadSnapshot(options) {
+       if (++reads === 1) { signal = options.signal; return first.promise; }
+       return { rows: [] };
+     },
+   }),
+   sicoobTransactionReportFactory: options => createSicoobTransactionReportView({ ...options, document: h.document }),
+ });
+ await h.controller.start();
+ const opening = h.view.emit('open-sicoob-transaction-report');
+ await tick();
+ const report = h.document.querySelector('.sicoob-transaction-overlay');
+ report.querySelector('.report-close-control').click();
+ assert.equal(signal.aborted, true);
+ assert.equal(await h.view.emit('open-sicoob-transaction-report'), true);
+ assert.equal(reads, 2);
+ assert.equal(report.hidden, false);
+ first.resolve({ rows: [] });
+ assert.equal(await opening, false);
 });
 
 test('a late management factory cannot open over cargos after arrow navigation is superseded',async t=>{
