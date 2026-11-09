@@ -7,12 +7,29 @@ const { buildRhidAttendanceTable, isRhidAttendanceDayFinalized, isRhidAttendance
 
 test("sugere horários apenas para dias úteis e diferencia a saída de sexta-feira", () => {
   assert.equal(suggestedRhidAdjustmentTime("entry1", "2026-09-29"), "07:00");
-  assert.equal(suggestedRhidAdjustmentTime("exit1", "2026-09-29"), "12:00");
-  assert.equal(suggestedRhidAdjustmentTime("entry2", "2026-09-29"), "13:00");
+  assert.equal(suggestedRhidAdjustmentTime("exit1", "2026-09-29"), "11:00");
+  assert.equal(suggestedRhidAdjustmentTime("entry2", "2026-09-29"), "12:00");
   assert.equal(suggestedRhidAdjustmentTime("exit2", "2026-09-28"), "17:00");
   assert.equal(suggestedRhidAdjustmentTime("exit2", "2026-10-02"), "16:00");
   assert.equal(suggestedRhidAdjustmentTime("exit2", "2026-10-03"), "");
   assert.equal(suggestedRhidAdjustmentTime("entry1", "2026-02-30"), "");
+});
+
+test("horário sugerido para almoço respeita os limites da jornada", () => {
+  const date = "2026-09-29";
+  assert.equal(suggestedRhidAdjustmentTime("entry2", date, {
+    exit1: { effective: "12:10" }, exit2: { effective: "13:00" },
+  }), "");
+  assert.equal(suggestedRhidAdjustmentTime("exit1", date, {
+    entry1: { effective: "11:30" },
+  }), "");
+});
+
+test("batidas de almoço ambíguas exigem conferência manual", () => {
+  const date = "2026-09-29";
+  const slots = { exit1: { rhidCandidates: ["11:05", "11:15", "11:25"] } };
+  assert.equal(suggestedRhidAdjustmentTime("exit1", date, slots), "");
+  assert.equal(suggestedRhidAdjustmentTime("entry2", date, slots), "");
 });
 
 test("horários azuis confirmados entram no total; lacunas cinzas continuam parciais", () => {

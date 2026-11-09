@@ -47,7 +47,7 @@ function correctionButton(h, slot) {
   return h.root.querySelector(`[data-action="attendance-rhid-adjust-open"][data-slot="${slot}"]`);
 }
 
-for (const [slot, label, suggested] of [['entry1', 'Entrada 1', '07:00'], ['exit1', 'Saída 1', '12:00'], ['entry2', 'Entrada 2', '13:00'], ['exit2', 'Saída 2', '17:00']]) {
+for (const [slot, label, suggested] of [['entry1', 'Entrada 1', '07:00'], ['exit1', 'Saída 1', '11:00'], ['entry2', 'Entrada 2', '12:00'], ['exit2', 'Saída 2', '17:00']]) {
   const rows = [row({ BATIDAS_RHID: slot === 'entry1' ? '12:00;13:00;17:00' : '06:52' })];
   test(`missing ${slot} opens the existing RHID dialog without selecting or submitting attendance`, async t => {
     const h = await harness(t, { rows });
@@ -84,6 +84,18 @@ for (const [slot, label, suggested] of [['entry1', 'Entrada 1', '07:00'], ['exit
     assert.equal(h.store.getState().messages.at(-1).id, 'pending-day');
     assert.deepEqual(h.writes, [], 'a correction must never send an attendance reply');
     assert.deepEqual(h.store.getState().messages.at(-1).options, poll().options, 'durable choices are unchanged');
+  });
+}
+
+for (const [slot, punches, expected] of [
+  ['exit1', '07:17;12:49;17:00', '11:49'],
+  ['entry2', '07:17;11:36;17:00', '12:36'],
+]) {
+  test(`the missing ${slot} completes a one-hour lunch using the existing punch`, async t => {
+    const h = await harness(t, { rows: [row({ BATIDAS_RHID: punches })] });
+    correctionButton(h, slot).click();
+    assert.equal(h.root.querySelector('[data-role="rhid-adjustment-time"]').value, expected);
+    assert.deepEqual(h.saves, []);
   });
 }
 
@@ -154,8 +166,9 @@ test('changing the pending poll dismisses its unsaved correction', async t => {
 
 test('three consecutive corrections recalculate the total without replacing the pending list', async t => {
   const h = await harness(t);
-  for (const [slot, time] of [['exit1', '12:00'], ['entry2', '13:00'], ['exit2', '17:00']]) {
+  for (const [slot, time] of [['exit1', '11:10'], ['entry2', '12:10'], ['exit2', '17:00']]) {
     correctionButton(h, slot).click();
+    if (slot === 'exit1') h.root.querySelector('[data-role="rhid-adjustment-time"]').value = time;
     h.root.querySelector('[data-action="rhid-attendance-adjust-save"]').click();
     await tick(); await tick();
     assert.match(h.root.querySelector(`[data-rhid-slot="${slot}"]`).textContent, new RegExp(time));
@@ -190,7 +203,7 @@ test('the save button blocks repeat clicks while a correction is in flight', asy
   assert.equal(h.root.querySelector('[data-action="rhid-attendance-adjust-cancel"]').disabled, true);
   release();
   await tick(); await tick();
-  assert.match(h.root.querySelector('[data-rhid-slot="exit1"]').textContent, /12:00/);
+  assert.match(h.root.querySelector('[data-rhid-slot="exit1"]').textContent, /11:00/);
 });
 
 test('ambiguous collaborators do not offer a correction on a guessed identity', async t => {
@@ -248,7 +261,7 @@ test('a lagging report after cache expiry does not erase a confirmed correction'
   clock += 61000;
   h.store.setDraft('HELISON');
   await tick(); await tick();
-  assert.match(h.root.querySelector('[data-rhid-slot="exit1"]').textContent, /12:00/);
+  assert.match(h.root.querySelector('[data-rhid-slot="exit1"]').textContent, /11:00/);
   assert.equal(correctionButton(h, 'exit1'), null);
 });
 

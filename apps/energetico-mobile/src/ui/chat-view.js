@@ -4886,7 +4886,7 @@ export function createChatView(root, { onOpenSettings, onDemoAccess, onSignOut, 
         adjustmentId: ++rhidAttendanceAdjustmentSequence,
         messageId: message.id, presenceId: target.presenceId, personKey: target.personKey, slot: command.slot,
         personName: target.personName, label, rhid: "", currentEffective: "", previous: null,
-        effective: suggestedRhidAdjustmentTime(command.slot, target.date),
+        effective: suggestedRhidAdjustmentTime(command.slot, target.date, target.slots),
         reason: "NÃO BATEU PONTO, APESAR DE ESTAR PRESENTE", busy: false, error: "",
       };
       if (lastState) { const state = lastState; lastState = null; render(state); }
@@ -4903,10 +4903,12 @@ export function createChatView(root, { onOpenSettings, onDemoAccess, onSignOut, 
         : !isRhidAttendanceDayFinalized(table.reportDate))) return;
       const label = { entry1: "Entrada 1", exit1: "Saída 1", entry2: "Entrada 2", exit2: "Saída 2" }[command.slot];
       if (!label) return;
+      const suggestTime = !mascotDate || command.slot === "exit1" || command.slot === "entry2";
       rhidAttendanceAdjustment = {
         messageId: command.messageId, personKey: command.personKey, slot: command.slot,
         personName: person.name, label, rhid: slot.rhidCandidates?.join(", ") || slot.rhid || "",
-        effective: mascotDate ? '' : slot.effective || suggestedRhidAdjustmentTime(command.slot, table.reportDate), currentEffective: slot.adjustment?.time || "", previous: slot.adjustment || null,
+        effective: slot.effective || (suggestTime ? suggestedRhidAdjustmentTime(command.slot, table.reportDate, person.slots) : ""),
+        currentEffective: slot.adjustment?.time || "", previous: slot.adjustment || null,
         reason: slot.adjustment?.reason ?? (!slot.rhid && !slot.rhidCandidates?.length ? "NÃO APONTADO" : ""), busy: false, error: "",
         canDelete: canDeleteRhidAdjustment(slot.adjustment, lastState?.account),
         ...(mascotDate ? { reportDate: mascotDate } : {}),

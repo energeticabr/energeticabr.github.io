@@ -53,7 +53,7 @@ test('RHID mascot opens today, filters a period, and saves the empty slot on its
       getRhidAttendanceReport: async date => {
         reads.push(date);
         return { date, rows: date === today ? [
-          row(date, '10', 'Ana Teste', '07:01'), row(date, '11', 'Bruno Teste', ''), row(date, '12', 'Carla Teste', ''),
+          row(date, '10', 'Ana Teste', '07:17;12:49;17:00'), row(date, '11', 'Bruno Teste', ''), row(date, '12', 'Carla Teste', ''),
         ] : history.filter(item => item.DATA_REFERENCIA === date) };
       },
       getRhidAttendanceMonth: async month => ({ month, rows: history.filter(item => item.DATA_REFERENCIA.startsWith(month)) }),
@@ -81,13 +81,17 @@ test('RHID mascot opens today, filters a period, and saves the empty slot on its
   assert.deepEqual(reads, [today]);
   assert.deepEqual(comparisons, [[today, today]]);
   assert.equal(cards().length, 3);
-  assert.match(cards()[0].textContent, /07:01/);
+  assert.match(cards()[0].textContent, /07:17/);
   assert.ok(cards()[0].classList.contains('chat-rhid-attendance-card--presence-pending'));
   assert.ok(cards()[1].classList.contains('chat-rhid-attendance-card--presence-mismatch'));
   assert.match(cards()[1].textContent, /Presente no Descritivo, sem batida no relógio/i);
   assert.ok(!cards()[2].classList.contains('chat-rhid-attendance-card--presence-mismatch'));
   assert.ok(cards()[0].querySelector('button[data-slot="exit1"]'));
   assert.equal(cards()[0].querySelector('button[data-slot="entry1"]'), null);
+  cards()[0].querySelector('button[data-slot="exit1"]').click();
+  assert.equal(root.querySelector('[data-role="rhid-adjustment-time"]').value, '11:49');
+  assert.deepEqual(writes, []);
+  click(action('rhid-attendance-adjust-cancel'));
   click(action('rhid-mascot-period'));
   await settle();
   root.querySelector('[name="rhid-start"]').value = '2025-02-02';
@@ -112,6 +116,7 @@ test('RHID mascot opens today, filters a period, and saves the empty slot on its
   assert.match(cards()[1].textContent, /Ausente no Descritivo, com batida no relógio/i);
   assert.equal(empty.dataset.messageId, 'rhid-mascot:2025-01-31');
   empty.click();
+  assert.equal(root.querySelector('[data-role="rhid-adjustment-time"]').value, '11:00');
   root.querySelector('[data-role="rhid-adjustment-time"]').value = '11:58';
   click(action('rhid-attendance-adjust-save'));
   await settle();

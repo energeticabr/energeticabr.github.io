@@ -217,11 +217,29 @@ export function rhidUpdateLabel(report = {}) {
     : `ÚLTIMA COLETA DO RHID ÀS ${time}`;
 }
 
-export function suggestedRhidAdjustmentTime(slot, reportDate) {
+export function suggestedRhidAdjustmentTime(slot, reportDate, slots) {
   if (!isValidRhidReportDate(reportDate)) return "";
+  const lunchExit = slot === "exit1";
+  if (lunchExit || slot === "entry2") {
+    const opposite = slots?.[lunchExit ? "entry2" : "exit1"];
+    if (slots?.[slot]?.rhidCandidates?.length || (opposite?.rhidCandidates?.length && !opposite.effective)) return "";
+
+    let suggestion = lunchExit ? "11:00" : "12:00";
+    if (opposite?.effective) {
+      const [hour, minute] = opposite.effective.split(":");
+      const suggestedHour = Number(hour) + (lunchExit ? -1 : 1);
+      if (suggestedHour < 0 || suggestedHour > 23) return "";
+      suggestion = `${String(suggestedHour).padStart(2, "0")}:${minute}`;
+    }
+
+    const dayStart = slots?.entry1?.effective;
+    const dayEnd = slots?.exit2?.effective;
+    if ((dayStart && suggestion <= dayStart) || (dayEnd && suggestion >= dayEnd)) return "";
+    return suggestion;
+  }
   const day = new Date(`${reportDate}T12:00:00Z`).getUTCDay();
   if (day === 0 || day === 6) return "";
-  return { entry1: "07:00", exit1: "12:00", entry2: "13:00", exit2: day === 5 ? "16:00" : "17:00" }[slot] || "";
+  return { entry1: "07:00", exit2: day === 5 ? "16:00" : "17:00" }[slot] || "";
 }
 
 export function rhidIrregularCountsByDate(rows = [], month = "") {

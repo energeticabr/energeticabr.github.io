@@ -79,7 +79,7 @@ export function attendanceMissingPunchContext(option, poll, slot) {
     || !["present", "absent", "inconsistent"].includes(badge?.status)
     || !/^(?:rhid|id):[^\s:]+$/.test(correction?.personKey || "")
     || !field || field.effective || field.rhid || field.rhidCandidates?.length) return null;
-  return { ...context, personKey: correction.personKey, personName: correction.name, field };
+  return { ...context, personKey: correction.personKey, personName: correction.name, slots: correction.slots };
 }
 
 function badge(status, date, minutes) {
