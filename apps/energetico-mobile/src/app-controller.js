@@ -1932,18 +1932,24 @@ export function createAppController({
     };
   }
 
-  function fetchMediaWithTimeout(item, label) {
+  function fetchMediaWithTimeout(item, label, signal) {
     const timeout = Math.max(1, Number(mediaLoadTimeoutMs) || 30_000);
-    const options = typeof AbortController === "function" ? new AbortController() : null;
+    const controller = typeof AbortController === "function" ? new AbortController() : null;
+    const abort = () => controller?.abort();
+    signal?.addEventListener("abort", abort, { once: true });
     let timer = null;
-    const request = Promise.resolve().then(() => client.fetchMedia(item, options ? { signal: options.signal } : undefined));
+    const request = Promise.resolve().then(() => {
+      if (signal?.aborted) throw new DOMException("Consulta cancelada.", "AbortError");
+      return client.fetchMedia(item, controller ? { signal: controller.signal } : undefined);
+    });
     const deadline = new Promise((_, reject) => {
       timer = setTimeout(() => {
-        options?.abort?.();
+        abort();
         reject(new Error(`O carregamento de ${label} demorou mais que o esperado.`));
       }, timeout);
     });
     return Promise.race([request, deadline]).finally(() => {
+      signal?.removeEventListener("abort", abort);
       if (timer !== null) clearTimeout(timer);
     });
   }
@@ -7199,13 +7205,12 @@ export function createAppController({
               }));
               return openGalleryMedia(items, assertSession);
             },
-            loadMediaPreview: async descriptor => {
+            loadMediaPreview: async (descriptor, { signal } = {}) => {
               assertSession();
-              const blob = await fetchMediaWithTimeout(descriptor, "a prévia do anexo");
+              const blob = await fetchMediaWithTimeout(descriptor, "a prévia do anexo", signal);
+              if (signal?.aborted) return null;
               assertSession();
-              const url = await createMediaThumbnail(blob, descriptor.fileName || "imagem");
-              if (url) previewUrls.add(url);
-              return url;
+              return createMediaThumbnail(blob, descriptor.fileName || "imagem");
             },
             captureSignature: () => {
               assertSession();
