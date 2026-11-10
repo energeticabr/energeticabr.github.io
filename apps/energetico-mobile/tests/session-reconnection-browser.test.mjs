@@ -14,7 +14,7 @@ test('Retomar click restores the real blocked app at phone and Windows widths', 
   if(!browser)return t.skip('Chrome unavailable');
   const cache=await mkdtemp(join(tmpdir(),'session-reconnection-vite-'));
   const server=await createServer({root:resolve(fileURLToPath(new URL('..',import.meta.url))),cacheDir:join(cache,'cache'),
-    optimizeDeps:{noDiscovery:true},server:{host:'127.0.0.1',port:0,hmr:false,watch:null},logLevel:'silent'});
+    optimizeDeps:{noDiscovery:true,include:['decimal.js']},server:{host:'127.0.0.1',port:0,hmr:false,watch:null},logLevel:'silent'});
   try{
     await server.listen();
     for(const width of [320,390,1365]){
@@ -22,7 +22,7 @@ test('Retomar click restores the real blocked app at phone and Windows widths', 
         url:`http://127.0.0.1:${server.httpServer.address().port}/tests/fixtures/session-reconnection.html`,
         captureScreenshot:Boolean(process.env.SESSION_RECONNECTION_SCREENSHOT_DIR)});
       const dom=new JSDOM(result.stdout), evidence=JSON.parse(dom.window.document.documentElement.dataset.layout);dom.window.close();
-      for(const key of ['initialError','initialBlocked','busy','oldErrorHidden','reconnectingVisible','restored','composerEnabled','draftPreserved','filesPreserved','onlyResumeCommands']) {
+      for(const key of ['initialError','initialBlocked','retryAccessible','busy','oldErrorHidden','reconnectingVisible','restored','composerEnabled','draftPreserved','filesPreserved','onlyResumeCommands']) {
         assert.equal(evidence[key],true,`${width}: ${key}: ${JSON.stringify(evidence)}`);
       }
       assert.equal(evidence.overflow,false,`${width}: overflow`);
