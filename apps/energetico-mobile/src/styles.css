@@ -1628,7 +1628,7 @@ button.chat-rhid-attendance-card__cluster:focus-visible { outline: 3px solid #15
 .chat-rhid-mascot__top .chat-rhid-date-navigation time {
   color: #123b5d; font-weight: 800; font-variant-numeric: tabular-nums; text-align: center;
 }
-.chat-rhid-mascot__body { display: grid; align-content: start; gap: 12px; overflow: auto; overscroll-behavior: contain; }
+.chat-rhid-mascot__body { display: grid; grid-auto-rows: max-content; align-content: start; gap: 12px; overflow: auto; overscroll-behavior: contain; }
 .chat-rhid-mascot__header {
   display: grid; grid-template-columns: 44px minmax(0, 1fr) 44px; gap: 8px; align-items: center;
 }
