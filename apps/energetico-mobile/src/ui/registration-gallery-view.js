@@ -9,7 +9,7 @@ import { createGalleryLoadingScreen } from './gallery-loading-screen.js';
 import { createGalleryRecordActions, dismissGalleryOverlay } from './gallery-record-actions.js';
 import { bindSearchableFilterSelects } from './searchable-filter-selects.js';
 import { REGISTRATION_GALLERY_MODELS, registrationFieldKey, registrationRawField, registrationNumber, registrationDateKey, sortRegistrationRows } from "../chat/registration-gallery-data.js";
-import { isImportedFinancialMovement } from '../chat/financial-gallery-models.js';
+import { financialMovementRecipient, isImportedFinancialMovement } from '../chat/financial-gallery-models.js';
 import Decimal from "decimal.js";
 import { renderWorkDiaryCardDetails } from './work-diary-card.js';
 import { renderAssetGalleryCard } from './asset-gallery-card.js';
@@ -950,7 +950,7 @@ export function createRegistrationGallery({ document: doc = globalThis.document,
       if (kind === 'provisionDescription') card.classList.add('rg-row--provision-description');
       card.setAttribute("role", "listitem");
       const bankMovement = kind === 'financial_movement' && isImportedFinancialMovement(row.fields);
-      const primary = bankMovement ? rowFieldValue(row, 'RAZAOSOCIALRECEBEDOR') || 'N/A'
+      const primary = bankMovement ? financialMovementRecipient(row.fields)
         : fieldValue(row.fields, model.fields[0], model) || model.emptyValue || `ID ${row.id}`;
       if (model.showAttachments) {
         const layout = el("div", "rg-row-layout");
@@ -996,7 +996,7 @@ export function createRegistrationGallery({ document: doc = globalThis.document,
           onDetails: (id, trigger) => {
             if (!destroyed && !root.hidden && !attachmentLoading && !pendingMutations && root.getAttribute('aria-busy') !== 'true') descriptionDetail.open(id, trigger);
           } });
-        else if (model.nativeCard) renderNativeDetails(main, row, primary);
+        else if (model.nativeCard) renderNativeDetails(main, row, primary, bankMovement ? 'RAZAOSOCIALRECEBEDOR' : undefined);
         else renderDocumentDetails(main, row, primary);
         layout.append(fileRail, main);
         card.append(layout);

@@ -8,6 +8,14 @@ export function isImportedFinancialMovement(fields) {
   return fields?.ORIGEMMOVIMENTACAO === 'SICOOB';
 }
 
+export function financialMovementRecipient(fields) {
+  const name = String(fields?.RAZAOSOCIALRECEBEDOR ?? '').trim();
+  if ((!name || name.toUpperCase() === 'N/A') && /\bPIX\b/i.test(fields?.DESCRICAO ?? '')) {
+    return 'Identificação pendente';
+  }
+  return name || 'N/A';
+}
+
 function model(title, listName, fields, fieldLabels, dateFields = []) {
   return Object.freeze({
     title: `GALERIA ${title}`, listName, aliases: [listName], nativeCard: true,
