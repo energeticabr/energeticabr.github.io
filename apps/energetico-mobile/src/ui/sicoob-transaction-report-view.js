@@ -12,6 +12,21 @@ const PAGE_SIZE = 50;
 const currency = new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' });
 const text = value => String(value ?? '').trim();
 const dateLabel = value => value ? value.split('-').reverse().join('/') : '—';
+const transactionTypes = [
+  [/\bpix\b/, 'Pix'],
+  [/\bted\b/, 'TED'],
+  [/\bdoc\b/, 'DOC'],
+  [/\b(?:boleto|titulo|tit)\b/, 'Boleto'],
+  [/\bdeb(?:ito)?\.? automatico\b/, 'Débito automático'],
+  [/\bcartao\b/, 'Cartão'],
+  [/\bconvenio\b/, 'Convênio'],
+  [/\b(?:transf|transferencia)\b/, 'Transferência'],
+];
+
+function transactionType(description) {
+  const label = normalizeSearchText(description.split('|')[0]);
+  return transactionTypes.find(([pattern]) => pattern.test(label))?.[1] || 'Pagamento';
+}
 
 function projectTransactions(snapshot) {
   if (!Array.isArray(snapshot?.rows) || snapshot.hasMore === true || snapshot.complete === false) {
@@ -25,6 +40,7 @@ function projectTransactions(snapshot) {
       document: text(fields.DOCUMENTORECEBEDOR),
       operation: text(fields.OPERACAO),
       description: text(fields.DESCRICAO),
+      type: transactionType(text(fields.DESCRICAO)),
       payerAccount: text(fields.CONTAPAGADORA),
       recipientAccount: text(fields.CONTARECEBEDOR),
       reference: text(fields.REFERENCIABANCARIA),
@@ -203,7 +219,7 @@ export function createSicoobTransactionReportView({ document: doc = globalThis.d
 
     const table = make('table', 'ddr-table sicoob-transaction-table');
     const headings = table.createTHead().insertRow();
-    for (const name of ['Data', 'Recebedor', 'Descrição e operação', 'Contas e referência', 'Valor']) {
+    for (const name of ['Data', 'Recebedor', 'Tipo', 'Contas e referência', 'Valor']) {
       const heading = make('th', '', name);
       heading.scope = 'col';
       headings.append(heading);
@@ -217,8 +233,7 @@ export function createSicoobTransactionReportView({ document: doc = globalThis.d
       recipient.append(make('strong', 'ddr-supplier-name', transaction.recipient));
       if (transaction.document) recipient.append(make('small', '', transaction.document));
       const description = row.insertCell();
-      description.append(make('span', '', transaction.description || '—'));
-      if (transaction.operation) description.append(make('small', '', transaction.operation));
+      description.textContent = transaction.type;
       const details = row.insertCell();
       for (const [label, value] of [
         ['Pagadora', transaction.payerAccount],
