@@ -1273,7 +1273,12 @@ function presenceDetailTableMarkup(table, context = {}) {
   }).join("")}</div>`;
 }
 
-function rhidAttendanceTableMarkup(table, messageId, rhidRefresh = null, activeFlow = null, mascot = false) {
+function rhidReportDateLabel(date) {
+  return isValidRhidReportDate(date) ? `${date.slice(8, 10)}/${date.slice(5, 7)}/${date.slice(0, 4)}` : "";
+}
+
+function rhidAttendanceTableMarkup(table, messageId, rhidRefresh = null, activeFlow = null, mascotMode = "") {
+  const mascot = Boolean(mascotMode);
   if (table?.kind !== "rhid_attendance" || !Array.isArray(table.headers) || !Array.isArray(table.rows)) return "";
   const headers = table.headers;
   const rows = table.rows.filter(Array.isArray);
@@ -1282,7 +1287,7 @@ function rhidAttendanceTableMarkup(table, messageId, rhidRefresh = null, activeF
     ? `<button class="chat-rhid-attendance-table__share" type="button" data-action="share-rhid-attendance-report" data-message-id="${escapeHtml(messageId)}" aria-label="Compartilhar relatório RHID em PDF">↗ Compartilhar PDF</button>`
     : "";
   const date = String(table.reportDate || "");
-  const dateLabel = isValidRhidReportDate(date) ? `${date.slice(8, 10)}/${date.slice(5, 7)}/${date.slice(0, 4)}` : "";
+  const dateLabel = rhidReportDateLabel(date);
   const summary = summarizeRhidAttendance(rows);
   if (mascot) {
     summary.withPunches = table.people.filter(person => person.rawPunches.length).length;
@@ -1306,7 +1311,7 @@ function rhidAttendanceTableMarkup(table, messageId, rhidRefresh = null, activeF
   </section>`;
   return `<section class="chat-rhid-attendance-table chat-rhid-attendance-report" aria-label="Relatório de presenças RHID">
     ${navigation}
-    ${mascot ? `<h2 class="chat-rhid-mascot__date"><time datetime="${escapeHtml(date)}">${dateLabel}</time></h2>` : `<header class="chat-rhid-attendance-report__header">
+    ${mascot ? (mascotMode === "period" ? `<h2 class="chat-rhid-mascot__date"><time datetime="${escapeHtml(date)}">${dateLabel}</time></h2>` : "") : `<header class="chat-rhid-attendance-report__header">
       <div class="chat-rhid-attendance-report__identity">${Number.isSafeInteger(table.pendingValidationCount) && table.pendingValidationCount > 0 && dateLabel && messageId
         ? '<button class="chat-rhid-attendance-report__validate" type="button" data-action="rhid-day-validation-open" data-message-id="' + escapeHtml(messageId) + '" aria-label="Validar presenças pendentes de ' + escapeHtml(dateLabel) + '"' + (table.navigationBusy === true ? " disabled" : "") + '>VALIDAR PRESENÇAS</button>'
         : '<span class="chat-rhid-attendance-report__kicker">RELATÓRIO DIÁRIO</span><h2>Presenças RHID</h2>'}</div>
@@ -1393,17 +1398,24 @@ function rhidMascotReportMarkup(report) {
   const visibleDays = days.slice(page * rhidMascotPageSize, (page + 1) * rhidMascotPageSize);
   return `<div class="chat-confirmation-backdrop chat-rhid-mascot-backdrop" data-popup-backdrop="true" data-popup-close-action="close-rhid-mascot-report">
   <section class="chat-rhid-mascot" data-rhid-mascot-report role="dialog" aria-modal="true" aria-labelledby="rhid-mascot-title" tabindex="-1">
-    <div class="report-close-bar">
-      <header class="chat-rhid-mascot__header report-close-tools">
-        <button type="button" data-action="rhid-mascot-reload" aria-label="Atualizar relatório" title="Atualizar relatório"${report.busy ? ' disabled' : ''}>↻</button>
-        <h2 id="rhid-mascot-title">Relatório de presenças RHID</h2>
-      </header>
-      <button class="report-close-control" type="button" data-action="close-rhid-mascot-report" aria-label="Fechar relatório RHID" title="Fechar relatório RHID">❌</button>
+    <div class="chat-rhid-mascot__top">
+      <div class="report-close-bar">
+        <header class="chat-rhid-mascot__header report-close-tools">
+          <button type="button" data-action="rhid-mascot-reload" aria-label="Atualizar relatório" title="Atualizar relatório"${report.busy ? ' disabled' : ''}>↻</button>
+          <h2 id="rhid-mascot-title">Relatório de presenças RHID</h2>
+        </header>
+        <button class="report-close-control" type="button" data-action="close-rhid-mascot-report" aria-label="Fechar relatório RHID" title="Fechar relatório RHID">❌</button>
+      </div>
+      ${period ? '' : `<nav class="chat-rhid-date-navigation" aria-label="Navegação por data do relatório RHID">
+        <button class="chat-rhid-date-navigation__button" type="button" data-action="rhid-mascot-day" data-value="-1" aria-label="Dia anterior" title="Dia anterior">←</button>
+        <time datetime="${escapeHtml(report.start)}" aria-live="polite">${rhidReportDateLabel(report.start)}</time>
+        <button class="chat-rhid-date-navigation__button" type="button" data-action="rhid-mascot-day" data-value="1" aria-label="Próximo dia" title="Próximo dia">→</button>
+      </nav>`}
     </div>
     <div class="chat-rhid-mascot__body" data-page="${page}" role="region" aria-label="Presenças e filtros RHID" tabindex="0">
     <div class="chat-rhid-mascot__filters">
       <div class="chat-rhid-mascot__modes">
-        <button type="button" data-action="rhid-mascot-today" aria-pressed="${!period}">Hoje</button>
+        <button type="button" data-action="rhid-mascot-today" aria-pressed="${!period && report.start === report.today}">Hoje</button>
         <button type="button" data-action="rhid-mascot-period" aria-pressed="${period}">Diversas datas</button>
       </div>
       ${period ? `<div class="chat-rhid-mascot__dates">
@@ -1430,7 +1442,7 @@ function rhidMascotReportMarkup(report) {
     </div>` : ''}
     ${report.busy ? loadingIndicatorMarkup('Consultando presenças RHID…', { compact: true }) : report.error
       ? `<p class="error-banner" role="alert">${escapeHtml(report.error)}</p>`
-      : visibleDays.length ? visibleDays.map(table => rhidAttendanceTableMarkup(table, `rhid-mascot:${table.reportDate}`, null, null, true)).join('')
+      : visibleDays.length ? visibleDays.map(table => rhidAttendanceTableMarkup(table, `rhid-mascot:${table.reportDate}`, null, null, period ? 'period' : 'day')).join('')
         : '<p class="chat-rhid-attendance-table__empty" role="status">Nenhuma presença encontrada com estes filtros.</p>'}
     ${!report.busy && !report.error && pageCount > 1 ? `<nav class="chat-rhid-mascot__header" aria-label="Páginas do período RHID">
       <button type="button" data-action="rhid-mascot-page" data-value="-1" aria-label="Página anterior"${page === 0 ? ' disabled' : ''}>←</button>

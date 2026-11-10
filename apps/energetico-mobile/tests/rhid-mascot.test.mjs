@@ -14,12 +14,14 @@ test('RHID mascot opens today, filters a period, and saves the empty slot on its
   const view = createChatView(root);
   const store = createConversationStore();
   const account = { name: 'Tester', homeAccountId: 'rhid-mascot' };
+  t.mock.timers.enable({ apis: ['Date'], now: new Date('2026-11-01T13:00:00Z') });
   const today = provisionDateKey();
   const row = (day, id, name, punches, adjustments) => ({
     DATA_REFERENCIA: day, ID_PESSOA_RHID: id, NOME_COLABORADOR: name,
     BATIDAS_RHID: punches, ADMIN_AJUSTES: adjustments,
   });
   const history = [
+    row('2026-10-31', '10', 'Ana Teste', '08:21'),
     row('2025-01-31', '10', 'Ana Teste', '07:15'),
     row('2025-02-01', '10', 'Ana Teste', '07:18'),
     row('2025-02-01', '11', 'Bruno Teste', '07:20'),
@@ -159,6 +161,42 @@ test('RHID mascot opens today, filters a period, and saves the empty slot on its
   clearProfession.value = '';
   clearProfession.dispatchEvent(new dom.window.Event('change', { bubbles: true }));
   assert.equal(cards().length, 3);
+  const dayNav = '[aria-label="Navegação por data do relatório RHID"]';
+  const selectedDate = () => root.querySelector(dayNav + ' time')?.textContent;
+  const previousDay = dayNav + ' [aria-label="Dia anterior"]';
+  const nextDay = dayNav + ' [aria-label="Próximo dia"]';
+  assert.equal(selectedDate(), '01/11/2026');
+  root.querySelector(previousDay).focus();
+  click(previousDay);
+  assert.equal(selectedDate(), '31/10/2026');
+  await settle();
+  assert.equal(reads.at(-1), '2026-10-31');
+  assert.deepEqual(comparisons.at(-1), ['2026-10-31', '2026-10-31']);
+  assert.equal(cards().length, 1);
+  assert.match(cards()[0].textContent, /08:21/);
+  assert.equal(dom.window.document.activeElement, root.querySelector(previousDay));
+  click(action('rhid-mascot-reload'));
+  await settle();
+  assert.equal(reads.at(-1), '2026-10-31');
+  assert.equal(selectedDate(), '31/10/2026');
+  click(nextDay);
+  click(nextDay);
+  await settle();
+  assert.deepEqual(reads.slice(-2), ['2026-11-01', '2026-11-02']);
+  assert.equal(selectedDate(), '02/11/2026');
+  assert.equal(cards().length, 0);
+  assert.match(root.querySelector('.chat-rhid-mascot__body').textContent, /Nenhuma presença encontrada/);
+  click(action('rhid-mascot-today'));
+  await settle();
+  assert.equal(selectedDate(), '01/11/2026');
+  assert.equal(cards().length, 3);
+  cards()[0].querySelector('button[data-slot="exit1"]').click();
+  root.querySelector('[data-role="rhid-adjustment-time"]').value = '11:50';
+  click(action('rhid-attendance-adjust-save'));
+  await settle();
+  assert.match(cards()[0].querySelector('.chat-rhid-attendance-card__cluster--added')?.textContent, /11:50/);
+  assert.equal(root.querySelector(previousDay).disabled, false);
+  assert.equal(root.querySelector(nextDay).disabled, false);
   click(action('close-rhid-mascot-report'));
   assert.equal(shell.querySelector('[data-rhid-mascot-report]'), null);
   assert.equal(shell.querySelector('.chat-transcript').scrollTop, 35);
