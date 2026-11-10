@@ -19,6 +19,8 @@ try {
   if($id -notmatch '^E[0-9]{20}[a-zA-Z0-9]{11}$'){continue}
   $uri="https://api.sicoob.com.br/pix-pagamentos/v2/pagamentos/$id"
   for($attempt=1;$attempt -le 4;$attempt++){
+   # Sicoob Pix Pagamentos allows one request per second, including retries.
+   Start-Sleep -Milliseconds 1100
    $res=Invoke-WebRequest -Uri $uri -Certificate $cert -Headers $headers -TimeoutSec 20 -MaximumRedirection 0 -SkipHttpErrorCheck
    if ($res.StatusCode -eq 429 -and $attempt -eq 1) {
     $retryAfter = [string]($res.Headers['Retry-After'] | Select-Object -First 1)
