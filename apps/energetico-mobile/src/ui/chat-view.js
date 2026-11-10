@@ -2958,6 +2958,7 @@ export function renderChatMarkup(state = {}, { showSettings = false, allowDemo =
   const busy = chatInteractionBusy(state, rhidAttendanceReport?.busy);
   const loading = Boolean(state.activeText || state.attachmentUploadProgress || state.resuming || state.responseTransitionPending || state.operationProgress)
     || pendingFiles.some(item => item.status === "sending") || rhidAttendanceReport?.busy === true || state.pendingProvisionOpening === true;
+  const needsRecovery = state.recoveryBlocked || state.recoveryUncertain;
   const pendingAttachment = pendingFiles.length > 0;
   const firstName = String(state.account?.name || "Você").split(/\s+/)[0];
   const signaturePrompt = isSignaturePrompt(state);
@@ -2978,7 +2979,7 @@ export function renderChatMarkup(state = {}, { showSettings = false, allowDemo =
       <button class="header-action" type="button" data-action="sign-out">Sair</button>
     </header>
     ${showFlowStatus ? flowStatusMarkup(state, visibleMessages, busy, rhidAttendanceReportPage ? "📊 RELATÓRIO DE PRESENÇAS RHID" : latestPollTitle(visibleMessages), { homeOnly: completedCreation, rhidRefresh }) : ""}
-    ${state.error ? `<div class="error-banner" role="alert"><span>${escapeHtml(state.error)}</span><button type="button" data-action="retry-session"${state.resuming || state.activeText ? " disabled" : ""}>Retomar conversa</button></div>` : ""}
+    ${state.error && !needsRecovery ? `<div class="error-banner" role="alert"><span>${escapeHtml(state.error)}</span><button type="button" data-action="retry-session"${state.resuming || state.activeText ? " disabled" : ""}>Retomar conversa</button></div>` : ""}
     <div class="chat-transcript" role="log" aria-live="polite" aria-relevant="additions text">
       ${state.recoveryWarning ? `<p class="error-banner" role="alert">${escapeHtml(state.recoveryWarning)}</p>` : ""}
       ${state.rhidMascot ? rhidMascotReportMarkup(state.rhidMascot) : rhidAttendanceReport?.open
@@ -2987,7 +2988,10 @@ export function renderChatMarkup(state = {}, { showSettings = false, allowDemo =
           : rhidAttendanceReportMarkup(rhidAttendanceReport)
         : transcriptMessages.length ? transcriptMessages.map((message, index) => renderMessage(message, state.account, busy, { finalSignedDocument: index === finalSignedIndex && isSignedDocumentMessage(message), draft: state.draft, databaseFilterMessage: databaseFilter?.message, activeFlow: state.activeFlow, attendanceSelectedIds, attendanceExpandedIds: message === latestPoll ? attendanceExpandedIds : [], attendanceIrregularityChecking: message === latestPoll && attendanceIrregularityChecking, currentPoll: message === latestPoll, attendanceHoursCurrent: message === latestAttendanceMessage, rhidRefresh, launchPayrollSelectedIds, launchPayrollCurrent: message === latestPoll })).join("") : state.recoveryPreview ? "" : `<article class="chat-message chat-message--assistant">${assistantAvatar()}<div class="chat-bubble"><strong>Energético</strong><p>Olá, ${escapeHtml(firstName)}. O que vamos fazer?</p></div></article>`}
     </div>
-    ${!loading && (state.recoveryBlocked || state.recoveryUncertain) ? `<p class="chat-hint" role="status">Aguardando sincronização com a VM. Toque em Retomar conversa para continuar.</p>` : ""}
+    ${needsRecovery && !loading ? `<div class="error-banner chat-resume-banner">
+      <span role="alert">${escapeHtml(state.error || "Aguardando sincronização com a VM.")}</span>
+      <button type="button" data-action="retry-session">Retomar conversa</button>
+    </div>` : ""}
     ${loading ? `<div class="chat-progress${rhidAttendanceReport?.busy ? " sr-only" : ""}">${loadingIndicatorMarkup(loadingProgress?.label || (rhidAttendanceReport?.busy ? "Consultando relatório RHID…" : state.pendingProvisionOpening ? "Consultando provisões de pagamento…" : state.recoveryUncertain ? "Aguardando sincronização com a VM…" : state.responseTransitionPending ? "Atualizando a próxima pergunta…" : state.resuming ? "Retomando conversa…" : state.activeText ? "Processando sua resposta…" : state.recoveryBlocked ? "Aguardando conexão com a VM…" : "Enviando anexo…"), { compact: true, progress: loadingProgress?.percent, progressLabel: loadingProgress?.progressLabel || (loadingProgress ? (state.activeText ? 'Finalização dos anexos' : 'Envio do anexo') : 'Progresso do carregamento') })}</div>` : ""}
     ${!generatedSignatureChoice && (attachments.length || pendingFiles.length || state.activeFlow?.launches || state.activeFlow?.measurementLines || provisionLines) ? `<div class="chat-file-tray">${renderAttachments(attachments, busy, Boolean(state.activeFlow), state.activeFlow?.allowBulkAttachmentDelete === true, state.activeFlow?.id === "pending_document_attachment")}${pendingFiles.length ? `<ul class="pending-files" aria-label="Anexos pendentes">${pendingFiles.map(renderPendingFile).join("")}</ul>` : ""}${renderLaunches(state.activeFlow?.launches, busy)}${renderMeasurementLines(state.activeFlow?.measurementLines, busy)}${renderProvisionLines(provisionLines)}</div>` : ""}
     ${signaturePrompt ? signaturePadTriggerMarkup(busy) : ""}

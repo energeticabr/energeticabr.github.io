@@ -4867,6 +4867,10 @@ export function createAppController({
       || (!allowUncertainRecovery && recoveryUncertain);
   }
 
+  function needsConversationRecovery() {
+    return recoveryUncertain || Boolean(recoveryAccountId && !recoveryVerified);
+  }
+
   function cancelDatabaseFilter({ resetLast = false } = {}) {
     if (databaseFilterTimer !== null) clearTimeout(databaseFilterTimer);
     databaseFilterTimer = null;
@@ -5247,7 +5251,7 @@ export function createAppController({
   function render() {
     provisionSettlementParent.sync();
     queueMicrotask(() => { void trancidAutoReminder.drain(); void ddaAutoReminder.drain(); });
-    if (!flowBusy() || stopped || !account) {
+    if ((!needsConversationRecovery() && !flowBusy()) || stopped || !account) {
       const waiters = [...idleWaiters];
       idleWaiters.clear();
       waiters.forEach(resolve => resolve());
@@ -11072,7 +11076,7 @@ export function createAppController({
       }
       if (confirmed && item.sourceId) {
         try {
-          await native.discardSharedItem(item.sourceId);
+          await discardConfirmedSharedItem(item.sourceId);
         } catch (error) {
           setSessionError(error, "O anexo foi enviado, mas a cópia compartilhada não pôde ser limpa.");
         }
@@ -11099,18 +11103,20 @@ export function createAppController({
     const ids = [...fileIds];
     const queuedAccount = account;
     const queuedRevision = sessionRevision;
+    const currentQueue = () => !stopped && account && account === queuedAccount && sessionRevision === queuedRevision;
     uploadQueue = uploadQueue.then(async () => {
       const failures = [];
       let allUploaded = true;
       for (const id of ids) {
-        while (!stopped && account === queuedAccount && flowBusy()) {
+        while (currentQueue() && (needsConversationRecovery() || flowBusy())) {
           await new Promise(resolve => idleWaiters.add(resolve));
         }
-        if (stopped || !account || account !== queuedAccount || sessionRevision !== queuedRevision) return false;
+        if (!currentQueue()) return false;
         const pending = store.getState().pendingFiles.find(item => item.id === id);
+        if (!pending) continue;
         let uploaded = false;
         try {
-          if (pending && isConstructionDiaryFlow(store.getState().activeFlow) && isAudioFile(pending.file)) {
+          if (isConstructionDiaryFlow(store.getState().activeFlow) && isAudioFile(pending.file)) {
             if (typeof client.transcribeAudio !== "function") {
               throw new Error("A transcrição de arquivos de áudio ainda não está disponível na VM.");
             }
@@ -11120,7 +11126,7 @@ export function createAppController({
             store.discardFile(id);
             if (pending.sourceId) {
               try {
-                await native.discardSharedItem(pending.sourceId);
+                await discardConfirmedSharedItem(pending.sourceId);
               } catch (error) {
                 setSessionError(error, "O áudio foi transcrito, mas a cópia compartilhada não pôde ser limpa.");
               }
@@ -11130,7 +11136,7 @@ export function createAppController({
             uploaded = await uploadFile(id,{preserveFailedFiles});
           }
         } catch (error) {
-          if (pending && isConstructionDiaryFlow(store.getState().activeFlow) && isAudioFile(pending.file)) {
+          if (isConstructionDiaryFlow(store.getState().activeFlow) && isAudioFile(pending.file)) {
             store.markFileError?.(id, error);
           }
           sessionError = errorMessage(error, "Não foi possível transcrever o arquivo de áudio.");
@@ -11139,7 +11145,7 @@ export function createAppController({
         if (!uploaded) {
           allUploaded = false;
           const failure = store.getState().error || sessionError;
-          if (preserveFailedFiles && pending && !stopped && account === queuedAccount && sessionRevision === queuedRevision) {
+          if (preserveFailedFiles && currentQueue()) {
             let retained = store.getState().pendingFiles.find(item=>item.id === id);
             if (!retained) {
               const known = new Set(store.getState().pendingFiles.map(item=>item.id));
@@ -11201,6 +11207,14 @@ export function createAppController({
       if (currentSelection()) setSessionError(error, "Não foi possível adicionar o anexo.");
       return false;
     }
+  }
+
+  async function discardConfirmedSharedItem(sourceId) {
+    // A read already in progress can still return the native copy until removal finishes.
+    ignoredSharedIds.add(sourceId);
+    const duplicate = store.getState().pendingFiles.find(item => item.sourceId === sourceId);
+    if (duplicate) store.discardFile(duplicate.id);
+    await native.discardSharedItem(sourceId);
   }
 
   async function importSharedFiles() {
@@ -11339,8 +11353,10 @@ export function createAppController({
       const pendingIds = store.getState().pendingFiles
         .filter(item => item.status !== "sending")
         .map(item => item.id);
-      await processFiles([...new Set([...importedIds, ...pendingIds])]);
-      if (sharedResumeRequested) await resumeSharedFiles();
+      const uploads = processFiles([...new Set([...importedIds, ...pendingIds])]);
+      if (!needsConversationRecovery()) await uploads;
+      const resumedShares = sharedResumeRequested ? resumeSharedFiles() : null;
+      if (resumedShares && !needsConversationRecovery()) await resumedShares;
       void trancidAutoReminder.refresh(); void ddaAutoReminder.refresh();
       return true;
     } catch (error) {
@@ -12857,14 +12873,17 @@ export function createAppController({
       await refreshPendingConstructionDiaries();
       await refreshPendingNotesSnapshot();
       const sharedFileIds = await sharedFileIdsPromise;
-      await processFiles(sharedFileIds);
+      // Keep startup responsive while the native share queue awaits VM verification.
+      const uploads = processFiles(sharedFileIds);
+      if (!needsConversationRecovery()) await uploads;
     } else {
       // Keep importing a file shared before authentication, but never hold the
       // login screen on native storage or a slow content provider.
       void sharedFileIdsPromise;
     }
     starting = false;
-    if (sharedResumeRequested) await resumeSharedFiles();
+    const resumedShares = sharedResumeRequested ? resumeSharedFiles() : null;
+    if (resumedShares && !needsConversationRecovery()) await resumedShares;
     const pendingAction = account ? auth.consumePendingAction?.() : null;
     if (pendingAction === PAYROLL_LAUNCH_REPLY_ID) await openSupplierPayroll();
     else if (pendingAction === MEAL_VOUCHER_REPLY_ID) await openMealVoucher();

@@ -32,19 +32,26 @@ await controller.start();
 store.setDraft('Rascunho fictício preservado');store.queueFiles([new File(['synthetic proof'],'comprovante-ficticio.pdf',{type:'application/pdf'})]);
 await document.fonts.ready;await frame();
 const overflow=()=>root.scrollWidth>innerWidth+1||document.documentElement.scrollWidth>innerWidth+1;
-const evidence={initialError:Boolean(root.querySelector('.error-banner')),initialBlocked:last.recoveryBlocked,overflow:overflow()};
+const retry = root.querySelector('.chat-resume-banner [data-action="retry-session"]');
+const retryRect = retry?.getBoundingClientRect();
+const evidence={initialError:Boolean(root.querySelector('.error-banner')),initialBlocked:last.recoveryBlocked,overflow:overflow(),
+  retryAccessible:Boolean(retry && !retry.disabled && retryRect.height >= 44
+    && retryRect.left >= 0 && retryRect.right <= innerWidth && retryRect.bottom <= innerHeight
+    && document.elementFromPoint(retryRect.x + retryRect.width / 2, retryRect.y + retryRect.height / 2) === retry)};
 requests.length=0;offline=false;
-root.querySelector('[data-action="retry-session"]').click();
-await pendingResume;await frame();
-evidence.busy=last.resuming;evidence.oldErrorHidden=!root.querySelector('.error-banner');
-evidence.reconnectingVisible=root.textContent.includes('Restabelecendo conexão');evidence.overflow ||= overflow();
-respond(Response.json({status:'processed',stage:'choosing_group',activeFlow:null,attachments:[],
-  messages:[{type:'poll',question:'QUAL ÁREA VOCÊ DESEJA ACESSAR?',options:[{id:'group_supplies',label:'SUPRIMENTOS'}]}]}));
-for(let i=0;i<120&&last.resuming;i++)await frame();
-evidence.restored=!last.resuming&&!last.recoveryBlocked&&!last.error&&Boolean(root.querySelector('[data-reply-id="group_supplies"]'));
-evidence.composerEnabled=!root.querySelector('[data-role="draft"]').disabled;
-evidence.draftPreserved=store.getState().draft==='Rascunho fictício preservado';evidence.filesPreserved=store.getState().pendingFiles.length===1;
-evidence.onlyResumeCommands=requests.every(body=>body.action==='diary_evidence_pending'||body.replyId==='input_continue');
-evidence.overflow ||= overflow();
+retry?.click();
+if (retry) {
+  await pendingResume;await frame();
+  evidence.busy=last.resuming;evidence.oldErrorHidden=!root.querySelector('.error-banner');
+  evidence.reconnectingVisible=root.textContent.includes('Restabelecendo conexão');evidence.overflow ||= overflow();
+  respond(Response.json({status:'processed',stage:'choosing_group',activeFlow:null,attachments:[],
+    messages:[{type:'poll',question:'QUAL ÁREA VOCÊ DESEJA ACESSAR?',options:[{id:'group_supplies',label:'SUPRIMENTOS'}]}]}));
+  for(let i=0;i<120&&last.resuming;i++)await frame();
+  evidence.restored=!last.resuming&&!last.recoveryBlocked&&!last.error&&Boolean(root.querySelector('[data-reply-id="group_supplies"]'));
+  evidence.composerEnabled=!root.querySelector('[data-role="draft"]').disabled;
+  evidence.draftPreserved=store.getState().draft==='Rascunho fictício preservado';evidence.filesPreserved=store.getState().pendingFiles.length===1;
+  evidence.onlyResumeCommands=requests.every(body=>body.action==='diary_evidence_pending'||body.replyId==='input_continue');
+  evidence.overflow ||= overflow();
+}
 document.documentElement.dataset.layout=JSON.stringify(evidence);document.documentElement.dataset.ready='true';
 </script></body></html>
