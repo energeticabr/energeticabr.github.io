@@ -1,4 +1,4 @@
-import { invoiceXmlFacts, NFE_SUPPLIER_REGIMES, projectNfeRows, rankNfeOrderOptions } from '../chat/nfe-report-model.js';
+import { invoiceXmlFacts, NFE_REPORT_DOCUMENT_TYPES, NFE_SUPPLIER_REGIMES, projectNfeRows, rankNfeOrderOptions } from '../chat/nfe-report-model.js';
 import { nfeOrderId } from '../chat/nfe-order-link.js';
 import { createReportLinkPicker } from './dda-provision-picker.js';
 import { createNfeProposalView } from './nfe-proposal-view.js';
@@ -104,7 +104,7 @@ export function createNfeReportView({ document:doc = globalThis.document, data, 
   regimeFilter.name = 'regime';
   const selects = [type, retentionFilter, cnoFilter, regimeFilter];
   for (const [control, label, options] of [
-    [type, 'Documento', [['', 'Todos'], ['NF-e','NF-e'], ['NFS-e','NFS-e']]],
+    [type, 'Documento', [['', 'Todos'], ...NFE_REPORT_DOCUMENT_TYPES.map(value => [value, value])]],
     [search, 'Pesquisar fornecedor, CNPJ ou nota', []],
     [retentionFilter, 'Retenção', [['', 'Todas'], ['yes', 'Com retenção'], ['no', 'Sem retenção']]],
     [cnoFilter, 'CNO', [['', 'Todas'], ['valid', 'CNO correta'], ['conflict', 'CNO divergente'], ['invalid', 'CNO inválido'], ['missing', 'Sem CNO']]],
@@ -185,7 +185,7 @@ export function createNfeReportView({ document:doc = globalThis.document, data, 
   }
 
   function renderOrderLink(cell, row, interactive) {
-    if (!interactive) {
+    if (!interactive || row.type === 'CT-e') {
       if (row.orderId) cell.append(make('span', 'nfe-link-cluster nfe-link-linked', `ID ${row.orderId}`));
       else cell.textContent = '—';
       return;
@@ -249,7 +249,7 @@ export function createNfeReportView({ document:doc = globalThis.document, data, 
     const identity = make('div', 'nfe-identity');
     identity.append(make('span', 'nfe-id', row.id));
     id.append(identity);
-    const pdfLabel = row.type === 'NFS-e' ? 'DANFSe' : 'DANFE';
+    const pdfLabel = { 'CT-e':'DACTE', 'NFS-e':'DANFSe' }[row.type] || 'DANFE';
     if (includePdf && (row.pdfName || row.correctionCount) && typeof openMediaCollection === 'function') {
       const documents = !row.pdfName ? 'cartas de correção' : row.correctionCount ? `${pdfLabel} e cartas de correção` : pdfLabel;
       const label = `Abrir ${documents} da nota ${row.number || row.id}`;
