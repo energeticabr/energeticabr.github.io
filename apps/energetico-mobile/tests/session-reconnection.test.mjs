@@ -131,6 +131,9 @@ test('Retomar after interrupted startup recovers when connectivity returns beyon
 test('a receipt shared before offline startup waits for synchronization and uploads without reopening the app', async t => {
   const file = Object.assign(new File(['synthetic proof'], 'comprovante.pdf', { type: 'application/pdf' }), { sourceId: 'cold-start-proof' });
   const confirmed = Promise.withResolvers();
+  const reread = Promise.withResolvers();
+  const discarded = Promise.withResolvers();
+  t.after(() => { reread.resolve([]); discarded.resolve(); });
   let activate, offline = true, uploads = 0, imports = 0;
   const h = harness(t, {
     client: {
@@ -148,10 +151,15 @@ test('a receipt shared before offline startup waits for synchronization and uplo
     native: {
       onResume: handler => { activate = handler; },
       importSharedItems: async () => {
-        if (++imports === 1) await activate();
+        if (++imports === 2) return reread.promise;
+        if (imports > 2) return [];
+        await activate();
         return [file];
       },
-      discardSharedItem: async id => confirmed.resolve(id),
+      discardSharedItem: async id => {
+        confirmed.resolve(id);
+        await discarded.promise;
+      },
     },
   });
   assert.equal(await Promise.race([h.controller.start().then(() => true), delay(250, false)]), true);
@@ -162,8 +170,14 @@ test('a receipt shared before offline startup waits for synchronization and uplo
   offline = false;
   assert.equal(await h.emit('retry-session'), true);
   assert.equal(await Promise.race([confirmed.promise, delay(250, null)]), file.sourceId);
-  await turn();
+  // The native inbox read began before the receipt was confirmed and returns
+  // the old item while the removal is still in progress.
   assert.equal(imports, 2);
+  reread.resolve([file]);
+  await turn();
+  assert.equal(h.store.getState().pendingFiles.length, 0);
+  discarded.resolve();
+  await activate();
   assert.equal(h.state().recoveryBlocked, false);
   assert.equal(h.store.getState().pendingFiles.length, 0);
   assert.equal(h.store.getState().attachments[0].fileName, file.name);

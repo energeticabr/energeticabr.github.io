@@ -11071,7 +11071,7 @@ export function createAppController({
       }
       if (confirmed && item.sourceId) {
         try {
-          await native.discardSharedItem(item.sourceId);
+          await discardConfirmedSharedItem(item.sourceId);
         } catch (error) {
           setSessionError(error, "O anexo foi enviado, mas a cópia compartilhada não pôde ser limpa.");
         }
@@ -11121,7 +11121,7 @@ export function createAppController({
             store.discardFile(id);
             if (pending.sourceId) {
               try {
-                await native.discardSharedItem(pending.sourceId);
+                await discardConfirmedSharedItem(pending.sourceId);
               } catch (error) {
                 setSessionError(error, "O áudio foi transcrito, mas a cópia compartilhada não pôde ser limpa.");
               }
@@ -11202,6 +11202,14 @@ export function createAppController({
       if (currentSelection()) setSessionError(error, "Não foi possível adicionar o anexo.");
       return false;
     }
+  }
+
+  async function discardConfirmedSharedItem(sourceId) {
+    // A read already in progress can still return the native copy until removal finishes.
+    ignoredSharedIds.add(sourceId);
+    const duplicate = store.getState().pendingFiles.find(item => item.sourceId === sourceId);
+    if (duplicate) store.discardFile(duplicate.id);
+    await native.discardSharedItem(sourceId);
   }
 
   async function importSharedFiles() {
