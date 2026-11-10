@@ -1,0 +1,169 @@
+diff --git a/worker/payroll_row_attachments.py b/worker/payroll_row_attachments.py
+--- a/worker/payroll_row_attachments.py
++++ b/worker/payroll_row_attachments.py
+@@ -2,6 +2,10 @@
+ 
+ No financial creation, parent enumeration, scheduler or persistent sync state.
+ """
++from datetime import datetime
++import re
++from zoneinfo import ZoneInfo
++
+ try:
+     from .provision_attachment_sync import SharePointStore, copy_name, item_id, sha
+ except ImportError:
+@@ -19,6 +23,35 @@
+ def _verified(value):
+     return value is True or (isinstance(value, dict) and value.get('fields') is True
+                              and value.get('attachments') is True)
++
++
++def _payment_day(value):
++    try:
++        parsed = datetime.fromisoformat(_text(value).replace('Z', '+00:00'))
++    except ValueError:
++        return None
++    if parsed.tzinfo is not None:
++        parsed = parsed.astimezone(ZoneInfo('America/Sao_Paulo'))
++    return parsed.date()
++
++
++def paid_status_refreshed(before, before_version, after, after_version):
++    """Recognize the automatic status/date refresh of an already-paid row."""
++    if (before.get('PGTOAGENDADO') != 'PAGO'
++            or before.get('STATUS') != 'PAGAMENTO PREVISTO'
++            or after.get('STATUS') != 'PAGAMENTO EFETUADO'):
++        return False
++    # A larger version jump could include a second writer outside this snapshot.
++    version = re.fullmatch(r'"([a-fA-F0-9-]+),([0-9]+)"', before_version)
++    if version is None or after_version != f'"{version[1]},{int(version[2]) + 1}"':
++        return False
++    date_field = 'DATA PGTO EFETUADO'
++    day = _payment_day(before.get(date_field))
++    if day is None or day != _payment_day(after.get(date_field)):
++        return False
++    payment_display = {'STATUS', date_field}
++    return ({key: value for key, value in before.items() if key not in payment_display}
++            == {key: value for key, value in after.items() if key not in payment_display})
+ 
+ 
+ def copy_launch_to_payroll(client, launch, payroll, expected, source_expected):
+@@ -109,15 +142,18 @@
+             for original, name, content, digest, reused in plans]
+ 
+ 
+-def propagate(client, child, expected, record, parent=None):
++def propagate(client, child, expected, record, parent=None, *, paid_source_fields=()):
+     """Use confirmed generated IDs or freshly verified existing financial links.
+ 
+     Before the conditional paid write, expected contains the original child
+     links. On journal recovery it contains the already-paid expected links.
++    A verified group row can supply its complete field snapshot so an automatic
++    status refresh can be distinguished from a change to the payment itself.
+     """
+     child = item_id(child)
+     launch, order = record.get('launch_item'), record.get('related_item')
+-    source_fields = ['FORNECEDOR', 'FILIAL', 'IDPEDIDO', 'IDLANCAMENTOS', 'DESCRITIVOPROVISAO']
++    source_fields = paid_source_fields or (
++        'FORNECEDOR', 'FILIAL', 'IDPEDIDO', 'IDLANCAMENTOS', 'DESCRITIVOPROVISAO')
+     source, version = client.get_item_fields_with_etag(child, source_fields, target_list=CHILD)
+     old_links = tuple(_text(expected.get(key)) for key in ('IDPEDIDO', 'IDLANCAMENTOS'))
+     actual_links = tuple(_text(source.get(key)) for key in ('IDPEDIDO', 'IDLANCAMENTOS'))
+@@ -167,6 +203,7 @@
+             order_fields['FORNECEDOR'] = live_order['FORNECEDOR']
+ 
+     def guard():
++        nonlocal source, version
+         if parent_owner is not None:
+             current_parent, current_parent_version = client.get_item_fields_with_etag(
+                 item_id(parent), tuple(parent_owner), target_list='DESCRITIVOPROVISAO')
+@@ -174,7 +211,9 @@
+                 raise RuntimeError('O descritivo DIVERSOS mudou durante a cópia de anexos.')
+         current, current_version = client.get_item_fields_with_etag(child, source_fields, target_list=CHILD)
+         if current != source or current_version != version:
+-            raise RuntimeError('Provisão alterada durante a cópia de anexos.')
++            if not paid_source_fields or not paid_status_refreshed(source, version, current, current_version):
++                raise RuntimeError('Provisão alterada durante a cópia de anexos.')
++            source, version = current, current_version
+         for kind, target, fields in ((LAUNCH, launch_id, launch_fields), (ORDER, order_id, order_fields)):
+             if not _verified(client.verify_item(target, fields, [], target_list=kind)):
+                 raise RuntimeError('Vínculo financeiro divergente durante a cópia de anexos.')
+diff --git a/worker/provision_description_settlement.py b/worker/provision_description_settlement.py
+--- a/worker/provision_description_settlement.py
++++ b/worker/provision_description_settlement.py
+@@ -17,12 +17,14 @@
+     from .payment_provision_group import provision_line_total, provision_money, _currency, _canonical, _sum, _number, earliest_unpaid_due
+     from .document_item_lock import document_item_lock
+     from .logic import resolve_option, filter_options
++    from .payroll_row_attachments import paid_status_refreshed
+     from .payroll_row_attachments import propagate as propagate_payroll_row_attachments
+     from .provision_description_review import review_table, provision_is_pending as _pending, provision_is_paid as _paid
+ except ImportError:
+     from payment_provision_group import provision_line_total, provision_money, _currency, _canonical, _sum, _number, earliest_unpaid_due
+     from document_item_lock import document_item_lock
+     from logic import resolve_option, filter_options
++    from payroll_row_attachments import paid_status_refreshed
+     from payroll_row_attachments import propagate as propagate_payroll_row_attachments
+     from provision_description_review import review_table, provision_is_pending as _pending, provision_is_paid as _paid
+ 
+@@ -1152,6 +1154,7 @@
+         group = state['provision_description']
+         parent = int(group['parent_id'])
+         selected = {int(row['Id']): row for row in group['children']}
++        paid_children = (group.get('journal') or {}).get('children') or {}
+         carrier = min(selected)
+         owner_fields = ('FORNECEDOR', 'FILIAL')
+         store = mirror.SharePointStore(self.sharepoint)
+@@ -1162,20 +1165,23 @@
+             names = store.names(PARENT_LIST, parent)
+             rows = {}
+             for ident, original in selected.items():
+-                live, _ = self.sharepoint.get_item_fields_with_etag(ident, CHILD_FIELDS, target_list=CHILD_LIST)
++                live, child_version = self.sharepoint.get_item_fields_with_etag(ident, CHILD_FIELDS, target_list=CHILD_LIST)
+                 if (_identity(live.get('DESCRITIVOPROVISAO')) != str(parent)
+                         or any(_text(live.get(key)) != _text(original.get(key)) for key in owner_fields)):
+                     raise RuntimeError('O vínculo/fornecedor/filial da provisão selecionada mudou.')
+-                rows[ident] = live
++                rows[ident] = (live, child_version)
+ 
+             def guard():
+                 current, current_version = self.sharepoint.get_item_fields_with_etag(parent, owner_fields, target_list=PARENT_LIST)
+                 if current != owner or current_version != version or store.names(PARENT_LIST, parent) != names:
+                     raise RuntimeError('Descritivo ou coleção de anexos alterado durante a cópia.')
+-                for ident, expected in rows.items():
+-                    live, _ = self.sharepoint.get_item_fields_with_etag(ident, CHILD_FIELDS, target_list=CHILD_LIST)
++                for ident, (expected, expected_version) in rows.items():
++                    live, current_version = self.sharepoint.get_item_fields_with_etag(ident, CHILD_FIELDS, target_list=CHILD_LIST)
+                     if live != expected:
+-                        raise RuntimeError('Uma provisão selecionada mudou durante a cópia dos anexos.')
++                        if str(ident) not in paid_children or not paid_status_refreshed(
++                                expected, expected_version, live, current_version):
++                            raise RuntimeError('Uma provisão selecionada mudou durante a cópia dos anexos.')
++                        rows[ident] = (live, current_version)
+ 
+             inventory = {name: store.digest(CHILD_LIST, carrier, name) for name in store.names(CHILD_LIST, carrier)}
+             for original in sorted(names):
+@@ -1202,11 +1208,12 @@
+                     raise RuntimeError('A cópia do anexo não passou na conferência SHA-256.')
+                 inventory[name] = digest
+             guard()
+-        saved = ((group.get('journal') or {}).get('children') or {}).get(str(carrier))
++        saved = paid_children.get(str(carrier))
+         if saved:
+             entry = next(entry for entry in group['entries'] if str(entry['fields']['ID PROVISÃO']) == str(carrier))
+             saved['attachment_propagation'] = propagate_payroll_row_attachments(self.sharepoint, carrier,
+-                {**entry['fields'], **saved['expected_fields']}, saved, parent=group['parent_id'])
++                {**entry['fields'], **saved['expected_fields']}, saved, parent=group['parent_id'],
++                paid_source_fields=CHILD_FIELDS)
+ 
+     def _description_reopen_owned_parent(self, state, checkpoint):
+         """Recover an ambiguous final close before any conflict can abort preflight."""
+@@ -1488,7 +1495,7 @@
+                         saved['attachment_propagation'] = propagate_payroll_row_attachments(
+                             self.sharepoint, int(item_id),
+                             {**entries[item_id]['fields'], **saved['expected_fields']}, saved,
+-                            parent=group['parent_id'])
++                            parent=group['parent_id'], paid_source_fields=CHILD_FIELDS)
+                         continue
+                     entry = entries[item_id]
+                     live, child_etag = self.sharepoint.get_item_fields_with_etag(int(item_id), CHILD_FIELDS, target_list=CHILD_LIST)
