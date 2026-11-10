@@ -9,7 +9,7 @@ import { createGalleryLoadingScreen } from './gallery-loading-screen.js';
 import { createGalleryRecordActions, dismissGalleryOverlay } from './gallery-record-actions.js';
 import { bindSearchableFilterSelects } from './searchable-filter-selects.js';
 import { REGISTRATION_GALLERY_MODELS, registrationFieldKey, registrationRawField, registrationNumber, registrationDateKey, sortRegistrationRows } from "../chat/registration-gallery-data.js";
-import { financialMovementRecipient, isImportedFinancialMovement } from '../chat/financial-gallery-models.js';
+import { financialMovementRecipient, financialMovementType, isImportedFinancialMovement } from '../chat/financial-gallery-models.js';
 import Decimal from "decimal.js";
 import { renderWorkDiaryCardDetails } from './work-diary-card.js';
 import { renderAssetGalleryCard } from './asset-gallery-card.js';
@@ -508,6 +508,10 @@ export function createRegistrationGallery({ document: doc = globalThis.document,
 
   function rowFieldValue(row, field) {
     if (field === "ID") return String(row.id || "");
+    if (kind === 'financial_movement' && field === 'DESCRICAO') {
+      const description = fieldValue(row.fields, field, model);
+      return financialMovementType(description, isImportedFinancialMovement(row.fields) ? 'Pagamento' : description.split('|')[0].trim());
+    }
     if (model.nativeCard && ["Criado por", "Modificado por"].includes(field)) return documentAuthorValue(row, field);
     if (kind === 'dda' && field === 'SITUACAO'
       && String(registrationRawField(row.fields, 'DDA_CICLO_AGENDAMENTO', model) ?? '').trim() === 'PAGO_AGENDADO') return 'Pago';
@@ -914,7 +918,9 @@ export function createRegistrationGallery({ document: doc = globalThis.document,
       }
       if (!query) return true;
       const searchFields = new Set([...model.fields, ...(model.filterFields || [])]);
-      return matchesGallerySearch(query, [row.id, ...[...searchFields].map(field => rowFieldValue(row, field))]);
+      const searchable = [row.id, ...[...searchFields].map(field => rowFieldValue(row, field))];
+      if (kind === 'financial_movement') searchable.push(fieldValue(row.fields, 'DESCRICAO', model));
+      return matchesGallerySearch(query, searchable);
     });
     return sortRegistrationRows(filtered, model, model.sortOptions?.find(sort => sort.value === sortControl.value));
   }

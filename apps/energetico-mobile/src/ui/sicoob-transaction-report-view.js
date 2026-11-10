@@ -1,6 +1,6 @@
 import Decimal from 'decimal.js';
 import { includesSearchText, normalizeSearchText } from '../../../../portal/core/search-text.js';
-import { financialMovementRecipient, isImportedFinancialMovement } from '../chat/financial-gallery-models.js';
+import { financialMovementRecipient, financialMovementType, isImportedFinancialMovement } from '../chat/financial-gallery-models.js';
 import { registrationDateKey, registrationNumber } from '../chat/registration-gallery-data.js';
 import { addReportCloseControl } from './report-close-control.js';
 import { bindReportLandscape } from './report-landscape.js';
@@ -12,21 +12,6 @@ const PAGE_SIZE = 50;
 const currency = new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' });
 const text = value => String(value ?? '').trim();
 const dateLabel = value => value ? value.split('-').reverse().join('/') : '—';
-const transactionTypes = [
-  [/\bpix\b/, 'Pix'],
-  [/\bted\b/, 'TED'],
-  [/\bdoc\b/, 'DOC'],
-  [/\b(?:boleto|titulo|tit)\b/, 'Boleto'],
-  [/\bdeb(?:ito)?\.? automatico\b/, 'Débito automático'],
-  [/\bcartao\b/, 'Cartão'],
-  [/\bconvenio\b/, 'Convênio'],
-  [/\b(?:transf|transferencia)\b/, 'Transferência'],
-];
-
-function transactionType(description) {
-  const label = normalizeSearchText(description.split('|')[0]);
-  return transactionTypes.find(([pattern]) => pattern.test(label))?.[1] || 'Pagamento';
-}
 
 function projectTransactions(snapshot) {
   if (!Array.isArray(snapshot?.rows) || snapshot.hasMore === true || snapshot.complete === false) {
@@ -40,7 +25,7 @@ function projectTransactions(snapshot) {
       document: text(fields.DOCUMENTORECEBEDOR),
       operation: text(fields.OPERACAO),
       description: text(fields.DESCRICAO),
-      type: transactionType(text(fields.DESCRICAO)),
+      type: financialMovementType(fields.DESCRICAO),
       payerAccount: text(fields.CONTAPAGADORA),
       recipientAccount: text(fields.CONTARECEBEDOR),
       reference: text(fields.REFERENCIABANCARIA),

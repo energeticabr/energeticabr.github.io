@@ -1,3 +1,21 @@
+import { normalizeSearchText } from '../../../../portal/core/search-text.js';
+
+const transactionTypes = [
+  [/\bpix\b/, 'Pix'],
+  [/\bted\b/, 'TED'],
+  [/\bdoc\b/, 'DOC'],
+  [/\b(?:boleto|titulo|tit)\b/, 'Boleto'],
+  [/\bdeb(?:ito)?\.? automatico\b/, 'Débito automático'],
+  [/\bcartao\b/, 'Cartão'],
+  [/\bconvenio\b/, 'Convênio'],
+  [/\b(?:transf|transferencia)\b/, 'Transferência'],
+];
+
+export function financialMovementType(description, fallback = 'Pagamento') {
+  const label = normalizeSearchText(String(description ?? '').split('|')[0]);
+  return transactionTypes.find(([pattern]) => pattern.test(label))?.[1] || fallback;
+}
+
 const auditFields = ['ID', 'Criado por', 'Criado', 'Modificado', 'Modificado por'];
 const auditAliases = { Criado: ['Created'], Modificado: ['Modified'], 'Criado por': ['Author'], 'Modificado por': ['Editor'] };
 const movementFields = ['INSTITUICAO', 'DESCRICAO', 'OPERACAO', 'VALOR'];
