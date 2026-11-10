@@ -564,7 +564,7 @@ button:disabled { cursor: wait; opacity: .55; }
   display: grid;
   place-items: center;
   z-index: 18;
-  background: rgb(0 0 0 / 45%);
+  background: rgb(0 0 0 / 30%);
   pointer-events: none;
 }
 .chat-progress:not(.sr-only) .app-loading {

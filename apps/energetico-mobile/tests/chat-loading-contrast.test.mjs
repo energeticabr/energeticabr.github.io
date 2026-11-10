@@ -24,6 +24,7 @@ test('cartão de processamento se destaca do fundo no celular e desktop, claro e
       const result = JSON.parse(dom.window.document.documentElement.dataset.layout);
       dom.window.close();
       assert.ok(result.backdropTranslucentBlack, `${colorScheme} ${width}x${height}: fundo preto translúcido`);
+      assert.equal(result.backdropAlpha, 0.30, `${colorScheme} ${width}x${height}: opacidade do fundo`);
       assert.ok(result.backdropCoversViewport, `${colorScheme} ${width}x${height}: fundo cobre a tela`);
       assert.ok(result.cardCentered, `${colorScheme} ${width}x${height}: cartão centralizado`);
       assert.ok(result.backdropAllowsPointerEvents, `${colorScheme} ${width}x${height}: interação existente preservada`);
