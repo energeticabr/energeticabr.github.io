@@ -473,6 +473,7 @@ export function createLaunchGallery({ document: documentRef = globalThis.documen
   }
 
   function observeRecordMedia() {
+    if (previewController || !active(session)) return;
     // Keep the attachment button independent of background thumbnail and count reads.
     previewController = new AbortController();
     const { signal } = previewController;
@@ -522,6 +523,7 @@ export function createLaunchGallery({ document: documentRef = globalThis.documen
     if (preservePage && data.sort === applied.sort && JSON.stringify(data.filters) === JSON.stringify(applied.filters)) data.page = page;
     if (data.filters.dateStart && data.filters.dateEnd && data.filters.dateStart > data.filters.dateEnd) {
       ++listVersion; listLoading = false; updateBusy();
+      observeRecordMedia();
       notify('A data final deve ser igual ou posterior à data inicial.', true); return;
     }
     notify(''); return loadSnapshot(data, { refresh, blocking: refresh || blocking });
@@ -714,7 +716,7 @@ export function createLaunchGallery({ document: documentRef = globalThis.documen
   function openRecordAttachments(item) {
     external(async epoch => {
       let attachments = attachmentEntries(item);
-      if (!attachments.length) attachments = await attachmentCounts.load(item, { force: true });
+      if (!attachments.length) attachments = await attachmentCounts.load(item, { force: true, priority: true });
       if (attachments == null) throw new Error('Não foi possível consultar os anexos do lançamento');
       const descriptors = [];
       for (const attachment of attachments) {
