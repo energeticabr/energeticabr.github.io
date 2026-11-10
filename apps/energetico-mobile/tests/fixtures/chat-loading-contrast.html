@@ -26,6 +26,7 @@
   const a = luminance(visibleCard), b = luminance(dimmedBackground);
   document.documentElement.dataset.layout = JSON.stringify({
     backdropTranslucentBlack: red === 0 && green === 0 && blue === 0 && backdropAlpha > 0 && backdropAlpha < 1,
+    backdropAlpha,
     backdropCoversViewport: viewport.top === 0 && viewport.left === 0 && viewport.right === innerWidth && viewport.bottom === innerHeight,
     backdropAllowsPointerEvents: backdropStyle.pointerEvents === 'none',
     cardCentered: Math.abs((bounds.left + bounds.right) / 2 - innerWidth / 2) < 1
