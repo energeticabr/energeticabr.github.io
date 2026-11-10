@@ -115,10 +115,10 @@ test('movement editor uses dependent closed choices and rejects foreign descript
 test('movement gallery shows and searches imported Sicoob data while preserving manual actions', async () => {
   const rows = [
     { id: '1', fields: { INSTITUICAO: 'BANCO QA', DESCRICAO: 'CDB QA', OPERACAO: 'APLICAÇÃO', VALOR: '10,50' } },
-    { id: '2', fields: { INSTITUICAO: 'SICOOB', DESCRICAO: 'PIX ENVIADO', OPERACAO: 'DÉBITO',
+    { id: '2', fields: { INSTITUICAO: 'SICOOB', DESCRICAO: 'PIX EMITIDO OUTRA IF | complemento bancário', OPERACAO: 'DÉBITO',
       VALOR: '22,45', DATAPAGAMENTO: '2026-10-03T12:00:00Z', RAZAOSOCIALRECEBEDOR: 'FAVORECIDO FICTÍCIO LTDA (MARCA QA)',
       CONTAPAGADORA: '001234', REFERENCIABANCARIA: 'REF-TESTE-2', ORIGEMMOVIMENTACAO: 'SICOOB' } },
-    { id: '3', fields: { INSTITUICAO: 'SICOOB', DESCRICAO: 'BOLETO', OPERACAO: 'DÉBITO',
+    { id: '3', fields: { INSTITUICAO: 'SICOOB', DESCRICAO: 'DÉB.TIT.COMPE EFETIVADO', OPERACAO: 'DÉBITO',
       VALOR: '18,00', DATAPAGAMENTO: '2026-10-02T12:00:00Z', RAZAOSOCIALRECEBEDOR: 'N/A', ORIGEMMOVIMENTACAO: 'SICOOB' } },
   ];
   const repository = {
@@ -141,6 +141,16 @@ test('movement gallery shows and searches imported Sicoob data while preserving 
     const bank = cards.find(card => card.textContent.includes('FAVORECIDO FICTÍCIO LTDA'));
     const manual = cards.find(card => card.textContent.includes('CDB QA'));
     assert.ok(bank, 'the imported payee is visible');
+    assert.equal(bank.querySelector('[data-field="DESCRICAO"] dd').textContent, 'Pix');
+    assert.doesNotMatch(bank.textContent, /EMITIDO OUTRA|complemento bancário/);
+    const typeFilter = dom.window.document.querySelector('[data-filter-field="DESCRICAO"]');
+    assert.deepEqual([...typeFilter.options].map(option => option.value), ['', 'Boleto', 'CDB QA', 'Pix']);
+    typeFilter.value = 'Boleto';
+    typeFilter.dispatchEvent(new dom.window.Event('change', { bubbles: true }));
+    assert.equal(dom.window.document.querySelectorAll('[data-registration-row]').length, 1);
+    assert.equal(dom.window.document.querySelector('[data-field="DESCRICAO"] dd').textContent, 'Boleto');
+    typeFilter.value = '';
+    typeFilter.dispatchEvent(new dom.window.Event('change', { bubbles: true }));
     assert.match(bank.textContent, /FAVORECIDO FICTÍCIO LTDA \(MARCA QA\)/);
     assert.ok(cards.some(card => card.querySelector('.rg-row-title').textContent === 'N/A'));
     assert.match(bank.textContent, /03\/10\/2026/);
@@ -151,6 +161,12 @@ test('movement gallery shows and searches imported Sicoob data while preserving 
     const institution = dom.window.document.querySelector('[data-filter-field="INSTITUICAO"]');
     assert.ok([...institution.options].some(option => option.value === 'SICOOB'));
     const search = dom.window.document.querySelector('[data-gallery-quick-search]');
+    search.value = 'complemento bancário';
+    search.dispatchEvent(new dom.window.Event('input', { bubbles: true }));
+    assert.equal(dom.window.document.querySelectorAll('[data-registration-row]').length, 1);
+    search.value = 'boleto';
+    search.dispatchEvent(new dom.window.Event('input', { bubbles: true }));
+    assert.equal(dom.window.document.querySelector('[data-registration-row]').dataset.registrationRow, '3');
     search.value = 'favorecido ficticio';
     search.dispatchEvent(new dom.window.Event('input', { bubbles: true }));
     assert.equal(dom.window.document.querySelectorAll('[data-registration-row]').length, 1);
