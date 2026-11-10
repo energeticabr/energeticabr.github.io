@@ -100,12 +100,56 @@ test('fiscal rows follow the original emission calendar and distinguish incomple
       STATUS_IMPORTACAO:'RESUMO', OBSERVACOES_NOTA:'', CHAVE_ACESSO:serviceKey } },
     { id:'9', fields:{ MODELO:'55', DATA_EMISSAO:'2026-11-06T22:00:00-03:00',
       STATUS_IMPORTACAO:'XML_COMPLETO', STATUS_RETENCOES:'NAO_INFORMADA_XML' } },
-    { id:'12', fields:{ MODELO:'57', DATA_EMISSAO:'2026-11-09' } },
+    { id:'12', fields:{ MODELO:'99', DATA_EMISSAO:'2026-11-09' } },
   ]);
   assert.deepEqual([pending.id, complete.id, noRetention.id], ['11','10','9']);
   assert.deepEqual([pending.retention, pending.cnoState, pending.total, pending.xmlUrl], ['unknown','unknown',null,'']);
   assert.deepEqual([complete.date, complete.retention, complete.withholding.total, complete.cnoState], ['2026-11-06','yes',15,'valid']);
   assert.deepEqual([noRetention.retention, noRetention.cnoState], ['no','missing']);
+});
+
+test('the unfiltered report includes freight documents and opens their exact DACTE', async t => {
+  const dom = new JSDOM('<main id="app"></main>');
+  const { document, Event } = dom.window;
+  const freightPdf = `DACTE-${'3'.repeat(44)}-deadbeefdeadbeef.pdf`;
+  const rows = [invoice, { id:'12', fields:{
+    MODELO:'57', Title:'TRANSPORTADORA TESTE LTDA', NUMERO_NOTA:'124',
+    DATA_EMISSAO_ORIGINAL:'2026-11-06T23:58:00-03:00', STATUS_IMPORTACAO:'XML_COMPLETO',
+    CHAVE_ACESSO:'3'.repeat(44), VALOR_TOTAL_NOTA:460,
+    DANFE_URL:`https://example.sharepoint.com/Attachments/12/${freightPdf}`,
+  } }];
+  const downloads = [];
+  const panel = createNfeReportView({ document, data:{
+    loadSnapshot:async () => ({ rows }),
+    downloadDocument:async () => new Blob([issuerXml]),
+    listAttachments:async () => [{ fileName:pdfName }, { fileName:freightPdf }],
+    downloadAttachment:async (id, name) => { downloads.push([id, name]); },
+  }, openMediaCollection:async (items, options) => {
+    await items[0].source();
+    options.onClose();
+  } });
+  t.after(() => { panel.destroy(); dom.window.close(); });
+  await panel.open();
+  const ids = () => [...panel.element.querySelectorAll('tbody tr')].map(row => row.dataset.invoiceId);
+  assert.deepEqual(ids(), ['12', '10']);
+  assert.deepEqual([...panel.element.querySelectorAll('.nfe-metrics dd')].map(node => node.textContent.replace(/\s/g, ' ')),
+    ['2', 'R$ 1.960,00', '06/11/2026', '2']);
+
+  const selector = panel.element.querySelector('select[name="document"]');
+  selector.value = 'CT-e';
+  assert.equal(selector.value, 'CT-e');
+  selector.dispatchEvent(new Event('change'));
+  assert.deepEqual(ids(), ['12']);
+  const pdf = panel.element.querySelector('[data-invoice-id="12"] button.nfe-pdf');
+  assert.match(pdf.getAttribute('aria-label'), /Abrir DACTE.*124/);
+  pdf.click();
+  await new Promise(resolve => setImmediate(resolve));
+  assert.deepEqual(downloads, [['12', freightPdf]]);
+
+  const print = await panel.capturePrint({ title:'Documentos filtrados' });
+  const table = print.pages[0].blocks.find(block => block.type === 'table');
+  assert.match(JSON.stringify(table.rows), /CT-e.*124.*TRANSPORTADORA TESTE LTDA/);
+  assert.doesNotMatch(JSON.stringify(table.rows), /ELÉTRICA TESTE LTDA/);
 });
 
 test('supplier regime comes from the issuer of the matching fiscal XML', () => {

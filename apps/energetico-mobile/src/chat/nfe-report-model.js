@@ -7,6 +7,7 @@ import { NFE_ORDER_FIELD, nfeOrderId } from './nfe-order-link.js';
 const model = REGISTRATION_GALLERY_MODELS.notas_fiscais_sefaz;
 const text = value => String(value ?? '').trim();
 const url = value => text(typeof value === 'object' ? value?.Url ?? value?.url : value);
+export const NFE_REPORT_DOCUMENT_TYPES = ['NF-e', 'NFS-e', 'CT-e'];
 const codes = {
   'NF-e': { '1':'Simples Nacional', '2':'Simples Nacional · excesso de sublimite', '3':'Regime normal', '4':'MEI' },
   'NFS-e': { '1':'Não optante pelo Simples Nacional', '2':'MEI', '3':'Simples Nacional · ME/EPP' },
@@ -46,7 +47,7 @@ export function rankNfeOrderOptions(options, { supplier, total }) {
 export function projectNfeRows(rows) {
   return rows.flatMap(({ id, fields = {} }) => {
     const type = fiscalDocumentType(fields);
-    if (!Object.hasOwn(codes, type)) return [];
+    if (!NFE_REPORT_DOCUMENT_TYPES.includes(type)) return [];
     const rawDate = registrationRawField(fields, 'DATA_EMISSAO', model);
     const date = registrationDateKey(rawDate);
     const complete = text(fields.STATUS_IMPORTACAO).toUpperCase() === 'XML_COMPLETO';
@@ -56,9 +57,10 @@ export function projectNfeRows(rows) {
     const retention = !complete ? 'unknown' : retentionCode === 'RETENCAO_INFORMADA_XML' ? 'yes'
       : retentionCode === 'NAO_INFORMADA_XML' ? 'no' : 'unknown';
     const cno = invoiceConstructionCno(fields);
-    const cnoState = cno.status === 'missing' && (!complete || type === 'NFS-e') && !cno.corrected ? 'unknown' : cno.status;
+    const cnoState = cno.status === 'missing' && (!complete || type !== 'NF-e') && !cno.corrected ? 'unknown' : cno.status;
     const key = text(fields.CHAVE_ACESSO);
-    const validKey = (type === 'NF-e' ? nfeKey : nfseKey).test(key);
+    const supportsXmlFacts = Object.hasOwn(codes, type);
+    const validKey = supportsXmlFacts && (type === 'NF-e' ? nfeKey : nfseKey).test(key);
     return [{
       id:String(id), orderId:nfeOrderId(fields[NFE_ORDER_FIELD]), type, date, issuedAt:date ? Date.parse(rawDate.toString().includes('/') ? date : rawDate) : 0,
       supplier:text(fields.Title) || text(fields.FORNECEDOR),
