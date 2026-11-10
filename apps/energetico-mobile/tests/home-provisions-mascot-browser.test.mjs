@@ -217,7 +217,60 @@ assert.deepEqual(shortcuts.map(s=>s.action),['open-pending-provisions','open-sic
           touch:[prev,next].every(r=>r.width>=44&&r.height>=44)};
       })()`);
       assert.deepEqual(rhidDayNav,{date:"09/11/2026",ordered:true,above:true,fits:true,touch:true});
-      await evaluate(`document.querySelector("[data-action=rhid-mascot-period]").click()`);
+      const rhidScroll = await evaluate(`(() => {
+        const body = document.querySelector('.chat-rhid-mascot__body');
+        const report = body.querySelector('.chat-rhid-attendance-report');
+        const cards = report.querySelectorAll('.chat-rhid-attendance-card');
+        const lastCard = cards[cards.length - 1].getBoundingClientRect();
+        const clip = body.getBoundingClientRect();
+        const firstCard = cards[0].getBoundingClientRect();
+        return {
+          count: cards.length,
+          offscreen: lastCard.bottom > clip.bottom,
+          clippedByReport: lastCard.bottom > report.getBoundingClientRect().bottom,
+          maxScroll: body.scrollHeight - body.clientHeight,
+          x: Math.round(firstCard.x + firstCard.width / 2),
+          y: Math.round(Math.min(firstCard.bottom, clip.bottom) - 20),
+        };
+      })()`);
+      assert.equal(rhidScroll.count, 8);
+      assert.ok(rhidScroll.offscreen && !rhidScroll.clippedByReport && rhidScroll.maxScroll > 0,
+        `os cartões fora da tela devem gerar rolagem no corpo do relatório: ${JSON.stringify(rhidScroll)}`);
+      if (width <= 390) {
+        await send('Emulation.setTouchEmulationEnabled', { enabled: true }, sessionId);
+        const { x, y } = rhidScroll;
+        await send('Input.dispatchTouchEvent', { type: 'touchStart', touchPoints: [{ x, y }] }, sessionId);
+        for (let step = 1; step <= 8; step++) {
+          await send('Input.dispatchTouchEvent', {
+            type: 'touchMove', touchPoints: [{ x, y: y - 30 * step }],
+          }, sessionId);
+        }
+        await send('Input.dispatchTouchEvent', { type: 'touchEnd', touchPoints: [] }, sessionId);
+        await send('Emulation.setTouchEmulationEnabled', { enabled: false }, sessionId);
+      } else {
+        await send('Input.dispatchMouseEvent', {
+          type: 'mouseWheel', x: rhidScroll.x, y: rhidScroll.y, deltaX: 0, deltaY: 240,
+        }, sessionId);
+      }
+      let scrollTop = 0;
+      for (let attempt = 0; attempt < 30 && scrollTop === 0; attempt++) {
+        scrollTop = await evaluate(`document.querySelector('.chat-rhid-mascot__body').scrollTop`);
+        if (scrollTop === 0) await delay(50);
+      }
+      assert.ok(scrollTop > 0, `o gesto deve rolar o relatório RHID em ${width}px`);
+      const lastRhidCardVisible = await evaluate(`(() => {
+        const body = document.querySelector('.chat-rhid-mascot__body');
+        body.scrollTop = body.scrollHeight;
+        const last = body.querySelector('.chat-rhid-attendance-card:last-child').getBoundingClientRect();
+        const clip = body.getBoundingClientRect();
+        body.scrollTop = 0;
+        return last.top >= clip.top && last.bottom <= clip.bottom;
+      })()`);
+      assert.ok(lastRhidCardVisible, 'o último fornecedor deve ficar totalmente visível ao final da rolagem');
+      await clickAt(await evaluate(`(() => {
+        const period = document.querySelector('[data-action=rhid-mascot-period]').getBoundingClientRect();
+        return { x: period.x + period.width / 2, y: period.y + period.height / 2 };
+      })()`));
       assert.equal(await evaluate(`!document.querySelector("[data-rhid-mascot-report] .chat-rhid-date-navigation")`),true);
       const rhidFit=await evaluate(`(()=>{
         const report=document.querySelector('.chat-rhid-mascot'), transcript=document.querySelector('.chat-transcript');
