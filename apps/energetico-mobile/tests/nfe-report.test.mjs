@@ -6,6 +6,7 @@ import { createAppController } from '../src/app-controller.js';
 import { createConversationStore } from '../src/chat/conversation-store.js';
 import { renderChatMarkup, commandFromTarget } from '../src/ui/chat-view.js';
 import { projectNfeRows, invoiceXmlFacts } from '../src/chat/nfe-report-model.js';
+import { createNfeOrderLink } from '../src/chat/nfe-order-link.js';
 import { buildFilteredReportPdf } from '../src/chat/filtered-report-pdf.js';
 import { createNfeReportView } from '../src/ui/nfe-report-view.js';
 import { decorateReportPrint } from '../src/ui/report-print.js';
@@ -150,6 +151,63 @@ test('the unfiltered report includes freight documents and opens their exact DAC
   const table = print.pages[0].blocks.find(block => block.type === 'table');
   assert.match(JSON.stringify(table.rows), /CT-e.*124.*TRANSPORTADORA TESTE LTDA/);
   assert.doesNotMatch(JSON.stringify(table.rows), /ELÉTRICA TESTE LTDA/);
+});
+
+test('CT-e can link to an existing order and change that link', async t => {
+  const dom = new JSDOM('<main id="app"></main>');
+  const { document } = dom.window;
+  const freight = { id:'12', fields:{ MODELO:'57', Title:'TRANSPORTADORA TESTE LTDA', NUMERO_NOTA:'124',
+    DATA_EMISSAO_ORIGINAL:'2026-11-06', STATUS_IMPORTACAO:'XML_COMPLETO', VALOR_TOTAL_NOTA:460 } };
+  const orders = [
+    { id:'37', fields:{ FORNECEDOR:freight.fields.Title, VALORTOTAL:460 } },
+    { id:'38', fields:{ FORNECEDOR:'Outro fornecedor', VALORTOTAL:470 } },
+  ];
+  const writes = [];
+  const repository = {
+    resolveList:async (_site, [name]) => ({ status:'resolved', id:name }),
+    getItems:async () => orders,
+    getItem:async (site, _list, id) => site === 'personal' ? orders.find(order => order.id === id) :
+      { ...freight, eTag:'"v' + writes.length + '"' },
+    async updateItem(site, list, id, fields, { eTag }) {
+      writes.push([site, list, id, fields, eTag]);
+      Object.assign(freight.fields, fields);
+      return freight;
+    },
+  };
+  const report = createNfeReportView({ document, data:{
+    loadSnapshot:async () => ({ rows:[invoice, freight] }),
+    orderLink:createNfeOrderLink({ repository }),
+    proposal:{},
+  } });
+  t.after(() => { report.destroy(); dom.window.close(); });
+  await report.open();
+  const row = () => report.element.querySelector('[data-invoice-id="12"]');
+  const tick = () => new Promise(resolve => setImmediate(resolve));
+
+  for (const [orderId, previous] of [['37', ''], ['38', '37']]) {
+    const pencil = row().querySelector('.nfe-link button');
+    assert.ok(pencil && !pencil.disabled, 'CT-e deve ter um lápis clicável');
+    pencil.click();
+    await tick();
+    const picker = report.element.querySelector('.dda-provision-dialog');
+    assert.equal(picker.querySelector('[data-nfe-propose-launch]'), null);
+    assert.equal(picker.querySelector('input:checked')?.value || '', previous);
+    assert.equal(writes.length, previous ? 1 : 0);
+    picker.querySelector('input[value="' + orderId + '"]').click();
+    picker.querySelector('.dda-provision-save').click();
+    document.querySelector('[data-edit-review-confirm]').click();
+    await tick();
+    assert.equal(row().querySelector('.nfe-link-linked').textContent, 'ID ' + orderId);
+    picker.querySelector('.gallery-record-dialog-button').click();
+  }
+
+  assert.deepEqual(writes, [
+    ['company','NOTAS_FISCAIS_SEFAZ','12',{ IDPEDIDO:37 },'"v0"'],
+    ['company','NOTAS_FISCAIS_SEFAZ','12',{ IDPEDIDO:38 },'"v1"'],
+  ]);
+  report.close();
+  await report.open();
+  assert.equal(row().querySelector('.nfe-link-linked').textContent, 'ID 38');
 });
 
 test('supplier regime comes from the issuer of the matching fiscal XML', () => {

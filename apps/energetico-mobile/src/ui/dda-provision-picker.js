@@ -29,7 +29,7 @@ export function createDdaProvisionPicker({service, ...options}){
  });
 }
 
-export function createReportLinkPicker({document:doc,host,copy,loadOptions,saveLink,currentLink,receiptId,rowAmount,onLinked,onClose,resolveReturnFocus,onPropose,sharedLinkQuestion,selectCurrent=false,timeoutMs=35000}){
+export function createReportLinkPicker({document:doc,host,copy,loadOptions,saveLink,currentLink,receiptId,rowAmount,onLinked,onClose,resolveReturnFocus,sharedLinkQuestion,selectCurrent=false,timeoutMs=35000}){
  let current=null;ensureEditReviewStyles(doc);
  const el=(tag,cls='',value)=>{const node=doc.createElement(tag);node.className=cls;if(value!==undefined)node.textContent=String(value);return node;};
  const money=value=>{let text=String(value??'').trim().replace(/R\$|\s/g,'');if(text.includes(','))text=text.replace(/\./g,'').replace(',','.');const number=/^-?\d+(?:\.\d+)?$/.test(text)?Number(text):NaN;return Number.isFinite(number)?new Intl.NumberFormat('pt-BR',{style:'currency',currency:'BRL'}).format(number):'Valor não informado';};
@@ -41,7 +41,7 @@ export function createReportLinkPicker({document:doc,host,copy,loadOptions,saveL
   if(target.isConnected&&!host.hidden)target.focus({preventScroll:true});
   onClose?.();
  }
- async function show(row,trigger){
+ async function show(row,trigger,{onPropose}={}){
   if(current||host.hidden||!loadOptions)return;
   const linkedId=String(currentLink(row)||'');
   const overlay=el('div','gallery-record-overlay dda-provision-overlay'),dialog=el('section','gallery-record-dialog dda-provision-dialog');

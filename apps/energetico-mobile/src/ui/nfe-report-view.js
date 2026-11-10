@@ -161,6 +161,7 @@ export function createNfeReportView({ document:doc = globalThis.document, data, 
     document:doc, host:root, service:data.proposal,
     onPosted(receipt) { showLinked(receipt); picker?.close(); },
   });
+  const onPropose = proposal && ((row, trigger) => void proposal.show(row, trigger));
   const picker = orderLink && createReportLinkPicker({
     document:doc, host:root, copy:ORDER_PICKER_COPY,
     loadOptions:async (row, signal) => rankNfeOrderOptions(await orderLink.loadOptions({ signal }), row),
@@ -171,7 +172,6 @@ export function createNfeReportView({ document:doc = globalThis.document, data, 
     rowAmount:row => row.total,
     resolveReturnFocus:trigger => list.querySelector(`[data-invoice-id="${trigger?.dataset.invoiceLink}"] .nfe-link-edit`) || closeButton,
     onLinked:showLinked,
-    onPropose:proposal && ((row, trigger) => void proposal.show(row, trigger)),
   });
 
   function showLinked({ invoiceId, orderId }) {
@@ -185,7 +185,7 @@ export function createNfeReportView({ document:doc = globalThis.document, data, 
   }
 
   function renderOrderLink(cell, row, interactive) {
-    if (!interactive || row.type === 'CT-e') {
+    if (!interactive) {
       if (row.orderId) cell.append(make('span', 'nfe-link-cluster nfe-link-linked', `ID ${row.orderId}`));
       else cell.textContent = '—';
       return;
@@ -193,7 +193,9 @@ export function createNfeReportView({ document:doc = globalThis.document, data, 
 
     const controls = make('div', 'nfe-link-controls');
     if (row.orderId) controls.append(make('span', 'nfe-link-cluster nfe-link-linked', `ID ${row.orderId}`));
-    const pencil = button('', () => void picker?.show(row, pencil),
+    const pencil = button('', () => void picker?.show(row, pencil, {
+      onPropose:row.type === 'CT-e' ? undefined : onPropose,
+    }),
       row.orderId ? 'nfe-link-cluster nfe-link-edit' : 'nfe-link-cluster nfe-link-pencil');
     pencil.dataset.invoiceLink = row.id;
     pencil.dataset.reportScreenOnly = '';
