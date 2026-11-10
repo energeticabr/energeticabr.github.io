@@ -37,6 +37,8 @@ Sicoob arquivado em LANCAMENTOS. Só grava a resposta do banco se o débito
 corresponder de forma única à conta, ao titular, à data, ao valor e ao documento
 do recebedor. A leitura de imagens usa Tesseract e mantém apenas o cache
 privado de identificadores por conteúdo.
+Um Pix sem nome fica em identificação pendente e volta à consulta em cada
+rodada. O coletor preserva o EndToEndId completo se o extrato o fornecer.
 
 ## Ativação
 

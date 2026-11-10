@@ -50,13 +50,13 @@ class MovementImportTests(unittest.TestCase):
         record = rows[0]
         self.assertEqual(record['DATAPAGAMENTO'], '2026-10-02T12:00:00Z')
         self.assertEqual(record['CONTAPAGADORA'], '001234')
-        self.assertEqual(record['RAZAOSOCIALRECEBEDOR'], 'N/A')
+        self.assertNotIn('RAZAOSOCIALRECEBEDOR', record)
         self.assertEqual(record['VALOR'], '1234,56')
         self.assertEqual(record['REFERENCIABANCARIA'], 'A1')
         self.assertNotIn('CONTARECEBEDOR', record)
         self.assertEqual(len(record['CHAVEIMPORTACAO']), 64)
         unconfirmed = payment_rows(payload, BACKFILL_START, BACKFILL_END, '001234', {})[0]
-        self.assertEqual(unconfirmed['RAZAOSOCIALRECEBEDOR'], 'N/A')
+        self.assertNotIn('RAZAOSOCIALRECEBEDOR', unconfirmed)
         self.assertEqual(unconfirmed['CHAVEIMPORTACAO'], record['CHAVEIMPORTACAO'])
 
     def test_missing_transaction_id_or_unrecognized_response_fails(self):
@@ -133,8 +133,27 @@ class MovementImportTests(unittest.TestCase):
         rows = payment_rows(payload, BACKFILL_START, BACKFILL_END, '12', {})
         self.assertEqual(rows[0]['RAZAOSOCIALRECEBEDOR'], 'Empresa Fictícia LTDA')
         self.assertEqual(rows[0]['DOCUMENTORECEBEDOR'], '12345678000195')
-        self.assertEqual(rows[1]['RAZAOSOCIALRECEBEDOR'], 'N/A')
+        self.assertNotIn('RAZAOSOCIALRECEBEDOR', rows[1])
         self.assertNotIn('DOCUMENTORECEBEDOR', rows[1])
+
+    def test_keeps_pix_end_to_end_when_bank_statement_also_uses_a_generic_reference(self):
+        end_id = 'E12345678202611061530ABCDEFGHIJK'
+        mask = '*** . 123 . 456 - **'
+        entry = self.transaction(transactionId=end_id, numeroDocumento='Pix',
+                                 descInfComplementar='x' * 219 + ' | ' + mask)
+        row = payment_rows({'transacoes': [entry]}, BACKFILL_START, BACKFILL_END, '12', {})[0]
+        self.assertEqual(row['REFERENCIABANCARIA'], 'Pix')
+        self.assertIn(end_id, row['DESCRICAO'])
+        self.assertIn(mask, row['DESCRICAO'])
+        self.assertLessEqual(len(row['DESCRICAO']), 255)
+
+    def test_keeps_conflicting_bank_ids_so_resolution_can_reject_them(self):
+        first = 'E12345678202611061530ABCDEFGHIJK'
+        second = first[:-1] + 'Z'
+        entry = self.transaction(transactionId=first, endToEndId=second, numeroDocumento='Pix')
+        row = payment_rows({'transacoes': [entry]}, BACKFILL_START, BACKFILL_END, '12', {})[0]
+        self.assertIn(first, row['DESCRICAO'])
+        self.assertIn(second, row['DESCRICAO'])
 
     def test_includes_settled_interbank_boleto_and_excludes_service_package(self):
         payload = {'transacoes': [

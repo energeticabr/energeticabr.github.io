@@ -27,6 +27,8 @@ UNKNOWN = 'N/A'
 PAYMENT = re.compile(r'\b(?:PIX|TED|DOC|PGTO|PAGTO|PAGAMENTO|TRANSF|TRANSFERENCIA|BOLETO|TITULO|CONVENIO)\b|\bDEB(?:ITO)?\.? AUTOMATICO\b|\bCOMPRA (?:NO )?CARTAO\b')
 NON_PAYMENT = re.compile(r'\b(?:TARIFA|TARIFAS|SAQUE|APLICACAO|RESGATE|ESTORNO|IOF)\b')
 COMPENSATED_BOLETO = 'DEB.TIT.COMPE EFETIVADO'
+PIX_END_TO_END = re.compile(r'E[0-9]{20}[A-Za-z0-9]{11}')
+PIX_MASKED_DOCUMENT = re.compile(r'\*{2,3}\s*\.\s*(\d{3})\s*\.\s*(\d{3})\s*-\s*\*{2,3}')
 BANK_DOCUMENT = re.compile(r'(?:[A-Z0-9]{2}\.[A-Z0-9]{3}\.[A-Z0-9]{3}[/ ][A-Z0-9]{4}-\d{2}|\d{3}\.\d{3}\.\d{3}-\d{2})', re.I)
 
 
@@ -121,6 +123,14 @@ def money(value):
     return format(amount, '.2f').replace('.', ',')
 
 
+def append_pix_identifiers(description, end_ids):
+    suffix = ''.join(f' | {end_id}' for end_id in sorted(end_ids))
+    mask = PIX_MASKED_DOCUMENT.search(description)
+    if mask and mask.end() > 255 - len(suffix):
+        suffix = f' | {mask.group()}{suffix}'
+    return f'{description[:255 - len(suffix)].rstrip()}{suffix}'
+
+
 def payment_rows(payload, start, end, account, names, excluded=None):
     if not isinstance(payload, dict):
         raise ValueError('Invalid statement')
@@ -146,16 +156,24 @@ def payment_rows(payload, start, end, account, names, excluded=None):
         if not transaction:
             raise ValueError('Bank debit is missing transactionId')
         document, bank_name = bank_receiver(entry)
+        is_pix = bool(re.search(r'\bPIX\b', label))
         reference = text(entry.get('numeroDocumento')) or transaction
         description = ' | '.join(filter(None, (text(entry.get('descricao')), text(entry.get('descInfComplementar')))))
+        if is_pix:
+            end_ids = {text(entry.get(field)) for field in ('endToEndId', 'transactionId')}
+            end_ids = {value for value in end_ids if value != reference and PIX_END_TO_END.fullmatch(value)}
+            if any(end_id not in description[:255] for end_id in end_ids):
+                description = append_pix_identifiers(description, end_ids)
         key = hashlib.sha256(f'SICOOB\0{account}\0{transaction}'.encode()).hexdigest()
         row = {
             KEY: key, 'Title': f'SICOOB {key}', 'INSTITUICAO': 'SICOOB', 'OPERACAO': 'DÉBITO',
             'VALOR': money(entry.get('valor')), 'DATAPAGAMENTO': f'{paid.isoformat()}T12:00:00Z',
             'CONTAPAGADORA': account, 'DESCRICAO': (description or 'DÉBITO SICOOB')[:255],
             'REFERENCIABANCARIA': reference[:255], 'ORIGEMMOVIMENTACAO': 'SICOOB',
-            'RAZAOSOCIALRECEBEDOR': (bank_name or (names.get(document) if not re.search(r'\bPIX\b', label) else '') or UNKNOWN)[:255],
         }
+        receiver = bank_name if is_pix else bank_name or names.get(document) or UNKNOWN
+        if receiver:
+            row['RAZAOSOCIALRECEBEDOR'] = receiver[:255]
         if document:
             row['DOCUMENTORECEBEDOR'] = document
         records.append(row)
@@ -173,7 +191,7 @@ def import_movements(fetch, save, start, end, account, names):
     for row in records.values():
         created = save(row)
         counts['inserted' if created else 'existing'] += 1
-        counts['unidentified'] += row['RAZAOSOCIALRECEBEDOR'] == UNKNOWN
+        counts['unidentified'] += row.get('RAZAOSOCIALRECEBEDOR') in (None, UNKNOWN)
     return counts
 
 
