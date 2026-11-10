@@ -997,6 +997,23 @@ function writePendingProvisionReminder(account, value) {
   }
 }
 
+function pendingProvisionLinkStorage(account, update, required = false) {
+  const key = pendingProvisionStorageKey(account);
+  if (!key && !required) return [];
+  const storageKey = `${key}:launch-link`;
+  try {
+    const stored = JSON.parse(globalThis.localStorage?.getItem(storageKey) || '[]');
+    const entries = Array.isArray(stored) ? stored.filter(entry => [entry?.id, entry?.childId, entry?.launchId]
+      .every(id => typeof id === 'string' && /^[1-9]\d{0,14}$/.test(id))) : [];
+    if (required && (!key || !globalThis.localStorage)) throw new Error('Armazenamento indisponível.');
+    if (update) globalThis.localStorage?.setItem(storageKey, JSON.stringify(update(entries)));
+    return entries;
+  } catch {
+    if (required) throw new Error('Não foi possível guardar a retomada do vínculo neste dispositivo. Reabra a tela e tente novamente.');
+    return [];
+  }
+}
+
 function documentLineSelectionStorageKey(account) {
   const id = String(account?.homeAccountId || account?.username || "").trim();
   return id ? `${DOCUMENT_LINE_SELECTION_KEY}:${id}` : "";
@@ -1823,6 +1840,7 @@ export function createAppController({
   let pendingProvisionDateEditValue = "";
   let pendingProvisionDateEditError = "";
   let pendingProvisionDateEditBusy = false;
+  let pendingProvisionLink = null;
   let pendingProvisionDeletion = null;
   let pendingProvisionDeletionContext = null;
   let pendingProvisionDeletionRevision = 0;
@@ -2161,6 +2179,7 @@ export function createAppController({
   }
 
   function clearPendingProvisionAttachmentState({ clearData = false } = {}) {
+    pendingProvisionLink = null;
     pendingProvisionDeletionRevision += 1;
     pendingProvisionDeletion = null;
     pendingProvisionDeletionContext = null;
@@ -4431,6 +4450,99 @@ export function createAppController({
     }
   }
 
+  function openPendingProvisionLink(paymentId) {
+    const id = String(paymentId || '').trim();
+    const row = pendingProvisionSnapshot?.rows?.find(item => String(item?.id) === id);
+    if (!account || stopped || !row || pendingProvisionLink || pendingProvisionDeletion || pendingProvisionReminderOpen
+      || pendingProvisionDateEditPaymentId || pendingUploadBusy() || pendingProvisionSettlementPaymentId
+      || (row.sourceKind || pendingProvisionSnapshot.sourceKind) !== 'provision-description') return false;
+    pendingProvisionLink = { id, supplier: row.supplier, status: 'entry', launchId: '', childId: '' };
+    render();
+    return true;
+  }
+
+  function resumePendingProvisionLink(id, launchId) {
+    if (!account || stopped || !pendingProvisionSnapshot || pendingProvisionLink || pendingProvisionReminderOpen
+      || pendingProvisionDeletion || pendingProvisionDateEditPaymentId || pendingUploadBusy() || pendingProvisionSettlementPaymentId) return false;
+    const recovery = pendingProvisionLinkStorage(account).find(entry => entry.id === id && entry.launchId === launchId);
+    if (!recovery) return false;
+    const row = pendingProvisionSnapshot.rows.find(item => String(item.id) === id);
+    pendingProvisionLink = { ...recovery, supplier: row?.supplier, recovery, status: 'entry' };
+    return runPendingProvisionLink(recovery.launchId);
+  }
+
+  function closePendingProvisionLink() {
+    if (!pendingProvisionLink || pendingProvisionLink.status === 'saving') return false;
+    pendingProvisionLink = null;
+    render();
+    return true;
+  }
+
+  async function runPendingProvisionLink(value, save = false) {
+    const link = pendingProvisionLink;
+    if (!account || stopped || !link || ['loading', 'saving', 'success'].includes(link.status)
+      || save && !link.preview?.children.some(row => row.id === value)
+      || link.recovery && value !== (save ? link.recovery.childId : link.recovery.launchId)) return false;
+    const targetAccount = account, targetRevision = sessionRevision;
+    const activeLink = {
+      ...link, error: '', status: save ? 'saving' : 'loading', childId: save ? value : link.recovery?.childId || '',
+      launchId: save ? link.launchId : String(value ?? '').trim(), preview: save ? link.preview : null,
+    };
+    pendingProvisionLink = activeLink;
+    const current = () => !stopped && account === targetAccount && sessionRevision === targetRevision
+      && pendingProvisionLink === activeLink;
+    render();
+    try {
+      const data = await getPendingProvisionAttachmentsData(targetAccount, targetRevision, 'provision-description');
+      if (!current()) return false;
+      if (!save) {
+        const preview = await data.previewLaunchLink(link.id, activeLink.launchId);
+        if (!current()) return false;
+        if (link.recovery && !preview.children.some(row => row.id === link.recovery.childId)) {
+          throw new Error('A provisão deste vínculo mudou desde a confirmação. Confira os registros.');
+        }
+        pendingProvisionLink = { ...activeLink, preview, status: 'ready' };
+      } else {
+        const isOperation = entry => entry.id === link.id && entry.launchId === link.launchId && entry.childId === value;
+        const result = await data.saveLaunchLink(link.preview, value, {
+          rememberOperation: operation => {
+            if (!current()) throw new Error('A sessão Microsoft foi encerrada.');
+            pendingProvisionLinkStorage(targetAccount, entries => [...entries.filter(entry => !isOperation(entry)), operation], true);
+          },
+        });
+        if (!current()) return false;
+        if (result?.id !== link.id || !result.paidDate) throw new Error('A baixa não foi confirmada pelo SharePoint.');
+        pendingProvisionLinkStorage(targetAccount, entries => entries.filter(entry => !isOperation(entry)));
+        const snapshot = pendingProvisionSnapshot;
+        const formatAmount = value => Number.isFinite(value)
+          ? new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(value) : null;
+        const deferredRows = [...(snapshot.deferredRows || [])];
+        const rows = snapshot.rows.flatMap(row => {
+          if (String(row.id) !== link.id) return [row];
+          if (result.parentPaid) return [];
+          const cutoff = snapshot.openedManually ? provisionDayOffset(snapshot.today, 2) : pendingProvisionAutomaticCutoff(snapshot.today);
+          const updated = { ...row, dueDate: result.dueDate, pendingChildIds: result.pendingChildIds,
+            amountDueDisplay: formatAmount(result.amountDue), amountPaidDisplay: formatAmount(result.amountPaid) };
+          if (!cutoff || result.dueDate <= cutoff) return [updated];
+          deferredRows.push(updated);
+          return [];
+        });
+        Object.assign(snapshot, { rows, deferredRows, count: rows.length,
+          totalsUnavailable: rows.some(row => row.amountDueDisplay === null || row.total == null || row.total === '') });
+        pendingProvisionAttachmentStateRevision += 1;
+        pendingProvisionLink = { ...activeLink, status: 'success', result };
+      }
+      render();
+      return true;
+    } catch (error) {
+      if (!current()) return false;
+      pendingProvisionLink = { ...activeLink, status: 'error',
+        error: error?.message || 'Não foi possível confirmar o vínculo. Tente novamente.' };
+      render();
+      return false;
+    }
+  }
+
   async function settlePendingProvision(paymentId) {
     const id = String(paymentId || "").trim();
     const row = pendingProvisionSnapshot?.rows?.find(item => String(item?.id ?? "").trim() === id);
@@ -5358,6 +5470,8 @@ export function createAppController({
       pendingProvisionDateEditError,
       pendingProvisionDateEditBusy,
       pendingProvisionDeletion,
+      pendingProvisionLink,
+      pendingProvisionLinkRecoveries: pendingProvisionSnapshot ? pendingProvisionLinkStorage(account) : null,
       pendingProvisionUploads: pendingProvisionUploadsForView(),
       pendingProvisionUploadsRevision,
       signaturePlacement,
@@ -12677,6 +12791,11 @@ export function createAppController({
     bind('cancel-pending-provision-deletion', cancelPendingProvisionDeletion);
     bind('confirm-pending-provision-deletion', command => confirmPendingProvisionDeletion(command.paymentId));
     bind("settle-pending-provision", command => settlePendingProvision(command.paymentId));
+    bind('open-pending-provision-link', command => openPendingProvisionLink(command.paymentId));
+    bind('close-pending-provision-link', () => closePendingProvisionLink());
+    bind('resume-pending-provision-link', command => resumePendingProvisionLink(command.paymentId, command.value));
+    bind('lookup-pending-provision-launch', command => runPendingProvisionLink(command.value));
+    bind('confirm-pending-provision-link', command => runPendingProvisionLink(command.value, true));
     bind("toggle-pending-provision-attachments", command => togglePendingProvisionAttachments(command.paymentId));
     bind("retry-pending-provision-attachments", command => retryPendingProvisionAttachments(command.paymentId));
     bind("open-pending-provision-attachment", command => openPendingProvisionAttachment(command.paymentId, command.fileName));

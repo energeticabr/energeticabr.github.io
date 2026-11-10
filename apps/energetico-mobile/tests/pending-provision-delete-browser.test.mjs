@@ -13,8 +13,10 @@ test('pending provision X and confirmation fit phone/Windows; No preserves and Y
   const chrome = [process.env.CHROME_BIN, 'C:\\Program Files\\Google\\Chrome\\Application\\chrome.exe', '/usr/bin/google-chrome'].find(path => path && existsSync(path));
   if (!chrome) return t.skip('Chrome unavailable');
   const cache = await mkdtemp(join(tmpdir(), 'pending-delete-vite-'));
-  const server = await createServer({root:resolve(fileURLToPath(new URL('..', import.meta.url))), cacheDir:join(cache,'cache'),
-    optimizeDeps:{noDiscovery:true},server:{host:'127.0.0.1',port:0,hmr:false,watch:null},logLevel:'silent'});
+  const root = resolve(fileURLToPath(new URL('..', import.meta.url)));
+  const server = await createServer({root, cacheDir:join(cache,'cache'),
+    optimizeDeps:{noDiscovery:true,include:['decimal.js']},
+    server:{host:'127.0.0.1',port:0,hmr:false,watch:null,fs:{allow:[resolve(root,'../..'),cache]}},logLevel:'silent'});
   try {
     await server.listen();
     for (const width of [320, 390, 1365]) {
@@ -25,6 +27,7 @@ test('pending provision X and confirmation fit phone/Windows; No preserves and Y
         const dom = new JSDOM(result.stdout);
         const layout = JSON.parse(dom.window.document.documentElement.dataset.layout); dom.window.close();
         assert.equal(layout.underCheck,true); assert.equal(layout.redFill,'rgb(180, 35, 24)');
+        assert.equal(layout.linkUnderCheck,true, `${width}px`); assert.equal(layout.linkDialogFits,true, `${width}px`);
         assert.deepEqual(layout.children,['332','333','334']);
         assert.equal(layout.afterNoRows,1); assert.equal(layout.noWrites,0);
         assert.equal(layout.afterYesRows,0); assert.equal(layout.yesWrites,1);

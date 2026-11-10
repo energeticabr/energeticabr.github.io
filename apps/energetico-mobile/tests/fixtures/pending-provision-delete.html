@@ -23,10 +23,27 @@ render();
 const frame = () => new Promise(resolve => requestAnimationFrame(() => requestAnimationFrame(resolve)));
 await document.fonts.ready; await frame();
 const check = root.querySelector('[data-action="settle-pending-provision"]');
-const remove = check.nextElementSibling;
+const link = check.nextElementSibling;
+const remove = root.querySelector('[data-action="request-pending-provision-deletion"]');
+const linkRect = link.getBoundingClientRect(), checkRect = check.getBoundingClientRect();
+evidence.linkUnderCheck = linkRect.top >= checkRect.bottom && linkRect.left === checkRect.left
+  && link.scrollWidth <= link.clientWidth + 1 && link.textContent === 'Vincular';
 evidence.underCheck = remove.getBoundingClientRect().top >= check.getBoundingClientRect().bottom;
 evidence.redFill = getComputedStyle(remove).backgroundColor;
-remove.click(); await frame();
+view.on('open-pending-provision-link', ({paymentId}) => {
+  state.pendingProvisionLink = { id: paymentId, status: 'ready', launchId: '81', supplier: 'FORNECEDOR FICTÍCIO DE TESTE',
+    preview: { launch: {id:'81', supplier:'FORNECEDOR FICTÍCIO DE TESTE', total:180, paidDate:'2026-10-15'},
+      children:[{id:'332', product:'PRODUTO FICTÍCIO COM UM NOME COMPRIDO PARA VERIFICAR O CAMPO DE SELEÇÃO', total:180}] } };
+  render();
+});
+view.on('close-pending-provision-link', () => { state.pendingProvisionLink = null; render(); });
+link.click(); await frame();
+const linkDialog = root.querySelector('[data-pending-provision-link-dialog] [role="dialog"]');
+const dialogRect = linkDialog.getBoundingClientRect();
+evidence.linkDialogFits = dialogRect.left >= 0 && dialogRect.right <= innerWidth + 1
+  && dialogRect.top >= 0 && dialogRect.bottom <= innerHeight + 1 && linkDialog.scrollWidth <= linkDialog.clientWidth + 1;
+root.querySelector('[data-action="close-pending-provision-link"]').click(); await frame();
+root.querySelector('[data-action="request-pending-provision-deletion"]').click(); await frame();
 evidence.children = [...root.querySelectorAll('[data-deletion-child-id]')].map(el => el.dataset.deletionChildId);
 root.querySelector('[data-action="cancel-pending-provision-deletion"]').click(); await frame();
 evidence.afterNoRows = root.querySelectorAll('.chat-pending-provision--payment').length;
@@ -35,7 +52,7 @@ root.querySelector('[data-action="request-pending-provision-deletion"]').click()
 root.querySelector('[data-action="confirm-pending-provision-deletion"]').click(); await frame();
 evidence.afterYesRows = root.querySelectorAll('.chat-pending-provision--payment').length;
 state.pendingProvisions = snapshot; render(); await frame();
-if (new URLSearchParams(location.search).get('view') !== 'list') {
+if (new URLSearchParams(location.search).get('view') === 'confirm') {
   root.querySelector('[data-action="request-pending-provision-deletion"]').click(); await frame();
 }
 const panel = root.querySelector('[role="dialog"]'), rect = panel.getBoundingClientRect();

@@ -2518,14 +2518,15 @@ function groupedProvisionsWithBlockedAmounts() {
   ] };
 }
 
-test('grouped pending rows put a red deletion X immediately below the green check, including unknown totals', () => {
+test('grouped pending rows keep the red deletion X after the settlement and link actions, including unknown totals', () => {
   const dom = new JSDOM(renderChatMarkup(signedInState({ pendingProvisions: groupedProvisionsWithBlockedAmounts() })));
   const actions = dom.window.document.querySelector('[data-payment-id="306"] .chat-pending-provision__actions');
   const check = actions.querySelector('[data-action="settle-pending-provision"]');
-  assert.equal(check.nextElementSibling.dataset.action, 'request-pending-provision-deletion');
-  assert.ok(check.nextElementSibling.classList.contains('chat-pending-provision__delete'));
-  assert.equal(check.nextElementSibling.disabled, false);
-  assert.match(check.nextElementSibling.getAttribute('aria-label'), /306/);
+  const remove = actions.querySelector('[data-action="request-pending-provision-deletion"]');
+  assert.ok(check.compareDocumentPosition(remove) & dom.window.Node.DOCUMENT_POSITION_FOLLOWING);
+  assert.ok(remove.classList.contains('chat-pending-provision__delete'));
+  assert.equal(remove.disabled, false);
+  assert.match(remove.getAttribute('aria-label'), /306/);
   dom.window.close();
 });
 
@@ -2838,6 +2839,53 @@ test("exibe um check de baixa antes da seta e associa a ação ao pagamento corr
   assert.equal(checks.length, 2);
   assert.ok(checks.every(button => button.disabled), "não deve permitir iniciar outro pagamento durante a baixa");
   busyDom.window.close();
+});
+
+test("Vincular fica logo abaixo do check do descritivo e confirma somente o lançamento conferido", () => {
+  const dom = new JSDOM('<main id="app"></main>');
+  const root = dom.window.document.querySelector('#app');
+  const view = createChatView(root);
+  const snapshot = { due: true, rows: [
+    { id: '21', sourceKind: 'provision-description', supplier: 'Fornecedor teste', dueDate: '2026-11-10' },
+    { id: '22', supplier: 'Provisão avulsa', dueDate: '2026-11-10' },
+  ] };
+  const calls = [];
+  for (const type of ['open-pending-provision-link', 'lookup-pending-provision-launch', 'confirm-pending-provision-link']) {
+    view.on(type, command => calls.push(command));
+  }
+  view.render(signedInState({ pendingProvisions: snapshot }));
+  const button = root.querySelector('[data-action="open-pending-provision-link"]');
+  assert.equal(root.querySelectorAll('[data-action="open-pending-provision-link"]').length, 1);
+  assert.equal(button.textContent, 'Vincular');
+  assert.equal(button.previousElementSibling.dataset.action, 'settle-pending-provision');
+  assert.equal(button.nextElementSibling.dataset.action, 'request-pending-provision-deletion');
+  button.click();
+  assert.equal(calls[0].paymentId, '21');
+
+  const link = { id: '21', status: 'entry', launchId: '', supplier: 'Fornecedor teste' };
+  view.render(signedInState({ pendingProvisions: snapshot, pendingProvisionLink: link }));
+  root.querySelector('#pending-provision-launch-id').value = '81';
+  view.render(signedInState({ pendingProvisions: snapshot, pendingProvisionLink: link, pendingProvisionAttachmentRevision: 1 }));
+  assert.equal(root.querySelector('#pending-provision-launch-id').value, '81');
+  root.querySelector('[data-action="lookup-pending-provision-launch"]').click();
+  assert.equal(calls[1].value, '81');
+
+  const preview = { launch: { id: '81', supplier: 'Fornecedor teste', total: 300, paidDate: '2026-11-09' },
+    children: [{ id: '41', product: 'Contabilidade', total: 300 }, { id: '42', product: 'Outro', total: 100 }] };
+  view.render(signedInState({ pendingProvisions: snapshot, pendingProvisionLink: { ...link, status: 'ready', launchId: '81', preview } }));
+  assert.match(root.querySelector('[data-pending-provision-link-dialog]').textContent, /Pago em 09\/11\/2026/);
+  root.querySelector('[data-action="confirm-pending-provision-link"]').click();
+  assert.equal(calls.length, 2);
+  root.querySelector('#pending-provision-link-child').value = '41';
+  root.querySelector('[data-action="confirm-pending-provision-link"]').click();
+  assert.equal(calls[2].value, '41');
+
+  root.querySelector('#pending-provision-launch-id').value = '82';
+  root.querySelector('[data-action="confirm-pending-provision-link"]').click();
+  assert.equal(calls[3].type, 'lookup-pending-provision-launch');
+  assert.equal(calls[3].value, '82');
+  view.destroy();
+  dom.window.close();
 });
 
 test("oferece lápis de edição de vencimento antes do check da provisão", () => {
