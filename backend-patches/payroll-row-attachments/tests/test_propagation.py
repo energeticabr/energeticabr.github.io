@@ -54,12 +54,18 @@ class Connector:
         return {**copy.deepcopy(self.items[PARENT, int(item)]),
                 'CHILDREN': [copy.deepcopy(self.items[CHILD, i]) for i in (11, 12)]}
 
+    def _find_item(self, token, *, target_list, idempotency_field):
+        item = self.tokens.get((target_list, token))
+        return {'Id': item} if item is not None else None
+
     def ensure_item(self, token, fields, target_list=None, **kwargs):
         key = target_list, token
         if key not in self.tokens:
             item = 500 + len(self.tokens)
             self.tokens[key] = item
             self.items[target_list, item] = copy.deepcopy(fields)
+            if kwargs.get('idempotency_field'):
+                self.items[target_list, item][kwargs['idempotency_field']] = token
             self.writes.append(('create', target_list, item))
             if target_list == 'LANCAMENTOS' and self.bad_launch:
                 self.items[target_list, item]['IDPGTOAGENDADO'] = '999'
