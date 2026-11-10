@@ -206,7 +206,19 @@ assert.deepEqual(shortcuts.map(s=>s.action),['open-pending-provisions','open-sic
       })()`);
       assert.deepEqual(rhidPosition,{above:true,aligned:true,label:'RHID',hit:true});
       await evaluate(`document.querySelector('.chat-main-rhid-shortcut').click()`);
-      await evaluate(`document.querySelector('[data-action=rhid-mascot-period]').click()`);
+      const rhidDayNav=await evaluate(`(()=>{
+        const report=document.querySelector("[data-rhid-mascot-report]");
+        const nav=report.querySelector(".chat-rhid-date-navigation");
+        const [prev,next]=[...nav.querySelectorAll("button")].map(button=>button.getBoundingClientRect());
+        const date=nav.querySelector("time"), label=date.getBoundingClientRect();
+        const filters=report.querySelector(".chat-rhid-mascot__filters").getBoundingClientRect();
+        return {date:date.textContent, ordered:prev.right<=label.left&&label.right<=next.left,
+          above:nav.getBoundingClientRect().bottom<=filters.top, fits:prev.left>=report.getBoundingClientRect().left&&next.right<=report.getBoundingClientRect().right,
+          touch:[prev,next].every(r=>r.width>=44&&r.height>=44)};
+      })()`);
+      assert.deepEqual(rhidDayNav,{date:"09/11/2026",ordered:true,above:true,fits:true,touch:true});
+      await evaluate(`document.querySelector("[data-action=rhid-mascot-period]").click()`);
+      assert.equal(await evaluate(`!document.querySelector("[data-rhid-mascot-report] .chat-rhid-date-navigation")`),true);
       const rhidFit=await evaluate(`(()=>{
         const report=document.querySelector('.chat-rhid-mascot'), transcript=document.querySelector('.chat-transcript');
         const composer=document.querySelector('.chat-composer'), adjusted=report.querySelector('.chat-rhid-attendance-card__cluster--added');

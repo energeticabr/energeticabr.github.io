@@ -2943,7 +2943,7 @@ export function createAppController({
       comparisonError: false, comparisonAuthorizationRequired: false });
     render();
     try {
-      const months = rhidMascotMonths(start, end, report.today);
+      const months = mode === 'period' ? rhidMascotMonths(start, end, report.today) : [];
       const comparison = withTimeout(report.source.then(source => source.loadRhidPresences({ start, end, signal: query.signal })),
         rhidReportTimeoutMs, 'A consulta do Descritivo Presença demorou demais.').then(
         rows => ({ rows }), error => ({ rows: null, authorizationRequired: error?.code === 'AUTH_REQUIRED' }),
@@ -3014,7 +3014,7 @@ export function createAppController({
       return auth.getToken(scopes);
     } }));
     loadRhidMascotDirectory(report);
-    return loadRhidMascotPeriod(today, today, 'today');
+    return loadRhidMascotPeriod(today, today, 'day');
   }
 
   function loadRhidMascotDirectory(report) {
@@ -12698,11 +12698,15 @@ export function createAppController({
       render();
       return true;
     });
-    const loadRhidMascotToday = () => {
+    bind('rhid-mascot-today', () => {
       const today = provisionDateKey();
-      return loadRhidMascotPeriod(today, today, 'today');
-    };
-    bind('rhid-mascot-today', loadRhidMascotToday);
+      return loadRhidMascotPeriod(today, today, 'day');
+    });
+    bind('rhid-mascot-day', ({ value }) => {
+      if (rhidMascot?.mode !== 'day') return false;
+      const day = shiftRhidReportDate(rhidMascot.start, Number(value));
+      return isValidRhidReportDate(day) ? loadRhidMascotPeriod(day, day, 'day') : false;
+    });
     bind('rhid-mascot-period', () => {
       const today = provisionDateKey();
       return loadRhidMascotPeriod(`${today.slice(0, 7)}-01`, today, 'period');
@@ -12710,7 +12714,7 @@ export function createAppController({
     bind('rhid-mascot-apply', ({ start, end }) => loadRhidMascotPeriod(start, end, 'period'));
     bind('rhid-mascot-reload', () => {
       if (!rhidMascot) return false;
-      return rhidMascot.mode === 'today' ? loadRhidMascotToday() : loadRhidMascotPeriod(rhidMascot.start, rhidMascot.end, 'period');
+      return loadRhidMascotPeriod(rhidMascot.start, rhidMascot.end, rhidMascot.mode);
     });
     bind('rhid-mascot-filter', ({ field, value }) => {
       if (!rhidMascot || !Object.hasOwn(rhidMascotFilters, field)) return false;
