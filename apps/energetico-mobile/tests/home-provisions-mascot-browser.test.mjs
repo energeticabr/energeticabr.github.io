@@ -88,6 +88,7 @@ assert.deepEqual(shortcuts.map(s=>s.action),['open-pending-provisions','open-sic
           visible: !report.hidden && dialog.width > 0 && dialog.height > 0,
           portrait: report.dataset.reportPortrait,
           text: report.querySelector('tbody tr')?.textContent,
+          transactionType: report.querySelector('tbody tr')?.cells[2].textContent,
           receiptSize: report.querySelector('.sicoob-transaction-receipt')?.offsetHeight,
           fits: content.clientHeight > 70 && content.scrollWidth <= content.clientWidth + 1,
         };
@@ -97,7 +98,8 @@ assert.deepEqual(shortcuts.map(s=>s.action),['open-pending-provisions','open-sic
       assert.ok(sicoobFit?.visible && sicoobFit.fits && sicoobFit.closed, JSON.stringify(sicoobFit));
       assert.equal(sicoobFit.portrait, String(width < 844));
       assert.ok(sicoobFit.receiptSize >= 44);
-      assert.match(sicoobFit.text, /Loja Exemplo.*PIX ENVIADO.*1\.250,99/);
+      assert.match(sicoobFit.text, /Loja Exemplo.*1\.250,99/);
+      assert.equal(sicoobFit.transactionType, 'Pix');
       assert.ok(commercialTop.buttons.every((b,i)=>b.width>=44&&b.height>=44&&Math.abs(b.y-commercialTop.row.y)<=1&&b.x>=0&&b.right<=width&&(!i||b.x>=commercialTop.buttons[i-1].right+8)),JSON.stringify(commercialTop));
       const pinkActions=mascotFit.filter(m=>['open-cargos-table','open-attendance-summary','open-stage-progress','open-supplier-payroll-report','open-trancid-report','open-supplier-workforce-report','open-contractor-control-report','open-pending-supplier-payments-report','open-pending-work-diaries-report'].includes(m.action));
       assert.deepEqual(pinkActions.map(m=>m.action),['open-cargos-table','open-attendance-summary','open-stage-progress','open-supplier-payroll-report','open-trancid-report','open-supplier-workforce-report','open-contractor-control-report','open-pending-supplier-payments-report','open-pending-work-diaries-report']);

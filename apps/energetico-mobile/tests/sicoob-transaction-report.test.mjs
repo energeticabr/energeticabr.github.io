@@ -18,6 +18,47 @@ const payment = (id, fields = {}) => ({
   },
 });
 
+test('summarizes bank descriptions in the report and PDF while retaining full-text search', async () => {
+  const dom = new JSDOM('<main id="app"></main>');
+  const examples = [
+    ['PIX EMITIDO OUTRA IF | Pagamento Pix identificador-exemplo', 'Pix'],
+    ['DÉB. PAGAMENTO DE BOLETO INTERCREDIS', 'Boleto'],
+    ['DÉB.TIT.COMPE EFETIVADO', 'Boleto'],
+    ['TED ENVIADA', 'TED'],
+    ['DOC EMITIDO', 'DOC'],
+    ['DÉB. AUTOMÁTICO', 'Débito automático'],
+    ['COMPRA NO CARTÃO', 'Cartão'],
+    ['PAGAMENTO CONVÊNIO', 'Convênio'],
+    ['TRANSFERÊNCIA ENTRE CONTAS', 'Transferência'],
+    ['PAGTO SERVIÇO', 'Pagamento'],
+  ];
+  const view = createSicoobTransactionReportView({
+    document: dom.window.document,
+    data: { async loadSnapshot() {
+      return { rows: examples.map(([description], index) => payment(index + 1, { DESCRICAO: description })) };
+    } },
+  });
+  try {
+    await view.open();
+    assert.deepEqual([...view.element.querySelectorAll('tbody tr')].map(row => row.cells[2].textContent),
+      examples.map(([, label]) => label).reverse());
+    const restore = await view.preparePrint();
+    const pdf = captureFilteredReport(view.element);
+    const table = pdf.pages.flatMap(page => page.blocks).find(block => block.type === 'table');
+    assert.deepEqual(table.rows.filter(row => !row.header).map(row => row.cells[2].runs.map(run => run.text).join('')),
+      examples.map(([, label]) => label).reverse());
+    restore();
+    const search = view.element.querySelector('input[type="search"]');
+    search.value = 'identificador-exemplo';
+    search.dispatchEvent(new dom.window.Event('input'));
+    assert.equal(view.element.querySelectorAll('tbody tr').length, 1);
+    assert.equal(view.element.querySelector('tbody tr').cells[2].textContent, 'Pix');
+  } finally {
+    view.destroy();
+    dom.window.close();
+  }
+});
+
 test('shows all imported payments across pages and prepares all filtered rows for PDF', async () => {
   const dom = new JSDOM('<main id="app"><button>Início</button></main>');
   const { document } = dom.window;
@@ -48,7 +89,7 @@ test('shows all imported payments across pages and prepares all filtered rows fo
     const pdf = captureFilteredReport(root);
     const table = pdf.pages.flatMap(page => page.blocks).find(block => block.type === 'table');
     assert.equal(table.rows.filter(row => !row.header).length, 52);
-    assert.equal(table.rows[1].cells[2].runs.map(run => run.text).join(''), 'TED DÉBITO');
+    assert.equal(table.rows[1].cells[2].runs.map(run => run.text).join(''), 'TED');
     restore();
     assert.equal(rowCount(), 2);
     const search = root.querySelector('input[type="search"]');
