@@ -1,0 +1,203 @@
+--- a/worker/launch_gallery.py
++++ b/worker/launch_gallery.py
+@@ -304,7 +304,9 @@
+         if operation == "snapshot":
+             return self._snapshot(payload)
+         item_id = _id(payload.get("id"))
+-        current = self._get(LAUNCHES, item_id, READ_FIELDS)
++        editing_supplier = (operation == "update" and isinstance(payload.get("fields"), dict)
++                            and "FORNECEDOR" in payload["fields"])
++        current = self._get(LAUNCHES, item_id, [*READ_FIELDS, "IDFOLHA"] if editing_supplier else READ_FIELDS)
+         if operation == "schema":
+             scope = payload.get("scope")
+             supplied = payload.get("fields")
+@@ -368,7 +370,10 @@
+                     combined,
+                     check_options=False,
+                 )
+-            self._write(item_id, values, current)
++            if editing_supplier and self._supplier_key(values["FORNECEDOR"]) != self._supplier_key(current.get("FORNECEDOR")):
++                self._write_supplier_change(item_id, values, current)
++            else:
++                self._write(item_id, values, current)
+         elif operation == "delete":
+             self.sharepoint._request("POST", self._item_endpoint(LAUNCHES, item_id), headers={
+                 "IF-MATCH": self._etag(current), "X-HTTP-Method": "DELETE"})
+@@ -739,6 +744,177 @@
+         self.sharepoint._request("POST", self._item_endpoint(LAUNCHES, item_id), json=body,
+             headers={"Content-Type": "application/json;odata=nometadata", "IF-MATCH": self._etag(current), "X-HTTP-Method": "MERGE"})
+
++    @staticmethod
++    def _supplier_key(value):
++        return unicodedata.normalize("NFC", str(value or "")).strip().casefold()
++
++    @staticmethod
++    def _payroll_month(value):
++        raw = str(value or "").strip()
++        match = re.fullmatch(r"(\d{1,2})[/-](\d{4})", raw)
++        if match:
++            month, year = map(int, match.groups())
++        else:
++            match = re.fullmatch(r"(\d{4})[/-](\d{1,2})(?:[/-]\d{1,2}(?:T.*)?)?", raw)
++            if not match:
++                return None
++            year, month = map(int, match.groups())
++        return (year, month) if year and 1 <= month <= 12 else None
++
++    def _payroll_transfer_plan(self, item_id, supplier, current):
++        line_fields = ("FORNECEDOR", "IDFOLHA", "IDLANCAMENTO")
++        sheet_fields = ("FORNECEDOR", "MESREFERENCIA", "STATUS")
++        # IDLANCAMENTO is indexed text in FOLHAPGTO. Reject schema drift rather
++        # than interpreting a failed/incorrect lookup as an unlinked launch.
++        link = self._field("FOLHAPGTO", "IDLANCAMENTO")
++        if link.get("TypeAsString") != "Text":
++            _fail("payroll_schema", "A coluna IDLANCAMENTO da folha mudou de formato.", 503)
++        linked = self._rows("FOLHAPGTO", ["IDLANCAMENTO"], f"{link['InternalName']} eq {_literal(item_id)}")
++        direct = current.get("IDFOLHA")
++        if not linked and _blank(direct):
++            return [], None
++        target_key, old_key = self._supplier_key(supplier), self._supplier_key(current.get("FORNECEDOR"))
++        if not target_key:
++            _fail("payroll_supplier_required", "Selecione o fornecedor que receberá o lançamento na folha.", 422)
++        for label in line_fields:
++            self._field("FOLHAPGTO", label)
++        for label in sheet_fields:
++            self._field("IDFOLHA", label)
++
++        def payroll_id(value):
++            if isinstance(value, float) and value.is_integer():
++                value = int(value)
++            return _id(str(value).strip())
++
++        sheets = {}
++
++        def destination(sheet_id, owner):
++            if sheet_id not in sheets:
++                sheets[sheet_id] = self._get("IDFOLHA", sheet_id, sheet_fields)
++            original = sheets[sheet_id]
++            month = self._payroll_month(original.get("MESREFERENCIA"))
++            if not month or not owner or self._supplier_key(original.get("FORNECEDOR")) != owner:
++                _fail("payroll_sheet_mismatch", "A folha de origem não corresponde ao fornecedor ou à competência do vínculo.", 422)
++            matches = [row for row in self._catalog("IDFOLHA", sheet_fields)
++                       if self._supplier_key(row.get("FORNECEDOR")) == target_key
++                       and self._payroll_month(row.get("MESREFERENCIA")) == month
++                       and self._supplier_key(row.get("STATUS")) in {"", "ativo"}]
++            reference = f"{month[1]:02d}/{month[0]}"
++            if len(matches) != 1:
++                message = (f"O novo fornecedor não tem folha disponível para {reference}."
++                           if not matches else f"O novo fornecedor tem mais de uma folha para {reference}.")
++                _fail("payroll_destination", message, 422)
++            target = payroll_id(matches[0]["ID"])
++            if target not in sheets:
++                sheets[target] = self._get("IDFOLHA", target, sheet_fields)
++            if any(sheets[target].get(key) != matches[0].get(key) for key in sheet_fields):
++                _fail("conflict", "A folha de destino mudou; atualize o lançamento e tente novamente.", 409)
++            return target
++
++        changes, targets = [], set()
++        for summary in linked:
++            line_id = payroll_id(summary["ID"])
++            line = self._get("FOLHAPGTO", line_id, line_fields)
++            owner = self._supplier_key(line.get("FORNECEDOR"))
++            if line.get("IDLANCAMENTO") != item_id or owner not in {old_key, target_key}:
++                _fail("payroll_link_mismatch", "O pagamento vinculado está em nome de outro fornecedor ou lançamento.", 422)
++            source = payroll_id(line.get("IDFOLHA"))
++            target = destination(source, owner)
++            targets.add(target)
++            if owner == target_key and source != target:
++                _fail("payroll_link_mismatch", "O pagamento já está em outra folha do novo fornecedor.", 422)
++            if source != target or line.get("FORNECEDOR") != supplier:
++                replacement = {"FORNECEDOR": supplier, "IDFOLHA": target}
++                self._etag(line)
++                self._body("FOLHAPGTO", replacement)
++                changes.append((line, replacement))
++
++        if not _blank(direct):
++            direct = payroll_id(direct)
++            if direct not in sheets:
++                sheets[direct] = self._get("IDFOLHA", direct, sheet_fields)
++            owner = self._supplier_key(sheets[direct].get("FORNECEDOR"))
++            if owner not in {old_key, target_key}:
++                _fail("payroll_sheet_mismatch", "O lançamento já aponta para a folha de outro fornecedor.", 422)
++            direct_target = destination(direct, owner)
++            if targets and direct_target not in targets:
++                _fail("payroll_sheet_mismatch", "As competências da folha e dos pagamentos vinculados não correspondem.", 422)
++            return changes, direct_target
++        return changes, next(iter(targets)) if len(targets) == 1 else None
++
++    def _merge_payroll_line(self, item, values):
++        return self.sharepoint._request("POST", self._item_endpoint("FOLHAPGTO", item["ID"]),
++            json=self._body("FOLHAPGTO", values), _return_response=True,
++            headers={"Content-Type": "application/json;odata=nometadata", "IF-MATCH": self._etag(item), "X-HTTP-Method": "MERGE"})
++
++    def _write_supplier_change(self, item_id, values, current):
++        changes, sheet_id = self._payroll_transfer_plan(item_id, values["FORNECEDOR"], current)
++        if sheet_id is not None:
++            meta = self._field(LAUNCHES, "IDFOLHA")
++            values["IDFOLHA"] = self._value(LAUNCHES, "IDFOLHA", sheet_id, meta, current, check_options=False)
++        if not changes:
++            return self._write(item_id, values, current)
++        self._body(LAUNCHES, values)  # Validate every write before moving the first payment.
++        applied = []
++        launch_attempted = False
++        labels = ("IDLANCAMENTO", "FORNECEDOR", "IDFOLHA")
++
++        def uncertain():
++            _fail("payroll_reassignment_unverified",
++                  "Não foi possível confirmar toda a troca na folha. Atualize o lançamento e confira o vínculo antes de tentar novamente.", 502)
++
++        try:
++            for line, replacement in changes:
++                error, tag = None, None
++                try:
++                    response = self._merge_payroll_line(line, replacement)
++                    tag = getattr(response, "headers", {}).get("ETag")
++                except requests.RequestException as exc:
++                    status = getattr(exc.response, "status_code", None)
++                    if status is not None and 400 <= status < 500 and status != 408:
++                        raise  # SharePoint rejected the write (including a version conflict).
++                    error = exc
++                try:
++                    latest = self._get("FOLHAPGTO", str(line["ID"]), labels)
++                except (requests.RequestException, LaunchGalleryError):
++                    uncertain()
++                if latest.get("IDLANCAMENTO") != item_id or any(latest.get(k) != v for k, v in replacement.items()):
++                    if error and latest.get("_etag") == line["_etag"]:
++                        raise error
++                    uncertain()
++                # MERGE can return no ETag. A single version step plus matching
++                # values is required to compensate without undoing another edit.
++                previous = re.fullmatch(r'(W/)?"(\d+)"', line["_etag"])
++                if not tag and previous:
++                    tag = f'{previous[1] or ""}"{int(previous[2]) + 1}"'
++                applied.append((line, replacement, tag))
++            launch_attempted = True
++            self._write(item_id, values, current)
++        except (requests.RequestException, LaunchGalleryError) as exc:
++            if launch_attempted or applied:
++                try:
++                    actual = self._get(LAUNCHES, item_id, values)
++                except (requests.RequestException, LaunchGalleryError):
++                    uncertain()
++                if launch_attempted and all(actual.get(key) == value for key, value in values.items()):
++                    return  # The launch MERGE completed even though the response was lost.
++                if actual.get("FORNECEDOR") != current.get("FORNECEDOR"):
++                    uncertain()
++                incomplete = False
++                for line, replacement, tag in reversed(applied):
++                    try:
++                        latest = self._get("FOLHAPGTO", str(line["ID"]), labels)
++                        if (not tag or latest.get("_etag") != tag or latest.get("IDLANCAMENTO") != item_id
++                                or any(latest.get(k) != v for k, v in replacement.items())):
++                            incomplete = True
++                            continue
++                        self._merge_payroll_line(latest, {key: line[key] for key in replacement})
++                    except (requests.RequestException, LaunchGalleryError):
++                        incomplete = True
++                if incomplete:
++                    uncertain()
++            raise exc
++
+     def _create_fields(self, operation, payload, item_id, current):
+         if operation == "payment":
+             planned = _day(payload.get("date")).isoformat()
