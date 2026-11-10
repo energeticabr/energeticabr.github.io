@@ -228,6 +228,7 @@ export function createSicoobTransactionReportView({ document: doc = globalThis.d
 
   function renderOrderLink(cell, transaction, interactive = true) {
     const linked = transaction.orderId;
+    cell.parentElement.classList.toggle('sicoob-transaction-linked', Boolean(linked));
     const value = make('span', linked ? 'sicoob-transaction-link-id' : '', linked ? `ID ${linked}` : '—');
     cell.replaceChildren(value);
     if (!interactive || !picker || sicoobOrderId(transaction.id) !== transaction.id) return;

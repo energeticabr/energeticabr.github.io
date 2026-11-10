@@ -135,6 +135,10 @@
 .sicoob-transaction-filters .ddr-filter:has(input[type="search"]) { min-width: 170px; }
 .sicoob-transaction-filters input[type="date"] { min-width: 0; }
 .sicoob-transaction-summary .ddr-metric { grid-column: span 6; }
+.sicoob-transaction-table tbody tr.sicoob-transaction-linked {
+  background: #eaf8ee;
+  print-color-adjust: exact;
+}
 .sicoob-transaction-table th:nth-child(1) { width: 12%; }
 .sicoob-transaction-table th:nth-child(2) { width: 28%; }
 .sicoob-transaction-table th:nth-child(3) { width: 11%; }
