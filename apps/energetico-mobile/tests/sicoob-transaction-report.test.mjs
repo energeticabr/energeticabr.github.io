@@ -144,3 +144,21 @@ test('Pix proof is matched to the movement ID because its bank reference can be 
     dom.window.close();
   }
 });
+
+test('Pix without a confirmed recipient is presented as pending identification', async () => {
+  const dom = new JSDOM('<main id="app"></main>');
+  const view = createSicoobTransactionReportView({
+    document: dom.window.document,
+    data: { async loadSnapshot() {
+      return { rows: [payment(1, { RAZAOSOCIALRECEBEDOR: undefined }), payment(2, { RAZAOSOCIALRECEBEDOR: 'N/A' })] };
+    } },
+  });
+  try {
+    await view.open();
+    assert.deepEqual([...view.element.querySelectorAll('tbody .ddr-supplier-name')].map(node => node.textContent),
+      ['Identificação pendente', 'Identificação pendente']);
+  } finally {
+    view.destroy();
+    dom.window.close();
+  }
+});

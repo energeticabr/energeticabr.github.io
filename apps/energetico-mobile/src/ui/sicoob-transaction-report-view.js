@@ -1,6 +1,6 @@
 import Decimal from 'decimal.js';
 import { includesSearchText, normalizeSearchText } from '../../../../portal/core/search-text.js';
-import { isImportedFinancialMovement } from '../chat/financial-gallery-models.js';
+import { financialMovementRecipient, isImportedFinancialMovement } from '../chat/financial-gallery-models.js';
 import { registrationDateKey, registrationNumber } from '../chat/registration-gallery-data.js';
 import { addReportCloseControl } from './report-close-control.js';
 import { bindReportLandscape } from './report-landscape.js';
@@ -21,7 +21,7 @@ function projectTransactions(snapshot) {
     const transaction = {
       id: String(id),
       date: registrationDateKey(fields.DATAPAGAMENTO),
-      recipient: text(fields.RAZAOSOCIALRECEBEDOR) || 'N/A',
+      recipient: financialMovementRecipient(fields),
       document: text(fields.DOCUMENTORECEBEDOR),
       operation: text(fields.OPERACAO),
       description: text(fields.DESCRICAO),
@@ -31,6 +31,7 @@ function projectTransactions(snapshot) {
       value: registrationNumber(fields.VALOR),
     };
     const isPix = /\bPIX\b/i.test(transaction.description);
+    const bankRecipient = text(fields.RAZAOSOCIALRECEBEDOR);
     const receiptName = isPix && /^\d+$/.test(transaction.id)
       ? `Comprovante-Sicoob-Pix-${transaction.id}.pdf`
       : /^\d{4,18}$/.test(transaction.reference) ? `Comprovante-Sicoob-${transaction.reference}.pdf` : '';
@@ -39,7 +40,8 @@ function projectTransactions(snapshot) {
       receiptName,
       searchText: normalizeSearchText([...Object.values(transaction), dateLabel(transaction.date)].join(' ')),
       hasReceipt: receiptName && (hasAttachments === true || (hasAttachments == null
-        && (isPix ? transaction.recipient !== 'N/A' : /\b(?:BOLETO|TIT|TITULO)\b/i.test(transaction.description)))),
+        && (isPix ? Boolean(bankRecipient && bankRecipient.toUpperCase() !== 'N/A')
+          : /\b(?:BOLETO|TIT|TITULO)\b/i.test(transaction.description)))),
     };
   }).sort((a, b) => b.date.localeCompare(a.date) || b.id.localeCompare(a.id, 'pt-BR', { numeric: true }));
 }

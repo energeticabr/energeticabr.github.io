@@ -16,7 +16,6 @@ import sync_movements as movements
 from sync_boleto_receipts import IDENTITY, LIST, RECEIVER, list_movements
 
 END_ID = re.compile(r'(?<![A-Za-z0-9])[Ee][0-9]{20}[A-Za-z0-9]{11}(?![A-Za-z0-9])')
-CPF_MASK = re.compile(r'\*{2,3}\s*\.\s*(\d{3})\s*\.\s*(\d{3})\s*-\s*\*{2,3}')
 EXTRA = (*RECEIVER, 'CONTARECEBEDOR')
 CACHE = Path('/var/lib/energetica-sicoob-movements/pix-ocr')
 
@@ -26,7 +25,7 @@ def extract_end_ids(text):
 
 
 def mask_key(value):
-    match = CPF_MASK.search(movements.text(value))
+    match = movements.PIX_MASKED_DOCUMENT.search(movements.text(value))
     return ''.join(match.groups()) if match else ''
 
 
