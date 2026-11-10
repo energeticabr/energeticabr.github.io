@@ -1,0 +1,31 @@
+--- a/worker/provision_description_settlement.py
++++ b/worker/provision_description_settlement.py
+@@ -120,6 +120,20 @@
+         **child, 'FRETE': child.get('FRETE') if _text(child.get('FRETE')) else '0',
+     }) for child in children)
+     return _currency(_sum(totals))
++
++
++def _snapshot_product_display(children):
++    values = []
++    has_observation = False
++    for child in children:
++        product = _text(child.get('PRODUTO'))
++        observation = _text(child.get('OBS'))
++        if observation:
++            values.append(f'{product or "—"} ({observation})')
++            has_observation = True
++        elif product:
++            values.append(product)
++    return {'productDisplay': ' / '.join(dict.fromkeys(values))} if has_observation else {}
+ 
+ 
+ def group_snapshot(groups, today):
+@@ -151,6 +165,7 @@
+             'dueDate': due.isoformat(), 'supplier': _text(group.get('FORNECEDOR')),
+             'branch': _text(group.get('FILIAL')), 'property': _joined(children, 'IMOVEL'),
+             'product': _joined(children, 'PRODUTO'), 'childCount': len(children),
++            **_snapshot_product_display(children),
+             'pendingChildIds': pending_ids,
+             'total': None if group.get('settlementBlocked') else str(group['VALOR TOTAL DESCRITIVO']),
+             'totalDisplay': group['totalDisplay'],

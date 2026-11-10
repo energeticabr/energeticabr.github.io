@@ -6,6 +6,7 @@ import { createChatView } from '/src/ui/chat-view.js';
 const root = document.querySelector('#app'), view = createChatView(root);
 const rows = [
   { id:'306', supplier:'FORNECEDOR FICTÍCIO DE MATERIAIS E SERVIÇOS PARA CONSTRUÇÃO', product:'MATERIAL DE TESTE',
+    productDisplay:'MATERIAL DE TESTE (OBSERVAÇÃO FICTÍCIA DE ENTREGA NO ALMOXARIFADO CENTRAL PARA CONFERÊNCIA)',
     branch:'004 - EDIFÍCIO DE TESTE', property:'TORRE A / APARTAMENTO 101', dueDate:'2026-10-26',
     amountDueDisplay:'R$ 21.600,00', amountPaidDisplay:'R$ 40.000,00', totalDisplay:'R$ 61.600,00', childCount:2 },
   { id:'307', supplier:'SWILE FICTÍCIO', product:'VALE ALIMENTAÇÃO', branch:'000 - ESCRITÓRIO', property:'TODOS',
@@ -44,9 +45,11 @@ const geometry = cards.map(card=>{
   const supplier=card.querySelector('[data-field="supplier"]'), due=card.querySelector('[data-field="dueDate"]');
   const branch=card.querySelector('[data-field="branch"]'), blue=card.querySelector('.chat-pending-provision__supplier');
   const amount=card.querySelector('[data-field="total"] strong');
+  const product=card.querySelector('[data-field="product"] strong');
   const s=supplier.getBoundingClientRect(),d=due.getBoundingClientRect(),b=branch.getBoundingClientRect(),box=blue.getBoundingClientRect();
   return {id:card.dataset.paymentId,supplier:supplier.textContent,supplierAbove:s.bottom<=d.top+1,locationInBlue:b.top>=box.top&&b.bottom<=box.bottom,
     locationVisible:branch.checkVisibility(),location:branch.querySelector('strong').textContent,
+    product:product.textContent,productFits:product.checkVisibility()&&product.scrollWidth<=product.clientWidth+1,
     amount:amount.textContent,amountFits:amount.checkVisibility()&&amount.scrollWidth<=amount.clientWidth+1,
     horizontalOverflow:card.scrollWidth>card.clientWidth+1,arrowDisabled:card.querySelector('.chat-pending-provision__arrow').disabled};
 });
