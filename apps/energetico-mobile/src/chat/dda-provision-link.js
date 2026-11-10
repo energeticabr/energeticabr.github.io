@@ -105,8 +105,13 @@ export function createDdaProvisionLink({repository,siteKey='personal',assertSess
    due:item.fields.DATAPREVISTOPGTO||'',label:`#${item.id} · ${item.fields.FORNECEDOR||'Fornecedor não informado'}`,provisions:byParent.get(String(item.id))||[],
   }));
  }
- async function loadSettledProvisionIds(provisionIds,{signal}={}){
-  const candidates=new Set(provisionIds.filter(validId).map(String)),settled=new Set();
+ async function loadSettledDdaIds(rows,{signal}={}){
+  const candidates=new Map(),settled=new Set();
+  for(const row of rows){
+   if(!validId(row.id)||!validId(row.provisionId))continue;
+   if(!candidates.has(row.provisionId))candidates.set(row.provisionId,[]);
+   candidates.get(row.provisionId).push(row);
+  }
   if(!candidates.size)return settled;
   const active=()=>{assertSession();signal?.throwIfAborted();};
   active();
@@ -121,23 +126,45 @@ export function createDdaProvisionLink({repository,siteKey='personal',assertSess
   // The repository follows every page and rejects partial or malformed collections.
   const lines=await repository.getItems(siteKey,children.id,'?$expand=fields',{signal});active();
   if(!Array.isArray(lines))throw new Error('Consulta de provisões incompleta.');
-  const seen=new Set(),allPaid=new Map();
+  const seen=new Set(),groups=new Map();
   for(const line of lines){
    if(!hasItemIdentity(line)||seen.has(String(line.id)))throw new Error('Consulta de provisões inválida.');
    seen.add(String(line.id));
    const rawLink=line.fields[linkName];
    if(rawLink!=null&&typeof rawLink!=='string'&&typeof rawLink!=='number')throw new Error('Vínculo de provisão inválido.');
    const parent=String(rawLink??'').trim();
-   if(candidates.has(parent))allPaid.set(parent,allPaid.get(parent)!==false&&provisionChildPaid(line.fields,paymentFields));
+   if(!candidates.has(parent))continue;
+   if(!groups.has(parent))groups.set(parent,{count:0,hasDue:false,undatedUnpaid:false,unpaidDays:new Set()});
+   const group=groups.get(parent),due=paymentDateKey(line.fields[paymentFields.DATAPREVISTOPGTO]
+    ??childField(line.fields,columns,'DATAPGTOPREVISTO'));
+   group.count++;
+   if(due)group.hasDue=true;
+   if(!provisionChildPaid(line.fields,paymentFields)){
+    if(due)group.unpaidDays.add(due);
+    else group.undatedUnpaid=true;
+   }
   }
-  const checkParent=async id=>{
+  const fullyPaidGroups=new Map();
+  for(const [parent,group] of groups){
+   for(const row of candidates.get(parent)){
+    if(row.status==='Pago'&&group.count>1&&row.due&&group.hasDue){
+     // A different due day under the same parent is a separate obligation.
+     if(!group.undatedUnpaid&&!group.unpaidDays.has(row.due))settled.add(row.id);
+    }else if(!group.undatedUnpaid&&!group.unpaidDays.size){
+     // Retain the existing proof for single provisions, unpaid DDAs and missing dates.
+     if(!fullyPaidGroups.has(parent))fullyPaidGroups.set(parent,[]);
+     fullyPaidGroups.get(parent).push(row.id);
+    }
+   }
+  }
+  const checkParent=async ([id,ddaIds])=>{
    let item;
    try{item=await repository.getItem(siteKey,parents.id,id,'?$expand=fields',{signal});}
    catch{active();return;}
    active();
-   if(hasItemIdentity(item,id)&&paymentDateKey(item.fields.DATAPGTOEFETUADO))settled.add(id);
+   if(hasItemIdentity(item,id)&&paymentDateKey(item.fields.DATAPGTOEFETUADO))for(const ddaId of ddaIds)settled.add(ddaId);
   };
-  const paidGroups=[...candidates].filter(id=>allPaid.get(id)===true);
+  const paidGroups=[...fullyPaidGroups];
   for(let offset=0;offset<paidGroups.length;offset+=8)await Promise.all(paidGroups.slice(offset,offset+8).map(checkParent));
   return settled;
  }
@@ -164,5 +191,5 @@ export function createDdaProvisionLink({repository,siteKey='personal',assertSess
   if(String(saved?.fields?.[DDA_PROVISION_FIELD]??'')!==String(provisionId))throw new Error('O vínculo não foi confirmado no SharePoint.');
   return {ddaId:String(ddaId),provisionId:String(provisionId)};
  }
- return Object.freeze({loadOptions,loadSettledProvisionIds,save});
+ return Object.freeze({loadOptions,loadSettledDdaIds,save});
 }
