@@ -4,16 +4,20 @@ const transactionTypes = [
   [/\bpix\b/, 'Pix'],
   [/\bted\b/, 'TED'],
   [/\bdoc\b/, 'DOC'],
+  [/\b(?:transf|transferencia)\b/, 'Transferência'],
   [/\b(?:boleto|titulo|tit)\b/, 'Boleto'],
   [/\bdeb(?:ito)?\.? automatico\b/, 'Débito automático'],
   [/\bcartao\b/, 'Cartão'],
   [/\bconvenio\b/, 'Convênio'],
-  [/\b(?:transf|transferencia)\b/, 'Transferência'],
 ];
 
 export function financialMovementType(description, fallback = 'Pagamento') {
-  const label = normalizeSearchText(String(description ?? '').split('|')[0]);
-  return transactionTypes.find(([pattern]) => pattern.test(label))?.[1] || fallback;
+  const normalized = normalizeSearchText(description);
+  const primary = normalized.split('|')[0];
+  const type = transactionTypes.find(([pattern]) => pattern.test(primary))?.[1];
+  if ((!type || type === 'Transferência')
+    && /\|\s*@?(?:pagamento|transferencia) pix(?:\s*\||$)/.test(normalized)) return 'Pix';
+  return type || fallback;
 }
 
 const auditFields = ['ID', 'Criado por', 'Criado', 'Modificado', 'Modificado por'];
@@ -28,7 +32,7 @@ export function isImportedFinancialMovement(fields) {
 
 export function financialMovementRecipient(fields) {
   const name = String(fields?.RAZAOSOCIALRECEBEDOR ?? '').trim();
-  if ((!name || name.toUpperCase() === 'N/A') && /\bPIX\b/i.test(fields?.DESCRICAO ?? '')) {
+  if ((!name || name.toUpperCase() === 'N/A') && financialMovementType(fields?.DESCRICAO) === 'Pix') {
     return 'Identificação pendente';
   }
   return name || 'N/A';

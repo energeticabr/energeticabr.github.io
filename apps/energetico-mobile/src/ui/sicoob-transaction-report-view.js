@@ -31,7 +31,7 @@ function projectTransactions(snapshot) {
       reference: text(fields.REFERENCIABANCARIA),
       value: registrationNumber(fields.VALOR),
     };
-    const isPix = /\bPIX\b/i.test(transaction.description);
+    const isPix = transaction.type === 'Pix';
     const bankRecipient = text(fields.RAZAOSOCIALRECEBEDOR);
     const receiptName = isPix && /^\d+$/.test(transaction.id)
       ? `Comprovante-Sicoob-Pix-${transaction.id}.pdf`
