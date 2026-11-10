@@ -5,13 +5,14 @@ import { JSDOM } from 'jsdom';
 
 // Load inside the harness so the first RED run reports the missing feature as
 // an assertion, and still exercises the actual exported UI in every test.
-async function setup(t, overrides = {}) {
+async function setup(t, overrides = {}, IntersectionObserver) {
   const module = await import('../src/ui/launch-gallery-view.js').catch(error => {
     if (error.code === 'ERR_MODULE_NOT_FOUND' && error.message.includes('launch-gallery-view.js')) return {};
     throw error;
   });
   assert.equal(typeof module.createLaunchGallery, 'function', 'createLaunchGallery must be implemented');
   const dom = new JSDOM('<button id="origin">Galeria</button><main id="chat"></main>', { url: 'https://example.test' });
+  if (IntersectionObserver) dom.window.IntersectionObserver = IntersectionObserver;
   const document = dom.window.document;
   const calls = [];
   const request = async (operation, payload, options) => {
@@ -2042,6 +2043,104 @@ test('summary omits unavailable PowerApps fields instead of rendering empty labe
   assert.ok(record);
   assert.match(record.textContent, /AREIA/);
   assert.doesNotMatch(record.textContent, /undefined|null|DATA DE PAGAMENTO|AVALIAÇÃO/);
+});
+
+function mockAttachmentViewport() {
+  const observers = [];
+  class IntersectionObserver {
+    constructor(callback) { this.callback = callback; this.targets = new Set(); observers.push(this); }
+    observe(target) { this.targets.add(target); }
+    unobserve(target) { this.targets.delete(target); }
+    disconnect() { this.targets.clear(); }
+    emit(target, isIntersecting = true) { this.callback([{ target, isIntersecting }]); }
+  }
+  return { observers, IntersectionObserver };
+}
+
+test('launch cards defer attachment work until visible and cancel it when the gallery closes', async t => {
+  const { observers, IntersectionObserver } = mockAttachmentViewport();
+  const image = { DisplayName: 'foto.jpg', Value: '/sharepoint/foto.jpg' };
+  const pending = deferred();
+  let previewSignal, opened;
+  const ctx = await setup(t, {
+    request: async (operation, payload) => {
+      if (operation === 'snapshot') return snapshot({ rows: [row(1), { ...row(2), attachments: [image] }, row(3)] });
+      if (operation === 'attachment') return { fileName: payload.fileName, mediaUrl: '/media/foto.jpg' };
+      return detail({ attachments: [{ fileName: 'um.pdf', mediaUrl: '/media/um.pdf' }] });
+    },
+    loadMediaPreview: async (_, { signal }) => { previewSignal = signal; return pending.promise; },
+    openMediaCollection: async descriptors => { opened = descriptors; },
+  }, IntersectionObserver);
+  await ctx.gallery.open(); await settle();
+  assert.deepEqual(ctx.calls.map(call => call.operation), ['snapshot']);
+  const observer = observers.at(-1);
+  const [first, second, third] = observer.targets;
+  observer.emit(first, false); await settle();
+  assert.deepEqual(ctx.calls.map(call => call.operation), ['snapshot']);
+  observer.emit(first); observer.emit(first); observer.emit(second); await settle();
+  assert.deepEqual(ctx.calls.filter(call => call.operation === 'detail').map(call => call.payload.id), [1]);
+  assert.equal(first.querySelector('.lg-record-attachment-count').textContent, '1 anexo');
+  assert.equal(previewSignal.aborted, false);
+  third.querySelector('.lg-record-media').click(); await settle();
+  assert.equal(opened[0].id, 3);
+  ctx.gallery.close();
+  assert.equal(previewSignal.aborted, true);
+  assert.equal(observer.targets.size, 0);
+  observer.emit(third);
+  pending.resolve('blob:https://example.test/late-preview'); await settle();
+  assert.equal(second.querySelector('img').hasAttribute('src'), false);
+  assert.deepEqual(ctx.calls.filter(call => call.operation === 'detail').map(call => call.payload.id), [1, 3]);
+});
+
+test('launch cards resume observing attachments when invalid filters restore their results', async t => {
+  const { observers, IntersectionObserver } = mockAttachmentViewport();
+  const pending = deferred();
+  const ctx = await setup(t, { request: async (operation, payload) => {
+    if (operation === 'detail') return detail();
+    return payload.filters.dateStart ? pending.promise : snapshot();
+  } }, IntersectionObserver);
+  t.mock.timers.enable({ apis: ['setTimeout'] });
+  ctx.dom.window.setTimeout = globalThis.setTimeout;
+  ctx.dom.window.clearTimeout = globalThis.clearTimeout;
+  await ctx.gallery.open();
+  const initialObserver = observers.at(-1);
+  const [card] = initialObserver.targets;
+  input(ctx, 'dateStart', '2026-11-09');
+  t.mock.timers.tick(0); await settle();
+  assert.equal(initialObserver.targets.size, 0);
+  input(ctx, 'dateEnd', '2026-11-08');
+  t.mock.timers.tick(0); await settle();
+  const restoredObserver = observers.at(-1);
+  assert.notEqual(restoredObserver, initialObserver);
+  assert.ok(restoredObserver.targets.has(card));
+  restoredObserver.emit(card); await settle();
+  assert.equal(card.querySelector('.lg-record-attachment-count').textContent, '2 anexos');
+  pending.resolve(snapshot({ rows: [row(99)] })); await settle();
+  assert.equal(ctx.root().querySelector('.lg-record'), card);
+});
+
+test('opening a launch attachment takes priority over counts waiting in the background', async t => {
+  const { observers, IntersectionObserver } = mockAttachmentViewport();
+  const pending = deferred();
+  const files = [{ fileName: 'um.pdf', mediaUrl: '/media/um.pdf' }];
+  let opened;
+  const ctx = await setup(t, {
+    request: async (operation, payload) => {
+      if (operation === 'snapshot') return snapshot({ rows: [row(1), row(2), row(3)] });
+      return payload.id === 1 ? pending.promise : detail({ attachments: files });
+    },
+    openMediaCollection: async descriptors => { opened = descriptors; },
+  }, IntersectionObserver);
+  await ctx.gallery.open();
+  const observer = observers.at(-1);
+  const cards = [...observer.targets];
+  cards.forEach(card => observer.emit(card));
+  await settle();
+  cards[2].querySelector('.lg-record-media').click();
+  pending.resolve(detail({ attachments: files }));
+  await settle();
+  assert.deepEqual(ctx.calls.filter(call => call.operation === 'detail').map(call => call.payload.id), [1, 3, 2]);
+  assert.equal(opened[0].id, 3);
 });
 
 test('late snapshots cannot replace newer rows or user filter edits and close invalidates loads', async t => {
