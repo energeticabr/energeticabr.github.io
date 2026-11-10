@@ -23,7 +23,7 @@
          elif operation == "delete":
              self.sharepoint._request("POST", self._item_endpoint(LAUNCHES, item_id), headers={
                  "IF-MATCH": self._etag(current), "X-HTTP-Method": "DELETE"})
-@@ -739,6 +744,177 @@
+@@ -739,6 +744,207 @@
          self.sharepoint._request("POST", self._item_endpoint(LAUNCHES, item_id), json=body,
              headers={"Content-Type": "application/json;odata=nometadata", "IF-MATCH": self._etag(current), "X-HTTP-Method": "MERGE"})
 
@@ -139,54 +139,84 @@
 +            return self._write(item_id, values, current)
 +        self._body(LAUNCHES, values)  # Validate every write before moving the first payment.
 +        applied = []
-+        launch_attempted = False
 +        labels = ("IDLANCAMENTO", "FORNECEDOR", "IDFOLHA")
 +
-+        def uncertain():
-+            _fail("payroll_reassignment_unverified",
++        def uncertain(*, pending=False):
++            _fail("payroll_write_pending" if pending else "payroll_reassignment_unverified",
 +                  "Não foi possível confirmar toda a troca na folha. Atualize o lançamento e confira o vínculo antes de tentar novamente.", 502)
++
++        def read_back(name, row_id, fields):
++            try:
++                return self._get(name, row_id, fields)
++            except (requests.Timeout, requests.ConnectionError):
++                return self._get(name, row_id, fields)  # Retry only the read, never the MERGE.
++
++        def conditional_write(write, load, matches, old_tag, on_ack=None):
++            """Only compensate definite rejections or acknowledged payroll writes."""
++            acknowledged = False
++            for attempt in range(2):
++                try:
++                    response = write()
++                    acknowledged = True
++                    if on_ack is None:
++                        return
++                    on_ack(response)
++                except requests.RequestException as exc:
++                    status = getattr(exc.response, "status_code", None)
++                    if attempt == 0 and status is not None and 400 <= status < 500 and status != 408:
++                        raise
++                try:
++                    actual = load()
++                except (requests.RequestException, LaunchGalleryError):
++                    uncertain(pending=not acknowledged)
++                if matches(actual):
++                    return
++                if acknowledged or actual.get("_etag") != old_tag:
++                    break
++                # An old read does not prove a timed-out write failed. Retrying
++                # with the original ETag lets only one request modify the item.
++            uncertain(pending=not acknowledged)
 +
 +        try:
 +            for line, replacement in changes:
-+                error, tag = None, None
-+                try:
-+                    response = self._merge_payroll_line(line, replacement)
++                def record(response):
 +                    tag = getattr(response, "headers", {}).get("ETag")
-+                except requests.RequestException as exc:
-+                    status = getattr(exc.response, "status_code", None)
-+                    if status is not None and 400 <= status < 500 and status != 408:
-+                        raise  # SharePoint rejected the write (including a version conflict).
-+                    error = exc
-+                try:
-+                    latest = self._get("FOLHAPGTO", str(line["ID"]), labels)
-+                except (requests.RequestException, LaunchGalleryError):
-+                    uncertain()
-+                if latest.get("IDLANCAMENTO") != item_id or any(latest.get(k) != v for k, v in replacement.items()):
-+                    if error and latest.get("_etag") == line["_etag"]:
-+                        raise error
-+                    uncertain()
-+                # MERGE can return no ETag. A single version step plus matching
-+                # values is required to compensate without undoing another edit.
-+                previous = re.fullmatch(r'(W/)?"(\d+)"', line["_etag"])
-+                if not tag and previous:
-+                    tag = f'{previous[1] or ""}"{int(previous[2]) + 1}"'
-+                applied.append((line, replacement, tag))
-+            launch_attempted = True
-+            self._write(item_id, values, current)
++                    # When MERGE omits ETag, accept a single version step only.
++                    previous = re.fullmatch(r'(W/)?"(\d+)"', line["_etag"])
++                    if not tag and previous:
++                        tag = f'{previous[1] or ""}"{int(previous[2]) + 1}"'
++                    applied.append((line, replacement, tag))
++
++                count = len(applied)
++                conditional_write(
++                    lambda: self._merge_payroll_line(line, replacement),
++                    lambda: read_back("FOLHAPGTO", str(line["ID"]), labels),
++                    lambda actual: actual.get("IDLANCAMENTO") == item_id and
++                    all(actual.get(k) == v for k, v in replacement.items()),
++                    line["_etag"], record,
++                )
++                if len(applied) == count:
++                    record(None)  # Confirmed by readback after a lost response.
++            conditional_write(
++                lambda: self._write(item_id, values, current),
++                lambda: read_back(LAUNCHES, item_id, values),
++                lambda actual: all(actual.get(k) == v for k, v in values.items()),
++                current["_etag"],
++            )
 +        except (requests.RequestException, LaunchGalleryError) as exc:
-+            if launch_attempted or applied:
++            if isinstance(exc, LaunchGalleryError) and exc.code == "payroll_write_pending":
++                raise  # A late write may still commit; do not undo its dependent rows.
++            if applied:
 +                try:
-+                    actual = self._get(LAUNCHES, item_id, values)
++                    actual = read_back(LAUNCHES, item_id, values)
 +                except (requests.RequestException, LaunchGalleryError):
 +                    uncertain()
-+                if launch_attempted and all(actual.get(key) == value for key, value in values.items()):
-+                    return  # The launch MERGE completed even though the response was lost.
 +                if actual.get("FORNECEDOR") != current.get("FORNECEDOR"):
 +                    uncertain()
 +                incomplete = False
 +                for line, replacement, tag in reversed(applied):
 +                    try:
-+                        latest = self._get("FOLHAPGTO", str(line["ID"]), labels)
++                        latest = read_back("FOLHAPGTO", str(line["ID"]), labels)
 +                        if (not tag or latest.get("_etag") != tag or latest.get("IDLANCAMENTO") != item_id
 +                                or any(latest.get(k) != v for k, v in replacement.items())):
 +                            incomplete = True
@@ -196,7 +226,7 @@
 +                        incomplete = True
 +                if incomplete:
 +                    uncertain()
-+            raise exc
++            raise
 +
      def _create_fields(self, operation, payload, item_id, current):
          if operation == "payment":

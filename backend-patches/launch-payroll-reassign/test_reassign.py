@@ -38,12 +38,26 @@ class PayrollSharePoint(SharePoint):
         self.conflict = None
         self.lose_response = None
         self.concurrent_payroll_edit = False
+        self.failed_readbacks = 0
+        self.delayed_write = None
+        self.pending_write = None
 
     def _request(self, method, endpoint, **kw):
         name, item = re.search(r"GetByTitle\('([^']+)'\)(?:/items\((\d+)\))?", endpoint).groups()
         key = name, item
         tag = self.tags.get(key, 1)
+        if method == 'GET' and key == ('FOLHAPGTO', '505') and tag == 2 and self.failed_readbacks:
+            self.failed_readbacks -= 1
+            raise requests.Timeout('unavailable payroll readback')
         if method == 'POST' and item:
+            if key == self.delayed_write:
+                if self.pending_write is None:
+                    self.pending_write = (method, endpoint, kw)
+                    raise requests.Timeout('write may still commit')
+                self.delayed_write = None
+                pending_method, pending_endpoint, pending_kw = self.pending_write
+                self._request(pending_method, pending_endpoint, **pending_kw)
+                self.error(412)
             if key == self.conflict == ('LANCAMENTOS', '1') and self.concurrent_payroll_edit:
                 self.rows['FOLHAPGTO'][0]['QTD'] = '4'
                 self.tags['FOLHAPGTO', '505'] += 1
@@ -137,16 +151,45 @@ class PayrollTransferTests(unittest.TestCase):
         assert (self.line['IDFOLHA'], second['IDFOLHA']) == ('73', '62')
         assert self.launch.get('IDFOLHA') is None
 
+    def test_direct_link_keeps_its_own_competency_when_payments_span_months(self):
+        self.sp.rows['IDFOLHA'].append(dict(Id=40, FORNECEDOR="D'ÁGUA", MESREFERENCIA='10/2025'))
+        self.sp.rows['FOLHAPGTO'].append(dict(Id=507, FORNECEDOR="D'ÁGUA", IDLANCAMENTO='1', IDFOLHA='40'))
+        self.launch['IDFOLHA'] = 40
+        assert self.transfer()['ok']
+        assert self.launch['IDFOLHA'] == 62 and self.line['IDFOLHA'] == '73'
+
     def test_response_lost_after_launch_commit_does_not_undo_payroll(self):
         self.sp.lose_response = 'LANCAMENTOS', '1'
         assert self.transfer()['ok']
         assert self.launch['field_5'] == self.line['FORNECEDOR'] == 'OUTRO'
         assert self.line['IDFOLHA'] == '73'
 
+    def test_delayed_launch_commit_after_first_read_does_not_restore_payroll(self):
+        self.sp.delayed_write = 'LANCAMENTOS', '1'
+        assert self.transfer()['ok']
+        assert self.launch['field_5'] == self.line['FORNECEDOR'] == 'OUTRO'
+
+    def test_delayed_payroll_commit_after_first_read_is_confirmed(self):
+        self.sp.delayed_write = 'FOLHAPGTO', '505'
+        assert self.transfer()['ok']
+        assert self.launch['field_5'] == self.line['FORNECEDOR'] == 'OUTRO'
+
     def test_response_lost_after_payroll_commit_is_read_back(self):
         self.sp.lose_response = 'FOLHAPGTO', '505'
         assert self.transfer()['ok']
         assert self.launch['field_5'] == self.line['FORNECEDOR'] == 'OUTRO'
+
+    def test_transient_payroll_readback_failure_does_not_split_records(self):
+        self.sp.failed_readbacks = 1
+        assert self.transfer()['ok']
+        assert self.launch['field_5'] == self.line['FORNECEDOR'] == 'OUTRO'
+
+    def test_known_payroll_write_is_compensated_after_failed_verification(self):
+        self.sp.failed_readbacks = 2
+        with self.assertRaises(LaunchGalleryError):
+            self.transfer()
+        assert self.launch['field_5'] == self.line['FORNECEDOR'] == "D'ÁGUA"
+        assert self.line['IDFOLHA'] == '41'
 
     def test_resume_when_payroll_already_moved(self):
         self.line.update(FORNECEDOR='OUTRO', IDFOLHA='73')
