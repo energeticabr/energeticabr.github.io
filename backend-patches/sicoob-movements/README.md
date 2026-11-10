@@ -30,6 +30,14 @@ A etapa preserva os arquivos existentes e tenta de novo nas próximas coletas
 quando o banco limita as consultas. Para conferir os vínculos sem gravação,
 execute `sync_boleto_receipts.py --check` com o ambiente da unidade.
 
+Para Pix, o nome vem do extrato Sicoob ou da consulta direta por EndToEndId
+com escopo `pixpagamentos_consulta`. Se o extrato trouxer apenas o CPF
+mascarado, o coletor pode localizar o identificador completo em um comprovante
+Sicoob arquivado em LANCAMENTOS. Só grava a resposta do banco se o débito
+corresponder de forma única à conta, ao titular, à data, ao valor e ao documento
+do recebedor. A leitura de imagens usa Tesseract e mantém apenas o cache
+privado de identificadores por conteúdo.
+
 ## Ativação
 
 1. Instale os scripts de extrato e comprovantes em `/opt/energetica-whatsapp/sicoob-movements` e as

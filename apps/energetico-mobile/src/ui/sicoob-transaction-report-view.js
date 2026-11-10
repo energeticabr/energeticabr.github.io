@@ -30,11 +30,16 @@ function projectTransactions(snapshot) {
       reference: text(fields.REFERENCIABANCARIA),
       value: registrationNumber(fields.VALOR),
     };
+    const isPix = /\bPIX\b/i.test(transaction.description);
+    const receiptName = isPix && /^\d+$/.test(transaction.id)
+      ? `Comprovante-Sicoob-Pix-${transaction.id}.pdf`
+      : /^\d{4,18}$/.test(transaction.reference) ? `Comprovante-Sicoob-${transaction.reference}.pdf` : '';
     return {
       ...transaction,
+      receiptName,
       searchText: normalizeSearchText([...Object.values(transaction), dateLabel(transaction.date)].join(' ')),
-      hasReceipt: /^\d{4,18}$/.test(transaction.reference) && (hasAttachments === true
-        || (hasAttachments == null && /\b(?:BOLETO|TIT|TITULO)\b/i.test(transaction.description))),
+      hasReceipt: receiptName && (hasAttachments === true || (hasAttachments == null
+        && (isPix ? transaction.recipient !== 'N/A' : /\b(?:BOLETO|TIT|TITULO)\b/i.test(transaction.description)))),
     };
   }).sort((a, b) => b.date.localeCompare(a.date) || b.id.localeCompare(a.id, 'pt-BR', { numeric: true }));
 }
@@ -130,7 +135,7 @@ export function createSicoobTransactionReportView({ document: doc = globalThis.d
     try {
       const attachments = await data.listAttachments(transaction.id, { refresh: true, signal });
       if (!current()) return;
-      const receiptName = `Comprovante-Sicoob-${transaction.reference}.pdf`;
+      const receiptName = transaction.receiptName;
       const receipt = attachments.find(item => item.fileName === receiptName);
       if (!receipt) {
         showNotice('Ainda não há comprovante Sicoob anexado a esta transação.');

@@ -91,7 +91,9 @@ test('rejects a partial snapshot and supports retry', async () => {
 test('opens the payment receipt for its own movement', async () => {
   const dom = new JSDOM('<main id="app"></main>');
   const receipt = 'Comprovante-Sicoob-1234567.pdf';
-  const rows = [payment(1), { ...payment(2, { REFERENCIABANCARIA: '1234567' }), hasAttachments: true }];
+  const rows = [payment(1, { RAZAOSOCIALRECEBEDOR: 'N/A' }), {
+    ...payment(2, { DESCRICAO: 'BOLETO', REFERENCIABANCARIA: '1234567' }), hasAttachments: true,
+  }];
   let opened;
   const view = createSicoobTransactionReportView({
     document: dom.window.document,
@@ -114,6 +116,29 @@ test('opens the payment receipt for its own movement', async () => {
     buttons[0].click();
     await new Promise(resolve => setImmediate(resolve));
     assert.deepEqual(opened, [['2', receipt]]);
+  } finally {
+    view.destroy();
+    dom.window.close();
+  }
+});
+
+test('Pix proof is matched to the movement ID because its bank reference can be generic', async () => {
+  const dom = new JSDOM('<main id="app"></main>');
+  const name = 'Comprovante-Sicoob-Pix-3.pdf';
+  let opened;
+  const view = createSicoobTransactionReportView({
+    document: dom.window.document,
+    data: {
+      async loadSnapshot() { return { rows: [{ ...payment(3, { REFERENCIABANCARIA: 'Pix' }), hasAttachments: true }] }; },
+      async listAttachments() { return [{ fileName: 'Comprovante-Sicoob-Pix-2.pdf' }, { fileName: name }]; },
+    },
+    async openMediaCollection(items) { opened = items.map(item => item.fileName); },
+  });
+  try {
+    await view.open();
+    view.element.querySelector('.sicoob-transaction-receipt').click();
+    await new Promise(resolve => setImmediate(resolve));
+    assert.deepEqual(opened, [name]);
   } finally {
     view.destroy();
     dom.window.close();
