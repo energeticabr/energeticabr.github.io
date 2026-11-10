@@ -2988,7 +2988,7 @@ export function renderChatMarkup(state = {}, { showSettings = false, allowDemo =
           : rhidAttendanceReportMarkup(rhidAttendanceReport)
         : transcriptMessages.length ? transcriptMessages.map((message, index) => renderMessage(message, state.account, busy, { finalSignedDocument: index === finalSignedIndex && isSignedDocumentMessage(message), draft: state.draft, databaseFilterMessage: databaseFilter?.message, activeFlow: state.activeFlow, attendanceSelectedIds, attendanceExpandedIds: message === latestPoll ? attendanceExpandedIds : [], attendanceIrregularityChecking: message === latestPoll && attendanceIrregularityChecking, currentPoll: message === latestPoll, attendanceHoursCurrent: message === latestAttendanceMessage, rhidRefresh, launchPayrollSelectedIds, launchPayrollCurrent: message === latestPoll })).join("") : state.recoveryPreview ? "" : `<article class="chat-message chat-message--assistant">${assistantAvatar()}<div class="chat-bubble"><strong>Energético</strong><p>Olá, ${escapeHtml(firstName)}. O que vamos fazer?</p></div></article>`}
     </div>
-    ${needsRecovery && !loading ? `<div class="error-banner chat-recovery-banner">
+    ${needsRecovery && !loading ? `<div class="error-banner chat-resume-banner">
       <span role="alert">${escapeHtml(state.error || "Aguardando sincronização com a VM.")}</span>
       <button type="button" data-action="retry-session">Retomar conversa</button>
     </div>` : ""}

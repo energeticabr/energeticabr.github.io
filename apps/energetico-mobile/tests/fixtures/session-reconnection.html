@@ -32,7 +32,7 @@ await controller.start();
 store.setDraft('Rascunho fictício preservado');store.queueFiles([new File(['synthetic proof'],'comprovante-ficticio.pdf',{type:'application/pdf'})]);
 await document.fonts.ready;await frame();
 const overflow=()=>root.scrollWidth>innerWidth+1||document.documentElement.scrollWidth>innerWidth+1;
-const retry = root.querySelector('.chat-recovery-banner [data-action="retry-session"]');
+const retry = root.querySelector('.chat-resume-banner [data-action="retry-session"]');
 const retryRect = retry?.getBoundingClientRect();
 const evidence={initialError:Boolean(root.querySelector('.error-banner')),initialBlocked:last.recoveryBlocked,overflow:overflow(),
   retryAccessible:Boolean(retry && !retry.disabled && retryRect.height >= 44

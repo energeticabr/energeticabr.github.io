@@ -532,14 +532,14 @@ button:disabled { cursor: wait; opacity: .55; }
 
 .error-banner button { border: 0; background: transparent; color: var(--danger); font-weight: 800; }
 
-.chat-recovery-banner {
+.chat-resume-banner {
   flex-shrink: 0;
   flex-wrap: wrap;
   gap: 8px;
   overflow-wrap: anywhere;
 }
-.chat-recovery-banner span { flex: 1 1 15rem; }
-.chat-recovery-banner button {
+.chat-resume-banner span { flex: 1 1 15rem; }
+.chat-resume-banner button {
   min-height: 44px;
   padding: 6px 12px;
   border: 1px solid currentColor;

@@ -128,6 +128,48 @@ test('Retomar after interrupted startup recovers when connectivity returns beyon
   assert.ok(sent.every(body => body.replyId === 'input_continue' || ['diary_evidence_pending', 'attachment_snapshot'].includes(body.action)));
 });
 
+test('a receipt shared before offline startup waits for synchronization and uploads without reopening the app', async t => {
+  const file = Object.assign(new File(['synthetic proof'], 'comprovante.pdf', { type: 'application/pdf' }), { sourceId: 'cold-start-proof' });
+  const confirmed = Promise.withResolvers();
+  let activate, offline = true, uploads = 0, imports = 0;
+  const h = harness(t, {
+    client: {
+      sendText: async ({ replyId }) => {
+        assert.equal(replyId, 'input_continue');
+        if (offline) throw Object.assign(new Error('Sem conexão com a VM.'), { code: 'NETWORK_UNAVAILABLE' });
+        return menu();
+      },
+      sendFile: async uploaded => {
+        assert.equal(uploaded, file);
+        uploads++;
+        return { status: 'processed', messages: [], attachments: [{ id: 'proof', fileName: file.name, mediaUrl: '/proof' }] };
+      },
+    },
+    native: {
+      onResume: handler => { activate = handler; },
+      importSharedItems: async () => {
+        if (++imports === 1) await activate();
+        return [file];
+      },
+      discardSharedItem: async id => confirmed.resolve(id),
+    },
+  });
+  assert.equal(await Promise.race([h.controller.start().then(() => true), delay(250, false)]), true);
+  assert.equal(h.state().recoveryBlocked, true);
+  assert.equal(h.store.getState().pendingFiles[0].file, file);
+  assert.equal(uploads, 0);
+
+  offline = false;
+  assert.equal(await h.emit('retry-session'), true);
+  assert.equal(await Promise.race([confirmed.promise, delay(250, null)]), file.sourceId);
+  await turn();
+  assert.equal(imports, 2);
+  assert.equal(h.state().recoveryBlocked, false);
+  assert.equal(h.store.getState().pendingFiles.length, 0);
+  assert.equal(h.store.getState().attachments[0].fileName, file.name);
+  assert.equal(uploads, 1);
+});
+
 test('a hung startup preflight is canceled and Retomar becomes usable without losing the local queue', async t => {
   const signals = [];
   const client = { sendText: async () => menu(), waitForDiaryEvidence: ({ signal }) => { signals.push(signal); return new Promise(() => {}); } };
