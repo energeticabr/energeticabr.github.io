@@ -76,8 +76,19 @@ test('RHID mascot opens today, filters a period, and saves the empty slot on its
   const cards = () => [...root.querySelectorAll('[data-rhid-mascot-report] .chat-rhid-attendance-card')];
   const shortcut = root.querySelector(action('open-rhid-mascot-report'));
   assert.equal(shortcut?.textContent.trim(), 'RHID');
+  const shell = root.querySelector('.chat-shell');
+  const composer = root.querySelector('.chat-composer');
+  const location = dom.window.location.href;
+  shell.querySelector('.chat-transcript').scrollTop = 35;
   click(action('open-rhid-mascot-report'));
   await settle();
+  const report = shell.querySelector('[data-rhid-mascot-report][role="dialog"]');
+  assert.ok(report, 'RHID opens as a report panel in the home shell');
+  assert.equal(report.closest('.chat-transcript'), null);
+  assert.ok(shell.querySelector('.chat-transcript ' + action('open-rhid-mascot-report')));
+  assert.equal(shell.querySelector('.chat-transcript').scrollTop, 35);
+  assert.equal(shell.querySelector('.chat-composer'), composer);
+  assert.equal(dom.window.location.href, location);
   assert.deepEqual(reads, [today]);
   assert.deepEqual(comparisons, [[today, today]]);
   assert.equal(cards().length, 3);
@@ -91,7 +102,11 @@ test('RHID mascot opens today, filters a period, and saves the empty slot on its
   cards()[0].querySelector('button[data-slot="exit1"]').click();
   assert.equal(root.querySelector('[data-role="rhid-adjustment-time"]').value, '11:49');
   assert.deepEqual(writes, []);
-  click(action('rhid-attendance-adjust-cancel'));
+  const timeField = root.querySelector('[data-role="rhid-adjustment-time"]');
+  assert.equal(dom.window.document.activeElement, timeField);
+  timeField.dispatchEvent(new dom.window.KeyboardEvent('keydown', { key: 'Escape', bubbles: true }));
+  assert.equal(root.querySelector('[data-rhid-adjustment-dialog]'), null);
+  assert.equal(dom.window.document.activeElement, cards()[0].querySelector('button[data-slot="exit1"]'));
   click(action('rhid-mascot-period'));
   await settle();
   root.querySelector('[name="rhid-start"]').value = '2025-02-02';
@@ -115,6 +130,7 @@ test('RHID mascot opens today, filters a period, and saves the empty slot on its
   assert.ok(cards()[1].classList.contains('chat-rhid-attendance-card--presence-mismatch'));
   assert.match(cards()[1].textContent, /Ausente no Descritivo, com batida no relógio/i);
   assert.equal(empty.dataset.messageId, 'rhid-mascot:2025-01-31');
+  root.querySelector('[name="rhid-start"]').value = '2025-01-30';
   empty.click();
   assert.equal(root.querySelector('[data-role="rhid-adjustment-time"]').value, '11:00');
   root.querySelector('[data-role="rhid-adjustment-time"]').value = '11:58';
@@ -124,6 +140,8 @@ test('RHID mascot opens today, filters a period, and saves the empty slot on its
   assert.match(cards()[1].querySelector('.chat-rhid-attendance-card__cluster--added')?.textContent, /11:58/);
   assert.ok(cards()[1].classList.contains('chat-rhid-attendance-card--presence-mismatch'));
   assert.equal(cards()[0].querySelector('.chat-rhid-attendance-card__cluster--added'), null);
+  assert.equal(root.querySelector(action('close-rhid-mascot-report')).disabled, false);
+  assert.equal(root.querySelector('[name="rhid-start"]').value, '2025-01-30');
   descriptiveError = new Error('SharePoint indisponível');
   click(action('rhid-mascot-today'));
   await settle();
@@ -142,6 +160,9 @@ test('RHID mascot opens today, filters a period, and saves the empty slot on its
   clearProfession.dispatchEvent(new dom.window.Event('change', { bubbles: true }));
   assert.equal(cards().length, 3);
   click(action('close-rhid-mascot-report'));
+  assert.equal(shell.querySelector('[data-rhid-mascot-report]'), null);
+  assert.equal(shell.querySelector('.chat-transcript').scrollTop, 35);
+  assert.equal(dom.window.document.activeElement, shell.querySelector(action('open-rhid-mascot-report')));
   assert.ok(root.querySelector(action('open-cargos-table')));
 });
 
