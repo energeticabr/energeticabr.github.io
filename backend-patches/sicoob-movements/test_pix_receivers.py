@@ -58,3 +58,24 @@ class PixTest(unittest.TestCase):
         with patch('sync_pix_receivers.subprocess.run', return_value=result) as ocr:
             self.assertEqual(receipt_ids(output.getvalue()), {END_ID})
         self.assertTrue(ocr.call_args.kwargs['input'].startswith(b'\x89PNG'))
+
+    def test_oversized_pdf_is_rendered_at_a_bounded_size(self):
+        from PIL import Image
+        from reportlab.pdfgen.canvas import Canvas
+        from pypdfium2 import PdfPage
+        output = BytesIO()
+        pdf = Canvas(output, pagesize=(2400, 3600))
+        pdf.showPage()
+        pdf.save()
+        render = PdfPage.render
+        scales = []
+        def observe(page, **options):
+            scales.append(options['scale'])
+            return render(page, **options)
+        with patch.object(PdfPage, 'render', observe):
+            with patch('sync_pix_receivers.subprocess.run', return_value=SimpleNamespace(stdout=b'')) as ocr:
+                self.assertEqual(receipt_ids(output.getvalue()), set())
+        self.assertLessEqual(scales[0], 1400 / 2400)
+        with Image.open(BytesIO(ocr.call_args.kwargs['input'])) as bitmap:
+            self.assertLessEqual(bitmap.width, 1400)
+            self.assertLessEqual(bitmap.height, 2600)
