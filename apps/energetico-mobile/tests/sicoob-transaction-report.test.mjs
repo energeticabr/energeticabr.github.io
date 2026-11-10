@@ -1,8 +1,11 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
+import { readFileSync } from 'node:fs';
 import { JSDOM } from 'jsdom';
 import { createSicoobTransactionReportView } from '../src/ui/sicoob-transaction-report-view.js';
 import { captureFilteredReport } from '../src/ui/report-print.js';
+
+const reportStyles = readFileSync(new URL('../src/ui/dda-report.css', import.meta.url), 'utf8');
 
 const payment = (id, fields = {}) => ({
   id: String(id),
@@ -216,6 +219,32 @@ const orders = [
 ];
 const settle = () => new Promise(resolve => setImmediate(resolve));
 
+test('highlights linked payments on either stripe and preserves the original unlinked stripes', async t => {
+  const dom = new JSDOM('<main id="app"></main>');
+  const { document } = dom.window;
+  const style = document.createElement('style');
+  style.textContent = reportStyles;
+  document.head.append(style);
+  const view = createSicoobTransactionReportView({
+    document,
+    data: { async loadSnapshot() {
+      return { rows: [payment(1, { IDPEDIDO: 525 }), payment(2, { IDPEDIDO: '526' }),
+        payment(3), payment(4, { IDPEDIDO: '0' })] };
+    } },
+  });
+  t.after(() => { view.destroy(); dom.window.close(); });
+  await view.open();
+  assert.deepEqual([...view.element.querySelectorAll('tbody tr')].map(row => [
+    row.cells[5].textContent,
+    dom.window.getComputedStyle(row).backgroundColor,
+  ]), [
+    ['—', 'rgba(0, 0, 0, 0)'],
+    ['—', 'rgb(239, 246, 250)'],
+    ['ID 526', 'rgb(234, 248, 238)'],
+    ['ID 525', 'rgb(234, 248, 238)'],
+  ]);
+});
+
 function setupOrderLink(t, { initial, recipient, loadOptions = async () => orders, saveError } = {}) {
   const dom = new JSDOM('<main id="app"></main>');
   const { document, Event, KeyboardEvent } = dom.window;
@@ -305,6 +334,10 @@ test('shows amount-only recommendations when bank recipient identification is pe
 
 test('confirms a Sicoob order link, replaces it and retains it through refresh, reopen and PDF', async t => {
   const { view, root, query, linkButton, picker, openPicker, select, writes, Event } = setupOrderLink(t);
+  const { ownerDocument: document } = root;
+  const style = document.createElement('style');
+  style.textContent = reportStyles;
+  document.head.append(style);
   await view.open();
   const search = query('input[name="search"]');
   search.value = 'Comércio Exemplo';
@@ -322,6 +355,7 @@ test('confirms a Sicoob order link, replaces it and retains it through refresh, 
   await settle();
   assert.deepEqual(writes, []);
   assert.equal(query('tbody td:last-child').textContent, '—');
+  assert.equal(document.defaultView.getComputedStyle(paymentRow).backgroundColor, 'rgba(0, 0, 0, 0)');
   review = select('44');
   review.querySelector('[data-edit-review-confirm]').click();
   await settle();
@@ -335,6 +369,7 @@ test('confirms a Sicoob order link, replaces it and retains it through refresh, 
   assert.equal(search.value, 'Comércio Exemplo');
   assert.deepEqual([...paymentRow.cells].slice(0, 5).map(cell => cell.textContent), originalPayment);
   assert.equal(query('tbody td:last-child').textContent, 'ID 44');
+  assert.equal(document.defaultView.getComputedStyle(paymentRow).backgroundColor, 'rgb(234, 248, 238)');
   picker().querySelector('.gallery-record-dialog-buttons button').click();
   assert.equal(root.ownerDocument.activeElement, linkButton());
 
@@ -358,6 +393,7 @@ test('confirms a Sicoob order link, replaces it and retains it through refresh, 
   const pdf = captureFilteredReport(root);
   const table = pdf.pages.flatMap(page => page.blocks).find(block => block.type === 'table');
   assert.equal(table.rows[1].cells[5].runs.map(run => run.text).join(''), 'ID 43');
+  assert.deepEqual(table.rows[1].cells.map(cell => cell.background), Array(6).fill([234 / 255, 248 / 255, 238 / 255]));
   assert.equal(linkButton(), null);
   restore();
   assert.ok(linkButton());
