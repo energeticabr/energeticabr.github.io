@@ -1,6 +1,7 @@
 """Use archived bank receipts only to discover IDs. Receiver fields come from the Sicoob API."""
 import argparse
 from collections import Counter, defaultdict
+from contextlib import closing
 from datetime import timedelta
 from decimal import Decimal, InvalidOperation
 import hashlib
@@ -90,13 +91,10 @@ def receipt_ids(content):
     ids = extract_end_ids(text)
     if all(label in labels for label in ('COMPROVANTE', 'SICOOB', 'PIX')) and ids:
         return ids if len(ids) == 1 else set()
-    with pypdfium2.PdfDocument(content) as document:
-        with document[0] as page:
-            bitmap = page.render(scale=2)
-            try:
+    with closing(pypdfium2.PdfDocument(content)) as document:
+        with closing(document[0]) as page:
+            with closing(page.render(scale=2)) as bitmap:
                 image = ImageOps.autocontrast(ImageOps.grayscale(bitmap.to_pil()))
-            finally:
-                bitmap.close()
     image.thumbnail((1400, 2600))
     picture = BytesIO()
     image.save(picture, format='PNG')
