@@ -1391,12 +1391,16 @@ function rhidMascotReportMarkup(report) {
   const page = report.page || 0;
   const pageCount = Math.ceil(days.length / rhidMascotPageSize);
   const visibleDays = days.slice(page * rhidMascotPageSize, (page + 1) * rhidMascotPageSize);
-  return `<section class="chat-rhid-mascot" data-rhid-mascot-report aria-labelledby="rhid-mascot-title">
-    <header class="chat-rhid-mascot__header">
-      <button type="button" data-action="close-rhid-mascot-report" aria-label="Voltar ao menu" title="Voltar ao menu">←</button>
-      <h1 id="rhid-mascot-title" tabindex="-1">Presenças RHID</h1>
-      <button type="button" data-action="rhid-mascot-reload" aria-label="Atualizar relatório" title="Atualizar relatório"${report.busy ? ' disabled' : ''}>↻</button>
-    </header>
+  return `<div class="chat-confirmation-backdrop chat-rhid-mascot-backdrop" data-popup-backdrop="true" data-popup-close-action="close-rhid-mascot-report">
+  <section class="chat-rhid-mascot" data-rhid-mascot-report role="dialog" aria-modal="true" aria-labelledby="rhid-mascot-title" tabindex="-1">
+    <div class="report-close-bar">
+      <header class="chat-rhid-mascot__header report-close-tools">
+        <button type="button" data-action="rhid-mascot-reload" aria-label="Atualizar relatório" title="Atualizar relatório"${report.busy ? ' disabled' : ''}>↻</button>
+        <h2 id="rhid-mascot-title">Relatório de presenças RHID</h2>
+      </header>
+      <button class="report-close-control" type="button" data-action="close-rhid-mascot-report" aria-label="Fechar relatório RHID" title="Fechar relatório RHID">❌</button>
+    </div>
+    <div class="chat-rhid-mascot__body" data-page="${page}" role="region" aria-label="Presenças e filtros RHID" tabindex="0">
     <div class="chat-rhid-mascot__filters">
       <div class="chat-rhid-mascot__modes">
         <button type="button" data-action="rhid-mascot-today" aria-pressed="${!period}">Hoje</button>
@@ -1433,7 +1437,8 @@ function rhidMascotReportMarkup(report) {
       <span class="chat-rhid-mascot__page">Página ${page + 1} de ${pageCount}</span>
       <button type="button" data-action="rhid-mascot-page" data-value="1" aria-label="Próxima página"${page + 1 === pageCount ? ' disabled' : ''}>→</button>
     </nav>` : ''}
-  </section>`;
+    </div>
+  </section></div>`;
 }
 
 function paymentAuditValue(row, keys, fallback = "-") {
@@ -2625,8 +2630,9 @@ function rhidAttendanceReportLoadingMarkup(date = "", progress) {
 function rhidAttendanceAdjustmentMarkup(adjustment) {
   if (!adjustment) return "";
   const { personName, label, rhid, effective, currentEffective, previous, reason, busy, deleting, canDelete, error } = adjustment;
-  return `<div class="chat-confirmation-backdrop" data-popup-backdrop="true" data-popup-close-action="rhid-attendance-adjust-cancel" data-rhid-adjustment-dialog>
-    <div class="chat-confirmation chat-rhid-adjustment" role="dialog" aria-modal="true" aria-labelledby="rhid-adjustment-title">
+  const mascotPunch = adjustment.reportDate ? ` data-message-id="${escapeHtml(adjustment.messageId)}" data-person-key="${escapeHtml(adjustment.personKey)}" data-slot="${escapeHtml(adjustment.slot)}"` : '';
+  return `<div class="chat-confirmation-backdrop" data-popup-backdrop="true" data-popup-close-action="rhid-attendance-adjust-cancel" data-rhid-adjustment-dialog${mascotPunch}>
+    <div class="chat-confirmation chat-rhid-adjustment" role="dialog" aria-modal="true" aria-labelledby="rhid-adjustment-title" tabindex="-1">
       <h2 id="rhid-adjustment-title">${adjustment.reportDate ? 'Preencher' : 'Corrigir'} ${escapeHtml(label)} — ${escapeHtml(personName)}</h2>
       ${adjustment.reportDate ? `<p>Data <time datetime="${escapeHtml(adjustment.reportDate)}">${escapeHtml(adjustment.reportDate.split('-').reverse().join('/'))}</time></p>` : ''}
       <div class="chat-rhid-adjustment__history"><p>RHID: <strong>${escapeHtml(rhid || "não registrado")}</strong></p><p>Ajustado: <strong>${escapeHtml(currentEffective || "não informado")}</strong></p>
@@ -2970,7 +2976,7 @@ export function renderChatMarkup(state = {}, { showSettings = false, allowDemo =
   const headerReportDisabled = busy || rhidRefresh?.busy || signOutConfirm || Boolean(state.rhidMascot);
   const headerReportAttributes = `type="button" data-action="open-rhid-attendance-today" aria-label="Abrir relatório de presenças RHID de hoje" title="Relatório de presenças RHID de hoje"${headerReportDisabled ? " disabled" : ""}`;
 
-  return `<section class="chat-shell${state.rhidMascot ? ' chat-shell--rhid-mascot' : ''}">
+  return `<section class="chat-shell">
     <header class="chat-header">
       <button class="chat-header-avatar-shortcut" ${headerReportAttributes}>${assistantAvatar()}</button>
       <span><button class="chat-header-name-shortcut" ${headerReportAttributes}><strong>Energético</strong></button><small>${demo ? `<span data-demo-banner role="status">Demonstração — dados fictícios</span>` : `${escapeHtml(firstName)}, conectado à VM`}</small></span>
@@ -2982,7 +2988,7 @@ export function renderChatMarkup(state = {}, { showSettings = false, allowDemo =
     ${state.error && !needsRecovery ? `<div class="error-banner" role="alert"><span>${escapeHtml(state.error)}</span><button type="button" data-action="retry-session"${state.resuming || state.activeText ? " disabled" : ""}>Retomar conversa</button></div>` : ""}
     <div class="chat-transcript" role="log" aria-live="polite" aria-relevant="additions text">
       ${state.recoveryWarning ? `<p class="error-banner" role="alert">${escapeHtml(state.recoveryWarning)}</p>` : ""}
-      ${state.rhidMascot ? rhidMascotReportMarkup(state.rhidMascot) : rhidAttendanceReport?.open
+      ${rhidAttendanceReport?.open
         ? rhidAttendanceReport.busy
           ? rhidAttendanceReportLoadingMarkup(rhidAttendanceReport.date, rhidAttendanceReport.progress)
           : rhidAttendanceReportMarkup(rhidAttendanceReport)
@@ -3030,6 +3036,7 @@ export function renderChatMarkup(state = {}, { showSettings = false, allowDemo =
     ${showPendingReminders && !state.pendingProvisions ? pendingConstructionDiariesMarkup(state.pendingConstructionDiaries, state.pendingConstructionDiaryFillingId, state.pendingConstructionDiaryError, state.busy) : ""}
     ${showPendingReminders && !state.pendingProvisions && !state.pendingConstructionDiaries ? pendingNotesMarkup(state.pendingNotes, state.pendingNoteLaunchOrderId, state.pendingNoteLaunchFailed ? state.error : "") : ""}
     ${attachmentSource ? attachmentSourceMarkup(typeof attachmentSource === "string" ? attachmentSource : "") : ""}
+    ${state.rhidMascot ? rhidMascotReportMarkup(state.rhidMascot) : ""}
     ${rhidAttendanceAdjustmentMarkup(rhidAttendanceAdjustment)}
   </section>`;
 }
@@ -4402,7 +4409,6 @@ export function createChatView(root, { onOpenSettings, onDemoAccess, onSignOut, 
     const template = root.ownerDocument.createElement('template');
     template.innerHTML = markup;
     const nextShell = template.content.querySelector('.chat-shell');
-    shell.classList.toggle('chat-shell--rhid-mascot', Boolean(state.rhidMascot));
     // Never detach the composer: restoring focus on a new field resets the iOS keyboard.
     for (const child of [...shell.children]) {
       if (child !== composer && !preservedOverlays.includes(child)) child.remove();
@@ -5554,6 +5560,25 @@ export function createChatView(root, { onOpenSettings, onDemoAccess, onSignOut, 
     return active;
   }
 
+  function rhidMascotKeyDown(event) {
+    if (!['Escape', 'Tab'].includes(event.key) || !root.querySelector('[data-rhid-mascot-report]')) return;
+    const dialog = activeModalDialog();
+    const layer = dialog?.closest('[data-popup-close-action]');
+    if (!layer || !dialog.contains(event.target)) return;
+    if (event.key === 'Escape') {
+      event.preventDefault();
+      layer.querySelector(`button[data-action="${layer.dataset.popupCloseAction}"]`)?.click();
+      return;
+    }
+    const controls = [...dialog.querySelectorAll('button:enabled, input:enabled, select:enabled, textarea:enabled, [tabindex="0"]')]
+      .filter(control => !control.closest('[hidden]'));
+    const boundary = event.shiftKey ? controls[0] : controls.at(-1);
+    if (!controls.length || event.target === boundary || (event.shiftKey && event.target === dialog)) {
+      event.preventDefault();
+      (event.shiftKey ? controls.at(-1) : controls[0])?.focus();
+    }
+  }
+
   function eventUsesCurrentPoint(event) {
     const clientX = Number(event?.clientX);
     const clientY = Number(event?.clientY);
@@ -5960,9 +5985,13 @@ export function createChatView(root, { onOpenSettings, onDemoAccess, onSignOut, 
     const responseFinished = Boolean(lastState?.activeText && !state.activeText && !state.error);
     const pendingReportScroll = root.querySelector('.chat-pending-provisions--payments .chat-pending-provisions__list')?.scrollTop;
     const previousScroll = root.querySelector?.('[role="log"]')?.scrollTop || 0;
-    const mascotWasOpen = Boolean(root.querySelector('[data-rhid-mascot-report]'));
-    const mascotDateDraft = state.rhidMascot && state.rhidMascot.query === lastState?.rhidMascot?.query
-      ? ['rhid-start', 'rhid-end'].map(name => [name, root.querySelector(`[name="${name}"]`)?.value])
+    const previousMascotBody = root.querySelector('.chat-rhid-mascot__body');
+    const mascotScroll = previousMascotBody?.scrollTop || 0;
+    const previousFocus = root.ownerDocument.activeElement;
+    const mascotFocus = previousFocus?.closest('[data-rhid-mascot-report]') ? previousFocus : null;
+    const mascotPunch = root.querySelector('[data-rhid-adjustment-dialog][data-message-id]')?.dataset;
+    const mascotDateDraft = state.rhidMascot && (!state.rhidMascot.busy || state.rhidMascot.query === lastState?.rhidMascot?.query)
+      ? ['rhid-start', 'rhid-end'].map(name => previousMascotBody?.querySelector(`[name="${name}"]`)).filter(Boolean)
       : [];
     const trayScroll = root.querySelector?.(".chat-file-tray")?.scrollTop || 0;
     const nextMessageKey = (state.messages || []).map(message => message.id).join("|");
@@ -6003,9 +6032,9 @@ export function createChatView(root, { onOpenSettings, onDemoAccess, onSignOut, 
       attendanceIrregularityChecking: Boolean(attendanceIrregularityPending),
       launchPayrollSelectedIds: [...launchPayrollSelectedIds],
     }), state, { preserveSignaturePad, preserveSignaturePlacement });
-    for (const [name, value] of mascotDateDraft) {
-      const field = root.querySelector(`[name="${name}"]`);
-      if (field && value !== undefined) field.value = value;
+    for (const previousField of mascotDateDraft) {
+      const field = root.querySelector(`[name="${previousField.name}"]`);
+      if (field?.defaultValue === previousField.defaultValue) field.value = previousField.value;
     }
     const pendingReportList = root.querySelector('.chat-pending-provisions--payments .chat-pending-provisions__list');
     if (pendingReportList && pendingReportScroll !== undefined) pendingReportList.scrollTop = pendingReportScroll;
@@ -6040,11 +6069,7 @@ export function createChatView(root, { onOpenSettings, onDemoAccess, onSignOut, 
         if (row && Number.isFinite(attendanceInlineScroll.rowTop)) {
           transcript.scrollTop += row.getBoundingClientRect().top - attendanceInlineScroll.rowTop;
         }
-      } else if (state.rhidMascot) {
-        const samePage = state.rhidMascot.page === lastState?.rhidMascot?.page;
-        transcript.scrollTop = mascotWasOpen && samePage && !state.rhidMascot.busy ? previousScroll : 0;
-      }
-      else if (responseFinished || (messageChanged && !state.activeText)) resetTranscriptPosition(transcript);
+      } else if (responseFinished || (messageChanged && !state.activeText)) resetTranscriptPosition(transcript);
       else transcript.scrollTop = messageChanged ? transcript.scrollHeight : previousScroll;
     }
     if (!state.activeText && (lastState?.activeText || messageChanged) && !attendanceTable?.copy_offer) attendanceInlineScroll = null;
@@ -6063,8 +6088,28 @@ export function createChatView(root, { onOpenSettings, onDemoAccess, onSignOut, 
     if (datePickerOpen) {
       root.querySelector('[data-role="date-picker"]')?.focus?.();
     }
-    if (!mascotWasOpen && state.rhidMascot) root.querySelector('#rhid-mascot-title')?.focus({ preventScroll: true });
-    if (mascotWasOpen && !state.rhidMascot) root.querySelector('[data-action="open-rhid-mascot-report"]')?.focus();
+    if (state.rhidMascot) {
+      const panel = root.querySelector('[data-rhid-mascot-report]');
+      const body = panel?.querySelector('.chat-rhid-mascot__body');
+      if (body && !state.rhidMascot.busy && body.dataset.page === previousMascotBody?.dataset.page) body.scrollTop = mascotScroll;
+      const dialog = activeModalDialog();
+      const layer = dialog?.closest('[data-popup-backdrop]');
+      if (layer?.parentElement === composerControls.shell) {
+        for (const child of layer.parentElement.children) child.toggleAttribute('inert', child !== layer);
+        const previousControl = dialog === panel && [...panel.querySelectorAll('button:enabled, input:enabled, select:enabled')].find(control => {
+          if (mascotPunch) {
+            return ['messageId', 'personKey', 'slot'].every(key => control.dataset[key] === mascotPunch[key]);
+          }
+          if (mascotFocus?.name) return control.name === mascotFocus.name;
+          return mascotFocus?.dataset.action && ['action', 'value', 'messageId', 'personKey', 'slot']
+            .every(key => control.dataset[key] === mascotFocus.dataset[key]);
+        });
+        (previousControl || dialog.querySelector('[data-role="rhid-adjustment-time"]:enabled') || dialog).focus({ preventScroll: true });
+      }
+    } else if (previousMascotBody) {
+      composerControls.composer?.removeAttribute('inert');
+      root.querySelector('[data-action="open-rhid-mascot-report"]')?.focus({ preventScroll: true });
+    }
     if (rhidAttendanceReportOpen && !root.inert) {
       const reportDialog = root.querySelector('[data-rhid-attendance-report-dialog]');
       const focusTarget = rhidAttendanceReportBusy || rhidAttendanceReportError || rhidAttendanceMonthError
@@ -6204,6 +6249,7 @@ export function createChatView(root, { onOpenSettings, onDemoAccess, onSignOut, 
   root.addEventListener("compositionend", compositionEnd);
   root.addEventListener("keydown", voiceKeyDown);
   root.addEventListener("keydown", observationKeyDown);
+  root.addEventListener("keydown", rhidMascotKeyDown);
   root.addEventListener("keyup", voiceKeyUp);
 
   return Object.freeze({
@@ -6262,6 +6308,7 @@ export function createChatView(root, { onOpenSettings, onDemoAccess, onSignOut, 
       root.removeEventListener("compositionend", compositionEnd);
       root.removeEventListener("keydown", voiceKeyDown);
       root.removeEventListener("keydown", observationKeyDown);
+      root.removeEventListener("keydown", rhidMascotKeyDown);
       root.removeEventListener("keyup", voiceKeyUp);
       voiceInput?.destroy();
       voiceInput = null;
