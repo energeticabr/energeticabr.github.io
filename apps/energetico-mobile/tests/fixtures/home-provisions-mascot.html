@@ -32,6 +32,7 @@ import '/src/ui/document-control-report.css';
 import { createDocumentControlReportView } from '/src/ui/document-control-report-view.js';
 import '/src/ui/task-association-report.css';
 import { createTaskAssociationReportView } from '/src/ui/task-association-report-view.js';
+import '/src/ui/gallery-record-actions.css';
 import '/src/ui/dda-report.css';
 import { createSicoobTransactionReportView } from '/src/ui/sicoob-transaction-report-view.js';
 import { decorateReportNavigation } from '/src/ui/report-navigation.js';
@@ -44,13 +45,34 @@ const state={sessionStatus:'authenticated',account:{name:'Bernardo'},draft:'',pe
 ]}]};
 const view=createChatView(document.querySelector('#app'));
 view.on('open-sicoob-transaction-report', () => {
-  const source = createSicoobTransactionReportView({ data: { async loadSnapshot() {
-    return { rows: [{ id: '1', hasAttachments: true, fields: {
-      ORIGEMMOVIMENTACAO: 'SICOOB', DATAPAGAMENTO: '2026-11-09T12:00:00Z', OPERACAO: 'DÉBITO',
-      RAZAOSOCIALRECEBEDOR: 'Comércio e Serviços de Exemplo Ltda. (Loja Exemplo)', DESCRICAO: 'PIX ENVIADO',
-      CONTAPAGADORA: '00001-5', REFERENCIABANCARIA: '1234567', VALOR: 1250.99,
-    } }] };
-  } }, openMediaCollection: async () => {} });
+  let linkedOrder = '11';
+  const source = createSicoobTransactionReportView({
+    data: {
+      async loadSnapshot() {
+        return { rows: [{ id: '1', hasAttachments: true, fields: {
+          ORIGEMMOVIMENTACAO: 'SICOOB', DATAPAGAMENTO: '2026-11-09T12:00:00Z', OPERACAO: 'DÉBITO',
+          RAZAOSOCIALRECEBEDOR: 'Comércio e Serviços de Exemplo Ltda. (Loja Exemplo)', DESCRICAO: 'PIX ENVIADO',
+          CONTAPAGADORA: '00001-5', REFERENCIABANCARIA: '1234567', VALOR: 1250.99, IDPEDIDO: Number(linkedOrder),
+        } }] };
+      },
+      orderLink: {
+        async loadOptions() {
+          return [
+            { id: '11', supplier: 'Outro fornecedor', amount: '1.000,00', label: '#11 · Outro fornecedor · Filial Norte' },
+            { id: '12', supplier: 'Loja Exemplo', amount: '1.251,00', label: '#12 · Loja Exemplo · Filial Sul' },
+            { id: '13', supplier: 'Distribuidora Fictícia', amount: '1.250,99', label: '#13 · Distribuidora Fictícia · Filial Leste' },
+            { id: '14', supplier: 'Loja Exemplo', amount: '1.250,99', label: '#14 · Loja Exemplo · Filial Oeste' },
+          ];
+        },
+        async save({ movementId, orderId, expectedOrderId }) {
+          if (movementId !== '1' || expectedOrderId !== linkedOrder) throw new Error('Vínculo desatualizado.');
+          linkedOrder = orderId;
+          return { movementId, orderId };
+        },
+      },
+    },
+    openMediaCollection: async () => {},
+  });
   const action = 'open-sicoob-transaction-report';
   const sicoobReport = decorateReportPrint(decorateReportNavigation(source, { action }), { action });
   sicoobReport.element.querySelector('.report-close-control').addEventListener('click', sicoobReport.destroy, { once: true });

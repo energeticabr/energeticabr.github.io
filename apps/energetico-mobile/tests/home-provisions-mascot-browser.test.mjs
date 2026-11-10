@@ -40,6 +40,10 @@ test('mascote externo preserva largura de Pendências e abre provisões em celul
     const {targetId}=await send('Target.createTarget',{url:'about:blank'});
     const {sessionId}=await send('Target.attachToTarget',{targetId,flatten:true});
     const evaluate=async (expression,awaitPromise=false)=>{const r=await send('Runtime.evaluate',{expression,returnByValue:true,awaitPromise},sessionId);assert.ok(!r.exceptionDetails,JSON.stringify(r.exceptionDetails));return r.result.value;};
+    const clickAt = async ({ x, y }) => {
+      await send('Input.dispatchMouseEvent', { type: 'mousePressed', x, y, button: 'left', clickCount: 1 }, sessionId);
+      await send('Input.dispatchMouseEvent', { type: 'mouseReleased', x, y, button: 'left', clickCount: 1 }, sessionId);
+    };
     for(const [width,pwa] of [[320,false],[390,false],[768,false],[1365,false],[390,true]]) {
       await send('Emulation.setDeviceMetricsOverride',{width,height:844,deviceScaleFactor:1,mobile:false},sessionId);
       await send('Page.navigate',{url:`http://127.0.0.1:${server.httpServer.address().port}/tests/fixtures/home-provisions-mascot.html?width=${width}&pwa=${pwa}`},sessionId);
@@ -87,12 +91,21 @@ assert.deepEqual(shortcuts.map(s=>s.action),['open-pending-provisions','open-sic
         const table = report.querySelector('.sicoob-transaction-table');
         const summary = report.querySelector('.sicoob-transaction-summary');
         const tableBounds = table.getBoundingClientRect();
+        const receipt = report.querySelector('.sicoob-transaction-receipt').getBoundingClientRect();
+        const pencil = report.querySelector('.sicoob-transaction-link-pencil');
+        const pencilBounds = pencil.getBoundingClientRect();
+        const x = pencilBounds.x + pencilBounds.width / 2;
+        const y = pencilBounds.y + pencilBounds.height / 2;
         const fit = {
           visible: !report.hidden && dialog.width > 0 && dialog.height > 0,
           portrait: report.dataset.reportPortrait,
           text: report.querySelector('tbody tr')?.textContent,
           transactionType: report.querySelector('tbody tr')?.cells[2].textContent,
-          receiptSize: report.querySelector('.sicoob-transaction-receipt')?.offsetHeight,
+          columns: [...table.querySelectorAll('th')].map(th => th.textContent),
+          receiptSize: Math.min(receipt.width, receipt.height),
+          pencilSize: Math.min(pencilBounds.width, pencilBounds.height),
+          pencilHit: { x, y, hit: document.elementFromPoint(x, y)?.closest('button') === pencil },
+          linkedOrder: report.querySelector('.sicoob-transaction-link').textContent,
           fits: content.clientHeight > 70 && content.scrollWidth <= content.clientWidth + 1,
           fullWidth: Math.abs(table.offsetWidth - content.clientWidth) <= 1
             && Math.abs(summary.offsetWidth - content.clientWidth) <= 1,
@@ -103,13 +116,81 @@ assert.deepEqual(shortcuts.map(s=>s.action),['open-pending-provisions','open-sic
         return fit;
       })()`, true);
       if(width===390&&!pwa&&process.env.SICOOB_REPORT_SCREENSHOT){const shot=await send('Page.captureScreenshot',{format:'png'},sessionId);writeFileSync(process.env.SICOOB_REPORT_SCREENSHOT,Buffer.from(shot.data,'base64'));}
-      sicoobFit.closed = await evaluate(`(()=>{const r=document.querySelector('.sicoob-transaction-overlay');r.querySelector('.report-close-control').click();return r.hidden;})()`);
-      assert.ok(sicoobFit?.visible && sicoobFit.fits && sicoobFit.closed, JSON.stringify(sicoobFit));
+      assert.ok(sicoobFit?.visible && sicoobFit.fits, JSON.stringify(sicoobFit));
       assert.ok(sicoobFit.fullWidth && sicoobFit.edgesVisible, 'Sicoob uses the full available width behind the arrows, with both edges visible: '+JSON.stringify(sicoobFit));
       assert.equal(sicoobFit.portrait, String(width < 844));
-      assert.ok(sicoobFit.receiptSize >= 44);
+      assert.deepEqual(sicoobFit.columns, ['Data', 'Recebedor', 'Tipo', 'Contas e referência', 'Valor', 'VINCULAÇÃO']);
+      assert.ok(sicoobFit.receiptSize >= 44 && sicoobFit.pencilSize >= 44 && sicoobFit.pencilHit.hit, JSON.stringify(sicoobFit));
+      assert.equal(sicoobFit.linkedOrder, 'ID 11');
       assert.match(sicoobFit.text, /Loja Exemplo.*1\.250,99/);
       assert.equal(sicoobFit.transactionType, 'Pix');
+      await clickAt(sicoobFit.pencilHit);
+      const pickerFit = await evaluate(`(async () => {
+        await new Promise(requestAnimationFrame);
+        const report = document.querySelector('.sicoob-transaction-overlay');
+        const picker = report.querySelector('.dda-provision-dialog');
+        if (!picker) return null;
+        const list = picker.querySelector('.dda-provision-options');
+        const options = [...list.children];
+        const search = picker.querySelector('.dda-provision-search');
+        const cancel = picker.querySelector('.gallery-record-dialog-buttons button');
+        const submit = picker.querySelector('.dda-provision-save');
+        const { x, y, width, height } = cancel.getBoundingClientRect();
+        const point = { x: x + width / 2, y: y + height / 2 };
+        const listBounds = list.getBoundingClientRect();
+        const inList = option => {
+          const r = option.getBoundingClientRect();
+          return r.left >= listBounds.left - 1 && r.right <= listBounds.right + 1
+            && r.top >= listBounds.top - 1 && r.bottom <= listBounds.bottom + 1;
+        };
+        const firstOptionVisible = inList(options[0]);
+        list.scrollTop = list.scrollHeight;
+        const lastOptionReachable = inList(options.at(-1));
+        list.scrollTop = 0;
+        return {
+          bounds: [picker, list, search, cancel, submit].map(element => {
+            const { left, right, top, bottom, width, height } = element.getBoundingClientRect();
+            return { left, right, top, bottom, width, height };
+          }),
+          cancelHit: { ...point, hit: document.elementFromPoint(point.x, point.y)?.closest('button') === cancel },
+          ids: options.map(option => option.querySelector('input').value),
+          starred: options.map(option => Boolean(option.querySelector('.dda-provision-star'))),
+          checked: picker.querySelector('input:checked')?.value,
+          currentDisabled: submit.disabled,
+          firstOptionVisible,
+          lastOptionReachable,
+        };
+      })()`, true);
+      assert.ok(pickerFit?.cancelHit.hit && pickerFit.bounds.every(r => r.width > 0 && r.height > 0
+        && r.left >= -1 && r.right <= width + 1 && r.top >= -1 && r.bottom <= 845),
+        `Sicoob picker ${width}/${pwa}: ${JSON.stringify(pickerFit)}`);
+      assert.ok(pickerFit.firstOptionVisible && pickerFit.lastOptionReachable, JSON.stringify(pickerFit));
+      assert.deepEqual(pickerFit.ids, ['14', '13', '12', '11']);
+      assert.deepEqual(pickerFit.starred, [true, true, true, false]);
+      assert.equal(pickerFit.checked, '11');
+      assert.equal(pickerFit.currentDisabled, true);
+      if (width === 390 && !pwa && process.env.SICOOB_ORDER_LINK_SCREENSHOT) {
+        const shot = await send('Page.captureScreenshot', { format: 'png' }, sessionId);
+        writeFileSync(process.env.SICOOB_ORDER_LINK_SCREENSHOT, Buffer.from(shot.data, 'base64'));
+      }
+      await evaluate(`document.querySelector('.dda-provision-dialog input[value="14"]').click()`);
+      await clickAt(pickerFit.cancelHit);
+      const sicoobCanceled = await evaluate(`(() => {
+        const report = document.querySelector('.sicoob-transaction-overlay');
+        const pencil = report.querySelector('.sicoob-transaction-link-pencil');
+        return {
+          reportVisible: !report.hidden,
+          pickerClosed: !report.querySelector('.dda-provision-dialog'),
+          focusRestored: document.activeElement === pencil,
+          linkedOrder: pencil.parentElement.textContent,
+        };
+      })()`);
+      assert.deepEqual(sicoobCanceled, { reportVisible: true, pickerClosed: true, focusRestored: true, linkedOrder: 'ID 11' });
+      assert.equal(await evaluate(`(() => {
+        const report = document.querySelector('.sicoob-transaction-overlay');
+        report.querySelector('.report-close-control').click();
+        return report.hidden;
+      })()`), true);
       assert.ok(commercialTop.buttons.every((b,i)=>b.width>=44&&b.height>=44&&Math.abs(b.y-commercialTop.row.y)<=1&&b.x>=0&&b.right<=width&&(!i||b.x>=commercialTop.buttons[i-1].right+8)),JSON.stringify(commercialTop));
       const pinkActions=mascotFit.filter(m=>['open-cargos-table','open-attendance-summary','open-stage-progress','open-supplier-payroll-report','open-trancid-report','open-supplier-workforce-report','open-contractor-control-report','open-pending-supplier-payments-report','open-pending-work-diaries-report'].includes(m.action));
       assert.deepEqual(pinkActions.map(m=>m.action),['open-cargos-table','open-attendance-summary','open-stage-progress','open-supplier-payroll-report','open-trancid-report','open-supplier-workforce-report','open-contractor-control-report','open-pending-supplier-payments-report','open-pending-work-diaries-report']);
