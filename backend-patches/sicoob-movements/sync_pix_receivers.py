@@ -92,7 +92,11 @@ def receipt_ids(content):
         return ids if len(ids) == 1 else set()
     with closing(pypdfium2.PdfDocument(content)) as document:
         with closing(document[0]) as page:
-            with closing(page.render(scale=2)) as bitmap:
+            width, height = page.get_size()
+            if not (width > 0 and height > 0):
+                return set()
+            scale = min(2, 1400 / width, 2600 / height)
+            with closing(page.render(scale=scale)) as bitmap:
                 image = ImageOps.autocontrast(ImageOps.grayscale(bitmap.to_pil()))
     image.thumbnail((1400, 2600))
     picture = BytesIO()
