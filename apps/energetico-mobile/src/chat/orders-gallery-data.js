@@ -721,7 +721,8 @@ export function createPendingProvisionAttachmentsData(options = {}) {
     downloadAttachment: data.downloadAttachment,
     uploadAttachment: data.uploadAttachment,
     updateDueDate: data.updateDueDate,
-    ...(grouped ? { previewDeletion: data.previewDeletion, deleteDescription: data.deleteDescription } : {}),
+    ...(grouped ? { previewDeletion: data.previewDeletion, deleteDescription: data.deleteDescription,
+      previewLaunchLink: data.previewLaunchLink, saveLaunchLink: data.saveLaunchLink } : {}),
   });
 }
 
@@ -762,6 +763,11 @@ function createSharePointListData({
   const descriptionEditor = fieldKey(listName) === 'DESCRITIVOPROVISAO'
     ? createProvisionDescriptionEditor({repository,siteKey,assertSession}) : null;
   const paymentEditor = provisionPaymentSync ? createProvisionPaymentEditor({ repository, siteKey, assertSession }) : null;
+  let descriptionLaunchLink;
+  function launchLinkService() {
+    return descriptionLaunchLink ||= import('./provision-launch-link.js')
+      .then(({ createProvisionLaunchLink }) => createProvisionLaunchLink({ repository, siteKey, assertSession }));
+  }
   let descriptionDeletion;
   function deletionService() {
     if (!descriptionEditor) throw new Error('A exclusão em conjunto requer um descritivo de provisão.');
@@ -1108,6 +1114,8 @@ function createSharePointListData({
       repository, siteKey, normalizeItem, assertSession,
     }, id, options) } : {}),
     ...(descriptionEditor ? { previewDeletion: async id => (await deletionService()).preview(id),
-      deleteDescription: async (context, options) => (await deletionService()).remove(context, options) } : {}),
+      deleteDescription: async (context, options) => (await deletionService()).remove(context, options),
+      previewLaunchLink: async (id, launchId) => (await launchLinkService()).preview(id, launchId),
+      saveLaunchLink: async (preview, childId, options) => (await launchLinkService()).save(preview, childId, options) } : {}),
     ...(filters ? { loadFilterOptions: filters.loadFilterOptions } : {}) });
 }

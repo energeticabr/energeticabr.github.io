@@ -2415,6 +2415,44 @@ function pendingNotesMarkup(snapshot, launchingOrderId = "", error = "") {
   </div>`;
 }
 
+function pendingProvisionLinkMarkup(link) {
+  if (!link) return '';
+  const busy = ['loading', 'saving'].includes(link.status);
+  const launch = link.preview?.launch;
+  const children = link.preview?.children || [];
+  const formatDate = date => date?.split('-').reverse().join('/') || '—';
+  const formatTotal = value => typeof value === 'number'
+    ? new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(value) : '—';
+  const disabled = busy ? ' disabled' : '';
+  return `<div class="chat-confirmation-backdrop" data-popup-backdrop="true" data-popup-close-action="close-pending-provision-link" data-pending-provision-link-dialog>
+    <section class="chat-confirmation chat-pending-provision-link" role="dialog" aria-modal="true" aria-labelledby="pending-provision-link-title">
+      <h2 id="pending-provision-link-title">Vincular lançamento</h2>
+      <p><strong>Descritivo ${escapeHtml(link.id)}</strong> · ${escapeHtml(link.supplier || 'Fornecedor não informado')}</p>
+      ${link.status === 'success' ? `<p role="status"><strong>Lançamento ${escapeHtml(link.launchId)} vinculado.</strong> Pagamento efetivo em ${escapeHtml(formatDate(link.result.paidDate))}.</p>
+        <p>${link.result.parentPaid ? 'O descritivo foi baixado.' : 'O descritivo continua pendente pelos outros itens.'}</p>` : `
+        <label for="pending-provision-launch-id">ID do lançamento</label>
+        <input id="pending-provision-launch-id" class="chat-date-picker__input" inputmode="numeric" maxlength="15" value="${escapeHtml(link.launchId)}"${disabled}${link.recovery ? ' readonly' : ''}>
+        <button class="chat-confirmation__cancel" type="button" data-action="lookup-pending-provision-launch"${disabled}>${link.status === 'loading' ? 'Consultando…' : 'Consultar lançamento'}</button>
+        ${launch ? `<div class="chat-pending-provision-link__preview">
+          <strong>Lançamento ${escapeHtml(launch.id)} · ${escapeHtml(launch.supplier)}</strong>
+          <span>${escapeHtml(launch.branch)}</span>
+          <span>Valor ${escapeHtml(formatTotal(launch.total))} · Pago em ${escapeHtml(formatDate(launch.paidDate))}</span>
+          <label for="pending-provision-link-child">Provisão a baixar</label>
+          <select id="pending-provision-link-child" class="chat-date-picker__input"${disabled}${link.recovery || link.status === 'error' && link.childId ? ' disabled' : ''}>
+            ${children.length > 1 ? '<option value="">Selecione a provisão</option>' : ''}
+            ${children.map(child => `<option value="${escapeHtml(child.id)}"${link.childId === child.id ? ' selected' : ''}>${escapeHtml([child.id, child.product, formatTotal(child.total)].filter(Boolean).join(' · '))}</option>`).join('')}
+          </select>
+        </div>` : ''}
+        ${link.error ? `<p class="chat-pending-provision__error" role="alert">${escapeHtml(link.error)}</p>` : ''}
+        <p data-provision-link-validation class="chat-pending-provision__error" role="status" hidden>Selecione a provisão a baixar.</p>`}
+      <div class="chat-confirmation__actions">
+        <button class="chat-confirmation__cancel" type="button" data-action="close-pending-provision-link"${link.status === 'saving' ? ' disabled' : ''}>${link.status === 'success' ? 'Voltar' : 'Cancelar'}</button>
+        ${launch && link.status !== 'success' ? `<button class="chat-confirmation__confirm" type="button" data-action="confirm-pending-provision-link"${disabled}>${link.status === 'saving' ? 'Vinculando…' : 'Confirmar vínculo e baixa'}</button>` : ''}
+      </div>
+    </section>
+  </div>`;
+}
+
 function pendingProvisionsMarkup(
   snapshot,
   reminderOpen = false,
@@ -2428,6 +2466,8 @@ function pendingProvisionsMarkup(
   dateEditBusy = false,
   deletion = null,
   uploadsByPayment = {},
+  linkOpen = false,
+  recoveries = [],
 ) {
   if (!snapshot || !snapshot.due) return "";
   if (reminderOpen) {
@@ -2497,7 +2537,7 @@ function pendingProvisionsMarkup(
     </div>`;
   }
   const dueWindow = snapshot.openedManually ? "vencidas ou com vencimento em até 2 dias" : "vencidas, vencendo hoje ou amanhã";
-  return `<div class="chat-confirmation-backdrop" data-popup-backdrop="true" data-popup-close-action="dismiss-pending-provisions" data-pending-provisions-dialog>
+  return `<div class="chat-confirmation-backdrop" data-popup-backdrop="true" data-popup-close-action="dismiss-pending-provisions" data-pending-provisions-dialog${linkOpen ? ' inert' : ''}>
     <div class="chat-confirmation chat-pending-provisions chat-pending-provisions--payments" role="dialog" aria-modal="true" aria-labelledby="pending-provisions-title">
       ${reportNavigationMarkup('open-pending-provisions')}
       <div class="chat-date-picker__header chat-pending-provisions__header">
@@ -2507,6 +2547,7 @@ function pendingProvisionsMarkup(
         <div class="chat-pending-provisions__title"><h2 id="pending-provisions-title">Provisões de pagamento pendentes</h2><p>Provisões ${dueWindow} (${rows.length}).</p></div>
       </div>
       ${!rows.length ? '<p class="chat-pending-provisions__empty" role="status">Nenhuma provisão pendente no período.</p>' : ""}
+      ${(recoveries || []).map(({id, launchId}) => `<button type="button" class="chat-pending-provision__retry" data-action="resume-pending-provision-link" data-payment-id="${escapeHtml(id)}" data-value="${escapeHtml(launchId)}">Retomar vínculo do descritivo ${escapeHtml(id)} com o lançamento ${escapeHtml(launchId)}</button>`).join('')}
       ${snapshot.upcomingUnavailable || snapshot.totalsUnavailable ? `<p class="chat-pending-provision__error" role="status">${snapshot.sourceKind === "provision-description" && !snapshot.upcomingUnavailable
         ? "Há descritivos com valores não conferidos. Valores desconhecidos aparecem como —."
         : "Não foi possível conferir todos os valores e vencimentos. Valores não conferidos aparecem como —."}</p>` : ""}
@@ -2530,6 +2571,7 @@ function pendingProvisionsMarkup(
           const listId = `pending-provision-attachments-${paymentId}`;
           const edit = `<button class="chat-pending-provision__edit chat-pending-provision__edit--due-date" type="button" data-action="edit-pending-provision-due-date" data-payment-id="${escapeHtml(paymentId)}" aria-label="Editar vencimento de ${escapeHtml(row.supplier || paymentId)}" title="Editar data de vencimento"${!paymentId || (Boolean(settlingPaymentId) || uploadsBusy) || reminderOpen ? " disabled" : ""}>✏️</button>`;
           const check = `<button class="chat-pending-provision__settle" type="button" data-action="settle-pending-provision" data-payment-id="${escapeHtml(paymentId)}" aria-label="Iniciar baixa do ${grouped ? "descritivo" : "pagamento"} ${escapeHtml(row.supplier || paymentId)}${paymentId ? ` (ID ${escapeHtml(paymentId)})` : ""}" title="Iniciar baixa ${grouped ? "deste descritivo" : "deste pagamento"}"${!paymentId || row.settlementBlocked === true || (Boolean(settlingPaymentId) || uploadsBusy) || reminderOpen ? " disabled" : ""}>✅</button>`;
+          const link = grouped ? `<button class="chat-pending-provision__link" type="button" data-action="open-pending-provision-link" data-payment-id="${escapeHtml(paymentId)}" aria-label="Vincular lançamento ao descritivo ${escapeHtml(paymentId)}"${!paymentId || settlingPaymentId || uploadsBusy ? ' disabled' : ''}>Vincular</button>` : '';
           const remove = grouped ? `<button class="chat-pending-provision__delete" type="button" data-action="request-pending-provision-deletion" data-payment-id="${escapeHtml(paymentId)}" aria-label="Excluir descritivo ${escapeHtml(paymentId)} e provisões vinculadas" title="Excluir descritivo e provisões vinculadas"${!paymentId || (Boolean(settlingPaymentId) || uploadsBusy) || reminderOpen ? ' disabled' : ''}>×</button>` : '';
           const arrowState = hasAttachments ? 'available' : ['loading', 'error'].includes(attachmentState.status) ? attachmentState.status : 'empty';
           const arrowLabel = hasAttachments ? `${expanded ? 'Recolher' : 'Mostrar'} anexos do pagamento ${paymentId}`
@@ -2548,7 +2590,7 @@ function pendingProvisionsMarkup(
               <div class="chat-pending-provision__due" data-field="dueDate">${pendingProvisionIcon("calendar")}<div><span>Vencimento</span><strong>${escapeHtml(timing.date)}</strong><small class="chat-pending-provision__timing">${escapeHtml(timing.label)}</small></div></div>
               <div class="chat-pending-provision__total${splitAmount ? " chat-pending-provision__total--split" : ""}" data-field="total"><span>Valor</span><strong>${escapeHtml(amountDisplay)}</strong></div>
             </div>
-            <div class="chat-pending-provision__supplier" data-field="summary"><div class="chat-pending-provision__supplier-info">${groupDetails}<div class="chat-pending-provision__field" data-field="product"><span>Produto</span><strong>${escapeHtml(pendingProvisionValue(row.productDisplay ?? row.product))}</strong></div><div class="chat-pending-provision__field" data-field="branch"><span>FILIAL</span><strong>${escapeHtml(pendingProvisionLocation(row))}</strong></div></div><div class="chat-pending-provision__actions">${edit}${check}${remove}${arrow}</div></div>
+            <div class="chat-pending-provision__supplier" data-field="summary"><div class="chat-pending-provision__supplier-info">${groupDetails}<div class="chat-pending-provision__field" data-field="product"><span>Produto</span><strong>${escapeHtml(pendingProvisionValue(row.productDisplay ?? row.product))}</strong></div><div class="chat-pending-provision__field" data-field="branch"><span>FILIAL</span><strong>${escapeHtml(pendingProvisionLocation(row))}</strong></div></div><div class="chat-pending-provision__actions">${edit}${check}${link}${remove}${arrow}</div></div>
             ${grouped && row.amountError ? `<p class="chat-pending-provision__error" data-field="amountError" role="status">Baixa bloqueada: ${escapeHtml(row.amountError)}</p>` : ""}
             ${attachmentState.error ? `<small class="chat-pending-provision__error" role="status">${escapeHtml(attachmentState.error)}</small>` : ""}${attachmentState.status === 'error' ? `<button class="chat-pending-provision__retry" type="button" data-action="retry-pending-provision-attachments" data-payment-id="${escapeHtml(paymentId)}" aria-label="Tentar consultar anexos do pagamento ${escapeHtml(paymentId)}"${!paymentId || (Boolean(settlingPaymentId) || uploadsBusy) || reminderOpen ? ' disabled' : ''}>Tentar novamente</button>` : ''}${attachmentState.actionError ? `<small class="chat-pending-provision__error" role="alert">${escapeHtml(attachmentState.actionError)}</small>` : ""}${canExpand ? `<div id="${escapeHtml(listId)}"${expanded ? '' : ' hidden'}>${attachmentList}${expanded ? pendingProvisionAttachmentTray(paymentId, uploadsByPayment[paymentId], (Boolean(settlingPaymentId) || uploadsBusy)) : ''}</div>` : ''}</article>`;
         }).join("")}
@@ -3044,7 +3086,8 @@ export function renderChatMarkup(state = {}, { showSettings = false, allowDemo =
     ${signaturePad ? signaturePadMarkup(signaturePadError) : ""}
     ${placement?.status === "ready" && placement.open === false ? signaturePlacementReopenMarkup() : ""}
     ${placement && placement.open !== false ? signaturePlacementMarkup(placement, busy, signaturePlacementStampApplied) : ""}
-    ${showPendingReminders ? pendingProvisionsMarkup(state.pendingProvisions, state.pendingProvisionReminderOpen, state.pendingProvisionReminderError, state.pendingProvisionAttachments, state.pendingProvisionExpandedPaymentId, state.pendingProvisionSettlementPaymentId, state.pendingProvisionDateEditPaymentId, state.pendingProvisionDateEditValue, state.pendingProvisionDateEditError, state.pendingProvisionDateEditBusy, state.pendingProvisionDeletion, state.pendingProvisionUploads) : ""}
+    ${showPendingReminders ? pendingProvisionsMarkup(state.pendingProvisions, state.pendingProvisionReminderOpen, state.pendingProvisionReminderError, state.pendingProvisionAttachments, state.pendingProvisionExpandedPaymentId, state.pendingProvisionSettlementPaymentId, state.pendingProvisionDateEditPaymentId, state.pendingProvisionDateEditValue, state.pendingProvisionDateEditError, state.pendingProvisionDateEditBusy, state.pendingProvisionDeletion, state.pendingProvisionUploads, Boolean(state.pendingProvisionLink), state.pendingProvisionLinkRecoveries) : ""}
+    ${showPendingReminders ? pendingProvisionLinkMarkup(state.pendingProvisionLink) : ""}
     ${showPendingReminders && !state.pendingProvisions ? pendingConstructionDiariesMarkup(state.pendingConstructionDiaries, state.pendingConstructionDiaryFillingId, state.pendingConstructionDiaryError, state.busy) : ""}
     ${showPendingReminders && !state.pendingProvisions && !state.pendingConstructionDiaries ? pendingNotesMarkup(state.pendingNotes, state.pendingNoteLaunchOrderId, state.pendingNoteLaunchFailed ? state.error : "") : ""}
     ${attachmentSource ? attachmentSourceMarkup(typeof attachmentSource === "string" ? attachmentSource : "") : ""}
@@ -4312,7 +4355,7 @@ export function createChatView(root, { onOpenSettings, onDemoAccess, onSignOut, 
          "pendingProvisionExpandedPaymentId", "pendingProvisionSettlementPaymentId",
          "pendingProvisionDateEditPaymentId", "pendingProvisionDateEditValue",
          "pendingProvisionDateEditError", "pendingProvisionDateEditBusy", "pendingProvisionUploadsRevision",
-         "pendingProvisionDeletion",
+         "pendingProvisionDeletion", "pendingProvisionLink",
        ].every(key => lastState[key] === state[key]);
   }
 
@@ -4724,6 +4767,24 @@ export function createChatView(root, { onOpenSettings, onDemoAccess, onSignOut, 
     }
     if (command.type === "send-text") return;
     event.preventDefault?.();
+    if (command.type === 'lookup-pending-provision-launch') {
+      emit({ ...command, value: root.querySelector('#pending-provision-launch-id')?.value || '' });
+      return;
+    }
+    if (command.type === 'confirm-pending-provision-link') {
+      const value = root.querySelector('#pending-provision-link-child')?.value || '';
+      const launchInput = root.querySelector('#pending-provision-launch-id');
+      if (launchInput?.value.trim() !== lastState?.pendingProvisionLink?.launchId) {
+        emit({ type: 'lookup-pending-provision-launch', value: launchInput?.value || '' });
+      } else if (value) {
+        emit({ ...command, value });
+      } else {
+        const validation = root.querySelector('[data-provision-link-validation]');
+        if (validation) validation.hidden = false;
+        root.querySelector('#pending-provision-link-child')?.focus();
+      }
+      return;
+    }
     if (command.type === 'rhid-mascot-apply') {
       emit({ type: command.type, start: root.querySelector('[name="rhid-start"]')?.value || '',
         end: root.querySelector('[name="rhid-end"]')?.value || '' });
@@ -6000,6 +6061,9 @@ export function createChatView(root, { onOpenSettings, onDemoAccess, onSignOut, 
     const previousMascotBody = root.querySelector('.chat-rhid-mascot__body');
     const mascotScroll = previousMascotBody?.scrollTop || 0;
     const previousFocus = root.ownerDocument.activeElement;
+    const sameProvisionLink = state.pendingProvisionLink && state.pendingProvisionLink === lastState?.pendingProvisionLink;
+    const previousLinkFields = sameProvisionLink ? ['pending-provision-launch-id', 'pending-provision-link-child']
+      .map(id => root.querySelector(`#${id}`)).filter(Boolean) : [];
     const mascotFocus = previousFocus?.closest('[data-rhid-mascot-report]') ? previousFocus : null;
     const mascotPunch = root.querySelector('[data-rhid-adjustment-dialog][data-message-id]')?.dataset;
     const mascotDateDraft = state.rhidMascot && (!state.rhidMascot.busy || state.rhidMascot.query === lastState?.rhidMascot?.query)
@@ -6047,6 +6111,18 @@ export function createChatView(root, { onOpenSettings, onDemoAccess, onSignOut, 
     for (const previousField of mascotDateDraft) {
       const field = root.querySelector(`[name="${previousField.name}"]`);
       if (field?.defaultValue === previousField.defaultValue) field.value = previousField.value;
+    }
+    for (const previous of previousLinkFields) {
+      const field = root.querySelector(`#${previous.id}`);
+      if (!field || field.disabled) continue;
+      field.value = previous.value;
+      if (previous === previousFocus) {
+        field.focus({ preventScroll: true });
+        if (typeof previous.selectionStart === 'number') field.setSelectionRange(previous.selectionStart, previous.selectionEnd);
+      }
+    }
+    if (state.pendingProvisionLink?.status === 'entry' && !lastState?.pendingProvisionLink) {
+      root.querySelector('#pending-provision-launch-id')?.focus({ preventScroll: true });
     }
     const pendingReportList = root.querySelector('.chat-pending-provisions--payments .chat-pending-provisions__list');
     if (pendingReportList && pendingReportScroll !== undefined) pendingReportList.scrollTop = pendingReportScroll;
