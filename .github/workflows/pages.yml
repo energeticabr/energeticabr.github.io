@@ -127,7 +127,8 @@ jobs:
                 && Date.parse(artifact.created_at) >= Date.parse(run.run_started_at)
                 && Date.parse(artifact.created_at) <= candidate.time);
               const history = available.find(artifact => artifact.name === 'energetico-web-assets');
-              const artifact = history || available.find(artifact => artifact.name === 'github-pages');
+              const artifact = history || available.find(artifact => artifact.name === 'github-pages'
+                || artifact.name.startsWith('github-pages-attempt-'));
               if (!artifact) continue;
               const destination = path.resolve('.previous-energetico', String(run.id));
               fs.mkdirSync(destination, { recursive: true });
@@ -170,8 +171,11 @@ jobs:
       - name: Upload static site
         uses: actions/upload-pages-artifact@v3
         with:
+          name: github-pages-attempt-${{ github.run_attempt }}
           path: _site
 
       - name: Deploy
         id: deployment
         uses: actions/deploy-pages@v4
+        with:
+          artifact_name: github-pages-attempt-${{ github.run_attempt }}
