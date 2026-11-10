@@ -23,7 +23,7 @@
          elif operation == "delete":
              self.sharepoint._request("POST", self._item_endpoint(LAUNCHES, item_id), headers={
                  "IF-MATCH": self._etag(current), "X-HTTP-Method": "DELETE"})
-@@ -739,6 +744,207 @@
+@@ -739,6 +744,214 @@
          self.sharepoint._request("POST", self._item_endpoint(LAUNCHES, item_id), json=body,
              headers={"Content-Type": "application/json;odata=nometadata", "IF-MATCH": self._etag(current), "X-HTTP-Method": "MERGE"})
 
@@ -221,7 +221,14 @@
 +                                or any(latest.get(k) != v for k, v in replacement.items())):
 +                            incomplete = True
 +                            continue
-+                        self._merge_payroll_line(latest, {key: line[key] for key in replacement})
++                        restore = {key: line[key] for key in replacement}
++                        conditional_write(
++                            lambda: self._merge_payroll_line(latest, restore),
++                            lambda: read_back("FOLHAPGTO", str(line["ID"]), labels),
++                            lambda saved: saved.get("IDLANCAMENTO") == item_id and
++                            all(saved.get(k) == v for k, v in restore.items()),
++                            tag, lambda _: None,
++                        )
 +                    except (requests.RequestException, LaunchGalleryError):
 +                        incomplete = True
 +                if incomplete:

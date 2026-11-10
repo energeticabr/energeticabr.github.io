@@ -40,6 +40,7 @@ class PayrollSharePoint(SharePoint):
         self.concurrent_payroll_edit = False
         self.failed_readbacks = 0
         self.delayed_write = None
+        self.delay_supplier = None
         self.pending_write = None
 
     def _request(self, method, endpoint, **kw):
@@ -50,7 +51,8 @@ class PayrollSharePoint(SharePoint):
             self.failed_readbacks -= 1
             raise requests.Timeout('unavailable payroll readback')
         if method == 'POST' and item:
-            if key == self.delayed_write:
+            if key == self.delayed_write and (self.delay_supplier is None or
+                    kw.get('json', {}).get('FORNECEDOR') == self.delay_supplier):
                 if self.pending_write is None:
                     self.pending_write = (method, endpoint, kw)
                     raise requests.Timeout('write may still commit')
@@ -133,6 +135,16 @@ class PayrollTransferTests(unittest.TestCase):
             self.transfer()
         assert error.exception.code == 'conflict'
         assert not self.sp.mutations
+
+    def test_delayed_compensation_is_confirmed_before_returning_the_conflict(self):
+        self.sp.conflict = 'LANCAMENTOS', '1'
+        self.sp.delayed_write = 'FOLHAPGTO', '505'
+        self.sp.delay_supplier = "D'ÁGUA"
+        with self.assertRaises(LaunchGalleryError) as error:
+            self.transfer()
+        assert error.exception.code == 'conflict'
+        assert self.launch['field_5'] == self.line['FORNECEDOR'] == "D'ÁGUA"
+        assert self.line['IDFOLHA'] == '41'
 
     def test_compensation_does_not_overwrite_a_concurrent_payroll_edit(self):
         self.sp.conflict = 'LANCAMENTOS', '1'
