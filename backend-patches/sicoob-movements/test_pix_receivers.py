@@ -1,6 +1,9 @@
 import unittest
+from io import BytesIO
+from types import SimpleNamespace
+from unittest.mock import patch
 
-from sync_pix_receivers import bank_match, extract_end_ids, pix_matches, pix_receiver_fields
+from sync_pix_receivers import bank_match, extract_end_ids, pix_matches, pix_receiver_fields, receipt_ids
 
 END_ID = 'E12345678202611061530ABCDEFGHIJK'
 
@@ -46,3 +49,12 @@ class PixTest(unittest.TestCase):
         self.assertIsNone(bank_match(movement, {END_ID: None, 'other': None}, answers, [movement], '12345678000190'))
         self.assertEqual(bank_match(movement, {END_ID: None}, answers, [movement], '12345678000190'),
                          (self.pix, END_ID, None))
+
+    def test_scanned_pdf_can_be_rendered_before_ocr(self):
+        from PIL import Image
+        output = BytesIO()
+        Image.new('RGB', (200, 300), 'white').save(output, format='PDF')
+        result = SimpleNamespace(stdout=f'SICOOB Comprovante de Pix\n{END_ID}'.encode())
+        with patch('sync_pix_receivers.subprocess.run', return_value=result) as ocr:
+            self.assertEqual(receipt_ids(output.getvalue()), {END_ID})
+        self.assertTrue(ocr.call_args.kwargs['input'].startswith(b'\x89PNG'))
