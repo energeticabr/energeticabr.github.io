@@ -45,12 +45,12 @@ const state={sessionStatus:'authenticated',account:{name:'Bernardo'},draft:'',pe
 const view=createChatView(document.querySelector('#app'));
 view.on('open-sicoob-transaction-report', () => {
   const source = createSicoobTransactionReportView({ data: { async loadSnapshot() {
-    return { rows: [{ id: '1', fields: {
+    return { rows: [{ id: '1', hasAttachments: true, fields: {
       ORIGEMMOVIMENTACAO: 'SICOOB', DATAPAGAMENTO: '2026-11-09T12:00:00Z', OPERACAO: 'DÉBITO',
       RAZAOSOCIALRECEBEDOR: 'Comércio e Serviços de Exemplo Ltda. (Loja Exemplo)', DESCRICAO: 'PIX ENVIADO',
-      CONTAPAGADORA: '00001-5', REFERENCIABANCARIA: 'EXEMPLO-1234', VALOR: 1250.99,
+      CONTAPAGADORA: '00001-5', REFERENCIABANCARIA: '1234567', VALOR: 1250.99,
     } }] };
-  } } });
+  } }, openMediaCollection: async () => {} });
   const action = 'open-sicoob-transaction-report';
   const sicoobReport = decorateReportPrint(decorateReportNavigation(source, { action }), { action });
   sicoobReport.element.querySelector('.report-close-control').addEventListener('click', sicoobReport.destroy, { once: true });

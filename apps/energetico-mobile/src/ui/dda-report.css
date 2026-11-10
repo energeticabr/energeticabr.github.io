@@ -144,4 +144,14 @@
 .sicoob-transaction-table td:first-child { white-space: nowrap; }
 .sicoob-transaction-table td:last-child { text-align: right; }
 .sicoob-transaction-table small { display: block; margin-top: 3px; color: #456375; }
+.sicoob-transaction-table .sicoob-transaction-receipt {
+  display: grid;
+  place-items: center;
+  margin: 4px 0 0 auto;
+  min-width: 44px;
+  min-height: 44px;
+  padding: 4px;
+  color: #225b97;
+}
+.sicoob-transaction-receipt svg { width: 30px; height: 30px; }
 @media print { .ddr-open-pdf { display: none !important; } }

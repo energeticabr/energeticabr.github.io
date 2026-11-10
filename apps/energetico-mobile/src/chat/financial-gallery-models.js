@@ -28,6 +28,7 @@ export const FINANCIAL_GALLERY_MODELS = Object.freeze({
       DOCUMENTORECEBEDOR: 'CPF/CNPJ do recebedor', REFERENCIABANCARIA: 'Referência bancária',
       ORIGEMMOVIMENTACAO: 'Origem' }),
     metadataEditorFields: movementFields,
+    showAttachments: true,
     filterFields: ['ID', ...movementFields, 'RAZAOSOCIALRECEBEDOR', 'CONTAPAGADORA', 'ORIGEMMOVIMENTACAO'],
     dateRangeField: 'DATAPAGAMENTO',
     sourceSort: [{ field: 'DATAPAGAMENTO', direction: 'desc', type: 'date' }, { field: 'ID', direction: 'desc', type: 'number' }],

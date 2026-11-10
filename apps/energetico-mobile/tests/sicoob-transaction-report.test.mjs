@@ -87,3 +87,35 @@ test('rejects a partial snapshot and supports retry', async () => {
     dom.window.close();
   }
 });
+
+test('opens the payment receipt for its own movement', async () => {
+  const dom = new JSDOM('<main id="app"></main>');
+  const receipt = 'Comprovante-Sicoob-1234567.pdf';
+  const rows = [payment(1), { ...payment(2, { REFERENCIABANCARIA: '1234567' }), hasAttachments: true }];
+  let opened;
+  const view = createSicoobTransactionReportView({
+    document: dom.window.document,
+    data: {
+      async loadSnapshot() { return { rows }; },
+      async listAttachments(id) {
+        assert.equal(id, '2');
+        return [{ fileName: 'Comprovante-Sicoob-7654321.pdf' }, { fileName: receipt }];
+      },
+      async downloadAttachment(id, name) { return [id, name]; },
+    },
+    async openMediaCollection(items) {
+      opened = await Promise.all(items.map(item => item.source()));
+    },
+  });
+  try {
+    await view.open();
+    const buttons = view.element.querySelectorAll('button[aria-label^="Abrir comprovante"]');
+    assert.equal(buttons.length, 1);
+    buttons[0].click();
+    await new Promise(resolve => setImmediate(resolve));
+    assert.deepEqual(opened, [['2', receipt]]);
+  } finally {
+    view.destroy();
+    dom.window.close();
+  }
+});

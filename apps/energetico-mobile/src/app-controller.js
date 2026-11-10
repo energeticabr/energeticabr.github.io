@@ -10186,7 +10186,7 @@ export function createAppController({
             } : {}),
             ...(isSicoobTransactionReport ? { onClose: () => registrationGalleryOpenings.delete(kind) } : {}),
             ...(reportAction || ["contractorEmployment", "dda", "notas_fiscais_sefaz", 'assetMenu', 'registrationMenu', 'assetLaunches'].includes(sourceKind) ? {} : { onCreate: galleryCreationHandler(replyId, assertSession) }),
-            ...(["notas_fiscais_sefaz", "dda", "presenceDescriptions", "provisionDescription", "documents", "asset", "assetFunction", "assetProduct", "assetGroup", "workDiary", "quotes", "contracts", "contractLines", "measurements", "measurementLines", "stageDemonstratives", "constructionStages", "recurringTasks", "delegatedTasks"].includes(sourceKind) ? {
+            ...(["financial_movement", "notas_fiscais_sefaz", "dda", "presenceDescriptions", "provisionDescription", "documents", "asset", "assetFunction", "assetProduct", "assetGroup", "workDiary", "quotes", "contracts", "contractLines", "measurements", "measurementLines", "stageDemonstratives", "constructionStages", "recurringTasks", "delegatedTasks"].includes(sourceKind) ? {
               openMediaCollection: (items, previewOptions) => {
                 assertSession();
                 const collection = (Array.isArray(items) ? items : []).map(item => ({

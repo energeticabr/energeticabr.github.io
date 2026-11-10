@@ -4,6 +4,7 @@ import { isImportedFinancialMovement } from '../chat/financial-gallery-models.js
 import { registrationDateKey, registrationNumber } from '../chat/registration-gallery-data.js';
 import { addReportCloseControl } from './report-close-control.js';
 import { bindReportLandscape } from './report-landscape.js';
+import { PDF_ATTACHMENT_ICON } from './report-pdf-attachment-icon.js';
 
 const LOGO = new URL('../../../../assets/logo-energetica-oficial.png', import.meta.url).href;
 const TITLE = 'Relatório de transações Sicoob';
@@ -16,7 +17,7 @@ function projectTransactions(snapshot) {
   if (!Array.isArray(snapshot?.rows) || snapshot.hasMore === true || snapshot.complete === false) {
     throw new Error('Consulta de transações incompleta.');
   }
-  return snapshot.rows.filter(({ fields }) => isImportedFinancialMovement(fields)).map(({ id, fields }) => {
+  return snapshot.rows.filter(({ fields }) => isImportedFinancialMovement(fields)).map(({ id, fields, hasAttachments }) => {
     const transaction = {
       id: String(id),
       date: registrationDateKey(fields.DATAPAGAMENTO),
@@ -32,11 +33,13 @@ function projectTransactions(snapshot) {
     return {
       ...transaction,
       searchText: normalizeSearchText([...Object.values(transaction), dateLabel(transaction.date)].join(' ')),
+      hasReceipt: /^\d{4,18}$/.test(transaction.reference) && (hasAttachments === true
+        || (hasAttachments == null && /\b(?:BOLETO|TIT|TITULO)\b/i.test(transaction.description))),
     };
   }).sort((a, b) => b.date.localeCompare(a.date) || b.id.localeCompare(a.id, 'pt-BR', { numeric: true }));
 }
 
-export function createSicoobTransactionReportView({ document: doc = globalThis.document, data, onClose } = {}) {
+export function createSicoobTransactionReportView({ document: doc = globalThis.document, data, onClose, openMediaCollection } = {}) {
   const make = (tag, className = '', value = '') => {
     const node = doc.createElement(tag);
     node.className = className;
@@ -92,7 +95,11 @@ export function createSicoobTransactionReportView({ document: doc = globalThis.d
   content.tabIndex = 0;
   content.setAttribute('role', 'region');
   content.setAttribute('aria-label', 'Transações importadas do Sicoob');
-  report.append(toolbar, content);
+  const notice = make('p', 'ddr-notice');
+  notice.setAttribute('role', 'status');
+  notice.hidden = true;
+  notice.dataset.reportScreenOnly = '';
+  report.append(toolbar, notice, content);
   panel.append(report);
   root.append(panel);
   doc.body.append(root);
@@ -105,7 +112,42 @@ export function createSicoobTransactionReportView({ document: doc = globalThis.d
   let returnFocus;
   let oldOverflow;
   let oldInert;
+  let receiptRequest;
   const app = doc.getElementById('app');
+
+  function showNotice(message = '') {
+    notice.textContent = message;
+    notice.hidden = !message;
+  }
+
+  async function openReceipt(transaction, trigger) {
+    if (receiptRequest || !request || root.hidden) return;
+    const signal = request.signal;
+    const active = receiptRequest = {};
+    const current = () => receiptRequest === active && !signal.aborted && trigger.isConnected;
+    trigger.disabled = true;
+    showNotice();
+    try {
+      const attachments = await data.listAttachments(transaction.id, { refresh: true, signal });
+      if (!current()) return;
+      const receiptName = `Comprovante-Sicoob-${transaction.reference}.pdf`;
+      const receipt = attachments.find(item => item.fileName === receiptName);
+      if (!receipt) {
+        showNotice('Ainda não há comprovante Sicoob anexado a esta transação.');
+        return;
+      }
+      trigger.disabled = false;
+      await openMediaCollection([{
+        fileName: receiptName,
+        source: options => data.downloadAttachment(transaction.id, receiptName, { ...options, signal: options?.signal ?? signal }),
+      }], { layout: 'report-pdf', signal, resolveReturnFocus: () => trigger.isConnected ? trigger : panel });
+    } catch {
+      if (current()) showNotice('Não foi possível abrir o comprovante. Tente novamente.');
+    } finally {
+      if (receiptRequest === active) receiptRequest = null;
+      trigger.disabled = false;
+    }
+  }
 
   function populateAccounts() {
     const current = controls.account.value;
@@ -182,6 +224,13 @@ export function createSicoobTransactionReportView({ document: doc = globalThis.d
       const value = row.insertCell();
       value.className = 'ddr-money';
       value.textContent = transaction.value === null ? '—' : currency.format(transaction.value);
+      if (!printAll && transaction.hasReceipt && typeof openMediaCollection === 'function') {
+        const receipt = button(`Abrir comprovante da transação ${transaction.id}`, '');
+        receipt.className = 'sicoob-transaction-receipt';
+        receipt.innerHTML = PDF_ATTACHMENT_ICON;
+        receipt.addEventListener('click', () => void openReceipt(transaction, receipt));
+        value.append(receipt);
+      }
     }
     content.append(table);
     if (printAll || pages === 1) return;
@@ -204,6 +253,9 @@ export function createSicoobTransactionReportView({ document: doc = globalThis.d
   }
 
   async function load() {
+    request?.abort();
+    receiptRequest = null;
+    showNotice();
     const active = request = new AbortController();
     rows = null;
     root.setAttribute('aria-busy', 'true');
@@ -235,7 +287,9 @@ export function createSicoobTransactionReportView({ document: doc = globalThis.d
     if (root.hidden) return;
     request?.abort();
     request = null;
+    receiptRequest = null;
     rows = null;
+    showNotice();
     content.replaceChildren();
     root.hidden = true;
     doc.body.style.overflow = oldOverflow;
