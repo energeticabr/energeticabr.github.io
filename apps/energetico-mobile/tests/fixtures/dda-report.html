@@ -36,7 +36,7 @@ const report=decorateReportPrint(decorateReportNavigation(createDdaReportView({d
  copyText:async text=>{window.ddaBarcodeCopies.push(text);},syncMonitor,data:{
   loadSnapshot:async()=>{snapshotLoads++;return {rows:source};},
   listAttachments:async()=>{window.ddaMirrorClicks++;return [];},downloadAttachment:async()=>null,
-  ...((settlementLayout||paymentMode)?{loadItem:async id=>source.find(row=>row.id===id),provisionLink:{loadSettledProvisionIds:async()=>new Set()}}:{})
+  ...((settlementLayout||paymentMode)?{loadItem:async id=>source.find(row=>row.id===id),provisionLink:{loadSettledDdaIds:async()=>new Set()}}:{})
  },openMediaCollection:()=>{},
  onStartSettlement:async id=>{document.documentElement.dataset.ddaSettlementSelected=id;return !paymentMode;},
  confirmPayment:async({itemId,key})=>{window.ddaPaymentCalls++;return {status:'confirmed',itemId,key,confirmedAt:'2026-10-28T18:00:00Z',confirmedBy:'demo@example.test'};}}),{action:'open-dda-report',onNavigate:()=>report.close()}),

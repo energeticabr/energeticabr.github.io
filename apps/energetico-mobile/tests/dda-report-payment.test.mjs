@@ -14,7 +14,7 @@ async function setup(t,{settled=[],onStartSettlement,loadItem}={}){
  const view=createDdaReportView({document:doc,data:{
   loadSnapshot:async()=>({rows}),
   loadItem:async(id,options)=>{calls.reads.push(id);return loadItem?loadItem(id,options):rows.find(item=>item.id===id);},
-  provisionLink:{loadSettledProvisionIds:async ids=>new Set(ids.filter(id=>settled.includes(id)))},
+  provisionLink:{loadSettledDdaIds:async rows=>new Set(rows.filter(row=>settled.includes(row.id)).map(row=>row.id))},
  },confirmPayment:async()=>{calls.writes++;},
  onStartSettlement:async id=>{calls.starts.push(id);return onStartSettlement?onStartSettlement(id):true;},
  now:()=>new Date('2026-11-09T12:00:00Z')});
@@ -27,7 +27,7 @@ async function setup(t,{settled=[],onStartSettlement,loadItem}={}){
 }
 
 test('the report check is enabled for linked open or paid DDAs and disabled without a link or after settlement',async t=>{
- const h=await setup(t,{settled:['90']});
+ const h=await setup(t,{settled:['34']});
  for(const id of [31,32])assert.equal(h.check(id)?.disabled,false);
  for(const id of [33,34]){assert.equal(h.check(id)?.disabled,true);h.check(id).click();}
  assert.equal(h.dialog(),null);

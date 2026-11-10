@@ -72,10 +72,10 @@ test('bank-paid and manually confirmed linked DDAs offer the exact provision unt
    manuallyPaid,row(50,{SITUACAO:'Pago'}),row(51,{SITUACAO:'Baixado',DESCRITIVOPROVIS_x00c3_O:'70'}),
   ]}),
   async loadItem(id){assert.equal(id,'34');return {...manuallyPaid,fields:{...manuallyPaid.fields,DESCRITIVOPROVIS_x00c3_O:liveLink}};},
-  provisionLink:{async loadSettledProvisionIds(ids){
-   assert.deepEqual(ids,['8','56','70']);
+  provisionLink:{async loadSettledDdaIds(rows){
+   assert.deepEqual(rows.map(row=>row.provisionId),['8','56','70']);
    if(!settled)await new Promise(resolve=>{verify=resolve;});
-   return new Set(settled?['56']:[]);
+   return new Set(settled?['34']:[]);
   }},
  },{onStartSettlement:async id=>{starts.push(id);return false;}});
  const opening=view.open({automatic:true});await tick();
@@ -104,7 +104,7 @@ test('bank-paid and manually confirmed linked DDAs offer the exact provision unt
 test('the pending row participates in pagination and filtered print, and disappears only after verified settlement',async t=>{
  let settled=false,lookups=0;
  const data={loadSnapshot:async()=>({rows:[...Array.from({length:51},(_,i)=>row(i+1)),row(52,{...paid,VENCIMENTO:'2026-11-10'})]}),
-  provisionLink:{async loadSettledProvisionIds(ids){assert.deepEqual(ids,['21']);lookups++;if(lookups===1)throw new Error('private detail');return new Set(settled?['21']:[]);}}};
+  provisionLink:{async loadSettledDdaIds(rows){assert.deepEqual(rows.map(row=>row.provisionId),['21']);lookups++;if(lookups===1)throw new Error('private detail');return new Set(settled?['52']:[]);}}};
  const {doc,view,filter,ids}=setup(t,data);
  await view.open();assert.equal(lookups,1);assert.equal(ids().length,50);assert.doesNotMatch(doc.body.textContent,/private detail/);
  doc.querySelector('[data-page-next]').click();assert.deepEqual(ids(),['51','52']);
@@ -132,7 +132,7 @@ test('relink aborts proof for the old parent and preserves report position and r
  const provisionLink={
   async loadOptions(){return [{id:'23',supplier:'Fornecedor 1',amount:50,label:'#23 · Fornecedor 1'}];},
   async save({ddaId,provisionId}){return {ddaId,provisionId};},
-  loadSettledProvisionIds(ids,{signal}){return new Promise(resolve=>checks.push({ids,signal,resolve}));},
+  loadSettledDdaIds(rows,{signal}){return new Promise(resolve=>checks.push({ids:rows.map(row=>row.provisionId),signal,resolve}));},
  };
  const {doc,view,ids}=setup(t,{loadSnapshot:async()=>({rows:[row(1,paid),row(2)]}),provisionLink});
  const opening=view.open();await tick();
@@ -143,13 +143,13 @@ test('relink aborts proof for the old parent and preserves report position and r
  doc.querySelector('[data-edit-review-submit]').click();await tick();
  assert.deepEqual(checks.map(check=>check.ids),[['21'],['23']]);
  assert.equal(checks[0].signal.aborted,true);
- checks[0].resolve(new Set(['21']));await opening;
+ checks[0].resolve(new Set(['1']));await opening;
  assert.deepEqual(ids(),['1','2']);
  assert.match(doc.querySelector('[data-dda-id="1"] .ddr-link').textContent,/ID 23/);
  [...doc.querySelectorAll('.dda-provision-dialog button')].find(node=>node.textContent==='Concluir').click();
  assert.equal(doc.activeElement,pencil());
  doc.querySelector('[data-dda-toggle-barcode="2"]').focus();
- checks[1].resolve(new Set(['23']));await tick();
+ checks[1].resolve(new Set(['1']));await tick();
  assert.deepEqual(ids(),['2']);
  assert.equal(doc.activeElement,doc.querySelector('[data-dda-toggle-barcode="2"]'));
  assert.equal(position.scrollTop,42);assert.equal(position.scrollLeft,10);
@@ -175,8 +175,49 @@ test('all child pages are considered once for every exact parent; legacy parent 
   throw new Error(path);
  }},{personal:{host:'tenant.sharepoint.com',path:'/sites/test'}});
  const service=createDdaProvisionLink({repository});
- assert.deepEqual([...await service.loadSettledProvisionIds(['21','22','23','24','25','26','27','28','22'])],['22']);
+ const rows=['21','22','23','24','25','26','27','28','22'].map((provisionId,index)=>({
+  id:String(index+1),provisionId,due:'2026-11-07',status:'Pago',
+ }));
+ assert.deepEqual([...await service.loadSettledDdaIds(rows)],['2','9']);
  assert.equal(inventories,1);assert.equal(pages,2);
+});
+
+test('each paid DDA leaves the open report only when its own due day has no pending provision',async t=>{
+ let lastSameDayPaid=false,undatedUnpaid=false;
+ const child=(id,due,settled,provisionLink='52',dueField='expectedDate')=>({id:String(id),fields:{
+  provisionLink,[dueField]:due,DATAPGTOEFETUADO:settled?'2026-11-09':'',PGTOAGENDADO:settled?'PAGO':'Agendado',
+ }});
+ const provisionLink=createDdaProvisionLink({repository:{
+  async resolveList(_site,[name]){return {status:'resolved',id:name};},
+  async getColumns(){return [
+   {name:'provisionLink',displayName:'DESCRITIVOPROVISAO',text:{}},
+   {name:'expectedDate',displayName:'DATA PREVISTO PGTO'},
+  ];},
+  async getItems(){return [
+   child(1,'2026-11-09T00:00:00Z',true),child(2,'09/11/2026',lastSameDayPaid),
+   child(3,'2026-11-16',false,'52','DATAPGTOPREVISTO'),child(4,'2026-11-18',false,'53'),
+   ...(undatedUnpaid?[child(5,'2026-11-31',false)]:[]),
+  ];},
+  async getItem(){return {id:'52',fields:{DATAPGTOEFETUADO:''}};},
+ }});
+ const linked=(id,due,status='Pago',provisionId='52')=>row(id,{SITUACAO:status,DESCRITIVOPROVIS_x00c3_O:provisionId,VENCIMENTO:due});
+ const {doc,view,filter,ids}=setup(t,{
+  loadSnapshot:async()=>({rows:[linked(9,'2026-11-09'),linked(10,'2026-11-16'),linked(11,'2026-11-23'),
+   linked(12,'2026-11-09','Agendado'),linked(13,'2026-11-17','Pago','53')]}),
+  provisionLink,
+ });
+ await view.open();
+ assert.deepEqual(ids(),['9','12','10','13']);
+ lastSameDayPaid=true;
+ doc.querySelector('[aria-label="Atualizar DDAs"]').click();await tick();
+ assert.deepEqual(ids(),['12','10','13']);
+ filter('status','Pago');
+ assert.deepEqual(ids(),['9','10','13','11']);
+ assert.deepEqual([...doc.querySelectorAll('.ddr-settlement-pending')].map(node=>node.closest('[data-dda-id]').dataset.ddaId),['10','13']);
+ undatedUnpaid=true;
+ filter('status','Em aberto');
+ doc.querySelector('[aria-label="Atualizar DDAs"]').click();await tick();
+ assert.deepEqual(ids(),['9','12','10','13','11']);
 });
 
 test('the pending payment badge and settlement button fit on phones and desktop',{timeout:60000},async t=>{

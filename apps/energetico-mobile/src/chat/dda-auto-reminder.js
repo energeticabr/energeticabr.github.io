@@ -1,4 +1,4 @@
-import {normalizeDdaReportRows,buildDdaReport,ddaSettlementPending,readDdaSettledProvisionIds} from './dda-report-model.js';
+import {normalizeDdaReportRows,buildDdaReport,ddaSettlementPending,readSettledDdaIds} from './dda-report-model.js';
 
 const brasiliaHour=new Intl.DateTimeFormat('pt-BR',{timeZone:'America/Sao_Paulo',hour:'2-digit',hourCycle:'h23'});
 
@@ -15,9 +15,9 @@ export function createDdaAutoReminder({loadData,canOpen,open,interaction=()=>nul
   const rows=normalizeDdaReportRows(snapshot);
   const result=buildDdaReport(rows,{status:'Não pagos'},new Date(now()));
   if(result.overdue+result.today>0)return {snapshot};
-  const settledProvisionIds=await readDdaSettledProvisionIds(rows,provisionLink,signal);
-  const settled=settledProvisionIds??new Set();
-  return rows.some(row=>ddaSettlementPending(row,settled))?{snapshot,settledProvisionIds}:null;
+  const settledDdaIds=await readSettledDdaIds(rows,provisionLink,signal);
+  const settled=settledDdaIds??new Set();
+  return rows.some(row=>ddaSettlementPending(row,settled))?{snapshot,settledDdaIds}:null;
  }
  function refresh(){
   if(!enabled())return Promise.resolve(false);
@@ -42,7 +42,7 @@ export function createDdaAutoReminder({loadData,canOpen,open,interaction=()=>nul
     if(!queued||!canOpen())return false;
     queued=false;opening=true;
     notify();
-    const shown=await open({automatic:true,initialSnapshot:eligible.snapshot,initialSettledProvisionIds:eligible.settledProvisionIds,isCurrent:()=>current()&&canOpen()});
+    const shown=await open({automatic:true,initialSnapshot:eligible.snapshot,initialSettledDdaIds:eligible.settledDdaIds,isCurrent:()=>current()&&canOpen()});
     if(shown&&current()){lastShown=now();visible=true;}
     return Boolean(shown&&current());
    }catch{if(generation===revision)queued=false;return false;}

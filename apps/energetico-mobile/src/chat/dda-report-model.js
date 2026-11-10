@@ -16,18 +16,18 @@ function ddaWasScheduledAt(row,confirmedAt){
  return Number.isFinite(observedAt)&&observedAt<=auditTime(confirmedAt);
 }
 
-export function ddaSettlementPending(row,settledProvisionIds){
- return Boolean(settledProvisionIds&&row.status==='Pago'
-  &&(row.provisionId||row.paidBySchedule)&&!settledProvisionIds.has(row.provisionId));
+export function ddaSettlementPending(row,settledDdaIds){
+ return Boolean(settledDdaIds&&row.status==='Pago'
+  &&(row.provisionId||row.paidBySchedule)&&!settledDdaIds.has(row.id));
 }
 
-export async function readDdaSettledProvisionIds(rows,provisionLink,signal,{includeUnpaid=false}={}){
- const ids=[...new Set(rows.filter(row=>row.provisionId&&(includeUnpaid||row.status==='Pago')).map(row=>row.provisionId))];
- if(!ids.length)return new Set();
- if(typeof provisionLink?.loadSettledProvisionIds!=='function')return null;
+export async function readSettledDdaIds(rows,provisionLink,signal,{includeUnpaid=false}={}){
+ const candidates=rows.filter(row=>row.provisionId&&(includeUnpaid||row.status==='Pago'));
+ if(!candidates.length)return new Set();
+ if(typeof provisionLink?.loadSettledDdaIds!=='function')return null;
  try{
-  const settled=await provisionLink.loadSettledProvisionIds(ids,{signal});
-  if(settled instanceof Set)return new Set(ids.filter(id=>settled.has(id)));
+  const settled=await provisionLink.loadSettledDdaIds(candidates,{signal});
+  if(settled instanceof Set)return new Set(candidates.map(row=>row.id).filter(id=>settled.has(id)));
  }catch{/* Keep paid DDAs pending when SharePoint cannot verify settlement. */}
  return null;
 }
@@ -60,12 +60,12 @@ export function normalizeDdaReportRows(snapshot){
  for(const row of normalized)if(row.supplierCnpj)counts.set(row.supplierCnpj,(counts.get(row.supplierCnpj)||0)+1);
  return Object.freeze(normalized.map(row=>Object.freeze({...row,supplierDdaCount:row.supplierCnpj?counts.get(row.supplierCnpj):null})));
 }
-export function buildDdaReport(rows,{status='Em aberto',bank='',search='',settledProvisionIds}={},now=new Date()){
+export function buildDdaReport(rows,{status='Em aberto',bank='',search='',settledDdaIds}={},now=new Date()){
  const query=normalizeSearchText(search),today=ddaTodayKey(now);
  const seventhDay=new Date(Date.parse(today+'T12:00:00Z')+7*86400000).toISOString().slice(0,10);
  const openFilter=status==='Em aberto'||status==='Não pagos';
  const matchesStatus=row=>!status||(openFilter?isDdaOpenStatus(row.status):row.status===status);
- const filtered=rows.filter(row=>(matchesStatus(row)||(openFilter&&ddaSettlementPending(row,settledProvisionIds)))&&(!bank||row.bank===bank)&&(!query||includesSearchText(normalizeSearchText([row.id,row.supplier,row.document,row.bank].join(' ')),query)))
+ const filtered=rows.filter(row=>(matchesStatus(row)||(openFilter&&ddaSettlementPending(row,settledDdaIds)))&&(!bank||row.bank===bank)&&(!query||includesSearchText(normalizeSearchText([row.id,row.supplier,row.document,row.bank].join(' ')),query)))
   .sort((a,b)=>(a.due||'9999').localeCompare(b.due||'9999')||Number(a.id)-Number(b.id));
  const inStatus=filtered.filter(matchesStatus);
  const missingAmounts=inStatus.filter(row=>row.amount==null).length;

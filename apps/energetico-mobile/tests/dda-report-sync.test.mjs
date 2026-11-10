@@ -9,7 +9,7 @@ async function setup(t,openMediaCollection){
  const emit=value=>{running=value;for(const fn of listeners)fn({running,notice:running?'Consultando o Sicoob…':''});};
  const monitor={get running(){return running;},subscribe(fn){listeners.add(fn);fn({running,notice:''});return()=>listeners.delete(fn);},async start(){starts++;if(fail)throw Error('private credential');emit(true);},destroy(){destroys++;}};
  const row={id:'1',fields:{Title:'EXEMPLO',SITUACAO:'Em aberto',DESCRITIVOPROVIS_x00c3_O:'56',CHAVE_DDA:'a'.repeat(64),VALOR:10,VENCIMENTO:'2026-11-01'}};
- const view=createDdaReportView({document:doc,syncMonitor:monitor,openMediaCollection,onStartSettlement:async()=>true,data:{loadItem:async()=>row,provisionLink:{loadSettledProvisionIds:async()=>new Set()},loadSnapshot:async()=>{loads++;return {rows:[row]};},listAttachments:async()=>[{fileName:'espelho.pdf'}],downloadAttachment:async()=>new Blob()}});
+ const view=createDdaReportView({document:doc,syncMonitor:monitor,openMediaCollection,onStartSettlement:async()=>true,data:{loadItem:async()=>row,provisionLink:{loadSettledDdaIds:async()=>new Set()},loadSnapshot:async()=>{loads++;return {rows:[row]};},listAttachments:async()=>[{fileName:'espelho.pdf'}],downloadAttachment:async()=>new Blob()}});
  t.after(()=>{view.destroy();dom.window.close();});await view.open();
  return {doc,dom,view,emit,fail:()=>fail=true,counts:()=>({starts,loads,destroys,listeners:listeners.size}),refresh:doc.querySelector('.pl-refresh')};
 }

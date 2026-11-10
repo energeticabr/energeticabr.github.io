@@ -5,8 +5,8 @@ const row=(id,status='Em aberto',due='2026-10-28')=>({id:String(id),fields:{SITU
 const tick=()=>new Promise(resolve=>setImmediate(resolve));
 function setup(options={}){
  let safe=true,time=Date.parse('2026-10-28T12:00:00Z'),rows=[row(1)],reads=0;const opened=[];
- const {loadSnapshot=async()=>{reads++;return {rows};},loadSettledProvisionIds,...rest}=options;
- const reminder=createDdaAutoReminder({loadData:async input=>({snapshot:await loadSnapshot(input),provisionLink:{loadSettledProvisionIds}}),canOpen:()=>safe,open:async opts=>{opened.push(opts);return true;},now:()=>time,...rest});
+ const {loadSnapshot=async()=>{reads++;return {rows};},loadSettledDdaIds,...rest}=options;
+ const reminder=createDdaAutoReminder({loadData:async input=>({snapshot:await loadSnapshot(input),provisionLink:{loadSettledDdaIds}}),canOpen:()=>safe,open:async opts=>{opened.push(opts);return true;},now:()=>time,...rest});
  return {reminder,opened,setSafe:v=>safe=v,setRows:v=>rows=v,advance:v=>time+=v,get reads(){return reads;}};
 }
 test('waits behind provisions, opens once, and repeats only after the reminder interval',async()=>{
@@ -38,7 +38,7 @@ test('a pending paid DDA repeats at each check from 15h Brasília, even within t
  const h=setup({
   now:()=>time,
   loadSnapshot:async()=>({rows:[paid]}),
-  loadSettledProvisionIds:async ids=>{assert.deepEqual(ids,['56']);return new Set(settled?ids:[]);},
+  loadSettledDdaIds:async rows=>{assert.deepEqual(rows.map(row=>[row.id,row.provisionId,row.due]),[['2','56','2026-11-02']]);return new Set(settled?['2']:[]);},
  });
  assert.equal(await h.reminder.refresh(),true);
  h.reminder.dismiss();
@@ -61,8 +61,8 @@ test('a newer visit replaces a stale settlement check without opening the old sn
  const h=setup({
   interaction:()=>interaction,
   loadSnapshot:async()=>({rows:[paid]}),
-  loadSettledProvisionIds:async (ids,{signal})=>{
-   if(interaction)return new Set(ids);
+  loadSettledDdaIds:async (rows,{signal})=>{
+   if(interaction)return new Set(rows.map(row=>row.id));
    oldSignal=signal;
    return new Promise((_,reject)=>{rejectOld=reject;});
   },
