@@ -132,3 +132,22 @@ test('Valor distinguishes an unconfirmed subtotal from the confirmed total', t =
   const { card } = render(t, { values: { amountDueDisplay: null, totalDisplay: 'R$ 61.600,00' } });
   assert.equal(card.querySelector('[data-field="total"] strong').textContent, '— / R$ 61.600,00');
 });
+
+test('shows each linked observation after its own product and preserves blank observations', t => {
+  const { dom, card } = render(t, { values: {
+    product: 'CONTABILIDADE / TAXAS',
+    productDisplay: 'CONTABILIDADE (FOLHA & <REVISÃO>) / TAXAS',
+  } });
+  const field = card.querySelector('[data-field="product"]');
+  const expected = 'CONTABILIDADE (FOLHA & <REVISÃO>) / TAXAS';
+  assert.equal(field.querySelector('span').textContent, 'Produto');
+  assert.equal(field.querySelector('strong').textContent, expected);
+  assert.equal(field.querySelector('revisão'), null);
+  const blocks = captureFilteredReport(dom.window.document.querySelector('[data-pending-provisions-dialog]')).pages[0].blocks;
+  assert.ok(blocks.some(block => block.runs?.map(run => run.text).join('').includes(expected)));
+});
+
+test('shows only the product for snapshots without a display override', t => {
+  const { card } = render(t);
+  assert.equal(card.querySelector('[data-field="product"] strong').textContent, 'PRODUTO DE TESTE');
+});

@@ -1,0 +1,4 @@
+source.patch -text whitespace=-blank-at-eol
+deploy-manifest.json text eol=lf
+deploy.sh text eol=lf
+patch_backend.py text eol=lf
