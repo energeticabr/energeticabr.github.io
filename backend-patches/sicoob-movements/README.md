@@ -22,9 +22,17 @@ devolvido antes de gravar `RAZÃO SOCIAL (NOME FANTASIA)`, ou o único nome
 disponível. O dado enviado à API pública é somente o CNPJ. Sem nome
 verificável, grava `N/A`.
 
+Depois da coleta, o serviço consulta a segunda via dos boletos Sicoob pela
+referência do extrato. Valida conta, data, valor, situação efetivada e
+autenticação bancária antes de completar campos vazios e anexar o PDF. O PDF
+é formatado pelo Energético com os dados retornados pela API de comprovantes.
+A etapa preserva os arquivos existentes e tenta de novo nas próximas coletas
+quando o banco limita as consultas. Para conferir os vínculos sem gravação,
+execute `sync_boleto_receipts.py --check` com o ambiente da unidade.
+
 ## Ativação
 
-1. Instale os dois scripts em `/opt/energetica-whatsapp/sicoob-movements` e as
+1. Instale os scripts de extrato e comprovantes em `/opt/energetica-whatsapp/sicoob-movements` e as
    unidades systemd em `/etc/systemd/system`. Mantenha o temporizador desativado
    durante a validação.
 2. Valide `check` com o usuário do serviço e o arquivo de ambiente da aplicação.

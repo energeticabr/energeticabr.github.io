@@ -12,6 +12,7 @@ StateDirectory=energetica-sicoob-movements
 StateDirectoryMode=0700
 UMask=0077
 ExecStart=/opt/energetica-whatsapp/.venv/bin/python /opt/energetica-whatsapp/sicoob-movements/sync_movements.py scheduled
+ExecStartPost=/opt/energetica-whatsapp/.venv/bin/python /opt/energetica-whatsapp/sicoob-movements/sync_boleto_receipts.py
 TimeoutStartSec=45min
 NoNewPrivileges=true
 PrivateTmp=true
