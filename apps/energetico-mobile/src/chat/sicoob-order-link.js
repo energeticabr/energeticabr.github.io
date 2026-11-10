@@ -62,6 +62,13 @@ const fieldObject = value => value && typeof value === 'object' && !Array.isArra
 const scalar = value => value == null || typeof value === 'string' || typeof value === 'number';
 const blank = value => value == null || (typeof value === 'string' && !value.trim());
 
+function orderSupplier(order) {
+  const supplier = order?.fields?.FORNECEDOR;
+  if (typeof supplier !== 'string') return '';
+  const name = normalizeSearchText(supplier).replace(/[^a-z0-9]+/g, ' ').trim();
+  return name && !placeholders.has(name) ? supplier.trim() : '';
+}
+
 export function createSicoobOrderLink({ repository, orderRepository = repository, siteKey = 'personal', assertSession = () => {} }) {
   function active(signal) {
     assertSession();
@@ -95,6 +102,26 @@ export function createSicoobOrderLink({ repository, orderRepository = repository
     });
   }
 
+  async function loadSuppliers(orderIds, { signal } = {}) {
+    const ids = [...new Set(orderIds.map(sicoobOrderId).filter(Boolean))];
+    const suppliers = new Map();
+    let incomplete = false;
+    if (!ids.length) return { suppliers, incomplete };
+    const list = await resolve(orderRepository, ORDER_LIST, signal);
+    const batchSize = 6;
+    for (let start = 0; start < ids.length; start += batchSize) {
+      active(signal);
+      const batch = await Promise.allSettled(ids.slice(start, start + batchSize).map(async id => {
+        const order = await readOrder(list, id, signal);
+        const supplier = orderSupplier(order);
+        if (sicoobOrderId(order?.id) === id && supplier) suppliers.set(id, supplier);
+      }));
+      incomplete ||= batch.some(result => result.status === 'rejected');
+    }
+    active(signal);
+    return { suppliers, incomplete };
+  }
+
   async function save({ movementId:rawMovement, orderId:rawOrder, expectedOrderId, signal }) {
     const movementId = sicoobOrderId(rawMovement), orderId = sicoobOrderId(rawOrder);
     const expected = sicoobOrderId(expectedOrderId);
@@ -113,6 +140,7 @@ export function createSicoobOrderLink({ repository, orderRepository = repository
     ]);
     active(signal);
     if (sicoobOrderId(target?.id) !== orderId) throw new Error('O pedido escolhido está indisponível.');
+    const receipt = { movementId, orderId, supplier: orderSupplier(target) };
     const eTag = current?.eTag ?? current?.['@odata.etag'];
     if (sicoobOrderId(current?.id) !== movementId || !fieldObject(current?.fields) ||
       typeof eTag !== 'string' || !/^(?:W\/)?"[^"\s]+"$/.test(eTag)) {
@@ -124,7 +152,7 @@ export function createSicoobOrderLink({ repository, orderRepository = repository
     if (!existing && !blank(rawExisting)) {
       throw new Error('O vínculo registrado é inválido. Atualize o relatório.');
     }
-    if (existing === orderId) return { movementId, orderId };
+    if (existing === orderId) return receipt;
     if (existing !== expected) throw new Error('O vínculo da movimentação mudou. Atualize o relatório.');
 
     const saved = await repository.updateItem(siteKey, movements, movementId, { [SICOOB_ORDER_FIELD]:Number(orderId) },
@@ -133,18 +161,18 @@ export function createSicoobOrderLink({ repository, orderRepository = repository
     if (sicoobOrderId(saved?.id) !== movementId || sicoobOrderId(saved?.fields?.[SICOOB_ORDER_FIELD]) !== orderId) {
       throw new Error('O vínculo do pedido não foi confirmado no SharePoint.');
     }
-    return { movementId, orderId };
+    return receipt;
   }
 
   async function readOrder(orders, orderId, signal) {
     try {
-      return await orderRepository.getItem(siteKey, orders, orderId, '$expand=fields($select=ID)', { signal });
+      return await orderRepository.getItem(siteKey, orders, orderId, '$expand=fields($select=FORNECEDOR)', { signal });
     } catch (error) {
       if (error?.status === 404) return null;
       throw error;
     }
   }
 
-  return Object.freeze({ loadOptions, save });
+  return Object.freeze({ loadOptions, loadSuppliers, save });
 }
 

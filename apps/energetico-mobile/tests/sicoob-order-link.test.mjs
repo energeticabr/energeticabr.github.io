@@ -64,9 +64,13 @@ test('payment link loads all personal SharePoint order pages then writes only ID
         return json({ value:[{ id:'38', fields:{ FORNECEDOR:'Outro', VALORTOTAL:500 } }],
           '@odata.nextLink':orderUrl + '?$skiptoken=next' });
       }
-      if (target.href.startsWith(orderUrl + '/37?')) return json({ id:'37' });
+      if (target.href.startsWith(orderUrl + '/37?')) {
+        assert.equal(target.searchParams.get('$expand'), 'fields($select=FORNECEDOR)');
+        return json({ id:'37', fields:{ FORNECEDOR:' Elétrica Teste ' } });
+      }
       if (target.href.startsWith(orderUrl + '/38?')) return json({ id:'38' });
       if (target.href.startsWith(orderUrl + '/39?')) return new Response(null, { status:404 });
+      if (target.href.startsWith(orderUrl + '/40?')) return new Response(null, { status:403 });
       assert.equal(target.origin, `https://${host}`);
       const pathname = decodeURIComponent(target.pathname).replace('/personal/user','');
       if (pathname === '/_api/web/lists') return json({ value:[
@@ -94,11 +98,14 @@ test('payment link loads all personal SharePoint order pages then writes only ID
     { id:'37', supplier:'Elétrica Teste', amount:'1.490,00', label:'#37 · Elétrica Teste · OBRA A' },
   ]);
   assert.ok(scopes.every(scope => scope === 'Sites.Read.All'));
+  assert.deepEqual(await data.orderLink.loadSuppliers(['37', '37', '38', '39', '40']),
+    { suppliers: new Map([['37', 'Elétrica Teste']]), incomplete:true });
   invalidPage = true;
   await assert.rejects(data.orderLink.loadOptions(), { code:'graph_pagination_payload_invalid' });
   await assert.rejects(data.orderLink.save({ movementId:10, orderId:39 }), /pedido.*indisponível/i);
   assert.equal(writes.length, 0);
-  assert.deepEqual(await data.orderLink.save({ movementId:10, orderId:37 }), { movementId:'10', orderId:'37' });
+  assert.deepEqual(await data.orderLink.save({ movementId:10, orderId:37 }),
+    { movementId:'10', orderId:'37', supplier:'Elétrica Teste' });
   assert.deepEqual(writes, [{ IDPEDIDO:37 }]);
   assert.ok(scopes.includes(`https://${host}/AllSites.Write`));
   assert.equal(readbacks, 1);

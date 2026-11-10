@@ -1,6 +1,7 @@
 import { normalizeSearchText } from '../../../../portal/core/search-text.js';
 
 export const SICOOB_ORDER_FIELD = 'IDPEDIDO';
+export const FINANCIAL_MOVEMENT_PENDING_RECIPIENT = 'Identificação pendente';
 
 const transactionTypes = [
   [/\bpix\b/, 'Pix'],
@@ -35,7 +36,7 @@ export function isImportedFinancialMovement(fields) {
 export function financialMovementRecipient(fields) {
   const name = String(fields?.RAZAOSOCIALRECEBEDOR ?? '').trim();
   if ((!name || name.toUpperCase() === 'N/A') && financialMovementType(fields?.DESCRICAO) === 'Pix') {
-    return 'Identificação pendente';
+    return FINANCIAL_MOVEMENT_PENDING_RECIPIENT;
   }
   return name || 'N/A';
 }
