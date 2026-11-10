@@ -22,11 +22,13 @@ test('summarizes bank descriptions in the report and PDF while retaining full-te
   const dom = new JSDOM('<main id="app"></main>');
   const examples = [
     ['PIX EMITIDO OUTRA IF | Pagamento Pix identificador-exemplo', 'Pix'],
-    ['DÉB.TRANSF.CONTAS DIF.TIT. INTERCREDIS | Transferência Pix|@Recebedor fictício', 'Pix'],
+    ['DÉB.TRANSF.CONTAS DIF.TIT. INTERCREDIS |@Transferência Pix|@Recebedor fictício', 'Pix'],
     ['DÉB.TRANSF.CONTAS DIF.TIT. INTERCREDIS', 'Transferência'],
     ['DÉB. PAGAMENTO DE BOLETO INTERCREDIS', 'Boleto'],
     ['DÉB.TIT.COMPE EFETIVADO', 'Boleto'],
     ['TED ENVIADA', 'TED'],
+    ['TED ENVIADA | referência: reembolso de pagamento Pix', 'TED'],
+    ['DÉB. PAGAMENTO DE BOLETO | referência: pagamento Pix anterior', 'Boleto'],
     ['DOC EMITIDO', 'DOC'],
     ['DÉB. AUTOMÁTICO', 'Débito automático'],
     ['COMPRA NO CARTÃO', 'Cartão'],

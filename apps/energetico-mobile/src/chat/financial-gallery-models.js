@@ -13,9 +13,11 @@ const transactionTypes = [
 
 export function financialMovementType(description, fallback = 'Pagamento') {
   const normalized = normalizeSearchText(description);
-  if (/\b(?:pagamento|transferencia) pix\b/.test(normalized)) return 'Pix';
   const primary = normalized.split('|')[0];
-  return transactionTypes.find(([pattern]) => pattern.test(primary))?.[1] || fallback;
+  const type = transactionTypes.find(([pattern]) => pattern.test(primary))?.[1];
+  if ((!type || type === 'Transferência')
+    && /\|\s*@?(?:pagamento|transferencia) pix(?:\s*\||$)/.test(normalized)) return 'Pix';
+  return type || fallback;
 }
 
 const auditFields = ['ID', 'Criado por', 'Criado', 'Modificado', 'Modificado por'];
