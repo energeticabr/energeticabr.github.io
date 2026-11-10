@@ -8,6 +8,7 @@ import { FINANCIAL_GALLERY_MODELS } from './financial-gallery-models.js';
 import { ddaPaidManually } from './dda-payment-confirmation.js';
 import { createDdaProvisionLink } from './dda-provision-link.js';
 import { createNfeOrderLink, NFE_ORDER_FIELD } from './nfe-order-link.js';
+import { createSicoobOrderLink } from './sicoob-order-link.js';
 import { createNfeProposalData } from './nfe-proposal-data.js';
 import { createFinancialMovementEditor } from './financial-movement-editor.js';
 import { createProvisionDescriptionEditor, loadProvisionDescriptionStatusOptions } from "../../../../portal/forms/provision-description-edit.js";
@@ -536,10 +537,19 @@ export function createRegistrationGalleryData({ kind, ...options } = {}) {
         siteKey: options.siteKey || 'personal', assertSession: options.assertSession }) : editor;
     });
   }
+  function financialMovementOrderLink() {
+    const siteKey = options.siteKey || 'personal';
+    // Obtain the movement's ETag from the same transport that uses it.
+    const siteConfig = { ...linkSiteConfig, [siteKey]: { ...linkSiteConfig[siteKey],
+      readTransport:'rest', writeTransport:'rest', restReadFields:[], restExpandSystemFields:false,
+    } };
+    return createSicoobOrderLink({ repository:galleryRepository({ ...options, siteConfig }), orderRepository:repository,
+      siteKey, assertSession:options.assertSession });
+  }
   return Object.freeze({ ...data,
     ...assetReport,
     ...filters,
-    ...(kind === 'financial_movement' ? { getFilterSource: () => null } : {}),
+    ...(kind === 'financial_movement' ? { getFilterSource: () => null, orderLink:financialMovementOrderLink() } : {}),
     ...(descriptionEditor ? { loadDescriptionGroup: (id, loadOptions) => loadDescriptionGroupWithProgress({
       repository, siteKey: options.siteKey || 'personal', normalizeItem: normalizeGalleryItem,
       assertSession: options.assertSession || (() => {}),

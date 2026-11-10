@@ -117,7 +117,7 @@ test('movement gallery shows and searches imported Sicoob data while preserving 
     { id: '1', fields: { INSTITUICAO: 'BANCO QA', DESCRICAO: 'CDB QA', OPERACAO: 'APLICAÇÃO', VALOR: '10,50' } },
     { id: '2', fields: { INSTITUICAO: 'SICOOB', DESCRICAO: 'PIX EMITIDO OUTRA IF | complemento bancário', OPERACAO: 'DÉBITO',
       VALOR: '22,45', DATAPAGAMENTO: '2026-10-03T12:00:00Z', RAZAOSOCIALRECEBEDOR: 'FAVORECIDO FICTÍCIO LTDA (MARCA QA)',
-      CONTAPAGADORA: '001234', REFERENCIABANCARIA: 'REF-TESTE-2', ORIGEMMOVIMENTACAO: 'SICOOB' } },
+      CONTAPAGADORA: '001234', REFERENCIABANCARIA: 'REF-TESTE-2', ORIGEMMOVIMENTACAO: 'SICOOB', IDPEDIDO: 37 } },
     { id: '3', fields: { INSTITUICAO: 'SICOOB', DESCRICAO: 'DÉB.TIT.COMPE EFETIVADO', OPERACAO: 'DÉBITO',
       VALOR: '18,00', DATAPAGAMENTO: '2026-10-02T12:00:00Z', RAZAOSOCIALRECEBEDOR: 'N/A', ORIGEMMOVIMENTACAO: 'SICOOB' } },
   ];
@@ -142,6 +142,8 @@ test('movement gallery shows and searches imported Sicoob data while preserving 
     const manual = cards.find(card => card.textContent.includes('CDB QA'));
     assert.ok(bank, 'the imported payee is visible');
     assert.equal(bank.querySelector('[data-field="DESCRICAO"] dd').textContent, 'Pix');
+    assert.equal(bank.querySelector('[data-field="IDPEDIDO"] dt').textContent, 'Pedido vinculado');
+    assert.equal(bank.querySelector('[data-field="IDPEDIDO"] dd').textContent, '37');
     assert.doesNotMatch(bank.textContent, /EMITIDO OUTRA|complemento bancário/);
     const typeFilter = dom.window.document.querySelector('[data-filter-field="DESCRICAO"]');
     assert.deepEqual([...typeFilter.options].map(option => option.value), ['', 'Boleto', 'CDB QA', 'Pix']);

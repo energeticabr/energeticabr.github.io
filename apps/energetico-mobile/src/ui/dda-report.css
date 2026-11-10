@@ -135,15 +135,17 @@
 .sicoob-transaction-filters .ddr-filter:has(input[type="search"]) { min-width: 170px; }
 .sicoob-transaction-filters input[type="date"] { min-width: 0; }
 .sicoob-transaction-summary .ddr-metric { grid-column: span 6; }
-.sicoob-transaction-table th:nth-child(1) { width: 13%; }
-.sicoob-transaction-table th:nth-child(2) { width: 25%; }
-.sicoob-transaction-table th:nth-child(3) { width: 25%; }
-.sicoob-transaction-table th:nth-child(4) { width: 23%; }
-.sicoob-transaction-table th:nth-child(5) { width: 14%; }
+.sicoob-transaction-table th:nth-child(1) { width: 12%; }
+.sicoob-transaction-table th:nth-child(2) { width: 28%; }
+.sicoob-transaction-table th:nth-child(3) { width: 11%; }
+.sicoob-transaction-table th:nth-child(4) { width: 21%; }
+.sicoob-transaction-table th:nth-child(5) { width: 14%; text-align: right; }
+.sicoob-transaction-table th:nth-child(6) { width: 14%; text-align: center; }
 .sicoob-transaction-table td:first-child { white-space: nowrap; }
-.sicoob-transaction-table td:last-child { text-align: right; }
+.sicoob-transaction-table .ddr-money { text-align: right; }
+.sicoob-transaction-table .sicoob-transaction-link { text-align: center; }
 .sicoob-transaction-table small { display: block; margin-top: 3px; color: #456375; }
-.sicoob-transaction-table .sicoob-transaction-receipt {
+.sicoob-transaction-overlay .ddr-table button.sicoob-transaction-receipt {
   display: grid;
   place-items: center;
   margin: 4px 0 0 auto;
@@ -153,4 +155,53 @@
   color: #225b97;
 }
 .sicoob-transaction-receipt svg { width: 30px; height: 30px; }
+.sicoob-transaction-link-id {
+  display: inline-block;
+  max-width: 100%;
+  box-sizing: border-box;
+  padding: 4px 6px;
+  border: 1px solid #93caaa;
+  border-radius: 6px;
+  background: #eaf8ee;
+  color: #17643f;
+  font-weight: 800;
+}
+.sicoob-transaction-overlay .ddr-table button.sicoob-transaction-link-pencil {
+  display: grid;
+  place-items: center;
+  min-width: 44px;
+  min-height: 44px;
+  margin: 4px auto 0;
+  padding: 4px;
+  background: #e6f0ff;
+  border-color: #a6c4e3;
+  color: #204d7a;
+}
+.sicoob-transaction-link-pencil:focus-visible {
+  outline: 3px solid #236ca6;
+  outline-offset: 2px;
+}
+.sicoob-transaction-overlay[data-report-compact-height="true"] .dda-provision-dialog[role="dialog"] {
+  padding: 10px !important;
+}
+.sicoob-transaction-overlay[data-report-compact-height="true"] .gallery-editor-header,
+.sicoob-transaction-overlay[data-report-compact-height="true"] .gallery-editor-header h2 {
+  margin-bottom: 4px;
+}
+.sicoob-transaction-overlay[data-report-compact-height="true"] .dda-provision-summary,
+.sicoob-transaction-overlay[data-report-compact-height="true"] .dda-provision-feedback {
+  margin-block: 3px;
+  line-height: 1.25;
+}
+.sicoob-transaction-overlay[data-report-compact-height="true"] .dda-provision-options {
+  min-height: 72px;
+}
+.sicoob-transaction-overlay[data-report-compact-height="true"] .dda-provision-option {
+  gap: 4px;
+  padding: 6px;
+}
+.sicoob-transaction-overlay[data-report-compact-height="true"] .dda-provision-dialog .gallery-record-dialog-buttons {
+  margin-top: 6px;
+}
+@media print { .sicoob-transaction-link-pencil { display: none !important; } }
 @media print { .ddr-open-pdf { display: none !important; } }

@@ -207,3 +207,185 @@ test('Pix without a confirmed recipient is presented as pending identification',
     dom.window.close();
   }
 });
+
+const orders = [
+  { id: '41', supplier: 'Outro fornecedor', amount: '1,00', label: '#41 · Outro fornecedor · Filial Norte' },
+  { id: '42', supplier: 'Comércio Exemplo Ltda.', amount: '0,11', label: '#42 · Comércio Exemplo Ltda. · Filial Sul' },
+  { id: '43', supplier: 'Fornecedor Diferente', amount: '0,10', label: '#43 · Fornecedor Diferente · Filial Leste' },
+  { id: '44', supplier: 'Comércio Exemplo Ltda.', amount: '0,10', label: '#44 · Comércio Exemplo Ltda. · Filial Oeste' },
+];
+const settle = () => new Promise(resolve => setImmediate(resolve));
+
+function setupOrderLink(t, { initial, recipient, loadOptions = async () => orders, saveError } = {}) {
+  const dom = new JSDOM('<main id="app"></main>');
+  const { document, Event, KeyboardEvent } = dom.window;
+  let orderId = initial;
+  let receiptsOpened = 0;
+  const writes = [];
+  const view = createSicoobTransactionReportView({
+    document,
+    data: {
+      async loadSnapshot() {
+        return { rows: [payment(7, {
+          IDPEDIDO: orderId,
+          ...(recipient === undefined ? {} : { RAZAOSOCIALRECEBEDOR: recipient }),
+        })] };
+      },
+      orderLink: {
+        loadOptions,
+        async save(change) {
+          writes.push(change);
+          if (saveError) throw saveError;
+          orderId = Number(change.orderId);
+          return { movementId: change.movementId, orderId: change.orderId };
+        },
+      },
+      async listAttachments() {
+        receiptsOpened += 1;
+        return [];
+      },
+    },
+    async openMediaCollection() {},
+  });
+  t.after(() => { view.destroy(); dom.window.close(); });
+  const root = view.element;
+  const query = selector => root.querySelector(selector);
+  const linkButton = () => query('tbody button[aria-label*="pedido"]');
+  const picker = () => query('.dda-provision-dialog');
+  const openPicker = async () => {
+    assert.ok(linkButton(), 'O pagamento deve oferecer um lápis de vinculação.');
+    linkButton().click();
+    await settle();
+  };
+  const select = id => {
+    const radio = picker().querySelector('input[value="' + id + '"]');
+    radio.checked = true;
+    radio.dispatchEvent(new Event('change', { bubbles: true }));
+    picker().querySelector('.dda-provision-save').click();
+    return document.querySelector('[data-edit-review]');
+  };
+  return { view, root, query, linkButton, picker, openPicker, select, writes, Event, KeyboardEvent,
+    receiptsOpened: () => receiptsOpened };
+}
+
+test('offers manual Sicoob order suggestions and keeps all orders searchable', async t => {
+  const { view, query, picker, openPicker, writes, Event, KeyboardEvent, linkButton, receiptsOpened } = setupOrderLink(t);
+  await view.open();
+  assert.equal(query('thead th:last-child').textContent, 'VINCULAÇÃO');
+  await openPicker();
+  const choices = () => [...picker().querySelectorAll('.dda-provision-option')];
+  assert.deepEqual(choices().map(node => node.querySelector('input').value), ['44', '43', '42', '41']);
+  assert.deepEqual(choices().map(node => Boolean(node.querySelector('.dda-provision-star'))), [true, true, true, false]);
+  assert.match(choices()[0].textContent, /Valor igual.*Nome\/razão social semelhante/i);
+  assert.match(choices()[1].textContent, /Valor igual/i);
+  assert.match(choices()[2].textContent, /Nome\/razão social semelhante/i);
+  assert.equal(picker().querySelector('input:checked'), null);
+  assert.equal(picker().querySelector('.dda-provision-save').disabled, true);
+  query('.sicoob-transaction-receipt').click();
+  assert.equal(receiptsOpened(), 0);
+  const search = picker().querySelector('input[type="search"]');
+  search.value = 'Filial Norte';
+  search.dispatchEvent(new Event('input', { bubbles: true }));
+  assert.deepEqual(choices().map(node => node.querySelector('input').value), ['41']);
+  search.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape', bubbles: true }));
+  assert.equal(picker(), null);
+  assert.equal(view.element.hidden, false);
+  assert.equal(view.element.ownerDocument.activeElement, linkButton());
+  assert.deepEqual(writes, []);
+});
+
+test('shows amount-only recommendations when bank recipient identification is pending', async t => {
+  const { view, picker, openPicker } = setupOrderLink(t, { recipient: 'N/A' });
+  await view.open();
+  await openPicker();
+  const recommended = [...picker().querySelectorAll('.dda-provision-star')].map(star => star.parentElement);
+  assert.deepEqual(recommended.map(node => node.querySelector('input').value).sort(), ['43', '44']);
+  assert.ok(recommended.every(node => /Valor igual/i.test(node.textContent)));
+});
+
+test('confirms a Sicoob order link, replaces it and retains it through refresh, reopen and PDF', async t => {
+  const { view, root, query, linkButton, picker, openPicker, select, writes, Event } = setupOrderLink(t);
+  await view.open();
+  const search = query('input[name="search"]');
+  search.value = 'Comércio Exemplo';
+  search.dispatchEvent(new Event('input', { bubbles: true }));
+  const scroll = query('.ddr-content');
+  scroll.scrollTop = 95;
+  const paymentRow = query('tbody tr');
+  const originalPayment = [...paymentRow.cells].slice(0, 5).map(cell => cell.textContent);
+  await openPicker();
+  let review = select('44');
+  assert.match(review.querySelector('thead').textContent, /AntesDepois/);
+  assert.equal(review.querySelector('tbody td:nth-child(2)').textContent, '—');
+  assert.match(review.querySelector('tbody td:nth-child(3)').textContent, /#44/);
+  review.querySelector('[data-edit-review-cancel]').click();
+  await settle();
+  assert.deepEqual(writes, []);
+  assert.equal(query('tbody td:last-child').textContent, '—');
+  review = select('44');
+  review.querySelector('[data-edit-review-confirm]').click();
+  await settle();
+  assert.equal(writes.length, 1);
+  const { signal, ...change } = writes[0];
+  assert.ok(signal instanceof AbortSignal);
+  assert.deepEqual(change, { movementId: '7', orderId: '44', expectedOrderId: '' });
+  assert.match(picker().querySelector('[role="status"]').textContent, /pedido #44/);
+  assert.equal(query('tbody tr'), paymentRow);
+  assert.equal(scroll.scrollTop, 95);
+  assert.equal(search.value, 'Comércio Exemplo');
+  assert.deepEqual([...paymentRow.cells].slice(0, 5).map(cell => cell.textContent), originalPayment);
+  assert.equal(query('tbody td:last-child').textContent, 'ID 44');
+  picker().querySelector('.gallery-record-dialog-buttons button').click();
+  assert.equal(root.ownerDocument.activeElement, linkButton());
+
+  await openPicker();
+  assert.equal(picker().querySelector('input:checked').value, '44');
+  review = select('43');
+  assert.equal(review.querySelector('tbody td:nth-child(2)').textContent, 'ID 44');
+  review.querySelector('[data-edit-review-confirm]').click();
+  await settle();
+  assert.equal(writes[1].expectedOrderId, '44');
+  assert.equal(query('tbody td:last-child').textContent, 'ID 43');
+  picker().querySelector('.gallery-record-dialog-buttons button').click();
+
+  query('button[aria-label^="Atualizar"]').click();
+  await settle();
+  assert.equal(query('tbody td:last-child').textContent, 'ID 43');
+  view.close();
+  await view.open();
+  assert.equal(query('tbody td:last-child').textContent, 'ID 43');
+  const restore = await view.preparePrint();
+  const pdf = captureFilteredReport(root);
+  const table = pdf.pages.flatMap(page => page.blocks).find(block => block.type === 'table');
+  assert.equal(table.rows[1].cells[5].runs.map(run => run.text).join(''), 'ID 43');
+  assert.equal(linkButton(), null);
+  restore();
+  assert.ok(linkButton());
+});
+
+test('a failed Sicoob order link write leaves the prior ID and reports the error', async t => {
+  const { view, query, openPicker, select, picker } = setupOrderLink(t, { initial: 42, saveError: new Error('Conflict') });
+  await view.open();
+  await openPicker();
+  select('43').querySelector('[data-edit-review-confirm]').click();
+  await settle();
+  assert.match(picker().querySelector('[role="alert"]').textContent, /Não foi possível/);
+  assert.equal(query('tbody td:last-child').textContent, 'ID 42');
+  assert.equal(picker().querySelector('.dda-provision-save').disabled, false);
+});
+
+test('closing the Sicoob report cancels a pending picker load', async t => {
+  let pendingSignal;
+  const { view, openPicker, picker } = setupOrderLink(t, {
+    loadOptions: ({ signal }) => {
+      pendingSignal = signal;
+      return new Promise(resolve => signal.addEventListener('abort', () => resolve(orders), { once: true }));
+    },
+  });
+  await view.open();
+  await openPicker();
+  view.close();
+  await settle();
+  assert.equal(pendingSignal.aborted, true);
+  assert.equal(picker(), null);
+});

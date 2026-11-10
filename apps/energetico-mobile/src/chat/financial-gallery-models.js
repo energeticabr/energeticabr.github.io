@@ -1,5 +1,7 @@
 import { normalizeSearchText } from '../../../../portal/core/search-text.js';
 
+export const SICOOB_ORDER_FIELD = 'IDPEDIDO';
+
 const transactionTypes = [
   [/\bpix\b/, 'Pix'],
   [/\bted\b/, 'TED'],
@@ -51,12 +53,12 @@ function model(title, listName, fields, fieldLabels, dateFields = []) {
 
 export const FINANCIAL_GALLERY_MODELS = Object.freeze({
   financial_movement: Object.freeze({ ...model('DE MOVIMENTAÇÃO', 'MOVIMENTACOESFINANCEIRAS',
-    [...movementFields, ...bankFields],
+    [...movementFields, ...bankFields, SICOOB_ORDER_FIELD],
     { INSTITUICAO: 'Instituição', DESCRICAO: 'Descrição', OPERACAO: 'Operação', VALOR: 'Valor',
       RAZAOSOCIALRECEBEDOR: 'Nome ou razão social do recebedor', DATAPAGAMENTO: 'Data do pagamento',
       CONTAPAGADORA: 'Conta pagadora', CONTARECEBEDOR: 'Conta do recebedor',
       DOCUMENTORECEBEDOR: 'CPF/CNPJ do recebedor', REFERENCIABANCARIA: 'Referência bancária',
-      ORIGEMMOVIMENTACAO: 'Origem' }),
+      ORIGEMMOVIMENTACAO: 'Origem', [SICOOB_ORDER_FIELD]: 'Pedido vinculado' }),
     metadataEditorFields: movementFields,
     showAttachments: true,
     filterFields: ['ID', ...movementFields, 'RAZAOSOCIALRECEBEDOR', 'CONTAPAGADORA', 'ORIGEMMOVIMENTACAO'],
