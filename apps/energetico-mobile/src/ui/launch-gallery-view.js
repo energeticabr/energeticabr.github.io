@@ -455,6 +455,53 @@ export function createLaunchGallery({ document: documentRef = globalThis.documen
     },
     onChange: updateAttachmentCount,
   });
+  let mediaObserver, previewController;
+
+  function stopRecordMediaLoads() {
+    mediaObserver?.disconnect();
+    mediaObserver = null;
+    previewController?.abort();
+    previewController = null;
+  }
+
+  function releaseRecordPreviews() {
+    for (const image of cards.querySelectorAll('.lg-record-preview[src^="blob:"]')) {
+      doc.defaultView?.URL.revokeObjectURL?.(image.src);
+      image.removeAttribute('src');
+      image.closest('.lg-record-media')?.classList.remove('lg-record-media-loaded');
+    }
+  }
+
+  function observeRecordMedia() {
+    if (previewController || !active(session)) return;
+    // Keep the attachment button independent of background thumbnail and count reads.
+    previewController = new AbortController();
+    const { signal } = previewController;
+    const load = card => {
+      if (signal.aborted || !card.isConnected) return;
+      const item = recordItems.get(card.dataset.itemId);
+      if (!item) return;
+      void attachmentCounts.load(item).catch(() => null);
+      const image = card.querySelector('.lg-record-preview:not([src])');
+      if (image && typeof loadMediaPreview === 'function') void loadRecordPreview(item, image, signal);
+    };
+    const targets = [...cards.children].filter(card => card.querySelector('.lg-record-media'));
+    const Observer = doc.defaultView?.IntersectionObserver;
+    if (typeof Observer !== 'function') {
+      targets.forEach(load);
+      return;
+    }
+    const pending = new Set(targets);
+    const observer = new Observer(entries => {
+      for (const { target, isIntersecting } of entries) {
+        if (signal.aborted || !isIntersecting || !pending.delete(target)) continue;
+        observer.unobserve(target);
+        load(target);
+      }
+    }, { root: content });
+    mediaObserver = observer;
+    targets.forEach(target => observer.observe(target));
+  }
 
   function updateAttachmentCount(item) {
     if (!active(session)) return;
@@ -476,12 +523,14 @@ export function createLaunchGallery({ document: documentRef = globalThis.documen
     if (preservePage && data.sort === applied.sort && JSON.stringify(data.filters) === JSON.stringify(applied.filters)) data.page = page;
     if (data.filters.dateStart && data.filters.dateEnd && data.filters.dateStart > data.filters.dateEnd) {
       ++listVersion; listLoading = false; updateBusy();
+      observeRecordMedia();
       notify('A data final deve ser igual ou posterior à data inicial.', true); return;
     }
     notify(''); return loadSnapshot(data, { refresh, blocking: refresh || blocking });
   }
   async function loadSnapshot(data = applied, { refresh = false, blocking = true, scrollToTop = false } = {}) {
     if (!opened || destroyed || !root.isConnected) return;
+    stopRecordMediaLoads();
     attachmentCounts.reset();
     const version = ++listVersion, epoch = session;
     applied = { ...data, filters: { ...data.filters } };
@@ -518,9 +567,9 @@ export function createLaunchGallery({ document: documentRef = globalThis.documen
         if (control?.tagName === 'SELECT' && Array.isArray(options)) setOptions(control, options, 'Todos');
       }
       if (result.sortOptions?.length) setOptions(sort, result.sortOptions);
+      releaseRecordPreviews();
       recordItems.clear();
       cards.replaceChildren(...result.rows.map(renderCard));
-      void attachmentCounts.request(result.rows.filter(item => recordMedia(item)));
       listStatus.replaceChildren(element('p', 'lg-hint', result.rows.length ? `${result.count ?? result.rows.length} lançamento(s)` : 'Nenhum lançamento encontrado para estes filtros.'));
       pageLabel.textContent = `Página ${pages ? page : 0} de ${pages}`;
       if (scrollToTop && page !== previousPage) content.scrollTop = 0;
@@ -540,6 +589,7 @@ export function createLaunchGallery({ document: documentRef = globalThis.documen
       if (active(epoch) && version === listVersion) {
         // Keep stale results covered until the newest input has been applied.
         listLoading = autoFilters.hasPendingApplication() && !matchesCurrentFilters(); updateBusy();
+        if (!listLoading) observeRecordMedia();
       }
     }
   }
@@ -595,25 +645,38 @@ export function createLaunchGallery({ document: documentRef = globalThis.documen
     }
     const image = element('img', 'lg-record-preview');
     image.alt = `Prévia de ${attachmentFileName(media.attachment) || 'imagem anexada'}`;
+    image.decoding = 'async';
     const embedded = embeddedImageSource(media.attachment);
     if (embedded) image.src = embedded;
-    else if (typeof loadMediaPreview === 'function' && fileName) {
-      const expectedSession = session;
-      Promise.resolve().then(async () => {
-        if (media.attachment?.mediaUrl) return media.attachment;
-        const reference = attachmentReference(media.attachment);
-        return request('attachment', { id: item.id, fileName, ...(reference ? { source: reference } : {}) });
-      }).then(descriptor => loadMediaPreview(descriptor)).then(result => {
-        const source = typeof result === 'string' ? result : result?.url;
-        if (!source || !active(expectedSession) || !host.isConnected) return;
-        image.src = source;
-        host.classList.add('lg-record-media-loaded');
-      }).catch(() => host.classList.add('lg-record-media-unavailable'));
-    } else host.classList.add('lg-record-media-unavailable');
+    else if (typeof loadMediaPreview !== 'function' || !fileName) host.classList.add('lg-record-media-unavailable');
     host.append(image, element('span', 'lg-record-attachment-icon', '📎'),
       element('span', 'lg-record-media-label', 'ANEXOS'),
       element('span', 'lg-record-attachment-count', countLabel));
     return host;
+  }
+  async function loadRecordPreview(item, image, signal) {
+    const attachment = recordMedia(item)?.attachment;
+    const fileName = attachmentFileName(attachment);
+    if (!fileName) return;
+    const host = image.parentElement;
+    try {
+      const reference = attachmentReference(attachment);
+      const descriptor = attachment.mediaUrl ? attachment
+        : await request('attachment', { id: item.id, fileName, ...(reference ? { source: reference } : {}) }, { signal });
+      if (signal.aborted) return;
+      const result = await loadMediaPreview(descriptor, { signal });
+      const source = typeof result === 'string' ? result : result?.url;
+      if (typeof source !== 'string' || !source) return;
+      if (signal.aborted || !image.isConnected) {
+        if (source.startsWith('blob:')) doc.defaultView?.URL.revokeObjectURL?.(source);
+        return;
+      }
+      image.src = source;
+      host.classList.remove('lg-record-media-unavailable');
+      host.classList.add('lg-record-media-loaded');
+    } catch {
+      if (!signal.aborted) host.classList.add('lg-record-media-unavailable');
+    }
   }
   function attachmentDescriptors(item, result) {
     const fromRow = attachmentEntries(item);
@@ -653,7 +716,7 @@ export function createLaunchGallery({ document: documentRef = globalThis.documen
   function openRecordAttachments(item) {
     external(async epoch => {
       let attachments = attachmentEntries(item);
-      if (!attachments.length) attachments = await attachmentCounts.load(item, { force: true });
+      if (!attachments.length) attachments = await attachmentCounts.load(item, { force: true, priority: true });
       if (attachments == null) throw new Error('Não foi possível consultar os anexos do lançamento');
       const descriptors = [];
       for (const attachment of attachments) {
@@ -1815,6 +1878,8 @@ export function createLaunchGallery({ document: documentRef = globalThis.documen
   }
   function close() {
     if (!opened || destroyed) return;
+    stopRecordMediaLoads();
+    releaseRecordPreviews();
     attachmentCounts.reset();
     recordActions.close();
     autoFilters.cancelPending();
@@ -1831,6 +1896,8 @@ export function createLaunchGallery({ document: documentRef = globalThis.documen
   }
   function destroy() {
     if (destroyed) return;
+    stopRecordMediaLoads();
+    releaseRecordPreviews();
     loadingScreen.destroy();
     recalculatingScreen.destroy();
     createShortcut.destroy();

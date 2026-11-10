@@ -127,12 +127,18 @@ export function createGalleryAttachmentCounts({ loadAttachments, onChange, concu
     }
   }
 
-  function load(row, { force = false } = {}) {
+  function load(row, { force = false, priority = false } = {}) {
     if (destroyed || typeof loadAttachments !== "function") return Promise.resolve(null);
     const key = rowKey(row);
     const current = states.get(key);
     if (current?.status === "ready") return Promise.resolve(current.items);
-    if (current?.status === "loading") return current.promise;
+    if (current?.status === "loading") {
+      if (priority) {
+        const index = queue.findIndex(task => task.state === current);
+        if (index > 0) queue.unshift(queue.splice(index, 1)[0]);
+      }
+      return current.promise;
+    }
     if (current?.status === "error" && !force) return Promise.resolve(null);
     if (knownGalleryAttachmentCount(row) != null && !force) return Promise.resolve(null);
 
@@ -140,7 +146,9 @@ export function createGalleryAttachmentCounts({ loadAttachments, onChange, concu
     let reject;
     const state = { status: "loading", items: null, promise: new Promise((done, fail) => { resolve = done; reject = fail; }) };
     states.set(key, state);
-    queue.push({ row, key, state, epoch, resolve, reject });
+    const task = { row, key, state, epoch, resolve, reject };
+    if (priority) queue.unshift(task);
+    else queue.push(task);
     pump();
     return state.promise;
   }

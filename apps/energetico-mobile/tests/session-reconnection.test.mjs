@@ -12,7 +12,7 @@ const menu = () => ({ status: 'processed', stage: 'choosing_group', activeFlow: 
 const json = payload => Response.json(payload);
 const turn = () => new Promise(setImmediate);
 
-function harness(t, { client, timeoutMs = 20 } = {}) {
+function harness(t, { client, timeoutMs = 20, native = {} } = {}) {
   const commands = new Map(), renders = [], saved = new Map();
   const store = createConversationStore({ historyMode: 'current-step' });
   const recovery = createRecoveryStorage({ storage: {
@@ -21,7 +21,7 @@ function harness(t, { client, timeoutMs = 20 } = {}) {
   const controller = createAppController({ store, recovery, client,
     view: { render: state => renders.push(state), on: (name, fn) => { commands.set(name, fn); return () => commands.delete(name); }, destroy() {} },
     auth: { initialize: async () => ({ homeAccountId: 'reconnection-test', name: 'Teste' }), getToken: async () => 'synthetic', signOut: async () => {} },
-    native: { importSharedItems: async () => [] },
+    native: { importSharedItems: async () => [], ...native },
     conversationResumeTimeoutMs: timeoutMs, conversationResumeRetryDelay: async () => {},
     pendingProvisionAttachmentsDataFactory: async () => ({ loadUpcomingPayments: async () => [], listAttachments: async () => [] }),
     pendingConstructionDiaryDataFactory: async () => ({ loadPending: async () => [] }),
@@ -30,6 +30,66 @@ function harness(t, { client, timeoutMs = 20 } = {}) {
   t.after(() => controller.stop());
   return { store, controller, renders, emit: (name, body) => commands.get(name)?.(body), state: () => renders.at(-1) };
 }
+
+test('a shared receipt that clears the send error still exposes Retomar and uploads once after synchronization', async t => {
+  const file = Object.assign(new File(['synthetic proof'], 'comprovante.pdf', { type: 'application/pdf' }), { sourceId: 'shared-proof' });
+  const hrMenu = { status: 'processed', stage: 'choosing_subaction',
+    activeFlow: { id: 'menu:choosing_subaction', title: 'RECURSOS HUMANOS' },
+    messages: [{ type: 'poll', question: 'QUAL FLUXO VOCÊ DESEJA INICIAR?', options: [{ id: 'hr_presence', label: 'CRIAR PRESENÇA DE FORNECEDOR' }] }] };
+  let activate, imports = [], uploads = 0, offline = false;
+  const sent = [];
+  const h = harness(t, {
+    client: {
+      sendText: async body => {
+        sent.push(body.replyId || body.text);
+        if (body.replyId === 'input_continue') {
+          if (offline) throw Object.assign(new Error('Sem conexão com a VM.'), { code: 'NETWORK_UNAVAILABLE' });
+          return hrMenu;
+        }
+        throw Object.assign(new Error('A confirmação da VM se perdeu.'), { code: 'NETWORK_UNCERTAIN' });
+      },
+      sendFile: async uploaded => {
+        assert.equal(uploaded, file);
+        uploads++;
+        return { ...hrMenu, messages: [], attachments: [{ id: 'proof', fileName: file.name, mediaUrl: '/proof' }] };
+      },
+    },
+    native: {
+      onResume: handler => { activate = handler; },
+      importSharedItems: async () => imports,
+      discardSharedItem: async () => { imports = []; },
+    },
+  });
+  await h.controller.start();
+  h.emit('draft-changed', { value: 'rascunho preservado' });
+  assert.equal(await h.controller.sendText(), false);
+  assert.match(h.state().error, /confirmação/);
+  imports = [file];
+  const share = activate();
+  await turn();
+  assert.equal(h.state().recoveryUncertain, true);
+  assert.equal(h.state().error, null);
+  assert.equal(h.store.getState().pendingFiles[0].file, file);
+  assert.equal(uploads, 0);
+  assert.match(renderChatMarkup(h.state()), /data-action="retry-session">Retomar conversa/);
+
+  offline = true;
+  assert.equal(await h.emit('retry-session'), false);
+  assert.match(renderChatMarkup(h.state()), /data-action="retry-session">Retomar conversa/);
+  assert.equal(h.store.getState().pendingFiles[0].file, file);
+  assert.equal(uploads, 0);
+
+  offline = false;
+  assert.equal(await h.emit('retry-session'), true);
+  await share;
+  assert.equal(h.state().recoveryUncertain, false);
+  assert.equal(h.store.getState().draft, 'rascunho preservado');
+  assert.equal(h.store.getState().pendingFiles.length, 0);
+  assert.equal(h.store.getState().attachments[0].fileName, file.name);
+  assert.equal(h.store.getState().activeFlow.title, 'RECURSOS HUMANOS');
+  assert.equal(uploads, 1);
+  assert.deepEqual(sent.filter(command => command !== 'input_continue'), ['rascunho preservado']);
+});
 
 test('Retomar after interrupted startup recovers when connectivity returns beyond the first failed preflight', async t => {
   let offline = true, pendingReads = 0;
@@ -66,6 +126,62 @@ test('Retomar after interrupted startup recovers when connectivity returns beyon
   assert.doesNotMatch(renderChatMarkup(h.state()), /Aguardando sincronização|error-banner/);
   assert.equal(sent.filter(body => body.replyId).length, 1);
   assert.ok(sent.every(body => body.replyId === 'input_continue' || ['diary_evidence_pending', 'attachment_snapshot'].includes(body.action)));
+});
+
+test('a receipt shared before offline startup waits for synchronization and uploads without reopening the app', async t => {
+  const file = Object.assign(new File(['synthetic proof'], 'comprovante.pdf', { type: 'application/pdf' }), { sourceId: 'cold-start-proof' });
+  const confirmed = Promise.withResolvers();
+  const reread = Promise.withResolvers();
+  const discarded = Promise.withResolvers();
+  t.after(() => { reread.resolve([]); discarded.resolve(); });
+  let activate, offline = true, uploads = 0, imports = 0;
+  const h = harness(t, {
+    client: {
+      sendText: async ({ replyId }) => {
+        assert.equal(replyId, 'input_continue');
+        if (offline) throw Object.assign(new Error('Sem conexão com a VM.'), { code: 'NETWORK_UNAVAILABLE' });
+        return menu();
+      },
+      sendFile: async uploaded => {
+        assert.equal(uploaded, file);
+        uploads++;
+        return { status: 'processed', messages: [], attachments: [{ id: 'proof', fileName: file.name, mediaUrl: '/proof' }] };
+      },
+    },
+    native: {
+      onResume: handler => { activate = handler; },
+      importSharedItems: async () => {
+        if (++imports === 2) return reread.promise;
+        if (imports > 2) return [];
+        await activate();
+        return [file];
+      },
+      discardSharedItem: async id => {
+        confirmed.resolve(id);
+        await discarded.promise;
+      },
+    },
+  });
+  assert.equal(await Promise.race([h.controller.start().then(() => true), delay(250, false)]), true);
+  assert.equal(h.state().recoveryBlocked, true);
+  assert.equal(h.store.getState().pendingFiles[0].file, file);
+  assert.equal(uploads, 0);
+
+  offline = false;
+  assert.equal(await h.emit('retry-session'), true);
+  assert.equal(await Promise.race([confirmed.promise, delay(250, null)]), file.sourceId);
+  // The native inbox read began before the receipt was confirmed and returns
+  // the old item while the removal is still in progress.
+  assert.equal(imports, 2);
+  reread.resolve([file]);
+  await turn();
+  assert.equal(h.store.getState().pendingFiles.length, 0);
+  discarded.resolve();
+  await activate();
+  assert.equal(h.state().recoveryBlocked, false);
+  assert.equal(h.store.getState().pendingFiles.length, 0);
+  assert.equal(h.store.getState().attachments[0].fileName, file.name);
+  assert.equal(uploads, 1);
 });
 
 test('a hung startup preflight is canceled and Retomar becomes usable without losing the local queue', async t => {
