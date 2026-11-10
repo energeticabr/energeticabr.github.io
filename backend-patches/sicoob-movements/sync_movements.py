@@ -154,7 +154,7 @@ def payment_rows(payload, start, end, account, names, excluded=None):
             'VALOR': money(entry.get('valor')), 'DATAPAGAMENTO': f'{paid.isoformat()}T12:00:00Z',
             'CONTAPAGADORA': account, 'DESCRICAO': (description or 'DÉBITO SICOOB')[:255],
             'REFERENCIABANCARIA': reference[:255], 'ORIGEMMOVIMENTACAO': 'SICOOB',
-            'RAZAOSOCIALRECEBEDOR': (bank_name or names.get(document) or UNKNOWN)[:255],
+            'RAZAOSOCIALRECEBEDOR': (bank_name or (names.get(document) if not re.search(r'\bPIX\b', label) else '') or UNKNOWN)[:255],
         }
         if document:
             row['DOCUMENTORECEBEDOR'] = document
@@ -235,7 +235,8 @@ def save_movement(client, row):
         verify_fields(actual, row, bank_fields)
         row['RAZAOSOCIALRECEBEDOR'] = actual.get('RAZAOSOCIALRECEBEDOR') or UNKNOWN
         return False
-    registered_name = public_receiver_name(row.get('DOCUMENTORECEBEDOR', ''), fetch_public_company)
+    registered_name = '' if re.search(r'\bPIX\b', bank_label(row['DESCRICAO'])) else public_receiver_name(
+        row.get('DOCUMENTORECEBEDOR', ''), fetch_public_company)
     if registered_name:
         row['RAZAOSOCIALRECEBEDOR'] = registered_name[:255]
     item_id = client.ensure_item(key, row, target_list=LIST, idempotency_field=KEY, merge_existing=False)

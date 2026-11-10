@@ -50,7 +50,7 @@ class MovementImportTests(unittest.TestCase):
         record = rows[0]
         self.assertEqual(record['DATAPAGAMENTO'], '2026-10-02T12:00:00Z')
         self.assertEqual(record['CONTAPAGADORA'], '001234')
-        self.assertEqual(record['RAZAOSOCIALRECEBEDOR'], 'Recebedor Fictício LTDA')
+        self.assertEqual(record['RAZAOSOCIALRECEBEDOR'], 'N/A')
         self.assertEqual(record['VALOR'], '1234,56')
         self.assertEqual(record['REFERENCIABANCARIA'], 'A1')
         self.assertNotIn('CONTARECEBEDOR', record)
