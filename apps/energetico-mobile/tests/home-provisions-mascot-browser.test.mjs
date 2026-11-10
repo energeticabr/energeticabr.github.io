@@ -84,6 +84,9 @@ assert.deepEqual(shortcuts.map(s=>s.action),['open-pending-provisions','open-sic
         const report = document.querySelector('.sicoob-transaction-overlay');
         const content = report.querySelector('.ddr-content');
         const dialog = report.querySelector('[role="dialog"]').getBoundingClientRect();
+        const table = report.querySelector('.sicoob-transaction-table');
+        const summary = report.querySelector('.sicoob-transaction-summary');
+        const tableBounds = table.getBoundingClientRect();
         const fit = {
           visible: !report.hidden && dialog.width > 0 && dialog.height > 0,
           portrait: report.dataset.reportPortrait,
@@ -91,11 +94,18 @@ assert.deepEqual(shortcuts.map(s=>s.action),['open-pending-provisions','open-sic
           transactionType: report.querySelector('tbody tr')?.cells[2].textContent,
           receiptSize: report.querySelector('.sicoob-transaction-receipt')?.offsetHeight,
           fits: content.clientHeight > 70 && content.scrollWidth <= content.clientWidth + 1,
+          fullWidth: Math.abs(table.offsetWidth - content.clientWidth) <= 1
+            && Math.abs(summary.offsetWidth - content.clientWidth) <= 1,
+          edgesVisible: tableBounds.left >= dialog.left - 1 && tableBounds.right <= dialog.right + 1
+            && (report.dataset.reportPortrait !== 'true'
+              || (tableBounds.top >= dialog.top - 1 && tableBounds.bottom <= dialog.bottom + 1)),
         };
-        report.querySelector('.report-close-control').click();
-        return { ...fit, closed: report.hidden };
+        return fit;
       })()`, true);
+      if(width===390&&!pwa&&process.env.SICOOB_REPORT_SCREENSHOT){const shot=await send('Page.captureScreenshot',{format:'png'},sessionId);writeFileSync(process.env.SICOOB_REPORT_SCREENSHOT,Buffer.from(shot.data,'base64'));}
+      sicoobFit.closed = await evaluate(`(()=>{const r=document.querySelector('.sicoob-transaction-overlay');r.querySelector('.report-close-control').click();return r.hidden;})()`);
       assert.ok(sicoobFit?.visible && sicoobFit.fits && sicoobFit.closed, JSON.stringify(sicoobFit));
+      assert.ok(sicoobFit.fullWidth && sicoobFit.edgesVisible, 'Sicoob uses the full available width behind the arrows, with both edges visible: '+JSON.stringify(sicoobFit));
       assert.equal(sicoobFit.portrait, String(width < 844));
       assert.ok(sicoobFit.receiptSize >= 44);
       assert.match(sicoobFit.text, /Loja Exemplo.*1\.250,99/);
