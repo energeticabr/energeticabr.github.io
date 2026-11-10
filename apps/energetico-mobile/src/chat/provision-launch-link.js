@@ -150,7 +150,7 @@ export function createProvisionLaunchLink({ repository, siteKey = 'personal', as
     return after;
   }
 
-  async function save(confirmation, childId, { beforePayment = () => {} } = {}) {
+  async function save(confirmation, childId, { rememberOperation = () => {} } = {}) {
     const op = operations.get(confirmation);
     const chosen = op?.children.find(row => row.id === childId);
     if (!chosen || op.selected && op.selected !== childId || saving) throw new Error('Confira a provisão antes de confirmar o vínculo.');
@@ -160,9 +160,10 @@ export function createProvisionLaunchLink({ repository, siteKey = 'personal', as
     const reverseLinked = row => row.child === childId && row.paidDate === launch.paidDate;
     saving = true;
     try {
-      let [currentChild, currentLaunch, liveParent] = await Promise.all([
+      const [currentChild, currentLaunch, liveParent] = await Promise.all([
         read(childSchema, childId), read(launchSchema, launch.id), read(parentSchema, parent.id),
       ]);
+      if (liveParent.rawDate && !liveParent.paidDate) throw new Error('O descritivo contém uma data de pagamento inválida.');
       if (!eligible(currentChild, currentLaunch) || currentChild.parent !== parent.id
         || currentLaunch.rawDate !== launch.rawDate
         || !sameFinancialDetails(currentLaunch, launch) || !sameFinancialDetails(currentChild, chosen)
@@ -170,22 +171,25 @@ export function createProvisionLaunchLink({ repository, siteKey = 'personal', as
         throw new Error('O lançamento ou a provisão foi alterado. Consulte novamente.');
       }
       op.selected = childId;
+      rememberOperation({ id: parent.id, launchId: launch.id, childId });
 
       // Reserve the provision first, so a second launch cannot replace it during a retry.
-      currentChild = await update(childSchema, currentChild, { launch: launch.id }, linked);
+      const reserved = await update(childSchema, currentChild, { launch: launch.id }, linked);
       try {
-        currentLaunch = await update(launchSchema, currentLaunch, { child: childId }, reverseLinked);
+        await update(launchSchema, currentLaunch, { child: childId }, reverseLinked);
       } catch (error) {
         const freshLaunch = await read(launchSchema, launch.id);
-        if (freshLaunch.child && freshLaunch.child !== childId && isPending(currentChild)) {
-          await update(childSchema, currentChild, { launch: null },
-            row => row.parent === parent.id && !row.launch && isPending(row));
+        if (freshLaunch.child && freshLaunch.child !== childId) {
+          if (!currentChild.launch && isPending(reserved) && sameFinancialDetails(reserved, chosen)) {
+            await update(childSchema, reserved, { launch: null },
+              row => row.parent === parent.id && !row.launch && isPending(row));
+          }
           throw new Error('O lançamento já está vinculado a outra provisão.');
         }
         throw error;
       }
 
-      const date = dateField(currentLaunch.rawDate);
+      const date = dateField(launch.rawDate);
       const snapshot = async () => {
         const rows = await scan(childSchema, parent.id, launch.id);
         if (rows.some(row => row.launch === launch.id && (row.id !== childId || row.parent !== parent.id))) {
@@ -203,14 +207,18 @@ export function createProvisionLaunchLink({ repository, siteKey = 'personal', as
         const paidRows = children.filter(isPaid);
         const paidDate = parentPaid ? paidRows.map(row => row.paidDate).sort().at(-1) : '';
         const live = await read(parentSchema, parent.id);
-        if (live.rawDate && (!live.paidDate || live.paidDate !== paidDate)) {
+        if (live.rawDate !== liveParent.rawDate && (!parentPaid || live.paidDate !== paidDate)) {
           throw new Error('A data de pagamento do descritivo foi alterada. Confira os registros.');
         }
         const fields = parentPaid ? { paidDate: paidDate === launch.paidDate ? date : dateField(paidDate) }
           : { dueDate: dateField(due) };
-        const confirmed = await update(parentSchema, live, fields, row => row.paidDate === paidDate && (parentPaid || row.dueDate === due));
+        const matches = row => parentPaid ? row.paidDate === paidDate : row.rawDate === live.rawDate && row.dueDate === due;
+        const confirmed = await update(parentSchema, live, fields, matches);
         if (parentPaid && (await snapshot()).some(isPending)) {
-          if (!live.rawDate) await update(parentSchema, confirmed, { paidDate: null }, row => !row.rawDate);
+          if (!matches(live)) {
+            await update(parentSchema, confirmed, { paidDate: live.rawDate ? dateField(live.rawDate) : null },
+              row => row.paidDate === live.paidDate && Boolean(row.rawDate) === Boolean(live.rawDate));
+          }
           throw new Error('Uma provisão voltou a ficar pendente durante o fechamento. Confira e retome o vínculo.');
         }
         const sum = rows => {
@@ -225,14 +233,15 @@ export function createProvisionLaunchLink({ repository, siteKey = 'personal', as
       if (before.some(row => row.id !== childId && isPending(row) && !row.dueDate)) {
         throw new Error('Há provisão em aberto sem vencimento válido neste descritivo.');
       }
-      const verifiedLaunch = await read(launchSchema, launch.id);
-      if (!reverseLinked(verifiedLaunch) || verifiedLaunch.rawDate !== launch.rawDate
-        || !sameFinancialDetails(verifiedLaunch, launch) || !eligible(currentChild, verifiedLaunch)) {
-        throw new Error('O lançamento foi alterado durante o vínculo. Confira os registros.');
+      const [verifiedLaunch, verifiedChild, verifiedParent] = await Promise.all([
+        read(launchSchema, launch.id), read(childSchema, childId), read(parentSchema, parent.id),
+      ]);
+      if (!reverseLinked(verifiedLaunch) || verifiedLaunch.rawDate !== launch.rawDate || !sameFinancialDetails(verifiedLaunch, launch)
+        || !linked(verifiedChild) || !eligible(verifiedChild, verifiedLaunch) || !sameFinancialDetails(verifiedChild, chosen)
+        || verifiedParent.rawDate !== liveParent.rawDate) {
+        throw new Error('Os registros foram alterados durante o vínculo. Confira os dados antes de retomar.');
       }
-      // Preserve the operation identity before the child can leave the pending report.
-      beforePayment({ id: parent.id, launchId: launch.id, childId });
-      await update(childSchema, currentChild, { paidDate: date, paid: 'PAGO' }, paid);
+      await update(childSchema, verifiedChild, { paidDate: date, paid: 'PAGO' }, paid);
       const after = await snapshot();
       if (!after.some(paid)) throw new Error('A baixa da provisão não foi confirmada.');
       return { id: parent.id, paidDate: launch.paidDate, ...await syncParent(after) };

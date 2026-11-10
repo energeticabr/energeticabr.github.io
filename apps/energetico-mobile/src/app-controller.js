@@ -4505,7 +4505,7 @@ export function createAppController({
       } else {
         const isOperation = entry => entry.id === link.id && entry.launchId === link.launchId && entry.childId === value;
         const result = await data.saveLaunchLink(link.preview, value, {
-          beforePayment: operation => {
+          rememberOperation: operation => {
             if (!current()) throw new Error('A sessão Microsoft foi encerrada.');
             pendingProvisionLinkStorage(targetAccount, entries => [...entries.filter(entry => !isOperation(entry)), operation], true);
           },

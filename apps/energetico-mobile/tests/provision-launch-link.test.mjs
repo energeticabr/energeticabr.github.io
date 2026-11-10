@@ -114,7 +114,7 @@ test('se a escrita no descritivo falhar, um novo serviço retoma somente o fecha
   const f = fixture(), preview = await f.service.preview('21', '81');
   const journal = [];
   f.setFailure((list, _, written) => list === 'DESCRITIVOPROVISAO' && !written);
-  await assert.rejects(f.service.save(preview, '41', { beforePayment: record => journal.push(record) }), /erro de rede/);
+  await assert.rejects(f.service.save(preview, '41', { rememberOperation: record => journal.push(record) }), /erro de rede/);
   assert.equal(f.child.fields.PGTOAGENDADO, 'PAGO');
   assert.deepEqual(journal, [{ id: '21', launchId: '81', childId: '41' }]);
   assert.equal(f.parent.fields.DATAPGTOEFETUADO, undefined);
@@ -141,6 +141,50 @@ test('reabre o descritivo se uma nova provisão aparecer durante o fechamento', 
   const result = await f.service.save(preview, '41');
   assert.equal(result.parentPaid, false);
   assert.deepEqual(result.pendingChildIds, ['42']);
+});
+
+test('data antiga no descritivo não interrompe a baixa de filhos pendentes', async () => {
+  const f = fixture();
+  f.parent.fields.DATAPGTOEFETUADO = '2026-10-01T12:00:00Z';
+  f.rows['PROVISÃO PGTOS']['42'] = {id: '42', eTag: '"1"', fields: {
+    ...f.child.fields, DATAPREVISTOPGTO: '2026-11-18T12:00:00Z',
+  }};
+  const preview = await f.service.preview('21', '81');
+  assert.equal((await f.service.save(preview, '41')).parentPaid, false);
+  assert.equal(f.parent.fields.DATAPGTOEFETUADO, '2026-10-01T12:00:00Z');
+  f.rows.LANCAMENTOS['82'] = {id: '82', eTag: '"1"', fields: {
+    ...f.launch.fields, IDPGTOAGENDADO: '', field_4: '2026-11-19T12:00:00Z',
+  }};
+  assert.equal((await f.service.save(await f.service.preview('21', '82'), '42')).parentPaid, true);
+  assert.equal(Date.parse(f.parent.fields.DATAPGTOEFETUADO), Date.parse(f.rows.LANCAMENTOS['82'].fields.field_4));
+});
+
+test('um conflito no vínculo reverso preserva o vínculo que já existia na provisão', async () => {
+  const f = fixture();
+  f.child.fields.IDLANCAMENTOS = '81';
+  const preview = await f.service.preview('21', '81');
+  f.setFailure((list, fields, written) => {
+    if (list !== 'LANCAMENTOS' || !fields.IDPGTOAGENDADO || written) return false;
+    f.launch.fields.IDPGTOAGENDADO = '42';
+    f.launch.eTag = '"2"';
+    return true;
+  });
+  await assert.rejects(f.service.save(preview, '41'), /outra provisão/i);
+  assert.equal(f.child.fields.IDLANCAMENTOS, '81');
+  assert.equal(f.child.fields.PGTOAGENDADO, undefined);
+});
+
+test('edição concorrente no valor da provisão impede a baixa antes da confirmação', async () => {
+  const f = fixture(), preview = await f.service.preview('21', '81');
+  f.setFailure((list, fields, written) => {
+    if (list === 'PROVISÃO PGTOS' && fields.IDLANCAMENTOS && written) {
+      f.child.fields.VALORTOTAL = '400';
+      f.child.eTag = '"3"';
+    }
+    return false;
+  });
+  await assert.rejects(f.service.save(preview, '41'), /alterados/);
+  assert.equal(f.child.fields.PGTOAGENDADO, undefined);
 });
 
 test('um filho inativo não aparece como pagamento pendente', async () => {
