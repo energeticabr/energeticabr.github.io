@@ -245,7 +245,7 @@ test('highlights linked payments on either stripe and preserves the original unl
   ]);
 });
 
-function setupOrderLink(t, { initial, recipient, loadOptions = async () => orders, saveError } = {}) {
+function setupOrderLink(t, { initial, recipient, description, loadOptions = async () => orders, saveError } = {}) {
   const dom = new JSDOM('<main id="app"></main>');
   const { document, Event, KeyboardEvent } = dom.window;
   let orderId = initial;
@@ -258,15 +258,21 @@ function setupOrderLink(t, { initial, recipient, loadOptions = async () => order
         return { rows: [payment(7, {
           IDPEDIDO: orderId,
           ...(recipient === undefined ? {} : { RAZAOSOCIALRECEBEDOR: recipient }),
+          ...(description === undefined ? {} : { DESCRICAO: description }),
         })] };
       },
       orderLink: {
         loadOptions,
+        async loadSuppliers(ids) {
+          const suppliers = new Map(orders.filter(order => ids.includes(order.id)).map(order => [order.id, order.supplier]));
+          return { suppliers, incomplete:false };
+        },
         async save(change) {
           writes.push(change);
           if (saveError) throw saveError;
           orderId = Number(change.orderId);
-          return { movementId: change.movementId, orderId: change.orderId };
+          return { movementId: change.movementId, orderId: change.orderId,
+            supplier: orders.find(order => order.id === change.orderId)?.supplier };
         },
       },
       async listAttachments() {
@@ -330,6 +336,55 @@ test('shows amount-only recommendations when bank recipient identification is pe
   const recommended = [...picker().querySelectorAll('.dda-provision-star')].map(star => star.parentElement);
   assert.deepEqual(recommended.map(node => node.querySelector('input').value).sort(), ['43', '44']);
   assert.ok(recommended.every(node => /Valor igual/i.test(node.textContent)));
+});
+
+test('uses the supplier of a confirmed link for a pending recipient and keeps it on refresh', async t => {
+  const { view, query, picker, openPicker, select, Event } = setupOrderLink(t, { recipient: 'N/A' });
+  const recipient = () => query('tbody .ddr-supplier-name').textContent;
+  await view.open();
+  assert.equal(recipient(), 'Identificação pendente');
+  await openPicker();
+  select('44').querySelector('[data-edit-review-confirm]').click();
+  await settle();
+  assert.equal(recipient(), orders[3].supplier);
+  picker().querySelector('.gallery-record-dialog-buttons button').click();
+  const search = query('input[name="search"]');
+  search.value = orders[3].supplier;
+  search.dispatchEvent(new Event('input', { bubbles: true }));
+  await openPicker();
+  select('41').querySelector('[data-edit-review-confirm]').click();
+  await settle();
+  assert.equal(query('tbody tr'), null);
+  assert.match(query('.ddr-empty').textContent, /Nenhuma transação/);
+  picker().querySelector('.gallery-record-dialog-buttons button').click();
+  view.close();
+  await view.open();
+  search.value = orders[0].supplier;
+  search.dispatchEvent(new Event('input', { bubbles: true }));
+  assert.equal(recipient(), orders[0].supplier);
+});
+
+test('appends the linked supplier after the boleto amount and preserves the bank recipient', async t => {
+  const bankRecipient = 'Beneficiário informado pelo Sicoob';
+  const { view, root, query, openPicker, select, picker } = setupOrderLink(t, {
+    recipient: bankRecipient, description: 'PAGAMENTO BOLETO',
+  });
+  await view.open();
+  assert.equal(query('tbody .ddr-money').textContent, 'R$\u00a00,10');
+  await openPicker();
+  select('41').querySelector('[data-edit-review-confirm]').click();
+  await settle();
+  assert.equal(query('tbody .ddr-supplier-name').textContent, bankRecipient);
+  assert.match(query('tbody .ddr-money').textContent, /^R\$\s0,10\s*\(Outro fornecedor\)$/);
+  picker().querySelector('.gallery-record-dialog-buttons button').click();
+  view.close();
+  await view.open();
+  assert.match(query('tbody .ddr-money').textContent, /\(Outro fornecedor\)/);
+  const restore = await view.preparePrint();
+  const pdf = captureFilteredReport(root);
+  const table = pdf.pages.flatMap(page => page.blocks).find(block => block.type === 'table');
+  assert.match(table.rows[1].cells[4].runs.map(run => run.text).join(' '), /\(Outro fornecedor\)/);
+  restore();
 });
 
 test('confirms a Sicoob order link, replaces it and retains it through refresh, reopen and PDF', async t => {
