@@ -32,7 +32,7 @@ export function isImportedFinancialMovement(fields) {
 
 export function financialMovementRecipient(fields) {
   const name = String(fields?.RAZAOSOCIALRECEBEDOR ?? '').trim();
-  if ((!name || name.toUpperCase() === 'N/A') && /\bPIX\b/i.test(fields?.DESCRICAO ?? '')) {
+  if ((!name || name.toUpperCase() === 'N/A') && financialMovementType(fields?.DESCRICAO) === 'Pix') {
     return 'Identificação pendente';
   }
   return name || 'N/A';

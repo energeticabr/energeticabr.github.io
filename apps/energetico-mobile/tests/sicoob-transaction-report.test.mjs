@@ -137,7 +137,7 @@ test('opens the payment receipt for its own movement', async () => {
   const dom = new JSDOM('<main id="app"></main>');
   const receipt = 'Comprovante-Sicoob-1234567.pdf';
   const rows = [payment(1, { RAZAOSOCIALRECEBEDOR: 'N/A' }), {
-    ...payment(2, { DESCRICAO: 'BOLETO', REFERENCIABANCARIA: '1234567' }), hasAttachments: true,
+    ...payment(2, { DESCRICAO: 'BOLETO | referência: pagamento Pix anterior', REFERENCIABANCARIA: '1234567' }), hasAttachments: true,
   }];
   let opened;
   const view = createSicoobTransactionReportView({
