@@ -677,21 +677,28 @@ export function createChatClient({
   function acknowledgeSefazRefresh(requestId, options) { return sefazRequest('sefaz_refresh_status', requestId, options, {acknowledge:true}); }
 
   async function ddaRequest(action, requestId, { signal } = {}, extra = {}) {
-    if ((requestId || (action === 'dda_refresh_status' && extra.mode !== 'pending')) && !/^[a-f0-9]{32}$/.test(String(requestId || ''))) throw new Error('Pedido DDA inválido.');
+    const sicoob = action.startsWith('sicoob_');
+    const isStatus = action.endsWith('_refresh_status');
+    const source = sicoob ? 'Sicoob' : 'DDA';
+    if ((requestId || (isStatus && extra.mode !== 'pending') || (sicoob && !isStatus)) && !/^[a-f0-9]{32}$/.test(String(requestId || ''))) throw new Error(`Pedido ${source} inválido.`);
     const token = await cancellableToken(tokenProvider, signal);
     const result = await request(chatUrl.href, {
       method: 'POST', signal,
       headers: { Accept: 'application/json', Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' },
       body: JSON.stringify({ action, ...(requestId ? { requestId } : {}), ...extra }),
       cache: 'no-store', credentials: 'omit',
-    }, response => parsePortalResponse(response, 'A consulta DDA'), action === 'dda_refresh_status');
-    const receipt = result?.ddaRefresh;
+    }, response => parsePortalResponse(response, `A consulta ${source}`), isStatus);
+    const receipt = sicoob ? result?.sicoobRefresh : result?.ddaRefresh;
     const allowed=extra.mode==='pending'?['pending']:extra.acknowledge?['acknowledged']:['queued', 'running', 'succeeded', 'failed', 'unavailable', 'busy'];
     if (!receipt || !allowed.includes(receipt.status)
-      || (action==='dda_refresh_status' && requestId && receipt.requestId !== requestId)
-      || (extra.mode==='pending' && !Array.isArray(receipt.requests))) throw new Error('A VM não confirmou a consulta DDA.');
+      || (isStatus && requestId && receipt.requestId !== requestId)
+      || (extra.mode==='pending' && !Array.isArray(receipt.requests))) throw new Error(`A VM não confirmou a consulta ${source}.`);
     return receipt;
   }
+  function refreshSicoob(options) { return ddaRequest('sicoob_refresh', options?.requestId, options); }
+  function getSicoobRefreshStatus(requestId, options) { return ddaRequest('sicoob_refresh_status', requestId, options); }
+  function getSicoobRefreshPending(options) { return ddaRequest('sicoob_refresh_status', null, options, { mode: 'pending' }); }
+  function acknowledgeSicoobRefresh(requestId, options) { return ddaRequest('sicoob_refresh_status', requestId, options, { acknowledge: true }); }
   async function confirmDdaPayment({ itemId, key, signal } = {}) {
     if (!Number.isSafeInteger(itemId) || itemId <= 0 || itemId > 2147483647 || !/^[a-f0-9]{64}$/.test(String(key || ''))) throw new Error('DDA inválido para confirmação.');
     const token = await cancellableToken(tokenProvider, signal);
@@ -855,5 +862,5 @@ export function createChatClient({
     }, true);
   }
 
-  return Object.freeze({ waitForDiaryEvidence, refreshSefaz, getSefazRefreshStatus, getSefazRefreshPending, acknowledgeSefazRefresh, sendText, sendFile, replaceAttachment, transcribeAudio, fetchMedia, getAttachments, launchGalleryRequest, uploadLaunchGalleryFile, getPendingProvisionSnapshot, getPendingNotesSnapshot, getRhidAttendanceReport, startRhidPendingValidation, startRhidDayValidation, getRhidAttendanceMonth, saveRhidAttendanceAdjustment, deleteRhidAttendanceAdjustment, refreshRhidAttendance, getRhidRefreshStatus, refreshRecurringProvisions, getRecurringProvisionRefreshStatus, refreshDda, getDdaRefreshStatus, getDdaRefreshPending, acknowledgeDdaRefresh, confirmDdaPayment, deleteAttachment, deleteAllAttachments, compressAttachment, chooseAttachmentCompression, getCompletionMenu, prepareSignatureEvidence, confirmSignatureEvidence, verifySignatureEvidence, captureSignatureEvidence });
+  return Object.freeze({ refreshSicoob, getSicoobRefreshStatus, getSicoobRefreshPending, acknowledgeSicoobRefresh, waitForDiaryEvidence, refreshSefaz, getSefazRefreshStatus, getSefazRefreshPending, acknowledgeSefazRefresh, sendText, sendFile, replaceAttachment, transcribeAudio, fetchMedia, getAttachments, launchGalleryRequest, uploadLaunchGalleryFile, getPendingProvisionSnapshot, getPendingNotesSnapshot, getRhidAttendanceReport, startRhidPendingValidation, startRhidDayValidation, getRhidAttendanceMonth, saveRhidAttendanceAdjustment, deleteRhidAttendanceAdjustment, refreshRhidAttendance, getRhidRefreshStatus, refreshRecurringProvisions, getRecurringProvisionRefreshStatus, refreshDda, getDdaRefreshStatus, getDdaRefreshPending, acknowledgeDdaRefresh, confirmDdaPayment, deleteAttachment, deleteAllAttachments, compressAttachment, chooseAttachmentCompression, getCompletionMenu, prepareSignatureEvidence, confirmSignatureEvidence, verifySignatureEvidence, captureSignatureEvidence });
 }

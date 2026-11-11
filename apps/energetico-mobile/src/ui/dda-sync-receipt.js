@@ -1,7 +1,7 @@
 import { formatDdaElapsed } from '../chat/dda-bank-refresh.js';
 import { scheduleCompletionDismiss } from './completion-receipt-dismiss.js';
 /** Every terminal outcome is acknowledged; only confirmed IDs identify new records. */
-export function createDdaSyncReceipt({ document: doc, host, format, onClose = () => {}, global = false, requireAcknowledgement = false, onAcknowledge = async () => true }) {
+export function createDdaSyncReceipt({ document: doc, host, format, source = 'dda', onClose = () => {}, global = false, requireAcknowledgement = false, onAcknowledge = async () => true }) {
   let current = null;
   const el = (tag, cls, text) => {
     const node = doc.createElement(tag); node.className = cls;
@@ -29,7 +29,7 @@ export function createDdaSyncReceipt({ document: doc, host, format, onClose = ()
     const hasNew = result.status !== 'failed' && Number.isSafeInteger(result.created) && result.created > 0;
     const title = result.status === 'failed' ? 'Atualização não confirmada'
       : result.status === 'partial' ? 'Consulta concluída; galeria desatualizada'
-      : hasNew ? 'Novos DDAs adicionados' : 'Sincronização concluída';
+      : hasNew ? (source === 'sicoob' ? 'Novas transações adicionadas' : 'Novos DDAs adicionados') : 'Sincronização concluída';
     const ids = result.createdItemIds;
     const validIds = Array.isArray(ids) && ids.length === result.created && ids.length <= 10000
       && ids.every(id => Number.isSafeInteger(id) && id > 0 && id <= 2147483647) && new Set(ids).size === ids.length;
@@ -43,13 +43,14 @@ export function createDdaSyncReceipt({ document: doc, host, format, onClose = ()
     semantic.setAttribute('role', 'dialog'); semantic.setAttribute('aria-modal', 'true');
     semantic.setAttribute('aria-label', title);
     dialog.append(el('h2', 'gallery-record-dialog-title', title));
-    const summary = result.message || (hasNew ? `${result.created} ${result.created === 1 ? 'boleto criado' : 'boletos criados'} nesta sincronização.`
+    const summary = result.message || (source === 'sicoob' ? `Transações consultadas no Sicoob e atualizadas no SharePoint. ${result.created ?? 0} ${result.created === 1 ? 'nova transação' : 'novas transações'}.` : hasNew ? `${result.created} ${result.created === 1 ? 'boleto criado' : 'boletos criados'} nesta sincronização.`
       : result.created === 0 ? 'Sicoob e SharePoint atualizados. Nenhum novo DDA foi encontrado.' : 'Sicoob e SharePoint atualizados.');
     dialog.append(el('p', 'dda-sync-summary', summary));
+    if (source === 'sicoob' && result.pendingDetails > 0) dialog.append(el('p', 'dda-sync-summary', `${result.pendingDetails} comprovantes ou recebedores ainda sem confirmação.`));
     if (Number.isFinite(result.elapsedMs)) dialog.append(el('p', 'dda-sync-summary', `Tempo de acompanhamento: ${formatDdaElapsed(result.elapsedMs)}.`));
     const list = el('ul', 'dda-sync-items');
     const byId = new Map(rows.map(row => [String(row.id), row]));
-    if (hasNew && validIds) for (const id of ids) {
+    if (source === 'dda' && hasNew && validIds) for (const id of ids) {
       const row = byId.get(String(id));
       const item = el('li', 'dda-sync-item');
       item.append(el('span', 'rg-dda-id', `ID ${id}`));
@@ -63,8 +64,8 @@ export function createDdaSyncReceipt({ document: doc, host, format, onClose = ()
       } else item.append(el('p', '', 'Criação confirmada. Os detalhes deste item não estão disponíveis nesta leitura da galeria.'));
       list.append(item);
     }
-    else if (hasNew) list.append(el('li', 'dda-sync-item', 'A sincronização confirmou a criação, mas não informou os IDs dos novos itens.'));
-    if (hasNew) dialog.append(list);
+    else if (source === 'dda' && hasNew) list.append(el('li', 'dda-sync-item', 'A sincronização confirmou a criação, mas não informou os IDs dos novos itens.'));
+    if (source === 'dda' && hasNew) dialog.append(list);
     const button = el('button', 'gallery-record-dialog-button', 'Entendi'); button.type = 'button';
     button.addEventListener('click', async () => {
       if (current?.dialog !== dialog || button.disabled) return;

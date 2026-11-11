@@ -6,6 +6,8 @@ import { createTrancidAutoReminder } from './chat/trancid-auto-reminder.js';
 import { refreshDdaBank } from './chat/dda-bank-refresh.js';
 import { loadDdaPaymentLaunchFiles, waitForDdaPaymentLaunch, reconcileDdaLaunchAttachments } from './chat/dda-payment-launch.js';
 import { createDdaSyncSession } from './ui/dda-sync-session.js';
+import { createSicoobSyncSession } from './ui/sicoob-sync-session.js';
+import { createFinancialSyncCoordinator } from './chat/financial-sync-coordinator.js';
 import { PAYROLL_LAUNCH_REPLY_ID, isSupplierPayrollMenu } from "./chat/supplier-payroll.js";
 import { MEAL_VOUCHER_REPLY_ID } from './chat/meal-voucher.js';
 import { createMealVoucherTray } from './chat/meal-voucher-tray.js';
@@ -1134,6 +1136,7 @@ export function createAppController({
   sicoobTransactionReportFactory = defaultSicoobTransactionReportFactory,
   ddaSyncSessionFactory = createDdaSyncSession,
   sefazSyncSessionFactory = createSefazSyncSession,
+  sicoobSyncSessionFactory = createSicoobSyncSession,
   enableDdaReminders = false,
   enableTrancidReminders = false,
   trancidReportFactory = defaultTrancidReportFactory,
@@ -1651,7 +1654,11 @@ export function createAppController({
   }
   function resumeSefazSync(){void ensureSefazSyncSession()?.resume();}
   let ddaSyncSession = null;
-  function disposeDdaSyncSession(){ddaSyncSession?.destroy();ddaSyncSession=null;}
+  function disposeDdaSyncSession(){
+    financialSyncCoordinator?.destroy();financialSyncCoordinator=null;
+    sicoobSyncSession?.destroy();sicoobSyncSession=null;
+    ddaSyncSession?.destroy();ddaSyncSession=null;
+  }
   function ensureDdaSyncSession(){
     if(!account||stopped||sessionStatus!=='authenticated'||typeof client.getDdaRefreshPending!=='function'||typeof client.acknowledgeDdaRefresh!=='function')return null;
     if(ddaSyncSession)return ddaSyncSession;
@@ -1667,7 +1674,24 @@ export function createAppController({
       }});
     return ddaSyncSession;
   }
-  function resumeDdaSync(){void ensureDdaSyncSession()?.resume();}
+  let sicoobSyncSession = null, financialSyncCoordinator = null;
+  function ensureSicoobSyncSession(){
+    if(!account||stopped||sessionStatus!=='authenticated'||!['refreshSicoob','getSicoobRefreshStatus','getSicoobRefreshPending','acknowledgeSicoobRefresh'].every(name=>typeof client[name]==='function'))return null;
+    if(sicoobSyncSession)return sicoobSyncSession;
+    const owner=account,revision=sessionRevision;
+    const accountKey=owner.homeAccountId||owner.localAccountId||owner.idTokenClaims?.oid||owner.username||'';
+    if(!accountKey)return null;
+    sicoobSyncSession=sicoobSyncSessionFactory({client,accountKey,isCurrent:()=>!stopped&&account===owner&&sessionRevision===revision&&sessionStatus==='authenticated'});
+    return sicoobSyncSession;
+  }
+  function ensureFinancialSync(source){
+    const sicoob=ensureSicoobSyncSession();
+    // Older/demo transports can still use their supported source monitor.
+    if(!sicoob)return source==='dda'?ensureDdaSyncSession():source==='fiscal'?ensureSefazSyncSession():null;
+    if(!financialSyncCoordinator)financialSyncCoordinator=createFinancialSyncCoordinator({sicoob,dda:ensureDdaSyncSession(),fiscal:ensureSefazSyncSession()});
+    return financialSyncCoordinator.forSource(source);
+  }
+  function resumeDdaSync(){void ensureDdaSyncSession()?.resume();void ensureSicoobSyncSession()?.resume();}
   const trancidAutoReminder = createTrancidAutoReminder({
     enabled: () => enableTrancidReminders && Boolean(account) && !stopped,
     accountKey: () => account?.homeAccountId || account?.localAccountId || account?.idTokenClaims?.oid || account?.username || '',
@@ -2434,6 +2458,7 @@ export function createAppController({
 
   function handleBackground() {
     sefazSyncSession?.suspend();
+    sicoobSyncSession?.suspend();
     // A WebView may be backgrounded without delivering the final pointerup.
     // Stop only the live canvas interaction so returning to the app cannot
     // append background coordinates to the previous signature stroke.
@@ -10289,7 +10314,7 @@ export function createAppController({
             ...(!isDdaReport && sourceKind === 'dda' ? {
               refreshBank: options => refreshDdaBank(client, { ...options, assertSession }),
             } : {}),
-            ...(sourceKind === 'dda' ? { syncMonitor: ensureDdaSyncSession() } : {}),
+            ...(sourceKind === 'dda' ? { syncMonitor: ensureFinancialSync('dda') } : {}),
             ...(!isDdaReport && sourceKind === 'dda' ? {
               confirmPayment: async options => { assertSession(); const receipt = await client.confirmDdaPayment(options); assertSession(); return receipt; },
               onStartLaunch: ddaPaymentLaunchHandler(data, assertSession),
@@ -10297,7 +10322,8 @@ export function createAppController({
                 flowId: 'payment', replyId: 'action_payment', text: 'CRIAR UMA PROVISÃO DE PAGAMENTO',
               }),
             } : {}),
-            ...(sourceKind === 'notas_fiscais_sefaz' ? { syncMonitor: ensureSefazSyncSession() } : {}),
+            ...(sourceKind === 'notas_fiscais_sefaz' ? { syncMonitor: ensureFinancialSync('fiscal') } : {}),
+            ...(sourceKind === 'financial_movement' ? { syncMonitor: ensureFinancialSync('sicoob') } : {}),
             ...(isDdaReport ? {
               onClose: () => ddaAutoReminder.dismiss(),
               onStartSettlement: id => {
