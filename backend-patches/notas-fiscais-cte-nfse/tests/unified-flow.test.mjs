@@ -21,10 +21,23 @@ function document(kind='NFSe',nsu='9223372036854775807'){
   const id=nsu+'-'+sha.slice(0,16);
   return {key,kind,nsu,id,sha256:sha,fileName:key+'-'+id+'.xml',xmlBase64:'PHhtbC8+',
     fields:{CHAVE_ACESSO:key,ULTIMO_NSU:nsu,STATUS_IMPORTACAO:full.includes(kind)?'XML_COMPLETO':'EVENTO_SEM_XML'},
-    ...(full.includes(kind)?{danfe:{fileName:`${prefix}-${key}-${sha.slice(0,16)}.pdf`,pdfBase64:'JVBERi0xLjQK'.repeat(3),sha256:'b'.repeat(64)}}:{})};
+    ...(full.includes(kind)?{danfe:{fileName:`${prefix}-${key}-${sha.slice(0,16)}.pdf`,pdfBase64:'JVBERi0xLjQK'.repeat(3),sha256:'b'.repeat(64),...(kind==='NFSe'?{source:'LOCAL_DANFSE_NACIONAL'}:{})}}:{})};
 }
 const ctx=doc=>({items:{Documentos:doc}});
 function validIdentity(doc){try{return evaluate(actions.Conferir_identidade.inputs.content,ctx(doc));}catch{return {};}}
+
+test('replay de espelho NFSe legado falha antes de qualquer escrita e DANFSe atual permanece aceito',()=>{
+  const gate=actions.Conferir_DANFE.actions.Conferir_identidade_pdf.inputs.content;
+  const current=document('NFSe');
+  assert.deepEqual(evaluate(gate,ctx(current)),{valido:true});
+  for(const source of [undefined,null,'','XML_MIRROR','LOCAL_DANFSE_NACIONAL_LEGACY']){
+    const stale=structuredClone(current);
+    if(source===undefined)delete stale.danfe.source;else stale.danfe.source=source;
+    assert.deepEqual(evaluate(gate,ctx(stale)),{},String(source));
+  }
+  for(const kind of ['nfeProc','cteProc'])assert.deepEqual(evaluate(gate,ctx(document(kind))),{valido:true});
+  assert.deepEqual(actions.Gravar_XML.runAfter,{Conferir_DANFE:['Succeeded']});
+});
 
 test('chave existente e criada suporta64 caracteres mantendo unicidade indice e verificacao real',()=>{
   const create=JSON.parse(provision.actions.Garantir_CHAVE_ACESSO.actions.Criar_CHAVE_ACESSO.inputs.parameters['parameters/body']);

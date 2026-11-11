@@ -16,6 +16,8 @@ O instalador valida os 16 arquivos e pré-requisitos antes da promoção, conser
 
 Não criar notas novas ou alterar campos fiscais durante a correção. Geração local, início de upload e sucesso HTTP não substituem o ACK exato. Em falha, conservar a pendência.
 
+NFS-e exige `danfe.source=LOCAL_DANFSE_NACIONAL` tanto na importação quanto no receptor de correção. O nome do anexo contém o hash do XML, portanto um espelho antigo e um DANFSe corrigido podem ter o mesmo nome. Replays sem a origem do renderizador atual são recusados antes de qualquer escrita. Gere novamente o PDF a partir do XML validado; não acrescente a origem a bytes legados.
+
 As notificações permanecem suspensas durante a troca controlada. Somente PDFs ainda não enviados podem ser substituídos na fila após reconciliação de chave, situação e hashes. Itens enviados ou em trânsito mantêm recibos e não são reenviados automaticamente. A retomada exige conferir anexos e pendências preservadas.
 
 ## Rotina posterior

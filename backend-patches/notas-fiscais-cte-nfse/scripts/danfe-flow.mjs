@@ -45,12 +45,15 @@ export function addDanfeActions(process,cfg){
   ];
   process.Conferir_identidade={type:'ParseJson',inputs:{content:`@if(and(${clauses.join(',')}),json('{"valido":true}'),json('{}'))`,schema:requiredTrue},runAfter:{}};
   const pdf=name=>`items('Documentos')?['danfe']?['${name}']`;
+  // Archived XML mirrors use the same filename as the national DANFSe. Reject
+  // those old payloads before Gravar_XML can replay and overwrite a repaired PDF.
+  const supportedPdf=`or(not(equals(${kind},'NFSe')),equals(${pdf('source')},'LOCAL_DANFSE_NACIONAL'))`;
   const pdfPrefix=`if(equals(${kind},'NFSe'),'DANFSe',if(contains(createArray('cteProc','cteOSProc','cteSimpProc'),${kind}),'DACTE','DANFE'))`;
   process.Conferir_DANFE={type:'If',expression:{equals:[`@${isFullDocument(kind)}`,true]},
     actions:{
       Validar_pdf:{type:'ParseJson',inputs:{content:"@items('Documentos')?['danfe']",schema:danfeSchema},runAfter:{}},
       Conferir_identidade_pdf:{type:'ParseJson',inputs:{
-        content:`@if(and(equals(${pdf('fileName')},concat(${pdfPrefix},'-',${key},'-',substring(${sha},0,16),'.pdf')),equals(length(${pdf('sha256')}),64),${only(pdf('sha256'),hex)}),json('{"valido":true}'),json('{}'))`,schema:requiredTrue,
+        content:`@if(and(${supportedPdf},equals(${pdf('fileName')},concat(${pdfPrefix},'-',${key},'-',substring(${sha},0,16),'.pdf')),equals(length(${pdf('sha256')}),64),${only(pdf('sha256'),hex)}),json('{"valido":true}'),json('{}'))`,schema:requiredTrue,
       },runAfter:after('Validar_pdf')},
     },else:{actions:{}},runAfter:after('Conferir_identidade')};
   process.Gravar_XML.runAfter=after('Conferir_DANFE');
