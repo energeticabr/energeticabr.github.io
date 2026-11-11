@@ -119,7 +119,9 @@ test('opening and cancelling sorting does not discard a pending search debounce'
   input.value = 'Obra C';
   input.dispatchEvent(new ctx.dom.window.Event('input', { bubbles: true }));
   ctx.open().querySelector('[data-task-sort-cancel]').click();
-  t.mock.timers.tick(181);
+  t.mock.timers.tick(999);
+  assert.deepEqual(ctx.ids(), ['100', '200', '300', '500']);
+  t.mock.timers.tick(1);
   assert.deepEqual(ctx.ids(), ['200']);
 });
 

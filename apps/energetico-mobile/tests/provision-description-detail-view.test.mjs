@@ -92,7 +92,7 @@ test('cluster real abre todas as provisões do vínculo apesar da pesquisa, pág
   const ctx = await setup(t);
   assert.equal(ctx.root.querySelectorAll('.pg-card').length, 10);
   const search = ctx.root.querySelector('[name="search"]');
-  search.value = '111'; search.dispatchEvent(new ctx.dom.window.Event('change', { bubbles: true }));
+  search.value = '111'; search.dispatchEvent(new ctx.dom.window.KeyboardEvent('keydown', { key: 'Enter', bubbles: true, cancelable: true }));
   assert.equal(ctx.root.querySelectorAll('.pg-card').length, 1);
   const trigger = await open(ctx, '111');
   const dialog = ctx.dialog();
