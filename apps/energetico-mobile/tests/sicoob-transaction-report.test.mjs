@@ -356,27 +356,39 @@ function setupOrderLink(t, { initial, recipient, description, loadOptions = asyn
 }
 
 test('offers manual Sicoob order suggestions and keeps all orders searchable', async t => {
-  const dates = { 42: '2026-02-30', 43: '01/11/2026', 44: '2026-11-09' };
+  const dates = { 41: '2026-11-09', 42: '01/10/2026', 43: '01/11/2026', 44: '2026-10-01T23:59:00-03:00' };
   const { loadOptions } = createSicoobOrderLink({ repository: {
     async resolveList() { return { status: 'resolved', id: 'orders' }; },
     async getItems() {
-      return orders.map(({ id, supplier, amount, label }) => ({ id: id === '41' ? '2026' : id, fields: {
+      return [...orders.map(({ id, supplier, amount, label }) => ({ id: id === '41' ? '2026' : id, fields: {
         FORNECEDOR: supplier, VALORTOTAL: amount, FILIAL: label.split(' · ').at(-1), DATAPEDIDO: dates[id],
-      } }));
+      } })), { id: '40', fields: { FORNECEDOR: 'Sem cadastro', DATAPEDIDO: '2026-02-30' } }];
     },
   } });
   const { view, query, picker, openPicker, writes, Event, KeyboardEvent, linkButton, receiptsOpened } = setupOrderLink(t, { loadOptions });
   await view.open();
   assert.equal(query('thead th:last-child').textContent, 'VINCULAÇÃO');
+  const { ownerDocument } = view.element;
+  const style = ownerDocument.createElement('style');
+  style.textContent = reportStyles;
+  ownerDocument.head.append(style);
   await openPicker();
   const choices = () => [...picker().querySelectorAll('.dda-provision-option')];
-  assert.deepEqual(choices().map(node => node.querySelector('input').value), ['44', '43', '42', '2026']);
+  assert.deepEqual(choices().map(node => node.querySelector('input').value), ['44', '43', '42', '2026', '40']);
   const labels = choices().map(node => node.querySelector('input + span').textContent);
-  assert.match(labels[0], /^#44 · 09\/11\/2026 · Comércio Exemplo Ltda\./);
+  assert.match(labels[0], /^#44 · 01\/10\/2026 · Comércio Exemplo Ltda\./);
   assert.match(labels[1], /^#43 · 01\/11\/2026 · Fornecedor Diferente/);
-  assert.match(labels[2], /^#42 · Sem data do pedido · Comércio Exemplo Ltda\./);
-  assert.match(labels[3], /^#2026 · Sem data do pedido · Outro fornecedor/);
-  assert.deepEqual(choices().map(node => Boolean(node.querySelector('.dda-provision-star'))), [true, true, true, false]);
+  assert.match(labels[2], /^#42 · 01\/10\/2026 · Comércio Exemplo Ltda\./);
+  assert.match(labels[3], /^#2026 · 09\/11\/2026 · Outro fornecedor/);
+  assert.match(labels[4], /^#40 · Sem data do pedido · Sem cadastro · Valor não informado$/);
+  const chipColors = node => [...node.querySelectorAll('.sicoob-order-comparison')].map(chip => {
+    const css = ownerDocument.defaultView.getComputedStyle(chip);
+    return [css.backgroundColor, css.borderColor];
+  });
+  const green = ['rgb(234, 248, 238)', 'rgb(83, 167, 118)'];
+  const orange = ['rgb(255, 237, 213)', 'rgb(215, 121, 41)'];
+  assert.deepEqual(choices().map(chipColors), [[green, green], [orange, green], [green, orange], [orange, orange], [orange, orange]]);
+  assert.deepEqual(choices().map(node => Boolean(node.querySelector('.dda-provision-star'))), [true, true, true, false, false]);
   assert.match(choices()[0].textContent, /Valor igual.*Nome\/razão social semelhante/i);
   assert.match(choices()[1].textContent, /Valor igual/i);
   assert.match(choices()[2].textContent, /Nome\/razão social semelhante/i);
