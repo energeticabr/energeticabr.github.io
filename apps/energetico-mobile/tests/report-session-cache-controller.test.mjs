@@ -30,7 +30,6 @@ const reports = [
   ['open-depreciation-report', 'depreciationReportViewFactory', 'depreciationReportDataFactory', 'loadSnapshot'],
   ['open-document-control-report', 'documentControlReportViewFactory', 'documentControlReportDataFactory', 'loadSnapshot'],
   ['open-task-association-report', 'taskAssociationReportViewFactory', 'taskAssociationReportDataFactory', 'loadSnapshot'],
-  ['open-delegated-deadline-report', 'delegatedDeadlineReportViewFactory', 'delegatedDeadlineReportDataFactory', 'loadSnapshot'],
   ['open-supplier-workforce-report', 'supplierWorkforceReportViewFactory', 'supplierWorkforceReportDataFactory', 'loadSnapshot'],
   ['open-pending-supplier-payments-report', 'pendingSupplierPaymentsReportViewFactory', 'pendingSupplierPaymentsReportDataFactory', 'loadSnapshot'],
   ['open-pending-work-diaries-report', 'pendingWorkDiariesReportViewFactory', 'pendingWorkDiariesReportDataFactory', 'loadSnapshot'],
