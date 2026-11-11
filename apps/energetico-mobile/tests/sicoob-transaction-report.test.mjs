@@ -382,28 +382,32 @@ test('uses the supplier of a confirmed link for a pending recipient and keeps it
   assert.equal(recipient(), orders[0].supplier);
 });
 
-test('appends the linked supplier after the boleto amount and preserves the bank recipient', async t => {
-  const bankRecipient = 'Beneficiário informado pelo Sicoob';
+for (const bankRecipient of ['N/A', 'Beneficiário informado pelo Sicoob']) {
+test(`appends the linked supplier to boleto recipient ${bankRecipient} through linking, reopen and PDF`, async t => {
   const { view, root, query, openPicker, select, picker } = setupOrderLink(t, {
     recipient: bankRecipient, description: 'PAGAMENTO BOLETO',
   });
   await view.open();
+  assert.equal(query('tbody .ddr-supplier-name').textContent, bankRecipient);
   assert.equal(query('tbody .ddr-money').textContent, 'R$\u00a00,10');
   await openPicker();
   select('41').querySelector('[data-edit-review-confirm]').click();
   await settle();
-  assert.equal(query('tbody .ddr-supplier-name').textContent, bankRecipient);
-  assert.match(query('tbody .ddr-money').textContent, /^R\$\s0,10\s*\(Outro fornecedor\)$/);
+  assert.equal(query('tbody .ddr-supplier-name').textContent, `${bankRecipient} (Outro fornecedor)`);
+  assert.equal(query('tbody .ddr-money').textContent, 'R$\u00a00,10');
   picker().querySelector('.gallery-record-dialog-buttons button').click();
   view.close();
   await view.open();
-  assert.match(query('tbody .ddr-money').textContent, /\(Outro fornecedor\)/);
+  assert.equal(query('tbody .ddr-supplier-name').textContent, `${bankRecipient} (Outro fornecedor)`);
+  assert.equal(query('tbody .ddr-money').textContent, 'R$\u00a00,10');
   const restore = await view.preparePrint();
   const pdf = captureFilteredReport(root);
   const table = pdf.pages.flatMap(page => page.blocks).find(block => block.type === 'table');
-  assert.match(table.rows[1].cells[4].runs.map(run => run.text).join(' '), /\(Outro fornecedor\)/);
+  assert.equal(table.rows[1].cells[1].runs.map(run => run.text).join(''), `${bankRecipient} (Outro fornecedor)`);
+  assert.match(table.rows[1].cells[4].runs.map(run => run.text).join(''), /^R\$\s0,10$/);
   restore();
 });
+}
 
 test('confirms a Sicoob order link, replaces it and retains it through refresh, reopen and PDF', async t => {
   const { view, root, query, linkButton, picker, openPicker, select, writes, Event } = setupOrderLink(t);
