@@ -19,8 +19,13 @@ await new Promise(r=>requestAnimationFrame(()=>requestAnimationFrame(r)));
 const state={overflow:document.documentElement.scrollWidth>innerWidth+1,rows:[],issued:[]};
 state.linkRows=[...document.querySelectorAll('[data-dda-id]')].map(row=>{
  const link=row.querySelector('.ddr-link-cluster'),warning=row.querySelector('.ddr-link-warning');
+ const label=link.firstChild,word=document.createRange();
+ const wordsFit=[...label.textContent.matchAll(/\S+/g)].every(match=>{
+  word.setStart(label,match.index);word.setEnd(label,match.index+match[0].length);
+  return word.getClientRects().length===1;
+ });
  return {id:row.dataset.ddaId,link:link.textContent,warning:warning?.textContent??null,
-  linkBackground:getComputedStyle(link).backgroundColor,linkFits:link.scrollWidth<=link.clientWidth+1&&link.offsetWidth<=row.cells[7].clientWidth,
+  linkBackground:getComputedStyle(link).backgroundColor,linkFits:link.scrollWidth<=link.clientWidth+1&&link.offsetWidth<=row.cells[7].clientWidth,wordsFit,
   below:Boolean(warning&&warning.offsetTop>=link.offsetTop+link.offsetHeight),
   fits:Boolean(warning&&warning.scrollWidth<=warning.clientWidth+1),
   rowBackground:getComputedStyle(row).backgroundColor,

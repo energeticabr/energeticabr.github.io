@@ -78,6 +78,14 @@
 }
 .ddr-scheduled-unlinked .ddr-due-date { color: #71101e; }
 button.ddr-link-cluster { font-family:inherit; font-size:inherit; line-height:1.2; white-space:normal; cursor:pointer; }
+.ddr-table .ddr-link-cluster[data-link-state="regularized"] {
+  font-size: 10px;
+  line-height: 1.2;
+  padding-inline: 4px;
+  text-align: center;
+  overflow-wrap: normal;
+  word-break: normal;
+}
 button.ddr-link-cluster:focus-visible { outline:2px solid #105367; outline-offset:2px; }
 .ddr-table tr[data-dda-paid],
 .ddr-table tr[data-dda-paid] > td {
