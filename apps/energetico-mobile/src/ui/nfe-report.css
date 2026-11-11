@@ -67,6 +67,7 @@
   font-variant-numeric: tabular-nums;
 }
 .nfe-feedback, .nfe-pdf-feedback { margin: 8px 0; color: #456375; font-size: 12px; }
+.nfe-sync-feedback { padding: 0 10px; white-space: pre-line; }
 .nfe-pdf-feedback { padding: 6px 10px; background: #ffeaec; color: #8b2730; }
 .nfe-table { width: 100%; min-width: 680px; border-collapse: collapse; table-layout: fixed; color: #183a50; font-size: 12px; }
 .nfe-table th {

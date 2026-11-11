@@ -10297,7 +10297,7 @@ export function createAppController({
                 flowId: 'payment', replyId: 'action_payment', text: 'CRIAR UMA PROVISÃO DE PAGAMENTO',
               }),
             } : {}),
-            ...(sourceKind === 'notas_fiscais_sefaz' && !isNfeReport ? { syncMonitor: ensureSefazSyncSession() } : {}),
+            ...(sourceKind === 'notas_fiscais_sefaz' ? { syncMonitor: ensureSefazSyncSession() } : {}),
             ...(isDdaReport ? {
               onClose: () => ddaAutoReminder.dismiss(),
               onStartSettlement: id => {

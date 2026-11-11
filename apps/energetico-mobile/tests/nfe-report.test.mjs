@@ -9,6 +9,7 @@ import { projectNfeRows, invoiceXmlFacts } from '../src/chat/nfe-report-model.js
 import { createNfeOrderLink } from '../src/chat/nfe-order-link.js';
 import { buildFilteredReportPdf } from '../src/chat/filtered-report-pdf.js';
 import { createNfeReportView } from '../src/ui/nfe-report-view.js';
+import { createSefazSyncMonitor } from '../src/chat/sefaz-sync-monitor.js';
 import { decorateReportPrint } from '../src/ui/report-print.js';
 
 test('NFE uses the DDA drawing and opens its own report from the home menu', () => {
@@ -32,7 +33,8 @@ test('NFE uses the DDA drawing and opens its own report from the home menu', () 
 
 test('NFE shortcut uses the authenticated fiscal source and ends its session at logout', async t => {
   const handlers = new Map(), opens = [], kinds = [];
-  let sessionCheck, destroyed = false;
+  let sessionCheck, destroyed = false, reportMonitor;
+  const monitor = { resume:async () => {}, destroy(){} };
   const view = {
     render(){}, focusComposer(){}, destroy(){},
     on(type, handler){ handlers.set(type, handler); return () => handlers.delete(type); },
@@ -40,10 +42,15 @@ test('NFE shortcut uses the authenticated fiscal source and ends its session at 
   const controller = createAppController({
     store:createConversationStore(), view,
     auth:{ initialize:async () => ({ homeAccountId:'nfe-test', name:'Teste' }), signOut:async () => {} },
-    client:{ sendText:async () => ({ status:'processed', messages:[] }) },
+    client:{ sendText:async () => ({ status:'processed', messages:[] }), refreshSefaz(){},
+      getSefazRefreshStatus(){}, getSefazRefreshPending(){}, acknowledgeSefazRefresh(){} },
+    sefazSyncSessionFactory:() => monitor,
     native:{ importSharedItems:async () => [] },
     registrationGalleryDataFactory:async ({kind,assertSession}) => { kinds.push(kind); sessionCheck = assertSession; return {}; },
-    nfeReportFactory:async () => ({ open(){ opens.push('NFE'); }, close(){}, destroy(){ destroyed = true; } }),
+    nfeReportFactory:async ({syncMonitor}) => {
+      reportMonitor = syncMonitor;
+      return { open(){ opens.push('NFE'); }, close(){}, destroy(){ destroyed = true; } };
+    },
     pendingProvisionAttachmentsDataFactory:async () => ({ loadUpcomingPayments:async () => [] }),
     pendingConstructionDiaryDataFactory:async () => ({ loadPending:async () => [] }),
     diaryFieldVisitDataFactory:async () => ({ load:async () => [] }),
@@ -53,6 +60,7 @@ test('NFE shortcut uses the authenticated fiscal source and ends its session at 
   await handlers.get('open-nfe-report')?.({ type:'open-nfe-report' });
   assert.deepEqual(opens, ['NFE']);
   assert.deepEqual(kinds, ['notas_fiscais_sefaz']);
+  assert.equal(reportMonitor, monitor);
   assert.doesNotThrow(sessionCheck);
   await handlers.get('sign-out')({ type:'sign-out' });
   assert.equal(destroyed, true);
@@ -77,6 +85,59 @@ const serviceXml = code => `<NFSe xmlns="http://www.sped.fazenda.gov.br/nfse"><i
   </infDPS></DPS></infNFSe></NFSe>`;
 const issuerXml = `<nfeProc xmlns="http://www.portalfiscal.inf.br/nfe"><NFe><infNFe Id="NFe${key}">
   <emit><CRT>4</CRT></emit></infNFe></NFe></nfeProc>`;
+
+test('the report sync button queues SEFAZ once and refreshes the same view after fiscal completion', async t => {
+  const dom = new JSDOM('<body/>', { url:'https://fixture.test' });
+  const { document, Event } = dom.window;
+  const calls = [], snapshots = [];
+  const id = 'a'.repeat(32);
+  const startedUtc = '2026-11-10T20:00:00Z';
+  const succeeded = { status:'succeeded', documents:0 };
+  let receipt = { requestId:id, startedUtc, status:'waiting', sources:{
+    NFE:{ status:'waiting', code:'COOLDOWN', nextAllowedAt:'2026-11-10T21:00:00Z' },
+    CTE:succeeded, NFSE:succeeded,
+  } };
+  const monitor = createSefazSyncMonitor({
+    accountKey:'report-test', storage:dom.window.localStorage, randomId:() => id,
+    schedule:() => 0, cancel(){},
+    client:{
+      async refreshSefaz({requestId}) { calls.push(requestId); return receipt; },
+      async getSefazRefreshStatus() { return receipt; },
+      async getSefazRefreshPending() { return { status:'pending', requests:[] }; },
+    },
+  });
+  const report = createNfeReportView({ document, syncMonitor:monitor, data:{
+    async loadSnapshot({ refresh }) {
+      snapshots.push(refresh);
+      const rows = refresh ? [{ ...invoice, fields:{ ...invoice.fields, NUMERO_NOTA:'141' } }] : [invoice];
+      return { rows };
+    },
+    downloadDocument:async () => new Blob([issuerXml]),
+  } });
+  t.after(() => { report.destroy(); monitor.destroy(); dom.window.close(); });
+  await report.open();
+  assert.deepEqual(calls, []);
+  const search = report.element.querySelector('input[type=search]');
+  search.value = 'elétrica';
+  search.dispatchEvent(new Event('input'));
+  const refresh = report.element.querySelector('.pl-refresh');
+  refresh.click();
+  refresh.click();
+  await new Promise(resolve => setImmediate(resolve));
+  assert.deepEqual(calls, [id]);
+  assert.deepEqual(snapshots, [false]);
+  assert.equal(refresh.disabled, true);
+  assert.match(report.element.textContent, /intervalo obrigatório/);
+  assert.match(report.element.querySelector('tbody').textContent, /140/);
+
+  receipt = { requestId:id, startedUtc, status:'partial', completedUtc:'2026-11-10T21:01:00Z',
+    sources:{ NFE:{ status:'succeeded', documents:1 }, CTE:succeeded, NFSE:{ status:'failed', code:'SYNC_FAILED' } } };
+  await monitor.resume();
+  assert.deepEqual(snapshots, [false, true]);
+  assert.equal(search.value, 'elétrica');
+  assert.equal(refresh.disabled, false);
+  assert.match(report.element.querySelector('tbody').textContent, /141/);
+});
 
 test('report separates an incomplete CNO from a missing CNO and exposes the reported number', async t => {
   const dom = new JSDOM('<body/>');
