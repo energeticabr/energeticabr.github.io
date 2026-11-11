@@ -1545,12 +1545,10 @@ button.chat-rhid-attendance-card__cluster:focus-visible { outline: 3px solid #15
 .chat-main-stage-progress-shortcut:focus-visible { outline:3px solid var(--accent); outline-offset:3px; }
 .chat-main-supplier-payroll-report-shortcut { grid-column:3; grid-row:1; align-self:start; margin-top:180px; width:44px; height:44px; padding:0; border:0; border-radius:10px; background:#cf757a; overflow:hidden; cursor:pointer; }
 .chat-main-supplier-payroll-report-shortcut:focus-visible { outline:3px solid var(--accent); outline-offset:3px; }
-.chat-main-pending-supplier-payments-shortcut { grid-column:3; grid-row:1; align-self:start; margin-top:404px; width:44px; height:44px; padding:0; border:0; border-radius:10px; background:#cf757a; overflow:hidden; cursor:pointer; }
-.chat-main-pending-work-diaries-shortcut { grid-column:3; grid-row:1; align-self:start; margin-top:460px; width:44px; height:44px; padding:0; border:0; border-radius:10px; background:#cf757a; overflow:hidden; cursor:pointer; }
-.chat-main-supplier-workforce-shortcut { grid-column:3; grid-row:1; align-self:start; margin-top:292px; width:44px; height:44px; padding:0; border:0; border-radius:10px; background:#cf757a; overflow:hidden; cursor:pointer; }
-.chat-main-contractor-control-shortcut { grid-column:3; grid-row:1; align-self:start; margin-top:348px; width:44px; height:44px; padding:0; border:0; border-radius:10px; background:#cf757a; overflow:hidden; cursor:pointer; }
+.chat-main-pending-supplier-payments-shortcut { grid-column:3; grid-row:1; align-self:start; margin-top:348px; width:44px; height:44px; padding:0; border:0; border-radius:10px; background:#cf757a; overflow:hidden; cursor:pointer; }
+.chat-main-pending-work-diaries-shortcut { grid-column:3; grid-row:1; align-self:start; margin-top:404px; width:44px; height:44px; padding:0; border:0; border-radius:10px; background:#cf757a; overflow:hidden; cursor:pointer; }
+.chat-main-contractor-control-shortcut { grid-column:3; grid-row:1; align-self:start; margin-top:292px; width:44px; height:44px; padding:0; border:0; border-radius:10px; background:#cf757a; overflow:hidden; cursor:pointer; }
 .chat-main-contractor-control-shortcut:focus-visible { outline:3px solid var(--accent); outline-offset:3px; }
-.chat-main-supplier-workforce-shortcut:focus-visible { outline:3px solid var(--accent); outline-offset:3px; }
 .chat-main-pending-supplier-payments-shortcut:focus-visible { outline:3px solid var(--accent); outline-offset:3px; }
 .chat-main-pending-work-diaries-shortcut:focus-visible { outline:3px solid var(--accent); outline-offset:3px; }
 .chat-message--commercial-top { row-gap:12px; }

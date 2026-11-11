@@ -339,7 +339,7 @@ const returnedHomeActions = [
   'open-sicoob-transaction-report', 'open-nfe-report', 'open-dda-report', 'open-provision-report', 'open-payment-ledger', 'open-management-report',
   'open-order-validation-report', 'open-quotation-report', 'open-depreciation-report', 'open-document-control-report',
   'open-task-association-report', 'open-rhid-mascot-report', 'open-cargos-table', 'open-attendance-summary',
-  'open-stage-progress', 'open-supplier-payroll-report', 'open-trancid-report', 'open-supplier-workforce-report', 'open-contractor-control-report',
+  'open-stage-progress', 'open-supplier-payroll-report', 'open-trancid-report', 'open-contractor-control-report',
   'open-pending-supplier-payments-report', 'open-pending-work-diaries-report',
 ];
 
@@ -4854,7 +4854,7 @@ test("menu inicial não oferece o hub antigo, inclusive em respostas legadas", t
   t.after(() => { view.destroy(); dom.window.close(); });
   for (const question of ['QUAL ÁREA VOCÊ DESEJA ACESSAR?', 'DESEJA UTILIZAR ELES EM QUAL FLUXO?']) {
     const opened = [];
-    const actions = ['open-contractor-control-report', 'open-supplier-workforce-report',
+    const actions = ['open-contractor-control-report',
       'open-pending-supplier-payments-report', 'open-pending-work-diaries-report'];
     for (const action of actions) view.on(action, () => opened.push(action));
     view.render(signedInState({ messages: [{
@@ -4866,6 +4866,7 @@ test("menu inicial não oferece o hub antigo, inclusive em respostas legadas", t
       ],
     }] }));
     assert.equal(dom.window.document.querySelector('[data-reply-id="action_contractor_reports"]'), null);
+    assert.equal(dom.window.document.querySelector('[data-action="open-supplier-workforce-report"]'), null);
     for (const action of question.startsWith('QUAL ÁREA') ? actions : []) {
       const mascot = dom.window.document.querySelector('[data-action="' + action + '"]');
       assert.ok(mascot, action);

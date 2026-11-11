@@ -223,11 +223,6 @@ async function defaultTaskAssociationReportDataFactory(options) {
   return createTaskAssociationReportData(options);
 }
 
-async function defaultSupplierWorkforceReportViewFactory(options) {
-  const { createSupplierWorkforceReportView } = await import('./ui/supplier-workforce-report-view.js');
-  return createSupplierWorkforceReportView(options);
-}
-
 async function defaultContractorControlReportViewFactory(options) {
   const { createContractorControlReportView } = await import('./ui/contractor-control-report-view.js');
   return createContractorControlReportView(options);
@@ -251,11 +246,6 @@ async function defaultPendingSupplierPaymentsReportViewFactory(options) {
 async function defaultPendingWorkDiariesReportViewFactory(options) {
   const { createPendingWorkDiariesReportView } = await import('./ui/pending-work-diaries-report-view.js');
   return createPendingWorkDiariesReportView(options);
-}
-
-async function defaultSupplierWorkforceReportDataFactory(options) {
-  const { createSupplierWorkforceReportData } = await import('./chat/supplier-workforce-report-data.js');
-  return createSupplierWorkforceReportData(options);
 }
 
 async function defaultPendingSupplierPaymentsReportDataFactory(options) {
@@ -496,12 +486,10 @@ export const DOCUMENT_CONTROL_REPORT_ID = 'home-document-control-report';
 const DOCUMENT_CONTROL_REPORT_SCOPES = Object.freeze(['Sites.Read.All']);
 export const TASK_ASSOCIATION_REPORT_ID = 'home-task-association-report';
 const TASK_ASSOCIATION_REPORT_SCOPES = Object.freeze(['Sites.Read.All']);
-export const SUPPLIER_WORKFORCE_REPORT_ID = 'home-supplier-workforce-report';
 export const CONTRACTOR_CONTROL_REPORT_ID = 'home-contractor-control-report';
 export const GENERAL_SUMMARY_REPORT_ID = 'header-general-summary-report';
 export const PENDING_SUPPLIER_PAYMENTS_REPORT_ID = 'home-pending-supplier-payments-report';
 export const PENDING_WORK_DIARIES_REPORT_ID = 'home-pending-work-diaries-report';
-const SUPPLIER_WORKFORCE_REPORT_SCOPES = Object.freeze(['Sites.Read.All']);
 const PENDING_SUPPLIER_PAYMENTS_REPORT_SCOPES = Object.freeze(['Sites.Read.All']);
 const PENDING_WORK_DIARIES_REPORT_SCOPES = Object.freeze(['Sites.Read.All']);
 const MANAGEMENT_REPORT_ID = 'action_management_report';
@@ -1098,14 +1086,12 @@ export function createAppController({
   documentControlReportDataFactory = defaultDocumentControlReportDataFactory,
   taskAssociationReportViewFactory = defaultTaskAssociationReportViewFactory,
   taskAssociationReportDataFactory = defaultTaskAssociationReportDataFactory,
-  supplierWorkforceReportViewFactory = defaultSupplierWorkforceReportViewFactory,
   contractorControlReportViewFactory = defaultContractorControlReportViewFactory,
   contractorControlReportDataFactory = defaultContractorReportDataFactory,
   generalSummaryReportViewFactory = defaultGeneralSummaryReportViewFactory,
   generalSummaryReportDataFactory = defaultGeneralSummaryReportDataFactory,
   pendingSupplierPaymentsReportViewFactory = defaultPendingSupplierPaymentsReportViewFactory,
   pendingWorkDiariesReportViewFactory = defaultPendingWorkDiariesReportViewFactory,
-  supplierWorkforceReportDataFactory = defaultSupplierWorkforceReportDataFactory,
   pendingSupplierPaymentsReportDataFactory = defaultPendingSupplierPaymentsReportDataFactory,
   pendingWorkDiariesReportDataFactory = defaultPendingWorkDiariesReportDataFactory,
   paymentLedgerFactory = defaultPaymentLedgerFactory,
@@ -1235,7 +1221,6 @@ export function createAppController({
   let taskAssociationReport = null;
   let taskAssociationReportOpening = null;
   let taskAssociationReportSession = null;
-  let supplierWorkforceReport = null;
   let contractorControlReport = null;
   let contractorControlReportOpening = null;
   let contractorControlReportSession = null;
@@ -1244,10 +1229,8 @@ export function createAppController({
   let generalSummaryReportSession = null;
   let pendingSupplierPaymentsReport = null;
   let pendingWorkDiariesReport = null;
-  let supplierWorkforceReportOpening = null;
   let pendingSupplierPaymentsReportOpening = null;
   let pendingWorkDiariesReportOpening = null;
-  let supplierWorkforceReportSession = null;
   let pendingSupplierPaymentsReportSession = null;
   let pendingWorkDiariesReportSession = null;
   let managementReport = null;
@@ -1762,7 +1745,7 @@ export function createAppController({
         supplierPayrollReportOpening, commercialReceiptsOpening, commercialMilestonesOpening,
         commercialDocumentsOpening, sacPathologiesOpening, quotationReportOpening, depreciationReportOpening,
         documentControlReportOpening, taskAssociationReportOpening,
-        contractorControlReportOpening, generalSummaryReportOpening, supplierWorkforceReportOpening,
+        contractorControlReportOpening, generalSummaryReportOpening,
         pendingSupplierPaymentsReportOpening, pendingWorkDiariesReportOpening, managementReportOpening,
         provisionReportOpening, orderValidationReportOpening, paymentProgrammingGalleryOpening,
         recurringExpensesGalleryOpening, supplierPayrollOpening, mealVoucherOpening, payrollBreakdownOpening,
@@ -5697,7 +5680,6 @@ export function createAppController({
     disposeDepreciationReport();
     disposeDocumentControlReport();
     disposeTaskAssociationReport();
-    disposeSupplierWorkforceReport();
     disposeContractorControlReport();
     disposeGeneralSummaryReport();
     disposePendingSupplierPaymentsReport();
@@ -6420,17 +6402,6 @@ export function createAppController({
     panel?.destroy?.();
   }
 
-  function disposeSupplierWorkforceReport() {
-    const session = supplierWorkforceReportSession;
-    const panel = supplierWorkforceReport;
-    supplierWorkforceReportSession = null;
-    supplierWorkforceReportOpening = null;
-    supplierWorkforceReport = null;
-    session?.lifetime.abort();
-    session?.loadController?.abort();
-    panel?.destroy?.();
-  }
-
   function disposeContractorControlReport() {
     const session = contractorControlReportSession;
     const panel = contractorControlReport;
@@ -6475,7 +6446,7 @@ export function createAppController({
     panel?.destroy?.();
   }
 
-  function closeGalleryOverlays(preserveSacPathologies = false, preserveQuotationReport = false, preserveDepreciationReport = false, preserveDocumentControlReport = false, preserveTaskAssociationReport = false, preservePendingWorkDiariesReport = false, preservePendingSupplierPaymentsReport = false, preserveSupplierWorkforceReport = false, preserveContractorControlReport = false, preserveGeneral = false) {
+  function closeGalleryOverlays(preserveSacPathologies = false, preserveQuotationReport = false, preserveDepreciationReport = false, preserveDocumentControlReport = false, preserveTaskAssociationReport = false, preservePendingWorkDiariesReport = false, preservePendingSupplierPaymentsReport = false, preserveContractorControlReport = false, preserveGeneral = false) {
     disposePayrollSheetCreate();
     if (!preserveSacPathologies) disposeSacPathologiesReport();
     if (!preserveQuotationReport) disposeQuotationReport();
@@ -6484,7 +6455,6 @@ export function createAppController({
     if (!preserveTaskAssociationReport) disposeTaskAssociationReport();
     if (!preservePendingWorkDiariesReport) disposePendingWorkDiariesReport();
     if (!preservePendingSupplierPaymentsReport) disposePendingSupplierPaymentsReport();
-    if (!preserveSupplierWorkforceReport) disposeSupplierWorkforceReport();
     if (!preserveContractorControlReport) disposeContractorControlReport();
     if (!preserveGeneral) disposeGeneralSummaryReport();
     for (const gallery of [
@@ -6527,7 +6497,6 @@ export function createAppController({
       case 'open-stage-progress': return stageProgressReport;
       case 'open-supplier-payroll-report': return supplierPayrollReport;
       case 'open-trancid-report': return trancidReport;
-      case 'open-supplier-workforce-report': return supplierWorkforceReport;
       case 'open-contractor-control-report': return contractorControlReport;
       case 'open-pending-supplier-payments-report': return pendingSupplierPaymentsReport;
       case 'open-pending-work-diaries-report': return pendingWorkDiariesReport;
@@ -6624,7 +6593,6 @@ export function createAppController({
       case 'open-stage-progress': return openStageProgress();
       case 'open-supplier-payroll-report': return openSupplierPayrollReport();
       case 'open-trancid-report': return openTrancidReport();
-      case 'open-supplier-workforce-report': return openSupplierWorkforceReport();
       case 'open-contractor-control-report': return openContractorControlReport();
       case 'open-pending-supplier-payments-report': return openPendingSupplierPaymentsReport();
       case 'open-pending-work-diaries-report': return openPendingWorkDiariesReport();
@@ -7191,7 +7159,6 @@ export function createAppController({
     disposeDepreciationReport();
     disposeDocumentControlReport();
     disposeTaskAssociationReport();
-    disposeSupplierWorkforceReport();
     disposeContractorControlReport();
     disposeGeneralSummaryReport();
     disposePendingSupplierPaymentsReport();
@@ -7306,7 +7273,6 @@ export function createAppController({
     disposeDepreciationReport();
     disposeDocumentControlReport();
     disposeTaskAssociationReport();
-    disposeSupplierWorkforceReport();
     disposeContractorControlReport();
     disposeGeneralSummaryReport();
     disposePendingSupplierPaymentsReport();
@@ -7422,7 +7388,6 @@ export function createAppController({
     disposeDepreciationReport();
     disposeDocumentControlReport();
     disposeTaskAssociationReport();
-    disposeSupplierWorkforceReport();
     disposeContractorControlReport();
     disposeGeneralSummaryReport();
     disposePendingSupplierPaymentsReport();
@@ -7470,7 +7435,6 @@ export function createAppController({
     disposeDepreciationReport();
     disposeDocumentControlReport();
     disposeTaskAssociationReport();
-    disposeSupplierWorkforceReport();
     disposeContractorControlReport();
     disposeGeneralSummaryReport();
     disposePendingSupplierPaymentsReport();
@@ -7527,7 +7491,6 @@ export function createAppController({
     disposeDepreciationReport();
     disposeDocumentControlReport();
     disposeTaskAssociationReport();
-    disposeSupplierWorkforceReport();
     disposeContractorControlReport();
     disposeGeneralSummaryReport();
     disposePendingSupplierPaymentsReport();
@@ -7658,7 +7621,6 @@ export function createAppController({
     disposeDepreciationReport();
     disposeDocumentControlReport();
     disposeTaskAssociationReport();
-    disposeSupplierWorkforceReport();
     disposeContractorControlReport();
     disposeGeneralSummaryReport();
     disposePendingSupplierPaymentsReport();
@@ -7736,7 +7698,6 @@ export function createAppController({
     disposeDepreciationReport();
     disposeDocumentControlReport();
     disposeTaskAssociationReport();
-    disposeSupplierWorkforceReport();
     disposeContractorControlReport();
     disposeGeneralSummaryReport();
     disposePendingSupplierPaymentsReport();
@@ -8024,7 +7985,6 @@ export function createAppController({
     disposeDepreciationReport();
     disposeDocumentControlReport();
     disposeTaskAssociationReport();
-    disposeSupplierWorkforceReport();
     disposeContractorControlReport();
     disposeGeneralSummaryReport();
     disposePendingSupplierPaymentsReport();
@@ -8140,7 +8100,6 @@ export function createAppController({
     disposeDepreciationReport();
     disposeDocumentControlReport();
     disposeTaskAssociationReport();
-    disposeSupplierWorkforceReport();
     disposeContractorControlReport();
     disposeGeneralSummaryReport();
     disposePendingSupplierPaymentsReport();
@@ -8267,7 +8226,6 @@ export function createAppController({
     disposeDepreciationReport();
     disposeDocumentControlReport();
     disposeTaskAssociationReport();
-    disposeSupplierWorkforceReport();
     disposeContractorControlReport();
     disposeGeneralSummaryReport();
     disposePendingSupplierPaymentsReport();
@@ -8394,7 +8352,6 @@ export function createAppController({
     disposeDepreciationReport();
     disposeDocumentControlReport();
     disposeTaskAssociationReport();
-    disposeSupplierWorkforceReport();
     disposeContractorControlReport();
     disposeGeneralSummaryReport();
     disposePendingSupplierPaymentsReport();
@@ -8519,7 +8476,6 @@ export function createAppController({
     disposeDepreciationReport();
     disposeDocumentControlReport();
     disposeTaskAssociationReport();
-    disposeSupplierWorkforceReport();
     disposeContractorControlReport();
     disposeGeneralSummaryReport();
     disposePendingSupplierPaymentsReport();
@@ -8654,7 +8610,6 @@ export function createAppController({
     disposeDepreciationReport();
     disposeDocumentControlReport();
     disposeTaskAssociationReport();
-    disposeSupplierWorkforceReport();
     disposeContractorControlReport();
     disposeGeneralSummaryReport();
     disposePendingSupplierPaymentsReport();
@@ -9206,152 +9161,6 @@ export function createAppController({
     return request;
   }
 
-  async function openSupplierWorkforceReport() {
-    if (!account || stopped || flowBusy() || store.getState().activeFlow) return false;
-    if (supplierWorkforceReportSession && supplierWorkforceReportSession.origin !== globalThis.location?.origin) disposeSupplierWorkforceReport();
-    if (supplierWorkforceReportOpening) return supplierWorkforceReportOpening;
-    galleryOpeningRevision++;
-    launchGalleryOpening = ordersGalleryOpening = tasksGalleryOpening = null;
-    paymentProgrammingGalleryOpening = recurringExpensesGalleryOpening = hrPayrollGalleryOpening = null;
-    registrationGalleryOpenings.clear();
-    // A pending factory has no panel for closeGalleryOverlays to close. Invalidate
-    // its request and destroy cached views so a later open gets a fresh session.
-    spendingReportsRevision++;
-    paymentLedgerOpening = managementReportOpening = provisionReportOpening = orderValidationReportOpening = null;
-    for (const report of [paymentLedger, managementReport, provisionReport, orderValidationReport]) report?.destroy?.();
-    paymentLedger = managementReport = provisionReport = orderValidationReport = null;
-    cargosTableRevision++;
-    cargosTableOpening = null;
-    cargosTable?.destroy?.();
-    cargosTable = null;
-    disposeAttendanceSummaryReport();
-    disposeStageProgressReport();
-    disposeSupplierPayrollReport();
-    disposeCommercialReceiptsReport();
-    disposeCommercialMilestonesReport();
-    disposeCommercialDocumentsReport();
-    disposePendingSupplierPaymentsReport();
-    closeGalleryOverlays(false, false, false, false, false, false, false, true);
-    const reportsAccount = account;
-    const reportsRevision = sessionRevision;
-    const reportsOrigin = globalThis.location?.origin;
-    const session = supplierWorkforceReportSession || {
-      origin: reportsOrigin,
-      lifetime: new AbortController(), loadController: null, generation: 0, authorization: null,
-    };
-    supplierWorkforceReportSession = session;
-    const cancelled = () => new DOMException('Consulta cancelada.', 'AbortError');
-    const assertSession = () => {
-      if (stopped || account !== reportsAccount || sessionRevision !== reportsRevision
-        || supplierWorkforceReportSession !== session || session.lifetime.signal.aborted
-        || (typeof auth.getAccount === 'function' && auth.getAccount()?.homeAccountId !== reportsAccount.homeAccountId)
-        || globalThis.location?.origin !== reportsOrigin
-        || flowBusy() || store.getState().activeFlow) throw cancelled();
-    };
-    const data = { async loadSnapshot(options = {}) {
-      assertSession();
-      if (options.signal?.aborted) throw cancelled();
-      session.loadController?.abort();
-      const controller = new AbortController();
-      session.loadController = controller;
-      const generation = ++session.generation;
-      const signal = controller.signal;
-      const assertQuery = () => {
-        assertSession();
-        if (signal.aborted || generation !== session.generation) throw cancelled();
-      };
-      const abort = () => controller.abort();
-      options.signal?.addEventListener('abort', abort, { once: true });
-      let rejectCancelled;
-      const cancellation = new Promise((_, reject) => { rejectCancelled = () => reject(cancelled()); });
-      signal.addEventListener('abort', rejectCancelled, { once: true });
-      // Each source owns this request's token provider. A source that resumes
-      // after replacement must never borrow the replacement's credentials.
-      const tokenProvider = async () => {
-        const scopes = SUPPLIER_WORKFORCE_REPORT_SCOPES;
-        assertQuery();
-        try {
-          const token = await auth.getToken(scopes);
-          assertQuery();
-          return token;
-        } catch (error) {
-          assertQuery();
-          if (error?.code !== 'AUTH_REQUIRED' || typeof auth.authorize !== 'function') throw error;
-          if (!session.authorization) {
-            const authorization = Promise.resolve().then(() => {
-              assertSession();
-              if (!session.loadController || session.loadController.signal.aborted) throw cancelled();
-              return auth.authorize(scopes, { resumeAction: SUPPLIER_WORKFORCE_REPORT_ID });
-            });
-            session.authorization = authorization;
-            void authorization.finally(() => {
-              if (session.authorization === authorization) session.authorization = null;
-            }).catch(() => {});
-          }
-          await session.authorization;
-          assertQuery();
-          const token = await auth.getToken(scopes);
-          assertQuery();
-          return token;
-        }
-      };
-      const load = async () => {
-        try {
-          assertQuery();
-          const source = cachedReportSource('open-supplier-workforce-report', await supplierWorkforceReportDataFactory({ tokenProvider }), assertQuery);
-          assertQuery();
-          const snapshot = await source.loadSnapshot({ ...options, signal });
-          assertQuery();
-          return snapshot;
-        } catch (error) {
-          assertQuery();
-          throw error;
-        }
-      };
-      try {
-        return await Promise.race([load(), cancellation]);
-      } finally {
-        options.signal?.removeEventListener('abort', abort);
-        signal.removeEventListener('abort', rejectCancelled);
-        if (session.loadController === controller) session.loadController = null;
-      }
-    } };
-    let cancelOpening;
-    const openingCancellation = new Promise(resolve => { cancelOpening = () => resolve(false); });
-    session.lifetime.signal.addEventListener('abort', cancelOpening, { once: true });
-    const opening = Promise.resolve().then(async () => {
-      try {
-        assertSession();
-        let report = supplierWorkforceReport;
-        if (!report) {
-          const panel = decorateControllerReport(await supplierWorkforceReportViewFactory({ data, document: globalThis.document,
-            onClose: () => { if (supplierWorkforceReportSession === session) disposeSupplierWorkforceReport(); },
-          }), 'open-supplier-workforce-report');
-          try { assertSession(); }
-          catch (error) { panel?.destroy?.(); throw error; }
-          supplierWorkforceReport = report = panel;
-        }
-        await report.open();
-        assertSession();
-        return true;
-      } catch (error) {
-        if (!stopped && account === reportsAccount && sessionRevision === reportsRevision
-          && supplierWorkforceReportSession === session && globalThis.location?.origin === reportsOrigin && error?.name !== 'AbortError') {
-          setSessionError(error, 'Não foi possível abrir o relatório de fornecedores por filial, imóvel e profissão.');
-        }
-        if (supplierWorkforceReportSession === session
-          && (!supplierWorkforceReport || globalThis.location?.origin !== reportsOrigin)) disposeSupplierWorkforceReport();
-        return false;
-      }
-    });
-    const request = Promise.race([opening, openingCancellation]).finally(() => {
-      session.lifetime.signal.removeEventListener('abort', cancelOpening);
-      if (supplierWorkforceReportOpening === request) supplierWorkforceReportOpening = null;
-    });
-    supplierWorkforceReportOpening = request;
-    return request;
-  }
-
   async function openContractorControlReport() {
     if (!account || stopped || flowBusy() || store.getState().activeFlow) return false;
     if (contractorControlReportSession?.origin !== globalThis.location?.origin) disposeContractorControlReport();
@@ -9367,7 +9176,7 @@ export function createAppController({
     cargosTableRevision++; cargosTableOpening = null; cargosTable?.destroy?.(); cargosTable = null;
     disposeAttendanceSummaryReport(); disposeStageProgressReport(); disposeSupplierPayrollReport();
     disposeCommercialReceiptsReport(); disposeCommercialMilestonesReport(); disposeCommercialDocumentsReport();
-    closeGalleryOverlays(false, false, false, false, false, false, false, false, true);
+    closeGalleryOverlays(false, false, false, false, false, false, false, true);
     const ownerAccount = account, ownerRevision = sessionRevision, ownerOrigin = globalThis.location?.origin;
     const session = contractorControlReportSession || {
       origin: ownerOrigin, lifetime: new AbortController(), queries: new Map(), authorization: null,
@@ -9497,7 +9306,7 @@ export function createAppController({
     cargosTableRevision++; cargosTableOpening = null; cargosTable?.destroy?.(); cargosTable = null;
     disposeAttendanceSummaryReport(); disposeStageProgressReport(); disposeSupplierPayrollReport();
     disposeCommercialReceiptsReport(); disposeCommercialMilestonesReport(); disposeCommercialDocumentsReport();
-    closeGalleryOverlays(false, false, false, false, false, false, false, false, false, true);
+    closeGalleryOverlays(false, false, false, false, false, false, false, false, true);
     const session = generalSummaryReportSession || {
       account: ownerAccount, revision: ownerRevision, identity: ownerIdentity, origin: ownerOrigin,
       lifetime: new AbortController(), loadController: null, authorization: null,
@@ -9910,7 +9719,6 @@ export function createAppController({
     disposeDepreciationReport();
     disposeDocumentControlReport();
     disposeTaskAssociationReport();
-    disposeSupplierWorkforceReport();
     disposeContractorControlReport();
     disposeGeneralSummaryReport();
     disposePendingSupplierPaymentsReport();
@@ -9965,7 +9773,6 @@ export function createAppController({
     disposeDepreciationReport();
     disposeDocumentControlReport();
     disposeTaskAssociationReport();
-    disposeSupplierWorkforceReport();
     disposeContractorControlReport();
     disposeGeneralSummaryReport();
     disposePendingSupplierPaymentsReport();
@@ -10120,7 +9927,6 @@ export function createAppController({
     disposeDepreciationReport();
     disposeDocumentControlReport();
     disposeTaskAssociationReport();
-    disposeSupplierWorkforceReport();
     disposeContractorControlReport();
     disposeGeneralSummaryReport();
     disposePendingSupplierPaymentsReport();
@@ -11309,7 +11115,6 @@ export function createAppController({
     disposeDepreciationReport();
     disposeDocumentControlReport();
     disposeTaskAssociationReport();
-    disposeSupplierWorkforceReport();
     disposeContractorControlReport();
     disposeGeneralSummaryReport();
     disposePendingSupplierPaymentsReport();
@@ -11434,7 +11239,6 @@ export function createAppController({
     disposeDepreciationReport();
     disposeDocumentControlReport();
     disposeTaskAssociationReport();
-    disposeSupplierWorkforceReport();
     disposeContractorControlReport();
     disposeGeneralSummaryReport();
     disposePendingSupplierPaymentsReport();
@@ -12235,7 +12039,6 @@ export function createAppController({
         disposeDepreciationReport();
         disposeDocumentControlReport();
         disposeTaskAssociationReport();
-        disposeSupplierWorkforceReport();
         disposeContractorControlReport();
         disposeGeneralSummaryReport();
         disposePendingSupplierPaymentsReport();
@@ -12360,7 +12163,6 @@ export function createAppController({
       if (command.replyId === DEPRECIATION_REPORT_ID) return openDepreciationReport();
       if (command.replyId === DOCUMENT_CONTROL_REPORT_ID) return openDocumentControlReport();
       if (command.replyId === TASK_ASSOCIATION_REPORT_ID) return openTaskAssociationReport();
-      if (command.replyId === SUPPLIER_WORKFORCE_REPORT_ID) return openSupplierWorkforceReport();
       if (command.replyId === CONTRACTOR_CONTROL_REPORT_ID) return openContractorControlReport();
       if (command.replyId === GENERAL_SUMMARY_REPORT_ID) return openGeneralSummaryReport();
       if (command.replyId === PENDING_SUPPLIER_PAYMENTS_REPORT_ID) return openPendingSupplierPaymentsReport();
@@ -12680,7 +12482,6 @@ export function createAppController({
     bind('open-depreciation-report', openDepreciationReport);
     bind('open-document-control-report', openDocumentControlReport);
     bind('open-task-association-report', openTaskAssociationReport);
-    bind('open-supplier-workforce-report', openSupplierWorkforceReport);
     bind('open-contractor-control-report', openContractorControlReport);
     bind('open-general-summary-report', openGeneralSummaryReport);
     bind('open-pending-supplier-payments-report', openPendingSupplierPaymentsReport);
@@ -12853,7 +12654,6 @@ export function createAppController({
       if (depreciationReportSession && (flowBusy() || store.getState().activeFlow)) disposeDepreciationReport();
       if (documentControlReportSession && (flowBusy() || store.getState().activeFlow)) disposeDocumentControlReport();
       if (taskAssociationReportSession && (flowBusy() || store.getState().activeFlow)) disposeTaskAssociationReport();
-      if (supplierWorkforceReportSession && (flowBusy() || store.getState().activeFlow)) disposeSupplierWorkforceReport();
       if (contractorControlReportSession && (flowBusy() || store.getState().activeFlow)) disposeContractorControlReport();
       if (generalSummaryReportSession && (flowBusy() || store.getState().activeFlow)) disposeGeneralSummaryReport();
       if (pendingSupplierPaymentsReportSession && (flowBusy() || store.getState().activeFlow)) disposePendingSupplierPaymentsReport();
@@ -12941,7 +12741,6 @@ export function createAppController({
     else if (pendingAction === DEPRECIATION_REPORT_ID) await openDepreciationReport();
     else if (pendingAction === DOCUMENT_CONTROL_REPORT_ID) await openDocumentControlReport();
     else if (pendingAction === TASK_ASSOCIATION_REPORT_ID) await openTaskAssociationReport();
-    else if (pendingAction === SUPPLIER_WORKFORCE_REPORT_ID) await openSupplierWorkforceReport();
     else if (pendingAction === CONTRACTOR_CONTROL_REPORT_ID) await openContractorControlReport();
     else if (pendingAction === GENERAL_SUMMARY_REPORT_ID) await openGeneralSummaryReport();
     else if (pendingAction === PENDING_SUPPLIER_PAYMENTS_REPORT_ID) await openPendingSupplierPaymentsReport();
@@ -13000,7 +12799,6 @@ export function createAppController({
     disposeDepreciationReport();
     disposeDocumentControlReport();
     disposeTaskAssociationReport();
-    disposeSupplierWorkforceReport();
     disposeContractorControlReport();
     disposeGeneralSummaryReport();
     disposePendingSupplierPaymentsReport();
