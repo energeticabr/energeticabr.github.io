@@ -293,9 +293,9 @@ test('conclusão normaliza responsável e data retornados pelo serviço real sem
   t.mock.timers.tick(2000); await settle();
   assert.match(root.querySelector('.tg-modified').textContent, /03\/10\/2026, 12:00/);
   const search = root.querySelector('[name="search"]');
-  search.value = 'Editor Antigo'; search.dispatchEvent(new ctx.dom.window.Event('change', { bubbles: true }));
+  search.value = 'Editor Antigo'; search.dispatchEvent(new ctx.dom.window.KeyboardEvent('keydown', { key: 'Enter', bubbles: true, cancelable: true }));
   assert.equal(root.querySelectorAll('.tg-card').length, 0);
-  search.value = 'Editor Novo'; search.dispatchEvent(new ctx.dom.window.Event('change', { bubbles: true }));
+  search.value = 'Editor Novo'; search.dispatchEvent(new ctx.dom.window.KeyboardEvent('keydown', { key: 'Enter', bubbles: true, cancelable: true }));
   assert.equal(root.querySelectorAll('.tg-card').length, 1);
 });
 

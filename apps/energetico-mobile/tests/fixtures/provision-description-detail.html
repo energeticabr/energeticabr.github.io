@@ -40,7 +40,7 @@ if (['320', '390'].includes(width)) {
   const data = createPaymentProgrammingGalleryData({ repository });
   const gallery = createPaymentProgrammingGallery({ document, data, now: () => new Date('2026-10-25T12:00:00Z') });
   await gallery.open();
-  const search = document.querySelector('[name="search"]'); search.value = '350'; search.dispatchEvent(new Event('change', { bubbles: true }));
+  const search = document.querySelector('[name="search"]'); search.value = '350'; search.dispatchEvent(new KeyboardEvent('keydown', { key: 'Enter', bubbles: true, cancelable: true }));
   if (params.has('detail')) {
     document.querySelector('[data-action="description-provisions"]').click();
     const deadline = performance.now() + 5000;
