@@ -416,7 +416,7 @@ test('uses the supplier of a confirmed link for a pending recipient and keeps it
   select('44').querySelector('[data-edit-review-confirm]').click();
   await settle();
   assert.equal(recipient(), orders[3].supplier);
-  picker().querySelector('.gallery-record-dialog-buttons button').click();
+  assert.equal(picker(), null);
   const search = query('input[name="search"]');
   search.value = orders[3].supplier;
   search.dispatchEvent(new Event('input', { bubbles: true }));
@@ -425,7 +425,7 @@ test('uses the supplier of a confirmed link for a pending recipient and keeps it
   await settle();
   assert.equal(query('tbody tr'), null);
   assert.match(query('.ddr-empty').textContent, /Nenhuma transação/);
-  picker().querySelector('.gallery-record-dialog-buttons button').click();
+  assert.equal(picker(), null);
   view.close();
   await view.open();
   search.value = orders[0].supplier;
@@ -446,7 +446,7 @@ test(`appends the linked supplier to boleto recipient ${bankRecipient} through l
   await settle();
   assert.equal(query('tbody .ddr-supplier-name').textContent, `${bankRecipient} (Outro fornecedor)`);
   assert.equal(query('tbody .ddr-money').textContent, 'R$\u00a00,10');
-  picker().querySelector('.gallery-record-dialog-buttons button').click();
+  assert.equal(picker(), null);
   view.close();
   await view.open();
   assert.equal(query('tbody .ddr-supplier-name').textContent, `${bankRecipient} (Outro fornecedor)`);
@@ -460,7 +460,7 @@ test(`appends the linked supplier to boleto recipient ${bankRecipient} through l
 });
 }
 
-test('confirms a Sicoob order link, replaces it and retains it through refresh, reopen and PDF', async t => {
+test('returns to the Sicoob report after linking or replacing an order and retains it through refresh, reopen and PDF', async t => {
   const { view, root, query, linkButton, picker, openPicker, select, writes, Event } = setupOrderLink(t);
   const { ownerDocument: document } = root;
   const style = document.createElement('style');
@@ -491,14 +491,14 @@ test('confirms a Sicoob order link, replaces it and retains it through refresh, 
   const { signal, ...change } = writes[0];
   assert.ok(signal instanceof AbortSignal);
   assert.deepEqual(change, { movementId: '7', orderId: '44', expectedOrderId: '' });
-  assert.match(picker().querySelector('[role="status"]').textContent, /pedido #44/);
+  assert.equal(root.hidden, false);
   assert.equal(query('tbody tr'), paymentRow);
   assert.equal(scroll.scrollTop, 95);
   assert.equal(search.value, 'Comércio Exemplo');
   assert.deepEqual([...paymentRow.cells].slice(0, 5).map(cell => cell.textContent), originalPayment);
   assert.equal(query('tbody td:last-child').textContent, 'ID 44');
   assert.equal(document.defaultView.getComputedStyle(paymentRow).backgroundColor, 'rgb(234, 248, 238)');
-  picker().querySelector('.gallery-record-dialog-buttons button').click();
+  assert.equal(picker(), null);
   assert.equal(root.ownerDocument.activeElement, linkButton());
 
   await openPicker();
@@ -509,7 +509,7 @@ test('confirms a Sicoob order link, replaces it and retains it through refresh, 
   await settle();
   assert.equal(writes[1].expectedOrderId, '44');
   assert.equal(query('tbody td:last-child').textContent, 'ID 43');
-  picker().querySelector('.gallery-record-dialog-buttons button').click();
+  assert.equal(picker(), null);
 
   query('button[aria-label^="Atualizar"]').click();
   await settle();

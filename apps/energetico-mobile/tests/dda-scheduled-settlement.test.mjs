@@ -166,7 +166,8 @@ test('relink aborts proof for the old parent and preserves report position and r
   pencil().focus();pencil().click();await tick();
   doc.querySelector(`input[value="${id}"]`).click();doc.querySelector('.dda-provision-save').click();await tick();
   doc.querySelector('[data-edit-review-submit]').click();await tick();
-  [...doc.querySelectorAll('.dda-provision-dialog button')].find(node=>node.textContent==='Concluir').click();
+  assert.equal(doc.querySelector('.dda-provision-dialog'),null);
+  assert.equal(view.element.hidden,false);
  };
  await link('23');
  await link('24');
