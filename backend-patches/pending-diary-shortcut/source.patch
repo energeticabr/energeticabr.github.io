@@ -1,0 +1,74 @@
+--- a/worker/workflow.py
++++ b/worker/workflow.py
+@@ -9268,28 +9268,17 @@
+             except Exception:
+                 # Uma falha de consulta não pode indisponibilizar o menu principal.
+                 return None
+-        today = datetime.now(ZoneInfo("America/Sao_Paulo")).date()
+-        not_started_fields = (
+-            self.config.get("sharepoint", {})
+-            .get("construction_diary_fill_flow", {})
+-            .get("main_menu_start", {})
+-            .get("not_started_fields", [])
+-        )
+-        options = [
+-            option
+-            for option in options
+-            if str(option.get("source_values", {}).get("DATA") or "")[:10]
+-            == today.isoformat()
+-            and not any(
+-                str(option.get("source_values", {}).get(field) or "").strip()
+-                for field in not_started_fields
+-            )
+-        ]
+         if not options:
+             return None
++        dates = {
++            str(option.get("source_values", {}).get("DATA") or "")[:10]
++            for option in options
++        }
++        diary_date = _display_iso_date(next(iter(dates))) if len(dates) == 1 else ""
++        date_suffix = f" ({diary_date})" if diary_date else ""
+         return {
+             "id": PENDING_DIARY_START_ID,
+-            "title": f"📔 COMEÇAR DIÁRIO DE OBRAS ({today:%d/%m/%Y})",
++            "title": f"📔 COMEÇAR DIÁRIO DE OBRAS{date_suffix}",
+             "aliases": [
+                 "COMEÇAR DIÁRIO DE OBRAS",
+                 "COMECAR DIARIO DE OBRAS",
+@@ -9300,22 +9289,10 @@
+
+     def _main_menu_diary_actions(self, state: dict) -> list[dict]:
+         try:
+-            latent_record, pending, latent_action = (
+-                self._pending_construction_diary_options(state)
+-            )
++            _, pending, latent_action = self._pending_construction_diary_options(state)
+         except Exception:
+             return []
+-        actions = []
+-        if latent_record and latent_action:
+-            latent_date = (latent_record.get("diary_date") or "").strip()
+-            today = datetime.now(ZoneInfo("America/Sao_Paulo")).strftime(
+-                "%d/%m/%Y"
+-            )
+-            if (
+-                self._construction_diary_has_started(latent_record.get("diary_state"))
+-                or latent_date == today
+-            ):
+-                actions.append(latent_action)
++        actions = [latent_action] if latent_action else []
+         startable = self._startable_construction_diary_action(pending)
+         if startable:
+             actions.append(startable)
+@@ -9342,9 +9319,7 @@
+         """Lista outros diários pendentes após confirmar a gravação atual."""
+
+         step = self._remaining_construction_diary_step(state)
+-        # A opção dinâmica do menu principal contém apenas diários recentes e
+-        # ainda não iniciados. Depois de uma gravação, a consulta deve ser global
+-        # e atualizada diretamente no SharePoint.
++        # Após a gravação, consulte novamente o SharePoint para atualizar a fila.
+         state.pop("diary_start_options", None)
+         options = self._selection_options(state, step)
+         current_item_id = str(

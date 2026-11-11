@@ -418,6 +418,7 @@ function draftMenuOptions(message) {
   // from the root area chooser even if an older VM response still includes
   // the legacy option there; do not synthesize it into the root menu.
   const isRootAreaMenu = isMainAreaMenu || isAttachmentAreaQuestion(question);
+  const hasPendingDiaryList = options.some(option => draftReplyId(option).trim().toLowerCase() === "start_pending_construction_diary");
   const menuOptions = isRootAreaMenu
     ? options
       .filter(option => String(option?.reply || option?.id || "").trim().toLowerCase() !== "audit_log")
@@ -425,11 +426,12 @@ function draftMenuOptions(message) {
       .map(option => {
         const replyId = String(option?.reply || option?.id || "").trim().toLowerCase();
         if (replyId === "append_today_construction_diary_photos") return { ...option, tone: undefined };
-        if (mainMenuDiaryRank(option) && /comecar\s+diario\s+de\s+obras/.test(normalizedDateText(option.label || option.title))) {
+        if (replyId === "start_pending_construction_diary"
+          || (replyId === "resume_latent_construction_diary" && !hasPendingDiaryList)) {
           return {
             ...option,
             tone: "danger",
-            menuDisplayLabel: String(option.label || option.title).replace(/come[çc]ar\s+di[áa]rio\s+de\s+obras/i, "DIÁRIO"),
+            menuDisplayLabel: String(option.label || option.title).replace(/(?:come[çc]ar|continuar)\s+di[áa]rio\s+de\s+obras/i, "DIÁRIO"),
           };
         }
         if (replyId === "resume_latent_construction_diary") return { ...option, tone: undefined };
