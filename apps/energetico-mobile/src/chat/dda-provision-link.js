@@ -1,4 +1,4 @@
-import {provisionDateKey,provisionTotal} from './pending-provision-dates.js';
+import {provisionTotal} from './pending-provision-dates.js';
 import {provisionDescriptionLinkColumn} from './provision-description-detail-data.js';
 import {provisionChildPaid,provisionDateKey as paymentDateKey,provisionDueFields} from '../../../../portal/forms/provision-parent-due.js';
 
@@ -46,19 +46,24 @@ function childField(fields,columns,...aliases){
 }
 export function rankDdaProvisionOptions(options,{supplier,amount,due}={}){
  const parts=tokens(supplier),wanted=amountKey(amount);
+ const ddaDue=paymentDateKey(due),dueTime=Date.parse(ddaDue);
+ const dueMatch=day=>Boolean(ddaDue)&&day===ddaDue;
+ const proximity=day=>{const time=Date.parse(day);return Number.isFinite(dueTime)&&Number.isFinite(time)?0.25/(1+Math.abs(dueTime-time)/86400000):0;};
  const ranked=options.map(item=>{
   const similarity=supplierSimilarity(parts,tokens(item.supplier));
   const supplierMatch=similarity>=0.5;
   const totalMatch=wanted!=null&&amountKey(item.amount)===wanted;
-  const matches=(item.provisions||[]).filter(line=>wanted!=null&&amountKey(line.amount)===wanted);
+  const matches=(item.provisions||[]).filter(line=>wanted!=null&&amountKey(line.amount)===wanted)
+   .map(line=>({...line,due:paymentDateKey(line.due)}));
   const amountMatch=totalMatch||matches.length>0;
-  const dueTime=Date.parse(String(due||'').slice(0,10));
-  const proximity=value=>{const time=Date.parse(String(value||'').slice(0,10));return Number.isFinite(dueTime)&&Number.isFinite(time)?0.25/(1+Math.abs(dueTime-time)/86400000):0;};
+  const itemDue=paymentDateKey(item.due);
   matches.sort((a,b)=>proximity(b.due)-proximity(a.due)||Number(a.id)-Number(b.id));
-  const matchedProvision=matches[0];
+  const line=matches[0];
+  const matchedProvision=line&&{...line,dueMatch:dueMatch(line.due)};
   // A matching line's own due date is stronger evidence than its group's due date.
-  const dueScore=amountMatch?Math.max(totalMatch?proximity(item.due):0,...matches.map(line=>proximity(line.due))):supplierMatch?proximity(item.due):0;
-  return {...item,supplierMatch,amountMatch,matchedProvision,score:(supplierMatch?2+similarity:0)+(amountMatch?2:0)+dueScore};
+  const dueScore=amountMatch?Math.max(totalMatch?proximity(itemDue):0,...matches.map(line=>proximity(line.due))):supplierMatch?proximity(itemDue):0;
+  return {...item,due:itemDue,dueMatch:dueMatch(itemDue),supplierMatch,totalMatch,amountMatch,matchedProvision,
+   score:(supplierMatch?2+similarity:0)+(amountMatch?2:0)+dueScore};
  });
  const hasAmountMatch=ranked.some(item=>item.amountMatch);
  return ranked.sort((a,b)=>Number(b.amountMatch)-Number(a.amountMatch)||b.score-a.score||Number(a.id)-Number(b.id)).map((item,index)=>({
@@ -98,7 +103,7 @@ export function createDdaProvisionLink({repository,siteKey='personal',assertSess
    const amount=provisionTotal(read('VALORTOTAL'),read('QTD','QUANTIDADE'),read('FRETE'));
    if(amountKey(amount)==null)continue;
    if(!byParent.has(parent))byParent.set(parent,[]);
-   byParent.get(parent).push({id:String(line.id),amount,due:provisionDateKey(read('DATAPREVISTOPGTO','DATAPGTOPREVISTO'))});
+   byParent.get(parent).push({id:String(line.id),amount,due:paymentDateKey(read('DATAPREVISTOPGTO','DATAPGTOPREVISTO'))});
   }
   return items.filter(item=>validId(item.id)&&item.fields&&!String(item.fields.DATAPGTOEFETUADO??'').trim()).map(item=>({
    id:String(item.id),supplier:String(item.fields.FORNECEDOR||'Fornecedor não informado'),amount:item.fields.VALORTOTAL??null,

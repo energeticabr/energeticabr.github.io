@@ -43,6 +43,7 @@ test('loads unpaid child amounts with quantity and freight under their actual pa
  assert.equal(ranked[0].id,'1');assert.equal(ranked[0].amountMatch,true);
  assert.equal(ranked[0].matchedProvision.id,'101');assert.equal(ranked[0].matchedProvision.amount,5516.67);
  assert.equal(ranked[0].matchedProvision.due,'2026-11-06');
+ assert.equal(options[0].provisions.find(line=>line.id==='102').due,'');
  assert.equal(ranked[1].amountMatch,false);assert.equal(state.writes.length,0);
  const dom=new JSDOM('<body><main></main></body>');
  const {createDdaProvisionPicker}=await import('../src/ui/dda-provision-picker.js');
@@ -51,7 +52,34 @@ test('loads unpaid child amounts with quantity and freight under their actual pa
  await picker.show({id:'37',supplier:'CONCRETEIRA FICTÍCIA',amount:5516.67,due:'2026-11-06'});
  const option=dom.window.document.querySelector('.dda-provision-star').closest('label');
  assert.match(option.textContent,/Provisão #101/);assert.match(option.textContent,/5\.516,67/);
+ const comparisons=node=>[...node.querySelectorAll('.report-link-comparison')].map(chip=>chip.dataset.match);
+ assert.deepEqual(comparisons(option.querySelector('input + span')),['false','false']);
+ assert.deepEqual(comparisons(option.querySelector('.dda-provision-line-match')),['true','true']);
  assert.equal(option.querySelector('input').checked,false);assert.equal(state.writes.length,0);
+});
+test('DDA picker compares the total and planned payment date of each description independently',async t=>{
+ const dom=new JSDOM('<body><main></main></body>'),doc=dom.window.document;
+ const {createDdaProvisionPicker}=await import('../src/ui/dda-provision-picker.js');
+ const options=[
+  {id:'1',supplier:'FORNECEDOR FICTÍCIO',amount:'R$ 40,00',due:'2026-11-23T00:00:00Z'},
+  {id:'2',supplier:'FORNECEDOR FICTÍCIO',amount:40,due:'28/11/2026',provisions:[{id:'102',amount:40,due:'28/11/2026'}]},
+  {id:'3',supplier:'FORNECEDOR FICTÍCIO',amount:40.01,due:'23/11/2026'},
+  {id:'4',supplier:'FORNECEDOR FICTÍCIO',amount:39.99,due:'2026-11-18'},
+  {id:'5',supplier:'FORNECEDOR FICTÍCIO',amount:null,due:'2026-02-30'},
+ ];
+ const picker=createDdaProvisionPicker({document:doc,host:doc.querySelector('main'),service:{loadOptions:async()=>options}});
+ t.after(()=>{picker.destroy();dom.window.close();});
+ await picker.show({id:'43',supplier:'FORNECEDOR FICTÍCIO',amount:'40,00',due:'2026-11-23'});
+ const getOption=id=>doc.querySelector(`input[value="${id}"]`).closest('label');
+ const comparison=node=>[...node.querySelectorAll('.report-link-comparison')].map(chip=>[chip.textContent,chip.dataset.match]);
+ assert.deepEqual(options.map(({id})=>comparison(getOption(id).querySelector('input + span'))),[
+  [['R$\u00a040,00','true'],['23/11/2026','true']],
+  [['R$\u00a040,00','true'],['28/11/2026','false']],
+  [['R$\u00a040,01','false'],['23/11/2026','true']],
+  [['R$\u00a039,99','false'],['18/11/2026','false']],
+  [['Valor não informado','false'],['Sem data prevista','false']],
+ ]);
+ assert.deepEqual(comparison(getOption('2').querySelector('.dda-provision-line-match')),[['R$\u00a040,00','true'],['28/11/2026','false']]);
 });
 test('resolves a child due-date internal name from SharePoint metadata',async()=>{
  const {state,api}=repository(),columns=api.getColumns;

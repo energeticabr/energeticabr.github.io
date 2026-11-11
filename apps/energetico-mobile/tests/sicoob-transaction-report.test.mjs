@@ -381,7 +381,7 @@ test('offers manual Sicoob order suggestions and keeps all orders searchable', a
   assert.match(labels[2], /^#42 · 01\/10\/2026 · Comércio Exemplo Ltda\./);
   assert.match(labels[3], /^#2026 · 09\/11\/2026 · Outro fornecedor/);
   assert.match(labels[4], /^#40 · Sem data do pedido · Sem cadastro · Valor não informado$/);
-  const chipColors = node => [...node.querySelectorAll('.sicoob-order-comparison')].map(chip => {
+  const chipColors = node => [...node.querySelectorAll('.report-link-comparison')].map(chip => {
     const css = ownerDocument.defaultView.getComputedStyle(chip);
     return [css.backgroundColor, css.borderColor];
   });

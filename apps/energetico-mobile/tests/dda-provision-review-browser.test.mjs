@@ -18,6 +18,9 @@ test('DDA link review follows landscape and keeps cancel and submit usable',{tim
   const dom=new JSDOM(result.stdout);
   try{const state=JSON.parse(dom.window.document.documentElement.dataset.layout);
    for(const key of ['pickerMatch','pickerFits','fits','hit','focusInside','cancelled','confirmed'])assert.equal(state[key],true,JSON.stringify({width,key,state}));
+   assert.equal(state.pickerOverflows,false,`${width}px`);
+   const orange=['rgb(255, 237, 213)','rgb(215, 121, 41)'],green=['rgb(234, 248, 238)','rgb(83, 167, 118)'];
+   assert.deepEqual(state.chipColors,nameFallback?[orange,orange]:[orange,orange,green,green]);
    assert.equal(state.writesBefore,0);
    assert.deepEqual(state.beforePencil,{inColumn:true,below:true,background:'rgb(181, 31, 51)'});
    assert.deepEqual(state.afterPencil,{inColumn:true,below:true,background:'rgb(255, 182, 96)'});
