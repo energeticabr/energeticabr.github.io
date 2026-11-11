@@ -41,7 +41,7 @@ test('last pink has only previous to payroll and payroll gains next, without rea
 });
 test('right rail keeps pink fill and an even gap with orange mascots in their separate top row',t=>{
  const dom=new JSDOM(renderChatMarkup(home));t.after(()=>dom.window.close());const css=dom.window.document.createElement('style');css.textContent=readFileSync(new URL('../src/styles.css',import.meta.url),'utf8');dom.window.document.head.append(css);
- const actions=['open-cargos-table','open-attendance-summary','open-stage-progress','open-supplier-payroll-report','open-trancid-report','open-supplier-workforce-report','open-contractor-control-report','open-pending-supplier-payments-report',action];
+ const actions=['open-cargos-table','open-attendance-summary','open-stage-progress','open-supplier-payroll-report','open-trancid-report','open-contractor-control-report','open-pending-supplier-payments-report',action];
  assert.deepEqual([...dom.window.document.querySelectorAll('.chat-main-commercial-shortcuts > button')].map(b=>b.dataset.action),['open-commercial-receipts','open-commercial-milestones','open-commercial-documents','open-sac-pathologies']);
  let previousBottom=0;for(const name of actions){const node=dom.window.document.querySelector(`[data-action="${name}"]`),style=dom.window.getComputedStyle(node);const top=parseFloat(style.marginTop),height=parseFloat(style.height);assert.ok(top>=previousBottom+4,name);previousBottom=top+height;}
  const style=dom.window.getComputedStyle(dom.window.document.querySelector(`[data-action="${action}"]`));assert.equal(style.backgroundColor,'rgb(207, 117, 122)');assert.equal(style.gridColumn,'3');

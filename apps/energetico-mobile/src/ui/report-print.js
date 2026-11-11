@@ -13,7 +13,6 @@ export const REPORT_PDF_TITLES = Object.freeze({
  'open-supplier-payroll-report':'Folhas de pagamento por fornecedor',
  'open-trancid-report':'Saldos e histórico dos cartões Trancid',
  'open-pending-supplier-payments-report':'Pagamentos pendentes por fornecedor',
- 'open-supplier-workforce-report':'Fornecedores por filial, imóvel e profissão',
  'open-contractor-control-report':'Controle de empreiteiros',
  'open-pending-work-diaries-report':'Diários de obras pendentes',
  'open-stage-progress':'Etapas e atividades da obra', 'open-commercial-receipts':'Contratos e pagamentos',

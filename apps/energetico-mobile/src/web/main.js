@@ -49,7 +49,6 @@ import "../ui/document-control-report.css";
 import "../ui/task-association-report.css";
 import "../ui/pending-work-diaries-report.css";
 import "../ui/pending-supplier-payments-report.css";
-import "../ui/supplier-workforce-report.css";
 import "../ui/contractor-control-report.css";
 import "../ui/general-summary-report.css";
 import "../ui/registration-gallery.css";
