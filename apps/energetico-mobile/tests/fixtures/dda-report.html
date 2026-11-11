@@ -63,7 +63,9 @@ if(settlementLayout){
 }
 if(syncMode){
  const refresh=document.querySelector('.pl-refresh');refresh.click();refresh.click();await new Promise(r=>setTimeout(r,0));
- const state={starts:syncStarts,disabledWhileRunning:refresh.disabled,progressVisible:!document.querySelector('.ddr-notice').hidden};
+ const lastUpdate=document.querySelector('[data-report-last-update]');
+ const state={starts:syncStarts,disabledWhileRunning:refresh.disabled,progressVisible:!document.querySelector('.ddr-notice').hidden,
+  lastUpdate:lastUpdate.querySelector('time').textContent,metricFits:lastUpdate.scrollWidth<=lastUpdate.clientWidth+1};
  if(syncMode==='complete'){
   emitSync(false);await new Promise(r=>setTimeout(r,0));
   const receipt=createDdaSyncReceipt({document,host:document.body,global:true,requireAcknowledgement:true,onAcknowledge:()=>{}});

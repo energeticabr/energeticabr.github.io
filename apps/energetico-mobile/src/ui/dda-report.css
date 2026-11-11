@@ -96,7 +96,8 @@
   font-weight: 800;
   line-height: 1.25;
 }
-.ddr-summary{grid-template-columns:repeat(12,minmax(0,1fr))}.ddr-metric{grid-column:span 3;min-width:0;overflow-wrap:anywhere}.ddr-metric:nth-child(n+5){grid-column:span 4}
+.ddr-metric{min-width:0;overflow-wrap:anywhere}
+.ddr-metric[data-report-last-update] strong { font-size: 16px; }
 .ddr-due-days,.ddr-issued-date .ddr-issued-days{display:block;width:max-content;box-sizing:border-box;max-width:100%;margin:5px auto 0;padding:3px 6px;border:1px solid #fff;border-radius:6px;font-size:11px;font-weight:800;line-height:1.2;font-variant-numeric:tabular-nums;text-align:center;white-space:nowrap;print-color-adjust:exact;-webkit-print-color-adjust:exact}
 .ddr-due-days{background:var(--ddr-due-accent);color:#fff;box-shadow:0 1px 3px #17394b33}
 .ddr-issued-date .ddr-issued-days{background:#edf1f4;border-color:#c1ced6;color:#456375;font-weight:700}
@@ -134,7 +135,7 @@
 .sicoob-transaction-filters .ddr-filter:has(input[type="date"]) { flex: 1; }
 .sicoob-transaction-filters .ddr-filter:has(input[type="search"]) { min-width: 170px; }
 .sicoob-transaction-filters input[type="date"] { min-width: 0; }
-.sicoob-transaction-summary .ddr-metric { grid-column: span 6; }
+.sicoob-transaction-summary { grid-template-columns: repeat(3, minmax(0, 1fr)); }
 .sicoob-transaction-table tbody tr.sicoob-transaction-linked {
   background: #eaf8ee;
   print-color-adjust: exact;

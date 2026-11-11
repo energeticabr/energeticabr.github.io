@@ -1,4 +1,5 @@
 import { formatDdaElapsed } from './dda-bank-refresh.js';
+import { confirmedFinancialTimestamp } from './financial-update-time.js';
 const validId=value=>typeof value==='string'&&/^[a-f0-9]{32}$/.test(value);
 const active=new Set(['starting','queued','running']);
 const terminal=new Set(['succeeded','failed']);
@@ -7,7 +8,8 @@ function clean(value,now){
  const result={requestId:value.requestId,status:value.status,startedAt:Number.isFinite(value.startedAt)?value.startedAt:now};
  if(value.acknowledged===true&&terminal.has(value.status))result.acknowledged=true;
  if(terminal.has(value.status)){
-  const serverTime=typeof value.completedUtc==='string'?Date.parse(value.completedUtc):NaN;
+  const serverTime=confirmedFinancialTimestamp(value.completedUtc);
+  if(serverTime!==null)result.completedUtc=value.completedUtc;
   result.completedAt=Number.isFinite(value.completedAt)?value.completedAt:Number.isFinite(serverTime)?serverTime:now;
  }
  if(['SYNC_FAILED','WORKER_UNAVAILABLE','BUSY'].includes(value.code))result.code=value.code;
@@ -24,21 +26,31 @@ export function createDdaSyncMonitor({client,accountKey,storage,source='dda',pre
  if(typeof accountKey!=='string'||!accountKey)throw Error('DDA_ACCOUNT_REQUIRED');
  if(!['dda','sicoob'].includes(source))throw Error('INVALID_BANK_SYNC_SOURCE');
  const key=`energetico.${source}-sync.v1:${encodeURIComponent(accountKey)}`,records=new Map(),listeners=new Set();
- let destroyed=false,inFlight=null,timer=null,discover=false,showing=null,notice='',controller=null;
- try{const saved=JSON.parse(storage?.getItem(key)||'null');if(saved?.version===1&&Array.isArray(saved.records))for(const row of saved.records){const r=clean(row,now());records.set(r.requestId,r);}}catch{/* Authenticated server recovery remains authoritative. */}
+ let destroyed=false,inFlight=null,timer=null,discover=false,showing=null,notice='',controller=null,lastSuccessfulAt=null;
+ function rememberSuccess(row){
+  const at=row.status==='succeeded'?confirmedFinancialTimestamp(row.completedUtc):null;
+  if(at!==null&&at>(lastSuccessfulAt??-Infinity))lastSuccessfulAt=at;
+ }
+ try{
+  const saved=JSON.parse(storage?.getItem(key)||'null');
+  if(saved?.version===1&&Array.isArray(saved.records)){
+   if(Number.isFinite(saved.lastSuccessfulAt))lastSuccessfulAt=saved.lastSuccessfulAt;
+   for(const row of saved.records){const r=clean(row,now());records.set(r.requestId,r);rememberSuccess(r);}
+  }
+ }catch{/* Authenticated server recovery remains authoritative. */}
  const current=()=>!destroyed&&isCurrent();
  const running=()=>[...records.values()].some(r=>active.has(r.status));
  function persist(){
   if(!storage?.setItem)throw Error('Não foi possível registrar a atualização neste aparelho. Tente novamente.');
-  try{storage.setItem(key,JSON.stringify({version:1,records:[...records.values()]}));}
+  try{storage.setItem(key,JSON.stringify({version:1,records:[...records.values()],lastSuccessfulAt}));}
   catch{throw Error('Não foi possível salvar o acompanhamento neste aparelho. Tente novamente.');}
  }
- function snapshot(){return {running:running(),notice,latest:[...records.values()].sort((a,b)=>b.startedAt-a.startedAt).at(0)??null};}
+ function snapshot(){return {running:running(),notice,lastSuccessfulAt,latest:[...records.values()].sort((a,b)=>b.startedAt-a.startedAt).at(0)??null};}
  function notify(){const state=snapshot();for(const listener of listeners)listener(state);}
  function remember(value,previous){
-  const r=clean({...value,startedAt:previous?.startedAt??value.startedAt,completedAt:previous?.completedAt??value.completedAt,acknowledged:previous?.acknowledged},now());
+  const r=clean({...value,startedAt:previous?.startedAt??value.startedAt,completedAt:previous?.completedAt??value.completedAt,completedUtc:value.completedUtc??previous?.completedUtc,acknowledged:previous?.acknowledged},now());
   if(previous&&previous.requestId!==r.requestId)records.delete(previous.requestId);
-  records.set(r.requestId,r);persist();return r;
+  records.set(r.requestId,r);rememberSuccess(r);persist();return r;
  }
  async function request(fn){
   if(!current())throw new DOMException('Sessão encerrada.','AbortError');

@@ -73,3 +73,15 @@ test('server completion UTC time survives delayed recovery',async t=>{
  const h=setup(t,{now:()=>500000});await h.monitor.start();h.setState({status:'failed',requestId:id,completedUtc:'1970-01-01T00:03:00+00:00'});await h.monitor.resume();
  const states=[];h.monitor.subscribe(state=>states.push(state));assert.equal(states.at(-1).latest.completedAt,180000);
 });
+
+test('bank keeps the last confirmed success after acknowledgement and a failed refresh',async t=>{
+ const completedUtc='2026-11-11T17:40:00Z';
+ const h=setup(t);
+ h.setState({status:'succeeded',requestId:id,completedUtc,created:0});await h.monitor.start();
+ await h.shown[0].ack();await h.monitor.resume();assert.equal(h.monitor.pendingCount,0);
+ const restored=setup(t,{storage:h.saved,randomId:()=>second});
+ let state;restored.monitor.subscribe(value=>{state=value;});
+ restored.setState({status:'failed',requestId:second,completedUtc:'2026-11-11T18:40:00Z'});
+ await restored.monitor.start();
+ assert.equal(state.lastSuccessfulAt,Date.parse(completedUtc));
+});
