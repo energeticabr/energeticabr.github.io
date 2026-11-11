@@ -186,6 +186,26 @@
   outline: 3px solid #236ca6;
   outline-offset: 2px;
 }
+.sicoob-order-option-text {
+  flex: 1;
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+.sicoob-order-comparison {
+  display: inline-block;
+  padding: 1px 6px;
+  border: 1px solid #d77929;
+  border-radius: 6px;
+  background: #ffedd5;
+  color: #853500;
+  font-weight: 700;
+  white-space: nowrap;
+}
+.sicoob-order-comparison[data-match="true"] {
+  border-color: #53a776;
+  background: #eaf8ee;
+  color: #17643f;
+}
 .sicoob-transaction-overlay[data-report-compact-height="true"] .dda-provision-dialog[role="dialog"] {
   padding: 10px !important;
 }
