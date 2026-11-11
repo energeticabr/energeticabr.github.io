@@ -36,7 +36,6 @@ import "./ui/quotation-report.css";
 import "./ui/depreciation-report.css";
 import "./ui/document-control-report.css";
 import "./ui/task-association-report.css";
-import "./ui/delegated-deadline-report.css";
 import "./ui/pending-work-diaries-report.css";
 import "./ui/pending-supplier-payments-report.css";
 import "./ui/supplier-workforce-report.css";

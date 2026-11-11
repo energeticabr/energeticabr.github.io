@@ -11,7 +11,6 @@ const groups = [
   ['open-pending-provisions', 'open-sicoob-transaction-report', 'open-nfe-report', 'open-dda-report', 'open-provision-report', 'open-payment-ledger', 'open-management-report', 'open-order-validation-report', 'open-document-control-report'],
   ['open-cargos-table', 'open-attendance-summary', 'open-stage-progress', 'open-supplier-payroll-report', 'open-trancid-report', 'open-supplier-workforce-report', 'open-contractor-control-report', 'open-pending-supplier-payments-report', 'open-pending-work-diaries-report'],
   ['open-commercial-receipts', 'open-commercial-milestones', 'open-commercial-documents', 'open-sac-pathologies'],
-  ['open-task-association-report', 'open-delegated-deadline-report'],
 ];
 const factories = {
   'open-dda-report': 'ddaReportFactory',
@@ -38,7 +37,6 @@ const factories = {
   'open-quotation-report': 'quotationReportViewFactory',
   'open-depreciation-report': 'depreciationReportViewFactory',
   'open-task-association-report': 'taskAssociationReportViewFactory',
-  'open-delegated-deadline-report': 'delegatedDeadlineReportViewFactory',
 };
 const tick = () => new Promise(resolve => setImmediate(resolve));
 function deferred() {
@@ -86,7 +84,7 @@ function harness(t, options = {}, { dom = true } = {}) {
     ...Object.fromEntries(['registrationGalleryDataFactory', 'paymentLedgerDataFactory', 'cargosDataFactory', 'attendanceSummaryDataFactory',
       'stageProgressDataFactory', 'supplierPayrollReportDataFactory', 'commercialReceiptsDataFactory', 'commercialMilestonesDataFactory',
       'commercialDocumentsDataFactory', 'sacPathologiesDataFactory', 'documentControlReportDataFactory',
-      'quotationReportDataFactory', 'depreciationReportDataFactory', 'taskAssociationReportDataFactory', 'delegatedDeadlineReportDataFactory',
+      'quotationReportDataFactory', 'depreciationReportDataFactory', 'taskAssociationReportDataFactory',
       'supplierWorkforceReportDataFactory', 'pendingSupplierPaymentsReportDataFactory', 'pendingWorkDiariesReportDataFactory'].map(name => [name, source])),
     ...factoryOptions, ...options, auth,
   });
@@ -140,7 +138,7 @@ for (const [from, direction] of [
   ['open-cargos-table', 'previous'], ['open-pending-work-diaries-report', 'next'],
   ['open-commercial-receipts', 'previous'], ['open-sac-pathologies', 'next'],
   ['open-quotation-report', 'next'], ['open-depreciation-report', 'previous'],
-  ['open-task-association-report', 'previous'], ['open-delegated-deadline-report', 'next'], ['unknown', 'next'],
+  ['open-task-association-report', 'previous'], ['open-task-association-report', 'next'], ['unknown', 'next'],
   ['open-provision-report', 'sideways'], ['open-provision-report', '__proto__'],
 ]) {
   test(`rejects boundary/singleton/invalid route ${from} ${direction}`, async t => {
@@ -193,8 +191,6 @@ for (const [from, target, direction] of [
   ['open-commercial-milestones', 'open-commercial-documents', 'next'],
   ['open-commercial-documents', 'open-sac-pathologies', 'next'],
   ['open-sac-pathologies', 'open-commercial-documents', 'previous'],
-  ['open-task-association-report', 'open-delegated-deadline-report', 'next'],
-  ['open-delegated-deadline-report', 'open-task-association-report', 'previous'],
 ]) {
   test(`decorated ${from} arrow calls the real controller to open ${target}`, async t => {
     const h = harness(t);

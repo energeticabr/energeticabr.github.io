@@ -17,7 +17,6 @@ const cases = [
   ['sac-pathologies-view', 'createSacPathologiesReportView'],
   ['contractor-control-report-view', 'createContractorControlReportView', 'loadOverview'],
   ['general-summary-report-view', 'createGeneralSummaryReportView', 'loadReport'],
-  ['delegated-deadline-report-view', 'createDelegatedDeadlineReportView'],
   ['document-control-report-view', 'createDocumentControlReportView'],
   ['depreciation-report-view', 'createDepreciationReportView'],
   ['management-report-view', 'createManagementReportView'],

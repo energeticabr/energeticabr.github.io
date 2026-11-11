@@ -306,10 +306,8 @@ test("atalho do mascote fica fora do cartão e abre provisões sem selecionar Pe
   assert.equal(depreciationShortcut.nextElementSibling, documentControlShortcut);
   const taskAssociationShortcut=root.querySelector('[data-action="open-task-association-report"]');
   assert.equal(documentControlShortcut.nextElementSibling,taskAssociationShortcut);
-  const delegatedDeadlineShortcut=root.querySelector('[data-action="open-delegated-deadline-report"]');
-  assert.equal(taskAssociationShortcut.nextElementSibling,delegatedDeadlineShortcut);
-  assert.equal(delegatedDeadlineShortcut.nextElementSibling,bubble);
-  assert.equal(bubble.contains(delegatedDeadlineShortcut),false);
+  assert.equal(taskAssociationShortcut.nextElementSibling,bubble);
+  assert.equal(root.querySelector('[data-action="open-delegated-deadline-report"]'), null);
   assert.equal(bubble.contains(validationShortcut),false);
   assert.notEqual(validationShortcut.querySelector('img').src,paymentShortcut.querySelector('img').src);
   let validationOpened=0;view.on('open-order-validation-report',()=>validationOpened++);
@@ -340,7 +338,7 @@ const returnedHomeActions = [
   'open-pending-provisions', 'open-commercial-receipts', 'open-commercial-milestones', 'open-commercial-documents', 'open-sac-pathologies',
   'open-sicoob-transaction-report', 'open-nfe-report', 'open-dda-report', 'open-provision-report', 'open-payment-ledger', 'open-management-report',
   'open-order-validation-report', 'open-quotation-report', 'open-depreciation-report', 'open-document-control-report',
-  'open-task-association-report', 'open-delegated-deadline-report', 'open-rhid-mascot-report', 'open-cargos-table', 'open-attendance-summary',
+  'open-task-association-report', 'open-rhid-mascot-report', 'open-cargos-table', 'open-attendance-summary',
   'open-stage-progress', 'open-supplier-payroll-report', 'open-trancid-report', 'open-supplier-workforce-report', 'open-contractor-control-report',
   'open-pending-supplier-payments-report', 'open-pending-work-diaries-report',
 ];
@@ -427,7 +425,7 @@ test('retorno com aviso preserva restrições de contexto, permissão e busy dos
   }
   view.render(signedInState({ messages: [menu], activeText: { id: 'sending' } }));
   const busyButtons = [...root.querySelectorAll('.chat-message--assistant button[data-action^="open-"]')];
-  assert.equal(busyButtons.length, 27);
+  assert.equal(busyButtons.length, returnedHomeActions.length);
   assert.ok(busyButtons.every(button => button.disabled));
   root.querySelector('[data-action="open-payment-ledger"]').click();
   assert.deepEqual(opened, []);
