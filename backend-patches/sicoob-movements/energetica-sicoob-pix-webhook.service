@@ -1,0 +1,21 @@
+[Unit]
+Description=Energético durable Sicoob Pix notification inbox
+After=network.target
+
+[Service]
+Type=simple
+User=energetica-whatsapp
+Group=energetica-whatsapp
+WorkingDirectory=/opt/energetica-whatsapp/sicoob-movements
+ExecStart=/opt/energetica-whatsapp/.venv/bin/python /opt/energetica-whatsapp/sicoob-movements/pix_events.py serve
+Restart=on-failure
+RestartSec=5
+UMask=0077
+NoNewPrivileges=true
+PrivateTmp=true
+ProtectHome=true
+ProtectSystem=strict
+ReadWritePaths=/var/lib/energetica-sicoob-movements/pix-events
+
+[Install]
+WantedBy=multi-user.target

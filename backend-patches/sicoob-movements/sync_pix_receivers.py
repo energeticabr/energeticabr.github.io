@@ -11,9 +11,11 @@ import os
 from pathlib import Path
 import re
 import subprocess
+import time
 
 import sync_movements as movements
 from sync_boleto_receipts import IDENTITY, LIST, RECEIVER, list_movements
+from pix_events import Inbox
 
 END_ID = re.compile(r'(?<![A-Za-z0-9])[Ee][0-9]{20}[A-Za-z0-9]{11}(?![A-Za-z0-9])')
 EXTRA = (*RECEIVER, 'CONTARECEBEDOR')
@@ -258,6 +260,89 @@ def bank_match(row, options, answers, movements_in_account, payer):
     return next(iter(matches.values())) if len(matches) == 1 else None
 
 
+def resolve_inbox(client, pix_rows, check, inbox=None):
+    """Use notified IDs before searching historical attachments; retain failures."""
+    inbox = inbox if inbox is not None else Inbox()
+    identifiers = inbox.pending(limit=10001)
+    stats = Counter()
+    if not identifiers or not pix_rows:
+        return stats
+    if len(identifiers) > 10000:
+        raise ValueError('Incomplete webhook snapshot')
+    accounts = {pix_key(row)[2] for row in pix_rows}
+    if len(accounts) != 1:
+        raise ValueError('Webhook account is ambiguous')
+    account = next(iter(accounts))
+    cached = inbox.bank_answers(account)
+    payers = {entry[0] for entry in cached.values()}
+    if len(payers) > 1:
+        raise ValueError('Webhook cached payer is ambiguous')
+    payer = next(iter(payers), None)
+    answers = {key: entry[1] for key, entry in cached.items()}
+    # Bound each run and persist each batch, so large queues survive the
+    # pipeline timeout. Still consider the entire snapshot before matching.
+    to_query = [identifier for identifier in identifiers if identifier not in answers][:100]
+    started = time.monotonic()
+    for offset in range(0, len(to_query), 25):
+        batch = to_query[offset:offset + 25]
+        if not check:
+            inbox.attempted(batch)
+        data = read_pix(account, batch)
+        batch_payer = movements.tax_id(data['payer_document'])
+        if payer is not None and payer != batch_payer:
+            raise ValueError('Webhook payer changed between batches')
+        payer = batch_payer
+        batch_answers = {identifier: data['results'][identifier] for identifier in batch if identifier in data['results']}
+        if not check:
+            inbox.remember_bank_answers(account, payer, batch_answers)
+        answers.update(batch_answers)
+        if time.monotonic() - started >= 180:
+            break
+    for identifier in identifiers:
+        if identifier in answers:
+            stats[f"http_{answers[identifier].get('status', 'pendente')}"] += 1
+        # A notified payment returning 404 may be temporarily unavailable.
+        # It remains unknown, not an eliminated competing payment.
+        if answers.get(identifier, {}).get('status') == 404:
+            answers[identifier] = {'status': 'pendente'}
+    options = dict.fromkeys(identifiers)
+    for row in pix_rows:
+        # Newly received IDs may add another candidate. Retry a fresh snapshot.
+        if not set(inbox.pending(limit=10001)).issubset(options):
+            break
+        explicit = direct_ids(row)
+        row_options = {key: value for key, value in options.items() if key in explicit} if explicit else options
+        match = bank_match(row, row_options, answers, pix_rows, payer)
+        if not match:
+            continue
+        pix, canonical, _ = match
+        missing = movements.text(row['RAZAOSOCIALRECEBEDOR']).upper() in ('', movements.UNKNOWN)
+        fields = pix_receiver_fields(pix)
+        if missing:
+            stats['verificados'] += 1
+        if check:
+            if missing:
+                row.update(fields)
+            continue
+        try:
+            stats['nomes_gravados'] += save_pix(client, row, pix, canonical, payer, None)
+            fresh = client.get_item_fields(row['Id'], (*IDENTITY, *EXTRA), LIST)
+            if any(fresh[field] != row[field] for field in IDENTITY):
+                raise ValueError('Webhook movement changed')
+            if not pix_matches(fresh, pix, canonical, payer):
+                raise ValueError('Webhook movement no longer matches')
+            if any(movements.text(fresh.get(field)).casefold() != value.casefold()
+                   for field, value in fields.items()):
+                continue
+            row.update({field: fresh[field] for field in EXTRA})
+            for identifier in identifiers:
+                if identifier.casefold() == canonical.casefold():
+                    inbox.complete(identifier, row['Id'])
+        except (OSError, ValueError, RuntimeError) as error:
+            stats[f'falha_gravacao_{type(error).__name__}'] += 1
+    return stats
+
+
 def run(check):
     client = movements.sharepoint_client()
     movements.assert_destination(client)
@@ -266,7 +351,12 @@ def run(check):
     pending = [row for row in pix_rows if movements.text(row['RAZAOSOCIALRECEBEDOR']).upper() in ('', movements.UNKNOWN)
                and (pix_key(row)[-1] or len(direct_ids(row)) == 1)]
     stats = Counter(pendentes=len(pending))
-    if not pending:
+    inbox = Inbox()
+    stats.update(resolve_inbox(client, pix_rows, check, inbox))
+    webhook_pending = inbox.pending(limit=10001)
+    pending = [row for row in pending if movements.text(row['RAZAOSOCIALRECEBEDOR']).upper() in ('', movements.UNKNOWN)]
+    # Historical receipts must not bypass unresolved webhook ambiguity.
+    if not pending or webhook_pending:
         return dict(stats)
     days = [pix_key(row)[0] for row in pending]
     launches = launch_dates_and_values(client, min(days), max(days))

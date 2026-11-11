@@ -1,10 +1,12 @@
 import unittest
+import importlib.util
 import subprocess
 import tempfile
 from pathlib import Path
 from io import BytesIO
 from types import SimpleNamespace
 from unittest.mock import patch
+from pix_events import Inbox
 
 import sync_pix_receivers as collector
 from sync_pix_receivers import bank_match, extract_end_ids, pix_matches, pix_receiver_fields, receipt_ids
@@ -46,6 +48,150 @@ class PixTest(unittest.TestCase):
     def test_uses_only_complete_identifiers(self):
         self.assertEqual(extract_end_ids(f'ID da transação:\n{END_ID}\n'), {END_ID})
         self.assertFalse(extract_end_ids(END_ID[:-4]))
+
+    def test_worker_accepts_empty_and_pending_webhook_results(self):
+        path = Path(__file__).resolve().parents[1] / 'sicoob-manual-sync' / 'sicoob_worker.py'
+        spec = importlib.util.spec_from_file_location('pix_worker_contract', path)
+        worker = importlib.util.module_from_spec(spec)
+        spec.loader.exec_module(worker)
+        row = {**self.row, 'Id': 1, 'RAZAOSOCIALRECEBEDOR': '',
+               'ORIGEMMOVIMENTACAO': 'SICOOB', 'OPERACAO': 'DÉBITO'}
+        for queued in (False, True):
+            with self.subTest(queued=queued), tempfile.TemporaryDirectory() as directory:
+                inbox = Inbox(Path(directory), create=True)
+                if queued:
+                    inbox.accept({'id': END_ID, 'status': 'FINALIZADO_SUCESSO'})
+                with patch.object(collector, 'Inbox', return_value=inbox), \
+                     patch.object(collector.movements, 'sharepoint_client', return_value=None), \
+                     patch.object(collector.movements, 'assert_destination'), \
+                     patch.object(collector, 'list_movements', return_value=[row] if queued else []), \
+                     patch.object(collector, 'read_pix', return_value={'payer_document': '12345678000190', 'results': {END_ID: {'status': 404}}}):
+                    result = worker.parse_stage('pix', collector.json.dumps(collector.run(False)), 0)
+                self.assertEqual(result['pendingDetails'], int(queued))
+
+    def test_webhook_waits_for_statement_and_uses_only_api_name_once(self):
+        class Client:
+            def __init__(self, row):
+                self.row = dict(row)
+                self.updates = 0
+            def get_item_fields_with_etag(self, item, fields, target):
+                return self.get_item_fields(item, fields, target), 'etag'
+            def get_item_fields(self, item, fields, target):
+                return {field: self.row[field] for field in fields}
+            def update_item_with_etag(self, item, fields, etag, target):
+                self.row.update(fields)
+                self.updates += bool(fields)
+        row = {field: '' for field in (*collector.IDENTITY, *collector.EXTRA)}
+        row.update(self.row, Id=29, ORIGEMMOVIMENTACAO='SICOOB', OPERACAO='DÉBITO')
+        client = Client(row)
+        data = {'payer_document': '12345678000190', 'results': {END_ID: {'status': 200, 'result': self.pix}}}
+        with tempfile.TemporaryDirectory() as directory:
+            inbox = Inbox(Path(directory), create=True)
+            notification = {'id': END_ID, 'status': 'FINALIZADO_SUCESSO', 'nome': 'FALSE NAME'}
+            inbox.accept(notification)
+            with patch.object(collector, 'read_pix', return_value=data) as read:
+                collector.resolve_inbox(client, [], False, inbox)
+                read.assert_not_called()
+                self.assertEqual(inbox.pending(), [END_ID])
+                stats = collector.resolve_inbox(client, [row], False, inbox)
+                self.assertEqual(stats['nomes_gravados'], 1)
+                self.assertEqual(client.row['RAZAOSOCIALRECEBEDOR'], 'Recebedor Exemplo')
+                self.assertFalse(inbox.pending())
+                inbox.accept(notification)
+                collector.resolve_inbox(client, [row], False, inbox)
+                self.assertEqual(read.call_count, 1)
+                self.assertEqual(client.updates, 1)
+
+    def test_webhook_failures_and_ambiguous_movements_remain_retryable(self):
+        row = {**self.row, 'Id': 1, 'RAZAOSOCIALRECEBEDOR': ''}
+        for answers, rows in [
+            ({END_ID: {'status': 403}}, [row]),
+            ({END_ID: {'status': 200, 'result': {**self.pix, 'valor': 900}}}, [row]),
+            ({END_ID: {'status': 200, 'result': self.pix}}, [row, {**row, 'Id': 2}]),
+        ]:
+            with tempfile.TemporaryDirectory() as directory:
+                inbox = Inbox(Path(directory), create=True)
+                inbox.accept({'id': END_ID, 'estado': 'FINALIZADO_SUCESSO'})
+                with patch.object(collector, 'read_pix', return_value={'payer_document': '12345678000190', 'results': answers}):
+                    with patch.object(collector, 'save_pix', side_effect=AssertionError('Unsafe write')):
+                        collector.resolve_inbox(None, rows, False, inbox)
+                self.assertEqual(inbox.pending(), [END_ID])
+
+    def test_webhook_checks_ambiguity_across_api_batches(self):
+        row = {**self.row, 'Id': 1, 'RAZAOSOCIALRECEBEDOR': ''}
+        identifiers = [END_ID[:21] + f'{index:011d}' for index in range(101)]
+        def read(account, ids):
+            answers = {identifier: {'status': 404} for identifier in ids}
+            for identifier, document in [(identifiers[0], '98712345612'), (identifiers[-1], '11112345699')]:
+                if identifier in ids:
+                    answers[identifier] = {'status': 200, 'result': {
+                        **self.pix, 'endToEndId': identifier,
+                        'destino': {'nome': 'API receiver ' + document, 'cpfCnpj': document}}}
+            return {'payer_document': '12345678000190', 'results': answers}
+        with tempfile.TemporaryDirectory() as directory:
+            inbox = Inbox(Path(directory), create=True)
+            for identifier in identifiers:
+                inbox.accept({'id': identifier, 'status': 'FINALIZADO_SUCESSO'})
+            with patch.object(collector, 'read_pix', side_effect=read) as reader:
+                with patch.object(collector, 'save_pix', side_effect=AssertionError('Ambiguous receiver')):
+                    # A bounded run must not choose from an incomplete snapshot.
+                    collector.resolve_inbox(None, [row], False, inbox)
+                    collector.resolve_inbox(None, [row], False, inbox)
+            self.assertLessEqual(max(len(call.args[1]) for call in reader.call_args_list), 25)
+            self.assertEqual(len(inbox.pending(limit=200)), 101)
+
+    def test_webhook_positive_api_evidence_survives_interruption(self):
+        row = {**self.row, 'Id': 1, 'RAZAOSOCIALRECEBEDOR': ''}
+        ids = [END_ID[:21] + f'{index:011d}' for index in range(101)]
+        def read(account, batch):
+            return {'payer_document': '12345678000190', 'results': {
+                identifier: {'status': 200, 'result': {**self.pix, 'endToEndId': identifier}}
+                for identifier in batch}}
+        with tempfile.TemporaryDirectory() as directory:
+            inbox = Inbox(Path(directory), create=True)
+            for identifier in ids:
+                inbox.accept({'id': identifier, 'status': 'FINALIZADO_SUCESSO'})
+            with patch.object(collector, 'read_pix', side_effect=[read('12345', ids[:25]), RuntimeError('interrupted')]):
+                with self.assertRaises(RuntimeError):
+                    collector.resolve_inbox(None, [row], False, inbox)
+            reopened = Inbox(Path(directory))
+            with patch.object(collector, 'read_pix', side_effect=read) as reader:
+                with patch.object(collector, 'save_pix', side_effect=AssertionError('Ambiguous receiver')):
+                    collector.resolve_inbox(None, [row], False, reopened)
+            queried = {identifier for call in reader.call_args_list for identifier in call.args[1]}
+            self.assertFalse(queried.intersection(ids[:25]))
+            self.assertEqual(queried, set(ids[25:]))
+
+    def test_unresolved_webhook_prevents_archival_fallback(self):
+        row = {**self.row, 'Id': 1, 'RAZAOSOCIALRECEBEDOR': '',
+               'ORIGEMMOVIMENTACAO': 'SICOOB', 'OPERACAO': 'DÉBITO'}
+        with tempfile.TemporaryDirectory() as directory:
+            inbox = Inbox(Path(directory), create=True)
+            inbox.accept({'id': END_ID, 'status': 'FINALIZADO_SUCESSO'})
+            with patch.object(collector, 'Inbox', return_value=inbox), \
+                 patch.object(collector.movements, 'sharepoint_client', return_value=None), \
+                 patch.object(collector.movements, 'assert_destination'), \
+                 patch.object(collector, 'list_movements', return_value=[row]), \
+                 patch.object(collector, 'read_pix', return_value={'payer_document': '12345678000190', 'results': {END_ID: {'status': 403}}}), \
+                 patch.object(collector, 'launch_dates_and_values', side_effect=AssertionError('Unsafe archive bypass')):
+                self.assertEqual(collector.run(False)['pendentes'], 1)
+
+    def test_webhook_completes_existing_name_with_missing_supplemental_fields(self):
+        row = {field: '' for field in (*collector.IDENTITY, *collector.EXTRA)}
+        row.update(self.row, Id=29, RAZAOSOCIALRECEBEDOR='Recebedor Exemplo')
+        stored = dict(row)
+        get = lambda item, fields, target: {field: stored[field] for field in fields}
+        client = SimpleNamespace(get_item_fields=get,
+            get_item_fields_with_etag=lambda *args: (get(*args), 'etag'),
+            update_item_with_etag=lambda item, fields, etag, target: stored.update(fields))
+        data = {'payer_document': '12345678000190', 'results': {END_ID: {'status': 200, 'result': self.pix}}}
+        with tempfile.TemporaryDirectory() as directory:
+            inbox = Inbox(Path(directory), create=True)
+            inbox.accept({'id': END_ID, 'status': 'FINALIZADO_SUCESSO'})
+            with patch.object(collector, 'read_pix', return_value=data):
+                collector.resolve_inbox(client, [row], False, inbox)
+            self.assertEqual(stored['DOCUMENTORECEBEDOR'], self.pix['destino']['cpfCnpj'])
+            self.assertEqual(inbox.pending(), [])
 
     def test_matches_bank_response_by_transaction_and_counterparty(self):
         self.assertTrue(pix_matches(self.row, self.pix, END_ID, '12345678000190'))
