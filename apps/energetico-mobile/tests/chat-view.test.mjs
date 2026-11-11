@@ -5813,6 +5813,43 @@ test("mantém unidade de medida com estrela no topo e ordena as demais por ID cr
   dom.window.close();
 });
 
+test("mantém no seletor de unidade a ordem de frequência enviada pelo servidor, inclusive ao filtrar", () => {
+  const state = signedInState({
+    activeFlow: { id: "launch", title: "EFETUAR LANÇAMENTO" },
+    messages: [{
+      id: "product-unit-frequency",
+      role: "assistant",
+      type: "poll",
+      question: "📦 📏 QUAL É A UNIDADE DE MEDIDA DO PRODUTO? CASO DESEJE FILTRAR, DIGITE UM TEXTO.",
+      presentation: "product_unit_frequency",
+      databaseFilter: true,
+      databaseFilterKey: "unidade_produto_cadastro",
+      options: [
+        { id: "9", reply: "9", label: "9 - m³" },
+        { id: "5", reply: "5", label: "5 - t" },
+        { id: "7", reply: "7", label: "7 - m²" },
+      ],
+    }],
+  });
+  const dom = new JSDOM('<div id="app"></div>');
+  const root = dom.window.document.querySelector("#app");
+  const view = createChatView(root);
+  view.on("draft-changed", command => view.render({ ...state, draft: command.value }));
+  view.render(state);
+
+  const replyIds = () => Array.from(root.querySelectorAll(".chat-choice-button[data-reply-id]"))
+    .map(button => button.dataset.replyId);
+  assert.deepEqual(replyIds(), ["9", "5", "7"]);
+
+  const draft = root.querySelector('[data-role="draft"]');
+  draft.value = "m";
+  draft.dispatchEvent(new dom.window.Event("input", { bubbles: true }));
+  assert.deepEqual(replyIds(), ["9", "7"]);
+
+  view.destroy();
+  dom.window.close();
+});
+
 test("lista de produtos EPI combina checkbox desmarcado com o botão de quantidade personalizada", () => {
   const poll = {
     id: "epi-products",

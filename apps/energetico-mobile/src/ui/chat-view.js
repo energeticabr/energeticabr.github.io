@@ -634,6 +634,7 @@ function numericChoiceId(option) {
 }
 
 function orderMeasurementUnitOptions(message, options) {
+  if (message.presentation === "product_unit_frequency") return options;
   const question = normalizedDateText(message?.question || message?.prompt || message?.text);
   if (!/\bunidade\s+de\s+medida\b/u.test(question)) return options;
 

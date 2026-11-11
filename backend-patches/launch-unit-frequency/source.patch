@@ -1,0 +1,48 @@
+--- a/worker/workflow.py
++++ b/worker/workflow.py
+@@ -20147 +20147 @@
+-        normalized = self._rank_recent_launch_account_options(state, step, normalized)
++        normalized = self._rank_recent_launch_field_options(state, step, normalized)
+@@ -20180,3 +20180,10 @@
+-    def _rank_recent_launch_account_options(self, state, step, options):
+-        """Rank account choices by use in the latest 100 launches, read only."""
+-        if state.get("flow") != "launch" or step.get("key") != "conta_lancamento" or not options:
++    def _rank_recent_launch_field_options(self, state, step, options):
++        """Rank account and product unit choices using the 100 latest launches."""
++        selection = (state.get("flow"), step.get("key"))
++        history = {
++            ("launch", "conta_lancamento"): ("recent_launch_account_usage", "CONTA"),
++            ("supply_product_registration", "unidade_produto_cadastro"): (
++                "recent_launch_unit_usage", "UN",
++            ),
++        }.get(selection)
++        if not history or not options:
+@@ -20183,0 +20191,6 @@
++        history_key, field = history
++        if field == "UN":
++            # The app previously showed units by ascending catalog ID.
++            options = sorted(options, key=lambda item: (
++                int(item["id"]) if str(item["id"]).isdecimal() else float("inf")
++            ))
+@@ -20186 +20199 @@
+-                "key": "recent_launch_account_usage",
++                "key": history_key,
+@@ -20189,2 +20202,2 @@
+-                    "id_field": "Id", "label_field": "Id", "value_field": "CONTA",
+-                    "fields": ["Id", "CONTA"], "top": 100,
++                    "id_field": "Id", "label_field": "Id", "value_field": field,
++                    "fields": ["Id", field], "top": 100,
+@@ -20198,3 +20211,3 @@
+-                account = normalize_text(str(row.get("value") or ""))
+-                if account:
+-                    counts[account] = counts.get(account, 0) + 1
++                value = normalize_text(str(row.get("value") or ""))
++                if value:
++                    counts[value] = counts.get(value, 0) + 1
+@@ -20204 +20217 @@
+-            # History availability must not block payment or remove catalog choices.
++            # Keep the catalog usable during a history outage.
+@@ -37591,0 +37605,3 @@
++        if (state.get("flow") == "supply_product_registration"
++                and step.get("key") == "unidade_produto_cadastro"):
++            step = {**step, "presentation": "product_unit_frequency"}
