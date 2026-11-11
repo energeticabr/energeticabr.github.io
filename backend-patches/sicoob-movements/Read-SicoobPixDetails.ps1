@@ -14,7 +14,8 @@ try {
  $headers=@{Authorization='Bearer '+$token.access_token;client_id=$dedicated.clientId;Accept='application/json'}
  $req=ConvertFrom-Json -InputObject ([Console]::In.ReadToEnd())
  if ($req.account -cne $config.accountNumber) { throw 'SICOOB_PIX_ACCOUNT_MISMATCH' }
- $results=[ordered]@{}
+ # Preserve each requested spelling: OCR alternatives can differ only in case.
+ $results=[System.Collections.Specialized.OrderedDictionary]::new([System.StringComparer]::Ordinal)
  foreach($id in $req.ids){
   if($id -notmatch '^E[0-9]{20}[a-zA-Z0-9]{11}$'){continue}
   $uri="https://api.sicoob.com.br/pix-pagamentos/v2/pagamentos/$id"
