@@ -11,18 +11,19 @@ function clean(value,now){
   result.completedAt=Number.isFinite(value.completedAt)?value.completedAt:Number.isFinite(serverTime)?serverTime:now;
  }
  if(['SYNC_FAILED','WORKER_UNAVAILABLE','BUSY'].includes(value.code))result.code=value.code;
- for(const key of ['created','updated','verified'])if(Number.isSafeInteger(value[key])&&value[key]>=0&&value[key]<=1000000)result[key]=value[key];
+ for(const key of ['created','updated','verified','pendingDetails'])if(Number.isSafeInteger(value[key])&&value[key]>=0&&value[key]<=1000000)result[key]=value[key];
  const ids=value.createdItemIds;
  if(Array.isArray(ids)&&ids.length===result.created&&ids.length<=10000&&ids.every(id=>Number.isSafeInteger(id)&&id>0&&id<=2147483647)&&new Set(ids).size===ids.length)result.createdItemIds=[...ids];
  return result;
 }
 
 /** Owns manual operations beyond gallery lifetime. Only explicit UI acknowledgement consumes a result. */
-export function createDdaSyncMonitor({client,accountKey,storage,present=async()=>false,hide=()=>{},isVisible=()=>true,
+export function createDdaSyncMonitor({client,accountKey,storage,source='dda',present=async()=>false,hide=()=>{},isVisible=()=>true,
  isCurrent=()=>true,now=Date.now,randomId=()=>globalThis.crypto.randomUUID().replaceAll('-',''),
  schedule=(fn,ms)=>setTimeout(fn,ms),cancel=clearTimeout,requestTimeoutMs=35000}={}){
  if(typeof accountKey!=='string'||!accountKey)throw Error('DDA_ACCOUNT_REQUIRED');
- const key=`energetico.dda-sync.v1:${encodeURIComponent(accountKey)}`,records=new Map(),listeners=new Set();
+ if(!['dda','sicoob'].includes(source))throw Error('INVALID_BANK_SYNC_SOURCE');
+ const key=`energetico.${source}-sync.v1:${encodeURIComponent(accountKey)}`,records=new Map(),listeners=new Set();
  let destroyed=false,inFlight=null,timer=null,discover=false,showing=null,notice='',controller=null;
  try{const saved=JSON.parse(storage?.getItem(key)||'null');if(saved?.version===1&&Array.isArray(saved.records))for(const row of saved.records){const r=clean(row,now());records.set(r.requestId,r);}}catch{/* Authenticated server recovery remains authoritative. */}
  const current=()=>!destroyed&&isCurrent();
@@ -67,7 +68,7 @@ export function createDdaSyncMonitor({client,accountKey,storage,present=async()=
  }
  function arm(){
   if(timer!==null)cancel(timer);timer=null;
-  if(current()&&(discover||[...records.values()].some(r=>active.has(r.status)||r.acknowledged)))timer=schedule(()=>{timer=null;void cycle();},3000);
+  if(current()&&(discover||[...records.values()].some(r=>active.has(r.status)||r.acknowledged||(!showing&&isVisible()))))timer=schedule(()=>{timer=null;void cycle();},3000);
  }
  function cycle(){
   if(!current())return Promise.resolve();if(inFlight)return inFlight;
@@ -80,7 +81,7 @@ export function createDdaSyncMonitor({client,accountKey,storage,present=async()=
      // Validate the complete response before accepting any member.
      const safe=pending.requests.map(row=>clean(row,now()));
      for(const row of safe)remember(row,records.get(row.requestId));
-    }catch(error){if(!current())return;notice='Sem conexão para recuperar as atualizações DDA. O acompanhamento será retomado automaticamente.';discover=true;}
+    }catch(error){if(!current())return;notice=`Sem conexão para recuperar as atualizações ${source==='sicoob'?'de transações Sicoob':'DDA'}. O acompanhamento será retomado automaticamente.`;discover=true;}
    }
    for(const saved of [...records.values()]){
     if(!current())return;const r=records.get(saved.requestId);if(!r)continue;

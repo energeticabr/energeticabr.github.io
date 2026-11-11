@@ -22,6 +22,57 @@ const payment = (id, fields = {}) => ({
   },
 });
 
+test('refresh starts the source sync, retains filters and rows, and reloads when bank completes before fiscal', async () => {
+  const dom = new JSDOM('<main id="app"></main>');
+  let listener, starts = 0, reads = 0, failRead = false;
+  const monitor = { running: false, subscribe(fn) { listener = fn; fn({ running: false }); return () => { listener = null; }; },
+    async start() { starts++; listener({ running: true, sourceRunning: true, notice: 'Consultando as três fontes…' }); } };
+  const view = createSicoobTransactionReportView({ document: dom.window.document, syncMonitor: monitor,
+    data: { async loadSnapshot() { reads++; if (failRead) throw Error('offline'); return { rows: [payment(reads)] }; } } });
+  try {
+    await view.open();
+    const search = view.element.querySelector('input[type="search"]');
+    search.value = 'Loja'; search.dispatchEvent(new dom.window.Event('input'));
+    const button = view.element.querySelector('.pl-refresh'); button.click();
+    await new Promise(resolve => setImmediate(resolve));
+    assert.equal(starts, 1); assert.equal(reads, 1);
+    assert.equal(view.element.querySelectorAll('tbody tr').length, 1);
+    assert.equal(button.disabled, true);
+    listener({ running: true, sourceRunning: false, latest: { requestId: 'a'.repeat(32), status: 'succeeded' }, notice: 'Transações concluídas. Notas fiscais aguardando.' });
+    await new Promise(resolve => setImmediate(resolve));
+    assert.equal(reads, 2); assert.equal(search.value, 'Loja'); assert.equal(button.disabled, true);
+    assert.match(view.element.textContent, /Notas fiscais aguardando/);
+    failRead = true;
+    listener({ running: true, sourceRunning: true, notice: 'Consultando…' });
+    listener({ running: false, sourceRunning: false, latest: { requestId: 'b'.repeat(32), status: 'failed' }, notice: 'Falha na coleta' });
+    await new Promise(resolve => setImmediate(resolve));
+    assert.equal(view.element.querySelectorAll('tbody tr').length, 1);
+    assert.match(view.element.textContent, /última leitura/);
+    listener({ running: false, sourceRunning: false, notice: 'Notas fiscais consultando…' });
+    assert.match(view.element.textContent, /última leitura/);
+  } finally { view.destroy(); dom.window.close(); }
+});
+
+test('retained row actions are disabled during snapshot replacement and available after it', async () => {
+  const dom = new JSDOM('<main id="app"></main>'); let finish, reads = 0, attachmentReads = 0;
+  const snapshot = { rows: [{ ...payment(3), hasAttachments: true }] };
+  const view = createSicoobTransactionReportView({ document: dom.window.document, openMediaCollection: async () => {},
+    data: { loadSnapshot: async () => ++reads === 1 ? snapshot : new Promise(resolve => { finish = resolve; }),
+      listAttachments: async () => { attachmentReads++; return []; },
+      orderLink: { loadOptions: async () => [] } } });
+  try {
+    await view.open(); view.element.querySelector('.pl-refresh').click();
+    const pdf = view.element.querySelector('.sicoob-transaction-receipt');
+    const pencil = view.element.querySelector('.sicoob-transaction-link-pencil');
+    assert.equal(pdf.disabled, true); assert.equal(pencil.disabled, true);
+    pdf.click(); pencil.click(); assert.equal(attachmentReads, 0);
+    assert.equal(view.element.querySelector('.dda-provision-dialog'), null);
+    finish(snapshot); await new Promise(resolve => setImmediate(resolve));
+    assert.equal(view.element.querySelector('.sicoob-transaction-receipt').disabled, false);
+    assert.equal(view.element.querySelector('.sicoob-transaction-link-pencil').disabled, false);
+  } finally { view.destroy(); dom.window.close(); }
+});
+
 test('summarizes bank descriptions in the report and PDF while retaining full-text search', async () => {
   const dom = new JSDOM('<main id="app"></main>');
   const examples = [

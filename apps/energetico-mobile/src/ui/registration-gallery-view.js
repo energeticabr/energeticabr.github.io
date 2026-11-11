@@ -416,7 +416,14 @@ export function createRegistrationGallery({ document: doc = globalThis.document,
   }
   const fiscalNotice = kind === 'notas_fiscais_sefaz' ? el('p', 'rg-source-notice sefaz-sync-progress') : null;
   if (fiscalNotice) { fiscalNotice.hidden=true; fiscalNotice.dataset.sefazSyncProgress=''; fiscalNotice.setAttribute('role','status'); header.after(fiscalNotice); }
+  const movementNotice = kind === 'financial_movement' && syncMonitor ? el('p', 'rg-source-notice') : null;
+  if (movementNotice) { movementNotice.hidden=true; movementNotice.setAttribute('role','status'); header.after(movementNotice); }
   async function manualRefresh() {
+    if (movementNotice) {
+      try { await syncMonitor.start(); }
+      catch { movementNotice.hidden=false; movementNotice.textContent='Não foi possível iniciar a sincronização. Tente novamente.'; }
+      return;
+    }
     if (kind === 'notas_fiscais_sefaz') {
       try {
         if (!syncMonitor) throw Error('A consulta fiscal está indisponível nesta versão. Atualize o aplicativo e tente novamente.');
@@ -462,6 +469,13 @@ export function createRegistrationGallery({ document: doc = globalThis.document,
   const refreshShortcut = attachGalleryRefreshButton({ document: doc, root, container: createShortcut.toolbar, header, button: refresh,
     onRefresh: manualRefresh,
     isAvailable: () => !destroyed && !attachmentLoading && !pendingMutations && !syncMonitor?.running });
+  let movementWasRunning=Boolean(syncMonitor?.running);
+  const unsubscribeMovements=movementNotice?syncMonitor.subscribe(state=>{
+    if(destroyed)return;
+    movementNotice.textContent=state.notice||'';movementNotice.hidden=!movementNotice.textContent;
+    if(movementWasRunning&&!state.running&&!root.hidden)void load({refresh:true,preserveRowsOnError:true});
+    movementWasRunning=state.running;refreshShortcut.sync();
+  }):null;
   let managedWasRunning=Boolean(syncMonitor?.running);
   const unsubscribeBank=kind==='dda'&&syncMonitor?syncMonitor.subscribe(state=>{
     if(destroyed)return;
@@ -1304,6 +1318,6 @@ export function createRegistrationGallery({ document: doc = globalThis.document,
       if(returnPending)returnedForManual=true;showBankNotice();await load();showBankNotice();
     },
     close: hide,
-    destroy() { provisionController?.abort(); provisionController = null; unsubscribeFiscal?.(); unsubscribeBank?.(); paymentConfirmation?.destroy(); bankReceipt?.destroy(); bankController?.abort(); stopDdaClock(); loadController?.abort(); assetReport?.destroy(); descriptionDetail?.destroy(); loadingScreen.destroy(); createShortcut.destroy(); refreshShortcut.destroy(); recordActions.destroy(); searchableFilters.destroy(); destroyed = true; request += 1; filterEpoch += 1; attachmentCountQueue = []; root.remove(); },
+    destroy() { provisionController?.abort(); provisionController = null; unsubscribeMovements?.(); unsubscribeFiscal?.(); unsubscribeBank?.(); paymentConfirmation?.destroy(); bankReceipt?.destroy(); bankController?.abort(); stopDdaClock(); loadController?.abort(); assetReport?.destroy(); descriptionDetail?.destroy(); loadingScreen.destroy(); createShortcut.destroy(); refreshShortcut.destroy(); recordActions.destroy(); searchableFilters.destroy(); destroyed = true; request += 1; filterEpoch += 1; attachmentCountQueue = []; root.remove(); },
   };
 }

@@ -75,7 +75,7 @@ function projectTransactions(snapshot) {
   }).sort((a, b) => b.date.localeCompare(a.date) || b.id.localeCompare(a.id, 'pt-BR', { numeric: true }));
 }
 
-export function createSicoobTransactionReportView({ document: doc = globalThis.document, data, onClose, openMediaCollection } = {}) {
+export function createSicoobTransactionReportView({ document: doc = globalThis.document, data, onClose, openMediaCollection, syncMonitor } = {}) {
   const make = (tag, className = '', value = '') => {
     const node = doc.createElement(tag);
     node.className = className;
@@ -103,6 +103,7 @@ export function createSicoobTransactionReportView({ document: doc = globalThis.d
   logo.alt = 'Energética Construtora';
   const refresh = button('Atualizar transações Sicoob', '⟳');
   refresh.className = 'pl-refresh';
+  refresh.title = 'Sincronizar transações, DDAs e notas fiscais';
   header.append(logo, refresh, make('h2', 'ddr-header-title', TITLE.toLocaleUpperCase('pt-BR')));
   const filters = make('div', 'ddr-filter-row sicoob-transaction-filters');
   const controls = {};
@@ -149,6 +150,9 @@ export function createSicoobTransactionReportView({ document: doc = globalThis.d
   let oldOverflow;
   let oldInert;
   let receiptRequest;
+  let loading = false, starting = false, syncRunning = Boolean(syncMonitor?.running);
+  let sourceRunning = Boolean(syncMonitor?.sourceRunning ?? syncMonitor?.running), syncNotice = '', reloadPending = false;
+  let loadNotice = '';
   const app = doc.getElementById('app');
   const orderLink = data.orderLink;
   const picker = orderLink && createReportLinkPicker({
@@ -166,6 +170,7 @@ export function createSicoobTransactionReportView({ document: doc = globalThis.d
     },
     currentLink: row => row.orderId,
     selectCurrent: true,
+    onClose: resumeRefresh,
     receiptId: receipt => receipt.orderId,
     rowAmount: row => row.value,
     resolveReturnFocus: trigger => content.querySelector(
@@ -188,12 +193,28 @@ export function createSicoobTransactionReportView({ document: doc = globalThis.d
   });
 
   function showNotice(message = '') {
-    notice.textContent = message;
-    notice.hidden = !message;
+    notice.textContent = message || [loadNotice, syncNotice].filter(Boolean).join('\n');
+    notice.hidden = !notice.textContent;
+  }
+
+  function syncRefreshButton() { refresh.disabled = loading || starting || syncRunning; }
+  function syncRowActions() {
+    for (const node of content.querySelectorAll('.sicoob-transaction-receipt, .sicoob-transaction-link-pencil')) node.disabled = loading;
+  }
+  function resumeRefresh() {
+    if (reloadPending && !root.hidden && !receiptRequest && !picker?.isOpen) void load();
+  }
+  async function manualRefresh() {
+    if (refresh.disabled || root.hidden || receiptRequest || picker?.isOpen) return;
+    if (!syncMonitor) return load();
+    starting = true; syncRefreshButton();
+    try { await syncMonitor.start(); }
+    catch (error) { if (!root.hidden) showNotice(error?.message || 'Não foi possível iniciar a sincronização.'); }
+    finally { starting = false; syncRefreshButton(); }
   }
 
   async function openReceipt(transaction, trigger) {
-    if (receiptRequest || picker?.isOpen || !request || root.hidden) return;
+    if (loading || receiptRequest || picker?.isOpen || !request || root.hidden) return;
     const signal = request.signal;
     const active = receiptRequest = {};
     const current = () => receiptRequest === active && !signal.aborted && trigger.isConnected;
@@ -218,6 +239,7 @@ export function createSicoobTransactionReportView({ document: doc = globalThis.d
     } finally {
       if (receiptRequest === active) receiptRequest = null;
       trigger.disabled = false;
+      resumeRefresh();
     }
   }
 
@@ -259,8 +281,9 @@ export function createSicoobTransactionReportView({ document: doc = globalThis.d
     pencil.dataset.sicoobMovementLink = transaction.id;
     pencil.dataset.reportScreenOnly = '';
     pencil.innerHTML = PENCIL_ICON;
+    pencil.disabled = loading;
     pencil.addEventListener('click', () => {
-      if (!receiptRequest) void picker.show({ ...transaction, supplier: transaction.recipient }, pencil);
+      if (!loading && !receiptRequest) void picker.show({ ...transaction, supplier: transaction.recipient }, pencil);
     });
     cell.append(pencil);
   }
@@ -323,6 +346,7 @@ export function createSicoobTransactionReportView({ document: doc = globalThis.d
         const receipt = button(`Abrir comprovante da transação ${transaction.id}`, '');
         receipt.className = 'sicoob-transaction-receipt';
         receipt.innerHTML = PDF_ATTACHMENT_ICON;
+        receipt.disabled = loading;
         receipt.addEventListener('click', () => void openReceipt(transaction, receipt));
         value.append(receipt);
       }
@@ -352,21 +376,25 @@ export function createSicoobTransactionReportView({ document: doc = globalThis.d
   }
 
   async function load() {
+    reloadPending = false;
     picker?.close();
     request?.abort();
     receiptRequest = null;
     showNotice();
     const active = request = new AbortController();
-    rows = null;
+    reloadPending = false;
+    loading = true;
     root.setAttribute('aria-busy', 'true');
-    refresh.disabled = true;
-    const loading = make('p', 'ddr-notice', 'Carregando transações do Sicoob…');
-    loading.setAttribute('role', 'status');
-    content.replaceChildren(loading);
+    syncRefreshButton();
+    syncRowActions();
+    const loadingNotice = make('p', 'ddr-notice', 'Carregando transações do Sicoob…');
+    loadingNotice.setAttribute('role', 'status');
+    if (!rows) content.replaceChildren(loadingNotice);
     try {
       const snapshot = await data.loadSnapshot({ refresh: true, signal: active.signal });
       if (active !== request) return;
       const transactions = projectTransactions(snapshot);
+      let supplierNotice = '';
       const linked = transactions.filter(row => row.orderId && (pendingRecipient(row) || row.type === 'Boleto'));
       if (linked.length && orderLink) {
         let incomplete = false;
@@ -377,33 +405,48 @@ export function createSicoobTransactionReportView({ document: doc = globalThis.d
         } catch {
           incomplete = true;
         }
-        if (incomplete && active === request) showNotice('Alguns fornecedores vinculados estão indisponíveis. Tente atualizar.');
+        if (incomplete) supplierNotice = 'Alguns fornecedores vinculados estão indisponíveis. Tente atualizar.';
       }
       if (active !== request) return;
       rows = transactions;
+      loadNotice = supplierNotice;
+      showNotice();
       populateAccounts();
+      const position = [content.scrollTop, content.scrollLeft];
       render();
+      [content.scrollTop, content.scrollLeft] = position;
     } catch {
       if (active !== request) return;
-      rows = null;
-      const error = make('p', 'ddr-notice', 'Não foi possível carregar as transações. Tente atualizar.');
-      error.setAttribute('role', 'alert');
-      content.replaceChildren(error);
+      if (rows) {
+        loadNotice = 'Não foi possível recarregar as transações. Os dados da última leitura foram preservados. Tente atualizar.';
+        showNotice();
+      }
+      else {
+        const error = make('p', 'ddr-notice', 'Não foi possível carregar as transações. Tente atualizar.');
+        error.setAttribute('role', 'alert');
+        content.replaceChildren(error);
+      }
     } finally {
       if (active === request) {
         root.setAttribute('aria-busy', 'false');
-        refresh.disabled = false;
+        loading = false;
+        syncRefreshButton();
+        syncRowActions();
       }
     }
   }
 
   function close() {
     if (root.hidden) return;
+    reloadPending = false;
     picker?.close();
     request?.abort();
     request = null;
     receiptRequest = null;
     rows = null;
+    loadNotice = '';
+    loading = false;
+    reloadPending = false;
     showNotice();
     content.replaceChildren();
     root.hidden = true;
@@ -415,7 +458,15 @@ export function createSicoobTransactionReportView({ document: doc = globalThis.d
     onClose?.();
   }
 
-  refresh.addEventListener('click', load);
+  const unsubscribeSync = syncMonitor?.subscribe(state => {
+    const active = Boolean(state.sourceRunning ?? state.running);
+    if (sourceRunning && !active) reloadPending = true;
+    sourceRunning = active;
+    syncRunning = Boolean(state.running);
+    syncNotice = state.notice || '';
+    showNotice(); syncRefreshButton(); resumeRefresh();
+  });
+  refresh.addEventListener('click', () => void manualRefresh());
   root.addEventListener('click', event => { if (event.target === root) close(); });
   root.addEventListener('keydown', event => {
     if (event.defaultPrevented || picker?.isOpen) return;
@@ -466,6 +517,7 @@ export function createSicoobTransactionReportView({ document: doc = globalThis.d
     },
     destroy() {
       close();
+      unsubscribeSync?.();
       landscape.destroy();
       root.remove();
     },

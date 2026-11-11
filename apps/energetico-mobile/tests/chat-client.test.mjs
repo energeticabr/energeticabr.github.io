@@ -5,6 +5,21 @@ import { createChatClient } from "../src/chat/chat-client.js";
 
 const API_BASE = "https://163-176-171-217.sslip.io";
 
+test('Sicoob manual collection uses authenticated fixed actions, pending recovery and acknowledgement', async () => {
+  const id = 'a'.repeat(32), bodies = [];
+  const client = clientWith(async (url, options) => {
+    assert.equal(options.headers.Authorization, 'Bearer graph-token');
+    const body = JSON.parse(options.body); bodies.push(body);
+    return jsonResponse({ status: 'processed', messages: [], sicoobRefresh: body.mode
+      ? { status: 'pending', requests: [] } : { requestId: id, status: body.acknowledge ? 'acknowledged' : 'succeeded' } });
+  });
+  assert.equal((await client.refreshSicoob({ requestId: id })).status, 'succeeded');
+  await client.getSicoobRefreshStatus(id); await client.getSicoobRefreshPending(); await client.acknowledgeSicoobRefresh(id);
+  assert.deepEqual(bodies, [ { action: 'sicoob_refresh', requestId: id }, { action: 'sicoob_refresh_status', requestId: id },
+    { action: 'sicoob_refresh_status', mode: 'pending' }, { action: 'sicoob_refresh_status', requestId: id, acknowledge: true } ]);
+  await assert.rejects(client.getSicoobRefreshStatus('invalid'));
+});
+
 test('retomada acompanha o PDF existente sem reenviar a finalização', async () => {
   const sent = [], progress = [];
   const client = clientWith(async (_url, options) => {
