@@ -18,11 +18,12 @@ const only=(v,chars)=>`equals(${[...chars].reduce((s,c)=>`replace(${s},'${c}',''
 const item=`concat(${lit(list+'/items(')},string(int(outputs('Nota')?['Id'])),')')`;
 const name=`${pdf}?['fileName']`;
 const isNfse=`equals(length(${key}),50)`;
+const supportedPdf=`or(not(${isNfse}),equals(${pdf}?['source'],'LOCAL_DANFSE_NACIONAL'))`;
 const fiscalType=`if(${isNfse},'NFS-e','CT-e')`;
 const prefix=`if(${isNfse},'DANFSe-','DACTE-')`;
 const attachmentTail=`concat('/Attachments/',string(int(outputs('Nota')?['Id'])),'/',${name})`;
 const repair={
- Conferir_identidade:gate(`and(or(${isNfse},and(equals(length(${key}),44),equals(substring(${key},20,2),'57'))),${only(key,'0123456789')},equals(coalesce(${doc('fiscalType')},${fiscalType}),${fiscalType}),equals(length(${sha}),64),${only(sha,'0123456789abcdef')},equals(${name},concat(${prefix},${key},'-',substring(${sha},0,16),'.pdf')),equals(length(${pdf}?['sha256']),64),${only(`${pdf}?['sha256']`,'0123456789abcdef')})`),
+ Conferir_identidade:gate(`and(${supportedPdf},or(${isNfse},and(equals(length(${key}),44),equals(substring(${key},20,2),'57'))),${only(key,'0123456789')},equals(coalesce(${doc('fiscalType')},${fiscalType}),${fiscalType}),equals(length(${sha}),64),${only(sha,'0123456789abcdef')},equals(${name},concat(${prefix},${key},'-',substring(${sha},0,16),'.pdf')),equals(length(${pdf}?['sha256']),64),${only(`${pdf}?['sha256']`,'0123456789abcdef')})`),
  Localizar_nota:sp('GET',`@concat(${lit(list+"/items?$select=*&$filter=CHAVE_ACESSO eq '")},${key},${lit("'&$top=2")})`,'Conferir_identidade'),
  Conferir_nota_unica:gate("equals(length(body('Localizar_nota')?['d']?['results']),1)",'Localizar_nota'),
  Nota:{type:'Compose',inputs:"@first(body('Localizar_nota')?['d']?['results'])",runAfter:after('Conferir_nota_unica')},
