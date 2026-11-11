@@ -4,7 +4,7 @@ import {REGISTRATION_GALLERY_MODELS,registrationRawField,registrationDateKey,reg
 import {ddaTodayKey} from '../ui/dda-card.js';
 import {ddaPaidManually} from './dda-payment-confirmation.js';
 import {resolveDdaPaymentLine} from './dda-payment-line.js';
-import {ddaBankSchedule,isDdaOpenStatus,normalizeDdaStatus} from './dda-bank-status.js';
+import {DDA_UNLINKED_REVIEW_FIELD,ddaBankSchedule,isDdaOpenStatus,normalizeDdaStatus} from './dda-bank-status.js';
 const Money=Decimal.clone({precision:40});
 export {ddaSearchKey} from './dda-bank-status.js';
 const text=value=>typeof value==='string'||typeof value==='number'?String(value).trim():'';
@@ -54,11 +54,18 @@ export function normalizeDdaReportRows(snapshot){
   const paidManually=ddaPaidManually(value('PGTO_CONFIRMADO')),confirmedAt=text(value('PGTO_CONFIRMADO_EM'));
   const audited=paidManually&&text(value('PGTO_CONFIRMADO_POR'))&&Number.isFinite(auditTime(confirmedAt));
   const paidBySchedule=scheduleLifecycle==='PAGO_AGENDADO'||Boolean(audited&&ddaWasScheduledAt({scheduledAt},confirmedAt));
-  return {id,paymentLine,key:text(value('CHAVE_DDA')),paidManually,confirmedAt,paidBySchedule,scheduledAt,supplier:text(value('FORNECEDOR'))||'Fornecedor não informado',supplierCnpj:supplierCnpj(value('CNPJ_FORNECEDOR')),due:registrationDateKey(value('VENCIMENTO')),issued:registrationDateKey(value('EMISSAO')),amount,status:paidBySchedule?'Pago':normalizeDdaStatus(value('SITUACAO')),schedule,document:text(value('DOCUMENTO')),bank:text(value('BANCO')),payer:text(value('PAGADOR')),checkedAt,provisionId:provisionId(value('DESCRITIVOPROVIS_x00c3_O'))};
+  return {id,paymentLine,key:text(value('CHAVE_DDA')),paidManually,confirmedAt,paidBySchedule,scheduledAt,supplier:text(value('FORNECEDOR'))||'Fornecedor não informado',supplierCnpj:supplierCnpj(value('CNPJ_FORNECEDOR')),due:registrationDateKey(value('VENCIMENTO')),issued:registrationDateKey(value('EMISSAO')),amount,status:paidBySchedule?'Pago':normalizeDdaStatus(value('SITUACAO')),schedule,document:text(value('DOCUMENTO')),bank:text(value('BANCO')),payer:text(value('PAGADOR')),checkedAt,provisionId:provisionId(value('DESCRITIVOPROVIS_x00c3_O')),linkReviewed:value(DDA_UNLINKED_REVIEW_FIELD)===true};
  });
  const counts=new Map();
  for(const row of normalized)if(row.supplierCnpj)counts.set(row.supplierCnpj,(counts.get(row.supplierCnpj)||0)+1);
  return Object.freeze(normalized.map(row=>Object.freeze({...row,supplierDdaCount:row.supplierCnpj?counts.get(row.supplierCnpj):null})));
+}
+export function canReviewDdaUnlinked(row){
+ return !row.provisionId&&!row.paidManually&&isDdaOpenStatus(row.status);
+}
+export function hasUpcomingUnlinkedDda(rows,now=new Date()){
+ const today=ddaTodayKey(now);
+ return rows.some(row=>row.due>=today&&!row.linkReviewed&&canReviewDdaUnlinked(row));
 }
 export function buildDdaReport(rows,{status='Em aberto',bank='',search='',settledDdaIds}={},now=new Date()){
  const query=normalizeSearchText(search),today=ddaTodayKey(now);

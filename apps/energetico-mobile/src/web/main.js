@@ -93,6 +93,7 @@ async function start() {
   view.on("sign-out", () => installView?.setReady(false));
   const controller = createAppController({
     enableDdaReminders: true,
+    enableDdaMenuAlert: true,
     enableTrancidReminders: true,
     auth,
     recovery: createRecoveryStorage(),

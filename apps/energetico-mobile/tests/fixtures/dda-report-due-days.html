@@ -10,8 +10,9 @@ const report=createDdaReportView({document,now:()=>new Date('2026-11-04T22:00:00
   Title:'FORNECEDOR FICTÍCIO DE MATERIAIS E EQUIPAMENTOS PARA CONSTRUÇÃO LTDA',
   VENCIMENTO:due,EMISSAO:i===4?null:'2026-10-23',VALOR:2500,SITUACAO:'Em aberto',BANCO:'BANCO EXEMPLO',DOCUMENTO:'EX-001',
   STATUS_DDA:i<2?'Agendado':i===4?'Não confirmado':'Em aberto',
-  DESCRITIVOPROVIS_x00c3_O:i===1?'8':''
- }}))})}});
+  DESCRITIVOPROVIS_x00c3_O:i===1?'8':'',
+  DDA_x0020_sem_x0020_vincula_x00e:i===3
+ }}))}),unlinkedReview:{save(){throw new Error('A fixture não deve gravar.');}}}});
 await report.open();
 await document.fonts.ready;
 await new Promise(r=>requestAnimationFrame(()=>requestAnimationFrame(r)));
@@ -19,6 +20,7 @@ const state={overflow:document.documentElement.scrollWidth>innerWidth+1,rows:[],
 state.linkRows=[...document.querySelectorAll('[data-dda-id]')].map(row=>{
  const link=row.querySelector('.ddr-link-cluster'),warning=row.querySelector('.ddr-link-warning');
  return {id:row.dataset.ddaId,link:link.textContent,warning:warning?.textContent??null,
+  linkBackground:getComputedStyle(link).backgroundColor,linkFits:link.scrollWidth<=link.clientWidth+1&&link.offsetWidth<=row.cells[7].clientWidth,
   below:Boolean(warning&&warning.offsetTop>=link.offsetTop+link.offsetHeight),
   fits:Boolean(warning&&warning.scrollWidth<=warning.clientWidth+1),
   rowBackground:getComputedStyle(row).backgroundColor,
