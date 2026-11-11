@@ -58,11 +58,11 @@ def order_document_type_options(engine, state, step, options):
     if value is None or value == '':
         return options
     selection = previous.get('selections', {}).get('tipo_documento') or {}
-    selected_id = selection.get('id')
+    selected_id = str(selection.get('id') or '').removeprefix('NOVO-').removesuffix('-TIPODOCUMENTO')
     for index, option in enumerate(options):
         if option.get('terminal_option') or option.get('value') is None:
             continue
-        matches = (str(option['id']) == str(selected_id) if selected_id is not None
+        matches = (str(option['id']) == selected_id if selected_id.isdecimal()
                    else option.get('value') == value)
         if matches:
             highlighted = {**option, 'title': f'⭐ {visual_option_title(option)}', 'title_includes_id': True}

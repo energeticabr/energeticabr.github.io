@@ -218,7 +218,7 @@ class DocumentBatchTests(unittest.TestCase):
 
         self.ready()
         previous = {'id': 42, 'title': 'TIPO A QA', 'value': 'TIPO A QA'}
-        self.state['selections']['tipo_documento'] = previous
+        self.state['selections']['tipo_documento'] = {**previous, 'id': 'NOVO-42-TIPODOCUMENTO'}
         self.engine.messenger = ChannelMessenger()
         self.reply('document_add_another')
         catalog = [{'id': number, 'title': f'OUTRO TIPO QA {number}', 'value': f'OUTRO TIPO QA {number}'}
