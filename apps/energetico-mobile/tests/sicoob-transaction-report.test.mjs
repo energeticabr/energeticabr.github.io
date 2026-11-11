@@ -2,6 +2,7 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
 import { JSDOM } from 'jsdom';
+import { createSicoobOrderLink } from '../src/chat/sicoob-order-link.js';
 import { createSicoobTransactionReportView } from '../src/ui/sicoob-transaction-report-view.js';
 import { captureFilteredReport } from '../src/ui/report-print.js';
 
@@ -304,12 +305,26 @@ function setupOrderLink(t, { initial, recipient, description, loadOptions = asyn
 }
 
 test('offers manual Sicoob order suggestions and keeps all orders searchable', async t => {
-  const { view, query, picker, openPicker, writes, Event, KeyboardEvent, linkButton, receiptsOpened } = setupOrderLink(t);
+  const dates = { 42: '2026-02-30', 43: '01/11/2026', 44: '2026-11-09' };
+  const { loadOptions } = createSicoobOrderLink({ repository: {
+    async resolveList() { return { status: 'resolved', id: 'orders' }; },
+    async getItems() {
+      return orders.map(({ id, supplier, amount, label }) => ({ id, fields: {
+        FORNECEDOR: supplier, VALORTOTAL: amount, FILIAL: label.split(' · ').at(-1), DATAPEDIDO: dates[id],
+      } }));
+    },
+  } });
+  const { view, query, picker, openPicker, writes, Event, KeyboardEvent, linkButton, receiptsOpened } = setupOrderLink(t, { loadOptions });
   await view.open();
   assert.equal(query('thead th:last-child').textContent, 'VINCULAÇÃO');
   await openPicker();
   const choices = () => [...picker().querySelectorAll('.dda-provision-option')];
   assert.deepEqual(choices().map(node => node.querySelector('input').value), ['44', '43', '42', '41']);
+  const labels = choices().map(node => node.querySelector('input + span').textContent);
+  assert.match(labels[0], /^#44 · 09\/11\/2026 · Comércio Exemplo Ltda\./);
+  assert.match(labels[1], /^#43 · 01\/11\/2026 · Fornecedor Diferente/);
+  assert.match(labels[2], /^#42 · Sem data do pedido · Comércio Exemplo Ltda\./);
+  assert.match(labels[3], /^#41 · Sem data do pedido · Outro fornecedor/);
   assert.deepEqual(choices().map(node => Boolean(node.querySelector('.dda-provision-star'))), [true, true, true, false]);
   assert.match(choices()[0].textContent, /Valor igual.*Nome\/razão social semelhante/i);
   assert.match(choices()[1].textContent, /Valor igual/i);

@@ -59,8 +59,8 @@ test('payment link loads all personal SharePoint order pages then writes only ID
       ] });
       if (target.href.startsWith(orderUrl + '?')) {
         if (target.searchParams.has('$skiptoken')) return json(invalidPage ? { error:'incomplete' } :
-          { value:[{ id:'37', fields:{ FORNECEDOR:'Elétrica Teste', VALORTOTAL:'1.490,00', FILIAL:'OBRA A' } }] });
-        assert.equal(target.searchParams.get('$expand'), 'fields($select=FORNECEDOR,VALORTOTAL,FILIAL)');
+          { value:[{ id:'37', fields:{ FORNECEDOR:'Elétrica Teste', VALORTOTAL:'1.490,00', FILIAL:'OBRA A', DATAPEDIDO:'2026-10-25T00:00:00Z' } }] });
+        assert.equal(target.searchParams.get('$expand'), 'fields($select=FORNECEDOR,VALORTOTAL,FILIAL,DATAPEDIDO)');
         return json({ value:[{ id:'38', fields:{ FORNECEDOR:'Outro', VALORTOTAL:500 } }],
           '@odata.nextLink':orderUrl + '?$skiptoken=next' });
       }
@@ -94,8 +94,8 @@ test('payment link loads all personal SharePoint order pages then writes only ID
   });
   assert.equal(typeof data.orderLink?.loadOptions, 'function');
   assert.deepEqual(await data.orderLink.loadOptions(), [
-    { id:'38', supplier:'Outro', amount:500, label:'#38 · Outro' },
-    { id:'37', supplier:'Elétrica Teste', amount:'1.490,00', label:'#37 · Elétrica Teste · OBRA A' },
+    { id:'38', supplier:'Outro', amount:500, label:'#38 · Sem data do pedido · Outro' },
+    { id:'37', supplier:'Elétrica Teste', amount:'1.490,00', label:'#37 · 25/10/2026 · Elétrica Teste · OBRA A' },
   ]);
   assert.ok(scopes.every(scope => scope === 'Sites.Read.All'));
   assert.deepEqual(await data.orderLink.loadSuppliers(['37', '37', '38', '39', '40']),
