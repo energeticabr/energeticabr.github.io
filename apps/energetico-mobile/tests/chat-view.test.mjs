@@ -5086,21 +5086,42 @@ test("menu com anexos põe COMEÇAR DIÁRIO latente depois de fotos e em vermelh
   dom.window.close();
 });
 
-test("CONTINUAR DIÁRIO latente fica no fim sem destaque vermelho", () => {
+test("diário iniciado de data anterior mantém o atalho vermelho quando é o único pendente", () => {
   const markup = renderChatMarkup(signedInState({ messages: [{
     id: "main-menu-continue-diary",
     role: "assistant",
     type: "poll",
     question: "QUAL ÁREA VOCÊ DESEJA ACESSAR?",
     options: [
-      { id: "resume_latent_construction_diary", reply: "resume_latent_construction_diary", label: "▶️ CONTINUAR DIÁRIO DE OBRAS", tone: "danger" },
+      { id: "resume_latent_construction_diary", reply: "resume_latent_construction_diary", label: "▶️ CONTINUAR DIÁRIO DE OBRAS (24/09/2026)" },
       { id: "group_supplies", reply: "group_supplies", label: "📦 SUPRIMENTOS" },
     ],
   }] }));
   const dom = new JSDOM(markup);
   const buttons = [...dom.window.document.querySelectorAll(".chat-choice-list > .chat-choice-button")];
   assert.deepEqual(buttons.map(button => button.dataset.replyId), ["group_supplies", "resume_latent_construction_diary"]);
-  assert.equal(buttons.at(-1).classList.contains("chat-choice-button--danger"), false);
+  assert.equal(buttons.at(-1).classList.contains("chat-choice-button--danger"), true);
+  assert.equal(buttons.at(-1).dataset.label, "▶️ CONTINUAR DIÁRIO DE OBRAS (24/09/2026)");
+  assert.equal(buttons.at(-1).textContent, "▶️ DIÁRIO (24/09/2026)");
+  dom.window.close();
+});
+
+test("atalho vermelho abre a fila de diários e mantém a retomada direta disponível", () => {
+  const markup = renderChatMarkup(signedInState({ messages: [{
+    id: "main-menu-several-pending-diaries",
+    role: "assistant",
+    type: "poll",
+    question: "QUAL ÁREA VOCÊ DESEJA ACESSAR?",
+    options: [
+      { id: "resume_latent_construction_diary", reply: "resume_latent_construction_diary", label: "▶️ CONTINUAR DIÁRIO DE OBRAS (24/09/2026)" },
+      { id: "start_pending_construction_diary", reply: "start_pending_construction_diary", label: "📔 COMEÇAR DIÁRIO DE OBRAS" },
+    ],
+  }] }));
+  const dom = new JSDOM(markup);
+  const buttons = [...dom.window.document.querySelectorAll(".chat-choice-list > .chat-choice-button")];
+  assert.deepEqual(buttons.map(button => button.dataset.replyId), ["resume_latent_construction_diary", "start_pending_construction_diary"]);
+  assert.deepEqual(buttons.filter(button => button.classList.contains("chat-choice-button--danger")), [buttons[1]]);
+  assert.equal(buttons[1].textContent, "📔 DIÁRIO");
   dom.window.close();
 });
 
