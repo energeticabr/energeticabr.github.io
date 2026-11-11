@@ -3,7 +3,7 @@ from __future__ import annotations
 
 import copy
 import hashlib
-from datetime import datetime
+from datetime import date, datetime
 from zoneinfo import ZoneInfo
 
 try:
@@ -34,8 +34,10 @@ def active(state):
     return bool(state) and state.get('flow') == 'document' and (state.get('document_batch') or {}).get('mode') == 'multiple'
 
 
-def checkpoint_key(state):
-    identity = f"{state['key']}:{state['batch_id']}:{state['document_batch']['index']}"
+def checkpoint_key(state, index=None):
+    if index is None:
+        index = state['document_batch']['index']
+    identity = f"{state['key']}:{state['batch_id']}:{index}"
     return 'document-batch-row-' + hashlib.sha256(identity.encode()).hexdigest()
 
 
@@ -78,22 +80,53 @@ def prompt_mode(engine, state, etag):
     return {'status': 'awaiting_document_mode', 'batch_id': state['batch_id'], 'etag': etag}
 
 
+def _default_display_value(snapshot, step):
+    target = step.get('target_field')
+    if target:
+        value = snapshot.get('display_values', {}).get(target, snapshot.get('fields', {}).get(target))
+    else:
+        value = snapshot.get('answers', {}).get(step.get('answer_target') or step['key'])
+    value = '' if value is None else str(value).strip()
+    if step.get('kind') == 'date' and value:
+        try:
+            value = date.fromisoformat(value[:10]).strftime('%d/%m/%Y')
+        except ValueError:
+            pass
+    return value or 'EM BRANCO'
+
+
 def prompt_defaults(engine, state, etag):
     batch = state['document_batch']
     batch['editing_defaults'] = True
     state['stage'], state['options'] = DEFAULTS_STAGE, []
     state.pop('edit_step_indices', None)
-    state['step_index'] = len(engine._flow_config(state)['steps'])
-    labels = {row['field']: row['label'] for row in engine._flow_config(state).get('summary_fields', [])}
+    flow = engine._flow_config(state)
+    state['step_index'] = len(flow['steps'])
+    labels = {row['field']: row['label'] for row in flow.get('summary_fields', [])}
+    checkpoint = None
+    if batch['index'] > 0:
+        checkpoint, _ = engine.state_store.load(checkpoint_key(state, batch['index'] - 1))
+    previous = checkpoint['snapshot'] if checkpoint and checkpoint.get('phase') == 'verified' else None
+    previous_context = engine._context(previous) if previous is not None else {}
+    current_context = engine._context(state)
+    changes = []
     options = [{'id': PROCEED, 'title': '✅ PROSSEGUIR SEM EDITAR', 'value': '__document_proceed__'}]
-    for index, step in enumerate(engine._flow_config(state)['steps']):
+    for index, step in enumerate(flow['steps']):
         if step.get('editable') is False or step['key'] == 'tipo_documento':
             continue
-        if not condition_matches(step.get('when'), engine._context(state)):
-            continue
+        applicable = condition_matches(step.get('when'), current_context)
         target = step.get('target_field')
         label = DEFAULT_LABELS.get(step['key']) or step.get('edit_label') or labels.get(target) or step['prompt'].rstrip('?')
-        options.append({'id': index + 1, 'title': label, 'value': index})
+        if applicable:
+            options.append({'id': index + 1, 'title': label, 'value': index})
+        if previous is not None and not step.get('sensitive') and (
+            applicable or condition_matches(step.get('when'), previous_context)
+        ):
+            before = _default_display_value(previous, step)
+            after = _default_display_value(state, step)
+            if before != after:
+                changes.append({'optionId': str(index + 1), 'field': label, 'before': before, 'after': after})
+    batch['default_changes'] = changes
     state['options'] = options
     engine._send_options(state, {'key': 'edit_field', 'prompt':
         'DESEJA EDITAR ALGUM DADO PARA O NOVO DOCUMENTO?', 'allow_navigation_back': False}, options)
@@ -125,6 +158,7 @@ def handle_text(engine, event, state, etag):
         }:
             engine._mark_processed(state, event.get('message_id'))
             state['document_batch']['editing_defaults'] = False
+            state['document_batch'].pop('default_changes', None)
             state['document_batch']['type_only'] = True
             index = next(i for i, step in enumerate(engine._flow_config(state)['steps'])
                          if step['key'] == 'tipo_documento')

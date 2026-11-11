@@ -234,6 +234,44 @@ class DocumentBatchTests(unittest.TestCase):
         self.assertEqual(self.state['fields']['DATA'], '2026-10-22')
         self.assertEqual(self.catalog.rows[self.catalog.creates[0]]['fields']['DATA'], '2026-10-21')
 
+    def test_defaults_show_pending_changes_against_the_previous_document(self):
+        from channel_bridge import ChannelMessenger
+
+        self.ready()
+        self.engine.messenger = ChannelMessenger()
+        self.reply('document_add_another')
+        self.assertNotIn('change_table', self.engine.messenger.drain()[-1])
+
+        self.reply('choice:edit_field:4')
+        self.assertNotIn('change_table', self.engine.messenger.drain()[-1])
+        self.reply('2')
+        table = self.engine.messenger.drain()[-1]['change_table']
+        self.assertEqual(table, {'kind': 'document_default_changes', 'rows': [{
+            'optionId': '4', 'field': 'FORNECEDOR / PESSOA RELACIONADA',
+            'before': 'PESSOA A QA', 'after': 'PESSOA B QA',
+        }]})
+
+        self.reply('choice:edit_field:5')
+        self.reply(text='22/10/2026')
+        rows = self.engine.messenger.drain()[-1]['change_table']['rows']
+        self.assertEqual(rows[0], table['rows'][0])
+        self.assertEqual(rows[1], {'optionId': '5', 'field': 'DATA DE EMISSÃO',
+                                   'before': '21/10/2026', 'after': '22/10/2026'})
+        self.state, version = self.store.load(self.state['key'])
+        self.engine._resend_current_prompt(self.state, version)
+        self.assertEqual(self.engine.messenger.drain()[-1]['change_table']['rows'], rows)
+        self.reply(text='fornecedor')
+        self.assertEqual(self.engine.messenger.drain()[-1]['change_table']['rows'], rows)
+
+        self.reply('choice:edit_field:4')
+        self.reply('1')
+        self.assertEqual(self.engine.messenger.drain()[-1]['change_table']['rows'], rows[1:])
+        self.reply('choice:edit_field:5')
+        self.reply(text='21/10/2026')
+        self.assertNotIn('change_table', self.engine.messenger.drain()[-1])
+        self.assertEqual(len(self.catalog.creates), 1)
+
+
     def test_final_submits_new_type_and_attachment_as_separate_document(self):
         self.ready()
         self.reply('document_add_another')
