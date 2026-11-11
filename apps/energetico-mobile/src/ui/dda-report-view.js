@@ -1,4 +1,4 @@
-import {normalizeDdaReportRows,buildDdaReport,ddaSettlementPending,readSettledDdaIds} from '../chat/dda-report-model.js';
+import {normalizeDdaReportRows,buildDdaReport,ddaSettlementPending,readSettledDdaIds,canReviewDdaUnlinked} from '../chat/dda-report-model.js';
 import {ddaDueTone,ddaTodayKey} from './dda-card.js';
 import {bindReportLandscape} from './report-landscape.js';
 import {addReportCloseControl} from './report-close-control.js';
@@ -11,12 +11,12 @@ const LOGO=new URL('../../../../assets/logo-energetica-oficial.png',import.meta.
 const money=value=>value==null?'Não disponível':new Intl.NumberFormat('pt-BR',{style:'currency',currency:'BRL'}).format(Number(value));
 const date=value=>value?value.slice(8,10)+'/'+value.slice(5,7)+'/'+value.slice(0,4):'Não informado';
 const daysSince=(day,today)=>Math.round((Date.parse(`${today}T00:00:00Z`)-Date.parse(`${day}T00:00:00Z`))/86400000);
-const ROW_CONTROLS=['data-dda-pdf','data-dda-mirror','data-dda-provision-check','data-dda-provision-pencil','data-dda-settle-provision','data-dda-toggle-barcode','data-dda-copy-barcode'];
+const ROW_CONTROLS=['data-dda-pdf','data-dda-mirror','data-dda-provision-check','data-dda-provision-pencil','data-dda-settle-provision','data-dda-toggle-barcode','data-dda-copy-barcode','data-dda-unlinked-review'];
 function rowControlSelector(element){
  const attribute=ROW_CONTROLS.find(name=>element?.hasAttribute(name));
  return attribute?`[${attribute}="${element.getAttribute(attribute)}"]`:null;
 }
-export function createDdaReportView({document:doc=globalThis.document,data,openMediaCollection,onStartSettlement,syncMonitor,copyText,onClose=()=>{},now=()=>new Date()}={}){
+export function createDdaReportView({document:doc=globalThis.document,data,openMediaCollection,onStartSettlement,syncMonitor,copyText,onRowsChange=()=>{},onClose=()=>{},now=()=>new Date()}={}){
  if(!doc?.body||typeof data?.loadSnapshot!=='function')throw new TypeError('O relatório requer a sessão SharePoint.');
  const make=(tag,cls='',value)=>{const node=doc.createElement(tag);node.className=cls;if(value!==undefined)node.textContent=String(value);return node;};
  const button=(label,text=label)=>{const node=make('button','',text);node.type='button';node.setAttribute('aria-label',label);return node;};
@@ -40,13 +40,14 @@ export function createDdaReportView({document:doc=globalThis.document,data,openM
  const lastUpdate=createFinancialReportLastUpdate(doc);
  let settledDdaIds=new Set(),settlementVerified=false,settlementRequest=null,settlementRenderPending=false,settlementOpening=false;
  const expandedBarcodes=new Set();
- let settlementDialog=null;
+ let settlementDialog=null,unlinkedDialog=null;
  const provisionPicker=createDdaProvisionPicker({document:doc,host:root,service:data.provisionLink,onClose:resumeDeferredRefresh,resolveReturnFocus:replacementControl,onLinked:receipt=>{
   if(destroyed||root.hidden||!rows)return;
   rows=rows.map(row=>row.id===receipt.ddaId?Object.freeze({...row,provisionId:receipt.provisionId}):row);
   settlementVerified=false;
   settledDdaIds.delete(receipt.ddaId);
   renderKeepingPosition();void recheckSettlement();
+  onRowsChange(rows,{id:receipt.ddaId,provisionId:receipt.provisionId});
  }});
  const selected=()=>Object.fromEntries(Object.entries(controls).map(([key,node])=>[key,node.value]));
  const option=(label,value)=>Object.assign(make('option','',label),{value});
@@ -68,7 +69,7 @@ export function createDdaReportView({document:doc=globalThis.document,data,openM
   if(rowControlSelector(focused)&&[doc.body,panel].includes(doc.activeElement))replacementControl(focused).focus({preventScroll:true});
  }
  function renderKeepingPosition(){const position=reportPosition();render();restoreReportPosition(position);}
- function nestedViewOpen(){return settlementDialog||provisionPicker.isOpen||pdfRequest;}
+ function nestedViewOpen(){return settlementDialog||unlinkedDialog||provisionPicker.isOpen||pdfRequest;}
  function renderSettlement(){
   if(!settlementRenderPending||nestedViewOpen())return;
   settlementRenderPending=false;renderKeepingPosition();
@@ -135,6 +136,53 @@ export function createDdaReportView({document:doc=globalThis.document,data,openM
   overlay.remove();panel.inert=false;
   (trigger.isConnected&&!trigger.disabled?trigger:replacementControl(trigger)).focus({preventScroll:true});
   resumeDeferredRefresh();
+ }
+ function closeUnlinkedDialog(){
+  if(!unlinkedDialog)return;
+  const {overlay,trigger}=unlinkedDialog;unlinkedDialog=null;
+  overlay.remove();panel.inert=false;
+  replacementControl(trigger).focus({preventScroll:true});
+  resumeDeferredRefresh();
+ }
+ function askUnlinkedReview(row,trigger){
+  if(destroyed||root.hidden||root.getAttribute('aria-busy')==='true'||nestedViewOpen()||settlementOpening||!rows?.includes(row))return;
+  const reviewed=!row.linkReviewed;
+  const question=reviewed?'Deseja tornar a não vinculação regular?':'Deseja reverter a não vinculação?';
+  const overlay=make('div','gallery-record-overlay dda-payment-overlay');
+  const dialog=make('section','gallery-record-dialog dda-payment-dialog');
+  dialog.dataset.ddaUnlinkedDialog='';dialog.tabIndex=-1;
+  dialog.setAttribute('role','dialog');dialog.setAttribute('aria-modal','true');dialog.setAttribute('aria-label',question);
+  const feedback=make('p','dda-payment-feedback');feedback.setAttribute('role','status');
+  const actions=make('div','gallery-record-dialog-buttons'),no=button('Não'),yes=button('Sim');
+  yes.className='dda-payment-yes';actions.append(no,yes);
+  dialog.append(make('h2','',question),make('p','dda-payment-summary',row.supplier+' · DDA '+row.id),feedback,actions);
+  overlay.append(dialog);
+  const entry=unlinkedDialog={overlay,trigger};
+  no.addEventListener('click',closeUnlinkedDialog);
+  yes.addEventListener('click',async()=>{
+   if(yes.disabled||unlinkedDialog!==entry)return;
+   no.disabled=yes.disabled=true;feedback.setAttribute('role','status');feedback.textContent='Salvando no SharePoint…';dialog.focus();
+   try{
+    const receipt=await data.unlinkedReview.save({row,reviewed,signal:controller.signal});
+    if(unlinkedDialog!==entry)return;
+    if(receipt?.id!==row.id||receipt.reviewed!==reviewed)throw new Error('Confirmação inválida.');
+    rows=rows.map(item=>item.id===row.id?Object.freeze({...item,linkReviewed:reviewed}):item);
+    renderKeepingPosition();closeUnlinkedDialog();onRowsChange(rows,{id:row.id,linkReviewed:reviewed});
+   }catch{
+    if(unlinkedDialog!==entry)return;
+    feedback.setAttribute('role','alert');feedback.textContent='Não foi possível confirmar a alteração. Atualize o relatório e confira a vinculação.';
+    no.disabled=yes.disabled=false;no.focus();
+   }
+  });
+  overlay.addEventListener('keydown',event=>{
+   if(event.key==='Escape'){
+    event.preventDefault();event.stopPropagation();if(!no.disabled)closeUnlinkedDialog();
+   }else if(event.key==='Tab'){
+    event.preventDefault();event.stopPropagation();
+    (no.disabled?dialog:doc.activeElement===no?yes:no).focus();
+   }
+  });
+  panel.inert=true;root.append(overlay);no.focus();
  }
  function askSettlement(row,trigger){
   if(root.hidden||destroyed||root.getAttribute('aria-busy')==='true'||nestedViewOpen()||settlementOpening
@@ -230,10 +278,19 @@ export function createDdaReportView({document:doc=globalThis.document,data,openM
    const pendingSettlement=ddaSettlementPending(row,settledDdaIds);
    if(pendingSettlement)(row.paidBySchedule?schedule:cluster).append(make('small','ddr-settlement-pending','Baixa pendente'));
    status.append(schedule,cluster);
-   const link=make('td','ddr-link');const linkCluster=make('span','ddr-link-cluster',row.provisionId?`ID ${row.provisionId}`:'N/A');linkCluster.dataset.linkState=row.provisionId?'linked':'missing';
-   linkCluster.title=row.provisionId?`Descritivo provisão vinculado: ID ${row.provisionId}`:'Nenhum descritivo provisão vinculado';link.append(linkCluster);
+   const link=make('td','ddr-link');
+   const linkState=row.provisionId?'linked':row.linkReviewed?'regularized':'missing';
+   const canReview=!printAll&&canReviewDdaUnlinked(row)&&typeof data.unlinkedReview?.save==='function';
+   const linkCluster=make(canReview?'button':'span','ddr-link-cluster',row.provisionId?`ID ${row.provisionId}`:row.linkReviewed?'SEM VINCULAÇÃO':'N/A');
+   linkCluster.dataset.linkState=linkState;
+   linkCluster.title=row.provisionId?`Descritivo provisão vinculado: ID ${row.provisionId}`:row.linkReviewed?'Ausência de vinculação regularizada':'Nenhum descritivo provisão vinculado';
+   if(canReview){
+    linkCluster.type='button';linkCluster.dataset.ddaUnlinkedReview=row.id;
+    linkCluster.addEventListener('click',()=>askUnlinkedReview(row,linkCluster));
+   }
+   link.append(linkCluster);
    const pencil=button('Vincular DDA '+row.id+' a descritivo provisão','✎');pencil.className='ddr-provision-pencil';pencil.dataset.ddaProvisionPencil=row.id;
-   pencil.dataset.linkState=linkCluster.dataset.linkState;
+   pencil.dataset.linkState=row.provisionId?'linked':'missing';
    pencil.disabled=printAll||!data.provisionLink||!Number.isSafeInteger(Number(row.id))||Number(row.id)<=0;
    pencil.addEventListener('click',()=>{if(destroyed||root.hidden||root.getAttribute('aria-busy')==='true')return;void provisionPicker.show(row,pencil);});
    link.append(pencil);
@@ -318,7 +375,7 @@ export function createDdaReportView({document:doc=globalThis.document,data,openM
  }
  async function load(initialSnapshot,position,initialSettledDdaIds){
   if(root.hidden||destroyed)return;
-  closeSettlementDialog();provisionPicker.close();pdfRequest=null;controller?.abort();cancelSettlement();
+  closeSettlementDialog();closeUnlinkedDialog();provisionPicker.close();pdfRequest=null;controller?.abort();cancelSettlement();
   const current=++revision,active=controller=new AbortController(),filters=filterRevision;
   const isCurrent=()=>!active.signal.aborted&&current===revision&&!root.hidden&&!destroyed;
   rows=null;settledDdaIds=new Set();settlementVerified=false;printAll=false;
@@ -340,7 +397,7 @@ export function createDdaReportView({document:doc=globalThis.document,data,openM
    settlementVerified=Boolean(verified);
    rows=nextRows;
    for(const row of rows)lastUpdate.update(confirmedFinancialTimestamp(row.checkedAt));
-   populate();render();
+   populate();render();onRowsChange(rows);
    if(position&&filters===filterRevision)restoreReportPosition(position);
   }catch{
    if(!isCurrent())return;
@@ -350,7 +407,7 @@ export function createDdaReportView({document:doc=globalThis.document,data,openM
   }
   finally{if(current===revision){root.setAttribute('aria-busy','false');syncRefreshButton();}}
  }
- function close(){if(root.hidden)return;expandedBarcodes.clear();reloadPending=false;pdfRequest=null;closeSettlementDialog();provisionPicker.close();controller?.abort();cancelSettlement();revision++;rows=null;printAll=false;content.replaceChildren();showNotice();root.hidden=true;doc.body.style.overflow=oldOverflow;if(app)app.inert=oldInert;const target=returnFocus?.isConnected?returnFocus:doc.querySelector('[data-action="open-dda-report"]')||app;target?.focus?.();returnFocus=null;onClose();}
+ function close(){if(root.hidden)return;expandedBarcodes.clear();reloadPending=false;pdfRequest=null;closeSettlementDialog();closeUnlinkedDialog();provisionPicker.close();controller?.abort();cancelSettlement();revision++;rows=null;printAll=false;content.replaceChildren();showNotice();root.hidden=true;doc.body.style.overflow=oldOverflow;if(app)app.inert=oldInert;const target=returnFocus?.isConnected?returnFocus:doc.querySelector('[data-action="open-dda-report"]')||app;target?.focus?.();returnFocus=null;onClose();}
  const filter=()=>{filterRevision++;printAll=false;page=1;if(rows){render();content.scrollTop=0;}showNotice();};
  controls.status.addEventListener('change',filter);controls.bank.addEventListener('change',filter);controls.search.addEventListener('input',filter);refresh.addEventListener('click',()=>void manualRefresh());
  const unsubscribeBank=syncMonitor?.subscribe(state=>{
@@ -363,6 +420,6 @@ export function createDdaReportView({document:doc=globalThis.document,data,openM
  root.addEventListener('click',event=>{if(event.target===root)close();});
  root.addEventListener('keydown',event=>{if(root.hidden)return;if(event.key==='Escape'){event.preventDefault();close();return;}if(event.key!=='Tab')return;const nodes=[...panel.querySelectorAll('button,input,select,[tabindex="0"]')].filter(node=>!node.disabled&&!node.closest('[hidden]')),first=nodes[0],last=nodes.at(-1);if(event.shiftKey&&(doc.activeElement===first||doc.activeElement===panel)){event.preventDefault();last?.focus();}else if(!event.shiftKey&&(doc.activeElement===last||doc.activeElement===panel)){event.preventDefault();first?.focus();}});
  return Object.freeze({element:root,async open({automatic=false,initialSnapshot,initialSettledDdaIds}={}){if(destroyed)throw new Error('Relatório encerrado.');if(!root.hidden)return;returnFocus=doc.activeElement;app=doc.getElementById('app');oldInert=app?.inert||false;oldOverflow=doc.body.style.overflow;doc.body.style.overflow='hidden';if(app)app.inert=true;const initialStatus=automatic?'Não pagos':'Em aberto';controls.status.replaceChildren(option(initialStatus,initialStatus));controls.bank.replaceChildren(option('Todas',''));controls.search.value='';page=1;root.hidden=false;landscape.update();panel.focus();await load(initialSnapshot,undefined,initialSettledDdaIds);},close,
-  async preparePrint(){if(root.hidden||destroyed||!rows||root.getAttribute('aria-busy')==='true')throw new Error('Não foi possível imprimir: aguarde a consulta completa dos DDAs.');const current=revision,filters=filterRevision,position=[content.scrollTop,content.scrollLeft],oldPage=page;printAll=true;render();return()=>{if(root.hidden||destroyed||current!==revision||filters!==filterRevision)return;printAll=false;page=oldPage;render();[content.scrollTop,content.scrollLeft]=position;};},
+  async preparePrint(){if(root.hidden||destroyed||!rows||unlinkedDialog||root.getAttribute('aria-busy')==='true')throw new Error('Não foi possível imprimir: aguarde a consulta completa dos DDAs.');const current=revision,filters=filterRevision,position=[content.scrollTop,content.scrollLeft],oldPage=page;printAll=true;render();return()=>{if(root.hidden||destroyed||current!==revision||filters!==filterRevision)return;printAll=false;page=oldPage;render();[content.scrollTop,content.scrollLeft]=position;};},
   destroy(){if(destroyed)return;close();destroyed=true;unsubscribeBank?.();landscape.destroy();root.remove();}});
 }

@@ -30,6 +30,10 @@ test('DDA date and linkage clusters fit on phones, desktop and print',{timeout:9
     assert.equal(unlinked.dueDateColor,'rgb(113, 16, 30)');
     assert.ok(unlinked.cellBackgrounds.every(background=>background===unlinked.rowBackground));
     assert.equal(state.linkRows.find(row=>row.id==='2').link,'ID 8');
+    const regularized=state.linkRows.find(row=>row.id==='4');
+    assert.equal(regularized.link,'SEM VINCULAÇÃO');
+    assert.equal(regularized.linkBackground,'rgb(234, 248, 238)');
+    assert.ok(regularized.linkFits,JSON.stringify({width,regularized}));
     assert.ok(state.linkRows.filter(row=>row!==unlinked).every(row=>row.rowBackground!==unlinked.rowBackground));
     assert.deepEqual([...new Set(state.schedules.map(badge=>badge.text))].sort(),['AGENDADO','AGENDAMENTO NÃO CONFIRMADO','NÃO AGENDADO']);
     for(const badge of state.schedules){

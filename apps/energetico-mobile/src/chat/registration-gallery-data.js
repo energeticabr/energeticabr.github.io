@@ -7,6 +7,8 @@ import { createRegistrationGalleryFilterData } from "./registration-gallery-filt
 import { FINANCIAL_GALLERY_MODELS } from './financial-gallery-models.js';
 import { ddaPaidManually } from './dda-payment-confirmation.js';
 import { createDdaProvisionLink } from './dda-provision-link.js';
+import { DDA_UNLINKED_REVIEW_FIELD } from './dda-bank-status.js';
+import { createDdaUnlinkedReview } from './dda-unlinked-review.js';
 import { createNfeOrderLink, NFE_ORDER_FIELD } from './nfe-order-link.js';
 import { createSicoobOrderLink } from './sicoob-order-link.js';
 import { createNfeProposalData } from './nfe-proposal-data.js';
@@ -60,7 +62,7 @@ export const REGISTRATION_GALLERY_MODELS = Object.freeze({
   dda: Object.freeze({
     title: "GALERIA DDA", listName: "DDAS SICOOB", aliases: ["DDAS SICOOB"],
     nativeCard: true, readOnly: true, readTransport: "rest", showAttachments: true, recordLabel: "DDA",
-    restReadFields: ["ID", "Title", "CHAVE_DDA", "PGTO_CONFIRMADO", "PGTO_CONFIRMADO_EM", "PGTO_CONFIRMADO_POR", "VENCIMENTO", "EMISSAO", "VALOR", "SITUACAO", "STATUS_DDA", "STATUS_CONSULTADO_EM", "DDA_CICLO_AGENDAMENTO", "CNPJ_FORNECEDOR", "DOCUMENTO", "BANCO", "VALOR_PAGAMENTO", "NOSSO_NUMERO", "LINHA_DIGITAVEL", "CODIGO_BARRAS", "PAGADOR", "CNPJ_PAGADOR", "BLOQUEADO", "MENSAGEM", "ULTIMA_CONSULTA", "DESCRITIVOPROVIS_x00c3_O"],
+    restReadFields: ["ID", "Title", "CHAVE_DDA", "PGTO_CONFIRMADO", "PGTO_CONFIRMADO_EM", "PGTO_CONFIRMADO_POR", "VENCIMENTO", "EMISSAO", "VALOR", "SITUACAO", "STATUS_DDA", "STATUS_CONSULTADO_EM", "DDA_CICLO_AGENDAMENTO", "CNPJ_FORNECEDOR", "DOCUMENTO", "BANCO", "VALOR_PAGAMENTO", "NOSSO_NUMERO", "LINHA_DIGITAVEL", "CODIGO_BARRAS", "PAGADOR", "CNPJ_PAGADOR", "BLOQUEADO", "MENSAGEM", "ULTIMA_CONSULTA", "DESCRITIVOPROVIS_x00c3_O", DDA_UNLINKED_REVIEW_FIELD],
     restExpandSystemFields: false,
     searchPlaceholder: "Pesquisar fornecedor, documento ou ID",
     fields: ["FORNECEDOR", "VENCIMENTO", "EMISSAO", "VALOR", "SITUACAO", "CNPJ_FORNECEDOR", "DOCUMENTO", "BANCO", "VALOR_PAGAMENTO", "NOSSO_NUMERO", "LINHA_DIGITAVEL", "CODIGO_BARRAS", "PAGADOR", "CNPJ_PAGADOR", "BLOQUEADO", "MENSAGEM", "ULTIMA_CONSULTA", "DESCRITIVOPROVIS_x00c3_O", "ID"],
@@ -434,7 +436,7 @@ export function createRegistrationGalleryData({ kind, ...options } = {}) {
           return result;
         },
       } : {}),
-      ...(kind === 'dda' ? { loadItem: data.loadItem, provisionLink: createDdaProvisionLink({
+      ...(kind === 'dda' ? { loadItem: data.loadItem, unlinkedReview: ddaUnlinkedReview(), provisionLink: createDdaProvisionLink({
         repository: galleryRepository({ ...options, siteConfig: linkSiteConfig, strictSnapshot: false }),
         siteKey: options.siteKey || 'personal', assertSession: options.assertSession,
       }) } : {}),
@@ -536,6 +538,14 @@ export function createRegistrationGalleryData({ kind, ...options } = {}) {
       return kind === 'financial_movement' ? createFinancialMovementEditor(editor, { repository,
         siteKey: options.siteKey || 'personal', assertSession: options.assertSession }) : editor;
     });
+  }
+  function ddaUnlinkedReview() {
+    const siteKey = options.siteKey || 'personal';
+    const siteConfig = { ...options.siteConfig, [siteKey]: {
+      ...options.siteConfig[siteKey], readTransport: 'rest', writeTransport: 'rest',
+    } };
+    return createDdaUnlinkedReview({ repository: galleryRepository({ ...options, siteConfig }),
+      siteKey, assertSession: options.assertSession });
   }
   function financialMovementOrderLink() {
     const siteKey = options.siteKey || 'personal';

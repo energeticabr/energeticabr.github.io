@@ -2,6 +2,7 @@ import { createSefazSyncSession } from './ui/sefaz-sync-session.js';
 import { resumeConversation } from './chat/resume-conversation.js';
 import { createProvisionSettlementParentSession } from './ui/provision-settlement-parent-session.js';
 import { createDdaAutoReminder } from './chat/dda-auto-reminder.js';
+import { hasUpcomingUnlinkedDda, normalizeDdaReportRows } from './chat/dda-report-model.js';
 import { createTrancidAutoReminder } from './chat/trancid-auto-reminder.js';
 import { refreshDdaBank } from './chat/dda-bank-refresh.js';
 import { loadDdaPaymentLaunchFiles, waitForDdaPaymentLaunch, reconcileDdaLaunchAttachments } from './chat/dda-payment-launch.js';
@@ -1124,6 +1125,7 @@ export function createAppController({
   sefazSyncSessionFactory = createSefazSyncSession,
   sicoobSyncSessionFactory = createSicoobSyncSession,
   enableDdaReminders = false,
+  enableDdaMenuAlert = false,
   enableTrancidReminders = false,
   trancidReportFactory = defaultTrancidReportFactory,
   trancidReportDataFactory = defaultTrancidReportDataFactory,
@@ -1621,6 +1623,63 @@ export function createAppController({
   let pendingProvisionLastAutoShownAt = null;
   let pendingProvisionEveDismissals = null;
   let ddaReminderInteraction = 0;
+  let ddaMenuRows = null, ddaMenuVersion = 0, ddaMenuRequest = null;
+  function ddaMenuHasAlert() {
+    return Boolean(account && !stopped && ddaMenuRows?.account === account &&
+      ddaMenuRows.revision === sessionRevision && hasUpcomingUnlinkedDda(ddaMenuRows.rows));
+  }
+  function updateDdaMenuRows(rows) {
+    const wasAlert = ddaMenuHasAlert();
+    ddaMenuRows = { account, revision: sessionRevision, rows };
+    if (wasAlert !== ddaMenuHasAlert()) render();
+  }
+  function resetDdaMenuAlert() {
+    abortDdaMenuRequest();
+    ddaMenuRows = null;
+    ddaMenuVersion++;
+  }
+  function abortDdaMenuRequest() {
+    ddaMenuRequest?.controller.abort();
+    ddaMenuRequest = null;
+  }
+  function loadDdaMenuSnapshot() {
+    if (!account || stopped || sessionStatus !== 'authenticated') return Promise.reject(new Error('DDA_SESSION_ENDED'));
+    if (ddaMenuRequest) return ddaMenuRequest.promise;
+    const owner = account, revision = sessionRevision, menuVersion = ddaMenuVersion;
+    const controller = new AbortController(), { signal } = controller;
+    const assertSession = () => {
+      signal.throwIfAborted();
+      if (stopped || account !== owner || revision !== sessionRevision) throw new Error('DDA_SESSION_ENDED');
+    };
+    const request = { controller };
+    ddaMenuRequest = request;
+    const load = async () => {
+      const data = await registrationGalleryDataFactory({ kind: 'dda', assertSession,
+        accountKey: owner.homeAccountId || owner.localAccountId || owner.idTokenClaims?.oid || '',
+        userEmail: owner.username || owner.email || '',
+        tokenProvider: async scopes => { assertSession(); const token = await auth.getToken(scopes); assertSession(); return token; },
+      });
+      assertSession();
+      const snapshot = await data.loadSnapshot({ refresh: true, signal });
+      assertSession();
+      if (enableDdaMenuAlert && menuVersion === ddaMenuVersion) updateDdaMenuRows(normalizeDdaReportRows(snapshot));
+      return { snapshot, provisionLink: data.provisionLink };
+    };
+    let timer;
+    const bounded = new Promise((_, reject) => {
+      signal.addEventListener('abort', () => reject(signal.reason), { once: true });
+      timer = setTimeout(() => controller.abort(), 25_000);
+      timer.unref?.();
+    });
+    request.promise = Promise.race([load(), bounded]).finally(() => {
+      clearTimeout(timer);
+      if (ddaMenuRequest === request) ddaMenuRequest = null;
+    });
+    return request.promise;
+  }
+  function refreshDdaMenuAlert() {
+    if (enableDdaMenuAlert) void loadDdaMenuSnapshot().catch(() => {});
+  }
   const ddaPaymentLaunches = new Map();
   let ddaPaymentLaunchAbort = null;
   let sefazSyncSession = null;
@@ -1651,9 +1710,15 @@ export function createAppController({
     ddaSyncSession=ddaSyncSessionFactory({client,isCurrent,accountKey:owner.homeAccountId||owner.localAccountId||owner.idTokenClaims?.oid||owner.username||'',
       loadRows:async({signal})=>{
         assertSession();
+        const menuVersion = ddaMenuVersion;
         const data=await registrationGalleryDataFactory({kind:'dda',assertSession,accountKey:owner.homeAccountId||owner.localAccountId||owner.idTokenClaims?.oid||owner.username||'',
           userEmail:owner.username||owner.email||'',tokenProvider:async scopes=>{assertSession();const token=await auth.getToken(scopes);assertSession();return token;}});
-        const snapshot=await data.loadSnapshot({refresh:true,signal});assertSession();return snapshot.rows;
+        const snapshot=await data.loadSnapshot({refresh:true,signal});assertSession();
+        if (enableDdaMenuAlert && menuVersion === ddaMenuVersion && !signal?.aborted) {
+          ddaMenuVersion++;
+          updateDdaMenuRows(normalizeDdaReportRows(snapshot));
+        }
+        return snapshot.rows;
       }});
     return ddaSyncSession;
   }
@@ -1800,15 +1865,9 @@ export function createAppController({
         if (!owner || stopped || account !== owner || revision !== sessionRevision || signal.aborted || interaction !== ddaReminderInteraction) throw new Error('DDA_SESSION_ENDED');
       };
       assertSession();
-      const data = await registrationGalleryDataFactory({ kind: 'dda', assertSession,
-        accountKey: owner.homeAccountId || owner.localAccountId || owner.idTokenClaims?.oid || '',
-        userEmail: owner.username || owner.email || '',
-        tokenProvider: async scopes => { assertSession(); const token = await auth.getToken(scopes); assertSession(); return token; },
-      });
+      const data = await loadDdaMenuSnapshot();
       assertSession();
-      const snapshot = await data.loadSnapshot({ refresh: true, signal });
-      assertSession();
-      return { snapshot, provisionLink: data.provisionLink };
+      return data;
     },
     open: options => {
       const interaction = ddaReminderInteraction;
@@ -2486,6 +2545,7 @@ export function createAppController({
     else cancelAttachmentReminder();
     await refreshPendingProvisionSnapshot().then(refreshPendingConstructionDiaries);
     void ddaAutoReminder.refresh();
+    refreshDdaMenuAlert();
     return true;
   }
 
@@ -5442,6 +5502,7 @@ export function createAppController({
     const signaturePlacement = syncSignaturePlacement();
     view.render({
       ...state,
+      ddaUpcomingUnlinked: ddaMenuHasAlert(),
       rhidMascot: rhidMascot ? { ...rhidMascot } : null,
       diaryAttachmentProgress,
       attachmentUploadProgress,
@@ -5560,10 +5621,15 @@ export function createAppController({
       homeAttachmentTransferPending = true;
       if (!pendingAutomaticExit) attachmentTransferCompleted = false;
     }
-    return sendText("", hasUnsubmittedAttachments ? PORTAL_TRANSFER_ATTACHMENTS_ID : PORTAL_MAIN_MENU_CONFIRM_ID, {
+    const revision = sessionRevision;
+    const returning = sendText("", hasUnsubmittedAttachments ? PORTAL_TRANSFER_ATTACHMENTS_ID : PORTAL_MAIN_MENU_CONFIRM_ID, {
       autoDiscardExit: true, requireMenuResult: true, preserveHomeAttachments: true,
       ...(hasUnsubmittedAttachments ? { homeAttachmentIds: pendingHomeExit.attachmentIds, expectedContextId: pendingHomeExit.contextId } : {}),
     });
+    if (enableDdaMenuAlert) void returning.then(sent => {
+      if (sent && revision === sessionRevision) refreshDdaMenuAlert();
+    }).catch(() => {});
+    return returning;
   }
 
   function unsubmittedUserAttachments(items = []) {
@@ -10133,6 +10199,17 @@ export function createAppController({
             ...(sourceKind === 'financial_movement' ? { syncMonitor: ensureFinancialSync('sicoob') } : {}),
             ...(isDdaReport ? {
               onClose: () => ddaAutoReminder.dismiss(),
+              onRowsChange: (rows, change) => {
+                assertSession();
+                // A reminder started before a report save must not restore the old color.
+                ddaMenuVersion++;
+                const current = ddaMenuRows?.account === account && ddaMenuRows.revision === sessionRevision ? ddaMenuRows.rows : null;
+                updateDdaMenuRows(change && current ? current.map(row => row.id === change.id ? { ...row, ...change } : row) : rows);
+                if (change && enableDdaMenuAlert) {
+                  abortDdaMenuRequest();
+                  refreshDdaMenuAlert();
+                }
+              },
               onStartSettlement: id => {
                 assertSession();
                 const panel = registrationGalleries.get(kind);
@@ -11207,6 +11284,7 @@ export function createAppController({
   }
 
   async function signIn() {
+    resetDdaMenuAlert();
     disposeDdaSyncSession();
     disposeSefazSyncSession();
     ddaAutoReminder.reset();
@@ -11261,6 +11339,7 @@ export function createAppController({
       lastPresenceValidationDate = "";
       legacyDocumentLineFinalizeOption = null;
       sessionStatus = "authenticated";
+      refreshDdaMenuAlert();
       resumeDdaSync();
       resumeSefazSync();
       pendingProvisionLastAutoShownAt = null;
@@ -11320,6 +11399,7 @@ export function createAppController({
   }
 
   async function signOut() {
+    resetDdaMenuAlert();
     provisionSettlementParent.destroy();
     galleryCreationReturn = null;
     disposeDdaSyncSession();
@@ -12802,6 +12882,7 @@ export function createAppController({
     }
 
     sessionStatus = account ? "authenticated" : "signed-out";
+    refreshDdaMenuAlert();
     resumeDdaSync();
     resumeSefazSync();
     pendingProvisionLastAutoShownAt = null;
@@ -12876,6 +12957,7 @@ export function createAppController({
   }
 
   function stop() {
+    resetDdaMenuAlert();
     provisionSettlementParent.destroy();
     galleryCreationReturn = null;
     disposeDdaSyncSession();

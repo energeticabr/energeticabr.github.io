@@ -1,5 +1,7 @@
 import { ddaPaidManually } from './dda-payment-confirmation.js';
 
+export const DDA_UNLINKED_REVIEW_FIELD = 'DDA_x0020_sem_x0020_vincula_x00e';
+
 const statusLabels = new Map([
   ['em aberto', 'Em aberto'],
   ['agendado', 'Agendado'],
