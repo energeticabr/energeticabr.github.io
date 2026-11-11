@@ -33,8 +33,11 @@ const currency = new Intl.NumberFormat('pt-BR', { style: 'currency', currency: '
 const text = value => String(value ?? '').trim();
 const dateLabel = value => value ? value.split('-').reverse().join('/') : '—';
 const pendingRecipient = row => row.recipient === FINANCIAL_MOVEMENT_PENDING_RECIPIENT;
-const displayedRecipient = row => (pendingRecipient(row) && row.orderSupplier) || row.recipient;
-const boletoSupplier = row => row.type === 'Boleto' && !pendingRecipient(row) ? row.orderSupplier : '';
+const displayedRecipient = row => {
+  if (!row.orderSupplier) return row.recipient;
+  if (pendingRecipient(row)) return row.orderSupplier;
+  return row.type === 'Boleto' ? `${row.recipient} (${row.orderSupplier})` : row.recipient;
+};
 
 function projectTransactions(snapshot) {
   if (!Array.isArray(snapshot?.rows) || snapshot.hasMore === true || snapshot.complete === false) {
@@ -185,7 +188,6 @@ export function createSicoobTransactionReportView({ document: doc = globalThis.d
       if (!cell) return;
       const row = cell.parentElement;
       row.querySelector('.ddr-supplier-name').textContent = displayedRecipient(transaction);
-      renderBoletoSupplier(row.querySelector('.ddr-money'), transaction);
       renderOrderLink(cell, transaction);
     },
   });
@@ -254,7 +256,7 @@ export function createSicoobTransactionReportView({ document: doc = globalThis.d
 
   function matchesSearch(row, query) {
     return !query || includesSearchText(normalizeSearchText([
-      row.searchText, displayedRecipient(row), boletoSupplier(row), row.orderId && `pedido id ${row.orderId}`,
+      row.searchText, displayedRecipient(row), row.orderId && `pedido id ${row.orderId}`,
     ].join(' ')), query);
   }
 
@@ -265,19 +267,6 @@ export function createSicoobTransactionReportView({ document: doc = globalThis.d
     const query = normalizeSearchText(controls.search.value);
     return rows.filter(row => (!from || row.date >= from) && (!to || (row.date && row.date <= to))
       && (!account || row.payerAccount === account) && matchesSearch(row, query));
-  }
-
-  function renderBoletoSupplier(cell, transaction) {
-    const supplier = boletoSupplier(transaction);
-    const label = cell.querySelector('.sicoob-transaction-boleto-supplier');
-    if (!supplier) {
-      label?.remove();
-      return;
-    }
-    const value = `(${supplier})`;
-    if (label) label.textContent = value;
-    else cell.insertBefore(make('small', 'sicoob-transaction-boleto-supplier', value),
-      cell.querySelector('.sicoob-transaction-receipt'));
   }
 
   function renderOrderLink(cell, transaction, interactive = true) {
@@ -353,7 +342,6 @@ export function createSicoobTransactionReportView({ document: doc = globalThis.d
       const value = row.insertCell();
       value.className = 'ddr-money';
       value.textContent = transaction.value === null ? '—' : currency.format(transaction.value);
-      renderBoletoSupplier(value, transaction);
       if (!printAll && transaction.hasReceipt && typeof openMediaCollection === 'function') {
         const receipt = button(`Abrir comprovante da transação ${transaction.id}`, '');
         receipt.className = 'sicoob-transaction-receipt';
