@@ -9,7 +9,8 @@ function Read-ResponseJson($Response) {
  return ConvertFrom-Json -InputObject $content -DateKind String
 }
 $config=Read-PrivateJson (Join-Path $env:DDA_PRIVATE_ROOT 'sharepoint-bank-credentials.dpapi')
-$dedicated=Read-PrivateJson (Join-Path $env:DDA_PRIVATE_ROOT 'sicoob-movements-credentials.dpapi')
+$dedicated=Read-PrivateJson (Join-Path $env:DDA_PRIVATE_ROOT 'sicoob-webhook-credentials.dpapi')
+if (!$dedicated.Count) {$dedicated=Read-PrivateJson (Join-Path $env:DDA_PRIVATE_ROOT 'sicoob-movements-credentials.dpapi')}
 if (!$dedicated.Count -or $dedicated.cnpj -cne $config.cnpj -or $dedicated.accountNumber -cne $config.accountNumber){throw 'SICOOB_ACCOUNT_MISMATCH'}
 $cert=Get-CompanyClientCertificate -Cnpj $config.cnpj
 try {
