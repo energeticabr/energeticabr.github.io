@@ -26,8 +26,13 @@ test('PDF repair only replaces its existing attachment after XML/status identity
   assert.equal(p.Conferir_PDF.runAfter.Baixar_PDF[0],'Succeeded');
   assert.equal(p.Conferir_estado_final.runAfter.Nota_depois[0],'Succeeded');
   assert.ok(!/CreateAttachment|CreateFile|MERGE|PatchItem|CreateItem|whatsapp|gateway_outbox/i.test(JSON.stringify(d)));
-  const key='1'.repeat(50),sha='a'.repeat(64),doc={key,xmlSha256:sha,danfe:{fileName:`DANFSe-${key}-${sha.slice(0,16)}.pdf`,sha256:'b'.repeat(64)}};
+  const key='1'.repeat(50),sha='a'.repeat(64),doc={key,xmlSha256:sha,danfe:{fileName:`DANFSe-${key}-${sha.slice(0,16)}.pdf`,sha256:'b'.repeat(64),source:'LOCAL_DANFSE_NACIONAL'}};
   assert.deepEqual(evaluate(p.Conferir_identidade.inputs.content,{items:{Documentos:doc}}),{valid:true});
+  for(const source of [undefined,null,'','XML_MIRROR']){
+   const stale=structuredClone(doc);
+   if(source===undefined)delete stale.danfe.source;else stale.danfe.source=source;
+   assert.deepEqual(evaluate(p.Conferir_identidade.inputs.content,{items:{Documentos:stale}}),{});
+  }
   assert.deepEqual(evaluate(p.Conferir_identidade.inputs.content,{items:{Documentos:{...doc,key:"'"+'1'.repeat(49)}}}),{});
   assert.deepEqual(evaluate(p.Conferir_XML.inputs.content,{items:{Documentos:{xmlBase64:'abc'}},body:{Baixar_XML:{$content:'abc'}}}),{valid:true});
   assert.deepEqual(evaluate(p.Conferir_XML.inputs.content,{items:{Documentos:{xmlBase64:'abc'}},body:{Baixar_XML:{$content:'def'}}}),{});
@@ -37,6 +42,7 @@ test('PDF repair only replaces its existing attachment after XML/status identity
   assert.deepEqual(evaluate(p.Conferir_estado.inputs.content,{items:{Documentos:{...doc,expectedSituation:'CANCELADA'}},outputs:{Nota:{...note,XML_URL:{Url:'https://outside.example/other.xml'}}}}),{});
   const cteKey='31261012345678000123570010000001231000001234';
   const cteDoc={...doc,key:cteKey,expectedSituation:'AUTORIZADA',danfe:{...doc.danfe,fileName:`DACTE-${cteKey}-${sha.slice(0,16)}.pdf`}};
+  delete cteDoc.danfe.source;
   const cteNote={...note,CHAVE_ACESSO:cteKey,SITUACAO:'AUTORIZADA',TIPO_FISCAL:'CT-e',MODELO:'57',TIPO_DOCUMENTO:'cteProc',XML_URL:{Url:`https://example.sharepoint.com${f.config.libraryPath}/${cteKey}-000000000000002-${sha.slice(0,16)}.xml`},DANFE_URL:{Url:`https://example.sharepoint.com/sites/energetica/Lists/NOTAS_FISCAIS_SEFAZ/Attachments/1/${cteDoc.danfe.fileName}`}};
   const identity=value=>evaluate(p.Conferir_identidade.inputs.content,{items:{Documentos:value}});
   const state=(value,row)=>evaluate(p.Conferir_estado.inputs.content,{items:{Documentos:value},outputs:{Nota:row}});
