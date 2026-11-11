@@ -1,5 +1,6 @@
 import { invoiceXmlFacts, NFE_REPORT_DOCUMENT_TYPES, NFE_SUPPLIER_REGIMES, projectNfeRows, rankNfeOrderOptions } from '../chat/nfe-report-model.js';
 import { nfeOrderId } from '../chat/nfe-order-link.js';
+import { sefazProgress } from '../chat/sefaz-sync-receipt.js';
 import { createReportLinkPicker } from './dda-provision-picker.js';
 import { createNfeProposalView } from './nfe-proposal-view.js';
 import { addReportCloseControl } from './report-close-control.js';
@@ -51,7 +52,7 @@ function classifyFiscalFacts(row, facts) {
   return { regime:facts?.regime || '', retention, cno, cnoDetail };
 }
 
-export function createNfeReportView({ document:doc = globalThis.document, data, openMediaCollection }) {
+export function createNfeReportView({ document:doc = globalThis.document, data, openMediaCollection, syncMonitor }) {
   const make = (tag, className = '', text) => {
     const element = doc.createElement(tag);
     if (className) element.className = className;
@@ -77,9 +78,9 @@ export function createNfeReportView({ document:doc = globalThis.document, data, 
   logo.alt = 'Energética Construtora';
   const title = make('h2', '', 'RELATÓRIO DE NOTAS FISCAIS');
   title.id = 'nfe-report-title';
-  const refresh = button('⟳', () => void load(true), 'pl-refresh');
+  const refresh = button('⟳', () => void manualRefresh(), 'pl-refresh');
   refresh.setAttribute('aria-label', 'Atualizar notas fiscais');
-  refresh.title = 'Atualizar notas fiscais';
+  refresh.title = syncMonitor ? 'Sincronizar notas fiscais com a SEFAZ' : 'Atualizar notas fiscais';
   const closeButton = make('button');
   closeButton.setAttribute('aria-label', 'Fechar notas fiscais');
   header.append(logo, refresh, title);
@@ -123,6 +124,10 @@ export function createNfeReportView({ document:doc = globalThis.document, data, 
 
   const feedback = make('p', 'nfe-feedback');
   feedback.setAttribute('role', 'status');
+  const syncFeedback = make('p', 'nfe-feedback nfe-sync-feedback');
+  syncFeedback.hidden = true;
+  syncFeedback.dataset.reportScreenOnly = '';
+  syncFeedback.setAttribute('role', 'status');
   const pdfFeedback = make('p', 'nfe-pdf-feedback');
   pdfFeedback.hidden = true;
   pdfFeedback.dataset.reportScreenOnly = '';
@@ -147,7 +152,7 @@ export function createNfeReportView({ document:doc = globalThis.document, data, 
   pager.append(previous, pageLabel, next);
   body.append(metrics, feedback, table, pager);
   const report = make('div', 'pl-report nfe-content');
-  report.append(toolbar, pdfFeedback, body);
+  report.append(toolbar, syncFeedback, pdfFeedback, body);
   panel.append(report);
   root.append(panel);
   doc.body.append(root);
@@ -155,6 +160,7 @@ export function createNfeReportView({ document:doc = globalThis.document, data, 
   addReportCloseControl({ root, toolbar, onClose:close, button:closeButton });
 
   let rows = null, page = 1, request, pageRequest, pageFacts, pdfRequest, returnFocus, app, oldInert, oldOverflow;
+  let fiscalRunning = Boolean(syncMonitor?.running), fiscalStarting = false, loading = false, fiscalReloadPending = false;
   const xmlFacts = new Map();
   const orderLink = data.orderLink;
   const proposal = data.proposal && createNfeProposalView({
@@ -172,6 +178,7 @@ export function createNfeReportView({ document:doc = globalThis.document, data, 
     rowAmount:row => row.total,
     resolveReturnFocus:trigger => list.querySelector(`[data-invoice-id="${trigger?.dataset.invoiceLink}"] .nfe-link-edit`) || closeButton,
     onLinked:showLinked,
+    onClose:reloadFiscalRows,
   });
 
   function showLinked({ invoiceId, orderId }) {
@@ -427,7 +434,11 @@ export function createNfeReportView({ document:doc = globalThis.document, data, 
     if (pdfRequest || !request || request.signal.aborted) return;
     const signal = request.signal, token = pdfRequest = {};
     const isCurrent = () => pdfRequest === token && !signal.aborted;
-    const finish = () => { if (isCurrent()) pdfRequest = null; };
+    const finish = () => {
+      if (!isCurrent()) return;
+      pdfRequest = null;
+      reloadFiscalRows();
+    };
     let opened = false;
     trigger.disabled = true;
     pdfFeedback.hidden = true;
@@ -466,30 +477,65 @@ export function createNfeReportView({ document:doc = globalThis.document, data, 
     }
   }
 
+  function syncRefreshButton() {
+    refresh.disabled = loading || fiscalStarting || fiscalRunning;
+  }
+
+  function showFiscalNotice(text) {
+    syncFeedback.textContent = text;
+    syncFeedback.hidden = !text;
+  }
+
+  async function manualRefresh() {
+    if (root.hidden || refresh.disabled || pdfRequest || picker?.isOpen) return;
+    if (!syncMonitor) return load(true);
+    fiscalStarting = true;
+    syncRefreshButton();
+    showFiscalNotice('Solicitando consulta à SEFAZ…');
+    try {
+      await syncMonitor.start();
+    } catch (error) {
+      if (!root.hidden) showFiscalNotice(error?.message || 'Não foi possível iniciar a consulta à SEFAZ. Tente novamente.');
+    } finally {
+      fiscalStarting = false;
+      syncRefreshButton();
+    }
+  }
+
+  function reloadFiscalRows() {
+    if (fiscalReloadPending && !root.hidden && !pdfRequest && !picker?.isOpen) void load(true);
+  }
+
   async function load(refreshSource = false) {
     request?.abort();
     request = new AbortController();
     const { signal } = request;
-    rows = null;
-    xmlFacts.clear();
-    pdfRequest = null;
     pdfFeedback.hidden = true;
+    loading = true;
     root.setAttribute('aria-busy', 'true');
-    refresh.disabled = true;
-    filters.hidden = true;
-    feedback.textContent = 'Consultando notas fiscais…';
-    render();
+    syncRefreshButton();
+    if (!rows) {
+      filters.hidden = true;
+      feedback.textContent = 'Consultando notas fiscais…';
+      render();
+    }
     try {
       const snapshot = await data.loadSnapshot({ signal, refresh:refreshSource });
       if (signal.aborted) return;
       rows = projectNfeRows(snapshot.rows);
+      if (refreshSource) fiscalReloadPending = false;
+      xmlFacts.clear();
+      const { scrollTop, scrollLeft } = body;
       render();
+      body.scrollTop = scrollTop;
+      body.scrollLeft = scrollLeft;
     } catch {
       if (!signal.aborted) feedback.textContent = 'Não foi possível consultar as notas fiscais. Use Atualizar para tentar novamente.';
     } finally {
       if (!signal.aborted) {
+        loading = false;
         root.setAttribute('aria-busy', 'false');
-        refresh.disabled = false;
+        syncRefreshButton();
         filters.hidden = !rows;
       }
     }
@@ -497,14 +543,15 @@ export function createNfeReportView({ document:doc = globalThis.document, data, 
 
   function close() {
     if (root.hidden) return;
+    root.hidden = true;
     proposal?.close();
     picker?.close();
     request?.abort();
     pageRequest?.abort();
+    pdfRequest = null;
     rows = null;
     xmlFacts.clear();
     list.replaceChildren();
-    root.hidden = true;
     if (app) app.inert = oldInert;
     doc.body.style.overflow = oldOverflow;
     const target = returnFocus?.isConnected ? returnFocus : doc.querySelector('[data-action="open-nfe-report"]');
@@ -526,6 +573,17 @@ export function createNfeReportView({ document:doc = globalThis.document, data, 
     if (!event.shiftKey && doc.activeElement === last) { event.preventDefault(); first?.focus(); }
   });
 
+  const unsubscribeFiscal = syncMonitor?.subscribe(state => {
+    const completed = fiscalRunning && !state.running;
+    fiscalRunning = state.running;
+    if (completed) fiscalReloadPending = true;
+    showFiscalNotice(state.notice || (state.running
+      ? state.latest?.sources ? sefazProgress(state.latest) : 'Consulta à SEFAZ em andamento.'
+      : ''));
+    syncRefreshButton();
+    if (completed) reloadFiscalRows();
+  });
+
   return Object.freeze({
     element:root,
     capturePrint,
@@ -545,9 +603,9 @@ export function createNfeReportView({ document:doc = globalThis.document, data, 
       body.scrollTop = 0;
       body.scrollLeft = 0;
       closeButton.focus();
-      await load();
+      await load(fiscalReloadPending);
     },
     close,
-    destroy() { close(); landscape.destroy(); root.remove(); },
+    destroy() { unsubscribeFiscal?.(); close(); landscape.destroy(); root.remove(); },
   });
 }
