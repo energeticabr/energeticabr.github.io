@@ -16,6 +16,22 @@ const DDA_COPY = {
  loadError:'Não foi possível carregar os descritivos. Tente novamente.',
 };
 
+export function createReportLinkComparison(doc,value,matches,label,reference){
+ const chip=doc.createElement('span');
+ chip.className='report-link-comparison';
+ chip.textContent=value;
+ chip.dataset.match=String(matches);
+ chip.title=`${label} ${matches?'confere com':'sem correspondência com'} ${reference}`;
+ return chip;
+}
+
+function appendDdaComparisons(node,amount,totalMatch,{due,dueMatch}){
+ const doc=node.ownerDocument;
+ node.append(' · ',createReportLinkComparison(doc,amount,totalMatch,'Valor','o valor do DDA'),' · ',
+  due?'Previsto ':'',createReportLinkComparison(doc,due?due.split('-').reverse().join('/'):'Sem data prevista',
+   dueMatch,'Data prevista','o vencimento do DDA'));
+}
+
 export function createDdaProvisionPicker({service, ...options}){
  return createReportLinkPicker({
   ...options, copy:DDA_COPY,
@@ -24,6 +40,11 @@ export function createDdaProvisionPicker({service, ...options}){
   sharedLinkQuestion:'Tem certeza que deseja atribuir dois DDAS ao mesmo descritivo provisão?',
   currentLink:row=>row.provisionId,
   rowAmount:row=>row.amount,
+  renderOptionLabel(node,item,amount){
+   node.className='report-link-option-text';
+   node.textContent=item.label || `#${item.id} · ${item.supplier}`;
+   appendDdaComparisons(node,amount,item.totalMatch,item);
+  },
  });
 }
 
@@ -77,10 +98,15 @@ export function createReportLinkPicker({document:doc,host,copy,loadOptions,saveL
    for(const item of visible){const label=el('label','dda-provision-option');if(item.recommended)label.append(el('strong','dda-provision-star',copy.recommendation || '★ MAIS PROVÁVEL'));
     const choice=el('input');choice.type='radio';choice.name='dda-provision-choice';choice.value=item.id;choice.checked=entry.selected===item.id;choice.addEventListener('change',()=>{entry.selected=item.id;save.disabled=selectCurrent&&item.id===linkedId;for(const option of list.children)option.toggleAttribute('data-edit-changed',option===label&&item.id!==linkedId);});
     const text=optionLabel(item);
-    if(item.due)text.append(` · Previsto ${String(item.due).slice(0,10).split('-').reverse().join('/')}`);
+    if(!renderOptionLabel&&item.due)text.append(` · Previsto ${String(item.due).slice(0,10).split('-').reverse().join('/')}`);
     label.toggleAttribute('data-edit-changed',choice.checked&&item.id!==linkedId);
     label.append(choice,text);
-    if(item.matchedProvision){const line=item.matchedProvision;label.append(el('span','dda-provision-line-match',`Provisão #${line.id} · ${money(line.amount)}${line.due?' · Previsto '+String(line.due).slice(0,10).split('-').reverse().join('/'):''} · mesmo valor deste DDA`));}
+    if(item.matchedProvision){
+     const line=item.matchedProvision,match=el('span','dda-provision-line-match',`Provisão #${line.id}`);
+     appendDdaComparisons(match,money(line.amount),true,line);
+     match.append(' · mesmo valor deste DDA');
+     label.append(match);
+    }
     if(item.matchReason==='supplier')label.append(el('span','dda-provision-name-match','Nome do fornecedor semelhante ao DDA'));
     if(item.matchDetail)label.append(el('span','dda-provision-name-match',item.matchDetail));
     list.append(label);

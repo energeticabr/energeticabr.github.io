@@ -6,7 +6,7 @@ import {
 import { registrationDateKey, registrationNumber, registrationRawField, REGISTRATION_GALLERY_MODELS } from '../chat/registration-gallery-data.js';
 import { confirmedFinancialTimestamp } from '../chat/financial-update-time.js';
 import { rankSicoobOrderOptions, SICOOB_ORDER_FIELD, sicoobOrderId } from '../chat/sicoob-order-link.js';
-import { createReportLinkPicker } from './dda-provision-picker.js';
+import { createReportLinkComparison, createReportLinkPicker } from './dda-provision-picker.js';
 import { addReportCloseControl } from './report-close-control.js';
 import { bindReportLandscape } from './report-landscape.js';
 import { PDF_ATTACHMENT_ICON } from './report-pdf-attachment-icon.js';
@@ -157,12 +157,6 @@ export function createSicoobTransactionReportView({ document: doc = globalThis.d
   let loadNotice = '';
   const app = doc.getElementById('app');
   const orderLink = data.orderLink;
-  function orderComparison(label, value, matches) {
-    const chip = make('span', 'sicoob-order-comparison', value);
-    chip.dataset.match = String(matches);
-    chip.title = `${label} ${matches ? 'confere com a transação' : 'sem correspondência com a transação'}`;
-    return chip;
-  }
   const picker = orderLink && createReportLinkPicker({
     document: doc,
     host: root,
@@ -170,11 +164,11 @@ export function createSicoobTransactionReportView({ document: doc = globalThis.d
     loadOptions: async (row, signal) => rankSicoobOrderOptions(
       await orderLink.loadOptions({ signal }), { supplier: row.supplier, amount: row.matchAmount, date: row.date }),
     renderOptionLabel(node, order, amount) {
-      node.className = 'sicoob-order-option-text';
+      node.className = 'report-link-option-text';
       node.append(`#${order.id} · `,
-        orderComparison('Data do pedido', order.date ? dateLabel(order.date) : 'Sem data do pedido', order.dateMatch),
+        createReportLinkComparison(doc, order.date ? dateLabel(order.date) : 'Sem data do pedido', order.dateMatch, 'Data do pedido', 'a transação'),
         ` · ${order.details ?? order.supplier} · `,
-        orderComparison('Valor do pedido', amount, order.amountMatch));
+        createReportLinkComparison(doc, amount, order.amountMatch, 'Valor do pedido', 'a transação'));
     },
     async saveLink(row, orderId, signal) {
       const receipt = await orderLink.save({ movementId: row.id, orderId, expectedOrderId: row.orderId, signal });

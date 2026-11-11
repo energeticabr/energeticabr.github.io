@@ -24,6 +24,12 @@ document.querySelector('[data-dda-provision-pencil]').click();await frame();
 const match=document.querySelector(nameFallback?'.dda-provision-name-match':'.dda-provision-line-match'),matchRect=match.getBoundingClientRect();
 const pickerMatch=(nameFallback?match.textContent.includes('Nome do fornecedor semelhante ao DDA'):match.textContent.includes('Provisão #101')&&match.textContent.includes('360,00'))&&document.querySelectorAll('.dda-provision-star').length===1;
 const pickerFits=matchRect.left>=-1&&matchRect.top>=-1&&matchRect.right<=innerWidth+1&&matchRect.bottom<=innerHeight+1;
+const pickerList=document.querySelector('.dda-provision-options');
+const pickerOverflows=pickerList.scrollWidth>pickerList.clientWidth+1;
+const chipColors=[...pickerList.querySelectorAll('.report-link-comparison')].map(chip=>{
+ const css=getComputedStyle(chip);
+ return [css.backgroundColor,css.borderTopColor];
+});
 document.querySelector('input[type=radio]').click();
 async function review(){document.querySelector('.dda-provision-save').click();await frame();return document.querySelector('[data-edit-review]');}
 let dialog=await review();
@@ -57,5 +63,5 @@ document.querySelector('[data-dda-provision-pencil]').click();await frame();
 document.querySelector('input[type=radio]').click();
 const capturedReview=await review();
 if(duplicate){capturedReview.querySelector('[data-edit-review-submit]').click();await frame();}
-document.documentElement.dataset.layout=JSON.stringify({pickerMatch,pickerFits,fits,hit,transform,dimensions,bounds:{left:rect.left,right:rect.right,top:rect.top,bottom:rect.bottom},focusInside,writesBefore,cancelled,confirmed,beforePencil,afterPencil,duplicateFits,duplicateNo,duplicateTransform});
+document.documentElement.dataset.layout=JSON.stringify({pickerMatch,pickerFits,pickerOverflows,chipColors,fits,hit,transform,dimensions,bounds:{left:rect.left,right:rect.right,top:rect.top,bottom:rect.bottom},focusInside,writesBefore,cancelled,confirmed,beforePencil,afterPencil,duplicateFits,duplicateNo,duplicateTransform});
 </script></body></html>

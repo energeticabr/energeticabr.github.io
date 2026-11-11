@@ -196,12 +196,12 @@ button.ddr-link-cluster:focus-visible { outline:2px solid #105367; outline-offse
   outline: 3px solid #236ca6;
   outline-offset: 2px;
 }
-.sicoob-order-option-text {
+.report-link-option-text {
   flex: 1;
   min-width: 0;
   overflow-wrap: anywhere;
 }
-.sicoob-order-comparison {
+.report-link-comparison {
   display: inline-block;
   padding: 1px 6px;
   border: 1px solid #d77929;
@@ -211,7 +211,7 @@ button.ddr-link-cluster:focus-visible { outline:2px solid #105367; outline-offse
   font-weight: 700;
   white-space: nowrap;
 }
-.sicoob-order-comparison[data-match="true"] {
+.report-link-comparison[data-match="true"] {
   border-color: #53a776;
   background: #eaf8ee;
   color: #17643f;
