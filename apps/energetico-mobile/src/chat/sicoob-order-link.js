@@ -101,8 +101,9 @@ export function createSicoobOrderLink({ repository, orderRepository = repository
       const branch = String(fields.FILIAL ?? '').trim();
       const date = provisionDateKey(fields.DATAPEDIDO);
       const dateLabel = date ? date.split('-').reverse().join('/') : 'Sem data do pedido';
-      const label = [`#${id}`, dateLabel, supplier, branch].filter(Boolean).join(' · ');
-      return { id, supplier, amount:fields.VALORTOTAL ?? null, label };
+      const details = branch ? `${supplier} · ${branch}` : supplier;
+      return { id, supplier, amount:fields.VALORTOTAL ?? null, label:`#${id} · ${details}`,
+        displayLabel:`#${id} · ${dateLabel} · ${details}` };
     });
   }
 
