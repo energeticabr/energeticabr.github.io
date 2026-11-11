@@ -184,7 +184,7 @@ export function createDdaReportView({document:doc=globalThis.document,data,openM
   if(destroyed||root.hidden||refresh.disabled)return;
   if(!syncMonitor)return reloadFromBank();
   startingBank=true;syncRefreshButton();showNotice();
-  try{await syncMonitor.start();}
+  try{const result=await syncMonitor.start();if(result?.startWarning&&!destroyed&&!root.hidden)showNotice(result.startWarning);}
   catch{if(!destroyed&&!root.hidden)showNotice('Não foi possível iniciar a consulta ao Sicoob. Tente novamente.');}
   finally{startingBank=false;syncRefreshButton();}
  }

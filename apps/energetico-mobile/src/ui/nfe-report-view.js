@@ -495,7 +495,8 @@ export function createNfeReportView({ document:doc = globalThis.document, data, 
     syncRefreshButton();
     showFiscalNotice('');
     try {
-      await syncMonitor.start();
+      const result = await syncMonitor.start();
+      if (result?.startWarning && !root.hidden) showFiscalNotice(result.startWarning);
     } catch (error) {
       if (!root.hidden) showFiscalNotice(error?.message || 'Não foi possível iniciar a consulta à SEFAZ. Tente novamente.');
     } finally {

@@ -211,7 +211,10 @@ export function createSicoobTransactionReportView({ document: doc = globalThis.d
     if (refresh.disabled || root.hidden || receiptRequest || picker?.isOpen) return;
     if (!syncMonitor) return load();
     starting = true; syncRefreshButton();
-    try { await syncMonitor.start(); }
+    try {
+      const result = await syncMonitor.start();
+      if (result?.startWarning && !root.hidden) showNotice(result.startWarning);
+    }
     catch (error) { if (!root.hidden) showNotice(error?.message || 'Não foi possível iniciar a sincronização.'); }
     finally { starting = false; syncRefreshButton(); }
   }

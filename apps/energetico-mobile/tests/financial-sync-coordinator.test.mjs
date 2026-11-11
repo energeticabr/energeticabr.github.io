@@ -32,7 +32,7 @@ test('one source start failure does not stop other collectors and remains visibl
   const group = createFinancialSyncCoordinator(sources); let state;
   group.forSource('dda').subscribe(value => { state = value; });
   try {
-    await group.forSource('dda').start();
+    assert.deepEqual(await group.forSource('dda').start(), { startWarning:'Consulta não iniciada: Transações Sicoob.' });
     assert.deepEqual(Object.values(sources).map(s => s.starts), [1, 1, 1]);
     assert.match(state.notice, /Transações.*indisponível/);
     assert.equal(state.running, true);
