@@ -22,6 +22,7 @@ class ConfigurationTests(unittest.TestCase):
             root = Path(directory)
             fixture = '''
 $script:registered=$false
+$script:reads=0
 function Read-PrivateJson {
  param($Path)
  if($Path -match 'sicoob-webhook-credentials'){
@@ -51,8 +52,11 @@ function Invoke-WebRequest {
   $value=ConvertFrom-Json $Body
   if($value.webhookUrl -cne ('https://163-176-171-217.sslip.io/api/sicoob-pix/'+('x'*43))){throw 'BAD_REGISTRATION'}
   $script:registered=$true
-  return @{StatusCode=200;Content='{}'}
+  $status=if($scenario -eq 'created201'){201}else{200}
+  return @{StatusCode=$status;Content='{}'}
  }
+ $script:reads++
+ if($scenario -eq 'transient401' -and $script:reads -eq 1){return @{StatusCode=401;Content='{}'}}
  if($scenario -eq 'existing' -or ($script:registered -and $scenario -eq 'bad_readback')){
   return @{StatusCode=200;Content='{"webhookUrl":"https://existing.example/callback"}'}
  }
@@ -90,3 +94,8 @@ function Invoke-WebRequest {
         self.assertNotIn('x'*43, registered.stdout + registered.stderr)
         fallback = self.run_registration('fallback')
         self.assertEqual(fallback.returncode, 0, fallback.stderr)
+        for scenario in ('created201', 'transient401'):
+            with self.subTest(scenario=scenario):
+                result = self.run_registration(scenario)
+                self.assertEqual(result.returncode, 0, result.stderr)
+                self.assertTrue(json.loads(result.stdout)['verified'])
