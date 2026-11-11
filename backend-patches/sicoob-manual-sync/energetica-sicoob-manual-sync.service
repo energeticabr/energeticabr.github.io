@@ -1,0 +1,23 @@
+[Unit]
+Description=Energético authenticated Sicoob collection requests
+Wants=network-online.target
+After=network-online.target
+
+[Service]
+Type=simple
+User=energetica-whatsapp
+Group=energetica-whatsapp
+EnvironmentFile=/etc/energetica-whatsapp.env
+StateDirectory=energetica-sicoob-movements
+StateDirectoryMode=0700
+UMask=0077
+ExecStart=/opt/energetica-whatsapp/.venv/bin/python /opt/energetica-whatsapp/sicoob-manual-sync/sicoob_worker.py daemon
+Restart=on-failure
+RestartSec=10
+KillMode=control-group
+TimeoutStopSec=30
+NoNewPrivileges=true
+PrivateTmp=true
+
+[Install]
+WantedBy=multi-user.target
