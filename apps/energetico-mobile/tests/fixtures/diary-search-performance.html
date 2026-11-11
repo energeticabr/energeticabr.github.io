@@ -24,7 +24,7 @@ await gallery.open();
 const root=document.querySelector('.lg-overlay'),search=root.querySelector('[data-gallery-quick-search]');
 search.focus();search.value='Mauro';search.dispatchEvent(new Event('input',{bubbles:true}));search.setSelectionRange(2,4);
 const screen = root.querySelector('.gallery-loading-screen--scoped');
-await sleep(0);
+await sleep(1050);
 const started = { requests, loaderHidden: screen.hidden };
 const screenRect = screen.getBoundingClientRect(), toolbar = root.querySelector('.gallery-create-toolbar');
 const toolbarRect = toolbar.getBoundingClientRect();
@@ -35,7 +35,7 @@ const during={focused:document.activeElement===search,loaderHidden:screen.hidden
   scopeOnly: screenRect.top >= toolbarRect.bottom && root.querySelector(':scope > .gallery-loading-screen').hidden,
   caret:[search.selectionStart,search.selectionEnd],status:root.querySelector('.lg-list-status').textContent};
 search.value='Mauro central';search.dispatchEvent(new Event('input',{bubbles:true}));
-pending.shift().resolve(result([rows[1]]));await sleep(0);
+pending.shift().resolve(result([rows[1]]));await sleep(1050);
 const staleIgnored=root.querySelectorAll('.lg-record').length===2;
 pending.shift().resolve(result([rows[0]]));await sleep(0);
 const source=document.createElement('canvas');source.width=2400;source.height=1600;

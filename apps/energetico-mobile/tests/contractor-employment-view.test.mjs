@@ -46,7 +46,7 @@ for (const action of ['edit', 'inactivate']) test(`RH ${action} back arrow cance
   await view.open();
   const root = doc.querySelector('.ce-overlay');
   const search = root.querySelector('[data-search]');
-  search.value = 'Funcionário'; search.dispatchEvent(new dom.window.Event('input'));
+  search.value = 'Funcionário'; search.dispatchEvent(new dom.window.KeyboardEvent('keydown', { key: 'Enter', cancelable: true }));
   const origin = root.querySelector(`[data-employment-row="4"] [data-action="${action}"]`);
   assert.ok(origin); origin.focus(); root.scrollTop = 360; root.scrollLeft = 4;
   const cards = [...root.querySelectorAll('.ce-card')];
@@ -258,8 +258,10 @@ test('retains editor and shows explicit partial error without claiming successfu
     assert.ok(doc.querySelector('form'));
   } finally { view.destroy(); dom.window.close(); }
 });
-test('gallery search and filters include inactive history and fields outside the highlights', async () => {
+test('gallery search waits while filters include inactive history and fields outside the highlights', async t => {
   const dom = new JSDOM('<main></main>'), doc = dom.window.document;
+  t.mock.timers.enable({ apis: ['setTimeout'] });
+  dom.window.setTimeout = globalThis.setTimeout; dom.window.clearTimeout = globalThis.clearTimeout;
   const inactive = { id: '5', fields: { ...synthetic.fields, Title: 'Histórico Exemplo', CARGO: 'MESTRE DE OBRAS', FILIAL: 'Obra B', STATUS: 'INATIVO' } };
   const view = subject.createContractorEmploymentView({ document: doc, data: { loadSnapshot: async () => ({ rows: [synthetic, inactive] }), save() { assert.fail('Filtering cannot write'); } } });
   try {
@@ -271,7 +273,12 @@ test('gallery search and filters include inactive history and fields outside the
     const search = doc.querySelector('[data-search]'); search.value = '2026-01-01'; search.dispatchEvent(new dom.window.Event('input'));
     assert.equal(doc.querySelectorAll('[data-employment-row]').length, 2);
     search.value = 'não existe'; search.dispatchEvent(new dom.window.Event('input'));
+    t.mock.timers.tick(999);
+    assert.equal(doc.querySelectorAll('[data-employment-row]').length, 2);
+    t.mock.timers.tick(1);
     assert.equal(doc.querySelectorAll('[data-employment-row]').length, 0);
+    search.value = '2026-01-01'; search.dispatchEvent(new dom.window.KeyboardEvent('keydown', { key: 'Enter', cancelable: true }));
+    assert.equal(doc.querySelectorAll('[data-employment-row]').length, 2);
   } finally { view.destroy(); dom.window.close(); }
 });
 test('inactivation validates dates before save and a valid submit updates the retained historical card', async () => {
@@ -305,7 +312,7 @@ test('failed refresh never presents a partial or empty search as a completed que
   try {
     await view.open(); fail = true; doc.querySelector('[data-action="refresh"]').click(); await tick();
     assert.equal(doc.querySelectorAll('[data-employment-row]').length, 0);
-    const search = doc.querySelector('[data-search]'); search.value = 'exemplo'; search.dispatchEvent(new dom.window.Event('input'));
+    const search = doc.querySelector('[data-search]'); search.value = 'exemplo'; search.dispatchEvent(new dom.window.KeyboardEvent('keydown', { key: 'Enter', cancelable: true }));
     assert.match(doc.querySelector('[role="status"]').textContent, /incompleta/i);
     assert.match(doc.querySelector('[role="alert"]').textContent, /Paginação incompleta/);
   } finally { view.destroy(); dom.window.close(); }

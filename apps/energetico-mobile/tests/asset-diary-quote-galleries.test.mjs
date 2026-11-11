@@ -291,13 +291,13 @@ test("quote quick search matches displayed fields and starts active with the act
   assert.deepEqual([...doc.querySelectorAll("[data-filter-field]")].map(node => node.dataset.filterField), ["ID", "FILIAL", "ETAPA", "STATUS"]);
   const search = doc.querySelector('[data-gallery-quick-search]');
   search.value = " cabos ";
-  search.dispatchEvent(new dom.window.Event("input", { bubbles: true }));
+  search.dispatchEvent(new dom.window.KeyboardEvent('keydown', { key: 'Enter', bubbles: true, cancelable: true }));
   assert.deepEqual(ids(doc), ["9", "1"], 'quick search covers supplier as well as description');
   search.value = " central ";
-  search.dispatchEvent(new dom.window.Event("input", { bubbles: true }));
+  search.dispatchEvent(new dom.window.KeyboardEvent('keydown', { key: 'Enter', bubbles: true, cancelable: true }));
   assert.deepEqual(ids(doc), ["9"]);
   search.value = "";
-  search.dispatchEvent(new dom.window.Event("input", { bubbles: true }));
+  search.dispatchEvent(new dom.window.KeyboardEvent('keydown', { key: 'Enter', bubbles: true, cancelable: true }));
   const sort = doc.querySelector('[data-gallery-sort]');
   assert.ok(sort);
   assert.equal(sort.options.length, 5);

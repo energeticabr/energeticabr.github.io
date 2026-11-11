@@ -1,6 +1,7 @@
 import { confirmEditChanges, ensureEditReviewStyles } from '../../../../portal/ui/edit-review.js';
 import { filterContractorEmploymentRows } from '../chat/contractor-employment-data.js';
 import { CONTRACTOR_EMPLOYMENT_CARGOS, contractorEmploymentDate, validateContractorEmploymentDraft } from '../../../../portal/forms/contractor-employment.js';
+import { bindGallerySearchInput } from './gallery-quick-search.js';
 import { applyScreenNavigation } from './screen-navigation.js';
 import { bindSearchableFilterSelects } from './searchable-filter-selects.js';
 
@@ -29,6 +30,7 @@ export function createContractorEmploymentView(container = {}, options = {}) {
   const searchLabel = el('label', '', 'Pesquisar em todos os campos');
   const search = el('input'); search.type = 'search'; search.placeholder = 'Pesquisar funcionário, cargo ou ID'; search.dataset.search = '';
   searchLabel.append(search); toolbar.append(searchLabel);
+  let committedSearch = search.value;
   const filters = {};
   for (const [name, label] of [['STATUS', 'Status'], ['FILIAL', 'Filial'], ['CARGO', 'Cargo']]) {
     const wrapper = el('label', '', label), select = el('select'); select.dataset.filter = name; select.setAttribute('aria-label', label);
@@ -71,6 +73,7 @@ export function createContractorEmploymentView(container = {}, options = {}) {
   }
   function hide() {
     if (saving) return;
+    searchBinding.cancel();
     generation++; controller?.abort(); root.hidden = true; clearEditor(); previousFocus?.focus?.();
   }
   function display(value) {
@@ -79,7 +82,7 @@ export function createContractorEmploymentView(container = {}, options = {}) {
   function renderRows() {
     list.replaceChildren();
     if (!loaded) return;
-    const visible = filterContractorEmploymentRows(rows, { search: search.value, ...Object.fromEntries(Object.entries(filters).map(([name, control]) => [name, control.value])) });
+    const visible = filterContractorEmploymentRows(rows, { search: committedSearch, ...Object.fromEntries(Object.entries(filters).map(([name, control]) => [name, control.value])) });
     status.textContent = visible.length + ' de ' + rows.length + ' funcionários • inclui histórico inativo';
     const labels = new Map([['createdBy', 'Criado por'], ['lastModifiedBy', 'Atualizado por'], ['createdDateTime', 'Criado em'], ['lastModifiedDateTime', 'Atualizado em'], ['eTag', 'Versão'], ...columns.map(column => [column.name, column.displayName || column.name])]);
     for (const row of visible) {
@@ -284,7 +287,11 @@ export function createContractorEmploymentView(container = {}, options = {}) {
       if (!destroyed && generation === current) { alert.textContent = cause.message || 'Não foi possível carregar os funcionários.'; status.textContent = 'Consulta incompleta; tente atualizar.'; }
     } finally { if (!destroyed && generation === current) refresh.disabled = false; }
   }
-  search.addEventListener('input', renderRows);
+  const searchBinding = bindGallerySearchInput(search, () => {
+    if (committedSearch === search.value) return;
+    committedSearch = search.value;
+    renderRows();
+  });
   root.addEventListener('keydown', event => {
     if (event.key === 'Escape') { event.preventDefault(); if (editor.childElementCount && !saving) clearEditor(); else hide(); }
     if (event.key === 'Tab') {
@@ -294,8 +301,13 @@ export function createContractorEmploymentView(container = {}, options = {}) {
     }
   });
   return Object.freeze({
-    async open() { if (destroyed || saving) return; clearEditor(); previousFocus = doc.activeElement; root.hidden = false; root.focus(); await load(); },
+    async open() {
+      if (destroyed || saving) return;
+      searchBinding.cancel(); committedSearch = search.value;
+      clearEditor(); previousFocus = doc.activeElement; root.hidden = false; root.focus();
+      await load();
+    },
     close: hide,
-    destroy() { destroyed = true; generation++; controller?.abort(); clearEditor(); root.remove(); },
+    destroy() { searchBinding.destroy(); destroyed = true; generation++; controller?.abort(); clearEditor(); root.remove(); },
   });
 }

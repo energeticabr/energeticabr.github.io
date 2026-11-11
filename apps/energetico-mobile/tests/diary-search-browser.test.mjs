@@ -6,7 +6,7 @@ import { createServer } from 'vite';
 import { JSDOM } from 'jsdom';
 import { runBrowserLayout } from './helpers/browser-layout-runner.mjs';
 
-test('live search masks only results immediately and photos retain small thumbnails', { timeout:120_000 }, async t => {
+test('the gallery masks only results after the search pause and photos retain small thumbnails', { timeout:120_000 }, async t => {
   const browser=[process.env.CHROME_BIN,'C:/Program Files/Google/Chrome/Application/chrome.exe','/usr/bin/google-chrome','/usr/bin/chromium'].find(path=>path&&existsSync(path));
   if(!browser)return t.skip('Chrome unavailable');
   const server=await createServer({root:fileURLToPath(new URL('..',import.meta.url)),logLevel:'silent',server:{host:'127.0.0.1',port:0}});

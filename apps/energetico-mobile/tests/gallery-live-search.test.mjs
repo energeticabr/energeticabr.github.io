@@ -20,12 +20,12 @@ for (const name of ['IDFOLHA', 'FOLHAPGTO']) for (const completion of ['success'
     const opening = gallery.open(); pending[0].resolve(result('901')); await opening;
     const root = dom.window.document.querySelector(entry.root), input = root.querySelector('[data-gallery-quick-search]');
     const type = value => { input.value = value; input.dispatchEvent(new dom.window.InputEvent('input', { bubbles: true })); };
-    type('ab'); t.mock.timers.tick(0); await settle();
+    type('ab'); t.mock.timers.tick(1000); await settle();
     type('abc');
     if (completion === 'error') pending[1].reject(new Error('OBSOLETE_QA'));
     else pending[1].resolve(result('902'));
     await settle();
-    type('ab'); t.mock.timers.tick(0); await settle();
+    type('ab'); t.mock.timers.tick(1000); await settle();
     assert.equal(pending.length, 3, 'discarding a query cannot count as displaying its results');
     assert.equal(pending[2].filters.search, 'ab');
     pending[2].resolve(result('991')); await settle();
@@ -47,12 +47,12 @@ for (const name of ['IDFOLHA', 'FOLHAPGTO']) {
     const opening = gallery.open(); pending[0].resolve(result('901')); await opening;
     const root = dom.window.document.querySelector(entry.root), input = root.querySelector('[data-gallery-quick-search]');
     const type = value => { input.value = value; input.dispatchEvent(new dom.window.InputEvent('input', { bubbles: true })); };
-    type('a'); t.mock.timers.tick(0); await settle(); pending[1].resolve(result('902')); await settle();
+    type('a'); t.mock.timers.tick(1000); await settle(); pending[1].resolve(result('902')); await settle();
     type('b'); gallery.close();
     const reopening = gallery.open();
     assert.equal(pending[2].filters.search, 'b');
     pending[2].resolve(result('991')); await reopening;
-    input.focus(); type('a'); t.mock.timers.tick(0); await settle();
+    input.focus(); type('a'); t.mock.timers.tick(1000); await settle();
     assert.equal(pending.length, 4, 'the pre-close query cannot suppress a new search after reopening');
     assert.equal(pending[3].filters.search, 'a');
     pending[3].resolve(result('901')); await settle();
@@ -65,6 +65,8 @@ for (const startEvent of [false, true]) {
   test('registration search commits composition only at its end (start event=' + startEvent + ')', async t => {
     const entry = galleryCases.find(item => item.name === 'group');
     const dom = new JSDOM('<body></body>');
+    t.mock.timers.enable({ apis: ['setTimeout'] });
+    dom.window.setTimeout = globalThis.setTimeout; dom.window.clearTimeout = globalThis.clearTimeout;
     const rows = ['901', '902', '991'].map(id => loadingRow(entry, id));
     const gallery = entry.factory(galleryOptions(entry, dom.window.document, { snapshot: { rows } }));
     t.after(() => { gallery.destroy(); dom.window.close(); });
@@ -80,6 +82,9 @@ for (const startEvent of [false, true]) {
     assert.deepEqual(visibleIds(root, entry), ['901', '902', '991'], 'other redraws must use the committed search');
     input.setSelectionRange(1, 2);
     input.dispatchEvent(new dom.window.CompositionEvent('compositionend', { bubbles: true }));
+    t.mock.timers.tick(999);
+    assert.deepEqual(visibleIds(root, entry), ['901', '902', '991']);
+    t.mock.timers.tick(1);
     assert.deepEqual(visibleIds(root, entry), ['901', '902']);
     assert.equal(doc.activeElement, input);
     assert.deepEqual([input.selectionStart, input.selectionEnd], [1, 2]);
@@ -94,7 +99,7 @@ function visibleIds(root, entry) {
 }
 
 for (const entry of galleryCases) {
-  test(entry.name + ': search updates between keystrokes without interrupting the active field', async t => {
+  test(entry.name + ': search waits one second from the last input and Enter applies immediately', async t => {
     const dom = new JSDOM('<body></body>', { url: 'https://example.test' });
     t.mock.timers.enable({ apis: ['setTimeout'] });
     dom.window.setTimeout = globalThis.setTimeout;
@@ -122,26 +127,47 @@ for (const entry of galleryCases) {
     const input = root.querySelector('[data-gallery-quick-search]');
     assert.deepEqual(visibleIds(root, entry), ['901', '902', '991'], 'fixture starts with three visible records');
     input.focus();
-    for (const [text, expected] of [
-      ['9', ['901', '902', '991']], ['90', ['901', '902']], ['901', ['901']], ['', ['901', '902', '991']],
-    ]) {
+    const type = text => {
       input.value = text;
       input.dispatchEvent(new dom.window.InputEvent('input', { bubbles: true }));
-      input.setSelectionRange(0, Math.min(1, text.length));
-      t.mock.timers.tick(0);
-      await settle();
-      assert.deepEqual(visibleIds(root, entry), expected, 'results adopt ' + JSON.stringify(text) + ' without waiting for a typing pause');
-      assert.equal(root.querySelector('[data-gallery-quick-search]'), input);
-      assert.equal(doc.activeElement, input);
-      assert.equal(input.value, text);
-      assert.deepEqual([input.selectionStart, input.selectionEnd], [0, Math.min(1, text.length)]);
-      assert.equal(input.disabled, false);
-      for (let node = input; node && node !== root; node = node.parentElement) {
-        assert.notEqual(node.inert, true);
-        assert.notEqual(node.getAttribute('aria-hidden'), 'true');
-      }
-      if (entry.name === 'launch' || entry.options?.gallery) assert.equal(requests.at(-1).search, text);
+    };
+    const baselineRequests = requests.length;
+    type('9');
+    t.mock.timers.tick(700);
+    type('90');
+    t.mock.timers.tick(700);
+    type('901');
+    input.setSelectionRange(0, 1);
+    t.mock.timers.tick(500);
+    input.dispatchEvent(new dom.window.Event('change', { bubbles: true }));
+    input.dispatchEvent(new dom.window.Event('search', { bubbles: true }));
+    t.mock.timers.tick(499);
+    await settle();
+    assert.deepEqual(visibleIds(root, entry), ['901', '902', '991']);
+    assert.equal(requests.length, baselineRequests, 'partial text must not request a snapshot');
+    t.mock.timers.tick(1);
+    await settle();
+    assert.deepEqual(visibleIds(root, entry), ['901']);
+    assert.equal(root.querySelector('[data-gallery-quick-search]'), input);
+    assert.equal(doc.activeElement, input);
+    assert.deepEqual([input.selectionStart, input.selectionEnd], [0, 1]);
+    assert.equal(input.disabled, false);
+    for (let node = input; node && node !== root; node = node.parentElement) {
+      assert.notEqual(node.inert, true);
+      assert.notEqual(node.getAttribute('aria-hidden'), 'true');
     }
+    const remoteSearch = entry.name === 'launch' || entry.options?.gallery;
+    if (remoteSearch) assert.deepEqual(requests.slice(baselineRequests).map(filters => filters.search), ['901']);
+
+    type('');
+    input.dispatchEvent(new dom.window.KeyboardEvent('keydown', { key: 'Enter', bubbles: true, cancelable: true }));
+    await settle();
+    assert.deepEqual(visibleIds(root, entry), ['901', '902', '991']);
+    const requestsAfterEnter = requests.length;
+    if (remoteSearch) assert.deepEqual(requests.slice(baselineRequests).map(filters => filters.search), ['901', '']);
+    t.mock.timers.tick(1000);
+    await settle();
+    assert.equal(requests.length, requestsAfterEnter);
   });
 }
 
@@ -162,7 +188,7 @@ for (const name of ['IDFOLHA', 'FOLHAPGTO']) for (const completion of ['success'
     const input = root.querySelector('[data-gallery-quick-search]');
     input.focus(); input.value = 'anterior';
     input.dispatchEvent(new dom.window.InputEvent('input', { bubbles: true }));
-    t.mock.timers.tick(0); await settle();
+    t.mock.timers.tick(1000); await settle();
     input.value = 'nova';
     input.dispatchEvent(new dom.window.InputEvent('input', { bubbles: true }));
     input.setSelectionRange(1, 2);
@@ -174,10 +200,36 @@ for (const name of ['IDFOLHA', 'FOLHAPGTO']) for (const completion of ['success'
     assert.equal(doc.activeElement, input);
     assert.equal(input.value, 'nova');
     assert.deepEqual([input.selectionStart, input.selectionEnd], [1, 2]);
-    t.mock.timers.tick(0); await settle();
+    t.mock.timers.tick(1000); await settle();
     assert.equal(pending[2].filters.search, 'nova');
     pending[2].resolve(result('991')); await settle();
     assert.deepEqual(visibleIds(root, entry), ['991']);
     assert.doesNotMatch(root.querySelector('.hr-gallery-status').textContent, /OBSOLETE_QA/);
+  });
+}
+
+for (const name of ['orders', 'tasks', 'recurring', 'payments']) {
+  test(name + ': reopening consumes a pending query and clearing it restores all results', async t => {
+    const entry = galleryCases.find(item => item.name === name);
+    const dom = new JSDOM('<body></body>');
+    t.mock.timers.enable({ apis: ['setTimeout'] });
+    dom.window.setTimeout = globalThis.setTimeout; dom.window.clearTimeout = globalThis.clearTimeout;
+    const rows = ['901', '902', '991'].map(id => loadingRow(entry, id));
+    const gallery = entry.factory(galleryOptions(entry, dom.window.document, { snapshot: { rows } }));
+    t.after(() => { gallery.destroy(); dom.window.close(); });
+    await gallery.open();
+    const root = dom.window.document.querySelector(entry.root);
+    const input = root.querySelector('[data-gallery-quick-search]');
+    const type = value => {
+      input.value = value;
+      input.dispatchEvent(new dom.window.InputEvent('input', { bubbles: true }));
+    };
+    type('901');
+    gallery.close();
+    await gallery.open();
+    assert.deepEqual(visibleIds(root, entry), ['901']);
+    type('');
+    t.mock.timers.tick(1000);
+    assert.deepEqual(visibleIds(root, entry), ['901', '902', '991']);
   });
 }

@@ -59,11 +59,11 @@ for (const kind of ['group', 'quotes', 'recurringTasks', 'delegatedTasks']) {
     const root = dom.window.document.querySelector(entry.root);
     const search = root.querySelector('input[type="search"]');
     search.value = '81 jose';
-    search.dispatchEvent(new dom.window.Event('input', { bubbles: true }));
+    search.dispatchEvent(new dom.window.KeyboardEvent('keydown', { key: 'Enter', bubbles: true, cancelable: true }));
     await settle();
     assert.deepEqual([...root.querySelectorAll('[data-registration-row]')].map(card => card.dataset.registrationRow), ['81']);
     search.value = 'central';
-    search.dispatchEvent(new dom.window.Event('input', { bubbles: true }));
+    search.dispatchEvent(new dom.window.KeyboardEvent('keydown', { key: 'Enter', bubbles: true, cancelable: true }));
     await settle();
     if (kind !== 'group') assert.deepEqual([...root.querySelectorAll('[data-registration-row]')].map(card => card.dataset.registrationRow), ['81']);
     if (kind === 'group') {
@@ -71,7 +71,7 @@ for (const kind of ['group', 'quotes', 'recurringTasks', 'delegatedTasks']) {
       status.value = 'ATIVO';
       status.dispatchEvent(new dom.window.Event('change', { bubbles: true }));
       search.value = '';
-      search.dispatchEvent(new dom.window.Event('input', { bubbles: true }));
+      search.dispatchEvent(new dom.window.KeyboardEvent('keydown', { key: 'Enter', bubbles: true, cancelable: true }));
       assert.equal(status.value, 'ATIVO');
       assert.deepEqual([...root.querySelectorAll('[data-registration-row]')].map(card => card.dataset.registrationRow), ['81']);
     }
@@ -97,13 +97,13 @@ test('launch quick search resets pagination and sends text alongside selected fi
   supplier.value = 'Mauro';
   search.value = 'CENTRAL 08/10/2026';
   search.dispatchEvent(new dom.window.Event('input', { bubbles: true }));
-  t.mock.timers.tick(0); await new Promise(resolve => setImmediate(resolve));
+  t.mock.timers.tick(1000); await new Promise(resolve => setImmediate(resolve));
   assert.equal(calls.at(-1).payload.filters.search, 'CENTRAL 08/10/2026');
   assert.equal(calls.at(-1).payload.filters.supplier, 'Mauro');
   assert.equal(calls.at(-1).payload.page, 1);
   search.value = '';
   search.dispatchEvent(new dom.window.Event('input', { bubbles: true }));
-  t.mock.timers.tick(0); await new Promise(resolve => setImmediate(resolve));
+  t.mock.timers.tick(1000); await new Promise(resolve => setImmediate(resolve));
   assert.equal(calls.at(-1).payload.filters.search, '');
   assert.equal(calls.at(-1).payload.filters.supplier, 'Mauro');
 });
@@ -143,17 +143,17 @@ for (const name of ['payments', 'recurring']) {
     const displayedDate = name === 'payments' ? '08/10/2026' : '09/10/2026';
     assert.ok(root.textContent.includes(displayedDate));
     search.value = displayedDate;
-    search.dispatchEvent(new dom.window.Event('input', { bubbles: true }));
+    search.dispatchEvent(new dom.window.KeyboardEvent('keydown', { key: 'Enter', bubbles: true, cancelable: true }));
     await settle();
     assert.equal(root.querySelectorAll('[data-item-id]').length, 1);
     if (name === 'payments') {
       search.value = '09/10/2026';
-      search.dispatchEvent(new dom.window.Event('input', { bubbles: true }));
+      search.dispatchEvent(new dom.window.KeyboardEvent('keydown', { key: 'Enter', bubbles: true, cancelable: true }));
       await settle();
       assert.equal(root.querySelectorAll('[data-item-id]').length, 0, 'UTC prefix must not create an incorrect displayed-date alias');
     }
     search.value = name === 'payments' ? '253,68' : 'Escavadeira';
-    search.dispatchEvent(new dom.window.Event('input', { bubbles: true }));
+    search.dispatchEvent(new dom.window.KeyboardEvent('keydown', { key: 'Enter', bubbles: true, cancelable: true }));
     await settle();
     assert.equal(root.querySelectorAll('[data-item-id]').length, 1);
   });
@@ -171,7 +171,7 @@ for (const name of ['orders', 'tasks']) {
     const root = dom.window.document.querySelector(entry.root);
     const search = root.querySelector('[data-gallery-quick-search]');
     search.value = '09/10/2026';
-    search.dispatchEvent(new dom.window.Event('input', { bubbles: true }));
+    search.dispatchEvent(new dom.window.KeyboardEvent('keydown', { key: 'Enter', bubbles: true, cancelable: true }));
     await settle();
     assert.equal(root.querySelectorAll('[data-item-id]').length, 1);
   });
@@ -194,13 +194,13 @@ for (const name of ['payments', 'recurring']) {
     const search = dom.window.document.querySelector('[data-gallery-quick-search]');
     preparations = 0;
     search.value = 'Mauro';
-    search.dispatchEvent(new dom.window.Event('input', { bubbles: true }));
+    search.dispatchEvent(new dom.window.KeyboardEvent('keydown', { key: 'Enter', bubbles: true, cancelable: true }));
     await settle();
     assert.ok(preparations >= rows.length);
     const searchPreparations = preparations;
     preparations = 0;
     search.value = '';
-    search.dispatchEvent(new dom.window.Event('input', { bubbles: true }));
+    search.dispatchEvent(new dom.window.KeyboardEvent('keydown', { key: 'Enter', bubbles: true, cancelable: true }));
     await settle();
     assert.ok(preparations <= searchPreparations - rows.length,
       'clearing search must skip per-row search preparation, while preserving structured filtering and card rendering');
@@ -221,7 +221,7 @@ test('tasks: real internal date aliases and displayed creation timestamps are se
   const search = root.querySelector('[data-gallery-quick-search]');
   for (const [value, expected] of [['03/10/2026', 1], ['08/10/2026', 1], ['09/10/2026', 0]]) {
     search.value = value;
-    search.dispatchEvent(new dom.window.Event('input', { bubbles: true }));
+    search.dispatchEvent(new dom.window.KeyboardEvent('keydown', { key: 'Enter', bubbles: true, cancelable: true }));
     await settle();
     assert.equal(root.querySelectorAll('[data-item-id]').length, expected, value);
   }

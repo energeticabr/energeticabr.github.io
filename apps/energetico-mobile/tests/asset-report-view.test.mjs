@@ -30,7 +30,7 @@ test('toque nos cartões das duas galerias usa o ID do bem e retorna à mesma p�
     const gallery = createRegistrationGallery({ document: doc, kind, data: {
       async loadSnapshot() { return { rows }; }, async loadAssetReport(id) { calls.push(id); return report(id); },
     } }); t.after(() => gallery.destroy()); await gallery.open();
-    const search = doc.querySelector('input[type="search"]'); search.value = 'GUINCHO'; search.dispatchEvent(new dom.window.Event('input', { bubbles: true }));
+    const search = doc.querySelector('input[type="search"]'); search.value = 'GUINCHO'; search.dispatchEvent(new dom.window.KeyboardEvent('keydown', { key: 'Enter', bubbles: true, cancelable: true }));
     const root = doc.querySelector('[data-gallery-kind]');
     [...doc.querySelectorAll('.rg-pagination button')].find(b => b.textContent === 'Próxima').click();
     root.scrollTop = 440;

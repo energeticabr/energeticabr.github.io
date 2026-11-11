@@ -167,9 +167,11 @@ for (const galleryName of ['IDFOLHA', 'FOLHAPGTO']) {
   test(`${galleryName}: manual refresh consumes a pending search debounce without a second cached query`, async t => {
     const entry = refreshCases.find(entry => entry.name === galleryName);
     const ctx = await setup(t, entry), button = refresh(ctx), search = ctx.root.querySelector('input[type="search"]');
+    t.mock.timers.enable({ apis: ['setTimeout'] });
+    ctx.dom.window.setTimeout = globalThis.setTimeout; ctx.dom.window.clearTimeout = globalThis.clearTimeout;
     search.value = 'SINTETICO'; search.dispatchEvent(new ctx.dom.window.Event('input', { bubbles: true }));
     const calls = ctx.state.calls.length; ctx.state.pending = deferred();
-    button.click(); await new Promise(resolve => setTimeout(resolve, 250));
+    button.click(); t.mock.timers.tick(1000); await settle();
     assert.equal(ctx.state.calls.length, calls + 1, 'scheduled filter query must not supersede the manual forced refresh');
     assert.equal(ctx.state.calls.at(-1).refresh, true);
     ctx.state.pending.resolve(snapshot(entry, [refreshRow(entry, '995', 'SINTETICO NOVO')])); await settle(); await settle();

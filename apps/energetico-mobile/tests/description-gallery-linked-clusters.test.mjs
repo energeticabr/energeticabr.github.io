@@ -82,7 +82,7 @@ test('ID fica antes do fornecedor e o cluster abre todos os filhos, inclusive pa
 test('fechar preserva pesquisa, filtros e ordenação do pai', async t => {
   const ctx = await setup(t);
   const search = ctx.root.querySelector('.gallery-quick-search');
-  search.value = 'GRUPO FICTÍCIO 21'; search.dispatchEvent(new ctx.dom.window.Event('input', { bubbles: true }));
+  search.value = 'GRUPO FICTÍCIO 21'; search.dispatchEvent(new ctx.dom.window.KeyboardEvent('keydown', { key: 'Enter', bubbles: true, cancelable: true }));
   const sort = ctx.root.querySelector('[data-gallery-sort]'); sort.value = 'ID:desc'; sort.dispatchEvent(new ctx.dom.window.Event('change'));
   const trigger = await open(ctx);
   ctx.dialog().querySelector('[data-action="close-description"]').click();

@@ -1,4 +1,4 @@
-import { placeGalleryQuickSearch } from './gallery-quick-search.js';
+import { bindGallerySearchInput, placeGalleryQuickSearch } from './gallery-quick-search.js';
 import { decorateSefazInvoiceCard } from './sefaz-invoice-card.js';
 import { fiscalDocumentType, buyerWithholding, SEFAZ_RETENTION_FIELDS } from '../chat/sefaz-withholding.js';
 import { matchesGallerySearch } from '../chat/gallery-quick-search.js';
@@ -217,7 +217,7 @@ export function createRegistrationGallery({ document: doc = globalThis.document,
     filters.replaceChildren(assetLaunchesIcon(doc, 'filter'), doc.createTextNode('Filtros'));
     if (home) { home.append(assetLaunchesIcon(doc, 'home')); home.classList.add('rg-launch-home'); }
   }
-  let committedSearch = search.value, searchComposing = false;
+  let committedSearch = search.value;
   const filterControls = new Map();
   for (const field of filterFields) {
     const label = el("label", "rg-field", fieldLabel(field));
@@ -1209,6 +1209,7 @@ export function createRegistrationGallery({ document: doc = globalThis.document,
 
   function hide() {
     if (root.hidden) return;
+    searchBinding.cancel();
     if (provisionController) attachmentNotice = '';
     provisionController?.abort();
     provisionController = null;
@@ -1264,16 +1265,11 @@ export function createRegistrationGallery({ document: doc = globalThis.document,
     doc.defaultView?.addEventListener('focus', refreshDdaDate);
   }
   function applySearch() {
-    if (searchComposing || committedSearch === search.value) return;
+    if (committedSearch === search.value) return;
     committedSearch = search.value;
     page = 1; attachmentNotice = ""; render();
   }
-  search.addEventListener("compositionstart", () => { searchComposing = true; });
-  search.addEventListener("input", event => {
-    if (event.isComposing) searchComposing = true;
-    applySearch();
-  });
-  search.addEventListener("compositionend", () => { searchComposing = false; applySearch(); });
+  const searchBinding = bindGallerySearchInput(search, applySearch);
   clearFilters?.addEventListener('click', () => {
     for (const control of filterControls.values()) control.value = '';
     for (const control of dateBounds.values()) control.value = '';
@@ -1313,11 +1309,11 @@ export function createRegistrationGallery({ document: doc = globalThis.document,
         filterControls.get(field).value = model.defaultFilters[field];
       }
       attachmentRequest += 1; attachmentLoading = false; returnFocus = doc.activeElement;
-      searchComposing = false; committedSearch = search.value;
+      searchBinding.cancel(); committedSearch = search.value;
       root.hidden = false; root.focus(); startDdaClock();
       if(returnPending)returnedForManual=true;showBankNotice();await load();showBankNotice();
     },
     close: hide,
-    destroy() { provisionController?.abort(); provisionController = null; unsubscribeMovements?.(); unsubscribeFiscal?.(); unsubscribeBank?.(); paymentConfirmation?.destroy(); bankReceipt?.destroy(); bankController?.abort(); stopDdaClock(); loadController?.abort(); assetReport?.destroy(); descriptionDetail?.destroy(); loadingScreen.destroy(); createShortcut.destroy(); refreshShortcut.destroy(); recordActions.destroy(); searchableFilters.destroy(); destroyed = true; request += 1; filterEpoch += 1; attachmentCountQueue = []; root.remove(); },
+    destroy() { searchBinding.destroy(); provisionController?.abort(); provisionController = null; unsubscribeMovements?.(); unsubscribeFiscal?.(); unsubscribeBank?.(); paymentConfirmation?.destroy(); bankReceipt?.destroy(); bankController?.abort(); stopDdaClock(); loadController?.abort(); assetReport?.destroy(); descriptionDetail?.destroy(); loadingScreen.destroy(); createShortcut.destroy(); refreshShortcut.destroy(); recordActions.destroy(); searchableFilters.destroy(); destroyed = true; request += 1; filterEpoch += 1; attachmentCountQueue = []; root.remove(); },
   };
 }

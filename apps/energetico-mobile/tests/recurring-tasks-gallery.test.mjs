@@ -67,9 +67,9 @@ test('recurring tasks preserve source order across pages and display metadata al
   assert.deepEqual(ids(), ['1']);
   recurrence.value = ''; recurrence.dispatchEvent(new dom.window.Event('change', { bubbles: true }));
   const search = doc.querySelector('input[type="search"]');
-  search.value = 'SEDE'; search.dispatchEvent(new dom.window.Event('input', { bubbles: true }));
+  search.value = 'SEDE'; search.dispatchEvent(new dom.window.KeyboardEvent('keydown', { key: 'Enter', bubbles: true, cancelable: true }));
   assert.deepEqual(ids(), ['1'], 'quick search also covers the branch');
-  search.value = '  pagar  '; search.dispatchEvent(new dom.window.Event('input', { bubbles: true }));
+  search.value = '  pagar  '; search.dispatchEvent(new dom.window.KeyboardEvent('keydown', { key: 'Enter', bubbles: true, cancelable: true }));
   assert.deepEqual(ids(), ['1']);
 });
 
@@ -127,7 +127,7 @@ test('Arthur supplier stays fixed during catalog outages and recovery instead of
   try {
     await new Promise(resolve => setImmediate(resolve));
     const search = doc.querySelector('input[type="search"]');
-    search.dispatchEvent(new dom.window.Event('input', { bubbles: true }));
+    search.dispatchEvent(new dom.window.KeyboardEvent('keydown', { key: 'Enter', bubbles: true, cancelable: true }));
     assert.equal(doc.querySelector('[data-filter-field="FORNECEDOR"]').value, 'ARTHUR MARCOS SILVA ROCHA');
     assert.deepEqual([...doc.querySelectorAll('[data-registration-row]')].map(node => node.dataset.registrationRow), ['1']);
   } finally { finish(); await pending; }
