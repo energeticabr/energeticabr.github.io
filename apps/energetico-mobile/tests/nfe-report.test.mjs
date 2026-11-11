@@ -555,12 +555,12 @@ test('NFE opens PEDIDOS with ranked suggestions, preserves the report and displa
     }
   }
   assert.deepEqual(writes, [['10','37',''],['10','37','']]);
-  assert.ok(choices.every(input => input.disabled));
+  assert.equal(element.querySelector('.dda-provision-dialog'), null);
+  assert.equal(element.hidden, false);
   assert.equal(pencil(), null);
   assert.equal(element.querySelector('.nfe-link-linked').textContent, 'ID 37');
   assert.equal(body.scrollLeft, 80);
   assert.equal(body.scrollTop, 120);
-  picker.querySelector('.gallery-record-dialog-button').click();
   const edit = element.querySelector('.nfe-link-edit');
   assert.equal(element.querySelector('.nfe-link-linked').nextElementSibling, edit);
   assert.equal(document.activeElement, edit);
@@ -580,6 +580,7 @@ test('NFE opens PEDIDOS with ranked suggestions, preserves the report and displa
   changes.querySelector('[data-edit-review-confirm]').click();
   await tick();
   assert.deepEqual(writes.at(-1), ['10','38','37']);
+  assert.equal(element.querySelector('.dda-provision-dialog'), null);
   assert.equal(element.querySelector('.nfe-link-linked').textContent, 'ID 38');
   assert.ok(element.querySelector('.nfe-link-edit'));
   report.close();

@@ -48,7 +48,9 @@ if(duplicate){
  document.querySelector('[data-edit-review-submit]').click();await frame();
 }
 const afterPencil=pencilLayout();
-const confirmed=writes===1&&!view.element.hidden&&document.querySelector('.ddr-link-cluster').textContent==='ID 44';
+const confirmed=writes===1&&!view.element.hidden&&!document.querySelector('.dda-provision-dialog')
+ &&document.querySelector('.ddr-link-cluster').textContent==='ID 44'
+ &&document.activeElement===document.querySelector('[data-dda-provision-pencil]');
 // Leave the real confirmation open for the captured visual check.
 view.close();await view.open();
 document.querySelector('[data-dda-provision-pencil]').click();await frame();

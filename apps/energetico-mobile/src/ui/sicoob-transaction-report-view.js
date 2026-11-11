@@ -25,7 +25,6 @@ const ORDER_PICKER_COPY = {
   options: count => count ? `${count} pedido(s). Escolha um para vincular.` : 'Nenhum pedido corresponde à busca.',
   empty: 'Nenhum pedido disponível.',
   loadError: 'Não foi possível carregar os pedidos. Feche e tente novamente.',
-  receipt: id => `Pagamento vinculado ao pedido #${id}.`,
   recommendation: '★ RECOMENDADO',
   reviewDetails: true,
 };
@@ -174,7 +173,6 @@ export function createSicoobTransactionReportView({ document: doc = globalThis.d
     currentLink: row => row.orderId,
     selectCurrent: true,
     onClose: resumeRefresh,
-    receiptId: receipt => receipt.orderId,
     rowAmount: row => row.value,
     resolveReturnFocus: trigger => content.querySelector(
       `[data-sicoob-movement-link="${trigger?.dataset.sicoobMovementLink}"] .sicoob-transaction-link-pencil`) || panel,

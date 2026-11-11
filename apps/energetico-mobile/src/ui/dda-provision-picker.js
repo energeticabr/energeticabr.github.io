@@ -14,7 +14,6 @@ const DDA_COPY = {
  options:count=>`${count} descritivo(s) sem data de pagamento efetuado. Escolha um para vincular.`,
  empty:'Nenhum descritivo provisão sem data de pagamento efetuado foi encontrado.',
  loadError:'Não foi possível carregar os descritivos. Tente novamente.',
- receipt:id=>`Vinculado ao descritivo #${id}.`,
 };
 
 export function createDdaProvisionPicker({service, ...options}){
@@ -24,12 +23,11 @@ export function createDdaProvisionPicker({service, ...options}){
   saveLink:(row,id,signal,sharedLinkETag)=>service.save({ddaId:row.id,provisionId:id,signal,sharedLinkETag}),
   sharedLinkQuestion:'Tem certeza que deseja atribuir dois DDAS ao mesmo descritivo provisão?',
   currentLink:row=>row.provisionId,
-  receiptId:receipt=>receipt.provisionId,
   rowAmount:row=>row.amount,
  });
 }
 
-export function createReportLinkPicker({document:doc,host,copy,loadOptions,saveLink,currentLink,receiptId,rowAmount,onLinked,onClose,resolveReturnFocus,sharedLinkQuestion,selectCurrent=false,timeoutMs=35000}){
+export function createReportLinkPicker({document:doc,host,copy,loadOptions,saveLink,currentLink,rowAmount,onLinked,onClose,resolveReturnFocus,sharedLinkQuestion,selectCurrent=false,timeoutMs=35000}){
  let current=null;ensureEditReviewStyles(doc);
  const el=(tag,cls='',value)=>{const node=doc.createElement(tag);node.className=cls;if(value!==undefined)node.textContent=String(value);return node;};
  const money=value=>{let text=String(value??'').trim().replace(/R\$|\s/g,'');if(text.includes(','))text=text.replace(/\./g,'').replace(',','.');const number=/^-?\d+(?:\.\d+)?$/.test(text)?Number(text):NaN;return Number.isFinite(number)?new Intl.NumberFormat('pt-BR',{style:'currency',currency:'BRL'}).format(number):'Valor não informado';};
@@ -130,10 +128,7 @@ export function createReportLinkPicker({document:doc,host,copy,loadOptions,saveL
      if(current!==entry||host.hidden)return;
     }
     onLinked?.(receipt);
-    feedback.setAttribute('role','status');
-    feedback.textContent=copy.receipt(receiptId(receipt));
-    save.remove();
-    cancel.textContent='Concluir';
+    close();
    }catch{
     if(current===entry){
      feedback.textContent='Não foi possível confirmar o vínculo no SharePoint. Atualize e tente novamente.';
@@ -142,13 +137,10 @@ export function createReportLinkPicker({document:doc,host,copy,loadOptions,saveL
    }finally{
     entry.busy=false;
     if(current===entry){
-     cancel.disabled=back.disabled=false;
-     if(save.isConnected){
-      save.disabled=search.disabled=false;
-      if(propose)propose.disabled=false;
-      for(const radio of list.querySelectorAll('input'))radio.disabled=false;
-     }
-     (save.isConnected?save:cancel).focus();
+     save.disabled=cancel.disabled=back.disabled=search.disabled=false;
+     if(propose)propose.disabled=false;
+     for(const radio of list.querySelectorAll('input'))radio.disabled=false;
+     save.focus();
     }
    }
   });
