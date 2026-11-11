@@ -7,9 +7,9 @@ from datetime import date, datetime
 from zoneinfo import ZoneInfo
 
 try:
-    from .logic import condition_matches, normalize_text, resolve_option
+    from .logic import condition_matches, normalize_text, resolve_option, visual_option_title
 except ImportError:
-    from logic import condition_matches, normalize_text, resolve_option
+    from logic import condition_matches, normalize_text, resolve_option, visual_option_title
 
 MODE_STAGE = 'choosing_document_mode'
 DEFAULTS_STAGE = 'document_batch_defaults'
@@ -39,6 +39,35 @@ def checkpoint_key(state, index=None):
         index = state['document_batch']['index']
     identity = f"{state['key']}:{state['batch_id']}:{index}"
     return 'document-batch-row-' + hashlib.sha256(identity.encode()).hexdigest()
+
+
+def _previous_document_snapshot(engine, state):
+    index = state['document_batch']['index']
+    if index == 0:
+        return None
+    checkpoint, _ = engine.state_store.load(checkpoint_key(state, index - 1))
+    return checkpoint['snapshot'] if checkpoint and checkpoint.get('phase') == 'verified' else None
+
+
+def order_document_type_options(engine, state, step, options):
+    """Pin the previous document's type on the outbound list only."""
+    if step.get('key') != 'tipo_documento' or not active(state):
+        return options
+    previous = _previous_document_snapshot(engine, state) or {}
+    value = previous.get('fields', {}).get('TIPODOCUMENTO')
+    if value is None or value == '':
+        return options
+    selection = previous.get('selections', {}).get('tipo_documento') or {}
+    selected_id = str(selection.get('id') or '').removeprefix('NOVO-').removesuffix('-TIPODOCUMENTO')
+    for index, option in enumerate(options):
+        if option.get('terminal_option') or option.get('value') is None:
+            continue
+        matches = (str(option['id']) == selected_id if selected_id.isdecimal()
+                   else option.get('value') == value)
+        if matches:
+            highlighted = {**option, 'title': f'⭐ {visual_option_title(option)}', 'title_includes_id': True}
+            return [highlighted, *options[:index], *options[index + 1:]]
+    return options
 
 
 def guard_event(engine, event, state, etag):
@@ -103,10 +132,7 @@ def prompt_defaults(engine, state, etag):
     flow = engine._flow_config(state)
     state['step_index'] = len(flow['steps'])
     labels = {row['field']: row['label'] for row in flow.get('summary_fields', [])}
-    checkpoint = None
-    if batch['index'] > 0:
-        checkpoint, _ = engine.state_store.load(checkpoint_key(state, batch['index'] - 1))
-    previous = checkpoint['snapshot'] if checkpoint and checkpoint.get('phase') == 'verified' else None
+    previous = _previous_document_snapshot(engine, state)
     previous_context = engine._context(previous) if previous is not None else {}
     current_context = engine._context(state)
     changes = []
