@@ -28,7 +28,7 @@ import { normalizeSignaturePixels, renderSignatureStrokes, signatureOutputSize }
 import { isDatabaseRegistrationOption, isSupplierGroupingDatabaseFilter, latestDatabaseFilter, supportsFullNameDatabaseFilter } from "../chat/database-filter.js";
 import { isActiveDateQuestion, isDateQuestion } from "../chat/date-input.js";
 import { orderEffectivePaymentDateOptions } from "../chat/launch-payment-date-options.js";
-import { attachmentFinishOption, isDiaryAttachmentPrompt, isDocumentAttachmentPrompt, withDocumentAttachmentPrompt } from "../chat/attachment-finish.js";
+import { LAUNCH_ATTACHMENT_CONTINUE_ID, attachmentFinishOption, isDiaryAttachmentPrompt, isDocumentAttachmentPrompt, withDocumentAttachmentPrompt, withLaunchAttachmentPrompt } from "../chat/attachment-finish.js";
 import { isRhidAttendanceDayFinalized, isRhidAttendanceRowDiscrepant, isRhidAttendanceRowWithoutPunches, isValidRhidReportDate, suggestedRhidAdjustmentTime, summarizeRhidAttendance } from "../chat/rhid-attendance-table.js";
 import { PRESENCE_OTHER_DATES_REPLY_ID } from "../chat/presence-date-scope.js";
 import { attendanceMissingPunchContext, attendanceValidationDate } from "../chat/attendance-rhid-badges.js";
@@ -769,6 +769,9 @@ function pollButton(option, busy, { deleteButton = false, deleteClass = "chat-dr
   const replyId = draftReplyId(option);
   const label = option.label || option.title || option.id;
   const disabled = busy || option?.disabled === true;
+  if (replyId === LAUNCH_ATTACHMENT_CONTINUE_ID) {
+    return `<button class="chat-choice-button chat-choice-button--finish" type="button" data-action="finish-flow"${disabled ? " disabled" : ""}>${escapeHtml(label)}</button>`;
+  }
   if (finishAttachments) {
     return `<button class="chat-choice-button chat-choice-button--finish" type="button" data-action="finish-flow" aria-label="Finalizar anexos"${disabled ? " disabled" : ""}>✅ FINALIZAR</button>`;
   }
@@ -1869,6 +1872,7 @@ function renderPoll(message, busy, draft = "", databaseFilterMessage = null, act
   const isLaunchPayrollMultiSelect = message?.presentation === "launch_payroll_multi_select";
   const isEpiProductSelection = isEpiProductPoll(message, activeFlow);
   const choiceListClass = choiceOptions.length === 1
+    || choiceOptions.some(option => draftReplyId(option) === LAUNCH_ATTACHMENT_CONTINUE_ID)
     ? "chat-choice-list chat-choice-list--single"
     : "chat-choice-list";
   const compressionChoices = displayOptions.filter(option => compressionOptionIds.has(draftReplyId(option).trim().toLowerCase()));
@@ -2975,8 +2979,10 @@ export function renderChatMarkup(state = {}, { showSettings = false, allowDemo =
     return renderSignedOut(state.sessionStatus, state.error, showSettings, allowDemo);
   }
 
-  const messages = withDocumentAttachmentPrompt(
-    Array.isArray(state.messages) ? state.messages : [], state.activeFlow, state.attachments,
+  const sourceMessages = Array.isArray(state.messages) ? state.messages : [];
+  const messages = withLaunchAttachmentPrompt(
+    withDocumentAttachmentPrompt(sourceMessages, state.activeFlow, state.attachments),
+    state.activeFlow, state.attachments,
   );
   const provisionLines = normalizeProvisionSnapshotForFlow(state.activeFlow);
   let finalSignedIndex = -1;
