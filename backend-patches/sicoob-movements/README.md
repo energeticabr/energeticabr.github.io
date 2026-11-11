@@ -40,6 +40,33 @@ privado de identificadores por conteúdo.
 Um Pix sem nome fica em identificação pendente e volta à consulta em cada
 rodada. O coletor preserva o EndToEndId completo se o extrato o fornecer.
 
+## Notificações Pix
+
+O receptor `pix_events.py` recebe os identificadores de pagamento em uma fila
+SQLite privada e confirma a entrega somente depois de gravá-los. O endereço
+contém um segredo aleatório; não deve aparecer em logs ou relatórios. Campos
+de nome enviados ao webhook são ignorados. O coletor consulta os identificadores
+pela API autenticada e exige a mesma correspondência financeira e unicidade
+usadas na consulta histórica antes de completar os campos vazios.
+
+Cada execução consulta até 100 identificadores em lotes de 25, no limite de
+tempo disponível. Respostas bancárias de pagamentos finalizados ficam salvas
+por lote para permitir retomada. Erros e respostas 404 continuam pendentes.
+A análise considera toda a fila, inclusive identificadores ainda não consultados;
+um resultado desconhecido impede a associação apenas por data/valor/CPF mascarado.
+Enquanto houver eventos pendentes, a busca em comprovantes históricos não pode
+contornar essa ambiguidade. O processamento ocorre nas coletas existentes,
+manuais ou programadas às 09h, 14h e 20h; a recepção fica disponível continuamente.
+
+O instalador `deploy_webhook.py` verifica versões, adquire as travas existentes,
+valida o Caddy e mantém backup e reversão. Depois de liberar o escopo
+`pixpagamentos_webhook` no Developers, execute `Configure-SicoobPixWebhook.ps1`
+em modo `Register` com o ambiente e usuário do serviço. O script preserva um
+callback diferente já cadastrado e exige leitura de confirmação do endereço.
+Ativação de escopo, cadastro da URL e entrega de um Pix feito no aplicativo
+Sicoob são verificações separadas. O receptor instalado, isoladamente, não
+comprova que esse canal de pagamento será notificado pelo banco.
+
 ## Ativação
 
 1. Instale os scripts de extrato e comprovantes em `/opt/energetica-whatsapp/sicoob-movements` e as
