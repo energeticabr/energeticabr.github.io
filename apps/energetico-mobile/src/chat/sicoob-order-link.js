@@ -44,16 +44,17 @@ function hasSupplierIdentity(value) {
   return !placeholders.has(descriptor) && name.split(' ').some(word => /[a-z]/.test(word) && !genericSupplierWords.has(word));
 }
 
-export function rankSicoobOrderOptions(options, { supplier, amount } = {}) {
+export function rankSicoobOrderOptions(options, { supplier, amount, date } = {}) {
   const wanted = positiveCents(amount);
   const named = hasSupplierIdentity(supplier);
   return options.map(option => {
     const amountMatch = wanted !== null && positiveCents(option.amount) === wanted;
+    const dateMatch = Boolean(date) && option.date === date;
     const similarity = named && hasSupplierIdentity(option.supplier) ? fiscalSupplierSimilarity(supplier, option.supplier) : 0;
     const nameMatch = similarity >= 0.5;
     const priority = 2 * Number(amountMatch) + Number(nameMatch);
     const matchDetail = [amountMatch && 'Valor igual', nameMatch && 'Nome/razão social semelhante'].filter(Boolean).join(' e ');
-    return { ...option, priority, similarity, recommended:priority > 0, matchDetail };
+    return { ...option, dateMatch, amountMatch, priority, similarity, recommended:priority > 0, matchDetail };
   }).sort((a, b) => b.priority - a.priority || b.similarity - a.similarity || Number(b.id) - Number(a.id));
 }
 
@@ -100,10 +101,8 @@ export function createSicoobOrderLink({ repository, orderRepository = repository
       const supplier = String(fields.FORNECEDOR ?? '').trim() || 'Fornecedor não informado';
       const branch = String(fields.FILIAL ?? '').trim();
       const date = provisionDateKey(fields.DATAPEDIDO);
-      const dateLabel = date ? date.split('-').reverse().join('/') : 'Sem data do pedido';
       const details = branch ? `${supplier} · ${branch}` : supplier;
-      return { id, supplier, amount:fields.VALORTOTAL ?? null, label:`#${id} · ${details}`,
-        displayLabel:`#${id} · ${dateLabel} · ${details}` };
+      return { id, supplier, amount:fields.VALORTOTAL ?? null, date, details, label:`#${id} · ${details}` };
     });
   }
 
