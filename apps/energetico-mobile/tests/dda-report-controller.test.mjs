@@ -42,7 +42,7 @@ test('the authenticated DDA snapshot and report changes control only the DDA mas
  let live=snapshot;
  const h=setup(t,{enableDdaReminders:false,enableDdaMenuAlert:true,registrationGalleryDataFactory:async()=>({loadSnapshot:async()=>live})});
  await h.controller.start();await tick();
- assert.equal(h.renders.at(-1).ddaUpcomingUnlinked,true);
+ assert.equal(h.renders.at(-1).ddaMenuAlert,true);
  const menu=()=>new JSDOM(renderChatMarkup({...h.renders.at(-1),messages:[{role:'assistant',type:'poll',
   question:'QUAL ÁREA VOCÊ DESEJA ACESSAR?',options:[{id:'group_pending',label:'PENDÊNCIAS'}]}]}));
  let dom=menu();
@@ -53,21 +53,21 @@ test('the authenticated DDA snapshot and report changes control only the DDA mas
  const report=h.factories[0];
  const regularized=live={rows:[{id:'5',fields:{...fields,DDA_x0020_sem_x0020_vincula_x00e:true}}]};
  report.onRowsChange(normalizeDdaReportRows(regularized),{id:'5',linkReviewed:true});
- assert.equal(h.renders.at(-1).ddaUpcomingUnlinked,false);
+ assert.equal(h.renders.at(-1).ddaMenuAlert,false);
  dom=menu();assert.ok(dom.window.document.querySelector('[data-action="open-dda-report"]'));
  assert.equal(dom.window.document.querySelector('[data-dda-alert]'),null);dom.window.close();
  live=snapshot;
  report.onRowsChange(normalizeDdaReportRows(snapshot),{id:'5',linkReviewed:false});
- assert.equal(h.renders.at(-1).ddaUpcomingUnlinked,true);
+ assert.equal(h.renders.at(-1).ddaMenuAlert,true);
  await tick();
  live={rows:[...snapshot.rows,{id:'6',fields}]};
  await h.controller.handleForeground();await tick();
  live={rows:[...regularized.rows,{id:'6',fields}]};
  // A report opened before the second DDA appeared cannot erase the newer alert.
  report.onRowsChange(normalizeDdaReportRows(regularized),{id:'5',linkReviewed:true});
- assert.equal(h.renders.at(-1).ddaUpcomingUnlinked,true);
+ assert.equal(h.renders.at(-1).ddaMenuAlert,true);
  await h.view.emit('sign-out');
- assert.equal(h.renders.at(-1).ddaUpcomingUnlinked,false);
+ assert.equal(h.renders.at(-1).ddaMenuAlert,false);
 });
 test('gallery receives the authenticated bank refresh callback and it expires with logout',async t=>{
  let options,called=0;
@@ -81,6 +81,26 @@ test('gallery receives the authenticated bank refresh callback and it expires wi
  await options.refreshBank({});assert.equal(called,1);
  await h.view.emit('sign-out');
  await assert.rejects(options.refreshBank({}));assert.equal(called,1);
+});
+
+test('the DDA mascot alerts on the São Paulo due day and while overdue regardless of linkage',async t=>{
+ t.mock.timers.enable({apis:['Date'],now:new Date('2026-11-12T02:59:00Z')});
+ const record={id:'5',fields:{SITUACAO:'Em aberto',VENCIMENTO:'2026-11-12',DESCRITIVOPROVIS_x00c3_O:'58'}};
+ let live={rows:[record]};
+ const h=setup(t,{enableDdaReminders:false,enableDdaMenuAlert:true,registrationGalleryDataFactory:async()=>({loadSnapshot:async()=>live})});
+ await h.controller.start();await tick();
+ const hasAlert=()=>h.renders.at(-1).ddaMenuAlert;
+ assert.equal(hasAlert(),false,'the linked DDA still has not reached its due day');
+ t.mock.timers.setTime(Date.parse('2026-11-12T03:00:00Z'));
+ await h.controller.handleForeground();await tick();
+ assert.equal(hasAlert(),true,'the linked DDA alerts as soon as its local due day arrives');
+ t.mock.timers.setTime(Date.parse('2026-11-13T03:00:00Z'));
+ live={rows:[{...record,fields:{...record.fields,DESCRITIVOPROVIS_x00c3_O:'',DDA_x0020_sem_x0020_vincula_x00e:true}}]};
+ await h.controller.handleForeground();await tick();
+ assert.equal(hasAlert(),true,'regularization does not dismiss an overdue DDA');
+ live={rows:[{...record,fields:{...record.fields,PGTO_CONFIRMADO:true}}]};
+ await h.controller.handleForeground();await tick();
+ assert.equal(hasAlert(),false,'payment clears the warning');
 });
 
 test('durable DDA results resume at app startup without opening gallery, foreground again, and detach on logout',async t=>{

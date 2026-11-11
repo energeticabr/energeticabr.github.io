@@ -63,9 +63,10 @@ export function normalizeDdaReportRows(snapshot){
 export function canReviewDdaUnlinked(row){
  return !row.provisionId&&!row.paidManually&&isDdaOpenStatus(row.status);
 }
-export function hasUpcomingUnlinkedDda(rows,now=new Date()){
+export function hasDdaMenuAlert(rows,now=new Date()){
  const today=ddaTodayKey(now);
- return rows.some(row=>row.due>=today&&!row.linkReviewed&&canReviewDdaUnlinked(row));
+ return rows.some(row=>row.due&&!row.paidManually&&isDdaOpenStatus(row.status)&&
+  (row.due<=today||(!row.provisionId&&!row.linkReviewed)));
 }
 export function buildDdaReport(rows,{status='Em aberto',bank='',search='',settledDdaIds}={},now=new Date()){
  const query=normalizeSearchText(search),today=ddaTodayKey(now);
