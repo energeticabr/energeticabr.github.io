@@ -75,6 +75,25 @@ def pix_receiver_fields(pix):
     return result
 
 
+def receipt_end_ids(text):
+    labels = movements.bank_label(text)
+    if not all(label in labels for label in ('COMPROVANTE', 'SICOOB', 'PIX')):
+        return set()
+    ids = extract_end_ids(text)
+    lines = text.splitlines()
+    for index, line in enumerate(lines):
+        # Keep the case as read. OCR can insert spaces into the ID on this line.
+        if not re.match(r'^ID DA TRANSA[CG]AO\s*:', movements.bank_label(line)):
+            continue
+        value = line.partition(':')[2].strip()
+        if not value and index + 1 < len(lines):
+            value = lines[index + 1]
+        candidate = ''.join(value.split())
+        if END_ID.fullmatch(candidate):
+            ids.update(extract_end_ids(candidate))
+    return ids if len(ids) == 1 else set()
+
+
 def receipt_ids(content):
     from PIL import ImageOps
     from pypdf import PdfReader
@@ -87,7 +106,7 @@ def receipt_ids(content):
         return set()
     text = pdf.pages[0].extract_text() or ''
     labels = movements.bank_label(text)
-    ids = extract_end_ids(text)
+    ids = receipt_end_ids(text)
     if all(label in labels for label in ('COMPROVANTE', 'SICOOB', 'PIX')) and ids:
         return ids if len(ids) == 1 else set()
     with closing(pypdfium2.PdfDocument(content)) as document:
@@ -101,26 +120,37 @@ def receipt_ids(content):
     image.thumbnail((1400, 2600))
     picture = BytesIO()
     image.save(picture, format='PNG')
-    for layout in ('6', '11'):
-        process = subprocess.run(['/usr/bin/tesseract', 'stdin', 'stdout', '--psm', layout, '-l', 'eng'],
-                                 input=picture.getvalue(), capture_output=True, timeout=30,
-                                 env={**os.environ, 'OMP_THREAD_LIMIT': '1'})
+    found = set()
+    incomplete = False
+    for layout, language in (('6', 'eng'), ('6', 'por'), ('11', 'eng')):
+        try:
+            process = subprocess.run(['/usr/bin/tesseract', 'stdin', 'stdout', '--psm', layout, '-l', language],
+                                     input=picture.getvalue(), capture_output=True, timeout=30,
+                                     env={**os.environ, 'OMP_THREAD_LIMIT': '1'})
+        except subprocess.TimeoutExpired:
+            incomplete = True
+            continue
+        if getattr(process, 'returncode', 0):
+            incomplete = True
+            continue
         text = process.stdout.decode('utf-8', errors='replace')
         labels = movements.bank_label(text)
-        ids = extract_end_ids(text)
+        ids = receipt_end_ids(text)
         if all(label in labels for label in ('COMPROVANTE', 'SICOOB', 'PIX')) and ids:
-            return ids if len(ids) == 1 else set()
-    return set()
+            found.update(ids)
+    if incomplete and not found:
+        raise RuntimeError('Receipt OCR incomplete')
+    return found
 
 
 def cached_receipt_ids(content):
     from pypdf.errors import PdfReadError
     key = hashlib.sha256(content).hexdigest()
-    file = CACHE / key
+    file = CACHE / f'{key}.v3'
     if file.exists():
         cached = json.loads(file.read_text())
-        return {cached[0]} if (isinstance(cached, list) and len(cached) == 1
-                               and isinstance(cached[0], str) and END_ID.fullmatch(cached[0])) else set()
+        return set(cached) if (isinstance(cached, list) and len(cached) <= 3
+                              and all(isinstance(value, str) and END_ID.fullmatch(value) for value in cached)) else set()
     try:
         ids = receipt_ids(content)
     except (OSError, ValueError, RuntimeError, PdfReadError, subprocess.SubprocessError):
@@ -147,11 +177,16 @@ def launch_dates_and_values(client, start, end):
         if not row.get('Attachments'):
             continue
         try:
+            day = movements.civil_date(row['field_4'])
+        except (KeyError, ValueError):
+            continue
+        matches[(day, None)].append(row['Id'])
+        try:
             quantity = Decimal(str(row.get('field_8') or 0).replace(',', '.'))
             price = Decimal(str(row.get('field_9') or 0).replace(',', '.'))
             freight = Decimal(str(row.get('field_10') or 0).replace(',', '.'))
             value = f'{quantity * price + freight:.2f}'.replace('.', ',')
-            matches[(movements.civil_date(row['field_4']), value)].append(row['Id'])
+            matches[(day, value)].append(row['Id'])
         except (KeyError, InvalidOperation, ValueError):
             continue
     return matches
@@ -199,17 +234,28 @@ def bank_match(row, options, answers, movements_in_account, payer):
     if any(r['Id'] != row['Id'] and not pix_key(r)[-1] and not direct_ids(r) and pix_key(r)[:3] == movement_key
            for r in movements_in_account):
         return None
-    matches = []
-    for end_id, content in options.items():
-        answer = answers[end_id]
+    matches = {}
+    for requested_id, content in options.items():
+        answer = answers[requested_id]
         result = answer.get('result')
         if answer['status'] != 200 or not isinstance(result, dict):
             continue
         pix = result.get('resultado', result)
+        if not isinstance(pix, dict):
+            continue
+        end_id = movements.text(pix.get('endToEndId'))
+        # OCR can change the case of a suffix. The canonical ID in the bank's
+        # response is still checked exactly against any ID from the statement.
+        if not END_ID.fullmatch(end_id) or end_id.casefold() != requested_id.casefold():
+            continue
         compatible = [r['Id'] for r in movements_in_account if pix_matches(r, pix, end_id, payer)]
         if compatible == [row['Id']]:
-            matches.append((pix, end_id, content))
-    return matches[0] if len(matches) == 1 else None
+            prior = matches.get(end_id)
+            if prior and prior[0] != pix:
+                return None
+            if not prior or not prior[2]:
+                matches[end_id] = (pix, end_id, content)
+    return next(iter(matches.values())) if len(matches) == 1 else None
 
 
 def run(check):
@@ -232,7 +278,9 @@ def run(check):
         if len(direct) > 1:
             continue
         candidates = dict.fromkeys(direct)
-        for launch_id in launches[(day, value)]:
+        # Accounting entries can split or group a payment's amount. Only the
+        # bank response establishes the amount and recipient of the movement.
+        for launch_id in dict.fromkeys(launches[(day, value)] + launches[(day, None)]):
             if launch_id not in archive:
                 archive[launch_id] = client.get_item_attachments(launch_id, 'LANCAMENTOS')
             for file in archive[launch_id]:
