@@ -2,6 +2,33 @@ function optionReplyId(option) {
   return String(option?.reply || option?.replyId || option?.id || "").trim();
 }
 
+export const LAUNCH_ATTACHMENT_CONTINUE_ID = "local_launch_attachment_continue";
+
+export function withLaunchAttachmentPrompt(messages, activeFlow, attachments) {
+  if (activeFlow?.id !== "launch"
+    || !Array.isArray(attachments)
+    || !attachments.some(item => item?.id && item?.mediaUrl)) return messages;
+  const index = messages.findLastIndex(message => message?.role !== "user"
+    && ["poll", "text"].includes(message?.type));
+  const message = messages[index];
+  if (message?.type !== "poll") return messages;
+  const uploadIndex = (message.options || []).findIndex(option => optionReplyId(option).toLowerCase() === "attachment_upload_continue");
+  if (uploadIndex < 0) return messages;
+
+  const options = [...message.options];
+  options.splice(uploadIndex + 1, 0, {
+    id: LAUNCH_ATTACHMENT_CONTINUE_ID,
+    label: "CONTINUAR APENAS COM OS JÁ ENVIADOS",
+    disabled: attachmentFinishOption(message)?.disabled === true,
+  });
+  const question = /envie\s+o\s+primeiro\s+anexo\s+do\s+lançamento/i.test(message.question || message.prompt || "")
+    ? "📎 DESEJA ENVIAR MAIS ANEXOS PARA ESTE LANÇAMENTO?"
+    : message.question;
+  const next = [...messages];
+  next[index] = { ...message, question, options };
+  return next;
+}
+
 export function attachmentFinishOption(message) {
   return (message?.options || []).find(option => {
     const label = String(option?.label || option?.title || "")
