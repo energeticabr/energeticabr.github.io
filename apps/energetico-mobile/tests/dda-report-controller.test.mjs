@@ -39,7 +39,8 @@ test('DDA shortcut stays below the NFE shortcut and dispatches its own report',(
 test('the authenticated DDA snapshot and report changes control only the DDA mascot warning',async t=>{
  const fields={SITUACAO:'Em aberto',VENCIMENTO:'2099-01-01'};
  const snapshot={rows:[{id:'5',fields}]};
- const h=setup(t,{enableDdaReminders:false,enableDdaMenuAlert:true,registrationGalleryDataFactory:async()=>({loadSnapshot:async()=>snapshot})});
+ let live=snapshot;
+ const h=setup(t,{enableDdaReminders:false,enableDdaMenuAlert:true,registrationGalleryDataFactory:async()=>({loadSnapshot:async()=>live})});
  await h.controller.start();await tick();
  assert.equal(h.renders.at(-1).ddaUpcomingUnlinked,true);
  const menu=()=>new JSDOM(renderChatMarkup({...h.renders.at(-1),messages:[{role:'assistant',type:'poll',
@@ -50,11 +51,20 @@ test('the authenticated DDA snapshot and report changes control only the DDA mas
  dom.window.close();
  await h.view.emit('open-dda-report');
  const report=h.factories[0];
- report.onRowsChange(normalizeDdaReportRows({rows:[{id:'5',fields:{...fields,DDA_x0020_sem_x0020_vincula_x00e:true}}]}));
+ const regularized=live={rows:[{id:'5',fields:{...fields,DDA_x0020_sem_x0020_vincula_x00e:true}}]};
+ report.onRowsChange(normalizeDdaReportRows(regularized),{id:'5',linkReviewed:true});
  assert.equal(h.renders.at(-1).ddaUpcomingUnlinked,false);
  dom=menu();assert.ok(dom.window.document.querySelector('[data-action="open-dda-report"]'));
  assert.equal(dom.window.document.querySelector('[data-dda-alert]'),null);dom.window.close();
- report.onRowsChange(normalizeDdaReportRows(snapshot));
+ live=snapshot;
+ report.onRowsChange(normalizeDdaReportRows(snapshot),{id:'5',linkReviewed:false});
+ assert.equal(h.renders.at(-1).ddaUpcomingUnlinked,true);
+ await tick();
+ live={rows:[...snapshot.rows,{id:'6',fields}]};
+ await h.controller.handleForeground();await tick();
+ live={rows:[...regularized.rows,{id:'6',fields}]};
+ // A report opened before the second DDA appeared cannot erase the newer alert.
+ report.onRowsChange(normalizeDdaReportRows(regularized),{id:'5',linkReviewed:true});
  assert.equal(h.renders.at(-1).ddaUpcomingUnlinked,true);
  await h.view.emit('sign-out');
  assert.equal(h.renders.at(-1).ddaUpcomingUnlinked,false);
