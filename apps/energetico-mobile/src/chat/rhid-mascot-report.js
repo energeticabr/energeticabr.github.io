@@ -56,12 +56,13 @@ export function rhidMascotDay(rows, date, descriptiveRows, ambiguousNames = rhid
     const pending = statuses?.has('PENDENTE') === true;
     const mismatch = clockPunch ? statuses?.has('AUSENTE') === true
       : person.emptyPunchSource && statuses?.has('PRESENTE') === true;
+    const matched = clockPunch && !mismatch && !pending && statuses?.has('PRESENTE') === true;
     let label = 'Sem presença no Descritivo';
     if (ambiguous) label = 'Nome ambíguo no RHID';
     else if (mismatch) label = clockPunch ? 'Ausente no Descritivo, com batida no relógio' : 'Presente no Descritivo, sem batida no relógio';
     else if (pending) label = 'Pendente no Descritivo';
     else if (statuses) label = statuses.has('PRESENTE') ? 'Presente no Descritivo' : 'Ausente no Descritivo';
-    const presenceComparison = descriptiveRows ? { pending, mismatch, label } : null;
+    const presenceComparison = descriptiveRows ? { pending, mismatch, matched, label } : null;
     people.push({ ...person, presenceComparison });
     visibleRows.push(row);
   }

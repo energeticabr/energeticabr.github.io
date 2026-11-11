@@ -1342,6 +1342,10 @@ function rhidAttendanceTableMarkup(table, messageId, rhidRefresh = null, activeF
           ? person.emptyPunchSource ? 'SEM BATIDA NO RELÓGIO' : 'DADOS DO RELÓGIO INCOMPLETOS'
           : 'SEM MARCAÇÃO';
         const name = row[0] ?? "—";
+        const registration = mascot
+          ? [person.profession, [person.branch, person.property].filter(Boolean).join('/')].filter(Boolean).join(' - ')
+          : '';
+        const heading = registration ? `${name} (${registration})` : name;
         const total = row[row.length - 1] ?? "—";
         const slots = Array.from({ length: pairCount }, (_, index) => {
           const entryLabel = String(headers[1 + index * 2] ?? `Entrada ${index + 1}`);
@@ -1379,10 +1383,9 @@ function rhidAttendanceTableMarkup(table, messageId, rhidRefresh = null, activeF
         const validateButton = !mascot && pendingId && person?.personKey && messageId && isValidRhidReportDate(table.reportDate)
           ? `<button class="chat-rhid-attendance-card__validate" type="button" data-action="rhid-presence-validate-open" data-message-id="${escapeHtml(messageId)}" data-person-key="${escapeHtml(person.personKey)}" data-value="${escapeHtml(pendingId)}" aria-label="Validar presença de ${escapeHtml(name)} em ${escapeHtml(dateLabel)}" title="ID de presença ${escapeHtml(pendingId)}"${activeFlow?.id === "attendance_validation" ? " disabled" : ""}>VALIDAR PRESENÇA</button>`
           : "";
-        return `<article class="chat-rhid-attendance-card ${rowClass}" role="listitem">
-          <div class="chat-rhid-attendance-card__main"><div class="chat-rhid-attendance-card__person"><h3>${escapeHtml(name)}</h3>${validateButton}${(mascot ? !person.rawPunches.length : noPunches) ? `<span class="chat-rhid-attendance-card__missing">${missingLabel}</span>` : ""}</div>
+        return `<article class="chat-rhid-attendance-card ${rowClass}${comparison?.matched ? ' chat-rhid-attendance-card--presence-match' : ''}" role="listitem">
+          <div class="chat-rhid-attendance-card__main"><div class="chat-rhid-attendance-card__person"><h3>${escapeHtml(heading)}</h3>${validateButton}${(mascot ? !person.rawPunches.length : noPunches) ? `<span class="chat-rhid-attendance-card__missing">${missingLabel}</span>` : ""}</div>
           ${comparison ? `<p class="chat-rhid-mascot__comparison">${escapeHtml(comparison.label)}${comparison.mismatch && comparison.pending ? ' <span>Pendente também no Descritivo</span>' : ''}</p>` : ''}
-          ${mascot && (person.profession || person.branch || person.property) ? `<p class="chat-rhid-mascot__registration">${[person.profession, person.branch, person.property].filter(Boolean).map(escapeHtml).join(' · ')}</p>` : ''}
           <div class="chat-rhid-attendance-card__details"><div class="chat-rhid-attendance-card__slots">${slots}</div><div class="chat-rhid-attendance-card__total"><span>TOTAL DE HORAS/DIA</span><strong>${escapeHtml(displayTotal)}</strong>${isPartial ? `<small>PARCIAL</small>` : ""}</div></div></div>
           ${person?.issues?.length ? `<ul class="chat-rhid-attendance-card__issues" aria-label="Inconsistências">${person.issues.map(issue => `<li>${escapeHtml(issue)}</li>`).join("")}</ul>` : ""}
         </article>`;

@@ -86,10 +86,12 @@ rhidRows.push(...Array.from({length:6}, (_, index)=>({
   ID_PESSOA_RHID:String(index+3), NOME_COLABORADOR:`Fornecedor de teste ${index+3}`, BATIDAS_RHID:'07:30',
 })));
 const rhidMascot={ today:rhidDay, start:rhidDay, end:rhidDay, mode:'today', filters:{},
-  directory:[{name:rhidRows[0].NOME_COLABORADOR, profession:'Mestre de obras', branch:'Filial de exemplo'}],
+  directory:[{name:rhidRows[0].NOME_COLABORADOR, profession:'Mestre de obras', branch:'Filial de exemplo'},
+    {name:rhidRows[2].NOME_COLABORADOR, profession:'Servente de pedreiro', branch:'004 - Edifício de exemplo', property:'Imóvel de teste'}],
   days:[rhidMascotDay(rhidRows,rhidDay,[
     {supplier:rhidRows[0].NOME_COLABORADOR,presence:'AUSENTE'},
     {supplier:rhidRows[1].NOME_COLABORADOR,presence:'PENDENTE'},
+    {supplier:rhidRows[2].NOME_COLABORADOR,presence:'PRESENTE'},
   ])] };
 view.on('open-rhid-mascot-report',()=>view.render({...state,rhidMascot}));
 view.on('rhid-mascot-period',()=>view.render({...state,rhidMascot:{...rhidMascot,mode:'period',start:'2026-11-01'}}));

@@ -856,7 +856,10 @@ button.chat-rhid-attendance-card__cluster:focus-visible { outline: 3px solid #15
 .chat-rhid-attendance-card--no-punches .chat-rhid-attendance-card__total { background: #f9e6c4; }
 .chat-rhid-attendance-card--presence-mismatch { border-color: #ca631b; border-inline-start-width: 4px; background: #fff0df; }
 .chat-rhid-attendance-card--presence-pending { border-color: #b28b13; border-inline-start-width: 4px; background: #fff7cf; }
+.chat-rhid-attendance-card--presence-match { background: #e7f6eb; }
+.chat-rhid-attendance-card--presence-match:not(.chat-rhid-attendance-card--discrepant) { border-color: #a6d3b5; }
 .chat-rhid-mascot__comparison { margin: 0 0 8px; color: #364d60; font-size: .77rem; font-weight: 650; overflow-wrap: anywhere; }
+.chat-rhid-attendance-card--presence-match .chat-rhid-mascot__comparison { justify-self: end; margin: 0; padding: 2px 7px; border-radius: 999px; color: #185b37; background: #cfedd9; text-align: end; }
 .chat-rhid-attendance-card--presence-mismatch .chat-rhid-mascot__comparison { color: #8d3908; }
 .chat-rhid-attendance-card--presence-pending .chat-rhid-mascot__comparison,
 .chat-rhid-mascot__comparison span { color: #685000; }
@@ -1650,7 +1653,7 @@ button.chat-rhid-attendance-card__cluster:focus-visible { outline: 3px solid #15
 .chat-rhid-mascot__filters input[type="date"] { appearance: none; }
 .chat-rhid-mascot__filters button[aria-pressed="true"] { background: #1466a3; color: #fff; border-color: #1466a3; font-weight: 700; }
 .chat-rhid-mascot__date { margin: 0 0 6px; color: #123b5d; font-size: 1.05rem; }
-.chat-rhid-mascot__registration { margin: 0 0 8px; font-size: .77rem; overflow-wrap: anywhere; }
+.chat-rhid-mascot .chat-rhid-attendance-card__person h3 { white-space: normal; overflow: visible; overflow-wrap: anywhere; }
 @media (min-width: 680px) {
   .chat-rhid-mascot__selects { grid-template-columns: repeat(4, minmax(0, 1fr)); }
   .chat-rhid-mascot__dates { grid-template-columns: repeat(3, minmax(0, 1fr)); align-items: end; }
