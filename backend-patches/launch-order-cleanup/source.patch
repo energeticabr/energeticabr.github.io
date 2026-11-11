@@ -1,0 +1,114 @@
+--- a/worker/launch_gallery.py
++++ b/worker/launch_gallery.py
+@@ -35,7 +35,7 @@
+ from decimal import Decimal, InvalidOperation, ROUND_HALF_UP
+ from html import unescape
+ from html.parser import HTMLParser
+-from urllib.parse import quote, unquote
++from urllib.parse import parse_qs, quote, unquote, urlsplit
+ from zoneinfo import ZoneInfo
+
+ import requests
+@@ -48,6 +48,7 @@
+
+ 
+ LAUNCHES = "LANCAMENTOS"
++ORDERS = "NOTASPENDENTES"
+ PROVISIONS = "PROVISÃO PGTOS"
+ MEASUREMENTS = "DESCRICAOMEDICOES"
+ TZ = ZoneInfo("America/Sao_Paulo")
+@@ -375,13 +376,92 @@
+             else:
+                 self._write(item_id, values, current)
+         elif operation == "delete":
+-            self.sharepoint._request("POST", self._item_endpoint(LAUNCHES, item_id), headers={
+-                "IF-MATCH": self._etag(current), "X-HTTP-Method": "DELETE"})
++            self._delete_launch(item_id, current)
+         elif operation == "signature":
+             self._signature(item_id, payload, current)
+         else:
+             return self._attachment(operation, item_id, payload, current)
+         return {"ok": True, "id": item_id}
++
++    def _delete_launch(self, item_id, current):
++        # AGRUPAR can also contain workflow labels; only a canonical SharePoint ID
++        # identifies an order. The ID comes from the version-checked stored row.
++        if "AGRUPAR" not in current:
++            _fail("schema_missing", "Campo necessário indisponível: AGRUPAR (LANCAMENTOS).", 503)
++        group = current["AGRUPAR"]
++        order_id = None
++        if (isinstance(group, str) and re.fullmatch(r"[1-9][0-9]{0,9}", group)
++                and int(group) <= 2147483647):
++            order_id = group
++        order_etag = None
++        if order_id:
++            self._metadata(ORDERS)  # A missing list is not a missing order.
++            try:
++                order_etag = self._etag(self._get(ORDERS, order_id, []))
++            except requests.HTTPError as exc:
++                if exc.response is None or exc.response.status_code != 404:
++                    raise
++
++        self.sharepoint._request("POST", self._item_endpoint(LAUNCHES, item_id), headers={
++            "IF-MATCH": self._etag(current), "X-HTTP-Method": "DELETE"})
++        if not order_etag:
++            return
++
++        try:
++            if self._has_active_order_link(order_id):
++                return
++            try:
++                self.sharepoint._request("POST", self._item_endpoint(ORDERS, order_id), headers={
++                    "IF-MATCH": order_etag, "X-HTTP-Method": "DELETE"})
++            except requests.HTTPError as exc:
++                # Another deletion may already have removed the same order.
++                if exc.response is None or exc.response.status_code != 404:
++                    raise
++        except (LaunchGalleryError, requests.RequestException):
++            _fail("order_cleanup_incomplete",
++                  f"O lançamento foi excluído, mas não foi possível confirmar a exclusão do pedido #{order_id}. "
++                  "Atualize a galeria.",
++                  409, launchDeleted=True, orderId=order_id)
++
++    def _has_active_order_link(self, order_id):
++        endpoint = f"{self._list_endpoint(LAUNCHES)}/items"
++        expected = urlsplit(f"{self.sharepoint.site_url.rstrip('/')}/_api/{endpoint}")
++        query = f"AGRUPAR eq '{order_id}'"
++        params = {"$select": "Id,AGRUPAR", "$filter": query, "$top": "1"}
++        seen = set()
++        for _ in range(25):
++            payload = self.sharepoint._request("GET", endpoint, params=params)
++            verbose = payload.get("d", {}) if isinstance(payload, dict) else None
++            if (not isinstance(verbose, dict)
++                    or ("value" in payload and "results" in verbose and payload["value"] != verbose["results"])):
++                _fail("invalid_response", "Resposta SharePoint inválida ao verificar os vínculos.", 502)
++            for row in self._values(payload):
++                if (not isinstance(row, dict) or row.get("AGRUPAR") != order_id
++                        or not re.fullmatch(r"[1-9][0-9]{0,9}", str(row.get("Id")))):
++                    _fail("invalid_response", "Resposta SharePoint inválida ao verificar os vínculos.", 502)
++                return True
++            # An empty page only proves absence if it terminates this exact query.
++            links = [link for link in (payload.get("@odata.nextLink"), payload.get("odata.nextLink"),
++                                       verbose.get("__next")) if link is not None]
++            if not links:
++                return False
++            endpoint = links[0]
++            if any(link != endpoint for link in links[1:]):
++                break
++            if isinstance(endpoint, str) and endpoint not in seen:
++                try:
++                    cursor = urlsplit(endpoint)
++                    filters = parse_qs(cursor.query, keep_blank_values=True).get("$filter")
++                    if (cursor.scheme == expected.scheme and cursor.netloc == expected.netloc
++                            and unquote(cursor.path) == unquote(expected.path)
++                            and not cursor.fragment and filters == [query]):
++                        seen.add(endpoint)
++                        params = None
++                        continue
++                except ValueError:
++                    pass
++            break
++        _fail("invalid_pagination", "Paginação SharePoint inválida ao verificar os vínculos.", 502)
+
+     def _list_endpoint(self, name):
+         return self.sharepoint._list_endpoint(name)
