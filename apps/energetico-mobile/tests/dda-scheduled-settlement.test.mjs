@@ -62,6 +62,26 @@ test('scheduled payments bypass only situation and remain outside the selected s
  assert.match(doc.querySelector('[data-dda-summary]').textContent,/50,00/);
 });
 
+test('the first table waits for settlement proof before ordering unpaid and pending DDAs',async t=>{
+ let verify;
+ const snapshot={rows:[row(3,paid),row(45),row(46,{...paid,VENCIMENTO:'2026-11-09'})]};
+ const {doc,view,ids}=setup(t,{
+  loadSnapshot:async()=>snapshot,
+  provisionLink:{loadSettledDdaIds:()=>new Promise(resolve=>{verify=resolve;})},
+ });
+ const opening=view.open({automatic:true,initialSnapshot:snapshot});
+ await tick();
+ try{
+  assert.equal(view.element.getAttribute('aria-busy'),'true');
+  assert.equal(doc.querySelector('.ddr-table'),null);
+ }finally{verify(new Set(['3']));}
+ await opening;
+ assert.equal(view.element.getAttribute('aria-busy'),'false');
+ assert.equal(doc.querySelector('[name="status"]').value,'Não pagos');
+ assert.deepEqual(ids(),['45','46']);
+ assert.deepEqual([...doc.querySelectorAll('.ddr-settlement-pending')].map(node=>node.closest('[data-dda-id]').dataset.ddaId),['46']);
+});
+
 test('bank-paid and manually confirmed linked DDAs offer the exact provision until settlement',async t=>{
  let settled=false,liveLink='90',verify;
  const starts=[];
@@ -80,10 +100,10 @@ test('bank-paid and manually confirmed linked DDAs offer the exact provision unt
  },{onStartSettlement:async id=>{starts.push(id);return false;}});
  const opening=view.open({automatic:true});await tick();
  const button=()=>doc.querySelector('[data-dda-settle-provision="34"]');
- assert.deepEqual(ids(),['1','10','34']);
- assert.equal(button().disabled,true);
+ assert.equal(button(),null);
  verify();await opening;
  const action=button();
+ assert.equal(action.disabled,false);
  assert.equal(action.textContent,'Dar baixa');
  assert.match(doc.querySelector('[data-dda-id="34"] .ddr-status-cluster').textContent,/Pago.*Baixa pendente/s);
  action.click();await tick();
@@ -130,23 +150,31 @@ test('an already confirmed scheduled DDA remains visible with its manual audit l
 test('relink aborts proof for the old parent and preserves report position and row focus',async t=>{
  const checks=[];
  const provisionLink={
-  async loadOptions(){return [{id:'23',supplier:'Fornecedor 1',amount:50,label:'#23 · Fornecedor 1'}];},
+  async loadOptions(){return ['23','24'].map(id=>({id,supplier:'Fornecedor 1',amount:50,label:`#${id} · Fornecedor 1`}));},
   async save({ddaId,provisionId}){return {ddaId,provisionId};},
-  loadSettledDdaIds(rows,{signal}){return new Promise(resolve=>checks.push({ids:rows.map(row=>row.provisionId),signal,resolve}));},
+  loadSettledDdaIds(rows,{signal}){
+   const ids=rows.map(row=>row.provisionId);
+   if(ids[0]==='21')return new Set();
+   return new Promise(resolve=>checks.push({ids,signal,resolve}));
+  },
  };
  const {doc,view,ids}=setup(t,{loadSnapshot:async()=>({rows:[row(1,paid),row(2)]}),provisionLink});
- const opening=view.open();await tick();
+ await view.open();
  const position=doc.querySelector('.ddr-content');position.scrollTop=42;position.scrollLeft=10;
  const pencil=()=>doc.querySelector('[data-dda-provision-pencil="1"]');
- pencil().focus();pencil().click();await tick();
- doc.querySelector('input[value="23"]').click();doc.querySelector('.dda-provision-save').click();await tick();
- doc.querySelector('[data-edit-review-submit]').click();await tick();
- assert.deepEqual(checks.map(check=>check.ids),[['21'],['23']]);
+ const link=async id=>{
+  pencil().focus();pencil().click();await tick();
+  doc.querySelector(`input[value="${id}"]`).click();doc.querySelector('.dda-provision-save').click();await tick();
+  doc.querySelector('[data-edit-review-submit]').click();await tick();
+  [...doc.querySelectorAll('.dda-provision-dialog button')].find(node=>node.textContent==='Concluir').click();
+ };
+ await link('23');
+ await link('24');
+ assert.deepEqual(checks.map(check=>check.ids),[['23'],['24']]);
  assert.equal(checks[0].signal.aborted,true);
- checks[0].resolve(new Set(['1']));await opening;
+ checks[0].resolve(new Set(['1']));await tick();
  assert.deepEqual(ids(),['1','2']);
- assert.match(doc.querySelector('[data-dda-id="1"] .ddr-link').textContent,/ID 23/);
- [...doc.querySelectorAll('.dda-provision-dialog button')].find(node=>node.textContent==='Concluir').click();
+ assert.match(doc.querySelector('[data-dda-id="1"] .ddr-link').textContent,/ID 24/);
  assert.equal(doc.activeElement,pencil());
  doc.querySelector('[data-dda-toggle-barcode="2"]').focus();
  checks[1].resolve(new Set(['1']));await tick();
