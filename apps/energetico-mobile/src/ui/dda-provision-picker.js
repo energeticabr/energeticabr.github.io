@@ -27,7 +27,7 @@ export function createDdaProvisionPicker({service, ...options}){
  });
 }
 
-export function createReportLinkPicker({document:doc,host,copy,loadOptions,saveLink,currentLink,rowAmount,onLinked,onClose,resolveReturnFocus,sharedLinkQuestion,selectCurrent=false,timeoutMs=35000}){
+export function createReportLinkPicker({document:doc,host,copy,loadOptions,saveLink,currentLink,rowAmount,renderOptionLabel,onLinked,onClose,resolveReturnFocus,sharedLinkQuestion,selectCurrent=false,timeoutMs=35000}){
  let current=null;ensureEditReviewStyles(doc);
  const el=(tag,cls='',value)=>{const node=doc.createElement(tag);node.className=cls;if(value!==undefined)node.textContent=String(value);return node;};
  const money=value=>{let text=String(value??'').trim().replace(/R\$|\s/g,'');if(text.includes(','))text=text.replace(/\./g,'').replace(',','.');const number=/^-?\d+(?:\.\d+)?$/.test(text)?Number(text):NaN;return Number.isFinite(number)?new Intl.NumberFormat('pt-BR',{style:'currency',currency:'BRL'}).format(number):'Valor não informado';};
@@ -66,12 +66,18 @@ export function createReportLinkPicker({document:doc,host,copy,loadOptions,saveL
   const cancelEdit=()=>{if(current===entry&&!entry.busy)close();};cancel.addEventListener('click',cancelEdit);back.addEventListener('click',cancelEdit);
   bindBackdropDismiss(overlay,()=>{if(!entry.reviewing)cancelEdit();});
   overlay.addEventListener('keydown',event=>{if(event.key==='Escape'&&!entry.busy){event.preventDefault();event.stopPropagation();close();}if(event.key==='Tab'){const nodes=[...dialog.querySelectorAll('button:not(:disabled),input:not(:disabled)')];const index=nodes.indexOf(doc.activeElement);if(nodes.length){event.preventDefault();event.stopPropagation();nodes[(index+(event.shiftKey?-1:1)+nodes.length)%nodes.length].focus();}}});
-  const optionText=item=>`${item.displayLabel || item.label || `#${item.id} · ${item.supplier}`} · ${money(item.amount)}`;
+  function optionLabel(item){
+   const text=el('span'),amount=money(item.amount);
+   if(renderOptionLabel)renderOptionLabel(text,item,amount);
+   else text.textContent=`${item.label || `#${item.id} · ${item.supplier}`} · ${amount}`;
+   return text;
+  }
   function render(){
    if(current!==entry)return;list.replaceChildren();const term=normalizeSearchText(search.value);const visible=entry.options.filter(item=>includesSearchText(normalizeSearchText(`${item.id} ${item.supplier} ${item.label||''}`),term));
    for(const item of visible){const label=el('label','dda-provision-option');if(item.recommended)label.append(el('strong','dda-provision-star',copy.recommendation || '★ MAIS PROVÁVEL'));
     const choice=el('input');choice.type='radio';choice.name='dda-provision-choice';choice.value=item.id;choice.checked=entry.selected===item.id;choice.addEventListener('change',()=>{entry.selected=item.id;save.disabled=selectCurrent&&item.id===linkedId;for(const option of list.children)option.toggleAttribute('data-edit-changed',option===label&&item.id!==linkedId);});
-    const text=el('span','',`${optionText(item)}${item.due?' · Previsto '+String(item.due).slice(0,10).split('-').reverse().join('/'):''}`);
+    const text=optionLabel(item);
+    if(item.due)text.append(` · Previsto ${String(item.due).slice(0,10).split('-').reverse().join('/')}`);
     label.toggleAttribute('data-edit-changed',choice.checked&&item.id!==linkedId);
     label.append(choice,text);
     if(item.matchedProvision){const line=item.matchedProvision;label.append(el('span','dda-provision-line-match',`Provisão #${line.id} · ${money(line.amount)}${line.due?' · Previsto '+String(line.due).slice(0,10).split('-').reverse().join('/'):''} · mesmo valor deste DDA`));}
@@ -88,7 +94,7 @@ export function createReportLinkPicker({document:doc,host,copy,loadOptions,saveL
    const choice=entry.options.find(item=>item.id===selected);
    if(!choice)return;
    entry.reviewing=true;
-   const after=copy.reviewDetails ? optionText(choice) : `ID ${selected}`;
+   const after=copy.reviewDetails ? optionLabel(choice).textContent : `ID ${selected}`;
    const accepted=await confirmEditChanges({form:dialog,signal:entry.controller.signal,dismissOnBackdrop:true,title:'Confirme as alterações',changes:selected===linkedId?[]:[{label:copy.targetLabel,before:linkedId?`ID ${linkedId}`:'—',after}]});
    entry.reviewing=false;
    if(!accepted||current!==entry||host.hidden)return;

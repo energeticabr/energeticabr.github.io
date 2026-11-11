@@ -5973,6 +5973,59 @@ function sharedFile(id) {
   return file;
 }
 
+test("lançamento avança com os anexos já enviados sem iniciar outro upload", async t => {
+  const dom = new JSDOM('<main id="app"></main>');
+  const root = dom.window.document.querySelector('#app');
+  const h = makeHarness({ view: createChatView(root) });
+  t.after(() => { h.controller.stop(); h.view.destroy(); dom.window.close(); });
+  await h.controller.start();
+
+  const activeFlow = { id: 'launch', title: 'EFETUAR LANÇAMENTO' };
+  const prompt = {
+    type: 'poll',
+    question: '📎 ENVIE O PRIMEIRO ANEXO DO LANÇAMENTO. Quando terminar, responda FINALIZAR.',
+    options: [{ id: 'attachment_upload_continue', label: '📎 ENVIAR ANEXO' }],
+  };
+  const attachments = ['nota', 'recibo'].map(id => ({
+    id, fileName: `${id}.pdf`, mimeType: 'application/pdf', mediaUrl: `/api/portal-media/${id}`,
+  }));
+  const continueLabel = 'CONTINUAR APENAS COM OS JÁ ENVIADOS';
+  const continueButton = () => [...root.querySelectorAll('.chat-choice-list button')]
+    .find(button => button.textContent.trim() === continueLabel);
+
+  h.store.ingestRemoteMessages([prompt], { activeFlow, attachments: [] });
+  assert.equal(continueButton(), undefined);
+  h.store.syncAttachments(attachments);
+  const button = continueButton();
+  assert.ok(button);
+  assert.match(button.previousElementSibling.textContent, /ENVIAR ANEXO/);
+
+  const response = deferred();
+  h.client.getAttachments = async () => attachments;
+  h.client.sendText = async payload => {
+    h.chatCalls.push(['text', payload]);
+    return response.promise;
+  };
+  const submissions = () => h.chatCalls.filter(([kind]) => kind === 'text' || kind === 'file');
+  const before = submissions().length;
+  button.click();
+  for (let attempt = 0; attempt < 20 && submissions().length === before; attempt++)
+    await new Promise(resolve => setImmediate(resolve));
+  assert.deepEqual(submissions().slice(before), [['text', { text: 'FINALIZAR' }]]);
+  assert.equal(continueButton()?.disabled ?? true, true);
+
+  response.resolve({
+    status: 'processed', activeFlow, attachments,
+    messages: [{ type: 'text', text: 'Qual é o fornecedor do lançamento?' }],
+  });
+  for (let attempt = 0; attempt < 20 && !/Qual é o fornecedor/.test(root.textContent); attempt++)
+    await new Promise(resolve => setImmediate(resolve));
+  assert.match(root.textContent, /Qual é o fornecedor do lançamento/);
+  assert.equal(continueButton(), undefined);
+  assert.deepEqual(submissions().slice(before), [['text', { text: 'FINALIZAR' }]]);
+  assert.deepEqual(h.store.getState().attachments.map(item => item.id), ['nota', 'recibo']);
+});
+
 test("compartilhamento confirmado atualiza finalizar do documento mesmo sem nova pergunta", async t => {
   const dom = new JSDOM('<main id="app"></main>');
   const root = dom.window.document.querySelector('#app');
@@ -6011,10 +6064,11 @@ test("compartilhamento confirmado atualiza finalizar do documento mesmo sem nova
     h.chatCalls.push(['text', payload]);
     return { status: 'processed', activeFlow, messages: [{ type: 'text', text: 'Qual é a descrição do documento?' }], attachments };
   };
+  const beforeFinish = h.chatCalls.length;
   finish.click();
   for (let attempt = 0; attempt < 20 && !/Qual é a descrição/.test(root.textContent); attempt++)
     await new Promise(resolve => setImmediate(resolve));
-  assert.deepEqual(h.chatCalls.at(-1), ['text', { text: 'FINALIZAR' }]);
+  assert.deepEqual(h.chatCalls.slice(beforeFinish).filter(([kind]) => kind !== 'media'), [['text', { text: 'FINALIZAR' }]]);
   assert.match(root.textContent, /Qual é a descrição do documento/);
   assert.equal(h.store.getState().attachments.length, 1);
   assert.equal(root.querySelector('.chat-choice-list [data-action="finish-flow"]'), null);

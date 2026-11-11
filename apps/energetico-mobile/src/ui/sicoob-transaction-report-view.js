@@ -157,12 +157,25 @@ export function createSicoobTransactionReportView({ document: doc = globalThis.d
   let loadNotice = '';
   const app = doc.getElementById('app');
   const orderLink = data.orderLink;
+  function orderComparison(label, value, matches) {
+    const chip = make('span', 'sicoob-order-comparison', value);
+    chip.dataset.match = String(matches);
+    chip.title = `${label} ${matches ? 'confere com a transação' : 'sem correspondência com a transação'}`;
+    return chip;
+  }
   const picker = orderLink && createReportLinkPicker({
     document: doc,
     host: root,
     copy: ORDER_PICKER_COPY,
     loadOptions: async (row, signal) => rankSicoobOrderOptions(
-      await orderLink.loadOptions({ signal }), { supplier: row.supplier, amount: row.matchAmount }),
+      await orderLink.loadOptions({ signal }), { supplier: row.supplier, amount: row.matchAmount, date: row.date }),
+    renderOptionLabel(node, order, amount) {
+      node.className = 'sicoob-order-option-text';
+      node.append(`#${order.id} · `,
+        orderComparison('Data do pedido', order.date ? dateLabel(order.date) : 'Sem data do pedido', order.dateMatch),
+        ` · ${order.details ?? order.supplier} · `,
+        orderComparison('Valor do pedido', amount, order.amountMatch));
+    },
     async saveLink(row, orderId, signal) {
       const receipt = await orderLink.save({ movementId: row.id, orderId, expectedOrderId: row.orderId, signal });
       if (sicoobOrderId(receipt?.movementId) !== row.id || sicoobOrderId(receipt?.orderId) !== orderId) {
