@@ -41,7 +41,7 @@ test('refresh starts the source sync, retains filters and rows, and reloads when
     listener({ running: true, sourceRunning: false, latest: { requestId: 'a'.repeat(32), status: 'succeeded' }, notice: 'Transações concluídas. Notas fiscais aguardando.' });
     await new Promise(resolve => setImmediate(resolve));
     assert.equal(reads, 2); assert.equal(search.value, 'Loja'); assert.equal(button.disabled, true);
-    assert.match(view.element.textContent, /Notas fiscais aguardando/);
+    assert.doesNotMatch(view.element.textContent, /Notas fiscais aguardando/);
     failRead = true;
     listener({ running: true, sourceRunning: true, notice: 'Consultando…' });
     listener({ running: false, sourceRunning: false, latest: { requestId: 'b'.repeat(32), status: 'failed' }, notice: 'Falha na coleta' });

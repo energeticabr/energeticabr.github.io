@@ -35,6 +35,8 @@ export function createFinancialSyncCoordinator(sources) {
           await sources[key].start();
         } catch (error) { errors[key] = error?.message || 'Não foi possível iniciar a consulta.'; }
       }));
+      const failed = Object.keys(labels).filter(key => errors[key]).map(key => labels[key]);
+      return { startWarning: failed.length ? `Consulta não iniciada: ${failed.join(', ')}.` : '' };
     }).finally(() => { starting = null; notify(); });
     notify();
     return starting;

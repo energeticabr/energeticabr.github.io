@@ -40,8 +40,8 @@ test('DDA date and linkage clusters fit on phones, desktop and print',{timeout:9
       assert.equal(badge.background,'rgb(234, 248, 238)');
      }
     }
-    assert.equal(state.metrics.length,7);
-    assert.deepEqual(state.metrics.slice(4).map(({label,value})=>({label,value})),[
+    assert.equal(state.metrics.length,8);
+    assert.deepEqual(state.metrics.slice(4,7).map(({label,value})=>({label,value})),[
      {label:'Qtd DDA vencendo em 7d',value:'3'},
      {label:'Valor DDA vencendo em 7d',value:'R$ 7.500,00'},
      {label:'Valor DDA vencendo hoje',value:'R$ 2.500,00'}

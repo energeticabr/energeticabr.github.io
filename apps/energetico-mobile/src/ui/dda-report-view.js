@@ -5,6 +5,8 @@ import {addReportCloseControl} from './report-close-control.js';
 import {addDdaReportBarcode} from './dda-report-barcode.js';
 import {createDdaProvisionPicker} from './dda-provision-picker.js';
 import {PDF_ATTACHMENT_ICON} from './report-pdf-attachment-icon.js';
+import {confirmedFinancialTimestamp} from '../chat/financial-update-time.js';
+import {createFinancialReportLastUpdate} from './financial-report-last-update.js';
 const LOGO=new URL('../../../../assets/logo-energetica-oficial.png',import.meta.url).href;
 const money=value=>value==null?'Não disponível':new Intl.NumberFormat('pt-BR',{style:'currency',currency:'BRL'}).format(Number(value));
 const date=value=>value?value.slice(8,10)+'/'+value.slice(5,7)+'/'+value.slice(0,4):'Não informado';
@@ -34,7 +36,8 @@ export function createDdaReportView({document:doc=globalThis.document,data,openM
  report.append(toolbar,notice,content);panel.append(report);root.append(panel);doc.body.append(root);
  const landscape=bindReportLandscape(root);addReportCloseControl({root,toolbar,onClose:close});
  let rows=null,controller=null,revision=0,filterRevision=0,page=1,printAll=false,destroyed=false,returnFocus=null,app=null,oldInert=false,oldOverflow='';
- let bankRunning=Boolean(syncMonitor?.running),bankNotice='',startingBank=false,reloadPending=false,pdfRequest=null;
+ let bankRunning=Boolean(syncMonitor?.running),startingBank=false,reloadPending=false,pdfRequest=null;
+ const lastUpdate=createFinancialReportLastUpdate(doc);
  let settledDdaIds=new Set(),settlementVerified=false,settlementRequest=null,settlementRenderPending=false,settlementOpening=false;
  const expandedBarcodes=new Set();
  let settlementDialog=null;
@@ -53,7 +56,7 @@ export function createDdaReportView({document:doc=globalThis.document,data,openM
    const current=controls[name].value;controls[name].replaceChildren(option('Todas',''),...[...new Set([...values,current].filter(Boolean))].map(value=>option(value,value)));controls[name].value=current;
   }
  }
- function showNotice(message=''){const text=message||bankNotice;notice.textContent=text;notice.hidden=!text;}
+ function showNotice(message=''){notice.textContent=message;notice.hidden=!message;}
  function syncRefreshButton(){refresh.disabled=startingBank||bankRunning||root.getAttribute('aria-busy')==='true';}
  function replacementControl(trigger){
   const selector=rowControlSelector(trigger),replacement=selector&&content.querySelector(selector);
@@ -180,8 +183,8 @@ export function createDdaReportView({document:doc=globalThis.document,data,openM
  async function manualRefresh(){
   if(destroyed||root.hidden||refresh.disabled)return;
   if(!syncMonitor)return reloadFromBank();
-  startingBank=true;syncRefreshButton();showNotice('Iniciando consulta ao Sicoob…');
-  try{await syncMonitor.start();}
+  startingBank=true;syncRefreshButton();showNotice();
+  try{const result=await syncMonitor.start();if(result?.startWarning&&!destroyed&&!root.hidden)showNotice(result.startWarning);}
   catch{if(!destroyed&&!root.hidden)showNotice('Não foi possível iniciar a consulta ao Sicoob. Tente novamente.');}
   finally{startingBank=false;syncRefreshButton();}
  }
@@ -189,7 +192,8 @@ export function createDdaReportView({document:doc=globalThis.document,data,openM
   if(content.contains(doc.activeElement))panel.focus({preventScroll:true});content.replaceChildren();if(!rows)return;
   const currentDate=now(),today=ddaTodayKey(currentDate),result=buildDdaReport(rows,{...selected(),settledDdaIds},currentDate),pages=Math.max(1,Math.ceil(result.rows.length/50));page=Math.min(page,pages);
   const summary=make('div','ddr-summary');summary.dataset.ddaSummary='';
-  for(const [label,value,hint] of [['DDAs encontrados',result.rows.length],['Valor nominal total',money(result.total)],['Vencidos no filtro',result.overdue],['Vencem hoje',result.today],['Qtd DDA vencendo em 7d',result.dueWithin7Days,'De hoje até daqui a 7 dias, inclusive, conforme os filtros.'],['Valor DDA vencendo em 7d',money(result.totalDueWithin7Days),'De hoje até daqui a 7 dias, inclusive, conforme os filtros.'],['Valor DDA vencendo hoje',money(result.totalDueToday),'Vencimento hoje, conforme os filtros.']]){const metric=make('div','ddr-metric');if(hint)metric.title=hint;metric.append(make('span','',label),make('strong','',value));summary.append(metric);}content.append(summary);
+  for(const [label,value,hint] of [['DDAs encontrados',result.rows.length],['Valor nominal total',money(result.total)],['Vencidos no filtro',result.overdue],['Vencem hoje',result.today],['Qtd DDA vencendo em 7d',result.dueWithin7Days,'De hoje até daqui a 7 dias, inclusive, conforme os filtros.'],['Valor DDA vencendo em 7d',money(result.totalDueWithin7Days),'De hoje até daqui a 7 dias, inclusive, conforme os filtros.'],['Valor DDA vencendo hoje',money(result.totalDueToday),'Vencimento hoje, conforme os filtros.']]){const metric=make('div','ddr-metric');if(hint)metric.title=hint;metric.append(make('span','',label),make('strong','',value));summary.append(metric);}
+  summary.append(lastUpdate.element);content.append(summary);
   content.append(make('p','ddr-source','Situação bancária ou pagamento confirmado pelo usuário. Ordenação pelo vencimento mais próximo.'));
   if(result.visibleOutsideStatus)content.append(make('p','ddr-source',`${result.visibleOutsideStatus} DDA(s) pagos com baixa pendente ficam fora dos totais da situação selecionada.`));
   if(result.missingAmounts)content.append(make('p','ddr-warning',`${result.missingAmounts} DDA(s) sem valor nominal válido. Total indisponível.`));
@@ -335,6 +339,7 @@ export function createDdaReportView({document:doc=globalThis.document,data,openM
    settledDdaIds=new Set(verified??initialSettledDdaIds);
    settlementVerified=Boolean(verified);
    rows=nextRows;
+   for(const row of rows)lastUpdate.update(confirmedFinancialTimestamp(row.checkedAt));
    populate();render();
    if(position&&filters===filterRevision)restoreReportPosition(position);
   }catch{
@@ -350,8 +355,8 @@ export function createDdaReportView({document:doc=globalThis.document,data,openM
  controls.status.addEventListener('change',filter);controls.bank.addEventListener('change',filter);controls.search.addEventListener('input',filter);refresh.addEventListener('click',()=>void manualRefresh());
  const unsubscribeBank=syncMonitor?.subscribe(state=>{
   if(destroyed)return;
-  const finished=bankRunning&&!state.running;bankRunning=Boolean(state.running);bankNotice=state.notice||'';
-  if(!root.hidden)showNotice();
+  const finished=bankRunning&&!state.running;bankRunning=Boolean(state.running);
+  lastUpdate.update(state.lastSuccessfulAt);
   if(finished)reloadFromBank();
   syncRefreshButton();
  });

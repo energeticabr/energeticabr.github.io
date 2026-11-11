@@ -127,7 +127,7 @@ test('the report sync button queues SEFAZ once and refreshes the same view after
   assert.deepEqual(calls, [id]);
   assert.deepEqual(snapshots, [false]);
   assert.equal(refresh.disabled, true);
-  assert.match(report.element.textContent, /intervalo obrigatório/);
+  assert.doesNotMatch(report.element.textContent, /intervalo obrigatório/);
   assert.match(report.element.querySelector('tbody').textContent, /140/);
 
   receipt = { requestId:id, startedUtc, status:'partial', completedUtc:'2026-11-10T21:01:00Z',
@@ -195,7 +195,7 @@ test('the unfiltered report includes freight documents and opens their exact DAC
   const ids = () => [...panel.element.querySelectorAll('tbody tr')].map(row => row.dataset.invoiceId);
   assert.deepEqual(ids(), ['12', '10']);
   assert.deepEqual([...panel.element.querySelectorAll('.nfe-metrics dd')].map(node => node.textContent.replace(/\s/g, ' ')),
-    ['2', 'R$ 1.960,00', '06/11/2026', '2']);
+    ['2', 'R$ 1.960,00', '06/11/2026', '2', '—']);
 
   const selector = panel.element.querySelector('select[name="document"]');
   selector.value = 'CT-e';
@@ -401,7 +401,7 @@ test('NFE printer captures all filtered pages with XML facts and preserves the p
   type.value = 'NF-e';
   type.dispatchEvent(new dom.window.Event('change'));
   const measures = [...element.querySelectorAll('.nfe-metrics dd')].map(node => node.textContent.replace(/\s/g, ' '));
-  assert.deepEqual(measures, ['13', 'R$ 16.500,00', '06/11/2026', '12']);
+  assert.deepEqual(measures, ['13', 'R$ 16.500,00', '06/11/2026', '12', '—']);
   element.querySelector('.nfe-pager button:last-child').click();
   const currentRow = element.querySelector('tbody tr');
   assert.equal(currentRow.dataset.invoiceId, '1');
