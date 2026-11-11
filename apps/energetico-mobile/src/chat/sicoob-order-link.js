@@ -1,5 +1,6 @@
 import Decimal from 'decimal.js';
 import { normalizeSearchText } from '../../../../portal/core/search-text.js';
+import { provisionDateKey } from '../../../../portal/forms/provision-parent-due.js';
 import { fiscalSupplierSimilarity } from './dda-provision-link.js';
 import { isImportedFinancialMovement, SICOOB_ORDER_FIELD } from './financial-gallery-models.js';
 
@@ -85,7 +86,7 @@ export function createSicoobOrderLink({ repository, orderRepository = repository
 
   async function loadOptions({ signal } = {}) {
     const list = await resolve(orderRepository, ORDER_LIST, signal);
-    const items = await orderRepository.getItems(siteKey, list, '$top=100&$expand=fields($select=FORNECEDOR,VALORTOTAL,FILIAL)', { signal });
+    const items = await orderRepository.getItems(siteKey, list, '$top=100&$expand=fields($select=FORNECEDOR,VALORTOTAL,FILIAL,DATAPEDIDO)', { signal });
     active(signal);
     if (!Array.isArray(items)) throw new Error('Consulta de pedidos incompleta.');
     const ids = new Set();
@@ -98,7 +99,11 @@ export function createSicoobOrderLink({ repository, orderRepository = repository
       ids.add(id);
       const supplier = String(fields.FORNECEDOR ?? '').trim() || 'Fornecedor não informado';
       const branch = String(fields.FILIAL ?? '').trim();
-      return { id, supplier, amount:fields.VALORTOTAL ?? null, label:`#${id} · ${supplier}${branch ? ' · ' + branch : ''}` };
+      const date = provisionDateKey(fields.DATAPEDIDO);
+      const dateLabel = date ? date.split('-').reverse().join('/') : 'Sem data do pedido';
+      const details = branch ? `${supplier} · ${branch}` : supplier;
+      return { id, supplier, amount:fields.VALORTOTAL ?? null, label:`#${id} · ${details}`,
+        displayLabel:`#${id} · ${dateLabel} · ${details}` };
     });
   }
 

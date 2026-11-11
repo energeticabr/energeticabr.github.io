@@ -68,7 +68,7 @@ export function createReportLinkPicker({document:doc,host,copy,loadOptions,saveL
   const cancelEdit=()=>{if(current===entry&&!entry.busy)close();};cancel.addEventListener('click',cancelEdit);back.addEventListener('click',cancelEdit);
   bindBackdropDismiss(overlay,()=>{if(!entry.reviewing)cancelEdit();});
   overlay.addEventListener('keydown',event=>{if(event.key==='Escape'&&!entry.busy){event.preventDefault();event.stopPropagation();close();}if(event.key==='Tab'){const nodes=[...dialog.querySelectorAll('button:not(:disabled),input:not(:disabled)')];const index=nodes.indexOf(doc.activeElement);if(nodes.length){event.preventDefault();event.stopPropagation();nodes[(index+(event.shiftKey?-1:1)+nodes.length)%nodes.length].focus();}}});
-  const optionText=item=>`${item.label || `#${item.id} · ${item.supplier}`} · ${money(item.amount)}`;
+  const optionText=item=>`${item.displayLabel || item.label || `#${item.id} · ${item.supplier}`} · ${money(item.amount)}`;
   function render(){
    if(current!==entry)return;list.replaceChildren();const term=normalizeSearchText(search.value);const visible=entry.options.filter(item=>includesSearchText(normalizeSearchText(`${item.id} ${item.supplier} ${item.label||''}`),term));
    for(const item of visible){const label=el('label','dda-provision-option');if(item.recommended)label.append(el('strong','dda-provision-star',copy.recommendation || '★ MAIS PROVÁVEL'));
