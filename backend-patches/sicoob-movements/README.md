@@ -63,6 +63,10 @@ valida o Caddy e mantém backup e reversão. Depois de liberar o escopo
 `pixpagamentos_webhook` no Developers, execute `Configure-SicoobPixWebhook.ps1`
 em modo `Register` com o ambiente e usuário do serviço. O script preserva um
 callback diferente já cadastrado e exige leitura de confirmação do endereço.
+Se o Developers exigir um aplicativo separado, guarde seu Client ID, CNPJ e
+conta no arquivo privado criptografado `sicoob-webhook-credentials.dpapi`.
+O registrador usa essa configuração sem alterar a integração de extratos;
+na ausência dela, usa a configuração de movimentações existente.
 Ativação de escopo, cadastro da URL e entrega de um Pix feito no aplicativo
 Sicoob são verificações separadas. O receptor instalado, isoladamente, não
 comprova que esse canal de pagamento será notificado pelo banco.

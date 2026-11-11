@@ -22,7 +22,15 @@ class ConfigurationTests(unittest.TestCase):
             root = Path(directory)
             fixture = '''
 $script:registered=$false
-function Read-PrivateJson { @{cnpj='12345678000190'; accountNumber='1234'; clientId='fixture'} }
+$script:reads=0
+function Read-PrivateJson {
+ param($Path)
+ if($Path -match 'sicoob-webhook-credentials'){
+  if($scenario -eq 'fallback'){return @{}}
+  return @{cnpj='12345678000190';accountNumber='1234';clientId='webhook-client'}
+ }
+ return @{cnpj='12345678000190'; accountNumber='1234'; clientId='fixture'}
+}
 function Get-CompanyClientCertificate {
  $cert=[pscustomobject]@{}
  $cert|Add-Member -MemberType ScriptMethod -Name Dispose -Value {}
@@ -34,6 +42,8 @@ function Invoke-RestMethod { @{status='ok'} }
 function Invoke-WebRequest {
  param($Uri,$Method,$Body)
  if($Uri -match '/token$'){
+  $expected=if($scenario -eq 'fallback'){'fixture'}else{'webhook-client'}
+  if($Body.client_id -cne $expected){throw 'WRONG_WEBHOOK_CLIENT'}
   if($scenario -eq 'invalid_scope'){return @{StatusCode=400;Content='{"error":"invalid_scope"}'}}
   return @{StatusCode=200;Content='{"scope":"pixpagamentos_webhook","access_token":"fixture"}'}
  }
@@ -42,8 +52,11 @@ function Invoke-WebRequest {
   $value=ConvertFrom-Json $Body
   if($value.webhookUrl -cne ('https://163-176-171-217.sslip.io/api/sicoob-pix/'+('x'*43))){throw 'BAD_REGISTRATION'}
   $script:registered=$true
-  return @{StatusCode=200;Content='{}'}
+  $status=if($scenario -eq 'created201'){201}else{200}
+  return @{StatusCode=$status;Content='{}'}
  }
+ $script:reads++
+ if($scenario -eq 'transient401' -and $script:reads -eq 1){return @{StatusCode=401;Content='{}'}}
  if($scenario -eq 'existing' -or ($script:registered -and $scenario -eq 'bad_readback')){
   return @{StatusCode=200;Content='{"webhookUrl":"https://existing.example/callback"}'}
  }
@@ -79,3 +92,10 @@ function Invoke-WebRequest {
         self.assertEqual(registered.returncode, 0, registered.stderr)
         self.assertTrue(json.loads(registered.stdout)['verified'])
         self.assertNotIn('x'*43, registered.stdout + registered.stderr)
+        fallback = self.run_registration('fallback')
+        self.assertEqual(fallback.returncode, 0, fallback.stderr)
+        for scenario in ('created201', 'transient401'):
+            with self.subTest(scenario=scenario):
+                result = self.run_registration(scenario)
+                self.assertEqual(result.returncode, 0, result.stderr)
+                self.assertTrue(json.loads(result.stdout)['verified'])

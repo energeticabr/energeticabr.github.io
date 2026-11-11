@@ -49,9 +49,9 @@ Files: `sync_pix_receivers.py`, `test_pix_receivers.py`.
 Files: webhook service unit and deployment/registration tooling in the collector folder.
 
 - [x] Deploy with existing service/collector locks, expected hashes, private state, backups, health checks and rollback.
-- [ ] Enable `pixpagamentos_webhook` through Portal Developers; preserve the active integration if a separate application is required.
-- [ ] Query the existing callback before registration; preserve unrelated registrations.
-- [ ] Register the verified HTTPS receiver and read it back using the bank API.
+- [x] Enable `pixpagamentos_webhook` through Portal Developers; preserve the active integration if a separate application is required.
+- [x] Query the existing callback before registration; preserve unrelated registrations.
+- [x] Register the verified HTTPS receiver and read it back using the bank API.
 - [ ] Observe a real subsequent Pix made by the user through the Sicoob app; reconcile its ID and receiver through the API and read back the application record.
 - [ ] Report each gate separately. Do not claim full automation until live delivery is observed.
 
@@ -68,3 +68,20 @@ Files: webhook service unit and deployment/registration tooling in the collector
 - The active Developers application exposes only the Pix consultation scope and
   no editing control. New application flow requires a separate company login.
 - Scope activation and real mobile-app delivery remain outstanding.
+
+## Evidence at 2026-11-11 18:42 UTC
+
+- Created `ENERGETICA - PIX NOTIFICACOES` with only consultation and webhook
+  scopes, using the existing company public certificate in PEM format. The
+  user approved it in Sicoob; Developers status is Active.
+- Separate encrypted webhook client configuration preserves the existing
+  statement integration. The new client obtains the requested OAuth scope.
+- The bank returned HTTP 201 when creating the callback (the published schema
+  lists 200). Added a regression covering 201 followed by exact URL readback.
+- Gateway reads initially alternated valid responses and 401. Bounded retries
+  of reads now tolerate this while still requiring exact configuration readback.
+- Live registration result: `scope_granted=true`, `registered=true`,
+  `verified=true`, `token_http=200`.
+- Public receiver health is 200; receiver service and collection timer active.
+- Inbox has zero events at 18:42 UTC. Real app-originated delivery remains
+  unverified, pending a subsequent routine Pix from the user through Sicoob.
