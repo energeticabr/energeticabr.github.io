@@ -613,7 +613,9 @@ export function createTasksGallery({ document: documentRef = globalThis.document
       if (!Array.isArray(result?.rows)) throw new Error("A consulta não retornou uma lista de tarefas válida.");
       task.acquired();
       rows = sortRows(result.rows.filter(row => /^\d{1,15}$/.test(String(row?.id || ""))));
-      filterOptions(); updateMetrics(); applyLocalFilters(); task.complete(); return true;
+      filterOptions(); updateMetrics();
+      autoFilters.sync();
+      applyLocalFilters(); task.complete(); return true;
     } catch (error) {
       if (!opened || destroyed || !root.isConnected || current !== session || controller !== loadController || error?.name === "AbortError") return false;
       listStatus.textContent = safeFailure(error, "Não foi possível carregar tarefas");

@@ -46,7 +46,7 @@ test('filtros fiscais ativos ficam visíveis fora do painel e podem ser limpos p
   await gallery.open();
   const ids = () => [...doc.querySelectorAll('[data-registration-row]')].map(node => node.dataset.registrationRow);
   const search = doc.querySelector('[data-gallery-quick-search]');
-  const query = value => { search.value = value; search.dispatchEvent(new dom.window.Event('input', { bubbles: true })); };
+  const query = value => { search.value = value; search.dispatchEvent(new dom.window.KeyboardEvent('keydown', { key: 'Enter', bubbles: true, cancelable: true })); };
   query('FORNECEDORA FICTÍCIA ANTIGA');
   assert.deepEqual(ids(), ['22', '14']);
   query('14');

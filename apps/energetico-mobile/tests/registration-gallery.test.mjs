@@ -257,7 +257,7 @@ test("galeria exibe registros, filtra pelo nome e permite voltar", async () => {
   assert.equal(doc.querySelectorAll("[data-registration-row]").length, 2);
   const search = doc.querySelector('[type="search"]');
   search.value = "HIDRÁULICA";
-  search.dispatchEvent(new dom.window.Event("input", { bubbles: true }));
+  search.dispatchEvent(new dom.window.KeyboardEvent('keydown', { key: 'Enter', bubbles: true, cancelable: true }));
   assert.equal(doc.querySelectorAll("[data-registration-row]").length, 1);
   assert.match(doc.querySelector("[data-registration-row]").textContent, /HIDRÁULICA/);
   doc.querySelector('[data-action="registration-close"]').click();
@@ -288,7 +288,7 @@ test("falha ao atualizar mantém aviso de erro e reinicia paginação", async ()
   assert.equal(previous.disabled, true);
   assert.equal(next.disabled, true);
   doc.querySelector('input[type="search"]').value = "OUTRO";
-  doc.querySelector('input[type="search"]').dispatchEvent(new dom.window.Event("input", { bubbles: true }));
+  doc.querySelector('input[type="search"]').dispatchEvent(new dom.window.KeyboardEvent('keydown', { key: 'Enter', bubbles: true, cancelable: true }));
   assert.match(doc.querySelector(".rg-feedback").textContent, /Não foi possível carregar/);
   gallery.destroy();
   dom.window.close();

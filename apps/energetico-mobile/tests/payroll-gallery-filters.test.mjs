@@ -56,7 +56,7 @@ test('pending old response cannot cancel newly typed search and changing filters
     return {gallery:'IDFOLHA',page:p,rows:[{id:'2',FORNECEDOR:'CLEITON'}],hasMore:false};
   }});
   t.after(()=>{gallery.destroy();dom.window.close();});const opening=gallery.open();
-  const search=doc.querySelector('[name=search]');search.value='cleiton';search.dispatchEvent(new dom.window.Event('input',{bubbles:true}));
+  const search=doc.querySelector('[name=search]');search.value='cleiton';search.dispatchEvent(new dom.window.KeyboardEvent('keydown', { key: 'Enter', bubbles: true, cancelable: true }));
   resolveOld({gallery:'IDFOLHA',page:1,rows:[{id:'1',FORNECEDOR:'BERNARDO'}],hasMore:false});await opening;
   await new Promise(resolve=>setTimeout(resolve,220));
   assert.deepEqual(reads,['','cleiton']);assert.match(doc.querySelector('.hr-gallery-cards').textContent,/CLEITON/);

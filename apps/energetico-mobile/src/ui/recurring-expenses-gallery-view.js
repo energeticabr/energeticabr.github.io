@@ -631,6 +631,7 @@ export function createRecurringExpensesGallery({
       task.acquired();
       rows = snapshot.rows;
       populateFilters();
+      autoFilters.sync();
       applyFilters();
       task.complete();
     } catch (error) {

@@ -74,9 +74,9 @@ test('galeria mostra reais, percentual, data e vínculo do bem; busca e filtros 
   assert.equal(doc.querySelector('[data-gallery-action="edit"]'), null);
   assert.equal(doc.querySelector('[data-gallery-action="delete"]'), null);
   const search = doc.querySelector('input[type="search"]'); search.value = '94';
-  search.dispatchEvent(new dom.window.Event('input', { bubbles: true }));
+  search.dispatchEvent(new dom.window.KeyboardEvent('keydown', { key: 'Enter', bubbles: true, cancelable: true }));
   assert.deepEqual([...doc.querySelectorAll('[data-registration-row]')].map(node => node.dataset.registrationRow), ['2', '1'], 'a busca também encontra o pedido 494');
-  search.value = ''; search.dispatchEvent(new dom.window.Event('input', { bubbles: true }));
+  search.value = ''; search.dispatchEvent(new dom.window.KeyboardEvent('keydown', { key: 'Enter', bubbles: true, cancelable: true }));
   const filter = doc.querySelector('[data-filter-field="ID IMOBILIZADO"]'); filter.value = '2';
   filter.dispatchEvent(new dom.window.Event('change', { bubbles: true }));
   await new Promise(resolve => setImmediate(resolve));
@@ -98,6 +98,6 @@ test('ordena todos os lançamentos por nome antes de paginar e permite voltar ao
   sort.value = 'recent:desc'; sort.dispatchEvent(new dom.window.Event('change', { bubbles: true }));
   assert.deepEqual([...doc.querySelectorAll('[data-registration-row]')].slice(0, 2).map(n => n.dataset.registrationRow), ['65', '64']);
   const search = doc.querySelector('input[type="search"]'); search.value = 'BETONEIRA';
-  search.dispatchEvent(new dom.window.Event('input', { bubbles: true }));
+  search.dispatchEvent(new dom.window.KeyboardEvent('keydown', { key: 'Enter', bubbles: true, cancelable: true }));
   assert.deepEqual([...doc.querySelectorAll('[data-registration-row]')].map(n => n.dataset.registrationRow), ['1']);
 });

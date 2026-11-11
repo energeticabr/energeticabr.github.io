@@ -1,3 +1,4 @@
+import { bindGallerySearchInput } from './gallery-quick-search.js';
 import { bindSearchableFilterSelects } from './searchable-filter-selects.js';
 
 const FILTER_CONTROL = 'input:not([type="button"]):not([type="submit"]):not([type="reset"]), select, textarea';
@@ -13,6 +14,8 @@ export function bindAutoFilterForm(form, apply, { debounceMs = 0, externalContro
   const searchableSelects = bindSearchableFilterSelects(form);
   const external = new Set(externalControls.filter(control => !form.contains(control)));
   const composing = new Set();
+  const quickSearch = [...form.elements, ...external].find(control => control.matches('[data-gallery-quick-search]'));
+  const searchBinding = quickSearch && bindGallerySearchInput(quickSearch, applyIfChanged);
 
   function values() {
     return JSON.stringify([...new Set([...form.elements, ...external])]
@@ -32,6 +35,7 @@ export function bindAutoFilterForm(form, apply, { debounceMs = 0, externalContro
   function cancelPending() {
     searchableSelects.close();
     cancelTimer();
+    searchBinding?.cancel();
   }
 
   function sync() {
@@ -51,7 +55,8 @@ export function bindAutoFilterForm(form, apply, { debounceMs = 0, externalContro
   function applyIfChanged() {
     // A picker opened after input must remain editable when this task runs.
     cancelTimer();
-    if (composing.size) return;
+    if (composing.size || searchBinding?.isComposing()) return;
+    searchBinding?.cancel();
     const nextValues = values();
     if (nextValues === lastAppliedValues) return;
     lastAppliedValues = nextValues;
@@ -60,13 +65,14 @@ export function bindAutoFilterForm(form, apply, { debounceMs = 0, externalContro
   }
 
   function isFilterEvent(event) {
-    return event.target?.dataset?.filterOptionSearch !== 'true' && event.target?.matches?.(FILTER_CONTROL)
+    return event.target !== quickSearch && event.target?.dataset?.filterOptionSearch !== 'true' && event.target?.matches?.(FILTER_CONTROL)
       && (form.contains(event.target) || external.has(event.target));
   }
 
   function onInput(event) {
     if (!isFilterEvent(event)) return;
-    cancelPending();
+    searchableSelects.close();
+    cancelTimer();
     if (event.isComposing) composing.add(event.target);
     if (composing.size) return;
     pendingValues = values();
@@ -87,7 +93,8 @@ export function bindAutoFilterForm(form, apply, { debounceMs = 0, externalContro
   function onCompositionStart(event) {
     if (!isFilterEvent(event)) return;
     composing.add(event.target);
-    cancelPending();
+    searchableSelects.close();
+    cancelTimer();
   }
 
   function onCompositionEnd(event) {
@@ -98,7 +105,7 @@ export function bindAutoFilterForm(form, apply, { debounceMs = 0, externalContro
 
   function onSubmit(event) {
     event.preventDefault();
-    if (composing.size) return;
+    if (composing.size || searchBinding?.isComposing()) return;
     applyNow();
   }
 
@@ -119,12 +126,13 @@ export function bindAutoFilterForm(form, apply, { debounceMs = 0, externalContro
     apply: applyNow,
     cancelPending,
     sync,
-    hasPendingApplication() { return timer !== null || composing.size > 0; },
+    hasPendingApplication() { return timer !== null || composing.size > 0 || searchBinding?.hasPending() === true; },
     // A discarded async result must be fetched again even if typing returns to its query.
     invalidate() { lastAppliedValues = null; },
     destroy() {
       cancelPending();
       composing.clear();
+      searchBinding?.destroy();
       searchableSelects.destroy();
       form.removeEventListener('input', onInput);
       form.removeEventListener('change', onChange);

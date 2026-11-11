@@ -7,7 +7,7 @@ import { fileURLToPath } from 'node:url';
 import { createIsolatedViteServer as createServer } from './helpers/isolated-vite-server.mjs';
 import { withAttachmentBrowser } from './helpers/attachment-browser-driver.mjs';
 
-test('native gallery typing continues while current and obsolete searches finish', { timeout: 120_000 }, async t => {
+test('native gallery typing waits before searching and keeps the active field', { timeout: 120_000 }, async t => {
   const browser = [process.env.CHROME_BIN, 'C:/Program Files/Google/Chrome/Application/chrome.exe',
     '/usr/bin/google-chrome', '/usr/bin/chromium'].find(path => path && existsSync(path));
   if (!browser) return t.skip('Chrome unavailable');
@@ -19,7 +19,6 @@ test('native gallery typing continues while current and obsolete searches finish
       await command('Emulation.setEmulatedMedia', { features: [{ name: 'prefers-color-scheme', value: colorScheme }] });
       await navigate('http://127.0.0.1:' + server.httpServer.address().port + '/tests/fixtures/gallery-live-search.html');
       await wait('document.documentElement.dataset.ready === "true"');
-      // Launches first also proves that the old three-second delay fails this native test.
       for (const name of ['launch', 'tasks', 'orders', 'payments', 'recurring', 'group', 'workDiary', 'IDFOLHA', 'FOLHAPGTO']) {
         const context = name + ' ' + width + 'px ' + colorScheme;
         await evaluate('qa.open(' + JSON.stringify(name) + ')');
@@ -31,10 +30,18 @@ test('native gallery typing continues while current and obsolete searches finish
             selection: [input.selectionStart, input.selectionEnd], disabled: input.disabled,
             blocked: Boolean(input.closest('[inert], [aria-hidden="true"]')) };
         })()`);
+        const enter = async () => {
+          for (const type of ['keyDown', 'keyUp']) await command('Input.dispatchKeyEvent',
+            { type, key: 'Enter', code: 'Enter', windowsVirtualKeyCode: 13 });
+          await turn();
+        };
+        const remote = await evaluate('qa.remote');
         await command('Input.insertText', { text: '9' }); await turn();
-        if (await evaluate('qa.remote')) assert.equal(await evaluate('qa.queries.at(-1)'), '9', context + ' starts without a pause');
         await command('Input.insertText', { text: '0' }); await turn();
-        if (await evaluate('qa.remote')) assert.equal(await evaluate('qa.queries.at(-1)'), '90', context + ' keeps searching while typing');
+        assert.deepEqual(await evaluate('qa.queries'), [], context + ' sends no query during typing');
+        assert.deepEqual(await evaluate('qa.ids()'), ['901', '902', '991'], context + ' keeps the current results during typing');
+        await wait(remote ? 'qa.queries.at(-1) === "90"' : 'qa.ids().length === 2');
+        if (remote) assert.deepEqual(await evaluate('qa.queries'), ['90'], context + ' sends only the final term');
         if (name === 'launch') {
           assert.equal(await evaluate('!document.querySelector(".gallery-loading-screen--scoped").hidden'), true);
           assert.match(await evaluate('document.querySelector(".gallery-loading-screen--scoped .app-loading__progress-row").textContent'), /33%/);
@@ -52,16 +59,16 @@ test('native gallery typing continues while current and obsolete searches finish
         assert.deepEqual(await state(), { ids: ['901', '902'], value: '90', focused: true, selection: [1, 1],
           disabled: false, blocked: false }, context + ' response preserves the cursor inside the query');
         await evaluate('document.querySelector("[data-gallery-quick-search]").setSelectionRange(2, 2)');
-        await command('Input.insertText', { text: '1' }); await turn();
-        if (await evaluate('qa.remote')) assert.equal(await evaluate('qa.queries.at(-1)'), '901', context);
+        await command('Input.insertText', { text: '1' }); await enter();
+        if (remote) assert.equal(await evaluate('qa.queries.at(-1)'), '901', context);
         await evaluate('document.querySelector("[data-gallery-quick-search]").setSelectionRange(1, 2); qa.finishLatest()');
-        await turn(); await evaluate('qa.finishFirst()'); await turn();
+        await turn();
         assert.deepEqual(await state(), { ids: ['901'], value: '901', focused: true, selection: [1, 2],
-          disabled: false, blocked: false }, context + ' obsolete reply cannot replace the final query');
+          disabled: false, blocked: false }, context + ' Enter submits immediately and preserves selection');
         await evaluate('document.querySelector("[data-gallery-quick-search]").select()');
         for (const type of ['keyDown', 'keyUp']) await command('Input.dispatchKeyEvent',
           { type, key: 'Backspace', code: 'Backspace', windowsVirtualKeyCode: 8 });
-        await turn(); await evaluate('qa.finishLatest()'); await turn();
+        await enter(); await evaluate('qa.finishLatest()'); await turn();
         assert.deepEqual(await state(), { ids: ['901', '902', '991'], value: '', focused: true, selection: [0, 0],
           disabled: false, blocked: false }, context + ' native clearing restores all rows');
       }

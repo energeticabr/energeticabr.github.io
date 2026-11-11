@@ -47,7 +47,7 @@ if (['320','390'].includes(width)) {
       touchHeight:bounds(trigger).height, fullWidth:Math.abs(bounds(trigger).width-bounds(main).width)<=1 };
   });
   if (params.has('detail')) {
-    const search=document.querySelector('.gallery-quick-search'); search.value='42'; search.dispatchEvent(new Event('input',{bubbles:true}));
+    const search=document.querySelector('.gallery-quick-search'); search.value='42'; search.dispatchEvent(new KeyboardEvent('keydown', { key: 'Enter', bubbles: true, cancelable: true }));
     document.querySelector('[data-description-id="42"]').click();
     const deadline=performance.now()+5000;
     while(!document.querySelector('[data-provision-id="371"]')) {

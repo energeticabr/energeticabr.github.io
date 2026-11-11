@@ -26,7 +26,7 @@ function setup(t) {
     search.value = value;
     search.dispatchEvent(new dom.window.InputEvent('input', { bubbles: true }));
   };
-  const tick = async (ms = 0) => { t.mock.timers.tick(ms); await settle(); };
+  const tick = async (ms = 1000) => { t.mock.timers.tick(ms); await settle(); };
   const rows = () => [...root.querySelectorAll('.lg-cards > [data-item-id]')].map(node => node.dataset.itemId);
   async function open() {
     const opening = gallery.open(); pending.at(-1).resolve(snapshot()); await opening;
@@ -93,7 +93,7 @@ test('focus, click and unchanged input do not reload launch data', async t => {
   assertInteractive(ctx); assert.deepEqual(ctx.rows(), ['17']);
 });
 
-test('typing continuously searches and suppresses an older response before the newest input is applied', async t => {
+test('a committed search suppresses an older response before the newest input is applied', async t => {
   const ctx = setup(t); await ctx.open();
   ctx.type('a'); await ctx.tick();
   assert.equal(ctx.pending[1].payload.filters.search, 'a');
@@ -176,7 +176,7 @@ for (const [name, value, event] of [['id', '349', 'input'], ['supplier', 'Mauro'
     else if (control.tagName === 'SELECT' && name === 'sort') control.selectedIndex = 1;
     else control.value = value;
     control.dispatchEvent(new ctx.dom.window.Event(event, { bubbles: true }));
-    if (event === 'input') await ctx.tick();
+    if (event === 'input') await ctx.tick(0);
     assert.equal(ctx.pending.length, 2);
     assertRecalculating(ctx);
     ctx.pending[1].resolve(snapshot(901, { rows: [], count: 0, totals: { paid: 0 } })); await settle();

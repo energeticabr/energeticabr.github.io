@@ -16,7 +16,7 @@ test('new DDA popup identifies only confirmed created IDs across filters and clo
  data:{async loadSnapshot(){return {rows:++loads===1?[old]:[old,added,concurrent]};}},
  refreshBank:async()=>({status:'succeeded',created:2,createdItemIds:[42,43]})});
  await gallery.open();
- const search=doc.querySelector('input[type="search"]');search.value='EXISTENTE';search.dispatchEvent(new dom.window.Event('input'));
+ const search=doc.querySelector('input[type="search"]');search.value='EXISTENTE';search.dispatchEvent(new dom.window.KeyboardEvent('keydown', { key: 'Enter', bubbles: true, cancelable: true }));
  const button=doc.querySelector('[data-action="registration-refresh"]');button.click();button.click();await tick();await tick();
  const popup=doc.querySelector('[data-dda-new-items]');assert.ok(popup);assert.equal(doc.querySelectorAll('[data-dda-new-items]').length,1);
  assert.match(popup.textContent,/NOVO FICTICIO/);assert.match(popup.textContent,/ID 42/);assert.match(popup.textContent,/10\/11\/2026/);assert.match(popup.textContent,/123,45/);

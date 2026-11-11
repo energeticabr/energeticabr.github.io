@@ -164,13 +164,13 @@ test('movement gallery shows and searches imported Sicoob data while preserving 
     assert.ok([...institution.options].some(option => option.value === 'SICOOB'));
     const search = dom.window.document.querySelector('[data-gallery-quick-search]');
     search.value = 'complemento bancário';
-    search.dispatchEvent(new dom.window.Event('input', { bubbles: true }));
+    search.dispatchEvent(new dom.window.KeyboardEvent('keydown', { key: 'Enter', bubbles: true, cancelable: true }));
     assert.equal(dom.window.document.querySelectorAll('[data-registration-row]').length, 1);
     search.value = 'boleto';
-    search.dispatchEvent(new dom.window.Event('input', { bubbles: true }));
+    search.dispatchEvent(new dom.window.KeyboardEvent('keydown', { key: 'Enter', bubbles: true, cancelable: true }));
     assert.equal(dom.window.document.querySelector('[data-registration-row]').dataset.registrationRow, '3');
     search.value = 'favorecido ficticio';
-    search.dispatchEvent(new dom.window.Event('input', { bubbles: true }));
+    search.dispatchEvent(new dom.window.KeyboardEvent('keydown', { key: 'Enter', bubbles: true, cancelable: true }));
     assert.equal(dom.window.document.querySelectorAll('[data-registration-row]').length, 1);
     await assert.rejects(data.loadEditor('2'), /importado/i);
     await assert.rejects(data.deleteItem('2'), /importado/i);

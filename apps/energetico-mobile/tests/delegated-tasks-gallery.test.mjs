@@ -35,11 +35,11 @@ test('G9 default selects both open statuses, sorts priority then fatal date and 
   assert.deepEqual([...status.selectedOptions].map(option => option.value).sort(), ['ATIVIDADE CRIADA','EM ATENDIMENTO']);
   assert.ok(status.parentElement.querySelector('.sfs-search'), 'multi-status filter must also support option search');
   const search = doc.querySelector('input[type="search"]');
-  search.value = 'D-105'; search.dispatchEvent(new dom.window.Event('input', { bubbles: true }));
+  search.value = 'D-105'; search.dispatchEvent(new dom.window.KeyboardEvent('keydown', { key: 'Enter', bubbles: true, cancelable: true }));
   assert.deepEqual(ids(), ['2']);
-  search.value = '2'; search.dispatchEvent(new dom.window.Event('input', { bubbles: true }));
+  search.value = '2'; search.dispatchEvent(new dom.window.KeyboardEvent('keydown', { key: 'Enter', bubbles: true, cancelable: true }));
   assert.deepEqual(ids(), ['4','2','1'], 'quick search also covers SharePoint ID and displayed dates');
-  search.value = ''; search.dispatchEvent(new dom.window.Event('input', { bubbles: true }));
+  search.value = ''; search.dispatchEvent(new dom.window.KeyboardEvent('keydown', { key: 'Enter', bubbles: true, cancelable: true }));
   const date = doc.querySelector('[data-filter-field="DATA FATAL"]');
   assert.equal(date.type, 'date'); date.value = '2026-10-03'; date.dispatchEvent(new dom.window.Event('change', { bubbles: true }));
   assert.deepEqual(ids(), ['2']);

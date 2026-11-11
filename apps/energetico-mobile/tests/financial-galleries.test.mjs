@@ -92,7 +92,7 @@ for (const [kind, list, primary, fields] of cases) {
     assert.equal(dom.window.document.querySelectorAll('[data-registration-row]').length, 2);
     const search = dom.window.document.querySelector('[data-gallery-quick-search]');
     search.value = 'UNICOALFA';
-    search.dispatchEvent(new dom.window.Event('input', { bubbles: true }));
+    search.dispatchEvent(new dom.window.KeyboardEvent('keydown', { key: 'Enter', bubbles: true, cancelable: true }));
     assert.equal(dom.window.document.querySelectorAll('[data-registration-row]').length, 1);
     assert.ok(dom.window.document.querySelector(`[data-filter-field="${primary}"]`));
     const editor = await data.loadEditor('1');

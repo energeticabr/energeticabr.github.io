@@ -43,7 +43,6 @@ const qa = window.qa = {
       .map(node => node.dataset.itemId || node.dataset.registrationRow).sort();
   },
   finishLatest() { requests.at(-1)?.finish(); return true; },
-  finishFirst() { requests[0]?.finish(); return true; },
 };
 document.documentElement.dataset.ready = 'true';
 </script></body></html>

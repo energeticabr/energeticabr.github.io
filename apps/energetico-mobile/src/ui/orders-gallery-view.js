@@ -468,6 +468,7 @@ export function createOrdersGallery({
       rows = sortRows(result.rows.filter(row => /^\d{1,15}$/.test(String(row?.id || ""))));
       filterOptions();
       updateMetrics();
+      autoFilters.sync();
       applyLocalFilters();
       task.complete();
       return true;

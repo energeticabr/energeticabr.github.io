@@ -45,7 +45,7 @@ test('gallery metrics precede list, survive search, update after refresh and do 
   assert.equal(metrics.querySelectorAll('.rg-dda-summary-tile').length,4);
   assert.ok(metrics.compareDocumentPosition(doc.querySelector('.rg-list')) & dom.window.Node.DOCUMENT_POSITION_FOLLOWING);
   assert.match(metrics.querySelector('[data-dda-metric="total"]').textContent,/123,45/);
-  const search=doc.querySelector('input[type="search"]'); search.value='absent'; search.dispatchEvent(new dom.window.Event('input'));
+  const search=doc.querySelector('input[type="search"]'); search.value='absent'; search.dispatchEvent(new dom.window.KeyboardEvent('keydown', { key: 'Enter', bubbles: true, cancelable: true }));
   await new Promise(resolve=>setTimeout(resolve,350));
   assert.match(metrics.querySelector('[data-dda-metric="total"]').textContent,/123,45/);
   rows=[row(1,'2026-10-28',200)]; doc.querySelector('[data-action="registration-refresh"]').click();

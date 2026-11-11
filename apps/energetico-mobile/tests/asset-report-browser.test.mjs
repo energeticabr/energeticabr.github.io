@@ -36,7 +36,7 @@ test('toque, teclado, cadastro e 31 depreciações cabem em 320/390/1365px sem p
         assert.notEqual(cluster.fill, 'rgba(0, 0, 0, 0)'); assert.match(cluster.text, /Ver .*depreciações/); assert.equal(cluster.overflow, false);
         if (width === 390) await shot(api, `${kind}-nome-selecionavel-390`);
       }
-      await api.evaluate(`(() => { const input = document.querySelector('input[type="search"]'); input.value='GUINCHO'; input.dispatchEvent(new Event('input',{bubbles:true})); })()`);
+      await api.evaluate(`(() => { const input = document.querySelector('input[type="search"]'); input.value='GUINCHO'; input.dispatchEvent(new KeyboardEvent('keydown', { key: 'Enter', bubbles: true, cancelable: true })); })()`);
       const before = await api.evaluate(`({page:document.querySelector('.rg-pagination').textContent, search:document.querySelector('input[type="search"]').value, scroll:document.querySelector('.rg-overlay').scrollTop})`);
       await api.tap(`${trigger} .rg-row-title`); await api.wait('document.querySelector("[data-asset-history-row]")');
       const layout = await api.evaluate(`(() => {
