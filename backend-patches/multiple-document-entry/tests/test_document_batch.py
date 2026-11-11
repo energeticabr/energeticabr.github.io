@@ -213,6 +213,49 @@ class DocumentBatchTests(unittest.TestCase):
         self.assertEqual(result['status'], 'waiting_for_attachments')
         self.assertEqual(len(self.catalog.creates), 1)
 
+    def test_next_document_pins_last_type_before_pagination_and_keeps_reply(self):
+        from channel_bridge import ChannelMessenger
+
+        self.ready()
+        previous = {'id': 42, 'title': 'TIPO A QA', 'value': 'TIPO A QA'}
+        self.state['selections']['tipo_documento'] = previous
+        self.engine.messenger = ChannelMessenger()
+        self.reply('document_add_another')
+        catalog = [{'id': number, 'title': f'OUTRO TIPO QA {number}', 'value': f'OUTRO TIPO QA {number}'}
+                   for number in range(1, 29)] + [previous]
+        with patch.object(self.catalog, 'get_options', return_value=catalog):
+            self.reply('document_defaults_proceed')
+            poll = self.engine.messenger.drain()[-1]
+            pinned = poll['options'][0]
+            self.assertEqual(pinned['reply'], 'choice:tipo_documento:42')
+            self.assertEqual(pinned['label'], '⭐ 42 - TIPO A QA')
+            self.assertEqual(sum(item['reply'] == pinned['reply'] for item in poll['options']), 1)
+            self.assertTrue(any(item['reply'] == 'choice:tipo_documento:0' for item in poll['options']))
+            self.reply(text='outro tipo')
+            self.assertFalse(any(item['label'].startswith('⭐')
+                                 for item in self.engine.messenger.drain()[-1]['options']))
+            self.engine._resend_current_prompt(self.state, self.etag())
+            self.assertEqual(self.engine.messenger.drain()[-1]['options'][0], pinned)
+            self.reply(pinned['reply'])
+        self.assertEqual(self.state['stage'], 'collecting_attachments')
+        self.assertEqual(self.state['fields']['TIPODOCUMENTO'], 'TIPO A QA')
+        self.assertEqual(self.state['display_values']['TIPODOCUMENTO'], 'TIPO A QA')
+
+    def test_initial_and_single_documents_keep_normal_type_order(self):
+        from channel_bridge import ChannelMessenger
+
+        for mode in ('multiple', 'single'):
+            with self.subTest(mode=mode):
+                self.setUp()
+                self.begin()
+                self.reply('document_mode_' + mode)
+                self.engine.messenger = ChannelMessenger()
+                self.state['step_index'] = 2
+                self.engine._prompt_next_or_summary(self.state, self.etag())
+                options = self.engine.messenger.drain()[-1]['options']
+                self.assertEqual(options[0]['reply'], 'choice:tipo_documento:0')
+                self.assertFalse(any(item['label'].startswith('⭐') for item in options))
+
     def test_defaults_offer_person_branch_dates_stage_and_observation(self):
         self.ready()
         self.reply('document_add_another')
@@ -401,10 +444,15 @@ class DocumentBatchTests(unittest.TestCase):
         self.assertNotEqual(self.state['stage'], 'completed')
 
     def test_three_documents_receive_distinct_identities_and_do_not_reuse_files(self):
+        from channel_bridge import ChannelMessenger
+
         self.ready()
         self.reply('document_add_another')
-        for name in ('second-qa.pdf', 'third-qa.pdf'):
-            self.reply('document_defaults_proceed')
+        for name, recent_type in (('second-qa.pdf', '⭐ 1 - TIPO A QA'), ('third-qa.pdf', '⭐ 2 - TIPO B QA')):
+            poll_messenger = ChannelMessenger()
+            with patch.object(self.engine, 'messenger', poll_messenger):
+                self.reply('document_defaults_proceed')
+            self.assertEqual(poll_messenger.drain()[-1]['options'][0]['label'], recent_type)
             self.reply('2')
             self.attach(name)
             self.state['attachments_phase_completed'] = True
