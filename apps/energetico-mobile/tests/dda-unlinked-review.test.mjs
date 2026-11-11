@@ -9,17 +9,21 @@ const now=()=>new Date('2026-11-12T01:00:00Z'); // still Nov 11 in Sao Paulo
 const row=(id=5,fields={})=>({id:String(id),eTag:'"7"',fields:{Title:'Fornecedor teste',SITUACAO:'Em aberto',CHAVE_DDA:'boleto-'+id,VENCIMENTO:'2026-11-11',...fields}});
 const snapshot=(...rows)=>({rows});
 const tick=()=>new Promise(resolve=>setImmediate(resolve));
-const {normalizeDdaReportRows,hasUpcomingUnlinkedDda}=model;
+const {normalizeDdaReportRows,hasDdaMenuAlert}=model;
 
-test('menu alert requires an unresolved upcoming open DDA in the complete snapshot',()=>{
+test('the DDA menu alert checks due dates, open status and unresolved future linkage',()=>{
  const withoutAlert=normalizeDdaReportRows(snapshot(
-  row(1,{VENCIMENTO:'2026-11-10'}),row(2,{VENCIMENTO:null}),row(3,{SITUACAO:'Pago'}),
+  row(1,{VENCIMENTO:'2026-11-10',SITUACAO:'Baixado'}),row(2,{VENCIMENTO:null}),row(3,{SITUACAO:'Pago'}),
   row(4,{SITUACAO:'Agendado',DDA_CICLO_AGENDAMENTO:'PAGO_AGENDADO'}),
-  row(5,{PGTO_CONFIRMADO:true}),row(6,{[link]:'58'}),row(7,{[flag]:true})
+  row(5,{PGTO_CONFIRMADO:true}),row(6,{[link]:'58',VENCIMENTO:'2026-11-12'}),row(7,{[flag]:true,VENCIMENTO:'2026-11-12'}),
+  row(9,{VENCIMENTO:'2026-11-10',SITUACAO:'Não confirmado'})
  ));
- assert.equal(hasUpcomingUnlinkedDda(withoutAlert,now()),false);
- for(const fields of [{},{SITUACAO:'Agendado',VENCIMENTO:'2026-12-01'}]){
-  assert.equal(hasUpcomingUnlinkedDda([...withoutAlert,...normalizeDdaReportRows(snapshot(row(8,fields)))],now()),true);
+ assert.equal(hasDdaMenuAlert(withoutAlert,now()),false);
+ for(const fields of [
+  {[link]:'58'},{[flag]:true,VENCIMENTO:'2026-11-10'},
+  {SITUACAO:'Agendado',[link]:'58'},{SITUACAO:'Agendado',VENCIMENTO:'2026-12-01'},
+ ]){
+  assert.equal(hasDdaMenuAlert([...withoutAlert,...normalizeDdaReportRows(snapshot(row(8,fields)))],now()),true);
  }
 });
 
@@ -47,8 +51,8 @@ test('writes only the review flag on the verified SharePoint version and rejects
 test('report confirms both directions, cancels without writing and preserves the row position',async t=>{
  const dom=new JSDOM('<body><div id="app"></div></body>');
  const doc=dom.window.document,calls=[],updates=[];
- const report=createDdaReportView({document:doc,now,onRowsChange:rows=>updates.push(hasUpcomingUnlinkedDda(rows,now())),data:{
-  loadSnapshot:async()=>snapshot(row(5),row(6,{[link]:'58'}),row(7,{SITUACAO:'Pago'})),
+ const report=createDdaReportView({document:doc,now,onRowsChange:rows=>updates.push(hasDdaMenuAlert(rows,now())),data:{
+  loadSnapshot:async()=>snapshot(row(5,{VENCIMENTO:'2026-11-12'}),row(6,{[link]:'58',VENCIMENTO:'2026-11-12'}),row(7,{SITUACAO:'Pago'})),
   unlinkedReview:{async save({row,reviewed}){calls.push([row.id,reviewed]);return {id:row.id,reviewed};}},
  }});
  t.after(()=>{report.destroy();dom.window.close();});

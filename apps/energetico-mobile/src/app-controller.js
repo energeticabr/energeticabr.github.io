@@ -2,7 +2,7 @@ import { createSefazSyncSession } from './ui/sefaz-sync-session.js';
 import { resumeConversation } from './chat/resume-conversation.js';
 import { createProvisionSettlementParentSession } from './ui/provision-settlement-parent-session.js';
 import { createDdaAutoReminder } from './chat/dda-auto-reminder.js';
-import { hasUpcomingUnlinkedDda, normalizeDdaReportRows } from './chat/dda-report-model.js';
+import { hasDdaMenuAlert, normalizeDdaReportRows } from './chat/dda-report-model.js';
 import { createTrancidAutoReminder } from './chat/trancid-auto-reminder.js';
 import { refreshDdaBank } from './chat/dda-bank-refresh.js';
 import { loadDdaPaymentLaunchFiles, waitForDdaPaymentLaunch, reconcileDdaLaunchAttachments } from './chat/dda-payment-launch.js';
@@ -1607,14 +1607,14 @@ export function createAppController({
   let pendingProvisionEveDismissals = null;
   let ddaReminderInteraction = 0;
   let ddaMenuRows = null, ddaMenuVersion = 0, ddaMenuRequest = null;
+  let renderedDdaMenuAlert = false;
   function ddaMenuHasAlert() {
     return Boolean(account && !stopped && ddaMenuRows?.account === account &&
-      ddaMenuRows.revision === sessionRevision && hasUpcomingUnlinkedDda(ddaMenuRows.rows));
+      ddaMenuRows.revision === sessionRevision && hasDdaMenuAlert(ddaMenuRows.rows));
   }
   function updateDdaMenuRows(rows) {
-    const wasAlert = ddaMenuHasAlert();
     ddaMenuRows = { account, revision: sessionRevision, rows };
-    if (wasAlert !== ddaMenuHasAlert()) render();
+    if (renderedDdaMenuAlert !== ddaMenuHasAlert()) render();
   }
   function resetDdaMenuAlert() {
     abortDdaMenuRequest();
@@ -5483,9 +5483,10 @@ export function createAppController({
       }
     }
     const signaturePlacement = syncSignaturePlacement();
+    renderedDdaMenuAlert = ddaMenuHasAlert();
     view.render({
       ...state,
-      ddaUpcomingUnlinked: ddaMenuHasAlert(),
+      ddaMenuAlert: renderedDdaMenuAlert,
       rhidMascot: rhidMascot ? { ...rhidMascot } : null,
       diaryAttachmentProgress,
       attachmentUploadProgress,
