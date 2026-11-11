@@ -13,9 +13,9 @@ async function setup(t,openMediaCollection){
  t.after(()=>{view.destroy();dom.window.close();});await view.open();
  return {doc,dom,view,emit,fail:()=>fail=true,counts:()=>({starts,loads,destroys,listeners:listeners.size}),refresh:doc.querySelector('.pl-refresh')};
 }
-test('report refresh starts bank once, displays progress and reloads SharePoint preserving filters',async t=>{
+test('report refresh starts bank once and reloads SharePoint preserving filters without a status paragraph',async t=>{
  const h=await setup(t);const search=h.doc.querySelector('[name=search]');search.value='EXEMPLO';search.dispatchEvent(new h.dom.window.Event('input'));
- h.refresh.click();h.refresh.click();await tick();assert.equal(h.counts().starts,1);assert.equal(h.counts().loads,1);assert.equal(h.refresh.disabled,true);assert.match(h.doc.querySelector('.ddr-notice').textContent,/Sicoob/);
+ h.refresh.click();h.refresh.click();await tick();assert.equal(h.counts().starts,1);assert.equal(h.counts().loads,1);assert.equal(h.refresh.disabled,true);assert.equal(h.doc.querySelector('.ddr-notice').hidden,true);
  h.emit(false);await tick();assert.equal(h.counts().loads,2);assert.equal(h.view.element.hidden,false);assert.equal(search.value,'EXEMPLO');assert.equal(h.refresh.disabled,false);
 });
 test('closing report never cancels the monitor; reopening catches up and destroy only unsubscribes',async t=>{

@@ -3,12 +3,14 @@ import { includesSearchText, normalizeSearchText } from '../../../../portal/core
 import {
   FINANCIAL_MOVEMENT_PENDING_RECIPIENT, financialMovementRecipient, financialMovementType, isImportedFinancialMovement,
 } from '../chat/financial-gallery-models.js';
-import { registrationDateKey, registrationNumber } from '../chat/registration-gallery-data.js';
+import { registrationDateKey, registrationNumber, registrationRawField, REGISTRATION_GALLERY_MODELS } from '../chat/registration-gallery-data.js';
+import { confirmedFinancialTimestamp } from '../chat/financial-update-time.js';
 import { rankSicoobOrderOptions, SICOOB_ORDER_FIELD, sicoobOrderId } from '../chat/sicoob-order-link.js';
 import { createReportLinkPicker } from './dda-provision-picker.js';
 import { addReportCloseControl } from './report-close-control.js';
 import { bindReportLandscape } from './report-landscape.js';
 import { PDF_ATTACHMENT_ICON } from './report-pdf-attachment-icon.js';
+import { createFinancialReportLastUpdate } from './financial-report-last-update.js';
 
 const LOGO = new URL('../../../../assets/logo-energetica-oficial.png', import.meta.url).href;
 const TITLE = 'Relatório de transações Sicoob';
@@ -151,7 +153,8 @@ export function createSicoobTransactionReportView({ document: doc = globalThis.d
   let oldInert;
   let receiptRequest;
   let loading = false, starting = false, syncRunning = Boolean(syncMonitor?.running);
-  let sourceRunning = Boolean(syncMonitor?.sourceRunning ?? syncMonitor?.running), syncNotice = '', reloadPending = false;
+  let sourceRunning = Boolean(syncMonitor?.sourceRunning ?? syncMonitor?.running), reloadPending = false;
+  const lastUpdate = createFinancialReportLastUpdate(doc);
   let loadNotice = '';
   const app = doc.getElementById('app');
   const orderLink = data.orderLink;
@@ -193,7 +196,7 @@ export function createSicoobTransactionReportView({ document: doc = globalThis.d
   });
 
   function showNotice(message = '') {
-    notice.textContent = message || [loadNotice, syncNotice].filter(Boolean).join('\n');
+    notice.textContent = message || loadNotice;
     notice.hidden = !notice.textContent;
   }
 
@@ -301,6 +304,7 @@ export function createSicoobTransactionReportView({ document: doc = globalThis.d
       metric.append(make('strong', '', value));
       summary.append(metric);
     }
+    summary.append(lastUpdate.element);
     const scope = make('p', 'ddr-source', 'Pagamentos importados do Sicoob · Galeria de Movimentação');
     content.replaceChildren(summary, scope);
     if (!filtered.length) {
@@ -409,6 +413,11 @@ export function createSicoobTransactionReportView({ document: doc = globalThis.d
       }
       if (active !== request) return;
       rows = transactions;
+      for (const { fields } of snapshot.rows) {
+        if (isImportedFinancialMovement(fields)) {
+          lastUpdate.update(confirmedFinancialTimestamp(registrationRawField(fields, 'Criado', REGISTRATION_GALLERY_MODELS.financial_movement)));
+        }
+      }
       loadNotice = supplierNotice;
       showNotice();
       populateAccounts();
@@ -463,8 +472,8 @@ export function createSicoobTransactionReportView({ document: doc = globalThis.d
     if (sourceRunning && !active) reloadPending = true;
     sourceRunning = active;
     syncRunning = Boolean(state.running);
-    syncNotice = state.notice || '';
-    showNotice(); syncRefreshButton(); resumeRefresh();
+    lastUpdate.update(state.lastSuccessfulAt);
+    syncRefreshButton(); resumeRefresh();
   });
   refresh.addEventListener('click', () => void manualRefresh());
   root.addEventListener('click', event => { if (event.target === root) close(); });

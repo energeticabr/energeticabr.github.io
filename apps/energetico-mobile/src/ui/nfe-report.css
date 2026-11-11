@@ -45,7 +45,7 @@
 .nfe-metrics {
   position: relative;
   display: grid;
-  grid-template-columns: repeat(4, minmax(0, 1fr));
+  grid-template-columns: repeat(5, minmax(0, 1fr));
   gap: 8px;
   margin: 0;
 }
@@ -66,6 +66,10 @@
   font-weight: 750;
   font-variant-numeric: tabular-nums;
 }
+.nfe-pair[data-report-last-update] dd { font-size: 16px; }
+.nfe-report[data-report-max-680="true"] .nfe-metrics { grid-template-columns: repeat(6, minmax(0, 1fr)); }
+.nfe-report[data-report-max-680="true"] .nfe-pair { grid-column: span 2; }
+.nfe-report[data-report-max-680="true"] .nfe-pair:nth-child(n+4) { grid-column: span 3; }
 .nfe-feedback, .nfe-pdf-feedback { margin: 8px 0; color: #456375; font-size: 12px; }
 .nfe-sync-feedback { padding: 0 10px; white-space: pre-line; }
 .nfe-pdf-feedback { padding: 6px 10px; background: #ffeaec; color: #8b2730; }

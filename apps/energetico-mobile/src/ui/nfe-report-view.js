@@ -1,12 +1,12 @@
 import { invoiceXmlFacts, NFE_REPORT_DOCUMENT_TYPES, NFE_SUPPLIER_REGIMES, projectNfeRows, rankNfeOrderOptions } from '../chat/nfe-report-model.js';
 import { nfeOrderId } from '../chat/nfe-order-link.js';
-import { sefazProgress } from '../chat/sefaz-sync-receipt.js';
 import { createReportLinkPicker } from './dda-provision-picker.js';
 import { createNfeProposalView } from './nfe-proposal-view.js';
 import { addReportCloseControl } from './report-close-control.js';
 import { bindReportLandscape } from './report-landscape.js';
 import { PDF_ATTACHMENT_ICON } from './report-pdf-attachment-icon.js';
 import { captureFilteredReport } from './report-print.js';
+import { createFinancialReportLastUpdate } from './financial-report-last-update.js';
 
 const PAGE_SIZE = 12;
 const LOGO = new URL('../../../../assets/logo-energetica-oficial.png', import.meta.url).href;
@@ -90,6 +90,7 @@ export function createNfeReportView({ document:doc = globalThis.document, data, 
   body.setAttribute('role', 'region');
   body.setAttribute('aria-label', 'Notas fiscais da empresa');
   const metrics = make('dl', 'nfe-metrics');
+  const lastUpdate = createFinancialReportLastUpdate(doc, { fiscal:true });
   const filters = make('div', 'nfe-filters');
   const search = make('input');
   search.type = 'search';
@@ -390,6 +391,7 @@ export function createNfeReportView({ document:doc = globalThis.document, data, 
     metric('Valor total sem canceladas', amounts.length ? money.format(cents / 100) : '—');
     metric('Última emissão', visible[0]?.date ? displayDate(visible[0].date) : '—');
     metric('Com XML completo', String(visible.filter(row => row.complete).length));
+    metrics.append(lastUpdate.element);
     if (rows) {
       feedback.textContent = visible.length ? 'Da emissão mais recente para a mais antiga.' : 'Nenhuma nota fiscal encontrada.';
       if (candidates.some(row => needsFilterXml(row) && xmlFacts.get(xmlKey(row)) === null)) {
@@ -491,7 +493,7 @@ export function createNfeReportView({ document:doc = globalThis.document, data, 
     if (!syncMonitor) return load(true);
     fiscalStarting = true;
     syncRefreshButton();
-    showFiscalNotice('Solicitando consulta à SEFAZ…');
+    showFiscalNotice('');
     try {
       await syncMonitor.start();
     } catch (error) {
@@ -577,9 +579,7 @@ export function createNfeReportView({ document:doc = globalThis.document, data, 
     const completed = fiscalRunning && !state.running;
     fiscalRunning = state.running;
     if (completed) fiscalReloadPending = true;
-    showFiscalNotice(state.notice || (state.running
-      ? state.latest?.sources ? sefazProgress(state.latest) : 'Consulta à SEFAZ em andamento.'
-      : ''));
+    lastUpdate.update(state.lastSuccessfulAt);
     syncRefreshButton();
     if (completed) reloadFiscalRows();
   });
