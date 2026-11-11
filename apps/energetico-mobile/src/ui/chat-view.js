@@ -2,7 +2,7 @@ import { matchesSearchTerms, normalizeSearchText } from '../../../../portal/core
 import { pendingProvisionAttachmentTray } from './pending-provision-attachment-tray.js';
 import { payrollAssignmentTableMarkup } from './payroll-assignment-table.js';
 import { supplierDefaultsComparisonMarkup } from './attendance-supplier-defaults-comparison.js';
-import { provisionVariationChangesMarkup } from './provision-variation-changes.js';
+import { fieldChangesMarkup, provisionVariationChangesMarkup } from './provision-variation-changes.js';
 import { loadingIndicatorMarkup } from "./loading-indicator.js";
 import { createCameraChooser } from './document-scanner.js';
 import { canDeleteRhidAdjustment } from '../chat/rhid-adjustment-ownership.js';
@@ -764,7 +764,7 @@ function draftTitle(option) {
     .replace(/^▶️\s*RETOMAR\s*•\s*/i, "");
 }
 
-function pollButton(option, busy, { deleteButton = false, deleteClass = "chat-draft-delete", galleryButton = false, launchMenuButton = false, suppliesButton = false, displayLabel = null, displayIcon = "", finishAttachments = false, diaryVisit = false, inLocoVisit = false } = {}) {
+function pollButton(option, busy, { deleteButton = false, deleteClass = "chat-draft-delete", galleryButton = false, launchMenuButton = false, suppliesButton = false, displayLabel = null, displayIcon = "", finishAttachments = false, diaryVisit = false, inLocoVisit = false, edited = false } = {}) {
   const replyId = draftReplyId(option);
   const label = option.label || option.title || option.id;
   const disabled = busy || option?.disabled === true;
@@ -788,6 +788,7 @@ function pollButton(option, busy, { deleteButton = false, deleteClass = "chat-dr
   let content = displayIcon
     ? `<span class="chat-supplies-button-icon" aria-hidden="true">${escapeHtml(displayIcon)}</span><span class="chat-supplies-button-text">${escapeHtml(displayLabel || label)}</span>`
     : displayLabel ? escapeHtml(displayLabel) : formatChatText(label);
+  if (edited) content = `<span role="img" aria-label="Editado">⭐</span> ${content}`;
   if (replyId === 'pending_payment_provisions_due' && !String(label).trimStart().startsWith('🔴')) {
     content = `🔴 ${content}`;
   }
@@ -1699,6 +1700,10 @@ function attendanceRhidBadgeMarkup(badge, { message, option, editable = false, s
 }
 
 function renderPoll(message, busy, draft = "", databaseFilterMessage = null, activeFlow = null, attendanceSelectedIds = [], currentPoll = false, rhidRefresh = null, launchPayrollSelectedIds = [], launchPayrollCurrent = false, attendanceExpandedIds = [], attendanceIrregularityChecking = false) {
+  const rawChangeTable = message.change_table || message.changeTable;
+  const documentChanges = rawChangeTable?.kind === "document_default_changes" && Array.isArray(rawChangeTable.rows)
+    ? rawChangeTable.rows : [];
+  const editedDocumentReplies = new Set(documentChanges.map(row => `choice:edit_field:${row?.optionId}`));
   const filteredOptions = databaseFilteredOptions(
     message,
     expiredTemporaryAttachmentOptions(message, menuOptionsWithoutApps(message, draftMenuOptions(message))),
@@ -1826,6 +1831,7 @@ function renderPoll(message, busy, draft = "", databaseFilterMessage = null, act
       return [`<div class="chat-document-option">${pollButton(deleteAction, busy, { deleteButton: true, deleteClass: "chat-document-option__delete" })}${pollButton(option, busy)}</div>`];
     }
     return [pollButton(option, busy, {
+      edited: editedDocumentReplies.has(replyId),
       diaryVisit: currentPoll && activeFlow?.id === 'construction_diary_fill' && !hasDiaryTypeOptions && option.diaryFieldVisit === true,
       inLocoVisit: currentPoll && Boolean(selectedDiaryType) && option.diaryFieldVisit === true && isInLocoDiaryOption(option),
       finishAttachments: option === finishOption,
@@ -1835,10 +1841,10 @@ function renderPoll(message, busy, draft = "", databaseFilterMessage = null, act
         : option.menuDisplayLabel || null),
     })];
   }).join("");
-  const rawChangeTable = message.change_table || message.changeTable;
   const questionText = String(message.question || message.prompt || "");
   const changeTable = rawChangeTable
     && rawChangeTable.kind !== 'provision_variation_changes'
+    && rawChangeTable.kind !== 'document_default_changes'
     && Array.isArray(rawChangeTable.rows)
     && rawChangeTable.rows.length
     && /fornecedor/i.test(questionText)
@@ -2022,6 +2028,7 @@ function renderPoll(message, busy, draft = "", databaseFilterMessage = null, act
     ${currentPoll ? singleLaunchConfirmationMarkup(message, activeFlow) : ""}
     ${changeTableMarkup(changeTable)}
     ${provisionVariationChangesMarkup(rawChangeTable, questionText)}
+    ${fieldChangesMarkup(documentChanges, "Alterações no novo documento", "Coluna")}
     ${supplierDefaultsComparison}
     ${payrollAssignment}
     ${provisionReview || presenceDetailTableMarkup(presenceTable, { messageId: message.id, busy, current: currentPoll })}

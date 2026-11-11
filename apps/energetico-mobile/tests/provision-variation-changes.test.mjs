@@ -37,3 +37,38 @@ test('the provision comparison preserves the continue action',t=>{
   view.on('select-reply',event=>events.push(event)); view.render(state);
   root.querySelector('[data-reply-id="1"]').click(); assert.equal(events[0].replyId,'1');
 });
+
+test('document changes appear above the options and only edited fields get a star', t => {
+  const dom = new JSDOM('<main></main>');
+  const root = dom.window.document.querySelector('main');
+  const view = createChatView(root);
+  const events = [];
+  t.after(() => { view.destroy(); dom.window.close(); });
+  view.on('select-reply', event => events.push(event));
+  view.render({...state, activeFlow: {id: 'document'}, messages: [{
+    ...poll, question: 'DESEJA EDITAR ALGUM DADO PARA O NOVO DOCUMENTO?',
+    change_table: {kind: 'document_default_changes', rows: [{
+      optionId: '4', field: 'FORNECEDOR / PESSOA RELACIONADA',
+      before: 'PESSOA A QA', after: 'PESSOA B QA <QA>',
+    }]},
+    options: [
+      {id: 'choice:edit_field:document_defaults_proceed', reply: 'document_defaults_proceed', label: '✅ PROSSEGUIR SEM EDITAR'},
+      {id: 'choice:edit_field:1', reply: 'choice:edit_field:1', label: '1 - FILIAL'},
+      {id: 'choice:edit_field:4', reply: 'choice:edit_field:4', label: '4 - FORNECEDOR / PESSOA RELACIONADA'},
+    ],
+  }]});
+  const table = root.querySelector('table[aria-label="Alterações no novo documento"]');
+  assert.ok(table);
+  assert.deepEqual([...table.querySelectorAll('thead th')].map(cell => cell.textContent), ['Coluna', 'Antes', 'Depois']);
+  assert.deepEqual([...table.tBodies[0].rows[0].cells].map(cell => cell.textContent),
+    ['FORNECEDOR / PESSOA RELACIONADA', 'PESSOA A QA', 'PESSOA B QA <QA>']);
+  const proceed = root.querySelector('[data-reply-id="document_defaults_proceed"]');
+  const branch = root.querySelector('[data-reply-id="choice:edit_field:1"]');
+  const supplier = root.querySelector('[data-reply-id="choice:edit_field:4"]');
+  assert.ok(table.compareDocumentPosition(proceed) & dom.window.Node.DOCUMENT_POSITION_FOLLOWING);
+  assert.doesNotMatch(proceed.textContent, /⭐/);
+  assert.doesNotMatch(branch.textContent, /⭐/);
+  assert.match(supplier.textContent, /^⭐ 4 - FORNECEDOR/);
+  supplier.click();
+  assert.equal(events[0].replyId, 'choice:edit_field:4');
+});

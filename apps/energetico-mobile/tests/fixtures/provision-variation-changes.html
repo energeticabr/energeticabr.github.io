@@ -1,9 +1,28 @@
 <!doctype html><html lang="pt-BR"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><link rel="stylesheet" href="/src/styles.css"></head><body><main id="app"></main><script type="module">
 import {createChatView} from '/src/ui/chat-view.js';
 const root=document.querySelector('#app'),view=createChatView(root);
-view.render({sessionStatus:'authenticated',account:{name:'Teste'},activeFlow:{id:'payment',label:'CRIAR UMA PROVISÃO DE PAGAMENTO'},draft:'',pendingFiles:[],messages:[{id:'variation',role:'assistant',type:'poll',question:'HÁ ALGUMA VARIAÇÃO EM RELAÇÃO À LINHA ANTERIOR? Escolha um campo para alterar. Depois poderá alterar outros.',change_table:{kind:'provision_variation_changes',rows:[{field:'DATA DE VENCIMENTO',before:'06/11/2026',after:'20/11/2026'},{field:'FORNECEDOR',before:'FORNECEDOR FICTÍCIO ALFA COM NOME BASTANTE COMPRIDO',after:'FORNECEDOR FICTÍCIO BETA CONSTRUÇÃO E SERVIÇOS ESPECIALIZADOS'},{field:'FILIAL',before:'004 - OBRA QA',after:'000 - ESCRITÓRIO CENTRAL QA'},{field:'OBSERVAÇÃO',before:'EM BRANCO',after:'OBSERVAÇÃO COM TEXTO LONGO E PALAVRASEMESPAÇOPARATESTARQUEBRAAUTOMÁTICA'}]},options:[{id:'1',reply:'1',label:'✅ PROSSEGUIR SEM OUTRA ALTERAÇÃO'},{id:'2',reply:'2',label:'📅 DATA DE VENCIMENTO'},{id:'3',reply:'3',label:'👤 FORNECEDOR'},{id:'4',reply:'4',label:'🏢 FILIAL'}]}]});
+const documentFlow = new URLSearchParams(location.search).has('document');
+const rows = [
+  {optionId:'5',field:documentFlow ? 'DATA DE EMISSÃO' : 'DATA DE VENCIMENTO',before:'06/11/2026',after:'20/11/2026'},
+  {optionId:'4',field:documentFlow ? 'FORNECEDOR / PESSOA RELACIONADA' : 'FORNECEDOR',before:'FORNECEDOR FICTÍCIO ALFA COM NOME BASTANTE COMPRIDO',after:'FORNECEDOR FICTÍCIO BETA CONSTRUÇÃO E SERVIÇOS ESPECIALIZADOS'},
+  {optionId:'1',field:'FILIAL',before:'004 - OBRA QA',after:'000 - ESCRITÓRIO CENTRAL QA'},
+  {optionId:'14',field:'OBSERVAÇÃO',before:'EM BRANCO',after:'OBSERVAÇÃO COM TEXTO LONGO E PALAVRASEMESPAÇOPARATESTARQUEBRAAUTOMÁTICA'},
+];
+const activeFlow = documentFlow
+  ? {id:'document',label:'ADICIONAR UM NOVO DOCUMENTO'}
+  : {id:'payment',label:'CRIAR UMA PROVISÃO DE PAGAMENTO'};
+const message = {id:'variation',role:'assistant',type:'poll',
+  question:documentFlow ? 'DESEJA EDITAR ALGUM DADO PARA O NOVO DOCUMENTO?' : 'HÁ ALGUMA VARIAÇÃO EM RELAÇÃO À LINHA ANTERIOR? Escolha um campo para alterar.',
+  change_table:{kind:documentFlow ? 'document_default_changes' : 'provision_variation_changes',rows},
+  options:documentFlow ? [
+    {id:'document_defaults_proceed',label:'✅ PROSSEGUIR SEM EDITAR'},
+    {id:'choice:edit_field:2',label:'2 - TIPO DE HOMOLOGAÇÃO'},
+    {id:'choice:edit_field:4',label:'4 - FORNECEDOR / PESSOA RELACIONADA'},
+  ] : [{id:'1',label:'✅ PROSSEGUIR SEM OUTRA ALTERAÇÃO'},{id:'2',label:'📅 DATA DE VENCIMENTO'}],
+};
+view.render({sessionStatus:'authenticated',account:{name:'Teste'},activeFlow,draft:'',pendingFiles:[],messages:[message]});
 await document.fonts.ready;await new Promise(r=>requestAnimationFrame(()=>requestAnimationFrame(r)));
-const table=root.querySelector('.chat-provision-changes table'),cells=[...table.querySelectorAll('th,td')],first=[...table.tBodies[0].rows[0].cells].map(cell=>cell.getBoundingClientRect()),button=root.querySelector('[data-reply-id="1"]');
-document.documentElement.dataset.layout=JSON.stringify({columns:table.tHead.rows[0].cells.length,rows:table.tBodies[0].rows.length,sameLine:first.every(cell=>Math.abs(cell.top-first[0].top)<2),ordered:first[0].right<=first[1].left+1&&first[1].right<=first[2].left+1,beforeButtons:table.getBoundingClientRect().bottom<=button.getBoundingClientRect().top,overflow:document.documentElement.scrollWidth>innerWidth+1||cells.some(cell=>cell.scrollWidth>cell.clientWidth+1),headers:[...table.tHead.rows[0].cells].map(cell=>cell.textContent),text:table.textContent});
+const table=root.querySelector('.chat-provision-changes table'),cells=[...table.querySelectorAll('th,td')],first=[...table.tBodies[0].rows[0].cells].map(cell=>cell.getBoundingClientRect()),button=root.querySelector(`[data-reply-id="${message.options[0].id}"]`);
+document.documentElement.dataset.layout=JSON.stringify({columns:table.tHead.rows[0].cells.length,rows:table.tBodies[0].rows.length,sameLine:first.every(cell=>Math.abs(cell.top-first[0].top)<2),ordered:first[0].right<=first[1].left+1&&first[1].right<=first[2].left+1,beforeButtons:table.getBoundingClientRect().bottom<=button.getBoundingClientRect().top,overflow:document.documentElement.scrollWidth>innerWidth+1||cells.some(cell=>cell.scrollWidth>cell.clientWidth+1),headers:[...table.tHead.rows[0].cells].map(cell=>cell.textContent),text:table.textContent,starredButton:root.querySelector('[aria-label="Editado"]')?.closest('button')?.textContent});
 document.documentElement.dataset.ready='true';
 </script></body></html>
