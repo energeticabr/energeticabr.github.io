@@ -26,7 +26,6 @@ const cases = [
   ['provision-report-view', 'createProvisionReportView', 'loadProvisionReportSnapshot'],
   ['quotation-report-view', 'createQuotationReportView'],
   ['supplier-payroll-report-view', 'createSupplierPayrollReportView'],
-  ['supplier-workforce-report-view', 'createSupplierWorkforceReportView'],
   ['task-association-report-view', 'createTaskAssociationReportView'],
   ['rhid-monthly-report-view', 'createRhidMonthlyReportView', 'loadSuppliers'],
   ['hr-payroll-report-view', 'createHrPayrollReport', 'request'],

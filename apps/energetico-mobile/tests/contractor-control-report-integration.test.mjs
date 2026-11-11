@@ -21,26 +21,28 @@ function harness(t,options={}) {
  const controller=createAppController({store,view,auth,client:{sendText:async payload=>{calls.push(payload);return {status:'processed',messages:[]};}},native:{importSharedItems:async()=>[]},pendingProvisionAttachmentsDataFactory:async()=>({loadUpcomingPayments:async()=>[]}),contractorControlReportViewFactory:async({data,onClose})=>{const panel={data,opens:0,destroys:0,open(){this.opens++;},close(){onClose?.();},destroy(){this.destroys++;}};panels.push(panel);return panel;},contractorControlReportDataFactory:async()=>({loadOverview:async()=>({rows:[]}),loadDetails:async()=>({launches:[],measurements:[]})}),...options,auth});
  t.after(()=>controller.stop());return {controller,view,store,auth,panels,calls};
 }
-test('new pink wheelbarrow mascot sits immediately below workforce and launches local contract report',t=>{
+test('new pink wheelbarrow mascot sits immediately below Trancid and launches local contract report',t=>{
  const dom=new JSDOM('<main id="app"></main>');dom.window.HTMLCanvasElement.prototype.getContext=()=>null;
  const view=createChatView(dom.window.document.querySelector('#app'));t.after(()=>{view.destroy();dom.window.close();});
  let opens=0;view.on(action,()=>opens++);view.render(home);const mascot=dom.window.document.querySelector(`[data-action="${action}"]`);
- assert.ok(mascot,'new report shortcut missing');assert.equal(mascot.previousElementSibling.dataset.action,'open-supplier-workforce-report');assert.equal(mascot.nextElementSibling.dataset.action,'open-pending-supplier-payments-report');
+ assert.ok(mascot,'new report shortcut missing');assert.equal(mascot.previousElementSibling.dataset.action,'open-trancid-report');assert.equal(mascot.nextElementSibling.dataset.action,'open-pending-supplier-payments-report');
  assert.match(mascot.querySelector('img').src,/contractor-control\.png$/);mascot.querySelector('img').click();assert.equal(opens,1);
  view.render({...home,activeText:{id:'busy'}});const busy=dom.window.document.querySelector(`[data-action="${action}"]`);assert.equal(busy.disabled,true);busy.click();assert.equal(opens,1);
  assert.doesNotMatch(renderChatMarkup({...home,activeFlow:'flow'}),/data-action="open-contractor-control-report"/);
 });
-test('new entry navigates strictly between pink workforce and pink pending payments',()=>{
- assert.deepEqual(getReportNeighbors(action),{previous:'open-supplier-workforce-report',next:'open-pending-supplier-payments-report'});
- assert.deepEqual(getReportNeighbors('open-supplier-workforce-report'),{previous:'open-trancid-report',next:action});
+test('new entry navigates strictly between Trancid and pink pending payments',()=>{
+ assert.deepEqual(getReportNeighbors(action),{previous:'open-trancid-report',next:'open-pending-supplier-payments-report'});
+ assert.deepEqual(getReportNeighbors('open-trancid-report'),{previous:'open-supplier-payroll-report',next:action});
  assert.deepEqual(getReportNeighbors('open-pending-supplier-payments-report'),{previous:action,next:'open-pending-work-diaries-report'});
  assert.equal(REPORT_PDF_TITLES[action],'Controle de empreiteiros');assert.equal(getReportNeighbors('open-commercial-receipts').previous,null);
 });
 test('pink rail preserves uniform fill and even spacing below the separate orange row',t=>{
  const dom=new JSDOM(renderChatMarkup(home),{url:'https://example.test/'});t.after(()=>dom.window.close());const style=dom.window.document.createElement('style');style.textContent=readFileSync(new URL('../src/styles.css',import.meta.url),'utf8');dom.window.document.head.append(style);
- const actions=['open-cargos-table','open-attendance-summary','open-stage-progress','open-supplier-payroll-report','open-trancid-report','open-supplier-workforce-report',action,'open-pending-supplier-payments-report','open-pending-work-diaries-report'];
+ const actions=['open-cargos-table','open-attendance-summary','open-stage-progress','open-supplier-payroll-report','open-trancid-report',action,'open-pending-supplier-payments-report','open-pending-work-diaries-report'];
  let bottom=0;for(const name of actions){const node=dom.window.document.querySelector(`[data-action="${name}"]`);assert.ok(node,name);const css=dom.window.getComputedStyle(node);assert.ok(parseFloat(css.marginTop)>=bottom+4,name);bottom=parseFloat(css.marginTop)+parseFloat(css.height);}
  const css=dom.window.getComputedStyle(dom.window.document.querySelector(`[data-action="${action}"]`));assert.equal(css.backgroundColor,'rgb(207, 117, 122)');
+ const trancid=dom.window.document.querySelector('[data-action="open-trancid-report"]');
+ assert.equal(parseFloat(css.marginTop)-parseFloat(dom.window.getComputedStyle(trancid).marginTop),56);
  const row=dom.window.document.querySelector('nav[aria-label="Relatórios comerciais"]');assert.ok(row);assert.equal(row.querySelectorAll('button').length,4);assert.equal(dom.window.getComputedStyle(row).display,'flex');
  assert.ok([...row.querySelectorAll('button')].every(b=>dom.window.getComputedStyle(b).backgroundColor==='rgb(173, 62, 8)'));
 });
