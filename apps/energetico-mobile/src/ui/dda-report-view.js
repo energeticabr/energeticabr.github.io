@@ -313,14 +313,40 @@ export function createDdaReportView({document:doc=globalThis.document,data,openM
   finally{if(trigger.isConnected&&!signal.aborted)trigger.disabled=false;if(!previewStarted)finish();}
  }
  async function load(initialSnapshot,position,initialSettledDdaIds){
-  if(root.hidden||destroyed)return;closeSettlementDialog();provisionPicker.close();pdfRequest=null;controller?.abort();cancelSettlement();const current=++revision,active=controller=new AbortController(),filters=filterRevision;rows=null;settledDdaIds=new Set();settlementVerified=false;printAll=false;root.setAttribute('aria-busy','true');refresh.disabled=true;showNotice();content.replaceChildren(make('p','','Carregando DDAs do SharePoint…'));
-  try{const snapshot=initialSnapshot??await data.loadSnapshot({refresh:true,signal:active.signal});if(active.signal.aborted||current!==revision||root.hidden||destroyed)return;rows=normalizeDdaReportRows(snapshot);if(initialSettledDdaIds){settledDdaIds=new Set(initialSettledDdaIds);settlementVerified=!rows.some(row=>row.provisionId&&row.status!=='Pago');}populate();render();if(position&&filters===filterRevision)restoreReportPosition(position);}
-  catch{if(active.signal.aborted||current!==revision||root.hidden||destroyed)return;rows=null;const error=make('p','','Não foi possível carregar os DDAs. Tente atualizar.');error.setAttribute('role','alert');content.replaceChildren(error);}
+  if(root.hidden||destroyed)return;
+  closeSettlementDialog();provisionPicker.close();pdfRequest=null;controller?.abort();cancelSettlement();
+  const current=++revision,active=controller=new AbortController(),filters=filterRevision;
+  const isCurrent=()=>!active.signal.aborted&&current===revision&&!root.hidden&&!destroyed;
+  rows=null;settledDdaIds=new Set();settlementVerified=false;printAll=false;
+  root.setAttribute('aria-busy','true');refresh.disabled=true;showNotice();
+  const loading=make('p','','Carregando DDAs do SharePoint…');
+  loading.setAttribute('role','status');content.replaceChildren(loading);
+  try{
+   const snapshot=initialSnapshot??await data.loadSnapshot({refresh:true,signal:active.signal});
+   if(!isCurrent())return;
+   const nextRows=normalizeDdaReportRows(snapshot);
+   let verified=initialSettledDdaIds;
+   // The automatic reminder only checks paid DDAs before opening the report.
+   if(!verified||nextRows.some(row=>row.provisionId&&row.status!=='Pago')){
+    if(nextRows.some(row=>row.provisionId))loading.textContent='Conferindo baixas de provisões no SharePoint…';
+    verified=await readSettledDdaIds(nextRows,data.provisionLink,active.signal,{includeUnpaid:true});
+   }
+   if(!isCurrent())return;
+   settledDdaIds=new Set(verified??initialSettledDdaIds);
+   settlementVerified=Boolean(verified);
+   rows=nextRows;
+   populate();render();
+   if(position&&filters===filterRevision)restoreReportPosition(position);
+  }catch{
+   if(!isCurrent())return;
+   rows=null;
+   const error=make('p','','Não foi possível carregar os DDAs. Tente atualizar.');
+   error.setAttribute('role','alert');content.replaceChildren(error);
+  }
   finally{if(current===revision){root.setAttribute('aria-busy','false');syncRefreshButton();}}
-  if(rows&&current===revision&&!settlementVerified)await recheckSettlement();
  }
  function close(){if(root.hidden)return;expandedBarcodes.clear();reloadPending=false;pdfRequest=null;closeSettlementDialog();provisionPicker.close();controller?.abort();cancelSettlement();revision++;rows=null;printAll=false;content.replaceChildren();showNotice();root.hidden=true;doc.body.style.overflow=oldOverflow;if(app)app.inert=oldInert;const target=returnFocus?.isConnected?returnFocus:doc.querySelector('[data-action="open-dda-report"]')||app;target?.focus?.();returnFocus=null;onClose();}
- const filter=()=>{filterRevision++;printAll=false;page=1;render();content.scrollTop=0;showNotice();};
+ const filter=()=>{filterRevision++;printAll=false;page=1;if(rows){render();content.scrollTop=0;}showNotice();};
  controls.status.addEventListener('change',filter);controls.bank.addEventListener('change',filter);controls.search.addEventListener('input',filter);refresh.addEventListener('click',()=>void manualRefresh());
  const unsubscribeBank=syncMonitor?.subscribe(state=>{
   if(destroyed)return;
