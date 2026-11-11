@@ -235,6 +235,19 @@ assert.deepEqual(shortcuts.map(s=>s.action),['open-pending-provisions','open-sic
       })()`);
       assert.deepEqual(rhidFit,{noOverflow:true,color:'rgb(185, 228, 246)',mismatch:'rgb(255, 240, 223)',
         pending:'rgb(255, 247, 207)',homePreserved:true,panelInset:true,homeInert:true,dates:2,datesFit:true});
+      const confirmed=await evaluate(`(()=>{
+        const report=document.querySelector('.chat-rhid-mascot');
+        const card=[...report.querySelectorAll('.chat-rhid-attendance-card')].find(node=>node.querySelector('h3').textContent.startsWith('Fornecedor de teste 3'));
+        const title=card.querySelector('h3'), badge=card.querySelector('.chat-rhid-mascot__comparison');
+        const badgeRect=badge.getBoundingClientRect(), row=card.querySelector('.chat-rhid-attendance-card__person').getBoundingClientRect();
+        return {heading:title.textContent, fullTitleVisible:title.scrollWidth<=title.clientWidth+1,
+          cardFill:getComputedStyle(card).backgroundColor, badgeText:badge.textContent,
+          badgeFill:getComputedStyle(badge).backgroundColor, onRight:Math.abs(badgeRect.right-row.right)<1,
+          oldDescription:!!card.querySelector('p.chat-rhid-mascot__registration')};
+      })()`);
+      assert.deepEqual(confirmed,{heading:'Fornecedor de teste 3 (Servente de pedreiro - 004 - Edifício de exemplo/Imóvel de teste)',
+        fullTitleVisible:true,cardFill:'rgb(231, 246, 235)',badgeText:'Presente no Descritivo',
+        badgeFill:'rgb(207, 237, 217)',onRight:true,oldDescription:false});
       if(width===390&&!pwa&&process.env.RHID_MASCOT_SCREENSHOT){const shot=await send('Page.captureScreenshot',{format:'png'},sessionId);writeFileSync(process.env.RHID_MASCOT_SCREENSHOT,Buffer.from(shot.data,'base64'));}
       await evaluate(`document.activeElement.dispatchEvent(new KeyboardEvent('keydown',{key:'Escape',bubbles:true}))`);
       assert.equal(await evaluate(`!document.querySelector('[data-rhid-mascot-report]') &&

@@ -218,17 +218,31 @@ test('RHID compares clock punches separately from manual times and leaves homony
   ]);
   const dora = day.people.find(person => person.personKey === 'rhid:3');
   assert.equal(dora.presenceComparison.mismatch, true);
+  assert.equal(dora.presenceComparison.matched, false);
   assert.equal(dora.slots.entry1.source, 'added');
   const homonyms = day.people.filter(person => ['rhid:1', 'rhid:2'].includes(person.personKey));
   assert.equal(homonyms.length, 2);
-  assert.ok(homonyms.every(person => !person.presenceComparison.mismatch
+  assert.ok(homonyms.every(person => !person.presenceComparison.matched && !person.presenceComparison.mismatch
     && person.presenceComparison.label === 'Nome ambíguo no RHID'));
   const unknown = day.people.filter(person => ['rhid:4', 'rhid:5'].includes(person.personKey));
   assert.equal(unknown.length, 2);
-  assert.ok(unknown.every(person => !person.presenceComparison.mismatch && !person.emptyPunchSource));
+  assert.ok(unknown.every(person => !person.presenceComparison.matched && !person.presenceComparison.mismatch && !person.emptyPunchSource));
   const names = rhidMascotAmbiguousNames(new Map([['2026-11-09', [clock[0]]], ['2026-11-10', [clock[1]]]]));
   const isolated = rhidMascotDay([clock[0]], '2026-11-09', [{ supplier: 'João Teste', presence: 'AUSENTE' }], names);
   assert.equal(isolated.people[0].presenceComparison.label, 'Nome ambíguo no RHID');
+});
+
+test('RHID confirms presence only when the clock and unambiguous Descritivo status agree', () => {
+  const date = '2026-11-09';
+  const rows = [{ ID_PESSOA_RHID: '1', NOME_COLABORADOR: 'Ana Teste', BATIDAS_RHID: '07:15' }];
+  const compare = (...statuses) => rhidMascotDay(rows, date, statuses.map(presence => ({
+    supplier: 'Ana Teste', presence,
+  }))).people[0].presenceComparison;
+  assert.equal(compare('PRESENTE').matched, true);
+  assert.equal(compare('PRESENTE', 'PRESENTE').matched, true);
+  assert.equal(compare('PRESENTE', 'PENDENTE').matched, false);
+  assert.equal(compare('PRESENTE', 'AUSENTE').matched, false);
+  assert.equal(compare().matched, false);
 });
 
 test('filling a missing time uses an explicit action that an older VM cannot interpret as a correction', async () => {
