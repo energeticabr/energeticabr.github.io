@@ -7,8 +7,8 @@ import { build, createServer } from 'vite';
 import { JSDOM } from 'jsdom';
 import { runBrowserLayout } from './helpers/browser-layout-runner.mjs';
 
-test('payroll date stays compact and inside the screen with native and shipped PWA styles', {timeout:120_000}, async t => {
-  const browser = [process.env.CHROME_BIN, 'C:\\Program Files\\Google\\Chrome\\Application\\chrome.exe'].find(path => path && existsSync(path));
+test('payroll date and batch cards fit native and shipped PWA styles', {timeout:120_000}, async t => {
+  const browser = [process.env.CHROME_BIN, 'C:\\Program Files\\Google\\Chrome\\Application\\chrome.exe', '/usr/bin/google-chrome'].find(path => path && existsSync(path));
   if (!browser) return t.skip('Chrome unavailable');
   const appRoot = fileURLToPath(new URL('..', import.meta.url));
   const bundle = await build({configFile:false, root:resolve(appRoot,'pwa'), base:'/energetico/', logLevel:'silent', build:{write:false}});
@@ -48,7 +48,17 @@ test('payroll date stays compact and inside the screen with native and shipped P
         assert.equal(layout.empty.value,'');
         assert.equal(layout.filled.value,'2026-10-08');
         assert.equal(layout.restored.value,'2026-10-08');
-        assert.equal(layout.advanced,'DESEJA EFETUAR A FOLHA DE QUAL FORNECEDOR?');
+        assert.match(layout.advanced,/Selecione os fornecedores/);
+        const { batch } = layout;
+        assert.equal(batch.initial, 'rgb(255, 255, 255)', context);
+        assert.equal(batch.incomplete, 'rgb(255, 240, 218)', context);
+        assert.equal(batch.ready, 'rgb(229, 245, 233)', context);
+        assert.equal(batch.unchecked, batch.incomplete, context);
+        assert.equal(batch.panelVisible, true, context);
+        assert.match(batch.amount, /101,25/);
+        assert.ok(batch.overflow <= 1, 'batch horizontal overflow: ' + context);
+        assert.ok(batch.checkbox.width >= 44 && batch.checkbox.height >= 44, 'checkbox touch target: ' + context);
+        assert.ok(batch.checkbox.right <= batch.toggle.left && batch.post.right <= width, 'batch controls clipped: ' + context);
         assert.deepEqual(layout.calls,['suppliers']);
         t.diagnostic(`${context}: date=${layout.filled.input.width}px; no overflow; selected date survives navigation`);
       }

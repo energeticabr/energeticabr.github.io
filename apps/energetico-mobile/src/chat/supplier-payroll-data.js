@@ -192,7 +192,7 @@ export function createSupplierPayrollData({
     }
     throw new Error("Há mais registros do que o limite da consulta da folha.");
   }
-  async function source(name, { signal, onProgress } = {}) {
+  async function readSource(name, { signal, onProgress }) {
     const loading = createPayrollProgress(onProgress, ['schema', 'items', 'options']);
     const descriptor = await describe(name, { signal, onProgress: loading.child('schema') });
     const definitions = SOURCES[name];
@@ -219,6 +219,18 @@ export function createSupplierPayrollData({
       }))
       .filter((item) => /^[1-9]\d*$/.test(item.id) && item.label);
     loading.done('options', { completedItems: rows.length }); return result;
+  }
+  function source(name, options = {}) {
+    // Panels in the same batch share the catalogs, while posting revalidates from SharePoint.
+    const { catalogCache, refreshCatalog } = options;
+    if (!catalogCache) return readSource(name, options);
+    if (!refreshCatalog && catalogCache.has(name)) return catalogCache.get(name);
+    const request = readSource(name, options).catch(cause => {
+      if (catalogCache.get(name) === request) catalogCache.delete(name);
+      throw cause;
+    });
+    catalogCache.set(name, request);
+    return request;
   }
   const loadSuppliers = async (options) =>
     (await source("FORNECEDORES", options))

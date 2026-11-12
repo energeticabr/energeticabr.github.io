@@ -25,6 +25,28 @@ test('option progress counts resolved schema and real pages without inventing a 
   assert.equal(f.writes.length, 0);
 });
 
+test('opened supplier cards share sheet reads while a refresh bypasses the prior catalog', async () => {
+  const f = fixture();
+  const read = f.repository.getItemsPage;
+  let sheetReads = 0;
+  f.repository.getItemsPage = async (...args) => {
+    if (args[1] === 'IDFOLHA') sheetReads++;
+    return read(...args);
+  };
+  const catalogCache = new Map();
+  const [first, second, tax] = await Promise.all([
+    f.data.loadSheets({ label: 'EDGAR' }, { catalogCache }),
+    f.data.loadSheets({ label: 'OUTRO' }, { catalogCache }),
+    f.data.loadSheets({ label: 'EDGAR' }, { catalogCache, competence: '2026-08' }),
+  ]);
+  assert.deepEqual(first.map(sheet => sheet.id), ['9']);
+  assert.deepEqual(second.map(sheet => sheet.id), ['11']);
+  assert.deepEqual(tax.map(sheet => sheet.id), ['10']);
+  assert.equal(sheetReads, 1);
+  await f.data.loadSheets({ label: 'EDGAR' }, { catalogCache, refreshCatalog: true });
+  assert.equal(sheetReads, 2);
+});
+
 test('payroll post reports confirmed launches, payroll links and receipts without storing UI progress', async () => {
   const f = fixture(), events = [], journal = { operationId: 'measured-payroll' };
   f.draft.lines[0].files = [new File(['abc'], 'receipt.pdf', { type: 'application/pdf' })];

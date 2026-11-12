@@ -22,14 +22,19 @@ const view = createSupplierPayrollView({
     loadSuppliers: async () => [{id:'1',label:'MAURICIO HONORATO DE SOUZA',branch:'004 - EDIFÍCIO XAVANTE'}],
     loadProducts: async () => [{id:'2',label:'SERVENTE DE PEDREIRO'}],
     loadAccounts: async () => [{id:'3',label:'AMAEL PF - CAIXA'}],
+    loadStages: async () => [{id:'4',label:'ETAPA TESTE'}],
+    loadSheets: async () => [{id:'5',label:'10/2026'}],
   },
 });
 await view.open();
 const date = document.querySelector('[name=date]');
 date.value='2026-10-02';date.dispatchEvent(new Event('input',{bubbles:true}));
-for(const selector of ['[data-payroll-next]','[data-payroll-option="1"]','[data-payroll-option="2"]']){
+for (const [selector, ready] of [
+  ['[data-payroll-next]', '[data-payroll-expand]'],
+  ['[data-payroll-expand]', '[data-payroll-receipts="salary"]'],
+]) {
   document.querySelector(selector).click();
-  while(!document.querySelector('.supplier-payroll-question'))await new Promise(r=>setTimeout(r,10));
+  while (!document.querySelector(ready)) await new Promise(resolve => setTimeout(resolve, 10));
 }
 document.querySelector('[data-payroll-receipts="salary"]').click();
 document.documentElement.dataset.ready='true';
