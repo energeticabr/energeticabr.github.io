@@ -1,14 +1,16 @@
 import xcode from "xcode";
 import { readFile, writeFile } from "node:fs/promises";
 import { fileURLToPath, pathToFileURL } from "node:url";
+import { NB_BUNDLE_ID } from "../src/nb-participacoes.js";
 
-const bundles = ["br.com.energetica.energetico", "br.com.energetica.energetico.share"];
+const bundlePairs = ["br.com.energetica.energetico", NB_BUNDLE_ID].map(base => [base, `${base}.share`]);
 const clean = (value) => String(value || "").replace(/^"|"$/g, "");
 
 export function configureDistributionSigning(project, team, profiles) {
+  const bundles = bundlePairs.find(pair => pair.every(bundle => Object.hasOwn(profiles, bundle)));
   if (!/^[A-Z0-9]{10}$/.test(team) || Object.keys(profiles).length !== 2 ||
-      bundles.some(bundle => !/^[0-9a-f-]{36}$/i.test(profiles[bundle] || ""))) {
-    throw new Error("Expected a team and exactly two ENERGETICO distribution profiles.");
+      !bundles || bundles.some(bundle => !/^[0-9a-f-]{36}$/i.test(profiles[bundle] || ""))) {
+    throw new Error("Expected a team and exactly two distribution profiles for the same app.");
   }
   const objects = project.hash.project.objects;
   const selected = [];

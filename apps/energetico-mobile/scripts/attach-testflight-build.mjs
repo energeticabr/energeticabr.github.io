@@ -93,6 +93,9 @@ async function buildHasGroup(client, build, group) {
 
 export async function attachLatestTestFlightBuild(client, { appId = APP_ID, groupName = GROUP_NAME, requireInternal = false } = {}) {
   const build = await waitForComplete(client, appId);
+  if (requireInternal && attr(build).buildAudienceType !== "INTERNAL_ONLY") {
+    throw new Error("A Apple não confirmou a compilação como exclusiva de testes internos.");
+  }
   const groups = await list(client, `/v1/betaGroups?filter[app]=${appId}`);
   const eligible = requireInternal ? groups.filter(group => attr(group).isInternalGroup === true) : groups;
   const group = chooseInternalGroup(eligible, groupName);
