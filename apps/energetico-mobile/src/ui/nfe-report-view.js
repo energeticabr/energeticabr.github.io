@@ -256,7 +256,7 @@ export function createNfeReportView({ document:doc = globalThis.document, data, 
     setValue(regime, status.regime || (unavailable ? 'Consulta indisponível' : pending ? 'Consultando…' : 'Não informado'));
     const retained = row.withholding ? `Pelo comprador · ${money.format(row.withholding.total)}` : '';
     setValue(retention, retentionLabels[status.retention], retained);
-    retention.parentElement.dataset.tone = status.retention === 'yes' ? 'warning' : '';
+    retention.parentElement.dataset.tone = status.retention === 'yes' ? 'retained' : '';
     setValue(cno, cnoLabels[status.cno], status.cnoDetail);
     cno.parentElement.dataset.tone = status.cno;
   }
@@ -293,13 +293,16 @@ export function createNfeReportView({ document:doc = globalThis.document, data, 
       note.append(badge);
     }
     const supplier = make('td', 'nfe-supplier');
-    supplier.append(make('strong', '', row.supplier || 'Razão social não informada'));
-    if (row.taxId) supplier.append(make('small', '', row.taxId));
+    const supplierCard = make('div', 'nfe-detail-card');
+    supplierCard.append(make('strong', '', row.supplier || 'Razão social não informada'));
+    if (row.taxId) supplierCard.append(make('small', '', row.taxId));
+    supplier.append(supplierCard);
     const date = make('td', 'nfe-date');
-    const dateText = make(row.date ? 'time' : 'span', '', displayDate(row.date));
+    const dateText = make(row.date ? 'time' : 'span', 'nfe-detail-card', displayDate(row.date));
     if (row.date) dateText.dateTime = row.date;
     date.append(dateText);
-    const amount = make('td', 'nfe-money', row.total === null ? 'Não informado' : money.format(row.total).replace(/\u00a0/g, ' '));
+    const amount = make('td', 'nfe-money');
+    amount.append(make('span', 'nfe-detail-card', row.total === null ? 'Não informado' : money.format(row.total).replace(/\u00a0/g, ' ')));
     line.append(id, note, supplier, date, amount);
     const fields = { row, line };
     const taxCell = make('td');

@@ -76,7 +76,15 @@ test('NFE opens the horizontal fiscal table from the blue mascot in portrait and
         assert.equal(pdfOnLeft, true);
         assert.equal(metricsAbove, true);
         assert.equal(headerControls, true);
+        assert.deepEqual(layout.overflowingHeadings, [], `table headings fit their columns at ${width}px`);
         assert.equal(amountFits, true, 'a long amount stays inside its column');
+        assert.equal(layout.regularAmountSingleLine, true, `a typical amount fits on one line at ${width}px`);
+        for (const highlight of layout.highlights) {
+          assert.ok(highlight?.visible && highlight.textFits && highlight.cellFits, `card at ${width}px: ${JSON.stringify(highlight)}`);
+        }
+        const { red, otherRetentionRed, regimeRed, text } = layout.retentionHighlight;
+        assert.deepEqual({ red, otherRetentionRed, regimeRed }, { red:true, otherRetentionRed:false, regimeRed:false });
+        assert.match(text, /Retenção informada.*Pelo comprador.*R\$\s*15,00/);
         assert.equal(pdfIconWidth, 34);
         assert.ok(pdfTargetHeight >= 44);
         assert.deepEqual(filterNames, ['document', 'retention', 'cno', 'regime']);
