@@ -300,7 +300,8 @@ export function createSupplierPayrollView({
         }
         row.dataset.payrollCompletion = complete ? "complete" : started ? "pending" : "empty";
         lineStatus.hidden = !started;
-        lineStatus.textContent = complete ? (line.alreadyPaid ? "✓ Já pago — será incluído no holerite" : "✓ Completa — será incluída na folha") : isZero
+        const paidStatus = payrollTaxType(rubric.payrollType) ? "✓ Já pago" : "✓ Já pago — será incluído no holerite";
+        lineStatus.textContent = complete ? (line.alreadyPaid ? paidStatus : "✓ Completa — será incluída na folha") : isZero
           ? "Valor zero: esta rubrica não será enviada."
           : !hasValue
           ? "Pendente: informe o valor unitário desta rubrica."
