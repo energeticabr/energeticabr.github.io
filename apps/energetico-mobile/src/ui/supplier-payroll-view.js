@@ -831,7 +831,7 @@ function lineEdited(line) {
           search = "";
           throw new Error(failures.join(" · "));
         }
-      }, "Postando folhas, comprovantes e vínculos…", true);
+      }, "Postando provisões, comprovantes e holerites…", true);
     }
 
     const cards = entries.map((entry, index) => {
@@ -868,11 +868,13 @@ function lineEdited(line) {
       if (entry.result) {
         const sheets = new Map([entry.result.sheet, entry.result.taxSheet]
           .filter(Boolean).map(sheet => [sheet.id, sheet]));
-        const launches = entry.result.lines.map(line => line.id).filter(Boolean);
+        const provisions = entry.result.lines.map(line => line.id).filter(Boolean);
+        const descriptions = entry.result.lines.map(line => line.parentId).filter(Boolean);
         const references = [...sheets.values()].map(sheet => "IDFOLHA: " + sheet.id + " (" + sheet.label + ")");
         result.textContent = [
           ...(references.length ? ["Folha postada e vinculada", ...references] : []),
-          ...(launches.length ? ["Lançamentos: " + launches.join(", ")] : []),
+          ...(provisions.length ? ["Provisões: " + provisions.join(", ")] : []),
+          ...(descriptions.length ? ["Descritivos: " + descriptions.join(", ")] : []),
           ...(entry.result.holerite ? ["Holerite salvo no SharePoint"] : []),
         ].join(" · ") + ".";
       }

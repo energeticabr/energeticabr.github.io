@@ -6999,7 +6999,7 @@ export function createAppController({
             assertSession,
           });
           assertSession();
-          await data.prepare?.();
+          await data.prepare?.({ weekly: true });
           assertSession();
           allowAuthorization = false;
           const panel = await supplierPayrollFactory({

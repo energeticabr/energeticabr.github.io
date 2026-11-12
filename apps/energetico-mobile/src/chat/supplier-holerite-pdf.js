@@ -16,7 +16,7 @@ function displayText(value, font) {
   }).join("");
 }
 
-export async function buildSupplierHoleritePdf({ supplier, date, week, lines, total, paidTotal, launchTotal }, { logoBytes }) {
+export async function buildSupplierHoleritePdf({ supplier, date, week, lines, total, paidTotal, provisionTotal }, { logoBytes }) {
   const document = await PDFDocument.create();
   document.setTitle("Holerite semanal");
   const regular = await document.embedFont(StandardFonts.Helvetica);
@@ -56,14 +56,14 @@ export async function buildSupplierHoleritePdf({ supplier, date, week, lines, to
     lines.forEach((entry, row) => {
       const y = head - 21 - row * 17;
       const cells = [entry.label, quantity.format(entry.quantity), money(entry.unitValue),
-        money(entry.total), entry.alreadyPaid ? "Já pago" : "Nesta folha"];
+        money(entry.total), entry.alreadyPaid ? "Já pago" : "Provisionado"];
       cells.forEach((value, index) => text(value, columns[index], y, { size: 9, width: widths[index] }));
       line(margin, right, y - 5);
     });
     const totals = head - 22 - lines.length * 17;
     text("Total  " + money(total), margin, totals, { size: 11, font: bold, width: 174 });
     text("Já pago  " + money(paidTotal), 213, totals, { size: 10, width: 171 });
-    text("Nesta folha  " + money(launchTotal), 392, totals, { size: 10, width: 173 });
+    text("Provisionado  " + money(provisionTotal), 392, totals, { size: 10, width: 173 });
 
     const signature = top - 348;
     line(margin, 271, signature, ink);

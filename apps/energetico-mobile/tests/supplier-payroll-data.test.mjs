@@ -92,7 +92,10 @@ const defs = {
   IDFOLHA: ["MESREFERENCIA", "FORNECEDOR"],
   HOLERITE: ["Title", "CHAVE", "OPERACAO", "FORNECEDOR", "IDFORNECEDOR", "FILIAL", "SEMANA_INICIO", "SEMANA_FIM",
     "DATA_PAGAMENTO", "PRODUTO", "ETAPA", "IDFOLHA", "IDFOLHATRIBUTOS", "RUBRICAS", "TOTAL", "TOTAL_JA_PAGO",
-    "TOTAL_SUPRIMENTOS", "SITUACAO", "LANCAMENTOS"],
+    "TOTAL_PROVISOES", "SITUACAO", "PROVISOES"],
+  DESCRITIVOPROVISAO: ["Title", "FOLHAOPERACAO", "FILIAL", "FORNECEDOR", "FORMAPGTO", "OBS", "DATAPREVISTOPGTO", "STATUS", "VALORTOTAL"],
+  "PROVISÃO PGTOS": ["Title", "FOLHAOPERACAO", "FILIAL", "FORNECEDOR", "FORMAPGTO", "OBS", "DATAPREVISTOPGTO", "STATUS", "DATA",
+    "PRODUTO", "QTD", "VALORTOTAL", "FRETE", "ETAPA", "PGTOAGENDADO", "TIPOPGTO", "DESCRITIVOPROVISAO", "IDFOLHA"],
   FOLHAPGTO: [
     "Title",
     "FORNECEDOR",
@@ -102,6 +105,7 @@ const defs = {
     "DATA",
     "IDFOLHA",
     "IDLANCAMENTO",
+    "IDPROVISAO",
   ],
 };
 export function fixture() {
@@ -126,6 +130,10 @@ export function fixture() {
       ]),
     );
   Object.assign(columns.LANCAMENTOS.find(c=>c.displayName==='IDFOLHA'),{text:undefined,number:{decimalPlaces:'none'},required:false});
+  for (const list of ["DESCRITIVOPROVISAO", "PROVISÃO PGTOS"])
+    Object.assign(columns[list].find(c=>c.displayName==="FOLHAOPERACAO"),{indexed:true,enforceUniqueValues:true});
+  Object.assign(columns["PROVISÃO PGTOS"].find(c=>c.displayName==="IDFOLHA"),{text:undefined,number:{}});
+  Object.assign(columns.FOLHAPGTO.find(c=>c.displayName==="IDPROVISAO"),{text:undefined,number:{},indexed:true,enforceUniqueValues:true});
   for (const column of columns.HOLERITE) {
     if (column.displayName === "CHAVE") Object.assign(column, { indexed: true, enforceUniqueValues: true });
     if (column.displayName.startsWith("SEMANA_")) Object.assign(column, { text: undefined, dateTime: {} });
@@ -182,6 +190,8 @@ export function fixture() {
     ],
     FOLHAPGTO: [],
     HOLERITE: [],
+    DESCRITIVOPROVISAO: [],
+    "PROVISÃO PGTOS": [],
   };
   const writes = [],
     uploads = [];
@@ -191,10 +201,10 @@ export function fixture() {
     resolveList: async (_s, [name]) => ({ id: name }),
     getColumns: async (_s, list) => columns[list],
     getItemsPage: async (_s, list, query, options = {}) => {
-      const match = query.match(/\$filter=fields\/([^ ]+) eq '([^']*)'/);
+      const match = query.match(/\$filter=fields\/([^ ]+) eq (?:'([^']*)'|(\d+))/);
       return {
         items: match
-          ? rows[list].filter((r) => r.fields[match[1]] === match[2])
+          ? rows[list].filter((r) => r.fields[match[1]] === (match[2] ?? Number(match[3])))
           : rows[list],
         hasMore: false,
       };
@@ -277,7 +287,7 @@ export function fixture() {
     },
   };
 }
-test("fechamento misto guarda todas as rubricas no PDF e lança apenas as ainda não registradas", async () => {
+test("fechamento misto guarda ambas as rubricas e cria provisão somente para a pendente", async () => {
   const f = fixture();
   f.draft.lines[0].alreadyPaid = true;
   f.draft.lines[0].account = null;
@@ -299,16 +309,30 @@ test("fechamento misto guarda todas as rubricas no PDF e lança apenas as ainda 
   assert.equal(saved.SITUACAO, "FECHADO");
   assert.equal(saved.TOTAL, 231);
   assert.equal(saved.TOTAL_JA_PAGO, 201);
-  assert.equal(saved.TOTAL_SUPRIMENTOS, 30);
+  assert.equal(saved.TOTAL_PROVISOES, 30);
   assert.deepEqual(JSON.parse(saved.RUBRICAS).map(row => [row.rubrica, row.alreadyPaid, row.idFolha]),
     [["salary", true, null], ["meal", false, 9]]);
-  assert.equal(f.rows.LANCAMENTOS.length, 1);
+  assert.equal(f.rows.LANCAMENTOS.length, 0);
+  assert.equal(f.rows.DESCRITIVOPROVISAO.length, 1);
+  assert.equal(f.rows["PROVISÃO PGTOS"].length, 1);
   assert.equal(f.rows.FOLHAPGTO.length, 1);
-  assert.equal(f.decode("LANCAMENTOS", f.rows.LANCAMENTOS[0].fields)["VALOR UNITÁRIO"], "10");
+  const parent = f.decode("DESCRITIVOPROVISAO", f.rows.DESCRITIVOPROVISAO[0].fields);
+  const child = f.decode("PROVISÃO PGTOS", f.rows["PROVISÃO PGTOS"][0].fields);
+  const payment = f.decode("FOLHAPGTO", f.rows.FOLHAPGTO[0].fields);
+  assert.equal(parent.VALORTOTAL, "30");
+  assert.equal(child.VALORTOTAL, "10");
+  assert.equal(child.ETAPA, "FUNDAÇÃO");
+  assert.equal(child.STATUS, "PAGAMENTO PREVISTO");
+  assert.equal(child.DATAPGTOEFETUADO, undefined);
+  assert.equal(child.FORMAPGTO, "PIX");
+  assert.equal(child.DESCRITIVOPROVISAO, f.rows.DESCRITIVOPROVISAO[0].id);
+  assert.equal(child.IDFOLHA, 9);
+  assert.equal(payment.IDPROVISAO, Number(f.rows["PROVISÃO PGTOS"][0].id));
+  assert.equal(payment.IDLANCAMENTO, undefined);
   f.rows.CADASTROPRODUTO.length = 0;
   const reopened = await f.data.post(f.draft, { operationId: "weekly-mixed-reopened" }, undefined, { weekly: true });
   assert.equal(reopened.lines[1].id, posted.lines[1].id);
-  assert.equal(f.rows.LANCAMENTOS.length, 1);
+  assert.equal(f.rows["PROVISÃO PGTOS"].length, 1);
   assert.equal(f.uploads.length, 1);
 });
 
@@ -324,11 +348,44 @@ test("folha inteiramente já paga dispensa IDFOLHA e recupera falha de anexo sem
   assert.equal(f.rows.HOLERITE.length, 1);
   assert.equal(f.decode("HOLERITE", f.rows.HOLERITE[0].fields).SITUACAO, "FECHADO");
   assert.equal(f.rows.LANCAMENTOS.length, 0);
+  assert.equal(f.rows.DESCRITIVOPROVISAO.length, 0);
+  assert.equal(f.rows["PROVISÃO PGTOS"].length, 0);
   assert.equal(f.rows.FOLHAPGTO.length, 0);
   assert.equal(f.uploads.length, 1);
   await assert.rejects(f.data.post({ ...draft, date: "2026-10-03" }, { operationId: "weekly-conflict" },
     undefined, { weekly: true }), /outros dados/);
   assert.equal(f.rows.HOLERITE.length, 1);
+});
+
+test("retoma uma provisão semanal após perda da resposta sem duplicar registros nem anexos", async () => {
+  const f = fixture();
+  const draft = { ...f.draft, lines: [{ ...f.draft.lines[0],
+    files: [new File(["receipt"], "recibo.pdf", { type: "application/pdf" })] }] };
+  const create = f.repository.createItem;
+  let loseResponse = true;
+  f.repository.createItem = async (...args) => {
+    const row = await create(...args);
+    if (args[1] === "PROVISÃO PGTOS" && loseResponse) {
+      loseResponse = false;
+      throw new Error("resposta da provisão perdida");
+    }
+    return row;
+  };
+  const uploaded = [];
+  const upload = f.repository.uploadAttachment;
+  f.repository.uploadAttachment = async (...args) => {
+    uploaded.push([args[1], args[3].name]);
+    return upload(...args);
+  };
+  const options = { weekly: true };
+  await assert.rejects(f.data.post(draft, { operationId: "first-provision-attempt" }, undefined, options), /resposta da provisão perdida/);
+  const confirmed = await f.data.post(draft, { operationId: "resume-provision" }, undefined, options);
+  assert.ok(confirmed.holerite.id);
+  assert.equal(f.rows.DESCRITIVOPROVISAO.length, 1);
+  assert.equal(f.rows["PROVISÃO PGTOS"].length, 1);
+  assert.equal(f.rows.FOLHAPGTO.length, 1);
+  assert.equal(f.rows.LANCAMENTOS.length, 0);
+  assert.deepEqual(uploaded, [["PROVISÃO PGTOS", "recibo.pdf"], ["HOLERITE", confirmed.holerite.fileName]]);
 });
 test('folha vincula cada rubrica antes do comprovante e da próxima linha', async () => {
   const f=fixture();f.draft.lines[0].files=[new File(['abc'],'comprovante.pdf',{type:'application/pdf'})];
@@ -867,16 +924,16 @@ test('weekly payroll keeps tax in its selected sheet and out of the payslip',asy
   const result=await f.data.post(draft,{operationId:'mixed-tax-test'},undefined,{weekly:true});
   const payments=f.writes.filter(w=>w.list==='FOLHAPGTO').map(w=>f.decode('FOLHAPGTO',w.fields));
   assert.deepEqual(payments.map(p=>[p.TIPOPGTO,Number(p.IDFOLHA)]),[['SALÁRIO',9],['INSS',12]]);
-  assert.deepEqual(f.rows.LANCAMENTOS.map(row=>f.decode('LANCAMENTOS',row.fields).IDFOLHA),[9,12]);
+  assert.deepEqual(f.rows['PROVISÃO PGTOS'].map(row=>f.decode('PROVISÃO PGTOS',row.fields).IDFOLHA),[9,12]);
   assert.equal(result.taxSheet.id,'12');
   assert.equal(result.sheet.id,'9');
   const saved=f.decode('HOLERITE',f.rows.HOLERITE[0].fields);
   assert.deepEqual(JSON.parse(saved.RUBRICAS).map(line=>line.rubrica),['salary']);
-  assert.deepEqual(JSON.parse(saved.LANCAMENTOS).map(line=>line.rubric),['salary']);
+  assert.deepEqual(JSON.parse(saved.PROVISOES).map(line=>line.rubric),['salary']);
   assert.equal(saved.IDFOLHATRIBUTOS,undefined);
   assert.equal(saved.TOTAL,201);
   assert.equal(saved.TOTAL_JA_PAGO,0);
-  assert.equal(saved.TOTAL_SUPRIMENTOS,201);
+  assert.equal(saved.TOTAL_PROVISOES,201);
   const {getDocument,OPS}=await import('pdfjs-dist/legacy/build/pdf.mjs');
   const pdf=getDocument({data:new Uint8Array(holeritePdf),useSystemFonts:true});
   try {
@@ -885,6 +942,7 @@ test('weekly payroll keeps tax in its selected sheet and out of the payslip',asy
     const page=await doc.getPage(1);
     const text=(await page.getTextContent()).items.map(item=>item.str).join(' ');
     assert.doesNotMatch(text,/INSS|FGTS/);
+    assert.match(text,/Provisionado\s+R\$ 201,00/);
     assert.equal((text.match(/Assinatura do responsável pela empresa/g) || []).length,2);
     assert.equal((text.match(/Assinatura do funcionário/g) || []).length,2);
     const {fnArray}=await page.getOperatorList();
@@ -894,7 +952,8 @@ test('weekly payroll keeps tax in its selected sheet and out of the payslip',asy
   assert.equal(retry.lines.find(line=>line.rubric==='inss').id,result.lines.find(line=>line.rubric==='inss').id);
   await assert.rejects(f.data.post({...draft,lines:[draft.lines[0],{...draft.lines[1],unitValue:'99'}]},
     {operationId:'mixed-tax-modified'},undefined,{weekly:true}),/tributos em um envio próprio/);
-  assert.equal(f.rows.LANCAMENTOS.length,2);
+  assert.equal(f.rows['PROVISÃO PGTOS'].length,2);
+  assert.equal(f.rows.LANCAMENTOS.length,0);
 });
 
 test('tax-only payroll posts to historical competence without requiring a normal sheet',async()=>{
@@ -904,8 +963,13 @@ test('tax-only payroll posts to historical competence without requiring a normal
   const payment=f.writes.filter(w=>w.list==='FOLHAPGTO').map(w=>f.decode('FOLHAPGTO',w.fields))[0];
   assert.equal(Number(payment.IDFOLHA),10);
   assert.equal(payment.TIPOPGTO,'FGTS');
-  assert.equal(f.decode('LANCAMENTOS',f.rows.LANCAMENTOS[0].fields).IDFOLHA,10);
+  assert.equal(f.decode('PROVISÃO PGTOS',f.rows['PROVISÃO PGTOS'][0].fields).IDFOLHA,10);
   assert.equal(f.rows.HOLERITE.length,0);
+  const taxSheet=taxSheetFixture(f);
+  const draft={...f.draft,sheet:null,taxCompetence:'2026-09',taxSheet,lines:[{...f.draft.lines[0],rubric:'fgts'}]};
+  await f.data.post(draft,{operationId:'same-week-other-competence'},undefined,{weekly:true});
+  await f.data.post(draft,{operationId:'same-week-retry'},undefined,{weekly:true});
+  assert.deepEqual(f.rows['PROVISÃO PGTOS'].map(row=>f.decode('PROVISÃO PGTOS',row.fields).IDFOLHA),[10,12]);
 });
 
 test('tax sheets from another supplier or wrong competence fail before any financial write',async()=>{
