@@ -5,6 +5,20 @@ import { createChatClient } from "../src/chat/chat-client.js";
 
 const API_BASE = "https://163-176-171-217.sslip.io";
 
+test('Sicoob balance uses the authenticated read action and preserves a zero balance', async () => {
+  const asOf = '2026-11-11T21:17:00Z';
+  const replies = [{ balanceCents: 0, asOf }, { balanceCents: null, asOf }, null];
+  const client = clientWith(async (_url, options) => {
+    assert.equal(options.headers.Authorization, 'Bearer graph-token');
+    assert.equal(options.cache, 'no-store');
+    assert.deepEqual(JSON.parse(options.body), { action: 'sicoob_balance' });
+    return jsonResponse({ status: 'processed', messages: [], sicoobBalance: replies.shift() });
+  });
+  assert.deepEqual(await client.getSicoobBalance(), { balanceCents: 0, asOf });
+  await assert.rejects(client.getSicoobBalance(), /saldo/i);
+  assert.equal(await client.getSicoobBalance(), null);
+});
+
 test('Sicoob manual collection uses authenticated fixed actions, pending recovery and acknowledgement', async () => {
   const id = 'a'.repeat(32), bodies = [];
   const client = clientWith(async (url, options) => {

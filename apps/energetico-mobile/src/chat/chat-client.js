@@ -699,6 +699,23 @@ export function createChatClient({
   function getSicoobRefreshStatus(requestId, options) { return ddaRequest('sicoob_refresh_status', requestId, options); }
   function getSicoobRefreshPending(options) { return ddaRequest('sicoob_refresh_status', null, options, { mode: 'pending' }); }
   function acknowledgeSicoobRefresh(requestId, options) { return ddaRequest('sicoob_refresh_status', requestId, options, { acknowledge: true }); }
+  async function getSicoobBalance({ signal } = {}) {
+    if (apiPrefix === '/api/demo') return null;
+    const token = await cancellableToken(tokenProvider, signal);
+    const result = await request(chatUrl.href, {
+      method: 'POST', signal,
+      headers: { Accept: 'application/json', Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' },
+      body: JSON.stringify({ action: 'sicoob_balance' }),
+      cache: 'no-store', credentials: 'omit',
+    }, response => parsePortalResponse(response, 'A consulta de saldo Sicoob'), true);
+    const balance = result?.sicoobBalance;
+    if (balance === null) return null;
+    if (!Number.isSafeInteger(balance?.balanceCents) || typeof balance.asOf !== 'string'
+      || !/^\d{4}-\d\d-\d\dT\d\d:\d\d:\d\dZ$/.test(balance.asOf) || !Number.isFinite(Date.parse(balance.asOf))) {
+      throw new Error('O banco não confirmou o saldo da conta corrente.');
+    }
+    return { balanceCents: balance.balanceCents, asOf: balance.asOf };
+  }
   async function confirmDdaPayment({ itemId, key, signal } = {}) {
     if (!Number.isSafeInteger(itemId) || itemId <= 0 || itemId > 2147483647 || !/^[a-f0-9]{64}$/.test(String(key || ''))) throw new Error('DDA inválido para confirmação.');
     const token = await cancellableToken(tokenProvider, signal);
@@ -862,5 +879,5 @@ export function createChatClient({
     }, true);
   }
 
-  return Object.freeze({ refreshSicoob, getSicoobRefreshStatus, getSicoobRefreshPending, acknowledgeSicoobRefresh, waitForDiaryEvidence, refreshSefaz, getSefazRefreshStatus, getSefazRefreshPending, acknowledgeSefazRefresh, sendText, sendFile, replaceAttachment, transcribeAudio, fetchMedia, getAttachments, launchGalleryRequest, uploadLaunchGalleryFile, getPendingProvisionSnapshot, getPendingNotesSnapshot, getRhidAttendanceReport, startRhidPendingValidation, startRhidDayValidation, getRhidAttendanceMonth, saveRhidAttendanceAdjustment, deleteRhidAttendanceAdjustment, refreshRhidAttendance, getRhidRefreshStatus, refreshRecurringProvisions, getRecurringProvisionRefreshStatus, refreshDda, getDdaRefreshStatus, getDdaRefreshPending, acknowledgeDdaRefresh, confirmDdaPayment, deleteAttachment, deleteAllAttachments, compressAttachment, chooseAttachmentCompression, getCompletionMenu, prepareSignatureEvidence, confirmSignatureEvidence, verifySignatureEvidence, captureSignatureEvidence });
+  return Object.freeze({ getSicoobBalance, refreshSicoob, getSicoobRefreshStatus, getSicoobRefreshPending, acknowledgeSicoobRefresh, waitForDiaryEvidence, refreshSefaz, getSefazRefreshStatus, getSefazRefreshPending, acknowledgeSefazRefresh, sendText, sendFile, replaceAttachment, transcribeAudio, fetchMedia, getAttachments, launchGalleryRequest, uploadLaunchGalleryFile, getPendingProvisionSnapshot, getPendingNotesSnapshot, getRhidAttendanceReport, startRhidPendingValidation, startRhidDayValidation, getRhidAttendanceMonth, saveRhidAttendanceAdjustment, deleteRhidAttendanceAdjustment, refreshRhidAttendance, getRhidRefreshStatus, refreshRecurringProvisions, getRecurringProvisionRefreshStatus, refreshDda, getDdaRefreshStatus, getDdaRefreshPending, acknowledgeDdaRefresh, confirmDdaPayment, deleteAttachment, deleteAllAttachments, compressAttachment, chooseAttachmentCompression, getCompletionMenu, prepareSignatureEvidence, confirmSignatureEvidence, verifySignatureEvidence, captureSignatureEvidence });
 }

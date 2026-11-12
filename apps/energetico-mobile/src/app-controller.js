@@ -10024,7 +10024,15 @@ export function createAppController({
                 return startProvisionSettlement(id, 'provision-description', { closeDdaReport: () => panel.close() });
               },
             } : {}),
-            ...(isSicoobTransactionReport ? { onClose: () => registrationGalleryOpenings.delete(kind) } : {}),
+            ...(isSicoobTransactionReport ? {
+              onClose: () => registrationGalleryOpenings.delete(kind),
+              loadBalance: typeof client.getSicoobBalance === 'function' ? async options => {
+                assertSession();
+                const balance = await client.getSicoobBalance(options);
+                assertSession();
+                return balance;
+              } : undefined,
+            } : {}),
             ...(reportAction || ["contractorEmployment", "dda", "notas_fiscais_sefaz", 'assetMenu', 'registrationMenu', 'assetLaunches'].includes(sourceKind) ? {} : { onCreate: galleryCreationHandler(replyId, assertSession) }),
             ...(["financial_movement", "notas_fiscais_sefaz", "dda", "presenceDescriptions", "provisionDescription", "documents", "asset", "assetFunction", "assetProduct", "assetGroup", "workDiary", "quotes", "contracts", "contractLines", "measurements", "measurementLines", "stageDemonstratives", "constructionStages", "recurringTasks", "delegatedTasks"].includes(sourceKind) ? {
               openMediaCollection: (items, previewOptions) => {
