@@ -2,6 +2,7 @@ import Decimal from 'decimal.js';
 import { normalizeSearchText } from '../../../../portal/core/search-text.js';
 
 const VERSION = 1;
+export const NFE_RECENT_STAGE_USES = 5;
 const HEX_SHA256 = /^[a-f0-9]{64}$/;
 const headerFields = ['supplierId', 'branchId', 'accountId'];
 const numericFields = ['quantity', 'unitPrice', 'discount', 'adjustment'];
@@ -87,9 +88,9 @@ export function createNfeLearningExample(invoice, fiscal, baseline, reviewed, ma
       && !sameValue(field, previous[field], corrected[field]));
     const productId = selectionId(corrected.productId), stageId = selectionId(corrected.stageId);
     const identity = lineIdentity(original);
-    if (changed.length && identity.description && productId) lines.push({ ...identity, productId, stageId, branchId, changed });
+    if (identity.description && productId) lines.push({ ...identity, productId, stageId, branchId, changed });
   }
-  const hasHeader = headerChanged.length > 0 && Object.values(header).every(Boolean);
+  const hasHeader = Object.values(header).every(Boolean);
   if (!hasHeader && !lines.length) return null;
   const compact = lines.reduce((size, line) => size + line.code.length + line.description.length, 0) > 20_000;
   return {
@@ -127,6 +128,19 @@ function uniqueSelection(rows, field) {
   return choices.size === 1 ? choices.values().next().value : '';
 }
 
+export function preferredNfeStage(recent) {
+  const counts = new Map();
+  for (const stage of recent) counts.set(stage, (counts.get(stage) || 0) + 1);
+  let preferred = '', highest = 0;
+  for (const [stage, count] of counts) {
+    // In a tie, the first stage in this newest-first sample wins.
+    if (count <= highest) continue;
+    preferred = stage;
+    highest = count;
+  }
+  return preferred;
+}
+
 function indexCorrections(history) {
   const exact = new Map(), compact = new Map(), fuzzy = new Map();
   const add = (index, key, value) => {
@@ -138,8 +152,7 @@ function indexCorrections(history) {
   const fuzzyKey = (unit, qualifiers, word) => JSON.stringify([unit, qualifiers, word]);
   history.forEach((event, order) => {
     for (const saved of event.lines) {
-      if (typeof saved?.description !== 'string' || typeof saved.unit !== 'string' || !Array.isArray(saved.changed)
-        || !saved.changed.some(change => lineFields.includes(change))) continue;
+      if (typeof saved?.description !== 'string' || typeof saved.unit !== 'string' || !Array.isArray(saved.changed)) continue;
       const features = event.compact || saved.description.startsWith('#') ? null : descriptionFeatures(saved);
       const entry = { saved, order, features };
       add(event.compact ? compact : exact, exactKey(saved), entry);
@@ -211,21 +224,36 @@ export function createNfeLearningModel(examples, invoice, _fiscal, catalog) {
   const products = options(catalog?.products), stages = options(catalog?.stages);
   const saved = history.find(event => event.header)?.header;
   const supplierId = selectionId(saved?.supplierId), branchId = selectionId(saved?.branchId), accountId = selectionId(saved?.accountId);
-  const header = supplierId && branchId && accountId && suppliers.has(supplierId) && branches.has(branchId) && accounts.has(accountId)
-    ? { supplierId, branchId, accountId } : {};
+  const header = supplierId && suppliers.has(supplierId) ? {
+    supplierId,
+    ...(branches.has(branchId) ? { branchId } : {}),
+    ...(accounts.has(accountId) ? { accountId } : {}),
+  } : {};
+  const recentStages = new Map();
   return {
     header,
     product(line) {
       const id = infer(corrections(line), 'productId');
       return id && products.has(id) ? id : '';
     },
-    stage(line, branchId, productId) {
-      const branch = branches.get(selectionId(branchId));
+    stage(line, branchValue, productValue) {
+      const branchId = selectionId(branchValue), productId = selectionId(productValue);
+      const branch = branches.get(branchId);
       const branchLabel = key(branch?.label);
-      if (!branchLabel || !products.has(selectionId(productId))) return '';
-      const id = infer(corrections(line), 'stageId', saved => saved.branchId === selectionId(branchId) && saved.productId === selectionId(productId));
-      const stage = stages.get(id);
-      return stage && key(stage.branch) === branchLabel ? id : '';
+      if (!branchLabel || !products.has(productId)) return '';
+      const eligible = saved => saved?.branchId === branchId && saved.productId === productId
+        && key(stages.get(selectionId(saved.stageId))?.branch) === branchLabel;
+      const productAndBranch = JSON.stringify([productId, branchId]);
+      if (!recentStages.has(productAndBranch)) {
+        const recent = [];
+        for (const event of history) {
+          const stage = uniqueSelection(event.lines.filter(eligible), 'stageId');
+          if (stage) recent.push(stage);
+          if (recent.length === NFE_RECENT_STAGE_USES) break;
+        }
+        recentStages.set(productAndBranch, preferredNfeStage(recent));
+      }
+      return recentStages.get(productAndBranch) || infer(corrections(line), 'stageId', eligible);
     },
   };
 }

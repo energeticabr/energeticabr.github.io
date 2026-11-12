@@ -90,19 +90,19 @@ export function createNfeProposalData({ repository, fiscalData, tokenProvider, s
   }
 
   async function loadExamples(row, signal) {
+    const identity = await learningIdentity(row);
+    active(signal);
+    if (!identity) return null;
+    const { invoice, scope } = identity;
+    const examples = [];
     try {
-      const identity = await learningIdentity(row);
-      active(signal);
-      if (!identity) return null;
-      const { invoice, scope } = identity;
       const list = await repository.resolveList('company', ['NOTAS_FISCAIS_SEFAZ'], { signal });
-      if (list?.status !== 'resolved' || !list.id) return null;
+      if (list?.status !== 'resolved' || !list.id) return { invoice, examples };
       const select = [NFE_ORDER_FIELD, NFE_LEARNING_FIELD, NFE_LEARNING_SCOPE].join(',');
       const items = await repository.getItems('company', list.id,
         `$select=${select}&$filter=${NFE_LEARNING_SCOPE} eq '${scope}'&$top=200`, { signal });
       active(signal);
-      if (!Array.isArray(items)) return null;
-      const examples = [];
+      if (!Array.isArray(items)) return { invoice, examples };
       for (const item of items) {
         const fields = item?.fields;
         if (String(item?.id) === row.id || !nfeOrderId(fields?.[NFE_ORDER_FIELD])
@@ -114,11 +114,10 @@ export function createNfeProposalData({ repository, fiscalData, tokenProvider, s
       }
       active(signal);
       examples.sort((left, right) => right.at - left.at);
-      return { invoice, examples };
     } catch {
       active(signal);
-      return null;
     }
+    return { invoice, examples };
   }
   async function authorizeWrite({ signal } = {}) {
     active(signal);
@@ -159,7 +158,8 @@ export function createNfeProposalData({ repository, fiscalData, tokenProvider, s
         { status:'SATUS',filter:fields => nfeProposalKey(fields.TIPO) !== 'receita' }),
       stages:options(stages,{ label:'field_3',branch:'FILIAL' }),
       accounts:options(accounts,{ label:'Title' }),
-      history:(usage || []).map(({fields}) => ({ product:fields.field_7, stage:fields.field_6, branch:fields.Title })),
+      history:[...(usage || [])].sort((left, right) => Number(right.id) - Number(left.id))
+        .map(({fields}) => ({ product:fields.field_7, stage:fields.field_6, branch:fields.Title })),
       historyUnavailable:usage === null,
     };
   }
