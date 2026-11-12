@@ -27,7 +27,7 @@ export function createPaymentLedgerView({ document: doc = globalThis.document, d
   const warning = make('p', 'pl-orientation', 'PARA VER O RELATÓRIO FAVOR POSICIONAR O TELEFONE NA HORIZONTAL.');
   warning.setAttribute('role', 'status');
   const report = make('div', 'pl-report'); report.hidden = true;
-  const filters = make('div', 'pl-filters');
+  const filters = make('div', 'pl-filters pl-ledger-filters');
   const refresh = button('pl-refresh', '⟳'); refresh.setAttribute('aria-label', 'Atualizar relatório');
   const controls = new Map(), dateDisplays = new Map();
   const dates = make('div', 'pl-dates'); dates.append(make('span', 'pl-filter-label', 'DATA'));
