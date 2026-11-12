@@ -3,6 +3,7 @@ import assert from 'node:assert/strict';
 import {JSDOM} from 'jsdom';
 import {createDdaProvisionLink,rankDdaProvisionOptions,DDA_PROVISION_FIELD} from '../src/chat/dda-provision-link.js';
 import {createDdaReportView} from '../src/ui/dda-report-view.js';
+import {provisionDateKey as localProvisionDate} from '../src/chat/pending-provision-dates.js';
 const tick=()=>new Promise(resolve=>setImmediate(resolve));
 const provision=(id,supplier,amount,date)=>({id:String(id),fields:{FORNECEDOR:supplier,VALORTOTAL:amount,...(date?{DATAPGTOEFETUADO:date}:{})}});
 function repository(){
@@ -15,6 +16,120 @@ function repository(){
   updateItem:async(_site,list,id,fields,options)=>{state.writes.push({list,id,fields,options});state.linked=fields[DDA_PROVISION_FIELD];return {fields:{[DDA_PROVISION_FIELD]:state.linked}};},
  };return {state,api};
 }
+
+function dueAdjustmentFixture({lines=1,planned='2026-11-28',bankDue='2026-11-23'}={}){
+ const dueField='DATAPREVISTOPGTO';
+ const row=(id,eTag,fields)=>({id,eTag,fields});
+ const records={
+  dda:[row('43','"d1"',{VENCIMENTO:bankDue,[DDA_PROVISION_FIELD]:''})],
+  provision:[row('49','"p1"',{FORNECEDOR:'SÓ ANDAIMES',VALORTOTAL:'40,00',[dueField]:planned})],
+  children:Array.from({length:lines},(_,index)=>row(String(398+index),'"c1"',{
+   DESCRITIVOPROVISAO:'49',VALORTOTAL:'40,00',[dueField]:planned,
+   ...(index>0?{DATAPGTOEFETUADO:'2026-11-01',STATUS:'PAGAMENTO EFETUADO'}:{}),
+  })),
+ };
+ const dateColumn={name:dueField,dateTime:{}};
+ const columns={dda:[{name:DDA_PROVISION_FIELD}],provision:[dateColumn],
+  children:[{name:'DESCRITIVOPROVISAO',text:{}},dateColumn]};
+ const writes=[];
+ const api={
+  resolveList:async(_site,[name])=>({status:'resolved',id:name==='DDAS SICOOB'?'dda':name==='DESCRITIVOPROVISAO'?'provision':'children'}),
+  getColumns:async(_site,list)=>columns[list],
+  getItems:async(_site,list)=>structuredClone(records[list]),
+  getItem:async(_site,list,id)=>structuredClone(records[list].find(item=>item.id===id)),
+  async updateItem(_site,list,id,fields,{eTag}){
+   const record=records[list].find(item=>item.id===id);
+   assert.equal(eTag,record.eTag);
+   writes.push({list,fields});
+   record.eTag=`"v${writes.length}"`;
+   Object.assign(record.fields,fields);
+   return structuredClone(record);
+  },
+ };
+ return {records,writes,api,dueField,service:createDdaProvisionLink({repository:api})};
+}
+
+test('asks after saving the DDA link only for a single line with a different planned date',async t=>{
+ const {createDdaProvisionPicker}=await import('../src/ui/dda-provision-picker.js');
+ for(const [scenario,settings,answer] of [
+  ['accept',{},true],['decline',{},false],['two lines including a paid line',{lines:2},null],
+  ['no lines',{lines:0},null],['same date',{planned:'2026-11-23T00:00:00Z'},null],
+  ['no DDA due date',{bankDue:''},null],['no planned date',{planned:null},true],
+ ]) await t.test(scenario,async t=>{
+  const {records,writes,service,dueField}=dueAdjustmentFixture(settings);
+  const doc=new JSDOM('<body><main></main></body>').window.document;
+  const completed=[];
+  const picker=createDdaProvisionPicker({document:doc,host:doc.querySelector('main'),service,onLinked:receipt=>completed.push(receipt)});
+  t.after(()=>{picker.destroy();doc.defaultView.close();});
+  await picker.show({id:'43',supplier:'SÓ ANDAIMES',due:records.dda[0].fields.VENCIMENTO,amount:40});
+  doc.querySelector('input[value="49"]').click();
+  doc.querySelector('.dda-provision-save').click();
+  assert.equal(writes.length,0);
+  doc.querySelector('[data-edit-review-confirm]').click();
+  await tick();
+  const dialog=doc.querySelector('[data-edit-review]');
+  assert.deepEqual(writes,[{list:'dda',fields:{[DDA_PROVISION_FIELD]:'49'}}]);
+  if(answer===null){
+   assert.equal(dialog,null);
+  }else{
+   assert.match(dialog.textContent,/vencimento do DDA/);
+   assert.match(dialog.textContent,/23\/11\/2026/);
+   assert.equal(completed.length,0);
+   dialog.querySelector(answer?'[data-edit-review-confirm]':'[data-edit-review-cancel]').click();
+   await tick();
+  }
+  assert.equal(picker.isOpen,false);
+  assert.equal(completed[0]?.provisionId,'49');
+  if(answer){
+   assert.deepEqual(writes.slice(1),['children','provision'].map(list=>({list,fields:{[dueField]:'2026-11-23T03:00:00Z'}})));
+   assert.equal(localProvisionDate(records.children[0].fields[dueField]),'2026-11-23');
+   assert.equal(localProvisionDate(records.provision[0].fields[dueField]),'2026-11-23');
+  }else{
+   assert.equal(writes.length,1);
+  }
+ });
+});
+
+test('rechecks the linked group before dating it and restores its line if the description write fails',async t=>{
+ await t.test('a second line appears after confirmation was offered',async()=>{
+  const {records,writes,service}=dueAdjustmentFixture();
+  const receipt=await service.save({ddaId:'43',provisionId:'49'});
+  const plan=await service.prepareDueAdjustment(receipt);
+  records.children.push({id:'399',eTag:'"c2"',fields:{DESCRITIVOPROVISAO:'49'}});
+  await assert.rejects(service.adjustDue(plan),/mudou/i);
+  assert.equal(writes.length,1);
+ });
+ await t.test('description write failure leaves the confirmed link and restores the original dates',async()=>{
+  const {records,writes,service,api,dueField}=dueAdjustmentFixture();
+  const save=api.updateItem;
+  api.updateItem=async(...args)=>{
+   if(args[1]==='provision')throw Object.assign(new Error('Falha de gravação'),{status:403});
+   return save(...args);
+  };
+  const receipt=await service.save({ddaId:'43',provisionId:'49'});
+  const plan=await service.prepareDueAdjustment(receipt);
+  await assert.rejects(service.adjustDue(plan),/gravação/i);
+  assert.deepEqual(writes.map(({list})=>list),['dda','children','children']);
+  assert.equal(records.children[0].fields[dueField],'2026-11-28');
+  assert.equal(records.provision[0].fields[dueField],'2026-11-28');
+  assert.equal(records.dda[0].fields[DDA_PROVISION_FIELD],'49');
+ });
+ await t.test('a lost description response is confirmed by rereading both dates',async()=>{
+  const {writes,service,api}=dueAdjustmentFixture();
+  const save=api.updateItem;
+  api.updateItem=async(...args)=>{
+   const saved=await save(...args);
+   if(args[1]==='provision')throw new Error('Resposta perdida');
+   return saved;
+  };
+  const receipt=await service.save({ddaId:'43',provisionId:'49'});
+  const plan=await service.prepareDueAdjustment(receipt);
+  await service.adjustDue(plan);
+  await service.adjustDue(plan);
+  assert.equal(await service.prepareDueAdjustment(receipt),null);
+  assert.deepEqual(writes.map(({list})=>list),['dda','children','provision']);
+ });
+});
 test('lists only unpaid provision descriptions and ranks supplier or exact total, without auto-linking',async()=>{
  const {state,api}=repository(),service=createDdaProvisionLink({repository:api});
  const options=await service.loadOptions();assert.deepEqual(options.map(item=>item.id),['1','2']);

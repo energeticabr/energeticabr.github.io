@@ -47,6 +47,7 @@ export function createDdaReportView({document:doc=globalThis.document,data,openM
   settlementVerified=false;
   settledDdaIds.delete(receipt.ddaId);
   renderKeepingPosition();void recheckSettlement();
+  if(receipt.dueAdjustmentNotice)showNotice(receipt.dueAdjustmentNotice);
   onRowsChange(rows,{id:receipt.ddaId,provisionId:receipt.provisionId});
  }});
  const selected=()=>Object.fromEntries(Object.entries(controls).map(([key,node])=>[key,node.value]));

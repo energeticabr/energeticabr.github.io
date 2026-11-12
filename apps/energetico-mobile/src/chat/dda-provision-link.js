@@ -1,6 +1,6 @@
 import {provisionTotal} from './pending-provision-dates.js';
 import {provisionDescriptionLinkColumn} from './provision-description-detail-data.js';
-import {provisionChildPaid,provisionDateKey as paymentDateKey,provisionDueFields} from '../../../../portal/forms/provision-parent-due.js';
+import {provisionChildPaid,provisionDateKey as paymentDateKey,provisionDueFields,sameProvisionDue} from '../../../../portal/forms/provision-parent-due.js';
 
 export const DDA_PROVISION_FIELD='DESCRITIVOPROVIS_x00c3_O';
 const validId=value=>/^[1-9]\d*$/.test(String(value??''))&&Number.isSafeInteger(Number(value));
@@ -44,6 +44,18 @@ function childField(fields,columns,...aliases){
   if(direct)return direct[1];
  }
 }
+const itemVersion=item=>item?.eTag||item?.['@odata.etag']||item?.['odata.etag']||item?.fields?.['@odata.etag'];
+function dueColumn(columns,names){
+ const canonical=columns.find(column=>column.name===names.DATAPREVISTOPGTO);
+ const legacy=columns.filter(column=>[column.name,column.displayName].some(name=>columnKey(name)==='DATAPGTOPREVISTO'));
+ const column=canonical||(legacy.length===1?legacy[0]:null);
+ if(!column?.dateTime||column.readOnly||column.hidden||column.computed)throw new Error('A data prevista de pagamento não está disponível para edição.');
+ return column.name;
+}
+function hasRecordedPayment(fields,names){
+ return Boolean(String(fields[names.DATAPGTOEFETUADO]??'').trim())||nameKey(fields[names.STATUS])==='PAGAMENTO EFETUADO'
+  ||nameKey(fields[names.PGTOAGENDADO])==='PAGO';
+}
 export function rankDdaProvisionOptions(options,{supplier,amount,due}={}){
  const parts=tokens(supplier),wanted=amountKey(amount);
  const ddaDue=paymentDateKey(due),dueTime=Date.parse(ddaDue);
@@ -73,6 +85,7 @@ export function rankDdaProvisionOptions(options,{supplier,amount,due}={}){
 
 export function createDdaProvisionLink({repository,siteKey='personal',assertSession=()=>{}}){
  if(!repository)throw new TypeError('Repositório SharePoint obrigatório.');
+ function active(signal){assertSession();signal?.throwIfAborted();}
  let listPromise;
  async function lists(signal){
   listPromise??=Promise.all(['DDAS SICOOB','DESCRITIVOPROVISAO'].map(name=>repository.resolveList(siteKey,[name],{signal}))).then(([dda,provision])=>{
@@ -118,18 +131,17 @@ export function createDdaProvisionLink({repository,siteKey='personal',assertSess
    candidates.get(row.provisionId).push(row);
   }
   if(!candidates.size)return settled;
-  const active=()=>{assertSession();signal?.throwIfAborted();};
-  active();
+  active(signal);
   const [parents,children]=await Promise.all([
    repository.resolveList(siteKey,['DESCRITIVOPROVISAO'],{signal}),
    repository.resolveList(siteKey,CHILD_LISTS,{signal}),
   ]);
-  active();
+  active(signal);
   if([parents,children].some(list=>list?.status!=='resolved'||!list.id))throw new Error('Listas de provisão indisponíveis.');
-  const columns=await repository.getColumns(siteKey,children.id,{signal});active();
+  const columns=await repository.getColumns(siteKey,children.id,{signal});active(signal);
   const linkName=provisionDescriptionLinkColumn(columns),paymentFields=provisionDueFields(columns);
   // The repository follows every page and rejects partial or malformed collections.
-  const lines=await repository.getItems(siteKey,children.id,'?$expand=fields',{signal});active();
+  const lines=await repository.getItems(siteKey,children.id,'?$expand=fields',{signal});active(signal);
   if(!Array.isArray(lines))throw new Error('Consulta de provisões incompleta.');
   const seen=new Set(),groups=new Map();
   for(const line of lines){
@@ -165,8 +177,8 @@ export function createDdaProvisionLink({repository,siteKey='personal',assertSess
   const checkParent=async ([id,ddaIds])=>{
    let item;
    try{item=await repository.getItem(siteKey,parents.id,id,'?$expand=fields',{signal});}
-   catch{active();return;}
-   active();
+   catch{active(signal);return;}
+   active(signal);
    if(hasItemIdentity(item,id)&&paymentDateKey(item.fields.DATAPGTOEFETUADO))for(const ddaId of ddaIds)settled.add(ddaId);
   };
   const paidGroups=[...fullyPaidGroups];
@@ -179,7 +191,7 @@ export function createDdaProvisionLink({repository,siteKey='personal',assertSess
   const target=await repository.getItem(siteKey,provision.id,provisionId,'?$expand=fields',{signal});
   if(!target?.fields||String(target.fields.DATAPGTOEFETUADO??'').trim())throw new Error('O descritivo já possui pagamento efetuado. Atualize as opções.');
   const current=await repository.getItem(siteKey,dda.id,ddaId,'?$expand=fields',{signal});
-  const eTag=current?.eTag||current?.['@odata.etag']||current?.fields?.['@odata.etag'];
+  const eTag=itemVersion(current);
   if(!current?.fields||!eTag)throw new Error('Não foi possível verificar a versão atual do DDA.');
   if(String(current.fields[DDA_PROVISION_FIELD]??'').trim()===String(provisionId))return {ddaId:String(ddaId),provisionId:String(provisionId)};
   if(sharedLinkETag&&eTag!==sharedLinkETag)throw new Error('O DDA foi alterado durante a confirmação do vínculo.');
@@ -196,5 +208,127 @@ export function createDdaProvisionLink({repository,siteKey='personal',assertSess
   if(String(saved?.fields?.[DDA_PROVISION_FIELD]??'')!==String(provisionId))throw new Error('O vínculo não foi confirmado no SharePoint.');
   return {ddaId:String(ddaId),provisionId:String(provisionId)};
  }
- return Object.freeze({loadOptions,loadSettledDdaIds,save});
+
+ async function readItem(list,id,signal){
+  active(signal);
+  const item=await repository.getItem(siteKey,list,id,'?$expand=fields',{signal,includeVersion:true});
+  active(signal);
+  if(!hasItemIdentity(item,id))throw new Error('A identidade do registro não foi confirmada.');
+  return item;
+ }
+
+ async function linkedChildren(list,linkName,provisionId,signal){
+  active(signal);
+  const lines=await repository.getItems(siteKey,list,`?$select=id&$expand=fields($select=${linkName})`,{signal});
+  active(signal);
+  const seen=new Set(),linked=[];
+  if(!Array.isArray(lines))throw new Error('Consulta de provisões incompleta.');
+  for(const line of lines){
+   const id=String(line?.id),link=line?.fields?.[linkName];
+   if(!hasItemIdentity(line)||seen.has(id)||(link!=null&&typeof link!=='string'&&typeof link!=='number')){
+    throw new Error('Consulta de provisões inválida.');
+   }
+   seen.add(id);
+   if(String(link??'').trim()===provisionId)linked.push(id);
+  }
+  return linked;
+ }
+
+ async function readLinkedDda(list,{ddaId,provisionId},signal){
+  const dda=await readItem(list,ddaId,signal);
+  if(String(dda.fields[DDA_PROVISION_FIELD]??'').trim()!==provisionId)throw new Error('O vínculo do DDA mudou.');
+  return paymentDateKey(dda.fields.VENCIMENTO);
+ }
+
+ async function readDueContext({ddaId,provisionId},signal){
+  if(!validId(ddaId)||!validId(provisionId))throw new RangeError('ID de vínculo inválido.');
+  active(signal);
+  const {dda,provision}=await lists(signal);
+  const due=await readLinkedDda(dda.id,{ddaId,provisionId},signal);
+  if(!due)return null;
+  const children=await repository.resolveList(siteKey,CHILD_LISTS,{signal});
+  active(signal);
+  if(children?.status!=='resolved'||!children.id)throw new Error('Lista de provisões indisponível.');
+  const childColumns=await repository.getColumns(siteKey,children.id,{signal});
+  const linkName=provisionDescriptionLinkColumn(childColumns);
+  if(!/^[A-Za-z_][A-Za-z0-9_]*$/.test(linkName))throw new Error('Coluna de vínculo da provisão inválida.');
+  const ids=await linkedChildren(children.id,linkName,provisionId,signal);
+  if(ids.length!==1)return null;
+  const [child,parent,parentColumns]=await Promise.all([
+   readItem(children.id,ids[0],signal),readItem(provision.id,provisionId,signal),repository.getColumns(siteKey,provision.id,{signal}),
+  ]);
+  active(signal);
+  if(String(child.fields[linkName]??'').trim()!==provisionId)return null;
+  const childNames=provisionDueFields(childColumns),parentNames=provisionDueFields(parentColumns);
+  if(hasRecordedPayment(child.fields,childNames)||hasRecordedPayment(parent.fields,parentNames))return null;
+  const childField=dueColumn(childColumns,childNames),parentField=dueColumn(parentColumns,parentNames);
+  return {
+   plan:{ddaId,provisionId,due,childId:ids[0],childDue:paymentDateKey(child.fields[childField]),parentDue:paymentDateKey(parent.fields[parentField]),
+    childVersion:itemVersion(child),parentVersion:itemVersion(parent),childField,parentField},
+   child,parent,linkName,childList:children.id,parentList:provision.id,ddaList:dda.id,
+  };
+ }
+
+ async function prepareDueAdjustment(receipt,{signal}={}){
+  const context=await readDueContext(receipt,signal);
+  const plan=context?.plan;
+  if(!plan||(plan.childDue===plan.due&&plan.parentDue===plan.due))return null;
+  if([plan.childVersion,plan.parentVersion].some(tag=>!tag||tag==='*'))throw new Error('As versões das datas previstas não estão disponíveis.');
+  return Object.freeze(plan);
+ }
+
+ async function writeDue(list,item,field,value){
+  active();
+  const eTag=itemVersion(item),id=String(item.id);
+  if(!eTag||eTag==='*')throw new Error('A versão da data prevista não está disponível.');
+  const matches=record=>hasItemIdentity(record,id)&&sameProvisionDue(record.fields[field],value);
+  try{
+   const saved=await repository.updateItem(siteKey,list,id,{[field]:value},{eTag,includeVersion:true,readbackFields:[field]});
+   if(matches(saved))return {saved,canRestore:true};
+  }catch(error){
+   if(Number(error?.status)===412||error?.code==='concurrent_change')throw error;
+   const observed=await readItem(list,id);
+   if(matches(observed))return {saved:observed,canRestore:false};
+   throw error;
+  }
+  const observed=await readItem(list,id);
+  if(matches(observed))return {saved:observed,canRestore:false};
+  throw new Error('A data prevista não foi confirmada na releitura.');
+ }
+
+ async function adjustDue(plan,{signal}={}){
+  const context=await readDueContext(plan,signal);
+  const latest=context?.plan;
+  if(latest?.due===plan.due&&latest.childId===plan.childId&&latest.childDue===plan.due&&latest.parentDue===plan.due)return;
+  if(!latest||Object.keys(latest).some(key=>latest[key]!==plan[key]))throw new Error('O vínculo ou a provisão mudou. Reabra o vínculo e confira as datas.');
+  const {child,parent,childList,parentList,ddaList,linkName}=context;
+  const {childId,provisionId,due,childField,parentField,childDue,parentDue}=latest;
+  if([latest.childVersion,latest.parentVersion].some(tag=>!tag||tag==='*'))throw new Error('As versões das datas previstas não estão disponíveis.');
+  // Preserve the same day in readers that convert SharePoint timestamps to São Paulo time.
+  const value=`${due}T03:00:00Z`;
+  active(signal);
+  // Once approved and started, finish the paired write or compensate even if the dialog is closed.
+  let childSaved,parentWriteStarted=false;
+  try{
+   if(childDue!==due)childSaved=await writeDue(childList,child,childField,value);
+   const [ids,liveDue]=await Promise.all([linkedChildren(childList,linkName,provisionId),readLinkedDda(ddaList,latest)]);
+   if(ids.length!==1||ids[0]!==childId||liveDue!==due)throw new Error('O vínculo ou a provisão mudou durante o ajuste.');
+   if(parentDue!==due){
+    parentWriteStarted=true;
+    await writeDue(parentList,parent,parentField,value);
+   }
+  }catch(error){
+   if(childSaved?.canRestore&&(!parentWriteStarted||paymentDateKey((await readItem(parentList,provisionId)).fields[parentField])!==due)){
+    await writeDue(childList,childSaved.saved,childField,child.fields[childField]??null);
+   }
+   throw error;
+  }
+  const [currentChild,currentParent]=await Promise.all([readItem(childList,childId),readItem(parentList,provisionId)]);
+  if(String(currentChild.fields[linkName]??'').trim()!==provisionId
+   ||paymentDateKey(currentChild.fields[childField])!==due||paymentDateKey(currentParent.fields[parentField])!==due){
+   throw new Error('As datas da provisão e do descritivo não foram confirmadas.');
+  }
+ }
+
+ return Object.freeze({loadOptions,loadSettledDdaIds,save,prepareDueAdjustment,adjustDue});
 }

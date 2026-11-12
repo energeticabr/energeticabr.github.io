@@ -25,10 +25,12 @@ export function createReportLinkComparison(doc,value,matches,label,reference){
  return chip;
 }
 
+const displayDate=day=>day?day.split('-').reverse().join('/'):'Sem data prevista';
+
 function appendDdaComparisons(node,amount,totalMatch,{due,dueMatch}){
  const doc=node.ownerDocument;
  node.append(' · ',createReportLinkComparison(doc,amount,totalMatch,'Valor','o valor do DDA'),' · ',
-  due?'Previsto ':'',createReportLinkComparison(doc,due?due.split('-').reverse().join('/'):'Sem data prevista',
+  due?'Previsto ':'',createReportLinkComparison(doc,displayDate(due),
    dueMatch,'Data prevista','o vencimento do DDA'));
 }
 
@@ -40,6 +42,27 @@ export function createDdaProvisionPicker({service, ...options}){
   sharedLinkQuestion:'Tem certeza que deseja atribuir dois DDAS ao mesmo descritivo provisão?',
   currentLink:row=>row.provisionId,
   rowAmount:row=>row.amount,
+  afterLink:service?.prepareDueAdjustment&& (async (receipt,{form,signal,run,feedback})=>{
+   try{
+    feedback.textContent='Conferindo a data prevista de pagamento…';
+    const plan=await run(signal=>service.prepareDueAdjustment(receipt,{signal}));
+    if(!plan||signal.aborted)return receipt;
+    const due=displayDate(plan.due);
+    const change=await confirmEditChanges({form,signal,
+     title:`Deseja ajustar a data prevista de pagamento para o vencimento do DDA (${due})?`,
+     cancelLabel:'Não',confirmLabel:'Sim',changes:[
+      {label:`Provisão #${plan.childId}`,before:displayDate(plan.childDue),after:due},
+      {label:`Descritivo #${plan.provisionId}`,before:displayDate(plan.parentDue),after:due},
+     ],
+    });
+    if(!change||signal.aborted)return receipt;
+    feedback.textContent='Atualizando as duas datas previstas no SharePoint…';
+    await service.adjustDue(plan,{signal});
+    return {...receipt,dueAdjustmentNotice:`Datas previstas da provisão e do descritivo atualizadas para ${due}.`};
+   }catch{
+    return {...receipt,dueAdjustmentNotice:'Vínculo salvo. Não foi possível confirmar o ajuste das datas previstas. Confira os registros antes de tentar novamente.'};
+   }
+  }),
   renderOptionLabel(node,item,amount){
    node.className='report-link-option-text';
    node.textContent=item.label || `#${item.id} · ${item.supplier}`;
@@ -48,7 +71,7 @@ export function createDdaProvisionPicker({service, ...options}){
  });
 }
 
-export function createReportLinkPicker({document:doc,host,copy,loadOptions,saveLink,currentLink,rowAmount,renderOptionLabel,onLinked,onClose,resolveReturnFocus,sharedLinkQuestion,selectCurrent=false,timeoutMs=35000}){
+export function createReportLinkPicker({document:doc,host,copy,loadOptions,saveLink,currentLink,rowAmount,renderOptionLabel,afterLink,onLinked,onClose,resolveReturnFocus,sharedLinkQuestion,selectCurrent=false,timeoutMs=35000}){
  let current=null;ensureEditReviewStyles(doc);
  const el=(tag,cls='',value)=>{const node=doc.createElement(tag);node.className=cls;if(value!==undefined)node.textContent=String(value);return node;};
  const money=value=>{let text=String(value??'').trim().replace(/R\$|\s/g,'');if(text.includes(','))text=text.replace(/\./g,'').replace(',','.');const number=/^-?\d+(?:\.\d+)?$/.test(text)?Number(text):NaN;return Number.isFinite(number)?new Intl.NumberFormat('pt-BR',{style:'currency',currency:'BRL'}).format(number):'Valor não informado';};
@@ -128,7 +151,7 @@ export function createReportLinkPicker({document:doc,host,copy,loadOptions,saveL
    if(propose)propose.disabled=true;
    const radios=[...list.querySelectorAll('input')];
    for(const radio of radios)radio.disabled=true;
-   async function writeSelection(sharedLinkETag){
+   async function run(operation){
     entry.controller.signal.throwIfAborted();
     const write=new AbortController();
     const cancelWrite=()=>write.abort();
@@ -138,12 +161,13 @@ export function createReportLinkPicker({document:doc,host,copy,loadOptions,saveL
      const deadline=new Promise((_,reject)=>{
       timer=setTimeout(()=>{write.abort();reject(new Error('timeout'));},timeoutMs);
      });
-     return await Promise.race([saveLink(row,selected,write.signal,sharedLinkETag),deadline]);
+     return await Promise.race([operation(write.signal),deadline]);
     }finally{
      clearTimeout(timer);
      entry.controller.signal.removeEventListener('abort',cancelWrite);
     }
    }
+   const writeSelection=sharedLinkETag=>run(signal=>saveLink(row,selected,signal,sharedLinkETag));
    try{
     let receipt=await writeSelection();
     if(current!==entry||host.hidden)return;
@@ -157,6 +181,10 @@ export function createReportLinkPicker({document:doc,host,copy,loadOptions,saveL
       return;
      }
      receipt=await writeSelection(receipt.eTag);
+     if(current!==entry||host.hidden)return;
+    }
+    if(afterLink){
+     receipt=await afterLink(receipt,{form:dialog,signal:entry.controller.signal,run,feedback});
      if(current!==entry||host.hidden)return;
     }
     onLinked?.(receipt);
