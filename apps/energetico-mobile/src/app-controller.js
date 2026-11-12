@@ -9692,6 +9692,14 @@ export function createAppController({
             } : {}),
             ...(sourceKind === 'notas_fiscais_sefaz' ? { syncMonitor: ensureFinancialSync('fiscal') } : {}),
             ...(sourceKind === 'financial_movement' ? { syncMonitor: ensureFinancialSync('sicoob') } : {}),
+            ...((isDdaReport || isSicoobTransactionReport) && typeof client.getSicoobBalance === 'function' ? {
+              loadBalance: async options => {
+                assertSession();
+                const balance = await client.getSicoobBalance(options);
+                assertSession();
+                return balance;
+              },
+            } : {}),
             ...(isDdaReport ? {
               onClose: () => ddaAutoReminder.dismiss(),
               onRowsChange: (rows, change) => {
@@ -9724,12 +9732,6 @@ export function createAppController({
                 // The report can be older than a complete linkage read after a bank sync.
                 refreshSicoobMenuAlert();
               },
-              loadBalance: typeof client.getSicoobBalance === 'function' ? async options => {
-                assertSession();
-                const balance = await client.getSicoobBalance(options);
-                assertSession();
-                return balance;
-              } : undefined,
             } : {}),
             ...(reportAction || ["contractorEmployment", "dda", "notas_fiscais_sefaz", 'assetMenu', 'registrationMenu', 'assetLaunches'].includes(sourceKind) ? {} : { onCreate: galleryCreationHandler(replyId, assertSession) }),
             ...(["financial_movement", "notas_fiscais_sefaz", "dda", "presenceDescriptions", "provisionDescription", "documents", "asset", "assetFunction", "assetProduct", "assetGroup", "workDiary", "quotes", "contracts", "contractLines", "measurements", "measurementLines", "stageDemonstratives", "constructionStages", "recurringTasks", "delegatedTasks"].includes(sourceKind) ? {

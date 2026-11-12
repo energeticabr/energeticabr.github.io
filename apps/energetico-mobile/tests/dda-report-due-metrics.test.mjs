@@ -56,3 +56,58 @@ test('visible and printed metrics include all filtered pages and recalculate wit
   filter('search','inexistente');check('0','R$ 0,00','R$ 0,00');
  }finally{view.destroy();dom.window.close();}
 });
+
+test('the DDA report displays the bank balance independently of the filters and keeps it out of the PDF', async () => {
+ const dom = new JSDOM('<main id="app"></main>');
+ const doc = dom.window.document;
+ const requests = [];
+ const view = createDdaReportView({
+  document: doc, now,
+  data: { loadSnapshot: async () => ({ rows: source }) },
+  loadBalance: ({ signal }) => new Promise((resolve, reject) => requests.push({ signal, resolve, reject })),
+ });
+ const card = () => doc.querySelector('[data-dda-summary] [data-sicoob-balance]');
+ const amount = () => card().querySelector('strong').textContent;
+ const tick = () => new Promise(resolve => setImmediate(resolve));
+ try {
+  await view.open();
+  assert.match(card()?.textContent ?? '', /Saldo em conta corrente.*Sicoob.*Consultando/);
+  assert.equal(requests.length, 1);
+  requests[0].resolve({ balanceCents: -123456, asOf: '2026-11-12T12:29:00Z' });
+  await tick();
+  assert.match(amount(), /^-R\$\s1\.234,56$/);
+  assert.match(card().querySelector('time').textContent, /09:29/);
+
+  const search = doc.querySelector('[name="search"]');
+  search.value = 'inexistente';
+  search.dispatchEvent(new dom.window.Event('input'));
+  assert.match(amount(), /1\.234,56/);
+  assert.equal(requests.length, 1);
+  const restore = await view.preparePrint();
+  assert.doesNotMatch(JSON.stringify(captureFilteredReport(view.element)), /Saldo em conta corrente|1\.234,56/);
+  restore();
+
+  doc.querySelector('.pl-refresh').click();
+  await tick();
+  assert.equal(search.value, 'inexistente');
+  assert.match(amount(), /Consultando/);
+  requests[1].reject(new Error('Falha na consulta'));
+  await tick();
+  assert.equal(amount(), 'Indisponível');
+  assert.equal(card().querySelector('time').hidden, true);
+
+  doc.querySelector('.pl-refresh').click();
+  view.close();
+  assert.equal(requests[2].signal.aborted, true);
+  await view.open();
+  requests[3].resolve({ balanceCents: 0, asOf: '2026-11-12T12:31:00Z' });
+  await tick();
+  assert.match(amount(), /^R\$\s0,00$/);
+  requests[2].resolve({ balanceCents: 999999, asOf: '2026-11-12T12:30:00Z' });
+  await tick();
+  assert.match(amount(), /^R\$\s0,00$/);
+ } finally {
+  view.destroy();
+  dom.window.close();
+ }
+});
