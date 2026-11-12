@@ -4,14 +4,16 @@ import {existsSync,mkdirSync,writeFileSync} from 'node:fs';
 import {resolve,join} from 'node:path';
 import {fileURLToPath} from 'node:url';
 import {JSDOM} from 'jsdom';
-import {createServer} from 'vite';
+import {createIsolatedViteServer} from './helpers/isolated-vite-server.mjs';
 import {runBrowserLayout} from './helpers/browser-layout-runner.mjs';
 
 test('DDA date and linkage clusters fit on phones, desktop and print',{timeout:90000},async t=>{
  const browser=[process.env.CHROME_BIN,'C:/Program Files/Google/Chrome/Application/chrome.exe','/usr/bin/google-chrome','/usr/bin/chromium'].find(p=>p&&existsSync(p));
  if(!browser)return t.skip('Chrome unavailable');
  const root=resolve(fileURLToPath(new URL('..',import.meta.url)));
- const server=await createServer({root,server:{host:'127.0.0.1',port:0,fs:{allow:[resolve(root,'../..')]}},logLevel:'silent'});
+ const server=await createIsolatedViteServer({root,
+  optimizeDeps:{noDiscovery:true,include:['decimal.js']},
+  server:{host:'127.0.0.1',port:0,hmr:false,fs:{allow:[resolve(root,'../..')]}},logLevel:'silent'});
  try{
   await server.listen();
   for(const [width,height,mediaType] of [[320,740,'screen'],[390,844,'screen'],[844,390,'screen'],[1365,900,'screen'],[1365,900,'print']]){

@@ -46,7 +46,7 @@ state.schedules=[...document.querySelectorAll('.ddr-schedule-cluster')].map(badg
   fits:wordsFit&&badge.scrollWidth<=badge.clientWidth+1,
   printColorAdjust:style.printColorAdjust};
 });
-state.metrics=[...document.querySelectorAll('.ddr-metric')].map(card=>({
+state.metrics=[...document.querySelectorAll('.ddr-metric:not([hidden])')].map(card=>({
  label:card.querySelector('span').textContent,value:card.querySelector('strong').textContent.replace(/\s/g,' '),
  fits:card.scrollWidth<=card.clientWidth+1,top:card.offsetTop
 }));
