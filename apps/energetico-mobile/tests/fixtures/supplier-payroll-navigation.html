@@ -14,18 +14,19 @@
       async loadSuppliers() { return [{ id: '1', label: 'EDGAR NELSON DA SILVA', branch: '004 - EDIFÍCIO XAVANTE' }]; },
       async loadProducts() { return [{ id: '2', label: 'MESTRE DE OBRAS' }]; },
       async loadAccounts() { return [{ id: '3', label: 'PIX' }]; },
+      async loadStages() { return [{ id: '4', label: 'ETAPA TESTE' }]; },
+      async loadSheets() { return [{ id: '5', label: '10/2026' }]; },
     } });
     await gallery.open();
     const date = document.querySelector('[name=date]');
     date.value = '2026-10-02';
     date.dispatchEvent(new Event('input', { bubbles: true }));
-    const advance = async selector => {
+    const advance = async (selector, ready) => {
       document.querySelector(selector).click();
-      while (!document.querySelector('.supplier-payroll-question')) await new Promise(resolve => setTimeout(resolve, 10));
+      while (!document.querySelector(ready)) await new Promise(resolve => setTimeout(resolve, 10));
     };
-    await advance('[data-payroll-next]');
-    await advance('[data-payroll-option="1"]');
-    await advance('[data-payroll-option="2"]');
+    await advance('[data-payroll-next]', '[data-payroll-expand]');
+    await advance('[data-payroll-expand]', '[name=product]');
     document.documentElement.dataset.ready = 'true';
   </script>
 </body>
