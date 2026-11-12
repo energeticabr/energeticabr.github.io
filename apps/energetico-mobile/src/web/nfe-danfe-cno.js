@@ -3,12 +3,32 @@ import { readPdfTextContent } from './pdf-text-content.js';
 
 const MAX_PDF_BYTES = 60_000_000;
 const ADDITIONAL_DATA = /\bDADOS\s+ADICIONAIS\b/i;
+const ACCESS_KEY_LABEL = /\bCHAVE\s+DE\s+ACESSO\b/i;
 const ACCESS_KEY = /(?:^|[^0-9A-Z])((?:[0-9][ \t]*){6}(?:[0-9A-Z][ \t]*){12}(?:[0-9][ \t]*){25}[0-9])(?![0-9A-Z]|[ \t]+[0-9])/gi;
 
+function accessKeyLabel(items) {
+  for (const [index, item] of items.entries()) {
+    if (!/\bCHAVE\b/i.test(item.str)) continue;
+    let text = item.str;
+    let last = item;
+    for (let next = index + 1; next < items.length && !ACCESS_KEY_LABEL.test(text); next++) {
+      const fragment = items[next];
+      const gap = fragment.transform[4] - last.transform[4] - last.width;
+      if (last.hasEOL || Math.abs(fragment.transform[5] - item.transform[5]) > 2 ||
+          gap < -2 || gap > Math.max(5, item.height)) break;
+      text += fragment.str;
+      last = fragment;
+    }
+    if (ACCESS_KEY_LABEL.test(text)) return item;
+  }
+  return null;
+}
+
 function danfeAccessKey(items) {
-  const label = items.find(item => /\bCHAVE\s+DE\s+ACESSO\b/i.test(item.str));
+  const label = accessKeyLabel(items);
   if (!label) return '';
   const [, , , , labelX, labelY] = label.transform;
+  if (!items.some(item => /^\s*DANFE\b/i.test(item.str) && item.transform[5] >= labelY)) return '';
   const lineHeight = Math.max(5, label.height);
   // Read the printed field by position. PDF text order can place its value
   // after unrelated fields, and referenced invoice keys can appear farther down.
@@ -47,6 +67,9 @@ async function hasRasterizedContent(page, fromY, { OPS, Util }) {
     } else if (op === OPS.transform) {
       matrix = Util.transform(matrix, argsArray[index]);
     } else if (images.includes(op)) {
+      // Some issuers place a blank inline image over the fiscal footer.
+      const pixels = op === OPS.paintInlineImageXObject ? argsArray[index][0]?.data : null;
+      if (pixels?.length && pixels.every(value => value === 255)) continue;
       const [, b, , d, , y] = matrix;
       // PDF coordinates start at the bottom. The matrix maps the unit image rectangle.
       if (y + Math.min(0, b) + Math.min(0, d) <= fromY) return true;
@@ -90,7 +113,7 @@ export async function readDanfeCno(blob, key, { document, signal }) {
       const items = content.items.filter(item => typeof item.str === 'string');
       const text = items.map(item => item.str + (item.hasEOL ? '\n' : '')).join('').trim();
       if (!text) return null;
-      if (number === 1 && (!/^[ \t]*DANFE\b/im.test(text) || danfeAccessKey(items) !== key)) return null;
+      if (number === 1 && danfeAccessKey(items) !== key) return null;
       const heading = items.find(item => ADDITIONAL_DATA.test(item.str));
       const fromY = heading && !page.rotate ? heading.transform[5] + heading.height : Infinity;
       pages.push({ page, text, fromY });

@@ -2,7 +2,7 @@
 <html lang="pt-BR">
 <head><meta charset="utf-8"><title>CNO no DANFE — dados fictícios</title></head>
 <body><main id="app"></main><script type="module">
-import { PDFDocument, StandardFonts } from 'pdf-lib';
+import { PDFDocument, PDFOperator, StandardFonts, popGraphicsState, pushGraphicsState, scale, translate } from 'pdf-lib';
 import { createNfeReportView } from '/src/ui/nfe-report-view.js';
 
 const key = '31260612345678000199550010000001401000001401';
@@ -37,8 +37,24 @@ const report = createNfeReportView({ document, data:{
       const header = id === '12' ? 'CARTA DE CORRECAO ELETRONICA' : 'DANFE';
       const note = id === '12' ? 'Corrigir DANFE para constar CNO 90.025.44060/72'
         : id === '5' ? `NF-e referenciada: ${key}\n${notes.get(id)}` : notes.get(id);
-      page.drawText(`${header}\nCHAVE DE ACESSO\n${printedKey.match(/.{4}/g).join(' ')}\n${additional}${note}`,
-        { x:36, y:760, size:11, lineHeight:18 });
+      const groups = printedKey.match(/.{4}/g).join(' ');
+      if (id === '2') {
+        const regular = await pdf.embedFont(StandardFonts.Helvetica);
+        const bold = await pdf.embedFont(StandardFonts.HelveticaBold);
+        page.drawText('DANFE', { x:36, y:760, size:18, font:bold });
+        page.drawText('Documento Auxiliar', { x:36, y:752, size:7, font:regular });
+        const first = 'CHAVE', rest = ' DE ACESSO';
+        page.drawText(first, { x:36, y:724, size:7, font:regular });
+        page.drawText(rest, { x:36 + regular.widthOfTextAtSize(first, 7), y:724, size:7, font:bold });
+        page.drawText(groups, { x:60, y:715, size:8 });
+        page.drawText(additional + note, { x:36, y:678, size:11, lineHeight:18 });
+        page.pushOperators(pushGraphicsState(), translate(395, 650), scale(100, 25),
+          PDFOperator.of('BI\n/W 2 /H 1 /CS /RGB /BPC 8 /F /AHx\nID\nFFFFFFFFFFFF>\nEI'),
+          popGraphicsState());
+      } else {
+        page.drawText(`${header}\nCHAVE DE ACESSO\n${groups}\n${additional}${note}`,
+          { x:36, y:760, size:11, lineHeight:18 });
+      }
       if (id === '9' || id === '10') {
         const image = document.createElement('canvas');
         image.width = 200;
