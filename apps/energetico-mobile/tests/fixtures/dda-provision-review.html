@@ -3,13 +3,16 @@ import '../../src/styles.css';
 import '../../src/ui/payment-ledger.css';
 import '../../src/ui/dda-report.css';
 import {createDdaReportView} from '../../src/ui/dda-report-view.js';
-let writes=0;
+let writes=0,dateWrites=0;
 const duplicate=new URLSearchParams(location.search).has('duplicate');
 const nameFallback=new URLSearchParams(location.search).has('fallback');
+const alignDue=new URLSearchParams(location.search).has('alignDue');
 const frame=()=>new Promise(resolve=>requestAnimationFrame(()=>requestAnimationFrame(resolve)));
 const view=createDdaReportView({document,data:{
  loadSnapshot:async()=>({rows:[{id:'28',fields:{Title:'FORNECEDOR FICTÍCIO',VALOR:360,SITUACAO:'Em aberto',VENCIMENTO:'2026-11-04'}}]}),
- provisionLink:{loadOptions:async()=>[{id:'44',supplier:nameFallback?'FICTÍCIO':'FORNECEDOR FICTÍCIO',label:'#44 · FORNECEDOR FICTÍCIO',amount:720,provisions:[{id:'101',amount:nameFallback?180:360,due:'2026-11-04'},{id:'102',amount:nameFallback?540:360,due:'2026-12-04'}]}],save:async({sharedLinkETag})=>{if(duplicate&&!sharedLinkETag)return {requiresSharedConfirmation:true,eTag:'fixture'};writes++;return {ddaId:'28',provisionId:'44'};}}
+ provisionLink:{loadOptions:async()=>[{id:'44',supplier:nameFallback?'FICTÍCIO':'FORNECEDOR FICTÍCIO',label:'#44 · FORNECEDOR FICTÍCIO',amount:720,provisions:[{id:'101',amount:nameFallback?180:360,due:'2026-11-04'},...(alignDue?[]:[{id:'102',amount:nameFallback?540:360,due:'2026-12-04'}])]}],save:async({sharedLinkETag})=>{if(duplicate&&!sharedLinkETag)return {requiresSharedConfirmation:true,eTag:'fixture'};writes++;return {ddaId:'28',provisionId:'44'};},
+  ...(alignDue?{prepareDueAdjustment:async()=>({provisionId:'44',childId:'101',childDue:'2026-11-05',parentDue:'2026-11-05',due:'2026-11-04'}),adjustDue:async()=>{dateWrites++;}}:{}),
+ }
 }});
 await view.open();
 function pencilLayout(){
@@ -43,6 +46,7 @@ dialog.querySelector('[data-edit-review-cancel]').click();await frame();
 const cancelled=writes===0&&document.querySelector('input[type=radio]').checked&&!document.querySelector('[data-edit-review]');
 dialog=await review();dialog.querySelector('[data-edit-review-submit]').click();await frame();
 let duplicateFits,duplicateNo,duplicateTransform;
+let dueReview;
 if(duplicate){
  const popup=document.querySelector('[data-edit-review]');
  const box=popup.getBoundingClientRect();
@@ -52,6 +56,16 @@ if(duplicate){
  duplicateNo=writes===0&&!document.querySelector('[data-edit-review]')&&document.querySelector('input[type=radio]').checked;
  dialog=await review();dialog.querySelector('[data-edit-review-submit]').click();await frame();
  document.querySelector('[data-edit-review-submit]').click();await frame();
+}
+if(alignDue){
+ const popup=document.querySelector('[data-edit-review]'),box=popup.getBoundingClientRect();
+ const choices=[...popup.querySelectorAll('button')];
+ dueReview={title:popup.querySelector('h2').textContent,labels:choices.map(button=>button.textContent),
+  fits:box.left>=-1&&box.top>=-1&&box.right<=innerWidth+1&&box.bottom<=innerHeight+1,
+  hit:choices.every(button=>{const r=button.getBoundingClientRect();return document.elementFromPoint(r.x+r.width/2,r.y+r.height/2)===button;}),
+  before:{writes,dateWrites}};
+ popup.querySelector('[data-edit-review-confirm]').click();await frame();
+ dueReview.after={writes,dateWrites};
 }
 const afterPencil=pencilLayout();
 const confirmed=writes===1&&!view.element.hidden&&!document.querySelector('.dda-provision-dialog')
@@ -63,5 +77,5 @@ document.querySelector('[data-dda-provision-pencil]').click();await frame();
 document.querySelector('input[type=radio]').click();
 const capturedReview=await review();
 if(duplicate){capturedReview.querySelector('[data-edit-review-submit]').click();await frame();}
-document.documentElement.dataset.layout=JSON.stringify({pickerMatch,pickerFits,pickerOverflows,chipColors,fits,hit,transform,dimensions,bounds:{left:rect.left,right:rect.right,top:rect.top,bottom:rect.bottom},focusInside,writesBefore,cancelled,confirmed,beforePencil,afterPencil,duplicateFits,duplicateNo,duplicateTransform});
+document.documentElement.dataset.layout=JSON.stringify({pickerMatch,pickerFits,pickerOverflows,chipColors,fits,hit,transform,dimensions,bounds:{left:rect.left,right:rect.right,top:rect.top,bottom:rect.bottom},focusInside,writesBefore,cancelled,confirmed,beforePencil,afterPencil,duplicateFits,duplicateNo,duplicateTransform,dueReview});
 </script></body></html>
