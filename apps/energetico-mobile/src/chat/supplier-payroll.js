@@ -87,25 +87,31 @@ export function validPayrollDate(value) {
 export function validatePayrollDraft(draft) {
   if (!validPayrollDate(draft?.date))
     throw new RangeError("Selecione uma data válida.");
-  for (const [field, label] of [
-    ["supplier", "o fornecedor cadastrado"],
-    ["product", "o produto cadastrado"],
-    ["stage", "a etapa cadastrada"],
-  ]) {
-    if (!draft[field]?.id || !draft[field]?.label)
-      throw new RangeError(`Selecione ${label}.`);
-  }
+  if (!draft.supplier?.id || !draft.supplier?.label)
+    throw new RangeError("Selecione o fornecedor cadastrado.");
   if (!String(draft.supplier.branch || "").trim())
     throw new RangeError("O fornecedor não possui filial cadastrada.");
   const validated = validatePayrollLines(draft.lines);
-  if (validated.lines.some(line => !payrollTaxType(line.payrollType)) &&
+  const pending = validated.lines.filter(line => line.alreadyPaid !== true);
+  if (pending.length && (!draft.product?.id || !draft.product?.label))
+    throw new RangeError("Selecione o produto cadastrado.");
+  if (pending.length && (!draft.stage?.id || !draft.stage?.label))
+    throw new RangeError("Selecione a etapa cadastrada.");
+  if (pending.some(line => !payrollTaxType(line.payrollType)) &&
     (!/^[1-9]\d*$/.test(String(draft.sheet?.id || "")) || !draft.sheet?.label))
     throw new RangeError(
       "Selecione o IDFOLHA cadastrado do fornecedor. O vínculo é obrigatório.",
     );
-  if (validated.lines.some(line => payrollTaxType(line.payrollType)) && !payrollTaxSheet(draft))
+  if (pending.some(line => payrollTaxType(line.payrollType)) && !payrollTaxSheet(draft))
     throw new RangeError('Confirme a competência e selecione o IDFOLHA de INSS/FGTS desse mês.');
   return { ...draft, ...validated };
+}
+export function supplierPayrollWeek(date) {
+  const start = new Date(date + "T12:00:00Z");
+  start.setUTCDate(start.getUTCDate() - (start.getUTCDay() + 6) % 7);
+  const end = new Date(start);
+  end.setUTCDate(end.getUTCDate() + 6);
+  return { start: start.toISOString().slice(0, 10), end: end.toISOString().slice(0, 10) };
 }
 export function validatePayrollLines(rawLines = []) {
   const seen = new Set();
@@ -123,7 +129,7 @@ export function validatePayrollLines(rawLines = []) {
       throw new RangeError(
         `Informe quantidade maior que zero em ${rubric.label}.`,
       );
-    if (!line.account?.id || !line.account?.label)
+    if (line.alreadyPaid !== true && (!line.account?.id || !line.account?.label))
       throw new RangeError(
         `Selecione a forma de pagamento de ${rubric.label}.`,
       );

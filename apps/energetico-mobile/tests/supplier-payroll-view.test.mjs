@@ -3,6 +3,29 @@ import assert from "node:assert/strict";
 import { JSDOM } from "jsdom";
 import * as module from "../src/ui/supplier-payroll-view.js";
 
+test('rubrica já paga fecha a semana sem exigir forma, etapa ou IDFOLHA', async t => {
+  const h = await harness();
+  t.after(() => { h.view.destroy(); h.dom.window.close(); });
+  let weekly;
+  const post = h.data.post;
+  h.data.post = (draft, progress, report, options) => {
+    weekly = options?.weekly;
+    return post(draft, progress, report);
+  };
+  await openSuppliers(h);
+  await h.click('[data-payroll-expand]');
+  h.input('[name=salary-value]', '250');
+  const doc = h.dom.window.document;
+  await h.click('[name=salary-already-paid]');
+  assert.equal(doc.querySelector('[name=salary-account]').required, false);
+  assert.equal(doc.querySelector('[data-payroll-supplier]').dataset.payrollState, 'ready');
+  assert.match(doc.querySelector('[data-payroll-summary-total]').textContent, /250,00/);
+  await h.click('[data-payroll-post]');
+  assert.equal(weekly, true);
+  assert.equal(h.posts[0].lines[0].alreadyPaid, true);
+  assert.equal(h.posts[0].sheet, null);
+});
+
 test('produto com estrela vem preenchido e os padrões resolvem a etapa e o IDFOLHA de cada fornecedor', async t => {
   const h = await harness();
   t.after(() => { h.view.destroy(); h.dom.window.close(); });
