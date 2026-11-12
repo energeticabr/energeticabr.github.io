@@ -204,7 +204,7 @@ test('the unfiltered report includes freight documents and opens their exact DAC
   await panel.open();
   const ids = () => [...panel.element.querySelectorAll('tbody tr')].map(row => row.dataset.invoiceId);
   assert.deepEqual(ids(), ['12', '10']);
-  assert.deepEqual([...panel.element.querySelectorAll('.nfe-metrics dd')].map(node => node.textContent.replace(/\s/g, ' ')),
+  assert.deepEqual([...panel.element.querySelectorAll('.nfe-metrics > :not([hidden]) dd')].map(node => node.textContent.replace(/\s/g, ' ')),
     ['2', 'R$ 1.960,00', '06/11/2026', '2', '—']);
 
   const selector = panel.element.querySelector('select[name="document"]');
@@ -411,7 +411,7 @@ test('NFE printer captures all filtered pages with XML facts and preserves the p
   const type = element.querySelector('select');
   type.value = 'NF-e';
   type.dispatchEvent(new dom.window.Event('change'));
-  const measures = [...element.querySelectorAll('.nfe-metrics dd')].map(node => node.textContent.replace(/\s/g, ' '));
+  const measures = [...element.querySelectorAll('.nfe-metrics > :not([hidden]) dd')].map(node => node.textContent.replace(/\s/g, ' '));
   assert.deepEqual(measures, ['13', 'R$ 16.500,00', '06/11/2026', '12', '—']);
   element.querySelector('.nfe-pager button:last-child').click();
   const currentRow = element.querySelector('tbody tr');

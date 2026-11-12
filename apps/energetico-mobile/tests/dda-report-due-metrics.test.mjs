@@ -37,7 +37,7 @@ test('visible and printed metrics include all filtered pages and recalculate wit
  const dom=new JSDOM('<body><main id="app"></main></body>',{url:'https://example.test'}),doc=dom.window.document;
  const data=[...Array.from({length:51},(_,i)=>row(i+1,'2026-11-05',10)),row(52,'2026-11-12',20,'Em aberto','Banco B'),row(53,'2026-11-05',100,'Pago')];
  const view=createDdaReportView({document:doc,now,data:{loadSnapshot:async()=>({rows:data})}});
- const metrics=()=>Object.fromEntries([...doc.querySelectorAll('.ddr-metric')].map(n=>[n.querySelector('span').textContent,n.querySelector('strong').textContent.replace(/\s/g,' ')]));
+ const metrics=()=>Object.fromEntries([...doc.querySelectorAll('.ddr-metric:not([data-report-refresh-status])')].map(n=>[n.querySelector('span').textContent,n.querySelector('strong').textContent.replace(/\s/g,' ')]));
  const check=(count,week,today)=>{
   assert.equal(metrics()['Qtd DDA vencendo em 7d'],count);
   assert.equal(metrics()['Valor DDA vencendo em 7d'],week);

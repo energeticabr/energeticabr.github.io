@@ -30,7 +30,7 @@ window.ddaBarcodeCopies=[];
 window.ddaPaymentCalls=0;
 window.ddaMirrorClicks=0;window.ddaPdfRows=0;
 const syncMode=new URLSearchParams(location.search).get('sync'),syncListeners=new Set();let syncRunning=false,syncStarts=0,snapshotLoads=0;
-const emitSync=running=>{syncRunning=running;for(const fn of syncListeners)fn({running,notice:running?'Consultando o Sicoob e atualizando o SharePoint…':''});};
+const emitSync=running=>{syncRunning=running;for(const fn of syncListeners)fn({running,latest:{status:running?'running':'succeeded'},notice:running?'Consultando o Sicoob e atualizando o SharePoint…':''});};
 const syncMonitor=syncMode?{get running(){return syncRunning;},subscribe(fn){syncListeners.add(fn);fn({running:false,notice:''});return()=>syncListeners.delete(fn);},async start(){syncStarts++;emitSync(true);}}:undefined;
 const report=decorateReportPrint(decorateReportNavigation(createDdaReportView({document,now:()=>new Date('2026-10-28T12:00:00Z'),
  copyText:async text=>{window.ddaBarcodeCopies.push(text);},syncMonitor,data:{
@@ -64,8 +64,11 @@ if(settlementLayout){
 if(syncMode){
  const refresh=document.querySelector('.pl-refresh');refresh.click();refresh.click();await new Promise(r=>setTimeout(r,0));
  const lastUpdate=document.querySelector('[data-report-last-update]');
+ const status=document.querySelector('[data-report-refresh-status]');
  const state={starts:syncStarts,disabledWhileRunning:refresh.disabled,progressVisible:!document.querySelector('.ddr-notice').hidden,
-  lastUpdate:lastUpdate.querySelector('time').textContent,metricFits:lastUpdate.scrollWidth<=lastUpdate.clientWidth+1};
+  lastUpdate:lastUpdate.querySelector('time').textContent,metricFits:lastUpdate.scrollWidth<=lastUpdate.clientWidth+1,
+  statusFits:status.offsetWidth>0&&status.scrollWidth<=status.clientWidth+1,
+  statusDuring:status.dataset.reportRefreshStatus};
  if(syncMode==='complete'){
   emitSync(false);await new Promise(r=>setTimeout(r,0));
   const receipt=createDdaSyncReceipt({document,host:document.body,global:true,requireAcknowledgement:true,onAcknowledge:()=>{}});
@@ -73,6 +76,7 @@ if(syncMode){
   state.globalVisible=document.querySelector('dialog.dda-sync-overlay--global')?.open===true;
  }
  state.loads=snapshotLoads;state.reportOpen=!report.element.hidden;state.disabledAfter=refresh.disabled;
+ state.statusAfter=status.dataset.reportRefreshStatus;
  document.documentElement.dataset.sync=JSON.stringify(state);
 }
 if(paymentMode){

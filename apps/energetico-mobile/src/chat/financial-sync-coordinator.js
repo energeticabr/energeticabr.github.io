@@ -3,7 +3,7 @@ const statusLabels = { starting: 'solicitando', queued: 'na fila', running: 'con
 
 /** One manual action starts every source. Each original monitor retains durable recovery. */
 export function createFinancialSyncCoordinator(sources) {
-  const states = {}, errors = {}, listeners = new Map(), facets = new Map();
+  const states = {}, errors = {}, refreshStatuses = {}, listeners = new Map(), facets = new Map();
   let starting = null, destroyed = false;
   const running = () => Boolean(starting) || Object.values(states).some(state => state.running);
   function snapshot(source) {
@@ -14,17 +14,29 @@ export function createFinancialSyncCoordinator(sources) {
         || (item?.running ? 'consultando' : 'nenhuma consulta em andamento');
       return `${label}: ${detail}`;
     }).join('\n');
-    return { ...state, running: Boolean(starting) || Boolean(state.running), anyRunning: running(), sourceRunning: Boolean(state.running), notice };
+    return { ...state, running: Boolean(starting) || Boolean(state.running), anyRunning: running(), sourceRunning: Boolean(state.running), refreshStatus:refreshStatuses[source] ?? null, notice };
   }
   function notify() {
     if (destroyed) return;
     for (const [source, callbacks] of listeners) for (const callback of callbacks) callback(snapshot(source));
   }
-  const unsubscribe = Object.keys(labels).map(key => sources[key]?.subscribe(state => { states[key] = state; notify(); }));
+  const unsubscribe = Object.keys(labels).map(key => sources[key]?.subscribe(state => {
+    const previous = states[key];
+    states[key] = state;
+    if (state.running) refreshStatuses[key] = 'pending';
+    else if (previous?.running) {
+      if (state.latest?.status === 'succeeded') refreshStatuses[key] = 'success';
+      else if (['failed', 'partial'].includes(state.latest?.status)) refreshStatuses[key] = 'error';
+    }
+    notify();
+  }));
   function start() {
     if (destroyed) return Promise.reject(Error('Sessão encerrada.'));
     if (starting) return starting;
-    for (const key of Object.keys(errors)) delete errors[key];
+    for (const key of Object.keys(labels)) {
+      delete errors[key];
+      refreshStatuses[key] = 'pending';
+    }
     starting = Promise.resolve().then(async () => {
       if (destroyed) throw Error('Sessão encerrada.');
       await Promise.all(Object.keys(labels).map(async key => {
@@ -33,7 +45,11 @@ export function createFinancialSyncCoordinator(sources) {
           // Join each pending source; a fiscal cooldown never blocks a fresh bank query.
           if (states[key]?.running) return;
           await sources[key].start();
-        } catch (error) { errors[key] = error?.message || 'Não foi possível iniciar a consulta.'; }
+        } catch (error) {
+          errors[key] = error?.message || 'Não foi possível iniciar a consulta.';
+          refreshStatuses[key] = 'error';
+          notify();
+        }
       }));
       const failed = Object.keys(labels).filter(key => errors[key]).map(key => labels[key]);
       return { startWarning: failed.length ? `Consulta não iniciada: ${failed.join(', ')}.` : '' };

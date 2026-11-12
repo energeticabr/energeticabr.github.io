@@ -7,6 +7,7 @@ import {createDdaProvisionPicker} from './dda-provision-picker.js';
 import {PDF_ATTACHMENT_ICON} from './report-pdf-attachment-icon.js';
 import {confirmedFinancialTimestamp} from '../chat/financial-update-time.js';
 import {createFinancialReportLastUpdate} from './financial-report-last-update.js';
+import {createFinancialReportRefreshStatus} from './financial-report-refresh-status.js';
 import {createSicoobBalanceMetric} from './sicoob-balance-metric.js';
 const LOGO=new URL('../../../../assets/logo-energetica-oficial.png',import.meta.url).href;
 const money=value=>value==null?'Não disponível':new Intl.NumberFormat('pt-BR',{style:'currency',currency:'BRL'}).format(Number(value));
@@ -37,8 +38,10 @@ export function createDdaReportView({document:doc=globalThis.document,data,openM
  report.append(toolbar,notice,content);panel.append(report);root.append(panel);doc.body.append(root);
  const landscape=bindReportLandscape(root);addReportCloseControl({root,toolbar,onClose:close});
  let rows=null,controller=null,revision=0,filterRevision=0,page=1,printAll=false,destroyed=false,returnFocus=null,app=null,oldInert=false,oldOverflow='';
- let bankRunning=Boolean(syncMonitor?.running),startingBank=false,reloadPending=false,pdfRequest=null;
+ let bankRunning=Boolean(syncMonitor?.running),sourceRunning=Boolean(syncMonitor?.sourceRunning??bankRunning),startingBank=false,reloadPending=false,pdfRequest=null;
  const lastUpdate=createFinancialReportLastUpdate(doc);
+ const refreshStatus=createFinancialReportRefreshStatus(doc);
+ const summary=make('div','ddr-summary');summary.dataset.ddaSummary='';
  const balanceMetric=loadBalance?createSicoobBalanceMetric(doc,loadBalance,'Saldo em conta corrente (Sicoob)'):null;
  let settledDdaIds=new Set(),settlementVerified=false,settlementRequest=null,settlementRenderPending=false,settlementOpening=false;
  const expandedBarcodes=new Set();
@@ -229,24 +232,32 @@ export function createDdaReportView({document:doc=globalThis.document,data,openM
   if(destroyed||root.hidden){reloadPending=false;return;}
   if(nestedViewOpen()){reloadPending=true;return;}
   reloadPending=false;
-  await load(undefined,reportPosition());
+  return load(undefined,reportPosition());
  }
  async function manualRefresh(){
-  if(destroyed||root.hidden||refresh.disabled)return;
+  if(destroyed||root.hidden||refresh.disabled||(!syncMonitor&&nestedViewOpen()))return;
+  refreshStatus.set('pending');
+  if(!content.contains(summary)){
+   summary.replaceChildren(lastUpdate.element,refreshStatus.element);
+   content.prepend(summary);
+  }
   void balanceMetric?.refresh();
-  if(!syncMonitor)return reloadFromBank();
+  if(!syncMonitor){
+   refreshStatus.beginRead();
+   return reloadFromBank();
+  }
   startingBank=true;syncRefreshButton();showNotice();
   try{const result=await syncMonitor.start();if(result?.startWarning&&!destroyed&&!root.hidden)showNotice(result.startWarning);}
-  catch{if(!destroyed&&!root.hidden)showNotice('Não foi possível iniciar a consulta ao Sicoob. Tente novamente.');}
+  catch{refreshStatus.set('error');if(!destroyed&&!root.hidden)showNotice('Não foi possível iniciar a consulta ao Sicoob. Tente novamente.');}
   finally{startingBank=false;syncRefreshButton();}
  }
  function render(){
   if(content.contains(doc.activeElement))panel.focus({preventScroll:true});content.replaceChildren();if(!rows)return;
   const currentDate=now(),today=ddaTodayKey(currentDate),result=buildDdaReport(rows,{...selected(),settledDdaIds},currentDate),pages=Math.max(1,Math.ceil(result.rows.length/50));page=Math.min(page,pages);
-  const summary=make('div','ddr-summary');summary.dataset.ddaSummary='';
+  summary.replaceChildren();
   if(balanceMetric)summary.append(balanceMetric.element);
   for(const [label,value,hint] of [['DDAs encontrados',result.rows.length],['Valor nominal total',money(result.total)],['Vencidos no filtro',result.overdue],['Vencem hoje',result.today],['Qtd DDA vencendo em 7d',result.dueWithin7Days,'De hoje até daqui a 7 dias, inclusive, conforme os filtros.'],['Valor DDA vencendo em 7d',money(result.totalDueWithin7Days),'De hoje até daqui a 7 dias, inclusive, conforme os filtros.'],['Valor DDA vencendo hoje',money(result.totalDueToday),'Vencimento hoje, conforme os filtros.']]){const metric=make('div','ddr-metric');if(hint)metric.title=hint;metric.append(make('span','',label),make('strong','',value));summary.append(metric);}
-  summary.append(lastUpdate.element);content.append(summary);
+  summary.append(lastUpdate.element,refreshStatus.element);content.append(summary);
   content.append(make('p','ddr-source','Situação bancária ou pagamento confirmado pelo usuário. Ordenação pelo vencimento mais próximo.'));
   if(result.visibleOutsideStatus)content.append(make('p','ddr-source',`${result.visibleOutsideStatus} DDA(s) pagos com baixa pendente ficam fora dos totais da situação selecionada.`));
   if(result.missingAmounts)content.append(make('p','ddr-warning',`${result.missingAmounts} DDA(s) sem valor nominal válido. Total indisponível.`));
@@ -386,7 +397,12 @@ export function createDdaReportView({document:doc=globalThis.document,data,openM
   rows=null;settledDdaIds=new Set();settlementVerified=false;printAll=false;
   root.setAttribute('aria-busy','true');refresh.disabled=true;showNotice();
   const loading=make('p','','Carregando DDAs do SharePoint…');
-  loading.setAttribute('role','status');content.replaceChildren(loading);
+  loading.setAttribute('role','status');
+  if(refreshStatus.element.hidden)content.replaceChildren(loading);
+  else {
+   if(!content.contains(summary))summary.replaceChildren(lastUpdate.element,refreshStatus.element);
+   content.replaceChildren(summary,loading);
+  }
   try{
    const snapshot=initialSnapshot??await data.loadSnapshot({refresh:true,signal:active.signal});
    if(!isCurrent())return;
@@ -404,11 +420,14 @@ export function createDdaReportView({document:doc=globalThis.document,data,openM
    for(const row of rows)lastUpdate.update(confirmedFinancialTimestamp(row.checkedAt));
    populate();render();onRowsChange(rows);
    if(position&&filters===filterRevision)restoreReportPosition(position);
+   refreshStatus.finishRead(true);
   }catch{
    if(!isCurrent())return;
    rows=null;
    const error=make('p','','Não foi possível carregar os DDAs. Tente atualizar.');
-   error.setAttribute('role','alert');content.replaceChildren(error);
+   error.setAttribute('role','alert');
+   content.replaceChildren(...(refreshStatus.element.hidden?[error]:[summary,error]));
+   refreshStatus.finishRead(false);
   }
   finally{if(current===revision){root.setAttribute('aria-busy','false');syncRefreshButton();}}
  }
@@ -417,8 +436,10 @@ export function createDdaReportView({document:doc=globalThis.document,data,openM
  controls.status.addEventListener('change',filter);controls.bank.addEventListener('change',filter);controls.search.addEventListener('input',filter);refresh.addEventListener('click',()=>void manualRefresh());
  const unsubscribeBank=syncMonitor?.subscribe(state=>{
   if(destroyed)return;
-  const finished=bankRunning&&!state.running;bankRunning=Boolean(state.running);
+  const active=Boolean(state.sourceRunning??state.running),finished=sourceRunning&&!active;
+  sourceRunning=active;bankRunning=Boolean(state.running);
   lastUpdate.update(state.lastSuccessfulAt);
+  refreshStatus.observe(state);
   if(finished)reloadFromBank();
   syncRefreshButton();
  });
