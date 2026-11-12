@@ -76,6 +76,7 @@ test('NFE opens the horizontal fiscal table from the blue mascot in portrait and
         assert.equal(pdfOnLeft, true);
         assert.equal(metricsAbove, true);
         assert.equal(headerControls, true);
+        assert.deepEqual(layout.overflowingHeadings, [], `table headings fit their columns at ${width}px`);
         assert.equal(amountFits, true, 'a long amount stays inside its column');
         assert.equal(layout.regularAmountSingleLine, true, `a typical amount fits on one line at ${width}px`);
         for (const highlight of layout.highlights) {

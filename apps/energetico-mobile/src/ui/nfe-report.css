@@ -73,7 +73,7 @@
 .nfe-feedback, .nfe-pdf-feedback { margin: 8px 0; color: #456375; font-size: 12px; }
 .nfe-sync-feedback { padding: 0 10px; white-space: pre-line; }
 .nfe-pdf-feedback { padding: 6px 10px; background: #ffeaec; color: #8b2730; }
-.nfe-table { width: 100%; min-width: 680px; border-collapse: collapse; table-layout: fixed; color: #183a50; font-size: 12px; }
+.nfe-table { width: 100%; min-width: 768px; border-collapse: collapse; table-layout: fixed; color: #183a50; font-size: 12px; }
 .nfe-table th {
   padding: 9px 6px;
   background: #07566b;
@@ -85,7 +85,7 @@
 .nfe-table th:nth-child(2) { width: 11%; }
 .nfe-table th:nth-child(3) { width: 21%; }
 .nfe-table th:nth-child(4) { width: 94px; }
-.nfe-table th:nth-child(5) { width: 15%; }
+.nfe-table th:nth-child(5) { width: 14%; }
 .nfe-table td {
   padding: 8px 6px;
   border-bottom: 1px solid #d6e2e7;

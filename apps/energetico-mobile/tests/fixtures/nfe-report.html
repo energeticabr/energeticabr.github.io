@@ -154,6 +154,7 @@ const layout = {
   tableScrolls:reportBody.scrollWidth > reportBody.clientWidth,
   amountFits:textFits(amount),
   regularAmountSingleLine:regularAmountRange.getClientRects().length === 1,
+  overflowingHeadings:[...panel.querySelectorAll('.nfe-table th')].filter(heading => !textFits(heading)).map(heading => heading.textContent),
   highlights, retentionHighlight,
   rotated, mei:hasMei(), pdfOnLeft:Boolean(isBefore(pdf,supplier,'inline')),
   metricsAbove:Boolean(isBefore(panel.querySelector('.nfe-metrics'), panel.querySelector('table'), 'block')),
