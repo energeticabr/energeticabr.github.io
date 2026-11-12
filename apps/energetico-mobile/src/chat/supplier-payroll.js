@@ -23,6 +23,15 @@ export const payrollKey = (value) =>
     .replace(/[\u0300-\u036f]/g, "")
     .toUpperCase()
     .replace(/[^A-Z0-9]/g, "");
+export function payrollReferenceMonth(value) {
+  const source = String(value || "").trim();
+  const br = source.match(/^(\d{1,2})[/-](\d{4})$/);
+  if (br) return Number(br[1]) >= 1 && Number(br[1]) <= 12
+    ? `${br[2]}-${br[1].padStart(2, "0")}` : "";
+  const iso = source.match(/^(\d{4})[-/](\d{1,2})(?:[-/].*)?$/);
+  return iso && Number(iso[2]) >= 1 && Number(iso[2]) <= 12
+    ? `${iso[1]}-${iso[2].padStart(2, "0")}` : "";
+}
 export function isSupplierPayrollMenu(message, flow) {
   if (flow?.id !== "launch") return false;
   const modality = (message?.options || []).some((option) =>

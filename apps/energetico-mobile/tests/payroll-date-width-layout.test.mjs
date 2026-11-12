@@ -55,6 +55,11 @@ test('payroll date and batch cards fit native and shipped PWA styles', {timeout:
         assert.equal(batch.ready, 'rgb(229, 245, 233)', context);
         assert.equal(batch.unchecked, batch.incomplete, context);
         assert.equal(batch.panelVisible, true, context);
+        assert.deepEqual(batch.defaults, ['2', '4', '5'], context);
+        for (const control of batch.defaultControls) {
+          assert.ok(control.height >= 44 && control.left >= 0 && control.right <= width &&
+            control.bottom <= batch.toggle.top, 'batch defaults clipped or below the list: ' + context);
+        }
         assert.match(batch.amount, /101,25/);
         assert.ok(batch.overflow <= 1, 'batch horizontal overflow: ' + context);
         assert.ok(batch.checkbox.width >= 44 && batch.checkbox.height >= 44, 'checkbox touch target: ' + context);

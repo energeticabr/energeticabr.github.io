@@ -3,6 +3,7 @@ import { applyScreenNavigation } from "./screen-navigation.js";
 import { bindSearchableFilterSelects } from './searchable-filter-selects.js';
 import {
   PAYROLL_RUBRICS,
+  payrollReferenceMonth,
   payrollTotal,
   payrollDecimal,
   validPayrollDate,
@@ -14,6 +15,8 @@ import { openPayrollReceiptPicker } from "./payroll-receipt-picker.js";
 import { payrollTaxType, payrollCompetenceMonth, previousPayrollCompetence } from '../chat/payroll-tax-competence.js';
 const money = (value) =>
   Number(value).toLocaleString("pt-BR", { style: "currency", currency: "BRL" });
+const stageKey = label => label.normalize("NFD").replace(/[\u0300-\u036f]/g, "")
+  .trim().replace(/\s+/g, " ").toLocaleUpperCase("pt-BR");
 let sequence = 0;
 export function createSupplierPayrollView({
   data,
@@ -77,6 +80,8 @@ export function createSupplierPayrollView({
   let step = "date";
   let date = "";
   let entries = [];
+  let batchStage = "";
+  let batchPeriod = "";
   let search = "";
   let previousFocus = null;
   let receiptPicker = null;
@@ -99,6 +104,8 @@ export function createSupplierPayrollView({
       },
       expanded: false,
       selected: false,
+      overrides: new Set(),
+      options: { products: null, accounts: null, stages: null, sheets: null },
     };
   }
   function hasPendingPosting() {
@@ -108,6 +115,7 @@ export function createSupplierPayrollView({
     step = "date";
     date = "";
     entries = [];
+    batchStage = batchPeriod = "";
     search = "";
   }
   function button(label, attribute, handler) {
@@ -441,7 +449,25 @@ function lineEdited(line) {
   const sheetLabel = option => (option.recommended ? "⭐ " : "") +
     "ID " + option.id + " — " + option.label;
 
-  function buildEditor(entry, editor, changed, catalogOptions) {
+  function matchingBatchStages(options) {
+    return batchStage ? options.stages?.filter(stage => stageKey(stage.label) === batchStage) || [] : [];
+  }
+  function applyBatchDefaults(entry) {
+    const { draft, options, overrides } = entry;
+    if (entry.result || entry.progress.fingerprint) return;
+    if (!overrides.has("stage")) {
+      const matches = matchingBatchStages(options);
+      draft.stage = matches.length === 1 ? matches[0] : null;
+    }
+    if (!overrides.has("sheet")) {
+      const matches = batchPeriod
+        ? options.sheets?.filter(sheet => payrollReferenceMonth(sheet.label) === batchPeriod) || []
+        : [];
+      draft.sheet = matches.length === 1 ? matches[0] : null;
+    }
+  }
+
+  function buildEditor(entry, editor, changed, catalogOptions, refreshSheetCatalog) {
     const { draft, options } = entry;
     const { signal } = catalogOptions;
     const locked = Boolean(entry.result || entry.progress.fingerprint);
@@ -451,6 +477,7 @@ function lineEdited(line) {
     fields.disabled = locked;
     const selectField = (name, label, placeholder, getChoices, format) => {
       const control = optionSelect(name, label, placeholder, () => {
+        entry.overrides.add(name);
         draft[name] = getChoices().find(option => option.id === control.select.value) || null;
         if (name === "product" && !draft.supplier.profession?.trim())
           profession.textContent = draft.product?.label || "—";
@@ -464,23 +491,16 @@ function lineEdited(line) {
     const stage = selectField("stage", "Etapa", "Selecione a etapa", () => options.stages);
     const sheet = selectField("sheet", "ID da folha a vincular", "Selecione o IDFOLHA",
       () => options.sheets, sheetLabel);
-    const sheetNote = element("p", "supplier-payroll-field-note",
-      "O IDFOLHA é obrigatório. Cadastre uma folha válida para este fornecedor.");
+    const stageNote = element("p", "supplier-payroll-field-note");
+    stageNote.setAttribute("role", "status");
+    const sheetNote = element("p", "supplier-payroll-field-note");
     sheetNote.setAttribute("role", "status");
     const reloadSheet = button("Atualizar IDFOLHA", "data-payroll-reload-sheet", async () => {
       reloadSheet.disabled = true;
       sheetNote.hidden = false;
       sheetNote.textContent = "Buscando folhas do fornecedor…";
       try {
-        const choices = await data.loadSheets(draft.supplier, { ...catalogOptions, refreshCatalog: true });
-        if (signal.aborted) return;
-        assertSession();
-        options.sheets = choices;
-        draft.sheet = choices.find(option => option.id === draft.sheet?.id) || null;
-        sheet.setOptions(choices, draft.sheet, sheetLabel);
-        sheetNote.textContent = "O IDFOLHA é obrigatório. Cadastre uma folha válida para este fornecedor.";
-        updateSheetFields();
-        changed();
+        await refreshSheetCatalog(entry);
       } catch (cause) {
         if (!signal.aborted) sheetNote.textContent = cause?.message || "Não foi possível buscar o IDFOLHA.";
       } finally {
@@ -564,8 +584,16 @@ function lineEdited(line) {
       const taxActive = draft.lines.some(line => ["inss", "fgts"].includes(line.rubric) && hasAmount(line));
       const normalActive = !taxActive || draft.lines.some(line => !["inss", "fgts"].includes(line.rubric) && hasAmount(line));
       sheet.select.closest(".supplier-payroll-field").hidden = !normalActive;
-      sheetNote.hidden = !normalActive || options.sheets.length > 0;
-      reloadSheet.hidden = locked || !normalActive || (options.sheets.length > 0 && !entry.failure);
+      const missingDefault = !locked && batchPeriod && !entry.overrides.has("sheet") && !draft.sheet;
+      if (missingDefault) {
+        const hasMatch = options.sheets.some(sheet => payrollReferenceMonth(sheet.label) === batchPeriod);
+        sheetNote.textContent = hasMatch ? "Mais de um IDFOLHA no período do lote. Confira o cadastro."
+          : "Nenhum IDFOLHA no período do lote. Escolha outro período neste fornecedor.";
+      } else if (!options.sheets.length) {
+        sheetNote.textContent = "O IDFOLHA é obrigatório. Cadastre uma folha válida para este fornecedor.";
+      }
+      sheetNote.hidden = !normalActive || (options.sheets.length > 0 && !missingDefault);
+      reloadSheet.hidden = locked || !normalActive || (options.sheets.length > 0 && !missingDefault && !entry.failure);
       if (!taxActive) {
         if (!tax.hidden) {
           taxRequest++;
@@ -585,16 +613,27 @@ function lineEdited(line) {
     }
     function onEdit() {
       updateSheetFields();
+      stageNote.hidden = locked || !batchStage || entry.overrides.has("stage") || Boolean(draft.stage);
       changed(true);
+    }
+    function syncReferences() {
+      stage.setOptions(options.stages, draft.stage);
+      sheet.setOptions(options.sheets, draft.sheet, sheetLabel);
+      stageNote.textContent = matchingBatchStages(options).length > 1
+        ? "Mais de um cadastro para a etapa do lote nesta filial. Selecione a etapa neste fornecedor."
+        : "Etapa do lote indisponível nesta filial. Selecione a etapa neste fornecedor.";
+      stageNote.hidden = locked || !batchStage || entry.overrides.has("stage") || Boolean(draft.stage);
+      updateSheetFields();
     }
     tax.hidden = true;
     fields.append(product.field,
       element("h3", "", "Informe os valores de cada rubrica"),
       renderRubrics(entry, onEdit),
-      stage.field, sheet.field, sheetNote, reloadSheet, tax);
+      stage.field, stageNote, sheet.field, sheetNote, reloadSheet, tax);
     editor.replaceChildren(info, fields);
     pickers.push(bindSearchableFilterSelects(fields));
-    updateSheetFields();
+    syncReferences();
+    return syncReferences;
   }
 
   function clearPickers() {
@@ -611,6 +650,97 @@ function lineEdited(line) {
     filter.value = search;
     filter.placeholder = "Digite para filtrar os fornecedores";
     filter.setAttribute("aria-label", "Filtrar fornecedores");
+    const defaults = element("div", "supplier-payroll-batch-defaults");
+    const stageDefault = optionSelect("batch-stage", "Etapa do lote", "Definir por fornecedor", () => {
+      batchStage = stageDefault.select.value;
+      updateDefaults();
+    });
+    const periodDefault = optionSelect("batch-period", "Período de referência do lote", "Definir por fornecedor", () => {
+      batchPeriod = periodDefault.select.value;
+      updateDefaults();
+    });
+    const catalogStatus = element("p", "supplier-payroll-field-note", "Carregando opções do lote…");
+    catalogStatus.setAttribute("role", "status");
+    const retryCatalog = button("Recarregar opções do lote", null, loadBatchReferences);
+    retryCatalog.hidden = true;
+    defaults.append(stageDefault.field, periodDefault.field, catalogStatus, retryCatalog);
+    const referenceRequests = new Map();
+    let sheetRefresh = null;
+    async function loadReferences(entry) {
+      if (entry.options.stages && entry.options.sheets) return;
+      if (!referenceRequests.has(entry)) {
+        const { supplier } = entry.draft;
+        const request = Promise.all([
+          data.loadStages(supplier, catalogOptions),
+          data.loadSheets(supplier, catalogOptions),
+        ]).then(([stages, sheets]) => {
+          if (signal.aborted) return;
+          assertSession();
+          entry.options.stages = stages;
+          entry.options.sheets ||= sheets;
+        }).finally(() => referenceRequests.delete(entry));
+        referenceRequests.set(entry, request);
+      }
+      await referenceRequests.get(entry);
+    }
+    function refreshBatchOptions() {
+      const stageOptions = new Map();
+      const periods = new Set();
+      for (const { options } of entries) {
+        for (const stage of options.stages || []) {
+          const id = stageKey(stage.label);
+          if (id && !stageOptions.has(id)) stageOptions.set(id, { id, label: stage.label });
+        }
+        for (const sheet of options.sheets || []) {
+          const month = payrollReferenceMonth(sheet.label);
+          if (month) periods.add(month);
+        }
+      }
+      stageDefault.setOptions([...stageOptions.values()].sort((a, b) => a.label.localeCompare(b.label, "pt-BR")),
+        { id: batchStage });
+      periodDefault.setOptions([...periods].sort().reverse().map(id => ({
+        id, label: id.split("-").reverse().join("/"),
+      })), { id: batchPeriod });
+    }
+    function updateDefaults() {
+      for (const card of cards) card.syncDefaults();
+      refreshBatch();
+    }
+    function refreshSheetCatalog(source) {
+      sheetRefresh ||= (async () => {
+        const first = await data.loadSheets(source.draft.supplier, { ...catalogOptions, refreshCatalog: true });
+        if (signal.aborted) return;
+        const targets = entries.filter(entry => !entry.result && !entry.progress.fingerprint);
+        const results = await Promise.allSettled(targets.map(entry =>
+          entry === source ? first : data.loadSheets(entry.draft.supplier, catalogOptions)));
+        if (signal.aborted) return;
+        assertSession();
+        for (const [index, result] of results.entries()) {
+          if (result.status !== "fulfilled") continue;
+          const { options, draft } = targets[index];
+          options.sheets = result.value;
+          draft.sheet = options.sheets.find(sheet => sheet.id === draft.sheet?.id) || null;
+        }
+        refreshBatchOptions();
+        updateDefaults();
+      })().finally(() => { sheetRefresh = null; });
+      return sheetRefresh;
+    }
+    async function loadBatchReferences() {
+      retryCatalog.hidden = true;
+      catalogStatus.hidden = false;
+      catalogStatus.textContent = "Carregando opções do lote…";
+      const results = await Promise.allSettled(entries.map(loadReferences));
+      if (signal.aborted) return;
+      refreshBatchOptions();
+      updateDefaults();
+      const failed = results.some(result => result.status === "rejected");
+      catalogStatus.textContent = failed ? "Algumas opções do lote não carregaram." : "";
+      catalogStatus.hidden = !failed;
+      retryCatalog.hidden = !failed;
+    }
+    stageDefault.setOptions([], null);
+    periodDefault.setOptions([], null);
     const list = element("div", "supplier-payroll-choices");
     const empty = element("p", "supplier-payroll-empty");
     const total = element("p", "supplier-payroll-total");
@@ -729,7 +859,7 @@ function lineEdited(line) {
       list.append(card);
 
       function refresh(edited = false) {
-        const started = Boolean(draft.product || draft.stage || draft.sheet || draft.taxSheet ||
+        const started = Boolean([...entry.overrides].some(name => draft[name]) || draft.taxSheet ||
           draft.taxCompetence || draft.lines.some(lineEdited));
         if (edited) {
           if (started) entry.selected = true;
@@ -764,26 +894,37 @@ function lineEdited(line) {
       });
 
       let editorReady = false;
+      let syncEditor = null;
+      function syncDefaults() {
+        applyBatchDefaults(entry);
+        syncEditor?.();
+        refresh();
+      }
       async function loadEditor() {
         if (editorReady || signal.aborted) return;
         editorReady = true;
         try {
-          if (!entry.options) {
+          if (!entry.options.products || !entry.options.stages || !entry.options.sheets) {
             editor.replaceChildren(createLoadingIndicator(doc, "Carregando opções do fornecedor…"));
-            const [products, accounts, stages, sheets] = await Promise.all([
-              data.loadProducts(draft.supplier, catalogOptions),
-              data.loadAccounts(catalogOptions),
-              data.loadStages(draft.supplier, catalogOptions),
-              data.loadSheets(draft.supplier, catalogOptions),
+            const [products, accounts] = await Promise.all([
+              entry.options.products || data.loadProducts(draft.supplier, catalogOptions),
+              entry.options.accounts || data.loadAccounts(catalogOptions),
+              loadReferences(entry),
             ]);
             if (signal.aborted) return;
             assertSession();
-            entry.options = { products, accounts, stages, sheets };
+            if (!entry.options.products) {
+              const recommended = products.filter(product => product.recommended);
+              if (recommended.length === 1) draft.product = recommended[0];
+            }
+            Object.assign(entry.options, { products, accounts });
           }
-          buildEditor(entry, editor, edited => {
+          applyBatchDefaults(entry);
+          syncEditor = buildEditor(entry, editor, edited => {
             refresh(edited);
             refreshBatch();
-          }, catalogOptions);
+          }, catalogOptions, refreshSheetCatalog);
+          refresh();
         } catch (cause) {
           if (signal.aborted) return;
           editorReady = false;
@@ -800,7 +941,7 @@ function lineEdited(line) {
       }
       setExpanded(entry.expanded);
       refresh();
-      return { card, name: normalizeSearchText(draft.supplier.label) };
+      return { card, name: normalizeSearchText(draft.supplier.label), syncDefaults };
     });
     function filterSuppliers() {
       search = filter.value;
@@ -812,7 +953,12 @@ function lineEdited(line) {
     filter.addEventListener("input", filterSuppliers);
     filterSuppliers();
     refreshBatch();
-    content.append(filter, list, empty, total, feedback, post);
+    defaults.hidden = entries.length === 0;
+    content.append(filter, defaults, list, empty, total, feedback, post);
+    if (entries.length) {
+      pickers.push(bindSearchableFilterSelects(defaults));
+      void loadBatchReferences();
+    }
   }
 
   async function next() {
@@ -831,6 +977,7 @@ function lineEdited(line) {
       const loaded = await data.loadSuppliers(options);
       assertCurrent();
       entries = loaded.map(makeEntry);
+      batchStage = batchPeriod = "";
       search = "";
       step = "batch";
     });

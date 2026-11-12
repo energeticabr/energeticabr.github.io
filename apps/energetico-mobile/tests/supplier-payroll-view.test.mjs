@@ -3,6 +3,118 @@ import assert from "node:assert/strict";
 import { JSDOM } from "jsdom";
 import * as module from "../src/ui/supplier-payroll-view.js";
 
+test('produto com estrela vem preenchido e os padrões resolvem a etapa e o IDFOLHA de cada fornecedor', async t => {
+  const h = await harness();
+  t.after(() => { h.view.destroy(); h.dom.window.close(); });
+  h.data.loadSuppliers = async () => [
+    { id: '1', label: 'EDGAR', branch: 'OBRA A' },
+    { id: '6', label: 'JOÃO', branch: 'OBRA B' },
+  ];
+  h.data.loadProducts = async supplier => [
+    { id: '2', label: 'PEDREIRO', recommended: supplier.id === '1' },
+    { id: '7', label: 'SERVENTE', recommended: supplier.id === '6' },
+  ];
+  h.data.loadStages = async supplier => [
+    { id: supplier.id === '1' ? '4' : '40', label: 'FUNDAÇÃO' },
+    { id: '9', label: 'ACABAMENTO' },
+  ];
+  h.data.loadSheets = async supplier => supplier.id === '1'
+    ? [{ id: '5', label: '10/2026' }, { id: '8', label: '11/2026' }]
+    : [{ id: '15', label: '2026-10-01T00:00:00Z' }, { id: '18', label: '11-2026' }];
+  const doc = h.dom.window.document;
+  const card = id => `[data-payroll-supplier="${id}"]`;
+  const field = (id, name) => doc.querySelector(`${card(id)} [name="${name}"]`);
+  await openSuppliers(h);
+  const stage = doc.querySelector('[name=batch-stage]');
+  assert.ok(stage?.compareDocumentPosition(doc.querySelector(card('1'))) & h.dom.window.Node.DOCUMENT_POSITION_FOLLOWING);
+  h.input('[name=batch-stage]', 'FUNDACAO');
+  h.input('[name=batch-period]', '2026-10');
+  await h.click(`${card('1')} [data-payroll-expand]`);
+  assert.equal(field('1', 'product').value, '2');
+  assert.equal(field('1', 'stage').value, '4');
+  assert.equal(field('1', 'sheet').value, '5');
+  assert.equal(doc.querySelector(`${card('1')} [data-payroll-select]`).checked, false);
+  assert.equal(doc.querySelector(card('1')).dataset.payrollState, 'empty');
+  h.input(`${card('1')} [name=stage]`, '9');
+  h.input(`${card('1')} [name=sheet]`, '8');
+  h.input('[name=batch-stage]', 'ACABAMENTO');
+  h.input('[name=batch-stage]', 'FUNDACAO');
+  h.input('[name=batch-period]', '2026-11');
+  h.input('[name=batch-period]', '2026-10');
+  await h.click(`${card('6')} [data-payroll-expand]`);
+  assert.equal(field('6', 'product').value, '7');
+  assert.equal(field('6', 'stage').value, '40');
+  assert.equal(field('6', 'sheet').value, '15');
+  assert.equal(field('1', 'stage').value, '9');
+  assert.equal(field('1', 'sheet').value, '8');
+  h.input('[name=batch-stage]', '');
+  h.input('[name=batch-period]', '');
+  assert.equal(field('6', 'stage').value, '');
+  assert.equal(field('6', 'sheet').value, '');
+  assert.equal(field('1', 'stage').value, '9');
+  assert.equal(field('1', 'sheet').value, '8');
+  h.input('[name=batch-stage]', 'FUNDACAO');
+  h.input('[name=batch-period]', '2026-10');
+  for (const id of ['1', '6']) {
+    h.input(`${card(id)} [name=salary-value]`, '100');
+    h.input(`${card(id)} [name=salary-account]`, '3');
+  }
+  await h.click('[data-payroll-post]');
+  assert.deepEqual(h.posts.map(({ supplier, product, stage, sheet }) =>
+    [supplier.id, product.id, stage.id, sheet.id]), [['1', '2', '9', '8'], ['6', '7', '40', '15']]);
+});
+
+test('padrão sem etapa na filial ou com duas folhas do mesmo mês fica pendente', async t => {
+  const h = await harness();
+  t.after(() => { h.view.destroy(); h.dom.window.close(); });
+  h.data.loadSuppliers = async () => [
+    { id: '1', label: 'EDGAR', branch: 'OBRA A' },
+    { id: '6', label: 'JOÃO', branch: 'OBRA B' },
+  ];
+  h.data.loadStages = async supplier => supplier.id === '1'
+    ? [{ id: '4', label: 'FUNDAÇÃO' }] : [{ id: '9', label: 'FUNDA-ÇÃO' }];
+  h.data.loadSheets = async supplier => supplier.id === '1'
+    ? [{ id: '5', label: '10/2026' }]
+    : [{ id: '15', label: '10/2026' }, { id: '16', label: '2026-10' }];
+  await openSuppliers(h);
+  h.input('[name=batch-stage]', 'FUNDACAO');
+  h.input('[name=batch-period]', '2026-10');
+  const supplier = '[data-payroll-supplier="6"]';
+  await h.click(supplier + ' [data-payroll-expand]');
+  const card = h.dom.window.document.querySelector(supplier);
+  assert.equal(card.querySelector('[name=stage]').value, '');
+  assert.equal(card.querySelector('[name=sheet]').value, '');
+  assert.match(card.textContent, /Etapa do lote indisponível nesta filial/);
+  assert.match(card.textContent, /Mais de um IDFOLHA/);
+  assert.equal(card.querySelector('[data-payroll-select]').checked, false);
+});
+
+test('atualizar IDFOLHA resolve o mês do lote para os demais fornecedores', async t => {
+  const h = await harness();
+  t.after(() => { h.view.destroy(); h.dom.window.close(); });
+  h.data.loadSuppliers = async () => [
+    { id: '1', label: 'EDGAR', branch: 'OBRA A' },
+    { id: '6', label: 'JOÃO', branch: 'OBRA B' },
+    { id: '7', label: 'MARIA', branch: 'OBRA A' },
+  ];
+  let added = false;
+  h.data.loadSheets = async supplier => {
+    if (supplier.id === '7') return [{ id: '20', label: '10/2026' }];
+    return added ? [{ id: supplier.id === '1' ? '5' : '15', label: '10/2026' }] : [];
+  };
+  await openSuppliers(h);
+  h.input('[name=batch-period]', '2026-10');
+  const first = '[data-payroll-supplier="1"]';
+  const second = '[data-payroll-supplier="6"]';
+  await h.click(first + ' [data-payroll-expand]');
+  await h.click(second + ' [data-payroll-expand]');
+  added = true;
+  await h.click(first + ' [data-payroll-reload-sheet]');
+  const doc = h.dom.window.document;
+  assert.equal(doc.querySelector(first + ' [name=sheet]').value, '5');
+  assert.equal(doc.querySelector(second + ' [name=sheet]').value, '15');
+});
+
 test('lote exige campos válidos, mantém exclusão manual e soma apenas os selecionados', async t => {
   const h = await harness();
   t.after(() => { h.view.destroy(); h.dom.window.close(); });

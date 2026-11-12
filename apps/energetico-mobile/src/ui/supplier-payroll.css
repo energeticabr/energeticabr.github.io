@@ -183,6 +183,18 @@
   gap: 10px;
   margin-top: 12px;
 }
+.supplier-payroll-batch-defaults {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 10px 14px;
+  margin-top: 12px;
+}
+.supplier-payroll-batch-defaults[hidden] { display: none; }
+.supplier-payroll-batch-defaults > p { grid-column: 1 / -1; }
+.supplier-payroll-batch-defaults > button { justify-self: start; }
+@media (max-width: 480px) {
+  .supplier-payroll-batch-defaults { grid-template-columns: minmax(0, 1fr); }
+}
 .supplier-payroll-card {
   min-width: 0;
   border: 1px solid #aac4d2;

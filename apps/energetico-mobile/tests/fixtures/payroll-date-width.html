@@ -26,7 +26,7 @@
         calls.push('suppliers');
         return [{ id: '1', label: 'FORNECEDOR DE SERVIÇOS DE ESCORAMENTO E ARMAÇÕES', branch: 'OBRA DE TESTE' }];
       },
-      async loadProducts() { return [{ id: '2', label: 'PRODUTO TESTE' }]; },
+      async loadProducts() { return [{ id: '2', label: 'PRODUTO TESTE', recommended: true }]; },
       async loadAccounts() { return [{ id: '3', label: 'CONTA TESTE' }]; },
       async loadStages() { return [{ id: '4', label: 'ETAPA TESTE' }]; },
       async loadSheets() { return [{ id: '5', label: '10/2026' }]; },
@@ -64,11 +64,19 @@
       const checkbox = card.querySelector('[data-payroll-select]');
       const panel = document.getElementById(card.querySelector('[data-payroll-expand]').getAttribute('aria-controls'));
       const color = () => getComputedStyle(card).backgroundColor;
+      const stage = document.querySelector('[name=batch-stage]');
+      const period = document.querySelector('[name=batch-period]');
+      while (stage.disabled || period.disabled) await frame();
+      for (const [control, value] of [[stage, 'ETAPA TESTE'], [period, '2026-10']]) {
+        control.value = value;
+        control.dispatchEvent(new Event('change', {bubbles:true}));
+      }
       const initial = color();
       checkbox.click();
       while (!panel.querySelector('[name=product]')) await frame();
       const incomplete = color();
-      for (const [name, value] of [['product', '2'], ['salary-value', '101,25'], ['salary-account', '3'], ['stage', '4'], ['sheet', '5']]) {
+      const defaults = ['product', 'stage', 'sheet'].map(name => panel.querySelector('[name="' + name + '"]').value);
+      for (const [name, value] of [['salary-value', '101,25'], ['salary-account', '3']]) {
         const control = panel.querySelector('[name="' + name + '"]');
         control.value = value;
         control.dispatchEvent(new Event(control.tagName === 'SELECT' ? 'change' : 'input', {bubbles:true}));
@@ -81,6 +89,8 @@
         overflow: body.scrollWidth - body.clientWidth,
         checkbox: bounds(checkbox.closest('label')),
         toggle: bounds(card.querySelector('[data-payroll-expand]')),
+        defaults,
+        defaultControls: [stage, period].map(control => bounds(control.nextElementSibling.querySelector('.sfs-trigger'))),
         post: bounds(document.querySelector('[data-payroll-post]')),
         amount: card.querySelector('[data-payroll-total]').textContent,
       };
