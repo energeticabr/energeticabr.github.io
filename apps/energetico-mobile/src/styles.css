@@ -620,11 +620,9 @@ button { touch-action: manipulation; }
 .chat-main-provision-report-shortcut img { object-fit:contain; transform:none; mix-blend-mode:normal; }
 .chat-main-management-shortcut { margin-top:292px; }
 .chat-main-order-validation-shortcut { margin-top:348px; }
-.chat-main-quotation-shortcut { margin-top:404px; cursor:pointer; background:#f1f3f5; }
-.chat-main-quotation-shortcut img { transform:none; mix-blend-mode:normal; object-fit:contain; }
-.chat-main-depreciation-shortcut { margin-top:460px; cursor:pointer; background:#999999; }
+.chat-main-depreciation-shortcut { margin-top:404px; cursor:pointer; background:#999999; }
 .chat-main-depreciation-shortcut img { transform:none; mix-blend-mode:normal; object-fit:contain; }
-.chat-main-document-control-shortcut { margin-top:518px; cursor:pointer; background:#89a0cf; }
+.chat-main-document-control-shortcut { margin-top:460px; cursor:pointer; background:#89a0cf; }
 .chat-main-document-control-shortcut img { transform:none; mix-blend-mode:normal; object-fit:contain; }
 .report-navigation { pointer-events:none; }
 .report-navigation .report-navigation-arrow { position:fixed; top:50%; transform:translateY(-50%); z-index:3; display:grid; place-items:center; box-sizing:border-box; width:var(--report-navigation-size,56px); height:var(--report-navigation-size,56px); min-width:44px; min-height:44px; padding:0; border:3px solid #b00000; border-radius:50%; background:white; color:#b00000; cursor:pointer; pointer-events:auto; touch-action:manipulation; }
@@ -635,7 +633,7 @@ button { touch-action: manipulation; }
 .report-navigation-arrow:disabled { opacity:.55; cursor:wait; }
 @media(max-height:500px) { .report-navigation .report-navigation-arrow { width:var(--report-navigation-size,46px); height:var(--report-navigation-size,46px); } }
 @media print { .report-navigation { display:none !important; } }
-.chat-main-task-association-shortcut { margin-top:574px; cursor:pointer; background:#618c25; }
+.chat-main-task-association-shortcut { margin-top:516px; cursor:pointer; background:#618c25; }
 .chat-main-task-association-shortcut img { transform:none; mix-blend-mode:normal; object-fit:contain; }
 .chat-pending-provisions__empty { margin: 10px 0; padding: 14px; border-radius: 12px; color: var(--brand); background: #edf7f3; }
 .chat-bubble {

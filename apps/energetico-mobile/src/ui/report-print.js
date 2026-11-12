@@ -18,7 +18,7 @@ export const REPORT_PDF_TITLES = Object.freeze({
  'open-stage-progress':'Etapas e atividades da obra', 'open-commercial-receipts':'Contratos e pagamentos',
  'open-commercial-milestones':'Andamento comercial dos imóveis',
  'open-commercial-documents':'Pendências documentais dos imóveis', 'open-sac-pathologies':'Acompanhamento de patologias',
- 'open-quotation-report':'Cotações e orçamentos', 'open-depreciation-report':'Depreciação do imobilizado',
+ 'open-depreciation-report':'Depreciação do imobilizado',
  'open-document-control-report':'Controle de documentos', 'open-task-association-report':'Atividades por associação',
 });
 const PRINTER = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M6 8V3h12v5M6 17H3V9h18v8h-3M6 14h12v7H6z"/><path d="M6 11h.01"/></svg>';
@@ -225,8 +225,7 @@ export function openFilteredReportPdf(root,{action,previewMedia,buildPdf=default
 export function decorateReportPrint(panel,{action,previewMedia,closePreview,buildPdf,loadLogo}={}){
  const root=panel?.element;if(!root?.ownerDocument||!REPORT_PDF_TITLES[action])return panel;
  const doc=root.ownerDocument,button=doc.createElement('button');button.type='button';button.className='report-print-button';button.dataset.action='print-report-pdf';button.innerHTML=PRINTER;button.setAttribute('aria-label','Abrir PDF do relatório');button.title='Abrir PDF com os filtros atuais';
- let host=root.querySelector('.pl-filters,.dr-toolbar,.qr-toolbar,.dcr-toolbar,.tar-filters,.tar-toolbar,.pwdr-toolbar,.ccr-toolbar,.gsr-toolbar,.cargos-header,.trancid-toolbar');
- if(!host&&root.querySelector('.qr-dialog')){host=doc.createElement('header');host.className='qr-toolbar';root.querySelector('.qr-dialog').prepend(host);}
+ let host=root.querySelector('.pl-filters,.dr-toolbar,.dcr-toolbar,.tar-filters,.tar-toolbar,.pwdr-toolbar,.ccr-toolbar,.gsr-toolbar,.cargos-header,.trancid-toolbar');
  host||=root.querySelector('[role="dialog"]')||root;
  // The shared PDF action supersedes the old browser-print shortcut.
  host.querySelector('.cr-print')?.remove();

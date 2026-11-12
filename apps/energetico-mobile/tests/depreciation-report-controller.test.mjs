@@ -5,7 +5,6 @@ const { createAppController } = controllerModule;
 import { createConversationStore } from '../src/chat/conversation-store.js';
 
 const localReports = [
-  ['action_quotation_report', 'quotationReportViewFactory', 'quotationReportDataFactory'],
   ['action_sac_pathologies', 'sacPathologiesViewFactory', 'sacPathologiesDataFactory'],
   ['action_payment_ledger', 'paymentLedgerFactory', 'paymentLedgerDataFactory'],
   ['action_management_report', 'managementReportFactory', 'paymentLedgerDataFactory'],
@@ -948,13 +947,13 @@ test('a view factory failure permits a fresh later open', async t => {
   assert.equal(opens, 1);
 });
 
-for (const end of ['stop', 'same-account-login', 'account-change', 'active-flow', 'busy', 'quotation']) {
+for (const end of ['stop', 'same-account-login', 'account-change', 'active-flow', 'busy', 'sac']) {
   test(`a depreciation source factory arriving after ${end} never loads or authenticates`, async t => {
     const factory = deferred();
     let loads = 0, tokens = 0;
     const h = harness(t, {
       depreciationReportDataFactory: () => factory.promise,
-      quotationReportViewFactory: async () => ({ open() {}, destroy() {} }),
+      sacPathologiesViewFactory: async () => ({ open() {}, destroy() {} }),
       auth: { getToken: async () => { tokens++; return 'token'; } },
     });
     const data = await open(h);
@@ -968,7 +967,7 @@ for (const end of ['stop', 'same-account-login', 'account-change', 'active-flow'
       await h.view.emit('sign-in');
     } else if (end === 'active-flow') h.store.restoreSnapshot({ messages: [], activeFlow });
     else if (end === 'busy') h.store.beginText('In progress');
-    else await h.view.emit('open-quotation-report');
+    else await h.view.emit('open-sac-pathologies');
     await rejected;
     factory.resolve({ async loadSnapshot() { loads++; await h.auth.getToken(scopes); return snapshot; } });
     await tick();
@@ -1002,12 +1001,12 @@ for (const [replyId, factoryName] of [
   });
 }
 
-test('depreciation disposes a pending quotation factory promptly and destroys its late panel', async t => {
+test('depreciation disposes a pending SAC report factory promptly and destroys its late panel', async t => {
   const factory = deferred();
   let opens = 0, destroys = 0, settled = false;
-  const h = harness(t, { quotationReportViewFactory: () => factory.promise });
+  const h = harness(t, { sacPathologiesViewFactory: () => factory.promise });
   await h.controller.start();
-  const pending = h.view.emit('open-quotation-report').then(value => { settled = true; return value; });
+  const pending = h.view.emit('open-sac-pathologies').then(value => { settled = true; return value; });
   await tick();
   assert.equal(await h.view.emit('open-depreciation-report'), true);
   await tick();
@@ -1019,17 +1018,17 @@ test('depreciation disposes a pending quotation factory promptly and destroys it
   assert.equal(destroys, 1);
 });
 
-test('quotation disposes a pending depreciation factory promptly and destroys its late panel', async t => {
+test('SAC report disposes a pending depreciation factory promptly and destroys its late panel', async t => {
   const factory = deferred();
   let opens = 0, destroys = 0;
   const h = harness(t, {
     depreciationReportViewFactory: () => factory.promise,
-    quotationReportViewFactory: async () => ({ open() {}, destroy() {} }),
+    sacPathologiesViewFactory: async () => ({ open() {}, destroy() {} }),
   });
   await h.controller.start();
   const pending = h.view.emit('open-depreciation-report');
   await tick();
-  assert.equal(await h.view.emit('open-quotation-report'), true);
+  assert.equal(await h.view.emit('open-sac-pathologies'), true);
   assert.equal(await pending, false);
   factory.resolve({ open() { opens++; }, destroy() { destroys++; } });
   await tick();

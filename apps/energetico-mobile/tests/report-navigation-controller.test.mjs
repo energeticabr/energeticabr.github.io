@@ -33,7 +33,6 @@ const factories = {
   'open-commercial-milestones': 'commercialMilestonesViewFactory',
   'open-commercial-documents': 'commercialDocumentsViewFactory',
   'open-sac-pathologies': 'sacPathologiesViewFactory',
-  'open-quotation-report': 'quotationReportViewFactory',
   'open-depreciation-report': 'depreciationReportViewFactory',
   'open-task-association-report': 'taskAssociationReportViewFactory',
 };
@@ -83,7 +82,7 @@ function harness(t, options = {}, { dom = true } = {}) {
     ...Object.fromEntries(['registrationGalleryDataFactory', 'paymentLedgerDataFactory', 'cargosDataFactory', 'attendanceSummaryDataFactory',
       'stageProgressDataFactory', 'supplierPayrollReportDataFactory', 'commercialReceiptsDataFactory', 'commercialMilestonesDataFactory',
       'commercialDocumentsDataFactory', 'sacPathologiesDataFactory', 'documentControlReportDataFactory',
-      'quotationReportDataFactory', 'depreciationReportDataFactory', 'taskAssociationReportDataFactory',
+      'depreciationReportDataFactory', 'taskAssociationReportDataFactory',
       'pendingSupplierPaymentsReportDataFactory', 'pendingWorkDiariesReportDataFactory'].map(name => [name, source])),
     ...factoryOptions, ...options, auth,
   });
@@ -136,7 +135,7 @@ for (const [from, direction] of [
   ['open-pending-provisions', 'previous'], ['open-document-control-report', 'next'],
   ['open-cargos-table', 'previous'], ['open-pending-work-diaries-report', 'next'],
   ['open-commercial-receipts', 'previous'], ['open-sac-pathologies', 'next'],
-  ['open-quotation-report', 'next'], ['open-depreciation-report', 'previous'],
+  ['open-depreciation-report', 'previous'],
   ['open-task-association-report', 'previous'], ['open-task-association-report', 'next'], ['unknown', 'next'],
   ['open-provision-report', 'sideways'], ['open-provision-report', '__proto__'],
 ]) {

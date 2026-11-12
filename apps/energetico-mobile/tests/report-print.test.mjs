@@ -3,14 +3,14 @@ import assert from 'node:assert/strict';
 import {JSDOM} from 'jsdom';
 import {createPaymentLedgerView} from '../src/ui/payment-ledger-view.js';
 import {createCargosView} from '../src/ui/cargos-view.js';
-import {createQuotationReportView} from '../src/ui/quotation-report-view.js';
+import {createDepreciationReportView} from '../src/ui/depreciation-report-view.js';
 import {createAttachmentPreview} from '../src/web/attachment-preview.js';
 import {renderChatMarkup,commandFromTarget,createChatView} from '../src/ui/chat-view.js';
 const api=await import('../src/ui/report-print.js').catch(()=>({}));
 import {buildFilteredReportPdf} from '../src/chat/filtered-report-pdf.js';
 import {getDocument} from 'pdfjs-dist/legacy/build/pdf.mjs';
 const tick=()=>new Promise(resolve=>setImmediate(resolve));
-test('pending provisions, the sixteenth report, exposes a printer command distinct from payment/reminder writes',()=>{
+test('pending provisions exposes a printer command distinct from payment/reminder writes',()=>{
  const dom=new JSDOM(renderChatMarkup({sessionStatus:'authenticated',account:{name:'Bernardo'},messages:[],pendingFiles:[],pendingProvisions:{due:true,rows:[]}}));
  const button=dom.window.document.querySelector('[data-action="print-pending-provisions"]');assert.ok(button);assert.deepEqual(commandFromTarget(button.querySelector('path')),{type:'print-pending-provisions'});dom.window.close();
 });
@@ -125,10 +125,10 @@ test('failed queries cannot export but a successful empty response can',async t=
  failed=false;view.element.querySelector('[aria-label="Atualizar tabela de cargos"]').click();await tick();await tick();assert.doesNotThrow(()=>api.captureFilteredReport(view.element));assert.equal(view.element.querySelector('[data-action=print-report-pdf]').disabled,false);
 });
 
-test('quotation printer is inside the focus-trapped dialog',async t=>{
+test('depreciation printer is inside the focus-trapped dialog',async t=>{
  const dom=new JSDOM('<main id="app"></main>');dom.window.matchMedia=()=>({matches:false});
- const original=createQuotationReportView({document:dom.window.document,data:{loadSnapshot:async()=>({quotes:[],budgets:[]})}}),view=api.decorateReportPrint(original,{action:'open-quotation-report',previewMedia:async()=>{}});t.after(()=>{view.destroy();dom.window.close();});await view.open();
- assert.equal(view.element.querySelector('[data-action=print-report-pdf]').closest('[role=dialog]'),view.element.querySelector('.qr-dialog'));
+ const original=createDepreciationReportView({document:dom.window.document,data:{loadSnapshot:async()=>({complete:true,assets:[]})}}),view=api.decorateReportPrint(original,{action:'open-depreciation-report',previewMedia:async()=>{}});t.after(()=>{view.destroy();dom.window.close();});await view.open();
+ assert.equal(view.element.querySelector('[data-action=print-report-pdf]').closest('[role=dialog]'),view.element.querySelector('.dr-dialog'));
 });
 
 test('closing an old report cannot close a later unrelated preview',async t=>{
