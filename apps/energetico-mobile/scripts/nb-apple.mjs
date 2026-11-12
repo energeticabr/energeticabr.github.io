@@ -57,36 +57,6 @@ async function ensureGroup(appId) {
   return group.id;
 }
 
-async function addExistingTester(sourceGroupId, targetGroupId) {
-  if (!/^[a-f0-9-]{36}$/i.test(sourceGroupId) || sourceGroupId === targetGroupId) {
-    throw new Error("Grupo de origem do testador inválido.");
-  }
-  const { data: source } = await client.request("GET", `/v1/betaGroups/${sourceGroupId}?include=app`);
-  if (source?.attributes?.isInternalGroup !== true
-      || source.attributes.name !== "ENERGETICO Validacao"
-      || source.relationships?.app?.data?.id !== "6809887853") {
-    throw new Error("O grupo de origem não corresponde à validação interna do Energético.");
-  }
-  const relationship = groupId => `/v1/betaGroups/${groupId}/relationships/betaTesters`;
-  const { data, links } = await client.request("GET", relationship(sourceGroupId));
-  if (data?.length !== 1 || links?.next || data[0].type !== "betaTesters" || !data[0].id) {
-    throw new Error("Esperava somente o testador já ativo no grupo de origem.");
-  }
-  const hasTester = async () => {
-    const { data: testers } = await client.request("GET", relationship(targetGroupId));
-    return testers?.some(item => item.type === "betaTesters" && item.id === data[0].id);
-  };
-  if (!await hasTester()) {
-    try {
-      await client.request("POST", relationship(targetGroupId), { data });
-    } catch (error) {
-      if (!/HTTP 409|timed out|timeout/i.test(error.message) || !await hasTester()) throw error;
-    }
-  }
-  if (!await hasTester()) throw new Error("A Apple não confirmou o testador interno no grupo do NB.");
-  console.log("Testador interno existente confirmado no NB.");
-}
-
 async function loadProfile({ bundle, name }) {
   const { data: bundles } = await client.request("GET", `/v1/bundleIds?filter[identifier]=${bundle}`);
   const bundleId = bundles?.find(item => item.attributes?.identifier === bundle)?.id;
@@ -164,7 +134,11 @@ if (!record) {
     console.log(JSON.stringify(await attachLatestTestFlightBuild(client, {
       appId: record.id, groupName, requireInternal: true,
     })));
-    if (process.env.NB_SOURCE_BETA_GROUP) await addExistingTester(process.env.NB_SOURCE_BETA_GROUP, groupId);
+    const { data: testers } = await client.request("GET", `/v1/betaGroups/${groupId}/relationships/betaTesters`);
+    if (!testers?.some(tester => tester.type === "betaTesters")) {
+      throw new Error("O grupo interno NB Validação precisa de um testador no App Store Connect.");
+    }
+    console.log("Grupo interno com testador confirmado no App Store Connect.");
   }
 }
 if (process.env.GITHUB_STEP_SUMMARY && mode !== "attach") {
