@@ -39,6 +39,47 @@ test('only valid SharePoint integer IDs can be linked', () => {
   for (const id of [0, null, -1, 1.2, '012', '1e4', '9007199254740992', [37]]) assert.equal(sicoobOrderId(id), '');
 });
 
+test('reviews only an unlinked Sicoob movement and confirms a versioned write of the flag alone', async () => {
+  const flag = 'SICOOB_SEM_VINCULACAO_REGULAR';
+  let current = { id: '10', eTag: '"5"', fields: { ORIGEMMOVIMENTACAO: 'SICOOB', IDPEDIDO: null, [flag]: false } };
+  const writes = [];
+  const service = createSicoobOrderLink({ repository: {
+    resolveList: async () => ({ status: 'resolved', id: 'movements' }),
+    getItem: async () => current,
+    updateItem: async (_site, _list, id, fields, { eTag }) => {
+      writes.push([id, fields, eTag]);
+      current = { ...current, fields: { ...current.fields, ...fields } };
+      return current;
+    },
+  } });
+  assert.deepEqual(await service.saveReview({ movementId: '10', reviewed: true }), { movementId: '10', reviewed: true });
+  assert.deepEqual(await service.saveReview({ movementId: '10', reviewed: false }), { movementId: '10', reviewed: false });
+  for (const fields of [{ IDPEDIDO: 99 }, { ORIGEMMOVIMENTACAO: 'MANUAL' }]) {
+    const previous = current;
+    current = { ...previous, fields: { ...previous.fields, ...fields } };
+    await assert.rejects(service.saveReview({ movementId: '10', reviewed: true }));
+    current = previous;
+  }
+  assert.deepEqual(writes, [['10', { [flag]: true }, '"5"'], ['10', { [flag]: false }, '"5"']]);
+});
+
+test('the startup alert reads only Sicoob linkage fields and ignores linked and reviewed rows', async () => {
+  const row = (id, fields) => ({ id, fields: { ORIGEMMOVIMENTACAO: 'SICOOB', ...fields } });
+  const rows = [row('1', { IDPEDIDO: 37 }), row('2', { SICOOB_SEM_VINCULACAO_REGULAR: true }),
+    row('3', { ORIGEMMOVIMENTACAO: 'MANUAL' })];
+  const service = createSicoobOrderLink({ repository: {
+    resolveList: async () => ({ status: 'resolved', id: 'movements' }),
+    getItems: async (_site, _list, query) => {
+      assert.equal(query.get('$filter'), "ORIGEMMOVIMENTACAO eq 'SICOOB'");
+      assert.equal(query.get('$select'), 'ID,IDPEDIDO,ORIGEMMOVIMENTACAO,SICOOB_SEM_VINCULACAO_REGULAR');
+      return rows;
+    },
+  } });
+  assert.equal(await service.hasPendingUnlinked(), false);
+  rows.push(row('4', { IDPEDIDO: null }));
+  assert.equal(await service.hasPendingUnlinked(), true);
+});
+
 test('payment link loads all personal SharePoint order pages then writes only IDPEDIDO with a REST ETag and readback', async () => {
   const host = 'tenant-my.sharepoint.com';
   const payments = '11111111-2222-3333-4444-555555555555';

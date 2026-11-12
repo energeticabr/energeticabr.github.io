@@ -1098,6 +1098,7 @@ export function createAppController({
   sicoobSyncSessionFactory = createSicoobSyncSession,
   enableDdaReminders = false,
   enableDdaMenuAlert = false,
+  enableSicoobMenuAlert = false,
   enableTrancidReminders = false,
   trancidReportFactory = defaultTrancidReportFactory,
   trancidReportDataFactory = defaultTrancidReportDataFactory,
@@ -1646,6 +1647,51 @@ export function createAppController({
   function refreshDdaMenuAlert() {
     if (enableDdaMenuAlert) void loadDdaMenuSnapshot().catch(() => {});
   }
+  let sicoobMenuAlert = false, sicoobMenuRequest = null;
+  function cancelSicoobMenuRead() {
+    sicoobMenuRequest?.abort();
+    sicoobMenuRequest = null;
+  }
+  function resetSicoobMenuAlert() {
+    cancelSicoobMenuRead();
+    sicoobMenuAlert = false;
+  }
+  function updateSicoobMenuAlert(pending) {
+    if (sicoobMenuAlert === pending) return;
+    sicoobMenuAlert = pending;
+    render();
+  }
+  function refreshSicoobMenuAlert() {
+    if (!enableSicoobMenuAlert || !account || stopped || sessionStatus !== 'authenticated' || sicoobMenuRequest) return;
+    const owner = account, revision = sessionRevision;
+    const request = sicoobMenuRequest = new AbortController();
+    const { signal } = request;
+    const assertSession = () => {
+      signal.throwIfAborted();
+      if (stopped || account !== owner || sessionRevision !== revision) throw new Error('SICOOB_SESSION_ENDED');
+    };
+    const timeout = setTimeout(() => {
+      if (sicoobMenuRequest === request) cancelSicoobMenuRead();
+    }, 25_000);
+    timeout.unref?.();
+    void (async () => {
+      try {
+        const data = await registrationGalleryDataFactory({ kind: 'financial_movement', assertSession,
+          accountKey: owner.homeAccountId || owner.localAccountId || owner.idTokenClaims?.oid || '',
+          userEmail: owner.username || owner.email || '',
+          tokenProvider: async scopes => { assertSession(); const token = await auth.getToken(scopes); assertSession(); return token; },
+        });
+        assertSession();
+        const pending = await data.orderLink?.hasPendingUnlinked?.({ signal });
+        assertSession();
+        if (typeof pending === 'boolean') updateSicoobMenuAlert(pending);
+      } catch { /* A failed read leaves the last confirmed alert visible. */ }
+      finally {
+        clearTimeout(timeout);
+        if (sicoobMenuRequest === request) sicoobMenuRequest = null;
+      }
+    })();
+  }
   const ddaPaymentLaunches = new Map();
   let ddaPaymentLaunchAbort = null;
   let sefazSyncSession = null;
@@ -1664,6 +1710,7 @@ export function createAppController({
   let ddaSyncSession = null;
   function disposeDdaSyncSession(){
     financialSyncCoordinator?.destroy();financialSyncCoordinator=null;
+    unsubscribeSicoobMenuSync?.();unsubscribeSicoobMenuSync=null;
     sicoobSyncSession?.destroy();sicoobSyncSession=null;
     ddaSyncSession?.destroy();ddaSyncSession=null;
   }
@@ -1688,7 +1735,7 @@ export function createAppController({
       }});
     return ddaSyncSession;
   }
-  let sicoobSyncSession = null, financialSyncCoordinator = null;
+  let sicoobSyncSession = null, financialSyncCoordinator = null, unsubscribeSicoobMenuSync = null;
   function ensureSicoobSyncSession(){
     if(!account||stopped||sessionStatus!=='authenticated'||!['refreshSicoob','getSicoobRefreshStatus','getSicoobRefreshPending','acknowledgeSicoobRefresh'].every(name=>typeof client[name]==='function'))return null;
     if(sicoobSyncSession)return sicoobSyncSession;
@@ -1696,6 +1743,16 @@ export function createAppController({
     const accountKey=owner.homeAccountId||owner.localAccountId||owner.idTokenClaims?.oid||owner.username||'';
     if(!accountKey)return null;
     sicoobSyncSession=sicoobSyncSessionFactory({client,accountKey,isCurrent:()=>!stopped&&account===owner&&sessionRevision===revision&&sessionStatus==='authenticated'});
+    if (enableSicoobMenuAlert) {
+      let lastSuccessfulAt;
+      unsubscribeSicoobMenuSync = sicoobSyncSession.subscribe?.(state => {
+        if (state.lastSuccessfulAt && state.lastSuccessfulAt !== lastSuccessfulAt) {
+          lastSuccessfulAt = state.lastSuccessfulAt;
+          cancelSicoobMenuRead();
+          refreshSicoobMenuAlert();
+        }
+      });
+    }
     return sicoobSyncSession;
   }
   function ensureFinancialSync(source){
@@ -1705,7 +1762,11 @@ export function createAppController({
     if(!financialSyncCoordinator)financialSyncCoordinator=createFinancialSyncCoordinator({sicoob,dda:ensureDdaSyncSession(),fiscal:ensureSefazSyncSession()});
     return financialSyncCoordinator.forSource(source);
   }
-  function resumeDdaSync(){void ensureDdaSyncSession()?.resume();void ensureSicoobSyncSession()?.resume();}
+  function resumeDdaSync(){
+    void ensureDdaSyncSession()?.resume();
+    void ensureSicoobSyncSession()?.resume();
+    refreshSicoobMenuAlert();
+  }
   const trancidAutoReminder = createTrancidAutoReminder({
     enabled: () => enableTrancidReminders && Boolean(account) && !stopped,
     accountKey: () => account?.homeAccountId || account?.localAccountId || account?.idTokenClaims?.oid || account?.username || '',
@@ -5470,6 +5531,7 @@ export function createAppController({
     view.render({
       ...state,
       ddaMenuAlert: renderedDdaMenuAlert,
+      sicoobMenuAlert,
       rhidMascot: rhidMascot ? { ...rhidMascot } : null,
       diaryAttachmentProgress,
       attachmentUploadProgress,
@@ -5593,8 +5655,11 @@ export function createAppController({
       autoDiscardExit: true, requireMenuResult: true, preserveHomeAttachments: true,
       ...(hasUnsubmittedAttachments ? { homeAttachmentIds: pendingHomeExit.attachmentIds, expectedContextId: pendingHomeExit.contextId } : {}),
     });
-    if (enableDdaMenuAlert) void returning.then(sent => {
-      if (sent && revision === sessionRevision) refreshDdaMenuAlert();
+    if (enableDdaMenuAlert || enableSicoobMenuAlert) void returning.then(sent => {
+      if (sent && revision === sessionRevision) {
+        refreshDdaMenuAlert();
+        refreshSicoobMenuAlert();
+      }
     }).catch(() => {});
     return returning;
   }
@@ -9841,6 +9906,16 @@ export function createAppController({
             } : {}),
             ...(isSicoobTransactionReport ? {
               onClose: () => registrationGalleryOpenings.delete(kind),
+              onLinkageChange: (pending, { changed } = {}) => {
+                assertSession();
+                if (!enableSicoobMenuAlert) return;
+                if (changed) {
+                  cancelSicoobMenuRead();
+                  if (pending) updateSicoobMenuAlert(true);
+                }
+                // The report can be older than a complete linkage read after a bank sync.
+                refreshSicoobMenuAlert();
+              },
               loadBalance: typeof client.getSicoobBalance === 'function' ? async options => {
                 assertSession();
                 const balance = await client.getSicoobBalance(options);
@@ -10915,6 +10990,7 @@ export function createAppController({
 
   async function signIn() {
     resetDdaMenuAlert();
+    resetSicoobMenuAlert();
     disposeDdaSyncSession();
     disposeSefazSyncSession();
     ddaAutoReminder.reset();
@@ -11028,6 +11104,7 @@ export function createAppController({
 
   async function signOut() {
     resetDdaMenuAlert();
+    resetSicoobMenuAlert();
     provisionSettlementParent.destroy();
     galleryCreationReturn = null;
     disposeDdaSyncSession();
@@ -12575,6 +12652,7 @@ export function createAppController({
 
   function stop() {
     resetDdaMenuAlert();
+    resetSicoobMenuAlert();
     provisionSettlementParent.destroy();
     galleryCreationReturn = null;
     disposeDdaSyncSession();

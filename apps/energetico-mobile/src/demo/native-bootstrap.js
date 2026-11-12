@@ -59,6 +59,7 @@ export function createNativeBootstrap({ root, auth, native, config, fetchImpl = 
     controller = createAppController({ auth: sessionAuth, native: appNative, recovery, view,
       enableDdaReminders: !demo,
       enableDdaMenuAlert: !demo,
+      enableSicoobMenuAlert: !demo,
       enableTrancidReminders: !demo,
       store: createConversationStore({ historyMode: "current-step" }),
       client,

@@ -5,7 +5,7 @@ import {
 } from '../chat/financial-gallery-models.js';
 import { registrationDateKey, registrationNumber, registrationRawField, REGISTRATION_GALLERY_MODELS } from '../chat/registration-gallery-data.js';
 import { confirmedFinancialTimestamp } from '../chat/financial-update-time.js';
-import { rankSicoobOrderOptions, SICOOB_ORDER_FIELD, sicoobOrderId } from '../chat/sicoob-order-link.js';
+import { rankSicoobOrderOptions, SICOOB_ORDER_FIELD, SICOOB_UNLINKED_REVIEW_FIELD, sicoobOrderId } from '../chat/sicoob-order-link.js';
 import { createReportLinkComparison, createReportLinkPicker } from './dda-provision-picker.js';
 import { addReportCloseControl } from './report-close-control.js';
 import { bindReportLandscape } from './report-landscape.js';
@@ -70,6 +70,7 @@ function projectTransactions(snapshot) {
       recipient: financialMovementRecipient(fields),
       matchAmount: fields.VALOR,
       orderId: sicoobOrderId(fields[SICOOB_ORDER_FIELD]),
+      linkReviewed: fields[SICOOB_UNLINKED_REVIEW_FIELD] === true,
       receiptName,
       searchText: normalizeSearchText([...Object.values(transaction), dateLabel(transaction.date)].join(' ')),
       hasReceipt: receiptName && (hasAttachments === true || (hasAttachments == null
@@ -79,7 +80,7 @@ function projectTransactions(snapshot) {
   }).sort((a, b) => b.date.localeCompare(a.date) || b.id.localeCompare(a.id, 'pt-BR', { numeric: true }));
 }
 
-export function createSicoobTransactionReportView({ document: doc = globalThis.document, data, onClose, openMediaCollection, syncMonitor, loadBalance } = {}) {
+export function createSicoobTransactionReportView({ document: doc = globalThis.document, data, onClose, onLinkageChange, openMediaCollection, syncMonitor, loadBalance } = {}) {
   const make = (tag, className = '', value = '') => {
     const node = doc.createElement(tag);
     node.className = className;
@@ -163,6 +164,7 @@ export function createSicoobTransactionReportView({ document: doc = globalThis.d
   let oldOverflow;
   let oldInert;
   let receiptRequest;
+  let reviewDialog;
   let loading = false, starting = false, syncRunning = Boolean(syncMonitor?.running);
   let sourceRunning = Boolean(syncMonitor?.sourceRunning ?? syncMonitor?.running), reloadPending = false;
   const lastUpdate = createFinancialReportLastUpdate(doc);
@@ -200,6 +202,7 @@ export function createSicoobTransactionReportView({ document: doc = globalThis.d
       if (!transaction) return;
       transaction.orderId = orderId;
       transaction.orderSupplier = supplier;
+      publishLinkage(rows, true);
       if (!matchesSearch(transaction, normalizeSearchText(controls.search.value))) {
         render();
         return;
@@ -219,10 +222,85 @@ export function createSicoobTransactionReportView({ document: doc = globalThis.d
 
   function syncRefreshButton() { refresh.disabled = loading || starting || syncRunning; }
   function syncRowActions() {
-    for (const node of content.querySelectorAll('.sicoob-transaction-receipt, .sicoob-transaction-link-pencil')) node.disabled = loading;
+    for (const node of content.querySelectorAll('.sicoob-transaction-receipt, .sicoob-transaction-link-pencil, [data-sicoob-unlinked-review]')) {
+      node.disabled = loading;
+    }
+  }
+  function publishLinkage(transactions, changed = false) {
+    onLinkageChange?.(transactions.some(row => !row.orderId && !row.linkReviewed), { changed });
   }
   function resumeRefresh() {
-    if (reloadPending && !root.hidden && !receiptRequest && !picker?.isOpen) void load();
+    if (reloadPending && !root.hidden && !receiptRequest && !picker?.isOpen && !reviewDialog) void load();
+  }
+  function closeReview() {
+    if (!reviewDialog) return;
+    const { overlay, id } = reviewDialog;
+    reviewDialog = null;
+    overlay.remove();
+    panel.inert = false;
+    const cluster = content.querySelector(`[data-sicoob-unlinked-review="${id}"]`);
+    (cluster || panel).focus({ preventScroll: true });
+    resumeRefresh();
+  }
+  function askReview(transaction) {
+    if (root.hidden || loading || receiptRequest || picker?.isOpen || reviewDialog || !rows?.includes(transaction)) return;
+    const reviewed = !transaction.linkReviewed;
+    const question = reviewed ? 'Deseja tornar a não vinculação regular?' : 'Deseja reverter a não vinculação?';
+    const overlay = make('div', 'gallery-record-overlay dda-payment-overlay');
+    const dialog = make('section', 'gallery-record-dialog dda-payment-dialog');
+    dialog.dataset.sicoobUnlinkedDialog = '';
+    dialog.tabIndex = -1;
+    dialog.setAttribute('role', 'dialog');
+    dialog.setAttribute('aria-modal', 'true');
+    dialog.setAttribute('aria-label', question);
+    const feedback = make('p', 'dda-payment-feedback');
+    feedback.setAttribute('role', 'status');
+    const actions = make('div', 'gallery-record-dialog-buttons');
+    const no = button('Não', 'Não');
+    const yes = button('Sim', 'Sim');
+    yes.className = 'dda-payment-yes';
+    actions.append(no, yes);
+    dialog.append(make('h2', '', question), make('p', 'dda-payment-summary', displayedRecipient(transaction)), feedback, actions);
+    overlay.append(dialog);
+    const active = reviewDialog = { overlay, id: transaction.id };
+    no.addEventListener('click', closeReview);
+    yes.addEventListener('click', async () => {
+      if (yes.disabled || reviewDialog !== active) return;
+      no.disabled = yes.disabled = true;
+      feedback.setAttribute('role', 'status');
+      feedback.textContent = 'Salvando no SharePoint…';
+      dialog.focus();
+      try {
+        const receipt = await orderLink.saveReview({ movementId: transaction.id, reviewed, signal: request.signal });
+        if (reviewDialog !== active) return;
+        if (receipt?.movementId !== transaction.id || receipt.reviewed !== reviewed) throw new Error('Confirmação inválida.');
+        transaction.linkReviewed = reviewed;
+        const cell = content.querySelector(`[data-sicoob-movement-link="${transaction.id}"]`);
+        if (cell) renderOrderLink(cell, transaction);
+        publishLinkage(rows, true);
+        closeReview();
+      } catch {
+        if (reviewDialog !== active) return;
+        feedback.setAttribute('role', 'alert');
+        feedback.textContent = 'Não foi possível confirmar a alteração. Atualize o relatório e confira a vinculação.';
+        no.disabled = yes.disabled = false;
+        no.focus();
+      }
+    });
+    overlay.addEventListener('keydown', event => {
+      if (event.key === 'Escape') {
+        event.preventDefault();
+        event.stopPropagation();
+        if (!no.disabled) closeReview();
+      } else if (event.key === 'Tab') {
+        event.preventDefault();
+        event.stopPropagation();
+        (no.disabled ? dialog : doc.activeElement === no ? yes : no).focus();
+      }
+    });
+    panel.inert = true;
+    root.append(overlay);
+    no.focus();
   }
   function showBalance(balance, pending = false) {
     balanceValue.textContent = balance ? currency.format(balance.balanceCents / 100) : pending ? 'Consultando…' : 'Indisponível';
@@ -243,7 +321,7 @@ export function createSicoobTransactionReportView({ document: doc = globalThis.d
     }
   }
   async function manualRefresh() {
-    if (refresh.disabled || root.hidden || receiptRequest || picker?.isOpen) return;
+    if (refresh.disabled || root.hidden || receiptRequest || picker?.isOpen || reviewDialog) return;
     void refreshBalance();
     if (!syncMonitor) return load();
     starting = true; syncRefreshButton();
@@ -256,7 +334,7 @@ export function createSicoobTransactionReportView({ document: doc = globalThis.d
   }
 
   async function openReceipt(transaction, trigger) {
-    if (loading || receiptRequest || picker?.isOpen || !request || root.hidden) return;
+    if (loading || receiptRequest || picker?.isOpen || reviewDialog || !request || root.hidden) return;
     const signal = request.signal;
     const active = receiptRequest = {};
     const current = () => receiptRequest === active && !signal.aborted && trigger.isConnected;
@@ -313,10 +391,20 @@ export function createSicoobTransactionReportView({ document: doc = globalThis.d
 
   function renderOrderLink(cell, transaction, interactive = true) {
     const linked = transaction.orderId;
+    const validMovement = sicoobOrderId(transaction.id) === transaction.id;
     cell.parentElement.classList.toggle('sicoob-transaction-linked', Boolean(linked));
-    const value = make('span', linked ? 'sicoob-transaction-link-id' : '', linked ? `ID ${linked}` : '—');
+    const canReview = !linked && interactive && validMovement && typeof orderLink?.saveReview === 'function';
+    const label = linked ? `ID ${linked}` : transaction.linkReviewed ? 'SEM VINCULAÇÃO' : 'N/A';
+    const value = make(canReview ? 'button' : 'span', linked ? 'sicoob-transaction-link-id' : 'ddr-link-cluster', label);
+    if (!linked) value.dataset.linkState = transaction.linkReviewed ? 'regularized' : 'missing';
+    if (canReview) {
+      value.type = 'button';
+      value.dataset.sicoobUnlinkedReview = transaction.id;
+      value.disabled = loading;
+      value.addEventListener('click', () => askReview(transaction));
+    }
     cell.replaceChildren(value);
-    if (!interactive || !picker || sicoobOrderId(transaction.id) !== transaction.id) return;
+    if (!interactive || !picker || !validMovement) return;
     const pencil = button(linked ? `Editar pedido vinculado ao pagamento ${transaction.id}`
       : `Vincular pagamento ${transaction.id} a um pedido`, '');
     pencil.className = 'sicoob-transaction-link-pencil';
@@ -325,7 +413,7 @@ export function createSicoobTransactionReportView({ document: doc = globalThis.d
     pencil.innerHTML = PENCIL_ICON;
     pencil.disabled = loading;
     pencil.addEventListener('click', () => {
-      if (!loading && !receiptRequest) void picker.show({ ...transaction, supplier: transaction.recipient }, pencil);
+      if (!loading && !receiptRequest && !reviewDialog) void picker.show({ ...transaction, supplier: transaction.recipient }, pencil);
     });
     cell.append(pencil);
   }
@@ -420,6 +508,7 @@ export function createSicoobTransactionReportView({ document: doc = globalThis.d
 
   async function load() {
     reloadPending = false;
+    closeReview();
     picker?.close();
     request?.abort();
     receiptRequest = null;
@@ -440,6 +529,7 @@ export function createSicoobTransactionReportView({ document: doc = globalThis.d
       const snapshot = await data.loadSnapshot({ refresh: true, signal: active.signal });
       if (active !== request) return;
       const transactions = projectTransactions(snapshot);
+      publishLinkage(transactions);
       let supplierNotice = '';
       const linked = transactions.filter(row => row.orderId && (pendingRecipient(row) || row.type === 'Boleto'));
       if (linked.length && orderLink) {
@@ -490,6 +580,7 @@ export function createSicoobTransactionReportView({ document: doc = globalThis.d
   function close() {
     if (root.hidden) return;
     reloadPending = false;
+    closeReview();
     picker?.close();
     request?.abort();
     request = null;
@@ -523,7 +614,7 @@ export function createSicoobTransactionReportView({ document: doc = globalThis.d
   refresh.addEventListener('click', () => void manualRefresh());
   root.addEventListener('click', event => { if (event.target === root) close(); });
   root.addEventListener('keydown', event => {
-    if (event.defaultPrevented || picker?.isOpen) return;
+    if (event.defaultPrevented || picker?.isOpen || reviewDialog) return;
     if (event.key === 'Escape') {
       event.preventDefault();
       close();
@@ -558,7 +649,7 @@ export function createSicoobTransactionReportView({ document: doc = globalThis.d
     },
     close,
     async preparePrint() {
-      if (!rows || picker?.isOpen || root.getAttribute('aria-busy') === 'true') {
+      if (!rows || picker?.isOpen || reviewDialog || root.getAttribute('aria-busy') === 'true') {
         throw new Error('Aguarde a consulta completa das transações para imprimir.');
       }
       const loaded = rows;
