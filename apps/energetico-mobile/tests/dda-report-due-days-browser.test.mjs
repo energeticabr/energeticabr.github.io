@@ -32,6 +32,7 @@ test('DDA date and linkage clusters fit on phones, desktop and print',{timeout:9
     assert.equal(state.linkRows.find(row=>row.id==='2').link,'ID 8');
     const regularized=state.linkRows.find(row=>row.id==='4');
     assert.equal(regularized.link,'SEM VINCULAÇÃO');
+    assert.equal(regularized.warning,null);
     assert.equal(regularized.linkBackground,'rgb(234, 248, 238)');
     assert.ok(regularized.linkFits&&regularized.wordsFit,JSON.stringify({width,regularized}));
     assert.ok(state.linkRows.filter(row=>row!==unlinked).every(row=>row.rowBackground!==unlinked.rowBackground));

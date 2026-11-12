@@ -52,26 +52,30 @@ test('report confirms both directions, cancels without writing and preserves the
  const dom=new JSDOM('<body><div id="app"></div></body>');
  const doc=dom.window.document,calls=[],updates=[];
  const report=createDdaReportView({document:doc,now,onRowsChange:rows=>updates.push(hasDdaMenuAlert(rows,now())),data:{
-  loadSnapshot:async()=>snapshot(row(5,{VENCIMENTO:'2026-11-12'}),row(6,{[link]:'58',VENCIMENTO:'2026-11-12'}),row(7,{SITUACAO:'Pago'})),
+  loadSnapshot:async()=>snapshot(row(5,{VENCIMENTO:'2026-11-12',STATUS_DDA:'Agendado'}),row(6,{[link]:'58',VENCIMENTO:'2026-11-12'}),row(7,{SITUACAO:'Pago'})),
   unlinkedReview:{async save({row,reviewed}){calls.push([row.id,reviewed]);return {id:row.id,reviewed};}},
  }});
  t.after(()=>{report.destroy();dom.window.close();});
  await report.open();
  const cluster=()=>doc.querySelector('[data-dda-unlinked-review="5"]');
+ const warning=()=>doc.querySelector('[data-dda-id="5"].ddr-scheduled-unlinked .ddr-link-warning');
  const dialog=()=>doc.querySelector('[data-dda-unlinked-dialog]');
  const choose=answer=>Array.from(dialog().querySelectorAll('button')).find(button=>button.textContent===answer).click();
  const content=doc.querySelector('.ddr-content');content.scrollTop=145;content.scrollLeft=60;
  assert.ok(cluster(),'o cluster N/A de um DDA em aberto deve ser clicável');
+ assert.equal(warning()?.textContent,'ATENÇÃO');
  cluster().click();
  assert.match(dialog().textContent,/Deseja tornar a não vinculação regular\?/);
  choose('Não');assert.deepEqual(calls,[]);assert.equal(cluster().textContent,'N/A');
  cluster().click();choose('Sim');await tick();
  assert.deepEqual(calls,[['5',true]]);assert.equal(cluster().textContent,'SEM VINCULAÇÃO');
  assert.equal(cluster().dataset.linkState,'regularized');assert.equal(doc.activeElement,cluster());
+ assert.equal(warning(),null);
  assert.deepEqual([content.scrollTop,content.scrollLeft],[145,60]);
  cluster().click();assert.match(dialog().textContent,/Deseja reverter a não vinculação\?/);
  choose('Não');assert.equal(cluster().textContent,'SEM VINCULAÇÃO');assert.equal(calls.length,1);
  cluster().click();choose('Sim');await tick();assert.equal(cluster().textContent,'N/A');
+ assert.equal(warning()?.textContent,'ATENÇÃO');
  assert.deepEqual(calls,[['5',true],['5',false]]);assert.deepEqual(updates,[true,false,true]);
  doc.querySelector('select[name="status"]').value='';
  doc.querySelector('select[name="status"]').dispatchEvent(new dom.window.Event('change'));

@@ -299,7 +299,7 @@ export function createDdaReportView({document:doc=globalThis.document,data,openM
    pencil.disabled=printAll||!data.provisionLink||!Number.isSafeInteger(Number(row.id))||Number(row.id)<=0;
    pencil.addEventListener('click',()=>{if(destroyed||root.hidden||root.getAttribute('aria-busy')==='true')return;void provisionPicker.show(row,pencil);});
    link.append(pencil);
-   if((schedule.dataset.scheduleState==='scheduled'||pendingSettlement)&&!row.provisionId){
+   if(linkState==='missing'&&(schedule.dataset.scheduleState==='scheduled'||pendingSettlement)){
     line.classList.add('ddr-scheduled-unlinked');
     link.append(make('span','ddr-link-warning','ATENÇÃO'));
    }
