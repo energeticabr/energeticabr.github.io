@@ -13,6 +13,7 @@ const LOGO = new URL('../../../../assets/logo-energetica-oficial.png', import.me
 const money = new Intl.NumberFormat('pt-BR', { style:'currency', currency:'BRL' });
 const retentionLabels = { yes:'Retenção informada', no:'Sem retenção informada', unknown:'Retenção não confirmada' };
 const cnoLabels = { valid:'CNO consta', conflict:'CNO divergente', invalid:'CNO inválido', missing:'CNO não consta', unknown:'CNO não confirmada', workCode:'CNO/CEI informado' };
+const matchesCnoFilter = (filter, status) => !filter || filter === status || (filter === 'conflict' && status === 'invalid');
 const searchKey = value => value.toLowerCase().normalize('NFD').replace(/\p{Diacritic}/gu, '');
 const displayDate = value => value ? value.split('-').reverse().join('/') : 'Não informada';
 const xmlKey = row => `${row.key}|${row.xmlUrl}`;
@@ -108,7 +109,7 @@ export function createNfeReportView({ document:doc = globalThis.document, data, 
     [type, 'Documento', [['', 'Todos'], ...NFE_REPORT_DOCUMENT_TYPES.map(value => [value, value])]],
     [search, 'Pesquisar fornecedor, CNPJ ou nota', []],
     [retentionFilter, 'Retenção', [['', 'Todas'], ['yes', 'Com retenção'], ['no', 'Sem retenção']]],
-    [cnoFilter, 'CNO', [['', 'Todas'], ['valid', 'CNO correta'], ['conflict', 'CNO divergente'], ['invalid', 'CNO inválido'], ['missing', 'Sem CNO']]],
+    [cnoFilter, 'CNO', [['', 'Todas'], ['valid', 'CNO correta'], ['conflict', 'CNO Divergente'], ['missing', 'Sem CNO']]],
     [regimeFilter, 'Tipo de empresa', [['', 'Todos'], ...NFE_SUPPLIER_REGIMES.map(regime => [regime, regime])]],
   ]) {
     const field = make('label');
@@ -354,7 +355,7 @@ export function createNfeReportView({ document:doc = globalThis.document, data, 
     const readRetention = service && row.retention !== 'yes';
     const readCno = service && row.cnoState === 'unknown';
     if (retentionFilter.value && !readRetention && row.retention !== retentionFilter.value) return false;
-    if (cnoFilter.value && !readCno && row.cnoState !== cnoFilter.value) return false;
+    if (!readCno && !matchesCnoFilter(cnoFilter.value, row.cnoState)) return false;
     return regimeFilter.value || (retentionFilter.value && readRetention) || (cnoFilter.value && readCno);
   }
 
@@ -363,7 +364,7 @@ export function createNfeReportView({ document:doc = globalThis.document, data, 
     return candidates.filter(row => {
       const { regime, retention, cno } = classifyFiscalFacts(row, xmlFacts.get(xmlKey(row)));
       return (!retentionFilter.value || retentionFilter.value === retention) &&
-        (!cnoFilter.value || cnoFilter.value === cno) &&
+        matchesCnoFilter(cnoFilter.value, cno) &&
         (!regimeFilter.value || regimeFilter.value === regime ||
           (regimeFilter.value === 'Simples Nacional' && regime.startsWith('Simples Nacional · ')));
     });
