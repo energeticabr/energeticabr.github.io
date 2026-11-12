@@ -3,7 +3,7 @@ import { join } from "node:path";
 import { createAppleClient } from "./app-store-submission.mjs";
 import { attachLatestTestFlightBuild } from "./attach-testflight-build.mjs";
 import {
-  createUserInvitationPayload, findAppStoreUser, findPendingInvitation,
+  findAppStoreUser, findPendingInvitation,
   loadGroupTesters, parseAllowedEmails, planTesterChanges,
 } from "./manage-testflight-testers.mjs";
 import { NB_APP_NAME, NB_BUNDLE_ID } from "../src/nb-participacoes.js";
@@ -34,16 +34,24 @@ async function confirmExclusiveTester(groupId, email) {
 
 async function prepareTesterAccess(appId, groupId) {
   const email = allowedTester();
+  const { data: localizations } = await client.request("GET", `/v1/apps/${appId}/betaAppLocalizations?limit=200`);
+  if (!localizations?.length || localizations.some(item => item.attributes?.feedbackEmail?.toLowerCase() !== email)) {
+    throw new Error("O contato de feedback do NBPAR precisa ser o destinatário configurado.");
+  }
+  console.log("Contato exclusivo de feedback confirmado.");
   const { missing, remove } = planTesterChanges(await loadGroupTesters(client, groupId), [email]);
   if (remove.length) {
     throw new Error("Remova os testadores não autorizados do NBPAR no App Store Connect.");
   }
   if (!missing.length) return "TESTER_CONFIRMED";
   if (await findAppStoreUser(client, email)) return "USER_READY_TO_ADD";
-  if (await findPendingInvitation(client, email)) return "INVITATION_PENDING";
-  const { data } = await client.request("POST", "/v1/userInvitations", createUserInvitationPayload(email, appId));
-  if (!data?.id) throw new Error("A Apple não confirmou a criação do convite.");
-  return "INVITATION_SENT";
+  const pending = await findPendingInvitation(client, email);
+  if (!pending) return "INVITATION_NOT_SENT";
+  const { data: apps } = await client.request("GET", `/v1/userInvitations/${pending.id}/visibleApps?limit=200`);
+  if (pending.attributes?.allAppsVisible !== false || apps?.length !== 1 || apps[0].id !== appId) {
+    throw new Error("O convite existente não está limitado ao NBPAR.");
+  }
+  return "INVITATION_PENDING";
 }
 
 async function registerBundle(identifier, name) {
