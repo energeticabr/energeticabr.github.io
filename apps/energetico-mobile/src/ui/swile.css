@@ -1,3 +1,5 @@
+.swile-menu-entry { margin-top: .65rem; }
+
 .swile-dialog {
   width: min(48rem, calc(100% - 1.5rem));
   max-width: none;

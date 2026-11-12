@@ -22,12 +22,23 @@ test('Recurring cards keep yellow edit left of delete without title overlap', { 
   try {
     await server.listen();
     child = spawn(browser, ['--headless=new', '--disable-gpu', '--no-first-run', '--no-sandbox',
-      '--remote-debugging-port=0', `--user-data-dir=${profile}`, 'about:blank'], { stdio: 'ignore' });
+      '--disable-dev-shm-usage', '--remote-debugging-port=0', `--user-data-dir=${profile}`, 'about:blank'],
+    { stdio: 'ignore', windowsHide: true });
     const portFile = join(profile, 'DevToolsActivePort');
-    for (let attempt = 0; attempt < 200 && !existsSync(portFile); attempt++) await delay(100);
-    assert.ok(existsSync(portFile), 'Chrome não iniciou inspeção remota');
-    const [debugPort, path] = readFileSync(portFile, 'utf8').trim().split(/\r?\n/);
-    socket = new WebSocket(`ws://127.0.0.1:${debugPort}${path}`);
+    let endpoint;
+    for (let attempt = 0; attempt < 200 && !endpoint; attempt++) {
+      try {
+        const [debugPort, path] = readFileSync(portFile, 'utf8').trim().split(/\r?\n/);
+        if (/^\d+$/.test(debugPort || '') && /^\/devtools\/browser\/[\da-f-]+$/i.test(path || '')) {
+          endpoint = `ws://127.0.0.1:${debugPort}${path}`;
+        }
+      } catch (error) {
+        if (!['ENOENT', 'EBUSY'].includes(error.code)) throw error;
+      }
+      if (!endpoint) await delay(100);
+    }
+    assert.ok(endpoint, 'Chrome não iniciou inspeção remota');
+    socket = new WebSocket(endpoint);
     await new Promise((done, fail) => { socket.addEventListener('open', done, { once: true }); socket.addEventListener('error', fail, { once: true }); });
     let sequence = 0;
     socket.addEventListener('message', event => {
