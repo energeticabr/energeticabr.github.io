@@ -339,7 +339,7 @@ const returnedHomeActions = [
   'open-order-validation-report', 'open-depreciation-report', 'open-document-control-report',
   'open-task-association-report', 'open-rhid-mascot-report', 'open-cargos-table', 'open-attendance-summary',
   'open-stage-progress', 'open-supplier-payroll-report', 'open-trancid-report', 'open-contractor-control-report',
-  'open-pending-supplier-payments-report', 'open-pending-work-diaries-report',
+  'open-pending-supplier-payments-report',
 ];
 
 for (const [variant, field, separator] of [
@@ -4854,7 +4854,7 @@ test("menu inicial não oferece o hub antigo, inclusive em respostas legadas", t
   for (const question of ['QUAL ÁREA VOCÊ DESEJA ACESSAR?', 'DESEJA UTILIZAR ELES EM QUAL FLUXO?']) {
     const opened = [];
     const actions = ['open-contractor-control-report',
-      'open-pending-supplier-payments-report', 'open-pending-work-diaries-report'];
+      'open-pending-supplier-payments-report'];
     for (const action of actions) view.on(action, () => opened.push(action));
     view.render(signedInState({ messages: [{
       id: 'retired-reports-menu', role: 'assistant', type: 'poll', question,
@@ -4866,6 +4866,7 @@ test("menu inicial não oferece o hub antigo, inclusive em respostas legadas", t
     }] }));
     assert.equal(dom.window.document.querySelector('[data-reply-id="action_contractor_reports"]'), null);
     assert.equal(dom.window.document.querySelector('[data-action="open-supplier-workforce-report"]'), null);
+    assert.equal(dom.window.document.querySelector('[data-action="open-pending-work-diaries-report"]'), null);
     for (const action of question.startsWith('QUAL ÁREA') ? actions : []) {
       const mascot = dom.window.document.querySelector('[data-action="' + action + '"]');
       assert.ok(mascot, action);

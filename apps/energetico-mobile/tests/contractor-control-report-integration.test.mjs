@@ -33,12 +33,12 @@ test('new pink wheelbarrow mascot sits immediately below Trancid and launches lo
 test('new entry navigates strictly between Trancid and pink pending payments',()=>{
  assert.deepEqual(getReportNeighbors(action),{previous:'open-trancid-report',next:'open-pending-supplier-payments-report'});
  assert.deepEqual(getReportNeighbors('open-trancid-report'),{previous:'open-supplier-payroll-report',next:action});
- assert.deepEqual(getReportNeighbors('open-pending-supplier-payments-report'),{previous:action,next:'open-pending-work-diaries-report'});
+ assert.deepEqual(getReportNeighbors('open-pending-supplier-payments-report'),{previous:action,next:null});
  assert.equal(REPORT_PDF_TITLES[action],'Controle de empreiteiros');assert.equal(getReportNeighbors('open-commercial-receipts').previous,null);
 });
 test('pink rail preserves uniform fill and even spacing below the separate orange row',t=>{
  const dom=new JSDOM(renderChatMarkup(home),{url:'https://example.test/'});t.after(()=>dom.window.close());const style=dom.window.document.createElement('style');style.textContent=readFileSync(new URL('../src/styles.css',import.meta.url),'utf8');dom.window.document.head.append(style);
- const actions=['open-cargos-table','open-attendance-summary','open-stage-progress','open-supplier-payroll-report','open-trancid-report',action,'open-pending-supplier-payments-report','open-pending-work-diaries-report'];
+ const actions=['open-cargos-table','open-attendance-summary','open-stage-progress','open-supplier-payroll-report','open-trancid-report',action,'open-pending-supplier-payments-report'];
  let bottom=0;for(const name of actions){const node=dom.window.document.querySelector(`[data-action="${name}"]`);assert.ok(node,name);const css=dom.window.getComputedStyle(node);assert.ok(parseFloat(css.marginTop)>=bottom+4,name);bottom=parseFloat(css.marginTop)+parseFloat(css.height);}
  const css=dom.window.getComputedStyle(dom.window.document.querySelector(`[data-action="${action}"]`));assert.equal(css.backgroundColor,'rgb(207, 117, 122)');
  const trancid=dom.window.document.querySelector('[data-action="open-trancid-report"]');

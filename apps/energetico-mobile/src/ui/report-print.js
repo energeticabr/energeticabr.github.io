@@ -14,7 +14,6 @@ export const REPORT_PDF_TITLES = Object.freeze({
  'open-trancid-report':'Saldos e histórico dos cartões Trancid',
  'open-pending-supplier-payments-report':'Pagamentos pendentes por fornecedor',
  'open-contractor-control-report':'Controle de empreiteiros',
- 'open-pending-work-diaries-report':'Diários de obras pendentes',
  'open-stage-progress':'Etapas e atividades da obra', 'open-commercial-receipts':'Contratos e pagamentos',
  'open-commercial-milestones':'Andamento comercial dos imóveis',
  'open-commercial-documents':'Pendências documentais dos imóveis', 'open-sac-pathologies':'Acompanhamento de patologias',
@@ -225,7 +224,7 @@ export function openFilteredReportPdf(root,{action,previewMedia,buildPdf=default
 export function decorateReportPrint(panel,{action,previewMedia,closePreview,buildPdf,loadLogo}={}){
  const root=panel?.element;if(!root?.ownerDocument||!REPORT_PDF_TITLES[action])return panel;
  const doc=root.ownerDocument,button=doc.createElement('button');button.type='button';button.className='report-print-button';button.dataset.action='print-report-pdf';button.innerHTML=PRINTER;button.setAttribute('aria-label','Abrir PDF do relatório');button.title='Abrir PDF com os filtros atuais';
- let host=root.querySelector('.pl-filters,.dr-toolbar,.dcr-toolbar,.tar-filters,.tar-toolbar,.pwdr-toolbar,.ccr-toolbar,.gsr-toolbar,.cargos-header,.trancid-toolbar');
+ let host=root.querySelector('.pl-filters,.dr-toolbar,.dcr-toolbar,.tar-filters,.tar-toolbar,.ccr-toolbar,.gsr-toolbar,.cargos-header,.trancid-toolbar');
  host||=root.querySelector('[role="dialog"]')||root;
  // The shared PDF action supersedes the old browser-print shortcut.
  host.querySelector('.cr-print')?.remove();
