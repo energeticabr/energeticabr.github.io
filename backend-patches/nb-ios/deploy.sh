@@ -66,9 +66,9 @@ for index in "${!roots[@]}"; do
 done
 
 systemctl restart energetica-channel-bridge
-for attempt in {1..12}; do
-  if curl -fsS http://127.0.0.1:8765/health; then break; fi
-  [[ "$attempt" != 12 ]]
+for attempt in {1..55}; do
+  if curl -fs --max-time 1 http://127.0.0.1:8765/health; then break; fi
+  [[ "$attempt" != 55 ]]
   sleep 1
 done
 for endpoint in chat upload transcribe; do

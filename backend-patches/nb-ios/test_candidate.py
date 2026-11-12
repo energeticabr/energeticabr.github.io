@@ -65,8 +65,10 @@ class PatchTests(unittest.TestCase):
             "_nb_portal_session", "_start_group_menu_options", "_handle_group_choice",
             "_handle_subaction_choice", "_actions_for_group", "_open_submenu",
         }]
-        scope = {"normalize_text": lambda value: str(value).lower(), "PENDING_GROUP_ID": "group_pending"}
-        exec(compile(ast.Module(body=methods, type_ignores=[]), "dispatch", "exec"), scope)
+        scope = {"normalize_text": lambda value: str(value).lower(), "PENDING_GROUP_ID": "group_pending",
+                 "AUDIT_LOG_ACTION": {"id": "audit_log"}}
+        future = ast.parse("from __future__ import annotations").body
+        exec(compile(ast.Module(body=future + methods, type_ignores=[]), "dispatch", "exec"), scope)
         obj = type("Dispatch", (), {method.name: scope[method.name] for method in methods})()
         obj._start_groups = lambda: self.catalog["start_groups"]
         obj._start_actions = lambda: self.catalog["start_actions"]
