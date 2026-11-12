@@ -146,15 +146,20 @@ button.ddr-link-cluster:focus-visible { outline:2px solid #105367; outline-offse
 .sicoob-transaction-filters .ddr-filter:has(input[type="search"]) { min-width: 170px; }
 .sicoob-transaction-filters input[type="date"] { min-width: 0; }
 .sicoob-transaction-summary { grid-template-columns: repeat(4, minmax(0, 1fr)); }
-.sicoob-transaction-balance time { font-size: 11px; }
+[data-sicoob-balance] strong { overflow-wrap: anywhere; }
+[data-sicoob-balance] time { font-size: 11px; }
 @media screen {
+  .ddr-overlay[data-report-width-mode="wide"] [data-dda-summary]:has([data-sicoob-balance]) {
+    grid-template-columns: repeat(5, minmax(0, 1fr));
+  }
+  .ddr-overlay[data-report-width-mode="narrow"] [data-dda-summary]:has([data-sicoob-balance]),
   .sicoob-transaction-overlay[data-report-width-mode="narrow"] .sicoob-transaction-summary {
     grid-template-columns: repeat(2, minmax(0, 1fr));
   }
 }
 @media print {
   .sicoob-transaction-overlay .sicoob-transaction-summary { grid-template-columns: repeat(3, minmax(0, 1fr)); }
-  .sicoob-transaction-balance { display: none; }
+  [data-sicoob-balance] { display: none; }
 }
 .sicoob-transaction-table tbody tr.sicoob-transaction-linked {
   background: #eaf8ee;

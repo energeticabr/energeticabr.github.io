@@ -11,6 +11,7 @@ import { addReportCloseControl } from './report-close-control.js';
 import { bindReportLandscape } from './report-landscape.js';
 import { PDF_ATTACHMENT_ICON } from './report-pdf-attachment-icon.js';
 import { createFinancialReportLastUpdate } from './financial-report-last-update.js';
+import { createSicoobBalanceMetric } from './sicoob-balance-metric.js';
 
 const LOGO = new URL('../../../../assets/logo-energetica-oficial.png', import.meta.url).href;
 const TITLE = 'Relatório de transações Sicoob';
@@ -31,9 +32,6 @@ const ORDER_PICKER_COPY = {
 const PENCIL_ICON = '<svg viewBox="0 0 24 24" width="21" height="21" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m14 6 4 4M4 20l4-1 12-12a2.8 2.8 0 0 0-4-4L4 15z"/></svg>';
 const PAGE_SIZE = 50;
 const currency = new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' });
-const balanceDate = new Intl.DateTimeFormat('pt-BR', {
-  timeZone: 'America/Sao_Paulo', dateStyle: 'short', timeStyle: 'short',
-});
 const text = value => String(value ?? '').trim();
 const dateLabel = value => value ? value.split('-').reverse().join('/') : '—';
 const pendingRecipient = row => row.recipient === FINANCIAL_MOVEMENT_PENDING_RECIPIENT;
@@ -138,13 +136,7 @@ export function createSicoobTransactionReportView({ document: doc = globalThis.d
   content.setAttribute('role', 'region');
   content.setAttribute('aria-label', 'Transações importadas do Sicoob');
   const summary = make('div', 'ddr-summary sicoob-transaction-summary');
-  const balanceMetric = make('div', 'ddr-metric sicoob-transaction-balance', 'Saldo em conta corrente');
-  balanceMetric.dataset.reportScreenOnly = '';
-  const balanceValue = make('strong');
-  balanceValue.setAttribute('role', 'status');
-  const balanceTime = make('time');
-  balanceTime.title = 'Horário da consulta em Brasília';
-  balanceMetric.append(balanceValue, balanceTime);
+  const balanceMetric = createSicoobBalanceMetric(doc, loadBalance);
   const notice = make('p', 'ddr-notice');
   notice.setAttribute('role', 'status');
   notice.hidden = true;
@@ -158,7 +150,6 @@ export function createSicoobTransactionReportView({ document: doc = globalThis.d
 
   let rows = null;
   let request;
-  let balanceRequest;
   let page = 1;
   let returnFocus;
   let oldOverflow;
@@ -302,27 +293,9 @@ export function createSicoobTransactionReportView({ document: doc = globalThis.d
     root.append(overlay);
     no.focus();
   }
-  function showBalance(balance, pending = false) {
-    balanceValue.textContent = balance ? currency.format(balance.balanceCents / 100) : pending ? 'Consultando…' : 'Indisponível';
-    balanceTime.hidden = !balance;
-    balanceTime.dateTime = balance?.asOf ?? '';
-    balanceTime.textContent = balance ? balanceDate.format(new Date(balance.asOf)) : '';
-  }
-  async function refreshBalance() {
-    balanceRequest?.abort();
-    if (!loadBalance) { showBalance(null); return; }
-    const active = balanceRequest = new AbortController();
-    showBalance(null, true);
-    try {
-      const balance = await loadBalance({ signal: active.signal });
-      if (!active.signal.aborted) showBalance(balance);
-    } catch {
-      if (!active.signal.aborted) showBalance(null);
-    }
-  }
   async function manualRefresh() {
     if (refresh.disabled || root.hidden || receiptRequest || picker?.isOpen || reviewDialog) return;
-    void refreshBalance();
+    void balanceMetric.refresh();
     if (!syncMonitor) return load();
     starting = true; syncRefreshButton();
     try {
@@ -424,7 +397,7 @@ export function createSicoobTransactionReportView({ document: doc = globalThis.d
     const pages = Math.max(1, Math.ceil(filtered.length / PAGE_SIZE));
     page = Math.min(page, pages);
     const total = filtered.reduce((sum, row) => sum.plus(row.value ?? 0), new Decimal(0));
-    summary.replaceChildren(balanceMetric);
+    summary.replaceChildren(balanceMetric.element);
     const totalLabel = filtered.some(row => row.value === null) ? 'Total com valor informado' : 'Valor total';
     for (const [label, value] of [['Transações', String(filtered.length)], [totalLabel, currency.format(total.toFixed(2))]]) {
       const metric = make('div', 'ddr-metric', label);
@@ -522,7 +495,7 @@ export function createSicoobTransactionReportView({ document: doc = globalThis.d
     const loadingNotice = make('p', 'ddr-notice', 'Carregando transações do Sicoob…');
     loadingNotice.setAttribute('role', 'status');
     if (!rows) {
-      summary.replaceChildren(balanceMetric);
+      summary.replaceChildren(balanceMetric.element);
       content.replaceChildren(summary, loadingNotice);
     }
     try {
@@ -584,9 +557,7 @@ export function createSicoobTransactionReportView({ document: doc = globalThis.d
     picker?.close();
     request?.abort();
     request = null;
-    balanceRequest?.abort();
-    balanceRequest = null;
-    showBalance(null);
+    balanceMetric.clear();
     receiptRequest = null;
     rows = null;
     loadNotice = '';
@@ -644,7 +615,7 @@ export function createSicoobTransactionReportView({ document: doc = globalThis.d
       root.hidden = false;
       landscape.update();
       panel.focus();
-      void refreshBalance();
+      void balanceMetric.refresh();
       await load();
     },
     close,

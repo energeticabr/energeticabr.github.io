@@ -31,6 +31,28 @@ function setup(t,options={}){
   ddaReportFactory:async options=>{factories.push(options);return panel();},...options,auth});
  t.after(()=>controller.stop());return {controller,view,store,auth,calls,opened,factories,renders};
 }
+test('the DDA report can read the Sicoob balance only while its authenticated session is current', async t => {
+ const balance = { balanceCents: 123456, asOf: '2026-11-12T12:29:00Z' };
+ let finish, calls = 0;
+ const h = setup(t, { client: {
+  sendText: async () => ({ status: 'processed', messages: [] }),
+  getSicoobBalance: async () => {
+   calls++;
+   return calls === 1 ? balance : new Promise(resolve => { finish = resolve; });
+  },
+ } });
+ await h.controller.start();
+ await h.view.emit('open-dda-report');
+ const { loadBalance } = h.factories[0];
+ assert.equal(typeof loadBalance, 'function');
+ assert.deepEqual(await loadBalance(), balance);
+ const pending = loadBalance();
+ await h.view.emit('sign-out');
+ finish(balance);
+ await assert.rejects(pending, /sessão.*encerrada/);
+ await assert.rejects(loadBalance(), /sessão.*encerrada/);
+ assert.equal(calls, 2);
+});
 test('DDA shortcut stays below the NFE shortcut and dispatches its own report',()=>{
  const markup=renderChatMarkup({sessionStatus:'authenticated',account:{name:'Teste'},messages:[{role:'assistant',type:'poll',question:'QUAL ÁREA VOCÊ DESEJA ACESSAR?',options:[{id:'group_pending',label:'PENDÊNCIAS'},{id:'group_supplies',label:'SUPRIMENTOS'},{id:'group_financial',label:'FINANCEIRO'},{id:'group_hr',label:'RECURSOS HUMANOS'}]}],attachments:[],draft:'',busy:false});
  const dom=new JSDOM(markup),first=dom.window.document.querySelector('[data-action="open-nfe-report"]'),dda=first?.nextElementSibling;
