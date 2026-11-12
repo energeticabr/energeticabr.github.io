@@ -128,7 +128,7 @@
   display: grid;
   grid-template-columns:
     minmax(140px, 1.2fr) minmax(90px, 0.6fr) minmax(130px, 0.9fr)
-    minmax(150px, 1fr) minmax(160px, 1fr);
+    minmax(215px, 1.2fr) minmax(150px, 1fr);
   align-items: center;
   gap: 16px;
   padding: 22px;
@@ -137,6 +137,26 @@
 }
 .supplier-payroll-rubric:nth-child(even) {
   background: #eaf3ff;
+}
+.supplier-payroll-rubric-payment {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  align-items: end;
+  gap: 8px;
+  min-width: 0;
+}
+.supplier-payroll-paid {
+  grid-column: 2;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  min-height: 44px;
+  font-size: .85rem;
+  font-weight: 650;
+}
+.supplier-payroll-paid input { width: 19px; height: 19px; margin: 0; accent-color: var(--brand); }
+@media (max-width: 650px) {
+  .supplier-payroll-rubric-payment { grid-column: 1 / -1; }
 }
 .supplier-payroll-rubric[data-payroll-completion="pending"] { background: #fff0da; }
 .supplier-payroll-rubric[data-payroll-completion="complete"] { background: #e5f5e9; }
@@ -393,7 +413,7 @@
     padding: 16px;
     gap: 12px;
   }
-  .supplier-payroll-rubric > .supplier-payroll-field:nth-of-type(3) {
+  .supplier-payroll-rubric-payment {
     grid-column: 1 / -1;
   }
   .supplier-payroll-header h1 {

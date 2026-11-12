@@ -5,7 +5,7 @@ import {
   createSharePointAttachmentTransport,
   validateAttachment,
 } from "../../../../portal/data/attachments.js";
-import { payrollKey as key, payrollReferenceMonth as monthKey, validatePayrollDraft } from "./supplier-payroll.js";
+import { payrollKey as key, payrollReferenceMonth as monthKey, payrollTotal, supplierPayrollWeek, validatePayrollDraft } from "./supplier-payroll.js";
 import { payrollTaxType, payrollCompetenceMonth } from './payroll-tax-competence.js';
 import { ensurePayrollTaxLink, assertPayrollTaxStorage } from './payroll-tax-links.js';
 import { payrollLaunchReferenceColumn, ensurePayrollLaunchSchema, confirmPayrollLaunchReference, compatiblePayrollLaunchLink,
@@ -86,6 +86,11 @@ export function createSupplierPayrollData({
   tokenProvider,
   siteConfig = SHAREPOINT_SITES,
   fetchImpl = globalThis.fetch,
+  loadHoleriteLogo = async () => {
+    const response = await fetchImpl(new URL("../../../../assets/logo-energetica-oficial.png", import.meta.url));
+    if (!response.ok) throw new Error("Não foi possível carregar o logo da empresa para o holerite.");
+    return response.arrayBuffer();
+  },
   now = () => new Date(),
   assertSession = () => {},
   storage,
@@ -364,17 +369,139 @@ export function createSupplierPayrollData({
       IDFOLHA: Number(sheet.id),
     };
   }
-  async function post(rawDraft, progress, onProgress) {
+  async function prepareHolerite(draft, week, progress) {
+    const descriptor = await describe("HOLERITE");
+    const keyColumn = writableColumn(descriptor, "CHAVE");
+    if (!keyColumn.text || keyColumn.indexed !== true || keyColumn.enforceUniqueValues !== true)
+      throw new Error("A chave semanal de HOLERITE deve ser exclusiva e indexada.");
+    const stateColumn = writableColumn(descriptor, "SITUACAO").name;
+    const operationColumn = writableColumn(descriptor, "OPERACAO").name;
+    const launchesColumn = writableColumn(descriptor, "LANCAMENTOS").name;
+    const token = week.start + "-" + draft.supplier.id;
+    const paidTotal = payrollTotal(draft.lines.filter(line => line.alreadyPaid));
+    const launchTotal = payrollTotal(draft.lines.filter(line => !line.alreadyPaid));
+    const hasNormal = draft.lines.some(line => !line.alreadyPaid && !payrollTaxType(line.payrollType));
+    const hasTax = draft.lines.some(line => !line.alreadyPaid && payrollTaxType(line.payrollType));
+    const lines = draft.lines.map(line => ({
+      rubrica: line.rubric, label: line.label, quantity: line.quantity, unitValue: line.unitValue,
+      total: payrollTotal([line]), alreadyPaid: line.alreadyPaid === true,
+      formaPgto: line.account?.label || null,
+      idFolha: line.alreadyPaid ? null : Number((payrollTaxType(line.payrollType) ? draft.taxSheet : draft.sheet).id),
+      comprovantes: line.files.map(file => ({ nome: file.name, bytes: file.size, modificado: file.lastModified })),
+    }));
+    const fields = fieldsFor(descriptor, {
+      Title: (draft.supplier.label + " — " + week.start).slice(0, 255),
+      CHAVE: token,
+      FORNECEDOR: draft.supplier.label,
+      IDFORNECEDOR: Number(draft.supplier.id),
+      FILIAL: draft.supplier.branch,
+      SEMANA_INICIO: week.start,
+      SEMANA_FIM: week.end,
+      DATA_PAGAMENTO: draft.date,
+      ...(hasNormal || hasTax ? { PRODUTO: draft.product.label, ETAPA: draft.stage.label } : {}),
+      ...(hasNormal ? { IDFOLHA: Number(draft.sheet.id) } : {}),
+      ...(hasTax ? { IDFOLHATRIBUTOS: Number(draft.taxSheet.id) } : {}),
+      RUBRICAS: JSON.stringify(lines),
+      TOTAL: draft.total,
+      TOTAL_JA_PAGO: paidTotal,
+      TOTAL_SUPRIMENTOS: launchTotal,
+    });
+    const { buildSupplierHoleritePdf } = await import("./supplier-holerite-pdf.js");
+    const fileName = "Holerite-" + token + ".pdf";
+    const logoBytes = await loadHoleriteLogo();
+    const pdf = new File([await buildSupplierHoleritePdf({ ...draft, week, lines, paidTotal, launchTotal }, { logoBytes })],
+      fileName, { type: "application/pdf" });
+    const receipts = draft.lines.filter(line => line.alreadyPaid).flatMap(line => line.files.map((file, index) => ({
+      file, name: line.rubric + "-" + (index + 1) + "-" + file.name.slice(-150),
+    })));
+    const journal = storage ?? globalThis.localStorage;
+    const ownerKey = payrollCreationKey(SITE, descriptor.id, "owner:" + token);
+    const owner = journal.getItem(ownerKey) || progress.operationId;
+    const verify = async row => {
+      const current = await repository.getItem(SITE, descriptor.id, String(row?.id || ""), "$expand=fields");
+      assertSession();
+      if (!/^[1-9]\d*$/.test(String(current?.id || "")) || !Object.entries(fields).every(([name, expected]) => {
+        const actual = current.fields?.[name];
+        const date = descriptor.columns.find(column => column.name === name)?.dateTime;
+        return typeof expected === "number" ? actual != null && Number(actual) === expected
+          : date ? scalar(actual).slice(0, 10) === scalar(expected).slice(0, 10)
+          : scalar(actual) === scalar(expected);
+      })) throw new Error("Já existe um holerite com outros dados para este fornecedor nesta semana.");
+      const state = current.fields[stateColumn];
+      if (state !== "FECHADO" && (state !== "EM PROCESSAMENTO" || current.fields[operationColumn] !== owner))
+        throw new Error("Esta folha da semana já está em processamento em outra sessão.");
+      return current;
+    };
+    const find = () => findToken(descriptor, keyColumn, token);
+    const reserve = async fingerprint => {
+      journal.setItem(ownerKey, owner);
+      if (journal.getItem(ownerKey) !== owner) throw new Error("Não foi possível guardar a retomada do holerite.");
+      const saved = await ensurePayrollCreation({
+        key: payrollCreationKey(SITE, descriptor.id, token), storage, assertSession,
+        findItem: find,
+        createItem: () => repository.createItem(SITE, descriptor.id, {
+          ...fields, [operationColumn]: owner, [stateColumn]: "EM PROCESSAMENTO",
+        }),
+        verifyItem: verify,
+        onAttempt: () => { progress.fingerprint = fingerprint; },
+      });
+      progress.operationId = owner;
+      return saved;
+    };
+    return { descriptor, find, reserve, stateColumn, launchesColumn, verify, pdf, receipts, journal, ownerKey };
+  }
+  async function finishHolerite(holerite, row, launches = []) {
+    const { descriptor, pdf, receipts, stateColumn, launchesColumn } = holerite;
+    const id = String(row.id);
+    const attachments = [{ file: pdf, name: pdf.name }, ...receipts];
+    const names = async () => new Set((await repository.listAttachments(SITE, descriptor.id, id))
+      .map(item => item.name ?? item.fileName));
+    const existing = await names();
+    for (const { file, name } of attachments) {
+      assertSession();
+      if (!existing.has(name)) await repository.uploadAttachment(SITE, descriptor.id, id, file, name);
+    }
+    const confirmed = await names();
+    if (!attachments.every(({ name }) => confirmed.has(name)))
+      throw new Error("O SharePoint não confirmou todos os anexos do holerite.");
+    if (row.fields[stateColumn] !== "FECHADO") {
+      const posted = JSON.stringify(launches.map(({ rubric, id }) => ({ rubric, id })));
+      let saved = await holerite.verify({ id });
+      let failure;
+      if (saved.fields[stateColumn] !== "FECHADO") {
+        const eTag = saved.eTag || saved["@odata.etag"];
+        try {
+          await repository.updateItem(SITE, descriptor.id, id, { [stateColumn]: "FECHADO", [launchesColumn]: posted }, { eTag });
+        } catch (cause) { failure = cause; }
+        saved = await holerite.verify({ id });
+      }
+      if (saved.fields[stateColumn] !== "FECHADO" || saved.fields[launchesColumn] !== posted)
+        throw failure || new Error("O SharePoint ainda não confirmou o fechamento do holerite.");
+    }
+    holerite.journal.removeItem(holerite.ownerKey);
+    return { id, fileName: pdf.name };
+  }
+  async function post(rawDraft, progress, onProgress, { weekly = false } = {}) {
+    const draft = validatePayrollDraft(rawDraft);
+    if (!weekly && draft.lines.some(line => line.alreadyPaid))
+      throw new Error("Rubricas já pagas devem ser registradas pelo fechamento semanal.");
+    if (!weekly) return postDraft(draft, progress, onProgress);
+    const week = supplierPayrollWeek(draft.date);
+    return withPayrollWriteLock(`energetico:holerite:${week.start}:${draft.supplier.id}`,
+      () => postDraft(draft, progress, onProgress, week));
+  }
+  async function postDraft(draft, progress, onProgress, week) {
     if (posting) throw new Error("A folha já está sendo postada.");
     operation(progress);
     posting = true;
     try {
-      const draft = validatePayrollDraft(rawDraft);
-      const hasNormal = draft.lines.some(line => !payrollTaxType(line.payrollType));
-      const hasTax = draft.lines.some(line => payrollTaxType(line.payrollType));
-      const loading = createPayrollProgress(onProgress, ['supplier', 'products', 'accounts', 'stages',
-        ...(hasNormal ? ['sheets'] : []), ...(hasTax ? ['taxSheets'] : []), 'payrollSchema', 'launchSchema', 'validated', 'linked',
-        ...draft.lines.flatMap(line => [`launch:${line.rubric}`, `payroll:${line.rubric}`, `verified:${line.rubric}`,
+      const pending = draft.lines.filter(line => line.alreadyPaid !== true);
+      const hasNormal = pending.some(line => !payrollTaxType(line.payrollType));
+      const hasTax = pending.some(line => payrollTaxType(line.payrollType));
+      const loading = createPayrollProgress(onProgress, ['supplier', 'validated',
+        ...(pending.length ? ['products', 'accounts', 'stages', 'payrollSchema', 'launchSchema', 'linked'] : []),
+        ...(hasNormal ? ['sheets'] : []), ...(hasTax ? ['taxSheets'] : []), ...(week ? ['holerite'] : []),
+        ...pending.flatMap(line => [`launch:${line.rubric}`, `payroll:${line.rubric}`, `verified:${line.rubric}`,
           ...line.files.map(file => `attachment:${line.rubric}:${file.name}`)])]);
       assertSession();assertPayrollCreationStorage(storage);
       const fingerprint = JSON.stringify({
@@ -392,6 +519,25 @@ export function createSupplierPayrollData({
         throw new Error(
           "A folha não pode ser alterada depois de iniciar a postagem.",
         );
+      const holerite = week ? await prepareHolerite(draft, week, progress) : null;
+      const existing = await holerite?.find();
+      async function recoverClosedHolerite(row) {
+        const launches = JSON.parse(row.fields[holerite.launchesColumn] || "[]");
+        const lines = draft.lines.map(line => {
+          if (line.alreadyPaid) return line;
+          const id = String(launches.find(launch => launch.rubric === line.rubric)?.id || "");
+          if (!/^[1-9]\d*$/.test(id)) throw new Error("O holerite fechado não contém o ID do lançamento da rubrica.");
+          return { ...line, id };
+        });
+        const saved = await finishHolerite(holerite, row);
+        loading.done('holerite');
+        return { ...draft, lines, holerite: saved };
+      }
+      if (existing) {
+        const saved = await holerite.verify(existing);
+        if (saved.fields[holerite.stateColumn] === "FECHADO") return await recoverClosedHolerite(saved);
+        progress.fingerprint = fingerprint;
+      }
       const suppliers = await loadSuppliers({ onProgress: loading.child('supplier') });
       const supplier = suppliers.find((s) => s.id === draft.supplier.id);
       if (
@@ -404,42 +550,31 @@ export function createSupplierPayrollData({
         );
       if (hasTax && !progress.fingerprint) assertPayrollTaxStorage(storage);
       const [products, accounts, stages, sheets, taxSheets] = await Promise.all([
-        loadProducts(supplier, { onProgress: loading.child('products') }),
-        loadAccounts({ onProgress: loading.child('accounts') }),
-        loadStages(supplier, { onProgress: loading.child('stages') }),
+        pending.length ? loadProducts(supplier, { onProgress: loading.child('products') }) : [],
+        pending.length ? loadAccounts({ onProgress: loading.child('accounts') }) : [],
+        pending.length ? loadStages(supplier, { onProgress: loading.child('stages') }) : [],
         // Once posting starts, keep its validated sheet across month rollover.
         !hasNormal ? [] : progress.fingerprint
           ? registeredSheets(supplier, { onProgress: loading.child('sheets') })
           : loadSheets(supplier, { onProgress: loading.child('sheets') }),
         hasTax ? loadSheets(supplier, {competence:draft.taxCompetence, onProgress: loading.child('taxSheets')}) : [],
       ]);
-      const product = products.find((p) => p.id === draft.product.id),
-        stage = stages.find((s) => s.id === draft.stage.id);
-      if (!product || key(product.label) !== key(draft.product.label))
+      const product = products.find((p) => p.id === draft.product?.id),
+        stage = stages.find((s) => s.id === draft.stage?.id);
+      if (pending.length && (!product || key(product.label) !== key(draft.product.label)))
         throw new Error("O produto selecionado não está ativo.");
-      if (!stage || key(stage.label) !== key(draft.stage.label))
+      if (pending.length && (!stage || key(stage.label) !== key(draft.stage.label)))
         throw new Error("A etapa não pertence à filial do fornecedor.");
       const normalSheet = hasNormal ? sheets.find((s) => s.id === draft.sheet.id) : null;
       if (hasNormal && (!normalSheet || key(normalSheet.label) !== key(draft.sheet.label)))
         throw new Error("Selecione um IDFOLHA válido desse fornecedor.");
+      if (normalSheet && sheets.filter(s => monthKey(s.label) === monthKey(normalSheet.label)).length !== 1)
+        throw new Error("O IDFOLHA do fornecedor está ambíguo para o mês selecionado.");
       const taxSheet = hasTax ? taxSheets.find(s => s.id === draft.taxSheet.id) : null;
       if (hasTax && (taxSheets.length !== 1 || !taxSheet || payrollCompetenceMonth(taxSheet.label) !== payrollCompetenceMonth(draft.taxCompetence)))
         throw new Error('Selecione um IDFOLHA único desse fornecedor para a competência de INSS/FGTS.');
       const sheet = normalSheet || taxSheet;
-      const payrollDescriptor = await describe("FOLHAPGTO", { onProgress: loading.child('payrollSchema') });
-      writableColumn(payrollDescriptor, "Title");
-      writableColumn(payrollDescriptor, "IDLANCAMENTO");
-      for (const line of draft.lines)
-        fieldsFor(
-          payrollDescriptor,
-          payrollValues({ ...draft, supplier }, payrollTaxType(line.payrollType) ? taxSheet : sheet, line),
-        );
-      const descriptor = await describe("LANCAMENTOS", { onProgress: loading.child('launchSchema') });
-      if (!payrollLaunchReferenceColumn(descriptor.columns)) throw new Error('IDFOLHA de LANCAMENTOS não está disponível; nenhum pagamento foi criado.');
-      const values = draft.lines.map((line) => {
-        const account = accounts.find((a) => a.id === line.account.id);
-        if (!account || key(account.label) !== key(line.account.label))
-          throw new Error("A conta selecionada não está cadastrada.");
+      for (const line of draft.lines) {
         const names = new Set();
         for (const file of line.files) {
           if (names.has(file.name))
@@ -448,6 +583,22 @@ export function createSupplierPayrollData({
           const validation = validateAttachment(file);
           if (!validation.valid) throw new Error(validation.message);
         }
+      }
+      const payrollDescriptor = pending.length ? await describe("FOLHAPGTO", { onProgress: loading.child('payrollSchema') }) : null;
+      const descriptor = pending.length ? await describe("LANCAMENTOS", { onProgress: loading.child('launchSchema') }) : null;
+      if (pending.length) {
+        writableColumn(payrollDescriptor, "Title");
+        writableColumn(payrollDescriptor, "IDLANCAMENTO");
+        for (const line of pending)
+          fieldsFor(payrollDescriptor, payrollValues({ ...draft, supplier }, payrollTaxType(line.payrollType) ? taxSheet : sheet, line));
+        if (!payrollLaunchReferenceColumn(descriptor.columns))
+          throw new Error('IDFOLHA de LANCAMENTOS não está disponível; nenhum pagamento foi criado.');
+        column(descriptor.columns, ["__PowerAppsId__"]);
+      }
+      const values = pending.map((line) => {
+        const account = accounts.find((a) => a.id === line.account.id);
+        if (!account || key(account.label) !== key(line.account.label))
+          throw new Error("A conta selecionada não está cadastrada.");
         return fieldsFor(
           descriptor,
           {
@@ -473,13 +624,13 @@ export function createSupplierPayrollData({
           ["UN", "TIPO DESPESA", "GERADESEMBOLSO", "APROVACAO", "FRETE", "OBS"],
         );
       });
-      column(descriptor.columns, ["__PowerAppsId__"]);
+      const reservation = await holerite?.reserve(fingerprint);
       loading.done('validated');
       progress.fingerprint = fingerprint;
+      if (reservation?.fields[holerite.stateColumn] === "FECHADO") return await recoverClosedHolerite(reservation);
       progress.lines ??= {};
       const lines = [];
-      for (let index = 0; index < draft.lines.length; index++) {
-        const line = draft.lines[index];
+      for (const [index, line] of pending.entries()) {
         const selectedSheet = payrollTaxType(line.payrollType) ? taxSheet : sheet;
         const currentSheets = await registeredSheets(supplier);
         const exact = currentSheets.filter(s=>monthKey(s.label) === monthKey(selectedSheet.label));
@@ -534,9 +685,17 @@ export function createSupplierPayrollData({
         loading.done(`verified:${lines[index].rubric}`);
       }
       const result = { ...draft, supplier, product, stage, sheet, ...(hasTax ? {taxSheet} : {}), lines };
-      const linked = await linkPayroll(result, sheet.id, progress);
-      loading.done('linked');
-      return { ...result, sheet: linked.sheet };
+      if (pending.length) {
+        const linked = await linkPayroll(result, sheet.id, progress);
+        result.sheet = linked.sheet;
+        loading.done('linked');
+      }
+      if (holerite) {
+        result.holerite = await finishHolerite(holerite, reservation, lines);
+        result.lines = draft.lines.map(line => lines.find(posted => posted.rubric === line.rubric) || line);
+        loading.done('holerite');
+      }
+      return result;
     } finally {
       posting = false;
     }

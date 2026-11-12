@@ -1,12 +1,15 @@
 import test from "node:test";
 import assert from "node:assert/strict";
+import { readFile } from "node:fs/promises";
 import * as production from "../src/chat/supplier-payroll-data.js";
+import { PDFDocument } from "pdf-lib";
 const journals=new WeakMap();
 const module={...production,createSupplierPayrollData(options){
   if(options.repository){
     if(options.storage)journals.set(options.repository,options.storage);
     if(!journals.has(options.repository)){const records=new Map();journals.set(options.repository,{getItem:k=>records.get(k)??null,setItem:(k,v)=>records.set(k,v),removeItem:k=>records.delete(k)});}
-    options={...options,storage:journals.get(options.repository)};
+    options={loadHoleriteLogo: () => readFile(new URL("../../../assets/logo-energetica-oficial.png", import.meta.url)),
+      ...options,storage:journals.get(options.repository)};
   }
   return production.createSupplierPayrollData(options);
 }};
@@ -87,6 +90,9 @@ const defs = {
     "IDFOLHA",
   ],
   IDFOLHA: ["MESREFERENCIA", "FORNECEDOR"],
+  HOLERITE: ["Title", "CHAVE", "OPERACAO", "FORNECEDOR", "IDFORNECEDOR", "FILIAL", "SEMANA_INICIO", "SEMANA_FIM",
+    "DATA_PAGAMENTO", "PRODUTO", "ETAPA", "IDFOLHA", "IDFOLHATRIBUTOS", "RUBRICAS", "TOTAL", "TOTAL_JA_PAGO",
+    "TOTAL_SUPRIMENTOS", "SITUACAO", "LANCAMENTOS"],
   FOLHAPGTO: [
     "Title",
     "FORNECEDOR",
@@ -120,6 +126,11 @@ export function fixture() {
       ]),
     );
   Object.assign(columns.LANCAMENTOS.find(c=>c.displayName==='IDFOLHA'),{text:undefined,number:{decimalPlaces:'none'},required:false});
+  for (const column of columns.HOLERITE) {
+    if (column.displayName === "CHAVE") Object.assign(column, { indexed: true, enforceUniqueValues: true });
+    if (column.displayName.startsWith("SEMANA_")) Object.assign(column, { text: undefined, dateTime: {} });
+    if (/^(ID|TOTAL)/.test(column.displayName)) Object.assign(column, { text: undefined, number: {} });
+  }
   const item = (list, id, fields) => ({
     id: String(id),
     fields: encode(list, fields),
@@ -170,6 +181,7 @@ export function fixture() {
       item("IDFOLHA", 11, { MESREFERENCIA: "10/2026", FORNECEDOR: "OUTRO" }),
     ],
     FOLHAPGTO: [],
+    HOLERITE: [],
   };
   const writes = [],
     uploads = [];
@@ -190,7 +202,7 @@ export function fixture() {
     getItem: async (_s, list, id) =>
       rows[list].find((r) => r.id === String(id)),
     createItem: async (_s, list, fields) => {
-      const row = { id: String(100 + rows[list].length), fields };
+      const row = { id: String(100 + rows[list].length), fields, ...(list === "HOLERITE" ? { eTag: '"1"' } : {}) };
       rows[list].push(row);
       writes.push({ list, fields });
       if (loseResponse) {
@@ -199,13 +211,18 @@ export function fixture() {
       }
       return row;
     },
+    updateItem: async (_s, list, id, fields, options) => {
+      const row = rows[list].find(item => item.id === String(id));
+      assert.equal(options.eTag, row.eTag);
+      Object.assign(row.fields, fields);
+    },
     listAttachments: async () => uploads.map((name) => ({ fileName: name })),
-    uploadAttachment: async (_s, list, id, file) => {
+    uploadAttachment: async (_s, list, id, file, name = file.name) => {
       if (failUpload) {
         failUpload = false;
         throw new Error("upload falhou");
       }
-      uploads.push(file.name);
+      uploads.push(name);
     },
   };
   const data = module.createSupplierPayrollData({
@@ -260,6 +277,59 @@ export function fixture() {
     },
   };
 }
+test("fechamento misto guarda todas as rubricas no PDF e lança apenas as ainda não registradas", async () => {
+  const f = fixture();
+  f.draft.lines[0].alreadyPaid = true;
+  f.draft.lines[0].account = null;
+  const upload = f.repository.uploadAttachment;
+  let pages;
+  f.repository.uploadAttachment = async (...args) => {
+    if (args[1] === "HOLERITE") {
+      const pdf = await PDFDocument.load(await args[3].arrayBuffer());
+      pages = pdf.getPageCount();
+    }
+    return upload(...args);
+  };
+  const progress = { operationId: "weekly-mixed" };
+  const posted = await f.data.post(f.draft, progress, undefined, { weekly: true });
+  assert.equal(pages, 1);
+  assert.match(posted.holerite.fileName, /^Holerite-2026-09-28-1\.pdf$/);
+  assert.equal(f.rows.HOLERITE.length, 1);
+  const saved = f.decode("HOLERITE", f.rows.HOLERITE[0].fields);
+  assert.equal(saved.SITUACAO, "FECHADO");
+  assert.equal(saved.TOTAL, 231);
+  assert.equal(saved.TOTAL_JA_PAGO, 201);
+  assert.equal(saved.TOTAL_SUPRIMENTOS, 30);
+  assert.deepEqual(JSON.parse(saved.RUBRICAS).map(row => [row.rubrica, row.alreadyPaid, row.idFolha]),
+    [["salary", true, null], ["meal", false, 9]]);
+  assert.equal(f.rows.LANCAMENTOS.length, 1);
+  assert.equal(f.rows.FOLHAPGTO.length, 1);
+  assert.equal(f.decode("LANCAMENTOS", f.rows.LANCAMENTOS[0].fields)["VALOR UNITÁRIO"], "10");
+  f.rows.CADASTROPRODUTO.length = 0;
+  const reopened = await f.data.post(f.draft, { operationId: "weekly-mixed-reopened" }, undefined, { weekly: true });
+  assert.equal(reopened.lines[1].id, posted.lines[1].id);
+  assert.equal(f.rows.LANCAMENTOS.length, 1);
+  assert.equal(f.uploads.length, 1);
+});
+
+test("folha inteiramente já paga dispensa IDFOLHA e recupera falha de anexo sem duplicar a linha", async () => {
+  const f = fixture();
+  const draft = { ...f.draft, product: null, stage: null, sheet: null,
+    lines: [{ ...f.draft.lines[0], alreadyPaid: true, account: null }] };
+  const first = { operationId: "weekly-paid" };
+  f.failUpload();
+  await assert.rejects(f.data.post(draft, first, undefined, { weekly: true }), /upload falhou/);
+  assert.equal(f.decode("HOLERITE", f.rows.HOLERITE[0].fields).SITUACAO, "EM PROCESSAMENTO");
+  await f.data.post(draft, { operationId: "weekly-paid-reopened" }, undefined, { weekly: true });
+  assert.equal(f.rows.HOLERITE.length, 1);
+  assert.equal(f.decode("HOLERITE", f.rows.HOLERITE[0].fields).SITUACAO, "FECHADO");
+  assert.equal(f.rows.LANCAMENTOS.length, 0);
+  assert.equal(f.rows.FOLHAPGTO.length, 0);
+  assert.equal(f.uploads.length, 1);
+  await assert.rejects(f.data.post({ ...draft, date: "2026-10-03" }, { operationId: "weekly-conflict" },
+    undefined, { weekly: true }), /outros dados/);
+  assert.equal(f.rows.HOLERITE.length, 1);
+});
 test('folha vincula cada rubrica antes do comprovante e da próxima linha', async () => {
   const f=fixture();f.draft.lines[0].files=[new File(['abc'],'comprovante.pdf',{type:'application/pdf'})];
   const upload=f.repository.uploadAttachment;

@@ -95,7 +95,7 @@ export function createSupplierPayrollView({
         date, supplier, product: null, stage: null, sheet: null,
         taxCompetence: "", taxSheet: null,
         lines: PAYROLL_RUBRICS.map(({ id }) => ({
-          rubric: id, quantity: "1", unitValue: "", account: null, files: [],
+          rubric: id, quantity: "1", unitValue: "", account: null, alreadyPaid: false, files: [],
         })),
       },
       progress: {
@@ -265,6 +265,19 @@ export function createSupplierPayrollView({
         changed();
       });
       const accountField = field("Forma de pagamento", account);
+      const alreadyPaid = element("input");
+      alreadyPaid.type = "checkbox";
+      alreadyPaid.name = `${rubric.id}-already-paid`;
+      alreadyPaid.checked = line.alreadyPaid === true;
+      alreadyPaid.addEventListener("change", () => {
+        line.alreadyPaid = alreadyPaid.checked;
+        updateCompletion();
+        changed();
+      });
+      const payment = element("div", "supplier-payroll-rubric-payment");
+      const paidField = element("label", "supplier-payroll-paid");
+      paidField.append(alreadyPaid, element("span", "", "Já pago"));
+      payment.append(accountField, paidField);
       const lineStatus = element("p", "supplier-payroll-line-status");
       lineStatus.setAttribute("data-payroll-line-status", "");
       lineStatus.setAttribute("role", "status");
@@ -275,19 +288,19 @@ export function createSupplierPayrollView({
         const needsPayment = hasValue && !isZero;
         (account.closest('.supplier-payroll-field') || accountField).hidden = !needsPayment;
         account.disabled = !needsPayment;
-        account.required = needsPayment;
+        account.required = needsPayment && !line.alreadyPaid;
         const started = lineEdited(line);
         let complete = false;
         if (hasValue) {
           try {
             complete = payrollDecimal(line.quantity).gt(0) && payrollDecimal(line.unitValue).gt(0) &&
-              Boolean(line.account?.id && line.account?.label);
+              Boolean(line.alreadyPaid || (line.account?.id && line.account?.label));
             if (complete) payrollTotal([line]);
           } catch { complete = false; }
         }
         row.dataset.payrollCompletion = complete ? "complete" : started ? "pending" : "empty";
         lineStatus.hidden = !started;
-        lineStatus.textContent = complete ? "✓ Completa — será incluída na folha" : isZero
+        lineStatus.textContent = complete ? (line.alreadyPaid ? "✓ Já pago — será incluído no holerite" : "✓ Completa — será incluída na folha") : isZero
           ? "Valor zero: esta rubrica não será enviada."
           : !hasValue
           ? "Pendente: informe o valor unitário desta rubrica."
@@ -296,7 +309,7 @@ export function createSupplierPayrollView({
       row.append(
         field("Quantidade", quantity),
         field("Valor unitário (R$)", value),
-        accountField,
+        payment,
       );
       const attachments = element("div", "supplier-payroll-attachments");
       const fileList = element("ul", "supplier-payroll-file-list");
@@ -347,7 +360,7 @@ export function createSupplierPayrollView({
     return grid;
   }
   function renderSummary(container, draft) {
-    const hasTax = draft.lines.some(line => payrollTaxType(line.payrollType));
+    const hasTax = draft.lines.some(line => !line.alreadyPaid && payrollTaxType(line.payrollType));
     const detailsTable = (label, entries) => {
       const table = element("table", "supplier-payroll-summary-table");
       table.setAttribute("aria-label", label);
@@ -363,7 +376,7 @@ export function createSupplierPayrollView({
       return table;
     };
     const context = element("div", "supplier-payroll-summary-context");
-    if (draft.sheet && draft.lines.some(line => !payrollTaxType(line.payrollType))) context.append(detailsTable("Referência da folha", [
+    if (draft.sheet && draft.lines.some(line => !line.alreadyPaid && !payrollTaxType(line.payrollType))) context.append(detailsTable("Referência da folha", [
       ["Etapa", draft.stage.label],
       ["IDFOLHA", String(draft.sheet.id)],
       ["Referência", draft.sheet.label],
@@ -388,8 +401,9 @@ export function createSupplierPayrollView({
           ["Quantidade", String(line.quantity)],
           ["Valor unitário", money(line.unitValue)],
           ["Subtotal", money(payrollTotal([line]))],
-          ...(hasTax ? [['IDFOLHA', String((payrollTaxType(line.payrollType) ? draft.taxSheet : draft.sheet).id)]] : []),
-          ["Forma de pagamento", line.account.label],
+          ...(hasTax && !line.alreadyPaid ? [['IDFOLHA', String((payrollTaxType(line.payrollType) ? draft.taxSheet : draft.sheet).id)]] : []),
+          ["Forma de pagamento", line.alreadyPaid
+            ? ["Já pago", line.account?.label].filter(Boolean).join(" · ") : line.account.label],
           ["Comprovantes", receipts],
         ]),
       );
@@ -405,7 +419,7 @@ export function createSupplierPayrollView({
   }
 function lineEdited(line) {
     return line.unitValue.trim() !== "" || line.quantity.trim() !== "1" ||
-      Boolean(line.account || line.files.length);
+      Boolean(line.account || line.alreadyPaid || line.files.length);
   }
   function hasAmount(line) {
     if (!line.unitValue.trim()) return false;
@@ -421,8 +435,9 @@ function lineEdited(line) {
         throw new Error("Informe um valor positivo para enviar os comprovantes de " + label + ".");
     }
     const validated = validatePayrollDraft(draft);
-    if (validated.lines.every(line => payrollTaxType(line.payrollType))) validated.sheet = null;
-    if (!validated.lines.some(line => payrollTaxType(line.payrollType))) {
+    const pending = validated.lines.filter(line => !line.alreadyPaid);
+    if (pending.every(line => payrollTaxType(line.payrollType))) validated.sheet = null;
+    if (!pending.some(line => payrollTaxType(line.payrollType))) {
       validated.taxSheet = null;
       validated.taxCompetence = "";
     }
@@ -581,8 +596,10 @@ function lineEdited(line) {
       void loadTaxSheets();
     });
     function updateSheetFields() {
-      const taxActive = draft.lines.some(line => ["inss", "fgts"].includes(line.rubric) && hasAmount(line));
-      const normalActive = !taxActive || draft.lines.some(line => !["inss", "fgts"].includes(line.rubric) && hasAmount(line));
+      const active = draft.lines.filter(hasAmount);
+      const pending = active.filter(line => !line.alreadyPaid);
+      const taxActive = pending.some(line => ["inss", "fgts"].includes(line.rubric));
+      const normalActive = active.length === 0 || pending.some(line => !["inss", "fgts"].includes(line.rubric));
       sheet.select.closest(".supplier-payroll-field").hidden = !normalActive;
       const missingDefault = !locked && batchPeriod && !entry.overrides.has("sheet") && !draft.sheet;
       if (missingDefault) {
@@ -799,7 +816,7 @@ function lineEdited(line) {
         for (const [index, { entry, validated }] of queue.entries()) {
           try {
             entry.result = await data.post(validated, entry.progress, event =>
-              onProgress({ percent: (index + (event?.percent || 0) / 100) * 100 / queue.length }));
+              onProgress({ percent: (index + (event?.percent || 0) / 100) * 100 / queue.length }), { weekly: true });
             entry.selected = false;
             entry.failure = null;
           } catch (cause) {
@@ -850,9 +867,13 @@ function lineEdited(line) {
       if (entry.result) {
         const sheets = new Map([entry.result.sheet, entry.result.taxSheet]
           .filter(Boolean).map(sheet => [sheet.id, sheet]));
-        result.textContent = "Folha postada e vinculada. " +
-          [...sheets.values()].map(sheet => "IDFOLHA: " + sheet.id + " (" + sheet.label + ")").join(" · ") +
-          ". Lançamentos: " + entry.result.lines.map(line => line.id).join(", ") + ".";
+        const launches = entry.result.lines.map(line => line.id).filter(Boolean);
+        const references = [...sheets.values()].map(sheet => "IDFOLHA: " + sheet.id + " (" + sheet.label + ")");
+        result.textContent = [
+          ...(references.length ? ["Folha postada e vinculada", ...references] : []),
+          ...(launches.length ? ["Lançamentos: " + launches.join(", ")] : []),
+          ...(entry.result.holerite ? ["Holerite salvo no SharePoint"] : []),
+        ].join(" · ") + ".";
       }
       panel.append(editor, result, details);
       card.append(row, panel);
