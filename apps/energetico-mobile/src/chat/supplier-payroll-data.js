@@ -5,7 +5,7 @@ import {
   createSharePointAttachmentTransport,
   validateAttachment,
 } from "../../../../portal/data/attachments.js";
-import { payrollKey as key, validatePayrollDraft } from "./supplier-payroll.js";
+import { payrollKey as key, payrollReferenceMonth as monthKey, validatePayrollDraft } from "./supplier-payroll.js";
 import { payrollTaxType, payrollCompetenceMonth } from './payroll-tax-competence.js';
 import { ensurePayrollTaxLink, assertPayrollTaxStorage } from './payroll-tax-links.js';
 import { payrollLaunchReferenceColumn, ensurePayrollLaunchSchema, confirmPayrollLaunchReference, compatiblePayrollLaunchLink,
@@ -66,18 +66,6 @@ function column(columns, aliases, required = true) {
       `O campo ${aliases[0]} não foi identificado no SharePoint.`,
     );
   return found;
-}
-function monthKey(value) {
-  const source = String(value || "").trim();
-  let m = source.match(/^(\d{1,2})[/-](\d{4})$/);
-  if (m)
-    return Number(m[1]) >= 1 && Number(m[1]) <= 12
-      ? `${m[2]}-${m[1].padStart(2, "0")}`
-      : "";
-  m = source.match(/^(\d{4})[-/](\d{1,2})(?:[-/].*)?$/);
-  return m && Number(m[2]) >= 1 && Number(m[2]) <= 12
-    ? `${m[1]}-${m[2].padStart(2, "0")}`
-    : "";
 }
 function currentMonth(now) {
   const parts = new Intl.DateTimeFormat("en-CA", {
