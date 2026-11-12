@@ -35,18 +35,18 @@ export function chooseInternalGroup(groups, name = GROUP_NAME) {
     || groups.find(group => attr(group).name === name);
 }
 
-async function findLatestBuild(client) {
+async function findLatestBuild(client, appId) {
   // App Store Connect uses `version` for the numeric build number (for example,
   // 256), not for the marketing version (for example, 1.0). The app filter and
   // upload ordering are therefore the reliable selectors for the latest upload.
-  const builds = await list(client, `/v1/builds?filter[app]=${APP_ID}&sort=-uploadedDate`);
+  const builds = await list(client, `/v1/builds?filter[app]=${appId}&sort=-uploadedDate`);
   const build = chooseLatestBuild(builds);
   return build;
 }
 
-async function waitForComplete(client) {
+async function waitForComplete(client, appId) {
   for (let attempt = 1; attempt <= MAX_ATTEMPTS; attempt += 1) {
-    const build = await findLatestBuild(client);
+    const build = await findLatestBuild(client, appId);
     if (!build) {
       console.log(`Build ${BUILD_NUMBER || 'mais recente'} ainda não apareceu na Apple; tentativa ${attempt}/${MAX_ATTEMPTS}.`);
       if (attempt < MAX_ATTEMPTS) await sleep(POLL_MS);
@@ -91,11 +91,12 @@ async function buildHasGroup(client, build, group) {
   return false;
 }
 
-export async function attachLatestTestFlightBuild(client) {
-  const build = await waitForComplete(client);
-  const groups = await list(client, `/v1/betaGroups?filter[app]=${APP_ID}`);
-  const group = chooseInternalGroup(groups);
-  if (!group) throw new Error(`Grupo interno ${GROUP_NAME} não encontrado; nenhuma associação foi feita.`);
+export async function attachLatestTestFlightBuild(client, { appId = APP_ID, groupName = GROUP_NAME, requireInternal = false } = {}) {
+  const build = await waitForComplete(client, appId);
+  const groups = await list(client, `/v1/betaGroups?filter[app]=${appId}`);
+  const eligible = requireInternal ? groups.filter(group => attr(group).isInternalGroup === true) : groups;
+  const group = chooseInternalGroup(eligible, groupName);
+  if (!group) throw new Error(`Grupo interno ${groupName} não encontrado; nenhuma associação foi feita.`);
   if (attr(group).hasAccessToAllBuilds === true) {
     return { status: 'AUTO_INCLUDED', build: attr(build).version, buildId: build.id, group: attr(group).name };
   }

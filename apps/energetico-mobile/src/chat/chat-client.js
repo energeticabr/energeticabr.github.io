@@ -6,6 +6,7 @@ import { startDiaryProgress } from "./diary-attachment-progress.js";
 import { uploadWithProgress } from "./upload-transport.js";
 import { readDownloadBlob } from "../../../../portal/data/download-progress.js";
 import { beginLoadingTask } from "../ui/loading-task.js";
+import { NB_PORTAL_APP, NB_PORTAL_HEADER } from "../nb-participacoes.js";
 
 const TOKEN_SCOPES = Object.freeze(["User.Read"]);
 const EMPTY_EPI_REPLY_IDS = new Set([
@@ -108,6 +109,7 @@ async function parsePortalResponse(response, failurePrefix, options = {}) {
 export function createChatClient({
   apiBaseUrl,
   apiPrefix = "/api",
+  portalApp,
   tokenProvider,
   fetchImpl = globalThis.fetch,
   xhrFactory = typeof globalThis.XMLHttpRequest === 'function' ? () => new globalThis.XMLHttpRequest() : null,
@@ -120,6 +122,9 @@ export function createChatClient({
 
   const baseUrl = parseBaseUrl(apiBaseUrl);
   if (!["/api", "/api/demo"].includes(apiPrefix)) throw new TypeError("Prefixo de API inválido.");
+  if (portalApp && (portalApp !== NB_PORTAL_APP || apiPrefix !== "/api")) {
+    throw new TypeError("Aplicativo do portal inválido.");
+  }
   const chatUrl = new URL(`${apiPrefix}/portal-chat`, baseUrl);
   const uploadUrl = new URL(`${apiPrefix}/portal-upload`, baseUrl);
   const transcriptionUrl = new URL(`${apiPrefix}/portal-transcribe`, baseUrl);
@@ -174,10 +179,14 @@ export function createChatClient({
   const captureSignatureEvidence = options => signatureEvidence("capture", options);
 
   async function request(url, options, read, readOnly = false, { retryTransient = false, transport = fetchImpl } = {}) {
+    const scoped = portalApp && [chatUrl.pathname, uploadUrl.pathname, transcriptionUrl.pathname].includes(new URL(url).pathname);
+    const requestOptions = scoped
+      ? { ...options, headers: { ...options.headers, [NB_PORTAL_HEADER]: portalApp }, redirect: "error" }
+      : apiPrefix === "/api/demo" ? { ...options, redirect: "error" } : options;
     for (let attempt = 0; ; attempt++) {
       checkRequestCancellation(options.signal);
       try {
-        const result = await read(await transport(url, apiPrefix === "/api/demo" ? { ...options, redirect: "error" } : options));
+        const result = await read(await transport(url, requestOptions));
         checkRequestCancellation(options.signal);
         if (apiPrefix === "/api/demo" && result?.status === "processed") {
           // Server preview URLs must not become direct <img> network requests.

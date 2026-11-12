@@ -161,6 +161,12 @@ final class ShareViewController: UIViewController {
         }
 
         var uploaded = 0
+        do {
+            try await SharedUploadRequest.checkPortalAppSupport()
+        } catch {
+            await finish(message: "Os arquivos foram recebidos. Abra o app para concluir o envio.")
+            return
+        }
         for item in uploadItems {
             do {
                 guard let store = inboxStore else { throw SharedInboxStoreError.missingItem }
