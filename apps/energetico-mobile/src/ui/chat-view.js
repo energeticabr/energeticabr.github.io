@@ -1750,8 +1750,10 @@ function renderPoll(message, busy, draft = "", databaseFilterMessage = null, act
   const galleryOptions = isHrGalleryMenu ? hrPayrollGalleryOptions(options) : [];
   const hrReport = humanResourcesReportInsertion(message, options);
   if (hrReport) options.splice(hrReport.index, 0, hrReport.option);
-  if (isHumanResourcesMenu(message) && !options.some(option => draftReplyId(option) === 'action_hr_swile')) {
-    options.push({ id: 'action_hr_swile', reply: 'action_hr_swile', label: 'Swile' });
+  const swileOption = isHrGalleryMenu ? { id: 'action_hr_swile', reply: 'action_hr_swile', label: 'Swile' } : null;
+  if (swileOption) {
+    const existing = options.findIndex(option => draftReplyId(option) === swileOption.id);
+    if (existing >= 0) options.splice(existing, 1);
   }
   if (currentPoll && isSupplierPayrollMenu(message, activeFlow)
     && !options.some(option => draftReplyId(option) === PAYROLL_LAUNCH_REPLY_ID)) {
@@ -1914,7 +1916,7 @@ function renderPoll(message, busy, draft = "", databaseFilterMessage = null, act
   }).join("") : "";
   const choicesMarkup = choices
     ? isHrGalleryMenu
-      ? `<div class="chat-choice-columns chat-choice-columns--hr-galleries">${hrChoices}</div>`
+      ? `<div class="chat-choice-columns chat-choice-columns--hr-galleries">${hrChoices}</div><div class="chat-choice-list swile-menu-entry">${pollButton(swileOption, busy)}</div>`
       : isLaunchMenu
       ? suppliesMenuChoices(regularOptions, { orders: ordersGallery, launches: galleryOption, notasSefaz: notasSefazGallery, payments: paymentProgrammingGallery, provisionDescription: provisionDescriptionGallery, recurring: recurringExpensesGallery, dda: ddaGallery, quotes: quoteGallery, assets: assetGallery, registrations: registrationGallery }, busy)
       : pairedMenu

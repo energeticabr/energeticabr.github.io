@@ -10,12 +10,12 @@ Solicite as credenciais corporativas de homologação e produção pelo canal of
 {
   "environment": "staging",
   "username": "<credencial corporativa>",
-  "password": "<segredo corporativo>",
+  "password": null,
   "allowedEmails": ["<usuário Microsoft autorizado>"]
 }
 ```
 
-Instale as credenciais de produção e altere `environment` para `production` após validar a homologação. A configuração é lida no servidor, com um diário próprio por ambiente. Mantenha os segredos fora do repositório, do navegador e das ferramentas de build.
+Substitua `null` pelo segredo fornecido pela Swile ao criar o arquivo privado. Instale as credenciais de produção e altere `environment` para `production` após validar a homologação. A configuração é lida no servidor, com um diário próprio por ambiente. Mantenha os segredos fora do repositório, do navegador e das ferramentas de build.
 
 O instalador usa o lock de implantação existente, valida o hash do bridge, faz backup e restaura a versão anterior se a checagem de saúde falhar. Execute primeiro `sudo python3 deploy.py --expected-bridge HASH` e, após o check, repita com `--apply`. O serviço cria o diário em `/var/lib/energetica-whatsapp/swile` com acesso restrito. Atualizar o status de um envio incerto tenta localizar a referência externa na Swile. Confira na Dash RH quando a integração ainda não conseguir localizar o pedido.
 
