@@ -10,9 +10,9 @@ import { createServer } from 'vite';
 
 const appRoot = resolve(fileURLToPath(new URL('..', import.meta.url)));
 const browser = [process.env.CHROME_BIN, 'C:\\Program Files\\Google\\Chrome\\Application\\chrome.exe',
-  'C:\\Program Files (x86)\\Microsoft\\Edge\\Application\\msedge.exe'].find(path => path && existsSync(path));
+  'C:\\Program Files (x86)\\Microsoft\\Edge\\Application\\msedge.exe', '/usr/bin/google-chrome'].find(path => path && existsSync(path));
 
-test('navigation pairs stay left and payroll footer spans both sides at mobile and desktop widths', { timeout: 90_000 }, async t => {
+test('navigation pairs stay left and the batch post action follows payroll totals at mobile and desktop widths', { timeout: 90_000 }, async t => {
   if (!browser) return t.skip('Chrome/Edge indisponível');
   const server = await createServer({ root: appRoot, server: { host: '127.0.0.1', port: 0,
     fs: { allow: [resolve(appRoot, '../..')] } }, logLevel: 'silent' });
@@ -71,13 +71,19 @@ test('navigation pairs stay left and payroll footer spans both sides at mobile a
           const buttons=[...nav.children];
           const footer=document.querySelector('.supplier-payroll-footer');
           const identity=document.querySelector('.supplier-payroll-identity-table');
+          const stage=document.querySelector('[name=stage]');
+          const post=document.querySelector('[data-payroll-post]');
+          const batchTotal=document.querySelector('[data-payroll-batch-total]');
           return {nav:box(nav),header:box(header),title:box(title),buttons:buttons.map(box),
             icons:buttons.map(b=>getComputedStyle(b,'::before').content),
             color:buttons.map(b=>getComputedStyle(b).backgroundColor),
             radius:buttons.map(b=>getComputedStyle(b).borderRadius),
             identity:identity ? {box:box(identity),rows:[...identity.rows].map(row=>[...row.cells].map(cell=>cell.textContent)),
               overflow:identity.scrollWidth > identity.clientWidth+1 || [...identity.querySelectorAll('th,td')].some(cell=>cell.scrollWidth > cell.clientWidth+1)}:null,
-            footer:footer && !footer.hidden ? {box:box(footer),back:box(footer.firstElementChild),next:box(footer.lastElementChild)}:null};
+            footerVisible:footer && !footer.hidden,
+            inlineStage:Boolean(stage?.closest('[data-payroll-supplier]')),
+            post:post ? box(post):null,
+            batchTotal:batchTotal ? box(batchTotal):null};
         })()`);
         assert.ok(layout.nav.left >= layout.header.left && layout.nav.right <= layout.title.left, screen+' navigation/title overlap: '+JSON.stringify(layout));
         assert.ok(layout.buttons[0].right <= layout.buttons[1].left && layout.buttons[0].top === layout.buttons[1].top,screen+' not side by side');
@@ -93,7 +99,8 @@ test('navigation pairs stay left and payroll footer spans both sides at mobile a
           ]);
         }
         if(screen==='payroll-stage') {
-          assert.equal(layout.footer, null, 'seleção de etapa permanece sem retorno inferior duplicado');
+          assert.equal(layout.inlineStage, true, 'etapa pertence ao painel do fornecedor');
+          assert.equal(layout.footerVisible, false, 'seleção de etapa permanece sem retorno inferior duplicado');
           if(width===390 && process.env.PAYROLL_TABLE_SCREENSHOT) {
             const shot=await send('Page.captureScreenshot',{format:'png',captureBeyondViewport:false},sessionId);
             writeFileSync(process.env.PAYROLL_TABLE_SCREENSHOT,Buffer.from(shot.data,'base64'));
@@ -133,9 +140,9 @@ test('navigation pairs stay left and payroll footer spans both sides at mobile a
           }
         }
         if(screen==='payroll') {
-          assert.ok(layout.footer.back.right <= layout.footer.next.left);
-          assert.ok(layout.footer.back.left < width/2 && layout.footer.next.right > width/2);
-          assert.ok(layout.footer.next.right-layout.footer.back.left > layout.footer.box.width*0.8,'footer must span left/right');
+          assert.equal(layout.footerVisible, false);
+          assert.ok(layout.post.top >= layout.batchTotal.bottom && layout.post.height >= 44);
+          assert.ok(layout.post.left >= 0 && layout.post.right <= width);
           if(width===390 && process.env.NAV_SCREENSHOT) {
             const shot=await send('Page.captureScreenshot',{format:'png',captureBeyondViewport:false},sessionId);
             writeFileSync(process.env.NAV_SCREENSHOT,Buffer.from(shot.data,'base64'));
