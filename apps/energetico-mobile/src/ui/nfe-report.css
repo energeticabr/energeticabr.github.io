@@ -221,12 +221,22 @@
   gap: 8px;
 }
 .nfe-report .nfe-picker-header h2 { margin: 0; overflow-wrap: anywhere; }
-.nfe-report .dda-provision-dialog .nfe-propose-launch {
+.nfe-link-propose {
+  max-width: min(86px, 100%);
+  min-height: 44px;
+  padding-inline: 2px;
+  border-left-width: 1px;
+  font-size: 11px;
+  font-weight: 700;
+  line-height: 1.15;
+  cursor: pointer;
+}
+.nfe-link-propose, .nfe-report .dda-provision-dialog .nfe-propose-launch {
   border-color: #07566b;
   background: #07566b;
   color: #fff;
-  white-space: nowrap;
 }
+.nfe-report .dda-provision-dialog .nfe-propose-launch { white-space: nowrap; }
 .nfe-proposal-overlay {
   --nfe-proposal-safe-top: max(10px, calc(env(safe-area-inset-top, 0px) + 8px));
   --nfe-proposal-safe-right: max(10px, calc(env(safe-area-inset-right, 0px) + 8px));

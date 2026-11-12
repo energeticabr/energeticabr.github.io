@@ -166,6 +166,7 @@ export function createNfeReportView({ document:doc = globalThis.document, data, 
   const proposal = data.proposal && createNfeProposalView({
     document:doc, host:root, service:data.proposal,
     onPosted(receipt) { showLinked(receipt); picker?.close(); },
+    onClose:reloadFiscalRows,
   });
   const onPropose = proposal && ((row, trigger) => void proposal.show(row, trigger));
   const picker = orderLink && createReportLinkPicker({
@@ -187,7 +188,11 @@ export function createNfeReportView({ document:doc = globalThis.document, data, 
     const updated = { ...previous, orderId };
     rows = rows.map(row => row === previous ? updated : row);
     const cell = list.querySelector(`[data-invoice-id="${invoiceId}"] .nfe-link`);
-    if (cell) renderOrderLink(cell, updated, true);
+    if (cell) {
+      const hadFocus = cell.contains(doc.activeElement);
+      renderOrderLink(cell, updated, true);
+      if (hadFocus) cell.querySelector('.nfe-link-edit').focus({ preventScroll:true });
+    }
   }
 
   function renderOrderLink(cell, row, interactive) {
@@ -199,9 +204,9 @@ export function createNfeReportView({ document:doc = globalThis.document, data, 
 
     const controls = make('div', 'nfe-link-controls');
     if (row.orderId) controls.append(make('span', 'nfe-link-cluster nfe-link-linked', `ID ${row.orderId}`));
-    const pencil = button('', () => void picker?.show(row, pencil, {
-      onPropose:row.type === 'CT-e' ? undefined : onPropose,
-    }),
+    const canLink = Boolean(picker && nfeOrderId(row.id));
+    const propose = canLink && row.type !== 'CT-e' && !row.orderId ? onPropose : undefined;
+    const pencil = button('', () => void picker?.show(row, pencil, { onPropose:propose }),
       row.orderId ? 'nfe-link-cluster nfe-link-edit' : 'nfe-link-cluster nfe-link-pencil');
     pencil.dataset.invoiceLink = row.id;
     pencil.dataset.reportScreenOnly = '';
@@ -209,8 +214,14 @@ export function createNfeReportView({ document:doc = globalThis.document, data, 
     pencil.title = row.orderId ? `Editar pedido vinculado à nota ${row.number || row.id}`
       : `Vincular nota ${row.number || row.id} a um pedido`;
     pencil.setAttribute('aria-label', pencil.title);
-    pencil.disabled = !picker || !nfeOrderId(row.id);
+    pencil.disabled = !canLink;
     controls.append(pencil);
+    if (propose) {
+      const shortcut = button('Propor lançamentos', () => propose(row, shortcut), 'nfe-link-cluster nfe-link-propose');
+      shortcut.setAttribute('aria-label', `Propor lançamentos para a nota ${row.number || row.id}`);
+      shortcut.dataset.reportScreenOnly = '';
+      controls.append(shortcut);
+    }
     cell.replaceChildren(controls);
   }
 
@@ -410,7 +421,7 @@ export function createNfeReportView({ document:doc = globalThis.document, data, 
   }
 
   async function capturePrint(options) {
-    if (root.hidden || !rows || picker?.isOpen) throw new Error('Aguarde a consulta das notas fiscais.');
+    if (root.hidden || !rows || picker?.isOpen || proposal?.isOpen) throw new Error('Aguarde a consulta das notas fiscais.');
     const { signal } = pageRequest;
     await pageFacts;
     signal.throwIfAborted();
@@ -490,7 +501,7 @@ export function createNfeReportView({ document:doc = globalThis.document, data, 
   }
 
   async function manualRefresh() {
-    if (root.hidden || refresh.disabled || pdfRequest || picker?.isOpen) return;
+    if (root.hidden || refresh.disabled || pdfRequest || picker?.isOpen || proposal?.isOpen) return;
     if (!syncMonitor) return load(true);
     fiscalStarting = true;
     syncRefreshButton();
@@ -507,7 +518,7 @@ export function createNfeReportView({ document:doc = globalThis.document, data, 
   }
 
   function reloadFiscalRows() {
-    if (fiscalReloadPending && !root.hidden && !pdfRequest && !picker?.isOpen) void load(true);
+    if (fiscalReloadPending && !root.hidden && !pdfRequest && !picker?.isOpen && !proposal?.isOpen) void load(true);
   }
 
   async function load(refreshSource = false) {

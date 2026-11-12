@@ -246,6 +246,7 @@ test('CT-e can link to an existing order and change that link', async t => {
   const tick = () => new Promise(resolve => setImmediate(resolve));
 
   for (const [orderId, previous] of [['37', ''], ['38', '37']]) {
+    assert.equal(row().querySelector('.nfe-link-propose'), null);
     const pencil = row().querySelector('.nfe-link button');
     assert.ok(pencil && !pencil.disabled, 'CT-e deve ter um lápis clicável');
     pencil.click();
@@ -589,10 +590,12 @@ test('NFE opens PEDIDOS with ranked suggestions, preserves the report and displa
   assert.equal(pencil(), null);
 });
 
-test('NFE pencil opens the proposal beside order choices and submits the edited catalog draft', async t => {
+test('NFE opens the same proposal from the pencil and directly below it, and submits the edited draft', async t => {
   const dom = new JSDOM('<main id="app"></main>');
   const { document, Event } = dom.window;
   const writes = [];
+  const proposalLoads = [];
+  let orderLoads = 0;
   const fiscal = { issueDate:'2026-11-06', dueDate:'2026-11-15', total:'1500.00', lines:[
     { number:'1', description:'CIMENTO EXEMPLO', unit:'SC', quantity:'3', unitPrice:'500', adjustment:'0', discount:'0' },
   ] };
@@ -610,9 +613,12 @@ test('NFE pencil opens the proposal beside order choices and submits the edited 
   const report = createNfeReportView({ document, data:{
     loadSnapshot:async () => ({ rows:[invoice] }),
     downloadDocument:async () => new Blob([issuerXml]),
-    orderLink:{ loadOptions:async () => [], async save() { throw new Error('unexpected'); } },
+    orderLink:{ async loadOptions() { orderLoads++; return []; }, async save() { throw new Error('unexpected'); } },
     proposal:{
-      load:async () => ({ fiscal,catalog,draft,reserved:false }),
+      async load(row) {
+        proposalLoads.push(row.id);
+        return { fiscal,catalog,draft,reserved:false };
+      },
       async submit(row, edited) {
         writes.push([row.id, structuredClone(edited)]);
         return { invoiceId:row.id, orderId:'48', launchIds:['61'] };
@@ -623,10 +629,34 @@ test('NFE pencil opens the proposal beside order choices and submits the edited 
   await report.open();
   const tick = () => new Promise(resolve => setImmediate(resolve));
   const root = report.element;
-  root.querySelector('.nfe-link-pencil').click();
-  root.querySelector('[data-nfe-propose-launch]').click();
+  const pencil = root.querySelector('.nfe-link-pencil');
+  const direct = root.querySelector('.nfe-link-propose');
+  assert.ok(direct, 'proposal shortcut is visible on the invoice row');
+  assert.equal(pencil.nextElementSibling, direct);
+  direct.click();
+  await tick();
+  assert.equal(root.querySelector('.dda-provision-dialog'), null);
+  assert.equal(orderLoads, 0);
+  const proposalLabel = root.querySelector('.nfe-proposal-dialog').getAttribute('aria-label');
+  root.querySelector('.nfe-proposal-header button').click();
+  assert.equal(document.activeElement, direct);
+
+  pencil.click();
+  const picker = root.querySelector('.dda-provision-dialog');
+  const fromPicker = picker.querySelector('[data-nfe-propose-launch]');
+  fromPicker.click();
+  await tick();
+  assert.equal(root.querySelector('.nfe-proposal-dialog').getAttribute('aria-label'), proposalLabel);
+  root.querySelector('.nfe-proposal-header button').click();
+  assert.equal(document.activeElement, fromPicker);
+  picker.querySelector('[data-gallery-editor-back]').click();
+  assert.equal(document.activeElement, pencil);
+  assert.equal(orderLoads, 1);
+
+  direct.click();
   await tick();
   assert.ok(root.querySelector('.nfe-proposal-dialog'));
+  assert.deepEqual(proposalLoads, ['10', '10', '10']);
   assert.equal(writes.length, 0);
   const select = root.querySelector('[name="supplierId"]');
   assert.equal(select.hidden, true);
@@ -660,4 +690,6 @@ test('NFE pencil opens the proposal beside order choices and submits the edited 
   assert.deepEqual([writes[0][1].supplierId,writes[0][1].branchId,writes[0][1].lines[0].stageId,writes[0][1].lines[0].discount],
     ['2','11','31','5,00']);
   assert.equal(root.querySelector('.nfe-link-linked').textContent, 'ID 48');
+  assert.equal(root.querySelector('.nfe-link-propose'), null);
+  assert.equal(document.activeElement, root.querySelector('.nfe-link-edit'));
 });
