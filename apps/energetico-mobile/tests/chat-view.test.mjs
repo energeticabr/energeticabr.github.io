@@ -298,10 +298,9 @@ test("atalho do mascote fica fora do cartão e abre provisões sem selecionar Pe
   const validationShortcut=root.querySelector('[data-action="open-order-validation-report"]');
   assert.ok(validationShortcut,'validação de notas deve ser o quinto mascote');
   assert.equal(managementShortcut.nextElementSibling, validationShortcut);
-  const quotationShortcut=root.querySelector('[data-action="open-quotation-report"]');
-  assert.equal(validationShortcut.nextElementSibling, quotationShortcut);
   const depreciationShortcut=root.querySelector('[data-action="open-depreciation-report"]');
-  assert.equal(quotationShortcut.nextElementSibling, depreciationShortcut);
+  assert.equal(validationShortcut.nextElementSibling, depreciationShortcut);
+  assert.equal(root.querySelector('[data-action="open-quotation-report"]'), null);
   const documentControlShortcut=root.querySelector('[data-action="open-document-control-report"]');
   assert.equal(depreciationShortcut.nextElementSibling, documentControlShortcut);
   const taskAssociationShortcut=root.querySelector('[data-action="open-task-association-report"]');
@@ -337,7 +336,7 @@ const returnedHomeOptions = [
 const returnedHomeActions = [
   'open-pending-provisions', 'open-commercial-receipts', 'open-commercial-milestones', 'open-commercial-documents', 'open-sac-pathologies',
   'open-sicoob-transaction-report', 'open-nfe-report', 'open-dda-report', 'open-provision-report', 'open-payment-ledger', 'open-management-report',
-  'open-order-validation-report', 'open-quotation-report', 'open-depreciation-report', 'open-document-control-report',
+  'open-order-validation-report', 'open-depreciation-report', 'open-document-control-report',
   'open-task-association-report', 'open-rhid-mascot-report', 'open-cargos-table', 'open-attendance-summary',
   'open-stage-progress', 'open-supplier-payroll-report', 'open-trancid-report', 'open-contractor-control-report',
   'open-pending-supplier-payments-report', 'open-pending-work-diaries-report',

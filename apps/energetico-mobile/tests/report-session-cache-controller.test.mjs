@@ -26,7 +26,6 @@ const reports = [
   ['open-commercial-milestones', 'commercialMilestonesViewFactory', 'commercialMilestonesDataFactory', 'loadSnapshot'],
   ['open-commercial-documents', 'commercialDocumentsViewFactory', 'commercialDocumentsDataFactory', 'loadSnapshot'],
   ['open-sac-pathologies', 'sacPathologiesViewFactory', 'sacPathologiesDataFactory', 'loadSnapshot'],
-  ['open-quotation-report', 'quotationReportViewFactory', 'quotationReportDataFactory', 'loadSnapshot'],
   ['open-depreciation-report', 'depreciationReportViewFactory', 'depreciationReportDataFactory', 'loadSnapshot'],
   ['open-document-control-report', 'documentControlReportViewFactory', 'documentControlReportDataFactory', 'loadSnapshot'],
   ['open-task-association-report', 'taskAssociationReportViewFactory', 'taskAssociationReportDataFactory', 'loadSnapshot'],
@@ -75,18 +74,17 @@ function harness(t, overrides = {}) {
 for (const [action, , dataFactory, method] of reports) {
   test(`${action} reuses its complete snapshot after panel/source recreation`, async t => {
     let reads = 0;
+    const otherAction = action === 'open-depreciation-report' ? 'open-document-control-report' : 'open-depreciation-report';
+    const [, , otherDataFactory] = reports.find(([candidate]) => candidate === otherAction);
     const h = harness(t, {
+      [otherDataFactory]: async () => ({ loadSnapshot: async () => ({ rows: [] }) }),
       [dataFactory]: async () => Object.freeze({ [method]: async () => ({ rows: [{ id: '42', total: ++reads }] }) }),
-      // Use a disjoint report to exercise the real controller disposal path.
-      quotationReportDataFactory: async () => ({ loadSnapshot: async () => ({ rows: [] }) }),
-      ...(action === 'open-quotation-report' ? { quotationReportDataFactory: async () => ({ loadSnapshot: async () => ({ rows: [{ id: '42', total: ++reads }] }) }),
-        documentControlReportDataFactory: async () => ({ loadSnapshot: async () => ({ rows: [] }) }) } : {}),
     });
     await h.controller.start();
     assert.equal(await h.view.emit(action), true);
     assert.deepEqual(h.panels.at(-1).latest.rows, [{ id: '42', total: 1 }]);
     const first = h.panels.at(-1);
-    assert.equal(await h.view.emit(action === 'open-quotation-report' ? 'open-document-control-report' : 'open-quotation-report'), true);
+    assert.equal(await h.view.emit(otherAction), true);
     assert.equal(await h.view.emit(action), true);
     assert.notEqual(h.panels.at(-1), first);
     assert.deepEqual(h.panels.at(-1).latest.rows, [{ id: '42', total: 1 }]);
@@ -147,8 +145,8 @@ test('payroll gallery sync discards the supplier payroll report source and snaps
 
 test('refresh capture invalidates before the view handler, including an icon click', async t => {
   let reads = 0;
-  const h = harness(t, { quotationReportDataFactory: async () => ({ loadSnapshot: async () => ({ rows: [{ id: ++reads }] }) }) });
-  await h.controller.start(); await h.view.emit('open-quotation-report');
+  const h = harness(t, { depreciationReportDataFactory: async () => ({ loadSnapshot: async () => ({ rows: [{ id: ++reads }] }) }) });
+  await h.controller.start(); await h.view.emit('open-depreciation-report');
   const panel = h.panels[0];
   await panel.open(); assert.equal(reads, 1);
   panel.refresh.querySelector('svg').dispatchEvent(new panel.element.ownerDocument.defaultView.MouseEvent('click', { bubbles: true })); await panel.refreshPromise;
@@ -158,8 +156,8 @@ test('refresh capture invalidates before the view handler, including an icon cli
 
 test('parameter keys separate reads but ignore signals and object property order', async t => {
   let reads = 0;
-  const h = harness(t, { quotationReportDataFactory: async () => ({ loadSnapshot: async () => ({ rows: [{ id: ++reads }] }) }) });
-  await h.controller.start(); await h.view.emit('open-quotation-report');
+  const h = harness(t, { depreciationReportDataFactory: async () => ({ loadSnapshot: async () => ({ rows: [{ id: ++reads }] }) }) });
+  await h.controller.start(); await h.view.emit('open-depreciation-report');
   const { data } = h.panels[0];
   assert.equal((await data.loadSnapshot({ filters: { start: 'a', end: 'b' }, signal: new AbortController().signal })).rows[0].id, 2);
   assert.equal((await data.loadSnapshot({ signal: new AbortController().signal, filters: { end: 'b', start: 'a' } })).rows[0].id, 2);
@@ -170,12 +168,12 @@ test('parameter keys separate reads but ignore signals and object property order
 test('failed, aborted and superseded completions cannot fill or overwrite the cache', async t => {
   let mode = 'fail', reads = 0;
   const slow = deferred();
-  const h = harness(t, { quotationReportDataFactory: async () => ({ async loadSnapshot() {
+  const h = harness(t, { depreciationReportDataFactory: async () => ({ async loadSnapshot() {
     reads++; if (mode === 'fail') throw new Error('unavailable');
     if (mode === 'slow') return slow.promise;
     return { rows: [{ id: 'current' }] };
   } }) });
-  await h.controller.start(); assert.equal(await h.view.emit('open-quotation-report'), false);
+  await h.controller.start(); assert.equal(await h.view.emit('open-depreciation-report'), false);
   mode = 'slow'; const data = h.panels[0].data;
   const old = data.loadSnapshot(); const rejection = assert.rejects(old, { name: 'AbortError' });
   await tick(); mode = 'ok';
@@ -187,18 +185,18 @@ test('failed, aborted and superseded completions cannot fill or overwrite the ca
 
 test('logout and a new account reset cached snapshots and reject previous source handles', async t => {
   let reads = 0;
-  const h = harness(t, { quotationReportDataFactory: async () => ({ loadSnapshot: async () => ({ rows: [{ id: ++reads }] }) }) });
-  await h.controller.start(); await h.view.emit('open-quotation-report'); const old = h.panels[0].data;
+  const h = harness(t, { depreciationReportDataFactory: async () => ({ loadSnapshot: async () => ({ rows: [{ id: ++reads }] }) }) });
+  await h.controller.start(); await h.view.emit('open-depreciation-report'); const old = h.panels[0].data;
   await h.view.emit('sign-out'); h.setAccount({ homeAccountId: 'second-user' }); await h.view.emit('sign-in');
   await assert.rejects(old.loadSnapshot(), { name: 'AbortError' });
-  await h.view.emit('open-quotation-report'); assert.deepEqual(h.panels.at(-1).latest.rows, [{ id: 2 }]);
+  await h.view.emit('open-depreciation-report'); assert.deepEqual(h.panels.at(-1).latest.rows, [{ id: 2 }]);
   h.controller.stop(); await assert.rejects(h.panels.at(-1).data.loadSnapshot(), { name: 'AbortError' });
 });
 
 test('a changed auth account rejects a snapshot hit before network work', async t => {
   let reads = 0;
-  const h = harness(t, { quotationReportDataFactory: async () => ({ loadSnapshot: async () => ({ rows: [{ id: ++reads }] }) }) });
-  await h.controller.start(); await h.view.emit('open-quotation-report');
+  const h = harness(t, { depreciationReportDataFactory: async () => ({ loadSnapshot: async () => ({ rows: [{ id: ++reads }] }) }) });
+  await h.controller.start(); await h.view.emit('open-depreciation-report');
   h.setAccount({ homeAccountId: 'other-user' });
   await assert.rejects(h.panels[0].data.loadSnapshot(), { name: 'AbortError' });
   assert.equal(reads, 1);
@@ -210,8 +208,8 @@ test('real Graph read batches retain snapshots; writes and uncertain writes inva
     if (fail) throw new Error('lost response');
     return { ok: true, status: 200, json: async () => ({ responses: [] }) };
   } });
-  const h = harness(t, { quotationReportDataFactory: async () => ({ loadSnapshot: async () => ({ rows: [{ id: ++reads }] }) }) });
-  await h.controller.start(); await h.view.emit('open-quotation-report'); const panel = h.panels[0];
+  const h = harness(t, { depreciationReportDataFactory: async () => ({ loadSnapshot: async () => ({ rows: [{ id: ++reads }] }) }) });
+  await h.controller.start(); await h.view.emit('open-depreciation-report'); const panel = h.panels[0];
   await graph.request('/$batch', { method: 'POST', body: { requests: [{ id: '1', method: 'GET', url: '/sites/site/lists' }] } });
   await panel.open(); assert.equal(reads, 1);
   await graph.request('/$batch', { method: 'POST', body: JSON.stringify({ requests: [{ id: '2', method: 'PATCH', url: '/sites/site/lists/list/items/1/fields', body: { Title: 'new' } }] }) });
@@ -224,14 +222,14 @@ test('real Graph read batches retain snapshots; writes and uncertain writes inva
 test('injected gallery writes invalidate other report snapshots even when a partial write throws', async t => {
   let reads = 0, gallery;
   const h = harness(t, {
-    quotationReportDataFactory: async () => ({ loadSnapshot: async () => ({ rows: [{ id: ++reads }] }) }),
+    depreciationReportDataFactory: async () => ({ loadSnapshot: async () => ({ rows: [{ id: ++reads }] }) }),
     paymentProgrammingGalleryDataFactory: async () => ({ loadSnapshot: async () => ({}), async saveEditor() { throw new Error('partial write'); } }),
     paymentProgrammingGalleryFactory: async options => { gallery = options; return { open() {}, destroy() {} }; },
   });
-  await h.controller.start(); await h.view.emit('open-quotation-report');
+  await h.controller.start(); await h.view.emit('open-depreciation-report');
   assert.equal(await h.view.emit('select-reply', { replyId: 'action_payment_programming_gallery' }), true);
   await assert.rejects(gallery.data.saveEditor(), /partial write/);
-  await h.view.emit('open-quotation-report'); assert.deepEqual(h.panels.at(-1).latest.rows, [{ id: 2 }]);
+  await h.view.emit('open-depreciation-report'); assert.deepEqual(h.panels.at(-1).latest.rows, [{ id: 2 }]);
 });
 
 test('payroll priming retries are shared by all surviving detail readers', async t => {
@@ -284,11 +282,11 @@ test('real supplier payroll source retains complete payment state for unseen exp
   };
   const h = harness(t, {
     supplierPayrollReportDataFactory: async () => createSupplierPayrollReportData({ repository }),
-    quotationReportDataFactory: async () => ({ loadSnapshot: async () => ({ rows: [] }) }),
+    depreciationReportDataFactory: async () => ({ loadSnapshot: async () => ({ rows: [] }) }),
   });
   await h.controller.start(); await h.view.emit('open-supplier-payroll-report');
   assert.equal((await h.panels.at(-1).data.loadPaymentsForPayrollIds(['2']))[0].totalCents, 2000);
-  await h.view.emit('open-quotation-report'); await h.view.emit('open-supplier-payroll-report');
+  await h.view.emit('open-depreciation-report'); await h.view.emit('open-supplier-payroll-report');
   assert.equal((await h.panels.at(-1).data.loadPaymentsForPayrollIds(['3']))[0].totalCents, 2000);
   assert.equal(scans.length, 3, 'the three complete lists survive panel recreation');
   assert.deepEqual(gets, [['LANCAMENTOS', '72'], ['LANCAMENTOS', '73']]);
@@ -313,9 +311,9 @@ test('real supplier payroll source retains complete payment state for unseen exp
 for (const reason of ['refresh', 'write', 'logout']) {
   test(`a slow completion after ${reason} cannot populate the new cache generation`, async t => {
     const slow = deferred(); let reads = 0;
-    const h = harness(t, { quotationReportDataFactory: async () => ({ loadSnapshot: async () => ++reads === 1 ? slow.promise : { rows: [{ id: 'new' }] } }) });
+    const h = harness(t, { depreciationReportDataFactory: async () => ({ loadSnapshot: async () => ++reads === 1 ? slow.promise : { rows: [{ id: 'new' }] } }) });
     await h.controller.start();
-    const opening = h.view.emit('open-quotation-report'); await tick();
+    const opening = h.view.emit('open-depreciation-report'); await tick();
     if (reason === 'refresh') {
       h.panels[0].refresh.click(); await h.panels[0].refreshPromise;
     } else if (reason === 'write') {
@@ -325,7 +323,7 @@ for (const reason of ['refresh', 'write', 'logout']) {
       await h.view.emit('sign-out'); await h.view.emit('sign-in');
     }
     slow.resolve({ rows: [{ id: 'old' }] }); assert.equal(await opening, false);
-    assert.equal(await h.view.emit('open-quotation-report'), true);
+    assert.equal(await h.view.emit('open-depreciation-report'), true);
     assert.deepEqual(h.panels.at(-1).latest.rows, [{ id: 'new' }]);
     assert.equal(reads, 2);
   });
@@ -354,13 +352,13 @@ test('real controller, CARGOS source, repository and Graph reuse both pages afte
     },
   });
   const h = harness(t, { cargosDataFactory: sourceFactory,
-    quotationReportDataFactory: async () => ({ loadSnapshot: async () => ({ rows: [] }) }) });
+    depreciationReportDataFactory: async () => ({ loadSnapshot: async () => ({ rows: [] }) }) });
   await h.controller.start(); assert.equal(await h.view.emit('open-cargos-table'), true);
   const first = h.panels.at(-1).latest;
   assert.equal(first.rows.find(row => row.cargo === 'PEDREIRO I').total, 1060);
   assert.equal(requests.filter(request => new URL(request.url).pathname.endsWith('/items')).length, 2);
   const initialReads = requests.length;
-  await h.view.emit('open-quotation-report'); await h.view.emit('open-cargos-table');
+  await h.view.emit('open-depreciation-report'); await h.view.emit('open-cargos-table');
   assert.deepEqual(h.panels.at(-1).latest, first); assert.equal(requests.length, initialReads);
   salary = 2000;
   h.panels.at(-1).refresh.click(); await h.panels.at(-1).refreshPromise;
@@ -373,13 +371,13 @@ test('contractor loadDetails separates IDs, survives recreation and is invalidat
   const h = harness(t, {
     contractorControlReportDataFactory: async () => ({ loadOverview: async () => ({ rows: [{ id: version }] }),
       loadDetails: async id => { calls.push(id); return { launches: [{ id, version }], measurements: [] }; } }),
-    quotationReportDataFactory: async () => ({ loadSnapshot: async () => ({ rows: [] }) }),
+    depreciationReportDataFactory: async () => ({ loadSnapshot: async () => ({ rows: [] }) }),
   });
   await h.controller.start(); await h.view.emit('open-contractor-control-report');
   let data = h.panels.at(-1).data;
   assert.deepEqual((await data.loadDetails('a')).launches, [{ id: 'a', version: 1 }]);
   assert.deepEqual((await data.loadDetails('b')).launches, [{ id: 'b', version: 1 }]);
-  await h.view.emit('open-quotation-report'); await h.view.emit('open-contractor-control-report');
+  await h.view.emit('open-depreciation-report'); await h.view.emit('open-contractor-control-report');
   const panel = h.panels.at(-1); data = panel.data;
   await data.loadDetails('a', { signal: new AbortController().signal });
   await data.loadDetails('b'); assert.deepEqual(calls, ['a', 'b']);

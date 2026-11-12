@@ -15,13 +15,13 @@ function setup(t,load=async()=>snapshot,vertical=false,now=()=>new Date('2026-10
  return {view,root:view.element,dom,rotate(value){portrait=value;dom.window.dispatchEvent(new dom.window.Event('resize'));}};
 }
 
-test('seventh left mascot opens depreciation below quotations and is unavailable during a flow',t=>{
+test('depreciation mascot opens below order validation and is unavailable during a flow',t=>{
  const dom=new JSDOM('<main id="app"></main>');dom.window.HTMLCanvasElement.prototype.getContext=()=>null;
  const view=createChatView(dom.window.document.querySelector('#app'));t.after(()=>{view.destroy();dom.window.close();});
  const state={sessionStatus:'authenticated',account:{name:'Bernardo'},draft:'',pendingFiles:[],messages:[{id:'home',role:'assistant',type:'poll',question:'QUAL ÁREA VOCÊ DESEJA ACESSAR?',options:[{id:'group_pending',label:'PENDÊNCIAS'},{id:'group_supplies',label:'SUPRIMENTOS'}]}]};
  let calls=0;view.on('open-depreciation-report',()=>calls++);view.render(state);
  const button=dom.window.document.querySelector('[data-action=open-depreciation-report]');assert.ok(button);
- assert.equal(button.previousElementSibling.dataset.action,'open-quotation-report');assert.equal(button.nextElementSibling.dataset.action,'open-document-control-report');
+ assert.equal(button.previousElementSibling.dataset.action,'open-order-validation-report');assert.equal(button.nextElementSibling.dataset.action,'open-document-control-report');
  assert.equal(button.closest('.chat-bubble'),null);assert.match(button.querySelector('img').src,/depreciation\.png$/);
  button.querySelector('img').click();assert.equal(calls,1);
  view.render({...state,activeText:{id:'busy'}});assert.equal(dom.window.document.querySelector('[data-action=open-depreciation-report]').disabled,true);

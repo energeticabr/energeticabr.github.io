@@ -30,7 +30,7 @@ for(const [action,previous,next] of [
  ['open-commercial-documents','open-commercial-milestones','open-sac-pathologies'],
  ['open-sac-pathologies','open-commercial-documents',null],
  ['open-task-association-report',null,null],
- ...['open-quotation-report','open-depreciation-report','invalid'].map(action=>[action,null,null]),
+ ...['open-depreciation-report','invalid'].map(action=>[action,null,null]),
 ])test(`${action} advances only within its visible mascot color, without wrapping`,()=>{
  assert.equal(typeof getReportNeighbors,'function');assert.deepEqual(getReportNeighbors(action),{previous,next});
 });
