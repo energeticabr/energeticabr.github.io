@@ -13,9 +13,10 @@ export function createSefazSyncSession({document:doc=globalThis.document,storage
     if(!receipt)receipt=createSefazSyncReceipt({document:doc,onAcknowledge:()=>acknowledge?.()??false});
     acknowledge=ack;return receipt.show(result);
   }});
-  const resume=monitor.resume.bind(monitor),suspend=monitor.suspend.bind(monitor);
+  const resume=monitor.resume.bind(monitor);
   monitor.resume=()=>{suspended=false;return resume();};
-  monitor.suspend=()=>{suspended=true;suspend();};
+  // Do not close a receipt the user has not acknowledged.
+  monitor.suspend=()=>{suspended=true;};
   const foreground=()=>{if(doc.visibilityState!=='hidden')void monitor.resume();else monitor.suspend();};
   doc?.addEventListener('visibilitychange',foreground);doc?.defaultView?.addEventListener('focus',foreground);
   const destroy=monitor.destroy.bind(monitor);

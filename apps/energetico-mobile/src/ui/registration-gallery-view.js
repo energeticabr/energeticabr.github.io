@@ -391,6 +391,29 @@ export function createRegistrationGallery({ document: doc = globalThis.document,
     } }) : null;
   const bankReceipt = kind === 'dda' ? createDdaSyncReceipt({ document: doc, host: root,
     format: (row, name) => rowFieldValue(row, name) || '—', onClose: () => refreshShortcut.sync() }) : null;
+  const pendingBankReceipts = [];
+  let bankReceiptObserver = null;
+  function clearPendingBankReceipts() {
+    bankReceiptObserver?.disconnect();
+    bankReceiptObserver = null;
+    pendingBankReceipts.length = 0;
+  }
+  function presentBankReceipt() {
+    if (destroyed || root.hidden || !root.isConnected) { clearPendingBankReceipts(); return; }
+    if (!doc.querySelector('[data-dda-sync-result], [data-sefaz-sync-result]')) {
+      const next = pendingBankReceipts.shift();
+      if (next) bankReceipt.show(...next);
+    }
+    if (!pendingBankReceipts.length) clearPendingBankReceipts();
+    else if (!bankReceiptObserver && doc.defaultView?.MutationObserver) {
+      bankReceiptObserver = new doc.defaultView.MutationObserver(presentBankReceipt);
+      bankReceiptObserver.observe(doc.body, { childList: true, subtree: true });
+    }
+  }
+  function showBankReceipt(...args) {
+    pendingBankReceipts.push(args);
+    presentBankReceipt();
+  }
   const bankNotice = kind === 'dda' ? el('p', 'rg-dda-sync-notice') : null;
   if (bankNotice) { bankNotice.hidden = true; bankNotice.setAttribute('role', 'status'); header.after(bankNotice); }
   let manualStartedThisVisit=false,manualStarting=false,manualRequestId=null,returnPending=false,returnedForManual=false,bankState=null,lastManualResult=null;
@@ -437,7 +460,7 @@ export function createRegistrationGallery({ document: doc = globalThis.document,
     if(syncMonitor){
       manualStarting=true;returnPending=false;returnedForManual=false;lastManualResult=null;manualRequestId=null;
       try{await syncMonitor.start();}
-      catch(error){if(!manualRequestId)manualStartedThisVisit=false;bankReceipt.show({status:'failed',message:String(error?.message||'Não foi possível iniciar a consulta.')},[],refresh);}
+      catch(error){if(!manualRequestId)manualStartedThisVisit=false;showBankReceipt({status:'failed',message:String(error?.message||'Não foi possível iniciar a consulta.')},[],refresh);}
       finally{manualStarting=false;}
       return;
     }
@@ -458,12 +481,12 @@ export function createRegistrationGallery({ document: doc = globalThis.document,
       const message = loaded === false ? 'O Sicoob foi consultado, mas não foi possível recarregar a galeria. Os cartões continuam mostrando a última leitura disponível. Tente sincronizar novamente.'
         : 'Sicoob e SharePoint atualizados.' + (Number.isInteger(result.created) ? ` ${result.created} novo(s) DDA(s).` : '');
       notice(message, loaded === false ? 'partial' : 'succeeded');
-      if (current()) bankReceipt.show(loaded === false ? { ...result, status: 'partial', message } : result, loaded === false ? [] : rows, refresh);
+      if (current()) showBankReceipt(loaded === false ? { ...result, status: 'partial', message } : result, loaded === false ? [] : rows, refresh);
     } catch (error) {
       const message = 'Não foi possível concluir a atualização do Sicoob. Os dados exibidos são da última consulta disponível. '
         + (error?.name === 'AbortError' ? 'A conexão demorou demais. Tente novamente.' : String(error?.message || 'Tente novamente.'));
       notice(message, 'failed');
-      if (current()) bankReceipt.show({ status: 'failed', message }, [], refresh);
+      if (current()) showBankReceipt({ status: 'failed', message }, [], refresh);
     } finally { if (bankController === controller) bankController = null; }
   }
   const refreshShortcut = attachGalleryRefreshButton({ document: doc, root, container: createShortcut.toolbar, header, button: refresh,
@@ -1215,6 +1238,7 @@ export function createRegistrationGallery({ document: doc = globalThis.document,
     provisionController = null;
     assetReport?.close();
     paymentConfirmation?.close();
+    clearPendingBankReceipts();
     bankReceipt?.close();
     bankController?.abort();
     if (bankNotice) {
@@ -1314,6 +1338,6 @@ export function createRegistrationGallery({ document: doc = globalThis.document,
       if(returnPending)returnedForManual=true;showBankNotice();await load();showBankNotice();
     },
     close: hide,
-    destroy() { searchBinding.destroy(); provisionController?.abort(); provisionController = null; unsubscribeMovements?.(); unsubscribeFiscal?.(); unsubscribeBank?.(); paymentConfirmation?.destroy(); bankReceipt?.destroy(); bankController?.abort(); stopDdaClock(); loadController?.abort(); assetReport?.destroy(); descriptionDetail?.destroy(); loadingScreen.destroy(); createShortcut.destroy(); refreshShortcut.destroy(); recordActions.destroy(); searchableFilters.destroy(); destroyed = true; request += 1; filterEpoch += 1; attachmentCountQueue = []; root.remove(); },
+    destroy() { searchBinding.destroy(); provisionController?.abort(); provisionController = null; unsubscribeMovements?.(); unsubscribeFiscal?.(); unsubscribeBank?.(); paymentConfirmation?.destroy(); clearPendingBankReceipts(); bankReceipt?.destroy(); bankController?.abort(); stopDdaClock(); loadController?.abort(); assetReport?.destroy(); descriptionDetail?.destroy(); loadingScreen.destroy(); createShortcut.destroy(); refreshShortcut.destroy(); recordActions.destroy(); searchableFilters.destroy(); destroyed = true; request += 1; filterEpoch += 1; attachmentCountQueue = []; root.remove(); },
   };
 }

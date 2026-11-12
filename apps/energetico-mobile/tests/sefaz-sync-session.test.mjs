@@ -94,3 +94,24 @@ test('a later failed DDA update waits until the visible fiscal result is acknowl
  assert.equal(ddaPopup.isConnected,false);
  assert.deepEqual(acknowledged,['fiscal','dda']);
 });
+
+test('returning from the background keeps the already visible bank receipt ahead of fiscal results',async t=>{
+ const dom=new JSDOM('<body><main><button>Menu</button></main></body>',{url:'https://fixture.test',pretendToBeVisual:true});
+ const doc=dom.window.document;let visibility='visible',detailsRead=0;
+ Object.defineProperty(doc,'visibilityState',{get:()=>visibility});
+ const setVisibility=value=>{visibility=value;doc.dispatchEvent(new dom.window.Event('visibilitychange'));};
+ const dda=createDdaSyncSession({document:doc,storage:dom.window.localStorage,accountKey:'a',loadRows:async()=>{
+  if(++detailsRead>1)throw Error('Offline');return [];
+ },client:{getDdaRefreshPending:async()=>({status:'pending',requests:[{requestId:'b'.repeat(32),status:'succeeded',created:1,createdItemIds:[42]}]})}});
+ const fiscal=createSefazSyncSession({document:doc,storage:dom.window.localStorage,accountKey:'a',
+  client:{getSefazRefreshPending:async()=>({status:'pending',requests:[result]})}});
+ t.after(()=>{fiscal.destroy();dda.destroy();dom.window.close();});
+ await dda.resume();await fiscal.resume();
+ const bankPopup=doc.querySelector('[data-dda-sync-result]');
+ assert.ok(bankPopup);
+ setVisibility('hidden');setVisibility('visible');
+ await tick();
+ assert.ok(bankPopup.isConnected,'the previously open result is still on screen');
+ assert.equal(doc.querySelector('[data-sefaz-sync-result]'),null);
+ assert.equal(detailsRead,1);
+});

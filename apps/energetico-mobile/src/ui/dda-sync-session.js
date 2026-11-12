@@ -5,8 +5,8 @@ import {REGISTRATION_GALLERY_MODELS,registrationRawField,registrationDateKey,reg
 /** The global app session owns this presenter; galleries only subscribe to its progress. */
 export function createDdaSyncSession({document:doc=globalThis.document,storage,source='dda',loadRows=async()=>[],detailTimeoutMs=15000,...options}){
  if(storage===undefined){try{storage=doc?.defaultView?.localStorage??globalThis.localStorage;}catch{/* Monitor refuses unpersisted starts; server recovery still works. */}}
- let receipt=null,acknowledge=null,details=null,disposed=false,presentation=0;
- const visible=()=>!disposed&&Boolean(doc?.body?.isConnected)&&doc.visibilityState!=='hidden';
+ let receipt=null,acknowledge=null,details=null,disposed=false,suspended=false,presentation=0;
+ const visible=()=>!disposed&&!suspended&&Boolean(doc?.body?.isConnected)&&doc.visibilityState!=='hidden';
  // The monitor retries pending results after the displayed receipt is acknowledged.
  const receiptOpen=()=>doc.querySelector('[data-dda-sync-result], [data-sefaz-sync-result]');
  function hide(){presentation++;details?.abort();details=null;acknowledge=null;receipt?.close();}
@@ -31,7 +31,11 @@ export function createDdaSyncSession({document:doc=globalThis.document,storage,s
   acknowledge=ack;
   return receipt.show(result,Array.isArray(rows)?rows:[],doc.activeElement);
  }});
- const foreground=()=>{if(visible())void monitor.resume();else monitor.suspend();};
+ const resume=monitor.resume.bind(monitor);
+ monitor.resume=()=>{suspended=false;return resume();};
+ // Keep an open receipt and its place in the queue when the app backgrounds.
+ monitor.suspend=()=>{suspended=true;};
+ const foreground=()=>{if(doc.visibilityState!=='hidden')void monitor.resume();else monitor.suspend();};
  doc?.addEventListener('visibilitychange',foreground);doc?.defaultView?.addEventListener('focus',foreground);
  const destroy=monitor.destroy.bind(monitor);
  monitor.destroy=()=>{disposed=true;doc?.removeEventListener('visibilitychange',foreground);doc?.defaultView?.removeEventListener('focus',foreground);destroy();receipt?.destroy();};
