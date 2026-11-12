@@ -29,9 +29,10 @@ test('NF-e with XML pending uses the matching DANFE to classify and filter CNO',
         '3':'CNO divergente90.025.44069/72',
         '4':'CNO inválido90.025.4406/72 · CNO correto da obra: 90.025.44060/72',
         '5':null, '6':null, '7':null, '8':null,
+        '9':null, '10':'CNO não consta', '11':'CNO consta90.025.44060/72', '12':null,
       });
       assert.equal(state.xmlPending, true);
-      assert.deepEqual(state.filters, { missing:['2'], valid:['1'], conflict:['3','4'] });
+      assert.deepEqual(state.filters, { missing:['10','2'], valid:['1','11'], conflict:['3','4'] });
     } finally { dom.window.close(); }
   } finally { await server.close(); }
 });

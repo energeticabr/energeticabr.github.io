@@ -63,7 +63,7 @@ export function projectNfeRows(rows) {
     const validKey = supportsXmlFacts && (type === 'NF-e' ? nfeKey : nfseKey).test(key);
     const pdfName = attachmentName(fields.DANFE_URL);
     const danfeCnoName = type === 'NF-e' && !complete && cnoState === 'unknown' && validKey
-      && text(fields.STATUS_DANFE).toUpperCase() === 'DISPONIVEL' ? pdfName : '';
+      && text(fields.STATUS_DANFE).toUpperCase() === 'DISPONIVEL' && !/^CCe-/i.test(pdfName) ? pdfName : '';
     return [{
       id:String(id), orderId:nfeOrderId(fields[NFE_ORDER_FIELD]), type, date, issuedAt:date ? Date.parse(rawDate.toString().includes('/') ? date : rawDate) : 0,
       supplier:text(fields.Title) || text(fields.FORNECEDOR),

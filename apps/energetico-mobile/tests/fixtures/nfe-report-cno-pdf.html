@@ -2,7 +2,7 @@
 <html lang="pt-BR">
 <head><meta charset="utf-8"><title>CNO no DANFE — dados fictícios</title></head>
 <body><main id="app"></main><script type="module">
-import { PDFDocument } from 'pdf-lib';
+import { PDFDocument, StandardFonts } from 'pdf-lib';
 import { createNfeReportView } from '/src/ui/nfe-report-view.js';
 
 const key = '31260612345678000199550010000001401000001401';
@@ -14,6 +14,10 @@ const notes = new Map([
   ['5', 'CNO 90.025.44060/72'],
   ['6', ''],
   ['8', 'Extrato parcial'],
+  ['9', ''],
+  ['10', 'Sem dados da obra no documento'],
+  ['11', ''],
+  ['12', ''],
 ]);
 const pdfName = id => `DANFE-${id}.pdf`;
 const rows = [...notes.keys(), '7'].map(id => ({ id, fields:{
@@ -30,8 +34,28 @@ const report = createNfeReportView({ document, data:{
     if (id !== '6') {
       const printedKey = id === '5' ? key.replace(/1$/, '2') : key;
       const additional = id === '8' ? '' : 'DADOS ADICIONAIS\n';
-      page.drawText(`DANFE\nCHAVE DE ACESSO\n${printedKey.match(/.{4}/g).join(' ')}\n${additional}${notes.get(id)}`,
+      const header = id === '12' ? 'CARTA DE CORRECAO ELETRONICA' : 'DANFE';
+      const note = id === '12' ? 'Corrigir DANFE para constar CNO 90.025.44060/72' : notes.get(id);
+      page.drawText(`${header}\nCHAVE DE ACESSO\n${printedKey.match(/.{4}/g).join(' ')}\n${additional}${note}`,
         { x:36, y:760, size:11, lineHeight:18 });
+      if (id === '9' || id === '10') {
+        const image = document.createElement('canvas');
+        image.width = 200;
+        image.height = 30;
+        const context = image.getContext('2d');
+        context.font = '16px sans-serif';
+        context.fillText(id === '9' ? 'CNO 90.025.44060/72' : 'Logomarca', 5, 20);
+        page.drawImage(await pdf.embedPng(image.toDataURL()), {
+          x:36, y:id === '9' ? 666 : 785, width:200, height:30,
+        });
+      }
+      if (id === '11') {
+        const regular = await pdf.embedFont(StandardFonts.Helvetica);
+        const bold = await pdf.embedFont(StandardFonts.HelveticaBold);
+        const prefix = 'CNO 90.025.44';
+        page.drawText(prefix, { x:36, y:666, size:11, font:regular });
+        page.drawText('060/72', { x:36 + regular.widthOfTextAtSize(prefix, 11), y:666, size:11, font:bold });
+      }
     }
     return new Blob([await pdf.save()], { type:'application/pdf' });
   },
