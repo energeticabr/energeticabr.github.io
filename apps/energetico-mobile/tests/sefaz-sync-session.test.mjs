@@ -5,6 +5,7 @@ import {createAppController} from '../src/app-controller.js';
 import {createConversationStore} from '../src/chat/conversation-store.js';
 import {createSefazSyncSession} from '../src/ui/sefaz-sync-session.js';
 import {createSefazSyncReceipt} from '../src/ui/sefaz-sync-receipt.js';
+import {createDdaSyncSession} from '../src/ui/dda-sync-session.js';
 const id='a'.repeat(32),tick=()=>new Promise(r=>setImmediate(r));
 const result={requestId:id,status:'succeeded',startedUtc:'2026-10-29T10:00:00Z',completedUtc:'2026-10-29T10:01:00Z',sources:{NFE:{status:'succeeded',documents:0},CTE:{status:'succeeded',documents:0},NFSE:{status:'succeeded',documents:0}}};
 
@@ -64,11 +65,53 @@ test('controller owns fiscal monitor before opening gallery and cancels it on lo
  await handlers.get('select-reply')({type:'select-reply',replyId:'action_notas_fiscais_sefaz_gallery',label:'NOTAS FISCAIS SEFAZ'});assert.equal(galleryOptions.syncMonitor,monitor);
  await handlers.get('sign-out')({type:'sign-out'});assert.equal(destroyed,1);assert.equal(factoryOptions.isCurrent(),false);
 });
-import {createDdaSyncReceipt} from '../src/ui/dda-sync-receipt.js';
-test('fiscal receipt yields to a later DDA completion and returns without consuming either result',async t=>{
- const dom=new JSDOM('<body><main><button>Menu</button></main></body>',{url:'https://fixture.test',pretendToBeVisual:true});t.after(()=>dom.window.close());
- const doc=dom.window.document,session=createSefazSyncSession({document:doc,storage:dom.window.localStorage,accountKey:'a',client:{getSefazRefreshPending:async()=>({status:'pending',requests:[result]})}});t.after(()=>session.destroy());await session.resume();
- const dda=createDdaSyncReceipt({document:doc,host:doc.body,format:()=>'',global:true,requireAcknowledgement:true});t.after(()=>dda.destroy());
- dda.show({status:'succeeded',created:0},[],doc.activeElement);await tick();assert.equal(doc.querySelector('[data-sefaz-sync-result]'),null);
- assert.ok(doc.querySelector('[data-dda-sync-result]'));dda.close();await session.resume();assert.ok(doc.querySelector('[data-sefaz-sync-result]'));
+test('a later failed DDA update waits until the visible fiscal result is acknowledged',async t=>{
+ const dom=new JSDOM('<body><main><button>Menu</button></main></body>',{url:'https://fixture.test',pretendToBeVisual:true});
+ const doc=dom.window.document,acknowledged=[];let retry;
+ const fiscal=createSefazSyncSession({document:doc,storage:dom.window.localStorage,accountKey:'a',client:{
+  getSefazRefreshPending:async()=>({status:'pending',requests:[result]}),
+  acknowledgeSefazRefresh:async requestId=>{acknowledged.push('fiscal');return {status:'acknowledged',requestId};}
+ }});
+ const dda=createDdaSyncSession({document:doc,storage:dom.window.localStorage,accountKey:'a',
+  schedule:callback=>{retry=callback;return 0;},cancel(){},client:{
+  getDdaRefreshPending:async()=>({status:'pending',requests:[{requestId:'b'.repeat(32),status:'failed'}]}),
+  acknowledgeDdaRefresh:async requestId=>{acknowledged.push('dda');return {status:'acknowledged',requestId};}
+ }});
+ t.after(()=>{fiscal.destroy();dda.destroy();dom.window.close();});
+ await fiscal.resume();
+ const fiscalPopup=doc.querySelector('[data-sefaz-sync-result]');
+ await dda.resume();await tick();
+ assert.ok(fiscalPopup.isConnected);
+ assert.equal(doc.querySelector('[data-dda-sync-result]'),null);
+ assert.deepEqual(acknowledged,[]);
+
+ fiscalPopup.querySelector('button').click();await tick();retry();await tick();
+ const ddaPopup=doc.querySelector('[data-dda-sync-result="failed"]');
+ assert.ok(ddaPopup);
+ assert.match(ddaPopup.textContent,/Atualização não confirmada/);
+ assert.deepEqual(acknowledged,['fiscal']);
+ ddaPopup.querySelector('button').click();await tick();
+ assert.equal(ddaPopup.isConnected,false);
+ assert.deepEqual(acknowledged,['fiscal','dda']);
+});
+
+test('returning from the background keeps the already visible bank receipt ahead of fiscal results',async t=>{
+ const dom=new JSDOM('<body><main><button>Menu</button></main></body>',{url:'https://fixture.test',pretendToBeVisual:true});
+ const doc=dom.window.document;let visibility='visible',detailsRead=0;
+ Object.defineProperty(doc,'visibilityState',{get:()=>visibility});
+ const setVisibility=value=>{visibility=value;doc.dispatchEvent(new dom.window.Event('visibilitychange'));};
+ const dda=createDdaSyncSession({document:doc,storage:dom.window.localStorage,accountKey:'a',loadRows:async()=>{
+  if(++detailsRead>1)throw Error('Offline');return [];
+ },client:{getDdaRefreshPending:async()=>({status:'pending',requests:[{requestId:'b'.repeat(32),status:'succeeded',created:1,createdItemIds:[42]}]})}});
+ const fiscal=createSefazSyncSession({document:doc,storage:dom.window.localStorage,accountKey:'a',
+  client:{getSefazRefreshPending:async()=>({status:'pending',requests:[result]})}});
+ t.after(()=>{fiscal.destroy();dda.destroy();dom.window.close();});
+ await dda.resume();await fiscal.resume();
+ const bankPopup=doc.querySelector('[data-dda-sync-result]');
+ assert.ok(bankPopup);
+ setVisibility('hidden');setVisibility('visible');
+ await tick();
+ assert.ok(bankPopup.isConnected,'the previously open result is still on screen');
+ assert.equal(doc.querySelector('[data-sefaz-sync-result]'),null);
+ assert.equal(detailsRead,1);
 });

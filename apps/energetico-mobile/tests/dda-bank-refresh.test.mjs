@@ -4,6 +4,7 @@ import { JSDOM } from 'jsdom';
 import { createChatClient } from '../src/chat/chat-client.js';
 import { refreshDdaBank } from '../src/chat/dda-bank-refresh.js';
 import { createRegistrationGallery } from '../src/ui/registration-gallery-view.js';
+import { createSefazSyncReceipt } from '../src/ui/sefaz-sync-receipt.js';
 const id='a'.repeat(32);
 const tick=()=>new Promise(resolve=>setImmediate(resolve));
 
@@ -23,6 +24,8 @@ test('new DDA popup identifies only confirmed created IDs across filters and clo
  assert.match(popup.textContent,/ID 43/);assert.doesNotMatch(popup.textContent,/EXISTENTE|OUTRA SINCRONIZACAO/);
  assert.equal(doc.querySelector('.rg-header').inert,true);
  popup.dispatchEvent(new dom.window.KeyboardEvent('keydown',{key:'Escape',bubbles:true}));
+ assert.ok(popup.isConnected);
+ popup.querySelector('button').click();
  assert.equal(doc.querySelector('[data-dda-new-items]'),null);assert.equal(doc.querySelector('.rg-overlay').hidden,false);
  assert.equal(doc.querySelector('.rg-header').inert,false);assert.equal(doc.activeElement,button);
  gallery.destroy();dom.window.close();
@@ -102,4 +105,26 @@ test('successful bank query followed by failed SharePoint read preserves actual 
  assert.equal(dom.window.document.querySelectorAll('.rg-row--dda').length,1);
  assert.match(dom.window.document.body.textContent,/não foi possível recarregar a galeria/i);
  gallery.destroy();dom.window.close();
+});
+
+test('a local DDA result waits behind an open fiscal receipt', async t => {
+ const dom=new JSDOM('<body/>',{url:'https://fixture.test',pretendToBeVisual:true});
+ const doc=dom.window.document;
+ let complete;
+ const gallery=createRegistrationGallery({document:doc,kind:'dda',data:{loadSnapshot:async()=>({rows:[]})},
+  refreshBank:()=>new Promise(resolve=>{complete=resolve;})});
+ const fiscal=createSefazSyncReceipt({document:doc,onAcknowledge:async()=>true});
+ t.after(()=>{fiscal.destroy();gallery.destroy();dom.window.close();});
+ await gallery.open();
+ doc.querySelector('[data-action="registration-refresh"]').click();
+ fiscal.show({status:'succeeded',sources:Object.fromEntries(['NFE','CTE','NFSE'].map(key=>[key,{status:'succeeded',documents:0}]))});
+ complete({status:'succeeded',created:0});await tick();
+ const fiscalPopup=doc.querySelector('[data-sefaz-sync-result]');
+ assert.ok(fiscalPopup);
+ assert.equal(doc.querySelector('[data-dda-sync-result]'),null);
+ fiscalPopup.querySelector('button').click();await tick();
+ const localPopup=doc.querySelector('[data-dda-sync-result]');
+ assert.ok(localPopup);
+ localPopup.querySelector('button').click();
+ assert.equal(doc.querySelector('[data-dda-sync-result]'),null);
 });
