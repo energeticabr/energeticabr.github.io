@@ -93,6 +93,8 @@ export function validatePayrollDraft(draft) {
     throw new RangeError("O fornecedor não possui filial cadastrada.");
   const validated = validatePayrollLines(draft.lines);
   const pending = validated.lines.filter(line => line.alreadyPaid !== true);
+  if (!pending.length && validated.lines.every(line => payrollTaxType(line.payrollType)))
+    throw new RangeError("INSS e FGTS já pagos dispensam postagem.");
   if (pending.length && (!draft.product?.id || !draft.product?.label))
     throw new RangeError("Selecione o produto cadastrado.");
   if (pending.length && (!draft.stage?.id || !draft.stage?.label))

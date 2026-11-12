@@ -853,25 +853,59 @@ test('unavailable durable tax journal blocks before any paid launch is created',
   assert.equal(f.writes.length,0);
 });
 
-test('mixed payroll keeps salary in October and posts tax only to the September sheet',async()=>{
+test('weekly payroll keeps tax in its selected sheet and out of the payslip',async()=>{
   const f=fixture(),taxSheet=taxSheetFixture(f);
-  const result=await f.data.post({...f.draft,taxCompetence:'2026-09',taxSheet,
-    lines:[f.draft.lines[0],{...f.draft.lines[0],rubric:'inss',quantity:'1',unitValue:'10'}]}, {operationId:'mixed-tax-test'});
+  const upload=f.repository.uploadAttachment;
+  let holeritePdf;
+  f.repository.uploadAttachment=async (...args)=>{
+    if(args[1]==='HOLERITE' && args[3].type==='application/pdf') holeritePdf=await args[3].arrayBuffer();
+    return upload(...args);
+  };
+  const draft={...f.draft,taxCompetence:'2026-09',taxSheet,lines:[f.draft.lines[0],
+    {...f.draft.lines[0],rubric:'inss',quantity:'1',unitValue:'10'},
+    {...f.draft.lines[0],rubric:'fgts',quantity:'1',unitValue:'20',alreadyPaid:true,account:null}]};
+  const result=await f.data.post(draft,{operationId:'mixed-tax-test'},undefined,{weekly:true});
   const payments=f.writes.filter(w=>w.list==='FOLHAPGTO').map(w=>f.decode('FOLHAPGTO',w.fields));
   assert.deepEqual(payments.map(p=>[p.TIPOPGTO,Number(p.IDFOLHA)]),[['SALÁRIO',9],['INSS',12]]);
   assert.deepEqual(f.rows.LANCAMENTOS.map(row=>f.decode('LANCAMENTOS',row.fields).IDFOLHA),[9,12]);
   assert.equal(result.taxSheet.id,'12');
   assert.equal(result.sheet.id,'9');
+  const saved=f.decode('HOLERITE',f.rows.HOLERITE[0].fields);
+  assert.deepEqual(JSON.parse(saved.RUBRICAS).map(line=>line.rubrica),['salary']);
+  assert.deepEqual(JSON.parse(saved.LANCAMENTOS).map(line=>line.rubric),['salary']);
+  assert.equal(saved.IDFOLHATRIBUTOS,undefined);
+  assert.equal(saved.TOTAL,201);
+  assert.equal(saved.TOTAL_JA_PAGO,0);
+  assert.equal(saved.TOTAL_SUPRIMENTOS,201);
+  const {getDocument,OPS}=await import('pdfjs-dist/legacy/build/pdf.mjs');
+  const pdf=getDocument({data:new Uint8Array(holeritePdf),useSystemFonts:true});
+  try {
+    const doc=await pdf.promise;
+    assert.equal(doc.numPages,1);
+    const page=await doc.getPage(1);
+    const text=(await page.getTextContent()).items.map(item=>item.str).join(' ');
+    assert.doesNotMatch(text,/INSS|FGTS/);
+    assert.equal((text.match(/Assinatura do responsável pela empresa/g) || []).length,2);
+    assert.equal((text.match(/Assinatura do funcionário/g) || []).length,2);
+    const {fnArray}=await page.getOperatorList();
+    assert.equal(fnArray.filter(operator=>operator===OPS.paintImageXObject).length,2);
+  } finally { await pdf.destroy(); }
+  const retry=await f.data.post(draft,{operationId:'mixed-tax-retry'},undefined,{weekly:true});
+  assert.equal(retry.lines.find(line=>line.rubric==='inss').id,result.lines.find(line=>line.rubric==='inss').id);
+  await assert.rejects(f.data.post({...draft,lines:[draft.lines[0],{...draft.lines[1],unitValue:'99'}]},
+    {operationId:'mixed-tax-modified'},undefined,{weekly:true}),/tributos em um envio próprio/);
+  assert.equal(f.rows.LANCAMENTOS.length,2);
 });
 
 test('tax-only payroll posts to historical competence without requiring a normal sheet',async()=>{
   const f=fixture();
   await f.data.post({...f.draft,sheet:null,taxCompetence:'2026-08',taxSheet:{id:'10',label:'08/2026'},
-    lines:[{...f.draft.lines[0],rubric:'fgts'}]}, {operationId:'tax-only-test'});
+    lines:[{...f.draft.lines[0],rubric:'fgts'}]}, {operationId:'tax-only-test'},undefined,{weekly:true});
   const payment=f.writes.filter(w=>w.list==='FOLHAPGTO').map(w=>f.decode('FOLHAPGTO',w.fields))[0];
   assert.equal(Number(payment.IDFOLHA),10);
   assert.equal(payment.TIPOPGTO,'FGTS');
   assert.equal(f.decode('LANCAMENTOS',f.rows.LANCAMENTOS[0].fields).IDFOLHA,10);
+  assert.equal(f.rows.HOLERITE.length,0);
 });
 
 test('tax sheets from another supplier or wrong competence fail before any financial write',async()=>{
