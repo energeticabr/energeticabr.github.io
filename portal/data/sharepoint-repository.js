@@ -666,8 +666,10 @@ function validatedRestNextLink(value, site, collectionPath) {
   } catch {
     throw new TypeError("O destino do nextLink de paginacao REST do SharePoint e invalido.");
   }
+  // SharePoint encodes OData quote delimiters in its continuation URLs.
+  // Normalize only those quotes for comparison and send the cursor unchanged.
   if (url.protocol !== "https:" || url.origin !== origin || url.username || url.password || url.port || url.hash
-    || url.pathname !== `${sitePath}${apiPath}`) {
+    || url.pathname.replaceAll("%27", "'") !== `${sitePath}${apiPath}`) {
     throw new TypeError("O destino do nextLink de paginacao REST do SharePoint e invalido para esta colecao.");
   }
   return url.toString();

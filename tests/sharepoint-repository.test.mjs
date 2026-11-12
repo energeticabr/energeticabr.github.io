@@ -805,8 +805,7 @@ test("metadados REST pessoais preservam tipos e restricoes no contrato canonico 
 
 test("leituras pessoais REST paginam e normalizam itens para o formato Graph", async () => {
   const listId = "12345678-1234-1234-1234-123456789abc";
-  const collectionPath = `/_api/web/lists(guid'${listId}')/items`;
-  const nextLink = `https://${sites.personal.host}${sites.personal.path}${collectionPath}?$skiptoken=Paged=TRUE%26p_ID=1`;
+  const nextLink = `https://${sites.personal.host}${sites.personal.path}/_api/web/lists(guid%27${listId}%27)/items?%24skiptoken=Paged%3dTRUE%26p_ID%3d1`;
   const calls = [];
   const controller = new AbortController();
   const item = {
