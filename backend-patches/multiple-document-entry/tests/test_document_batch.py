@@ -420,6 +420,63 @@ class DocumentBatchTests(unittest.TestCase):
         self.assertNotEqual(result.get('field'), 'tipo_documento')
         self.assertEqual(self.state['fields']['TIPOHOMOLOGACAO'], 'HOMOLOGAÇÃO FILIAL')
 
+    def open_document_validity(self, mode):
+        self.begin()
+        self.reply(f'document_mode_{mode}')
+        steps = self.config['sharepoint']['steps']
+        self.state['step_index'] = next(i for i, step in enumerate(steps)
+                                        if step['key'] == 'tem_data_validade')
+        return self.engine._prompt_next_or_summary(self.state, self.etag())
+
+    def test_document_expiry_can_be_sent_at_the_yes_no_question(self):
+        self.open_document_validity('single')
+        self.assertIn('Digite a data de validade no chat', str(self.messenger.sent))
+        self.messenger.sent.clear()
+
+        result = self.public_event('', text='29/02/2028')
+
+        self.assertEqual(result['field'], 'imovel')
+        saved, _ = self.store.load(self.state['key'])
+        self.assertEqual(saved['answers']['tem_data_validade'], 'SIM')
+        self.assertEqual(saved['fields']['DATAVALIDADE'], '2028-02-29')
+        self.assertEqual(saved['display_values']['DATAVALIDADE'], '29/02/2028')
+        self.assertFalse(any('QUAL A DATA DE VALIDADE' in str(message)
+                             for message in self.messenger.sent))
+        self.assertEqual(self.catalog.rows, {})
+
+    def test_invalid_expiry_stays_on_the_same_question(self):
+        self.open_document_validity('single')
+        self.messenger.sent.clear()
+
+        result = self.reply(text='31/02/2028')
+
+        self.assertEqual(result['status'], 'invalid_date')
+        self.assertEqual(result['field'], 'tem_data_validade')
+        self.assertNotIn('tem_data_validade', self.state['answers'])
+        self.assertNotIn('DATAVALIDADE', self.state['fields'])
+        self.assertIn('DATA VÁLIDA', str(self.messenger.sent))
+        self.assertEqual(self.reply(text='29/02/2028')['field'], 'imovel')
+
+    def test_expiry_question_keeps_explicit_choice_buttons(self):
+        for choice, next_field in [('1', 'data_validade'), ('2', 'imovel'), ('0', 'imovel')]:
+            with self.subTest(choice=choice):
+                self.open_document_validity('single')
+                self.assertEqual(self.reply(f'choice:tem_data_validade:{choice}')['field'],
+                                 next_field)
+                self.assertNotIn('DATAVALIDADE', self.state['fields'])
+
+    def test_typed_expiry_can_replace_the_default_for_the_next_document(self):
+        self.ready()
+        self.reply('document_add_another')
+        self.reply('6')  # tem_data_validade
+
+        result = self.reply(text='21/10/2027')
+
+        self.assertEqual(result['status'], 'awaiting_document_defaults')
+        self.assertEqual(self.state['fields']['DATAVALIDADE'], '2027-10-21')
+        self.assertEqual(len(self.catalog.rows), 1)
+        self.assertNotIn('DATAVALIDADE', next(iter(self.catalog.rows.values()))['fields'])
+
     def test_validity_can_be_added_and_removed_for_next_document(self):
         self.ready()
         self.reply('document_add_another')
