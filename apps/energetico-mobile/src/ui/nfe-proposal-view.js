@@ -10,7 +10,7 @@ const money = new Intl.NumberFormat('pt-BR', { style:'currency', currency:'BRL' 
 const displayDate = date => date ? date.split('-').reverse().join('/') : 'Não informado';
 const labelOf = (options, id, empty) => options.find(option => option.id === id)?.label || (id ? `ID ${id}` : empty);
 
-export function createNfeProposalView({ document:doc, host, service, onPosted }) {
+export function createNfeProposalView({ document:doc, host, service, onPosted, onClose }) {
   let current;
   const el = (tag, className = '', text) => {
     const node = doc.createElement(tag);
@@ -33,6 +33,7 @@ export function createNfeProposalView({ document:doc, host, service, onPosted })
     overlay.remove();
     for (const [node, inert] of background) node.inert = inert;
     if (!host.hidden && trigger?.isConnected) trigger.focus({ preventScroll:true });
+    onClose?.();
   }
 
   async function show(row, trigger) {
