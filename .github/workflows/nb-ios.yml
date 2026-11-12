@@ -10,7 +10,7 @@ on:
       operation:
         description: Operação
         type: choice
-        options: [prepare, setup-signing, group, publish, attach]
+        options: [prepare, setup-signing, group, tester-access, publish, attach]
         default: prepare
       manual_signing:
         description: Usar perfis de distribuição já cadastrados para o NB
@@ -43,6 +43,7 @@ jobs:
       APPLE_API_KEY_ID: ${{ secrets.APPLE_API_KEY_ID }}
       APPLE_API_ISSUER_ID: ${{ secrets.APPLE_API_ISSUER_ID }}
       APPLE_API_PRIVATE_KEY_B64: ${{ secrets.APPLE_API_PRIVATE_KEY_B64 }}
+      NBPAR_TESTER_EMAIL: ${{ secrets.NBPAR_TESTER_EMAIL }}
       APP_STORE_BUILD: ${{ inputs.operation == 'publish' && github.run_number || '' }}
     steps:
       - uses: actions/checkout@v4
@@ -55,6 +56,7 @@ jobs:
         env:
           NB_MANUAL_SIGNING: ${{ inputs.manual_signing }}
         run: |
+          node scripts/nb-apple.mjs tester-check
           if [[ "$NB_MANUAL_SIGNING" == true ]]; then
             node scripts/nb-apple.mjs wait-profiles
           else
@@ -64,6 +66,8 @@ jobs:
         run: node scripts/nb-apple.mjs setup-signing
       - if: inputs.operation == 'group'
         run: node scripts/nb-apple.mjs group
+      - if: inputs.operation == 'tester-access'
+        run: node scripts/nb-apple.mjs tester-access
       - if: inputs.operation == 'attach'
         run: node scripts/nb-apple.mjs attach
 
@@ -113,6 +117,7 @@ jobs:
       APPLE_API_KEY_ID: ${{ secrets.APPLE_API_KEY_ID }}
       APPLE_API_ISSUER_ID: ${{ secrets.APPLE_API_ISSUER_ID }}
       APPLE_API_PRIVATE_KEY_B64: ${{ secrets.APPLE_API_PRIVATE_KEY_B64 }}
+      NBPAR_TESTER_EMAIL: ${{ secrets.NBPAR_TESTER_EMAIL }}
       APPLE_TEAM_ID: ${{ secrets.APPLE_TEAM_ID }}
       APPLE_DISTRIBUTION_CERTIFICATE_P12_BASE64: ${{ secrets.APPLE_DISTRIBUTION_CERTIFICATE_P12_BASE64 }}
       APPLE_DISTRIBUTION_CERTIFICATE_PASSWORD: ${{ secrets.APPLE_DISTRIBUTION_CERTIFICATE_PASSWORD }}

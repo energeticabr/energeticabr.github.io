@@ -105,7 +105,7 @@ async function findExistingTester(client, email) {
   return all.find(tester => normalizeEmail(attr(tester).email) === email) || null;
 }
 
-async function findAppStoreUser(client, email) {
+export async function findAppStoreUser(client, email) {
   const query = encodeURIComponent(email);
   const filtered = await list(client, `/v1/users?filter%5Busername%5D=${query}&limit=200`);
   const match = filtered.find(user => normalizeEmail(attr(user).username) === email);
@@ -116,7 +116,7 @@ async function findAppStoreUser(client, email) {
   return all.find(user => normalizeEmail(attr(user).username) === email) || null;
 }
 
-async function findPendingInvitation(client, email) {
+export async function findPendingInvitation(client, email) {
   const query = encodeURIComponent(email);
   const filtered = await list(client, `/v1/userInvitations?filter%5Bemail%5D=${query}&limit=200`);
   const match = filtered.find(invitation => normalizeEmail(attr(invitation).email) === email);
@@ -125,7 +125,7 @@ async function findPendingInvitation(client, email) {
   return all.find(invitation => normalizeEmail(attr(invitation).email) === email) || null;
 }
 
-async function loadGroupTesters(client, groupId) {
+export async function loadGroupTesters(client, groupId) {
   return list(client, `/v1/betaGroups/${groupId}/betaTesters?limit=200&fields%5BbetaTesters%5D=email`);
 }
 

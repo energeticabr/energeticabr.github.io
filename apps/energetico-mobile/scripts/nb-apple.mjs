@@ -2,6 +2,10 @@ import { appendFile, writeFile } from "node:fs/promises";
 import { join } from "node:path";
 import { createAppleClient } from "./app-store-submission.mjs";
 import { attachLatestTestFlightBuild } from "./attach-testflight-build.mjs";
+import {
+  createUserInvitationPayload, findAppStoreUser, findPendingInvitation,
+  loadGroupTesters, parseAllowedEmails, planTesterChanges,
+} from "./manage-testflight-testers.mjs";
 import { NB_APP_NAME, NB_BUNDLE_ID } from "../src/nb-participacoes.js";
 
 const client = createAppleClient();
@@ -14,6 +18,33 @@ const app = async () => {
   const { data } = await client.request("GET", `/v1/apps?filter[bundleId]=${NB_BUNDLE_ID}`);
   return data?.find(item => item.attributes?.bundleId === NB_BUNDLE_ID);
 };
+
+function allowedTester() {
+  const [email, ...extras] = parseAllowedEmails(process.env.NBPAR_TESTER_EMAIL ?? "");
+  if (extras.length) throw new Error("Configure um único testador para o NBPAR.");
+  return email;
+}
+
+async function confirmExclusiveTester(groupId, email) {
+  const { missing, remove } = planTesterChanges(await loadGroupTesters(client, groupId), [email]);
+  if (missing.length || remove.length) {
+    throw new Error("O grupo NB Validação precisa conter somente o testador configurado.");
+  }
+}
+
+async function prepareTesterAccess(appId, groupId) {
+  const email = allowedTester();
+  const { missing, remove } = planTesterChanges(await loadGroupTesters(client, groupId), [email]);
+  if (remove.length) {
+    throw new Error("Remova os testadores não autorizados do NBPAR no App Store Connect.");
+  }
+  if (!missing.length) return "TESTER_CONFIRMED";
+  if (await findAppStoreUser(client, email)) return "USER_READY_TO_ADD";
+  if (await findPendingInvitation(client, email)) return "INVITATION_PENDING";
+  const { data } = await client.request("POST", "/v1/userInvitations", createUserInvitationPayload(email, appId));
+  if (!data?.id) throw new Error("A Apple não confirmou a criação do convite.");
+  return "INVITATION_SENT";
+}
 
 async function registerBundle(identifier, name) {
   const find = async () => {
@@ -126,19 +157,25 @@ if (!record) {
   if (mode !== "register") process.exitCode = 1;
 } else {
   console.log(`Cadastro do app confirmado para ${NB_BUNDLE_ID}.`);
+  if (mode === "tester-check") {
+    await confirmExclusiveTester(await ensureGroup(record.id), allowedTester());
+  }
+  if (mode === "tester-access") {
+    const groupId = await ensureGroup(record.id);
+    console.log(await prepareTesterAccess(record.id, groupId));
+  }
   if (mode === "group") await ensureGroup(record.id);
   if (mode === "profiles" || mode === "setup-signing") await prepareSigning({ allowCreate: mode === "setup-signing" });
   if (mode === "wait-profiles") await waitForSigningProfiles();
   if (mode === "attach") {
     const groupId = await ensureGroup(record.id);
+    const email = allowedTester();
+    await confirmExclusiveTester(groupId, email);
     console.log(JSON.stringify(await attachLatestTestFlightBuild(client, {
       appId: record.id, groupName, requireInternal: true,
     })));
-    const { data: testers } = await client.request("GET", `/v1/betaGroups/${groupId}/relationships/betaTesters`);
-    if (!testers?.some(tester => tester.type === "betaTesters")) {
-      throw new Error("O grupo interno NB Validação precisa de um testador no App Store Connect.");
-    }
-    console.log("Grupo interno com testador confirmado no App Store Connect.");
+    await confirmExclusiveTester(groupId, email);
+    console.log("Testador exclusivo do NBPAR confirmado no App Store Connect.");
   }
 }
 if (process.env.GITHUB_STEP_SUMMARY && mode !== "attach") {
