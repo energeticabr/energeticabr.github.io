@@ -65,7 +65,7 @@ const report = decorateReportPrint(decorateReportNavigation(createNfeReportView(
     { id:'3', fields:{ ...common, TIPO_FISCAL:'NF-e', DATA_EMISSAO:'2026-11-07', NUMERO_NOTA:'14', VALOR_TOTAL_NOTA:98765432.10,
       Title:'Comércio de Materiais Exemplo Ltda.', CNPJ_FORNECEDOR:'00.000.000/0000-00', CHAVE_ACESSO:key,
       XML_URL:'https://example.test/nota.xml', DANFE_URL:'https://example.test/nota.pdf',
-      OBSERVACOES_NOTA:'CNO: 90.025.4406/72', STATUS_RETENCOES:'RETENCAO_INFORMADA_XML' } },
+      OBSERVACOES_NOTA:'CNO: 90.025.4406/72', DIRECAO:'ENTRADA', STATUS_RETENCOES:'RETENCAO_INFORMADA_XML', IRRF_RETIDO:15, TOTAL_RETIDO:15 } },
   ] }; },
   async downloadDocument(){
     await new Promise(resolve => setTimeout(resolve, 250));
@@ -99,13 +99,35 @@ const pdf = panel.querySelector('[data-invoice-id="2"] button.nfe-pdf');
 const supplier = panel.querySelector('[data-invoice-id="2"] .nfe-supplier');
 const rotated = report.element.dataset.reportPortrait === 'true';
 const amount = panel.querySelector('[data-invoice-id="3"] .nfe-money');
-function amountFitsCell() {
-  if (!amount) return false;
+const regularAmount = panel.querySelector('[data-invoice-id="2"] .nfe-money')?.firstElementChild;
+const regularAmountRange = document.createRange();
+if (regularAmount) regularAmountRange.selectNodeContents(regularAmount);
+function textFits(node) {
+  if (!node) return false;
   const range = document.createRange();
-  range.selectNodeContents(amount);
-  const cell = box(amount);
-  return [...range.getClientRects()].every(rect => rotated ? rect.bottom <= cell.bottom + 1 : rect.right <= cell.right + 1);
+  range.selectNodeContents(node);
+  const bounds = box(node);
+  return [...range.getClientRects()].every(rect => rotated ? rect.bottom <= bounds.bottom + 1 : rect.right <= bounds.right + 1);
 }
+const emphasisCells = [supplier, panel.querySelector('[data-invoice-id="2"] .nfe-date'), amount];
+const highlights = emphasisCells.map(cell => {
+  const card = cell?.firstElementChild;
+  return card && { field:cell.className, visible:getComputedStyle(card).backgroundColor !== 'rgba(0, 0, 0, 0)',
+    textFits:textFits(card), cellFits:textFits(cell) };
+});
+const retentionFacts = id => panel.querySelectorAll(`[data-invoice-id="${id}"] .nfe-tax-stack .nfe-fact`);
+const isRed = card => {
+  const [red, green, blue] = getComputedStyle(card).borderLeftColor.match(/\d+/g).map(Number);
+  return red > 1.5 * Math.max(green, blue);
+};
+const [retainedRegime, retained] = retentionFacts('3');
+const [, otherRetention] = retentionFacts('2');
+const retentionHighlight = retained && {
+  red: isRed(retained),
+  otherRetentionRed: isRed(otherRetention),
+  regimeRed: isRed(retainedRegime),
+  text: retained.textContent,
+};
 const isBefore = (first, second, axis) => first && second &&
   (axis === 'inline'
     ? rotated ? box(first).bottom <= box(second).y : box(first).right <= box(second).x
@@ -130,7 +152,9 @@ const layout = {
   availableReportWidth:reportBody.parentElement.clientWidth,
   overlayArrows:arrows.length,
   tableScrolls:reportBody.scrollWidth > reportBody.clientWidth,
-  amountFits:amountFitsCell(),
+  amountFits:textFits(amount),
+  regularAmountSingleLine:regularAmountRange.getClientRects().length === 1,
+  highlights, retentionHighlight,
   rotated, mei:hasMei(), pdfOnLeft:Boolean(isBefore(pdf,supplier,'inline')),
   metricsAbove:Boolean(isBefore(panel.querySelector('.nfe-metrics'), panel.querySelector('table'), 'block')),
   headerControls:!!panel.querySelector('.nfe-header [data-action="print-report-pdf"]') &&

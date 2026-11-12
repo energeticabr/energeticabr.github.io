@@ -84,8 +84,8 @@
 .nfe-table th:nth-child(1) { width: 56px; text-align: center; }
 .nfe-table th:nth-child(2) { width: 11%; }
 .nfe-table th:nth-child(3) { width: 21%; }
-.nfe-table th:nth-child(4) { width: 10%; }
-.nfe-table th:nth-child(5) { width: 12%; }
+.nfe-table th:nth-child(4) { width: 94px; }
+.nfe-table th:nth-child(5) { width: 15%; }
 .nfe-table td {
   padding: 8px 6px;
   border-bottom: 1px solid #d6e2e7;
@@ -118,7 +118,26 @@
 .nfe-table small { display: block; margin-top: 4px; color: #456375; font-size: 11px; }
 .nfe-pdf-pending { text-align: center; }
 .nfe-type { color: #245d93; }
-.nfe-date, .nfe-money { font-weight: 700; font-variant-numeric: tabular-nums; }
+.nfe-date, .nfe-money { font-variant-numeric: tabular-nums; }
+.nfe-detail-card {
+  display: block;
+  padding: 6px 5px;
+  border: 1px solid #acc7e0;
+  border-left: 3px solid #316da5;
+  border-radius: 7px;
+  background: #e3effc;
+  color: #123d64;
+  font-weight: 800;
+}
+.nfe-detail-card small { color: #315574; font-weight: 500; }
+.nfe-date .nfe-detail-card { text-align: center; }
+.nfe-money .nfe-detail-card {
+  border-color: #9ac6ce;
+  border-left-color: #087689;
+  background: #d9f1f4;
+  color: #064857;
+  text-align: right;
+}
 .nfe-table time { white-space: nowrap; }
 .nfe-fact, .nfe-note-status {
   padding: 5px;
@@ -134,7 +153,12 @@
   background: #fff1d7;
   color: #704300;
 }
-.nfe-table [data-tone="conflict"], .nfe-table [data-tone="invalid"] { border-color: #f2b8c0; border-left-color: #c3233b; background: #ffeaec; color: #8b2730; }
+.nfe-table [data-tone="conflict"], .nfe-table [data-tone="invalid"], .nfe-fact[data-tone="retained"] {
+  border-color: #f2b8c0;
+  border-left-color: #c3233b;
+  background: #ffeaec;
+  color: #8b2730;
+}
 .nfe-fact small { color: inherit; }
 .nfe-pager { display: flex; justify-content: center; align-items: center; flex-wrap: wrap; gap: 12px; margin: 10px 0; font-size: 12px; }
 .nfe-pager button {
