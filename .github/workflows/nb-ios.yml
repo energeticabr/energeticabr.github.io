@@ -27,7 +27,7 @@ defaults:
 jobs:
   apple:
     name: Cadastro Apple
-    if: github.event_name == 'workflow_dispatch' || (github.event.pull_request.head.repo.full_name == github.repository && github.actor == github.repository_owner && github.head_ref == 'feat/nb-participacoes-ios')
+    if: github.event_name == 'workflow_dispatch'
     runs-on: ubuntu-latest
     environment: app-store-connect
     env:
@@ -40,7 +40,7 @@ jobs:
       - uses: actions/setup-node@v4
         with:
           node-version: 24
-      - if: inputs.operation == 'prepare' || github.event_name == 'pull_request'
+      - if: inputs.operation == 'prepare'
         run: node scripts/nb-apple.mjs register
       - if: inputs.operation == 'publish'
         run: node scripts/nb-apple.mjs check
@@ -55,6 +55,8 @@ jobs:
     timeout-minutes: 35
     steps:
       - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
       - uses: pnpm/action-setup@v4
         with:
           version: 11.19.0
@@ -66,7 +68,7 @@ jobs:
       - name: Compilar e verificar a identidade do NB
         run: |
           pnpm install --frozen-lockfile
-          pnpm guard:signature-gestures
+          pnpm guard:signature-gestures -- --base-ref origin/main
           node --test tests/nb-participacoes.test.mjs tests/chat-client.test.mjs tests/native-bootstrap.test.mjs
           node scripts/prepare-nb-ios.mjs
           pnpm build --mode nb-participacoes
