@@ -2,7 +2,6 @@ import { SHAREPOINT_SITES } from "../../../../portal/config.js";
 import { createGraphClient } from "../../../../portal/data/graph-client.js";
 import { createSharePointRepository } from "../../../../portal/data/sharepoint-repository.js";
 import { provisionDateKey } from "./pending-provision-dates.js";
-import { buildPendingWorkDiariesReport } from "./pending-work-diaries-report-model.js";
 
 const MAX_PAGES = 100;
 
@@ -20,6 +19,35 @@ function scalar(value) {
     return "";
   }
   return String(value).trim();
+}
+
+function calendarDate(value) {
+  if (value == null) return '';
+  if (typeof value !== 'string') throw new TypeError('Campo DATA inválido na consulta de diários pendentes.');
+  const raw = value.trim();
+  if (!raw) return '';
+  if (/^\d{4}-\d{2}-\d{2}T/.test(raw)) {
+    // Date.parse can roll an impossible timestamp day into the following month.
+    if (!provisionDateKey(raw.slice(0, 10))
+      || !/^\d{4}-\d{2}-\d{2}T(?:[01]\d|2[0-3]):[0-5]\d(?::[0-5]\d(?:\.\d{1,9})?)?(?:Z|[+-](?:[01]\d|2[0-3]):[0-5]\d)?$/.test(raw)) return '';
+  }
+  return provisionDateKey(raw);
+}
+
+function validatePendingDiaryRows(rows) {
+  const seen = new Map();
+  for (const { id: rawId, date, branch, status } of rows) {
+    const id = Number(rawId);
+    if (!/^\d+$/.test(rawId) || !Number.isSafeInteger(id) || id < 1) {
+      throw new TypeError("ID inválido na consulta de diários pendentes.");
+    }
+    const normalized = { date: calendarDate(date), branch, status: status.toUpperCase() };
+    const previous = seen.get(id);
+    if (previous && (previous.date !== normalized.date || previous.branch !== branch || previous.status !== normalized.status)) {
+      throw new TypeError("ID duplicado com campos conflitantes na consulta de diários pendentes.");
+    }
+    seen.set(id, normalized);
+  }
 }
 
 export function createPendingConstructionDiaryData({
@@ -47,8 +75,8 @@ export function createPendingConstructionDiaryData({
     const responsible = column(["RESPONSAVELTECNICO", "RESPONSÁVEL TÉCNICO", "RESPONSAVEL"]);
     const query = `$expand=fields&$top=100&$filter=fields/${status} eq 'PENDENTE'`;
     const rows = new Map();
-    // Preserve raw report evidence before the tolerant reminder path filters or deduplicates it.
-    const reportRows = [];
+    // Validate the complete source before filtering or deduplicating rows.
+    const rawRows = [];
     let cursor = "";
     for (let pageNumber = 1; pageNumber <= MAX_PAGES; pageNumber++) {
       check();
@@ -65,13 +93,13 @@ export function createPendingConstructionDiaryData({
         const rawId = String(item?.id || "").trim(), id = strictReport ? String(Number(rawId)) : rawId, fields = item?.fields || {};
         if (strictReport) {
           if ([status,date,branch].some(name => !Object.hasOwn(fields,name))) throw new Error('Registro de diário incompleto.');
-          reportRows.push({id:rawId,date:scalar(fields[date]),branch:scalar(fields[branch]),status:scalar(fields[status])});
+          rawRows.push({id:rawId,date:scalar(fields[date]),branch:scalar(fields[branch]),status:scalar(fields[status])});
         }
         if (!/^[1-9]\d*$/.test(id) || scalar(fields[status]).toUpperCase() !== "PENDENTE") continue;
         rows.set(id, Object.freeze({ id, status: "PENDENTE", date: scalar(fields[date]), branch: scalar(fields[branch]), responsible: scalar(fields[responsible]) }));
       }
       if (page?.hasMore !== true) {
-        if (strictReport) buildPendingWorkDiariesReport({rows:reportRows,count:reportRows.length});
+        if (strictReport) validatePendingDiaryRows(rawRows);
         const sorted = [...rows.values()].sort((a, b) => (provisionDateKey(a.date) || "9999").localeCompare(provisionDateKey(b.date) || "9999") || Number(a.id) - Number(b.id));
         return Object.freeze({ rows: Object.freeze(sorted), count: sorted.length,
           ...(includeDateMetadata ? { dateColumn: columns.find(column => column.name === date) } : {}),

@@ -21,7 +21,6 @@ const cases = [
   ['depreciation-report-view', 'createDepreciationReportView'],
   ['management-report-view', 'createManagementReportView'],
   ['order-validation-report-view', 'createOrderValidationReportView', 'loadOrderValidationSnapshot'],
-  ['pending-work-diaries-report-view', 'createPendingWorkDiariesReportView'],
   ['pending-supplier-payments-report-view', 'createPendingSupplierPaymentsReportView'],
   ['provision-report-view', 'createProvisionReportView', 'loadProvisionReportSnapshot'],
   ['supplier-payroll-report-view', 'createSupplierPayrollReportView'],

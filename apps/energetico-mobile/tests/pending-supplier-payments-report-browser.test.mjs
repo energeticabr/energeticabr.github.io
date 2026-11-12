@@ -37,7 +37,7 @@ test('printing the upright pending supplier report removes its compact screen gu
 
 // Break caught: duplicated safe-area margins or a dialog width cap waste space;
 // compact arrow rails must still protect financial cells and searchable filters.
-test('pending supplier report reserves both arrow edges and captures full tables on phone tablet and Windows desktop',{timeout:180000},async t=>{
+test('pending supplier report reserves room for the previous arrow and captures full tables on phone tablet and Windows desktop',{timeout:180000},async t=>{
   const browser=[process.env.CHROME_BIN,'C:\\Program Files\\Google\\Chrome\\Application\\chrome.exe','/usr/bin/google-chrome'].find(path=>path&&existsSync(path));
   if (!browser) return t.skip('Chrome unavailable');
   const server=await createServer({root:resolve(fileURLToPath(new URL('..',import.meta.url))),server:{host:'127.0.0.1',port:0},logLevel:'silent'});
@@ -52,7 +52,7 @@ test('pending supplier report reserves both arrow edges and captures full tables
         assert.equal(result.loads,1); assert.equal(result.warning,false); assert.equal(result.closeVisible,true);
         assert.equal(result.busy,'false'); assert.ok(result.tables>0); continue;
       }
-      assert.equal(result.logoLoaded,true); assert.equal(result.arrows.length,2);
+      assert.equal(result.logoLoaded,true); assert.equal(result.arrows.length,1);
       assert.deepEqual(result.dateFilters.map(date=>[date.type,date.value,date.iso]),[
         ['text','01/10/2026','2026-10-01'],['text','07/10/2026','2026-10-07'],
       ],`${width}px visible filters must not use browser-localized date text`);
@@ -75,10 +75,10 @@ test('pending supplier report reserves both arrow edges and captures full tables
       assert.deepEqual(result.tables.map(table=>[table.columns,table.rows]),[[5,12],[4,12]]);
       for (const table of result.tables) {
         assert.ok(table.left>=result.arrows[0].right+2,`${width}px previous arrow overlaps table`);
-        assert.ok(table.right<=result.arrows[1].left-2,`${width}px next arrow overlaps table`);
+        assert.ok(table.right<=result.content.right+1,`${width}px table exceeds the content edge`);
       }
       assert.ok(result.tables[0].left-result.arrows[0].right<=8,`${width}px unused strip between previous arrow and table`);
-      assert.ok(result.arrows[1].left-result.tables[0].right<=26,`${width}px unused strip between table and next arrow (including scrollbar)`);
+      assert.ok(result.content.right-result.tables[0].right<=26,`${width}px unused strip at the right content edge (including scrollbar)`);
       assert.deepEqual(result.backgrounds,['rgb(255, 243, 224)','rgb(255, 224, 178)','rgb(30, 136, 229)']);
       assert.deepEqual(result.capturedTables,[{columns:5,rows:15},{columns:4,rows:14}]);
       assert.deepEqual(result.actions.map(action=>action.label),['Abrir PDF do relatório','Atualizar pagamentos pendentes']);
@@ -94,11 +94,12 @@ test('pending supplier report reserves both arrow edges and captures full tables
       assert.equal(result.keyboard.report.height,height,'keyboard must preserve full report viewport');
       assert.ok(result.keyboard.scrollOverflow<=1);
       assert.equal(result.keyboard.fontSize,result.fontSize,'keyboard must not inflate report fonts');
+      assert.equal(result.keyboard.arrows.length,1);
       for (const table of result.keyboard.tables) {
         assert.ok(table.left>=result.keyboard.arrows[0].right+2,`${width}px keyboard previous arrow overlaps table`);
-        assert.ok(table.right<=result.keyboard.arrows[1].left-2,`${width}px keyboard next arrow overlaps table`);
+        assert.ok(table.right<=result.keyboard.content.right+1,`${width}px keyboard table exceeds the content edge`);
       }
-      t.diagnostic(`${width}x${height} safe-area ${safeLeft}/${safeRight}: tables ${Math.round(result.tables[0].width)}px, both arrows clear; full PDF 12+12 rows`);
+      t.diagnostic(`${width}x${height} safe-area ${safeLeft}/${safeRight}: tables ${Math.round(result.tables[0].width)}px, previous arrow clear; full PDF 12+12 rows`);
     }
   } finally {await server.close();}
 });
