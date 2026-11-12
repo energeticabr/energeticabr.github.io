@@ -51,6 +51,7 @@ export function openSwileView({ document: doc, request, onClose }) {
   };
   const dialog = make('dialog', '', 'swile-dialog');
   dialog.setAttribute('aria-labelledby', 'swile-heading');
+  dialog.setAttribute('aria-modal', 'true');
   const title = make('h2', 'Swile');
   title.id = 'swile-heading';
   const headline = make('div', '', 'swile-headline');
