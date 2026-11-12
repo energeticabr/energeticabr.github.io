@@ -61,6 +61,9 @@ export function projectNfeRows(rows) {
     const key = text(fields.CHAVE_ACESSO);
     const supportsXmlFacts = Object.hasOwn(codes, type);
     const validKey = supportsXmlFacts && (type === 'NF-e' ? nfeKey : nfseKey).test(key);
+    const pdfName = attachmentName(fields.DANFE_URL);
+    const danfeCnoName = type === 'NF-e' && !complete && cnoState === 'unknown' && validKey
+      && text(fields.STATUS_DANFE).toUpperCase() === 'DISPONIVEL' ? pdfName : '';
     return [{
       id:String(id), orderId:nfeOrderId(fields[NFE_ORDER_FIELD]), type, date, issuedAt:date ? Date.parse(rawDate.toString().includes('/') ? date : rawDate) : 0,
       supplier:text(fields.Title) || text(fields.FORNECEDOR),
@@ -68,7 +71,7 @@ export function projectNfeRows(rows) {
       total:complete ? registrationNumber(fields.VALOR_TOTAL_NOTA) : null,
       retention, withholding, cno, cnoState, complete, cancelled,
       xmlUrl:complete && validKey ? url(fields.XML_URL) : '',
-      pdfName:attachmentName(fields.DANFE_URL),
+      pdfName, danfeCnoName,
       correctionCount:type === 'NF-e' ? new Set(registeredInvoiceCorrections(fields).map(event => event.sequence)).size : 0,
     }];
   }).sort((a, b) => b.date.localeCompare(a.date) || (b.issuedAt || 0) - (a.issuedAt || 0)
