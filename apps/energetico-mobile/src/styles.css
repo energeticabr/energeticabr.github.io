@@ -1607,8 +1607,9 @@ button.chat-rhid-attendance-card__cluster:focus-visible { outline: 3px solid #15
 
 .chat-main-dda-shortcut, .chat-main-nfe-shortcut, .chat-main-sicoob-shortcut { position:relative; background:#103b6b; }
 .chat-main-dda-shortcut { margin-top:124px; }
-.chat-main-dda-shortcut[data-dda-alert] { background:#a5142a; }
-.chat-main-dda-shortcut[data-dda-alert] .chat-main-dda-label { background:inherit; }
+.chat-main-dda-shortcut[data-dda-alert], .chat-main-sicoob-shortcut[data-sicoob-alert] { background:#a5142a; }
+.chat-main-dda-shortcut[data-dda-alert] .chat-main-dda-label,
+.chat-main-sicoob-shortcut[data-sicoob-alert] .chat-main-dda-label { background:inherit; }
 .chat-main-nfe-shortcut { margin-top:68px; }
 .chat-main-sicoob-shortcut { margin-top:12px; }
 .chat-main-dda-label { position:absolute; bottom:0; left:0; right:0; padding:1px 0; background:#103b6b; color:#fff; font-size:10px; font-weight:800; line-height:12px; text-align:center; }

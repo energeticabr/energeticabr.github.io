@@ -92,6 +92,7 @@ async function start() {
   const controller = createAppController({
     enableDdaReminders: true,
     enableDdaMenuAlert: true,
+    enableSicoobMenuAlert: true,
     enableTrancidReminders: true,
     auth,
     recovery: createRecoveryStorage(),

@@ -5,6 +5,7 @@ import { fiscalSupplierSimilarity } from './dda-provision-link.js';
 import { isImportedFinancialMovement, SICOOB_ORDER_FIELD } from './financial-gallery-models.js';
 
 export { SICOOB_ORDER_FIELD };
+export const SICOOB_UNLINKED_REVIEW_FIELD = 'SICOOB_SEM_VINCULACAO_REGULAR';
 
 export function sicoobOrderId(value) {
   if (typeof value !== 'string' && typeof value !== 'number') return '';
@@ -63,6 +64,18 @@ const MOVEMENT_LIST = 'MOVIMENTACOESFINANCEIRAS';
 const fieldObject = value => value && typeof value === 'object' && !Array.isArray(value);
 const scalar = value => value == null || typeof value === 'string' || typeof value === 'number';
 const blank = value => value == null || (typeof value === 'string' && !value.trim());
+const versionedMovementFields = [SICOOB_ORDER_FIELD, 'ORIGEMMOVIMENTACAO'];
+const reviewFields = [...versionedMovementFields, SICOOB_UNLINKED_REVIEW_FIELD];
+
+function movementVersion(item, movementId) {
+  const eTag = item?.eTag ?? item?.['@odata.etag'];
+  if (sicoobOrderId(item?.id) !== movementId || !fieldObject(item?.fields) ||
+    typeof eTag !== 'string' || !/^(?:W\/)?"[^"\s]+"$/.test(eTag)) {
+    throw new Error('Não foi possível verificar a versão atual da movimentação.');
+  }
+  if (!isImportedFinancialMovement(item.fields)) throw new Error('A movimentação não foi importada do Sicoob.');
+  return eTag;
+}
 
 function orderSupplier(order) {
   const supplier = order?.fields?.FORNECEDOR;
@@ -126,6 +139,46 @@ export function createSicoobOrderLink({ repository, orderRepository = repository
     return { suppliers, incomplete };
   }
 
+  async function hasPendingUnlinked({ signal } = {}) {
+    const list = await resolve(repository, MOVEMENT_LIST, signal);
+    const query = new URLSearchParams({
+      '$select': ['ID', ...reviewFields].join(','),
+      '$filter': "ORIGEMMOVIMENTACAO eq 'SICOOB'",
+    });
+    const items = await repository.getItems(siteKey, list, query, { signal });
+    active(signal);
+    if (!Array.isArray(items) || items.some(item => !sicoobOrderId(item?.id) || !fieldObject(item?.fields))) {
+      throw new Error('Consulta de transações incompleta.');
+    }
+    return items.some(({ fields }) => isImportedFinancialMovement(fields)
+      && !sicoobOrderId(fields[SICOOB_ORDER_FIELD]) && fields[SICOOB_UNLINKED_REVIEW_FIELD] !== true);
+  }
+
+  async function saveReview({ movementId: rawMovement, reviewed, signal }) {
+    const movementId = sicoobOrderId(rawMovement);
+    if (!movementId || typeof reviewed !== 'boolean') throw new RangeError('Regularização Sicoob inválida.');
+    const list = await resolve(repository, MOVEMENT_LIST, signal);
+    const current = await repository.getItem(siteKey, list, movementId, undefined,
+      { signal, restrictedFields: reviewFields, includeVersion: true });
+    active(signal);
+    const eTag = movementVersion(current, movementId);
+    if (!blank(current.fields[SICOOB_ORDER_FIELD])) {
+      throw new Error('O vínculo da movimentação mudou. Atualize o relatório.');
+    }
+    const previous = current.fields[SICOOB_UNLINKED_REVIEW_FIELD];
+    if (previous != null && typeof previous !== 'boolean') throw new Error('Regularização existente inválida.');
+    const receipt = { movementId, reviewed };
+    if ((previous === true) === reviewed) return receipt;
+    const saved = await repository.updateItem(siteKey, list, movementId, { [SICOOB_UNLINKED_REVIEW_FIELD]: reviewed },
+      { eTag, signal, readbackFields: reviewFields });
+    active(signal);
+    if (sicoobOrderId(saved?.id) !== movementId || !isImportedFinancialMovement(saved?.fields) ||
+      !blank(saved.fields[SICOOB_ORDER_FIELD]) || saved.fields[SICOOB_UNLINKED_REVIEW_FIELD] !== reviewed) {
+      throw new Error('A regularização não foi confirmada no SharePoint.');
+    }
+    return receipt;
+  }
+
   async function save({ movementId:rawMovement, orderId:rawOrder, expectedOrderId, signal }) {
     const movementId = sicoobOrderId(rawMovement), orderId = sicoobOrderId(rawOrder);
     const expected = sicoobOrderId(expectedOrderId);
@@ -140,17 +193,12 @@ export function createSicoobOrderLink({ repository, orderRepository = repository
     const [target, current] = await Promise.all([
       readOrder(orders, orderId, signal),
       repository.getItem(siteKey, movements, movementId, undefined,
-        { signal, restrictedFields:[SICOOB_ORDER_FIELD, 'ORIGEMMOVIMENTACAO'], includeVersion:true }),
+        { signal, restrictedFields: versionedMovementFields, includeVersion:true }),
     ]);
     active(signal);
     if (sicoobOrderId(target?.id) !== orderId) throw new Error('O pedido escolhido está indisponível.');
     const receipt = { movementId, orderId, supplier: orderSupplier(target) };
-    const eTag = current?.eTag ?? current?.['@odata.etag'];
-    if (sicoobOrderId(current?.id) !== movementId || !fieldObject(current?.fields) ||
-      typeof eTag !== 'string' || !/^(?:W\/)?"[^"\s]+"$/.test(eTag)) {
-      throw new Error('Não foi possível verificar a versão atual da movimentação.');
-    }
-    if (!isImportedFinancialMovement(current.fields)) throw new Error('A movimentação não foi importada do Sicoob.');
+    const eTag = movementVersion(current, movementId);
     const rawExisting = current.fields[SICOOB_ORDER_FIELD];
     const existing = sicoobOrderId(rawExisting);
     if (!existing && !blank(rawExisting)) {
@@ -177,6 +225,6 @@ export function createSicoobOrderLink({ repository, orderRepository = repository
     }
   }
 
-  return Object.freeze({ loadOptions, loadSuppliers, save });
+  return Object.freeze({ loadOptions, loadSuppliers, hasPendingUnlinked, saveReview, save });
 }
 

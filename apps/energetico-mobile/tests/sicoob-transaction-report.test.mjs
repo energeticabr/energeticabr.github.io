@@ -2,7 +2,10 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
 import { JSDOM } from 'jsdom';
+import { createAppController } from '../src/app-controller.js';
+import { createConversationStore } from '../src/chat/conversation-store.js';
 import { createSicoobOrderLink } from '../src/chat/sicoob-order-link.js';
+import { renderChatMarkup } from '../src/ui/chat-view.js';
 import { createSicoobTransactionReportView } from '../src/ui/sicoob-transaction-report-view.js';
 import { captureFilteredReport } from '../src/ui/report-print.js';
 
@@ -20,6 +23,100 @@ const payment = (id, fields = {}) => ({
     VALOR: '0,10',
     ...fields,
   },
+});
+
+test('regulariza e reverte a vinculação no relatório com confirmação e preserva o alerta de outras linhas', async t => {
+  const dom = new JSDOM('<main id="app"></main>');
+  const flag = 'SICOOB_SEM_VINCULACAO_REGULAR';
+  const records = [payment(1), payment(2, { CONTAPAGADORA: '00002-3' }), payment(3, { IDPEDIDO: 19 }),
+    payment(4, { ORIGEMMOVIMENTACAO: 'MANUAL' })];
+  const changes = [], pending = [];
+  const view = createSicoobTransactionReportView({
+    document: dom.window.document,
+    onLinkageChange: hasPending => pending.push(hasPending),
+    data: {
+      loadSnapshot: async () => ({ rows: records }),
+      orderLink: { async saveReview({ movementId, reviewed }) {
+        changes.push([movementId, reviewed]);
+        records.find(record => record.id === movementId).fields[flag] = reviewed;
+        return { movementId, reviewed };
+      } },
+    },
+  });
+  t.after(() => { view.destroy(); dom.window.close(); });
+  await view.open();
+  const cluster = id => view.element.querySelector(`[data-sicoob-unlinked-review="${id}"]`);
+  const dialog = () => view.element.querySelector('[data-sicoob-unlinked-dialog]');
+  const choose = answer => [...dialog().querySelectorAll('button')].find(node => node.textContent === answer).click();
+  const tick = () => new Promise(resolve => setImmediate(resolve));
+  assert.equal(cluster(1)?.textContent, 'N/A');
+  assert.equal(cluster(3), null);
+  assert.equal(cluster(4), null);
+  const account = view.element.querySelector('select[name="account"]');
+  account.value = '00001-5';
+  account.dispatchEvent(new dom.window.Event('change'));
+  assert.equal(cluster(2), null);
+  cluster(1).click();
+  assert.match(dialog().textContent, /Deseja tornar a não vinculação regular\?/);
+  choose('Não');
+  assert.deepEqual(changes, []);
+  cluster(1).click(); choose('Sim'); await tick();
+  assert.equal(cluster(1)?.textContent, 'SEM VINCULAÇÃO');
+  assert.equal(cluster(1).dataset.linkState, 'regularized');
+  assert.equal(dom.window.document.activeElement, cluster(1));
+  assert.equal(pending.at(-1), true);
+  account.value = '';
+  account.dispatchEvent(new dom.window.Event('change'));
+  cluster(2).click(); choose('Sim'); await tick();
+  assert.equal(pending.at(-1), false);
+  view.close(); await view.open();
+  assert.equal(cluster(1)?.textContent, 'SEM VINCULAÇÃO');
+  cluster(1).click();
+  assert.match(dialog().textContent, /Deseja reverter a não vinculação\?/);
+  choose('Sim'); await tick();
+  assert.equal(cluster(1)?.textContent, 'N/A');
+  assert.equal(pending.at(-1), true);
+  assert.deepEqual(changes, [['1', true], ['2', true], ['1', false]]);
+});
+
+test('o menu mostra a pendência Sicoob antes de abrir o relatório e atualiza a cor após regularizar', async t => {
+  let pending = true, reportOptions;
+  const actions = new Map(), renders = [];
+  const tick = () => new Promise(resolve => setImmediate(resolve));
+  const controller = createAppController({
+    enableSicoobMenuAlert: true,
+    store: createConversationStore(),
+    auth: { initialize: async () => ({ homeAccountId: 'sicoob-test' }), getToken: async () => '', signOut: async () => {} },
+    view: { render: state => renders.push(state), on(type, fn) { actions.set(type, fn); return () => actions.delete(type); },
+      focusComposer() {}, destroy() {} },
+    native: { importSharedItems: async () => [] },
+    client: { sendText: async () => ({ status: 'processed', messages: [] }) },
+    pendingProvisionAttachmentsDataFactory: async () => ({ loadUpcomingPayments: async () => [] }),
+    pendingConstructionDiaryDataFactory: async () => ({ loadPending: async () => [] }),
+    registrationGalleryDataFactory: async () => ({ orderLink: { hasPendingUnlinked: async () => pending } }),
+    sicoobTransactionReportFactory: async options => {
+      reportOptions = options;
+      return { open() {}, close() {}, destroy() {} };
+    },
+  });
+  t.after(() => controller.stop());
+  await controller.start(); await tick();
+  const renderMenu = () => new JSDOM(renderChatMarkup({ ...renders.at(-1), messages: [{ role: 'assistant', type: 'poll',
+    question: 'QUAL ÁREA VOCÊ DESEJA ACESSAR?', options: [{ id: 'group_pending', label: 'PENDÊNCIAS' }] }] }));
+  const alert = renderMenu();
+  assert.ok(alert.window.document.querySelector('[data-action="open-sicoob-transaction-report"][data-sicoob-alert]'));
+  assert.equal(alert.window.document.querySelector('[data-dda-alert]'), null);
+  alert.window.close();
+  await actions.get('open-sicoob-transaction-report')({ type: 'open-sicoob-transaction-report' });
+  reportOptions.onLinkageChange(false);
+  assert.equal(renders.at(-1).sicoobMenuAlert, true, 'an older report snapshot cannot clear a confirmed pending alert');
+  pending = false;
+  reportOptions.onLinkageChange(false, { changed: true });
+  await tick();
+  const cleared = renderMenu();
+  assert.ok(cleared.window.document.querySelector('[data-action="open-sicoob-transaction-report"]'));
+  assert.equal(cleared.window.document.querySelector('[data-sicoob-alert]'), null);
+  cleared.window.close();
 });
 
 test('shows the bank balance first and independently of transaction filters and printing', async () => {
@@ -328,8 +425,8 @@ test('highlights linked payments on either stripe and preserves the original unl
     row.cells[5].textContent,
     dom.window.getComputedStyle(row).backgroundColor,
   ]), [
-    ['—', 'rgba(0, 0, 0, 0)'],
-    ['—', 'rgb(239, 246, 250)'],
+    ['N/A', 'rgba(0, 0, 0, 0)'],
+    ['N/A', 'rgb(239, 246, 250)'],
     ['ID 526', 'rgb(234, 248, 238)'],
     ['ID 525', 'rgb(234, 248, 238)'],
   ]);
@@ -532,7 +629,7 @@ test('returns to the Sicoob report after linking or replacing an order and retai
   review.querySelector('[data-edit-review-cancel]').click();
   await settle();
   assert.deepEqual(writes, []);
-  assert.equal(query('tbody td:last-child').textContent, '—');
+  assert.equal(query('tbody td:last-child').textContent, 'N/A');
   assert.equal(document.defaultView.getComputedStyle(paymentRow).backgroundColor, 'rgba(0, 0, 0, 0)');
   review = select('44');
   review.querySelector('[data-edit-review-confirm]').click();
