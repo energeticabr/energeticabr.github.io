@@ -108,6 +108,52 @@ button.ddr-link-cluster:focus-visible { outline:2px solid #105367; outline-offse
 }
 .ddr-metric{min-width:0;overflow-wrap:anywhere}
 .ddr-metric[data-report-last-update] strong { font-size: 16px; }
+
+[data-report-refresh-status][hidden] { display: none; }
+[data-report-refresh-status]:not([hidden]) {
+  display: flex;
+  justify-content: center;
+  background: #edf5ff;
+  border-color: #9bbce3;
+  color: #123e69;
+}
+[data-report-refresh-status="success"]:not([hidden]) {
+  background: #eaf8ee;
+  border-color: #91bfa3;
+  color: #175334;
+}
+[data-report-refresh-status="error"]:not([hidden]) {
+  background: #fff0ef;
+  border-color: #e1a3a3;
+  color: #8e2530;
+}
+[data-report-refresh-status] .financial-refresh-term {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  overflow: hidden;
+  clip-path: inset(50%);
+}
+[data-report-refresh-status] > [role="status"] {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  margin: 0;
+  color: inherit;
+  font-size: 12px;
+  font-weight: 750;
+  line-height: 1.25;
+}
+[data-report-refresh-status] svg {
+  flex: none;
+  width: 18px;
+  height: 18px;
+  fill: none;
+  stroke: currentColor;
+  stroke-width: 2;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+}
 .ddr-due-days,.ddr-issued-date .ddr-issued-days{display:block;width:max-content;box-sizing:border-box;max-width:100%;margin:5px auto 0;padding:3px 6px;border:1px solid #fff;border-radius:6px;font-size:11px;font-weight:800;line-height:1.2;font-variant-numeric:tabular-nums;text-align:center;white-space:nowrap;print-color-adjust:exact;-webkit-print-color-adjust:exact}
 .ddr-due-days{background:var(--ddr-due-accent);color:#fff;box-shadow:0 1px 3px #17394b33}
 .ddr-issued-date .ddr-issued-days{background:#edf1f4;border-color:#c1ced6;color:#456375;font-weight:700}
@@ -149,6 +195,9 @@ button.ddr-link-cluster:focus-visible { outline:2px solid #105367; outline-offse
 [data-sicoob-balance] strong { overflow-wrap: anywhere; }
 [data-sicoob-balance] time { font-size: 11px; }
 @media screen {
+  .sicoob-transaction-summary:where(:has([data-report-refresh-status]:not([hidden]))) {
+    grid-template-columns: repeat(5, minmax(0, 1fr));
+  }
   .ddr-overlay[data-report-width-mode="wide"] [data-dda-summary]:has([data-sicoob-balance]) {
     grid-template-columns: repeat(5, minmax(0, 1fr));
   }
@@ -160,6 +209,7 @@ button.ddr-link-cluster:focus-visible { outline:2px solid #105367; outline-offse
 @media print {
   .sicoob-transaction-overlay .sicoob-transaction-summary { grid-template-columns: repeat(3, minmax(0, 1fr)); }
   [data-sicoob-balance] { display: none; }
+  [data-report-refresh-status]:not([hidden]) { display: none; }
 }
 .sicoob-transaction-table tbody tr.sicoob-transaction-linked {
   background: #eaf8ee;

@@ -7,6 +7,7 @@ import { bindReportLandscape } from './report-landscape.js';
 import { PDF_ATTACHMENT_ICON } from './report-pdf-attachment-icon.js';
 import { captureFilteredReport } from './report-print.js';
 import { createFinancialReportLastUpdate } from './financial-report-last-update.js';
+import { createFinancialReportRefreshStatus } from './financial-report-refresh-status.js';
 import { readDanfeCno } from '../web/nfe-danfe-cno.js';
 
 const PAGE_SIZE = 12;
@@ -93,6 +94,7 @@ export function createNfeReportView({ document:doc = globalThis.document, data, 
   body.setAttribute('aria-label', 'Notas fiscais da empresa');
   const metrics = make('dl', 'nfe-metrics');
   const lastUpdate = createFinancialReportLastUpdate(doc, { fiscal:true });
+  const refreshStatus = createFinancialReportRefreshStatus(doc, { fiscal:true });
   const filters = make('div', 'nfe-filters');
   const search = make('input');
   search.type = 'search';
@@ -164,6 +166,7 @@ export function createNfeReportView({ document:doc = globalThis.document, data, 
 
   let rows = null, page = 1, request, pageRequest, pageFacts, pdfRequest, returnFocus, app, oldInert, oldOverflow;
   let fiscalRunning = Boolean(syncMonitor?.running), fiscalStarting = false, loading = false, fiscalReloadPending = false;
+  let sourceRunning = Boolean(syncMonitor?.sourceRunning ?? fiscalRunning);
   const fiscalFacts = new Map();
   const orderLink = data.orderLink;
   const proposal = data.proposal && createNfeProposalView({
@@ -405,7 +408,7 @@ export function createNfeReportView({ document:doc = globalThis.document, data, 
     const visible = filteredRows(candidates);
     const pages = Math.max(1, Math.ceil(visible.length / PAGE_SIZE));
     page = Math.min(page, pages);
-    metrics.hidden = !rows;
+    metrics.hidden = !rows && refreshStatus.element.hidden;
     table.hidden = visible.length === 0;
     pager.hidden = pages === 1;
     metrics.replaceChildren();
@@ -415,7 +418,7 @@ export function createNfeReportView({ document:doc = globalThis.document, data, 
     metric('Valor total sem canceladas', amounts.length ? money.format(cents / 100) : '—');
     metric('Última emissão', visible[0]?.date ? displayDate(visible[0].date) : '—');
     metric('Com XML completo', String(visible.filter(row => row.complete).length));
-    metrics.append(lastUpdate.element);
+    metrics.append(lastUpdate.element, refreshStatus.element);
     if (rows) {
       feedback.textContent = visible.length ? 'Da emissão mais recente para a mais antiga.' : 'Nenhuma nota fiscal encontrada.';
       if (candidates.some(row => needsFilterFacts(row) && fiscalFacts.get(factsKey(row)) === null)) {
@@ -514,7 +517,12 @@ export function createNfeReportView({ document:doc = globalThis.document, data, 
 
   async function manualRefresh() {
     if (root.hidden || refresh.disabled || pdfRequest || picker?.isOpen || proposal?.isOpen) return;
-    if (!syncMonitor) return load(true);
+    refreshStatus.set('pending');
+    metrics.hidden = false;
+    if (!syncMonitor) {
+      refreshStatus.beginRead();
+      return load(true);
+    }
     fiscalStarting = true;
     syncRefreshButton();
     showFiscalNotice('');
@@ -522,6 +530,7 @@ export function createNfeReportView({ document:doc = globalThis.document, data, 
       const result = await syncMonitor.start();
       if (result?.startWarning && !root.hidden) showFiscalNotice(result.startWarning);
     } catch (error) {
+      refreshStatus.set('error');
       if (!root.hidden) showFiscalNotice(error?.message || 'Não foi possível iniciar a consulta à SEFAZ. Tente novamente.');
     } finally {
       fiscalStarting = false;
@@ -556,8 +565,12 @@ export function createNfeReportView({ document:doc = globalThis.document, data, 
       render();
       body.scrollTop = scrollTop;
       body.scrollLeft = scrollLeft;
+      refreshStatus.finishRead(true);
     } catch {
-      if (!signal.aborted) feedback.textContent = 'Não foi possível consultar as notas fiscais. Use Atualizar para tentar novamente.';
+      if (!signal.aborted) {
+        feedback.textContent = 'Não foi possível consultar as notas fiscais. Use Atualizar para tentar novamente.';
+        refreshStatus.finishRead(false);
+      }
     } finally {
       if (!signal.aborted) {
         loading = false;
@@ -601,10 +614,14 @@ export function createNfeReportView({ document:doc = globalThis.document, data, 
   });
 
   const unsubscribeFiscal = syncMonitor?.subscribe(state => {
-    const completed = fiscalRunning && !state.running;
+    const active = Boolean(state.sourceRunning ?? state.running);
+    const completed = sourceRunning && !active;
+    sourceRunning = active;
     fiscalRunning = state.running;
     if (completed) fiscalReloadPending = true;
     lastUpdate.update(state.lastSuccessfulAt);
+    refreshStatus.observe(state);
+    if (!refreshStatus.element.hidden) metrics.hidden = false;
     syncRefreshButton();
     if (completed) reloadFiscalRows();
   });

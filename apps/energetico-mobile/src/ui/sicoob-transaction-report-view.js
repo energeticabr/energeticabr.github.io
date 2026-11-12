@@ -11,6 +11,7 @@ import { addReportCloseControl } from './report-close-control.js';
 import { bindReportLandscape } from './report-landscape.js';
 import { PDF_ATTACHMENT_ICON } from './report-pdf-attachment-icon.js';
 import { createFinancialReportLastUpdate } from './financial-report-last-update.js';
+import { createFinancialReportRefreshStatus } from './financial-report-refresh-status.js';
 import { createSicoobBalanceMetric } from './sicoob-balance-metric.js';
 
 const LOGO = new URL('../../../../assets/logo-energetica-oficial.png', import.meta.url).href;
@@ -159,6 +160,7 @@ export function createSicoobTransactionReportView({ document: doc = globalThis.d
   let loading = false, starting = false, syncRunning = Boolean(syncMonitor?.running);
   let sourceRunning = Boolean(syncMonitor?.sourceRunning ?? syncMonitor?.running), reloadPending = false;
   const lastUpdate = createFinancialReportLastUpdate(doc);
+  const refreshStatus = createFinancialReportRefreshStatus(doc);
   let loadNotice = '';
   const app = doc.getElementById('app');
   const orderLink = data.orderLink;
@@ -295,14 +297,18 @@ export function createSicoobTransactionReportView({ document: doc = globalThis.d
   }
   async function manualRefresh() {
     if (refresh.disabled || root.hidden || receiptRequest || picker?.isOpen || reviewDialog) return;
+    refreshStatus.set('pending');
     void balanceMetric.refresh();
-    if (!syncMonitor) return load();
+    if (!syncMonitor) {
+      refreshStatus.beginRead();
+      return load();
+    }
     starting = true; syncRefreshButton();
     try {
       const result = await syncMonitor.start();
       if (result?.startWarning && !root.hidden) showNotice(result.startWarning);
     }
-    catch (error) { if (!root.hidden) showNotice(error?.message || 'Não foi possível iniciar a sincronização.'); }
+    catch (error) { refreshStatus.set('error'); if (!root.hidden) showNotice(error?.message || 'Não foi possível iniciar a sincronização.'); }
     finally { starting = false; syncRefreshButton(); }
   }
 
@@ -404,7 +410,7 @@ export function createSicoobTransactionReportView({ document: doc = globalThis.d
       metric.append(make('strong', '', value));
       summary.append(metric);
     }
-    summary.append(lastUpdate.element);
+    summary.append(lastUpdate.element, refreshStatus.element);
     const scope = make('p', 'ddr-source', 'Pagamentos importados do Sicoob · Galeria de Movimentação');
     content.replaceChildren(summary, scope);
     if (!filtered.length) {
@@ -495,7 +501,7 @@ export function createSicoobTransactionReportView({ document: doc = globalThis.d
     const loadingNotice = make('p', 'ddr-notice', 'Carregando transações do Sicoob…');
     loadingNotice.setAttribute('role', 'status');
     if (!rows) {
-      summary.replaceChildren(balanceMetric.element);
+      summary.replaceChildren(balanceMetric.element, lastUpdate.element, refreshStatus.element);
       content.replaceChildren(summary, loadingNotice);
     }
     try {
@@ -529,6 +535,7 @@ export function createSicoobTransactionReportView({ document: doc = globalThis.d
       const position = [content.scrollTop, content.scrollLeft];
       render();
       [content.scrollTop, content.scrollLeft] = position;
+      refreshStatus.finishRead(true);
     } catch {
       if (active !== request) return;
       if (rows) {
@@ -540,6 +547,7 @@ export function createSicoobTransactionReportView({ document: doc = globalThis.d
         error.setAttribute('role', 'alert');
         content.replaceChildren(summary, error);
       }
+      refreshStatus.finishRead(false);
     } finally {
       if (active === request) {
         root.setAttribute('aria-busy', 'false');
@@ -580,6 +588,7 @@ export function createSicoobTransactionReportView({ document: doc = globalThis.d
     sourceRunning = active;
     syncRunning = Boolean(state.running);
     lastUpdate.update(state.lastSuccessfulAt);
+    refreshStatus.observe(state);
     syncRefreshButton(); resumeRefresh();
   });
   refresh.addEventListener('click', () => void manualRefresh());
