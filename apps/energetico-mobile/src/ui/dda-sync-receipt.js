@@ -1,5 +1,4 @@
 import { formatDdaElapsed } from '../chat/dda-bank-refresh.js';
-import { scheduleCompletionDismiss } from './completion-receipt-dismiss.js';
 /** Every terminal outcome is acknowledged; only confirmed IDs identify new records. */
 export function createDdaSyncReceipt({ document: doc, host, format, source = 'dda', onClose = () => {}, global = false, requireAcknowledgement = false, onAcknowledge = async () => true }) {
   let current = null;
@@ -14,7 +13,6 @@ export function createDdaSyncReceipt({ document: doc, host, format, source = 'dd
   function close() {
     const previous = current; current = null;
     if (!previous) return;
-    previous.cancelReceiptDismiss?.();
     doc.removeEventListener('focusin', keepFocus, true);
     previous.observer?.disconnect();
     if(previous.native&&previous.overlay.open)previous.overlay.close();
@@ -69,7 +67,6 @@ export function createDdaSyncReceipt({ document: doc, host, format, source = 'dd
     const button = el('button', 'gallery-record-dialog-button', 'Entendi'); button.type = 'button';
     button.addEventListener('click', async () => {
       if (current?.dialog !== dialog || button.disabled) return;
-      current.cancelReceiptDismiss?.();
       if(!requireAcknowledgement){close();return;}
       button.disabled=true;
       try{if(await onAcknowledge()!==false&&current?.dialog===dialog)close();}finally{button.disabled=false;}
@@ -86,16 +83,13 @@ export function createDdaSyncReceipt({ document: doc, host, format, source = 'dd
     }
     overlay.append(dialog); host.append(overlay); current = { overlay, dialog, button, trigger, background, native, observer };
     if(native)overlay.showModal();else if(global)overlay.setAttribute('open','');
-    overlay.addEventListener('cancel',event=>{event.preventDefault();if(!requireAcknowledgement)close();});
-    overlay.addEventListener('click', event => { event.stopPropagation(); if (event.target === overlay && !requireAcknowledgement) close(); });
+    overlay.addEventListener('cancel', event => event.preventDefault());
+    overlay.addEventListener('click', event => event.stopPropagation());
     overlay.addEventListener('keydown', event => {
-      if (event.key === 'Escape') { event.preventDefault(); event.stopPropagation(); if(!requireAcknowledgement)close(); }
+      if (event.key === 'Escape') { event.preventDefault(); event.stopPropagation(); }
       if (event.key === 'Tab') { event.preventDefault(); event.stopPropagation(); button.focus(); }
     });
     doc.addEventListener('focusin', keepFocus, true); button.focus({ preventScroll: true });
-    if (result.status === 'succeeded') current.cancelReceiptDismiss = scheduleCompletionDismiss(() => {
-      if (current?.dialog === dialog) button.click();
-    });
     return true;
   }
   return { show, close, destroy: close };

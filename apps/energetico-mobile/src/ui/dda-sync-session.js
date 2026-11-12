@@ -7,6 +7,8 @@ export function createDdaSyncSession({document:doc=globalThis.document,storage,s
  if(storage===undefined){try{storage=doc?.defaultView?.localStorage??globalThis.localStorage;}catch{/* Monitor refuses unpersisted starts; server recovery still works. */}}
  let receipt=null,acknowledge=null,details=null,disposed=false,presentation=0;
  const visible=()=>!disposed&&Boolean(doc?.body?.isConnected)&&doc.visibilityState!=='hidden';
+ // The monitor retries pending results after the displayed receipt is acknowledged.
+ const receiptOpen=()=>doc.querySelector('[data-dda-sync-result], [data-sefaz-sync-result]');
  function hide(){presentation++;details?.abort();details=null;acknowledge=null;receipt?.close();}
  function format(row,name){
   const raw=registrationRawField(row.fields,name,REGISTRATION_GALLERY_MODELS.dda);
@@ -15,7 +17,7 @@ export function createDdaSyncSession({document:doc=globalThis.document,storage,s
   return typeof raw==='string'||typeof raw==='number'?String(raw):'—';
  }
  const monitor=createDdaSyncMonitor({...options,source,storage,isVisible:visible,hide,present:async(result,ack)=>{
-  if(!visible()||doc.querySelector('.dda-sync-overlay--global'))return false;
+  if(!visible()||receiptOpen())return false;
   const version=++presentation;let rows=[];
   if(source==='dda'&&result.status==='succeeded'&&result.created>0){
    const controller=details=new AbortController();let timer;
@@ -23,7 +25,7 @@ export function createDdaSyncSession({document:doc=globalThis.document,storage,s
    catch{/* Confirmed IDs remain visible even when the optional gallery read fails. */}
    finally{clearTimeout(timer);if(details===controller)details=null;}
   }
-  if(version!==presentation||!visible()||options.isCurrent?.()===false||doc.querySelector('.dda-sync-overlay--global'))return false;
+  if(version!==presentation||!visible()||options.isCurrent?.()===false||receiptOpen())return false;
   if(!receipt)receipt=createDdaSyncReceipt({document:doc,host:doc.body,source,format,global:true,requireAcknowledgement:true,
    onAcknowledge:()=>acknowledge?.()??false});
   acknowledge=ack;

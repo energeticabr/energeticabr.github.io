@@ -1,13 +1,11 @@
 import {SEFAZ_SOURCES,sefazSourceSummary,isSefazTerminal} from '../chat/sefaz-sync-receipt.js';
-import { scheduleCompletionDismiss } from './completion-receipt-dismiss.js';
 
-/** Success expiry uses the same acknowledgement as Entendi; errors stay actionable. */
+/** Fiscal results stay visible until the user acknowledges them. */
 export function createSefazSyncReceipt({document:doc,onAcknowledge=async()=>false}) {
   let current=null;
   const el=(tag,cls,text)=>{const node=doc.createElement(tag);node.className=cls;if(text!==undefined)node.textContent=text;return node;};
   function focus(event) { if(current&&!doc.querySelector('[data-dda-sync-result]')&&!current.overlay.contains(event.target))current.button.focus({preventScroll:true}); }
   function close() {
-    current?.cancelReceiptDismiss?.();
     const previous=current;current=null;if(!previous)return;
     doc.removeEventListener('focusin',focus,true);previous.observer?.disconnect();
     if(previous.native&&previous.overlay.open)previous.overlay.close();previous.overlay.remove();
@@ -41,7 +39,6 @@ export function createSefazSyncReceipt({document:doc,onAcknowledge=async()=>fals
     const button=el('button','sefaz-sync-ack','Entendi');button.type='button';
     button.addEventListener('click',async()=>{
       if(current?.dialog!==dialog||button.disabled)return;
-      current.cancelReceiptDismiss?.();
       button.disabled=true;
       try { if(await onAcknowledge()!==false){if(current?.dialog===dialog)close();}
         else{feedback.hidden=false;feedback.textContent='Não foi possível salvar o reconhecimento neste aparelho. Tente novamente.';}
@@ -61,9 +58,6 @@ export function createSefazSyncReceipt({document:doc,onAcknowledge=async()=>fals
     current={overlay,dialog,button,trigger,native,observer};
     if(native)overlay.showModal();else overlay.setAttribute('open','');
     doc.addEventListener('focusin',focus,true);button.focus({preventScroll:true});
-    if(result.status==='succeeded')current.cancelReceiptDismiss=scheduleCompletionDismiss(()=>{
-      if(current?.dialog===dialog)button.click();
-    });
     return true;
   }
   return {show,close,destroy:close};

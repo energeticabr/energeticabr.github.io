@@ -23,6 +23,8 @@ test('new DDA popup identifies only confirmed created IDs across filters and clo
  assert.match(popup.textContent,/ID 43/);assert.doesNotMatch(popup.textContent,/EXISTENTE|OUTRA SINCRONIZACAO/);
  assert.equal(doc.querySelector('.rg-header').inert,true);
  popup.dispatchEvent(new dom.window.KeyboardEvent('keydown',{key:'Escape',bubbles:true}));
+ assert.ok(popup.isConnected);
+ popup.querySelector('button').click();
  assert.equal(doc.querySelector('[data-dda-new-items]'),null);assert.equal(doc.querySelector('.rg-overlay').hidden,false);
  assert.equal(doc.querySelector('.rg-header').inert,false);assert.equal(doc.activeElement,button);
  gallery.destroy();dom.window.close();
