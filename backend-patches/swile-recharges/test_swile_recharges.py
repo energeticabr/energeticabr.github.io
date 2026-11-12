@@ -9,6 +9,9 @@ class Gateway:
     def __init__(self):
         self.calls = []
         self.uncertain = False
+        self.external_id = None
+        self.status = 'WAITING_PAYMENT'
+        self.summary_orders = []
 
     def request(self, path, *, data=None, query=None):
         self.calls.append((path, data, query))
@@ -30,13 +33,22 @@ class Gateway:
             ]}
         if path == 'order/summary':
             return {'summaryId': 'SUM1', 'valueCredit': 225.05, 'valuePayment': 226.05,
-                    'totalEmployees': 1, 'payerName': 'Matriz', 'payerDocument': '12345678000190'}
+                    'totalEmployees': 1, 'payerName': 'Matriz', 'payerDocument': '12345678000190',
+                    'orders': self.summary_orders}
         if path == 'order/create':
+            self.external_id = data['externalId']
             if self.uncertain:
                 raise SwileError('Resultado incerto.', 502)
             return {'orderGroupCode': 'SWO123', 'status': 'CREATED'}
+        if path == 'order/group':
+            return {'last': True, 'orderGroups': [
+                {'groupCode': 'OTHER', 'valueCredit': 225.05, 'totalEmployees': 1},
+                {'groupCode': 'SWO123', 'valueCredit': 225.05, 'totalEmployees': 1},
+            ]}
+        if path == 'order/group/status/OTHER':
+            return {'orderGroupCode': 'OTHER', 'status': 'WAITING_PAYMENT', 'externalId': 'unrelated'}
         if path == 'order/group/status/SWO123':
-            return {'orderGroupCode': 'SWO123', 'status': 'WAITING_PAYMENT'}
+            return {'orderGroupCode': 'SWO123', 'status': self.status, 'externalId': self.external_id}
         raise AssertionError(path)
 
 
@@ -85,6 +97,41 @@ class ServiceTests(unittest.TestCase):
             with self.assertRaises(SwileError):
                 self.service.preview('user-a', {**self.data, 'items': items})
         self.assertFalse(any(path == 'order/summary' for path, _, _ in self.gateway.calls))
+
+    def test_two_operators_cannot_send_identical_orders(self):
+        first = self.service.preview('user-a', self.data)
+        second = self.service.preview('user-b', self.data)
+        self.service.confirm('user-a', first['id'])
+        with self.assertRaisesRegex(SwileError, 'idêntico'):
+            self.service.confirm('user-b', second['id'])
+        self.assertEqual([], self.service.orders('user-b'))
+        self.assertEqual(1, sum(path == 'order/create' for path, _, _ in self.gateway.calls))
+
+    def test_exact_external_reference_recovers_a_lost_create_response(self):
+        self.gateway.uncertain = True
+        preview = self.service.preview('user-a', self.data)
+        self.service.confirm('user-a', preview['id'])
+        receipts = self.service.orders('user-a', preview['id'])
+        self.assertEqual('SWO123', receipts[0]['orderCode'])
+        self.assertEqual('WAITING_PAYMENT', receipts[0]['status'])
+        self.assertEqual('SWO123', self.service.confirm('user-a', preview['id'])['orderCode'])
+        self.assertEqual(1, sum(path == 'order/create' for path, _, _ in self.gateway.calls))
+
+    def test_confirmed_creation_error_allows_new_preview(self):
+        preview = self.service.preview('user-a', self.data)
+        self.service.confirm('user-a', preview['id'])
+        self.gateway.status = 'CREATION_ERROR'
+        self.service.orders('user-a')
+        next_preview = self.service.preview('user-a', self.data)
+        self.assertNotEqual(preview['id'], next_preview['id'])
+        self.assertNotIn('receipt', next_preview)
+
+    def test_summary_rejects_a_wrong_wallet_even_when_totals_match(self):
+        self.gateway.summary_orders = [{'employees': [
+            {'document': '12345678900', 'cardValue': {'v131': 225.05}},
+        ]}]
+        with self.assertRaisesRegex(SwileError, 'diverge'):
+            self.service.preview('user-a', self.data)
 
 
 if __name__ == '__main__':

@@ -708,7 +708,12 @@ export function createChatClient({
       headers: { Accept: 'application/json', Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' },
       body: JSON.stringify({ ...payload, action: `swile_${operation}` }),
       cache: 'no-store', credentials: 'omit',
-    }, response => parsePortalResponse(response, 'A consulta Swile'), operation === 'directory' || operation === 'orders');
+    }, response => parsePortalResponse(response, 'A consulta Swile'), operation !== 'confirm').catch(error => {
+      if (operation === 'confirm' && error.code === 'NETWORK_UNCERTAIN') {
+        throw new Error('O envio ficou sem confirmação. Consulte Pedidos enviados na aba Swile antes de reenviar.', { cause: error });
+      }
+      throw error;
+    });
     if (!result?.swile || typeof result.swile !== 'object') throw new Error('A integração Swile ainda não está disponível.');
     return result.swile;
   }
