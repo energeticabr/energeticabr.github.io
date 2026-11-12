@@ -43,7 +43,6 @@ import "../ui/commercial-receipts.css";
 import "../ui/commercial-milestones.css";
 import "../ui/commercial-documents.css";
 import "../ui/sac-pathologies.css";
-import "../ui/quotation-report.css";
 import "../ui/depreciation-report.css";
 import "../ui/document-control-report.css";
 import "../ui/task-association-report.css";
