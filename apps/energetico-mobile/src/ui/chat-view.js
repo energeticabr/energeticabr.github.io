@@ -1750,6 +1750,9 @@ function renderPoll(message, busy, draft = "", databaseFilterMessage = null, act
   const galleryOptions = isHrGalleryMenu ? hrPayrollGalleryOptions(options) : [];
   const hrReport = humanResourcesReportInsertion(message, options);
   if (hrReport) options.splice(hrReport.index, 0, hrReport.option);
+  if (isHumanResourcesMenu(message) && !options.some(option => draftReplyId(option) === 'action_hr_swile')) {
+    options.push({ id: 'action_hr_swile', reply: 'action_hr_swile', label: 'Swile' });
+  }
   if (currentPoll && isSupplierPayrollMenu(message, activeFlow)
     && !options.some(option => draftReplyId(option) === PAYROLL_LAUNCH_REPLY_ID)) {
     const multiple = options.findIndex(option => draftReplyId(option) === "choice:tipo_lancamento:2");
