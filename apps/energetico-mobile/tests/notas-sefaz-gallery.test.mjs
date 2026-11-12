@@ -350,24 +350,31 @@ test('NF-e completa distingue observacao ausente de resumo ainda pendente',async
 
 test('NF-e source uses company SharePoint REST with read-only authorization and explicit fields', async () => {
   const calls = [], scopes = [];
+  const listId = '11111111-2222-3333-4444-555555555555';
+  const cursor = `https://tenant.sharepoint.com/sites/company/_api/web/lists(guid%27${listId}%27)/items?%24skiptoken=Paged%3dTRUE%26p_ID%3d100&%24top=100`;
   const data = createRegistrationGalleryData({ kind: 'notas_fiscais_sefaz',
     siteConfig: { company: { host: 'tenant.sharepoint.com', path: '/sites/company', readTransport: 'graph' } },
     tokenProvider: async requested => { scopes.push(...requested); return 'fictitious-token'; },
     fetchImpl: async (url, options) => {
       calls.push(String(url)); assert.equal(options.method, 'GET');
-      let value;
+      let value, nextLink;
       if (String(url).includes('/fields?')) value = [{ InternalName: 'Title', Title: 'Fornecedor', TypeAsString: 'Text' }];
+      else if (String(url) === cursor) value = [{ ...sample.fields, ID: 101 }];
       else if (String(url).includes('/items?')) {
         const query = new URL(String(url)).searchParams;
         for (const name of ['TIPO_FISCAL','ORIGEM_FISCAL','TOMADOR','CNPJ_TOMADOR','PAPEL_EMPRESA','DESCRICAO_SERVICO','MUNICIPIO_PRESTACAO','CODIGO_SERVICO','ISS','VALOR_SERVICOS','CONTRIB_SOCIAIS_RETIDAS','TOTAL_RETIDO','CHAVE_ACESSO','DATA_EMISSAO','DATA_EMISSAO_ORIGINAL','VALOR_LIQUIDO','DESCONTOS','XML_URL','DANFE_URL','STATUS_IMPORTACAO','OBSERVACOES_NOTA','INFORMACOES_FISCO','NATUREZA_OPERACAO','CNPJ_DESTINATARIO','FRETE','PROTOCOLO']) assert.ok(query.get('$select').split(',').includes(name),name);
         assert.equal(query.has('$expand'), false);
-        value = [{ Id: 4, ...sample.fields }];
-      } else if (String(url).includes('/_api/web/lists?')) value = [{ Id: '11111111-2222-3333-4444-555555555555', Title: 'NOTAS_FISCAIS_SEFAZ', BaseTemplate: 100, Hidden: false }];
+        value = Array.from({ length: 100 }, (_, index) => ({ ...sample.fields, ID: index + 1 }));
+        nextLink = cursor;
+      } else if (String(url).includes('/_api/web/lists?')) value = [{ Id: listId, Title: 'NOTAS_FISCAIS_SEFAZ', BaseTemplate: 100, Hidden: false }];
       else throw new Error('Unexpected fixture request ' + url);
-      return new Response(JSON.stringify({ value }), { status: 200, headers: { 'Content-Type': 'application/json' } });
+      return new Response(JSON.stringify({ value, 'odata.nextLink': nextLink }), { status: 200, headers: { 'Content-Type': 'application/json' } });
     },
   });
-  assert.equal((await data.loadSnapshot()).rows[0].id, '4');
+  const { rows } = await data.loadSnapshot();
+  assert.deepEqual(rows.map(row => Number(row.id)).sort((a, b) => a - b),
+    Array.from({ length: 101 }, (_, index) => index + 1));
+  assert.equal(calls.filter(url => url === cursor).length, 1);
   assert.ok(calls.every(url => url.startsWith('https://tenant.sharepoint.com/sites/company/_api/')));
   assert.ok(scopes.every(scope => scope === 'https://tenant.sharepoint.com/AllSites.Read'));
 });
