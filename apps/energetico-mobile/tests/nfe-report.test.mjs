@@ -139,20 +139,30 @@ test('the report sync button queues SEFAZ once and refreshes the same view after
   assert.match(report.element.querySelector('tbody').textContent, /141/);
 });
 
-test('report separates an incomplete CNO from a missing CNO and exposes the reported number', async t => {
+test('the CNO Divergente filter groups conflicting and incomplete CNOs while keeping row diagnoses', async t => {
   const dom = new JSDOM('<body/>');
   const document = dom.window.document;
-  const rows = [{ ...invoice, fields:{ ...invoice.fields, OBSERVACOES_NOTA:'CNO: 90.025.4406/72 RUA FICTÍCIA 134' } },
-    { id:'9', fields:{ ...invoice.fields, OBSERVACOES_NOTA:'' } }];
-  const report = createNfeReportView({ document, data:{ loadSnapshot:async () => ({ rows }), fetchInvoiceXml:async () => issuerXml } });
+  const rows = [
+    { ...invoice, fields:{ ...invoice.fields, OBSERVACOES_NOTA:'CNO: 90.025.4406/72 RUA FICTÍCIA 134' } },
+    { id:'9', fields:{ ...invoice.fields, OBSERVACOES_NOTA:'' } },
+    { id:'8', fields:{ ...invoice.fields, OBSERVACOES_NOTA:'CNO: 90.025.44069/72' } },
+    { ...invoice, id:'7' },
+  ];
+  const report = createNfeReportView({ document, data:{ loadSnapshot:async () => ({ rows }) } });
   t.after(() => { report.destroy(); dom.window.close(); });
   await report.open();
-  const badge = document.querySelector('[data-invoice-id="10"] [data-tone="invalid"]');
-  assert.match(badge?.textContent ?? '', /CNO inválido.*90\.025\.4406\/72/);
   const filter = document.querySelector('select[name="cno"]');
-  filter.value = 'invalid';
-  filter.dispatchEvent(new dom.window.Event('change'));
-  assert.deepEqual([...document.querySelectorAll('[data-invoice-id]')].map(row => row.dataset.invoiceId), ['10']);
+  const select = value => {
+    filter.value = value;
+    filter.dispatchEvent(new dom.window.Event('change'));
+    return [...document.querySelectorAll('[data-invoice-id]')].map(row => row.dataset.invoiceId).sort();
+  };
+  assert.deepEqual(select('conflict'), ['10', '8']);
+  assert.deepEqual([...filter.options].map(option => option.textContent), ['Todas', 'CNO correta', 'CNO Divergente', 'Sem CNO']);
+  assert.match(document.querySelector('[data-invoice-id="10"] [data-tone="invalid"]')?.textContent ?? '', /CNO inválido.*90\.025\.4406\/72/);
+  assert.match(document.querySelector('[data-invoice-id="8"] [data-tone="conflict"]')?.textContent ?? '', /CNO divergente.*90\.025\.44069\/72/);
+  assert.deepEqual(select('missing'), ['9']);
+  assert.deepEqual(select('valid'), ['7']);
 });
 
 test('fiscal rows follow the original emission calendar and distinguish incomplete XML', () => {
@@ -435,7 +445,8 @@ test('fiscal filters cover every page and combine document, search and XML class
   notes.push(service,
     { id:'18', fields:{ ...invoice.fields, OBSERVACOES_NOTA:'CNO 12.345.67890/12', XML_URL:xmlUrl + '?normal' } },
     { id:'17', fields:{ ...service.fields, XML_URL:xmlUrl + '?unavailable' } },
-    { id:'16', fields:{ ...service.fields, STATUS_IMPORTACAO:'RESUMO' } });
+    { id:'16', fields:{ ...service.fields, STATUS_IMPORTACAO:'RESUMO' } },
+    { id:'15', fields:{ ...invoice.fields, OBSERVACOES_NOTA:'CNO 90.025.4406/72', XML_URL:xmlUrl + '?incomplete-normal' } });
   const downloaded = [];
   const panel = createNfeReportView({ document, data:{
     loadSnapshot:async () => ({ rows:notes }),
@@ -443,7 +454,7 @@ test('fiscal filters cover every page and combine document, search and XML class
       downloaded.push(url);
       if (url.endsWith('?unavailable')) throw new Error('Indisponível');
       if (url.endsWith('?service')) return new Blob([serviceXml('900254406072')]);
-      return new Blob([issuerXml.replace('<CRT>4', url.endsWith('?normal') ? '<CRT>3' : '<CRT>2')]);
+      return new Blob([issuerXml.replace('<CRT>4', url.endsWith('normal') ? '<CRT>3' : '<CRT>2')]);
     },
   } });
   t.after(() => { panel.destroy(); dom.window.close(); });
@@ -477,10 +488,15 @@ test('fiscal filters cover every page and combine document, search and XML class
 
   filter('search', '', 'input');
   filter('document', '');
-  filter('regime', '');
+  filter('regime', 'Regime normal');
   filter('cno', 'conflict');
   await settle();
-  assert.deepEqual(ids(), ['18']);
+  assert.deepEqual(ids(), ['18', '15']);
+  const divergentPrint = await panel.capturePrint({ title:'Notas com CNO divergente' });
+  const divergentTable = divergentPrint.pages[0].blocks.find(block => block.type === 'table');
+  assert.equal(divergentTable.rows.length, 3);
+  assert.match(JSON.stringify(divergentTable.rows[1]), /CNO divergente/);
+  assert.match(JSON.stringify(divergentTable.rows[2]), /CNO inválido/);
 
   filter('retention', 'no');
   filter('cno', 'missing');
@@ -496,7 +512,7 @@ test('fiscal filters cover every page and combine document, search and XML class
   filter('retention', 'yes');
   filter('cno', '');
   await settle();
-  assert.deepEqual(ids(), ['18']);
+  assert.deepEqual(ids(), ['18', '15']);
 
   panel.close();
   await panel.open();
