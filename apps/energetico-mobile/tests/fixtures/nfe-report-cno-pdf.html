@@ -35,7 +35,8 @@ const report = createNfeReportView({ document, data:{
       const printedKey = id === '5' ? key.replace(/1$/, '2') : key;
       const additional = id === '8' ? '' : 'DADOS ADICIONAIS\n';
       const header = id === '12' ? 'CARTA DE CORRECAO ELETRONICA' : 'DANFE';
-      const note = id === '12' ? 'Corrigir DANFE para constar CNO 90.025.44060/72' : notes.get(id);
+      const note = id === '12' ? 'Corrigir DANFE para constar CNO 90.025.44060/72'
+        : id === '5' ? `NF-e referenciada: ${key}\n${notes.get(id)}` : notes.get(id);
       page.drawText(`${header}\nCHAVE DE ACESSO\n${printedKey.match(/.{4}/g).join(' ')}\n${additional}${note}`,
         { x:36, y:760, size:11, lineHeight:18 });
       if (id === '9' || id === '10') {

@@ -3,6 +3,33 @@ import { readPdfTextContent } from './pdf-text-content.js';
 
 const MAX_PDF_BYTES = 60_000_000;
 const ADDITIONAL_DATA = /\bDADOS\s+ADICIONAIS\b/i;
+const ACCESS_KEY = /(?:^|[^0-9A-Z])((?:[0-9][ \t]*){6}(?:[0-9A-Z][ \t]*){12}(?:[0-9][ \t]*){25}[0-9])(?![0-9A-Z]|[ \t]+[0-9])/gi;
+
+function danfeAccessKey(items) {
+  const label = items.find(item => /\bCHAVE\s+DE\s+ACESSO\b/i.test(item.str));
+  if (!label) return '';
+  const [, , , , labelX, labelY] = label.transform;
+  const lineHeight = Math.max(5, label.height);
+  // Read the printed field by position. PDF text order can place its value
+  // after unrelated fields, and referenced invoice keys can appear farther down.
+  const nearby = items.filter(item => {
+    const [, , , , x, y] = item.transform;
+    return item.str.trim() && y >= labelY - 3 * lineHeight && y <= labelY + 2 &&
+      x + item.width >= labelX - 8 * lineHeight && x <= labelX + label.width + 220;
+  }).sort((a, b) => a.transform[4] - b.transform[4]);
+  const lines = [];
+  for (const item of nearby) {
+    const [, , , , x, y] = item.transform;
+    const line = lines.find(candidate => Math.abs(candidate.y - y) <= 2 && x - candidate.endX <= 2 * lineHeight);
+    if (line) {
+      line.text += item.str;
+      line.endX = x + item.width;
+    } else lines.push({ y, endX:x + item.width, text:item.str });
+  }
+  const keys = new Set(lines.flatMap(({ text }) =>
+    [...text.matchAll(ACCESS_KEY)].map(match => match[1].replace(/[ \t]/g, '').toUpperCase())));
+  return keys.size === 1 ? [...keys][0] : '';
+}
 
 async function hasRasterizedContent(page, fromY, { OPS, Util }) {
   const { fnArray, argsArray } = await page.getOperatorList();
@@ -63,13 +90,12 @@ export async function readDanfeCno(blob, key, { document, signal }) {
       const items = content.items.filter(item => typeof item.str === 'string');
       const text = items.map(item => item.str + (item.hasEOL ? '\n' : '')).join('').trim();
       if (!text) return null;
+      if (number === 1 && (!/^[ \t]*DANFE\b/im.test(text) || danfeAccessKey(items) !== key)) return null;
       const heading = items.find(item => ADDITIONAL_DATA.test(item.str));
       const fromY = heading && !page.rotate ? heading.transform[5] + heading.height : Infinity;
       pages.push({ page, text, fromY });
     }
     const text = pages.map(page => page.text).join('\n');
-    const printedKey = new RegExp(`(?:^|[^0-9A-Z])${[...key].join('\\s*')}(?![0-9A-Z])`, 'i');
-    if (!/^[ \t]*DANFE\b/im.test(text) || !/\bCHAVE\s+DE\s+ACESSO\b/i.test(text) || !printedKey.test(text)) return null;
     const cno = invoiceConstructionCno({ OBSERVACOES_NOTA:text });
     if (cno.status !== 'missing') return cno;
     // Confirm absence only when the additional-data area is readable, including on hybrid PDFs.
