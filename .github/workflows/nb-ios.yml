@@ -16,6 +16,10 @@ on:
         description: Usar perfis de distribuição já cadastrados para o NB
         type: boolean
         default: true
+      source_beta_group:
+        description: Grupo de origem para reutilizar o único testador interno existente
+        type: string
+        required: false
 
 permissions:
   contents: read
@@ -33,6 +37,7 @@ jobs:
     name: Cadastro Apple
     if: github.event_name == 'workflow_dispatch'
     runs-on: ubuntu-latest
+    timeout-minutes: 25
     environment: app-store-connect
     env:
       APPLE_API_KEY_ID: ${{ secrets.APPLE_API_KEY_ID }}
@@ -47,12 +52,21 @@ jobs:
       - if: inputs.operation == 'prepare'
         run: node scripts/nb-apple.mjs register
       - if: inputs.operation == 'publish'
-        run: node scripts/nb-apple.mjs check
+        env:
+          NB_MANUAL_SIGNING: ${{ inputs.manual_signing }}
+        run: |
+          if [[ "$NB_MANUAL_SIGNING" == true ]]; then
+            node scripts/nb-apple.mjs wait-profiles
+          else
+            node scripts/nb-apple.mjs check
+          fi
       - if: inputs.operation == 'setup-signing'
         run: node scripts/nb-apple.mjs setup-signing
       - if: inputs.operation == 'group'
         run: node scripts/nb-apple.mjs group
       - if: inputs.operation == 'attach'
+        env:
+          NB_SOURCE_BETA_GROUP: ${{ inputs.source_beta_group }}
         run: node scripts/nb-apple.mjs attach
 
   build:
@@ -181,5 +195,7 @@ jobs:
           xcodebuild -exportArchive -archivePath build/NB.xcarchive -exportPath build/TestFlight \
             -exportOptionsPlist "$RUNNER_TEMP/ExportOptions.plist" "${auth[@]}"
       - name: Confirmar a build e o grupo interno na Apple
+        env:
+          NB_SOURCE_BETA_GROUP: ${{ inputs.source_beta_group }}
         run: node scripts/nb-apple.mjs attach
 

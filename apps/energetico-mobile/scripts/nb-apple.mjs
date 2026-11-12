@@ -51,8 +51,40 @@ async function ensureGroup(appId) {
       if (!/HTTP 409|timed out|timeout/i.test(error.message) || !await find()) throw error;
     }
   }
-  if (!await find()) throw new Error("Grupo interno NB não confirmado na Apple.");
+  const group = await find();
+  if (!group) throw new Error("Grupo interno NB não confirmado na Apple.");
   console.log(`Grupo interno confirmado: ${groupName}`);
+  return group.id;
+}
+
+async function addExistingTester(sourceGroupId, targetGroupId) {
+  if (!/^[a-f0-9-]{36}$/i.test(sourceGroupId) || sourceGroupId === targetGroupId) {
+    throw new Error("Grupo de origem do testador inválido.");
+  }
+  const { data: source } = await client.request("GET", `/v1/betaGroups/${sourceGroupId}?include=app`);
+  if (source?.attributes?.isInternalGroup !== true
+      || source.attributes.name !== "ENERGETICO Validacao"
+      || source.relationships?.app?.data?.id !== "6809887853") {
+    throw new Error("O grupo de origem não corresponde à validação interna do Energético.");
+  }
+  const relationship = groupId => `/v1/betaGroups/${groupId}/relationships/betaTesters`;
+  const { data, links } = await client.request("GET", relationship(sourceGroupId));
+  if (data?.length !== 1 || links?.next || data[0].type !== "betaTesters" || !data[0].id) {
+    throw new Error("Esperava somente o testador já ativo no grupo de origem.");
+  }
+  const hasTester = async () => {
+    const { data: testers } = await client.request("GET", relationship(targetGroupId));
+    return testers?.some(item => item.type === "betaTesters" && item.id === data[0].id);
+  };
+  if (!await hasTester()) {
+    try {
+      await client.request("POST", relationship(targetGroupId), { data });
+    } catch (error) {
+      if (!/HTTP 409|timed out|timeout/i.test(error.message) || !await hasTester()) throw error;
+    }
+  }
+  if (!await hasTester()) throw new Error("A Apple não confirmou o testador interno no grupo do NB.");
+  console.log("Testador interno existente confirmado no NB.");
 }
 
 async function loadProfile({ bundle, name }) {
@@ -100,6 +132,19 @@ async function prepareSigning({ allowCreate }) {
   }
 }
 
+async function waitForSigningProfiles() {
+  for (let attempt = 1; attempt <= 40; attempt++) {
+    try {
+      await prepareSigning({ allowCreate: false });
+      return;
+    } catch (error) {
+      if (error.message !== "Perfil NB Share AppStore não encontrado." || attempt === 40) throw error;
+      if (attempt === 1 || attempt % 5 === 0) console.log("Aguardando o perfil NB Share AppStore.");
+      await new Promise(resolve => setTimeout(resolve, 30_000));
+    }
+  }
+}
+
 const mode = process.argv[2];
 if (mode === "register") {
   await registerBundle(NB_BUNDLE_ID, NB_APP_NAME);
@@ -111,12 +156,15 @@ if (!record) {
   if (mode !== "register") process.exitCode = 1;
 } else {
   console.log(`Cadastro do app confirmado para ${NB_BUNDLE_ID}.`);
-  if (mode === "group" || mode === "attach") await ensureGroup(record.id);
+  if (mode === "group") await ensureGroup(record.id);
   if (mode === "profiles" || mode === "setup-signing") await prepareSigning({ allowCreate: mode === "setup-signing" });
+  if (mode === "wait-profiles") await waitForSigningProfiles();
   if (mode === "attach") {
+    const groupId = await ensureGroup(record.id);
     console.log(JSON.stringify(await attachLatestTestFlightBuild(client, {
       appId: record.id, groupName, requireInternal: true,
     })));
+    if (process.env.NB_SOURCE_BETA_GROUP) await addExistingTester(process.env.NB_SOURCE_BETA_GROUP, groupId);
   }
 }
 if (process.env.GITHUB_STEP_SUMMARY && mode !== "attach") {
