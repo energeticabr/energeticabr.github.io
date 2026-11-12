@@ -89,12 +89,13 @@ test('recalls one complete header from the most recent corrected proposal and ne
   assert.deepEqual(newest.headerChanged, ['branchId','accountId']);
   assert.deepEqual(model([newest, older]).header, { supplierId:'10', branchId:'21', accountId:'31' });
   const staleNewest = { ...catalog, branches:catalog.branches.filter(branch => branch.id !== '21') };
-  assert.deepEqual(model([newest, older], invoice, fiscal, staleNewest).header, {});
+  assert.deepEqual(model([newest, older], invoice, fiscal, staleNewest).header, { supplierId:'10', accountId:'31' });
 });
 
 test('numeric spelling is immaterial while a real financial edit captures decisions without reusing amounts', () => {
   const equal = { ...baseline, lines:[{...baseLine, quantity:'17,1000', unitPrice:23.45, discount:'0.00', adjustment:'-0'}] };
-  assert.equal(example(equal), null);
+  assert.deepEqual(example(equal).lines[0].changed, []);
+  assert.deepEqual(example(equal).headerChanged, []);
   const edited = { ...baseline, lines:[{ ...baseLine, quantity:'20.1', date:'2026-11-02' }] };
   const event = example(edited);
   assert.deepEqual(new Set(event.lines[0].changed), new Set(['quantity','date']));
@@ -102,6 +103,22 @@ test('numeric spelling is immaterial while a real financial edit captures decisi
   assert.equal(model([event]).stage(line,'20','40'), '50');
   assert.doesNotMatch(JSON.stringify(event), /20\.1|2026-11-02/);
   assert.equal(model([event,example()]).product(line), '41');
+});
+
+test('suggests the stage from the last five confirmed notes for the product and branch, across fiscal descriptions', () => {
+  const differentItem = { ...line, code:'OUTRO', description:'Outra descrição fiscal do mesmo produto' };
+  const posted = (stageId, source = fiscal, branchId = '20') => {
+    const draft = { ...reviewed, branchId, lines:[{ ...reviewed.lines[0], stageId }] };
+    return example(draft, draft, source);
+  };
+  const north = posted('52', fiscal, '21');
+  const newStage = posted('51', { lines:[differentItem] });
+  const oldStage = posted('50');
+  const history = [north, newStage, newStage, oldStage, newStage, oldStage, ...Array(8).fill(oldStage)];
+  assert.ok(history.every(Boolean), 'submitting the suggested fields still records a confirmed example');
+  assert.equal(model(history).stage(line,'20','41'), '51');
+  assert.equal(model(history).stage(line,'21','41'), '52');
+  assert.equal(model([newStage, oldStage]).stage(line,'20','41'), '51');
 });
 
 test('records recalculated stages as context and learns direct stage selections as corrections', () => {

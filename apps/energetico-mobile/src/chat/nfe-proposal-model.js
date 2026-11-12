@@ -1,6 +1,7 @@
 import DecimalBase from 'decimal.js';
 import { normalizeSearchText } from '../../../../portal/core/search-text.js';
 import { fiscalSupplierSimilarity } from './dda-provision-link.js';
+import { NFE_RECENT_STAGE_USES, preferredNfeStage } from './nfe-proposal-learning.js';
 
 const Decimal = DecimalBase.clone({ precision:40 });
 export const nfeProposalKey = value => normalizeSearchText(value).replace(/[^a-z0-9]+/g, ' ').trim();
@@ -78,19 +79,19 @@ export function nfeProposalStages(catalog, branchId) {
 }
 
 const stageUsage = new WeakMap();
+const stageUsageKey = (branch, product) => JSON.stringify([branch, product]);
 function catalogStageUsage(catalog) {
   let usage = stageUsage.get(catalog);
   if (usage) return usage;
   usage = new Map();
+  const registered = new Set(catalog.stages.map(stage => stageUsageKey(nfeProposalKey(stage.branch), nfeProposalKey(stage.label))));
   for (const row of catalog.history) {
     const product = nfeProposalKey(row.product), stage = nfeProposalKey(row.stage), branch = nfeProposalKey(row.branch);
-    if (!product || !stage) continue;
-    if (!usage.has(product)) usage.set(product, new Map());
-    const stages = usage.get(product);
-    const count = stages.get(stage) || { all:0, branches:new Map() };
-    count.all++;
-    count.branches.set(branch, (count.branches.get(branch) || 0) + 1);
-    stages.set(stage, count);
+    if (!product || !stage || !branch || !registered.has(stageUsageKey(branch, stage))) continue;
+    const pair = stageUsageKey(branch, product);
+    if (!usage.has(pair)) usage.set(pair, []);
+    const recent = usage.get(pair);
+    if (recent.length < NFE_RECENT_STAGE_USES) recent.push(stage);
   }
   stageUsage.set(catalog, usage);
   return usage;
@@ -103,15 +104,9 @@ function proposedStage(catalog, branchId, productId, number) {
   if (stages.length < 2) return selectionId(stages[0]);
   const learned = catalog.learning?.stage(number, branchId, productId);
   if (select(stages, learned)) return learned;
-  const counts = catalogStageUsage(catalog).get(nfeProposalKey(product.label));
-  if (!counts) return '';
   const branch = nfeProposalKey(stages[0].branch);
-  const ranked = stages.map(stage => {
-    const count = counts.get(nfeProposalKey(stage.label));
-    return { stage, local:count?.branches.get(branch) || 0, all:count?.all || 0 };
-  }).sort((a, b) => b.local - a.local || b.all - a.all);
-  const [first, second] = ranked;
-  return (first.local > second.local || first.all > second.all) ? first.stage.id : '';
+  const recent = catalogStageUsage(catalog).get(stageUsageKey(branch, nfeProposalKey(product.label)));
+  return recent ? selectionId(byLabel(stages, preferredNfeStage(recent))) : '';
 }
 
 export function updateNfeProposalBranch(draft, branchId, catalog) {

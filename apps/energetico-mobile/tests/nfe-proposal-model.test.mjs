@@ -57,6 +57,20 @@ test('branch, supplier and product edits recompute stages from the selected bran
   assert.throws(()=>validateNfeProposal(tampered,fiscal,catalog),/etapa/i);
 });
 
+test('stage fallback follows the recent product history of the selected branch', () => {
+  const recent = [
+    { product:'AÇO CA-50 8 MM', stage:'FUNDAÇÃO', branch:'OBRA' },
+    { product:'AÇO CA-50 8 MM', stage:'ESTRUTURA', branch:'OBRA' },
+    { product:'AÇO CA-50 8 MM', stage:'FUNDAÇÃO', branch:'OBRA' },
+    { product:'AÇO CA-50 8 MM', stage:'ESTRUTURA', branch:'OBRA' },
+    { product:'AÇO CA-50 8 MM', stage:'FUNDAÇÃO', branch:'OBRA' },
+  ];
+  const history = [...recent, ...Array(10).fill(recent[1])];
+  assert.equal(buildNfeProposal(invoice, fiscal, { ...catalog, history }).lines[0].stageId, '41');
+  const otherBranch = [{ ...recent[0], branch:'MATRIZ' }];
+  assert.equal(buildNfeProposal(invoice, fiscal, { ...catalog, history:otherBranch }).lines[0].stageId, '');
+});
+
 test('unknown products require a real catalog selection and financial edits retain the fiscal line identities', () => {
   const current = { ...fiscal, lines:[{ ...fiscal.lines[0], description:'DESCRIÇÃO DESCONHECIDA' }] };
   const draft = buildNfeProposal(invoice, current, catalog);
