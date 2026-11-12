@@ -6,6 +6,7 @@
   <title>Data da folha de pagamento</title>
   <link rel="stylesheet" href="../../src/styles.css">
   <link rel="stylesheet" href="../../src/ui/supplier-payroll.css">
+  <link rel="stylesheet" href="../../src/ui/searchable-filter-selects.css">
 </head>
 <body>
   <script type="module">
@@ -21,7 +22,14 @@
     }
     const calls = [];
     const view = createSupplierPayrollView({ documentRef: document, data: {
-      async loadSuppliers() { calls.push('suppliers'); return [{ id: '1', label: 'Fornecedor de teste' }]; },
+      async loadSuppliers() {
+        calls.push('suppliers');
+        return [{ id: '1', label: 'FORNECEDOR DE SERVIÇOS DE ESCORAMENTO E ARMAÇÕES', branch: 'OBRA DE TESTE' }];
+      },
+      async loadProducts() { return [{ id: '2', label: 'PRODUTO TESTE' }]; },
+      async loadAccounts() { return [{ id: '3', label: 'CONTA TESTE' }]; },
+      async loadStages() { return [{ id: '4', label: 'ETAPA TESTE' }]; },
+      async loadSheets() { return [{ id: '5', label: '10/2026' }]; },
       async post() { throw new Error('Esta fixture nunca deve gravar pagamentos.'); },
     } });
     await view.open();
@@ -50,12 +58,38 @@
     const filled = measure();
     if (!new URLSearchParams(location.search).has('preview')) {
       document.querySelector('[data-payroll-next]').click();
-      while (!document.querySelector('[data-payroll-option="1"]')) await frame();
+      while (!document.querySelector('[data-payroll-expand]')) await frame();
       const advanced = document.querySelector('.supplier-payroll-question').textContent;
+      const card = document.querySelector('[data-payroll-supplier]');
+      const checkbox = card.querySelector('[data-payroll-select]');
+      const panel = document.getElementById(card.querySelector('[data-payroll-expand]').getAttribute('aria-controls'));
+      const color = () => getComputedStyle(card).backgroundColor;
+      const initial = color();
+      checkbox.click();
+      while (!panel.querySelector('[name=product]')) await frame();
+      const incomplete = color();
+      for (const [name, value] of [['product', '2'], ['salary-value', '101,25'], ['salary-account', '3'], ['stage', '4'], ['sheet', '5']]) {
+        const control = panel.querySelector('[name="' + name + '"]');
+        control.value = value;
+        control.dispatchEvent(new Event(control.tagName === 'SELECT' ? 'change' : 'input', {bubbles:true}));
+      }
+      await frame();
+      const body = card.closest('.supplier-payroll-body');
+      const batch = {
+        initial, incomplete, ready: color(),
+        panelVisible: !panel.hidden,
+        overflow: body.scrollWidth - body.clientWidth,
+        checkbox: bounds(checkbox.closest('label')),
+        toggle: bounds(card.querySelector('[data-payroll-expand]')),
+        post: bounds(document.querySelector('[data-payroll-post]')),
+        amount: card.querySelector('[data-payroll-total]').textContent,
+      };
+      checkbox.click();
+      batch.unchecked = color();
       document.querySelector('[data-payroll-header-back]').click();
       await frame();
       document.documentElement.dataset.layout = JSON.stringify({
-        empty, filled, advanced, restored: measure(), calls,
+        empty, filled, advanced, batch, restored: measure(), calls,
       });
     }
     document.documentElement.dataset.ready = 'true';

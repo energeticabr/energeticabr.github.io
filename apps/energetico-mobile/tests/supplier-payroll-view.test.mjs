@@ -2,6 +2,93 @@ import test from "node:test";
 import assert from "node:assert/strict";
 import { JSDOM } from "jsdom";
 import * as module from "../src/ui/supplier-payroll-view.js";
+
+test('lote exige campos válidos, mantém exclusão manual e soma apenas os selecionados', async t => {
+  const h = await harness();
+  t.after(() => { h.view.destroy(); h.dom.window.close(); });
+  h.data.loadSuppliers = async () => [
+    { id: '1', label: 'EDGAR', branch: 'OBRA A' },
+    { id: '6', label: 'JOÃO', branch: 'OBRA B' },
+  ];
+  const doc = h.dom.window.document;
+  const supplier = id => `[data-payroll-supplier="${id}"]`;
+  const card = id => doc.querySelector(supplier(id));
+  const check = id => card(id).querySelector('[data-payroll-select]');
+  const input = (id, name, value) => h.input(`${supplier(id)} [name="${name}"]`, value);
+  h.input('[name=date]', '2026-10-02');
+  await h.click('[data-payroll-next]');
+  assert.equal(doc.querySelectorAll('[data-payroll-supplier]').length, 2);
+  assert.equal(card('1').dataset.payrollState, 'empty');
+  await h.click(`${supplier('1')} [data-payroll-expand]`);
+  await h.click(`${supplier('6')} [data-payroll-expand]`);
+  assert.equal(check('1').checked, false);
+  check('1').click();
+  assert.equal(card('1').dataset.payrollState, 'pending');
+  input('6', 'salary-value', '50');
+  assert.equal(check('6').checked, true);
+  assert.equal(card('6').dataset.payrollState, 'pending');
+  for (const [id, value] of [['1', '101,25'], ['6', '50']]) {
+    input(id, 'product', '2');
+    input(id, 'salary-value', value);
+    input(id, 'salary-account', '3');
+    input(id, 'stage', '4');
+    input(id, 'sheet', '5');
+    assert.equal(card(id).dataset.payrollState, 'ready');
+    if (id === '1') {
+      await h.click('[data-payroll-post]');
+      assert.match(doc.querySelector('[role=alert]').textContent, /JOÃO/);
+      assert.equal(h.posts.length, 0);
+    }
+  }
+  assert.match(card('1').querySelector('[data-payroll-total]').textContent, /101,25/);
+  assert.match(doc.querySelector('[data-payroll-batch-total]').textContent, /151,25/);
+  check('6').click();
+  assert.equal(card('6').dataset.payrollState, 'pending');
+  assert.match(doc.querySelector('[data-payroll-batch-total]').textContent, /101,25/);
+  await h.click('[data-payroll-post]');
+  assert.deepEqual(h.posts.map(p => [p.supplier.id, p.total, p.sheet.id]), [['1', 101.25, '5']]);
+});
+
+test('um clique posta todos os marcados mesmo com filtro e retoma só o fornecedor que falhou', async t => {
+  const h = await harness();
+  t.after(() => { h.view.destroy(); h.dom.window.close(); });
+  h.data.loadSuppliers = async () => [
+    { id: '1', label: 'EDGAR', branch: 'OBRA A' },
+    { id: '6', label: 'JOÃO', branch: 'OBRA B' },
+    { id: '7', label: 'MARIA', branch: 'OBRA C' },
+  ];
+  const finish = h.data.post;
+  const attempts = [];
+  h.data.post = async (draft, progress) => {
+    attempts.push({ id: draft.supplier.id, operation: progress.operationId });
+    if (attempts.length === 2) {
+      progress.fingerprint = 'postagem iniciada';
+      throw new Error('Vínculo temporariamente indisponível.');
+    }
+    return finish(draft, progress);
+  };
+  const doc = h.dom.window.document;
+  await openSuppliers(h);
+  for (const id of ['1', '6', '7']) {
+    const card = '[data-payroll-supplier="' + id + '"]';
+    await h.click(card + ' [data-payroll-expand]');
+    for (const [name, value] of [['product', '2'], ['salary-value', '100'], ['salary-account', '3'], ['stage', '4'], ['sheet', '5']]) {
+      h.input(card + ' [name="' + name + '"]', value);
+    }
+  }
+  h.input('.supplier-payroll-search', 'Maria');
+  assert.equal(doc.querySelector('[data-payroll-supplier="6"]').hidden, true);
+  assert.match(doc.querySelector('[data-payroll-batch-total]').textContent, /300,00/);
+  await h.click('[data-payroll-post]');
+  assert.deepEqual(attempts.map(attempt => attempt.id), ['1', '6', '7']);
+  assert.deepEqual(h.posts.map(post => post.supplier.id), ['1', '7']);
+  assert.match(doc.querySelector('[role=alert]').textContent, /JOÃO.*Vínculo/);
+  assert.equal(doc.querySelector('[data-payroll-supplier="6"] [data-payroll-select]').disabled, true);
+  await h.click('[data-payroll-post]');
+  assert.deepEqual(h.posts.map(post => post.supplier.id), ['1', '7', '6']);
+  assert.deepEqual(attempts[3], attempts[1]);
+  assert.equal(doc.querySelector('[data-payroll-post]').disabled, true);
+});
 const flush = () => new Promise((r) => setTimeout(r, 5));
 test('fundo dos comprovantes cancela download sem vincular e restaura a folha e o foco', async t => {
   const h = await harness(); t.after(() => { h.view.destroy(); h.dom.window.close(); });
@@ -197,75 +284,96 @@ test("anexo removido enquanto outro baixa impede confirmação do lote", async t
   assert.match(doc.querySelector('[data-receipt-error]').textContent, /bandeja/i);
 });
 async function fillToSheet(h) {
-  h.input("[name=date]", "2026-10-02");
-  await h.click("[data-payroll-next]");
-  assert.match(
-    h.dom.window.document.body.textContent,
-    /DESEJA EFETUAR A FOLHA DE QUAL FORNECEDOR/,
-  );
-  await h.click('[data-payroll-option="1"]');
-  assert.match(h.dom.window.document.body.textContent, /⭐.*PEDREIRO/);
-  await h.click('[data-payroll-option="2"]');
-  assert.equal(
-    h.dom.window.document.querySelectorAll("[data-payroll-rubric]").length,
-    9,
-  );
-  h.input('[name="salary-quantity"]', "2");
-  h.input('[name="salary-value"]', "100,50");
-  h.input('[name="salary-account"]', "3");
-  assert.match(
-    h.dom.window.document.querySelector("[data-payroll-total]").textContent,
-    /201,00/,
-  );
-  await h.click("[data-payroll-next]");
-  await h.click('[data-payroll-option="4"]');
+  await openRubrics(h);
+  h.input('[name=salary-quantity]', '2');
+  h.input('[name=salary-value]', '100,50');
+  h.input('[name=salary-account]', '3');
+  h.input('[name=stage]', '4');
+  assert.match(h.dom.window.document.querySelector('[data-payroll-total]').textContent, /201,00/);
 }
+
 async function fill(h) {
   await fillToSheet(h);
-  await h.click('[data-payroll-option="5"]');
+  h.input('[name=sheet]', '5');
+}
+
+async function openSuppliers(h) {
+  h.input('[name=date]', '2026-10-02');
+  await h.click('[data-payroll-next]');
 }
 
 async function openRubrics(h) {
-  h.input("[name=date]", "2026-10-02");
-  await h.click("[data-payroll-next]");
-  await h.click('[data-payroll-option="1"]');
-  await h.click('[data-payroll-option="2"]');
+  await openSuppliers(h);
+  await h.click('[data-payroll-expand]');
+  h.input('[name=product]', '2');
 }
 
-test('tax-only flow confirms competence once and selects its sheet without a fictitious normal sheet',async t=>{
-  const h=await harness();t.after(()=>{h.view.destroy();h.dom.window.close();});
-  const requests=[];h.data.loadSheets=async(supplier,options)=>{requests.push(options);return [{id:'8',label:'09/2026'}];};
-  await openRubrics(h);h.input('[name=inss-value]','100');h.input('[name=inss-account]','3');h.input('[name=fgts-value]','80');h.input('[name=fgts-account]','3');
-  await h.click('[data-payroll-next]');await h.click('[data-payroll-option="4"]');
-  const doc=h.dom.window.document;assert.equal(doc.querySelector('[name=taxCompetence]')?.value,'2026-09');assert.equal(requests.length,0);
-  await h.click('[data-payroll-next]');assert.deepEqual(requests.map(({competence})=>({competence})),[{competence:'2026-09'}]);assert.equal(typeof requests[0].onProgress,'function');await h.click('[data-payroll-option="8"]');
-  assert.match(doc.querySelector('[aria-label="Referência de INSS/FGTS"]').textContent,/Competência.*09\/2026.*IDFOLHA.*8/s);
-  assert.match(doc.querySelector('[aria-label="Referência de INSS/FGTS"]').textContent,/Rubricas.*INSS e FGTS/);
-  await h.click('[data-payroll-post]');assert.equal(h.posts.length,1);assert.equal(h.posts[0].sheet,null);assert.equal(h.posts[0].taxSheet.id,'8');
-  assert.equal(h.posts[0].taxCompetence,'2026-09');
+test('folha só com INSS/FGTS vincula a competência anterior sem exigir folha salarial', async t => {
+  const h = await harness();
+  t.after(() => { h.view.destroy(); h.dom.window.close(); });
+  const requests = [];
+  h.data.loadSheets = async (supplier, options) => {
+    requests.push(options.competence);
+    return options.competence ? [{ id: '8', label: '09/2026' }] : [];
+  };
+  await openRubrics(h);
+  for (const [rubric, value] of [['inss', '100'], ['fgts', '80']]) {
+    h.input('[name=' + rubric + '-value]', value);
+    h.input('[name=' + rubric + '-account]', '3');
+  }
+  h.input('[name=stage]', '4');
+  await flush();
+  const doc = h.dom.window.document;
+  assert.equal(doc.querySelector('[name=taxCompetence]').value, '2026-09');
+  assert.deepEqual(requests, [undefined, '2026-09']);
+  assert.equal(doc.querySelector('[name=sheet]').closest('.supplier-payroll-field').hidden, true);
+  h.input('[name=taxSheet]', '8');
+  assert.match(doc.querySelector('[aria-label="Referência de INSS/FGTS"]').textContent, /Competência.*09\/2026.*IDFOLHA.*8/);
+  await h.click('[data-payroll-post]');
+  assert.equal(h.posts[0].sheet, null);
+  assert.equal(h.posts[0].taxSheet.id, '8');
+  assert.equal(h.posts[0].taxCompetence, '2026-09');
 });
 
-test('mixed flow preserves ordinary sheet and shows separate tax competence and historical sheet',async t=>{
-  const h=await harness();t.after(()=>{h.view.destroy();h.dom.window.close();});
-  h.data.loadSheets=async(supplier,options)=>options?.competence?[{id:'8',label:'08/2026'}]:[{id:'5',label:'10/2026'}];
-  await openRubrics(h);for(const rubric of ['salary','inss']){h.input(`[name=${rubric}-value]`,'100');h.input(`[name=${rubric}-account]`,'3');}
-  await h.click('[data-payroll-next]');await h.click('[data-payroll-option="4"]');await h.click('[data-payroll-option="5"]');
-  const doc=h.dom.window.document;assert.equal(doc.querySelector('[name=taxCompetence]')?.value,'2026-09');h.input('[name=taxCompetence]','2026-08');
-  await h.click('[data-payroll-next]');await h.click('[data-payroll-option="8"]');
-  assert.match(doc.querySelector('[aria-label="Referência da folha"]').textContent,/IDFOLHA.*5.*10\/2026/s);
-  assert.match(doc.querySelector('[aria-label="Referência de INSS/FGTS"]').textContent,/08\/2026.*8/s);
-  await h.click('[data-payroll-header-back]');await h.click('[data-payroll-header-back]');assert.equal(doc.querySelector('[name=taxCompetence]').value,'2026-08');
-  await h.click('[data-payroll-next]');await h.click('[data-payroll-option="8"]');await h.click('[data-payroll-post]');
-  assert.equal(h.posts[0].sheet.id,'5');assert.equal(h.posts[0].taxSheet.id,'8');assert.equal(h.posts[0].taxCompetence,'2026-08');
+test('folha mista mantém IDFOLHA salarial e recarrega o ID de INSS da competência editada', async t => {
+  const h = await harness();
+  t.after(() => { h.view.destroy(); h.dom.window.close(); });
+  h.data.loadSheets = async (supplier, { competence }) => competence
+    ? [{ id: competence === '2026-08' ? '8' : '9', label: competence === '2026-08' ? '08/2026' : '09/2026' }]
+    : [{ id: '5', label: '10/2026' }];
+  await fill(h);
+  h.input('[name=inss-value]', '100');
+  h.input('[name=inss-account]', '3');
+  await flush();
+  h.input('[name=taxSheet]', '9');
+  h.input('[name=taxCompetence]', '2026-08');
+  const doc = h.dom.window.document;
+  assert.equal(doc.querySelector('[data-payroll-supplier]').dataset.payrollState, 'pending');
+  await flush();
+  h.input('[name=taxSheet]', '8');
+  assert.match(doc.querySelector('[aria-label="Detalhes de INSS"]').textContent, /IDFOLHA8/);
+  await h.click('[data-payroll-post]');
+  assert.equal(h.posts[0].sheet.id, '5');
+  assert.equal(h.posts[0].taxSheet.id, '8');
+  assert.equal(h.posts[0].taxCompetence, '2026-08');
 });
 
-test('missing tax competence sheet cannot reach posting and back returns to the competence question',async t=>{
-  const h=await harness();t.after(()=>{h.view.destroy();h.dom.window.close();});h.data.loadSheets=async()=>[];
-  await openRubrics(h);h.input('[name=fgts-value]','80');h.input('[name=fgts-account]','3');
-  await h.click('[data-payroll-next]');await h.click('[data-payroll-option="4"]');await h.click('[data-payroll-next]');
-  const doc=h.dom.window.document;assert.match(doc.body.textContent,/competência/i);assert.equal(doc.querySelector('[data-payroll-post]'),null);
-  await h.click('[data-payroll-header-back]');assert.equal(doc.querySelector('[name=taxCompetence]').value,'2026-09');assert.equal(h.posts.length,0);
+test('competência sem IDFOLHA cadastrado preserva a edição e bloqueia a postagem', async t => {
+  const h = await harness();
+  t.after(() => { h.view.destroy(); h.dom.window.close(); });
+  h.data.loadSheets = async () => [];
+  await openRubrics(h);
+  h.input('[name=fgts-value]', '80');
+  h.input('[name=fgts-account]', '3');
+  h.input('[name=stage]', '4');
+  await flush();
+  await h.click('[data-payroll-post]');
+  const doc = h.dom.window.document;
+  assert.match(doc.querySelector('[role=alert]').textContent, /competência.*IDFOLHA/i);
+  assert.equal(doc.querySelector('[name=taxCompetence]').value, '2026-09');
+  assert.equal(h.posts.length, 0);
 });
+
 
 test("BUSCAR oferece foto e arquivo, pré-seleciona comprovantes e envia só na rubrica confirmada", async t => {
   const h = await harness();
@@ -300,9 +408,8 @@ test("BUSCAR oferece foto e arquivo, pré-seleciona comprovantes e envia só na 
   assert.deepEqual(h.reads, ["remote"]);
   h.input("[name=salary-value]", "100");
   h.input("[name=salary-account]", "3");
-  await h.click("[data-payroll-next]");
-  await h.click('[data-payroll-option="4"]');
-  await h.click('[data-payroll-option="5"]');
+  h.input('[name=stage]', '4');
+  h.input('[name=sheet]', '5');
   await h.click("[data-payroll-post]");
   const files = h.posts[0].lines.find(line => line.rubric === "salary").files;
   assert.deepEqual(files.map(f => f.name), [remote.name, photo.name, pdf.name]);
@@ -450,9 +557,8 @@ test("resumo separa rubricas ativas e lista comprovantes como texto seguro", asy
   await h.click('[data-payroll-receipts="salary"]');
   for (const checkbox of h.dom.window.document.querySelectorAll('[data-receipt-id]')) checkbox.checked = true;
   await h.click('[data-receipt-confirm]');
-  await h.click('[data-payroll-next]');
-  await h.click('[data-payroll-option="4"]');
-  await h.click('[data-payroll-option="5"]');
+  h.input('[name=stage]', '4');
+  h.input('[name=sheet]', '5');
   const doc = h.dom.window.document;
   assert.equal(doc.querySelectorAll('.supplier-payroll-summary article').length, 2);
   const table = doc.querySelector('table[aria-label="Detalhes de Salário"]');
@@ -463,7 +569,7 @@ test("resumo separa rubricas ativas e lista comprovantes como texto seguro", asy
   assert.match(doc.querySelector('[data-payroll-summary-total]').textContent, /23,50/);
 });
 
-test("resumo da folha separa os quatro dados em tabela nas rubricas, etapa e confirmação", async t => {
+test("painel mantém os quatro dados em tabela durante o preenchimento", async t => {
   const h = await harness();
   t.after(() => { h.view.destroy(); h.dom.window.close(); });
   h.data.loadSuppliers = async () => [{ id: "1", label: "CLEITON CESAR NONATO",
@@ -479,17 +585,15 @@ test("resumo da folha separa os quatro dados em tabela nas rubricas, etapa e con
       ["Filial", "004 - EDIFÍCIO XAVANTE"],
     ]);
     assert.ok([...table.rows].every(row => row.cells[0].tagName === "TH" && row.cells[0].scope === "row"));
-    assert.equal(table.closest(".supplier-payroll-content").querySelector(".supplier-payroll-question").nextElementSibling, table.parentElement);
+    assert.ok(table.closest("[data-payroll-supplier]"));
   };
   await openRubrics(h);
   check();
   h.input('[name="salary-value"]', "100");
   h.input('[name="salary-account"]', "3");
-  await h.click("[data-payroll-next]");
-  assert.equal(h.dom.window.document.querySelector(".supplier-payroll-question").textContent, "Indique a etapa");
+  h.input("[name=stage]", "4");
   check();
-  await h.click('[data-payroll-option="4"]');
-  await h.click('[data-payroll-option="5"]');
+  h.input("[name=sheet]", "5");
   check();
 });
 
@@ -515,47 +619,22 @@ test("tabela trata campos com apenas espaços como ausentes", async t => {
   assert.deepEqual([...table.rows].map(row => row.cells[1].textContent), ["EDGAR", "PEDREIRO", "02/10/2026", "—"]);
 });
 
-test("folha mantém Voltar inferior apenas nas rubricas e esconde rodapés sem ações", async t => {
+test('Postar fica abaixo dos fornecedores e do total agregado', async t => {
   const h = await harness();
   t.after(() => { h.view.destroy(); h.dom.window.close(); });
   const doc = h.dom.window.document;
-  const check = (action, rubrics = false) => {
-    assert.equal(Boolean(doc.querySelector('[data-payroll-back]')), rubrics);
-    assert.equal(doc.querySelectorAll('.supplier-payroll-footer [data-payroll-back]').length, rubrics ? 1 : 0);
-    assert.equal(doc.querySelector('[data-payroll-header-back]').dataset.navigationIcon, '↩️');
-    assert.equal(doc.querySelector('[data-payroll-home]').dataset.navigationIcon, '🏠');
-    const footer = doc.querySelector('.supplier-payroll-footer');
-    assert.equal(footer.hidden, !action);
-    assert.equal(footer.children.length, action ? rubrics ? 2 : 1 : 0);
-    if (action) assert.equal(footer.lastElementChild.textContent, action);
-    if (rubrics) assert.equal(footer.firstElementChild.textContent, 'Voltar');
-  };
-  check('Continuar');
-  h.input('[name=date]', '2026-10-02');
-  await h.click('[data-payroll-next]');
-  check();
-  await h.click('[data-payroll-option="1"]');
-  check();
-  await h.click('[data-payroll-option="2"]');
-  check('Continuar', true);
-  await h.click('[data-payroll-back]');
-  check();
-  assert.match(doc.querySelector('.supplier-payroll-question').textContent, /Qual produto/);
-  await h.click('[data-payroll-option="2"]');
-  check('Continuar', true);
-  h.input('[name=salary-value]', '100');
-  h.input('[name=salary-account]', '3');
-  await h.click('[data-payroll-next]');
-  check();
-  await h.click('[data-payroll-option="4"]');
-  check();
-  await h.click('[data-payroll-option="5"]');
-  check('Postar');
-  await h.click('[data-payroll-post]');
-  check('Concluir');
-  await h.click('[data-payroll-header-back]');
-  assert.equal(h.closed, 1);
+  assert.equal(doc.querySelector('.supplier-payroll-footer [data-payroll-next]').textContent, 'Continuar');
+  await openSuppliers(h);
+  const total = doc.querySelector('[data-payroll-batch-total]');
+  const post = doc.querySelector('[data-payroll-post]');
+  assert.equal(total.previousElementSibling.className, 'supplier-payroll-empty');
+  assert.equal(post.previousElementSibling.previousElementSibling, total);
+  assert.equal(post.disabled, true);
+  assert.equal(doc.querySelector('.supplier-payroll-footer').hidden, true);
+  await h.click('[data-payroll-select]');
+  assert.equal(post.disabled, false);
 });
+
 
 test("quantidade padrão não ativa rubrica e pagamento só aparece com valor informado", async t => {
   const h = await harness();
@@ -599,107 +678,78 @@ test("quantidade padrão não ativa rubrica e pagamento só aparece com valor in
   assert.equal(row.dataset.payrollCompletion, "pending");
 });
 
-test("envio da folha só contém rubrica com valor e ignora demais quantidades padrão", async t => {
+test('rubrica iniciada precisa de valor, rubricas em branco podem ficar fora da folha', async t => {
   const h = await harness();
   t.after(() => { h.view.destroy(); h.dom.window.close(); });
-  await openRubrics(h);
-  h.input('[name=salary-value]', "200");
-  await h.click('[data-payroll-next]');
-  assert.match(h.dom.window.document.body.textContent, /forma de pagamento de Salário/);
-  assert.equal(h.posts.length, 0);
-  h.input('[name=salary-account]', "3");
-  h.input('[name=allowance-quantity]', "3");
-  await h.click('[data-payroll-next]');
-  await h.click('[data-payroll-option="4"]');
-  await h.click('[data-payroll-option="5"]');
-  assert.equal(h.dom.window.document.querySelectorAll('.supplier-payroll-summary article').length, 1);
+  await fill(h);
+  h.input('[name=allowance-quantity]', '3');
   await h.click('[data-payroll-post]');
-  assert.equal(h.posts.length, 1);
-  assert.equal(h.posts[0].total, 200);
-  assert.deepEqual(h.posts[0].lines.map(line => line.rubric), ["salary"]);
+  assert.equal(h.posts.length, 0);
+  assert.match(h.dom.window.document.querySelector('[role=alert]').textContent, /valor unitário de Ajuda de custo/);
+  h.input('[name=allowance-quantity]', '1');
+  await h.click('[data-payroll-post]');
+  assert.equal(h.posts[0].total, 201);
+  assert.deepEqual(h.posts[0].lines.map(line => line.rubric), ['salary']);
 });
-test("IDFOLHA é escolhido antes do resumo e enviado na postagem obrigatória", async (t) => {
+
+test('IDFOLHA é escolhido no painel e enviado na postagem obrigatória', async t => {
   const h = await harness();
-  t.after(() => {
-    h.view.destroy();
-    h.dom.window.close();
-  });
+  t.after(() => { h.view.destroy(); h.dom.window.close(); });
   await fillToSheet(h);
   const doc = h.dom.window.document;
-  assert.match(doc.body.textContent, /Qual IDFOLHA de EDGAR/);
-  assert.equal(doc.querySelector("[data-payroll-post]"), null);
+  await h.click('[data-payroll-post]');
+  assert.match(doc.querySelector('[role=alert]').textContent, /IDFOLHA.*obrigatório/);
   assert.equal(h.posts.length, 0);
-  await h.click('[data-payroll-option="5"]');
-  assert.match(doc.body.textContent, /Resumo da folha/);
-  assert.deepEqual([...doc.querySelector('table[aria-label="Referência da folha"]').rows].map(row => row.cells[1].textContent), ["FUNDAÇÃO", "5", "10/2026"]);
-  await h.click("[data-payroll-post]");
-  assert.equal(h.posts[0].sheet.id, "5");
-  assert.match(doc.body.textContent, /postada e vinculada/);
-  assert.match(doc.body.textContent, /IDFOLHA: 5/);
-  assert.equal(doc.querySelector("[data-payroll-link-no]"), null);
+  h.input('[name=sheet]', '5');
+  assert.deepEqual([...doc.querySelector('table[aria-label="Referência da folha"]').rows].map(row => row.cells[1].textContent), ['FUNDAÇÃO', '5', '10/2026']);
+  await h.click('[data-payroll-post]');
+  assert.equal(h.posts[0].sheet.id, '5');
+  assert.match(doc.querySelector('.supplier-payroll-card-result').textContent, /postada e vinculada.*IDFOLHA: 5/);
 });
 
-test("cabeçalho da folha mantém seta e casinha em todas as etapas e volta sem perder rubricas", async t => {
+test('seta retorna à data e conserva os painéis preenchidos ao voltar à mesma data', async t => {
   const h = await harness();
   t.after(() => { h.view.destroy(); h.dom.window.close(); });
   const doc = h.dom.window.document;
-  const navigation = () => {
-    const header = doc.querySelector('.supplier-payroll-header');
-    const nav = header.querySelector('.screen-navigation');
-    assert.equal(header.firstElementChild, nav);
-    assert.equal(nav.firstElementChild.dataset.payrollHeaderBack, '');
-    assert.equal(nav.lastElementChild.dataset.payrollHome, '');
-    assert.equal(nav.firstElementChild.dataset.navigationIcon, '↩️');
-    assert.equal(nav.lastElementChild.dataset.navigationIcon, '🏠');
-  };
-  navigation();
   await fill(h);
-  navigation();
-  const questions = [/Qual IDFOLHA/, /Indique a etapa/, /Informe os valores/, /Qual produto/, /QUAL FORNECEDOR/, /Qual é a data/];
-  for (const question of questions) {
-    await h.click('[data-payroll-header-back]');
-    navigation();
-    assert.match(doc.querySelector('.supplier-payroll-question').textContent, question);
-    if (/Informe os valores/.test(question.source)) assert.equal(doc.querySelector('[name=salary-value]').value, '100,50');
-  }
+  const nav = doc.querySelector('.supplier-payroll-header .screen-navigation');
+  assert.equal(nav.firstElementChild.dataset.navigationIcon, '↩️');
+  assert.equal(nav.lastElementChild.dataset.navigationIcon, '🏠');
   await h.click('[data-payroll-header-back]');
-  assert.equal(doc.querySelector('.supplier-payroll-page').hidden, true);
-  assert.equal(h.closed, 1);
-  assert.equal(h.home, 0);
-  assert.equal(h.posts.length, 0);
+  assert.equal(doc.querySelector('[name=date]').value, '2026-10-02');
+  await h.click('[data-payroll-next]');
+  assert.equal(doc.querySelector('[name=salary-value]').value, '100,50');
+  assert.equal(doc.querySelector('[name=sheet]').value, '5');
+  assert.equal(doc.querySelector('[data-payroll-select]').checked, true);
 });
 
-test("casinha sai diretamente para o menu e descarta a folha não postada", async t => {
+test('casinha sai para o menu e descarta a folha não postada', async t => {
   const h = await harness();
   t.after(() => { h.view.destroy(); h.dom.window.close(); });
   await fill(h);
   await h.click('[data-payroll-home]');
-  assert.equal(h.dom.window.document.querySelector('.supplier-payroll-page').hidden, true);
-  assert.equal(h.closed, 1);
   assert.equal(h.home, 1);
-  assert.equal(h.posts.length, 0);
+  assert.equal(h.closed, 1);
   await h.view.open();
   assert.equal(h.dom.window.document.querySelector('[name=date]').value, '');
-  assert.match(h.dom.window.document.querySelector('.supplier-payroll-question').textContent, /Qual é a data/);
-});
-
-test("seta cancela consulta pendente sem deixar resposta antiga avançar a folha", async t => {
-  const h = await harness();
-  t.after(() => { h.view.destroy(); h.dom.window.close(); });
-  await fill(h);
-  for (let i = 0; i < 3; i++) await h.click('[data-payroll-header-back]');
-  let resolveStages;
-  h.data.loadStages = () => new Promise(resolve => { resolveStages = resolve; });
-  await h.click('[data-payroll-next]');
-  assert.equal(h.dom.window.document.querySelector('.supplier-payroll-footer').hidden, true);
-  assert.equal(h.dom.window.document.querySelector('.supplier-payroll-footer').children.length, 0);
-  await h.click('[data-payroll-header-back]');
-  assert.match(h.dom.window.document.querySelector('.supplier-payroll-question').textContent, /Qual produto/);
-  resolveStages([{ id: '4', label: 'FUNDAÇÃO' }]);
-  await flush();
-  assert.match(h.dom.window.document.querySelector('.supplier-payroll-question').textContent, /Qual produto/);
   assert.equal(h.posts.length, 0);
 });
+
+test('voltar à data cancela a consulta pendente de um painel', async t => {
+  const h = await harness();
+  t.after(() => { h.view.destroy(); h.dom.window.close(); });
+  let resolveStages, signal;
+  h.data.loadStages = (supplier, options) => new Promise(resolve => { resolveStages = resolve; signal = options.signal; });
+  await openSuppliers(h);
+  await h.click('[data-payroll-expand]');
+  await h.click('[data-payroll-header-back]');
+  assert.equal(signal.aborted, true);
+  resolveStages([{ id: '4', label: 'FUNDAÇÃO' }]);
+  await flush();
+  assert.equal(h.dom.window.document.querySelector('[name=stage]'), null);
+  assert.equal(h.dom.window.document.querySelector('[name=date]').value, '2026-10-02');
+});
+
 
 test("seta e casinha não interrompem uma gravação de folha já em andamento", async t => {
   const h = await harness();
@@ -718,72 +768,58 @@ test("seta e casinha não interrompem uma gravação de folha já em andamento",
   assert.equal(h.home, 0);
   finish();
   await flush();
-  assert.match(doc.querySelector('.supplier-payroll-question').textContent, /Folha postada/);
+  assert.match(doc.querySelector('.supplier-payroll-card-result').textContent, /Folha postada/);
   assert.equal(doc.querySelector('[data-payroll-home]').disabled, false);
   await h.click('[data-payroll-home]');
   assert.equal(h.home, 1);
 });
-test("sem IDFOLHA cadastrado não há como postar ou concluir sem vínculo", async (t) => {
+test('sem IDFOLHA cadastrado o painel explica a pendência e preserva os dados', async t => {
   const h = await harness();
-  t.after(() => {
-    h.view.destroy();
-    h.dom.window.close();
-  });
+  t.after(() => { h.view.destroy(); h.dom.window.close(); });
   h.data.loadSheets = async () => [];
   await fillToSheet(h);
   const doc = h.dom.window.document;
-  assert.match(doc.body.textContent, /IDFOLHA.*obrigatório/i);
-  assert.equal(doc.querySelector("[data-payroll-post]"), null);
-  assert.ok(
-    ![...doc.querySelectorAll("button")].some(
-      (b) => b.textContent === "Concluir",
-    ),
-  );
+  assert.equal(doc.querySelector('[name=sheet]').disabled, true);
+  assert.match(doc.body.textContent, /Cadastre uma folha válida/);
+  await h.click('[data-payroll-post]');
   assert.equal(h.posts.length, 0);
-  await h.click("[data-payroll-header-back]");
-  assert.match(doc.body.textContent, /Indique a etapa/);
+  assert.equal(doc.querySelector('[name=stage]').value, '4');
+  h.data.loadSheets = async () => [{ id: '5', label: '10/2026' }];
+  await h.click('[data-payroll-reload-sheet]');
+  assert.equal(doc.querySelector('[name=stage]').value, '4');
+  assert.equal(doc.querySelector('[name=salary-value]').value, '100,50');
+  h.input('[name=sheet]', '5');
+  await h.click('[data-payroll-post]');
+  assert.equal(h.posts[0].sheet.id, '5');
 });
-test("falha ao buscar IDFOLHA preserva etapa e permite repetir consulta", async (t) => {
+
+test('falha ao carregar um fornecedor permite repetir a consulta no painel', async t => {
   const h = await harness();
-  t.after(() => {
-    h.view.destroy();
-    h.dom.window.close();
-  });
-  h.data.loadSheets = async () => {
-    throw new Error("sem rede para IDFOLHA");
-  };
-  await fillToSheet(h);
+  t.after(() => { h.view.destroy(); h.dom.window.close(); });
+  h.data.loadSheets = async () => { throw new Error('sem rede para IDFOLHA'); };
+  await openSuppliers(h);
+  await h.click('[data-payroll-expand]');
   const doc = h.dom.window.document;
-  assert.match(doc.querySelector("[role=alert]").textContent, /sem rede/);
-  assert.match(doc.body.textContent, /Indique a etapa/);
-  assert.equal(h.posts.length, 0);
-  h.data.loadSheets = async () => [{ id: "5", label: "10/2026" }];
-  await h.click('[data-payroll-option="4"]');
-  await h.click('[data-payroll-option="5"]');
-  assert.match(doc.body.textContent, /Resumo da folha/);
+  assert.match(doc.querySelector('[data-payroll-supplier] [role=alert]').textContent, /sem rede/);
+  h.data.loadSheets = async () => [{ id: '5', label: '10/2026' }];
+  await h.click('[data-payroll-retry-options]');
+  assert.equal(doc.querySelector('[name=sheet] option[value="5"]').value, '5');
 });
-test("formulário inválido conserva valores e não inicia gravação", async (t) => {
+
+test('formulário inválido conserva os valores e explica a forma de pagamento em falta', async t => {
   const h = await harness();
-  t.after(() => {
-    h.view.destroy();
-    h.dom.window.close();
-  });
-  h.input("[name=date]", "2026-10-02");
-  await h.click("[data-payroll-next]");
-  await h.click('[data-payroll-option="1"]');
-  await h.click('[data-payroll-option="2"]');
-  h.input('[name="salary-value"]', "10");
-  await h.click("[data-payroll-next]");
+  t.after(() => { h.view.destroy(); h.dom.window.close(); });
+  await openRubrics(h);
+  h.input('[name=stage]', '4');
+  h.input('[name=salary-value]', '10');
+  await h.click('[data-payroll-post]');
+  const doc = h.dom.window.document;
   assert.equal(h.posts.length, 0);
-  assert.match(
-    h.dom.window.document.querySelector("[role=alert]").textContent,
-    /pagamento|conta/i,
-  );
-  assert.equal(
-    h.dom.window.document.querySelector('[name="salary-value"]').value,
-    "10",
-  );
+  assert.match(doc.querySelector('[role=alert]').textContent, /pagamento|conta/i);
+  assert.equal(doc.querySelector('[name=salary-value]').value, '10');
 });
+
+
 test("envio duplo é bloqueado e erro preserva resumo para retentativa", async (t) => {
   const h = await harness();
   t.after(() => {
@@ -815,18 +851,14 @@ test("comprovantes ficam associados à rubrica e são descartados ao destruir", 
   const h = await harness();
   t.after(() => h.dom.window.close());
   await fill(h);
-  await h.click("[data-payroll-header-back]");
-  await h.click("[data-payroll-header-back]");
-  await h.click("[data-payroll-header-back]");
   const file = new File(["a"], "salario.pdf", { type: "application/pdf" });
   h.tray.push({ id: "a", fileName: file.name, file });
   await h.click('[data-payroll-receipts="salary"]');
   h.dom.window.document.querySelector('[data-receipt-id="a"]').checked = true;
   await h.click('[data-receipt-confirm]');
   assert.match(h.dom.window.document.body.textContent, /salario.pdf/);
-  await h.click("[data-payroll-next]");
-  await h.click('[data-payroll-option="4"]');
-  await h.click('[data-payroll-option="5"]');
+  h.input('[name=stage]', '4');
+  h.input('[name=sheet]', '5');
   await h.click("[data-payroll-post]");
   assert.equal(h.posts[0].lines[0].files[0].name, "salario.pdf");
   h.view.destroy();
@@ -858,7 +890,7 @@ test("consulta antiga não altera etapa ao fechar e reabrir página", async (t) 
   ];
   await h.click("[data-payroll-next]");
   assert.equal(
-    h.dom.window.document.querySelectorAll("[data-payroll-option]").length,
+    h.dom.window.document.querySelectorAll("[data-payroll-expand]").length,
     1,
   );
 });
@@ -880,7 +912,7 @@ test("erro no vínculo conserva o IDFOLHA e exige retomada antes da conclusão",
   assert.match(doc.body.textContent, /Resumo da folha/);
   assert.equal(doc.querySelector('table[aria-label="Referência da folha"]').rows[1].cells[1].textContent, "5");
   assert.match(doc.querySelector("[data-payroll-post]").textContent, /Retomar/);
-  assert.equal(doc.querySelector("[data-payroll-back]"), null);
+  assert.equal(doc.querySelector("[name=sheet]").matches(":disabled"), true);
   assert.ok(
     ![...doc.querySelectorAll("button")].some(
       (b) => b.textContent === "Concluir",

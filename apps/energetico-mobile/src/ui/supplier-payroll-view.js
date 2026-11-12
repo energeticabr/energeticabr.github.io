@@ -7,7 +7,6 @@ import {
   payrollDecimal,
   validPayrollDate,
   validatePayrollDraft,
-  validatePayrollLines,
 } from "../chat/supplier-payroll.js";
 import { createLoadingIndicator, updateLoadingIndicator } from "./loading-indicator.js";
 import { beginLoadingTask } from './loading-task.js';
@@ -56,7 +55,7 @@ export function createSupplierPayrollView({
   const backButton = navigationButton("Voltar", "data-payroll-header-back", navigateBack);
   const homeButton = navigationButton("Início", "data-payroll-home", () => {
     if (close()) {
-      fresh();
+      if (!hasPendingPosting()) reset();
       onHome();
     }
   });
@@ -70,56 +69,46 @@ export function createSupplierPayrollView({
   body.append(error, content);
   page.append(header, body, footer);
   (root || doc.body).append(page);
-  let destroyed = false,
-    opened = false,
-    busy = false,
-    mutating = false,
-    epoch = 0,
-    step = "date",
-    draft,
-    progress,
-    result = null,
-    previousFocus = null;
-  let accountPickers = null;
+  let destroyed = false;
+  let opened = false;
+  let busy = false;
+  let mutating = false;
+  let epoch = 0;
+  let step = "date";
+  let date = "";
+  let entries = [];
+  let search = "";
+  let previousFocus = null;
   let receiptPicker = null;
   let loadingOperation = null;
-  let suppliers = [],
-    products = [],
-    accounts = [],
-    stages = [],
-    sheets = [], taxSheets = [];
-  const fresh = () => {
-    draft = {
-      date: "",
-      supplier: null,
-      product: null,
-      stage: null,
-      sheet: null,
-      taxCompetence: '',
-      taxSheet: null,
-      lines: PAYROLL_RUBRICS.map((r) => ({
-        rubric: r.id,
-        quantity: "1",
-        unitValue: "",
-        account: null,
-        files: [],
-      })),
+  let batchRequest = null;
+  let pickers = [];
+
+  function makeEntry(supplier) {
+    return {
+      draft: {
+        date, supplier, product: null, stage: null, sheet: null,
+        taxCompetence: "", taxSheet: null,
+        lines: PAYROLL_RUBRICS.map(({ id }) => ({
+          rubric: id, quantity: "1", unitValue: "", account: null, files: [],
+        })),
+      },
+      progress: {
+        operationId: globalThis.crypto?.randomUUID?.() ||
+          String(Date.now()) + "-" + Math.random().toString(36).slice(2),
+      },
+      expanded: false,
+      selected: false,
     };
-    progress = {
-      operationId:
-        globalThis.crypto?.randomUUID?.() ||
-        `${Date.now()}-${Math.random().toString(36).slice(2)}`,
-    };
-    result = null;
+  }
+  function hasPendingPosting() {
+    return entries.some(entry => entry.progress.fingerprint && !entry.result);
+  }
+  function reset() {
     step = "date";
-  };
-  fresh();
-  const hasTax = () => validatePayrollLines(draft.lines).lines.some(line => payrollTaxType(line.payrollType));
-  const hasNormal = () => validatePayrollLines(draft.lines).lines.some(line => !payrollTaxType(line.payrollType));
-  function taxCompetenceStep() {
-    draft.taxCompetence ||= previousPayrollCompetence(draft.date);
-    draft.taxSheet = null;
-    step = 'tax-competence';
+    date = "";
+    entries = [];
+    search = "";
   }
   function button(label, attribute, handler) {
     const el = element("button", "supplier-payroll-button", label);
@@ -190,10 +179,7 @@ export function createSupplierPayrollView({
       return false;
     }
   }
-  function heading(text) {
-    content.append(element("h2", "supplier-payroll-question", text));
-  }
-  function identity() {
+  function identity(draft) {
     const summary = element("div", "supplier-payroll-identity");
     const table = element("table", "supplier-payroll-identity-table");
     table.setAttribute("aria-label", "Dados da folha");
@@ -212,61 +198,15 @@ export function createSupplierPayrollView({
     }
     table.append(body);
     summary.append(table);
-    content.append(summary);
-  }
-  function choiceList(options, select) {
-    const filter = element("input", "supplier-payroll-search");
-    filter.type = "search";
-    filter.placeholder = "Digite para filtrar as opções";
-    filter.setAttribute("aria-label", "Filtrar opções");
-    const list = element("div", "supplier-payroll-choices");
-    const buttons = [];
-    for (const option of options) {
-      const el = button(
-        `${option.recommended ? "⭐ " : ""}${option.label}${["sheet", "tax-sheet"].includes(step) ? ` — ID ${option.id}` : ""}`,
-        null,
-        () => select(option),
-      );
-      el.dataset.payrollOption = option.id;
-      list.append(el);
-      buttons.push([el, option.label]);
-    }
-    const empty = element(
-      "p",
-      "supplier-payroll-empty",
-      options.length
-        ? "Nenhuma opção corresponde à pesquisa."
-        : "Nenhuma opção cadastrada disponível.",
-    );
-    empty.hidden = options.length > 0;
-    filter.addEventListener("input", () => {
-      const search = normalizeSearchText(filter.value);
-      let visible = 0;
-      for (const [el, label] of buttons) {
-        el.hidden = !includesSearchText(normalizeSearchText(label), search);
-        if (!el.hidden) visible++;
-      }
-      empty.hidden = visible > 0;
-    });
-    content.append(filter, list, empty);
+    return summary;
   }
   function field(labelText, input) {
     const label = element("label", "supplier-payroll-field");
     label.append(element("span", "", labelText), input);
     return label;
   }
-  function updateTotal() {
-    try {
-      content.querySelector("[data-payroll-total]").textContent =
-        `Total pago: ${money(payrollTotal(draft.lines))}`;
-    } catch {
-      content.querySelector("[data-payroll-total]").textContent =
-        "Total pago: confira os valores informados";
-    }
-  }
-  function renderRubrics() {
-    heading("Informe os valores de cada rubrica");
-    identity();
+  function renderRubrics({ draft, options }, changed) {
+    const { accounts } = options;
     const grid = element("div", "supplier-payroll-rubrics");
     for (const rubric of PAYROLL_RUBRICS) {
       const line = draft.lines.find((l) => l.rubric === rubric.id);
@@ -283,7 +223,7 @@ export function createSupplierPayrollView({
       quantity.addEventListener("input", () => {
         line.quantity = quantity.value;
         updateCompletion();
-        updateTotal();
+        changed();
       });
       const value = element("input");
       value.type = "text";
@@ -293,8 +233,12 @@ export function createSupplierPayrollView({
       value.placeholder = "Digite o valor";
       value.addEventListener("input", () => {
         line.unitValue = value.value;
+        if (!line.unitValue.trim()) {
+          line.account = null;
+          account.value = "";
+        }
         updateCompletion();
-        updateTotal();
+        changed();
       });
       const account = element("select");
       account.name = `${rubric.id}-account`;
@@ -310,6 +254,7 @@ export function createSupplierPayrollView({
       account.addEventListener("change", () => {
         line.account = accounts.find((a) => a.id === account.value) || null;
         updateCompletion();
+        changed();
       });
       const accountField = field("Forma de pagamento", account);
       const lineStatus = element("p", "supplier-payroll-line-status");
@@ -323,7 +268,7 @@ export function createSupplierPayrollView({
         (account.closest('.supplier-payroll-field') || accountField).hidden = !needsPayment;
         account.disabled = !needsPayment;
         account.required = needsPayment;
-        const started = hasValue || String(line.quantity).trim() !== "1" || line.account || line.files.length;
+        const started = lineEdited(line);
         let complete = false;
         if (hasValue) {
           try {
@@ -337,7 +282,7 @@ export function createSupplierPayrollView({
         lineStatus.textContent = complete ? "✓ Completa — será incluída na folha" : isZero
           ? "Valor zero: esta rubrica não será enviada."
           : !hasValue
-          ? "Pendente: sem valor unitário, esta rubrica não será enviada."
+          ? "Pendente: informe o valor unitário desta rubrica."
           : "Pendente: confira quantidade, valor unitário e forma de pagamento.";
       }
       row.append(
@@ -356,6 +301,7 @@ export function createSupplierPayrollView({
             line.files = line.files.filter((f) => f !== file);
             drawFiles();
             updateCompletion();
+            changed();
           });
           remove.setAttribute("aria-label", `Remover ${file.name}`);
           item.append(remove);
@@ -372,12 +318,13 @@ export function createSupplierPayrollView({
           getReceiptAttachments, readReceiptAttachment, pickReceiptAttachments,
           onConfirm: candidates => {
             assertSession();
-            if (!opened || destroyed || attempt !== epoch || step !== "rubrics")
+            if (!opened || destroyed || attempt !== epoch || step !== "batch")
               throw new Error("Esta edição da folha foi encerrada.");
             line.files.push(...candidates);
             error.hidden = true;
             drawFiles();
             updateCompletion();
+            changed();
           },
           onClose: () => { receiptPicker = null; },
         });
@@ -389,17 +336,10 @@ export function createSupplierPayrollView({
       updateCompletion();
       grid.append(row);
     }
-    content.append(grid);
-    accountPickers = bindSearchableFilterSelects(grid);
-    const total = element("p", "supplier-payroll-total");
-    total.setAttribute("data-payroll-total", "");
-    total.setAttribute("aria-live", "polite");
-    content.append(total);
-    updateTotal();
+    return grid;
   }
-  function summary() {
-    heading("Resumo da folha");
-    identity();
+  function renderSummary(container, draft) {
+    const hasTax = draft.lines.some(line => payrollTaxType(line.payrollType));
     const detailsTable = (label, entries) => {
       const table = element("table", "supplier-payroll-summary-table");
       table.setAttribute("aria-label", label);
@@ -415,18 +355,18 @@ export function createSupplierPayrollView({
       return table;
     };
     const context = element("div", "supplier-payroll-summary-context");
-    if (hasNormal()) context.append(detailsTable("Referência da folha", [
+    if (draft.sheet && draft.lines.some(line => !payrollTaxType(line.payrollType))) context.append(detailsTable("Referência da folha", [
       ["Etapa", draft.stage.label],
       ["IDFOLHA", String(draft.sheet.id)],
       ["Referência", draft.sheet.label],
     ]));
-    if (hasTax()) context.append(detailsTable('Referência de INSS/FGTS', [
+    if (hasTax) context.append(detailsTable('Referência de INSS/FGTS', [
       ['Rubricas', 'INSS e FGTS'],
       ['Competência', `${draft.taxCompetence.slice(5)}/${draft.taxCompetence.slice(0,4)}`],
       ['IDFOLHA', String(draft.taxSheet.id)],
     ]));
     const list = element("div", "supplier-payroll-summary");
-    for (const line of validatePayrollDraft(draft).lines) {
+    for (const line of draft.lines) {
       const row = element("article");
       const receipts = element("td");
       if (line.files.length) {
@@ -440,7 +380,7 @@ export function createSupplierPayrollView({
           ["Quantidade", String(line.quantity)],
           ["Valor unitário", money(line.unitValue)],
           ["Subtotal", money(payrollTotal([line]))],
-          ...(hasTax() ? [['IDFOLHA', String((payrollTaxType(line.payrollType) ? draft.taxSheet : draft.sheet).id)]] : []),
+          ...(hasTax ? [['IDFOLHA', String((payrollTaxType(line.payrollType) ? draft.taxSheet : draft.sheet).id)]] : []),
           ["Forma de pagamento", line.account.label],
           ["Comprovantes", receipts],
         ]),
@@ -451,256 +391,504 @@ export function createSupplierPayrollView({
     total.setAttribute("data-payroll-summary-total", "");
     total.append(
       element("span", "", "Total pago"),
-      element("strong", "", money(payrollTotal(draft.lines))),
+      element("strong", "", money(draft.total)),
     );
-    content.append(context, list, total);
+    container.replaceChildren(context, list, total);
   }
-  async function next() {
-    error.hidden = true;
-    if (step === "date") {
-      if (!validPayrollDate(draft.date)) {
-        showError(new Error("Selecione uma data válida."));
+function lineEdited(line) {
+    return line.unitValue.trim() !== "" || line.quantity.trim() !== "1" ||
+      Boolean(line.account || line.files.length);
+  }
+  function hasAmount(line) {
+    if (!line.unitValue.trim()) return false;
+    try { return payrollDecimal(line.unitValue).gt(0); }
+    catch { return false; }
+  }
+  function validateEntry(draft) {
+    for (const line of draft.lines) {
+      const { label } = PAYROLL_RUBRICS.find(rubric => rubric.id === line.rubric);
+      if (lineEdited(line) && !line.unitValue.trim())
+        throw new Error("Informe o valor unitário de " + label + ".");
+      if (line.files.length && !hasAmount(line))
+        throw new Error("Informe um valor positivo para enviar os comprovantes de " + label + ".");
+    }
+    const validated = validatePayrollDraft(draft);
+    if (validated.lines.every(line => payrollTaxType(line.payrollType))) validated.sheet = null;
+    if (!validated.lines.some(line => payrollTaxType(line.payrollType))) {
+      validated.taxSheet = null;
+      validated.taxCompetence = "";
+    }
+    return validated;
+  }
+  function optionSelect(name, label, placeholder, onChange) {
+    const select = element("select");
+    select.name = name;
+    select.setAttribute("aria-label", label);
+    select.addEventListener("change", onChange);
+    function setOptions(options, selected, format = option => option.label) {
+      const empty = element("option", "", placeholder);
+      empty.value = "";
+      select.replaceChildren(empty, ...options.map(option => {
+        const item = element("option", "", format(option));
+        item.value = option.id;
+        return item;
+      }));
+      select.value = selected?.id || "";
+      select.disabled = options.length === 0;
+    }
+    return { select, field: field(label, select), setOptions };
+  }
+  const sheetLabel = option => (option.recommended ? "⭐ " : "") +
+    "ID " + option.id + " — " + option.label;
+
+  function buildEditor(entry, editor, changed, catalogOptions) {
+    const { draft, options } = entry;
+    const { signal } = catalogOptions;
+    const locked = Boolean(entry.result || entry.progress.fingerprint);
+    const info = identity(draft);
+    const profession = info.querySelectorAll("td")[1];
+    const fields = element("fieldset", "supplier-payroll-editor");
+    fields.disabled = locked;
+    const selectField = (name, label, placeholder, getChoices, format) => {
+      const control = optionSelect(name, label, placeholder, () => {
+        draft[name] = getChoices().find(option => option.id === control.select.value) || null;
+        if (name === "product" && !draft.supplier.profession?.trim())
+          profession.textContent = draft.product?.label || "—";
+        onEdit();
+      });
+      control.setOptions(getChoices(), draft[name], format);
+      return control;
+    };
+    const product = selectField("product", "Produto", "Selecione o produto", () => options.products,
+      option => (option.recommended ? "⭐ " : "") + option.label);
+    const stage = selectField("stage", "Etapa", "Selecione a etapa", () => options.stages);
+    const sheet = selectField("sheet", "ID da folha a vincular", "Selecione o IDFOLHA",
+      () => options.sheets, sheetLabel);
+    const sheetNote = element("p", "supplier-payroll-field-note",
+      "O IDFOLHA é obrigatório. Cadastre uma folha válida para este fornecedor.");
+    sheetNote.setAttribute("role", "status");
+    const reloadSheet = button("Atualizar IDFOLHA", "data-payroll-reload-sheet", async () => {
+      reloadSheet.disabled = true;
+      sheetNote.hidden = false;
+      sheetNote.textContent = "Buscando folhas do fornecedor…";
+      try {
+        const choices = await data.loadSheets(draft.supplier, { ...catalogOptions, refreshCatalog: true });
+        if (signal.aborted) return;
+        assertSession();
+        options.sheets = choices;
+        draft.sheet = choices.find(option => option.id === draft.sheet?.id) || null;
+        sheet.setOptions(choices, draft.sheet, sheetLabel);
+        sheetNote.textContent = "O IDFOLHA é obrigatório. Cadastre uma folha válida para este fornecedor.";
+        updateSheetFields();
+        changed();
+      } catch (cause) {
+        if (!signal.aborted) sheetNote.textContent = cause?.message || "Não foi possível buscar o IDFOLHA.";
+      } finally {
+        reloadSheet.disabled = false;
+      }
+    });
+    const tax = element("div", "supplier-payroll-tax");
+    const month = element("input");
+    month.type = "month";
+    month.name = "taxCompetence";
+    month.placeholder = "AAAA-MM";
+    month.value = draft.taxCompetence;
+    let taxRequest = 0;
+    let taxOptions = [];
+    const taxSheet = optionSelect("taxSheet", "ID da folha de INSS/FGTS", "Selecione o IDFOLHA", () => {
+      draft.taxSheet = taxOptions.find(option => option.id === taxSheet.select.value) || null;
+      changed(true);
+    });
+    const taxNote = element("p", "supplier-payroll-field-note");
+    taxNote.setAttribute("role", "status");
+    const retryTax = button("Atualizar IDFOLHA de INSS/FGTS", null, () => loadTaxSheets(true));
+    retryTax.hidden = true;
+    tax.append(field("Competência de INSS/FGTS", month), taxSheet.field, taxNote, retryTax);
+
+    function showTaxOptions(choices) {
+      taxOptions = choices.length === 1 ? choices : [];
+      const previous = draft.taxSheet;
+      draft.taxSheet = taxOptions.find(option => option.id === previous?.id) || null;
+      taxSheet.setOptions(taxOptions, draft.taxSheet, sheetLabel);
+      retryTax.hidden = locked || (choices.length === 1 && !entry.failure);
+      taxNote.textContent = choices.length > 1
+        ? "Há mais de um IDFOLHA nessa competência. Regularize o cadastro antes de postar."
+        : choices.length === 0 ? "Cadastre um IDFOLHA para este fornecedor nessa competência." : "";
+      if (previous !== draft.taxSheet) changed();
+    }
+    async function loadTaxSheets(refresh = false) {
+      const request = ++taxRequest;
+      const competence = payrollCompetenceMonth(draft.taxCompetence);
+      retryTax.hidden = true;
+      taxSheet.setOptions([], null);
+      if (!competence) {
+        taxNote.textContent = "Informe a competência de INSS/FGTS.";
         return;
       }
-      return work(async (assertCurrent, options) => {
-        const loaded = await data.loadSuppliers(options);
-        assertCurrent();
-        suppliers = loaded;
-        step = "supplier";
-      });
-    }
-    if (step === "rubrics") {
+      const current = () => !signal.aborted && request === taxRequest &&
+        payrollCompetenceMonth(draft.taxCompetence) === competence;
+      if (!refresh && entry.taxOptions?.competence === competence) {
+        showTaxOptions(entry.taxOptions.choices);
+        return;
+      }
+      taxNote.textContent = "Buscando IDFOLHA de INSS/FGTS…";
       try {
-        validatePayrollLines(draft.lines);
+        const choices = await data.loadSheets(draft.supplier, {
+          ...catalogOptions, competence, refreshCatalog: refresh,
+        });
+        if (!current()) return;
+        assertSession();
+        entry.taxOptions = { competence, choices };
+        showTaxOptions(choices);
+      } catch (cause) {
+        if (!current()) return;
+        taxNote.textContent = cause?.message || "Não foi possível buscar o IDFOLHA de INSS/FGTS.";
+        retryTax.hidden = false;
+      }
+    }
+    month.addEventListener("input", () => {
+      if (draft.taxCompetence === month.value) return;
+      draft.taxCompetence = month.value;
+      draft.taxSheet = null;
+      changed(true);
+    });
+    month.addEventListener("change", () => {
+      if (draft.taxCompetence !== month.value) {
+        draft.taxCompetence = month.value;
+        draft.taxSheet = null;
+        changed(true);
+      }
+      void loadTaxSheets();
+    });
+    function updateSheetFields() {
+      const taxActive = draft.lines.some(line => ["inss", "fgts"].includes(line.rubric) && hasAmount(line));
+      const normalActive = !taxActive || draft.lines.some(line => !["inss", "fgts"].includes(line.rubric) && hasAmount(line));
+      sheet.select.closest(".supplier-payroll-field").hidden = !normalActive;
+      sheetNote.hidden = !normalActive || options.sheets.length > 0;
+      reloadSheet.hidden = locked || !normalActive || (options.sheets.length > 0 && !entry.failure);
+      if (!taxActive) {
+        if (!tax.hidden) {
+          taxRequest++;
+          draft.taxSheet = null;
+          draft.taxCompetence = "";
+          month.value = "";
+        }
+        tax.hidden = true;
+        return;
+      }
+      if (tax.hidden) {
+        tax.hidden = false;
+        if (!draft.taxCompetence) draft.taxCompetence = previousPayrollCompetence(draft.date);
+        month.value = draft.taxCompetence;
+        void loadTaxSheets();
+      }
+    }
+    function onEdit() {
+      updateSheetFields();
+      changed(true);
+    }
+    tax.hidden = true;
+    fields.append(product.field,
+      element("h3", "", "Informe os valores de cada rubrica"),
+      renderRubrics(entry, onEdit),
+      stage.field, sheet.field, sheetNote, reloadSheet, tax);
+    editor.replaceChildren(info, fields);
+    pickers.push(bindSearchableFilterSelects(fields));
+    updateSheetFields();
+  }
+
+  function clearPickers() {
+    for (const picker of pickers) picker.destroy();
+    pickers = [];
+  }
+
+  function renderBatch() {
+    batchRequest = new AbortController();
+    const { signal } = batchRequest;
+    const catalogOptions = { signal, catalogCache: new Map() };
+    const filter = element("input", "supplier-payroll-search");
+    filter.type = "search";
+    filter.value = search;
+    filter.placeholder = "Digite para filtrar os fornecedores";
+    filter.setAttribute("aria-label", "Filtrar fornecedores");
+    const list = element("div", "supplier-payroll-choices");
+    const empty = element("p", "supplier-payroll-empty");
+    const total = element("p", "supplier-payroll-total");
+    total.setAttribute("data-payroll-batch-total", "");
+    total.setAttribute("aria-live", "polite");
+    const feedback = element("p", "supplier-payroll-batch-feedback");
+    feedback.setAttribute("role", "status");
+    const post = button("Postar", "data-payroll-post", submit);
+    post.classList.add("supplier-payroll-post");
+    function refreshBatch() {
+      const selected = entries.filter(entry => entry.selected && !entry.result);
+      try {
+        const amount = payrollTotal(selected.flatMap(entry => entry.validated?.lines || entry.draft.lines));
+        total.textContent = "Total selecionado (" + selected.length + "): " + money(amount);
+        post.disabled = selected.length === 0;
+      } catch {
+        total.textContent = "Total selecionado: confira os valores informados";
+        post.disabled = false;
+      }
+      const posted = entries.filter(entry => entry.result);
+      feedback.hidden = posted.length === 0;
+      if (posted.length) {
+        feedback.textContent = posted.length + (posted.length === 1 ? " folha postada" : " folhas postadas");
+        try {
+          feedback.textContent += " · Total postado: " +
+            money(payrollTotal(posted.flatMap(entry => entry.result.lines)));
+        } catch { /* The count and each supplier's total remain available. */ }
+      }
+      post.textContent = hasPendingPosting() ? "Retomar postagem" : "Postar";
+    }
+    async function submit() {
+      const selected = entries.filter(entry => entry.selected && !entry.result);
+      const queue = [];
+      for (const entry of selected) {
+        try {
+          queue.push({ entry, validated: validateEntry(entry.draft) });
+        } catch (cause) {
+          entry.expanded = true;
+          search = "";
+          render();
+          showError(new Error(entry.draft.supplier.label + " — " + cause.message));
+          error.tabIndex = -1;
+          error.focus();
+          return;
+        }
+      }
+      if (!queue.length) return;
+      try {
+        payrollTotal(queue.flatMap(({ validated }) => validated.lines));
       } catch (cause) {
         showError(cause);
         return;
       }
-      return work(async (assertCurrent, options) => {
-        const loaded = await data.loadStages(draft.supplier, options);
-        assertCurrent();
-        stages = loaded;
-        step = "stage";
-      });
+      return work(async (assertCurrent, { onProgress }) => {
+        const failures = [];
+        for (const [index, { entry, validated }] of queue.entries()) {
+          try {
+            entry.result = await data.post(validated, entry.progress, event =>
+              onProgress({ percent: (index + (event?.percent || 0) / 100) * 100 / queue.length }));
+            entry.selected = false;
+            entry.failure = null;
+          } catch (cause) {
+            entry.failure = cause?.message || "Não foi possível postar a folha.";
+            failures.push(entry.draft.supplier.label + " — " + entry.failure);
+          }
+          assertCurrent();
+          onProgress({ percent: (index + 1) * 100 / queue.length });
+        }
+        if (failures.length) {
+          search = "";
+          throw new Error(failures.join(" · "));
+        }
+      }, "Postando folhas, comprovantes e vínculos…", true);
     }
-    if (step === 'tax-competence') {
-      if (!payrollCompetenceMonth(draft.taxCompetence)) { showError(new Error('Informe uma competência válida.')); return; }
-      return work(async (assertCurrent, options) => {
-        const loaded = await data.loadSheets(draft.supplier, {...options, competence:draft.taxCompetence});
-        assertCurrent(); taxSheets = loaded; draft.taxSheet = null; step = 'tax-sheet';
+
+    const cards = entries.map((entry, index) => {
+      const { draft } = entry;
+      const card = element("section", "supplier-payroll-card");
+      card.dataset.payrollSupplier = draft.supplier.id;
+      const row = element("div", "supplier-payroll-card-header");
+      const checkbox = element("input");
+      checkbox.type = "checkbox";
+      checkbox.setAttribute("data-payroll-select", "");
+      checkbox.setAttribute("aria-label", "Selecionar " + draft.supplier.label + " para postar");
+      checkbox.disabled = Boolean(entry.result || entry.progress.fingerprint);
+      const checkboxLabel = element("label", "supplier-payroll-card-select");
+      checkboxLabel.append(checkbox);
+      const expand = button("", "data-payroll-expand", () => setExpanded(!entry.expanded));
+      expand.classList.add("supplier-payroll-card-toggle");
+      const supplierName = element("strong", "", draft.supplier.label);
+      const amount = element("span", "supplier-payroll-card-amount");
+      amount.setAttribute("data-payroll-total", "");
+      const status = element("span", "supplier-payroll-card-status");
+      const caret = element("span", "supplier-payroll-card-caret", "⌄");
+      caret.setAttribute("aria-hidden", "true");
+      expand.append(supplierName, amount, status, caret);
+      row.append(checkboxLabel, expand);
+      const panel = element("div", "supplier-payroll-card-panel");
+      panel.id = "supplier-payroll-" + id + "-supplier-" + index;
+      expand.setAttribute("aria-controls", panel.id);
+      const editor = element("div");
+      const details = element("details", "supplier-payroll-review");
+      const review = element("div");
+      details.append(element("summary", "", "Resumo da folha"), review);
+      const result = element("p", "supplier-payroll-card-result");
+      result.hidden = !entry.result;
+      if (entry.result) {
+        const sheets = new Map([entry.result.sheet, entry.result.taxSheet]
+          .filter(Boolean).map(sheet => [sheet.id, sheet]));
+        result.textContent = "Folha postada e vinculada. " +
+          [...sheets.values()].map(sheet => "IDFOLHA: " + sheet.id + " (" + sheet.label + ")").join(" · ") +
+          ". Lançamentos: " + entry.result.lines.map(line => line.id).join(", ") + ".";
+      }
+      panel.append(editor, result, details);
+      card.append(row, panel);
+      list.append(card);
+
+      function refresh(edited = false) {
+        const started = Boolean(draft.product || draft.stage || draft.sheet || draft.taxSheet ||
+          draft.taxCompetence || draft.lines.some(lineEdited));
+        if (edited) {
+          if (started) entry.selected = true;
+          entry.failure = null;
+          error.hidden = true;
+        }
+        let validated;
+        let message = "";
+        if (entry.selected || started || entry.result) {
+          try { validated = validateEntry(draft); }
+          catch (cause) { message = cause.message; }
+        }
+        entry.validated = validated;
+        checkbox.checked = entry.selected;
+        const state = entry.result ? "posted" : entry.selected && validated && !entry.failure
+          ? "ready" : entry.selected || started ? "pending" : "empty";
+        card.dataset.payrollState = state;
+        status.textContent = entry.failure || (state === "ready" ? "Pronto para postar"
+          : state === "posted" ? "Postado" : state === "empty" ? ""
+          : !entry.selected ? "Fora da postagem" : message);
+        try { amount.textContent = "Total pago: " + money(validated?.total ?? payrollTotal(draft.lines)); }
+        catch { amount.textContent = "Total pago: confira os valores"; }
+        details.hidden = !validated;
+        if (validated) renderSummary(review, validated);
+      }
+      checkbox.addEventListener("change", () => {
+        entry.selected = checkbox.checked;
+        error.hidden = true;
+        refresh();
+        refreshBatch();
+        if (entry.selected) setExpanded(true);
       });
+
+      let editorReady = false;
+      async function loadEditor() {
+        if (editorReady || signal.aborted) return;
+        editorReady = true;
+        try {
+          if (!entry.options) {
+            editor.replaceChildren(createLoadingIndicator(doc, "Carregando opções do fornecedor…"));
+            const [products, accounts, stages, sheets] = await Promise.all([
+              data.loadProducts(draft.supplier, catalogOptions),
+              data.loadAccounts(catalogOptions),
+              data.loadStages(draft.supplier, catalogOptions),
+              data.loadSheets(draft.supplier, catalogOptions),
+            ]);
+            if (signal.aborted) return;
+            assertSession();
+            entry.options = { products, accounts, stages, sheets };
+          }
+          buildEditor(entry, editor, edited => {
+            refresh(edited);
+            refreshBatch();
+          }, catalogOptions);
+        } catch (cause) {
+          if (signal.aborted) return;
+          editorReady = false;
+          const notice = element("p", "supplier-payroll-error", cause?.message || "Não foi possível carregar o fornecedor.");
+          notice.setAttribute("role", "alert");
+          editor.replaceChildren(notice, button("Tentar novamente", "data-payroll-retry-options", loadEditor));
+        }
+      }
+      function setExpanded(expanded) {
+        entry.expanded = expanded;
+        expand.setAttribute("aria-expanded", String(expanded));
+        panel.hidden = !expanded;
+        if (expanded) void loadEditor();
+      }
+      setExpanded(entry.expanded);
+      refresh();
+      return { card, name: normalizeSearchText(draft.supplier.label) };
+    });
+    function filterSuppliers() {
+      search = filter.value;
+      const query = normalizeSearchText(search);
+      for (const { card, name } of cards) card.hidden = !includesSearchText(name, query);
+      empty.hidden = cards.some(({ card }) => !card.hidden);
+      empty.textContent = cards.length ? "Nenhum fornecedor corresponde à pesquisa." : "Nenhum fornecedor cadastrado disponível.";
     }
+    filter.addEventListener("input", filterSuppliers);
+    filterSuppliers();
+    refreshBatch();
+    content.append(filter, list, empty, total, feedback, post);
   }
-  function back() {
-    if (progress.fingerprint) return;
-    const previous = step === 'tax-competence' ? (hasNormal() ? 'sheet' : 'stage') : step === 'summary' ? (hasTax() ? 'tax-sheet' : 'sheet') : {
-      supplier: "date",
-      product: "supplier",
-      rubrics: "product",
-      stage: "rubrics",
-      sheet: "stage",
-      'tax-sheet': 'tax-competence',
-    }[step];
-    if (previous) {
-      step = previous;
-      error.hidden = true;
+
+  async function next() {
+    error.hidden = true;
+    if (!validPayrollDate(date)) {
+      showError(new Error("Selecione uma data válida."));
+      return;
+    }
+    if (entries[0]?.draft.date === date) {
+      step = "batch";
       render();
       focus();
+      return;
     }
+    return work(async (assertCurrent, options) => {
+      const loaded = await data.loadSuppliers(options);
+      assertCurrent();
+      entries = loaded.map(makeEntry);
+      search = "";
+      step = "batch";
+    });
   }
   function navigateBack() {
     if (destroyed || !opened || mutating) return;
-    if (step === "date" || step === "linked" || progress.fingerprint) {
+    if (step === "date" || hasPendingPosting()) {
       close();
       return;
     }
-    if (busy) {
-      epoch++;
-      loadingOperation?.abort.abort();
-      busy = false;
-    }
-    back();
+    step = "date";
+    error.hidden = true;
+    render();
+    focus();
   }
   function render(loadingLabel) {
+    batchRequest?.abort();
     receiptPicker?.close();
-    accountPickers?.destroy(); accountPickers = null;
+    clearPickers();
     content.replaceChildren();
     footer.replaceChildren();
-    footer.classList.toggle("supplier-payroll-footer--rubrics", step === "rubrics");
     footer.hidden = true;
     backButton.disabled = mutating;
     homeButton.disabled = mutating;
     if (busy) {
       const snapshot = loadingOperation?.snapshot;
-      const loader = createLoadingIndicator(doc, loadingLabel || "Carregando folha…", { progress: snapshot?.percent, progressLabel: snapshot?.progressLabel });
+      const loader = createLoadingIndicator(doc, loadingLabel || "Carregando folha…",
+        { progress: snapshot?.percent, progressLabel: snapshot?.progressLabel });
       if (loadingOperation) loadingOperation.loader = loader;
       content.append(loader);
       return;
     }
-    if (step === "date") {
-      heading("Qual é a data da folha de pagamento?");
-      const input = element("input");
-      input.type = "date";
-      input.name = "date";
-      input.value = draft.date;
-      input.addEventListener("input", () => {
-        if (draft.date !== input.value) { draft.taxCompetence = ''; draft.taxSheet = null; }
-        draft.date = input.value;
-      });
-      content.append(field("Data", input));
+    if (step === "batch") {
+      content.append(element("h2", "supplier-payroll-question", "Selecione os fornecedores para a folha de pagamento"));
+      renderBatch();
+      return;
     }
-    if (step === "supplier") {
-      heading("DESEJA EFETUAR A FOLHA DE QUAL FORNECEDOR?");
-      choiceList(suppliers, (option) =>
-        work(async (assertCurrent, options) => {
-          const loaded = await data.loadProducts(option, options);
-          assertCurrent();
-          if (draft.supplier?.id !== option.id) {
-            draft.lines = PAYROLL_RUBRICS.map((r) => ({
-              rubric: r.id,
-              quantity: "1",
-              unitValue: "",
-              account: null,
-              files: [],
-            }));
-            draft.stage = null;
-            draft.sheet = null;
-            draft.taxCompetence = '';
-            draft.taxSheet = null;
-            draft.product = null;
-          }
-          draft.supplier = option;
-          products = loaded;
-          step = "product";
-        }),
-      );
-    }
-    if (step === "product") {
-      heading("Qual produto deseja utilizar?");
-      content.append(
-        element(
-          "p",
-          "",
-          `Fornecedor: ${draft.supplier.label}. ⭐ Profissão do fornecedor.`,
-        ),
-      );
-      choiceList(products, (option) =>
-        work(async (assertCurrent, options) => {
-          const loaded = await data.loadAccounts(options);
-          assertCurrent();
-          draft.product = option;
-          accounts = loaded;
-          step = "rubrics";
-        }),
-      );
-    }
-    if (step === "rubrics") renderRubrics();
-    if (step === "stage") {
-      heading("Indique a etapa");
-      identity();
-      choiceList(stages, (option) =>
-        work(async (assertCurrent, options) => {
-          const normal = hasNormal();
-          const loaded = normal ? await data.loadSheets(draft.supplier, options) : [];
-          assertCurrent();
-          draft.stage = option;
-          draft.sheet = null;
-          sheets = loaded;
-          if (normal) step = "sheet"; else taxCompetenceStep();
-        }),
-      );
-    }
-    if (step === "summary") {
-      summary();
-      footer.append(
-        button(
-          progress.fingerprint ? "Retomar postagem" : "Postar",
-          "data-payroll-post",
-          () =>
-            work(
-              async (assertCurrent, options) => {
-                const posted = await data.post(
-                  validatePayrollDraft(draft),
-                  progress,
-                  options.onProgress,
-                );
-                assertCurrent();
-                result = posted;
-                step = "linked";
-              },
-              "Postando lançamentos, comprovantes e vínculo ao IDFOLHA…",
-              true,
-            ),
-        ),
-      );
-    }
-    if (step === "sheet") {
-      heading(`Qual IDFOLHA de ${draft.supplier.label} deseja utilizar?`);
-      content.append(
-        element(
-          "p",
-          "",
-          hasTax() ? 'Selecione a folha das rubricas salariais. INSS/FGTS terão sua competência confirmada na próxima etapa.' : "O IDFOLHA é obrigatório. Selecione a folha que receberá todas as rubricas.",
-        ),
-      );
-      choiceList(sheets, (option) => {
-        draft.sheet = option;
-        if (hasTax()) taxCompetenceStep(); else step = "summary";
-        render();
-        focus();
-      });
-      if (!sheets.length) {
-        content.append(
-          element(
-            "p",
-            "",
-            "O fornecedor não possui folha do mês vigente, anterior ou próximo. Cadastre um IDFOLHA válido para esse fornecedor e volte para selecioná-lo antes de postar.",
-          ),
-        );
-      }
-    }
-    if (step === 'tax-competence') {
-      heading('Qual é a competência de INSS/FGTS?'); identity();
-      const month = element('input'); month.type = 'month'; month.name = 'taxCompetence'; month.value = draft.taxCompetence;
-      month.addEventListener('input', () => { draft.taxCompetence = month.value; draft.taxSheet = null; });
-      content.append(field('Competência (mês e ano)', month), element('p', '', 'Sugerimos o mês anterior à data do pagamento. Confirme ou altere para a competência correta; a data do pagamento não será alterada.'));
-    }
-    if (step === 'tax-sheet') {
-      heading(`Qual IDFOLHA receberá INSS/FGTS da competência ${draft.taxCompetence.slice(5)}/${draft.taxCompetence.slice(0,4)}?`); identity();
-      choiceList(taxSheets.length === 1 ? taxSheets : [], option => { draft.taxSheet = option; step = 'summary'; render(); focus(); });
-      if (taxSheets.length !== 1) content.append(element('p', '', taxSheets.length ? 'Há mais de um IDFOLHA desse fornecedor nessa competência. Regularize as folhas antes de postar.' : 'O fornecedor não possui IDFOLHA cadastrado nessa competência. Cadastre a folha e volte para selecioná-la.'));
-    }
-    if (step === "linked") {
-      heading("Folha postada e vinculada ao IDFOLHA");
-      content.append(
-        element(
-          "p",
-          "",
-          `IDFOLHA: ${(result.sheet || result.taxSheet).id} · Referência: ${(result.sheet || result.taxSheet).label}.${result.taxSheet ? ` INSS/FGTS — IDFOLHA ${result.taxSheet.id} · Competência ${result.taxSheet.label}.` : ''} Lançamentos: ${result.lines.map((l) => l.id).join(", ")}.`,
-        ),
-        element(
-          "p",
-          "supplier-payroll-total",
-          `Total pago: ${money(payrollTotal(draft.lines))}`,
-        ),
-      );
-      footer.append(button("Concluir", null, close));
-    }
-    if (step === "rubrics")
-      footer.append(button("Voltar", "data-payroll-back", navigateBack));
-    if (["date", "rubrics", "tax-competence"].includes(step))
-      footer.append(button("Continuar", "data-payroll-next", next));
-    footer.hidden = footer.childElementCount === 0;
+    content.append(element("h2", "supplier-payroll-question", "Qual é a data da folha de pagamento?"));
+    const input = element("input");
+    input.type = "date";
+    input.name = "date";
+    input.value = date;
+    input.addEventListener("input", () => { date = input.value; });
+    content.append(field("Data", input));
+    footer.append(button("Continuar", "data-payroll-next", next));
+    footer.hidden = false;
   }
+
   function close() {
     if (destroyed || !opened || mutating) return false;
     opened = false;
     loadingOperation?.abort.abort();
+    batchRequest?.abort();
     epoch++;
     busy = false;
     page.hidden = true;
     receiptPicker?.close();
-    accountPickers?.close();
+    clearPickers();
     previousFocus?.focus?.();
     onClose();
     return true;
@@ -714,9 +902,10 @@ export function createSupplierPayrollView({
     if (event.key === "Tab") {
       const focusable = [
         ...page.querySelectorAll(
-          "button:not([disabled]),input:not([type=file]),select",
+          "button, input:not([type=file]), select, summary",
         ),
-      ].filter((el) => !el.hidden && !el.closest("[hidden]"));
+      ].filter((el) => !el.matches(":disabled, [tabindex=\"-1\"]") && !el.closest("[hidden], [inert]") &&
+        (!el.closest("details:not([open])") || el.matches("summary")));
       if (!focusable.length) {
         event.preventDefault();
         return;
@@ -738,7 +927,6 @@ export function createSupplierPayrollView({
       if (destroyed) return false;
       assertSession();
       if (opened) return true;
-      if (step === "linked") fresh();
       previousFocus = doc.activeElement;
       opened = true;
       epoch++;
@@ -753,17 +941,15 @@ export function createSupplierPayrollView({
     close,
     destroy() {
       loadingOperation?.abort.abort();
+      batchRequest?.abort();
       receiptPicker?.close();
-      accountPickers?.destroy(); accountPickers = null;
+      clearPickers();
       destroyed = true;
       opened = false;
       epoch++;
       page.removeEventListener("keydown", keydown);
       page.remove();
-      draft = null;
-      progress = null;
-      result = null;
-      suppliers = products = accounts = stages = sheets = [];
+      entries = [];
     },
   });
 }
