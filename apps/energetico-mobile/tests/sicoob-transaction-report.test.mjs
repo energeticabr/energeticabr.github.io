@@ -22,6 +22,44 @@ const payment = (id, fields = {}) => ({
   },
 });
 
+test('shows the bank balance first and independently of transaction filters and printing', async () => {
+  const dom = new JSDOM('<main id="app"></main>');
+  let finish, reads = 0;
+  const view = createSicoobTransactionReportView({ document: dom.window.document,
+    data: { async loadSnapshot() { return { rows: [payment(1)] }; } },
+    loadBalance: () => { reads++; return new Promise(resolve => { finish = resolve; }); },
+  });
+  try {
+    await view.open();
+    const first = () => view.element.querySelector('.sicoob-transaction-summary').firstElementChild;
+    assert.match(first().textContent, /Saldo em conta corrente.*Consultando/);
+    assert.match(first().nextElementSibling.textContent, /^Transações1$/);
+    finish({ balanceCents: -123456, asOf: '2026-11-11T21:17:00Z' });
+    await new Promise(resolve => setImmediate(resolve));
+    assert.match(first().textContent, /-R\$\s1\.234,56/);
+    assert.match(first().querySelector('time').textContent, /18:17/);
+
+    const search = view.element.querySelector('input[type="search"]');
+    search.value = 'sem correspondência';
+    search.dispatchEvent(new dom.window.Event('input'));
+    assert.match(first().nextElementSibling.textContent, /^Transações0$/);
+    assert.match(first().textContent, /1\.234,56/);
+    assert.equal(reads, 1);
+
+    const restore = await view.preparePrint();
+    assert.doesNotMatch(JSON.stringify(captureFilteredReport(view.element)), /Saldo em conta corrente|1\.234,56/);
+    restore();
+    view.element.querySelector('.pl-refresh').click();
+    finish(null);
+    await new Promise(resolve => setImmediate(resolve));
+    assert.match(first().textContent, /Indisponível/);
+    assert.equal(first().querySelector('time').hidden, true);
+  } finally {
+    view.destroy();
+    dom.window.close();
+  }
+});
+
 test('refresh starts the source sync, retains filters and rows, and reloads when bank completes before fiscal', async () => {
   const dom = new JSDOM('<main id="app"></main>');
   let listener, starts = 0, reads = 0, failRead = false;
