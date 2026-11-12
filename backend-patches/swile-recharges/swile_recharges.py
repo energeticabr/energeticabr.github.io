@@ -21,6 +21,8 @@ CONFIG = Path('/etc/energetica-swile.json')
 DATABASE = Path('/var/lib/energetica-whatsapp/swile/orders.sqlite')
 WALLET = 'v13'
 PREVIEW_TTL = 15 * 60
+BLOCKING_ORDER = """(state='sending' OR
+                     (state='created' AND COALESCE(status, '') NOT IN ('CANCELED', 'CREATION_ERROR')))"""
 ORIGINS = {
     'production': 'https://corporate-gateway.swile.com.br',
     'staging': 'https://corporate-gateway-staging.swile.com.br',
@@ -125,7 +127,7 @@ def request_dates(body, now):
     if payment not in ('PIX', 'BANK_SLIP'):
         raise SwileError('Selecione Pix ou boleto.')
     today = datetime.fromtimestamp(now, SP).date()
-    earliest = today
+    earliest = datetime.fromtimestamp(now, timezone.utc).date()
     for _ in range(1 if payment == 'PIX' else 2):
         earliest += timedelta(days=1)
         while earliest.weekday() >= 5:
@@ -139,6 +141,23 @@ def request_dates(body, now):
             raise SwileError('O boleto deve vencer antes da data de crédito.')
         result['dueDate'] = due.isoformat()
     return result
+
+
+def breakdown_matches(summary, expected):
+    orders = summary.get('orders') or []
+    lists = [order.get('employees') for order in orders if isinstance(order, dict)]
+    if not any(lists):
+        return True  # The API may omit individual allocations.
+    actual = {}
+    for employees in lists:
+        if not isinstance(employees, list):
+            return False
+        for employee in employees:
+            document, values = employee.get('document'), employee.get('cardValue')
+            if document not in expected or document in actual or not isinstance(values, dict) or values.keys() != {WALLET}:
+                return False
+            actual[document] = cents(values[WALLET])
+    return actual == expected
 
 
 class Service:
@@ -188,6 +207,7 @@ class Service:
                 id TEXT PRIMARY KEY, owner TEXT NOT NULL, fingerprint TEXT NOT NULL,
                 created REAL NOT NULL, summary TEXT NOT NULL, payload TEXT NOT NULL,
                 display TEXT NOT NULL, state TEXT NOT NULL, code TEXT, status TEXT)""")
+            db.execute('CREATE INDEX IF NOT EXISTS orders_fingerprint ON orders (fingerprint)')
             yield db
 
     def receipt(self, row):
@@ -215,9 +235,9 @@ class Service:
                 raise SwileError('Informe valores positivos em reais, com até duas casas decimais.')
             amounts[identifier] = amount
         fingerprint = hashlib.sha256(json.dumps([sorted(amounts.items()), payment], sort_keys=True).encode()).hexdigest()
-        query = """SELECT * FROM orders WHERE owner=? AND fingerprint=?
-                   AND (state IN ('sending','created') OR (state='ready' AND created>?))
-                   ORDER BY created DESC LIMIT 1"""
+        query = f"""SELECT * FROM orders WHERE owner=? AND fingerprint=?
+                    AND ({BLOCKING_ORDER} OR (state='ready' AND created>?))
+                    ORDER BY created DESC LIMIT 1"""
         cutoff = self.clock() - PREVIEW_TTL
         with self.db() as db:
             if (existing := db.execute(query, (owner, fingerprint, cutoff)).fetchone()):
@@ -235,7 +255,8 @@ class Service:
         summary_id = summary.get('summaryId')
         if (not isinstance(summary_id, str) or not summary_id
                 or summary.get('totalEmployees') != len(amounts)
-                or cents(summary.get('valueCredit')) != sum(amounts.values())):
+                or cents(summary.get('valueCredit')) != sum(amounts.values())
+                or not breakdown_matches(summary, dict(zip(documents, amounts.values())))):
             raise SwileError('O resumo da Swile diverge dos valores informados. Nenhum pedido foi enviado.', 502)
         identifier = uuid4().hex
         display = {**payment, 'creditCents': sum(amounts.values()), 'paymentCents': cents(summary.get('valuePayment')),
@@ -262,6 +283,10 @@ class Service:
                 return self.receipt(row)
             if row['state'] != 'ready' or self.clock() - row['created'] >= PREVIEW_TTL:
                 raise SwileError('Gere um novo resumo antes de enviar o pedido.')
+            duplicate = db.execute(f'SELECT 1 FROM orders WHERE fingerprint=? AND id<>? AND {BLOCKING_ORDER} LIMIT 1',
+                                   (row['fingerprint'], identifier)).fetchone()
+            if duplicate:
+                raise SwileError('Já existe um envio idêntico na empresa. Confira os pedidos na Dash RH.', 409)
             payment = request_dates(json.loads(row['payload']), self.clock())
             db.execute("UPDATE orders SET state='sending' WHERE id=?", (identifier,))
         # Preserve the claim before contacting Swile. The same externalId is
@@ -275,7 +300,7 @@ class Service:
         except SwileError as error:
             if error.status in (401, 403, 422, 429):
                 with self.db() as db:
-                    db.execute("UPDATE orders SET state=? WHERE id=?",
+                    db.execute("UPDATE orders SET state=? WHERE id=? AND state='sending'",
                                ('rejected' if error.status == 422 else 'ready', identifier))
                 raise
             return self.receipt(row)
@@ -286,6 +311,40 @@ class Service:
             db.execute("UPDATE orders SET state='created', code=?, status=? WHERE id=?", (code, status, identifier))
         return {**self.receipt(row), 'orderCode': code, 'status': status}
 
+    def order_status(self, code):
+        data = self.gateway.request('order/group/status/' + quote(code, safe=''))
+        if data.get('orderGroupCode') != code or not isinstance(data.get('status'), str):
+            raise SwileError('A Swile não confirmou o status atualizado.', 502)
+        return data
+
+    def reconcile(self, row, receipt):
+        # The listing returns group codes but only the status route echoes
+        # externalId. Query the period when this saved preview could be sent.
+        start = datetime.fromtimestamp(row['created'] - 60, timezone.utc)
+        end = start + timedelta(seconds=PREVIEW_TTL + 360)
+        tried = 0
+        for page in range(2):
+            groups = self.gateway.request('order/group', query={
+                'initialDate': start.strftime('%Y-%m-%dT%H:%M:%S'),
+                'finalDate': end.strftime('%Y-%m-%dT%H:%M:%S'),
+                'page': page, 'size': 50,
+            })
+            for group in groups.get('orderGroups') or []:
+                code = group.get('groupCode')
+                if (not isinstance(code, str) or not re.fullmatch(r'[A-Za-z0-9_-]{1,100}', code)
+                        or group.get('totalEmployees') not in (None, receipt['totalEmployees'])
+                        or cents(group.get('valueCredit')) != receipt['creditCents']):
+                    continue
+                tried += 1
+                match = self.order_status(code)
+                if match.get('externalId') == row['id']:
+                    return match
+                if tried >= 12:
+                    return None
+            if groups.get('last') is True:
+                break
+        return None
+
     def orders(self, owner, reference=None):
         with self.db() as db:
             rows = db.execute("""SELECT * FROM orders WHERE owner=? AND state IN ('sending','created')
@@ -293,17 +352,17 @@ class Service:
         result = []
         for row in rows:
             receipt = self.receipt(row)
-            if row['code'] and (reference == row['id'] or reference is None and not result):
+            if reference == row['id'] or reference is None and not result:
                 try:
-                    data = self.gateway.request('order/group/status/' + quote(row['code'], safe=''))
-                    if data.get('orderGroupCode') != row['code'] or not isinstance(data.get('status'), str):
-                        raise SwileError('A Swile não confirmou o status atualizado.', 502)
+                    data = self.order_status(row['code']) if row['code'] else self.reconcile(row, receipt)
                 except SwileError:
                     receipt['statusStale'] = True
                 else:
-                    receipt['status'] = data['status']
-                    with self.db() as db:
-                        db.execute('UPDATE orders SET status=? WHERE id=?', (data['status'], row['id']))
+                    if data:
+                        receipt.update(orderCode=data['orderGroupCode'], status=data['status'])
+                        with self.db() as db:
+                            db.execute("UPDATE orders SET state='created', code=?, status=? WHERE id=? AND state IN ('created','sending')",
+                                       (data['orderGroupCode'], data['status'], row['id']))
             result.append(receipt)
         return result
 

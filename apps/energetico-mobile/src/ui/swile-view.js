@@ -264,7 +264,9 @@ export function openSwileView({ document: doc, request, onClose }) {
       const list = make('div', '', 'swile-order-list');
       for (const order of result) {
         const block = receiptDetails(order);
-        if (order.orderCode) block.append(button('Atualizar status', () => showOrders(order.reference)));
+        if (order.orderCode || order.status === 'UNCONFIRMED') {
+          block.append(button('Atualizar status', () => showOrders(order.reference)));
+        }
         list.append(block);
       }
       if (!result.length) list.append(make('p', 'Nenhum pedido enviado por você nesta integração.'));
