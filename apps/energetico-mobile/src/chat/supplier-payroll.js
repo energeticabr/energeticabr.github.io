@@ -79,12 +79,12 @@ export function validatePayrollDraft(draft) {
   if (!validPayrollDate(draft?.date))
     throw new RangeError("Selecione uma data válida.");
   for (const [field, label] of [
-    ["supplier", "fornecedor"],
-    ["product", "produto"],
-    ["stage", "etapa"],
+    ["supplier", "o fornecedor cadastrado"],
+    ["product", "o produto cadastrado"],
+    ["stage", "a etapa cadastrada"],
   ]) {
     if (!draft[field]?.id || !draft[field]?.label)
-      throw new RangeError(`Selecione o ${label} cadastrado.`);
+      throw new RangeError(`Selecione ${label}.`);
   }
   if (!String(draft.supplier.branch || "").trim())
     throw new RangeError("O fornecedor não possui filial cadastrada.");
