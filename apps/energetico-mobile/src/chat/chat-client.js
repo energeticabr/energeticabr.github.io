@@ -699,6 +699,19 @@ export function createChatClient({
   function getSicoobRefreshStatus(requestId, options) { return ddaRequest('sicoob_refresh_status', requestId, options); }
   function getSicoobRefreshPending(options) { return ddaRequest('sicoob_refresh_status', null, options, { mode: 'pending' }); }
   function acknowledgeSicoobRefresh(requestId, options) { return ddaRequest('sicoob_refresh_status', requestId, options, { acknowledge: true }); }
+  async function swileRequest(operation, payload = {}, { signal } = {}) {
+    if (apiPrefix === '/api/demo') throw new Error('A integração Swile está disponível no ambiente da empresa.');
+    if (!['directory', 'preview', 'confirm', 'orders'].includes(operation)) throw new TypeError('Operação Swile inválida.');
+    const token = await cancellableToken(tokenProvider, signal);
+    const result = await request(chatUrl.href, {
+      method: 'POST', signal, redirect: 'error',
+      headers: { Accept: 'application/json', Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' },
+      body: JSON.stringify({ ...payload, action: `swile_${operation}` }),
+      cache: 'no-store', credentials: 'omit',
+    }, response => parsePortalResponse(response, 'A consulta Swile'), operation === 'directory' || operation === 'orders');
+    if (!result?.swile || typeof result.swile !== 'object') throw new Error('A integração Swile ainda não está disponível.');
+    return result.swile;
+  }
   async function getSicoobBalance({ signal } = {}) {
     if (apiPrefix === '/api/demo') return null;
     const token = await cancellableToken(tokenProvider, signal);
@@ -879,5 +892,5 @@ export function createChatClient({
     }, true);
   }
 
-  return Object.freeze({ getSicoobBalance, refreshSicoob, getSicoobRefreshStatus, getSicoobRefreshPending, acknowledgeSicoobRefresh, waitForDiaryEvidence, refreshSefaz, getSefazRefreshStatus, getSefazRefreshPending, acknowledgeSefazRefresh, sendText, sendFile, replaceAttachment, transcribeAudio, fetchMedia, getAttachments, launchGalleryRequest, uploadLaunchGalleryFile, getPendingProvisionSnapshot, getPendingNotesSnapshot, getRhidAttendanceReport, startRhidPendingValidation, startRhidDayValidation, getRhidAttendanceMonth, saveRhidAttendanceAdjustment, deleteRhidAttendanceAdjustment, refreshRhidAttendance, getRhidRefreshStatus, refreshRecurringProvisions, getRecurringProvisionRefreshStatus, refreshDda, getDdaRefreshStatus, getDdaRefreshPending, acknowledgeDdaRefresh, confirmDdaPayment, deleteAttachment, deleteAllAttachments, compressAttachment, chooseAttachmentCompression, getCompletionMenu, prepareSignatureEvidence, confirmSignatureEvidence, verifySignatureEvidence, captureSignatureEvidence });
+  return Object.freeze({ swileRequest, getSicoobBalance, refreshSicoob, getSicoobRefreshStatus, getSicoobRefreshPending, acknowledgeSicoobRefresh, waitForDiaryEvidence, refreshSefaz, getSefazRefreshStatus, getSefazRefreshPending, acknowledgeSefazRefresh, sendText, sendFile, replaceAttachment, transcribeAudio, fetchMedia, getAttachments, launchGalleryRequest, uploadLaunchGalleryFile, getPendingProvisionSnapshot, getPendingNotesSnapshot, getRhidAttendanceReport, startRhidPendingValidation, startRhidDayValidation, getRhidAttendanceMonth, saveRhidAttendanceAdjustment, deleteRhidAttendanceAdjustment, refreshRhidAttendance, getRhidRefreshStatus, refreshRecurringProvisions, getRecurringProvisionRefreshStatus, refreshDda, getDdaRefreshStatus, getDdaRefreshPending, acknowledgeDdaRefresh, confirmDdaPayment, deleteAttachment, deleteAllAttachments, compressAttachment, chooseAttachmentCompression, getCompletionMenu, prepareSignatureEvidence, confirmSignatureEvidence, verifySignatureEvidence, captureSignatureEvidence });
 }
