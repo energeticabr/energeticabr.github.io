@@ -16,6 +16,10 @@ on:
         description: Usar perfis de distribuição já cadastrados para o NB
         type: boolean
         default: true
+      use_intel_runner:
+        description: Compilar em um executor macOS Intel
+        type: boolean
+        default: false
       source_beta_group:
         description: Grupo de origem para reutilizar o único testador interno existente
         type: string
@@ -73,7 +77,7 @@ jobs:
     name: Compilação iOS NB
     if: ${{ !cancelled() && (github.event_name == 'pull_request' || inputs.operation == 'prepare' || (inputs.operation == 'publish' && needs.apple.result == 'success')) }}
     needs: apple
-    runs-on: macos-26
+    runs-on: ${{ inputs.use_intel_runner == true && 'macos-26-intel' || 'macos-26' }}
     timeout-minutes: 35
     steps:
       - uses: actions/checkout@v4
@@ -108,7 +112,7 @@ jobs:
     name: Publicação no TestFlight interno
     if: inputs.operation == 'publish'
     needs: [apple, build]
-    runs-on: macos-26
+    runs-on: ${{ inputs.use_intel_runner == true && 'macos-26-intel' || 'macos-26' }}
     timeout-minutes: 55
     environment: app-store-connect
     env:
