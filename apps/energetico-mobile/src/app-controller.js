@@ -6454,7 +6454,44 @@ export function createAppController({
     panel?.destroy?.();
   }
 
+  let swilePanel = null;
+  let swileOpening = null;
+
+  function disposeSwilePanel() {
+    swileOpening = null;
+    swilePanel?.close();
+    swilePanel = null;
+  }
+
+  async function openSwilePanel() {
+    if (!account || stopped || sessionStatus !== 'authenticated' || flowBusy() || store.getState().activeFlow) return false;
+    if (swilePanel || swileOpening) return true;
+    closeGalleryOverlays();
+    const owner = account, revision = sessionRevision, opening = {};
+    swileOpening = opening;
+    const current = () => !stopped && account === owner && sessionRevision === revision && sessionStatus === 'authenticated';
+    try {
+      const { openSwileView } = await import('./ui/swile-view.js');
+      if (!current() || swileOpening !== opening) return false;
+      swilePanel = openSwileView({
+        document: globalThis.document,
+        request: (operation, payload, options) => {
+          if (!current()) throw new Error('A sessão do Energético foi encerrada.');
+          return client.swileRequest(operation, payload, options);
+        },
+        onClose: () => { swilePanel = null; },
+      });
+      return true;
+    } catch (error) {
+      if (current()) setSessionError(error, 'Não foi possível abrir a integração Swile.');
+      return false;
+    } finally {
+      if (swileOpening === opening) swileOpening = null;
+    }
+  }
+
   function closeGalleryOverlays(preserveSacPathologies = false, preserveDepreciationReport = false, preserveDocumentControlReport = false, preserveTaskAssociationReport = false, preservePendingSupplierPaymentsReport = false, preserveContractorControlReport = false, preserveGeneral = false) {
+    disposeSwilePanel();
     disposePayrollSheetCreate();
     if (!preserveSacPathologies) disposeSacPathologiesReport();
     if (!preserveDepreciationReport) disposeDepreciationReport();
@@ -10799,6 +10836,7 @@ export function createAppController({
   }
 
   async function signIn() {
+    disposeSwilePanel();
     resetDdaMenuAlert();
     resetSicoobMenuAlert();
     disposeDdaSyncSession();
@@ -10912,6 +10950,7 @@ export function createAppController({
   }
 
   async function signOut() {
+    disposeSwilePanel();
     resetDdaMenuAlert();
     resetSicoobMenuAlert();
     provisionSettlementParent.destroy();
@@ -11876,6 +11915,7 @@ export function createAppController({
       if (command.replyId === "action_hr_gallery_idfolha") return openHrPayrollGallery("IDFOLHA");
       if (command.replyId === "action_hr_create_idfolha") return openPayrollSheetCreate();
       if (command.replyId === "action_hr_gallery_folhapgto") return openHrPayrollGallery("FOLHAPGTO");
+      if (command.replyId === 'action_hr_swile') return openSwilePanel();
       const state = store.getState();
       syncEpiDeliverySnapshot(state.activeFlow);
       if ([EPI_ORDER_BLANK_REPLY_ID, EPI_SUPPLIER_DOCUMENT_BLANK_REPLY_ID].includes(command.replyId)) {
@@ -12463,6 +12503,7 @@ export function createAppController({
     ddaAutoReminder.reset();
     trancidAutoReminder.reset(); disposeTrancidReport(); trancidSourceCache = null;
     trancidDialogObserver?.disconnect(); trancidDialogObserver = null;
+    disposeSwilePanel();
     clearOperationProgress();
     clearAttachmentUploadProgress();
     attachmentCompressionReturnPoint = null;

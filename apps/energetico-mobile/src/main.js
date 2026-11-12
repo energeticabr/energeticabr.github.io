@@ -15,6 +15,7 @@ import "./ui/orders-linked-report.css";
 import "./ui/registration-gallery.css";
 import "./ui/contractor-employment-view.css";
 import "./ui/hr-payroll-gallery.css";
+import "./ui/swile.css";
 import "./ui/gallery-record-actions.css";
 import "./ui/tasks-gallery.css";
 import "./ui/payment-ledger.css";
