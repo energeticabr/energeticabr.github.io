@@ -50,3 +50,16 @@ continua imediata na saída do instalador.
 
 Uma confirmação antiga com identificador nunca observado, entregue somente
 após abrir outra área, permanece sujeita à validação normal dessa área.
+
+## Recibo reapresentado no aplicativo
+
+[`portal-replay.patch`](portal-replay.patch) aplica-se à revisão ativa posterior,
+com SHA-256 `f04ac1b80d5c8cd2d0bb4268de75d9f414294969eed553e61a9f25dbda6badab`.
+Quando uma submissão já confirmada é reapresentada ao aplicativo, a VM devolve
+o estado concluído e o controle do menu vinculado ao lote. O aplicativo usa
+essa confirmação para limpar a bandeja e depois carregar o menu.
+
+`test_portal_replay.py` exercita a resposta pública e o retorno ao menu com
+um documento e um anexo fictícios, tanto para a mesma requisição quanto
+para uma segunda confirmação. Os testes usam o motor e a ponte reais com
+armazenamento simulado.

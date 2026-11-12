@@ -1,0 +1,69 @@
+--- a/worker/workflow.py
++++ b/worker/workflow.py
+@@ -1402,0 +1403,4 @@
++            portal_replay = event.get("trusted_portal") is True
++            previously_scheduled_menu = bool(
++                state.get("post_completion_menu_scheduled_at") and state.get("completion_id")
++            )
+@@ -1410,0 +1415,6 @@
++            if portal_replay:
++                # The original response may have been lost. Send the same
++                # terminal state and guarded menu control with the receipt.
++                if previously_scheduled_menu:
++                    self._schedule_post_completion_menu(state)
++                return self._completion_result(state)
+@@ -36496,25 +36506 @@
+-            delay_seconds = max(
+-                0,
+-                int(
+-                    self.config.get("limits", {}).get(
+-                        "post_completion_menu_delay_seconds", 10
+-                    )
+-                ),
+-            )
+-            try:
+-                self.messenger.schedule_deferred(
+-                    state,
+-                    {
+-                        "kind": "post_completion_menu",
+-                        "conversation_key": state["key"],
+-                        "batch_id": state["batch_id"],
+-                        "completion_id": state["completion_id"],
+-                    },
+-                    delay_seconds,
+-                )
+-            except Exception:
+-                # O registro concluído e o marcador de agendamento já foram
+-                # persistidos. Uma indisponibilidade do canal ao enfileirar o
+-                # menu não pode transformar a submissão em falha nem provocar
+-                # a repetição da gravação no SharePoint.
+-                pass
++            self._schedule_post_completion_menu(state)
+@@ -36529,0 +36516,27 @@
++
++    def _schedule_post_completion_menu(self, state: dict) -> None:
++        delay_seconds = max(
++            0,
++            int(
++                self.config.get("limits", {}).get(
++                    "post_completion_menu_delay_seconds", 10
++                )
++            ),
++        )
++        try:
++            self.messenger.schedule_deferred(
++                state,
++                {
++                    "kind": "post_completion_menu",
++                    "conversation_key": state["key"],
++                    "batch_id": state["batch_id"],
++                    "completion_id": state["completion_id"],
++                },
++                delay_seconds,
++            )
++        except Exception:
++            # O registro concluído e o marcador de agendamento já foram
++            # persistidos. Uma indisponibilidade do canal ao enfileirar o
++            # menu não pode transformar a submissão em falha nem provocar
++            # a repetição da gravação no SharePoint.
++            pass
