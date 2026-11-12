@@ -17,6 +17,8 @@
   flex: 1;
   display: grid;
   place-items: center;
+  padding-block: 2px;
+  line-height: 1;
   white-space: normal;
   overflow-wrap: anywhere;
 }
