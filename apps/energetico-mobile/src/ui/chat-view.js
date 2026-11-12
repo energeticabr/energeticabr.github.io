@@ -2956,7 +2956,7 @@ function renderSignedOut(status, error, showSettings, allowDemo, nb) {
   return `<section class="auth-screen">
     <div class="auth-card">
       ${isLoading ? loadingIndicatorMarkup("Entrando com a Microsoft…", { compact: true }) : nb
-        ? '<span class="nb-brand-mark nb-brand-mark--large" aria-hidden="true">NB</span>'
+        ? `<span class="nb-brand-mark nb-brand-mark--large" aria-hidden="true">${NB_APP_NAME}</span>`
         : `<img class="auth-mascot" src="${MASCOT_URL}" alt="Mascote Energético">`}
       ${nb ? `<h1>${NB_APP_NAME}</h1><p>Gastos pessoais, aluguéis e imóveis</p>`
         : '<p class="eyebrow">ENERGÉTICA</p><h1>Energético</h1><p>Seu assistente administrativo em uma conversa segura.</p>'}
@@ -3054,7 +3054,7 @@ export function renderChatMarkup(state = {}, { showSettings = false, allowDemo =
 
   return `<section class="chat-shell">
     <header class="chat-header">
-      ${nb ? `<span class="nb-brand-mark" aria-hidden="true">NB</span>
+      ${nb ? `<span class="nb-brand-mark" aria-hidden="true">${NB_APP_NAME}</span>
       <span><strong>${NB_APP_NAME}</strong><small>${escapeHtml(firstName)}</small></span>`
         : `
       <button class="chat-header-avatar-shortcut" ${headerReportAttributes}>${assistantAvatar()}</button>

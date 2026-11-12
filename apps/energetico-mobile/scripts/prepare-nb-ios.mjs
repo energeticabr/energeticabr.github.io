@@ -49,7 +49,13 @@ const assetCatalog = new URL(main + "Assets.xcassets/", root);
 const icon = Buffer.from(`<svg xmlns="http://www.w3.org/2000/svg" width="1024" height="1024" viewBox="0 0 1024 1024">
   <rect width="1024" height="1024" fill="#0c5568"/>
   <rect x="135" y="135" width="754" height="754" rx="158" fill="none" stroke="#81b2bf" stroke-width="12"/>
-  <path fill="#fff" d="M259 666V358h63l122 184V358h65v308h-63L324 482v184zm300 0V358h116c61 0 96 29 96 80 0 32-13 54-36 67 32 13 48 39 48 76 0 53-38 85-103 85zm65-184h44c26 0 39-13 39-35s-13-33-39-33h-44zm0 128h52c27 0 42-13 42-37s-15-36-42-36h-52z"/>
+  <g fill="none" stroke="#fff" stroke-width="29" stroke-linecap="round" stroke-linejoin="round">
+    <path d="M190 593V431l102 162V431"/>
+    <path d="M326 593V431h51c54 0 54 81 0 81h-51m51 0c65 0 65 81 0 81h-51"/>
+    <path d="M462 593V431h51c61 0 61 88 0 88h-51"/>
+    <path d="m589 593 55-162 55 162m-91-56h72"/>
+    <path d="M734 593V431h51c61 0 61 88 0 88h-51m49 0 52 74"/>
+  </g>
 </svg>`);
 const iconSet = new URL("AppIcon.appiconset/", assetCatalog);
 const { images } = JSON.parse(await readFile(new URL("Contents.json", iconSet), "utf8"));

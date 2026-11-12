@@ -101,7 +101,7 @@ jobs:
             || { tail -100 "$RUNNER_TEMP/nb-simulator.log"; exit 1; }
           app=build/nb-simulator/Build/Products/Debug-iphonesimulator/App.app
           test "$(/usr/libexec/PlistBuddy -c 'Print CFBundleIdentifier' "$app/Info.plist")" = br.com.energetica.nbparticipacoes
-          test "$(/usr/libexec/PlistBuddy -c 'Print CFBundleDisplayName' "$app/Info.plist")" = NB
+          test "$(/usr/libexec/PlistBuddy -c 'Print CFBundleDisplayName' "$app/Info.plist")" = NBPAR
           test "$(/usr/libexec/PlistBuddy -c 'Print CFBundleIdentifier' "$app/PlugIns/ShareExtension.appex/Info.plist")" = br.com.energetica.nbparticipacoes.share
 
   testflight:

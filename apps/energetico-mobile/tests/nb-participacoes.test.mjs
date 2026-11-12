@@ -22,7 +22,7 @@ const state = {
 };
 
 test("NB has its own Microsoft login and only shows its two home areas", () => {
-  assert.match(renderChatMarkup({}, { portalApp }), /<h1>NB<\/h1>[\s\S]*Entrar com a Microsoft/);
+  assert.match(renderChatMarkup({}, { portalApp }), /<h1>NBPAR<\/h1>[\s\S]*Entrar com a Microsoft/);
   const markup = renderChatMarkup(state, { portalApp });
   assert.match(markup, /data-reply-id="group_nb_participacoes"/);
   assert.match(markup, /data-reply-id="group_personal_expenses"/);
