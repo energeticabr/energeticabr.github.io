@@ -85,6 +85,9 @@ test('NFE opens the horizontal fiscal table from the blue mascot in portrait and
         assert.equal(taxStacked, true);
         assert.match(invalidCno ?? '', /CNO inválido.*90\.025\.4406\/72/);
         assert.ok(pencilHeight >= 44);
+        assert.equal(layout.directProposalBelow, true, 'proposal shortcut sits below the pencil');
+        assert.ok(layout.directProposalHeight >= 44, 'proposal shortcut has a touch target');
+        assert.equal(layout.proposalLabelFits, true, `proposal label fits at ${width}px`);
         const { orangeTargetHeight, ...orderLink } = JSON.parse(dom.window.document.documentElement.dataset.orderLink);
         assert.ok(orangeTargetHeight >= 44);
         assert.deepEqual(orderLink, {

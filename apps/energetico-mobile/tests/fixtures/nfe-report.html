@@ -122,6 +122,18 @@ const filtersFit = [...fiscalControls, panel.querySelector('input[name="search"]
     });
 });
 const rowIds = () => [...panel.querySelectorAll('tbody tr')].map(row => row.dataset.invoiceId);
+const directProposal = panel.querySelector('.nfe-link-propose');
+function proposalLabelFits() {
+  if (!directProposal) return false;
+  const label = directProposal.firstChild;
+  const range = document.createRange();
+  range.setStart(label, label.data.lastIndexOf(' ') + 1);
+  range.setEnd(label, label.length);
+  const [word, extraLine] = range.getClientRects();
+  const button = box(directProposal);
+  return Boolean(word && !extraLine && word.x >= button.x && word.right <= button.right &&
+    word.y >= button.y && word.bottom <= button.bottom);
+}
 const layout = {
   provisions, orange, sicoob, nfe, dda,
   open:!report.element.hidden, rowIds:rowIds(),
@@ -143,6 +155,10 @@ const layout = {
   taxStacked:Boolean(isBefore(...panel.querySelectorAll('[data-invoice-id="3"] .nfe-tax-stack .nfe-fact'), 'block')),
   invalidCno:panel.querySelector('[data-invoice-id="3"] [data-tone="invalid"]')?.textContent,
   pencilHeight:panel.querySelector('.nfe-link-pencil')?.offsetHeight,
+  directProposalBelow:Boolean(isBefore(
+    panel.querySelector('.nfe-link-pencil'), directProposal, 'block')),
+  directProposalHeight:directProposal?.offsetHeight,
+  proposalLabelFits:proposalLabelFits(),
 };
 if (!report.element.hidden) {
   const pencil = panel.querySelector('[data-invoice-id="2"] .nfe-link-pencil');
