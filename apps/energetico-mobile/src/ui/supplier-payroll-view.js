@@ -17,6 +17,9 @@ const money = (value) =>
   Number(value).toLocaleString("pt-BR", { style: "currency", currency: "BRL" });
 const stageKey = label => label.normalize("NFD").replace(/[\u0300-\u036f]/g, "")
   .trim().replace(/\s+/g, " ").toLocaleUpperCase("pt-BR");
+// IDs do cadastro FORNECEDORES vinculados aos seis funcionários no RH.
+const weeklyBenefitSuppliers = new Set(["253", "254", "260", "264", "265", "269"]);
+const weeklyBenefitValues = new Map([["transport", "11"], ["meal", "45"]]);
 let sequence = 0;
 export function createSupplierPayrollView({
   data,
@@ -90,13 +93,17 @@ export function createSupplierPayrollView({
   let pickers = [];
 
   function makeEntry(supplier) {
+    const hasBenefitDefaults = weeklyBenefitSuppliers.has(String(supplier.id));
     return {
       draft: {
         date, supplier, product: null, stage: null, sheet: null,
         taxCompetence: "", taxSheet: null,
-        lines: PAYROLL_RUBRICS.map(({ id }) => ({
-          rubric: id, quantity: "1", unitValue: "", account: null, alreadyPaid: false, files: [],
-        })),
+        lines: PAYROLL_RUBRICS.map(({ id }) => {
+          const unitValue = hasBenefitDefaults ? weeklyBenefitValues.get(id) ?? "" : "";
+          const prefilledBenefit = Boolean(unitValue);
+          return { rubric: id, quantity: prefilledBenefit ? "5" : "1", unitValue, prefilledBenefit,
+            account: null, alreadyPaid: false, files: [] };
+        }),
       },
       progress: {
         operationId: globalThis.crypto?.randomUUID?.() ||
@@ -418,8 +425,8 @@ export function createSupplierPayrollView({
     );
     container.replaceChildren(context, list, total);
   }
-function lineEdited(line) {
-    return line.unitValue.trim() !== "" || line.quantity.trim() !== "1" ||
+  function lineEdited(line) {
+    return line.unitValue.trim() !== "" || (!line.prefilledBenefit && line.quantity.trim() !== "1") ||
       Boolean(line.account || line.alreadyPaid || line.files.length);
   }
   function hasAmount(line) {

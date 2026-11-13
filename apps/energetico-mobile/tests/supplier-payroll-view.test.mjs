@@ -3,6 +3,40 @@ import assert from "node:assert/strict";
 import { JSDOM } from "jsdom";
 import * as module from "../src/ui/supplier-payroll-view.js";
 
+test('pré-preenche somente os vales dos seis fornecedores e permite alterar ou retirar os valores antes de postar', async t => {
+  const h = await harness();
+  t.after(() => { h.view.destroy(); h.dom.window.close(); });
+  h.data.loadSuppliers = async () => [
+    ['253', 'Edgar'], ['260', 'Feliciano'], ['265', 'José Geraldo'],
+    ['264', 'Helison'], ['254', 'Maurício'], ['269', 'Luiz'],
+    ['241', 'Israel'], ['240', 'Rafael Gontijo'], ['999', 'Luiz Carlos'],
+  ].map(([id, label]) => ({ id, label, branch: 'OBRA A' }));
+  h.data.loadAccounts = async () => [{ id: '3', label: 'PIX' }, { id: '17', label: 'SWILE' }];
+  const doc = h.dom.window.document;
+  const card = id => `[data-payroll-supplier="${id}"]`;
+  const field = (id, name) => `${card(id)} [name="${name}"]`;
+  await openSuppliers(h);
+  for (const [index, { id }] of (await h.data.loadSuppliers()).entries()) {
+    await h.click(`${card(id)} [data-payroll-expand]`);
+    const values = ['transport-quantity', 'transport-value', 'meal-quantity', 'meal-value', 'salary-value']
+      .map(name => doc.querySelector(field(id, name)).value);
+    assert.deepEqual(values, index < 6 ? ['5', '11', '5', '45', ''] : ['1', '', '1', '', ''], id);
+    assert.equal(doc.querySelector(`${card(id)} [data-payroll-select]`).checked, false);
+  }
+  assert.equal(doc.querySelector('[data-payroll-post]').disabled, true);
+  h.input(field('253', 'transport-quantity'), '3');
+  h.input(field('253', 'transport-value'), '');
+  h.input(field('253', 'meal-quantity'), '4');
+  h.input(field('253', 'meal-account'), '17');
+  h.input(field('253', 'stage'), '4');
+  h.input(field('253', 'sheet'), '5');
+  await h.click('[data-payroll-post]');
+  assert.deepEqual(h.posts.map(({ supplier, lines, total }) => ({
+    supplier: supplier.id, lines: lines.map(({ rubric, quantity, unitValue, account }) =>
+      [rubric, quantity, unitValue, account.label]), total,
+  })), [{ supplier: '253', lines: [['meal', 4, 45, 'SWILE']], total: 180 }]);
+});
+
 test('rubrica já paga fecha a semana sem exigir forma, etapa ou IDFOLHA', async t => {
   const h = await harness();
   t.after(() => { h.view.destroy(); h.dom.window.close(); });
