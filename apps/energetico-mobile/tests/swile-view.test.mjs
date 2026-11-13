@@ -125,6 +125,11 @@ test('Swile gallery is a separate screen and can open an older completed order',
   assert.equal(screen.isConnected, false);
   assert.equal(document.querySelector('#app').hasAttribute('inert'), false);
   assert.equal(document.activeElement, opener);
+  const reopened = openSwileView({ document, gallery: true, request: async () => [] });
+  t.after(() => reopened.close());
+  document.dispatchEvent(new window.KeyboardEvent('keydown', { key: 'Escape' }));
+  assert.equal(document.querySelector('main.swile-gallery-page'), null);
+  assert.equal(document.activeElement, opener);
 });
 
 test('Swile uses the portal token and demo mode never sends a request', async () => {

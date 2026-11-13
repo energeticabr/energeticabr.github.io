@@ -111,11 +111,19 @@ export function openSwileView({ document: doc, request, gallery = false, onClose
   function close() {
     if (signal.aborted) return;
     controller.abort();
+    if (gallery) doc.removeEventListener('keydown', onGalleryKey);
     if (!gallery && screen.open && typeof screen.close === 'function') screen.close();
     screen.remove();
     if (restoreApp) app.removeAttribute('inert');
     if (focus?.isConnected) focus.focus({ preventScroll: true });
     onClose?.();
+  }
+
+  function onGalleryKey(event) {
+    if (event.key === 'Escape' && !event.defaultPrevented) {
+      event.preventDefault();
+      close();
+    }
   }
 
   function message(text = '', error = false) {
@@ -372,6 +380,7 @@ export function openSwileView({ document: doc, request, gallery = false, onClose
   doc.body.append(screen);
   if (gallery) {
     if (restoreApp) app.setAttribute('inert', '');
+    doc.addEventListener('keydown', onGalleryKey);
     title.focus({ preventScroll: true });
     void loadGallery();
   } else {

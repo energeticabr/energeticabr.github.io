@@ -20,7 +20,7 @@
 .swile-gallery-page {
   position: fixed;
   inset: 0;
-  z-index: 12;
+  z-index: 160;
   display: flex;
   flex-direction: column;
   overflow: hidden;
