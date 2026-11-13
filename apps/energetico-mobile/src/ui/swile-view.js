@@ -1,3 +1,5 @@
+import { provisionDescriptionIcon } from './provision-description-card.js';
+
 const money = new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' });
 const reais = cents => money.format(cents / 100);
 const dateLabel = value => String(value || '').split('-').reverse().join('/');
@@ -62,7 +64,19 @@ export function openSwileView({ document: doc, request, gallery = false, onClose
   headline.append(title);
   if (!gallery) headline.append(make('span', 'Multibenefícios'));
   const header = make('header', '', 'swile-header');
-  header.append(headline, button(gallery ? 'Voltar ao RH' : 'Fechar', close));
+  const headerActions = make('div', '', 'swile-header-actions');
+  const refresh = gallery ? null : button('', load);
+  if (refresh) {
+    refresh.className = 'swile-refresh';
+    refresh.title = 'Atualizar colaboradores';
+    refresh.setAttribute('aria-label', refresh.title);
+    refresh.append(provisionDescriptionIcon(doc, 'refresh'));
+    headerActions.append(refresh);
+  }
+  const closeButton = button(gallery ? 'Voltar ao RH' : 'Fechar', close);
+  if (!gallery) closeButton.autofocus = true;
+  headerActions.append(closeButton);
+  header.append(headline, headerActions);
   const body = make('div', '', 'swile-body');
   const note = make('p', '', 'swile-note');
   note.setAttribute('role', 'status');
@@ -81,8 +95,8 @@ export function openSwileView({ document: doc, request, gallery = false, onClose
   invoiceText.value = DEFAULT_INVOICE_TEXT;
   const invoiceField = field('Descrição na nota fiscal', invoiceText);
   invoiceField.className = 'swile-invoice-description';
-  const amounts = new Map();
-  const search = make('input');
+  const amountOverrides = new Map();
+  const search = make('input', '', 'swile-search');
   search.type = 'search';
   search.placeholder = 'Buscar por nome, grupo ou filial';
   search.setAttribute('aria-label', 'Buscar colaboradores');
@@ -137,6 +151,7 @@ export function openSwileView({ document: doc, request, gallery = false, onClose
     busy = true;
     screen.setAttribute('aria-busy', 'true');
     const controls = [...content.querySelectorAll('button, input, select, textarea')].filter(control => !control.disabled);
+    if (refresh && !refresh.hidden) controls.push(refresh);
     controls.forEach(control => { control.disabled = true; });
     message();
     try { await work(); }
@@ -149,8 +164,19 @@ export function openSwileView({ document: doc, request, gallery = false, onClose
     }
   }
 
+  function amountFor(row) {
+    return amountOverrides.get(row.id) ?? (/^(bernardo|rafael)(\s|$)/i.test(row.name.trim()) ? '' : '225,00');
+  }
+
+  function orderItems() {
+    return people.flatMap(row => {
+      const value = amountFor(row).trim();
+      return value ? [{ employeeId: row.id, amountCents: parseSwileAmount(value) }] : [];
+    });
+  }
+
   function updateTotal() {
-    const values = [...amounts.values()].map(parseSwileAmount).filter(value => value !== null);
+    const values = orderItems().map(item => item.amountCents).filter(value => value !== null);
     total.textContent = `${values.length} ${values.length === 1 ? 'colaborador' : 'colaboradores'} · ${reais(values.reduce((sum, value) => sum + value, 0))}`;
   }
 
@@ -174,10 +200,9 @@ export function openSwileView({ document: doc, request, gallery = false, onClose
       input.autocomplete = 'off';
       input.placeholder = '0,00';
       input.setAttribute('aria-label', `Valor em reais para ${row.name}`);
-      input.value = amounts.get(row.id) || '';
+      input.value = amountFor(row);
       input.addEventListener('input', () => {
-        if (input.value.trim()) amounts.set(row.id, input.value);
-        else amounts.delete(row.id);
+        amountOverrides.set(row.id, input.value);
         input.removeAttribute('aria-invalid');
         updateTotal();
       });
@@ -187,8 +212,6 @@ export function openSwileView({ document: doc, request, gallery = false, onClose
     updateTotal();
   }
 
-  const tools = make('div', '', 'swile-actions');
-  tools.append(button('Atualizar colaboradores', load), button('Pedidos enviados', () => showOrders()));
   const dates = make('div', '', 'swile-dates');
   dates.append(field('Data de crédito', credit), field('Forma de pagamento', payment), dueField);
   const footer = make('div', '', 'swile-actions swile-footer');
@@ -197,11 +220,12 @@ export function openSwileView({ document: doc, request, gallery = false, onClose
 
   function showForm() {
     message();
+    refresh.hidden = false;
     if (!loaded) {
-      content.replaceChildren(tools);
+      content.replaceChildren();
       return;
     }
-    content.replaceChildren(tools, search, rows, dates, footer);
+    content.replaceChildren(search, rows, dates, footer);
     showPeople();
     review.disabled = !people.length;
   }
@@ -214,15 +238,13 @@ export function openSwileView({ document: doc, request, gallery = false, onClose
       if (!Array.isArray(result)) throw new Error('Lista de colaboradores inválida.');
       people = result;
       loaded = true;
-      const ids = new Set(people.map(row => row.id));
-      for (const id of amounts.keys()) if (!ids.has(id)) amounts.delete(id);
       showForm();
     });
   }
 
   function prepare() {
     return run(async () => {
-      const items = [...amounts].map(([employeeId, value]) => ({ employeeId, amountCents: parseSwileAmount(value) }));
+      const items = orderItems();
       const invalid = items.find(item => item.amountCents === null);
       if (invalid) throw new Error(`Confira o valor informado para ${people.find(row => row.id === invalid.employeeId)?.name || 'o colaborador'}.`);
       if (!items.length) throw new Error('Informe o valor de pelo menos um colaborador.');
@@ -238,6 +260,7 @@ export function openSwileView({ document: doc, request, gallery = false, onClose
   }
 
   function showPreview(preview) {
+    refresh.hidden = true;
     const details = make('div', '', 'swile-summary');
     details.append(make('h3', 'Conferir pedido'),
       make('p', `${preview.totalEmployees} ${preview.totalEmployees === 1 ? 'colaborador' : 'colaboradores'} · crédito em ${dateLabel(preview.creditDate)}`),
@@ -271,7 +294,8 @@ export function openSwileView({ document: doc, request, gallery = false, onClose
   }
 
   function showReceipt(order) {
-    amounts.clear();
+    refresh.hidden = true;
+    amountOverrides.clear();
     invoiceText.value = DEFAULT_INVOICE_TEXT;
     const actions = make('div', '', 'swile-actions');
     actions.append(button('Voltar para recargas', showForm), button('Consultar pedidos', () => showOrders(order.reference)));

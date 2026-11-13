@@ -3579,7 +3579,7 @@ test('Swile opens from the live RH menu without leaving the conversation or send
   assert.equal(h.chatCalls.length, callsBefore);
   assert.equal(h.store.getState().activeFlow.id, menu.id);
   assert.equal(h.store.getState().activeFlow.title, menu.title);
-  panel.querySelector('button').click();
+  [...panel.querySelectorAll('button')].find(button => button.textContent === 'Fechar').click();
   const opening = h.view.emit('select-reply', { replyId });
   h.store.ingestRemoteMessages([poll], { activeFlow: { id: 'launch', title: 'EFETUAR LANÇAMENTO' } });
   assert.equal(await opening, false, 'a new operational flow takes precedence while the panel is loading');

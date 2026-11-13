@@ -15,20 +15,27 @@ test('Swile keeps amounts across search and submits only after review', async ()
   const { window } = new JSDOM('<!doctype html><body></body>');
   const { document } = window;
   const calls = [];
+  let directoryLoads = 0;
   const view = openSwileView({ document, request: async (operation, body) => {
     calls.push([operation, body]);
-    if (operation === 'directory') return [
-      { id: 1, name: 'Pessoa A', hasActiveCard: true },
-      { id: 2, name: 'Pessoa B', hasActiveCard: false },
-    ];
+    if (operation === 'directory') {
+      directoryLoads++;
+      return [
+        { id: 1, name: 'Pessoa A', hasActiveCard: true },
+        ...(directoryLoads !== 2 ? [{ id: 2, name: 'Pessoa B', hasActiveCard: false }] : []),
+        { id: 3, name: 'BERNARDO NOTINI MOREIRA BAHIA' },
+        { id: 4, name: ' Rafael da Silva' },
+        ...(directoryLoads > 1 ? [{ id: 5, name: 'Pessoa C' }] : []),
+      ];
+    }
     if (operation === 'preview') return {
-      id: 'preview', items: [{ name: 'Pessoa A', amountCents: 1234 }],
-      totalEmployees: 1, creditCents: 1234, paymentCents: 1300,
+      id: 'preview', items: [{ name: 'Pessoa A', amountCents: 1234 }, { name: 'Pessoa C', amountCents: 22500 }],
+      totalEmployees: 2, creditCents: 23734, paymentCents: 23800,
       paymentMethod: 'PIX', creditDate: body.creditDate,
     };
     if (operation === 'confirm') return {
       reference: 'preview', orderCode: 'SWO123', status: 'WAITING_PAYMENT',
-      creditCents: 1234, creditDate: '2026-12-02',
+      creditCents: 23734, creditDate: '2026-12-02',
     };
     throw new Error(operation);
   } });
@@ -38,21 +45,43 @@ test('Swile keeps amounts across search and submits only after review', async ()
     element.value = value;
     element.dispatchEvent(new window.Event('input', { bubbles: true }));
   };
+  const amount = name => document.querySelector(`[aria-label="Valor em reais para ${name}"]`);
   try {
     await settle();
     assert.match(document.body.textContent, /Multibenefícios.*Cartão físico ativo/s);
-    input(document.querySelector('[aria-label="Valor em reais para Pessoa A"]'), '12,34');
+    assert.equal(amount('Pessoa A').value, '225,00');
+    assert.equal(amount('Pessoa B').value, '225,00');
+    assert.equal(amount('BERNARDO NOTINI MOREIRA BAHIA').value, '');
+    assert.equal(amount(' Rafael da Silva').value, '');
+    assert.match(document.querySelector('[aria-live=polite]').textContent, /2 colaboradores · R\$\s*450,00/);
+    assert.equal([...document.querySelectorAll('button')].some(button => button.textContent === 'Pedidos enviados'), false);
+    const sync = document.querySelector('header button[aria-label="Atualizar colaboradores"]');
+    assert.ok(sync.querySelector('svg'));
+    assert.equal(sync.nextElementSibling.textContent, 'Fechar');
+    input(amount('Pessoa A'), '12,34');
+    input(amount('Pessoa B'), '');
     input(document.querySelector('[type=search]'), 'Pessoa B');
-    assert.equal(document.querySelector('[aria-label="Valor em reais para Pessoa A"]'), null);
+    assert.equal(amount('Pessoa A'), null);
+    sync.click();
+    await settle();
+    assert.equal(amount('Pessoa B'), null);
+    sync.click();
+    await settle();
+    assert.equal(amount('Pessoa B').value, '');
+    input(document.querySelector('[type=search]'), '');
+    assert.equal(amount('Pessoa A').value, '12,34');
+    assert.equal(amount('Pessoa C').value, '225,00');
     document.querySelector('[type=date]').value = '2026-12-02';
     document.querySelector('select').value = 'PIX';
     click('Conferir pedido');
     await settle();
     assert.deepEqual(calls, [
       ['directory', {}],
-      ['preview', { items: [{ employeeId: 1, amountCents: 1234 }], creditDate: '2026-12-02', paymentMethod: 'PIX' }],
+      ['directory', {}],
+      ['directory', {}],
+      ['preview', { items: [{ employeeId: 1, amountCents: 1234 }, { employeeId: 5, amountCents: 22500 }], creditDate: '2026-12-02', paymentMethod: 'PIX' }],
     ]);
-    assert.match(document.body.textContent, /Total a pagar.*13,00/);
+    assert.match(document.body.textContent, /Total a pagar.*238,00/);
     const description = document.querySelector('label:has(textarea)');
     assert.match(description.textContent, /Descrição na nota fiscal/);
     const note = description.querySelector('textarea');
@@ -68,6 +97,9 @@ test('Swile keeps amounts across search and submits only after review', async ()
     await settle();
     assert.deepEqual(calls.at(-1), ['confirm', { id: 'preview', invoiceText: 'CNO da obra revisado' }]);
     assert.match(document.body.textContent, /Aguardando pagamento.*SWO123/s);
+    click('Voltar para recargas');
+    assert.equal(amount('Pessoa B').value, '225,00');
+    assert.equal(amount('BERNARDO NOTINI MOREIRA BAHIA').value, '');
   } finally {
     view.close();
     window.close();
