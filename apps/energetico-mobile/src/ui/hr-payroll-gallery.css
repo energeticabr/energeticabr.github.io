@@ -79,7 +79,7 @@
 .hr-payslip-date-toggle[aria-expanded="true"]::after { content: "▴"; }
 .hr-payslip-date-count { font-size: .83rem; font-weight: 600; }
 .hr-payslip-date-pdf { white-space: nowrap; }
-.hr-payslip-date-items, .hr-payslip-download-status { margin: 10px 0 0; }
+.hr-payslip-date-items { margin: 10px 0 0; }
 .hr-gallery-header .hr-gallery-button { color: #fff; background: transparent; border-color: #ffffff85; }
 .hr-gallery-header.hr-gallery-header--add-payment.screen-navigation-header { grid-template-columns: auto minmax(0, 1fr) auto; }
 .hr-gallery-header .hr-gallery-add-payment { flex: 0 0 44px; width: 44px; height: 44px; padding: 0; background: #fff; color: #218443; border-color: #218443; font-size: 2rem; font-weight: 800; line-height: 1; }

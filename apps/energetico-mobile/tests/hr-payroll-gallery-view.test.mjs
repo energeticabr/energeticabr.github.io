@@ -13,7 +13,7 @@ test("holerites exibem funcionário, semana e PDF de cada registro sem excluir o
   const dom = new JSDOM("<main id='root'></main>");
   const root = dom.window.document.querySelector("#root");
   const opened = [];
-  const downloaded = [];
+  const openedDates = [];
   const rows = [
     { id: "17", FORNECEDOR: "EDGAR", SEMANA_INICIO: "2026-11-09", SEMANA_FIM: "2026-11-15", TOTAL: "285", pdfFileName: "Holerite-2026-11-09-253.pdf" },
     { id: "18", FORNECEDOR: "FELICIANO", SEMANA_INICIO: "2026-11-09", SEMANA_FIM: "2026-11-15", TOTAL: "280", pdfFileName: "Holerite-2026-11-09-260.pdf" },
@@ -25,7 +25,7 @@ test("holerites exibem funcionário, semana e PDF de cada registro sem excluir o
       return { ...response(kind, 1, rows), dateGroups: [{ date: "2026-11-13", rows }] };
     },
     openPayslip: row => { opened.push([row.id, row.pdfFileName]); },
-    downloadDatePayslips: date => { downloaded.push(date); },
+    openDatePayslips: date => { openedDates.push(date); },
     loadEditor: () => assert.fail("read only"), deleteItem: () => assert.fail("read only"),
   });
   t.after(() => { gallery.destroy(); dom.window.close(); });
@@ -34,9 +34,12 @@ test("holerites exibem funcionário, semana e PDF de cada registro sem excluir o
   const toggle = group.querySelector("[data-action=toggle-payslip-date]");
   assert.match(toggle.textContent, /13\/11\/2026/);
   assert.equal(toggle.getAttribute("aria-expanded"), "false");
-  group.querySelector("[data-action=download-payslip-date]").click();
+  const datePdf = group.querySelector("[data-action=open-payslip-date]");
+  assert.match(datePdf.getAttribute("aria-label"), /Abrir.*13\/11\/2026/);
+  assert.equal(datePdf.textContent, "PDF");
+  datePdf.click();
   await Promise.resolve();
-  assert.deepEqual(downloaded, ["2026-11-13"]);
+  assert.deepEqual(openedDates, ["2026-11-13"]);
   assert.equal(toggle.getAttribute("aria-expanded"), "false");
   toggle.click();
   assert.equal(toggle.getAttribute("aria-expanded"), "true");

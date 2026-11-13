@@ -2885,33 +2885,50 @@ test("botão de holerites abre o PDF pela sessão e interrompe a leitura ao fech
   assert.equal(receivedSignal.aborted, true);
 });
 
-test("PDF da data baixa o consolidado da sessão sem abrir o visualizador", async t => {
+test("PDF da data abre o consolidado no visualizador sem chamar a exportação", async t => {
   let options;
-  const exports = [];
+  let receivedSignal, viewer, previewOptions;
+  const previews = [];
+  const progress = [];
+  let closed = 0;
   const h = makeHarness({
     hrPayrollGalleryDataFactory: async () => ({
       async loadPage() { return { rows: [] }; },
       async downloadPayslip() { assert.fail("Use o PDF da data"); },
-      async downloadPayslipsByDate(date) {
+      async downloadPayslipsByDate(date, { signal, onProgress }) {
         assert.equal(date, "2026-11-13");
+        receivedSignal = signal;
+        onProgress({ percent: 50 });
         return new Blob(["%PDF-1.7"], { type: "application/pdf" });
       },
     }),
     hrPayrollGalleryFactory: async value => { options = value; return { async open() {}, destroy() {} }; },
   });
-  h.native.previewMedia = () => assert.fail("O consolidado é baixado diretamente");
-  h.native.exportMedia = async (blob, name, preferences) => {
-    exports.push([await blob.text(), name, preferences]);
-    return "downloaded";
+  h.native.previewMedia = async (source, name, settings) => {
+    viewer = new AbortController();
+    previewOptions = settings;
+    previews.push([await (await source({ signal: viewer.signal, onProgress: value => progress.push(value.percent) })).text(), name]);
   };
+  h.native.closePreview = () => { closed++; viewer.abort(); previewOptions.onClose(); };
+  h.native.exportMedia = () => assert.fail("A abertura não deve exportar o PDF");
   t.after(() => h.controller.stop());
   await h.controller.start();
   await h.view.emit("select-reply", { replyId: "action_hr_gallery_holerite", label: "GALERIA HOLERITES" });
   const request = new AbortController();
-  assert.equal(await options.downloadDatePayslips("2026-11-13", { signal: request.signal }), "downloaded");
+  await options.openDatePayslips("2026-11-13", { signal: request.signal });
+  await options.openDatePayslips("2026-11-13");
+  assert.deepEqual(previews, [["%PDF-1.7", "Holerites-2026-11-13.pdf"]]);
+  assert.deepEqual(progress, [50]);
+  assert.equal(previewOptions.returnLabel, "Voltar à galeria de holerites");
+  assert.equal(receivedSignal.aborted, false);
   request.abort();
-  assert.equal(await options.downloadDatePayslips("2026-11-13", { signal: request.signal }), null);
-  assert.deepEqual(exports, [["%PDF-1.7", "Holerites-2026-11-13.pdf", { download: true, signal: request.signal }]]);
+  assert.equal(receivedSignal.aborted, true);
+  assert.equal(closed, 1);
+  await options.openDatePayslips("2026-11-13", { signal: request.signal });
+  assert.equal(previews.length, 1);
+  await options.openDatePayslips("2026-11-13");
+  assert.equal(previews.length, 2);
+  options.closePayslip();
 });
 
 test("holerites encaminham arquivos, scanner e fotos e cancelam o download ao fechar a prévia assinada", async t => {

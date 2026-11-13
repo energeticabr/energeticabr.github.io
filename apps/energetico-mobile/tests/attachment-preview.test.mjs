@@ -463,6 +463,14 @@ test('measured unknown attachment size keeps completed stages and real bytes wit
   assert.equal(documentRef.querySelector('[role="progressbar"]'), null);
 });
 
+test('the payslip preview can point a failed source back to the gallery', async t => {
+  const { preview, documentRef } = setup(t);
+  const loadErrorMessage = 'Não foi possível preparar os holerites desta data. Volte à galeria e tente novamente.';
+  await preview.open(async () => { throw new Error('offline'); }, 'Holerites-2026-11-13.pdf', { loadErrorMessage });
+  assert.equal(documentRef.querySelector('.attachment-preview-explanation').textContent, loadErrorMessage);
+  assert.doesNotMatch(documentRef.querySelector('.attachment-preview-status').textContent, /salvar|encaminhar/i);
+});
+
 test('measured attachment preparation accepts PDF parse and render callbacks but ignores stale completion', async t => {
   let report, finish;
   const { preview, documentRef } = setup(t, { loadPdfPreview: async () => ({ createPdfPreview: ({ onProgress }) => {
