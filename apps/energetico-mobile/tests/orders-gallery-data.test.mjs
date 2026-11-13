@@ -203,6 +203,46 @@ function repositoryHarness(overrides = {}) {
   return { repository, calls };
 }
 
+test("holerites listam apenas folhas fechadas, da mais recente à mais antiga, e abrem apenas o PDF exato", async () => {
+  const row = (id, supplier, date, status = "FECHADO") => ({ id: String(id), fields: {
+    CHAVE: `${date}-${supplier}`, IDFORNECEDOR: supplier, FORNECEDOR: supplier === 253 ? "Edgar" : "José Geraldo",
+    SEMANA_INICIO: `${date}T00:00:00Z`, SITUACAO: status,
+  } });
+  const rows = [row(1, 265, "2026-11-02"), row(2, 253, "2026-11-09"),
+    row(3, 265, "2026-11-09", "EM PROCESSAMENTO"), row(4, 265, "2026-11-09")];
+  const downloaded = [];
+  const repo = {
+    async resolveList(site, names) { assert.deepEqual([site, names], ["personal", ["HOLERITE"]]); return { status: "resolved", id: "holerite-list" }; },
+    async getItemsPage(_site, _list, _query, { cursor }) {
+      return cursor ? { items: rows.slice(2) } : { items: rows.slice(0, 2), hasMore: true, nextLink: "next" };
+    },
+    async getItem(_site, _list, id) { return rows.find(item => item.id === id); },
+    async listAttachments(_site, _list, id) {
+      return [{ name: "comprovante.pdf" }, ...(id === "1" ? [] : [{ name: "Holerite-2026-11-09-265.pdf" }])];
+    },
+    async downloadAttachment(site, list, id, name) {
+      downloaded.push([site, list, id, name]);
+      return new TextEncoder().encode("%PDF-1.7").buffer;
+    },
+  };
+  const data = galleryData.createHrPayrollGalleryData({ repository: repo });
+  const first = await data.loadFilteredPage("HOLERITE", { pageSize: 2 });
+  assert.deepEqual(first.rows.map(row => row.id), ["4", "2"]);
+  assert.equal(first.count, 3);
+  const week = await data.loadFilteredPage("HOLERITE", { filters: { search: "09/11/2026" } });
+  assert.deepEqual(week.rows.map(row => row.id), ["4", "2"]);
+  const found = await data.loadFilteredPage("HOLERITE", { filters: { search: "jose geraldo" } });
+  assert.deepEqual(found.rows.map(row => row.id), ["4", "1"]);
+  const pdf = await data.downloadPayslip(found.rows[0]);
+  assert.equal(pdf.type, "application/pdf");
+  assert.equal(await pdf.text(), "%PDF-1.7");
+  assert.deepEqual(downloaded, [["personal", "holerite-list", "4", "Holerite-2026-11-09-265.pdf"]]);
+  await assert.rejects(data.downloadPayslip(found.rows[1]), /PDF do holerite/);
+  rows[3].fields.SITUACAO = "EM PROCESSAMENTO";
+  await assert.rejects(data.downloadPayslip(found.rows[0]), /fechad/i);
+  assert.equal(downloaded.length, 1);
+});
+
 test("galerias de folha leem IDFOLHA e FOLHAPGTO com paginação e normalização de campos", async () => {
   assert.equal(typeof galleryData.createHrPayrollGalleryData, "function", "a leitura direta SharePoint da folha precisa estar disponível");
   const calls = [];

@@ -11,6 +11,11 @@ import { bindAutoFilterForm } from './auto-filter-form.js';
 import { payrollFilterOptions, validatePayrollFilters } from '../chat/payroll-gallery-filters.js';
 
 const GALLERIES = {
+  HOLERITE: {
+    title: "Galeria Holerites",
+    fields: [["FORNECEDOR", "Funcionário"], ["FILIAL", "Filial"], ["SEMANA_INICIO", "Início da semana"],
+      ["SEMANA_FIM", "Fim da semana"], ["DATA_PAGAMENTO", "Data da folha"], ["TOTAL", "Total"]],
+  },
   IDFOLHA: {
     title: "Galeria IDFOLHA",
     fields: [["MESREFERENCIA", "Mês de referência"], ["FORNECEDOR", "Fornecedor"]],
@@ -30,18 +35,18 @@ const GALLERIES = {
 function displayValue(field, value) {
   if (value == null || value === "") return "—";
   const raw = String(value);
-  if (field === "DATA" && /^\d{4}-\d{2}-\d{2}/.test(raw)) {
+  if (["DATA", "SEMANA_INICIO", "SEMANA_FIM", "DATA_PAGAMENTO"].includes(field) && /^\d{4}-\d{2}-\d{2}/.test(raw)) {
     const [, year, month, day] = raw.match(/^(\d{4})-(\d{2})-(\d{2})/);
     return `${day}/${month}/${year}`;
   }
-  if (field === "VALORUNITARIO" && Number.isFinite(Number(raw))) {
+  if (["VALORUNITARIO", "TOTAL"].includes(field) && Number.isFinite(Number(raw))) {
     return Number(raw).toLocaleString("pt-BR", { style: "currency", currency: "BRL" });
   }
   return raw;
 }
 
 export function createHrPayrollGallery({ document: documentOption,
-  root: mountRootOption, gallery, request, requestReport, invalidateRelatedReports, loadEditor, saveEditor, deleteItem, loadPaymentOptions, savePayment, onClose, onHome, onCreate, getReceiptAttachments, readReceiptAttachment } = {}) {
+  root: mountRootOption, gallery, request, requestReport, invalidateRelatedReports, loadEditor, saveEditor, deleteItem, loadPaymentOptions, savePayment, onClose, onHome, onCreate, getReceiptAttachments, readReceiptAttachment, openPayslip, closePayslip } = {}) {
   const documentRef = documentOption || mountRootOption?.ownerDocument || globalThis.document;
   const mountRoot = mountRootOption || documentRef?.body;
   const config = GALLERIES[gallery];
@@ -49,6 +54,7 @@ export function createHrPayrollGallery({ document: documentOption,
     throw new TypeError("Documento, galeria e consulta são obrigatórios.");
   }
   const doc = documentRef;
+  const isPayslip = gallery === "HOLERITE";
   const payrollReport = gallery === "IDFOLHA" && typeof requestReport === "function"
     ? createHrPayrollReport({ document: doc, root: mountRoot, request: requestReport,
       onHome: onHome ? () => { closeGallery(); onHome(); } : undefined })
@@ -86,7 +92,8 @@ export function createHrPayrollGallery({ document: documentOption,
   const toolbar = element('div', 'hr-gallery-toolbar');
   const search = element('input', 'hr-gallery-search');
   search.type='search'; search.name='search';
-  search.placeholder=gallery==='IDFOLHA' ? 'Pesquisar folhas (fornecedor, mês, ID…)': 'Pesquisar pagamentos (fornecedor, tipo, ID…)';
+  search.placeholder=isPayslip ? 'Pesquisar holerites (funcionário, semana, ID…)'
+    : gallery==='IDFOLHA' ? 'Pesquisar folhas (fornecedor, mês, ID…)': 'Pesquisar pagamentos (fornecedor, tipo, ID…)';
   search.setAttribute('aria-label', 'Pesquisar registros');
   const toggle = element('button','hr-gallery-button hr-gallery-filter-toggle','⚲ Filtros');
   toggle.type='button'; toggle.dataset.action='toggle-payroll-filters'; toggle.setAttribute('aria-expanded','false');
@@ -104,9 +111,9 @@ export function createHrPayrollGallery({ document: documentOption,
     wrapper.append(control);filterGrid.append(wrapper);filterControls.set(name,control);
   }
   addFilter('id','ID','number');
-  addFilter('FORNECEDOR','Fornecedor','select');
+  addFilter('FORNECEDOR',isPayslip ? 'Funcionário' : 'Fornecedor','select');
   if(gallery==='IDFOLHA') addFilter('MESREFERENCIA','Mês de referência','select');
-  else {
+  else if (!isPayslip) {
     addFilter('TIPOPGTO','Tipo de pagamento','select');
     addFilter('VALORUNITARIOmin','Valor unitário mínimo','number');addFilter('VALORUNITARIOmax','Valor unitário máximo','number');
     addFilter('QTDmin','Quantidade mínima','number');addFilter('QTDmax','Quantidade máxima','number');
@@ -134,7 +141,7 @@ export function createHrPayrollGallery({ document: documentOption,
   content.append(filterForm, status, cards, pagination);
   root.append(header, content);
   const loadingScreen = createGalleryLoadingScreen({ root, header, label: 'Carregando registros…' });
-  const recordActions = createGalleryRecordActions({
+  const recordActions = isPayslip ? null : createGalleryRecordActions({
     getReceiptAttachments, readReceiptAttachment,
     document: doc, host: root, loadEditor,
     galleryTitle: config.title,
@@ -155,7 +162,7 @@ export function createHrPayrollGallery({ document: documentOption,
       await loadPage(1, { refresh: true });
     }}) : null;
   const add = element('button', 'hr-gallery-button hr-gallery-add-payment', '+');
-  const createShortcut = attachGalleryCreateShortcut({ document: doc, root, toolbar, filterToggle: toggle, button: add,
+  const createShortcut = isPayslip ? null : attachGalleryCreateShortcut({ document: doc, root, toolbar, filterToggle: toggle, button: add,
     className: gallery === 'FOLHAPGTO' ? 'hr-gallery-button hr-gallery-add-payment' : 'hr-gallery-button',
     label: gallery === 'FOLHAPGTO' ? 'Acrescentar pagamento' : 'Adicionar registro — Galeria IDFOLHA',
     action: gallery === 'FOLHAPGTO' ? 'add-payroll-payment' : 'create-payroll-record',
@@ -174,7 +181,7 @@ export function createHrPayrollGallery({ document: documentOption,
     isAvailable: () => opened && !destroyed && !busy && !pendingMutations && !paymentComposer?.isOpen() });
   async function runMutation(operation) {
     pendingMutations++; refreshShortcut.sync();
-    try { return await createShortcut.runMutation(operation); }
+    try { return await (createShortcut ? createShortcut.runMutation(operation) : operation()); }
     finally { pendingMutations--; refreshShortcut.sync(); }
   }
 
@@ -222,7 +229,26 @@ export function createHrPayrollGallery({ document: documentOption,
       const recordMain = element('div', 'gallery-record-main');
       recordMain.append(cardHeader, fields);
       card.classList.add('gallery-record-card');
-      const actions = recordActions.render(row);
+      if (isPayslip) card.classList.add('hr-gallery-card--payslip');
+      const actions = recordActions?.render(row) || element('div', 'gallery-record-actions');
+      if (isPayslip) {
+        const pdf = element('button', 'hr-gallery-button hr-gallery-payslip-pdf', 'PDF');
+        pdf.type = 'button';
+        pdf.dataset.action = 'open-payslip-pdf';
+        pdf.setAttribute('aria-label', `Ver PDF do holerite de ${row.FORNECEDOR || 'funcionário'}, ID ${row.id}`);
+        pdf.disabled = !row.pdfFileName || typeof openPayslip !== 'function';
+        pdf.addEventListener('click', () => {
+          if (opened && !destroyed) {
+            const epoch = session;
+            Promise.resolve().then(() => {
+              if (opened && !destroyed && epoch === session) return openPayslip(row);
+            }).catch(error => {
+              if (opened && !destroyed && epoch === session) status.textContent = error?.message || 'Não foi possível abrir o PDF do holerite.';
+            });
+          }
+        });
+        actions.append(pdf);
+      }
       if (payrollReport) {
         actions.append(createMascotReportButton(doc, {
           label: `Consultar pagamentos da folha ID ${row.id || ""}`,
@@ -233,7 +259,7 @@ export function createHrPayrollGallery({ document: documentOption,
       card.append(recordMain, actions);
       cards.append(card);
     }
-    if (!rows.length) status.textContent = "Nenhum registro encontrado nesta página.";
+    if (!rows.length) status.textContent = isPayslip ? "Nenhum holerite postado encontrado." : "Nenhum registro encontrado nesta página.";
     else status.textContent = `${rows.length} registro(s) nesta página.`;
   }
 
@@ -243,7 +269,7 @@ export function createHrPayrollGallery({ document: documentOption,
     next.disabled = busy || !hasMore;
     pageLabel.textContent = `Página ${page}`;
     close.disabled = false;
-    createShortcut.sync();
+    createShortcut?.sync();
     refreshShortcut.sync();
   }
 
@@ -325,14 +351,15 @@ export function createHrPayrollGallery({ document: documentOption,
   function closeGallery() {
     if (!opened || destroyed) return;
     loadingScreen.sync(false);
-    recordActions.close();
+    recordActions?.close();
+    if (isPayslip) closePayslip?.();
     autoFilters.cancelPending();
     paymentComposer?.close();
     opened = false;
     session += 1;
     busy = false;
     root.hidden = true;
-    createShortcut.sync();
+    createShortcut?.sync();
     refreshShortcut.sync();
     onClose?.();
   }
@@ -373,12 +400,13 @@ export function createHrPayrollGallery({ document: documentOption,
     close: closeGallery,
     destroy() {
       loadingScreen.destroy();
-      createShortcut.destroy();
+      createShortcut?.destroy();
       refreshShortcut.destroy();
       doc.defaultView?.clearInterval(refreshTimer);
       doc.defaultView?.removeEventListener('focus', refreshSource);
       doc.removeEventListener('visibilitychange', refreshSource);
-      recordActions.destroy();
+      recordActions?.destroy();
+      if (isPayslip) closePayslip?.();
       autoFilters.destroy();
       paymentComposer?.close();
       destroyed = true;

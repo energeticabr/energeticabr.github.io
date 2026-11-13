@@ -1,4 +1,4 @@
-.swile-menu-entry { margin-top: .65rem; }
+.chat-choice-list.swile-menu-entry { margin-top: .65rem; grid-template-columns: minmax(0, 1fr); }
 
 .swile-dialog {
   width: min(48rem, calc(100% - 1.5rem));

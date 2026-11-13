@@ -1296,6 +1296,7 @@ test("inclui o relatório RHID depois de Contrato somente no menu de Recursos Hu
   assert.ok(report > contract, "o novo botão deve vir logo após Contrato");
   assert.match(markup, /RELATÓRIO DE PRESENÇAS RHID/);
   assert.match(markup, /data-reply-id="action_hr_swile"[^>]*>[^]*?Swile/);
+  assert.match(markup, /data-reply-id="action_hr_swile"[^]*?data-reply-id="action_hr_gallery_holerite"[^>]*>[^]*?GALERIA HOLERITES/);
 
   const unrelated = renderChatMarkup(signedInState({ messages: [{
     ...menu,
@@ -1304,6 +1305,7 @@ test("inclui o relatório RHID depois de Contrato somente no menu de Recursos Hu
   }] }));
   assert.doesNotMatch(unrelated, /action_rhid_attendance_report/);
   assert.doesNotMatch(unrelated, /action_hr_swile/);
+  assert.doesNotMatch(unrelated, /action_hr_gallery_holerite/);
 });
 
 test("menu RH mostra galerias IDFOLHA e FOLHA PGTO sem depender de opções do backend", () => {
