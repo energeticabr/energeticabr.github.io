@@ -6,6 +6,38 @@ export { parseSwileAmount };
 const money = new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' });
 const reais = cents => money.format(cents / 100);
 const dateLabel = value => String(value || '').split('-').reverse().join('/');
+const saoPauloDate = new Intl.DateTimeFormat('en-CA', {
+  timeZone: 'America/Sao_Paulo', year: 'numeric', month: '2-digit', day: '2-digit',
+});
+const calendarDate = value => new Date(`${value}T00:00:00Z`);
+const dateKey = value => value.toISOString().slice(0, 10);
+
+function shiftDays(value, days) {
+  const date = calendarDate(value);
+  date.setUTCDate(date.getUTCDate() + days);
+  return dateKey(date);
+}
+
+function earliestCreditDate(instant, payment) {
+  if (!payment) return '';
+  // The Corporate Gateway validates the minimum lead time against UTC.
+  let date = dateKey(instant);
+  let remaining = payment === 'BANK_SLIP' ? 2 : 1;
+  while (remaining) {
+    date = shiftDays(date, 1);
+    const weekday = calendarDate(date).getUTCDay();
+    if (weekday !== 0 && weekday !== 6) remaining--;
+  }
+  return date;
+}
+
+function nextFriday(instant, earliest) {
+  const parts = saoPauloDate.formatToParts(instant);
+  const today = ['year', 'month', 'day'].map(type => parts.find(part => part.type === type).value).join('-');
+  const daysUntilFriday = (5 - calendarDate(today).getUTCDay() + 7) % 7 || 7;
+  const friday = shiftDays(today, daysUntilFriday);
+  return friday < earliest ? shiftDays(friday, 7) : friday;
+}
 const DEFAULT_INVOICE_TEXT = 'CNO :90.025.44060/72 RUA ANTÔNIO TORRES DOS SANTOS NÚMERO 134';
 const statuses = {
   DRAFT: 'Rascunho',
@@ -26,7 +58,7 @@ const statuses = {
   UNCONFIRMED: 'Envio sem confirmação',
 };
 
-export function openSwileView({ document: doc, request, gallery = false, onClose }) {
+export function openSwileView({ document: doc, request, gallery = false, onClose, now = () => new Date() }) {
   const controller = new AbortController();
   const { signal } = controller;
   const focus = doc.activeElement;
@@ -101,6 +133,7 @@ export function openSwileView({ document: doc, request, gallery = false, onClose
   const credit = make('input');
   credit.type = 'date';
   credit.required = true;
+  credit.max = '9999-12-31';
   const due = make('input');
   due.type = 'date';
   const payment = make('select');
@@ -110,11 +143,28 @@ export function openSwileView({ document: doc, request, gallery = false, onClose
     payment.append(option);
   }
   const dueField = field('Vencimento do boleto', due);
-  dueField.hidden = true;
-  payment.addEventListener('change', () => {
-    dueField.hidden = payment.value !== 'BANK_SLIP';
-    due.required = !dueField.hidden;
-  });
+  due.readOnly = true;
+  const pixDeadline = make('p', 'Prazo de pagamento do Pix definido pela Swile.', 'swile-pix-deadline');
+  let automaticCredit = true;
+
+  function updateDates(useDefault = false) {
+    const instant = now();
+    credit.min = earliestCreditDate(instant, payment.value);
+    if (useDefault && automaticCredit) credit.value = nextFriday(instant, credit.min);
+    const boleto = payment.value === 'BANK_SLIP';
+    dueField.hidden = !boleto;
+    pixDeadline.hidden = payment.value !== 'PIX';
+    due.value = boleto && credit.value && credit.validity.valid ? shiftDays(credit.value, -1) : '';
+  }
+
+  function onCreditEdit() {
+    automaticCredit = false;
+    updateDates();
+  }
+
+  payment.addEventListener('change', () => updateDates(true));
+  credit.addEventListener('input', onCreditEdit);
+  credit.addEventListener('change', onCreditEdit);
   search.addEventListener('input', showPeople);
 
   function close() {
@@ -208,7 +258,7 @@ export function openSwileView({ document: doc, request, gallery = false, onClose
   }
 
   const dates = make('div', '', 'swile-dates');
-  dates.append(field('Data de crédito', credit), field('Forma de pagamento', payment), dueField);
+  dates.append(field('Data de crédito', credit), field('Forma de pagamento', payment), dueField, pixDeadline);
   const footer = make('div', '', 'swile-actions swile-footer');
   const review = button('Conferir pedido', prepare, true);
   footer.append(total, review);
@@ -220,6 +270,7 @@ export function openSwileView({ document: doc, request, gallery = false, onClose
       content.replaceChildren();
       return;
     }
+    updateDates(true);
     content.replaceChildren(search, rows, dates, footer);
     showPeople();
     review.disabled = !people.length;
@@ -243,11 +294,14 @@ export function openSwileView({ document: doc, request, gallery = false, onClose
       const invalid = items.find(item => item.amountCents === null);
       if (invalid) throw new Error(`Confira o valor informado para ${people.find(row => row.id === invalid.employeeId)?.name || 'o colaborador'}.`);
       if (!items.length) throw new Error('Informe o valor de pelo menos um colaborador.');
-      if (!credit.value || !payment.value || due.required && !due.value) {
-        throw new Error('Informe a data de crédito, a forma de pagamento e o vencimento quando usar boleto.');
+      if (!credit.value || !payment.value) throw new Error('Informe a data de crédito e a forma de pagamento.');
+      updateDates(true);
+      if (credit.validity.rangeUnderflow) {
+        throw new Error(`A data de crédito deve ser a partir de ${dateLabel(credit.min)} para essa forma de pagamento.`);
       }
+      if (!credit.validity.valid) throw new Error('Informe uma data válida para o crédito.');
       const result = await request('preview', { items, creditDate: credit.value, paymentMethod: payment.value,
-        ...(due.required ? { dueDate: due.value } : {}) }, { signal });
+        ...(payment.value === 'BANK_SLIP' ? { dueDate: due.value } : {}) }, { signal });
       if (signal.aborted) return;
       if (result.receipt) showReceipt(result.receipt);
       else showPreview(result);
@@ -259,7 +313,7 @@ export function openSwileView({ document: doc, request, gallery = false, onClose
     const details = make('div', '', 'swile-summary');
     details.append(make('h3', 'Conferir pedido'),
       make('p', `${preview.totalEmployees} ${preview.totalEmployees === 1 ? 'colaborador' : 'colaboradores'} · crédito em ${dateLabel(preview.creditDate)}`),
-      make('p', preview.paymentMethod === 'PIX' ? 'Pagamento por Pix' : `Boleto com vencimento em ${dateLabel(preview.dueDate)}`));
+      make('p', preview.paymentMethod === 'PIX' ? 'Pagamento por Pix · prazo definido pela Swile' : `Boleto com vencimento em ${dateLabel(preview.dueDate)}`));
     if (preview.payer) details.append(make('p', `Faturamento para ${preview.payer}`));
     const list = make('ul', '', 'swile-preview-list');
     for (const item of preview.items) {
@@ -291,6 +345,7 @@ export function openSwileView({ document: doc, request, gallery = false, onClose
   function showReceipt(order) {
     refresh.hidden = true;
     amountOverrides.clear();
+    automaticCredit = true;
     invoiceText.value = DEFAULT_INVOICE_TEXT;
     const actions = make('div', '', 'swile-actions');
     actions.append(button('Voltar para recargas', showForm), button('Consultar pedidos', () => showOrders(order.reference)));
