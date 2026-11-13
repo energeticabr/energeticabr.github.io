@@ -28,6 +28,8 @@ ORIGINS = {
     'staging': 'https://corporate-gateway-staging.swile.com.br',
 }
 SP = timezone(timedelta(hours=-3))
+CLOSED_ORDER_STATUSES = frozenset({'DRAFT', 'APPROVED', 'CANCELED', 'CREATION_ERROR'})
+MIXED_CREDIT_STATUSES = frozenset({'PROCESSING', 'APPROVED_PARTIALLY', 'PROCESSED_ERROR', 'PROCESSING_CANCEL'})
 
 
 class SwileError(Exception):
@@ -121,6 +123,20 @@ def date_field(value):
         raise SwileError('Informe uma data válida para o pedido.') from None
 
 
+def scheduled_date(value):
+    if not isinstance(value, str) or not value:
+        return None
+    try:
+        if len(value) == 10:
+            return date.fromisoformat(value).isoformat()
+        timestamp = datetime.fromisoformat(value)
+    except ValueError:
+        return None
+    if timestamp.tzinfo is None:
+        timestamp = timestamp.replace(tzinfo=timezone.utc)
+    return timestamp.astimezone(SP).date().isoformat()
+
+
 def request_dates(body, now):
     credit = date_field(body.get('creditDate'))
     payment = body.get('paymentMethod')
@@ -164,16 +180,16 @@ class Service:
     def __init__(self, gateway, database=DATABASE, clock=time.time):
         self.gateway, self.database, self.clock = gateway, database, clock
 
-    def pages(self, endpoint, field, **params):
+    def pages(self, endpoint, field, *, size_param='pageSize', **params):
         for page in range(1000):
-            result = self.gateway.request(endpoint, query={**params, 'page': page, 'pageSize': 100})
+            result = self.gateway.request(endpoint, query={**params, 'page': page, size_param: 100})
             rows = result.get(field) or []
             if not isinstance(rows, list) or type(result.get('last')) is not bool:
                 raise SwileError('A Swile devolveu uma lista inválida.', 502)
             yield from rows
             if result['last']:
                 return
-        raise SwileError('A consulta de colaboradores excedeu o limite de páginas.', 502)
+        raise SwileError('A consulta à Swile excedeu o limite de páginas.', 502)
 
     def directory(self, *, public=False):
         groups = {group['idWorkGroup']: group for group in self.pages('workgroup', 'workgroups')
@@ -379,6 +395,48 @@ class Service:
             result.append(receipt)
         return result
 
+    def pending_orders(self):
+        result = []
+        for group in self.pages('order/group', 'orderGroups', size_param='size'):
+            status = group['statusCode']
+            if status in CLOSED_ORDER_STATUSES:
+                continue
+            dates = {scheduled_date(order.get('creditDate')) for order in group.get('orders') or []}
+            result.append({
+                'orderCode': group['groupCode'], 'status': status, 'creditCents': cents(group['valueCredit']),
+                'creditDate': dates.pop() if len(dates) == 1 else None,
+            })
+        return result
+
+    def pending_order_details(self, code):
+        if not isinstance(code, str) or not re.fullmatch(r'[A-Za-z0-9_-]{1,100}', code):
+            raise SwileError('Código de pedido Swile inválido.')
+        group = self.gateway.request('order/group/' + quote(code, safe=''))
+        if group.get('code') != code or not isinstance(group.get('orderList'), list):
+            raise SwileError('A Swile não confirmou os detalhes do pedido.', 502)
+        if group['statusCode'] in CLOSED_ORDER_STATUSES:
+            raise SwileError('Este pedido saiu dos pedidos em suspenso. Atualize a galeria.', 404)
+        group_date = scheduled_date(group.get('creditDate'))
+        result = {'orderCode': code, 'status': group['statusCode'], 'creditDate': group_date,
+                  'creditCents': 0, 'items': []}
+        for order in group['orderList']:
+            result['creditCents'] += cents(order['totalValue'])
+            employees = order.get('employeeList') or []
+            status = order['statusCode']
+            if len(employees) < (order.get('totalEmployees') or 0):
+                result['itemsIncomplete'] = True
+            for employee in employees:
+                line = {
+                    'name': employee['name'],
+                    'amountCents': sum(cents(value) for value in employee['items'].values()),
+                    'status': status,
+                    'creditDate': scheduled_date(order.get('creditDate')) or group_date,
+                }
+                if status in MIXED_CREDIT_STATUSES:
+                    line.update(status=None, orderStatus=status)
+                result['items'].append(line)
+        return result
+
 
 _lock = Lock()
 _signature = None
@@ -423,7 +481,10 @@ def handle_portal(identity, body):
         elif action == 'swile_confirm':
             value = service.confirm(owner, body.get('id'), body.get('invoiceText', ''))
         elif action == 'swile_orders':
-            value = service.orders(owner, body.get('reference'))
+            if body.get('gallery') == 'pending':
+                value = service.pending_order_details(body['orderCode']) if 'orderCode' in body else service.pending_orders()
+            else:
+                value = service.orders(owner, body.get('reference'))
         else:
             raise SwileError('Operação Swile inválida.')
         return 200, {'status': 'processed', 'messages': [], 'swile': value}

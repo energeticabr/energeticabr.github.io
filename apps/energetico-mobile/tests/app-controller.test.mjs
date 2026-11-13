@@ -3586,6 +3586,17 @@ test('Swile opens from the live RH menu without leaving the conversation or send
   assert.equal(await h.view.emit('select-reply', { replyId }), false);
   assert.equal(dom.window.document.querySelector('.swile-dialog'), null);
   assert.deepEqual(requests, ['directory']);
+  h.store.ingestRemoteMessages([poll], { activeFlow: menu });
+  h.client.swileRequest = async (operation, payload) => {
+    assert.equal(operation, 'orders');
+    assert.deepEqual(payload, { gallery: 'pending' });
+    requests.push(operation);
+    return [];
+  };
+  assert.equal(await h.view.emit('select-reply', { replyId: 'action_hr_swile_gallery' }), true);
+  assert.match(dom.window.document.querySelector('.swile-dialog').textContent, /Nenhum pedido em suspenso/);
+  assert.deepEqual(requests, ['directory', 'orders']);
+  assert.equal(h.chatCalls.length, callsBefore);
 });
 
 test('IDFOLHA default real gallery and composer open through +, never posting on open', async t => {

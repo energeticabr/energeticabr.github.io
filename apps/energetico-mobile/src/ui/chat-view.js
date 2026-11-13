@@ -1751,10 +1751,13 @@ function renderPoll(message, busy, draft = "", databaseFilterMessage = null, act
   const hrReport = humanResourcesReportInsertion(message, options);
   if (hrReport) options.splice(hrReport.index, 0, hrReport.option);
   const swileOption = isHrGalleryMenu ? { id: 'action_hr_swile', reply: 'action_hr_swile', label: 'Swile' } : null;
+  const swileGalleryOption = isHrGalleryMenu ? { id: 'action_hr_swile_gallery', reply: 'action_hr_swile_gallery', label: 'GALERIA SWILE' } : null;
   const payslipOption = isHrGalleryMenu ? { id: 'action_hr_gallery_holerite', reply: 'action_hr_gallery_holerite', label: '📄 GALERIA HOLERITES' } : null;
-  if (swileOption) {
-    const existing = options.findIndex(option => draftReplyId(option) === swileOption.id);
-    if (existing >= 0) options.splice(existing, 1);
+  for (const localOption of [swileOption, swileGalleryOption]) {
+    if (localOption) {
+      const existing = options.findIndex(option => draftReplyId(option) === localOption.id);
+      if (existing >= 0) options.splice(existing, 1);
+    }
   }
   if (currentPoll && isSupplierPayrollMenu(message, activeFlow)
     && !options.some(option => draftReplyId(option) === PAYROLL_LAUNCH_REPLY_ID)) {
@@ -1917,7 +1920,7 @@ function renderPoll(message, busy, draft = "", databaseFilterMessage = null, act
   }).join("") : "";
   const choicesMarkup = choices
     ? isHrGalleryMenu
-      ? `<div class="chat-choice-columns chat-choice-columns--hr-galleries">${hrChoices}</div><div class="chat-choice-list swile-menu-entry">${pollButton(swileOption, busy)}${pollButton(payslipOption, busy)}</div>`
+      ? `<div class="chat-choice-columns chat-choice-columns--hr-galleries">${hrChoices}</div><div class="chat-choice-list swile-menu-entry">${pollButton(swileOption, busy)}${pollButton(swileGalleryOption, busy, { galleryButton: true })}${pollButton(payslipOption, busy)}</div>`
       : isLaunchMenu
       ? suppliesMenuChoices(regularOptions, { orders: ordersGallery, launches: galleryOption, notasSefaz: notasSefazGallery, payments: paymentProgrammingGallery, provisionDescription: provisionDescriptionGallery, recurring: recurringExpensesGallery, dda: ddaGallery, quotes: quoteGallery, assets: assetGallery, registrations: registrationGallery }, busy)
       : pairedMenu

@@ -29,7 +29,7 @@ export function parseSwileAmount(value) {
   return Number.isSafeInteger(cents) && cents > 0 && cents <= 999999999 ? cents : null;
 }
 
-export function openSwileView({ document: doc, request, onClose }) {
+export function openSwileView({ document: doc, request, gallery = false, onClose }) {
   const controller = new AbortController();
   const { signal } = controller;
   const focus = doc.activeElement;
@@ -53,10 +53,10 @@ export function openSwileView({ document: doc, request, onClose }) {
   const dialog = make('dialog', '', 'swile-dialog');
   dialog.setAttribute('aria-labelledby', 'swile-heading');
   dialog.setAttribute('aria-modal', 'true');
-  const title = make('h2', 'Swile');
+  const title = make('h2', gallery ? 'Galeria Swile' : 'Swile');
   title.id = 'swile-heading';
   const headline = make('div', '', 'swile-headline');
-  headline.append(title, make('span', 'Multibenefícios'));
+  headline.append(title, make('span', gallery ? 'Pedidos em suspenso' : 'Multibenefícios'));
   const header = make('header', '', 'swile-header');
   header.append(headline, button('Fechar', close));
   const body = make('div', '', 'swile-body');
@@ -282,11 +282,82 @@ export function openSwileView({ document: doc, request, onClose }) {
     });
   }
 
+  function loadPending() {
+    return run(async () => {
+      const refreshPending = button('Atualizar pedidos', loadPending);
+      refreshPending.disabled = true;
+      content.replaceChildren(refreshPending);
+      message('Consultando pedidos na Swile…');
+      try {
+        const orders = await request('orders', { gallery: 'pending' }, { signal });
+        if (signal.aborted) return;
+        if (!Array.isArray(orders)) throw new Error('Lista de pedidos inválida.');
+        const list = make('div', '', 'swile-order-list');
+        for (const order of orders) {
+          const item = button('', () => loadOrderDetails(order.orderCode));
+          item.className = 'swile-pending-order';
+          item.append(make('strong', order.orderCode), make('strong', reais(order.creditCents)),
+            make('span', statuses[order.status] || order.status));
+          if (order.creditDate) item.append(make('span', `Previsão ${dateLabel(order.creditDate)}`));
+          list.append(item);
+        }
+        if (!orders.length) list.append(make('p', 'Nenhum pedido em suspenso.'));
+        content.append(list);
+        message();
+      } finally {
+        refreshPending.disabled = false;
+      }
+    });
+  }
+
+  function loadOrderDetails(orderCode) {
+    return run(async () => {
+      message('Consultando as linhas do pedido…');
+      const order = await request('orders', { gallery: 'pending', orderCode }, { signal });
+      if (signal.aborted) return;
+      if (order?.orderCode !== orderCode || !Array.isArray(order.items)) {
+        throw new Error('A Swile não confirmou as linhas do pedido.');
+      }
+      const details = make('section', '', 'swile-summary swile-credit-details');
+      const heading = make('h3', `Pedido ${order.orderCode}`);
+      heading.tabIndex = -1;
+      details.append(heading, make('p', statuses[order.status] || order.status),
+        make('strong', `Total em créditos · ${reais(order.creditCents)}`));
+      const rows = make('ul', '', 'swile-credit-lines');
+      for (const line of order.items) {
+        const row = make('li');
+        const top = make('div', '', 'swile-credit-line-heading');
+        top.append(make('strong', line.name), make('strong', reais(line.amountCents)));
+        const fields = make('dl');
+        for (const [label, value] of [
+          ['Nº do cartão', line.cardNumber || 'Não informado'],
+          ['Status da carga', statuses[line.status] || line.status || 'Não informado'],
+          ['Data prevista', dateLabel(line.creditDate) || 'Não informada'],
+          ['Data efetuada', dateLabel(line.creditedDate) || 'Não informada'],
+        ]) {
+          fields.append(make('dt', label), make('dd', value));
+        }
+        if (line.orderStatus) fields.append(make('dt', 'Status do pedido'), make('dd', statuses[line.orderStatus] || line.orderStatus));
+        row.append(top, fields);
+        rows.append(row);
+      }
+      if (!order.items.length) details.append(make('p', 'A Swile ainda não disponibilizou as linhas deste pedido.'));
+      else if (order.itemsIncomplete) details.append(make('p', 'A Swile retornou apenas parte das linhas deste pedido.'));
+      details.append(rows);
+      content.replaceChildren(button('Voltar aos pedidos', loadPending), details);
+      message();
+      heading.focus();
+    });
+  }
+
   dialog.addEventListener('cancel', event => { event.preventDefault(); close(); });
   doc.body.append(dialog);
   if (typeof dialog.showModal === 'function') dialog.showModal();
   else dialog.setAttribute('open', '');
-  showForm();
-  void load();
+  if (gallery) void loadPending();
+  else {
+    showForm();
+    void load();
+  }
   return { close };
 }
