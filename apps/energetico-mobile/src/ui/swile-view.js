@@ -1,6 +1,7 @@
 const money = new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' });
 const reais = cents => money.format(cents / 100);
 const dateLabel = value => String(value || '').split('-').reverse().join('/');
+const DEFAULT_INVOICE_TEXT = 'CNO :90.025.44060/72 RUA ANTÔNIO TORRES DOS SANTOS NÚMERO 134';
 const statuses = {
   DRAFT: 'Rascunho',
   CREATED: 'Pedido criado',
@@ -69,6 +70,12 @@ export function openSwileView({ document: doc, request, onClose }) {
   let people = [];
   let loaded = false;
   let busy = false;
+  const invoiceText = make('textarea');
+  invoiceText.rows = 3;
+  invoiceText.maxLength = 255;
+  invoiceText.value = DEFAULT_INVOICE_TEXT;
+  const invoiceField = field('Descrição na nota fiscal', invoiceText);
+  invoiceField.className = 'swile-invoice-description';
   const amounts = new Map();
   const search = make('input');
   search.type = 'search';
@@ -115,7 +122,7 @@ export function openSwileView({ document: doc, request, onClose }) {
     if (busy || signal.aborted) return;
     busy = true;
     dialog.setAttribute('aria-busy', 'true');
-    const controls = [...content.querySelectorAll('button, input, select')].filter(control => !control.disabled);
+    const controls = [...content.querySelectorAll('button, input, select, textarea')].filter(control => !control.disabled);
     controls.forEach(control => { control.disabled = true; });
     message();
     try { await work(); }
@@ -229,10 +236,10 @@ export function openSwileView({ document: doc, request, onClose }) {
       list.append(row);
     }
     details.append(list, make('p', `Total em créditos · ${reais(preview.creditCents)}`),
-      make('strong', `Total a pagar · ${reais(preview.paymentCents)}`));
+      make('strong', `Total a pagar · ${reais(preview.paymentCents)}`), invoiceField);
     const actions = make('div', '', 'swile-actions');
     actions.append(button('Editar valores', showForm), button('Enviar pedido à Swile', () => run(async () => {
-      const result = await request('confirm', { id: preview.id });
+      const result = await request('confirm', { id: preview.id, invoiceText: invoiceText.value.trim() });
       if (!signal.aborted) showReceipt(result);
     }), true));
     content.replaceChildren(details, actions);
@@ -251,6 +258,7 @@ export function openSwileView({ document: doc, request, onClose }) {
 
   function showReceipt(order) {
     amounts.clear();
+    invoiceText.value = DEFAULT_INVOICE_TEXT;
     const actions = make('div', '', 'swile-actions');
     actions.append(button('Voltar para recargas', showForm), button('Consultar pedidos', () => showOrders(order.reference)));
     content.replaceChildren(receiptDetails(order), actions);

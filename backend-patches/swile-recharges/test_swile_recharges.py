@@ -2,7 +2,9 @@ import tempfile
 import unittest
 from pathlib import Path
 
-from swile_recharges import Service, SwileError
+from unittest.mock import patch
+
+from swile_recharges import Service, SwileError, handle_portal
 
 
 class Gateway:
@@ -91,6 +93,42 @@ class ServiceTests(unittest.TestCase):
         self.assertEqual('UNCONFIRMED', self.service.preview('user-a', self.data)['receipt']['status'])
         self.assertEqual('UNCONFIRMED', self.service.confirm('user-a', preview['id'])['status'])
         self.assertEqual(1, sum(path == 'order/create' for path, _, _ in self.gateway.calls))
+
+    def test_invoice_text_uses_the_summary_payer_without_using_swile_credit(self):
+        preview = self.service.preview('user-a', self.data)
+        text = 'CNO :90.025.44060/72 RUA ANTÔNIO TORRES DOS SANTOS NÚMERO 134'
+        restarted = Service(self.gateway, self.database, clock=lambda: self.now)
+        with patch('swile_recharges.configured_service', return_value=restarted):
+            status, result = handle_portal({'oid': 'user-a'}, {
+                'action': 'swile_confirm', 'id': preview['id'], 'invoiceText': text,
+            })
+        self.assertEqual(200, status)
+        self.assertEqual('SWO123', result['swile']['orderCode'])
+        payload = next(data for path, data, _ in self.gateway.calls if path == 'order/create')
+        self.assertEqual([{'document': '12345678000190', 'invoiceText': text, 'swileCreditToUse': 0}],
+                         payload['benefitPaymentInfo'])
+        self.assertNotIn('benefitPayerDocument', payload)
+        self.assertNotIn('campaignPaymentInfo', payload)
+        restarted.confirm('user-a', preview['id'], 'Outro texto')
+        self.assertEqual(1, sum(path == 'order/create' for path, _, _ in self.gateway.calls))
+
+    def test_invoice_text_too_long_does_not_claim_or_create_order(self):
+        preview = self.service.preview('user-a', self.data)
+        with self.assertRaisesRegex(SwileError, '255'):
+            self.service.confirm('user-a', preview['id'], 'á' * 256)
+        self.assertFalse(any(path == 'order/create' for path, _, _ in self.gateway.calls))
+        self.service.confirm('user-a', preview['id'], '')
+        payload = next(data for path, data, _ in self.gateway.calls if path == 'order/create')
+        self.assertNotIn('benefitPaymentInfo', payload)
+
+    def test_legacy_unsent_preview_can_be_replaced_without_sending_an_invoice_to_a_guessed_payer(self):
+        preview = self.service.preview('user-a', self.data)
+        with self.service.db() as db:
+            db.execute("UPDATE orders SET payload=json_remove(payload, '$.payerDocument') WHERE id=?", (preview['id'],))
+        with self.assertRaisesRegex(SwileError, 'novo resumo'):
+            self.service.confirm('user-a', preview['id'], 'CNO da obra')
+        self.assertNotEqual(preview['id'], self.service.preview('user-a', self.data)['id'])
+        self.assertFalse(any(path == 'order/create' for path, _, _ in self.gateway.calls))
 
     def test_rejects_duplicate_people_and_ineligible_wallet(self):
         for items in [[*self.data['items']] * 2, [{'employeeId': 30, 'amountCents': 22505}]]:

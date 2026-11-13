@@ -53,9 +53,20 @@ test('Swile keeps amounts across search and submits only after review', async ()
       ['preview', { items: [{ employeeId: 1, amountCents: 1234 }], creditDate: '2026-12-02', paymentMethod: 'PIX' }],
     ]);
     assert.match(document.body.textContent, /Total a pagar.*13,00/);
+    const description = document.querySelector('label:has(textarea)');
+    assert.match(description.textContent, /Descrição na nota fiscal/);
+    const note = description.querySelector('textarea');
+    assert.equal(note.value, 'CNO :90.025.44060/72 RUA ANTÔNIO TORRES DOS SANTOS NÚMERO 134');
+    assert.equal(note.maxLength, 255);
+    input(note, 'CNO da obra revisado');
+    click('Editar valores');
+    click('Conferir pedido');
+    await settle();
+    assert.equal(document.querySelector('textarea').value, 'CNO da obra revisado');
+    assert.equal(calls.some(([operation]) => operation === 'confirm'), false);
     click('Enviar pedido à Swile');
     await settle();
-    assert.deepEqual(calls.at(-1), ['confirm', { id: 'preview' }]);
+    assert.deepEqual(calls.at(-1), ['confirm', { id: 'preview', invoiceText: 'CNO da obra revisado' }]);
     assert.match(document.body.textContent, /Aguardando pagamento.*SWO123/s);
   } finally {
     view.close();
