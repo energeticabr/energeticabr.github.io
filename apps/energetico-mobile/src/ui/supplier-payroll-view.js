@@ -413,20 +413,25 @@ export function createSupplierPayrollView({
           ["Quantidade", String(line.quantity)],
           ["Valor unitário", money(line.unitValue)],
           ["Subtotal", money(payrollTotal([line]))],
+          ["Situação", line.alreadyPaid === true ? "Já pago" : "A pagar"],
           ...(hasTax && !line.alreadyPaid ? [['IDFOLHA', String((payrollTaxType(line.payrollType) ? draft.taxSheet : draft.sheet).id)]] : []),
-          ["Forma de pagamento", line.alreadyPaid
-            ? ["Já pago", line.account?.label].filter(Boolean).join(" · ") : line.account.label],
+          ["Forma de pagamento", line.account?.label || "—"],
           ["Comprovantes", receipts],
         ]),
       );
       list.append(row);
     }
-    const total = element("div", "supplier-payroll-summary-total");
+    const total = element("dl", "supplier-payroll-summary-total");
     total.setAttribute("data-payroll-summary-total", "");
-    total.append(
-      element("span", "", "Total pago"),
-      element("strong", "", money(draft.total)),
-    );
+    for (const [label, value] of [
+      ["Já pago", payrollTotal(draft.lines.filter(line => line.alreadyPaid === true))],
+      ["A pagar", payrollTotal(draft.lines.filter(line => line.alreadyPaid !== true))],
+      ["Total da folha", draft.total],
+    ]) {
+      const row = element("div");
+      row.append(element("dt", "", label), element("dd", "", money(value)));
+      total.append(row);
+    }
     container.replaceChildren(context, list, total);
   }
   function lineEdited(line) {
@@ -915,8 +920,8 @@ export function createSupplierPayrollView({
         status.textContent = entry.failure || (state === "ready" ? "Pronto para postar"
           : state === "posted" ? "Postado" : state === "empty" ? ""
           : !entry.selected ? "Fora da postagem" : message);
-        try { amount.textContent = "Total pago: " + money(validated?.total ?? payrollTotal(draft.lines)); }
-        catch { amount.textContent = "Total pago: confira os valores"; }
+        try { amount.textContent = "Total da folha: " + money(validated?.total ?? payrollTotal(draft.lines)); }
+        catch { amount.textContent = "Total da folha: confira os valores"; }
         details.hidden = !validated;
         if (validated) renderSummary(review, validated);
       }
