@@ -16,7 +16,7 @@ test('Swile keeps amounts across search and submits only after review', async ()
   const { document } = window;
   const calls = [];
   let directoryLoads = 0;
-  const view = openSwileView({ document, request: async (operation, body) => {
+  const view = openSwileView({ document, now: () => new Date('2026-11-16T14:00:00Z'), request: async (operation, body) => {
     calls.push([operation, body]);
     if (operation === 'directory') {
       directoryLoads++;
@@ -71,7 +71,7 @@ test('Swile keeps amounts across search and submits only after review', async ()
     input(document.querySelector('[type=search]'), '');
     assert.equal(amount('Pessoa A').value, '12,34');
     assert.equal(amount('Pessoa C').value, '225,00');
-    document.querySelector('[type=date]').value = '2026-12-02';
+    input(document.querySelector('[type=date]'), '2026-12-02');
     document.querySelector('select').value = 'PIX';
     click('Conferir pedido');
     await settle();
@@ -104,6 +104,121 @@ test('Swile keeps amounts across search and submits only after review', async ()
     view.close();
     window.close();
   }
+});
+
+test('Swile schedules the nearest eligible Friday and recalculates the latest boleto due date', async t => {
+  const { window } = new JSDOM('<!doctype html><body></body>');
+  const { document } = window;
+  const calls = [];
+  const view = openSwileView({
+    document, now: () => new Date('2026-11-16T14:00:00Z'),
+    request: async (operation, body) => {
+      calls.push([operation, body]);
+      if (operation === 'directory') return [{ id: 1, name: 'Pessoa A' }];
+      return { ...body, items: [], totalEmployees: 1, creditCents: 22500, paymentCents: 22500 };
+    },
+  });
+  t.after(() => { view.close(); window.close(); });
+  const settle = () => new Promise(resolve => setImmediate(resolve));
+  await settle();
+  const [credit, due] = document.querySelectorAll('input[type=date]');
+  const payment = document.querySelector('select');
+  const set = (input, value, event = 'change') => {
+    input.value = value;
+    input.dispatchEvent(new window.Event(event, { bubbles: true }));
+  };
+  const click = text => [...document.querySelectorAll('button')].find(button => button.textContent === text).click();
+
+  assert.equal(credit.value, '2026-11-20');
+  set(payment, 'BANK_SLIP');
+  assert.equal(due.value, '2026-11-19');
+  assert.equal(due.readOnly, true);
+  set(credit, '2026-12-01', 'input');
+  assert.equal(due.value, '2026-11-30');
+  set(payment, 'PIX');
+  assert.equal(credit.value, '2026-12-01');
+  assert.equal(due.closest('label').hidden, true);
+  assert.equal(due.value, '');
+  assert.match(document.querySelector('.swile-pix-deadline').textContent, /prazo.+Swile/i);
+  set(payment, 'BANK_SLIP');
+  assert.equal(due.value, '2026-11-30');
+  set(credit, '');
+  assert.equal(due.value, '');
+  set(credit, '2026-11-20');
+  click('Conferir pedido');
+  await settle();
+  assert.deepEqual(calls.at(-1), ['preview', {
+    items: [{ employeeId: 1, amountCents: 22500 }],
+    creditDate: '2026-11-20', paymentMethod: 'BANK_SLIP', dueDate: '2026-11-19',
+  }]);
+  assert.match(document.body.textContent, /Boleto com vencimento em 19\/11\/2026/);
+});
+
+test('Swile advances the automatic Friday when boleto needs more time, preserving an eligible manual date', async t => {
+  const { window } = new JSDOM('<!doctype html><body></body>');
+  const { document } = window;
+  const calls = [];
+  const view = openSwileView({
+    document, now: () => new Date('2026-11-12T14:00:00Z'),
+    request: async (operation, body) => {
+      calls.push([operation, body]);
+      if (operation === 'directory') return [{ id: 1, name: 'Pessoa A' }];
+      return { ...body, items: [], totalEmployees: 1, creditCents: 22500, paymentCents: 22500 };
+    },
+  });
+  t.after(() => { view.close(); window.close(); });
+  const settle = () => new Promise(resolve => setImmediate(resolve));
+  await settle();
+  const [credit, due] = document.querySelectorAll('input[type=date]');
+  const payment = document.querySelector('select');
+  const set = (input, value) => {
+    input.value = value;
+    input.dispatchEvent(new window.Event('change', { bubbles: true }));
+  };
+  assert.equal(credit.value, '2026-11-13');
+  set(payment, 'BANK_SLIP');
+  assert.equal(credit.min, '2026-11-16');
+  assert.equal(credit.value, '2026-11-20');
+  assert.equal(due.value, '2026-11-19');
+  set(payment, 'PIX');
+  assert.equal(credit.value, '2026-11-13');
+  set(credit, '2026-11-17');
+  set(payment, 'BANK_SLIP');
+  assert.equal(credit.value, '2026-11-17');
+  assert.equal(due.value, '2026-11-16');
+  set(credit, '2026-11-13');
+  assert.equal(due.value, '');
+  [...document.querySelectorAll('button')].find(button => button.textContent === 'Conferir pedido').click();
+  await settle();
+  assert.equal(calls.length, 1);
+  assert.match(document.querySelector('[role=status]').textContent, /16\/11\/2026/);
+});
+
+test('Swile refreshes an automatic date when the UTC cutoff changes before review', async t => {
+  const { window } = new JSDOM('<!doctype html><body></body>');
+  const { document } = window;
+  let instant = new Date('2026-11-11T23:58:00Z');
+  let preview;
+  const view = openSwileView({
+    document, now: () => instant,
+    request: async (operation, body) => {
+      if (operation === 'directory') return [{ id: 1, name: 'Pessoa A' }];
+      preview = body;
+      return { ...body, items: [], totalEmployees: 1, creditCents: 22500, paymentCents: 22500 };
+    },
+  });
+  t.after(() => { view.close(); window.close(); });
+  const settle = () => new Promise(resolve => setImmediate(resolve));
+  await settle();
+  const payment = document.querySelector('select');
+  payment.value = 'BANK_SLIP';
+  payment.dispatchEvent(new window.Event('change'));
+  assert.equal(document.querySelector('input[type=date]').value, '2026-11-13');
+  instant = new Date('2026-11-12T00:01:00Z');
+  [...document.querySelectorAll('button')].find(button => button.textContent === 'Conferir pedido').click();
+  await settle();
+  assert.equal(preview?.creditDate, '2026-11-20');
+  assert.equal(preview?.dueDate, '2026-11-19');
 });
 
 test('Swile gallery is a separate screen and can open an older completed order', async t => {
