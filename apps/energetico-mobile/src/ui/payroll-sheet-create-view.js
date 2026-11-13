@@ -3,7 +3,7 @@ import { beginLoadingTask } from './loading-task.js';
 import { bindSearchableFilterSelects } from './searchable-filter-selects.js';
 
 /** Standalone IDFOLHA composer using the native payroll form and shared dialog styles. */
-export function createPayrollSheetCreateView({ document: doc = globalThis.document, loadOptions, save, onSaved, onClose } = {}) {
+export function createPayrollSheetCreateView({ document: doc = globalThis.document, loadOptions, save, onSaved, onClose, onAbandon } = {}) {
   let current = null, disposed = false, mutationPending = false;
   const element = (tag, className, text) => {
     const node = doc.createElement(tag);
@@ -131,8 +131,10 @@ export function createPayrollSheetCreateView({ document: doc = globalThis.docume
     const body = element('div', 'gallery-record-dialog-body');
     const actions = element('div', 'dynamic-form-actions');
     const cancel = element('button', 'gallery-record-dialog-button', 'CANCELAR'); cancel.type = 'button'; cancel.dataset.sheetCreateCancel = '';
+    const abandon = element('button', 'gallery-record-dialog-button gallery-record-dialog-button--danger', 'ABANDONAR IDFOLHA');
+    abandon.type = 'button'; abandon.dataset.sheetCreateAbandon = '';
     const submit = element('button', 'gallery-record-dialog-button', 'SUBMETER'); submit.type = 'submit'; submit.disabled = true;
-    actions.append(cancel, submit); dialog.append(heading, error, body, actions); overlay.append(dialog);
+    actions.append(cancel, abandon, submit); dialog.append(heading, error, body, actions); overlay.append(dialog);
     const state = { overlay, dialog, body, error, submit, trigger, operationId, abort: new AbortController(),
       loading: false, busy: false, saved: null, uncertain: false };
     current = state;
@@ -142,6 +144,11 @@ export function createPayrollSheetCreateView({ document: doc = globalThis.docume
     };
     doc.addEventListener('keydown', state.outsideKeydown, true);
     cancel.addEventListener('click', () => close());
+    abandon.addEventListener('click', () => {
+      if (!active(state) || state.busy) return;
+      close(false, false);
+      onAbandon?.();
+    });
     overlay.addEventListener('click', event => {
       event.stopPropagation();
       if (event.target === overlay && active(state)) close();

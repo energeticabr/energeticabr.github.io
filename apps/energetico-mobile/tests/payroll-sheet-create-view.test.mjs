@@ -29,6 +29,27 @@ function submit(f, supplierId = '7', month = '2026-10') {
   form.dispatchEvent(new f.dom.window.Event('submit', { bubbles: true, cancelable: true }));
 }
 
+test('abandon during load cancels the read and only invokes the main-menu callback', async t => {
+  let release, abandoned = 0;
+  const f = fixture(t, {
+    loadOptions: ({ signal }) => { f.signals.push(signal); return new Promise(resolve => { release = resolve; }); },
+    onAbandon: () => { abandoned++; },
+  });
+  const opening = f.view.open();
+  const button = f.doc.querySelector('[data-sheet-create-abandon]');
+  assert.ok(button);
+  assert.equal(button.type, 'button');
+  button.click();
+  button.click();
+  release(options);
+  await opening;
+  assert.equal(abandoned, 1);
+  assert.equal(f.closed(), 0);
+  assert.equal(f.signals[0].aborted, true);
+  assert.equal(f.view.isOpen(), false);
+  assert.equal(f.saves.length, 0);
+});
+
 test('sheet backdrop cancels loading, aborts the read and ignores late data without closing inside clicks', async t => {
   let release;
   const f = fixture(t, { loadOptions: ({ signal }) => { f.signals.push(signal); return new Promise(resolve => { release = resolve; }); } });
@@ -107,7 +128,7 @@ test('standalone accessible native composer opens under body with searchable sup
   assert.equal(dialog.querySelector('[role=combobox]').getAttribute('aria-label'), 'Fornecedor');
   assert.equal(dialog.querySelector('[name=month]').type, 'month');
   assert.equal(dialog.querySelector('[name=month]').value, '2026-10');
-  assert.deepEqual([...dialog.querySelectorAll('.dynamic-form-actions button')].map(node => node.textContent), ['CANCELAR', 'SUBMETER']);
+  assert.deepEqual([...dialog.querySelectorAll('.dynamic-form-actions button')].map(node => node.textContent), ['CANCELAR', 'ABANDONAR IDFOLHA', 'SUBMETER']);
   assert.equal(f.saves.length, 0); assert.equal(f.notifications.length, 0);
 });
 
@@ -146,6 +167,9 @@ test('double submit and user cancel while saving cannot start another write or d
   const f = fixture(t, { save: () => { attempts++; return new Promise(resolve => { release = resolve; }); } });
   await f.view.open(); submit(f); submit(f);
   f.doc.querySelector('[data-sheet-create-cancel]').click();
+  const abandon = f.doc.querySelector('[data-sheet-create-abandon]');
+  assert.equal(abandon?.disabled, true);
+  abandon.click();
   f.doc.querySelector('[role=dialog]').dispatchEvent(new f.dom.window.KeyboardEvent('keydown', { key: 'Escape', bubbles: true }));
   f.doc.querySelector('.gallery-record-overlay').click();
   assert.equal(attempts, 1); assert.equal(f.view.isOpen(), true);

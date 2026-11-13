@@ -7188,6 +7188,11 @@ export function createAppController({
             disposePayrollSheetCreate();
             void openHrPayrollGallery('IDFOLHA');
           },
+          onAbandon: () => {
+            if (payrollSheetCreate !== panel || !current()) return;
+            disposePayrollSheetCreate();
+            return returnToMainMenu();
+          },
         });
         if (!current()) { panel?.destroy?.(); return false; }
         payrollSheetCreate = panel;
