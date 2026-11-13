@@ -35,7 +35,22 @@
 .hr-gallery-button { min-height: 44px; width: auto; padding: 9px 13px; border: 1px solid #315d76; border-radius: 10px; color: #123c68; background: #fff; font: inherit; font-weight: 700; line-height: 1.2; overflow-wrap: anywhere; cursor: pointer; touch-action: manipulation; }
 .hr-gallery-button:hover:not(:disabled) { background: #eaf4f8; }
 .hr-gallery-button:disabled { opacity: .5; cursor: default; }
-.hr-gallery-card--payslip .hr-gallery-payslip-pdf { width: 44px; padding: 4px; font-size: .78rem; }
+.gallery-record-card.hr-gallery-card.hr-gallery-card--payslip { grid-template-columns: 44px minmax(0, 1fr) 44px; }
+.hr-gallery-card--payslip > .gallery-record-main { grid-column: 2; grid-row: 1; }
+.hr-gallery-card--payslip > .hr-gallery-payslip-pdf {
+  grid-column: 1;
+  grid-row: 1;
+  display: grid;
+  place-items: center;
+  width: 44px;
+  height: 44px;
+  padding: 0;
+  color: #07566b;
+  background: #edf7fd;
+  border-color: #bed5e2;
+}
+.hr-gallery-payslip-pdf svg { width: 34px; height: 34px; }
+.hr-gallery-payslip-pdf:focus-visible { outline: 3px solid #236ca6; outline-offset: -2px; }
 .hr-payslip-upload { width: 44px; padding: 4px; font-size: 1.4rem; }
 .hr-payslip-dialog-header { display: flex; align-items: start; justify-content: space-between; gap: 12px; }
 .hr-payslip-dialog-header h2 { margin: 0; font-size: 1.25rem; }
