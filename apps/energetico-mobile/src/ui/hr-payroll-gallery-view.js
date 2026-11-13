@@ -12,6 +12,9 @@ import { payrollFilterOptions, validatePayrollFilters } from '../chat/payroll-ga
 import { createWeeklyPayslipActions } from './weekly-payslip-actions.js';
 import { PDF_ATTACHMENT_ICON } from './report-pdf-attachment-icon.js';
 
+const rubricQuantity = new Intl.NumberFormat('pt-BR', { maximumFractionDigits: 12 });
+const rubricUnitValue = new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL', maximumFractionDigits: 12 });
+
 const GALLERIES = {
   HOLERITE: {
     title: "Galeria Holerites",
@@ -230,6 +233,41 @@ export function createHrPayrollGallery({ document: documentOption,
     }
   }
 
+  function payslipTotal(row) {
+    const details = element('details', 'hr-gallery-field hr-payslip-total');
+    const summary = element('summary', 'hr-payslip-total-summary');
+    summary.append(element('span', 'hr-payslip-total-label', 'Total'),
+      element('strong', '', displayValue('TOTAL', row.TOTAL)));
+    details.append(summary);
+    if (!row.rubrics?.length) {
+      details.append(element('p', 'hr-payslip-rubrics-empty', 'Rubricas indisponíveis para este holerite.'));
+      return details;
+    }
+    const list = element('ul', 'hr-payslip-rubrics');
+    for (const rubric of row.rubrics) {
+      const item = element('li', 'hr-payslip-rubric');
+      const values = element('dl', 'hr-payslip-rubric-values');
+      for (const [label, value] of [
+        ['Quantidade', rubricQuantity.format(rubric.quantity)],
+        ['Valor unitário', rubricUnitValue.format(rubric.unitValue)],
+        ['Forma de pagamento', rubric.formaPgto || '—'],
+      ]) {
+        const pair = element('div');
+        pair.append(element('dt', '', label), element('dd', '', value));
+        values.append(pair);
+      }
+      const heading = element('div', 'hr-payslip-rubric-heading');
+      const subtotal = displayValue('TOTAL', rubric.total);
+      const amount = element('strong', '', subtotal);
+      amount.setAttribute('aria-label', `Subtotal ${subtotal}`);
+      heading.append(element('strong', '', rubric.label), amount);
+      item.append(heading, values);
+      list.append(item);
+    }
+    details.append(list);
+    return details;
+  }
+
   function drawRows(rows, target = cards) {
     for (const row of rows) {
       const card = element("article", "hr-gallery-card");
@@ -238,12 +276,14 @@ export function createHrPayrollGallery({ document: documentOption,
       cardHeader.append(element("strong", "hr-gallery-id", `ID ${row.id || "—"}`));
       const fields = element("dl", "hr-gallery-fields");
       for (const [key, label] of config.fields) {
+        if (isPayslip && key === 'TOTAL') continue;
         const pair = element("div", "hr-gallery-field");
         pair.append(element("dt", "", label), element("dd", "", displayValue(key, row[key])));
         fields.append(pair);
       }
       const recordMain = element('div', 'gallery-record-main');
       recordMain.append(cardHeader, fields);
+      if (isPayslip) recordMain.append(payslipTotal(row));
       card.classList.add('gallery-record-card');
       if (isPayslip) card.classList.add('hr-gallery-card--payslip');
       const actions = recordActions?.render(row) || element('div', 'gallery-record-actions');

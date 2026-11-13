@@ -485,7 +485,7 @@ export function createHrPayrollGalleryData({
     const list = await progress.wait(resolveList(gallery));
     progress.step('list');
     const selectedFields = [...config.fields.map(([, aliases]) => aliases[0]),
-      ...(gallery === 'HOLERITE' ? ['CHAVE', 'IDFORNECEDOR', 'SITUACAO', 'HOLERITE_REVISAO'] : [])].join(",");
+      ...(gallery === 'HOLERITE' ? ['CHAVE', 'IDFORNECEDOR', 'SITUACAO', 'HOLERITE_REVISAO', 'RUBRICAS'] : [])].join(",");
     // STATUS is optional on IDFOLHA. Read it when available without selecting a possibly missing column.
     const expandedFields = gallery === 'FOLHAPGTO' || gallery === 'IDFOLHA' && includeSearchFields ? 'fields' : `fields($select=${selectedFields})`;
     const result = await repository.getItemsPage(

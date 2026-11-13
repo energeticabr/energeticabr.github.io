@@ -51,6 +51,20 @@
 }
 .hr-gallery-payslip-pdf svg { width: 34px; height: 34px; }
 .hr-gallery-payslip-pdf:focus-visible { outline: 3px solid #236ca6; outline-offset: -2px; }
+.hr-payslip-total { margin-top: 7px; padding: 0; }
+.hr-payslip-total-summary { position: relative; display: grid; gap: 3px; padding: 9px 32px 9px 10px; cursor: pointer; list-style: none; }
+.hr-payslip-total-summary::-webkit-details-marker { display: none; }
+.hr-payslip-total-summary::after { content: '▾'; position: absolute; inset-inline-end: 10px; top: 50%; transform: translateY(-50%); }
+.hr-payslip-total[open] > .hr-payslip-total-summary::after { content: '▴'; }
+.hr-payslip-total-summary:focus-visible { outline: 3px solid #236ca6; outline-offset: -2px; border-radius: inherit; }
+.hr-payslip-total-label { color: #60747d; font-size: .75rem; font-weight: 750; text-transform: uppercase; }
+.hr-payslip-rubrics { display: grid; gap: 8px; margin: 0; padding: 0 8px 8px; list-style: none; }
+.hr-payslip-rubric { padding: 8px; border: 1px solid #dbe7ee; border-radius: 7px; background: #fff; overflow-wrap: anywhere; }
+.hr-payslip-rubric-heading { display: flex; flex-wrap: wrap; justify-content: space-between; gap: 2px 8px; font-size: .9rem; }
+.hr-payslip-rubric-values { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(100%, 80px), 1fr)); gap: 5px 8px; margin: 6px 0 0; }
+.hr-payslip-rubric-values dt { text-transform: none; }
+.hr-payslip-rubric-values dd { font-size: .82rem; }
+.hr-payslip-rubrics-empty { margin: 0; padding: 0 10px 10px; font-size: .85rem; }
 .hr-payslip-upload { width: 44px; padding: 4px; font-size: 1.4rem; }
 .hr-payslip-dialog-header { display: flex; align-items: start; justify-content: space-between; gap: 12px; }
 .hr-payslip-dialog-header h2 { margin: 0; font-size: 1.25rem; }

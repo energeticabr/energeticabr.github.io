@@ -59,6 +59,33 @@ test("holerites exibem funcionário, semana e PDF de cada registro sem excluir o
   assert.deepEqual(opened, [["17", "Holerite-2026-11-09-253.pdf"]]);
 });
 
+test('o total de cada holerite expande apenas suas próprias rubricas', async t => {
+  const dom = new JSDOM("<main id='root'></main>");
+  const root = dom.window.document.querySelector('#root');
+  const rows = [{ id: '17', FORNECEDOR: 'Edgar', TOTAL: 133.38, rubrics: [
+    { label: 'Salário', quantity: '3', unitValue: '41.125', total: 123.38, formaPgto: 'SWILE' },
+    { label: 'Vale alimentação', quantity: '2', unitValue: '5', total: 10 },
+  ] }, { id: '18', FORNECEDOR: 'Rafael', TOTAL: 75, rubrics: [] }];
+  const gallery = createHrPayrollGallery({ root, gallery: 'HOLERITE', request: async kind => ({
+    ...response(kind, 1, rows), dateGroups: [{ date: '2026-11-13', rows }],
+  }) });
+  t.after(() => { gallery.destroy(); dom.window.close(); });
+  await gallery.open();
+  root.querySelector('[data-action=toggle-payslip-date]').click();
+  const [edgar, rafael] = root.querySelectorAll('.hr-gallery-card details');
+  assert.equal(edgar.open, false);
+  assert.equal(rafael.open, false);
+  assert.match(edgar.querySelector('summary').textContent, /Total\s*R\$\s*133,38/);
+  edgar.querySelector('summary').click();
+  assert.equal(edgar.open, true);
+  assert.equal(rafael.open, false);
+  assert.match(edgar.textContent, /Salário.*123,38.*Quantidade3.*41,125.*SWILE/);
+  assert.match(edgar.textContent, /Vale alimentação.*10,00/);
+  assert.match(rafael.textContent, /Rubricas indisponíveis/);
+  edgar.querySelector('summary').click();
+  assert.equal(edgar.open, false);
+});
+
 test("as ações por fornecedor enviam a via assinada e editam somente o holerite escolhido", async t => {
   const dom = new JSDOM("<main id='root'></main>");
   const root = dom.window.document.querySelector("#root");
