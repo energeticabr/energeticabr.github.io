@@ -3599,6 +3599,37 @@ test('Swile opens from the live RH menu without leaving the conversation or send
   assert.equal(h.chatCalls.length, callsBefore);
 });
 
+test('Trancid opens recharge and history as local RH screens', async t => {
+  const dom = new JSDOM('<main id="app"></main>', { url: 'https://example.test' });
+  const previous = globalThis.document;
+  globalThis.document = dom.window.document;
+  const h = makeHarness();
+  t.after(() => { h.controller.stop(); globalThis.document = previous; dom.window.close(); });
+  await h.controller.start();
+  const requests = [];
+  h.client.trancidRechargeRequest = async (operation, body) => {
+    requests.push([operation, body]);
+    if (operation === 'directory') return [{ id: 'card-a', name: 'Pessoa elegível', cardLast4: '0010' }];
+    return { orders: [], hasMore: false, page: 1 };
+  };
+  h.store.ingestRemoteMessages([{ type: 'poll', question: '👉 👥 RECURSOS HUMANOS',
+    options: [{ id: 'action_hr_registrations', label: 'CADASTROS' }] }], {
+    activeFlow: { id: 'menu:choosing_action', title: '👥 RECURSOS HUMANOS' },
+  });
+  const callsBefore = h.chatCalls.length;
+  assert.equal(await h.view.emit('select-reply', { replyId: 'action_hr_trancid' }), true);
+  const panel = dom.window.document.querySelector('.trancid-recharge-dialog');
+  assert.match(panel?.textContent || '', /Vale-transporte.*Pessoa elegível/s);
+  [...panel.querySelectorAll('button')].find(button => button.textContent === 'Fechar').click();
+  assert.equal(await h.view.emit('select-reply', { replyId: 'action_hr_trancid_gallery' }), true);
+  assert.match(dom.window.document.querySelector('main.trancid-gallery-page')?.textContent || '', /Nenhum pedido/);
+  assert.deepEqual(requests, [['directory', {}], ['history', { page: 1 }]]);
+  assert.equal(h.chatCalls.length, callsBefore);
+  h.controller.stop();
+  assert.equal(dom.window.document.querySelector('main.trancid-gallery-page'), null);
+  assert.equal(dom.window.document.querySelector('#app').hasAttribute('inert'), false);
+});
+
 test('IDFOLHA default real gallery and composer open through +, never posting on open', async t => {
   const dom = new JSDOM('<main id="app"></main>', { url: 'https://example.test' });
   const previous = globalThis.document;

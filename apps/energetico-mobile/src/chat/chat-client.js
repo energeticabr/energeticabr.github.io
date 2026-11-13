@@ -717,6 +717,29 @@ export function createChatClient({
     if (!result?.swile || typeof result.swile !== 'object') throw new Error('A integração Swile ainda não está disponível.');
     return result.swile;
   }
+  async function trancidRechargeRequest(operation, payload = {}, { signal } = {}) {
+    if (apiPrefix === '/api/demo') throw new Error('A integração Trancid está disponível no ambiente da empresa.');
+    if (!['directory', 'preview', 'confirm', 'history'].includes(operation)) throw new TypeError('Operação Trancid inválida.');
+    const token = await cancellableToken(tokenProvider, signal);
+    const readOnly = operation !== 'confirm';
+    try {
+      const result = await request(chatUrl.href, {
+        method: 'POST', signal, redirect: 'error',
+        headers: { Accept: 'application/json', Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' },
+        body: JSON.stringify({ ...payload, action: `trancid_recharge_${operation}` }),
+        cache: 'no-store', credentials: 'omit',
+      }, response => parsePortalResponse(response, 'A consulta Trancid'), readOnly);
+      if (!result?.trancid || typeof result.trancid !== 'object') throw new Error('A integração Trancid ainda não está disponível.');
+      return result.trancid;
+    } catch (error) {
+      if (!readOnly && (error.code === 'NETWORK_UNCERTAIN' || !error.status || error.status >= 500)) {
+        throw Object.assign(new Error('O envio ficou sem confirmação. Confira a Galeria Trancid antes de reenviar.', { cause: error }), {
+          code: 'TRANCID_CONFIRMATION_UNCERTAIN',
+        });
+      }
+      throw error;
+    }
+  }
   async function getSicoobBalance({ signal } = {}) {
     if (apiPrefix === '/api/demo') return null;
     const token = await cancellableToken(tokenProvider, signal);
@@ -897,5 +920,5 @@ export function createChatClient({
     }, true);
   }
 
-  return Object.freeze({ swileRequest, getSicoobBalance, refreshSicoob, getSicoobRefreshStatus, getSicoobRefreshPending, acknowledgeSicoobRefresh, waitForDiaryEvidence, refreshSefaz, getSefazRefreshStatus, getSefazRefreshPending, acknowledgeSefazRefresh, sendText, sendFile, replaceAttachment, transcribeAudio, fetchMedia, getAttachments, launchGalleryRequest, uploadLaunchGalleryFile, getPendingProvisionSnapshot, getPendingNotesSnapshot, getRhidAttendanceReport, startRhidPendingValidation, startRhidDayValidation, getRhidAttendanceMonth, saveRhidAttendanceAdjustment, deleteRhidAttendanceAdjustment, refreshRhidAttendance, getRhidRefreshStatus, refreshRecurringProvisions, getRecurringProvisionRefreshStatus, refreshDda, getDdaRefreshStatus, getDdaRefreshPending, acknowledgeDdaRefresh, confirmDdaPayment, deleteAttachment, deleteAllAttachments, compressAttachment, chooseAttachmentCompression, getCompletionMenu, prepareSignatureEvidence, confirmSignatureEvidence, verifySignatureEvidence, captureSignatureEvidence });
+  return Object.freeze({ swileRequest, trancidRechargeRequest, getSicoobBalance, refreshSicoob, getSicoobRefreshStatus, getSicoobRefreshPending, acknowledgeSicoobRefresh, waitForDiaryEvidence, refreshSefaz, getSefazRefreshStatus, getSefazRefreshPending, acknowledgeSefazRefresh, sendText, sendFile, replaceAttachment, transcribeAudio, fetchMedia, getAttachments, launchGalleryRequest, uploadLaunchGalleryFile, getPendingProvisionSnapshot, getPendingNotesSnapshot, getRhidAttendanceReport, startRhidPendingValidation, startRhidDayValidation, getRhidAttendanceMonth, saveRhidAttendanceAdjustment, deleteRhidAttendanceAdjustment, refreshRhidAttendance, getRhidRefreshStatus, refreshRecurringProvisions, getRecurringProvisionRefreshStatus, refreshDda, getDdaRefreshStatus, getDdaRefreshPending, acknowledgeDdaRefresh, confirmDdaPayment, deleteAttachment, deleteAllAttachments, compressAttachment, chooseAttachmentCompression, getCompletionMenu, prepareSignatureEvidence, confirmSignatureEvidence, verifySignatureEvidence, captureSignatureEvidence });
 }

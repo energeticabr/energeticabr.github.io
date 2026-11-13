@@ -1,4 +1,7 @@
 import { provisionDescriptionIcon } from './provision-description-card.js';
+import { parseBenefitAmount as parseSwileAmount } from './hr-benefit-amount.js';
+
+export { parseSwileAmount };
 
 const money = new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' });
 const reais = cents => money.format(cents / 100);
@@ -22,14 +25,6 @@ const statuses = {
   CREATION_ERROR: 'Falha na criação',
   UNCONFIRMED: 'Envio sem confirmação',
 };
-
-export function parseSwileAmount(value) {
-  const input = String(value).trim();
-  const match = /^(\d+)(?:[,.](\d{1,2}))?$/.exec(input);
-  if (!match) return null;
-  const cents = Number(match[1]) * 100 + Number((match[2] || '').padEnd(2, '0'));
-  return Number.isSafeInteger(cents) && cents > 0 && cents <= 999999999 ? cents : null;
-}
 
 export function openSwileView({ document: doc, request, gallery = false, onClose }) {
   const controller = new AbortController();

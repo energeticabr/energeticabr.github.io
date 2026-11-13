@@ -1298,6 +1298,14 @@ test("inclui o relatório RHID depois de Contrato somente no menu de Recursos Hu
   assert.match(markup, /data-reply-id="action_hr_swile"[^>]*>[^]*?Swile/);
   assert.match(markup, /class="chat-choice-list swile-menu-entry">[^]*?data-reply-id="action_hr_swile"[^]*?data-reply-id="action_hr_swile_gallery"[^>]*>GALERIA SWILE<[^]*?<\/div>/);
   assert.match(markup, /data-reply-id="action_hr_swile"[^]*?data-reply-id="action_hr_gallery_holerite"[^>]*>[^]*?GALERIA HOLERITES/);
+  const document = new JSDOM(markup).window.document;
+  const entries = [...document.querySelectorAll('.swile-menu-entry > button')];
+  assert.deepEqual(entries.map(button => button.dataset.replyId), [
+    'action_hr_swile', 'action_hr_swile_gallery', 'action_hr_trancid', 'action_hr_trancid_gallery', 'action_hr_gallery_holerite',
+  ]);
+  assert.equal(entries[2].textContent, 'TRANCID');
+  assert.equal(entries[3].textContent, 'GALERIA TRANCID');
+  assert.equal(entries[3].classList.contains('chat-choice-button--gallery'), true);
 
   const unrelated = renderChatMarkup(signedInState({ messages: [{
     ...menu,
@@ -1306,6 +1314,7 @@ test("inclui o relatório RHID depois de Contrato somente no menu de Recursos Hu
   }] }));
   assert.doesNotMatch(unrelated, /action_rhid_attendance_report/);
   assert.doesNotMatch(unrelated, /action_hr_swile/);
+  assert.doesNotMatch(unrelated, /action_hr_trancid/);
   assert.doesNotMatch(unrelated, /action_hr_gallery_holerite/);
 });
 
