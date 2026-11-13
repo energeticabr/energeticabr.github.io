@@ -2845,19 +2845,30 @@ test("retoma a Galeria Pedidos depois do retorno de consentimento Microsoft no n
 });
 
 test("botão de holerites abre o PDF pela sessão e interrompe a leitura ao fechar a galeria", async t => {
-  let options, preview, receivedSignal, closed = 0;
+  let options, preview, receivedSignal, viewerSignal, closed = 0, abortFromViewer = false;
+  const originalAny = AbortSignal.any;
+  AbortSignal.any = undefined;
+  t.after(() => { AbortSignal.any = originalAny; });
   const h = makeHarness({
     hrPayrollGalleryDataFactory: async () => ({
       async loadPage() { return { rows: [] }; },
       async downloadPayslip(row, { signal }) {
         assert.equal(row.id, "9");
         receivedSignal = signal;
+        if (abortFromViewer) {
+          viewerSignal.abort();
+          assert.equal(signal.aborted, true);
+        }
         return new Blob(["%PDF-1.7"], { type: "application/pdf" });
       },
     }),
     hrPayrollGalleryFactory: async value => { options = value; return { async open() {}, destroy() { value.closePayslip(); } }; },
   });
-  h.native.previewMedia = async (source, fileName) => { preview = [fileName, await (await source({})).text()]; };
+  h.native.previewMedia = async (source, fileName, options) => {
+    viewerSignal = new AbortController();
+    preview = [fileName, await (await source({ signal: viewerSignal.signal })).text()];
+    if (abortFromViewer) options.onClose();
+  };
   h.native.closePreview = () => { closed++; };
   t.after(() => h.controller.stop());
   await h.controller.start();
@@ -2869,6 +2880,9 @@ test("botão de holerites abre o PDF pela sessão e interrompe a leitura ao fech
   options.closePayslip();
   assert.equal(receivedSignal.aborted, true);
   assert.equal(closed, 1);
+  abortFromViewer = true;
+  await options.openPayslip({ id: "9", pdfFileName: "Holerite-2026-11-09-253.pdf" });
+  assert.equal(receivedSignal.aborted, true);
 });
 
 test("retoma a galeria de folha escolhida após o retorno de consentimento Microsoft", async t => {

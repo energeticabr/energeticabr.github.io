@@ -42,6 +42,12 @@ export function filterPayrollRows(gallery, rows, filters = {}) {
     const searchable = COLUMNS[gallery].map(key => row[key]);
     if (gallery === 'FOLHAPGTO') searchable.push(day(row.DATA));
     if (gallery === 'IDFOLHA') searchable.push(row.STATUS);
+    if (gallery === 'HOLERITE') {
+      for (const field of ['SEMANA_INICIO', 'SEMANA_FIM', 'DATA_PAGAMENTO']) {
+        const date = day(row[field]);
+        if (date) searchable.push(date, date.split('-').reverse().join('/'));
+      }
+    }
     if (!matchesGallerySearch(filters.search, searchable)) return false;
     for (const key of COLUMNS[gallery]) {
       if (!filters[key]) continue;

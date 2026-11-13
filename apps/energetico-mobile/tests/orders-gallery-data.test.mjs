@@ -206,7 +206,7 @@ function repositoryHarness(overrides = {}) {
 test("holerites listam apenas folhas fechadas, da mais recente à mais antiga, e abrem apenas o PDF exato", async () => {
   const row = (id, supplier, date, status = "FECHADO") => ({ id: String(id), fields: {
     CHAVE: `${date}-${supplier}`, IDFORNECEDOR: supplier, FORNECEDOR: supplier === 253 ? "Edgar" : "José Geraldo",
-    SEMANA_INICIO: date, SITUACAO: status,
+    SEMANA_INICIO: `${date}T00:00:00Z`, SITUACAO: status,
   } });
   const rows = [row(1, 265, "2026-11-02"), row(2, 253, "2026-11-09"),
     row(3, 265, "2026-11-09", "EM PROCESSAMENTO"), row(4, 265, "2026-11-09")];
@@ -229,6 +229,8 @@ test("holerites listam apenas folhas fechadas, da mais recente à mais antiga, e
   const first = await data.loadFilteredPage("HOLERITE", { pageSize: 2 });
   assert.deepEqual(first.rows.map(row => row.id), ["4", "2"]);
   assert.equal(first.count, 3);
+  const week = await data.loadFilteredPage("HOLERITE", { filters: { search: "09/11/2026" } });
+  assert.deepEqual(week.rows.map(row => row.id), ["4", "2"]);
   const found = await data.loadFilteredPage("HOLERITE", { filters: { search: "jose geraldo" } });
   assert.deepEqual(found.rows.map(row => row.id), ["4", "1"]);
   const pdf = await data.downloadPayslip(found.rows[0]);

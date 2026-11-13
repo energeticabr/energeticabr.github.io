@@ -7247,8 +7247,12 @@ export function createAppController({
                 try {
                   await showMedia(async options => {
                     assertSession();
-                    const signal = options?.signal ? AbortSignal.any([options.signal, preview.signal]) : preview.signal;
-                    return data.downloadPayslip(row, { ...options, signal });
+                    const viewerSignal = options?.signal;
+                    const abort = () => preview.abort(viewerSignal.reason);
+                    if (viewerSignal?.aborted) abort();
+                    else viewerSignal?.addEventListener("abort", abort, { once: true });
+                    try { return await data.downloadPayslip(row, { ...options, signal: preview.signal }); }
+                    finally { viewerSignal?.removeEventListener("abort", abort); }
                   }, row.pdfFileName, { onClose: release, returnLabel: "Voltar à galeria de holerites" });
                 } catch (error) {
                   release();
