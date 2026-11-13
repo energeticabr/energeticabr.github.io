@@ -112,22 +112,25 @@ test('navigation pairs stay left and the batch post action follows payroll total
             return {tables:tables.map(table=>({label:table.getAttribute('aria-label'),
               rows:[...table.rows].map(row=>[...row.cells].map(cell=>cell.textContent)),
               overflow:table.scrollWidth > table.clientWidth+1 || [...table.querySelectorAll('th,td')].some(cell=>cell.scrollWidth > cell.clientWidth+1)})),
-              total:document.querySelector('[data-payroll-summary-total]')?.textContent,
+              totals:[...document.querySelectorAll('[data-payroll-summary-total] > div')].map(row=>
+                [...row.children].map(cell=>cell.textContent)),
+              totalsOverflow:[...document.querySelectorAll('[data-payroll-summary-total], [data-payroll-summary-total] > div')]
+                .some(row=>row.scrollWidth > row.clientWidth+1),
               files:[...document.querySelectorAll('.supplier-payroll-summary-files li')].map(file=>file.textContent),
               bodyOverflow:document.querySelector('.supplier-payroll-body').scrollWidth > document.querySelector('.supplier-payroll-body').clientWidth+1,
               post:document.querySelector('[data-payroll-post]')?.textContent};
           })()`);
           assert.equal(summary.tables.length, screen==='payroll-summary-long' ? 3 : 2);
-          assert.ok(!summary.bodyOverflow && summary.tables.every(table=>!table.overflow), 'resumo sem corte ou rolagem lateral em '+width);
+          assert.ok(!summary.bodyOverflow && !summary.totalsOverflow && summary.tables.every(table=>!table.overflow), 'resumo sem corte ou rolagem lateral em '+width);
           assert.deepEqual(summary.tables[0].rows, [['Etapa','ALVENARIA E ESTRUTURAS'],['IDFOLHA','5'],['Referência','10/2026']]);
           if(screen==='payroll-summary-long') {
             assert.deepEqual(summary.files, ['comprovante-de-pagamento-'+'referencia'.repeat(16)+'.pdf','segundo-comprovante.pdf']);
-            assert.match(summary.tables[1].rows[3][1],/DESCRIÇÃO EXTENSA/);
+            assert.match(summary.tables[1].rows.find(([label]) => label === 'Forma de pagamento')[1],/DESCRIÇÃO EXTENSA/);
             assert.equal(summary.tables[2].rows[2][1],'R$\u00a020,50');
-            assert.match(summary.total,/120,50/);
+            assert.deepEqual(summary.totals, [['Já pago','R$\u00a00,00'],['A pagar','R$\u00a0120,50'],['Total da folha','R$\u00a0120,50']]);
           } else {
-            assert.deepEqual(summary.tables[1].rows, [['Quantidade','1'],['Valor unitário','R$\u00a0100,00'],['Subtotal','R$\u00a0100,00'],['Forma de pagamento','PIX'],['Comprovantes','Sem comprovantes']]);
-            assert.match(summary.total,/100,00/);
+            assert.deepEqual(summary.tables[1].rows, [['Quantidade','1'],['Valor unitário','R$\u00a0100,00'],['Subtotal','R$\u00a0100,00'],['Situação','A pagar'],['Forma de pagamento','PIX'],['Comprovantes','Sem comprovantes']]);
+            assert.deepEqual(summary.totals, [['Já pago','R$\u00a00,00'],['A pagar','R$\u00a0100,00'],['Total da folha','R$\u00a0100,00']]);
           }
           assert.equal(summary.post,'Postar');
           if(screen==='payroll-summary' && width===390 && process.env.PAYROLL_SUMMARY_SCREENSHOT) {
