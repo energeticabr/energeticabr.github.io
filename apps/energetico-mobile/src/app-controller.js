@@ -6464,10 +6464,14 @@ export function createAppController({
   }
 
   async function openSwilePanel() {
-    const { activeFlow } = store.getState();
-    const inRhMenu = activeFlow?.id === 'menu:choosing_action'
-      && /\brecursos\s+humanos\b/.test(normalizedChoiceText(activeFlow.title));
-    if (!account || stopped || sessionStatus !== 'authenticated' || flowBusy() || (activeFlow && !inRhMenu)) return false;
+    const canOpen = () => {
+      const { activeFlow } = store.getState();
+      const inRhMenu = activeFlow?.id === 'menu:choosing_action'
+        && /\brecursos\s+humanos\b/.test(normalizedChoiceText(activeFlow.title));
+      return Boolean(account) && !stopped && sessionStatus === 'authenticated' && !flowBusy()
+        && (!activeFlow || inRhMenu);
+    };
+    if (!canOpen()) return false;
     if (swilePanel || swileOpening) return true;
     closeGalleryOverlays();
     const owner = account, revision = sessionRevision, opening = {};
@@ -6475,7 +6479,7 @@ export function createAppController({
     const current = () => !stopped && account === owner && sessionRevision === revision && sessionStatus === 'authenticated';
     try {
       const { openSwileView } = await import('./ui/swile-view.js');
-      if (!current() || swileOpening !== opening) return false;
+      if (!current() || swileOpening !== opening || !canOpen()) return false;
       swilePanel = openSwileView({
         document: globalThis.document,
         request: (operation, payload, options) => {
