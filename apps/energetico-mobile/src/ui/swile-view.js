@@ -330,13 +330,14 @@ export function openSwileView({ document: doc, request, gallery = false, onClose
         top.append(make('strong', line.name), make('strong', reais(line.amountCents)));
         const fields = make('dl');
         for (const [label, value] of [
-          ['Cartão', line.cardNumber || 'Não informado'],
+          ['Nº do cartão', line.cardNumber || 'Não informado'],
           ['Status da carga', statuses[line.status] || line.status || 'Não informado'],
           ['Data prevista', dateLabel(line.creditDate) || 'Não informada'],
           ['Data efetuada', dateLabel(line.creditedDate) || 'Não informada'],
         ]) {
           fields.append(make('dt', label), make('dd', value));
         }
+        if (line.orderStatus) fields.append(make('dt', 'Status do pedido'), make('dd', statuses[line.orderStatus] || line.orderStatus));
         row.append(top, fields);
         rows.append(row);
       }

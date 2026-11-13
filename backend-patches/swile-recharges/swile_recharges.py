@@ -29,6 +29,7 @@ ORIGINS = {
 }
 SP = timezone(timedelta(hours=-3))
 CLOSED_ORDER_STATUSES = frozenset({'DRAFT', 'APPROVED', 'CANCELED', 'CREATION_ERROR'})
+MIXED_CREDIT_STATUSES = frozenset({'PROCESSING', 'APPROVED_PARTIALLY', 'PROCESSED_ERROR', 'PROCESSING_CANCEL'})
 
 
 class SwileError(Exception):
@@ -425,12 +426,15 @@ class Service:
             if len(employees) < (order.get('totalEmployees') or 0):
                 result['itemsIncomplete'] = True
             for employee in employees:
-                result['items'].append({
+                line = {
                     'name': employee['name'],
                     'amountCents': sum(cents(value) for value in employee['items'].values()),
-                    'status': None if status in ('APPROVED_PARTIALLY', 'PROCESSED_ERROR') else status,
+                    'status': status,
                     'creditDate': scheduled_date(order.get('creditDate')) or group_date,
-                })
+                }
+                if status in MIXED_CREDIT_STATUSES:
+                    line.update(status=None, orderStatus=status)
+                result['items'].append(line)
         return result
 
 

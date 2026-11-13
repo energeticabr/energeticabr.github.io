@@ -86,7 +86,7 @@ test('Swile gallery opens a pending order and shows the credit data per person',
     if (!payload.orderCode) return [order];
     return { ...order, items: [
       { name: 'Pessoa A', amountCents: 12505, status: 'APPROVED', creditDate: '2026-11-17' },
-      { name: 'Pessoa B', amountCents: 10000, status: 'WAITING_PAYMENT', creditDate: '2026-11-18' },
+      { name: 'Pessoa B', amountCents: 10000, status: null, orderStatus: 'APPROVED_PARTIALLY', creditDate: '2026-11-18' },
     ] };
   } });
   t.after(() => { view.close(); window.close(); });
@@ -96,8 +96,8 @@ test('Swile gallery opens a pending order and shows the credit data per person',
   assert.match(document.querySelector('dialog').textContent, /Pedidos em suspenso.*SWO123.*225,05/s);
   findButton('SWO123').click();
   await settle();
-  assert.match(document.querySelector('dialog').textContent, /Pessoa A.*125,05.*Cartão.*Não informado.*Crédito concluído.*17\/11\/2026.*Data efetuada.*Não informada/s);
-  assert.match(document.querySelector('dialog').textContent, /Pessoa B.*100,00.*Aguardando pagamento.*18\/11\/2026/s);
+  assert.match(document.querySelector('dialog').textContent, /Pessoa A.*125,05.*Nº do cartão.*Não informado.*Crédito concluído.*17\/11\/2026.*Data efetuada.*Não informada/s);
+  assert.match(document.querySelector('dialog').textContent, /Pessoa B.*100,00.*Status da cargaNão informado.*18\/11\/2026.*Status do pedidoCrédito parcial/s);
   findButton('Voltar aos pedidos').click();
   await settle();
   assert.deepEqual(calls, [

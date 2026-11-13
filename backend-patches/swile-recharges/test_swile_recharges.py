@@ -209,7 +209,8 @@ class ServiceTests(unittest.TestCase):
             'orderCode': 'PARTIAL', 'status': 'APPROVED_PARTIALLY', 'creditCents': 22505, 'creditDate': '2026-12-01',
             'items': [
                 {'name': 'Pessoa A', 'amountCents': 12505, 'status': 'APPROVED', 'creditDate': '2026-12-01'},
-                {'name': 'Pessoa B', 'amountCents': 10000, 'status': None, 'creditDate': '2026-12-02'},
+                {'name': 'Pessoa B', 'amountCents': 10000, 'status': None, 'orderStatus': 'APPROVED_PARTIALLY',
+                 'creditDate': '2026-12-02'},
             ],
         }, result['swile'])
 
