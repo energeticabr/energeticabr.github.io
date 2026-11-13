@@ -16,7 +16,7 @@ function displayText(value, font) {
   }).join("");
 }
 
-export async function buildSupplierHoleritePdf({ supplier, date, week, lines, total, paidTotal, provisionTotal }, { logoBytes }) {
+export async function buildSupplierHoleritePdf({ supplier, date, week, lines, total }, { logoBytes }) {
   const document = await PDFDocument.create();
   document.setTitle("Holerite semanal");
   const regular = await document.embedFont(StandardFonts.Helvetica);
@@ -47,23 +47,21 @@ export async function buildSupplierHoleritePdf({ supplier, date, week, lines, to
     text("Semana " + dateLabel(week.start) + " a " + dateLabel(week.end), margin, top - 53, { size: 9 });
     text("Data da folha  " + dateLabel(date), 382, top - 53, { size: 9 });
 
-    const columns = [37, 235, 291, 378, 465];
-    const widths = [191, 50, 80, 80, 91];
+    const columns = [37, 195, 245, 333, 421];
+    const widths = [151, 44, 81, 81, 137];
     const head = top - 76;
     page.drawRectangle({ x: margin, y: head - 6, width: right - margin, height: 19, color: light });
-    ["Rubrica", "Qtd.", "Valor unitário", "Subtotal", "Situação"].forEach((label, index) =>
+    ["Rubrica", "Qtd.", "Valor unitário", "Subtotal", "Forma de pgto."].forEach((label, index) =>
       text(label, columns[index], head, { font: bold, size: 9 }));
     lines.forEach((entry, row) => {
       const y = head - 21 - row * 17;
       const cells = [entry.label, quantity.format(entry.quantity), money(entry.unitValue),
-        money(entry.total), entry.alreadyPaid ? "Já pago" : "Provisionado"];
+        money(entry.total), entry.formaPgto || "—"];
       cells.forEach((value, index) => text(value, columns[index], y, { size: 9, width: widths[index] }));
       line(margin, right, y - 5);
     });
     const totals = head - 22 - lines.length * 17;
     text("Total  " + money(total), margin, totals, { size: 11, font: bold, width: 174 });
-    text("Já pago  " + money(paidTotal), 213, totals, { size: 10, width: 171 });
-    text("Provisionado  " + money(provisionTotal), 392, totals, { size: 10, width: 173 });
 
     const signature = top - 348;
     line(margin, 271, signature, ink);

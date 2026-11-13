@@ -411,7 +411,7 @@ export function createSupplierPayrollData({
     const { buildSupplierHoleritePdf } = await import("./supplier-holerite-pdf.js");
     const fileName = "Holerite-" + token + ".pdf";
     const logoBytes = await loadHoleriteLogo();
-    const pdf = new File([await buildSupplierHoleritePdf({ ...draft, week, lines, paidTotal, provisionTotal }, { logoBytes })],
+    const pdf = new File([await buildSupplierHoleritePdf({ ...draft, week, lines }, { logoBytes })],
       fileName, { type: "application/pdf" });
     const receipts = draft.lines.filter(line => line.alreadyPaid).flatMap(line => line.files.map((file, index) => ({
       file, name: line.rubric + "-" + (index + 1) + "-" + file.name.slice(-150),

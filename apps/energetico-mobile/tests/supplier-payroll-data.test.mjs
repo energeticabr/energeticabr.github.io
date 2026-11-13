@@ -2,7 +2,6 @@ import test from "node:test";
 import assert from "node:assert/strict";
 import { readFile } from "node:fs/promises";
 import * as production from "../src/chat/supplier-payroll-data.js";
-import { PDFDocument } from "pdf-lib";
 const journals=new WeakMap();
 const module={...production,createSupplierPayrollData(options){
   if(options.repository){
@@ -287,31 +286,43 @@ export function fixture() {
     },
   };
 }
-test("fechamento misto guarda ambas as rubricas e cria provisão somente para a pendente", async () => {
+test("fechamento misto guarda as rubricas e cria provisão somente para a pendente", async () => {
   const f = fixture();
   f.draft.lines[0].alreadyPaid = true;
   f.draft.lines[0].account = null;
+  f.draft.lines.push({ rubric: "transport", quantity: "5", unitValue: "11",
+    alreadyPaid: true, account: { id: "13", label: "SWILE" }, files: [] });
   const upload = f.repository.uploadAttachment;
-  let pages;
+  let pdfBytes;
   f.repository.uploadAttachment = async (...args) => {
-    if (args[1] === "HOLERITE") {
-      const pdf = await PDFDocument.load(await args[3].arrayBuffer());
-      pages = pdf.getPageCount();
-    }
+    if (args[1] === "HOLERITE") pdfBytes = new Uint8Array(await args[3].arrayBuffer());
     return upload(...args);
   };
   const progress = { operationId: "weekly-mixed" };
   const posted = await f.data.post(f.draft, progress, undefined, { weekly: true });
-  assert.equal(pages, 1);
+  const { getDocument } = await import("pdfjs-dist/legacy/build/pdf.mjs");
+  const pdf = getDocument({ data: pdfBytes, useSystemFonts: true });
+  try {
+    const document = await pdf.promise;
+    assert.equal(document.numPages, 1);
+    const page = await document.getPage(1);
+    const text = (await page.getTextContent()).items.map(item => item.str).join(" ");
+    assert.doesNotMatch(text, /Situação|Já pago|Provisionado/i);
+    assert.equal((text.match(/Forma de pgto\./g) || []).length, 2);
+    assert.equal((text.match(/Salário\s+2\s+R\$ 100,50\s+R\$ 201,00\s+—/g) || []).length, 2);
+    assert.equal((text.match(/Vale alimentação\s+3\s+R\$ 10,00\s+R\$ 30,00\s+PIX/g) || []).length, 2);
+    assert.equal((text.match(/Vale transporte\s+5\s+R\$ 11,00\s+R\$ 55,00\s+SWILE/g) || []).length, 2);
+    assert.equal((text.match(/Total\s+R\$ 286,00/g) || []).length, 2);
+  } finally { await pdf.destroy(); }
   assert.match(posted.holerite.fileName, /^Holerite-2026-09-28-1\.pdf$/);
   assert.equal(f.rows.HOLERITE.length, 1);
   const saved = f.decode("HOLERITE", f.rows.HOLERITE[0].fields);
   assert.equal(saved.SITUACAO, "FECHADO");
-  assert.equal(saved.TOTAL, 231);
-  assert.equal(saved.TOTAL_JA_PAGO, 201);
+  assert.equal(saved.TOTAL, 286);
+  assert.equal(saved.TOTAL_JA_PAGO, 256);
   assert.equal(saved.TOTAL_PROVISOES, 30);
-  assert.deepEqual(JSON.parse(saved.RUBRICAS).map(row => [row.rubrica, row.alreadyPaid, row.idFolha]),
-    [["salary", true, null], ["meal", false, 9]]);
+  assert.deepEqual(JSON.parse(saved.RUBRICAS).map(row => [row.rubrica, row.alreadyPaid, row.idFolha, row.formaPgto]),
+    [["salary", true, null, null], ["meal", false, 9, "PIX"], ["transport", true, null, "SWILE"]]);
   assert.equal(f.rows.LANCAMENTOS.length, 0);
   assert.equal(f.rows.DESCRITIVOPROVISAO.length, 1);
   assert.equal(f.rows["PROVISÃO PGTOS"].length, 1);
@@ -942,7 +953,7 @@ test('weekly payroll keeps tax in its selected sheet and out of the payslip',asy
     const page=await doc.getPage(1);
     const text=(await page.getTextContent()).items.map(item=>item.str).join(' ');
     assert.doesNotMatch(text,/INSS|FGTS/);
-    assert.match(text,/Provisionado\s+R\$ 201,00/);
+    assert.match(text,/R\$ 201,00\s+PIX\s+Total\s+R\$ 201,00/);
     assert.equal((text.match(/Assinatura do responsável pela empresa/g) || []).length,2);
     assert.equal((text.match(/Assinatura do funcionário/g) || []).length,2);
     const {fnArray}=await page.getOperatorList();
