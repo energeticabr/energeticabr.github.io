@@ -2885,6 +2885,35 @@ test("botão de holerites abre o PDF pela sessão e interrompe a leitura ao fech
   assert.equal(receivedSignal.aborted, true);
 });
 
+test("PDF da data baixa o consolidado da sessão sem abrir o visualizador", async t => {
+  let options;
+  const exports = [];
+  const h = makeHarness({
+    hrPayrollGalleryDataFactory: async () => ({
+      async loadPage() { return { rows: [] }; },
+      async downloadPayslip() { assert.fail("Use o PDF da data"); },
+      async downloadPayslipsByDate(date) {
+        assert.equal(date, "2026-11-13");
+        return new Blob(["%PDF-1.7"], { type: "application/pdf" });
+      },
+    }),
+    hrPayrollGalleryFactory: async value => { options = value; return { async open() {}, destroy() {} }; },
+  });
+  h.native.previewMedia = () => assert.fail("O consolidado é baixado diretamente");
+  h.native.exportMedia = async (blob, name, preferences) => {
+    exports.push([await blob.text(), name, preferences]);
+    return "downloaded";
+  };
+  t.after(() => h.controller.stop());
+  await h.controller.start();
+  await h.view.emit("select-reply", { replyId: "action_hr_gallery_holerite", label: "GALERIA HOLERITES" });
+  const request = new AbortController();
+  assert.equal(await options.downloadDatePayslips("2026-11-13", { signal: request.signal }), "downloaded");
+  request.abort();
+  assert.equal(await options.downloadDatePayslips("2026-11-13", { signal: request.signal }), null);
+  assert.deepEqual(exports, [["%PDF-1.7", "Holerites-2026-11-13.pdf", { download: true, signal: request.signal }]]);
+});
+
 test("retoma a galeria de folha escolhida após o retorno de consentimento Microsoft", async t => {
   for (const [action, gallery] of [
     ["action_hr_gallery_idfolha", "IDFOLHA"],

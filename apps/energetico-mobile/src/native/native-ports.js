@@ -344,16 +344,30 @@ export function createNativePorts({
     }
   }
 
-  async function exportMedia(blob, fileName) {
+  async function exportMedia(blob, fileName, { download = false, signal } = {}) {
     const safeName = String(fileName || "arquivo")
       .replace(/[\\/:*?"<>|\r\n]/g, "-")
       .slice(0, 180);
+    if (signal?.aborted) return null;
+    const data = await blobToBase64(blob);
+    if (signal?.aborted) return null;
+    const path = `shared/${randomUUID()}/${safeName}`;
     const written = await filesystem.writeFile({
-      path: `shared/${randomUUID()}/${safeName}`,
-      data: await blobToBase64(blob),
+      path,
+      data,
       directory: cacheDirectory,
       recursive: true,
     });
+    if (download) {
+      try {
+        if (signal?.aborted) return null;
+        const result = await documentPicker.savePdf({ uri: written.uri });
+        return result?.saved === true ? "downloaded" : null;
+      } finally {
+        try { await filesystem.deleteFile({ path, directory: cacheDirectory }); }
+        catch { /* The temporary file remains in the app cache. */ }
+      }
+    }
     try {
       await share.share({ title: safeName, files: [written.uri] });
     } catch (error) {

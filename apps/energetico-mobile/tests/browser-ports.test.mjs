@@ -63,6 +63,12 @@ test("faz download local quando a folha não aceita arquivos", async () => {
   assert.deepEqual(calls, ["create", "append", "click", "remove", "revoke:blob:download"]);
   assert.equal(anchor.download, "relatório.pdf");
   assert.equal(anchor.href, "blob:download");
+  const sharingPorts = createBrowserPorts({ documentRef, urlApi, navigatorRef: {
+    canShare: () => true,
+    share: () => assert.fail("Download explícito deve salvar o arquivo"),
+  } });
+  assert.equal(await sharingPorts.exportMedia(new Blob(["pdf"]), "Holerites.pdf", { download: true }), "downloaded");
+  assert.equal(anchor.download, "Holerites.pdf");
 });
 
 test("baixa o arquivo quando o navegador perde a permissão temporária de compartilhar", async () => {

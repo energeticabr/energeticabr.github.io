@@ -13,22 +13,38 @@ test("holerites exibem funcionário, semana e PDF de cada registro, sem ações 
   const dom = new JSDOM("<main id='root'></main>");
   const root = dom.window.document.querySelector("#root");
   const opened = [];
+  const downloaded = [];
+  const rows = [
+    { id: "17", FORNECEDOR: "EDGAR", SEMANA_INICIO: "2026-11-09", SEMANA_FIM: "2026-11-15", TOTAL: "285", pdfFileName: "Holerite-2026-11-09-253.pdf" },
+    { id: "18", FORNECEDOR: "FELICIANO", SEMANA_INICIO: "2026-11-09", SEMANA_FIM: "2026-11-15", TOTAL: "280", pdfFileName: "Holerite-2026-11-09-260.pdf" },
+  ];
   const gallery = createHrPayrollGallery({
     root, gallery: "HOLERITE",
-    request: async kind => response(kind, 1, [
-      { id: "18", FORNECEDOR: "FELICIANO", SEMANA_INICIO: "2026-11-09", SEMANA_FIM: "2026-11-15", TOTAL: "280", pdfFileName: "Holerite-2026-11-09-260.pdf" },
-      { id: "17", FORNECEDOR: "EDGAR", SEMANA_INICIO: "2026-11-09", SEMANA_FIM: "2026-11-15", TOTAL: "285", pdfFileName: "Holerite-2026-11-09-253.pdf" },
-    ]),
+    request: async (kind, _page, _size, _cursor, options) => {
+      assert.equal(options.groupByDate, true);
+      return { ...response(kind, 1, rows), dateGroups: [{ date: "2026-11-13", rows }] };
+    },
     openPayslip: row => { opened.push([row.id, row.pdfFileName]); },
+    downloadDatePayslips: date => { downloaded.push(date); },
     loadEditor: () => assert.fail("read only"), deleteItem: () => assert.fail("read only"),
   });
   t.after(() => { gallery.destroy(); dom.window.close(); });
   await gallery.open();
+  const group = root.querySelector(".hr-payslip-date");
+  const toggle = group.querySelector("[data-action=toggle-payslip-date]");
+  assert.match(toggle.textContent, /13\/11\/2026/);
+  assert.equal(toggle.getAttribute("aria-expanded"), "false");
+  group.querySelector("[data-action=download-payslip-date]").click();
+  await Promise.resolve();
+  assert.deepEqual(downloaded, ["2026-11-13"]);
+  assert.equal(toggle.getAttribute("aria-expanded"), "false");
+  toggle.click();
+  assert.equal(toggle.getAttribute("aria-expanded"), "true");
   const cards = [...root.querySelectorAll(".hr-gallery-card")];
-  assert.match(cards[0].textContent, /FELICIANO[^]*09\/11\/2026[^]*15\/11\/2026[^]*280,00/);
-  assert.match(cards[1].textContent, /EDGAR/);
+  assert.match(cards[0].textContent, /EDGAR/);
+  assert.match(cards[1].textContent, /FELICIANO[^]*09\/11\/2026[^]*15\/11\/2026[^]*280,00/);
   assert.equal(root.querySelector("[data-gallery-action], [data-action=create-payroll-record]"), null);
-  cards[1].querySelector("[data-action=open-payslip-pdf]").click();
+  cards[0].querySelector("[data-action=open-payslip-pdf]").click();
   await Promise.resolve();
   assert.deepEqual(opened, [["17", "Holerite-2026-11-09-253.pdf"]]);
 });
