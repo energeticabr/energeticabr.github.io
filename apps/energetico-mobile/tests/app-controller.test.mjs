@@ -2844,16 +2844,45 @@ test("retoma a Galeria Pedidos depois do retorno de consentimento Microsoft no n
   assert.equal(opens, 1);
 });
 
+test("botão de holerites abre o PDF pela sessão e interrompe a leitura ao fechar a galeria", async t => {
+  let options, preview, receivedSignal, closed = 0;
+  const h = makeHarness({
+    hrPayrollGalleryDataFactory: async () => ({
+      async loadPage() { return { rows: [] }; },
+      async downloadPayslip(row, { signal }) {
+        assert.equal(row.id, "9");
+        receivedSignal = signal;
+        return new Blob(["%PDF-1.7"], { type: "application/pdf" });
+      },
+    }),
+    hrPayrollGalleryFactory: async value => { options = value; return { async open() {}, destroy() { value.closePayslip(); } }; },
+  });
+  h.native.previewMedia = async (source, fileName) => { preview = [fileName, await (await source({})).text()]; };
+  h.native.closePreview = () => { closed++; };
+  t.after(() => h.controller.stop());
+  await h.controller.start();
+  await h.view.emit("select-reply", { replyId: "action_hr_gallery_holerite", label: "GALERIA HOLERITES" });
+  assert.equal(options.gallery, "HOLERITE");
+  await options.openPayslip({ id: "9", pdfFileName: "Holerite-2026-11-09-253.pdf" });
+  assert.deepEqual(preview, ["Holerite-2026-11-09-253.pdf", "%PDF-1.7"]);
+  assert.equal(receivedSignal.aborted, false);
+  options.closePayslip();
+  assert.equal(receivedSignal.aborted, true);
+  assert.equal(closed, 1);
+});
+
 test("retoma a galeria de folha escolhida após o retorno de consentimento Microsoft", async t => {
   for (const [action, gallery] of [
     ["action_hr_gallery_idfolha", "IDFOLHA"],
     ["action_hr_gallery_folhapgto", "FOLHAPGTO"],
+    ["action_hr_gallery_holerite", "HOLERITE"],
   ]) {
     let opened = "";
     const h = makeHarness({
       hrPayrollGalleryDataFactory: async () => ({
         async loadPage() { return { rows: [] }; },
         async loadPaymentsForPayrollId() { return []; },
+        async downloadPayslip() { return new Blob(); },
       }),
       hrPayrollGalleryFactory: async options => ({ async open() { opened = options.gallery; }, destroy() {} }),
     });

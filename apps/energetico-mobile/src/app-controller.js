@@ -7193,7 +7193,7 @@ export function createAppController({
   }
 
   async function openHrPayrollGallery(gallery) {
-    if (!["IDFOLHA", "FOLHAPGTO"].includes(gallery) || !account || stopped || flowBusy()) return false;
+    if (!["IDFOLHA", "FOLHAPGTO", "HOLERITE"].includes(gallery) || !account || stopped || flowBusy()) return false;
     disposeSupplierPayrollReport();
     disposeSacPathologiesReport();
     disposeDepreciationReport();
@@ -7213,7 +7213,9 @@ export function createAppController({
       try {
         if (hrPayrollGalleryName !== gallery) {
           disposeHrPayrollGallery();
-          const resumeAction = gallery === "IDFOLHA" ? "action_hr_gallery_idfolha" : "action_hr_gallery_folhapgto";
+          const isPayslip = gallery === "HOLERITE";
+          const resumeAction = isPayslip ? "action_hr_gallery_holerite"
+            : gallery === "IDFOLHA" ? "action_hr_gallery_idfolha" : "action_hr_gallery_folhapgto";
           const data = await hrPayrollGalleryDataFactory({
             tokenProvider: ordersGalleryTokenProvider(assertSession, resumeAction),
             assertSession,
@@ -7221,13 +7223,42 @@ export function createAppController({
           if (!openingIsCurrent()) return false;
           assertSession();
           if (typeof data?.loadPage !== "function"
-            || (gallery === "IDFOLHA" && typeof data?.loadPaymentsForPayrollId !== "function")) {
+            || (gallery === "IDFOLHA" && typeof data?.loadPaymentsForPayrollId !== "function")
+            || (isPayslip && typeof data?.downloadPayslip !== "function")) {
             throw new Error("A consulta das listas de folha do SharePoint não está disponível.");
           }
           hrPayrollGalleryData = data;
           let panel;
+          let payslipPreview = null;
+          function closePayslip() {
+            if (!payslipPreview) return;
+            payslipPreview.abort();
+            payslipPreview = null;
+            native.closePreview?.();
+          }
           panel = await hrPayrollGalleryFactory({
             gallery,
+            ...(isPayslip ? {
+              openPayslip: async row => {
+                assertSession();
+                if (payslipPreview || hrPayrollGallery !== panel) return;
+                const preview = payslipPreview = new AbortController();
+                const release = () => { if (payslipPreview === preview) payslipPreview = null; };
+                try {
+                  await showMedia(async options => {
+                    assertSession();
+                    const signal = options?.signal ? AbortSignal.any([options.signal, preview.signal]) : preview.signal;
+                    return data.downloadPayslip(row, { ...options, signal });
+                  }, row.pdfFileName, { onClose: release, returnLabel: "Voltar à galeria de holerites" });
+                } catch (error) {
+                  release();
+                  if (!preview.signal.aborted) throw error;
+                } finally {
+                  if (!native.previewMedia) release();
+                }
+              },
+              closePayslip,
+            } : {}),
             ...(gallery === 'IDFOLHA' ? payrollReceiptTrayAccess(assertSession) : {}),
             onCreate: gallery === 'IDFOLHA' ? () => { assertSession(); return openPayrollSheetCreate(); } : undefined,
             loadPaymentOptions: gallery === 'FOLHAPGTO' ? async options => {
@@ -11915,6 +11946,7 @@ export function createAppController({
       if (command.replyId === "action_hr_gallery_idfolha") return openHrPayrollGallery("IDFOLHA");
       if (command.replyId === "action_hr_create_idfolha") return openPayrollSheetCreate();
       if (command.replyId === "action_hr_gallery_folhapgto") return openHrPayrollGallery("FOLHAPGTO");
+      if (command.replyId === "action_hr_gallery_holerite") return openHrPayrollGallery("HOLERITE");
       if (command.replyId === 'action_hr_swile') return openSwilePanel();
       const state = store.getState();
       syncEpiDeliverySnapshot(state.activeFlow);
@@ -12489,6 +12521,7 @@ export function createAppController({
     else if (pendingAction === "action_hr_gallery_idfolha") await openHrPayrollGallery("IDFOLHA");
     else if (pendingAction === "action_hr_create_idfolha") await openPayrollSheetCreate();
     else if (pendingAction === "action_hr_gallery_folhapgto") await openHrPayrollGallery("FOLHAPGTO");
+    else if (pendingAction === "action_hr_gallery_holerite") await openHrPayrollGallery("HOLERITE");
     else if (REGISTRATION_GALLERY_KIND[pendingAction]) await openRegistrationGallery(REGISTRATION_GALLERY_KIND[pendingAction], pendingAction);
     if (!pendingAction) { void trancidAutoReminder.refresh(); void ddaAutoReminder.refresh(); }
   }

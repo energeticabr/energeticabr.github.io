@@ -35,6 +35,7 @@
 .hr-gallery-button { min-height: 44px; width: auto; padding: 9px 13px; border: 1px solid #315d76; border-radius: 10px; color: #123c68; background: #fff; font: inherit; font-weight: 700; line-height: 1.2; overflow-wrap: anywhere; cursor: pointer; touch-action: manipulation; }
 .hr-gallery-button:hover:not(:disabled) { background: #eaf4f8; }
 .hr-gallery-button:disabled { opacity: .5; cursor: default; }
+.hr-gallery-card--payslip .hr-gallery-payslip-pdf { width: 44px; padding: 4px; font-size: .78rem; }
 .hr-gallery-header .hr-gallery-button { color: #fff; background: transparent; border-color: #ffffff85; }
 .hr-gallery-header.hr-gallery-header--add-payment.screen-navigation-header { grid-template-columns: auto minmax(0, 1fr) auto; }
 .hr-gallery-header .hr-gallery-add-payment { flex: 0 0 44px; width: 44px; height: 44px; padding: 0; background: #fff; color: #218443; border-color: #218443; font-size: 2rem; font-weight: 800; line-height: 1; }

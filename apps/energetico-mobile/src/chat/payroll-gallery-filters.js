@@ -2,6 +2,7 @@ import { matchesGallerySearch } from './gallery-quick-search.js';
 
 const COLUMNS = {
   IDFOLHA: ['id', 'FORNECEDOR', 'MESREFERENCIA'],
+  HOLERITE: ['id', 'FORNECEDOR', 'FILIAL', 'SEMANA_INICIO', 'SEMANA_FIM', 'DATA_PAGAMENTO'],
   FOLHAPGTO: ['id', 'FORNECEDOR', 'TIPOPGTO', 'VALORUNITARIO', 'QTD', 'DATA', 'IDFOLHA', 'IDLANCAMENTO'],
 };
 const fold = value => String(value ?? '').normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLocaleLowerCase('pt-BR').trim();
@@ -24,7 +25,7 @@ export function validatePayrollFilters(gallery, filters = {}) {
   if (!columns || !filters || typeof filters !== 'object' || Array.isArray(filters)) throw new RangeError('Filtros da galeria inválidos.');
   const allowed = new Set(['search', ...columns, 'VALORUNITARIOmin', 'VALORUNITARIOmax', 'QTDmin', 'QTDmax', 'DATAfrom', 'DATAto']);
   for (const [key,value] of Object.entries(filters)) {
-    if (!allowed.has(key) || (gallery === 'IDFOLHA' && !['search',...columns].includes(key))
+    if (!allowed.has(key) || (gallery !== 'FOLHAPGTO' && !['search',...columns].includes(key))
       || typeof value !== 'string' || value.length > 500) throw new RangeError('Filtro da galeria inválido.');
     if (!value) continue;
     if (['id','IDFOLHA','IDLANCAMENTO'].includes(key) && !/^\d+$/.test(value)) throw new RangeError('Informe um ID numérico no filtro.');
@@ -58,6 +59,7 @@ export function filterPayrollRows(gallery, rows, filters = {}) {
   });
 }
 export function payrollFilterOptions(gallery, rows) {
-  return Object.fromEntries((gallery === 'IDFOLHA' ? ['FORNECEDOR','MESREFERENCIA'] : ['FORNECEDOR','TIPOPGTO']).map(key =>
+  const keys = gallery === 'HOLERITE' ? ['FORNECEDOR'] : gallery === 'IDFOLHA' ? ['FORNECEDOR','MESREFERENCIA'] : ['FORNECEDOR','TIPOPGTO'];
+  return Object.fromEntries(keys.map(key =>
     [key, [...new Set(rows.map(row=>String(row[key] ?? '').trim()).filter(Boolean))].sort((a,b)=>a.localeCompare(b,'pt-BR',{numeric:true}))]));
 }

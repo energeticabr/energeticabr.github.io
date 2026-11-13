@@ -9,6 +9,30 @@ function response(gallery, page = 1, rows = [], hasMore = false) {
   return { gallery, page, pageSize: 25, fields: [], rows, hasMore, nextCursor: hasMore ? "opaque-next-page" : null };
 }
 
+test("holerites exibem funcionário, semana e PDF de cada registro, sem ações de alteração", async t => {
+  const dom = new JSDOM("<main id='root'></main>");
+  const root = dom.window.document.querySelector("#root");
+  const opened = [];
+  const gallery = createHrPayrollGallery({
+    root, gallery: "HOLERITE",
+    request: async kind => response(kind, 1, [
+      { id: "18", FORNECEDOR: "FELICIANO", SEMANA_INICIO: "2026-11-09", SEMANA_FIM: "2026-11-15", TOTAL: "280", pdfFileName: "Holerite-2026-11-09-260.pdf" },
+      { id: "17", FORNECEDOR: "EDGAR", SEMANA_INICIO: "2026-11-09", SEMANA_FIM: "2026-11-15", TOTAL: "285", pdfFileName: "Holerite-2026-11-09-253.pdf" },
+    ]),
+    openPayslip: row => { opened.push([row.id, row.pdfFileName]); },
+    loadEditor: () => assert.fail("read only"), deleteItem: () => assert.fail("read only"),
+  });
+  t.after(() => { gallery.destroy(); dom.window.close(); });
+  await gallery.open();
+  const cards = [...root.querySelectorAll(".hr-gallery-card")];
+  assert.match(cards[0].textContent, /FELICIANO[^]*09\/11\/2026[^]*15\/11\/2026[^]*280,00/);
+  assert.match(cards[1].textContent, /EDGAR/);
+  assert.equal(root.querySelector("[data-gallery-action], [data-action=create-payroll-record]"), null);
+  cards[1].querySelector("[data-action=open-payslip-pdf]").click();
+  await Promise.resolve();
+  assert.deepEqual(opened, [["17", "Holerite-2026-11-09-253.pdf"]]);
+});
+
 test('payroll mutation invalidates a pending background snapshot and refreshes saved values', async t => {
   const dom = new JSDOM('<main id="root"></main>');
   const document = dom.window.document;

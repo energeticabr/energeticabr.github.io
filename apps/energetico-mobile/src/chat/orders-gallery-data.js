@@ -368,6 +368,11 @@ export async function loadDescriptionGroupWithProgress(context, rawId, options =
 }
 
 const HR_PAYROLL_GALLERIES = Object.freeze({
+  HOLERITE: Object.freeze({
+    listName: "HOLERITE",
+    fields: Object.freeze(["FORNECEDOR", "FILIAL", "SEMANA_INICIO", "SEMANA_FIM", "DATA_PAGAMENTO", "TOTAL"]
+      .map(name => [name, [name]])),
+  }),
   IDFOLHA: Object.freeze({
     listName: "IDFOLHA",
     fields: Object.freeze([
@@ -397,6 +402,13 @@ function hrPayrollFieldValue(fields, aliases) {
   const accepted = new Set(aliases.map(fieldKey));
   const entry = Object.entries(fields || {}).find(([name, value]) => accepted.has(fieldKey(name)) && value != null);
   return entry ? scalar(entry[1]) : undefined;
+}
+
+function payslipPdfName(fields) {
+  const week = String(fields?.SEMANA_INICIO ?? "").slice(0, 10);
+  const supplier = String(fields?.IDFORNECEDOR ?? "");
+  const key = `${week}-${supplier}`;
+  return /^\d{4}-\d{2}-\d{2}-[1-9]\d*$/.test(key) && fields?.CHAVE === key ? `Holerite-${key}.pdf` : "";
 }
 
 export function createHrPayrollGalleryData({
@@ -473,7 +485,8 @@ export function createHrPayrollGalleryData({
     const progress = createAcquisitionProgress({ signal, onProgress }, ['list', 'items', ...(hydrate ? ['hydrate'] : []), 'normalize'], assertSession);
     const list = await progress.wait(resolveList(gallery));
     progress.step('list');
-    const selectedFields = config.fields.map(([, aliases]) => aliases[0]).join(",");
+    const selectedFields = [...config.fields.map(([, aliases]) => aliases[0]),
+      ...(gallery === 'HOLERITE' ? ['CHAVE', 'IDFORNECEDOR', 'SITUACAO'] : [])].join(",");
     // STATUS is optional on IDFOLHA. Read it when available without selecting a possibly missing column.
     const expandedFields = gallery === 'FOLHAPGTO' || gallery === 'IDFOLHA' && includeSearchFields ? 'fields' : `fields($select=${selectedFields})`;
     const result = await repository.getItemsPage(
@@ -486,6 +499,10 @@ export function createHrPayrollGalleryData({
     const rows = (Array.isArray(result?.items) ? result.items : []).map(item => {
       const fields = item?.fields && typeof item.fields === "object" ? item.fields : {};
       const row = { id: String(item?.id ?? hrPayrollFieldValue(fields, ["ID"]) ?? "") };
+      if (gallery === 'HOLERITE') {
+        if (fields.SITUACAO !== 'FECHADO' || !/^[1-9]\d{0,14}$/.test(row.id)) return null;
+        row.pdfFileName = payslipPdfName(fields);
+      }
       if (gallery === 'FOLHAPGTO' && fields.Title != null) row.Title = fields.Title;
       if (gallery === 'FOLHAPGTO' && fields.IDPROVISAO != null) row.IDPROVISAO = fields.IDPROVISAO;
       const eTag = String(item?.eTag || item?.["@odata.etag"] || item?.["odata.etag"] || "").trim();
@@ -499,7 +516,7 @@ export function createHrPayrollGalleryData({
         if (status !== undefined) row.STATUS = status;
       }
       return Object.freeze(row);
-    }).filter(row => row.id);
+    }).filter(row => row?.id);
     const nextCursor = result?.hasMore === true && typeof result?.nextLink === "string" && result.nextLink
       ? result.nextLink
       : null;
@@ -579,6 +596,8 @@ export function createHrPayrollGalleryData({
     const filtered=filterPayrollRows(gallery,candidates,filters);
     progress.step('filter', { records: filtered.length });
     if (gallery === 'FOLHAPGTO') filtered.sort((a, b) => Number(b.id) - Number(a.id));
+    if (gallery === 'HOLERITE') filtered.sort((a, b) =>
+      String(b.SEMANA_INICIO || '').localeCompare(String(a.SEMANA_INICIO || '')) || Number(b.id) - Number(a.id));
     const offset=(page-1)*pageSize;
     const hasMore=offset+pageSize<filtered.length;
     const pageRows=filtered.slice(offset,offset+pageSize);
@@ -666,9 +685,34 @@ export function createHrPayrollGalleryData({
   }
 
   const editors = new Map();
+  async function downloadPayslip(row, options = {}) {
+    const { signal, onProgress } = options;
+    const check = () => { assertSession(); signal?.throwIfAborted(); };
+    check();
+    const id = String(row?.id || '');
+    if (!/^[1-9]\d{0,14}$/.test(id)) throw new RangeError('Holerite inválido.');
+    const list = await resolveList('HOLERITE');
+    check();
+    const current = await repository.getItem(SITE_KEY, list.id, id, '$expand=fields', { signal });
+    check();
+    if (String(current?.id || '') !== id || current.fields?.SITUACAO !== 'FECHADO')
+      throw new Error('Este holerite ainda não está fechado.');
+    const name = payslipPdfName(current.fields);
+    if (!name || name !== row.pdfFileName) throw new Error('O PDF do holerite não foi identificado. Atualize a galeria.');
+    const files = await repository.listAttachments(SITE_KEY, list.id, id);
+    check();
+    if (files.filter(file => (file.name ?? file.fileName) === name).length !== 1)
+      throw new Error('O PDF do holerite não foi encontrado nos anexos deste registro.');
+    const payload = await repository.downloadAttachment(SITE_KEY, list.id, id, name, { signal, onProgress });
+    check();
+    const blob = asBlob(payload, 'application/pdf');
+    if (await blob.slice(0, 5).text() !== '%PDF-') throw new Error('O arquivo do holerite não é um PDF válido.');
+    check();
+    return blob;
+  }
   function editor(gallery) {
     const config = HR_PAYROLL_GALLERIES[gallery];
-    if (!config) throw new RangeError("Galeria de folha inválida.");
+    if (!config || gallery === 'HOLERITE') throw new RangeError("Galeria de folha inválida para edição.");
     if (!editors.has(gallery)) {
       editors.set(gallery, import("./gallery-record-data.js").then(({ createGalleryRecordData }) =>
         createGalleryRecordData({ repository, siteKey: SITE_KEY, listName: config.listName, now, assertSession,
@@ -696,7 +740,7 @@ export function createHrPayrollGalleryData({
     return sheetData ||= import('./payroll-sheet-create-data.js').then(({ createPayrollSheetCreateData }) =>
       createPayrollSheetCreateData({ repository, siteKey: SITE_KEY, now, assertSession, attempts: sheetCreationAttempts }));
   }
-  return Object.freeze({ loadPage, loadFilteredPage, loadPaymentsForPayrollId, loadEditor, saveEditor,
+  return Object.freeze({ loadPage, loadFilteredPage, downloadPayslip, loadPaymentsForPayrollId, loadEditor, saveEditor,
     invalidateRelatedReports: () => { filterSnapshots.delete('FOLHAPGTO'); listRequests.delete('FOLHAPGTO'); },
     loadPaymentOptions: async options => (await payments()).loadOptions(options),
     savePayment: async (draft, options) => (await payments()).save(draft, options),
