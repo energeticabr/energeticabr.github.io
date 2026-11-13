@@ -29,7 +29,7 @@
 }
 .swile-headline h2 { margin: 0; font-size: 1.35rem; }
 .swile-headline span { color: #553990; font-size: .9rem; }
-.swile-dialog button, .swile-dialog input, .swile-dialog select {
+.swile-dialog button, .swile-dialog input, .swile-dialog select, .swile-dialog textarea {
   min-height: 2.65rem;
   min-width: 0;
   border: 1px solid #cbd1dd;
@@ -65,6 +65,8 @@
 .swile-summary { margin: 0 0 .85rem; padding: .75rem; border: 1px solid #e3e7ef; border-radius: .6rem; }
 .swile-summary h3 { margin: 0; }
 .swile-summary p { margin: .35rem 0; overflow-wrap: anywhere; }
+.swile-invoice-description { display: grid; gap: .35rem; margin-top: .9rem; }
+.swile-invoice-description textarea { width: 100%; resize: vertical; }
 .swile-preview-list { list-style: none; padding: 0; max-height: 25dvh; overflow: auto; }
 .swile-preview-list li { display: flex; gap: .75rem; justify-content: space-between; padding: .35rem 0; }
 .swile-preview-list span { overflow-wrap: anywhere; }
