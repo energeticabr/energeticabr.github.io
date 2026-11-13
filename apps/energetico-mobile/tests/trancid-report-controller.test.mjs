@@ -114,3 +114,30 @@ test('automatic Trancid warning waits until a manually opened provisions report 
  resolve(h.report);for(let n=0;n<8;n++)await tick();assert.equal(h.opens.length,0);
  await h.view.emit('dismiss-pending-provisions');await tick();resolve(h.report);for(let n=0;n<8;n++)await tick();assert.equal(h.opens.length,1);
 });
+
+test('automatic balance alert waits while the full-screen Trancid gallery is open', async t => {
+  const previousDocument = globalThis.document;
+  const { window } = new JSDOM('<main id="app"></main>');
+  globalThis.document = window.document;
+  t.after(() => { globalThis.document = previousDocument; window.close(); });
+  let finishReport;
+  const h = harness(t, {
+    enableTrancidReminders: true,
+    client: { sendText: async () => ({ status: 'processed', messages: [] }),
+      trancidRechargeRequest: async () => ({ page: 1, hasMore: false, orders: [] }) },
+    trancidReportDataFactory: async () => ({ loadSnapshot: async () => new Promise(resolve => { finishReport = resolve; }) }),
+  });
+  await h.controller.start();
+  await tick();
+  assert.equal(await h.view.emit('select-reply', { replyId: 'action_hr_trancid_gallery' }), true);
+  finishReport(h.report);
+  for (let n = 0; n < 8; n++) await tick();
+  const gallery = window.document.querySelector('main.trancid-gallery-page');
+  assert.ok(gallery);
+  assert.equal(h.opens.length, 0);
+  gallery.querySelector('header button:last-child').click();
+  for (let n = 0; n < 8; n++) await tick();
+  finishReport(h.report);
+  for (let n = 0; n < 8; n++) await tick();
+  assert.equal(h.opens.length, 1);
+});

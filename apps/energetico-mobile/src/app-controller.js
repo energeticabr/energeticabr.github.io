@@ -1762,6 +1762,7 @@ export function createAppController({
   function canOpenAutomaticTrancid() {
     const state = store.getState();
     if (!account || stopped || starting || sessionStatus !== 'authenticated' || flowBusy()
+      || hrBenefitPanel || hrBenefitOpening
       || state.activeFlow || state.draft?.trim() || state.pendingFiles.length
       || pendingNoteLaunchOrderId || pendingConstructionDiaryFillingId
       || (recoveryAccountId && !recoveryVerified) || recoveryPreview
@@ -1889,6 +1890,7 @@ export function createAppController({
   function canOpenAutomaticDda() {
     const state = store.getState();
     if (!account || stopped || starting || sessionStatus !== 'authenticated' || flowBusy()
+      || hrBenefitPanel || hrBenefitOpening
       || state.activeFlow || state.draft?.trim() || state.pendingFiles.length
       || pendingNoteLaunchOrderId || pendingConstructionDiaryFillingId || pendingProvisionSettlementPaymentId
       || (recoveryAccountId && !recoveryVerified) || recoveryPreview
@@ -6454,16 +6456,16 @@ export function createAppController({
     panel?.destroy?.();
   }
 
-  let swilePanel = null;
-  let swileOpening = null;
+  let hrBenefitPanel = null;
+  let hrBenefitOpening = null;
 
-  function disposeSwilePanel() {
-    swileOpening = null;
-    swilePanel?.close();
-    swilePanel = null;
+  function disposeHrBenefitPanel() {
+    hrBenefitOpening = null;
+    hrBenefitPanel?.close();
+    hrBenefitPanel = null;
   }
 
-  async function openSwilePanel(gallery = false) {
+  async function openHrBenefitPanel(provider, gallery = false) {
     const canOpen = () => {
       const { activeFlow } = store.getState();
       const inRhMenu = activeFlow?.id === 'menu:choosing_action'
@@ -6472,34 +6474,38 @@ export function createAppController({
         && (!activeFlow || inRhMenu);
     };
     if (!canOpen()) return false;
-    if (swilePanel || swileOpening) return true;
+    if (hrBenefitPanel || hrBenefitOpening) return true;
     closeGalleryOverlays();
     const owner = account, revision = sessionRevision, opening = {};
-    swileOpening = opening;
+    hrBenefitOpening = opening;
     const current = () => !stopped && account === owner && sessionRevision === revision && sessionStatus === 'authenticated';
     try {
-      const { openSwileView } = await import('./ui/swile-view.js');
-      if (!current() || swileOpening !== opening || !canOpen()) return false;
-      swilePanel = openSwileView({
+      const openView = provider === 'Trancid'
+        ? (await import('./ui/trancid-recharge-view.js')).openTrancidRechargeView
+        : (await import('./ui/swile-view.js')).openSwileView;
+      if (!current() || hrBenefitOpening !== opening || !canOpen()) return false;
+      hrBenefitPanel = openView({
         document: globalThis.document,
         gallery,
         request: (operation, payload, options) => {
           if (!current()) throw new Error('A sessão do Energético foi encerrada.');
-          return client.swileRequest(operation, payload, options);
+          return provider === 'Trancid'
+            ? client.trancidRechargeRequest(operation, payload, options)
+            : client.swileRequest(operation, payload, options);
         },
-        onClose: () => { swilePanel = null; },
+        onClose: () => { hrBenefitPanel = null; },
       });
       return true;
     } catch (error) {
-      if (current()) setSessionError(error, 'Não foi possível abrir a integração Swile.');
+      if (current()) setSessionError(error, `Não foi possível abrir a integração ${provider}.`);
       return false;
     } finally {
-      if (swileOpening === opening) swileOpening = null;
+      if (hrBenefitOpening === opening) hrBenefitOpening = null;
     }
   }
 
   function closeGalleryOverlays(preserveSacPathologies = false, preserveDepreciationReport = false, preserveDocumentControlReport = false, preserveTaskAssociationReport = false, preservePendingSupplierPaymentsReport = false, preserveContractorControlReport = false, preserveGeneral = false) {
-    disposeSwilePanel();
+    disposeHrBenefitPanel();
     disposePayrollSheetCreate();
     if (!preserveSacPathologies) disposeSacPathologiesReport();
     if (!preserveDepreciationReport) disposeDepreciationReport();
@@ -10948,7 +10954,7 @@ export function createAppController({
   }
 
   async function signIn() {
-    disposeSwilePanel();
+    disposeHrBenefitPanel();
     resetDdaMenuAlert();
     resetSicoobMenuAlert();
     disposeDdaSyncSession();
@@ -11062,7 +11068,7 @@ export function createAppController({
   }
 
   async function signOut() {
-    disposeSwilePanel();
+    disposeHrBenefitPanel();
     resetDdaMenuAlert();
     resetSicoobMenuAlert();
     provisionSettlementParent.destroy();
@@ -12028,8 +12034,10 @@ export function createAppController({
       if (command.replyId === "action_hr_create_idfolha") return openPayrollSheetCreate();
       if (command.replyId === "action_hr_gallery_folhapgto") return openHrPayrollGallery("FOLHAPGTO");
       if (command.replyId === "action_hr_gallery_holerite") return openHrPayrollGallery("HOLERITE");
-      if (command.replyId === 'action_hr_swile') return openSwilePanel();
-      if (command.replyId === 'action_hr_swile_gallery') return openSwilePanel(true);
+      if (command.replyId === 'action_hr_swile') return openHrBenefitPanel('Swile');
+      if (command.replyId === 'action_hr_swile_gallery') return openHrBenefitPanel('Swile', true);
+      if (command.replyId === 'action_hr_trancid') return openHrBenefitPanel('Trancid');
+      if (command.replyId === 'action_hr_trancid_gallery') return openHrBenefitPanel('Trancid', true);
       const state = store.getState();
       syncEpiDeliverySnapshot(state.activeFlow);
       if ([EPI_ORDER_BLANK_REPLY_ID, EPI_SUPPLIER_DOCUMENT_BLANK_REPLY_ID].includes(command.replyId)) {
@@ -12618,7 +12626,7 @@ export function createAppController({
     ddaAutoReminder.reset();
     trancidAutoReminder.reset(); disposeTrancidReport(); trancidSourceCache = null;
     trancidDialogObserver?.disconnect(); trancidDialogObserver = null;
-    disposeSwilePanel();
+    disposeHrBenefitPanel();
     clearOperationProgress();
     clearAttachmentUploadProgress();
     attachmentCompressionReturnPoint = null;
