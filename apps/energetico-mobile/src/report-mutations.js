@@ -2,7 +2,7 @@ import { notifyDataMutation } from '../../../portal/data/data-mutations.js';
 
 const WRITES = new Set([
   'saveEditor', 'deleteItem', 'deleteDescription', 'updateItem', 'updateDueDate', 'uploadAttachment',
-  'savePayment', 'saveSheet', 'save', 'post', 'linkPayroll',
+  'savePayment', 'saveSheet', 'save', 'post', 'linkPayroll', 'savePayslipEditor', 'uploadSignedPayslips',
   'sendText', 'sendFile', 'saveRhidAttendanceAdjustment', 'deleteRhidAttendanceAdjustment', 'refreshRhidAttendance',
   'startRhidPendingValidation', 'completeDelegatedTask', 'uploadLaunchGalleryFile',
   'deleteAttachment', 'deleteAllAttachments', 'compressAttachment', 'chooseAttachmentCompression',

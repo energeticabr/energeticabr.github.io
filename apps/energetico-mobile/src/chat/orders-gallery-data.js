@@ -11,6 +11,7 @@ import { filterPayrollRows, payrollFilterOptions, validatePayrollFilters, payrol
 import { createRegistrationGalleryFilterData } from './registration-gallery-filter-data.js';
 import { loadProvisionDescriptionGroup, provisionDescriptionLinkColumn } from './provision-description-detail-data.js';
 import { createAcquisitionProgress, notifyAcquisitionProgress } from './acquisition-progress.js';
+import { createWeeklyPayslipRecord, weeklyPayslipDisplay, weeklyPayslipName } from './weekly-payslip-record.js';
 
 const SITE_KEY = "personal";
 const LIST_ALIASES = Object.freeze(["NOTASPENDENTES"]);
@@ -404,13 +405,6 @@ function hrPayrollFieldValue(fields, aliases) {
   return entry ? scalar(entry[1]) : undefined;
 }
 
-function payslipPdfName(fields) {
-  const week = String(fields?.SEMANA_INICIO ?? "").slice(0, 10);
-  const supplier = String(fields?.IDFORNECEDOR ?? "");
-  const key = `${week}-${supplier}`;
-  return /^\d{4}-\d{2}-\d{2}-[1-9]\d*$/.test(key) && fields?.CHAVE === key ? `Holerite-${key}.pdf` : "";
-}
-
 export function createHrPayrollGalleryData({
   tokenProvider,
   repository: suppliedRepository,
@@ -418,6 +412,11 @@ export function createHrPayrollGalleryData({
   fetchImpl = globalThis.fetch,
   now = () => new Date(),
   assertSession = () => {},
+  loadHoleriteLogo = async ({ signal } = {}) => {
+    const response = await fetchImpl(new URL('../../../../assets/logo-energetica-oficial.png', import.meta.url), { signal });
+    if (!response.ok) throw new Error('Não foi possível carregar a logo do holerite.');
+    return new Uint8Array(await response.arrayBuffer());
+  },
   sheetCreationAttempts,
 } = {}) {
   let repository = suppliedRepository;
@@ -486,7 +485,7 @@ export function createHrPayrollGalleryData({
     const list = await progress.wait(resolveList(gallery));
     progress.step('list');
     const selectedFields = [...config.fields.map(([, aliases]) => aliases[0]),
-      ...(gallery === 'HOLERITE' ? ['CHAVE', 'IDFORNECEDOR', 'SITUACAO'] : [])].join(",");
+      ...(gallery === 'HOLERITE' ? ['CHAVE', 'IDFORNECEDOR', 'SITUACAO', 'HOLERITE_REVISAO'] : [])].join(",");
     // STATUS is optional on IDFOLHA. Read it when available without selecting a possibly missing column.
     const expandedFields = gallery === 'FOLHAPGTO' || gallery === 'IDFOLHA' && includeSearchFields ? 'fields' : `fields($select=${selectedFields})`;
     const result = await repository.getItemsPage(
@@ -501,7 +500,7 @@ export function createHrPayrollGalleryData({
       const row = { id: String(item?.id ?? hrPayrollFieldValue(fields, ["ID"]) ?? "") };
       if (gallery === 'HOLERITE') {
         if (fields.SITUACAO !== 'FECHADO' || !/^[1-9]\d{0,14}$/.test(row.id)) return null;
-        row.pdfFileName = payslipPdfName(fields);
+        row.pdfFileName = weeklyPayslipName(fields);
       }
       if (gallery === 'FOLHAPGTO' && fields.Title != null) row.Title = fields.Title;
       if (gallery === 'FOLHAPGTO' && fields.IDPROVISAO != null) row.IDPROVISAO = fields.IDPROVISAO;
@@ -511,6 +510,7 @@ export function createHrPayrollGalleryData({
         const value = hrPayrollFieldValue(fields, aliases);
         if (value !== undefined) row[key] = value;
       }
+      if (gallery === 'HOLERITE') Object.assign(row, weeklyPayslipDisplay(fields, row.pdfFileName));
       if (gallery === 'IDFOLHA' && includeSearchFields) {
         const status = hrPayrollFieldValue(fields, ['STATUS']);
         if (status !== undefined) row.STATUS = status;
@@ -705,33 +705,8 @@ export function createHrPayrollGalleryData({
   }
 
   const editors = new Map();
-  async function downloadPayslip(row, options = {}) {
-    const { signal, onProgress, expectedDate } = options;
-    const check = () => { assertSession(); signal?.throwIfAborted(); };
-    check();
-    const id = String(row?.id || '');
-    if (!/^[1-9]\d{0,14}$/.test(id)) throw new RangeError('Holerite inválido.');
-    const list = await resolveList('HOLERITE');
-    check();
-    const current = await repository.getItem(SITE_KEY, list.id, id, '$expand=fields', { signal });
-    check();
-    if (String(current?.id || '') !== id || current.fields?.SITUACAO !== 'FECHADO')
-      throw new Error('Este holerite ainda não está fechado.');
-    if (expectedDate && payrollGalleryDay(current.fields.DATA_PAGAMENTO) !== expectedDate)
-      throw new Error('A data deste holerite mudou. Atualize a galeria.');
-    const name = payslipPdfName(current.fields);
-    if (!name || name !== row.pdfFileName) throw new Error('O PDF do holerite não foi identificado. Atualize a galeria.');
-    const files = await repository.listAttachments(SITE_KEY, list.id, id);
-    check();
-    if (files.filter(file => (file.name ?? file.fileName) === name).length !== 1)
-      throw new Error('O PDF do holerite não foi encontrado nos anexos deste registro.');
-    const payload = await repository.downloadAttachment(SITE_KEY, list.id, id, name, { signal, onProgress });
-    check();
-    const blob = asBlob(payload, 'application/pdf');
-    if (await blob.slice(0, 5).text() !== '%PDF-') throw new Error('O arquivo do holerite não é um PDF válido.');
-    check();
-    return blob;
-  }
+  const payslips = createWeeklyPayslipRecord({ repository, siteKey: SITE_KEY, resolveList, assertSession,
+    loadLogo: loadHoleriteLogo, onSaved: () => filterSnapshots.delete('HOLERITE') });
   async function downloadPayslipsByDate(date, { signal, onProgress } = {}) {
     if (!date || payrollGalleryDay(date) !== date) throw new RangeError('Data da folha inválida.');
     const progress = createAcquisitionProgress({ signal, onProgress }, ['list', 'pdfs', 'result'], assertSession);
@@ -746,7 +721,7 @@ export function createHrPayrollGalleryData({
     for (const [index, row] of rows.entries()) {
       progress.check();
       try {
-        const file = await downloadPayslip(row, { signal, expectedDate: date });
+        const file = await payslips.downloadPayslip(row, { signal, expectedDate: date });
         const pdf = await PDFDocument.load(await file.arrayBuffer());
         if (pdf.getPageCount() !== 1) throw new Error('O holerite original precisa ter uma página.');
         const [page] = await output.copyPages(pdf, [0]);
@@ -791,7 +766,7 @@ export function createHrPayrollGalleryData({
     return sheetData ||= import('./payroll-sheet-create-data.js').then(({ createPayrollSheetCreateData }) =>
       createPayrollSheetCreateData({ repository, siteKey: SITE_KEY, now, assertSession, attempts: sheetCreationAttempts }));
   }
-  return Object.freeze({ loadPage, loadFilteredPage, downloadPayslip, downloadPayslipsByDate, loadPaymentsForPayrollId, loadEditor, saveEditor,
+  return Object.freeze({ loadPage, loadFilteredPage, ...payslips, downloadPayslipsByDate, loadPaymentsForPayrollId, loadEditor, saveEditor,
     invalidateRelatedReports: () => { filterSnapshots.delete('FOLHAPGTO'); listRequests.delete('FOLHAPGTO'); },
     loadPaymentOptions: async options => (await payments()).loadOptions(options),
     savePayment: async (draft, options) => (await payments()).save(draft, options),

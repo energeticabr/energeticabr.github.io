@@ -9,7 +9,7 @@ function response(gallery, page = 1, rows = [], hasMore = false) {
   return { gallery, page, pageSize: 25, fields: [], rows, hasMore, nextCursor: hasMore ? "opaque-next-page" : null };
 }
 
-test("holerites exibem funcionário, semana e PDF de cada registro, sem ações de alteração", async t => {
+test("holerites exibem funcionário, semana e PDF de cada registro sem excluir ou criar folhas", async t => {
   const dom = new JSDOM("<main id='root'></main>");
   const root = dom.window.document.querySelector("#root");
   const opened = [];
@@ -47,6 +47,58 @@ test("holerites exibem funcionário, semana e PDF de cada registro, sem ações 
   cards[0].querySelector("[data-action=open-payslip-pdf]").click();
   await Promise.resolve();
   assert.deepEqual(opened, [["17", "Holerite-2026-11-09-253.pdf"]]);
+});
+
+test("as ações por fornecedor enviam a via assinada e editam somente o holerite escolhido", async t => {
+  const dom = new JSDOM("<main id='root'></main>");
+  const root = dom.window.document.querySelector("#root");
+  const rows = [{ id: "17", FORNECEDOR: "Edgar", pdfFileName: "Holerite-edgar.pdf" },
+    { id: "18", FORNECEDOR: "Rafael", pdfFileName: "Holerite-rafael.pdf" }];
+  const signed = [];
+  const calls = [];
+  const file = new File(["scan"], "assinado.pdf", { type: "application/pdf" });
+  const gallery = createHrPayrollGallery({
+    root, gallery: "HOLERITE",
+    request: async kind => ({ ...response(kind, 1, rows), dateGroups: [{ date: "2026-11-13", rows }] }),
+    pickSignedPayslip: async source => { calls.push(["pick", source]); return [file]; },
+    listSignedPayslips: async row => { calls.push(["list", row.id]); return [...signed]; },
+    uploadSignedPayslips: async (row, files) => {
+      calls.push(["upload", row.id, files]); signed.push({ name: "via-assinada.pdf" }); return [...signed];
+    },
+    openSignedPayslip: async (row, attachment) => calls.push(["open", row.id, attachment.name]),
+    loadPayslipEditor: async row => ({ supplier: row.FORNECEDOR, branch: "Obra A", date: "2026-11-13" }),
+    savePayslipEditor: async (row, _context, draft) => {
+      calls.push(["save", row.id, draft]); row.FORNECEDOR = draft.supplier;
+    },
+  });
+  t.after(() => { gallery.destroy(); dom.window.close(); });
+  const settle = () => new Promise(resolve => setImmediate(resolve));
+  await gallery.open();
+  root.querySelector('[data-action="toggle-payslip-date"]').click();
+  const cards = root.querySelectorAll(".hr-gallery-card");
+  assert.equal(root.querySelectorAll('[data-action="upload-payslip"]').length, 2);
+  assert.equal(root.querySelectorAll('[data-action="edit-payslip"]').length, 2);
+  cards[1].querySelector('[data-action="upload-payslip"]').click();
+  await settle();
+  for (const option of ["Enviar anexo", "Escanear", "Enviar foto"]) assert.match(root.querySelector('[data-payslip-dialog]').textContent, new RegExp(option));
+  root.querySelector('[data-payslip-source="scan"]').click();
+  await settle();
+  assert.deepEqual(calls, [["list", "18"], ["pick", "scan"]]);
+  root.querySelector('[data-action="confirm-signed-payslip"]').click();
+  await settle();
+  assert.deepEqual(calls.at(-1), ["upload", "18", [file]]);
+  root.querySelector('[data-action="open-signed-payslip"]').click();
+  await settle();
+  assert.deepEqual(calls.at(-1), ["open", "18", "via-assinada.pdf"]);
+  root.querySelector('[data-action="close-payslip-dialog"]').click();
+  cards[0].querySelector('[data-action="edit-payslip"]').click();
+  await settle();
+  const form = root.querySelector('[data-payslip-dialog] form');
+  form.elements.supplier.value = "Edgar da Silva";
+  form.dispatchEvent(new dom.window.Event("submit", { bubbles: true, cancelable: true }));
+  await settle();
+  assert.deepEqual(calls.at(-1), ["save", "17", { supplier: "Edgar da Silva", branch: "Obra A", date: "2026-11-13" }]);
+  assert.match(root.querySelector(".hr-gallery-cards").textContent, /Edgar da Silva/);
 });
 
 test('payroll mutation invalidates a pending background snapshot and refreshes saved values', async t => {

@@ -282,6 +282,76 @@ test("paginação de holerites preserva datas inteiras e o PDF inclui todos do d
   await assert.rejects(data.downloadPayslipsByDate("2026-11-13"), /José/);
 });
 
+test("holerite guarda assinaturas no registro exato e publica correções com controle de versão", async () => {
+  const { PDFDocument } = await import("pdf-lib");
+  const { readFile } = await import("node:fs/promises");
+  const source = await PDFDocument.create();
+  source.addPage([595, 842]);
+  const original = await source.save();
+  const name = "Holerite-2026-11-09-253.pdf";
+  const fields = { CHAVE: "2026-11-09-253", IDFORNECEDOR: 253, SITUACAO: "FECHADO", FORNECEDOR: "Edgar",
+    FILIAL: "Obra A", SEMANA_INICIO: "2026-11-09", SEMANA_FIM: "2026-11-15", DATA_PAGAMENTO: "2026-11-13",
+    TOTAL: 100, PROVISOES: "[]", RUBRICAS: JSON.stringify([{ label: "Salário", quantity: 1, unitValue: 100, total: 100, formaPgto: "PIX" }]) };
+  let current = { id: "17", eTag: '"1"', fields };
+  const attachments = new Map([[name, original], ["receipt.pdf", original]]);
+  const writes = [];
+  const repo = {
+    async resolveList() { return { status: "resolved", id: "holerites" }; },
+    async getItemsPage() { return { items: [current] }; },
+    async getItem(_site, _list, id) { assert.equal(id, "17"); return current; },
+    async listAttachments(_site, _list, id) { assert.equal(id, "17"); return [...attachments.keys()].map(name => ({ name })); },
+    async downloadAttachment(_site, _list, id, name) { assert.equal(id, "17"); return attachments.get(name); },
+    async uploadAttachment(_site, _list, id, file, name) {
+      assert.equal(id, "17"); assert.ok(!attachments.has(name));
+      attachments.set(name, new Uint8Array(await file.arrayBuffer()));
+      current = { ...current, eTag: `"${Number(current.eTag.replaceAll('"', '')) + 1}"` };
+      writes.push(["upload", name]);
+      throw new Error("resposta perdida após gravar");
+    },
+    async updateItem(_site, _list, id, patch, { eTag }) {
+      assert.equal(id, "17"); assert.equal(eTag, '"2"');
+      writes.push(["edit", Object.keys(patch).sort()]);
+      current = { id, eTag: '"3"', fields: { ...current.fields, ...patch } };
+      throw new Error("resposta perdida após editar");
+    },
+  };
+  const data = galleryData.createHrPayrollGalleryData({ repository: repo,
+    loadHoleriteLogo: () => readFile(new URL("../../../assets/logo-energetica-oficial.png", import.meta.url)) });
+  const row = { id: "17", pdfFileName: name };
+  const editor = await data.loadPayslipEditor(row);
+  await assert.rejects(data.savePayslipEditor(row, editor, { ...editor, total: 999 }), /campos/i);
+  await assert.rejects(data.savePayslipEditor(row, editor, { ...editor, date: "2026-11-17" }), /semana/i);
+  await data.savePayslipEditor(row, editor, { supplier: "Edgar da Silva", branch: "Obra B", date: "2026-11-14" });
+  assert.deepEqual(writes[1], ["edit", ["HOLERITE_REVISAO"]]);
+  const { HOLERITE_REVISAO, ...posted } = current.fields;
+  assert.deepEqual(posted, fields);
+  assert.equal(JSON.parse(HOLERITE_REVISAO).supplier, "Edgar da Silva");
+  const gallery = await data.loadFilteredPage('HOLERITE', { groupByDate: true });
+  assert.deepEqual(gallery.dateGroups.map(group => [group.date, group.rows[0].FORNECEDOR]), [["2026-11-14", "Edgar da Silva"]]);
+  assert.equal(attachments.get(name), original);
+  const updated = await data.downloadPayslip(row);
+  const { getDocument } = await import("pdfjs-dist/legacy/build/pdf.mjs");
+  const task = getDocument({ data: new Uint8Array(await updated.arrayBuffer()), useSystemFonts: true });
+  try {
+    const page = await (await task.promise).getPage(1);
+    const text = (await page.getTextContent()).items.map(item => item.str).join(" ");
+    assert.match(text, /Edgar da Silva.*Obra B.*14\/11\/2026/);
+  } finally { await task.destroy(); }
+  const file = new File([original], "recebido.pdf", { type: "application/pdf" });
+  assert.deepEqual(await data.listSignedPayslips(row), []);
+  const malformed = new File(["not an image"], "falso.jpg", { type: "image/jpeg" });
+  await assert.rejects(data.uploadSignedPayslips(row, [file, malformed]), /imagem válida/i);
+  assert.equal(writes.length, 2);
+  const [signed] = await data.uploadSignedPayslips(row, [file]);
+  assert.match(signed.name, /assinado.*\.pdf$/);
+  assert.deepEqual(await data.uploadSignedPayslips(row, [file]), [signed]);
+  assert.equal(writes.filter(([action]) => action === "upload").length, 2);
+  assert.equal((await data.downloadSignedPayslip(row, signed)).type, "application/pdf");
+  await assert.rejects(data.downloadSignedPayslip(row, { name }), /via assinada/i);
+  await assert.rejects(data.uploadSignedPayslips({ ...row, pdfFileName: "Outro.pdf" }, [file]), /identificado/i);
+  await assert.rejects(data.savePayslipEditor(row, editor, { supplier: "Edgar", branch: "Obra C", date: "2026-11-14" }), /alterado/i);
+});
+
 test("galerias de folha leem IDFOLHA e FOLHAPGTO com paginação e normalização de campos", async () => {
   assert.equal(typeof galleryData.createHrPayrollGalleryData, "function", "a leitura direta SharePoint da folha precisa estar disponível");
   const calls = [];
