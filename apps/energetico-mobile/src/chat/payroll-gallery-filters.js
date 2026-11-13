@@ -12,7 +12,7 @@ function numeric(value) {
   if (raw.includes(',')) raw = raw.replace(/\./g, '').replace(',', '.');
   return /^-?\d+(?:\.\d+)?$/.test(raw) ? Number(raw) : NaN;
 }
-function day(value) {
+export function payrollGalleryDay(value) {
   const raw = String(value ?? '').trim();
   const iso = raw.match(/^(\d{4})-(\d{2})-(\d{2})(?:T.*)?$/);
   const br = raw.match(/^(\d{2})\/(\d{2})\/(\d{4})$/);
@@ -20,6 +20,7 @@ function day(value) {
   const date = key && new Date(`${key}T12:00:00Z`);
   return date && Number.isFinite(date.getTime()) && date.toISOString().slice(0,10) === key ? key : '';
 }
+const day = payrollGalleryDay;
 export function validatePayrollFilters(gallery, filters = {}) {
   const columns = COLUMNS[gallery];
   if (!columns || !filters || typeof filters !== 'object' || Array.isArray(filters)) throw new RangeError('Filtros da galeria inválidos.');
@@ -51,6 +52,10 @@ export function filterPayrollRows(gallery, rows, filters = {}) {
     if (!matchesGallerySearch(filters.search, searchable)) return false;
     for (const key of COLUMNS[gallery]) {
       if (!filters[key]) continue;
+      if (gallery === 'HOLERITE' && key === 'DATA_PAGAMENTO') {
+        if (!day(filters[key]) || day(row[key]) !== day(filters[key])) return false;
+        continue;
+      }
       if (['id','IDFOLHA','IDLANCAMENTO'].includes(key) ? numeric(row[key]) !== numeric(filters[key]) : fold(row[key]) !== fold(filters[key])) return false;
     }
     for (const key of ['VALORUNITARIO','QTD']) {

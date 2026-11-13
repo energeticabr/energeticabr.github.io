@@ -7,7 +7,7 @@ import { createSharePointRepository } from "../../../../portal/data/sharepoint-r
 import { provisionDateKey, provisionDayOffset, provisionDueState, provisionTotal } from "./pending-provision-dates.js";
 import { createOrdersLinkedReportData } from './orders-linked-report-data.js';
 import { createPayrollSourceReader } from './payroll-editor-policy.js';
-import { filterPayrollRows, payrollFilterOptions, validatePayrollFilters } from './payroll-gallery-filters.js';
+import { filterPayrollRows, payrollFilterOptions, validatePayrollFilters, payrollGalleryDay } from './payroll-gallery-filters.js';
 import { createRegistrationGalleryFilterData } from './registration-gallery-filter-data.js';
 import { loadProvisionDescriptionGroup, provisionDescriptionLinkColumn } from './provision-description-detail-data.js';
 import { createAcquisitionProgress, notifyAcquisitionProgress } from './acquisition-progress.js';
@@ -536,7 +536,7 @@ export function createHrPayrollGalleryData({
   }
 
   const filterSnapshots = new Map();
-  async function loadFilteredPage(gallery, { page = 1, pageSize = 25, filters = {}, refresh = false, signal, onProgress } = {}) {
+  async function loadFilteredPage(gallery, { page = 1, pageSize = 25, filters = {}, refresh = false, groupByDate = false, signal, onProgress } = {}) {
     validatePayrollFilters(gallery, filters);
     if (!Number.isInteger(page) || page < 1 || page > 5000 || !Number.isInteger(pageSize) || pageSize < 1 || pageSize > HR_PAYROLL_PAGE_SIZE_MAX) {
       throw new RangeError('Página da galeria inválida.');
@@ -595,6 +595,26 @@ export function createHrPayrollGalleryData({
     else if (gallery === 'FOLHAPGTO') progress.step('candidates', { records: candidates.length });
     const filtered=filterPayrollRows(gallery,candidates,filters);
     progress.step('filter', { records: filtered.length });
+    if (gallery === 'HOLERITE' && groupByDate) {
+      const byDate = new Map();
+      const byId = new Map(filtered.map(row => [row.id, row]));
+      for (const row of byId.values()) {
+        const date = payrollGalleryDay(row.DATA_PAGAMENTO);
+        if (!byDate.has(date)) byDate.set(date, []);
+        byDate.get(date).push(row);
+      }
+      const dates = [...byDate.keys()].sort((a, b) => b.localeCompare(a));
+      const offset = (page - 1) * pageSize;
+      const dateGroups = dates.slice(offset, offset + pageSize).map(date => {
+        const rows = byDate.get(date).sort((a, b) =>
+          (a.FORNECEDOR || '').localeCompare(b.FORNECEDOR || '', 'pt-BR', { sensitivity: 'base' }) || Number(a.id) - Number(b.id));
+        return { date, rows };
+      });
+      const hasMore = offset + pageSize < dates.length;
+      progress.step('result');
+      return { gallery, page, pageSize, dateGroups, rows: dateGroups.flatMap(group => group.rows),
+        count: byId.size, filterOptions: payrollFilterOptions(gallery, all), hasMore, nextCursor: hasMore ? String(page + 1) : null };
+    }
     if (gallery === 'FOLHAPGTO') filtered.sort((a, b) => Number(b.id) - Number(a.id));
     if (gallery === 'HOLERITE') filtered.sort((a, b) =>
       String(b.SEMANA_INICIO || '').localeCompare(String(a.SEMANA_INICIO || '')) || Number(b.id) - Number(a.id));
@@ -686,7 +706,7 @@ export function createHrPayrollGalleryData({
 
   const editors = new Map();
   async function downloadPayslip(row, options = {}) {
-    const { signal, onProgress } = options;
+    const { signal, onProgress, expectedDate } = options;
     const check = () => { assertSession(); signal?.throwIfAborted(); };
     check();
     const id = String(row?.id || '');
@@ -697,6 +717,8 @@ export function createHrPayrollGalleryData({
     check();
     if (String(current?.id || '') !== id || current.fields?.SITUACAO !== 'FECHADO')
       throw new Error('Este holerite ainda não está fechado.');
+    if (expectedDate && payrollGalleryDay(current.fields.DATA_PAGAMENTO) !== expectedDate)
+      throw new Error('A data deste holerite mudou. Atualize a galeria.');
     const name = payslipPdfName(current.fields);
     if (!name || name !== row.pdfFileName) throw new Error('O PDF do holerite não foi identificado. Atualize a galeria.');
     const files = await repository.listAttachments(SITE_KEY, list.id, id);
@@ -709,6 +731,35 @@ export function createHrPayrollGalleryData({
     if (await blob.slice(0, 5).text() !== '%PDF-') throw new Error('O arquivo do holerite não é um PDF válido.');
     check();
     return blob;
+  }
+  async function downloadPayslipsByDate(date, { signal, onProgress } = {}) {
+    if (!date || payrollGalleryDay(date) !== date) throw new RangeError('Data da folha inválida.');
+    const progress = createAcquisitionProgress({ signal, onProgress }, ['list', 'pdfs', 'result'], assertSession);
+    const { rows } = await loadFilteredPage('HOLERITE', {
+      pageSize: 1, filters: { DATA_PAGAMENTO: date }, groupByDate: true, refresh: true, signal,
+    });
+    progress.step('list');
+    if (!rows.length) throw new Error('Nenhum holerite postado nesta data.');
+    const { PDFDocument } = await import('pdf-lib');
+    const output = await PDFDocument.create();
+    output.setTitle(`Holerites - ${date}`);
+    for (const [index, row] of rows.entries()) {
+      progress.check();
+      try {
+        const file = await downloadPayslip(row, { signal, expectedDate: date });
+        const pdf = await PDFDocument.load(await file.arrayBuffer());
+        if (pdf.getPageCount() !== 1) throw new Error('O holerite original precisa ter uma página.');
+        const [page] = await output.copyPages(pdf, [0]);
+        output.addPage(page);
+      } catch (error) {
+        progress.check();
+        throw new Error(`Não foi possível incluir o holerite de ${row.FORNECEDOR || `ID ${row.id}`}. ${error.message}`, { cause: error });
+      }
+      progress.units('pdfs', index + 1, rows.length, 'holerites');
+    }
+    const bytes = await output.save();
+    progress.step('result');
+    return asBlob(bytes, 'application/pdf');
   }
   function editor(gallery) {
     const config = HR_PAYROLL_GALLERIES[gallery];
@@ -740,7 +791,7 @@ export function createHrPayrollGalleryData({
     return sheetData ||= import('./payroll-sheet-create-data.js').then(({ createPayrollSheetCreateData }) =>
       createPayrollSheetCreateData({ repository, siteKey: SITE_KEY, now, assertSession, attempts: sheetCreationAttempts }));
   }
-  return Object.freeze({ loadPage, loadFilteredPage, downloadPayslip, loadPaymentsForPayrollId, loadEditor, saveEditor,
+  return Object.freeze({ loadPage, loadFilteredPage, downloadPayslip, downloadPayslipsByDate, loadPaymentsForPayrollId, loadEditor, saveEditor,
     invalidateRelatedReports: () => { filterSnapshots.delete('FOLHAPGTO'); listRequests.delete('FOLHAPGTO'); },
     loadPaymentOptions: async options => (await payments()).loadOptions(options),
     savePayment: async (draft, options) => (await payments()).save(draft, options),

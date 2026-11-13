@@ -243,6 +243,45 @@ test("holerites listam apenas folhas fechadas, da mais recente à mais antiga, e
   assert.equal(downloaded.length, 1);
 });
 
+test("paginação de holerites preserva datas inteiras e o PDF inclui todos do dia em ordem alfabética", async () => {
+  const { PDFDocument } = await import("pdf-lib");
+  const row = (id, name, date) => ({
+    id: String(id),
+    fields: { FORNECEDOR: name, DATA_PAGAMENTO: date, SEMANA_INICIO: "2026-11-09",
+      IDFORNECEDOR: id, CHAVE: `2026-11-09-${id}`, SITUACAO: "FECHADO" },
+  });
+  const edgar = row(1, "Edgar", "2026-11-13T00:00:00Z");
+  const jose = row(2, "José", "2026-11-13");
+  const rafael = row(3, "Rafael", "2026-11-12");
+  let broken;
+  const repository = {
+    async resolveList() { return { status: "resolved", id: "holerites" }; },
+    async getItemsPage(_site, _list, _query, { cursor }) {
+      return cursor ? { items: [edgar, rafael, jose] } : { items: [jose], hasMore: true, nextLink: "next" };
+    },
+    async getItem(_site, _list, id) { return [edgar, jose, rafael].find(row => row.id === id); },
+    async listAttachments(_site, _list, id) {
+      return id === broken ? [] : [{ name: `Holerite-2026-11-09-${id}.pdf` }];
+    },
+    async downloadAttachment(_site, _list, id) {
+      const pdf = await PDFDocument.create();
+      pdf.addPage([500 + Number(id), 842]);
+      return pdf.save();
+    },
+  };
+  const data = galleryData.createHrPayrollGalleryData({ repository });
+  const page = await data.loadFilteredPage("HOLERITE", { groupByDate: true, pageSize: 1 });
+  assert.deepEqual(page.dateGroups.map(group => [group.date, group.rows.map(row => row.id)]), [["2026-11-13", ["1", "2"]]]);
+  assert.equal(page.hasMore, true);
+  const filtered = await data.loadFilteredPage("HOLERITE", { groupByDate: true, filters: { search: "Edgar" } });
+  assert.deepEqual(filtered.dateGroups[0].rows.map(row => row.id), ["1"]);
+  const result = await data.downloadPayslipsByDate("2026-11-13");
+  const pdf = await PDFDocument.load(await result.arrayBuffer());
+  assert.deepEqual(pdf.getPages().map(page => page.getWidth()), [501, 502]);
+  broken = "2";
+  await assert.rejects(data.downloadPayslipsByDate("2026-11-13"), /José/);
+});
+
 test("galerias de folha leem IDFOLHA e FOLHAPGTO com paginação e normalização de campos", async () => {
   assert.equal(typeof galleryData.createHrPayrollGalleryData, "function", "a leitura direta SharePoint da folha precisa estar disponível");
   const calls = [];

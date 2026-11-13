@@ -7239,6 +7239,14 @@ export function createAppController({
           panel = await hrPayrollGalleryFactory({
             gallery,
             ...(isPayslip ? {
+              downloadDatePayslips: async (date, options = {}) => {
+                assertSession();
+                if (options.signal?.aborted || hrPayrollGallery !== panel) return null;
+                const pdf = await data.downloadPayslipsByDate(date, options);
+                assertSession();
+                if (options.signal?.aborted || hrPayrollGallery !== panel) return null;
+                return native.exportMedia(pdf, `Holerites-${date}.pdf`, { download: true });
+              },
               openPayslip: async row => {
                 assertSession();
                 if (payslipPreview || hrPayrollGallery !== panel) return;

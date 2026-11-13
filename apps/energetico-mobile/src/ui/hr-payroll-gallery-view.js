@@ -46,7 +46,7 @@ function displayValue(field, value) {
 }
 
 export function createHrPayrollGallery({ document: documentOption,
-  root: mountRootOption, gallery, request, requestReport, invalidateRelatedReports, loadEditor, saveEditor, deleteItem, loadPaymentOptions, savePayment, onClose, onHome, onCreate, getReceiptAttachments, readReceiptAttachment, openPayslip, closePayslip } = {}) {
+  root: mountRootOption, gallery, request, requestReport, invalidateRelatedReports, loadEditor, saveEditor, deleteItem, loadPaymentOptions, savePayment, onClose, onHome, onCreate, getReceiptAttachments, readReceiptAttachment, openPayslip, closePayslip, downloadDatePayslips } = {}) {
   const documentRef = documentOption || mountRootOption?.ownerDocument || globalThis.document;
   const mountRoot = mountRootOption || documentRef?.body;
   const config = GALLERIES[gallery];
@@ -66,6 +66,7 @@ export function createHrPayrollGallery({ document: documentOption,
   let hasMore = false;
   const pageCursors = [null, null];
   let session = 0;
+  let dateDownload;
 
   function element(tag, className, text) {
     const node = doc.createElement(tag);
@@ -92,7 +93,7 @@ export function createHrPayrollGallery({ document: documentOption,
   const toolbar = element('div', 'hr-gallery-toolbar');
   const search = element('input', 'hr-gallery-search');
   search.type='search'; search.name='search';
-  search.placeholder=isPayslip ? 'Pesquisar holerites (funcionário, semana, ID…)'
+  search.placeholder=isPayslip ? 'Pesquisar holerites (funcionário, data, ID…)'
     : gallery==='IDFOLHA' ? 'Pesquisar folhas (fornecedor, mês, ID…)': 'Pesquisar pagamentos (fornecedor, tipo, ID…)';
   search.setAttribute('aria-label', 'Pesquisar registros');
   const toggle = element('button','hr-gallery-button hr-gallery-filter-toggle','⚲ Filtros');
@@ -213,8 +214,7 @@ export function createHrPayrollGallery({ document: documentOption,
     }
   }
 
-  function drawRows(rows) {
-    cards.replaceChildren();
+  function drawRows(rows, target = cards) {
     for (const row of rows) {
       const card = element("article", "hr-gallery-card");
       card.setAttribute("role", "listitem");
@@ -257,8 +257,79 @@ export function createHrPayrollGallery({ document: documentOption,
         }));
       }
       card.append(recordMain, actions);
-      cards.append(card);
+      target.append(card);
     }
+  }
+
+  function drawPayslipDates(groups) {
+    for (const { date, rows } of groups) {
+      const group = element("section", "hr-payslip-date");
+      group.setAttribute("role", "listitem");
+      const header = element("header", "hr-payslip-date-header");
+      const label = date ? displayValue("DATA_PAGAMENTO", date) : "Sem data da folha";
+      const toggle = element("button", "hr-gallery-button hr-payslip-date-toggle", label);
+      toggle.type = "button";
+      toggle.dataset.action = "toggle-payslip-date";
+      toggle.setAttribute("aria-expanded", "false");
+      toggle.append(element("span", "hr-payslip-date-count", `${rows.length} ${rows.length === 1 ? "holerite" : "holerites"}`));
+      const list = element("div", "hr-gallery-cards hr-payslip-date-items");
+      list.setAttribute("role", "list");
+      list.hidden = true;
+      toggle.addEventListener("click", () => {
+        list.hidden = !list.hidden;
+        toggle.setAttribute("aria-expanded", String(!list.hidden));
+        if (!list.hidden && !list.childElementCount) drawRows(rows, list);
+      });
+      header.append(toggle);
+      if (date && typeof downloadDatePayslips === "function") {
+        const pdf = element("button", "hr-gallery-button hr-payslip-date-pdf", "↓ PDF");
+        pdf.type = "button";
+        pdf.dataset.action = "download-payslip-date";
+        pdf.setAttribute("aria-label", `Baixar todos os holerites de ${label} em PDF`);
+        const notice = element("p", "hr-payslip-download-status");
+        notice.setAttribute("role", "status");
+        notice.hidden = true;
+        pdf.addEventListener("click", async () => {
+          if (!opened || destroyed || busy || dateDownload) return;
+          const controller = dateDownload = new AbortController();
+          pdf.disabled = true;
+          pdf.setAttribute("aria-busy", "true");
+          notice.hidden = false;
+          notice.textContent = "Preparando PDF…";
+          const current = () => opened && !destroyed && !controller.signal.aborted && group.isConnected;
+          try {
+            const result = await downloadDatePayslips(date, {
+              signal: controller.signal,
+              onProgress: ({ units } = {}) => {
+                if (current() && units) notice.textContent = `Preparando PDF (${units.completed}/${units.total})…`;
+              },
+            });
+            if (current()) {
+              notice.hidden = !result;
+              notice.textContent = result === "downloaded" ? "PDF baixado." : result ? "PDF exportado." : "";
+            }
+          } catch (error) {
+            if (current()) notice.textContent = error?.message || "Não foi possível baixar os holerites desta data.";
+          } finally {
+            if (dateDownload === controller) dateDownload = null;
+            pdf.disabled = false;
+            pdf.removeAttribute("aria-busy");
+          }
+        });
+        header.append(pdf);
+        group.append(header, notice, list);
+      } else {
+        group.append(header, list);
+      }
+      cards.append(group);
+    }
+  }
+
+  function renderRows(result) {
+    const { rows } = result;
+    cards.replaceChildren();
+    if (isPayslip) drawPayslipDates(result.dateGroups);
+    else drawRows(rows);
     if (!rows.length) status.textContent = isPayslip ? "Nenhum holerite postado encontrado." : "Nenhum registro encontrado nesta página.";
     else status.textContent = `${rows.length} registro(s) nesta página.`;
   }
@@ -299,21 +370,22 @@ export function createHrPayrollGallery({ document: documentOption,
     task?.prepared();
     try {
       let result;
-      try { result = await request(gallery, targetPage, 25, cursor, {filters,refresh,onProgress:task?.report}); }
+      const options = { filters, refresh, onProgress: task?.report, ...(isPayslip ? { groupByDate: true } : {}) };
+      try { result = await request(gallery, targetPage, 25, cursor, options); }
       catch (error) {
         const invalidCursor = error?.status === 410 || error?.statusCode === 410
           || /cursor|skip.?token/i.test(`${error?.code || ''} ${error?.message || ''}`);
         if (!current() || !refresh || targetPage <= 1 || !invalidCursor) throw error;
         targetPage = 1; cursor = null;
-        result = await request(gallery, 1, 25, null, {filters,refresh,onProgress:task?.report});
+        result = await request(gallery, 1, 25, null, options);
       }
       if (!current()) return;
       if (refresh && targetPage > 1 && result?.page > 1 && Array.isArray(result.rows) && !result.rows.length) {
         targetPage = 1; cursor = null;
-        result = await request(gallery, 1, 25, null, {filters,refresh,onProgress:task?.report});
+        result = await request(gallery, 1, 25, null, options);
       }
       if (!current()) return;
-      if (result?.gallery !== gallery || !Array.isArray(result.rows)) {
+      if (result?.gallery !== gallery || !Array.isArray(result.rows) || (isPayslip && !Array.isArray(result.dateGroups))) {
         throw new Error("Resposta da galeria inválida.");
       }
       task?.acquired();
@@ -324,7 +396,7 @@ export function createHrPayrollGallery({ document: documentOption,
       pageCursors[page + 1] = result.nextCursor || null;
       hasMore = result.hasMore === true && Boolean(result.nextCursor);
       if(!quiet || !filterForm.contains(doc.activeElement)) syncFilterOptions(result);
-      drawRows(result.rows);
+      renderRows(result);
       if (scrollToTop && page !== previousPage) content.scrollTop = 0;
       if(Number.isInteger(result.count)) status.textContent=`${result.count} registro(s) encontrado(s) · ${result.rows.length} nesta página.`;
       task?.complete();
@@ -352,6 +424,8 @@ export function createHrPayrollGallery({ document: documentOption,
     if (!opened || destroyed) return;
     loadingScreen.sync(false);
     recordActions?.close();
+    dateDownload?.abort();
+    dateDownload = null;
     if (isPayslip) closePayslip?.();
     autoFilters.cancelPending();
     paymentComposer?.close();
@@ -399,6 +473,8 @@ export function createHrPayrollGallery({ document: documentOption,
     },
     close: closeGallery,
     destroy() {
+      dateDownload?.abort();
+      dateDownload = null;
       loadingScreen.destroy();
       createShortcut?.destroy();
       refreshShortcut.destroy();
