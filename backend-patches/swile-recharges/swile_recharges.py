@@ -407,12 +407,14 @@ class Service:
             })
         return result
 
-    def order_details(self, code):
+    def pending_order_details(self, code):
         if not isinstance(code, str) or not re.fullmatch(r'[A-Za-z0-9_-]{1,100}', code):
             raise SwileError('Código de pedido Swile inválido.')
         group = self.gateway.request('order/group/' + quote(code, safe=''))
         if group.get('code') != code or not isinstance(group.get('orderList'), list):
             raise SwileError('A Swile não confirmou os detalhes do pedido.', 502)
+        if group['statusCode'] in CLOSED_ORDER_STATUSES:
+            raise SwileError('Este pedido saiu dos pedidos em suspenso. Atualize a galeria.', 404)
         group_date = scheduled_date(group.get('creditDate'))
         result = {'orderCode': code, 'status': group['statusCode'], 'creditDate': group_date,
                   'creditCents': 0, 'items': []}
@@ -476,7 +478,7 @@ def handle_portal(identity, body):
             value = service.confirm(owner, body.get('id'), body.get('invoiceText', ''))
         elif action == 'swile_orders':
             if body.get('gallery') == 'pending':
-                value = service.order_details(body['orderCode']) if 'orderCode' in body else service.pending_orders()
+                value = service.pending_order_details(body['orderCode']) if 'orderCode' in body else service.pending_orders()
             else:
                 value = service.orders(owner, body.get('reference'))
         else:

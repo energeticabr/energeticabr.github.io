@@ -213,6 +213,16 @@ class ServiceTests(unittest.TestCase):
             ],
         }, result['swile'])
 
+    def test_pending_gallery_cannot_open_a_completed_order_by_code(self):
+        with patch.object(self.gateway, 'request', return_value={
+            'code': 'CLOSED', 'statusCode': 'APPROVED', 'orderList': [],
+        }), patch('swile_recharges.configured_service', return_value=self.service):
+            status, result = handle_portal({'oid': 'user-a'}, {
+                'action': 'swile_orders', 'gallery': 'pending', 'orderCode': 'CLOSED',
+            })
+        self.assertEqual(404, status)
+        self.assertNotIn('swile', result)
+
 
 if __name__ == '__main__':
     unittest.main()
