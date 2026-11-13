@@ -15,15 +15,19 @@ test('Swile keeps amounts across search and submits only after review', async ()
   const { window } = new JSDOM('<!doctype html><body></body>');
   const { document } = window;
   const calls = [];
+  let directoryLoads = 0;
   const view = openSwileView({ document, request: async (operation, body) => {
     calls.push([operation, body]);
-    if (operation === 'directory') return [
-      { id: 1, name: 'Pessoa A', hasActiveCard: true },
-      { id: 2, name: 'Pessoa B', hasActiveCard: false },
-      { id: 3, name: 'BERNARDO NOTINI MOREIRA BAHIA' },
-      { id: 4, name: ' Rafael da Silva' },
-      ...(calls.length > 1 ? [{ id: 5, name: 'Pessoa C' }] : []),
-    ];
+    if (operation === 'directory') {
+      directoryLoads++;
+      return [
+        { id: 1, name: 'Pessoa A', hasActiveCard: true },
+        ...(directoryLoads !== 2 ? [{ id: 2, name: 'Pessoa B', hasActiveCard: false }] : []),
+        { id: 3, name: 'BERNARDO NOTINI MOREIRA BAHIA' },
+        { id: 4, name: ' Rafael da Silva' },
+        ...(directoryLoads > 1 ? [{ id: 5, name: 'Pessoa C' }] : []),
+      ];
+    }
     if (operation === 'preview') return {
       id: 'preview', items: [{ name: 'Pessoa A', amountCents: 1234 }, { name: 'Pessoa C', amountCents: 22500 }],
       totalEmployees: 2, creditCents: 23734, paymentCents: 23800,
@@ -60,6 +64,9 @@ test('Swile keeps amounts across search and submits only after review', async ()
     assert.equal(amount('Pessoa A'), null);
     sync.click();
     await settle();
+    assert.equal(amount('Pessoa B'), null);
+    sync.click();
+    await settle();
     assert.equal(amount('Pessoa B').value, '');
     input(document.querySelector('[type=search]'), '');
     assert.equal(amount('Pessoa A').value, '12,34');
@@ -69,6 +76,7 @@ test('Swile keeps amounts across search and submits only after review', async ()
     click('Conferir pedido');
     await settle();
     assert.deepEqual(calls, [
+      ['directory', {}],
       ['directory', {}],
       ['directory', {}],
       ['preview', { items: [{ employeeId: 1, amountCents: 1234 }, { employeeId: 5, amountCents: 22500 }], creditDate: '2026-12-02', paymentMethod: 'PIX' }],

@@ -238,8 +238,6 @@ export function openSwileView({ document: doc, request, gallery = false, onClose
       if (!Array.isArray(result)) throw new Error('Lista de colaboradores inválida.');
       people = result;
       loaded = true;
-      const ids = new Set(people.map(row => row.id));
-      for (const id of amountOverrides.keys()) if (!ids.has(id)) amountOverrides.delete(id);
       showForm();
     });
   }
