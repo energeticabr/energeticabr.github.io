@@ -36,6 +36,14 @@
 .hr-gallery-button:hover:not(:disabled) { background: #eaf4f8; }
 .hr-gallery-button:disabled { opacity: .5; cursor: default; }
 .hr-gallery-card--payslip .hr-gallery-payslip-pdf { width: 44px; padding: 4px; font-size: .78rem; }
+.hr-payslip-upload { width: 44px; padding: 4px; font-size: 1.4rem; }
+.hr-payslip-dialog-header { display: flex; align-items: start; justify-content: space-between; gap: 12px; }
+.hr-payslip-dialog-header h2 { margin: 0; font-size: 1.25rem; }
+.hr-payslip-dialog-body, .hr-payslip-dialog-files { display: grid; gap: 10px; }
+.hr-payslip-dialog-options { display: flex; flex-wrap: wrap; gap: 8px; }
+.hr-payslip-dialog-options > .hr-payslip-dialog-options { width: 100%; }
+.hr-payslip-dialog-message:empty, .hr-payslip-dialog-files:empty { display: none; }
+.hr-payslip-dialog-message { color: #285268; font-weight: 650; }
 .hr-payslip-date {
   min-width: 0;
   padding: 10px;

@@ -2914,6 +2914,48 @@ test("PDF da data baixa o consolidado da sessão sem abrir o visualizador", asyn
   assert.deepEqual(exports, [["%PDF-1.7", "Holerites-2026-11-13.pdf", { download: true, signal: request.signal }]]);
 });
 
+test("holerites encaminham arquivos, scanner e fotos e cancelam o download ao fechar a prévia assinada", async t => {
+  let options;
+  let previewSignal;
+  let error;
+  const calls = [];
+  const h = makeHarness({
+    hrPayrollGalleryDataFactory: async () => ({
+      async loadPage() { return { rows: [] }; },
+      async downloadPayslip() {},
+      async listSignedPayslips() { return []; },
+      async uploadSignedPayslips() {},
+      async downloadSignedPayslip(row, file, { signal }) {
+        calls.push([row.id, file.name]);
+        previewSignal = signal;
+        return new Blob(['signed'], { type: 'image/jpeg' });
+      },
+    }),
+    hrPayrollGalleryFactory: async value => { options = value; return { async open() {}, destroy() { value.closePayslip(); } }; },
+  });
+  for (const [source, method] of [['files', 'pickDocuments'], ['scan', 'scanDocument'], ['photos', 'pickPhotos'], ['camera', 'capturePhoto']]) {
+    h.native[method] = async () => { calls.push(source); return []; };
+  }
+  h.native.previewMedia = async (source, _name, { onClose }) => {
+    if (error) throw error;
+    const viewer = new AbortController();
+    await source({ signal: viewer.signal });
+    onClose();
+  };
+  t.after(() => h.controller.stop());
+  await h.controller.start();
+  await h.view.emit('select-reply', { replyId: 'action_hr_gallery_holerite' });
+  for (const source of ['files', 'scan', 'photos', 'camera']) await options.pickSignedPayslip(source);
+  let closed = 0;
+  const row = { id: '9' }, file = { name: 'signed.jpg' };
+  await options.openSignedPayslip(row, file, { onClose: () => closed++ });
+  assert.equal(closed, 1);
+  assert.equal(previewSignal.aborted, true);
+  assert.deepEqual(calls, ['files', 'scan', 'photos', 'camera', ['9', 'signed.jpg']]);
+  error = new Error('Prévia indisponível');
+  await assert.rejects(options.openSignedPayslip(row, file), /Prévia indisponível/);
+});
+
 test("retoma a galeria de folha escolhida após o retorno de consentimento Microsoft", async t => {
   for (const [action, gallery] of [
     ["action_hr_gallery_idfolha", "IDFOLHA"],

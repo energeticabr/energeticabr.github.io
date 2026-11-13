@@ -340,6 +340,7 @@ test("fechamento misto guarda as rubricas e cria provisão somente para a penden
   assert.equal(child.IDFOLHA, 9);
   assert.equal(payment.IDPROVISAO, Number(f.rows["PROVISÃO PGTOS"][0].id));
   assert.equal(payment.IDLANCAMENTO, undefined);
+  f.rows.HOLERITE[0].fields.HOLERITE_REVISAO = JSON.stringify({ supplier: "Nome corrigido", branch: "Obra A", date: "2026-10-02" });
   f.rows.CADASTROPRODUTO.length = 0;
   const reopened = await f.data.post(f.draft, { operationId: "weekly-mixed-reopened" }, undefined, { weekly: true });
   assert.equal(reopened.lines[1].id, posted.lines[1].id);

@@ -7239,6 +7239,54 @@ export function createAppController({
           panel = await hrPayrollGalleryFactory({
             gallery,
             ...(isPayslip ? {
+              ...(typeof data.uploadSignedPayslips === 'function' && typeof data.listSignedPayslips === 'function'
+                && typeof data.downloadSignedPayslip === 'function' ? {
+                pickSignedPayslip: async (source, { signal } = {}) => {
+                  assertSession();
+                  if (signal?.aborted || hrPayrollGallery !== panel) return [];
+                  const picker = { files: native.pickDocuments, scan: native.scanDocument,
+                    photos: native.pickPhotos, camera: native.capturePhoto }[source];
+                  if (typeof picker !== 'function') throw new Error('Esta opção não está disponível neste dispositivo.');
+                  const files = await picker.call(native);
+                  assertSession();
+                  return signal?.aborted || hrPayrollGallery !== panel ? [] : files;
+                },
+                listSignedPayslips: (row, options) => data.listSignedPayslips(row, options),
+                uploadSignedPayslips: (row, files, options) => data.uploadSignedPayslips(row, files, options),
+                openSignedPayslip: async (row, file, { signal, onClose } = {}) => {
+                  assertSession();
+                  if (payslipPreview || signal?.aborted || hrPayrollGallery !== panel) { onClose?.(); return; }
+                  const preview = payslipPreview = new AbortController();
+                  const abort = () => { preview.abort(signal.reason); native.closePreview?.(); };
+                  signal?.addEventListener('abort', abort, { once: true });
+                  const release = () => {
+                    if (payslipPreview === preview) payslipPreview = null;
+                    preview.abort();
+                    signal?.removeEventListener('abort', abort);
+                    onClose?.();
+                  };
+                  try {
+                    await showMedia(async options => {
+                      const viewer = options?.signal;
+                      const cancel = () => preview.abort(viewer.reason);
+                      if (viewer?.aborted) cancel();
+                      else viewer?.addEventListener('abort', cancel, { once: true });
+                      try { return await data.downloadSignedPayslip(row, file, { ...options, signal: preview.signal }); }
+                      finally { viewer?.removeEventListener('abort', cancel); }
+                    },
+                      file.name, { onClose: release, returnLabel: 'Voltar às vias assinadas' });
+                  } catch (error) {
+                    const cancelled = preview.signal.aborted;
+                    release();
+                    if (!cancelled) throw error;
+                  }
+                  finally { if (!native.previewMedia) release(); }
+                },
+              } : {}),
+              ...(typeof data.loadPayslipEditor === 'function' && typeof data.savePayslipEditor === 'function' ? {
+                loadPayslipEditor: (row, options) => data.loadPayslipEditor(row, options),
+                savePayslipEditor: (row, context, draft, options) => data.savePayslipEditor(row, context, draft, options),
+              } : {}),
               downloadDatePayslips: async (date, options = {}) => {
                 assertSession();
                 if (options.signal?.aborted || hrPayrollGallery !== panel) return null;
