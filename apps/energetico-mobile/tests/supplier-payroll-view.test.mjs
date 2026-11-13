@@ -736,24 +736,28 @@ test("resumo associa contexto e valores a cabeçalhos de tabela sem alterar a po
   assert.ok(details);
   assert.deepEqual([...details.rows].map(row => [...row.cells].map(cell => cell.textContent)), [
     ["Quantidade", "2"], ["Valor unitário", "R$\u00a0100,50"], ["Subtotal", "R$\u00a0201,00"],
+    ["Situação", "A pagar"],
     ["Forma de pagamento", "PIX"], ["Comprovantes", "Sem comprovantes"],
   ]);
   for (const table of [context, details]) {
     assert.ok([...table.rows].every(row => row.cells[0].tagName === "TH" && row.cells[0].scope === "row"));
   }
   const total = doc.querySelector('[data-payroll-summary-total]');
-  assert.match(total.textContent, /Total pago.*201,00/);
+  assert.deepEqual([...total.querySelectorAll("dt, dd")].map(cell => cell.textContent), [
+    "Já pago", "R$\u00a00,00", "A pagar", "R$\u00a0201,00", "Total da folha", "R$\u00a0201,00",
+  ]);
   await h.click('[data-payroll-post]');
   assert.equal(h.posts[0].total, 201);
   assert.equal(h.posts[0].sheet.id, "5");
 });
 
-test("resumo separa rubricas ativas e lista comprovantes como texto seguro", async t => {
+test("resumo detalha rubricas pagas e a pagar antes dos totais e lista comprovantes como texto seguro", async t => {
   const h = await harness();
   t.after(() => { h.view.destroy(); h.dom.window.close(); });
   await openRubrics(h);
   h.input('[name=salary-value]', "3");
   h.input('[name=salary-account]', "3");
+  await h.click('[name=salary-already-paid]');
   h.input('[name=allowance-value]', "10,25");
   h.input('[name=allowance-quantity]', "2");
   h.input('[name=allowance-account]', "3");
@@ -771,8 +775,21 @@ test("resumo separa rubricas ativas e lista comprovantes como texto seguro", asy
   assert.ok(table);
   assert.deepEqual([...table.querySelectorAll('li')].map(el => el.textContent), names);
   assert.equal(table.querySelector('img'), null);
-  assert.match(doc.querySelector('table[aria-label="Detalhes de Ajuda de custo"]').textContent, /20,50/);
-  assert.match(doc.querySelector('[data-payroll-summary-total]').textContent, /23,50/);
+  const allowance = doc.querySelector('table[aria-label="Detalhes de Ajuda de custo"]');
+  assert.match(allowance.textContent, /20,50/);
+  const paymentStatus = table => [...table.rows].find(row => row.cells[0].textContent === "Situação").cells[1].textContent;
+  assert.equal(paymentStatus(table), "Já pago");
+  assert.equal(paymentStatus(allowance), "A pagar");
+  const total = doc.querySelector('[data-payroll-summary-total]');
+  assert.equal(allowance.closest("article").parentElement.nextElementSibling, total);
+  assert.deepEqual([...total.querySelectorAll("dt, dd")].map(cell => cell.textContent), [
+    "Já pago", "R$\u00a03,00", "A pagar", "R$\u00a020,50", "Total da folha", "R$\u00a023,50",
+  ]);
+  await h.click('[name=allowance-already-paid]');
+  assert.equal(paymentStatus(doc.querySelector('table[aria-label="Detalhes de Ajuda de custo"]')), "Já pago");
+  assert.deepEqual([...doc.querySelectorAll('[data-payroll-summary-total] dd')].map(cell => cell.textContent), [
+    "R$\u00a023,50", "R$\u00a00,00", "R$\u00a023,50",
+  ]);
 });
 
 test("painel mantém os quatro dados em tabela durante o preenchimento", async t => {
