@@ -119,7 +119,8 @@ export function createBrowserPorts({
     return validatedSelection({ accept: "image/*,application/pdf,.doc,.docx,.xls,.xlsx,.csv,.txt", multiple: true });
   }
 
-  async function exportMedia(blob, fileName, { download = false } = {}) {
+  async function exportMedia(blob, fileName, { download = false, signal } = {}) {
+    if (signal?.aborted) return null;
     const name = safeFileName(fileName);
     const file = new FileCtor([blob], name, { type: blob.type || "application/octet-stream" });
     if (!download && navigatorRef?.share && navigatorRef?.canShare?.({ files: [file] })) {

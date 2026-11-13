@@ -336,6 +336,24 @@ test("arquivos com o mesmo nome mantêm URIs e conteúdos separados ao encaminha
   assert.notEqual(writes[0].data, writes[1].data);
 });
 
+test("download de PDF abre o seletor de destino e limpa a cópia temporária", async () => {
+  const calls = [];
+  const ports = createNativePorts({
+    randomUUID: () => "date-export",
+    filesystem: {
+      async writeFile({ path }) { return { uri: `file:///cache/${path}` }; },
+      async deleteFile({ path }) { calls.push(["delete", path]); },
+    },
+    documentPicker: { async savePdf(options) { calls.push(["save", options]); return { saved: true }; } },
+    share: { share: () => assert.fail("O download usa o seletor de destino") },
+  });
+  assert.equal(await ports.exportMedia(new Blob(["pdf"], { type: "application/pdf" }), "Holerites.pdf", { download: true }), "downloaded");
+  assert.deepEqual(calls, [
+    ["save", { uri: "file:///cache/shared/date-export/Holerites.pdf" }],
+    ["delete", "shared/date-export/Holerites.pdf"],
+  ]);
+});
+
 test("cancelar a folha nativa de compartilhamento não mostra erro", async () => {
   const ports = createNativePorts({
     filesystem: { async writeFile() { return { uri: "file:///cache/shared/foto.jpg" }; } },

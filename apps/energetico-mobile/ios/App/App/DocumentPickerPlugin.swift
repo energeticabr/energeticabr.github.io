@@ -8,15 +8,44 @@ final class DocumentPickerPlugin: CAPPlugin, CAPBridgedPlugin, UIDocumentPickerD
     let identifier = "DocumentPickerPlugin"
     let jsName = "DocumentPicker"
     let pluginMethods: [CAPPluginMethod] = [
-        CAPPluginMethod(name: "pick", returnType: CAPPluginReturnPromise)
+        CAPPluginMethod(name: "pick", returnType: CAPPluginReturnPromise),
+        CAPPluginMethod(name: "savePdf", returnType: CAPPluginReturnPromise)
     ]
 
     private var pendingCall: CAPPluginCall?
+    private var pendingExport: CAPPluginCall?
+
+    @objc func savePdf(_ call: CAPPluginCall) {
+        DispatchQueue.main.async { [weak self] in
+            guard let self else { return }
+            guard self.pendingCall == nil, self.pendingExport == nil,
+                  let presenter = self.bridge?.viewController, presenter.presentedViewController == nil else {
+                call.reject("Já existe uma seleção de arquivos em andamento.", "PICK_IN_PROGRESS")
+                return
+            }
+            guard let uri = call.getString("uri"), let url = URL(string: uri), url.isFileURL,
+                  let cache = FileManager.default.urls(for: .cachesDirectory, in: .userDomainMask).first else {
+                call.reject("PDF temporário inválido.", "INVALID_PDF")
+                return
+            }
+            let source = url.resolvingSymlinksInPath().standardizedFileURL
+            let shared = cache.appendingPathComponent("shared", isDirectory: true).resolvingSymlinksInPath().standardizedFileURL
+            guard source.path.hasPrefix(shared.path + "/"), source.pathExtension.lowercased() == "pdf",
+                  (try? source.resourceValues(forKeys: [.isRegularFileKey]).isRegularFile) == true else {
+                call.reject("PDF temporário inválido.", "INVALID_PDF")
+                return
+            }
+            let picker = UIDocumentPickerViewController(forExporting: [source], asCopy: true)
+            picker.delegate = self
+            self.pendingExport = call
+            presenter.present(picker, animated: true)
+        }
+    }
 
     @objc func pick(_ call: CAPPluginCall) {
         DispatchQueue.main.async { [weak self] in
             guard let self else { return }
-            guard self.pendingCall == nil else {
+            guard self.pendingCall == nil, self.pendingExport == nil else {
                 call.reject("Já existe uma seleção de arquivos em andamento.", "PICK_IN_PROGRESS")
                 return
             }
@@ -33,6 +62,11 @@ final class DocumentPickerPlugin: CAPPlugin, CAPBridgedPlugin, UIDocumentPickerD
     }
 
     func documentPickerWasCancelled(_ controller: UIDocumentPickerViewController) {
+        if let pendingExport {
+            self.pendingExport = nil
+            pendingExport.resolve(["saved": false])
+            return
+        }
         finish(with: [])
     }
 
@@ -40,6 +74,11 @@ final class DocumentPickerPlugin: CAPPlugin, CAPBridgedPlugin, UIDocumentPickerD
         _ controller: UIDocumentPickerViewController,
         didPickDocumentsAt urls: [URL]
     ) {
+        if let pendingExport {
+            self.pendingExport = nil
+            pendingExport.resolve(["saved": !urls.isEmpty])
+            return
+        }
         do {
             let items = try urls.map(copyToAppCache)
             finish(with: items)

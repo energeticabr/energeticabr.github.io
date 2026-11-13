@@ -2911,7 +2911,7 @@ test("PDF da data baixa o consolidado da sessão sem abrir o visualizador", asyn
   assert.equal(await options.downloadDatePayslips("2026-11-13", { signal: request.signal }), "downloaded");
   request.abort();
   assert.equal(await options.downloadDatePayslips("2026-11-13", { signal: request.signal }), null);
-  assert.deepEqual(exports, [["%PDF-1.7", "Holerites-2026-11-13.pdf", { download: true }]]);
+  assert.deepEqual(exports, [["%PDF-1.7", "Holerites-2026-11-13.pdf", { download: true, signal: request.signal }]]);
 });
 
 test("retoma a galeria de folha escolhida após o retorno de consentimento Microsoft", async t => {

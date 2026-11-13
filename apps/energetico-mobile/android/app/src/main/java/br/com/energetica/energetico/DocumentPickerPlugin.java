@@ -15,6 +15,8 @@ import com.getcapacitor.Plugin;
 import com.getcapacitor.PluginCall;
 import com.getcapacitor.PluginMethod;
 import com.getcapacitor.annotation.CapacitorPlugin;
+import com.getcapacitor.annotation.ActivityCallback;
+import androidx.activity.result.ActivityResult;
 
 import java.io.File;
 import java.io.FileInputStream;
@@ -31,7 +33,8 @@ import java.util.UUID;
 public class DocumentPickerPlugin extends Plugin {
     private static final int REQUEST_CODE = 4301;
     private static volatile DocumentPickerPlugin instance;
-    private PluginCall pendingCall;
+    private volatile PluginCall pendingCall;
+    private volatile boolean exportPending;
 
     @Override
     public void load() {
@@ -41,7 +44,7 @@ public class DocumentPickerPlugin extends Plugin {
 
     @PluginMethod
     public void pick(PluginCall call) {
-        if (pendingCall != null) {
+        if (pendingCall != null || exportPending) {
             call.reject("Já existe uma seleção de arquivos em andamento.", "PICK_IN_PROGRESS");
             return;
         }
@@ -56,6 +59,87 @@ public class DocumentPickerPlugin extends Plugin {
             pendingCall = null;
             call.reject("Não foi possível abrir o seletor de arquivos.", "PICKER_UNAVAILABLE", error);
         }
+    }
+
+    @PluginMethod
+    public void savePdf(PluginCall call) {
+        getActivity().runOnUiThread(() -> openPdfDestination(call));
+    }
+
+    private void openPdfDestination(PluginCall call) {
+        if (pendingCall != null || exportPending) {
+            call.reject("Já existe uma seleção de arquivos em andamento.", "PICK_IN_PROGRESS");
+            return;
+        }
+        final File source;
+        try {
+            source = getExportSource(call);
+        } catch (IOException error) {
+            call.reject("PDF temporário inválido.", "INVALID_PDF", error);
+            return;
+        }
+        Intent picker = new Intent(Intent.ACTION_CREATE_DOCUMENT);
+        picker.addCategory(Intent.CATEGORY_OPENABLE);
+        picker.setType("application/pdf");
+        picker.putExtra(Intent.EXTRA_TITLE, source.getName());
+        try {
+            exportPending = true;
+            startActivityForResult(call, picker, "completePdfSave");
+        } catch (Exception error) {
+            exportPending = false;
+            call.reject("Não foi possível abrir o seletor de destino.", "PICKER_UNAVAILABLE", error);
+        }
+    }
+
+    @ActivityCallback
+    private void completePdfSave(PluginCall call, ActivityResult result) {
+        if (call == null) {
+            exportPending = false;
+            return;
+        }
+        Intent data = result.getData();
+        Uri destination = data == null ? null : data.getData();
+        if (result.getResultCode() != Activity.RESULT_OK || destination == null) {
+            exportPending = false;
+            call.resolve(new JSObject().put("saved", false));
+            return;
+        }
+        ContentResolver resolver = getContext().getContentResolver();
+        new Thread(() -> {
+            try {
+                File source = getExportSource(call);
+                try (InputStream input = new FileInputStream(source);
+                     OutputStream output = resolver.openOutputStream(destination, "w")) {
+                    if (output == null) throw new IOException("O destino não está disponível.");
+                    byte[] buffer = new byte[64 * 1024];
+                    int read;
+                    while ((read = input.read(buffer)) != -1) output.write(buffer, 0, read);
+                }
+                getActivity().runOnUiThread(() -> {
+                    exportPending = false;
+                    call.resolve(new JSObject().put("saved", true));
+                });
+            } catch (Exception error) {
+                getActivity().runOnUiThread(() -> {
+                    exportPending = false;
+                    call.reject("Não foi possível salvar o PDF.", "PDF_SAVE_FAILED", error);
+                });
+            }
+        }, "energetico-pdf-save").start();
+    }
+
+    private File getExportSource(PluginCall call) throws IOException {
+        String uri = call.getString("uri");
+        Uri parsed = uri == null ? null : Uri.parse(uri);
+        String path = parsed == null ? null : parsed.getPath();
+        if (path == null || !"file".equals(parsed.getScheme())) throw new IOException("Arquivo inválido.");
+        File shared = new File(getContext().getCacheDir(), "shared").getCanonicalFile();
+        File source = new File(path).getCanonicalFile();
+        if (!source.getPath().startsWith(shared.getPath() + File.separator) || !source.isFile()
+                || !source.getName().toLowerCase(java.util.Locale.ROOT).endsWith(".pdf")) {
+            throw new IOException("Arquivo inválido.");
+        }
+        return source;
     }
 
     /** Called by MainActivity after ACTION_OPEN_DOCUMENT returns. */
