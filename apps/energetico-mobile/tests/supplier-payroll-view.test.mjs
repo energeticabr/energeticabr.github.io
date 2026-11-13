@@ -24,6 +24,7 @@ test('pré-preenche somente os vales dos seis fornecedores e permite alterar ou 
     assert.equal(doc.querySelector(`${card(id)} [data-payroll-select]`).checked, false);
   }
   assert.equal(doc.querySelector('[data-payroll-post]').disabled, true);
+  h.input(field('253', 'transport-quantity'), '3');
   h.input(field('253', 'transport-value'), '');
   h.input(field('253', 'meal-quantity'), '4');
   h.input(field('253', 'meal-account'), '17');

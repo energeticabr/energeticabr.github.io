@@ -100,8 +100,9 @@ export function createSupplierPayrollView({
         taxCompetence: "", taxSheet: null,
         lines: PAYROLL_RUBRICS.map(({ id }) => {
           const unitValue = hasBenefitDefaults ? weeklyBenefitValues.get(id) ?? "" : "";
-          const defaultQuantity = unitValue ? "5" : "1";
-          return { rubric: id, quantity: defaultQuantity, defaultQuantity, unitValue, account: null, alreadyPaid: false, files: [] };
+          const prefilledBenefit = Boolean(unitValue);
+          return { rubric: id, quantity: prefilledBenefit ? "5" : "1", unitValue, prefilledBenefit,
+            account: null, alreadyPaid: false, files: [] };
         }),
       },
       progress: {
@@ -425,7 +426,7 @@ export function createSupplierPayrollView({
     container.replaceChildren(context, list, total);
   }
   function lineEdited(line) {
-    return line.unitValue.trim() !== "" || line.quantity.trim() !== line.defaultQuantity ||
+    return line.unitValue.trim() !== "" || (!line.prefilledBenefit && line.quantity.trim() !== "1") ||
       Boolean(line.account || line.alreadyPaid || line.files.length);
   }
   function hasAmount(line) {
