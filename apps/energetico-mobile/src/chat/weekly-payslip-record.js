@@ -56,8 +56,11 @@ function revision(fields, name) {
 
 export function weeklyPayslipDisplay(fields, name) {
   const saved = name && revision(fields, name);
-  return saved ? { FORNECEDOR: saved.supplier, FILIAL: saved.branch, DATA_PAGAMENTO: saved.date,
-    ...(saved.lines ? { TOTAL: saved.total } : {}) } : {};
+  let rubrics = [];
+  try { rubrics = weeklyPayslipLines(saved?.lines ?? JSON.parse(fields.RUBRICAS || '[]')); }
+  catch { /* A legacy record without readable rubrics can still show its total and PDF. */ }
+  return { rubrics, ...(saved ? { FORNECEDOR: saved.supplier, FILIAL: saved.branch, DATA_PAGAMENTO: saved.date,
+    ...(saved.lines ? { TOTAL: saved.total } : {}) } : {}) };
 }
 
 export function createWeeklyPayslipRecord({ repository, siteKey, resolveList, assertSession, loadLogo, onSaved }) {

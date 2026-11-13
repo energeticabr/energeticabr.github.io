@@ -318,6 +318,8 @@ test("holerite guarda assinaturas no registro exato e publica correções com co
   const data = galleryData.createHrPayrollGalleryData({ repository: repo,
     loadHoleriteLogo: () => readFile(new URL("../../../assets/logo-energetica-oficial.png", import.meta.url)) });
   const row = { id: "17", pdfFileName: name };
+  const originalRows = await data.loadFilteredPage('HOLERITE', { groupByDate: true });
+  assert.deepEqual(originalRows.rows[0].rubrics.map(line => [line.label, line.total, line.formaPgto]), [['Salário', 100, 'PIX']]);
   const editor = await data.loadPayslipEditor(row);
   await assert.rejects(data.savePayslipEditor(row, editor, { ...editor, total: 999 }), /campos/i);
   await assert.rejects(data.savePayslipEditor(row, editor, { supplier: editor.supplier, branch: editor.branch, date: "2026-11-17" }), /semana/i);
@@ -364,7 +366,10 @@ test("holerite guarda assinaturas no registro exato e publica correções com co
   assert.deepEqual(reread.lines.map(line => [line.rubrica, line.total]), [['salary', 123.38], ['meal', 10]]);
   assert.deepEqual(reread.attachments.map(file => file.label), ['novo.pdf']);
   assert.deepEqual(reread.removedAttachments.map(file => file.name), ['receipt.pdf', signed.name]);
-  assert.equal((await data.loadFilteredPage('HOLERITE', { groupByDate: true })).rows[0].TOTAL, 133.38);
+  const revisedRow = (await data.loadFilteredPage('HOLERITE', { groupByDate: true })).rows[0];
+  assert.equal(revisedRow.TOTAL, 133.38);
+  assert.deepEqual(revisedRow.rubrics.map(line => [line.label, line.total, line.formaPgto]),
+    [['Salário', 123.38, 'SWILE'], ['Vale alimentação', 10, 'PIX']]);
   assert.equal(current.fields.TOTAL, 100);
   assert.ok(attachments.has(name));
   await assert.rejects(data.downloadSignedPayslip(row, signed), /não foi encontrada/i);
