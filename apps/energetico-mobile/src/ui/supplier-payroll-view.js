@@ -939,12 +939,25 @@ export function createSupplierPayrollView({
         if (editorReady || signal.aborted) return;
         editorReady = true;
         try {
-          if (!entry.options.products || !entry.options.stages || !entry.options.sheets) {
-            const firstAccountsLoad = !entry.options.accounts;
+          if (!entry.options.accounts || !entry.options.products || !entry.options.stages || !entry.options.sheets) {
             editor.replaceChildren(createLoadingIndicator(doc, "Carregando opções do fornecedor…"));
-            const [products, accounts] = await Promise.all([
+            const loadAccounts = async () => {
+              if (entry.options.accounts) return;
+              const accounts = await data.loadAccounts(catalogOptions);
+              if (signal.aborted || entry.options.accounts) return;
+              assertSession();
+              const meal = prefilledMeal(draft);
+              if (meal) {
+                const swile = accounts.filter(account => stageKey(account.label) === "SWILE");
+                if (swile.length === 1) meal.account = swile[0];
+              }
+              entry.options.accounts = accounts;
+              refresh();
+              refreshBatch();
+            };
+            const [products] = await Promise.all([
               entry.options.products || data.loadProducts(draft.supplier, catalogOptions),
-              entry.options.accounts || data.loadAccounts(catalogOptions),
+              loadAccounts(),
               loadReferences(entry),
             ]);
             if (signal.aborted) return;
@@ -953,14 +966,7 @@ export function createSupplierPayrollView({
               const recommended = products.filter(product => product.recommended);
               if (recommended.length === 1) draft.product = recommended[0];
             }
-            if (firstAccountsLoad) {
-              const meal = prefilledMeal(draft);
-              if (meal) {
-                const swile = accounts.filter(account => stageKey(account.label) === "SWILE");
-                if (swile.length === 1) meal.account = swile[0];
-              }
-            }
-            Object.assign(entry.options, { products, accounts });
+            entry.options.products = products;
           }
           applyBatchDefaults(entry);
           syncEditor = buildEditor(entry, editor, edited => {

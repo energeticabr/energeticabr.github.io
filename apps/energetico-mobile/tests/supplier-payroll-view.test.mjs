@@ -58,6 +58,7 @@ test('postagem de vale já pago aguarda a forma padrão do catálogo', async t =
   const h = await harness();
   t.after(() => { h.view.destroy(); h.dom.window.close(); });
   h.data.loadSuppliers = async () => [{ id: '260', label: 'Feliciano', branch: 'OBRA A' }];
+  h.data.loadProducts = async () => { throw new Error('Produtos indisponíveis'); };
   let finishAccounts;
   h.data.loadAccounts = () => new Promise(resolve => { finishAccounts = resolve; });
   await openSuppliers(h);
