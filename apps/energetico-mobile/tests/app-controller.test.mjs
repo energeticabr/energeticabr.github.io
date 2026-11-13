@@ -3662,6 +3662,57 @@ test('IDFOLHA default real gallery and composer open through +, never posting on
   assert.ok(dom.window.document.querySelector('[data-gallery-create]'));
 });
 
+test('ABANDONAR IDFOLHA discards the local form and opens the main menu from the gallery', async t => {
+  const dom = new JSDOM('<main id="app"></main>', { url: 'https://example.test' });
+  const previous = globalThis.document;
+  globalThis.document = dom.window.document;
+  let writes = 0, galleryLoads = 0;
+  const h = makeHarness({
+    hrPayrollGalleryDataFactory: async () => ({
+      loadPage: async () => { galleryLoads++; return { gallery: 'IDFOLHA', page: 1, rows: [], hasMore: false }; },
+      loadPaymentsForPayrollId: async () => [],
+      loadSheetOptions: async () => ({
+        suppliers: [{ id: '7', label: 'Fornecedor demonstrativo' }], defaultMonth: '2026-10',
+      }),
+      saveSheet: async () => { writes++; return { id: '21' }; },
+    }),
+  });
+  t.after(() => { h.controller.stop(); globalThis.document = previous; dom.window.close(); });
+  const replies = [];
+  h.client.sendText = async ({ replyId }) => {
+    replies.push(replyId);
+    return { status: 'processed', returned_to_main_menu: true, resetConversation: true,
+      activeFlow: null, attachments: [],
+      messages: [{ type: 'poll', question: 'QUAL ÁREA VOCÊ DESEJA ACESSAR?', options: [] }] };
+  };
+  await h.controller.start();
+  await h.view.emit('select-reply', { replyId: 'action_hr_gallery_idfolha' });
+  dom.window.document.querySelector('[data-gallery-create]').click();
+  const awaitElement = async selector => {
+    for (let tries = 0; tries < 30; tries++) {
+      const result = dom.window.document.querySelector(selector);
+      if (result) return result;
+      await new Promise(done => setImmediate(done));
+    }
+    assert.fail('Expected to find ' + selector);
+  };
+  const supplier = await awaitElement('[data-payroll-sheet-create] [name="supplierId"]');
+  supplier.value = '7';
+  const abandon = await awaitElement('[data-sheet-create-abandon]');
+  assert.equal(abandon.textContent, 'ABANDONAR IDFOLHA');
+  const before = replies.length;
+  abandon.click();
+  for (let tries = 0; tries < 30 && h.store.getState().activeText; tries++) await new Promise(done => setImmediate(done));
+  assert.deepEqual(replies.slice(before), ['portal_confirm_main_menu']);
+  assert.equal(h.store.getState().messages.at(-1).question, 'QUAL ÁREA VOCÊ DESEJA ACESSAR?');
+  assert.equal(dom.window.document.querySelector('[data-payroll-sheet-create]'), null);
+  assert.equal(dom.window.document.querySelector('[data-gallery-create]'), null);
+  assert.equal(galleryLoads, 1);
+  assert.equal(writes, 0);
+  await h.view.emit('select-reply', { replyId: 'action_hr_create_idfolha' });
+  assert.equal((await awaitElement('[data-payroll-sheet-create] [name="supplierId"]')).value, '');
+});
+
 for (const consentRetry of [false, true]) {
   test(`IDFOLHA Graph write held at ${consentRetry ? 'consent retry' : 'silent token'} is blocked after logout`, async t => {
     const { createGraphClient } = await import('../../../portal/data/graph-client.js');
