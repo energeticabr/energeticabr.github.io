@@ -96,7 +96,7 @@ export async function loadProvisionDescriptionStatusOptions({repository,siteKey=
 }
 
 /** One service retains incomplete operations for explicit retry, never rebasing stale edits. */
-export function createProvisionDescriptionEditor({repository,siteKey='personal',assertSession=()=>{}}={}){
+export function createProvisionDescriptionEditor({repository,siteKey='personal',assertSession=()=>{},syncPayslipAmounts}={}){
  const operations=new Map(),busy=new Set();
  function active(signal){assertSession();if(signal?.aborted)throw signal.reason||new DOMException('Sincronização cancelada.','AbortError');}
  async function read(list,itemId,signal){active(signal);const item=await repository.getItem(siteKey,list,itemId,'$expand=fields',signal?{signal}:{});active(signal);if(id(item?.id)!==itemId)throw new Error('A identidade do descritivo/provisão mudou.');version(item);return item;}
@@ -162,7 +162,7 @@ export function createProvisionDescriptionEditor({repository,siteKey='personal',
   }
   return {parentList:parent.id,parentColumns,patch:Object.freeze(patch),childList,childColumns,childPatch:Object.freeze(childPatch),link,children};
  }
- async function apply(list,itemId,expectedTag,patch,columns,state,signal,check=()=>{}){
+ async function apply(list,itemId,expectedTag,patch,columns,state,signal,check=()=>{},ensure){
   const current=await read(list,itemId,signal);check(current);
   if(version(current)!==expectedTag){
    if(matches(current,patch,columns))return current;
@@ -172,7 +172,7 @@ export function createProvisionDescriptionEditor({repository,siteKey='personal',
   if(matches(current,patch,columns))return current;
   let patchTag=expectedTag;
   for(let attempt=0;attempt<2;attempt++){
-   active(signal);state.attempted=true;
+   await ensure?.();active(signal);state.attempted=true;
    try{await repository.updateItem(siteKey,list,itemId,patch,{eTag:patchTag,...(signal?{signal}:{})});break;}
    catch(error){
     // A lost response may already be committed. A 412 permits one retry only
@@ -188,7 +188,25 @@ export function createProvisionDescriptionEditor({repository,siteKey='personal',
   return saved;
  }
  async function save({list,item,fields,requestedFields,signal}={}){
-  active(signal);const parentId=id(item?.id),originalTag=version(item);
+  if(syncPayslipAmounts&&item?.fields?.FOLHAOPERACAO&&Object.keys(fields||{}).length){
+   const pending=operations.get(id(item.id));
+   const metadata=pending||await contract(list,item,fields,signal);
+   const synced=await syncPayslipAmounts('parent',item,metadata.patch,{signal,
+    persist:ensure=>saveDescription({list,item,fields,requestedFields,signal,ensure})});
+   if(synced){
+    const rest=Object.fromEntries(Object.entries(fields).filter(([name])=>!synced.amountNames.includes(name)));
+    if(!Object.keys(rest).length)return synced.savedItem;
+    if(!editedFieldsUnchanged(synced.savedItem,item.fields,rest,metadata.parentColumns))
+     throw new Error('Os demais campos do descritivo mudaram. Reabra o registro.');
+    return save({list,item:synced.savedItem,fields:rest,requestedFields,signal});
+   }
+  }
+  return saveDescription({list,item,fields,requestedFields,signal});
+ }
+
+ async function saveDescription({list,item,fields,requestedFields,signal,ensure}){
+  active(signal);const parentId=id(item?.id);
+  const originalTag=version(item);
   if(!fields||typeof fields!=='object'||Array.isArray(fields))throw new Error('Informe os campos editados do descritivo.');
   if(busy.has(parentId))throw new Error('A sincronização deste descritivo já está em andamento.');
   busy.add(parentId);let operation=operations.get(parentId);
@@ -204,13 +222,13 @@ export function createProvisionDescriptionEditor({repository,siteKey='personal',
     operation={...metadata,parentId,eTag:originalTag,originalFields:{...item.fields},input:intent(fields),attempted:false,saved:null};
     operations.set(parentId,operation);
    }
-   if(!operation.saved)operation.saved=await apply(operation.parentList,parentId,operation.eTag,operation.patch,operation.parentColumns,operation,signal);
+   if(!operation.saved)operation.saved=await apply(operation.parentList,parentId,operation.eTag,operation.patch,operation.parentColumns,operation,signal,undefined,ensure);
    async function confirmParent(){const current=await read(operation.parentList,parentId,signal);if(!matches(current,operation.patch,operation.parentColumns))throw new Error('O descritivo mudou durante a sincronização incompleta. Confira os dados antes de retomar.');return current;}
    await confirmParent();
    for(const child of operation.children){
     if(child.done)continue;
     await confirmParent();
-    await apply(operation.childList,child.id,child.eTag,child.patch,operation.childColumns,child,signal,current=>{if(String(current.fields?.[operation.link.name]??'').trim()!==parentId)throw new Error(`A provisão ${child.id} mudou de vínculo; não foi alterada.`);});
+    await apply(operation.childList,child.id,child.eTag,child.patch,operation.childColumns,child,signal,current=>{if(String(current.fields?.[operation.link.name]??'').trim()!==parentId)throw new Error(`A provisão ${child.id} mudou de vínculo; não foi alterada.`);},ensure);
     child.done=true;
    }
    if(operation.link){

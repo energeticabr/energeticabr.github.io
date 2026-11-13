@@ -179,8 +179,12 @@ export function createWeeklyPayslipActions({ doc, host, pick, list, upload, open
     const total = el('strong');
     total.dataset.payslipTotal = '';
     total.setAttribute('aria-live', 'polite');
-    const readLines = () => [...list.children].map(fieldset => Object.fromEntries(
-      [...fieldset.querySelectorAll('[data-payslip-line]')].map(input => [input.dataset.payslipLine, input.value])));
+    const readLines = () => [...list.children].map(fieldset => {
+      const entry = Object.fromEntries([...fieldset.querySelectorAll('[data-payslip-line]')]
+        .map(input => [input.dataset.payslipLine, input.value]));
+      const freight = lines.find(line => line.rubrica === entry.rubrica)?.freight;
+      return freight ? { ...entry, freight } : entry;
+    });
     const refresh = () => {
       const rows = readLines();
       add.disabled = rows.length >= WEEKLY_PAYSLIP_RUBRICS.length;
@@ -343,7 +347,7 @@ export function createWeeklyPayslipActions({ doc, host, pick, list, upload, open
       }
       const readLines = Array.isArray(context.lines) ? editRubrics(form, context.lines) : null;
       const attachments = Array.isArray(context.attachments) ? editAttachments(form, row, context.attachments, context.removedAttachments || [], state) : null;
-      form.append(el('p', 'As correções atualizam o PDF do holerite. Os lançamentos financeiros da folha ficam com os dados já postados.'));
+      form.append(el('p', 'Alterações de valor também atualizam a provisão e o descritivo vinculados à rubrica.'));
       const submit = el('button', 'Salvar alterações', 'hr-gallery-button');
       submit.type = 'submit';
       form.append(submit);

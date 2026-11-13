@@ -68,6 +68,7 @@ export function payrollTotal(lines = []) {
     return total.plus(
       payrollDecimal(line.quantity)
         .times(payrollDecimal(line.unitValue))
+        .plus(payrollDecimal(line.freight ?? '0'))
         .toDecimalPlaces(2, Decimal.ROUND_HALF_UP),
     );
   }, new Decimal(0));

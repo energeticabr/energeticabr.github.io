@@ -15,6 +15,7 @@ import { createNfeProposalData } from './nfe-proposal-data.js';
 import { createFinancialMovementEditor } from './financial-movement-editor.js';
 import { createProvisionDescriptionEditor, loadProvisionDescriptionStatusOptions } from "../../../../portal/forms/provision-description-edit.js";
 import { createAcquisitionProgress } from './acquisition-progress.js';
+import { createWeeklyPayslipRecord, loadWeeklyPayslipLogo } from './weekly-payslip-record.js';
 
 import { fiscalDocumentType, SEFAZ_RETENTION_FIELDS } from "./sefaz-withholding.js";
 
@@ -460,7 +461,12 @@ export function createRegistrationGalleryData({ kind, ...options } = {}) {
   // Lists without an extracted edit form use only the model's proven fields
   // with their real SharePoint metadata in the metadata editor.
   let editorPromise;
-  const descriptionEditor = kind === 'provisionDescription' ? createProvisionDescriptionEditor({repository,siteKey:options.siteKey||'personal',assertSession:options.assertSession}) : null;
+  const siteKey = options.siteKey || 'personal';
+  const { saveFromFinance: syncPayslipAmounts } = createWeeklyPayslipRecord({ repository, siteKey,
+    assertSession: options.assertSession, loadLogo: options.loadHoleriteLogo
+      || (input => loadWeeklyPayslipLogo({ ...input, fetchImpl: options.fetchImpl })) });
+  const descriptionEditor = kind === 'provisionDescription'
+    ? createProvisionDescriptionEditor({ repository, siteKey, assertSession: options.assertSession, syncPayslipAmounts }) : null;
   function metadataEditor() {
     return editorPromise ||= import("./gallery-record-data.js").then(({ createGalleryRecordData }) => {
       // Editor refreshes and gallery filter selections have independent request

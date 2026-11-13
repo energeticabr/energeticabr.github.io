@@ -11,7 +11,7 @@ import { filterPayrollRows, payrollFilterOptions, validatePayrollFilters, payrol
 import { createRegistrationGalleryFilterData } from './registration-gallery-filter-data.js';
 import { loadProvisionDescriptionGroup, provisionDescriptionLinkColumn } from './provision-description-detail-data.js';
 import { createAcquisitionProgress, notifyAcquisitionProgress } from './acquisition-progress.js';
-import { createWeeklyPayslipRecord, weeklyPayslipDisplay, weeklyPayslipName } from './weekly-payslip-record.js';
+import { createWeeklyPayslipRecord, loadWeeklyPayslipLogo, weeklyPayslipDisplay, weeklyPayslipName } from './weekly-payslip-record.js';
 
 const SITE_KEY = "personal";
 const LIST_ALIASES = Object.freeze(["NOTASPENDENTES"]);
@@ -412,11 +412,7 @@ export function createHrPayrollGalleryData({
   fetchImpl = globalThis.fetch,
   now = () => new Date(),
   assertSession = () => {},
-  loadHoleriteLogo = async ({ signal } = {}) => {
-    const response = await fetchImpl(new URL('../../../../assets/logo-energetica-oficial.png', import.meta.url), { signal });
-    if (!response.ok) throw new Error('Não foi possível carregar a logo do holerite.');
-    return new Uint8Array(await response.arrayBuffer());
-  },
+  loadHoleriteLogo = options => loadWeeklyPayslipLogo({ ...options, fetchImpl }),
   sheetCreationAttempts,
 } = {}) {
   let repository = suppliedRepository;
@@ -810,6 +806,7 @@ function createSharePointListData({
   retrySnapshotReads = false,
   filterKind,
   provisionPaymentSync = false,
+  loadHoleriteLogo = options => loadWeeklyPayslipLogo({ ...options, fetchImpl }),
   readOnlyEditFields = [],
   assertSession = () => {},
 } = {}) {
@@ -830,9 +827,11 @@ function createSharePointListData({
   }
   const filters = filterKind ? createRegistrationGalleryFilterData({ repository, siteKey, kind: filterKind }) : null;
 
+  const { saveFromFinance: syncPayslipAmounts } = createWeeklyPayslipRecord({ repository, siteKey, assertSession, loadLogo: loadHoleriteLogo });
   const descriptionEditor = fieldKey(listName) === 'DESCRITIVOPROVISAO'
-    ? createProvisionDescriptionEditor({repository,siteKey,assertSession}) : null;
-  const paymentEditor = provisionPaymentSync ? createProvisionPaymentEditor({ repository, siteKey, assertSession }) : null;
+    ? createProvisionDescriptionEditor({repository,siteKey,assertSession,syncPayslipAmounts}) : null;
+  const paymentEditor = provisionPaymentSync
+    ? createProvisionPaymentEditor({ repository, siteKey, assertSession, syncPayslipAmounts }) : null;
   let descriptionLaunchLink;
   function launchLinkService() {
     return descriptionLaunchLink ||= import('./provision-launch-link.js')

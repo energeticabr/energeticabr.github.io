@@ -57,7 +57,9 @@ export async function buildSupplierHoleritePdf({ supplier, date, week, lines, to
       const y = head - 21 - row * 17;
       const cells = [entry.label, quantity.format(entry.quantity), money(entry.unitValue),
         money(entry.total), entry.formaPgto || "—"];
-      cells.forEach((value, index) => text(value, columns[index], y, { size: 9, width: widths[index] }));
+      cells.forEach((value, index) => text(value, columns[index], y,
+        { size: 9, width: index === 0 && entry.freight ? 78 : widths[index] }));
+      if (entry.freight) text("Frete " + money(entry.freight), columns[0] + 83, y, { size: 8, width: 68 });
       line(margin, right, y - 5);
     });
     const totals = head - 22 - lines.length * 17;
