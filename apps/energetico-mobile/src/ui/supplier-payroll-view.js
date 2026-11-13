@@ -18,7 +18,8 @@ const money = (value) =>
 const stageKey = label => label.normalize("NFD").replace(/[\u0300-\u036f]/g, "")
   .trim().replace(/\s+/g, " ").toLocaleUpperCase("pt-BR");
 // IDs do cadastro FORNECEDORES vinculados aos seis funcionários no RH.
-const weeklyBenefitSuppliers = new Set(["253", "254", "260", "264", "265", "269"]);
+const edgarSupplierId = "253";
+const weeklyBenefitSuppliers = new Set([edgarSupplierId, "254", "260", "264", "265", "269"]);
 const weeklyBenefitValues = new Map([["transport", "11"], ["meal", "45"]]);
 let sequence = 0;
 export function createSupplierPayrollView({
@@ -93,7 +94,8 @@ export function createSupplierPayrollView({
   let pickers = [];
 
   function makeEntry(supplier) {
-    const hasBenefitDefaults = weeklyBenefitSuppliers.has(String(supplier.id));
+    const supplierId = String(supplier.id);
+    const hasBenefitDefaults = weeklyBenefitSuppliers.has(supplierId);
     return {
       draft: {
         date, supplier, product: null, stage: null, sheet: null,
@@ -102,7 +104,7 @@ export function createSupplierPayrollView({
           const unitValue = hasBenefitDefaults ? weeklyBenefitValues.get(id) ?? "" : "";
           const prefilledBenefit = Boolean(unitValue);
           return { rubric: id, quantity: prefilledBenefit ? "5" : "1", unitValue, prefilledBenefit,
-            account: null, alreadyPaid: false, files: [] };
+            account: null, alreadyPaid: prefilledBenefit && supplierId !== edgarSupplierId, files: [] };
         }),
       },
       progress: {
@@ -251,6 +253,7 @@ export function createSupplierPayrollView({
         if (!line.unitValue.trim()) {
           line.account = null;
           account.value = "";
+          if (line.prefilledBenefit) line.alreadyPaid = alreadyPaid.checked = false;
         }
         updateCompletion();
         changed();

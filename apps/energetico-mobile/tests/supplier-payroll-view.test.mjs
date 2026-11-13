@@ -21,6 +21,9 @@ test('pré-preenche somente os vales dos seis fornecedores e permite alterar ou 
     const values = ['transport-quantity', 'transport-value', 'meal-quantity', 'meal-value', 'salary-value']
       .map(name => doc.querySelector(field(id, name)).value);
     assert.deepEqual(values, index < 6 ? ['5', '11', '5', '45', ''] : ['1', '', '1', '', ''], id);
+    const benefitPaid = index > 0 && index < 6;
+    assert.deepEqual(['transport', 'meal', 'salary'].map(rubric =>
+      doc.querySelector(field(id, `${rubric}-already-paid`)).checked), [benefitPaid, benefitPaid, false], id);
     assert.equal(doc.querySelector(`${card(id)} [data-payroll-select]`).checked, false);
   }
   assert.equal(doc.querySelector('[data-payroll-post]').disabled, true);
@@ -30,11 +33,20 @@ test('pré-preenche somente os vales dos seis fornecedores e permite alterar ou 
   h.input(field('253', 'meal-account'), '17');
   h.input(field('253', 'stage'), '4');
   h.input(field('253', 'sheet'), '5');
+  await h.click(field('260', 'meal-already-paid'));
+  assert.equal(doc.querySelector(field('260', 'meal-account')).required, true);
+  await h.click(field('260', 'meal-already-paid'));
+  assert.equal(doc.querySelector(field('260', 'meal-account')).required, false);
+  h.input(field('260', 'transport-value'), '');
+  assert.equal(doc.querySelector(field('260', 'transport-already-paid')).checked, false);
   await h.click('[data-payroll-post]');
   assert.deepEqual(h.posts.map(({ supplier, lines, total }) => ({
-    supplier: supplier.id, lines: lines.map(({ rubric, quantity, unitValue, account }) =>
-      [rubric, quantity, unitValue, account.label]), total,
-  })), [{ supplier: '253', lines: [['meal', 4, 45, 'SWILE']], total: 180 }]);
+    supplier: supplier.id, lines: lines.map(({ rubric, quantity, unitValue, account, alreadyPaid }) =>
+      [rubric, quantity, unitValue, account?.label, alreadyPaid]), total,
+  })), [
+    { supplier: '253', lines: [['meal', 4, 45, 'SWILE', false]], total: 180 },
+    { supplier: '260', lines: [['meal', 5, 45, undefined, true]], total: 225 },
+  ]);
 });
 
 test('rubrica já paga fecha a semana sem exigir forma, etapa ou IDFOLHA', async t => {
