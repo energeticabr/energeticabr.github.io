@@ -309,9 +309,9 @@ test("holerite guarda assinaturas no registro exato e publica correções com co
       throw new Error("resposta perdida após gravar");
     },
     async updateItem(_site, _list, id, patch, { eTag }) {
-      assert.equal(id, "17"); assert.equal(eTag, '"2"');
+      assert.equal(id, "17"); assert.equal(eTag, current.eTag);
       writes.push(["edit", Object.keys(patch).sort()]);
-      current = { id, eTag: '"3"', fields: { ...current.fields, ...patch } };
+      current = { id, eTag: `"${Number(eTag.replaceAll('"', '')) + 1}"`, fields: { ...current.fields, ...patch } };
       throw new Error("resposta perdida após editar");
     },
   };
@@ -320,7 +320,7 @@ test("holerite guarda assinaturas no registro exato e publica correções com co
   const row = { id: "17", pdfFileName: name };
   const editor = await data.loadPayslipEditor(row);
   await assert.rejects(data.savePayslipEditor(row, editor, { ...editor, total: 999 }), /campos/i);
-  await assert.rejects(data.savePayslipEditor(row, editor, { ...editor, date: "2026-11-17" }), /semana/i);
+  await assert.rejects(data.savePayslipEditor(row, editor, { supplier: editor.supplier, branch: editor.branch, date: "2026-11-17" }), /semana/i);
   await data.savePayslipEditor(row, editor, { supplier: "Edgar da Silva", branch: "Obra B", date: "2026-11-14" });
   assert.deepEqual(writes[1], ["edit", ["HOLERITE_REVISAO"]]);
   const { HOLERITE_REVISAO, ...posted } = current.fields;
@@ -350,6 +350,42 @@ test("holerite guarda assinaturas no registro exato e publica correções com co
   await assert.rejects(data.downloadSignedPayslip(row, { name }), /via assinada/i);
   await assert.rejects(data.uploadSignedPayslips({ ...row, pdfFileName: "Outro.pdf" }, [file]), /identificado/i);
   await assert.rejects(data.savePayslipEditor(row, editor, { supplier: "Edgar", branch: "Obra C", date: "2026-11-14" }), /alterado/i);
+  const complete = await data.loadPayslipEditor(row);
+  assert.deepEqual(complete.attachments.map(file => file.name), ["receipt.pdf", signed.name]);
+  const attachment = new File([original], "novo.pdf", { type: "application/pdf" });
+  await data.savePayslipEditor(row, complete, {
+    supplier: complete.supplier, branch: complete.branch, date: complete.date,
+    lines: [{ rubrica: 'salary', quantity: '3', unitValue: '41,125', formaPgto: 'SWILE' },
+      { rubrica: 'meal', quantity: '2', unitValue: '5', formaPgto: 'PIX' }],
+    uploads: [attachment], removed: ["receipt.pdf", signed.name],
+  });
+  const reread = await data.loadPayslipEditor(row);
+  assert.equal(reread.total, 133.38);
+  assert.deepEqual(reread.lines.map(line => [line.rubrica, line.total]), [['salary', 123.38], ['meal', 10]]);
+  assert.deepEqual(reread.attachments.map(file => file.label), ['novo.pdf']);
+  assert.deepEqual(reread.removedAttachments.map(file => file.name), ['receipt.pdf', signed.name]);
+  assert.equal((await data.loadFilteredPage('HOLERITE', { groupByDate: true })).rows[0].TOTAL, 133.38);
+  assert.equal(current.fields.TOTAL, 100);
+  assert.ok(attachments.has(name));
+  await assert.rejects(data.downloadSignedPayslip(row, signed), /não foi encontrada/i);
+  const updatedPdf = await data.downloadPayslip(row);
+  const revisedTask = getDocument({ data: new Uint8Array(await updatedPdf.arrayBuffer()), useSystemFonts: true });
+  try {
+    const page = await (await revisedTask.promise).getPage(1);
+    const text = (await page.getTextContent()).items.map(item => item.str).join(' ');
+    assert.match(text, /123,38.*SWILE.*Vale alimentação.*10,00.*PIX.*133,38/);
+  } finally { await revisedTask.destroy(); }
+  await data.savePayslipEditor(row, reread, { supplier: reread.supplier, branch: reread.branch, date: reread.date, restored: [signed.name] });
+  assert.equal((await data.listSignedPayslips(row))[0].name, signed.name);
+});
+
+test('a edição preserva casas decimais e calcula subtotal e total a partir dos mesmos valores', async () => {
+  const { weeklyPayslipLines, weeklyPayslipTotal } = await import('../src/chat/weekly-payslip-lines.js');
+  const lines = weeklyPayslipLines([{ rubrica: 'salary', quantity: 1, unitValue: '1,004999999999999999' },
+    { rubrica: 'meal', quantity: 1, unitValue: 100.123456789 }]);
+  assert.deepEqual(lines.map(line => [line.unitValue, line.total]), [['1.004999999999999999', 1], ['100.123456789', 100.12]]);
+  assert.equal(weeklyPayslipTotal(lines), 101.12);
+  assert.deepEqual(weeklyPayslipLines(JSON.parse(JSON.stringify(lines))), lines);
 });
 
 test("galerias de folha leem IDFOLHA e FOLHAPGTO com paginação e normalização de campos", async () => {

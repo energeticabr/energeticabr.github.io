@@ -76,7 +76,9 @@ test("as ações por fornecedor enviam a via assinada e editam somente o holerit
       calls.push(["upload", row.id, files]); signed.push({ name: "via-assinada.pdf" }); return [...signed];
     },
     openSignedPayslip: async (row, attachment) => calls.push(["open", row.id, attachment.name]),
-    loadPayslipEditor: async row => ({ supplier: row.FORNECEDOR, branch: "Obra A", date: "2026-11-13" }),
+    loadPayslipEditor: async row => ({ supplier: row.FORNECEDOR, branch: "Obra A", date: "2026-11-13",
+      lines: [{ rubrica: 'salary', quantity: 1, unitValue: 20, formaPgto: 'PIX' }], total: 20,
+      attachments: [{ name: 'recibo.pdf', label: 'Recibo da folha' }] }),
     savePayslipEditor: async (row, _context, draft) => {
       calls.push(["save", row.id, draft]); row.FORNECEDOR = draft.supplier;
     },
@@ -105,9 +107,18 @@ test("as ações por fornecedor enviam a via assinada e editam somente o holerit
   await settle();
   const form = root.querySelector('[data-payslip-dialog] form');
   form.elements.supplier.value = "Edgar da Silva";
+  form.querySelector('[data-payslip-line="quantity"]').value = '3';
+  form.querySelector('[data-payslip-line="unitValue"]').value = '41,125';
+  form.querySelector('[data-payslip-line="unitValue"]').dispatchEvent(new dom.window.Event('input', { bubbles: true }));
+  assert.match(form.querySelector('[data-payslip-total]').textContent, /123,38/);
+  form.querySelector('[data-action="remove-payslip-attachment"]').click();
+  form.querySelector('[data-payslip-source="files"]').click();
+  await settle();
+  assert.deepEqual(calls.at(-1), ['pick', 'files']);
   form.dispatchEvent(new dom.window.Event("submit", { bubbles: true, cancelable: true }));
   await settle();
-  assert.deepEqual(calls.at(-1), ["save", "17", { supplier: "Edgar da Silva", branch: "Obra A", date: "2026-11-13" }]);
+  assert.deepEqual(calls.at(-1), ["save", "17", { supplier: "Edgar da Silva", branch: "Obra A", date: "2026-11-13",
+    lines: [{ rubrica: 'salary', quantity: '3', unitValue: '41,125', formaPgto: 'PIX' }], uploads: [file], removed: ['recibo.pdf'], restored: [] }]);
   assert.match(root.querySelector(".hr-gallery-cards").textContent, /Edgar da Silva/);
 });
 

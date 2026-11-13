@@ -59,6 +59,12 @@
 .hr-payslip-dialog-options > .hr-payslip-dialog-options { width: 100%; }
 .hr-payslip-dialog-message:empty, .hr-payslip-dialog-files:empty { display: none; }
 .hr-payslip-dialog-message { color: #285268; font-weight: 650; }
+.hr-payslip-dialog-body h3 { margin: 12px 0 0; font-size: 1rem; }
+.hr-payslip-edit-rubric { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 8px; min-width: 0; margin: 0; padding: 10px; border: 1px solid #c5d6df; border-radius: 9px; }
+.hr-payslip-edit-rubric > select, .hr-payslip-edit-rubric > label:has([data-payslip-line="formaPgto"]) { grid-column: 1 / -1; }
+.hr-payslip-edit-rubric > span { align-self: center; }
+.hr-payslip-edit-file { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; }
+.hr-payslip-edit-file > span { flex: 1 1 140px; min-width: 0; overflow-wrap: anywhere; }
 .hr-payslip-date {
   min-width: 0;
   padding: 10px;
