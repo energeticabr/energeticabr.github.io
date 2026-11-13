@@ -171,6 +171,48 @@ class ServiceTests(unittest.TestCase):
         with self.assertRaisesRegex(SwileError, 'diverge'):
             self.service.preview('user-a', self.data)
 
+    def test_pending_gallery_paginates_corporate_orders_and_omits_closed_groups(self):
+        groups = [
+            {'orderGroups': [
+                {'groupCode': 'CLOSED', 'statusCode': 'APPROVED'},
+                {'groupCode': 'CANCELED', 'statusCode': 'CANCELED'},
+            ], 'last': False},
+            {'orderGroups': [
+                {'groupCode': 'PENDING', 'statusCode': 'WAITING_PAYMENT', 'valueCredit': 225.05,
+                 'orders': [{'creditDate': '2026-12-02T02:00:00'}]},
+                {'groupCode': 'FAILED_CREATE', 'statusCode': 'CREATION_ERROR'},
+            ], 'last': True},
+        ]
+        with patch.object(self.gateway, 'request', side_effect=groups) as request:
+            self.assertEqual([{
+                'orderCode': 'PENDING', 'status': 'WAITING_PAYMENT', 'creditCents': 22505, 'creditDate': '2026-12-01',
+            }], self.service.pending_orders())
+        self.assertEqual([0, 1], [call.kwargs['query']['page'] for call in request.call_args_list])
+
+    def test_pending_gallery_projects_details_without_guessing_card_or_credit_date(self):
+        details = {'code': 'PARTIAL', 'statusCode': 'APPROVED_PARTIALLY', 'creditDate': '2026-12-01T03:00:00',
+                   'orderList': [
+                       {'statusCode': 'APPROVED', 'creditDate': '2026-12-01T03:00:00', 'totalValue': 125.05,
+                        'employeeList': [{'name': 'Pessoa A', 'document': '12345678900', 'status': 'ACTIVE',
+                                          'items': {'v13': 120.05, 'v5': 5}}]},
+                       {'statusCode': 'APPROVED_PARTIALLY', 'creditDate': '2026-12-02T03:00:00', 'totalValue': 100,
+                        'employeeList': [{'name': 'Pessoa B', 'status': 'INACTIVE', 'items': {'v13': 100}}]},
+                   ]}
+        with patch.object(self.gateway, 'request', return_value=details) as request, \
+                patch('swile_recharges.configured_service', return_value=self.service):
+            status, result = handle_portal({'oid': 'user-a'}, {
+                'action': 'swile_orders', 'gallery': 'pending', 'orderCode': 'PARTIAL',
+            })
+        self.assertEqual(200, status)
+        request.assert_called_once_with('order/group/PARTIAL')
+        self.assertEqual({
+            'orderCode': 'PARTIAL', 'status': 'APPROVED_PARTIALLY', 'creditCents': 22505, 'creditDate': '2026-12-01',
+            'items': [
+                {'name': 'Pessoa A', 'amountCents': 12505, 'status': 'APPROVED', 'creditDate': '2026-12-01'},
+                {'name': 'Pessoa B', 'amountCents': 10000, 'status': None, 'creditDate': '2026-12-02'},
+            ],
+        }, result['swile'])
+
 
 if __name__ == '__main__':
     unittest.main()

@@ -6463,7 +6463,7 @@ export function createAppController({
     swilePanel = null;
   }
 
-  async function openSwilePanel() {
+  async function openSwilePanel(gallery = false) {
     const canOpen = () => {
       const { activeFlow } = store.getState();
       const inRhMenu = activeFlow?.id === 'menu:choosing_action'
@@ -6482,6 +6482,7 @@ export function createAppController({
       if (!current() || swileOpening !== opening || !canOpen()) return false;
       swilePanel = openSwileView({
         document: globalThis.document,
+        gallery,
         request: (operation, payload, options) => {
           if (!current()) throw new Error('A sessão do Energético foi encerrada.');
           return client.swileRequest(operation, payload, options);
@@ -12028,6 +12029,7 @@ export function createAppController({
       if (command.replyId === "action_hr_gallery_folhapgto") return openHrPayrollGallery("FOLHAPGTO");
       if (command.replyId === "action_hr_gallery_holerite") return openHrPayrollGallery("HOLERITE");
       if (command.replyId === 'action_hr_swile') return openSwilePanel();
+      if (command.replyId === 'action_hr_swile_gallery') return openSwilePanel(true);
       const state = store.getState();
       syncEpiDeliverySnapshot(state.activeFlow);
       if ([EPI_ORDER_BLANK_REPLY_ID, EPI_SUPPLIER_DOCUMENT_BLANK_REPLY_ID].includes(command.replyId)) {

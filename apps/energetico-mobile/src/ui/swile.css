@@ -1,4 +1,7 @@
-.chat-choice-list.swile-menu-entry { margin-top: .65rem; grid-template-columns: minmax(0, 1fr); }
+.chat-choice-list.swile-menu-entry { margin-top: .65rem; grid-template-columns: repeat(2, minmax(0, 1fr)); }
+.swile-menu-entry > [data-reply-id='action_hr_gallery_holerite'] { grid-column: 1 / -1; }
+.swile-menu-entry > button.chat-choice-button--gallery { color: #123c68; border: 1px solid #8aaab7; background: #edf6f8; padding-inline: .3rem; }
+.swile-menu-entry > button.chat-choice-button--gallery:hover:not(:disabled) { color: #123c68; border-color: #8aaab7; background: #dcecf1; }
 
 .swile-dialog {
   width: min(48rem, calc(100% - 1.5rem));
@@ -72,6 +75,26 @@
 .swile-preview-list span { overflow-wrap: anywhere; }
 .swile-preview-list strong { white-space: nowrap; }
 .swile-order-list { margin-top: .7rem; }
+.swile-dialog .swile-pending-order {
+  width: 100%;
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  gap: .25rem .65rem;
+  margin-bottom: .5rem;
+  padding: .7rem .8rem;
+  text-align: start;
+  overflow-wrap: anywhere;
+}
+.swile-pending-order:hover { background: #f6f4ff; }
+.swile-pending-order strong:nth-child(2), .swile-credit-line-heading strong:nth-child(2) { white-space: nowrap; text-align: end; }
+.swile-pending-order span { color: #525c6d; font-size: .86rem; }
+.swile-credit-details { margin-top: .75rem; }
+.swile-credit-lines { margin: .65rem 0 0; padding: 0; list-style: none; }
+.swile-credit-lines > li { padding: .65rem 0; border-top: 1px solid #e7eaf0; overflow-wrap: anywhere; }
+.swile-credit-line-heading { display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: .5rem; }
+.swile-credit-lines dl { display: grid; grid-template-columns: max-content minmax(0, 1fr); gap: .3rem .6rem; margin: .45rem 0 0; font-size: .9rem; }
+.swile-credit-lines dt { color: #525c6d; }
+.swile-credit-lines dd { margin: 0; }
 
 @media (max-width: 420px) {
   .swile-dialog { max-height: calc(100dvh - 1rem); width: calc(100% - 1rem); }

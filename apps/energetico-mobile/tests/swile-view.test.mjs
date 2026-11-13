@@ -74,6 +74,41 @@ test('Swile keeps amounts across search and submits only after review', async ()
   }
 });
 
+test('Swile gallery opens a pending order and shows the credit data per person', async t => {
+  const { window } = new JSDOM('<!doctype html><body><button>Galeria Swile</button></body>');
+  const { document } = window;
+  const opener = document.querySelector('button');
+  opener.focus();
+  const order = { orderCode: 'SWO123', status: 'APPROVED_PARTIALLY', creditDate: '2026-11-17', creditCents: 22505 };
+  const calls = [];
+  const view = openSwileView({ document, gallery: true, request: async (operation, payload) => {
+    calls.push([operation, payload]);
+    if (!payload.orderCode) return [order];
+    return { ...order, items: [
+      { name: 'Pessoa A', amountCents: 12505, status: 'APPROVED', creditDate: '2026-11-17' },
+      { name: 'Pessoa B', amountCents: 10000, status: 'WAITING_PAYMENT', creditDate: '2026-11-18' },
+    ] };
+  } });
+  t.after(() => { view.close(); window.close(); });
+  const settle = () => new Promise(resolve => setImmediate(resolve));
+  const findButton = text => [...document.querySelectorAll('dialog button')].find(button => button.textContent.includes(text));
+  await settle();
+  assert.match(document.querySelector('dialog').textContent, /Pedidos em suspenso.*SWO123.*225,05/s);
+  findButton('SWO123').click();
+  await settle();
+  assert.match(document.querySelector('dialog').textContent, /Pessoa A.*125,05.*Cartão.*Não informado.*Crédito concluído.*17\/11\/2026.*Data efetuada.*Não informada/s);
+  assert.match(document.querySelector('dialog').textContent, /Pessoa B.*100,00.*Aguardando pagamento.*18\/11\/2026/s);
+  findButton('Voltar aos pedidos').click();
+  await settle();
+  assert.deepEqual(calls, [
+    ['orders', { gallery: 'pending' }],
+    ['orders', { gallery: 'pending', orderCode: 'SWO123' }],
+    ['orders', { gallery: 'pending' }],
+  ]);
+  view.close();
+  assert.equal(document.activeElement, opener);
+});
+
 test('Swile uses the portal token and demo mode never sends a request', async () => {
   const calls = [];
   const options = { apiBaseUrl: 'https://example.com', tokenProvider: async () => 'test-token', fetchImpl: async (url, init) => {
