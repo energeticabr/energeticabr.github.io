@@ -48,7 +48,7 @@ function displayValue(field, value) {
 }
 
 export function createHrPayrollGallery({ document: documentOption,
-  root: mountRootOption, gallery, request, requestReport, invalidateRelatedReports, loadEditor, saveEditor, deleteItem, loadPaymentOptions, savePayment, onClose, onHome, onCreate, getReceiptAttachments, readReceiptAttachment, openPayslip, closePayslip, downloadDatePayslips,
+  root: mountRootOption, gallery, request, requestReport, invalidateRelatedReports, loadEditor, saveEditor, deleteItem, loadPaymentOptions, savePayment, onClose, onHome, onCreate, getReceiptAttachments, readReceiptAttachment, openPayslip, closePayslip, openDatePayslips,
   pickSignedPayslip, listSignedPayslips, uploadSignedPayslips, openSignedPayslip, loadPayslipEditor, savePayslipEditor } = {}) {
   const documentRef = documentOption || mountRootOption?.ownerDocument || globalThis.document;
   const mountRoot = mountRootOption || documentRef?.body;
@@ -69,7 +69,7 @@ export function createHrPayrollGallery({ document: documentOption,
   let hasMore = false;
   const pageCursors = [null, null];
   let session = 0;
-  let dateDownload;
+  let datePreview;
   const expandedPayslipDates = new Set();
 
   function element(tag, className, text) {
@@ -304,46 +304,28 @@ export function createHrPayrollGallery({ document: documentOption,
         if (!list.hidden && !list.childElementCount) drawRows(rows, list);
       });
       header.append(toggle);
-      if (date && typeof downloadDatePayslips === "function") {
-        const pdf = element("button", "hr-gallery-button hr-payslip-date-pdf", "↓ PDF");
+      if (date && typeof openDatePayslips === "function") {
+        const pdf = element("button", "hr-gallery-button hr-payslip-date-pdf", "PDF");
         pdf.type = "button";
-        pdf.dataset.action = "download-payslip-date";
-        pdf.setAttribute("aria-label", `Baixar todos os holerites de ${label} em PDF`);
-        const notice = element("p", "hr-payslip-download-status");
-        notice.setAttribute("role", "status");
-        notice.hidden = true;
+        pdf.dataset.action = "open-payslip-date";
+        pdf.setAttribute("aria-label", `Abrir o PDF com todos os holerites de ${label}`);
         pdf.addEventListener("click", async () => {
-          if (!opened || destroyed || busy || dateDownload) return;
-          const controller = dateDownload = new AbortController();
-          pdf.disabled = true;
+          if (!opened || destroyed || busy || datePreview) return;
+          const controller = datePreview = new AbortController();
           pdf.setAttribute("aria-busy", "true");
-          notice.hidden = false;
-          notice.textContent = "Preparando PDF…";
-          const current = () => opened && !destroyed && !controller.signal.aborted && group.isConnected;
           try {
-            const result = await downloadDatePayslips(date, {
-              signal: controller.signal,
-              onProgress: ({ units } = {}) => {
-                if (current() && units) notice.textContent = `Preparando PDF (${units.completed}/${units.total})…`;
-              },
-            });
-            if (current()) {
-              notice.hidden = !result;
-              notice.textContent = result === "downloaded" ? "PDF baixado." : result ? "PDF exportado." : "";
-            }
+            await openDatePayslips(date, { signal: controller.signal, resolveReturnFocus: () => pdf.isConnected ? pdf : root });
           } catch (error) {
-            if (current()) notice.textContent = error?.message || "Não foi possível baixar os holerites desta data.";
+            if (opened && !destroyed && !controller.signal.aborted && group.isConnected)
+              status.textContent = error?.message || "Não foi possível abrir os holerites desta data.";
           } finally {
-            if (dateDownload === controller) dateDownload = null;
-            pdf.disabled = false;
+            if (datePreview === controller) datePreview = null;
             pdf.removeAttribute("aria-busy");
           }
         });
         header.append(pdf);
-        group.append(header, notice, list);
-      } else {
-        group.append(header, list);
       }
+      group.append(header, list);
       cards.append(group);
     }
   }
@@ -450,8 +432,8 @@ export function createHrPayrollGallery({ document: documentOption,
     payslipActions?.close(true);
     loadingScreen.sync(false);
     recordActions?.close();
-    dateDownload?.abort();
-    dateDownload = null;
+    datePreview?.abort();
+    datePreview = null;
     if (isPayslip) closePayslip?.();
     autoFilters.cancelPending();
     paymentComposer?.close();
@@ -500,8 +482,8 @@ export function createHrPayrollGallery({ document: documentOption,
     close: closeGallery,
     destroy() {
       payslipActions?.close(true);
-      dateDownload?.abort();
-      dateDownload = null;
+      datePreview?.abort();
+      datePreview = null;
       loadingScreen.destroy();
       createShortcut?.destroy();
       refreshShortcut.destroy();

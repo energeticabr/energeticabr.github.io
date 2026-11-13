@@ -467,7 +467,7 @@ export function createAttachmentPreview({
     return true;
   }
 
-  async function openOne(blobOrPromise, fileName = "arquivo", { onClose, onSign, onStamp, onAppendPages, resolveReturnFocus, initialPage = 1, layout = /^resumo-.+\.png$/i.test(String(fileName)) ? "flow-summary" : "media" } = {}) {
+  async function openOne(blobOrPromise, fileName = "arquivo", { onClose, onSign, onStamp, onAppendPages, resolveReturnFocus, loadErrorMessage, initialPage = 1, layout = /^resumo-.+\.png$/i.test(String(fileName)) ? "flow-summary" : "media" } = {}) {
     if (destroyed) throw new Error("O visualizador já foi encerrado.");
     if (!dialog.open) returnFocus = typeof resolveReturnFocus === "function" ? resolveReturnFocus : documentRef.activeElement;
     release();
@@ -720,6 +720,11 @@ export function createAttachmentPreview({
           // Continue to the explicit download fallback below.
         }
       }
+      if (!session.blob && loadErrorMessage) {
+        explain(session, loadErrorMessage);
+        showPreviewStatus(session, '');
+        return;
+      }
       explain(session, session.blob
         ? "Não foi possível mostrar este arquivo. Se o PDF tiver senha ou estiver danificado, tente abri-lo em outro app."
         : `Não foi possível carregar este arquivo. Feche esta janela e tente novamente ${layout === 'dda-report-pdf' ? 'no relatório DDA' : compactReport ? 'no relatório de notas fiscais' : 'no chat'}.`);
@@ -727,12 +732,12 @@ export function createAttachmentPreview({
     }
   }
 
-  async function open(blobOrPromise, fileName = "arquivo", { onAddToTray, onAppendPages, returnLabel = "Voltar ao chat", onClose, onSign, onStamp, resolveReturnFocus, layout, initialPage } = {}) {
+  async function open(blobOrPromise, fileName = "arquivo", { onAddToTray, onAppendPages, returnLabel = "Voltar ao chat", onClose, onSign, onStamp, resolveReturnFocus, loadErrorMessage, layout, initialPage } = {}) {
     backButton.textContent = returnLabel;
     releaseCollection();
     addToTrayHandler = typeof onAddToTray === "function" ? onAddToTray : null;
     updateCollectionNavigation();
-    return openOne(blobOrPromise, fileName, { onClose: typeof onClose === "function" ? onClose : undefined, onSign, onStamp, onAppendPages, resolveReturnFocus, layout, initialPage });
+    return openOne(blobOrPromise, fileName, { onClose: typeof onClose === "function" ? onClose : undefined, onSign, onStamp, onAppendPages, resolveReturnFocus, loadErrorMessage, layout, initialPage });
   }
 
   async function openCollection(items, { onAddToTray, initialIndex = 0, layout, resolveReturnFocus, signal, onClose } = {}) {
