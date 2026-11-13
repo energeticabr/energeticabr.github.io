@@ -1,0 +1,217 @@
+--- a/worker/workflow.py
++++ b/worker/workflow.py
+@@ -31749,6 +31749,94 @@
+                 return self._launch_payroll_is_contractor(status)
+         return False
+ 
++    def _settlement_has_payroll_link(self, provision_id, *, preserve_write_retry=False):
++        options = self.sharepoint.get_options({
++            "key": "settlement_payroll_existing_provision",
++            "source": {"type": "sharepoint_list", "list": "FOLHAPGTO", "id_field": "Id",
++                       "label_field": "IDFOLHA", "fields": ["IDPROVISAO", "IDFOLHA", "Title"], "top": 2,
++                       "filters": [{"field": "IDPROVISAO", "kind": "number", "equals": provision_id}]},
++        }, {})
++        # SharePoint can return a Number column as 463.0 and a Text column as "23".
++        for option in options:
++            values = option.get("source_values") or {}
++            if preserve_write_retry and values.get("Title") == f"WA-provision-payroll-{provision_id}":
++                # An earlier optional write may still need attachment verification.
++                continue
++            try:
++                linked_id = Decimal(str(values.get("IDPROVISAO")).strip())
++                sheet_id = Decimal(str(values.get("IDFOLHA")).strip())
++            except InvalidOperation:
++                continue
++            if (linked_id.is_finite() and linked_id == provision_id and sheet_id.is_finite()
++                    and sheet_id > 0 and sheet_id == sheet_id.to_integral_value()):
++                return True
++        return False
++
++    def _settlement_payroll_lookup_failed(self, state, etag):
++        state["stage"] = LAUNCH_PAYROLL_DECISION_STAGE
++        state["options"] = []
++        state.pop("option_pagination", None)
++        self._send_actions(state, "A BAIXA JÁ FOI CONFIRMADA. NÃO FOI POSSÍVEL CONSULTAR O VÍNCULO "
++                           "COM A FOLHA. SEUS DADOS FORAM PRESERVADOS.",
++                           [{"id": LAUNCH_PAYROLL_YES_ID, "title": "🔄 TENTAR NOVAMENTE", "reply": LAUNCH_PAYROLL_YES_ID}],
++                           allow_back=False)
++        etag = self._save(state, etag)
++        return {"status": "settlement_payroll_load_failed", "batch_id": state["batch_id"], "etag": etag}
++
++    def _reconcile_pending_settlement_payroll(self, state, etag, event=None):
++        pending = state.get("pending_launch_payroll")
++        if (state.get("flow") != "payment_settlement" or not pending
++                or pending.get("settlement_links_checked") or pending.get("settlement_loading")
++                or state.get("stage") not in {
++                    LAUNCH_PAYROLL_DECISION_STAGE, LAUNCH_PAYROLL_SELECTION_STAGE,
++                    LAUNCH_PAYROLL_SHEET_STAGE, LAUNCH_PAYROLL_TYPE_STAGE,
++                }):
++            return None
++
++        # Keep any choices for still-unlinked lines in a mixed, resumed batch.
++        entries = pending.get("selected_entries", pending.get("entries")) or []
++        stage = pending.get("settlement_links_retry_stage", state["stage"])
++        message_id = (event or {}).get("message_id")
++        try:
++            linked_ids = {entry["item_id"] for entry in entries
++                          if entry.get("eligible") and not entry.get("FOLHAPGTO_ID")
++                          and self._settlement_has_payroll_link(
++                              entry["provision_id"], preserve_write_retry=stage == LAUNCH_PAYROLL_TYPE_STAGE)}
++        except Exception:
++            pending["settlement_links_retry_stage"] = stage
++            if message_id:
++                self._mark_processed(state, message_id)
++            return self._settlement_payroll_lookup_failed(state, etag)
++
++        retrying = pending.pop("settlement_links_retry_stage", None) is not None
++        pending["settlement_links_checked"] = True
++        if not linked_ids and not retrying:
++            return None
++        if message_id:
++            self._mark_processed(state, message_id)
++
++        for key in ("entries", "selected_entries"):
++            if key in pending:
++                pending[key] = [entry for entry in pending[key] if entry["item_id"] not in linked_ids]
++        for key in ("eligible_ids", "launch_item_ids", "selected_ids"):
++            if key in pending:
++                pending[key] = [item_id for item_id in pending[key] if int(item_id) not in linked_ids]
++
++        remaining = pending.get("selected_entries", pending.get("entries")) or []
++        if not any(entry.get("eligible") and not entry.get("FOLHAPGTO_ID") for entry in remaining):
++            return self._continue_launch_after_payroll(state, etag)
++
++        state["stage"] = stage
++        for key in ("sheet_entry_index", "type_index"):
++            if key in pending:
++                pending[key] = 0
++        for key in ("current_sheet_supplier", "current_sheet_launch_id", "current_sheet_option_key",
++                    "awaiting_sheet_mode", "awaiting_shared_month", "awaiting_type_mode"):
++            pending.pop(key, None)
++        state["options"] = []
++        state.pop("option_pagination", None)
++        return self._resend_current_prompt(state, etag)
++
+     def _maybe_prompt_settlement_payroll(self, state, etag):
+         """Optional payroll after confirmed settlement; never repeat financial posting."""
+         receipt = state.get("sharepoint") or {}
+@@ -31769,15 +31857,7 @@
+                 if not (verified is True or (isinstance(verified, dict)
+                         and verified.get("fields") is True and verified.get("attachments") is True)):
+                     raise ValueError("Baixa ainda não confirmada")
+-                existing_payroll = self.sharepoint.get_options({
+-                    "key": "settlement_payroll_existing_provision",
+-                    "source": {"type": "sharepoint_list", "list": "FOLHAPGTO", "id_field": "Id",
+-                               "label_field": "IDFOLHA", "fields": ["IDPROVISAO", "IDFOLHA"], "top": 2,
+-                               "filters": [{"field": "IDPROVISAO", "kind": "number", "equals": provision_id}]},
+-                }, {})
+-                if any(str((option.get("source_values") or {}).get("IDPROVISAO")) == str(provision_id)
+-                       and str((option.get("source_values") or {}).get("IDFOLHA") or "").strip()
+-                       for option in existing_payroll):
++                if self._settlement_has_payroll_link(provision_id):
+                     continue
+                 launch = record.get("launch_item") or {}
+                 launch_id = launch.get("item_id") or fields.get("IDLANCAMENTOS")
+@@ -31797,13 +31877,7 @@
+         except Exception:
+             state.pop("settlement_payroll_batch", None)
+             state["pending_launch_payroll"] = {"settlement_loading": True}
+-            state["stage"] = LAUNCH_PAYROLL_DECISION_STAGE
+-            self._send_actions(state, "A BAIXA JÁ FOI CONFIRMADA. NÃO FOI POSSÍVEL CONSULTAR O VÍNCULO "
+-                               "COM A FOLHA. SEUS DADOS FORAM PRESERVADOS.",
+-                               [{"id": LAUNCH_PAYROLL_YES_ID, "title": "🔄 TENTAR NOVAMENTE", "reply": LAUNCH_PAYROLL_YES_ID}],
+-                               allow_back=False)
+-            etag = self._save(state, etag)
+-            return {"status": "settlement_payroll_load_failed", "batch_id": state["batch_id"], "etag": etag}
++            return self._settlement_payroll_lookup_failed(state, etag)
+ 
+     def _maybe_prompt_launch_payroll(
+         self,
+@@ -31865,6 +31939,8 @@
+             "launch_item_ids": [item["item_id"] for item in entries],
+             "decision": None,
+         }
++        if state.get("flow") == "payment_settlement":
++            state["pending_launch_payroll"]["settlement_links_checked"] = True
+         state["stage"] = LAUNCH_PAYROLL_DECISION_STAGE
+         state["options"] = []
+         state.pop("option_pagination", None)
+@@ -31913,12 +31989,15 @@
+         message_id = event.get("message_id")
+         if message_id and message_id in state.get("processed_message_ids", []):
+             return {"status": "duplicate", "message_id": message_id, "batch_id": state.get("batch_id")}
++        payroll_recovery = self._reconcile_pending_settlement_payroll(state, etag, event)
++        if payroll_recovery is not None:
++            return payroll_recovery
+         command = _control_command(event.get("reply_id") or event.get("text") or "")
+         pending = state.get("pending_launch_payroll") or {}
+         if pending.get("settlement_loading"):
+             self._mark_processed(state, message_id)
+             result = self._maybe_prompt_settlement_payroll(state, etag)
+-            return result if result is not None else self._notify_completed(state, etag)
++            return result if result is not None else self._continue_launch_after_payroll(state, etag)
+         if command not in {
+             normalize_text(LAUNCH_PAYROLL_YES_ID),
+             normalize_text(LAUNCH_PAYROLL_NO_ID),
+@@ -32018,6 +32097,9 @@
+         message_id = event.get("message_id")
+         if message_id and message_id in state.get("processed_message_ids", []):
+             return {"status": "duplicate", "message_id": message_id, "batch_id": state.get("batch_id")}
++        payroll_recovery = self._reconcile_pending_settlement_payroll(state, etag, event)
++        if payroll_recovery is not None:
++            return payroll_recovery
+         raw = str(event.get("reply_id") or event.get("text") or "").strip()
+         match = re.fullmatch(r"launch_payroll_selected:(.*)", raw, flags=re.IGNORECASE)
+         if match:
+@@ -32413,6 +32495,9 @@
+         message_id = event.get("message_id")
+         if message_id and message_id in state.get("processed_message_ids", []):
+             return {"status": "duplicate", "message_id": message_id, "batch_id": state.get("batch_id")}
++        payroll_recovery = self._reconcile_pending_settlement_payroll(state, etag, event)
++        if payroll_recovery is not None:
++            return payroll_recovery
+         pending = state.get("pending_launch_payroll") or {}
+         if "sheet_entry_index" not in pending:
+             self._mark_processed(state, message_id)
+@@ -32512,6 +32597,9 @@
+         message_id = event.get("message_id")
+         if message_id and message_id in state.get("processed_message_ids", []):
+             return {"status": "duplicate", "message_id": message_id, "batch_id": state.get("batch_id")}
++        payroll_recovery = self._reconcile_pending_settlement_payroll(state, etag, event)
++        if payroll_recovery is not None:
++            return payroll_recovery
+         pending = state.get("pending_launch_payroll") or {}
+         if len(pending.get("selected_entries") or []) > 1 and "sheet_entry_index" not in pending:
+             self._mark_processed(state, message_id)
+@@ -36741,16 +36829,21 @@
+             return self._handle_launch_pending_attendance_link_reply({}, state, etag)
+         elif stage == CASH_RECEIPT_RECOVERY_STAGE:
+             return self._retry_after_error(state, etag)
+-        elif stage == LAUNCH_PAYROLL_DECISION_STAGE:
+-            self._send_launch_payroll_decision_prompt(state)
+-        elif stage == LAUNCH_PAYROLL_SELECTION_STAGE:
+-            self._send_launch_payroll_entry_selection(state, etag)
+-        elif stage == LAUNCH_PAYROLL_SHEET_STAGE:
+-            return self._prompt_launch_payroll_sheet_for_current_supplier(
+-                state, etag
+-            )
+-        elif stage == LAUNCH_PAYROLL_TYPE_STAGE:
+-            return self._prompt_launch_payroll_type(state, etag)
++        elif stage in {LAUNCH_PAYROLL_DECISION_STAGE, LAUNCH_PAYROLL_SELECTION_STAGE,
++                       LAUNCH_PAYROLL_SHEET_STAGE, LAUNCH_PAYROLL_TYPE_STAGE}:
++            payroll_recovery = self._reconcile_pending_settlement_payroll(state, etag)
++            if payroll_recovery is not None:
++                return payroll_recovery
++            if stage == LAUNCH_PAYROLL_DECISION_STAGE:
++                if (state.get("pending_launch_payroll") or {}).get("settlement_loading"):
++                    return self._settlement_payroll_lookup_failed(state, etag)
++                self._send_launch_payroll_decision_prompt(state)
++            elif stage == LAUNCH_PAYROLL_SELECTION_STAGE:
++                return self._send_launch_payroll_entry_selection(state, etag)
++            elif stage == LAUNCH_PAYROLL_SHEET_STAGE:
++                return self._prompt_launch_payroll_sheet_for_current_supplier(state, etag)
++            else:
++                return self._prompt_launch_payroll_type(state, etag)
+         elif stage == "cancelled_confirmation":
+             self._send_cancelled_confirmation_actions(state)
+         elif stage == "submission_failed":
