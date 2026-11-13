@@ -21,6 +21,7 @@ const stageKey = label => label.normalize("NFD").replace(/[\u0300-\u036f]/g, "")
 const edgarSupplierId = "253";
 const weeklyBenefitSuppliers = new Set([edgarSupplierId, "254", "260", "264", "265", "269"]);
 const weeklyBenefitValues = new Map([["transport", "11"], ["meal", "45"]]);
+const prefilledMeal = draft => draft.lines.find(line => line.rubric === "meal" && line.prefilledBenefit);
 let sequence = 0;
 export function createSupplierPayrollView({
   data,
@@ -783,11 +784,10 @@ export function createSupplierPayrollView({
       try {
         const amount = payrollTotal(selected.flatMap(entry => entry.validated?.lines || entry.draft.lines));
         total.textContent = "Total selecionado (" + selected.length + "): " + money(amount);
-        post.disabled = selected.length === 0;
       } catch {
         total.textContent = "Total selecionado: confira os valores informados";
-        post.disabled = false;
       }
+      post.disabled = selected.length === 0 || selected.some(entry => !entry.options.accounts && prefilledMeal(entry.draft));
       const posted = entries.filter(entry => entry.result);
       feedback.hidden = posted.length === 0;
       if (posted.length) {
@@ -801,6 +801,7 @@ export function createSupplierPayrollView({
     }
     async function submit() {
       const selected = entries.filter(entry => entry.selected && !entry.result);
+      if (selected.some(entry => !entry.options.accounts && prefilledMeal(entry.draft))) return;
       const queue = [];
       for (const entry of selected) {
         try {
@@ -953,7 +954,7 @@ export function createSupplierPayrollView({
               if (recommended.length === 1) draft.product = recommended[0];
             }
             if (firstAccountsLoad) {
-              const meal = draft.lines.find(line => line.rubric === "meal" && line.prefilledBenefit);
+              const meal = prefilledMeal(draft);
               if (meal) {
                 const swile = accounts.filter(account => stageKey(account.label) === "SWILE");
                 if (swile.length === 1) meal.account = swile[0];
@@ -967,6 +968,7 @@ export function createSupplierPayrollView({
             refreshBatch();
           }, catalogOptions, refreshSheetCatalog);
           refresh();
+          refreshBatch();
         } catch (cause) {
           if (signal.aborted) return;
           editorReady = false;

@@ -54,6 +54,25 @@ test('pré-preenche somente os vales dos seis fornecedores e permite alterar ou 
   ]);
 });
 
+test('postagem de vale já pago aguarda a forma padrão do catálogo', async t => {
+  const h = await harness();
+  t.after(() => { h.view.destroy(); h.dom.window.close(); });
+  h.data.loadSuppliers = async () => [{ id: '260', label: 'Feliciano', branch: 'OBRA A' }];
+  let finishAccounts;
+  h.data.loadAccounts = () => new Promise(resolve => { finishAccounts = resolve; });
+  await openSuppliers(h);
+  await h.click('[data-payroll-select]');
+  const post = h.dom.window.document.querySelector('[data-payroll-post]');
+  assert.equal(post.disabled, true);
+  await h.click('[data-payroll-post]');
+  assert.equal(h.posts.length, 0);
+  finishAccounts([{ id: '17', label: 'SWILE' }]);
+  await flush();
+  assert.equal(post.disabled, false);
+  await h.click('[data-payroll-post]');
+  assert.equal(h.posts[0].lines.find(line => line.rubric === 'meal').account.label, 'SWILE');
+});
+
 test('rubrica já paga fecha a semana sem exigir forma, etapa ou IDFOLHA', async t => {
   const h = await harness();
   t.after(() => { h.view.destroy(); h.dom.window.close(); });
