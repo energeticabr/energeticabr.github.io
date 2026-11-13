@@ -25,8 +25,9 @@ export function weeklyPayslipLines(rows) {
       throw new Error(`Informe quantidade e valor unitário positivos em ${rubric.label}.`);
     if (row.formaPgto != null && (typeof row.formaPgto !== 'string' || row.formaPgto.length > 255 || /[\u0000-\u001f]/.test(row.formaPgto)))
       throw new Error(`Informe uma forma de pagamento válida em ${rubric.label}.`);
+    const freight = payrollDecimal(decimalText(row.freight ?? '0'));
     const line = { rubrica: rubric.id, label: rubric.label, quantity: quantity.toFixed(), unitValue: unitValue.toFixed(),
-      formaPgto: row.formaPgto?.trim() || null };
+      formaPgto: row.formaPgto?.trim() || null, ...(freight.isZero() ? {} : { freight: freight.toFixed() }) };
     return { ...line, total: payrollTotal([line]) };
   });
 }

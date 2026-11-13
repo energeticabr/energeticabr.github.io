@@ -1,4 +1,4 @@
-import { provisionChildrenTotal, provisionTextTotal } from './provision-parent-workflow.js';
+import { isWeeklyPayslipProvision, provisionChildrenTotal, provisionTextTotal } from './provision-parent-workflow.js';
 import { provisionDueFields, provisionEarliestUnpaidDue, sameProvisionDue, provisionChildrenStamp } from './provision-parent-due.js';
 
 const PARENT_LIST = ['DESCRITIVOPROVISAO'];
@@ -47,7 +47,7 @@ function sameValue(actual, expected, date) {
   return String(actual) === String(expected);
 }
 
-export function createProvisionPaymentEditor({ repository, siteKey = 'personal', assertSession = () => {} } = {}) {
+export function createProvisionPaymentEditor({ repository, siteKey = 'personal', assertSession = () => {}, syncPayslipAmounts } = {}) {
   const busy = new Set();
   const pendingRepairs = new Map();
   function active(signal) {
@@ -110,11 +110,12 @@ export function createProvisionPaymentEditor({ repository, siteKey = 'personal',
     const name = field(rawColumns, 'DESCRITIVOPROVISAO');
     if (rawColumns.find(column => column.name === name).readOnly) return columns;
     const list = await parentSource(signal);
-    const parents = (await allRows(list.id, signal)).sort((a,b) => Number(b.id) - Number(a.id));
+    const current = String(item.fields?.[name] ?? '').trim();
+    const parents = (await allRows(list.id, signal)).filter(row => String(row.id) === current || !isWeeklyPayslipProvision(row.fields))
+      .sort((a,b) => Number(b.id) - Number(a.id));
     const choices = parents.map(row => id(row.id));
     const optionLabels = Object.fromEntries(parents.map(row => [id(row.id),
       [`ID ${row.id}`, row.fields?.FORNECEDOR, row.fields?.OBS].filter(value => !blank(value)).join(' · ')]));
-    const current = String(item.fields?.[name] ?? '').trim();
     if (current && !choices.includes(current)) {
       choices.push(id(current));
       optionLabels[current] = `ID ${current} · vínculo atual`;
@@ -211,7 +212,13 @@ export function createProvisionPaymentEditor({ repository, siteKey = 'personal',
     const dueFields = provisionDueFields(childColumns);
     const amounts = Object.fromEntries(['QTD','VALORTOTAL','FRETE'].map(name => [name, field(childColumns,name,['text','number','currency'])]));
     const parentIds = [...new Set([...(currentLink ? [id(currentLink)] : []), targetId])];
-    for (const parentId of parentIds) await read(parents.id, parentId, signal);
+    const confirmParents = async () => {
+      for (const parentId of parentIds) {
+        const parent = await read(parents.id, parentId, signal);
+        if (isWeeklyPayslipProvision(parent.fields)) throw new Error('O descritivo da folha é reservado para a provisão da própria rubrica.');
+      }
+    };
+    await confirmParents();
     const current = await read(childList.id, childId, signal);
     const equal = (row,values) => Object.entries(values).every(([name,value]) => sameValue(row.fields?.[name],value,
       childColumns.some(column => column.name === name && column.dateTime)));
@@ -230,7 +237,7 @@ export function createProvisionPaymentEditor({ repository, siteKey = 'personal',
     }
     // The child scan is asynchronous: prove destination/source existence again
     // at the actual write boundary, not just before starting that scan.
-    for (const parentId of parentIds) await read(parents.id,parentId,signal);
+    await confirmParents();
     const original = Object.fromEntries(Object.keys(fields).map(name=>[name,item.fields?.[name] ?? null]));
     const record = {parents,parentIds,childList,childId,linkName,targetId,currentLink,totalName,amounts,parentColumns,dueName,dueFields,
       original,matches,matchesOriginal:row=>equal(row,original)};
@@ -259,6 +266,24 @@ export function createProvisionPaymentEditor({ repository, siteKey = 'personal',
   }
 
   async function save({ list, item, fields, signal } = {}) {
+    if (syncPayslipAmounts && isWeeklyPayslipProvision(item?.fields) && Object.keys(fields || {}).length) {
+      const synced = await syncPayslipAmounts('child', item, fields, { signal,
+        persist: ensure => saveProvision({ list, item, fields, signal, ensure }) });
+      if (synced) {
+        const rest = Object.fromEntries(Object.entries(fields).filter(([name]) => !synced.amountNames.includes(name)));
+        if (!Object.keys(rest).length) return synced.savedItem;
+        const columns = await repository.getColumns(siteKey, list.id, { signal });
+        if (Object.keys(rest).some(name => !sameValue(synced.savedItem.fields?.[name], item.fields?.[name],
+          columns.some(column => column.name === name && column.dateTime)))) {
+          throw new Error('Os demais campos da provisão mudaram. Reabra o registro antes de alterá-los.');
+        }
+        return save({ list, item: synced.savedItem, fields: rest, signal });
+      }
+    }
+    return saveProvision({ list, item, fields, signal });
+  }
+
+  async function saveProvision({ list, item, fields, signal, ensure }) {
     active(signal);
     const childId = id(item?.id);
     if (!fields || typeof fields !== 'object' || Array.isArray(fields)) throw new Error('Informe os campos editados da provisão.');
@@ -322,6 +347,7 @@ export function createProvisionPaymentEditor({ repository, siteKey = 'personal',
       const matches = sameFields(current);
       if (version(current) !== version(item) && !matches) throw new Error('A provisão mudou. Recarregue antes de editar.');
       if (!matches && Object.keys(fields).length) {
+        await ensure?.();
         active(signal);
         try { await repository.updateItem(siteKey, childList.id, childId, fields, { eTag: version(current), ...(signal ? { signal } : {}) }); }
         catch (error) {
@@ -375,6 +401,7 @@ export function createProvisionPaymentEditor({ repository, siteKey = 'personal',
           if (attempt === 2) throw new Error('O total do descritivo mudou durante a sincronização. Tente novamente.');
           continue;
         }
+        await ensure?.();
         active(signal);
         try {
           await repository.updateItem(siteKey, parentList.id, parentId, patch, { eTag: version(parent), ...(signal ? { signal } : {}) });

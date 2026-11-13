@@ -5,6 +5,10 @@ const PAYMENT_MARKERS = ["DATAPGTOEFETUADO", "PGTOAGENDADO", "DATAPGTOAGENDADO",
 const PARENT_TEXT = ["Title", "FILIAL", "FORNECEDOR", "FORMAPGTO", "OBS", "VALORTOTAL"];
 const PARENT_DATES = ["DATAPREVISTOPGTO", ...PAYMENT_MARKERS];
 const CHILD_ALIASES = ["PROVISÃO PGTOS", "PROVISAO PGTOS", "PROVISAO PAGAMENTOS"];
+export function isWeeklyPayslipProvision(fields) {
+  return /^folha-semanal-\d{4}-\d{2}-\d{2}-[1-9]\d*-[a-z]+$/.test(String(fields?.FOLHAOPERACAO || ''));
+}
+
 const blank = value => value == null || (typeof value === "string" && !value.trim());
 const canonical = value => String(value || "").normalize("NFD").replace(/[\u0300-\u036f]/g, "").replace(/[^a-z0-9]/gi, "").toUpperCase();
 
@@ -71,6 +75,7 @@ async function parentContract(repository, entity) {
 
 function requirePending(item, fields, id, expectedEtag = "") {
   if (!item || positiveId(item.id) !== positiveId(id)) throw new Error("A identidade do descritivo mudou no SharePoint.");
+  if (isWeeklyPayslipProvision(item.fields)) throw new Error('O descritivo da folha é reservado para a provisão da própria rubrica.');
   const currentEtag = etag(item);
   if (PAYMENT_MARKERS.some(name => !blank(item.fields?.[fields[name]]))) throw new Error("O descritivo não está pendente: há pagamento ou agendamento registrado.");
   if (expectedEtag && currentEtag !== expectedEtag) throw new Error("O descritivo mudou desde a seleção. Selecione novamente após revisar os dados.");

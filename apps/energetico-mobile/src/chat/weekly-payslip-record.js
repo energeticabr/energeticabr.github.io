@@ -1,6 +1,7 @@
 import { validateAttachment } from '../../../../portal/data/attachments.js';
 import { payrollGalleryDay } from './payroll-gallery-filters.js';
 import { weeklyPayslipLines, weeklyPayslipTotal } from './weekly-payslip-lines.js';
+import { createWeeklyPayslipProvisionSync } from './weekly-payslip-provision-sync.js';
 
 const signedTypes = { pdf: 'application/pdf', jpg: 'image/jpeg', jpeg: 'image/jpeg', jfif: 'image/jpeg', png: 'image/png', webp: 'image/webp' };
 const mimeFor = name => Object.hasOwn(signedTypes, name.split('.').at(-1)) ? signedTypes[name.split('.').at(-1)] : '';
@@ -11,6 +12,11 @@ const identity = fields => ({ supplier: String(fields.FORNECEDOR ?? ''), branch:
 const version = row => String(row?.eTag || row?.['@odata.etag'] || row?.['odata.etag'] || '').trim();
 const sameIdentity = (a, b) => a.supplier === b.supplier && a.branch === b.branch && a.date === b.date;
 const SIGNED_BATCH_LIMIT = 50 * 1024 * 1024;
+export async function loadWeeklyPayslipLogo({ signal, fetchImpl = globalThis.fetch } = {}) {
+  const response = await fetchImpl(new URL('../../../../assets/logo-energetica-oficial.png', import.meta.url), { signal });
+  if (!response.ok) throw new Error('Não foi possível carregar a logo do holerite.');
+  return new Uint8Array(await response.arrayBuffer());
+}
 const SOURCE_FIELDS = ['FORNECEDOR', 'FILIAL', 'DATA_PAGAMENTO', 'SEMANA_INICIO', 'SEMANA_FIM', 'RUBRICAS', 'TOTAL',
   'TOTAL_JA_PAGO', 'TOTAL_PROVISOES', 'PROVISOES', 'IDFOLHA', 'PRODUTO', 'ETAPA', 'Title', 'OPERACAO', 'HOLERITE_REVISAO'];
 const snapshot = fields => JSON.stringify(SOURCE_FIELDS.map(key => fields[key] ?? null));
@@ -63,8 +69,10 @@ export function weeklyPayslipDisplay(fields, name) {
     ...(saved.lines ? { TOTAL: saved.total } : {}) } : {}) };
 }
 
-export function createWeeklyPayslipRecord({ repository, siteKey, resolveList, assertSession, loadLogo, onSaved }) {
+export function createWeeklyPayslipRecord({ repository, siteKey, resolveList, assertSession = () => {},
+  loadLogo = loadWeeklyPayslipLogo, onSaved = () => {} }) {
   const contexts = new WeakMap();
+  const finances = createWeeklyPayslipProvisionSync({ repository, siteKey, assertSession });
   const check = signal => { assertSession(); signal?.throwIfAborted(); };
 
   async function read(row, signal, list) {
@@ -223,7 +231,7 @@ export function createWeeklyPayslipRecord({ repository, siteKey, resolveList, as
   }
 
   async function loadPayslipEditor(row, { signal } = {}) {
-    const target = await read(row, signal);
+    const target = await resume(await read(row, signal), row, signal);
     const eTag = version(target.current);
     if (!eTag || eTag === '*') throw new Error('Não foi possível confirmar a versão deste holerite. Atualize a galeria.');
     const fields = target.current.fields;
@@ -240,8 +248,163 @@ export function createWeeklyPayslipRecord({ repository, siteKey, resolveList, as
     return context;
   }
 
+  async function stagePdf(target, values, week, lines, total, files, signal) {
+    const hash = await sha256(new TextEncoder().encode(JSON.stringify([values, week, lines, total])));
+    const pdf = `${target.stem}-revisao-${hash}.pdf`;
+    if (!files.some(file => file.name === pdf)) {
+      const { buildSupplierHoleritePdf } = await import('./supplier-holerite-pdf.js');
+      const bytes = await buildSupplierHoleritePdf({ supplier: { label: values.supplier, branch: values.branch },
+        date: values.date, week, lines, total }, { logoBytes: await loadLogo({ signal }) });
+      await confirmFile(target, asBlob(bytes, 'application/pdf'), pdf, signal, false);
+    }
+    return pdf;
+  }
+
+  async function writeRevision(target, row, payload, signal) {
+    const eTag = version(target.current);
+    if (!eTag || eTag === '*') throw new Error('Não foi possível confirmar a versão deste holerite.');
+    let failure;
+    check(signal);
+    try { await repository.updateItem(siteKey, target.list.id, target.id, { HOLERITE_REVISAO: payload }, { eTag, signal }); }
+    catch (error) { failure = error; }
+    const saved = await read(row, signal, target.list);
+    if ((saved.current.fields.HOLERITE_REVISAO ?? null) !== payload) throw failure || new Error('A edição do holerite não foi confirmada.');
+    return saved;
+  }
+
+  function financeLock(fields) {
+    try {
+      const lock = JSON.parse(fields.HOLERITE_REVISAO || 'null')?.financeLock;
+      return lock && Number.isSafeInteger(lock.expires) ? lock : null;
+    } catch { return null; }
+  }
+
+  async function underFinanceLock(target, row, signal, persist) {
+    const fields = target.current.fields;
+    const original = fields.HOLERITE_REVISAO ?? null;
+    const existing = revision(fields, target.name);
+    const reservation = { id: crypto.randomUUID(), expires: Date.now() + 180_000, previous: original };
+    const lock = JSON.stringify({ ...(existing ?? {}), financeLock: reservation });
+    if (lock.length > 60_000) throw new Error('O holerite atingiu o limite de dados de revisão.');
+    const ensure = async () => {
+      const latest = await read(row, signal, target.list);
+      if (Date.now() >= reservation.expires || latest.current.fields.HOLERITE_REVISAO !== lock)
+        throw new Error('A reserva da edição financeira expirou. Reabra o registro.');
+    };
+    try {
+      await writeRevision(target, row, lock, signal);
+      return await persist(ensure);
+    } finally {
+      // Release after cancellation too. An interrupted session can recover the
+      // previous revision after expiry. Only the owner may release its lock.
+      const latest = await read(row, undefined, target.list);
+      if (latest.current.fields.HOLERITE_REVISAO === lock) await writeRevision(latest, row, original, undefined);
+    }
+  }
+
+  // Keep the visible revision active until all linked rows are confirmed. The
+  // pending intent survives reloads and every financial write is conditional.
+  async function commitRevision(target, row, payload, changes, signal) {
+    const fields = target.current.fields;
+    if (financeLock(fields)) throw new Error('Há uma edição financeira em andamento nesta folha. Tente novamente.');
+    if (!changes.length) return writeRevision(target, row, payload, signal);
+    const saved = revision(fields, target.name);
+    const lines = weeklyPayslipLines(saved?.lines ?? JSON.parse(fields.RUBRICAS || '[]'));
+    const visible = { ...(saved || identity(fields)), pdf: saved?.pdf || target.name,
+      lines, total: weeklyPayslipTotal(lines) };
+    const pending = JSON.stringify({ ...visible, pendingAmounts: { payload, changes } });
+    if (pending.length > 60_000) throw new Error('O holerite atingiu o limite de dados de revisão.');
+    return resume(await writeRevision(target, row, pending, signal), row, signal);
+  }
+
+  async function resume(target, row, signal) {
+    const fields = target.current.fields;
+    const lock = financeLock(fields);
+    if (lock && lock.expires <= Date.now()) {
+      if (lock.previous !== null && typeof lock.previous !== 'string') throw new Error('A reserva financeira é inválida.');
+      return resume(await writeRevision(target, row, lock.previous, signal), row, signal);
+    }
+    let pending;
+    try { pending = JSON.parse(fields.HOLERITE_REVISAO || 'null')?.pendingAmounts; }
+    catch { return target; }
+    if (!pending) return target;
+    const { payload, changes } = pending;
+    try {
+      const next = revision({ HOLERITE_REVISAO: payload }, target.name);
+      if (!next?.lines || !Array.isArray(changes) || !changes.length
+        || new Set(changes.map(change => change.rubric)).size !== changes.length) {
+        throw new Error('A revisão pendente do holerite é inválida.');
+      }
+      const lines = weeklyPayslipLines(next.lines);
+      if (weeklyPayslipTotal(lines) !== next.total || changes.some(change => {
+        const line = lines.find(line => line.rubrica === change.rubric);
+        return !line || line.quantity !== change.desired?.QTD || line.unitValue !== change.desired?.VALORTOTAL
+          || (line.freight || '0') !== change.desired?.FRETE;
+      })) throw new Error('Os valores da revisão pendente não conferem.');
+      if ((await listFiles(target, signal)).filter(file => file.name === next.pdf).length !== 1)
+        throw new Error('O PDF da revisão pendente não foi encontrado.');
+      const ensureActive = async () => {
+        const current = await read(row, signal, target.list);
+        if (snapshot(current.current.fields) !== snapshot(fields)) throw new Error('A revisão pendente do holerite mudou.');
+      };
+      await finances.apply(fields, changes, ensureActive, signal);
+      const fresh = await read(row, signal, target.list);
+      if (fresh.current.fields.HOLERITE_REVISAO === payload) return fresh;
+      if (snapshot(fresh.current.fields) !== snapshot(fields))
+        throw new Error('O holerite mudou durante a sincronização.');
+      const saved = await writeRevision(fresh, row, payload, signal);
+      onSaved();
+      return saved;
+    } catch (cause) {
+      if (signal?.aborted) throw cause;
+      throw new Error(`A sincronização do holerite está pendente. Reabra o registro para retomar. ${cause.message}`, { cause });
+    }
+  }
+
+  async function saveFromFinance(kind, item, patch, { signal, persist } = {}) {
+    const request = await finances.fromFinance(kind, item, patch, signal);
+    if (!request) return null;
+    const row = { id: request.row.id, pdfFileName: weeklyPayslipName(request.row.fields) };
+    const list = { id: request.holeriteList };
+    const target = await resume(await read(row, signal, list), row, signal);
+    const fields = target.current.fields;
+    if (financeLock(fields)) throw new Error('Há uma edição financeira em andamento nesta folha. Tente novamente.');
+    if (!request.amountEdit) {
+      if (!persist) return null;
+      return { savedItem: await underFinanceLock(target, row, signal, persist), amountNames: Object.keys(patch) };
+    }
+    const { changes, line, amount, listId } = await request.prepare(fields);
+    const saved = revision(fields, target.name);
+    const values = saved || identity(fields);
+    const currentLines = weeklyPayslipLines(saved?.lines ?? JSON.parse(fields.RUBRICAS || '[]'));
+    if (!currentLines.some(existing => existing.rubrica === line.rubrica))
+      throw new Error('A rubrica vinculada não foi encontrada no holerite.');
+    const lines = currentLines.map(existing => existing.rubrica === line.rubrica
+      ? { ...line, formaPgto: existing.formaPgto } : existing);
+    const total = weeklyPayslipTotal(lines);
+    const week = { start: payrollGalleryDay(fields.SEMANA_INICIO), end: payrollGalleryDay(fields.SEMANA_FIM) };
+    const newPdf = JSON.stringify(lines) !== JSON.stringify(currentLines);
+    const pdf = newPdf ? await stagePdf(target, values, week, lines, total, await listFiles(target, signal), signal)
+      : saved?.pdf || target.name;
+    const payload = JSON.stringify({ supplier: values.supplier, branch: values.branch, date: values.date,
+      pdf, lines, total, removed: saved?.removed || [], labels: saved?.labels || [] });
+    const fresh = await read(row, signal, list);
+    if (snapshot(fresh.current.fields) !== snapshot(fields)) throw new Error('O holerite mudou durante a edição da provisão.');
+    // Even when the PDF already has the desired numbers, journal any financial
+    // changes before writing them. A retry may otherwise lose the source intent.
+    if (payload !== fields.HOLERITE_REVISAO || changes.some(change =>
+      change.parentBefore !== change.parentDesired || JSON.stringify(change.before) !== JSON.stringify(change.desired))) {
+      await commitRevision(fresh, row, payload, changes, signal);
+    }
+    onSaved();
+    const savedItem = await repository.getItem(siteKey, listId, item.id, '$expand=fields', { signal, includeVersion: true });
+    check(signal);
+    return { savedItem, amountNames: Object.keys(amount) };
+  }
+
   async function savePayslipEditor(row, context, draft, { signal } = {}) {
-    const target = await read(row, signal);
+    const target = await resume(await read(row, signal), row, signal);
+    if (financeLock(target.current.fields)) throw new Error('Há uma edição financeira em andamento nesta folha. Tente novamente.');
     const source = contexts.get(context);
     if (!source || source.id !== target.id || source.name !== target.name) throw new Error('Reabra a edição deste holerite.');
     if (!draft || Object.keys(draft).some(key => !['supplier', 'branch', 'date', 'lines', 'uploads', 'removed', 'restored'].includes(key)))
@@ -266,7 +429,12 @@ export function createWeeklyPayslipRecord({ repository, siteKey, resolveList, as
     const saved = revision(fields, target.name);
     const currentValues = saved || identity(fields);
     const currentLines = weeklyPayslipLines(saved?.lines ?? JSON.parse(fields.RUBRICAS || '[]'));
-    const lines = draft.lines === undefined ? currentLines : weeklyPayslipLines(draft.lines);
+    const lines = draft.lines === undefined ? currentLines : weeklyPayslipLines(draft.lines).map(line => {
+      const existing = currentLines.find(candidate => candidate.rubrica === line.rubrica);
+      const { freight: _input, ...editable } = line;
+      return weeklyPayslipLines([{ ...editable, freight: existing?.freight }])[0];
+    });
+    const financeChanges = await finances.fromPayslip(fields, currentLines, lines, signal);
     const total = weeklyPayslipTotal(lines);
     const removed = draft.removed ?? [];
     const restored = draft.restored ?? [];
@@ -284,16 +452,7 @@ export function createWeeklyPayslipRecord({ repository, siteKey, resolveList, as
     if (restored.some(name => !files.some(file => file.name === name)))
       throw new Error('Um anexo selecionado para restaurar não está mais disponível.');
     let pdf = saved?.pdf || target.name;
-    if (updatePdf) {
-      const hash = await sha256(new TextEncoder().encode(JSON.stringify([values, week, lines, total])));
-      pdf = `${target.stem}-revisao-${hash}.pdf`;
-      if (!files.some(file => file.name === pdf)) {
-        const { buildSupplierHoleritePdf } = await import('./supplier-holerite-pdf.js');
-        const bytes = await buildSupplierHoleritePdf({ supplier: { label: values.supplier, branch: values.branch },
-          date: values.date, week, lines, total }, { logoBytes: await loadLogo({ signal }) });
-        await confirmFile(target, asBlob(bytes, 'application/pdf'), pdf, signal, false);
-      }
-    }
+    if (updatePdf) pdf = await stagePdf(target, values, week, lines, total, files, signal);
     const hidden = new Set([...(saved?.removed || []), ...removed]);
     for (const name of restored) hidden.delete(name);
     const labels = new Map(saved?.labels);
@@ -317,19 +476,13 @@ export function createWeeklyPayslipRecord({ repository, siteKey, resolveList, as
       throw new Error('Este holerite foi alterado. Reabra a edição para conferir os dados.');
     const eTag = version(fresh.current);
     if (!eTag || eTag === '*') throw new Error('Não foi possível confirmar a versão deste holerite.');
-    let failure;
     source.pending = { payload, values, lines: JSON.stringify(draft.lines), removed: JSON.stringify(removed),
       restored: JSON.stringify(restored), uploads: draft.uploads ?? [] };
-    try {
-      check(signal);
-      await repository.updateItem(siteKey, target.list.id, target.id, { HOLERITE_REVISAO: payload }, { eTag, signal });
-    } catch (error) { failure = error; }
-    const confirmed = await read(row, signal, target.list);
-    if (confirmed.current.fields.HOLERITE_REVISAO !== payload) throw failure || new Error('A edição do holerite não foi confirmada.');
+    await commitRevision(fresh, row, payload, financeChanges, signal);
     source.pending = undefined;
     onSaved();
     return values;
   }
 
-  return { downloadPayslip, listSignedPayslips, downloadSignedPayslip, downloadPayslipAttachment, uploadSignedPayslips, loadPayslipEditor, savePayslipEditor };
+  return { downloadPayslip, listSignedPayslips, downloadSignedPayslip, downloadPayslipAttachment, uploadSignedPayslips, loadPayslipEditor, savePayslipEditor, saveFromFinance };
 }

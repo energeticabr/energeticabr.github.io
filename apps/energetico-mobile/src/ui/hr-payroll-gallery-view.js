@@ -250,6 +250,7 @@ export function createHrPayrollGallery({ document: documentOption,
       for (const [label, value] of [
         ['Quantidade', rubricQuantity.format(rubric.quantity)],
         ['Valor unitário', rubricUnitValue.format(rubric.unitValue)],
+        ...(rubric.freight ? [['Frete', displayValue('TOTAL', rubric.freight)]] : []),
         ['Forma de pagamento', rubric.formaPgto || '—'],
       ]) {
         const pair = element('div');
