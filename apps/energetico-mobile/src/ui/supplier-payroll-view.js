@@ -939,6 +939,7 @@ export function createSupplierPayrollView({
         editorReady = true;
         try {
           if (!entry.options.products || !entry.options.stages || !entry.options.sheets) {
+            const firstAccountsLoad = !entry.options.accounts;
             editor.replaceChildren(createLoadingIndicator(doc, "Carregando opções do fornecedor…"));
             const [products, accounts] = await Promise.all([
               entry.options.products || data.loadProducts(draft.supplier, catalogOptions),
@@ -950,6 +951,13 @@ export function createSupplierPayrollView({
             if (!entry.options.products) {
               const recommended = products.filter(product => product.recommended);
               if (recommended.length === 1) draft.product = recommended[0];
+            }
+            if (firstAccountsLoad) {
+              const meal = draft.lines.find(line => line.rubric === "meal" && line.prefilledBenefit);
+              if (meal) {
+                const swile = accounts.filter(account => stageKey(account.label) === "SWILE");
+                if (swile.length === 1) meal.account = swile[0];
+              }
             }
             Object.assign(entry.options, { products, accounts });
           }
