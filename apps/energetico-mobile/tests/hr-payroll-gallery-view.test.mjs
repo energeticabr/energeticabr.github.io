@@ -44,6 +44,13 @@ test("holerites exibem funcionário, semana e PDF de cada registro sem excluir o
   assert.match(cards[0].textContent, /EDGAR/);
   assert.match(cards[1].textContent, /FELICIANO[^]*09\/11\/2026[^]*15\/11\/2026[^]*280,00/);
   assert.equal(root.querySelector("[data-gallery-action], [data-action=create-payroll-record]"), null);
+  for (const card of cards) {
+    const pdf = card.querySelector("[data-action=open-payslip-pdf]");
+    assert.equal(card.firstElementChild, pdf);
+    assert.equal(pdf.nextElementSibling, card.querySelector(".gallery-record-main"));
+    assert.ok(pdf.querySelector('svg[aria-hidden="true"]'));
+    assert.match(pdf.getAttribute("aria-label"), /Ver PDF do holerite/);
+  }
   cards[0].querySelector("[data-action=open-payslip-pdf]").click();
   await Promise.resolve();
   assert.deepEqual(opened, [["17", "Holerite-2026-11-09-253.pdf"]]);

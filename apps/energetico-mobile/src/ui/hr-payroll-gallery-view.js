@@ -10,6 +10,7 @@ import { createPayrollPaymentComposer } from './payroll-payment-view.js';
 import { bindAutoFilterForm } from './auto-filter-form.js';
 import { payrollFilterOptions, validatePayrollFilters } from '../chat/payroll-gallery-filters.js';
 import { createWeeklyPayslipActions } from './weekly-payslip-actions.js';
+import { PDF_ATTACHMENT_ICON } from './report-pdf-attachment-icon.js';
 
 const GALLERIES = {
   HOLERITE: {
@@ -247,10 +248,12 @@ export function createHrPayrollGallery({ document: documentOption,
       if (isPayslip) card.classList.add('hr-gallery-card--payslip');
       const actions = recordActions?.render(row) || element('div', 'gallery-record-actions');
       if (isPayslip) {
-        const pdf = element('button', 'hr-gallery-button hr-gallery-payslip-pdf', 'PDF');
+        const pdf = element('button', 'hr-gallery-button hr-gallery-payslip-pdf');
         pdf.type = 'button';
         pdf.dataset.action = 'open-payslip-pdf';
         pdf.setAttribute('aria-label', `Ver PDF do holerite de ${row.FORNECEDOR || 'funcionário'}, ID ${row.id}`);
+        pdf.title = pdf.getAttribute('aria-label');
+        pdf.innerHTML = PDF_ATTACHMENT_ICON;
         pdf.disabled = !row.pdfFileName || typeof openPayslip !== 'function';
         pdf.addEventListener('click', () => {
           if (opened && !destroyed) {
@@ -262,7 +265,7 @@ export function createHrPayrollGallery({ document: documentOption,
             });
           }
         });
-        actions.append(pdf);
+        card.append(pdf);
         payslipActions.render(row, actions);
       }
       if (payrollReport) {
