@@ -21,6 +21,7 @@ const stageKey = label => label.normalize("NFD").replace(/[\u0300-\u036f]/g, "")
 const edgarSupplierId = "253";
 const weeklyBenefitSuppliers = new Set([edgarSupplierId, "254", "260", "264", "265", "269"]);
 const weeklyBenefitValues = new Map([["transport", "11"], ["meal", "45"]]);
+const prefilledMeal = draft => draft.lines.find(line => line.rubric === "meal" && line.prefilledBenefit);
 let sequence = 0;
 export function createSupplierPayrollView({
   data,
@@ -783,11 +784,10 @@ export function createSupplierPayrollView({
       try {
         const amount = payrollTotal(selected.flatMap(entry => entry.validated?.lines || entry.draft.lines));
         total.textContent = "Total selecionado (" + selected.length + "): " + money(amount);
-        post.disabled = selected.length === 0;
       } catch {
         total.textContent = "Total selecionado: confira os valores informados";
-        post.disabled = false;
       }
+      post.disabled = selected.length === 0 || selected.some(entry => !entry.options.accounts && prefilledMeal(entry.draft));
       const posted = entries.filter(entry => entry.result);
       feedback.hidden = posted.length === 0;
       if (posted.length) {
@@ -801,6 +801,7 @@ export function createSupplierPayrollView({
     }
     async function submit() {
       const selected = entries.filter(entry => entry.selected && !entry.result);
+      if (selected.some(entry => !entry.options.accounts && prefilledMeal(entry.draft))) return;
       const queue = [];
       for (const entry of selected) {
         try {
@@ -938,11 +939,25 @@ export function createSupplierPayrollView({
         if (editorReady || signal.aborted) return;
         editorReady = true;
         try {
-          if (!entry.options.products || !entry.options.stages || !entry.options.sheets) {
+          if (!entry.options.accounts || !entry.options.products || !entry.options.stages || !entry.options.sheets) {
             editor.replaceChildren(createLoadingIndicator(doc, "Carregando opções do fornecedor…"));
-            const [products, accounts] = await Promise.all([
+            const loadAccounts = async () => {
+              if (entry.options.accounts) return;
+              const accounts = await data.loadAccounts(catalogOptions);
+              if (signal.aborted || entry.options.accounts) return;
+              assertSession();
+              const meal = prefilledMeal(draft);
+              if (meal) {
+                const swile = accounts.filter(account => stageKey(account.label) === "SWILE");
+                if (swile.length === 1) meal.account = swile[0];
+              }
+              entry.options.accounts = accounts;
+              refresh();
+              refreshBatch();
+            };
+            const [products] = await Promise.all([
               entry.options.products || data.loadProducts(draft.supplier, catalogOptions),
-              entry.options.accounts || data.loadAccounts(catalogOptions),
+              loadAccounts(),
               loadReferences(entry),
             ]);
             if (signal.aborted) return;
@@ -951,7 +966,7 @@ export function createSupplierPayrollView({
               const recommended = products.filter(product => product.recommended);
               if (recommended.length === 1) draft.product = recommended[0];
             }
-            Object.assign(entry.options, { products, accounts });
+            entry.options.products = products;
           }
           applyBatchDefaults(entry);
           syncEditor = buildEditor(entry, editor, edited => {
@@ -959,6 +974,7 @@ export function createSupplierPayrollView({
             refreshBatch();
           }, catalogOptions, refreshSheetCatalog);
           refresh();
+          refreshBatch();
         } catch (cause) {
           if (signal.aborted) return;
           editorReady = false;

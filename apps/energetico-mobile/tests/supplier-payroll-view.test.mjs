@@ -21,6 +21,8 @@ test('pré-preenche somente os vales dos seis fornecedores e permite alterar ou 
     const values = ['transport-quantity', 'transport-value', 'meal-quantity', 'meal-value', 'salary-value']
       .map(name => doc.querySelector(field(id, name)).value);
     assert.deepEqual(values, index < 6 ? ['5', '11', '5', '45', ''] : ['1', '', '1', '', ''], id);
+    assert.equal(doc.querySelector(field(id, 'meal-account')).value, index < 6 ? '17' : '', id);
+    assert.equal(doc.querySelector(field(id, 'transport-account')).value, '', id);
     const benefitPaid = index > 0 && index < 6;
     assert.deepEqual(['transport', 'meal', 'salary'].map(rubric =>
       doc.querySelector(field(id, `${rubric}-already-paid`)).checked), [benefitPaid, benefitPaid, false], id);
@@ -30,13 +32,16 @@ test('pré-preenche somente os vales dos seis fornecedores e permite alterar ou 
   h.input(field('253', 'transport-quantity'), '3');
   h.input(field('253', 'transport-value'), '');
   h.input(field('253', 'meal-quantity'), '4');
-  h.input(field('253', 'meal-account'), '17');
   h.input(field('253', 'stage'), '4');
   h.input(field('253', 'sheet'), '5');
   await h.click(field('260', 'meal-already-paid'));
   assert.equal(doc.querySelector(field('260', 'meal-account')).required, true);
   await h.click(field('260', 'meal-already-paid'));
   assert.equal(doc.querySelector(field('260', 'meal-account')).required, false);
+  h.input(field('260', 'meal-account'), '3');
+  await h.click(`${card('260')} [data-payroll-expand]`);
+  await h.click(`${card('260')} [data-payroll-expand]`);
+  assert.equal(doc.querySelector(field('260', 'meal-account')).value, '3');
   h.input(field('260', 'transport-value'), '');
   assert.equal(doc.querySelector(field('260', 'transport-already-paid')).checked, false);
   await h.click('[data-payroll-post]');
@@ -45,8 +50,28 @@ test('pré-preenche somente os vales dos seis fornecedores e permite alterar ou 
       [rubric, quantity, unitValue, account?.label, alreadyPaid]), total,
   })), [
     { supplier: '253', lines: [['meal', 4, 45, 'SWILE', false]], total: 180 },
-    { supplier: '260', lines: [['meal', 5, 45, undefined, true]], total: 225 },
+    { supplier: '260', lines: [['meal', 5, 45, 'PIX', true]], total: 225 },
   ]);
+});
+
+test('postagem de vale já pago aguarda a forma padrão do catálogo', async t => {
+  const h = await harness();
+  t.after(() => { h.view.destroy(); h.dom.window.close(); });
+  h.data.loadSuppliers = async () => [{ id: '260', label: 'Feliciano', branch: 'OBRA A' }];
+  h.data.loadProducts = async () => { throw new Error('Produtos indisponíveis'); };
+  let finishAccounts;
+  h.data.loadAccounts = () => new Promise(resolve => { finishAccounts = resolve; });
+  await openSuppliers(h);
+  await h.click('[data-payroll-select]');
+  const post = h.dom.window.document.querySelector('[data-payroll-post]');
+  assert.equal(post.disabled, true);
+  await h.click('[data-payroll-post]');
+  assert.equal(h.posts.length, 0);
+  finishAccounts([{ id: '17', label: 'SWILE' }]);
+  await flush();
+  assert.equal(post.disabled, false);
+  await h.click('[data-payroll-post]');
+  assert.equal(h.posts[0].lines.find(line => line.rubric === 'meal').account.label, 'SWILE');
 });
 
 test('rubrica já paga fecha a semana sem exigir forma, etapa ou IDFOLHA', async t => {
