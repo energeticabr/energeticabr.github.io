@@ -7284,7 +7284,7 @@ export function createAppController({
                 },
                 listSignedPayslips: (row, options) => data.listSignedPayslips(row, options),
                 uploadSignedPayslips: (row, files, options) => data.uploadSignedPayslips(row, files, options),
-                openSignedPayslip: async (row, file, { signal, onClose } = {}) => {
+                openSignedPayslip: async (row, file, { signal, onClose, returnLabel, editorAttachment } = {}) => {
                   assertSession();
                   if (payslipPreview || signal?.aborted || hrPayrollGallery !== panel) { onClose?.(); return; }
                   const preview = payslipPreview = new AbortController();
@@ -7302,10 +7302,14 @@ export function createAppController({
                       const cancel = () => preview.abort(viewer.reason);
                       if (viewer?.aborted) cancel();
                       else viewer?.addEventListener('abort', cancel, { once: true });
-                      try { return await data.downloadSignedPayslip(row, file, { ...options, signal: preview.signal }); }
+                      try {
+                        const download = editorAttachment && typeof data.downloadPayslipAttachment === 'function'
+                          ? data.downloadPayslipAttachment : data.downloadSignedPayslip;
+                        return await download(row, file, { ...options, signal: preview.signal });
+                      }
                       finally { viewer?.removeEventListener('abort', cancel); }
                     },
-                      file.name, { onClose: release, returnLabel: 'Voltar às vias assinadas' });
+                      file.label || file.name, { onClose: release, returnLabel: returnLabel || 'Voltar às vias assinadas' });
                   } catch (error) {
                     const cancelled = preview.signal.aborted;
                     release();

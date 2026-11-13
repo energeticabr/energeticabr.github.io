@@ -1,3 +1,7 @@
+import { WEEKLY_PAYSLIP_RUBRICS, weeklyPayslipLines, weeklyPayslipTotal } from '../chat/weekly-payslip-lines.js';
+
+const currency = new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' });
+
 export function createWeeklyPayslipActions({ doc, host, pick, list, upload, open, loadEditor, saveEditor, onSaved }) {
   let active;
   const el = (tag, text, className) => {
@@ -43,7 +47,7 @@ export function createWeeklyPayslipActions({ doc, host, pick, list, upload, open
     overlay.addEventListener('keydown', event => {
       if (event.key === 'Escape') { event.preventDefault(); close(); }
       if (event.key !== 'Tab') return;
-      const focusable = [...panel.querySelectorAll('button:not([disabled]), input:not([disabled])')]
+      const focusable = [...panel.querySelectorAll('button:not([disabled]), input:not([disabled]), select:not([disabled])')]
         .filter(node => !node.closest('[hidden]'));
       const first = focusable[0], last = focusable.at(-1);
       if (event.shiftKey && doc.activeElement === first) { event.preventDefault(); last?.focus(); }
@@ -55,12 +59,40 @@ export function createWeeklyPayslipActions({ doc, host, pick, list, upload, open
   }
   function errorMessage(error, fallback) { return error?.message || fallback; }
 
+  function attachmentChoices(choose, isEditor = false) {
+    const choices = el('div', '', 'hr-payslip-dialog-options');
+    const photos = el('div', '', 'hr-payslip-dialog-options');
+    photos.hidden = true;
+    for (const [source, label] of [['files', isEditor ? 'Adicionar arquivo' : 'Enviar anexo'], ['scan', 'Escanear'], ['photo', isEditor ? 'Adicionar foto' : 'Enviar foto']]) {
+      const option = button(label, '', () => {
+        if (source === 'photo') {
+          photos.hidden = !photos.hidden;
+          option.setAttribute('aria-expanded', String(!photos.hidden));
+        } else {
+          photos.hidden = true;
+          choices.querySelector('[data-payslip-source=photo]').setAttribute('aria-expanded', 'false');
+          void choose(source);
+        }
+      });
+      if (source === 'photo') option.setAttribute('aria-expanded', 'false');
+      option.dataset.payslipSource = source;
+      choices.append(option);
+    }
+    for (const [source, label] of [['photos', 'Escolher foto'], ['camera', 'Tirar foto']]) {
+      const option = button(label, '', () => { void choose(source); });
+      option.dataset.payslipSource = source;
+      photos.append(option);
+    }
+    choices.append(photos);
+    return choices;
+  }
+
   async function uploadDialog(row, trigger) {
     const state = dialog('Via assinada do holerite', row, trigger);
     if (!state) return;
     const { body, message, signal } = state;
     const options = { signal };
-    const choices = el('div', '', 'hr-payslip-dialog-options');
+    const choices = attachmentChoices(choose);
     const preview = el('div', '', 'hr-payslip-dialog-files');
     const existing = el('div', '', 'hr-payslip-dialog-files');
     let selected = [];
@@ -131,23 +163,6 @@ export function createWeeklyPayslipActions({ doc, host, pick, list, upload, open
         if (!signal.aborted) message.textContent = errorMessage(error, 'Não foi possível salvar a via assinada.');
       } finally { state.writing = false; if (!signal.aborted) setDisabled(); }
     });
-    const photos = el('div', '', 'hr-payslip-dialog-options');
-    photos.hidden = true;
-    for (const [source, label] of [['files', 'Enviar anexo'], ['scan', 'Escanear'], ['photo', 'Enviar foto']]) {
-      const option = button(label, '', () => {
-        if (source !== 'photo') { photos.hidden = true; void choose(source); }
-        else { photos.hidden = !photos.hidden; option.setAttribute('aria-expanded', String(!photos.hidden)); }
-      });
-      if (source === 'photo') option.setAttribute('aria-expanded', 'false');
-      option.dataset.payslipSource = source;
-      choices.append(option);
-    }
-    for (const [source, label] of [['photos', 'Escolher foto'], ['camera', 'Tirar foto']]) {
-      const option = button(label, '', () => { void choose(source); });
-      option.dataset.payslipSource = source;
-      photos.append(option);
-    }
-    choices.append(photos);
     body.append(choices, preview, send, existing);
     setDisabled();
     try {
@@ -156,6 +171,153 @@ export function createWeeklyPayslipActions({ doc, host, pick, list, upload, open
     } catch (error) {
       if (!signal.aborted && !state.writing && !uploaded) message.textContent = errorMessage(error, 'Não foi possível consultar as vias assinadas.');
     }
+  }
+
+  function editRubrics(form, lines) {
+    const section = el('section', '', 'hr-payslip-dialog-body');
+    const list = el('div', '', 'hr-payslip-dialog-body');
+    const total = el('strong');
+    total.dataset.payslipTotal = '';
+    total.setAttribute('aria-live', 'polite');
+    const readLines = () => [...list.children].map(fieldset => Object.fromEntries(
+      [...fieldset.querySelectorAll('[data-payslip-line]')].map(input => [input.dataset.payslipLine, input.value])));
+    const refresh = () => {
+      const rows = readLines();
+      add.disabled = rows.length >= WEEKLY_PAYSLIP_RUBRICS.length;
+      [...list.children].forEach((fieldset, index) => {
+        const row = rows[index];
+        for (const option of fieldset.querySelector('select').options)
+          option.disabled = option.value !== row.rubrica && rows.some(other => other.rubrica === option.value);
+        const subtotal = fieldset.querySelector('[data-payslip-subtotal]');
+        try { subtotal.textContent = `Subtotal ${currency.format(weeklyPayslipLines([row])[0].total)}`; }
+        catch { subtotal.textContent = 'Subtotal —'; }
+      });
+      try { total.textContent = `Total ${currency.format(weeklyPayslipTotal(weeklyPayslipLines(rows)))}`; }
+      catch { total.textContent = 'Total —'; }
+    };
+    function addLine(line) {
+      const row = el('fieldset', '', 'hr-payslip-edit-rubric');
+      row.append(el('legend', 'Rubrica'));
+      const select = el('select', '', 'hr-gallery-filter-input');
+      select.dataset.payslipLine = 'rubrica';
+      select.setAttribute('aria-label', 'Tipo da rubrica');
+      for (const { id, label } of WEEKLY_PAYSLIP_RUBRICS) {
+        const option = el('option', label);
+        option.value = id;
+        select.append(option);
+      }
+      select.value = line.rubrica;
+      row.append(select);
+      for (const [key, label] of [['quantity', 'Quantidade'], ['unitValue', 'Valor unitário (R$)'], ['formaPgto', 'Forma de pagamento']]) {
+        const field = el('label', label, 'hr-gallery-filter-field');
+        const input = el('input', '', 'hr-gallery-filter-input');
+        input.dataset.payslipLine = key;
+        input.value = line[key] ?? '';
+        input.required = key !== 'formaPgto';
+        input.inputMode = key === 'formaPgto' ? 'text' : 'decimal';
+        input.maxLength = key === 'formaPgto' ? 255 : 32;
+        field.append(input);
+        row.append(field);
+      }
+      const subtotal = el('span');
+      subtotal.dataset.payslipSubtotal = '';
+      row.append(subtotal, button('Retirar rubrica', 'remove-payslip-rubric', () => {
+        row.remove();
+        refresh();
+        add.focus();
+      }));
+      list.append(row);
+      return select;
+    }
+    const add = button('Adicionar rubrica', 'add-payslip-rubric', () => {
+      const used = new Set(readLines().map(row => row.rubrica));
+      const rubric = WEEKLY_PAYSLIP_RUBRICS.find(({ id }) => !used.has(id));
+      if (!rubric) return;
+      const select = addLine({ rubrica: rubric.id, quantity: 1 });
+      refresh();
+      select.focus();
+    });
+    lines.forEach(addLine);
+    list.addEventListener('input', refresh);
+    list.addEventListener('change', refresh);
+    section.append(el('h3', 'Rubricas e valores'), list, add, total);
+    form.append(section);
+    refresh();
+    return readLines;
+  }
+
+  function editAttachments(form, row, initial, archived, state) {
+    const section = el('section', '', 'hr-payslip-dialog-body');
+    const files = el('div', '', 'hr-payslip-dialog-files');
+    const removed = new Set();
+    const restored = new Set();
+    const uploads = [];
+    const { signal, message } = state;
+    let busy = false;
+    function renderFiles() {
+      files.replaceChildren();
+      for (const attachment of initial) {
+        const removedHere = removed.has(attachment.name);
+        const item = el('div', '', 'hr-payslip-edit-file');
+        const label = attachment.signed ? `Via assinada (${attachment.name.endsWith('.pdf') ? 'PDF' : 'foto'})` : attachment.label || attachment.name;
+        item.append(el('span', removedHere ? `${label} · será retirado` : label));
+        if (!removedHere && open) item.append(button('Abrir', 'open-payslip-attachment', async () => {
+          if (busy || signal.aborted) return;
+          try { await open(row, attachment, { signal, editorAttachment: true, returnLabel: 'Voltar à edição do holerite' }); }
+          catch (error) { if (!signal.aborted) message.textContent = errorMessage(error, 'Não foi possível abrir o anexo.'); }
+        }));
+        item.append(button(removedHere ? 'Desfazer' : 'Retirar', 'remove-payslip-attachment', () => {
+          if (removedHere) removed.delete(attachment.name); else removed.add(attachment.name);
+          renderFiles();
+          files.querySelectorAll('[data-action=remove-payslip-attachment]')[initial.indexOf(attachment)]?.focus();
+        }));
+        files.append(item);
+      }
+      for (const attachment of archived) {
+        const restore = restored.has(attachment.name);
+        const item = el('div', '', 'hr-payslip-edit-file');
+        const label = attachment.signed ? `Via assinada (${attachment.name.endsWith('.pdf') ? 'PDF' : 'foto'})` : attachment.label;
+        item.append(el('span', `${label} · ${restore ? 'será restaurado' : 'retirado'}`),
+          button(restore ? 'Desfazer' : 'Restaurar', 'restore-payslip-attachment', () => {
+            if (restore) restored.delete(attachment.name); else restored.add(attachment.name);
+            renderFiles();
+            files.querySelectorAll('[data-action=restore-payslip-attachment]')[archived.indexOf(attachment)]?.focus();
+          }));
+        files.append(item);
+      }
+      for (const file of uploads) {
+        const item = el('div', '', 'hr-payslip-edit-file');
+        item.append(el('span', `${file.name} · novo`), button('Retirar', 'discard-payslip-attachment', () => {
+          uploads.splice(uploads.indexOf(file), 1);
+          renderFiles();
+          choices.querySelector('button')?.focus();
+        }));
+        files.append(item);
+      }
+      if (!files.childElementCount) files.append(el('p', 'Nenhum anexo.'));
+    }
+    const choices = pick ? attachmentChoices(async source => {
+      if (busy || signal.aborted) return;
+      busy = true;
+      message.textContent = '';
+      choices.querySelectorAll('button').forEach(node => { node.disabled = true; });
+      try {
+        const selected = Array.from(await pick(source, { signal }) || []);
+        if (signal.aborted || !selected.length) return;
+        if (uploads.length + selected.length > 20) throw new Error('Selecione até 20 arquivos por envio.');
+        uploads.push(...selected);
+        renderFiles();
+      } catch (error) {
+        if (!signal.aborted) message.textContent = errorMessage(error, 'Não foi possível selecionar o anexo.');
+      } finally {
+        busy = false;
+        choices.querySelectorAll('button').forEach(node => { node.disabled = false; });
+      }
+    }, true) : el('div');
+    section.append(el('h3', 'Anexos'), files, choices);
+    form.append(section);
+    renderFiles();
+    return { uploads, removed, restored, isBusy: () => busy };
   }
 
   async function editDialog(row, trigger) {
@@ -179,16 +341,29 @@ export function createWeeklyPayslipActions({ doc, host, pick, list, upload, open
         field.append(input);
         form.append(field);
       }
-      form.append(el('p', 'Ao salvar, o PDF será atualizado. Vias assinadas anteriores ficam disponíveis para consulta.'));
+      const readLines = Array.isArray(context.lines) ? editRubrics(form, context.lines) : null;
+      const attachments = Array.isArray(context.attachments) ? editAttachments(form, row, context.attachments, context.removedAttachments || [], state) : null;
+      form.append(el('p', 'As correções atualizam o PDF do holerite. Os lançamentos financeiros da folha ficam com os dados já postados.'));
       const submit = el('button', 'Salvar alterações', 'hr-gallery-button');
       submit.type = 'submit';
       form.append(submit);
       form.addEventListener('submit', async event => {
         event.preventDefault();
-        if (signal.aborted || state.writing || !form.reportValidity()) return;
-        state.writing = true;
+        if (signal.aborted || state.writing || attachments?.isBusy() || !form.reportValidity()) return;
         const draft = Object.fromEntries(Object.entries(fields).map(([key, field]) => [key, field.value]));
-        for (const field of [...Object.values(fields), submit, state.dismiss]) field.disabled = true;
+        if (readLines) {
+          draft.lines = readLines();
+          try { weeklyPayslipTotal(weeklyPayslipLines(draft.lines)); }
+          catch (error) { message.textContent = error.message; return; }
+        }
+        if (attachments) {
+          draft.uploads = [...attachments.uploads];
+          draft.removed = [...attachments.removed];
+          draft.restored = [...attachments.restored];
+        }
+        state.writing = true;
+        const controls = [...form.querySelectorAll('input:not([disabled]), select:not([disabled]), button:not([disabled])'), state.dismiss];
+        for (const field of controls) field.disabled = true;
         message.textContent = 'Salvando holerite…';
         try {
           await saveEditor(row, context, draft, { signal });
@@ -199,7 +374,7 @@ export function createWeeklyPayslipActions({ doc, host, pick, list, upload, open
           if (!signal.aborted) message.textContent = errorMessage(error, 'Não foi possível salvar o holerite.');
         } finally {
           state.writing = false;
-          if (!signal.aborted) for (const field of [...Object.values(fields), submit, state.dismiss]) field.disabled = false;
+          if (!signal.aborted) for (const field of controls) field.disabled = false;
         }
       });
       body.append(form);
