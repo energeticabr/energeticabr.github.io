@@ -6464,7 +6464,10 @@ export function createAppController({
   }
 
   async function openSwilePanel() {
-    if (!account || stopped || sessionStatus !== 'authenticated' || flowBusy() || store.getState().activeFlow) return false;
+    const { activeFlow } = store.getState();
+    const inRhMenu = activeFlow?.id === 'menu:choosing_action'
+      && /\brecursos\s+humanos\b/.test(normalizedChoiceText(activeFlow.title));
+    if (!account || stopped || sessionStatus !== 'authenticated' || flowBusy() || (activeFlow && !inRhMenu)) return false;
     if (swilePanel || swileOpening) return true;
     closeGalleryOverlays();
     const owner = account, revision = sessionRevision, opening = {};

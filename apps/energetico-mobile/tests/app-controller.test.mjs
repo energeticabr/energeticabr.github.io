@@ -3551,6 +3551,41 @@ test('IDFOLHA delayed creation cannot cover a newer gallery navigation', async t
   assert.equal(destroys, 1);
 });
 
+test('Swile opens from the live RH menu without leaving the conversation or sending a recharge', async t => {
+  const dom = new JSDOM('<main id="app"></main>', { url: 'https://example.test' });
+  const previous = globalThis.document;
+  globalThis.document = dom.window.document;
+  const h = makeHarness();
+  t.after(() => { h.controller.stop(); globalThis.document = previous; dom.window.close(); });
+  await h.controller.start();
+  const requests = [];
+  h.client.swileRequest = async operation => {
+    requests.push(operation);
+    return [{ id: 1, name: 'Pessoa elegível', hasActiveCard: true }];
+  };
+  const poll = { type: 'poll', question: '👉 👥 RECURSOS HUMANOS',
+    options: [{ id: 'action_hr_registrations', label: 'CADASTROS' }] };
+  const menu = { id: 'menu:choosing_action', title: '👥 RECURSOS HUMANOS' };
+  h.store.ingestRemoteMessages([poll], { activeFlow: menu });
+  const callsBefore = h.chatCalls.length;
+  const menuMarkup = dom.window.document.createElement('template');
+  menuMarkup.innerHTML = renderChatMarkup(h.view.renders.at(-1));
+  const { replyId } = menuMarkup.content.querySelector('.swile-menu-entry button').dataset;
+  assert.equal(await h.view.emit('select-reply', { replyId }), true);
+  const panel = dom.window.document.querySelector('.swile-dialog');
+  assert.ok(panel);
+  assert.match(panel.textContent, /Pessoa elegível/);
+  assert.deepEqual(requests, ['directory']);
+  assert.equal(h.chatCalls.length, callsBefore);
+  assert.equal(h.store.getState().activeFlow.id, menu.id);
+  assert.equal(h.store.getState().activeFlow.title, menu.title);
+  panel.querySelector('button').click();
+  h.store.ingestRemoteMessages([poll], { activeFlow: { id: 'launch', title: 'EFETUAR LANÇAMENTO' } });
+  assert.equal(await h.view.emit('select-reply', { replyId }), false);
+  assert.equal(dom.window.document.querySelector('.swile-dialog'), null);
+  assert.deepEqual(requests, ['directory']);
+});
+
 test('IDFOLHA default real gallery and composer open through +, never posting on open', async t => {
   const dom = new JSDOM('<main id="app"></main>', { url: 'https://example.test' });
   const previous = globalThis.document;
