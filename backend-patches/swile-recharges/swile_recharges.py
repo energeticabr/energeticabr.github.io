@@ -396,25 +396,34 @@ class Service:
         return result
 
     def pending_orders(self):
+        return self.corporate_orders(history=False)
+
+    def corporate_orders(self, *, history):
         result = []
         for group in self.pages('order/group', 'orderGroups', size_param='size'):
             status = group['statusCode']
-            if status in CLOSED_ORDER_STATUSES:
+            if not history and status in CLOSED_ORDER_STATUSES:
                 continue
             dates = {scheduled_date(order.get('creditDate')) for order in group.get('orders') or []}
-            result.append({
+            row = {
                 'orderCode': group['groupCode'], 'status': status, 'creditCents': cents(group['valueCredit']),
                 'creditDate': dates.pop() if len(dates) == 1 else None,
-            })
-        return result
+            }
+            requested = group.get('requestDate')
+            if history:
+                row['requestDate'] = scheduled_date(requested)
+            result.append((requested or '', row))
+        if history:
+            result.sort(key=lambda entry: entry[0], reverse=True)
+        return [row for _, row in result]
 
-    def pending_order_details(self, code):
+    def corporate_order_details(self, code, *, pending_only):
         if not isinstance(code, str) or not re.fullmatch(r'[A-Za-z0-9_-]{1,100}', code):
             raise SwileError('Código de pedido Swile inválido.')
         group = self.gateway.request('order/group/' + quote(code, safe=''))
         if group.get('code') != code or not isinstance(group.get('orderList'), list):
             raise SwileError('A Swile não confirmou os detalhes do pedido.', 502)
-        if group['statusCode'] in CLOSED_ORDER_STATUSES:
+        if pending_only and group['statusCode'] in CLOSED_ORDER_STATUSES:
             raise SwileError('Este pedido saiu dos pedidos em suspenso. Atualize a galeria.', 404)
         group_date = scheduled_date(group.get('creditDate'))
         result = {'orderCode': code, 'status': group['statusCode'], 'creditDate': group_date,
@@ -481,8 +490,12 @@ def handle_portal(identity, body):
         elif action == 'swile_confirm':
             value = service.confirm(owner, body.get('id'), body.get('invoiceText', ''))
         elif action == 'swile_orders':
-            if body.get('gallery') == 'pending':
-                value = service.pending_order_details(body['orderCode']) if 'orderCode' in body else service.pending_orders()
+            gallery = body.get('gallery')
+            if gallery in ('pending', 'history'):
+                if 'orderCode' in body:
+                    value = service.corporate_order_details(body['orderCode'], pending_only=gallery == 'pending')
+                else:
+                    value = service.corporate_orders(history=gallery == 'history')
             else:
                 value = service.orders(owner, body.get('reference'))
         else:

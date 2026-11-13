@@ -3594,7 +3594,7 @@ test('Swile opens from the live RH menu without leaving the conversation or send
     return [];
   };
   assert.equal(await h.view.emit('select-reply', { replyId: 'action_hr_swile_gallery' }), true);
-  assert.match(dom.window.document.querySelector('.swile-dialog').textContent, /Nenhum pedido em suspenso/);
+  assert.match(dom.window.document.querySelector('main.swile-gallery-page').textContent, /Nenhum pedido em suspenso/);
   assert.deepEqual(requests, ['directory', 'orders']);
   assert.equal(h.chatCalls.length, callsBefore);
 });
