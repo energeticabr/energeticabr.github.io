@@ -50,26 +50,31 @@ export function openSwileView({ document: doc, request, gallery = false, onClose
     label.append(make('span', text), input);
     return label;
   };
-  const dialog = make('dialog', '', 'swile-dialog');
-  dialog.setAttribute('aria-labelledby', 'swile-heading');
-  dialog.setAttribute('aria-modal', 'true');
-  const title = make('h2', gallery ? 'Galeria Swile' : 'Swile');
+  const screen = gallery ? make('main', '', 'swile-gallery-page') : make('dialog', '', 'swile-dialog');
+  screen.setAttribute('aria-labelledby', 'swile-heading');
+  if (!gallery) screen.setAttribute('aria-modal', 'true');
+  const app = gallery ? doc.getElementById('app') : null;
+  const restoreApp = app && !app.hasAttribute('inert');
+  const title = make(gallery ? 'h1' : 'h2', gallery ? 'Galeria Swile' : 'Swile');
   title.id = 'swile-heading';
+  title.tabIndex = -1;
   const headline = make('div', '', 'swile-headline');
-  headline.append(title, make('span', gallery ? 'Pedidos em suspenso' : 'Multibenefícios'));
+  headline.append(title);
+  if (!gallery) headline.append(make('span', 'Multibenefícios'));
   const header = make('header', '', 'swile-header');
-  header.append(headline, button('Fechar', close));
+  header.append(headline, button(gallery ? 'Voltar ao RH' : 'Fechar', close));
   const body = make('div', '', 'swile-body');
   const note = make('p', '', 'swile-note');
   note.setAttribute('role', 'status');
   note.hidden = true;
   const content = make('div');
   body.append(note, content);
-  dialog.append(header, body);
+  screen.append(header, body);
 
   let people = [];
   let loaded = false;
   let busy = false;
+  let galleryFilter = 'pending';
   const invoiceText = make('textarea');
   invoiceText.rows = 3;
   invoiceText.maxLength = 255;
@@ -106,10 +111,19 @@ export function openSwileView({ document: doc, request, gallery = false, onClose
   function close() {
     if (signal.aborted) return;
     controller.abort();
-    if (dialog.open && typeof dialog.close === 'function') dialog.close();
-    dialog.remove();
+    if (gallery) doc.removeEventListener('keydown', onGalleryKey);
+    if (!gallery && screen.open && typeof screen.close === 'function') screen.close();
+    screen.remove();
+    if (restoreApp) app.removeAttribute('inert');
     if (focus?.isConnected) focus.focus({ preventScroll: true });
     onClose?.();
+  }
+
+  function onGalleryKey(event) {
+    if (event.key === 'Escape' && !event.defaultPrevented) {
+      event.preventDefault();
+      close();
+    }
   }
 
   function message(text = '', error = false) {
@@ -121,7 +135,7 @@ export function openSwileView({ document: doc, request, gallery = false, onClose
   async function run(work) {
     if (busy || signal.aborted) return;
     busy = true;
-    dialog.setAttribute('aria-busy', 'true');
+    screen.setAttribute('aria-busy', 'true');
     const controls = [...content.querySelectorAll('button, input, select, textarea')].filter(control => !control.disabled);
     controls.forEach(control => { control.disabled = true; });
     message();
@@ -129,7 +143,7 @@ export function openSwileView({ document: doc, request, gallery = false, onClose
     catch (error) { if (!signal.aborted) message(error.message || 'Não foi possível consultar a Swile.', true); }
     finally {
       busy = false;
-      dialog.removeAttribute('aria-busy');
+      screen.removeAttribute('aria-busy');
       controls.forEach(control => { control.disabled = false; });
       review.disabled = !loaded || !people.length;
     }
@@ -282,30 +296,42 @@ export function openSwileView({ document: doc, request, gallery = false, onClose
     });
   }
 
-  function loadPending() {
+  function loadGallery(filter = galleryFilter, restoreFocus = false) {
     return run(async () => {
-      const refreshPending = button('Atualizar pedidos', loadPending);
-      refreshPending.disabled = true;
-      content.replaceChildren(refreshPending);
+      galleryFilter = filter;
+      const toolbar = make('div', '', 'swile-actions swile-gallery-toolbar');
+      for (const [value, label] of [['pending', 'Em suspenso'], ['history', 'Histórico']]) {
+        const choice = button(label, () => loadGallery(value, true), value === filter);
+        choice.setAttribute('aria-pressed', String(value === filter));
+        toolbar.append(choice);
+      }
+      const refresh = button('Atualizar pedidos', () => loadGallery(filter, true));
+      toolbar.append(refresh);
+      const controls = [...toolbar.children];
+      controls.forEach(control => { control.disabled = true; });
+      content.replaceChildren(toolbar);
+      body.scrollTop = 0;
       message('Consultando pedidos na Swile…');
       try {
-        const orders = await request('orders', { gallery: 'pending' }, { signal });
+        const orders = await request('orders', { gallery: filter }, { signal });
         if (signal.aborted) return;
         if (!Array.isArray(orders)) throw new Error('Lista de pedidos inválida.');
         const list = make('div', '', 'swile-order-list');
         for (const order of orders) {
           const item = button('', () => loadOrderDetails(order.orderCode));
-          item.className = 'swile-pending-order';
+          item.className = 'swile-gallery-order';
           item.append(make('strong', order.orderCode), make('strong', reais(order.creditCents)),
             make('span', statuses[order.status] || order.status));
-          if (order.creditDate) item.append(make('span', `Previsão ${dateLabel(order.creditDate)}`));
+          if (filter === 'history' && order.requestDate) item.append(make('span', `Pedido em ${dateLabel(order.requestDate)}`));
+          else if (order.creditDate) item.append(make('span', `Previsão ${dateLabel(order.creditDate)}`));
           list.append(item);
         }
-        if (!orders.length) list.append(make('p', 'Nenhum pedido em suspenso.'));
+        if (!orders.length) list.append(make('p', filter === 'pending' ? 'Nenhum pedido em suspenso.' : 'Nenhum pedido no histórico.'));
         content.append(list);
         message();
       } finally {
-        refreshPending.disabled = false;
+        controls.forEach(control => { control.disabled = false; });
+        if (!signal.aborted && restoreFocus) toolbar.querySelector('[aria-pressed="true"]').focus({ preventScroll: true });
       }
     });
   }
@@ -313,7 +339,7 @@ export function openSwileView({ document: doc, request, gallery = false, onClose
   function loadOrderDetails(orderCode) {
     return run(async () => {
       message('Consultando as linhas do pedido…');
-      const order = await request('orders', { gallery: 'pending', orderCode }, { signal });
+      const order = await request('orders', { gallery: galleryFilter, orderCode }, { signal });
       if (signal.aborted) return;
       if (order?.orderCode !== orderCode || !Array.isArray(order.items)) {
         throw new Error('A Swile não confirmou as linhas do pedido.');
@@ -344,18 +370,23 @@ export function openSwileView({ document: doc, request, gallery = false, onClose
       if (!order.items.length) details.append(make('p', 'A Swile ainda não disponibilizou as linhas deste pedido.'));
       else if (order.itemsIncomplete) details.append(make('p', 'A Swile retornou apenas parte das linhas deste pedido.'));
       details.append(rows);
-      content.replaceChildren(button('Voltar aos pedidos', loadPending), details);
+      content.replaceChildren(button('Voltar aos pedidos', () => loadGallery(galleryFilter, true)), details);
+      body.scrollTop = 0;
       message();
       heading.focus();
     });
   }
 
-  dialog.addEventListener('cancel', event => { event.preventDefault(); close(); });
-  doc.body.append(dialog);
-  if (typeof dialog.showModal === 'function') dialog.showModal();
-  else dialog.setAttribute('open', '');
-  if (gallery) void loadPending();
-  else {
+  doc.body.append(screen);
+  if (gallery) {
+    if (restoreApp) app.setAttribute('inert', '');
+    doc.addEventListener('keydown', onGalleryKey);
+    title.focus({ preventScroll: true });
+    void loadGallery();
+  } else {
+    screen.addEventListener('cancel', event => { event.preventDefault(); close(); });
+    if (typeof screen.showModal === 'function') screen.showModal();
+    else screen.setAttribute('open', '');
     showForm();
     void load();
   }

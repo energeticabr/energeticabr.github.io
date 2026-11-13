@@ -74,15 +74,17 @@ test('Swile keeps amounts across search and submits only after review', async ()
   }
 });
 
-test('Swile gallery opens a pending order and shows the credit data per person', async t => {
-  const { window } = new JSDOM('<!doctype html><body><button>Galeria Swile</button></body>');
+test('Swile gallery is a separate screen and can open an older completed order', async t => {
+  const { window } = new JSDOM('<!doctype html><body><main id="app"><button>Galeria Swile</button></main></body>');
   const { document } = window;
   const opener = document.querySelector('button');
   opener.focus();
   const order = { orderCode: 'SWO123', status: 'APPROVED_PARTIALLY', creditDate: '2026-11-17', creditCents: 22505 };
+  const oldOrder = { orderCode: 'SWO90', status: 'APPROVED', requestDate: '2026-03-16', creditCents: 10000 };
   const calls = [];
   const view = openSwileView({ document, gallery: true, request: async (operation, payload) => {
     calls.push([operation, payload]);
+    if (payload.gallery === 'history') return payload.orderCode ? { ...oldOrder, items: [] } : [order, oldOrder];
     if (!payload.orderCode) return [order];
     return { ...order, items: [
       { name: 'Pessoa A', amountCents: 12505, status: 'APPROVED', creditDate: '2026-11-17' },
@@ -91,21 +93,42 @@ test('Swile gallery opens a pending order and shows the credit data per person',
   } });
   t.after(() => { view.close(); window.close(); });
   const settle = () => new Promise(resolve => setImmediate(resolve));
-  const findButton = text => [...document.querySelectorAll('dialog button')].find(button => button.textContent.includes(text));
   await settle();
-  assert.match(document.querySelector('dialog').textContent, /Pedidos em suspenso.*SWO123.*225,05/s);
+  assert.equal(document.querySelector('dialog'), null);
+  assert.ok(document.querySelector('#app').hasAttribute('inert'));
+  const screen = document.querySelector('main.swile-gallery-page');
+  const findButton = text => [...screen.querySelectorAll('button')].find(button => button.textContent.includes(text));
+  assert.match(screen.textContent, /Galeria Swile.*Em suspenso.*SWO123.*225,05/s);
   findButton('SWO123').click();
   await settle();
-  assert.match(document.querySelector('dialog').textContent, /Pessoa A.*125,05.*Nº do cartão.*Não informado.*Crédito concluído.*17\/11\/2026.*Data efetuada.*Não informada/s);
-  assert.match(document.querySelector('dialog').textContent, /Pessoa B.*100,00.*Status da cargaNão informado.*18\/11\/2026.*Status do pedidoCrédito parcial/s);
+  assert.match(screen.textContent, /Pessoa A.*125,05.*Nº do cartão.*Não informado.*Crédito concluído.*17\/11\/2026.*Data efetuada.*Não informada/s);
+  assert.match(screen.textContent, /Pessoa B.*100,00.*Status da cargaNão informado.*18\/11\/2026.*Status do pedidoCrédito parcial/s);
+  findButton('Voltar aos pedidos').click();
+  await settle();
+  findButton('Histórico').click();
+  await settle();
+  assert.match(screen.textContent, /SWO90.*16\/03\/2026/s);
+  findButton('SWO90').click();
+  await settle();
+  assert.match(screen.textContent, /Pedido SWO90.*Crédito concluído/s);
   findButton('Voltar aos pedidos').click();
   await settle();
   assert.deepEqual(calls, [
     ['orders', { gallery: 'pending' }],
     ['orders', { gallery: 'pending', orderCode: 'SWO123' }],
     ['orders', { gallery: 'pending' }],
+    ['orders', { gallery: 'history' }],
+    ['orders', { gallery: 'history', orderCode: 'SWO90' }],
+    ['orders', { gallery: 'history' }],
   ]);
-  view.close();
+  findButton('Voltar ao RH').click();
+  assert.equal(screen.isConnected, false);
+  assert.equal(document.querySelector('#app').hasAttribute('inert'), false);
+  assert.equal(document.activeElement, opener);
+  const reopened = openSwileView({ document, gallery: true, request: async () => [] });
+  t.after(() => reopened.close());
+  document.dispatchEvent(new window.KeyboardEvent('keydown', { key: 'Escape' }));
+  assert.equal(document.querySelector('main.swile-gallery-page'), null);
   assert.equal(document.activeElement, opener);
 });
 

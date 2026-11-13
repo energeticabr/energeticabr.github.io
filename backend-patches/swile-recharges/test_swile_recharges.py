@@ -224,6 +224,31 @@ class ServiceTests(unittest.TestCase):
         self.assertEqual(404, status)
         self.assertNotIn('swile', result)
 
+    def test_history_lists_and_opens_corporate_orders_missing_from_the_local_journal(self):
+        groups = [
+            {'orderGroups': [{'groupCode': 'OLD', 'statusCode': 'APPROVED', 'valueCredit': 50,
+                              'requestDate': '2026-03-16T12:53:49', 'orders': []}], 'last': False},
+            {'orderGroups': [{'groupCode': 'CANCEL', 'statusCode': 'CANCELED', 'valueCredit': 60,
+                              'requestDate': '2026-11-10T01:12:32', 'orders': []}], 'last': True},
+        ]
+        detail = {'code': 'OLD', 'statusCode': 'APPROVED', 'orderList': [{'statusCode': 'APPROVED',
+                  'totalValue': 50, 'employeeList': [{'name': 'Pessoa A', 'document': '12345678900',
+                  'email': 'private@example.test', 'items': {'v13': 50}}]}]}
+        with patch.object(self.gateway, 'request', side_effect=[*groups, detail]) as gateway, \
+                patch('swile_recharges.configured_service', return_value=self.service):
+            body = {'action': 'swile_orders', 'gallery': 'history'}
+            status, response = handle_portal({'oid': 'user-a'}, body)
+            self.assertEqual(200, status)
+            self.assertEqual(['CANCEL', 'OLD'], [o['orderCode'] for o in response['swile']])
+            self.assertEqual('2026-11-09', response['swile'][0]['requestDate'])
+            status, response = handle_portal({'oid': 'user-a'}, {**body, 'orderCode': 'OLD'})
+            self.assertEqual(200, status)
+            self.assertEqual('APPROVED', response['swile']['status'])
+            self.assertEqual({'name': 'Pessoa A', 'amountCents': 5000, 'status': 'APPROVED', 'creditDate': None},
+                             response['swile']['items'][0])
+            self.assertEqual([0, 1], [call.kwargs['query']['page'] for call in gateway.call_args_list[:2]])
+        self.assertFalse(self.database.exists())
+
 
 if __name__ == '__main__':
     unittest.main()
