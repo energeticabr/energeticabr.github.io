@@ -93,7 +93,6 @@ async function start() {
     enableDdaReminders: true,
     enableDdaMenuAlert: true,
     enableSicoobMenuAlert: true,
-    enableTrancidReminders: true,
     auth,
     recovery: createRecoveryStorage(),
     store: createConversationStore({ historyMode: "current-step" }),

@@ -153,7 +153,6 @@ const RESUMABLE_ACTIONS = new Set([
   "open-rhid-mascot-report",
   "action_stage_progress",
   "action_supplier_payroll_report",
-  "home-trancid-card-report",
   "action_commercial_receipts",
   "action_commercial_milestones",
   "action_commercial_documents",

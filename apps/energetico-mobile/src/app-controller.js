@@ -3,7 +3,6 @@ import { resumeConversation } from './chat/resume-conversation.js';
 import { createProvisionSettlementParentSession } from './ui/provision-settlement-parent-session.js';
 import { createDdaAutoReminder } from './chat/dda-auto-reminder.js';
 import { hasDdaMenuAlert, normalizeDdaReportRows } from './chat/dda-report-model.js';
-import { createTrancidAutoReminder } from './chat/trancid-auto-reminder.js';
 import { refreshDdaBank } from './chat/dda-bank-refresh.js';
 import { loadDdaPaymentLaunchFiles, waitForDdaPaymentLaunch, reconcileDdaLaunchAttachments } from './chat/dda-payment-launch.js';
 import { createDdaSyncSession } from './ui/dda-sync-session.js';
@@ -470,7 +469,6 @@ export const PENDING_SUPPLIER_PAYMENTS_REPORT_ID = 'home-pending-supplier-paymen
 const PENDING_SUPPLIER_PAYMENTS_REPORT_SCOPES = Object.freeze(['Sites.Read.All']);
 const MANAGEMENT_REPORT_ID = 'action_management_report';
 const PROVISION_REPORT_ID = 'provision-report';
-export const TRANCID_REPORT_ID = 'home-trancid-card-report';
 const ORDER_VALIDATION_REPORT_ID = 'order-validation-report';
 const PAYMENT_PROGRAMMING_GALLERY_ID = "action_payment_programming_gallery";
 const RECURRING_EXPENSES_GALLERY_ID = "action_recurring_expenses_gallery";
@@ -1085,7 +1083,6 @@ export function createAppController({
   enableDdaReminders = false,
   enableDdaMenuAlert = false,
   enableSicoobMenuAlert = false,
-  enableTrancidReminders = false,
   trancidReportFactory = defaultTrancidReportFactory,
   trancidReportDataFactory = defaultTrancidReportDataFactory,
   trancidReportBuilder = defaultTrancidReportBuilder,
@@ -1139,7 +1136,7 @@ export function createAppController({
   let galleryCreationReturn = null;
   let mascotNavigationOpening = null;
   let trancidReport = null, trancidReportOpening = null, trancidReportSession = null;
-  let trancidReportGeneration = 0, trancidSourceCache = null, trancidDialogObserver = null;
+  let trancidReportGeneration = 0, trancidSourceCache = null;
   let launchGallery = null;
   let launchGalleryOpening = null;
   let ordersGallery = null;
@@ -1750,39 +1747,7 @@ export function createAppController({
     void ensureSicoobSyncSession()?.resume();
     refreshSicoobMenuAlert();
   }
-  const trancidAutoReminder = createTrancidAutoReminder({
-    enabled: () => enableTrancidReminders && Boolean(account) && !stopped,
-    accountKey: () => account?.homeAccountId || account?.localAccountId || account?.idTokenClaims?.oid || account?.username || '',
-    canOpen: canOpenAutomaticTrancid,
-    onChange: () => render(),
-    loadReport: options => loadTrancidReport({ ...options, interactive: false }),
-    open: openTrancidReport,
-  });
-
-  function canOpenAutomaticTrancid() {
-    const state = store.getState();
-    if (!account || stopped || starting || sessionStatus !== 'authenticated' || flowBusy()
-      || hrBenefitPanel || hrBenefitOpening
-      || state.activeFlow || state.draft?.trim() || state.pendingFiles.length
-      || pendingNoteLaunchOrderId || pendingConstructionDiaryFillingId
-      || (recoveryAccountId && !recoveryVerified) || recoveryPreview
-      || pendingProvisionSnapshot?.openedManually || pendingProvisionReminderOpen || pendingProvisionRequest
-      || mascotNavigationOpening || registrationGalleryOpenings.size
-      || [launchGalleryOpening, ordersGalleryOpening, tasksGalleryOpening, paymentLedgerOpening,
-        cargosTableOpening, attendanceSummaryOpening, rhidMonthlyOpening, stageProgressOpening,
-        supplierPayrollReportOpening, commercialReceiptsOpening, commercialMilestonesOpening,
-        commercialDocumentsOpening, sacPathologiesOpening, depreciationReportOpening,
-        documentControlReportOpening, taskAssociationReportOpening,
-        contractorControlReportOpening, generalSummaryReportOpening,
-        pendingSupplierPaymentsReportOpening, managementReportOpening,
-        provisionReportOpening, orderValidationReportOpening, paymentProgrammingGalleryOpening,
-        recurringExpensesGalleryOpening, supplierPayrollOpening, mealVoucherOpening, payrollBreakdownOpening,
-        hrPayrollGalleryOpening, payrollSheetCreateOpening, pendingProvisionOpenRequest].some(Boolean)) return false;
-    return ![...(globalThis.document?.querySelectorAll('[role="dialog"], [aria-modal="true"]') || [])]
-      .some(node => !node.closest('[hidden], [aria-hidden="true"]') && node.getClientRects().length);
-  }
-
-  async function loadTrancidReport({ month, signal, refresh = false, interactive = true } = {}, context) {
+  async function loadTrancidReport({ month, signal, refresh = false } = {}, context) {
     const owner = context?.owner || account, revision = context?.revision ?? sessionRevision;
     const origin = context?.origin ?? globalThis.location?.origin;
     const controller = new AbortController();
@@ -1804,9 +1769,9 @@ export function createAppController({
           try { const token = await auth.getToken(scopes); assertCurrent(); return token; }
           catch (error) {
             assertCurrent();
-            if (!interactive || typeof auth.authorize !== 'function'
+            if (typeof auth.authorize !== 'function'
               || !/AUTH_REQUIRED|interaction_required|consent_required|login_required/i.test(String(error?.code || error?.errorCode || ''))) throw error;
-            await auth.authorize(scopes, { resumeAction: TRANCID_REPORT_ID }); assertCurrent();
+            await auth.authorize(scopes); assertCurrent();
             const token = await auth.getToken(scopes); assertCurrent(); return token;
           }
         };
@@ -1822,19 +1787,18 @@ export function createAppController({
     trancidReportGeneration++;
     const panel = trancidReport, session = trancidReportSession;
     trancidReport = trancidReportOpening = trancidReportSession = null;
-    session?.abort.abort(); panel?.destroy?.(); trancidAutoReminder.dismiss();
+    session?.abort.abort(); panel?.destroy?.();
   }
 
-  async function openTrancidReport(options = {}) {
+  async function openTrancidReport() {
     if (!account || stopped || sessionStatus !== 'authenticated' || flowBusy() || store.getState().activeFlow) return false;
-    if (options.automatic && (!options.isCurrent?.() || !canOpenAutomaticTrancid())) return false;
-    if (!options.automatic && trancidReportSession?.automatic) disposeTrancidReport();
     if (trancidReportOpening) return trancidReportOpening;
-    if (!options.automatic) { trancidAutoReminder.handled(); trancidSourceCache = null; closeGalleryOverlays(); }
+    trancidSourceCache = null;
+    closeGalleryOverlays();
     disposeTrancidReport();
     const generation = trancidReportGeneration;
     const session = { owner: account, revision: sessionRevision, origin: globalThis.location?.origin,
-      automatic: Boolean(options.automatic), abort: new AbortController() };
+      abort: new AbortController() };
     trancidReportSession = session;
     const current = () => !session.abort.signal.aborted && trancidReportSession === session
       && !stopped && account === session.owner && sessionRevision === session.revision && sessionStatus === 'authenticated'
@@ -1848,9 +1812,9 @@ export function createAppController({
           loadReport: query => loadTrancidReport(query, session),
           onClose: () => { if (trancidReportSession === session) disposeTrancidReport(); },
         }), 'open-trancid-report');
-        if (!current() || options.automatic && !options.isCurrent?.()) { panel?.destroy?.(); return false; }
+        if (!current()) { panel?.destroy?.(); return false; }
         trancidReport = panel;
-        const result = await panel.open({ ...options });
+        const result = await panel.open();
         return current() && result !== false;
       } catch (error) {
         if (current() && error?.name !== 'AbortError') setSessionError(error, 'Não foi possível abrir o relatório dos cartões Trancid.');
@@ -1894,7 +1858,7 @@ export function createAppController({
       || state.activeFlow || state.draft?.trim() || state.pendingFiles.length
       || pendingNoteLaunchOrderId || pendingConstructionDiaryFillingId || pendingProvisionSettlementPaymentId
       || (recoveryAccountId && !recoveryVerified) || recoveryPreview
-      || trancidAutoReminder.pending || trancidReportOpening || pendingProvisionSnapshot || pendingProvisionReminderOpen || pendingProvisionRequest
+      || trancidReportOpening || pendingProvisionSnapshot || pendingProvisionReminderOpen || pendingProvisionRequest
       || mascotNavigationOpening || [...registrationGalleryOpenings.keys()].some(key => key !== 'ddaReport')) return false;
     // Dialogs include PDF previews and other manually opened reports. Never
     // replace them with a background reminder, including on native foreground.
@@ -2551,7 +2515,6 @@ export function createAppController({
   async function handleForeground() {
     resumeDdaSync();
     resumeSefazSync();
-    void trancidAutoReminder.foreground();
     armFlowReminder();
     if (attachmentReminderDetails()) scheduleAttachmentReminder();
     else cancelAttachmentReminder();
@@ -5442,7 +5405,7 @@ export function createAppController({
 
   function render() {
     provisionSettlementParent.sync();
-    queueMicrotask(() => { void trancidAutoReminder.drain(); void ddaAutoReminder.drain(); });
+    queueMicrotask(() => { void ddaAutoReminder.drain(); });
     if ((!needsConversationRecovery() && !flowBusy()) || stopped || !account) {
       const waiters = [...idleWaiters];
       idleWaiters.clear();
@@ -5533,10 +5496,10 @@ export function createAppController({
       recoveryWarning,
       recoveryBlocked: Boolean(recoveryAccountId && !recoveryVerified),
       recoveryUncertain,
-      pendingProvisions: trancidAutoReminder.pending && !pendingProvisionReminderOpen && !pendingProvisionSnapshot?.openedManually ? null : pendingProvisionSnapshot,
+      pendingProvisions: pendingProvisionSnapshot,
       pendingProvisionOpening: Boolean(account && pendingProvisionOpenRequest),
-      pendingNotes: (trancidAutoReminder.pending || ddaAutoReminder.pending) && !pendingNoteLaunchOrderId ? null : pendingNotesSnapshot,
-      pendingConstructionDiaries: pendingProvisionSnapshot || ((trancidAutoReminder.pending || ddaAutoReminder.pending) && !pendingConstructionDiaryFillingId) || !pendingConstructionDiaryTime()
+      pendingNotes: ddaAutoReminder.pending && !pendingNoteLaunchOrderId ? null : pendingNotesSnapshot,
+      pendingConstructionDiaries: pendingProvisionSnapshot || (ddaAutoReminder.pending && !pendingConstructionDiaryFillingId) || !pendingConstructionDiaryTime()
         ? null : pendingConstructionDiarySnapshot,
       pendingConstructionDiaryFillingId,
       pendingConstructionDiaryError,
@@ -11020,7 +10983,7 @@ export function createAppController({
     disposeDdaSyncSession();
     disposeSefazSyncSession();
     ddaAutoReminder.reset();
-    trancidAutoReminder.reset(); disposeTrancidReport(); trancidSourceCache = null;
+    disposeTrancidReport(); trancidSourceCache = null;
     clearAttachmentUploadProgress();
     attachmentActionBusy = false;
     attachmentCompressionReturnPoint = null;
@@ -11111,7 +11074,7 @@ export function createAppController({
       if (!needsConversationRecovery()) await uploads;
       const resumedShares = sharedResumeRequested ? resumeSharedFiles() : null;
       if (resumedShares && !needsConversationRecovery()) await resumedShares;
-      void trancidAutoReminder.refresh(); void ddaAutoReminder.refresh();
+      void ddaAutoReminder.refresh();
       return true;
     } catch (error) {
       if (stopped || sessionRevision !== signInRevision) return false;
@@ -11136,7 +11099,7 @@ export function createAppController({
     disposeDdaSyncSession();
     disposeSefazSyncSession();
     ddaAutoReminder.reset();
-    trancidAutoReminder.reset(); disposeTrancidReport(); trancidSourceCache = null;
+    disposeTrancidReport(); trancidSourceCache = null;
     clearOperationProgress();
     clearAttachmentUploadProgress();
     attachmentActionBusy = false;
@@ -11942,8 +11905,7 @@ export function createAppController({
           for (const [kind] of pendingReports) registrationGalleries.get(kind)?.close();
         }
       }
-      if (type === 'open-trancid-report') trancidAutoReminder.handled();
-      else if (trancidReportSession && type.startsWith('open-')) disposeTrancidReport();
+      if (trancidReportSession && type.startsWith('open-') && type !== 'open-trancid-report') disposeTrancidReport();
       if (type === 'open-dda-report' || command?.replyId === 'action_dda_report') ddaAutoReminder.reset();
       if ((payrollSheetCreate || payrollSheetCreateOpening)
         && (type.startsWith('open-') || type === 'select-reply' || type === 'send-text'
@@ -12555,12 +12517,6 @@ export function createAppController({
     starting = true;
     const startRevision = sessionRevision;
     bindCommands();
-    const TrancidObserver = globalThis.document?.defaultView?.MutationObserver;
-    if (enableTrancidReminders && TrancidObserver && globalThis.document?.body) {
-      trancidDialogObserver = new TrancidObserver(() => { if (!stopped) void trancidAutoReminder.drain(); });
-      trancidDialogObserver.observe(globalThis.document.body, { subtree: true, childList: true,
-        attributes: true, attributeFilter: ['hidden', 'aria-hidden'] });
-    }
     unsubscribeRecovery = recovery?.subscribe?.(ok => {
       recoveryWarning = ok ? null : storageWarning;
       if (!stopped) render();
@@ -12655,7 +12611,6 @@ export function createAppController({
     else if (pendingAction === RHID_MASCOT_ACTION) await openRhidMascotReport();
     else if (pendingAction === STAGE_PROGRESS_ID) await openStageProgress();
     else if (pendingAction === SUPPLIER_PAYROLL_REPORT_ID) await openSupplierPayrollReport();
-    else if (pendingAction === TRANCID_REPORT_ID) await openTrancidReport();
     else if (pendingAction === COMMERCIAL_RECEIPTS_ID) await openCommercialReceipts();
     else if (pendingAction === COMMERCIAL_MILESTONES_ID) await openCommercialMilestones();
     else if (pendingAction === COMMERCIAL_DOCUMENTS_ID) await openCommercialDocuments();
@@ -12674,7 +12629,7 @@ export function createAppController({
     else if (pendingAction === "action_hr_gallery_folhapgto") await openHrPayrollGallery("FOLHAPGTO");
     else if (pendingAction === "action_hr_gallery_holerite") await openHrPayrollGallery("HOLERITE");
     else if (REGISTRATION_GALLERY_KIND[pendingAction]) await openRegistrationGallery(REGISTRATION_GALLERY_KIND[pendingAction], pendingAction);
-    if (!pendingAction) { void trancidAutoReminder.refresh(); void ddaAutoReminder.refresh(); }
+    if (!pendingAction) void ddaAutoReminder.refresh();
   }
 
   function stop() {
@@ -12685,8 +12640,7 @@ export function createAppController({
     disposeDdaSyncSession();
     disposeSefazSyncSession();
     ddaAutoReminder.reset();
-    trancidAutoReminder.reset(); disposeTrancidReport(); trancidSourceCache = null;
-    trancidDialogObserver?.disconnect(); trancidDialogObserver = null;
+    disposeTrancidReport(); trancidSourceCache = null;
     disposeHrBenefitPanel();
     clearOperationProgress();
     clearAttachmentUploadProgress();
