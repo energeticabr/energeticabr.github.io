@@ -16,9 +16,14 @@
 .chat-main-pending-payroll-links-shortcut span { font-size: 18px; line-height: 25px; }
 .chat-main-pending-payroll-links-shortcut strong { font: 800 8px/15px system-ui, sans-serif; }
 .chat-main-pending-payroll-links-shortcut:focus-visible { outline: 3px solid var(--accent); outline-offset: 3px; }
-.chat-message--pending-payroll-links {
-  --payroll-shortcut-offset: 44px;
-}
+.chat-message--pending-payroll-links > .chat-main-cargos-shortcut { margin-top: 56px; }
+.chat-message--pending-payroll-links > .chat-main-attendance-summary-shortcut { margin-top: 112px; }
+.chat-message--pending-payroll-links > .chat-main-stage-progress-shortcut { margin-top: 168px; }
+.chat-message--pending-payroll-links > .chat-main-supplier-payroll-report-shortcut { margin-top: 224px; }
+.chat-message--pending-payroll-links > .chat-main-trancid-report-shortcut { margin-top: 280px; }
+.chat-message--pending-payroll-links > .chat-main-contractor-control-shortcut { margin-top: 336px; }
+.chat-message--pending-payroll-links > .chat-main-pending-supplier-payments-shortcut { margin-top: 392px; }
+.chat-message--pending-payroll-links > .chat-main-holerite-shortcut { margin-top: 448px; }
 
 .payroll-links-overlay {
   z-index: 30;
