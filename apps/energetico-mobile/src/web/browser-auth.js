@@ -176,6 +176,7 @@ const RESUMABLE_ACTIONS = new Set([
   "action_powerbi_dashboard",
   "action_hr_gallery_idfolha",
   "action_hr_gallery_holerite",
+  "open-holerite-report",
   "action_hr_create_idfolha",
   "action_hr_gallery_folhapgto",
   "action_hr_gallery_funcionarios",

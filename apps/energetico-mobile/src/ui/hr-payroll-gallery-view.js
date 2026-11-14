@@ -12,6 +12,10 @@ import { payrollFilterOptions, validatePayrollFilters } from '../chat/payroll-ga
 import { createWeeklyPayslipActions } from './weekly-payslip-actions.js';
 import { PDF_ATTACHMENT_ICON } from './report-pdf-attachment-icon.js';
 import { createGalleryAttachmentCounts } from './gallery-attachment-counts.js';
+import { addReportCloseControl } from './report-close-control.js';
+import { bindReportLandscape } from './report-landscape.js';
+
+const REPORT_LOGO = new URL('../../../../assets/logo-energetica-oficial.png', import.meta.url).href;
 
 const rubricQuantity = new Intl.NumberFormat('pt-BR', { maximumFractionDigits: 12 });
 const rubricUnitValue = new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL', maximumFractionDigits: 12 });
@@ -52,7 +56,7 @@ function displayValue(field, value) {
 }
 
 export function createHrPayrollGallery({ document: documentOption,
-  root: mountRootOption, gallery, request, requestReport, invalidateRelatedReports, loadEditor, saveEditor, deleteItem, loadPaymentOptions, savePayment, onClose, onHome, onCreate, getReceiptAttachments, readReceiptAttachment, openPayslip, closePayslip, openDatePayslips,
+  root: mountRootOption, gallery, presentation, request, requestReport, invalidateRelatedReports, loadEditor, saveEditor, deleteItem, loadPaymentOptions, savePayment, onClose, onHome, onCreate, getReceiptAttachments, readReceiptAttachment, openPayslip, closePayslip, openDatePayslips,
   pickSignedPayslip, listSignedPayslips, uploadSignedPayslips, openSignedPayslip, loadPayslipEditor, savePayslipEditor } = {}) {
   const documentRef = documentOption || mountRootOption?.ownerDocument || globalThis.document;
   const mountRoot = mountRootOption || documentRef?.body;
@@ -62,6 +66,8 @@ export function createHrPayrollGallery({ document: documentOption,
   }
   const doc = documentRef;
   const isPayslip = gallery === "HOLERITE";
+  const isReport = isPayslip && presentation === "report";
+  const titleText = isReport ? "Relatório de Holerites" : config.title;
   const payrollReport = gallery === "IDFOLHA" && typeof requestReport === "function"
     ? createHrPayrollReport({ document: doc, root: mountRoot, request: requestReport,
       onHome: onHome ? () => { closeGallery(); onHome(); } : undefined })
@@ -91,21 +97,34 @@ export function createHrPayrollGallery({ document: documentOption,
     return node;
   }
   const root = element("section", "hr-gallery-overlay");
+  const backdrop = isReport ? element("div", "hr-payroll-report-backdrop hr-holerite-report-backdrop") : null;
+  if (backdrop) {
+    backdrop.hidden = true;
+    root.classList.add("hr-payroll-report-overlay", "hr-holerite-report");
+    backdrop.append(root);
+  }
+  const landscape = backdrop ? bindReportLandscape(backdrop) : null;
+  let reportContext;
   root.hidden = true;
   root.tabIndex = -1;
   root.setAttribute("role", "dialog");
   root.setAttribute("aria-modal", "true");
-  root.setAttribute("aria-label", config.title);
+  root.setAttribute("aria-label", titleText);
   const header = element("header", "hr-gallery-header");
-  const title = element("h1", "hr-gallery-title", config.title);
+  const title = element("h1", "hr-gallery-title", titleText);
   const close = element("button", "hr-gallery-button hr-gallery-close", "Fechar");
   close.type = "button";
-  close.dataset.action = "close-hr-gallery";
-  const home = onHome ? element("button", "hr-gallery-button", "Início") : null;
-  applyScreenNavigation({ header, back: close, home, title });
+  close.dataset.action = isReport ? "close-holerite-report" : "close-hr-gallery";
+  const home = !isReport && onHome ? element("button", "hr-gallery-button", "Início") : null;
+  if (isReport) {
+    const logo = element("img", "hr-holerite-report-logo");
+    logo.src = REPORT_LOGO;
+    logo.alt = "Energética Construtora";
+    header.append(logo, title);
+  } else applyScreenNavigation({ header, back: close, home, title });
   const content = element("div", "hr-gallery-content");
   const filterForm = element('form', 'hr-gallery-filter-form');
-  filterForm.setAttribute('aria-label', `Filtros de ${config.title}`);
+  filterForm.setAttribute('aria-label', isReport ? 'Filtros dos holerites' : `Filtros de ${config.title}`);
   const toolbar = element('div', 'hr-gallery-toolbar');
   const search = element('input', 'hr-gallery-search');
   search.type='search'; search.name='search';
@@ -146,7 +165,7 @@ export function createHrPayrollGallery({ document: documentOption,
   const cards = element("div", "hr-gallery-cards");
   cards.setAttribute("role", "list");
   const pagination = element("nav", "hr-gallery-pagination");
-  pagination.setAttribute("aria-label", "Páginas da galeria");
+  pagination.setAttribute("aria-label", isReport ? "Páginas do relatório" : "Páginas da galeria");
   const previous = element("button", "hr-gallery-button", "‹ Anterior");
   previous.type = "button";
   previous.dataset.action = "previous-page";
@@ -208,6 +227,12 @@ export function createHrPayrollGallery({ document: documentOption,
       await loadPage(page, { refresh: true });
     },
     isAvailable: () => opened && !destroyed && !busy && !pendingMutations && !paymentComposer?.isOpen() });
+  if (isReport) {
+    refreshShortcut.button.setAttribute("aria-label", "Sincronizar holerites");
+    addReportCloseControl({root, toolbar:header, onClose:navigateBack, button:close, inline:true});
+    backdrop.addEventListener("click", event => { if (event.target === backdrop) navigateBack(); });
+    backdrop.addEventListener("keydown", reportKeyDown);
+  }
   async function runMutation(operation) {
     pendingMutations++; refreshShortcut.sync();
     try { return await (createShortcut ? createShortcut.runMutation(operation) : operation()); }
@@ -529,6 +554,28 @@ export function createHrPayrollGallery({ document: documentOption,
     }
   }
 
+  function releaseReportContext() {
+    if (!reportContext) return;
+    const { app, inert, overflow, focus } = reportContext;
+    reportContext = null;
+    if (app && !inert) app.removeAttribute("inert");
+    doc.body.style.overflow = overflow;
+    const shortcut = doc.querySelector('[data-action="open-holerite-report"]:not(:disabled)');
+    (focus?.isConnected && focus !== doc.body ? focus : shortcut)?.focus({ preventScroll: true });
+  }
+
+  function reportKeyDown(event) {
+    if (event.defaultPrevented || event.target.closest?.(".gallery-record-overlay")) return;
+    if (event.key === "Escape") { event.preventDefault(); navigateBack(); return; }
+    if (event.key !== "Tab") return;
+    const controls = [...root.querySelectorAll("button:not(:disabled), input:not(:disabled), select:not(:disabled), summary, a[href]")]
+      .filter(node => !node.closest("[hidden], [inert]") && !node.inert
+        && !node.parentElement.closest("details:not([open]) > :not(summary)"));
+    const first = controls[0], last = controls.at(-1);
+    if (event.shiftKey && (doc.activeElement === first || doc.activeElement === root)) { event.preventDefault(); last?.focus(); }
+    else if (!event.shiftKey && doc.activeElement === last) { event.preventDefault(); first?.focus(); }
+  }
+
   function closeGallery() {
     if (!opened || destroyed) return;
     if (payslipActions?.isWriting()) return;
@@ -547,6 +594,8 @@ export function createHrPayrollGallery({ document: documentOption,
     session += 1;
     busy = false;
     root.hidden = true;
+    if (backdrop) backdrop.hidden = true;
+    releaseReportContext();
     createShortcut?.sync();
     refreshShortcut.sync();
     onClose?.();
@@ -557,7 +606,7 @@ export function createHrPayrollGallery({ document: documentOption,
     if (dismissGalleryOverlay(root)) return;
     closeGallery();
   }
-  close.addEventListener("click", navigateBack);
+  if (!isReport) close.addEventListener("click", navigateBack);
   home?.addEventListener("click", () => { if (!payslipActions?.isWriting()) { closeGallery(); onHome(); } });
   previous.addEventListener("click", () => { if (page > 1) void loadPage(page - 1, { scrollToTop: true }); });
   next.addEventListener("click", () => { if (hasMore) void loadPage(page + 1, { scrollToTop: true }); });
@@ -576,8 +625,20 @@ export function createHrPayrollGallery({ document: documentOption,
       opened = true;
       busy = false;
       session += 1;
-      if (!root.isConnected) mountRoot.append(root);
+      if (!root.isConnected) mountRoot.append(backdrop || root);
       root.hidden = false;
+      if (backdrop) {
+        if (!reportContext) {
+          const app = doc.getElementById("app");
+          const background = app && !app.contains(backdrop) ? app : null;
+          reportContext = { app:background, inert:background?.hasAttribute("inert"), overflow:doc.body.style.overflow, focus:doc.activeElement };
+          background?.setAttribute("inert", "");
+          doc.body.style.overflow = "hidden";
+        }
+        backdrop.hidden = false;
+        landscape.update();
+        close.focus({ preventScroll: true });
+      }
       page = 1;
       hasMore = false;
       pageCursors.splice(0, pageCursors.length, null, null);
@@ -607,7 +668,9 @@ export function createHrPayrollGallery({ document: documentOption,
       opened = false;
       session += 1;
       payrollReport?.destroy();
-      root.remove();
+      (backdrop || root).remove();
+      landscape?.destroy();
+      releaseReportContext();
     },
   });
 }

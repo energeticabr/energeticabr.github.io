@@ -3011,7 +3011,7 @@ test("holerites encaminham arquivos, scanner e fotos e cancelam o download ao fe
   await assert.rejects(options.openSignedPayslip(row, file), /Prévia indisponível/);
 });
 
-test('o atalho Holerite abre a galeria e consulta as vias mesmo sem permissão de enviar', async t => {
+test('o atalho Holerite abre o relatório e consulta as vias mesmo sem permissão de enviar', async t => {
   let options, opened = false;
   const signed = [{ name: 'via-assinada.pdf' }];
   const h = makeHarness({
@@ -3023,9 +3023,10 @@ test('o atalho Holerite abre a galeria e consulta as vias mesmo sem permissão d
   });
   t.after(() => h.controller.stop());
   await h.controller.start();
-  await h.view.emit('open-holerite-gallery');
+  await h.view.emit('open-holerite-report');
   assert.equal(opened, true);
   assert.equal(options.gallery, 'HOLERITE');
+  assert.equal(options.presentation, 'report');
   assert.equal(options.uploadSignedPayslips, undefined);
   assert.deepEqual(await options.listSignedPayslips({ id: '17' }), signed);
 });
@@ -3053,19 +3054,20 @@ test('as consultas simultâneas de holerites pedem o mesmo consentimento Microso
   };
   t.after(() => h.controller.stop());
   await h.controller.start();
-  await h.view.emit('open-holerite-gallery');
+  await h.view.emit('open-holerite-report');
   const replies = Promise.all([tokenProvider(scopes), tokenProvider([...scopes]), tokenProvider(scopes)]);
   await new Promise(resolve => setImmediate(resolve));
   authorizeDone();
   assert.deepEqual(await replies, ['sharepoint-token', 'sharepoint-token', 'sharepoint-token']);
-  assert.deepEqual(authorizationCalls, [[scopes, 'action_hr_gallery_holerite']]);
+  assert.deepEqual(authorizationCalls, [[scopes, 'open-holerite-report']]);
 });
 
-test("retoma a galeria de folha escolhida após o retorno de consentimento Microsoft", async t => {
-  for (const [action, gallery] of [
+test("retoma a galeria ou o relatório de folha após o consentimento Microsoft", async t => {
+  for (const [action, gallery, presentation = "gallery"] of [
     ["action_hr_gallery_idfolha", "IDFOLHA"],
     ["action_hr_gallery_folhapgto", "FOLHAPGTO"],
     ["action_hr_gallery_holerite", "HOLERITE"],
+    ["open-holerite-report", "HOLERITE", "report"],
   ]) {
     let opened = "";
     const h = makeHarness({
@@ -3074,12 +3076,12 @@ test("retoma a galeria de folha escolhida após o retorno de consentimento Micro
         async loadPaymentsForPayrollId() { return []; },
         async downloadPayslip() { return new Blob(); },
       }),
-      hrPayrollGalleryFactory: async options => ({ async open() { opened = options.gallery; }, destroy() {} }),
+      hrPayrollGalleryFactory: async options => ({ async open() { opened = [options.gallery, options.presentation ?? "gallery"]; }, destroy() {} }),
     });
     h.auth.consumePendingAction = () => action;
     t.after(() => h.controller.stop());
     await h.controller.start();
-    assert.equal(opened, gallery);
+    assert.deepEqual(opened, [gallery, presentation]);
   }
 });
 
