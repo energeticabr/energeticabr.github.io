@@ -1,6 +1,7 @@
 """Authenticated corporate Trancid recharges and durable submission receipts."""
 
 from contextlib import closing, contextmanager
+from datetime import datetime, timezone
 import hashlib
 import hmac
 import json
@@ -17,6 +18,12 @@ CONFIG = Path('/etc/energetica-trancid-recharges.json')
 DATABASE = Path('/var/lib/energetica-whatsapp/trancid-recharges/orders.sqlite')
 PREVIEW_SECONDS = 30 * 60
 PAYMENT_METHOD = 'BOLETO'
+HISTORY_PAGE_SIZE = 7
+HISTORY_TTL = 86400
+PAYMENT_STATUSES = {
+    'enviado': 'Pendente pgto', 'aguardando pagamento': 'Pendente pgto',
+    'pago': 'Pago', 'finalizado': 'Pago', 'em andamento': 'Rascunho', 'cancelado': 'Cancelado',
+}
 SENT_STATUSES = {'enviado', 'finalizado'}
 LOGGER = logging.getLogger(__name__)
 
@@ -42,6 +49,10 @@ class Service:
                 receipt TEXT
             )""")
             db.execute('CREATE INDEX IF NOT EXISTS orders_fingerprint ON orders(fingerprint, state)')
+            db.execute('''CREATE TABLE IF NOT EXISTS history_snapshot (
+                id INTEGER PRIMARY KEY CHECK (id=1), collected REAL NOT NULL,
+                stale INTEGER NOT NULL DEFAULT 0, orders_json TEXT NOT NULL
+            )''')
             yield db
 
     def public_id(self, provider_id):
@@ -161,35 +172,78 @@ class Service:
         else:
             state, receipt = 'uncertain', self.receipt(row, 'UNCONFIRMED', {'orderCode': order_code})
         with self.connect() as db:
-            updated = db.execute("UPDATE orders SET state=?, receipt=? WHERE id=? AND state='sending'",
-                                 (state, json.dumps(receipt), identifier))
+            updated = db.execute("UPDATE orders SET state=?, attempted=?, receipt=? WHERE id=? AND state='sending'",
+                                 (state, self.clock(), json.dumps(receipt), identifier))
             if not updated.rowcount:
                 current = db.execute('SELECT receipt FROM orders WHERE id=?', (identifier,)).fetchone()
                 return json.loads(current['receipt'])
         return receipt
 
-    def history(self, page):
+    def refresh_history(self):
+        started = self.clock()
+        try:
+            with self.portal() as portal:
+                return self.collect_history(portal)
+        except PortalError:
+            with self.connect() as db:
+                db.execute('UPDATE history_snapshot SET stale=1 WHERE collected<?', (started,))
+            raise
+
+    def collect_history(self, portal):
+        collected = self.clock()
+        orders = portal.all_history()
+        orders.sort(key=lambda order: (order['requestDate'], int(order['orderCode'])), reverse=True)
+        snapshot = [
+            {**order, 'paymentStatus': PAYMENT_STATUSES.get(order['status'].strip().casefold(),
+                                                            'Pagamento não confirmado')}
+            for order in orders
+        ]
+        with self.connect() as db:
+            self.reconcile_history(db, orders)
+            db.execute('''INSERT INTO history_snapshot (id, collected, orders_json) VALUES (1, ?, ?)
+                          ON CONFLICT(id) DO UPDATE SET collected=excluded.collected,
+                                                       orders_json=excluded.orders_json, stale=0''',
+                       (collected, json.dumps(snapshot)))
+        return collected, snapshot
+
+    def history(self, page, *, refresh=False):
         if type(page) is not int or page < 1:
             raise GatewayError('Página inválida do histórico Trancid.')
-        with self.portal() as portal:
-            result = portal.history(page)
-        confirmed = {order['orderCode']: order for order in result['orders']
+        with self.connect() as db:
+            snapshot = db.execute('SELECT collected, stale, orders_json FROM history_snapshot WHERE id=1').fetchone()
+            attempted = db.execute("SELECT max(attempted) FROM orders WHERE state IN ('submitted', 'uncertain', 'sending')").fetchone()[0]
+        collected, orders = (snapshot['collected'], json.loads(snapshot['orders_json'])) if snapshot else (None, [])
+        stale = bool(snapshot and snapshot['stale'])
+        if (refresh or not snapshot or snapshot['collected'] + HISTORY_TTL <= self.clock()
+                or (attempted is not None and attempted > snapshot['collected'])):
+            try:
+                collected, orders = self.refresh_history()
+                stale = False
+            except PortalError:
+                if not snapshot:
+                    raise
+                stale = True
+        page = min(page, max(1, (len(orders) + HISTORY_PAGE_SIZE - 1) // HISTORY_PAGE_SIZE))
+        start = (page - 1) * HISTORY_PAGE_SIZE
+        return {'orders': orders[start:start + HISTORY_PAGE_SIZE], 'hasMore': start + HISTORY_PAGE_SIZE < len(orders),
+                'page': page, 'stale': stale, 'checkedAt': datetime.fromtimestamp(collected, timezone.utc).isoformat()}
+
+    def reconcile_history(self, db, orders):
+        confirmed = {order['orderCode']: order for order in orders
                      if order.get('orderCode') and order.get('paymentMethod') == PAYMENT_METHOD
                      and str(order.get('status', '')).strip().casefold() in SENT_STATUSES}
-        if confirmed:
-            with self.connect() as db:
-                for row in db.execute("SELECT * FROM orders WHERE state IN ('sending', 'uncertain') AND receipt IS NOT NULL").fetchall():
-                    code = json.loads(row['receipt']).get('orderCode')
-                    order = confirmed.get(code)
-                    if order and order.get('creditCents') == row['credit']:
-                        receipt = self.receipt(row, 'SUBMITTED', order)
-                        db.execute("UPDATE orders SET state='submitted', receipt=? WHERE id=? AND state IN ('sending', 'uncertain')",
-                                   (json.dumps(receipt), row['id']))
-        return result
+        if not confirmed:
+            return
+        for row in db.execute("SELECT * FROM orders WHERE state IN ('sending', 'uncertain') AND receipt IS NOT NULL"):
+            code = json.loads(row['receipt']).get('orderCode')
+            order = confirmed.get(code)
+            if order and order.get('creditCents') == row['credit']:
+                receipt = self.receipt(row, 'SUBMITTED', order)
+                db.execute("UPDATE orders SET state='submitted', receipt=? WHERE id=? AND state IN ('sending', 'uncertain')",
+                           (json.dumps(receipt), row['id']))
 
 
-def configured_service(identity):
-    email = str(identity.get('email') or identity.get('preferred_username') or '').strip().casefold()
+def read_config():
     try:
         config = json.loads(CONFIG.read_text(encoding='utf-8'))
         allowed = config['allowedEmails']
@@ -198,6 +252,12 @@ def configured_service(identity):
             raise ValueError()
     except (OSError, ValueError, KeyError, TypeError):
         raise GatewayError('A integração Trancid está temporariamente indisponível.', 503) from None
+    return allowed, key
+
+
+def configured_service(identity):
+    email = str(identity.get('email') or identity.get('preferred_username') or '').strip().casefold()
+    allowed, key = read_config()
     if not identity.get('oid') or email not in allowed:
         raise GatewayError('Seu usuário não tem acesso à integração Trancid.', 403)
     return Service(Portal, DATABASE, key)
@@ -215,7 +275,7 @@ def handle_portal(identity, body):
         elif action == 'trancid_recharge_confirm':
             value = service.confirm(owner, body.get('id'))
         elif action == 'trancid_recharge_history':
-            value = service.history(body.get('page', 1))
+            value = service.history(body.get('page', 1), refresh=body.get('refresh') is True)
         else:
             raise GatewayError('Operação Trancid inválida.')
         return 200, {'status': 'processed', 'messages': [], 'trancid': value}
@@ -227,3 +287,14 @@ def handle_portal(identity, body):
         return 502, {'error': str(error)}
     except (OSError, sqlite3.Error):
         return 503, {'error': 'O registro de recargas Trancid está temporariamente indisponível.'}
+
+
+if __name__ == '__main__':
+    logging.basicConfig(level=logging.INFO)
+    try:
+        _, key = read_config()
+        _, orders = Service(Portal, DATABASE, key).refresh_history()
+        LOGGER.info('Histórico Trancid atualizado: %d pedidos.', len(orders))
+    except (GatewayError, PortalError, sqlite3.Error, OSError):
+        LOGGER.error('Não foi possível atualizar o histórico Trancid.')
+        raise SystemExit(1)

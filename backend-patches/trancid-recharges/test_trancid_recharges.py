@@ -12,6 +12,8 @@ class FakePortal:
         self.submissions = []
         self.failure = None
         self.history_orders = []
+        self.history_reads = 0
+        self.history_error = None
 
     @contextmanager
     def connect(self):
@@ -23,6 +25,12 @@ class FakePortal:
 
     def history(self, page):
         return {'orders': self.history_orders, 'page': page, 'hasMore': page == 1}
+
+    def all_history(self):
+        self.history_reads += 1
+        if self.history_error:
+            raise self.history_error
+        return self.history_orders.copy()
 
     def submit(self, items, payment_method, *, on_draft):
         self.submissions.append((items, payment_method))
@@ -109,14 +117,14 @@ class ServiceTests(unittest.TestCase):
         self.portal.failure = PortalUncertain('unverified', order_code='789806')
         self.service.confirm('owner', preview['id'])
         self.now += 3600
-        self.portal.history_orders = [{'orderCode': '789806', 'creditCents': 5500, 'paymentMethod': 'BOLETO', 'status': 'Gravado'}]
-        self.service.history(1)
+        self.portal.history_orders = [{'orderCode': '789806', 'creditCents': 5500, 'paymentMethod': 'BOLETO', 'requestDate': '2026-11-13', 'status': 'Gravado'}]
+        self.service.history(1, refresh=True)
         self.assertEqual(self.service.confirm('owner', preview['id'])['status'], 'UNCONFIRMED')
         self.portal.history_orders[0].update(status='Enviado', creditCents=6600)
-        self.service.history(1)
+        self.service.history(1, refresh=True)
         self.assertEqual(self.service.confirm('owner', preview['id'])['status'], 'UNCONFIRMED')
         self.portal.history_orders[0]['creditCents'] = 5500
-        self.service.history(1)
+        self.service.history(1, refresh=True)
         self.assertEqual(self.service.confirm('owner', preview['id'])['status'], 'SUBMITTED')
         self.assertEqual(len(self.portal.submissions), 1)
 
@@ -132,8 +140,8 @@ class ServiceTests(unittest.TestCase):
             self.service.confirm('owner', preview['id'])
         restarted = self.new_service()
         self.assertEqual(restarted.confirm('owner', preview['id'])['orderCode'], '789807')
-        self.portal.history_orders = [{'orderCode': '789807', 'creditCents': 5500, 'paymentMethod': 'BOLETO', 'status': 'Enviado'}]
-        restarted.history(1)
+        self.portal.history_orders = [{'orderCode': '789807', 'creditCents': 5500, 'paymentMethod': 'BOLETO', 'requestDate': '2026-11-13', 'status': 'Enviado'}]
+        restarted.history(1, refresh=True)
         self.assertEqual(restarted.confirm('owner', preview['id'])['status'], 'SUBMITTED')
 
     def test_prewrite_failure_allows_explicit_retry(self):
@@ -153,7 +161,47 @@ class ServiceTests(unittest.TestCase):
             with self.subTest(items=items), self.assertRaises(GatewayError):
                 self.service.preview('owner', {**self.body, 'items': items})
         self.assertEqual(self.portal.submissions, [])
-        self.assertEqual(self.service.history(2), {'orders': [], 'page': 2, 'hasMore': False})
+        self.assertEqual(self.service.history(2)['orders'], [])
+
+    def test_daily_snapshot_sorts_before_paging_and_labels_payment_without_guessing(self):
+        def entry(code, date, status):
+            return {'orderCode': code, 'requestDate': date, 'status': status, 'paymentMethod': 'BOLETO'}
+
+        self.portal.history_orders = [
+            entry('780001', '2026-10-01', 'Em andamento'),
+            entry('790001', '2026-11-13', 'Enviado'),
+            entry('790002', '2026-11-13', 'Finalizado'),
+            entry('789000', '2026-11-10', 'Cancelado'),
+            entry('780002', '2026-10-02', 'Desconhecido'),
+            entry('780003', '2026-10-03', 'Finalizado'),
+            entry('780004', '2026-10-04', 'Finalizado'),
+            entry('790003', '2026-11-14', 'Enviado'),
+        ]
+        self.service.refresh_history()
+        first = self.new_service().history(1)
+        second = self.new_service().history(2)
+        self.assertEqual([('790003', 'Pendente pgto'), ('790002', 'Pago'), ('790001', 'Pendente pgto'),
+                          ('789000', 'Cancelado'), ('780004', 'Pago'), ('780003', 'Pago'),
+                          ('780002', 'Pagamento não confirmado')],
+                         [(row['orderCode'], row['paymentStatus']) for row in first['orders']])
+        self.assertEqual('Rascunho', second['orders'][0]['paymentStatus'])
+        self.assertTrue(first['hasMore'])
+        self.assertEqual(1, self.portal.history_reads)
+        self.portal.history_orders[-1]['status'] = 'Finalizado'
+        result = self.service.history(1, refresh=True)
+        self.assertEqual('Pago', result['orders'][0]['paymentStatus'])
+        self.now += 1
+        self.portal.history_error = PortalError('Portal indisponível')
+        with self.assertRaises(PortalError):
+            self.service.refresh_history()
+        stale = self.service.history(1, refresh=True)
+        self.assertTrue(stale['stale'])
+        self.assertEqual('Pago', stale['orders'][0]['paymentStatus'])
+        self.assertTrue(self.new_service().history(2)['stale'])
+        self.assertEqual(2, self.service.history(3)['page'])
+        self.portal.history_error = None
+        self.service.refresh_history()
+        self.assertFalse(self.new_service().history(2)['stale'])
 
     def test_expired_preview_never_calls_provider(self):
         preview = self.service.preview('owner', self.body)

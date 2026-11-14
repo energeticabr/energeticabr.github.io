@@ -139,13 +139,14 @@ test('Trancid requires the gallery check after an uncertain submission', async t
 test('Trancid opens its paginated history in a full-screen gallery and returns to RH', async t => {
   const pages = [];
   let wentHome = false;
-  const { document, opener, click } = await fixture(t, async (operation, { page }) => {
+  const { document, opener, click } = await fixture(t, async (operation, params) => {
     assert.equal(operation, 'history');
-    pages.push(page);
+    pages.push(params);
+    const { page, refresh } = params;
     const order = page === 1 ?
-      { orderCode: '790001', status: 'Enviado', requestDate: '2026-11-13', creditCents: 22000, totalCents: 22220, paymentMethod: 'BOLETO' } :
-      { orderCode: '788001', status: 'Em andamento', requestDate: '2026-09-17', creditCents: 5500, totalCents: null, paymentMethod: 'PIX' };
-    return { orders: [order], hasMore: page === 1, page };
+      { orderCode: '790001', status: 'Enviado', paymentStatus: 'Pendente pgto', requestDate: '2026-11-13', creditCents: 22000, totalCents: 22220, paymentMethod: 'BOLETO' } :
+      { orderCode: '788001', status: 'Finalizado', paymentStatus: 'Pago', requestDate: '2026-09-17', creditCents: 5500, totalCents: null, paymentMethod: 'PIX' };
+    return { orders: [order], hasMore: page === 1, page, checkedAt: '2026-11-13T21:15:00Z', stale: refresh };
   }, true, () => { wentHome = true; });
   const screen = document.querySelector('main.trancid-gallery-page');
   assert.ok(screen);
@@ -156,18 +157,18 @@ test('Trancid opens its paginated history in a full-screen gallery and returns t
   assert.ok(header.querySelector('nav button[aria-label="Início"]'));
   const sync = header.querySelector(':scope > [data-gallery-refresh]');
   assert.ok(sync);
-  assert.match(screen.textContent, /Galeria Trancid.*790001.*220,00.*Enviado.*13\/11\/2026.*Boleto.*222,20/s);
+  assert.match(screen.textContent, /Galeria Trancid.*790001.*220,00.*Pendente pgto.*13\/11\/2026.*Boleto.*222,20/s);
+  assert.match(screen.textContent, /Situação informada pela Trancid em 13\/11\/2026,? 18:15/);
   click('Próxima página');
   await settle();
-  assert.match(screen.textContent, /788001.*55,00.*Em andamento.*17\/09\/2026.*Pix/s);
+  assert.match(screen.textContent, /788001.*55,00.*Pago.*17\/09\/2026.*Pix/s);
   assert.doesNotMatch(screen.textContent, /Total|Não informado/);
   sync.click();
   assert.equal(sync.disabled, true);
   await settle();
   assert.equal(sync.disabled, false);
-  click('Página anterior');
-  await settle();
-  assert.deepEqual(pages, [1, 2, 2, 1]);
+  assert.match(screen.textContent, /Exibindo a última consulta à Trancid/);
+  assert.deepEqual(pages, [{ page: 1 }, { page: 2 }, { page: 1, refresh: true }]);
   assert.doesNotMatch(screen.textContent, /Atualizar pedidos/);
   header.querySelector('nav button[aria-label="Voltar ao RH"]').click();
   assert.equal(screen.isConnected, false);

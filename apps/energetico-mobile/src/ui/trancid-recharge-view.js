@@ -23,7 +23,6 @@ export function openTrancidRechargeView({ document: doc, request, gallery = fals
   const app = doc.getElementById('app');
   let restoreApp = false;
   let isGallery = gallery;
-  let galleryPage = 1;
   let galleryHeader;
   let busy = false;
   let confirming = false;
@@ -112,7 +111,7 @@ export function openTrancidRechargeView({ document: doc, request, gallery = fals
       galleryHeader = createHrBenefitGalleryHeader({
         root: screen, title, onBack: close,
         onHome: onHome && (() => { dispose(); onHome(); }),
-        onRefresh: () => loadGallery(galleryPage),
+        onRefresh: () => loadGallery(1, false, true),
       });
     } else {
       headline.replaceChildren(title, make('span', 'Vale-transporte'));
@@ -351,16 +350,16 @@ export function openTrancidRechargeView({ document: doc, request, gallery = fals
     heading.focus({ preventScroll: true });
   }
 
-  function loadGallery(page = 1, focusPage = false) {
+  function loadGallery(page = 1, focusPage = false, refresh = false) {
     return run(async () => {
       message('Consultando pedidos na Trancid…');
       try {
-        const result = await request('history', { page }, { signal });
+        const result = await request('history', refresh ? { page, refresh } : { page }, { signal });
         if (signal.aborted) return;
         if (!Array.isArray(result?.orders) || !Number.isSafeInteger(result.page) || result.page < 1) {
           throw new Error('A Trancid retornou uma página de pedidos inválida.');
         }
-        message();
+        message(result.stale ? 'Atualização indisponível. Exibindo a última consulta à Trancid.' : undefined);
         showGallery(result, focusPage);
       } catch (error) {
         if (!signal.aborted && !content.childElementCount) showGallery({ page });
@@ -369,13 +368,12 @@ export function openTrancidRechargeView({ document: doc, request, gallery = fals
     });
   }
 
-  function showGallery({ orders, page, hasMore }, focusPage = false) {
-    galleryPage = page;
+  function showGallery({ orders, page, hasMore, checkedAt }, focusPage = false) {
     const list = make('div', '', 'swile-order-list');
     for (const order of orders ?? []) {
       const item = make('article', '', 'swile-summary swile-gallery-order');
       item.append(make('strong', `Pedido ${order.orderCode}`), make('strong', reais(order.creditCents)),
-        make('span', order.status), make('span', order.requestDate ? `Pedido em ${formatDate(order.requestDate)}` : ''),
+        make('span', order.paymentStatus || order.status), make('span', order.requestDate ? `Pedido em ${formatDate(order.requestDate)}` : ''),
         make('span', paymentLabel(order.paymentMethod)));
       if (Number.isSafeInteger(order.totalCents)) item.append(make('span', `Total · ${reais(order.totalCents)}`));
       list.append(item);
@@ -388,7 +386,12 @@ export function openTrancidRechargeView({ document: doc, request, gallery = fals
     if (page > 1) navigation.append(button('Página anterior', () => loadGallery(page - 1, true)));
     if (page > 1 || hasMore) navigation.append(pageLabel);
     if (hasMore) navigation.append(button('Próxima página', () => loadGallery(page + 1, true)));
-    content.replaceChildren(list, navigation);
+    const checked = new Date(checkedAt);
+    const timestamp = Number.isFinite(checked.getTime()) ? [make('p',
+      `Situação informada pela Trancid em ${new Intl.DateTimeFormat('pt-BR', {
+        dateStyle: 'short', timeStyle: 'short', timeZone: 'America/Sao_Paulo',
+      }).format(checked)}`)] : [];
+    content.replaceChildren(...timestamp, list, navigation);
     body.scrollTop = 0;
     if (focusPage) {
       pageLabel.tabIndex = -1;
