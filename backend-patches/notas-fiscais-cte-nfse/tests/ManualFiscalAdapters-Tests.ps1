@@ -31,7 +31,7 @@ try{
  '{}'|Set-Content (Join-Path $pending 'synthetic-pending.json')
  $record.sources.NFE=@{deliveredIds=@();result=$null}
  $r=Invoke-ManualFiscalSource -Source NFE @options -NfeCollectorAction $collect
- if($r.status -cne 'failed' -or $r.code -cne 'INCOMPLETE'){throw 'PENDING_NFE_DOCUMENT_FAKED_DELIVERY_SUCCESS'}
+ if($r.status -cne 'waiting' -or $record.sources.NFE.result.status -ceq 'succeeded'){throw 'PENDING_NFE_DOCUMENT_FAKED_DELIVERY_SUCCESS'}
  foreach($source in @('CTE','NFSE')){
   $path=Join-Path $root ('SefazAuxLive/'+$company+'/'+$source);[IO.Directory]::CreateDirectory($path)|Out-Null
   $state=@{version=1;source=$source;lastNsu='000000000000001';maxNsu='000000000000001';status='COMPLETED';lastCompletedSlot=$slot;pendingSlot=$null;hasMore=$false;awaitingCompletion=$false;nextAllowedAt=[DateTimeOffset]::UtcNow.AddMinutes(65).ToString('o')}

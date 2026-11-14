@@ -4,18 +4,9 @@ Import-Module (Join-Path $PSScriptRoot 'Sefaz.psm1') -DisableNameChecking
 Import-Module (Join-Path $PSScriptRoot 'GapRecovery.psm1') -DisableNameChecking
 
 function Get-SefazRecentGap([string]$CompanyPath,[string]$InitialResumeNsu){
-    $directory=Join-Path $CompanyPath 'history-gaps'
-    if(-not [IO.Directory]::Exists($directory)){return}
-    foreach($file in @(Get-ChildItem -LiteralPath $directory -File -Filter '*.json' | Sort-Object Name -Descending)){
-        if($file.BaseName -cnotmatch '^\d{15}-\d{15}$'){continue}
-        $record=Read-GapJson $file.FullName
-        if($record.status -cnotin @('HISTORICAL_RECOVERY_REQUIRED','CAPTURED')){continue}
-        if($record.source -cne 'SEFAZ' -or "$($record.fromExclusive)-$($record.throughInclusive)" -cne $file.BaseName -or [long]$record.fromExclusive -ge [long]$record.throughInclusive){throw 'SEFAZ_GAP_INVALID'}
-        # The explicit initial bootstrap window is outside routine recovery.
-        $bootstrap=$record.PSObject.Properties['bootstrap']
-        if(($bootstrap -and $bootstrap.Value -eq $true) -or (-not $bootstrap -and [long]$record.fromExclusive -eq 0 -and $record.throughInclusive -ceq $InitialResumeNsu)){continue}
-        [pscustomobject]@{path=$file.FullName;record=$record}
-    }
+    Get-SefazCollectionGaps $CompanyPath $InitialResumeNsu |
+        Where-Object {$_.record.status -cin @('HISTORICAL_RECOVERY_REQUIRED','CAPTURED')} |
+        Sort-Object path -Descending
 }
 
 function Invoke-SefazRecentGapRecovery($Config,[string]$CompanyPath,[string]$GovernorPath,$LiveState,[DateTimeOffset]$Now,[scriptblock]$Request){
@@ -26,6 +17,7 @@ function Invoke-SefazRecentGapRecovery($Config,[string]$CompanyPath,[string]$Gov
     $receiptDirectory=Join-Path $CompanyPath 'history-gap-receipts'
     $calls=0
     $pendingDelivery=$false
+    $confirmedCorrections=Get-SefazConfirmedCorrection $CompanyPath
     foreach($gap in $gaps){
         $gapHasDocuments=$false
         $gapAllArchived=$true
@@ -69,7 +61,14 @@ function Invoke-SefazRecentGapRecovery($Config,[string]$CompanyPath,[string]$Gov
                 if(-not [IO.File]::Exists((Join-Path $CompanyPath "archive/$($receipt.documentId).json"))){
                     $gapAllArchived=$false
                     $settled=@('scope-excluded','summaries' | Where-Object {[IO.File]::Exists((Join-Path $CompanyPath "$_/$($receipt.documentId).json"))})
-                    if(-not $settled.Count){
+                    $correction=$false
+                    $pendingDate=Join-Path $CompanyPath "scope-pending-date/$($receipt.documentId).json"
+                    if([IO.File]::Exists($pendingDate)){
+                        $doc=Read-GapJson $pendingDate
+                        $correction=$doc.kind -ceq 'procEventoNFe' -and $doc.fields.PSObject.Properties['TIPO_EVENTO'] -and
+                            $doc.fields.TIPO_EVENTO -ceq '110110' -and $confirmedCorrections[$doc.sha256] -ceq $doc.key
+                    }
+                    if(-not $settled.Count -and -not $correction){
                         $gapAllSettled=$false
                         if(-not @(Get-SefazRecentGapLocalDocument $CompanyPath $receipt.documentId).Count){
                             $parsed=ConvertFrom-GapResponse ([IO.File]::ReadAllText($raw)) $nsu ([string]$Config.companyCnpj) $Now
@@ -86,6 +85,7 @@ function Invoke-SefazRecentGapRecovery($Config,[string]$CompanyPath,[string]$Gov
         $gap.record.status=$nextStatus
         $gap.record.documentsImportedFromThisRange=$gapHasDocuments -and $gapAllArchived
         $gap.record|Add-Member -NotePropertyName reconciledAt -NotePropertyValue $Now.ToString('o') -Force
+        $gap.record|Add-Member -NotePropertyName pointReceiptsRequired -NotePropertyValue $true -Force
         Write-AtomicJson $gap.path $gap.record
     }
     if($pendingDelivery){return [pscustomobject]@{status='CAPTURED';nextAllowedAt=$Now.AddMinutes(1).ToString('o')}}
