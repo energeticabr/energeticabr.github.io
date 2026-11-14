@@ -307,6 +307,17 @@ function Invoke-SefazWorker {
             if($null -ne $saved){$state=$saved}
             $hasPending=Test-SefazWorkerOutbox $companyPath
             if($hasPending){continue}
+            if($result.status -ceq 'GAP_PENDING' -or ($null -ne $state -and $state.status -cne '656' -and (
+               ($result.PSObject.Properties['gapDeliveryPending'] -and $result.gapDeliveryPending) -or
+               ($state.PSObject.Properties['historyRecoveryRequired'] -and $state.historyRecoveryRequired)))){
+                $stage='QUEUE_DEFER_GAP'
+                $next=if($result.PSObject.Properties['nextAllowedAt']){[string]$result.nextAllowedAt}else{Get-SefazWorkerNextAttempt $state 1}
+                $defer=& $QueueAction 'queue-defer' $jobId $next 'WORKER_LIMIT'
+                if($null -ne $defer -and $defer.failed -eq $true){return [pscustomobject]@{status='FAILED';batches=$batches;documents=$documents}}
+                if($null -eq $defer -or $defer.deferred -ne $true){throw 'WORKER_DEFER'}
+                Write-SefazWorkerLog $DataRoot 'DEFERRED' $batches $documents 'WORKER_LIMIT' 'GAP_RECOVERY'
+                return [pscustomobject]@{status='DEFERRED';batches=$batches;documents=$documents;nextAllowedAt=$next}
+            }
             $status=if($null -ne $state){[string]$state.status}else{[string]$result.status}
             $final=$status -eq '137'
             if($status -eq '138' -and $null -ne $state -and $state.PSObject.Properties['lastNsu'] -and $state.PSObject.Properties['maxNsu']){
