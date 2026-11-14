@@ -10,13 +10,13 @@ from urllib.parse import urlencode
 source = Path(os.environ["GALLERY_SOURCE"]).resolve()
 sys.path[:0] = [str(source / "worker"), os.environ["GALLERY_FIXTURES"]]
 from launch_gallery import LaunchGalleryError, LaunchGalleryService
-from test_launch_gallery import SharePoint, base_fields, mutation
+from test_launch_gallery import SharePoint, base_fields, field, mutation
 
 
 class DeletionSharePoint(SharePoint):
     def __init__(self):
         super().__init__()
-        self.schemas["NOTASPENDENTES"] = base_fields()
+        self.schemas["NOTASPENDENTES"] = base_fields() + [field("VALORTOTAL"), field("OBS", kind="Note")]
         self.rows["NOTASPENDENTES"] = [{"Id": 17}, {"Id": 117}, {"Id": 99}]
         self.rows["LANCAMENTOS"][0]["AGRUPAR"] = "17"
         self.rows["LANCAMENTOS"][1]["AGRUPAR"] = "117"
@@ -44,10 +44,12 @@ class DeletionSharePoint(SharePoint):
                 return {"d": []}
             if self.link_read in {"page-two", "wrong-list", "wrong-filter", "conflicting-links", "duplicate-filter"}:
                 if "%24skiptoken=" in endpoint:
-                    return {"value": [{"Id": 3, "AGRUPAR": "17"}] if self.link_read == "page-two" else []}
+                    return {"value": [
+                        self.rows["LANCAMENTOS"][-1] | {"AGRUPAR": "17"}
+                    ] if self.link_read == "page-two" else []}
                 path = endpoint if self.link_read != "wrong-list" else endpoint.replace("LANCAMENTOS", "NOTASPENDENTES")
                 filter_by = "AGRUPAR eq '117'" if self.link_read == "wrong-filter" else "AGRUPAR eq '17'"
-                cursor = urlencode({"$filter": filter_by, "$skiptoken": "Paged=TRUE&p_ID=2"})
+                cursor = urlencode({"$filter": filter_by, "$skiptoken": "Paged=TRUE&p_ID=2", "$select": kw["params"]["$select"]})
                 if self.link_read == "duplicate-filter":
                     cursor += "&%24filter="
                 result = {"value": [], "@odata.nextLink": self.site_url + "/_api/" + path + "?" + cursor}
@@ -86,7 +88,8 @@ class DeleteLaunchTests(unittest.TestCase):
         self.sp.rows["LANCAMENTOS"][2]["AGRUPAR"] = "17"
         self.delete()
         self.assertEqual(self.remaining("NOTASPENDENTES"), [17, 117, 99])
-        self.assertEqual(len(self.sp.mutations), 1)
+        self.assertEqual(self.sp.mutations[0][2]["headers"]["X-HTTP-Method"], "DELETE")
+        self.assertEqual(self.sp.rows["NOTASPENDENTES"][0]["VALORTOTAL"], "24,00")
 
     def test_sibling_on_next_page_keeps_order(self):
         self.sp.link_read = "page-two"
