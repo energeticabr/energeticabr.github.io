@@ -6513,8 +6513,9 @@ export function createAppController({
           if (current() && operation === 'confirm') void refreshSwileReminder();
           return result;
         },
-        previewDocument: native.previewMedia && ((blob, fileName, resolveReturnFocus) =>
-          native.previewMedia(blob, fileName, { returnLabel: 'Voltar ao pedido', resolveReturnFocus })),
+        previewDocument: native.previewMedia && ((blob, fileName, resolveReturnFocus, onClose) =>
+          native.previewMedia(blob, fileName, { returnLabel: 'Voltar ao pedido', resolveReturnFocus, onClose })),
+        closePreview: native.closePreview,
         onClose: () => {
           hrBenefitPanel = null;
           if (current() && provider === 'Swile') void refreshSwileReminder();

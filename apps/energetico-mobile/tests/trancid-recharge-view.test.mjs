@@ -13,14 +13,14 @@ const preview = {
 };
 const settle = () => new Promise(resolve => setImmediate(resolve));
 
-async function fixture(t, request, gallery = false, onHome) {
+async function fixture(t, request, gallery = false, onHome, previewDocument) {
   const { window } = new JSDOM('<main id="app"><button>Abrir Trancid</button></main>');
   const { document } = window;
   const opener = document.querySelector('button');
   opener.focus();
   t.after(() => window.close());
   const { openTrancidRechargeView } = await import('../src/ui/trancid-recharge-view.js');
-  const view = openTrancidRechargeView({ document, request, gallery, onHome });
+  const view = openTrancidRechargeView({ document, request, gallery, onHome, previewDocument });
   t.after(() => view.close());
   await settle();
   return {
@@ -225,6 +225,41 @@ test('Trancid expands the exact order, shows masked recharge lines and retries d
   assert.doesNotMatch(changed.textContent, /Cartão final/);
 });
 
+test('Trancid opens only the selected boleto in the PDF viewer without expanding its order', async t => {
+  const calls = [];
+  const rendered = [];
+  const { document, window } = await fixture(t, async (operation, params) => {
+    if (operation === 'history') return { page: 1, orders: [
+      { orderCode: '790001', creditCents: 5500, paymentMethod: 'BOLETO', paymentStatus: 'Pendente pgto' },
+      { orderCode: '790002', creditCents: 5500, paymentMethod: 'BOLETO', paymentStatus: 'Pago' },
+      { orderCode: '790003', creditCents: 5500, paymentMethod: 'PIX', paymentStatus: 'Pago' },
+      { orderCode: '790004', creditCents: 5500, paymentMethod: 'BOLETO', paymentStatus: 'Rascunho' },
+    ] };
+    calls.push([operation, params]);
+    return { orderCode: params.orderCode, base64: btoa('%PDF-1.7') };
+  }, true, undefined, async (blob, fileName, resolveReturnFocus, onClose) => {
+    rendered.push([blob.type, await blob.text(), fileName, resolveReturnFocus(), onClose]);
+  });
+
+  const buttons = [...document.querySelectorAll('.trancid-order-boleto')];
+  assert.deepEqual(buttons.map(button => button.getAttribute('aria-label')), [
+    'Abrir boleto do pedido 790001', 'Abrir boleto do pedido 790002',
+  ]);
+  const [pending, paid] = buttons;
+  assert.ok(pending.nextElementSibling.matches('.trancid-order-summary'));
+  paid.click();
+  paid.click();
+  await settle();
+  assert.deepEqual(calls, [['boleto', { orderCode: '790002' }]]);
+  assert.deepEqual(rendered[0].slice(0, 4), ['application/pdf', '%PDF-1.7', 'Boleto-Trancid-790002.pdf', paid]);
+  assert.equal(paid.nextElementSibling.getAttribute('aria-expanded'), 'false');
+  document.dispatchEvent(new window.KeyboardEvent('keydown', { key: 'Escape', cancelable: true }));
+  assert.ok(document.querySelector('.trancid-gallery-page'));
+  rendered[0][4]();
+  document.dispatchEvent(new window.KeyboardEvent('keydown', { key: 'Escape', cancelable: true }));
+  assert.equal(document.querySelector('.trancid-gallery-page'), null);
+});
+
 test('Trancid client uses authenticated portal actions without retrying uncertain confirmation', async () => {
   const calls = [];
   const options = {
@@ -240,15 +275,17 @@ test('Trancid client uses authenticated portal actions without retrying uncertai
   const client = createChatClient(options);
   assert.deepEqual(await client.trancidRechargeRequest('directory'), cards);
   assert.deepEqual(await client.trancidRechargeRequest('details', { orderCode: '790001' }), cards);
+  assert.deepEqual(await client.trancidRechargeRequest('boleto', { orderCode: '790001' }), cards);
   await assert.rejects(client.trancidRechargeRequest('confirm', { id: 'preview-1' }), /Galeria Trancid/);
   assert.deepEqual(calls, [
     ['https://energetico.example/api/portal-chat', 'Bearer fake-token', { action: 'trancid_recharge_directory' }],
     ['https://energetico.example/api/portal-chat', 'Bearer fake-token', { action: 'trancid_recharge_details', orderCode: '790001' }],
+    ['https://energetico.example/api/portal-chat', 'Bearer fake-token', { action: 'trancid_recharge_boleto', orderCode: '790001' }],
     ['https://energetico.example/api/portal-chat', 'Bearer fake-token', { action: 'trancid_recharge_confirm', id: 'preview-1' }],
   ]);
   const demo = createChatClient({ ...options, apiPrefix: '/api/demo' });
   await assert.rejects(demo.trancidRechargeRequest('confirm', { id: 'preview-1' }), /ambiente da empresa/);
-  assert.equal(calls.length, 3);
+  assert.equal(calls.length, 4);
 });
 
 test('Trancid client preserves a response that confirms no order was submitted', async () => {
