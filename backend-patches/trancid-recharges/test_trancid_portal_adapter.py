@@ -101,6 +101,30 @@ class PortalTest(unittest.TestCase):
         self.assertEqual(order["orderCode"], "900002")
         self.assertEqual(order["status"], "Enviado")
 
+    def test_mixed_amounts_are_saved_and_verified_before_dispatch(self):
+        initial_url = ORIGIN + "/frmSelGrupoNovoPedido.aspx"
+        history_url = ORIGIN + "/frmSelPedidoExistenteCI.aspx"
+        draft_url = ORIGIN + "/frmPedidoCargaIndividual.aspx"
+        persisted = draft(["55,00", "57,50"], "112,50")
+        self.read.side_effect = [
+            (history_url, history([("900001", "Finalizado", "20,00")])),
+            (initial_url, start_form()),
+            (draft_url, draft(["0,00", "0,00"], "0,00")),
+            (draft_url, persisted),
+            (history_url, history([("900002", "Em andamento", "112,50")])),
+            (history_url, history([("900002", "Em andamento", "112,50")])),
+            (draft_url, persisted),
+            (draft_url, persisted),
+            (history_url, history([("900002", "Enviado", "112,50")])),
+        ]
+        order = self.portal.submit([{"id": CARDS[1], "amountCents": 5750},
+                                    {"id": CARDS[0], "amountCents": 5500}], "boleto")
+        posts = [call.args[1] for call in self.read.call_args_list if len(call.args) == 2]
+        self.assertEqual(posts[1]["gridPedidos:_ctl2:txtTotalCarga"], "55,00")
+        self.assertEqual(posts[1]["gridPedidos:_ctl3:txtTotalCarga"], "57,50")
+        self.assertEqual(sum(p["__EVENTTARGET"] == "btnEnvioTransfacil" for p in posts), 1)
+        self.assertEqual(order["creditCents"], 11250)
+
     def test_uniform_full_roster_uses_initial_amount_and_sends_once(self):
         initial_url = ORIGIN + "/frmSelGrupoNovoPedido.aspx"
         history_url = ORIGIN + "/frmSelPedidoExistenteCI.aspx"

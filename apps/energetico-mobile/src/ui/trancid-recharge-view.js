@@ -29,6 +29,7 @@ export function openTrancidRechargeView({ document: doc, request, gallery = fals
   let confirming = false;
   let cards = [];
   const selected = new Set();
+  const individualAmounts = new Map();
 
   function make(tag, text, className) {
     const node = doc.createElement(tag);
@@ -176,8 +177,12 @@ export function openTrancidRechargeView({ document: doc, request, gallery = fals
   amount.inputMode = 'decimal';
   amount.autocomplete = 'off';
   amount.placeholder = '0,00';
+  amount.value = '55,00';
   amount.setAttribute('aria-label', 'Valor da recarga por cartão');
-  amount.addEventListener('input', updateTotal);
+  amount.addEventListener('input', () => {
+    individualAmounts.clear();
+    showCards();
+  });
   const fields = make('div', '', 'swile-dates');
   const payment = make('div', '', 'trancid-payment');
   payment.append(make('span', 'Forma de pagamento'), make('strong', 'Boleto'));
@@ -187,10 +192,17 @@ export function openTrancidRechargeView({ document: doc, request, gallery = fals
   total.setAttribute('aria-live', 'polite');
   footer.append(total, button('Conferir pedido', prepare, true));
 
+  function selectedItems() {
+    return cards.filter(card => selected.has(card.id)).map(card => ({
+      id: card.id,
+      amountCents: parseBenefitAmount(individualAmounts.get(card.id) ?? amount.value),
+    }));
+  }
+
   function updateTotal() {
     selection.checked = cards.length > 0 && selected.size === cards.length;
     selection.indeterminate = selected.size > 0 && !selection.checked;
-    const credits = selected.size * (parseBenefitAmount(amount.value) ?? 0);
+    const credits = selectedItems().reduce((sum, item) => sum + (item.amountCents ?? 0), 0);
     total.textContent = `${selected.size} ${selected.size === 1 ? 'cartão' : 'cartões'} · ${reais(credits)}`;
   }
 
@@ -200,9 +212,10 @@ export function openTrancidRechargeView({ document: doc, request, gallery = fals
     const visible = cards.filter(card => normalize(`${card.name} ${card.cardLast4 ?? ''}`).includes(query));
     if (!visible.length) rows.append(make('p', query ? 'Nenhum cartão encontrado.' : 'Nenhum cartão disponível para recarga.'));
     for (const card of visible) {
-      const row = make('label', '', 'swile-person trancid-card');
-      const label = make('span');
-      label.append(make('strong', card.name), make('small', cardLabel(card)));
+      const row = make('div', '', 'swile-person trancid-card');
+      const label = make('label', '', 'trancid-card-selection');
+      const cardDescription = make('span');
+      cardDescription.append(make('strong', card.name), make('small', cardLabel(card)));
       const checkbox = make('input');
       checkbox.type = 'checkbox';
       checkbox.checked = selected.has(card.id);
@@ -212,7 +225,19 @@ export function openTrancidRechargeView({ document: doc, request, gallery = fals
         else selected.delete(card.id);
         updateTotal();
       });
-      row.append(label, checkbox);
+      label.append(cardDescription, checkbox);
+      const individual = make('input', '', 'trancid-card-amount');
+      individual.type = 'text';
+      individual.inputMode = 'decimal';
+      individual.autocomplete = 'off';
+      individual.placeholder = '0,00';
+      individual.setAttribute('aria-label', `Valor para ${card.name}${card.cardLast4 ? `, cartão final ${card.cardLast4}` : ''}`);
+      individual.value = individualAmounts.get(card.id) ?? amount.value;
+      individual.addEventListener('input', () => {
+        individualAmounts.set(card.id, individual.value);
+        updateTotal();
+      });
+      row.append(label, individual);
       rows.append(row);
     }
     updateTotal();
@@ -234,6 +259,7 @@ export function openTrancidRechargeView({ document: doc, request, gallery = fals
       cards = result;
       const available = new Set(cards.map(card => card.id));
       for (const id of selected) if (!available.has(id)) selected.delete(id);
+      for (const id of individualAmounts.keys()) if (!available.has(id)) individualAmounts.delete(id);
       showForm();
     });
   }
@@ -241,13 +267,18 @@ export function openTrancidRechargeView({ document: doc, request, gallery = fals
   function prepare() {
     return run(async () => {
       if (!selected.size) throw new Error('Selecione os cartões que receberão a recarga.');
-      const amountCents = parseBenefitAmount(amount.value);
-      if (amountCents === null) throw new Error('Informe um valor por cartão maior que zero, com até duas casas decimais.');
-      const items = cards.filter(card => selected.has(card.id)).map(({ id }) => ({ id, amountCents }));
+      const items = selectedItems();
+      const invalid = items.find(item => item.amountCents === null);
+      if (invalid) {
+        const card = cards.find(card => card.id === invalid.id);
+        throw new Error(`Informe um valor maior que zero, com até duas casas decimais, para ${card.name}.`);
+      }
+      const credits = items.reduce((sum, item) => sum + item.amountCents, 0);
       const preview = await request('preview', { items, paymentMethod: 'BOLETO' }, { signal });
       if (signal.aborted) return;
-      if (!preview?.id || !Array.isArray(preview.items) || preview.items.length !== items.length
-        || preview.creditCents !== items.length * amountCents || preview.paymentMethod !== 'BOLETO') {
+      const matchingItems = Array.isArray(preview?.items) && preview.items.length === items.length
+        && items.every(({ id, amountCents }) => preview.items.some(item => item.id === id && item.amountCents === amountCents));
+      if (!preview?.id || !matchingItems || preview.creditCents !== credits || preview.paymentMethod !== 'BOLETO') {
         throw new Error('A Trancid retornou uma prévia de recarga inválida.');
       }
       showPreview(preview);
