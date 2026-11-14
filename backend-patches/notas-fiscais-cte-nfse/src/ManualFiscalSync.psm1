@@ -154,7 +154,7 @@ function Invoke-ManualFiscalSync {
 }
 function Invoke-ManualFiscalSource {
  param([ValidateSet('NFE','CTE','NFSE')][string]$Source,[string]$RequestId,$Record,[scriptblock]$Save,[scriptblock]$Renew,
-  [string]$WorkerConfigPath,[string]$CollectorConfigPath,[string]$FiscalBase,[scriptblock]$NfeCollectorAction)
+  [string]$WorkerConfigPath,[string]$CollectorConfigPath,[string]$FiscalBase,[scriptblock]$NfeCollectorAction,[scriptblock]$AuxiliaryRequest)
  $worker=Get-Content -LiteralPath $WorkerConfigPath -Raw|ConvertFrom-Json -DateKind String
  $config=Get-Content -LiteralPath $CollectorConfigPath -Raw|ConvertFrom-Json -DateKind String
  $company=$config.companyCnpj+'-'+$config.environment;$slot='manual:'+$RequestId
@@ -212,7 +212,12 @@ function Invoke-ManualFiscalSource {
  }
  Import-Module (Join-Path $PSScriptRoot 'AuxiliaryFiscal.psm1') -DisableNameChecking
  $path=Join-Path $FiscalBase ('SefazAuxLive/'+$company+'/'+$Source)
- $native=Invoke-AuxiliaryFiscalSource -Source $Source -Config $config -WorkerConfig $worker -DataPath $path -Slot $slot -MaxBatches 1 -SendBatch $sender
+ try{
+  $native=Invoke-AuxiliaryFiscalSource -Source $Source -Config $config -WorkerConfig $worker -DataPath $path -Slot $slot -MaxBatches 1 -SendBatch $sender -Request $AuxiliaryRequest
+ }catch{
+  if($_.Exception.Message -cne 'AUX_REQUEST_FAILED'){throw}
+  $native=@{status='AUX_REQUEST_FAILED'}
+ }
  if($native.status -cin @('COMPLETED','ALREADY_COMPLETED') -and $native.lastCompletedManualSlot -ceq $slot){
   $incomplete=$false
   foreach($folder in @('unhandled-pending','scope-pending-date','outbox')){if(@(Get-ChildItem -LiteralPath (Join-Path $path $folder) -Filter '*.json' -File -ErrorAction SilentlyContinue).Count -gt 0){$incomplete=$true}}
@@ -220,7 +225,18 @@ function Invoke-ManualFiscalSource {
   return @{status='succeeded';documents=@($entry.deliveredIds).Count}
  }
  $statePath=Join-Path $path 'state.json';$next=[DateTimeOffset]::UtcNow.AddMinutes(1)
- if([IO.File]::Exists($statePath)){$s=Get-Content -LiteralPath $statePath -Raw|ConvertFrom-Json -DateKind String;if($s.nextAllowedAt){$held=[DateTimeOffset]::Parse([string]$s.nextAllowedAt);if($held -gt $next){$next=$held}}}
- return @{status='waiting';code=$(if($native.status -ceq 'LOCK_BUSY'){'BUSY'}elseif($native.status -ceq 'PAGE_LIMIT'){'DELIVERY_PENDING'}else{'COOLDOWN'});nextAllowedAt=$next.ToString('o');documents=@($entry.deliveredIds).Count}
+ $saved=if([IO.File]::Exists($statePath)){Get-Content -LiteralPath $statePath -Raw|ConvertFrom-Json -DateKind String}
+ if($saved.nextAllowedAt){
+  $held=[DateTimeOffset]::Parse([string]$saved.nextAllowedAt)
+  if($held -gt $next){$next=$held}
+ }
+ $code=switch -CaseSensitive ($native.status){
+  'LOCK_BUSY' {'BUSY'}
+  'PAGE_LIMIT' {'DELIVERY_PENDING'}
+  'AUX_REQUEST_FAILED' {'SYNC_FAILED'}
+  'COOLDOWN' {if($saved.status -ceq 'AUX_REQUEST_FAILED'){'SYNC_FAILED'}else{'COOLDOWN'}}
+  default {'COOLDOWN'}
+ }
+ return @{status='waiting';code=$code;nextAllowedAt=$next.ToString('o');documents=@($entry.deliveredIds).Count}
 }
 Export-ModuleMember -Function Invoke-ManualFiscalSync,Invoke-ManualFiscalSource,Invoke-ManualFiscalQueue

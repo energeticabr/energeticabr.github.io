@@ -43,7 +43,18 @@ try{
   $r=Invoke-ManualFiscalSource -Source $source @options
   if($r.status -cne 'waiting' -or $r.code -cne 'COOLDOWN'){throw 'OLDER_DAILY_COMPLETION_FAKED_MANUAL_SUCCESS'}
  }
- Write-Output 'PASS ManualFiscalAdapters 8 assertions; government requests 0'
+ $nfsePath=Join-Path $root ('SefazAuxLive/'+$company+'/NFSE')
+ $nfseStatePath=Join-Path $nfsePath 'state.json'
+ $nfseState=@{version=1;source='NFSE';lastNsu='000000000000001';status='NEW';nextAllowedAt=$null}
+ $nfseState|ConvertTo-Json|Set-Content $nfseStatePath
+ $script:nfseCalls=0
+ $failedNfse={param($config,$cursor) $script:nfseCalls++;throw 'simulated transport failure'}
+ $r=Invoke-ManualFiscalSource -Source NFSE @options -AuxiliaryRequest $failedNfse
+ $savedNfse=Get-Content -LiteralPath $nfseStatePath -Raw|ConvertFrom-Json -DateKind String
+ if($r.status -cne 'waiting' -or $r.code -cne 'SYNC_FAILED' -or $r.nextAllowedAt -cne $savedNfse.nextAllowedAt -or $script:nfseCalls -ne 1){throw 'NFSE_TRANSPORT_FAILURE_LOST_RETRY_DEADLINE'}
+ $r=Invoke-ManualFiscalSource -Source NFSE @options -AuxiliaryRequest $failedNfse
+ if($r.status -cne 'waiting' -or $r.code -cne 'SYNC_FAILED' -or $r.nextAllowedAt -cne $savedNfse.nextAllowedAt -or $script:nfseCalls -ne 1){throw 'NFSE_COOLDOWN_HID_PRIOR_TRANSPORT_FAILURE'}
+ Write-Output 'PASS ManualFiscalAdapters 10 assertions; government requests 0'
 }finally{
  $resolved=[IO.Path]::GetFullPath($root)
  if((Split-Path $resolved -Parent) -cne $base -or (Split-Path $resolved -Leaf) -notlike 'manual-adapter-test-*'){throw 'UNSAFE_TEST_CLEANUP'}
