@@ -29,6 +29,12 @@ autenticação bancária antes de completar campos vazios e anexar o PDF. O PDF
 A etapa preserva os arquivos existentes e tenta de novo nas próximas coletas
 quando o banco limita as consultas. Para conferir os vínculos sem gravação,
 execute `sync_boleto_receipts.py --check` com o ambiente da unidade.
+Cada referência tem tentativas limitadas para falhas temporárias e renovação
+de token após uma resposta 401. Uma falha de transporte ou resposta inválida
+permanece sem confirmação, mas não descarta os comprovantes já consultados.
+O leitor devolve os resultados parciais antes do prazo do processo chamador;
+consultas adiadas continuam elegíveis nas próximas coletas. Uma resposta 429
+interrompe o lote para respeitar o limite do banco.
 
 Para Pix, o nome vem do extrato Sicoob ou da consulta direta por EndToEndId
 com escopo `pixpagamentos_consulta`. Se o extrato trouxer apenas o CPF
