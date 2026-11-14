@@ -50,7 +50,8 @@ document.documentElement.dataset.layout = JSON.stringify({
   count: buttons.length, actions: buttons.map(button => button.dataset.action),
   buttons: buttons.map(button => { const rect = button.getBoundingClientRect(); return {
     left: rect.left, right: rect.right, width: rect.width, height: rect.height,
-    external: button.closest('.chat-bubble') === null, loaded: button.querySelector('img')?.naturalWidth > 0,
+    external: button.closest('.chat-bubble') === null, loaded: button.dataset.action === 'open-holerite-gallery'
+      ? button.textContent.trim() === 'Holerite' : button.querySelector('img')?.naturalWidth > 0,
   }; }),
   notice: root.querySelector('.chat-choice-card > p')?.textContent || '',
   attachment: root.querySelector('.chat-attachments')?.textContent || '',

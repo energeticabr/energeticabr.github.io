@@ -22,12 +22,12 @@ function harness(t,options={}) {
  const controller=createAppController({store,view,auth,client:{sendText:async payload=>{calls.push(payload);return {status:'processed',messages:[]};}},native:{importSharedItems:async()=>[]},pendingProvisionAttachmentsDataFactory:async()=>({loadUpcomingPayments:async()=>[]}),pendingSupplierPaymentsReportViewFactory:async({data,onClose})=>{const panel={data,opens:0,destroys:0,open(){this.opens++;},close(){onClose?.();},destroy(){this.destroys++;}};panels.push(panel);return panel;},pendingSupplierPaymentsReportDataFactory:async()=>({loadSnapshot:async()=>({rows:[],count:0})}),...options,auth});
  t.after(()=>controller.stop());return {controller,view,store,auth,panels,calls};
 }
-test('last right mascot follows contractor control and dispatches its local report',t=>{
+test('supplier payments follows contractor control and precedes Holerite on the right',t=>{
  const dom=new JSDOM('<main id="app"></main>');dom.window.HTMLCanvasElement.prototype.getContext=()=>null;
  const view=createChatView(dom.window.document.querySelector('#app'));t.after(()=>{view.destroy();dom.window.close();});
  let opened=0;view.on(action,()=>opened++);view.render(home);
  const mascot=dom.window.document.querySelector(`[data-action="${action}"]`);assert.ok(mascot);
- assert.equal(mascot.previousElementSibling.dataset.action,'open-contractor-control-report');assert.equal(mascot.nextElementSibling,null);
+ assert.equal(mascot.previousElementSibling.dataset.action,'open-contractor-control-report');assert.equal(mascot.nextElementSibling.dataset.action,'open-holerite-gallery');
  assert.equal(mascot.closest('.chat-bubble'),null);assert.match(mascot.querySelector('img').src,/pending-supplier-payments\.png$/);
  mascot.querySelector('img').click();assert.equal(opened,1);
  view.render({...home,activeText:{id:'busy'}});const busy=dom.window.document.querySelector(`[data-action="${action}"]`);assert.equal(busy.disabled,true);busy.click();assert.equal(opened,1);
