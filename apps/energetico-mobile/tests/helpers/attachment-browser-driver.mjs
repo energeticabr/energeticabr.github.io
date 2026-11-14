@@ -8,7 +8,9 @@ import { setTimeout as delay } from 'node:timers/promises';
 // chooser events, with no access to the user's browser or applications.
 export async function withAttachmentBrowser(browser, { width = 390, height = 844 } = {}, run) {
   const temporaryRoot = resolve(tmpdir());
-  const profile = await mkdtemp(join(temporaryRoot, 'energetico-attachment-'));
+  const runDirectory = await mkdtemp(join(temporaryRoot, 'energetico-attachment-'));
+  // Keep the Chrome app ID on Windows stable while isolating each test run.
+  const profile = join(runDirectory, 'energetico-attachment');
   const requests = new Map(), events = [];
   let child, socket, sequence = 0, sessionId, onLoaded;
   try {
@@ -127,9 +129,9 @@ export async function withAttachmentBrowser(browser, { width = 390, height = 844
     await commandCleanup();
   }
   async function commandCleanup() {
-    if (dirname(resolve(profile)) !== temporaryRoot || !basename(profile).startsWith('energetico-attachment-')) {
+    if (dirname(resolve(runDirectory)) !== temporaryRoot || !basename(runDirectory).startsWith('energetico-attachment-')) {
       throw new Error('Perfil de teste fora da pasta temporária.');
     }
-    await rm(profile, { recursive: true, force: true, maxRetries: 5, retryDelay: 250 });
+    await rm(runDirectory, { recursive: true, force: true, maxRetries: 5, retryDelay: 250 });
   }
 }
