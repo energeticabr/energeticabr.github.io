@@ -157,6 +157,8 @@
 .swile-gallery-order strong:nth-child(2), .swile-credit-line-heading strong:nth-child(2) { white-space: nowrap; text-align: end; }
 .swile-gallery-order span { color: #525c6d; font-size: .86rem; }
 .swile-credit-details { margin-top: .75rem; }
+.swile-documents { margin: .8rem 0; }
+.swile-documents h4 { margin: 0 0 .4rem; }
 .swile-credit-lines { margin: .65rem 0 0; padding: 0; list-style: none; }
 .swile-credit-lines > li { padding: .65rem 0; border-top: 1px solid #e7eaf0; overflow-wrap: anywhere; }
 .swile-credit-line-heading { display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: .5rem; }

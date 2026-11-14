@@ -4,7 +4,7 @@ from pathlib import Path
 
 from unittest.mock import patch
 
-from swile_recharges import Service, SwileError, handle_portal
+from swile_recharges import Service, SwileError, document_url, download_document, handle_portal
 
 
 class Gateway:
@@ -207,12 +207,56 @@ class ServiceTests(unittest.TestCase):
         request.assert_called_once_with('order/group/PARTIAL')
         self.assertEqual({
             'orderCode': 'PARTIAL', 'status': 'APPROVED_PARTIALLY', 'creditCents': 22505, 'creditDate': '2026-12-01',
+            'documents': [],
             'items': [
                 {'name': 'Pessoa A', 'amountCents': 12505, 'status': 'APPROVED', 'creditDate': '2026-12-01'},
                 {'name': 'Pessoa B', 'amountCents': 10000, 'status': None, 'orderStatus': 'APPROVED_PARTIALLY',
                  'creditDate': '2026-12-02'},
             ],
         }, result['swile'])
+
+    def test_document_download_only_accepts_verified_pdf_sources(self):
+        municipal = 'https://nfe.prefeitura.sp.gov.br/contribuinte/notaprint.aspx?inscricao=1&nf=2&verificacao=X'
+        expected = municipal.replace('notaprint.aspx', 'notaprintpdf.aspx')
+        self.assertEqual(expected, document_url('invoice', municipal))
+        for bad in (municipal.replace('https:', 'http:'), municipal + '&nf=4', municipal + '#ref',
+                    municipal.replace('nfe.prefeitura.sp.gov.br', 'nfe.prefeitura.sp.gov.br.example.test'),
+                    municipal.replace('/contribuinte/notaprint.aspx', '/redirect')):
+            self.assertIsNone(document_url('invoice', bad))
+        with patch('swile_recharges.build_opener') as opener:
+            response = opener.return_value.open.return_value.__enter__.return_value
+            response.headers.get_content_type.return_value = 'application/pdf'
+            response.read.return_value = b'%PDF-verified'
+            self.assertEqual(b'%PDF-verified', download_document('invoice', municipal))
+            request = opener.return_value.open.call_args.args[0]
+            self.assertEqual(expected, request.full_url)
+            self.assertIsNone(request.get_header('Authorization'))
+            response.read.return_value = b'<html>PDF unavailable</html>'
+            with self.assertRaises(SwileError):
+                download_document('invoice', municipal)
+
+    def test_documents_follow_their_provider_order_and_appear_when_issued(self):
+        boleto = 'https://dash-rh.swile.com.br/boleto/ORDER-A'
+        nota = 'https://nfe.prefeitura.sp.gov.br/contribuinte/notaprint.aspx?inscricao=1&nf=2&verificacao=X'
+        group = {'code': 'GROUP', 'statusCode': 'WAITING_PAYMENT', 'orderList': [
+            {'code': 'A', 'statusCode': 'CREATED', 'totalValue': 20, 'slipLink': boleto},
+            {'code': 'B', 'statusCode': 'CREATED', 'totalValue': 30},
+        ]}
+        with patch.object(self.gateway, 'request', return_value=group):
+            before = self.service.corporate_order_details('GROUP', pending_only=True)
+            self.assertEqual([{'orderCode': 'A', 'kind': 'boleto'}], before['documents'])
+            group['orderList'][1]['invoiceLink'] = nota
+            group['orderList'][1]['slipLink'] = 'https://dash-rh.swile.com.br@external.test/boleto/test'
+            after = self.service.corporate_order_details('GROUP', pending_only=False)
+            self.assertEqual([{'orderCode': 'A', 'kind': 'boleto'}, {'orderCode': 'B', 'kind': 'invoice'}], after['documents'])
+            self.assertNotIn('https://', str(after['documents']))
+            with self.assertRaises(SwileError):
+                self.service.corporate_document('GROUP', 'B', 'boleto')
+            with patch('swile_recharges.download_document', return_value=b'%PDF-verified') as download:
+                result = self.service.corporate_document('GROUP', 'B', 'invoice')
+                download.assert_called_once_with('invoice', nota)
+                self.assertEqual('Nota fiscal Swile B.pdf', result['fileName'])
+                self.assertEqual('JVBERi12ZXJpZmllZA==', result['base64'])
 
     def test_pending_gallery_cannot_open_a_completed_order_by_code(self):
         with patch.object(self.gateway, 'request', return_value={

@@ -64,6 +64,7 @@ def restart():
 def main():
     parser = argparse.ArgumentParser()
     parser.add_argument('--expected-bridge', required=True)
+    parser.add_argument('--expected-module', required=True)
     parser.add_argument('--apply', action='store_true')
     args = parser.parse_args()
     module = (SOURCE / 'swile_recharges.py').read_bytes()
@@ -77,9 +78,16 @@ def main():
             if hashlib.sha256(before).hexdigest() != args.expected_bridge:
                 raise RuntimeError(f'Bridge changed at {bridge}.')
             originals[bridge] = (before, bridge.stat())
-            updates[bridge] = patch_bridge(before)
+            patched = patch_bridge(before)
+            if patched != before:
+                updates[bridge] = patched
             target = root / 'swile_recharges.py'
             originals[target] = (target.read_bytes(), target.stat()) if target.exists() else None
+            current = originals[target]
+            if args.expected_module != 'absent' and (not current or hashlib.sha256(current[0]).hexdigest() != args.expected_module):
+                raise RuntimeError(f'Swile module changed at {target}.')
+            if args.expected_module == 'absent' and current:
+                raise RuntimeError(f'Swile module already exists at {target}.')
             updates[target] = module
         if not args.apply:
             print('Swile deployment check passed.')

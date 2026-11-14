@@ -12,7 +12,7 @@ import sqlite3
 from threading import Lock
 import time
 from urllib.error import HTTPError, URLError
-from urllib.parse import quote, urlencode
+from urllib.parse import parse_qs, quote, urlencode, urlsplit, urlunsplit
 from urllib.request import HTTPRedirectHandler, Request, build_opener
 from uuid import uuid4
 
@@ -30,6 +30,8 @@ ORIGINS = {
 SP = timezone(timedelta(hours=-3))
 CLOSED_ORDER_STATUSES = frozenset({'DRAFT', 'APPROVED', 'CANCELED', 'CREATION_ERROR'})
 MIXED_CREDIT_STATUSES = frozenset({'PROCESSING', 'APPROVED_PARTIALLY', 'PROCESSED_ERROR', 'PROCESSING_CANCEL'})
+DOCUMENT_FIELDS = {'boleto': ('slipLink', 'Boleto'), 'invoice': ('invoiceLink', 'Nota fiscal')}
+MAX_DOCUMENT_BYTES = 8 * 1024 * 1024
 
 
 class SwileError(Exception):
@@ -121,6 +123,49 @@ def date_field(value):
         return date.fromisoformat(value)
     except ValueError:
         raise SwileError('Informe uma data válida para o pedido.') from None
+
+
+def valid_order_code(code):
+    return isinstance(code, str) and re.fullmatch(r'[A-Za-z0-9_-]{1,100}', code) is not None
+
+
+def document_url(kind, value):
+    if not isinstance(value, str) or not 0 < len(value) <= 2048 or re.search(r'[\s\\\x00-\x1f\x7f]', value):
+        return None
+    try:
+        link = urlsplit(value)
+    except ValueError:
+        return None
+    if link.scheme != 'https' or link.fragment:
+        return None
+    if kind == 'boleto':
+        if (link.netloc == 'dash-rh.swile.com.br' and not link.query
+                and re.fullmatch(r'/boleto/[A-Za-z0-9_-]+', link.path)):
+            return value
+    elif (kind == 'invoice' and link.netloc == 'nfe.prefeitura.sp.gov.br'
+          and link.path.lower() in ('/contribuinte/notaprint.aspx', '/contribuinte/notaprintpdf.aspx')):
+        query = parse_qs(link.query, keep_blank_values=True)
+        if set(query) == {'inscricao', 'nf', 'verificacao'} and all(len(values) == 1 and values[0] for values in query.values()):
+            # The official invoice page embeds this PDF with the same verification parameters.
+            return urlunsplit(link._replace(path='/contribuinte/notaprintpdf.aspx'))
+    return None
+
+
+def download_document(kind, link):
+    url = document_url(kind, link)
+    if not url:
+        raise SwileError('Documento indisponível para este pedido.', 404)
+    try:
+        with build_opener(NoRedirect()).open(Request(url, headers={'Accept': 'application/pdf'}), timeout=12) as response:
+            if response.headers.get_content_type() == 'application/pdf':
+                data = response.read(MAX_DOCUMENT_BYTES + 1)
+                if len(data) <= MAX_DOCUMENT_BYTES and data.startswith(b'%PDF-'):
+                    return data
+    except HTTPError as error:
+        error.close()
+    except (URLError, OSError, ValueError):
+        pass
+    raise SwileError('Não foi possível baixar o PDF na origem. Tente novamente.', 502)
 
 
 def scheduled_date(value):
@@ -417,18 +462,41 @@ class Service:
             result.sort(key=lambda entry: entry[0], reverse=True)
         return [row for _, row in result]
 
-    def corporate_order_details(self, code, *, pending_only):
-        if not isinstance(code, str) or not re.fullmatch(r'[A-Za-z0-9_-]{1,100}', code):
+    def corporate_group(self, code):
+        if not valid_order_code(code):
             raise SwileError('Código de pedido Swile inválido.')
         group = self.gateway.request('order/group/' + quote(code, safe=''))
         if group.get('code') != code or not isinstance(group.get('orderList'), list):
             raise SwileError('A Swile não confirmou os detalhes do pedido.', 502)
+        return group
+
+    def corporate_document(self, group_code, order_code, kind):
+        if not valid_order_code(order_code) or not isinstance(kind, str) or kind not in DOCUMENT_FIELDS:
+            raise SwileError('Documento do pedido Swile inválido.')
+        group = self.corporate_group(group_code)
+        field, label = DOCUMENT_FIELDS[kind]
+        orders = [order for order in group['orderList'] if order.get('code') == order_code]
+        if len(orders) != 1:
+            raise SwileError('Documento indisponível para este pedido.', 404)
+        data = download_document(kind, orders[0].get(field))
+        return {'fileName': f'{label} Swile {order_code}.pdf', 'base64': base64.b64encode(data).decode('ascii')}
+
+    def corporate_order_details(self, code, *, pending_only):
+        group = self.corporate_group(code)
         if pending_only and group['statusCode'] in CLOSED_ORDER_STATUSES:
             raise SwileError('Este pedido saiu dos pedidos em suspenso. Atualize a galeria.', 404)
         group_date = scheduled_date(group.get('creditDate'))
         result = {'orderCode': code, 'status': group['statusCode'], 'creditDate': group_date,
-                  'creditCents': 0, 'items': []}
+                  'creditCents': 0, 'items': [], 'documents': []}
+        seen_documents = set()
         for order in group['orderList']:
+            order_code = order.get('code')
+            if valid_order_code(order_code):
+                for kind, (field, _) in DOCUMENT_FIELDS.items():
+                    reference = order_code, kind
+                    if reference not in seen_documents and document_url(kind, order.get(field)):
+                        seen_documents.add(reference)
+                        result['documents'].append({'orderCode': order_code, 'kind': kind})
             result['creditCents'] += cents(order['totalValue'])
             employees = order.get('employeeList') or []
             status = order['statusCode']
@@ -491,7 +559,12 @@ def handle_portal(identity, body):
             value = service.confirm(owner, body.get('id'), body.get('invoiceText', ''))
         elif action == 'swile_orders':
             gallery = body.get('gallery')
-            if gallery in ('pending', 'history'):
+            if 'document' in body:
+                document = body['document']
+                if not isinstance(document, dict):
+                    raise SwileError('Documento do pedido Swile inválido.')
+                value = service.corporate_document(body.get('orderCode'), document.get('orderCode'), document.get('kind'))
+            elif gallery in ('pending', 'history'):
                 if 'orderCode' in body:
                     value = service.corporate_order_details(body['orderCode'], pending_only=gallery == 'pending')
                 else:

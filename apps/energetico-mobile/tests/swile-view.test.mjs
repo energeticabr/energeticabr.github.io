@@ -265,6 +265,47 @@ test('Swile disables unavailable dates in the calendar before they can be select
   assert.equal(document.activeElement, credit);
 });
 
+test('Swile gallery opens the PDF for the exact order and shows documents as they arrive', async t => {
+  const { window } = new JSDOM('<!doctype html><body></body>');
+  const { document } = window;
+  const calls = [];
+  const opened = [];
+  let invoiceIssued = false;
+  const view = openSwileView({ document, gallery: true,
+    previewDocument: (blob, name, resolveReturnFocus) => opened.push([blob, name, resolveReturnFocus()]),
+    request: async (operation, body) => {
+      calls.push([operation, body]);
+      if (body.document) return { fileName: 'Nota fiscal Swile A.pdf', base64: 'JVBERi0=' };
+      if (!body.orderCode) return [{ orderCode: 'GROUP', status: 'WAITING_PAYMENT', creditCents: 10000 }];
+      return { orderCode: 'GROUP', status: 'WAITING_PAYMENT', creditCents: 10000, items: [], documents: [
+        { orderCode: 'A', kind: 'boleto' },
+        ...(invoiceIssued ? [{ orderCode: 'A', kind: 'invoice' }] : []),
+      ] };
+    },
+  });
+  t.after(() => { view.close(); window.close(); });
+  const settle = () => new Promise(resolve => setImmediate(resolve));
+  const click = text => [...document.querySelectorAll('button')].find(b => b.textContent.includes(text)).click();
+  await settle();
+  click('GROUP');
+  await settle();
+  assert.match(document.body.textContent, /Aguardando nota fiscal/);
+  assert.ok([...document.querySelectorAll('button')].find(b => b.textContent === 'Boleto · A'));
+  invoiceIssued = true;
+  click('Voltar aos pedidos');
+  await settle();
+  click('Histórico');
+  await settle();
+  click('GROUP');
+  await settle();
+  click('Nota fiscal');
+  await settle();
+  assert.deepEqual(calls.at(-1), ['orders', { orderCode: 'GROUP', document: { orderCode: 'A', kind: 'invoice' } }]);
+  assert.equal(opened[0][1], 'Nota fiscal Swile A.pdf');
+  assert.equal(opened[0][2].textContent, 'Nota fiscal · A');
+  assert.equal(await opened[0][0].text(), '%PDF-');
+});
+
 test('Swile gallery is a separate screen and can open an older completed order', async t => {
   const { window } = new JSDOM('<!doctype html><body><main id="app"><button>Galeria Swile</button></main></body>');
   const { document } = window;
