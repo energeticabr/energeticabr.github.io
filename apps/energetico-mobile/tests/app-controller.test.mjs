@@ -3030,6 +3030,37 @@ test('o atalho Holerite abre a galeria e consulta as vias mesmo sem permissão d
   assert.deepEqual(await options.listSignedPayslips({ id: '17' }), signed);
 });
 
+test('as consultas simultâneas de holerites pedem o mesmo consentimento Microsoft uma única vez', async t => {
+  let tokenProvider, authorizeDone, authorized = false;
+  const consent = new Promise(resolve => { authorizeDone = resolve; });
+  const authorizationCalls = [];
+  const scopes = ['https://example.sharepoint.com/AllSites.Read'];
+  const h = makeHarness({
+    hrPayrollGalleryDataFactory: async options => {
+      tokenProvider = options.tokenProvider;
+      return { async loadPage() {}, async downloadPayslip() {} };
+    },
+    hrPayrollGalleryFactory: async () => ({ async open() {}, destroy() {} }),
+  });
+  h.auth.getToken = async () => {
+    if (!authorized) throw { code: 'AUTH_REQUIRED' };
+    return 'sharepoint-token';
+  };
+  h.auth.authorize = async (requested, options) => {
+    authorizationCalls.push([requested, options.resumeAction]);
+    await consent;
+    authorized = true;
+  };
+  t.after(() => h.controller.stop());
+  await h.controller.start();
+  await h.view.emit('open-holerite-gallery');
+  const replies = Promise.all([tokenProvider(scopes), tokenProvider([...scopes]), tokenProvider(scopes)]);
+  await new Promise(resolve => setImmediate(resolve));
+  authorizeDone();
+  assert.deepEqual(await replies, ['sharepoint-token', 'sharepoint-token', 'sharepoint-token']);
+  assert.deepEqual(authorizationCalls, [[scopes, 'action_hr_gallery_holerite']]);
+});
+
 test("retoma a galeria de folha escolhida após o retorno de consentimento Microsoft", async t => {
   for (const [action, gallery] of [
     ["action_hr_gallery_idfolha", "IDFOLHA"],

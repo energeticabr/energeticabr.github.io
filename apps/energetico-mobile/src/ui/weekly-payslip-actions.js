@@ -99,7 +99,7 @@ export function createWeeklyPayslipActions({ doc, host, pick, list, upload, open
     let picking = false;
     let previewing = false;
     let viewing = null;
-    let uploaded = false;
+    let uploadStarted = false;
     const setDisabled = () => {
       for (const node of choices.querySelectorAll('button')) node.disabled = picking || !!state.writing || previewing;
       send.disabled = !selected.length || picking || !!state.writing || previewing;
@@ -149,28 +149,35 @@ export function createWeeklyPayslipActions({ doc, host, pick, list, upload, open
     }
     const send = button('Salvar via assinada', 'confirm-signed-payslip', async () => {
       if (!selected.length || signal.aborted || picking || state.writing || previewing) return;
+      uploadStarted = true;
       state.writing = true;
       message.textContent = 'Enviando via assinada…';
       setDisabled();
       try {
         const files = await upload(row, selected, options);
         if (signal.aborted) return;
-        uploaded = true;
         selected = [];
         preview.replaceChildren();
         showExisting(files);
         message.textContent = 'Via assinada salva.';
       } catch (error) {
-        if (!signal.aborted) message.textContent = errorMessage(error, 'Não foi possível salvar a via assinada.');
+        if (!signal.aborted) {
+          message.textContent = errorMessage(error, 'Não foi possível salvar a via assinada.');
+          // A later file can fail after SharePoint has saved an earlier one.
+          try {
+            const confirmed = await list(row, options);
+            if (!signal.aborted) showExisting(confirmed);
+          } catch { /* Keep the upload error and the selected files for retry. */ }
+        }
       } finally { state.writing = false; if (!signal.aborted) setDisabled(); }
     });
     body.append(choices, preview, send, existing);
     setDisabled();
     try {
       const files = await list(row, options);
-      if (!signal.aborted && !state.writing && !uploaded) showExisting(files);
+      if (!signal.aborted && !uploadStarted) showExisting(files);
     } catch (error) {
-      if (!signal.aborted && !state.writing && !uploaded) message.textContent = errorMessage(error, 'Não foi possível consultar as vias assinadas.');
+      if (!signal.aborted && !uploadStarted) message.textContent = errorMessage(error, 'Não foi possível consultar as vias assinadas.');
     }
   }
 

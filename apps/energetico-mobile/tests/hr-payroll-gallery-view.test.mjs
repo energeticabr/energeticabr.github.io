@@ -198,6 +198,40 @@ test("as ações por fornecedor enviam a via assinada e editam somente o holerit
   assert.match(root.querySelector(".hr-gallery-cards").textContent, /Edgar da Silva/);
 });
 
+test('um envio parcial atualiza a situação do holerite e mantém o erro e a opção de tentar novamente', async t => {
+  const dom = new JSDOM('<main id="root"></main>');
+  const root = dom.window.document.querySelector('#root');
+  const rows = [{ id: '17', pdfFileName: 'Holerite-17.pdf' }];
+  let uploaded = [];
+  const file = name => new File(['scan'], name, { type: 'application/pdf' });
+  const gallery = createHrPayrollGallery({ root, gallery: 'HOLERITE', request: async kind => ({
+    ...response(kind, 1, rows), dateGroups: [{ date: '2026-11-13', rows }],
+  }), listSignedPayslips: async () => uploaded,
+  pickSignedPayslip: async () => [file('1.pdf'), file('2.pdf')],
+  openSignedPayslip: async () => {},
+  uploadSignedPayslips: async () => {
+    uploaded = [{ name: 'via-assinada.pdf' }];
+    throw new Error('O segundo arquivo não foi salvo.');
+  } });
+  const settle = () => new Promise(resolve => setImmediate(resolve));
+  t.after(() => { gallery.destroy(); dom.window.close(); });
+  await gallery.open();
+  const toggle = root.querySelector('[data-action=toggle-payslip-date]');
+  toggle.click();
+  await settle();
+  assert.match(toggle.textContent, /0\/1 \(0%\)/);
+  root.querySelector('[data-action=upload-payslip]').click();
+  root.querySelector('[data-payslip-source=files]').click();
+  await settle();
+  const submit = root.querySelector('[data-action=confirm-signed-payslip]');
+  submit.click();
+  await settle();
+  assert.match(toggle.textContent, /1\/1 \(100%\)/);
+  assert.ok(root.querySelector('.hr-gallery-card--payslip-signed'));
+  assert.match(root.querySelector('[data-payslip-dialog]').textContent, /O segundo arquivo não foi salvo/);
+  assert.equal(submit.disabled, false);
+});
+
 test('payroll mutation invalidates a pending background snapshot and refreshes saved values', async t => {
   const dom = new JSDOM('<main id="root"></main>');
   const document = dom.window.document;
