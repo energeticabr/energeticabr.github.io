@@ -1,0 +1,247 @@
+--- a/worker/launch_gallery.py
++++ b/worker/launch_gallery.py
+@@ -49,6 +49,14 @@
+ 
+ LAUNCHES = "LANCAMENTOS"
+ ORDERS = "NOTASPENDENTES"
++ORDER_AMOUNT_FIELDS = ("QUANTIDADE", "VALOR UNITÁRIO", "FRETE")
++ORDER_ADJUSTMENT_NOTE = re.compile(
++    r"^(?P<kind>DESCONTO|ACR[ÉE]SCIMO) GLOBAL DO LOTE:[ \t]*(?P<nl>\r?\n)"
++    r"VALOR GLOBAL: (?P<gross>R\$ [\d.,-]+)\.(?P=nl)"
++    r"(?P=kind) GLOBAL: (?P<adjustment>R\$ [\d.,-]+)\.(?P=nl)"
++    r"VALOR GLOBAL AP[ÓO]S (?P=kind): (?P<net>R\$ [\d.,-]+)\.(?=\r?$)",
++    re.MULTILINE,
++)
+ PROVISIONS = "PROVISÃO PGTOS"
+ MEASUREMENTS = "DESCRICAOMEDICOES"
+ TZ = ZoneInfo("America/Sao_Paulo")
+@@ -348,6 +356,9 @@
+         if operation == "update":
+             values = self._validate(LAUNCHES, payload.get("fields"), EDIT_FIELDS, current)
+             self._check_measurement_pair(values, current)
++            links = None
++            if values.keys() & {*ORDER_AMOUNT_FIELDS, "AGRUPAR"}:
++                links = (self._order_link(current), self._order_link(current | values))
+             if set(values) & {"DATA", "DATA PGTO PREVISTO", "DATA PGTO EFETUADO"}:
+                 combined = current | values
+                 committed = not _blank(combined.get("DATA"))
+@@ -375,6 +386,8 @@
+                 self._write_supplier_change(item_id, values, current)
+             else:
+                 self._write(item_id, values, current)
++            if links and any(links):
++                self._sync_edited_launch_orders(item_id, *links, current | values)
+         elif operation == "delete":
+             self._delete_launch(item_id, current)
+         elif operation == "signature":
+@@ -383,16 +396,110 @@
+             return self._attachment(operation, item_id, payload, current)
+         return {"ok": True, "id": item_id}
+ 
+-    def _delete_launch(self, item_id, current):
+-        # AGRUPAR can also contain workflow labels; only a canonical SharePoint ID
+-        # identifies an order. The ID comes from the version-checked stored row.
+-        if "AGRUPAR" not in current:
++    @staticmethod
++    def _order_link(fields):
++        # AGRUPAR also contains workflow labels; only a canonical ID names an order.
++        if "AGRUPAR" not in fields:
+             _fail("schema_missing", "Campo necessário indisponível: AGRUPAR (LANCAMENTOS).", 503)
+-        group = current["AGRUPAR"]
+-        order_id = None
++        group = fields["AGRUPAR"]
+         if (isinstance(group, str) and re.fullmatch(r"[1-9][0-9]{0,9}", group)
+                 and int(group) <= 2147483647):
+-            order_id = group
++            return group
++        return None
++
++    def _sync_edited_launch_orders(self, item_id, before, after, saved):
++        failed = []
++        for order_id in dict.fromkeys((before, after)):
++            if not order_id:
++                continue
++            try:
++                if order_id == after:
++                    self._sync_order_total(order_id, required_launch=item_id, saved_amount=self._amount(saved))
++                else:
++                    self._sync_order_total(order_id, absent_launch=item_id)
++            except (LaunchGalleryError, requests.RequestException):
++                failed.append(order_id)
++        if failed:
++            orders = ", ".join(f"#{order_id}" for order_id in failed)
++            _fail("order_total_incomplete",
++                  f"O lançamento foi salvo, mas o total em Notas Pendentes não foi confirmado para {orders}. "
++                  "Atualize a galeria e confira o pedido antes de repetir a edição.",
++                  502, launchUpdated=True, orderIds=failed)
++
++    @staticmethod
++    def _order_adjustment_note(note, net):
++        # Generated notes describe an adjustment already allocated in the saved
++        # line prices. Keep its amount, recompute only gross/net, and retain all
++        # user text outside the single recognized block.
++        if not isinstance(note, str):
++            return note
++        matches = list(ORDER_ADJUSTMENT_NOTE.finditer(note))
++        if len(matches) != 1:
++            return note
++        match = matches[0]
++        try:
++            adjustment = _number(match["adjustment"])
++            if match["kind"] != "DESCONTO":
++                adjustment = -abs(adjustment)
++            if (_number(match["gross"]) - adjustment != _number(match["net"])
++                    or not adjustment):
++                return note
++        except LaunchGalleryError:
++            return note
++
++        def display(amount):
++            rendered = f"{amount:,.2f}".replace(",", "_").replace(".", ",").replace("_", ".")
++            return f"R$ {rendered}"
++
++        result = note
++        for name, amount in (("net", net), ("gross", net + adjustment)):
++            start, end = match.span(name)
++            result = result[:start] + display(amount) + result[end:]
++        return result
++
++    def _sync_order_total(self, order_id, *, required_launch=None, saved_amount=None,
++                          absent_launch=None, require_rows=False):
++        fields = ("VALORTOTAL", "OBS")
++        total_field = self._field(ORDERS, "VALORTOTAL")
++        if total_field.get("TypeAsString") != "Text" or not self._writable(total_field):
++            _fail("schema_missing", "O campo VALORTOTAL de Notas Pendentes não está disponível para gravação.", 503)
++        for attempt in range(3):
++            try:
++                order = self._get(ORDERS, order_id, fields)
++                etag = self._etag(order)
++                rows = dict(self._order_links(order_id, amounts=True))
++                # The group query must already reflect the committed edit or
++                # removal. Allow only negligible precision loss in list numbers.
++                expected = rows.get(required_launch)
++                if ((required_launch is not None and (expected is None or
++                        (saved_amount is not None and abs(expected - saved_amount) > Decimal("0.000000001"))))
++                        or absent_launch in rows or (require_rows and not rows)):
++                    continue
++                total = sum(rows.values(), Decimal(0)).quantize(Decimal("0.01"), rounding=ROUND_HALF_UP)
++                values = {"VALORTOTAL": format(total, ".2f").replace(".", ",")}
++                note = self._order_adjustment_note(order.get("OBS"), total)
++                if note != order.get("OBS"):
++                    values["OBS"] = note
++                # Even an unchanged sum uses the version check: a concurrent
++                # edit holding this older ETag must recalculate before writing.
++                self.sharepoint._request("POST", self._item_endpoint(ORDERS, order_id),
++                    json=self._body(ORDERS, values),
++                    headers={"IF-MATCH": etag, "X-HTTP-Method": "MERGE",
++                             "Content-Type": "application/json;odata=nometadata"})
++                confirmed = self._get(ORDERS, order_id, fields)
++                if (not _blank(confirmed.get("VALORTOTAL"))
++                        and _number(confirmed["VALORTOTAL"]) == total
++                        and ("OBS" not in values or confirmed.get("OBS") == values["OBS"])):
++                    return
++            except requests.RequestException as exc:
++                status = getattr(getattr(exc, "response", None), "status_code", None)
++                if attempt == 2 or (status not in (409, 412, 429, 500, 502, 503, 504)
++                                    and not isinstance(exc, (requests.Timeout, requests.ConnectionError))):
++                    raise
++        _fail("version_unavailable", "O SharePoint não confirmou o total recalculado.", 409)
++
++    def _delete_launch(self, item_id, current):
++        order_id = self._order_link(current)
+         order_etag = None
+         if order_id:
+             self._metadata(ORDERS)  # A missing list is not a missing order.
+@@ -408,53 +515,72 @@
+             return
+ 
+         try:
+-            if self._has_active_order_link(order_id):
+-                return
+-            try:
+-                self.sharepoint._request("POST", self._item_endpoint(ORDERS, order_id), headers={
+-                    "IF-MATCH": order_etag, "X-HTTP-Method": "DELETE"})
+-            except requests.HTTPError as exc:
+-                # Another deletion may already have removed the same order.
+-                if exc.response is None or exc.response.status_code != 404:
+-                    raise
++            has_links = next(self._order_links(order_id), None) is not None
++            if not has_links:
++                try:
++                    self.sharepoint._request("POST", self._item_endpoint(ORDERS, order_id), headers={
++                        "IF-MATCH": order_etag, "X-HTTP-Method": "DELETE"})
++                except requests.HTTPError as exc:
++                    # Another deletion may already have removed the same order.
++                    if exc.response is None or exc.response.status_code != 404:
++                        raise
+         except (LaunchGalleryError, requests.RequestException):
+             _fail("order_cleanup_incomplete",
+                   f"O lançamento foi excluído, mas não foi possível confirmar a exclusão do pedido #{order_id}. "
+                   "Atualize a galeria.",
+                   409, launchDeleted=True, orderId=order_id)
+-
+-    def _has_active_order_link(self, order_id):
++        if has_links:
++            try:
++                self._sync_order_total(order_id, absent_launch=item_id, require_rows=True)
++            except (LaunchGalleryError, requests.RequestException):
++                _fail("order_total_incomplete",
++                      f"O lançamento foi excluído, mas não foi possível confirmar o total do pedido #{order_id}. "
++                      "Atualize a galeria e confira o pedido.",
++                      502, launchDeleted=True, orderIds=[order_id])
++
++    def _order_links(self, order_id, *, amounts=False):
+         endpoint = f"{self._list_endpoint(LAUNCHES)}/items"
+         expected = urlsplit(f"{self.sharepoint.site_url.rstrip('/')}/_api/{endpoint}")
++        projection = self._projection(LAUNCHES, ORDER_AMOUNT_FIELDS) if amounts else {}
++        if amounts and not set(ORDER_AMOUNT_FIELDS) <= projection.keys():
++            _fail("schema_missing", "Colunas necessárias para calcular o total do pedido estão ausentes.", 503)
+         query = f"AGRUPAR eq '{order_id}'"
+-        params = {"$select": "Id,AGRUPAR", "$filter": query, "$top": "1"}
++        select = ",".join(("Id", "AGRUPAR", *(projection[label] for label in ORDER_AMOUNT_FIELDS if amounts)))
++        params = {"$select": select, "$filter": query, "$top": "200" if amounts else "1"}
++        if amounts:
++            params["$orderby"] = "Id asc"
+         seen = set()
+-        for _ in range(25):
++        seen_ids = set()
++        for _ in range(100 if amounts else 25):
+             payload = self.sharepoint._request("GET", endpoint, params=params)
+             verbose = payload.get("d", {}) if isinstance(payload, dict) else None
+             if (not isinstance(verbose, dict)
+                     or ("value" in payload and "results" in verbose and payload["value"] != verbose["results"])):
+                 _fail("invalid_response", "Resposta SharePoint inválida ao verificar os vínculos.", 502)
+             for row in self._values(payload):
+-                if (not isinstance(row, dict) or row.get("AGRUPAR") != order_id
+-                        or not re.fullmatch(r"[1-9][0-9]{0,9}", str(row.get("Id")))):
++                row_id = str(row.get("Id")) if isinstance(row, dict) else ""
++                if (not re.fullmatch(r"[1-9][0-9]{0,9}", row_id)
++                        or row.get("AGRUPAR") != order_id or row_id in seen_ids
++                        or (amounts and not set(projection.values()) <= row.keys())):
+                     _fail("invalid_response", "Resposta SharePoint inválida ao verificar os vínculos.", 502)
+-                return True
+-            # An empty page only proves absence if it terminates this exact query.
++                seen_ids.add(row_id)
++                amount = self._amount({label: row[column] for label, column in projection.items()}) if amounts else None
++                yield row_id, amount
+             links = [link for link in (payload.get("@odata.nextLink"), payload.get("odata.nextLink"),
+                                        verbose.get("__next")) if link is not None]
+             if not links:
+-                return False
++                return
+             endpoint = links[0]
+             if any(link != endpoint for link in links[1:]):
+                 break
+             if isinstance(endpoint, str) and endpoint not in seen:
+                 try:
+                     cursor = urlsplit(endpoint)
+-                    filters = parse_qs(cursor.query, keep_blank_values=True).get("$filter")
++                    options = parse_qs(cursor.query, keep_blank_values=True)
+                     if (cursor.scheme == expected.scheme and cursor.netloc == expected.netloc
+                             and unquote(cursor.path) == unquote(expected.path)
+-                            and not cursor.fragment and filters == [query]):
++                            and not cursor.fragment and options.get("$filter") == [query]
++                            and (not amounts or options.get("$select") == [select])):
+                         seen.add(endpoint)
+                         params = None
+                         continue
