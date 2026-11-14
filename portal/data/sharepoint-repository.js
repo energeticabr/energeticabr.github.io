@@ -476,10 +476,6 @@ function attachmentName(value) {
   return encodeURIComponent(name.replaceAll("'", "''")).replace(/[!()*]/g, character => `%${character.charCodeAt(0).toString(16).toUpperCase()}`);
 }
 
-function attachmentValues(payload) {
-  return payload?.value || payload?.d?.results || [];
-}
-
 function attachmentMetadata(file) {
   return {
     name: file?.FileName || file?.name || "Arquivo sem nome",
@@ -2182,10 +2178,15 @@ export function createSharePointRepository(graph, siteConfig, { attachmentTransp
     return Object.freeze({ verified: true, memberships: Object.freeze(memberships.sort()) });
   }
 
-  async function listAttachments(siteKey, listId, itemId) {
+  async function listAttachments(siteKey, listId, itemId, { signal, requireCollection = false } = {}) {
+    throwIfAborted(signal);
     await authorize("view", siteKey, listId, { itemId: String(itemId || "") });
-    const payload = await requestAttachment(siteKey, listId, itemId, "?$select=FileName,ServerRelativeUrl,Length,TimeLastModified,Author/Title&$expand=Author", { method: "GET" });
-    return attachmentValues(payload).map(attachmentMetadata);
+    throwIfAborted(signal);
+    const payload = await requestAttachment(siteKey, listId, itemId, "?$select=FileName,ServerRelativeUrl,Length,TimeLastModified,Author/Title&$expand=Author", { method: "GET", ...(signal ? { signal } : {}) });
+    throwIfAborted(signal);
+    const files = payload?.value ?? payload?.d?.results;
+    if (requireCollection && !Array.isArray(files)) throw new Error('O SharePoint não retornou uma lista de anexos válida.');
+    return (files || []).map(attachmentMetadata);
   }
 
   async function uploadAttachment(siteKey, listId, itemId, file, fileName = file?.name, options = {}) {

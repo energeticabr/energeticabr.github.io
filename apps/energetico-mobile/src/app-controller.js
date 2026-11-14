@@ -6785,20 +6785,32 @@ export function createAppController({
   }
 
   function ordersGalleryTokenProvider(assertSession, resumeAction = ORDERS_GALLERY_ID) {
+    const inFlight = new Map();
     return async scopes => {
       assertSession();
+      const key = JSON.stringify(scopes ? [...scopes].sort() : null);
+      if (inFlight.has(key)) return inFlight.get(key);
+      const request = Promise.resolve().then(async () => {
+        assertSession();
+        try {
+          const token = await auth.getToken(scopes);
+          assertSession();
+          return token;
+        } catch (error) {
+          assertSession();
+          if (error?.code !== "AUTH_REQUIRED" || typeof auth.authorize !== "function") throw error;
+          await auth.authorize(scopes, { resumeAction });
+          assertSession();
+          const token = await auth.getToken(scopes);
+          assertSession();
+          return token;
+        }
+      });
+      inFlight.set(key, request);
       try {
-        const token = await auth.getToken(scopes);
-        assertSession();
-        return token;
-      } catch (error) {
-        assertSession();
-        if (error?.code !== "AUTH_REQUIRED" || typeof auth.authorize !== "function") throw error;
-        await auth.authorize(scopes, { resumeAction });
-        assertSession();
-        const token = await auth.getToken(scopes);
-        assertSession();
-        return token;
+        return await request;
+      } finally {
+        inFlight.delete(key);
       }
     };
   }
@@ -7329,6 +7341,8 @@ export function createAppController({
           panel = await hrPayrollGalleryFactory({
             gallery,
             ...(isPayslip ? {
+              listSignedPayslips: typeof data.listSignedPayslips === 'function'
+                ? (row, options) => data.listSignedPayslips(row, options) : undefined,
               ...(typeof data.uploadSignedPayslips === 'function' && typeof data.listSignedPayslips === 'function'
                 && typeof data.downloadSignedPayslip === 'function' ? {
                 pickSignedPayslip: async (source, { signal } = {}) => {
@@ -7341,7 +7355,6 @@ export function createAppController({
                   assertSession();
                   return signal?.aborted || hrPayrollGallery !== panel ? [] : files;
                 },
-                listSignedPayslips: (row, options) => data.listSignedPayslips(row, options),
                 uploadSignedPayslips: (row, files, options) => data.uploadSignedPayslips(row, files, options),
                 openSignedPayslip: async (row, file, { signal, onClose, returnLabel, editorAttachment } = {}) => {
                   assertSession();
@@ -12397,6 +12410,7 @@ export function createAppController({
     bind('open-contractor-control-report', openContractorControlReport);
     bind('open-general-summary-report', openGeneralSummaryReport);
     bind('open-pending-supplier-payments-report', openPendingSupplierPaymentsReport);
+    bind('open-holerite-gallery', () => openHrPayrollGallery('HOLERITE'));
     bind("dismiss-pending-provisions", () => dismissPendingProvisions({ userDismissal: true }));
     bind("dismiss-pending-notes", dismissPendingNotes);
     bind("dismiss-pending-construction-diaries", dismissPendingConstructionDiaries);

@@ -77,7 +77,11 @@ export function createHrPayrollGallery({ document: documentOption,
   let rowPreview;
   const expandedPayslipDates = new Set();
   const signedPayslips = isPayslip && typeof listSignedPayslips === 'function'
-    ? createGalleryAttachmentCounts({ loadAttachments: listSignedPayslips })
+    ? createGalleryAttachmentCounts({ loadAttachments: async (row, options) => {
+      const files = await listSignedPayslips(row, options);
+      if (!Array.isArray(files)) throw new Error('Não foi possível consultar as vias assinadas.');
+      return files;
+    } })
     : null;
 
   function element(tag, className, text) {
@@ -274,7 +278,7 @@ export function createHrPayrollGallery({ document: documentOption,
     return details;
   }
 
-  function drawRows(rows, target = cards) {
+  function drawRows(rows, target = cards, submission) {
     for (const row of rows) {
       const card = element("article", "hr-gallery-card");
       card.setAttribute("role", "listitem");
@@ -301,20 +305,16 @@ export function createHrPayrollGallery({ document: documentOption,
         pdf.title = pdf.getAttribute('aria-label');
         pdf.innerHTML = PDF_ATTACHMENT_ICON;
         pdf.disabled = !row.pdfFileName || typeof openPayslip !== 'function';
-        let checkedByAction = false;
-        const updateSigned = signed => {
-          card.classList.toggle('hr-gallery-card--payslip-signed', signed);
-          pdf.setAttribute('aria-label', signed ? `${pdf.title}. Via assinada disponível.` : pdf.title);
+        const badge = element('span', 'hr-payslip-upload-status');
+        cardHeader.append(badge);
+        const paintStatus = state => {
+          card.classList.toggle('hr-gallery-card--payslip-signed', state === 'signed');
+          card.classList.toggle('hr-gallery-card--payslip-missing', state === 'missing');
+          pdf.setAttribute('aria-label', state === 'signed' ? `${pdf.title}. Via assinada disponível.` : pdf.title);
+          badge.textContent = { signed: 'Enviado', missing: 'Falta enviar', checking: 'Verificando…', unknown: 'Não verificado' }[state];
         };
-        const markSigned = signed => {
-          checkedByAction = true;
-          updateSigned(signed);
-        };
-        if (row.pdfFileName && signedPayslips) {
-          void signedPayslips.load(row).then(files => {
-            if (card.isConnected && !checkedByAction && files) updateSigned(files.length > 0);
-          }).catch(() => { /* The PDF and upload actions can retry the lookup. */ });
-        }
+        submission.observe(row, paintStatus);
+        const markSigned = signed => submission.update(row, signed ? 'signed' : 'missing');
         pdf.addEventListener('click', async () => {
           if (!opened || destroyed || busy || rowPreview) return;
           const controller = rowPreview = new AbortController();
@@ -356,17 +356,43 @@ export function createHrPayrollGallery({ document: documentOption,
       toggle.dataset.action = "toggle-payslip-date";
       const expanded = expandedPayslipDates.has(date);
       toggle.setAttribute("aria-expanded", String(expanded));
-      toggle.append(element("span", "hr-payslip-date-count", `${rows.length} ${rows.length === 1 ? "holerite" : "holerites"}`));
+      const count = element('span', 'hr-payslip-date-count');
+      toggle.append(count);
+      const progress = new Map(rows.map(row => [row, { state: signedPayslips && row.pdfFileName ? 'checking' : 'unknown' }]));
+      function showProgress() {
+        const counts = { signed: 0, missing: 0, checking: 0, unknown: 0 };
+        for (const { state } of progress.values()) counts[state]++;
+        const percent = Math.round(100 * counts.signed / (rows.length || 1));
+        count.textContent = counts.checking ? `Verificando ${rows.length}…`
+          : `${counts.signed}/${rows.length} (${percent}%) enviados · ${counts.missing} ${counts.missing === 1 ? 'pendente' : 'pendentes'}`
+            + (counts.unknown ? ` · ${counts.unknown} ${counts.unknown === 1 ? 'não verificado' : 'não verificados'}` : '');
+      }
+      const submission = {
+        observe(row, paint) {
+          const entry = progress.get(row);
+          entry.paint = paint;
+          paint(entry.state);
+        },
+        update(row, state) {
+          if (!group.isConnected || !opened) return;
+          const entry = progress.get(row);
+          if (entry.state === state) return;
+          entry.state = state;
+          entry.paint?.(state);
+          showProgress();
+        },
+      };
+      showProgress();
       const list = element("div", "hr-gallery-cards hr-payslip-date-items");
       list.setAttribute("role", "list");
       list.hidden = !expanded;
-      if (expanded) drawRows(rows, list);
+      if (expanded) drawRows(rows, list, submission);
       toggle.addEventListener("click", () => {
         list.hidden = !list.hidden;
         toggle.setAttribute("aria-expanded", String(!list.hidden));
         if (list.hidden) expandedPayslipDates.delete(date);
         else expandedPayslipDates.add(date);
-        if (!list.hidden && !list.childElementCount) drawRows(rows, list);
+        if (!list.hidden && !list.childElementCount) drawRows(rows, list, submission);
       });
       header.append(toggle);
       if (date && typeof openDatePayslips === "function") {
@@ -392,6 +418,15 @@ export function createHrPayrollGallery({ document: documentOption,
       }
       group.append(header, list);
       cards.append(group);
+      for (const [row, entry] of progress) {
+        if (entry.state !== 'checking') continue;
+        const updateFromLookup = state => {
+          if (entry.state === 'checking') submission.update(row, state);
+        };
+        void signedPayslips.load(row, { force: true }).then(files => {
+          if (files) updateFromLookup(files.length ? 'signed' : 'missing');
+        }, () => updateFromLookup('unknown'));
+      }
     }
   }
 
@@ -423,6 +458,7 @@ export function createHrPayrollGallery({ document: documentOption,
     loadingScreen.sync(!quiet);
     if (!quiet) {
       status.textContent = '';
+      signedPayslips?.reset();
       cards.replaceChildren();
     }
     updateControls();
@@ -442,18 +478,19 @@ export function createHrPayrollGallery({ document: documentOption,
     try {
       let result;
       const options = { filters, refresh, onProgress: task?.report, ...(isPayslip ? { groupByDate: true } : {}) };
-      try { result = await request(gallery, targetPage, 25, cursor, options); }
+      const pageSize = isPayslip ? 5 : 25;
+      try { result = await request(gallery, targetPage, pageSize, cursor, options); }
       catch (error) {
         const invalidCursor = error?.status === 410 || error?.statusCode === 410
           || /cursor|skip.?token/i.test(`${error?.code || ''} ${error?.message || ''}`);
         if (!current() || !refresh || targetPage <= 1 || !invalidCursor) throw error;
         targetPage = 1; cursor = null;
-        result = await request(gallery, 1, 25, null, options);
+        result = await request(gallery, 1, pageSize, null, options);
       }
       if (!current()) return;
       if (refresh && targetPage > 1 && result?.page > 1 && Array.isArray(result.rows) && !result.rows.length) {
         targetPage = 1; cursor = null;
-        result = await request(gallery, 1, 25, null, options);
+        result = await request(gallery, 1, pageSize, null, options);
       }
       if (!current()) return;
       if (result?.gallery !== gallery || !Array.isArray(result.rows) || (isPayslip && !Array.isArray(result.dateGroups))) {

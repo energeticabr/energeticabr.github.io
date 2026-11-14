@@ -1307,6 +1307,22 @@ test("os anexos usam somente a URL REST do item SharePoint informado", async () 
   assert.equal(transportCalls[3].options.responseType, "arrayBuffer");
 });
 
+test('consulta de vias assinadas cancela a requisição e exige uma lista de anexos válida', async () => {
+  const controller = new AbortController();
+  const calls = [];
+  const repository = createSharePointRepository(createFakeGraph([]), { company: sites.company }, {
+    attachmentTransport: { async request(_site, _path, options) { calls.push(options.signal); return {}; } },
+  });
+  const query = () => repository.listAttachments('company', '12345678-1234-1234-1234-123456789abc', '42', {
+    signal: controller.signal, requireCollection: true,
+  });
+  await assert.rejects(query(), /lista de anexos/i);
+  assert.deepEqual(calls, [controller.signal]);
+  controller.abort();
+  await assert.rejects(query(), { name: 'AbortError' });
+  assert.equal(calls.length, 1);
+});
+
 test("a autoridade bloqueia create update delete e approve antes da requisicao de escrita", async () => {
   const graph = createFakeGraph([]);
   const repository = createSharePointRepository(graph, { company: sites.company });

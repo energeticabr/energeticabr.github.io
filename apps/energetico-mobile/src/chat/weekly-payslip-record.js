@@ -92,7 +92,7 @@ export function createWeeklyPayslipRecord({ repository, siteKey, resolveList, as
 
   async function listFiles(target, signal) {
     check(signal);
-    const files = await repository.listAttachments(siteKey, target.list.id, target.id);
+    const files = await repository.listAttachments(siteKey, target.list.id, target.id, { signal, requireCollection: true });
     check(signal);
     if (!Array.isArray(files)) throw new Error('Não foi possível consultar os anexos do holerite.');
     return files.map(file => ({ ...file, name: file.name ?? file.fileName }));

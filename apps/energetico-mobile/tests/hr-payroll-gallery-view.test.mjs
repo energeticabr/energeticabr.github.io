@@ -86,6 +86,43 @@ test('o total de cada holerite expande apenas suas próprias rubricas', async t 
   assert.equal(edgar.open, false);
 });
 
+test('datas recolhidas mostram os envios confirmados; erro de consulta não é uma pendência', async t => {
+  const dom = new JSDOM('<main id="root"></main>');
+  const root = dom.window.document.querySelector('#root');
+  const [confirmed, missing, unavailable, older] = ['17', '18', '19', '20'].map(id => ({ id, pdfFileName: `Holerite-${id}.pdf` }));
+  const calls = [];
+  let confirm;
+  const pending = new Promise(resolve => { confirm = resolve; });
+  const gallery = createHrPayrollGallery({ root, gallery: 'HOLERITE', request: async kind => ({
+    ...response(kind, 1, [confirmed, missing, unavailable, older]), dateGroups: [
+      { date: '2026-11-13', rows: [confirmed, missing, unavailable] }, { date: '2026-11-06', rows: [older] },
+    ],
+  }), listSignedPayslips: async row => {
+    calls.push(row.id);
+    if (row === confirmed) return pending;
+    if (row === unavailable) throw new Error('SharePoint indisponível');
+    return [];
+  } });
+  t.after(() => { gallery.destroy(); dom.window.close(); });
+  await gallery.open();
+  const [latest, previous] = root.querySelectorAll('[data-action=toggle-payslip-date]');
+  assert.match(latest.textContent, /13\/11\/2026.*Verificando/);
+  assert.match(previous.textContent, /06\/11\/2026/);
+  assert.equal(root.querySelectorAll('.hr-gallery-card').length, 0);
+  confirm([{ name: 'via-assinada.jpg' }, { name: 'via-assinada.pdf' }]);
+  await new Promise(resolve => setImmediate(resolve));
+  assert.match(latest.textContent, /1\/3 \(33%\).*1 pendente.*1 não verificado/);
+  assert.match(previous.textContent, /0\/1 \(0%\).*1 pendente/);
+  latest.click();
+  const [green, red, neutral] = root.querySelectorAll('.hr-gallery-card');
+  assert.ok(green.classList.contains('hr-gallery-card--payslip-signed'));
+  assert.ok(red.classList.contains('hr-gallery-card--payslip-missing'));
+  assert.match(neutral.textContent, /Não verificado/);
+  assert.ok(!neutral.classList.contains('hr-gallery-card--payslip-missing'));
+  assert.equal(previous.getAttribute('aria-expanded'), 'false');
+  assert.deepEqual(calls, ['17', '18', '19', '20'], 'expandir não repete a consulta');
+});
+
 test("as ações por fornecedor enviam a via assinada e editam somente o holerite escolhido", async t => {
   const dom = new JSDOM("<main id='root'></main>");
   const root = dom.window.document.querySelector("#root");
@@ -116,11 +153,13 @@ test("as ações por fornecedor enviam a via assinada e editam somente o holerit
   t.after(() => { gallery.destroy(); dom.window.close(); });
   const settle = () => new Promise(resolve => setImmediate(resolve));
   await gallery.open();
-  root.querySelector('[data-action="toggle-payslip-date"]').click();
+  const dateToggle = root.querySelector('[data-action="toggle-payslip-date"]');
+  dateToggle.click();
   const cards = root.querySelectorAll(".hr-gallery-card");
   await settle();
   assert.equal(cards[0].classList.contains('hr-gallery-card--payslip-signed'), true);
   assert.equal(cards[1].classList.contains('hr-gallery-card--payslip-signed'), false);
+  assert.match(dateToggle.textContent, /1\/2 \(50%\).*1 pendente/);
   assert.equal(root.querySelectorAll('[data-action="upload-payslip"]').length, 2);
   assert.equal(root.querySelectorAll('[data-action="edit-payslip"]').length, 2);
   cards[1].querySelector('[data-action="upload-payslip"]').click();
@@ -134,6 +173,8 @@ test("as ações por fornecedor enviam a via assinada e editam somente o holerit
   await settle();
   assert.deepEqual(calls.at(-1), ["upload", "18", [file]]);
   assert.equal(cards[1].classList.contains('hr-gallery-card--payslip-signed'), true);
+  assert.equal(cards[1].classList.contains('hr-gallery-card--payslip-missing'), false);
+  assert.match(dateToggle.textContent, /2\/2 \(100%\).*0 pendentes/);
   root.querySelector('[data-action="open-signed-payslip"]').click();
   await settle();
   assert.deepEqual(calls.at(-1), ["open", "18", "via-assinada.pdf"]);
@@ -155,6 +196,40 @@ test("as ações por fornecedor enviam a via assinada e editam somente o holerit
   assert.deepEqual(calls.at(-1), ["save", "17", { supplier: "Edgar da Silva", branch: "Obra A", date: "2026-11-13",
     lines: [{ rubrica: 'salary', quantity: '3', unitValue: '41,125', formaPgto: 'PIX' }], uploads: [file], removed: ['recibo.pdf'], restored: [] }]);
   assert.match(root.querySelector(".hr-gallery-cards").textContent, /Edgar da Silva/);
+});
+
+test('um envio parcial atualiza a situação do holerite e mantém o erro e a opção de tentar novamente', async t => {
+  const dom = new JSDOM('<main id="root"></main>');
+  const root = dom.window.document.querySelector('#root');
+  const rows = [{ id: '17', pdfFileName: 'Holerite-17.pdf' }];
+  let uploaded = [];
+  const file = name => new File(['scan'], name, { type: 'application/pdf' });
+  const gallery = createHrPayrollGallery({ root, gallery: 'HOLERITE', request: async kind => ({
+    ...response(kind, 1, rows), dateGroups: [{ date: '2026-11-13', rows }],
+  }), listSignedPayslips: async () => uploaded,
+  pickSignedPayslip: async () => [file('1.pdf'), file('2.pdf')],
+  openSignedPayslip: async () => {},
+  uploadSignedPayslips: async () => {
+    uploaded = [{ name: 'via-assinada.pdf' }];
+    throw new Error('O segundo arquivo não foi salvo.');
+  } });
+  const settle = () => new Promise(resolve => setImmediate(resolve));
+  t.after(() => { gallery.destroy(); dom.window.close(); });
+  await gallery.open();
+  const toggle = root.querySelector('[data-action=toggle-payslip-date]');
+  toggle.click();
+  await settle();
+  assert.match(toggle.textContent, /0\/1 \(0%\)/);
+  root.querySelector('[data-action=upload-payslip]').click();
+  root.querySelector('[data-payslip-source=files]').click();
+  await settle();
+  const submit = root.querySelector('[data-action=confirm-signed-payslip]');
+  submit.click();
+  await settle();
+  assert.match(toggle.textContent, /1\/1 \(100%\)/);
+  assert.ok(root.querySelector('.hr-gallery-card--payslip-signed'));
+  assert.match(root.querySelector('[data-payslip-dialog]').textContent, /O segundo arquivo não foi salvo/);
+  assert.equal(submit.disabled, false);
 });
 
 test('payroll mutation invalidates a pending background snapshot and refreshes saved values', async t => {

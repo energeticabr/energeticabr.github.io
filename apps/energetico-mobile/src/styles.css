@@ -1547,6 +1547,8 @@ button.chat-rhid-attendance-card__cluster:focus-visible { outline: 3px solid #15
 .chat-main-contractor-control-shortcut { grid-column:3; grid-row:1; align-self:start; margin-top:292px; width:44px; height:44px; padding:0; border:0; border-radius:10px; background:#cf757a; overflow:hidden; cursor:pointer; }
 .chat-main-contractor-control-shortcut:focus-visible { outline:3px solid var(--accent); outline-offset:3px; }
 .chat-main-pending-supplier-payments-shortcut:focus-visible { outline:3px solid var(--accent); outline-offset:3px; }
+.chat-main-holerite-shortcut { grid-column:3; grid-row:1; align-self:start; width:44px; min-height:44px; margin-top:404px; border-radius:10px; color:#fff; background:#0b5266; font:800 10px/1.2 system-ui,sans-serif; cursor:pointer; }
+.chat-main-holerite-shortcut:focus-visible { outline:3px solid var(--accent); outline-offset:3px; }
 .chat-message--commercial-top { row-gap:12px; }
 .chat-main-commercial-shortcuts { grid-column:1 / -1; grid-row:1; display:flex; gap:12px; align-items:center; min-width:0; }
 .chat-message.chat-message--commercial-top > .chat-bubble,

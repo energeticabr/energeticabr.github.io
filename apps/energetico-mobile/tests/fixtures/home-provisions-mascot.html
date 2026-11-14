@@ -31,6 +31,8 @@ import { createDocumentControlReportView } from '/src/ui/document-control-report
 import '/src/ui/task-association-report.css';
 import { createTaskAssociationReportView } from '/src/ui/task-association-report-view.js';
 import '/src/ui/gallery-record-actions.css';
+import '/src/ui/hr-payroll-gallery.css';
+import { createHrPayrollGallery } from '/src/ui/hr-payroll-gallery-view.js';
 import '/src/ui/dda-report.css';
 import { createSicoobTransactionReportView } from '/src/ui/sicoob-transaction-report-view.js';
 import { decorateReportNavigation } from '/src/ui/report-navigation.js';
@@ -42,6 +44,17 @@ const state={sessionStatus:'authenticated',account:{name:'Bernardo'},draft:'',pe
   {id:'action_contractor_reports',reply:'action_contractor_reports',label:'📑 RELATÓRIOS'}
 ]}]};
 const view=createChatView(document.querySelector('#app'));
+view.on('open-holerite-gallery', () => {
+  const rows = ['Ana', 'Bruno'].map((FORNECEDOR, index) => ({
+    id: String(index + 1), FORNECEDOR, pdfFileName: `Holerite-${index}.pdf`,
+  }));
+  const gallery = createHrPayrollGallery({ gallery: 'HOLERITE',
+    request: async () => ({ gallery: 'HOLERITE', page: 1, rows, dateGroups: [{ date: '2026-11-13', rows }] }),
+    listSignedPayslips: async row => row.id === '1' ? [{ name: 'via-assinada.pdf' }] : [],
+    onClose: () => gallery.destroy(),
+  });
+  return gallery.open();
+});
 view.on('open-sicoob-transaction-report', () => {
   let linkedOrder = '11';
   const source = createSicoobTransactionReportView({

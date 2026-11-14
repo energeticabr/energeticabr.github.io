@@ -72,7 +72,32 @@ assert.deepEqual(shortcuts.map(s=>s.action),['open-pending-provisions','open-sic
       assert.ok(reportLayout.external&&reportLayout.y>=reportLayout.mascotBottom+4&&reportLayout.right<=reportLayout.cardLeft-4,JSON.stringify(reportLayout));
       assert.ok(reportLayout.width>=44&&reportLayout.height>=44&&reportLayout.x>=0&&reportLayout.image);
       assert.equal(reportLayout.fill,'rgb(0, 13, 75)');
-      const mascotFit=await evaluate(`(()=>{return [...document.querySelectorAll('.chat-message--external-provisions > button,.chat-message--external-cargos > button,.chat-main-commercial-shortcuts > button')].map(b=>{const i=b.querySelector('img'),r=b.getBoundingClientRect(),q=i.getBoundingClientRect(),s=getComputedStyle(i);return {action:b.dataset.action,source:i.naturalWidth,fit:s.objectFit,blend:s.mixBlendMode,transform:s.transform,inside:q.left>=r.left&&q.right<=r.right&&q.top>=r.top&&q.bottom<=r.bottom,fill:getComputedStyle(b).backgroundColor};});})()`);
+      const holerite = await evaluate(`(() => {
+        const button = document.querySelector('[data-action=open-holerite-gallery]');
+        const r = button.getBoundingClientRect(), neighbor = button.previousElementSibling.getBoundingClientRect();
+        return { x: r.x, y: r.y, right: r.right, width: r.width, height: r.height, neighborX: neighbor.x, neighborBottom: neighbor.bottom };
+      })()`);
+      assert.ok(holerite.width >= 44 && holerite.height >= 44 && holerite.right <= width);
+      assert.ok(Math.abs(holerite.x - holerite.neighborX) < 1 && holerite.y >= holerite.neighborBottom + 8);
+      await clickAt({ x: holerite.x + holerite.width / 2, y: holerite.y + holerite.height / 2 });
+      const payslip = await evaluate(`(async () => {
+        for (let i = 0; i < 40 && !document.querySelector('.hr-payslip-date-count')?.textContent.includes('50%'); i++)
+          await new Promise(resolve => setTimeout(resolve, 25));
+        const toggle = document.querySelector('[data-action=toggle-payslip-date]');
+        const count = toggle.querySelector('.hr-payslip-date-count').textContent;
+        const collapsed = toggle.getAttribute('aria-expanded');
+        toggle.click();
+        const cards = [...document.querySelectorAll('.hr-gallery-card--payslip')];
+        const colors = cards.map(card => getComputedStyle(card).backgroundColor);
+        const content = toggle.closest('.hr-gallery-content');
+        const overflow = content.scrollWidth > content.clientWidth || cards.some(card => card.scrollWidth > card.clientWidth + 1);
+        const overlay = toggle.closest('.hr-gallery-overlay');
+        overlay.querySelector('.screen-navigation button').click();
+        return { count, collapsed, colors, overflow, closed: !overlay.isConnected };
+      })()`, true);
+      assert.deepEqual(payslip, { count: '1/2 (50%) enviados · 1 pendente', collapsed: 'false',
+        colors: ['rgb(214, 239, 220)', 'rgb(251, 225, 226)'], overflow: false, closed: true });
+      const mascotFit=await evaluate(`(()=>{return [...document.querySelectorAll('.chat-message--external-provisions > button,.chat-message--external-cargos > button,.chat-main-commercial-shortcuts > button')].filter(b=>b.querySelector('img')).map(b=>{const i=b.querySelector('img'),r=b.getBoundingClientRect(),q=i.getBoundingClientRect(),s=getComputedStyle(i);return {action:b.dataset.action,source:i.naturalWidth,fit:s.objectFit,blend:s.mixBlendMode,transform:s.transform,inside:q.left>=r.left&&q.right<=r.right&&q.top>=r.top&&q.bottom<=r.bottom,fill:getComputedStyle(b).backgroundColor};});})()`);
       assert.equal(mascotFit.length,23);
       const commercialTop=await evaluate(`(()=>{const nav=document.querySelector('nav[aria-label="Relatórios comerciais"]'),bubble=document.querySelector('[data-reply-id=group_pending]').closest('.chat-bubble'),blue=document.querySelector('.chat-main-provisions-shortcut');const rect=n=>{const r=n.getBoundingClientRect();return {x:r.x,y:r.y,right:r.right,bottom:r.bottom,width:r.width,height:r.height};};return nav?{row:rect(nav),bubble:rect(bubble),blue:rect(blue),external:!bubble.contains(nav),buttons:[...nav.querySelectorAll('button')].map(b=>({action:b.dataset.action,...rect(b)}))}:null;})()`);
       assert.ok(commercialTop,'os quatro mascotes comerciais devem ter uma faixa acima do menu');
