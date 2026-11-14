@@ -1,5 +1,6 @@
 const states = {
   pending: { text:'ATUALIZAÇÃO EM ANDAMENTO', path:'M20 7v5h-5M4 17v-5h5M6 7a7 7 0 0 1 11-2l3 4M18 17a7 7 0 0 1-11 2l-3-4' },
+  waiting: { text:'AGUARDANDO NOVA TENTATIVA', path:'M22 12a10 10 0 1 1-20 0 10 10 0 0 1 20 0ZM12 7v5l3 2' },
   success: { text:'SUCESSO EM ATUALIZAR', path:'M22 12a10 10 0 1 1-20 0 10 10 0 0 1 20 0ZM8 12l3 3 5-6' },
   error: { text:'ERRO AO ATUALIZAR', path:'M12 3 2 21h20L12 3Zm0 7v4m0 3h.01' },
 };
@@ -46,16 +47,17 @@ export function createFinancialReportRefreshStatus(doc, { fiscal = false } = {})
       let next = state.refreshStatus;
       if (!('refreshStatus' in state)) {
         if (state.sourceRunning ?? state.running) next = 'pending';
-        else if (sourceStatus === 'pending') {
+        else if (sourceStatus === 'pending' || sourceStatus === 'waiting') {
           if (state.latest?.status === 'succeeded') next = 'success';
           else if (['failed', 'partial'].includes(state.latest?.status)) next = 'error';
         }
       }
+      if (fiscal && next === 'pending' && state.latest?.status === 'waiting') next = 'waiting';
       if (!next || next === sourceStatus) return;
-      const wasPending = sourceStatus === 'pending';
+      const wasPending = sourceStatus === 'pending' || sourceStatus === 'waiting';
       sourceStatus = next;
       awaitingRead = next === 'success' && wasPending;
-      if (!awaitingRead) set(next);
+      set(awaitingRead ? 'pending' : next);
     },
     finishRead(ok) {
       if (!awaitingRead) return;

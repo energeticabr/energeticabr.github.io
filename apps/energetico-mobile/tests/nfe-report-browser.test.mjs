@@ -139,6 +139,11 @@ test('NFE opens the horizontal fiscal table from the blue mascot in portrait and
           pickerResults:{ supplierId:true, branchId:true, accountId:true, productId:true, stageId:true },
         });
         assert.deepEqual(JSON.parse(dom.window.document.documentElement.dataset.meiRows), ['3']);
+        const motion = JSON.parse(dom.window.document.documentElement.dataset.refreshAnimation);
+        assert.equal(motion.active, motion.motionEnabled ? 'loading-spinner-turn' : 'none');
+        assert.equal(motion.waiting, 'none');
+        assert.equal(motion.waitingVisible, true);
+        assert.equal(motion.complete, 'none');
         if (capture) {
           mkdirSync(capture, {recursive:true});
           writeFileSync(join(capture, `nfe-${width}.png`), result.screenshot);

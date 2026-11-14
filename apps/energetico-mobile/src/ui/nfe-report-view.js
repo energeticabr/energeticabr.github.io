@@ -1,5 +1,6 @@
 import { invoiceXmlFacts, NFE_REPORT_DOCUMENT_TYPES, NFE_SUPPLIER_REGIMES, projectNfeRows, rankNfeOrderOptions } from '../chat/nfe-report-model.js';
 import { nfeOrderId } from '../chat/nfe-order-link.js';
+import { SEFAZ_SOURCES, sefazSourceSummary } from '../chat/sefaz-sync-receipt.js';
 import { createReportLinkPicker } from './dda-provision-picker.js';
 import { createNfeProposalView } from './nfe-proposal-view.js';
 import { addReportCloseControl } from './report-close-control.js';
@@ -166,7 +167,7 @@ export function createNfeReportView({ document:doc = globalThis.document, data, 
 
   let rows = null, page = 1, request, pageRequest, pageFacts, pdfRequest, returnFocus, app, oldInert, oldOverflow;
   let fiscalRunning = Boolean(syncMonitor?.running), fiscalStarting = false, loading = false, fiscalReloadPending = false;
-  let sourceRunning = Boolean(syncMonitor?.sourceRunning ?? fiscalRunning);
+  let sourceRunning = Boolean(syncMonitor?.sourceRunning ?? fiscalRunning), fiscalStartWarning = '';
   const fiscalFacts = new Map();
   const orderLink = data.orderLink;
   const proposal = data.proposal && createNfeProposalView({
@@ -511,6 +512,7 @@ export function createNfeReportView({ document:doc = globalThis.document, data, 
   }
 
   function showFiscalNotice(text) {
+    if (syncFeedback.textContent === text && syncFeedback.hidden === !text) return;
     syncFeedback.textContent = text;
     syncFeedback.hidden = !text;
   }
@@ -524,11 +526,15 @@ export function createNfeReportView({ document:doc = globalThis.document, data, 
       return load(true);
     }
     fiscalStarting = true;
+    fiscalStartWarning = '';
     syncRefreshButton();
     showFiscalNotice('');
     try {
       const result = await syncMonitor.start();
-      if (result?.startWarning && !root.hidden) showFiscalNotice(result.startWarning);
+      if (result?.startWarning && !root.hidden) {
+        fiscalStartWarning = result.startWarning;
+        showFiscalNotice([syncFeedback.textContent, fiscalStartWarning].filter(Boolean).join('\n'));
+      }
     } catch (error) {
       refreshStatus.set('error');
       if (!root.hidden) showFiscalNotice(error?.message || 'Não foi possível iniciar a consulta à SEFAZ. Tente novamente.');
@@ -621,6 +627,16 @@ export function createNfeReportView({ document:doc = globalThis.document, data, 
     if (completed) fiscalReloadPending = true;
     lastUpdate.update(state.lastSuccessfulAt);
     refreshStatus.observe(state);
+    if (active || completed) {
+      const waiting = state.latest?.status === 'waiting'
+        ? Object.entries(SEFAZ_SOURCES).flatMap(([key, label]) => {
+          const source = state.latest.sources?.[key];
+          return source?.status === 'waiting' ? [`${label}: ${sefazSourceSummary(source)}`] : [];
+        })
+        : [];
+      if (state.latest?.status === 'waiting') waiting.push('A consulta será retomada automaticamente. Você pode sair desta tela.');
+      showFiscalNotice([...waiting, fiscalStartWarning].filter(Boolean).join('\n'));
+    }
     if (!refreshStatus.element.hidden) metrics.hidden = false;
     syncRefreshButton();
     if (completed) reloadFiscalRows();

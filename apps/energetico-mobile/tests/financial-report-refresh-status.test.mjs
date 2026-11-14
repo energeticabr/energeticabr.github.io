@@ -47,7 +47,7 @@ for (const [key, create, grid, terminal] of [
   assert.equal(status()?.textContent, 'ATUALIZAÇÃO EM ANDAMENTO');
   await flush();
   current.emit(key === 'fiscal' ? 'waiting' : 'queued', true);
-  assert.equal(status()?.textContent, 'ATUALIZAÇÃO EM ANDAMENTO');
+  assert.equal(status()?.textContent, key === 'fiscal' ? 'AGUARDANDO NOVA TENTATIVA' : 'ATUALIZAÇÃO EM ANDAMENTO');
   let finish;
   read = () => new Promise(resolve => { finish = resolve; });
   current.emit('succeeded', false);
