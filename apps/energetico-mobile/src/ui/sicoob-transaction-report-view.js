@@ -5,7 +5,9 @@ import {
 } from '../chat/financial-gallery-models.js';
 import { registrationDateKey, registrationNumber, registrationRawField, REGISTRATION_GALLERY_MODELS } from '../chat/registration-gallery-data.js';
 import { confirmedFinancialTimestamp } from '../chat/financial-update-time.js';
-import { rankSicoobOrderOptions, SICOOB_ORDER_FIELD, SICOOB_UNLINKED_REVIEW_FIELD, sicoobOrderId } from '../chat/sicoob-order-link.js';
+import {
+  rankSicoobOrderOptions, sameSicoobOrderIds, sicoobLinkedOrderIds, sicoobOrderId, SICOOB_UNLINKED_REVIEW_FIELD,
+} from '../chat/sicoob-order-link.js';
 import { createReportLinkComparison, createReportLinkPicker } from './dda-provision-picker.js';
 import { addReportCloseControl } from './report-close-control.js';
 import { bindReportLandscape } from './report-landscape.js';
@@ -17,14 +19,17 @@ import { createSicoobBalanceMetric } from './sicoob-balance-metric.js';
 const LOGO = new URL('../../../../assets/logo-energetica-oficial.png', import.meta.url).href;
 const TITLE = 'Relatório de transações Sicoob';
 const ORDER_PICKER_COPY = {
-  title: 'A QUAL PEDIDO DESEJA VINCULAR?',
-  dialogLabel: 'Vincular pagamento Sicoob a pedido',
+  title: 'QUAIS PEDIDOS DESEJA VINCULAR?',
+  dialogLabel: 'Vincular pagamento Sicoob a pedidos',
   sourceLabel: 'Pagamento Sicoob',
-  targetLabel: 'Pedido',
+  targetLabel: 'Pedidos vinculados',
   searchLabel: 'Buscar pedido por fornecedor, filial ou ID',
   listLabel: 'Pedidos disponíveis',
   loading: 'Carregando pedidos…',
-  options: count => count ? `${count} pedido(s). Escolha um para vincular.` : 'Nenhum pedido corresponde à busca.',
+  options(count, selected) {
+    const available = count ? `${count} ${count === 1 ? 'pedido encontrado' : 'pedidos encontrados'}.` : 'Nenhum pedido corresponde à busca.';
+    return `${available} ${selected} ${selected === 1 ? 'pedido selecionado' : 'pedidos selecionados'}.`;
+  },
   empty: 'Nenhum pedido disponível.',
   loadError: 'Não foi possível carregar os pedidos. Feche e tente novamente.',
   recommendation: '★ RECOMENDADO',
@@ -36,6 +41,7 @@ const currency = new Intl.NumberFormat('pt-BR', { style: 'currency', currency: '
 const text = value => String(value ?? '').trim();
 const dateLabel = value => value ? value.split('-').reverse().join('/') : '—';
 const pendingRecipient = row => row.recipient === FINANCIAL_MOVEMENT_PENDING_RECIPIENT;
+const linkedSupplierNames = suppliers => [...new Set(suppliers.filter(Boolean))].join(' / ');
 const displayedRecipient = row => {
   if (!row.orderSupplier) return row.recipient;
   if (pendingRecipient(row)) return row.orderSupplier;
@@ -68,7 +74,7 @@ function projectTransactions(snapshot) {
       ...transaction,
       recipient: financialMovementRecipient(fields),
       matchAmount: fields.VALOR,
-      orderId: sicoobOrderId(fields[SICOOB_ORDER_FIELD]),
+      orderIds: sicoobLinkedOrderIds(fields),
       linkReviewed: fields[SICOOB_UNLINKED_REVIEW_FIELD] === true,
       receiptName,
       searchText: normalizeSearchText([...Object.values(transaction), dateLabel(transaction.date)].join(' ')),
@@ -168,33 +174,44 @@ export function createSicoobTransactionReportView({ document: doc = globalThis.d
     document: doc,
     host: root,
     copy: ORDER_PICKER_COPY,
-    loadOptions: async (row, signal) => rankSicoobOrderOptions(
-      await orderLink.loadOptions({ signal }), { supplier: row.supplier, amount: row.matchAmount, date: row.date }),
+    async loadOptions(row, signal) {
+      const options = rankSicoobOrderOptions(
+        await orderLink.loadOptions({ signal }), { supplier: row.supplier, amount: row.matchAmount, date: row.date });
+      const availableIds = new Set(options.map(option => option.id));
+      const unavailable = row.orderIds.filter(id => !availableIds.has(id))
+        .map(id => ({ id, supplier: 'Pedido indisponível', unavailable: true }));
+      return [...unavailable, ...options];
+    },
     renderOptionLabel(node, order, amount) {
       node.className = 'report-link-option-text';
+      if (order.unavailable) {
+        node.textContent = `#${order.id} · Pedido indisponível`;
+        return;
+      }
       node.append(`#${order.id} · `,
         createReportLinkComparison(doc, order.date ? dateLabel(order.date) : 'Sem data do pedido', order.dateMatch, 'Data do pedido', 'a transação'),
         ` · ${order.details ?? order.supplier} · `,
         createReportLinkComparison(doc, amount, order.amountMatch, 'Valor do pedido', 'a transação'));
     },
-    async saveLink(row, orderId, signal) {
-      const receipt = await orderLink.save({ movementId: row.id, orderId, expectedOrderId: row.orderId, signal });
-      if (sicoobOrderId(receipt?.movementId) !== row.id || sicoobOrderId(receipt?.orderId) !== orderId) {
-        throw new Error('O vínculo salvo não corresponde à seleção.');
+    async saveLink(row, orderIds, signal) {
+      const receipt = await orderLink.save({ movementId: row.id, orderIds, expectedOrderIds: row.orderIds, signal });
+      if (sicoobOrderId(receipt?.movementId) !== row.id || !sameSicoobOrderIds(receipt?.orderIds, orderIds)) {
+        throw new Error('Os vínculos salvos não correspondem à seleção.');
       }
-      return { movementId: row.id, orderId, supplier: receipt.supplier };
+      return receipt;
     },
-    currentLink: row => row.orderId,
+    currentLink: row => row.orderIds,
     selectCurrent: true,
+    multiple: true,
     onClose: resumeRefresh,
     rowAmount: row => row.value,
     resolveReturnFocus: trigger => content.querySelector(
       `[data-sicoob-movement-link="${trigger?.dataset.sicoobMovementLink}"] .sicoob-transaction-link-pencil`) || panel,
-    onLinked({ movementId, orderId, supplier }) {
+    onLinked({ movementId, orderIds, suppliers }) {
       const transaction = rows?.find(row => row.id === movementId);
       if (!transaction) return;
-      transaction.orderId = orderId;
-      transaction.orderSupplier = supplier;
+      transaction.orderIds = orderIds;
+      transaction.orderSupplier = linkedSupplierNames(suppliers);
       publishLinkage(rows, true);
       if (!matchesSearch(transaction, normalizeSearchText(controls.search.value))) {
         render();
@@ -220,7 +237,7 @@ export function createSicoobTransactionReportView({ document: doc = globalThis.d
     }
   }
   function publishLinkage(transactions, changed = false) {
-    onLinkageChange?.(transactions.some(row => !row.orderId && !row.linkReviewed), { changed });
+    onLinkageChange?.(transactions.some(row => !row.orderIds.length && !row.linkReviewed), { changed });
   }
   function resumeRefresh() {
     if (reloadPending && !root.hidden && !receiptRequest && !picker?.isOpen && !reviewDialog) void load();
@@ -355,7 +372,7 @@ export function createSicoobTransactionReportView({ document: doc = globalThis.d
 
   function matchesSearch(row, query) {
     return !query || includesSearchText(normalizeSearchText([
-      row.searchText, displayedRecipient(row), row.orderId && `pedido id ${row.orderId}`,
+      row.searchText, displayedRecipient(row), ...row.orderIds.map(id => `pedido id ${id}`),
     ].join(' ')), query);
   }
 
@@ -369,11 +386,12 @@ export function createSicoobTransactionReportView({ document: doc = globalThis.d
   }
 
   function renderOrderLink(cell, transaction, interactive = true) {
-    const linked = transaction.orderId;
+    const linked = transaction.orderIds.length > 0;
     const validMovement = sicoobOrderId(transaction.id) === transaction.id;
     cell.parentElement.classList.toggle('sicoob-transaction-linked', Boolean(linked));
     const canReview = !linked && interactive && validMovement && typeof orderLink?.saveReview === 'function';
-    const label = linked ? `ID ${linked}` : transaction.linkReviewed ? 'SEM VINCULAÇÃO' : 'N/A';
+    const label = linked ? transaction.orderIds.map(id => `ID ${id}`).join(', ')
+      : transaction.linkReviewed ? 'SEM VINCULAÇÃO' : 'N/A';
     const value = make(canReview ? 'button' : 'span', linked ? 'sicoob-transaction-link-id' : 'ddr-link-cluster', label);
     if (!linked) value.dataset.linkState = transaction.linkReviewed ? 'regularized' : 'missing';
     if (canReview) {
@@ -384,8 +402,8 @@ export function createSicoobTransactionReportView({ document: doc = globalThis.d
     }
     cell.replaceChildren(value);
     if (!interactive || !picker || !validMovement) return;
-    const pencil = button(linked ? `Editar pedido vinculado ao pagamento ${transaction.id}`
-      : `Vincular pagamento ${transaction.id} a um pedido`, '');
+    const pencil = button(linked ? `Editar pedidos vinculados ao pagamento ${transaction.id}`
+      : `Vincular pagamento ${transaction.id} a pedidos`, '');
     pencil.className = 'sicoob-transaction-link-pencil';
     pencil.dataset.sicoobMovementLink = transaction.id;
     pencil.dataset.reportScreenOnly = '';
@@ -510,13 +528,13 @@ export function createSicoobTransactionReportView({ document: doc = globalThis.d
       const transactions = projectTransactions(snapshot);
       publishLinkage(transactions);
       let supplierNotice = '';
-      const linked = transactions.filter(row => row.orderId && (pendingRecipient(row) || row.type === 'Boleto'));
+      const linked = transactions.filter(row => row.orderIds.length && (pendingRecipient(row) || row.type === 'Boleto'));
       if (linked.length && orderLink) {
         let incomplete = false;
         try {
-          const result = await orderLink.loadSuppliers(linked.map(row => row.orderId), { signal: active.signal });
+          const result = await orderLink.loadSuppliers(linked.flatMap(row => row.orderIds), { signal: active.signal });
           incomplete = result.incomplete;
-          for (const row of linked) row.orderSupplier = result.suppliers.get(row.orderId);
+          for (const row of linked) row.orderSupplier = linkedSupplierNames(row.orderIds.map(id => result.suppliers.get(id)));
         } catch {
           incomplete = true;
         }

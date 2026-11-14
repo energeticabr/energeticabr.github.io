@@ -206,11 +206,19 @@ assert.deepEqual(shortcuts.map(s=>s.action),['open-pending-provisions','open-sic
       assert.deepEqual(pickerFit.starred, [true, true, true, false]);
       assert.equal(pickerFit.checked, '11');
       assert.equal(pickerFit.currentDisabled, true);
+      const selected = await evaluate(`(() => {
+        const dialog = document.querySelector('.dda-provision-dialog');
+        dialog.querySelector('input[value="14"]').click();
+        return {
+          ids: [...dialog.querySelectorAll('input[type="checkbox"]:checked')].map(input => input.value),
+          canSubmit: !dialog.querySelector('.dda-provision-save').disabled,
+        };
+      })()`);
+      assert.deepEqual(selected, { ids: ['14', '11'], canSubmit: true });
       if (width === 390 && !pwa && process.env.SICOOB_ORDER_LINK_SCREENSHOT) {
         const shot = await send('Page.captureScreenshot', { format: 'png' }, sessionId);
         writeFileSync(process.env.SICOOB_ORDER_LINK_SCREENSHOT, Buffer.from(shot.data, 'base64'));
       }
-      await evaluate(`document.querySelector('.dda-provision-dialog input[value="14"]').click()`);
       await clickAt(pickerFit.cancelHit);
       const sicoobCanceled = await evaluate(`(() => {
         const report = document.querySelector('.sicoob-transaction-overlay');

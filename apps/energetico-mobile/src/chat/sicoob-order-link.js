@@ -5,6 +5,7 @@ import { fiscalSupplierSimilarity } from './dda-provision-link.js';
 import { isImportedFinancialMovement, SICOOB_ORDER_FIELD } from './financial-gallery-models.js';
 
 export { SICOOB_ORDER_FIELD };
+export const SICOOB_ADDITIONAL_ORDERS_FIELD = 'SICOOB_PEDIDOS_ADICIONAIS';
 export const SICOOB_UNLINKED_REVIEW_FIELD = 'SICOOB_SEM_VINCULACAO_REGULAR';
 
 export function sicoobOrderId(value) {
@@ -64,8 +65,30 @@ const MOVEMENT_LIST = 'MOVIMENTACOESFINANCEIRAS';
 const fieldObject = value => value && typeof value === 'object' && !Array.isArray(value);
 const scalar = value => value == null || typeof value === 'string' || typeof value === 'number';
 const blank = value => value == null || (typeof value === 'string' && !value.trim());
-const versionedMovementFields = [SICOOB_ORDER_FIELD, 'ORIGEMMOVIMENTACAO'];
+const linkFields = [SICOOB_ORDER_FIELD, SICOOB_ADDITIONAL_ORDERS_FIELD];
+const versionedMovementFields = [...linkFields, 'ORIGEMMOVIMENTACAO'];
 const reviewFields = [...versionedMovementFields, SICOOB_UNLINKED_REVIEW_FIELD];
+const ORDER_LOOKUP_BATCH_SIZE = 6;
+
+function normalizeOrderIds(values) {
+  if (!Array.isArray(values)) return null;
+  const ids = values.map(sicoobOrderId);
+  return ids.every(Boolean) ? [...new Set(ids)] : null;
+}
+
+export function sicoobLinkedOrderIds(fields, { strict = false } = {}) {
+  const primary = fields?.[SICOOB_ORDER_FIELD];
+  const additional = fields?.[SICOOB_ADDITIONAL_ORDERS_FIELD];
+  const values = blank(primary) ? [] : [primary];
+  if (!blank(additional)) {
+    if (typeof additional === 'string') values.push(...additional.split(','));
+    else if (strict) return null;
+  }
+  return strict ? normalizeOrderIds(values) : [...new Set(values.map(sicoobOrderId).filter(Boolean))];
+}
+
+export const sameSicoobOrderIds = (left, right) =>
+  Array.isArray(left) && Array.isArray(right) && left.length === right.length && right.every(id => left.includes(id));
 
 function movementVersion(item, movementId) {
   const eTag = item?.eTag ?? item?.['@odata.etag'];
@@ -125,10 +148,9 @@ export function createSicoobOrderLink({ repository, orderRepository = repository
     let incomplete = false;
     if (!ids.length) return { suppliers, incomplete };
     const list = await resolve(orderRepository, ORDER_LIST, signal);
-    const batchSize = 6;
-    for (let start = 0; start < ids.length; start += batchSize) {
+    for (let start = 0; start < ids.length; start += ORDER_LOOKUP_BATCH_SIZE) {
       active(signal);
-      const batch = await Promise.allSettled(ids.slice(start, start + batchSize).map(async id => {
+      const batch = await Promise.allSettled(ids.slice(start, start + ORDER_LOOKUP_BATCH_SIZE).map(async id => {
         const order = await readOrder(list, id, signal);
         const supplier = orderSupplier(order);
         if (sicoobOrderId(order?.id) === id && supplier) suppliers.set(id, supplier);
@@ -151,7 +173,7 @@ export function createSicoobOrderLink({ repository, orderRepository = repository
       throw new Error('Consulta de transações incompleta.');
     }
     return items.some(({ fields }) => isImportedFinancialMovement(fields)
-      && !sicoobOrderId(fields[SICOOB_ORDER_FIELD]) && fields[SICOOB_UNLINKED_REVIEW_FIELD] !== true);
+      && sicoobLinkedOrderIds(fields).length === 0 && fields[SICOOB_UNLINKED_REVIEW_FIELD] !== true);
   }
 
   async function saveReview({ movementId: rawMovement, reviewed, signal }) {
@@ -162,7 +184,7 @@ export function createSicoobOrderLink({ repository, orderRepository = repository
       { signal, restrictedFields: reviewFields, includeVersion: true });
     active(signal);
     const eTag = movementVersion(current, movementId);
-    if (!blank(current.fields[SICOOB_ORDER_FIELD])) {
+    if (sicoobLinkedOrderIds(current.fields, { strict: true })?.length !== 0) {
       throw new Error('O vínculo da movimentação mudou. Atualize o relatório.');
     }
     const previous = current.fields[SICOOB_UNLINKED_REVIEW_FIELD];
@@ -173,16 +195,17 @@ export function createSicoobOrderLink({ repository, orderRepository = repository
       { eTag, signal, readbackFields: reviewFields });
     active(signal);
     if (sicoobOrderId(saved?.id) !== movementId || !isImportedFinancialMovement(saved?.fields) ||
-      !blank(saved.fields[SICOOB_ORDER_FIELD]) || saved.fields[SICOOB_UNLINKED_REVIEW_FIELD] !== reviewed) {
+      sicoobLinkedOrderIds(saved.fields, { strict: true })?.length !== 0 || saved.fields[SICOOB_UNLINKED_REVIEW_FIELD] !== reviewed) {
       throw new Error('A regularização não foi confirmada no SharePoint.');
     }
     return receipt;
   }
 
-  async function save({ movementId:rawMovement, orderId:rawOrder, expectedOrderId, signal }) {
-    const movementId = sicoobOrderId(rawMovement), orderId = sicoobOrderId(rawOrder);
-    const expected = sicoobOrderId(expectedOrderId);
-    if (!movementId || !orderId || (!expected && !blank(expectedOrderId))) {
+  async function save({ movementId:rawMovement, orderIds, expectedOrderIds = [], signal }) {
+    const movementId = sicoobOrderId(rawMovement);
+    const selected = normalizeOrderIds(orderIds);
+    const expected = normalizeOrderIds(expectedOrderIds);
+    if (!movementId || !selected?.length || !expected) {
       throw new RangeError('ID de movimentação ou pedido inválido.');
     }
 
@@ -190,28 +213,41 @@ export function createSicoobOrderLink({ repository, orderRepository = repository
       resolve(repository, MOVEMENT_LIST, signal), resolve(orderRepository, ORDER_LIST, signal),
     ]);
     active(signal);
-    const [target, current] = await Promise.all([
-      readOrder(orders, orderId, signal),
-      repository.getItem(siteKey, movements, movementId, undefined,
-        { signal, restrictedFields: versionedMovementFields, includeVersion:true }),
-    ]);
+    const current = await repository.getItem(siteKey, movements, movementId, undefined,
+      { signal, restrictedFields: versionedMovementFields, includeVersion:true });
     active(signal);
-    if (sicoobOrderId(target?.id) !== orderId) throw new Error('O pedido escolhido está indisponível.');
-    const receipt = { movementId, orderId, supplier: orderSupplier(target) };
     const eTag = movementVersion(current, movementId);
-    const rawExisting = current.fields[SICOOB_ORDER_FIELD];
-    const existing = sicoobOrderId(rawExisting);
-    if (!existing && !blank(rawExisting)) {
-      throw new Error('O vínculo registrado é inválido. Atualize o relatório.');
+    const existing = sicoobLinkedOrderIds(current.fields, { strict: true });
+    if (!existing) throw new Error('O vínculo registrado é inválido. Atualize o relatório.');
+    const unchanged = sameSicoobOrderIds(existing, selected);
+    if (!unchanged && !sameSicoobOrderIds(existing, expected)) {
+      throw new Error('O vínculo da movimentação mudou. Atualize o relatório.');
     }
-    if (existing === orderId) return receipt;
-    if (existing !== expected) throw new Error('O vínculo da movimentação mudou. Atualize o relatório.');
 
-    const saved = await repository.updateItem(siteKey, movements, movementId, { [SICOOB_ORDER_FIELD]:Number(orderId) },
-      { eTag, signal, readbackFields:[SICOOB_ORDER_FIELD] });
+    // Keep the first existing order in the numeric column while it is selected.
+    const next = [...existing.filter(id => selected.includes(id)), ...selected.filter(id => !existing.includes(id))];
+    const suppliers = [];
+    for (let start = 0; start < next.length; start += ORDER_LOOKUP_BATCH_SIZE) {
+      const batch = next.slice(start, start + ORDER_LOOKUP_BATCH_SIZE);
+      const targets = await Promise.all(batch.map(id => readOrder(orders, id, signal)));
+      active(signal);
+      if (targets.some((target, index) => sicoobOrderId(target?.id) !== batch[index])) {
+        throw new Error('Um dos pedidos escolhidos está indisponível.');
+      }
+      suppliers.push(...targets.map(orderSupplier));
+    }
+    const receipt = { movementId, orderIds: next, suppliers };
+    if (unchanged) return receipt;
+
+    const [primary, ...additional] = next;
+    const saved = await repository.updateItem(siteKey, movements, movementId, {
+      [SICOOB_ORDER_FIELD]: Number(primary),
+      [SICOOB_ADDITIONAL_ORDERS_FIELD]: additional.join(','),
+    }, { eTag, signal, readbackFields: linkFields });
     active(signal);
-    if (sicoobOrderId(saved?.id) !== movementId || sicoobOrderId(saved?.fields?.[SICOOB_ORDER_FIELD]) !== orderId) {
-      throw new Error('O vínculo do pedido não foi confirmado no SharePoint.');
+    if (sicoobOrderId(saved?.id) !== movementId || sicoobOrderId(saved?.fields?.[SICOOB_ORDER_FIELD]) !== primary
+      || !sameSicoobOrderIds(sicoobLinkedOrderIds(saved.fields, { strict: true }), next)) {
+      throw new Error('O vínculo dos pedidos não foi confirmado no SharePoint.');
     }
     return receipt;
   }

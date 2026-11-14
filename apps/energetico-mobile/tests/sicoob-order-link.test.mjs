@@ -65,13 +65,13 @@ test('reviews only an unlinked Sicoob movement and confirms a versioned write of
 
 test('the startup alert reads only Sicoob linkage fields and ignores linked and reviewed rows', async () => {
   const row = (id, fields) => ({ id, fields: { ORIGEMMOVIMENTACAO: 'SICOOB', ...fields } });
-  const rows = [row('1', { IDPEDIDO: 37 }), row('2', { SICOOB_SEM_VINCULACAO_REGULAR: true }),
+  const rows = [row('1', { IDPEDIDO: 37 }), row('5', { SICOOB_PEDIDOS_ADICIONAIS: '38,39' }), row('2', { SICOOB_SEM_VINCULACAO_REGULAR: true }),
     row('3', { ORIGEMMOVIMENTACAO: 'MANUAL' })];
   const service = createSicoobOrderLink({ repository: {
     resolveList: async () => ({ status: 'resolved', id: 'movements' }),
     getItems: async (_site, _list, query) => {
       assert.equal(query.get('$filter'), "ORIGEMMOVIMENTACAO eq 'SICOOB'");
-      assert.equal(query.get('$select'), 'ID,IDPEDIDO,ORIGEMMOVIMENTACAO,SICOOB_SEM_VINCULACAO_REGULAR');
+      assert.equal(query.get('$select'), 'ID,IDPEDIDO,SICOOB_PEDIDOS_ADICIONAIS,ORIGEMMOVIMENTACAO,SICOOB_SEM_VINCULACAO_REGULAR');
       return rows;
     },
   } });
@@ -80,14 +80,14 @@ test('the startup alert reads only Sicoob linkage fields and ignores linked and 
   assert.equal(await service.hasPendingUnlinked(), true);
 });
 
-test('payment link loads all personal SharePoint order pages then writes only IDPEDIDO with a REST ETag and readback', async () => {
+test('payment link loads all order pages and writes and confirms all selected IDs in one REST merge', async () => {
   const host = 'tenant-my.sharepoint.com';
   const payments = '11111111-2222-3333-4444-555555555555';
   const orders = '22222222-3333-4444-5555-666666666666';
   const orderUrl = `https://graph.microsoft.com/v1.0/sites/personal/lists/${orders}/items`;
   const movementPath = `/_api/web/lists(guid'${payments}')/items(10)`;
   const scopes = [], writes = [];
-  let linked = null, versioned = false, readbacks = 0, mergeStatus = 204, actualReadback, invalidPage = false;
+  let linked = null, additional = null, actualAdditional, versioned = false, readbacks = 0, mergeStatus = 204, actualReadback, invalidPage = false;
   const json = value => Response.json(value);
   const data = createRegistrationGalleryData({ kind:'financial_movement',
     siteConfig:{ personal:{ host, path:'/personal/user', readTransport:'graph', writeTransport:'graph' } },
@@ -124,12 +124,14 @@ test('payment link loads all personal SharePoint order pages then writes only ID
         assert.equal(options.headers['IF-MATCH'], '"5"');
         if (mergeStatus !== 204) return Response.json({ error:{ message:'Version conflict' } }, { status:mergeStatus });
         linked = writes.at(-1).IDPEDIDO;
+        additional = writes.at(-1).SICOOB_PEDIDOS_ADICIONAIS;
         return new Response(null, { status:204 });
       }
       versioned = options.headers.Accept.endsWith('minimalmetadata');
-      assert.equal(target.searchParams.get('$select'), versioned ? 'ID,IDPEDIDO,ORIGEMMOVIMENTACAO' : 'ID,IDPEDIDO');
+      assert.equal(target.searchParams.get('$select'), versioned ? 'ID,IDPEDIDO,SICOOB_PEDIDOS_ADICIONAIS,ORIGEMMOVIMENTACAO' : 'ID,IDPEDIDO,SICOOB_PEDIDOS_ADICIONAIS');
       if (!versioned) readbacks++;
       return json({ ID:10, IDPEDIDO:versioned ? linked : actualReadback ?? linked,
+        SICOOB_PEDIDOS_ADICIONAIS:versioned ? additional : actualAdditional ?? additional,
         ...(versioned ? { ORIGEMMOVIMENTACAO:'SICOOB', 'odata.etag':'"5"' } : {}) });
     },
   });
@@ -144,22 +146,32 @@ test('payment link loads all personal SharePoint order pages then writes only ID
     { suppliers: new Map([['37', 'Elétrica Teste']]), incomplete:true });
   invalidPage = true;
   await assert.rejects(data.orderLink.loadOptions(), { code:'graph_pagination_payload_invalid' });
-  await assert.rejects(data.orderLink.save({ movementId:10, orderId:39 }), /pedido.*indisponível/i);
+  const save = (orderIds, expectedOrderIds = []) => data.orderLink.save({ movementId:10, orderIds, expectedOrderIds });
+  await assert.rejects(save([37, 39]), /pedido.*indisponível/i);
+  await assert.rejects(save([37, 0]), /pedido inválido/i);
   assert.equal(writes.length, 0);
-  assert.deepEqual(await data.orderLink.save({ movementId:10, orderId:37 }),
-    { movementId:'10', orderId:'37', supplier:'Elétrica Teste' });
-  assert.deepEqual(writes, [{ IDPEDIDO:37 }]);
+  linked = 37; // A link saved before the additional-orders column was introduced.
+  assert.deepEqual(await save([38, 37, 38], [37]),
+    { movementId:'10', orderIds:['37', '38'], suppliers:['Elétrica Teste', ''] });
+  assert.deepEqual(writes, [{ IDPEDIDO:37, SICOOB_PEDIDOS_ADICIONAIS:'38' }]);
+  additional = '38,inválido';
+  await assert.rejects(save([37], [37, 38]), /vínculo registrado é inválido/i);
+  additional = '38';
   assert.ok(scopes.includes(`https://${host}/AllSites.Write`));
   assert.equal(readbacks, 1);
-  await data.orderLink.save({ movementId:10, orderId:37 });
-  await assert.rejects(data.orderLink.save({ movementId:10, orderId:38, expectedOrderId:36 }), /vínculo.*mudou/i);
+  await save([38, 37], [37]); // A retry of the same selection needs no second write.
+  await assert.rejects(save([38], [37]), /vínculo.*mudou/i);
   assert.equal(writes.length, 1);
   mergeStatus = 412;
-  await assert.rejects(data.orderLink.save({ movementId:10, orderId:38, expectedOrderId:37 }), { code:'concurrent_change' });
+  await assert.rejects(save([38], [37, 38]), { code:'concurrent_change' });
   assert.equal(readbacks, 1);
   mergeStatus = 204;
   actualReadback = 37;
-  await assert.rejects(data.orderLink.save({ movementId:10, orderId:38, expectedOrderId:37 }), /não foi confirmado/i);
+  await assert.rejects(save([38], [37, 38]), /não foi confirmado/i);
+  assert.deepEqual(writes.at(-1), { IDPEDIDO:38, SICOOB_PEDIDOS_ADICIONAIS:'' });
+  actualReadback = undefined;
+  actualAdditional = '';
+  await assert.rejects(save([38, 37], [38]), /não foi confirmado/i);
 });
 
 test('invalid catalog, nonbank movement, missing order or ETag, and cancelled sessions do not write', async () => {
@@ -183,7 +195,7 @@ test('invalid catalog, nonbank movement, missing order or ETag, and cancelled se
   await assert.rejects(service.loadOptions(), /pedido inválido/i);
   orders = [{ id:'37', fields:{ FORNECEDOR:['fornecedor'] } }];
   await assert.rejects(service.loadOptions(), /pedido inválido/i);
-  const selection = { movementId:10, orderId:37 };
+  const selection = { movementId:10, orderIds:[37] };
   target = null;
   await assert.rejects(service.save(selection), /pedido.*indisponível/i);
   target = { id:'37' };
