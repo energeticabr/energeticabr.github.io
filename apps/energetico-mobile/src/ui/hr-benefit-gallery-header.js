@@ -1,7 +1,7 @@
 import { applyScreenNavigation } from './screen-navigation.js';
 import { attachGalleryRefreshButton } from './gallery-refresh.js';
 
-export function createHrBenefitGalleryHeader({ root, title, onBack, onHome, onRefresh }) {
+export function createHrBenefitGalleryHeader({ root, title, onBack, onHome, onRefresh, refreshLabel }) {
   const document = root.ownerDocument;
   const header = document.createElement('header');
   header.className = 'hr-gallery-header';
@@ -19,5 +19,9 @@ export function createHrBenefitGalleryHeader({ root, title, onBack, onHome, onRe
   applyScreenNavigation({ header, back, home, title });
 
   const refresh = attachGalleryRefreshButton({ document, root, header, onRefresh });
+  if (refreshLabel) {
+    refresh.button.setAttribute('aria-label', refreshLabel);
+    refresh.button.title = refreshLabel;
+  }
   return { header, dispose: refresh.destroy };
 }
