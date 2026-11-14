@@ -60,7 +60,7 @@ const statuses = {
   UNCONFIRMED: 'Envio sem confirmação',
 };
 
-export function openSwileView({ document: doc, request, gallery = false, onClose, onHome, now = () => new Date() }) {
+export function openSwileView({ document: doc, request, gallery = false, previewDocument, onClose, onHome, now = () => new Date() }) {
   const controller = new AbortController();
   const { signal } = controller;
   const focus = doc.activeElement;
@@ -283,7 +283,7 @@ export function openSwileView({ document: doc, request, gallery = false, onClose
   }
 
   function onGalleryKey(event) {
-    if (event.key === 'Escape' && !event.defaultPrevented) {
+    if (event.key === 'Escape' && !event.defaultPrevented && !doc.querySelector('.attachment-preview-dialog[open]')) {
       event.preventDefault();
       close();
     }
@@ -511,6 +511,42 @@ export function openSwileView({ document: doc, request, gallery = false, onClose
     });
   }
 
+  function orderDocuments(order) {
+    if (!Array.isArray(order.documents)) return null;
+    const section = make('section', '', 'swile-documents');
+    section.append(make('h4', 'Documentos do pedido'));
+    const files = make('div', '', 'swile-actions');
+
+    for (const file of order.documents) {
+      const label = { boleto: 'Boleto', invoice: 'Nota fiscal' }[file.kind];
+      if (typeof label !== 'string') continue;
+      const open = button(file.orderCode !== order.orderCode ? `${label} · ${file.orderCode}` : label, () => run(async () => {
+        if (!previewDocument) throw new Error('O visualizador de PDF está indisponível.');
+        message('Carregando documento da Swile…');
+        const result = await request('orders', { orderCode: order.orderCode, document: file }, { signal });
+        if (signal.aborted) return;
+        if (typeof result?.base64 !== 'string' || typeof result.fileName !== 'string' || !result.fileName.endsWith('.pdf')) {
+          throw new Error('A Swile não disponibilizou um PDF válido.');
+        }
+        const contents = atob(result.base64);
+        if (!contents.startsWith('%PDF-')) throw new Error('A Swile não disponibilizou um PDF válido.');
+        const blob = new Blob([Uint8Array.from(contents, character => character.charCodeAt(0))], { type: 'application/pdf' });
+        message();
+        open.disabled = false;
+        await previewDocument(blob, result.fileName, () => open);
+      }));
+      files.append(open);
+    }
+    if (files.childElementCount) section.append(files);
+    if (!order.documents.some(file => file.kind === 'invoice' || file.kind === 'boleto')) {
+      section.append(make('p', 'A Swile ainda não disponibilizou documentos para este pedido.'));
+    } else if (order.documents.some(file => file.kind === 'boleto'
+        && !order.documents.some(invoice => invoice.kind === 'invoice' && invoice.orderCode === file.orderCode))) {
+      section.append(make('p', 'Aguardando nota fiscal.'));
+    }
+    return section;
+  }
+
   function loadOrderDetails(orderCode, focusHeading = true) {
     return run(async () => {
       message('Consultando as linhas do pedido…');
@@ -524,6 +560,8 @@ export function openSwileView({ document: doc, request, gallery = false, onClose
       heading.tabIndex = -1;
       details.append(heading, make('p', statuses[order.status] || order.status),
         make('strong', `Total em créditos · ${reais(order.creditCents)}`));
+      const documents = orderDocuments(order);
+      if (documents) details.append(documents);
       const rows = make('ul', '', 'swile-credit-lines');
       for (const line of order.items) {
         const row = make('li');

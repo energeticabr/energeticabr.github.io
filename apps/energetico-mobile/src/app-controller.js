@@ -6493,6 +6493,8 @@ export function createAppController({
             ? client.trancidRechargeRequest(operation, payload, options)
             : client.swileRequest(operation, payload, options);
         },
+        previewDocument: native.previewMedia && ((blob, fileName, resolveReturnFocus) =>
+          native.previewMedia(blob, fileName, { returnLabel: 'Voltar ao pedido', resolveReturnFocus })),
         onClose: () => { hrBenefitPanel = null; },
         onHome: () => { if (current()) return returnToMainMenu(); },
       });
