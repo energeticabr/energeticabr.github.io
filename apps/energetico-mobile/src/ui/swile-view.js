@@ -1,5 +1,6 @@
 import { provisionDescriptionIcon } from './provision-description-card.js';
 import { parseBenefitAmount as parseSwileAmount } from './hr-benefit-amount.js';
+import { createHrBenefitGalleryHeader } from './hr-benefit-gallery-header.js';
 
 export { parseSwileAmount };
 
@@ -59,7 +60,7 @@ const statuses = {
   UNCONFIRMED: 'Envio sem confirmação',
 };
 
-export function openSwileView({ document: doc, request, gallery = false, onClose, now = () => new Date() }) {
+export function openSwileView({ document: doc, request, gallery = false, onClose, onHome, now = () => new Date() }) {
   const controller = new AbortController();
   const { signal } = controller;
   const focus = doc.activeElement;
@@ -88,35 +89,42 @@ export function openSwileView({ document: doc, request, gallery = false, onClose
   const title = make(gallery ? 'h1' : 'h2', gallery ? 'Galeria Swile' : 'Swile');
   title.id = 'swile-heading';
   title.tabIndex = -1;
-  const headline = make('div', '', 'swile-headline');
-  headline.append(title);
-  if (!gallery) headline.append(make('span', 'Multibenefícios'));
-  const header = make('header', '', 'swile-header');
-  const headerActions = make('div', '', 'swile-header-actions');
+  const galleryHeader = gallery ? createHrBenefitGalleryHeader({
+    root: screen, title, onBack: close,
+    onHome: onHome && (() => { close(); onHome(); }),
+    onRefresh: () => displayedOrderCode ? loadOrderDetails(displayedOrderCode, false) : loadGallery(),
+  }) : null;
   const refresh = gallery ? null : button('', load);
   if (refresh) {
+    const headline = make('div', '', 'swile-headline');
+    headline.append(title, make('span', 'Multibenefícios'));
+    const header = make('header', '', 'swile-header');
+    const headerActions = make('div', '', 'swile-header-actions');
     refresh.className = 'swile-refresh';
     refresh.title = 'Atualizar colaboradores';
     refresh.setAttribute('aria-label', refresh.title);
     refresh.append(provisionDescriptionIcon(doc, 'refresh'));
-    headerActions.append(refresh);
+    const closeButton = button('Fechar', close);
+    closeButton.autofocus = true;
+    headerActions.append(refresh, closeButton);
+    header.append(headline, headerActions);
+    screen.append(header);
+  } else {
+    screen.append(galleryHeader.header);
   }
-  const closeButton = button(gallery ? 'Voltar ao RH' : 'Fechar', close);
-  if (!gallery) closeButton.autofocus = true;
-  headerActions.append(closeButton);
-  header.append(headline, headerActions);
   const body = make('div', '', 'swile-body');
   const note = make('p', '', 'swile-note');
   note.setAttribute('role', 'status');
   note.hidden = true;
   const content = make('div');
   body.append(note, content);
-  screen.append(header, body);
+  screen.append(body);
 
   let people = [];
   let loaded = false;
   let busy = false;
   let galleryFilter = 'pending';
+  let displayedOrderCode = null;
   const invoiceText = make('textarea');
   invoiceText.rows = 3;
   invoiceText.maxLength = 255;
@@ -265,6 +273,7 @@ export function openSwileView({ document: doc, request, gallery = false, onClose
   function close() {
     if (signal.aborted) return;
     controller.abort();
+    galleryHeader?.dispose();
     if (gallery) doc.removeEventListener('keydown', onGalleryKey);
     if (!gallery && screen.open && typeof screen.close === 'function') screen.close();
     screen.remove();
@@ -466,14 +475,13 @@ export function openSwileView({ document: doc, request, gallery = false, onClose
   function loadGallery(filter = galleryFilter, restoreFocus = false) {
     return run(async () => {
       galleryFilter = filter;
+      displayedOrderCode = null;
       const toolbar = make('div', '', 'swile-actions swile-gallery-toolbar');
       for (const [value, label] of [['pending', 'Em suspenso'], ['history', 'Histórico']]) {
         const choice = button(label, () => loadGallery(value, true), value === filter);
         choice.setAttribute('aria-pressed', String(value === filter));
         toolbar.append(choice);
       }
-      const refresh = button('Atualizar pedidos', () => loadGallery(filter, true));
-      toolbar.append(refresh);
       const controls = [...toolbar.children];
       controls.forEach(control => { control.disabled = true; });
       content.replaceChildren(toolbar);
@@ -503,7 +511,7 @@ export function openSwileView({ document: doc, request, gallery = false, onClose
     });
   }
 
-  function loadOrderDetails(orderCode) {
+  function loadOrderDetails(orderCode, focusHeading = true) {
     return run(async () => {
       message('Consultando as linhas do pedido…');
       const order = await request('orders', { gallery: galleryFilter, orderCode }, { signal });
@@ -537,10 +545,11 @@ export function openSwileView({ document: doc, request, gallery = false, onClose
       if (!order.items.length) details.append(make('p', 'A Swile ainda não disponibilizou as linhas deste pedido.'));
       else if (order.itemsIncomplete) details.append(make('p', 'A Swile retornou apenas parte das linhas deste pedido.'));
       details.append(rows);
+      displayedOrderCode = orderCode;
       content.replaceChildren(button('Voltar aos pedidos', () => loadGallery(galleryFilter, true)), details);
       body.scrollTop = 0;
       message();
-      heading.focus();
+      if (focusHeading) heading.focus();
     });
   }
 

@@ -13,14 +13,14 @@ const preview = {
 };
 const settle = () => new Promise(resolve => setImmediate(resolve));
 
-async function fixture(t, request, gallery = false) {
+async function fixture(t, request, gallery = false, onHome) {
   const { window } = new JSDOM('<main id="app"><button>Abrir Trancid</button></main>');
   const { document } = window;
   const opener = document.querySelector('button');
   opener.focus();
   t.after(() => window.close());
   const { openTrancidRechargeView } = await import('../src/ui/trancid-recharge-view.js');
-  const view = openTrancidRechargeView({ document, request, gallery });
+  const view = openTrancidRechargeView({ document, request, gallery, onHome });
   t.after(() => view.close());
   await settle();
   return {
@@ -78,12 +78,17 @@ test('Trancid only sends the reviewed recharge after confirmation', async t => {
 
 test('Trancid requires the gallery check after an uncertain submission', async t => {
   const operations = [];
+  let wentHome = false;
   const { document, click, input } = await fixture(t, async operation => {
     operations.push(operation);
     if (operation === 'directory') return cards;
     if (operation === 'preview') return preview;
     if (operation === 'history') return { orders: [], hasMore: false, page: 1 };
     return { id: preview.id, orderCode: '790001', status: 'UNCONFIRMED', creditCents: 5500, totalCents: null, paymentMethod: 'BOLETO' };
+  }, false, () => {
+    assert.equal(document.querySelector('main.trancid-gallery-page'), null);
+    assert.equal(document.querySelector('#app').hasAttribute('inert'), false);
+    wentHome = true;
   });
   document.querySelector('[aria-label="Selecionar Pessoa Ávila, cartão final 0101"]').click();
   input('[aria-label="Valor da recarga por cartão"]', '55,00');
@@ -97,34 +102,48 @@ test('Trancid requires the gallery check after an uncertain submission', async t
   await settle();
   assert.equal(operations.at(-1), 'history');
   assert.ok(document.querySelector('main.trancid-gallery-page'));
+  document.querySelector('.trancid-gallery-page nav button[aria-label="Início"]').click();
+  assert.equal(wentHome, true);
 });
 
 test('Trancid opens its paginated history in a full-screen gallery and returns to RH', async t => {
   const pages = [];
-  const { document, window, opener, click } = await fixture(t, async (operation, { page }) => {
+  let wentHome = false;
+  const { document, opener, click } = await fixture(t, async (operation, { page }) => {
     assert.equal(operation, 'history');
     pages.push(page);
     const order = page === 1 ?
       { orderCode: '790001', status: 'Enviado', requestDate: '2026-11-13', creditCents: 22000, totalCents: 22220, paymentMethod: 'BOLETO' } :
       { orderCode: '788001', status: 'Em andamento', requestDate: '2026-09-17', creditCents: 5500, totalCents: null, paymentMethod: 'PIX' };
     return { orders: [order], hasMore: page === 1, page };
-  }, true);
+  }, true, () => { wentHome = true; });
   const screen = document.querySelector('main.trancid-gallery-page');
   assert.ok(screen);
   assert.equal(document.querySelector('dialog'), null);
   assert.equal(document.querySelector('#app').hasAttribute('inert'), true);
+  const header = screen.querySelector('header');
+  assert.equal(header.querySelector('h1.screen-navigation-title')?.textContent, 'Galeria Trancid');
+  assert.ok(header.querySelector('nav button[aria-label="Início"]'));
+  const sync = header.querySelector(':scope > [data-gallery-refresh]');
+  assert.ok(sync);
   assert.match(screen.textContent, /Galeria Trancid.*790001.*220,00.*Enviado.*13\/11\/2026.*Boleto.*222,20/s);
   click('Próxima página');
   await settle();
   assert.match(screen.textContent, /788001.*55,00.*Em andamento.*17\/09\/2026.*Pix/s);
   assert.doesNotMatch(screen.textContent, /Total|Não informado/);
+  sync.click();
+  assert.equal(sync.disabled, true);
+  await settle();
+  assert.equal(sync.disabled, false);
   click('Página anterior');
   await settle();
-  assert.deepEqual(pages, [1, 2, 1]);
-  document.dispatchEvent(new window.KeyboardEvent('keydown', { key: 'Escape' }));
+  assert.deepEqual(pages, [1, 2, 2, 1]);
+  assert.doesNotMatch(screen.textContent, /Atualizar pedidos/);
+  header.querySelector('nav button[aria-label="Voltar ao RH"]').click();
   assert.equal(screen.isConnected, false);
   assert.equal(document.querySelector('#app').hasAttribute('inert'), false);
   assert.equal(document.activeElement, opener);
+  assert.equal(wentHome, false);
 });
 
 test('Trancid client uses authenticated portal actions without retrying uncertain confirmation', async () => {
