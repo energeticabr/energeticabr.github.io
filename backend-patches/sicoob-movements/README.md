@@ -22,13 +22,14 @@ devolvido antes de gravar `RAZÃO SOCIAL (NOME FANTASIA)`, ou o único nome
 disponível. O dado enviado à API pública é somente o CNPJ. Sem nome
 verificável, grava `N/A`.
 
-Depois da coleta, o serviço consulta a segunda via dos boletos Sicoob pela
-referência do extrato. Valida conta, data, valor, situação efetivada e
-autenticação bancária antes de completar campos vazios e anexar o PDF. O PDF
-é formatado pelo Energético com os dados retornados pela API de comprovantes.
-A etapa preserva os arquivos existentes e tenta de novo nas próximas coletas
-quando o banco limita as consultas. Para conferir os vínculos sem gravação,
-execute `sync_boleto_receipts.py --check` com o ambiente da unidade.
+Depois da coleta, o serviço consulta dados dos pagamentos de boletos Sicoob
+com identificação incompleta pela referência do extrato. Valida conta, data,
+valor, situação efetivada e autenticação bancária antes de completar os campos
+vazios do recebedor. A API consultada retorna os dados em JSON. O documento
+do banco deve ser obtido no Sicoob e anexado ao movimento como
+`Comprovante-Sicoob-<referência>.pdf`.
+Para conferir documentos pendentes e consultas sem gravação, execute
+`sync_boleto_receipts.py --check` com o ambiente da unidade.
 
 Para Pix, o nome vem do extrato Sicoob ou da consulta direta por EndToEndId
 com escopo `pixpagamentos_consulta`. Se o extrato trouxer apenas o CPF

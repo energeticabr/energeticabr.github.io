@@ -1,5 +1,7 @@
 import unittest
+from unittest.mock import Mock, patch
 
+import sync_boleto_receipts as collector
 from sync_boleto_receipts import missing_receiver_fields, receipt_candidate, receipt_matches, receipt_order, receiver_fields
 
 
@@ -47,3 +49,37 @@ class ReceiptTest(unittest.TestCase):
         self.assertEqual(missing_receiver_fields({'DOCUMENTORECEBEDOR': '11222333000181'}, self.receipt), {})
         self.assertEqual(missing_receiver_fields({'DOCUMENTORECEBEDOR': '11.222.333/0001-81'}, receipt),
                          {'RAZAOSOCIALRECEBEDOR': 'Exemplo Ltda. (Loja Exemplo)'})
+
+    def test_bank_json_enriches_the_receiver_without_creating_a_pdf(self):
+        movement = {**self.movement, 'Id': 1, 'Attachments': False}
+        client = Mock()
+        client.get_item_fields_with_etag.return_value = (movement, 'etag')
+        client.get_item_fields.return_value = receiver_fields(self.receipt)
+        with (patch.object(collector.movements, 'sharepoint_client', return_value=client),
+              patch.object(collector.movements, 'assert_destination'),
+              patch.object(collector, 'list_movements', return_value=[movement]),
+              patch.object(collector, 'CURSOR') as cursor,
+              patch.object(collector, 'read_receipts', return_value={
+                  '1234567': {'status': 200, 'receipt': self.receipt},
+              })):
+            cursor.exists.return_value = False
+            result = collector.run(check=False)
+        self.assertEqual(result, {'missing_document': 1, 'verified': 1, 'receivers_updated': 1})
+        client.update_item_with_etag.assert_called_once_with(
+            1, receiver_fields(self.receipt), 'etag', target_list=collector.LIST)
+        client.ensure_attachment.assert_not_called()
+
+    def test_complete_receiver_without_pdf_needs_no_bank_lookup(self):
+        movement = {**self.movement, 'Id': 2, 'Attachments': True,
+                    'RAZAOSOCIALRECEBEDOR': 'Exemplo Ltda.', 'DOCUMENTORECEBEDOR': '11222333000181'}
+        client = Mock()
+        client.get_attachment_names.return_value = {'Outro-anexo.pdf'}
+        with (patch.object(collector.movements, 'sharepoint_client', return_value=client),
+              patch.object(collector.movements, 'assert_destination'),
+              patch.object(collector, 'list_movements', return_value=[movement]),
+              patch.object(collector, 'CURSOR') as cursor,
+              patch.object(collector, 'read_receipts') as read):
+            cursor.exists.return_value = False
+            self.assertEqual(collector.run(check=False), {'missing_document': 1})
+        read.assert_not_called()
+        client.ensure_attachment.assert_not_called()

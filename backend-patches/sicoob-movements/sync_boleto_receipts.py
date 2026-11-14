@@ -1,13 +1,11 @@
-"""Attach verified Sicoob boleto receipt data to existing bank movements."""
+"""Complete receiver fields using verified Sicoob boleto payment data."""
 import argparse
 from collections import Counter, defaultdict
-from io import BytesIO
 import json
 import os
 from pathlib import Path
 import re
 import subprocess
-from xml.sax.saxutils import escape
 
 import sync_movements as movements
 
@@ -70,51 +68,6 @@ def missing_receiver_fields(movement, receipt):
     return updates
 
 
-def receipt_pdf(receipt, reference):
-    from reportlab.lib import colors
-    from reportlab.lib.pagesizes import A4
-    from reportlab.lib.styles import getSampleStyleSheet
-    from reportlab.platypus import Paragraph, SimpleDocTemplate, Spacer, Table, TableStyle
-
-    values = [
-        ('Situação', receipt['situacaoPagamento']),
-        ('Data do pagamento', movements.civil_date(receipt['dataPagamento']).strftime('%d/%m/%Y')),
-        ('Valor pago', 'R$ ' + movements.money(receipt['valorPagamento'])),
-        ('Conta pagadora', receipt['numeroConta']),
-        ('Pagador', receipt.get('nomeProprietarioContaCorrente')),
-        ('Beneficiário', receipt.get('nomeRazaoSocialBeneficiario')),
-        ('Nome fantasia', receipt.get('nomeFantasiaBeneficiario')),
-        ('CPF/CNPJ do beneficiário', receipt.get('numeroCpfCnpjBeneficiario')),
-        ('Beneficiário final', receipt.get('nomeRazaoSocialBeneficiarioFinal')),
-        ('Nome fantasia do beneficiário final', receipt.get('nomeFantasiaBeneficiarioFinal')),
-        ('CPF/CNPJ do beneficiário final', receipt.get('numeroCpfCnpjBeneficiarioFinal')),
-        ('Linha digitável', receipt.get('numeroLinhaDigitavel')),
-        ('Referência do extrato', reference),
-        ('Autenticação bancária', receipt['numeroAutenticacaoPagamento']),
-    ]
-    output = BytesIO()
-    styles = getSampleStyleSheet()
-    rows = [[Paragraph(escape(label), styles['Normal']),
-             Paragraph(escape(movements.text(value)), styles['Normal'])]
-            for label, value in values if movements.text(value)]
-    table = Table(rows, colWidths=[158, 314])
-    table.setStyle(TableStyle([
-        ('VALIGN', (0, 0), (-1, -1), 'TOP'),
-        ('ROWBACKGROUNDS', (0, 0), (-1, -1), [colors.HexColor('#edf4f7'), colors.white]),
-        ('TOPPADDING', (0, 0), (-1, -1), 8),
-        ('BOTTOMPADDING', (0, 0), (-1, -1), 8),
-    ]))
-    document = SimpleDocTemplate(output, pagesize=A4, title='Dados do comprovante de pagamento Sicoob',
-                                 author='Energético', leftMargin=60, rightMargin=60, invariant=1)
-    document.build([
-        Paragraph('Dados do comprovante de pagamento', styles['Title']),
-        Paragraph('Boleto Sicoob', styles['Heading2']),
-        Paragraph('PDF formatado pelo Energético com os dados da segunda via retornados pela API Sicoob.', styles['Normal']),
-        Spacer(1, 14), table,
-    ])
-    return output.getvalue()
-
-
 def list_movements(client):
     endpoint = client._list_endpoint(LIST) + '/items'
     after = 0
@@ -147,21 +100,18 @@ def receipt_filename(reference):
     return f'Comprovante-Sicoob-{reference}.pdf'
 
 
-def save_receipt(client, movement, reference, receipt):
+def save_receiver(client, movement, receipt):
     item_id = movement['Id']
     fresh, etag = client.get_item_fields_with_etag(item_id, (*IDENTITY, *RECEIVER), LIST)
     if any(fresh.get(field) != movement.get(field) for field in IDENTITY) or not receipt_matches(fresh, receipt):
-        raise ValueError('Movement identity changed before attachment')
+        raise ValueError('Movement identity changed before receiver update')
     updates = missing_receiver_fields(fresh, receipt)
-    if updates:
-        client.update_item_with_etag(item_id, updates, etag, target_list=LIST)
-    filename = receipt_filename(reference)
-    pdf = receipt_pdf(receipt, reference)
-    client.ensure_attachment(item_id, filename, pdf, 'application/pdf', target_list=LIST)
-    copies = [file['content'] for file in client.get_item_attachments(item_id, LIST) if file['filename'] == filename]
-    if copies != [pdf] or client.get_item_fields(item_id, tuple(updates), LIST) != updates:
-        raise ValueError('Movement receipt readback mismatch')
-    return 'RAZAOSOCIALRECEBEDOR' in updates
+    if not updates:
+        return False
+    client.update_item_with_etag(item_id, updates, etag, target_list=LIST)
+    if client.get_item_fields(item_id, tuple(updates), LIST) != updates:
+        raise ValueError('Movement receiver readback mismatch')
+    return True
 
 
 def receipt_order(pending, cursor):
@@ -189,8 +139,10 @@ def run(check):
         movement = candidates[0]
         if movement['Attachments'] and receipt_filename(reference) in client.get_attachment_names(movement['Id'], LIST):
             result['already_attached'] += 1
-            continue
-        accounts[movement['CONTAPAGADORA']][reference] = movement
+        else:
+            result['missing_document'] += 1
+        if any(movements.text(movement.get(field)).upper() in ('', movements.UNKNOWN) for field in RECEIVER):
+            accounts[movement['CONTAPAGADORA']][reference] = movement
     cursor = int(CURSOR.read_text().strip()) if CURSOR.exists() else 0
     last_attempt = None
     for account, pending in accounts.items():
@@ -207,11 +159,10 @@ def run(check):
             result['verified'] += 1
             if not check:
                 try:
-                    result['names_recovered'] += save_receipt(client, pending[reference], reference, receipt)
+                    if save_receiver(client, pending[reference], receipt):
+                        result['receivers_updated'] += 1
                 except (RuntimeError, ValueError, OSError) as error:
                     result[f'write_failed_{type(error).__name__}'] += 1
-                else:
-                    result['attached'] += 1
     if not check and last_attempt is not None:
         temporary = CURSOR.with_suffix(f'.{os.getpid()}.tmp')
         temporary.write_text(f'{last_attempt}\n')

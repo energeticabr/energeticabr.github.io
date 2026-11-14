@@ -42,12 +42,12 @@ def parse_stage(stage, text, exit_code):
             raise ValueError('INVALID_PERIOD')
         return {'created': value['inserted'], 'updated': 0, 'verified': value['debits'], 'pendingDetails': 0}
     if stage == 'boleto':
-        allowed = {'ambiguous_reference', 'already_attached', 'unverified_200', 'unverified_400', 'unverified_404', 'verified', 'names_recovered', 'attached'}
-        if (set(value) - allowed or value.get('attached', 0) != value.get('verified', 0)
-                or value.get('names_recovered', 0) > value.get('attached', 0)):
+        allowed = {'ambiguous_reference', 'already_attached', 'missing_document', 'unverified_200',
+                   'unverified_400', 'unverified_403', 'unverified_404', 'verified', 'receivers_updated'}
+        if set(value) - allowed or value.get('receivers_updated', 0) > value.get('verified', 0):
             raise ValueError('INCOMPLETE_RECEIPTS')
-        pending = sum(value.get(key, 0) for key in ('ambiguous_reference', 'unverified_200', 'unverified_400', 'unverified_404'))
-        return {'created': 0, 'updated': value.get('attached', 0), 'verified': 0, 'pendingDetails': pending}
+        pending = value.get('missing_document', 0) + value.get('ambiguous_reference', 0)
+        return {'created': 0, 'updated': value.get('receivers_updated', 0), 'verified': 0, 'pendingDetails': pending}
     if stage == 'pix':
         allowed = {'pendentes', 'http_200', 'http_404', 'verificados', 'nomes_gravados'}
         if (set(value) - allowed or 'pendentes' not in value
