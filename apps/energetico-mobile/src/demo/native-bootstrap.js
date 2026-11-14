@@ -60,7 +60,6 @@ export function createNativeBootstrap({ root, auth, native, config, fetchImpl = 
       enableDdaReminders: !demo,
       enableDdaMenuAlert: !demo,
       enableSicoobMenuAlert: !demo,
-      enableTrancidReminders: !demo,
       store: createConversationStore({ historyMode: "current-step" }),
       client,
       pendingConstructionDiaryDataFactory: demo ? undefined : options => createPendingConstructionDiaryData({ ...options, fetchImpl }),

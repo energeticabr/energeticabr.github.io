@@ -167,14 +167,13 @@ export function createTrancidReportView({ document: doc = globalThis.document, l
     if (event.shiftKey && (doc.activeElement === first || doc.activeElement === panel)) { event.preventDefault(); last?.focus(); }
     else if (!event.shiftKey && (doc.activeElement === last || doc.activeElement === panel)) { event.preventDefault(); first?.focus(); }
   });
-  return Object.freeze({ element: root, async open({ initialSnapshot, automatic = false, onDisplayed } = {}) {
+  return Object.freeze({ element: root, async open({ initialSnapshot } = {}) {
     if (destroyed) throw new Error('O relatório Trancid foi encerrado.');
     if (!root.hidden) return false;
     returnFocus = doc.activeElement; oldOverflow = doc.body.style.overflow; app = doc.getElementById('app'); oldInert = Boolean(app?.inert);
     doc.body.style.overflow = 'hidden'; if (app) app.inert = true;
     root.hidden = false;
-    onDisplayed?.();
-    root.dataset.automatic = String(Boolean(automatic)); selectPeriod(currentMonth()); body.scrollTop = 0; panel.focus({ preventScroll: true });
+    selectPeriod(currentMonth()); body.scrollTop = 0; panel.focus({ preventScroll: true });
     if (initialSnapshot) {
       try { acceptReport(initialSnapshot); } catch { await load(); }
     } else await load();

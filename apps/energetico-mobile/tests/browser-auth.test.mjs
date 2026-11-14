@@ -429,7 +429,6 @@ test("retoma validação de pedidos apenas com conta e escopos confirmados pelo 
 
 for (const [action, scopes] of [
   ['action_dda_gallery', ['Sites.Read.All']],
-  ['home-trancid-card-report', ['Sites.Read.All']],
   ['action_notas_fiscais_sefaz_gallery', ['https://energeticaltda.sharepoint.com/AllSites.Read']],
   ['action_nfe_report', ['https://energeticaltda.sharepoint.com/AllSites.Write']],
 ]) test(`retoma ${action} após consentimento Microsoft`, async () => {

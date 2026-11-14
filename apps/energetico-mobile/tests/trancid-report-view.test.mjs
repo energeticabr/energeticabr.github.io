@@ -122,7 +122,7 @@ test('supplier and card labels are literal text even when they contain markup', 
 // Break caught: keyboard escape leaves the page inert/locked or loses the triggering mascot's focus.
 test('dialog traps keyboard focus and restores the trigger, scroll lock and callback on dismissal', async t => {
   const ctx = setup(t), trigger = ctx.doc.getElementById('trigger'); trigger.focus(); ctx.doc.body.style.overflow = 'auto';
-  await ctx.view.open({ initialSnapshot: report(), automatic: true });
+  await ctx.view.open({ initialSnapshot: report() });
   assert.equal(ctx.doc.getElementById('app').inert, true); assert.equal(ctx.doc.body.style.overflow, 'hidden');
   const panel = ctx.root.querySelector('[role="dialog"]'); assert.equal(ctx.doc.activeElement, panel);
   panel.dispatchEvent(new ctx.dom.window.KeyboardEvent('keydown', { key: 'Tab', bubbles: true, cancelable: true }));
