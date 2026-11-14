@@ -4,6 +4,7 @@ import json
 import os
 import re
 import sys
+import tempfile
 import time
 import uuid
 from datetime import datetime, timezone
@@ -11,10 +12,39 @@ from pathlib import Path
 
 ROOT = Path("/var/lib/energetica-whatsapp/sicoob-sync")
 ACTIVE = {"queued", "running"}
+LATEST_ATTEMPT = Path("/var/lib/energetica-sicoob-movements/latest-attempt.json")
+
+
+def read_attempt(path):
+    try:
+        attempt = json.loads(path.read_text(encoding="utf-8"))
+    except FileNotFoundError:
+        return {"status": "unknown"}
+    return {key: attempt[key] for key in ("status", "completedUtc", "lastSuccessfulUtc")}
+
+
+def record_attempt(path, status, completed_at=None):
+    # The scheduled and manual workers share the pipeline lock while publishing.
+    completed = datetime.fromtimestamp(time.time() if completed_at is None else completed_at, timezone.utc).isoformat()
+    previous = read_attempt(path)
+    attempt = {"status": status, "completedUtc": completed,
+               "lastSuccessfulUtc": completed if status == "succeeded" else previous.get("lastSuccessfulUtc")}
+    with tempfile.NamedTemporaryFile(dir=path.parent, mode="w", encoding="utf-8", delete=False) as output:
+        temporary = Path(output.name)
+        try:
+            with output:
+                json.dump(attempt, output)
+                output.flush()
+                os.fsync(output.fileno())
+            os.replace(temporary, path)
+        finally:
+            temporary.unlink(missing_ok=True)
+
 
 class Queue:
-    def __init__(self, root=ROOT, clock=time.time):
+    def __init__(self, root=ROOT, clock=time.time, *, latest_attempt_path=LATEST_ATTEMPT):
         self.root, self.clock = Path(root), clock
+        self.latest_attempt_path = latest_attempt_path
 
     @contextlib.contextmanager
     def locked(self):
@@ -208,6 +238,9 @@ def handle_portal(identity, body, queue=None):
         status = queue.status(identity, body["requestId"])
     elif action == "sicoob_refresh_status" and set(body) == {"action", "mode"} and body["mode"] == "pending":
         status = queue.pending(identity)
+    elif action == "sicoob_refresh_status" and set(body) == {"action", "mode"} and body["mode"] == "latest":
+        queue.authorize(identity)
+        status = read_attempt(queue.latest_attempt_path)
     elif (action == "sicoob_refresh_status" and set(body) == {"action", "requestId", "acknowledge"}
           and body["acknowledge"] is True):
         status = queue.acknowledge(identity, body["requestId"])

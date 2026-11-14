@@ -685,7 +685,7 @@ export function createChatClient({
     const sicoob = action.startsWith('sicoob_');
     const isStatus = action.endsWith('_refresh_status');
     const source = sicoob ? 'Sicoob' : 'DDA';
-    if ((requestId || (isStatus && extra.mode !== 'pending') || (sicoob && !isStatus)) && !/^[a-f0-9]{32}$/.test(String(requestId || ''))) throw new Error(`Pedido ${source} inválido.`);
+    if ((requestId || (isStatus && !extra.mode) || (sicoob && !isStatus)) && !/^[a-f0-9]{32}$/.test(String(requestId || ''))) throw new Error(`Pedido ${source} inválido.`);
     const token = await cancellableToken(tokenProvider, signal);
     const result = await request(chatUrl.href, {
       method: 'POST', signal,
@@ -694,12 +694,27 @@ export function createChatClient({
       cache: 'no-store', credentials: 'omit',
     }, response => parsePortalResponse(response, `A consulta ${source}`), isStatus);
     const receipt = sicoob ? result?.sicoobRefresh : result?.ddaRefresh;
+    if (sicoob && extra.mode === 'latest') {
+      return validateSicoobLatestAttempt(receipt);
+    }
     const allowed=extra.mode==='pending'?['pending']:extra.acknowledge?['acknowledged']:['queued', 'running', 'succeeded', 'failed', 'unavailable', 'busy'];
     if (!receipt || !allowed.includes(receipt.status)
       || (isStatus && requestId && receipt.requestId !== requestId)
       || (extra.mode==='pending' && !Array.isArray(receipt.requests))) throw new Error(`A VM não confirmou a consulta ${source}.`);
     return receipt;
   }
+  function validateSicoobLatestAttempt(receipt) {
+    if (receipt?.status === 'unknown') return null;
+    const completedAt = Date.parse(receipt?.completedUtc);
+    const lastSuccessfulAt = receipt?.lastSuccessfulUtc == null ? null : Date.parse(receipt.lastSuccessfulUtc);
+    if (!['succeeded', 'failed'].includes(receipt?.status) || !Number.isFinite(completedAt)
+      || (lastSuccessfulAt !== null && (!Number.isFinite(lastSuccessfulAt) || lastSuccessfulAt > completedAt))
+      || (receipt.status === 'succeeded' && lastSuccessfulAt !== completedAt)) {
+      throw new Error('A VM não confirmou a última atualização Sicoob.');
+    }
+    return { status: receipt.status, lastSuccessfulAt };
+  }
+  function getSicoobLatestAttempt(options) { return ddaRequest('sicoob_refresh_status', null, options, { mode: 'latest' }); }
   function refreshSicoob(options) { return ddaRequest('sicoob_refresh', options?.requestId, options); }
   function getSicoobRefreshStatus(requestId, options) { return ddaRequest('sicoob_refresh_status', requestId, options); }
   function getSicoobRefreshPending(options) { return ddaRequest('sicoob_refresh_status', null, options, { mode: 'pending' }); }
@@ -925,5 +940,5 @@ export function createChatClient({
     }, true);
   }
 
-  return Object.freeze({ swileRequest, trancidRechargeRequest, getSicoobBalance, refreshSicoob, getSicoobRefreshStatus, getSicoobRefreshPending, acknowledgeSicoobRefresh, waitForDiaryEvidence, refreshSefaz, getSefazRefreshStatus, getSefazRefreshPending, acknowledgeSefazRefresh, sendText, sendFile, replaceAttachment, transcribeAudio, fetchMedia, getAttachments, launchGalleryRequest, uploadLaunchGalleryFile, getPendingProvisionSnapshot, getPendingNotesSnapshot, getRhidAttendanceReport, startRhidPendingValidation, startRhidDayValidation, getRhidAttendanceMonth, saveRhidAttendanceAdjustment, deleteRhidAttendanceAdjustment, refreshRhidAttendance, getRhidRefreshStatus, refreshRecurringProvisions, getRecurringProvisionRefreshStatus, refreshDda, getDdaRefreshStatus, getDdaRefreshPending, acknowledgeDdaRefresh, confirmDdaPayment, deleteAttachment, deleteAllAttachments, compressAttachment, chooseAttachmentCompression, getCompletionMenu, prepareSignatureEvidence, confirmSignatureEvidence, verifySignatureEvidence, captureSignatureEvidence });
+  return Object.freeze({ swileRequest, trancidRechargeRequest, getSicoobBalance, getSicoobLatestAttempt, refreshSicoob, getSicoobRefreshStatus, getSicoobRefreshPending, acknowledgeSicoobRefresh, waitForDiaryEvidence, refreshSefaz, getSefazRefreshStatus, getSefazRefreshPending, acknowledgeSefazRefresh, sendText, sendFile, replaceAttachment, transcribeAudio, fetchMedia, getAttachments, launchGalleryRequest, uploadLaunchGalleryFile, getPendingProvisionSnapshot, getPendingNotesSnapshot, getRhidAttendanceReport, startRhidPendingValidation, startRhidDayValidation, getRhidAttendanceMonth, saveRhidAttendanceAdjustment, deleteRhidAttendanceAdjustment, refreshRhidAttendance, getRhidRefreshStatus, refreshRecurringProvisions, getRecurringProvisionRefreshStatus, refreshDda, getDdaRefreshStatus, getDdaRefreshPending, acknowledgeDdaRefresh, confirmDdaPayment, deleteAttachment, deleteAllAttachments, compressAttachment, chooseAttachmentCompression, getCompletionMenu, prepareSignatureEvidence, confirmSignatureEvidence, verifySignatureEvidence, captureSignatureEvidence });
 }

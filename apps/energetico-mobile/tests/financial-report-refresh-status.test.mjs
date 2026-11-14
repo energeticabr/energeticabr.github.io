@@ -64,21 +64,21 @@ for (const [key, create, grid, terminal] of [
   await flush();
   current.emit(terminal, false);
   await flush();
-  assert.equal(status()?.textContent, 'ERRO AO ATUALIZAR');
+  assert.equal(status()?.textContent, key === 'sicoob' ? 'FALHA NA ATUALIZAÇÃO' : 'ERRO AO ATUALIZAR');
 
   refresh();
   await flush();
   read = async () => { throw Error('Falha na leitura'); };
   current.emit('succeeded', false);
   await flush();
-  assert.equal(status()?.textContent, 'ERRO AO ATUALIZAR');
+  assert.equal(status()?.textContent, key === 'sicoob' ? 'FALHA NA ATUALIZAÇÃO' : 'ERRO AO ATUALIZAR');
   read = null;
 
   current.failStart = true;
   refresh();
   assert.equal(status()?.textContent, 'ATUALIZAÇÃO EM ANDAMENTO');
   await flush();
-  assert.equal(status()?.textContent, 'ERRO AO ATUALIZAR');
+  assert.equal(status()?.textContent, key === 'sicoob' ? 'FALHA NA ATUALIZAÇÃO' : 'ERRO AO ATUALIZAR');
 });
 
 test('DDA keeps the card during a manual report reload without a sync monitor', async t => {
@@ -97,4 +97,30 @@ test('DDA keeps the card during a manual report reload without a sync monitor', 
   rejectReload(Error('Falha na leitura'));
   await flush();
   assert.equal(status()?.textContent, 'ERRO AO ATUALIZAR');
+});
+
+test('Sicoob opens with the last confirmed failure and clears it after a successful scheduled run', async t => {
+  const dom = new JSDOM('<body><main id="app"></main></body>');
+  const lastSuccessfulAt = Date.parse('2026-11-13T23:10:00Z');
+  let latest = { status: 'failed', lastSuccessfulAt };
+  const report = createSicoobTransactionReportView({
+    document: dom.window.document,
+    data: { loadSnapshot: async () => ({ rows: [] }) },
+    loadLatestAttempt: async () => latest,
+  });
+  t.after(() => { report.destroy(); dom.window.close(); });
+  const card = () => report.element.querySelector('.ddr-summary > [data-report-refresh-status]:not([hidden])');
+  const updatedAt = () => report.element.querySelector('[data-report-last-update] time').dateTime;
+  await report.open();
+  await flush();
+  assert.equal(card()?.textContent, 'FALHA NA ATUALIZAÇÃO');
+  assert.equal(card()?.dataset.reportRefreshStatus, 'error');
+  assert.equal(updatedAt(), '2026-11-13T23:10:00.000Z');
+  report.close();
+
+  latest = { status: 'succeeded', lastSuccessfulAt: Date.parse('2026-11-14T23:10:00Z') };
+  await report.open();
+  await flush();
+  assert.equal(card(), null);
+  assert.equal(updatedAt(), '2026-11-14T23:10:00.000Z');
 });

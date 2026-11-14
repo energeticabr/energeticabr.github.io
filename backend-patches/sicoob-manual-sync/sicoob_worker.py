@@ -10,6 +10,10 @@ import sys
 import tempfile
 import time
 
+# On OCI the shared queue module lives one directory above the worker.
+sys.path.append(str(Path(__file__).resolve().parent.parent))
+from sicoob_sync import Queue, record_attempt
+
 ROOT = Path('/var/lib/energetica-sicoob-movements')
 CODE = Path('/opt/energetica-whatsapp/sicoob-movements')
 PYTHON = '/opt/energetica-whatsapp/.venv/bin/python'
@@ -138,6 +142,7 @@ def collect(origin, heartbeat=lambda: None):
                 except Exception as error:
                     result.update(status='failed', failed=1)
                     print(json.dumps({'origin': origin, 'stage': stage, 'status': 'failed', 'errorType': type(error).__name__}), flush=True)
+            record_attempt(ROOT / 'latest-attempt.json', result['status'])
     except Exception as error:
         # Errors and banking output can contain confidential data. Log safe classes only.
         result = {'status': 'failed', 'failed': 1}
@@ -147,8 +152,6 @@ def collect(origin, heartbeat=lambda: None):
 
 def serve():
     import fcntl
-    sys.path.insert(0, '/opt/energetica-whatsapp')
-    from sicoob_sync import Queue
     queue = Queue()
     with (ROOT / 'request-worker.lock').open('a+b') as singleton:
         fcntl.flock(singleton, fcntl.LOCK_EX | fcntl.LOCK_NB)

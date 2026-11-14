@@ -85,7 +85,7 @@ function projectTransactions(snapshot) {
   }).sort((a, b) => b.date.localeCompare(a.date) || b.id.localeCompare(a.id, 'pt-BR', { numeric: true }));
 }
 
-export function createSicoobTransactionReportView({ document: doc = globalThis.document, data, onClose, onLinkageChange, openMediaCollection, syncMonitor, loadBalance } = {}) {
+export function createSicoobTransactionReportView({ document: doc = globalThis.document, data, onClose, onLinkageChange, openMediaCollection, syncMonitor, loadBalance, loadLatestAttempt } = {}) {
   const make = (tag, className = '', value = '') => {
     const node = doc.createElement(tag);
     node.className = className;
@@ -166,7 +166,28 @@ export function createSicoobTransactionReportView({ document: doc = globalThis.d
   let loading = false, starting = false, syncRunning = Boolean(syncMonitor?.running);
   let sourceRunning = Boolean(syncMonitor?.sourceRunning ?? syncMonitor?.running), reloadPending = false;
   const lastUpdate = createFinancialReportLastUpdate(doc);
-  const refreshStatus = createFinancialReportRefreshStatus(doc);
+  const refreshStatus = createFinancialReportRefreshStatus(doc, { errorText: 'FALHA NA ATUALIZAÇÃO' });
+  let attemptRequest, attemptTimer;
+
+  async function readLatestAttempt() {
+    if (!loadLatestAttempt || root.hidden) return;
+    attemptRequest?.abort();
+    const active = attemptRequest = new AbortController();
+    try {
+      const latest = await loadLatestAttempt({ signal: active.signal });
+      if (!latest || active !== attemptRequest || root.hidden) return;
+      lastUpdate.update(latest.lastSuccessfulAt);
+      refreshStatus.setLatestAttempt(latest.status);
+    } catch {
+      // A status read error does not establish the outcome of the bank collection.
+    } finally {
+      if (active === attemptRequest) attemptRequest = null;
+    }
+  }
+
+  function readLatestAttemptWhenVisible() {
+    if (doc.visibilityState !== 'hidden' && !attemptRequest) void readLatestAttempt();
+  }
   let loadNotice = '';
   const app = doc.getElementById('app');
   const orderLink = data.orderLink;
@@ -583,6 +604,10 @@ export function createSicoobTransactionReportView({ document: doc = globalThis.d
     picker?.close();
     request?.abort();
     request = null;
+    doc.removeEventListener('visibilitychange', readLatestAttemptWhenVisible);
+    doc.defaultView?.clearInterval(attemptTimer);
+    attemptRequest?.abort();
+    attemptRequest = null;
     balanceMetric.clear();
     receiptRequest = null;
     rows = null;
@@ -602,7 +627,10 @@ export function createSicoobTransactionReportView({ document: doc = globalThis.d
 
   const unsubscribeSync = syncMonitor?.subscribe(state => {
     const active = Boolean(state.sourceRunning ?? state.running);
-    if (sourceRunning && !active) reloadPending = true;
+    if (sourceRunning && !active) {
+      reloadPending = true;
+      void readLatestAttempt();
+    }
     sourceRunning = active;
     syncRunning = Boolean(state.running);
     lastUpdate.update(state.lastSuccessfulAt);
@@ -643,6 +671,11 @@ export function createSicoobTransactionReportView({ document: doc = globalThis.d
       landscape.update();
       panel.focus();
       void balanceMetric.refresh();
+      if (loadLatestAttempt) {
+        doc.addEventListener('visibilitychange', readLatestAttemptWhenVisible);
+        attemptTimer = doc.defaultView?.setInterval(readLatestAttemptWhenVisible, 60000);
+        void readLatestAttempt();
+      }
       await load();
     },
     close,
