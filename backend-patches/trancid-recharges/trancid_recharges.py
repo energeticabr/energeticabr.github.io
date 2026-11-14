@@ -12,7 +12,7 @@ import secrets
 import sqlite3
 import time
 
-from trancid_portal_adapter import Portal, PortalError, PortalUncertain
+from trancid_portal_adapter import ORDER_CODE, Portal, PortalError, PortalUncertain
 
 CONFIG = Path('/etc/energetica-trancid-recharges.json')
 DATABASE = Path('/var/lib/energetica-whatsapp/trancid-recharges/orders.sqlite')
@@ -242,6 +242,12 @@ class Service:
                 db.execute("UPDATE orders SET state='submitted', receipt=? WHERE id=? AND state IN ('sending', 'uncertain')",
                            (json.dumps(receipt), row['id']))
 
+    def order_details(self, order_code):
+        if not isinstance(order_code, str) or not re.fullmatch(ORDER_CODE, order_code):
+            raise GatewayError('Código de pedido da Trancid inválido.')
+        with self.portal() as portal:
+            return {'orderCode': order_code, 'items': portal.order_details(order_code)}
+
 
 def read_config():
     try:
@@ -276,6 +282,8 @@ def handle_portal(identity, body):
             value = service.confirm(owner, body.get('id'))
         elif action == 'trancid_recharge_history':
             value = service.history(body.get('page', 1), refresh=body.get('refresh') is True)
+        elif action == 'trancid_recharge_details':
+            value = service.order_details(body.get('orderCode'))
         else:
             raise GatewayError('Operação Trancid inválida.')
         return 200, {'status': 'processed', 'messages': [], 'trancid': value}

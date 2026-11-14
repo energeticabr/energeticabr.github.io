@@ -22,7 +22,7 @@ ACCOUNT = 'energetica-whatsapp'
 CONFIG = Path('/etc/energetica-trancid-recharges.json')
 STATE = Path('/var/lib/energetica-whatsapp/trancid-recharges')
 ANCHOR = '                if action in {"swile_directory", "swile_preview", "swile_confirm", "swile_orders"}:\n'
-ROUTE = '''                if action in {
+LEGACY_ROUTE = '''                if action in {
                     "trancid_recharge_directory", "trancid_recharge_preview",
                     "trancid_recharge_confirm", "trancid_recharge_history",
                 }:
@@ -30,6 +30,10 @@ ROUTE = '''                if action in {
                     status, result = handle_trancid_recharges(identity, body)
                     return self._send_json(status, result, cors_origin=origin)
 '''
+ROUTE = LEGACY_ROUTE.replace(
+    '"trancid_recharge_confirm", "trancid_recharge_history",',
+    '"trancid_recharge_confirm", "trancid_recharge_history", "trancid_recharge_details",',
+)
 MODULES = ('trancid_recharges.py', 'trancid_portal_adapter.py')
 
 
@@ -37,9 +41,14 @@ def patch_bridge(data):
     source = data.decode('utf-8')
     if ROUTE + ANCHOR in source:
         return data
-    if source.count(ANCHOR) != 1 or 'handle_trancid_recharges' in source:
+    if source.count(ANCHOR) != 1:
         raise ValueError('Unexpected portal routing. Review the active bridge.')
-    source = source.replace(ANCHOR, ROUTE + ANCHOR, 1)
+    if source.count(LEGACY_ROUTE + ANCHOR) == 1:
+        source = source.replace(LEGACY_ROUTE + ANCHOR, ROUTE + ANCHOR, 1)
+    elif 'handle_trancid_recharges' not in source:
+        source = source.replace(ANCHOR, ROUTE + ANCHOR, 1)
+    else:
+        raise ValueError('Unexpected Trancid routing. Review the active bridge.')
     compile(source, 'channel_bridge.py', 'exec')
     return source.encode('utf-8')
 

@@ -157,11 +157,11 @@ test('Trancid opens its paginated history in a full-screen gallery and returns t
   assert.ok(header.querySelector('nav button[aria-label="Início"]'));
   const sync = header.querySelector(':scope > [data-gallery-refresh]');
   assert.ok(sync);
-  assert.match(screen.textContent, /Galeria Trancid.*790001.*220,00.*Pendente pgto.*13\/11\/2026.*Boleto.*222,20/s);
+  assert.match(screen.textContent, /Galeria Trancid.*790001.*220,00.*Pendente pgto.*Boleto.*13\/11\/2026.*222,20/s);
   assert.match(screen.textContent, /Situação informada pela Trancid em 13\/11\/2026,? 18:15/);
   click('Próxima página');
   await settle();
-  assert.match(screen.textContent, /788001.*55,00.*Pago.*17\/09\/2026.*Pix/s);
+  assert.match(screen.textContent, /788001.*55,00.*Pago.*Pix.*17\/09\/2026/s);
   assert.doesNotMatch(screen.textContent, /Total|Não informado/);
   sync.click();
   assert.equal(sync.disabled, true);
@@ -175,6 +175,54 @@ test('Trancid opens its paginated history in a full-screen gallery and returns t
   assert.equal(document.querySelector('#app').hasAttribute('inert'), false);
   assert.equal(document.activeElement, opener);
   assert.equal(wentHome, false);
+});
+
+test('Trancid expands the exact order, shows masked recharge lines and retries detail errors', async t => {
+  const calls = [];
+  let pending = true;
+  const { document } = await fixture(t, async (operation, params) => {
+    if (operation === 'history') return { page: 1, orders: [
+      { orderCode: '790001', creditCents: 5500, paymentMethod: 'BOLETO', paymentStatus: 'Pendente pgto' },
+      { orderCode: '790002', creditCents: 5750, paymentMethod: 'PIX', paymentStatus: 'Pago' },
+      { orderCode: '790003', creditCents: 0, paymentMethod: 'BOLETO', paymentStatus: 'Rascunho' },
+    ] };
+    calls.push([operation, params]);
+    if (params.orderCode === '790002' && pending) {
+      pending = false;
+      throw new Error('Consulta temporariamente indisponível');
+    }
+    return { orderCode: params.orderCode, items: [{ ...cards[0], amountCents: 5750 }] };
+  }, true);
+  const [first, second, draft] = document.querySelectorAll('.trancid-order-summary');
+  assert.ok(first && second && draft, 'orders have disclosure buttons');
+  assert.equal(first.getAttribute('aria-expanded'), 'false');
+  assert.equal(first.querySelector('.trancid-order-method').textContent, 'Boleto');
+  assert.equal(second.querySelector('.trancid-order-method').textContent, 'Pix');
+  assert.equal(first.querySelector('.trancid-order-status').dataset.tone, 'pending');
+  assert.equal(second.querySelector('.trancid-order-status').dataset.tone, 'paid');
+  assert.equal(draft.querySelector('.trancid-order-status').dataset.tone, 'neutral');
+  assert.deepEqual(calls, []);
+
+  const details = document.getElementById(second.getAttribute('aria-controls'));
+  assert.equal(details.hidden, true);
+  second.click();
+  assert.equal(details.hidden, false);
+  assert.equal(second.getAttribute('aria-expanded'), 'true');
+  await settle();
+  assert.match(details.textContent, /Consulta temporariamente indisponível/);
+  details.querySelector('button').click();
+  await settle();
+  assert.match(details.textContent, /Pessoa Ávila.*Cartão final 0101.*57,50/s);
+  second.click();
+  assert.equal(details.hidden, true);
+  second.click();
+  await settle();
+  assert.deepEqual(calls, [['details', { orderCode: '790002' }], ['details', { orderCode: '790002' }]]);
+  first.click();
+  await settle();
+  const changed = document.getElementById(first.getAttribute('aria-controls'));
+  assert.match(changed.textContent, /O valor do pedido mudou.*Atualize a galeria/s);
+  assert.doesNotMatch(changed.textContent, /Cartão final/);
 });
 
 test('Trancid client uses authenticated portal actions without retrying uncertain confirmation', async () => {
@@ -191,14 +239,16 @@ test('Trancid client uses authenticated portal actions without retrying uncertai
   };
   const client = createChatClient(options);
   assert.deepEqual(await client.trancidRechargeRequest('directory'), cards);
+  assert.deepEqual(await client.trancidRechargeRequest('details', { orderCode: '790001' }), cards);
   await assert.rejects(client.trancidRechargeRequest('confirm', { id: 'preview-1' }), /Galeria Trancid/);
   assert.deepEqual(calls, [
     ['https://energetico.example/api/portal-chat', 'Bearer fake-token', { action: 'trancid_recharge_directory' }],
+    ['https://energetico.example/api/portal-chat', 'Bearer fake-token', { action: 'trancid_recharge_details', orderCode: '790001' }],
     ['https://energetico.example/api/portal-chat', 'Bearer fake-token', { action: 'trancid_recharge_confirm', id: 'preview-1' }],
   ]);
   const demo = createChatClient({ ...options, apiPrefix: '/api/demo' });
   await assert.rejects(demo.trancidRechargeRequest('confirm', { id: 'preview-1' }), /ambiente da empresa/);
-  assert.equal(calls.length, 2);
+  assert.equal(calls.length, 3);
 });
 
 test('Trancid client preserves a response that confirms no order was submitted', async () => {
