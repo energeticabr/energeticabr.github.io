@@ -33,6 +33,11 @@ view.render({ sessionStatus:'authenticated', account:{name:'Teste'}, messages:[{
 const key = '1'.repeat(44);
 const common = { STATUS_IMPORTACAO:'XML_COMPLETO', SITUACAO:'AUTORIZADA', VALOR_TOTAL_NOTA:2500 };
 let orderId = null;
+let syncListener;
+const syncMonitor = {
+  subscribe(listener) { syncListener = listener; listener({ running:false }); return () => {}; },
+  async start() { syncListener({ running:true, latest:{ status:'running' } }); },
+};
 const report = decorateReportPrint(decorateReportNavigation(createNfeReportView({ data:{
   proposal:{
     async load(){ return {
@@ -71,7 +76,7 @@ const report = decorateReportPrint(decorateReportNavigation(createNfeReportView(
     await new Promise(resolve => setTimeout(resolve, 250));
     return new Blob([`<NFe xmlns="http://www.portalfiscal.inf.br/nfe"><infNFe Id="NFe${key}"><emit><CRT>4</CRT></emit></infNFe></NFe>`]);
   },
-}, openMediaCollection:async()=>{} }), {action:'open-nfe-report'}), {action:'open-nfe-report'});
+}, syncMonitor, openMediaCollection:async()=>{} }), {action:'open-nfe-report'}), {action:'open-nfe-report'});
 view.on('open-nfe-report', () => report.open());
 const box = node => {
   const {x,y,right,bottom,width,height} = node.getBoundingClientRect();
@@ -318,6 +323,23 @@ if (!report.element.hidden) {
     regime.value = '';
     regime.dispatchEvent(new Event('change'));
   }
+}
+if (!report.element.hidden) {
+  const motionEnabled = matchMedia('(prefers-reduced-motion: no-preference)').matches;
+  const status = panel.querySelector('[data-report-refresh-status]');
+  const animation = () => getComputedStyle(status.querySelector('svg')).animationName;
+  panel.querySelector('.pl-refresh').click();
+  const active = animation();
+  syncListener({ running:true, latest:{ status:'waiting', sources:{
+    NFE:{ status:'waiting', code:'COOLDOWN', nextAllowedAt:'2026-11-14T02:17:58Z' },
+    NFSE:{ status:'waiting', code:'SYNC_FAILED', nextAllowedAt:'2026-11-14T02:22:44Z' },
+  } } });
+  const waiting = animation();
+  const feedback = panel.querySelector('.nfe-sync-feedback');
+  const waitingVisible = !feedback.hidden && feedback.textContent.includes('23:17') && box(feedback).height > 0;
+  syncListener({ running:false, latest:{ status:'succeeded' } });
+  await new Promise(resolve => setTimeout(resolve, 0));
+  document.documentElement.dataset.refreshAnimation = JSON.stringify({ motionEnabled, active, waiting, waitingVisible, complete:animation() });
 }
 document.documentElement.dataset.layout = JSON.stringify(layout);
 document.documentElement.dataset.ready = 'true';

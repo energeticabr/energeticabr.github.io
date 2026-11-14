@@ -127,8 +127,18 @@ test('the report sync button queues SEFAZ once and refreshes the same view after
   assert.deepEqual(calls, [id]);
   assert.deepEqual(snapshots, [false]);
   assert.equal(refresh.disabled, true);
-  assert.doesNotMatch(report.element.textContent, /intervalo obrigatório/);
+  const status = report.element.querySelector('[data-report-refresh-status]');
+  const progress = report.element.querySelector('.nfe-sync-feedback');
+  assert.equal(status.dataset.reportRefreshStatus, 'waiting');
+  assert.match(status.textContent, /AGUARDANDO NOVA TENTATIVA/);
+  assert.match(progress.textContent, /NF-e: aguardando o intervalo obrigatório.*18:00/);
+  assert.match(progress.textContent, /A consulta será retomada automaticamente/);
   assert.match(report.element.querySelector('tbody').textContent, /140/);
+
+  receipt = { ...receipt, status:'running', sources:{ ...receipt.sources, NFE:{ status:'running' } } };
+  await monitor.resume();
+  assert.equal(status.dataset.reportRefreshStatus, 'pending');
+  assert.equal(progress.hidden, true);
 
   receipt = { requestId:id, startedUtc, status:'partial', completedUtc:'2026-11-10T21:01:00Z',
     sources:{ NFE:{ status:'succeeded', documents:1 }, CTE:succeeded, NFSE:{ status:'failed', code:'SYNC_FAILED' } } };
@@ -136,6 +146,7 @@ test('the report sync button queues SEFAZ once and refreshes the same view after
   assert.deepEqual(snapshots, [false, true]);
   assert.equal(search.value, 'elétrica');
   assert.equal(refresh.disabled, false);
+  assert.equal(status.dataset.reportRefreshStatus, 'error');
   assert.match(report.element.querySelector('tbody').textContent, /141/);
 });
 

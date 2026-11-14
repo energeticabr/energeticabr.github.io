@@ -76,6 +76,12 @@
 .nfe-report[data-report-max-680="true"] .nfe-metrics:has([data-report-refresh-status]:not([hidden])) .nfe-pair {
   grid-column: span 2;
 }
+@media (prefers-reduced-motion: no-preference) {
+  .nfe-report [data-report-refresh-status="pending"] svg {
+    transform-origin: center;
+    animation: loading-spinner-turn .9s linear infinite;
+  }
+}
 .nfe-feedback, .nfe-pdf-feedback { margin: 8px 0; color: #456375; font-size: 12px; }
 .nfe-sync-feedback { padding: 0 10px; white-space: pre-line; }
 .nfe-pdf-feedback { padding: 6px 10px; background: #ffeaec; color: #8b2730; }
