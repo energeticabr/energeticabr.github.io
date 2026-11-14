@@ -53,7 +53,7 @@ test('Swile keeps amounts across search and submits only after review', async ()
     assert.equal(amount('Pessoa B').value, '225,00');
     assert.equal(amount('BERNARDO NOTINI MOREIRA BAHIA').value, '');
     assert.equal(amount(' Rafael da Silva').value, '');
-    assert.match(document.querySelector('[aria-live=polite]').textContent, /2 colaboradores · R\$\s*450,00/);
+    assert.match(document.querySelector('.swile-footer [aria-live=polite]').textContent, /2 colaboradores · R\$\s*450,00/);
     assert.equal([...document.querySelectorAll('button')].some(button => button.textContent === 'Pedidos enviados'), false);
     const sync = document.querySelector('header button[aria-label="Atualizar colaboradores"]');
     assert.ok(sync.querySelector('svg'));
@@ -71,7 +71,9 @@ test('Swile keeps amounts across search and submits only after review', async ()
     input(document.querySelector('[type=search]'), '');
     assert.equal(amount('Pessoa A').value, '12,34');
     assert.equal(amount('Pessoa C').value, '225,00');
-    input(document.querySelector('[type=date]'), '2026-12-02');
+    document.querySelector('.swile-credit-trigger').click();
+    document.querySelector('[aria-label="Próximo mês"]').click();
+    document.querySelector('[data-date="2026-12-02"]').click();
     document.querySelector('select').value = 'PIX';
     click('Conferir pedido');
     await settle();
@@ -121,30 +123,32 @@ test('Swile schedules the nearest eligible Friday and recalculates the latest bo
   t.after(() => { view.close(); window.close(); });
   const settle = () => new Promise(resolve => setImmediate(resolve));
   await settle();
-  const [credit, due] = document.querySelectorAll('input[type=date]');
+  const credit = document.querySelector('.swile-credit-trigger');
+  const due = document.querySelector('output');
   const payment = document.querySelector('select');
-  const set = (input, value, event = 'change') => {
-    input.value = value;
-    input.dispatchEvent(new window.Event(event, { bubbles: true }));
+  const setPayment = value => {
+    payment.value = value;
+    payment.dispatchEvent(new window.Event('change', { bubbles: true }));
   };
   const click = text => [...document.querySelectorAll('button')].find(button => button.textContent === text).click();
 
-  assert.equal(credit.value, '2026-11-20');
-  set(payment, 'BANK_SLIP');
-  assert.equal(due.value, '2026-11-19');
-  assert.equal(due.readOnly, true);
-  set(credit, '2026-12-01', 'input');
-  assert.equal(due.value, '2026-11-30');
-  set(payment, 'PIX');
-  assert.equal(credit.value, '2026-12-01');
+  assert.equal(credit.textContent, '20/11/2026');
+  setPayment('BANK_SLIP');
+  assert.equal(due.textContent, '19/11/2026');
+  credit.click();
+  document.querySelector('[aria-label="Próximo mês"]').click();
+  document.querySelector('[data-date="2026-12-01"]').click();
+  assert.equal(due.textContent, '30/11/2026');
+  setPayment('PIX');
+  assert.equal(credit.textContent, '01/12/2026');
   assert.equal(due.closest('label').hidden, true);
-  assert.equal(due.value, '');
+  assert.equal(due.textContent, '');
   assert.match(document.querySelector('.swile-pix-deadline').textContent, /prazo.+Swile/i);
-  set(payment, 'BANK_SLIP');
-  assert.equal(due.value, '2026-11-30');
-  set(credit, '');
-  assert.equal(due.value, '');
-  set(credit, '2026-11-20');
+  setPayment('BANK_SLIP');
+  assert.equal(due.textContent, '30/11/2026');
+  credit.click();
+  document.querySelector('[aria-label="Mês anterior"]').click();
+  document.querySelector('[data-date="2026-11-20"]').click();
   click('Conferir pedido');
   await settle();
   assert.deepEqual(calls.at(-1), ['preview', {
@@ -157,41 +161,30 @@ test('Swile schedules the nearest eligible Friday and recalculates the latest bo
 test('Swile advances the automatic Friday when boleto needs more time, preserving an eligible manual date', async t => {
   const { window } = new JSDOM('<!doctype html><body></body>');
   const { document } = window;
-  const calls = [];
   const view = openSwileView({
     document, now: () => new Date('2026-11-12T14:00:00Z'),
-    request: async (operation, body) => {
-      calls.push([operation, body]);
-      if (operation === 'directory') return [{ id: 1, name: 'Pessoa A' }];
-      return { ...body, items: [], totalEmployees: 1, creditCents: 22500, paymentCents: 22500 };
-    },
+    request: async () => [{ id: 1, name: 'Pessoa A' }],
   });
   t.after(() => { view.close(); window.close(); });
-  const settle = () => new Promise(resolve => setImmediate(resolve));
-  await settle();
-  const [credit, due] = document.querySelectorAll('input[type=date]');
+  await new Promise(resolve => setImmediate(resolve));
+  const credit = document.querySelector('.swile-credit-trigger');
+  const due = document.querySelector('output');
   const payment = document.querySelector('select');
-  const set = (input, value) => {
-    input.value = value;
-    input.dispatchEvent(new window.Event('change', { bubbles: true }));
+  const setPayment = value => {
+    payment.value = value;
+    payment.dispatchEvent(new window.Event('change', { bubbles: true }));
   };
-  assert.equal(credit.value, '2026-11-13');
-  set(payment, 'BANK_SLIP');
-  assert.equal(credit.min, '2026-11-16');
-  assert.equal(credit.value, '2026-11-20');
-  assert.equal(due.value, '2026-11-19');
-  set(payment, 'PIX');
-  assert.equal(credit.value, '2026-11-13');
-  set(credit, '2026-11-17');
-  set(payment, 'BANK_SLIP');
-  assert.equal(credit.value, '2026-11-17');
-  assert.equal(due.value, '2026-11-16');
-  set(credit, '2026-11-13');
-  assert.equal(due.value, '');
-  [...document.querySelectorAll('button')].find(button => button.textContent === 'Conferir pedido').click();
-  await settle();
-  assert.equal(calls.length, 1);
-  assert.match(document.querySelector('[role=status]').textContent, /16\/11\/2026/);
+  assert.equal(credit.textContent, '13/11/2026');
+  setPayment('BANK_SLIP');
+  assert.equal(credit.textContent, '20/11/2026');
+  assert.equal(due.textContent, '19/11/2026');
+  setPayment('PIX');
+  assert.equal(credit.textContent, '13/11/2026');
+  credit.click();
+  document.querySelector('[data-date="2026-11-17"]').click();
+  setPayment('BANK_SLIP');
+  assert.equal(credit.textContent, '17/11/2026');
+  assert.equal(due.textContent, '16/11/2026');
 });
 
 test('Swile refreshes an automatic date when the UTC cutoff changes before review', async t => {
@@ -213,12 +206,63 @@ test('Swile refreshes an automatic date when the UTC cutoff changes before revie
   const payment = document.querySelector('select');
   payment.value = 'BANK_SLIP';
   payment.dispatchEvent(new window.Event('change'));
-  assert.equal(document.querySelector('input[type=date]').value, '2026-11-13');
+  assert.equal(document.querySelector('.swile-credit-trigger').textContent, '13/11/2026');
   instant = new Date('2026-11-12T00:01:00Z');
   [...document.querySelectorAll('button')].find(button => button.textContent === 'Conferir pedido').click();
   await settle();
   assert.equal(preview?.creditDate, '2026-11-20');
   assert.equal(preview?.dueDate, '2026-11-19');
+});
+
+test('Swile disables unavailable dates in the calendar before they can be selected', async t => {
+  const { window } = new JSDOM('<!doctype html><body></body>');
+  const { document } = window;
+  const view = openSwileView({
+    document, now: () => new Date('2026-11-16T14:00:00Z'),
+    request: async () => [{ id: 1, name: 'Pessoa A' }],
+  });
+  t.after(() => { view.close(); window.close(); });
+  await new Promise(resolve => setImmediate(resolve));
+  const credit = document.querySelector('button[aria-label^="Data de crédito"]');
+  const day = value => document.querySelector(`button[data-date="${value}"]`);
+  const payment = document.querySelector('select');
+  const setPayment = value => {
+    payment.value = value;
+    payment.dispatchEvent(new window.Event('change'));
+  };
+
+  assert.equal(document.querySelector('input[type=date]'), null);
+  assert.equal(credit.getAttribute('aria-expanded'), 'false');
+  credit.click();
+  assert.equal(day('2026-11-15').disabled, true);
+  assert.equal(day('2026-11-16').disabled, true);
+  assert.equal(day('2026-11-17').disabled, false);
+  assert.equal(document.querySelector('[aria-label="Mês anterior"]').disabled, true);
+
+  setPayment('BANK_SLIP');
+  assert.equal(day('2026-11-17').disabled, true);
+  day('2026-11-17').click();
+  assert.equal(credit.getAttribute('aria-expanded'), 'true');
+  assert.match(credit.textContent, /20\/11\/2026/);
+  assert.equal(day('2026-11-18').disabled, false);
+  day('2026-11-18').click();
+  assert.equal(credit.getAttribute('aria-expanded'), 'false');
+  assert.match(credit.textContent, /18\/11\/2026/);
+  assert.equal(document.querySelector('output').textContent, '17/11/2026');
+
+  setPayment('PIX');
+  credit.click();
+  assert.equal(day('2026-11-17').disabled, false);
+  day('2026-11-17').click();
+  setPayment('BANK_SLIP');
+  assert.match(credit.textContent, /20\/11\/2026/);
+  assert.equal(document.querySelector('output').textContent, '19/11/2026');
+  credit.click();
+  document.querySelector('[aria-label="Próximo mês"]').click();
+  assert.equal(day('2026-12-01').disabled, false);
+  day('2026-12-01').dispatchEvent(new window.KeyboardEvent('keydown', { key: 'Escape', bubbles: true }));
+  assert.equal(credit.getAttribute('aria-expanded'), 'false');
+  assert.equal(document.activeElement, credit);
 });
 
 test('Swile gallery is a separate screen and can open an older completed order', async t => {

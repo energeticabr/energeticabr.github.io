@@ -11,6 +11,8 @@ const saoPauloDate = new Intl.DateTimeFormat('en-CA', {
 });
 const calendarDate = value => new Date(`${value}T00:00:00Z`);
 const dateKey = value => value.toISOString().slice(0, 10);
+const calendarMonth = new Intl.DateTimeFormat('pt-BR', { month: 'long', year: 'numeric', timeZone: 'UTC' });
+const calendarDay = new Intl.DateTimeFormat('pt-BR', { dateStyle: 'full', timeZone: 'UTC' });
 
 function shiftDays(value, days) {
   const date = calendarDate(value);
@@ -19,7 +21,6 @@ function shiftDays(value, days) {
 }
 
 function earliestCreditDate(instant, payment) {
-  if (!payment) return '';
   // The Corporate Gateway validates the minimum lead time against UTC.
   let date = dateKey(instant);
   let remaining = payment === 'BANK_SLIP' ? 2 : 1;
@@ -130,12 +131,13 @@ export function openSwileView({ document: doc, request, gallery = false, onClose
   const rows = make('div', '', 'swile-rows');
   const total = make('strong');
   total.setAttribute('aria-live', 'polite');
-  const credit = make('input');
-  credit.type = 'date';
-  credit.required = true;
-  credit.max = '9999-12-31';
-  const due = make('input');
-  due.type = 'date';
+  const credit = button('', toggleCalendar);
+  credit.className = 'swile-credit-trigger';
+  credit.setAttribute('aria-expanded', 'false');
+  credit.setAttribute('aria-controls', 'swile-credit-calendar');
+  const creditField = make('div', '', 'swile-credit-field');
+  creditField.append(make('span', 'Data de crédito'), credit);
+  const due = make('output');
   const payment = make('select');
   for (const [value, label] of [['', 'Selecione'], ['PIX', 'Pix'], ['BANK_SLIP', 'Boleto']]) {
     const option = make('option', label);
@@ -143,28 +145,121 @@ export function openSwileView({ document: doc, request, gallery = false, onClose
     payment.append(option);
   }
   const dueField = field('Vencimento do boleto', due);
-  due.readOnly = true;
+  dueField.className = 'swile-boleto-due';
   const pixDeadline = make('p', 'Prazo de pagamento do Pix definido pela Swile.', 'swile-pix-deadline');
+  let creditDate = '';
+  let minimumCredit = '';
   let automaticCredit = true;
+  let visibleMonth = '';
+  const calendar = make('section', '', 'swile-calendar');
+  calendar.id = 'swile-credit-calendar';
+  calendar.hidden = true;
+  const monthTitle = make('strong');
+  monthTitle.id = 'swile-credit-month';
+  monthTitle.setAttribute('aria-live', 'polite');
+  calendar.setAttribute('aria-labelledby', monthTitle.id);
+  const previous = button('‹', () => changeMonth(-1));
+  previous.setAttribute('aria-label', 'Mês anterior');
+  const next = button('›', () => changeMonth(1));
+  next.setAttribute('aria-label', 'Próximo mês');
+  const calendarHeader = make('div', '', 'swile-calendar-header');
+  calendarHeader.append(previous, monthTitle, next);
+  const weekdays = make('div', '', 'swile-calendar-grid');
+  weekdays.setAttribute('aria-hidden', 'true');
+  for (const day of ['Dom', 'Seg', 'Ter', 'Qua', 'Qui', 'Sex', 'Sáb']) weekdays.append(make('span', day));
+  const days = make('div', '', 'swile-calendar-grid');
+  calendar.append(calendarHeader, weekdays, days);
 
-  function updateDates(useDefault = false) {
+  function dateInRange(date) {
+    return date >= minimumCredit && date <= '9999-12-31';
+  }
+
+  function updateDates() {
     const instant = now();
-    credit.min = earliestCreditDate(instant, payment.value);
-    if (useDefault && automaticCredit) credit.value = nextFriday(instant, credit.min);
+    minimumCredit = earliestCreditDate(instant, payment.value);
+    if (automaticCredit || !dateInRange(creditDate)) {
+      creditDate = nextFriday(instant, minimumCredit);
+      automaticCredit = true;
+    }
+    credit.textContent = dateLabel(creditDate);
+    credit.setAttribute('aria-label', `Data de crédito: ${dateLabel(creditDate)}`);
     const boleto = payment.value === 'BANK_SLIP';
     dueField.hidden = !boleto;
     pixDeadline.hidden = payment.value !== 'PIX';
-    due.value = boleto && credit.value && credit.validity.valid ? shiftDays(credit.value, -1) : '';
+    due.value = boleto && dateInRange(creditDate) ? dateLabel(shiftDays(creditDate, -1)) : '';
+    if (!calendar.hidden) {
+      if (visibleMonth < minimumCredit.slice(0, 7)) visibleMonth = creditDate.slice(0, 7);
+      renderCalendar();
+    }
   }
 
-  function onCreditEdit() {
-    automaticCredit = false;
+  function renderCalendar() {
+    const first = calendarDate(`${visibleMonth}-01`);
+    const afterMonth = new Date(first);
+    afterMonth.setUTCMonth(first.getUTCMonth() + 1);
+    monthTitle.textContent = calendarMonth.format(first);
+    previous.disabled = visibleMonth <= minimumCredit.slice(0, 7);
+    next.disabled = visibleMonth === '9999-12';
+    days.replaceChildren();
+    for (let gap = 0; gap < first.getUTCDay(); gap++) days.append(make('span'));
+    for (const date = new Date(first); date < afterMonth; date.setUTCDate(date.getUTCDate() + 1)) {
+      const value = dateKey(date);
+      const day = button(String(date.getUTCDate()), () => {
+        if (busy) return;
+        if (value < earliestCreditDate(now(), payment.value)) {
+          updateDates();
+          focusCalendarDay();
+          return;
+        }
+        creditDate = value;
+        automaticCredit = false;
+        hideCalendar(true);
+        updateDates();
+      });
+      day.dataset.date = value;
+      day.disabled = !dateInRange(value);
+      day.setAttribute('aria-label', calendarDay.format(date));
+      day.setAttribute('aria-pressed', String(value === creditDate));
+      days.append(day);
+    }
+  }
+
+  function focusCalendarDay() {
+    (days.querySelector('[aria-pressed=true]:enabled') || days.querySelector('button:enabled'))?.focus();
+  }
+
+  function changeMonth(offset) {
+    if (busy) return;
+    const first = calendarDate(`${visibleMonth}-01`);
+    first.setUTCMonth(first.getUTCMonth() + offset);
+    visibleMonth = dateKey(first).slice(0, 7);
+    renderCalendar();
+    if ((offset < 0 ? previous : next).disabled) focusCalendarDay();
+  }
+
+  function hideCalendar(restoreFocus = false) {
+    calendar.hidden = true;
+    credit.setAttribute('aria-expanded', 'false');
+    if (restoreFocus) credit.focus();
+  }
+
+  function toggleCalendar() {
+    if (!calendar.hidden) return hideCalendar(true);
     updateDates();
+    visibleMonth = creditDate.slice(0, 7);
+    renderCalendar();
+    calendar.hidden = false;
+    credit.setAttribute('aria-expanded', 'true');
+    focusCalendarDay();
   }
 
-  payment.addEventListener('change', () => updateDates(true));
-  credit.addEventListener('input', onCreditEdit);
-  credit.addEventListener('change', onCreditEdit);
+  payment.addEventListener('change', updateDates);
+  screen.addEventListener('keydown', event => {
+    if (event.key === 'Escape' && !calendar.hidden) {
+      event.preventDefault();
+      hideCalendar(true);
+    }
+  });
   search.addEventListener('input', showPeople);
 
   function close() {
@@ -258,7 +353,7 @@ export function openSwileView({ document: doc, request, gallery = false, onClose
   }
 
   const dates = make('div', '', 'swile-dates');
-  dates.append(field('Data de crédito', credit), field('Forma de pagamento', payment), dueField, pixDeadline);
+  dates.append(creditField, field('Forma de pagamento', payment), calendar, dueField, pixDeadline);
   const footer = make('div', '', 'swile-actions swile-footer');
   const review = button('Conferir pedido', prepare, true);
   footer.append(total, review);
@@ -270,7 +365,8 @@ export function openSwileView({ document: doc, request, gallery = false, onClose
       content.replaceChildren();
       return;
     }
-    updateDates(true);
+    hideCalendar();
+    updateDates();
     content.replaceChildren(search, rows, dates, footer);
     showPeople();
     review.disabled = !people.length;
@@ -294,14 +390,11 @@ export function openSwileView({ document: doc, request, gallery = false, onClose
       const invalid = items.find(item => item.amountCents === null);
       if (invalid) throw new Error(`Confira o valor informado para ${people.find(row => row.id === invalid.employeeId)?.name || 'o colaborador'}.`);
       if (!items.length) throw new Error('Informe o valor de pelo menos um colaborador.');
-      if (!credit.value || !payment.value) throw new Error('Informe a data de crédito e a forma de pagamento.');
-      updateDates(true);
-      if (credit.validity.rangeUnderflow) {
-        throw new Error(`A data de crédito deve ser a partir de ${dateLabel(credit.min)} para essa forma de pagamento.`);
-      }
-      if (!credit.validity.valid) throw new Error('Informe uma data válida para o crédito.');
-      const result = await request('preview', { items, creditDate: credit.value, paymentMethod: payment.value,
-        ...(payment.value === 'BANK_SLIP' ? { dueDate: due.value } : {}) }, { signal });
+      if (!payment.value) throw new Error('Informe a forma de pagamento.');
+      hideCalendar();
+      updateDates();
+      const result = await request('preview', { items, creditDate, paymentMethod: payment.value,
+        ...(payment.value === 'BANK_SLIP' ? { dueDate: shiftDays(creditDate, -1) } : {}) }, { signal });
       if (signal.aborted) return;
       if (result.receipt) showReceipt(result.receipt);
       else showPreview(result);
