@@ -1,13 +1,15 @@
 """Exercise report, full/partial application, legacy exclusion and write recovery."""
 import unittest
 from decimal import Decimal
+from datetime import datetime
+from unittest.mock import patch
 from types import SimpleNamespace
 from tempfile import TemporaryDirectory
 from pathlib import Path
 
 import requests
 
-from payroll_pending import handle, has_unresolved_application, origin_write_lock, assert_legacy_origin_available
+from payroll_pending import handle, has_unresolved_application, origin_write_lock, assert_legacy_origin_available, TZ
 
 
 def launch(n, **fields):
@@ -51,6 +53,7 @@ class Gallery:
         self.db = {
             'LANCAMENTOS': [launch(17)], 'PROVISÃO PGTOS': [],
             'FOLHAPGTO': [], 'IDFOLHA': [sheet(41, 'Ana'), sheet(42, 'Beto')],
+            'FORNECEDORES': [{'ID': 1, 'CADASTRO': 'Ana', 'STATUS': 'ATIVO', 'EMPREITEIRO': 'SIM'}],
         }
         self.engine = SimpleNamespace(state_store=Store())
         self.site = SimpleNamespace(site_url='https://example.test/sites/finance', _request=self.request)
@@ -123,6 +126,9 @@ class PendingPayrollTests(unittest.TestCase):
         self.addCleanup(state_dir.cleanup)
         self.g = Gallery()
         self.g.engine.state_store.directory = Path(state_dir.name)
+        clock = patch('payroll_pending.datetime')
+        clock.start().now.return_value = datetime(2026, 11, 14, 12, tzinfo=TZ)
+        self.addCleanup(clock.stop)
         self.call = lambda op, payload=None: handle(self.g, op, payload if payload is not None else {})
 
     def row(self, origin='17'):
@@ -266,6 +272,12 @@ class PendingPayrollTests(unittest.TestCase):
                        FORNECEDOR='Ana', TIPOPGTO='SALÁRIO', VALORUNITARIO='33,33',
                        QTD=3, DATA='2026-11-05')
         self.g.db['LANCAMENTOS'][0]['FORNECEDOR'] = 'Ana'
+        self.g.db['FORNECEDORES'][0]['STATUS'] = 'INATIVO'
+        self.error('conflict', 'payroll_legacy_link', {'fields': request})
+        self.g.db['FORNECEDORES'][0]['STATUS'] = 'ATIVO'
+        self.g.db['IDFOLHA'][0]['MESREFERENCIA'] = '05/2026'
+        self.error('conflict', 'payroll_legacy_link', {'fields': request})
+        self.g.db['IDFOLHA'][0]['MESREFERENCIA'] = '11/2026'
         self.error('conflict', 'payroll_legacy_link', {'fields': request | {'QTD': 4}})
         self.assertFalse(has_unresolved_application(self.g,'17'))
         self.assertEqual(len(self.g.posts), 0)
@@ -273,6 +285,9 @@ class PendingPayrollTests(unittest.TestCase):
         self.assertEqual(self.call('payroll_legacy_link', {'fields': request}), {'id':'101'})
         self.assertEqual(len(self.g.posts), 1)
         self.assertEqual(self.call('payroll_pending')['total'], 0)
+        self.g.db['FOLHAPGTO'].clear()
+        self.assertFalse(has_unresolved_application(self.g, '17'))
+        self.assertEqual(self.call('payroll_apply', self.body())['item']['remainingCents'],7989)
 
     def test_legacy_gallery_write_cannot_double_count_after_report_allocation(self):
         self.call('payroll_apply', self.body())

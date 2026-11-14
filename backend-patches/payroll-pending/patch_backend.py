@@ -3,10 +3,22 @@ from pathlib import Path
 import sys
 
 
-OPERATIONS = '            "payroll_pending", "payroll_targets", "payroll_detail", "payroll_apply", "payroll_legacy_link",\n'
+OPERATIONS = '{"payroll_pending", "payroll_targets", "payroll_detail", "payroll_apply", "payroll_legacy_link"}'
 
 BRIDGE_OPERATIONS = '''            "attachment", "attachment_add", "attachment_delete", "signature",
         } or not isinstance(payload, dict):
+'''
+BRIDGE_GALLERY_OWNER = '''            self.portal_owners.authorize(
+                key, identity, state_exists=bool(state), bind=True, allowed_emails=allowed_emails,
+            )
+            from launch_gallery import LaunchGalleryService
+'''
+BRIDGE_AUTHORIZED_CHECK = '''            if operation in ''' + OPERATIONS + ''':
+                configured = os.getenv("PAYROLL_PENDING_ALLOWED_EMAILS")
+                payroll_emails = configured.split(",") if configured is not None else allowed_emails
+                allowed = {email.strip().casefold() for email in payroll_emails if email.strip()}
+                if str(identity.get("email") or "").strip().casefold() not in allowed:
+                    raise PermissionError("Conta Microsoft sem acesso ao relatório de pagamentos IDFOLHA")
 '''
 BRIDGE_DISPATCH = '''                        result = self.bridge.portal_launch_gallery(
                             identity, operation, body.get("payload") or {}, self.portal_media_store,
@@ -20,7 +32,7 @@ BRIDGE_DISPATCH_PATCH = '''                        from launch_gallery import La
                                 allowed_emails=self.portal_authenticator.allowed_emails,
                             )
                         except LaunchGalleryError as exc:
-                            if operation not in {"payroll_pending", "payroll_targets", "payroll_detail", "payroll_apply", "payroll_legacy_link"}:
+                            if operation not in ''' + OPERATIONS + ''':
                                 raise
                             return self._send_json(exc.status, {"error": str(exc), "code": exc.code, **exc.details}, cors_origin=origin)
 '''
@@ -28,8 +40,7 @@ GALLERY_ENTRY = '''    def _handle(self, operation, payload):
         operations = {"snapshot", "detail", "schema", "update", "delete", "payment", "measurement",
 '''
 GALLERY_ENTRY_PATCH = '''    def _handle(self, operation, payload):
-        if isinstance(operation, str) and operation in {
-''' + OPERATIONS + '''        }:
+        if isinstance(operation, str) and operation in ''' + OPERATIONS + ''':
             if not isinstance(payload, dict):
                 _fail("invalid_payload", "O payload deve ser um objeto.")
             if __package__:
@@ -177,7 +188,10 @@ def change(relative, before):
         raise RuntimeError("Mixed source line endings: " + relative)
     if relative == "channel_bridge.py":
         changed = replace_once(source, BRIDGE_OPERATIONS,
-                               BRIDGE_OPERATIONS.replace("        }", OPERATIONS + "        }", 1))
+                               BRIDGE_OPERATIONS.replace("        }", f"            *{OPERATIONS},\n        }}", 1))
+        authorized = BRIDGE_GALLERY_OWNER.replace(
+            "            from launch_gallery import", BRIDGE_AUTHORIZED_CHECK + "            from launch_gallery import", 1)
+        changed = replace_once(changed, BRIDGE_GALLERY_OWNER, authorized)
         changed = replace_once(changed, BRIDGE_DISPATCH, BRIDGE_DISPATCH_PATCH)
     elif relative == "worker/launch_gallery.py":
         changed = replace_once(source, GALLERY_ENTRY, GALLERY_ENTRY_PATCH)

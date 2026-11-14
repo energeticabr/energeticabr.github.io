@@ -3,6 +3,7 @@ from __future__ import annotations
 
 from collections import defaultdict
 from contextlib import contextmanager
+from datetime import datetime
 from pathlib import Path
 from decimal import Decimal, ROUND_HALF_UP
 import hashlib
@@ -13,9 +14,9 @@ import unicodedata
 import requests
 
 if __package__:
-    from .launch_gallery import LaunchGalleryError, TZ, _instant, _number
+    from .launch_gallery import LaunchGalleryError, TZ, _instant, _literal, _number
 else:
-    from launch_gallery import LaunchGalleryError, TZ, _instant, _number
+    from launch_gallery import LaunchGalleryError, TZ, _instant, _literal, _number
 
 
 APPLICATION_PREFIX = "IDFOLHA-PENDENTE:"
@@ -29,6 +30,7 @@ LAUNCH = "LANCAMENTOS"
 PAYROLL = "FOLHAPGTO"
 PROVISION = "PROVISÃO PGTOS"
 SHEET = "IDFOLHA"
+SUPPLIERS = "FORNECEDORES"
 LAUNCH_FIELDS = (
     "IDFOLHA", "DATA PGTO EFETUADO", "FORNECEDOR", "PRODUTO", "TIPO TRANSAÇÃO",
     "QUANTIDADE", "VALOR UNITÁRIO", "FRETE", "Modificado", "IDPGTOAGENDADO",
@@ -251,15 +253,35 @@ def confirmed_tokens(record):
     return set(record.get("confirmed", ())) if record else set()
 
 
-def missing_confirmed(record, rows):
-    return bool(confirmed_tokens(record) - {row.get("Title") for row in rows})
+def missing_confirmed(g, item_id, record, rows):
+    missing = confirmed_tokens(record) - {row.get("Title") for row in rows}
+    for token in missing:
+        legacy_row_id = record.get("legacyRows", {}).get(token)
+        if not legacy_row_id:
+            return True  # A saved split may never disappear silently.
+        try:
+            row = g._get(PAYROLL, legacy_row_id, ("Title", "IDLANCAMENTO", "IDFOLHA"))
+        except requests.HTTPError as exc:
+            if exc.response is not None and exc.response.status_code == 404:
+                continue  # An old-style row was intentionally removed.
+            raise
+        if row.get("Title") == token and identifier(row.get("IDLANCAMENTO")) == item_id and populated(row.get("IDFOLHA")):
+            return True  # The single item still exists; do not trust an incomplete collection.
+    return False
 
 
-def finish_reservation(store, key, tag, before, token=None, status="settled"):
+def settled_reservation(before, token=None, status="settled", legacy_row_id=None):
     tokens = confirmed_tokens(before)
+    legacy = dict(before.get("legacyRows", {})) if before else {}
     if token:
         tokens.add(token)
-    return save_reservation(store, key, {"status": status, "confirmed": sorted(tokens)}, tag)
+        if legacy_row_id:
+            legacy[token] = legacy_row_id
+    return {"status": status, "confirmed": sorted(tokens), "legacyRows": legacy}
+
+
+def finish_reservation(store, key, tag, before, token=None, status="settled", legacy_row_id=None):
+    return save_reservation(store, key, settled_reservation(before, token, status, legacy_row_id), tag)
 
 
 def has_unresolved_application(g, item_id):
@@ -268,7 +290,7 @@ def has_unresolved_application(g, item_id):
         return False
     if record.get("status") == "pending":
         return True
-    return bool(confirmed_tokens(record) and missing_confirmed(record, load_payroll(g, item_id)))
+    return bool(confirmed_tokens(record) and missing_confirmed(g, item_id, record, load_payroll(g, item_id)))
 
 
 @contextmanager
@@ -320,7 +342,7 @@ def legacy_origin_write(g, item_id, token):
             fail("payroll_allocation_locked", "O lançamento tem aplicações no relatório IDFOLHA. Continue pelo relatório de pendências.", 409)
         key = store_key(g, item_id)
         store, record, tag = load_reservation(g, item_id)
-        if missing_confirmed(record, rows):
+        if missing_confirmed(g, item_id, record, rows):
             fail("payroll_legacy_uncertain", "O pagamento de folha anterior ainda está sendo conferido.", 409)
         if record and record.get("status") == "pending":
             if record.get("kind") != "legacy":
@@ -328,8 +350,8 @@ def legacy_origin_write(g, item_id, token):
             saved = find_application(rows, reservation_title(record))
             if not saved or not populated(saved.get("IDFOLHA")):
                 fail("payroll_legacy_uncertain", "O pagamento de folha anterior ainda está sendo conferido. Tente retomar a operação original.", 409)
-            tag = finish_reservation(store, key, tag, record, saved["Title"])
-            record = {"status": "settled", "confirmed": sorted(confirmed_tokens(record) | {saved["Title"]})}
+            record = settled_reservation(record, saved["Title"], legacy_row_id=identifier(saved["ID"]))
+            tag = save_reservation(store, key, record, tag)
         existing = find_application(rows, token)
         if existing:
             existing_id = identifier(existing.get("ID"))
@@ -337,15 +359,17 @@ def legacy_origin_write(g, item_id, token):
                 fail("payroll_allocation_integrity", "O pagamento existente não tem um ID válido.", 409)
             yield int(existing_id)
             return
-        tag = save_reservation(store, key, {"status": "pending", "kind": "legacy", "token": token,
-                                             "confirmed": sorted(confirmed_tokens(record))}, tag)
+        tag = save_reservation(store, key, settled_reservation(record, status="pending") | {"kind": "legacy", "token": token}, tag)
         try:
             yield
         except Exception as exc:
             if definitive_http_rejection(exc):
                 finish_reservation(store, key, tag, record, status="rejected")
             raise
-        finish_reservation(store, key, tag, record, token)
+        saved = find_application(load_payroll(g, item_id), token)
+        if not saved or not identifier(saved.get("ID")) or not populated(saved.get("IDFOLHA")):
+            fail("payroll_legacy_uncertain", "O pagamento de folha anterior ainda está sendo conferido.", 409)
+        finish_reservation(store, key, tag, record, token, legacy_row_id=identifier(saved["ID"]))
 
 
 def save_reservation(store, key, record, tag):
@@ -376,7 +400,8 @@ def mark_pending(g, item, rows):
         _, record, _ = load_reservation(g, item["id"])
         if record:
             token = reservation_title(record) if record.get("status") == "pending" else None
-            if missing_confirmed(record, rows) or token and not find_application(rows, token):
+            if (token and not find_application(rows, token)
+                    or confirmed_tokens(record) - {row.get("Title") for row in rows} - set(record.get("legacyRows", ()))):
                 item["applicationPending"] = True
     return item
 
@@ -458,7 +483,7 @@ def apply(g, item_id, payload):
     store, pending, tag = load_reservation(g, item_id)
     by_origin, historical = history(g)
     rows = origin_rows(g, item_id, by_origin.get(item_id, ()))
-    if missing_confirmed(pending, rows):
+    if missing_confirmed(g, item_id, pending, rows):
         uncertain()
     original = read_launch(g, item_id)
     item = summarize(g, original, rows, historical)
@@ -474,8 +499,9 @@ def apply(g, item_id, payload):
             uncertain()
         if pending.get("kind") != "legacy":
             validate_saved(row, pending["body"])
-        tag = finish_reservation(store, key, tag, pending, title)
-        pending = {"status": "settled", "confirmed": sorted(confirmed_tokens(pending) | {title})}
+        legacy_id = identifier(row["ID"]) if pending.get("kind") == "legacy" else None
+        pending = settled_reservation(pending, title, legacy_row_id=legacy_id)
+        tag = save_reservation(store, key, pending, tag)
     if find_application(rows, token):
         return {"item": item}
     if not item or not item["remainingCents"]:
@@ -502,8 +528,7 @@ def apply(g, item_id, payload):
             "TIPOPGTO": payment_type, "VALORUNITARIO": format(Decimal(amount) / 100, ".2f"), "QTD": "1",
             "DATA": item["paidAt"] + "T12:00:00Z"}
     g._required(PAYROLL, body)
-    tag = save_reservation(store, key, {"status": "pending", "body": body,
-                                       "confirmed": sorted(confirmed_tokens(pending))}, tag)
+    tag = save_reservation(store, key, settled_reservation(pending, status="pending") | {"body": body}, tag)
     try:
         g.sharepoint._request("POST", f"{g._list_endpoint(PAYROLL)}/items", json=body,
                               headers={"Content-Type": "application/json;odata=nometadata"})
@@ -527,6 +552,27 @@ def apply(g, item_id, payload):
     final = summarize(g, read_launch(g, item_id), fresh_rows, historical)
     finish_reservation(store, key, tag, pending, token)
     return {"item": final}
+
+
+def validate_legacy_destination(g, supplier, sheet_id, destination, tax):
+    labels = ("CADASTRO", "STATUS", "EMPREITEIRO")
+    read_schema(g, ((SUPPLIERS, labels),))
+    name_field = g._field(SUPPLIERS, "CADASTRO")["InternalName"]
+    matches = [row for row in g._rows(SUPPLIERS, labels, f"{name_field} eq {_literal(supplier)}")
+               if folded(row.get("CADASTRO")) == folded(supplier)]
+    if len(matches) != 1 or folded(matches[0].get("STATUS")) != "ativo" or folded(matches[0].get("EMPREITEIRO")) != "sim":
+        fail("conflict", "O fornecedor deve ser empreiteiro SIM e estar ATIVO.", 409)
+    if tax:
+        same_month = [row for row in g._rows(SHEET, SHEET_FIELDS)
+                      if folded(row.get("FORNECEDOR")) == folded(supplier)
+                      and g._payroll_month(row.get("MESREFERENCIA")) == destination[2]]
+        if len(same_month) != 1 or identifier(same_month[0].get("ID")) != sheet_id:
+            fail("conflict", "Selecione um IDFOLHA único do fornecedor na competência do encargo.", 409)
+    else:
+        today = datetime.now(TZ)
+        year, month = destination[2]
+        if abs(year * 12 + month - (today.year * 12 + today.month)) > 1:
+            fail("conflict", "Selecione a folha do mês anterior, atual ou próximo.", 409)
 
 
 def link_legacy(g, fields):
@@ -560,6 +606,8 @@ def link_legacy(g, fields):
                     or paid_date(launch.get("DATA")) != date or quantity != _number(fields["QTD"])
                     or unit != _number(fields["VALORUNITARIO"])):
                 fail("conflict", "Confira a folha, o fornecedor e os valores do lançamento antes de continuar.", 409)
+            if not existing:
+                validate_legacy_destination(g, supplier, sheet_id, destination, tax)
             body = {"Title": token, "IDLANCAMENTO": item_id, "IDFOLHA": sheet_id, "FORNECEDOR": supplier,
                     "TIPOPGTO": payment_type, "VALORUNITARIO": text(fields["VALORUNITARIO"]), "QTD": text(fields["QTD"]),
                     "DATA": date + "T12:00:00Z"}

@@ -7,6 +7,7 @@ from copy import deepcopy
 import sys
 from types import ModuleType, SimpleNamespace
 import unittest
+from unittest.mock import patch
 
 
 from patch_backend import change
@@ -82,7 +83,7 @@ class RouterTests(unittest.TestCase):
              "_number": lambda value, blank_zero: float(value or 0),
              "_instant": lambda value: value, "_norm": lambda value: str(value).casefold()},
         )
-        self.bridge = get_class("channel_bridge.py", None, {"portal_launch_gallery"}, {"PortalMediaStore": type})
+        self.bridge = get_class("channel_bridge.py", None, {"portal_launch_gallery"}, {"PortalMediaStore": type, "os": os})
 
     def tearDown(self):
         for key in ("launch_gallery", "payroll_pending"):
@@ -102,25 +103,58 @@ class RouterTests(unittest.TestCase):
         module = ModuleType("launch_gallery")
         module.LaunchGalleryService = lambda engine: SimpleNamespace(handle=self.gallery()._handle)
         sys.modules["launch_gallery"] = module
-        identity = {"mail": "usuario@example.com"}
+        identity = {"email": "usuario@example.com"}
 
         def authorize(key, caller, *, allowed_emails, **kwargs):
-            if caller["mail"] not in allowed_emails:
+            if caller["email"] not in allowed_emails:
                 raise PermissionError("denied")
             self.recorded.append(("auth", key))
 
         bridge = self.bridge()
         bridge.lock = Lock()
         bridge.engine = object()
-        bridge._portal_state = lambda caller: (caller["mail"], None)
+        bridge._portal_state = lambda caller: (caller["email"], None)
         bridge.portal_owners = SimpleNamespace(authorize=authorize)
         with self.assertRaises(PermissionError):
             bridge.portal_launch_gallery(identity, "payroll_targets", {}, None, allowed_emails=set())
         self.assertEqual(self.recorded, [])
         for operation in ("payroll_pending", "payroll_targets", "payroll_detail", "payroll_apply", "payroll_legacy_link"):
             self.assertEqual(bridge.portal_launch_gallery(
-                identity, operation, {}, None, allowed_emails={identity["mail"]})["launchGallery"], {"ok": True})
-            self.assertEqual(self.recorded[-2:], [("auth", identity["mail"]), (operation, {})])
+                identity, operation, {}, None, allowed_emails={identity["email"]})["launchGallery"], {"ok": True})
+            self.assertEqual(self.recorded[-2:], [("auth", identity["email"]), (operation, {})])
+
+    def test_report_needs_explicit_staff_allowlist_even_if_portal_owner_authorization_passes(self):
+        module = ModuleType("launch_gallery")
+        module.LaunchGalleryService = lambda engine: SimpleNamespace(handle=self.gallery()._handle)
+        sys.modules["launch_gallery"] = module
+
+        class Lock:
+            def __enter__(self):
+                return self
+
+            def __exit__(self, *_):
+                pass
+
+        bridge = self.bridge()
+        bridge.lock = Lock()
+        bridge.engine = object()
+        bridge._portal_state = lambda caller: (caller["email"], None)
+        bridge.portal_owners = SimpleNamespace(authorize=lambda *args, **kwargs: None)
+        identity = {"email": "usuario@example.com"}
+        run = lambda allowed: bridge.portal_launch_gallery(
+            identity, "payroll_pending", {}, None, allowed_emails=allowed)
+        with patch.dict(os.environ, {}, clear=True):
+            with self.assertRaises(PermissionError):
+                run({"other@example.com"})
+            self.assertEqual(run({" Usuario@Example.com "})["launchGallery"], {"ok": True})
+        with patch.dict(os.environ, {"PAYROLL_PENDING_ALLOWED_EMAILS": " OTHER@example.com "}):
+            with self.assertRaises(PermissionError):
+                run({"usuario@example.com"})
+        with patch.dict(os.environ, {"PAYROLL_PENDING_ALLOWED_EMAILS": " other@example.com, USUARIO@example.com "}):
+            self.assertEqual(run({"not-on-portal-list@example.com"})["launchGallery"], {"ok": True})
+        with patch.dict(os.environ, {"PAYROLL_PENDING_ALLOWED_EMAILS": ""}):
+            with self.assertRaises(PermissionError):
+                run({"usuario@example.com"})
 
     def test_http_preserves_new_domain_errors_without_changing_ordinary_gallery_errors(self):
         module = ModuleType("launch_gallery")
