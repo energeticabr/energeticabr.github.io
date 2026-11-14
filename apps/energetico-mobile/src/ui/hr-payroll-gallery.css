@@ -36,6 +36,7 @@
 .hr-gallery-button:hover:not(:disabled) { background: #eaf4f8; }
 .hr-gallery-button:disabled { opacity: .5; cursor: default; }
 .gallery-record-card.hr-gallery-card.hr-gallery-card--payslip { grid-template-columns: 44px minmax(0, 1fr) 44px; }
+.gallery-record-card.hr-gallery-card.hr-gallery-card--payslip-signed { background: #d6efdc; border-color: #8dbb99; }
 .hr-gallery-card--payslip > .gallery-record-main { grid-column: 2; grid-row: 1; }
 .hr-gallery-card--payslip > .hr-gallery-payslip-pdf {
   grid-column: 1;

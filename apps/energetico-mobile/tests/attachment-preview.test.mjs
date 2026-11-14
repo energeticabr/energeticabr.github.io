@@ -622,22 +622,25 @@ test("abre antes de ler o arquivo e preserva conversa, rascunho, rolagem e foco 
 test("coleção de anexos abre o primeiro arquivo e permite avançar e voltar sem fechar o visualizador", async t => {
   const { preview, documentRef } = setup(t);
   await preview.openCollection([
-    { source: new Blob(["primeiro"], { type: "text/plain" }), fileName: "primeiro.txt" },
-    { source: new Blob(["segundo"], { type: "text/plain" }), fileName: "segundo.txt" },
-  ]);
+    { source: new Blob(["primeiro"], { type: "text/plain" }), fileName: "primeiro.txt", label: "Assinado" },
+    { source: new Blob(["segundo"], { type: "text/plain" }), fileName: "segundo.txt", label: "Modelo" },
+  ], { returnLabel: "Voltar à galeria de holerites" });
   const dialog = documentRef.querySelector("dialog");
   assert.equal(dialog.open, true);
-  assert.equal(dialog.querySelector("h2").textContent, "primeiro.txt");
+  assert.equal(dialog.querySelector("h2").textContent, "Assinado");
+  assert.match(dialog.querySelector(".attachment-preview-footer").textContent, /Voltar à galeria de holerites/);
   assert.equal(dialog.querySelector("[data-preview-action=previous]").disabled, true);
   assert.equal(dialog.querySelector("[data-preview-action=next]").disabled, false);
+  assert.match(dialog.querySelector("[data-preview-action=next]").textContent, /Modelo/);
   assert.match(dialog.querySelector("[data-preview-action=collection-status]").textContent, /1 de 2/);
   dialog.querySelector("[data-preview-action=next]").click();
   await new Promise(resolve => setImmediate(resolve));
-  assert.equal(dialog.querySelector("h2").textContent, "segundo.txt");
+  assert.equal(dialog.querySelector("h2").textContent, "Modelo");
+  assert.match(dialog.querySelector("[data-preview-action=previous]").textContent, /Assinado/);
   assert.equal(dialog.querySelector("pre").textContent, "segundo");
   dialog.querySelector("[data-preview-action=previous]").click();
   await new Promise(resolve => setImmediate(resolve));
-  assert.equal(dialog.querySelector("h2").textContent, "primeiro.txt");
+  assert.equal(dialog.querySelector("h2").textContent, "Assinado");
 });
 
 test("imagem usa URL local e libera a anterior ao substituir e ao cancelar", async t => {

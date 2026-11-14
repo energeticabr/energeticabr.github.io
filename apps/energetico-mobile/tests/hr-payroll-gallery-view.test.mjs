@@ -91,16 +91,19 @@ test("as ações por fornecedor enviam a via assinada e editam somente o holerit
   const root = dom.window.document.querySelector("#root");
   const rows = [{ id: "17", FORNECEDOR: "Edgar", pdfFileName: "Holerite-edgar.pdf" },
     { id: "18", FORNECEDOR: "Rafael", pdfFileName: "Holerite-rafael.pdf" }];
-  const signed = [];
+  const signed = new Map([['17', [{ name: 'edgar-assinado.pdf' }]]]);
   const calls = [];
   const file = new File(["scan"], "assinado.pdf", { type: "application/pdf" });
   const gallery = createHrPayrollGallery({
     root, gallery: "HOLERITE",
     request: async kind => ({ ...response(kind, 1, rows), dateGroups: [{ date: "2026-11-13", rows }] }),
     pickSignedPayslip: async source => { calls.push(["pick", source]); return [file]; },
-    listSignedPayslips: async row => { calls.push(["list", row.id]); return [...signed]; },
+    listSignedPayslips: async row => signed.get(row.id) || [],
     uploadSignedPayslips: async (row, files) => {
-      calls.push(["upload", row.id, files]); signed.push({ name: "via-assinada.pdf" }); return [...signed];
+      calls.push(["upload", row.id, files]);
+      const saved = [{ name: "via-assinada.pdf" }];
+      signed.set(row.id, saved);
+      return saved;
     },
     openSignedPayslip: async (row, attachment) => calls.push(["open", row.id, attachment.name]),
     loadPayslipEditor: async row => ({ supplier: row.FORNECEDOR, branch: "Obra A", date: "2026-11-13",
@@ -115,6 +118,9 @@ test("as ações por fornecedor enviam a via assinada e editam somente o holerit
   await gallery.open();
   root.querySelector('[data-action="toggle-payslip-date"]').click();
   const cards = root.querySelectorAll(".hr-gallery-card");
+  await settle();
+  assert.equal(cards[0].classList.contains('hr-gallery-card--payslip-signed'), true);
+  assert.equal(cards[1].classList.contains('hr-gallery-card--payslip-signed'), false);
   assert.equal(root.querySelectorAll('[data-action="upload-payslip"]').length, 2);
   assert.equal(root.querySelectorAll('[data-action="edit-payslip"]').length, 2);
   cards[1].querySelector('[data-action="upload-payslip"]').click();
@@ -122,10 +128,12 @@ test("as ações por fornecedor enviam a via assinada e editam somente o holerit
   for (const option of ["Enviar anexo", "Escanear", "Enviar foto"]) assert.match(root.querySelector('[data-payslip-dialog]').textContent, new RegExp(option));
   root.querySelector('[data-payslip-source="scan"]').click();
   await settle();
-  assert.deepEqual(calls, [["list", "18"], ["pick", "scan"]]);
+  assert.deepEqual(calls, [["pick", "scan"]]);
+  assert.equal(cards[1].classList.contains('hr-gallery-card--payslip-signed'), false);
   root.querySelector('[data-action="confirm-signed-payslip"]').click();
   await settle();
   assert.deepEqual(calls.at(-1), ["upload", "18", [file]]);
+  assert.equal(cards[1].classList.contains('hr-gallery-card--payslip-signed'), true);
   root.querySelector('[data-action="open-signed-payslip"]').click();
   await settle();
   assert.deepEqual(calls.at(-1), ["open", "18", "via-assinada.pdf"]);
