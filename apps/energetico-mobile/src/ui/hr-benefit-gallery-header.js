@@ -8,10 +8,14 @@ export function createHrBenefitGalleryHeader({ root, title, onBack, onHome, onRe
   title.classList.add('hr-gallery-title');
 
   const back = document.createElement('button');
+  back.className = 'hr-gallery-button';
   back.setAttribute('aria-label', 'Voltar ao RH');
   back.addEventListener('click', onBack);
   const home = onHome ? document.createElement('button') : null;
-  home?.addEventListener('click', onHome);
+  if (home) {
+    home.className = 'hr-gallery-button';
+    home.addEventListener('click', onHome);
+  }
   applyScreenNavigation({ header, back, home, title });
 
   const refresh = attachGalleryRefreshButton({ document, root, header, onRefresh });

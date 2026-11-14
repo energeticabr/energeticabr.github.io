@@ -28,6 +28,7 @@
   color: #202735;
 }
 .swile-dialog *, .swile-gallery-page * { box-sizing: border-box; }
+.swile-gallery-page .hr-gallery-title:focus { outline: none; }
 .swile-gallery-page .swile-body {
   flex: 1;
   min-height: 0;
