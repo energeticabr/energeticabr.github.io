@@ -2,8 +2,9 @@ from contextlib import contextmanager
 from pathlib import Path
 import tempfile
 import unittest
+from unittest.mock import patch
 
-from trancid_recharges import GatewayError, Service
+from trancid_recharges import GatewayError, Service, handle_portal
 from trancid_portal_adapter import PortalError, PortalUncertain
 
 
@@ -69,6 +70,22 @@ class ServiceTests(unittest.TestCase):
         self.assertEqual(receipt['status'], 'SUBMITTED')
         self.assertEqual(self.new_service().confirm('owner', preview['id']), receipt)
         self.assertEqual(self.portal.submissions, [([{'id': 'portal-1234', 'amountCents': 5500}], 'BOLETO')])
+
+    def test_details_route_requires_corporate_access_and_only_reads_the_requested_order(self):
+        identity = {'email': 'authorized@example.test', 'oid': 'employee'}
+        request = {'action': 'trancid_recharge_details', 'orderCode': '789805'}
+        with patch('trancid_recharges.read_config', return_value=(['authorized@example.test'], b'key')), \
+                patch('trancid_recharges.Service', return_value=self.service):
+            items = [{'name': 'Colaborador', 'cardLast4': '1234', 'amountCents': 5500}]
+            with patch.object(self.portal, 'order_details', create=True, return_value=items) as read:
+                self.assertEqual(handle_portal({**identity, 'email': 'other@example.test'}, request)[0], 403)
+                self.assertEqual(handle_portal(identity, {**request, 'orderCode': '../other'})[0], 422)
+                read.assert_not_called()
+                status, response = handle_portal(identity, request)
+                self.assertEqual(status, 200)
+                self.assertEqual(response['trancid'], {'orderCode': '789805', 'items': items})
+                read.assert_called_once_with('789805')
+        self.assertEqual(self.portal.submissions, [])
 
     def test_mixed_amounts_preserve_card_mapping_and_deduplicate_reordered_requests(self):
         second = self.service.directory()[1]['id']

@@ -9,6 +9,27 @@ ORIGIN = "http://provider.example:8082"
 CARDS = ["06850000084216", "06850000084217"]
 
 
+def order_report():
+    def line(card="", matrícula="", name="", use="", old="", balance="", amount=""):
+        return f"{card:20}{matrícula:16}{name:23}{use:52}{old:20}{balance:21}{amount}"
+    return "\n".join([
+        "Pedido de Carga                       Página: 1",
+        "TITULAR : ENERGETICA CONSTRUCOES             CÓDIGO:",
+        "                                             14660",
+        "Pedido:   900002",
+        "Data: 13/11/2026  Valor: 57,50",
+        line("Cartão VT", "Matrícula", "Nome", "Utilização", "** Cartão Antigo", "Estimado", "Valor"),
+        line(CARDS[0], "01", "PESSOA DE TESTE", "VT", "06850000084001", "3,00", "57,50"),
+        line(name="SILVA", use="Funcionário"),
+        line(CARDS[1], "02", "SEM RECARGA", "VT", balance="4,00", amount="0,00"),
+        line(name="NO PEDIDO", use="Funcionário"),
+        "                       Total: 57,50",
+        "                       Cartões do pedido: 2",
+        "**Cartão bloqueado e substituído             Total de cartões dos pedidos: 2",
+        "                                             Total: 57,50",
+    ])
+
+
 def history(orders, page=1, count=1):
     rows = "".join(
         f"""<tr><td><a href="javascript:__doPostBack('gridPedido$_ctl{i}$_ctl0','')">x</a></td>
@@ -54,6 +75,31 @@ class PortalTest(unittest.TestCase):
         self.portal.directory = Mock(return_value=[{"id": card} for card in CARDS])
         self.portal.collector = Mock()
         self.read = self.portal.collector.read
+
+    def test_order_detail_opens_exact_read_only_report_and_masks_card(self):
+        form_url = ORIGIN + "/frmConsultaPedidoCarga.aspx"
+        report_url = ORIGIN + "/frmRelPedidoCargaBordoCI.aspx?codpedido=900002"
+        form = """TITULAR: ENERGETICA CODIGO: 14660
+          <input name="txtPedido" id="txtPedido" type="text"/>
+          <input id="btnGerarRel" type="button" onclick='WebForm_PostBackOptions("btnGerarRel", "")'>"""
+        self.read.side_effect = [(form_url, form), (form_url,
+            """<script>window.open('frmRelPedidoCargaBordoCI.aspx?codpedido=900002', '_blank');</script>"""),
+            (report_url, """<script>{"ExportUrlBase":"/Reserved.ReportViewerWebControl.axd?Format="}</script>""")]
+        self.portal._pdf_text = Mock(return_value=order_report())
+        self.assertEqual(self.portal.order_details("900002"), [
+            {"name": "PESSOA DE TESTE SILVA", "cardLast4": "4216", "amountCents": 5750},
+        ])
+        self.assertEqual(self.read.call_args_list[1].args[1]["txtPedido"], "900002")
+        self.assertEqual(self.read.call_args_list[1].args[1]["__EVENTTARGET"], "btnGerarRel")
+
+    def test_report_rejects_wrong_order_tenant_and_incomplete_credits(self):
+        from trancid_portal_adapter import parse_order_report
+
+        for before, after in [("900002", "900003"), ("14660", "14661"),
+                              ("Total de cartões dos pedidos: 2", "Total de cartões dos pedidos: 3"),
+                              ("Valor: 57,50", "Valor: 58,50")]:
+            with self.subTest(before=before), self.assertRaises(PortalError):
+                parse_order_report(order_report().replace(before, after), "900002")
 
     def test_parse_active_card_directory_rejects_incomplete_count(self):
         report = f"""<div>Titular ENERGÉTICA Data: 13/11/2026 Hora: 16:00:00

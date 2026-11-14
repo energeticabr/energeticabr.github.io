@@ -29,6 +29,8 @@ export function openTrancidRechargeView({ document: doc, request, gallery = fals
   let cards = [];
   const selected = new Set();
   const individualAmounts = new Map();
+  // The provider shares one authenticated session with the balance collector.
+  let detailQueue = Promise.resolve();
 
   function make(tag, text, className) {
     const node = doc.createElement(tag);
@@ -354,6 +356,8 @@ export function openTrancidRechargeView({ document: doc, request, gallery = fals
     return run(async () => {
       message('Consultando pedidos na Trancid…');
       try {
+        await detailQueue;
+        if (signal.aborted) return;
         const result = await request('history', refresh ? { page, refresh } : { page }, { signal });
         if (signal.aborted) return;
         if (!Array.isArray(result?.orders) || !Number.isSafeInteger(result.page) || result.page < 1) {
@@ -368,16 +372,95 @@ export function openTrancidRechargeView({ document: doc, request, gallery = fals
     });
   }
 
+  function galleryOrder(order, index) {
+    const item = make('article', '', 'trancid-order');
+    const summary = make('button', '', 'trancid-order-summary');
+    summary.type = 'button';
+    summary.setAttribute('aria-expanded', 'false');
+    const status = order.paymentStatus || order.status;
+    const statusBadge = make('span', status, 'trancid-order-status');
+    statusBadge.dataset.tone = ({ pago: 'paid', 'pendente pgto': 'pending' })[normalize(status).trim()] || 'neutral';
+    const badges = make('span', '', 'trancid-order-badges');
+    badges.append(statusBadge, make('span', paymentLabel(order.paymentMethod), 'trancid-order-method'));
+    const arrow = make('span', '', 'trancid-order-arrow');
+    arrow.setAttribute('aria-hidden', 'true');
+    summary.append(make('strong', 'Pedido ' + order.orderCode),
+      make('strong', reais(order.creditCents), 'trancid-order-value'),
+      badges, make('span', order.requestDate ? 'Pedido em ' + formatDate(order.requestDate) : '', 'trancid-order-date'));
+    if (Number.isSafeInteger(order.totalCents)) {
+      summary.append(make('span', 'Total · ' + reais(order.totalCents), 'trancid-order-total'));
+    }
+    summary.append(arrow);
+
+    const details = make('div', '', 'trancid-order-details');
+    details.id = 'trancid-order-detail-' + index;
+    details.hidden = true;
+    summary.setAttribute('aria-controls', details.id);
+    let loading = false;
+    let loaded = false;
+    function load() {
+      if (loading || loaded) return;
+      loading = true;
+      const loadingNote = make('p', 'Consultando cartões do pedido…');
+      loadingNote.setAttribute('role', 'status');
+      details.replaceChildren(loadingNote);
+      detailQueue = detailQueue.then(async () => {
+        try {
+          if (signal.aborted || !details.isConnected || details.hidden) {
+            details.replaceChildren();
+            return;
+          }
+          const result = await request('details', { orderCode: order.orderCode }, { signal });
+          if (signal.aborted || !details.isConnected) return;
+          if (result?.orderCode !== order.orderCode || !Array.isArray(result.items) ||
+              result.items.some(card => typeof card?.name !== 'string' || !card.name.trim() ||
+                !/^\d{4}$/.test(card.cardLast4) || !Number.isSafeInteger(card.amountCents) || card.amountCents <= 0)) {
+            throw new Error('A Trancid não confirmou os cartões deste pedido.');
+          }
+          if (result.items.reduce((total, card) => total + card.amountCents, 0) !== order.creditCents) {
+            const note = make('p', 'O valor do pedido mudou na Trancid. Atualize a galeria para conferir os cartões.');
+            note.setAttribute('role', 'status');
+            details.replaceChildren(note);
+            loaded = true;
+            return;
+          }
+          const list = make('ul', '', 'trancid-order-cards');
+          for (const card of result.items) {
+            const row = make('li');
+            const cardholder = make('span');
+            cardholder.append(make('strong', card.name), make('span', cardLabel(card), 'trancid-order-card-number'));
+            row.append(cardholder, make('strong', reais(card.amountCents), 'trancid-order-value'));
+            list.append(row);
+          }
+          details.replaceChildren(result.items.length
+            ? list : make('p', 'Nenhum cartão com valor de recarga neste pedido.'));
+          loaded = true;
+        } catch (error) {
+          if (signal.aborted || !details.isConnected) return;
+          const note = make('p', error.message || 'Não foi possível consultar os cartões deste pedido.', 'swile-error');
+          note.setAttribute('role', 'status');
+          details.replaceChildren(note, button('Tentar novamente', () => {
+            if (busy) return;
+            summary.focus({ preventScroll: true });
+            load();
+          }));
+        } finally {
+          loading = false;
+        }
+      });
+    }
+    summary.addEventListener('click', () => {
+      details.hidden = !details.hidden;
+      summary.setAttribute('aria-expanded', String(!details.hidden));
+      if (!details.hidden) load();
+    });
+    item.append(summary, details);
+    return item;
+  }
+
   function showGallery({ orders, page, hasMore, checkedAt }, focusPage = false) {
     const list = make('div', '', 'swile-order-list');
-    for (const order of orders ?? []) {
-      const item = make('article', '', 'swile-summary swile-gallery-order');
-      item.append(make('strong', `Pedido ${order.orderCode}`), make('strong', reais(order.creditCents)),
-        make('span', order.paymentStatus || order.status), make('span', order.requestDate ? `Pedido em ${formatDate(order.requestDate)}` : ''),
-        make('span', paymentLabel(order.paymentMethod)));
-      if (Number.isSafeInteger(order.totalCents)) item.append(make('span', `Total · ${reais(order.totalCents)}`));
-      list.append(item);
-    }
+    (orders ?? []).forEach((order, index) => list.append(galleryOrder(order, index)));
     if (orders?.length === 0) list.append(make('p', 'Nenhum pedido encontrado.'));
     const navigation = make('nav', '', 'swile-actions');
     navigation.setAttribute('aria-label', 'Páginas de pedidos');

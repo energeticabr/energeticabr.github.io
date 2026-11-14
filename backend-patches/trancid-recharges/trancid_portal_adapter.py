@@ -9,10 +9,10 @@ import shlex
 import sys
 import unicodedata
 from datetime import datetime, timedelta, timezone
-from html import escape
+from html import escape, unescape
 from html.parser import HTMLParser
 from pathlib import Path
-from urllib.parse import urljoin, urlsplit
+from urllib.parse import parse_qs, quote, urljoin, urlsplit
 
 
 LOGGER = logging.getLogger(__name__)
@@ -20,6 +20,8 @@ MONITOR_ROOT = Path("/opt/energetica-whatsapp/trancid-monitor")
 CONFIG_FILE = Path("/etc/energetica-trancid.env")
 HISTORY_PATH = "/frmSelPedidoExistente.aspx"
 HISTORY_PAGE = "/frmSelPedidoExistenteCI.aspx"
+DETAIL_FILTER = "/frmConsultaPedidoCarga.aspx"
+DETAIL_REPORT = "/frmRelPedidoCargaBordoCI.aspx"
 CREATE_PAGE = "/frmSelGrupoNovoPedido.aspx"
 DRAFT_PAGE = "/frmPedidoCargaIndividual.aspx"
 LOGOUT_PATH = "/frmLogout.aspx?encerra=true&popup=true"
@@ -174,6 +176,47 @@ def parse_cards(html):
     if len(cards) != int(count[1]) or len({card["id"] for card in cards}) != len(cards):
         raise PortalError("Cadastro ativo da Trancid retornou cartões incompletos ou duplicados.")
     return cards
+
+
+def parse_order_report(report, order_code):
+    """Match the exact order and reconcile its credit rows before exposing masked details."""
+    text = normalize(report)
+    orders = set(re.findall(rf"(?m)^[ \t]*PEDIDO:[ \t]*({ORDER_CODE})\b", text))
+    totals = set(re.findall(rf"(?m)^[ \t]*DATA:[ \t]*{DATE}[ \t]+VALOR:[ \t]*({MONEY})\b", text))
+    counts = set(re.findall(r"\bTOTAL DE CARTOES DOS PEDIDOS:[ \t]*(\d+)\b", text))
+    if (not re.search(r"\bTITULAR\s*:\s*ENERGETICA\b[^\n]*\bCODIGO:\s*14660\b", text)
+            or orders != {order_code} or len(totals) != 1 or len(counts) != 1):
+        raise PortalError("O relatório da Trancid não confirmou o pedido e a titularidade.")
+
+    items = {}
+    starts = None
+    current = None
+    for line in report.splitlines():
+        header = re.search(r"CARTAO VT\s+MATRICULA\s+(NOME)\s+(UTILIZACAO)", normalize(line))
+        if header:
+            starts = (header.start(1), header.start(2))
+            current = None
+            continue
+        if not starts:
+            continue
+        name_start, name_end = starts
+        name = line[name_start:name_end].strip()
+        card = re.match(rf"^[ \t]*({CARD})\b", line)
+        if card:
+            amounts = re.search(rf"({MONEY})[ \t]+({MONEY})[ \t]*$", line[name_end:])
+            if not amounts or not name or card[1] in items:
+                raise PortalError("O relatório da Trancid contém detalhes de cartão incompletos.")
+            current = {"name": name, "cardLast4": card[1][-4:], "amountCents": cents(amounts[2])}
+            items[card[1]] = current
+        elif current and not line[:name_start].strip() and name and (
+                not line[name_end:].strip() or normalize(line[name_end:].strip()) == "FUNCIONARIO"):
+            current["name"] += " " + name
+        elif line.strip():
+            current = None
+
+    if len(items) != int(next(iter(counts))) or sum(item["amountCents"] for item in items.values()) != cents(next(iter(totals))):
+        raise PortalError("Os cartões do relatório não conferem com o valor do pedido Trancid.")
+    return [item for item in items.values() if item["amountCents"] > 0]
 
 
 def require_tenant(form):
@@ -380,14 +423,14 @@ class Portal:
                 raw = response.read(5_000_001)
             if len(raw) > 5_000_000 or not raw.startswith(b"%PDF-"):
                 raise PortalError("A exportação da Trancid não retornou um PDF válido.")
-            return " ".join(
+            return "\n".join(
                 page.extract_text(extraction_mode="layout") or ""
                 for page in PdfReader(io.BytesIO(raw)).pages
             )
         except PortalError:
             raise
         except Exception as error:
-            raise PortalError("Não foi possível ler o cadastro ativo da Trancid.") from error
+            raise PortalError("Não foi possível ler o relatório da Trancid.") from error
 
     def directory(self):
         url, html = self._read(self.balance_url)
@@ -447,6 +490,34 @@ class Portal:
         if not isinstance(order_code, str) or not re.fullmatch(ORDER_CODE, order_code):
             raise PortalError("Código de pedido da Trancid inválido.")
         return self._order_row(order_code)[2]
+
+    def order_details(self, order_code):
+        """Open the portal's read-only order report, never the order edit form."""
+        if not isinstance(order_code, str) or not re.fullmatch(ORDER_CODE, order_code):
+            raise PortalError("Código de pedido da Trancid inválido.")
+        url, html = self._read(self.origin + DETAIL_FILTER + "?TituloMenu=Consulta+de+Pedido+de+Carga")
+        form = Form(html)
+        require_tenant(form)
+        verify_button(form, "btnGerarRel", 'WebForm_PostBackOptions("btnGerarRel"')
+        if urlsplit(url).path != DETAIL_FILTER or "txtPedido" not in form.fields:
+            raise PortalError("O formulário de consulta de pedidos da Trancid mudou.")
+        url, html = self._read(url, {**event_fields(form, "btnGerarRel"), "txtPedido": order_code})
+        links = re.findall(r"""window\.open\(['"](frmRelPedidoCargaBordoCI\.aspx\?[^'"]+)['"]""", html)
+        if urlsplit(url).path != DETAIL_FILTER or len(links) != 1:
+            raise PortalError("A Trancid não disponibilizou os detalhes deste pedido.")
+        report_url = urljoin(url, quote(unescape(links[0]), safe="/?&=%+-"))
+        report = urlsplit(report_url)
+        if report.path != DETAIL_REPORT or parse_qs(report.query).get("codpedido") != [order_code]:
+            raise PortalError("A Trancid retornou o relatório de outro pedido.")
+        url, html = self._read(report_url)
+        export = re.search(r'"ExportUrlBase"\s*:\s*("(?:\\.|[^"\\])*")', html)
+        if urlsplit(url).path != DETAIL_REPORT or not export:
+            raise PortalError("A exportação dos cartões deste pedido não está disponível.")
+        try:
+            download = urljoin(url, json.loads(export[1]) + "PDF")
+        except ValueError as error:
+            raise PortalError("A exportação do pedido Trancid retornou um endereço inválido.") from error
+        return parse_order_report(self._pdf_text(download), order_code)
 
     def _reopen_draft(self, order_code, today):
         url, form, order, row = self._order_row(order_code)
