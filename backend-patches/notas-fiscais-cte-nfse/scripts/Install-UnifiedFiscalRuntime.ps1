@@ -55,7 +55,7 @@ foreach($relative in $files){
 $tests=New-Object 'Collections.Generic.List[object]'
 if($RunOfflineTests){
     $exe=(Get-Command pwsh -ErrorAction Stop).Source
-    foreach($name in @('Run-Tests.ps1','RecentGap-Tests.ps1','Cte-Tests.ps1','Nfse-Tests.ps1','FiscalDocuments-Tests.ps1','AuxiliaryFiscal-Tests.ps1')){
+    foreach($name in @('Run-Tests.ps1','RecentGap-Tests.ps1','Coverage-Tests.ps1','Cte-Tests.ps1','Nfse-Tests.ps1','FiscalDocuments-Tests.ps1','AuxiliaryFiscal-Tests.ps1')){
         $testPath=Join-Path (Join-Path $root 'tests') $name
         if(-not [IO.File]::Exists($testPath)){throw 'UNIFIED_OFFLINE_TEST_MISSING'}
         $output=@(& $exe -NoProfile -File $testPath 2>&1)

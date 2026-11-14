@@ -93,7 +93,7 @@ function Invoke-SefazQueueCommand($Config,[string]$Action,[int]$Id=0,[string]$Ne
 }
 
 function Get-SefazCollectorEncodedCommand([string]$Collector,[string]$Command,[string[]]$Ids,[string]$ConfigPath,[string]$DataPath){
-    if($Command -notin @('Collect','Acknowledge')){throw 'WORKER_COLLECTOR_ACTION'}
+    if($Command -notin @('Collect','Acknowledge','VerifyCoverage')){throw 'WORKER_COLLECTOR_ACTION'}
     $collectorArguments=@('-Command',$Command,'-ConfigPath',$ConfigPath,'-DataRoot',$DataPath)
     if($Command -eq 'Acknowledge'){
         $payload=@{ids=@($Ids)}|ConvertTo-Json -Compress
@@ -223,6 +223,12 @@ function Invoke-SefazWorker {
         if([string]$cfg.flowId -notmatch ('^'+$guidPattern+'$') -or [string]$cfg.environmentId -notmatch ('^Default-'+$guidPattern+'$')){throw 'WORKER_CONFIG'}
         if(-not [IO.File]::Exists([string]$cfg.sshKeyPath)){throw 'WORKER_CONFIG'}
         $companyPath=Join-Path $DataRoot ($collectorCfg.companyCnpj+'-'+$collectorCfg.environment)
+        $coveragePath=Join-Path $companyPath 'coverage-status.json'
+        $coverageDue=-not [IO.File]::Exists($coveragePath) -or [IO.File]::GetLastWriteTimeUtc($coveragePath) -lt [DateTime]::UtcNow.AddMinutes(-5)
+        if($null -eq $CollectorAction -and $coverageDue -and [IO.File]::Exists((Join-Path $companyPath 'state.json'))){
+            $stage='LOCAL_COVERAGE_REPLAY'
+            $null=Invoke-SefazLocalCollector 'VerifyCoverage' @() $CollectorConfigPath $DataRoot
+        }
         # Progress delivery even with no fiscal job or during SEFAZ cooldown.
         if($null -eq $NotificationDrain){
             Import-Module (Join-Path $PSScriptRoot '../src/SefazWhatsApp.psm1')
@@ -324,6 +330,22 @@ function Invoke-SefazWorker {
                 $final=([string]$state.lastNsu -cmatch '^\d{15}$' -and [string]$state.maxNsu -cmatch '^\d{15}$' -and [string]$state.lastNsu -ceq [string]$state.maxNsu)
             }
             if($final){
+                if($null -ne $saved){
+                    $stage='VERIFY_COVERAGE'
+                    Import-Module (Join-Path $PSScriptRoot '../src/Sefaz.psm1') -DisableNameChecking
+                    $minimum=if($collectorCfg.PSObject.Properties['minimumIssueDate']){[string]$collectorCfg.minimumIssueDate}else{''}
+                    $initialResume=if($collectorCfg.PSObject.Properties['initialResumeNsu']){[string]$collectorCfg.initialResumeNsu}else{''}
+                    $coverage=Get-SefazCollectionCoverage $companyPath $minimum ([DateTimeOffset]::UtcNow) $initialResume
+                    Write-SefazCoverageStatus $companyPath $coverage ([DateTimeOffset]::UtcNow)
+                    if(-not $coverage.complete){
+                        $next=Get-SefazWorkerNextAttempt $state 1
+                        $defer=& $QueueAction 'queue-defer' $jobId $next 'WORKER_LIMIT'
+                        if($null -ne $defer -and $defer.failed -eq $true){return [pscustomobject]@{status='FAILED';batches=$batches;documents=$documents}}
+                        if($null -eq $defer -or $defer.deferred -ne $true){throw 'WORKER_DEFER'}
+                        Write-SefazWorkerLog $DataRoot 'DEFERRED' $batches $documents 'WORKER_LIMIT' 'VERIFY_COVERAGE'
+                        return [pscustomobject]@{status='DEFERRED';batches=$batches;documents=$documents;nextAllowedAt=$next}
+                    }
+                }
                 $stage='QUEUE_COMPLETE'
                 $done=& $QueueAction 'queue-complete' $jobId $null $null
                 if($null -eq $done -or $done.completed -ne $true -or [int]$done.id -ne $jobId){throw 'WORKER_COMPLETE'}

@@ -211,15 +211,33 @@ function Register-SefazDistributionGap([string]$DataPath,[string]$FromExclusive,
         Write-AtomicJson $path ([ordered]@{status='HISTORICAL_RECOVERY_REQUIRED';source='SEFAZ';fromExclusive=$FromExclusive;throughInclusive=$ThroughInclusive;recordedAt=$Now.ToString('o');documentsImportedFromThisRange=$false;bootstrap=[bool]$Bootstrap})
     }
 }
-function Save-DistributionBatch([string]$Soap,[string]$DataPath,[string]$CompanyCnpj,[string]$PreviousNsu,[DateTimeOffset]$Now,[int]$Cooldown=65) {
+function Save-DistributionBatch([string]$Soap,[string]$DataPath,[string]$CompanyCnpj,[string]$PreviousNsu,[DateTimeOffset]$Now,[int]$Cooldown=65,$PendingResponse=$null) {
     [IO.Directory]::CreateDirectory($DataPath)|Out-Null
     [IO.Directory]::CreateDirectory((Join-Path $DataPath 'raw'))|Out-Null
     # Antes de parsing: uma consulta ja ocorreu; uma falha nao autoriza outra consulta imediata.
     $statePath=Join-Path $DataPath 'state.json'
     $held=[ordered]@{lastNsu=$PreviousNsu;nextAllowedAt=$Now.AddMinutes([Math]::Max(65,$Cooldown)).ToString('o');status='PROCESSANDO_RESPOSTA'}
-    Write-AtomicJson $statePath $held
-    $rawName=$Now.UtcDateTime.ToString('yyyyMMddTHHmmssfffffff')+'-'+[guid]::NewGuid().ToString('N')+'.xml'
-    [IO.File]::WriteAllText((Join-Path (Join-Path $DataPath 'raw') $rawName),$Soap,(New-Object Text.UTF8Encoding($false)))
+    $epochPath=Join-Path $DataPath 'coverage-start.json'
+    if(-not [IO.File]::Exists($epochPath)){
+        Write-AtomicJson $epochPath @{startedAt=$Now.UtcDateTime.ToString('yyyyMMddTHHmmssfffffff');startNsu=$PreviousNsu}
+    }
+    $bytes=[Text.Encoding]::UTF8.GetBytes($Soap)
+    $rawName=if($PendingResponse){$PendingResponse.responseFile}else{$Now.UtcDateTime.ToString('yyyyMMddTHHmmssfffffff')+'-'+[guid]::NewGuid().ToString('N')+'.xml'}
+    $rawPath=Join-Path (Join-Path $DataPath 'raw') $rawName
+    $held.requestNsu=$PreviousNsu
+    $held.responseFile=$rawName
+    $held.responseSha256=Get-Sha256 $bytes
+    $held.queryStartedAt=$Now.ToString('o')
+    $held.responseReceivedAt=if($PendingResponse){$PendingResponse.responseReceivedAt}else{[DateTimeOffset]::UtcNow.ToString('o')}
+    if(-not $PendingResponse){
+        Write-AtomicJson $statePath $held
+        if(-not [IO.File]::Exists($rawPath)){
+            $temp=$rawPath+'.tmp'
+            $stream=[IO.FileStream]::new($temp,[IO.FileMode]::CreateNew,[IO.FileAccess]::Write,[IO.FileShare]::None)
+            try{$stream.Write($bytes,0,$bytes.Length);$stream.Flush($true)}finally{$stream.Dispose()}
+            [IO.File]::Move($temp,$rawPath)
+        }
+    }
     $xml=Read-SafeXml $Soap
     $ret=$xml.SelectSingleNode("//*[local-name()='retDistDFeInt']")
     if($null -eq $ret){throw 'Resposta SOAP sem retDistDFeInt.'}
@@ -235,6 +253,7 @@ function Save-DistributionBatch([string]$Soap,[string]$DataPath,[string]$Company
             $held.historyRecoveryRequired=$true
             Register-SefazDistributionGap $DataPath $PreviousNsu $last $Now
         }
+        $held.responseStatus=$status
         Write-AtomicJson $statePath $held
         return [pscustomobject]$held
     }
@@ -258,10 +277,248 @@ function Save-DistributionBatch([string]$Soap,[string]$DataPath,[string]$Company
     foreach($range in $ranges){
         Register-SefazDistributionGap $DataPath ($range.from.ToString('000000000000000')) ($range.through.ToString('000000000000000')) $Now
     }
-    $state=[ordered]@{lastNsu=$last;maxNsu=$max;nextAllowedAt=$decision.nextAllowedAt;status=$status}
+    $state=$held
+    $state.lastNsu=$last
+    $state.maxNsu=$max
+    $state.nextAllowedAt=$decision.nextAllowedAt
+    $state.status=$status
+    $state.responseStatus=$status
+    $state.coverageJournalRequired=$true
+    Write-AtomicJson (Join-Path $DataPath "distribution-receipts/$rawName.json") ([ordered]@{
+        responseFile=$rawName;responseSha256=$held.responseSha256;companyCnpj=$CompanyCnpj;requestNsu=$PreviousNsu;lastNsu=$last;responseStatus=$status
+    })
     if($ranges.Count){$state.historyRecoveryRequired=$true}
     Write-AtomicJson $statePath $state
     return [pscustomobject]$state
+}
+function Resume-SefazDistributionBatch([string]$DataPath,[string]$CompanyCnpj,$State,[int]$Cooldown){
+    if($null -eq $State -or $State.status -cne 'PROCESSANDO_RESPOSTA' -or -not $State.PSObject.Properties['responseFile']){return $State}
+    if($State.responseFile -cnotmatch '^\d{8}T\d+-[a-f0-9]{32}\.xml$' -or $State.responseSha256 -cnotmatch '^[a-f0-9]{64}$' -or
+       $State.requestNsu -cnotmatch '^\d{15}$' -or $State.requestNsu -cne $State.lastNsu){throw 'SEFAZ_PENDING_RESPONSE_INVALID'}
+    $raw=Join-Path $DataPath "raw/$($State.responseFile)"
+    if(-not [IO.File]::Exists($raw)){
+        $temp=$raw+'.tmp'
+        if(-not [IO.File]::Exists($temp)){return $State}
+        if((Get-Sha256 ([IO.File]::ReadAllBytes($temp))) -cne $State.responseSha256){return $State}
+        [IO.File]::Move($temp,$raw)
+    }
+    $bytes=[IO.File]::ReadAllBytes($raw)
+    if((Get-Sha256 $bytes) -cne $State.responseSha256){throw 'SEFAZ_PENDING_RESPONSE_CHANGED'}
+    return Save-DistributionBatch ([Text.Encoding]::UTF8.GetString($bytes)) $DataPath $CompanyCnpj $State.requestNsu ([DateTimeOffset]::Parse($State.queryStartedAt)) $Cooldown $State
+}
+function Get-SefazSavedDocument([string]$Path){
+    $item=Read-SefazScopeJson $Path
+    $name=[IO.Path]::GetFileNameWithoutExtension($Path)
+    if($name -cnotmatch '^\d{15}-[a-f0-9]{16}$' -or $item.id -cne $name -or $item.nsu -cne $name.Substring(0,15) -or
+       $item.sha256 -cnotmatch '^[a-f0-9]{64}$' -or -not $item.sha256.StartsWith($name.Substring(16),[StringComparison]::Ordinal) -or
+       (Get-Sha256 ([Convert]::FromBase64String([string]$item.xmlBase64))) -cne $item.sha256){
+        throw 'SEFAZ_SAVED_DOCUMENT_INVALID'
+    }
+    return $item
+}
+
+function Get-SefazCollectionGaps([string]$DataPath,[string]$InitialResumeNsu){
+    foreach($file in @(Get-ChildItem -LiteralPath (Join-Path $DataPath 'history-gaps') -File -Filter '*.json' -ErrorAction SilentlyContinue)){
+        if($file.BaseName -cnotmatch '^\d{15}-\d{15}$'){continue}
+        $record=Read-SefazScopeJson $file.FullName
+        if($record.source -cne 'SEFAZ' -or "$($record.fromExclusive)-$($record.throughInclusive)" -cne $file.BaseName -or
+           [long]$record.fromExclusive -ge [long]$record.throughInclusive){throw 'SEFAZ_COVERAGE_GAP_INVALID'}
+        $bootstrap=$record.PSObject.Properties['bootstrap']
+        if(($bootstrap -and $bootstrap.Value -eq $true) -or (-not $bootstrap -and [long]$record.fromExclusive -eq 0 -and $record.throughInclusive -ceq $InitialResumeNsu)){continue}
+        [pscustomobject]@{path=$file.FullName;record=$record}
+    }
+}
+
+function Get-SefazConfirmedCorrection([string]$DataPath){
+    $fiscalBase=[IO.Path]::GetDirectoryName([IO.Path]::GetDirectoryName([IO.Path]::GetFullPath($DataPath)))
+    $attached=@{}
+    foreach($file in @(Get-ChildItem -LiteralPath (Join-Path $fiscalBase 'CceSync/events') -File -Filter '*.json' -ErrorAction SilentlyContinue)){
+        $proof=Read-SefazScopeJson $file.FullName
+        $data=$proof.PSObject.Properties
+        if($data['attached'] -and $data['attached'].Value -eq $true -and $data['itemId'] -and $data['itemId'].Value -gt 0 -and
+           $data['metadataVersion'] -and $data['metadataVersion'].Value -eq 1 -and $data['xmlSha256'] -and
+           $data['xmlSha256'].Value -cmatch '^[a-f0-9]{64}$' -and $data['key'] -and
+           (($data['originalComplete'] -and $data['originalComplete'].Value -eq $true) -or
+            ($data['originalStatus'] -and $data['originalStatus'].Value -ceq 'PRAZO_SEFAZ_EXPIRADO'))){
+            $attached[$data['xmlSha256'].Value]=$data['key'].Value
+        }
+    }
+    return $attached
+}
+
+function Get-SefazCollectionCoverage([string]$DataPath,[string]$MinimumIssueDate,[DateTimeOffset]$Now,[string]$InitialResumeNsu='', [switch]$Recover){
+    $stored=@{}
+    $fullInvoices=@{}
+    $summaries=[Collections.Generic.List[object]]::new()
+    $pending=0
+    $fiscalBase=[IO.Path]::GetDirectoryName([IO.Path]::GetDirectoryName([IO.Path]::GetFullPath($DataPath)))
+    foreach($file in @(Get-ChildItem -LiteralPath (Join-Path $fiscalBase 'SefazGapRecovery/archive') -File -Filter '*.json' -ErrorAction SilentlyContinue)){
+        $doc=Get-SefazSavedDocument $file.FullName
+        if($doc.kind -ceq 'nfeProc'){$fullInvoices[$doc.key]=$true}
+    }
+    $attached=Get-SefazConfirmedCorrection $DataPath
+    foreach($folder in @('archive','scope-excluded','summaries','scope-pending-date','outbox')){
+        foreach($file in @(Get-ChildItem -LiteralPath (Join-Path $DataPath $folder) -File -Filter '*.json' -ErrorAction SilentlyContinue)){
+            $doc=Get-SefazSavedDocument $file.FullName
+            $stored[$doc.id]=$doc
+            if($folder -ceq 'outbox'){$pending++}
+            if($folder -ceq 'scope-pending-date'){
+                if($doc.kind -cne 'procEventoNFe' -or (Get-SefazScopeField $doc.fields 'TIPO_EVENTO') -cne '110110' -or
+                   $attached[$doc.sha256] -cne $doc.key){
+                    $pending++
+                }
+            }
+            if($folder -ceq 'archive' -and ($doc.kind -ceq 'nfeProc' -or
+               (Get-SefazScopeField $doc.fields 'SITUACAO') -ceq 'CANCELADA')){$fullInvoices[$doc.key]=$true}
+            if($doc.kind -ceq 'resNFe' -and $folder -cne 'scope-excluded' -and (Get-SefazScopeField $doc.fields 'SITUACAO') -cne 'CANCELADA'){$summaries.Add($doc)}
+        }
+    }
+    $gaps=@(Get-SefazCollectionGaps $DataPath $InitialResumeNsu)
+    $unresolved=@($gaps | Where-Object {$_.record.status -cne 'RECOVERED'}).Count
+    $rawDirectory=Join-Path $DataPath 'raw'
+    $epochPath=Join-Path $DataPath 'coverage-start.json'
+    if([IO.File]::Exists($epochPath)){
+        $epoch=Read-SefazScopeJson $epochPath
+        if($epoch.startedAt -cnotmatch '^\d{8}T\d{13}$' -or $epoch.startNsu -cnotmatch '^\d{15}$'){throw 'SEFAZ_COVERAGE_EPOCH_INVALID'}
+    }else{$epoch=$null}
+
+    $replayed=0
+    $rawNames=@{}
+    $coveredThrough=if($epoch){[long]$epoch.startNsu}else{0L}
+    $orderedGaps=@($gaps | Sort-Object {$_.record.fromExclusive})
+    $unresolvedNsu=@{}
+    $pointEvidence=@{}
+    foreach($entry in @(Get-ChildItem -LiteralPath (Join-Path $DataPath 'history-gap-receipts') -File -Filter '*.json' -ErrorAction SilentlyContinue)){
+        $point=Read-SefazScopeJson $entry.FullName
+        if($point.nsu -cnotmatch '^\d{15}$' -or $point.nsu -cne $entry.BaseName -or $point.status -cnotin @('137','138') -or
+           $point.rawFile -cnotmatch ('^'+$point.nsu+'-[a-f0-9]{32}\.xml$') -or $point.sha256 -cnotmatch '^[a-f0-9]{64}$'){
+            throw 'SEFAZ_COVERAGE_POINT_RECEIPT_INVALID'
+        }
+        $raw=Join-Path $DataPath "history-gap-raw/$($point.rawFile)"
+        if((Get-Sha256 ([IO.File]::ReadAllBytes($raw))) -cne $point.sha256){throw 'SEFAZ_COVERAGE_RESPONSE_CHANGED'}
+        $pointEvidence[$point.nsu]=$true
+        if($point.status -ceq '138'){
+            if($point.documentId -cnotmatch ('^'+$point.nsu+'-[a-f0-9]{16}$')){throw 'SEFAZ_COVERAGE_POINT_RECEIPT_INVALID'}
+            if(-not $stored.ContainsKey($point.documentId)){$unresolvedNsu[$point.nsu]=$point}
+        }
+    }
+    foreach($gap in $gaps){
+        $record=$gap.record
+        if($record.status -cne 'RECOVERED' -or -not $record.PSObject.Properties['pointReceiptsRequired'] -or -not $record.pointReceiptsRequired){continue}
+        for($number=[long]$record.fromExclusive+1;$number -le [long]$record.throughInclusive;$number++){
+            if($pointEvidence[$number.ToString('000000000000000')]){continue}
+            $unresolved++
+            if($Recover){
+                $record.status='HISTORICAL_RECOVERY_REQUIRED'
+                $record.documentsImportedFromThisRange=$false
+                Write-AtomicJson $gap.path $record
+            }
+            break
+        }
+    }
+    foreach($point in $unresolvedNsu.Values){
+        $raw=Join-Path $DataPath "history-gap-raw/$($point.rawFile)"
+        $bytes=[IO.File]::ReadAllBytes($raw)
+        if((Get-Sha256 $bytes) -cne $point.sha256){throw 'SEFAZ_COVERAGE_RESPONSE_CHANGED'}
+        $xml=Read-SafeXml ([Text.Encoding]::UTF8.GetString($bytes))
+        $parts=@($xml.SelectNodes("//*[local-name()='retDistDFeInt']/*[local-name()='loteDistDFeInt']/*[local-name()='docZip']"))
+        if($parts.Count -ne 1 -or $parts[0].GetAttribute('NSU') -cne $point.nsu){throw 'SEFAZ_COVERAGE_POINT_RECEIPT_INVALID'}
+        $doc=ConvertFrom-FiscalXml (Expand-DocZip $parts[0].InnerText) $point.nsu ((Split-Path $DataPath -Leaf) -split '-')[0]
+        if($doc.id -cne $point.documentId){throw 'SEFAZ_COVERAGE_POINT_RECEIPT_INVALID'}
+        $pending++
+        if($Recover){
+            Write-AtomicJson (Join-Path $DataPath "outbox/$($doc.id).json") $doc
+            $stored[$doc.id]=$doc
+            $replayed++
+        }
+    }
+    foreach($entry in @(Get-ChildItem -LiteralPath (Join-Path $DataPath 'distribution-receipts') -File -Filter '*.xml.json' -ErrorAction SilentlyContinue | Sort-Object Name)){
+        $proof=Read-SefazScopeJson $entry.FullName
+        if($proof.responseFile -cnotmatch '^\d{8}T\d+-[a-f0-9]{32}\.xml$' -or "$($proof.responseFile).json" -cne $entry.Name -or
+           $proof.responseSha256 -cnotmatch '^[a-f0-9]{64}$' -or $proof.responseStatus -cnotin @('137','138') -or
+           $proof.requestNsu -cnotmatch '^\d{15}$' -or $proof.lastNsu -cnotmatch '^\d{15}$' -or
+           [long]$proof.requestNsu -gt [long]$proof.lastNsu -or $proof.companyCnpj -cnotmatch '^[A-Z0-9]{12}\d{2}$'){
+            throw 'SEFAZ_COVERAGE_RECEIPT_INVALID'
+        }
+        $rawNames[$proof.responseFile]=$true
+        if($epoch -and [long]$proof.requestNsu -gt $coveredThrough){
+            $end=[long]$proof.requestNsu
+            $cursor=$coveredThrough
+            foreach($gap in $orderedGaps){
+                if([long]$gap.record.fromExclusive -le $cursor -and [long]$gap.record.throughInclusive -gt $cursor){
+                    $cursor=[long]$gap.record.throughInclusive
+                }
+            }
+            if($cursor -lt $end){
+                $unresolved++
+                if($Recover){Register-SefazDistributionGap $DataPath ($cursor.ToString('000000000000000')) $proof.requestNsu $Now}
+            }
+        }
+        $coveredThrough=[Math]::Max($coveredThrough,[long]$proof.lastNsu)
+        $path=Join-Path $DataPath "raw/$($proof.responseFile)"
+        $bytes=[IO.File]::ReadAllBytes($path)
+        if((Get-Sha256 $bytes) -cne $proof.responseSha256){throw 'SEFAZ_COVERAGE_RESPONSE_CHANGED'}
+        $xml=Read-SafeXml ([Text.Encoding]::UTF8.GetString($bytes))
+        $ret=$xml.SelectSingleNode("//*[local-name()='retDistDFeInt']")
+        if($null -eq $ret -or (Get-XmlValue $ret "./*[local-name()='cStat']") -cne $proof.responseStatus -or
+           (Get-XmlValue $ret "./*[local-name()='ultNSU']") -cne $proof.lastNsu){throw 'SEFAZ_COVERAGE_RESPONSE_INCONSISTENT'}
+        $previous=[long]$proof.requestNsu
+        foreach($part in $ret.SelectNodes("./*[local-name()='loteDistDFeInt']/*[local-name()='docZip']")){
+            $number=[long]$part.GetAttribute('NSU')
+            if($number -gt ($previous+1)){
+                $missingFrom=$previous.ToString('000000000000000')
+                $missingThrough=($number-1).ToString('000000000000000')
+                if(-not [IO.File]::Exists((Join-Path $DataPath "history-gaps/$missingFrom-$missingThrough.json"))){
+                    $unresolved++
+                    if($Recover){Register-SefazDistributionGap $DataPath $missingFrom $missingThrough $Now}
+                }
+            }
+            $previous=$number
+            $doc=ConvertFrom-FiscalXml (Expand-DocZip $part.InnerText) $part.GetAttribute('NSU') $proof.companyCnpj
+            if($stored.ContainsKey($doc.id)){continue}
+            $pending++
+            if($Recover){
+                Write-AtomicJson (Join-Path $DataPath "outbox/$($doc.id).json") $doc
+                $stored[$doc.id]=$doc
+                $replayed++
+            }
+        }
+        if([long]$proof.lastNsu -gt $previous){
+            $missingFrom=$previous.ToString('000000000000000')
+            if(-not [IO.File]::Exists((Join-Path $DataPath "history-gaps/$missingFrom-$($proof.lastNsu).json"))){
+                $unresolved++
+                if($Recover){Register-SefazDistributionGap $DataPath $missingFrom $proof.lastNsu $Now}
+            }
+        }
+    }
+    $statePath=Join-Path $DataPath 'state.json'
+    if([IO.File]::Exists($statePath)){
+        $state=Read-SefazScopeJson $statePath
+        if($state.status -cin @('137','138') -and $state.PSObject.Properties['coverageJournalRequired'] -and
+           $state.coverageJournalRequired -and -not $rawNames[[string]$state.responseFile]){throw 'SEFAZ_COVERAGE_JOURNAL_MISSING'}
+    }
+    if($epoch){
+        foreach($file in @(Get-ChildItem -LiteralPath $rawDirectory -File -Filter '*.xml' -ErrorAction SilentlyContinue)){
+            if($file.Name -cnotmatch '^\d{8}T\d{13}-[a-f0-9]{32}\.xml$' -or
+               [string]::CompareOrdinal($file.Name.Substring(0,22),$epoch.startedAt) -lt 0 -or $rawNames[$file.Name]){continue}
+            $xml=Read-SafeXml ([IO.File]::ReadAllText($file.FullName))
+            $ret=$xml.SelectSingleNode("//*[local-name()='retDistDFeInt']")
+            if($null -eq $ret){throw 'SEFAZ_COVERAGE_RESPONSE_INCONSISTENT'}
+            if((Get-XmlValue $ret "./*[local-name()='cStat']") -cin @('137','138')){throw 'SEFAZ_COVERAGE_JOURNAL_MISSING'}
+        }
+    }
+    $summaryKeys=@($summaries | Where-Object {-not $fullInvoices.ContainsKey($_.key) -and
+        (Get-SefazDocumentScopeDisposition $_ @() $MinimumIssueDate $Now) -ceq 'READY'} |
+        Group-Object key | ForEach-Object {$_.Name})
+    $pendingXml=$summaryKeys.Count
+    return [pscustomobject]@{complete=($unresolved -eq 0 -and $pending -eq 0 -and $pendingXml -eq 0);openGaps=$unresolved;pendingDelivery=$pending;pendingXml=$pendingXml;replayed=$replayed}
+}
+
+function Write-SefazCoverageStatus([string]$DataPath,$Coverage,[DateTimeOffset]$Now){
+    Write-AtomicJson (Join-Path $DataPath 'coverage-status.json') ([ordered]@{
+        checkedAt=$Now.ToString('o');complete=$Coverage.complete;openGaps=$Coverage.openGaps
+        pendingDelivery=$Coverage.pendingDelivery;pendingXml=$Coverage.pendingXml;replayed=$Coverage.replayed
+    })
 }
 function Get-PendingDocuments([string]$DataPath,[int]$MaxDocuments=10,[int]$MaxOutputBytes=1500000) {
     $folder=Join-Path $DataPath 'outbox'
@@ -386,4 +643,4 @@ function Set-SefazOutboxScope([string]$DataRoot,[object[]]$Evidence,[string]$Min
     }
     return [pscustomobject]@{excluded=$excluded;pendingDate=$pending;released=$released}
 }
-Export-ModuleMember -Function ConvertFrom-FiscalXml,Merge-FiscalFields,Expand-DocZip,Get-DistributionDecision,Get-SefazCursorPlan,Register-SefazDistributionGap,Save-DistributionBatch,Get-PendingDocuments,Confirm-Documents,Get-CompanyCertificate,Invoke-SefazDistribution,Write-AtomicJson,Get-SefazDocumentScopeDisposition,Set-SefazOutboxScope
+Export-ModuleMember -Function ConvertFrom-FiscalXml,Merge-FiscalFields,Expand-DocZip,Get-DistributionDecision,Get-SefazCursorPlan,Register-SefazDistributionGap,Save-DistributionBatch,Resume-SefazDistributionBatch,Get-SefazCollectionGaps,Get-SefazConfirmedCorrection,Get-SefazCollectionCoverage,Write-SefazCoverageStatus,Get-PendingDocuments,Confirm-Documents,Get-CompanyCertificate,Invoke-SefazDistribution,Write-AtomicJson,Get-SefazDocumentScopeDisposition,Set-SefazOutboxScope
