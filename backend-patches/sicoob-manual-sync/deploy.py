@@ -14,7 +14,7 @@ import urllib.request
 EXPECTED_BRIDGE = '6e81c177a7a85cd398e9dea7dd520aca2d842ef0f87d805c3b5badc7472f21d3'
 COLLECTORS = {
     'sync_movements.py': 'fb8688b04a5ae07098d96ed78f1b711796944fbab4dfdb5d7d65ba036c91ab32',
-    'sync_boleto_receipts.py': 'eabde796064593acfb0887a35bfae8914d57319e3b70741269b8ffee91e109f4',
+    'sync_boleto_receipts.py': 'c7b1d7a4c77cd3b8075067aca2f0a28bcf47d4bc909fcd4d0167d4238273eb75',
     'sync_pix_receivers.py': '5b8b67556189f9687e1fb644275d6ab0da8f038d1efd13ac4c9d14e87680f2a2',
 }
 LIVE = Path('/opt/energetica-whatsapp')

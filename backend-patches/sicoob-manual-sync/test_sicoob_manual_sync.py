@@ -123,7 +123,7 @@ class RunnerTests(unittest.TestCase):
                 self.receipt('movements', value)
 
     def test_no_match_is_not_fabricated_as_a_write(self):
-        self.assertEqual(self.receipt('boleto', {'already_attached': 2, 'unverified_404': 3, 'unverified_200': 1, 'unverified_400': 4}), {'created': 0, 'updated': 0, 'verified': 0, 'pendingDetails': 8})
+        self.assertEqual(self.receipt('boleto', {'already_attached': 2, 'missing_document': 8, 'unverified_404': 3, 'unverified_200': 1, 'unverified_400': 4}), {'created': 0, 'updated': 0, 'verified': 0, 'pendingDetails': 8})
         self.assertEqual(self.receipt('pix', {'pendentes': 7, 'http_200': 2, 'http_404': 3, 'verificados': 2, 'nomes_gravados': 1}), {'created': 0, 'updated': 1, 'verified': 0, 'pendingDetails': 6})
 
     def test_auxiliary_write_failures_and_incomplete_bank_responses_fail(self):
@@ -131,6 +131,13 @@ class RunnerTests(unittest.TestCase):
         for stage, payload in cases:
             with self.subTest(stage=stage, payload=payload), self.assertRaises(ValueError):
                 self.receipt(stage, payload)
+
+    def test_verified_boleto_fields_do_not_imply_a_bank_pdf(self):
+        self.assertEqual(self.receipt('boleto', {
+            'already_attached': 2, 'missing_document': 3, 'verified': 2, 'receivers_updated': 1,
+        }), {'created': 0, 'updated': 1, 'verified': 0, 'pendingDetails': 3})
+        with self.assertRaises(ValueError):
+            self.receipt('boleto', {'verified': 1, 'receivers_updated': 2})
 
     def test_unknown_truncated_duplicate_and_nonzero_output_fail(self):
         for text, code in [('{}', 2), ('{"pendentes":0}\n{"pendentes":0}', 0), ('{"pendentes":', 0), ('{"pendentes":0,"secret_field":2}', 0)]:
