@@ -164,7 +164,8 @@ function ConvertFrom-GapResponse([string]$Soap,[string]$TargetNsu,[string]$Compa
     if($document.fields.Contains('CNPJ_FORNECEDOR') -and ([string]$document.fields.CNPJ_FORNECEDOR).Length -eq 14 -and $document.fields.CNPJ_FORNECEDOR -cne $document.key.Substring(6,14)){throw 'GAP_ISSUER_KEY_MISMATCH'}
     if($document.kind -ceq 'nfeProc'){
         $fiscal=Read-GapXml $text
-        $roles=@($fiscal.SelectNodes("/*[local-name()='nfeProc']/*[local-name()='NFe']/*[local-name()='infNFe']/*[local-name()='emit' or local-name()='dest' or local-name()='autXML']/*[local-name()='CNPJ']")|ForEach-Object{$_.InnerText})
+        $invoice=$fiscal.SelectSingleNode("/*[local-name()='nfeProc']/*[local-name()='NFe']/*[local-name()='infNFe']")
+        $roles=@($invoice.SelectNodes("./*[local-name()='emit' or local-name()='dest' or local-name()='autXML']/*[local-name()='CNPJ'] | ./*[local-name()='transp']/*[local-name()='transporta']/*[local-name()='CNPJ']")|ForEach-Object{$_.InnerText})
         if($roles -cnotcontains $CompanyCnpj){throw 'GAP_COMPANY_ROLE_MISMATCH'}
         $protocol=$fiscal.SelectSingleNode("/*[local-name()='nfeProc']/*[local-name()='protNFe']/*[local-name()='infProt']/*[local-name()='chNFe']")
         if($null -eq $protocol -or $protocol.InnerText -cne $document.key){throw 'GAP_PROTOCOL_KEY_MISMATCH'}

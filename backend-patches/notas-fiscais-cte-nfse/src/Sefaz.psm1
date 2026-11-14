@@ -204,6 +204,13 @@ function Write-AtomicJson([string]$Path,$Value) {
         }else{[IO.File]::Move($tmp,$Path)}
     }finally{if([IO.File]::Exists($tmp)){[IO.File]::Delete($tmp)}}
 }
+function Register-SefazDistributionGap([string]$DataPath,[string]$FromExclusive,[string]$ThroughInclusive,[DateTimeOffset]$Now,[switch]$Bootstrap){
+    if($FromExclusive -cnotmatch '^\d{15}$' -or $ThroughInclusive -cnotmatch '^\d{15}$' -or [long]$FromExclusive -ge [long]$ThroughInclusive){throw 'SEFAZ_GAP_RANGE_INVALID'}
+    $path=Join-Path $DataPath "history-gaps/$FromExclusive-$ThroughInclusive.json"
+    if(-not [IO.File]::Exists($path)){
+        Write-AtomicJson $path ([ordered]@{status='HISTORICAL_RECOVERY_REQUIRED';source='SEFAZ';fromExclusive=$FromExclusive;throughInclusive=$ThroughInclusive;recordedAt=$Now.ToString('o');documentsImportedFromThisRange=$false;bootstrap=[bool]$Bootstrap})
+    }
+}
 function Save-DistributionBatch([string]$Soap,[string]$DataPath,[string]$CompanyCnpj,[string]$PreviousNsu,[DateTimeOffset]$Now,[int]$Cooldown=65) {
     [IO.Directory]::CreateDirectory($DataPath)|Out-Null
     [IO.Directory]::CreateDirectory((Join-Path $DataPath 'raw'))|Out-Null
@@ -226,6 +233,7 @@ function Save-DistributionBatch([string]$Soap,[string]$DataPath,[string]$Company
         if($last -match '^\d{15}$' -and [long]$last -gt [long]$PreviousNsu -and $reason -match 'ultNSU'){
             $held.serverNsuHint=$last
             $held.historyRecoveryRequired=$true
+            Register-SefazDistributionGap $DataPath $PreviousNsu $last $Now
         }
         Write-AtomicJson $statePath $held
         return [pscustomobject]$held
@@ -235,16 +243,23 @@ function Save-DistributionBatch([string]$Soap,[string]$DataPath,[string]$Company
     $docs=@($ret.SelectNodes("./*[local-name()='loteDistDFeInt']/*[local-name()='docZip']"))
     if($status -eq '138' -and $docs.Count -eq 0){throw 'cStat 138 sem documentos; cursor preservado.'}
     $previousDoc=[long]$PreviousNsu
+    $ranges=@()
     foreach($doc in $docs){
         $docNsu=$doc.GetAttribute('NSU')
         if($docNsu -notmatch '^\d{15}$' -or [long]$docNsu -le $previousDoc -or [long]$docNsu -gt [long]$last){throw 'NSU de documento fora da sequencia.'}
+        if([long]$docNsu -gt ($previousDoc+1)){$ranges+=@(@{from=$previousDoc;through=([long]$docNsu-1)})}
         $previousDoc=[long]$docNsu
         $parsed=ConvertFrom-FiscalXml (Expand-DocZip $doc.InnerText) $docNsu $CompanyCnpj
         $outPath=Join-Path (Join-Path $DataPath 'outbox') ($parsed.id+'.json')
         $archived=Join-Path (Join-Path $DataPath 'archive') ($parsed.id+'.json')
         if(-not [IO.File]::Exists($archived)){Write-AtomicJson $outPath $parsed}
     }
+    if([long]$last -gt $previousDoc){$ranges+=@(@{from=$previousDoc;through=([long]$last)})}
+    foreach($range in $ranges){
+        Register-SefazDistributionGap $DataPath ($range.from.ToString('000000000000000')) ($range.through.ToString('000000000000000')) $Now
+    }
     $state=[ordered]@{lastNsu=$last;maxNsu=$max;nextAllowedAt=$decision.nextAllowedAt;status=$status}
+    if($ranges.Count){$state.historyRecoveryRequired=$true}
     Write-AtomicJson $statePath $state
     return [pscustomobject]$state
 }
@@ -286,20 +301,24 @@ function Get-CompanyCertificate($Config) {
     if($cert.Subject -notlike ('*'+$Config.companyCnpj+'*')){throw 'Certificado nao corresponde ao CNPJ configurado.'}
     return $cert
 }
-function Invoke-SefazDistribution($Config,[string]$LastNsu) {
+function Invoke-SefazDistribution($Config,[string]$LastNsu,[switch]$Point) {
     if($LastNsu -notmatch '^\d{15}$'){throw 'NSU inicial deve ter 15 digitos.'}
     if($Config.companyCnpj -notmatch '^[A-Z0-9]{12}\d{2}$' -or $Config.ufCode -notmatch '^\d{2}$' -or $Config.environment -notin @('1','2')){throw 'CNPJ, UF ou ambiente invalidos.'}
     $url='https://www1.nfe.fazenda.gov.br/NFeDistribuicaoDFe/NFeDistribuicaoDFe.asmx'
     if($Config.environment -eq '2'){$url='https://hom.nfe.fazenda.gov.br/NFeDistribuicaoDFe/NFeDistribuicaoDFe.asmx'}
     $certificate=Get-CompanyCertificate $Config
+    $query=if($Point){"<consNSU><NSU>$LastNsu</NSU></consNSU>"}else{"<distNSU><ultNSU>$LastNsu</ultNSU></distNSU>"}
     $soap=@"
-<?xml version="1.0" encoding="utf-8"?><soap12:Envelope xmlns:soap12="http://www.w3.org/2003/05/soap-envelope"><soap12:Body><nfeDistDFeInteresse xmlns="http://www.portalfiscal.inf.br/nfe/wsdl/NFeDistribuicaoDFe"><nfeDadosMsg><distDFeInt xmlns="http://www.portalfiscal.inf.br/nfe" versao="1.01"><tpAmb>$($Config.environment)</tpAmb><cUFAutor>$($Config.ufCode)</cUFAutor><CNPJ>$($Config.companyCnpj)</CNPJ><distNSU><ultNSU>$LastNsu</ultNSU></distNSU></distDFeInt></nfeDadosMsg></nfeDistDFeInteresse></soap12:Body></soap12:Envelope>
+<?xml version="1.0" encoding="utf-8"?><soap12:Envelope xmlns:soap12="http://www.w3.org/2003/05/soap-envelope"><soap12:Body><nfeDistDFeInteresse xmlns="http://www.portalfiscal.inf.br/nfe/wsdl/NFeDistribuicaoDFe"><nfeDadosMsg><distDFeInt xmlns="http://www.portalfiscal.inf.br/nfe" versao="1.01"><tpAmb>$($Config.environment)</tpAmb><cUFAutor>$($Config.ufCode)</cUFAutor><CNPJ>$($Config.companyCnpj)</CNPJ>$query</distDFeInt></nfeDadosMsg></nfeDistDFeInteresse></soap12:Body></soap12:Envelope>
 "@
     [Net.ServicePointManager]::SecurityProtocol=[Net.SecurityProtocolType]::Tls12
     $action='http://www.portalfiscal.inf.br/nfe/wsdl/NFeDistribuicaoDFe/nfeDistDFeInteresse'
     # Invoke-WebRequest nao repete automaticamente POST. Cadeia TLS e hostname continuam validados.
-    $response=Invoke-WebRequest -Uri $url -Method Post -Certificate $certificate -ContentType ('application/soap+xml; charset=utf-8; action="'+$action+'"') -Body ([Text.Encoding]::UTF8.GetBytes($soap)) -TimeoutSec 90 -UseBasicParsing
-    return [string]$response.Content
+    try{
+        $timeout=if($Point){15}else{90}
+        $response=Invoke-WebRequest -Uri $url -Method Post -Certificate $certificate -ContentType ('application/soap+xml; charset=utf-8; action="'+$action+'"') -Body ([Text.Encoding]::UTF8.GetBytes($soap)) -TimeoutSec $timeout -UseBasicParsing
+        return [string]$response.Content
+    }finally{$certificate.Dispose()}
 }
 function ConvertTo-SefazScopeDocument($Document){
     if($Document.PSObject.Properties['xmlBase64'] -and $Document.PSObject.Properties['nsu']){
@@ -344,12 +363,12 @@ function Set-SefazOutboxScope([string]$DataRoot,[object[]]$Evidence,[string]$Min
     if([string]::IsNullOrWhiteSpace($MinimumIssueDate)){return [pscustomobject]@{excluded=0;pendingDate=0;released=0}}
     $null=[DateTime]::ParseExact($MinimumIssueDate,'yyyy-MM-dd',[Globalization.CultureInfo]::InvariantCulture)
     $files=@();$documents=@();$known=@($Evidence)
-    foreach($folder in @('outbox','scope-pending-date','archive')){
+    foreach($folder in @('outbox','scope-pending-date','archive','scope-excluded')){
         $path=Join-Path $DataRoot $folder
         if(-not [IO.Directory]::Exists($path)){continue}
         foreach($file in @(Get-ChildItem -LiteralPath $path -Filter '*.json' -File)){
             $doc=ConvertTo-SefazScopeDocument (Read-SefazScopeJson $file.FullName);$known+=@($doc)
-            if($folder -cne 'archive'){$files+=@($file);$documents+=@($doc)}
+            if($folder -cnotin @('archive','scope-excluded')){$files+=@($file);$documents+=@($doc)}
         }
     }
     $excluded=0;$pending=0;$released=0
@@ -367,4 +386,4 @@ function Set-SefazOutboxScope([string]$DataRoot,[object[]]$Evidence,[string]$Min
     }
     return [pscustomobject]@{excluded=$excluded;pendingDate=$pending;released=$released}
 }
-Export-ModuleMember -Function ConvertFrom-FiscalXml,Merge-FiscalFields,Expand-DocZip,Get-DistributionDecision,Get-SefazCursorPlan,Save-DistributionBatch,Get-PendingDocuments,Confirm-Documents,Get-CompanyCertificate,Invoke-SefazDistribution,Write-AtomicJson,Get-SefazDocumentScopeDisposition,Set-SefazOutboxScope
+Export-ModuleMember -Function ConvertFrom-FiscalXml,Merge-FiscalFields,Expand-DocZip,Get-DistributionDecision,Get-SefazCursorPlan,Register-SefazDistributionGap,Save-DistributionBatch,Get-PendingDocuments,Confirm-Documents,Get-CompanyCertificate,Invoke-SefazDistribution,Write-AtomicJson,Get-SefazDocumentScopeDisposition,Set-SefazOutboxScope

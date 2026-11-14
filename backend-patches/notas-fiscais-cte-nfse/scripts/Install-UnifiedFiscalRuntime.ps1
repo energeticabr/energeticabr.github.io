@@ -31,7 +31,7 @@ function Get-UnifiedHash([byte[]]$Bytes){
     try{return ([BitConverter]::ToString($sha.ComputeHash($Bytes))).Replace('-','').ToLowerInvariant()}finally{$sha.Dispose()}
 }
 $files=@('src/Sefaz.psm1','src/Cte.psm1','src/Nfse.psm1','src/FiscalDocuments.psm1','src/AuxiliaryFiscal.psm1',
-    'src/FlowTransport.psm1','src/Danfe.psm1','src/SefazWhatsApp.psm1','src/GapRecovery.psm1',
+    'src/FlowTransport.psm1','src/Danfe.psm1','src/SefazWhatsApp.psm1','src/GapRecovery.psm1','src/RecentGap.psm1',
     'scripts/PowerPlatform-Session.ps1','scripts/Invoke-Collector.ps1','scripts/Invoke-SefazWorker.ps1','scripts/Invoke-GapRecovery.ps1',
     'src/danfe_renderer.py','src/fiscal_document.py','src/national_danfse.py','src/ManualFiscalSync.psm1','scripts/Invoke-ManualFiscalSync.ps1')
 $root=[IO.Path]::GetFullPath($SourceRoot)
@@ -55,7 +55,7 @@ foreach($relative in $files){
 $tests=New-Object 'Collections.Generic.List[object]'
 if($RunOfflineTests){
     $exe=(Get-Command pwsh -ErrorAction Stop).Source
-    foreach($name in @('Run-Tests.ps1','Cte-Tests.ps1','Nfse-Tests.ps1','FiscalDocuments-Tests.ps1','AuxiliaryFiscal-Tests.ps1')){
+    foreach($name in @('Run-Tests.ps1','RecentGap-Tests.ps1','Cte-Tests.ps1','Nfse-Tests.ps1','FiscalDocuments-Tests.ps1','AuxiliaryFiscal-Tests.ps1')){
         $testPath=Join-Path (Join-Path $root 'tests') $name
         if(-not [IO.File]::Exists($testPath)){throw 'UNIFIED_OFFLINE_TEST_MISSING'}
         $output=@(& $exe -NoProfile -File $testPath 2>&1)
@@ -112,7 +112,7 @@ try{
  $installerLock=[IO.File]::Open((Join-Path $target 'unified-install.lock'),[IO.FileMode]::OpenOrCreate,[IO.FileAccess]::ReadWrite,[IO.FileShare]::None)
  $signature=Get-AuthenticodeSignature -LiteralPath $runtime
  if($signature.Status -ne 'Valid' -or $signature.SignerCertificate.Subject -notlike '*Microsoft Corporation*'){throw 'UNIFIED_RUNTIME_SIGNATURE_INVALID'}
- $allowed=@('src/Sefaz.psm1','src/Cte.psm1','src/Nfse.psm1','src/FiscalDocuments.psm1','src/AuxiliaryFiscal.psm1','src/FlowTransport.psm1','src/Danfe.psm1','src/SefazWhatsApp.psm1','src/GapRecovery.psm1','scripts/PowerPlatform-Session.ps1','scripts/Invoke-Collector.ps1','scripts/Invoke-SefazWorker.ps1','scripts/Invoke-GapRecovery.ps1','src/danfe_renderer.py','src/fiscal_document.py','src/national_danfse.py','src/ManualFiscalSync.psm1','scripts/Invoke-ManualFiscalSync.ps1')
+ $allowed=@('src/Sefaz.psm1','src/Cte.psm1','src/Nfse.psm1','src/FiscalDocuments.psm1','src/AuxiliaryFiscal.psm1','src/FlowTransport.psm1','src/Danfe.psm1','src/SefazWhatsApp.psm1','src/GapRecovery.psm1','src/RecentGap.psm1','scripts/PowerPlatform-Session.ps1','scripts/Invoke-Collector.ps1','scripts/Invoke-SefazWorker.ps1','scripts/Invoke-GapRecovery.ps1','src/danfe_renderer.py','src/fiscal_document.py','src/national_danfse.py','src/ManualFiscalSync.psm1','scripts/Invoke-ManualFiscalSync.ps1')
  if(@($Package.files).Count -ne $allowed.Count){throw 'UNIFIED_MANIFEST_INVALID'}
  $seen=@{}
  foreach($entry in $Package.files){

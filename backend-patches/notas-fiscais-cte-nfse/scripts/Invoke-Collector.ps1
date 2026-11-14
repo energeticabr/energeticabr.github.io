@@ -45,6 +45,24 @@ try{
         $state=Get-Content -LiteralPath $statePath -Raw | ConvertFrom-Json @jsonOptions
     }
     $status='REPLAY_OUTBOX'
+    $recovery=$null
+    if($null -ne $state -and $state.status -ceq '656' -and $state.PSObject.Properties['serverNsuHint']){
+        $plan=Get-SefazCursorPlan ([string]$state.lastNsu) ([string]$state.serverNsuHint)
+        if($null -ne $plan.historyGapFrom){Register-SefazDistributionGap $dataPath $plan.historyGapFrom $plan.historyGapThrough ([DateTimeOffset]::UtcNow)}
+    }
+    if($pending.Count -eq 0 -and $null -ne $state -and (Test-Path -LiteralPath (Join-Path $dataPath 'history-gaps'))){
+        Import-Module (Join-Path $PSScriptRoot '../src/RecentGap.psm1') -DisableNameChecking
+        $recovery=Invoke-SefazRecentGapRecovery $cfg $dataPath (Join-Path (Split-Path $DataRoot -Parent) 'SefazGapRecovery') $state ([DateTimeOffset]::UtcNow)
+        $scope=Set-SefazOutboxScope $dataPath $scopeEvidence $minimumIssueDate ([DateTimeOffset]::UtcNow)
+        $pending=@(Get-PendingDocuments $dataPath $cfg.maxBatchDocuments $cfg.maxOutputBytes)
+    }
+    if($recovery -and $recovery.status -in @('WAIT','PROGRESS')){
+        $canContinue=$recovery.PSObject.Properties['pointQuotaOnly'] -and $recovery.pointQuotaOnly -and $state.status -cne '656'
+        if(-not $canContinue){
+            [ordered]@{status='GAP_PENDING';documents=@($pending);state=$state;scope=$scope;nextAllowedAt=$recovery.nextAllowedAt}|ConvertTo-Json -Depth 35 -Compress
+            exit 0
+        }
+    }
     if($pending.Count -eq 0){
         $now=[DateTimeOffset]::UtcNow
         if($null -ne $state -and [DateTimeOffset]::Parse($state.nextAllowedAt) -gt $now){$status='COOLDOWN'}else{
@@ -53,17 +71,15 @@ try{
             if([string]::IsNullOrWhiteSpace($last)){throw 'Configure initialNsu antes da primeira coleta direta na SEFAZ. Depois disso, preservar o cursor salvo em state.json.'}
             if([string]$last -notmatch '^\d{15}$'){throw 'initialNsu deve conter exatamente 15 digitos.'}
             $hint=$null
+            $bootstrap=$false
             if($null -ne $state -and $state.status -eq '656'){
                 if($state.PSObject.Properties['serverNsuHint']){$hint=[string]$state.serverNsuHint}
-                elseif($last -eq '000000000000000' -and $cfg.PSObject.Properties['initialResumeNsu']){$hint=[string]$cfg.initialResumeNsu}
+                elseif($last -eq '000000000000000' -and $cfg.PSObject.Properties['initialResumeNsu']){$hint=[string]$cfg.initialResumeNsu;$bootstrap=$true}
             }
             if(-not [string]::IsNullOrWhiteSpace($hint)){
                 $plan=Get-SefazCursorPlan ([string]$last) $hint
                 if($null -ne $plan.historyGapFrom){
-                    $gapPath=Join-Path (Join-Path $dataPath 'history-gaps') ($plan.historyGapFrom+'-'+$plan.historyGapThrough+'.json')
-                    if(-not [IO.File]::Exists($gapPath)){
-                        Write-AtomicJson $gapPath ([ordered]@{status='HISTORICAL_RECOVERY_REQUIRED';source='SEFAZ';fromExclusive=$plan.historyGapFrom;throughInclusive=$plan.historyGapThrough;recordedAt=$now.ToString('o');documentsImportedFromThisRange=$false})
-                    }
+                    Register-SefazDistributionGap $dataPath $plan.historyGapFrom $plan.historyGapThrough $now -Bootstrap:$bootstrap
                     $last=$plan.requestNsu
                 }
             }
@@ -76,5 +92,5 @@ try{
             $pending=@(Get-PendingDocuments $dataPath $cfg.maxBatchDocuments $cfg.maxOutputBytes)
         }
     }
-    [ordered]@{status=$status;documents=@($pending);state=$state;scope=$scope}|ConvertTo-Json -Depth 35 -Compress
+    [ordered]@{status=$status;documents=@($pending);state=$state;scope=$scope;gapDeliveryPending=($recovery -and $recovery.status -cne 'RECONCILED')}|ConvertTo-Json -Depth 35 -Compress
 }finally{$lock.Dispose()}
