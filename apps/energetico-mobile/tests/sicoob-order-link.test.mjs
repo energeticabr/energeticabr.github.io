@@ -154,6 +154,9 @@ test('payment link loads all order pages and writes and confirms all selected ID
   assert.deepEqual(await save([38, 37, 38], [37]),
     { movementId:'10', orderIds:['37', '38'], suppliers:['Elétrica Teste', ''] });
   assert.deepEqual(writes, [{ IDPEDIDO:37, SICOOB_PEDIDOS_ADICIONAIS:'38' }]);
+  additional = '38,inválido';
+  await assert.rejects(save([37], [37, 38]), /vínculo registrado é inválido/i);
+  additional = '38';
   assert.ok(scopes.includes(`https://${host}/AllSites.Write`));
   assert.equal(readbacks, 1);
   await save([38, 37], [37]); // A retry of the same selection needs no second write.

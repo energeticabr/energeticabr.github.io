@@ -79,12 +79,12 @@ function normalizeOrderIds(values) {
 export function sicoobLinkedOrderIds(fields, { strict = false } = {}) {
   const primary = fields?.[SICOOB_ORDER_FIELD];
   const additional = fields?.[SICOOB_ADDITIONAL_ORDERS_FIELD];
-  const primaryId = sicoobOrderId(primary);
-  if ((strict && !primaryId && !blank(primary)) || (!blank(additional) && typeof additional !== 'string')) return null;
-  return normalizeOrderIds([
-    ...(primaryId ? [primaryId] : []),
-    ...(blank(additional) ? [] : additional.split(',')),
-  ]);
+  const values = blank(primary) ? [] : [primary];
+  if (!blank(additional)) {
+    if (typeof additional === 'string') values.push(...additional.split(','));
+    else if (strict) return null;
+  }
+  return strict ? normalizeOrderIds(values) : [...new Set(values.map(sicoobOrderId).filter(Boolean))];
 }
 
 export const sameSicoobOrderIds = (left, right) =>
@@ -173,7 +173,7 @@ export function createSicoobOrderLink({ repository, orderRepository = repository
       throw new Error('Consulta de transações incompleta.');
     }
     return items.some(({ fields }) => isImportedFinancialMovement(fields)
-      && sicoobLinkedOrderIds(fields)?.length === 0 && fields[SICOOB_UNLINKED_REVIEW_FIELD] !== true);
+      && sicoobLinkedOrderIds(fields).length === 0 && fields[SICOOB_UNLINKED_REVIEW_FIELD] !== true);
   }
 
   async function saveReview({ movementId: rawMovement, reviewed, signal }) {
@@ -246,7 +246,7 @@ export function createSicoobOrderLink({ repository, orderRepository = repository
     }, { eTag, signal, readbackFields: linkFields });
     active(signal);
     if (sicoobOrderId(saved?.id) !== movementId || sicoobOrderId(saved?.fields?.[SICOOB_ORDER_FIELD]) !== primary
-      || !sameSicoobOrderIds(sicoobLinkedOrderIds(saved.fields), next)) {
+      || !sameSicoobOrderIds(sicoobLinkedOrderIds(saved.fields, { strict: true }), next)) {
       throw new Error('O vínculo dos pedidos não foi confirmado no SharePoint.');
     }
     return receipt;

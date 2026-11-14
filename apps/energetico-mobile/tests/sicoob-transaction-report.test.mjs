@@ -415,7 +415,7 @@ test('highlights linked payments on either stripe and preserves the original unl
   const view = createSicoobTransactionReportView({
     document,
     data: { async loadSnapshot() {
-      return { rows: [payment(1, { IDPEDIDO: 525 }), payment(2, { IDPEDIDO: '526' }),
+      return { rows: [payment(1, { IDPEDIDO: 525 }), payment(2, { IDPEDIDO: '526', SICOOB_PEDIDOS_ADICIONAIS: '527,inválido' }),
         payment(3), payment(4, { IDPEDIDO: '0' })] };
     } },
   });
@@ -427,7 +427,7 @@ test('highlights linked payments on either stripe and preserves the original unl
   ]), [
     ['N/A', 'rgba(0, 0, 0, 0)'],
     ['N/A', 'rgb(239, 246, 250)'],
-    ['ID 526', 'rgb(234, 248, 238)'],
+    ['ID 526, ID 527', 'rgb(234, 248, 238)'],
     ['ID 525', 'rgb(234, 248, 238)'],
   ]);
 });

@@ -65,8 +65,6 @@ function projectTransactions(snapshot) {
       reference: text(fields.REFERENCIABANCARIA),
       value: registrationNumber(fields.VALOR),
     };
-    const orderIds = sicoobLinkedOrderIds(fields);
-    if (!orderIds) throw new Error('Vinculação de pedidos inválida.');
     const isPix = transaction.type === 'Pix';
     const bankRecipient = text(fields.RAZAOSOCIALRECEBEDOR);
     const receiptName = isPix && /^\d+$/.test(transaction.id)
@@ -76,7 +74,7 @@ function projectTransactions(snapshot) {
       ...transaction,
       recipient: financialMovementRecipient(fields),
       matchAmount: fields.VALOR,
-      orderIds,
+      orderIds: sicoobLinkedOrderIds(fields),
       linkReviewed: fields[SICOOB_UNLINKED_REVIEW_FIELD] === true,
       receiptName,
       searchText: normalizeSearchText([...Object.values(transaction), dateLabel(transaction.date)].join(' ')),
