@@ -151,6 +151,17 @@ def document_url(kind, value):
     return None
 
 
+def document_references(orders, code_field):
+    references = {}
+    for order in orders:
+        code = order.get(code_field)
+        if valid_order_code(code):
+            for kind, (field, _) in DOCUMENT_FIELDS.items():
+                if document_url(kind, order.get(field)):
+                    references[code, kind] = {'orderCode': code, 'kind': kind}
+    return list(references.values())
+
+
 def download_document(kind, link):
     url = document_url(kind, link)
     if not url:
@@ -493,10 +504,12 @@ class Service:
             status = group['statusCode']
             if not history and status in CLOSED_ORDER_STATUSES:
                 continue
-            dates = {scheduled_date(order.get('creditDate')) for order in group.get('orders') or []}
+            orders = group.get('orders') or []
+            dates = {scheduled_date(order.get('creditDate')) for order in orders}
             row = {
                 'orderCode': group['groupCode'], 'status': status, 'creditCents': cents(group['valueCredit']),
                 'creditDate': dates.pop() if len(dates) == 1 else None,
+                'documents': document_references(orders, 'orderCode'),
             }
             requested = group.get('requestDate')
             if history:
@@ -531,16 +544,8 @@ class Service:
             raise SwileError('Este pedido saiu dos pedidos em suspenso. Atualize a galeria.', 404)
         group_date = scheduled_date(group.get('creditDate'))
         result = {'orderCode': code, 'status': group['statusCode'], 'creditDate': group_date,
-                  'creditCents': 0, 'items': [], 'documents': []}
-        seen_documents = set()
+                  'creditCents': 0, 'items': [], 'documents': document_references(group['orderList'], 'code')}
         for order in group['orderList']:
-            order_code = order.get('code')
-            if valid_order_code(order_code):
-                for kind, (field, _) in DOCUMENT_FIELDS.items():
-                    reference = order_code, kind
-                    if reference not in seen_documents and document_url(kind, order.get(field)):
-                        seen_documents.add(reference)
-                        result['documents'].append({'orderCode': order_code, 'kind': kind})
             result['creditCents'] += cents(order['totalValue'])
             employees = order.get('employeeList') or []
             status = order['statusCode']

@@ -41,6 +41,12 @@ function nextFriday(instant, earliest) {
   return friday < earliest ? shiftDays(friday, 7) : friday;
 }
 const DEFAULT_INVOICE_TEXT = 'CNO :90.025.44060/72 RUA ANTÔNIO TORRES DOS SANTOS NÚMERO 134';
+const documentLabels = new Map([['boleto', 'Boleto'], ['invoice', 'Nota fiscal']]);
+const availableDocuments = order => Array.isArray(order.documents)
+  ? order.documents.filter(file => documentLabels.has(file?.kind) && typeof file.orderCode === 'string' && file.orderCode)
+  : [];
+const documentLabel = (groupCode, file) => file.orderCode === groupCode
+  ? documentLabels.get(file.kind) : `${documentLabels.get(file.kind)} · ${file.orderCode}`;
 const statuses = {
   DRAFT: 'Rascunho',
   CREATED: 'Pedido criado',
@@ -60,7 +66,8 @@ const statuses = {
   UNCONFIRMED: 'Envio sem confirmação',
 };
 
-export function openSwileView({ document: doc, request, gallery = false, previewDocument, onClose, onHome, now = () => new Date() }) {
+export function openSwileView({ document: doc, request, gallery = false, previewDocument, previewDocuments,
+  closePreview, onClose, onHome, now = () => new Date() }) {
   const controller = new AbortController();
   const { signal } = controller;
   const focus = doc.activeElement;
@@ -126,6 +133,7 @@ export function openSwileView({ document: doc, request, gallery = false, preview
   let busy = false;
   let galleryFilter = 'pending';
   let displayedOrderCode = null;
+  let viewingDocuments = false;
   const invoiceText = make('textarea');
   invoiceText.rows = 3;
   invoiceText.maxLength = 255;
@@ -274,6 +282,7 @@ export function openSwileView({ document: doc, request, gallery = false, preview
   function close() {
     if (signal.aborted) return;
     controller.abort();
+    if (viewingDocuments) closePreview?.();
     galleryHeader?.dispose();
     if (gallery) doc.removeEventListener('keydown', onGalleryKey);
     if (!gallery && screen.open && typeof screen.close === 'function') screen.close();
@@ -284,7 +293,8 @@ export function openSwileView({ document: doc, request, gallery = false, preview
   }
 
   function onGalleryKey(event) {
-    if (event.key === 'Escape' && !event.defaultPrevented && !doc.querySelector('.attachment-preview-dialog[open]')) {
+    if (event.key === 'Escape' && !event.defaultPrevented && !viewingDocuments
+        && !doc.querySelector('.attachment-preview-dialog[open]')) {
       event.preventDefault();
       close();
     }
@@ -511,7 +521,20 @@ export function openSwileView({ document: doc, request, gallery = false, preview
             make('span', statuses[order.status] || order.status));
           if (filter === 'history' && order.requestDate) item.append(make('span', `Pedido em ${dateLabel(order.requestDate)}`));
           else if (order.creditDate) item.append(make('span', `Previsão ${dateLabel(order.creditDate)}`));
-          list.append(item);
+          const documents = availableDocuments(order);
+          if (!documents.length) {
+            list.append(item);
+            continue;
+          }
+          const attachments = button('', () => openGalleryDocuments(order.orderCode, documents, attachments));
+          attachments.className = 'swile-gallery-pdf';
+          attachments.title = `Abrir PDFs do pedido ${order.orderCode}`;
+          attachments.setAttribute('aria-label', attachments.title);
+          attachments.setAttribute('aria-haspopup', 'dialog');
+          attachments.append(provisionDescriptionIcon(doc, 'document'), make('span', 'PDF'));
+          const row = make('article', '', 'swile-gallery-order-row');
+          row.append(attachments, item);
+          list.append(row);
         }
         if (!orders.length) list.append(make('p', filter === 'pending' ? 'Nenhum pedido em aberto.' : 'Nenhum pedido no histórico.'));
         if (previousList) previousList.replaceWith(list);
@@ -524,34 +547,68 @@ export function openSwileView({ document: doc, request, gallery = false, preview
     });
   }
 
+  async function downloadOrderDocument(orderCode, file, downloadSignal) {
+    const result = await request('orders', { orderCode, document: file }, { signal: downloadSignal });
+    downloadSignal.throwIfAborted();
+    if (typeof result?.base64 !== 'string' || typeof result.fileName !== 'string' || !result.fileName.endsWith('.pdf')) {
+      throw new Error('A Swile não disponibilizou um PDF válido.');
+    }
+    const contents = atob(result.base64);
+    if (!contents.startsWith('%PDF-')) throw new Error('A Swile não disponibilizou um PDF válido.');
+    const blob = new Blob([Uint8Array.from(contents, character => character.charCodeAt(0))], { type: 'application/pdf' });
+    return { blob, fileName: result.fileName };
+  }
+
+  async function showOrderDocument(orderCode, file, opener) {
+    if (!previewDocument) throw new Error('O visualizador de PDF está indisponível.');
+    message('Carregando documento da Swile…');
+    const { blob, fileName } = await downloadOrderDocument(orderCode, file, signal);
+    if (signal.aborted) return;
+    message();
+    opener.disabled = false;
+    viewingDocuments = true;
+    await previewDocument(blob, fileName, () => opener, () => { viewingDocuments = false; });
+  }
+
+  function openGalleryDocuments(orderCode, documents, opener) {
+    if (viewingDocuments) return;
+    if (documents.length > 1 && !previewDocuments) return loadOrderDetails(orderCode);
+    return run(async () => {
+      try {
+        if (documents.length === 1) {
+          await showOrderDocument(orderCode, documents[0], opener);
+          return;
+        }
+        const items = documents.map(file => ({
+          label: documentLabel(orderCode, file),
+          fileName: `${documentLabels.get(file.kind)} Swile ${file.orderCode}.pdf`,
+          source: async options => (await downloadOrderDocument(orderCode, file, options?.signal || signal)).blob,
+        }));
+        opener.disabled = false;
+        viewingDocuments = true;
+        await previewDocuments(items, {
+          signal, resolveReturnFocus: () => opener, onClose: () => { viewingDocuments = false; },
+          loadErrorMessage: 'Não foi possível baixar este PDF da Swile. Feche o visualizador e tente novamente na galeria.',
+        });
+      } catch (error) {
+        viewingDocuments = false;
+        throw error;
+      }
+    });
+  }
+
   function orderDocuments(order) {
     if (!Array.isArray(order.documents)) return null;
     const section = make('section', '', 'swile-documents');
     section.append(make('h4', 'Documentos do pedido'));
     const files = make('div', '', 'swile-actions');
 
-    for (const file of order.documents) {
-      const label = { boleto: 'Boleto', invoice: 'Nota fiscal' }[file.kind];
-      if (typeof label !== 'string') continue;
-      const open = button(file.orderCode !== order.orderCode ? `${label} · ${file.orderCode}` : label, () => run(async () => {
-        if (!previewDocument) throw new Error('O visualizador de PDF está indisponível.');
-        message('Carregando documento da Swile…');
-        const result = await request('orders', { orderCode: order.orderCode, document: file }, { signal });
-        if (signal.aborted) return;
-        if (typeof result?.base64 !== 'string' || typeof result.fileName !== 'string' || !result.fileName.endsWith('.pdf')) {
-          throw new Error('A Swile não disponibilizou um PDF válido.');
-        }
-        const contents = atob(result.base64);
-        if (!contents.startsWith('%PDF-')) throw new Error('A Swile não disponibilizou um PDF válido.');
-        const blob = new Blob([Uint8Array.from(contents, character => character.charCodeAt(0))], { type: 'application/pdf' });
-        message();
-        open.disabled = false;
-        await previewDocument(blob, result.fileName, () => open);
-      }));
+    for (const file of availableDocuments(order)) {
+      const open = button(documentLabel(order.orderCode, file), () => openGalleryDocuments(order.orderCode, [file], open));
       files.append(open);
     }
     if (files.childElementCount) section.append(files);
-    if (!order.documents.some(file => file.kind === 'invoice' || file.kind === 'boleto')) {
+    if (!files.childElementCount) {
       section.append(make('p', 'A Swile ainda não disponibilizou documentos para este pedido.'));
     } else if (order.documents.some(file => file.kind === 'boleto'
         && !order.documents.some(invoice => invoice.kind === 'invoice' && invoice.orderCode === file.orderCode))) {
