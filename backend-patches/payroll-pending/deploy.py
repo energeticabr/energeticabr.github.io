@@ -62,13 +62,20 @@ def build_package(baselines, out):
     entries = {}
     for scope, root in TARGET_ROOTS.items():
         matching = baselines / scope
+        upgrading = (matching / NEW).is_file()
         for relative in FILES:
-            if relative == NEW:
-                entries[f"{root}/{relative}"] = {"before": None, "after": sha(current)}
-                continue
             path = matching / relative
+            if relative == NEW:
+                before = sha(checked_file(path)) if upgrading else None
+                entries[f"{root}/{relative}"] = {"before": before, "after": sha(current)}
+                continue
             before = checked_file(path)
-            after = patch.change(relative, before)
+            if upgrading:
+                if b"payroll_pending" not in before:
+                    raise RuntimeError(f"Payroll report was not installed in {path}")
+                after = before
+            else:
+                after = patch.change(relative, before)
             compile(after, relative, "exec")
             entries[f"{root}/{relative}"] = {"before": sha(before), "after": sha(after)}
     sources = {
@@ -133,20 +140,23 @@ def plan_files(manifest):
             pins = manifest["files"][str(path)]
             if set(pins) != {"before", "after"} or path.parent.resolve() != path.parent:
                 raise RuntimeError(f"Unexpected target metadata: {path}")
-            if relative == NEW:
-                if pins["before"] is not None:
-                    raise RuntimeError(f"Expected absent baseline for {path}")
+            old_hash = pins["before"]
+            if relative == NEW and old_hash is None:
                 if os.path.lexists(path):
                     # A rolled-back rollout leaves our inactive helper available for the exact same retry.
                     checked_file(path, pins["after"])
                 before, after = None, helper
                 info = (root / GALLERY).stat()
             else:
-                if not isinstance(pins["before"], str) or not re.fullmatch(r"[a-f0-9]{64}", pins["before"]):
+                if not isinstance(old_hash, str) or not re.fullmatch(r"[a-f0-9]{64}", old_hash):
                     raise RuntimeError(f"Missing baseline SHA-256 for {path}")
-                before = checked_file(path, pins["before"])
-                after = patch.change(relative, before)
-                info = path.stat()
+                before, info = checked_file(path, old_hash), path.stat()
+                if relative == NEW:
+                    after = helper
+                elif old_hash == pins["after"]:
+                    after = before
+                else:
+                    after = patch.change(relative, before)
             compile(after, str(path), "exec")
             if sha(after) != pins["after"]:
                 raise RuntimeError(f"Candidate SHA-256 differs: {path}")
@@ -219,7 +229,7 @@ def rollout(plan, helper, receipt, backup_root=BACKUPS):
             if before is None:
                 if not os.path.lexists(path):
                     publish_new(path, after, info)
-            else:
+            elif after != before:
                 helper.install(after, path, info, sha(before))
                 changed.append((path, before, after, info))
             checked_file(path, sha(after))

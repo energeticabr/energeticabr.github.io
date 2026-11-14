@@ -52,7 +52,7 @@ view.on('open-pending-payroll-links', () => {
     recovery: new Map(), makeRequestId: () => 'fixture',
     request: async operation => operation === 'payroll_pending'
       ? { total: 1, page: 1, pageSize: 25, items: [item] }
-      : { items: [{ supplier: 'Ána Alves', sheets: [{ id: '28', reference: '11/2026' }] }], paymentTypes: ['SALÁRIO'] },
+      : { items: [{ supplier: 'Ána Alves', sheets: [{ id: '28', reference: '11/2026', monthRelation: 'mês atual' }] }], paymentTypes: ['SALÁRIO'] },
     onClose: () => panel.destroy(),
   });
   return panel.open();
