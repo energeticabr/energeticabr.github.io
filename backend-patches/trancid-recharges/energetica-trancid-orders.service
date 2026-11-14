@@ -1,0 +1,24 @@
+[Unit]
+Description=Atualizar histórico de pedidos Trancid
+Wants=network-online.target
+After=network-online.target
+StartLimitIntervalSec=1h
+StartLimitBurst=5
+
+[Service]
+Type=oneshot
+User=energetica-whatsapp
+Group=energetica-whatsapp
+EnvironmentFile=/etc/energetica-whatsapp.env
+EnvironmentFile=/etc/energetica-trancid.env
+WorkingDirectory=/opt/energetica-whatsapp
+ExecStart=/opt/energetica-whatsapp/.venv/bin/python -B /opt/energetica-whatsapp/trancid_recharges.py
+TimeoutStartSec=5min
+Restart=on-failure
+RestartSec=5min
+UMask=0077
+NoNewPrivileges=true
+PrivateTmp=true
+ProtectSystem=strict
+ProtectHome=true
+ReadWritePaths=/var/lib/energetica-whatsapp/trancid-recharges /var/lib/energetica-whatsapp/trancid-monitor

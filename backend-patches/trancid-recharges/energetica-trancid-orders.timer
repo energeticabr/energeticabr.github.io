@@ -1,0 +1,9 @@
+[Unit]
+Description=Consultar diariamente a situação dos pedidos Trancid
+
+[Timer]
+OnCalendar=*-*-* 18:15:00 America/Sao_Paulo
+Persistent=true
+
+[Install]
+WantedBy=timers.target

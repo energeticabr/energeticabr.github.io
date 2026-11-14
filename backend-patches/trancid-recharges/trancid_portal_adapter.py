@@ -399,7 +399,7 @@ class Portal:
         text = self._pdf_text(urljoin(url, json.loads(export[1]) + "PDF"))
         return parse_cards("<div>" + escape(text) + "</div>")
 
-    def _history_pages(self):
+    def _history_pages(self, *, require_complete=False):
         url, html = self._read(self.origin + HISTORY_PATH)
         previously_seen = set()
         for requested in range(1, MAX_HISTORY_PAGES + 1):
@@ -414,6 +414,8 @@ class Portal:
             page, count, next_button = history_pager(form)
             if page != requested:
                 raise PortalError("A Trancid não confirmou o avanço do histórico de pedidos.")
+            if require_complete and count > MAX_HISTORY_PAGES:
+                raise PortalError("O histórico da Trancid excedeu o limite da consulta completa.")
             has_more = page < min(count, MAX_HISTORY_PAGES)
             yield url, form, orders, page, has_more
             if not has_more:
@@ -429,6 +431,9 @@ class Portal:
             if current == page:
                 return {"orders": [order for order, _ in orders], "hasMore": has_more, "page": page}
         return {"orders": [], "hasMore": False, "page": page}
+
+    def all_history(self):
+        return [order for _, _, orders, _, _ in self._history_pages(require_complete=True) for order, _ in orders]
 
     def _order_row(self, order_code):
         for url, form, orders, _, _ in self._history_pages():
