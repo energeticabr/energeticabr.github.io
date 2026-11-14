@@ -275,7 +275,26 @@ assert.deepEqual(shortcuts.map(s=>s.action),['open-pending-provisions','open-sic
       assert.ok(payrollFit.left >= 0 && payrollFit.right <= width && payrollFit.verticalFit
         && !payrollFit.overflow && payrollFit.hit && payrollFit.label === 'Ána Alves', JSON.stringify(payrollFit));
       await clickAt(payrollFit);
-      assert.equal(await evaluate(`document.querySelector('[data-pending-payroll-links] select[name="sheet"]')?.options[1]?.textContent`), 'IDFOLHA 28 · 11/2026');
+      assert.equal(await evaluate(`document.querySelector('[data-pending-payroll-links] select[name="sheet"]')?.options[1]?.textContent`), 'IDFOLHA 28 · 11/2026 (mês atual)');
+      const draftLayout = await evaluate(`(() => {
+        const panel = document.querySelector('[data-pending-payroll-links]');
+        for (const [name, value] of [['sheet', '28'], ['paymentType', 'SALÁRIO']]) {
+          const select = panel.querySelector('select[name="' + name + '"]');
+          select.value = value;
+          select.dispatchEvent(new Event('change', { bubbles: true }));
+        }
+        panel.querySelector('[data-payroll-action="partial"]').click();
+        const amount = panel.querySelector('input[name="amount"]');
+        amount.value = '10,23';
+        amount.dispatchEvent(new Event('input', { bubbles: true }));
+        panel.querySelector('[data-payroll-action="add"]').click();
+        const row = panel.querySelector('[data-payroll-draft] li');
+        const rect = row.getBoundingClientRect();
+        return { hasSupplier: row.textContent.includes('Ána Alves'), hasAmount: row.querySelector('input').value === '10,23',
+          fits: rect.left >= 0 && rect.right <= innerWidth && row.scrollWidth <= row.clientWidth + 1,
+          confirm: !panel.querySelector('[data-payroll-action="confirm"]').disabled };
+      })()`);
+      assert.deepEqual(draftLayout, { hasSupplier: true, hasAmount: true, fits: true, confirm: true });
       await evaluate(`document.querySelector('[data-payroll-action="close"]').click()`);
       if (width === 320) {
         await send('Emulation.setDeviceMetricsOverride', {width,height:520,deviceScaleFactor:1,mobile:false}, sessionId);

@@ -11,6 +11,7 @@ const dateLabel = value => {
 const definitiveErrors = new Set([
   'conflict', 'not_found', 'payroll_not_pending', 'payroll_sheet_unavailable', 'payroll_existing_link_conflict',
   'invalid_amount', 'invalid_payload', 'confirmation_required', 'request_id_conflict', 'payroll_write_rejected',
+  'payroll_batch_incomplete', 'payroll_application_reversed',
 ]);
 const reportTimeoutMs = 45_000;
 
@@ -63,6 +64,8 @@ function launchCard(item, includeAction, attempt) {
     <small>${item.product ? `${escapeHtml(item.product)} · ` : ''}Pago em ${dateLabel(item.paidAt)}</small></div>
     ${attempt
       ? `<button type="button" data-payroll-action="retry" data-id="${id}" aria-label="Retomar confirmação do lançamento ${id}">Retomar confirmação</button>`
+      : item.batchPending === true && includeAction
+      ? `<button type="button" data-payroll-action="resume" data-id="${id}">Retomar confirmação do rateio</button>`
       : item.applicationPending === true
       ? '<small class="payroll-links-awaiting">Aguardando confirmação da aplicação. Atualize para verificar o saldo.</small>'
       : includeAction ? `<button type="button" data-payroll-action="edit" data-id="${id}" aria-label="Vincular lançamento ${id} ao IDFOLHA">Vincular IDFOLHA</button>` : ''}</div>
@@ -113,6 +116,7 @@ export function createPendingPayrollLinksView({ root, request, onClose, recovery
   let mode = null;
   let targets = null;
   let form = null;
+  let draft = [];
 
   function announce(message, error = '') {
     notice.textContent = message;
@@ -234,6 +238,7 @@ export function createPendingPayrollLinksView({ root, request, onClose, recovery
 
   function showForm() {
     mode = null;
+    draft = [];
     const editor = `<div class="payroll-links-form">
       <div class="payroll-links-targets">
         <label>Fornecedor<select name="supplier" aria-label="Fornecedor"></select></label>
@@ -246,6 +251,12 @@ export function createPendingPayrollLinksView({ root, request, onClose, recovery
       </div>
       <label class="payroll-links-amount" hidden>Valor parcial (R$)<input name="amount" type="text" inputmode="decimal" autocomplete="off" maxlength="24" placeholder="0,00" aria-describedby="payroll-links-amount-hint"></label>
       <p class="payroll-links-form-hint" id="payroll-links-amount-hint" hidden></p>
+      <button type="button" data-payroll-action="add" hidden disabled>Adicionar linha ao rateio</button>
+      <section class="payroll-links-draft" data-payroll-draft hidden aria-label="Linhas do rateio">
+        <h3>Linhas do rateio</h3>
+        <ul></ul>
+        <p aria-live="polite"></p>
+      </section>
       <button type="button" class="payroll-links-confirm" data-payroll-action="confirm" hidden disabled>Confirmar aplicação</button>
     </div>`;
     renderMarkup(`<button type="button" class="payroll-links-back" data-payroll-action="back">← Voltar às pendências</button>
@@ -290,7 +301,7 @@ export function createPendingPayrollLinksView({ root, request, onClose, recovery
     form.querySelector('[data-payroll-role="sheet"]').hidden = !group;
     const sheet = form.querySelector('select[name="sheet"]');
     setOptions(sheet, 'Selecione o IDFOLHA', (group?.sheets || []).map(option => [
-      `IDFOLHA ${option.id}${option.reference ? ` · ${option.reference}` : ''}`, String(option.id),
+      `IDFOLHA ${option.id} · ${option.reference}${option.monthRelation ? ` (${option.monthRelation})` : ''}`, String(option.id),
     ]));
     form.querySelector('select[name="paymentType"]').value = '';
   }
@@ -304,6 +315,30 @@ export function createPendingPayrollLinksView({ root, request, onClose, recovery
     return { supplier: supplier.supplier, sheetId, reference: sheet.reference, paymentType };
   }
 
+  function draftTotal() {
+    let total = 0;
+    for (const line of draft) {
+      const value = partialCents(line.rawAmount);
+      if (!value || !Number.isSafeInteger(total + value)) return null;
+      total += value;
+    }
+    return total;
+  }
+
+  function drawDraft() {
+    const section = form.querySelector('[data-payroll-draft]');
+    section.hidden = draft.length === 0;
+    section.querySelector('ul').innerHTML = draft.map((line, index) => {
+      const supplier = escapeHtml(line.supplier);
+      return `<li>
+        <div><strong>${supplier}</strong><small>IDFOLHA ${escapeHtml(line.sheetId)} · ${escapeHtml(line.reference)} · ${escapeHtml(line.paymentType)}</small></div>
+        <label>Valor (R$)<input type="text" inputmode="decimal" autocomplete="off" maxlength="24" data-draft-index="${index}"
+          aria-label="Valor da linha ${index + 1} de ${supplier}" value="${escapeHtml(line.rawAmount)}"></label>
+        <button type="button" data-payroll-action="remove" data-index="${index}" aria-label="Remover linha ${index + 1} de ${supplier}">Remover</button>
+      </li>`;
+    }).join('');
+  }
+
   function updateForm() {
     const sheetId = form.querySelector('select[name="sheet"]').value;
     const destination = selectedDestination();
@@ -311,18 +346,33 @@ export function createPendingPayrollLinksView({ root, request, onClose, recovery
     const input = form.querySelector('input[name="amount"]');
     const hint = form.querySelector('.payroll-links-form-hint');
     const confirm = form.querySelector('[data-payroll-action="confirm"]');
-    const cents = mode === 'total' ? item.remainingCents : partialCents(input.value);
-    const valid = cents > 0 && (mode === 'total' || cents < item.remainingCents);
+    const add = form.querySelector('[data-payroll-action="add"]');
+    const total = draftTotal();
+    const balance = total === null ? 0 : item.remainingCents - total;
+    const cents = mode === 'total' ? balance : partialCents(input.value);
+    const valid = cents > 0 && cents <= balance;
+    const editingLine = mode !== null && destination !== null;
+    const canAdd = editingLine && (mode === 'partial' || draft.length > 0);
+    const totalOnly = mode === 'total' && !draft.length && Boolean(destination);
+    const draftValid = draft.length > 0 && total > 0 && balance >= 0;
+    const status = form.querySelector('[data-payroll-draft] p');
+    const draftMessage = total === null ? 'Informe um valor maior que zero em cada linha.'
+      : balance < 0 ? 'A soma das linhas ultrapassa o saldo a aplicar.'
+      : `Total a aplicar ${money(total)} · Saldo após confirmar ${money(balance)}`;
+    if (status.textContent !== draftMessage) status.textContent = draftMessage;
     form.querySelector('[data-payroll-role="payment-type"]').hidden = !sheetId;
     modes.hidden = !destination;
     for (const button of modes.querySelectorAll('button')) button.setAttribute('aria-pressed', String(button.dataset.payrollAction === mode));
     input.parentElement.hidden = !destination || mode !== 'partial';
     hint.hidden = !destination || mode !== 'partial' || !input.value.trim() || valid;
-    hint.textContent = `Digite um valor maior que zero e menor que ${money(item.remainingCents)}. Para usar todo o saldo, escolha valor total.`;
-    confirm.hidden = !destination || !mode;
-    confirm.disabled = !destination || !mode || !valid;
-    confirm.textContent = valid ? `Confirmar aplicação de ${money(cents)}` : 'Confirmar aplicação';
-    return valid && destination ? { ...destination, amountCents: cents } : null;
+    hint.textContent = `Informe um valor maior que zero até o saldo disponível de ${money(Math.max(0, balance))}.`;
+    add.hidden = !canAdd;
+    add.disabled = !canAdd || !valid;
+    confirm.hidden = !draft.length && !totalOnly && !editingLine;
+    confirm.disabled = draft.length ? !draftValid || editingLine : !totalOnly || !valid;
+    confirm.textContent = draft.length ? `Confirmar rateio de ${money(total || 0)}`
+      : totalOnly && valid ? `Confirmar aplicação de ${money(cents)}` : 'Confirmar aplicação';
+    return valid && editingLine ? { ...destination, amountCents: cents } : null;
   }
 
   async function submit(attempt) {
@@ -331,7 +381,10 @@ export function createPendingPayrollLinksView({ root, request, onClose, recovery
     const { payload } = attempt;
     const sourcePage = snapshot?.page || 1;
     announce('Confirmando aplicação…');
-    renderMarkup(`<p>ID origem ${escapeHtml(payload.id)} · IDFOLHA ${escapeHtml(payload.sheetId)} · ${money(attempt.amountCents)}</p>`);
+    const lines = payload.lines?.length;
+    const summary = lines ? `${lines} ${lines === 1 ? 'linha' : 'linhas'}` : `IDFOLHA ${escapeHtml(payload.sheetId ?? '')}`;
+    const description = payload.resume ? 'Retomando o rateio' : `${summary} · ${money(attempt.amountCents)}`;
+    renderMarkup(`<p>ID origem ${escapeHtml(payload.id)} · ${description}</p>`);
     try {
       const { item: updated } = await query('payroll_apply', payload, active);
       if (!current(active)) return;
@@ -369,15 +422,36 @@ export function createPendingPayrollLinksView({ root, request, onClose, recovery
   function confirm() {
     if (busy || !item || !form || recovery.has(String(item.id))) return;
     const destination = updateForm();
-    if (!destination) return;
-    const { amountCents, supplier, sheetId, reference, paymentType } = destination;
-    const payload = Object.freeze({
-      id: String(item.id), supplier, sheetId, reference, paymentType, mode, confirm: true, revision: item.revision,
-      requestId: makeRequestId(), ...(mode === 'partial' ? { amountCents } : {}),
-    });
+    if (form.querySelector('[data-payroll-action="confirm"]').disabled) return;
+    const base = { id: String(item.id), confirm: true, revision: item.revision, requestId: makeRequestId() };
+    let payload, amountCents;
+    if (draft.length) {
+      amountCents = draftTotal();
+      const lines = draft.map(({ rawAmount, ...line }) => Object.freeze({ ...line, amountCents: partialCents(rawAmount) }));
+      payload = Object.freeze({ ...base, lines: Object.freeze(lines) });
+    } else {
+      const { amountCents: full, ...line } = destination;
+      amountCents = full;
+      payload = Object.freeze({ ...base, ...line, mode: 'total' });
+    }
     const attempt = { payload, amountCents };
     recovery.set(payload.id, attempt);
     void submit(attempt);
+  }
+
+  function addLine() {
+    const line = updateForm();
+    if (!line) return;
+    const { amountCents, ...destination } = line;
+    draft.push({ ...destination, rawAmount: (amountCents / 100).toFixed(2).replace('.', ',') });
+    form.querySelector('select[name="supplier"]').value = '';
+    updateSupplier();
+    picker.sync();
+    mode = null;
+    form.querySelector('input[name="amount"]').value = '';
+    drawDraft();
+    updateForm();
+    form.querySelector('[data-payroll-action="confirm"]').focus();
   }
 
   function click(event) {
@@ -396,7 +470,21 @@ export function createPendingPayrollLinksView({ root, request, onClose, recovery
         if (mode === 'partial') form.querySelector('input[name="amount"]').focus();
         break;
       }
+      case 'add': addLine(); break;
+      case 'remove':
+        draft.splice(Number(button.dataset.index), 1);
+        drawDraft();
+        updateForm();
+        (form.querySelector('[data-payroll-action="remove"]') || form.querySelector('[role="combobox"]'))?.focus();
+        break;
       case 'confirm': confirm(); break;
+      case 'resume': {
+        if (busy || recovery.has(button.dataset.id)) break;
+        const attempt = { payload: Object.freeze({ id: button.dataset.id, resume: true, confirm: true }) };
+        recovery.set(button.dataset.id, attempt);
+        void submit(attempt);
+        break;
+      }
       case 'retry': {
         const attempt = recovery.get(button.dataset.id);
         if (attempt) void submit(attempt);
@@ -435,7 +523,13 @@ export function createPendingPayrollLinksView({ root, request, onClose, recovery
 
   backdrop.addEventListener('click', click);
   backdrop.addEventListener('change', change);
-  backdrop.addEventListener('input', event => { if (form && event.target.name === 'amount') updateForm(); });
+  backdrop.addEventListener('input', event => {
+    if (!form) return;
+    if (event.target.dataset.draftIndex !== undefined) {
+      draft[Number(event.target.dataset.draftIndex)].rawAmount = event.target.value;
+      updateForm();
+    } else if (event.target.name === 'amount') updateForm();
+  });
   backdrop.addEventListener('keydown', keydown);
 
   return {

@@ -42,7 +42,7 @@ SHEET_FIELDS = ("FORNECEDOR", "MESREFERENCIA", "STATUS")
 OPERATIONS = {
     "payroll_pending": {"page"}, "payroll_targets": set(), "payroll_detail": {"id"},
     "payroll_legacy_link": {"fields"},
-    "payroll_apply": {"id", "sheetId", "mode", "amountCents", "revision", "requestId", "confirm", "paymentType", "supplier", "reference"},
+    "payroll_apply": {"id", "sheetId", "mode", "amountCents", "revision", "requestId", "confirm", "paymentType", "supplier", "reference", "lines", "resume"},
 }
 
 
@@ -277,7 +277,8 @@ def settled_reservation(before, token=None, status="settled", legacy_row_id=None
         tokens.add(token)
         if legacy_row_id:
             legacy[token] = legacy_row_id
-    return {"status": status, "confirmed": sorted(tokens), "legacyRows": legacy}
+    return {"status": status, "confirmed": sorted(tokens), "legacyRows": legacy,
+            "reversed": list(before.get("reversed", ())) if before else []}
 
 
 def finish_reservation(store, key, tag, before, token=None, status="settled", legacy_row_id=None):
@@ -399,8 +400,12 @@ def mark_pending(g, item, rows):
     if item and item["remainingCents"]:
         _, record, _ = load_reservation(g, item["id"])
         if record:
-            token = reservation_title(record) if record.get("status") == "pending" else None
-            if (token and not find_application(rows, token)
+            pending = record.get("status") == "pending"
+            batch_active = pending and record.get("kind") == "batch"
+            token = reservation_title(record) if pending and not batch_active else None
+            if batch_active:
+                item["batchPending"] = True
+            if (batch_active or token and not find_application(rows, token)
                     or confirmed_tokens(record) - {row.get("Title") for row in rows} - set(record.get("legacyRows", ()))):
                 item["applicationPending"] = True
     return item
@@ -435,15 +440,25 @@ def sheet_values(g, sheet):
     return supplier, f"{month:02d}/{year}", (year, month)
 
 
+def month_relation(reference, today):
+    year, month = reference
+    delta = year * 12 + month - (today.year * 12 + today.month)
+    return {-1: "mês anterior", 0: "mês atual", 1: "próximo mês"}.get(delta)
+
+
 def targets(g):
     read_schema(g, ((SHEET, SHEET_FIELDS),))
     groups = defaultdict(list)
+    today = datetime.now(TZ)
     for sheet in g._rows(SHEET, SHEET_FIELDS):
         result = sheet_values(g, sheet)
         item_id = identifier(sheet.get("ID"))
         if result and item_id:
             supplier, reference, order = result
-            groups[supplier].append((order, int(item_id), {"id": item_id, "reference": reference}))
+            relation = month_relation(order, today)
+            if relation:
+                option = {"id": item_id, "reference": reference, "monthRelation": relation}
+                groups[supplier].append((order, int(item_id), option))
     return {
         "items": [{"supplier": supplier, "sheets": [entry[2] for entry in sorted(group, reverse=True)]}
                   for supplier, group in sorted(groups.items(), key=lambda pair: (folded(pair[0]), pair[0]))],
@@ -490,7 +505,10 @@ def apply(g, item_id, payload):
     for row in rows:
         if text(row.get("Title")).startswith(key_prefix) and row["Title"] != token:
             fail("request_id_conflict", "Essa confirmação já foi usada com outros dados.", 409)
+    reject_reversed(pending, key_prefix)
     if pending and pending.get("status") == "pending":
+        if pending.get("kind") == "batch":
+            uncertain()
         title = reservation_title(pending)
         if title.startswith(key_prefix) and title != token:
             fail("request_id_conflict", "Essa confirmação já foi usada com outros dados.", 409)
@@ -513,21 +531,9 @@ def apply(g, item_id, payload):
     amount = item["remainingCents"] if mode == "total" else requested
     if amount > item["remainingCents"]:
         fail("invalid_amount", "O valor informado ultrapassa o saldo do pagamento.", 422)
-    read_schema(g, ((SHEET, SHEET_FIELDS),))
-    try:
-        sheet = g._get(SHEET, sheet_id, SHEET_FIELDS)
-    except requests.HTTPError as exc:
-        if exc.response is not None and exc.response.status_code == 404:
-            fail("payroll_sheet_unavailable", "A folha selecionada não está mais disponível.", 409)
-        raise
-    destination = sheet_values(g, sheet)
-    if not destination or destination[:2] != (supplier, reference):
-        fail("payroll_sheet_unavailable", "O fornecedor ou a competência do IDFOLHA mudou. Atualize a seleção.", 409)
     require_write_schema(g)
-    body = {"Title": token, "IDLANCAMENTO": item_id, "IDFOLHA": sheet_id, "FORNECEDOR": destination[0],
-            "TIPOPGTO": payment_type, "VALORUNITARIO": format(Decimal(amount) / 100, ".2f"), "QTD": "1",
-            "DATA": item["paidAt"] + "T12:00:00Z"}
-    g._required(PAYROLL, body)
+    destination_sheet(g, sheet_id, supplier, reference, datetime.now(TZ))
+    body = application_body(g, item, token, sheet_id, supplier, payment_type, amount)
     tag = save_reservation(store, key, settled_reservation(pending, status="pending") | {"body": body}, tag)
     try:
         g.sharepoint._request("POST", f"{g._list_endpoint(PAYROLL)}/items", json=body,
@@ -551,6 +557,171 @@ def apply(g, item_id, payload):
                    (text(row.get("IDLANCAMENTO")) != item_id or is_application_title(row.get("Title")))]
     final = summarize(g, read_launch(g, item_id), fresh_rows, historical)
     finish_reservation(store, key, tag, pending, token)
+    return {"item": final}
+
+
+BATCH_LINE_FIELDS = {"sheetId", "supplier", "reference", "paymentType", "amountCents"}
+BATCH_FIELDS = {"id", "revision", "requestId", "lines", "confirm"}
+
+
+def reject_reversed(record, prefix):
+    if record and any(token.startswith(prefix) for token in record.get("reversed", ())):
+        fail("payroll_application_reversed", "Essa aplicação foi revertida. Atualize o lançamento para criar uma nova.", 409)
+
+
+def destination_sheet(g, sheet_id, supplier, reference, today):
+    read_schema(g, ((SHEET, SHEET_FIELDS),))
+    try:
+        sheet = g._get(SHEET, sheet_id, SHEET_FIELDS)
+    except requests.HTTPError as exc:
+        if exc.response is not None and exc.response.status_code == 404:
+            fail("payroll_sheet_unavailable", "A folha selecionada não está mais disponível.", 409)
+        raise
+    destination = sheet_values(g, sheet)
+    if not destination or destination[:2] != (supplier, reference) or not month_relation(destination[2], today):
+        fail("payroll_sheet_unavailable", "Selecione uma folha disponível do mês anterior, atual ou próximo.", 409)
+
+
+def application_body(g, item, token, sheet_id, supplier, payment_type, amount):
+    body = {"Title": token, "IDLANCAMENTO": item["id"], "IDFOLHA": sheet_id, "FORNECEDOR": supplier,
+            "TIPOPGTO": payment_type, "VALORUNITARIO": format(Decimal(amount) / 100, ".2f"), "QTD": "1",
+            "DATA": item["paidAt"] + "T12:00:00Z"}
+    g._required(PAYROLL, body)
+    return body
+
+
+def batch_request(payload):
+    if payload.get("confirm") is not True:
+        fail("confirmation_required", "Confirme o rateio na folha.")
+    request_id, revision, lines = (payload.get(key) for key in ("requestId", "revision", "lines"))
+    if (set(payload) != BATCH_FIELDS
+            or not isinstance(request_id, str) or not re.fullmatch(r"[a-zA-Z0-9_.:-]{8,128}", request_id)
+            or not isinstance(revision, str) or not re.fullmatch(r"[a-f0-9]{64}", revision)
+            or not isinstance(lines, list) or not lines):
+        fail("invalid_payload", "Informe as linhas e a revisão do lançamento para confirmar o rateio.")
+    for line in lines:
+        if (not isinstance(line, dict) or set(line) != BATCH_LINE_FIELDS
+                or not isinstance(line["supplier"], str) or not line["supplier"].strip() or len(line["supplier"]) > 255
+                or not isinstance(line["reference"], str) or not re.fullmatch(r"(0[1-9]|1[0-2])/[0-9]{4}", line["reference"])
+                or line["paymentType"] not in PAYMENT_TYPES):
+            fail("invalid_payload", "Cada linha precisa de fornecedor, IDFOLHA, competência e rubrica.")
+        input_id(line["sheetId"])
+        if type(line["amountCents"]) is not int or not 0 < line["amountCents"] <= MAX_CENTS:
+            fail("invalid_amount", "Informe um valor em centavos maior que zero em cada linha.")
+    return APPLICATION_PREFIX + digest([payload["id"], request_id]) + ":", digest([revision, lines])
+
+
+def batch_rejected(store, key, tag, record, confirmed):
+    finish_reservation(store, key, tag, record, status="rejected")
+    if confirmed:
+        fail("payroll_batch_incomplete",
+             f"O SharePoint confirmou {confirmed} linha(s). Atualize o saldo para aplicar o restante.", 409)
+    fail("payroll_write_rejected", "O SharePoint rejeitou a aplicação. Confira os dados e tente novamente.", 422)
+
+
+def apply_batch(g, item_id, payload):
+    prefix, fingerprint = batch_request(payload)
+    lines = payload["lines"]
+    tokens = [prefix + digest(["batch", fingerprint, index]) for index in range(len(lines))]
+    key = store_key(g, item_id)
+    store, record, tag = load_reservation(g, item_id)
+    reject_reversed(record, prefix)
+    by_origin, historical = history(g)
+    rows = origin_rows(g, item_id, by_origin.get(item_id, ()))
+    if missing_confirmed(g, item_id, record, rows):
+        uncertain()
+    origin = read_launch(g, item_id)
+    item = summarize(g, origin, rows, historical)
+    existing = {row["Title"] for row in rows if text(row.get("Title")).startswith(prefix)}
+    if existing - set(tokens):
+        fail("request_id_conflict", "Essa confirmação já foi usada com outros dados.", 409)
+
+    pending = record and record.get("status") == "pending"
+    if pending:
+        if record.get("kind") != "batch" or record.get("prefix") != prefix:
+            uncertain()
+        if record.get("fingerprint") != fingerprint:
+            fail("request_id_conflict", "Essa confirmação já foi usada com outros dados.", 409)
+        if not item or item.get("applicationPending"):
+            uncertain()
+        baseline = summarize(g, origin, [row for row in rows if row.get("Title") not in tokens], historical)
+        if not baseline or baseline["revision"] != payload["revision"]:
+            if record["inFlight"] is not None and tokens[record["inFlight"]] not in existing:
+                uncertain()
+            if record["inFlight"] is not None:
+                index = record["inFlight"]
+                validate_saved(find_application(rows, tokens[index]), record["bodies"][index])
+                record = record | {"confirmed": sorted(confirmed_tokens(record) | {tokens[index]})}
+            finish_reservation(store, key, tag, record, status="rejected")
+            fail("conflict", "O lançamento mudou durante o rateio. Atualize para conferir as linhas registradas.", 409)
+        bodies = record["bodies"]
+    else:
+        if existing == set(tokens):
+            return {"item": item}
+        if existing:
+            fail("payroll_batch_incomplete", "Parte do rateio foi registrada. Atualize o saldo antes de continuar.", 409)
+        if not item or not item["remainingCents"]:
+            fail("payroll_not_pending", "O pagamento não está mais pendente de IDFOLHA.", 409)
+        if item.get("applicationPending"):
+            fail("payroll_existing_link_conflict", "O lançamento possui outro vínculo com a folha. Atualize os dados.", 409)
+        if item["revision"] != payload["revision"]:
+            fail("conflict", "O pagamento ou o saldo mudou. Atualize antes de confirmar.", 409)
+        if sum(line["amountCents"] for line in lines) > item["remainingCents"]:
+            fail("invalid_amount", "A soma das linhas ultrapassa o saldo do pagamento.", 422)
+        require_write_schema(g)
+        today = datetime.now(TZ)
+        for line in lines:
+            destination_sheet(g, line["sheetId"], line["supplier"], line["reference"], today)
+        bodies = [application_body(g, item, token, line["sheetId"], line["supplier"], line["paymentType"], line["amountCents"])
+                  for token, line in zip(tokens, lines)]
+        record = settled_reservation(record, status="pending") | {
+            "kind": "batch", "prefix": prefix, "fingerprint": fingerprint, "bodies": bodies,
+            "inFlight": None, "request": payload,
+        }
+        tag = save_reservation(store, key, record, tag)
+
+    rows_by_id = {str(row["ID"]): row for row in rows}
+    confirmed = 0
+    for index, body in enumerate(bodies):
+        token = body["Title"]
+        saved = find_application(rows_by_id.values(), token)
+        if saved is None:
+            if record["inFlight"] is not None:
+                uncertain()
+            # A resumed batch revalidates sheets that have not received their rows yet.
+            if pending:
+                try:
+                    line = lines[index]
+                    destination_sheet(g, line["sheetId"], line["supplier"], line["reference"], datetime.now(TZ))
+                except LaunchGalleryError as exc:
+                    if exc.code == "payroll_sheet_unavailable":
+                        batch_rejected(store, key, tag, record, confirmed)
+                    raise
+            record = record | {"inFlight": index}
+            tag = save_reservation(store, key, record, tag)
+            try:
+                g.sharepoint._request("POST", f"{g._list_endpoint(PAYROLL)}/items", json=body,
+                                      headers={"Content-Type": "application/json;odata=nometadata"})
+            except (requests.RequestException, ValueError) as exc:
+                if definitive_http_rejection(exc):
+                    batch_rejected(store, key, tag, record, confirmed)
+            try:
+                fresh = load_payroll(g, item_id)
+            except requests.RequestException:
+                uncertain()
+            saved = find_application(fresh, token)
+            if saved is None:
+                uncertain()
+            rows_by_id.update({str(row["ID"]): row for row in fresh})
+        validate_saved(saved, body)
+        confirmed += 1
+        new_in_flight = None if record["inFlight"] == index else record["inFlight"]
+        if token not in confirmed_tokens(record) or new_in_flight != record["inFlight"]:
+            record = record | {"inFlight": new_in_flight, "confirmed": sorted(confirmed_tokens(record) | {token})}
+            tag = save_reservation(store, key, record, tag)
+
+    final = summarize(g, read_launch(g, item_id), list(rows_by_id.values()), historical)
+    finish_reservation(store, key, tag, record)
     return {"item": final}
 
 
@@ -655,4 +826,13 @@ def handle(gallery, operation, payload):
     if operation == "payroll_detail":
         return detail(gallery, item_id)
     with origin_write_lock(gallery, item_id):
+        if payload.get("resume") is True:
+            if set(payload) != {"id", "resume", "confirm"} or payload.get("confirm") is not True:
+                fail("confirmation_required", "Confirme a retomada do rateio.")
+            _, record, _ = load_reservation(gallery, item_id)
+            if not record or record.get("status") != "pending" or record.get("kind") != "batch":
+                return detail(gallery, item_id)
+            return apply_batch(gallery, item_id, record["request"])
+        if "lines" in payload:
+            return apply_batch(gallery, item_id, payload)
         return apply(gallery, item_id, payload)

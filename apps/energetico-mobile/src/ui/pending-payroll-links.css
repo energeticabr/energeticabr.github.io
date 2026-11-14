@@ -25,6 +25,22 @@
 .chat-message--pending-payroll-links > .chat-main-pending-supplier-payments-shortcut { margin-top: 392px; }
 .chat-message--pending-payroll-links > .chat-main-holerite-shortcut { margin-top: 448px; }
 
+.payroll-links-form > [data-payroll-action="add"] { min-height: 44px; }
+.payroll-links-draft { min-width: 0; padding: 12px; border: 1px solid #c4d9df; border-radius: 12px; }
+.payroll-links-draft h3 { font-size: 1rem; margin: 0 0 8px; }
+.payroll-links-draft ul { display: grid; gap: 8px; list-style: none; padding: 0; margin: 0; }
+.payroll-links-draft li { display: grid; grid-template-columns: minmax(0, 1fr) minmax(85px, 110px) auto;
+  gap: 8px; align-items: center; padding: 8px 0; border-bottom: 1px solid #c4d9df; }
+.payroll-links-draft li > div { min-width: 0; overflow-wrap: anywhere; }
+.payroll-links-draft small { display: block; }
+.payroll-links-draft label { display: grid; gap: 4px; min-width: 0; font-size: .875rem; }
+.payroll-links-draft input { box-sizing: border-box; width: 100%; }
+.payroll-links-draft p { font-weight: 700; margin: 10px 0 0; }
+@media (max-width: 480px) {
+  .payroll-links-draft li { grid-template-columns: minmax(0, 1fr) auto; }
+  .payroll-links-draft li > div { grid-column: 1 / -1; }
+}
+
 .payroll-links-overlay {
   z-index: 30;
   padding: max(12px, env(safe-area-inset-top)) max(10px, env(safe-area-inset-right))

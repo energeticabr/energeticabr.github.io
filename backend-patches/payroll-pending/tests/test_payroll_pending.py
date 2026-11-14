@@ -144,6 +144,61 @@ class PendingPayrollTests(unittest.TestCase):
             self.call(operation, payload)
         self.assertEqual(getattr(error.exception, 'code', None), code)
 
+    def batch(self, **changes):
+        return dict(id='17', revision=self.row()['revision'], requestId='batch-001', confirm=True, lines=[
+            dict(sheetId='41', supplier='Ana', reference='11/2026', paymentType='SALÁRIO', amountCents=4200),
+            dict(sheetId='42', supplier='Beto', reference='11/2026', paymentType='PREMIAÇÃO', amountCents=5800),
+        ]) | changes
+
+    def test_batch_validates_all_rows_before_writing_and_replays_without_duplication(self):
+        data = self.batch()
+        invalid = self.batch(lines=[data['lines'][0], data['lines'][1] | {'amountCents': 5801}])
+        self.error('invalid_amount', 'payroll_apply', invalid)
+        invalid = self.batch(lines=[data['lines'][0], data['lines'][1] | {'reference': '01/2026'}])
+        self.error('payroll_sheet_unavailable', 'payroll_apply', invalid)
+        self.assertEqual(self.g.posts, [])
+        item = self.call('payroll_apply', data)['item']
+        self.assertEqual(item['remainingCents'], 0)
+        self.assertEqual([(a['supplier'],a['amountCents']) for a in item['allocations']], [('Ana',4200),('Beto',5800)])
+        self.assertEqual(self.call('payroll_apply', data)['item'], item)
+        self.assertEqual(len(self.g.posts), 2)
+
+    def test_batch_uncertain_first_line_reconciles_then_continues(self):
+        data = self.batch()
+        self.g.failure = 'lag'
+        self.error('payroll_apply_uncertain', 'payroll_apply', data)
+        self.assertTrue(self.row()['applicationPending'])
+        self.error('payroll_apply_uncertain', 'payroll_apply', self.body())
+        self.error('payroll_apply_uncertain', 'payroll_apply', data)
+        self.g.db['FOLHAPGTO'].append(self.g.late_row)
+        self.g.failure = None
+        self.assertEqual(self.call('payroll_apply', {'id':'17', 'resume':True, 'confirm':True})['item']['remainingCents'], 0)
+        self.assertEqual(len(self.g.posts), 2)
+
+    def test_rejected_second_line_preserves_first_and_reopens_the_balance(self):
+        data = self.batch()
+        request = self.g.request
+        def reject_second(*args, **kwargs):
+            if len(self.g.posts) == 1:
+                self.g.failure = 'rejected'
+            return request(*args, **kwargs)
+        self.g.sharepoint._request = reject_second
+        self.error('payroll_batch_incomplete', 'payroll_apply', data)
+        item = self.row()
+        self.assertEqual(item['remainingCents'], 5800)
+        self.assertFalse(item.get('applicationPending', False))
+        self.error('payroll_batch_incomplete', 'payroll_apply', data)
+        self.assertEqual(len(self.g.posts), 2)
+
+    def test_month_window_crosses_new_year(self):
+        import payroll_pending
+        payroll_pending.datetime.now.return_value = datetime(2027, 1, 1, 12, tzinfo=TZ)
+        self.g.db['IDFOLHA'] = [sheet(31,'Ana','11/2026'), sheet(32,'Ana','12/2026'),
+                                 sheet(33,'Ana','01/2027'), sheet(34,'Ana','02/2027'), sheet(35,'Ana','03/2027')]
+        options = self.call('payroll_targets')['items'][0]['sheets']
+        self.assertEqual({s['reference']:s['monthRelation'] for s in options},
+                         {'12/2026':'mês anterior','01/2027':'mês atual','02/2027':'próximo mês'})
+
     def test_paid_only_and_each_historical_link_path(self):
         self.g.db['LANCAMENTOS'].extend([
             launch(18, IDFOLHA=41), launch(19), launch(20), launch(21, IDPGTOAGENDADO='91'),
@@ -200,8 +255,8 @@ class PendingPayrollTests(unittest.TestCase):
         self.g.db['IDFOLHA'].extend([sheet(43, 'Ana', '08/2026', ''), sheet(44, 'Cris', '11/2026', 'INATIVO'),
                                      sheet(45, 'Dani', 'sem referência'), sheet(46, '', '11/2026')])
         targets = self.call('payroll_targets')
-        self.assertEqual(targets['items'], [{'supplier': 'Ana', 'sheets': [{'id': '41', 'reference': '11/2026'}, {'id': '43', 'reference': '08/2026'}]},
-                                           {'supplier': 'Beto', 'sheets': [{'id': '42', 'reference': '11/2026'}]}])
+        self.assertEqual(targets['items'], [{'supplier': 'Ana', 'sheets': [{'id': '41', 'reference': '11/2026', 'monthRelation': 'mês atual'}]},
+                                           {'supplier': 'Beto', 'sheets': [{'id': '42', 'reference': '11/2026', 'monthRelation': 'mês atual'}]}])
         self.assertIn('SALÁRIO', targets['paymentTypes'])
         self.error('payroll_sheet_unavailable', 'payroll_apply', self.body(sheetId='44'))
         self.assertEqual(self.g.posts, [])

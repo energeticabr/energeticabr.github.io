@@ -18,8 +18,8 @@ const settled = { ...half, remainingCents: 0, allocations: [ana, {
   id: '801', sheetId: '48', supplier: 'Bruno Silva', amountCents: 76970, paymentType: 'PREMIAÇÃO',
 }], revision: 'complete' };
 const targets = { items: [
-  { supplier: 'Ána Alves', sheets: [{ id: '25', reference: '11/2026' }, { id: '26', reference: '10/2026' }] },
-  { supplier: 'Bruno Silva', sheets: [{ id: '48', reference: '11/2026' }] },
+  { supplier: 'Ána Alves', sheets: [{ id: '25', reference: '11/2026', monthRelation: 'mês atual' }, { id: '26', reference: '10/2026', monthRelation: 'mês anterior' }, { id: '27', reference: '12/2026', monthRelation: 'próximo mês' }] },
+  { supplier: 'Bruno Silva', sheets: [{ id: '48', reference: '11/2026', monthRelation: 'mês atual' }] },
 ], paymentTypes: ['SALÁRIO', 'PREMIAÇÃO'] };
 
 async function harness(t, respond) {
@@ -91,14 +91,14 @@ test('home shortcut allocates a payment across two suppliers and removes it only
     assert.equal(event.payload.id, '401');
     assert.equal(event.payload.confirm, true);
     if (current === first) {
-      assert.equal(event.payload.sheetId, '25');
-      assert.equal(event.payload.supplier, 'Ána Alves');
-      assert.equal(event.payload.reference, '11/2026');
-      assert.equal(event.payload.paymentType, 'SALÁRIO');
-      assert.equal(event.payload.mode, 'partial');
-      assert.equal(event.payload.amountCents, 23031);
+      assert.deepEqual(event.payload.lines, [
+        { supplier: 'Ána Alves', sheetId: '25', reference: '11/2026', paymentType: 'SALÁRIO', amountCents: 23031 },
+        { supplier: 'Bruno Silva', sheetId: '48', reference: '11/2026', paymentType: 'PREMIAÇÃO', amountCents: 10000 },
+      ]);
       assert.equal(event.payload.revision, 'original');
-      current = half;
+      current = { ...first, remainingCents: 66970, allocations: [
+        ana, { id: '802', sheetId: '48', supplier: 'Bruno Silva', amountCents: 10000, paymentType: 'PREMIAÇÃO' },
+      ], revision: 'partial' };
     } else {
       assert.equal(event.payload.sheetId, '48');
       assert.equal(event.payload.supplier, 'Bruno Silva');
@@ -126,18 +126,34 @@ test('home shortcut allocates a payment across two suppliers and removes it only
   const amount = h.query('input[name="amount"]');
   h.input(amount, '1.000,02');
   assert.equal(h.query(action('confirm')).disabled, true);
+  const optionText = [...h.query('select[name="sheet"]').options].map(option => option.textContent).join(' ');
+  for (const label of ['11/2026 (mês atual)', '10/2026 (mês anterior)', '12/2026 (próximo mês)']) {
+    assert.ok(optionText.includes(label));
+  }
   h.input(amount, '230,31');
+  h.query(action('add')).click();
+  assert.match(h.query('[data-payroll-draft]').textContent, /Ána Alves/);
+  choose(h, 'bruno', '48', 'PREMIAÇÃO');
+  h.query(action('partial')).click();
+  h.input(amount, '100,00');
+  h.query(action('add')).click();
+  assert.match(h.query('[data-payroll-draft]').textContent, /Bruno Silva/);
+  const draftAmount = h.query('[data-draft-index="1"]');
+  h.input(draftAmount, '900,00');
+  assert.equal(h.query(action('confirm')).disabled, true);
+  h.input(draftAmount, '100,00');
+  assert.match(h.query('[data-payroll-draft]').textContent, /669,70/);
   assert.equal(h.calls.filter(call => call.operation === 'payroll_apply').length, 0);
   h.query(action('confirm')).click();
   await h.tick();
-  assert.match(h.query(dialog).textContent, /769,70/);
+  assert.match(h.query(dialog).textContent, /669,70/);
   assert.match(h.query(dialog).textContent, /Ána Alves/);
   assert.match(h.query(dialog).textContent, /IDFOLHA 25/);
   h.query(action('edit')).click();
   await h.tick();
   choose(h, 'bruno', '48', 'PREMIAÇÃO');
   h.query(action('total')).click();
-  assert.match(h.query(action('confirm')).textContent, /769,70/);
+  assert.match(h.query(action('confirm')).textContent, /669,70/);
   h.query(action('confirm')).click();
   await h.tick();
   assert.equal(h.root.querySelector(action('edit')), null);
@@ -179,6 +195,7 @@ test('an uncertain application stays on its origin while a different payment can
   choose(h, 'ana', '25', 'SALÁRIO');
   h.query(action('partial')).click();
   h.input(h.query('input[name="amount"]'), '230,31');
+  h.query(action('add')).click();
   h.query(action('confirm')).click();
   await h.tick();
   assert.equal(attempts.length, 1);
