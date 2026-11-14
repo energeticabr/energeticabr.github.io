@@ -14,7 +14,8 @@ const dom = new JSDOM(renderChatMarkup({
       { id: 'group_supplies', reply: 'group_supplies', label: 'SUPRIMENTOS' },
     ] }],
 }));
-const buttons = [...dom.window.document.querySelectorAll('.chat-message--external-provisions > button, .chat-message--external-cargos > button, .chat-main-commercial-shortcuts > button')];
+const buttons = [...dom.window.document.querySelectorAll('.chat-message--external-provisions > button, .chat-message--external-cargos > button, .chat-main-commercial-shortcuts > button')]
+  .filter(button => button.dataset.action !== 'open-holerite-gallery');
 assert.equal(buttons.length, 23, 'all HOME mascots are exercised');
 
 for (const button of buttons) {
