@@ -1,4 +1,5 @@
 import tempfile
+from datetime import datetime, timezone
 import unittest
 from pathlib import Path
 
@@ -85,6 +86,57 @@ class ServiceTests(unittest.TestCase):
         self.assertEqual(receipt, again.confirm('user-a', preview['id']))
         self.assertEqual('WAITING_PAYMENT', again.orders('user-a')[0]['status'])
         self.assertEqual(1, sum(path == 'order/create' for path, _, _ in self.gateway.calls))
+
+    def test_weekly_reminder_waits_for_full_provider_approval_and_reopens_next_monday(self):
+        self.now = datetime(2026, 11, 16, 13, tzinfo=timezone.utc).timestamp()
+        self.assertEqual({'visible': True}, self.service.weekly_reminder())
+        preview = self.service.preview('user-a', self.data)
+        self.service.confirm('user-a', preview['id'])
+        group = {'code': 'SWO123', 'creationDate': '2026-11-16T13:00:00', 'totalEmployees': 1,
+                 'orderList': [{'statusCode': 'APPROVED', 'totalValue': 225.05}], 'statusCode': 'CREATED'}
+        with patch.object(self.gateway, 'request', return_value=group) as request:
+            for status in ('CREATED', 'WAITING_PAYMENT', 'PROCESSING', 'APPROVED_PARTIALLY', 'CANCELED'):
+                group['statusCode'] = status
+                self.assertEqual({'visible': True}, self.service.weekly_reminder())
+            group.update(statusCode='APPROVED', totalEmployees=0)
+            self.assertEqual({'visible': True}, self.service.weekly_reminder())
+            group.update(totalEmployees=1)
+            group['orderList'][0]['totalValue'] = 100
+            self.assertEqual({'visible': True}, self.service.weekly_reminder())
+            group['orderList'][0]['totalValue'] = 225.05
+            with patch('swile_recharges.configured_service', return_value=self.service):
+                status, result = handle_portal({'oid': 'another-user'}, {'action': 'swile_orders', 'weeklyReminder': True})
+            self.assertEqual((200, {'visible': False}), (status, result['swile']))
+            request.assert_called_with('order/group/SWO123')
+            self.now = datetime(2026, 11, 23, 2, 59, tzinfo=timezone.utc).timestamp()
+            self.assertEqual({'visible': False}, self.service.weekly_reminder())
+            self.now += 60
+            self.assertEqual({'visible': True}, self.service.weekly_reminder())
+
+    def test_weekly_reminder_does_not_report_a_verified_state_on_provider_error(self):
+        self.now = datetime(2026, 11, 16, 13, tzinfo=timezone.utc).timestamp()
+        preview = self.service.preview('user-a', self.data)
+        self.service.confirm('user-a', preview['id'])
+        with patch.object(self.gateway, 'request', side_effect=SwileError('Indisponível', 429)), \
+                patch('swile_recharges.configured_service', return_value=self.service):
+            status, result = handle_portal({'oid': 'user-a'}, {'action': 'swile_orders', 'weeklyReminder': True})
+        self.assertEqual(429, status)
+        self.assertNotIn('swile', result)
+
+    def test_uncertain_weekly_reminder_requires_exact_confirmation(self):
+        self.now = datetime(2026, 11, 16, 13, tzinfo=timezone.utc).timestamp()
+        self.gateway.uncertain = True
+        preview = self.service.preview('user-a', self.data)
+        self.service.confirm('user-a', preview['id'])
+        group = {'code': 'SWO123', 'statusCode': 'APPROVED', 'creationDate': '2026-11-16T13:00:00',
+                 'totalEmployees': 1, 'orderList': [{'statusCode': 'APPROVED', 'totalValue': 225.05}]}
+        self.gateway.external_id = 'unrelated'
+        original = self.gateway.request
+        with patch.object(self.gateway, 'request', side_effect=lambda path, **kwargs:
+                          group if path == 'order/group/SWO123' else original(path, **kwargs)):
+            self.assertEqual({'visible': True}, self.service.weekly_reminder())
+            self.gateway.external_id = preview['id']
+            self.assertEqual({'visible': False}, self.service.weekly_reminder())
 
     def test_unknown_create_is_not_retried_even_after_new_preview(self):
         self.gateway.uncertain = True

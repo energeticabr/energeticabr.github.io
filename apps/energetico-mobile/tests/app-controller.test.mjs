@@ -3647,7 +3647,8 @@ test('Swile opens from the live RH menu without leaving the conversation or send
   t.after(() => { h.controller.stop(); globalThis.document = previous; dom.window.close(); });
   await h.controller.start();
   const requests = [];
-  h.client.swileRequest = async operation => {
+  h.client.swileRequest = async (operation, payload) => {
+    if (payload.weeklyReminder) return { visible: false };
     requests.push(operation);
     return [{ id: 1, name: 'Pessoa elegível', hasActiveCard: true }];
   };
@@ -3660,6 +3661,7 @@ test('Swile opens from the live RH menu without leaving the conversation or send
   menuMarkup.innerHTML = renderChatMarkup(h.view.renders.at(-1));
   const { replyId } = menuMarkup.content.querySelector('.swile-menu-entry button').dataset;
   assert.equal(await h.view.emit('select-reply', { replyId }), true);
+  await new Promise(resolve => setImmediate(resolve));
   const panel = dom.window.document.querySelector('.swile-dialog');
   assert.ok(panel);
   assert.match(panel.textContent, /Pessoa elegível/);
@@ -3676,6 +3678,7 @@ test('Swile opens from the live RH menu without leaving the conversation or send
   assert.deepEqual(requests, ['directory']);
   h.store.ingestRemoteMessages([poll], { activeFlow: menu });
   h.client.swileRequest = async (operation, payload) => {
+    if (payload.weeklyReminder) return { visible: false };
     assert.equal(operation, 'orders');
     assert.deepEqual(payload, { gallery: 'pending' });
     requests.push(operation);
@@ -3690,6 +3693,50 @@ test('Swile opens from the live RH menu without leaving the conversation or send
   assert.match(gallery.textContent, /Nenhum pedido em aberto/);
   assert.deepEqual(requests, ['directory', 'orders', 'orders']);
   assert.equal(h.chatCalls.length, callsBefore);
+});
+
+test('Swile red weekly button opens the recharge popup and waits for the provider verification', async t => {
+  const dom = new JSDOM('<main id="app"></main>', { url: 'https://example.test' });
+  const previous = globalThis.document;
+  globalThis.document = dom.window.document;
+  const h = makeHarness();
+  t.after(() => { h.controller.stop(); globalThis.document = previous; dom.window.close(); });
+  await h.controller.start();
+  let approved = false;
+  const requests = [];
+  h.client.swileRequest = async (operation, body) => {
+    requests.push([operation, body]);
+    if (body.weeklyReminder) return { visible: !approved };
+    return [{ id: 1, name: 'Pessoa elegível', hasActiveCard: true }];
+  };
+  const tick = () => new Promise(resolve => setImmediate(resolve));
+  const poll = { type: 'poll', question: '👉 👥 RECURSOS HUMANOS',
+    options: [{ id: 'action_hr_registrations', label: 'CADASTROS' }] };
+  const menu = { id: 'menu:choosing_action', title: '👥 RECURSOS HUMANOS' };
+  const extract = () => {
+    const template = dom.window.document.createElement('template');
+    template.innerHTML = renderChatMarkup(h.view.renders.at(-1));
+    return template.content.querySelector('[data-reply-id="action_hr_swile_reminder"]');
+  };
+  h.store.ingestRemoteMessages([poll], { activeFlow: menu });
+  await tick();
+  const reminder = extract();
+  assert.equal(reminder?.textContent, 'Swile');
+  assert.match(reminder.className, /danger/);
+  assert.equal(reminder.parentElement.lastElementChild, reminder);
+  assert.equal(await h.view.emit('select-reply', { replyId: reminder.dataset.replyId }), true);
+  await tick();
+  assert.match(dom.window.document.querySelector('.swile-dialog').textContent, /Pessoa elegível/);
+  const close = () => [...dom.window.document.querySelectorAll('.swile-dialog button')].find(b => b.textContent === 'Fechar').click();
+  close();
+  await tick();
+  assert.ok(extract());
+  assert.equal(await h.view.emit('select-reply', { replyId: 'action_hr_swile_reminder' }), true);
+  approved = true;
+  close();
+  await tick();
+  assert.equal(extract(), null);
+  assert.deepEqual(requests.map(([action]) => action), ['orders', 'directory', 'orders', 'directory', 'orders']);
 });
 
 test('Trancid opens recharge and history as local RH screens', async t => {
@@ -3711,10 +3758,12 @@ test('Trancid opens recharge and history as local RH screens', async t => {
   });
   const callsBefore = h.chatCalls.length;
   assert.equal(await h.view.emit('select-reply', { replyId: 'action_hr_trancid' }), true);
+  await new Promise(resolve => setImmediate(resolve));
   const panel = dom.window.document.querySelector('.trancid-recharge-dialog');
   assert.match(panel?.textContent || '', /Vale-transporte.*Pessoa elegível/s);
   [...panel.querySelectorAll('button')].find(button => button.textContent === 'Fechar').click();
   assert.equal(await h.view.emit('select-reply', { replyId: 'action_hr_trancid_gallery' }), true);
+  await new Promise(resolve => setImmediate(resolve));
   assert.match(dom.window.document.querySelector('main.trancid-gallery-page')?.textContent || '', /Nenhum pedido/);
   assert.deepEqual(requests, [['directory', {}], ['history', { page: 1 }]]);
   assert.equal(h.chatCalls.length, callsBefore);

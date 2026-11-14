@@ -2513,6 +2513,7 @@ export function createAppController({
   }
 
   async function handleForeground() {
+    void refreshSwileReminder();
     resumeDdaSync();
     resumeSefazSync();
     armFlowReminder();
@@ -5412,6 +5413,7 @@ export function createAppController({
       waiters.forEach(resolve => resolve());
     }
     const state = store.getState();
+    syncSwileReminder(state.activeFlow);
     const currentDiaryPoll = latestAssistantPoll(state.messages);
     const diaryActivityPrompt = /^construction_diary_(?:create|fill)$/.test(String(state.activeFlow?.id || ""))
       && /atividades\s+executadas/i.test(String(currentDiaryPoll?.question || currentDiaryPoll?.prompt || ""));
@@ -5480,6 +5482,7 @@ export function createAppController({
       ...state,
       ddaMenuAlert: renderedDdaMenuAlert,
       sicoobMenuAlert,
+      swileReminder: swileReminder?.visible === true,
       rhidMascot: rhidMascot ? { ...rhidMascot } : null,
       diaryAttachmentProgress,
       attachmentUploadProgress,
@@ -6422,6 +6425,59 @@ export function createAppController({
   let hrBenefitPanel = null;
   let hrBenefitOpening = null;
 
+  let swileReminder = null;
+
+  function isRhMenu(activeFlow) {
+    return activeFlow?.id === 'menu:choosing_action'
+      && /\brecursos\s+humanos\b/.test(normalizedChoiceText(activeFlow.title));
+  }
+
+  function stopSwileReminder() {
+    if (!swileReminder) return;
+    clearTimeout(swileReminder.timer);
+    swileReminder.request?.abort();
+    swileReminder = null;
+  }
+
+  function syncSwileReminder(activeFlow) {
+    if (stopped || !account || sessionStatus !== 'authenticated' || !isRhMenu(activeFlow)
+        || typeof client.swileRequest !== 'function') {
+      stopSwileReminder();
+      return;
+    }
+    if (swileReminder?.revision === sessionRevision) return;
+    stopSwileReminder();
+    swileReminder = { revision: sessionRevision, visible: false, request: null, timer: null };
+    void refreshSwileReminder();
+  }
+
+  async function refreshSwileReminder() {
+    const reminder = swileReminder;
+    if (!reminder || reminder.request) return;
+    clearTimeout(reminder.timer);
+    const request = new AbortController();
+    reminder.request = request;
+    const timeout = setTimeout(() => request.abort(), 25_000);
+    timeout.unref?.();
+    try {
+      const result = await client.swileRequest('orders', { weeklyReminder: true }, { signal: request.signal });
+      if (swileReminder === reminder && !request.signal.aborted && typeof result?.visible === 'boolean'
+          && reminder.visible !== result.visible) {
+        reminder.visible = result.visible;
+        render();
+      }
+    } catch {
+      // Keep the last verified state while the provider is unavailable.
+    } finally {
+      clearTimeout(timeout);
+      if (swileReminder === reminder) {
+        reminder.request = null;
+        reminder.timer = setTimeout(() => { void refreshSwileReminder(); }, 60_000);
+        reminder.timer.unref?.();
+      }
+    }
+  }
+
   function disposeHrBenefitPanel() {
     hrBenefitOpening = null;
     hrBenefitPanel?.close();
@@ -6431,8 +6487,7 @@ export function createAppController({
   async function openHrBenefitPanel(provider, gallery = false) {
     const canOpen = () => {
       const { activeFlow } = store.getState();
-      const inRhMenu = activeFlow?.id === 'menu:choosing_action'
-        && /\brecursos\s+humanos\b/.test(normalizedChoiceText(activeFlow.title));
+      const inRhMenu = isRhMenu(activeFlow);
       return Boolean(account) && !stopped && sessionStatus === 'authenticated' && !flowBusy()
         && (!activeFlow || inRhMenu);
     };
@@ -6450,15 +6505,19 @@ export function createAppController({
       hrBenefitPanel = openView({
         document: globalThis.document,
         gallery,
-        request: (operation, payload, options) => {
+        request: async (operation, payload, options) => {
           if (!current()) throw new Error('A sessão do Energético foi encerrada.');
-          return provider === 'Trancid'
-            ? client.trancidRechargeRequest(operation, payload, options)
-            : client.swileRequest(operation, payload, options);
+          if (provider === 'Trancid') return client.trancidRechargeRequest(operation, payload, options);
+          const result = await client.swileRequest(operation, payload, options);
+          if (current() && operation === 'confirm') void refreshSwileReminder();
+          return result;
         },
         previewDocument: native.previewMedia && ((blob, fileName, resolveReturnFocus) =>
           native.previewMedia(blob, fileName, { returnLabel: 'Voltar ao pedido', resolveReturnFocus })),
-        onClose: () => { hrBenefitPanel = null; },
+        onClose: () => {
+          hrBenefitPanel = null;
+          if (current() && provider === 'Swile') void refreshSwileReminder();
+        },
         onHome: () => { if (current()) return returnToMainMenu(); },
       });
       return true;
@@ -12057,6 +12116,9 @@ export function createAppController({
       if (command.replyId === "action_hr_gallery_folhapgto") return openHrPayrollGallery("FOLHAPGTO");
       if (command.replyId === "action_hr_gallery_holerite") return openHrPayrollGallery("HOLERITE");
       if (command.replyId === 'action_hr_swile') return openHrBenefitPanel('Swile');
+      if (command.replyId === 'action_hr_swile_reminder') {
+        return swileReminder?.visible === true && isRhMenu(store.getState().activeFlow) ? openHrBenefitPanel('Swile') : false;
+      }
       if (command.replyId === 'action_hr_swile_gallery') return openHrBenefitPanel('Swile', true);
       if (command.replyId === 'action_hr_trancid') return openHrBenefitPanel('Trancid');
       if (command.replyId === 'action_hr_trancid_gallery') return openHrBenefitPanel('Trancid', true);
@@ -12633,6 +12695,7 @@ export function createAppController({
   }
 
   function stop() {
+    stopSwileReminder();
     resetDdaMenuAlert();
     resetSicoobMenuAlert();
     provisionSettlementParent.destroy();
