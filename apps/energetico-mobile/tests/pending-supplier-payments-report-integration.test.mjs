@@ -28,7 +28,7 @@ test('last right mascot follows contractor control and dispatches its local repo
  let opened=0;view.on(action,()=>opened++);view.render(home);
  const mascot=dom.window.document.querySelector(`[data-action="${action}"]`);assert.ok(mascot);
  assert.equal(mascot.previousElementSibling.dataset.action,'open-contractor-control-report');
- assert.equal(mascot.nextElementSibling?.dataset.action,'open-holerite-gallery');
+ assert.equal(mascot.nextElementSibling?.dataset.action,'open-holerite-report');
  assert.equal(mascot.nextElementSibling.nextElementSibling,null);
  assert.equal(mascot.closest('.chat-bubble'),null);assert.match(mascot.querySelector('img').src,/pending-supplier-payments\.png$/);
  mascot.querySelector('img').click();assert.equal(opened,1);

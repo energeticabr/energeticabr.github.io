@@ -186,3 +186,34 @@
 .hr-payroll-report-warning { grid-column: 1 / -1; margin: 2px 0; padding: 10px; border: 1px solid #e6bd73; border-radius: 10px; color: #7d4a0a; background: #fff7e7; font-weight: 650; }
 @media (min-width: 760px) { .hr-payroll-report-totals { grid-template-columns: repeat(4, minmax(0, 1fr)); } }
 @media (min-width: 760px) { .hr-gallery-content { padding: 22px; } .hr-gallery-card { padding: 16px; } }
+.hr-holerite-report-backdrop > .hr-holerite-report {
+  width: min(1150px, 100%);
+  height: min(850px, 100%);
+  border-radius: 12px;
+  background: #fff;
+}
+.hr-holerite-report .hr-gallery-header {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr) 44px 44px;
+  align-items: center;
+  gap: 8px;
+  padding: 6px 12px;
+  color: #12375e;
+  background: #fff;
+  box-shadow: none;
+  border-bottom: 1px solid #c5d6df;
+}
+.hr-holerite-report-logo { display: block; width: clamp(58px, 12vw, 150px); height: auto; }
+.hr-holerite-report .hr-gallery-title { text-align: end; font-size: clamp(.94rem, 2.7vw, 1.35rem); }
+.hr-holerite-report .gallery-refresh-button { grid-column: 3; width: 44px; height: 44px; }
+.hr-holerite-report button.report-close-control { grid-column: 4; }
+.hr-holerite-report[data-gallery-loading="true"] > .hr-gallery-content { display: none; }
+.hr-holerite-report > .gallery-loading-screen { position: static; flex: 1; min-height: 0; }
+.hr-holerite-report .gallery-record-overlay { position: absolute; }
+.hr-holerite-report-backdrop[data-report-portrait="true"] .hr-payslip-dialog[role="dialog"] {
+  width: min(100%, 520px) !important;
+  height: auto !important;
+  max-height: 100% !important;
+  padding: 16px !important;
+  border-radius: 12px !important;
+}

@@ -339,7 +339,7 @@ const returnedHomeActions = [
   'open-order-validation-report', 'open-depreciation-report', 'open-document-control-report',
   'open-task-association-report', 'open-rhid-mascot-report', 'open-cargos-table', 'open-attendance-summary',
   'open-stage-progress', 'open-supplier-payroll-report', 'open-trancid-report', 'open-contractor-control-report',
-  'open-pending-supplier-payments-report', 'open-holerite-gallery',
+  'open-pending-supplier-payments-report', 'open-holerite-report',
 ];
 
 for (const [variant, field, separator] of [

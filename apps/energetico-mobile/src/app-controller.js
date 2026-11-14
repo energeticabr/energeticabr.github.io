@@ -445,6 +445,7 @@ const PAYMENT_LEDGER_ID = 'action_payment_ledger';
 const CARGOS_TABLE_ID = 'action_cargos_table';
 const ATTENDANCE_SUMMARY_ID = 'action_attendance_summary';
 const RHID_MASCOT_ACTION = 'open-rhid-mascot-report';
+const HOLERITE_REPORT_ACTION = 'open-holerite-report';
 const STAGE_PROGRESS_ID = 'action_stage_progress';
 const STAGE_PROGRESS_SCOPES = Object.freeze(['Sites.Read.All']);
 const SUPPLIER_PAYROLL_REPORT_ID = 'action_supplier_payroll_report';
@@ -7248,7 +7249,10 @@ export function createAppController({
     return opening;
   }
 
-  async function openHrPayrollGallery(gallery) {
+  async function openHrPayrollGallery(gallery, presentation = "gallery") {
+    const isReport = gallery === "HOLERITE" && presentation === "report";
+    const panelName = isReport ? HOLERITE_REPORT_ACTION : gallery;
+    const payslipPlace = isReport ? "ao relatório" : "à galeria";
     if (!["IDFOLHA", "FOLHAPGTO", "HOLERITE"].includes(gallery) || !account || stopped || flowBusy()) return false;
     disposeSupplierPayrollReport();
     disposeSacPathologiesReport();
@@ -7267,10 +7271,10 @@ export function createAppController({
     };
     const opening = Promise.resolve().then(async () => {
       try {
-        if (hrPayrollGalleryName !== gallery) {
+        if (hrPayrollGalleryName !== panelName) {
           disposeHrPayrollGallery();
           const isPayslip = gallery === "HOLERITE";
-          const resumeAction = isPayslip ? "action_hr_gallery_holerite"
+          const resumeAction = isReport ? HOLERITE_REPORT_ACTION : isPayslip ? "action_hr_gallery_holerite"
             : gallery === "IDFOLHA" ? "action_hr_gallery_idfolha" : "action_hr_gallery_folhapgto";
           const data = await hrPayrollGalleryDataFactory({
             tokenProvider: ordersGalleryTokenProvider(assertSession, resumeAction),
@@ -7325,7 +7329,7 @@ export function createAppController({
                 if (collection) preview.signal.removeEventListener('abort', cancelRead);
               }
             };
-            const settings = { onClose: release, returnLabel: 'Voltar à galeria de holerites', resolveReturnFocus, loadErrorMessage };
+            const settings = { onClose: release, returnLabel: `Voltar ${payslipPlace} de holerites`, resolveReturnFocus, loadErrorMessage };
             let usingCollection = false;
             try {
               if (row && typeof data.listSignedPayslips === 'function' && typeof data.downloadSignedPayslip === 'function') {
@@ -7361,7 +7365,7 @@ export function createAppController({
             }
           }
           panel = await hrPayrollGalleryFactory({
-            gallery,
+            gallery, presentation,
             ...(isPayslip ? {
               listSignedPayslips: typeof data.listSignedPayslips === 'function'
                 ? (row, options) => data.listSignedPayslips(row, options) : undefined,
@@ -7420,7 +7424,7 @@ export function createAppController({
                 if (typeof native.previewMedia !== 'function') throw new Error('O visualizador de PDFs não está disponível.');
                 return previewPayslip(sourceOptions => data.downloadPayslipsByDate(date, sourceOptions), `Holerites-${date}.pdf`, {
                   ...options,
-                  loadErrorMessage: 'Não foi possível preparar os holerites desta data. Volte à galeria e tente novamente.',
+                  loadErrorMessage: `Não foi possível preparar os holerites desta data. Volte ${payslipPlace} e tente novamente.`,
                 });
               } : undefined,
               openPayslip: (row, options) => previewPayslip(sourceOptions => data.downloadPayslip(row, sourceOptions), row.pdfFileName, {
@@ -7475,7 +7479,7 @@ export function createAppController({
               data.invalidateRelatedReports?.();
               invalidateGalleryReportSources();
             },
-            onHome: () => {
+            onHome: isReport ? undefined : () => {
               assertSession();
               return returnToMainMenu();
             },
@@ -7484,17 +7488,20 @@ export function createAppController({
                 panel?.destroy?.();
                 hrPayrollGallery = null;
                 hrPayrollGalleryName = "";
+                hrPayrollGalleryData = null;
+                if (hrPayrollGalleryOpening === opening) hrPayrollGalleryOpening = null;
               }
             },
           });
           if (!openingIsCurrent()) { panel?.destroy?.(); return false; }
           hrPayrollGallery = panel;
-          hrPayrollGalleryName = gallery;
+          hrPayrollGalleryName = panelName;
         }
-        await hrPayrollGallery.open();
-        return openingIsCurrent();
+        const panel = hrPayrollGallery;
+        await panel.open();
+        return openingIsCurrent() && hrPayrollGallery === panel;
       } catch (error) {
-        if (openingIsCurrent()) setSessionError(error, "Não foi possível abrir a galeria de folha.");
+        if (openingIsCurrent()) setSessionError(error, isReport ? "Não foi possível abrir o relatório de holerites." : "Não foi possível abrir a galeria de folha.");
         return false;
       } finally {
         if (hrPayrollGalleryOpening === opening) hrPayrollGalleryOpening = null;
@@ -12434,7 +12441,7 @@ export function createAppController({
     bind('open-contractor-control-report', openContractorControlReport);
     bind('open-general-summary-report', openGeneralSummaryReport);
     bind('open-pending-supplier-payments-report', openPendingSupplierPaymentsReport);
-    bind('open-holerite-gallery', () => openHrPayrollGallery('HOLERITE'));
+    bind(HOLERITE_REPORT_ACTION, () => openHrPayrollGallery('HOLERITE', 'report'));
     bind("dismiss-pending-provisions", () => dismissPendingProvisions({ userDismissal: true }));
     bind("dismiss-pending-notes", dismissPendingNotes);
     bind("dismiss-pending-construction-diaries", dismissPendingConstructionDiaries);
@@ -12690,6 +12697,7 @@ export function createAppController({
     else if (pendingAction === "action_hr_create_idfolha") await openPayrollSheetCreate();
     else if (pendingAction === "action_hr_gallery_folhapgto") await openHrPayrollGallery("FOLHAPGTO");
     else if (pendingAction === "action_hr_gallery_holerite") await openHrPayrollGallery("HOLERITE");
+    else if (pendingAction === HOLERITE_REPORT_ACTION) await openHrPayrollGallery("HOLERITE", "report");
     else if (REGISTRATION_GALLERY_KIND[pendingAction]) await openRegistrationGallery(REGISTRATION_GALLERY_KIND[pendingAction], pendingAction);
     if (!pendingAction) void ddaAutoReminder.refresh();
   }
