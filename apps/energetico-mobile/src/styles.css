@@ -1521,7 +1521,7 @@ button.chat-rhid-attendance-card__cluster:focus-visible { outline: 3px solid #15
 
 .chat-message--external-cargos { display: grid; grid-template-columns: 44px minmax(0, 640px) 44px; gap: 8px; align-items: start; }
 .chat-message--external-cargos .chat-bubble { grid-column: 2; grid-row: 1; width: 100%; max-width: 640px; box-sizing: border-box; }
-.chat-main-cargos-shortcut { grid-column: 3; grid-row: 1; margin-top: calc(12px + var(--payroll-shortcut-offset, 0px)); width: 44px; height: 44px; padding: 0; border: 1px solid #bf6165; border-radius: 10px; background: #cf757a; overflow: hidden; cursor: pointer; }
+.chat-main-cargos-shortcut { grid-column: 3; grid-row: 1; margin-top: 12px; width: 44px; height: 44px; padding: 0; border: 1px solid #bf6165; border-radius: 10px; background: #cf757a; overflow: hidden; cursor: pointer; }
 .chat-main-cargos-shortcut img { width: 100%; height: 100%; object-fit: contain; }
 .chat-message--commercial-top > .chat-main-rhid-shortcut {
   grid-column: 3; grid-row: 1; align-self: start; z-index: 1;
@@ -1536,19 +1536,19 @@ button.chat-rhid-attendance-card__cluster:focus-visible { outline: 3px solid #15
   position: absolute; right: 2px; bottom: 0; width: 16px; height: 16px;
   fill: #fff; stroke: #1466a3; stroke-width: 1.6; stroke-linecap: round; stroke-linejoin: round;
 }
-.chat-main-attendance-summary-shortcut { grid-column:3; grid-row:1; align-self:start; margin-top:calc(68px + var(--payroll-shortcut-offset, 0px)); width:44px; height:44px; padding:0; border:0; border-radius:10px; background:#cf757a; overflow:hidden; cursor:pointer; }
+.chat-main-attendance-summary-shortcut { grid-column:3; grid-row:1; align-self:start; margin-top:68px; width:44px; height:44px; padding:0; border:0; border-radius:10px; background:#cf757a; overflow:hidden; cursor:pointer; }
 .chat-main-attendance-summary-shortcut img { display:block; width:100%; height:100%; object-fit:contain; }
 .chat-main-attendance-summary-shortcut:focus-visible { outline:3px solid var(--accent); outline-offset:3px; }
-.chat-main-stage-progress-shortcut { grid-column:3; grid-row:1; align-self:start; margin-top:calc(124px + var(--payroll-shortcut-offset, 0px)); width:44px; height:44px; padding:0; border:0; border-radius:10px; background:#c96c68; overflow:hidden; cursor:pointer; }
+.chat-main-stage-progress-shortcut { grid-column:3; grid-row:1; align-self:start; margin-top:124px; width:44px; height:44px; padding:0; border:0; border-radius:10px; background:#c96c68; overflow:hidden; cursor:pointer; }
 .chat-main-stage-progress-shortcut img { display:block; width:100%; height:100%; object-fit:contain; }
 .chat-main-stage-progress-shortcut:focus-visible { outline:3px solid var(--accent); outline-offset:3px; }
-.chat-main-supplier-payroll-report-shortcut { grid-column:3; grid-row:1; align-self:start; margin-top:calc(180px + var(--payroll-shortcut-offset, 0px)); width:44px; height:44px; padding:0; border:0; border-radius:10px; background:#cf757a; overflow:hidden; cursor:pointer; }
+.chat-main-supplier-payroll-report-shortcut { grid-column:3; grid-row:1; align-self:start; margin-top:180px; width:44px; height:44px; padding:0; border:0; border-radius:10px; background:#cf757a; overflow:hidden; cursor:pointer; }
 .chat-main-supplier-payroll-report-shortcut:focus-visible { outline:3px solid var(--accent); outline-offset:3px; }
-.chat-main-pending-supplier-payments-shortcut { grid-column:3; grid-row:1; align-self:start; margin-top:calc(348px + var(--payroll-shortcut-offset, 0px)); width:44px; height:44px; padding:0; border:0; border-radius:10px; background:#cf757a; overflow:hidden; cursor:pointer; }
-.chat-main-contractor-control-shortcut { grid-column:3; grid-row:1; align-self:start; margin-top:calc(292px + var(--payroll-shortcut-offset, 0px)); width:44px; height:44px; padding:0; border:0; border-radius:10px; background:#cf757a; overflow:hidden; cursor:pointer; }
+.chat-main-pending-supplier-payments-shortcut { grid-column:3; grid-row:1; align-self:start; margin-top:348px; width:44px; height:44px; padding:0; border:0; border-radius:10px; background:#cf757a; overflow:hidden; cursor:pointer; }
+.chat-main-contractor-control-shortcut { grid-column:3; grid-row:1; align-self:start; margin-top:292px; width:44px; height:44px; padding:0; border:0; border-radius:10px; background:#cf757a; overflow:hidden; cursor:pointer; }
 .chat-main-contractor-control-shortcut:focus-visible { outline:3px solid var(--accent); outline-offset:3px; }
 .chat-main-pending-supplier-payments-shortcut:focus-visible { outline:3px solid var(--accent); outline-offset:3px; }
-.chat-main-holerite-shortcut { grid-column:3; grid-row:1; align-self:start; display:grid; grid-template:30px 14px / minmax(0, 1fr); width:44px; height:44px; margin-top:calc(404px + var(--payroll-shortcut-offset, 0px)); padding:0; border:0; border-radius:10px; color:#fff; background:#cf757a; font:800 10px/14px system-ui,sans-serif; text-align:center; overflow:hidden; cursor:pointer; }
+.chat-main-holerite-shortcut { grid-column:3; grid-row:1; align-self:start; display:grid; grid-template:30px 14px / minmax(0, 1fr); width:44px; height:44px; margin-top:404px; padding:0; border:0; border-radius:10px; color:#fff; background:#cf757a; font:800 10px/14px system-ui,sans-serif; text-align:center; overflow:hidden; cursor:pointer; }
 .chat-main-holerite-shortcut img { display:block; width:100%; height:100%; object-fit:contain; }
 .chat-main-holerite-shortcut span { background:#a02536; }
 .chat-main-holerite-shortcut:focus-visible { outline:3px solid var(--accent); outline-offset:3px; }
@@ -1685,5 +1685,5 @@ button.chat-rhid-attendance-card__cluster:focus-visible { outline: 3px solid #15
 .payroll-assignment td:last-child { color: #a52922; text-align: right; font-weight: 800; }
 .payroll-assignment th:last-child { text-align: right; }
 
-.chat-main-trancid-report-shortcut { grid-column:3; grid-row:1; align-self:start; margin-top:calc(236px + var(--payroll-shortcut-offset, 0px)); width:44px; height:44px; padding:0; border:0; border-radius:10px; background:#cf757a; overflow:hidden; cursor:pointer; }
+.chat-main-trancid-report-shortcut { grid-column:3; grid-row:1; align-self:start; margin-top:236px; width:44px; height:44px; padding:0; border:0; border-radius:10px; background:#cf757a; overflow:hidden; cursor:pointer; }
 .chat-main-trancid-report-shortcut:focus-visible { outline:3px solid var(--accent); outline-offset:3px; }
