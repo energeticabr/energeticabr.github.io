@@ -25,7 +25,8 @@ test('retorno com aviso e anexo restaura mascotes e abre relatório real em320/3
       try {
         const layout = JSON.parse(dom.window.document.documentElement.dataset.layout);
         assert.equal(layout.submenuIcons, 0);
-        assert.equal(layout.count, 24);
+        assert.equal(layout.count, 25);
+        assert.ok(layout.actions.includes('open-pending-payroll-links'));
         assert.equal(new Set(layout.actions).size, layout.count, 'sem atalhos duplicados');
         assert.equal(layout.payslip, 'Holerite');
         assert.ok(layout.actions.includes('open-sicoob-transaction-report'));
