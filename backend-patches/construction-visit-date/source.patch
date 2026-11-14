@@ -1,0 +1,283 @@
+--- a/worker/workflow.py
++++ b/worker/workflow.py
+@@ -3838,6 +3838,13 @@ class WorkflowEngine(ProvisionDescriptionSettlement, PaymentProvisionFlow):
+         return self._save(state, etag)
+ 
+     def _resume_draft_prompt(self, state: dict, etag: str | None) -> dict:
++        if (state.get("flow") == "construction_visit" and self._construction_visit_date(state) is None
++                and state.get("stage") in {
++            "selecting_fields", "awaiting_confirmation",
++        }):
++            result = self._resend_current_prompt(state, etag)
++            return {**result, "status": "draft_resumed", "draft_resumed": True,
++                    "batch_id": state["batch_id"], "resumed_stage": state["stage"]}
+         provision_result = self._provision_reissue_skipped_freight(state, etag)
+         if provision_result is None and state.get("stage") == "awaiting_confirmation":
+             provision_result = self._provision_review_changed_freight(state, etag)
+@@ -4196,5 +4203,9 @@ class WorkflowEngine(ProvisionDescriptionSettlement, PaymentProvisionFlow):
+         return {"status": "cash_checkpoint_navigation_blocked", "batch_id": state.get("batch_id"), "etag": etag}
+ 
+     def _navigate_back(self, state: dict, etag: str | None) -> dict:
++        if state.get("flow") == "construction_visit" and state.get("stage") == "submission_failed":
++            # A failed request may already have created the order. Keep the
++            # date and batch together while the retry reconciles that write.
++            return self._resend_current_prompt(state, etag)
+         if state.get("stage") == "attendance_batch_confirmation" and state.pop("attendance_summary_registration_menu", False):
+             return self._prompt_attendance_batch_confirmation(state, etag)
+@@ -19511,12 +19522,15 @@ class WorkflowEngine(ProvisionDescriptionSettlement, PaymentProvisionFlow):
+             if skip_provision_freight and step.get("key") in {"tem_frete_pagamento", "frete_pagamento"}:
+                 state["step_index"] += 1
+                 continue
+-            if (state.get("flow") == "construction_visit"
+-                    and step.get("key") == "criar_diario_obra"
+-                    and visit_diary.skip_if_existing(
+-                        self, state, datetime.now(ZoneInfo("America/Sao_Paulo")).date())):
+-                state["step_index"] += 1
+-                continue
++            if state.get("flow") == "construction_visit" and step.get("key") == "criar_diario_obra":
++                visit_date = self._construction_visit_date(state)
++                if visit_date is None:
++                    state.pop("edit_step_indices", None)
++                    state["step_index"] -= 1
++                    return steps[state["step_index"]]
++                if visit_diary.skip_if_existing(self, state, visit_date):
++                    state["step_index"] += 1
++                    continue
+             if self._provision_multiple(state) and step.get("key") == "produto_pagamento":
+                 step = {**step,"allow_blank":False}
+             if step.get("edit_only") and edit_step_indices is None:
+@@ -27858,6 +27872,8 @@ class WorkflowEngine(ProvisionDescriptionSettlement, PaymentProvisionFlow):
+         parsed: date,
+         display_value: str,
+     ) -> dict:
++        if step.get("key") == "data_visita_obra":
++            display_value = parsed.strftime("%d/%m/%Y")
+         state["answers"][step["key"]] = parsed.isoformat()
+         state["fields"][step["target_field"]] = parsed.isoformat()
+         state["display_values"][step["target_field"]] = display_value
+@@ -30034,6 +30050,8 @@ class WorkflowEngine(ProvisionDescriptionSettlement, PaymentProvisionFlow):
+         return card
+ 
+     def _summarize_and_confirm(self, state: dict, etag: str | None) -> dict:
++        if state.get("flow") == "construction_visit" and self._construction_visit_date(state) is None:
++            return self._prompt_missing_construction_visit_date(state, etag)
+         unit_result = self._guard_launch_product_units(state, etag)
+         if unit_result is not None:
+             return unit_result
+@@ -30755,6 +30773,11 @@ class WorkflowEngine(ProvisionDescriptionSettlement, PaymentProvisionFlow):
+             "retornar postagem",
+             "retornar a postagem",
+         }:
++            if state.get("flow") == "construction_visit":
++                if state.get("submission_failure"):
++                    state["stage"] = "submission_failed"
++                    return self._resend_current_prompt(state, etag)
++                return self._summarize_and_confirm(state, etag)
+             if state.get("flow") == "launch":
+                 return self._summarize_and_confirm(state, etag)
+             self._send_confirmation_actions(state)
+@@ -33637,6 +33660,27 @@ class WorkflowEngine(ProvisionDescriptionSettlement, PaymentProvisionFlow):
+         etag = self._save(state, etag)
+         return self._notify_completed(state, etag)
+ 
++    @staticmethod
++    def _construction_visit_date(state: dict) -> date | None:
++        # Legacy drafts may contain an automatically filled DATA. Only the
++        # date step's answer represents an explicit choice.
++        try:
++            return date.fromisoformat(state.get("answers", {}).get("data_visita_obra", ""))
++        except (TypeError, ValueError):
++            return None
++
++    def _prompt_missing_construction_visit_date(self, state: dict, etag: str | None) -> dict:
++        state.pop("edit_step_indices", None)
++        state.pop("summary_card", None)
++        state.pop("visit_existing_diary", None)
++        state.pop("submission_failure", None)
++        state["stage"] = "selecting_fields"
++        steps = self._flow_config(state)["steps"]
++        state["step_index"] = next(i for i, step in enumerate(steps) if step["key"] == "data_visita_obra")
++        for step in steps[state["step_index"]:]:
++            self._clear_step_value(state, step)
++        return self._prompt_next_or_summary(state, etag)
++
+     def _commit_construction_visit(
+         self, state: dict, etag: str | None, flow: dict
+     ) -> dict:
+@@ -33655,38 +33699,57 @@ class WorkflowEngine(ProvisionDescriptionSettlement, PaymentProvisionFlow):
+                     "O valor da visita deve ser preenchido com um número maior que zero"
+                 )
+ 
+-            sao_paulo = ZoneInfo("America/Sao_Paulo")
+-            today = datetime.now(sao_paulo).date()
+-            today_iso = today.isoformat()
++            visit_date = self._construction_visit_date(state)
++            pending_token = f"WA-VISITA-PEDIDO-{state['batch_id']}"
++            pending_id = next(
++                (item["item_id"] for item in state.get("partial_submission_items", [])
++                 if item["target_list"] == "NOTASPENDENTES"),
++                None,
++            )
++            if visit_date is None:
++                # A legacy attempt may have already posted the order, even
++                # when its response was lost. Keep that date for the retry.
++                if pending_id is None:
++                    pending = self.sharepoint._find_item(pending_token, "NOTASPENDENTES", "Title")
++                    pending_id = pending["Id"] if pending else None
++                if pending_id is None:
++                    return self._prompt_missing_construction_visit_date(state, etag)
++                saved = self.sharepoint.get_item_fields(pending_id, ["DATA PEDIDO"], "NOTASPENDENTES")
++                visit_date = date.fromisoformat(self._selection_date_key(saved["DATA PEDIDO"]))
++                state["answers"]["data_visita_obra"] = visit_date.isoformat()
++                state["fields"]["DATA"] = visit_date.isoformat()
++                state["display_values"]["DATA"] = visit_date.strftime("%d/%m/%Y")
++                self._remember_submission_item(state, pending_id, "NOTASPENDENTES")
++                etag = self._save(state, etag)
++            visit_date_iso = visit_date.isoformat()
+             stored_value = _decimal_storage(visit_value)
+             create_diary = normalize_text(str(context.get("criar_diario_obra") or "")) == "sim"
+             # Check before any financial write, including sessions opened before
+             # this release or a diary created after the original question.
+-            if create_diary and visit_diary.skip_if_existing(self, state, today):
++            if create_diary and visit_diary.skip_if_existing(self, state, visit_date):
+                 create_diary = False
+             pending_fields = {
+                 "FILIAL": filial,
+                 "FORNECEDOR": "BERNARDO",
+                 "VALORTOTAL": stored_value,
+-                "DATA PEDIDO": today_iso,
++                "DATA PEDIDO": visit_date_iso,
+                 "STATUS": "PENDENTE AUDITORIA",
+                 "OBS": (
+                     f"VISITA EM CAMPO EM {filial} EM "
+-                    f"{today.strftime('%d/%m/%Y')}"
++                    f"{visit_date.strftime('%d/%m/%Y')}"
+                 ),
+                 "FORMAPGTO": "N/A",
+             }
+-            pending_id = self.sharepoint.ensure_item(
+-                f"WA-VISITA-PEDIDO-{state['batch_id']}",
+-                pending_fields,
+-                target_list="NOTASPENDENTES",
+-                idempotency_field="Title",
+-                merge_existing=False,
+-            )
+-            self._remember_submission_item(
+-                state, pending_id, "NOTASPENDENTES"
+-            )
+-            etag = self._save(state, etag)
++            if pending_id is None:
++                pending_id = self.sharepoint.ensure_item(
++                    pending_token,
++                    pending_fields,
++                    target_list="NOTASPENDENTES",
++                    idempotency_field="Title",
++                    merge_existing=False,
++                )
++                self._remember_submission_item(state, pending_id, "NOTASPENDENTES")
++                etag = self._save(state, etag)
+             pending_verification = self.sharepoint.verify_item(
+                 pending_id,
+                 pending_fields,
+@@ -33701,7 +33764,7 @@ class WorkflowEngine(ProvisionDescriptionSettlement, PaymentProvisionFlow):
+ 
+             diary_item = None
+             if create_diary:
+-                diary_item, etag = visit_diary.ensure_for_visit(self, state, today, etag)
++                diary_item, etag = visit_diary.ensure_for_visit(self, state, visit_date, etag)
+ 
+             launch_fields = {
+                 "VALOR UNITÁRIO": stored_value,
+@@ -33709,10 +33772,10 @@ class WorkflowEngine(ProvisionDescriptionSettlement, PaymentProvisionFlow):
+                 "FORNECEDOR": "BERNARDO",
+                 "FILIAL": filial,
+                 "CONTA": "DINHEIRO",
+-                "DATA": today_iso,
+-                "DATA PGTO EFETUADO": today_iso,
+-                "DATA PGTO PREVISTO": today_iso,
+-                "DATA RMS": today_iso,
++                "DATA": visit_date_iso,
++                "DATA PGTO EFETUADO": visit_date_iso,
++                "DATA PGTO PREVISTO": visit_date_iso,
++                "DATA RMS": visit_date_iso,
+                 "TIPO TRANSAÇÃO": "DESPESA",
+                 "ETAPA": "VISITA EM CAMPO",
+                 "CONCLUÍDO": "PEDIDO FINALIZADO",
+@@ -35565,6 +35628,8 @@ class WorkflowEngine(ProvisionDescriptionSettlement, PaymentProvisionFlow):
+             "cancel_failed_submission",
+             "cancelar",
+         }:
++            if state.get("flow") == "construction_visit":
++                return self._resend_current_prompt(state, etag)
+             return self._prompt_cancelled_confirmation(state, etag)
+         self._send_submission_failed_actions(state)
+         self._save(state, etag)
+@@ -37036,6 +37101,9 @@ class WorkflowEngine(ProvisionDescriptionSettlement, PaymentProvisionFlow):
+         if document_result is not None:
+             return document_result
+         stage = state.get("stage")
++        if (stage == "awaiting_confirmation" and state.get("flow") == "construction_visit"
++                and self._construction_visit_date(state) is None):
++            return self._prompt_missing_construction_visit_date(state, etag)
+         if stage == "completed":
+             # Resume/CONTINUAR after a completed post must open a fresh menu,
+             # never turn the completed state back into an editable form.
+--- a/worker/workflow_config.json
++++ b/worker/workflow_config.json
+@@ -11999,26 +11999,6 @@
+       "completion_subject": "Visita em obra",
+       "completion_verb": "apontada",
+       "fixed_fields": [
+-        {
+-          "target_field": "DATA RMS",
+-          "value_provider": "today",
+-          "display_format": "dd/mm/yyyy"
+-        },
+-        {
+-          "target_field": "DATA",
+-          "value_provider": "today",
+-          "display_format": "dd/mm/yyyy"
+-        },
+-        {
+-          "target_field": "DATA PGTO PREVISTO",
+-          "value_provider": "today",
+-          "display_format": "dd/mm/yyyy"
+-        },
+-        {
+-          "target_field": "DATA PGTO EFETUADO",
+-          "value_provider": "today",
+-          "display_format": "dd/mm/yyyy"
+-        },
+         {
+           "target_field": "QUANTIDADE",
+           "value": "1",
+@@ -12115,7 +12095,8 @@
+           "target_field": "FILIAL",
+           "edit_label": "FILIAL",
+           "edit_with": [
+-            "valor_visita_obra"
++            "valor_visita_obra",
++            "criar_diario_obra"
+           ],
+           "prompt": "🏗️ QUAL É A FILIAL DA VISITA EM OBRA?",
+           "button_label": "ESCOLHER FILIAL",
+@@ -12148,6 +12129,19 @@
+           "required_prompt": "💵 INFORME O VALOR DA VISITA EM OBRA. O VALOR DEVE SER MAIOR QUE ZERO.",
+           "invalid_message": "INFORME UM VALOR VÁLIDO MAIOR QUE ZERO."
+         },
++        {
++          "key": "data_visita_obra",
++          "kind": "date",
++          "target_field": "DATA",
++          "edit_label": "DATA DA VISITA",
++          "edit_with": [
++            "criar_diario_obra"
++          ],
++          "prompt": "📅 QUAL É A DATA DA VISITA EM OBRA?",
++          "allow_today": true,
++          "today_label": "📅 HOJE",
++          "other_date_label": "📆 OUTRA DATA"
++        },
+         {
+           "key": "criar_diario_obra",
+           "kind": "selection",

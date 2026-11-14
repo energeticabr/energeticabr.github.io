@@ -121,6 +121,13 @@ class VisitDiaryTests(unittest.TestCase):
         self.state.update(flow='construction_visit', stage='selecting_fields', step_index=2,
             fields={'FILIAL': BRANCH, 'VALOR UNITÁRIO': '175.50'},
             answers={'filial_visita_obra': BRANCH, 'valor_visita_obra': '175.50'})
+        steps = self.engine._flow_config(self.state)['steps']
+        self.diary_step = next(index for index, step in enumerate(steps) if step['key'] == 'criar_diario_obra')
+        self.state['step_index'] = self.diary_step
+        if self.diary_step > 2:
+            self.state['answers']['data_visita_obra'] = '2026-10-20'
+            self.state['fields']['DATA'] = '2026-10-20'
+            self.state['display_values']['DATA'] = '20/10/2026'
         Clock.instant = datetime(2026, 10, 20, 22, 0, tzinfo=timezone.utc)
         self.clock = patch.object(workflow, 'datetime', Clock)
         self.clock.start()
@@ -138,7 +145,7 @@ class VisitDiaryTests(unittest.TestCase):
             with self.subTest(status=status):
                 self.catalog.diaries = []
                 self.existing(status=status)
-                self.state.update(step_index=2)
+                self.state.update(step_index=self.diary_step)
                 result = self.engine._prompt_next_or_summary(self.state, None)
                 self.assertEqual(result['status'], 'awaiting_confirmation')
                 self.assertEqual(self.state['answers'].get('criar_diario_obra'), 'NÃO')
@@ -156,7 +163,7 @@ class VisitDiaryTests(unittest.TestCase):
         self.existing(filial='003 - OUTRA OBRA QA')
         self.assertEqual(self.engine._current_step(self.state)['key'], 'criar_diario_obra')
 
-    def test_current_day_is_sao_paulo_not_utc(self):
+    def test_diary_lookup_uses_local_civil_day_not_utc_day(self):
         Clock.instant = datetime(2026, 10, 21, 1, 30, tzinfo=timezone.utc)
         self.existing(day='2026-10-20T03:00:00Z')
         self.assertIsNone(self.engine._current_step(self.state))
@@ -164,7 +171,7 @@ class VisitDiaryTests(unittest.TestCase):
     def test_branch_edit_rechecks_without_reusing_previous_branch_result(self):
         self.existing()
         self.engine._current_step(self.state)
-        self.state.update(step_index=2, fields={'FILIAL': '003 - OUTRA OBRA QA'})
+        self.state.update(step_index=self.diary_step, fields={'FILIAL': '003 - OUTRA OBRA QA'})
         self.assertEqual(self.engine._current_step(self.state)['key'], 'criar_diario_obra')
         self.assertNotIn('criar_diario_obra', self.state['answers'])
 
@@ -234,7 +241,7 @@ class VisitDiaryTests(unittest.TestCase):
 
     def test_stale_yes_from_old_poll_advances_to_summary_without_answer_or_write(self):
         self.existing()
-        self.state['options'] = copy.deepcopy(self.engine._flow_config(self.state)['steps'][2]['source']['options'])
+        self.state['options'] = copy.deepcopy(self.engine._flow_config(self.state)['steps'][self.diary_step]['source']['options'])
         result = self.engine._handle_step_reply({'kind': 'text', 'message_id': 'old-yes',
             'text': 'SIM', 'reply_id': 'choice:criar_diario_obra:1'}, self.state, None)
         self.assertEqual(result['status'], 'awaiting_confirmation')
@@ -272,7 +279,7 @@ class VisitDiaryTests(unittest.TestCase):
             self.assertEqual(self.commit()['status'], 'submission_failed')
             self.assertEqual(len(pending), 1, 'the uncertain first POST must not be repeated')
             visible = True
-            self.state.update(stage='selecting_fields', step_index=2)
+            self.state.update(stage='selecting_fields', step_index=self.diary_step)
             self.assertIsNone(self.engine._current_step(self.state))
             self.assertEqual(self.state['answers']['criar_diario_obra'], 'NÃO')
             self.assertEqual(len(pending), 1)
@@ -283,7 +290,7 @@ class VisitDiaryTests(unittest.TestCase):
         original_get = self.catalog.get_options
         self.catalog.get_options = lambda step, context: [] \
             if step['source'].get('list') == 'DIÁRIO DE OBRAS' else original_get(step, context)
-        self.state.update(step_index=2, batch_id='after-stale-list')
+        self.state.update(step_index=self.diary_step, batch_id='after-stale-list')
         self.assertIsNone(self.engine._current_step(self.state))
         self.assertEqual(len(self.catalog.diaries), 1)
 
