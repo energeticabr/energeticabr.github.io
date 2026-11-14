@@ -314,6 +314,7 @@ test('Swile gallery is a separate screen and can open an older completed order',
   const order = { orderCode: 'SWO123', status: 'APPROVED_PARTIALLY', creditDate: '2026-11-17', creditCents: 22505 };
   const oldOrder = { orderCode: 'SWO90', status: 'APPROVED', requestDate: '2026-03-16', creditCents: 10000 };
   const calls = [];
+  let pendingOrderClosed = false;
   let wentHome = false;
   const onHome = () => {
     assert.equal(document.querySelector('main.swile-gallery-page'), null);
@@ -324,6 +325,7 @@ test('Swile gallery is a separate screen and can open an older completed order',
     calls.push([operation, payload]);
     if (payload.gallery === 'history') return payload.orderCode ? { ...oldOrder, items: [] } : [order, oldOrder];
     if (!payload.orderCode) return [order];
+    if (pendingOrderClosed) throw Object.assign(new Error('Este pedido saiu dos pedidos em suspenso. Atualize a galeria.'), { status: 404 });
     return { ...order, items: [
       { name: 'Pessoa A', amountCents: 12505, status: 'APPROVED', creditDate: '2026-11-17' },
       { name: 'Pessoa B', amountCents: 10000, status: null, orderStatus: 'APPROVED_PARTIALLY', creditDate: '2026-11-18' },
@@ -342,11 +344,16 @@ test('Swile gallery is a separate screen and can open an older completed order',
   const sync = header.querySelector(':scope > [data-gallery-refresh]');
   assert.ok(sync);
   const findButton = text => [...screen.querySelectorAll('button')].find(button => button.textContent.includes(text));
-  assert.match(screen.textContent, /Galeria Swile.*Em suspenso.*SWO123.*225,05/s);
+  assert.match(screen.textContent, /Galeria Swile.*Em aberto.*SWO123.*225,05/s);
   findButton('SWO123').click();
   await settle();
   assert.match(screen.textContent, /Pessoa A.*125,05.*Nº do cartão.*Não informado.*Crédito concluído.*17\/11\/2026.*Data efetuada.*Não informada/s);
   assert.match(screen.textContent, /Pessoa B.*100,00.*Status da cargaNão informado.*18\/11\/2026.*Status do pedidoCrédito parcial/s);
+  pendingOrderClosed = true;
+  sync.click();
+  await settle();
+  assert.match(screen.querySelector('.swile-note').textContent, /pedidos em aberto/);
+  assert.equal(sync.disabled, false);
   findButton('Voltar aos pedidos').click();
   await settle();
   findButton('Histórico').click();
@@ -364,6 +371,7 @@ test('Swile gallery is a separate screen and can open an older completed order',
   await settle();
   assert.deepEqual(calls, [
     ['orders', { gallery: 'pending' }],
+    ['orders', { gallery: 'pending', orderCode: 'SWO123' }],
     ['orders', { gallery: 'pending', orderCode: 'SWO123' }],
     ['orders', { gallery: 'pending' }],
     ['orders', { gallery: 'history' }],
@@ -388,6 +396,56 @@ test('Swile gallery is a separate screen and can open an older completed order',
   assert.equal(wentHome, true);
 });
 
+test('Swile keeps open orders visible and spins the sync icon until the direct query settles', async t => {
+  const { window } = new JSDOM('<main id="app"></main>');
+  const { document } = window;
+  const order = { orderCode: 'SWO123', status: 'WAITING_PAYMENT', creditCents: 10000 };
+  const pendingQueries = [];
+  const view = openSwileView({ document, gallery: true, request: (operation, payload, { signal }) => {
+    assert.deepEqual([operation, payload], ['orders', { gallery: 'pending' }]);
+    const response = Promise.withResolvers();
+    pendingQueries.push({ ...response, signal });
+    return response.promise;
+  } });
+  t.after(() => { view.close(); window.close(); });
+  const settle = () => new Promise(resolve => setImmediate(resolve));
+  const screen = document.querySelector('.swile-gallery-page');
+  const sync = screen.querySelector('header > [data-gallery-refresh]');
+  assert.equal(sync.getAttribute('aria-label'), 'Sincronizar pedidos da Swile');
+  assert.equal(sync.getAttribute('aria-busy'), null);
+  pendingQueries[0].resolve([order]);
+  await settle();
+
+  sync.click();
+  sync.click();
+  assert.equal(sync.getAttribute('aria-busy'), 'true');
+  assert.equal(sync.disabled, true);
+  assert.equal(pendingQueries.length, 2);
+  assert.match(screen.querySelector('.swile-order-list').textContent, /SWO123.*Aguardando pagamento/s);
+  pendingQueries[1].reject(new Error('A Swile está indisponível.'));
+  await settle();
+  assert.equal(sync.getAttribute('aria-busy'), null);
+  assert.equal(sync.disabled, false);
+  assert.match(screen.textContent, /A Swile está indisponível.*Aguardando pagamento/s);
+
+  sync.click();
+  assert.equal(sync.getAttribute('aria-busy'), 'true');
+  assert.equal(pendingQueries.length, 3);
+  pendingQueries[2].resolve([{ ...order, status: 'PAID' }]);
+  await settle();
+  assert.match(screen.textContent, /Pagamento confirmado/);
+  assert.doesNotMatch(screen.textContent, /Aguardando pagamento|A Swile está indisponível/);
+  assert.equal(sync.getAttribute('aria-busy'), null);
+  assert.equal(sync.disabled, false);
+
+  sync.click();
+  screen.querySelector('[aria-label="Voltar ao RH"]').click();
+  assert.equal(pendingQueries[3].signal.aborted, true);
+  pendingQueries[3].resolve([]);
+  await settle();
+  assert.equal(screen.isConnected, false);
+});
+
 test('Swile uses the portal token and demo mode never sends a request', async () => {
   const calls = [];
   const options = { apiBaseUrl: 'https://example.com', tokenProvider: async () => 'test-token', fetchImpl: async (url, init) => {
@@ -399,7 +457,13 @@ test('Swile uses the portal token and demo mode never sends a request', async ()
   assert.match(calls[0][0], /\/api\/portal-chat$/);
   assert.equal(calls[0][1].headers.Authorization, 'Bearer test-token');
   assert.deepEqual(JSON.parse(calls[0][1].body), { action: 'swile_directory' });
+  await client.swileRequest('orders', { gallery: 'pending' });
+  await client.swileRequest('orders', { gallery: 'pending' });
+  for (const [, init] of calls.slice(1)) {
+    assert.equal(init.cache, 'no-store');
+    assert.deepEqual(JSON.parse(init.body), { action: 'swile_orders', gallery: 'pending' });
+  }
   const demo = createChatClient({ ...options, apiPrefix: '/api/demo' });
   await assert.rejects(demo.swileRequest('confirm', { id: 'test' }), /ambiente da empresa/);
-  assert.equal(calls.length, 1);
+  assert.equal(calls.length, 3);
 });

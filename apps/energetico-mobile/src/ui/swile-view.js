@@ -81,7 +81,7 @@ export function openSwileView({ document: doc, request, gallery = false, preview
     label.append(make('span', text), input);
     return label;
   };
-  const screen = gallery ? make('main', '', 'swile-gallery-page') : make('dialog', '', 'swile-dialog');
+  const screen = gallery ? make('main', '', 'swile-gallery-page swile-orders-gallery-page') : make('dialog', '', 'swile-dialog');
   screen.setAttribute('aria-labelledby', 'swile-heading');
   if (!gallery) screen.setAttribute('aria-modal', 'true');
   const app = gallery ? doc.getElementById('app') : null;
@@ -92,6 +92,7 @@ export function openSwileView({ document: doc, request, gallery = false, preview
   const galleryHeader = gallery ? createHrBenefitGalleryHeader({
     root: screen, title, onBack: close,
     onHome: onHome && (() => { close(); onHome(); }),
+    refreshLabel: 'Sincronizar pedidos da Swile',
     onRefresh: () => displayedOrderCode ? loadOrderDetails(displayedOrderCode, false) : loadGallery(),
   }) : null;
   const refresh = gallery ? null : button('', load);
@@ -304,7 +305,14 @@ export function openSwileView({ document: doc, request, gallery = false, preview
     controls.forEach(control => { control.disabled = true; });
     message();
     try { await work(); }
-    catch (error) { if (!signal.aborted) message(error.message || 'Não foi possível consultar a Swile.', true); }
+    catch (error) {
+      if (!signal.aborted) {
+        const text = error.message === 'Este pedido saiu dos pedidos em suspenso. Atualize a galeria.'
+          ? 'Este pedido saiu da lista de pedidos em aberto. Consulte o histórico.'
+          : error.message;
+        message(text || 'Não foi possível consultar a Swile.', true);
+      }
+    }
     finally {
       busy = false;
       screen.removeAttribute('aria-busy');
@@ -474,18 +482,22 @@ export function openSwileView({ document: doc, request, gallery = false, preview
 
   function loadGallery(filter = galleryFilter, restoreFocus = false) {
     return run(async () => {
+      const previousList = filter === galleryFilter ? content.querySelector('.swile-order-list') : null;
       galleryFilter = filter;
       displayedOrderCode = null;
       const toolbar = make('div', '', 'swile-actions swile-gallery-toolbar');
-      for (const [value, label] of [['pending', 'Em suspenso'], ['history', 'Histórico']]) {
+      for (const [value, label] of [['pending', 'Em aberto'], ['history', 'Histórico']]) {
         const choice = button(label, () => loadGallery(value, true), value === filter);
         choice.setAttribute('aria-pressed', String(value === filter));
         toolbar.append(choice);
       }
       const controls = [...toolbar.children];
       controls.forEach(control => { control.disabled = true; });
-      content.replaceChildren(toolbar);
-      body.scrollTop = 0;
+      if (previousList) content.replaceChildren(toolbar, previousList);
+      else {
+        content.replaceChildren(toolbar);
+        body.scrollTop = 0;
+      }
       message('Consultando pedidos na Swile…');
       try {
         const orders = await request('orders', { gallery: filter }, { signal });
@@ -501,8 +513,9 @@ export function openSwileView({ document: doc, request, gallery = false, preview
           else if (order.creditDate) item.append(make('span', `Previsão ${dateLabel(order.creditDate)}`));
           list.append(item);
         }
-        if (!orders.length) list.append(make('p', filter === 'pending' ? 'Nenhum pedido em suspenso.' : 'Nenhum pedido no histórico.'));
-        content.append(list);
+        if (!orders.length) list.append(make('p', filter === 'pending' ? 'Nenhum pedido em aberto.' : 'Nenhum pedido no histórico.'));
+        if (previousList) previousList.replaceWith(list);
+        else content.append(list);
         message();
       } finally {
         controls.forEach(control => { control.disabled = false; });

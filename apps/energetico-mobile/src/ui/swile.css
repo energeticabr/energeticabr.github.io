@@ -29,6 +29,11 @@
 }
 .swile-dialog *, .swile-gallery-page * { box-sizing: border-box; }
 .swile-gallery-page .hr-gallery-title:focus { outline: none; }
+@media (prefers-reduced-motion: no-preference) {
+  .swile-orders-gallery-page .gallery-refresh-header > .gallery-refresh-button[aria-busy="true"] svg {
+    animation: loading-spinner-turn .85s linear infinite;
+  }
+}
 .swile-gallery-page .swile-body {
   flex: 1;
   min-height: 0;
