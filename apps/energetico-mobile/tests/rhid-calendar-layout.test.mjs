@@ -6,13 +6,18 @@ import { join, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { spawn } from 'node:child_process';
 import { setTimeout as delay } from 'node:timers/promises';
-import { createServer } from 'vite';
+import { createIsolatedViteServer } from './helpers/isolated-vite-server.mjs';
 
-test('RHID calendar warnings stay red, under dates and inside cells on phone and desktop', {timeout:120_000}, async t => {
+test('RHID calendar keeps warnings inside cells and aligns the daily report button on phone and desktop', {timeout:120_000}, async t => {
   const browser = [process.env.CHROME_BIN,'C:\\Program Files\\Google\\Chrome\\Application\\chrome.exe'].find(path=>path && existsSync(path));
   if(!browser) return t.skip('Chrome unavailable');
   const appRoot = resolve(fileURLToPath(new URL('..',import.meta.url)));
-  const server = await createServer({root:appRoot,server:{host:'127.0.0.1',port:0,fs:{allow:[resolve(appRoot,'../..')]}},logLevel:'silent'});
+  const server = await createIsolatedViteServer({
+    root: appRoot,
+    optimizeDeps: { noDiscovery: true, include: ['decimal.js', 'pdf-lib', 'pako', '@capacitor/core'] },
+    server: { host: '127.0.0.1', port: 0, hmr: false, fs: { allow: [resolve(appRoot, '../..')] } },
+    logLevel: 'silent',
+  });
   const profile = mkdtempSync(join(tmpdir(),'rhid-calendar-layout-'));
   const pending = new Map();
   let child,socket;
@@ -36,7 +41,13 @@ test('RHID calendar warnings stay red, under dates and inside cells on phone and
       await send('Page.navigate',{url:`http://127.0.0.1:${server.httpServer.address().port}/tests/fixtures/rhid-calendar-responsive.html?width=${width}`},sessionId);
       let ready=false;
       for(let n=0;n<100&&!ready;n++){ready=await evaluate(`location.search==='?width=${width}' && document.documentElement?.dataset.ready==='true'`);if(!ready)await delay(100);}
-      assert.ok(ready);
+      assert.ok(ready, `calendar fixture did not load at ${width}px`);
+      const edges = await evaluate(`(() => {
+        const calendar = document.querySelector('.chat-rhid-calendar').getBoundingClientRect();
+        const button = document.querySelector('[data-action="generate-rhid-attendance-report"]').getBoundingClientRect();
+        return { calendar: { left: calendar.left, right: calendar.right }, button: { left: button.left, right: button.right } };
+      })()`);
+      assert.deepEqual(edges.button, edges.calendar, `daily report button aligns with the calendar at ${width}px`);
       const layout=await evaluate(`(()=>{const warnings=[...document.querySelectorAll('.chat-rhid-calendar__irregular')];return {width:document.documentElement.scrollWidth,warnings:warnings.map(n=>{const r=n.getBoundingClientRect(),d=n.parentElement.getBoundingClientRect(),number=n.previousElementSibling.getBoundingClientRect();return {text:n.textContent,color:getComputedStyle(n).color,font:parseFloat(getComputedStyle(n).fontSize),below:r.top>=number.bottom,inside:r.left>=d.left&&r.right<=d.right&&r.bottom<=d.bottom,overflow:n.scrollWidth>n.clientWidth+1};})};})()`);
       assert.ok(layout.width<=width,JSON.stringify(layout));
       assert.equal(layout.warnings.length,2);
