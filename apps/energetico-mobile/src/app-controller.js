@@ -445,6 +445,7 @@ const PAYMENT_LEDGER_ID = 'action_payment_ledger';
 const CARGOS_TABLE_ID = 'action_cargos_table';
 const ATTENDANCE_SUMMARY_ID = 'action_attendance_summary';
 const RHID_MASCOT_ACTION = 'open-rhid-mascot-report';
+const PENDING_PAYROLL_LINKS_ACTION = 'open-pending-payroll-links';
 const HOLERITE_REPORT_ACTION = 'open-holerite-report';
 const STAGE_PROGRESS_ID = 'action_stage_progress';
 const STAGE_PROGRESS_SCOPES = Object.freeze(['Sites.Read.All']);
@@ -1244,6 +1245,10 @@ export function createAppController({
   let rhidAttendanceReportPreviousSnapshot = null;
   let rhidAttendanceReportNavigationRevision = 0;
   let rhidMascot = null;
+  let pendingPayrollLinks = null;
+  let pendingPayrollLinksOpening = null;
+  let pendingPayrollLinksBack = null;
+  const pendingPayrollRecovery = new Map();
   let rhidRefreshRequest = null;
   let resuming = false;
   let conversationResumeRecord = null;
@@ -2995,6 +3000,70 @@ export function createAppController({
     rhidMascot?.lifetime.abort();
     rhidMascot?.query?.abort();
     rhidMascot = null;
+  }
+
+  function disposePendingPayrollLinks() {
+    pendingPayrollLinksOpening = null;
+    const panel = pendingPayrollLinks;
+    pendingPayrollLinks = null;
+    pendingPayrollLinksBack?.();
+    pendingPayrollLinksBack = null;
+    panel?.destroy();
+  }
+
+  async function openPendingPayrollLinks() {
+    if (!account || stopped || sessionStatus !== 'authenticated' || flowBusy()
+      || store.getState().activeFlow || pendingPayrollLinks || pendingPayrollLinksOpening) return false;
+    resetMascotNavigationOverlays();
+    disposeRhidMascot();
+    const opening = {};
+    const reportAccount = account;
+    pendingPayrollLinksOpening = opening;
+    const sessionCurrent = () => !stopped && account === reportAccount
+      && sessionStatus === 'authenticated' && !store.getState().activeFlow;
+    let panel;
+    try {
+      const { createPendingPayrollLinksView } = await import('./ui/pending-payroll-links-view.js');
+      if (!sessionCurrent() || pendingPayrollLinksOpening !== opening || flowBusy()) return false;
+      panel = view.mountPendingPayrollLinks?.(createPendingPayrollLinksView, {
+        request: async (operation, payload, options) => {
+          const assertSession = () => {
+            if (!sessionCurrent() || pendingPayrollLinks !== panel || options.signal.aborted) {
+              throw new DOMException('Consulta cancelada.', 'AbortError');
+            }
+          };
+          assertSession();
+          const result = await client.launchGalleryRequest(operation, payload, options);
+          assertSession();
+          return result;
+        },
+        onClose: disposePendingPayrollLinks,
+        recovery: pendingPayrollRecovery,
+        makeRequestId: newUploadMessageId,
+      });
+      if (!panel) return false;
+      pendingPayrollLinks = panel;
+      if (typeof native.onReportBack === 'function') {
+        void Promise.resolve().then(() => native.onReportBack(() => {
+          if (pendingPayrollLinks !== panel) return false;
+          panel.back();
+          return true;
+        })).then(remove => {
+          if (pendingPayrollLinks === panel) pendingPayrollLinksBack = remove;
+          else remove?.();
+        }).catch(() => {});
+      }
+      await panel.open();
+      return pendingPayrollLinks === panel;
+    } catch (error) {
+      if (sessionCurrent() && pendingPayrollLinksOpening === opening) {
+        disposePendingPayrollLinks();
+        setSessionError(error, 'Não foi possível abrir os pagamentos sem vínculo em folha.');
+      }
+      return false;
+    } finally {
+      if (pendingPayrollLinksOpening === opening) pendingPayrollLinksOpening = null;
+    }
   }
 
   async function loadRhidMascotPeriod(start, end, mode) {
@@ -6534,6 +6603,7 @@ export function createAppController({
   }
 
   function closeGalleryOverlays(preserveSacPathologies = false, preserveDepreciationReport = false, preserveDocumentControlReport = false, preserveTaskAssociationReport = false, preservePendingSupplierPaymentsReport = false, preserveContractorControlReport = false, preserveGeneral = false) {
+    disposePendingPayrollLinks();
     disposeHrBenefitPanel();
     disposePayrollSheetCreate();
     if (!preserveSacPathologies) disposeSacPathologiesReport();
@@ -7282,6 +7352,12 @@ export function createAppController({
           const data = await hrPayrollGalleryDataFactory({
             tokenProvider: ordersGalleryTokenProvider(assertSession, resumeAction),
             assertSession,
+            createLockedPayment: async fields => {
+              assertSession();
+              const result = await client.launchGalleryRequest('payroll_legacy_link', { fields });
+              assertSession();
+              return result;
+            },
           });
           if (!openingIsCurrent()) return false;
           assertSession();
@@ -11160,6 +11236,8 @@ export function createAppController({
   }
 
   async function signOut() {
+    disposePendingPayrollLinks();
+    pendingPayrollRecovery.clear();
     disposeHrBenefitPanel();
     resetDdaMenuAlert();
     resetSicoobMenuAlert();
@@ -11959,6 +12037,10 @@ export function createAppController({
 
   function bind(type, handler) {
     unsubscribeCommands.push(view.on(type, command => {
+      if ((pendingPayrollLinks || pendingPayrollLinksOpening) && type !== PENDING_PAYROLL_LINKS_ACTION
+        && (type.startsWith('open-') || ['select-reply', 'send-text', 'finish-flow'].includes(type))) {
+        disposePendingPayrollLinks();
+      }
       if (type.startsWith('open-') || ['select-reply','send-text','finish-flow','navigate-mascot-report','draft-changed','fill-pending-construction-diary','launch-pending-note'].includes(type)) {
         ddaPaymentLaunchAbort?.abort();
         ddaReminderInteraction++;
@@ -12477,6 +12559,7 @@ export function createAppController({
     }));
     bind("open-rhid-monthly-report", openRhidMonthlyReport);
     bind(RHID_MASCOT_ACTION, openRhidMascotReport);
+    bind(PENDING_PAYROLL_LINKS_ACTION, openPendingPayrollLinks);
     bind('rhid-mascot-authorize', authorizeRhidMascotComparison);
     bind('close-rhid-mascot-report', () => {
       if (!rhidMascot || rhidMascot.saving) return false;
@@ -12595,6 +12678,9 @@ export function createAppController({
     });
     unsubscribeStore = store.subscribe(() => {
       provisionSettlementParent.sync();
+      if ((pendingPayrollLinks || pendingPayrollLinksOpening) && (flowBusy() || store.getState().activeFlow)) {
+        disposePendingPayrollLinks();
+      }
       if (trancidReportSession && (flowBusy() || store.getState().activeFlow)) disposeTrancidReport();
       if (attendanceSummarySession && (flowBusy() || store.getState().activeFlow)) disposeAttendanceSummaryReport();
       if (stageProgressSession && (flowBusy() || store.getState().activeFlow)) disposeStageProgressReport();
@@ -12706,6 +12792,8 @@ export function createAppController({
   }
 
   function stop() {
+    disposePendingPayrollLinks();
+    pendingPayrollRecovery.clear();
     stopSwileReminder();
     resetDdaMenuAlert();
     resetSicoobMenuAlert();

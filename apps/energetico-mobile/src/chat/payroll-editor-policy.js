@@ -1,6 +1,7 @@
 import { PAYROLL_RUBRICS } from './supplier-payroll.js';
 import { createPayrollProvisionReader, payrollProvisionId } from './payroll-provision-source.js';
 import { payrollTaxType } from './payroll-tax-competence.js';
+import { readPayrollAllocation } from './payroll-pending-allocation.js';
 
 export const payrollFieldKey = value => String(value || '')
   .replace(/_x([0-9a-f]{4})_/gi, (_, hex) => String.fromCodePoint(parseInt(hex, 16)))
@@ -37,6 +38,8 @@ export function createPayrollSourceReader(repository, siteKey) {
     })().catch(error => { descriptorPromise = null; throw error; });
   }
   return async function read(fields, signal) {
+    const applied = readPayrollAllocation(fields);
+    if (applied) return applied;
     if (payrollProvisionId(fields)) return readProvision(fields, signal);
     const link = Object.entries(fields || {}).find(([n]) => payrollFieldKey(n) === 'IDLANCAMENTO')?.[1];
     if (link == null || String(link).trim() === '') return {};

@@ -8,7 +8,7 @@ const WRITES = new Set([
   'deleteAttachment', 'deleteAllAttachments', 'compressAttachment', 'chooseAttachmentCompression',
   'prepareSignatureEvidence', 'captureSignatureEvidence', 'confirmSignatureEvidence',
 ]);
-const GALLERY_READS = new Set(['snapshot', 'detail', 'schema', 'attachment']);
+const GALLERY_READS = new Set(['snapshot', 'detail', 'schema', 'attachment', 'payroll_pending', 'payroll_targets', 'payroll_detail']);
 
 // Proxy an empty facade, not the (often frozen) service itself, so methods can
 // be decorated without violating frozen property invariants. Resolve methods

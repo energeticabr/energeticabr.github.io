@@ -87,6 +87,9 @@ async function parsePortalResponse(response, failurePrefix, options = {}) {
     const message = result?.error || `${failurePrefix} respondeu com erro ${response.status}.`;
     const error = new Error(message);
     error.status = response.status;
+    if (options.allowFailureCode && typeof result?.code === "string" && /^[a-z_]+$/.test(result.code)) {
+      error.code = result.code;
+    }
     if (response.status === 422 && result?.code === "ATTACHMENT_UNAVAILABLE"
       && Array.isArray(result.unavailableAttachmentIds)) {
       error.code = "ATTACHMENT_UNAVAILABLE";
@@ -475,14 +478,16 @@ export function createChatClient({
   }
 
   async function launchGalleryRequest(operation, payload = {}, { signal, onProgress } = {}) {
-    const allowed = new Set(["snapshot", "detail", "schema", "update", "delete", "payment", "measurement", "attachment", "attachment_delete"]);
-    if (!allowed.has(operation)) throw new Error("Operação de galeria inválida.");
+    const reads = ["snapshot", "detail", "schema", "attachment", "payroll_pending", "payroll_targets", "payroll_detail"];
+    const writes = ["update", "delete", "payment", "measurement", "attachment_delete", "payroll_apply", "payroll_legacy_link"];
+    const readOnly = reads.includes(operation);
+    if (!readOnly && !writes.includes(operation)) throw new Error("Operação de galeria inválida.");
+    const payrollRequest = operation.startsWith("payroll_");
     const progressId = typeof onProgress === "function" ? newMessageId() : null;
     const progress = operationMonitor(onProgress, signal, progressId);
     try {
-    const token = await acquireToken(tokenProvider);
+    const token = await cancellableToken(tokenProvider, signal);
     progress?.prepared();
-    const readOnly = ["snapshot", "detail", "schema", "attachment"].includes(operation);
     // The VM reads launch rows afresh on every snapshot and rejects unknown keys.
     // Refresh is a UI loader hint, not an additional server contract field.
     const requestPayload = { ...payload };
@@ -493,7 +498,7 @@ export function createChatClient({
       body: JSON.stringify({ action: "launch_gallery", operation, payload: requestPayload,
         ...(progress ? { progressRequestId: progressId } : {}) }),
       cache: "no-store", credentials: "omit", ...(signal ? { signal } : {}),
-    }, response => parsePortalResponse(response, "A galeria de lançamentos"), readOnly);
+    }, response => parsePortalResponse(response, "A galeria de lançamentos", { allowFailureCode: payrollRequest }), readOnly);
     if (!result.launchGallery || typeof result.launchGallery !== "object") throw new Error("A VM não devolveu os dados da galeria.");
     progress?.accept(result);
     return result.launchGallery;

@@ -242,6 +242,60 @@ assert.deepEqual(shortcuts.map(s=>s.action),['open-pending-provisions','open-sic
           hit:document.elementFromPoint(r.x+r.width/2,r.y+r.height/2)?.closest('button')===rhid};
       })()`);
       assert.deepEqual(rhidPosition,{above:true,aligned:true,label:'RHID',hit:true});
+      const payrollShortcut = await evaluate(`(() => {
+        const shortcut = document.querySelector('[data-action="open-pending-payroll-links"]');
+        const rect = shortcut.getBoundingClientRect();
+        const rhid = document.querySelector('.chat-main-rhid-shortcut').getBoundingClientRect();
+        const cargos = document.querySelector('.chat-main-cargos-shortcut').getBoundingClientRect();
+        return { x: rect.x + 22, y: rect.y + 22, width: rect.width, height: rect.height,
+          aligned: Math.abs(rect.x - rhid.x) <= 1, between: rhid.bottom < rect.y && rect.bottom < cargos.y,
+          hit: document.elementFromPoint(rect.x + 22, rect.y + 22)?.closest('button') === shortcut };
+      })()`);
+      assert.ok(payrollShortcut.aligned && payrollShortcut.between && payrollShortcut.hit
+        && payrollShortcut.width === 44 && payrollShortcut.height === 44, JSON.stringify(payrollShortcut));
+      await clickAt(payrollShortcut);
+      const payrollFit = await evaluate(`(async () => {
+        await new Promise(requestAnimationFrame);
+        const panel = document.querySelector('[data-pending-payroll-links]');
+        const card = panel.querySelector('.payroll-links-card');
+        const bounds = panel.getBoundingClientRect();
+        const edit = card.querySelector('[data-payroll-action="edit"]');
+        edit.click();
+        await new Promise(requestAnimationFrame);
+        const search = panel.querySelector('[role="combobox"][aria-label="Fornecedor"]');
+        search.focus();
+        search.value = 'ana';
+        search.dispatchEvent(new Event('input', { bubbles: true }));
+        const option = panel.querySelector('.sfs-popup:not([hidden]) [role="option"]');
+        const rect = option.getBoundingClientRect();
+        return { left: bounds.left, right: bounds.right, verticalFit: bounds.top >= 0 && bounds.bottom <= innerHeight,
+          overflow: card.scrollWidth > card.clientWidth + 1, label: option.textContent,
+          x: rect.x + rect.width / 2, y: rect.y + rect.height / 2, hit: document.elementFromPoint(rect.x + rect.width / 2, rect.y + rect.height / 2) === option };
+      })()`, true);
+      assert.ok(payrollFit.left >= 0 && payrollFit.right <= width && payrollFit.verticalFit
+        && !payrollFit.overflow && payrollFit.hit && payrollFit.label === 'Ána Alves', JSON.stringify(payrollFit));
+      await clickAt(payrollFit);
+      assert.equal(await evaluate(`document.querySelector('[data-pending-payroll-links] select[name="sheet"]')?.options[1]?.textContent`), 'IDFOLHA 28 · 11/2026');
+      await evaluate(`document.querySelector('[data-payroll-action="close"]').click()`);
+      if (width === 320) {
+        await send('Emulation.setDeviceMetricsOverride', {width,height:520,deviceScaleFactor:1,mobile:false}, sessionId);
+        const compactPayroll = await evaluate(`(async () => {
+          document.querySelector('[data-action="open-pending-payroll-links"]').click();
+          await new Promise(requestAnimationFrame);
+          const panel = document.querySelector('[data-pending-payroll-links]');
+          panel.querySelector('[data-payroll-action="edit"]').click();
+          await new Promise(requestAnimationFrame);
+          const search = panel.querySelector('[role="combobox"][aria-label="Fornecedor"]');
+          search.focus();
+          const option = panel.querySelector('.sfs-popup:not([hidden]) [role="option"]:last-child');
+          const rect = option.getBoundingClientRect();
+          const hit = document.elementFromPoint(rect.x + rect.width / 2, rect.y + rect.height / 2) === option;
+          panel.querySelector('[data-payroll-action="close"]').click();
+          return { height: rect.height, hit };
+        })()`, true);
+        assert.deepEqual(compactPayroll, { height: 44, hit: true }, 'short phone still allows choosing a supplier');
+        await send('Emulation.setDeviceMetricsOverride', {width,height:844,deviceScaleFactor:1,mobile:false}, sessionId);
+      }
       await evaluate(`document.querySelector('.chat-main-rhid-shortcut').click()`);
       const rhidDayNav=await evaluate(`(()=>{
         const report=document.querySelector("[data-rhid-mascot-report]");

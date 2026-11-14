@@ -181,3 +181,35 @@ test('payroll launch options fail closed when contractor metadata or pagination 
     await assert.rejects(data.loadEditor('FOLHAPGTO','3'),/empreiteiro|lançamentos|consulta/i);
   }
 });
+
+test('sheets with allocations retain their supplier and reference and cannot be deleted', async () => {
+  const f = fixture(), read = f.repository.getItem;
+  f.repository.getItem = async (...args) => {
+    const row = await read(...args);
+    return args[1] === 'IDFOLHA' ? { ...row, eTag: '"v1"' } : row;
+  };
+  f.repository.deleteItem = async (...args) => f.writes.push(args);
+  const page = f.repository.getItemsPage;
+  f.repository.getItemsPage = async (...args) => args[1] === 'FOLHAPGTO' ? {
+    items: args[3].cursor ? [{ id: '9', fields: { Title: 'IDFOLHA-PENDENTE:proof', IDFOLHA: '5', IDLANCAMENTO: '3460' } }] : [],
+    hasMore: !args[3].cursor,
+    nextLink: args[3].cursor ? '' : 'next-payroll-page',
+  } : page(...args);
+  const data = f.data, context = await data.loadEditor('IDFOLHA', '5');
+  await assert.rejects(data.saveEditor(context, { FORNECEDOR: 'OUTRO' }), /aplica|rateio/i);
+  await assert.rejects(data.saveEditor(context, { MESREFERENCIA: '12/2026' }), /aplica|rateio/i);
+  await assert.rejects(data.deleteItem('IDFOLHA', '5', { eTag: '"v1"' }), /aplica|rateio/i);
+  assert.equal(f.writes.length, 0);
+  await data.deleteItem('IDFOLHA', '15', { eTag: '"v1"' });
+  assert.equal(f.writes.length, 1);
+});
+
+test('repointing historical payroll checks the current origin allocations before writing', async () => {
+  const f = fixture(), page = f.repository.getItemsPage;
+  const context = await f.data.loadEditor('FOLHAPGTO', '3');
+  f.repository.getItemsPage = async (...args) => args[1] === 'FOLHAPGTO' ? {
+    items: [{ id: '9', fields: { Title: 'IDFOLHA-PENDENTE:proof', IDFOLHA: '5', IDLANCAMENTO: '3460' } }], hasMore: false,
+  } : page(...args);
+  await assert.rejects(f.data.saveEditor(context, { IDLANCAMENTO: '3460' }), /aplica|rateio/i);
+  assert.deepEqual(f.writes, []);
+});

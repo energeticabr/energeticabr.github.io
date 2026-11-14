@@ -2,6 +2,7 @@
 <html lang="pt-BR"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1"><link rel="stylesheet" href="/src/styles.css"><link rel="stylesheet" href="/src/ui/payment-ledger.css"><link rel="stylesheet" href="/src/ui/management-report.css"><link rel="stylesheet" href="/src/ui/searchable-filter-selects.css"><link rel="stylesheet" href="/src/ui/cargos.css"></head>
 <body><main id="app"></main><script type="module">
 import { createChatView } from '/src/ui/chat-view.js';
+import { createPendingPayrollLinksView } from '/src/ui/pending-payroll-links-view.js';
 import { rhidMascotDay } from '/src/chat/rhid-mascot-report.js';
 import { createPaymentLedgerView } from '/src/ui/payment-ledger-view.js';
 import { createCargosView } from '/src/ui/cargos-view.js';
@@ -44,6 +45,18 @@ const state={sessionStatus:'authenticated',account:{name:'Bernardo'},draft:'',pe
   {id:'action_contractor_reports',reply:'action_contractor_reports',label:'📑 RELATÓRIOS'}
 ]}]};
 const view=createChatView(document.querySelector('#app'));
+view.on('open-pending-payroll-links', () => {
+  const item = { id: '4819', totalCents: 1100345, remainingCents: 1100345, revision: 'fixture', allocations: [],
+    supplier: 'Fornecedor de serviços com um nome muito longo para validar a quebra de linha', product: 'Serviços de obra', paidAt: '2026-11-13' };
+  const panel = view.mountPendingPayrollLinks(createPendingPayrollLinksView, {
+    recovery: new Map(), makeRequestId: () => 'fixture',
+    request: async operation => operation === 'payroll_pending'
+      ? { total: 1, page: 1, pageSize: 25, items: [item] }
+      : { items: [{ supplier: 'Ána Alves', sheets: [{ id: '28', reference: '11/2026' }] }], paymentTypes: ['SALÁRIO'] },
+    onClose: () => panel.destroy(),
+  });
+  return panel.open();
+});
 view.on('open-holerite-report', () => {
   const rows = ['Ana', 'Bruno'].map((FORNECEDOR, index) => ({
     id: String(index + 1), FORNECEDOR, pdfFileName: `Holerite-${index}.pdf`,

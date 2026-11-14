@@ -5,6 +5,7 @@ import { createPayrollSourceReader, payrollFieldKey } from './payroll-editor-pol
 import { normalizePayrollMonth, summarizePayrollPayments } from './supplier-payroll-report-model.js';
 import { createPayrollProvisionReader, payrollProvisionId } from './payroll-provision-source.js';
 import { buildPayrollSalaryExpectations } from './supplier-payroll-salary.js';
+import { readPayrollAllocation } from './payroll-pending-allocation.js';
 
 const site = 'personal';
 const unnamed = 'Fornecedor não informado';
@@ -86,8 +87,11 @@ function normalizeItem(item, fields, list) {
     normalizePayrollMonth(date);
     if (!/^(?:\d{2}\/\d{2}\/\d{4}|\d{4}-\d{2}-\d{2}(?:T.*)?)$/.test(date)) throw new TypeError('Data de pagamento inválida.');
   }
+  const allocation = readPayrollAllocation({ ...item.fields, IDLANCAMENTO: values.launchId, IDFOLHA: values.payrollId,
+    VALORUNITARIO: values.unitValue, QTD: values.quantity });
   return Object.freeze({ id, supplier, type: scalar(values.type), date,
     payrollId: validId(values.payrollId, true), launchId: validId(values.launchId, true),
+    ...(allocation ? { allocation } : {}),
     ...(payrollProvisionId(item.fields) ? { provisionTitle: item.fields.Title } : {}) });
 }
 
@@ -291,13 +295,15 @@ export function createSupplierPayrollReportData({ tokenProvider, repository: sup
       const result = [];
       for (let start = 0; start < rows.length; start += 4) {
         result.push(...await Promise.all(rows.slice(start, start + 4).map(async row => {
-          const source = row.provisionTitle || row.launchId ? await abortable(() => readSource(
+          const { allocation, ...payment } = row;
+          const source = allocation ?? (row.provisionTitle || row.launchId ? await abortable(() => readSource(
             () => row.provisionTitle ? readProvision({ Title: row.provisionTitle, IDFOLHA: row.payrollId, FORNECEDOR: row.supplier, TIPOPGTO: row.type }, signal)
               : read({ IDLANCAMENTO: row.launchId }, signal), signal,
-          ), signal) : {};
+          ), signal) : {});
           checkAbort(signal);
           const unitValue = source.VALORUNITARIO ?? null, quantity = source.QTD ?? null;
-          return Object.freeze({ ...row, supplier: row.supplier || current.sheets.get(row.payrollId).row.supplier,
+          return Object.freeze({ ...payment, supplier: row.supplier || current.sheets.get(row.payrollId).row.supplier,
+            ...(allocation ? { paymentStatus: 'PAGO' } : {}),
             ...Object.fromEntries(['description','paymentMethod','observations'].filter(key=>Object.hasOwn(source,key)).map(key=>[key,source[key]])),
             unitValue, quantity, totalCents: source.TOTALCENTAVOS ?? summarizePayrollPayments([{ unitValue, quantity }]).totalCents,
             ...(row.provisionTitle ? { paymentStatus: source.PGTOAGENDADO, provisionId: source.IDPROVISAO, date: source.DATA } : {}) });

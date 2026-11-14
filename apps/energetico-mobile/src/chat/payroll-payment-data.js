@@ -19,7 +19,7 @@ function monthWindow(now) {
 }
 
 /** Link an existing launch to payroll; this never creates or edits a launch. */
-export function createPayrollPaymentData({repository,siteKey='personal',now=()=>new Date(),assertSession=()=>{},storage}={}) {
+export function createPayrollPaymentData({repository,siteKey='personal',now=()=>new Date(),assertSession=()=>{},storage, createLockedPayment}={}) {
   const descriptors = new Map(), operations = new Map();
   let saving = false;
   async function describe(name, {signal,onProgress} = {}) {
@@ -104,6 +104,14 @@ export function createPayrollPaymentData({repository,siteKey='personal',now=()=>
     const item=await repository.getItem(siteKey,descriptor.id,id(rawId),'$expand=fields');assertSession();
     if(String(item?.id)!==String(rawId)) throw new Error('O registro selecionado não foi confirmado.');return item;
   }
+  async function createPayment(descriptor, fields) {
+    if (!createLockedPayment) return repository.createItem(siteKey, descriptor.id, fields);
+    const labels = ['Title','FORNECEDOR','TIPOPGTO','VALORUNITARIO','QTD','DATA','IDFOLHA','IDLANCAMENTO'];
+    const canonical = Object.fromEntries(labels.map(label => [label, fields[column(descriptor,[label]).name]]));
+    const saved = await createLockedPayment(canonical);
+    assertSession();
+    return { id: id(saved?.id) };
+  }
   async function save(draft,{operationId}={}) {
     if(saving) throw new Error('O pagamento já está sendo cadastrado.');
     if(!/^[a-zA-Z0-9-]{1,80}$/.test(String(operationId||''))) throw new Error('A operação não foi identificada.');
@@ -139,7 +147,7 @@ export function createPayrollPaymentData({repository,siteKey='personal',now=()=>
         if(!types(payroll).includes(selection.paymentType))throw new Error('Selecione um tipo de pagamento cadastrado.');
         return await ensurePayrollTaxLink({descriptor:payroll,fields,siteKey,storage,assertSession,assertContext,
           allRows:()=>all(payroll),readItem:rawId=>get(payroll,rawId),
-          createItem:fields=>repository.createItem(siteKey,payroll.id,fields),onAttempt:()=>operations.set(operationId,{fingerprint})});
+          createItem:fields=>createPayment(payroll,fields),onAttempt:()=>operations.set(operationId,{fingerprint})});
       }
       const token=tax?`APP-folha-encargo-lancamento-${selection.launchId}-${key(selection.paymentType)}`:`APP-folha-vinculo-${operationId}`,title=column(payroll,['Title']).name;
       let found;
@@ -181,7 +189,7 @@ export function createPayrollPaymentData({repository,siteKey='personal',now=()=>
       }
       assertSession();
       operations.set(operationId,{fingerprint,fields,attempted:true});
-      const saved=await repository.createItem(siteKey,payroll.id,fields);assertSession();
+      const saved=await createPayment(payroll,fields);assertSession();
       return verify(saved,fields);
     } finally {saving=false;}
   }
