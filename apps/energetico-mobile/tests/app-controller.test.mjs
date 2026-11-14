@@ -3011,6 +3011,25 @@ test("holerites encaminham arquivos, scanner e fotos e cancelam o download ao fe
   await assert.rejects(options.openSignedPayslip(row, file), /Prévia indisponível/);
 });
 
+test('o atalho Holerite abre a galeria e consulta as vias mesmo sem permissão de enviar', async t => {
+  let options, opened = false;
+  const signed = [{ name: 'via-assinada.pdf' }];
+  const h = makeHarness({
+    hrPayrollGalleryDataFactory: async () => ({ async loadPage() {}, async downloadPayslip() {}, async listSignedPayslips(row) {
+      assert.equal(row.id, '17');
+      return signed;
+    } }),
+    hrPayrollGalleryFactory: async value => { options = value; return { async open() { opened = true; }, destroy() {} }; },
+  });
+  t.after(() => h.controller.stop());
+  await h.controller.start();
+  await h.view.emit('open-holerite-gallery');
+  assert.equal(opened, true);
+  assert.equal(options.gallery, 'HOLERITE');
+  assert.equal(options.uploadSignedPayslips, undefined);
+  assert.deepEqual(await options.listSignedPayslips({ id: '17' }), signed);
+});
+
 test("retoma a galeria de folha escolhida após o retorno de consentimento Microsoft", async t => {
   for (const [action, gallery] of [
     ["action_hr_gallery_idfolha", "IDFOLHA"],
