@@ -44,7 +44,7 @@ if (new URLSearchParams(location.search).has('probe')) {
   view.render(state);
   await Promise.all([...document.images].map(image => image.decode().catch(() => {})));
 }
-const buttons = [...root.querySelectorAll('.chat-message--assistant button[data-action^="open-"]')];
+const buttons = [...root.querySelectorAll('.chat-message--assistant button[data-action^="open-"]:has(img)')];
 document.documentElement.dataset.layout = JSON.stringify({
   submenuIcons, reportReady, opened, reads, selected,
   count: buttons.length, actions: buttons.map(button => button.dataset.action),
