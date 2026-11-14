@@ -1,6 +1,6 @@
 [CmdletBinding()]
 param(
-    [ValidateSet('Collect','Acknowledge','Inspect')][string]$Command='Inspect',
+    [ValidateSet('Collect','Acknowledge','Inspect','VerifyCoverage')][string]$Command='Inspect',
     [string]$PayloadBase64='e30=',
     [string]$ConfigPath=(Join-Path $PSScriptRoot '../config/energetica.json'),
     [string]$DataRoot=(Join-Path $env:LOCALAPPDATA 'Energetica/Sefaz')
@@ -43,6 +43,22 @@ try{
         $jsonOptions=@{}
         if((Get-Command ConvertFrom-Json).Parameters.ContainsKey('DateKind')){$jsonOptions.DateKind='String'}
         $state=Get-Content -LiteralPath $statePath -Raw | ConvertFrom-Json @jsonOptions
+    }
+    if($null -ne $state -and $state.status -ceq 'PROCESSANDO_RESPOSTA'){
+        $state=Resume-SefazDistributionBatch $dataPath $cfg.companyCnpj $state $cfg.cooldownMinutes
+        $scope=Set-SefazOutboxScope $dataPath $scopeEvidence $minimumIssueDate ([DateTimeOffset]::UtcNow)
+        $pending=@(Get-PendingDocuments $dataPath $cfg.maxBatchDocuments $cfg.maxOutputBytes)
+    }
+    $initialResume=if($cfg.PSObject.Properties['initialResumeNsu']){[string]$cfg.initialResumeNsu}else{''}
+    $coverage=Get-SefazCollectionCoverage $dataPath $minimumIssueDate ([DateTimeOffset]::UtcNow) $initialResume -Recover
+    Write-SefazCoverageStatus $dataPath $coverage ([DateTimeOffset]::UtcNow)
+    if($coverage.replayed){
+        $scope=Set-SefazOutboxScope $dataPath $scopeEvidence $minimumIssueDate ([DateTimeOffset]::UtcNow)
+        $pending=@(Get-PendingDocuments $dataPath $cfg.maxBatchDocuments $cfg.maxOutputBytes)
+    }
+    if($Command -ceq 'VerifyCoverage'){
+        [ordered]@{status='COVERAGE_CHECKED';complete=$coverage.complete;openGaps=$coverage.openGaps;pendingXml=$coverage.pendingXml;pendingDelivery=$coverage.pendingDelivery;replayed=$coverage.replayed}|ConvertTo-Json -Compress
+        exit 0
     }
     $status='REPLAY_OUTBOX'
     $recovery=$null
