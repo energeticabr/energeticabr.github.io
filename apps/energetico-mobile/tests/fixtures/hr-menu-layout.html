@@ -5,6 +5,7 @@
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>Alinhamento do menu RH — dados sintéticos</title>
   <link rel="stylesheet" href="../../src/styles.css">
+  <link rel="stylesheet" href="../../src/ui/swile.css">
 </head>
 <body>
 <main id="app"></main>
@@ -42,8 +43,13 @@
     buttonsFit: [...row.querySelectorAll('button')].every(button =>
       button.scrollWidth <= button.clientWidth + 1 && button.scrollHeight <= button.clientHeight + 1),
   }));
+  const buttonRect = id => rect(document.querySelector(`[data-reply-id="${id}"]`));
   document.documentElement.dataset.layout = JSON.stringify({
-    rows, overflow: menu.scrollWidth > menu.clientWidth + 1 || document.documentElement.scrollWidth > innerWidth + 1,
+    rows,
+    swile: buttonRect('action_hr_swile'), swileGallery: buttonRect('action_hr_swile_gallery'),
+    trancid: buttonRect('action_hr_trancid'), trancidGallery: buttonRect('action_hr_trancid_gallery'),
+    holerites: buttonRect('action_hr_gallery_holerite'),
+    overflow: menu.scrollWidth > menu.clientWidth + 1 || document.documentElement.scrollWidth > innerWidth + 1,
   });
 </script>
 </body>

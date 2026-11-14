@@ -1,5 +1,5 @@
-.chat-choice-list.swile-menu-entry { margin-top: .65rem; grid-template-columns: repeat(2, minmax(0, 1fr)); }
-.swile-menu-entry > [data-reply-id='action_hr_gallery_holerite'] { grid-column: 1 / -1; }
+.chat-choice-list.swile-menu-entry { margin-top: .65rem; }
+.swile-menu-entry > [data-reply-id='action_hr_gallery_holerite'] { grid-column: 2; }
 .swile-menu-entry > button.chat-choice-button--gallery { color: #123c68; border: 1px solid #8aaab7; background: #edf6f8; padding-inline: .3rem; }
 .swile-menu-entry > button.chat-choice-button--gallery:hover:not(:disabled) { color: #123c68; border-color: #8aaab7; background: #dcecf1; }
 

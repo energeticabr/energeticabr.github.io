@@ -979,10 +979,18 @@ const HUMAN_RESOURCES_ACTIONS = new Set([
   "action_register_hr_activity",
   "action_hr_registrations",
   "action_validate_attendance",
+  "action_hr_registration",
+  "action_construction_contracts",
+]);
+
+const RETIRED_HR_ACTIONS = new Set([
   "action_link_attendance_payment",
   "action_hr_reports",
   "action_hr_report",
-  "action_hr_registration",
+  "action_attendance_reports_by_date",
+  "action_attendance_supplier_report",
+  "action_attendance_single_day_report",
+  "action_attendance_period_report",
 ]);
 
 function isHumanResourcesMenu(message) {
@@ -1745,7 +1753,7 @@ function renderPoll(message, busy, draft = "", databaseFilterMessage = null, act
     message,
     paymentProvisionProductOptions(message,
       allOptions.filter(option => !auditLogRow(option) && !navigationOptionKind(option)), activeFlow, currentPoll),
-  );
+  ).filter(option => !RETIRED_HR_ACTIONS.has(draftReplyId(option).trim().toLowerCase()));
   const isHrGalleryMenu = isHrPayrollGalleryMenu(message);
   const galleryOptions = isHrGalleryMenu ? hrPayrollGalleryOptions(options) : [];
   const hrReport = humanResourcesReportInsertion(message, options);
