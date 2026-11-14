@@ -205,7 +205,10 @@ export function createPayrollBreakdownView({ data, root, documentRef = globalThi
         const row = el('article', 'payroll-breakdown-payment'); row.dataset.breakdownPayment = payment.id;
         row.append(el('h3', '', `${payment.label || PAYROLL_RUBRICS.find(r => r.id === payment.rubric)?.label} · Pago`),
           el('p', '', `${dateText(payment.date)} · Quantidade: ${Number(payment.quantity).toLocaleString('pt-BR')} · Valor unitário: ${money(payment.unitValue)}`),
-          el('strong', '', `Total: ${money(payment.total)}`), attachmentControl(`payment:${payment.id}`,`${payment.label || payment.rubric} em ${dateText(payment.date)}`,payment.id)); cluster.append(row);
+          el('strong', '', `Total: ${money(payment.total)}`));
+        if (payment.payrollAllocation) row.append(el('p', '', `Aplicação do lançamento ID ${payment.launchId}`));
+        else row.append(attachmentControl(`payment:${payment.id}`,`${payment.label || payment.rubric} em ${dateText(payment.date)}`,payment.id));
+        cluster.append(row);
       }
       if (!day.editable && !day.payments.length) cluster.append(el('p', 'payroll-breakdown-week', 'Nenhum pagamento registrado nesta semana.'));
       for (const rubric of day.editable ? WEEKLY_RUBRICS : []) {

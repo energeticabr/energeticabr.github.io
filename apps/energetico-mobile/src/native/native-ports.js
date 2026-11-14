@@ -504,6 +504,12 @@ export function createNativePorts({
       });
       return () => listener.remove();
     },
+    async onReportBack(handler) {
+      const listener = await app.addListener("backButton", event => {
+        if (!handler() && event.canGoBack) globalThis.history?.back();
+      });
+      return () => { void listener.remove().catch(() => {}); };
+    },
     capturePhoto,
     scanDocument,
     requestMicrophonePermission,

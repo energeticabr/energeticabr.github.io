@@ -3,6 +3,7 @@ import { resolvePowerAppsUiContract } from "../../../../portal/catalog/powerapps
 import { mapSharePointColumns, validateFormValues } from "../../../../portal/data/column-mapper.js";
 import { createForm43StatusPolicy } from './orders-form43-locks.js';
 import { payrollEditorColumns, createPayrollSourceReader, payrollFieldKey } from './payroll-editor-policy.js';
+import { isPayrollAllocation } from './payroll-pending-allocation.js';
 import { createPayrollSheetReader } from './payroll-sheet-options.js';
 import { createPayrollLaunchReader } from './payroll-launch-options.js';
 import { createPayrollSheetAttachments } from './payroll-sheet-attachments.js';
@@ -168,6 +169,40 @@ export function createGalleryRecordData({ repository, siteKey = "personal", list
   const payrollSheets=isPayroll?createPayrollSheetReader(repository,siteKey,now):null;
   const payrollLaunches=isPayroll?createPayrollLaunchReader(repository,siteKey):null;
 
+  async function assertNoPayrollAllocations(field, rawId, signal) {
+    const id = idValue(rawId);
+    const message = 'Não foi possível conferir as aplicações em folha. Atualize e tente novamente.';
+    assertSession();
+    abort(signal);
+    const payroll = await repository.resolveList(siteKey, ['FOLHAPGTO'], { signal });
+    if (payroll?.status !== 'resolved' || !payroll.id) throw new Error(message);
+    const query = '$select=id&$expand=fields($select=Title,' + field + ')&$top=100';
+    const seen = new Set();
+    let cursor;
+    for (let pageNumber = 1; pageNumber <= 100; pageNumber++) {
+      assertSession();
+      abort(signal);
+      const page = await repository.getItemsPage(siteKey, payroll.id, query,
+        { signal, pageNumber, maxPages: 100, ...(cursor ? { cursor } : {}) });
+      assertSession();
+      abort(signal);
+      if (!Array.isArray(page?.items) || typeof page.hasMore !== 'boolean'
+        || page.hasMore !== Boolean(page.nextLink) || page.nextLink && seen.has(page.nextLink)) throw new Error(message);
+      for (const row of page.items) {
+        if (!row?.fields || typeof row.fields !== 'object' || Array.isArray(row.fields)) throw new Error(message);
+        if (isPayrollAllocation(row.fields) && String(row.fields[field] ?? '').trim().replace(/\.0+$/, '') === id) {
+          throw new Error(field === 'IDFOLHA'
+            ? 'Esta folha tem valores aplicados no relatório de IDFOLHA. O fornecedor, a competência e a exclusão estão bloqueados.'
+            : 'Este lançamento tem valores aplicados no relatório de IDFOLHA. Continue o vínculo pelo relatório de pendências.');
+        }
+      }
+      if (!page.hasMore) return;
+      cursor = page.nextLink;
+      seen.add(cursor);
+    }
+    throw new Error(message);
+  }
+
   async function currentItem(list, id, signal) {
     if (typeof repository.getItem !== "function") throw new Error("A consulta segura do registro não está disponível.");
     abort(signal);
@@ -202,7 +237,8 @@ export function createGalleryRecordData({ repository, siteKey = "personal", list
       item = frozenCopy({ ...item, fields: { ...item.fields, ...await refreshDerivedValues({}, { signal }) } });
       progress.step('derived');
     }
-    const provisionLinked = isPayroll && Boolean(payrollProvisionId(item.fields));
+    const allocationLocked = isPayroll && isPayrollAllocation(item.fields);
+    const fixedPayrollLink = isPayroll && (allocationLocked || Boolean(payrollProvisionId(item.fields)));
     abort(signal);
     const mapped = typedColumns(Array.isArray(rawColumns) ? rawColumns : [], entity, metadataOnly);
     let contract = resolvePowerAppsUiContract(entity, mapped, { mode: "edit", ...(formVariantId ? { formVariantId } : {}) });
@@ -215,10 +251,10 @@ export function createGalleryRecordData({ repository, siteKey = "personal", list
     const sheetColumn=isPayroll?rawColumns.find(c=>payrollFieldKey(c.name)==='IDFOLHA'):null;
     const sheetSupplier=isPayroll?Object.entries(item.fields).find(([name])=>payrollFieldKey(name)==='FORNECEDOR')?.[1]:null;
     const launchColumn=isPayroll?rawColumns.find(c=>payrollFieldKey(c.name)==='IDLANCAMENTO'):null;
-    const taxIdentityLocked=isPayroll&&payrollTaxType(Object.entries(item.fields).find(([name])=>payrollFieldKey(name)==='TIPOPGTO')?.[1]);
+    const taxIdentityLocked=isPayroll&&!allocationLocked&&payrollTaxType(Object.entries(item.fields).find(([name])=>payrollFieldKey(name)==='TIPOPGTO')?.[1]);
     const needsTaxSheet = Boolean(taxIdentityLocked && sheetColumn);
-    const needsSheets = Boolean(sheetColumn && !provisionLinked && !taxIdentityLocked);
-    const needsLaunches = Boolean(launchColumn && !provisionLinked && !taxIdentityLocked);
+    const needsSheets = Boolean(sheetColumn && !fixedPayrollLink && !taxIdentityLocked);
+    const needsLaunches = Boolean(launchColumn && !fixedPayrollLink && !taxIdentityLocked);
     const contextProgress = isPayroll ? createAcquisitionProgress({ signal, onProgress: progress.forward('payrollContext') },
       [...(needsTaxSheet ? ['taxSheet'] : []), ...(needsSheets ? ['sheets'] : []), ...(needsLaunches ? ['launches'] : []), 'context'], assertSession) : null;
     const taxCompetence=needsTaxSheet ? await payrollSheets.assertSheet(item.fields[sheetColumn.name],sheetSupplier,{allowHistorical:true}) : '';
@@ -250,8 +286,8 @@ export function createGalleryRecordData({ repository, siteKey = "personal", list
     const locked = new Set(readOnlyEditFields.map(key));
     const columns = frozenCopy((isPayroll ? payrollEditorColumns(formColumns,sheetOptions,launchOptions,{lockTaxIdentity:taxIdentityLocked}) : formColumns)
       .filter(column => key(column.name) !== 'FOLHAOPERACAO')
-      .map(column => provisionLinked || locked.has(key(column.name)) ? { ...column, readOnly: true, disabled: true, editable: true, ...(provisionLinked ? { required: false } : {}) } : column));
-    contract = frozenCopy({ ...contract, formColumns: columns, ...(provisionLinked ? { readOnly: true } : {}) });
+      .map(column => fixedPayrollLink || locked.has(key(column.name)) ? { ...column, readOnly: true, disabled: true, editable: true, ...(fixedPayrollLink ? { required: false } : {}) } : column));
+    contract = frozenCopy({ ...contract, formColumns: columns, ...(fixedPayrollLink ? { readOnly: true } : {}) });
     const descriptors = new Map(columns.map(column => [column.name, column]));
     const relationshipOptions = new Map();
     // Availability helpers may only use this record or values returned by its
@@ -349,7 +385,7 @@ export function createGalleryRecordData({ repository, siteKey = "personal", list
         const existingFiles = frozenCopy(verifiedAttachments(await repository.listAttachments(siteKey, list.id, item.id)));
         abort(signal);
         attachments = Object.freeze({ enabled: true, canView: true,
-          canEdit: typeof repository.uploadAttachment === 'function' && typeof repository.deleteAttachment === 'function',
+          canEdit: !allocationLocked && typeof repository.uploadAttachment === 'function' && typeof repository.deleteAttachment === 'function',
           existingFiles,
           async readExisting(file, options) {
             const name = existingFiles.find(entry => attachmentKey(entry.name) === attachmentKey(file?.name))?.name;
@@ -615,6 +651,13 @@ export function createGalleryRecordData({ repository, siteKey = "personal", list
       });
       if (Object.hasOwn(changed, name) || dependencyChanged) await validateClosed(column, merged[name], baseline, columns, merged, options.signal);
     }
+    if (isPayroll && baseline.launchColumn && Object.hasOwn(changed, baseline.launchColumn.name)) {
+      await assertNoPayrollAllocations('IDLANCAMENTO', changed[baseline.launchColumn.name], options.signal);
+    }
+    if (isPayrollSheet && columns.some(column => Object.hasOwn(changed, inputName(column))
+      && [column.name, column.label].some(value => ['FORNECEDOR', 'MESREFERENCIA'].includes(key(value))))) {
+      await assertNoPayrollAllocations('IDFOLHA', item.id, options.signal);
+    }
     let eTag = version(item.eTag);
     if (baseline.sheetAttachments) {
       const status = merged[baseline.statusColumn?.name];
@@ -651,7 +694,10 @@ export function createGalleryRecordData({ repository, siteKey = "personal", list
 
   async function deleteItem(rawId, options = {}) {
     const id = idValue(rawId), list = await resolveList();
-    const eTag = Object.hasOwn(options, "eTag") ? version(options.eTag) : (await currentItem(list, id)).eTag;
+    const live = isPayroll || !Object.hasOwn(options, 'eTag') ? await currentItem(list, id) : null;
+    if (isPayroll && isPayrollAllocation(live.fields)) throw new Error('Esta aplicação de folha está vinculada ao rateio do pagamento de origem.');
+    const eTag = Object.hasOwn(options, "eTag") ? version(options.eTag) : live.eTag;
+    if (isPayrollSheet) await assertNoPayrollAllocations('IDFOLHA', id, options.signal);
     if (typeof repository.deleteItem !== "function") throw new Error("A exclusão segura do registro não está disponível.");
     await repository.deleteItem(siteKey, list.id, id, { eTag });
     return true;

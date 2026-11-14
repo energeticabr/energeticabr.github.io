@@ -1,5 +1,6 @@
 import { SHAREPOINT_SITES } from '../../../../portal/config.js';
 import Decimal from 'decimal.js';
+import { readPayrollAllocation } from './payroll-pending-allocation.js';
 import { createGraphClient } from '../../../../portal/data/graph-client.js';
 import { createSharePointRepository } from '../../../../portal/data/sharepoint-repository.js';
 import { createSharePointAttachmentTransport } from '../../../../portal/data/attachments.js';
@@ -128,7 +129,9 @@ export function createPayrollBreakdownData({ repository, tokenProvider, siteConf
       if (!rubric) throw new Error('Há uma rubrica de pagamento não reconhecida nesta folha. Confira os pagamentos antes de desdobrar.');
       const fields = { Title: readValue(payments,row,'Title'), IDPROVISAO: readValue(payments,row,'IDPROVISAO',true), IDFOLHA: sheetId, FORNECEDOR: supplier.label, TIPOPGTO: rubric.payrollType,
         IDLANCAMENTO: readValue(payments,row,'IDLANCAMENTO') };
-      const source = await readPayrollSource(fields,supplier);
+      const allocation = readPayrollAllocation({ ...fields, VALORUNITARIO: readValue(payments,row,'VALORUNITARIO',true),
+        QTD: readValue(payments,row,'QTD',true) });
+      const source = allocation ?? await readPayrollSource(fields,supplier);
       signal?.throwIfAborted();
       if (source.PGTOAGENDADO === 'PENDENTE') { checked(index); continue; }
       if (source.VALORUNITARIO == null || source.QTD == null) throw new Error(`Não foi possível apurar o pagamento ${row.id} da folha.`);
@@ -142,7 +145,8 @@ export function createPayrollBreakdownData({ repository, tokenProvider, siteConf
       seen.add(String(row.id));
       history.push({ id: String(row.id), date, rubric: rubric.id, label: rubric.label,
         quantity: source.QTD, unitValue: source.VALORUNITARIO, total: total.toNumber(),
-        provisionId: source.IDPROVISAO || '', launchId: String(fields.IDLANCAMENTO || '') });
+        provisionId: source.IDPROVISAO || '', launchId: String(fields.IDLANCAMENTO || ''),
+        ...(allocation ? { payrollAllocation: true } : {}) });
       checked(index);
     }
     loading.done('sources');

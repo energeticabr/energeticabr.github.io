@@ -115,3 +115,28 @@ test('pagamento de provisão não pode ser convertido manualmente em outro pagam
   assert.ok(context.columns.every(column => column.readOnly));
   await assert.rejects(data.saveEditor(context, { TIPOPGTO: 'VALE TRANSPORTE' }), /provisão|editável/i);
 });
+
+test('rateio de uma origem paga a pessoas diferentes usa apenas o valor aplicado em cada folha', async () => {
+  const f = fixture();
+  f.rows.IDFOLHA.push({ id: '20', fields: { FORNECEDOR: 'Beto', MESREFERENCIA: '10/2026' } });
+  f.rows.LANCAMENTOS.push({ id: '80', fields: { FORNECEDOR: 'Fornecedor da origem', FILIAL: 'OUTRA OBRA', VALORUNITARIO: 900, QTD: 1, FRETE: 0 } });
+  const title = n => 'IDFOLHA-PENDENTE:' + String(n).repeat(64) + ':' + 'c'.repeat(64);
+  f.payments.push(
+    {id:'61', fields:{Title:title(1), IDFOLHA:'19', FORNECEDOR:'Ana', TIPOPGTO:'SALÁRIO', VALORUNITARIO:'15.31', QTD:'1', DATA:'2026-10-12', IDLANCAMENTO:'80'}},
+    {id:'62', fields:{Title:title(2), IDFOLHA:'20', FORNECEDOR:'Beto', TIPOPGTO:'PREMIAÇÃO', VALORUNITARIO:'884.69', QTD:'1', DATA:'2026-10-12', IDLANCAMENTO:'80'}},
+  );
+  const bySupplier = createSupplierPayrollReportData({repository:f.repository});
+  await bySupplier.loadSnapshot();
+  const allocated = (await bySupplier.loadPaymentsForPayrollIds(['19','20'])).filter(row => row.launchId === '80');
+  assert.deepEqual(allocated.map(row => [row.supplier,row.totalCents]), [['Ana',1531],['Beto',88469]]);
+  const gallery = createHrPayrollGalleryData({repository:f.repository});
+  const payments = await gallery.loadPaymentsForPayrollId('19');
+  assert.equal(payments.find(row => row.id === '61').TOTALCENTAVOS,1531);
+  const context = await createPayrollBreakdownData({repository:f.repository}).loadPayrollContext({id:'1',label:'Ana',branch:'OBRA A'},'2026-10');
+  assert.equal(context.paid.salary,65.31);
+  assert.equal(context.payments.find(row => row.id==='61').launchId,'80');
+  const get = f.repository.getItem;
+  f.repository.getItem = async (...args) => ({ ...await get(...args), eTag: '"1"' });
+  assert.ok((await gallery.loadEditor('FOLHAPGTO','61')).columns.every(column => column.readOnly));
+  await assert.rejects(gallery.deleteItem('FOLHAPGTO','61',{eTag:'"1"'}), /aplica|rateio/i);
+});

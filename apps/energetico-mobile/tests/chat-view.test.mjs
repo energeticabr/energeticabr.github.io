@@ -337,7 +337,7 @@ const returnedHomeActions = [
   'open-pending-provisions', 'open-commercial-receipts', 'open-commercial-milestones', 'open-commercial-documents', 'open-sac-pathologies',
   'open-sicoob-transaction-report', 'open-nfe-report', 'open-dda-report', 'open-provision-report', 'open-payment-ledger', 'open-management-report',
   'open-order-validation-report', 'open-depreciation-report', 'open-document-control-report',
-  'open-task-association-report', 'open-rhid-mascot-report', 'open-cargos-table', 'open-attendance-summary',
+  'open-task-association-report', 'open-rhid-mascot-report', 'open-pending-payroll-links', 'open-cargos-table', 'open-attendance-summary',
   'open-stage-progress', 'open-supplier-payroll-report', 'open-trancid-report', 'open-contractor-control-report',
   'open-pending-supplier-payments-report', 'open-holerite-report',
 ];

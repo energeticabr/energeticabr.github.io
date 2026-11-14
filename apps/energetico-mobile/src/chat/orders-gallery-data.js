@@ -414,6 +414,7 @@ export function createHrPayrollGalleryData({
   assertSession = () => {},
   loadHoleriteLogo = options => loadWeeklyPayslipLogo({ ...options, fetchImpl }),
   sheetCreationAttempts,
+  createLockedPayment,
 } = {}) {
   let repository = suppliedRepository;
   if (!repository) {
@@ -755,7 +756,7 @@ export function createHrPayrollGalleryData({
   }
   let paymentData;
   async function payments() {
-    return paymentData ||= import('./payroll-payment-data.js').then(({createPayrollPaymentData})=>createPayrollPaymentData({repository,siteKey:SITE_KEY,now,assertSession}));
+    return paymentData ||= import('./payroll-payment-data.js').then(({createPayrollPaymentData})=>createPayrollPaymentData({repository,siteKey:SITE_KEY,now,assertSession,createLockedPayment}));
   }
   let sheetData;
   async function sheets() {
