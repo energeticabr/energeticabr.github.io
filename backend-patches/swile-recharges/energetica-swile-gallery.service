@@ -1,0 +1,18 @@
+[Unit]
+Description=Atualizar pedidos e anexos da Galeria Swile
+Wants=network-online.target
+After=network-online.target
+
+[Service]
+Type=oneshot
+User=energetica-whatsapp
+Group=energetica-whatsapp
+WorkingDirectory=/opt/energetica-whatsapp
+ExecStart=/opt/energetica-whatsapp/.venv/bin/python -B /opt/energetica-whatsapp/swile_recharges.py
+TimeoutStartSec=5min
+UMask=0077
+NoNewPrivileges=true
+PrivateTmp=true
+ProtectSystem=strict
+ProtectHome=true
+ReadWritePaths=/var/lib/energetica-whatsapp/swile

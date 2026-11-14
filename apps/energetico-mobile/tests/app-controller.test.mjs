@@ -3707,7 +3707,9 @@ test('Swile opens from the live RH menu without leaving the conversation or send
   h.client.swileRequest = async (operation, payload) => {
     if (payload.weeklyReminder) return { visible: false };
     assert.equal(operation, 'orders');
-    assert.deepEqual(payload, { gallery: 'pending' });
+    assert.deepEqual(payload, {
+      gallery: 'pending', ...(requests.includes('orders') ? { refresh: true } : { snapshot: true }),
+    });
     requests.push(operation);
     return [];
   };

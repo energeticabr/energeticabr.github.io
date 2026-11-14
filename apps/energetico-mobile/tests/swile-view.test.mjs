@@ -338,7 +338,7 @@ test('Swile opens the left PDF shortcut for the exact order in both gallery tabs
   button.click();
   await settle();
   assert.deepEqual(opened[0], ['%PDF-', 'Nota fiscal · B', button]);
-  assert.deepEqual(calls, [{ gallery: 'pending' }, { orderCode: 'GROUP', document: files[1] }]);
+  assert.deepEqual(calls, [{ gallery: 'pending', snapshot: true }, { orderCode: 'GROUP', document: files[1] }]);
   [...document.querySelectorAll('button')].find(b => b.textContent === 'Histórico').click();
   await settle();
   const historical = document.querySelector('.swile-gallery-pdf');
@@ -413,15 +413,15 @@ test('Swile gallery is a separate screen and can open an older completed order',
   sync.click();
   await settle();
   assert.deepEqual(calls, [
-    ['orders', { gallery: 'pending' }],
+    ['orders', { gallery: 'pending', snapshot: true }],
     ['orders', { gallery: 'pending', orderCode: 'SWO123' }],
     ['orders', { gallery: 'pending', orderCode: 'SWO123' }],
-    ['orders', { gallery: 'pending' }],
-    ['orders', { gallery: 'history' }],
+    ['orders', { gallery: 'pending', snapshot: true }],
+    ['orders', { gallery: 'history', snapshot: true }],
     ['orders', { gallery: 'history', orderCode: 'SWO90' }],
     ['orders', { gallery: 'history', orderCode: 'SWO90' }],
-    ['orders', { gallery: 'history' }],
-    ['orders', { gallery: 'history' }],
+    ['orders', { gallery: 'history', snapshot: true }],
+    ['orders', { gallery: 'history', refresh: true }],
   ]);
   assert.equal(findButton('Atualizar pedidos'), undefined);
   back.click();
@@ -445,7 +445,9 @@ test('Swile keeps open orders visible and spins the sync icon until the direct q
   const order = { orderCode: 'SWO123', status: 'WAITING_PAYMENT', creditCents: 10000 };
   const pendingQueries = [];
   const view = openSwileView({ document, gallery: true, request: (operation, payload, { signal }) => {
-    assert.deepEqual([operation, payload], ['orders', { gallery: 'pending' }]);
+    assert.deepEqual([operation, payload], ['orders', {
+      gallery: 'pending', ...(pendingQueries.length ? { refresh: true } : { snapshot: true }),
+    }]);
     const response = Promise.withResolvers();
     pendingQueries.push({ ...response, signal });
     return response.promise;

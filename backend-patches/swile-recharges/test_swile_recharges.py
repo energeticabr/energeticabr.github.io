@@ -223,6 +223,36 @@ class ServiceTests(unittest.TestCase):
         with self.assertRaisesRegex(SwileError, 'diverge'):
             self.service.preview('user-a', self.data)
 
+    def test_scheduled_gallery_refresh_updates_both_tabs_and_preserves_snapshot_on_failure(self):
+        payload = {'last': True, 'orderGroups': [
+            {'groupCode': 'PENDING', 'statusCode': 'WAITING_PAYMENT', 'valueCredit': 50,
+             'requestDate': '2026-11-14', 'orders': [{'orderCode': 'A'}]},
+        ]}
+        with patch.object(self.gateway, 'request', return_value=payload) as upstream:
+            pending, history = self.service.refresh_gallery()
+            self.assertEqual([], pending[0]['documents'])
+            self.assertEqual('2026-11-14', history[0]['requestDate'])
+            upstream.assert_called_once()
+
+        payload['orderGroups'][0]['statusCode'] = 'APPROVED'
+        payload['orderGroups'][0]['orders'][0]['slipLink'] = 'https://dash-rh.swile.com.br/boleto/ORDER-A'
+        self.now += 10
+        reader = Service(self.gateway, self.database, clock=lambda: self.now)
+        identity = {'oid': 'operator'}
+        request = {'action': 'swile_orders', 'gallery': 'history'}
+        with patch('swile_recharges.configured_service', return_value=reader), \
+                patch.object(self.gateway, 'request', return_value=payload) as upstream:
+            self.assertEqual(history, handle_portal(identity, {**request, 'snapshot': True})[1]['swile'])
+            upstream.assert_not_called()
+            status, result = handle_portal(identity, {**request, 'refresh': True})
+            self.assertEqual(200, status)
+            self.assertEqual([{'orderCode': 'A', 'kind': 'boleto'}], result['swile'][0]['documents'])
+            self.assertEqual([], reader.gallery_orders(history=False))
+            upstream.assert_called_once()
+            upstream.side_effect = SwileError('Indisponível', 429)
+            self.assertEqual(429, handle_portal(identity, {**request, 'refresh': True})[0])
+            self.assertEqual(result['swile'], reader.gallery_orders(history=True))
+
     def test_pending_gallery_paginates_corporate_orders_and_omits_closed_groups(self):
         slip = 'https://dash-rh.swile.com.br/boleto/ORDER-A'
         nota = 'https://nfe.prefeitura.sp.gov.br/contribuinte/notaprint.aspx?inscricao=1&nf=2&verificacao=X'
