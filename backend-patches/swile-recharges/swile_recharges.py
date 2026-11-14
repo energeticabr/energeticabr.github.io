@@ -385,6 +385,50 @@ class Service:
             db.execute("UPDATE orders SET state='created', code=?, status=? WHERE id=?", (code, status, identifier))
         return {**self.receipt(row), 'orderCode': code, 'status': status}
 
+    def weekly_reminder(self):
+        today = datetime.fromtimestamp(self.clock(), SP).date()
+        monday = today - timedelta(days=today.weekday())
+        start = datetime.combine(monday, datetime.min.time(), SP).timestamp()
+        end = start + 7 * 86400
+        with self.db() as db:
+            db.execute("""CREATE TABLE IF NOT EXISTS weekly_approvals (
+                week TEXT PRIMARY KEY, code TEXT NOT NULL
+            )""")
+            if db.execute('SELECT 1 FROM weekly_approvals WHERE week=?', (monday.isoformat(),)).fetchone():
+                return {'visible': False}
+            candidates = db.execute("""SELECT * FROM orders
+                WHERE created>=? AND created<? AND state IN ('created','sending')
+                ORDER BY code IS NULL, created DESC""", (start - PREVIEW_TTL, end)).fetchall()
+        failure = None
+        for row in candidates:
+            receipt = self.receipt(row)
+            try:
+                match = None if row['code'] else self.reconcile(row, receipt)
+                code = row['code'] or (match and match['orderGroupCode'])
+                if not code:
+                    continue
+                group = self.corporate_group(code)
+                created = scheduled_date(group.get('creationDate'))
+                orders = group['orderList']
+                if (group.get('statusCode') == 'APPROVED'
+                        and created and monday.isoformat() <= created <= today.isoformat()
+                        and group.get('totalEmployees') == receipt['totalEmployees']
+                        and orders and all(order.get('statusCode') == 'APPROVED' for order in orders)
+                        and sum(cents(order.get('totalValue')) for order in orders) == receipt['creditCents']):
+                    with self.db() as db:
+                        db.execute('INSERT OR IGNORE INTO weekly_approvals VALUES (?, ?)', (monday.isoformat(), code))
+                    return {'visible': False}
+            except SwileError as error:
+                failure = error
+                if error.status in (401, 403, 429):
+                    break
+        with self.db() as db:
+            if db.execute('SELECT 1 FROM weekly_approvals WHERE week=?', (monday.isoformat(),)).fetchone():
+                return {'visible': False}
+        if failure:
+            raise failure
+        return {'visible': True}
+
     def order_status(self, code):
         data = self.gateway.request('order/group/status/' + quote(code, safe=''))
         if data.get('orderGroupCode') != code or not isinstance(data.get('status'), str):
@@ -559,7 +603,9 @@ def handle_portal(identity, body):
             value = service.confirm(owner, body.get('id'), body.get('invoiceText', ''))
         elif action == 'swile_orders':
             gallery = body.get('gallery')
-            if 'document' in body:
+            if body.get('weeklyReminder') is True:
+                value = service.weekly_reminder()
+            elif 'document' in body:
                 document = body['document']
                 if not isinstance(document, dict):
                     raise SwileError('Documento do pedido Swile inválido.')
