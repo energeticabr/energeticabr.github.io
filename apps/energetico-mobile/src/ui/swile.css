@@ -55,7 +55,7 @@
 .swile-headline h2 { margin: 0; font-size: 1.35rem; }
 .swile-headline span { color: #553990; font-size: .9rem; }
 .swile-header-actions { display: flex; flex: none; align-items: center; gap: .4rem; }
-.swile-dialog button, .swile-dialog input, .swile-dialog select, .swile-dialog textarea, .swile-gallery-page .swile-body button {
+.swile-dialog button, .swile-dialog input, .swile-dialog select, .swile-dialog textarea, .swile-gallery-page :where(.swile-body) button {
   min-height: 2.65rem;
   min-width: 0;
   border: 1px solid #cbd1dd;
@@ -65,10 +65,10 @@
   background: #fff;
   font: inherit;
 }
-.swile-dialog button, .swile-gallery-page .swile-body button { font-weight: 600; cursor: pointer; }
+.swile-dialog button, .swile-gallery-page :where(.swile-body) button { font-weight: 600; cursor: pointer; }
 .swile-dialog button.swile-refresh { width: 2.75rem; min-height: 2.75rem; padding: 0; }
 .swile-refresh svg { display: block; width: 1.25rem; height: 1.25rem; margin: auto; color: inherit; }
-.swile-dialog button:disabled, .swile-gallery-page .swile-body button:disabled { opacity: .55; cursor: default; }
+.swile-dialog button:disabled, .swile-gallery-page :where(.swile-body) button:disabled { opacity: .55; cursor: default; }
 .swile-dialog button.swile-primary, .swile-gallery-page button.swile-primary { background: #553990; color: #fff; border-color: #553990; }
 .swile-actions, .swile-dates { display: flex; flex-wrap: wrap; gap: .65rem; align-items: center; }
 .swile-search { width: 100%; margin-bottom: .35rem; }
