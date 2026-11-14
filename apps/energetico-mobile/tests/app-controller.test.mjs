@@ -3682,8 +3682,13 @@ test('Swile opens from the live RH menu without leaving the conversation or send
     return [];
   };
   assert.equal(await h.view.emit('select-reply', { replyId: 'action_hr_swile_gallery' }), true);
-  assert.match(dom.window.document.querySelector('main.swile-gallery-page').textContent, /Nenhum pedido em suspenso/);
-  assert.deepEqual(requests, ['directory', 'orders']);
+  await new Promise(resolve => setImmediate(resolve));
+  const gallery = dom.window.document.querySelector('main.swile-gallery-page');
+  assert.match(gallery.textContent, /Nenhum pedido em aberto/);
+  gallery.querySelector('header [aria-label="Sincronizar pedidos da Swile"]').click();
+  await new Promise(resolve => setImmediate(resolve));
+  assert.match(gallery.textContent, /Nenhum pedido em aberto/);
+  assert.deepEqual(requests, ['directory', 'orders', 'orders']);
   assert.equal(h.chatCalls.length, callsBefore);
 });
 
