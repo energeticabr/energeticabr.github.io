@@ -100,7 +100,7 @@ export function openSwileView({ document: doc, request, gallery = false, preview
     root: screen, title, onBack: close,
     onHome: onHome && (() => { close(); onHome(); }),
     refreshLabel: 'Sincronizar pedidos da Swile',
-    onRefresh: () => displayedOrderCode ? loadOrderDetails(displayedOrderCode, false) : loadGallery(),
+    onRefresh: () => displayedOrderCode ? loadOrderDetails(displayedOrderCode, false) : loadGallery(galleryFilter, false, true),
   }) : null;
   const refresh = gallery ? null : button('', load);
   if (refresh) {
@@ -490,7 +490,7 @@ export function openSwileView({ document: doc, request, gallery = false, preview
     });
   }
 
-  function loadGallery(filter = galleryFilter, restoreFocus = false) {
+  function loadGallery(filter = galleryFilter, restoreFocus = false, refreshFromSwile = false) {
     return run(async () => {
       const previousList = filter === galleryFilter ? content.querySelector('.swile-order-list') : null;
       galleryFilter = filter;
@@ -510,7 +510,9 @@ export function openSwileView({ document: doc, request, gallery = false, preview
       }
       message('Consultando pedidos na Swile…');
       try {
-        const orders = await request('orders', { gallery: filter }, { signal });
+        const orders = await request('orders', {
+          gallery: filter, ...(refreshFromSwile ? { refresh: true } : { snapshot: true }),
+        }, { signal });
         if (signal.aborted) return;
         if (!Array.isArray(orders)) throw new Error('Lista de pedidos inválida.');
         const list = make('div', '', 'swile-order-list');

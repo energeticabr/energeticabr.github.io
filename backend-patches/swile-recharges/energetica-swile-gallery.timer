@@ -1,0 +1,11 @@
+[Unit]
+Description=Sincronizar Galeria Swile às 07h e 17h de Brasília
+
+[Timer]
+OnCalendar=*-*-* 07:00:00 America/Sao_Paulo
+OnCalendar=*-*-* 17:00:00 America/Sao_Paulo
+AccuracySec=1s
+Persistent=true
+
+[Install]
+WantedBy=timers.target

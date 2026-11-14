@@ -6,6 +6,7 @@ from datetime import date, datetime, timedelta, timezone
 from decimal import Decimal, InvalidOperation
 import hashlib
 import json
+import logging
 from pathlib import Path
 import re
 import sqlite3
@@ -236,10 +237,12 @@ class Service:
     def __init__(self, gateway, database=DATABASE, clock=time.time):
         self.gateway, self.database, self.clock = gateway, database, clock
 
-    def pages(self, endpoint, field, *, size_param='pageSize', **params):
+    def pages(self, endpoint, field, *, size_param='pageSize', require_list=False, **params):
         for page in range(1000):
             result = self.gateway.request(endpoint, query={**params, 'page': page, size_param: 100})
-            rows = result.get(field) or []
+            rows = result.get(field)
+            if not require_list and not rows:
+                rows = []
             if not isinstance(rows, list) or type(result.get('last')) is not bool:
                 raise SwileError('A Swile devolveu uma lista inválida.', 502)
             yield from rows
@@ -498,11 +501,11 @@ class Service:
     def pending_orders(self):
         return self.corporate_orders(history=False)
 
-    def corporate_orders(self, *, history):
-        result = []
-        for group in self.pages('order/group', 'orderGroups', size_param='size'):
+    def collect_gallery(self, *, include_history=True):
+        pending, history = [], []
+        for group in self.pages('order/group', 'orderGroups', size_param='size', require_list=True):
             status = group['statusCode']
-            if not history and status in CLOSED_ORDER_STATUSES:
+            if not include_history and status in CLOSED_ORDER_STATUSES:
                 continue
             orders = group.get('orders') or []
             dates = {scheduled_date(order.get('creditDate')) for order in orders}
@@ -511,13 +514,43 @@ class Service:
                 'creditDate': dates.pop() if len(dates) == 1 else None,
                 'documents': document_references(orders, 'orderCode'),
             }
-            requested = group.get('requestDate')
-            if history:
-                row['requestDate'] = scheduled_date(requested)
-            result.append((requested or '', row))
-        if history:
-            result.sort(key=lambda entry: entry[0], reverse=True)
-        return [row for _, row in result]
+            if status not in CLOSED_ORDER_STATUSES:
+                pending.append(row)
+            if include_history:
+                requested = group.get('requestDate') or ''
+                history.append((requested, {**row, 'requestDate': scheduled_date(requested)}))
+        history.sort(key=lambda entry: entry[0], reverse=True)
+        return pending, [row for _, row in history]
+
+    def corporate_orders(self, *, history):
+        return self.collect_gallery(include_history=history)[int(history)]
+
+    @contextmanager
+    def gallery_db(self):
+        with self.db() as db:
+            db.execute("""CREATE TABLE IF NOT EXISTS gallery_snapshot (
+                id INTEGER PRIMARY KEY CHECK (id=1), collected REAL NOT NULL,
+                pending TEXT NOT NULL, history TEXT NOT NULL)""")
+            yield db
+
+    def refresh_gallery(self):
+        collected = self.clock()
+        pending, history = self.collect_gallery()
+        with self.gallery_db() as db:
+            db.execute("""INSERT INTO gallery_snapshot (id, collected, pending, history)
+                          VALUES (1, ?, ?, ?) ON CONFLICT (id) DO UPDATE SET
+                          collected=excluded.collected, pending=excluded.pending, history=excluded.history
+                          WHERE excluded.collected >= gallery_snapshot.collected""",
+                       (collected, json.dumps(pending), json.dumps(history)))
+        return pending, history
+
+    def gallery_orders(self, *, history, refresh=False):
+        if not refresh:
+            with self.gallery_db() as db:
+                snapshot = db.execute('SELECT pending, history FROM gallery_snapshot WHERE id=1').fetchone()
+            if snapshot is not None:
+                return json.loads(snapshot['history' if history else 'pending'])
+        return self.refresh_gallery()[int(history)]
 
     def corporate_group(self, code):
         if not valid_order_code(code):
@@ -570,7 +603,7 @@ _service = None
 _allowed = frozenset()
 
 
-def configured_service(identity):
+def load_service():
     global _signature, _service, _allowed
     with _lock:
         try:
@@ -589,10 +622,15 @@ def configured_service(identity):
                 _signature = signature
         except (OSError, ValueError, KeyError, TypeError):
             raise SwileError('Integração Swile aguardando configuração das credenciais da empresa.', 503) from None
-        email = str(identity.get('email') or identity.get('preferred_username') or '').strip().casefold()
-        if not identity.get('oid') or email not in _allowed:
-            raise SwileError('Seu usuário não tem acesso à integração Swile.', 403)
-        return _service
+        return _service, _allowed
+
+
+def configured_service(identity):
+    service, allowed = load_service()
+    email = str(identity.get('email') or identity.get('preferred_username') or '').strip().casefold()
+    if not identity.get('oid') or email not in allowed:
+        raise SwileError('Seu usuário não tem acesso à integração Swile.', 403)
+    return service
 
 
 def handle_portal(identity, body):
@@ -618,6 +656,8 @@ def handle_portal(identity, body):
             elif gallery in ('pending', 'history'):
                 if 'orderCode' in body:
                     value = service.corporate_order_details(body['orderCode'], pending_only=gallery == 'pending')
+                elif body.get('snapshot') is True or body.get('refresh') is True:
+                    value = service.gallery_orders(history=gallery == 'history', refresh=body.get('refresh') is True)
                 else:
                     value = service.corporate_orders(history=gallery == 'history')
             else:
@@ -630,3 +670,17 @@ def handle_portal(identity, body):
         return (502 if error.status == 401 else error.status), {'error': str(error)}
     except (OSError, sqlite3.Error):
         return 503, {'error': 'O registro de pedidos Swile está temporariamente indisponível.'}
+
+
+if __name__ == '__main__':
+    logging.basicConfig(level=logging.INFO)
+    try:
+        service, _ = load_service()
+        pending, history = service.refresh_gallery()
+    except SwileError as error:
+        logging.error('Falha ao atualizar a Galeria Swile: %s', error)
+        raise SystemExit(1)
+    except (OSError, sqlite3.Error, KeyError, TypeError, ValueError):
+        logging.error('Não foi possível validar ou salvar os pedidos da Galeria Swile.')
+        raise SystemExit(1)
+    logging.info('Galeria Swile atualizada: %d pedidos em aberto e %d no histórico.', len(pending), len(history))
