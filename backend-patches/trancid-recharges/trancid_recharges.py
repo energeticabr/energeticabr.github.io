@@ -62,8 +62,8 @@ class Service:
         if not isinstance(items, list) or not items or any(not isinstance(item, dict) for item in items):
             raise GatewayError('Selecione os cartões que devem receber a recarga.')
         amounts = [item.get('amountCents') for item in items]
-        if any(type(amount) is not int or not 0 < amount <= 999999999 for amount in amounts) or len(set(amounts)) != 1:
-            raise GatewayError('Informe um valor válido e igual para os cartões selecionados.')
+        if any(type(amount) is not int or not 0 < amount <= 999999999 for amount in amounts):
+            raise GatewayError('Informe um valor válido para cada cartão selecionado.')
         identifiers = [item.get('id') for item in items]
         if any(not isinstance(identifier, str) or not re.fullmatch(r'[a-f0-9]{64}', identifier)
                for identifier in identifiers) or len(set(identifiers)) != len(identifiers):
@@ -72,12 +72,11 @@ class Service:
             cards = {self.public_id(card['id']): card for card in portal.directory()}
         if not all(identifier in cards for identifier in identifiers):
             raise GatewayError('A lista de cartões mudou. Abra a recarga novamente.')
-        amount = amounts[0]
-        selected = [cards[identifier] for identifier in identifiers]
-        order_items = sorted(({'id': card['id'], 'amountCents': amount} for card in selected), key=lambda item: item['id'])
+        selected = [(identifier, cards[identifier], amount) for identifier, amount in zip(identifiers, amounts)]
+        order_items = sorted(({'id': card['id'], 'amountCents': amount} for _, card, amount in selected), key=lambda item: item['id'])
         serial = json.dumps(order_items, separators=(',', ':'))
         fingerprint = hashlib.sha256(serial.encode()).hexdigest()
-        credit = amount * len(selected)
+        credit = sum(amounts)
         # The provider contract quotes a 1% service fee. The final total comes from the portal.
         fee = (credit + 50) // 100
         identifier = secrets.token_urlsafe(24)
@@ -86,8 +85,8 @@ class Service:
             db.execute("""INSERT INTO orders (id, owner, fingerprint, created, state, items, credit, total)
                           VALUES (?, ?, ?, ?, 'preview', ?, ?, ?)""",
                        (identifier, owner, fingerprint, self.clock(), serial, credit, credit + fee))
-        return {'id': identifier, 'items': [{'name': card['name'], 'cardLast4': card['cardLast4'], 'amountCents': amount}
-                                           for card in selected], 'creditCents': credit, 'feeCents': fee,
+        return {'id': identifier, 'items': [{**self.public_card(card, public_id), 'amountCents': amount}
+                                           for public_id, card, amount in selected], 'creditCents': credit, 'feeCents': fee,
                 'totalCents': credit + fee, 'paymentMethod': PAYMENT_METHOD}
 
     @staticmethod

@@ -8,7 +8,7 @@ const cards = [
   { id: 'card-b', name: 'Pessoa Barbosa', cardLast4: '0202' },
 ];
 const preview = {
-  id: 'preview-1', items: [{ name: 'Pessoa Ávila', cardLast4: '0101', amountCents: 5500 }],
+  id: 'preview-1', items: [{ id: 'card-a', name: 'Pessoa Ávila', cardLast4: '0101', amountCents: 5500 }],
   creditCents: 5500, feeCents: 55, totalCents: 5555, paymentMethod: 'BOLETO',
 };
 const settle = () => new Promise(resolve => setImmediate(resolve));
@@ -74,6 +74,36 @@ test('Trancid only sends the reviewed recharge after confirmation', async t => {
   assert.deepEqual(calls.at(-1), ['confirm', { id: 'preview-1' }]);
   assert.equal(calls.filter(([operation]) => operation === 'confirm').length, 1);
   assert.match(document.body.textContent, /Pedido enviado.*790001/s);
+});
+
+test('Trancid defaults to 55, applies the general field to every card and preserves individual edits', async t => {
+  const calls = [];
+  const { document, click, input } = await fixture(t, async (operation, body) => {
+    if (operation === 'directory') return cards;
+    calls.push(body);
+    return { ...preview, creditCents: 11750, items: [
+      { ...cards[0], amountCents: 5750 }, { ...cards[1], amountCents: 6000 },
+    ] };
+  });
+  const general = '[aria-label="Valor da recarga por cartão"]';
+  const a = '[aria-label="Valor para Pessoa Ávila, cartão final 0101"]';
+  const b = '[aria-label="Valor para Pessoa Barbosa, cartão final 0202"]';
+  const value = selector => document.querySelector(selector)?.value;
+  assert.deepEqual([value(general), value(a), value(b)], ['55,00', '55,00', '55,00']);
+  input('[type=search]', '0101');
+  input(general, '60,00');
+  input(a, '57,50');
+  input('[type=search]', '');
+  assert.deepEqual([value(a), value(b)], ['57,50', '60,00']);
+  document.querySelector('.trancid-select-all input').click();
+  assert.match(document.querySelector('.swile-footer').textContent, /117,50/);
+  click('Conferir pedido');
+  await settle();
+  assert.deepEqual(calls, [{ items: [{ id: 'card-a', amountCents: 5750 }, { id: 'card-b', amountCents: 6000 }], paymentMethod: 'BOLETO' }]);
+  click('Editar valores');
+  assert.deepEqual([value(a), value(b)], ['57,50', '60,00']);
+  input(general, '65,00');
+  assert.deepEqual([value(a), value(b)], ['65,00', '65,00']);
 });
 
 test('Trancid requires the gallery check after an uncertain submission', async t => {

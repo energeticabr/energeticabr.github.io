@@ -174,7 +174,10 @@
 
 .trancid-select-all { display: flex; flex-direction: row-reverse; justify-content: flex-end; align-items: center; gap: .55rem; }
 .trancid-recharge-dialog input[type='checkbox'] { width: 1.15rem; min-height: 1.15rem; accent-color: #553990; }
-.trancid-card { grid-template-columns: minmax(0, 1fr) auto; cursor: pointer; }
+.trancid-card { grid-template-columns: minmax(0, 1fr) minmax(4.5rem, 6rem); gap: .5rem; }
+.trancid-card-selection { display: flex; align-items: center; gap: .4rem; min-width: 0; cursor: pointer; }
+.trancid-card-selection > input { order: -1; flex: none; margin: 0; }
+.trancid-recharge-dialog .trancid-card-amount { padding-inline: .35rem; }
 .trancid-payment { display: grid; gap: .25rem; flex: 1 1 9rem; align-self: stretch; }
 .trancid-gallery-page .swile-gallery-order span:nth-child(even) { text-align: end; }
 

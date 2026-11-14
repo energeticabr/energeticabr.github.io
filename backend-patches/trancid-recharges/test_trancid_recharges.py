@@ -29,7 +29,9 @@ class FakePortal:
         if self.failure:
             raise self.failure
         on_draft('789805')
-        return {'orderCode': '789805', 'creditCents': 5500, 'status': 'Enviado', 'paymentMethod': 'BOLETO', 'totalCents': 5555}
+        credits = sum(item['amountCents'] for item in items)
+        return {'orderCode': '789805', 'creditCents': credits, 'status': 'Enviado',
+                'paymentMethod': 'BOLETO', 'totalCents': credits + (credits + 50) // 100}
 
 
 class ServiceTests(unittest.TestCase):
@@ -49,7 +51,7 @@ class ServiceTests(unittest.TestCase):
     def test_owner_bound_confirmation_and_durable_receipt(self):
         preview = self.service.preview('owner', self.body)
         self.assertNotEqual(self.public_id, 'portal-1234')
-        self.assertEqual(preview['items'], [{'name': 'Colaborador', 'cardLast4': '1234', 'amountCents': 5500}])
+        self.assertEqual(preview['items'], [{'id': self.public_id, 'name': 'Colaborador', 'cardLast4': '1234', 'amountCents': 5500}])
         self.assertEqual((preview['creditCents'], preview['feeCents'], preview['totalCents']), (5500, 55, 5555))
         with self.assertRaises(GatewayError):
             self.service.confirm('other', preview['id'])
@@ -59,6 +61,22 @@ class ServiceTests(unittest.TestCase):
         self.assertEqual(receipt['status'], 'SUBMITTED')
         self.assertEqual(self.new_service().confirm('owner', preview['id']), receipt)
         self.assertEqual(self.portal.submissions, [([{'id': 'portal-1234', 'amountCents': 5500}], 'BOLETO')])
+
+    def test_mixed_amounts_preserve_card_mapping_and_deduplicate_reordered_requests(self):
+        second = self.service.directory()[1]['id']
+        items = [{'id': second, 'amountCents': 5750}, self.body['items'][0]]
+        preview = self.service.preview('owner', {**self.body, 'items': items})
+        self.assertEqual([(second, 5750), (self.public_id, 5500)],
+                         [(item['id'], item['amountCents']) for item in preview['items']])
+        self.assertEqual((11250, 113, 11363), (preview['creditCents'], preview['feeCents'], preview['totalCents']))
+        receipt = self.service.confirm('owner', preview['id'])
+        self.assertEqual('SUBMITTED', receipt['status'])
+        self.assertEqual([([{'id': 'portal-1234', 'amountCents': 5500},
+                            {'id': 'portal-5678', 'amountCents': 5750}], 'BOLETO')], self.portal.submissions)
+        duplicate = self.service.preview('other', {**self.body, 'items': list(reversed(items))})
+        with self.assertRaises(GatewayError):
+            self.service.confirm('other', duplicate['id'])
+        self.assertEqual(len(self.portal.submissions), 1)
 
     def test_confirmed_portal_order_does_not_require_a_final_total(self):
         preview = self.service.preview('owner', self.body)
@@ -131,7 +149,7 @@ class ServiceTests(unittest.TestCase):
         for items in ([], [self.body['items'][0]] * 2,
                       [{'id': 'fake', 'amountCents': 5500}],
                       [{'id': self.public_id, 'amountCents': True}],
-                      [self.body['items'][0], {'id': second, 'amountCents': 2500}]):
+                      [self.body['items'][0], {'id': second, 'amountCents': 0}]):
             with self.subTest(items=items), self.assertRaises(GatewayError):
                 self.service.preview('owner', {**self.body, 'items': items})
         self.assertEqual(self.portal.submissions, [])

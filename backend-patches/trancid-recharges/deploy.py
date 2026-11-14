@@ -79,9 +79,11 @@ def restart():
 def main():
     parser = argparse.ArgumentParser()
     parser.add_argument('--expected-bridge', required=True)
+    parser.add_argument('--expected-module', action='append', default=[], metavar='NAME=SHA256')
     parser.add_argument('--allow-email', required=True)
     parser.add_argument('--apply', action='store_true')
     args = parser.parse_args()
+    expected_modules = dict(entry.split('=', 1) for entry in args.expected_module)
     account = pwd.getpwnam(ACCOUNT)
     group = grp.getgrnam(ACCOUNT).gr_gid
     modules = {name: (SOURCE / name).read_bytes() for name in MODULES}
@@ -95,11 +97,17 @@ def main():
             originals[bridge] = snapshot(bridge)
             if hashlib.sha256(originals[bridge][0]).hexdigest() != args.expected_bridge:
                 raise RuntimeError(f'Bridge changed at {bridge}.')
-            updates[bridge] = (patch_bridge(originals[bridge][0]), *originals[bridge][1:])
+            patched = patch_bridge(originals[bridge][0])
+            if patched != originals[bridge][0]:
+                updates[bridge] = (patched, *originals[bridge][1:])
             for name, data in modules.items():
                 target = root / name
                 originals[target] = snapshot(target) if target.exists() else None
-                updates[target] = (data, 0, group, 0o640)
+                original = originals[target]
+                if name in expected_modules and (not original or hashlib.sha256(original[0]).hexdigest() != expected_modules[name]):
+                    raise RuntimeError(f'Module changed at {target}.')
+                if not original or original[0] != data:
+                    updates[target] = (data, 0, group, 0o640)
         if not CONFIG.exists():
             originals[CONFIG] = None
             data = json.dumps({'allowedEmails': [args.allow_email.strip().casefold()], 'cardIdKey': secrets.token_hex(32)})
