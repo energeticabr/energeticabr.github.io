@@ -314,6 +314,7 @@ test('Swile gallery is a separate screen and can open an older completed order',
   const order = { orderCode: 'SWO123', status: 'APPROVED_PARTIALLY', creditDate: '2026-11-17', creditCents: 22505 };
   const oldOrder = { orderCode: 'SWO90', status: 'APPROVED', requestDate: '2026-03-16', creditCents: 10000 };
   const calls = [];
+  let pendingOrderClosed = false;
   let wentHome = false;
   const onHome = () => {
     assert.equal(document.querySelector('main.swile-gallery-page'), null);
@@ -324,6 +325,7 @@ test('Swile gallery is a separate screen and can open an older completed order',
     calls.push([operation, payload]);
     if (payload.gallery === 'history') return payload.orderCode ? { ...oldOrder, items: [] } : [order, oldOrder];
     if (!payload.orderCode) return [order];
+    if (pendingOrderClosed) throw Object.assign(new Error('Este pedido saiu dos pedidos em suspenso. Atualize a galeria.'), { status: 404 });
     return { ...order, items: [
       { name: 'Pessoa A', amountCents: 12505, status: 'APPROVED', creditDate: '2026-11-17' },
       { name: 'Pessoa B', amountCents: 10000, status: null, orderStatus: 'APPROVED_PARTIALLY', creditDate: '2026-11-18' },
@@ -347,6 +349,11 @@ test('Swile gallery is a separate screen and can open an older completed order',
   await settle();
   assert.match(screen.textContent, /Pessoa A.*125,05.*Nº do cartão.*Não informado.*Crédito concluído.*17\/11\/2026.*Data efetuada.*Não informada/s);
   assert.match(screen.textContent, /Pessoa B.*100,00.*Status da cargaNão informado.*18\/11\/2026.*Status do pedidoCrédito parcial/s);
+  pendingOrderClosed = true;
+  sync.click();
+  await settle();
+  assert.match(screen.querySelector('.swile-note').textContent, /pedidos em aberto/);
+  assert.equal(sync.disabled, false);
   findButton('Voltar aos pedidos').click();
   await settle();
   findButton('Histórico').click();
@@ -364,6 +371,7 @@ test('Swile gallery is a separate screen and can open an older completed order',
   await settle();
   assert.deepEqual(calls, [
     ['orders', { gallery: 'pending' }],
+    ['orders', { gallery: 'pending', orderCode: 'SWO123' }],
     ['orders', { gallery: 'pending', orderCode: 'SWO123' }],
     ['orders', { gallery: 'pending' }],
     ['orders', { gallery: 'history' }],

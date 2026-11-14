@@ -305,7 +305,14 @@ export function openSwileView({ document: doc, request, gallery = false, preview
     controls.forEach(control => { control.disabled = true; });
     message();
     try { await work(); }
-    catch (error) { if (!signal.aborted) message(error.message || 'Não foi possível consultar a Swile.', true); }
+    catch (error) {
+      if (!signal.aborted) {
+        const text = error.message === 'Este pedido saiu dos pedidos em suspenso. Atualize a galeria.'
+          ? 'Este pedido saiu da lista de pedidos em aberto. Consulte o histórico.'
+          : error.message;
+        message(text || 'Não foi possível consultar a Swile.', true);
+      }
+    }
     finally {
       busy = false;
       screen.removeAttribute('aria-busy');
