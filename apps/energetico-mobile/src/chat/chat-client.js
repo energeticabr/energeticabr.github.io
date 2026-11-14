@@ -719,7 +719,7 @@ export function createChatClient({
   }
   async function trancidRechargeRequest(operation, payload = {}, { signal } = {}) {
     if (apiPrefix === '/api/demo') throw new Error('A integração Trancid está disponível no ambiente da empresa.');
-    if (!['directory', 'preview', 'confirm', 'history', 'details'].includes(operation)) throw new TypeError('Operação Trancid inválida.');
+    if (!['directory', 'preview', 'confirm', 'history', 'details', 'boleto'].includes(operation)) throw new TypeError('Operação Trancid inválida.');
     const token = await cancellableToken(tokenProvider, signal);
     const readOnly = operation !== 'confirm';
     try {

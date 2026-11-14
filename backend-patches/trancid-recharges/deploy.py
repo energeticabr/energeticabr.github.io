@@ -30,9 +30,14 @@ LEGACY_ROUTE = '''                if action in {
                     status, result = handle_trancid_recharges(identity, body)
                     return self._send_json(status, result, cors_origin=origin)
 '''
-ROUTE = LEGACY_ROUTE.replace(
+DETAILS_ROUTE = LEGACY_ROUTE.replace(
     '"trancid_recharge_confirm", "trancid_recharge_history",',
     '"trancid_recharge_confirm", "trancid_recharge_history", "trancid_recharge_details",',
+)
+ROUTE = DETAILS_ROUTE.replace(
+    '                    "trancid_recharge_confirm", "trancid_recharge_history", "trancid_recharge_details",',
+    '                    "trancid_recharge_confirm", "trancid_recharge_history", "trancid_recharge_details",\n'
+    '                    "trancid_recharge_boleto",',
 )
 MODULES = ('trancid_recharges.py', 'trancid_portal_adapter.py')
 
@@ -43,7 +48,9 @@ def patch_bridge(data):
         return data
     if source.count(ANCHOR) != 1:
         raise ValueError('Unexpected portal routing. Review the active bridge.')
-    if source.count(LEGACY_ROUTE + ANCHOR) == 1:
+    if source.count(DETAILS_ROUTE + ANCHOR) == 1:
+        source = source.replace(DETAILS_ROUTE + ANCHOR, ROUTE + ANCHOR, 1)
+    elif source.count(LEGACY_ROUTE + ANCHOR) == 1:
         source = source.replace(LEGACY_ROUTE + ANCHOR, ROUTE + ANCHOR, 1)
     elif 'handle_trancid_recharges' not in source:
         source = source.replace(ANCHOR, ROUTE + ANCHOR, 1)

@@ -87,6 +87,21 @@ class ServiceTests(unittest.TestCase):
                 read.assert_called_once_with('789805')
         self.assertEqual(self.portal.submissions, [])
 
+    def test_boleto_route_returns_pdf_only_to_an_authorized_corporate_user(self):
+        identity = {'email': 'authorized@example.test', 'oid': 'employee'}
+        request = {'action': 'trancid_recharge_boleto', 'orderCode': '789805'}
+        with patch('trancid_recharges.read_config', return_value=(['authorized@example.test'], b'key')), \
+                patch('trancid_recharges.Service', return_value=self.service), \
+                patch.object(self.portal, 'order_boleto', create=True, return_value=b'%PDF-1.7') as read:
+            self.assertEqual(handle_portal({**identity, 'email': 'other@example.test'}, request)[0], 403)
+            self.assertEqual(handle_portal(identity, {**request, 'orderCode': '../other'})[0], 422)
+            read.assert_not_called()
+            status, response = handle_portal(identity, request)
+            self.assertEqual(status, 200)
+            self.assertEqual(response['trancid'], {'orderCode': '789805', 'base64': 'JVBERi0xLjc='})
+            read.assert_called_once_with('789805')
+            self.assertEqual(self.portal.submissions, [])
+
     def test_mixed_amounts_preserve_card_mapping_and_deduplicate_reordered_requests(self):
         second = self.service.directory()[1]['id']
         items = [{'id': second, 'amountCents': 5750}, self.body['items'][0]]

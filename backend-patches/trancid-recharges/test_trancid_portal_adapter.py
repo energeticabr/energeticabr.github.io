@@ -1,12 +1,42 @@
 import unittest
 from datetime import date
-from unittest.mock import Mock
+from unittest.mock import Mock, call, patch
 
 from trancid_portal_adapter import Form, Portal, PortalError, PortalUncertain, parse_cards
 
 
 ORIGIN = "http://provider.example:8082"
 CARDS = ["06850000084216", "06850000084217"]
+
+
+class BoletoTests(unittest.TestCase):
+    def test_opens_exact_existing_order_and_rejects_a_different_boleto(self):
+        page = ORIGIN + '/frmSelecaoBoletoCI.aspx'
+        listing = history([('900001', 'Enviado', '55,00'), ('900002', 'Finalizado', '55,00')])
+        listing = (listing.replace('Nº Pedido', 'Código').replace('Data Pedido', 'Data')
+                   .replace('Status Pedido', 'Status').replace('Valor Pedido', 'Valor'))
+        selected = listing + """<input type="submit" id="btnPedido" name="btnPedido"
+            value="Emitir pagamento de pedido" onclick='WebForm_PostBackOptions("btnPedido", "")'>"""
+        result = """<script>window.open('frmPgRelCargaBordo.aspx?TituloMenu=Boleto de Carga&parameters=ABC+123=', '_blank');</script>"""
+        raw = b'%PDF-1.7'
+        for returned, verified in [('900002', True), ('900001', False)]:
+            with self.subTest(returned=returned):
+                portal = Portal()
+                portal.origin = ORIGIN
+                portal._read = Mock(side_effect=[(page, listing), (page, selected), (page, result)])
+                portal._pdf_bytes = Mock(return_value=raw)
+                with patch('trancid_portal_adapter.extract_pdf_text',
+                           return_value=f'(+)    Pedido de Carga: {returned}', create=True):
+                    if verified:
+                        self.assertEqual(portal.order_boleto('900002'), raw)
+                    else:
+                        with self.assertRaisesRegex(PortalError, 'outro pedido'):
+                            portal.order_boleto('900002')
+                self.assertEqual(portal._read.call_args_list[0], call(ORIGIN + '/frmSelecaoBoleto.aspx'))
+                self.assertEqual(portal._read.call_args_list[1].args[1]['__EVENTTARGET'], 'gridPedido$_ctl4$_ctl0')
+                self.assertEqual(portal._read.call_args_list[2].args[1]['btnPedido'], 'Emitir pagamento de pedido')
+                portal._pdf_bytes.assert_called_once_with(
+                    ORIGIN + '/frmPgRelCargaBordo.aspx?TituloMenu=Boleto%20de%20Carga&parameters=ABC+123=')
 
 
 def order_report():

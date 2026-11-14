@@ -1,5 +1,6 @@
 """Authenticated corporate Trancid recharges and durable submission receipts."""
 
+from base64 import b64encode
 from contextlib import closing, contextmanager
 from datetime import datetime, timezone
 import hashlib
@@ -248,6 +249,13 @@ class Service:
         with self.portal() as portal:
             return {'orderCode': order_code, 'items': portal.order_details(order_code)}
 
+    def order_boleto(self, order_code):
+        if not isinstance(order_code, str) or not re.fullmatch(ORDER_CODE, order_code):
+            raise GatewayError('Código de pedido da Trancid inválido.')
+        with self.portal() as portal:
+            pdf = portal.order_boleto(order_code)
+        return {'orderCode': order_code, 'base64': b64encode(pdf).decode('ascii')}
+
 
 def read_config():
     try:
@@ -284,6 +292,8 @@ def handle_portal(identity, body):
             value = service.history(body.get('page', 1), refresh=body.get('refresh') is True)
         elif action == 'trancid_recharge_details':
             value = service.order_details(body.get('orderCode'))
+        elif action == 'trancid_recharge_boleto':
+            value = service.order_boleto(body.get('orderCode'))
         else:
             raise GatewayError('Operação Trancid inválida.')
         return 200, {'status': 'processed', 'messages': [], 'trancid': value}

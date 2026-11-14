@@ -20,6 +20,9 @@ MONITOR_ROOT = Path("/opt/energetica-whatsapp/trancid-monitor")
 CONFIG_FILE = Path("/etc/energetica-trancid.env")
 HISTORY_PATH = "/frmSelPedidoExistente.aspx"
 HISTORY_PAGE = "/frmSelPedidoExistenteCI.aspx"
+BOLETO_PATH = "/frmSelecaoBoleto.aspx"
+BOLETO_PAGE = "/frmSelecaoBoletoCI.aspx"
+BOLETO_REPORT = "/frmPgRelCargaBordo.aspx"
 DETAIL_FILTER = "/frmConsultaPedidoCarga.aspx"
 DETAIL_REPORT = "/frmRelPedidoCargaBordoCI.aspx"
 CREATE_PAGE = "/frmSelGrupoNovoPedido.aspx"
@@ -231,7 +234,7 @@ def portal_date(value):
         raise PortalError("A Trancid retornou uma data inválida.") from error
 
 
-def history_rows(form):
+def history_rows(form, *, boleto=False):
     require_tenant(form)
     grid = form.tables.get("gridPedido")
     if not grid:
@@ -240,9 +243,10 @@ def history_rows(form):
             return []
         raise PortalError("Grade de pedidos da Trancid não localizada.")
     header = [normalize(value) for value in grid[0].values()]
-    if len(header) != 6 or header[1:] != [
-        "Nº PEDIDO", "DATA PEDIDO", "STATUS PEDIDO", "VALOR PEDIDO", "FORMA DE PAGAMENTO",
-    ]:
+    columns = ["CODIGO", "DATA", "STATUS", "VALOR"] if boleto else [
+        "Nº PEDIDO", "DATA PEDIDO", "STATUS PEDIDO", "VALOR PEDIDO",
+    ]
+    if len(header) != 6 or header[1:] != [*columns, "FORMA DE PAGAMENTO"]:
         raise PortalError("A Trancid alterou as colunas do histórico de pedidos.")
     orders = []
     for row in grid[1:]:
@@ -282,6 +286,15 @@ def history_pager(form):
 
 def event_fields(form, target):
     return {**form.fields, "__EVENTTARGET": target, "__EVENTARGUMENT": ""}
+
+
+def select_order_target(row):
+    targets = [match[1] for link in row.links if (
+        match := re.fullmatch(r"javascript:__doPostBack\('(gridPedido\$_ctl\d+\$_ctl\d+)',''\)", link)
+    )]
+    if len(targets) != 1:
+        raise PortalError("A ação de seleção do pedido não foi identificada no histórico.")
+    return targets[0]
 
 
 def verify_button(form, identifier, script):
@@ -332,6 +345,18 @@ def config_values():
     if not all(config.get(key) for key in keys):
         raise PortalError("A configuração protegida da Trancid está incompleta.")
     return config
+
+
+def extract_pdf_text(raw):
+    try:
+        from pypdf import PdfReader
+
+        return "\n".join(
+            page.extract_text(extraction_mode="layout") or ""
+            for page in PdfReader(io.BytesIO(raw)).pages
+        )
+    except Exception as error:
+        raise PortalError("Não foi possível ler o relatório da Trancid.") from error
 
 
 class Portal:
@@ -411,26 +436,24 @@ class Portal:
             raise PortalError("A Trancid redirecionou para um destino externo.")
         return final_url, html
 
-    def _pdf_text(self, url):
+    def _pdf_bytes(self, url):
         if not self._same_origin(url):
             raise PortalError("Exportação da Trancid fora da origem autorizada.")
         try:
-            from pypdf import PdfReader
-
             with self.collector.opener.open(url, timeout=30) as response:
                 if not self._same_origin(response.url):
                     raise PortalError("Destino da exportação da Trancid divergente.")
                 raw = response.read(5_000_001)
             if len(raw) > 5_000_000 or not raw.startswith(b"%PDF-"):
                 raise PortalError("A exportação da Trancid não retornou um PDF válido.")
-            return "\n".join(
-                page.extract_text(extraction_mode="layout") or ""
-                for page in PdfReader(io.BytesIO(raw)).pages
-            )
+            return raw
         except PortalError:
             raise
         except Exception as error:
             raise PortalError("Não foi possível ler o relatório da Trancid.") from error
+
+    def _pdf_text(self, url):
+        return extract_pdf_text(self._pdf_bytes(url))
 
     def directory(self):
         url, html = self._read(self.balance_url)
@@ -442,14 +465,15 @@ class Portal:
         text = self._pdf_text(urljoin(url, json.loads(export[1]) + "PDF"))
         return parse_cards("<div>" + escape(text) + "</div>")
 
-    def _history_pages(self, *, require_complete=False):
-        url, html = self._read(self.origin + HISTORY_PATH)
+    def _history_pages(self, *, require_complete=False, boleto=False):
+        start, canonical = (BOLETO_PATH, BOLETO_PAGE) if boleto else (HISTORY_PATH, HISTORY_PAGE)
+        url, html = self._read(self.origin + start)
         previously_seen = set()
         for requested in range(1, MAX_HISTORY_PAGES + 1):
-            if urlsplit(url).path not in (HISTORY_PATH, HISTORY_PAGE):
+            if urlsplit(url).path not in (start, canonical):
                 raise PortalError("A Trancid não abriu o histórico de pedidos autenticado.")
             form = Form(html)
-            orders = history_rows(form)
+            orders = history_rows(form, boleto=boleto)
             codes = {order["orderCode"] for order, _ in orders}
             if previously_seen & codes:
                 raise PortalError("A Trancid repetiu pedidos entre páginas do histórico.")
@@ -478,11 +502,13 @@ class Portal:
     def all_history(self):
         return [order for _, _, orders, _, _ in self._history_pages(require_complete=True) for order, _ in orders]
 
-    def _order_row(self, order_code):
-        for url, form, orders, _, _ in self._history_pages():
+    def _order_row(self, order_code, *, boleto=False):
+        for url, form, orders, _, _ in self._history_pages(boleto=boleto):
             for order, row in orders:
                 if order["orderCode"] == order_code:
                     return url, form, order, row
+        if boleto:
+            raise PortalError("A Trancid não disponibilizou o boleto deste pedido.")
         raise PortalError("O pedido ainda não apareceu no histórico da Trancid.")
 
     def order(self, order_code):
@@ -490,6 +516,39 @@ class Portal:
         if not isinstance(order_code, str) or not re.fullmatch(ORDER_CODE, order_code):
             raise PortalError("Código de pedido da Trancid inválido.")
         return self._order_row(order_code)[2]
+
+    def order_boleto(self, order_code):
+        """Print the existing boleto for the selected corporate order."""
+        if not isinstance(order_code, str) or not re.fullmatch(ORDER_CODE, order_code):
+            raise PortalError("Código de pedido da Trancid inválido.")
+        url, form, order, row = self._order_row(order_code, boleto=True)
+        if (order["paymentMethod"] != "BOLETO"
+                or normalize(order["status"]) not in SENT_STATUSES | {"PAGO", "AGUARDANDO PAGAMENTO"}):
+            raise PortalError("A Trancid não disponibilizou o boleto deste pedido.")
+
+        url, html = self._read(url, event_fields(form, select_order_target(row)))
+        if urlsplit(url).path != BOLETO_PAGE:
+            raise PortalError("A Trancid não confirmou a seleção do boleto.")
+        selected = Form(html)
+        require_tenant(selected)
+        verify_button(selected, "btnPedido", 'WebForm_PostBackOptions("btnPedido"')
+        submit = selected.inputs.get("btnPedido", {})
+        if submit.get("type") != "submit" or submit.get("value") != "Emitir pagamento de pedido":
+            raise PortalError("A opção de impressão do boleto da Trancid mudou.")
+        url, html = self._read(url, {**event_fields(selected, ""), "btnPedido": submit["value"]})
+        links = re.findall(r"""window\.open\(['"]((?:\./)?frmPgRelCargaBordo\.aspx\?[^'"\r\n]+)['"]""", html)
+        if urlsplit(url).path != BOLETO_PAGE or len(links) != 1:
+            raise PortalError("A Trancid não disponibilizou a impressão deste boleto.")
+        reference = unescape(links[0]).replace("\u00b6meters=", "&parameters=")
+        report_url = urljoin(url, quote(reference, safe="/?&=%+"))
+        report = urlsplit(report_url)
+        if report.path != BOLETO_REPORT or len(parse_qs(report.query).get("parameters", [])) != 1:
+            raise PortalError("A Trancid retornou um endereço de boleto inválido.")
+        raw = self._pdf_bytes(report_url)
+        codes = set(re.findall(rf"(?i)\bPedido de Carga:[ \t]*({ORDER_CODE})\b", extract_pdf_text(raw)))
+        if codes != {order_code}:
+            raise PortalError("A Trancid retornou um boleto de outro pedido ou sem identificação.")
+        return raw
 
     def order_details(self, order_code):
         """Open the portal's read-only order report, never the order edit form."""
@@ -524,12 +583,7 @@ class Portal:
         if (order["requestDate"] != today or normalize(order["status"]) != "EM ANDAMENTO"
                 or order["paymentMethod"] != "BOLETO"):
             raise PortalError("O histórico não confirmou o rascunho de boleto em andamento.")
-        targets = [match[1] for link in row.links if (
-            match := re.fullmatch(r"javascript:__doPostBack\('(gridPedido\$_ctl\d+\$_ctl\d+)',''\)", link)
-        )]
-        if len(targets) != 1:
-            raise PortalError("A ação de seleção do rascunho não foi identificada no histórico.")
-        url, html = self._read(url, event_fields(form, targets[0]))
+        url, html = self._read(url, event_fields(form, select_order_target(row)))
         form = Form(html)
         require_tenant(form)
         verify_button(form, "btnAlterar", 'WebForm_PostBackOptions("btnAlterar"')

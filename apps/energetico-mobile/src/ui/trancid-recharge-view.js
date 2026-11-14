@@ -16,7 +16,8 @@ function cardLabel(card) {
   return card.cardLast4 ? `Cartão final ${card.cardLast4}` : '';
 }
 
-export function openTrancidRechargeView({ document: doc, request, gallery = false, onClose, onHome }) {
+export function openTrancidRechargeView({ document: doc, request, gallery = false,
+  previewDocument, closePreview, onClose, onHome }) {
   const lifetime = new AbortController();
   const { signal } = lifetime;
   const opener = doc.activeElement;
@@ -26,6 +27,7 @@ export function openTrancidRechargeView({ document: doc, request, gallery = fals
   let galleryHeader;
   let busy = false;
   let confirming = false;
+  let viewingBoleto = false;
   let cards = [];
   const selected = new Set();
   const individualAmounts = new Map();
@@ -72,7 +74,7 @@ export function openTrancidRechargeView({ document: doc, request, gallery = fals
   let screen;
 
   function onGalleryKey(event) {
-    if (event.key === 'Escape' && !event.defaultPrevented) {
+    if (event.key === 'Escape' && !event.defaultPrevented && !viewingBoleto) {
       event.preventDefault();
       close();
     }
@@ -93,6 +95,7 @@ export function openTrancidRechargeView({ document: doc, request, gallery = fals
     if (signal.aborted) return;
     lifetime.abort();
     doc.removeEventListener('keydown', onGalleryKey);
+    if (viewingBoleto) closePreview?.();
     removeScreen();
     if (restoreApp) app.removeAttribute('inert');
     if (opener?.isConnected) opener.focus({ preventScroll: true });
@@ -374,12 +377,14 @@ export function openTrancidRechargeView({ document: doc, request, gallery = fals
 
   function galleryOrder(order, index) {
     const item = make('article', '', 'trancid-order');
+    const heading = make('div', '', 'trancid-order-heading');
     const summary = make('button', '', 'trancid-order-summary');
     summary.type = 'button';
     summary.setAttribute('aria-expanded', 'false');
     const status = order.paymentStatus || order.status;
+    const paymentTone = normalize(status).trim();
     const statusBadge = make('span', status, 'trancid-order-status');
-    statusBadge.dataset.tone = ({ pago: 'paid', 'pendente pgto': 'pending' })[normalize(status).trim()] || 'neutral';
+    statusBadge.dataset.tone = ({ pago: 'paid', 'pendente pgto': 'pending' })[paymentTone] || 'neutral';
     const badges = make('span', '', 'trancid-order-badges');
     badges.append(statusBadge, make('span', paymentLabel(order.paymentMethod), 'trancid-order-method'));
     const arrow = make('span', '', 'trancid-order-arrow');
@@ -454,8 +459,49 @@ export function openTrancidRechargeView({ document: doc, request, gallery = fals
       summary.setAttribute('aria-expanded', String(!details.hidden));
       if (!details.hidden) load();
     });
-    item.append(summary, details);
+    if (order.paymentMethod === 'BOLETO' && ['pago', 'pendente pgto', 'enviado', 'finalizado'].includes(paymentTone)) {
+      const open = button('', () => showBoleto(order.orderCode, open));
+      open.className = 'trancid-order-boleto';
+      open.title = 'Abrir boleto do pedido ' + order.orderCode;
+      open.setAttribute('aria-label', open.title);
+      open.setAttribute('aria-haspopup', 'dialog');
+      open.append(provisionDescriptionIcon(doc, 'document'), make('span', 'PDF'));
+      heading.append(open);
+    }
+    heading.append(summary);
+    item.append(heading, details);
     return item;
+  }
+
+  function showBoleto(orderCode, control) {
+    if (viewingBoleto) return;
+    return run(async () => {
+      if (!previewDocument) throw new Error('O visualizador de PDF está indisponível.');
+      message('Carregando boleto do pedido ' + orderCode + '…');
+      await detailQueue;
+      if (signal.aborted) return;
+      const result = await request('boleto', { orderCode }, { signal });
+      if (signal.aborted) return;
+      const invalidPdf = 'A Trancid não disponibilizou um PDF válido para este pedido.';
+      if (result?.orderCode !== orderCode || typeof result.base64 !== 'string') throw new Error(invalidPdf);
+      let contents;
+      try {
+        contents = atob(result.base64);
+      } catch {
+        throw new Error(invalidPdf);
+      }
+      if (!contents.startsWith('%PDF-')) throw new Error(invalidPdf);
+      const blob = new Blob([Uint8Array.from(contents, character => character.charCodeAt(0))], { type: 'application/pdf' });
+      message();
+      control.disabled = false;
+      viewingBoleto = true;
+      try {
+        await previewDocument(blob, 'Boleto-Trancid-' + orderCode + '.pdf', () => control, () => { viewingBoleto = false; });
+      } catch (error) {
+        viewingBoleto = false;
+        throw error;
+      }
+    });
   }
 
   function showGallery({ orders, page, hasMore, checkedAt }, focusPage = false) {
