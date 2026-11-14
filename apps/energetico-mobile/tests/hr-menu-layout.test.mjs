@@ -1,7 +1,9 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { existsSync } from 'node:fs';
-import { resolve } from 'node:path';
+import { mkdtemp, rm } from 'node:fs/promises';
+import { tmpdir } from 'node:os';
+import { join, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { createServer } from 'vite';
 import { JSDOM } from 'jsdom';
@@ -26,7 +28,7 @@ const menu = {
   ],
 };
 
-test('HR galleries occupy the first four rows without changing or duplicating navigation', () => {
+test('HR hides retired actions and keeps the remaining shortcuts usable', () => {
   const dom = new JSDOM('<main id="app"></main>');
   const root = dom.window.document.querySelector('#app');
   const view = createChatView(root), events = [];
@@ -40,7 +42,7 @@ test('HR galleries occupy the first four rows without changing or duplicating na
       ['action_create_supplier_attendance', 'action_hr_gallery_idfolha'],
       ['action_register_hr_activity', 'action_hr_gallery_folhapgto'],
       ['action_hr_registrations', 'action_hr_gallery_presencas'],
-      ['action_validate_attendance', 'action_hr_gallery_funcionarios'], ['action_link_attendance_payment'], ['action_hr_reports'],
+      ['action_validate_attendance', 'action_hr_gallery_funcionarios'],
       ['action_contract'], ['action_rhid_attendance_report'],
     ]);
     for (const button of root.querySelectorAll('.chat-hr-menu-row button')) button.click();
@@ -48,7 +50,7 @@ test('HR galleries occupy the first four rows without changing or duplicating na
       'action_create_supplier_attendance', 'action_hr_gallery_idfolha',
       'action_register_hr_activity', 'action_hr_gallery_folhapgto',
       'action_hr_registrations', 'action_hr_gallery_presencas',
-      'action_validate_attendance', 'action_hr_gallery_funcionarios', 'action_link_attendance_payment', 'action_hr_reports', 'action_contract',
+      'action_validate_attendance', 'action_hr_gallery_funcionarios', 'action_contract',
     ]);
     assert.ok(root.querySelector('[data-rhid-attendance-report-dialog]'), 'report keeps its calendar popup');
     view.render({ ...state, activeText: 'sending' });
@@ -84,8 +86,11 @@ test('legacy duplicate presence options render one gallery with its current name
 
 test('HR actions and galleries share aligned equal-height rows on phones, tablets and Windows', { timeout: 120_000 }, async t => {
   if (!browser) return t.skip('Chrome unavailable');
-  const server = await createServer({ root: appRoot, server: { host: '127.0.0.1', port: 0,
-    fs: { allow: [resolve(appRoot, '../..')] } }, logLevel: 'silent' });
+  const cacheDir = await mkdtemp(join(tmpdir(), 'energetico-hr-menu-'));
+  t.after(() => rm(cacheDir, { recursive: true, force: true, maxRetries: 5 }));
+  const server = await createServer({ root: appRoot, cacheDir,
+    optimizeDeps: { noDiscovery: true, include: ['decimal.js', 'pdf-lib', 'pako', '@capacitor/core'] },
+    server: { host: '127.0.0.1', port: 0, fs: { allow: [resolve(appRoot, '../..'), cacheDir] } }, logLevel: 'silent' });
   try {
     await server.listen();
     for (const [width, height] of [[320, 740], [390, 844], [768, 1024], [1365, 768]]) {
@@ -93,15 +98,24 @@ test('HR actions and galleries share aligned equal-height rows on phones, tablet
         url: `http://127.0.0.1:${server.httpServer.address().port}/tests/fixtures/hr-menu-layout.html` });
       const dom = new JSDOM(stdout), result = JSON.parse(dom.window.document.documentElement.dataset.layout);
       dom.window.close();
-      assert.equal(result.rows.length, 8);
+      assert.equal(result.rows.length, 6);
       assert.equal(result.overflow, false, `${width}: no horizontal overflow`);
+      for (const [button, reference] of [[result.holerites, result.swileGallery],
+        [result.trancid, result.swile], [result.trancidGallery, result.swileGallery]]) {
+        assert.ok(Math.abs(button.x - reference.x) <= 1, `${width}: ${JSON.stringify(button)}`);
+        assert.ok(Math.abs(button.width - reference.width) <= 1, `${width}: ${JSON.stringify(button)}`);
+      }
       for (const [index, row] of result.rows.entries()) {
         const diagnostic = `${width} row ${index}: ${JSON.stringify(row)}`;
         assert.ok(row.buttonsFit, diagnostic);
         assert.ok(Math.abs(row.primary.y - row.row.y) <= 1, diagnostic);
         assert.ok(Math.abs(row.primary.height - row.row.height) <= 1, diagnostic);
         assert.ok(Math.abs(row.row.height - result.rows[0].row.height) <= 1, diagnostic);
+        assert.ok(Math.abs(row.primary.x - result.swile.x) <= 1, diagnostic);
+        assert.ok(Math.abs(row.primary.width - result.swile.width) <= 1, diagnostic);
         if (row.gallery) {
+          assert.ok(Math.abs(row.gallery.x - result.swileGallery.x) <= 1, diagnostic);
+          assert.ok(Math.abs(row.gallery.width - result.swileGallery.width) <= 1, diagnostic);
           assert.ok(Math.abs(row.primary.y - row.gallery.y) <= 1, diagnostic);
           assert.ok(Math.abs(row.primary.height - row.gallery.height) <= 1, diagnostic);
           assert.ok(row.gallery.x >= row.primary.x + row.primary.width + 7, diagnostic);
