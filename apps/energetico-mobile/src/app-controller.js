@@ -1086,6 +1086,7 @@ export function createAppController({
   enableDdaMenuAlert = false,
   enableSicoobMenuAlert = false,
   enableTrancidReminders = false,
+  enableCompanyData = true,
   trancidReportFactory = defaultTrancidReportFactory,
   trancidReportDataFactory = defaultTrancidReportDataFactory,
   trancidReportBuilder = defaultTrancidReportBuilder,
@@ -1680,6 +1681,7 @@ export function createAppController({
   let sefazSyncSession = null;
   function disposeSefazSyncSession(){sefazSyncSession?.destroy();sefazSyncSession=null;}
   function ensureSefazSyncSession(){
+    if (!enableCompanyData) return null;
     if(!account||stopped||sessionStatus!=='authenticated'||!['refreshSefaz','getSefazRefreshStatus','getSefazRefreshPending','acknowledgeSefazRefresh'].every(name=>typeof client[name]==='function'))return null;
     if(sefazSyncSession)return sefazSyncSession;
     const owner=account,revision=sessionRevision;
@@ -1698,6 +1700,7 @@ export function createAppController({
     ddaSyncSession?.destroy();ddaSyncSession=null;
   }
   function ensureDdaSyncSession(){
+    if (!enableCompanyData) return null;
     if(!account||stopped||sessionStatus!=='authenticated'||typeof client.getDdaRefreshPending!=='function'||typeof client.acknowledgeDdaRefresh!=='function')return null;
     if(ddaSyncSession)return ddaSyncSession;
     const owner=account,revision=sessionRevision;
@@ -1720,6 +1723,7 @@ export function createAppController({
   }
   let sicoobSyncSession = null, financialSyncCoordinator = null, unsubscribeSicoobMenuSync = null;
   function ensureSicoobSyncSession(){
+    if (!enableCompanyData) return null;
     if(!account||stopped||sessionStatus!=='authenticated'||!['refreshSicoob','getSicoobRefreshStatus','getSicoobRefreshPending','acknowledgeSicoobRefresh'].every(name=>typeof client[name]==='function'))return null;
     if(sicoobSyncSession)return sicoobSyncSession;
     const owner=account,revision=sessionRevision;
@@ -2804,7 +2808,7 @@ export function createAppController({
   }
 
   async function refreshPendingProvisionSnapshot({ manual = false, isCurrent = () => true, progressOptions } = {}) {
-    if (!account || stopped || typeof client.getPendingProvisionSnapshot !== "function") return false;
+    if (!enableCompanyData || !account || stopped || typeof client.getPendingProvisionSnapshot !== "function") return false;
     if (pendingProvisionReminderOpen || pendingProvisionSnapshot) {
       const today = provisionDateKey();
       if (pendingProvisionSnapshot && (pendingProvisionSnapshot.today !== today || manual && !pendingProvisionSnapshot.openedManually)) {
@@ -2953,7 +2957,7 @@ export function createAppController({
   }
 
   async function refreshPendingNotesSnapshot() {
-    if (!account || stopped || typeof client.getPendingNotesSnapshot !== "function") return false;
+    if (!enableCompanyData || !account || stopped || typeof client.getPendingNotesSnapshot !== "function") return false;
     const snapshotAccount = account;
     const snapshotRevision = sessionRevision;
     try {

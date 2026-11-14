@@ -1,3 +1,4 @@
+import { NB_APP_NAME, NB_AREA_IDS, NB_PORTAL_APP } from "../nb-participacoes.js";
 import { matchesSearchTerms, normalizeSearchText } from '../../../../portal/core/search-text.js';
 import { pendingProvisionAttachmentTray } from './pending-provision-attachment-tray.js';
 import { payrollAssignmentTableMarkup } from './payroll-assignment-table.js';
@@ -415,6 +416,7 @@ function draftMenuOptions(message) {
   // from the root area chooser even if an older VM response still includes
   // the legacy option there; do not synthesize it into the root menu.
   const isRootAreaMenu = isMainAreaMenu || isAttachmentAreaQuestion(question);
+  if (isRootAreaMenu && message.nbAreaMenu) return options.filter(option => NB_AREA_IDS.has(draftReplyId(option)));
   const hasPendingDiaryList = options.some(option => draftReplyId(option).trim().toLowerCase() === "start_pending_construction_diary");
   const menuOptions = isRootAreaMenu
     ? options
@@ -2968,14 +2970,15 @@ export function renderPublicLinks() {
   return `<nav aria-label="Privacidade e suporte"><a href="https://www.energeticabr.com/energetico-privacidade.html" target="_blank" rel="noopener noreferrer">Privacidade</a> · <a href="https://www.energeticabr.com/energetico-suporte.html" target="_blank" rel="noopener noreferrer">Suporte</a></nav>`;
 }
 
-function renderSignedOut(status, error, showSettings, allowDemo) {
+function renderSignedOut(status, error, showSettings, allowDemo, nb) {
   const isLoading = status === "initializing";
   return `<section class="auth-screen">
     <div class="auth-card">
-      ${isLoading ? loadingIndicatorMarkup("Entrando com a Microsoft…", { compact: true }) : `<img class="auth-mascot" src="${MASCOT_URL}" alt="Mascote Energético">`}
-      <p class="eyebrow">ENERGÉTICA</p>
-      <h1>Energético</h1>
-      <p>Seu assistente administrativo em uma conversa segura.</p>
+      ${isLoading ? loadingIndicatorMarkup("Entrando com a Microsoft…", { compact: true }) : nb
+        ? `<span class="nb-brand-mark nb-brand-mark--large" aria-hidden="true">${NB_APP_NAME}</span>`
+        : `<img class="auth-mascot" src="${MASCOT_URL}" alt="Mascote Energético">`}
+      ${nb ? `<h1>${NB_APP_NAME}</h1><p>Gastos pessoais, aluguéis e imóveis</p>`
+        : '<p class="eyebrow">ENERGÉTICA</p><h1>Energético</h1><p>Seu assistente administrativo em uma conversa segura.</p>'}
       ${error ? `<p class="error-banner" role="alert">${escapeHtml(error)}</p>` : ""}
       <button class="primary-button" type="button" data-action="sign-in"${isLoading ? " disabled" : ""}>${isLoading ? "Entrando com a Microsoft…" : "Entrar com a Microsoft"}</button>
       ${allowDemo ? `<button type="button" data-action="demo-access"${isLoading ? " disabled" : ""}>Acesso de demonstração</button>` : ""}
@@ -2991,12 +2994,16 @@ function chatInteractionBusy(state, rhidReportBusy = false) {
     || rhidReportBusy === true || state.pendingProvisionOpening === true;
 }
 
-export function renderChatMarkup(state = {}, { showSettings = false, allowDemo = false, demo = false, signOutConfirm = false, pendingDocumentDelete = false, attachmentSource = false, datePicker = false, datePickerValue = "", signaturePad = false, signaturePadError = "", signaturePlacement = null, signaturePlacementStampApplied = false, attendanceSelectedIds = [], attendanceExpandedIds = [], attendanceIrregularityDialog = null, attendanceIrregularityChecking = false, launchPayrollSelectedIds = [], rhidAttendanceReport = null, rhidAttendanceAdjustment = null, rhidRefresh = null } = {}) {
+export function renderChatMarkup(state = {}, { showSettings = false, allowDemo = false, demo = false, signOutConfirm = false, pendingDocumentDelete = false, attachmentSource = false, datePicker = false, datePickerValue = "", signaturePad = false, signaturePadError = "", signaturePlacement = null, signaturePlacementStampApplied = false, attendanceSelectedIds = [], attendanceExpandedIds = [], attendanceIrregularityDialog = null, attendanceIrregularityChecking = false, launchPayrollSelectedIds = [], rhidAttendanceReport = null, rhidAttendanceAdjustment = null, rhidRefresh = null, portalApp } = {}) {
+  const nb = portalApp === NB_PORTAL_APP;
   if (state.sessionStatus !== "authenticated") {
-    return renderSignedOut(state.sessionStatus, state.error, showSettings, allowDemo);
+    return renderSignedOut(state.sessionStatus, state.error, showSettings, allowDemo, nb);
   }
 
-  const sourceMessages = Array.isArray(state.messages) ? state.messages : [];
+  const rawMessages = Array.isArray(state.messages) ? state.messages : [];
+  const sourceMessages = nb ? rawMessages.map(message => isInitialAreaSelectionMenu(message)
+    ? { ...message, nbAreaMenu: true, options: message.options?.filter(option => NB_AREA_IDS.has(draftReplyId(option))) }
+    : message) : rawMessages;
   const messages = withLaunchAttachmentPrompt(
     withDocumentAttachmentPrompt(sourceMessages, state.activeFlow, state.attachments),
     state.activeFlow, state.attachments,
@@ -3066,10 +3073,13 @@ export function renderChatMarkup(state = {}, { showSettings = false, allowDemo =
 
   return `<section class="chat-shell">
     <header class="chat-header">
+      ${nb ? `<span class="nb-brand-mark" aria-hidden="true">${NB_APP_NAME}</span>
+      <span><strong>${NB_APP_NAME}</strong><small>${escapeHtml(firstName)}</small></span>`
+        : `
       <button class="chat-header-avatar-shortcut" ${headerReportAttributes}>${assistantAvatar()}</button>
       <span><button class="chat-header-name-shortcut" ${headerReportAttributes}><strong>Energético</strong></button><small>${demo ? `<span data-demo-banner role="status">Demonstração — dados fictícios</span>` : `${escapeHtml(firstName)}, conectado à VM`}</small></span>
       ${showSettings ? settingsButton() : ""}
-      <button class="chat-header-general-summary-shortcut" type="button" data-action="open-general-summary-report" aria-label="Abrir resumo geral" title="Resumo geral"${headerReportDisabled || state.activeFlow ? " disabled" : ""}><img src="${STAGE_PROGRESS_MASCOT_URL}" alt="Energético com placa da construtora"></button>
+      <button class="chat-header-general-summary-shortcut" type="button" data-action="open-general-summary-report" aria-label="Abrir resumo geral" title="Resumo geral"${headerReportDisabled || state.activeFlow ? " disabled" : ""}><img src="${STAGE_PROGRESS_MASCOT_URL}" alt="Energético com placa da construtora"></button>`}
       <button class="header-action" type="button" data-action="sign-out">Sair</button>
     </header>
     ${showFlowStatus ? flowStatusMarkup(state, visibleMessages, busy, rhidAttendanceReportPage ? "📊 RELATÓRIO DE PRESENÇAS RHID" : latestPollTitle(visibleMessages), { homeOnly: completedCreation, rhidRefresh }) : ""}
@@ -3080,7 +3090,7 @@ export function renderChatMarkup(state = {}, { showSettings = false, allowDemo =
         ? rhidAttendanceReport.busy
           ? rhidAttendanceReportLoadingMarkup(rhidAttendanceReport.date, rhidAttendanceReport.progress)
           : rhidAttendanceReportMarkup(rhidAttendanceReport)
-        : transcriptMessages.length ? transcriptMessages.map((message, index) => renderMessage(message, state.account, busy, { finalSignedDocument: index === finalSignedIndex && isSignedDocumentMessage(message), draft: state.draft, databaseFilterMessage: databaseFilter?.message, activeFlow: state.activeFlow, attendanceSelectedIds, attendanceExpandedIds: message === latestPoll ? attendanceExpandedIds : [], attendanceIrregularityChecking: message === latestPoll && attendanceIrregularityChecking, currentPoll: message === latestPoll, attendanceHoursCurrent: message === latestAttendanceMessage, rhidRefresh, launchPayrollSelectedIds, launchPayrollCurrent: message === latestPoll, ddaMenuAlert: state.ddaMenuAlert, sicoobMenuAlert: state.sicoobMenuAlert })).join("") : state.recoveryPreview ? "" : `<article class="chat-message chat-message--assistant">${assistantAvatar()}<div class="chat-bubble"><strong>Energético</strong><p>Olá, ${escapeHtml(firstName)}. O que vamos fazer?</p></div></article>`}
+        : transcriptMessages.length ? transcriptMessages.map((message, index) => renderMessage(message, state.account, busy, { finalSignedDocument: index === finalSignedIndex && isSignedDocumentMessage(message), draft: state.draft, databaseFilterMessage: databaseFilter?.message, activeFlow: state.activeFlow, attendanceSelectedIds, attendanceExpandedIds: message === latestPoll ? attendanceExpandedIds : [], attendanceIrregularityChecking: message === latestPoll && attendanceIrregularityChecking, currentPoll: message === latestPoll, attendanceHoursCurrent: message === latestAttendanceMessage, rhidRefresh, launchPayrollSelectedIds, launchPayrollCurrent: message === latestPoll, ddaMenuAlert: state.ddaMenuAlert, sicoobMenuAlert: state.sicoobMenuAlert })).join("") : state.recoveryPreview ? "" : `<article class="chat-message chat-message--assistant">${assistantAvatar()}<div class="chat-bubble"><strong>${nb ? NB_APP_NAME : "Energético"}</strong><p>Olá, ${escapeHtml(firstName)}. O que vamos fazer?</p></div></article>`}
     </div>
     ${needsRecovery && !loading ? `<div class="error-banner chat-resume-banner">
       <span role="alert">${escapeHtml(state.error || "Aguardando sincronização com a VM.")}</span>
@@ -3153,7 +3163,7 @@ export function commandFromTarget(target) {
   };
 }
 
-export function createChatView(root, { onOpenSettings, onDemoAccess, onSignOut, ensureMicrophonePermission, transcribeAudio, demo = false } = {}) {
+export function createChatView(root, { onOpenSettings, onDemoAccess, onSignOut, ensureMicrophonePermission, transcribeAudio, demo = false, portalApp } = {}) {
   let customEditReview = null;
   function clearCustomEditReview() {
     const current = customEditReview;
@@ -6110,6 +6120,7 @@ export function createChatView(root, { onOpenSettings, onDemoAccess, onSignOut, 
       showSettings: typeof onOpenSettings === "function",
       allowDemo: typeof onDemoAccess === "function",
       demo,
+      portalApp,
       signOutConfirm: signOutConfirmOpen,
       pendingDocumentDelete: Boolean(pendingDocumentDelete),
       attachmentSource: attachmentSourceOpen,

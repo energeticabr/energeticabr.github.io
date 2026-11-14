@@ -36,9 +36,11 @@ export function createNativeBootstrap({ root, auth, native, config, fetchImpl = 
     activePreview = preview;
     const viewOptions = {
       ensureMicrophonePermission: ports.requestMicrophonePermission,
+      portalApp: config.portalApp,
     };
     const client = createChatClient({ apiBaseUrl: demo ? DEMO_API_ORIGIN : config.apiBaseUrl,
-      apiPrefix: demo ? "/api/demo" : "/api", fetchImpl, tokenProvider: scopes => sessionAuth.getToken(scopes) });
+      apiPrefix: demo ? "/api/demo" : "/api", portalApp: config.portalApp,
+      fetchImpl, tokenProvider: scopes => sessionAuth.getToken(scopes) });
     viewOptions.transcribeAudio = file => client.transcribeAudio(file);
     if (demo) {
       viewOptions.demo = true;
@@ -57,13 +59,15 @@ export function createNativeBootstrap({ root, auth, native, config, fetchImpl = 
       closePreview: preview.close,
     } : ports;
     controller = createAppController({ auth: sessionAuth, native: appNative, recovery, view,
-      enableDdaReminders: !demo,
-      enableDdaMenuAlert: !demo,
-      enableSicoobMenuAlert: !demo,
-      enableTrancidReminders: !demo,
+      enableDdaReminders: !demo && !config.portalApp,
+      enableDdaMenuAlert: !demo && !config.portalApp,
+      enableSicoobMenuAlert: !demo && !config.portalApp,
+      enableTrancidReminders: !demo && !config.portalApp,
+      enableCompanyData: !config.portalApp,
       store: createConversationStore({ historyMode: "current-step" }),
       client,
-      pendingConstructionDiaryDataFactory: demo ? undefined : options => createPendingConstructionDiaryData({ ...options, fetchImpl }),
+      pendingConstructionDiaryDataFactory: demo || config.portalApp
+        ? undefined : options => createPendingConstructionDiaryData({ ...options, fetchImpl }),
     });
     return controller.start();
   }

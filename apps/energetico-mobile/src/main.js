@@ -5,6 +5,7 @@ import { createNativePorts } from "./native/native-ports.js";
 import { MicrosoftAuth } from "./native/plugins.js";
 import { installAppZoomGuard } from "./web/app-zoom-guard.js";
 import "./styles.css";
+import "./ui/nb-participacoes.css";
 import "./ui/supplier-payroll.css";
 import './ui/meal-voucher.css';
 import './ui/payroll-breakdown.css';
@@ -62,7 +63,7 @@ if (root) {
     const message = globalThis.document.createElement("p");
     message.className = "error-banner";
     message.setAttribute("role", "alert");
-    message.textContent = "O Energético não conseguiu iniciar. Feche e abra o aplicativo novamente.";
+    message.textContent = `${APP_CONFIG.appName} não conseguiu iniciar. Feche e abra o aplicativo novamente.`;
     section.append(message);
     root.append(section);
   }

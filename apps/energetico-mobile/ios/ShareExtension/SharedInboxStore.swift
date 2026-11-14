@@ -297,6 +297,25 @@ final class SharedInboxStore {
 }
 
 enum SharedUploadRequest {
+    static let portalApp = Bundle.main.object(forInfoDictionaryKey: "PortalApp") as? String
+
+    static func checkPortalAppSupport() async throws {
+        guard portalApp != nil else { return }
+        var request = URLRequest(url: URL(string: "https://163-176-171-217.sslip.io/api/portal-upload")!)
+        request.httpMethod = "OPTIONS"
+        request.setValue("capacitor://localhost", forHTTPHeaderField: "Origin")
+        request.setValue("POST", forHTTPHeaderField: "Access-Control-Request-Method")
+        request.setValue("X-Portal-App", forHTTPHeaderField: "Access-Control-Request-Headers")
+        let (_, reply) = try await URLSession.shared.data(for: request)
+        guard let response = reply as? HTTPURLResponse,
+              response.statusCode == 204,
+              response.value(forHTTPHeaderField: "Access-Control-Allow-Headers")?
+                .lowercased().split(separator: ",")
+                .contains(where: { $0.trimmingCharacters(in: .whitespaces) == "x-portal-app" }) == true else {
+            throw URLError(.badServerResponse)
+        }
+    }
+
     static func make(item: SharedInboxMetadata, token: String) -> URLRequest {
         var request = URLRequest(url: URL(string: "https://163-176-171-217.sslip.io/api/portal-upload")!)
         request.httpMethod = "POST"
@@ -307,6 +326,7 @@ enum SharedUploadRequest {
         let allowed = CharacterSet(charactersIn: "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789-_.!~*'()")
         request.setValue(item.name.addingPercentEncoding(withAllowedCharacters: allowed) ?? "arquivo", forHTTPHeaderField: "X-Portal-File-Name")
         request.setValue(item.id, forHTTPHeaderField: "X-Portal-Message-Id")
+        if let portalApp { request.setValue(portalApp, forHTTPHeaderField: "X-Portal-App") }
         return request
     }
 }
