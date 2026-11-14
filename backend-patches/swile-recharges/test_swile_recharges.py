@@ -252,6 +252,10 @@ class ServiceTests(unittest.TestCase):
             upstream.side_effect = SwileError('Indisponível', 429)
             self.assertEqual(429, handle_portal(identity, {**request, 'refresh': True})[0])
             self.assertEqual(result['swile'], reader.gallery_orders(history=True))
+            for malformed in ({'last': True}, {'last': True, 'orderGroups': {}}):
+                upstream.side_effect = [dict(payload, last=False), malformed]
+                self.assertEqual(502, handle_portal(identity, {**request, 'refresh': True})[0])
+                self.assertEqual(result['swile'], reader.gallery_orders(history=True))
 
     def test_pending_gallery_paginates_corporate_orders_and_omits_closed_groups(self):
         slip = 'https://dash-rh.swile.com.br/boleto/ORDER-A'

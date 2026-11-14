@@ -237,10 +237,12 @@ class Service:
     def __init__(self, gateway, database=DATABASE, clock=time.time):
         self.gateway, self.database, self.clock = gateway, database, clock
 
-    def pages(self, endpoint, field, *, size_param='pageSize', **params):
+    def pages(self, endpoint, field, *, size_param='pageSize', require_list=False, **params):
         for page in range(1000):
             result = self.gateway.request(endpoint, query={**params, 'page': page, size_param: 100})
-            rows = result.get(field) or []
+            rows = result.get(field)
+            if not require_list and not rows:
+                rows = []
             if not isinstance(rows, list) or type(result.get('last')) is not bool:
                 raise SwileError('A Swile devolveu uma lista inválida.', 502)
             yield from rows
@@ -501,7 +503,7 @@ class Service:
 
     def collect_gallery(self, *, include_history=True):
         pending, history = [], []
-        for group in self.pages('order/group', 'orderGroups', size_param='size'):
+        for group in self.pages('order/group', 'orderGroups', size_param='size', require_list=True):
             status = group['statusCode']
             if not include_history and status in CLOSED_ORDER_STATUSES:
                 continue
