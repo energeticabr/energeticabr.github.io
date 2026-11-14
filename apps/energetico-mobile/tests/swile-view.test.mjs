@@ -273,7 +273,13 @@ test('Swile gallery is a separate screen and can open an older completed order',
   const order = { orderCode: 'SWO123', status: 'APPROVED_PARTIALLY', creditDate: '2026-11-17', creditCents: 22505 };
   const oldOrder = { orderCode: 'SWO90', status: 'APPROVED', requestDate: '2026-03-16', creditCents: 10000 };
   const calls = [];
-  const view = openSwileView({ document, gallery: true, request: async (operation, payload) => {
+  let wentHome = false;
+  const onHome = () => {
+    assert.equal(document.querySelector('main.swile-gallery-page'), null);
+    assert.equal(document.querySelector('#app').hasAttribute('inert'), false);
+    wentHome = true;
+  };
+  const view = openSwileView({ document, gallery: true, onHome, request: async (operation, payload) => {
     calls.push([operation, payload]);
     if (payload.gallery === 'history') return payload.orderCode ? { ...oldOrder, items: [] } : [order, oldOrder];
     if (!payload.orderCode) return [order];
@@ -288,6 +294,12 @@ test('Swile gallery is a separate screen and can open an older completed order',
   assert.equal(document.querySelector('dialog'), null);
   assert.ok(document.querySelector('#app').hasAttribute('inert'));
   const screen = document.querySelector('main.swile-gallery-page');
+  const header = screen.querySelector('header');
+  assert.equal(header.querySelector('h1.screen-navigation-title')?.textContent, 'Galeria Swile');
+  const back = header.querySelector('nav button[aria-label="Voltar ao RH"]');
+  assert.ok(back);
+  const sync = header.querySelector(':scope > [data-gallery-refresh]');
+  assert.ok(sync);
   const findButton = text => [...screen.querySelectorAll('button')].find(button => button.textContent.includes(text));
   assert.match(screen.textContent, /Galeria Swile.*Em suspenso.*SWO123.*225,05/s);
   findButton('SWO123').click();
@@ -302,7 +314,12 @@ test('Swile gallery is a separate screen and can open an older completed order',
   findButton('SWO90').click();
   await settle();
   assert.match(screen.textContent, /Pedido SWO90.*Crédito concluído/s);
+  sync.click();
+  await settle();
+  assert.match(screen.textContent, /Pedido SWO90.*Crédito concluído/s);
   findButton('Voltar aos pedidos').click();
+  await settle();
+  sync.click();
   await settle();
   assert.deepEqual(calls, [
     ['orders', { gallery: 'pending' }],
@@ -310,9 +327,12 @@ test('Swile gallery is a separate screen and can open an older completed order',
     ['orders', { gallery: 'pending' }],
     ['orders', { gallery: 'history' }],
     ['orders', { gallery: 'history', orderCode: 'SWO90' }],
+    ['orders', { gallery: 'history', orderCode: 'SWO90' }],
+    ['orders', { gallery: 'history' }],
     ['orders', { gallery: 'history' }],
   ]);
-  findButton('Voltar ao RH').click();
+  assert.equal(findButton('Atualizar pedidos'), undefined);
+  back.click();
   assert.equal(screen.isConnected, false);
   assert.equal(document.querySelector('#app').hasAttribute('inert'), false);
   assert.equal(document.activeElement, opener);
@@ -321,6 +341,10 @@ test('Swile gallery is a separate screen and can open an older completed order',
   document.dispatchEvent(new window.KeyboardEvent('keydown', { key: 'Escape' }));
   assert.equal(document.querySelector('main.swile-gallery-page'), null);
   assert.equal(document.activeElement, opener);
+  const homeView = openSwileView({ document, gallery: true, onHome, request: async () => [] });
+  t.after(() => homeView.close());
+  document.querySelector('.swile-gallery-page nav button[aria-label="Início"]').click();
+  assert.equal(wentHome, true);
 });
 
 test('Swile uses the portal token and demo mode never sends a request', async () => {

@@ -6494,6 +6494,7 @@ export function createAppController({
             : client.swileRequest(operation, payload, options);
         },
         onClose: () => { hrBenefitPanel = null; },
+        onHome: () => { if (current()) return returnToMainMenu(); },
       });
       return true;
     } catch (error) {

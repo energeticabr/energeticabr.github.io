@@ -28,12 +28,6 @@
   color: #202735;
 }
 .swile-dialog *, .swile-gallery-page * { box-sizing: border-box; }
-.swile-gallery-page .swile-header {
-  flex: 0 0 auto;
-  padding: max(.8rem, env(safe-area-inset-top)) max(.9rem, env(safe-area-inset-right)) .8rem max(.9rem, env(safe-area-inset-left));
-  color: #fff;
-  background: #123c68;
-}
 .swile-gallery-page .swile-body {
   flex: 1;
   min-height: 0;
@@ -44,8 +38,6 @@
 .swile-gallery-page .swile-body > * { width: min(100%, 64rem); margin-inline: auto; }
 .swile-gallery-page .swile-summary { background: #fff; }
 .swile-gallery-page .swile-summary h3 { margin-top: 0; }
-.swile-gallery-page .swile-header button { color: #123c68; flex-shrink: 0; }
-.swile-gallery-page .swile-headline h1 { margin: 0; font-size: clamp(1.15rem, 4vw, 1.55rem); }
 .swile-gallery-toolbar { margin-bottom: .8rem; }
 .swile-header, .swile-body { padding: 1rem 1.25rem; }
 .swile-header {
@@ -62,7 +54,7 @@
 .swile-headline h2 { margin: 0; font-size: 1.35rem; }
 .swile-headline span { color: #553990; font-size: .9rem; }
 .swile-header-actions { display: flex; flex: none; align-items: center; gap: .4rem; }
-.swile-dialog button, .swile-dialog input, .swile-dialog select, .swile-dialog textarea, .swile-gallery-page button {
+.swile-dialog button, .swile-dialog input, .swile-dialog select, .swile-dialog textarea, .swile-gallery-page .swile-body button {
   min-height: 2.65rem;
   min-width: 0;
   border: 1px solid #cbd1dd;
@@ -72,10 +64,10 @@
   background: #fff;
   font: inherit;
 }
-.swile-dialog button, .swile-gallery-page button { font-weight: 600; cursor: pointer; }
+.swile-dialog button, .swile-gallery-page .swile-body button { font-weight: 600; cursor: pointer; }
 .swile-dialog button.swile-refresh { width: 2.75rem; min-height: 2.75rem; padding: 0; }
 .swile-refresh svg { display: block; width: 1.25rem; height: 1.25rem; margin: auto; color: inherit; }
-.swile-dialog button:disabled, .swile-gallery-page button:disabled { opacity: .55; cursor: default; }
+.swile-dialog button:disabled, .swile-gallery-page .swile-body button:disabled { opacity: .55; cursor: default; }
 .swile-dialog button.swile-primary, .swile-gallery-page button.swile-primary { background: #553990; color: #fff; border-color: #553990; }
 .swile-actions, .swile-dates { display: flex; flex-wrap: wrap; gap: .65rem; align-items: center; }
 .swile-search { width: 100%; margin-bottom: .35rem; }

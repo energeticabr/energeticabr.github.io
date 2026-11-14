@@ -1,5 +1,6 @@
 import { parseBenefitAmount } from './hr-benefit-amount.js';
 import { provisionDescriptionIcon } from './provision-description-card.js';
+import { createHrBenefitGalleryHeader } from './hr-benefit-gallery-header.js';
 
 const money = new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' });
 const reais = cents => Number.isSafeInteger(cents) ? money.format(cents / 100) : 'Não informado';
@@ -15,13 +16,15 @@ function cardLabel(card) {
   return card.cardLast4 ? `Cartão final ${card.cardLast4}` : '';
 }
 
-export function openTrancidRechargeView({ document: doc, request, gallery = false, onClose }) {
+export function openTrancidRechargeView({ document: doc, request, gallery = false, onClose, onHome }) {
   const lifetime = new AbortController();
   const { signal } = lifetime;
   const opener = doc.activeElement;
   const app = doc.getElementById('app');
   let restoreApp = false;
   let isGallery = gallery;
+  let galleryPage = 1;
+  let galleryHeader;
   let busy = false;
   let confirming = false;
   let cards = [];
@@ -74,6 +77,8 @@ export function openTrancidRechargeView({ document: doc, request, gallery = fals
   }
 
   function removeScreen() {
+    galleryHeader?.dispose();
+    galleryHeader = null;
     if (screen?.open && typeof screen.close === 'function') screen.close();
     screen?.remove();
   }
@@ -101,10 +106,17 @@ export function openTrancidRechargeView({ document: doc, request, gallery = fals
     title.id = 'trancid-recharge-heading';
     title.tabIndex = -1;
     screen.setAttribute('aria-labelledby', title.id);
-    headline.replaceChildren(title);
     refresh.hidden = isGallery;
-    closeButton.textContent = isGallery ? 'Voltar ao RH' : 'Fechar';
-    screen.append(header, body);
+    if (isGallery) {
+      galleryHeader = createHrBenefitGalleryHeader({
+        root: screen, title, onBack: close,
+        onHome: onHome && (() => { dispose(); onHome(); }),
+        onRefresh: () => loadGallery(galleryPage),
+      });
+    } else {
+      headline.replaceChildren(title, make('span', 'Vale-transporte'));
+    }
+    screen.append(galleryHeader?.header || header, body);
     doc.body.append(screen);
     if (isGallery) {
       restoreApp = Boolean(app && !app.hasAttribute('inert'));
@@ -112,7 +124,6 @@ export function openTrancidRechargeView({ document: doc, request, gallery = fals
       doc.addEventListener('keydown', onGalleryKey);
       title.focus({ preventScroll: true });
     } else {
-      headline.append(make('span', 'Vale-transporte'));
       screen.setAttribute('aria-modal', 'true');
       screen.addEventListener('cancel', event => { event.preventDefault(); close(); });
       if (typeof screen.showModal === 'function') screen.showModal();
@@ -328,8 +339,7 @@ export function openTrancidRechargeView({ document: doc, request, gallery = fals
   }
 
   function showGallery({ orders, page, hasMore }, focusPage = false) {
-    const toolbar = make('div', '', 'swile-actions swile-gallery-toolbar');
-    toolbar.append(button('Atualizar pedidos', () => loadGallery(page, true)));
+    galleryPage = page;
     const list = make('div', '', 'swile-order-list');
     for (const order of orders ?? []) {
       const item = make('article', '', 'swile-summary swile-gallery-order');
@@ -347,11 +357,11 @@ export function openTrancidRechargeView({ document: doc, request, gallery = fals
     if (page > 1) navigation.append(button('Página anterior', () => loadGallery(page - 1, true)));
     if (page > 1 || hasMore) navigation.append(pageLabel);
     if (hasMore) navigation.append(button('Próxima página', () => loadGallery(page + 1, true)));
-    content.replaceChildren(toolbar, list, navigation);
+    content.replaceChildren(list, navigation);
     body.scrollTop = 0;
     if (focusPage) {
       pageLabel.tabIndex = -1;
-      (pageLabel.isConnected ? pageLabel : toolbar.firstElementChild).focus({ preventScroll: true });
+      (pageLabel.isConnected ? pageLabel : galleryHeader.header.querySelector('h1')).focus({ preventScroll: true });
     }
   }
 
