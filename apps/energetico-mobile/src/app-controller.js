@@ -7488,6 +7488,8 @@ export function createAppController({
                 panel?.destroy?.();
                 hrPayrollGallery = null;
                 hrPayrollGalleryName = "";
+                hrPayrollGalleryData = null;
+                if (hrPayrollGalleryOpening === opening) hrPayrollGalleryOpening = null;
               }
             },
           });
@@ -7495,8 +7497,9 @@ export function createAppController({
           hrPayrollGallery = panel;
           hrPayrollGalleryName = panelName;
         }
-        await hrPayrollGallery.open();
-        return openingIsCurrent();
+        const panel = hrPayrollGallery;
+        await panel.open();
+        return openingIsCurrent() && hrPayrollGallery === panel;
       } catch (error) {
         if (openingIsCurrent()) setSessionError(error, isReport ? "Não foi possível abrir o relatório de holerites." : "Não foi possível abrir a galeria de folha.");
         return false;

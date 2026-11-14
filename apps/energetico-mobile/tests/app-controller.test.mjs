@@ -3031,6 +3031,31 @@ test('o atalho Holerite abre o relatório e consulta as vias mesmo sem permissã
   assert.deepEqual(await options.listSignedPayslips({ id: '17' }), signed);
 });
 
+test('o relatório de holerites pode ser reaberto depois de fechar uma consulta lenta', async t => {
+  const panels = [];
+  let settleFirst;
+  const firstLoad = new Promise(resolve => { settleFirst = resolve; });
+  const h = makeHarness({
+    hrPayrollGalleryDataFactory: async () => ({ async loadPage() {}, async downloadPayslip() {} }),
+    hrPayrollGalleryFactory: async ({ onClose }) => {
+      const wait = panels.length === 0 ? firstLoad : Promise.resolve();
+      panels.push({ onClose });
+      return { open: () => wait, destroy() {} };
+    },
+  });
+  t.after(() => { settleFirst(); h.controller.stop(); });
+  await h.controller.start();
+  const first = h.view.emit('open-holerite-report');
+  await new Promise(resolve => setImmediate(resolve));
+  panels[0].onClose();
+  const second = h.view.emit('open-holerite-report');
+  await new Promise(resolve => setImmediate(resolve));
+  assert.equal(panels.length, 2);
+  assert.equal(await second, true);
+  settleFirst();
+  assert.equal(await first, false);
+});
+
 test('as consultas simultâneas de holerites pedem o mesmo consentimento Microsoft uma única vez', async t => {
   let tokenProvider, authorizeDone, authorized = false;
   const consent = new Promise(resolve => { authorizeDone = resolve; });
