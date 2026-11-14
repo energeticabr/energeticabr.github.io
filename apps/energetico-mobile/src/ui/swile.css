@@ -162,6 +162,21 @@
 .swile-gallery-page button.swile-gallery-order:hover { background: #f6f4ff; }
 .swile-gallery-order strong:nth-child(2), .swile-credit-line-heading strong:nth-child(2) { white-space: nowrap; text-align: end; }
 .swile-gallery-order span { color: #525c6d; font-size: .86rem; }
+.swile-gallery-order span:nth-child(4) { text-align: end; }
+.swile-gallery-order-row {
+  margin-bottom: .5rem;
+  border: 1px solid #cbd1dd;
+  border-radius: .65rem;
+  display: flex;
+  align-items: stretch;
+  background: #fff;
+}
+.swile-gallery-page .swile-gallery-order-row > .swile-gallery-order {
+  margin-bottom: 0;
+  border: 0;
+  border-radius: 0 .6rem .6rem 0;
+  padding-inline-start: .55rem;
+}
 .swile-credit-details { margin-top: .75rem; }
 .swile-documents { margin: .8rem 0; }
 .swile-documents h4 { margin: 0 0 .4rem; }
@@ -190,7 +205,7 @@
   align-items: stretch;
   border-radius: inherit;
 }
-.trancid-gallery-page .trancid-order-boleto {
+.swile-gallery-page :is(.trancid-order-boleto, .swile-gallery-pdf) {
   flex: 0 0 2.75rem;
   display: flex;
   flex-direction: column;
@@ -205,9 +220,9 @@
   color: #194d87;
   font-size: .7rem;
 }
-.trancid-order-boleto svg { width: 1.2rem; height: 1.2rem; }
-.trancid-gallery-page .trancid-order-boleto:hover { background: #dcecff; }
-.trancid-order-boleto:focus-visible { outline: 2px solid #1c5a9b; outline-offset: -2px; }
+:is(.trancid-order-boleto, .swile-gallery-pdf) svg { width: 1.2rem; height: 1.2rem; }
+.swile-gallery-page :is(.trancid-order-boleto, .swile-gallery-pdf):hover { background: #dcecff; }
+:is(.trancid-order-boleto, .swile-gallery-pdf):focus-visible { outline: 2px solid #1c5a9b; outline-offset: -2px; }
 .trancid-gallery-page .trancid-order-summary {
   width: 100%;
   min-width: 0;

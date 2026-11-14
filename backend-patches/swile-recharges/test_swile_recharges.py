@@ -224,6 +224,8 @@ class ServiceTests(unittest.TestCase):
             self.service.preview('user-a', self.data)
 
     def test_pending_gallery_paginates_corporate_orders_and_omits_closed_groups(self):
+        slip = 'https://dash-rh.swile.com.br/boleto/ORDER-A'
+        nota = 'https://nfe.prefeitura.sp.gov.br/contribuinte/notaprint.aspx?inscricao=1&nf=2&verificacao=X'
         groups = [
             {'orderGroups': [
                 {'groupCode': 'CLOSED', 'statusCode': 'APPROVED'},
@@ -231,13 +233,15 @@ class ServiceTests(unittest.TestCase):
             ], 'last': False},
             {'orderGroups': [
                 {'groupCode': 'PENDING', 'statusCode': 'WAITING_PAYMENT', 'valueCredit': 225.05,
-                 'orders': [{'creditDate': '2026-12-02T02:00:00'}]},
+                 'orders': [{'creditDate': '2026-12-02T02:00:00', 'orderCode': 'A', 'slipLink': slip, 'invoiceLink': nota},
+                            {'creditDate': '2026-12-02T02:00:00', 'orderCode': 'B', 'slipLink': 'https://other.test/file.pdf'}]},
                 {'groupCode': 'FAILED_CREATE', 'statusCode': 'CREATION_ERROR'},
             ], 'last': True},
         ]
         with patch.object(self.gateway, 'request', side_effect=groups) as request:
             self.assertEqual([{
                 'orderCode': 'PENDING', 'status': 'WAITING_PAYMENT', 'creditCents': 22505, 'creditDate': '2026-12-01',
+                'documents': [{'orderCode': 'A', 'kind': 'boleto'}, {'orderCode': 'A', 'kind': 'invoice'}],
             }], self.service.pending_orders())
         self.assertEqual([0, 1], [call.kwargs['query']['page'] for call in request.call_args_list])
 

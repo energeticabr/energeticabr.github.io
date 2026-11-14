@@ -306,6 +306,49 @@ test('Swile gallery opens the PDF for the exact order and shows documents as the
   assert.equal(await opened[0][0].text(), '%PDF-');
 });
 
+test('Swile opens the left PDF shortcut for the exact order in both gallery tabs', async t => {
+  const { window } = new JSDOM('<main id="app"></main>');
+  const { document } = window;
+  const files = [{ orderCode: 'A', kind: 'boleto' }, { orderCode: 'B', kind: 'invoice' }];
+  const calls = [];
+  const opened = [];
+  const view = openSwileView({
+    document, gallery: true,
+    previewDocument: async (blob, name, focus) => opened.push([await blob.text(), name, focus()]),
+    previewDocuments: async (items, options) => {
+      const selected = items[1];
+      opened.push([await (await selected.source({ signal: options.signal })).text(), selected.label, options.resolveReturnFocus()]);
+      assert.strictEqual(options.signal.aborted, false);
+      options.onClose();
+    },
+    request: async (_, payload) => {
+      calls.push(payload);
+      if (payload.document) return { fileName: 'Swile.pdf', base64: 'JVBERi0=' };
+      return [{ orderCode: 'GROUP', creditCents: 5000, documents: payload.gallery === 'history' ? [files[0]] : files },
+        { orderCode: 'EMPTY', creditCents: 5000, documents: [] }];
+    },
+  });
+  t.after(() => { view.close(); window.close(); });
+  const settle = () => new Promise(resolve => setImmediate(resolve));
+  await settle();
+  const buttons = document.querySelectorAll('.swile-gallery-pdf');
+  assert.equal(buttons.length, 1);
+  const button = buttons[0];
+  assert.ok(button.nextElementSibling.matches('.swile-gallery-order'));
+  button.click();
+  await settle();
+  assert.deepEqual(opened[0], ['%PDF-', 'Nota fiscal · B', button]);
+  assert.deepEqual(calls, [{ gallery: 'pending' }, { orderCode: 'GROUP', document: files[1] }]);
+  [...document.querySelectorAll('button')].find(b => b.textContent === 'Histórico').click();
+  await settle();
+  const historical = document.querySelector('.swile-gallery-pdf');
+  historical.click();
+  await settle();
+  assert.deepEqual(opened[1], ['%PDF-', 'Swile.pdf', historical]);
+  assert.deepEqual(calls.at(-1), { orderCode: 'GROUP', document: files[0] });
+  assert.ok(document.querySelector('.swile-gallery-toolbar'));
+});
+
 test('Swile gallery is a separate screen and can open an older completed order', async t => {
   const { window } = new JSDOM('<!doctype html><body><main id="app"><button>Galeria Swile</button></main></body>');
   const { document } = window;

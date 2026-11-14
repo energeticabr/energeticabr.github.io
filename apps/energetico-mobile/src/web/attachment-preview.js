@@ -744,7 +744,7 @@ export function createAttachmentPreview({
     return openOne(blobOrPromise, fileName, { onClose: typeof onClose === "function" ? onClose : undefined, onSign, onStamp, onAppendPages, resolveReturnFocus, loadErrorMessage, layout, initialPage });
   }
 
-  async function openCollection(items, { onAddToTray, initialIndex = 0, layout, resolveReturnFocus, signal, onClose, returnLabel = "Voltar ao chat" } = {}) {
+  async function openCollection(items, { onAddToTray, initialIndex = 0, layout, resolveReturnFocus, signal, onClose, loadErrorMessage, returnLabel = "Voltar ao chat" } = {}) {
     signal?.throwIfAborted();
     backButton.textContent = returnLabel;
     const normalized = (Array.isArray(items) ? items : [])
@@ -754,7 +754,7 @@ export function createAttachmentPreview({
     releaseCollection();
     addToTrayHandler = typeof onAddToTray === "function" ? onAddToTray : null;
     const index = Number.isInteger(initialIndex) && initialIndex >= 0 && initialIndex < normalized.length ? initialIndex : 0;
-    const owner = collection = { items: normalized, index, layout, cleanup() {
+    const owner = collection = { items: normalized, index, layout, loadErrorMessage, cleanup() {
       signal?.removeEventListener('abort', abort);
       onClose?.();
     } };
@@ -763,7 +763,7 @@ export function createAttachmentPreview({
     updateCollectionNavigation();
     try {
       const item = normalized[index];
-      return await openOne(item.source, item.fileName, { layout, resolveReturnFocus, label: item.label });
+      return await openOne(item.source, item.fileName, { layout, resolveReturnFocus, loadErrorMessage, label: item.label });
     } catch (error) {
       if (collection === owner) close();
       throw error;
@@ -777,7 +777,7 @@ export function createAttachmentPreview({
     collection.index = index;
     updateCollectionNavigation();
     const item = collection.items[index];
-    await openOne(item.source, item.fileName, { layout: collection.layout, label: item.label });
+    await openOne(item.source, item.fileName, { layout: collection.layout, loadErrorMessage: collection.loadErrorMessage, label: item.label });
   }
 
   previousButton.addEventListener("click", () => { void moveCollection(-1); });

@@ -6515,6 +6515,8 @@ export function createAppController({
         },
         previewDocument: native.previewMedia && ((blob, fileName, resolveReturnFocus, onClose) =>
           native.previewMedia(blob, fileName, { returnLabel: 'Voltar ao pedido', resolveReturnFocus, onClose })),
+        previewDocuments: native.previewMediaCollection && ((items, options) =>
+          native.previewMediaCollection(items, { returnLabel: 'Voltar aos pedidos', ...options })),
         closePreview: native.closePreview,
         onClose: () => {
           hrBenefitPanel = null;
