@@ -7255,7 +7255,8 @@ export function createAppController({
             payslipPreview = null;
             native.closePreview?.();
           }
-          async function previewPayslip(source, fileName, { signal, resolveReturnFocus, loadErrorMessage } = {}) {
+          async function previewPayslip(source, fileName, { signal, resolveReturnFocus, loadErrorMessage,
+            row, onSigned } = {}) {
             assertSession();
             if (payslipPreview || signal?.aborted || hrPayrollGallery !== panel) return;
             const preview = payslipPreview = new AbortController();
@@ -7266,24 +7267,60 @@ export function createAppController({
               preview.abort();
               signal?.removeEventListener('abort', cancel);
             };
+            const bindSource = (load, collection = false) => async options => {
+              assertSession();
+              const viewer = options?.signal;
+              // Moving within a collection cancels just the current file.
+              const read = collection ? new AbortController() : preview;
+              const abort = () => read.abort(viewer.reason);
+              const cancelRead = () => read.abort(preview.signal.reason);
+              if (collection) {
+                if (preview.signal.aborted) cancelRead();
+                else preview.signal.addEventListener('abort', cancelRead, { once: true });
+              }
+              if (viewer?.aborted) abort();
+              else viewer?.addEventListener('abort', abort, { once: true });
+              try {
+                read.signal.throwIfAborted();
+                return await load({ ...options, signal: read.signal });
+              } finally {
+                viewer?.removeEventListener('abort', abort);
+                if (collection) preview.signal.removeEventListener('abort', cancelRead);
+              }
+            };
+            const settings = { onClose: release, returnLabel: 'Voltar à galeria de holerites', resolveReturnFocus, loadErrorMessage };
+            let usingCollection = false;
             try {
-              await showMedia(async options => {
+              if (row && typeof data.listSignedPayslips === 'function' && typeof data.downloadSignedPayslip === 'function') {
+                const files = await data.listSignedPayslips(row, { signal: preview.signal });
                 assertSession();
-                const viewer = options?.signal;
-                const abort = () => preview.abort(viewer.reason);
-                if (viewer?.aborted) abort();
-                else viewer?.addEventListener('abort', abort, { once: true });
-                try {
-                  preview.signal.throwIfAborted();
-                  return await source({ ...options, signal: preview.signal });
-                } finally { viewer?.removeEventListener('abort', abort); }
-              }, fileName, { onClose: release, returnLabel: 'Voltar à galeria de holerites', resolveReturnFocus, loadErrorMessage });
+                preview.signal.throwIfAborted();
+                onSigned?.(files.length > 0);
+                if (files.length) {
+                  const sorted = [...files].sort((a, b) => (Date.parse(b.uploadedAt) || 0) - (Date.parse(a.uploadedAt) || 0));
+                  if (typeof native.previewMediaCollection !== 'function') {
+                    const [first] = sorted;
+                    await showMedia(bindSource(options => data.downloadSignedPayslip(row, first, options)), first.name, settings);
+                    return;
+                  }
+                  usingCollection = true;
+                  const items = sorted.map((file, index) => ({
+                    fileName: file.name,
+                    label: sorted.length === 1 ? 'Assinado' : `Assinado ${index + 1} de ${sorted.length}`,
+                    source: bindSource(options => data.downloadSignedPayslip(row, file, options), true),
+                  }));
+                  items.push({ fileName, label: 'Modelo', source: bindSource(source, true) });
+                  await native.previewMediaCollection(items, { ...settings, signal: preview.signal });
+                  return;
+                }
+              }
+              await showMedia(bindSource(source), fileName, settings);
             } catch (error) {
               const cancelled = preview.signal.aborted;
               release();
               if (!cancelled) throw error;
             } finally {
-              if (!native.previewMedia) release();
+              if (!native.previewMedia && !usingCollection) release();
             }
           }
           panel = await hrPayrollGalleryFactory({
@@ -7348,7 +7385,9 @@ export function createAppController({
                   loadErrorMessage: 'Não foi possível preparar os holerites desta data. Volte à galeria e tente novamente.',
                 });
               } : undefined,
-              openPayslip: row => previewPayslip(options => data.downloadPayslip(row, options), row.pdfFileName),
+              openPayslip: (row, options) => previewPayslip(sourceOptions => data.downloadPayslip(row, sourceOptions), row.pdfFileName, {
+                ...options, row,
+              }),
               closePayslip,
             } : {}),
             ...(gallery === 'IDFOLHA' ? payrollReceiptTrayAccess(assertSession) : {}),

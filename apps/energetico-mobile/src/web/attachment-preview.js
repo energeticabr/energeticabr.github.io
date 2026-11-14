@@ -285,6 +285,10 @@ export function createAttachmentPreview({
     const last = collection.items.length - 1;
     previousButton.disabled = collection.index <= 0;
     nextButton.disabled = collection.index >= last;
+    const previousLabel = collection.items[collection.index - 1]?.label;
+    const nextLabel = collection.items[collection.index + 1]?.label;
+    if (previousLabel) previousButton.textContent = `‹ ${previousLabel}`;
+    if (nextLabel) nextButton.textContent = `${nextLabel} ›`;
     collectionStatus.textContent = `${collection.index + 1} de ${collection.items.length}`;
   }
 
@@ -467,7 +471,7 @@ export function createAttachmentPreview({
     return true;
   }
 
-  async function openOne(blobOrPromise, fileName = "arquivo", { onClose, onSign, onStamp, onAppendPages, resolveReturnFocus, loadErrorMessage, initialPage = 1, layout = /^resumo-.+\.png$/i.test(String(fileName)) ? "flow-summary" : "media" } = {}) {
+  async function openOne(blobOrPromise, fileName = "arquivo", { onClose, onSign, onStamp, onAppendPages, resolveReturnFocus, loadErrorMessage, label, initialPage = 1, layout = /^resumo-.+\.png$/i.test(String(fileName)) ? "flow-summary" : "media" } = {}) {
     if (destroyed) throw new Error("O visualizador já foi encerrado.");
     if (!dialog.open) returnFocus = typeof resolveReturnFocus === "function" ? resolveReturnFocus : documentRef.activeElement;
     release();
@@ -488,8 +492,8 @@ export function createAttachmentPreview({
       updateLoadingIndicator(session.loader, { progress: session.progress, progressLabel: value.progressLabel });
     }, { signal: session.abort.signal, isCurrent: () => active === session && !session.failed });
     const correction = layout === 'nfe-report-pdf' && /^CCe-.+-110110-(\d{2})\.pdf$/i.exec(session.fileName);
-    title.textContent = correction ? `Carta de correção (CC-e) · ${correction[1]}` : session.fileName;
-    title.title = compactReport ? session.fileName : '';
+    title.textContent = label || (correction ? `Carta de correção (CC-e) · ${correction[1]}` : session.fileName);
+    title.title = (label || compactReport) ? session.fileName : '';
     updateCollectionNavigation();
     showPreviewStatus(session, session.loader);
     exportButton.disabled = true;
@@ -740,11 +744,11 @@ export function createAttachmentPreview({
     return openOne(blobOrPromise, fileName, { onClose: typeof onClose === "function" ? onClose : undefined, onSign, onStamp, onAppendPages, resolveReturnFocus, loadErrorMessage, layout, initialPage });
   }
 
-  async function openCollection(items, { onAddToTray, initialIndex = 0, layout, resolveReturnFocus, signal, onClose } = {}) {
+  async function openCollection(items, { onAddToTray, initialIndex = 0, layout, resolveReturnFocus, signal, onClose, returnLabel = "Voltar ao chat" } = {}) {
     signal?.throwIfAborted();
-    backButton.textContent = "Voltar ao chat";
+    backButton.textContent = returnLabel;
     const normalized = (Array.isArray(items) ? items : [])
-      .map(item => ({ source: item?.source, fileName: String(item?.fileName || "arquivo") }))
+      .map(item => ({ source: item?.source, fileName: String(item?.fileName || "arquivo"), label: item?.label }))
       .filter(item => item.source != null);
     if (!normalized.length) throw new Error("Nenhum anexo disponível.");
     releaseCollection();
@@ -758,7 +762,8 @@ export function createAttachmentPreview({
     signal?.addEventListener('abort', abort, { once: true });
     updateCollectionNavigation();
     try {
-      return await openOne(normalized[index].source, normalized[index].fileName, { layout, resolveReturnFocus });
+      const item = normalized[index];
+      return await openOne(item.source, item.fileName, { layout, resolveReturnFocus, label: item.label });
     } catch (error) {
       if (collection === owner) close();
       throw error;
@@ -772,7 +777,7 @@ export function createAttachmentPreview({
     collection.index = index;
     updateCollectionNavigation();
     const item = collection.items[index];
-    await openOne(item.source, item.fileName, { layout: collection.layout });
+    await openOne(item.source, item.fileName, { layout: collection.layout, label: item.label });
   }
 
   previousButton.addEventListener("click", () => { void moveCollection(-1); });

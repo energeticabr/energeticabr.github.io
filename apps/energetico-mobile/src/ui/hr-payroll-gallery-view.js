@@ -11,6 +11,7 @@ import { bindAutoFilterForm } from './auto-filter-form.js';
 import { payrollFilterOptions, validatePayrollFilters } from '../chat/payroll-gallery-filters.js';
 import { createWeeklyPayslipActions } from './weekly-payslip-actions.js';
 import { PDF_ATTACHMENT_ICON } from './report-pdf-attachment-icon.js';
+import { createGalleryAttachmentCounts } from './gallery-attachment-counts.js';
 
 const rubricQuantity = new Intl.NumberFormat('pt-BR', { maximumFractionDigits: 12 });
 const rubricUnitValue = new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL', maximumFractionDigits: 12 });
@@ -73,7 +74,11 @@ export function createHrPayrollGallery({ document: documentOption,
   const pageCursors = [null, null];
   let session = 0;
   let datePreview;
+  let rowPreview;
   const expandedPayslipDates = new Set();
+  const signedPayslips = isPayslip && typeof listSignedPayslips === 'function'
+    ? createGalleryAttachmentCounts({ loadAttachments: listSignedPayslips })
+    : null;
 
   function element(tag, className, text) {
     const node = doc.createElement(tag);
@@ -296,18 +301,37 @@ export function createHrPayrollGallery({ document: documentOption,
         pdf.title = pdf.getAttribute('aria-label');
         pdf.innerHTML = PDF_ATTACHMENT_ICON;
         pdf.disabled = !row.pdfFileName || typeof openPayslip !== 'function';
-        pdf.addEventListener('click', () => {
-          if (opened && !destroyed) {
-            const epoch = session;
-            Promise.resolve().then(() => {
-              if (opened && !destroyed && epoch === session) return openPayslip(row);
-            }).catch(error => {
-              if (opened && !destroyed && epoch === session) status.textContent = error?.message || 'Não foi possível abrir o PDF do holerite.';
-            });
+        let checkedByAction = false;
+        const updateSigned = signed => {
+          card.classList.toggle('hr-gallery-card--payslip-signed', signed);
+          pdf.setAttribute('aria-label', signed ? `${pdf.title}. Via assinada disponível.` : pdf.title);
+        };
+        const markSigned = signed => {
+          checkedByAction = true;
+          updateSigned(signed);
+        };
+        if (row.pdfFileName && signedPayslips) {
+          void signedPayslips.load(row).then(files => {
+            if (card.isConnected && !checkedByAction && files) updateSigned(files.length > 0);
+          }).catch(() => { /* The PDF and upload actions can retry the lookup. */ });
+        }
+        pdf.addEventListener('click', async () => {
+          if (!opened || destroyed || busy || rowPreview) return;
+          const controller = rowPreview = new AbortController();
+          pdf.setAttribute('aria-busy', 'true');
+          try {
+            await openPayslip(row, { signal: controller.signal, onSigned: markSigned,
+              resolveReturnFocus: () => pdf.isConnected ? pdf : root });
+          } catch (error) {
+            if (!controller.signal.aborted && card.isConnected)
+              status.textContent = error?.message || 'Não foi possível abrir o PDF do holerite.';
+          } finally {
+            if (rowPreview === controller) rowPreview = null;
+            pdf.removeAttribute('aria-busy');
           }
         });
         card.append(pdf);
-        payslipActions.render(row, actions);
+        payslipActions.render(row, actions, markSigned);
       }
       if (payrollReport) {
         actions.append(createMascotReportButton(doc, {
@@ -373,6 +397,7 @@ export function createHrPayrollGallery({ document: documentOption,
 
   function renderRows(result) {
     const { rows } = result;
+    signedPayslips?.reset();
     cards.replaceChildren();
     if (isPayslip) drawPayslipDates(result.dateGroups);
     else drawRows(rows);
@@ -473,6 +498,9 @@ export function createHrPayrollGallery({ document: documentOption,
     payslipActions?.close(true);
     loadingScreen.sync(false);
     recordActions?.close();
+    signedPayslips?.reset();
+    rowPreview?.abort();
+    rowPreview = null;
     datePreview?.abort();
     datePreview = null;
     if (isPayslip) closePayslip?.();
@@ -523,6 +551,9 @@ export function createHrPayrollGallery({ document: documentOption,
     close: closeGallery,
     destroy() {
       payslipActions?.close(true);
+      signedPayslips?.destroy();
+      rowPreview?.abort();
+      rowPreview = null;
       datePreview?.abort();
       datePreview = null;
       loadingScreen.destroy();

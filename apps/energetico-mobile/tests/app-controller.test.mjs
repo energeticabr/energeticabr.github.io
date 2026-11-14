@@ -2885,6 +2885,44 @@ test("botão de holerites abre o PDF pela sessão e interrompe a leitura ao fech
   assert.equal(receivedSignal.aborted, true);
 });
 
+test('PDF do holerite abre a via assinada mais recente e inclui as demais vias e o modelo', async t => {
+  let options, entries, settings;
+  const older = { name: 'via-antiga.pdf', uploadedAt: '2026-11-12T12:00:00Z' };
+  const newer = { name: 'via-atual.jpg', uploadedAt: '2026-11-13T12:00:00Z' };
+  const downloads = [];
+  const h = makeHarness({
+    hrPayrollGalleryDataFactory: async () => ({
+      async loadPage() { return { rows: [] }; },
+      async listSignedPayslips(row) { return row.id === '9' ? [older, newer] : []; },
+      async downloadPayslip(row) { downloads.push(['modelo', row.id]); return new Blob(['modelo']); },
+      async downloadSignedPayslip(row, file) { downloads.push([file.name, row.id]); return new Blob([file.name]); },
+    }),
+    hrPayrollGalleryFactory: async value => { options = value; return { async open() {}, destroy() {} }; },
+  });
+  t.after(() => h.controller.stop());
+  h.native.previewMediaCollection = async (items, options) => { entries = items; settings = options; };
+  h.native.previewMedia = async (source, name, { onClose }) => {
+    assert.equal(name, 'Holerite-sem-assinatura.pdf');
+    await source();
+    onClose();
+  };
+  await h.controller.start();
+  await h.view.emit('select-reply', { replyId: 'action_hr_gallery_holerite' });
+  await options.openPayslip({ id: '9', pdfFileName: 'Holerite-9.pdf' });
+  assert.deepEqual(entries.map(({ fileName, label }) => [fileName, label]), [
+    [newer.name, 'Assinado 1 de 2'],
+    [older.name, 'Assinado 2 de 2'],
+    ['Holerite-9.pdf', 'Modelo'],
+  ]);
+  assert.equal(settings.returnLabel, 'Voltar à galeria de holerites');
+  assert.deepEqual(downloads, []);
+  for (const entry of [entries[0], entries[2], entries[1]]) await entry.source();
+  assert.deepEqual(downloads, [[newer.name, '9'], ['modelo', '9'], [older.name, '9']]);
+  settings.onClose();
+  await options.openPayslip({ id: '10', pdfFileName: 'Holerite-sem-assinatura.pdf' });
+  assert.deepEqual(downloads.at(-1), ['modelo', '10']);
+});
+
 test("PDF da data abre o consolidado no visualizador sem chamar a exportação", async t => {
   let options;
   let receivedSignal, viewer, previewOptions;

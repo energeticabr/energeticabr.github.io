@@ -87,7 +87,7 @@ export function createWeeklyPayslipActions({ doc, host, pick, list, upload, open
     return choices;
   }
 
-  async function uploadDialog(row, trigger) {
+  async function uploadDialog(row, trigger, markSigned) {
     const state = dialog('Via assinada do holerite', row, trigger);
     if (!state) return;
     const { body, message, signal } = state;
@@ -121,6 +121,7 @@ export function createWeeklyPayslipActions({ doc, host, pick, list, upload, open
       } finally { picking = false; if (!signal.aborted) setDisabled(); }
     }
     function showExisting(files) {
+      markSigned(files.length > 0);
       existing.replaceChildren();
       files.forEach((file, index) => {
         const date = file.uploadedAt ? new Date(file.uploadedAt) : null;
@@ -391,10 +392,10 @@ export function createWeeklyPayslipActions({ doc, host, pick, list, upload, open
   return {
     close,
     isWriting: () => Boolean(active?.writing),
-    render(row, actions) {
+    render(row, actions, markSigned) {
       const label = row.FORNECEDOR || `ID ${row.id}`;
       if ([pick, list, upload, open].every(handler => typeof handler === 'function')) {
-        const uploadButton = button('📤', 'upload-payslip', () => { void uploadDialog(row, uploadButton); }, 'hr-gallery-button hr-payslip-upload');
+        const uploadButton = button('📤', 'upload-payslip', () => { void uploadDialog(row, uploadButton, markSigned); }, 'hr-gallery-button hr-payslip-upload');
         uploadButton.title = `Enviar ou abrir via assinada de ${label}`;
         uploadButton.setAttribute('aria-label', uploadButton.title);
         uploadButton.disabled = !row.pdfFileName;
