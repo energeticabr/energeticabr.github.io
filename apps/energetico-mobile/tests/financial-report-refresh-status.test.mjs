@@ -36,6 +36,7 @@ for (const [key, create, grid, terminal] of [
   const sources = { dda:source(), fiscal:source(), sicoob:source() };
   const group = createFinancialSyncCoordinator(sources);
   const current = sources[key];
+  const successText = key === 'sicoob' ? 'COLETA CONCLUÍDA' : 'SUCESSO EM ATUALIZAR';
   let read;
   const report = create({ document:dom.window.document, data:{ loadSnapshot:() => read?.() ?? Promise.resolve({ rows:[] }) },
     syncMonitor:group.forSource(key) });
@@ -56,11 +57,11 @@ for (const [key, create, grid, terminal] of [
   read = null;
   finish({ rows:[] });
   await flush();
-  assert.equal(status()?.textContent, 'SUCESSO EM ATUALIZAR');
+  assert.equal(status()?.textContent, successText);
   current.emit(null, false); // Acknowledging the receipt does not remove the card.
   report.close();
   await report.open();
-  assert.equal(status()?.textContent, 'SUCESSO EM ATUALIZAR');
+  assert.equal(status()?.textContent, successText);
   refresh();
   await flush();
   current.emit(terminal, false);
@@ -133,6 +134,7 @@ test('Sicoob opens with the last confirmed failure and clears it after a success
   assert.equal(card()?.textContent, 'FALHA NA ATUALIZAÇÃO');
   assert.equal(card()?.dataset.reportRefreshStatus, 'error');
   assert.equal(updatedAt(), '2026-11-13T23:10:00.000Z');
+  assert.match(report.element.querySelector('[data-report-last-update]').textContent, /Última coleta concluída/);
   report.close();
 
   const recoveryAt = Date.parse('2026-11-14T23:10:00Z');
@@ -141,4 +143,46 @@ test('Sicoob opens with the last confirmed failure and clears it after a success
   await flush();
   assert.equal(card(), null);
   assert.equal(updatedAt(), '2026-11-14T23:10:00.000Z');
+});
+
+test('a criação de um item no SharePoint não comprova uma consulta bancária', async t => {
+  const dom = new JSDOM('<body><main id="app"></main></body>');
+  const report = createSicoobTransactionReportView({
+    document: dom.window.document,
+    data: { loadSnapshot: async () => ({ rows: [{
+      id: '1',
+      fields: { ORIGEMMOVIMENTACAO: 'SICOOB', OPERACAO: 'DÉBITO', Created: '2026-11-14T17:09:00Z' },
+    }] }) },
+  });
+  t.after(() => { report.destroy(); dom.window.close(); });
+  await report.open();
+  assert.equal(report.element.querySelector('[data-report-last-update] time').textContent, '—');
+  report.element.querySelector('.pl-refresh').click();
+  await flush();
+  assert.equal(report.element.querySelector('[data-refresh-status-label]').textContent, 'LISTA RECARREGADA');
+  assert.equal(report.element.querySelector('[data-report-last-update] time').textContent, '—');
+});
+
+test('uma coleta manual confirmada substitui uma falha mais antiga do Sicoob', async t => {
+  const dom = new JSDOM('<body><main id="app"></main></body>');
+  let notify;
+  const lastSuccessfulAt = Date.parse('2026-11-13T23:10:00Z');
+  const failed = { status: 'failed', completedAt: Date.parse('2026-11-14T18:10:00Z'), lastSuccessfulAt };
+  const report = createSicoobTransactionReportView({
+    document: dom.window.document,
+    data: { loadSnapshot: async () => ({ rows: [] }) },
+    loadLatestAttempt: async () => failed,
+    syncMonitor: { subscribe(listener) { notify = listener; } },
+  });
+  t.after(() => { report.destroy(); dom.window.close(); });
+  await report.open();
+  await flush();
+  const status = () => report.element.querySelector('[data-refresh-status-label]').textContent;
+  assert.equal(status(), 'FALHA NA ATUALIZAÇÃO');
+  notify({ running: true });
+  const completedUtc = '2026-11-14T19:10:00.000Z';
+  notify({ running: false, latest: { status: 'succeeded', completedUtc }, lastSuccessfulAt: Date.parse(completedUtc) });
+  await flush();
+  assert.equal(status(), 'COLETA CONCLUÍDA');
+  assert.equal(report.element.querySelector('[data-report-last-update] time').dateTime, completedUtc);
 });

@@ -6,7 +6,9 @@ const states = {
 };
 const svgNamespace = 'http://www.w3.org/2000/svg';
 
-export function createFinancialReportRefreshStatus(doc, { fiscal = false, errorText = states.error.text } = {}) {
+export function createFinancialReportRefreshStatus(doc, {
+  fiscal = false, errorText = states.error.text, successText = states.success.text,
+} = {}) {
   const element = doc.createElement('div');
   element.className = fiscal ? 'nfe-pair' : 'ddr-metric';
   element.dataset.reportRefreshStatus = '';
@@ -41,7 +43,7 @@ export function createFinancialReportRefreshStatus(doc, { fiscal = false, errorT
     if (!status) return;
     const { text, path:d } = states[status];
     path.setAttribute('d', d);
-    label.textContent = status === 'error' ? errorText : text;
+    label.textContent = status === 'error' ? errorText : status === 'success' ? successText : text;
   }
 
   function set(status, at = Date.now()) {
