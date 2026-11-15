@@ -1,6 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { JSDOM } from 'jsdom';
+import { createFinancialReportRefreshStatus } from '../src/ui/financial-report-refresh-status.js';
 import { createFinancialSyncCoordinator } from '../src/chat/financial-sync-coordinator.js';
 import { createDdaReportView } from '../src/ui/dda-report-view.js';
 import { createNfeReportView } from '../src/ui/nfe-report-view.js';
@@ -99,13 +100,29 @@ test('DDA keeps the card during a manual report reload without a sync monitor', 
   assert.equal(status()?.textContent, 'ERRO AO ATUALIZAR');
 });
 
+test('a newer confirmed collection clears a previous monitor error', t => {
+  const dom = new JSDOM();
+  t.after(() => dom.window.close());
+  const status = createFinancialReportRefreshStatus(dom.window.document);
+  const failedAt = '2026-11-14T16:02:00Z';
+  status.observe({ refreshStatus: 'error', latest: { completedUtc: failedAt } });
+  status.setLatestAttempt({ status: 'succeeded', completedAt: Date.parse('2026-11-14T15:00:00Z') });
+  assert.equal(status.element.dataset.reportRefreshStatus, 'error');
+  status.setLatestAttempt({ status: 'succeeded', completedAt: Date.parse('2026-11-14T17:00:00Z') });
+  assert.equal(status.element.hidden, true);
+});
+
 test('Sicoob opens with the last confirmed failure and clears it after a successful scheduled run', async t => {
   const dom = new JSDOM('<body><main id="app"></main></body>');
   const lastSuccessfulAt = Date.parse('2026-11-13T23:10:00Z');
-  let latest = { status: 'failed', lastSuccessfulAt };
+  let latest = { status: 'failed', completedAt: Date.parse('2026-11-14T18:10:00Z'), lastSuccessfulAt };
+  const rows = [{
+    id: '1',
+    fields: { ORIGEMMOVIMENTACAO: 'SICOOB', OPERACAO: 'DÉBITO', Created: '2026-11-14T17:09:00Z' },
+  }];
   const report = createSicoobTransactionReportView({
     document: dom.window.document,
-    data: { loadSnapshot: async () => ({ rows: [] }) },
+    data: { loadSnapshot: async () => ({ rows }) },
     loadLatestAttempt: async () => latest,
   });
   t.after(() => { report.destroy(); dom.window.close(); });
@@ -118,7 +135,8 @@ test('Sicoob opens with the last confirmed failure and clears it after a success
   assert.equal(updatedAt(), '2026-11-13T23:10:00.000Z');
   report.close();
 
-  latest = { status: 'succeeded', lastSuccessfulAt: Date.parse('2026-11-14T23:10:00Z') };
+  const recoveryAt = Date.parse('2026-11-14T23:10:00Z');
+  latest = { status: 'succeeded', completedAt: recoveryAt, lastSuccessfulAt: recoveryAt };
   await report.open();
   await flush();
   assert.equal(card(), null);

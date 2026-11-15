@@ -167,17 +167,23 @@ export function createSicoobTransactionReportView({ document: doc = globalThis.d
   let sourceRunning = Boolean(syncMonitor?.sourceRunning ?? syncMonitor?.running), reloadPending = false;
   const lastUpdate = createFinancialReportLastUpdate(doc);
   const refreshStatus = createFinancialReportRefreshStatus(doc, { errorText: 'FALHA NA ATUALIZAÇÃO' });
-  let attemptRequest, attemptTimer;
+  let attemptRequest, attemptTimer, lastAttemptAt;
 
-  async function readLatestAttempt() {
+  async function readLatestAttempt({ reload = false } = {}) {
     if (!loadLatestAttempt || root.hidden) return;
     attemptRequest?.abort();
     const active = attemptRequest = new AbortController();
     try {
       const latest = await loadLatestAttempt({ signal: active.signal });
       if (!latest || active !== attemptRequest || root.hidden) return;
-      lastUpdate.update(latest.lastSuccessfulAt);
-      refreshStatus.setLatestAttempt(latest.status);
+      const hasNewAttempt = lastAttemptAt !== undefined && latest.completedAt > lastAttemptAt;
+      lastAttemptAt = latest.completedAt;
+      lastUpdate.confirm(latest.lastSuccessfulAt);
+      refreshStatus.setLatestAttempt(latest);
+      if (reload && hasNewAttempt && rows && !sourceRunning) {
+        reloadPending = true;
+        resumeRefresh();
+      }
     } catch {
       // A status read error does not establish the outcome of the bank collection.
     } finally {
@@ -186,7 +192,7 @@ export function createSicoobTransactionReportView({ document: doc = globalThis.d
   }
 
   function readLatestAttemptWhenVisible() {
-    if (doc.visibilityState !== 'hidden' && !attemptRequest) void readLatestAttempt();
+    if (doc.visibilityState !== 'hidden' && !attemptRequest) void readLatestAttempt({ reload: true });
   }
   let loadNotice = '';
   const app = doc.getElementById('app');

@@ -712,7 +712,7 @@ export function createChatClient({
       || (receipt.status === 'succeeded' && lastSuccessfulAt !== completedAt)) {
       throw new Error('A VM não confirmou a última atualização Sicoob.');
     }
-    return { status: receipt.status, lastSuccessfulAt };
+    return { status: receipt.status, completedAt, lastSuccessfulAt };
   }
   function getSicoobLatestAttempt(options) { return ddaRequest('sicoob_refresh_status', null, options, { mode: 'latest' }); }
   function refreshSicoob(options) { return ddaRequest('sicoob_refresh', options?.requestId, options); }

@@ -190,6 +190,22 @@ class RunnerTests(unittest.TestCase):
             self.assertEqual(latest['status'], 'failed')
             self.assertIsNone(latest['lastSuccessfulUtc'])
 
+    @unittest.skipIf(os.name == 'nt', 'Production runner uses flock')
+    def test_pipeline_lock_timeout_is_published_as_latest_failure(self):
+        from unittest.mock import patch
+        with tempfile.TemporaryDirectory() as root:
+            real_lock = self.module.pipeline_lock
+
+            def lock(root, heartbeat, **options):
+                if options.get('name') != 'attempt.lock':
+                    raise TimeoutError('PIPELINE_BUSY')
+                return real_lock(root, heartbeat, **options)
+
+            with patch.object(self.module, 'ROOT', Path(root)), patch.object(self.module, 'pipeline_lock', lock):
+                result = self.module.collect('Scheduled')
+            self.assertEqual(result['status'], 'failed')
+            self.assertEqual(json.loads((Path(root) / 'latest-attempt.json').read_text())['status'], 'failed')
+
     @unittest.skipIf(os.name == 'nt', 'POSIX process groups and flock are production Linux primitives')
     def test_timeout_kills_descendants_before_releasing_pipeline_lock(self):
         with tempfile.TemporaryDirectory() as root:

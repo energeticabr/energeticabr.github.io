@@ -14,12 +14,22 @@ export function createFinancialReportLastUpdate(doc, { fiscal = false } = {}) {
   time.textContent = '—';
   value.append(time);
   element.append(label, value);
-  let latest = -Infinity;
-  return { element, update(at) {
-    if (!Number.isFinite(at) || at <= latest) return;
+  let latest = -Infinity, confirmed = false;
+  function display(at) {
     latest = at;
     const date = new Date(at);
     time.dateTime = date.toISOString();
     time.textContent = formatter.format(date);
-  } };
+  }
+  return {
+    element,
+    update(at) {
+      if (!confirmed && Number.isFinite(at) && at > latest) display(at);
+    },
+    confirm(at) {
+      if (!Number.isFinite(at) || (confirmed && at <= latest)) return;
+      confirmed = true;
+      display(at);
+    },
+  };
 }

@@ -30,7 +30,7 @@ export function createFinancialReportRefreshStatus(doc, { fiscal = false, errorT
   icon.append(path);
   value.append(icon, label);
   element.append(value);
-  let sourceStatus, currentStatus, latestAttemptFailed = false, awaitingRead = false;
+  let sourceStatus, currentStatus, statusAt, latestAttemptFailed = false, awaitingRead = false;
 
   function render() {
     const inProgress = currentStatus === 'pending' || currentStatus === 'waiting';
@@ -44,15 +44,16 @@ export function createFinancialReportRefreshStatus(doc, { fiscal = false, errorT
     label.textContent = status === 'error' ? errorText : text;
   }
 
-  function set(status) {
+  function set(status, at = Date.now()) {
     currentStatus = status;
+    statusAt = at;
     render();
   }
 
   return {
     element, set,
-    setLatestAttempt(status) {
-      if (status === 'succeeded' && latestAttemptFailed && currentStatus === 'error') currentStatus = null;
+    setLatestAttempt({ status, completedAt }) {
+      if (status === 'succeeded' && currentStatus === 'error' && completedAt > statusAt) currentStatus = null;
       latestAttemptFailed = status === 'failed';
       render();
     },
@@ -71,7 +72,8 @@ export function createFinancialReportRefreshStatus(doc, { fiscal = false, errorT
       const wasPending = sourceStatus === 'pending' || sourceStatus === 'waiting';
       sourceStatus = next;
       awaitingRead = next === 'success' && wasPending;
-      set(awaitingRead ? 'pending' : next);
+      const completedAt = Date.parse(state.latest?.completedUtc);
+      set(awaitingRead ? 'pending' : next, Number.isFinite(completedAt) ? completedAt : undefined);
     },
     finishRead(ok) {
       if (!awaitingRead) return;

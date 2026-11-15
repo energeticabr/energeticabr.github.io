@@ -822,7 +822,7 @@ test('Sicoob reads the latest collection outcome without starting or acknowledgi
     return jsonResponse({ status: 'processed', messages: [], sicoobRefresh: replies.shift() });
   });
   assert.deepEqual(await client.getSicoobLatestAttempt(), {
-    status: 'failed', lastSuccessfulAt: Date.parse(lastSuccessfulUtc),
+    status: 'failed', completedAt: Date.parse(completedUtc), lastSuccessfulAt: Date.parse(lastSuccessfulUtc),
   });
   assert.equal(await client.getSicoobLatestAttempt(), null);
   await assert.rejects(client.getSicoobLatestAttempt(), /Sicoob/);
