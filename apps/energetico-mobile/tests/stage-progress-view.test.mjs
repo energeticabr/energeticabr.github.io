@@ -1,6 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import {JSDOM} from 'jsdom';
+import {captureFilteredReport} from '../src/ui/report-print.js';
 import {createChatView,renderChatMarkup} from '../src/ui/chat-view.js';
 const {createStageProgressReportView}=await import('../src/ui/stage-progress-view.js').catch(error=>{if(error.code==='ERR_MODULE_NOT_FOUND')return {};throw error;});
 const snapshot={complete:true,activities:[
@@ -136,4 +137,20 @@ test('restores the manually edited date after Microsoft consent and waits for a 
  assert.equal(popup.querySelector('input').value,'2026-09-29');
  assert.equal(suggestions,0);
  assert.equal(saves,0);
+});
+
+test('the closed finalization form does not block the activity PDF',async t=>{
+ const {view,root}=setup(t,async()=>snapshot,false,{
+  async loadLatestAssignmentDate(){return '';},async finalizeActivity(){},
+ });
+ await view.open();
+ const print=()=>{
+  const report=JSON.stringify(captureFilteredReport(root));
+  assert.match(report,/PAREDES/);
+  assert.doesNotMatch(report,/SUBMETER|FINALIZAR/);
+ };
+ print();
+ root.querySelector('.sp-end button').click();await new Promise(r=>setImmediate(r));
+ root.querySelector('.sp-finish-form [type=button]').click();
+ print();
 });

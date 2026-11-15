@@ -33,7 +33,7 @@ export function createStageProgressReportView({document:doc=globalThis.document,
  finishOverlay.setAttribute('aria-label','Finalizar atividade');
  const finishForm=make('form','sp-finish-form');finishForm.tabIndex=-1;
  const finishActivity=make('p','sp-finish-activity');
- const finishDate=make('input');finishDate.type='date';finishDate.required=true;
+ const finishDate=make('input');finishDate.type='date';finishDate.required=true;finishDate.disabled=true;
  const finishLabel=make('label','','Data fim');finishLabel.append(finishDate);
  const finishNotice=make('p','sp-finish-notice');finishNotice.setAttribute('role','status');finishNotice.hidden=true;
  const finishCancel=make('button','','CANCELAR');finishCancel.type='button';
@@ -51,7 +51,7 @@ export function createStageProgressReportView({document:doc=globalThis.document,
  function closeFinish(restoreFocus=true){
   if(!finishing)return;
   const {controller,trigger}=finishing;
-  finishing=null;controller.abort();finishOverlay.hidden=true;panel.inert=false;
+  finishing=null;controller.abort();finishDate.disabled=true;finishOverlay.hidden=true;panel.inert=false;
   if(restoreFocus)trigger.focus();
  }
  async function openFinish(row,trigger,draftDate=''){
