@@ -32,13 +32,13 @@ export function createMealVoucherAttachments({ repository, assertSession = () =>
       throw new Error('Para retomar, mantenha os mesmos anexos, com o mesmo conteúdo, na bandeja.');
     return entries;
   }
-  async function exists(target, entry) {
-    const rows = await call('listAttachments',target.listId,target.id);
+  async function exists(target, entry, signal) {
+    const rows = await call('listAttachments',target.listId,target.id,{ signal, requireCollection:true });
     if (!Array.isArray(rows) || rows.some(row=>!String(row?.name || '').trim())) throw new Error('Não foi possível conferir os anexos no SharePoint.');
     const matches = rows.filter(row=>fileKey(row.name)===fileKey(entry.manifest.name));
     if (matches.length > 1) throw new Error('O destino possui nomes de anexos ambíguos.');
     if (!matches.length) return false;
-    const raw = await call('downloadAttachment',target.listId,target.id,matches[0].name);
+    const raw = await call('downloadAttachment',target.listId,target.id,matches[0].name,{ signal });
     const bytes = raw instanceof ArrayBuffer ? raw : ArrayBuffer.isView(raw) ? raw.buffer.slice(raw.byteOffset,raw.byteOffset+raw.byteLength) : await raw.arrayBuffer();
     const hash = await digest(bytes); assertSession();
     if (bytes.byteLength !== entry.manifest.size || hash !== entry.manifest.sha256)
@@ -46,6 +46,18 @@ export function createMealVoucherAttachments({ repository, assertSession = () =>
     return true;
   }
   async function check(target, entries) { for (const entry of entries) await exists(target,entry); }
+  async function confirm(targets, files, manifest, signal) {
+    if (!files.length) return !manifest?.length;
+    if (!Array.isArray(manifest) || manifest.length !== files.length) return false;
+    const entries = manifest.map(entry => ({ manifest:{ ...entry, name:sharePointFileName(entry.name) } }));
+    if (new Set(entries.map(({ manifest }) => fileKey(manifest.name))).size !== files.length
+      || !files.every(file => entries.some(({ manifest }) => manifest.name === sharePointFileName(file.name)
+        && manifest.size === file.size && /^[a-f0-9]{64}$/.test(manifest.sha256)))) return false;
+    for (const target of targets) for (const entry of entries) {
+      if (!await exists(target,entry,signal)) return false;
+    }
+    return true;
+  }
   async function submit(targets, entries, onProgress = () => {}) {
     for (const target of targets) await check(target,entries);
     for (const target of targets) for (const entry of entries) {
@@ -57,5 +69,5 @@ export function createMealVoucherAttachments({ repository, assertSession = () =>
       onProgress(target,entry.manifest);
     }
   }
-  return Object.freeze({prepare,check,submit});
+  return Object.freeze({prepare,check,confirm,submit});
 }
