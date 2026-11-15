@@ -28,7 +28,7 @@ function fixture() {
     NOTASPENDENTES: ['Title','FILIAL','FORNECEDOR','VALORTOTAL','DATA PEDIDO','STATUS','OBS','FORMAPGTO','NOTA FISCAL','VALECONTROLE'],
     LANCAMENTOS: ['__PowerAppsId__','AGRUPAR','FILIAL','TIPO TRANSAÇÃO','DATA','DATA PGTO PREVISTO','DATA PGTO EFETUADO','FORNECEDOR','PRODUTO','ETAPA','QUANTIDADE','VALOR UNITÁRIO','CONTA','FRETE','OBS','IDFOLHA'],
   };
-  const columns = Object.fromEntries(Object.entries(names).map(([list, labels]) => [list, labels.map(label => ({ name: label, displayName: label, ...(/DATA/.test(label) ? { dateTime: {} } : list === 'NOTASPENDENTES' && label === 'VALORTOTAL' ? { number: {} } : { text: {} }) }))]));
+  const columns = Object.fromEntries(Object.entries(names).map(([list, labels]) => [list, labels.map(label => ({ name: label, displayName: label, ...(/DATA/.test(label) ? { dateTime: {} } : (list === 'NOTASPENDENTES' && label === 'VALORTOTAL' || list === 'FOLHAPGTO' && ['VALORUNITARIO','QTD','IDFOLHA','IDLANCAMENTO'].includes(label)) ? { number: {} } : { text: {} }) }))]));
   Object.assign(columns.NOTASPENDENTES.find(c => c.name === 'VALECONTROLE'), { hidden:true, text:{ allowMultipleLines:true, textType:'plain', appendChangesToExistingText:false } });
   Object.assign(columns.LANCAMENTOS.find(c => c.name === 'IDFOLHA'), { text:undefined, number:{ decimalPlaces:'none' }, required:false });
   const rows = { FORNECEDORES: [
@@ -70,6 +70,54 @@ test('vale transporte registra a rubrica e a OBS próprias com retomada sem dupl
   assert.equal(f.rows.LANCAMENTOS.length, 2);
   assert.equal(f.rows.FOLHAPGTO.length, 2);
 });
+test('vale transporte grava a folha com as colunas de texto do SharePoint', async () => {
+  const f = fixture(), create = f.repo.createItem;
+  const fieldsStoredAsText = ['VALORUNITARIO', 'QTD', 'IDFOLHA', 'IDLANCAMENTO'];
+  for (const column of f.columns.FOLHAPGTO) {
+    if (fieldsStoredAsText.includes(column.name)) Object.assign(column, { number:undefined, text:{} });
+  }
+  f.repo.createItem = async (site, list, fields) => {
+    if (list === 'FOLHAPGTO') {
+      for (const name of fieldsStoredAsText) {
+        if (typeof fields[name] !== 'string') throw new Error('General exception while processing');
+      }
+    }
+    return create(site, list, fields);
+  };
+  const data = createMealVoucherData({ repository:f.repo, voucherType:'transport' });
+  const { suppliers } = await data.loadOptions();
+  const selected = draft(suppliers);
+  const progress = { operationId:'transport-text-schema' };
+  const result = await data.post(selected, progress);
+  assert.equal(f.rows.LANCAMENTOS[0].fields.IDFOLHA, 11);
+  assert.deepEqual(f.rows.FOLHAPGTO.map(row => row.fields.IDFOLHA), ['11', '12']);
+  assert.deepEqual(f.rows.FOLHAPGTO.map(row => row.fields.IDLANCAMENTO), result.lines.map(line => line.id));
+  assert.deepEqual(f.rows.FOLHAPGTO.map(row => row.fields.VALORUNITARIO), ['10', '20']);
+  assert.deepEqual(f.rows.FOLHAPGTO.map(row => row.fields.QTD), ['1', '1']);
+  assert.equal((await data.post(selected, progress)).orderId, result.orderId);
+  assert.equal(f.rows.FOLHAPGTO.length, 2);
+});
+test('comprovante do Sicoob mantém os bytes e usa um nome aceito pelo SharePoint ao retomar', async () => {
+  const f = fixture(), upload = f.repo.uploadAttachment;
+  f.repo.uploadAttachment = async (site, list, id, file) => {
+    if (file.name.includes(':')) throw new Error('Nome recusado pelo SharePoint');
+    return upload(site, list, id, file);
+  };
+  const data = createMealVoucherData({ repository:f.repo, voucherType:'transport' });
+  const { suppliers } = await data.loadOptions();
+  const original = 'comprovante_15_11_2026_09:26:23.pdf';
+  const safe = 'comprovante_15_11_2026_09_26_23.pdf';
+  const selected = { ...draft(suppliers), files:[new File(['recibo'], original, { type:'application/pdf' })] };
+  const progress = { operationId:'transport-receipt-name' };
+  await data.post(selected, progress);
+  assert.deepEqual(f.deliveries.map(({ list, name }) => [list, name]), [['NOTASPENDENTES', safe], ['LANCAMENTOS', safe]]);
+  const saved = progress.fileManifest[0];
+  progress.fileManifest = [{ ...saved, name:original }];
+  await data.post(selected, progress);
+  assert.equal(f.deliveries.length, 2);
+  assert.equal(progress.fileManifest[0].sha256, saved.sha256);
+});
+
 test('meal options report completed sources while another catalog is still pending', async () => {
   const f = fixture(), events = [], page = f.repo.getItemsPage; let release;
   f.repo.getItemsPage = (...args) => args[1] === 'LANCAMENTOOBRA'

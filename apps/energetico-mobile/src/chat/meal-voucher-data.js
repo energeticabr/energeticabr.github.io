@@ -158,8 +158,12 @@ export function createMealVoucherData({ repository, graph, tokenProvider, storag
       OBS:voucherType === 'transport' && draft.obs ? draft.obs : `${voucher.title}${draft.obs ? ` — ${draft.obs}` : ''}` }, ['FRETE','OBS']);
   }
   function payrollFields(descriptor, draft, line, sheet, launchId) {
-    return payload(descriptor, { FORNECEDOR:line.supplier.label, TIPOPGTO:paymentType, VALORUNITARIO:line.unitValue,
+    const fields = payload(descriptor, { FORNECEDOR:line.supplier.label, TIPOPGTO:paymentType, VALORUNITARIO:line.unitValue,
       QTD:line.quantity, DATA:draft.date, IDFOLHA:Number(sheet.id), IDLANCAMENTO:Number(launchId) });
+    for (const { name, text } of descriptor.columns) {
+      if (text && typeof fields[name] === 'number') fields[name] = String(fields[name]);
+    }
+    return fields;
   }
   async function preflightLines(launches, payroll, draft, sheets, orderId, operationId, tokenCache) {
     const [savedLaunches, savedPayroll] = await Promise.all([all(launches), all(payroll)]);
