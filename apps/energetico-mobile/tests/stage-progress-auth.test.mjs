@@ -100,3 +100,14 @@ test('a different Microsoft account cannot access the stage draft after consent'
   assert.equal(second.auth.consumePendingAction(), null);
   assert.equal(second.auth.consumePendingStageFinish(), null);
 });
+
+test('the consent redirect keeps a stage draft distinct from an activity with the same ID', async () => {
+  const first = harness();
+  const stageFinishDraft = { id: '129', date: '2026-10-07', kind: 'stage' };
+  await first.auth.initialize();
+  await first.auth.authorize(['Sites.ReadWrite.All'], { resumeAction: 'action_stage_progress', stageFinishDraft });
+  const second = harness({ account, accessToken: 'write-token', scopes: ['Sites.ReadWrite.All'] }, first.values);
+  await second.auth.initialize();
+  assert.equal(second.auth.consumePendingAction(), 'action_stage_progress');
+  assert.deepEqual(second.auth.consumePendingStageFinish(), stageFinishDraft);
+});

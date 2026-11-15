@@ -37,22 +37,29 @@ export function selectStageLaunch(launches, status = "") {
     .sort(compareStageLaunches)[0] || null;
 }
 
-export function buildStageReport(snapshot, filters = {}, today = new Date().toISOString().slice(0, 10)) {
+export function stageReportGroupKey(row) {
+  return `${normalized(row.branch)}\u0000${normalized(row.stage)}`;
+}
+
+export function buildStageReport(snapshot, filters = {}, today = new Date().toISOString().slice(0, 10), { includeGroups = [] } = {}) {
   const activities = (snapshot?.activities || []).filter(row => matches(row, filters, ["branch", "stage", "activity", "status", "supplier"]));
   const launches = snapshot?.launches || [];
   const groups = new Map();
-  for (const row of activities) {
-    const key = `${normalized(row.branch)}\u0000${normalized(row.stage)}`;
+  function groupFor(row) {
+    const key = stageReportGroupKey(row);
     if (!groups.has(key)) groups.set(key, { branch: row.branch, stage: row.stage, rows: [] });
-    groups.get(key).rows.push(row);
+    return groups.get(key);
+  }
+  for (const row of activities) groupFor(row).rows.push(row);
+  for (const row of includeGroups) {
+    if (matches(row, filters, ["branch", "stage", "activity", "supplier"])) groupFor(row);
   }
   const visibleBranches = new Set(activities.map(row => normalized(row.branch)));
   const hasActivityFilter = ["activity", "status", "supplier"].some(name => Boolean(filters[name]));
   for (const row of launches) {
     if (hasActivityFilter || !text(row.stage) || !matches(row, filters, ["branch", "stage"])) continue;
     if (!visibleBranches.has(normalized(row.branch)) && !same(filters.branch, row.branch) && !same(filters.stage, row.stage)) continue;
-    const key = `${normalized(row.branch)}\u0000${normalized(row.stage)}`;
-    if (!groups.has(key)) groups.set(key, { branch: row.branch, stage: row.stage, rows: [] });
+    groupFor(row);
   }
   const stages = [];
   for (const group of groups.values()) {
@@ -62,7 +69,7 @@ export function buildStageReport(snapshot, filters = {}, today = new Date().toIS
     if (filters.launchStatus && !launch) continue;
     const end = same(launch?.status, "FINALIZADO") ? launch?.endDate : today;
     stages.push({
-      ...group, launches: stageLaunches, startDate: launch?.startDate || "", endDate: launch?.endDate || "",
+      ...group, launch, launches: stageLaunches, startDate: launch?.startDate || "", endDate: launch?.endDate || "",
       status: launch?.status || "", percent: launch?.percent ?? null,
       days: launch?.startDate ? calendarDays(launch.startDate, end) : null,
       rows: [...group.rows].sort((a, b) => dateKey(a.executionDate).localeCompare(dateKey(b.executionDate)) || Number(a.id) - Number(b.id)),

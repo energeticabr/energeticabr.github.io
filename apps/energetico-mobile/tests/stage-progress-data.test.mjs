@@ -297,3 +297,42 @@ test("does not finalize after the displayed activity changes while its popup is 
     supplier: "João", executionDate: "2026-10-01", plannedDate: "2026-10-03" };
   await assert.rejects(data.finalizeActivity("129", "2026-10-07", { expectedActivity }), { code: "stage_progress_changed" });
 });
+
+test("stage finalization reads every page of descriptions and writes FIM and FINALIZADO together", async () => {
+  let writes = 0;
+  const { repository } = fixture({
+    async getItem(_site, list, id) {
+      assert.equal(list, "LANCAMENTOOBRA");
+      assert.equal(id, "7");
+      return { ...launch(7), eTag: '"stage,5"' };
+    },
+    async getItemsPage(_site, list, _query, { cursor }) {
+      assert.equal(list, "DEMONSTRATIVOETAPA");
+      return cursor ? { items: [activity(2, { field_7: "ATIVIDADE FINALIZADA" }), activity(3, { field_0: "B" })], hasMore: false }
+        : { items: [activity(1, { field_7: "ATIVIDADE FINALIZADA" })], hasMore: true, nextLink: "next" };
+    },
+    async updateItem(site, list, id, fields, options) {
+      assert.deepEqual([site, list, id, options.eTag], ["personal", "LANCAMENTOOBRA", "7", '"stage,5"']);
+      assert.deepEqual(fields, { field_3: "2026-10-08T12:00:00Z", field_4: "FINALIZADO" });
+      writes++;
+      return launch(7, 0.4, fields);
+    },
+  });
+  const result = await create({ repository }).finalizeStage("7", "2026-10-08");
+  assert.equal(result.endDate, "2026-10-08");
+  assert.equal(result.status, "FINALIZADO");
+  assert.equal(writes, 1);
+});
+
+test("stage finalization refuses a pending description on a later page", async () => {
+  const { repository } = fixture({
+    async getItem() { return { ...launch(7), eTag: '"stage,5"' }; },
+    async getItemsPage(_site, list, _query, { cursor }) {
+      assert.equal(list, "DEMONSTRATIVOETAPA");
+      return cursor ? { items: [activity(2)], hasMore: false }
+        : { items: [activity(1, { field_7: "ATIVIDADE FINALIZADA" })], hasMore: true, nextLink: "next" };
+    },
+    async updateItem() { assert.fail("Cannot finish a stage with a pending description"); },
+  });
+  await assert.rejects(create({ repository }).finalizeStage("7", "2026-10-08"), { code: "stage_progress_incomplete" });
+});

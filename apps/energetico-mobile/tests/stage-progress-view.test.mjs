@@ -154,3 +154,51 @@ test('the closed finalization form does not block the activity PDF',async t=>{
  root.querySelector('.sp-finish-form [type=button]').click();
  print();
 });
+
+test('the stage button considers hidden rows and suggests the most recent end after the last activity finishes',async t=>{
+ const calls=[];
+ const data={...snapshot,activities:[snapshot.activities[0],{...snapshot.activities[1],supplier:'Ana',plannedDate:'2026-09-30'}]};
+ const {view,root,dom}=setup(t,async()=>data,false,{
+  async loadLatestAssignmentDate(){return '2026-09-20';},
+  async finalizeActivity(id,date){return {...data.activities[0],id,plannedDate:date,status:'ATIVIDADE FINALIZADA'};},
+  async finalizeStage(id,date){calls.push([id,date]);return {...data.launches[0],id,endDate:date,status:'FINALIZADO'};},
+ });
+ await view.open();
+ const stageButton=()=>root.querySelector('.sp-stage-days + button');
+ let button=stageButton();
+ assert.equal(button.textContent,'FINALIZAR');
+ assert.equal(button.disabled,true);
+ const status=root.querySelector('[name=status]');status.value='ATIVIDADE FINALIZADA';status.dispatchEvent(new dom.window.Event('change'));
+ assert.equal(stageButton().disabled,true,'a hidden ongoing activity must block finalization');
+ status.value='ATIVIDADE INICIADA';status.dispatchEvent(new dom.window.Event('change'));
+ root.querySelector('.sp-end button').click();await new Promise(r=>setImmediate(r));
+ const popup=root.querySelector('.sp-finish-overlay'),date=popup.querySelector('input');
+ popup.querySelector('[type=submit]').click();await new Promise(r=>setImmediate(r));
+ assert.equal(root.querySelectorAll('tbody tr').length,0);
+ button=stageButton();
+ assert.equal(button.disabled,false);
+ button.click();
+ assert.equal(popup.getAttribute('aria-label'),'Finalizar etapa');
+ assert.equal(date.value,'2026-09-30');
+ date.value='2026-10-02';
+ popup.querySelector('[type=submit]').click();await new Promise(r=>setImmediate(r));
+ assert.deepEqual(calls,[['1','2026-10-02']]);
+ const stageStatus=root.querySelector('[name=launchStatus]');stageStatus.value='FINALIZADO';stageStatus.dispatchEvent(new dom.window.Event('change'));
+ assert.match(root.querySelector('.sp-stage-dates').textContent,/02\/10\/2026/);
+ assert.equal(stageButton().disabled,true);
+});
+
+test('stage draft restores the stage popup and keeps PDF export available after cancellation',async t=>{
+ let writes=0;
+ const {view,root}=setup(t,async()=>({...snapshot,activities:[snapshot.activities[1]]}),false,{
+  async finalizeStage(){writes++;},
+ });
+ await view.open({finishDraft:{id:'1',date:'2026-09-18',kind:'stage'}});
+ const popup=root.querySelector('.sp-finish-overlay');
+ assert.equal(popup.hidden,false);
+ assert.equal(popup.getAttribute('aria-label'),'Finalizar etapa');
+ assert.equal(popup.querySelector('input').value,'2026-09-18');
+ assert.equal(writes,0);
+ popup.querySelector('[type=button]').click();
+ assert.doesNotThrow(()=>captureFilteredReport(root));
+});

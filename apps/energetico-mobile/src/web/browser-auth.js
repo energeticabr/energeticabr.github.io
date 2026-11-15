@@ -205,7 +205,7 @@ function stageFinishForAction(action, scopes, value) {
   if (action !== "action_stage_progress" || !scopes.some(scope => /^Sites\.Read(?:Write)?\.All$/i.test(scope))
     || typeof value?.id !== "string" || !/^[1-9]\d*$/.test(value.id) || !Number.isSafeInteger(Number(value.id))
     || typeof value.date !== "string" || !/^\d{4}-\d{2}-\d{2}$/.test(value.date)) return null;
-  return { id: value.id, date: value.date };
+  return { id: value.id, date: value.date, ...(value.kind === "stage" ? { kind: "stage" } : {}) };
 }
 
 function browserStorage(storage) {

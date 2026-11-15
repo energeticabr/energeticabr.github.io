@@ -81,7 +81,7 @@ test('HOME and reply open one local stage report, with an independent read-only 
   assert.equal(h.panels.length, 1);
   assert.equal(h.panels[0].opens, 1);
   assert.equal(h.panels[0].document, globalThis.document);
-  assert.deepEqual(Object.keys(h.panels[0].data), ['loadSnapshot', 'loadLatestAssignmentDate', 'finalizeActivity']);
+  assert.deepEqual(Object.keys(h.panels[0].data), ['loadSnapshot', 'loadLatestAssignmentDate', 'finalizeActivity', 'finalizeStage']);
   const caller = new AbortController();
   assert.equal(await h.panels[0].data.loadSnapshot({ signal: caller.signal, trace: 'stage' }), snapshot);
   assert.equal(sourceCreates, 1);
@@ -505,4 +505,47 @@ test('only explicit finalization asks for write access and invalidates the repor
   assert.equal((await data.finalizeActivity('129', '2026-10-07')).status, 'ATIVIDADE FINALIZADA');
   assert.deepEqual(await data.loadSnapshot(), { reads: 2 });
   assert.deepEqual(requestedScopes, [scopes, scopes, ['Sites.ReadWrite.All'], scopes]);
+});
+
+test('stage submission preserves its kind during Microsoft consent and forwards the selected version', async t => {
+  const requested = [];
+  let writeAllowed = false;
+  const expectedStage = { id: '7', stage: 'Fundação', status: 'INICIADO' };
+  const h = harness(t, {
+    stageProgressDataFactory: async ({ tokenProvider }) => ({
+      async finalizeStage(id, date, options) {
+        assert.equal(writeAllowed, true, 'write consent must complete before the fresh dependency check');
+        assert.deepEqual([id, date, options.expectedStage], ['7', '2026-10-07', expectedStage]);
+        assert.equal(await tokenProvider(['Sites.ReadWrite.All']), 'write-token');
+        return { id, endDate: date, status: 'FINALIZADO' };
+      },
+    }),
+    auth: {
+      async getToken(value) {
+        assert.deepEqual(value, ['Sites.ReadWrite.All']);
+        if (!writeAllowed) throw authRequired();
+        return 'write-token';
+      },
+      async authorize(value, options) { requested.push([value, options]); writeAllowed = true; },
+    },
+  });
+  const data = await open(h);
+  assert.equal((await data.finalizeStage('7', '2026-10-07', { expectedStage })).status, 'FINALIZADO');
+  assert.deepEqual(requested, [[['Sites.ReadWrite.All'], {
+    resumeAction: 'action_stage_progress', stageFinishDraft: { id: '7', date: '2026-10-07', kind: 'stage' },
+  }]]);
+});
+
+
+test('the stage report refresh reads a new snapshot when child statuses change outside this session', async t => {
+  let reads = 0;
+  const h = harness(t, { stageProgressDataFactory: async () => ({
+    async loadSnapshot() { return { reads: ++reads }; },
+  }) });
+  const data = await open(h);
+  assert.deepEqual(await data.loadSnapshot(), { reads: 1 });
+  assert.deepEqual(await data.loadSnapshot(), { reads: 1 });
+  assert.deepEqual(await data.loadSnapshot({ refresh: true }), { reads: 2 });
+  assert.deepEqual(await data.loadSnapshot({ refresh: true }), { reads: 3 });
+  assert.deepEqual(await data.loadSnapshot(), { reads: 3 });
 });
