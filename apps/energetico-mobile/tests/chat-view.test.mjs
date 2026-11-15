@@ -9764,10 +9764,15 @@ test("Novo Pedido insere Efetuar Folha abaixo de Lançamento Múltiplo e não al
  assert.doesNotMatch(renderChatMarkup(signedInState({messages:[message],activeFlow:{...activeFlow,rows:[{label:'TIPO DE PEDIDO',value:'PEDIDO EXISTENTE'}]}})),/action_supplier_payroll_launch/);
 });
 
-test('vale-alimentação aparece logo abaixo da folha no menu de lançamentos', () => {
+test('o menu de lançamentos coloca vale transporte abaixo de vale alimentação', () => {
  const message={role:'assistant',type:'poll',question:'COMO DESEJA EFETUAR O LANÇAMENTO?',options:[{id:'choice:tipo_lancamento:1',label:'LANÇAMENTO ÚNICO'},{id:'choice:tipo_lancamento:2',label:'LANÇAMENTO MÚLTIPLO'}]};
  const activeFlow={id:'launch',rows:[{label:'TIPO DE PEDIDO',value:'NOVO PEDIDO'}]};
  const markup=renderChatMarkup(signedInState({messages:[message],activeFlow}));
  assert.ok(markup.indexOf('EFETUAR FOLHA DE PAGAMENTO')<markup.indexOf('EFETUAR LANÇAMENTO VALE ALIMENTAÇÃO'));
  assert.match(markup,/action_meal_voucher_launch/);
+ const dom = new JSDOM(markup);
+ try {
+   const meal = dom.window.document.querySelector('[data-reply-id="action_meal_voucher_launch"]');
+   assert.equal(meal.nextElementSibling.dataset.replyId, 'action_transport_voucher_launch');
+ } finally { dom.window.close(); }
 });

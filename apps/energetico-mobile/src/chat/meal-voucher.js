@@ -2,6 +2,11 @@ import Decimal from 'decimal.js';
 import { payrollDecimal, payrollKey, validPayrollDate } from './supplier-payroll.js';
 
 export const MEAL_VOUCHER_REPLY_ID = 'action_meal_voucher_launch';
+export const TRANSPORT_VOUCHER_REPLY_ID = 'action_transport_voucher_launch';
+export const VOUCHER_TYPES = Object.freeze({
+  meal: Object.freeze({ title:'VALE ALIMENTAÇÃO', name:'vale-alimentação', storage:'meal-voucher', token:'APP-vale-alimentacao' }),
+  transport: Object.freeze({ title:'VALE TRANSPORTE', name:'vale transporte', storage:'transport-voucher', token:'APP-vale-transporte' }),
+});
 export const mealVoucherKey = payrollKey;
 
 function amounts(line) {

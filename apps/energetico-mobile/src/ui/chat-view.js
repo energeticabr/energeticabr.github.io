@@ -15,7 +15,7 @@ import { provisionSettlementLaunchSummaryMarkup } from './provision-settlement-l
 import { reportNavigationMarkup } from "./report-navigation.js";
 import { pendingReportPrintMarkup } from "./report-print.js";
 import { PAYROLL_LAUNCH_REPLY_ID, isSupplierPayrollMenu } from "../chat/supplier-payroll.js";
-import { MEAL_VOUCHER_REPLY_ID } from '../chat/meal-voucher.js';
+import { MEAL_VOUCHER_REPLY_ID, TRANSPORT_VOUCHER_REPLY_ID } from '../chat/meal-voucher.js';
 import { diaryFieldVisitOptionId, isInLocoDiaryOption, selectedDiaryTypeVisitId } from '../chat/diary-field-visit-options.js';
 import { PAYROLL_BREAKDOWN_REPLY_ID, isPayrollBreakdownMenu } from '../chat/payroll-breakdown.js';
 import { escapeHtml } from "./escape-html.js";
@@ -1786,6 +1786,15 @@ function renderPoll(message, busy, draft = "", databaseFilterMessage = null, act
       id: MEAL_VOUCHER_REPLY_ID,
       reply: MEAL_VOUCHER_REPLY_ID,
       label: '🥗 EFETUAR LANÇAMENTO VALE ALIMENTAÇÃO',
+    });
+  }
+  if (currentPoll && isSupplierPayrollMenu(message, activeFlow)
+    && !options.some(option => draftReplyId(option) === TRANSPORT_VOUCHER_REPLY_ID)) {
+    const mealVoucher = options.findIndex(option => draftReplyId(option) === MEAL_VOUCHER_REPLY_ID);
+    options.splice(mealVoucher + 1, 0, {
+      id: TRANSPORT_VOUCHER_REPLY_ID,
+      reply: TRANSPORT_VOUCHER_REPLY_ID,
+      label: '🚌 EFETUAR LANÇAMENTO VALE TRANSPORTE',
     });
   }
   if (currentPoll && isPayrollBreakdownMenu(message)

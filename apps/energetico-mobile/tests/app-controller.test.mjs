@@ -12615,6 +12615,30 @@ function openPayrollMenu(h) {
   h.store.ingestRemoteMessages([{ type: "poll", question: "COMO DESEJA EFETUAR O LANÇAMENTO?", options: [{ id: "choice:tipo_lancamento:2", label: "LANÇAMENTO MÚLTIPLO" }] }], { activeFlow: { id: "launch", title: "EFETUAR LANÇAMENTO", rows: [{ label: "TIPO DE PEDIDO", value: "NOVO PEDIDO" }] } });
 }
 
+test('vale transporte abre pelo menu com catálogo e painel próprios', async t => {
+  const created = [];
+  const h = makeHarness({
+    mealVoucherDataFactory: async ({ voucherType }) => ({ voucherType }),
+    mealVoucherFactory: async ({ data, voucherType, onSwileRecharge }) => {
+      assert.equal(data.voucherType, voucherType);
+      created.push({ voucherType, onSwileRecharge, opened:0, closed:0 });
+      const panel = created.at(-1);
+      return { open:() => panel.opened++, close:() => panel.closed++, destroy:() => {} };
+    },
+  });
+  t.after(() => h.controller.stop());
+  await h.controller.start();
+  assert.equal(await h.view.emit('select-reply', { replyId:'action_transport_voucher_launch' }), false);
+  openPayrollMenu(h);
+  const calls = h.chatCalls.length;
+  assert.equal(await h.view.emit('select-reply', { replyId:'action_meal_voucher_launch' }), true);
+  assert.equal(await h.view.emit('select-reply', { replyId:'action_transport_voucher_launch' }), true);
+  assert.equal(h.chatCalls.length, calls);
+  assert.deepEqual(created.map(({voucherType, opened, closed}) => [voucherType, opened, closed]), [['meal',1,1],['transport',1,0]]);
+  assert.equal(typeof created[0].onSwileRecharge, 'function');
+  assert.equal(created[1].onSwileRecharge, undefined);
+});
+
 test('vale abre a Swile com os subtotais pela sessão do menu de lançamento', async t => {
   const dom = new JSDOM('<body></body>', { url:'https://example.invalid' });
   const previousDocument = globalThis.document;
