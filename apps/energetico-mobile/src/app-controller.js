@@ -2326,7 +2326,10 @@ export function createAppController({
         return token;
       }
     };
-    const request = Promise.resolve().then(() => pendingProvisionAttachmentsDataFactory({ tokenProvider,assertSession:assertCurrentSession, sourceKind: kind })).then(data => {
+    const request = Promise.resolve().then(() => pendingProvisionAttachmentsDataFactory({
+      tokenProvider, assertSession: assertCurrentSession, sourceKind: kind,
+      confirmPayrollLink: payload => client.launchGalleryRequest("payroll_provision_link", payload),
+    })).then(data => {
       if (typeof data?.listAttachments !== "function" || typeof data?.downloadAttachment !== "function") {
         throw new Error("A consulta autenticada dos anexos não está disponível.");
       }

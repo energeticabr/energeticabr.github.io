@@ -4,6 +4,7 @@ const PARENT = { paidDate: ['DATAPGTOEFETUADO', 'dateTime'], dueDate: ['DATAPREV
 const CHILD = {
   ...PARENT, parent: ['DESCRITIVOPROVISAO'], launch: ['IDLANCAMENTOS'], status: ['STATUS'], paid: ['PGTOAGENDADO'],
   supplier: ['FORNECEDOR'], branch: ['FILIAL'], product: ['PRODUTO'], quantity: ['QTD'], unit: ['VALORTOTAL'], freight: ['FRETE'],
+  payrollSheet: ['IDFOLHA', 'number'],
 };
 const LAUNCH = {
   paidDate: ['DATAPGTOEFETUADO', 'dateTime'], child: ['IDPGTOAGENDADO'], supplier: ['FORNECEDOR'], branch: ['FILIAL'],
@@ -15,7 +16,7 @@ const branch = value => text(value).match(/^\d+(?=\s*(?:-|$))/)?.[0] || key(valu
 const etag = row => text(row?.eTag || row?.['@odata.etag'] || row?.['odata.etag']);
 const isPaid = row => Boolean(row.paidDate) && (key(row.paid) === 'PAGO' || key(row.status) === 'PAGAMENTOEFETUADO');
 const isPending = row => key(row.status) === 'PAGAMENTOPREVISTO' && !row.rawDate && key(row.paid) !== 'PAGO';
-const sameFinancialDetails = (left, right) => ['supplier', 'branch', 'product', 'unit', 'quantity', 'freight']
+const sameFinancialDetails = (left, right) => ['supplier', 'branch', 'product', 'unit', 'quantity', 'freight', 'payrollSheet']
   .every(field => left[field] === right[field]);
 const dateField = value => /^\d{4}-\d{2}-\d{2}T/.test(value) ? new Date(value).toISOString() : `${provisionDateKey(value)}T12:00:00Z`;
 
@@ -25,7 +26,7 @@ function requireId(value) {
   return id;
 }
 
-export function createProvisionLaunchLink({ repository, siteKey = 'personal', assertSession = () => {} }) {
+export function createProvisionLaunchLink({ repository, siteKey = 'personal', assertSession = () => {}, confirmPayrollLink }) {
   const operations = new WeakMap();
   let saving = false;
 
@@ -158,6 +159,14 @@ export function createProvisionLaunchLink({ repository, siteKey = 'personal', as
     const linked = row => row.parent === parent.id && row.launch === launch.id;
     const paid = row => linked(row) && row.paidDate === launch.paidDate && isPaid(row);
     const reverseLinked = row => row.child === childId && row.paidDate === launch.paidDate;
+    const checkPayroll = async (checkOnly = false) => {
+      assertSession();
+      const receipt = await confirmPayrollLink?.({ provisionId: childId, launchId: launch.id, ...(checkOnly ? {checkOnly} : {}) });
+      assertSession();
+      if (receipt?.[checkOnly ? 'ready' : 'linked'] !== true || receipt.provisionId !== childId || receipt.launchId !== launch.id) {
+        throw new Error('O serviço de folha não confirmou o vínculo ao lançamento. Confira e retome a vinculação.');
+      }
+    };
     saving = true;
     try {
       const [currentChild, currentLaunch, liveParent] = await Promise.all([
@@ -170,6 +179,7 @@ export function createProvisionLaunchLink({ repository, siteKey = 'personal', as
         || !op.selected && (currentChild.eTag !== chosen.eTag || currentLaunch.eTag !== launch.eTag || liveParent.eTag !== parent.eTag)) {
         throw new Error('O lançamento ou a provisão foi alterado. Consulte novamente.');
       }
+      if (currentChild.payrollSheet && (!linked(currentChild) || !reverseLinked(currentLaunch))) await checkPayroll(true);
       op.selected = childId;
       rememberOperation({ id: parent.id, launchId: launch.id, childId });
 
@@ -241,7 +251,20 @@ export function createProvisionLaunchLink({ repository, siteKey = 'personal', as
         || verifiedParent.rawDate !== liveParent.rawDate) {
         throw new Error('Os registros foram alterados durante o vínculo. Confira os dados antes de retomar.');
       }
-      await update(childSchema, verifiedChild, { paidDate: date, paid: 'PAGO' }, paid);
+      let payableChild = verifiedChild;
+      if (payableChild.payrollSheet) {
+        await checkPayroll();
+        const [latestChild, latestLaunch] = await Promise.all([
+          read(childSchema, childId), read(launchSchema, launch.id),
+        ]);
+        if (latestChild.eTag !== verifiedChild.eTag || latestLaunch.eTag !== verifiedLaunch.eTag
+          || !reverseLinked(latestLaunch) || latestLaunch.rawDate !== launch.rawDate || !sameFinancialDetails(latestLaunch, launch)
+          || !linked(latestChild) || !eligible(latestChild, latestLaunch) || !sameFinancialDetails(latestChild, chosen)) {
+          throw new Error('O lançamento ou a provisão foi alterado durante a confirmação da folha. Confira e retome a vinculação.');
+        }
+        payableChild = latestChild;
+      }
+      await update(childSchema, payableChild, { paidDate: date, paid: 'PAGO' }, paid);
       const after = await snapshot();
       if (!after.some(paid)) throw new Error('A baixa da provisão não foi confirmada.');
       return { id: parent.id, paidDate: launch.paidDate, ...await syncParent(after) };
