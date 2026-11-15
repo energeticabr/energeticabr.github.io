@@ -291,7 +291,7 @@ test('permissão anterior não permite editar um lote parcialmente gravado', asy
   assert.equal(f.rows.NOTASPENDENTES.length, 1); assert.equal(f.rows.LANCAMENTOS.length, 2); assert.equal(f.rows.FOLHAPGTO.length, 2);
 });
 
-test('duas instâncias não podem retomar e corrigir simultaneamente a mesma operação', async () => {
+test('outra instância não pode retomar nem abandonar a mesma operação durante o envio', async () => {
   const f = fixture(); f.loseOrderResponse();
   const data = createMealVoucherData({ repository:f.repo }), other = createMealVoucherData({ repository:f.repo });
   const { suppliers } = await data.loadOptions(), original = draft([suppliers[0]]), progress = { operationId:'concurrent-resume' };
@@ -303,6 +303,7 @@ test('duas instâncias não podem retomar e corrigir simultaneamente a mesma ope
       armed = false;
       concurrent = other.post(original, previousProgress).then(() => 'gravou', error => error.message);
       await concurrent;
+      await assert.rejects(other.abandonPending(previousProgress, () => assert.fail('descartou durante o envio')), /outra tela/);
     }
     return getPage(...args);
   };
@@ -312,6 +313,11 @@ test('duas instâncias não podem retomar e corrigir simultaneamente a mesma ope
   assert.equal(f.rows.NOTASPENDENTES[0].fields.VALORTOTAL, 20);
   assert.equal(f.rows.LANCAMENTOS.length, 1); assert.equal(f.rows.LANCAMENTOS[0].fields.FORNECEDOR, 'Beto');
   assert.equal(f.rows.FOLHAPGTO.length, 1);
+  const writes = f.writes.length;
+  let abandoned = false;
+  await other.abandonPending(progress, () => { abandoned = true; });
+  assert.equal(abandoned, true);
+  assert.equal(f.writes.length, writes);
 });
 
 test('falha de leitura antes do PATCH mantém a revisão anterior recuperável após recriar o serviço', async () => {

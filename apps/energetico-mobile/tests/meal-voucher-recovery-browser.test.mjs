@@ -20,7 +20,8 @@ test('vale-alimentação reabre pedido vazio, edita campos e confirma uma única
       const { stdout } = await runBrowserLayout(browser, { width, height:844, url:`http://127.0.0.1:${server.httpServer.address().port}/tests/fixtures/meal-voucher-recovery.html` });
       const dom = new JSDOM(stdout), result = JSON.parse(dom.window.document.documentElement.dataset.layout); dom.window.close();
       assert.deepEqual(result, { enabled:true, pickers:true, persists:true, noEarlyWrites:true, noOverflow:true, webLock:true, orders:1, launches:1, payroll:1,
-        orderDate:'2026-11-02T12:00:00Z', orderAccount:'BANCO', paid:'2026-11-03T12:00:00Z', stage:'ALVENARIA', sheet:12 }, `${width}px`);
+        orderDate:'2026-11-02T12:00:00Z', orderAccount:'BANCO', paid:'2026-11-03T12:00:00Z', stage:'ALVENARIA', sheet:12,
+        legacyBlocked:true, abandonFits:true, freshAfterAbandon:true }, `${width}px`);
     }
   } finally { await server.close(); await rm(cache, { recursive:true, force:true, maxRetries:5, retryDelay:250 }); }
 });
