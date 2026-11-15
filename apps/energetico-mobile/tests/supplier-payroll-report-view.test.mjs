@@ -73,6 +73,18 @@ test('pending provision is visibly identified while its amount stays outside the
  await view.open();const detail=root.querySelector('details');detail.open=true;detail.dispatchEvent(new dom.window.Event('toggle'));await tick();
  assert.match(detail.querySelector('table').textContent,/PENDENTE/);assert.match(detail.querySelector('.spr-total').textContent,/Total: R\$\s*0,00/);
 });
+test('settled salary with a launch shows its rubric and launch ID', async t => {
+ const salary={...rows[0],type:'SALÁRIO',launchId:'3810',provisionId:'471',paymentStatus:'PAGO'};
+ const {view,root,dom}=setup(t,{loadPaymentsForPayrollIds:async ids=>ids.includes('8')?[salary]:[]});
+ await view.open();
+ const detail=root.querySelector('details');
+ detail.open=true;
+ detail.dispatchEvent(new dom.window.Event('toggle'));
+ await tick();
+ const {cells}=detail.querySelector('tbody tr');
+ assert.equal(cells[3].textContent,'SALÁRIO');
+ assert.equal(cells[4].textContent,'3810');
+});
 test('filters discard details and refresh failure removes stale data',async t=>{
  let loads=0;const {view,root,dom}=setup(t,{loadSnapshot:async()=>{if(loads++)throw Error('network');return snapshot;}});await view.open();
  const month=root.querySelector('[name=month]');month.value='2026-09';month.dispatchEvent(new dom.window.Event('change'));
