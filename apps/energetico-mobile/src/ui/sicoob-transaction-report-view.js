@@ -240,7 +240,7 @@ export function createSicoobTransactionReportView({ document: doc = globalThis.d
     selectCurrent: true,
     multiple: true,
     onClose: resumeRefresh,
-    rowAmount: row => row.value,
+    rowAmount: row => row.matchAmount,
     amountInCents: sicoobAmountCents,
     resolveReturnFocus: trigger => content.querySelector(
       `[data-sicoob-movement-link="${trigger?.dataset.sicoobMovementLink}"] .sicoob-transaction-link-pencil`) || panel,

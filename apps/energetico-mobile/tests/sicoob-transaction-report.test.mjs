@@ -620,6 +620,18 @@ test('totals Sicoob orders across searches and fills every checked row green on 
   assert.notEqual(fill('548'), green);
 });
 
+test('does not confirm the selection total against a malformed Sicoob reference amount', async t => {
+  const { view, picker, openPicker } = setupOrderLink(t, {
+    amount: '1.2,34',
+    loadOptions: async () => [{ id: '548', supplier: 'Fornecedor Exemplo', amount: '12,34' }],
+  });
+  await view.open();
+  await openPicker();
+  picker().querySelector('input[value="548"]').click();
+  assert.equal(picker().querySelector('output').textContent, 'Total selecionado R$\u00a012,34');
+  assert.equal(picker().querySelector('[data-selection-amount-match]'), null);
+});
+
 test('uses the supplier of a confirmed link for a pending recipient and keeps it on refresh', async t => {
   const { view, query, picker, openPicker, select, Event } = setupOrderLink(t, { recipient: 'N/A' });
   const recipient = () => query('tbody .ddr-supplier-name').textContent;
