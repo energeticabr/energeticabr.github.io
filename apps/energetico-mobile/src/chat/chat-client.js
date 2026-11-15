@@ -721,14 +721,14 @@ export function createChatClient({
   function acknowledgeSicoobRefresh(requestId, options) { return ddaRequest('sicoob_refresh_status', requestId, options, { acknowledge: true }); }
   async function swileRequest(operation, payload = {}, { signal } = {}) {
     if (apiPrefix === '/api/demo') throw new Error('A integração Swile está disponível no ambiente da empresa.');
-    if (!['directory', 'preview', 'confirm', 'orders'].includes(operation)) throw new TypeError('Operação Swile inválida.');
+    if (!['directory', 'preview', 'confirm', 'orders', 'provision'].includes(operation)) throw new TypeError('Operação Swile inválida.');
     const token = await cancellableToken(tokenProvider, signal);
     const result = await request(chatUrl.href, {
       method: 'POST', signal, redirect: 'error',
       headers: { Accept: 'application/json', Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' },
       body: JSON.stringify({ ...payload, action: `swile_${operation}` }),
       cache: 'no-store', credentials: 'omit',
-    }, response => parsePortalResponse(response, 'A consulta Swile'), operation !== 'confirm').catch(error => {
+    }, response => parsePortalResponse(response, 'A consulta Swile'), !['confirm', 'provision'].includes(operation)).catch(error => {
       if (operation === 'confirm' && error.code === 'NETWORK_UNCERTAIN') {
         throw new Error('O envio ficou sem confirmação. Consulte Pedidos enviados na aba Swile antes de reenviar.', { cause: error });
       }

@@ -11,6 +11,34 @@ test('Swile accepts positive BRL amounts with at most two decimal places', () =>
   }
 });
 
+test('recarga direta confirmada solicita provisões somente após a escolha Sim', async t => {
+  const { window } = new JSDOM('<body></body>'), { document } = window;
+  const calls = [];
+  const view = openSwileView({ document, now: () => new Date('2026-11-16T14:00:00Z'), request: async (operation, body) => {
+    calls.push([operation, body]);
+    if (operation === 'directory') return [{ id:1, name:'Ana Silva' }];
+    if (operation === 'preview') return { id:'local-ref', ...body, dueDate:'2026-11-19',
+      totalEmployees:1, paymentCents:22500, creditCents:22500, items:[{ name:'Ana Silva', amountCents:22500 }] };
+    if (operation === 'confirm') return { reference:'local-ref', orderCode:'SWO123', status:'CREATED',
+      creditCents:22500, creditDate:'2026-11-20', provisionAvailable:true };
+    if (operation === 'provision') return { state:'queued', reference:'local-ref' };
+  } });
+  t.after(() => { view.close(); window.close(); });
+  const settle = () => new Promise(resolve => setImmediate(resolve));
+  const click = text => [...document.querySelectorAll('button')].find(button => button.textContent === text).click();
+  await settle();
+  assert.doesNotMatch(document.body.textContent, /cadastrar a provisão/);
+  document.querySelector('select').value = 'PIX';
+  click('Conferir pedido'); await settle();
+  assert.match(document.body.textContent, /Pix com prazo previsto em 19\/11\/2026/);
+  click('Enviar pedido à Swile'); await settle();
+  assert.match(document.body.textContent, /Deseja cadastrar a provisão de pagamento desta recarga/);
+  assert.equal(calls.at(-1)[0], 'confirm');
+  click('Sim, cadastrar provisões'); await settle();
+  assert.deepEqual(calls.at(-1), ['provision', { reference:'local-ref' }]);
+  assert.match(document.body.textContent, /Cadastro das provisões solicitado/);
+});
+
 test('recarga do vale usa apenas os colaboradores lançados e seus subtotais na conferência Swile', async t => {
   const { window } = new JSDOM('<body></body>'), { document } = window;
   const calls = [];
@@ -35,7 +63,7 @@ test('recarga do vale usa apenas os colaboradores lançados e seus subtotais na 
   document.querySelector('select').value = 'BANK_SLIP';
   click('Conferir pedido'); await settle();
   assert.deepEqual(calls.at(-1), ['preview', { items:[{ employeeId:21, amountCents:4713 }, { employeeId:22, amountCents:9000 }],
-    creditDate:'2026-11-20', paymentMethod:'BANK_SLIP', dueDate:'2026-11-19' }]);
+    creditDate:'2026-11-20', paymentMethod:'BANK_SLIP', dueDate:'2026-11-18', source:'meal' }]);
   assert.equal(document.querySelector('textarea').value, '');
   document.querySelector('textarea').value = 'Vale alimentação da obra';
   click('Enviar pedido à Swile'); await settle();
@@ -211,18 +239,18 @@ test('Swile schedules the nearest eligible Friday and recalculates the latest bo
 
   assert.equal(credit.textContent, '20/11/2026');
   setPayment('BANK_SLIP');
-  assert.equal(due.textContent, '19/11/2026');
+  assert.equal(due.textContent, '18/11/2026');
   credit.click();
   document.querySelector('[aria-label="Próximo mês"]').click();
   document.querySelector('[data-date="2026-12-01"]').click();
-  assert.equal(due.textContent, '30/11/2026');
+  assert.equal(due.textContent, '29/11/2026');
   setPayment('PIX');
   assert.equal(credit.textContent, '01/12/2026');
   assert.equal(due.closest('label').hidden, true);
   assert.equal(due.textContent, '');
-  assert.match(document.querySelector('.swile-pix-deadline').textContent, /prazo.+Swile/i);
+  assert.match(document.querySelector('.swile-pix-deadline').textContent, /Pix.+30\/11\/2026/i);
   setPayment('BANK_SLIP');
-  assert.equal(due.textContent, '30/11/2026');
+  assert.equal(due.textContent, '29/11/2026');
   credit.click();
   document.querySelector('[aria-label="Mês anterior"]').click();
   document.querySelector('[data-date="2026-11-20"]').click();
@@ -230,9 +258,9 @@ test('Swile schedules the nearest eligible Friday and recalculates the latest bo
   await settle();
   assert.deepEqual(calls.at(-1), ['preview', {
     items: [{ employeeId: 1, amountCents: 22500 }],
-    creditDate: '2026-11-20', paymentMethod: 'BANK_SLIP', dueDate: '2026-11-19',
+    creditDate: '2026-11-20', paymentMethod: 'BANK_SLIP', dueDate: '2026-11-18',
   }]);
-  assert.match(document.body.textContent, /Boleto com vencimento em 19\/11\/2026/);
+  assert.match(document.body.textContent, /Boleto com vencimento em 18\/11\/2026/);
 });
 
 test('Swile advances the automatic Friday when boleto needs more time, preserving an eligible manual date', async t => {
@@ -254,14 +282,14 @@ test('Swile advances the automatic Friday when boleto needs more time, preservin
   assert.equal(credit.textContent, '13/11/2026');
   setPayment('BANK_SLIP');
   assert.equal(credit.textContent, '20/11/2026');
-  assert.equal(due.textContent, '19/11/2026');
+  assert.equal(due.textContent, '18/11/2026');
   setPayment('PIX');
   assert.equal(credit.textContent, '13/11/2026');
   credit.click();
   document.querySelector('[data-date="2026-11-17"]').click();
   setPayment('BANK_SLIP');
   assert.equal(credit.textContent, '17/11/2026');
-  assert.equal(due.textContent, '16/11/2026');
+  assert.equal(due.textContent, '15/11/2026');
 });
 
 test('Swile refreshes an automatic date when the UTC cutoff changes before review', async t => {
@@ -288,7 +316,7 @@ test('Swile refreshes an automatic date when the UTC cutoff changes before revie
   [...document.querySelectorAll('button')].find(button => button.textContent === 'Conferir pedido').click();
   await settle();
   assert.equal(preview?.creditDate, '2026-11-20');
-  assert.equal(preview?.dueDate, '2026-11-19');
+  assert.equal(preview?.dueDate, '2026-11-18');
 });
 
 test('Swile disables unavailable dates in the calendar before they can be selected', async t => {
@@ -325,7 +353,7 @@ test('Swile disables unavailable dates in the calendar before they can be select
   day('2026-11-18').click();
   assert.equal(credit.getAttribute('aria-expanded'), 'false');
   assert.match(credit.textContent, /18\/11\/2026/);
-  assert.equal(document.querySelector('output').textContent, '17/11/2026');
+  assert.equal(document.querySelector('output').textContent, '16/11/2026');
 
   setPayment('PIX');
   credit.click();
@@ -333,7 +361,7 @@ test('Swile disables unavailable dates in the calendar before they can be select
   day('2026-11-17').click();
   setPayment('BANK_SLIP');
   assert.match(credit.textContent, /20\/11\/2026/);
-  assert.equal(document.querySelector('output').textContent, '19/11/2026');
+  assert.equal(document.querySelector('output').textContent, '18/11/2026');
   credit.click();
   document.querySelector('[aria-label="Próximo mês"]').click();
   assert.equal(day('2026-12-01').disabled, false);

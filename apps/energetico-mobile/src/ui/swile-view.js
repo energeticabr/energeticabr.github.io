@@ -186,7 +186,7 @@ export function openSwileView({ document: doc, request, gallery = false, preview
   }
   const dueField = field('Vencimento do boleto', due);
   dueField.className = 'swile-boleto-due';
-  const pixDeadline = make('p', 'Prazo de pagamento do Pix definido pela Swile.', 'swile-pix-deadline');
+  const pixDeadline = make('p', '', 'swile-pix-deadline');
   let creditDate = '';
   let minimumCredit = '';
   let automaticCredit = true;
@@ -214,6 +214,8 @@ export function openSwileView({ document: doc, request, gallery = false, preview
     return date >= minimumCredit && date <= '9999-12-31';
   }
 
+  const paymentDeadline = (date, method) => shiftDays(date, method === 'BANK_SLIP' ? -2 : -1);
+
   function updateDates() {
     const instant = now();
     minimumCredit = earliestCreditDate(instant, payment.value);
@@ -226,7 +228,8 @@ export function openSwileView({ document: doc, request, gallery = false, preview
     const boleto = payment.value === 'BANK_SLIP';
     dueField.hidden = !boleto;
     pixDeadline.hidden = payment.value !== 'PIX';
-    due.value = boleto && dateInRange(creditDate) ? dateLabel(shiftDays(creditDate, -1)) : '';
+    due.value = boleto && dateInRange(creditDate) ? dateLabel(paymentDeadline(creditDate, payment.value)) : '';
+    pixDeadline.textContent = payment.value === 'PIX' ? `Prazo previsto do Pix: ${dateLabel(paymentDeadline(creditDate, 'PIX'))}` : '';
     if (!calendar.hidden) {
       if (visibleMonth < minimumCredit.slice(0, 7)) visibleMonth = creditDate.slice(0, 7);
       renderCalendar();
@@ -452,7 +455,8 @@ export function openSwileView({ document: doc, request, gallery = false, preview
       hideCalendar();
       updateDates();
       const result = await request('preview', { items, creditDate, paymentMethod: payment.value,
-        ...(payment.value === 'BANK_SLIP' ? { dueDate: shiftDays(creditDate, -1) } : {}) }, { signal });
+        ...(payment.value === 'BANK_SLIP' ? { dueDate: paymentDeadline(creditDate, payment.value) } : {}),
+        ...(mealItems ? { source: 'meal' } : {}) }, { signal });
       if (signal.aborted) return;
       if (mealItems) {
         const amountsByName = rows => JSON.stringify(rows.map(row => [employeeName(row.name), row.amountCents]).sort());
@@ -470,7 +474,9 @@ export function openSwileView({ document: doc, request, gallery = false, preview
     const details = make('div', '', 'swile-summary');
     details.append(make('h3', 'Conferir pedido'),
       make('p', `${preview.totalEmployees} ${preview.totalEmployees === 1 ? 'colaborador' : 'colaboradores'} · crédito em ${dateLabel(preview.creditDate)}`),
-      make('p', preview.paymentMethod === 'PIX' ? 'Pagamento por Pix · prazo definido pela Swile' : `Boleto com vencimento em ${dateLabel(preview.dueDate)}`));
+      make('p', preview.paymentMethod === 'PIX'
+        ? `Pix com prazo previsto em ${dateLabel(preview.dueDate || paymentDeadline(preview.creditDate, 'PIX'))}`
+        : `Boleto com vencimento em ${dateLabel(preview.dueDate)}`));
     if (preview.payer) details.append(make('p', `Faturamento para ${preview.payer}`));
     const list = make('ul', '', 'swile-preview-list');
     for (const item of preview.items) {
@@ -511,7 +517,39 @@ export function openSwileView({ document: doc, request, gallery = false, preview
       block.append(make('p', 'Confira o pedido na Dash RH antes de reenviar. Use a referência acima para localizar o envio.'));
     }
     if (order.statusStale) block.append(make('p', 'Último status registrado. A Swile está indisponível para atualização.'));
+    if (order.dueDate) block.append(make('p', `Vencimento previsto em ${dateLabel(order.dueDate)}`));
+    if (!mealItems) {
+      const provision = make('div');
+      renderProvisionOffer(provision, order);
+      if (provision.childElementCount) block.append(provision);
+    }
     return block;
+  }
+
+  function renderProvisionOffer(section, order) {
+    section.replaceChildren();
+    const provision = order.provision;
+    if (provision) {
+      const labels = {
+        queued: 'Cadastro das provisões solicitado.',
+        documents: 'Provisões cadastradas. Aguardando os documentos da Swile.',
+        retry: 'Cadastro ou anexação pendente.',
+        done: 'Provisões cadastradas e documentos anexados.',
+        stopped: 'Cadastro de provisões interrompido.',
+      };
+      section.append(make('strong', provision.parent ? `Descritivo ${provision.parent}` : 'Provisão de pagamento'),
+        make('p', labels[provision.state] || 'Cadastro em processamento.'));
+      if (provision.error) section.append(make('p', provision.error));
+    } else if (order.provisionAvailable) {
+      section.append(make('p', 'Deseja cadastrar a provisão de pagamento desta recarga?'));
+      const actions = make('div', '', 'swile-actions');
+      actions.append(button('Não', () => section.replaceChildren()),
+        button('Sim, cadastrar provisões', () => run(async () => {
+          const result = await request('provision', { reference: order.reference }, { signal });
+          if (!signal.aborted) renderProvisionOffer(section, { ...order, provision: result });
+        }), true));
+      section.append(actions);
+    }
   }
 
   function showReceipt(order) {
