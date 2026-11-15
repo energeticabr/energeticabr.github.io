@@ -66,8 +66,30 @@ const statuses = {
   UNCONFIRMED: 'Envio sem confirmação',
 };
 
+const employeeName = value => String(value || '').normalize('NFD').replace(/\p{M}/gu, '').trim().replace(/\s+/g, ' ').toUpperCase();
+
+function matchMealEmployees(items, directory) {
+  const matched = [], used = new Set(), problems = [];
+  for (const { name, subtotal } of items) {
+    const key = employeeName(name);
+    const candidates = directory.filter(row => key && employeeName(row.name) === key);
+    const row = candidates.length === 1 ? candidates[0] : null;
+    const amountCents = parseSwileAmount(subtotal);
+    if (!row || !Number.isSafeInteger(row.id) || row.id < 1 || used.has(row.id)) {
+      problems.push(`${name} (cadastro ausente ou ambíguo)`);
+    } else if (amountCents === null) {
+      problems.push(`${name} (subtotal inválido para recarga)`);
+    } else {
+      used.add(row.id);
+      matched.push({ ...row, amountCents });
+    }
+  }
+  if (problems.length) throw new Error(`Confira os colaboradores do lançamento na Swile: ${problems.join('; ')}.`);
+  return matched;
+}
+
 export function openSwileView({ document: doc, request, gallery = false, previewDocument, previewDocuments,
-  closePreview, onClose, onHome, now = () => new Date() }) {
+  closePreview, onClose, onHome, mealItems, now = () => new Date() }) {
   const controller = new AbortController();
   const { signal } = controller;
   const focus = doc.activeElement;
@@ -134,10 +156,11 @@ export function openSwileView({ document: doc, request, gallery = false, preview
   let galleryFilter = 'pending';
   let displayedOrderCode = null;
   let viewingDocuments = false;
+  let mealOrderHandled = false;
   const invoiceText = make('textarea');
   invoiceText.rows = 3;
   invoiceText.maxLength = 255;
-  invoiceText.value = DEFAULT_INVOICE_TEXT;
+  invoiceText.value = mealItems ? '' : DEFAULT_INVOICE_TEXT;
   const invoiceField = field('Descrição na nota fiscal', invoiceText);
   invoiceField.className = 'swile-invoice-description';
   const amountOverrides = new Map();
@@ -289,7 +312,7 @@ export function openSwileView({ document: doc, request, gallery = false, preview
     screen.remove();
     if (restoreApp) app.removeAttribute('inert');
     if (focus?.isConnected) focus.focus({ preventScroll: true });
-    onClose?.();
+    onClose?.(mealOrderHandled);
   }
 
   function onGalleryKey(event) {
@@ -332,10 +355,12 @@ export function openSwileView({ document: doc, request, gallery = false, preview
   }
 
   function amountFor(row) {
+    if (mealItems) return (row.amountCents / 100).toFixed(2).replace('.', ',');
     return amountOverrides.get(row.id) ?? (/^(bernardo|rafael)(\s|$)/i.test(row.name.trim()) ? '' : '225,00');
   }
 
   function orderItems() {
+    if (mealItems) return people.map(({ id, amountCents }) => ({ employeeId:id, amountCents }));
     return people.flatMap(row => {
       const value = amountFor(row).trim();
       return value ? [{ employeeId: row.id, amountCents: parseSwileAmount(value) }] : [];
@@ -368,7 +393,8 @@ export function openSwileView({ document: doc, request, gallery = false, preview
       input.placeholder = '0,00';
       input.setAttribute('aria-label', `Valor em reais para ${row.name}`);
       input.value = amountFor(row);
-      input.addEventListener('input', () => {
+      input.readOnly = Boolean(mealItems);
+      if (!mealItems) input.addEventListener('input', () => {
         amountOverrides.set(row.id, input.value);
         input.removeAttribute('aria-invalid');
         updateTotal();
@@ -395,6 +421,7 @@ export function openSwileView({ document: doc, request, gallery = false, preview
     hideCalendar();
     updateDates();
     content.replaceChildren(search, rows, dates, footer);
+    if (mealItems) content.prepend(make('p', 'Os valores abaixo são os subtotais do lançamento de Vale Alimentação.'));
     showPeople();
     review.disabled = !people.length;
   }
@@ -405,8 +432,12 @@ export function openSwileView({ document: doc, request, gallery = false, preview
       const result = await request('directory', {}, { signal });
       if (signal.aborted) return;
       if (!Array.isArray(result)) throw new Error('Lista de colaboradores inválida.');
-      people = result;
       loaded = true;
+      if (mealItems) {
+        people = [];
+        try { people = matchMealEmployees(mealItems, result); }
+        catch (error) { showForm(); throw error; }
+      } else people = result;
       showForm();
     });
   }
@@ -423,6 +454,12 @@ export function openSwileView({ document: doc, request, gallery = false, preview
       const result = await request('preview', { items, creditDate, paymentMethod: payment.value,
         ...(payment.value === 'BANK_SLIP' ? { dueDate: shiftDays(creditDate, -1) } : {}) }, { signal });
       if (signal.aborted) return;
+      if (mealItems) {
+        const amountsByName = rows => JSON.stringify(rows.map(row => [employeeName(row.name), row.amountCents]).sort());
+        if (!Array.isArray(result.items) || amountsByName(result.items) !== amountsByName(people)) {
+          throw new Error('Os colaboradores ou os valores do resumo da Swile divergiram do lançamento. Atualize os cadastros e confira novamente.');
+        }
+      }
       if (result.receipt) showReceipt(result.receipt);
       else showPreview(result);
     });
@@ -444,10 +481,25 @@ export function openSwileView({ document: doc, request, gallery = false, preview
     details.append(list, make('p', `Total em créditos · ${reais(preview.creditCents)}`),
       make('strong', `Total a pagar · ${reais(preview.paymentCents)}`), invoiceField);
     const actions = make('div', '', 'swile-actions');
-    actions.append(button('Editar valores', showForm), button('Enviar pedido à Swile', () => run(async () => {
-      const result = await request('confirm', { id: preview.id, invoiceText: invoiceText.value.trim() });
-      if (!signal.aborted) showReceipt(result);
-    }), true));
+    const edit = button(mealItems ? 'Editar data e pagamento' : 'Editar valores', showForm);
+    const send = button('Enviar pedido à Swile', () => run(async () => {
+      if (mealItems) mealOrderHandled = true;
+      try {
+        const result = await request('confirm', { id: preview.id, invoiceText: invoiceText.value.trim() });
+        if (!signal.aborted) showReceipt(result);
+      } catch (error) {
+        if (mealItems) {
+          mealOrderHandled = ![400, 401, 403, 404, 422, 429].includes(error.status);
+          if (mealOrderHandled) {
+            edit.remove();
+            invoiceText.readOnly = true;
+            send.textContent = 'Verificar o mesmo envio';
+          }
+        }
+        throw error;
+      }
+    }), true);
+    actions.append(edit, send);
     content.replaceChildren(details, actions);
   }
 
@@ -463,12 +515,14 @@ export function openSwileView({ document: doc, request, gallery = false, preview
   }
 
   function showReceipt(order) {
+    if (mealItems) mealOrderHandled = true;
     refresh.hidden = true;
     amountOverrides.clear();
     automaticCredit = true;
-    invoiceText.value = DEFAULT_INVOICE_TEXT;
+    invoiceText.value = mealItems ? '' : DEFAULT_INVOICE_TEXT;
     const actions = make('div', '', 'swile-actions');
-    actions.append(button('Voltar para recargas', showForm), button('Consultar pedidos', () => showOrders(order.reference)));
+    actions.append(mealItems ? button('Voltar ao lançamento', close) : button('Voltar para recargas', showForm),
+      button('Consultar pedidos', () => showOrders(order.reference)));
     content.replaceChildren(receiptDetails(order), actions);
   }
 
@@ -486,7 +540,8 @@ export function openSwileView({ document: doc, request, gallery = false, preview
         list.append(block);
       }
       if (!result.length) list.append(make('p', 'Nenhum pedido enviado por você nesta integração.'));
-      content.replaceChildren(button('Voltar para recargas', showForm), make('h3', 'Pedidos enviados'), list);
+      content.replaceChildren(mealItems ? button('Voltar ao lançamento', close) : button('Voltar para recargas', showForm),
+        make('h3', 'Pedidos enviados'), list);
     });
   }
 

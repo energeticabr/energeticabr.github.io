@@ -65,7 +65,7 @@
 .meal-voucher-review-extra p { color: #657889; font-size: .8rem; overflow-wrap: anywhere; }
 .meal-voucher-footer { display: flex; justify-content: flex-end; gap: 10px; padding: 12px max(14px, env(safe-area-inset-right)) max(12px, env(safe-area-inset-bottom)) max(14px, env(safe-area-inset-left)); background: #e2f0f5; border-top: 1px solid #bfd3dc; }
 .meal-voucher-footer .meal-voucher-button { background: #075a70; color: #fff; }
-.meal-voucher-footer:has([data-meal-keep-pending]) { flex-wrap: wrap; }
+.meal-voucher-footer:has([data-meal-keep-pending], [data-meal-swile]) { flex-wrap: wrap; }
 .meal-voucher-footer [data-meal-keep-pending] { background: #fff; color: #173b56; }
 .meal-voucher-footer [data-meal-done] {
   box-sizing: border-box;
@@ -83,6 +83,15 @@
   text-align: center;
 }
 .meal-voucher-footer [data-meal-review-back] { background: #fff; color: #173b56; }
+.meal-voucher-footer:has([data-meal-swile]) [data-meal-done] {
+  flex: 0 1 auto;
+  width: auto;
+  min-height: 44px;
+  padding: .55rem .8rem;
+  font-size: inherit;
+  background: #fff;
+  color: #173b56;
+}
 .meal-voucher-tray { flex: none; min-height: 0; padding: 8px max(14px, env(safe-area-inset-right)) 8px max(14px, env(safe-area-inset-left)); border-top: 1px solid #bfd3dc; background: #e2f0f5; }
 .meal-voucher-tray-heading, .meal-voucher-tray-actions { display: flex; align-items: center; justify-content: space-between; gap: 8px; }
 .meal-voucher-tray-actions .meal-voucher-button { width: 46px; padding: 5px; font-size: 1.35rem; }

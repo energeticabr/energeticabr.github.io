@@ -12615,6 +12615,35 @@ function openPayrollMenu(h) {
   h.store.ingestRemoteMessages([{ type: "poll", question: "COMO DESEJA EFETUAR O LANÇAMENTO?", options: [{ id: "choice:tipo_lancamento:2", label: "LANÇAMENTO MÚLTIPLO" }] }], { activeFlow: { id: "launch", title: "EFETUAR LANÇAMENTO", rows: [{ label: "TIPO DE PEDIDO", value: "NOVO PEDIDO" }] } });
 }
 
+test('vale abre a Swile com os subtotais pela sessão do menu de lançamento', async t => {
+  const dom = new JSDOM('<body></body>', { url:'https://example.invalid' });
+  const previousDocument = globalThis.document;
+  globalThis.document = dom.window.document;
+  let openRecharge;
+  const h = makeHarness({ mealVoucherDataFactory: async () => ({}),
+    mealVoucherFactory: async ({ onSwileRecharge }) => { openRecharge = onSwileRecharge; return { open() {}, destroy() {} }; },
+  });
+  t.after(() => { h.controller.stop(); globalThis.document = previousDocument; dom.window.close(); });
+  const calls = [];
+  h.client.swileRequest = async (operation, payload) => {
+    calls.push([operation, payload]);
+    return [{ id:41, name:'Ana Silva' }, { id:42, name:'Outro colaborador' }];
+  };
+  await h.controller.start();
+  openPayrollMenu(h);
+  await h.view.emit('select-reply', { replyId:'action_meal_voucher_launch' });
+  let handled;
+  assert.equal(await openRecharge([{ name:'Ana Silva', subtotal:123.45 }], value => { handled = value; }), true);
+  await tickController();
+  assert.deepEqual(calls, [['directory', {}]]);
+  assert.equal(dom.window.document.querySelector('.swile-person input').value, '123,45');
+  assert.equal(dom.window.document.querySelectorAll('.swile-person').length, 1);
+  [...dom.window.document.querySelectorAll('dialog button')].find(button => button.textContent === 'Fechar').click();
+  assert.equal(handled, false);
+  h.controller.stop();
+  assert.throws(() => openRecharge([{ name:'Ana Silva', subtotal:123.45 }], () => {}), /sessão/);
+});
+
 test('vale usa bandeja compartilhada, lê os bytes, consome apenas o lote confirmado e invalida a sessão', async t => {
   let options; const h=makeHarness({mealVoucherDataFactory:async()=>({prepare:async()=>{}}),mealVoucherFactory:async value=>{options=value;return {open(){},destroy(){}};}});
   t.after(()=>h.controller.stop()); await h.controller.start(); openPayrollMenu(h);

@@ -9,7 +9,7 @@ import { sameMealVoucherTray } from '../chat/meal-voucher-tray.js';
 const money = amount => Number(amount).toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' });
 let sequence = 0;
 
-export function createMealVoucherView({ data, root, documentRef = globalThis.document, assertSession = () => {}, onHome = () => {}, attachmentTray, sessionKey = '', storage = globalThis.localStorage } = {}) {
+export function createMealVoucherView({ data, root, documentRef = globalThis.document, assertSession = () => {}, onHome = () => {}, onSwileRecharge, attachmentTray, sessionKey = '', storage = globalThis.localStorage } = {}) {
   if (!data || !documentRef?.createElement) throw new TypeError('A tela exige dados e documento.');
   const doc = documentRef, id = ++sequence;
   const el = (tag, className = '', text) => { const node = doc.createElement(tag); if (className) node.className = className; if (text !== undefined) node.textContent = text; return node; };
@@ -30,6 +30,7 @@ export function createMealVoucherView({ data, root, documentRef = globalThis.doc
   let pendingSnapshot = null;
   let loadingOperation = null;
   let confirmingAbandon = false;
+  let swileHandled = false;
   const hasPendingAttempt = () => Boolean(progress.signature || pendingSnapshot);
   function savedFiles(files) { return files.map(file => ({ name: file.name, size: file.size, lastModified: file.lastModified })); }
   function clearPending() {
@@ -64,7 +65,7 @@ export function createMealVoucherView({ data, root, documentRef = globalThis.doc
   function reset() {
     draft = { lines: [], orderMode: '', orderId: '', date: '', dueDate: '', paymentDate: '', referenceMonth: '', account: null, stage: null, obs: '', files: [] };
     progress = { operationId: globalThis.crypto?.randomUUID?.() || `${Date.now()}-${Math.random().toString(36).slice(2)}` };
-    expectedFiles = []; reviewedTray = null; result = null; orders = []; assignments = {}; step = 'lines';
+    expectedFiles = []; reviewedTray = null; result = null; orders = []; assignments = {}; swileHandled = false; step = 'lines';
   }
   reset();
   const locked = () => Boolean(progress.signature) && progress.editable !== true;
@@ -395,6 +396,30 @@ export function createMealVoucherView({ data, root, documentRef = globalThis.doc
       }, 'Abandonando tentativa anterior…');
     }));
   }
+  function renderSwileOffer() {
+    if (swileHandled) {
+      content.append(el('p', '', 'Consulte o pedido de recarga na Swile.'));
+    } else if (onSwileRecharge && result.lines.length) {
+      const receipt = result;
+      content.append(el('p', '', 'Deseja recarregar o cartão Swile dos colaboradores deste lançamento?'));
+      footer.append(button('Não, concluir', 'data-meal-done', close));
+      footer.append(button('Sim, preparar recarga', 'data-meal-swile', () => work(async active => {
+        const items = receipt.lines.map(line => ({ name:line.supplier, subtotal:line.total }));
+        const shown = await onSwileRecharge(items, handled => {
+          if (result !== receipt || !opened || destroyed) return;
+          if (handled) swileHandled = true;
+          if (!busy) {
+            if (handled) render();
+            footer.querySelector(handled ? '[data-meal-done]' : '[data-meal-swile]')?.focus();
+          }
+        });
+        active();
+        if (!shown) throw new Error('Não foi possível abrir a recarga Swile. Tente novamente.');
+      }, 'Abrindo recarga Swile…')));
+      return;
+    }
+    footer.append(button('Concluir', 'data-meal-done', close));
+  }
   function render(message) {
     detailPickers?.destroy(); detailPickers = null;
     content.replaceChildren(); footer.replaceChildren(); footer.hidden = true; back.disabled = home.disabled = mutating;
@@ -422,7 +447,7 @@ export function createMealVoucherView({ data, root, documentRef = globalThis.doc
       content.append(el('p', '', `Pedido ${result.orderId} · ${result.lines.length} lançamento(s) vinculados às respectivas IDFOLHA · Total ${money(result.total)}`));
       const list = el('ul', 'meal-voucher-summary');
       for (const line of result.lines) list.append(el('li', '', `${line.supplier} · Lançamento ${line.id} · IDFOLHA ${line.sheetId} · Vínculo ${line.payrollId}`));
-      content.append(list); footer.append(button('Concluir', 'data-meal-done', close));
+      content.append(list); renderSwileOffer();
     }
     if (progress.signature && !locked() && step !== 'done') content.prepend(el('p', 'meal-voucher-warning', 'Você pode corrigir os dados e confirmar novamente. Se o pedido já foi criado, ele será reutilizado, sem duplicidade.'));
     if (locked() && step !== 'done') content.prepend(el('p', 'meal-voucher-warning', 'Esta tentativa possui registros gravados ou ainda não foi possível conferi-los. Para evitar duplicidade, a edição está protegida. Retomar envia somente os registros pendentes.'));
