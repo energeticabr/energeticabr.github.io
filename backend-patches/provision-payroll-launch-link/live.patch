@@ -1,0 +1,82 @@
+--- a/worker/workflow.py
++++ b/worker/workflow.py
+@@ -32237,11 +32237,11 @@
+                 return self._launch_payroll_is_contractor(status)
+         return False
+ 
+-    def _settlement_has_payroll_link(self, provision_id, *, preserve_write_retry=False):
++    def _settlement_has_payroll_link(self, provision_id, *, launch_id=None, preserve_write_retry=False):
+         options = self.sharepoint.get_options({
+             "key": "settlement_payroll_existing_provision",
+             "source": {"type": "sharepoint_list", "list": "FOLHAPGTO", "id_field": "Id",
+-                       "label_field": "IDFOLHA", "fields": ["IDPROVISAO", "IDFOLHA", "Title"], "top": 2,
++                       "label_field": "IDFOLHA", "fields": ["IDPROVISAO", "IDFOLHA", "Title", "IDLANCAMENTO"], "top": 2,
+                        "filters": [{"field": "IDPROVISAO", "kind": "number", "equals": provision_id}]},
+         }, {})
+         # SharePoint can return a Number column as 463.0 and a Text column as "23".
+@@ -32257,8 +32257,38 @@
+                 continue
+             if (linked_id.is_finite() and linked_id == provision_id and sheet_id.is_finite()
+                     and sheet_id > 0 and sheet_id == sheet_id.to_integral_value()):
++                title = f"APP-folha-provisao-{provision_id}"
++                stored_launch = str(values.get("IDLANCAMENTO") or "").strip()
++                if launch_id and values.get("Title") == title and stored_launch in ("", str(launch_id)):
++                    payroll_id = int(option["id"])
++                    fields = ("Title", "IDPROVISAO", "IDFOLHA", "IDLANCAMENTO")
++                    with self._settlement_payroll_origin_guard(launch_id, title, payroll_id) as saved_id:
++                        if saved_id is not None and saved_id != payroll_id:
++                            raise ValueError("Lançamento já vinculado a outra linha da folha")
++                        current, version = self.sharepoint.get_item_fields_with_etag(payroll_id, fields, "FOLHAPGTO")
++                        if (current.get("Title") != title or Decimal(str(current.get("IDPROVISAO"))) != provision_id
++                                or Decimal(str(current.get("IDFOLHA"))) != sheet_id):
++                            raise ValueError("Vínculo da folha mudou durante a baixa")
++                        current_launch = str(current.get("IDLANCAMENTO") or "").strip()
++                        if current_launch and current_launch != str(launch_id):
++                            raise ValueError("Lançamento da folha mudou durante a baixa")
++                        if not current_launch:
++                            self.sharepoint.update_item_with_etag(
++                                payroll_id, {"IDLANCAMENTO": str(launch_id)}, version, "FOLHAPGTO")
++                            confirmed, _ = self.sharepoint.get_item_fields_with_etag(payroll_id, fields, "FOLHAPGTO")
++                            if str(confirmed.get("IDLANCAMENTO") or "").strip() != str(launch_id):
++                                raise ValueError("Lançamento da folha ainda não confirmado")
+                 return True
+         return False
++
++    def _settlement_payroll_origin_guard(self, launch_id, title, payroll_id):
++        if __package__:
++            from .launch_gallery import LaunchGalleryService
++            from .payroll_pending import legacy_origin_write
++        else:
++            from launch_gallery import LaunchGalleryService
++            from payroll_pending import legacy_origin_write
++        return legacy_origin_write(LaunchGalleryService(self), str(launch_id), title, existing_row_id=payroll_id)
+ 
+     def _settlement_payroll_lookup_failed(self, state, etag):
+         state["stage"] = LAUNCH_PAYROLL_DECISION_STAGE
+@@ -32289,7 +32319,8 @@
+             linked_ids = {entry["item_id"] for entry in entries
+                           if entry.get("eligible") and not entry.get("FOLHAPGTO_ID")
+                           and self._settlement_has_payroll_link(
+-                              entry["provision_id"], preserve_write_retry=stage == LAUNCH_PAYROLL_TYPE_STAGE)}
++                              entry["provision_id"], launch_id=entry.get("launch_id"),
++                              preserve_write_retry=stage == LAUNCH_PAYROLL_TYPE_STAGE)}
+         except Exception:
+             pending["settlement_links_retry_stage"] = stage
+             if message_id:
+@@ -32345,14 +32376,14 @@
+                 if not (verified is True or (isinstance(verified, dict)
+                         and verified.get("fields") is True and verified.get("attachments") is True)):
+                     raise ValueError("Baixa ainda não confirmada")
+-                if self._settlement_has_payroll_link(provision_id):
+-                    continue
+                 launch = record.get("launch_item") or {}
+                 launch_id = launch.get("item_id") or fields.get("IDLANCAMENTOS")
+                 if launch_id:
+                     launch_id = int(launch_id)
+                     if launch_id <= 0:
+                         raise ValueError("Lançamento inválido")
++                if self._settlement_has_payroll_link(provision_id, launch_id=launch_id):
++                    continue
+                 total = self._launch_payroll_total({"VALOR UNITÁRIO": fields.get("VALOR TOTAL"),
+                     "QUANTIDADE": fields.get("QTD"), "FRETE": fields.get("FRETE") or "0"})
+                 # One payroll payment equals the whole paid amount, including freight.

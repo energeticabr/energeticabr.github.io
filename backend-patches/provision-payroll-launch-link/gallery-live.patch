@@ -1,0 +1,12 @@
+--- a/worker/launch_gallery.py
++++ b/worker/launch_gallery.py
+@@ -1016,6 +1016,9 @@
+         # These rows were deliberately assigned to their own suppliers.
+         linked = [row for row in self._pending_payroll_rows(item_id)
+                   if not str(row.get("Title") or "").startswith("IDFOLHA-PENDENTE:")]
++        if any(str(row.get("Title") or "").startswith("APP-folha-provisao-") for row in linked):
++            _fail("payroll_provision_link",
++                  "O fornecedor deste lançamento está vinculado a uma provisão da folha.", 409)
+         direct = current.get("IDFOLHA")
+         if not linked and _blank(direct):
+             return [], None
