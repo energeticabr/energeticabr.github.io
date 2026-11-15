@@ -1,6 +1,6 @@
 import { bindReportLandscape } from './report-landscape.js';
 import { addReportCloseControl } from './report-close-control.js';
-import {buildTaskAssociationOverview} from '../chat/task-association-report-model.js';
+import {buildTaskAssociationOverview,isCompletedTaskStatus} from '../chat/task-association-report-model.js';
 import {provisionDateKey} from '../chat/pending-provision-dates.js';
 import {bindSearchableFilterSelects} from './searchable-filter-selects.js';
 
@@ -36,7 +36,7 @@ export function createTaskAssociationReportView({document:doc=globalThis.documen
  finishPopup.setAttribute('role','dialog');finishPopup.setAttribute('aria-modal','true');finishPopup.setAttribute('aria-label','Finalizar atividade');
  const finishForm=make('form','tar-finish-form');finishForm.tabIndex=-1;
  const finishSubject=make('p','tar-finish-subject');
- const finishDate=make('input');finishDate.type='date';finishDate.required=true;
+ const finishDate=make('input');finishDate.type='date';finishDate.required=true;finishDate.disabled=true;
  const finishLabel=make('label','','Data de conclusão');finishLabel.append(finishDate);
  const finishNotice=make('p','tar-finish-notice');finishNotice.setAttribute('role','status');finishNotice.hidden=true;
  const finishCancel=button('Cancelar finalização','tar-finish-cancel','CANCELAR');
@@ -47,18 +47,18 @@ export function createTaskAssociationReportView({document:doc=globalThis.documen
  let finishing=null;
 
  function finishMessage(text){finishNotice.textContent=text;finishNotice.hidden=!text;}
- function openFinish(row,trigger){
+ function openFinish(row,trigger,draftDate){
   if(finishing||root.hidden)return;
   finishing={row,trigger,controller:new AbortController(),saving:false};
   pickers?.close();panel.inert=true;finishPopup.hidden=false;
   finishSubject.textContent=`#${row.id} · ${row.description||'Atividade sem descrição'}`;
-  finishDate.value=provisionDateKey(now());finishDate.disabled=false;finishCancel.disabled=false;finishSubmit.disabled=false;
+  finishDate.value=draftDate||provisionDateKey(now());finishDate.disabled=false;finishCancel.disabled=false;finishSubmit.disabled=false;
   finishMessage('');finishForm.focus();
  }
  function closeFinish(restoreFocus=true){
   if(!finishing)return;
   const {controller,trigger}=finishing;
-  finishing=null;controller.abort();finishPopup.hidden=true;panel.inert=false;
+  finishing=null;controller.abort();finishDate.disabled=true;finishPopup.hidden=true;panel.inert=false;
   if(restoreFocus)trigger.focus();
  }
  finishCancel.addEventListener('click',()=>{if(!finishing?.saving)closeFinish();});
@@ -75,9 +75,9 @@ export function createTaskAssociationReportView({document:doc=globalThis.documen
   }catch(error){
    if(finishing!==active)return;
    active.saving=false;finishDate.disabled=false;finishCancel.disabled=false;finishSubmit.disabled=false;
-   finishMessage(error?.status===412||error?.code==='task_association_changed'
-    ?'A atividade mudou no SharePoint. Cancele e atualize o relatório para conferir.'
-    :'Não foi possível confirmar a finalização. Tente novamente.');
+   if(error?.code==='task_association_already_completed')finishMessage('Esta atividade já foi concluída no SharePoint. Cancele e atualize o relatório para conferir.');
+   else if(error?.status===412||error?.code==='task_association_changed')finishMessage('A atividade mudou no SharePoint. Cancele e atualize o relatório para conferir.');
+   else finishMessage('Não foi possível confirmar a finalização. Tente novamente.');
    finishSubmit.focus();return;
   }
   if(finishing!==active)return;
@@ -137,5 +137,19 @@ export function createTaskAssociationReportView({document:doc=globalThis.documen
   if(index===-1||event.shiftKey&&index===0||!event.shiftKey&&index===nodes.length-1){event.preventDefault();(event.shiftKey?nodes.at(-1):nodes[0])?.focus();}
  });
  const filterChanged=()=>{render();content.scrollTop=0;};for(const node of controls.values())node.addEventListener('change',filterChanged);description.addEventListener('input',filterChanged);native.addEventListener('change',()=>{display.value=native.value?date(native.value):'';filterChanged();});clear.addEventListener('click',()=>{native.value='';display.value='';filterChanged();});refresh.addEventListener('click',()=>void load());win?.addEventListener('resize',orientationChanged);win?.addEventListener('orientationchange',orientationChanged);
- return Object.freeze({element:root,async open(){if(destroyed)throw new Error('O relatório foi encerrado.');if(!root.hidden)return;returnFocus=doc.activeElement;oldOverflow=doc.body.style.overflow;app=doc.getElementById('app');oldInert=app?.inert||false;doc.body.style.overflow='hidden';if(app)app.inert=true;description.value='';native.value='';display.value='';populate(true);root.hidden=false;landscape.update();warning.hidden=true;report.hidden=false;panel.classList.toggle('tar-portrait',false);panel.focus();content.scrollTop=0;await load();},close,destroy(){if(destroyed)return;close();destroyed=true;pickers?.destroy();win?.removeEventListener('resize',orientationChanged);win?.removeEventListener('orientationchange',orientationChanged);landscape.destroy();root.remove();}});
+ async function open({finishDraft}={}){
+  if(destroyed)throw new Error('O relatório foi encerrado.');if(!root.hidden)return;
+  returnFocus=doc.activeElement;oldOverflow=doc.body.style.overflow;app=doc.getElementById('app');oldInert=app?.inert||false;
+  doc.body.style.overflow='hidden';if(app)app.inert=true;
+  description.value='';native.value='';display.value='';populate(true);root.hidden=false;landscape.update();warning.hidden=true;report.hidden=false;
+  panel.classList.toggle('tar-portrait',false);panel.focus();content.scrollTop=0;
+  const opening=load(),openedRevision=revision;
+  await opening;
+  if(!finishDraft||!snapshot||revision!==openedRevision||typeof data.finalizeTask!=='function')return;
+  const row=snapshot.tasks.find(task=>Number(task.id)===finishDraft.id);
+  if(!row||isCompletedTaskStatus(row.status))return;
+  const trigger=content.querySelector(`[data-task-id="${finishDraft.id}"] .tar-finish-button`)||content;
+  openFinish(row,trigger,finishDraft.date);
+ }
+ return Object.freeze({element:root,open,close,destroy(){if(destroyed)return;close();destroyed=true;pickers?.destroy();win?.removeEventListener('resize',orientationChanged);win?.removeEventListener('orientationchange',orientationChanged);landscape.destroy();root.remove();}});
 }

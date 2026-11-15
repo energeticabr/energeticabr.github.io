@@ -41,11 +41,16 @@ test("finalization writes the completion fields with the latest version and pres
   let writes = 0;
   const source = create(fixture({
     async getColumns() { return [...columns(), { name: "completion", displayName: "DATA CONCLUSÃO" }]; },
-    async getItem(site, list, id) { assert.deepEqual([site, list, id], ["personal", "tasks", "7"]); return current; },
-    async updateItem(site, list, id, fields, { eTag, signal }) {
+    async getItem(site, list, id, _query, { restrictedFields }) {
+      assert.deepEqual([site, list, id], ["personal", "tasks", "7"]);
+      assert.deepEqual(restrictedFields, [...columns().map(column => column.name), "completion"]);
+      return current;
+    },
+    async updateItem(site, list, id, fields, { eTag, readbackFields, signal }) {
       assert.deepEqual([site, list, id, eTag], ["personal", "tasks", "7", '"current"']);
       assert.ok(signal);
       assert.deepEqual(fields, { field_4: "CONCLUÍDO", completion: "2026-10-06T12:00:00Z" });
+      assert.deepEqual(readbackFields, [...columns().map(column => column.name), "completion"]);
       writes++;
       current = { ...current, fields: { ...current.fields, ...fields } };
       return current;
@@ -56,7 +61,8 @@ test("finalization writes the completion fields with the latest version and pres
   assert.equal(writes, 0);
   assert.equal((await source.finalizeTask(7, "2026-10-06", { expectedTask })).status, "CONCLUÍDO");
   current = { ...current, fields: { ...current.fields, field_4: "CONCLUÍDA" } };
-  assert.equal((await source.finalizeTask(7, "2026-10-07", { expectedTask })).status, "CONCLUÍDA");
+  assert.equal((await source.finalizeTask(7, "2026-10-06", { expectedTask })).status, "CONCLUÍDA");
+  await assert.rejects(source.finalizeTask(7, "2026-10-07", { expectedTask }), { code: "task_association_already_completed" });
   assert.equal(writes, 1);
 });
 
@@ -214,4 +220,36 @@ test("unavailable authentication never issues an unauthenticated SharePoint requ
   for (const tokenProvider of [async () => "", async () => { throw new Error("session expired"); }]) {
     await assert.rejects(create({ tokenProvider }).loadSnapshot(), /token|session expired/i);
   }
+});
+
+test("Graph finalization patches the selected item with If-Match and verifies a restricted readback", async t => {
+  let fields = item(7).fields;
+  const methods = [];
+  const requested = [];
+  const selected = [...columns().map(column => column.name), "completion"].join(",");
+  t.mock.method(globalThis, "fetch", async (value, init) => {
+    const url = new URL(value);
+    let payload = { id: "site" };
+    if (url.pathname.endsWith("/lists")) payload = { value: [{ id: "tasks", displayName: "LANCAMENTOTAREFAS", list: { template: "genericList" } }] };
+    if (url.pathname.endsWith("/columns")) payload = { value: [...columns(), { name: "completion", displayName: "DATA CONCLUSÃO" }] };
+    if (url.pathname.endsWith("/items/7")) {
+      assert.equal(url.searchParams.get("$expand"), `fields($select=${selected})`);
+      methods.push(init.method);
+      payload = { id: "7", fields, eTag: '"version"' };
+    }
+    if (url.pathname.endsWith("/items/7/fields")) {
+      methods.push(init.method);
+      assert.equal(init.headers["If-Match"], '"version"');
+      const changes = JSON.parse(init.body);
+      assert.deepEqual(changes, { field_4: "CONCLUÍDO", completion: "2026-10-06T12:00:00Z" });
+      fields = { ...fields, ...changes };
+      payload = changes;
+    }
+    return { ok: true, status: 200, async json() { return payload; } };
+  });
+  const source = create({ async tokenProvider(scopes) { requested.push(scopes); return "token"; } });
+  const expectedTask = { id: 7, status: "ATIVIDADE CRIADA", description: "Revisar projeto", association: "ENGENHARIA" };
+  assert.equal((await source.finalizeTask(7, "2026-10-06", { expectedTask })).status, "CONCLUÍDO");
+  assert.deepEqual(methods, ["GET", "PATCH", "GET"]);
+  assert.equal(requested.filter(scopes => scopes.includes("Sites.ReadWrite.All")).length, 1);
 });

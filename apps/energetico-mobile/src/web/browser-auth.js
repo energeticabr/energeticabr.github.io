@@ -35,9 +35,11 @@ export function createBrowserAuth({ client, config, storage }) {
   let msalAccount = null;
   let pendingAction = null;
   let pendingStageFinish = null;
+  let pendingTaskFinish = null;
 
   async function initialize() {
     pendingStageFinish = null;
+    pendingTaskFinish = null;
     try {
       await client.initialize();
       const redirect = await client.handleRedirectPromise();
@@ -64,6 +66,7 @@ export function createBrowserAuth({ client, config, storage }) {
         && grantedRequestedScopes(redirect, pending.scopes)) {
         pendingAction = pending.action;
         pendingStageFinish = stageFinishForAction(pending.action, pending.scopes, pending.stageFinishDraft);
+        pendingTaskFinish = taskFinishForAction(pending.action, pending.scopes, pending.taskFinishDraft);
       }
       return account;
     } catch (error) {
@@ -98,7 +101,7 @@ export function createBrowserAuth({ client, config, storage }) {
     }
   }
 
-  async function authorize(scopes = ["User.Read"], { resumeAction, stageFinishDraft } = {}) {
+  async function authorize(scopes = ["User.Read"], { resumeAction, stageFinishDraft, taskFinishDraft } = {}) {
     if (!account || !msalAccount) throw new BrowserAuthError("AUTH_REQUIRED", "Entre novamente com a Microsoft.");
     const requestedScopes = [...scopes];
     if (RESUMABLE_ACTIONS.has(resumeAction)) {
@@ -106,12 +109,14 @@ export function createBrowserAuth({ client, config, storage }) {
         const targetStorage = browserStorage(storage);
         if (!targetStorage) throw new Error("sessionStorage unavailable");
         const draft = stageFinishForAction(resumeAction, requestedScopes, stageFinishDraft);
+        const taskDraft = taskFinishForAction(resumeAction, requestedScopes, taskFinishDraft);
         targetStorage.setItem(PENDING_ACTION_KEY, JSON.stringify({
           version: 1,
           action: resumeAction,
           accountId: account.homeAccountId,
           scopes: requestedScopes,
           ...(draft ? { stageFinishDraft: draft } : {}),
+          ...(taskDraft ? { taskFinishDraft: taskDraft } : {}),
         }));
       } catch {
         throw new BrowserAuthError("AUTH_FAILED", "Não foi possível preservar a ação solicitada durante a autorização Microsoft.");
@@ -135,6 +140,7 @@ export function createBrowserAuth({ client, config, storage }) {
     msalAccount = null;
     pendingAction = null;
     pendingStageFinish = null;
+    pendingTaskFinish = null;
     removePendingAction(storage);
     await client.logoutRedirect({
       account: signedInAccount,
@@ -145,6 +151,7 @@ export function createBrowserAuth({ client, config, storage }) {
   return Object.freeze({ initialize, signIn, getToken, authorize, signOut, getAccount: () => account,
     consumePendingAction() { const action = pendingAction; pendingAction = null; return action; },
     consumePendingStageFinish() { const draft = pendingStageFinish; pendingStageFinish = null; return draft; },
+    consumePendingTaskFinish() { const draft = pendingTaskFinish; pendingTaskFinish = null; return draft; },
   });
 }
 
@@ -206,6 +213,13 @@ function stageFinishForAction(action, scopes, value) {
     || typeof value?.id !== "string" || !/^[1-9]\d*$/.test(value.id) || !Number.isSafeInteger(Number(value.id))
     || typeof value.date !== "string" || !/^\d{4}-\d{2}-\d{2}$/.test(value.date)) return null;
   return { id: value.id, date: value.date, ...(value.kind === "stage" ? { kind: "stage" } : {}) };
+}
+
+function taskFinishForAction(action, scopes, value) {
+  if (action !== "home-task-association-report" || !scopes.some(scope => /^Sites\.ReadWrite\.All$/i.test(scope))
+    || !Number.isSafeInteger(value?.id) || value.id < 1
+    || typeof value.date !== "string" || !/^\d{4}-\d{2}-\d{2}$/.test(value.date)) return null;
+  return { id: value.id, date: value.date };
 }
 
 function browserStorage(storage) {

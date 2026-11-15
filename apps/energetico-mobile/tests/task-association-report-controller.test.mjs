@@ -493,7 +493,9 @@ test('only finalization requests write consent and invalidates the cached snapsh
   await data.loadSnapshot(); await data.loadSnapshot();
   assert.equal(reads, 1);assert.equal(writes, 0);assert.deepEqual(requests, [scopes]);
   assert.equal(await data.finalizeTask(7, '2026-10-06', { expectedTask }), saved);
-  assert.deepEqual(grants, [{ requested: [...scopes, 'Sites.ReadWrite.All'], options: { resumeAction: 'home-task-association-report' } }]);
+  assert.deepEqual(grants, [{ requested: [...scopes, 'Sites.ReadWrite.All'], options: {
+    resumeAction: 'home-task-association-report', taskFinishDraft: { id: 7, date: '2026-10-06' },
+  } }]);
   await data.loadSnapshot();assert.equal(reads, 2);assert.equal(writes, 1);
 });
 
@@ -1211,6 +1213,19 @@ test('read-only task-association report consent persists its own account and red
     version: 1, action: 'home-task-association-report', accountId: 'commercial-user', scopes: ['Sites.Read.All'],
   });
   assert.deepEqual(h.requests, [{ account: browserAccount, scopes: ['Sites.Read.All'], redirectUri: browserConfig.webRedirectUri }]);
+});
+
+test('write consent restores the selected activity and date once for the same account', async () => {
+  const requested = ['Sites.Read.All', 'Sites.ReadWrite.All'];
+  const draft = { id: 7, date: '2026-10-06' };
+  const first = browserHarness();
+  await first.auth.initialize();
+  await first.auth.authorize(requested, { resumeAction: 'home-task-association-report', taskFinishDraft: { ...draft, extra: 'discard' } });
+  const second = browserHarness({ account: browserAccount, accessToken: 'token', scopes: requested }, first.values);
+  await second.auth.initialize();
+  assert.equal(second.auth.consumePendingAction(), 'home-task-association-report');
+  assert.deepEqual(second.auth.consumePendingTaskFinish(), draft);
+  assert.equal(second.auth.consumePendingTaskFinish(), null);
 });
 
 for (const [name, redirect, expected] of [

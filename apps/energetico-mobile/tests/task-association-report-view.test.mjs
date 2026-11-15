@@ -3,6 +3,7 @@ import assert from 'node:assert/strict';
 import {readFileSync} from 'node:fs';
 import {JSDOM} from 'jsdom';
 import {createChatView,renderChatMarkup} from '../src/ui/chat-view.js';
+import {captureFilteredReport} from '../src/ui/report-print.js';
 const {createTaskAssociationReportView}=await import('../src/ui/task-association-report-view.js').catch(error=>{if(error.code==='ERR_MODULE_NOT_FOUND')return {};throw error;});
 const row=(id,extra={})=>({id,createdDate:'2026-10-04',dueDate:'2026-10-05',description:'Conferir documentação',association:'DEMANDAS PESSOAIS',status:'ATIVIDADE CRIADA',priority:'ATIVIDADE EMERGENCIAL',difficulty:'ALTA DIFICULDADE',supplier:'Bernardo',...extra});
 const snapshot={tasks:[row(1),row(2,{priority:'ATIVIDADE PRIORITÁRIA',dueDate:'2026-10-06',status:'EM ATENDIMENTO'}),row(3,{association:'ENGENHARIA',status:'CONCLUÍDO'}),row(4,{association:'ENGENHARIA',priority:'NÃO PRIORITÁRIA',dueDate:'',supplier:'Edgar'})]};
@@ -54,6 +55,20 @@ test('description ID supplier difficulty priority and multi-status filters compo
  description.value='conferir';description.dispatchEvent(new dom.window.Event('input',{bubbles:true}));const supplier=root.querySelector('select[name=supplier]');supplier.value='Edgar';supplier.dispatchEvent(new dom.window.Event('change',{bubbles:true}));assert.equal(root.querySelector('[data-task-id]').dataset.taskId,'4');assert.equal(root.querySelectorAll('[data-task-id]').length,1);supplier.value='';supplier.dispatchEvent(new dom.window.Event('change',{bubbles:true}));
  const status=root.querySelector('select[name=status]');for(const option of status.options)option.selected=option.value==='CONCLUÍDO';status.dispatchEvent(new dom.window.Event('change',{bubbles:true}));assert.equal(root.querySelector('[data-task-id]').dataset.taskId,'3');assert.equal(dom.window.getComputedStyle(root.querySelector('[data-task-id="3"]')).backgroundColor,'rgb(200, 230, 201)');assert.match(root.querySelector('[data-task-id="3"]').textContent,/✅ CONCLUÍDO/);assert.equal(root.querySelector('[data-metric=pending] strong').textContent,'3');
  root.querySelector('[aria-label="Abrir opções de STATUS"]').click();assert.equal(root.querySelector('[role=listbox][aria-label=STATUS]').getAttribute('aria-multiselectable'),'true');assert.equal(root.querySelector('.sfs-popup:not([hidden])').dataset.placement,'expanded');
+});
+test('resuming after consent restores the date and opens confirmation with the latest record even off the default filter',async t=>{
+ let saves=0;const {view,root}=setup(t,async()=>({tasks:[row(7,{status:'CANCELADO',description:'Descrição atual'})]}),false,async()=>{saves++;});
+ await view.open({finishDraft:{id:7,date:'2026-10-05'}});
+ const dialog=root.querySelector('.tar-finish-overlay');assert.equal(dialog.hidden,false);
+ assert.match(dialog.textContent,/#7 · Descrição atual/);assert.equal(dialog.querySelector('input').value,'2026-10-05');assert.equal(saves,0);
+});
+test('exports the status column before the finalization popup has ever opened',async t=>{
+ const {view,root}=setup(t,async()=>snapshot,false,async()=>{});await view.open();
+ const printed=captureFilteredReport(root,{title:'Atividades por associação'});
+ const table=printed.pages[0].blocks.find(block=>block.type==='table');
+ assert.equal(table.rows[0].cells.at(-1).runs[0].text,'STATUS');
+ assert.equal(table.rows[1].cells.at(-1).runs[0].text,'ATIVIDADE CRIADA');
+ assert.doesNotMatch(JSON.stringify(table),/FINALIZAR/);
 });
 test('date filter uses source ISO day with dd/mm/yyyy display and clears without changing totals',async t=>{
  const {view,root,dom}=setup(t);await view.open();const input=root.querySelector('input[name=dueDate]');input.value='2026-10-06';input.dispatchEvent(new dom.window.Event('change',{bubbles:true}));assert.equal(root.querySelector('.tar-date-display').value,'06/10/2026');assert.equal(root.querySelector('[data-task-id]').dataset.taskId,'2');root.querySelector('[aria-label="Limpar data fatal"]').click();assert.equal(root.querySelectorAll('[data-task-id]').length,3);assert.equal(root.querySelector('.tar-date-display').value,'');assert.equal(root.querySelector('[data-metric=total] strong').textContent,'4');

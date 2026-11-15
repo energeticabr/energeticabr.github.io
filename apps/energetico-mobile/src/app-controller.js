@@ -9239,7 +9239,7 @@ export function createAppController({
     return request;
   }
 
-  async function openTaskAssociationReport() {
+  async function openTaskAssociationReport({ finishDraft } = {}) {
     if (!account || stopped || flowBusy() || store.getState().activeFlow) return false;
     if (taskAssociationReportSession && taskAssociationReportSession.origin !== globalThis.location?.origin) disposeTaskAssociationReport();
     if (taskAssociationReportOpening) return taskAssociationReportOpening;
@@ -9357,7 +9357,9 @@ export function createAppController({
       };
       assertAction();
       for (const sourceSignal of signals) sourceSignal.addEventListener('abort', abort, { once: true });
-      const tokenProvider = ordersGalleryTokenProvider(assertAction, TASK_ASSOCIATION_REPORT_ID);
+      const tokenProvider = ordersGalleryTokenProvider(assertAction, TASK_ASSOCIATION_REPORT_ID, {
+        taskFinishDraft: { id, date: completionDate },
+      });
       try {
         // Obtain write consent before checking the current item and its version.
         const writeToken = await tokenProvider([...TASK_ASSOCIATION_REPORT_SCOPES, 'Sites.ReadWrite.All']);
@@ -9387,7 +9389,7 @@ export function createAppController({
           catch (error) { panel?.destroy?.(); throw error; }
           taskAssociationReport = report = panel;
         }
-        await report.open();
+        await report.open({ finishDraft });
         assertSession();
         return true;
       } catch (error) {
@@ -12869,7 +12871,7 @@ export function createAppController({
     else if (pendingAction === SAC_PATHOLOGIES_ID) await openSacPathologies();
     else if (pendingAction === DEPRECIATION_REPORT_ID) await openDepreciationReport();
     else if (pendingAction === DOCUMENT_CONTROL_REPORT_ID) await openDocumentControlReport();
-    else if (pendingAction === TASK_ASSOCIATION_REPORT_ID) await openTaskAssociationReport();
+    else if (pendingAction === TASK_ASSOCIATION_REPORT_ID) await openTaskAssociationReport({ finishDraft: auth.consumePendingTaskFinish?.() });
     else if (pendingAction === CONTRACTOR_CONTROL_REPORT_ID) await openContractorControlReport();
     else if (pendingAction === GENERAL_SUMMARY_REPORT_ID) await openGeneralSummaryReport();
     else if (pendingAction === PENDING_SUPPLIER_PAYMENTS_REPORT_ID) await openPendingSupplierPaymentsReport();

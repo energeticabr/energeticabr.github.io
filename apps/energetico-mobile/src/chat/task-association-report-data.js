@@ -169,18 +169,24 @@ export function createTaskAssociationReportData({ tokenProvider, repository: sup
     return withRepository(signal, async (repository, activeSignal) => {
       const { list, columns: { completion, ...columns } } = await resolveTaskSchema(repository, activeSignal,
         { ...SCHEMA, completion: COMPLETION_DATE });
-      const current = await abortable(() => repository.getItem(SITE, list.id, itemId, "$expand=fields", { signal: activeSignal }), activeSignal);
+      const fields = [...Object.values(columns), completion];
+      const current = await abortable(() => repository.getItem(SITE, list.id, itemId, undefined, {
+        restrictedFields: fields, signal: activeSignal,
+      }), activeSignal);
       const row = normalizeItem(current, columns);
       if (row.id !== id || ["description", "association"].some(field => row[field] !== expectedTask[field])) {
         throw Object.assign(new Error("A atividade mudou no SharePoint."), { code: "task_association_changed" });
       }
-      if (isCompletedTaskStatus(row.status)) return row;
+      if (isCompletedTaskStatus(row.status)) {
+        if (calendarDate(scalar(current.fields[completion])) === date) return row;
+        throw Object.assign(new Error("Esta atividade já foi concluída."), { code: "task_association_already_completed" });
+      }
       if (row.status !== expectedTask.status) {
         throw Object.assign(new Error("O status da atividade mudou no SharePoint."), { code: "task_association_changed" });
       }
       const saved = await repository.updateItem(SITE, list.id, itemId, {
         [columns.status]: "CONCLUÍDO", [completion]: `${date}T12:00:00Z`,
-      }, { eTag: current.eTag || current["@odata.etag"] || current.fields["@odata.etag"], signal: activeSignal });
+      }, { eTag: current.eTag || current["@odata.etag"] || current.fields["@odata.etag"], readbackFields: fields, signal: activeSignal });
       const updated = normalizeItem(saved, columns);
       if (updated.id !== id || !isCompletedTaskStatus(updated.status)
         || calendarDate(scalar(saved.fields[completion])) !== date) {
