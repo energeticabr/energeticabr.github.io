@@ -71,7 +71,7 @@ export function createDdaProvisionPicker({service, ...options}){
  });
 }
 
-export function createReportLinkPicker({document:doc,host,copy,loadOptions,saveLink,currentLink,rowAmount,renderOptionLabel,afterLink,onLinked,onClose,resolveReturnFocus,sharedLinkQuestion,selectCurrent=false,multiple=false,timeoutMs=35000}){
+export function createReportLinkPicker({document:doc,host,copy,loadOptions,saveLink,currentLink,rowAmount,amountInCents,renderOptionLabel,afterLink,onLinked,onClose,resolveReturnFocus,sharedLinkQuestion,selectCurrent=false,multiple=false,timeoutMs=35000}){
  let current=null;ensureEditReviewStyles(doc);
  const el=(tag,cls='',value)=>{const node=doc.createElement(tag);node.className=cls;if(value!==undefined)node.textContent=String(value);return node;};
  const money=value=>{let text=String(value??'').trim().replace(/R\$|\s/g,'');if(text.includes(','))text=text.replace(/\./g,'').replace(',','.');const number=/^-?\d+(?:\.\d+)?$/.test(text)?Number(text):NaN;return Number.isFinite(number)?new Intl.NumberFormat('pt-BR',{style:'currency',currency:'BRL'}).format(number):'Valor não informado';};
@@ -100,12 +100,16 @@ export function createReportLinkPicker({document:doc,host,copy,loadOptions,saveL
    propose.addEventListener('click',()=>onPropose(row,propose));
    header.classList.add('nfe-picker-header');header.append(propose);
   }
-  const summary=el('p','dda-provision-summary',`${row.supplier} · ${copy.sourceLabel} #${row.id} · ${money(rowAmount(row))}${selectCurrent&&!multiple&&linkedId?` · Pedido atual ID ${linkedId}`:''}`);
+  const referenceAmount=rowAmount(row);
+  const summary=el('p','dda-provision-summary',`${row.supplier} · ${copy.sourceLabel} #${row.id} · ${money(referenceAmount)}${selectCurrent&&!multiple&&linkedId?` · Pedido atual ID ${linkedId}`:''}`);
   const search=el('input','dda-provision-search');search.type='search';search.placeholder='Buscar fornecedor ou ID';search.setAttribute('aria-label',copy.searchLabel);
   const feedback=el('p','dda-provision-feedback',copy.loading);feedback.setAttribute('role','status');
   const list=el('div','dda-provision-options');list.setAttribute('role',multiple?'group':'radiogroup');list.setAttribute('aria-label',copy.listLabel);
   const actions=el('div','gallery-record-dialog-buttons'),cancel=el('button','gallery-record-dialog-button','Cancelar'),save=el('button','gallery-record-dialog-button dda-provision-save','SUBMETER');
   cancel.type=save.type='button';save.disabled=true;
+  const total=amountInCents&&el('output','dda-provision-selection-total','Total selecionado —');
+  const referenceCents=amountInCents?.(referenceAmount);
+  if(total)actions.append(total);
   actions.append(cancel,save);dialog.append(header,summary,search,feedback,list,actions);overlay.append(dialog);
   const background=[...host.children].map(node=>[node,node.inert===true]);for(const [node] of background)node.inert=true;
   const entry={overlay,dialog,trigger,background,controller:new AbortController(),options:[],selected:new Set(selectCurrent?linkedIds:[]),busy:false,reviewing:false};current=entry;host.append(overlay);dialog.focus();
@@ -125,6 +129,31 @@ export function createReportLinkPicker({document:doc,host,copy,loadOptions,saveL
    feedback.setAttribute('role','status');
    feedback.textContent=entry.options.length?copy.options(count,entry.selected.size):copy.empty;
   }
+  function updateSelection(){
+   let matches=false;
+   if(total){
+    let sum=0;
+    let knownCount=0;
+    for(const item of entry.options){
+     if(!entry.selected.has(item.id))continue;
+     const cents=amountInCents(item.amount);
+     if(cents===null)continue;
+     sum+=cents;
+     knownCount++;
+    }
+    const complete=knownCount===entry.selected.size;
+    const validSum=Number.isSafeInteger(sum);
+    matches=entry.selected.size>0&&complete&&validSum&&sum===referenceCents;
+    const amount=validSum?`${money(sum/100)}${complete?'':' (parcial)'}`:'indisponível';
+    const text=`Total selecionado ${amount}`;
+    if(total.textContent!==text)total.textContent=text;
+   }
+   for(const option of list.children){
+    const input=option.querySelector('input');
+    option.toggleAttribute('data-selection-amount-match',input.checked&&matches);
+    option.toggleAttribute('data-edit-changed',input.checked&&!matches&&!linkedIds.includes(input.value));
+   }
+  }
   function render(){
    if(current!==entry)return;list.replaceChildren();const term=normalizeSearchText(search.value);const visible=entry.options.filter(item=>includesSearchText(normalizeSearchText(`${item.id} ${item.supplier} ${item.label||''}`),term));
    for(const item of visible){const label=el('label','dda-provision-option');if(item.recommended)label.append(el('strong','dda-provision-star',copy.recommendation || '★ MAIS PROVÁVEL'));
@@ -134,15 +163,11 @@ export function createReportLinkPicker({document:doc,host,copy,loadOptions,saveL
      if(choice.checked)entry.selected.add(item.id);
      else entry.selected.delete(item.id);
      save.disabled=!canSave();
-     for(const option of list.children){
-      const input=option.querySelector('input');
-      option.toggleAttribute('data-edit-changed',input.checked&&!linkedIds.includes(input.value));
-     }
+     updateSelection();
      if(multiple)updateFeedback();
     });
     const text=optionLabel(item);
     if(!renderOptionLabel&&item.due)text.append(` · Previsto ${String(item.due).slice(0,10).split('-').reverse().join('/')}`);
-    label.toggleAttribute('data-edit-changed',choice.checked&&!linkedIds.includes(item.id));
     label.append(choice,text);
     if(item.matchedProvision){
      const line=item.matchedProvision,match=el('span','dda-provision-line-match',`Provisão #${line.id}`);
@@ -154,6 +179,7 @@ export function createReportLinkPicker({document:doc,host,copy,loadOptions,saveL
     if(item.matchDetail)label.append(el('span','dda-provision-name-match',item.matchDetail));
     list.append(label);
    }
+   updateSelection();
    updateFeedback();
   }
   search.addEventListener('input',render);

@@ -436,7 +436,7 @@ test('highlights linked payments on either stripe and preserves the original unl
   ]);
 });
 
-function setupOrderLink(t, { initial, recipient, description, loadOptions = async () => orders, saveError } = {}) {
+function setupOrderLink(t, { initial, recipient, description, amount, loadOptions = async () => orders, saveError } = {}) {
   const dom = new JSDOM('<main id="app"></main>');
   const { document, Event, KeyboardEvent } = dom.window;
   let orderId = initial;
@@ -452,6 +452,7 @@ function setupOrderLink(t, { initial, recipient, description, loadOptions = asyn
           SICOOB_PEDIDOS_ADICIONAIS: additionalOrders,
           ...(recipient === undefined ? {} : { RAZAOSOCIALRECEBEDOR: recipient }),
           ...(description === undefined ? {} : { DESCRICAO: description }),
+          ...(amount === undefined ? {} : { VALOR: amount }),
         })] };
       },
       orderLink: {
@@ -562,6 +563,73 @@ test('shows amount-only recommendations when bank recipient identification is pe
   const recommended = [...picker().querySelectorAll('.dda-provision-star')].map(star => star.parentElement);
   assert.deepEqual(recommended.map(node => node.querySelector('input').value).sort(), ['43', '44']);
   assert.ok(recommended.every(node => /Valor igual/i.test(node.textContent)));
+});
+
+test('totals Sicoob orders across searches and fills every checked row green on an exact match', async t => {
+  const { view, picker, openPicker, Event } = setupOrderLink(t, {
+    amount: '1.497,44',
+    loadOptions: async () => [
+      { id: '548', supplier: 'Escoramento', amount: '55,00' },
+      { id: '547', supplier: 'Armação', amount: 1442.44 },
+      { id: '546', supplier: 'Comércio Exemplo', amount: 'R$ 1.497,44' },
+      { id: '545', supplier: 'Sem valor', amount: null },
+    ],
+  });
+  const { ownerDocument } = view.element;
+  const style = ownerDocument.createElement('style');
+  style.textContent = reportStyles;
+  ownerDocument.head.append(style);
+  await view.open();
+  await openPicker();
+
+  const total = picker().querySelector('output');
+  assert.ok(total);
+  assert.equal(total.nextElementSibling.textContent, 'Cancelar');
+  const check = id => picker().querySelector(`input[value="${id}"]`);
+  const fill = id => ownerDocument.defaultView.getComputedStyle(check(id).parentElement).backgroundColor;
+  const search = picker().querySelector('input[type="search"]');
+  const filter = query => {
+    search.value = query;
+    search.dispatchEvent(new Event('input', { bubbles: true }));
+  };
+  const green = 'rgb(234, 248, 238)';
+  assert.equal(total.textContent, 'Total selecionado R$\u00a00,00');
+  check('546').click();
+  assert.equal(total.textContent, 'Total selecionado R$\u00a01.497,44');
+  assert.equal(fill('546'), green);
+  assert.notEqual(fill('548'), green);
+  check('548').click();
+  assert.equal(total.textContent, 'Total selecionado R$\u00a01.552,44');
+  assert.notEqual(fill('546'), green);
+  check('546').click();
+  assert.equal(total.textContent, 'Total selecionado R$\u00a055,00');
+  filter('Armação');
+  check('547').click();
+  assert.equal(total.textContent, 'Total selecionado R$\u00a01.497,44');
+  assert.equal(fill('547'), green);
+  filter('');
+  assert.equal(fill('548'), green);
+  assert.equal(fill('547'), green);
+  assert.notEqual(fill('546'), green);
+  check('545').click();
+  assert.equal(total.textContent, 'Total selecionado R$\u00a01.497,44 (parcial)');
+  assert.notEqual(fill('548'), green);
+  check('545').click();
+  assert.equal(fill('548'), green);
+  check('547').click();
+  assert.notEqual(fill('548'), green);
+});
+
+test('does not confirm the selection total against a malformed Sicoob reference amount', async t => {
+  const { view, picker, openPicker } = setupOrderLink(t, {
+    amount: '1.2,34',
+    loadOptions: async () => [{ id: '548', supplier: 'Fornecedor Exemplo', amount: '12,34' }],
+  });
+  await view.open();
+  await openPicker();
+  picker().querySelector('input[value="548"]').click();
+  assert.equal(picker().querySelector('output').textContent, 'Total selecionado R$\u00a012,34');
+  assert.equal(picker().querySelector('[data-selection-amount-match]'), null);
 });
 
 test('uses the supplier of a confirmed link for a pending recipient and keeps it on refresh', async t => {

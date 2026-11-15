@@ -14,16 +14,16 @@ export function sicoobOrderId(value) {
   return /^[1-9]\d*$/.test(id) && Number.isSafeInteger(Number(id)) ? id : '';
 }
 
-function positiveCents(value) {
+export function sicoobAmountCents(value) {
   if (typeof value !== 'number' && typeof value !== 'string') return null;
   let raw = value;
   if (typeof raw === 'string') {
     raw = raw.trim().replace(/^R\$\s*/i, '');
-    if (/^(?:\d+|\d{1,3}(?:\.\d{3})+),\d+$/.test(raw)) raw = raw.replaceAll('.', '').replace(',', '.');
-    if (!/^\d+(?:\.\d+)?$/.test(raw)) return null;
+    if (/^-?(?:\d+|\d{1,3}(?:\.\d{3})+),\d+$/.test(raw)) raw = raw.replaceAll('.', '').replace(',', '.');
+    if (!/^-?\d+(?:\.\d+)?$/.test(raw)) return null;
   } else if (!Number.isFinite(raw)) return null;
   const cents = new Decimal(raw).times(100).toDecimalPlaces(0, Decimal.ROUND_HALF_UP).toNumber();
-  return Number.isSafeInteger(cents) && cents > 0 ? cents : null;
+  return Number.isSafeInteger(cents) ? cents : null;
 }
 
 const placeholders = new Set([
@@ -47,10 +47,10 @@ function hasSupplierIdentity(value) {
 }
 
 export function rankSicoobOrderOptions(options, { supplier, amount, date } = {}) {
-  const wanted = positiveCents(amount);
+  const wanted = sicoobAmountCents(amount);
   const named = hasSupplierIdentity(supplier);
   return options.map(option => {
-    const amountMatch = wanted !== null && positiveCents(option.amount) === wanted;
+    const amountMatch = wanted > 0 && sicoobAmountCents(option.amount) === wanted;
     const dateMatch = Boolean(date) && option.date === date;
     const similarity = named && hasSupplierIdentity(option.supplier) ? fiscalSupplierSimilarity(supplier, option.supplier) : 0;
     const nameMatch = similarity >= 0.5;
