@@ -1,5 +1,5 @@
 import { includesSearchText, normalizeSearchText } from '../../../../portal/core/search-text.js';
-import { mealVoucherLines, mealVoucherTotal, mealVoucherKey, validateMealVoucherDraft, VOUCHER_TYPES } from '../chat/meal-voucher.js';
+import { mealVoucherLines, mealVoucherTotal, mealVoucherKey, validateMealVoucherDraft, VOUCHER_TYPES, TRANSPORT_ORDER_SUPPLIER } from '../chat/meal-voucher.js';
 import { createLoadingIndicator, updateLoadingIndicator } from './loading-indicator.js';
 import { beginLoadingTask } from './loading-task.js';
 import { applyScreenNavigation } from './screen-navigation.js';
@@ -76,6 +76,14 @@ export function createMealVoucherView({ data, root, documentRef = globalThis.doc
     progress = { operationId: globalThis.crypto?.randomUUID?.() || `${Date.now()}-${Math.random().toString(36).slice(2)}` };
     expectedFiles = []; reviewedTray = null; result = null; orders = []; assignments = {}; swileHandled = false; step = 'lines';
   }
+  function restartTransport(posted) {
+    assertPendingCurrent();
+    clearPending();
+    reset();
+    draft.lines = available.suppliers.map(initialLine);
+    result = posted;
+    body.scrollTop = 0;
+  }
   reset();
   const locked = () => Boolean(progress.signature) && progress.editable !== true;
   function restoreOriginalDraft() {
@@ -112,6 +120,51 @@ export function createMealVoucherView({ data, root, documentRef = globalThis.doc
   const button = (label, attribute, action) => { const node = el('button', 'meal-voucher-button', label); node.type = 'button'; if (attribute) node.setAttribute(attribute, ''); node.addEventListener('click', () => { if (!busy && !trayActionBusy && !destroyed) void action(); }); return node; };
   const field = (label, input) => { const wrapper = el('label', 'meal-voucher-field'); wrapper.append(el('span', '', label), input); return wrapper; };
   function showError(cause) { error.textContent = cause?.message || 'Não foi possível concluir. Tente novamente.'; error.hidden = false; }
+  async function cleanupTransport(cleanup, active, options) {
+    const abort = new AbortController();
+    const cancel = () => abort.abort();
+    options.signal.addEventListener('abort', cancel, { once:true });
+    let timeout;
+    try {
+      await Promise.race([
+        cleanup({ ...options, signal:abort.signal }),
+        new Promise((_, reject) => {
+          timeout = setTimeout(() => {
+            abort.abort();
+            reject(new Error('O pedido foi gravado. Confira se a bandeja ainda tem alguma cópia do comprovante.'));
+          }, 8000);
+        }),
+      ]);
+      active();
+    } catch (cause) { active(); showError(cause); }
+    finally {
+      clearTimeout(timeout);
+      options.signal.removeEventListener('abort', cancel);
+    }
+    options.onProgress({ percent:100 });
+  }
+  async function recoverTransport(active, options) {
+    let recovered;
+    try { recovered = await data.recoverCompleted?.(progress, options); }
+    catch { active(); return false; }
+    active();
+    if (!recovered) return false;
+    restartTransport(recovered.result);
+    if (!recovered.files.length) return true;
+    await cleanupTransport(async cleanupOptions => {
+      const sources = trayAccess.snapshot();
+      const matching = sources.filter(source => recovered.files.some(file => file.name === source.fileName && file.size === source.size));
+      if (!matching.length) return;
+      if (matching.length !== recovered.files.length)
+        throw new Error('O pedido foi gravado. Confira se a bandeja ainda tem alguma cópia do comprovante.');
+      const files = await trayAccess.read(sources, recovered.files, cleanupOptions);
+      await recovered.matchesFiles(files.filter(file => recovered.files.some(saved => saved.name === file.name && saved.size === file.size)));
+      cleanupOptions.signal.throwIfAborted();
+      active();
+      await trayAccess.consume?.(matching, cleanupOptions);
+    }, active, options);
+    return true;
+  }
   async function trayAction(action) {
     if (busy || trayActionBusy || destroyed || !opened) return;
     trayActionBusy = true; error.hidden = true; renderTray();
@@ -214,6 +267,11 @@ export function createMealVoucherView({ data, root, documentRef = globalThis.doc
   }
   function renderLines() {
     content.append(el('h2', '', `${benefitName} dos fornecedores`));
+    if (transport && result) {
+      const receipt = el('p', 'meal-voucher-restart-receipt', `Pedido ${result.orderId} lançado com sucesso · ${money(result.total)}`);
+      receipt.setAttribute('role', 'status');
+      content.append(receipt);
+    }
     content.append(el('p', '', 'Informe quantidade e valor unitário somente para os fornecedores que receberão lançamentos. Todos os empreiteiros ativos estão listados.'));
     const search = el('input', 'meal-voucher-search'); search.type = 'search'; search.placeholder = 'Filtrar fornecedores'; search.setAttribute('aria-label', 'Filtrar fornecedores'); content.append(search);
     const table = el('table', 'meal-voucher-table'); table.setAttribute('aria-label', `Fornecedores e valores de ${voucher.name}`);
@@ -243,7 +301,7 @@ export function createMealVoucherView({ data, root, documentRef = globalThis.doc
     const total = el('p', 'meal-voucher-total'); total.dataset.mealTotal = ''; content.append(total); totals();
     footer.append(button('Seguir', 'data-meal-next', async () => {
       try { branch(); } catch (cause) { showError(cause); return; }
-      await work(async (active, options) => { const loaded = await data.loadOrders(branch(), options); active(); orders = loaded; step = 'order'; }, 'Carregando pedidos…');
+      await work(async (active, options) => { const loaded = await data.loadOrders(branch(), options); active(); orders = loaded; result = null; step = 'order'; }, 'Carregando pedidos…');
     }));
   }
   function renderOrder() {
@@ -262,7 +320,10 @@ export function createMealVoucherView({ data, root, documentRef = globalThis.doc
     if (orders.length) {
       content.append(el('h3', '', 'Seguir com pedido existente'));
       const selected = mealVoucherLines(draft.lines);
-      const allowed = orders.filter(order => mealVoucherKey(order.supplier) === 'DIVERSOS' || selected.length === 1 && mealVoucherKey(order.supplier) === mealVoucherKey(selected[0].supplier.label));
+      const allowed = orders.filter(order => {
+        const supplier = mealVoucherKey(order.supplier);
+        return transport ? supplier === TRANSPORT_ORDER_SUPPLIER : supplier === 'DIVERSOS' || selected.length === 1 && supplier === mealVoucherKey(selected[0].supplier.label);
+      });
       for (const order of allowed) content.append(button(order.label, 'data-meal-order-existing', () => { draft.orderMode = 'existing'; draft.orderId = order.id; step = 'details'; render(); }));
       if (!allowed.length) content.append(el('p', '', 'Nenhum pedido existente é compatível com estes fornecedores.'));
     } else content.append(el('p', '', 'Nenhum pedido pendente nesta filial.'));
@@ -321,6 +382,7 @@ export function createMealVoucherView({ data, root, documentRef = globalThis.doc
     orderInfo.append(el('strong', '', `Pedido ${verified.orderMode === 'new' ? 'novo' : `ID ${verified.orderId}`} · ${verified.branch}`));
     const orderMeta = el('div', 'meal-voucher-order-meta');
     for (const line of [
+      ...(transport && verified.orderMode === 'new' && !progress.orderId ? [TRANSPORT_ORDER_SUPPLIER] : []),
       `Lançamento ${verified.date}  |  Vencimento ${verified.dueDate}`,
       `Pagamento efetuado ${verified.paymentDate || 'não informado'}  |  Mês de referência ${verified.referenceMonth}`,
       `${verified.stage.label}  ·  ${verified.account.label}`,
@@ -374,8 +436,15 @@ export function createMealVoucherView({ data, root, documentRef = globalThis.doc
       savePending();
       const postOptions = options.stage(0, 2), cleanupOptions = options.stage(1, 2);
       const posted = await data.post(verified, progress, event => { active(); if (!event?.stage) savePending(); postOptions.onProgress(event); });
-      active(); result = posted;
+      active();
       postOptions.onProgress({ percent: 100 });
+      if (transport) {
+        const completedSources = reviewedTray || [];
+        restartTransport(posted);
+        await cleanupTransport(options => trayAccess.consume?.(completedSources, options), active, cleanupOptions);
+        return;
+      }
+      result = posted;
       clearPending(); step = 'done';
       try { await trayAccess.consume?.(reviewedTray || [], cleanupOptions); active(); cleanupOptions.onProgress({ percent: 100 }); }
       catch (cause) { active(); showError(cause); }
@@ -516,6 +585,7 @@ export function createMealVoucherView({ data, root, documentRef = globalThis.doc
       if ((!inMemory || changedElsewhere) && !restored) draft.lines = available.suppliers.map(initialLine);
       else {
         const inspectionOptions = options.stage(1, 3), nextOptions = options.stage(2, 3);
+        if (transport && await recoverTransport(active, inspectionOptions)) return;
         const editable = await refreshEditability(active, inspectionOptions); active(); inspectionOptions.onProgress({ percent: 100 });
         if (editable) {
           try { branch(); } catch { step = 'lines'; return; }

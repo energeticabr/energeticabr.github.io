@@ -63,12 +63,29 @@ test('vale transporte registra a rubrica e a OBS próprias com retomada sem dupl
   const obs = 'VALE TRANSPORTE (15/11/2026)', selected = { ...draft(suppliers), obs };
   const result = await data.post(selected, progress);
   assert.equal(f.rows.NOTASPENDENTES[0].fields.OBS, obs);
+  assert.equal(f.rows.NOTASPENDENTES[0].fields.FORNECEDOR, 'TRANCID');
+  assert.deepEqual(f.rows.LANCAMENTOS.map(row => row.fields.FORNECEDOR), ['Ana', 'Beto']);
   assert.match(f.rows.NOTASPENDENTES[0].fields.VALECONTROLE, /\[VALE TRANSPORTE transport-test\]/);
   assert.ok(f.rows.LANCAMENTOS.every(row => row.fields.OBS === obs));
   assert.ok(f.rows.FOLHAPGTO.every(row => row.fields.TIPOPGTO === 'VALE TRANSPORTE'));
   assert.equal((await createMealVoucherData({ repository:f.repo, voucherType:'transport' }).post(selected, progress)).orderId, result.orderId);
   assert.equal(f.rows.LANCAMENTOS.length, 2);
   assert.equal(f.rows.FOLHAPGTO.length, 2);
+});
+
+test('vale transporte só oferece pedidos Trancid para novas inclusões e retoma o próprio pedido legado', async () => {
+  const f = fixture(), data = createMealVoucherData({ repository:f.repo, voucherType:'transport' });
+  const { suppliers } = await data.loadOptions();
+  const selected = draft(suppliers), progress = { operationId:'transport-owned-legacy' };
+  await data.post(selected, progress);
+  const order = f.rows.NOTASPENDENTES[0];
+  order.fields.FORNECEDOR = 'DIVERSOS';
+  assert.deepEqual(await data.loadOrders('OBRA A'), []);
+  await assert.rejects(data.post({ ...selected, orderMode:'existing', orderId:order.id }, { operationId:'unrelated' }), /fornecedor/i);
+  assert.equal((await data.post(selected, progress)).orderId, order.id);
+  order.fields.FORNECEDOR = 'TRANCID';
+  assert.deepEqual((await data.loadOrders('OBRA A')).map(item => item.id), [order.id]);
+  assert.equal(f.rows.LANCAMENTOS.length, 2);
 });
 test('vale transporte grava a folha com as colunas de texto do SharePoint', async () => {
   const f = fixture(), create = f.repo.createItem;
@@ -113,9 +130,17 @@ test('comprovante do Sicoob mantém os bytes e usa um nome aceito pelo SharePoin
   assert.deepEqual(f.deliveries.map(({ list, name }) => [list, name]), [['NOTASPENDENTES', safe], ['LANCAMENTOS', safe]]);
   const saved = progress.fileManifest[0];
   progress.fileManifest = [{ ...saved, name:original }];
+  const writes = f.writes.length;
+  const recovered = await data.recoverCompleted(progress);
+  assert.equal(recovered.result.orderId, '1');
+  assert.equal(await recovered.matchesFiles(selected.files), true);
+  assert.equal(f.writes.length, writes);
   await data.post(selected, progress);
   assert.equal(f.deliveries.length, 2);
   assert.equal(progress.fileManifest[0].sha256, saved.sha256);
+  f.seedAttachment('LANCAMENTOS', '2', safe);
+  await assert.rejects(data.recoverCompleted(progress), /conteúdo diferente/);
+  assert.equal(f.deliveries.length, 2);
 });
 
 test('meal options report completed sources while another catalog is still pending', async () => {
@@ -906,13 +931,18 @@ test('destino dos anexos é fixado antes da primeira linha mesmo com resposta pe
 
 for (const voucherType of ['meal', 'transport']) test(`lote originador retoma após outro lote (${voucherType}) sem repetir o total`,async()=>{
   const f=fixture(),create=f.repo.createItem;let fail=true;
-f.repo.createItem=async(...args)=>{if(args[1]==='FOLHAPGTO'&&fail)throw rejectedWrite('folha indisponível');return create(...args);};
-  const data=createMealVoucherData({repository:f.repo}),{suppliers}=await data.loadOptions(),selected=draft(suppliers),progress={operationId:'origin-a'};
+  if (voucherType === 'transport') {
+    f.rows.FORNECEDORES[0].fields.CADASTRO = 'TRANCID';
+    f.rows.IDFOLHA[0].fields.FORNECEDOR = 'TRANCID';
+  }
+  f.repo.createItem=async(...args)=>{if(args[1]==='FOLHAPGTO'&&fail)throw rejectedWrite('folha indisponível');return create(...args);};
+  const data=createMealVoucherData({repository:f.repo}),{suppliers}=await data.loadOptions();
+  const selected=draft(voucherType === 'transport' ? suppliers.filter(supplier => supplier.label === 'TRANCID') : suppliers),progress={operationId:'origin-a'};
   await assert.rejects(data.post(selected,progress),/folha indisponível/);fail=false;
   await createMealVoucherData({repository:f.repo,voucherType}).post({...selected,orderMode:'existing',orderId:'1'},{operationId:'addition-b'});
   await createMealVoucherData({repository:f.repo}).post(selected,progress);
-  assert.equal(f.rows.NOTASPENDENTES.length,1);assert.equal(f.rows.NOTASPENDENTES[0].fields.VALORTOTAL,60);
-  assert.equal(f.rows.LANCAMENTOS.length,4);assert.equal(f.rows.FOLHAPGTO.length,4);
+  assert.equal(f.rows.NOTASPENDENTES.length,1);assert.equal(f.rows.NOTASPENDENTES[0].fields.VALORTOTAL,voucherType === 'transport' ? 20 : 60);
+  assert.equal(f.rows.LANCAMENTOS.length,selected.lines.length*2);assert.equal(f.rows.FOLHAPGTO.length,selected.lines.length*2);
 });
 
 test('total acumulado divergente continua bloqueado mesmo quando coincide com o valor só do lote originador',async()=>{

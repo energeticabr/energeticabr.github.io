@@ -112,6 +112,25 @@ try {
     && document.querySelector('[data-meal-value="1"]').value === ''
     && !document.querySelector('[data-meal-abandon]');
   resumed.destroy();
+
+  const transportData = createMealVoucherData({ repository, voucherType:'transport' });
+  const transportDraft = { ...draft, obs:'VALE TRANSPORTE (15/11/2026)' };
+  const transportProgress = { operationId:'browser-posted-transport' };
+  const postedTransport = await transportData.post(transportDraft, transportProgress);
+  delete transportProgress.lines;
+  delete transportProgress.payroll;
+  const transportKey = 'energetico:transport-voucher:pending:browser';
+  localStorage.setItem(transportKey, JSON.stringify({ draft:transportDraft, progress:transportProgress, files:[] }));
+  const transportView = createMealVoucherView({ data:transportData, sessionKey:'browser', voucherType:'transport' });
+  const beforeReopening = writes;
+  await transportView.open();
+  result.transportFresh = !localStorage.getItem(transportKey) && writes === beforeReopening
+    && document.querySelector('[data-meal-value="1"]')?.value === '11'
+    && !document.querySelector('[data-meal-abandon]')
+    && document.querySelector('[role="status"]')?.textContent.includes(`Pedido ${postedTransport.orderId} lançado com sucesso`);
+  result.transportSupplier = rows.NOTASPENDENTES.find(row => row.id === postedTransport.orderId)?.fields.FORNECEDOR;
+  result.transportFits = document.querySelector('.meal-voucher-restart-receipt')?.getBoundingClientRect().right <= innerWidth + 1;
+  transportView.destroy();
   document.documentElement.dataset.layout = JSON.stringify(result);
 } catch (error) { document.documentElement.dataset.layout = JSON.stringify({ error:error.stack }); }
 </script></body></html>

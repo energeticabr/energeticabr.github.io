@@ -46,9 +46,9 @@ function testTray(initial = []) {
     pickFiles:async()=>{actions.push('files');},capture:async()=>{actions.push('camera');},open:async id=>{actions.push(`open:${id}`);},remove:async id=>{actions.push(`remove:${id}`);},
   };
 }
-async function extrasPanel(t,{files=[],post=async()=>({orderId:'5',lines:[],total:50}),onSwileRecharge}={}) {
+async function extrasPanel(t,{files=[],post=async()=>({orderId:'5',lines:[],total:50}),onSwileRecharge,voucherType='meal',sessionKey=''}={}) {
   const dom=new JSDOM('<body></body>',{url:'https://example.invalid'}),doc=dom.window.document,tray=testTray(files);
-  const panel=createMealVoucherView({documentRef:doc,attachmentTray:tray,onSwileRecharge,data:{
+  const panel=createMealVoucherView({documentRef:doc,attachmentTray:tray,onSwileRecharge,voucherType,sessionKey,storage:dom.window.localStorage,data:{
     loadOptions:async()=>({suppliers:[{id:'1',label:'Ana',branch:'OBRA A',profession:'PEDREIRO'}],accounts:[{id:'8',label:'CAIXA'}],stages:[{id:'7',label:'FUNDAÇÃO',branch:'OBRA A'}]}),
     loadOrders:async()=>[],loadSheetAssignments:async()=>({'1':{id:'11'}}),post,
   }});t.after(()=>{panel.destroy();dom.window.close();});
@@ -58,6 +58,22 @@ async function extrasPanel(t,{files=[],post=async()=>({orderId:'5',lines:[],tota
   for(const [name,value] of [['meal-account','8'],['meal-stage','7']]){const select=doc.querySelector(`[name="${name}"]`);select.value=value;select.dispatchEvent(new dom.window.Event('change',{bubbles:true}));}
   doc.querySelector('[data-meal-next]').click();await tick();return {dom,doc,tray,panel,type};
 }
+
+test('vale transporte confirma, limpa a tentativa e volta à primeira etapa com os valores padrão', async t => {
+  const h = await extrasPanel(t, { voucherType:'transport', sessionKey:'test', post:async (draft, progress, save) => {
+    progress.signature = JSON.stringify(draft);
+    save();
+    return {orderId:'554',lines:[],total:50};
+  } });
+  h.doc.querySelector('[data-meal-next]').click();
+  h.doc.querySelector('[data-meal-confirm]').click(); await tick();
+  assert.equal(h.doc.querySelector('h2').textContent, 'Vale transporte dos fornecedores');
+  assert.match(h.doc.querySelector('[role="status"]').textContent, /554.*sucesso/);
+  assert.equal(h.doc.querySelector('[data-meal-value="1"]').value, '11');
+  assert.equal(h.dom.window.localStorage.length, 0);
+  assert.equal(h.doc.querySelector('[data-meal-confirm]'), null);
+  assert.equal(h.doc.querySelector('[data-meal-done]'), null);
+});
 
 for (const accept of [true, false]) test(`fim do vale pergunta pela Swile e só abre a recarga na opção Sim (resposta: ${accept})`, async t => {
   let opened = 0;

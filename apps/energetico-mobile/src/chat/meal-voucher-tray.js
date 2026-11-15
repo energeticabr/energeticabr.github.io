@@ -44,7 +44,7 @@ export function createMealVoucherTray({ store, assertSession, pickFiles, capture
     verify(selected); progress.step('verified'); return files;
   }
   async function consume(selected, options = {}) {
-    assertSession(); const failures = [];
+    assertSession(); const failures = [], remoteCopies = [];
     const progress = createAcquisitionProgress(options, [...selected.map((_, index) => 'file:' + index), 'confirmed'], assertSession);
     for (const [index, reference] of selected.entries()) {
       progress.check();
@@ -54,6 +54,10 @@ export function createMealVoucherTray({ store, assertSession, pickFiles, capture
       if (!current || !sameSource(current,reference)) { progress.step(key); continue; }
       if (reference.kind === 'pending') { store.discardFile(reference.fileId); progress.step(key); continue; }
       store.removeAttachment(reference.fileId,{dismissFromSnapshots:true});
+      remoteCopies.push({ reference, key });
+    }
+    for (const { reference, key } of remoteCopies) {
+      progress.check();
       try { await deleteAttachment(reference.fileId, { progressSignal: options.signal }); assertSession(); progress.step(key); }
       catch (cause) { assertSession(); failures.push(reference.fileName); }
     }
