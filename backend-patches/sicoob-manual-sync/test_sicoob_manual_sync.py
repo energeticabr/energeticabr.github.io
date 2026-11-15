@@ -151,6 +151,14 @@ class RunnerTests(unittest.TestCase):
             with self.subTest(stage=stage, payload=payload), self.assertRaises(ValueError):
                 self.receipt(stage, payload)
 
+    def test_receipt_candidate_denials_stay_pending_if_bank_read_succeeded(self):
+        receipt = {'pendentes': 13, 'http_200': 45, 'http_404': 59, 'receipt_candidates_denied': 15}
+        self.assertEqual(self.receipt('pix', receipt),
+                         {'created': 0, 'updated': 0, 'verified': 0, 'pendingDetails': 13})
+        for stats in ({**receipt, 'http_200': 0}, {**receipt, 'http_403': 1}):
+            with self.assertRaises(ValueError):
+                self.receipt('pix', stats)
+
     def test_verified_boleto_fields_do_not_imply_a_bank_pdf(self):
         self.assertEqual(self.receipt('boleto', {
             'already_attached': 2, 'missing_document': 3, 'verified': 2, 'receivers_updated': 1,

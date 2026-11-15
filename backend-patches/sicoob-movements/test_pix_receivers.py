@@ -69,6 +69,45 @@ class PixTest(unittest.TestCase):
                     result = worker.parse_stage('pix', collector.json.dumps(collector.run(False)), 0)
                 self.assertEqual(result['pendingDetails'], int(queued))
 
+    def test_only_scoped_denials_for_unverified_receipts_can_remain_pending(self):
+        from collections import defaultdict
+        denied = END_ID[:-1] + 'Z'
+        base = {**self.row, 'Id': 1, 'RAZAOSOCIALRECEBEDOR': '',
+                'ORIGEMMOVIMENTACAO': 'SICOOB', 'OPERACAO': 'DÉBITO'}
+        client = SimpleNamespace(get_item_attachments=lambda *args: [
+            {'filename': 'comprovante-pix.pdf', 'content': b'fixture'}])
+        launches = defaultdict(lambda: [1])
+        cases = [
+            ('mixed receipt candidates', True, False, self.pix, 'receipt_candidates_denied'),
+            ('all denied', True, False, None, 'http_403'),
+            ('empty response', True, False, {}, 'http_403'),
+            ('unrelated id', True, False, {**self.pix, 'endToEndId': denied}, 'http_403'),
+            ('unrelated account', True, False,
+             {**self.pix, 'origem': {**self.pix['origem'], 'conta': '43210'}}, 'http_403'),
+            ('unclassified denial', False, False, self.pix, 'http_403'),
+            ('statement identifier', True, True, self.pix, 'http_403'),
+        ]
+        for name, identifier_denied, statement_id, response, counter in cases:
+            with self.subTest(name=name), tempfile.TemporaryDirectory() as directory:
+                inbox = Inbox(Path(directory), create=True)
+                rows = [dict(base)]
+                if statement_id:
+                    rows.append({**base, 'Id': 2, 'REFERENCIABANCARIA': denied})
+                options = {denied: {'status': 403, 'identifierDenied': identifier_denied},
+                           END_ID: {'status': 200 if response is not None else 404, 'result': response}}
+                with patch.object(collector, 'Inbox', return_value=inbox), \
+                     patch.object(collector.movements, 'sharepoint_client', return_value=client), \
+                     patch.object(collector.movements, 'assert_destination'), \
+                     patch.object(collector, 'list_movements', return_value=rows), \
+                     patch.object(collector, 'launch_dates_and_values', return_value=launches), \
+                     patch.object(collector, 'cached_receipt_ids', return_value={END_ID, denied}), \
+                     patch.object(collector, 'read_pix', return_value={'payer_document': '12345678000190', 'results': options}), \
+                     patch.object(collector, 'save_pix', side_effect=AssertionError('Unresolved candidate blocks writes')):
+                    stats = collector.run(False)
+                self.assertGreater(stats.get(counter, 0), 0)
+                self.assertEqual(stats.get('nomes_gravados', 0), 0)
+                self.assertEqual(stats.get('http_403', 0) > 0, counter == 'http_403')
+
     def test_webhook_waits_for_statement_and_uses_only_api_name_once(self):
         class Client:
             def __init__(self, row):
