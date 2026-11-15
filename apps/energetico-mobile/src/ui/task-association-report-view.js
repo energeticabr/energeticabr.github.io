@@ -1,13 +1,13 @@
 import { bindReportLandscape } from './report-landscape.js';
 import { addReportCloseControl } from './report-close-control.js';
-import {buildTaskAssociationOverview} from '../chat/task-association-report-model.js';
+import {buildTaskAssociationOverview,isCompletedTaskStatus} from '../chat/task-association-report-model.js';
 import {provisionDateKey} from '../chat/pending-provision-dates.js';
 import {bindSearchableFilterSelects} from './searchable-filter-selects.js';
 
 const LOGO=new URL('../../../../assets/logo-energetica-oficial.png',import.meta.url).href;
 const DEFAULT_STATUSES=['ATIVIDADE CRIADA','EM ATENDIMENTO'];
 const SELECTS=[['id','ID'],['supplier','FORNECEDOR'],['difficulty','DIFICULDADE'],['priority','PRIORITÁRIA'],['status','STATUS']];
-const COLUMNS=[['🆔 ID',7],['📅 DATA CRIAÇÃO',15],['⏰ DATA FATAL',20],['📝 TAREFA',43],['🚨 PRIORIDADE',15]];
+const COLUMNS=[['🆔 ID',7],['📅 DATA CRIAÇÃO',14],['⏰ DATA FATAL',15],['📝 TAREFA',34],['🚨 PRIORIDADE',14],['STATUS',16]];
 const date=value=>value?`${value.slice(8,10)}/${value.slice(5,7)}/${value.slice(0,4)}`:'—';
 
 export function createTaskAssociationReportView({document:doc=globalThis.document,data,now=()=>new Date()}={}){
@@ -26,10 +26,65 @@ export function createTaskAssociationReportView({document:doc=globalThis.documen
  const showCalendar=()=>{try{if(native.showPicker)native.showPicker();else{native.focus();native.click();}}catch{native.focus();native.click();}};
  calendar.addEventListener('click',showCalendar);display.addEventListener('click',showCalendar);display.addEventListener('keydown',event=>{if(['Enter',' ','ArrowDown'].includes(event.key)){event.preventDefault();showCalendar();}});
  holder.append(native,display,calendar,clear);dateField.append(make('span','tar-filter-label','DATA FATAL'),holder);toolbar.append(dateField);
- const content=make('div','tar-content');content.tabIndex=0;content.setAttribute('role','region');content.setAttribute('aria-label','Indicadores e atividades por associação');report.append(toolbar,content);panel.append(warning,report);root.append(panel);doc.body.append(root);
+ const notice=make('p','tar-save-notice');notice.hidden=true;notice.setAttribute('role','status');notice.dataset.reportScreenOnly='';
+ const content=make('div','tar-content');content.tabIndex=0;content.setAttribute('role','region');content.setAttribute('aria-label','Indicadores e atividades por associação');report.append(toolbar,notice,content);panel.append(warning,report);root.append(panel);doc.body.append(root);
  let snapshot=null,controller=null,revision=0,pickers=null,destroyed=false,returnFocus=null,oldOverflow='',app=null,oldInert=false;
  const landscape = bindReportLandscape(root);
-  addReportCloseControl({root, toolbar:toolbar, onClose:close});
+ addReportCloseControl({root, toolbar:toolbar, onClose:close});
+
+ const finishPopup=make('div','tar-finish-overlay');finishPopup.hidden=true;finishPopup.dataset.reportScreenOnly='';
+ finishPopup.setAttribute('role','dialog');finishPopup.setAttribute('aria-modal','true');finishPopup.setAttribute('aria-label','Finalizar atividade');
+ const finishForm=make('form','tar-finish-form');finishForm.tabIndex=-1;
+ const finishSubject=make('p','tar-finish-subject');
+ const finishDate=make('input');finishDate.type='date';finishDate.required=true;finishDate.disabled=true;
+ const finishLabel=make('label','','Data de conclusão');finishLabel.append(finishDate);
+ const finishNotice=make('p','tar-finish-notice');finishNotice.setAttribute('role','status');finishNotice.hidden=true;
+ const finishCancel=button('Cancelar finalização','tar-finish-cancel','CANCELAR');
+ const finishSubmit=make('button','tar-finish-button','CONFIRMAR');finishSubmit.type='submit';
+ const finishActions=make('div','tar-finish-actions');finishActions.append(finishCancel,finishSubmit);
+ finishForm.append(make('h2','','Deseja finalizar esta atividade?'),finishSubject,finishLabel,finishNotice,finishActions);
+ finishPopup.append(finishForm);root.append(finishPopup);
+ let finishing=null;
+
+ function finishMessage(text){finishNotice.textContent=text;finishNotice.hidden=!text;}
+ function openFinish(row,trigger,draftDate){
+  if(finishing||root.hidden)return;
+  finishing={row,trigger,controller:new AbortController(),saving:false};
+  pickers?.close();panel.inert=true;finishPopup.hidden=false;
+  finishSubject.textContent=`#${row.id} · ${row.description||'Atividade sem descrição'}`;
+  finishDate.value=draftDate||provisionDateKey(now());finishDate.disabled=false;finishCancel.disabled=false;finishSubmit.disabled=false;
+  finishMessage('');finishForm.focus();
+ }
+ function closeFinish(restoreFocus=true){
+  if(!finishing)return;
+  const {controller,trigger}=finishing;
+  finishing=null;controller.abort();finishDate.disabled=true;finishPopup.hidden=true;panel.inert=false;
+  if(restoreFocus)trigger.focus();
+ }
+ finishCancel.addEventListener('click',()=>{if(!finishing?.saving)closeFinish();});
+ finishForm.addEventListener('submit',async event=>{
+  event.preventDefault();
+  const active=finishing;
+  if(!active||active.saving||!finishForm.reportValidity())return;
+  const completionDate=finishDate.value;
+  active.saving=true;finishDate.disabled=true;finishCancel.disabled=true;finishSubmit.disabled=true;
+  finishMessage('Finalizando atividade…');finishForm.focus();
+  let saved;
+  try{
+   saved=await data.finalizeTask(active.row.id,completionDate,{expectedTask:active.row,signal:active.controller.signal});
+  }catch(error){
+   if(finishing!==active)return;
+   active.saving=false;finishDate.disabled=false;finishCancel.disabled=false;finishSubmit.disabled=false;
+   if(error?.code==='task_association_already_completed')finishMessage('Esta atividade já foi concluída no SharePoint. Cancele e atualize o relatório para conferir.');
+   else if(error?.status===412||error?.code==='task_association_changed')finishMessage('A atividade mudou no SharePoint. Cancele e atualize o relatório para conferir.');
+   else finishMessage('Não foi possível confirmar a finalização. Tente novamente.');
+   finishSubmit.focus();return;
+  }
+  if(finishing!==active)return;
+  closeFinish(false);
+  snapshot={...snapshot,tasks:snapshot.tasks.map(row=>Number(row.id)===saved.id?saved:row)};
+  populate();render();notice.textContent=`Atividade #${saved.id} concluída.`;notice.hidden=false;content.focus({preventScroll:true});
+ });
  const selected=()=>({...Object.fromEntries([...controls].filter(([name])=>name!=='status').map(([name,node])=>[name,node.value])),description:description.value,dueDate:native.value,statuses:[...controls.get('status').selectedOptions].map(option=>option.value).filter(Boolean)});
  function render(){
   if(content.contains(doc.activeElement))panel.focus();content.replaceChildren();if(!snapshot)return;
@@ -45,9 +100,15 @@ export function createTaskAssociationReportView({document:doc=globalThis.documen
     const tr=make('tr');tr.dataset.taskId=String(row.id);tr.style.backgroundColor=row.rowColor;tr.append(make('td','tar-id',String(row.id)));
     const created=make('td','tar-created');created.append(make('strong','',date(row.createdDate)));if(row.createdDays!=null)created.append(make('small','',`HÁ ${row.createdDays} DIAS`));tr.append(created);
     const due=make('td','tar-due');due.append(make('strong','',row.dueDate?date(row.dueDate):'SEM DATA'));if(row.dueDate){const label=make('small','',row.dueLabel);label.style.color=row.dueColor;due.append(label);}else due.style.color=row.dueColor;tr.append(due,make('td','tar-task',row.description||'—'));
-    const priority=make('td','tar-priority',row.priority||'—');priority.style.color=row.priorityColor;if(row.completed)priority.append(make('small','tar-completed','✅ CONCLUÍDO'));tr.append(priority);body.append(tr);
+    const priority=make('td','tar-priority',row.priority||'—');priority.style.color=row.priorityColor;
+    const status=make('td','tar-status');status.append(make('strong',row.completed?'tar-completed':'',row.completed?`✅ ${row.status}`:row.status||'—'));
+    if(!row.completed&&typeof data.finalizeTask==='function'){
+     const finish=button(`Finalizar atividade ${row.id}`,'tar-finish-button','FINALIZAR');
+     finish.addEventListener('click',()=>openFinish(row,finish));status.append(finish);
+    }
+    tr.append(priority,status);body.append(tr);
    }
-   const footerRow=make('tr'),footer=make('td','',`TOTAL DE ATIVIDADES NESTA ASSOCIAÇÃO: ${group.total}`);footer.colSpan=5;footerRow.append(footer);foot.append(footerRow);table.append(cols,head,body,foot);wrap.append(table);article.append(aside,wrap);content.append(article);
+   const footerRow=make('tr'),footer=make('td','',`TOTAL DE ATIVIDADES NESTA ASSOCIAÇÃO: ${group.total}`);footer.colSpan=COLUMNS.length;footerRow.append(footer);foot.append(footerRow);table.append(cols,head,body,foot);wrap.append(table);article.append(aside,wrap);content.append(article);
   }
  }
  function populate(reset=false){
@@ -58,14 +119,37 @@ export function createTaskAssociationReportView({document:doc=globalThis.documen
   if(focusedSelect&&!root.hidden){focusedSelect.nextElementSibling?.querySelector('.sfs-trigger')?.focus();pickers.close();}
  }
  async function load(){
-  if(root.hidden||destroyed)return;if(content.contains(doc.activeElement))panel.focus();pickers?.close();controller?.abort();const current=++revision,active=new AbortController();controller=active;snapshot=null;refresh.disabled=true;content.replaceChildren(make('p','tar-notice','Carregando atividades do SharePoint…'));report.setAttribute('aria-busy','true');
+  if(root.hidden||destroyed||finishing)return;if(content.contains(doc.activeElement))panel.focus();pickers?.close();controller?.abort();const current=++revision,active=new AbortController();controller=active;snapshot=null;refresh.disabled=true;notice.hidden=true;content.replaceChildren(make('p','tar-notice','Carregando atividades do SharePoint…'));report.setAttribute('aria-busy','true');
   try{const result=await data.loadSnapshot({signal:active.signal});if(active.signal.aborted||current!==revision||root.hidden||destroyed)return;buildTaskAssociationOverview(result,selected(),provisionDateKey(now()));snapshot=result;populate();render();}
   catch(error){if(active.signal.aborted||current!==revision||root.hidden||destroyed)return;snapshot=null;const message=make('p','tar-notice','Não foi possível carregar as atividades por associação.');message.setAttribute('role','status');const retry=button('Tentar novamente','tar-retry','Tentar novamente');retry.addEventListener('click',()=>void load());content.replaceChildren(message,retry);}
   finally{if(current===revision){refresh.disabled=false;report.setAttribute('aria-busy','false');}}
  }
  function orientationChanged() { landscape.update(); }
- function close(){if(root.hidden)return;controller?.abort();revision++;snapshot=null;pickers?.close();content.replaceChildren();root.hidden=true;doc.body.style.overflow=oldOverflow;if(app)app.inert=oldInert;const target=returnFocus?.isConnected?returnFocus:doc.querySelector('[data-action="open-task-association-report"]:not(:disabled)')||app;target?.focus?.();returnFocus=null;}
- root.addEventListener('click',event=>{if(event.target===root)close();});root.addEventListener('keydown',event=>{if(root.hidden)return;if(event.key==='Escape'){event.preventDefault();close();return;}if(event.key!=='Tab')return;const nodes=[...panel.querySelectorAll('button,input,select,[tabindex="0"]')].filter(node=>!node.disabled&&!node.closest('[hidden]')&&node.tabIndex>=0),first=nodes[0],last=nodes.at(-1);if(event.shiftKey&&(doc.activeElement===first||doc.activeElement===panel)){event.preventDefault();last?.focus();}else if(!event.shiftKey&&(doc.activeElement===last||doc.activeElement===panel)){event.preventDefault();first?.focus();}});
+ function close(){if(root.hidden)return;closeFinish(false);controller?.abort();revision++;snapshot=null;pickers?.close();content.replaceChildren();root.hidden=true;doc.body.style.overflow=oldOverflow;if(app)app.inert=oldInert;const target=returnFocus?.isConnected?returnFocus:doc.querySelector('[data-action="open-task-association-report"]:not(:disabled)')||app;target?.focus?.();returnFocus=null;}
+ root.addEventListener('click',event=>{if(event.target===root&&!finishing)close();});
+ root.addEventListener('keydown',event=>{
+  if(root.hidden)return;
+  if(event.key==='Escape'){event.preventDefault();if(!finishing)close();else if(!finishing.saving)closeFinish();return;}
+  if(event.key!=='Tab')return;
+  const scope=finishing?finishForm:panel;
+  const nodes=[...scope.querySelectorAll('button,input,select,[tabindex="0"]')].filter(node=>!node.disabled&&!node.closest('[hidden]')&&node.tabIndex>=0);
+  const index=nodes.indexOf(doc.activeElement);
+  if(index===-1||event.shiftKey&&index===0||!event.shiftKey&&index===nodes.length-1){event.preventDefault();(event.shiftKey?nodes.at(-1):nodes[0])?.focus();}
+ });
  const filterChanged=()=>{render();content.scrollTop=0;};for(const node of controls.values())node.addEventListener('change',filterChanged);description.addEventListener('input',filterChanged);native.addEventListener('change',()=>{display.value=native.value?date(native.value):'';filterChanged();});clear.addEventListener('click',()=>{native.value='';display.value='';filterChanged();});refresh.addEventListener('click',()=>void load());win?.addEventListener('resize',orientationChanged);win?.addEventListener('orientationchange',orientationChanged);
- return Object.freeze({element:root,async open(){if(destroyed)throw new Error('O relatório foi encerrado.');if(!root.hidden)return;returnFocus=doc.activeElement;oldOverflow=doc.body.style.overflow;app=doc.getElementById('app');oldInert=app?.inert||false;doc.body.style.overflow='hidden';if(app)app.inert=true;description.value='';native.value='';display.value='';populate(true);root.hidden=false;landscape.update();warning.hidden=true;report.hidden=false;panel.classList.toggle('tar-portrait',false);panel.focus();content.scrollTop=0;await load();},close,destroy(){if(destroyed)return;close();destroyed=true;pickers?.destroy();win?.removeEventListener('resize',orientationChanged);win?.removeEventListener('orientationchange',orientationChanged);landscape.destroy();root.remove();}});
+ async function open({finishDraft}={}){
+  if(destroyed)throw new Error('O relatório foi encerrado.');if(!root.hidden)return;
+  returnFocus=doc.activeElement;oldOverflow=doc.body.style.overflow;app=doc.getElementById('app');oldInert=app?.inert||false;
+  doc.body.style.overflow='hidden';if(app)app.inert=true;
+  description.value='';native.value='';display.value='';populate(true);root.hidden=false;landscape.update();warning.hidden=true;report.hidden=false;
+  panel.classList.toggle('tar-portrait',false);panel.focus();content.scrollTop=0;
+  const opening=load(),openedRevision=revision;
+  await opening;
+  if(!finishDraft||!snapshot||revision!==openedRevision||typeof data.finalizeTask!=='function')return;
+  const row=snapshot.tasks.find(task=>Number(task.id)===finishDraft.id);
+  if(!row||isCompletedTaskStatus(row.status))return;
+  const trigger=content.querySelector(`[data-task-id="${finishDraft.id}"] .tar-finish-button`)||content;
+  openFinish(row,trigger,finishDraft.date);
+ }
+ return Object.freeze({element:root,open,close,destroy(){if(destroyed)return;close();destroyed=true;pickers?.destroy();win?.removeEventListener('resize',orientationChanged);win?.removeEventListener('orientationchange',orientationChanged);landscape.destroy();root.remove();}});
 }
