@@ -1,5 +1,5 @@
 import { includesSearchText, normalizeSearchText } from '../../../../portal/core/search-text.js';
-import { mealVoucherLines, mealVoucherTotal, mealVoucherKey, validateMealVoucherDraft } from '../chat/meal-voucher.js';
+import { mealVoucherLines, mealVoucherTotal, mealVoucherKey, validateMealVoucherDraft, VOUCHER_TYPES } from '../chat/meal-voucher.js';
 import { createLoadingIndicator, updateLoadingIndicator } from './loading-indicator.js';
 import { beginLoadingTask } from './loading-task.js';
 import { applyScreenNavigation } from './screen-navigation.js';
@@ -7,14 +7,23 @@ import { bindSearchableFilterSelects } from './searchable-filter-selects.js';
 import { sameMealVoucherTray } from '../chat/meal-voucher-tray.js';
 
 const money = amount => Number(amount).toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' });
+const observationDate = new Intl.DateTimeFormat('pt-BR', { timeZone:'America/Sao_Paulo', day:'2-digit', month:'2-digit', year:'numeric' });
+const transportExceptions = /^(ISRAEL|RAFAEL|MAURO|CLEITON)\b/i;
 let sequence = 0;
 
-export function createMealVoucherView({ data, root, documentRef = globalThis.document, assertSession = () => {}, onHome = () => {}, onSwileRecharge, attachmentTray, sessionKey = '', storage = globalThis.localStorage } = {}) {
+export function createMealVoucherView({ data, root, documentRef = globalThis.document, assertSession = () => {}, onHome = () => {}, onSwileRecharge, attachmentTray, sessionKey = '', storage = globalThis.localStorage, voucherType = 'meal', now = () => new Date() } = {}) {
   if (!data || !documentRef?.createElement) throw new TypeError('A tela exige dados e documento.');
+  const voucher = VOUCHER_TYPES[voucherType];
+  const transport = voucherType === 'transport';
+  const benefitName = voucher.name[0].toUpperCase() + voucher.name.slice(1);
+  function initialLine(supplier) {
+    const excluded = transport && transportExceptions.test(supplier.label.trim());
+    return { supplier, quantity:excluded ? '0' : '5', unitValue:transport ? (excluded ? '0' : '11') : '' };
+  }
   const doc = documentRef, id = ++sequence;
   const el = (tag, className = '', text) => { const node = doc.createElement(tag); if (className) node.className = className; if (text !== undefined) node.textContent = text; return node; };
   const page = el('section', 'meal-voucher-page'); page.hidden = true; page.tabIndex = -1; page.setAttribute('role', 'dialog'); page.setAttribute('aria-modal', 'true'); page.setAttribute('aria-labelledby', `meal-voucher-title-${id}`);
-  const header = el('header', 'meal-voucher-header'), title = el('h1', '', 'EFETUAR LANÇAMENTO VALE ALIMENTAÇÃO'); title.id = `meal-voucher-title-${id}`;
+  const header = el('header', 'meal-voucher-header'), title = el('h1', '', `EFETUAR LANÇAMENTO ${voucher.title}`); title.id = `meal-voucher-title-${id}`;
   const back = el('button', 'meal-voucher-navigation', 'Voltar'), home = el('button', 'meal-voucher-navigation', 'Início'); back.type = home.type = 'button';
   applyScreenNavigation({ header, back, home, title });
   const body = el('div', 'meal-voucher-body'), error = el('p', 'meal-voucher-error'), content = el('div', 'meal-voucher-content'), footer = el('footer', 'meal-voucher-footer'); error.hidden = true; error.setAttribute('role', 'alert');
@@ -26,7 +35,7 @@ export function createMealVoucherView({ data, root, documentRef = globalThis.doc
   let progress = {}, draft = {}, expectedFiles = [];
   const trayAccess = attachmentTray || {snapshot:()=>[],read:async()=>[]};
   let reviewedTray = null, trayActionBusy = false;
-  const storageKey = sessionKey ? `energetico:meal-voucher:pending:${sessionKey}` : '';
+  const storageKey = sessionKey ? `energetico:${voucher.storage}:pending:${sessionKey}` : '';
   let pendingSnapshot = null;
   let loadingOperation = null;
   let confirmingAbandon = false;
@@ -63,7 +72,7 @@ export function createMealVoucherView({ data, root, documentRef = globalThis.doc
     return true;
   }
   function reset() {
-    draft = { lines: [], orderMode: '', orderId: '', date: '', dueDate: '', paymentDate: '', referenceMonth: '', account: null, stage: null, obs: '', files: [] };
+    draft = { lines: [], orderMode: '', orderId: '', date: '', dueDate: '', paymentDate: '', referenceMonth: '', account: null, stage: null, obs: transport ? null : '', files: [] };
     progress = { operationId: globalThis.crypto?.randomUUID?.() || `${Date.now()}-${Math.random().toString(36).slice(2)}` };
     expectedFiles = []; reviewedTray = null; result = null; orders = []; assignments = {}; swileHandled = false; step = 'lines';
   }
@@ -183,7 +192,7 @@ export function createMealVoucherView({ data, root, documentRef = globalThis.doc
               if (editable) { step = 'details'; const loaded = await data.loadOrders(branch(), options); active(); orders = loaded; }
               else { const loaded = await data.loadSheetAssignments(draft.referenceMonth, mealVoucherLines(draft.lines).map(line => line.supplier), options); active(); assignments = loaded; }
             } else {
-              reset(); draft.lines = available.suppliers.map(supplier => ({ supplier, quantity:'5', unitValue:'' }));
+              reset(); draft.lines = available.suppliers.map(initialLine);
             }
           } catch (recoveryError) { cause = recoveryError; }
         } else if (mutation && progress.signature) {
@@ -204,15 +213,15 @@ export function createMealVoucherView({ data, root, documentRef = globalThis.doc
     catch { content.querySelector('[data-meal-total]').textContent = 'Total: confira os valores informados'; }
   }
   function renderLines() {
-    content.append(el('h2', '', 'Vale-alimentação dos fornecedores'));
+    content.append(el('h2', '', `${benefitName} dos fornecedores`));
     content.append(el('p', '', 'Informe quantidade e valor unitário somente para os fornecedores que receberão lançamentos. Todos os empreiteiros ativos estão listados.'));
     const search = el('input', 'meal-voucher-search'); search.type = 'search'; search.placeholder = 'Filtrar fornecedores'; search.setAttribute('aria-label', 'Filtrar fornecedores'); content.append(search);
-    const table = el('table', 'meal-voucher-table'); table.setAttribute('aria-label', 'Fornecedores e valores de vale-alimentação');
+    const table = el('table', 'meal-voucher-table'); table.setAttribute('aria-label', `Fornecedores e valores de ${voucher.name}`);
     const head = el('thead'), hrow = el('tr'); for (const label of ['Fornecedor', 'Qtd', 'Valor unitário', 'Subtotal']) { const th = el('th', '', label); th.scope = 'col'; hrow.append(th); } head.append(hrow); table.append(head);
     const tbody = el('tbody');
     for (const supplier of available.suppliers) {
       let line = draft.lines.find(item => item.supplier.id === supplier.id);
-      if (!line) { line = { supplier, quantity: '5', unitValue: '' }; draft.lines.push(line); }
+      if (!line) { line = initialLine(supplier); draft.lines.push(line); }
       const row = el('tr'); row.dataset.mealSupplier = supplier.id;
       const identity = el('td'); identity.append(el('strong', '', supplier.label), el('small', '', `${supplier.branch || 'Sem filial'} · ${supplier.profession || 'Sem profissão'}`)); row.append(identity);
       const quantity = el('input'); quantity.type = 'text'; quantity.inputMode = 'decimal'; quantity.value = line.quantity; quantity.setAttribute('aria-label', `Quantidade de ${supplier.label}`); quantity.dataset.mealQuantity = supplier.id;
@@ -276,6 +285,7 @@ export function createMealVoucherView({ data, root, documentRef = globalThis.doc
     }));
   }
   function renderExtras() {
+    if (transport && draft.obs == null) draft.obs = `${voucher.title} (${observationDate.format(now())})`;
     content.append(el('h2', '', 'Há alguma OBS?'));
     if (expectedFiles.length) content.append(el('p', 'meal-voucher-warning', locked()
       ? `Para retomar, mantenha estes arquivos na barra de anexos: ${expectedFiles.map(file => file.name).join(', ')}. Arquivos já confirmados não serão duplicados.`
@@ -302,7 +312,7 @@ export function createMealVoucherView({ data, root, documentRef = globalThis.doc
   function renderSummary() {
     const verified = validateMealVoucherDraft(draft);
     const review = el('div', 'meal-voucher-review'); review.dataset.mealReview = '';
-    review.append(el('h2', '', 'Confirme os lançamentos de vale-alimentação'));
+    review.append(el('h2', '', `Confirme os lançamentos de ${voucher.name}`));
     review.append(el('p', 'meal-voucher-review-intro', 'Revise os dados abaixo antes de confirmar o lançamento.'));
 
     const order = el('section', 'meal-voucher-order-card'); order.dataset.mealOrderCard = '';
@@ -399,7 +409,7 @@ export function createMealVoucherView({ data, root, documentRef = globalThis.doc
   function renderSwileOffer() {
     if (swileHandled) {
       content.append(el('p', '', 'Consulte o pedido de recarga na Swile.'));
-    } else if (onSwileRecharge && result.lines.length) {
+    } else if (!transport && onSwileRecharge && result.lines.length) {
       const receipt = result;
       content.append(el('p', '', 'Deseja recarregar o cartão Swile dos colaboradores deste lançamento?'));
       footer.append(button('Não, concluir', 'data-meal-done', close));
@@ -426,7 +436,7 @@ export function createMealVoucherView({ data, root, documentRef = globalThis.doc
     renderTray();
     if (busy) {
       const snapshot = loadingOperation?.snapshot;
-      const loader = createLoadingIndicator(doc, message || 'Carregando vale-alimentação…', { progress: snapshot?.percent, progressLabel: snapshot?.progressLabel });
+      const loader = createLoadingIndicator(doc, message || `Carregando ${voucher.name}…`, { progress: snapshot?.percent, progressLabel: snapshot?.progressLabel });
       if (loadingOperation) loadingOperation.loader = loader;
       content.append(loader); return;
     }
@@ -443,7 +453,7 @@ export function createMealVoucherView({ data, root, documentRef = globalThis.doc
     if (step === 'summary') renderSummary();
     if (step === 'invalid') content.append(el('h2', '', 'Tentativa anterior indisponível'));
     if (step === 'done') {
-      content.append(el('h2', '', 'Vale-alimentação lançado com sucesso'));
+      content.append(el('h2', '', `${benefitName} lançado com sucesso`));
       content.append(el('p', '', `Pedido ${result.orderId} · ${result.lines.length} lançamento(s) vinculados às respectivas IDFOLHA · Total ${money(result.total)}`));
       const list = el('ul', 'meal-voucher-summary');
       for (const line of result.lines) list.append(el('li', '', `${line.supplier} · Lançamento ${line.id} · IDFOLHA ${line.sheetId} · Vínculo ${line.payrollId}`));
@@ -503,7 +513,7 @@ export function createMealVoucherView({ data, root, documentRef = globalThis.doc
       const changedElsewhere = storageKey && storage.getItem(storageKey) !== pendingSnapshot;
       const restored = (!inMemory || changedElsewhere) && restorePending();
       if (inMemory && changedElsewhere && !restored) reset();
-      if ((!inMemory || changedElsewhere) && !restored) draft.lines = available.suppliers.map(supplier => ({ supplier, quantity: '5', unitValue: '' }));
+      if ((!inMemory || changedElsewhere) && !restored) draft.lines = available.suppliers.map(initialLine);
       else {
         const inspectionOptions = options.stage(1, 3), nextOptions = options.stage(2, 3);
         const editable = await refreshEditability(active, inspectionOptions); active(); inspectionOptions.onProgress({ percent: 100 });

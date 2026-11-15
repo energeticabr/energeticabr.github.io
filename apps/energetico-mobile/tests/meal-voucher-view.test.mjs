@@ -6,6 +6,35 @@ import { createMealVoucherView } from '../src/ui/meal-voucher-view.js';
 
 const tick = () => new Promise(resolve => setTimeout(resolve, 0));
 
+test('vale transporte inicia os valores e sugere OBS com a data de Brasília', async t => {
+  const dom = new JSDOM('<body></body>', { url:'https://example.invalid' }), doc = dom.window.document;
+  const suppliers = ['Ana Silva', 'ISRAEL ESCORAMENTO E ARMAÇÕES', 'Rafael Souza', 'Mauro Lima', 'Cleiton Cesar Nonato']
+    .map((label, index) => ({ id:String(index + 1), label, branch:'OBRA A', profession:'PEDREIRO' }));
+  const view = createMealVoucherView({ documentRef:doc, voucherType:'transport', now:() => new Date('2026-11-16T01:00:00Z'), data:{
+    loadOptions:async () => ({ suppliers, accounts:[{id:'8',label:'CAIXA'}], stages:[{id:'7',label:'FUNDAÇÃO',branch:'OBRA A'}] }),
+    loadOrders:async () => [], loadSheetAssignments:async () => ({'1':{id:'11'}}),
+  } });
+  t.after(() => { view.destroy(); dom.window.close(); });
+  const value = (name, val) => {
+    const field = doc.querySelector(`[name="${name}"]`);
+    field.value = val;
+    field.dispatchEvent(new dom.window.Event(field.tagName === 'SELECT' ? 'change' : 'input'));
+  };
+  const click = selector => doc.querySelector(selector).click();
+  await view.open();
+  assert.equal(doc.querySelector('h2').textContent, 'Vale transporte dos fornecedores');
+  assert.deepEqual([...doc.querySelectorAll('[data-meal-quantity]')].map(node => node.value), ['5','0','0','0','0']);
+  assert.deepEqual([...doc.querySelectorAll('[data-meal-value]')].map(node => node.value), ['11','0','0','0','0']);
+  click('[data-meal-next]'); await tick(); click('[data-meal-order-new]');
+  for (const [name,val] of [['meal-date','2026-11-13'],['meal-due-date','2026-11-20'],['meal-reference-month','2026-11'],['meal-account','8'],['meal-stage','7']]) value(name,val);
+  click('[data-meal-next]'); await tick();
+  assert.equal(doc.querySelector('[name="meal-obs"]').value, 'VALE TRANSPORTE (15/11/2026)');
+  click('[data-meal-next]');
+  assert.match(doc.querySelector('h2').textContent, /lançamentos de vale transporte/);
+  assert.equal(doc.querySelectorAll('[data-meal-person-card]').length, 1);
+  assert.match(doc.querySelector('[data-meal-review-total]').textContent, /55,00/);
+});
+
 function testTray(initial = []) {
   let files=initial;const listeners=new Set(),actions=[];let consumed=0;
   const snapshot=()=>files.map(file=>({id:file.name,fileName:file.name,size:file.size,mimeType:file.type,source:file,status:'ready'}));

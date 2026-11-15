@@ -55,6 +55,21 @@ function fixture() {
   return { repo, columns, rows, writes, uploads, deliveries, seedAttachment, failSecond: () => { failSecond = true; }, recover: () => { failSecond = false; }, loseOrderResponse: () => { loseOrderResponse = true; }, appendOrderObs: () => { appendOrderObs = true; }, changeSheetDuringLaunch: () => { changeSheetDuringLaunch = true; }, changeOrderDuringLaunch: () => { changeOrderDuringLaunch = true; } };
 }
 const draft = suppliers => ({ date: '2026-10-15', dueDate: '2026-10-30', referenceMonth: '2026-10', stage: { id: '7', label: 'FUNDAÇÃO', branch: 'OBRA A' }, account: { id: '8', label: 'CAIXA' }, orderMode: 'new', obs: 'outubro', files: [], lines: suppliers.map((supplier, index) => ({ supplier, quantity: '1', unitValue: index ? '20' : '10' })) });
+
+test('vale transporte registra a rubrica e a OBS próprias com retomada sem duplicar', async () => {
+  const f = fixture(), data = createMealVoucherData({ repository:f.repo, voucherType:'transport' });
+  const { suppliers } = await data.loadOptions();
+  const progress = { operationId:'transport-test' };
+  const obs = 'VALE TRANSPORTE (15/11/2026)', selected = { ...draft(suppliers), obs };
+  const result = await data.post(selected, progress);
+  assert.equal(f.rows.NOTASPENDENTES[0].fields.OBS, obs);
+  assert.match(f.rows.NOTASPENDENTES[0].fields.VALECONTROLE, /\[VALE TRANSPORTE transport-test\]/);
+  assert.ok(f.rows.LANCAMENTOS.every(row => row.fields.OBS === obs));
+  assert.ok(f.rows.FOLHAPGTO.every(row => row.fields.TIPOPGTO === 'VALE TRANSPORTE'));
+  assert.equal((await createMealVoucherData({ repository:f.repo, voucherType:'transport' }).post(selected, progress)).orderId, result.orderId);
+  assert.equal(f.rows.LANCAMENTOS.length, 2);
+  assert.equal(f.rows.FOLHAPGTO.length, 2);
+});
 test('meal options report completed sources while another catalog is still pending', async () => {
   const f = fixture(), events = [], page = f.repo.getItemsPage; let release;
   f.repo.getItemsPage = (...args) => args[1] === 'LANCAMENTOOBRA'
@@ -841,12 +856,12 @@ test('destino dos anexos é fixado antes da primeira linha mesmo com resposta pe
   assert.equal(f.rows.LANCAMENTOS.length,2);assert.equal(f.rows.FOLHAPGTO.length,2);
 });
 
-test('lote originador retoma depois de outro lote acrescentar ao pedido sem repetir o total',async()=>{
+for (const voucherType of ['meal', 'transport']) test(`lote originador retoma após outro lote (${voucherType}) sem repetir o total`,async()=>{
   const f=fixture(),create=f.repo.createItem;let fail=true;
 f.repo.createItem=async(...args)=>{if(args[1]==='FOLHAPGTO'&&fail)throw rejectedWrite('folha indisponível');return create(...args);};
   const data=createMealVoucherData({repository:f.repo}),{suppliers}=await data.loadOptions(),selected=draft(suppliers),progress={operationId:'origin-a'};
   await assert.rejects(data.post(selected,progress),/folha indisponível/);fail=false;
-  await createMealVoucherData({repository:f.repo}).post({...selected,orderMode:'existing',orderId:'1'},{operationId:'addition-b'});
+  await createMealVoucherData({repository:f.repo,voucherType}).post({...selected,orderMode:'existing',orderId:'1'},{operationId:'addition-b'});
   await createMealVoucherData({repository:f.repo}).post(selected,progress);
   assert.equal(f.rows.NOTASPENDENTES.length,1);assert.equal(f.rows.NOTASPENDENTES[0].fields.VALORTOTAL,60);
   assert.equal(f.rows.LANCAMENTOS.length,4);assert.equal(f.rows.FOLHAPGTO.length,4);

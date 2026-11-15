@@ -2,7 +2,7 @@ import { SHAREPOINT_SITES } from '../../../../portal/config.js';
 import { createGraphClient } from '../../../../portal/data/graph-client.js';
 import { createSharePointRepository } from '../../../../portal/data/sharepoint-repository.js';
 import { createSharePointAttachmentTransport, validateAttachment } from '../../../../portal/data/attachments.js';
-import { mealVoucherKey as key, validateMealVoucherDraft } from './meal-voucher.js';
+import { mealVoucherKey as key, validateMealVoucherDraft, VOUCHER_TYPES } from './meal-voucher.js';
 import { payrollDecimal } from './supplier-payroll.js';
 import { PAYROLL_RUBRICS } from './supplier-payroll.js';
 import { createPayrollProgress } from './supplier-payroll-data.js';
@@ -16,7 +16,7 @@ const scalar = value => String(value && typeof value === 'object' ? value.Lookup
 const numericId = value => /^[1-9]\d{0,14}$/.test(String(value ?? '')) && Number.isSafeInteger(Number(value));
 const pending = value => /^(?:PENDENTE|RASCUNHO|EMABERTO)/.test(key(value));
 const amount = value => payrollDecimal(value || 0).toDecimalPlaces(2);
-const mealPaymentType = PAYROLL_RUBRICS.find(rubric => rubric.id === 'meal').payrollType;
+const voucherMarkerPattern = /^\[(VALE ALIMENTAÇÃO|VALE TRANSPORTE) ([A-Za-z0-9-]{1,80})\]$/;
 // Instances share this fallback; Web Locks also coordinate other tabs/WebViews
 // sharing this origin. A pending draft's random operation ID is local to it.
 const pendingOperations = new Set();
@@ -52,7 +52,13 @@ function monthKey(raw) {
   return brazil ? `${brazil[2]}-${brazil[1].padStart(2, '0')}` : iso ? `${iso[1]}-${iso[2].padStart(2, '0')}` : '';
 }
 
-export function createMealVoucherData({ repository, graph, tokenProvider, storage, siteConfig = SHAREPOINT_SITES, fetchImpl = globalThis.fetch, siteKey = 'personal', assertSession = () => {} } = {}) {
+export function createMealVoucherData({ repository, graph, tokenProvider, storage, siteConfig = SHAREPOINT_SITES, fetchImpl = globalThis.fetch, siteKey = 'personal', assertSession = () => {}, voucherType = 'meal' } = {}) {
+  const voucher = VOUCHER_TYPES[voucherType];
+  if (!Object.hasOwn(VOUCHER_TYPES, voucherType)) throw new RangeError('Tipo de vale inválido.');
+  const paymentType = PAYROLL_RUBRICS.find(rubric => rubric.id === voucherType).payrollType;
+  const operationToken = id => `${voucher.token}-${id}`;
+  const operationMarker = id => `[${voucher.title} ${id}]`;
+  const orderJournalToken = id => voucherType === 'meal' ? `order:${id}` : `order:transport:${id}`;
   if (!repository) {
     if (typeof tokenProvider !== 'function') throw new TypeError('É necessária uma sessão Microsoft ativa.');
     graph = createGraphClient(tokenProvider, { fetch: fetchImpl });
@@ -120,16 +126,17 @@ export function createMealVoucherData({ repository, graph, tokenProvider, storag
   function normalizedOrder(descriptor, row) {
     if (descriptor.name !== 'NOTASPENDENTES' || !row?.fields || typeof row.fields !== 'object' || Array.isArray(row.fields)) return row;
     const obsName = column(descriptor,['OBS']).name, controlName = control(descriptor);
-    const technical = /^\[VALE (?:ALIMENTAÇÃO [A-Za-z0-9-]{1,80}|REVISÃO [A-Za-z0-9-]{1,80} [a-f0-9]{64}|DESTINO [A-Za-z0-9-]{1,80} [1-9]\d*)\]$/;
-    const lines = scalar(row.fields[obsName]).split('\n'), legacy = lines.filter(line=>technical.test(line));
+    const revisionOrDestination = /^\[VALE (?:REVISÃO [A-Za-z0-9-]{1,80} [a-f0-9]{64}|DESTINO [A-Za-z0-9-]{1,80} [1-9]\d*)\]$/;
+    const technical = line => voucherMarkerPattern.test(line) || revisionOrDestination.test(line);
+    const lines = scalar(row.fields[obsName]).split('\n'), legacy = lines.filter(technical);
     if (!legacy.length) return row;
     const existing = scalar(row.fields[controlName]).split('\n').filter(Boolean);
     return { ...row, mealLegacyObs:true, fields:{ ...row.fields,
-      [obsName]:lines.filter(line=>!technical.test(line)).join('\n').trim(),
+      [obsName]:lines.filter(line=>!technical(line)).join('\n').trim(),
       [controlName]:[...new Set([...existing,...legacy])].join('\n') } };
   }
   async function orderFields(descriptor, draft, operationId, versioned = true) {
-    const marker = `[VALE ALIMENTAÇÃO ${operationId}]`;
+    const marker = operationMarker(operationId);
     const revision = versioned ? `\n${await revisionMarker(draft, operationId)}` : '';
     const destination = versioned && draft.files.length ? `\n[VALE DESTINO ${operationId} ${draft.lines.at(-1).supplier.id}]` : '';
     return payload(descriptor, { FILIAL:draft.branch, FORNECEDOR:draft.lines.length === 1 ? draft.lines[0].supplier.label : 'DIVERSOS',
@@ -148,10 +155,10 @@ export function createMealVoucherData({ repository, graph, tokenProvider, storag
       'DATA PGTO PREVISTO':draft.dueDate, ...(column(descriptor,['DATA PGTO EFETUADO'],false) ? { 'DATA PGTO EFETUADO':draft.paymentDate || null } : {}),
       FORNECEDOR:line.supplier.label, PRODUTO:line.supplier.profession, ETAPA:draft.stage.label, QUANTIDADE:line.quantity,
       'VALOR UNITÁRIO':line.unitValue, CONTA:draft.account.label, FRETE:0, IDFOLHA:Number(sheet.id),
-      OBS:`VALE ALIMENTAÇÃO${draft.obs ? ` — ${draft.obs}` : ''}` }, ['FRETE','OBS']);
+      OBS:voucherType === 'transport' && draft.obs ? draft.obs : `${voucher.title}${draft.obs ? ` — ${draft.obs}` : ''}` }, ['FRETE','OBS']);
   }
   function payrollFields(descriptor, draft, line, sheet, launchId) {
-    return payload(descriptor, { FORNECEDOR:line.supplier.label, TIPOPGTO:mealPaymentType, VALORUNITARIO:line.unitValue,
+    return payload(descriptor, { FORNECEDOR:line.supplier.label, TIPOPGTO:paymentType, VALORUNITARIO:line.unitValue,
       QTD:line.quantity, DATA:draft.date, IDFOLHA:Number(sheet.id), IDLANCAMENTO:Number(launchId) });
   }
   async function preflightLines(launches, payroll, draft, sheets, orderId, operationId, tokenCache) {
@@ -160,7 +167,7 @@ export function createMealVoucherData({ repository, graph, tokenProvider, storag
       throw new Error('Não foi possível confirmar todos os dados da tentativa anterior.');
     const launchToken = column(launches, ['__PowerAppsId__']).name, payrollToken = column(payroll, ['Title']).name;
     const paidColumn = column(launches, ['DATA PGTO EFETUADO'], false)?.name;
-    const prefix = `APP-vale-alimentacao-${operationId}-`;
+    const prefix = `${operationToken(operationId)}-`;
     const reference = payrollLaunchReferenceColumn(launches.columns);
     const selected = new Map(draft.lines.map(line => [String(line.supplier.id), line]));
     const owned = (rows, tokenName, start) => rows.filter(row => scalar(row.fields?.[tokenName]).startsWith(start) && /^\d+$/.test(scalar(row.fields[tokenName]).slice(start.length)));
@@ -372,11 +379,14 @@ export function createMealVoucherData({ repository, graph, tokenProvider, storag
   async function confirmOriginatingOrderTotal(orders,launches,orderId,draft,operationId,tokenCache) {
     const row = await get(orders,orderId), actual = amount(value(orders,row,['VALORTOTAL']));
     const controls = scalar(row.fields[control(orders)]).split('\n');
-    const otherOperations = [...new Set(controls.map(line=>line.match(/^\[VALE ALIMENTAÇÃO ([A-Za-z0-9-]{1,80})\]$/)?.[1]).filter(id=>id && id !== operationId))];
     let expected = amount(draft.total);
-    for (const id of otherOperations) {
+    for (const line of new Set(controls)) {
+      const other = line.match(voucherMarkerPattern);
+      if (!other || line === operationMarker(operationId)) continue;
+      const [, title, id] = other;
       if (revisions(row.fields[control(orders)],id).length !== 1) throw new Error('O total acumulado do pedido não foi confirmado.');
-      const prefix = `APP-vale-alimentacao-${id}-`;
+      const kind = title === VOUCHER_TYPES.transport.title ? VOUCHER_TYPES.transport : VOUCHER_TYPES.meal;
+      const prefix = `${kind.token}-${id}-`;
       const additions = tokenCache.get(launches.id).filter(item=>value(launches,item,['AGRUPAR'],false) === String(orderId)
         && scalar(item.fields?.[column(launches,['__PowerAppsId__']).name]).startsWith(prefix)
         && /^\d+$/.test(scalar(item.fields[column(launches,['__PowerAppsId__']).name]).slice(prefix.length)));
@@ -429,13 +439,13 @@ export function createMealVoucherData({ repository, graph, tokenProvider, storag
     const records = await Promise.all([orders, launches, payroll].map((descriptor, index) => all(descriptor, '', { signal, onProgress: loading.child(['orders', 'launches', 'payroll'][index]) })));
     if (records.some(rows => rows.some(row => !numericId(row?.id) || !row.fields || typeof row.fields !== 'object' || Array.isArray(row.fields))))
       throw new Error('Não foi possível confirmar todos os registros da tentativa anterior.');
-    const prefix = `APP-vale-alimentacao-${progress.operationId}`.toUpperCase();
-    const marker = `[VALE ALIMENTAÇÃO ${progress.operationId}]`.toUpperCase();
+    const prefix = operationToken(progress.operationId).toUpperCase();
+    const marker = operationMarker(progress.operationId).toUpperCase();
     const ownsToken = (raw, start) => { const token = scalar(raw).toUpperCase(); return token.startsWith(start) && /^\d+$/.test(token.slice(start.length)); };
     assertSession();
     const ownedOrders = records[0].filter(row => scalar(row.fields[controlName]).toUpperCase().includes(marker) || title && scalar(row.fields[title]).toUpperCase() === prefix);
-    if (!ownedOrders.length && pendingPayrollCreation(storage,payrollCreationKey(siteKey,orders.id,`order:${progress.operationId}`))
-      || original.lines?.some(line=>pendingPayrollCreation(storage,payrollCreationKey(siteKey,launches.id,`APP-vale-alimentacao-${progress.operationId}-${line.supplier?.id}`)))) return blocked;
+    if (!ownedOrders.length && pendingPayrollCreation(storage,payrollCreationKey(siteKey,orders.id,orderJournalToken(progress.operationId)))
+      || original.lines?.some(line=>pendingPayrollCreation(storage,payrollCreationKey(siteKey,launches.id,`${operationToken(progress.operationId)}-${line.supplier?.id}`)))) return blocked;
     if (ownedOrders.length > 1 || records[1].some(row => ownsToken(row.fields[launchToken], `${prefix}-`)
       || ownedOrders.some(order => scalar(value(launches, row, ['AGRUPAR'], false)) === String(order.id)))
       || records[2].some(row => ownsToken(row.fields[payrollToken], `${prefix}-FOLHA-`))) return blocked;
@@ -543,7 +553,8 @@ export function createMealVoucherData({ repository, graph, tokenProvider, storag
       const tokenCache = new Map();
       column(launches, ['__PowerAppsId__']);
       column(payroll, ['Title']);
-      for (const line of draft.lines) payload(payroll, { FORNECEDOR: line.supplier.label, TIPOPGTO: mealPaymentType, VALORUNITARIO: line.unitValue, QTD: line.quantity, DATA: draft.date, IDFOLHA: Number(sheets[line.supplier.id].id), IDLANCAMENTO: 1 });
+      for (const line of draft.lines) payload(payroll, { FORNECEDOR: line.supplier.label, TIPOPGTO: paymentType, VALORUNITARIO: line.unitValue, QTD: line.quantity, DATA: draft.date, IDFOLHA: Number(sheets[line.supplier.id].id), IDLANCAMENTO: 1 });
+      const prefix = operationToken(progress.operationId);
       let orderId = progress.orderId;
       if (draft.orderMode === 'existing') {
         orderId = draft.orderId;
@@ -555,7 +566,7 @@ export function createMealVoucherData({ repository, graph, tokenProvider, storag
         if (key(supplier) !== 'DIVERSOS' && (draft.lines.length !== 1 || key(supplier) !== key(draft.lines[0].supplier.label))) throw new Error('O fornecedor do pedido não é compatível com o lote.');
         await attachments.check({listId:orders.id,id:orderId},entries);
       } else {
-        const marker = `[VALE ALIMENTAÇÃO ${progress.operationId}]`;
+        const marker = operationMarker(progress.operationId);
         const fields = await orderFields(orders, draft, progress.operationId);
         if (edit?.order) {
           const obsName = column(orders, ['OBS']).name;
@@ -567,8 +578,7 @@ export function createMealVoucherData({ repository, graph, tokenProvider, storag
         }
         progress.signature = signature;
         onProgress();
-        const legacyToken = `APP-vale-alimentacao-${progress.operationId}`;
-        const legacy = column(orders, ['Title'], false) && await findToken(orders, 'Title', legacyToken, tokenCache);
+        const legacy = column(orders, ['Title'], false) && await findToken(orders, 'Title', prefix, tokenCache);
         if (legacy && !edit?.order) {
           const saved = await get(orders, legacy.id);
           const expectedSupplier = draft.lines.length === 1 ? draft.lines[0].supplier.label : 'DIVERSOS';
@@ -588,7 +598,7 @@ export function createMealVoucherData({ repository, graph, tokenProvider, storag
             throw new Error('O pedido anterior não foi confirmado no SharePoint.');
           orderId = String(legacy.id);
         } else orderId = await ensureOrder(orders, fields, marker, tokenCache, edit?.order && { ...edit.order, progress, onProgress },
-          payrollCreationKey(siteKey,orders.id,`order:${progress.operationId}`));
+          payrollCreationKey(siteKey,orders.id,orderJournalToken(progress.operationId)));
       }
       loading.done('order');
       await preflightLines(launches, payroll, draft, sheets, orderId, progress.operationId, tokenCache);
@@ -597,8 +607,7 @@ export function createMealVoucherData({ repository, graph, tokenProvider, storag
       const revision = await confirmOrderRevision(orders, orderId, draft, progress.operationId);
       loading.done('revision');
       if (entries.length) {
-        const prefix = `APP-vale-alimentacao-${progress.operationId}-`;
-        const hasPreviousLaunch = tokenCache.get(launches.id).some(row=>scalar(row.fields?.[column(launches,['__PowerAppsId__']).name]).startsWith(prefix));
+        const hasPreviousLaunch = tokenCache.get(launches.id).some(row=>scalar(row.fields?.[column(launches,['__PowerAppsId__']).name]).startsWith(`${prefix}-`));
         progress.attachmentSupplierId = await attachmentDestination(orders,orderId,draft,progress,
           {mayInfer:hadOriginalDraft || !hasPreviousLaunch,replace:edit?.editable === true});
       }
@@ -623,7 +632,7 @@ export function createMealVoucherData({ repository, graph, tokenProvider, storag
         const sheet = sheets[line.supplier.id];
         await confirmSheet(line, sheet);
         const fields = launchFields(launches, draft, line, orderId, sheet);
-        const launchId = await ensure(launches, fields, '__PowerAppsId__', `APP-vale-alimentacao-${progress.operationId}-${line.supplier.id}`, tokenCache,
+        const launchId = await ensure(launches, fields, '__PowerAppsId__', `${prefix}-${line.supplier.id}`, tokenCache,
           async saved=>compatiblePayrollLaunchLink({columns:payroll.columns,rows:await originRows(payroll,saved.id),
             fields:payrollFields(payroll,draft,line,sheet,saved.id)}));
         progress.lines[line.supplier.id] = launchId;
@@ -632,7 +641,7 @@ export function createMealVoucherData({ repository, graph, tokenProvider, storag
         await confirmSheet(line, sheet);
         // Confirm each association before the next financial row or any upload.
         const payrollId = await ensure(payroll, payrollFields(payroll, draft, line, sheet, launchId), 'Title',
-          `APP-vale-alimentacao-${progress.operationId}-folha-${line.supplier.id}`, tokenCache);
+          `${prefix}-folha-${line.supplier.id}`, tokenCache);
         progress.payroll[line.supplier.id] = payrollId;
         onProgress();
         loading.done(`payroll:${line.supplier.id}`);
@@ -641,7 +650,7 @@ export function createMealVoucherData({ repository, graph, tokenProvider, storag
       if (draft.orderMode === 'existing') {
         const current = await get(orders, orderId);
         const previous = amount(value(orders, current, ['VALORTOTAL'], false));
-        const marker = `[VALE ALIMENTAÇÃO ${progress.operationId}]`;
+        const marker = operationMarker(progress.operationId);
         const currentControl = scalar(current.fields[control(orders)]);
         if (!currentControl.includes(marker)) {
           const target = previous.plus(amount(draft.total)).toDecimalPlaces(2);
@@ -660,7 +669,7 @@ export function createMealVoucherData({ repository, graph, tokenProvider, storag
         const launchId = progress.lines[progress.attachmentSupplierId];
         const destination = await get(launches,launchId);
         if (value(launches,destination,['AGRUPAR']) !== String(orderId)
-          || scalar(destination.fields[column(launches,['__PowerAppsId__']).name]) !== `APP-vale-alimentacao-${progress.operationId}-${progress.attachmentSupplierId}`)
+          || scalar(destination.fields[column(launches,['__PowerAppsId__']).name]) !== `${prefix}-${progress.attachmentSupplierId}`)
           throw new Error('O vínculo do último lançamento mudou. Confira os anexos antes de retomar.');
         await attachments.submit([{listId:orders.id,id:orderId},{listId:launches.id,id:launchId}],entries,(target, manifest) => {
           onProgress(); loading.done(`attachment:${target.listId === orders.id ? 'order' : 'launch'}:${manifest.name}`);
@@ -674,7 +683,7 @@ export function createMealVoucherData({ repository, graph, tokenProvider, storag
         await confirmSheet(line, sheet);
         const saved = await get(launches, resultLine.id);
         if (!matchesFields(launches, saved, { ...launchFields(launches,draft,line,orderId,sheet),
-          [column(launches,['__PowerAppsId__']).name]:`APP-vale-alimentacao-${progress.operationId}-${line.supplier.id}` }))
+          [column(launches,['__PowerAppsId__']).name]:`${prefix}-${line.supplier.id}` }))
           throw new Error('Os dados ou IDFOLHA do lançamento mudaram durante o envio. Confira antes de concluir.');
         const fields = payrollFields(payroll,draft,line,sheet,resultLine.id);
         const linked = compatiblePayrollLaunchLink({ columns:payroll.columns, rows:confirmedPayroll, fields });
