@@ -27,9 +27,90 @@ export function createStageProgressReportView({document:doc=globalThis.document,
  report.append(filters,notice,content);panel.append(warning,report);root.append(panel);doc.body.append(root);
  let snapshot=null,controller=null,revision=0,pickers=null,destroyed=false,returnFocus=null,oldOverflow='',app=null,oldInert=false;
  const landscape = bindReportLandscape(root);
+ const canFinalize=typeof data.loadLatestAssignmentDate==='function'&&typeof data.finalizeActivity==='function';
+ const finishOverlay=make('div','sp-finish-overlay');finishOverlay.hidden=true;
+ finishOverlay.setAttribute('role','dialog');finishOverlay.setAttribute('aria-modal','true');
+ finishOverlay.setAttribute('aria-label','Finalizar atividade');
+ const finishForm=make('form','sp-finish-form');finishForm.tabIndex=-1;
+ const finishActivity=make('p','sp-finish-activity');
+ const finishDate=make('input');finishDate.type='date';finishDate.required=true;
+ const finishLabel=make('label','','Data fim');finishLabel.append(finishDate);
+ const finishNotice=make('p','sp-finish-notice');finishNotice.setAttribute('role','status');finishNotice.hidden=true;
+ const finishCancel=make('button','','CANCELAR');finishCancel.type='button';
+ const finishSubmit=make('button','sp-finish-button','SUBMETER');finishSubmit.type='submit';
+ const finishActions=make('div','sp-finish-actions');finishActions.append(finishCancel,finishSubmit);
+ finishForm.append(make('h2','','Finalizar atividade'),finishActivity,finishLabel,finishNotice,finishActions);
+ finishOverlay.append(finishForm);root.append(finishOverlay);
+ let finishing=null;
   addReportCloseControl({root, toolbar:filters, onClose:close});
  const showNotice=text=>{notice.textContent=text;notice.hidden=!text;};
  const selected=()=>Object.fromEntries([...controls].map(([name,node])=>[name,node.value]));
+ function finishMessage(text){
+  finishNotice.textContent=text;finishNotice.hidden=!text;
+ }
+ function closeFinish(restoreFocus=true){
+  if(!finishing)return;
+  const {controller,trigger}=finishing;
+  finishing=null;controller.abort();finishOverlay.hidden=true;panel.inert=false;
+  if(restoreFocus)trigger.focus();
+ }
+ async function openFinish(row,trigger){
+  if(finishing)return;
+  const active={row,trigger,controller:new AbortController(),saving:false};
+  finishing=active;pickers?.close();panel.inert=true;finishOverlay.hidden=false;
+  finishActivity.textContent=row.activity;
+  finishDate.value='';finishDate.disabled=true;finishSubmit.disabled=true;finishCancel.disabled=false;
+  finishMessage('Buscando a última data de atribuição…');finishForm.focus();
+  try{
+   const date=await data.loadLatestAssignmentDate(row.id,{signal:active.controller.signal});
+   if(finishing!==active)return;
+   finishDate.value=date;
+   finishMessage(date?'':'Nenhuma atribuição com data foi encontrada. Informe a data fim.');
+  }catch{
+   if(finishing!==active)return;
+   finishMessage('Não foi possível consultar as atribuições. Informe a data fim.');
+  }
+  finishDate.disabled=false;finishSubmit.disabled=false;
+ }
+ finishCancel.addEventListener('click',()=>closeFinish());
+ finishForm.addEventListener('submit',async event=>{
+  event.preventDefault();
+  const active=finishing;
+  if(!active||active.saving||finishDate.disabled||!finishForm.reportValidity())return;
+  const date=finishDate.value;
+  active.saving=true;finishDate.disabled=true;finishSubmit.disabled=true;finishCancel.disabled=true;
+  finishMessage('Finalizando atividade…');finishForm.focus();
+  let saved;
+  try{
+   saved=await data.finalizeActivity(active.row.id,date,{signal:active.controller.signal});
+  }catch(error){
+   if(finishing!==active)return;
+   active.saving=false;finishDate.disabled=false;finishSubmit.disabled=false;finishCancel.disabled=false;
+   finishMessage(error?.status===412||error?.code==='stage_progress_changed'
+    ?'A atividade mudou no SharePoint. Atualize o relatório para conferir.'
+    :'Não foi possível confirmar a finalização. Confira a data e tente novamente.');
+   finishSubmit.focus();
+   return;
+  }
+  if(finishing!==active)return;
+  closeFinish(false);
+  snapshot={...snapshot,activities:snapshot.activities.map(row=>row.id===saved.id?saved:row)};
+  populate();render();showNotice('Atividade finalizada.');content.focus({preventScroll:true});
+ });
+ finishOverlay.addEventListener('keydown',event=>{
+  if(!finishing)return;
+  if(event.key==='Escape'){
+   event.preventDefault();event.stopPropagation();
+   if(!finishing.saving)closeFinish();
+  }
+  if(event.key!=='Tab')return;
+  event.stopPropagation();
+  const nodes=[finishDate,finishCancel,finishSubmit].filter(node=>!node.disabled);
+  const index=nodes.indexOf(doc.activeElement);
+  if(index===-1||event.shiftKey&&index===0||!event.shiftKey&&index===nodes.length-1){
+   event.preventDefault();(event.shiftKey?nodes.at(-1):nodes[0])?.focus();
+  }
+ });
  function duration(days,state){const badge=make('span',`sp-duration sp-duration--${state}`,days===null?'—':`${days} dias`);return badge;}
  function render(){
   content.replaceChildren();showNotice('');if(!snapshot)return;
@@ -51,7 +132,15 @@ export function createStageProgressReportView({document:doc=globalThis.document,
    const body=make('tbody');table.append(cols,head,body);
    stage.rows.forEach((row,index)=>{
     const rowTone=tone(row.status),tr=make('tr');tr.dataset.tone=rowTone;
-    for(const [cls,value] of [['number',index+1],['activity',row.activity||'—'],['property',row.property||'—'],['supplier',row.supplier||'—'],['start',formatOperationsDate(row.executionDate)],['end',formatOperationsDate(row.plannedDate)]])tr.append(make('td',`sp-${cls}`,String(value)));
+    for(const [cls,value] of [['number',index+1],['activity',row.activity||'—'],['property',row.property||'—'],['supplier',row.supplier||'—'],['start',formatOperationsDate(row.executionDate)]])tr.append(make('td',`sp-${cls}`,String(value)));
+    const end=make('td','sp-end');
+    if(row.plannedDate||!canFinalize||key(row.status)!=='ATIVIDADE INICIADA')end.textContent=formatOperationsDate(row.plannedDate);
+    if(canFinalize&&key(row.status)==='ATIVIDADE INICIADA'){
+     const finish=make('button','sp-finish-button','FINALIZAR');finish.type='button';
+     finish.setAttribute('aria-label',`Finalizar ${row.activity||'atividade'}`);
+     finish.addEventListener('click',()=>void openFinish(row,finish));end.append(finish);
+    }
+    tr.append(end);
     const elapsed=calendarDays(row.executionDate,key(row.status)==='ATIVIDADE FINALIZADA'?row.plannedDate:today),day=make('td');day.append(duration(elapsed,rowTone==='success'?'success':rowTone==='info'?'info':'danger'));tr.append(day);
     const status=make('td','sp-status',rowTone==='success'?'✅':rowTone==='info'?'🔄':'❌');status.setAttribute('aria-label',row.status||'Status não informado');status.title=row.status||'Status não informado';tr.append(status);body.append(tr);
    });
@@ -81,10 +170,10 @@ export function createStageProgressReportView({document:doc=globalThis.document,
   finally{if(current===revision){report.setAttribute('aria-busy','false');refresh.disabled=false;}}
  }
  function orientationChanged() { landscape.update(); }
- function close(){if(root.hidden)return;controller?.abort();revision++;snapshot=null;pickers?.close();content.replaceChildren();root.hidden=true;doc.body.style.overflow=oldOverflow;if(app)app.inert=oldInert;returnFocus?.focus?.();returnFocus=null;}
+ function close(){if(root.hidden)return;closeFinish(false);controller?.abort();revision++;snapshot=null;pickers?.close();content.replaceChildren();root.hidden=true;doc.body.style.overflow=oldOverflow;if(app)app.inert=oldInert;returnFocus?.focus?.();returnFocus=null;}
  root.addEventListener('click',e=>{if(e.target===root)close();});
  root.addEventListener('keydown',e=>{
-  if(root.hidden)return;if(e.key==='Escape'){e.preventDefault();close();return;}if(e.key!=='Tab')return;
+  if(root.hidden||finishing)return;if(e.key==='Escape'){e.preventDefault();close();return;}if(e.key!=='Tab')return;
   const nodes=[...panel.querySelectorAll('button,input,select,[tabindex="0"]')].filter(n=>!n.disabled&&!n.closest('[hidden]')&&n.tabIndex>=0),first=nodes[0],last=nodes.at(-1);
   if(e.shiftKey&&(doc.activeElement===first||doc.activeElement===panel)){e.preventDefault();last?.focus();}else if(!e.shiftKey&&(doc.activeElement===last||doc.activeElement===panel)){e.preventDefault();first?.focus();}
  });

@@ -27,3 +27,18 @@
 .sp-activity,.sp-property,.sp-supplier { font-weight:700; }
 .sp-activities .sp-start,.sp-activities .sp-end,.sp-number,.sp-status { text-align:center; font-weight:800; }
 .sp-total { margin:0; border:1px solid #aaa; border-top:0; background:#eee; padding:6px; text-align:right; font-weight:700; }
+
+.sp-finish-button { display:inline-block; min-height:24px; max-width:100%; padding:3px 4px; border:1px solid #1e6732; border-radius:5px; background:#1e6732; color:#fff; font:inherit; font-weight:800; cursor:pointer; }
+.sp-end .sp-finish-button { display:block; margin:2px auto 0; font-size:clamp(7px,calc(1.08 * var(--report-vw, 1vw)),12px); }
+.sp-finish-overlay { position:absolute; inset:0; z-index:10; display:grid; place-items:center; padding:12px; box-sizing:border-box; background:#05202e88; }
+.sp-finish-form { width:min(100%,360px); max-height:100%; box-sizing:border-box; overflow:auto; display:grid; gap:10px; padding:16px; border-radius:12px; background:#fff; color:#112b3a; box-shadow:0 6px 24px #0004; }
+.sp-finish-form h2 { margin:0; font-size:18px; }
+.sp-finish-form p { margin:0; overflow-wrap:anywhere; }
+.sp-finish-activity { font-weight:700; }
+.sp-finish-form label { display:grid; gap:4px; font-weight:700; }
+.sp-finish-form input { box-sizing:border-box; width:100%; min-height:44px; padding:6px 10px; border:1px solid #556b78; border-radius:6px; background:#fff; color:#112b3a; font:inherit; color-scheme:light; }
+.sp-finish-notice { font-size:14px; }
+.sp-finish-actions { display:flex; justify-content:flex-end; gap:8px; }
+.sp-finish-actions button { min-height:44px; padding:6px 12px; font-size:14px; font-weight:800; cursor:pointer; }
+.sp-finish-actions button:not(.sp-finish-button) { border:1px solid #556b78; border-radius:5px; background:#fff; color:#112b3a; }
+.sp-finish-actions button:disabled { opacity:.6; cursor:default; }

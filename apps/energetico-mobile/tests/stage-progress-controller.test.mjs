@@ -81,7 +81,7 @@ test('HOME and reply open one local stage report, with an independent read-only 
   assert.equal(h.panels.length, 1);
   assert.equal(h.panels[0].opens, 1);
   assert.equal(h.panels[0].document, globalThis.document);
-  assert.deepEqual(Object.keys(h.panels[0].data), ['loadSnapshot']);
+  assert.deepEqual(Object.keys(h.panels[0].data), ['loadSnapshot', 'loadLatestAssignmentDate', 'finalizeActivity']);
   const caller = new AbortController();
   assert.equal(await h.panels[0].data.loadSnapshot({ signal: caller.signal, trace: 'stage' }), snapshot);
   assert.equal(sourceCreates, 1);
@@ -476,4 +476,31 @@ test('successful old-account token cannot escape after sign-out and a new login'
   await tick();
   await assert.rejects(oldData.loadSnapshot(), { name: 'AbortError' });
   assert.equal(tokens, 2);
+});
+
+test('only explicit finalization asks for write access and invalidates the report snapshot', async t => {
+  const requestedScopes = [];
+  let reads = 0;
+  const h = harness(t, {
+    stageProgressDataFactory: async ({ tokenProvider }) => ({
+      async loadSnapshot() { await tokenProvider(scopes); return { reads: ++reads }; },
+      async loadLatestAssignmentDate(id) {
+        assert.equal(id, '129');
+        await tokenProvider(scopes);
+        return '2026-10-05';
+      },
+      async finalizeActivity(id, date) {
+        assert.equal(id, '129'); assert.equal(date, '2026-10-07');
+        await tokenProvider(['Sites.ReadWrite.All']);
+        return { id, plannedDate: date, status: 'ATIVIDADE FINALIZADA' };
+      },
+    }),
+    auth: { getToken: async value => { requestedScopes.push(value); return 'sharepoint-token'; } },
+  });
+  const data = await open(h);
+  assert.deepEqual(await data.loadSnapshot(), { reads: 1 });
+  assert.equal(await data.loadLatestAssignmentDate('129'), '2026-10-05');
+  assert.equal((await data.finalizeActivity('129', '2026-10-07')).status, 'ATIVIDADE FINALIZADA');
+  assert.deepEqual(await data.loadSnapshot(), { reads: 2 });
+  assert.deepEqual(requestedScopes, [scopes, scopes, ['Sites.ReadWrite.All'], scopes]);
 });

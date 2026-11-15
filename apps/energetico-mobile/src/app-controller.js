@@ -8326,6 +8326,33 @@ export function createAppController({
         || stageProgressSession !== session || session.lifetime.signal.aborted
         || flowBusy() || store.getState().activeFlow) throw cancelled();
     };
+    async function runStageAction(method, args, externalSignal) {
+      const controller = new AbortController();
+      const signals = [session.lifetime.signal, externalSignal].filter(Boolean);
+      const cancel = () => controller.abort();
+      const assertAction = () => {
+        assertSession();
+        if (controller.signal.aborted || signals.some(signal => signal.aborted)
+          || (typeof auth.getAccount === 'function' && auth.getAccount()?.homeAccountId !== reportsAccount.homeAccountId)) {
+          throw cancelled();
+        }
+      };
+      assertAction();
+      for (const signal of signals) signal.addEventListener('abort', cancel, { once: true });
+      const getToken = ordersGalleryTokenProvider(assertAction, STAGE_PROGRESS_ID);
+      const tokenProvider = scopes => getToken(method === 'finalizeActivity' && scopes?.includes('Sites.ReadWrite.All')
+        ? ['Sites.ReadWrite.All'] : STAGE_PROGRESS_SCOPES);
+      try {
+        const source = await stageProgressDataFactory({ tokenProvider });
+        assertAction();
+        const result = await source[method](...args, { signal: controller.signal });
+        assertAction();
+        return result;
+      } finally {
+        for (const signal of signals) signal.removeEventListener('abort', cancel);
+        if (method === 'finalizeActivity' && stageProgressSession === session) invalidateGalleryReportSources();
+      }
+    }
     const data = { async loadSnapshot(options = {}) {
       assertSession();
       if (options.signal?.aborted) throw cancelled();
@@ -8382,6 +8409,10 @@ export function createAppController({
         signal.removeEventListener('abort', rejectCancelled);
         if (session.loadController === controller) session.loadController = null;
       }
+    }, loadLatestAssignmentDate(id, { signal } = {}) {
+      return runStageAction('loadLatestAssignmentDate', [id], signal);
+    }, finalizeActivity(id, date, { signal } = {}) {
+      return runStageAction('finalizeActivity', [id, date], signal);
     } };
     let cancelOpening;
     const openingCancellation = new Promise(resolve => { cancelOpening = () => resolve(false); });

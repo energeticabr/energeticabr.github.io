@@ -234,3 +234,55 @@ test("invalid repository and absent Microsoft session reject at construction", (
   assert.throws(() => create(), /sessão|session/i);
   assert.throws(() => create({ repository: {} }), /repositório/i);
 });
+
+test("suggests the latest dated supplier assignment for the exact demonstrative across pages", async () => {
+  const { repository } = fixture({
+    async getColumns() {
+      return [
+        { name: "ref", displayName: "IDDESCRITIVOETAPA", text: {} },
+        { name: "day", displayName: "DATA", dateTime: { format: "dateOnly" } },
+        { name: "supplier", displayName: "FORNECEDOR", text: {} },
+      ];
+    },
+    async getItemsPage(_site, list, query, options) {
+      assert.equal(list, "DESCRITIVOPRESENCA");
+      assert.equal(new URLSearchParams(query).get("$filter"), "fields/ref eq '129'");
+      const row = (id, ref, day, supplier = "Edgar") => ({ id, fields: { ref, day, supplier } });
+      return options.cursor
+        ? { items: [row("4", "129", "2026-10-05T00:00:00Z")], hasMore: false }
+        : { items: [row("1", "129", "2026-10-02"), row("2", "130", "2026-11-20"),
+          row("3", "129", "2026-11-15", "")], hasMore: true, nextLink: "next" };
+    },
+  });
+  assert.equal(await create({ repository }).loadLatestAssignmentDate("129"), "2026-10-05");
+});
+
+test("writes the manual end date and final status in one versioned update and retries idempotently", async () => {
+  let record = { ...activity(129), eTag: '"item,5"' };
+  const { repository } = fixture({
+    async getColumns() {
+      return columns("DEMONSTRATIVOETAPA").map((column, index) =>
+        index === 6 ? { ...column, dateTime: { format: "dateOnly" } } : column);
+    },
+    async getItem(_site, list, id) {
+      assert.equal(list, "DEMONSTRATIVOETAPA");
+      assert.equal(id, "129");
+      return record;
+    },
+    async updateItem(site, list, id, fields, options) {
+      assert.equal(site, "personal");
+      assert.equal(list, "DEMONSTRATIVOETAPA");
+      assert.equal(id, "129");
+      assert.equal(options.eTag, '"item,5"');
+      assert.deepEqual(fields, { field_6: "2026-10-07T12:00:00Z", field_7: "ATIVIDADE FINALIZADA" });
+      record = { ...record, fields: { ...record.fields, ...fields }, eTag: '"item,6"' };
+      return record;
+    },
+  });
+  const data = create({ repository });
+  const saved = await data.finalizeActivity("129", "2026-10-07");
+  assert.equal(saved.plannedDate, "2026-10-07");
+  assert.equal(saved.status, "ATIVIDADE FINALIZADA");
+  assert.deepEqual(await data.finalizeActivity("129", "2026-10-07"), saved);
+  await assert.rejects(data.finalizeActivity("129", "2026-10-08"), /já foi finalizada/i);
+});
