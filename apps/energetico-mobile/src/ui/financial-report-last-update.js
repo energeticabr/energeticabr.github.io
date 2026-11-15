@@ -2,13 +2,13 @@ const formatter = new Intl.DateTimeFormat('pt-BR', {
   timeZone: 'America/Sao_Paulo', dateStyle: 'short', timeStyle: 'short',
 });
 
-export function createFinancialReportLastUpdate(doc, { fiscal = false } = {}) {
+export function createFinancialReportLastUpdate(doc, { fiscal = false, labelText = 'Última atualização' } = {}) {
   const element = doc.createElement('div');
   element.className = fiscal ? 'nfe-pair' : 'ddr-metric';
   element.dataset.reportLastUpdate = '';
   element.title = 'Horário de Brasília';
   const label = doc.createElement(fiscal ? 'dt' : 'span');
-  label.textContent = 'Última atualização';
+  label.textContent = labelText;
   const value = doc.createElement(fiscal ? 'dd' : 'strong');
   const time = doc.createElement('time');
   time.textContent = '—';

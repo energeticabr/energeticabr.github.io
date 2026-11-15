@@ -11,6 +11,15 @@ const variants = [
   { name: 'Sicoob', source: 'sicoob', global: true },
   { name: 'NF-e', fiscal: true },
 ];
+test('Sicoob reports zero new entries as the result of the bank query', t => {
+  const dom = new JSDOM('<body><main></main></body>');
+  const doc = dom.window.document;
+  const receipt = createDdaSyncReceipt({ document: doc, host: doc.querySelector('main'), source: 'sicoob' });
+  t.after(() => { receipt.destroy(); dom.window.close(); });
+  receipt.show({ status: 'succeeded', created: 0 }, []);
+  assert.equal(doc.querySelector('.dda-sync-summary').textContent,
+    'O Sicoob não retornou novas transações para importar.');
+});
 for (const { name, fiscal, source, global } of variants) {
   for (const status of ['succeeded', 'failed', 'partial']) {
     test(`${name} ${status} stays open until Entendi`, async t => {

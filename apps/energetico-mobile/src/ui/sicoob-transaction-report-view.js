@@ -3,7 +3,7 @@ import { includesSearchText, normalizeSearchText } from '../../../../portal/core
 import {
   FINANCIAL_MOVEMENT_PENDING_RECIPIENT, financialMovementRecipient, financialMovementType, isImportedFinancialMovement,
 } from '../chat/financial-gallery-models.js';
-import { registrationDateKey, registrationNumber, registrationRawField, REGISTRATION_GALLERY_MODELS } from '../chat/registration-gallery-data.js';
+import { registrationDateKey, registrationNumber } from '../chat/registration-gallery-data.js';
 import { confirmedFinancialTimestamp } from '../chat/financial-update-time.js';
 import {
   rankSicoobOrderOptions, sameSicoobOrderIds, sicoobLinkedOrderIds, sicoobOrderId, SICOOB_UNLINKED_REVIEW_FIELD,
@@ -165,9 +165,20 @@ export function createSicoobTransactionReportView({ document: doc = globalThis.d
   let reviewDialog;
   let loading = false, starting = false, syncRunning = Boolean(syncMonitor?.running);
   let sourceRunning = Boolean(syncMonitor?.sourceRunning ?? syncMonitor?.running), reloadPending = false;
-  const lastUpdate = createFinancialReportLastUpdate(doc);
-  const refreshStatus = createFinancialReportRefreshStatus(doc, { errorText: 'FALHA NA ATUALIZAÇÃO' });
+  const lastUpdate = createFinancialReportLastUpdate(doc, { labelText: 'Última coleta concluída' });
+  const refreshStatus = createFinancialReportRefreshStatus(doc, {
+    errorText: 'FALHA NA ATUALIZAÇÃO', successText: syncMonitor ? 'COLETA CONCLUÍDA' : 'LISTA RECARREGADA',
+  });
   let attemptRequest, attemptTimer, lastAttemptAt;
+
+  function recordAttempt(latest) {
+    if (lastAttemptAt !== undefined && latest.completedAt <= lastAttemptAt) return false;
+    const hasNewAttempt = lastAttemptAt !== undefined;
+    lastAttemptAt = latest.completedAt;
+    lastUpdate.confirm(latest.lastSuccessfulAt);
+    refreshStatus.setLatestAttempt(latest);
+    return hasNewAttempt;
+  }
 
   async function readLatestAttempt({ reload = false } = {}) {
     if (!loadLatestAttempt || root.hidden) return;
@@ -176,11 +187,9 @@ export function createSicoobTransactionReportView({ document: doc = globalThis.d
     try {
       const latest = await loadLatestAttempt({ signal: active.signal });
       if (!latest || active !== attemptRequest || root.hidden) return;
-      const hasNewAttempt = lastAttemptAt !== undefined && latest.completedAt > lastAttemptAt;
-      lastAttemptAt = latest.completedAt;
-      lastUpdate.confirm(latest.lastSuccessfulAt);
-      refreshStatus.setLatestAttempt(latest);
+      const hasNewAttempt = recordAttempt(latest);
       if (reload && hasNewAttempt && rows && !sourceRunning) {
+        void balanceMetric.refresh();
         reloadPending = true;
         resumeRefresh();
       }
@@ -342,8 +351,8 @@ export function createSicoobTransactionReportView({ document: doc = globalThis.d
   async function manualRefresh() {
     if (refresh.disabled || root.hidden || receiptRequest || picker?.isOpen || reviewDialog) return;
     refreshStatus.set('pending');
-    void balanceMetric.refresh();
     if (!syncMonitor) {
+      void balanceMetric.refresh();
       refreshStatus.beginRead();
       return load();
     }
@@ -449,13 +458,17 @@ export function createSicoobTransactionReportView({ document: doc = globalThis.d
     page = Math.min(page, pages);
     const total = filtered.reduce((sum, row) => sum.plus(row.value ?? 0), new Decimal(0));
     summary.replaceChildren(balanceMetric.element);
-    const totalLabel = filtered.some(row => row.value === null) ? 'Total com valor informado' : 'Valor total';
-    for (const [label, value] of [['Transações', String(filtered.length)], [totalLabel, currency.format(total.toFixed(2))]]) {
-      const metric = make('div', 'ddr-metric', label);
-      metric.append(make('strong', '', value));
-      summary.append(metric);
+    const count = make('div', 'ddr-metric', 'Transações');
+    count.append(make('strong', '', String(filtered.length)));
+    if (filtered[0]?.date) {
+      const latestPayment = make('time', '', `Pagamento mais recente em ${dateLabel(filtered[0].date)}`);
+      latestPayment.dateTime = filtered[0].date;
+      count.append(latestPayment);
     }
-    summary.append(lastUpdate.element, refreshStatus.element);
+    const totalLabel = filtered.some(row => row.value === null) ? 'Total com valor informado' : 'Valor total';
+    const totalMetric = make('div', 'ddr-metric', totalLabel);
+    totalMetric.append(make('strong', '', currency.format(total.toFixed(2))));
+    summary.append(count, totalMetric, lastUpdate.element, refreshStatus.element);
     const scope = make('p', 'ddr-source', 'Pagamentos importados do Sicoob · Galeria de Movimentação');
     content.replaceChildren(summary, scope);
     if (!filtered.length) {
@@ -569,11 +582,6 @@ export function createSicoobTransactionReportView({ document: doc = globalThis.d
       }
       if (active !== request) return;
       rows = transactions;
-      for (const { fields } of snapshot.rows) {
-        if (isImportedFinancialMovement(fields)) {
-          lastUpdate.update(confirmedFinancialTimestamp(registrationRawField(fields, 'Criado', REGISTRATION_GALLERY_MODELS.financial_movement)));
-        }
-      }
       loadNotice = supplierNotice;
       showNotice();
       populateAccounts();
@@ -635,6 +643,12 @@ export function createSicoobTransactionReportView({ document: doc = globalThis.d
     const active = Boolean(state.sourceRunning ?? state.running);
     if (sourceRunning && !active) {
       reloadPending = true;
+      if (!root.hidden) void balanceMetric.refresh();
+      const status = state.latest?.status;
+      const completedAt = confirmedFinancialTimestamp(state.latest?.completedUtc);
+      if (completedAt !== null && (status === 'succeeded' || status === 'failed')) {
+        recordAttempt({ status, completedAt, lastSuccessfulAt: state.lastSuccessfulAt });
+      }
       void readLatestAttempt();
     }
     sourceRunning = active;
