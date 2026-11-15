@@ -229,6 +229,33 @@ def save_pix(client, row, pix, end_id, payer, content):
     return 'RAZAOSOCIALRECEBEDOR' in updates
 
 
+def payment_details(answer, requested_id):
+    result = answer.get('result')
+    if answer.get('status') != 200 or not isinstance(result, dict):
+        return None
+    pix = result.get('resultado', result)
+    if not isinstance(pix, dict):
+        return None
+    end_id = movements.text(pix.get('endToEndId'))
+    # Receipt OCR can change the case. Keep the bank's canonical identifier.
+    if END_ID.fullmatch(end_id) and end_id.casefold() == requested_id.casefold():
+        return pix, end_id
+    return None
+
+
+def has_account_payment(answers, account, payer):
+    if not payer:
+        return False
+    for requested_id, answer in answers.items():
+        payment = payment_details(answer, requested_id)
+        if payment:
+            origin = payment[0].get('origem')
+            if (isinstance(origin, dict) and movements.tax_id(origin.get('cpfCnpj')) == payer
+                    and movements.text(origin.get('conta')).lstrip('0') == account.lstrip('0')):
+                return True
+    return False
+
+
 def bank_match(row, options, answers, movements_in_account, payer):
     if any(answers.get(end_id, {}).get('status') not in (200, 404) for end_id in options):
         return None
@@ -238,18 +265,10 @@ def bank_match(row, options, answers, movements_in_account, payer):
         return None
     matches = {}
     for requested_id, content in options.items():
-        answer = answers[requested_id]
-        result = answer.get('result')
-        if answer['status'] != 200 or not isinstance(result, dict):
+        payment = payment_details(answers[requested_id], requested_id)
+        if not payment:
             continue
-        pix = result.get('resultado', result)
-        if not isinstance(pix, dict):
-            continue
-        end_id = movements.text(pix.get('endToEndId'))
-        # OCR can change the case of a suffix. The canonical ID in the bank's
-        # response is still checked exactly against any ID from the statement.
-        if not END_ID.fullmatch(end_id) or end_id.casefold() != requested_id.casefold():
-            continue
+        pix, end_id = payment
         compatible = [r['Id'] for r in movements_in_account if pix_matches(r, pix, end_id, payer)]
         if compatible == [row['Id']]:
             prior = matches.get(end_id)
@@ -384,11 +403,20 @@ def run(check):
         ids = sorted({end_id for _, options in group.values() for end_id in options})
         data = read_pix(account, ids)
         payer = movements.tax_id(data['payer_document'])
+        answers = data['results']
+        has_bank_details = has_account_payment(answers, account, payer)
         for row, options in group.values():
+            statement_ids = direct_ids(row)
             for end_id in options:
-                answer = data['results'].get(end_id, {})
-                stats[f"http_{answer.get('status', 'pendente')}"] += 1
-            match = bank_match(row, options, data['results'], pix_rows, payer)
+                answer = answers.get(end_id, {})
+                status = answer.get('status', 'pendente')
+                if (status == 403 and answer.get('identifierDenied') is True
+                        and end_id not in statement_ids and has_bank_details):
+                    stats['receipt_candidates_denied'] += 1
+                else:
+                    stats[f'http_{status}'] += 1
+            # A refused candidate stays unresolved and still blocks ambiguous matches.
+            match = bank_match(row, options, answers, pix_rows, payer)
             if not match:
                 continue
             stats['verificados'] += 1

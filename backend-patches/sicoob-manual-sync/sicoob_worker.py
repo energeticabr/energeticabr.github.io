@@ -11,7 +11,8 @@ import tempfile
 import time
 
 # On OCI the shared queue module lives one directory above the worker.
-sys.path.append(str(Path(__file__).resolve().parent.parent))
+_worker_directory = Path(__file__).resolve().parent
+sys.path.extend((str(_worker_directory), str(_worker_directory.parent)))
 from sicoob_sync import Queue, record_attempt
 
 ROOT = Path('/var/lib/energetica-sicoob-movements')
@@ -53,8 +54,9 @@ def parse_stage(stage, text, exit_code):
         pending = value.get('missing_document', 0) + value.get('ambiguous_reference', 0)
         return {'created': 0, 'updated': value.get('receivers_updated', 0), 'verified': 0, 'pendingDetails': pending}
     if stage == 'pix':
-        allowed = {'pendentes', 'http_200', 'http_404', 'verificados', 'nomes_gravados'}
+        allowed = {'pendentes', 'http_200', 'http_404', 'receipt_candidates_denied', 'verificados', 'nomes_gravados'}
         if (set(value) - allowed or 'pendentes' not in value
+                or (value.get('receipt_candidates_denied', 0) and not value.get('http_200', 0))
                 or value.get('nomes_gravados', 0) > value.get('verificados', 0)
                 or value.get('verificados', 0) > value['pendentes']):
             raise ValueError('INCOMPLETE_PIX')

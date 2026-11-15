@@ -23,6 +23,7 @@ try {
    # Sicoob Pix Pagamentos allows one request per second, including retries.
    Start-Sleep -Milliseconds 1100
    $res=Invoke-WebRequest -Uri $uri -Certificate $cert -Headers $headers -TimeoutSec 20 -MaximumRedirection 0 -SkipHttpErrorCheck
+   $content=if($res.Content -is [byte[]]){[Text.Encoding]::UTF8.GetString($res.Content)}else{[string]$res.Content}
    if ($res.StatusCode -eq 429 -and $attempt -eq 1) {
     $retryAfter = [string]($res.Headers['Retry-After'] | Select-Object -First 1)
     $seconds = 0
@@ -36,10 +37,20 @@ try {
     Start-Sleep -Seconds ([math]::Max(1, $seconds))
     continue
    }
-   if($res.StatusCode -ne 403 -or $res.Content -notmatch 'Not registered to plan' -or $attempt -eq 4){break}
+   if($res.StatusCode -ne 403 -or $content -notmatch 'Not registered to plan' -or $attempt -eq 4){break}
    Start-Sleep -Seconds $attempt
   }
-  $results[$id]=@{status=[int]$res.StatusCode; result=$(if($res.StatusCode -eq 200){ConvertFrom-Json -DateKind String -InputObject $res.Content})}
+  $answer=@{status=[int]$res.StatusCode; result=$(if($res.StatusCode -eq 200){ConvertFrom-Json -DateKind String -InputObject $content})}
+  if ($res.StatusCode -eq 403) {
+   $problem=$null
+   try { $problem=ConvertFrom-Json -InputObject $content -AsHashtable } catch {}
+   $detail=if ($problem -is [System.Collections.IDictionary]) { $problem['detail'] }
+   $denialPattern='(?i:não possui permissão para).*(?<![A-Za-z0-9])'+[regex]::Escape($id)+'(?![A-Za-z0-9])'
+   if ($detail -is [string] -and $detail -cmatch $denialPattern) {
+    $answer.identifierDenied=$true
+   }
+  }
+  $results[$id]=$answer
   if ($res.StatusCode -eq 429) { break }
  }
  @{payer_document=$config.cnpj;results=$results}|ConvertTo-Json -Depth 10 -Compress
