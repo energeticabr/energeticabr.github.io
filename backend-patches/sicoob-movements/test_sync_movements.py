@@ -25,10 +25,18 @@ class MovementImportTests(unittest.TestCase):
             cursor.write_text('2026-11-08')
             self.assertEqual(scheduled_start(cursor, date(2026, 11, 10)), NEW_START)
             cursor.write_text('2026-11-10')
-            self.assertEqual(scheduled_start(cursor, date(2026, 11, 10)), date(2026, 11, 9))
+            self.assertEqual(scheduled_start(cursor, date(2026, 11, 10)), NEW_START)
             cursor.write_text('2026-11-07')
             with self.assertRaises(ValueError):
                 scheduled_start(cursor, date(2026, 11, 10))
+
+    def test_rechecks_saturday_after_a_successful_monday_run(self):
+        with tempfile.TemporaryDirectory() as directory:
+            cursor = Path(directory) / 'cursor'
+            cursor.write_text('2026-11-16')
+            self.assertEqual(scheduled_start(cursor, date(2026, 11, 17)), date(2026, 11, 14))
+            cursor.write_text('2026-11-12')
+            self.assertEqual(scheduled_start(cursor, date(2026, 11, 17)), date(2026, 11, 12))
 
     def test_resolves_only_unambiguous_nominal_matches(self):
         names = receiver_names([
