@@ -59,6 +59,25 @@ class QueueTests(unittest.TestCase):
             with self.assertRaises(ValueError):
                 self.module.handle_portal(self.identity, body, self.queue)
 
+    def test_latest_attempt_is_read_only_and_uses_the_report_allowlist(self):
+        outcome = self.queue.root / 'latest-attempt.json'
+        self.queue = self.module.Queue(self.queue.root, latest_attempt_path=outcome)
+        body = {'action': 'sicoob_refresh_status', 'mode': 'latest'}
+        read = lambda: self.module.handle_portal(self.identity, body, self.queue)['sicoobRefresh']
+        self.assertEqual(read(), {'status': 'unknown'})
+        self.module.record_attempt(outcome, 'succeeded', completed_at=1000)
+        self.module.record_attempt(outcome, 'failed', completed_at=1200)
+        self.assertEqual(read(), {'status': 'failed', 'completedUtc': '1970-01-01T00:20:00+00:00',
+                                  'lastSuccessfulUtc': '1970-01-01T00:16:40+00:00'})
+        self.module.record_attempt(outcome, 'succeeded', completed_at=1500)
+        self.assertEqual(read()['status'], 'succeeded')
+        self.assertEqual(read()['lastSuccessfulUtc'], read()['completedUtc'])
+        with self.assertRaises(PermissionError):
+            self.module.handle_portal({'oid': 'id', 'email': 'unknown@example.invalid'}, body, self.queue)
+        with self.assertRaises(ValueError):
+            self.module.handle_portal(self.identity, {**body, 'account': '999'}, self.queue)
+        self.assertEqual(self.queue.pending(self.identity)['requests'], [])
+
     def test_worker_unavailable_receipt_is_permanent(self):
         self.now += 181
         self.assertEqual(self.start()['code'], 'WORKER_UNAVAILABLE')
@@ -167,6 +186,25 @@ class RunnerTests(unittest.TestCase):
                 result = self.module.collect('Manual')
             self.assertEqual(result['status'], 'failed')
             self.assertTrue(marker.exists(), 'Pix must still run after a partial boleto result')
+            latest = json.loads((Path(root) / 'latest-attempt.json').read_text())
+            self.assertEqual(latest['status'], 'failed')
+            self.assertIsNone(latest['lastSuccessfulUtc'])
+
+    @unittest.skipIf(os.name == 'nt', 'Production runner uses flock')
+    def test_pipeline_lock_timeout_is_published_as_latest_failure(self):
+        from unittest.mock import patch
+        with tempfile.TemporaryDirectory() as root:
+            real_lock = self.module.pipeline_lock
+
+            def lock(root, heartbeat, **options):
+                if options.get('name') != 'attempt.lock':
+                    raise TimeoutError('PIPELINE_BUSY')
+                return real_lock(root, heartbeat, **options)
+
+            with patch.object(self.module, 'ROOT', Path(root)), patch.object(self.module, 'pipeline_lock', lock):
+                result = self.module.collect('Scheduled')
+            self.assertEqual(result['status'], 'failed')
+            self.assertEqual(json.loads((Path(root) / 'latest-attempt.json').read_text())['status'], 'failed')
 
     @unittest.skipIf(os.name == 'nt', 'POSIX process groups and flock are production Linux primitives')
     def test_timeout_kills_descendants_before_releasing_pipeline_lock(self):

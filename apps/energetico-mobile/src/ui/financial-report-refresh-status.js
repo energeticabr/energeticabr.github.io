@@ -6,7 +6,7 @@ const states = {
 };
 const svgNamespace = 'http://www.w3.org/2000/svg';
 
-export function createFinancialReportRefreshStatus(doc, { fiscal = false } = {}) {
+export function createFinancialReportRefreshStatus(doc, { fiscal = false, errorText = states.error.text } = {}) {
   const element = doc.createElement('div');
   element.className = fiscal ? 'nfe-pair' : 'ddr-metric';
   element.dataset.reportRefreshStatus = '';
@@ -30,18 +30,33 @@ export function createFinancialReportRefreshStatus(doc, { fiscal = false } = {})
   icon.append(path);
   value.append(icon, label);
   element.append(value);
-  let sourceStatus, awaitingRead = false;
+  let sourceStatus, currentStatus, statusAt, latestAttemptFailed = false, awaitingRead = false;
 
-  function set(status) {
-    if (!status || element.dataset.reportRefreshStatus === status) return;
+  function render() {
+    const inProgress = currentStatus === 'pending' || currentStatus === 'waiting';
+    const status = latestAttemptFailed && !inProgress ? 'error' : currentStatus;
+    if (element.dataset.reportRefreshStatus === (status || '')) return;
+    element.dataset.reportRefreshStatus = status || '';
+    element.hidden = !status;
+    if (!status) return;
     const { text, path:d } = states[status];
-    element.dataset.reportRefreshStatus = status;
-    element.hidden = false;
     path.setAttribute('d', d);
-    label.textContent = text;
+    label.textContent = status === 'error' ? errorText : text;
   }
+
+  function set(status, at = Date.now()) {
+    currentStatus = status;
+    statusAt = at;
+    render();
+  }
+
   return {
     element, set,
+    setLatestAttempt({ status, completedAt }) {
+      if (status === 'succeeded' && currentStatus === 'error' && completedAt > statusAt) currentStatus = null;
+      latestAttemptFailed = status === 'failed';
+      render();
+    },
     beginRead() { awaitingRead = true; set('pending'); },
     observe(state) {
       let next = state.refreshStatus;
@@ -57,7 +72,8 @@ export function createFinancialReportRefreshStatus(doc, { fiscal = false } = {})
       const wasPending = sourceStatus === 'pending' || sourceStatus === 'waiting';
       sourceStatus = next;
       awaitingRead = next === 'success' && wasPending;
-      set(awaitingRead ? 'pending' : next);
+      const completedAt = Date.parse(state.latest?.completedUtc);
+      set(awaitingRead ? 'pending' : next, Number.isFinite(completedAt) ? completedAt : undefined);
     },
     finishRead(ok) {
       if (!awaitingRead) return;

@@ -10015,6 +10015,14 @@ export function createAppController({
             } : {}),
             ...(sourceKind === 'notas_fiscais_sefaz' ? { syncMonitor: ensureFinancialSync('fiscal') } : {}),
             ...(sourceKind === 'financial_movement' ? { syncMonitor: ensureFinancialSync('sicoob') } : {}),
+            ...(isSicoobTransactionReport && typeof client.getSicoobLatestAttempt === 'function' ? {
+              loadLatestAttempt: async options => {
+                assertSession();
+                const attempt = await client.getSicoobLatestAttempt(options);
+                assertSession();
+                return attempt;
+              },
+            } : {}),
             ...((isDdaReport || isSicoobTransactionReport) && typeof client.getSicoobBalance === 'function' ? {
               loadBalance: async options => {
                 assertSession();

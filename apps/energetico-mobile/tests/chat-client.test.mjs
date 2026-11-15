@@ -809,3 +809,21 @@ test("baixa mídia somente da origem e do caminho opaco permitidos", async () =>
     /mídia inválido/,
   );
 });
+
+test('Sicoob reads the latest collection outcome without starting or acknowledging a request', async () => {
+  const completedUtc = '2026-11-14T23:02:36+00:00', lastSuccessfulUtc = '2026-11-13T23:10:00+00:00';
+  const replies = [
+    { status: 'failed', completedUtc, lastSuccessfulUtc },
+    { status: 'unknown' },
+    { status: 'failed', completedUtc: 'invalid' },
+  ];
+  const client = clientWith(async (_url, options) => {
+    assert.deepEqual(JSON.parse(options.body), { action: 'sicoob_refresh_status', mode: 'latest' });
+    return jsonResponse({ status: 'processed', messages: [], sicoobRefresh: replies.shift() });
+  });
+  assert.deepEqual(await client.getSicoobLatestAttempt(), {
+    status: 'failed', completedAt: Date.parse(completedUtc), lastSuccessfulAt: Date.parse(lastSuccessfulUtc),
+  });
+  assert.equal(await client.getSicoobLatestAttempt(), null);
+  await assert.rejects(client.getSicoobLatestAttempt(), /Sicoob/);
+});
