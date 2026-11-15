@@ -1,6 +1,7 @@
 """Exercise the confirmed settlement path against an existing payslip payment."""
 
 from pathlib import Path
+from contextlib import contextmanager
 import sys
 import unittest
 
@@ -15,7 +16,15 @@ class Worker(previous.Worker):
             "IDFOLHA": "21", "IDLANCAMENTO": stored_launch,
         }
         self.writes = []
+        self.block_origin = False
         super().__init__({471: [self.row]})
+
+    @contextmanager
+    def _settlement_payroll_origin_guard(self, launch_id, title, payroll_id):
+        assert (launch_id, title, payroll_id) == (3810, self.row["Title"], 189)
+        if self.block_origin:
+            raise RuntimeError("O lançamento já tem rateio")
+        yield None
 
     def get_options(self, step, context):
         return [{"id": 189, **option} for option in super().get_options(step, context)]
@@ -72,3 +81,10 @@ class LaunchLinkTest(unittest.TestCase):
         self.assertEqual(result["status"], "settlement_payroll_load_failed")
         self.assertTrue(state["pending_launch_payroll"]["settlement_loading"])
         self.assertTrue(state["sharepoint"]["line_items"][0]["verified"])
+
+    def test_origin_with_existing_allocation_keeps_the_provision_unlinked(self):
+        worker = Worker()
+        worker.block_origin = True
+        result = worker._maybe_prompt_settlement_payroll(confirmed_settlement(), None)
+        self.assertEqual(result["status"], "settlement_payroll_load_failed")
+        self.assertEqual(worker.writes, [])

@@ -1,0 +1,63 @@
+--- a/worker/payroll_pending.py
++++ b/worker/payroll_pending.py
+@@ -335,12 +335,20 @@
+ 
+ 
+ @contextmanager
+-def legacy_origin_write(g, item_id, token):
++def legacy_origin_write(g, item_id, token, *, existing_row_id=None):
+     item_id = input_id(str(item_id))
++    existing_row_id = input_id(str(existing_row_id)) if existing_row_id is not None else None
++
++    def check_row(row):
++        if existing_row_id is not None and identifier(row.get("ID")) != existing_row_id:
++            fail("payroll_allocation_integrity", "A linha da folha mudou durante a vinculação.", 409)
++
+     with origin_write_lock(g, item_id):
+         rows = load_payroll(g, item_id)
+         if any(is_application_title(row.get("Title")) for row in rows):
+             fail("payroll_allocation_locked", "O lançamento tem aplicações no relatório IDFOLHA. Continue pelo relatório de pendências.", 409)
++        if existing_row_id is not None and any(identifier(row.get("ID")) != existing_row_id for row in rows):
++            fail("payroll_allocation_locked", "O lançamento já está vinculado a outra linha da folha.", 409)
+         key = store_key(g, item_id)
+         store, record, tag = load_reservation(g, item_id)
+         if missing_confirmed(g, item_id, record, rows):
+@@ -349,18 +357,26 @@
+             if record.get("kind") != "legacy":
+                 fail("payroll_allocation_locked", "O lançamento tem aplicações no relatório IDFOLHA. Continue pelo relatório de pendências.", 409)
+             saved = find_application(rows, reservation_title(record))
+-            if not saved or not populated(saved.get("IDFOLHA")):
++            same_merge = (existing_row_id is not None and record.get("row_id") == existing_row_id
++                          and record.get("token") == token)
++            if saved and populated(saved.get("IDFOLHA")):
++                check_row(saved)
++                record = settled_reservation(record, saved["Title"], legacy_row_id=identifier(saved["ID"]))
++                tag = save_reservation(store, key, record, tag)
++            elif not same_merge:
+                 fail("payroll_legacy_uncertain", "O pagamento de folha anterior ainda está sendo conferido. Tente retomar a operação original.", 409)
+-            record = settled_reservation(record, saved["Title"], legacy_row_id=identifier(saved["ID"]))
+-            tag = save_reservation(store, key, record, tag)
+         existing = find_application(rows, token)
+         if existing:
++            check_row(existing)
+             existing_id = identifier(existing.get("ID"))
+             if not existing_id:
+                 fail("payroll_allocation_integrity", "O pagamento existente não tem um ID válido.", 409)
+             yield int(existing_id)
+             return
+-        tag = save_reservation(store, key, settled_reservation(record, status="pending") | {"kind": "legacy", "token": token}, tag)
++        pending = settled_reservation(record, status="pending") | {"kind": "legacy", "token": token}
++        if existing_row_id is not None:
++            pending["row_id"] = existing_row_id
++        tag = save_reservation(store, key, pending, tag)
+         try:
+             yield
+         except Exception as exc:
+@@ -370,6 +386,7 @@
+         saved = find_application(load_payroll(g, item_id), token)
+         if not saved or not identifier(saved.get("ID")) or not populated(saved.get("IDFOLHA")):
+             fail("payroll_legacy_uncertain", "O pagamento de folha anterior ainda está sendo conferido.", 409)
++        check_row(saved)
+         finish_reservation(store, key, tag, record, token, legacy_row_id=identifier(saved["ID"]))
+ 
+ 
