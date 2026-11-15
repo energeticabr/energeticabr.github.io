@@ -17,9 +17,9 @@ function testTray(initial = []) {
     pickFiles:async()=>{actions.push('files');},capture:async()=>{actions.push('camera');},open:async id=>{actions.push(`open:${id}`);},remove:async id=>{actions.push(`remove:${id}`);},
   };
 }
-async function extrasPanel(t,{files=[],post=async()=>({orderId:'5',lines:[],total:50})}={}) {
+async function extrasPanel(t,{files=[],post=async()=>({orderId:'5',lines:[],total:50}),onSwileRecharge}={}) {
   const dom=new JSDOM('<body></body>',{url:'https://example.invalid'}),doc=dom.window.document,tray=testTray(files);
-  const panel=createMealVoucherView({documentRef:doc,attachmentTray:tray,data:{
+  const panel=createMealVoucherView({documentRef:doc,attachmentTray:tray,onSwileRecharge,data:{
     loadOptions:async()=>({suppliers:[{id:'1',label:'Ana',branch:'OBRA A',profession:'PEDREIRO'}],accounts:[{id:'8',label:'CAIXA'}],stages:[{id:'7',label:'FUNDAÇÃO',branch:'OBRA A'}]}),
     loadOrders:async()=>[],loadSheetAssignments:async()=>({'1':{id:'11'}}),post,
   }});t.after(()=>{panel.destroy();dom.window.close();});
@@ -29,6 +29,32 @@ async function extrasPanel(t,{files=[],post=async()=>({orderId:'5',lines:[],tota
   for(const [name,value] of [['meal-account','8'],['meal-stage','7']]){const select=doc.querySelector(`[name="${name}"]`);select.value=value;select.dispatchEvent(new dom.window.Event('change',{bubbles:true}));}
   doc.querySelector('[data-meal-next]').click();await tick();return {dom,doc,tray,panel,type};
 }
+
+for (const accept of [true, false]) test(`fim do vale pergunta pela Swile e só abre a recarga na opção Sim (resposta: ${accept})`, async t => {
+  let opened = 0;
+  const h = await extrasPanel(t, {
+    post: async value => ({ orderId:'5', lines:value.lines.map(line => ({supplier:line.supplier.label,total:line.total})), total:value.total }),
+    onSwileRecharge: async (items, onClose) => {
+      assert.deepEqual(items, [{name:'Ana', subtotal:50}]);
+      opened++;
+      onClose(true);
+      return true;
+    },
+  });
+  assert.equal(h.doc.querySelector('[data-meal-swile]'), null);
+  h.doc.querySelector('[data-meal-next]').click();
+  h.doc.querySelector('[data-meal-confirm]').click(); await tick();
+  assert.match(h.doc.querySelector('.meal-voucher-content').textContent, /Deseja recarregar.*Swile/);
+  assert.equal(opened, 0);
+  h.doc.querySelector(accept ? '[data-meal-swile]' : '[data-meal-done]').click(); await tick();
+  assert.equal(opened, accept ? 1 : 0);
+  if (accept) {
+    assert.equal(h.doc.querySelector('[data-meal-swile]'), null);
+    assert.match(h.doc.querySelector('.meal-voucher-content').textContent, /sucesso/);
+  } else {
+    assert.equal(h.doc.querySelector('.meal-voucher-page').hidden, true);
+  }
+});
 
 test('confirmed meal posting reserves progress until tray cleanup and the receipt are accepted', async t => {
   const h = await extrasPanel(t, { post: async (_draft, _journal, onProgress) => {

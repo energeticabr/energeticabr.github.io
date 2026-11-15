@@ -6554,15 +6554,15 @@ export function createAppController({
     hrBenefitPanel = null;
   }
 
-  async function openHrBenefitPanel(provider, gallery = false) {
+  async function openHrBenefitPanel(provider, gallery = false, mealRecharge) {
     const canOpen = () => {
-      const { activeFlow } = store.getState();
+      const { activeFlow, messages } = store.getState();
       const inRhMenu = isRhMenu(activeFlow);
       return Boolean(account) && !stopped && sessionStatus === 'authenticated' && !flowBusy()
-        && (!activeFlow || inRhMenu);
+        && (mealRecharge ? isSupplierPayrollMenu(latestAssistantPoll(messages), activeFlow) : (!activeFlow || inRhMenu));
     };
     if (!canOpen()) return false;
-    if (hrBenefitPanel || hrBenefitOpening) return true;
+    if (hrBenefitPanel || hrBenefitOpening) return !mealRecharge;
     closeGalleryOverlays();
     const owner = account, revision = sessionRevision, opening = {};
     hrBenefitOpening = opening;
@@ -6575,6 +6575,7 @@ export function createAppController({
       hrBenefitPanel = openView({
         document: globalThis.document,
         gallery,
+        mealItems: mealRecharge?.items,
         request: async (operation, payload, options) => {
           if (!current()) throw new Error('A sessão do Energético foi encerrada.');
           if (provider === 'Trancid') return client.trancidRechargeRequest(operation, payload, options);
@@ -6587,8 +6588,9 @@ export function createAppController({
         previewDocuments: native.previewMediaCollection && ((items, options) =>
           native.previewMediaCollection(items, { returnLabel: 'Voltar aos pedidos', ...options })),
         closePreview: native.closePreview,
-        onClose: () => {
+        onClose: handled => {
           hrBenefitPanel = null;
+          if (current()) mealRecharge?.onClose(handled);
           if (current() && provider === 'Swile') void refreshSwileReminder();
         },
         onHome: () => { if (current()) return returnToMainMenu(); },
@@ -7022,7 +7024,10 @@ export function createAppController({
             open:openFile, remove:(id,kind)=>kind === 'pending' ? removeFile(id) : removeAttachment(id,{confirm:false}),
             load:loadAttachment, deleteAttachment:(id, options)=>client.deleteAttachment(id, options),
           });
-          const panel = await mealVoucherFactory({ data, assertSession, attachmentTray, sessionKey: owner.homeAccountId, onHome: () => { assertSession(); return returnToMainMenu(); } });
+          const panel = await mealVoucherFactory({ data, assertSession, attachmentTray, sessionKey: owner.homeAccountId,
+            onSwileRecharge: (items, onClose) => { assertSession(); return openHrBenefitPanel('Swile', false, { items, onClose }); },
+            onHome: () => { assertSession(); return returnToMainMenu(); },
+          });
           if (stopped || account !== owner || sessionRevision !== revision) { panel.destroy?.(); return false; }
           mealVoucher = panel;
         }

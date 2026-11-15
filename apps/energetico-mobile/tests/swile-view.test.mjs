@@ -11,6 +11,83 @@ test('Swile accepts positive BRL amounts with at most two decimal places', () =>
   }
 });
 
+test('recarga do vale usa apenas os colaboradores lançados e seus subtotais na conferência Swile', async t => {
+  const { window } = new JSDOM('<body></body>'), { document } = window;
+  const calls = [];
+  let handled;
+  const view = openSwileView({ document, now: () => new Date('2026-11-16T14:00:00Z'),
+    mealItems: [{ name:'Ána Silva', subtotal:47.13 }, { name:'Rafael Souza', subtotal:90 }],
+    onClose: value => { handled = value; },
+    request: async (operation, body) => {
+      calls.push([operation, body]);
+      if (operation === 'directory') return [{ id:21, name:'ANA SILVA' }, { id:22, name:'Rafael Souza' }, { id:23, name:'Outro funcionário' }];
+      if (operation === 'preview') return { id:'p1', ...body, items:[{name:'ANA SILVA', amountCents:4713},{name:'Rafael Souza', amountCents:9000}],
+        totalEmployees:2, creditCents:13713, paymentCents:13800 };
+      return { reference:'p1', orderCode:'SWO1', status:'WAITING_PAYMENT', creditCents:13713, creditDate:'2026-11-20' };
+    },
+  });
+  t.after(() => { view.close(); window.close(); });
+  const settle = () => new Promise(resolve => setImmediate(resolve));
+  const click = text => [...document.querySelectorAll('button')].find(button => button.textContent === text).click();
+  await settle();
+  assert.deepEqual([...document.querySelectorAll('.swile-person strong')].map(node => node.textContent), ['ANA SILVA', 'Rafael Souza']);
+  assert.ok([...document.querySelectorAll('.swile-person input')].every(input => input.readOnly));
+  document.querySelector('select').value = 'BANK_SLIP';
+  click('Conferir pedido'); await settle();
+  assert.deepEqual(calls.at(-1), ['preview', { items:[{ employeeId:21, amountCents:4713 }, { employeeId:22, amountCents:9000 }],
+    creditDate:'2026-11-20', paymentMethod:'BANK_SLIP', dueDate:'2026-11-19' }]);
+  assert.equal(document.querySelector('textarea').value, '');
+  document.querySelector('textarea').value = 'Vale alimentação da obra';
+  click('Enviar pedido à Swile'); await settle();
+  assert.deepEqual(calls.at(-1), ['confirm', { id:'p1', invoiceText:'Vale alimentação da obra' }]);
+  click('Voltar ao lançamento');
+  assert.equal(handled, true);
+});
+
+test('recarga do vale bloqueia todo o pedido se houver homônimo ou cadastro ausente na Swile', async t => {
+  const { window } = new JSDOM('<body></body>'), { document } = window;
+  let calls = 0;
+  const view = openSwileView({ document, mealItems:[{ name:'Ana Silva', subtotal:35 }, { name:'José Santos', subtotal:70 }],
+    request: async operation => {
+      calls++;
+      assert.equal(operation, 'directory');
+      return [{ id:21, name:'ANA SILVA' }, { id:22, name:'Ana Silva' }];
+    },
+  });
+  t.after(() => { view.close(); window.close(); });
+  await new Promise(resolve => setImmediate(resolve));
+  assert.match(document.querySelector('[role="status"]').textContent, /Ana Silva.*José Santos/s);
+  assert.equal(document.querySelector('.swile-footer button').disabled, true);
+  document.querySelector('.swile-footer button').click();
+  assert.equal(calls, 1);
+});
+
+test('recarga do vale com resposta incerta só verifica a mesma referência', async t => {
+  const { window } = new JSDOM('<body></body>'), { document } = window;
+  const confirmations = [];
+  const view = openSwileView({ document, now: () => new Date('2026-11-16T14:00:00Z'), mealItems:[{ name:'Ana', subtotal:50 }],
+    request: async (operation, body) => {
+      if (operation === 'directory') return [{ id:21, name:'Ana' }];
+      if (operation === 'preview') return { id:'p1', ...body, items:[{ name:'Ana', amountCents:5000 }],
+        totalEmployees:1, creditCents:5000, paymentCents:5000 };
+      confirmations.push(body.id);
+      if (confirmations.length === 1) throw new Error('Envio sem confirmação');
+      return { reference:'p1', status:'WAITING_PAYMENT', creditCents:5000, creditDate:'2026-11-20' };
+    },
+  });
+  t.after(() => { view.close(); window.close(); });
+  const settle = () => new Promise(resolve => setImmediate(resolve));
+  const button = text => [...document.querySelectorAll('button')].find(node => node.textContent === text);
+  await settle();
+  document.querySelector('select').value = 'PIX';
+  button('Conferir pedido').click(); await settle();
+  button('Enviar pedido à Swile').click(); await settle();
+  assert.equal(button('Editar data e pagamento'), undefined);
+  button('Verificar o mesmo envio').click(); await settle();
+  assert.deepEqual(confirmations, ['p1', 'p1']);
+  assert.match(document.body.textContent, /Aguardando pagamento/);
+});
+
 test('Swile keeps amounts across search and submits only after review', async () => {
   const { window } = new JSDOM('<!doctype html><body></body>');
   const { document } = window;
