@@ -514,6 +514,7 @@ test('stage submission preserves its kind during Microsoft consent and forwards 
   const h = harness(t, {
     stageProgressDataFactory: async ({ tokenProvider }) => ({
       async finalizeStage(id, date, options) {
+        assert.equal(writeAllowed, true, 'write consent must complete before the fresh dependency check');
         assert.deepEqual([id, date, options.expectedStage], ['7', '2026-10-07', expectedStage]);
         assert.equal(await tokenProvider(['Sites.ReadWrite.All']), 'write-token');
         return { id, endDate: date, status: 'FINALIZADO' };

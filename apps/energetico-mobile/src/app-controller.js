@@ -8343,9 +8343,16 @@ export function createAppController({
       const writing = finalizingStage || method === 'finalizeActivity';
       const resumeOptions = writing ? { stageFinishDraft: { id: args[0], date: args[1], ...(finalizingStage ? { kind: 'stage' } : {}) } } : undefined;
       const getToken = ordersGalleryTokenProvider(assertAction, STAGE_PROGRESS_ID, resumeOptions);
-      const tokenProvider = scopes => getToken(writing && scopes?.includes('Sites.ReadWrite.All')
-        ? ['Sites.ReadWrite.All'] : STAGE_PROGRESS_SCOPES);
+      const writeScopes = ['Sites.ReadWrite.All'];
       try {
+        // Finish consent before checking linked descriptions so the write does not
+        // wait on an authorization screen after the fresh dependency check.
+        const stageWriteToken = finalizingStage ? await getToken(writeScopes) : null;
+        const tokenProvider = async scopes => {
+          assertAction();
+          if (writing && scopes?.includes('Sites.ReadWrite.All')) return stageWriteToken || getToken(writeScopes);
+          return getToken(STAGE_PROGRESS_SCOPES);
+        };
         const source = await stageProgressDataFactory({ tokenProvider });
         assertAction();
         const result = await source[method](...args, { ...sourceOptions, signal: controller.signal });
