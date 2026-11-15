@@ -207,13 +207,23 @@ def request_dates(body, now):
             earliest += timedelta(days=1)
     if credit < earliest:
         raise SwileError(f'A data de crédito deve ser a partir de {earliest:%d/%m/%Y} para essa forma de pagamento.')
-    result = {'creditDate': credit.isoformat(), 'paymentMethod': payment}
-    if payment == 'BANK_SLIP':
-        due = date_field(body.get('dueDate'))
-        if not today <= due < credit:
-            raise SwileError('O boleto deve vencer antes da data de crédito.')
-        result['dueDate'] = due.isoformat()
-    return result
+    due = credit - timedelta(days=2 if payment == 'BANK_SLIP' else 1)
+    if due < today:
+        raise SwileError('Escolha uma data de crédito cujo vencimento não tenha passado.')
+    return {'creditDate': credit.isoformat(), 'paymentMethod': payment, 'dueDate': due.isoformat()}
+
+
+def provider_payment(payment):
+    return {key: value for key, value in payment.items() if key != 'dueDate' or payment['paymentMethod'] == 'BANK_SLIP'}
+
+
+def order_fingerprints(amounts, payment):
+    current = provider_payment(payment)
+    previous = dict(current)
+    if previous['paymentMethod'] == 'BANK_SLIP':
+        previous['dueDate'] = (date_field(previous['creditDate']) - timedelta(days=1)).isoformat()
+    return tuple(hashlib.sha256(json.dumps([sorted(amounts.items()), dates], sort_keys=True).encode()).hexdigest()
+                 for dates in (current, previous))
 
 
 def breakdown_matches(summary, expected):
@@ -283,11 +293,17 @@ class Service:
                 created REAL NOT NULL, summary TEXT NOT NULL, payload TEXT NOT NULL,
                 display TEXT NOT NULL, state TEXT NOT NULL, code TEXT, status TEXT)""")
             db.execute('CREATE INDEX IF NOT EXISTS orders_fingerprint ON orders (fingerprint)')
+            db.execute("""CREATE TABLE IF NOT EXISTS swile_provisions (
+                        reference TEXT PRIMARY KEY, state TEXT NOT NULL, plan TEXT,
+                        parent INTEGER, next_try REAL NOT NULL, error TEXT,
+                        FOREIGN KEY (reference) REFERENCES orders(id))""")
             yield db
 
     def receipt(self, row):
         display = json.loads(row['display'])
         return {'reference': row['id'], 'orderCode': row['code'], 'status': row['status'] or 'UNCONFIRMED',
+                'dueDate': display.get('dueDate'), 'paymentMethod': display.get('paymentMethod'),
+                'provisionAvailable': bool(row['code'] and json.loads(row['payload']).get('provisionPeople')),
                 **{key: display[key] for key in ('creditDate', 'creditCents', 'paymentCents', 'totalEmployees')}}
 
     def preview_result(self, row):
@@ -309,14 +325,18 @@ class Service:
             if type(amount) is not int or not 1 <= amount <= 999999999:
                 raise SwileError('Informe valores positivos em reais, com até duas casas decimais.')
             amounts[identifier] = amount
-        fingerprint = hashlib.sha256(json.dumps([sorted(amounts.items()), payment], sort_keys=True).encode()).hexdigest()
-        query = f"""SELECT * FROM orders WHERE owner=? AND fingerprint=?
-                    AND ({BLOCKING_ORDER} OR (state='ready' AND created>?
-                         AND json_extract(payload, '$.payerDocument') IS NOT NULL))
+        fingerprint, old_fingerprint = order_fingerprints(amounts, payment)
+        source = 'meal' if body.get('source') == 'meal' else 'direct'
+        query = f"""SELECT * FROM orders WHERE owner=?
+                    AND ((fingerprint IN (?, ?) AND {BLOCKING_ORDER})
+                         OR (fingerprint=? AND state='ready' AND created>?
+                         AND json_extract(payload, '$.payerDocument') IS NOT NULL
+                         AND json_extract(payload, '$.source')=?))
                     ORDER BY created DESC LIMIT 1"""
         cutoff = self.clock() - PREVIEW_TTL
+        query_args = (owner, fingerprint, old_fingerprint, fingerprint, cutoff, source)
         with self.db() as db:
-            if (existing := db.execute(query, (owner, fingerprint, cutoff)).fetchone()):
+            if (existing := db.execute(query, query_args).fetchone()):
                 return self.preview_result(existing)
         directory = {record['id']: record for record in self.directory()}
         if not amounts.keys() <= directory.keys():
@@ -340,14 +360,18 @@ class Service:
         display = {**payment, 'creditCents': sum(amounts.values()), 'paymentCents': cents(summary.get('valuePayment')),
                    'totalEmployees': len(amounts), 'payer': summary.get('payerName') or summary.get('payerDocument'),
                    'items': [{'name': directory[key]['name'], 'amountCents': amount} for key, amount in amounts.items()]}
+        saved = {**payment, 'payerDocument': payer_document, 'source': source, 'amounts': amounts}
+        if source == 'direct':
+            saved['provisionPeople'] = [{'name': directory[key]['name'], 'document': directory[key]['document'],
+                                         'amountCents': amount} for key, amount in amounts.items()]
         with self.db() as db:
             db.execute('BEGIN IMMEDIATE')
-            if (existing := db.execute(query, (owner, fingerprint, cutoff)).fetchone()):
+            if (existing := db.execute(query, query_args).fetchone()):
                 return self.preview_result(existing)
             db.execute("DELETE FROM orders WHERE state IN ('ready','rejected') AND created<=?", (cutoff,))
             db.execute("INSERT INTO orders VALUES (?, ?, ?, ?, ?, ?, ?, 'ready', NULL, NULL)",
                        (identifier, owner, fingerprint, self.clock(), summary_id,
-                        json.dumps({**payment, 'payerDocument': payer_document}), json.dumps(display)))
+                        json.dumps(saved), json.dumps(display)))
         return {'id': identifier, **display}
 
     def confirm(self, owner, identifier, invoice_text=''):
@@ -365,18 +389,23 @@ class Service:
                 return self.receipt(row)
             if row['state'] != 'ready' or self.clock() - row['created'] >= PREVIEW_TTL:
                 raise SwileError('Gere um novo resumo antes de enviar o pedido.')
-            duplicate = db.execute(f'SELECT 1 FROM orders WHERE fingerprint=? AND id<>? AND {BLOCKING_ORDER} LIMIT 1',
-                                   (row['fingerprint'], identifier)).fetchone()
+            saved = json.loads(row['payload'])
+            if 'amounts' not in saved:
+                raise SwileError('Gere um novo resumo para conferir o vencimento antes de enviar o pedido.')
+            payment = request_dates(saved, self.clock())
+            if saved.get('dueDate') != payment['dueDate']:
+                raise SwileError('Gere um novo resumo para conferir o vencimento antes de enviar o pedido.')
+            fingerprints = order_fingerprints({int(key): val for key, val in saved['amounts'].items()}, payment)
+            duplicate = db.execute(f'SELECT 1 FROM orders WHERE fingerprint IN (?, ?) AND id<>? AND {BLOCKING_ORDER} LIMIT 1',
+                                   (*fingerprints, identifier)).fetchone()
             if duplicate:
                 raise SwileError('Já existe um envio idêntico na empresa. Confira os pedidos na Dash RH.', 409)
-            saved = json.loads(row['payload'])
-            payment = request_dates(saved, self.clock())
             if invoice_text and not saved.get('payerDocument'):
                 raise SwileError('Gere um novo resumo para incluir a descrição na nota fiscal.')
             db.execute("UPDATE orders SET state='sending' WHERE id=?", (identifier,))
         # Preserve the claim before contacting Swile. The same externalId is
         # also recorded at Swile for reconciliation after an interrupted response.
-        payload = {'summaryId': row['summary'], 'externalId': identifier, **payment}
+        payload = {'summaryId': row['summary'], 'externalId': identifier, **provider_payment(payment)}
         if invoice_text:
             payload['benefitPaymentInfo'] = [{'document': saved['payerDocument'], 'invoiceText': invoice_text,
                                               'swileCreditToUse': 0}]
@@ -397,7 +426,7 @@ class Service:
             return self.receipt(row)
         with self.db() as db:
             db.execute("UPDATE orders SET state='created', code=?, status=? WHERE id=?", (code, status, identifier))
-        return {**self.receipt(row), 'orderCode': code, 'status': status}
+        return self.receipt(dict(row, code=code, status=status))
 
     def weekly_reminder(self):
         today = datetime.fromtimestamp(self.clock(), SP).date()
@@ -481,9 +510,13 @@ class Service:
         with self.db() as db:
             rows = db.execute("""SELECT * FROM orders WHERE owner=? AND state IN ('sending','created')
                                 ORDER BY created DESC LIMIT 30""", (owner,)).fetchall()
+            jobs = {job['reference']: dict(job) for job in db.execute("""SELECT p.reference,p.state,p.parent,p.error
+                    FROM swile_provisions p JOIN orders o ON o.id=p.reference WHERE o.owner=?""", (owner,))}
         result = []
         for row in rows:
             receipt = self.receipt(row)
+            if row['id'] in jobs:
+                receipt['provision'] = jobs[row['id']]
             if reference == row['id'] or reference is None and not result:
                 try:
                     data = self.order_status(row['code']) if row['code'] else self.reconcile(row, receipt)
@@ -492,6 +525,7 @@ class Service:
                 else:
                     if data:
                         receipt.update(orderCode=data['orderGroupCode'], status=data['status'])
+                        receipt['provisionAvailable'] = bool(json.loads(row['payload']).get('provisionPeople'))
                         with self.db() as db:
                             db.execute("UPDATE orders SET state='created', code=?, status=? WHERE id=? AND state IN ('created','sending')",
                                        (data['orderGroupCode'], data['status'], row['id']))
@@ -644,6 +678,9 @@ def handle_portal(identity, body):
             value = service.preview(owner, body)
         elif action == 'swile_confirm':
             value = service.confirm(owner, body.get('id'), body.get('invoiceText', ''))
+        elif action == 'swile_provision':
+            from swile_provisions import queue_provision
+            value = queue_provision(service, owner, body.get('reference'))
         elif action == 'swile_orders':
             gallery = body.get('gallery')
             if body.get('weeklyReminder') is True:

@@ -5,7 +5,7 @@ from pathlib import Path
 
 from unittest.mock import patch
 
-from swile_recharges import Service, SwileError, document_url, download_document, handle_portal
+from swile_recharges import Service, SwileError, document_url, download_document, handle_portal, request_dates
 
 
 class Gateway:
@@ -65,6 +65,10 @@ class ServiceTests(unittest.TestCase):
         self.service = Service(self.gateway, self.database, clock=lambda: self.now)
         self.data = {'items': [{'employeeId': 10, 'amountCents': 22505}],
                      'creditDate': '2026-12-01', 'paymentMethod': 'PIX'}
+
+    def test_swile_due_dates_are_relative_to_credit(self):
+        self.assertEqual('2026-11-29', request_dates({**self.data, 'paymentMethod':'BANK_SLIP', 'dueDate':'2026-11-30'}, self.now)['dueDate'])
+        self.assertEqual('2026-11-30', request_dates(self.data, self.now)['dueDate'])
 
     def test_directory_paginates_and_returns_only_eligible_public_fields(self):
         records = self.service.directory(public=True)

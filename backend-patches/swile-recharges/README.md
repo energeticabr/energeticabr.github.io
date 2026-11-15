@@ -26,3 +26,9 @@ Após implantar o módulo, instale `energetica-swile-gallery.service` e `energet
 O pedido e o pagamento têm estados distintos. Consulte a Dash RH para pagar e acompanhe o status na aba Swile.
 
 [Documentação oficial da Swile](https://corporate-gateway.swile.com.br/docs/integration-guide.html)
+
+## Provisões de recargas diretas
+
+Após confirmar um pedido da Swile, o botão de provisões registra a solicitação vinculada à referência do pedido. O serviço `energetica-swile-provisions` cria o descritivo e as provisões usando a chave única `FOLHAOPERACAO`. Ele consulta o grupo exato da Swile até que possa anexar a nota fiscal e, para boleto, o boleto. Para Pix, o vencimento previsto é interno e fica um dia antes do crédito. No boleto, o vencimento enviado à Swile fica dois dias antes.
+
+Depois da implantação dos módulos, instale `energetica-swile-provisions.service` e `energetica-swile-provisions.timer` em `/etc/systemd/system`, com modo `0644`. Execute `sudo systemctl daemon-reload` e `sudo systemctl enable --now energetica-swile-provisions.timer`. O serviço usa o mesmo diário e o cliente SharePoint da VM.

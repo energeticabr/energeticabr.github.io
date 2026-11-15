@@ -16,20 +16,24 @@ SOURCE = Path(__file__).resolve().parent
 ROOTS = (Path('/opt/energetica-whatsapp'), Path('/home/opc/energetica-build'))
 UNIT = 'energetica-channel-bridge.service'
 ANCHOR = '                if action in {"sicoob_refresh", "sicoob_refresh_status"}:\n'
-ROUTE = '''                if action in {"swile_directory", "swile_preview", "swile_confirm", "swile_orders"}:
+LEGACY_ROUTE = '''                if action in {"swile_directory", "swile_preview", "swile_confirm", "swile_orders"}:
                     from swile_recharges import handle_portal as handle_swile
                     status, result = handle_swile(identity, body)
                     return self._send_json(status, result, cors_origin=origin)
 '''
+ROUTE = LEGACY_ROUTE.replace('"swile_orders"}', '"swile_orders", "swile_provision"}')
 
 
 def patch_bridge(data):
     source = data.decode('utf-8')
-    if ROUTE + ANCHOR in source:
+    if ROUTE in source:
         return data
-    if source.count(ANCHOR) != 1 or 'handle_swile' in source:
+    if source.count(LEGACY_ROUTE) == 1:
+        source = source.replace(LEGACY_ROUTE, ROUTE, 1)
+    elif source.count(ANCHOR) == 1 and 'handle_swile' not in source:
+        source = source.replace(ANCHOR, ROUTE + ANCHOR, 1)
+    else:
         raise ValueError('Unexpected portal routing. Review the active bridge.')
-    source = source.replace(ANCHOR, ROUTE + ANCHOR, 1)
     compile(source, 'channel_bridge.py', 'exec')
     return source.encode('utf-8')
 
@@ -65,10 +69,13 @@ def main():
     parser = argparse.ArgumentParser()
     parser.add_argument('--expected-bridge', required=True)
     parser.add_argument('--expected-module', required=True)
+    parser.add_argument('--expected-provisions', default='absent')
     parser.add_argument('--apply', action='store_true')
     args = parser.parse_args()
-    module = (SOURCE / 'swile_recharges.py').read_bytes()
-    compile(module, 'swile_recharges.py', 'exec')
+    modules = {name: ((SOURCE / name).read_bytes(), expected) for name, expected in
+               [('swile_recharges.py', args.expected_module), ('swile_provisions.py', args.expected_provisions)]}
+    for name, (module, _) in modules.items():
+        compile(module, name, 'exec')
     with Path('/tmp/energetica-whatsapp-deploy.lock').open('a+b') as lock:
         fcntl.flock(lock, fcntl.LOCK_EX)
         originals, updates = {}, {}
@@ -81,14 +88,13 @@ def main():
             patched = patch_bridge(before)
             if patched != before:
                 updates[bridge] = patched
-            target = root / 'swile_recharges.py'
-            originals[target] = (target.read_bytes(), target.stat()) if target.exists() else None
-            current = originals[target]
-            if args.expected_module != 'absent' and (not current or hashlib.sha256(current[0]).hexdigest() != args.expected_module):
-                raise RuntimeError(f'Swile module changed at {target}.')
-            if args.expected_module == 'absent' and current:
-                raise RuntimeError(f'Swile module already exists at {target}.')
-            updates[target] = module
+            for name, (module, expected) in modules.items():
+                target = root / name
+                current = originals[target] = (target.read_bytes(), target.stat()) if target.exists() else None
+                actual = hashlib.sha256(current[0]).hexdigest() if current else 'absent'
+                if actual != expected:
+                    raise RuntimeError(f'Swile module changed at {target}.')
+                updates[target] = module
         if not args.apply:
             print('Swile deployment check passed.')
             return
@@ -99,7 +105,7 @@ def main():
         installed = []
         try:
             # Install both module copies before publishing either route.
-            for path in sorted(updates, key=lambda path: path.name != 'swile_recharges.py'):
+            for path in sorted(updates, key=lambda path: path.name == 'channel_bridge.py'):
                 original = originals[path]
                 if original and path.read_bytes() != original[0]:
                     raise RuntimeError(f'File changed during install at {path}.')

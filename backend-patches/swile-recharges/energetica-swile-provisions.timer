@@ -1,0 +1,10 @@
+[Unit]
+Description=Processar solicitações e documentos pendentes da Swile
+
+[Timer]
+OnCalendar=*-*-* *:0/2:00
+AccuracySec=10s
+Persistent=true
+
+[Install]
+WantedBy=timers.target
