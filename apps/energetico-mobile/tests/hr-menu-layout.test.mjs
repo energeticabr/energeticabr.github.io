@@ -34,9 +34,12 @@ test('HR hides retired actions and keeps the remaining shortcuts usable', () => 
   const view = createChatView(root), events = [];
   view.on('select-reply', event => events.push(event.replyId));
   const state = { sessionStatus: 'authenticated', account: { name: 'Teste' }, draft: '', pendingFiles: [],
-    messages: [{ ...menu, options: [...menu.options, option('action_hr_gallery_presencas', '📋 GALERIA DE PRESENÇAS')] }] };
+    messages: [{ ...menu, options: [...menu.options, option('action_hr_gallery_presencas', '📋 GALERIA DE PRESENÇAS'), option('navigation_back', 'RETORNAR')] }] };
   try {
     view.render(state);
+    assert.match(root.querySelector('.chat-flow-title').textContent, /RECURSOS HUMANOS/i);
+    const bubble = root.querySelector('.chat-message--hr-gallery-menu .chat-bubble');
+    assert.doesNotMatch(bubble.textContent, /Energético|RECURSOS HUMANOS|QUAL FLUXO VOCÊ DESEJA INICIAR/i);
     const rows = [...root.querySelectorAll('.chat-hr-menu-row')];
     assert.deepEqual(rows.map(row => [...row.querySelectorAll('[data-reply-id]')].map(button => button.dataset.replyId)), [
       ['action_create_supplier_attendance', 'action_hr_gallery_idfolha'],
