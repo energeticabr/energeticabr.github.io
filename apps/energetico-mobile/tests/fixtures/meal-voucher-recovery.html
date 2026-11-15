@@ -87,6 +87,31 @@ try {
   result.orders = rows.NOTASPENDENTES.length; result.launches = rows.LANCAMENTOS.length; result.payroll = rows.FOLHAPGTO.length;
   result.orderDate = rows.NOTASPENDENTES[0].fields['DATA PEDIDO']; result.orderAccount = rows.NOTASPENDENTES[0].fields.FORMAPGTO;
   result.paid = rows.LANCAMENTOS[0].fields['DATA PGTO EFETUADO']; result.stage = rows.LANCAMENTOS[0].fields.ETAPA; result.sheet = rows.FOLHAPGTO[0].fields.IDFOLHA;
+
+  view.destroy();
+  const legacyFile = { name:'Comprovante_20261022_221430.pdf', size:100, lastModified:123 };
+  const legacyDraft = { ...draft, obs:'OBS anterior' };
+  const legacyProgress = { operationId:progress.operationId, orderId:'1', lines:{ '1':'1' },
+    signature:JSON.stringify({ ...legacyDraft, files:[legacyFile] }) };
+  const pendingKey = 'energetico:meal-voucher:pending:browser';
+  localStorage.setItem(pendingKey, JSON.stringify({ draft:legacyDraft, progress:legacyProgress, files:[legacyFile] }));
+  const resumed = createMealVoucherView({ data, sessionKey:'browser' });
+  const savedRows = JSON.stringify(rows);
+  await resumed.open();
+  document.querySelector('[data-meal-next]').click();
+  await wait('[role="alert"]:not([hidden])');
+  result.legacyBlocked = document.querySelector('[name="meal-obs"]').disabled
+    && document.querySelector('[role="alert"]').textContent.includes('mesmos anexos');
+  document.querySelector('[data-meal-abandon]').click();
+  result.abandonFits = [...document.querySelectorAll('.meal-voucher-footer button')]
+    .every(node => node.getBoundingClientRect().right <= innerWidth + 1);
+  document.querySelector('[data-meal-confirm-abandon]').click();
+  await wait('[data-meal-value="1"]');
+  resumed.close(); await resumed.open();
+  result.freshAfterAbandon = !localStorage.getItem(pendingKey) && JSON.stringify(rows) === savedRows
+    && document.querySelector('[data-meal-value="1"]').value === ''
+    && !document.querySelector('[data-meal-abandon]');
+  resumed.destroy();
   document.documentElement.dataset.layout = JSON.stringify(result);
 } catch (error) { document.documentElement.dataset.layout = JSON.stringify({ error:error.stack }); }
 </script></body></html>

@@ -157,6 +157,42 @@ test('registros encontrados restauram o lote original e preservam os anexos pend
   assert.deepEqual(JSON.parse(h.storage.getItem(h.key)).files, [file]);
 });
 
+test('abandona lote legado com comprovante ausente e volta ao formulário limpo nas próximas aberturas', async t => {
+  const file = { name:'Comprovante_20261022_221430.pdf', size:11, lastModified:123 };
+  const h = recoveryPanel(t, { canEdit:async () => false, files:[file] });
+  await h.panel.open();
+  h.doc.querySelector('[data-meal-next]').click(); await tick();
+  assert.match(h.doc.querySelector('[role="alert"]').textContent, /mesmos anexos/);
+
+  h.doc.querySelector('[data-meal-abandon]').click();
+  h.doc.querySelector('[data-meal-keep-pending]').click();
+  assert.ok(h.storage.getItem(h.key));
+  assert.equal(h.doc.querySelector('[name="meal-obs"]').disabled, true);
+
+  h.doc.querySelector('[data-meal-abandon]').click();
+  h.doc.querySelector('[data-meal-confirm-abandon]').click(); await tick();
+  assert.equal(h.storage.getItem(h.key), null);
+  assert.doesNotMatch(h.doc.querySelector('.meal-voucher-content').textContent, /Comprovante_20261022/);
+  assert.equal(h.doc.querySelector('[data-meal-value="1"]').value, '');
+  assert.equal(h.doc.querySelector('[data-meal-value="1"]').disabled, false);
+
+  h.panel.close(); await h.panel.open();
+  assert.ok(h.doc.querySelector('[data-meal-value="1"]'));
+  assert.equal(h.doc.querySelector('[data-meal-abandon]'), null);
+});
+
+test('abandonar não apaga uma tentativa atualizada por outra tela', async t => {
+  const h = recoveryPanel(t, { canEdit:async () => false });
+  await h.panel.open();
+  h.doc.querySelector('[data-meal-abandon]').click();
+  const current = JSON.parse(h.storage.getItem(h.key));
+  current.progress.lines = { '1':'56' };
+  h.storage.setItem(h.key, JSON.stringify(current));
+  h.doc.querySelector('[data-meal-confirm-abandon]').click(); await tick();
+  assert.deepEqual(JSON.parse(h.storage.getItem(h.key)).progress.lines, { '1':'56' });
+  assert.match(h.doc.querySelector('[role="alert"]').textContent, /outra tela/);
+});
+
 test('permissão de edição salva não é reutilizada quando a consulta ao servidor falha', async t => {
   let offline = true;
   const h = recoveryPanel(t, { canEdit:async () => { if (offline) throw new Error('offline'); return true; } });

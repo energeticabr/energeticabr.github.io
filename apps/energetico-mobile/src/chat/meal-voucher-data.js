@@ -688,5 +688,8 @@ export function createMealVoucherData({ repository, graph, tokenProvider, storag
   async function post(rawDraft, progress = {}, onProgress = () => {}) {
     return guardOperation(progress, () => postUnlocked(rawDraft, progress, onProgress));
   }
-  return Object.freeze({ prepare, loadOptions, loadOrders, loadSheetAssignments, canEditPending, post });
+  function abandonPending(progress, discard) {
+    return guardOperation(progress, () => { assertSession(); discard(); });
+  }
+  return Object.freeze({ prepare, loadOptions, loadOrders, loadSheetAssignments, canEditPending, abandonPending, post });
 }
