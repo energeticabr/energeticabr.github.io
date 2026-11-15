@@ -6,7 +6,7 @@ import {
 import { registrationDateKey, registrationNumber } from '../chat/registration-gallery-data.js';
 import { confirmedFinancialTimestamp } from '../chat/financial-update-time.js';
 import {
-  rankSicoobOrderOptions, sameSicoobOrderIds, sicoobLinkedOrderIds, sicoobOrderId, SICOOB_UNLINKED_REVIEW_FIELD,
+  rankSicoobOrderOptions, sameSicoobOrderIds, sicoobAmountCents, sicoobLinkedOrderIds, sicoobOrderId, SICOOB_UNLINKED_REVIEW_FIELD,
 } from '../chat/sicoob-order-link.js';
 import { createReportLinkComparison, createReportLinkPicker } from './dda-provision-picker.js';
 import { addReportCloseControl } from './report-close-control.js';
@@ -241,6 +241,7 @@ export function createSicoobTransactionReportView({ document: doc = globalThis.d
     multiple: true,
     onClose: resumeRefresh,
     rowAmount: row => row.value,
+    amountInCents: sicoobAmountCents,
     resolveReturnFocus: trigger => content.querySelector(
       `[data-sicoob-movement-link="${trigger?.dataset.sicoobMovementLink}"] .sicoob-transaction-link-pencil`) || panel,
     onLinked({ movementId, orderIds, suppliers }) {
