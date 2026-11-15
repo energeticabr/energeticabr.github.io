@@ -8,10 +8,10 @@ const row=(id,extra={})=>({id,createdDate:'2026-10-04',dueDate:'2026-10-05',desc
 const snapshot={tasks:[row(1),row(2,{priority:'ATIVIDADE PRIORITÁRIA',dueDate:'2026-10-06',status:'EM ATENDIMENTO'}),row(3,{association:'ENGENHARIA',status:'CONCLUÍDO'}),row(4,{association:'ENGENHARIA',priority:'NÃO PRIORITÁRIA',dueDate:'',supplier:'Edgar'})]};
 const tick=()=>new Promise(resolve=>setImmediate(resolve));
 const home={sessionStatus:'authenticated',account:{name:'Bernardo'},draft:'',pendingFiles:[],messages:[{id:'home',role:'assistant',type:'poll',question:'QUAL ÁREA VOCÊ DESEJA ACESSAR?',options:[{id:'group_pending',label:'PENDÊNCIAS'},{id:'group_supplies',label:'SUPRIMENTOS'}]}]};
-function setup(t,load=async()=>snapshot,vertical=false){
+function setup(t,load=async()=>snapshot,vertical=false,finalizeTask){
  assert.equal(typeof createTaskAssociationReportView,'function','new report factory must exist');const dom=new JSDOM('<main id="app"><button>Mascote</button></main>');let portrait=vertical;
  dom.window.matchMedia=()=>({get matches(){return portrait;}});const style=dom.window.document.createElement('style');style.textContent=readFileSync(new URL('../src/ui/task-association-report.css',import.meta.url),'utf8');dom.window.document.head.append(style);
- const view=createTaskAssociationReportView({document:dom.window.document,data:{loadSnapshot:load},now:()=>new Date('2026-10-06T12:00:00Z')});t.after(()=>{view.destroy();dom.window.close();});
+ const view=createTaskAssociationReportView({document:dom.window.document,data:{loadSnapshot:load,finalizeTask},now:()=>new Date('2026-10-06T12:00:00Z')});t.after(()=>{view.destroy();dom.window.close();});
  return {view,root:view.element,dom,rotate(value){portrait=value;dom.window.dispatchEvent(new dom.window.Event('resize'));}};
 }
 test('ninth left HOME mascot is after document control and clicking its provided image opens its own action',t=>{
@@ -19,11 +19,35 @@ test('ninth left HOME mascot is after document control and clicking its provided
  let calls=0;view.on('open-task-association-report',()=>calls++);view.render(home);const button=dom.window.document.querySelector('[data-action=open-task-association-report]');assert.ok(button);assert.equal(button.previousElementSibling.dataset.action,'open-document-control-report');assert.ok(button.nextElementSibling.classList.contains('chat-bubble'));assert.match(button.querySelector('img').src,/task-association\.png$/);button.querySelector('img').click();assert.equal(calls,1);
  view.render({...home,activeText:{id:'busy'}});assert.equal(dom.window.document.querySelector('[data-action=open-task-association-report]').disabled,true);assert.doesNotMatch(renderChatMarkup({...home,activeFlow:'busy'}),/data-action="open-task-association-report"/);
 });
-test('source grouping and priority colors render with three unfiltered metrics and five table columns',async t=>{
+test('source grouping and priority colors render with three unfiltered metrics and six table columns',async t=>{
  const {view,root,dom}=setup(t);await view.open();assert.match(root.querySelector('img').src,/logo-energetica-oficial/);assert.equal(root.querySelectorAll('.tar-filter').length,7);assert.equal(root.querySelectorAll('.tar-card').length,3);
  for(const [key,value] of Object.entries({pending:3,completed:1,total:4}))assert.equal(root.querySelector(`[data-metric=${key}] strong`).textContent,String(value));
- assert.equal(root.querySelectorAll('.tar-group').length,2);assert.equal(root.querySelectorAll('tbody tr[data-task-id]').length,3);assert.equal(root.querySelectorAll('thead')[0].querySelectorAll('th').length,5);assert.match(root.querySelector('.tar-association').textContent,/DEMANDAS PESSOAIS.*TOTAL: 2.*PENDENTES: 2/s);
+ assert.equal(root.querySelectorAll('.tar-group').length,2);assert.equal(root.querySelectorAll('tbody tr[data-task-id]').length,3);assert.equal(root.querySelectorAll('thead')[0].querySelectorAll('th').length,6);assert.equal(root.querySelector('thead th:last-child').textContent,'STATUS');assert.equal(root.querySelector('tfoot td').colSpan,6);assert.match(root.querySelector('.tar-association').textContent,/DEMANDAS PESSOAIS.*TOTAL: 2.*PENDENTES: 2/s);
  assert.equal(dom.window.getComputedStyle(root.querySelector('[data-task-id="1"]')).backgroundColor,'rgb(255, 205, 210)');assert.equal(dom.window.getComputedStyle(root.querySelector('[data-task-id="2"]')).backgroundColor,'rgb(255, 224, 178)');assert.match(root.querySelector('[data-task-id="1"]').textContent,/HÁ 2 DIAS.*1 DIA VENCIDA/s);assert.match(root.querySelector('[data-task-id="2"]').textContent,/VENCE HOJE/);assert.match(root.querySelector('[data-task-id="4"]').textContent,/SEM DATA/);assert.equal(root.querySelector('[aria-label*="Fechar"]:not(.sfs-dismiss)').textContent,'❌');
+});
+test('status offers finalization for open rows and updates only after confirmed SharePoint readback',async t=>{
+ const tasks=[...snapshot.tasks,row(5,{status:'CONCLUÍDA'}),row(6,{status:'CANCELADO'})];
+ let attempts=0,finish;
+ const {view,root,dom}=setup(t,async()=>({tasks}),false,async(id,completionDate,{expectedTask,signal})=>{
+  assert.equal(id,1);assert.equal(completionDate,'2026-10-05');assert.equal(expectedTask.status,'ATIVIDADE CRIADA');assert.equal(signal.aborted,false);
+  if(++attempts===1)throw Error('network');
+  return new Promise(resolve=>{finish=()=>resolve(row(1,{status:'CONCLUÍDO'}));});
+ });
+ await view.open();
+ const select=root.querySelector('select[name=status]');for(const option of select.options)option.selected=option.value==='';select.dispatchEvent(new dom.window.Event('change',{bubbles:true}));
+ const state=id=>root.querySelector(`[data-task-id="${id}"] .tar-status`);
+ assert.match(state(1).textContent,/ATIVIDADE CRIADA.*FINALIZAR/);
+ assert.match(state(5).textContent,/CONCLUÍDA/);assert.equal(state(5).querySelector('button'),null);assert.equal(state(3).querySelector('button'),null);
+ assert.ok(state(6).querySelector('button'));assert.equal(root.querySelector('[data-metric=completed] strong').textContent,'2');
+ const trigger=state(1).querySelector('button');trigger.click();
+ const dialog=root.querySelector('[aria-label="Finalizar atividade"]');const form=dialog.querySelector('form');const input=form.querySelector('input[type=date]');
+ const submit=form.querySelector('button[type=submit]');
+ assert.equal(dialog.hidden,false);assert.match(dialog.textContent,/Conferir documentação/);assert.equal(input.value,'2026-10-06');
+ form.querySelector('button[type=button]').click();assert.equal(dialog.hidden,true);assert.equal(dom.window.document.activeElement,trigger);assert.equal(attempts,0);
+ trigger.click();input.value='2026-10-05';submit.click();await tick();assert.equal(dialog.hidden,false);assert.match(dialog.textContent,/Não foi possível/);
+ submit.click();submit.click();assert.equal(submit.disabled,true);assert.equal(attempts,2);assert.match(state(1).textContent,/ATIVIDADE CRIADA/);
+ finish();await tick();assert.equal(dialog.hidden,true);assert.match(state(1).textContent,/CONCLUÍDO/);assert.equal(state(1).querySelector('button'),null);
+ assert.equal(root.querySelector('[data-metric=completed] strong').textContent,'3');assert.equal(root.querySelector('[data-metric=pending] strong').textContent,'2');
 });
 test('description ID supplier difficulty priority and multi-status filters compose without changing full-base counters',async t=>{
  const {view,root,dom}=setup(t);await view.open();const description=root.querySelector('[name=description]');description.value='INEXISTENTE';description.dispatchEvent(new dom.window.Event('input',{bubbles:true}));assert.equal(root.querySelectorAll('.tar-table').length,0);assert.equal(root.querySelector('[data-metric=total] strong').textContent,'4');

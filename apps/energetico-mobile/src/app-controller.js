@@ -9346,6 +9346,33 @@ export function createAppController({
         signal.removeEventListener('abort', rejectCancelled);
         if (session.loadController === controller) session.loadController = null;
       }
+    }, async finalizeTask(id, completionDate, { expectedTask, signal } = {}) {
+      const controller = new AbortController();
+      const signals = [session.lifetime.signal, signal].filter(Boolean);
+      const abort = () => controller.abort();
+      const assertAction = () => {
+        assertSession();
+        if (controller.signal.aborted || signal?.aborted || (typeof auth.getAccount === 'function'
+          && auth.getAccount()?.homeAccountId !== reportsAccount.homeAccountId)) throw cancelled();
+      };
+      assertAction();
+      for (const sourceSignal of signals) sourceSignal.addEventListener('abort', abort, { once: true });
+      const tokenProvider = ordersGalleryTokenProvider(assertAction, TASK_ASSOCIATION_REPORT_ID);
+      try {
+        // Obtain write consent before checking the current item and its version.
+        const writeToken = await tokenProvider([...TASK_ASSOCIATION_REPORT_SCOPES, 'Sites.ReadWrite.All']);
+        const source = await taskAssociationReportDataFactory({ tokenProvider() {
+          assertAction();
+          return writeToken;
+        } });
+        assertAction();
+        const saved = await source.finalizeTask(id, completionDate, { expectedTask, signal: controller.signal });
+        assertAction();
+        return saved;
+      } finally {
+        for (const sourceSignal of signals) sourceSignal.removeEventListener('abort', abort);
+        if (taskAssociationReportSession === session) invalidateGalleryReportSources();
+      }
     } };
     let cancelOpening;
     const openingCancellation = new Promise(resolve => { cancelOpening = () => resolve(false); });

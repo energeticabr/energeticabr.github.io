@@ -1,7 +1,7 @@
 import { SHAREPOINT_SITES } from "../../../../portal/config.js";
 import { createGraphClient } from "../../../../portal/data/graph-client.js";
 import { createSharePointRepository } from "../../../../portal/data/sharepoint-repository.js";
-import { normalizeTaskAssociationSnapshot } from "./task-association-report-model.js";
+import { calendarDate, isCompletedTaskStatus, normalizeTaskAssociationSnapshot } from "./task-association-report-model.js";
 
 const SITE = "personal";
 const LISTS = ["LANCAMENTOTAREFAS", "LANCAMENTO TAREFAS"];
@@ -12,16 +12,17 @@ const SCHEMA = {
   description: ["TAREFA"], association: ["ASSOCIAÇÃO", "ASSOCIACAO"], status: ["CONCLUÍDO"],
   priority: ["PRIORITÁRIA"], difficulty: ["DIFICULDADE"], supplier: ["REFERENTE"],
 };
+const COMPLETION_DATE = ["DATA CONCLUSÃO"];
 // Fold accents only in schema aliases. Report equality keeps the source accents.
 const columnKey = value => String(value ?? "").replace(/^OData_/i, "")
   .replace(/_x([0-9a-f]{4})_/gi, (_, code) => String.fromCodePoint(Number.parseInt(code, 16)))
   .normalize("NFD").replace(/[\u0300-\u036f]/g, "").toUpperCase().replace(/[^A-Z0-9]/g, "");
 
-function validateSchema(columns) {
+function validateSchema(columns, schema) {
   if (!Array.isArray(columns)) throw new TypeError("Esquema SharePoint inválido em LANCAMENTOTAREFAS.");
   const eligible = columns.filter(column => !column?.computed && !/^LinkTitle(?:NoMenu|2)?$/i.test(String(column?.name ?? "")));
   const resolved = {};
-  for (const [field, aliases] of Object.entries(SCHEMA)) {
+  for (const [field, aliases] of Object.entries(schema)) {
     const keys = new Set(aliases.map(columnKey));
     const matches = eligible.filter(column => keys.has(columnKey(column?.name)) || keys.has(columnKey(column?.displayName)));
     if (matches.length !== 1 || !/^[A-Za-z_][A-Za-z0-9_]*$/.test(matches[0]?.name || "")) {
@@ -91,14 +92,19 @@ function abortable(operation, signal) {
   });
 }
 
-async function loadRows(repository, signal) {
+async function resolveTaskSchema(repository, signal, schema = SCHEMA) {
   let list;
   for (const alias of LISTS) {
     list = await abortable(() => repository.resolveList(SITE, [alias], { signal }), signal);
     if (list?.status !== "missing") break;
   }
   if (list?.status !== "resolved" || !list.id) throw new Error("A lista LANCAMENTOTAREFAS não está disponível nesta conta.");
-  const columns = validateSchema(await abortable(() => repository.getColumns(SITE, list.id, { signal }), signal));
+  const columns = validateSchema(await abortable(() => repository.getColumns(SITE, list.id, { signal }), signal), schema);
+  return { list, columns };
+}
+
+async function loadRows(repository, signal) {
+  const { list, columns } = await resolveTaskSchema(repository, signal);
   const query = new URLSearchParams({ $expand: `fields($select=${Object.values(columns).join(",")})`, $top: "100" }).toString();
   const rows = []; const ids = new Set(); const cursors = new Set(); let cursor = "";
   for (let index = 0; index < MAX_TOTAL_PAGES; index++) {
@@ -126,13 +132,12 @@ async function loadRows(repository, signal) {
   throw new RangeError("Limite seguro de paginação excedido; nenhum resultado parcial foi disponibilizado.");
 }
 
-/** Authenticated GET-only load returns a frozen snapshot after full schema and base validation. */
 export function createTaskAssociationReportData({ tokenProvider, repository: suppliedRepository } = {}) {
   if (!suppliedRepository && typeof tokenProvider !== "function") throw new TypeError("O relatório exige uma sessão Microsoft ativa.");
   if (suppliedRepository && ["resolveList", "getColumns", "getItemsPage"].some(name => typeof suppliedRepository[name] !== "function")) {
     throw new TypeError("Repositório SharePoint inválido para o relatório de tarefas por associação.");
   }
-  async function loadSnapshot({ signal: externalSignal } = {}) {
+  async function withRepository(externalSignal, operation) {
     abortIfNeeded(externalSignal);
     const controller = new AbortController(); const { signal } = controller;
     const abort = () => controller.abort(externalSignal.reason);
@@ -141,14 +146,49 @@ export function createTaskAssociationReportData({ tokenProvider, repository: sup
       const repository = suppliedRepository || createSharePointRepository(createGraphClient(
         scopes => abortable(() => tokenProvider(scopes, { signal }), signal),
       ), { personal: SHAREPOINT_SITES.personal });
-      const tasks = await loadRows(repository, signal);
+      const result = await operation(repository, signal);
       abortIfNeeded(signal);
-      return normalizeTaskAssociationSnapshot({ tasks });
+      return result;
     } catch (error) {
       controller.abort(error); throw error;
     } finally {
       externalSignal?.removeEventListener("abort", abort);
     }
   }
-  return Object.freeze({ loadSnapshot });
+
+  function loadSnapshot({ signal } = {}) {
+    return withRepository(signal, async (repository, activeSignal) =>
+      normalizeTaskAssociationSnapshot({ tasks: await loadRows(repository, activeSignal) }));
+  }
+
+  async function finalizeTask(id, completionDate, { expectedTask, signal } = {}) {
+    if (!Number.isSafeInteger(id) || id < 1 || expectedTask?.id !== id) throw new TypeError("Atividade inválida.");
+    const date = calendarDate(completionDate);
+    if (!date || date !== completionDate) throw new TypeError("Informe uma data de conclusão válida.");
+    const itemId = String(id);
+    return withRepository(signal, async (repository, activeSignal) => {
+      const { list, columns: { completion, ...columns } } = await resolveTaskSchema(repository, activeSignal,
+        { ...SCHEMA, completion: COMPLETION_DATE });
+      const current = await abortable(() => repository.getItem(SITE, list.id, itemId, "$expand=fields", { signal: activeSignal }), activeSignal);
+      const row = normalizeItem(current, columns);
+      if (row.id !== id || ["description", "association"].some(field => row[field] !== expectedTask[field])) {
+        throw Object.assign(new Error("A atividade mudou no SharePoint."), { code: "task_association_changed" });
+      }
+      if (isCompletedTaskStatus(row.status)) return row;
+      if (row.status !== expectedTask.status) {
+        throw Object.assign(new Error("O status da atividade mudou no SharePoint."), { code: "task_association_changed" });
+      }
+      const saved = await repository.updateItem(SITE, list.id, itemId, {
+        [columns.status]: "CONCLUÍDO", [completion]: `${date}T12:00:00Z`,
+      }, { eTag: current.eTag || current["@odata.etag"] || current.fields["@odata.etag"], signal: activeSignal });
+      const updated = normalizeItem(saved, columns);
+      if (updated.id !== id || !isCompletedTaskStatus(updated.status)
+        || calendarDate(scalar(saved.fields[completion])) !== date) {
+        throw new Error("O SharePoint não confirmou a finalização da atividade.");
+      }
+      return updated;
+    });
+  }
+
+  return Object.freeze({ loadSnapshot, finalizeTask });
 }

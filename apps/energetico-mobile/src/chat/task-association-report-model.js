@@ -33,8 +33,9 @@ function text(value) {
   return String(value).trim();
 }
 const key = value => text(value).toLocaleUpperCase("pt-BR");
+export const isCompletedTaskStatus = value => ["CONCLUÍDA", "CONCLUÍDO"].includes(key(value).normalize("NFC"));
 
-function calendarDate(value) {
+export function calendarDate(value) {
   if (value == null || typeof value === "string" && !value.trim()) return "";
   if (typeof value !== "string") throw new TypeError("Data inválida no relatório de tarefas por associação.");
   const raw = value.trim();
@@ -82,7 +83,7 @@ function dueLabel(count) {
 }
 
 function deriveTask(row, today) {
-  const completed = key(row.status) === "CONCLUÍDO";
+  const completed = isCompletedTaskStatus(row.status);
   const priority = key(row.priority);
   const priorityRank = priority === "ATIVIDADE EMERGENCIAL" ? 1 : priority === "ATIVIDADE PRIORITÁRIA" ? 2 : 3;
   const daysToDue = row.dueDate ? days(row.dueDate) - today : null;
@@ -114,7 +115,7 @@ export function buildTaskAssociationOverview(snapshot, filters = {}, todayISO) {
   const dueDate = calendarDate(filters.dueDate);
   const selections = Object.fromEntries(EXACT_FILTERS.map(field => [field, key(filters[field])]));
   const metrics = Object.freeze({ pending: source.filter(pending).length,
-    completed: source.filter(row => key(row.status) === "CONCLUÍDO").length, total: source.length });
+    completed: source.filter(row => isCompletedTaskStatus(row.status)).length, total: source.length });
   const filterOptions = Object.freeze(Object.fromEntries(OPTION_FIELDS.map(field => [field,
     Object.freeze([...new Set(source.map(row => String(row[field])).filter(Boolean))]
       .sort(field === "id" ? (a, b) => Number(a) - Number(b) : collator.compare)),

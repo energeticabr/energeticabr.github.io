@@ -36,6 +36,30 @@ test("loads the exact immutable task contract with actual SharePoint ID and reso
   for (const value of [result, result.tasks, result.tasks[0]]) assert.ok(Object.isFrozen(value));
 });
 
+test("finalization writes the completion fields with the latest version and preserves an existing completion", async () => {
+  let current = { ...item(7), eTag: '"current"' };
+  let writes = 0;
+  const source = create(fixture({
+    async getColumns() { return [...columns(), { name: "completion", displayName: "DATA CONCLUSÃO" }]; },
+    async getItem(site, list, id) { assert.deepEqual([site, list, id], ["personal", "tasks", "7"]); return current; },
+    async updateItem(site, list, id, fields, { eTag, signal }) {
+      assert.deepEqual([site, list, id, eTag], ["personal", "tasks", "7", '"current"']);
+      assert.ok(signal);
+      assert.deepEqual(fields, { field_4: "CONCLUÍDO", completion: "2026-10-06T12:00:00Z" });
+      writes++;
+      current = { ...current, fields: { ...current.fields, ...fields } };
+      return current;
+    },
+  }));
+  const expectedTask = { id: 7, status: "ATIVIDADE CRIADA", description: "Revisar projeto", association: "ENGENHARIA" };
+  await assert.rejects(source.finalizeTask(7, "2026-10-06", { expectedTask: { ...expectedTask, description: "Tarefa desatualizada" } }), /mudou/);
+  assert.equal(writes, 0);
+  assert.equal((await source.finalizeTask(7, "2026-10-06", { expectedTask })).status, "CONCLUÍDO");
+  current = { ...current, fields: { ...current.fields, field_4: "CONCLUÍDA" } };
+  assert.equal((await source.finalizeTask(7, "2026-10-07", { expectedTask })).status, "CONCLUÍDA");
+  assert.equal(writes, 1);
+});
+
 test("schema resolves encoded accents and spaces, renamed Title and internal aliases", async () => {
   const names = ["DATAIDENTIFICACAO", "DATA_x0020_FATAL", "Title", "ASSOCIA_x00c7__x00c3_O", "CONCLU_x00cd_DO", "PRIORIT_x00c1_RIA", "DIFICULDADE", "REFERENTE"];
   const result = await create(fixture({ async getColumns() { return [{ name: "LinkTitle", displayName: "TAREFA" }, { name: "computed", displayName: "DATA FATAL", computed: {} },
