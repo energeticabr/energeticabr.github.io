@@ -17,6 +17,7 @@ from zoneinfo import ZoneInfo
 BACKFILL_START = date(2026, 10, 1)
 BACKFILL_END = date(2026, 11, 7)
 NEW_START = date(2026, 11, 8)
+POSTING_OVERLAP_DAYS = 3
 ZONE = ZoneInfo('America/Sao_Paulo') if sys.platform != 'win32' else timezone(timedelta(hours=-3))
 LIST = 'MOVIMENTACOESFINANCEIRAS'
 LIST_ID = 'ad287352-ea59-4f60-9c91-d18520bb1d08'
@@ -45,8 +46,8 @@ def scheduled_start(cursor, today):
     last = date.fromisoformat(cursor.read_text().strip())
     if not NEW_START <= last <= today:
         raise ValueError('Invalid scheduled cursor')
-    # Keep the prior day in each run to catch bank posting delays across midnight.
-    return max(NEW_START, min(last, today - timedelta(days=1)))
+    # Recheck recent dates for bank postings delayed over a weekend.
+    return max(NEW_START, min(last, today - timedelta(days=POSTING_OVERLAP_DAYS)))
 
 
 def text(value):

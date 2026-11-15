@@ -7,7 +7,8 @@ Cada item novo é relido do SharePoint. Registros manuais continuam disponíveis
 na galeria e os importados são somente para consulta no aplicativo.
 
 A primeira carga abrange de 01/10/2026 a 07/11/2026. O modo programado começa
-em 08/11/2026 e relê o dia anterior para capturar lançamentos tardios.
+em 08/11/2026 e relê os três dias anteriores para capturar lançamentos tardios,
+inclusive após o fim de semana.
 Uma execução incompleta não avança a data. O serviço usa o horário de São Paulo
 e o temporizador dispara às 09h, 14h e 20h.
 
