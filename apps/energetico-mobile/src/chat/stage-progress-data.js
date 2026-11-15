@@ -7,8 +7,15 @@ const SITE = "personal";
 const WINDOW_PAGES = 100;
 // Reject runaway traversal entirely; never report truncated counts as complete.
 const MAX_TOTAL_PAGES = 10_000;
-const LISTS = { activities: ["DEMONSTRATIVOETAPA"], launches: ["LANCAMENTOOBRA"] };
+const LISTS = {
+  activities: ["DEMONSTRATIVOETAPA"], launches: ["LANCAMENTOOBRA"],
+  assignments: ["DESCRITIVOPRESENCA", "DESCRITIVO PRESENCA"],
+};
+const STARTED = "ATIVIDADE INICIADA";
+const FINALIZED = "ATIVIDADE FINALIZADA";
+const isItemId = id => /^[1-9]\d*$/.test(id) && Number.isSafeInteger(Number(id));
 const SCHEMA = {
+  assignments: [["IDDESCRITIVOETAPA", "ID DESCRITIVO ETAPA"], ["DATA"], ["FORNECEDOR"]],
   activities: [["FILIAL"], ["ETAPA"], ["ATIVIDADEEXECUTADA", "ATIVIDADE EXECUTADA"], ["IMOVEL", "IMÓVEL"],
     ["FORNECEDOR"], ["DATAEXECUTADO"], ["DATAPREVISTO"], ["STATUS"]],
   launches: [["FILIAL"], ["ETAPA"], ["INÍCIO", "INICIO"], ["FIM"], ["STATUS"], ["PERCENTUALEFETUADO", "PERCENTUAL EFETUADO"]],
@@ -72,14 +79,18 @@ function normalizeItem(item, columns, kind) {
     percent: Number.isFinite(parsed) && parsed >= 0 && parsed <= 1 ? parsed * 100 : null });
 }
 
-async function loadList(repository, kind, signal) {
+async function resolveSchema(repository, kind, signal) {
   const resolved = await abortable(() => repository.resolveList(SITE, LISTS[kind], { signal }), signal);
   if (resolved?.status !== "resolved" || !resolved.id) throw new Error(`A lista ${LISTS[kind][0]} não está disponível nesta conta.`);
   const columns = validateSchema(await abortable(() => repository.getColumns(SITE, resolved.id, { signal }), signal), kind);
-  const query = new URLSearchParams({ $expand: "fields", $top: "100" }).toString();
+  return { id: resolved.id, columns };
+}
+
+async function readCompleteList(repository, listId, signal, normalize, options = {}) {
+  const query = new URLSearchParams({ $expand: "fields", $top: "100", ...options }).toString();
   const rows = []; const ids = new Set(); const cursors = new Set(); let cursor = "";
   for (let pageIndex = 0; pageIndex < MAX_TOTAL_PAGES; pageIndex++) {
-    const page = await abortable(() => repository.getItemsPage(SITE, resolved.id, query, {
+    const page = await abortable(() => repository.getItemsPage(SITE, listId, query, {
       signal, pageNumber: pageIndex % WINDOW_PAGES + 1, maxPages: WINDOW_PAGES,
       headers: { Prefer: "HonorNonIndexedQueriesWarningMayFailRandomly" }, ...(cursor ? { cursor } : {}),
     }), signal);
@@ -95,12 +106,12 @@ async function loadList(repository, kind, signal) {
     }
     for (const item of page.items) {
       const id = String(item?.id ?? "");
-      if (!["string", "number"].includes(typeof item?.id) || !/^[1-9]\d*$/.test(id) || !Number.isSafeInteger(Number(id))
+      if (!["string", "number"].includes(typeof item?.id) || !isItemId(id)
         || !item?.fields || typeof item.fields !== "object" || Array.isArray(item.fields)) {
         throw new TypeError("Página com ID ou campos de registro inválidos.");
       }
       if (ids.has(id)) throw new TypeError("ID duplicado na paginação SharePoint.");
-      ids.add(id); rows.push(normalizeItem(item, columns, kind));
+      ids.add(id); rows.push(normalize(item));
     }
     if (!page.hasMore) return Object.freeze(rows);
     if (cursors.has(next)) throw new TypeError("Cursor repetido: ciclo de paginação SharePoint.");
@@ -109,13 +120,28 @@ async function loadList(repository, kind, signal) {
   throw new RangeError("Limite seguro de paginação excedido; nenhum total parcial foi disponibilizado.");
 }
 
-/** Read-only: both lists must finish before {complete:true,activities,launches}. */
+async function loadList(repository, kind, signal) {
+  const { id, columns } = await resolveSchema(repository, kind, signal);
+  return readCompleteList(repository, id, signal, item => normalizeItem(item, columns, kind));
+}
+
+function requireActivityId(value) {
+  const id = String(value ?? "");
+  if (!isItemId(id)) throw new TypeError("ID do demonstrativo de etapa inválido.");
+  return id;
+}
+
+function normalizeActivityRecord(item, columns, id) {
+  if (String(item?.id) !== id || !item.fields) throw new Error("O SharePoint não confirmou o demonstrativo selecionado.");
+  return normalizeItem(item, columns, "activities");
+}
+
 export function createStageProgressData({ tokenProvider, repository: suppliedRepository } = {}) {
   if (!suppliedRepository && typeof tokenProvider !== "function") throw new TypeError("O relatório exige uma sessão Microsoft ativa.");
   if (suppliedRepository && ["resolveList", "getColumns", "getItemsPage"].some(name => typeof suppliedRepository[name] !== "function")) {
     throw new TypeError("Repositório SharePoint inválido para o relatório.");
   }
-  async function loadSnapshot({ signal: externalSignal } = {}) {
+  async function withRepository(externalSignal, operation) {
     abortIfNeeded(externalSignal);
     const controller = new AbortController();
     const { signal } = controller;
@@ -125,9 +151,9 @@ export function createStageProgressData({ tokenProvider, repository: suppliedRep
       const repository = suppliedRepository || createSharePointRepository(createGraphClient(
         scopes => abortable(() => tokenProvider(scopes, { signal }), signal),
       ), SHAREPOINT_SITES);
-      const [activities, launches] = await Promise.all([loadList(repository, "activities", signal), loadList(repository, "launches", signal)]);
+      const result = await operation(repository, signal);
       abortIfNeeded(signal);
-      return Object.freeze({ complete: true, activities, launches });
+      return result;
     } catch (error) {
       controller.abort(error);
       throw error;
@@ -135,5 +161,67 @@ export function createStageProgressData({ tokenProvider, repository: suppliedRep
       externalSignal?.removeEventListener("abort", abort);
     }
   }
-  return Object.freeze({ loadSnapshot });
+  async function loadSnapshot({ signal } = {}) {
+    return withRepository(signal, async (repository, activeSignal) => {
+      const [activities, launches] = await Promise.all([
+        loadList(repository, "activities", activeSignal), loadList(repository, "launches", activeSignal),
+      ]);
+      return Object.freeze({ complete: true, activities, launches });
+    });
+  }
+
+  async function loadLatestAssignmentDate(activityId, { signal } = {}) {
+    const itemId = requireActivityId(activityId);
+    return withRepository(signal, async (repository, activeSignal) => {
+      const { id, columns: [reference, date, supplier] } = await resolveSchema(repository, "assignments", activeSignal);
+      const referenceField = reference.lookup ? `${reference.name}LookupId` : reference.name;
+      const value = reference.number || reference.lookup ? itemId : `'${itemId}'`;
+      const expand = `fields($select=${referenceField},${date.name},${supplier.name})`;
+      const assignmentDate = ({ fields }) => {
+        if (scalar(fields[referenceField]) !== itemId || !scalar(fields[supplier.name])) return "";
+        return normalizeStageProgressDate(scalar(fields[date.name]));
+      };
+      let dates;
+      try {
+        dates = await readCompleteList(repository, id, activeSignal, assignmentDate, {
+          $expand: expand, $filter: `fields/${referenceField} eq ${value}`,
+        });
+      } catch (error) {
+        // An unindexed column may be rejected by SharePoint; scan only the three needed fields.
+        if (error?.status !== 400) throw error;
+        dates = await readCompleteList(repository, id, activeSignal, assignmentDate, { $expand: expand });
+      }
+      return dates.reduce((latest, date) => date > latest ? date : latest, "");
+    });
+  }
+
+  async function finalizeActivity(activityId, endDate, { expectedActivity, signal } = {}) {
+    const itemId = requireActivityId(activityId);
+    const date = normalizeStageProgressDate(endDate);
+    if (!date || date !== endDate) throw new TypeError("Informe uma data fim válida.");
+    return withRepository(signal, async (repository, activeSignal) => {
+      const { id, columns } = await resolveSchema(repository, "activities", activeSignal);
+      const current = await abortable(() => repository.getItem(SITE, id, itemId, "$expand=fields", { signal: activeSignal }), activeSignal);
+      const row = normalizeActivityRecord(current, columns, itemId);
+      if (row.status.toUpperCase() === FINALIZED) {
+        if (row.plannedDate === date) return row;
+        throw Object.assign(new Error("Esta atividade já foi finalizada com outra data. Atualize o relatório para conferir."), { code: "stage_progress_changed" });
+      }
+      const displayedFields = ["branch", "stage", "activity", "property", "supplier", "executionDate", "plannedDate"];
+      if (row.status.toUpperCase() !== STARTED || expectedActivity && displayedFields.some(field => row[field] !== expectedActivity[field])) {
+        throw Object.assign(new Error("A atividade mudou. Atualize o relatório para conferir."), { code: "stage_progress_changed" });
+      }
+      const saved = await repository.updateItem(SITE, id, itemId, {
+        [columns[6].name]: `${date}T12:00:00Z`,
+        [columns[7].name]: FINALIZED,
+      }, { eTag: current.eTag || current["@odata.etag"], signal: activeSignal });
+      const updated = normalizeActivityRecord(saved, columns, itemId);
+      if (updated.status !== FINALIZED || updated.plannedDate !== date) {
+        throw new Error("O SharePoint não confirmou a data e o status da finalização. Atualize o relatório para conferir.");
+      }
+      return updated;
+    });
+  }
+
+  return Object.freeze({ loadSnapshot, loadLatestAssignmentDate, finalizeActivity });
 }

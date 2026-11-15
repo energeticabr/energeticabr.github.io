@@ -7,11 +7,11 @@ const snapshot={complete:true,activities:[
  {id:'1',branch:'004 - XAVANTE',stage:'ALVENARIA',activity:'PAREDES',property:'TODOS',supplier:'Edgar',executionDate:'2026-08-10',plannedDate:'',status:'ATIVIDADE INICIADA'},
  {id:'2',branch:'004 - XAVANTE',stage:'ALVENARIA',activity:'PILARES',property:'TODOS',supplier:'Edgar',executionDate:'2026-09-09',plannedDate:'2026-09-10',status:'ATIVIDADE FINALIZADA'},
 ],launches:[{id:'1',branch:'004 - XAVANTE',stage:'ALVENARIA',startDate:'2026-08-10',endDate:'',status:'INICIADO',percent:25}]};
-function setup(t,loader=async()=>snapshot,vertical=false){
+function setup(t,loader=async()=>snapshot,vertical=false,actions={}){
  assert.equal(typeof createStageProgressReportView,'function','stage report must be implemented');
  const dom=new JSDOM('<main id="app"><button>Mascote</button></main>');let portrait=vertical;
  dom.window.matchMedia=()=>({get matches(){return portrait;}});
- const view=createStageProgressReportView({document:dom.window.document,data:{loadSnapshot:loader},now:()=>new Date('2026-10-05T12:00:00Z')});
+ const view=createStageProgressReportView({document:dom.window.document,data:{loadSnapshot:loader,...actions},now:()=>new Date('2026-10-05T12:00:00Z')});
  t.after(()=>{view.destroy();dom.window.close();});
  return {view,root:view.element,dom,rotate(v){portrait=v;dom.window.dispatchEvent(new dom.window.Event('resize'));}};
 }
@@ -76,4 +76,64 @@ test('failed refresh and a closed outstanding query cannot display stale activit
  root.querySelector('.pl-refresh').click();await new Promise(r=>setImmediate(r));assert.equal(root.querySelectorAll('.sp-stage').length,0);assert.match(root.querySelector('.pl-notice').textContent,/Não foi possível/);
  let finish,signal;const pending=setup(t,o=>{signal=o.signal;return new Promise(r=>finish=r);});const p=pending.view.open();pending.view.close();assert.equal(signal.aborted,true);finish(snapshot);await p;
  assert.equal(pending.root.querySelectorAll('.sp-stage').length,0);
+});
+
+test('Fim opens an editable assignment date and shows the confirmed completion under the completed filter',async t=>{
+ const calls=[];
+ const {view,root,dom}=setup(t,async()=>snapshot,false,{
+  async loadLatestAssignmentDate(id){calls.push(['date',id]);return '2026-09-27';},
+  async finalizeActivity(id,date){calls.push(['save',id,date]);return {...snapshot.activities[0],plannedDate:date,status:'ATIVIDADE FINALIZADA'};},
+ });
+ await view.open();
+ const button=root.querySelector('.sp-end button');
+ assert.equal(button.textContent,'FINALIZAR');
+ button.click();await new Promise(r=>setImmediate(r));
+ const popup=root.querySelector('[aria-label="Finalizar atividade"]'),date=popup.querySelector('input[type=date]');
+ assert.equal(popup.closest('[hidden]'),null);
+ assert.match(popup.textContent,/PAREDES/);
+ assert.equal(date.value,'2026-09-27');
+ date.value='2026-09-28';
+ popup.querySelector('[type=submit]').click();await new Promise(r=>setImmediate(r));
+ assert.deepEqual(calls,[['date','1'],['save','1','2026-09-28']]);
+ assert.ok(popup.closest('[hidden]'));
+ const status=root.querySelector('[name=status]');status.value='ATIVIDADE FINALIZADA';status.dispatchEvent(new dom.window.Event('change'));
+ const row=[...root.querySelectorAll('tbody tr')].find(tr=>tr.textContent.includes('PAREDES'));
+ assert.equal(row.querySelector('.sp-end').textContent,'28/09/2026');
+ assert.equal(row.querySelector('.sp-end button'),null);
+});
+
+test('with no dated assignment, a failed submission keeps the manual date and the activity available',async t=>{
+ let saves=0;
+ const {view,root}=setup(t,async()=>snapshot,false,{
+  async loadLatestAssignmentDate(){return '';},
+  async finalizeActivity(){saves++;throw Error('rede');},
+ });
+ await view.open();
+ const finish=root.querySelector('.sp-end button');
+ finish.click();await new Promise(r=>setImmediate(r));
+ const form=root.querySelector('.sp-finish-form'),date=form.querySelector('input'),submit=form.querySelector('[type=submit]');
+ assert.equal(date.value,'');
+ submit.click();assert.equal(saves,0);
+ date.value='2026-09-29';
+ submit.click();submit.click();await new Promise(r=>setImmediate(r));
+ assert.equal(saves,1);
+ assert.equal(date.value,'2026-09-29');
+ assert.match(form.querySelector('[role=status]').textContent,/Não foi possível confirmar/);
+ form.querySelector('[type=button]').click();
+ assert.equal(root.querySelector('.sp-end button'),finish);
+ assert.equal(root.ownerDocument.activeElement,finish);
+});
+
+test('restores the manually edited date after Microsoft consent and waits for a new submission',async t=>{
+ let suggestions=0,saves=0;
+ const {view,root}=setup(t,async()=>snapshot,false,{
+  async loadLatestAssignmentDate(){suggestions++;return '2026-10-05';},
+  async finalizeActivity(){saves++;},
+ });
+ await view.open({finishDraft:{id:'1',date:'2026-09-29'}});
+ const popup=root.querySelector('.sp-finish-overlay');
+ assert.equal(popup.hidden,false);
+ assert.equal(popup.querySelector('input').value,'2026-09-29');
+ assert.equal(suggestions,0);
+ assert.equal(saves,0);
 });

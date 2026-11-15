@@ -34,8 +34,10 @@ export function createBrowserAuth({ client, config, storage }) {
   let account = null;
   let msalAccount = null;
   let pendingAction = null;
+  let pendingStageFinish = null;
 
   async function initialize() {
+    pendingStageFinish = null;
     try {
       await client.initialize();
       const redirect = await client.handleRedirectPromise();
@@ -61,6 +63,7 @@ export function createBrowserAuth({ client, config, storage }) {
         && Array.isArray(pending.scopes)
         && grantedRequestedScopes(redirect, pending.scopes)) {
         pendingAction = pending.action;
+        pendingStageFinish = stageFinishForAction(pending.action, pending.scopes, pending.stageFinishDraft);
       }
       return account;
     } catch (error) {
@@ -95,18 +98,20 @@ export function createBrowserAuth({ client, config, storage }) {
     }
   }
 
-  async function authorize(scopes = ["User.Read"], { resumeAction } = {}) {
+  async function authorize(scopes = ["User.Read"], { resumeAction, stageFinishDraft } = {}) {
     if (!account || !msalAccount) throw new BrowserAuthError("AUTH_REQUIRED", "Entre novamente com a Microsoft.");
     const requestedScopes = [...scopes];
     if (RESUMABLE_ACTIONS.has(resumeAction)) {
       try {
         const targetStorage = browserStorage(storage);
         if (!targetStorage) throw new Error("sessionStorage unavailable");
+        const draft = stageFinishForAction(resumeAction, requestedScopes, stageFinishDraft);
         targetStorage.setItem(PENDING_ACTION_KEY, JSON.stringify({
           version: 1,
           action: resumeAction,
           accountId: account.homeAccountId,
           scopes: requestedScopes,
+          ...(draft ? { stageFinishDraft: draft } : {}),
         }));
       } catch {
         throw new BrowserAuthError("AUTH_FAILED", "Não foi possível preservar a ação solicitada durante a autorização Microsoft.");
@@ -129,6 +134,7 @@ export function createBrowserAuth({ client, config, storage }) {
     account = null;
     msalAccount = null;
     pendingAction = null;
+    pendingStageFinish = null;
     removePendingAction(storage);
     await client.logoutRedirect({
       account: signedInAccount,
@@ -138,6 +144,7 @@ export function createBrowserAuth({ client, config, storage }) {
 
   return Object.freeze({ initialize, signIn, getToken, authorize, signOut, getAccount: () => account,
     consumePendingAction() { const action = pendingAction; pendingAction = null; return action; },
+    consumePendingStageFinish() { const draft = pendingStageFinish; pendingStageFinish = null; return draft; },
   });
 }
 
@@ -193,6 +200,13 @@ const RESUMABLE_ACTIONS = new Set([
   "action_stage_demonstrative_gallery",
   "action_construction_stage_gallery",
 ]);
+
+function stageFinishForAction(action, scopes, value) {
+  if (action !== "action_stage_progress" || !scopes.some(scope => /^Sites\.Read(?:Write)?\.All$/i.test(scope))
+    || typeof value?.id !== "string" || !/^[1-9]\d*$/.test(value.id) || !Number.isSafeInteger(Number(value.id))
+    || typeof value.date !== "string" || !/^\d{4}-\d{2}-\d{2}$/.test(value.date)) return null;
+  return { id: value.id, date: value.date };
+}
 
 function browserStorage(storage) {
   try { return storage || globalThis.sessionStorage || null; }
