@@ -286,3 +286,14 @@ test("writes the manual end date and final status in one versioned update and re
   assert.deepEqual(await data.finalizeActivity("129", "2026-10-07"), saved);
   await assert.rejects(data.finalizeActivity("129", "2026-10-08"), /já foi finalizada/i);
 });
+
+test("does not finalize after the displayed activity changes while its popup is open", async () => {
+  const { repository } = fixture({
+    async getItem() { return { ...activity(129, { field_2: "Paredes" }), eTag: '"item,6"' }; },
+    async updateItem() { assert.fail("The edit opened for a different activity must not overwrite this record"); },
+  });
+  const data = create({ repository });
+  const expectedActivity = { branch: "A", stage: "Fundação", activity: "Concreto", property: "Casa",
+    supplier: "João", executionDate: "2026-10-01", plannedDate: "2026-10-03" };
+  await assert.rejects(data.finalizeActivity("129", "2026-10-07", { expectedActivity }), { code: "stage_progress_changed" });
+});

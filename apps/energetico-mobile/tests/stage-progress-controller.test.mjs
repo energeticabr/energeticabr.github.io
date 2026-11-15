@@ -41,7 +41,7 @@ function harness(t, options = {}) {
     stageProgressDataFactory: async () => ({ loadSnapshot: async () => snapshot }),
     stageProgressFactory: async ({ data, document }) => {
       const panel = { data, document, opens: 0, closes: 0, destroys: 0,
-        open() { this.opens++; }, close() { this.closes++; }, destroy() { this.destroys++; } };
+        open(options) { this.opens++; this.openOptions = options; }, close() { this.closes++; }, destroy() { this.destroys++; } };
       panels.push(panel);
       return panel;
     },
@@ -110,10 +110,12 @@ test('stage consent preserves scopes and its own redirect resume action', async 
 });
 
 test('pending stage redirect resumes the report locally after conversation recovery', async t => {
-  const h = harness(t, { auth: { consumePendingAction: () => 'action_stage_progress' } });
+  const finishDraft = { id: '129', date: '2026-10-07' };
+  const h = harness(t, { auth: { consumePendingAction: () => 'action_stage_progress', consumePendingStageFinish: () => finishDraft } });
   await h.controller.start();
   assert.equal(h.panels.length, 1);
   assert.equal(h.panels[0].opens, 1);
+  assert.deepEqual(h.panels[0].openOptions, { finishDraft });
   assert.deepEqual(h.calls, [{ text: '', replyId: 'input_continue' }]);
 });
 

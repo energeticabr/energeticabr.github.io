@@ -75,3 +75,28 @@ test('pending stage action is accepted without allowing an arbitrary mutating re
   await h.auth.initialize();
   assert.equal(h.auth.consumePendingAction(), null);
 });
+
+test('write consent restores the selected activity and date once for the same Microsoft account', async () => {
+  const first = harness();
+  const stageFinishDraft = { id: '129', date: '2026-10-07' };
+  await first.auth.initialize();
+  await first.auth.authorize(['Sites.ReadWrite.All'], { resumeAction: 'action_stage_progress', stageFinishDraft });
+  const second = harness({ account, accessToken: 'write-token', scopes: ['Sites.ReadWrite.All'] }, first.values);
+  await second.auth.initialize();
+  assert.equal(second.auth.consumePendingAction(), 'action_stage_progress');
+  assert.deepEqual(second.auth.consumePendingStageFinish(), stageFinishDraft);
+  assert.equal(second.auth.consumePendingStageFinish(), null);
+});
+
+test('a different Microsoft account cannot access the stage draft after consent', async () => {
+  const first = harness();
+  await first.auth.initialize();
+  await first.auth.authorize(['Sites.ReadWrite.All'], {
+    resumeAction: 'action_stage_progress', stageFinishDraft: { id: '129', date: '2026-10-07' },
+  });
+  const redirect = { account: { ...account, homeAccountId: 'other-account' }, accessToken: 'token', scopes: ['Sites.ReadWrite.All'] };
+  const second = harness(redirect, first.values);
+  await second.auth.initialize();
+  assert.equal(second.auth.consumePendingAction(), null);
+  assert.equal(second.auth.consumePendingStageFinish(), null);
+});

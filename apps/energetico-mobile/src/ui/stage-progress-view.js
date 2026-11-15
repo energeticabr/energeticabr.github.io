@@ -54,13 +54,14 @@ export function createStageProgressReportView({document:doc=globalThis.document,
   finishing=null;controller.abort();finishOverlay.hidden=true;panel.inert=false;
   if(restoreFocus)trigger.focus();
  }
- async function openFinish(row,trigger){
+ async function openFinish(row,trigger,draftDate=''){
   if(finishing)return;
   const active={row,trigger,controller:new AbortController(),saving:false};
   finishing=active;pickers?.close();panel.inert=true;finishOverlay.hidden=false;
   finishActivity.textContent=row.activity;
-  finishDate.value='';finishDate.disabled=true;finishSubmit.disabled=true;finishCancel.disabled=false;
-  finishMessage('Buscando a última data de atribuição…');finishForm.focus();
+  finishDate.value=draftDate;finishDate.disabled=!draftDate;finishSubmit.disabled=!draftDate;finishCancel.disabled=false;
+  finishMessage(draftDate?'':'Buscando a última data de atribuição…');finishForm.focus();
+  if(draftDate)return;
   try{
    const date=await data.loadLatestAssignmentDate(row.id,{signal:active.controller.signal});
    if(finishing!==active)return;
@@ -82,7 +83,7 @@ export function createStageProgressReportView({document:doc=globalThis.document,
   finishMessage('Finalizando atividade…');finishForm.focus();
   let saved;
   try{
-   saved=await data.finalizeActivity(active.row.id,date,{signal:active.controller.signal});
+   saved=await data.finalizeActivity(active.row.id,date,{expectedActivity:active.row,signal:active.controller.signal});
   }catch(error){
    if(finishing!==active)return;
    active.saving=false;finishDate.disabled=false;finishSubmit.disabled=false;finishCancel.disabled=false;
@@ -179,11 +180,15 @@ export function createStageProgressReportView({document:doc=globalThis.document,
  });
  for(const node of controls.values())node.addEventListener('change',()=>{render();content.scrollTop=0;});
  refresh.addEventListener('click',()=>void load());win?.addEventListener('resize',orientationChanged);win?.addEventListener('orientationchange',orientationChanged);
- return Object.freeze({element:root,async open(){
+ return Object.freeze({element:root,async open({finishDraft}={}){
   if(destroyed)throw new Error('O relatório de etapas foi encerrado.');if(!root.hidden)return;
   returnFocus=doc.activeElement;oldOverflow=doc.body.style.overflow;app=doc.getElementById('app');oldInert=app?.inert||false;doc.body.style.overflow='hidden';if(app)app.inert=true;
   pickers?.destroy();pickers=null;
   for(const [name,node] of controls){const value=name==='launchStatus'?'INICIADO':name==='status'?'ATIVIDADE INICIADA':'';node.replaceChildren(Object.assign(make('option','','Todos'),{value:''}));if(value)node.append(Object.assign(make('option','',value),{value}));node.value=value;}
   root.hidden=false;landscape.update();warning.hidden=true;report.hidden=false;panel.classList.toggle('pl-dialog--portrait',false);panel.focus();await load();
+  if(canFinalize&&finishDraft){
+   const row=snapshot?.activities.find(row=>String(row.id)===finishDraft.id&&key(row.status)==='ATIVIDADE INICIADA');
+   if(row)await openFinish(row,content,finishDraft.date);
+  }
  },close,destroy(){if(destroyed)return;close();destroyed=true;pickers?.destroy();win?.removeEventListener('resize',orientationChanged);win?.removeEventListener('orientationchange',orientationChanged);landscape.destroy();root.remove();}});
 }

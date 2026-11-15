@@ -6885,7 +6885,7 @@ export function createAppController({
     });
   }
 
-  function ordersGalleryTokenProvider(assertSession, resumeAction = ORDERS_GALLERY_ID) {
+  function ordersGalleryTokenProvider(assertSession, resumeAction = ORDERS_GALLERY_ID, resumeOptions) {
     const inFlight = new Map();
     return async scopes => {
       assertSession();
@@ -6900,7 +6900,7 @@ export function createAppController({
         } catch (error) {
           assertSession();
           if (error?.code !== "AUTH_REQUIRED" || typeof auth.authorize !== "function") throw error;
-          await auth.authorize(scopes, { resumeAction });
+          await auth.authorize(scopes, { resumeAction, ...resumeOptions });
           assertSession();
           const token = await auth.getToken(scopes);
           assertSession();
@@ -8303,7 +8303,7 @@ export function createAppController({
     supplierPayrollReportOpening = request; return request;
   }
 
-  async function openStageProgress() {
+  async function openStageProgress({ finishDraft } = {}) {
     if (!account || stopped || flowBusy() || store.getState().activeFlow) return false;
     disposeSupplierPayrollReport();
     disposeSacPathologiesReport();
@@ -8326,7 +8326,7 @@ export function createAppController({
         || stageProgressSession !== session || session.lifetime.signal.aborted
         || flowBusy() || store.getState().activeFlow) throw cancelled();
     };
-    async function runStageAction(method, args, externalSignal) {
+    async function runStageAction(method, args, { signal: externalSignal, ...sourceOptions } = {}) {
       const controller = new AbortController();
       const signals = [session.lifetime.signal, externalSignal].filter(Boolean);
       const cancel = () => controller.abort();
@@ -8339,13 +8339,14 @@ export function createAppController({
       };
       assertAction();
       for (const signal of signals) signal.addEventListener('abort', cancel, { once: true });
-      const getToken = ordersGalleryTokenProvider(assertAction, STAGE_PROGRESS_ID);
+      const resumeOptions = method === 'finalizeActivity' ? { stageFinishDraft: { id: args[0], date: args[1] } } : undefined;
+      const getToken = ordersGalleryTokenProvider(assertAction, STAGE_PROGRESS_ID, resumeOptions);
       const tokenProvider = scopes => getToken(method === 'finalizeActivity' && scopes?.includes('Sites.ReadWrite.All')
         ? ['Sites.ReadWrite.All'] : STAGE_PROGRESS_SCOPES);
       try {
         const source = await stageProgressDataFactory({ tokenProvider });
         assertAction();
-        const result = await source[method](...args, { signal: controller.signal });
+        const result = await source[method](...args, { ...sourceOptions, signal: controller.signal });
         assertAction();
         return result;
       } finally {
@@ -8410,9 +8411,9 @@ export function createAppController({
         if (session.loadController === controller) session.loadController = null;
       }
     }, loadLatestAssignmentDate(id, { signal } = {}) {
-      return runStageAction('loadLatestAssignmentDate', [id], signal);
-    }, finalizeActivity(id, date, { signal } = {}) {
-      return runStageAction('finalizeActivity', [id, date], signal);
+      return runStageAction('loadLatestAssignmentDate', [id], { signal });
+    }, finalizeActivity(id, date, options) {
+      return runStageAction('finalizeActivity', [id, date], options);
     } };
     let cancelOpening;
     const openingCancellation = new Promise(resolve => { cancelOpening = () => resolve(false); });
@@ -8427,7 +8428,7 @@ export function createAppController({
           catch (error) { panel?.destroy?.(); throw error; }
           stageProgressReport = report = panel;
         }
-        await report.open();
+        await report.open({ finishDraft });
         assertSession();
         return true;
       } catch (error) {
@@ -12821,7 +12822,7 @@ export function createAppController({
     else if (pendingAction === CARGOS_TABLE_ID) await openCargosTable();
     else if (pendingAction === ATTENDANCE_SUMMARY_ID) await openAttendanceSummary();
     else if (pendingAction === RHID_MASCOT_ACTION) await openRhidMascotReport();
-    else if (pendingAction === STAGE_PROGRESS_ID) await openStageProgress();
+    else if (pendingAction === STAGE_PROGRESS_ID) await openStageProgress({ finishDraft: auth.consumePendingStageFinish?.() });
     else if (pendingAction === SUPPLIER_PAYROLL_REPORT_ID) await openSupplierPayrollReport();
     else if (pendingAction === COMMERCIAL_RECEIPTS_ID) await openCommercialReceipts();
     else if (pendingAction === COMMERCIAL_MILESTONES_ID) await openCommercialMilestones();

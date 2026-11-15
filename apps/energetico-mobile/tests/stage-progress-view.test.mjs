@@ -123,3 +123,17 @@ test('with no dated assignment, a failed submission keeps the manual date and th
  assert.equal(root.querySelector('.sp-end button'),finish);
  assert.equal(root.ownerDocument.activeElement,finish);
 });
+
+test('restores the manually edited date after Microsoft consent and waits for a new submission',async t=>{
+ let suggestions=0,saves=0;
+ const {view,root}=setup(t,async()=>snapshot,false,{
+  async loadLatestAssignmentDate(){suggestions++;return '2026-10-05';},
+  async finalizeActivity(){saves++;},
+ });
+ await view.open({finishDraft:{id:'1',date:'2026-09-29'}});
+ const popup=root.querySelector('.sp-finish-overlay');
+ assert.equal(popup.hidden,false);
+ assert.equal(popup.querySelector('input').value,'2026-09-29');
+ assert.equal(suggestions,0);
+ assert.equal(saves,0);
+});

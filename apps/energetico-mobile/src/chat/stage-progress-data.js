@@ -195,7 +195,7 @@ export function createStageProgressData({ tokenProvider, repository: suppliedRep
     });
   }
 
-  async function finalizeActivity(activityId, endDate, { signal } = {}) {
+  async function finalizeActivity(activityId, endDate, { expectedActivity, signal } = {}) {
     const itemId = requireActivityId(activityId);
     const date = normalizeStageProgressDate(endDate);
     if (!date || date !== endDate) throw new TypeError("Informe uma data fim válida.");
@@ -207,7 +207,10 @@ export function createStageProgressData({ tokenProvider, repository: suppliedRep
         if (row.plannedDate === date) return row;
         throw Object.assign(new Error("Esta atividade já foi finalizada com outra data. Atualize o relatório para conferir."), { code: "stage_progress_changed" });
       }
-      if (row.status.toUpperCase() !== STARTED) throw Object.assign(new Error("O status desta atividade mudou. Atualize o relatório para conferir."), { code: "stage_progress_changed" });
+      const displayedFields = ["branch", "stage", "activity", "property", "supplier", "executionDate", "plannedDate"];
+      if (row.status.toUpperCase() !== STARTED || expectedActivity && displayedFields.some(field => row[field] !== expectedActivity[field])) {
+        throw Object.assign(new Error("A atividade mudou. Atualize o relatório para conferir."), { code: "stage_progress_changed" });
+      }
       const saved = await repository.updateItem(SITE, id, itemId, {
         [columns[6].name]: `${date}T12:00:00Z`,
         [columns[7].name]: FINALIZED,
