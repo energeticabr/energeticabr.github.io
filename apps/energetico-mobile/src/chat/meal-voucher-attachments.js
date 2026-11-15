@@ -1,5 +1,6 @@
 import { validateAttachment } from '../../../../portal/data/attachments.js';
 
+const sharePointFileName = name => name.replace(/["*:<>?|]/g, '_');
 const fileKey = name => String(name).normalize('NFC').toLocaleLowerCase('pt-BR');
 const digest = async bytes => [...new Uint8Array(await globalThis.crypto.subtle.digest('SHA-256',bytes))].map(n=>n.toString(16).padStart(2,'0')).join('');
 
@@ -15,16 +16,19 @@ export function createMealVoucherAttachments({ repository, assertSession = () =>
     for (const file of files) {
       const valid = validateAttachment(file);
       if (!valid.valid) throw new Error(valid.message);
-      if (seen.has(fileKey(valid.name))) throw new Error('Há arquivos com o mesmo nome na bandeja. Renomeie um deles.');
-      seen.add(fileKey(valid.name));
+      const name = sharePointFileName(valid.name);
+      if (seen.has(fileKey(name))) throw new Error('Há arquivos com o mesmo nome na bandeja. Renomeie um deles.');
+      seen.add(fileKey(name));
       const bytes = await file.arrayBuffer(); assertSession();
       if (bytes.byteLength !== file.size) throw new Error('O tamanho do anexo mudou. Confira a bandeja.');
       const sha256 = await digest(bytes); assertSession();
-      entries.push({manifest:{name:valid.name,size:bytes.byteLength,sha256},
-        file:{name:valid.name,size:bytes.byteLength,type:file.type,arrayBuffer:async()=>bytes.slice(0)}});
+      entries.push({manifest:{name,size:bytes.byteLength,sha256},
+        file:{name,size:bytes.byteLength,type:file.type,arrayBuffer:async()=>bytes.slice(0)}});
     }
     entries.sort((a,b)=>a.manifest.name.localeCompare(b.manifest.name));
-    if (previous && JSON.stringify(previous) !== JSON.stringify(entries.map(e=>e.manifest)))
+    const previousManifest = previous?.map(entry=>({ ...entry, name:sharePointFileName(entry.name) }))
+      .sort((a,b)=>a.name.localeCompare(b.name));
+    if (previousManifest && JSON.stringify(previousManifest) !== JSON.stringify(entries.map(e=>e.manifest)))
       throw new Error('Para retomar, mantenha os mesmos anexos, com o mesmo conteúdo, na bandeja.');
     return entries;
   }
