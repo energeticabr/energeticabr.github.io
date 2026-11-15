@@ -1,0 +1,58 @@
+--- a/worker/workflow.py
++++ b/worker/workflow.py
+@@ -31738,13 +31738,28 @@
+                 return self._launch_payroll_is_contractor(status)
+         return False
+ 
+-    def _settlement_has_payroll_link(self, provision_id, *, launch_id=None, preserve_write_retry=False):
++    def _settlement_has_payroll_link(self, provision_id, *, launch_id=None, preserve_write_retry=False,
++                                     expected_payroll=None, check_only=False):
++        fields = ["IDPROVISAO", "IDFOLHA", "Title", "IDLANCAMENTO"]
++        if expected_payroll is not None:
++            fields += ["FORNECEDOR", "TIPOPGTO"]
++
++        def matches_payroll(values, sheet_id):
++            if expected_payroll is None:
++                return True
++            expected_sheet, supplier, rubric = expected_payroll
++            return (sheet_id == expected_sheet
++                    and normalize_text(values.get("FORNECEDOR") or "") == normalize_text(supplier)
++                    and normalize_text(values.get("TIPOPGTO") or "") == normalize_text(rubric))
++
+         options = self.sharepoint.get_options({
+             "key": "settlement_payroll_existing_provision",
+             "source": {"type": "sharepoint_list", "list": "FOLHAPGTO", "id_field": "Id",
+-                       "label_field": "IDFOLHA", "fields": ["IDPROVISAO", "IDFOLHA", "Title", "IDLANCAMENTO"], "top": 2,
++                       "label_field": "IDFOLHA", "fields": fields, "top": 2,
+                        "filters": [{"field": "IDPROVISAO", "kind": "number", "equals": provision_id}]},
+         }, {})
++        if expected_payroll is not None and len(options) != 1:
++            return False
+         # SharePoint can return a Number column as 463.0 and a Text column as "23".
+         for option in options:
+             values = option.get("source_values") or {}
+@@ -31760,15 +31775,21 @@
+                     and sheet_id > 0 and sheet_id == sheet_id.to_integral_value()):
+                 title = f"APP-folha-provisao-{provision_id}"
+                 stored_launch = str(values.get("IDLANCAMENTO") or "").strip()
+-                if launch_id and values.get("Title") == title and stored_launch in ("", str(launch_id)):
++                app_payment = values.get("Title") == title
++                if expected_payroll is not None and (not matches_payroll(values, sheet_id)
++                        or stored_launch != str(launch_id) and (stored_launch or not app_payment)):
++                    return False
++                if check_only:
++                    return True
++                if launch_id and app_payment and stored_launch in ("", str(launch_id)):
+                     payroll_id = int(option["id"])
+-                    fields = ("Title", "IDPROVISAO", "IDFOLHA", "IDLANCAMENTO")
+                     with self._settlement_payroll_origin_guard(launch_id, title, payroll_id) as saved_id:
+                         if saved_id is not None and saved_id != payroll_id:
+                             raise ValueError("Lançamento já vinculado a outra linha da folha")
+                         current, version = self.sharepoint.get_item_fields_with_etag(payroll_id, fields, "FOLHAPGTO")
+                         if (current.get("Title") != title or Decimal(str(current.get("IDPROVISAO"))) != provision_id
+-                                or Decimal(str(current.get("IDFOLHA"))) != sheet_id):
++                                or Decimal(str(current.get("IDFOLHA"))) != sheet_id
++                                or not matches_payroll(current, sheet_id)):
+                             raise ValueError("Vínculo da folha mudou durante a baixa")
+                         current_launch = str(current.get("IDLANCAMENTO") or "").strip()
+                         if current_launch and current_launch != str(launch_id):

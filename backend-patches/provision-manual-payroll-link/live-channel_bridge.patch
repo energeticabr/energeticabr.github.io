@@ -1,0 +1,29 @@
+--- a/channel_bridge.py
++++ b/channel_bridge.py
+@@ -2235,7 +2235,7 @@
+         if operation not in {
+             "snapshot", "detail", "schema", "update", "delete", "payment", "measurement",
+             "attachment", "attachment_add", "attachment_delete", "signature",
+-            *{"payroll_pending", "payroll_targets", "payroll_detail", "payroll_apply", "payroll_legacy_link"},
++            *{"payroll_pending", "payroll_targets", "payroll_detail", "payroll_apply", "payroll_legacy_link", "payroll_provision_link"},
+         } or not isinstance(payload, dict):
+             raise ValueError("Operação de galeria inválida")
+         with self.lock:
+@@ -2243,7 +2243,7 @@
+             self.portal_owners.authorize(
+                 key, identity, state_exists=bool(state), bind=True, allowed_emails=allowed_emails,
+             )
+-            if operation in {"payroll_pending", "payroll_targets", "payroll_detail", "payroll_apply", "payroll_legacy_link"}:
++            if operation in {"payroll_pending", "payroll_targets", "payroll_detail", "payroll_apply", "payroll_legacy_link", "payroll_provision_link"}:
+                 configured = os.getenv("PAYROLL_PENDING_ALLOWED_EMAILS")
+                 payroll_emails = configured.split(",") if configured is not None else allowed_emails
+                 allowed = {email.strip().casefold() for email in payroll_emails if email.strip()}
+@@ -3681,7 +3681,7 @@
+                                 allowed_emails=self.portal_authenticator.allowed_emails,
+                             )
+                         except LaunchGalleryError as exc:
+-                            if operation not in {"payroll_pending", "payroll_targets", "payroll_detail", "payroll_apply", "payroll_legacy_link"}:
++                            if operation not in {"payroll_pending", "payroll_targets", "payroll_detail", "payroll_apply", "payroll_legacy_link", "payroll_provision_link"}:
+                                 raise
+                             return self._send_json(exc.status, {"error": str(exc), "code": exc.code, **exc.details}, cors_origin=origin)
+                         operation_stage("processing")

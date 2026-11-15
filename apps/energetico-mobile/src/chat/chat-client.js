@@ -479,7 +479,7 @@ export function createChatClient({
 
   async function launchGalleryRequest(operation, payload = {}, { signal, onProgress } = {}) {
     const reads = ["snapshot", "detail", "schema", "attachment", "payroll_pending", "payroll_targets", "payroll_detail"];
-    const writes = ["update", "delete", "payment", "measurement", "attachment_delete", "payroll_apply", "payroll_legacy_link"];
+    const writes = ["update", "delete", "payment", "measurement", "attachment_delete", "payroll_apply", "payroll_legacy_link", "payroll_provision_link"];
     const readOnly = reads.includes(operation);
     if (!readOnly && !writes.includes(operation)) throw new Error("Operação de galeria inválida.");
     const payrollRequest = operation.startsWith("payroll_");

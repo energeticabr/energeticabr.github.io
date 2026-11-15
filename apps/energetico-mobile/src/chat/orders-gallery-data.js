@@ -807,6 +807,7 @@ function createSharePointListData({
   retrySnapshotReads = false,
   filterKind,
   provisionPaymentSync = false,
+  confirmPayrollLink,
   loadHoleriteLogo = options => loadWeeklyPayslipLogo({ ...options, fetchImpl }),
   readOnlyEditFields = [],
   assertSession = () => {},
@@ -836,7 +837,7 @@ function createSharePointListData({
   let descriptionLaunchLink;
   function launchLinkService() {
     return descriptionLaunchLink ||= import('./provision-launch-link.js')
-      .then(({ createProvisionLaunchLink }) => createProvisionLaunchLink({ repository, siteKey, assertSession }));
+      .then(({ createProvisionLaunchLink }) => createProvisionLaunchLink({ repository, siteKey, assertSession, confirmPayrollLink }));
   }
   let descriptionDeletion;
   function deletionService() {

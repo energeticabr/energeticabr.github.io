@@ -13,7 +13,7 @@ function fixture() {
     DESCRITIVOPROVISAO: [date('DATAPGTOEFETUADO'), date('DATAPREVISTOPGTO')],
     'PROVISÃO PGTOS': [text('DESCRITIVOPROVISAO'), text('IDLANCAMENTOS'), text('STATUS'), text('PGTOAGENDADO'),
       text('FORNECEDOR'), text('FILIAL'), text('PRODUTO'), text('QTD'), text('VALORTOTAL'), text('FRETE'),
-      date('DATAPGTOEFETUADO'), date('DATAPREVISTOPGTO')],
+      date('DATAPGTOEFETUADO'), date('DATAPREVISTOPGTO'), number('IDFOLHA')],
     LANCAMENTOS: [text('IDPGTOAGENDADO'), {...text('field_5'), displayName: 'FORNECEDOR'}, {...text('Title'), displayName: 'FILIAL'},
       {...date('field_4'), displayName: 'DATA PGTO EFETUADO'}, {...number('field_8'), displayName: 'QUANTIDADE'},
       {...number('field_9'), displayName: 'VALOR UNITÁRIO'}, {...number('field_10'), displayName: 'FRETE'}],
@@ -67,6 +67,67 @@ test('vincula nas duas direções e baixa usando o dia de São Paulo do lançame
   assert.equal(Date.parse(f.parent.fields.DATAPGTOEFETUADO), Date.parse(f.launch.fields.field_4));
   assert.equal(f.child.fields.VALORTOTAL, '300');
   assert.equal((await f.service.save(preview, '41')).parentPaid, true);
+});
+
+test('baixa manual de salário espera a folha e retoma o mesmo vínculo se a confirmação falhar', async () => {
+  const f = fixture();
+  f.child.fields.IDFOLHA = 21;
+  const requests = [];
+  const confirmPayrollLink = async request => {
+    if (request.checkOnly) {
+      assert.equal(f.child.fields.IDLANCAMENTOS, undefined);
+      assert.equal(f.launch.fields.IDPGTOAGENDADO, undefined);
+      return { ready: true, ...request };
+    }
+    requests.push(request);
+    assert.equal(f.child.fields.IDLANCAMENTOS, '81');
+    assert.equal(f.launch.fields.IDPGTOAGENDADO, '41');
+    assert.equal(f.child.fields.PGTOAGENDADO, undefined);
+    if (requests.length === 1) throw new Error('Folha temporariamente indisponível');
+    return { linked: true, ...request };
+  };
+  const service = () => createProvisionLaunchLink({ repository: f.repository, confirmPayrollLink });
+  const first = service();
+  await assert.rejects(first.save(await first.preview('21', '81'), '41'), /folha temporariamente indisponível/i);
+  assert.equal(f.parent.fields.DATAPGTOEFETUADO, undefined);
+  assert.equal(f.child.fields.PGTOAGENDADO, undefined);
+  const retry = service();
+  assert.equal((await retry.save(await retry.preview('21', '81'), '41')).parentPaid, true);
+  assert.equal(f.child.fields.PGTOAGENDADO, 'PAGO');
+  assert.deepEqual(requests, [{ provisionId: '41', launchId: '81' }, { provisionId: '41', launchId: '81' }]);
+  assert.equal(f.writes.filter(([list]) => list === 'LANCAMENTOS').length, 1);
+});
+
+test('recibo de outra linha da folha não confirma a baixa', async () => {
+  const f = fixture();
+  f.child.fields.IDFOLHA = 21;
+  const service = createProvisionLaunchLink({ repository: f.repository,
+    confirmPayrollLink: async request => request.checkOnly ? { ready: true, ...request }
+      : ({ linked: true, provisionId: '42', launchId: '81' }) });
+  await assert.rejects(service.save(await service.preview('21', '81'), '41'), /folha.*não confirmou/i);
+  assert.equal(f.child.fields.PGTOAGENDADO, undefined);
+});
+
+test('recusa a baixa sem gravar vínculos quando a folha nega a conferência inicial', async () => {
+  const f = fixture();
+  f.child.fields.IDFOLHA = 21;
+  const service = createProvisionLaunchLink({ repository: f.repository,
+    confirmPayrollLink: async () => { throw new Error('Conta sem acesso à folha'); } });
+  await assert.rejects(service.save(await service.preview('21', '81'), '41'), /sem acesso à folha/i);
+  assert.deepEqual(f.writes, []);
+});
+
+test('alteração da data durante a confirmação da folha não grava a data anterior', async () => {
+  const f = fixture();
+  f.child.fields.IDFOLHA = 21;
+  const service = createProvisionLaunchLink({ repository: f.repository, confirmPayrollLink: async request => {
+    if (request.checkOnly) return { ready: true, ...request };
+    f.launch.fields.field_4 = '2026-11-11T12:00:00Z';
+    return { linked: true, ...request };
+  } });
+  await assert.rejects(service.save(await service.preview('21', '81'), '41'), /alterado/i);
+  assert.equal(f.child.fields.PGTOAGENDADO, undefined);
+  assert.equal(f.parent.fields.DATAPGTOEFETUADO, undefined);
 });
 
 test('recusa lançamento sem data, com outro vínculo ou alterado depois da conferência', async () => {
