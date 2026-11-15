@@ -8339,9 +8339,11 @@ export function createAppController({
       };
       assertAction();
       for (const signal of signals) signal.addEventListener('abort', cancel, { once: true });
-      const resumeOptions = method === 'finalizeActivity' ? { stageFinishDraft: { id: args[0], date: args[1] } } : undefined;
+      const finalizingStage = method === 'finalizeStage';
+      const writing = finalizingStage || method === 'finalizeActivity';
+      const resumeOptions = writing ? { stageFinishDraft: { id: args[0], date: args[1], ...(finalizingStage ? { kind: 'stage' } : {}) } } : undefined;
       const getToken = ordersGalleryTokenProvider(assertAction, STAGE_PROGRESS_ID, resumeOptions);
-      const tokenProvider = scopes => getToken(method === 'finalizeActivity' && scopes?.includes('Sites.ReadWrite.All')
+      const tokenProvider = scopes => getToken(writing && scopes?.includes('Sites.ReadWrite.All')
         ? ['Sites.ReadWrite.All'] : STAGE_PROGRESS_SCOPES);
       try {
         const source = await stageProgressDataFactory({ tokenProvider });
@@ -8351,13 +8353,14 @@ export function createAppController({
         return result;
       } finally {
         for (const signal of signals) signal.removeEventListener('abort', cancel);
-        if (method === 'finalizeActivity' && stageProgressSession === session) invalidateGalleryReportSources();
+        if (writing && stageProgressSession === session) invalidateGalleryReportSources();
       }
     }
-    const data = { async loadSnapshot(options = {}) {
+    const data = { async loadSnapshot({ refresh, ...options } = {}) {
       assertSession();
       if (options.signal?.aborted) throw cancelled();
       session.loadController?.abort();
+      if (refresh) reportSnapshots.invalidate('open-stage-progress');
       const controller = new AbortController();
       session.loadController = controller;
       const generation = ++session.generation;
@@ -8414,6 +8417,8 @@ export function createAppController({
       return runStageAction('loadLatestAssignmentDate', [id], { signal });
     }, finalizeActivity(id, date, options) {
       return runStageAction('finalizeActivity', [id, date], options);
+    }, finalizeStage(id, date, options) {
+      return runStageAction('finalizeStage', [id, date], options);
     } };
     let cancelOpening;
     const openingCancellation = new Promise(resolve => { cancelOpening = () => resolve(false); });

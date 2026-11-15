@@ -1,4 +1,4 @@
-import { buildStageReport } from "./operations-reports-model.js";
+import { buildStageReport, stageReportGroupKey } from "./operations-reports-model.js";
 
 /** Preserve the source calendar day, including SharePoint timestamps with offsets.
  * Blank is unknown; invalid dates reject rather than rolling over into durations.
@@ -46,6 +46,13 @@ function normalizeRows(rows, kind) {
   });
 }
 
+export function summarizeStageCompletion(activities) {
+  return {
+    ready: activities.length > 0 && activities.every(row => row.status.trim().toUpperCase() === "ATIVIDADE FINALIZADA"),
+    latestDate: activities.reduce((latest, row) => row.plannedDate > latest ? row.plannedDate : latest, ""),
+  };
+}
+
 /** UI supplies its own defaults. Grouping, zero-activity cards and latest-launch
  * selection remain the shared operations report behavior, isolated per branch.
  */
@@ -62,6 +69,20 @@ export function buildStageProgress(snapshot, filters = {}, today) {
   }
   const date = today === undefined ? undefined : normalizeStageProgressDate(today);
   if (date === "") throw new RangeError("Data de hoje inválida no relatório de etapas.");
-  return buildStageReport({ activities: normalizeRows(snapshot.activities, "activities"),
-    launches: normalizeRows(snapshot.launches, "launches") }, selected, date);
+  const activities = normalizeRows(snapshot.activities, "activities");
+  const launches = normalizeRows(snapshot.launches, "launches");
+  const linked = new Map();
+  for (const row of activities) {
+    const key = stageReportGroupKey(row);
+    if (!linked.has(key)) linked.set(key, []);
+    linked.get(key).push(row);
+  }
+  const completion = new Map([...linked].map(([key, rows]) => [key, summarizeStageCompletion(rows)]));
+  // Keep a stage accessible after its last started activity leaves the initial filter.
+  const includeGroups = selected.status.toUpperCase() === "ATIVIDADE INICIADA"
+    ? activities.filter(row => completion.get(stageReportGroupKey(row)).ready) : [];
+  const report = buildStageReport({ activities, launches }, selected, date, { includeGroups });
+  return { ...report, stages: report.stages.map(stage => ({
+    ...stage, completion: completion.get(stageReportGroupKey(stage)) ?? summarizeStageCompletion([]),
+  })) };
 }

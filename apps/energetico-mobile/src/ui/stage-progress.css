@@ -29,6 +29,8 @@
 .sp-total { margin:0; border:1px solid #aaa; border-top:0; background:#eee; padding:6px; text-align:right; font-weight:700; }
 
 .sp-finish-button { display:inline-block; min-height:24px; max-width:100%; padding:3px 4px; border:1px solid #1e6732; border-radius:5px; background:#1e6732; color:#fff; font:inherit; font-weight:800; cursor:pointer; }
+.sp-stage-finish { min-height:32px; padding:4px 8px; }
+.sp-stage-finish:disabled { background:#dbe2e8; border-color:#a7b3bc; color:#465763; cursor:default; }
 .sp-end .sp-finish-button { display:block; margin:2px auto 0; font-size:clamp(7px,calc(1.08 * var(--report-vw, 1vw)),12px); }
 .sp-finish-overlay { position:absolute; inset:0; z-index:10; display:grid; place-items:center; padding:12px; box-sizing:border-box; background:#05202e88; }
 .sp-finish-form { width:min(100%,360px); max-height:100%; box-sizing:border-box; overflow:auto; display:grid; gap:10px; padding:16px; border-radius:12px; background:#fff; color:#112b3a; box-shadow:0 6px 24px #0004; }

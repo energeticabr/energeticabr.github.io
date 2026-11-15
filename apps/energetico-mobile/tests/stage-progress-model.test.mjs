@@ -111,3 +111,16 @@ test("impossible or malformed dates cannot invent elapsed durations", () => {
 test("empty complete snapshot produces an empty report", () => {
   assert.deepEqual(build(source([], []), {}, "2026-10-05"), { stages: [], count: 0 });
 });
+
+test("completed children keep the stage available under the started activity filter", () => {
+  const activityDone = { status: "ATIVIDADE FINALIZADA" };
+  const snapshot = source([
+    activity(1, { ...activityDone, plannedDate: "10/10/2026" }),
+    activity(2, { ...activityDone, plannedDate: "2026-10-03" }),
+    activity(3, { branch: "B", plannedDate: "2026-12-31" }),
+  ], [launch(7), launch(9, { status: "FINALIZADO", startDate: "2026-10-02" })]);
+  const [stage] = build(snapshot, { launchStatus: "INICIADO", status: "ATIVIDADE INICIADA" }).stages;
+  assert.equal(stage.launch.id, "7");
+  assert.deepEqual(stage.rows, []);
+  assert.deepEqual(stage.completion, { ready: true, latestDate: "2026-10-10" });
+});

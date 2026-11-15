@@ -28,18 +28,19 @@ export function createStageProgressReportView({document:doc=globalThis.document,
  let snapshot=null,controller=null,revision=0,pickers=null,destroyed=false,returnFocus=null,oldOverflow='',app=null,oldInert=false;
  const landscape = bindReportLandscape(root);
  const canFinalize=typeof data.loadLatestAssignmentDate==='function'&&typeof data.finalizeActivity==='function';
+ const canFinalizeStage=typeof data.finalizeStage==='function';
  const finishOverlay=make('div','sp-finish-overlay');finishOverlay.hidden=true;
  finishOverlay.setAttribute('role','dialog');finishOverlay.setAttribute('aria-modal','true');
  finishOverlay.setAttribute('aria-label','Finalizar atividade');
  const finishForm=make('form','sp-finish-form');finishForm.tabIndex=-1;
- const finishActivity=make('p','sp-finish-activity');
+ const finishHeading=make('h2','','Finalizar atividade'),finishSubject=make('p','sp-finish-activity');
  const finishDate=make('input');finishDate.type='date';finishDate.required=true;finishDate.disabled=true;
  const finishLabel=make('label','','Data fim');finishLabel.append(finishDate);
  const finishNotice=make('p','sp-finish-notice');finishNotice.setAttribute('role','status');finishNotice.hidden=true;
  const finishCancel=make('button','','CANCELAR');finishCancel.type='button';
  const finishSubmit=make('button','sp-finish-button','SUBMETER');finishSubmit.type='submit';
  const finishActions=make('div','sp-finish-actions');finishActions.append(finishCancel,finishSubmit);
- finishForm.append(make('h2','','Finalizar atividade'),finishActivity,finishLabel,finishNotice,finishActions);
+ finishForm.append(finishHeading,finishSubject,finishLabel,finishNotice,finishActions);
  finishOverlay.append(finishForm);root.append(finishOverlay);
  let finishing=null;
   addReportCloseControl({root, toolbar:filters, onClose:close});
@@ -54,14 +55,18 @@ export function createStageProgressReportView({document:doc=globalThis.document,
   finishing=null;controller.abort();finishDate.disabled=true;finishOverlay.hidden=true;panel.inert=false;
   if(restoreFocus)trigger.focus();
  }
- async function openFinish(row,trigger,draftDate=''){
+ async function openFinish(row,trigger,{stage=false,suggestion='',draftDate=''}={}){
   if(finishing)return;
-  const active={row,trigger,controller:new AbortController(),saving:false};
+  const active={row,trigger,stage,controller:new AbortController(),saving:false};
   finishing=active;pickers?.close();panel.inert=true;finishOverlay.hidden=false;
-  finishActivity.textContent=row.activity;
-  finishDate.value=draftDate;finishDate.disabled=!draftDate;finishSubmit.disabled=!draftDate;finishCancel.disabled=false;
-  finishMessage(draftDate?'':'Buscando a última data de atribuição…');finishForm.focus();
-  if(draftDate)return;
+  const title=stage?'Finalizar etapa':'Finalizar atividade';
+  finishHeading.textContent=title;finishOverlay.setAttribute('aria-label',title);
+  finishSubject.textContent=stage?`${row.stage} · ${row.branch}`:row.activity;
+  const loading=!stage&&!draftDate;
+  finishDate.value=draftDate||suggestion;finishDate.disabled=loading;finishSubmit.disabled=loading;finishCancel.disabled=false;
+  finishMessage(loading?'Buscando a última data de atribuição…':stage&&!finishDate.value?'Informe a data fim da etapa.':'');
+  finishForm.focus();
+  if(!loading)return;
   try{
    const date=await data.loadLatestAssignmentDate(row.id,{signal:active.controller.signal});
    if(finishing!==active)return;
@@ -80,23 +85,28 @@ export function createStageProgressReportView({document:doc=globalThis.document,
   if(!active||active.saving||finishDate.disabled||!finishForm.reportValidity())return;
   const date=finishDate.value;
   active.saving=true;finishDate.disabled=true;finishSubmit.disabled=true;finishCancel.disabled=true;
-  finishMessage('Finalizando atividade…');finishForm.focus();
+  finishMessage(active.stage?'Finalizando etapa…':'Finalizando atividade…');finishForm.focus();
   let saved;
   try{
-   saved=await data.finalizeActivity(active.row.id,date,{expectedActivity:active.row,signal:active.controller.signal});
+   const signal=active.controller.signal;
+   saved=active.stage
+    ?await data.finalizeStage(active.row.id,date,{expectedStage:active.row,signal})
+    :await data.finalizeActivity(active.row.id,date,{expectedActivity:active.row,signal});
   }catch(error){
    if(finishing!==active)return;
    active.saving=false;finishDate.disabled=false;finishSubmit.disabled=false;finishCancel.disabled=false;
-   finishMessage(error?.status===412||error?.code==='stage_progress_changed'
-    ?'A atividade mudou no SharePoint. Atualize o relatório para conferir.'
-    :'Não foi possível confirmar a finalização. Confira a data e tente novamente.');
+   const subject=active.stage?'etapa':'atividade';
+   if(error?.code==='stage_progress_incomplete')finishMessage('Ainda há descritivos pendentes ou a etapa ficou sem vínculos. Atualize o relatório.');
+   else if(error?.status===412||error?.code==='stage_progress_changed')finishMessage(`A ${subject} mudou no SharePoint. Atualize o relatório para conferir.`);
+   else finishMessage('Não foi possível confirmar a finalização. Confira a data e tente novamente.');
    finishSubmit.focus();
    return;
   }
   if(finishing!==active)return;
   closeFinish(false);
-  snapshot={...snapshot,activities:snapshot.activities.map(row=>row.id===saved.id?saved:row)};
-  populate();render();showNotice('Atividade finalizada.');content.focus({preventScroll:true});
+  const collection=active.stage?'launches':'activities';
+  snapshot={...snapshot,[collection]:snapshot[collection].map(row=>String(row.id)===saved.id?saved:row)};
+  populate();render();showNotice(active.stage?'Etapa finalizada.':'Atividade finalizada.');content.focus({preventScroll:true});
  });
  finishOverlay.addEventListener('keydown',event=>{
   if(!finishing)return;
@@ -127,6 +137,13 @@ export function createStageProgressReportView({document:doc=globalThis.document,
    if(stage.startDate){dates.append(make('strong','sp-start',formatOperationsDate(stage.startDate)),make('strong','sp-arrow',' ➜ '),make('strong',stage.endDate?'sp-end':'',stage.endDate?formatOperationsDate(stage.endDate):'HOJE'));}else dates.append(doc.createTextNode('—'));
    const days=make('div','sp-stage-days','⏳ ');days.append(duration(stage.days,state));
    summary.append(heading,make('p','sp-branch',stage.branch||'—'),dates,days);
+   if(canFinalizeStage){
+    const finish=make('button','sp-finish-button sp-stage-finish','FINALIZAR');finish.type='button';
+    finish.setAttribute('aria-label',`Finalizar etapa ${stage.stage}`);
+    finish.disabled=!stage.completion.ready||!stage.launch?.branch||!stage.launch?.stage||key(stage.status)!=='INICIADO';
+    finish.addEventListener('click',()=>void openFinish(stage.launch,finish,{stage:true,suggestion:stage.completion.latestDate}));
+    summary.append(finish);
+   }
    const details=make('div','sp-details'),table=make('table','sp-activities'),cols=make('colgroup');
    for(const width of [5,20,15,18,12,12,8,10]){const col=make('col');col.style.width=`${width}%`;cols.append(col);}
    const head=make('thead'),titles=make('tr');for(const label of HEADERS){const th=make('th','',label);th.scope='col';titles.append(th);}head.append(titles);
@@ -160,11 +177,11 @@ export function createStageProgressReportView({document:doc=globalThis.document,
   }
   pickers=bindSearchableFilterSelects(filters,{placement:'below',report:true});
  }
- async function load(){
+ async function load(refreshSnapshot=false){
   if(root.hidden||destroyed)return;
   pickers?.close();controller?.abort();const current=++revision,active=new AbortController();controller=active;snapshot=null;content.replaceChildren();showNotice('Carregando etapas e atividades do SharePoint…');report.setAttribute('aria-busy','true');refresh.disabled=true;
   try{
-   const result=await data.loadSnapshot({signal:active.signal});
+   const result=await data.loadSnapshot({signal:active.signal,refresh:refreshSnapshot});
    if(active.signal.aborted||current!==revision||root.hidden||destroyed)return;
    buildStageProgress(result,{},localDate(now()));snapshot=result;populate();render();
   }catch(error){if(active.signal.aborted||current!==revision||root.hidden||destroyed)return;snapshot=null;content.replaceChildren();showNotice('Não foi possível carregar as etapas e atividades. Use Atualizar para tentar novamente.');}
@@ -179,16 +196,23 @@ export function createStageProgressReportView({document:doc=globalThis.document,
   if(e.shiftKey&&(doc.activeElement===first||doc.activeElement===panel)){e.preventDefault();last?.focus();}else if(!e.shiftKey&&(doc.activeElement===last||doc.activeElement===panel)){e.preventDefault();first?.focus();}
  });
  for(const node of controls.values())node.addEventListener('change',()=>{render();content.scrollTop=0;});
- refresh.addEventListener('click',()=>void load());win?.addEventListener('resize',orientationChanged);win?.addEventListener('orientationchange',orientationChanged);
+ refresh.addEventListener('click',()=>void load(true));win?.addEventListener('resize',orientationChanged);win?.addEventListener('orientationchange',orientationChanged);
  return Object.freeze({element:root,async open({finishDraft}={}){
   if(destroyed)throw new Error('O relatório de etapas foi encerrado.');if(!root.hidden)return;
   returnFocus=doc.activeElement;oldOverflow=doc.body.style.overflow;app=doc.getElementById('app');oldInert=app?.inert||false;doc.body.style.overflow='hidden';if(app)app.inert=true;
   pickers?.destroy();pickers=null;
   for(const [name,node] of controls){const value=name==='launchStatus'?'INICIADO':name==='status'?'ATIVIDADE INICIADA':'';node.replaceChildren(Object.assign(make('option','','Todos'),{value:''}));if(value)node.append(Object.assign(make('option','',value),{value}));node.value=value;}
   root.hidden=false;landscape.update();warning.hidden=true;report.hidden=false;panel.classList.toggle('pl-dialog--portrait',false);panel.focus();await load();
-  if(canFinalize&&finishDraft){
-   const row=snapshot?.activities.find(row=>String(row.id)===finishDraft.id&&key(row.status)==='ATIVIDADE INICIADA');
-   if(row)await openFinish(row,content,finishDraft.date);
+  if(!snapshot||!finishDraft)return;
+  if(finishDraft.kind==='stage'&&canFinalizeStage){
+   const launch=snapshot.launches.find(row=>String(row.id)===finishDraft.id);
+   const group=buildStageProgress(snapshot).stages.find(stage=>stage.launches.some(row=>row.id===finishDraft.id));
+   if(launch&&group?.completion.ready&&key(launch.status)==='INICIADO'){
+    await openFinish(launch,content,{stage:true,draftDate:finishDraft.date});
+   }else showNotice('A etapa mudou. Confira a situação dos descritivos vinculados.');
+  }else if(canFinalize&&finishDraft.kind!=='stage'){
+   const row=snapshot.activities.find(row=>String(row.id)===finishDraft.id&&key(row.status)==='ATIVIDADE INICIADA');
+   if(row)await openFinish(row,content,{draftDate:finishDraft.date});
   }
  },close,destroy(){if(destroyed)return;close();destroyed=true;pickers?.destroy();win?.removeEventListener('resize',orientationChanged);win?.removeEventListener('orientationchange',orientationChanged);landscape.destroy();root.remove();}});
 }

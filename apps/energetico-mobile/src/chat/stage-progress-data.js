@@ -1,7 +1,8 @@
 import { SHAREPOINT_SITES } from "../../../../portal/config.js";
 import { createGraphClient } from "../../../../portal/data/graph-client.js";
 import { createSharePointRepository } from "../../../../portal/data/sharepoint-repository.js";
-import { normalizeStageProgressDate } from "./stage-progress-model.js";
+import { normalizeStageProgressDate, summarizeStageCompletion } from "./stage-progress-model.js";
+import { stageReportGroupKey } from "./operations-reports-model.js";
 
 const SITE = "personal";
 const WINDOW_PAGES = 100;
@@ -223,5 +224,41 @@ export function createStageProgressData({ tokenProvider, repository: suppliedRep
     });
   }
 
-  return Object.freeze({ loadSnapshot, loadLatestAssignmentDate, finalizeActivity });
+  async function finalizeStage(launchId, endDate, { expectedStage, signal } = {}) {
+    const itemId = String(launchId ?? "");
+    if (!isItemId(itemId)) throw new TypeError("ID da etapa inválido.");
+    const date = normalizeStageProgressDate(endDate);
+    if (!date || date !== endDate) throw new TypeError("Informe uma data fim válida.");
+    return withRepository(signal, async (repository, activeSignal) => {
+      const { id, columns } = await resolveSchema(repository, "launches", activeSignal);
+      const current = await abortable(() => repository.getItem(SITE, id, itemId, "$expand=fields", { signal: activeSignal }), activeSignal);
+      if (String(current?.id) !== itemId || !current.fields) throw new Error("O SharePoint não confirmou a etapa selecionada.");
+      const stage = normalizeItem(current, columns, "launches");
+      if (stage.status.toUpperCase() === "FINALIZADO" && stage.endDate === date) return stage;
+      const displayedFields = ["branch", "stage", "startDate", "endDate", "percent"];
+      if (!stage.branch || !stage.stage || stage.status.toUpperCase() !== "INICIADO"
+        || expectedStage && displayedFields.some(field => stage[field] !== expectedStage[field])) {
+        throw Object.assign(new Error("A etapa mudou. Atualize o relatório para conferir."), { code: "stage_progress_changed" });
+      }
+      const stageKey = stageReportGroupKey(stage);
+      const activities = await loadList(repository, "activities", activeSignal);
+      const { ready } = summarizeStageCompletion(activities.filter(row => stageReportGroupKey(row) === stageKey));
+      if (!ready) {
+        throw Object.assign(new Error("Finalize todos os descritivos vinculados antes de finalizar a etapa."),
+          { code: "stage_progress_incomplete" });
+      }
+      const saved = await repository.updateItem(SITE, id, itemId, {
+        [columns[3].name]: `${date}T12:00:00Z`,
+        [columns[4].name]: "FINALIZADO",
+      }, { eTag: current.eTag || current["@odata.etag"], signal: activeSignal });
+      if (String(saved?.id) !== itemId || !saved.fields) throw new Error("O SharePoint não confirmou a gravação da etapa.");
+      const updated = normalizeItem(saved, columns, "launches");
+      if (updated.status.toUpperCase() !== "FINALIZADO" || updated.endDate !== date) {
+        throw new Error("O SharePoint não confirmou a data e o status da etapa.");
+      }
+      return updated;
+    });
+  }
+
+  return Object.freeze({ loadSnapshot, loadLatestAssignmentDate, finalizeActivity, finalizeStage });
 }
