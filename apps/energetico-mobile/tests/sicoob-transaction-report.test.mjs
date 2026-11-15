@@ -130,7 +130,7 @@ test('shows the bank balance first and independently of transaction filters and 
     await view.open();
     const first = () => view.element.querySelector('.sicoob-transaction-summary').firstElementChild;
     assert.match(first().textContent, /Saldo em conta corrente.*Consultando/);
-    assert.match(first().nextElementSibling.textContent, /^Transações1$/);
+    assert.match(first().nextElementSibling.textContent, /^Transações1Pagamento mais recente em 01\/10\/2026$/);
     finish({ balanceCents: -123456, asOf: '2026-11-11T21:17:00Z' });
     await new Promise(resolve => setImmediate(resolve));
     assert.match(first().textContent, /-R\$\s1\.234,56/);
@@ -160,9 +160,11 @@ test('shows the bank balance first and independently of transaction filters and 
 test('refresh starts the source sync, retains filters and rows, and reloads when bank completes before fiscal', async () => {
   const dom = new JSDOM('<main id="app"></main>');
   let listener, starts = 0, reads = 0, failRead = false;
+  let balanceReads = 0;
   const monitor = { running: false, subscribe(fn) { listener = fn; fn({ running: false }); return () => { listener = null; }; },
     async start() { starts++; listener({ running: true, sourceRunning: true, notice: 'Consultando as três fontes…' }); } };
   const view = createSicoobTransactionReportView({ document: dom.window.document, syncMonitor: monitor,
+    loadBalance: async () => { balanceReads++; return null; },
     data: { async loadSnapshot() { reads++; if (failRead) throw Error('offline'); return { rows: [payment(reads)] }; } } });
   try {
     await view.open();
@@ -171,11 +173,13 @@ test('refresh starts the source sync, retains filters and rows, and reloads when
     const button = view.element.querySelector('.pl-refresh'); button.click();
     await new Promise(resolve => setImmediate(resolve));
     assert.equal(starts, 1); assert.equal(reads, 1);
+    assert.equal(balanceReads, 1);
     assert.equal(view.element.querySelectorAll('tbody tr').length, 1);
     assert.equal(button.disabled, true);
     listener({ running: true, sourceRunning: false, latest: { requestId: 'a'.repeat(32), status: 'succeeded' }, notice: 'Transações concluídas. Notas fiscais aguardando.' });
     await new Promise(resolve => setImmediate(resolve));
     assert.equal(reads, 2); assert.equal(search.value, 'Loja'); assert.equal(button.disabled, true);
+    assert.equal(balanceReads, 2);
     assert.doesNotMatch(view.element.textContent, /Notas fiscais aguardando/);
     failRead = true;
     listener({ running: true, sourceRunning: true, notice: 'Consultando…' });

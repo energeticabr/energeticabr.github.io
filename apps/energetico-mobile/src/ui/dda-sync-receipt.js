@@ -1,4 +1,14 @@
 import { formatDdaElapsed } from '../chat/dda-bank-refresh.js';
+
+function sicoobSummary(result) {
+  if (result.status === 'failed') return 'A consulta ao Sicoob ou a importação das transações falhou.';
+  if (result.status === 'partial') return 'A consulta ao Sicoob terminou com pendências na galeria.';
+  if (result.created === 0) return 'O Sicoob não retornou novas transações para importar.';
+  if (result.created === 1) return '1 nova transação importada do extrato Sicoob.';
+  if (result.created > 1) return `${result.created} novas transações importadas do extrato Sicoob.`;
+  return 'Consulta ao extrato Sicoob concluída.';
+}
+
 /** Every terminal outcome is acknowledged; only confirmed IDs identify new records. */
 export function createDdaSyncReceipt({ document: doc, host, format, source = 'dda', onClose = () => {}, global = false, requireAcknowledgement = false, onAcknowledge = async () => true }) {
   let current = null;
@@ -41,7 +51,8 @@ export function createDdaSyncReceipt({ document: doc, host, format, source = 'dd
     semantic.setAttribute('role', 'dialog'); semantic.setAttribute('aria-modal', 'true');
     semantic.setAttribute('aria-label', title);
     dialog.append(el('h2', 'gallery-record-dialog-title', title));
-    const summary = result.message || (source === 'sicoob' ? `Transações consultadas no Sicoob e atualizadas no SharePoint. ${result.created ?? 0} ${result.created === 1 ? 'nova transação' : 'novas transações'}.` : hasNew ? `${result.created} ${result.created === 1 ? 'boleto criado' : 'boletos criados'} nesta sincronização.`
+    const summary = result.message || (source === 'sicoob' ? sicoobSummary(result)
+      : hasNew ? `${result.created} ${result.created === 1 ? 'boleto criado' : 'boletos criados'} nesta sincronização.`
       : result.created === 0 ? 'Sicoob e SharePoint atualizados. Nenhum novo DDA foi encontrado.' : 'Sicoob e SharePoint atualizados.');
     dialog.append(el('p', 'dda-sync-summary', summary));
     if (source === 'sicoob' && result.pendingDetails > 0) dialog.append(el('p', 'dda-sync-summary', `${result.pendingDetails} comprovantes ou recebedores ainda sem confirmação.`));
