@@ -10,7 +10,7 @@ for (const [name, create, grid, rows, initial] of [
     [{ id:'1', fields:{ Title:'Exemplo', SITUACAO:'Em aberto', ULTIMA_CONSULTA:'2026-11-10T15:25:00Z' } }], '10/11/2026, 12:25'],
   ['Notas Fiscais', createNfeReportView, '.nfe-metrics', [], '—'],
   ['Sicoob', createSicoobTransactionReportView, '.ddr-summary',
-    [{ id:'1', fields:{ ORIGEMMOVIMENTACAO:'SICOOB', Created:'2026-11-10T16:10:00Z', Modified:'2026-11-12T12:00:00Z' } }], '10/11/2026, 13:10'],
+    [{ id:'1', fields:{ ORIGEMMOVIMENTACAO:'SICOOB', Created:'2026-11-10T16:10:00Z', Modified:'2026-11-12T12:00:00Z' } }], '—'],
 ]) test(`${name} shows one last-update metric without polling text or future retry dates`, async t => {
   const dom = new JSDOM('<body><main id="app"></main></body>');
   let emit;
@@ -25,7 +25,7 @@ for (const [name, create, grid, rows, initial] of [
   const metric = () => report.element.querySelector(`${grid} > [data-report-last-update]`);
   const value = () => metric().querySelector('time').textContent;
   assert.ok(metric());
-  assert.match(metric().textContent, /Última atualização/);
+  assert.match(metric().textContent, name === 'Sicoob' ? /Última coleta concluída/ : /Última atualização/);
   assert.equal(value(), initial);
   const lastSuccessfulAt = Date.parse('2026-11-11T17:40:00Z');
   emit({ running:false, lastSuccessfulAt });
