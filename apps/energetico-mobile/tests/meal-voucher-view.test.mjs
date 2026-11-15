@@ -75,6 +75,27 @@ test('vale transporte confirma, limpa a tentativa e volta à primeira etapa com 
   assert.equal(h.doc.querySelector('[data-meal-done]'), null);
 });
 
+for (const sameSource of [true, false]) test(`reabertura limpa apenas a cópia identificada da postagem anterior (${sameSource})`, async t => {
+  const dom = new JSDOM('<body></body>', { url:'https://example.invalid' });
+  const doc = dom.window.document, storage = dom.window.localStorage;
+  const file = new File(['pdf'], 'recibo.pdf', { type:'application/pdf', lastModified:0 });
+  const tray = testTray([file]);
+  const key = 'energetico:transport-voucher:pending:recover';
+  storage.setItem(key, JSON.stringify({ draft:{ lines:[] }, files:[{ name:file.name, size:file.size, lastModified:0 }],
+    progress:{ signature:'{}', operationId:'recover', traySourceIds:[sameSource ? file.name : 'previous-source'] } }));
+  const panel = createMealVoucherView({ documentRef:doc, attachmentTray:tray, sessionKey:'recover', storage, voucherType:'transport',
+    data:{ loadOptions:async () => ({ suppliers:[], accounts:[], stages:[] }), recoverCompleted:async () => ({
+      result:{ orderId:'554', lines:[], total:50 }, files:[file], matchesFiles:async files => assert.deepEqual(files,[file]),
+    }) },
+  });
+  t.after(() => { panel.destroy(); dom.window.close(); });
+  await panel.open();
+  assert.match(doc.querySelector('[role="status"]').textContent, /554.*sucesso/);
+  assert.equal(storage.getItem(key), null);
+  assert.equal(tray.consumed, sameSource ? 1 : 0);
+  assert.equal(doc.querySelector('[role="alert"]').hidden, sameSource);
+});
+
 for (const accept of [true, false]) test(`fim do vale pergunta pela Swile e só abre a recarga na opção Sim (resposta: ${accept})`, async t => {
   let opened = 0;
   const h = await extrasPanel(t, {

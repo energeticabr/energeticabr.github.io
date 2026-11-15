@@ -149,12 +149,14 @@ export function createMealVoucherView({ data, root, documentRef = globalThis.doc
     catch { active(); return false; }
     active();
     if (!recovered) return false;
+    const reviewedIds = new Set(progress.traySourceIds || []);
     restartTransport(recovered.result);
     if (!recovered.files.length) return true;
     await cleanupTransport(async cleanupOptions => {
       const sources = trayAccess.snapshot();
-      const matching = sources.filter(source => recovered.files.some(file => file.name === source.fileName && file.size === source.size));
-      if (!matching.length) return;
+      const possibleCopies = sources.filter(source => recovered.files.some(file => file.name === source.fileName && file.size === source.size));
+      if (!possibleCopies.length) return;
+      const matching = possibleCopies.filter(source => reviewedIds.has(source.id));
       if (matching.length !== recovered.files.length)
         throw new Error('O pedido foi gravado. Confira se a bandeja ainda tem alguma cópia do comprovante.');
       const files = await trayAccess.read(sources, recovered.files, cleanupOptions);
@@ -433,6 +435,7 @@ export function createMealVoucherView({ data, root, documentRef = globalThis.doc
     footer.append(button('Voltar', 'data-meal-review-back', navigateBack));
     footer.append(button(locked() ? 'Retomar envio' : 'Confirmar e lançar', 'data-meal-confirm', () => work(async (active, options) => {
       if (!sameMealVoucherTray(reviewedTray || [],trayAccess.snapshot())) { step = 'extras'; throw new Error('A bandeja mudou. Revise os anexos antes de confirmar.'); }
+      if (transport) progress.traySourceIds = (reviewedTray || []).map(source => source.id);
       savePending();
       const postOptions = options.stage(0, 2), cleanupOptions = options.stage(1, 2);
       const posted = await data.post(verified, progress, event => { active(); if (!event?.stage) savePending(); postOptions.onProgress(event); });

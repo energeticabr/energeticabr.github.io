@@ -389,8 +389,8 @@ export function createMealVoucherData({ repository, graph, tokenProvider, storag
     clearPayrollCreation(storage,writeKey);
     return String(row.id);
   }
-  async function confirmOriginatingOrderTotal(orders,launches,orderId,draft,operationId,tokenCache) {
-    const row = await get(orders,orderId), actual = amount(value(orders,row,['VALORTOTAL']));
+  function confirmOrderTotal(orders,launches,row,draft,operationId,savedLaunches) {
+    const actual = amount(value(orders,row,['VALORTOTAL']));
     const controls = scalar(row.fields[control(orders)]).split('\n');
     let expected = amount(draft.total);
     for (const line of new Set(controls)) {
@@ -400,7 +400,7 @@ export function createMealVoucherData({ repository, graph, tokenProvider, storag
       if (revisions(row.fields[control(orders)],id).length !== 1) throw new Error('O total acumulado do pedido não foi confirmado.');
       const kind = title === VOUCHER_TYPES.transport.title ? VOUCHER_TYPES.transport : VOUCHER_TYPES.meal;
       const prefix = `${kind.token}-${id}-`;
-      const additions = tokenCache.get(launches.id).filter(item=>value(launches,item,['AGRUPAR'],false) === String(orderId)
+      const additions = savedLaunches.filter(item=>value(launches,item,['AGRUPAR'],false) === String(row.id)
         && scalar(item.fields?.[column(launches,['__PowerAppsId__']).name]).startsWith(prefix)
         && /^\d+$/.test(scalar(item.fields[column(launches,['__PowerAppsId__']).name]).slice(prefix.length)));
       if (!additions.length) throw new Error('O total acumulado do pedido não foi confirmado.');
@@ -410,7 +410,8 @@ export function createMealVoucherData({ repository, graph, tokenProvider, storag
         expected = expected.plus(quantity.times(unit).toDecimalPlaces(2));
       }
     }
-    if (!actual.equals(expected)) throw new Error('O SharePoint não confirmou o total acumulado do pedido. Confira os registros antes de retomar.');
+    if (draft.orderMode === 'new' ? !actual.equals(expected) : actual.lt(expected))
+      throw new Error('O SharePoint não confirmou o total acumulado do pedido. Confira os registros antes de retomar.');
   }
   async function attachmentDestination(orders, orderId, draft, progress, {mayInfer = true, replace = false} = {}) {
     const row = await get(orders,orderId), name = control(orders);
@@ -622,7 +623,7 @@ export function createMealVoucherData({ repository, graph, tokenProvider, storag
       }
       loading.done('order');
       await preflightLines(launches, payroll, draft, sheets, orderId, progress.operationId, tokenCache);
-      if (draft.orderMode === 'new') await confirmOriginatingOrderTotal(orders,launches,orderId,draft,progress.operationId,tokenCache);
+      if (draft.orderMode === 'new') confirmOrderTotal(orders,launches,await get(orders,orderId),draft,progress.operationId,tokenCache.get(launches.id));
       loading.done('preflight');
       const revision = await confirmOrderRevision(orders, orderId, draft, progress.operationId);
       loading.done('revision');
@@ -729,26 +730,43 @@ export function createMealVoucherData({ repository, graph, tokenProvider, storag
       const [orders, launches, payroll] = await Promise.all(['NOTASPENDENTES','LANCAMENTOS','FOLHAPGTO'].map(name => describe(name, { signal })));
       const marker = operationMarker(operationId);
       const orderControl = row => scalar(row.fields?.[control(orders)]).split('\n');
-      let orderId = progress.orderId || draft.orderId;
-      if (!orderId) {
-        const matches = (await all(orders, '', { signal })).filter(row => orderControl(row).includes(marker));
-        if (matches.length !== 1) return false;
-        orderId = String(matches[0].id);
-      }
+      const expectedId = progress.orderId || draft.orderId;
+      const matches = (await all(orders, '', { signal })).filter(row => orderControl(row).includes(marker));
+      if (matches.length !== 1 || expectedId && String(matches[0].id) !== String(expectedId)) return false;
+      const orderId = String(matches[0].id);
       const order = await get(orders, orderId, signal);
       const controls = orderControl(order);
       const revision = await revisionMarker(draft, operationId);
-      if (!controls.includes(marker) || !controls.includes(revision)
+      if (controls.filter(line => line === marker).length !== 1
+        || JSON.stringify(revisions(order.fields[control(orders)],operationId)) !== JSON.stringify([revision])
         || key(value(orders,order,['FILIAL'])) !== key(draft.branch)
         || draft.orderMode === 'existing' && String(draft.orderId) !== String(orderId)) return false;
-      const assignments = await loadSheetAssignments(draft.referenceMonth, draft.lines.map(line => line.supplier), { signal, onProgress });
+      const supplier = key(value(orders,order,['FORNECEDOR']));
+      if (supplier !== TRANSPORT_ORDER_SUPPLIER && !(draft.orderMode === 'new'
+        ? supplier === key(legacySupplier(draft)) : compatibleExistingSupplier(supplier,draft))) return false;
+      const group = column(launches,['AGRUPAR']);
+      const [orderLaunches, assignments] = await Promise.all([
+        all(launches, `fields/${group.name} eq ${group.number ? Number(orderId) : `'${orderId}'`}`, { signal }),
+        loadSheetAssignments(draft.referenceMonth, draft.lines.map(line => line.supplier), { signal, onProgress }),
+      ]);
+      if (draft.orderMode === 'new') {
+        const expected = payload(orders, { 'DATA PEDIDO':draft.date, FORMAPGTO:draft.account.label }, ['DATA PEDIDO','FORMAPGTO']);
+        if (!matchesFields(orders,order,expected)) return false;
+      }
+      confirmOrderTotal(orders,launches,order,draft,operationId,orderLaunches);
       const prefix = operationToken(operationId);
+      const launchToken = column(launches,['__PowerAppsId__']).name;
+      const owned = orderLaunches.filter(row => scalar(row.fields?.[group.name]) === String(orderId)
+        && scalar(row.fields?.[launchToken]).startsWith(`${prefix}-`)
+        && /^\d+$/.test(scalar(row.fields[launchToken]).slice(prefix.length + 1)));
+      if (owned.length !== draft.lines.length) return false;
       const lines = [], launchIds = new Map();
       for (const line of draft.lines) {
         const supplierId = line.supplier.id, sheet = assignments[supplierId];
-        const launchId = progress.lines?.[supplierId]
-          || (await freshToken(launches, '__PowerAppsId__', `${prefix}-${supplierId}`, { signal }))?.id;
-        if (!numericId(launchId)) return false;
+        const token = `${prefix}-${supplierId}`;
+        const found = await freshToken(launches, '__PowerAppsId__', token, { signal });
+        const launchId = found?.id, storedId = progress.lines?.[supplierId];
+        if (!numericId(launchId) || storedId && String(storedId) !== String(launchId)) return false;
         const resultLine = { supplier:line.supplier.label, total:line.total, sheetId:sheet.id,
           id:String(launchId), payrollId:String(progress.payroll?.[supplierId] || '') };
         const confirmedPayroll = await originRows(payroll, resultLine.id, { signal });

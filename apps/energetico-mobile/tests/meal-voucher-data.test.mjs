@@ -87,6 +87,29 @@ test('vale transporte só oferece pedidos Trancid para novas inclusões e retoma
   assert.deepEqual((await data.loadOrders('OBRA A')).map(item => item.id), [order.id]);
   assert.equal(f.rows.LANCAMENTOS.length, 2);
 });
+
+for (const orderMode of ['new', 'existing']) test(`vale transporte só reconhece conclusão com o total e IDs confirmados (${orderMode})`, async () => {
+  const f = fixture(), data = createMealVoucherData({ repository:f.repo, voucherType:'transport' });
+  const { suppliers } = await data.loadOptions();
+  const progress = { operationId:'transport-reconcile' };
+  if (orderMode === 'existing') f.rows.NOTASPENDENTES.push({ id:'88', eTag:'"1"', fields:{
+    FILIAL:'OBRA A', FORNECEDOR:'TRANCID', STATUS:'PENDENTE AUDITORIA', VALORTOTAL:40,
+  } });
+  await data.post({ ...draft(suppliers), orderMode, orderId:orderMode === 'existing' ? '88' : '' }, progress);
+  const order = f.rows.NOTASPENDENTES[0], total = order.fields.VALORTOTAL;
+  order.fields.VALORTOTAL = orderMode === 'new' ? 999 : 0;
+  await assert.rejects(data.recoverCompleted(progress), /total acumulado/);
+  order.fields.VALORTOTAL = total;
+  f.rows.NOTASPENDENTES.push({ ...order, id:'99' });
+  assert.equal(await data.recoverCompleted(progress), false);
+  f.rows.NOTASPENDENTES.pop();
+  const launch = structuredClone(f.rows.LANCAMENTOS[0]);
+  launch.fields.AGRUPAR = '99';
+  f.rows.LANCAMENTOS.push({ ...launch, id:'99' });
+  await assert.rejects(data.recoverCompleted(progress), /duplicados/);
+  f.rows.LANCAMENTOS.pop();
+  assert.equal((await data.recoverCompleted(progress)).result.orderId, order.id);
+});
 test('vale transporte grava a folha com as colunas de texto do SharePoint', async () => {
   const f = fixture(), create = f.repo.createItem;
   const fieldsStoredAsText = ['VALORUNITARIO', 'QTD', 'IDFOLHA', 'IDLANCAMENTO'];
