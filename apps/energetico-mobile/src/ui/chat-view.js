@@ -391,14 +391,26 @@ function powerBiDashboardOption() {
   return { id: "action_powerbi_dashboard", reply: "action_powerbi_dashboard", label: "📊 POWER BI" };
 }
 
-function insertPowerBiAfterPersonalExpenses(options) {
-  if (options.some(option => String(option?.reply || option?.id || "").trim().toLowerCase() === "action_powerbi_dashboard")) return options;
-  const index = options.findIndex(option => (
-    String(option?.reply || option?.id || "").trim().toLowerCase() === "group_personal_expenses"
-    || /gastos\s+pessoais/.test(normalizedDateText(option?.label || option?.title || ""))
-  ));
-  if (index < 0) return options;
-  return [...options.slice(0, index + 1), powerBiDashboardOption(), ...options.slice(index + 1)];
+function areaMenuLabel(option) {
+  return normalizedDateText(option?.label || option?.title).replace(/^[^\p{L}]+/u, "").trim();
+}
+
+function isPersonalExpensesArea(option) {
+  return draftReplyId(option).trim().toLowerCase() === "group_personal_expenses"
+    || areaMenuLabel(option) === "gastos pessoais";
+}
+
+function energeticAreaOptions(options) {
+  const hasPowerBi = options.some(option => draftReplyId(option).trim().toLowerCase() === "action_powerbi_dashboard");
+  // Preserve Power BI for the same menu responses, replacing the retired area in place.
+  const powerBiIndex = hasPowerBi ? -1 : options.findIndex(isPersonalExpensesArea);
+  return options.flatMap((option, index) => {
+    if (index === powerBiIndex) return [powerBiDashboardOption()];
+    if (isPersonalExpensesArea(option)
+      || draftReplyId(option).trim().toLowerCase() === "group_nb_participacoes"
+      || areaMenuLabel(option) === "nb participacoes") return [];
+    return [option];
+  });
 }
 
 function isAttachmentAreaQuestion(question) {
@@ -436,7 +448,7 @@ function draftMenuOptions(message) {
         return option;
       })
     : options;
-  if (!/RASCUNHOS?/i.test(question)) return isRootAreaMenu ? insertPowerBiAfterPersonalExpenses(menuOptions) : menuOptions;
+  if (!/RASCUNHOS?/i.test(question)) return isRootAreaMenu ? energeticAreaOptions(menuOptions) : menuOptions;
 
   const deleteIds = new Set(menuOptions
     .map(option => String(option.reply || option.id || ""))
