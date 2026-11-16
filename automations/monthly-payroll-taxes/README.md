@@ -24,6 +24,17 @@ a conciliação mensal. Provisões e memórias de INSS identificam o vínculo
 marcado. A coluna deve existir com padrão Não antes da publicação.
 Manifestos anteriores aceitam o campo ausente.
 
+A configuração privada opcional `salaryFamily` identifica um único vínculo por
+`employeeId` de RH e informa `quotas`, `quotaCents`, `limitCents` e `year`.
+O benefício previsto exige o vínculo também sinalizado, a competência no ano
+da tabela e o salário mensal cadastrado dentro do limite. No mês de admissão,
+a cota é proporcional. O cálculo usa a base de salário do fluxo. Outras verbas,
+vínculos simultâneos e mudanças na elegibilidade dos dependentes devem ser
+refletidos no fechamento oficial. Atualize as cotas elegíveis e a tabela na
+configuração privada quando houver mudança.
+A memória e as provisões apresentam o líquido previsto. O manifesto preserva
+os componentes brutos para comparação com a declaração oficial.
+
 ## Conciliação do salário-família
 
 No descritivo de INSS da competência, anexar o **XML de Saída** obtido em
@@ -32,8 +43,8 @@ No descritivo de INSS da competência, anexar o **XML de Saída** obtido em
 O arquivo informa o valor vinculado de salário-família no código 1082-01.
 O serviço compara o bruto e o líquido dos códigos da folha com o manifesto
 original. Com um único vínculo marcado, aplica o crédito na provisão desse
-trabalhador, no vínculo FOLHAPGTO e no descritivo. A observação informa o
-crédito e o recibo. Divergências de valor, outros abatimentos nos códigos da
+trabalhador, no vínculo FOLHAPGTO e no descritivo, substituindo o crédito
+previsto pelo apurado. A observação informa o crédito e o recibo. Divergências de valor, outros abatimentos nos códigos da
 folha e valores já agendados ou pagos exigem conferência. A retenção de
 prestador (1162) segue a provisão própria.
 

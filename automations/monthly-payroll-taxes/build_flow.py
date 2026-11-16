@@ -106,12 +106,35 @@ def intent_path(label, value):
     return "@concat('/ENCARGOS-INTENCAO-', uriComponent(replace(concat('"+label+"-', string("+value+")), ':', '-')), '.json')"
 
 
+def planned_tax_total(tax):
+    totals = "variables('Manifesto')?['totals']"
+    return f"if(equals({tax}, 'INSS'), coalesce({totals}?['INSSNet'], {totals}?['INSS']), {totals}?['FGTS'])"
+
+
+def planned_tax_amount(row, tax):
+    return (f"if(equals({tax}, 'INSS'), sub({row}?['inssCents'], "
+            f"coalesce({row}?['salaryFamilyEstimatedCents'], 0)), {row}?['fgtsCents'])")
+
+
+def estimated_salary_family(row):
+    policy = "variables('Regras')?['salaryFamily']"
+    year = "int(substring(outputs('Competencia'), 0, 4))"
+    eligible = (f"and(equals({row}?['salaryFamilyReview'], true), "
+                f"equals({row}?['employeeId'], {policy}?['employeeId']), "
+                f"equals({year}, {policy}?['year']), "
+                f"lessOrEquals({row}?['salaryCents'], coalesce({policy}?['limitCents'], 0)))")
+    quota = f"mul(coalesce({policy}?['quotas'], 0), coalesce({policy}?['quotaCents'], 0))"
+    divisor = f"{row}?['divisor']"
+    prorated = f"div(add(mul({quota}, {row}?['days']), div({divisor}, 2)), {divisor})"
+    return f"if({eligible}, min({prorated}, variables('INSSLinha')), 0)"
+
+
 def parent_payload(tax, branches):
     key = "concat('ENCARGOS:', variables('Manifesto')?['competence'], ':', "+tax+")"
     return {'Title':'@'+key,'FOLHAOPERACAO':'@'+key,
         'FILIAL':"@if(equals(length(union("+branches+", "+branches+")), 1), first("+branches+"), 'DIVERSAS')",
         'FORNECEDOR':"@if(equals(length(variables('Manifesto')?['rows']), 1), first(variables('Manifesto')?['rows'])?['name'], 'DIVERSOS')",
-        'VALORTOTAL':"@formatNumber(div(variables('Manifesto')?['totals']?["+tax+"], 100.0), 'F2', 'en-US')",
+        'VALORTOTAL':"@formatNumber(div("+planned_tax_total(tax)+", 100.0), 'F2', 'en-US')",
         'OBS':"@concat("+tax+", ' - COMPETÊNCIA ', variables('Manifesto')?['competence'])",'FORMAPGTO':'','STATUS':'PAGAMENTO PREVISTO',
         'DATAPREVISTOPGTO':"@concat(variables('Manifesto')?['dueDate'], 'T12:00:00Z')"}
 
@@ -127,7 +150,7 @@ def salary_family_notice(row, tax, prefix, suffix):
 
 def provision_payload(row, tax, parent_id):
     key = "concat('ENCARGOS:', variables('Manifesto')?['competence'], ':', "+tax+", ':', string("+row+"?['supplierId']))"
-    amount = "formatNumber(div(if(equals("+tax+", 'INSS'), "+row+"?['inssCents'], "+row+"?['fgtsCents']), 100.0), 'F2', 'en-US')"
+    amount = "formatNumber(div("+planned_tax_amount(row, tax)+", 100.0), 'F2', 'en-US')"
     return {'Title':'@'+key,'FOLHAOPERACAO':'@'+key,'FILIAL':'@'+row+"?['branch']",'FORNECEDOR':'@'+row+"?['name']",'PRODUTO':'@'+row+"?['profession']",
         'OBS':"@concat("+tax+", ' - ', "+row+"?['name'], ' - COMPETÊNCIA ', variables('Manifesto')?['competence'], "+salary_family_notice(row, tax, ' | ', '.')+")",'IMOVEL':'TODOS','FORMAPGTO':'','QTD':'1','VALORTOTAL':'@'+amount,'FRETE':'0',
         'STATUS':'PAGAMENTO PREVISTO','PGTOAGENDADO':'PENDENTE','DATA':"@concat(variables('Manifesto')?['createdDate'], 'T12:00:00Z')",'DATAPREVISTOPGTO':"@concat(variables('Manifesto')?['dueDate'], 'T12:00:00Z')",
@@ -135,7 +158,7 @@ def provision_payload(row, tax, parent_id):
 
 
 def payroll_payload(row, tax, provision_id):
-    amount = "formatNumber(div(if(equals("+tax+", 'INSS'), "+row+"?['inssCents'], "+row+"?['fgtsCents']), 100.0), 'F2', 'en-US')"
+    amount = "formatNumber(div("+planned_tax_amount(row, tax)+", 100.0), 'F2', 'en-US')"
     return {'Title':"@concat('APP-folha-provisao-', string("+provision_id+"))",'FORNECEDOR':'@'+row+"?['name']",'TIPOPGTO':'@'+tax,
         'VALORUNITARIO':'@'+amount,'QTD':'1','DATA':"@concat(variables('Manifesto')?['dueDate'], 'T12:00:00Z')",'IDFOLHA':"@string("+row+"?['sheetId'])",'IDPROVISAO':'@'+provision_id}
 
@@ -272,26 +295,39 @@ def calculation_actions(previous):
         'Atualizar_Componente':compose("@setProperty(variables('Componentes'), items('Componentes_Da_Linha')?['code'], variables('Ajustes')?[concat(string(items('Finalizar_Linhas')?['supplierId']), ':', items('Componentes_Da_Linha')?['code'])])"),
         'Guardar_Componente':variable('Componentes',"@outputs('Atualizar_Componente')",'Atualizar_Componente'),
         'Somar_INSS_Linha':increment('INSSLinha',"@variables('Ajustes')?[concat(string(items('Finalizar_Linhas')?['supplierId']), ':', items('Componentes_Da_Linha')?['code'])]",'Guardar_Componente')},'Iniciar_INSS_Linha')
-    finalize['Linha_Final'] = compose("@setProperty(setProperty(items('Finalizar_Linhas'), 'components', variables('Componentes')), 'inssCents', variables('INSSLinha'))",'Componentes_Da_Linha')
+    row = "items('Finalizar_Linhas')"
+    finalize['Linha_Final'] = compose(
+        f"@setProperty(setProperty(setProperty({row}, 'components', variables('Componentes')), "
+        f"'inssCents', variables('INSSLinha')), 'salaryFamilyEstimatedCents', {estimated_salary_family(row)})",
+        'Componentes_Da_Linha')
     finalize['Guardar_Linha_Final'] = append('Linhas',"@outputs('Linha_Final')",'Linha_Final')
     finalize['Somar_Total_INSS'] = increment('TotalINSS',"@variables('INSSLinha')",'Guardar_Linha_Final')
-    finalize['Somar_Total_FGTS'] = increment('TotalFGTS',"@items('Finalizar_Linhas')?['fgtsCents']",'Somar_Total_INSS')
+    finalize['Somar_Total_INSS_Liquido'] = increment('TotalINSSLiquido',
+        "@"+planned_tax_amount("outputs('Linha_Final')", "'INSS'"), 'Somar_Total_INSS')
+    finalize['Somar_Total_FGTS'] = increment('TotalFGTS',"@items('Finalizar_Linhas')?['fgtsCents']",'Somar_Total_INSS_Liquido')
     actions['Finalizar_Linhas'] = loop("@variables('LinhasBrutas')",finalize,'Cada_Filial')
-    actions['Novo_Manifesto'] = compose({'version':1,'key':"@outputs('Chave_Lote')",'competence':"@outputs('Competencia')",'createdDate':"@formatDateTime(outputs('Agora_Brasilia'), 'yyyy-MM-dd')",'dueDate':"@outputs('Vencimento')",'rulesVersion':"@variables('Regras')?['version']",'rules':"@variables('Regras')",'rows':"@variables('Linhas')",'totals':{'INSS':"@variables('TotalINSS')",'FGTS':"@variables('TotalFGTS')"},'title':"@concat('ENCARGOS-', outputs('Competencia'), '-', workflow()?['run']?['name'])"},'Finalizar_Linhas')
+    actions['Novo_Manifesto'] = compose({'version':1,'key':"@outputs('Chave_Lote')",'competence':"@outputs('Competencia')",'createdDate':"@formatDateTime(outputs('Agora_Brasilia'), 'yyyy-MM-dd')",'dueDate':"@outputs('Vencimento')",'rulesVersion':"@variables('Regras')?['version']",'rules':"@variables('Regras')",'rows':"@variables('Linhas')",'totals':{'INSS':"@variables('TotalINSS')",'INSSNet':"@variables('TotalINSSLiquido')",'FGTS':"@variables('TotalFGTS')"},'title':"@concat('ENCARGOS-', outputs('Competencia'), '-', workflow()?['run']?['name'])"},'Finalizar_Linhas')
     actions['Usar_Calculo'] = variable('Manifesto',"@outputs('Novo_Manifesto')",'Novo_Manifesto')
     return actions
 
 
 def document_actions(previous=None):
     each = {'Zerar_HTML':variable('HTMLRows','')}
-    amount = "if(equals(items('Criar_Documentos'), 'INSS'), items('Cada_Linha_PDF')?['inssCents'], items('Cada_Linha_PDF')?['fgtsCents'])"
+    row = "items('Cada_Linha_PDF')"
+    tax = "items('Criar_Documentos')"
+    amount = planned_tax_amount(row, tax)
+    net_total = planned_tax_total(tax)
+    estimate = f"coalesce({row}?['salaryFamilyEstimatedCents'], 0)"
+    deduction = (f"if(and(equals({tax}, 'INSS'), greater({estimate}, 0)), "
+                 f"concat('<tr><td colspan=\"4\">Salário-família previsto: -R$ ', "
+                 f"formatNumber(div({estimate}, 100.0), 'N2', 'pt-BR'), '</td></tr>'), '')")
     line = {'Zerar_Componentes_HTML':variable('HTMLComponentes','')}
     line['Detalhar_Componentes'] = loop("@variables('Manifesto')?['rules']?['employerComponents']",{
         'Componente_HTML':append('HTMLComponentes',"@concat(' | ', "+escape_html("items('Detalhar_Componentes')?['label']")+", ': R$ ', formatNumber(div(items('Cada_Linha_PDF')?['components']?[items('Detalhar_Componentes')?['code']], 100.0), 'N2', 'pt-BR'))",string=True)},'Zerar_Componentes_HTML')
     review = salary_family_notice("items('Cada_Linha_PDF')", "items('Criar_Documentos')", '<tr><td colspan="4"><strong>', '.</strong></td></tr>')
-    line['Linha_HTML'] = append('HTMLRows',"@concat('<tr><td colspan=\"4\"><strong>', "+escape_html("items('Cada_Linha_PDF')?['name']")+", '</strong> | ', "+escape_html("items('Cada_Linha_PDF')?['profession']")+", ' | IDFOLHA ', string(items('Cada_Linha_PDF')?['sheetId']), '</td></tr><tr><td>Salário R$ ', formatNumber(div(items('Cada_Linha_PDF')?['salaryCents'], 100.0), 'N2', 'pt-BR'), '</td><td>Admissão ', formatDateTime(items('Cada_Linha_PDF')?['admission'], 'dd/MM/yyyy'), '</td><td>', string(items('Cada_Linha_PDF')?['days']), '/', string(items('Cada_Linha_PDF')?['divisor']), ' dias | Base R$ ', formatNumber(div(items('Cada_Linha_PDF')?['baseCents'], 100.0), 'N2', 'pt-BR'), '</td><td><strong>R$ ', formatNumber(div("+amount+", 100.0), 'N2', 'pt-BR'), '</strong></td></tr>', if(equals(items('Criar_Documentos'), 'INSS'), concat('<tr><td colspan=\"4\">Empregado R$ ', formatNumber(div(items('Cada_Linha_PDF')?['components']?['EMPREGADO'], 100.0), 'N2', 'pt-BR'), variables('HTMLComponentes'), '</td></tr>'), ''), "+review+")",'Detalhar_Componentes',string=True)
+    line['Linha_HTML'] = append('HTMLRows',"@concat('<tr><td colspan=\"4\"><strong>', "+escape_html("items('Cada_Linha_PDF')?['name']")+", '</strong> | ', "+escape_html("items('Cada_Linha_PDF')?['profession']")+", ' | IDFOLHA ', string(items('Cada_Linha_PDF')?['sheetId']), '</td></tr><tr><td>Salário R$ ', formatNumber(div(items('Cada_Linha_PDF')?['salaryCents'], 100.0), 'N2', 'pt-BR'), '</td><td>Admissão ', formatDateTime(items('Cada_Linha_PDF')?['admission'], 'dd/MM/yyyy'), '</td><td>', string(items('Cada_Linha_PDF')?['days']), '/', string(items('Cada_Linha_PDF')?['divisor']), ' dias | Base R$ ', formatNumber(div(items('Cada_Linha_PDF')?['baseCents'], 100.0), 'N2', 'pt-BR'), '</td><td><strong>R$ ', formatNumber(div("+amount+", 100.0), 'N2', 'pt-BR'), '</strong></td></tr>', if(equals(items('Criar_Documentos'), 'INSS'), concat('<tr><td colspan=\"4\">Empregado R$ ', formatNumber(div(items('Cada_Linha_PDF')?['components']?['EMPREGADO'], 100.0), 'N2', 'pt-BR'), variables('HTMLComponentes'), '</td></tr>'), ''), "+deduction+", "+review+")",'Detalhar_Componentes',string=True)
     each['Cada_Linha_PDF'] = loop("@variables('Manifesto')?['rows']",line,'Zerar_HTML')
-    each['HTML'] = compose("@concat('<!doctype html><html><head><meta charset=\"utf-8\"><style>@page{size:A4 landscape;margin:15mm}body{font:11px Arial;color:#143746}h1{color:#075367}table{width:100%;border-collapse:collapse}td,th{padding:7px;border:1px solid #bfd0d8;word-wrap:break-word}tr{page-break-inside:avoid}thead{display:table-header-group}.note{font-size:10px}</style></head><body><h1>', items('Criar_Documentos'), ' - memória de cálculo</h1><p>Competência ', variables('Manifesto')?['competence'], ' | Vencimento ', formatDateTime(variables('Manifesto')?['dueDate'], 'dd/MM/yyyy'), '</p><p>Base: somente SALARIO. Regras: ', "+escape_html("variables('Manifesto')?['rulesVersion']")+", '</p><table><thead><tr><th>Salário mensal</th><th>Admissão</th><th>Proporção/base</th><th>', items('Criar_Documentos'), '</th></tr></thead><tbody>', variables('HTMLRows'), '</tbody></table><h2>TOTAL R$ ', formatNumber(div(variables('Manifesto')?['totals']?[items('Criar_Documentos')], 100.0), 'N2', 'pt-BR'), '</h2><p class=\"note\">Valores previstos, ainda não pagos. Não é guia de recolhimento. Prêmio, alimentação e transporte não integram esta base. Admissão: dias corridos inclusivos / dias reais do mês; salário integral no mês completo. FGTS truncado por pessoa e INSS por faixa; componentes patronais totalizados por filial/código, com distribuição apenas de centavos residuais pelas maiores frações. Eventual regra específica da CCT deve ser observada.</p></body></html>')",'Cada_Linha_PDF')
+    each['HTML'] = compose("@concat('<!doctype html><html><head><meta charset=\"utf-8\"><style>@page{size:A4 landscape;margin:15mm}body{font:11px Arial;color:#143746}h1{color:#075367}table{width:100%;border-collapse:collapse}td,th{padding:7px;border:1px solid #bfd0d8;word-wrap:break-word}tr{page-break-inside:avoid}thead{display:table-header-group}.note{font-size:10px}</style></head><body><h1>', items('Criar_Documentos'), ' - memória de cálculo</h1><p>Competência ', variables('Manifesto')?['competence'], ' | Vencimento ', formatDateTime(variables('Manifesto')?['dueDate'], 'dd/MM/yyyy'), '</p><p>Base: somente SALARIO. Regras: ', "+escape_html("variables('Manifesto')?['rulesVersion']")+", '</p><table><thead><tr><th>Salário mensal</th><th>Admissão</th><th>Proporção/base</th><th>', items('Criar_Documentos'), '</th></tr></thead><tbody>', variables('HTMLRows'), '</tbody></table><h2>TOTAL R$ ', formatNumber(div("+net_total+", 100.0), 'N2', 'pt-BR'), '</h2><p class=\"note\">Valores previstos, ainda não pagos. Não é guia de recolhimento. Prêmio, alimentação e transporte não integram esta base. Admissão: dias corridos inclusivos / dias reais do mês; salário integral no mês completo. FGTS truncado por pessoa e INSS por faixa; componentes patronais totalizados por filial/código, com distribuição apenas de centavos residuais pelas maiores frações. Eventual regra específica da CCT deve ser observada.</p></body></html>')",'Cada_Linha_PDF')
     each['Salvar_HTML'] = api('shared_onedriveforbusiness','CreateFile',{'folderPath':'/','name':"@concat(variables('Manifesto')?['title'], '-', items('Criar_Documentos'), '.html')",'body':"@outputs('HTML')"},'HTML')
     each['Aguardar_Conversao'] = {'type':'Wait','inputs':{'interval':{'count':5,'unit':'Second'}},'runAfter':after('Salvar_HTML')}
     each['Converter_PDF'] = api('shared_onedriveforbusiness','ConvertFile',{'id':"@body('Salvar_HTML')?['Id']",'type':'PDF'},'Aguardar_Conversao')
@@ -437,7 +473,7 @@ def financial_actions():
     pending = record_checks('item()',{'STATUS':'PAGAMENTO PREVISTO','PGTOAGENDADO':'PENDENTE'})[1:]
     types['Filhos_Finais_Divergentes'] = query("@body('Filhos_Finais_Do_Descritivo')?['value']","@or(not(contains(variables('IDsDesteEncargo'), item()?['Id'])), not("+pending+"))",'Filhos_Finais_Do_Descritivo')
     types['Conjunto_Final_De_Filhos'] = validate("@and(equals(length(body('Filhos_Finais_Do_Descritivo')?['value']), length(variables('Manifesto')?['rows'])), equals(length(variables('IDsDesteEncargo')), length(variables('Manifesto')?['rows'])), equals(length(union(variables('IDsDesteEncargo'), variables('IDsDesteEncargo'))), length(variables('IDsDesteEncargo'))), empty(body('Filhos_Finais_Divergentes')), empty(coalesce(body('Filhos_Finais_Do_Descritivo')?['odata.nextLink'], body('Filhos_Finais_Do_Descritivo')?['@odata.nextLink'], '')))",'Filhos_Finais_Divergentes','Conjunto final de filhos divergente, incompleto ou baixado; não confirmar conclusão.')
-    types['Resumo_Encargo'] = compose({'tipo':'@'+tax,'descritivo':parent_id,'linhas':"@length(variables('Manifesto')?['rows'])",'totalCentavos':"@variables('Manifesto')?['totals']?[items('Cada_Encargo')]",'competencia':"@variables('Manifesto')?['competence']",'vencimento':"@variables('Manifesto')?['dueDate']"},'Conjunto_Final_De_Filhos')
+    types['Resumo_Encargo'] = compose({'tipo':'@'+tax,'descritivo':parent_id,'linhas':"@length(variables('Manifesto')?['rows'])",'totalCentavos':"@"+planned_tax_total(tax),'competencia':"@variables('Manifesto')?['competence']",'vencimento':"@variables('Manifesto')?['dueDate']"},'Conjunto_Final_De_Filhos')
     a['Cada_Encargo'] = loop("@createArray('INSS','FGTS')",types,'Preflight_Global')
     return a
 
@@ -452,7 +488,7 @@ def build_definition():
         ('Chave_Lote',"@concat(if(equals(dayOfMonth(outputs('Agora_Brasilia')), 1), 'ENCARGOS:', 'ENCARGOS-PREVIA:'), outputs('Competencia'))",'Vencimento'),
         ('Caminho_Reserva',"@concat('/ENCARGOS-', if(equals(dayOfMonth(outputs('Agora_Brasilia')), 1), 'RESERVA-', 'PREVIA-RESERVA-'), outputs('Competencia'), '.json')",'Chave_Lote')]: a[name] = compose(value,prev)
     variables = {'Manifesto':('object',{}),'Reserva':('object',{}),'Regras':('object',{}),'PDFs':('object',{}),'PDFsValidados':('object',{}),'IDsValidados':('object',{}),'Ajustes':('object',{}),'Componentes':('object',{}),
-                 'LinhasBrutas':('array',[]),'Linhas':('array',[]),'Empregado':('integer',0),'LimiteAnterior':('integer',0),'BaseGrupo':('integer',0),'PisosGrupo':('integer',0),'IndiceResiduo':('integer',0),'INSSLinha':('integer',0),'TotalINSS':('integer',0),'TotalFGTS':('integer',0),'HTMLRows':('string',''),'HTMLComponentes':('string',''),'PDFBase64':('string','')}
+                 'LinhasBrutas':('array',[]),'Linhas':('array',[]),'Empregado':('integer',0),'LimiteAnterior':('integer',0),'BaseGrupo':('integer',0),'PisosGrupo':('integer',0),'IndiceResiduo':('integer',0),'INSSLinha':('integer',0),'TotalINSS':('integer',0),'TotalINSSLiquido':('integer',0),'TotalFGTS':('integer',0),'HTMLRows':('string',''),'HTMLComponentes':('string',''),'PDFBase64':('string','')}
     for label in ['Cadastros','Salarios','Folhas','Provisoes','Pagamentos']:
         variables.update({label:('array',[]),'Pagina'+label:('string',''),'Visitadas'+label:('array',[])})
     variables['IDsDesteEncargo'] = ('array',[])
@@ -471,7 +507,13 @@ def build_definition():
         'employeeRounding':{'type':'string'},'employerRounding':{'type':'string'},
         'employeeBrackets':{'type':'array','minItems':1,'maxItems':10,'items':{'type':'object','required':['limitCents','rateBps'],'properties':{'limitCents':{'type':'integer','minimum':1,'maximum':10000000000},'rateBps':integer_rate}}},
         'employerComponents':{'type':'array','minItems':1,'maxItems':20,'items':{'type':'object','required':['code','label','rateBps'],'properties':{'code':{'type':'string','minLength':1,'maxLength':40},'label':{'type':'string','minLength':1},'rateBps':integer_rate}}}}
-    rules_schema = {'type':'object','required':list(rules_properties),'properties':rules_properties}
+    family_limits = {'employeeId': 10**12, 'quotas': 100, 'limitCents': 10**9,
+                     'quotaCents': 10**7, 'year': 9999}
+    family_schema = {'type':'object', 'required':list(family_limits),
+                     'properties':{name:{'type':'integer','minimum':1,'maximum':limit}
+                                   for name,limit in family_limits.items()}}
+    rules_schema = {'type':'object','required':list(rules_properties),
+                    'properties':{**rules_properties, 'salaryFamily':family_schema}}
     a['Estrutura_Regras'] = {'type':'ParseJson','inputs':{'content':"@variables('Regras')",'schema':rules_schema},'runAfter':after('Usar_Regras')}
     a['Validar_Regras'] = require("@and(equals(variables('Regras')?['confirmed'], true), equals(variables('Regras')?['base'], 'SALARIO'), greater(variables('Regras')?['fgtsBps'], 0), equals(variables('Regras')?['employeeRounding'], 'truncate'), equals(variables('Regras')?['employerRounding'], 'truncate'), lessOrEquals(ticks(concat(variables('Regras')?['validFrom'], '-01T00:00:00Z')), ticks(concat(outputs('Inicio_Competencia'), 'T00:00:00Z'))), greaterOrEquals(ticks(concat(variables('Regras')?['validThrough'], '-01T00:00:00Z')), ticks(concat(outputs('Inicio_Competencia'), 'T00:00:00Z'))))",'Estrutura_Regras','Regras não confirmadas/vencidas. Atualizar a tabela antes de criar obrigações.')
     a['Codigos_Componentes'] = select("@variables('Regras')?['employerComponents']","@item()?['code']",'Validar_Regras')

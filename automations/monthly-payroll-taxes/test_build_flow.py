@@ -80,8 +80,8 @@ class NativePreflight:
                 'startsWith':lambda value,prefix:value.startswith(prefix), 'contains':lambda value,part:part in value,
                 'concat':lambda *values:''.join(str(value) for value in values), 'substring':lambda value,start,size:value[start:start+size],
                 'createArray':lambda *values:list(values), 'union':lambda a,b:list(dict.fromkeys(a+b)),
-                'div':lambda a,b:a/b, 'formatNumber':lambda value,pattern,locale:format(value,'.2f'),
-                'add':lambda a,b:a+b, 'base64ToBinary':lambda value:base64.b64decode(value,validate=True),
+                'div':lambda a,b:a//b if type(a) is type(b) is int else a/b, 'formatNumber':lambda value,pattern,locale:format(value,'.2f'),
+                'add':lambda a,b:a+b, 'sub':lambda a,b:a-b, 'mul':lambda a,b:a*b, 'min':min, 'base64ToBinary':lambda value:base64.b64decode(value,validate=True),
                 'formatDateTime':lambda value,pattern:date.fromisoformat(value[:10]).strftime({'dd/MM/yyyy':'%d/%m/%Y'}[pattern]),
                 'json':json.loads, 'uriComponent':lambda value:quote(str(value),safe=''), 'decodeUriComponent':unquote,
                 'replace':lambda value,old,new:value.replace(old,new), 'workflow':lambda:{'run':{'name':'RUN123'}},
@@ -531,6 +531,38 @@ class MonthlyFlowTests(unittest.TestCase):
         self.assertEqual(trigger['recurrence']['startTime'], '2026-11-01T06:00:00')
         self.assertEqual(trigger['recurrence']['timeZone'], 'E. South America Standard Time')
         self.assertEqual(trigger['runtimeConfiguration']['concurrency']['runs'], 1)
+
+    def test_provisional_salary_family_flows_into_all_inss_payloads_only(self):
+        runtime = NativePreflight(preflight_fixture())
+        actions = dict(actions_in(flow.build_definition()['actions']))
+        runtime.variables.update(Componentes={'EMPREGADO': 13500, '1138': 36500},
+                                 INSSLinha=50000, Regras={'salaryFamily': {
+                                     'employeeId': 6, 'year': 2026, 'quotas': 3,
+                                     'limitCents': 198038, 'quotaCents': 6754}})
+        runtime.values['Competencia'] = '2026-11'
+        raw = dict(runtime.variables['Manifesto']['rows'][0], employeeId=6,
+                   salaryFamilyReview=True, salaryCents=180000, days=30, divisor=30)
+        for changes, expected in (({}, 20262), ({'employeeId': 7}, 0),
+                                  ({'salaryFamilyReview': False}, 0),
+                                  ({'salaryCents': 198039}, 0),
+                                  ({'days': 24, 'divisor': 31}, 15687)):
+            with self.subTest(changes=changes):
+                runtime.items['Finalizar_Linhas'] = {**raw, **changes}
+                row = runtime.evaluate(actions['Linha_Final']['inputs'])
+                self.assertEqual(row['salaryFamilyEstimatedCents'], expected)
+                self.assertEqual(row['inssCents'], 50000)
+        runtime.items['Finalizar_Linhas'] = raw
+        row = runtime.evaluate(actions['Linha_Final']['inputs'])
+        runtime.outputs['Linha_Final'] = row
+        self.assertEqual(runtime.evaluate(actions['Somar_Total_INSS_Liquido']['inputs']['value']), 29738)
+        runtime.variables['Manifesto']['totals'] = {'INSS': 50000, 'INSSNet': 29738, 'FGTS': row['fgtsCents']}
+        runtime.values.update(row=row, branches=[row['branch']])
+        for tax, amount in (("INSS", '297.38'), ("FGTS", format(row['fgtsCents'] / 100, '.2f'))):
+            forms = (flow.parent_payload(repr(tax), "outputs('branches')"),
+                     flow.provision_payload("outputs('row')", repr(tax), '1'),
+                     flow.payroll_payload("outputs('row')", repr(tax), '1'))
+            for form in forms:
+                self.assertEqual(runtime.evaluate(form.get('VALORTOTAL') or form['VALORUNITARIO']), amount)
 
     def test_native_payloads_create_individual_provision_and_payroll_not_paid_launches(self):
         all_actions = dict(actions_in(flow.build_definition()['actions']))

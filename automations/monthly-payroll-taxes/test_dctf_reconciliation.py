@@ -126,6 +126,20 @@ class MockLedger:
 
 
 class ReplayTests(unittest.TestCase):
+    def test_provisional_credit_is_replaced_and_does_not_accumulate(self):
+        plan = manifest()
+        plan["rows"][0]["salaryFamilyEstimatedCents"] = 12000
+        plan["totals"]["INSSNet"] = 36350
+        ledger = MockLedger()
+        ledger.values = {"child": 6350, "payroll": 6350, "parent": 36350}
+        source = read_declaration(report(), CNPJ, COMPETENCE)
+        with tempfile.TemporaryDirectory() as folder:
+            state = Path(folder) / "state.json"
+            self.assertEqual(reconcile(ledger, plan, source, state), "CONCILIADO")
+            self.assertEqual(ledger.values, {"child": 8350, "payroll": 8350, "parent": 38350})
+            self.assertEqual(reconcile(ledger, plan, source, state), "CONCILIADO")
+            self.assertEqual(ledger.writes, ["child", "payroll", "parent"])
+
     def test_resumes_a_partial_write_and_never_deducts_twice(self):
         first = read_declaration(report(), CNPJ, COMPETENCE)
         ledger = MockLedger()

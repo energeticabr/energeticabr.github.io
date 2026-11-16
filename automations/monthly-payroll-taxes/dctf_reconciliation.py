@@ -187,10 +187,17 @@ def plan_reconciliation(manifest, declaration):
             raise Review("valores de contribuição inválidos no manifesto")
         if sum(components.values()) != row["inssCents"]:
             raise Review("componentes individuais do manifesto não fecham")
+        estimate = row.get("salaryFamilyEstimatedCents", 0)
+        if (type(estimate) is not int or not 0 <= estimate <= row["inssCents"]
+                or (estimate and row is not flagged[0])):
+            raise Review("previsão de salário-família inválida no manifesto")
         expected.update({"108201" if k == "EMPREGADO" else k+"01": v for k,v in components.items()})
     gross = sum(expected.values())
     if gross != manifest["totals"]["INSS"] or expected.get("108201", 0) <= 0:
         raise Review("total bruto do manifesto não fecha")
+    forecast_net = gross - flagged[0].get("salaryFamilyEstimatedCents", 0)
+    if manifest["totals"].get("INSSNet", gross) != forecast_net:
+        raise Review("total líquido previsto do manifesto não fecha")
     if any(item.family for code, item in declaration.debts.items() if code != "108201"):
         raise Review("o salário-família está vinculado também a outro código de receita")
     prefixes = {code[:4] for code in expected}
@@ -246,7 +253,7 @@ def reconcile(ledger, manifest, declaration, state, dry_run=False):
     if pending:
         if pending != _token(adjustment):
             raise Review("conciliação em andamento para outro recibo; preserve e reapresente o XML original")
-    previous_credit = previous.get("credit", 0)
+    previous_credit = previous.get("credit", adjustment.worker.get("salaryFamilyEstimatedCents", 0))
     old_receipt = previous.get("receipt")
     ledger.preflight(manifest, adjustment, previous_credit, old_receipt, pending=bool(pending))
     if dry_run:

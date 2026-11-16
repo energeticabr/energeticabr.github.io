@@ -7,6 +7,8 @@ from html import escape
 from io import BytesIO
 from pathlib import Path
 
+from model import plan_total, row_amount
+
 
 _NOTICE = 'Valores previstos; não pagos. Este relatório não comprova pagamento.'
 _BASE = 'Base exclusiva: SALARIO. Prêmio, alimentação e transporte excluídos.'
@@ -34,12 +36,16 @@ def _rows(plan, tax):
             raise ValueError('Componentes INSS ausentes no manifesto.')
         if sum(_cents(value) for value in components.values()) != row['inssCents']:
             raise ValueError('Componentes divergem do INSS individual no manifesto.')
+        if _cents(row.get('salaryFamilyEstimatedCents', 0)) > row['inssCents']:
+            raise ValueError('Dedução prevista excede a provisão individual.')
         if (type(row['days']) is not int or type(row['divisor']) is not int
                 or not 0 <= row['days'] <= row['divisor'] or row['divisor'] <= 0):
             raise ValueError('Dias e divisor inválidos no manifesto.')
     total = _cents(plan['totals'][tax])
     if sum(row[f'{tax.lower()}Cents'] for row in rows) != total:
         raise ValueError('Total do tributo diverge da soma individual no manifesto.')
+    if sum(row_amount(row, tax) for row in rows) != _cents(plan_total(plan, tax)):
+        raise ValueError('Total líquido previsto diverge da soma individual no manifesto.')
     return rows
 
 
@@ -81,8 +87,11 @@ def _cells(plan, row, tax):
     components = '<br/>'.join(
         f'{_text(label)}: <b>{_money(amount)}</b>'
         for label, amount in _components(plan, row, tax))
+    deduction = row.get('salaryFamilyEstimatedCents', 0)
+    if tax == 'INSS' and deduction:
+        components += f'<br/>Salário-família previsto: <b>-{_money(deduction)}</b>'
     amounts = (f'{components}<br/><br/><b>{tax} previsto: '
-               f'{_money(row[f"{tax.lower()}Cents"])}</b>')
+               f'{_money(row_amount(row, tax))}</b>')
     return identity, basis, amounts
 
 
@@ -97,7 +106,7 @@ def calculation_html(plan, tax):
                    + '</tr>' for row in rows)
     if not rows:
         body = '<tr><td colspan="3">Nenhuma pessoa no manifesto desta competência.</td></tr>'
-    total = _money(plan['totals'][tax])
+    total = _money(plan_total(plan, tax))
     return f'''<!doctype html>
 <html lang="pt-BR">
 <head>
@@ -211,7 +220,7 @@ def render_calculation_pdf(plan, tax, path):
         canvas.drawRightString(A4[0] - margin, 16, f'{tax} | Página {document.page}')
         canvas.restoreState()
 
-    total = _money(plan['totals'][tax])
+    total = _money(plan_total(plan, tax))
     story = [
         Paragraph(f'Emissão do plano: {_text(plan["createdDate"])} | '
                   f'Versão do manifesto: {_text(plan["version"])}', small),
