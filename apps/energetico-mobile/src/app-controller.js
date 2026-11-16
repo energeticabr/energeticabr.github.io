@@ -8050,6 +8050,35 @@ export function createAppController({
         || attendanceSummarySession !== session || session.lifetime.signal.aborted
         || flowBusy() || store.getState().activeFlow) throw cancelled();
     };
+    async function runSupplierAction(method, args, { signal: callerSignal } = {}) {
+      const action = new AbortController();
+      const { signal } = action;
+      const parentSignals = [session.lifetime.signal, callerSignal].filter(Boolean);
+      const cancel = () => action.abort();
+      const assertAction = () => {
+        assertSession();
+        if (signal.aborted || parentSignals.some(parent => parent.aborted) || (typeof auth.getAccount === 'function'
+          && auth.getAccount()?.homeAccountId !== reportsAccount.homeAccountId)) throw cancelled();
+      };
+      assertAction();
+      for (const parent of parentSignals) parent.addEventListener('abort', cancel, { once: true });
+      const tokenProvider = ordersGalleryTokenProvider(assertAction, ATTENDANCE_SUMMARY_ID);
+      const writing = method === 'saveSupplierLinks';
+      if (writing) invalidateGalleryReportSources();
+      try {
+        // Consent can redirect to Microsoft. Request it before the user enters a draft.
+        if (!writing) await tokenProvider(['Sites.ReadWrite.All']);
+        assertAction();
+        const source = await attendanceSummaryDataFactory({ tokenProvider });
+        assertAction();
+        const result = await source[method](...args, { signal });
+        assertAction();
+        return result;
+      } finally {
+        for (const parent of parentSignals) parent.removeEventListener('abort', cancel);
+        if (writing && attendanceSummarySession === session) invalidateGalleryReportSources();
+      }
+    }
     const data = { async loadSnapshot(options = {}) {
       assertSession();
       if (options.signal?.aborted) throw cancelled();
@@ -8105,6 +8134,10 @@ export function createAppController({
         signal.removeEventListener('abort', rejectCancelled);
         if (session.loadController === controller) session.loadController = null;
       }
+    }, loadSupplierEditor(id, options) {
+      return runSupplierAction('loadSupplierEditor', [id], options);
+    }, saveSupplierLinks(editor, links, options) {
+      return runSupplierAction('saveSupplierLinks', [editor, links], options);
     } };
     let cancelOpening;
     const openingCancellation = new Promise(resolve => { cancelOpening = () => resolve(false); });

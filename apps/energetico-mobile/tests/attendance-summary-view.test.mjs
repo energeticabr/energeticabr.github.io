@@ -9,7 +9,10 @@ const rows=[
  {id:'3',date:'2026-10-05',branch:'004 - XAVANTE',supplier:'Alfa',profession:'PEDREIRO',presence:'PRESENTE',status:'PENDENTE',dailyValue:30,paymentId:''},
  {id:'4',date:'2026-10-05',branch:'004 - XAVANTE',supplier:'Beta',profession:'SERVENTE',presence:'AUSENTE',status:'PENDENTE',dailyValue:20,paymentId:''},
 ];
-const snapshot={complete:true,presences:rows,suppliers:[{id:'1',name:'Alfa',status:'ATIVO'},{id:'2',name:'Beta',status:'ATIVO'}]};
+const snapshot={complete:true,presences:rows,suppliers:[
+ {id:'1',name:'Alfa',status:'ATIVO',profession:'PEDREIRO'},
+ {id:'2',name:'Beta',status:'ATIVO',profession:'SERVENTE'}
+]};
 function setup(t,loader=async()=>snapshot,vertical=false){
  assert.equal(typeof createAttendanceSummaryReportView,'function','attendance report is implemented');
  const dom=new JSDOM('<main id="app"><button>Mascote</button></main>');let portrait=vertical;
@@ -30,7 +33,7 @@ assert.deepEqual([...root.querySelectorAll('.chat-main-payment-ledger-shortcut')
  view.render({...state,activeText:{id:'busy'}});assert.equal(root.querySelector('[data-action=open-attendance-summary]').disabled,true);
  assert.equal(new JSDOM(renderChatMarkup({...state,activeFlow:'flow'})).window.document.querySelector('[data-action=open-attendance-summary]'),null);
 });
-test('attendance summary uses four indicators, profession financial cards and seven daily columns',async t=>{
+test('attendance summary shows registry cards and presence-only indicators and daily detail',async t=>{
  const {view,root}=setup(t);await view.open();
  assert.equal(root.querySelector('[name=supplierStatus]').value,'ATIVO');
  assert.equal(root.querySelector('[data-date-display=startDate]').value,'21/09/2026');
@@ -38,12 +41,11 @@ test('attendance summary uses four indicators, profession financial cards and se
  assert.equal(root.querySelector('[data-metric=pending]').textContent,'1');
  assert.equal(root.querySelector('[data-metric=present]').textContent,'2');
  assert.equal(root.querySelector('[data-metric=absent]').textContent,'1');
- assert.match(root.querySelector('[data-metric=total]').textContent,/80,00/);
- assert.equal(root.querySelectorAll('.as-profession').length,1);
- assert.match(root.querySelector('.as-financial').textContent,/100,00.*30,00.*50,00.*180,00/s);
- assert.equal(root.querySelectorAll('.as-daily thead th').length,7);
- assert.match(root.querySelector('.as-daily').textContent,/IDPGTO: 3500/);
- assert.match(root.querySelector('.as-daily').textContent,/PENDENTE PGTO/);
+ assert.equal(root.querySelectorAll('[data-metric]').length,3);
+ assert.equal(root.querySelectorAll('.as-profession').length,2);
+ assert.match(root.querySelector('.as-professions').textContent,/PEDREIRO.*Alfa.*SERVENTE.*Beta/s);
+ assert.equal(root.querySelectorAll('.as-daily thead th').length,6);
+ assert.doesNotMatch(root.textContent,/IDPGTO|PENDENTE PGTO|APROVADO PGTO|R\$/);
  assert.ok(root.querySelector('.as-duplicate'));
  assert.equal(root.querySelector('.pl-close'),null);
  root.querySelector('[aria-label="Abrir opções de FORNECEDOR"]').click();
@@ -75,4 +77,45 @@ test('untrusted labels stay text and failed/closed loads cannot show stale resul
  const failed=setup(t,async()=>{throw Error('network');});await failed.view.open();assert.equal(failed.root.querySelectorAll('[data-metric]').length,0);
  let finish,signal;const pending=setup(t,o=>{signal=o.signal;return new Promise(r=>finish=r);});const p=pending.view.open();pending.view.close();
  assert.equal(signal.aborted,true);finish(snapshot);await p;assert.equal(pending.root.querySelectorAll('[data-metric]').length,0);
+});
+
+test('supplier edit reads the current catalog, saves the chosen links and updates just the supplier card', async t=>{
+ const dom=new JSDOM('<main id="app"></main>');
+ let saved, finishSave;
+ const pendingSave=new Promise(resolve=>{finishSave=resolve;});
+ const registered={id:'1',name:'Alfa',status:'ATIVO',profession:'PEDREIRO',branch:'004 - XAVANTE',stage:'3',activity:'ARMAÇÃO'};
+ const stages=[{id:'3',stage:'ESTRUTURA',branch:registered.branch,status:'ATIVIDADE INICIADA'},
+  {id:'8',stage:'FUNDAÇÃO',branch:registered.branch,status:'ATIVIDADE INICIADA'}];
+ const data={
+  async loadSnapshot(){return {...snapshot, stages, suppliers:[registered]};},
+  async loadSupplierEditor(id){assert.equal(id,'1');return {supplier:registered,eTag:'"version-1"',stages,
+   activities:[{stage:'ESTRUTURA',activity:'ARMAÇÃO'},{stage:'FUNDAÇÃO',activity:'CONCRETAGEM'}]};},
+  async saveSupplierLinks(editor, links){saved={editor,links};await pendingSave;return {...registered,...links};}
+ };
+ const view=createAttendanceSummaryReportView({document:dom.window.document,data,now:()=>new Date('2026-10-05T12:00:00Z')});
+ t.after(()=>{view.destroy();dom.window.close();});
+ await view.open();
+ const root=view.element;
+ const card=root.querySelector('.as-provider');
+ assert.match(card.textContent,/Alfa.*ESTRUTURA.*ARMAÇÃO/s);
+ card.querySelector('button').click();
+ await new Promise(resolve=>setImmediate(resolve));
+ const stage=root.querySelector('[data-attendance-link=stage]');
+ const activity=root.querySelector('[data-attendance-link=activity]');
+ assert.deepEqual([...activity.options].map(option=>option.value),['','ARMAÇÃO']);
+ stage.value='8';stage.dispatchEvent(new dom.window.Event('change'));
+ assert.deepEqual([...activity.options].map(option=>option.value),['','CONCRETAGEM']);
+ activity.value='CONCRETAGEM';
+ const form=root.querySelector('form.as-provider-editor');
+ form.dispatchEvent(new dom.window.Event('submit',{cancelable:true,bubbles:true}));
+ assert.equal(root.querySelector('.report-close-control').disabled,true);
+ root.click();
+ assert.equal(root.hidden,false);
+ finishSave();
+ await new Promise(resolve=>setImmediate(resolve));
+ assert.equal(root.querySelector('.report-close-control').disabled,false);
+ assert.deepEqual(saved.links,{stage:'8',activity:'CONCRETAGEM'});
+ assert.equal(saved.editor.eTag,'"version-1"');
+ assert.match(root.querySelector('.as-provider').textContent,/Alfa.*FUNDAÇÃO.*CONCRETAGEM/s);
+ assert.equal(root.querySelector('[data-metric=present]').textContent,'2');
 });

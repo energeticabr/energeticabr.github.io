@@ -13,8 +13,26 @@ const navigated=[];
 const launches=Array.from({length:new URL(location.href).searchParams.has('visual')?12:440},(_,index)=>({id:String(index+1),paymentDate:'2026-10-01',supplier:'Fornecedor '+(index%3+1),branch:'004 - EDIFÍCIO XAVANTE',product:'Produto',order:String(index+1),account:'Energética - Caixa',unit:10,quantity:1,freight:0,total:10}));
 const contractorMode=new URL(location.href).searchParams.has('contractor');
 const attendanceMode=new URL(location.href).searchParams.has('attendance');
-const attendance={complete:true,presences:[{id:'1',date:'2026-10-14',branch:'004 - XAVANTE',supplier:'Alfa',profession:'PEDREIRO',presence:'PENDENTE',status:'PENDENTE',dailyValue:100,paymentId:''}],suppliers:[{id:'1',name:'Alfa',status:'ATIVO'}]};
-const view=decorateReportNavigation(attendanceMode?createAttendanceSummaryReportView({document,data:{async loadSnapshot(){reads++;return attendance;}},now:()=>new Date('2026-10-14T12:00:00Z')}):contractorMode?createContractorControlReportView({document,data:{async loadOverview(){reads++;return {rows:[],documentStatuses:{}};},async loadDetails(){return {};}}}):createPaymentLedgerView({document,data:{async loadPaymentsSnapshot(){document.querySelector('#reads').textContent=++reads+' consultas';return {launches};}}}),{action:attendanceMode?'open-attendance-summary':contractorMode?'open-contractor-control-report':'open-payment-ledger',onNavigate:target=>{navigated.push(target);return false;}});
+const attendanceBranch='004 - XAVANTE';
+const stages=[
+ {id:'18',stage:'ALVENARIA E ESTRUTURAS',activity:'EXECUÇÃO DE PAREDES',property:'TORRE A',branch:attendanceBranch,status:'ATIVIDADE INICIADA'},
+ {id:'32',stage:'FUNDAÇÃO',activity:'ARMAÇÃO DE BLOCOS',property:'TORRE B',branch:attendanceBranch,status:'ATIVIDADE INICIADA'}
+];
+const attendance={complete:true,stages,
+ presences:[{id:'1',date:'2026-10-14',branch:attendanceBranch,supplier:'Alfa Construções e Serviços de Alvenaria',profession:'PEDREIRO',presence:'PENDENTE'}],
+ suppliers:[
+  {id:'1',name:'Alfa Construções e Serviços de Alvenaria',profession:'PEDREIRO',stage:'18',activity:'ASSENTAMENTO DE BLOCOS'},
+  {id:'2',name:'Beta',profession:'SERVENTE DE PEDREIRO',stage:'18',activity:'ASSENTAMENTO DE BLOCOS'},
+  {id:'3',name:'Gama',profession:'SERVENTE DE PEDREIRO',stage:'32',activity:'ARMAÇÃO DE BLOCOS'}
+ ].map(row=>({...row,branch:attendanceBranch,status:'ATIVO'}))
+};
+const attendanceData={
+ async loadSnapshot(){reads++;return attendance;},
+ async loadSupplierEditor(id){return {supplier:attendance.suppliers.find(row=>row.id===id),stages,
+  activities:[{stage:stages[0].stage,activity:'ASSENTAMENTO DE BLOCOS'},{stage:stages[1].stage,activity:'ARMAÇÃO DE BLOCOS'}]};},
+ async saveSupplierLinks(editor,links){return {...editor.supplier,...links};}
+};
+const view=decorateReportNavigation(attendanceMode?createAttendanceSummaryReportView({document,data:attendanceData,now:()=>new Date('2026-10-14T12:00:00Z')}):contractorMode?createContractorControlReportView({document,data:{async loadOverview(){reads++;return {rows:[],documentStatuses:{}};},async loadDetails(){return {};}}}):createPaymentLedgerView({document,data:{async loadPaymentsSnapshot(){document.querySelector('#reads').textContent=++reads+' consultas';return {launches};}}}),{action:attendanceMode?'open-attendance-summary':contractorMode?'open-contractor-control-report':'open-payment-ledger',onNavigate:target=>{navigated.push(target);return false;}});
 document.querySelector('#open').addEventListener('click',()=>view.open());
 if(new URL(location.href).searchParams.has('safearea')) {
  await view.open();await new Promise(resolve=>requestAnimationFrame(resolve));
@@ -40,7 +58,25 @@ if(contractorMode) {
  const root=view.element,filters=root.querySelector('.ccr-filters'),rects=[...filters.querySelectorAll('.ccr-filter')].map(element=>element.getBoundingClientRect()),portrait=root.dataset.reportPortrait==='true';
  document.documentElement.dataset.layout=JSON.stringify({portrait,columns:getComputedStyle(filters).gridTemplateColumns.split(' ').length,sameRow:rects.every(rect=>rect.width>1&&rect.height>1&&Math.abs((portrait?rect.left:rect.bottom)-(portrait?rects[0].left:rects[0].bottom))<1),reads,closeCount:root.querySelectorAll('.report-close-control').length});
 }
-if(attendanceMode) {
+if(attendanceMode&&new URL(location.href).searchParams.has('edit')) {
+ await view.open();
+ const root=view.element,content=root.querySelector('.as-content');
+ const card=id=>root.querySelector(`[data-supplier-edit="${id}"]`).closest('.as-provider');
+ const color=id=>getComputedStyle(card(id)).backgroundColor;
+ const sharesColor=color(1)===color(2)&&color(1)!==color(3);
+ card(1).querySelector('button').click();
+ await new Promise(resolve=>requestAnimationFrame(resolve));
+ const editor=card(1).querySelector('form');
+ const fits=content.scrollWidth<=content.clientWidth+1&&editor.scrollWidth<=editor.clientWidth+1;
+ const stageSelect=editor.querySelector('[data-attendance-link=stage]');
+ stageSelect.value='32';
+ stageSelect.dispatchEvent(new Event('change'));
+ editor.querySelector('[data-attendance-link=activity]').value='ARMAÇÃO DE BLOCOS';
+ editor.requestSubmit();
+ await new Promise(resolve=>requestAnimationFrame(resolve));
+ document.documentElement.dataset.layout=JSON.stringify({sharesColor,fits,updated:color(1)===color(3)&&color(1)!==color(2),
+  editFocus:document.activeElement?.dataset.supplierEdit,daily:root.querySelector('.as-daily').textContent.includes('Alfa')});
+} else if(attendanceMode) {
  await view.open();await new Promise(resolve=>requestAnimationFrame(resolve));
  const root=view.element,panel=root.querySelector('[role=dialog]'),rect=panel.getBoundingClientRect();
  const bounds={left:rect.left,right:rect.right,top:rect.top,bottom:rect.bottom};
