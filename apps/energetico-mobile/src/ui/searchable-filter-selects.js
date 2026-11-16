@@ -112,7 +112,10 @@ function createPicker(select, closeOthers, options = {}) {
       // let the keyboard cover the list bottom instead of flattening the list.
       // A width change is a new orientation/window size, not a keyboard resize.
       const viewportWidth = right - left, viewportHeight = bottom - top;
-      if (reportViewport?.width === viewportWidth && viewportHeight < reportViewport.height
+      // For the proposal, a desktop window resize still needs to fit the list.
+      const keyboardCanCoverList = !options.reportFrame || view.visualViewport?.height < view.innerHeight
+        || view.matchMedia?.('(any-pointer: coarse)').matches;
+      if (keyboardCanCoverList && reportViewport?.width === viewportWidth && viewportHeight < reportViewport.height
         && (doc.activeElement === search || reportViewport.keyboardOpen)) {
         // Keep this through keyboard dismissal/reopening too. A resize while
         // search is not being edited is an ordinary window resize and may fit.
@@ -128,7 +131,7 @@ function createPicker(select, closeOthers, options = {}) {
       const safeRight = parseFloat(safeArea?.paddingRight) || 0;
       const usableWidth = right - left - safeLeft - safeRight;
       const width = Math.max(0, Math.min(480, usableWidth - 24));
-      const availableHeight = selectionActions || options.reportFrame ? viewportHeight : reportViewport.height;
+      const availableHeight = selectionActions ? viewportHeight : reportViewport.height;
       const height = Math.max(0, Math.min(640, availableHeight - safeTop - safeBottom - 24));
       popup.dataset.placement = 'expanded';
       popup.style.width = `${width}px`;
@@ -365,7 +368,12 @@ function createPicker(select, closeOthers, options = {}) {
   function onAncestorScroll(event) {
     if (!selectingOption && (event.target === doc || event.target?.contains?.(wrapper) && !wrapper.contains(event.target))) close();
   }
-  function onFocusOut(event) { if (!selectingOption && !wrapper.contains(event.relatedTarget)) close(); }
+  function onFocusOut(event) {
+    // The native keyboard's Done button blurs the proposal search without
+    // moving focus to another control. Keep the query and options available.
+    if (options.reportFrame && event.target === search && !event.relatedTarget) return;
+    if (!selectingOption && !wrapper.contains(event.relatedTarget)) close();
+  }
   function onReset() { view.queueMicrotask(() => { if (!destroyed) { close(); sync(); } }); }
   function onDismiss() { close({ focus: true }); }
   function onSelectAll() {
