@@ -64,6 +64,7 @@ export function createNativeBootstrap({ root, auth, native, config, fetchImpl = 
       enableSicoobMenuAlert: !demo && !config.portalApp,
       enableTrancidReminders: !demo && !config.portalApp,
       enableCompanyData: !config.portalApp,
+      portalApp: config.portalApp,
       store: createConversationStore({ historyMode: "current-step" }),
       client,
       pendingConstructionDiaryDataFactory: demo || config.portalApp

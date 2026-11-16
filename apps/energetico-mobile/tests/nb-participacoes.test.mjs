@@ -67,9 +67,9 @@ test("NB centers its stacked home buttons when opening and returning to the menu
       <script type="module">
         const transcript = document.querySelector(".chat-transcript");
         transcript.scrollTop = transcript.scrollHeight;
-        const buttons = [...transcript.querySelectorAll("[data-reply-id]")].map(button => {
+        const buttons = [...transcript.querySelectorAll('[data-reply-id], [data-action="open-rentals-report"]')].map(button => {
           const { left, right, top, bottom } = button.getBoundingClientRect();
-          return { id: button.dataset.replyId, left, right, top, bottom };
+          return { id: button.dataset.replyId ?? button.dataset.action, left, right, top, bottom };
         });
         const { left, right, top, bottom } = transcript.getBoundingClientRect();
         document.documentElement.dataset.layout = JSON.stringify({ buttons, left, right, top, bottom });
@@ -85,12 +85,13 @@ test("NB centers its stacked home buttons when opening and returning to the menu
     const { buttons, left, right, top, bottom } = JSON.parse(dom.window.document.documentElement.dataset.layout);
     dom.window.close();
     const description = `${width}x${height} (${mode})`;
-    assert.deepEqual(buttons.map(button => button.id), ["group_nb_participacoes", "group_personal_expenses"]);
+    assert.deepEqual(buttons.map(button => button.id), ["group_nb_participacoes", "group_personal_expenses", "open-rentals-report"]);
     assert.ok(buttons[0].bottom < buttons[1].top, description);
+    assert.ok(buttons[1].bottom < buttons[2].top, description);
     for (const button of buttons) {
       assert.ok(Math.abs((button.left + button.right - left - right) / 2) <= 2, description);
     }
-    assert.ok(Math.abs((buttons[0].top + buttons[1].bottom - top - bottom) / 2) <= 2, description);
+    assert.ok(Math.abs((buttons[0].top + buttons.at(-1).bottom - top - bottom) / 2) <= 2, description);
   }
 });
 

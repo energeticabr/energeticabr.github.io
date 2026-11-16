@@ -1,3 +1,4 @@
+import { NB_PORTAL_APP } from "./nb-participacoes.js";
 import { createSefazSyncSession } from './ui/sefaz-sync-session.js';
 import { resumeConversation } from './chat/resume-conversation.js';
 import { createProvisionSettlementParentSession } from './ui/provision-settlement-parent-session.js';
@@ -176,6 +177,14 @@ async function defaultCommercialDocumentsViewFactory(options) {
 async function defaultCommercialDocumentsDataFactory(options) {
   const { createCommercialDocumentsData } = await import('./chat/commercial-documents-data.js');
   return createCommercialDocumentsData(options);
+}
+
+async function defaultRentalsReportViewFactory(options) {
+  return (await import('./ui/rentals-report-view.js')).createRentalsReportView(options);
+}
+
+async function defaultRentalsReportDataFactory(options) {
+  return (await import('./chat/rentals-report-data.js')).createRentalsReportData(options);
 }
 
 async function defaultSacPathologiesViewFactory(options) {
@@ -456,6 +465,7 @@ const COMMERCIAL_MILESTONES_ID = 'action_commercial_milestones';
 const COMMERCIAL_MILESTONES_SCOPES = Object.freeze(['Sites.Read.All']);
 const COMMERCIAL_DOCUMENTS_ID = 'action_commercial_documents';
 const COMMERCIAL_DOCUMENTS_SCOPES = Object.freeze(['Sites.Read.All']);
+const RENTALS_REPORT_ACTION = 'open-rentals-report';
 const SAC_PATHOLOGIES_ID = 'action_sac_pathologies';
 const SAC_PATHOLOGIES_SCOPES = Object.freeze(['Sites.Read.All']);
 export const DEPRECIATION_REPORT_ID = 'home-depreciation-report';
@@ -1052,6 +1062,8 @@ export function createAppController({
   commercialMilestonesDataFactory = defaultCommercialMilestonesDataFactory,
   commercialDocumentsViewFactory = defaultCommercialDocumentsViewFactory,
   commercialDocumentsDataFactory = defaultCommercialDocumentsDataFactory,
+  rentalsReportViewFactory = defaultRentalsReportViewFactory,
+  rentalsReportDataFactory = defaultRentalsReportDataFactory,
   sacPathologiesViewFactory = defaultSacPathologiesViewFactory,
   sacPathologiesDataFactory = defaultSacPathologiesDataFactory,
   depreciationReportViewFactory = defaultDepreciationReportViewFactory,
@@ -1087,6 +1099,7 @@ export function createAppController({
   enableSicoobMenuAlert = false,
   enableTrancidReminders = false,
   enableCompanyData = true,
+  portalApp,
   trancidReportFactory = defaultTrancidReportFactory,
   trancidReportDataFactory = defaultTrancidReportDataFactory,
   trancidReportBuilder = defaultTrancidReportBuilder,
@@ -1178,6 +1191,7 @@ export function createAppController({
   let commercialMilestonesOpening = null;
   let commercialMilestonesSession = null;
   let commercialDocumentsReport = null;
+  let rentalsReportSession = null;
   let commercialDocumentsOpening = null;
   let commercialDocumentsSession = null;
   let sacPathologiesReport = null;
@@ -6352,6 +6366,13 @@ export function createAppController({
     panel?.destroy?.();
   }
 
+  function disposeRentalsReport() {
+    const session = rentalsReportSession;
+    rentalsReportSession = null;
+    session?.abort.abort();
+    session?.panel?.destroy?.();
+  }
+
   function disposeCommercialDocumentsReport() {
     const session = commercialDocumentsSession;
     const panel = commercialDocumentsReport;
@@ -6459,6 +6480,7 @@ export function createAppController({
   }
 
   function closeGalleryOverlays(preserveSacPathologies = false, preserveDepreciationReport = false, preserveDocumentControlReport = false, preserveTaskAssociationReport = false, preservePendingSupplierPaymentsReport = false, preserveContractorControlReport = false, preserveGeneral = false) {
+    disposeRentalsReport();
     disposePayrollSheetCreate();
     if (!preserveSacPathologies) disposeSacPathologiesReport();
     if (!preserveDepreciationReport) disposeDepreciationReport();
@@ -8330,6 +8352,69 @@ export function createAppController({
     });
     commercialMilestonesOpening = request;
     return request;
+  }
+
+  async function openRentalsReport() {
+    if (portalApp !== NB_PORTAL_APP || !account || stopped || sessionStatus !== 'authenticated'
+      || flowBusy() || store.getState().activeFlow || rentalsReportSession) return false;
+    closeGalleryOverlays();
+    const session = { abort: new AbortController(), panel: null };
+    const owner = account;
+    const revision = sessionRevision;
+    rentalsReportSession = session;
+    const current = () => rentalsReportSession === session && !stopped && account === owner && sessionRevision === revision;
+    const assertCurrent = signal => {
+      signal?.throwIfAborted();
+      session.abort.signal.throwIfAborted();
+      if (!current()) throw new DOMException('Consulta de aluguéis cancelada.', 'AbortError');
+    };
+    const loadSnapshot = async ({ signal } = {}) => {
+      assertCurrent(signal);
+      const scopes = ['Sites.Read.All'];
+      const requestToken = async () => {
+        try {
+          return await auth.getToken(scopes);
+        } catch (error) {
+          assertCurrent(signal);
+          if (error?.code !== 'AUTH_REQUIRED' || typeof auth.authorize !== 'function') throw error;
+          await auth.authorize(scopes, { resumeAction: RENTALS_REPORT_ACTION });
+          assertCurrent(signal);
+          return auth.getToken(scopes);
+        }
+      };
+      let tokenPromise;
+      const data = await rentalsReportDataFactory({ tokenProvider: async () => {
+        assertCurrent(signal);
+        const token = await (tokenPromise ??= requestToken());
+        assertCurrent(signal);
+        return token;
+      } });
+      assertCurrent(signal);
+      const snapshot = await data.loadSnapshot({ signal });
+      assertCurrent(signal);
+      return snapshot;
+    };
+    try {
+      const view = await rentalsReportViewFactory({
+        document: globalThis.document,
+        loadSnapshot,
+        onClose: () => { if (current()) disposeRentalsReport(); },
+      });
+      if (!current()) {
+        view.destroy?.();
+        return false;
+      }
+      const panel = decorateControllerReport(view, RENTALS_REPORT_ACTION);
+      session.panel = panel;
+      await panel.open();
+      return current();
+    } catch (error) {
+      if (current()) {
+        disposeRentalsReport();
+        setSessionError(error, 'Não foi possível abrir o relatório de aluguéis.');
+      }
+      return false;
+    }
   }
 
   async function openCommercialDocuments() {
@@ -10803,6 +10888,7 @@ export function createAppController({
   }
 
   async function signIn() {
+    disposeRentalsReport();
     resetDdaMenuAlert();
     resetSicoobMenuAlert();
     disposeDdaSyncSession();
@@ -10916,6 +11002,7 @@ export function createAppController({
   }
 
   async function signOut() {
+    disposeRentalsReport();
     resetDdaMenuAlert();
     resetSicoobMenuAlert();
     provisionSettlementParent.destroy();
@@ -12184,6 +12271,7 @@ export function createAppController({
     bind('open-commercial-receipts', openCommercialReceipts);
     bind('open-commercial-milestones', openCommercialMilestones);
     bind('open-commercial-documents', openCommercialDocuments);
+    if (portalApp === NB_PORTAL_APP) bind(RENTALS_REPORT_ACTION, openRentalsReport);
     bind('opensacpathologies', openSacPathologies);
     bind('open-sac-pathologies', openSacPathologies);
     bind('open-depreciation-report', openDepreciationReport);
@@ -12355,6 +12443,7 @@ export function createAppController({
       if (commercialReceiptsSession && (flowBusy() || store.getState().activeFlow)) disposeCommercialReceiptsReport();
       if (commercialMilestonesSession && (flowBusy() || store.getState().activeFlow)) disposeCommercialMilestonesReport();
       if (commercialDocumentsSession && (flowBusy() || store.getState().activeFlow)) disposeCommercialDocumentsReport();
+      if (rentalsReportSession && (flowBusy() || store.getState().activeFlow)) disposeRentalsReport();
       if (sacPathologiesSession && (flowBusy() || store.getState().activeFlow)) disposeSacPathologiesReport();
       if (depreciationReportSession && (flowBusy() || store.getState().activeFlow)) disposeDepreciationReport();
       if (documentControlReportSession && (flowBusy() || store.getState().activeFlow)) disposeDocumentControlReport();
@@ -12440,6 +12529,7 @@ export function createAppController({
     else if (pendingAction === COMMERCIAL_RECEIPTS_ID) await openCommercialReceipts();
     else if (pendingAction === COMMERCIAL_MILESTONES_ID) await openCommercialMilestones();
     else if (pendingAction === COMMERCIAL_DOCUMENTS_ID) await openCommercialDocuments();
+    else if (pendingAction === RENTALS_REPORT_ACTION) await openRentalsReport();
     else if (pendingAction === SAC_PATHOLOGIES_ID) await openSacPathologies();
     else if (pendingAction === DEPRECIATION_REPORT_ID) await openDepreciationReport();
     else if (pendingAction === DOCUMENT_CONTROL_REPORT_ID) await openDocumentControlReport();
@@ -12458,6 +12548,7 @@ export function createAppController({
   }
 
   function stop() {
+    disposeRentalsReport();
     resetDdaMenuAlert();
     resetSicoobMenuAlert();
     provisionSettlementParent.destroy();

@@ -50,3 +50,32 @@
   width: 2.75rem;
   height: 2.75rem;
 }
+
+.nb-area-menu .nb-rentals-button {
+  display: inline-grid;
+  justify-self: center;
+  justify-items: center;
+  gap: 3px;
+  width: max-content;
+  min-width: 76px;
+  padding: 5px 10px;
+  color: white;
+  background: #0c5568;
+  border: 1px solid #81b2bf;
+  border-radius: 0.75rem;
+  font-size: 0.75rem;
+  font-weight: 800;
+  cursor: pointer;
+}
+
+.nb-rentals-button img {
+  display: block;
+  width: 54px;
+  height: 48px;
+  object-fit: contain;
+}
+
+.nb-rentals-button:focus-visible {
+  outline: 3px solid var(--accent);
+  outline-offset: 3px;
+}

@@ -93,7 +93,7 @@ jobs:
         run: |
           pnpm install --frozen-lockfile
           pnpm guard:signature-gestures -- --base-ref origin/main
-          node --test tests/nb-participacoes.test.mjs tests/chat-client.test.mjs tests/native-bootstrap.test.mjs
+          node --test tests/nb-participacoes.test.mjs tests/chat-client.test.mjs tests/demo-access.test.mjs tests/nb-rentals-entry.test.mjs tests/rentals-report.test.mjs
           node scripts/prepare-nb-ios.mjs
           pnpm build --mode nb-participacoes
           pnpm cap:sync

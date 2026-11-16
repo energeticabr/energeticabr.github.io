@@ -56,6 +56,7 @@ const STAGE_PROGRESS_MASCOT_URL = new URL('../../../../assets/report-mascots/sta
 const COMMERCIAL_RECEIPTS_MASCOT_URL = new URL('../../../../assets/report-mascots/commercial-receipts.png', import.meta.url).href;
 const COMMERCIAL_MILESTONES_MASCOT_URL = new URL('../../../../assets/report-mascots/commercial-milestones.png', import.meta.url).href;
 const COMMERCIAL_DOCUMENTS_MASCOT_URL = new URL('../../../../assets/report-mascots/commercial-documents.png', import.meta.url).href;
+const RENTALS_MASCOT_URL = new URL('../../../../assets/report-mascots/rentals.png', import.meta.url).href;
 const SAC_PATHOLOGIES_MASCOT_URL = new URL('../../../../assets/report-mascots/sac-pathologies.png', import.meta.url).href;
 const DEPRECIATION_REPORT_MASCOT_URL = new URL('../../../../assets/report-mascots/depreciation.png', import.meta.url).href;
 const DOCUMENT_CONTROL_REPORT_MASCOT_URL = new URL('../../../../assets/report-mascots/document-control.png', import.meta.url).href;
@@ -936,7 +937,9 @@ function renderNbAreaMenu(message, busy, centered) {
   return `<article class="chat-message chat-message--assistant nb-area-menu${centered ? " nb-area-menu--home" : ""}">
     <div class="chat-bubble">
       ${hasInitialAreaMenuHeading(message) ? "" : `<p>${formatChatText(question)}</p>`}
-      <div class="chat-choice-list chat-choice-list--single">${(message.options || []).map(option => pollButton(option, busy)).join("")}</div>
+      <div class="chat-choice-list chat-choice-list--single">${(message.options || []).map(option => pollButton(option, busy)).join("")}
+        ${centered ? `<button class="nb-rentals-button" type="button" data-action="open-rentals-report" aria-label="Abrir relatório de aluguéis" aria-haspopup="dialog"${busy ? " disabled" : ""}><img src="${RENTALS_MASCOT_URL}" alt=""><span>Aluguéis</span></button>` : ""}
+      </div>
     </div>
   </article>`;
 }
