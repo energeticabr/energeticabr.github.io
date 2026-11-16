@@ -162,7 +162,7 @@ function proposalLabelFits() {
     word.y >= button.y && word.bottom <= button.bottom);
 }
 const layout = {
-  provisions, orange, sicoob, nfe, dda,
+  provisions, orange, commercialRow:box(document.querySelector('.chat-main-commercial-shortcuts')), sicoob, nfe, dda,
   open:!report.element.hidden, rowIds:rowIds(),
   overflow:document.documentElement.scrollWidth > innerWidth,
   reportBodyWidth:reportBody.offsetWidth,
