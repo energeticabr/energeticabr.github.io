@@ -7,12 +7,42 @@ const {createDocumentControlReportView}=await import('../src/ui/document-control
 const row=(id,extra={})=>({id,submittedDate:'2026-10-06',issuedDate:'2026-10-04',expirationDate:'2026-10-07',branch:'004 - EDIFÍCIO XAVANTE',homologation:'HOMOLOGAÇÃO FILIAL',documentType:'PONTO ASSINADO',person:'CLEITON CESAR NONATO',stage:'ALVENARIA',property:'TODOS',status:'SUBMETIDO',...extra});
 const snapshot={documents:[row(294,{status:'PENDENTE',expirationDate:''}),row(293,{expirationDate:'2026-10-05'}),row(292,{homologation:'HOMOLOGAÇÃO MÃO DE OBRA'}),row(291,{homologation:'HOMOLOGAÇÃO COMERCIAL'}),row(290,{homologation:'HOMOLOGAÇÃO CONTRATO',status:'APROVADO'})]};
 const tick=()=>new Promise(resolve=>setImmediate(resolve));
-function setup(t,load=async()=>snapshot,vertical=false){
+function setup(t,load=async()=>snapshot,vertical=false,attachments={}){
  assert.equal(typeof createDocumentControlReportView,'function');const dom=new JSDOM('<main id="app"><button>Mascote</button></main>');let portrait=vertical;
+ dom.window.HTMLDialogElement.prototype.showModal = function () { this.open = true; };
+ dom.window.HTMLDialogElement.prototype.close = function () { this.open = false; };
  dom.window.matchMedia=()=>({get matches(){return portrait;}});const style=dom.window.document.createElement('style');style.textContent=readFileSync(new URL('../src/ui/document-control-report.css',import.meta.url),'utf8');dom.window.document.head.append(style);
- const view=createDocumentControlReportView({document:dom.window.document,data:{loadSnapshot:load},now:()=>new Date('2026-10-06T12:00:00Z')});t.after(()=>{view.destroy();dom.window.close();});
+ const view=createDocumentControlReportView({document:dom.window.document,data:{loadSnapshot:load},attachments:Object.keys(attachments).length ? attachments : undefined,now:()=>new Date('2026-10-06T12:00:00Z')});t.after(()=>{view.destroy();dom.window.close();});
  return {view,root:view.element,dom,rotate(value){portrait=value;dom.window.dispatchEvent(new dom.window.Event('resize'));}};
 }
+
+test('only a pending document offers four attachment sources and saves to its row', async t => {
+ const files = [new File(['comprovante'], 'documento.pdf', { type: 'application/pdf' })];
+ const picked = [], uploaded = [];
+ const { view, root, dom } = setup(t, async () => ({
+  ...snapshot, attachmentListId: '12345678-1234-1234-1234-123456789abc',
+ }), false, {
+  async pickAttachments(source) { picked.push(source); return source === 'photos' ? [] : files; },
+  async uploadAttachments(listId, id, selected) { uploaded.push({ listId, id, selected }); return selected.length; },
+ });
+ await view.open();
+ const buttons = [...root.querySelectorAll('.dcr-attach')];
+ assert.equal(buttons.length, 1);
+ assert.equal(buttons[0].textContent, 'Anexar');
+ assert.equal(buttons[0].previousElementSibling.textContent, 'PENDENTE');
+ buttons[0].click();
+ const dialog = dom.window.document.querySelector('dialog[open]');
+ const sources = [...dialog.querySelectorAll('[data-source]')];
+ assert.deepEqual(sources.map(button => button.textContent), ['Tirar foto', 'Escanear', 'Fototeca', 'Arquivos']);
+ for (const button of sources) { button.click(); await tick(); }
+ assert.deepEqual(picked, ['camera', 'scan', 'photos', 'files']);
+ assert.deepEqual(uploaded, Array.from({ length: 3 }, () => ({
+  listId: '12345678-1234-1234-1234-123456789abc', id: 294, selected: files,
+ })));
+ assert.match(dialog.querySelector('[role=status]').textContent, /1 arquivo anexado/);
+ view.close();
+ assert.equal(dialog.open, false);
+});
 test('eighth left home mascot follows depreciation, uses provided detective and works by clicking the image',t=>{
  const dom=new JSDOM('<main id="app"></main>');dom.window.HTMLCanvasElement.prototype.getContext=()=>null;const view=createChatView(dom.window.document.querySelector('#app'));t.after(()=>{view.destroy();dom.window.close();});
  const state={sessionStatus:'authenticated',account:{name:'Bernardo'},draft:'',pendingFiles:[],messages:[{id:'home',role:'assistant',type:'poll',question:'QUAL ÁREA VOCÊ DESEJA ACESSAR?',options:[{id:'group_pending',label:'PENDÊNCIAS'},{id:'group_supplies',label:'SUPRIMENTOS'}]}]};

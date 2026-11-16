@@ -41,3 +41,12 @@
 .dcr-overlay[data-report-max-900="true"] .dcr-table :is(th,td) { padding:4px 1px; }
 .dcr-overlay[data-report-max-900="true"] .dcr-brand { margin-bottom:5px; }
 .dcr-overlay[data-report-max-900="true"] .dcr-badge { padding:2px; }
+.dcr-attach { display:block; box-sizing:border-box; width:100%; max-width:88px; min-height:28px; margin:4px auto 0; padding:2px; border:1px solid #395eac; border-radius:5px; background:#fff; color:#1c3c7b; font:inherit; font-weight:700; cursor:pointer; }
+.dcr-attach:hover { background:#e6f0ff; }
+.dcr-attachment-sources { display:grid; grid-template-columns:repeat(2,minmax(0,1fr)); gap:8px; }
+.dcr-attachment-chooser .dcr-attachment-feedback { font-size:.9rem; overflow-wrap:anywhere; }
+.dcr-attachment-feedback:empty { display:none; }
+.dcr-attachment-chooser > .document-scanner-secondary { margin-top:12px; }
+.dcr-webcam video { display:block; width:100%; max-height:45dvh; background:#102b39; object-fit:contain; }
+.dcr-webcam video[hidden],.dcr-webcam p:empty { display:none; }
+@media print { .dcr-attach { display:none; } }

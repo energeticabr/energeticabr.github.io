@@ -40,6 +40,7 @@ import { decorateReportNavigation, getReportNeighbors } from "./ui/report-naviga
 import { createReportSessionCache } from "./report-session-cache.js";
 import { observeReportMutations, observeReportMutationFactory } from "./report-mutations.js";
 import { subscribeDataMutations } from "../../../portal/data/data-mutations.js";
+import { SHAREPOINT_SITES } from "../../../portal/config.js";
 import { decorateReportPrint, openFilteredReportPdf, preserveReportPdfReturn } from "./ui/report-print.js";
 import { beginLoadingTask } from "./ui/loading-task.js";
 import { createAcquisitionProgress } from "./chat/acquisition-progress.js";
@@ -463,6 +464,7 @@ export const DEPRECIATION_REPORT_ID = 'home-depreciation-report';
 const DEPRECIATION_REPORT_SCOPES = Object.freeze(['Sites.Read.All']);
 export const DOCUMENT_CONTROL_REPORT_ID = 'home-document-control-report';
 const DOCUMENT_CONTROL_REPORT_SCOPES = Object.freeze(['Sites.Read.All']);
+const DOCUMENT_CONTROL_ATTACHMENT_SCOPES = Object.freeze([`https://${SHAREPOINT_SITES.personal.host}/AllSites.Write`]);
 export const TASK_ASSOCIATION_REPORT_ID = 'home-task-association-report';
 const TASK_ASSOCIATION_REPORT_SCOPES = Object.freeze(['Sites.Read.All']);
 export const CONTRACTOR_CONTROL_REPORT_ID = 'home-contractor-control-report';
@@ -9146,6 +9148,51 @@ export function createAppController({
         || documentControlReportSession !== session || session.lifetime.signal.aborted
         || flowBusy() || store.getState().activeFlow) throw cancelled();
     };
+    const assertAttachmentSession = signal => {
+      assertSession();
+      if (signal.aborted) throw cancelled();
+    };
+    const attachments = {
+      async hasPermission({ signal }) {
+        assertAttachmentSession(signal);
+        try {
+          await auth.getToken(DOCUMENT_CONTROL_ATTACHMENT_SCOPES);
+          assertAttachmentSession(signal);
+          return true;
+        } catch (error) {
+          assertAttachmentSession(signal);
+          if (error?.code !== 'AUTH_REQUIRED') throw error;
+          return false;
+        }
+      },
+      async authorize({ signal }) {
+        assertAttachmentSession(signal);
+        await auth.authorize(DOCUMENT_CONTROL_ATTACHMENT_SCOPES, { resumeAction: DOCUMENT_CONTROL_REPORT_ID });
+        assertAttachmentSession(signal);
+        return this.hasPermission({ signal });
+      },
+      async pickAttachments(source, { signal }) {
+        assertAttachmentSession(signal);
+        const picker = { camera: native.capturePhoto, scan: native.scanDocument,
+          photos: native.pickPhotos, files: native.pickDocuments }[source];
+        if (typeof picker !== 'function') throw new Error('Esta opção não está disponível neste dispositivo.');
+        const files = await picker.call(native, { signal, desktopCamera: true });
+        assertSession();
+        return signal.aborted ? [] : files;
+      },
+      async uploadAttachments(listId, id, files, { signal }) {
+        const tokenProvider = async scopes => {
+          assertAttachmentSession(signal);
+          const token = await auth.getToken(scopes);
+          assertAttachmentSession(signal);
+          return token;
+        };
+        assertAttachmentSession(signal);
+        const source = observeReportMutations(await documentControlReportDataFactory({ tokenProvider }));
+        assertAttachmentSession(signal);
+        return source.uploadAttachments(listId, id, files, { signal });
+      },
+    };
     const data = { async loadSnapshot(options = {}) {
       assertSession();
       if (options.signal?.aborted) throw cancelled();
@@ -9196,7 +9243,8 @@ export function createAppController({
       const load = async () => {
         try {
           assertQuery();
-          const source = cachedReportSource('open-document-control-report', await documentControlReportDataFactory({ tokenProvider }), assertQuery);
+          const source = cachedReportSource('open-document-control-report',
+            await documentControlReportDataFactory({ tokenProvider, includeAttachmentTarget: true }), assertQuery);
           assertQuery();
           const snapshot = await source.loadSnapshot({ ...options, signal });
           assertQuery();
@@ -9222,7 +9270,7 @@ export function createAppController({
         assertSession();
         let report = documentControlReport;
         if (!report) {
-          const panel = decorateControllerReport(await documentControlReportViewFactory({ data, document: globalThis.document }), 'open-document-control-report');
+          const panel = decorateControllerReport(await documentControlReportViewFactory({ data, attachments, document: globalThis.document }), 'open-document-control-report');
           try { assertSession(); }
           catch (error) { panel?.destroy?.(); throw error; }
           documentControlReport = report = panel;
