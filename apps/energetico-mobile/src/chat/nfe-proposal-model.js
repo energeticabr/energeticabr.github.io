@@ -97,12 +97,12 @@ function catalogStageUsage(catalog) {
   return usage;
 }
 
-function proposedStage(catalog, branchId, productId, number) {
+function proposedStage(catalog, branchId, productId, number, supplierId) {
   const product = select(catalog.products, productId);
   if (!product) return '';
   const stages = nfeProposalStages(catalog, branchId);
   if (stages.length < 2) return selectionId(stages[0]);
-  const learned = catalog.learning?.stage(number, branchId, productId);
+  const learned = catalog.learning?.stage(number, branchId, productId, supplierId);
   if (select(stages, learned)) return learned;
   const branch = nfeProposalKey(stages[0].branch);
   const recent = catalogStageUsage(catalog).get(stageUsageKey(branch, nfeProposalKey(product.label)));
@@ -111,7 +111,7 @@ function proposedStage(catalog, branchId, productId, number) {
 
 export function updateNfeProposalBranch(draft, branchId, catalog) {
   return { ...draft, branchId, lines:draft.lines.map(line => ({
-    ...line, stageId:proposedStage(catalog, branchId, line.productId, line.number),
+    ...line, stageId:proposedStage(catalog, branchId, line.productId, line.number, draft.supplierId),
   })) };
 }
 
@@ -124,7 +124,7 @@ export function updateNfeProposalSupplier(draft, supplierId, catalog) {
 
 export function updateNfeProposalProduct(draft, number, productId, catalog) {
   return { ...draft, lines:draft.lines.map(line => line.number === number
-    ? { ...line, productId, unitReviewed:false, stageId:proposedStage(catalog, draft.branchId, productId, number) } : line) };
+    ? { ...line, productId, unitReviewed:false, stageId:proposedStage(catalog, draft.branchId, productId, number, draft.supplierId) } : line) };
 }
 
 export function buildNfeProposal(invoice, fiscal, catalog) {
@@ -132,17 +132,18 @@ export function buildNfeProposal(invoice, fiscal, catalog) {
     const name = productKey(option.label);
     return { option, name, terms:words(name), unitKey:nfeProposalKey(option.unit) };
   });
+  const header = catalog.learning?.header;
+  const supplierId = header?.supplierId || selectionId(proposedSupplier(invoice, catalog.suppliers));
+  const draft = updateNfeProposalSupplier({ date:fiscal.issueDate, lines:[] }, supplierId, catalog);
+  if (header?.accountId) draft.accountId = header.accountId;
+  const branchId = header?.branchId || draft.branchId;
+  const context = { supplierId, branchId };
   const lines = fiscal.lines.map(line => ({
-    number:line.number, productId:catalog.learning?.product(line) || selectionId(proposedProduct(line, products)), stageId:'',
+    number:line.number, productId:catalog.learning?.product(line, context) || selectionId(proposedProduct(line, products)),
     quantity:line.quantity, unitPrice:line.unitPrice, discount:line.discount, adjustment:line.adjustment,
     date:fiscal.issueDate, dueDate:fiscal.dueDate || '', unitReviewed:false,
   }));
-  const header = catalog.learning?.header;
-  const supplierId = header?.supplierId || selectionId(proposedSupplier(invoice, catalog.suppliers));
-  let draft = updateNfeProposalSupplier({ date:fiscal.issueDate, lines }, supplierId, catalog);
-  if (header?.branchId && header.branchId !== draft.branchId) draft = updateNfeProposalBranch(draft, header.branchId, catalog);
-  if (header?.accountId) draft.accountId = header.accountId;
-  return draft;
+  return updateNfeProposalBranch({ ...draft, lines }, branchId, catalog);
 }
 
 function decimal(value, label) {

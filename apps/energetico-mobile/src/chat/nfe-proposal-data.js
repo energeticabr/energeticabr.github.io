@@ -6,7 +6,7 @@ import {
   createNfeProposalPosting, decodeNfeStoredRecord, NFE_LEARNING_FIELD, NFE_LEARNING_SCOPE,
 } from './nfe-proposal-posting.js';
 import { createNfeLearningExample, createNfeLearningModel, nfeLearningIssuerHash } from './nfe-proposal-learning.js';
-import { nfeOrderId, NFE_ORDER_FIELD } from './nfe-order-link.js';
+import { nfeOrderId, NFE_ORDER_FIELD, NFE_PROVISION_DESCRIPTION_FIELD } from './nfe-order-link.js';
 import { parseNfeProposalXml } from './nfe-proposal-xml.js';
 
 const clean = value => String(value ?? '').trim();
@@ -137,15 +137,15 @@ export function createNfeProposalData({ repository, fiscalData, tokenProvider, s
     try {
       const list = await repository.resolveList('company', ['NOTAS_FISCAIS_SEFAZ'], { signal });
       if (list?.status !== 'resolved' || !list.id) return { invoice, examples };
-      const select = [NFE_ORDER_FIELD, NFE_LEARNING_FIELD, NFE_LEARNING_SCOPE].join(',');
+      const select = [NFE_ORDER_FIELD, NFE_PROVISION_DESCRIPTION_FIELD, NFE_LEARNING_FIELD, NFE_LEARNING_SCOPE].join(',');
       const items = await repository.getItems('company', list.id,
         `$select=${select}&$filter=${NFE_LEARNING_SCOPE} eq '${scope}'&$top=200`, { signal });
       active(signal);
       if (!Array.isArray(items)) return { invoice, examples };
       for (const item of items) {
         const fields = item?.fields;
-        if (String(item?.id) === row.id || !nfeOrderId(fields?.[NFE_ORDER_FIELD])
-          || fields[NFE_LEARNING_SCOPE] !== scope) continue;
+        const linked = nfeOrderId(fields?.[NFE_ORDER_FIELD]) || nfeOrderId(fields?.[NFE_PROVISION_DESCRIPTION_FIELD]);
+        if (!linked || String(item.id) === String(row.id) || fields[NFE_LEARNING_SCOPE] !== scope) continue;
         try {
           const example = JSON.parse(await decodeNfeStoredRecord(fields[NFE_LEARNING_FIELD]));
           if (example?.version === 1 && example.issuer === invoice.learningIssuerHash && Number.isFinite(example.at)) examples.push(example);
@@ -234,7 +234,7 @@ export function createNfeProposalData({ repository, fiscalData, tokenProvider, s
         throw new Error('O XML ou os cadastros desta proposta mudaram. Reabra o relatório para conferir os dados.');
       }
       const proposal = (provision ? materializeNfeProvision : materializeNfeProposal)(row, fiscal, draft, catalog);
-      if (baseline && !provision) {
+      if (baseline) {
         const identity = await learningIdentity(row);
         const example = identity && createNfeLearningExample(identity.invoice, fiscal, baseline, proposal.draft, manualStages);
         if (example) proposal.learning = { scope:identity.scope, example };
@@ -254,7 +254,9 @@ export function createNfeProposalData({ repository, fiscalData, tokenProvider, s
       if (learning?.examples.length) {
         const model = createNfeLearningModel(learning.examples, learning.invoice, fiscal, catalog);
         const lines = new Map(fiscal.lines.map(line => [line.number, line]));
-        catalog.learning = { ...model, stage:(number, branchId, productId) => model.stage(lines.get(number), branchId, productId) };
+        catalog.learning = { ...model,
+          stage:(number, branchId, productId, supplierId) => model.stage(lines.get(number), branchId, productId, supplierId),
+        };
       }
       const draft = reserved || buildNfeProposal(row, fiscal, catalog);
       const baseline = learning ? { ...draft, lines:draft.lines.map(line => ({ ...line })) } : null;

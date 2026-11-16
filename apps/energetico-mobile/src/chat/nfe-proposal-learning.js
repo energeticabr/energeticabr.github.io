@@ -193,7 +193,7 @@ function indexCorrections(history) {
   };
 }
 
-function infer(candidates, field, eligible = () => true) {
+function infer(candidates, field, eligible = () => true, prefer) {
   const accepted = entry => entry.rank > 0 && eligible(entry.saved) && selectionId(entry.saved[field]);
   let matches = candidates.matches.filter(accepted);
   if (!matches.length) matches = candidates.approximate().filter(accepted);
@@ -206,6 +206,8 @@ function infer(candidates, field, eligible = () => true) {
     }
     winning.push(entry);
   }
+  const contextual = prefer && winning.filter(prefer);
+  if (contextual?.length) winning = contextual;
   // Only an exact match can supersede older contradictory examples.
   let newest = Infinity;
   if (best >= 3) {
@@ -214,7 +216,26 @@ function infer(candidates, field, eligible = () => true) {
   return uniqueSelection(winning.filter(entry => newest === Infinity || entry.order === newest).map(entry => entry.saved), field);
 }
 
-export function createNfeLearningModel(examples, invoice, _fiscal, catalog) {
+function matchingHeader(history, lines, corrections, suppliers, products) {
+  const scores = new Map();
+  for (const line of lines || []) {
+    const ranks = new Map();
+    for (const { saved, order, rank } of corrections(line).matches) {
+      if (rank && products.has(selectionId(saved.productId))) ranks.set(order, Math.max(rank, ranks.get(order) || 0));
+    }
+    for (const [order, rank] of ranks) scores.set(order, (scores.get(order) || 0) + rank);
+  }
+  let header, best = -1;
+  history.forEach((event, order) => {
+    const score = scores.get(order) || 0;
+    if (score <= best || !suppliers.has(selectionId(event.header?.supplierId))) return;
+    header = event.header;
+    best = score;
+  });
+  return header;
+}
+
+export function createNfeLearningModel(examples, invoice, fiscal, catalog) {
   const issuer = issuerKey(invoice);
   const history = issuer && Array.isArray(examples)
     ? examples.filter(event => event?.version === VERSION && event.issuer === issuer && Array.isArray(event.lines)) : [];
@@ -222,7 +243,7 @@ export function createNfeLearningModel(examples, invoice, _fiscal, catalog) {
   const options = items => new Map((items || []).map(item => [selectionId(item.id), item]));
   const suppliers = options(catalog?.suppliers), branches = options(catalog?.branches), accounts = options(catalog?.accounts);
   const products = options(catalog?.products), stages = options(catalog?.stages);
-  const saved = history.find(event => event.header)?.header;
+  const saved = matchingHeader(history, fiscal?.lines, corrections, suppliers, products);
   const supplierId = selectionId(saved?.supplierId), branchId = selectionId(saved?.branchId), accountId = selectionId(saved?.accountId);
   const header = supplierId && suppliers.has(supplierId) ? {
     supplierId,
@@ -232,28 +253,32 @@ export function createNfeLearningModel(examples, invoice, _fiscal, catalog) {
   const recentStages = new Map();
   return {
     header,
-    product(line) {
-      const id = infer(corrections(line), 'productId');
-      return id && products.has(id) ? id : '';
+    product(line, context) {
+      const supplier = selectionId(context?.supplierId), branch = selectionId(context?.branchId);
+      const prefer = supplier && branch ? ({ saved, order }) => saved.branchId === branch
+        && selectionId(history[order].header?.supplierId) === supplier : undefined;
+      return infer(corrections(line), 'productId', saved => products.has(selectionId(saved.productId)), prefer);
     },
-    stage(line, branchValue, productValue) {
-      const branchId = selectionId(branchValue), productId = selectionId(productValue);
+    stage(line, branchValue, productValue, supplierValue) {
+      const branchId = selectionId(branchValue), productId = selectionId(productValue), supplierId = selectionId(supplierValue);
       const branch = branches.get(branchId);
       const branchLabel = key(branch?.label);
       if (!branchLabel || !products.has(productId)) return '';
       const eligible = saved => saved?.branchId === branchId && saved.productId === productId
         && key(stages.get(selectionId(saved.stageId))?.branch) === branchLabel;
-      const productAndBranch = JSON.stringify([productId, branchId]);
-      if (!recentStages.has(productAndBranch)) {
-        const recent = [];
+      const context = JSON.stringify([productId, branchId, supplierId]);
+      if (!recentStages.has(context)) {
+        const recent = [], bySupplier = [];
         for (const event of history) {
           const stage = uniqueSelection(event.lines.filter(eligible), 'stageId');
-          if (stage) recent.push(stage);
-          if (recent.length === NFE_RECENT_STAGE_USES) break;
+          if (!stage) continue;
+          if (recent.length < NFE_RECENT_STAGE_USES) recent.push(stage);
+          if (supplierId && selectionId(event.header?.supplierId) === supplierId) bySupplier.push(stage);
+          if ((supplierId ? bySupplier : recent).length === NFE_RECENT_STAGE_USES) break;
         }
-        recentStages.set(productAndBranch, preferredNfeStage(recent));
+        recentStages.set(context, preferredNfeStage(bySupplier.length ? bySupplier : recent));
       }
-      return recentStages.get(productAndBranch) || infer(corrections(line), 'stageId', eligible);
+      return recentStages.get(context) || infer(corrections(line), 'stageId', eligible);
     },
   };
 }

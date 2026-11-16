@@ -92,6 +92,31 @@ test('recalls one complete header from the most recent corrected proposal and ne
   assert.deepEqual(model([newest, older], invoice, fiscal, staleNewest).header, { supplierId:'10', accountId:'31' });
 });
 
+test('matches the header to the current items and uses compatible product and stage choices within that context', () => {
+  const otherLine = { ...line, code:'MANG-1', description:'Mangueira para irrigação' };
+  const older = example();
+  const newest = example({ ...reviewed, supplierId:'11', branchId:'21', accountId:'31',
+    lines:[{ ...reviewed.lines[0], productId:'42', stageId:'52' }] }, baseline, { lines:[otherLine] });
+  const sameItemOtherBranch = example({ ...reviewed, supplierId:'11', branchId:'21', accountId:'31',
+    lines:[{ ...reviewed.lines[0], productId:'42', stageId:'52' }] });
+  const trained = model([newest, older, sameItemOtherBranch]);
+  assert.deepEqual(trained.header, { supplierId:'10', branchId:'20', accountId:'30' });
+  assert.equal(trained.product(line, trained.header), '41');
+  assert.equal(trained.product(line, { supplierId:'11',branchId:'21' }), '42');
+  assert.equal(trained.stage(line, '20', '41', '10'), '51');
+  assert.equal(trained.stage(line, '21', '42', '11'), '52');
+});
+
+test('stage history prefers confirmed choices for the selected supplier and still supports older examples', () => {
+  const supplierChanged = example({ ...reviewed, supplierId:'11',
+    lines:[{ ...reviewed.lines[0], stageId:'50' }] });
+  const legacy = { ...example(), header:undefined };
+  const trained = model([supplierChanged, supplierChanged, example(), legacy]);
+  assert.equal(trained.stage(line,'20','41','10'), '51');
+  assert.equal(trained.stage(line,'20','41','11'), '50');
+  assert.equal(model([legacy]).stage(line,'20','41','10'), '51');
+});
+
 test('numeric spelling is immaterial while a real financial edit captures decisions without reusing amounts', () => {
   const equal = { ...baseline, lines:[{...baseLine, quantity:'17,1000', unitPrice:23.45, discount:'0.00', adjustment:'-0'}] };
   assert.deepEqual(example(equal).lines[0].changed, []);

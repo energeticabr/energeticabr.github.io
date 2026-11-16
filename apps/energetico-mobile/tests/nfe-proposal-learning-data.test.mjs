@@ -54,12 +54,13 @@ test('a later fiscal proposal uses confirmed corrections from the same account a
       reads++;
       const params = new URLSearchParams(query);
       assert.equal(list,'NOTAS_FISCAIS_SEFAZ');
-      assert.equal(params.get('$select'),'IDPEDIDO,NFEAPRENDIZADO,NFEAPRENDIZCHAVE');
+      assert.equal(params.get('$select'),'IDPEDIDO,NFEDESCRITIVO,NFEAPRENDIZADO,NFEAPRENDIZCHAVE');
       const filtered = params.get('$filter');
       assert.match(filtered,/^NFEAPRENDIZCHAVE eq '[a-f0-9]{64}'$/);
-      // Include a leaked wrong-scope row to exercise the defensive client check.
+      // A reserved note without a financial link cannot train either proposal.
       return [item('3',{ IDPEDIDO:19,NFEAPRENDIZADO:JSON.stringify(example),NFEAPRENDIZCHAVE:scope }),
-        item('4',{ IDPEDIDO:null,NFEAPRENDIZADO:JSON.stringify({ ...example, at:200 }),NFEAPRENDIZCHAVE:scope })];
+        item('4',{ IDPEDIDO:null,NFEDESCRITIVO:null,NFEAPRENDIZCHAVE:scope,
+          NFEAPRENDIZADO:JSON.stringify({ ...example, at:200, lines:[{ ...example.lines[0], stageId:'14' }] }) })];
     },
   };
   const data = accountKey => createNfeProposalData({ repository, fiscalData:{
@@ -82,7 +83,7 @@ test('a later fiscal proposal uses confirmed corrections from the same account a
   assert.equal(reads,2);
 });
 
-test('posting a manually completed note trains the next note even if history was unavailable on the first read', async t => {
+async function verifyCrossPosting(t, firstIsProvision) {
   const dom = new JSDOM();
   t.after(() => dom.window.close());
   const next = { ...row, id:'8', number:'2', key:key.slice(0,-1)+'2', date:'2026-11-10',
@@ -93,13 +94,15 @@ test('posting a manually completed note trains the next note even if history was
     DANFE_URL:{ Url:'https://company.example/sites/finance/nota.pdf' }, XML_URL:{ Url:note.xmlUrl },
   } }));
   const choices = { ...catalogs, FORNECEDORES:[item('11',{ Title:'Cadastro ZZ',FILIAL:'Obra A',FORMAPGTO:'Conta A' })] };
-  const orders = [], launches = [], attachments = new Map();
-  const table = list => list === 'NOTAS_FISCAIS_SEFAZ' ? notes : list === 'NOTASPENDENTES' ? orders : launches;
+  const tables = { NOTAS_FISCAIS_SEFAZ:notes, NOTASPENDENTES:[], LANCAMENTOS:[],
+    DESCRITIVOPROVISAO:[], 'PROVISÃO PGTOS':[] };
+  const attachments = new Map();
+  const table = list => tables[list];
   let historyUnavailable = true;
   const repository = {
     resolveList:async (_site, [name]) => ({ status:'resolved', id:name }),
     getColumns:async (_site, list) => [{
-      name:list === 'NOTASPENDENTES' ? 'NFEORIGEM' : 'NFELINHA', text:{ allowMultipleLines:false },
+      name:['NOTASPENDENTES','DESCRITIVOPROVISAO'].includes(list) ? 'NFEORIGEM' : 'NFELINHA', text:{ allowMultipleLines:false },
       readOnly:false, required:false, indexed:true, enforceUniqueValues:true,
     }],
     async getItems(site, list, query) {
@@ -132,7 +135,7 @@ test('posting a manually completed note trains the next note even if history was
     async uploadAttachment(_site, _list, id, pdf) { attachments.set(id, pdf); },
     async downloadAttachment(_site, _list, id) { return attachments.get(id); },
   };
-  const service = () => createNfeProposalData({ repository, accountKey:'account-a.tenant',
+  const service = provision => createNfeProposalData({ repository, provision, accountKey:'account-a.tenant',
     DOMParser:dom.window.DOMParser, fiscalData:{
       downloadDocument:async url => new Blob([url === row.xmlUrl ? xml : xml.replace(key,next.key)
         .replace(row.date,next.date).replace('<qCom>2</qCom>','<qCom>4</qCom>').replaceAll('>75<','>150<')]),
@@ -140,25 +143,32 @@ test('posting a manually completed note trains the next note even if history was
       downloadAttachment:async () => new Blob(['%PDF-1.7\nexemplo\n%%EOF\n'], { type:'application/pdf' }),
     },
   });
-  const first = service();
+  const first = service(firstIsProvision);
   const reviewed = await first.load(row);
   assert.deepEqual([reviewed.draft.supplierId, reviewed.draft.lines[0].productId, reviewed.draft.lines[0].stageId], ['', '', '']);
   Object.assign(reviewed.draft, { supplierId:'11', branchId:'12', accountId:'16' });
-  Object.assign(reviewed.draft.lines[0], { productId:'13', stageId:'15' });
+  Object.assign(reviewed.draft.lines[0], { productId:'13', stageId:'15', dueDate:'2026-11-30' });
   const receipt = await first.submit(row, reviewed.draft, { ...reviewed, manualStages:new Set(['1']) });
-  assert.equal(receipt.orderId, '40');
-  assert.equal(notes[0].fields.IDPEDIDO, 40);
+  assert.equal(firstIsProvision ? receipt.provisionDescriptionId : receipt.orderId, '40');
+  assert.equal(notes[0].fields[firstIsProvision ? 'NFEDESCRITIVO' : 'IDPEDIDO'], 40);
+  assert.equal(notes[0].fields[firstIsProvision ? 'IDPEDIDO' : 'NFEDESCRITIVO'], undefined);
   assert.ok(notes[0].fields.NFEAPRENDIZADO, 'successful fiscal link persists the reviewed choices');
 
   historyUnavailable = false;
-  const reopened = service();
+  const reopened = service(!firstIsProvision);
   const later = await reopened.load(next);
   assert.deepEqual([later.draft.supplierId, later.draft.branchId, later.draft.accountId], ['11','12','16']);
   const { productId, stageId, quantity, date } = later.draft.lines[0];
   assert.deepEqual([productId, stageId, quantity, date], ['13','15','4',next.date]);
-  assert.equal(orders.length, 1, 'opening a suggestion never submits a new order');
+  assert.equal(later.draft.lines[0].dueDate, '', 'the previous posting cannot supply the new note’s due date');
+  assert.equal(tables[firstIsProvision ? 'NOTASPENDENTES' : 'DESCRITIVOPROVISAO'].length, 0);
+  if (!firstIsProvision) later.draft.lines[0].dueDate = '2026-12-02';
   await reopened.submit(next, later.draft, { ...later, manualStages:new Set() });
   const confirmation = JSON.parse(notes[1].fields.NFEAPRENDIZADO);
   assert.deepEqual(confirmation.headerChanged, []);
-  assert.deepEqual(confirmation.lines.map(line => [line.productId,line.stageId,line.changed]), [['13','15',[]]]);
-});
+  assert.deepEqual(confirmation.lines.map(line => [line.productId,line.stageId,line.changed]),
+    [['13','15',firstIsProvision ? [] : ['dueDate']]]);
+}
+
+test('a confirmed launch trains the next provision proposal after a history outage', t => verifyCrossPosting(t, false));
+test('a confirmed provision trains the next launch proposal after a history outage', t => verifyCrossPosting(t, true));
