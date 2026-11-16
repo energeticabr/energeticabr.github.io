@@ -10197,6 +10197,7 @@ export function createAppController({
     const reportAction = isDdaReport ? 'open-dda-report' : isNfeReport ? 'open-nfe-report'
       : isSicoobTransactionReport ? 'open-sicoob-transaction-report' : '';
     const isGalleryMenu = ['assetMenu', 'registrationMenu'].includes(sourceKind);
+    const isSupplyCatalog = ['supplier', 'account', 'materialType', 'unitOfMeasure'].includes(sourceKind);
     if (reportAction && store.getState().activeFlow) return false;
     disposeSupplierPayrollReport();
     disposeSacPathologiesReport();
@@ -10232,7 +10233,14 @@ export function createAppController({
     const opening = (async () => {
       try {
         if (!registrationGalleries.has(kind)) {
+          const catalogToken = isSupplyCatalog ? ordersGalleryTokenProvider(assertSession, replyId) : null;
           const data = isGalleryMenu ? null : await registrationGalleryDataFactory({ kind: sourceKind,assertSession, accountKey: galleryAccount.homeAccountId || galleryAccount.localAccountId || galleryAccount.idTokenClaims?.oid || "", userEmail: galleryAccount.username || galleryAccount.email || "", tokenProvider: async (scopes, { signal } = {}) => {
+            if (catalogToken) {
+              signal?.throwIfAborted();
+              const token = await catalogToken(scopes);
+              signal?.throwIfAborted();
+              return token;
+            }
             assertSession();
             const token = await auth.getToken(scopes).catch(async error => {
               if (error?.code !== "AUTH_REQUIRED" || typeof auth.authorize !== "function") throw error;
@@ -10328,7 +10336,7 @@ export function createAppController({
               },
             } : {}),
             ...(GALLERY_CREATION_ACTIONS[replyId] ? { onCreate: galleryCreationHandler(replyId, assertSession) } : {}),
-            ...(["financial_movement", "notas_fiscais_sefaz", "dda", "presenceDescriptions", "provisionDescription", "documents", "asset", "assetFunction", "assetProduct", "assetGroup", "workDiary", "quotes", "contracts", "contractLines", "measurements", "measurementLines", "stageDemonstratives", "constructionStages", "recurringTasks", "delegatedTasks"].includes(sourceKind) ? {
+            ...(isSupplyCatalog || ["financial_movement", "notas_fiscais_sefaz", "dda", "presenceDescriptions", "provisionDescription", "documents", "asset", "assetFunction", "assetProduct", "assetGroup", "workDiary", "quotes", "contracts", "contractLines", "measurements", "measurementLines", "stageDemonstratives", "constructionStages", "recurringTasks", "delegatedTasks"].includes(sourceKind) ? {
               openMediaCollection: (items, previewOptions) => {
                 assertSession();
                 const collection = (Array.isArray(items) ? items : []).map(item => ({

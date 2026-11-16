@@ -352,16 +352,18 @@ test("galerias interpretam os nomes internos SharePoint dos campos PowerApps", a
 });
 
 
-test("galerias de fornecedor, conta, tipo e unidade leem os cadastros SharePoint existentes", async t => {
-  for (const [kind, list, title, recordName] of [
-    ["supplier", "FORNECEDORES", "GALERIA FORNECEDOR", "FORNECEDOR EXEMPLO"],
-    ["account", "CADASTROCONTA", "GALERIA CONTA", "CONTA EXEMPLO"],
-    ["materialType", "CADASTROTIPOMATERIAL", "GALERIA TIPO DE MATERIAL", "MATERIAL EXEMPLO"],
-    ["unitOfMeasure", "CADASTROUNIDADEMEDIDA", "GALERIA UNIDADE DE MEDIDA", "CAIXA EXEMPLO"],
+test("galerias de fornecedor, conta, tipo e unidade editam e deletam na lista de origem", async t => {
+  for (const [kind, list, title, variant] of [
+    ["supplier", "FORNECEDORES", "GALERIA FORNECEDOR", "E2- EDITAR FORNECEDOR.pa.yaml#EDITARFORNECEDOR"],
+    ["account", "CADASTROCONTA", "GALERIA CONTA", "GALERIACONTA.pa.yaml#Form52_2"],
+    ["materialType", "CADASTROTIPOMATERIAL", "GALERIA TIPO DE MATERIAL", "G2- HISTÓRICO TIPO MATERIAL.pa.yaml#Form13"],
+    ["unitOfMeasure", "CADASTROUNIDADEMEDIDA", "GALERIA UNIDADE DE MEDIDA", "G41- HISTÓRICO UNIDADE MEDIDA.pa.yaml#Form23"],
   ]) {
     await t.test(kind, async () => {
       const dom = new JSDOM("<!doctype html><body></body>");
       const document = dom.window.document;
+      const deletions = [], updates = [], deleteVersions = [];
+      const item = { id: "17", eTag: '"revision-17"', fields: { Title: "CADASTRO EXEMPLO", STATUS: "ATIVO", Attachments: false } };
       const data = createRegistrationGalleryData({ kind, repository: {
         async resolveList(site, aliases) {
           assert.equal(site, "personal");
@@ -373,7 +375,22 @@ test("galerias de fornecedor, conta, tipo e unidade leem os cadastros SharePoint
         },
         async getItemsPage(_site, id) {
           assert.equal(id, list);
-          return { items: [{ id: "17", fields: { Title: recordName, STATUS: "ATIVO" } }], hasMore: false };
+          return { items: deletions.length ? [] : [item], hasMore: false };
+        },
+        async getItem(_site, id, row) {
+          assert.equal(id, list);
+          assert.equal(row, "17");
+          return item;
+        },
+        async updateItem(site, id, row, fields, { eTag }) {
+          updates.push([site, id, row, fields, eTag]);
+          Object.assign(item.fields, fields);
+          return item;
+        },
+        async deleteItem(...args) {
+          deleteVersions.push(args[3].eTag);
+          if (args[3].eTag !== item.eTag) throw Object.assign(new Error("O registro foi alterado. Atualize a galeria."), { status: 412 });
+          deletions.push(args);
         },
       } });
       const gallery = createRegistrationGallery({ document, kind, data });
@@ -381,13 +398,80 @@ test("galerias de fornecedor, conta, tipo e unidade leem os cadastros SharePoint
         await gallery.open();
         assert.ok([...document.querySelectorAll("h1")].some(heading => heading.textContent === title));
         const card = document.querySelector('[data-registration-row="17"]');
-        assert.match(card.textContent, new RegExp(recordName));
+        assert.match(card.textContent, /CADASTRO EXEMPLO/);
         assert.match(card.textContent, /ATIVO/);
-        assert.equal(card.querySelector('[data-gallery-action="edit"]'), null);
+        assert.ok(card.querySelector('[data-gallery-action="edit"]'));
+        const editor = await data.loadEditor("17");
+        assert.equal(editor.contract.formVariant.id, variant);
+        assert.ok(editor.contract.formColumns.some(column => column.name === "Title" && column.editable));
+        await data.saveEditor(editor, { Title: "CADASTRO ATUALIZADO" });
+        assert.deepEqual(updates, [["personal", list, "17", { Title: "CADASTRO ATUALIZADO" }, '"revision-17"']]);
+        card.querySelector('[data-gallery-action="delete"]').click();
+        document.querySelector('[data-gallery-confirm="no"]').click();
+        assert.equal(deletions.length, 0);
+        card.querySelector('[data-gallery-action="delete"]').click();
+        item.eTag = '"revision-18"';
+        document.querySelector('[data-gallery-confirm="yes"]').click();
+        await new Promise(resolve => setImmediate(resolve));
+        assert.deepEqual(deleteVersions, ['"revision-17"']);
+        assert.deepEqual(deletions, []);
+        document.querySelector('[data-gallery-confirm="no"]').click();
+        await gallery.open();
+        document.querySelector('[data-registration-row="17"] [data-gallery-action="delete"]').click();
+        document.querySelector('[data-gallery-confirm="yes"]').click();
+        await new Promise(resolve => setImmediate(resolve));
+        assert.deepEqual(deletions, [["personal", list, "17", { eTag: '"revision-18"' }]]);
       } finally {
         gallery.destroy();
         dom.window.close();
       }
     });
+  }
+});
+
+test("atalho de PDF aparece no item certo e abre apenas seus PDFs", async () => {
+  const dom = new JSDOM("<!doctype html><body></body>");
+  const document = dom.window.document;
+  const consulted = [], opened = [], downloads = [];
+  let pendingInventory;
+  const gallery = createRegistrationGallery({ document, kind: "supplier", data: {
+    async loadSnapshot() {
+      return { rows: [
+        { id: "10", fields: { Title: "FORNECEDOR COM PDF" }, hasAttachments: true, attachmentCount: 3 },
+        { id: "11", fields: { Title: "FORNECEDOR COM IMAGEM" }, hasAttachments: true },
+        { id: "12", fields: { Title: "FORNECEDOR SEM ARQUIVOS" }, hasAttachments: false },
+      ] };
+    },
+    async listAttachments(id) {
+      consulted.push(id);
+      if (pendingInventory) return pendingInventory;
+      const image = { fileName: "foto.png", mimeType: "image/png" };
+      return id === "10" ? [{ fileName: "Ficha.PDF" }, image, { fileName: "Contrato.pdf", mimeType: "application/pdf" }] : [image];
+    },
+    async downloadAttachment(id, name) { downloads.push([id, name]); },
+  }, openMediaCollection(items) { opened.push(items); } });
+  const pdfFor = id => document.querySelector('[data-registration-row="' + id + '"] [data-action="registration-pdf"]');
+  try {
+    await gallery.open();
+    await new Promise(resolve => setImmediate(resolve));
+    assert.deepEqual(consulted.sort(), ["10", "11"]);
+    assert.equal(pdfFor("11"), null);
+    assert.equal(pdfFor("12"), null);
+    pdfFor("10").click();
+    await new Promise(resolve => setImmediate(resolve));
+    assert.deepEqual(opened[0].map(item => item.fileName), ["Ficha.PDF", "Contrato.pdf"]);
+    await opened[0][1].source({});
+    assert.deepEqual(downloads, [["10", "Contrato.pdf"]]);
+    pendingInventory = new Promise(resolve => {
+      pdfFor("10").click();
+      document.querySelector('[data-registration-row="10"] [data-gallery-action="delete"]').click();
+      resolve([{ fileName: "Ficha.PDF" }]);
+    });
+    await new Promise(resolve => setImmediate(resolve));
+    assert.ok(document.querySelector('[data-gallery-confirm="yes"]'));
+    assert.equal(opened.length, 1);
+  } finally {
+    gallery.destroy();
+    dom.window.close();
   }
 });
