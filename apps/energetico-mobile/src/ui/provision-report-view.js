@@ -145,7 +145,7 @@ export function createProvisionReportView({document:doc=globalThis.document,data
     const td=cell(tr,'attachments','','pr-attachments');
     const signal=attachmentController.signal;
     const current=()=>!signal.aborted&&td.isConnected;
-    const itemLabel=`${kind==='description'?'do descritivo':'da provisão'} ${id}`;
+    const itemLabel=kind==='description'?(id?`do descritivo ${id}`:'do descritivo'):`da provisão ${id}`;
     let files=null;
     async function read(){
       if(files)return files;
@@ -163,7 +163,7 @@ export function createProvisionReportView({document:doc=globalThis.document,data
         await openMediaCollection(items.map(({fileName,mimeType})=>({fileName,mimeType,source:options=>{
           signal.throwIfAborted();
           return data.downloadProvisionReportAttachment(kind,id,fileName,{...options,signal:options?.signal??signal});
-        }})),{signal,resolveReturnFocus:()=>control.isConnected?control:td.querySelector('button')||panel});
+        }})),{signal,returnLabel:'Voltar ao relatório',resolveReturnFocus:()=>control.isConnected?control:panel});
       }catch{if(current())showNotice(`Não foi possível abrir os anexos ${itemLabel}. Tente novamente.`);}
       finally{if(current())control.disabled=false;}
     }
@@ -212,7 +212,6 @@ export function createProvisionReportView({document:doc=globalThis.document,data
       setState('unknown','Anexos não verificados',make('span','','—'));
       if(canListAttachments&&/^[1-9]\d*$/.test(id))attachmentLoads.set(td,loadFiles);
     }
-    return td;
   }
 
   function provisionRow(row,today,attachmentSource){
@@ -237,8 +236,8 @@ export function createProvisionReportView({document:doc=globalThis.document,data
     const descriptions=new Map(snapshot.descriptions?.map(row=>[row.id,row.hasAttachments]));
     for(const row of groupProvisionReportRows(result.rows,snapshot.descriptions)){
       const descriptionId=row.children?row.id:row.descriptionId;
-      const attachmentSource=descriptionId?{kind:'description',id:descriptionId,hasAttachments:descriptions.get(descriptionId)}
-        :{kind:'provision',id:row.id,hasAttachments:row.hasAttachments};
+      const attachmentSource={kind:'description',id:descriptionId,
+        hasAttachments:descriptionId?descriptions.get(descriptionId):false};
       const tr=provisionRow(row,today,attachmentSource);body.append(tr);watchAttachmentCell(tr.cells[0]);if(!row.children)continue;
       tr.classList.add('pr-description-group');
       const branch=tr.querySelector('[data-column=branch]'),toggle=button('pr-group-toggle','↓',`Expandir itens do descritivo ${row.id}`);

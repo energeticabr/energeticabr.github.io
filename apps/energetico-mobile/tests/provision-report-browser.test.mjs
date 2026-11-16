@@ -41,6 +41,7 @@ test('provision report keeps the original compact tables in landscape and portra
       const dom=new JSDOM(stdout);let result;try{result=JSON.parse(dom.window.document.documentElement.dataset.layout);}finally{dom.window.close();}
       assert.equal(result.error,undefined,`${width}px: ${result.error}`);
       assert.equal(result.warning,false);
+      assert.equal(result.navigationPadding,0,`${width}x${height}: the report must use the width under the arrows`);
       if((width===1280&&height===589)||(width===589&&height===1280))rotatedPanelSizes.set(`${width}x${height}`,result.panelSize);
       if(result.portrait){
         assert.ok(Math.abs(result.physicalPanel.left)<1&&Math.abs(result.physicalPanel.right-width)<1,`${width}x${height}: report must occupy the physical X axis`);
@@ -91,7 +92,7 @@ test('provision report keeps the original compact tables in landscape and portra
       assert.deepEqual(result.cellOverflows,[],`${width}px: cell contents overflow their visible bounds`);
       assert.ok(result.labelledCells.every(cell=>cell.label),`${width}px: responsive field lost its label`);
       assert.equal(result.headerColumns[1],14,`${width}px: annual headers must remain in PDF capture`);
-      if(!result.portrait)for(const wrapper of result.wrappers){assert.ok(wrapper.left<result.arrows[0].right);assert.ok(wrapper.right>result.arrows[1].left);}
+      for(const wrapper of result.wrappers){assert.ok(wrapper.left<result.arrows[0].right);assert.ok(wrapper.right>result.arrows[1].left);}
       assert.equal(result.filters.length,5);assert.deepEqual(result.capturedTables.map(table=>table.columns),[8,14,8]);
       assert.match(result.annualText,/1\.234\.567,89/);assert.match(result.annualText,/02\/01\/2026/);assert.match(result.annualText,/02\/12\/2026/);
       t.diagnostic(`${width}x${height}: compact table rows, no annual status dots, whole dates/amounts and colored text`);

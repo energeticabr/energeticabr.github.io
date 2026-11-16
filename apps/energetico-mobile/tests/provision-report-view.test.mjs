@@ -61,7 +61,7 @@ test('description attachment icon and expanded provision PDFs open files from th
   const reads=[],downloads=[];
   const {view,root}=setup(t,async()=>({
     provisions:[{...row,id:'301',descriptionId:'42',hasAttachments:true},{...row,id:'302',descriptionId:'42',hasAttachments:true},
-      {...row,id:'303',descriptionId:'43',hasAttachments:true}],
+      {...row,id:'303',descriptionId:'43',hasAttachments:true},{...row,id:'304',hasAttachments:true}],
     recurrences:[recurrence],descriptions:[{id:'42',hasAttachments:true},{id:'43',hasAttachments:false}],
   }),false,undefined,{
     async listProvisionReportAttachments(kind,id){reads.push(`${kind}:${id}`);return files.get(`${kind}:${id}`).map(fileName=>({fileName}));},
@@ -75,6 +75,7 @@ test('description attachment icon and expanded provision PDFs open files from th
   const empty=root.querySelector('[data-id="303"] [data-column=attachments]');
   assert.equal(empty.dataset.attachmentState,'empty');
   assert.match(empty.getAttribute('aria-label'),/Sem anexos/);
+  assert.equal(root.querySelector('[data-id="304"] [data-column=attachments]').dataset.attachmentState,'empty');
   assert.deepEqual(reads,[]);
   attached.click();
   await new Promise(resolve=>setImmediate(resolve));
