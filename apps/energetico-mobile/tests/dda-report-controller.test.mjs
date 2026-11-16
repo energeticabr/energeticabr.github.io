@@ -5,6 +5,7 @@ import {createAppController} from '../src/app-controller.js';
 import {createConversationStore} from '../src/chat/conversation-store.js';
 import {renderChatMarkup,commandFromTarget} from '../src/ui/chat-view.js';
 import {normalizeDdaReportRows} from '../src/chat/dda-report-model.js';
+import {createDdaReportView} from '../src/ui/dda-report-view.js';
 const tick=()=>new Promise(resolve=>setImmediate(resolve));
 test('only the gallery receives the authenticated payment callback and it expires after logout',async t=>{
  let calls=0,gallery;const h=setup(t,{
@@ -194,7 +195,7 @@ test('the automatic DDA returns after 15h when the user goes back to the main me
   client:{sendText:async()=>({status:'processed',activeFlow:null,messages:[{
    role:'assistant',type:'poll',question:'QUAL ÁREA VOCÊ DESEJA ACESSAR?',options:[{id:'group_pending',label:'PENDÊNCIAS'}],
   }]})},
-  registrationGalleryDataFactory:async()=>({loadSnapshot:async()=>({rows:[autoRow]})}),
+  registrationGalleryDataFactory:async()=>({loadSnapshot:async()=>({rows:[{...autoRow,fields:{...autoRow.fields,VENCIMENTO:'2026-11-09'}}]})}),
  });
  await h.controller.start();
  for(let i=0;i<8;i++)await tick();
@@ -204,6 +205,98 @@ test('the automatic DDA returns after 15h when the user goes back to the main me
  assert.equal(await h.view.emit('select-reply',{replyId:'navigation_main_menu'}),true);
  for(let i=0;i<8;i++)await tick();
  assert.deepEqual(h.opened,['report','report']);
+});
+
+test('the automatic DDA opens once per Brasília weekend day even after reopening the app',async t=>{
+ t.mock.timers.enable({apis:['Date'],now:new Date('2026-11-14T18:00:00Z')});
+ const dom=new JSDOM('',{url:'https://example.test'});
+ const storageDescriptor=Object.getOwnPropertyDescriptor(globalThis,'localStorage');
+ Object.defineProperty(globalThis,'localStorage',{configurable:true,value:dom.window.localStorage});
+ t.after(()=>{
+  if(storageDescriptor)Object.defineProperty(globalThis,'localStorage',storageDescriptor);
+  else delete globalThis.localStorage;
+  dom.window.close();
+ });
+ const options={
+  client:{sendText:async()=>({status:'processed',activeFlow:null,messages:[{
+   role:'assistant',type:'poll',question:'QUAL ÁREA VOCÊ DESEJA ACESSAR?',options:[{id:'group_pending',label:'PENDÊNCIAS'}],
+  }]})},
+  registrationGalleryDataFactory:async()=>({loadSnapshot:async()=>({rows:[autoRow]})}),
+ };
+ const start=async(overrides={})=>{
+  const h=setup(t,{...options,...overrides});
+  await h.controller.start();
+  for(let i=0;i<8;i++)await tick();
+  return h;
+ };
+ const goToMenu=async h=>{
+  assert.equal(await h.view.emit('select-reply',{replyId:'navigation_main_menu'}),true);
+  for(let i=0;i<8;i++)await tick();
+ };
+
+ const saturday=await start();
+ assert.deepEqual(saturday.opened,['report']);
+ saturday.factories[0].onClose();
+ await goToMenu(saturday);
+ assert.deepEqual(saturday.opened,['report']);
+ saturday.controller.stop();
+
+ t.mock.timers.setTime(Date.parse('2026-11-15T02:59:00Z'));
+ const restarted=await start();
+ assert.deepEqual(restarted.opened,[]);
+ assert.equal(await restarted.view.emit('open-dda-report'),true);
+ assert.deepEqual(restarted.opened,['report']);
+ restarted.factories[0].onClose();
+ await goToMenu(restarted);
+ assert.deepEqual(restarted.opened,['report']);
+ restarted.controller.stop();
+
+ const otherAccount=await start({auth:{initialize:async()=>({homeAccountId:'dda-test-other',name:'Outro'})}});
+ assert.deepEqual(otherAccount.opened,['report']);
+ otherAccount.controller.stop();
+
+ t.mock.timers.setTime(Date.parse('2026-11-15T03:00:00Z'));
+ const sunday=await start();
+ assert.deepEqual(sunday.opened,['report']);
+ sunday.factories[0].onClose();
+ t.mock.timers.setTime(Date.parse('2026-11-15T18:00:00Z'));
+ await goToMenu(sunday);
+ assert.deepEqual(sunday.opened,['report']);
+
+ t.mock.timers.setTime(Date.parse('2026-11-16T18:00:00Z'));
+ await goToMenu(sunday);
+ assert.deepEqual(sunday.opened,['report','report']);
+ sunday.factories.at(-1).onClose();
+ await goToMenu(sunday);
+ assert.deepEqual(sunday.opened,['report','report','report']);
+});
+
+test('closing the visible weekend DDA during settlement lookup still counts as its daily opening',async t=>{
+ t.mock.timers.enable({apis:['Date'],now:new Date('2026-11-15T18:00:00Z')});
+ const dom=new JSDOM('<main id="app"></main>');
+ let panel,finishLookup;
+ const lookup=new Promise(resolve=>{finishLookup=resolve;});
+ const h=setup(t,{
+  client:{sendText:async()=>({status:'processed',activeFlow:null,messages:[{
+   role:'assistant',type:'poll',question:'QUAL ÁREA VOCÊ DESEJA ACESSAR?',options:[{id:'group_pending',label:'PENDÊNCIAS'}],
+  }]})},
+  registrationGalleryDataFactory:async()=>({
+   loadSnapshot:async()=>({rows:[{...autoRow,fields:{...autoRow.fields,DESCRITIVOPROVIS_x00c3_O:'56'}}]}),
+   provisionLink:{loadSettledDdaIds:()=>lookup},
+  }),
+  ddaReportFactory:options=>{panel=createDdaReportView({...options,document:dom.window.document});return panel;},
+ });
+ t.after(()=>dom.window.close());
+ await h.controller.start();
+ for(let i=0;i<8;i++)await tick();
+ assert.equal(panel.element.hidden,false);
+ assert.equal(panel.element.getAttribute('aria-busy'),'true');
+ panel.close();
+ finishLookup(new Set());
+ await tick();
+ await h.view.emit('select-reply',{replyId:'navigation_main_menu'});
+ for(let i=0;i<8;i++)await tick();
+ assert.equal(panel.element.hidden,true);
 });
 
 test('automatic DDA waits for the real provision dismiss command and does not repeat',async t=>{

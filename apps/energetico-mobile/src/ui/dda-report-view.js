@@ -445,7 +445,20 @@ export function createDdaReportView({document:doc=globalThis.document,data,openM
  });
  root.addEventListener('click',event=>{if(event.target===root)close();});
  root.addEventListener('keydown',event=>{if(root.hidden)return;if(event.key==='Escape'){event.preventDefault();close();return;}if(event.key!=='Tab')return;const nodes=[...panel.querySelectorAll('button,input,select,[tabindex="0"]')].filter(node=>!node.disabled&&!node.closest('[hidden]')),first=nodes[0],last=nodes.at(-1);if(event.shiftKey&&(doc.activeElement===first||doc.activeElement===panel)){event.preventDefault();last?.focus();}else if(!event.shiftKey&&(doc.activeElement===last||doc.activeElement===panel)){event.preventDefault();first?.focus();}});
- return Object.freeze({element:root,async open({automatic=false,initialSnapshot,initialSettledDdaIds}={}){if(destroyed)throw new Error('Relatório encerrado.');if(!root.hidden)return;returnFocus=doc.activeElement;app=doc.getElementById('app');oldInert=app?.inert||false;oldOverflow=doc.body.style.overflow;doc.body.style.overflow='hidden';if(app)app.inert=true;const initialStatus=automatic?'Não pagos':'Em aberto';controls.status.replaceChildren(option(initialStatus,initialStatus));controls.bank.replaceChildren(option('Todas',''));controls.search.value='';page=1;root.hidden=false;landscape.update();panel.focus();void balanceMetric?.refresh();await load(initialSnapshot,undefined,initialSettledDdaIds);},close,
+ return Object.freeze({element:root,async open({automatic=false,initialSnapshot,initialSettledDdaIds,onShown}={}){
+  if(destroyed)throw new Error('Relatório encerrado.');
+  if(!root.hidden)return;
+  returnFocus=doc.activeElement;app=doc.getElementById('app');oldInert=app?.inert||false;oldOverflow=doc.body.style.overflow;
+  doc.body.style.overflow='hidden';
+  if(app)app.inert=true;
+  const initialStatus=automatic?'Não pagos':'Em aberto';
+  controls.status.replaceChildren(option(initialStatus,initialStatus));
+  controls.bank.replaceChildren(option('Todas',''));controls.search.value='';page=1;
+  root.hidden=false;
+  onShown?.();
+  landscape.update();panel.focus();void balanceMetric?.refresh();
+  await load(initialSnapshot,undefined,initialSettledDdaIds);
+ },close,
   async preparePrint(){if(root.hidden||destroyed||!rows||unlinkedDialog||root.getAttribute('aria-busy')==='true')throw new Error('Não foi possível imprimir: aguarde a consulta completa dos DDAs.');const current=revision,filters=filterRevision,position=[content.scrollTop,content.scrollLeft],oldPage=page;printAll=true;render();return()=>{if(root.hidden||destroyed||current!==revision||filters!==filterRevision)return;printAll=false;page=oldPage;render();[content.scrollTop,content.scrollLeft]=position;};},
   destroy(){if(destroyed)return;close();destroyed=true;unsubscribeBank?.();landscape.destroy();root.remove();}});
 }
