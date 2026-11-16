@@ -165,7 +165,7 @@ function billingDiscount(invoice, invoiceTotal, productDiscount) {
   return invoiceTotal.minus(net);
 }
 
-function parseNfe(info, rowDate) {
+function parseNfe(info, rowDate, provision) {
   const seen = new Set();
   const lines = children(info, 'det').map(det => {
     const number = det.getAttribute('nItem');
@@ -197,6 +197,9 @@ function parseNfe(info, rowDate) {
   const additionalDiscount = billingDiscount(child(billing, 'fat'), invoiceTotal, discount);
   allocate(lines, additionalDiscount, line => FiscalDecimal.max(0, lineTotal(line)), addDiscount, 'o desconto da fatura', true);
   const dates = children(billing, 'dup').map(installment => calendarDay(value(installment, 'dVenc')));
+  if (provision && new Set(dates).size > 1) {
+    throw new Error('A nota tem parcelas com vencimentos diferentes. Use Nova provisão pgto para cadastrar os valores de cada parcela.');
+  }
   const ide = child(info, 'ide');
   const dateTime = value(ide, 'dhEmi');
   const date = value(ide, 'dEmi');
@@ -247,7 +250,7 @@ export function parseNfeProposalXml(xml, row, DOMParser, { provision = false } =
     throw new Error('A chave de acesso do XML fiscal não corresponde à nota selecionada.');
   }
 
-  const proposal = isNfe ? parseNfe(info, row.date) : parseNfse(info, row.date, provision);
+  const proposal = isNfe ? parseNfe(info, row.date, provision) : parseNfse(info, row.date, provision);
   return {
     issueDate:proposal.issueDate, dueDate:proposal.dueDate, total:proposal.total.toFixed(),
     lines:proposal.lines.map(({ number, code, description, unit, quantity, unitPrice, discount, adjustment }) => ({

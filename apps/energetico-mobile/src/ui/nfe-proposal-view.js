@@ -196,7 +196,7 @@ export function createNfeProposalView({ document:doc, host, service, onPosted, o
       const headerFields = el('fieldset', 'nfe-proposal-fields');
       body.append(reference, attachment, headerFields);
       if (!fiscal.dueDate) body.append(el('p', 'nfe-proposal-hint', provision
-        ? 'O XML não informa um vencimento único. Informe o vencimento de cada item. Parcelas com datas diferentes precisam de revisão.'
+        ? 'O XML não informa o vencimento. Informe a data de cada item.'
         : 'O XML não informa um vencimento único. Confira a data de cada item.'));
       if (catalog.historyUnavailable) body.append(el('p', 'nfe-proposal-hint', 'Histórico de uso indisponível. Selecione as etapas pelo cadastro da filial.'));
       const supplier = field(headerFields, 'Fornecedor', 'supplierId', 'select', value => {

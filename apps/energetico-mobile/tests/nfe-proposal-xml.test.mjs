@@ -70,6 +70,7 @@ test('leaves the due date blank when the XML has distinct installment due dates'
   const xml = nfe.replace('<vDup>62.50</vDup></dup>', '<vDup>31.25</vDup></dup><dup><nDup>002</nDup><dVenc>2027-01-06</dVenc><vDup>31.25</vDup></dup>');
   assert.equal(parse(xml).dueDate, '');
   assert.equal(parse(xml.replace('2027-01-06', '2026-12-06')).dueDate, '2026-12-06');
+  assert.throws(() => parseNfeProposalXml(xml, row, dom.window.DOMParser, { provision:true }), /parcelas.*vencimentos diferentes/i);
 });
 
 test('keeps an item excluded from the fiscal subtotal without adding its gross amount to the proposal', () => {

@@ -1,3 +1,4 @@
+import { PROVISION_FISCAL_DRAFT_STATUS } from '../../../../portal/forms/provision-parent-due.js';
 import { NFE_ORDER_FIELD, NFE_PROVISION_DESCRIPTION_FIELD, nfeOrderId } from './nfe-order-link.js';
 import { fiscalDocumentType } from './sefaz-withholding.js';
 
@@ -157,6 +158,10 @@ export function createNfeProposalPosting({ repository, assertSession = () => {},
     ? [NFE_PROVISION_DESCRIPTION_FIELD, NFE_ORDER_FIELD, 'DESCRITIVOPROVISAO', 'PROVISÃO PGTOS', 'DESCRITIVOPROVISAO', 'parentFields', 'provisionFields']
     : [NFE_ORDER_FIELD, NFE_PROVISION_DESCRIPTION_FIELD, 'NOTASPENDENTES', 'LANCAMENTOS', 'AGRUPAR', 'orderFields', 'launchFields'];
   const target = provision ? 'descritivo de provisão' : 'pedido';
+  const parentDraft = provision
+    ? { STATUS:PROVISION_FISCAL_DRAFT_STATUS, FORNECEDOR:null, VALORTOTAL:null, DATAPREVISTOPGTO:null }
+    : { [ORDER_FISCAL_STATUS]:ORDER_PENDING };
+  const childDraft = provision ? { STATUS:PROVISION_FISCAL_DRAFT_STATUS, PGTOAGENDADO:null } : null;
 
   function active(signal) {
     assertSession();
@@ -252,12 +257,12 @@ export function createNfeProposalPosting({ repository, assertSession = () => {},
       && LEARNING_FIELDS.some(field => String(error?.message).toUpperCase().includes(field));
   }
 
-  async function finishLink(list, invoice, reserved, parentId, parentList, parentFields, learning, signal) {
+  async function finishLink(list, invoice, reserved, parentId, promote, learning, signal) {
     const link = { [linkField]:Number(parentId), [RESERVATION]:provision ? provisionLinkMarker(parentId) : null };
     async function confirm(extra = [], fields = link) {
       let current = await readFiscal(list, invoice, signal, extra);
       if (!current.linked && current.rawReservation === reserved) {
-        if (!provision) await promoteOrder(parentList, parentId, parentFields, invoice.key, signal);
+        await promote();
         current = await writeFiscal(list, invoice, current, fields, signal, extra);
       }
       if (current.linked !== parentId || current.reservation || current.rawReservation !== link[RESERVATION] && provision
@@ -295,25 +300,24 @@ export function createNfeProposalPosting({ repository, assertSession = () => {},
     }
   }
 
-  async function readFinancial(list, id, expected, { acceptPending, signal }) {
+  async function readFinancial(list, id, expected, { pending, signal }) {
     active(signal);
     const saved = await repository.getItem('personal', list, id, undefined, { signal, restrictedFields:Object.keys(expected) });
     active(signal);
+    const matches = fields => Object.entries(fields).every(([name, value]) => sameField(name, saved.fields[name], value));
     if (nfeOrderId(saved?.id) !== id || !record(saved?.fields)
-      || Object.entries(expected).some(([name, value]) => !sameField(name, saved.fields[name], value)
-        && !(acceptPending && name === ORDER_FISCAL_STATUS && saved.fields[name] === ORDER_PENDING))) {
+      || !matches(expected) && !(pending && matches({ ...expected, ...pending }))) {
       throw new Error('Os dados do registro financeiro divergem da proposta fiscal reservada.');
     }
     return saved;
   }
 
-  async function financialItem(list, column, token, fields, { readOnly, pendingOrder, expectedId, signal }) {
+  async function financialItem(list, column, token, fields, { readOnly, pending, expectedId, signal }) {
     let id = await findFinancial(list, column, token, signal);
     const expected = { ...fields, [column]:token };
-    const acceptPending = pendingOrder && !readOnly;
     if (!id && !readOnly) {
       active(signal);
-      const creation = acceptPending ? { ...expected, [ORDER_FISCAL_STATUS]:ORDER_PENDING } : expected;
+      const creation = { ...expected, ...pending };
       try {
         id = nfeOrderId((await repository.createItem('personal', list, creation, { signal }))?.id);
       } catch (error) {
@@ -323,23 +327,22 @@ export function createNfeProposalPosting({ repository, assertSession = () => {},
       if (!id) id = await findFinancial(list, column, token, signal);
     }
     if (!id || expectedId && id !== expectedId) throw new Error(`A nota já está vinculada a outro ${target} ou o registro financeiro não foi encontrado.`);
-    await readFinancial(list, id, expected, { acceptPending, signal });
+    await readFinancial(list, id, expected, { pending:readOnly ? null : pending, signal });
     return id;
   }
 
-  async function promoteOrder(list, id, fields, key, signal) {
-    const expected = { ...fields, [ORDER_ORIGIN]:key };
-    const current = await readFinancial(list, id, expected, { acceptPending:true, signal });
-    if (current.fields[ORDER_FISCAL_STATUS] === ORDER_SUBMITTED) return;
+  async function promoteFinancial(list, id, expected, pending, signal) {
+    const current = await readFinancial(list, id, expected, { pending, signal });
+    const fields = Object.fromEntries(Object.keys(pending).map(name => [name, expected[name]]));
+    if (Object.entries(fields).every(([name, value]) => sameField(name, current.fields[name], value))) return;
     const eTag = current.eTag || current['@odata.etag'];
-    if (!eTag || eTag === '*') throw new Error('A versão do pedido para envio fiscal não foi confirmada.');
+    if (!eTag || eTag === '*') throw new Error('A versão do registro para envio fiscal não foi confirmada.');
     active(signal);
     try {
-      await repository.updateItem('personal', list, id, { [ORDER_FISCAL_STATUS]:ORDER_SUBMITTED },
-        { eTag, signal, readbackFields:Object.keys(expected) });
+      await repository.updateItem('personal', list, id, fields, { eTag, signal, readbackFields:Object.keys(expected) });
     } catch (error) {
-      const latest = await readFinancial(list, id, expected, { acceptPending:true, signal });
-      if (latest.fields[ORDER_FISCAL_STATUS] !== ORDER_SUBMITTED) throw error;
+      const latest = await readFinancial(list, id, expected, { pending, signal });
+      if (!Object.entries(fields).every(([name, value]) => sameField(name, latest.fields[name], value))) throw error;
       return;
     }
     await readFinancial(list, id, expected, { signal });
@@ -444,13 +447,13 @@ export function createNfeProposalPosting({ repository, assertSession = () => {},
 
     const readOnly = Boolean(current.linked);
     const parentId = await financialItem(parentList, ORDER_ORIGIN, invoice.key, parentFields,
-      { readOnly, pendingOrder:!provision, expectedId:current.linked, signal });
+      { readOnly, pending:parentDraft, expectedId:current.linked, signal });
     await ensurePdf(parentList, parentId, invoice.pdfName, pdf, pdfHash, readOnly, signal);
     const confirmed = [];
     for (const line of lineFields) {
       const token = `${invoice.key}-${line.number}`;
       const fields = { ...line.fields, [childLink]:parentId };
-      const id = await financialItem(childList, LINE_ORIGIN, token, fields, { readOnly, signal });
+      const id = await financialItem(childList, LINE_ORIGIN, token, fields, { readOnly, pending:childDraft, signal });
       confirmed.push({ id, fields:{ ...fields, [LINE_ORIGIN]:token } });
       if (typeof onProgress === 'function') {
         try {
@@ -462,11 +465,16 @@ export function createNfeProposalPosting({ repository, assertSession = () => {},
       const reserved = current.rawReservation;
       for (let start = 0; start < confirmed.length; start += READBACK_BATCH_SIZE) {
         await Promise.all(confirmed.slice(start, start + READBACK_BATCH_SIZE).map(({ id, fields }) =>
-          readFinancial(childList, id, fields, { signal })));
+          readFinancial(childList, id, fields, { pending:childDraft, signal })));
       }
       await ensurePdf(parentList, parentId, invoice.pdfName, pdf, pdfHash, true, signal);
       const learning = await confirmedLearning(stored, source);
-      await finishLink(fiscalList, invoice, reserved, parentId, parentList, parentFields, learning, signal);
+      await finishLink(fiscalList, invoice, reserved, parentId, async () => {
+        if (provision) {
+          for (const { id, fields } of confirmed) await promoteFinancial(childList, id, fields, childDraft, signal);
+        }
+        await promoteFinancial(parentList, parentId, { ...parentFields, [ORDER_ORIGIN]:invoice.key }, parentDraft, signal);
+      }, learning, signal);
     }
     active(signal);
     const ids = confirmed.map(item => item.id);

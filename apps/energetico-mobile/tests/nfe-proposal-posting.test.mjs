@@ -41,12 +41,22 @@ function fixture(provision = false) {
       if (list === 'NOTAS_FISCAIS_SEFAZ') return fiscalItem();
       assert.equal(site, 'personal');
       const item = structuredClone(tables[list].find(item => item.id === id));
-      if (item && list === 'NOTASPENDENTES') item.eTag = `\"${state.orderRevision}\"`;
+      if (item) item.eTag = list === 'NOTASPENDENTES' ? `\"${state.orderRevision}\"` : '"1"';
       if (item && state.normalizeFinancialReadback) state.normalizeFinancialReadback(item.fields);
       return item;
     },
     async updateItem(site, list, id, fields, { eTag }) {
       if (site === 'personal') {
+        if (provision && [parents,children].includes(list)) {
+          assert.equal(tables[children].length, 2, 'a provision must stay out of payment until all lines exist');
+          assert.ok(files.has(pdfName));
+          const item = tables[list].find(item => item.id === id);
+          assert.notEqual(item.fields.STATUS, 'PAGAMENTO PREVISTO');
+          assert.equal(fields.STATUS, 'PAGAMENTO PREVISTO');
+          Object.assign(item.fields, fields);
+          events.push(`activate:${id}`);
+          return this.getItem(site, list, id);
+        }
         assert.deepEqual([list,id,fields,eTag], ['NOTASPENDENTES','40',{ NOTAFISCAL:'SUBMETIDO' },`\"${state.orderRevision}\"`]);
         assert.equal(tables.NOTASPENDENTES[0].fields.NOTAFISCAL, 'PENDENTE');
         assert.equal(tables.LANCAMENTOS.length, 2);
@@ -121,8 +131,11 @@ function fixture(provision = false) {
     authorizeWrite:async () => { if (state.unauthorized) throw new Error('write consent denied'); },
     resolveLearningScope:async () => state.scope ?? 'a'.repeat(64),
     prepare:asProvision ? async (_, input) => ({
-      draft:input, parentFields:{ VALORTOTAL:'15', STATUS:'PAGAMENTO PREVISTO' },
-      provisionFields:input.lines.map(({ number,account }) => ({ number, fields:{ FORMAPGTO:account, PGTOAGENDADO:'PENDENTE' } })),
+      draft:input, parentFields:{ FORNECEDOR:'Fornecedor fictício', VALORTOTAL:'15',
+        STATUS:'PAGAMENTO PREVISTO', DATAPREVISTOPGTO:'2026-11-15T12:00:00Z' },
+      provisionFields:input.lines.map(({ number,account }) => ({
+        number, fields:{ FORMAPGTO:account, PGTOAGENDADO:'PENDENTE', STATUS:'PAGAMENTO PREVISTO' },
+      })),
     }) : prepare,
     downloadPdf:async () => { state.onDownload?.(); return state.sourcePdf; } });
   return { fiscal, tables, files, events, state, service };
@@ -133,6 +146,9 @@ test('provision reserves the fiscal note, resumes partial writes, and links only
   state.rejectLine = `${key}-2`;
   await assert.rejects(service().submit(invoice,draft), /creation unavailable/);
   assert.equal(fiscal.NFEDESCRITIVO, undefined);
+  assert.notEqual(tables.DESCRITIVOPROVISAO[0].fields.STATUS, 'PAGAMENTO PREVISTO');
+  assert.equal(tables.DESCRITIVOPROVISAO[0].fields.VALORTOTAL, null);
+  assert.notEqual(tables['PROVISÃO PGTOS'][0].fields.STATUS, 'PAGAMENTO PREVISTO');
   await assert.rejects(service(false).submit(invoice,draft), /provisão/i);
   state.rejectLine = null;
   state.loseLink = true;
@@ -143,7 +159,7 @@ test('provision reserves the fiscal note, resumes partial writes, and links only
   assert.deepEqual(JSON.parse(fiscal.NFEPROPOSTA), { version:2, provisionDescriptionId:'40' });
   assert.equal(tables.NOTASPENDENTES.length + tables.LANCAMENTOS.length, 0);
   assert.deepEqual(tables['PROVISÃO PGTOS'].map(({ fields }) => fields.DESCRITIVOPROVISAO), ['40','40']);
-  assert.deepEqual(events, ['reserve','DESCRITIVOPROVISAO:40','attach','PROVISÃO PGTOS:50','PROVISÃO PGTOS:51','link']);
+  assert.deepEqual(events, ['reserve','DESCRITIVOPROVISAO:40','attach','PROVISÃO PGTOS:50','PROVISÃO PGTOS:51','activate:50','activate:51','activate:40','link']);
   assert.deepEqual(await service().submit(invoice,draft), { invoiceId:'7', provisionDescriptionId:'40', provisionIds:['50','51'] });
   await assert.rejects(service(false).submit(invoice,draft), /provisão/i);
 });
