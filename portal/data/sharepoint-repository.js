@@ -2178,12 +2178,14 @@ export function createSharePointRepository(graph, siteConfig, { attachmentTransp
     return Object.freeze({ verified: true, memberships: Object.freeze(memberships.sort()) });
   }
 
-  async function listAttachments(siteKey, listId, itemId, { signal, requireCollection = false, namesOnly = false } = {}) {
+  async function listAttachments(siteKey, listId, itemId, { signal, requireCollection = false, namesOnly = false, interactive } = {}) {
     throwIfAborted(signal);
     await authorize("view", siteKey, listId, { itemId: String(itemId || "") });
     throwIfAborted(signal);
     const query = namesOnly ? "?$select=FileName" : "?$select=FileName,ServerRelativeUrl,Length,TimeLastModified,Author/Title&$expand=Author";
-    const payload = await requestAttachment(siteKey, listId, itemId, query, { method: "GET", ...(signal ? { signal } : {}) });
+    const payload = await requestAttachment(siteKey, listId, itemId, query, {
+      method: "GET", ...(signal ? { signal } : {}), ...(interactive === undefined ? {} : { interactive }),
+    });
     throwIfAborted(signal);
     const files = payload?.value ?? payload?.d?.results;
     if (requireCollection && !Array.isArray(files)) throw new Error('O SharePoint não retornou uma lista de anexos válida.');

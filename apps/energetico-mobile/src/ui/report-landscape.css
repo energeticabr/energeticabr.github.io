@@ -15,4 +15,3 @@
 }
 .report-landscape-viewport[data-report-portrait="true"] .report-navigation-arrow--previous { left:max(16px,env(safe-area-inset-top)); }
 .report-landscape-viewport[data-report-portrait="true"] .report-navigation-arrow--next { right:max(16px,env(safe-area-inset-bottom)); }
-.report-landscape-viewport[data-report-portrait="true"][data-report-compact-height="true"] .pr-content { padding-inline:48px; }

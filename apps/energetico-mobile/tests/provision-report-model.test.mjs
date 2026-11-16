@@ -37,7 +37,7 @@ test("discovers SharePoint aliases and keeps scheduling and execution dates sepa
     STATUS: { Value: "PAGAMENTO EFETUADO" }, field_3: "R$ 1.234,50", field_4: "2", FRETE: "5,25",
   } }, columns);
   assert.deepEqual(result, {
-    id: "41", recurrenceId: "7", branch: "Filial A", supplier: "Alfa", product: "Internet",
+    id: "41", recurrenceId: "7", hasAttachments: null, branch: "Filial A", supplier: "Alfa", product: "Internet",
     observation: "<em>urgente & mensal</em>", property: "Sala 1", dueDate: "2026-10-05",
     paidDate: "2026-10-06", schedule: "AGENDADO", scheduledDate: "2026-10-02",
     executionDate: "2026-10-05", status: "PAGAMENTO EFETUADO", total: 2474.25,
@@ -237,9 +237,9 @@ test("description grouping reads the textual parent ID and the parent's own paym
   assert.equal(typeof model.normalizeProvisionReportDescription, "function");
   const parent = model.normalizeProvisionReportDescription({ id: "42", fields: {
     parentBranch: "Filial do pai", FORNECEDOR: "Fornecedor de referência", DATAPREVISTOPGTO: "2026-10-20T03:00:00Z",
-    DATAPGTOPREVISTO: "2026-11-01", VALORTOTAL: "999999,99",
+    DATAPGTOPREVISTO: "2026-11-01", VALORTOTAL: "999999,99", Attachments: true,
   } }, [{ name: "parentBranch", displayName: "FILIAL" }]);
-  assert.deepEqual(parent, { id: "42", branch: "Filial do pai", supplier: "Fornecedor de referência", dueDate: "2026-10-20" });
+  assert.deepEqual(parent, { id: "42", branch: "Filial do pai", supplier: "Fornecedor de referência", dueDate: "2026-10-20", hasAttachments: true });
   assert.equal(Object.isFrozen(parent), true);
 });
 
