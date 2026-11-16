@@ -28,23 +28,35 @@ function groupBy(rows, accessor) {
   return [...groups];
 }
 
-function sum(rows) {
-  if (rows.some(row => !Number.isFinite(row.dailyValue))) return null;
-  const value = rows.reduce((total, row) => total.plus(row.dailyValue), new Decimal(0)).toNumber();
-  return Number.isFinite(value) ? value : null;
+export function attendanceStageLabel({ id, stage, activity, property, supplier }) {
+  return [...new Set([`#${id}`, stage, activity, property, supplier].filter(Boolean))].join(" · ");
 }
 
-function financial(rows) {
-  return {
-    pendingApproval: sum(rows.filter(row => key(row.presence) === "PENDENTE" && key(row.status) !== "PAGO")),
-    approvedPayment: sum(rows.filter(row => key(row.presence) === "PRESENTE" && key(row.status) !== "PAGO")),
-    paid: sum(rows.filter(row => key(row.status) === "PAGO")), total: sum(rows),
-  };
+export function attendanceActivityOptions(activities, stage) {
+  return [...new Set(activities.filter(row => !stage || key(row.stage) === key(stage))
+    .map(row => row.activity))].sort(sortText);
 }
 
-function tone(rows) {
-  if (rows.every(row => key(row.status) === "PAGO")) return "paid";
-  return rows.every(row => key(row.presence) === "PENDENTE" && key(row.status) !== "PAGO") ? "pending" : "mixed";
+function assignmentKey({ stage, activity }) {
+  return key(stage) && key(activity) ? JSON.stringify([key(stage), key(activity)]) : "";
+}
+
+function currentProfessions(suppliers, stages, filters, status) {
+  const labels = new Map(stages.map(stage => [text(stage.id), attendanceStageLabel(stage)]));
+  const assignments = [...new Set(suppliers.map(assignmentKey).filter(Boolean))].sort();
+  const hues = new Map(assignments.map((assignment, index) => [assignment, index * 137.508 % 360]));
+  const selected = suppliers.filter(supplier => text(supplier.name) && matches(supplier.status, status)
+    && matches(supplier.branch, filters.branch) && matches(supplier.name, filters.supplier));
+  return groupBy(selected, supplier => key(supplier.profession))
+    .map(([, records]) => {
+      const name = text(records[0].profession) || "SEM PROFISSÃO";
+      const providers = records.map(supplier => ({
+        ...supplier,
+        stageLabel: labels.get(text(supplier.stage)) || text(supplier.stage),
+        assignmentHue: hues.get(assignmentKey(supplier)) ?? null,
+      })).sort((a, b) => sortText(a.name, b.name));
+      return { name, emoji: emoji(name), providers };
+    }).sort((a, b) => b.providers.length - a.providers.length || sortText(a.name, b.name));
 }
 
 function emoji(name) {
@@ -58,10 +70,7 @@ function emoji(name) {
 
 function categories(rows, presence) {
   return groupBy(rows.filter(row => key(row.presence) === presence), row => text(row.supplier) || "SEM NOME")
-    .sort(([a], [b]) => sortText(a, b)).map(([name, records]) => ({ name, count: records.length,
-      paymentBadges: presence === "PRESENTE" ? [...new Set(records.map(row => key(row.status) === "PAGO"
-        ? text(row.paymentId) ? `IDPGTO: ${text(row.paymentId)}` : "PAGO" : "PENDENTE PGTO"))] : [],
-    }));
+    .sort(([a], [b]) => sortText(a, b)).map(([name, records]) => ({ name, count: records.length }));
 }
 
 function supplierStatuses(suppliers) {
@@ -78,12 +87,7 @@ function supplierStatuses(suppliers) {
   return statuses;
 }
 
-/** Read-only PowerFx summary. Null financial sums mean an unknown source amount.
- * Filters: startDate/endDate (ISO or dd/mm/yyyy; empty/null opens that bound),
- * branch, supplierStatus (registry; ATIVO by default; status is an RH alias),
- * supplier and presence.
- * Tones are paid/pending/mixed; paymentBadges are distinct display strings.
- */
+/** Current supplier assignments and daily attendance. Date and presence filters apply to the daily records. */
 export function buildAttendanceSummary(snapshot, filters = {}) {
   if (snapshot?.complete !== true || snapshot.error || snapshot.aborted || snapshot.partial || snapshot.truncated
     || !Array.isArray(snapshot.suppliers) || !Array.isArray(snapshot.presences)) {
@@ -99,7 +103,7 @@ export function buildAttendanceSummary(snapshot, filters = {}) {
   const ids = new Set();
   for (const row of snapshot.presences) {
     if (!row || !/^[1-9]\d*$/.test(String(row.id)) || typeof row.date !== "string" || !row.date
-      || ["branch", "supplier", "profession", "presence", "status", "paymentId"].some(name => typeof row[name] !== "string")) {
+      || ["branch", "supplier", "profession", "presence"].some(name => typeof row[name] !== "string")) {
       throw new TypeError("Registro de presença inválido no snapshot.");
     }
     dateFilter(row.date);
@@ -113,15 +117,9 @@ export function buildAttendanceSummary(snapshot, filters = {}) {
     && matches(statuses.get(key(row.supplier)) || "DESCONHECIDO", status))
     .sort((a, b) => new Decimal(b.id).comparedTo(a.id));
   const present = rows.filter(row => key(row.presence) === "PRESENTE");
-  const professions = groupBy(rows.filter(row => key(row.presence) !== "AUSENTE"), row => text(row.profession) || "SEM PROFISSÃO")
-    .map(([name, records]) => ({ name, emoji: emoji(name), tone: tone(records), recordCount: records.length,
-      professionalCount: new Set(records.map(row => text(row.supplier))).size,
-      providers: groupBy(records, row => text(row.supplier) || "SEM NOME").sort(([a], [b]) => sortText(a, b))
-        .map(([provider, providerRows]) => ({ name: provider, tone: tone(providerRows), recordCount: providerRows.length,
-          present: providerRows.filter(row => key(row.presence) === "PRESENTE").length,
-          pending: providerRows.filter(row => key(row.presence) === "PENDENTE").length, financial: financial(providerRows) })),
-      financial: financial(records),
-    })).sort((a, b) => b.recordCount - a.recordCount || sortText(a.name, b.name));
+  const attendanceNames = new Set(snapshot.presences.map(row => key(row.supplier)));
+  const registeredProfessionals = snapshot.suppliers.filter(row => text(row.profession) || attendanceNames.has(key(row.name)));
+  const professions = currentProfessions(registeredProfessionals, snapshot.stages || [], filters, status);
   const days = groupBy(rows, row => row.date).sort(([a], [b]) => sortText(b, a)).map(([date, records]) => {
     const weekday = new Date(`${date}T12:00:00Z`).getUTCDay();
     return { date, weekday: ["Domingo", "Segunda", "Terça", "Quarta", "Quinta", "Sexta", "Sábado"][weekday],
@@ -132,10 +130,10 @@ export function buildAttendanceSummary(snapshot, filters = {}) {
           absent: categories(branchRows, "AUSENTE"),
           professions: groupBy(presentRows, row => text(row.profession) || "SEM PROFISSÃO")
             .sort(([a], [b]) => sortText(a, b)).map(([name, professionRows]) => ({ name, emoji: emoji(name),
-              count: new Set(professionRows.map(row => text(row.supplier))).size })), total: sum(presentRows) };
+              count: new Set(professionRows.map(row => text(row.supplier))).size })) };
       }),
     };
   });
   return { rows, summary: { pending: rows.filter(row => key(row.presence) === "PENDENTE").length,
-    present: present.length, absent: rows.filter(row => key(row.presence) === "AUSENTE").length, total: sum(present) }, professions, days };
+    present: present.length, absent: rows.filter(row => key(row.presence) === "AUSENTE").length }, professions, days };
 }

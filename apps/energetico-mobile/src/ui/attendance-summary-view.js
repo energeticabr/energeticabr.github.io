@@ -1,13 +1,11 @@
 import { bindReportLandscape } from './report-landscape.js';
 import { addReportCloseControl } from './report-close-control.js';
-import {buildAttendanceSummary} from '../chat/attendance-summary-model.js';
-import {formatReportDate,formatReportMoney} from '../chat/contractor-report-model.js';
+import {attendanceActivityOptions, attendanceStageLabel, buildAttendanceSummary} from '../chat/attendance-summary-model.js';
+import {formatReportDate} from '../chat/contractor-report-model.js';
 import {bindSearchableFilterSelects} from './searchable-filter-selects.js';
 
 const FILTERS=[['branch','FILIAL'],['supplierStatus','STATUS FORNECEDOR'],['supplier','FORNECEDOR'],['presence','PRESENÇA']];
-const METRICS=[['pending','⚠ PENDENTES'],['present','✅ PRESENTES'],['absent','❌ AUSENTES'],['total','💰 TOTAL VLR DIÁRIO FILTRADO']];
-const FINANCIAL=[['pendingApproval','⏳ PENDENTE APROVAÇÃO'],['approvedPayment','🟠 APROVADO PGTO'],['paid','✅ PAGO'],['total','💰 TOTAL']];
-const money=value=>Number.isFinite(value)?formatReportMoney(value):'INCOMPLETO';
+const METRICS=[['pending','⚠ PENDENTES'],['present','✅ PRESENTES'],['absent','❌ AUSENTES']];
 const dateKey=d=>`${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}-${String(d.getDate()).padStart(2,'0')}`;
 
 export function createAttendanceSummaryReportView({document:doc=globalThis.document,data,now=()=>new Date()}={}){
@@ -47,73 +45,180 @@ export function createAttendanceSummaryReportView({document:doc=globalThis.docum
  const content=make('div','pl-table-scroll as-content');content.tabIndex=0;content.setAttribute('role','region');content.setAttribute('aria-label','Resumo por profissão e detalhamento diário');
  report.append(filters,notice,content);panel.append(warning,report);root.append(panel);doc.body.append(root);
  let snapshot=null,controller=null,revision=0,pickers=null,destroyed=false,returnFocus=null,oldOverflow='',app=null,oldInert=false;
+ let editing=null;
  const landscape = bindReportLandscape(root);
   addReportCloseControl({root, toolbar:filters, onClose:close});
  const showNotice=text=>{notice.textContent=text;notice.hidden=!text;};
  const selected=()=>Object.fromEntries([...controls].map(([name,node])=>[name,node.value]));
- function financial(values){
-  const table=make('table','as-financial'),body=make('tbody');
-  for(const [key,label] of FINANCIAL){const row=make('tr',`as-financial--${key}`);row.append(make('td','',label),make('td','',money(values[key])));body.append(row);}
-  table.append(body);return table;
+ function endEditing(restoreFocus=false){
+  if(!editing)return;
+  const {abort,form,trigger,saving}=editing;
+  if(saving)for(const control of [refresh,...controls.values(),...displays.values()])control.disabled=false;
+  editing=null;
+  abort.abort();
+  form.remove();
+  trigger.disabled=false;
+  trigger.setAttribute('aria-expanded','false');
+  if(restoreFocus)trigger.focus();
  }
- function people(td,rows,empty,paid=false){
+ function fillLinkOptions(select,options,current){
+  select.replaceChildren(Object.assign(make('option','','Sem vínculo'),{value:''}));
+  if(current&&!options.has(current))options.set(current,current);
+  for(const [value,text] of options)select.append(Object.assign(make('option','',text),{value}));
+  select.value=current;
+ }
+ function linkSelect(form,name,label){
+  const wrapper=make('label');
+  const select=make('select');select.name=name;
+  wrapper.append(make('span','',label),select);form.append(wrapper);
+  return select;
+ }
+ async function editSupplier(provider,card,trigger){
+  if(editing?.saving)return;
+  endEditing();
+  const form=make('form','as-provider-editor'),status=make('p','as-edit-status','Carregando cadastro…');
+  const cancel=button('as-edit-button','Cancelar');
+  const abort=new AbortController();
+  const edit={abort,form,trigger,saving:false};
+  editing=edit;
+  trigger.disabled=true;
+  trigger.setAttribute('aria-expanded','true');
+  status.setAttribute('role','status');
+  cancel.addEventListener('click',()=>endEditing(true));
+  form.append(status,cancel);card.append(form);cancel.focus({preventScroll:true});
+  try{
+   const source=await data.loadSupplierEditor(provider.id,{signal:abort.signal});
+   if(editing!==edit)return;
+   const {supplier,activities,stages}=source;
+   const stageOptions=new Map([...stages].sort((a,b)=>Number(b.id)-Number(a.id)).map(row=>[row.id,attendanceStageLabel(row)]));
+   const stage=linkSelect(form,'stage','Descritivo etapa');
+   const activity=linkSelect(form,'activity','Atividade executada');
+   fillLinkOptions(stage,stageOptions,supplier.stage||'');
+   const updateActivities=(value)=>{
+    const stageName=stages.find(row=>row.id===stage.value)?.stage;
+    const allowed=attendanceActivityOptions(activities,stageName);
+    fillLinkOptions(activity,new Map(allowed.map(name=>[name,name])),
+     allowed.includes(value)||stage.value===supplier.stage?value:'');
+   };
+   updateActivities(supplier.activity||'');
+   stage.addEventListener('change',()=>updateActivities(activity.value));
+   const actions=make('div','as-edit-actions'),save=make('button','as-edit-button as-edit-button--save','Salvar');
+   save.type='submit';actions.append(cancel,save);
+   status.textContent='';form.append(status,actions);stage.focus({preventScroll:true});
+   form.addEventListener('submit',async event=>{
+    event.preventDefault();
+    if(editing!==edit||edit.saving||save.disabled)return;
+    const links={stage:stage.value,activity:activity.value};
+    if(links.stage===supplier.stage&&links.activity===supplier.activity){endEditing(true);return;}
+    edit.saving=true;
+    for(const control of [stage,activity,cancel,save,refresh,...controls.values(),...displays.values()])control.disabled=true;
+    status.textContent='Salvando cadastro…';
+    try{
+     const saved=await data.saveSupplierLinks(source,links,{signal:abort.signal});
+     if(editing!==edit)return;
+     const stagesById=new Map((snapshot.stages||[]).map(stage=>[stage.id,stage]));
+     for(const stage of stages)stagesById.set(stage.id,stage);
+     snapshot={...snapshot,stages:[...stagesById.values()],suppliers:snapshot.suppliers.map(row=>row.id===saved.id?saved:row)};
+     const scrollTop=content.scrollTop;
+     render();content.scrollTop=scrollTop;
+     [...content.querySelectorAll('[data-supplier-edit]')].find(control=>control.dataset.supplierEdit===saved.id)?.focus({preventScroll:true});
+     showNotice('Cadastro do fornecedor atualizado.');
+    }catch(error){
+     if(editing!==edit)return;
+     status.textContent=error?.status===412?'O cadastro mudou no SharePoint. Cancele e abra a edição novamente.'
+      :'Não foi possível confirmar o salvamento. Confira o cadastro ao reabrir a edição.';
+     save.disabled=true;
+    }finally{
+     if(editing===edit){
+      edit.saving=false;
+      for(const control of [stage,activity,cancel,refresh,...controls.values(),...displays.values()])control.disabled=false;
+     }
+    }
+   });
+  }catch{
+   if(editing===edit)status.textContent='Não foi possível carregar o cadastro. Cancele e tente novamente.';
+  }
+ }
+ function providerCard(provider){
+  const card=make('section','as-provider');
+  if(provider.assignmentHue!==null)card.style.setProperty('--as-assignment-hue',provider.assignmentHue);
+  card.classList.toggle('as-provider--assigned',provider.assignmentHue!==null);
+  card.append(make('h4','',provider.name));
+  const details=make('dl','as-provider-links');
+  details.append(make('dt','','Descritivo etapa'),make('dd','',provider.stageLabel||'Sem vínculo'),
+   make('dt','','Atividade executada'),make('dd','',provider.activity||'Sem vínculo'));
+  card.append(details);
+  if(provider.id&&typeof data.loadSupplierEditor==='function'&&typeof data.saveSupplierLinks==='function'){
+   const edit=button('as-edit-button','✎ Editar');
+   edit.dataset.supplierEdit=provider.id;
+   edit.setAttribute('aria-label',`Editar cadastro de ${provider.name}`);
+   edit.setAttribute('aria-expanded','false');
+   edit.addEventListener('click',()=>void editSupplier(provider,card,edit));card.append(edit);
+  }
+  return card;
+ }
+ function people(td,rows,empty,highlightDuplicates=false){
   if(!rows.length){td.append(make('span','as-empty',empty));return;}
   for(const row of rows){
-   const person=make('div',paid&&row.count>1?'as-person as-duplicate':'as-person');person.append(make('strong','',row.name));
-   if(paid&&row.count>1)person.append(make('span','as-count',`${row.count}X`));
-   if(paid)for(const badge of row.paymentBadges||[])person.append(make('span',badge==='PENDENTE PGTO'?'as-badge as-badge--pending':'as-badge as-badge--paid',badge));
+   const person=make('div',highlightDuplicates&&row.count>1?'as-person as-duplicate':'as-person');
+   person.append(make('strong','',row.name));
+   if(row.count>1)person.append(make('span','as-count',`${row.count}X`));
    td.append(person);
   }
  }
  function render(){
-  content.replaceChildren();showNotice('');if(!snapshot)return;
+  endEditing();content.replaceChildren();showNotice('');if(!snapshot)return;
   if([...displays.values()].some(input=>!input.checkValidity())){showNotice('Data inválida. Use dd/mm/yyyy.');return;}
   const values=selected();
   if(values.startDate&&values.endDate&&values.startDate>values.endDate){showNotice('A data inicial não pode ser posterior à data final.');return;}
   const result=buildAttendanceSummary(snapshot,values);
   const heading=make('header','as-heading');heading.append(make('h1','','📊 RESUMO DE PRESENÇAS E AUSÊNCIAS — PERÍODO FILTRADO'),make('p','',`${values.startDate?formatReportDate(values.startDate):'Desde o início'} até ${values.endDate?formatReportDate(values.endDate):'o fim'}`));content.append(heading);
   const metrics=make('div','as-metrics');
-  for(const [key,label] of METRICS){const card=make('div',`as-metric as-metric--${key}`),value=make('strong','',key==='total'?money(result.summary[key]):String(result.summary[key]));value.dataset.metric=key;card.append(make('span','',label),value);metrics.append(card);}
+  for(const [key,label] of METRICS){const card=make('div',`as-metric as-metric--${key}`),value=make('strong','',String(result.summary[key]));value.dataset.metric=key;card.append(make('span','',label),value);metrics.append(card);}
   content.append(metrics);
-  const professions=make('section','as-professions');professions.append(make('h2','','👷 PROFISSÕES TOTAIS NA SEMANA / PERÍODO FILTRADO'));
+  const professions=make('section','as-professions');professions.append(make('h2','','👷 CADASTRO ATUAL DOS FORNECEDORES POR PROFISSÃO'));
   const grid=make('div','as-profession-grid');professions.append(grid);content.append(professions);
-  if(!result.professions.length)grid.append(make('p','as-empty','SEM REGISTROS PRESENTES OU PENDENTES NO PERÍODO'));
+  if(!result.professions.length)grid.append(make('p','as-empty','NENHUM FORNECEDOR CORRESPONDE AOS FILTROS DE CADASTRO'));
   for(const profession of result.professions){
-   const card=make('article',`as-profession as-tone--${profession.tone}`);
-   card.append(make('h3','',`${profession.emoji||''} ${profession.name}`),make('p','as-count-label',`${profession.professionalCount} PROFISSIONAIS • ${profession.recordCount} REGISTROS`));
-   for(const provider of profession.providers){
-    const person=make('section',`as-provider as-tone--${provider.tone}`),name=make('h4','',provider.name);name.append(make('span','as-count',`${provider.recordCount}X`));
-    person.append(name,make('p','as-presence-counts',`✅ ${provider.present} PRESENTE(S) • ⏳ ${provider.pending} PENDENTE(S)`),financial(provider.financial));card.append(person);
-   }
-   card.append(make('h4','as-profession-total','RESUMO GERAL DA PROFISSÃO'),financial(profession.financial));grid.append(card);
+   const card=make('article','as-profession'),count=profession.providers.length;
+   card.append(make('h3','',`${profession.emoji||''} ${profession.name}`),
+    make('p','as-count-label',`${count} ${count===1?'FORNECEDOR':'FORNECEDORES'}`));
+   for(const provider of profession.providers)card.append(providerCard(provider));
+   grid.append(card);
   }
-  const table=make('table','as-daily'),cols=make('colgroup');for(const width of [10,12,18,18,18,14,10]){const col=make('col');col.style.width=`${width}%`;cols.append(col);}
-  const head=make('thead'),titles=make('tr');for(const label of ['📅 DATA','🏢 FILIAL','⚠ PENDENTES','✅ PRESENTES','❌ AUSENTES','👷 QTD POR PROFISSÃO (somente presentes)','💰 TOTAL DO DIA']){const th=make('th','',label);th.scope='col';titles.append(th);}head.append(titles);
+  content.append(make('h2','as-daily-title','PRESENÇAS POR DIA E FILIAL'));
+  const table=make('table','as-daily'),cols=make('colgroup');for(const width of [11,15,19,21,19,15]){const col=make('col');col.style.width=`${width}%`;cols.append(col);}
+  const head=make('thead'),titles=make('tr');for(const label of ['📅 DATA','🏢 FILIAL','⚠ PENDENTES','✅ PRESENTES','❌ AUSENTES','👷 QTD POR PROFISSÃO (somente presentes)']){const th=make('th','',label);th.scope='col';titles.append(th);}head.append(titles);
   const body=make('tbody');table.append(cols,head,body);content.append(table);
   for(const day of result.days){
-   const dayHeader=make('tr','as-day-heading'),dayCell=make('th','',`📅 ${formatReportDate(day.date)} — ${day.weekday}`);dayCell.colSpan=7;dayCell.scope='rowgroup';dayHeader.append(dayCell);body.append(dayHeader);
+   const dayHeader=make('tr','as-day-heading'),dayCell=make('th','',`📅 ${formatReportDate(day.date)} — ${day.weekday}`);dayCell.colSpan=6;dayCell.scope='rowgroup';dayHeader.append(dayCell);body.append(dayHeader);
    for(const branch of day.branches){
     const tr=make('tr');tr.dataset.date=day.date;
     const date=make('td',day.weekend?'as-weekend':'as-date',`${formatReportDate(day.date)} (${day.weekday})`);tr.append(date,make('td','as-branch',branch.branch));
     for(const [key,empty] of [['pending','SEM PENDENTES'],['present','SEM PRESENTES'],['absent','SEM AUSENTES']]){const td=make('td',`as-category as-category--${key}`);people(td,branch[key],empty,key==='present');tr.append(td);}
-    const professions=make('td','as-daily-professions');for(const p of branch.professions)professions.append(make('div','',`${p.emoji||''} ${p.name}: ${p.count}`));if(!branch.professions.length)professions.textContent='SEM PRESENTES';tr.append(professions,make('td','as-day-total',money(branch.total)));body.append(tr);
+    const professions=make('td','as-daily-professions');for(const p of branch.professions)professions.append(make('div','',`${p.emoji||''} ${p.name}: ${p.count}`));if(!branch.professions.length)professions.textContent='SEM PRESENTES';tr.append(professions);body.append(tr);
    }
   }
-  if(!result.rows.length)showNotice('Nenhuma presença corresponde aos filtros selecionados.');
+  if(!result.rows.length){
+   const row=make('tr'),cell=make('td','as-empty','Nenhuma presença corresponde aos filtros selecionados.');
+   cell.colSpan=6;row.append(cell);body.append(row);
+  }
  }
  function populate(){
   pickers?.destroy();pickers=null;
   for(const [name] of FILTERS){
    const select=controls.get(name),current=select.value;
-   const values=name==='supplierStatus'?['ATIVO','INATIVO',...snapshot.suppliers.map(r=>r.status)]:name==='presence'?['PENDENTE','PRESENTE','AUSENTE']:snapshot.presences.map(r=>r[name]);
+   const registryValues=snapshot.suppliers.filter(row=>row.profession).map(row=>name==='supplier'?row.name:row[name]);
+   const values=name==='supplierStatus'?['ATIVO','INATIVO',...snapshot.suppliers.map(r=>r.status)]
+    :name==='presence'?['PENDENTE','PRESENTE','AUSENTE']:[...registryValues,...snapshot.presences.map(r=>r[name])];
    const unique=[...new Set([...values,current].filter(Boolean))].sort((a,b)=>a.localeCompare(b,'pt-BR'));
    select.replaceChildren(Object.assign(make('option','','Todos'),{value:''}));for(const value of unique)select.append(Object.assign(make('option','',value),{value}));select.value=current;
   }
   pickers=bindSearchableFilterSelects(filters,{placement:'below',report:true});
  }
  async function load(){
-  if(root.hidden||destroyed)return;
-  pickers?.close();controller?.abort();const current=++revision,active=new AbortController();controller=active;snapshot=null;content.replaceChildren();showNotice('Carregando presenças e fornecedores do SharePoint…');report.setAttribute('aria-busy','true');refresh.disabled=true;
+  if(root.hidden||destroyed||editing?.saving)return;
+  endEditing();pickers?.close();controller?.abort();const current=++revision,active=new AbortController();controller=active;snapshot=null;content.replaceChildren();showNotice('Carregando presenças e fornecedores do SharePoint…');report.setAttribute('aria-busy','true');refresh.disabled=true;
   try{
    const result=await data.loadSnapshot({signal:active.signal});
    if(active.signal.aborted||current!==revision||root.hidden||destroyed)return;
@@ -123,10 +228,10 @@ export function createAttendanceSummaryReportView({document:doc=globalThis.docum
   finally{if(current===revision){report.setAttribute('aria-busy','false');refresh.disabled=false;}}
  }
  function orientationChanged() { landscape.update(); }
- function close(){if(root.hidden)return;controller?.abort();revision++;snapshot=null;pickers?.close();content.replaceChildren();root.hidden=true;doc.body.style.overflow=oldOverflow;if(app)app.inert=oldInert;returnFocus?.focus?.();returnFocus=null;}
+ function close(){if(root.hidden)return;endEditing();controller?.abort();revision++;snapshot=null;pickers?.close();content.replaceChildren();root.hidden=true;doc.body.style.overflow=oldOverflow;if(app)app.inert=oldInert;returnFocus?.focus?.();returnFocus=null;}
  root.addEventListener('click',e=>{if(e.target===root)close();});
  root.addEventListener('keydown',e=>{
-  if(root.hidden)return;if(e.key==='Escape'){e.preventDefault();close();return;}if(e.key!=='Tab')return;
+  if(root.hidden)return;if(e.key==='Escape'){e.preventDefault();if(editing){if(!editing.saving)endEditing(true);}else close();return;}if(e.key!=='Tab')return;
   const nodes=[...panel.querySelectorAll('button,input,select,[tabindex="0"]')].filter(n=>!n.disabled&&!n.closest('[hidden]')&&n.tabIndex>=0),first=nodes[0],last=nodes.at(-1);
   if(e.shiftKey&&(doc.activeElement===first||doc.activeElement===panel)){e.preventDefault();last?.focus();}else if(!e.shiftKey&&(doc.activeElement===last||doc.activeElement===panel)){e.preventDefault();first?.focus();}
  });

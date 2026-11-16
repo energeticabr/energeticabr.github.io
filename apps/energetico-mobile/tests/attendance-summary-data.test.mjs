@@ -10,13 +10,16 @@ const create = options => {
   assert.equal(typeof dataModule.createAttendanceSummaryData, "function", "createAttendanceSummaryData must be implemented");
   return dataModule.createAttendanceSummaryData(options);
 };
-const names = { FORNECEDORES: ["CADASTRO", "STATUS"],
-  DESCRITIVOPRESENCA: ["DATA", "FILIAL", "FORNECEDOR", "PROFISSAO", "PRESENCA", "STATUS", "VLORDIARIO", "IDPGTO"] };
+const names = { FORNECEDORES: ["CADASTRO", "STATUS", "FILIAL", "PROFISSAO", "DESCRITIVOETAPA ATUAL", "ATIVIDADE EXERCIDA"],
+  DESCRITIVOPRESENCA: ["DATA", "FILIAL", "FORNECEDOR", "PROFISSAO", "PRESENCA"],
+  DEMONSTRATIVOETAPA: ["FILIAL", "ETAPA", "IMOVEL", "STATUS", "ATIVIDADEEXECUTADA", "FORNECEDOR"] };
 const columns = list => names[list].map((displayName, i) => ({ name: `field_${i}`, displayName }));
 const presence = (id = 1, value = "R$ 1.234,56") => ({ id: String(id), fields: { field_0: "2026-10-03T00:00:00-03:00",
   field_1: "B", field_2: { LookupValue: "Ana" }, field_3: "PEDREIRO", field_4: "PRESENTE",
   field_5: "PAGO", field_6: value, field_7: 91 } });
-const supplier = { id: "1", fields: { field_0: "Ana", field_1: { Value: "ATIVO" } } };
+const supplier = { id: "1", fields: { field_0: "Ana", field_1: { Value: "ATIVO" }, field_2: "B",
+  field_3: "PEDREIRO", field_4: 35, field_5: "ARMAÇÃO" } };
+const stage = { id: "35", fields: { field_0: "B", field_1: "ESTRUTURA", field_2: "TORRE A", field_3: "ATIVIDADE INICIADA" } };
 function fixture(overrides = {}) {
   const calls = [];
   const repository = {
@@ -28,11 +31,14 @@ function fixture(overrides = {}) {
     async getItemsPage(_site, list, query, options) {
       calls.push(["page", list, options.pageNumber, options.cursor || ""]);
       assert.equal(new URLSearchParams(query).get("$top"), "100");
-      assert.equal(new URLSearchParams(query).get("$expand"), "fields");
+      assert.match(new URLSearchParams(query).get("$expand"), /^fields\(\$select=/);
       assert.ok(options.pageNumber >= 1 && options.pageNumber <= options.maxPages && options.maxPages <= 100);
       return { items: [list === "FORNECEDORES" ? supplier : presence()], hasMore: false, nextLink: "", batchCount: 1 };
     }, ...overrides,
   };
+  const getPage = repository.getItemsPage;
+  repository.getItemsPage = async (site, list, query, options) => list === "DEMONSTRATIVOETAPA"
+    ? { items: [stage, { ...stage, id: "52" }, { ...stage, id: "55" }], hasMore: false } : getPage(site, list, query, options);
   return { repository, calls };
 }
 
@@ -43,8 +49,12 @@ test("loadSnapshot returns complete frozen RH-normalized supplier and presence d
   assert.ok(Object.isFrozen(source.presences)); assert.ok(Object.isFrozen(source.suppliers));
   assert.equal(source.suppliers[0].name, "Ana"); assert.equal(source.suppliers[0].status, "ATIVO");
   assert.equal(source.presences[0].supplier, "Ana"); assert.equal(source.presences[0].date, "2026-10-03");
-  assert.equal(source.presences[0].dailyValue, 1234.56); assert.equal(source.presences[0].paymentId, "91");
-  assert.deepEqual(calls.filter(call => call[0] === "resolve").map(call => call[1]).sort(), ["DESCRITIVOPRESENCA", "FORNECEDORES"]);
+  assert.deepEqual(source.presences[0], { id: "1", date: "2026-10-03", branch: "B", supplier: "Ana", profession: "PEDREIRO", presence: "PRESENTE" });
+  assert.equal(source.suppliers[0].stage, "35");
+  assert.equal(source.suppliers[0].activity, "ARMAÇÃO");
+  assert.equal(source.stages[0].stage, "ESTRUTURA");
+  assert.deepEqual(calls.filter(call => call[0] === "resolve").map(call => call[1]).sort(),
+    ["DEMONSTRATIVOETAPA", "DESCRITIVOPRESENCA", "FORNECEDORES"]);
 });
 
 test("RHID reads only the selected period and attendance columns across all pages", async () => {
@@ -79,6 +89,7 @@ test("renamed Title resolves CADASTRO without confusing SharePoint computed titl
         { name: "LinkTitle2", displayName: "CADASTRO", computed: true },
         { name: "Title", displayName: "CADASTRO", text: {} },
         { name: "STATUS", displayName: "STATUS", text: {} },
+        ...columns("FORNECEDORES").slice(2),
       ];
     },
     async getItemsPage(_site, list) {
@@ -140,13 +151,13 @@ test("corrupt pages, contradictory completion, duplicate IDs and cursor cycles r
   await assert.rejects(create({ repository: repeated.repository }).loadSnapshot(), /duplicad/i);
 });
 
-test("invalid financial text remains unknown while explicit zero and locale amounts stay valid", async () => {
-  const values = ["garbage 20", "1,2,3", "", null, Infinity, "R$ 0,00", "1.234,56", "1234.56"];
-  const { repository } = fixture({ async getItemsPage(_site, list) {
-    return { items: list === "FORNECEDORES" ? [supplier] : values.map((value, i) => presence(i + 1, value)), hasMore: false };
+test("attendance queries project no payment or amount fields", async () => {
+  const { repository } = fixture({ async getItemsPage(_site, list, query) {
+    if (list === "FORNECEDORES") return { items: [supplier], hasMore: false };
+    assert.equal(new URLSearchParams(query).get("$expand"), "fields($select=field_0,field_1,field_2,field_3,field_4)");
+    return { items: [presence()], hasMore: false };
   } });
-  assert.deepEqual((await create({ repository }).loadSnapshot()).presences.map(item => item.dailyValue),
-    [null, null, null, null, null, 0, 1234.56, 1234.56]);
+  assert.equal((await create({repository}).loadSnapshot()).presences[0].presence, "PRESENTE");
 });
 
 test("page failure markers and cycles with distinct row IDs cannot produce a complete snapshot", async () => {
@@ -194,9 +205,10 @@ test("late abort and a later remote failure never return a partial snapshot", as
 test("real Graph repository read traversal produces a complete snapshot with validated cursors", async () => {
   const graph = { async request(path, options) {
     assert.equal(options.method || "GET", "GET");
-    if (path.includes("/columns")) return { value: columns(path.includes("/FORNECEDORES/") ? "FORNECEDORES" : "DESCRITIVOPRESENCA") };
+    if (path.includes("/columns")) return { value: columns(path.split("/")[4]) };
     if (path.includes("/FORNECEDORES/items")) return { value: [supplier] };
     if (path.includes("/DESCRITIVOPRESENCA/items")) return { value: [presence()] };
+    if (path.includes("/DEMONSTRATIVOETAPA/items")) return { value: [stage] };
     if (path.includes("/lists?")) return { value: Object.keys(names).map(id => ({ id, displayName: id, list: { template: "genericList" } })) };
     return { id: "site" };
   } };
@@ -230,4 +242,40 @@ test("authenticated token retrieval receives read scopes and aborts before netwo
   await start; controller.abort();
   await assert.rejects(pending, /abort|cancel/i);
   assert.equal(tokenSignal.aborted, true);
+});
+
+test("supplier link edits update the two registry fields with the loaded ETag and check readback", async () => {
+  const patches = [];
+  const current = { id: "1", eTag: '"v1"', fields: {
+    field_0: "Ana", field_1: "ATIVO", field_2: "B", field_3: "PEDREIRO", field_4: 35, field_5: "ARMAÇÃO",
+  } };
+  const { repository } = fixture({
+    async getColumns(_site, list) {
+      if (list === "ATIVIDADE EXECUTADA") return [{ name: "ATIVIDADEEXECUTADA" }, { name: "FILIAL" }, { name: "ETAPA" }];
+      if (list === "DEMONSTRATIVOETAPA") return columns(list);
+      return ["CADASTRO", "STATUS", "FILIAL", "PROFISSAO", "DESCRITIVOETAPA ATUAL", "ATIVIDADE EXERCIDA"]
+        .map((displayName, i) => ({ name: `field_${i}`, displayName, ...(i === 4 ? { number: {} } : {}) }));
+    },
+    async getItemsPage(_site, list) {
+      assert.equal(list, "ATIVIDADE EXECUTADA");
+      return { items: [{ id: "8", fields: { ATIVIDADEEXECUTADA: "CONCRETAGEM", FILIAL: "B", ETAPA: "ESTRUTURA" } },
+        { id: "9", fields: { ATIVIDADEEXECUTADA: "OUTRA", FILIAL: "Z", ETAPA: "ESTRUTURA" } },
+        { id: "10", fields: { ATIVIDADEEXECUTADA: "PINTURA", FILIAL: "B", ETAPA: "ACABAMENTO" } }], hasMore: false };
+    },
+    async getItem() { return current; },
+    async updateItem(site, list, id, fields, options) {
+      patches.push({ site, list, id, fields, eTag: options.eTag });
+      if (patches.length > 1) throw Object.assign(new Error("concurrent update"), { status: 412 });
+      return { ...current, fields: { ...current.fields, ...fields } };
+    },
+  });
+  const data = create({ repository });
+  const editor = await data.loadSupplierEditor("1");
+  assert.deepEqual(editor.activities.map(row => row.activity), ["CONCRETAGEM", "PINTURA"]);
+  assert.throws(() => data.saveSupplierLinks(editor, { stage: "52", activity: "PINTURA" }), /vínculos válidos/);
+  const saved = await data.saveSupplierLinks(editor, { stage: "52", activity: "CONCRETAGEM" });
+  assert.deepEqual(patches, [{ site: "personal", list: "FORNECEDORES", id: "1",
+    fields: { field_4: 52, field_5: "CONCRETAGEM" }, eTag: '"v1"' }]);
+  assert.equal(saved.stage, "52"); assert.equal(saved.activity, "CONCRETAGEM");
+  await assert.rejects(data.saveSupplierLinks(editor, { stage: "55", activity: "CONCRETAGEM" }), { status: 412 });
 });

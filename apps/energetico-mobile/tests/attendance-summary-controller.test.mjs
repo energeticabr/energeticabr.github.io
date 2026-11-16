@@ -57,7 +57,7 @@ async function open(h) {
   return h.panels.at(-1).data;
 }
 
-test('HOME and reply open one local attendance report, with an independent read-only data source', async t => {
+test('HOME and reply open one local attendance report and read it with read-only scopes', async t => {
   let sourceCreates = 0, receivedOptions;
   const requestedScopes = [];
   const h = harness(t, {
@@ -81,7 +81,7 @@ test('HOME and reply open one local attendance report, with an independent read-
   assert.equal(h.panels.length, 1);
   assert.equal(h.panels[0].opens, 1);
   assert.equal(h.panels[0].document, globalThis.document);
-  assert.deepEqual(Object.keys(h.panels[0].data), ['loadSnapshot']);
+  assert.deepEqual(Object.keys(h.panels[0].data), ['loadSnapshot', 'loadSupplierEditor', 'saveSupplierLinks']);
   const caller = new AbortController();
   assert.equal(await h.panels[0].data.loadSnapshot({ signal: caller.signal, trace: 'attendance' }), snapshot);
   assert.equal(sourceCreates, 1);

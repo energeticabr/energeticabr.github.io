@@ -2,6 +2,8 @@ import { SHAREPOINT_SITES } from "../../../../portal/config.js";
 import { createGraphClient } from "../../../../portal/data/graph-client.js";
 import { createSharePointRepository } from "../../../../portal/data/sharepoint-repository.js";
 import { normalizeRhSupplier, normalizeRhPresence } from "./rh-reports-model.js";
+import { normalizeStageProgressDate } from "./stage-progress-model.js";
+import { attendanceActivityOptions } from "./attendance-summary-model.js";
 import { isValidRhidReportDate, shiftRhidReportDate } from "./rhid-attendance-table.js";
 
 const SITE = "personal";
@@ -9,12 +11,24 @@ const WINDOW_PAGES = 100;
 // An overall runaway guard rejects the entire load; it never publishes truncated totals.
 const MAX_TOTAL_PAGES = 10_000;
 const PRESENCE_LIST = ["DESCRITIVOPRESENCA", "DESCRITIVO PRESENCA"];
-const LISTS = { suppliers: ["FORNECEDORES"], directory: ["FORNECEDORES"], presences: PRESENCE_LIST, rhid: PRESENCE_LIST };
-const SCHEMA = { suppliers: [["CADASTRO"], ["STATUS"]], directory: [["CADASTRO"], ["PROFISSAO", "PROFISSÃO"], ["FILIAL"], ["IMOVEL", "IMÓVEL"]],
+const LISTS = { suppliers: ["FORNECEDORES"], directory: ["FORNECEDORES"], presences: PRESENCE_LIST, rhid: PRESENCE_LIST,
+  stages: ["DEMONSTRATIVOETAPA"], activities: ["ATIVIDADE EXECUTADA", "ATIVIDADES EXECUTADAS"] };
+const SCHEMA = {
+  suppliers: [["CADASTRO"], ["STATUS"], ["FILIAL"], ["PROFISSAO", "PROFISSÃO"],
+    ["DESCRITIVOETAPA ATUAL", "ETAPA ATUAL"], ["ATIVIDADE EXERCIDA"]],
+  directory: [["CADASTRO"], ["PROFISSAO", "PROFISSÃO"], ["FILIAL"], ["IMOVEL", "IMÓVEL"]],
   rhid: [["DATA"], ["FORNECEDOR"], ["PRESENCA", "PRESENÇA"]],
-  presences: [["DATA"], ["FILIAL"], ["FORNECEDOR"],
-  ["PROFISSAO", "PROFISSÃO"], ["PRESENCA", "PRESENÇA"], ["STATUS"],
-  ["VLORDIARIO", "VALOR DIÁRIO", "VALOR DIARIO"], ["IDPGTO", "ID PGTO"]] };
+  presences: [["DATA"], ["FILIAL"], ["FORNECEDOR"], ["PROFISSAO", "PROFISSÃO"], ["PRESENCA", "PRESENÇA"]],
+  stages: [["FILIAL"], ["ETAPA"], ["IMOVEL", "IMÓVEL"], ["STATUS"], ["ATIVIDADEEXECUTADA", "ATIVIDADE EXECUTADA"], ["FORNECEDOR"]],
+  activities: [["FILIAL"], ["ATIVIDADE EXECUTADA", "ATIVIDADEEXECUTADA"], ["ETAPA"]],
+};
+const itemId = value => /^[1-9]\d*$/.test(String(value ?? "")) && Number.isSafeInteger(Number(value));
+const scalar = value => {
+  if (Array.isArray(value)) return value.map(scalar).filter(Boolean).join(", ");
+  if (value && typeof value === "object") return scalar(value.LookupValue ?? value.Value ?? value.value ?? value.Title ?? value.LookupId);
+  return String(value ?? "").trim();
+};
+const valueKey = value => scalar(value).normalize("NFC").toLocaleUpperCase("pt-BR").replace(/\s+/g, " ");
 const columnKey = value => String(value ?? "").replace(/_x([0-9a-f]{4})_/gi, (_, code) => String.fromCodePoint(Number.parseInt(code, 16)))
   .normalize("NFD").replace(/[\u0300-\u036f]/g, "").toUpperCase().replace(/[^A-Z0-9]/g, "");
 
@@ -44,51 +58,72 @@ function validateSchema(columns, kind) {
   const resolved = SCHEMA[kind].map(aliases => {
     const wanted = new Set(aliases.map(columnKey));
     const matches = dataColumns.filter(column => wanted.has(columnKey(column?.name)) || wanted.has(columnKey(column?.displayName)));
-    if (matches.length !== 1 || !matches[0].name) throw new TypeError(`Coluna ${aliases[0]} ausente ou ambígua na lista ${LISTS[kind][0]}.`);
+    if (!matches.length && kind === "suppliers" && aliases === SCHEMA.suppliers[5]) {
+      matches.push(...dataColumns.filter(column => column.name === "field_2"));
+    }
+    if (!matches.length && kind === "activities" && aliases === SCHEMA.activities[1]) {
+      matches.push(...dataColumns.filter(column => column.name === "Title"));
+    }
+    if (matches.length !== 1 || !/^[A-Za-z_][A-Za-z0-9_]*$/.test(matches[0]?.name || "")) {
+      throw new TypeError(`Coluna ${aliases[0]} ausente ou ambígua na lista ${LISTS[kind][0]}.`);
+    }
     return matches[0];
   });
+  if (new Set(resolved.map(column => column.name)).size !== resolved.length) {
+    throw new TypeError(`Colunas ambíguas na lista ${LISTS[kind][0]}.`);
+  }
   return resolved;
 }
 
-function moneyIsValid(value) {
-  if (typeof value === "number") return Number.isFinite(value);
-  if (value && typeof value === "object" && !Array.isArray(value)) return moneyIsValid(value.Value ?? value.value ?? value.LookupValue);
-  if (typeof value !== "string") return false;
-  const raw = value.trim().replace(/^R\$\s*/, "");
-  return /^-?(?:\d+(?:[.,]\d+)?|\d{1,3}(?:\.\d{3})+(?:,\d+)?|\d{1,3}(?:,\d{3})+(?:\.\d+)?)$/.test(raw);
-}
-
 function normalizeItem(item, columns, kind) {
+  const get = index => scalar(item.fields[columns[index].name]);
+  const id = String(item.id);
+  if (kind === "stages") return Object.freeze({
+    id, branch: get(0), stage: get(1), property: get(2), status: get(3), activity: get(4), supplier: get(5),
+  });
+  if (kind === "activities") return Object.freeze({ branch: get(0), activity: get(1), stage: get(2) });
+  if (kind === "directory") return normalizeRhSupplier(item, columns);
+  if (kind === "suppliers") {
+    const stageColumn = columns[4];
+    const rawStage = item.fields[stageColumn.name];
+    const stage = stageColumn.lookup ? scalar(item.fields[`${stageColumn.name}LookupId`] ?? rawStage?.LookupId ?? rawStage) : get(4);
+    return Object.freeze({ id, name: get(0), status: get(1), branch: get(2), profession: get(3), stage, activity: get(5) });
+  }
   if (kind === "rhid") {
     const { date, supplier, presence } = normalizeRhPresence(item, columns);
     if (!isValidRhidReportDate(date)) throw new TypeError("Registro do Descritivo Presença com data inválida.");
     return Object.freeze({ date, supplier, presence });
   }
-  if (kind !== "presences") return normalizeRhSupplier(item, columns);
-  const row = normalizeRhPresence(item, columns);
-  const parsed = new Date(`${row.date}T12:00:00Z`);
-  if (!row.date || !Number.isFinite(parsed.getTime()) || parsed.toISOString().slice(0, 10) !== row.date
-    || !row.presence) throw new TypeError("Registro de presença com data ou presença inválida.");
-  const moneyColumn = columns[6];
-  const rawMoney = item.fields[moneyColumn.name];
-  return Object.freeze({ ...row, dailyValue: moneyIsValid(rawMoney) ? row.dailyValue : null });
+  const date = normalizeStageProgressDate(get(0));
+  if (!isValidRhidReportDate(date) || !get(4)) throw new TypeError("Registro de presença com data ou presença inválida.");
+  return Object.freeze({ id, date, branch: get(1), supplier: get(2), profession: get(3), presence: get(4) });
 }
 
-async function loadList(repository, kind, signal, range) {
+async function resolveSchema(repository, kind, signal) {
   const resolved = await abortable(() => repository.resolveList(SITE, LISTS[kind], { signal }), signal);
   if (resolved?.status !== "resolved" || !resolved.id) throw new Error(`A lista ${LISTS[kind][0]} não está disponível nesta conta.`);
   const columns = validateSchema(await abortable(() => repository.getColumns(SITE, resolved.id, { signal }), signal), kind);
-  const params = new URLSearchParams({ $expand: "fields", $top: "100" });
+  return { id: resolved.id, columns };
+}
+
+function selectedFields(columns, kind) {
+  return columns.flatMap((column, index) => kind === "suppliers" && index === 4 && column.lookup
+    ? [column.name, `${column.name}LookupId`] : [column.name]);
+}
+
+async function loadList(repository, kind, signal, range) {
+  const { id: listId, columns } = await resolveSchema(repository, kind, signal);
+  const fields = selectedFields(columns, kind);
+  const expand = kind === "directory" ? "fields" : `fields($select=${fields.join(",")})`;
+  const params = new URLSearchParams({ $expand: expand, $top: "100" });
   if (range) {
-    const fields = columns.map(column => column.name);
     const dateField = `fields/${fields[0]}`;
-    params.set("$expand", `fields($select=${fields.join(",")})`);
     params.set("$filter", `${dateField} ge '${range.start}T00:00:00Z' and ${dateField} lt '${shiftRhidReportDate(range.end, 1)}T00:00:00Z'`);
   }
   const query = params.toString();
   const rows = []; const ids = new Set(); const cursors = new Set(); let cursor = "";
   for (let pageIndex = 0; pageIndex < MAX_TOTAL_PAGES; pageIndex++) {
-    const page = await abortable(() => repository.getItemsPage(SITE, resolved.id, query, {
+    const page = await abortable(() => repository.getItemsPage(SITE, listId, query, {
       signal, pageNumber: pageIndex % WINDOW_PAGES + 1, maxPages: WINDOW_PAGES,
       headers: { Prefer: "HonorNonIndexedQueriesWarningMayFailRandomly" }, ...(cursor ? { cursor } : {}),
     }), signal);
@@ -117,7 +152,21 @@ async function loadList(repository, kind, signal, range) {
   throw new RangeError("Limite seguro de paginação excedido; nenhum total parcial foi disponibilizado.");
 }
 
-/** Fully traverses both read-only lists before returning {complete:true,suppliers,presences}. */
+function supplierRecord(item, columns, id) {
+  if (String(item?.id) !== id || !item.fields) throw new Error("O SharePoint não confirmou o cadastro do fornecedor.");
+  return normalizeItem(item, columns, "suppliers");
+}
+
+function registryLinkField(column, value) {
+  if (column.readOnly) throw new Error("O vínculo está bloqueado no cadastro do SharePoint.");
+  if (column.lookup) {
+    if (value && !itemId(value)) throw new Error("Selecione um vínculo válido.");
+    return [`${column.name}LookupId`, value || null];
+  }
+  return [column.name, column.number ? value ? Number(value) : null : value];
+}
+
+/** Loads current registrations and historical attendance from their own SharePoint lists. */
 export function createAttendanceSummaryData({ tokenProvider, repository: suppliedRepository } = {}) {
   if (!suppliedRepository && typeof tokenProvider !== "function") throw new TypeError("O relatório exige uma sessão Microsoft ativa.");
   if (suppliedRepository && ["resolveList", "getColumns", "getItemsPage"].some(name => typeof suppliedRepository[name] !== "function")) {
@@ -127,17 +176,14 @@ export function createAttendanceSummaryData({ tokenProvider, repository: supplie
     scopes => abortable(() => tokenProvider(scopes, { signal }), signal),
   ), SHAREPOINT_SITES);
 
-  async function loadSnapshot({ signal: externalSignal } = {}) {
+  async function withRepository(externalSignal, operation) {
     abortIfNeeded(externalSignal);
     const controller = new AbortController();
     const { signal } = controller;
     const abort = () => controller.abort(externalSignal.reason);
     externalSignal?.addEventListener("abort", abort, { once: true });
     try {
-      const repository = repositoryFor(signal);
-      const [suppliers, presences] = await Promise.all([loadList(repository, "suppliers", signal), loadList(repository, "presences", signal)]);
-      abortIfNeeded(signal);
-      return Object.freeze({ complete: true, suppliers, presences });
+      return await operation(repositoryFor(signal), signal);
     } catch (error) {
       controller.abort(error);
       throw error;
@@ -145,6 +191,70 @@ export function createAttendanceSummaryData({ tokenProvider, repository: supplie
       externalSignal?.removeEventListener("abort", abort);
     }
   }
+  function loadSnapshot({ signal } = {}) {
+    return withRepository(signal, async (repository, activeSignal) => {
+      const [suppliers, presences, stages] = await Promise.all(
+        ["suppliers", "presences", "stages"].map(kind => loadList(repository, kind, activeSignal)),
+      );
+      abortIfNeeded(activeSignal);
+      return Object.freeze({ complete: true, suppliers, presences, stages });
+    });
+  }
+
+  function loadSupplierEditor(id, { signal } = {}) {
+    if (!itemId(id)) throw new TypeError("ID de cadastro de fornecedor inválido.");
+    id = String(id);
+    return withRepository(signal, async (repository, activeSignal) => {
+      const { id: listId, columns } = await resolveSchema(repository, "suppliers", activeSignal);
+      const fields = selectedFields(columns, "suppliers");
+      const item = await abortable(() => repository.getItem(SITE, listId, id, "", { restrictedFields: fields, signal: activeSignal }), activeSignal);
+      const supplier = supplierRecord(item, columns, id);
+      const eTag = item.eTag || item["@odata.etag"] || item["odata.etag"] || item.fields["@odata.etag"];
+      if (!eTag || eTag === "*") throw new Error("A versão do cadastro do fornecedor não foi identificada.");
+      const [catalog, descriptions] = await Promise.all(
+        ["activities", "stages"].map(kind => loadList(repository, kind, activeSignal)),
+      );
+      const inBranch = row => !supplier.branch || valueKey(row.branch) === valueKey(supplier.branch);
+      const activities = catalog.filter(row => row.activity && inBranch(row));
+      const stages = descriptions.filter(row => row.id === supplier.stage || (inBranch(row) && valueKey(row.status) === "ATIVIDADE INICIADA"));
+      return { supplier, eTag, activities, stages };
+    });
+  }
+
+  function saveSupplierLinks(editor, links, { signal } = {}) {
+    const { supplier, eTag, activities, stages } = editor;
+    const { stage, activity } = links;
+    const selectedStage = stages.find(row => row.id === stage);
+    if (!itemId(supplier?.id) || typeof stage !== "string" || typeof activity !== "string"
+      || (stage !== supplier.stage && stage && !selectedStage)
+      || ((stage !== supplier.stage || activity !== supplier.activity) && activity
+        && !attendanceActivityOptions(activities, selectedStage?.stage).includes(activity))) {
+      throw new TypeError("Selecione vínculos válidos para o fornecedor.");
+    }
+    return withRepository(signal, async (repository, activeSignal) => {
+      const { id, columns } = await resolveSchema(repository, "suppliers", activeSignal);
+      const changes = {};
+      if (stage !== supplier.stage) {
+        const [name, value] = registryLinkField(columns[4], stage);
+        changes[name] = value;
+      }
+      if (activity !== supplier.activity) {
+        if (columns[5].lookup) throw new Error("O tipo do campo Atividade exercida não aceita o valor selecionado.");
+        changes[columns[5].name] = registryLinkField(columns[5], activity)[1];
+      }
+      if (!Object.keys(changes).length) return supplier;
+      const readbackFields = selectedFields(columns, "suppliers");
+      const item = await abortable(() => repository.updateItem(SITE, id, supplier.id, changes, {
+        eTag, readbackFields, signal: activeSignal,
+      }), activeSignal);
+      const saved = supplierRecord(item, columns, supplier.id);
+      if (saved.stage !== stage || saved.activity !== activity) {
+        throw new Error("O SharePoint não confirmou os vínculos selecionados.");
+      }
+      return saved;
+    });
+  }
+
   function loadSupplierDirectory({ signal = new AbortController().signal } = {}) {
     return loadList(repositoryFor(signal), "directory", signal);
   }
@@ -155,5 +265,5 @@ export function createAttendanceSummaryData({ tokenProvider, repository: supplie
     const rows = await loadList(repositoryFor(signal), "rhid", signal, { start, end });
     return rows.filter(row => row.date >= start && row.date <= end);
   }
-  return Object.freeze({ loadSnapshot, loadSupplierDirectory, loadRhidPresences });
+  return Object.freeze({ loadSnapshot, loadSupplierEditor, saveSupplierLinks, loadSupplierDirectory, loadRhidPresences });
 }
