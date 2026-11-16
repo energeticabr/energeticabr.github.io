@@ -88,14 +88,14 @@ test('NFE opens the horizontal fiscal table from the blue mascot in portrait and
       try {
         const layout = JSON.parse(dom.window.document.documentElement.dataset.layout);
         assert.equal(layout.error, undefined);
-        const { provisions, orange, sicoob, nfe, dda, open, rowIds, overflow, tableScrolls, rotated, mei, pdfOnLeft, metricsAbove,
+        const { provisions, orange, commercial, sicoob, nfe, dda, open, rowIds, overflow, tableScrolls, rotated, mei, pdfOnLeft, metricsAbove,
           headerControls, amountFits, pdfIconWidth, pdfTargetHeight, reportBodyWidth, availableReportWidth, overlayArrows,
           filterNames, filtersFit, taxHeading, taxStacked, invalidCno, pencilHeight
         } = layout;
         assert.equal(provisions.y, orange.y);
         assert.equal(orange.x - provisions.x, 56);
         assert.equal(nfe.x, provisions.x);
-        assert.equal(sicoob.y - provisions.y, 68);
+        assert.equal(sicoob.y - commercial.bottom, 24);
         assert.equal(nfe.y - sicoob.y, 56);
         assert.equal(dda.y - nfe.y, 56);
         assert.deepEqual({ open, rowIds, overflow, mei }, { open:true, rowIds:['2','3'], overflow:false, mei:true });
