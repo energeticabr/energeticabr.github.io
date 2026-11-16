@@ -1,0 +1,10 @@
+[Unit]
+Description=Consultar anexos DCTFWeb para as provisões de INSS
+
+[Timer]
+OnCalendar=*-*-* *:10,40:00
+Persistent=true
+AccuracySec=1min
+
+[Install]
+WantedBy=timers.target

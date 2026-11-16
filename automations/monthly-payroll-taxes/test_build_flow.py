@@ -200,7 +200,7 @@ class MonthlyFlowTests(unittest.TestCase):
         row = fixture['plan']['rows'][0]
         engine = NativePreflight(fixture)
         engine.values['Descritivo'] = 1
-        notice = 'SALÁRIO-FAMÍLIA: conferir crédito da competência na DCTFWeb'
+        notice = 'SALÁRIO-FAMÍLIA: anexar XML de Saída da DCTFWeb para conciliação automática'
         for flag in (None, False, True):
             for tax in ('INSS', 'FGTS'):
                 with self.subTest(flag=flag, tax=tax):

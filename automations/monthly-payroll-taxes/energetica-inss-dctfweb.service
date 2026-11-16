@@ -1,0 +1,17 @@
+[Unit]
+Description=Conciliação de salário-família do INSS pela DCTFWeb
+Wants=network-online.target
+After=network-online.target
+
+[Service]
+Type=oneshot
+Environment=PYTHONDONTWRITEBYTECODE=1
+EnvironmentFile=/etc/energetica-inss-dctfweb.env
+WorkingDirectory=/opt/energetica-inss-dctfweb
+ExecStart=/opt/energetica-whatsapp/.venv/bin/python /opt/energetica-inss-dctfweb/run_dctf_reconciliation.py
+TimeoutStartSec=240
+UMask=0077
+NoNewPrivileges=true
+PrivateTmp=true
+ProtectSystem=strict
+ReadWritePaths=/var/lib/energetica-whatsapp/inss-dctfweb
