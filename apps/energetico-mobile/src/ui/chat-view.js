@@ -335,10 +335,14 @@ function formatQuestionText(value) {
   const formatted = formatChatText(text);
   if (!range) return formatted;
   const fieldHtml = formatChatText(text.slice(range.start, range.end));
-  return formatted.replace(
+  const highlighted = formatted.replace(
     fieldHtml,
     `<span class="chat-question-field">${fieldHtml}</span>`,
   );
+  const settlementAmount = /^[^\p{L}\p{N}]*CONFIRMA A BAIXA DE TODOS OS ITENS PENDENTES SELECIONADOS DO DESCRITIVO \d+ NO VALOR DE (R\$[^\S\r\n]*\d[\d.]*,\d{2})\?/iu.exec(text)?.[1];
+  if (!settlementAmount) return highlighted;
+  const amountHtml = escapeHtml(settlementAmount);
+  return highlighted.replace(amountHtml, () => `<span class="chat-question-field">${amountHtml}</span>`);
 }
 
 function assistantAvatar() {

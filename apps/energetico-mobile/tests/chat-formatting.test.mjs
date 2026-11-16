@@ -89,6 +89,23 @@ test('destaca o identificador principal da pergunta em uma enquete', async t => 
     '🏭 QUAL É A FILIAL? A opção com ⭐ é a filial padrão.');
 });
 
+test('destaca o total do descritivo em vermelho e mostra a etapa escolhida na linha seguinte', async t => {
+  const question = '💰 CONFIRMA A BAIXA DE TODOS OS ITENS PENDENTES SELECIONADOS DO DESCRITIVO 65 NO VALOR DE R$ 21.802,14?\nEtapa vinculada: Fundação & Estrutura';
+  const dom = render(t, [{ type: 'poll', question, options: [] },
+    { type: 'poll', question: 'CONFIRMA A BAIXA DA PROVISÃO 65 NO VALOR DE R$ 21.802,14?', options: [] }]);
+  const document = dom.window.document;
+  const style = document.createElement('style');
+  style.textContent = await readFile(new URL('../src/styles.css', import.meta.url), 'utf8');
+  document.head.append(style);
+  const [description, provision] = document.querySelectorAll('.chat-choice-card p');
+  const highlighted = [...description.querySelectorAll('.chat-question-field')];
+  assert.deepEqual(highlighted.map(field => field.textContent), ['VALOR', 'R$ 21.802,14']);
+  assert.equal(dom.window.getComputedStyle(highlighted[1]).color, 'rgb(180, 35, 24)');
+  assert.equal(dom.window.getComputedStyle(description).whiteSpace, 'pre-wrap');
+  assert.equal(description.textContent, question);
+  assert.deepEqual([...provision.querySelectorAll('.chat-question-field')].map(field => field.textContent), ['PROVISÃO']);
+});
+
 test('destaca data de validade em vermelho na pergunta sobre documento com vencimento', async t => {
   const question = '📅 O DOCUMENTO DE HOMOLOGAÇÃO QUE ESTÁ SENDO CADASTRADO POSSUI DATA DE VALIDADE? Se responder SIM, a data de validade será solicitada na próxima etapa.';
   const options = [
