@@ -17,7 +17,6 @@ export const REPORT_PDF_TITLES = Object.freeze({
  'open-stage-progress':'Etapas e atividades da obra', 'open-commercial-receipts':'Contratos e pagamentos',
  'open-commercial-milestones':'Andamento comercial dos imóveis',
  'open-commercial-documents':'Pendências documentais dos imóveis', 'open-sac-pathologies':'Acompanhamento de patologias',
- 'open-rentals-report':'Relatório de aluguéis',
  'open-depreciation-report':'Depreciação do imobilizado',
  'open-document-control-report':'Controle de documentos', 'open-task-association-report':'Atividades por associação',
 });
@@ -187,7 +186,6 @@ function readFilters(root){
   const display=input.name.endsWith('Date')?root.querySelector(`[data-date-display="${input.name}"]`):null;
   const label=input.getAttribute('aria-label')?.replace(/^Calendário: /,'')||input.parentElement.querySelector('.sfs-trigger')?.getAttribute('aria-label')||input.parentElement.querySelector('.sfs-search')?.getAttribute('aria-label')||input.closest('label')?.querySelector('span')?.textContent||input.closest('label')?.firstChild?.textContent||input.name;
   let value=input.tagName==='SELECT'?[...input.selectedOptions].map(option=>option.label).join(', '):input.value;
-  if(input.tagName==='SELECT'&&!input.value&&input.dataset.reportEmptyValue)value=input.dataset.reportEmptyValue;
   if(/^\d{4}-\d{2}-\d{2}$/.test(value))value=`${value.slice(8,10)}/${value.slice(5,7)}/${value.slice(0,4)}`;
   return {label:String(label).trim(),value:String(value||display?.placeholder||'Todos').trim()};
  });
@@ -226,7 +224,7 @@ export function openFilteredReportPdf(root,{action,previewMedia,buildPdf=default
 export function decorateReportPrint(panel,{action,previewMedia,closePreview,buildPdf,loadLogo}={}){
  const root=panel?.element;if(!root?.ownerDocument||!REPORT_PDF_TITLES[action])return panel;
  const doc=root.ownerDocument,button=doc.createElement('button');button.type='button';button.className='report-print-button';button.dataset.action='print-report-pdf';button.innerHTML=PRINTER;button.setAttribute('aria-label','Abrir PDF do relatório');button.title='Abrir PDF com os filtros atuais';
- let host=root.querySelector('.pl-filters,.dr-toolbar,.dcr-toolbar,.tar-filters,.tar-toolbar,.ccr-toolbar,.gsr-toolbar,.cargos-header,.trancid-toolbar,.rentals-filters');
+ let host=root.querySelector('.pl-filters,.dr-toolbar,.dcr-toolbar,.tar-filters,.tar-toolbar,.ccr-toolbar,.gsr-toolbar,.cargos-header,.trancid-toolbar');
  host||=root.querySelector('[role="dialog"]')||root;
  // The shared PDF action supersedes the old browser-print shortcut.
  host.querySelector('.cr-print')?.remove();

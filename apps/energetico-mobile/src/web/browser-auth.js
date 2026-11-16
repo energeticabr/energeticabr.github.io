@@ -171,7 +171,6 @@ const RESUMABLE_ACTIONS = new Set([
   "action_commercial_milestones",
   "action_commercial_documents",
   "action_sac_pathologies",
-  "open-rentals-report",
   "home-depreciation-report",
   "home-document-control-report",
   "home-task-association-report",
