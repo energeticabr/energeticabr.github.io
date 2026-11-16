@@ -2,7 +2,7 @@ import { REGISTRATION_GALLERY_MODELS, registrationDateKey, registrationNumber, r
 import { fiscalDocumentType, buyerWithholding } from './sefaz-withholding.js';
 import { invoiceConstructionCno, registeredInvoiceCorrections } from './sefaz-cno.js';
 import { fiscalSupplierSimilarity } from './dda-provision-link.js';
-import { NFE_ORDER_FIELD, nfeOrderId } from './nfe-order-link.js';
+import { NFE_ORDER_FIELD, NFE_PROVISION_DESCRIPTION_FIELD, nfeOrderId } from './nfe-order-link.js';
 
 const model = REGISTRATION_GALLERY_MODELS.notas_fiscais_sefaz;
 const text = value => String(value ?? '').trim();
@@ -65,7 +65,9 @@ export function projectNfeRows(rows) {
     const danfeCnoName = type === 'NF-e' && !complete && cnoState === 'unknown' && validKey
       && text(fields.STATUS_DANFE).toUpperCase() === 'DISPONIVEL' && !/^CCe-/i.test(pdfName) ? pdfName : '';
     return [{
-      id:String(id), orderId:nfeOrderId(fields[NFE_ORDER_FIELD]), type, date, issuedAt:date ? Date.parse(rawDate.toString().includes('/') ? date : rawDate) : 0,
+      id:String(id), orderId:nfeOrderId(fields[NFE_ORDER_FIELD]),
+      provisionDescriptionId:nfeOrderId(fields[NFE_PROVISION_DESCRIPTION_FIELD]),
+      type, date, issuedAt:date ? Date.parse(rawDate.toString().includes('/') ? date : rawDate) : 0,
       supplier:text(fields.Title) || text(fields.FORNECEDOR),
       taxId:text(fields.CNPJ_FORNECEDOR), key, number:text(fields.NUMERO_NOTA),
       total:complete ? registrationNumber(fields.VALOR_TOTAL_NOTA) : null,

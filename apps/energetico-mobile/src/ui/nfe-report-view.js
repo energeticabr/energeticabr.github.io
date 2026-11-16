@@ -175,6 +175,11 @@ export function createNfeReportView({ document:doc = globalThis.document, data, 
     onPosted(receipt) { showLinked(receipt); picker?.close(); },
     onClose:reloadFiscalRows,
   });
+  const provision = data.provisionProposal && createNfeProposalView({
+    document:doc, host:root, service:data.provisionProposal, provision:true,
+    onPosted:showLinked, onClose:reloadFiscalRows,
+  });
+  const proposalOpen = () => proposal?.isOpen || provision?.isOpen;
   const onPropose = proposal && ((row, trigger) => void proposal.show(row, trigger));
   const picker = orderLink && createReportLinkPicker({
     document:doc, host:root, copy:ORDER_PICKER_COPY,
@@ -188,21 +193,25 @@ export function createNfeReportView({ document:doc = globalThis.document, data, 
     onClose:reloadFiscalRows,
   });
 
-  function showLinked({ invoiceId, orderId }) {
-    if (root.hidden || !rows || !nfeOrderId(invoiceId) || !nfeOrderId(orderId)) return;
+  function showLinked({ invoiceId, orderId, provisionDescriptionId }) {
+    if (root.hidden || !rows || !nfeOrderId(invoiceId) || !(nfeOrderId(orderId) || nfeOrderId(provisionDescriptionId))) return;
     const previous = rows.find(row => row.id === invoiceId);
     if (!previous) return;
-    const updated = { ...previous, orderId };
+    const updated = { ...previous, ...(provisionDescriptionId ? { provisionDescriptionId } : { orderId }) };
     rows = rows.map(row => row === previous ? updated : row);
     const cell = list.querySelector(`[data-invoice-id="${invoiceId}"] .nfe-link`);
     if (cell) {
       const hadFocus = cell.contains(doc.activeElement);
       renderOrderLink(cell, updated, true);
-      if (hadFocus) cell.querySelector('.nfe-link-edit').focus({ preventScroll:true });
+      if (hadFocus) (cell.querySelector('.nfe-link-edit') || closeButton).focus({ preventScroll:true });
     }
   }
 
   function renderOrderLink(cell, row, interactive) {
+    if (row.provisionDescriptionId) {
+      cell.replaceChildren(make('span', 'nfe-link-cluster nfe-link-linked', `Descritivo de provisão #${row.provisionDescriptionId}`));
+      return;
+    }
     if (!interactive) {
       if (row.orderId) cell.append(make('span', 'nfe-link-cluster nfe-link-linked', `ID ${row.orderId}`));
       else cell.textContent = '—';
@@ -226,6 +235,12 @@ export function createNfeReportView({ document:doc = globalThis.document, data, 
     if (propose) {
       const shortcut = button('Propor lançamentos', () => propose(row, shortcut), 'nfe-link-cluster nfe-link-propose');
       shortcut.setAttribute('aria-label', `Propor lançamentos para a nota ${row.number || row.id}`);
+      shortcut.dataset.reportScreenOnly = '';
+      controls.append(shortcut);
+    }
+    if (provision && canLink && !row.orderId && row.xmlUrl && row.pdfName && !row.cancelled) {
+      const shortcut = button('Propor provisão', () => void provision.show(row, shortcut), 'nfe-link-cluster nfe-link-propose');
+      shortcut.setAttribute('aria-label', `Propor provisão para a nota ${row.number || row.id}`);
       shortcut.dataset.reportScreenOnly = '';
       controls.append(shortcut);
     }
@@ -437,7 +452,7 @@ export function createNfeReportView({ document:doc = globalThis.document, data, 
   }
 
   async function capturePrint(options) {
-    if (root.hidden || !rows || picker?.isOpen || proposal?.isOpen) throw new Error('Aguarde a consulta das notas fiscais.');
+    if (root.hidden || !rows || picker?.isOpen || proposalOpen()) throw new Error('Aguarde a consulta das notas fiscais.');
     const { signal } = pageRequest;
     await pageFacts;
     signal.throwIfAborted();
@@ -518,7 +533,7 @@ export function createNfeReportView({ document:doc = globalThis.document, data, 
   }
 
   async function manualRefresh() {
-    if (root.hidden || refresh.disabled || pdfRequest || picker?.isOpen || proposal?.isOpen) return;
+    if (root.hidden || refresh.disabled || pdfRequest || picker?.isOpen || proposalOpen()) return;
     refreshStatus.set('pending');
     metrics.hidden = false;
     if (!syncMonitor) {
@@ -545,7 +560,7 @@ export function createNfeReportView({ document:doc = globalThis.document, data, 
   }
 
   function reloadFiscalRows() {
-    if (fiscalReloadPending && !root.hidden && !pdfRequest && !picker?.isOpen && !proposal?.isOpen) void load(true);
+    if (fiscalReloadPending && !root.hidden && !pdfRequest && !picker?.isOpen && !proposalOpen()) void load(true);
   }
 
   async function load(refreshSource = false) {
@@ -591,6 +606,7 @@ export function createNfeReportView({ document:doc = globalThis.document, data, 
     if (root.hidden) return;
     root.hidden = true;
     proposal?.close();
+    provision?.close();
     picker?.close();
     request?.abort();
     pageRequest?.abort();

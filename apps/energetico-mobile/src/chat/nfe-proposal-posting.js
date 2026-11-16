@@ -1,4 +1,4 @@
-import { NFE_ORDER_FIELD, nfeOrderId } from './nfe-order-link.js';
+import { NFE_ORDER_FIELD, NFE_PROVISION_DESCRIPTION_FIELD, nfeOrderId } from './nfe-order-link.js';
 import { fiscalDocumentType } from './sefaz-withholding.js';
 
 const RESERVATION = 'NFEPROPOSTA';
@@ -10,7 +10,7 @@ const LINE_ORIGIN = 'NFELINHA';
 const ORDER_FISCAL_STATUS = 'NOTAFISCAL';
 const ORDER_PENDING = 'PENDENTE';
 const ORDER_SUBMITTED = 'SUBMETIDO';
-const INVOICE_FIELDS = [NFE_ORDER_FIELD, RESERVATION, 'CHAVE_ACESSO', 'TIPO_FISCAL', 'MODELO',
+const INVOICE_FIELDS = [NFE_ORDER_FIELD, NFE_PROVISION_DESCRIPTION_FIELD, RESERVATION, 'CHAVE_ACESSO', 'TIPO_FISCAL', 'MODELO',
   'DIRECAO', 'PAPEL_EMPRESA', 'STATUS_IMPORTACAO', 'SITUACAO', 'STATUS_DANFE', 'DANFE_URL', 'XML_URL', 'NUMERO_NOTA'];
 const KEY_PATTERN = { 'NF-e':/^[0-9]{6}[A-Z0-9]{12}[0-9]{26}$/, 'NFS-e':/^\d{50}$/ };
 const FIELD_NAME = /^[A-Za-z_][A-Za-z0-9_]*$/;
@@ -19,12 +19,15 @@ const RESERVATION_LIMIT = 63000;
 const RESERVATION_EXPANDED_LIMIT = 4 * 1024 * 1024;
 const GZIP_PREFIX = 'gzip:';
 const READBACK_BATCH_SIZE = 6;
-const reservedFields = new Set([RESERVATION, ORDER_ORIGIN, LINE_ORIGIN, 'AGRUPAR', 'IDPEDIDO', 'ID']);
-const civilDateFields = new Set(['DATAPEDIDO', 'field_2', 'field_3']);
+const reservedFields = new Set([RESERVATION, ORDER_ORIGIN, LINE_ORIGIN, 'AGRUPAR', 'DESCRITIVOPROVISAO', 'IDPEDIDO', 'ID']);
+const civilDateFields = new Set(['DATAPEDIDO', 'field_2', 'field_3', 'DATA', 'DATAPREVISTOPGTO']);
 const civilDate = /^\d{4}-\d{2}-\d{2}(?:$|T)/;
 const blank = value => value == null || value === '';
 const record = value => value && Object.getPrototypeOf(value) === Object.prototype;
 const code = value => String(value ?? '').trim().toUpperCase().normalize('NFD').replace(/\p{Diacritic}/gu, '');
+// Older apps only read IDPEDIDO and NFEPROPOSTA; keep the latter occupied
+// after a provision is linked so those versions cannot post an order too.
+const provisionLinkMarker = id => JSON.stringify({ version:2, provisionDescriptionId:id });
 
 function canonicalJson(value) {
   if (value === null || typeof value === 'string' || typeof value === 'boolean' || Number.isFinite(value)) return JSON.stringify(value);
@@ -77,18 +80,19 @@ function payloadFields(fields, extraFields) {
   return fields;
 }
 
-function normalizePayload(payload) {
-  if (!record(payload?.draft) || !Array.isArray(payload.launchFields) || !payload.launchFields.length) {
-    throw new Error('A proposta fiscal não contém lançamentos válidos.');
+function normalizePayload(payload, headerKey, linesKey) {
+  const lines = payload?.[linesKey];
+  if (!record(payload?.draft) || !Array.isArray(lines) || !lines.length) {
+    throw new Error('A proposta fiscal não contém itens válidos.');
   }
   const seen = new Set();
-  const launchFields = payload.launchFields.map(({ number, fields }) => {
+  const lineFields = lines.map(({ number, fields }) => {
     const fiscalLine = nfeOrderId(number);
     if (!fiscalLine || seen.has(fiscalLine)) throw new Error('A linha fiscal está inválida ou repetida.');
     seen.add(fiscalLine);
     return { number:fiscalLine, fields:payloadFields(fields, 2) };
   });
-  return JSON.parse(canonicalJson({ draft:payload.draft, orderFields:payloadFields(payload.orderFields, 1), launchFields }));
+  return JSON.parse(canonicalJson({ draft:payload.draft, [headerKey]:payloadFields(payload[headerKey], 1), [linesKey]:lineFields }));
 }
 
 async function encodeReservation(value) {
@@ -130,7 +134,8 @@ async function readReservation(value, { id, key, pdfName, xmlUrl, number }) {
   if (blank(value)) return null;
   try {
     const stored = JSON.parse(await decodeNfeStoredRecord(value));
-    if (!record(stored?.draft) || stored.version !== 1 || stored.invoiceId !== id || stored.key !== key || stored.pdfName !== pdfName
+    if (!record(stored?.draft) || stored.version !== 1 || stored.provision !== undefined && stored.provision !== true
+      || stored.invoiceId !== id || stored.key !== key || stored.pdfName !== pdfName
       || stored.xmlUrl !== xmlUrl || stored.number !== number
       || !SHA256.test(stored.pdfHash) || !SHA256.test(stored.inputHash) || !SHA256.test(stored.planHash)) throw new Error();
     return stored;
@@ -147,7 +152,12 @@ function sameField(name, actual, expected) {
   return actual === expected;
 }
 
-export function createNfeProposalPosting({ repository, assertSession = () => {}, authorizeWrite, prepare, downloadPdf, resolveLearningScope }) {
+export function createNfeProposalPosting({ repository, assertSession = () => {}, authorizeWrite, prepare, downloadPdf, resolveLearningScope, provision = false }) {
+  const [linkField, otherLinkField, parentName, childName, childLink, headerKey, linesKey] = provision
+    ? [NFE_PROVISION_DESCRIPTION_FIELD, NFE_ORDER_FIELD, 'DESCRITIVOPROVISAO', 'PROVISÃO PGTOS', 'DESCRITIVOPROVISAO', 'parentFields', 'provisionFields']
+    : [NFE_ORDER_FIELD, NFE_PROVISION_DESCRIPTION_FIELD, 'NOTASPENDENTES', 'LANCAMENTOS', 'AGRUPAR', 'orderFields', 'launchFields'];
+  const target = provision ? 'descritivo de provisão' : 'pedido';
+
   function active(signal) {
     assertSession();
     signal?.throwIfAborted();
@@ -187,9 +197,18 @@ export function createNfeProposalPosting({ repository, assertSession = () => {},
     if (code(fields.STATUS_DANFE) !== 'DISPONIVEL' || fiscalPdfName(fields.DANFE_URL) !== invoice.pdfName) {
       throw new Error('O PDF fiscal mudou ou está indisponível. Atualize o relatório.');
     }
-    const linked = nfeOrderId(fields[NFE_ORDER_FIELD]);
-    if (!linked && !blank(fields[NFE_ORDER_FIELD])) throw new Error('O vínculo atual da nota fiscal está inválido.');
-    return { eTag, linked, fields, rawReservation:fields[RESERVATION], reservation:await readReservation(fields[RESERVATION], invoice) };
+    if (!blank(fields[otherLinkField])) {
+      throw new Error(provision ? 'A nota fiscal já está vinculada a um pedido.' : 'A nota fiscal já está vinculada a uma provisão.');
+    }
+    const linked = nfeOrderId(fields[linkField]);
+    if (!linked && !blank(fields[linkField])) throw new Error('O vínculo atual da nota fiscal está inválido.');
+    const rawReservation = fields[RESERVATION];
+    const reservation = provision && linked && rawReservation === provisionLinkMarker(linked)
+      ? null : await readReservation(rawReservation, invoice);
+    if (reservation && Boolean(reservation.provision) !== provision) {
+      throw new Error(provision ? 'Use Propor lançamentos para retomar o envio reservado.' : 'Use Propor provisão para retomar o envio reservado.');
+    }
+    return { eTag, linked, fields, rawReservation, reservation };
   }
 
   async function readFiscal(list, invoice, signal, extraFields = []) {
@@ -233,18 +252,18 @@ export function createNfeProposalPosting({ repository, assertSession = () => {},
       && LEARNING_FIELDS.some(field => String(error?.message).toUpperCase().includes(field));
   }
 
-  async function finishLink(list, invoice, reserved, orderId, orderList, orderFields, learning, signal) {
-    const link = { [NFE_ORDER_FIELD]:Number(orderId), [RESERVATION]:null };
+  async function finishLink(list, invoice, reserved, parentId, parentList, parentFields, learning, signal) {
+    const link = { [linkField]:Number(parentId), [RESERVATION]:provision ? provisionLinkMarker(parentId) : null };
     async function confirm(extra = [], fields = link) {
       let current = await readFiscal(list, invoice, signal, extra);
       if (!current.linked && current.rawReservation === reserved) {
-        await promoteOrder(orderList, orderId, orderFields, invoice.key, signal);
+        if (!provision) await promoteOrder(parentList, parentId, parentFields, invoice.key, signal);
         current = await writeFiscal(list, invoice, current, fields, signal, extra);
       }
-      if (current.linked !== orderId || current.reservation
+      if (current.linked !== parentId || current.reservation || current.rawReservation !== link[RESERVATION] && provision
         || extra.some(field => !blank(current.fields[field]))
           && extra.some(field => current.fields[field] !== fields[field])) {
-        throw new Error('O vínculo do pedido não foi confirmado na nota fiscal. Atualize o relatório e retome.');
+        throw new Error(`O vínculo do ${target} não foi confirmado na nota fiscal. Atualize o relatório e retome.`);
       }
     }
     if (learning) {
@@ -303,7 +322,7 @@ export function createNfeProposalPosting({ repository, assertSession = () => {},
       }
       if (!id) id = await findFinancial(list, column, token, signal);
     }
-    if (!id || expectedId && id !== expectedId) throw new Error('A nota já está vinculada a outro pedido ou o registro financeiro não foi encontrado.');
+    if (!id || expectedId && id !== expectedId) throw new Error(`A nota já está vinculada a outro ${target} ou o registro financeiro não foi encontrado.`);
     await readFinancial(list, id, expected, { acceptPending, signal });
     return id;
   }
@@ -331,24 +350,24 @@ export function createNfeProposalPosting({ repository, assertSession = () => {},
       active(signal);
       const attachments = await repository.listAttachments('personal', list, id);
       active(signal);
-      if (!Array.isArray(attachments)) throw new Error('A consulta de anexos do pedido está incompleta.');
+      if (!Array.isArray(attachments)) throw new Error(`A consulta de anexos do ${target} está incompleta.`);
       const matches = attachments.filter(file => file.fileName?.toLowerCase() === name.toLowerCase());
       if (!matches.length) return false;
-      if (matches.length !== 1 || matches[0].fileName !== name) throw new Error('O nome do PDF já está em uso no pedido.');
+      if (matches.length !== 1 || matches[0].fileName !== name) throw new Error(`O nome do PDF já está em uso no ${target}.`);
       const saved = await repository.downloadAttachment('personal', list, id, name, { signal });
-      if (await pdfFingerprint(saved) !== fingerprint) throw new Error('O PDF do pedido diverge do PDF fiscal original.');
+      if (await pdfFingerprint(saved) !== fingerprint) throw new Error(`O PDF do ${target} diverge do PDF fiscal original.`);
       active(signal);
       return true;
     }
     if (await confirm()) return;
-    if (readOnly) throw new Error('O PDF fiscal vinculado ao pedido está indisponível.');
+    if (readOnly) throw new Error(`O PDF fiscal vinculado ao ${target} está indisponível.`);
     active(signal);
     try { await repository.uploadAttachment('personal', list, id, pdf, name, { signal }); }
     catch (error) {
       if (await confirm()) return;
       throw error;
     }
-    if (!await confirm()) throw new Error('O SharePoint não confirmou o PDF fiscal no pedido.');
+    if (!await confirm()) throw new Error(`O SharePoint não confirmou o PDF fiscal no ${target}.`);
   }
 
   async function loadReservation(row, { signal } = {}) {
@@ -366,19 +385,19 @@ export function createNfeProposalPosting({ repository, assertSession = () => {},
     const input = canonicalJson(draft);
     await authorizeWrite({ signal });
     active(signal);
-    const [fiscalList, orders, launches] = await Promise.all([
+    const [fiscalList, parentList, childList] = await Promise.all([
       resolve('company', 'NOTAS_FISCAIS_SEFAZ', signal),
-      resolve('personal', 'NOTASPENDENTES', signal),
-      resolve('personal', 'LANCAMENTOS', signal),
+      resolve('personal', parentName, signal),
+      resolve('personal', childName, signal),
     ]);
     const [fiscal] = await Promise.all([
       readFiscal(fiscalList, invoice, signal),
-      confirmUniqueColumn(orders, ORDER_ORIGIN, signal),
-      confirmUniqueColumn(launches, LINE_ORIGIN, signal),
+      confirmUniqueColumn(parentList, ORDER_ORIGIN, signal),
+      confirmUniqueColumn(childList, LINE_ORIGIN, signal),
     ]);
     let current = fiscal;
-    if (current.linked && current.linked !== await findFinancial(orders, ORDER_ORIGIN, invoice.key, signal)) {
-      throw new Error('A nota fiscal já está vinculada a outro pedido.');
+    if (current.linked && current.linked !== await findFinancial(parentList, ORDER_ORIGIN, invoice.key, signal)) {
+      throw new Error(`A nota fiscal já está vinculada a outro ${target}.`);
     }
     const encoder = new TextEncoder();
     const inputHash = await sha256(encoder.encode(input));
@@ -390,14 +409,16 @@ export function createNfeProposalPosting({ repository, assertSession = () => {},
     const candidate = await prepare(source, JSON.parse(input), {
       signal, baseline:current.reservation || current.linked ? null : baseline, manualStages,
     });
-    const prepared = normalizePayload(candidate);
-    if (prepared.orderFields[ORDER_FISCAL_STATUS] !== ORDER_SUBMITTED) {
+    const prepared = normalizePayload(candidate, headerKey, linesKey);
+    const parentFields = prepared[headerKey], lineFields = prepared[linesKey];
+    if (!provision && parentFields[ORDER_FISCAL_STATUS] !== ORDER_SUBMITTED) {
       throw new Error('A proposta não confirmou a situação fiscal final do pedido.');
     }
     const planHash = await sha256(encoder.encode(canonicalJson(prepared)));
     if (!current.linked && !current.reservation) {
       const reservation = { version:1, invoiceId:invoice.id, key:invoice.key, pdfName:invoice.pdfName,
-        xmlUrl:invoice.xmlUrl, number:invoice.number, inputHash, pdfHash, planHash, draft:prepared.draft };
+        xmlUrl:invoice.xmlUrl, number:invoice.number, inputHash, pdfHash, planHash, draft:prepared.draft,
+        ...(provision ? { provision:true } : {}) };
       let next;
       if (SHA256.test(candidate.learning?.scope) && record(candidate.learning?.example)) {
         try {
@@ -422,18 +443,18 @@ export function createNfeProposalPosting({ repository, assertSession = () => {},
     if (!current.linked && !stored || current.linked && stored) throw new Error('O estado da reserva fiscal não foi confirmado.');
 
     const readOnly = Boolean(current.linked);
-    const orderId = await financialItem(orders, ORDER_ORIGIN, invoice.key, prepared.orderFields,
-      { readOnly, pendingOrder:true, expectedId:current.linked, signal });
-    await ensurePdf(orders, orderId, invoice.pdfName, pdf, pdfHash, readOnly, signal);
+    const parentId = await financialItem(parentList, ORDER_ORIGIN, invoice.key, parentFields,
+      { readOnly, pendingOrder:!provision, expectedId:current.linked, signal });
+    await ensurePdf(parentList, parentId, invoice.pdfName, pdf, pdfHash, readOnly, signal);
     const confirmed = [];
-    for (const line of prepared.launchFields) {
+    for (const line of lineFields) {
       const token = `${invoice.key}-${line.number}`;
-      const fields = { ...line.fields, AGRUPAR:orderId };
-      const id = await financialItem(launches, LINE_ORIGIN, token, fields, { readOnly, signal });
+      const fields = { ...line.fields, [childLink]:parentId };
+      const id = await financialItem(childList, LINE_ORIGIN, token, fields, { readOnly, signal });
       confirmed.push({ id, fields:{ ...fields, [LINE_ORIGIN]:token } });
       if (typeof onProgress === 'function') {
         try {
-          Promise.resolve(onProgress({ completedLines:confirmed.length, totalLines:prepared.launchFields.length })).catch(() => {});
+          Promise.resolve(onProgress({ completedLines:confirmed.length, totalLines:lineFields.length })).catch(() => {});
         } catch { /* A progress observer cannot affect posting. */ }
       }
     }
@@ -441,14 +462,16 @@ export function createNfeProposalPosting({ repository, assertSession = () => {},
       const reserved = current.rawReservation;
       for (let start = 0; start < confirmed.length; start += READBACK_BATCH_SIZE) {
         await Promise.all(confirmed.slice(start, start + READBACK_BATCH_SIZE).map(({ id, fields }) =>
-          readFinancial(launches, id, fields, { signal })));
+          readFinancial(childList, id, fields, { signal })));
       }
-      await ensurePdf(orders, orderId, invoice.pdfName, pdf, pdfHash, true, signal);
+      await ensurePdf(parentList, parentId, invoice.pdfName, pdf, pdfHash, true, signal);
       const learning = await confirmedLearning(stored, source);
-      await finishLink(fiscalList, invoice, reserved, orderId, orders, prepared.orderFields, learning, signal);
+      await finishLink(fiscalList, invoice, reserved, parentId, parentList, parentFields, learning, signal);
     }
     active(signal);
-    return { invoiceId:invoice.id, orderId, launchIds:confirmed.map(item => item.id) };
+    const ids = confirmed.map(item => item.id);
+    return provision ? { invoiceId:invoice.id, provisionDescriptionId:parentId, provisionIds:ids }
+      : { invoiceId:invoice.id, orderId:parentId, launchIds:ids };
   }
 
   return Object.freeze({ loadReservation, submit });

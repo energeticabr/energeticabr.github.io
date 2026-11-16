@@ -1,5 +1,7 @@
+import Decimal from 'decimal.js';
 import { validateAttachment } from '../../../../portal/data/attachments.js';
-import { buildNfeProposal, nfeProposalKey, validateNfeProposal } from './nfe-proposal-model.js';
+import { provisionTextTotal } from '../../../../portal/forms/provision-parent-workflow.js';
+import { buildNfeProposal, nfeProposalAmounts, nfeProposalKey, validateNfeProposal } from './nfe-proposal-model.js';
 import {
   createNfeProposalPosting, decodeNfeStoredRecord, NFE_LEARNING_FIELD, NFE_LEARNING_SCOPE,
 } from './nfe-proposal-posting.js';
@@ -12,6 +14,7 @@ const sortable = (left, right) => left.label.localeCompare(right.label, 'pt-BR',
 const available = value => !['inativo','inativa','bloqueado','bloqueada','cancelado','cancelada'].includes(nfeProposalKey(value));
 const iso = day => `${day}T12:00:00Z`;
 const FISCAL_NUMBER = /^\d{1,12}$/;
+const ProvisionDecimal = Decimal.clone({ precision:60 });
 
 async function fingerprint(value) {
   const digest = await globalThis.crypto.subtle.digest('SHA-256', new TextEncoder().encode(value));
@@ -38,6 +41,16 @@ function options(items, fields, { status = 'STATUS', filter = () => true } = {})
   })).filter(item => item.label).sort(sortable);
 }
 
+function normalizedDraft(draft, { supplier, branch, account, date, lines }) {
+  return {
+    supplierId:supplier.id, branchId:branch.id, accountId:account.id, date,
+    ...(draft.reviewStamp ? { reviewStamp:draft.reviewStamp } : {}),
+    lines:lines.map(line => ({ number:line.number, productId:line.product.id, stageId:line.stage.id,
+      quantity:line.quantity, unitPrice:line.unitPrice, adjustment:line.adjustment, discount:line.discount,
+      date:line.date, dueDate:line.dueDate, unitReviewed:line.unitReviewed })),
+  };
+}
+
 export function materializeNfeProposal(row, fiscal, draft, catalog) {
   const result = validateNfeProposal(draft, fiscal, catalog);
   const { supplier, branch, account, date, lines } = result;
@@ -62,11 +75,7 @@ export function materializeNfeProposal(row, fiscal, draft, catalog) {
     return { number:line.number, fields };
   });
   return {
-    draft:{ supplierId:supplier.id, branchId:branch.id, accountId:account.id, date,
-      ...(draft.reviewStamp ? { reviewStamp:draft.reviewStamp } : {}),
-      lines:lines.map(line => ({ number:line.number, productId:line.product.id, stageId:line.stage.id,
-        quantity:line.quantity, unitPrice:line.unitPrice, adjustment:line.adjustment, discount:line.discount,
-        date:line.date, dueDate:line.dueDate, unitReviewed:line.unitReviewed })) },
+    draft:normalizedDraft(draft, result),
     orderFields:{
       Title:`APP-NFE-${row.key}`, FILIAL:branch.label, FORNECEDOR:supplier.label,
       VALORTOTAL:result.total.replace('.', ','), DATAPEDIDO:iso(date), STATUS:'PENDENTE AUDITORIA',
@@ -77,8 +86,38 @@ export function materializeNfeProposal(row, fiscal, draft, catalog) {
   };
 }
 
+export function materializeNfeProvision(row, fiscal, draft, catalog) {
+  const result = validateNfeProposal(draft, fiscal, catalog, { provision:true });
+  const { supplier, branch, account, lines, total } = result;
+  const fiscalLabel = `${row.type} nº ${row.number || row.id}`;
+  const source = `${fiscalLabel} · Chave ${row.key}`;
+  const title = `APP-NFE-${row.key}`;
+  const common = { FILIAL:branch.label, FORNECEDOR:supplier.label, FORMAPGTO:account.label, STATUS:'PAGAMENTO PREVISTO' };
+  const provisionFields = lines.map(line => {
+    const net = new ProvisionDecimal(nfeProposalAmounts(line).total.toFixed(2));
+    const quantity = new ProvisionDecimal(line.quantity);
+    const originalPrice = new ProvisionDecimal(line.unitPrice);
+    // The provision recalculates total from QTD × VALORTOTAL + FRETE.
+    // When a discount lowers the unit price, retain the exact residual so the descritivo still reconciles.
+    const price = ProvisionDecimal.min(originalPrice, net.div(quantity).toDecimalPlaces(12, ProvisionDecimal.ROUND_DOWN));
+    const remainder = net.minus(price.times(quantity));
+    return { number:line.number, fields:{
+      ...common, Title:`${title}-${line.number}`, PRODUTO:line.product.label, ETAPA:line.stage.label,
+      DATA:iso(line.date), DATAPREVISTOPGTO:iso(line.dueDate), PGTOAGENDADO:'PENDENTE',
+      QTD:provisionTextTotal(line.quantity), VALORTOTAL:provisionTextTotal(price.toFixed()), FRETE:provisionTextTotal(remainder.toFixed()),
+      OBS:`${fiscalLabel} · Item ${line.number}: ${line.description}`.slice(0,255),
+    } };
+  });
+  const firstDueDate = lines.map(line => line.dueDate).sort()[0];
+  return {
+    draft:normalizedDraft(draft, result),
+    parentFields:{ ...common, Title:title, OBS:source, VALORTOTAL:provisionTextTotal(total), DATAPREVISTOPGTO:iso(firstDueDate) },
+    provisionFields,
+  };
+}
+
 export function createNfeProposalData({ repository, fiscalData, tokenProvider, siteConfig,
-  accountKey, userEmail, assertSession = () => {}, DOMParser = globalThis.DOMParser }) {
+  accountKey, userEmail, assertSession = () => {}, DOMParser = globalThis.DOMParser, provision = false }) {
   const active = signal => { assertSession(); signal?.throwIfAborted(); };
   const learner = clean(accountKey || userEmail).toLowerCase();
 
@@ -169,7 +208,7 @@ export function createNfeProposalData({ repository, fiscalData, tokenProvider, s
     const file = await fiscalData.downloadDocument(row.xmlUrl, { signal });
     const xml = await file.text();
     active(signal);
-    return { fiscal:parseNfeProposalXml(xml, row, DOMParser), xmlHash:await fingerprint(xml) };
+    return { fiscal:parseNfeProposalXml(xml, row, DOMParser, { provision }), xmlHash:await fingerprint(xml) };
   }
 
   async function downloadPdf(row, { signal } = {}) {
@@ -186,7 +225,7 @@ export function createNfeProposalData({ repository, fiscalData, tokenProvider, s
   }
 
   const posting = createNfeProposalPosting({
-    repository, assertSession, authorizeWrite, downloadPdf,
+    repository, assertSession, authorizeWrite, downloadPdf, provision,
     resolveLearningScope:async row => (await learningIdentity(row))?.scope,
     async prepare(row, draft, { signal, baseline, manualStages }) {
       const [{ fiscal, xmlHash }, catalog] = await Promise.all([loadXml(row, signal), loadCatalog(signal)]);
@@ -194,8 +233,8 @@ export function createNfeProposalData({ repository, fiscalData, tokenProvider, s
       if (draft.reviewStamp !== await reviewStamp(draft, catalog, xmlHash)) {
         throw new Error('O XML ou os cadastros desta proposta mudaram. Reabra o relatório para conferir os dados.');
       }
-      const proposal = materializeNfeProposal(row, fiscal, draft, catalog);
-      if (baseline) {
+      const proposal = (provision ? materializeNfeProvision : materializeNfeProposal)(row, fiscal, draft, catalog);
+      if (baseline && !provision) {
         const identity = await learningIdentity(row);
         const example = identity && createNfeLearningExample(identity.invoice, fiscal, baseline, proposal.draft, manualStages);
         if (example) proposal.learning = { scope:identity.scope, example };

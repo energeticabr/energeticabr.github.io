@@ -720,3 +720,46 @@ test('NFE opens the same proposal from the pencil and directly below it, and sub
   assert.equal(root.querySelector('.nfe-link-propose'), null);
   assert.equal(document.activeElement, root.querySelector('.nfe-link-edit'));
 });
+
+test('NFE proposes a provision directly below the launch shortcut and displays the linked description after saving', async t => {
+  const dom = new JSDOM('<main id="app"></main>');
+  const { document } = dom.window;
+  const writes = [];
+  const fiscal = { issueDate:'2026-11-06', dueDate:'2026-11-15', total:'1500.00', lines:[
+    { number:'1', description:'CIMENTO EXEMPLO', unit:'SC', quantity:'3', unitPrice:'500', adjustment:'0', discount:'0' },
+  ] };
+  const catalog = {
+    suppliers:[{ id:'1',label:'ELÉTRICA TESTE LTDA' }], branches:[{ id:'10',label:'OBRA A' }],
+    accounts:[{ id:'40',label:'CONTA TESTE' }], stages:[{ id:'30',label:'FUNDAÇÃO',branch:'OBRA A' }],
+    products:[{ id:'20',label:'CIMENTO EXEMPLO',unit:'SC',expenseType:'MATERIAL' }],
+  };
+  const draft = { supplierId:'1',branchId:'10',accountId:'40',date:fiscal.issueDate,
+    lines:[{ ...fiscal.lines[0],productId:'20',stageId:'30',date:fiscal.issueDate,dueDate:fiscal.dueDate }] };
+  const report = createNfeReportView({ document, data:{
+    loadSnapshot:async () => ({ rows:[invoice] }),
+    orderLink:{ async loadOptions() { throw new Error('unexpected order picker'); } },
+    proposal:{},
+    provisionProposal:{
+      async load() { return { fiscal,catalog,draft,reserved:false }; },
+      async submit(row, edited) {
+        writes.push([row.id, edited.lines[0].dueDate]);
+        return { invoiceId:row.id,provisionDescriptionId:'73',provisionIds:['92'] };
+      },
+    },
+  } });
+  t.after(() => { report.destroy(); dom.window.close(); });
+  await report.open();
+  const root = report.element;
+  const shortcut = root.querySelector('.nfe-link-propose')?.nextElementSibling;
+  assert.match(shortcut?.textContent || '', /Propor provisão/i);
+  shortcut.click();
+  await new Promise(resolve => setImmediate(resolve));
+  assert.match(root.querySelector('.nfe-proposal-dialog').getAttribute('aria-label'), /provisão/i);
+  assert.equal(writes.length, 0);
+  root.querySelector('[data-nfe-proposal-submit]').click();
+  await new Promise(resolve => setImmediate(resolve));
+  assert.deepEqual(writes, [['10','2026-11-15']]);
+  assert.match(root.querySelector('.nfe-link-linked').textContent, /Descritivo.*73/i);
+  assert.equal(root.querySelector('.nfe-link-propose'), null);
+  assert.equal(root.querySelector('.nfe-link-pencil'), null);
+});

@@ -208,7 +208,7 @@ function parseNfe(info, rowDate) {
   };
 }
 
-function parseNfse(info, rowDate) {
+function parseNfse(info, rowDate, provision) {
   const dps = child(child(info, 'DPS'), 'infDPS');
   const service = child(child(dps, 'serv'), 'cServ');
   const description = value(service, 'xDescServ', 'no serviço da NFS-e', true);
@@ -218,14 +218,18 @@ function parseNfse(info, rowDate) {
   const discounts = child(values, 'vDescCondIncond');
   const discount = amount(discounts, 'vDescIncond');
   if (discount.gt(unitPrice)) throw new Error('O desconto incondicionado supera o valor do serviço na NFS-e.');
+  const grossAfterDiscount = unitPrice.minus(discount);
+  const net = provision ? decimal(child(info, 'valores'), 'vLiq', { required:true }) : grossAfterDiscount;
+  if (net.gt(grossAfterDiscount)) throw new Error('O valor líquido declarado supera o valor do serviço na NFS-e.');
   return {
     issueDate:invoiceIssueDate(value(info, 'dhProc'), rowDate), dueDate:'',
-    lines:[{ number:'1', code, description, unit:'', quantity:new FiscalDecimal(1), unitPrice, discount, adjustment:zero }],
-    total:unitPrice.minus(discount),
+    lines:[{ number:'1', code, description, unit:'', quantity:new FiscalDecimal(1), unitPrice, discount,
+      adjustment:net.minus(grossAfterDiscount) }],
+    total:net,
   };
 }
 
-export function parseNfeProposalXml(xml, row, DOMParser) {
+export function parseNfeProposalXml(xml, row, DOMParser, { provision = false } = {}) {
   if (typeof xml !== 'string' || !xml || xml.length > 1_125_000 || /<!DOCTYPE|<!ENTITY/i.test(xml)) {
     throw new Error('XML fiscal inválido.');
   }
@@ -243,7 +247,7 @@ export function parseNfeProposalXml(xml, row, DOMParser) {
     throw new Error('A chave de acesso do XML fiscal não corresponde à nota selecionada.');
   }
 
-  const proposal = isNfe ? parseNfe(info, row.date) : parseNfse(info, row.date);
+  const proposal = isNfe ? parseNfe(info, row.date) : parseNfse(info, row.date, provision);
   return {
     issueDate:proposal.issueDate, dueDate:proposal.dueDate, total:proposal.total.toFixed(),
     lines:proposal.lines.map(({ number, code, description, unit, quantity, unitPrice, discount, adjustment }) => ({

@@ -13,12 +13,14 @@ const wrongPdf = new Blob(['%PDF-1.7\ndifferent\n%%EOF\n'], { type:'application/
 const draft = { lines:[{ number:1, account:'A' }, { number:2, account:'B' }] };
 const expected = { invoiceId:'7', orderId:'40', launchIds:['50','51'] };
 
-function fixture() {
+function fixture(provision = false) {
+  const parents = provision ? 'DESCRITIVOPROVISAO' : 'NOTASPENDENTES';
+  const children = provision ? 'PROVISÃO PGTOS' : 'LANCAMENTOS';
   const fiscal = { IDPEDIDO:null, NFEPROPOSTA:null, CHAVE_ACESSO:key, TIPO_FISCAL:'NF-e', DIRECAO:'ENTRADA',
     STATUS_IMPORTACAO:'XML_COMPLETO', SITUACAO:'AUTORIZADA', STATUS_DANFE:'DISPONIVEL',
     DANFE_URL:{ Url:`https://company.example/sites/finance/Lists/Notas/Attachments/7/${pdfName}` },
     XML_URL:{ Url:xmlUrl }, NUMERO_NOTA:'1' };
-  const tables = { NOTASPENDENTES:[], LANCAMENTOS:[] };
+  const tables = { NOTASPENDENTES:[], LANCAMENTOS:[], DESCRITIVOPROVISAO:[], 'PROVISÃO PGTOS':[] };
   const files = new Map();
   const events = [];
   const state = { revision:1, orderRevision:1, sourcePdf:pdf };
@@ -31,7 +33,7 @@ function fixture() {
     async getColumns(site, list, options) {
       assert.equal(site, 'personal');
       assert.equal(options.includeHidden, true);
-      const name = list === 'NOTASPENDENTES' ? 'NFEORIGEM' : 'NFELINHA';
+      const name = [parents,'NOTASPENDENTES'].includes(list) ? 'NFEORIGEM' : 'NFELINHA';
       return [{ name, text:{ allowMultipleLines:false }, readOnly:false, required:false,
         indexed:true, enforceUniqueValues:state.withoutUniqueConstraint !== name }];
     },
@@ -62,10 +64,10 @@ function fixture() {
       if (state.rejectLearning && fields.NFEAPRENDIZADO) {
         throw Object.assign(new Error('NFEAPRENDIZADO is read-only'), { status:400 });
       }
-      events.push(fields.IDPEDIDO ? 'link' : 'reserve');
+      events.push(fields.IDPEDIDO || fields.NFEDESCRITIVO ? 'link' : 'reserve');
       Object.assign(fiscal, fields);
       state.revision++;
-      if (fields.IDPEDIDO && state.loseLink) throw new Error('response lost after fiscal update');
+      if ((fields.IDPEDIDO || fields.NFEDESCRITIVO) && state.loseLink) throw new Error('response lost after fiscal update');
       return fiscalItem();
     },
     async getItems(site, list, query) {
@@ -77,10 +79,10 @@ function fixture() {
     async createItem(site, list, fields) {
       assert.equal(site, 'personal');
       assert.ok(fiscal.NFEPROPOSTA, 'financial writes require a durable fiscal reservation');
-      const technical = list === 'NOTASPENDENTES' ? 'NFEORIGEM' : 'NFELINHA';
+      const technical = list === parents ? 'NFEORIGEM' : 'NFELINHA';
       if (tables[list].some(row => row.fields[technical] === fields[technical])) throw new Error('unique key conflict');
-      if (list === 'LANCAMENTOS' && state.rejectLine === fields[technical]) throw new Error('launch creation unavailable');
-      const id = String((list === 'NOTASPENDENTES' ? 40 : 50) + tables[list].length);
+      if (list === children && state.rejectLine === fields[technical]) throw new Error('launch creation unavailable');
+      const id = String((list === parents ? 40 : 50) + tables[list].length);
       tables[list].push({ id, fields:structuredClone(fields) });
       events.push(`${list}:${id}`);
       if (list === 'LANCAMENTOS' && state.changeFiscalAfterLaunch === id) {
@@ -92,11 +94,11 @@ function fixture() {
       return { id };
     },
     async listAttachments(site, list, id) {
-      assert.deepEqual([site,list,id], ['personal','NOTASPENDENTES','40']);
+      assert.deepEqual([site,list,id], ['personal',parents,'40']);
       return [...files.keys()].map(fileName => ({ fileName }));
     },
     async uploadAttachment(site, list, id, file, name) {
-      assert.deepEqual([site,list,id,name], ['personal','NOTASPENDENTES','40',pdfName]);
+      assert.deepEqual([site,list,id,name], ['personal',parents,'40',pdfName]);
       if (state.rejectAttachment) throw new Error('attachment upload unavailable');
       const bytes = await file.arrayBuffer();
       if (files.has(name)) throw new Error('duplicate file name');
@@ -105,7 +107,7 @@ function fixture() {
       if (state.loseAttachment) throw new Error('response lost after attachment');
     },
     async downloadAttachment(site, list, id, name) {
-      assert.deepEqual([site,list,id], ['personal','NOTASPENDENTES','40']);
+      assert.deepEqual([site,list,id], ['personal',parents,'40']);
       return files.get(name);
     },
   };
@@ -115,12 +117,36 @@ function fixture() {
       STATUS:'PENDENTE AUDITORIA', NOTAFISCAL:'SUBMETIDO' },
       launchFields:input.lines.map(({ number,account }) => ({ number, fields:{ field_14:account, field_8:1, field_2:'2026-11-08T12:00:00Z' } })) };
   }
-  const service = () => createNfeProposalPosting({ repository, assertSession:() => {},
+  const service = (asProvision = provision) => createNfeProposalPosting({ repository, provision:asProvision, assertSession:() => {},
     authorizeWrite:async () => { if (state.unauthorized) throw new Error('write consent denied'); },
     resolveLearningScope:async () => state.scope ?? 'a'.repeat(64),
-    prepare, downloadPdf:async () => { state.onDownload?.(); return state.sourcePdf; } });
+    prepare:asProvision ? async (_, input) => ({
+      draft:input, parentFields:{ VALORTOTAL:'15', STATUS:'PAGAMENTO PREVISTO' },
+      provisionFields:input.lines.map(({ number,account }) => ({ number, fields:{ FORMAPGTO:account, PGTOAGENDADO:'PENDENTE' } })),
+    }) : prepare,
+    downloadPdf:async () => { state.onDownload?.(); return state.sourcePdf; } });
   return { fiscal, tables, files, events, state, service };
 }
+
+test('provision reserves the fiscal note, resumes partial writes, and links only the confirmed description', async () => {
+  const { fiscal,tables,events,state,service } = fixture(true);
+  state.rejectLine = `${key}-2`;
+  await assert.rejects(service().submit(invoice,draft), /creation unavailable/);
+  assert.equal(fiscal.NFEDESCRITIVO, undefined);
+  await assert.rejects(service(false).submit(invoice,draft), /provisão/i);
+  state.rejectLine = null;
+  state.loseLink = true;
+  assert.deepEqual(await service().submit(invoice, await service().loadReservation(invoice)),
+    { invoiceId:'7', provisionDescriptionId:'40', provisionIds:['50','51'] });
+  assert.equal(fiscal.NFEDESCRITIVO, 40);
+  assert.equal(fiscal.IDPEDIDO, null);
+  assert.deepEqual(JSON.parse(fiscal.NFEPROPOSTA), { version:2, provisionDescriptionId:'40' });
+  assert.equal(tables.NOTASPENDENTES.length + tables.LANCAMENTOS.length, 0);
+  assert.deepEqual(tables['PROVISÃO PGTOS'].map(({ fields }) => fields.DESCRITIVOPROVISAO), ['40','40']);
+  assert.deepEqual(events, ['reserve','DESCRITIVOPROVISAO:40','attach','PROVISÃO PGTOS:50','PROVISÃO PGTOS:51','link']);
+  assert.deepEqual(await service().submit(invoice,draft), { invoiceId:'7', provisionDescriptionId:'40', provisionIds:['50','51'] });
+  await assert.rejects(service(false).submit(invoice,draft), /provisão/i);
+});
 
 test('reserves, creates the order, confirms its PDF, creates both launches and links last', async () => {
   const { fiscal,tables,files,events,service } = fixture();

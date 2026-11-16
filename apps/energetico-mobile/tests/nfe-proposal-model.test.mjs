@@ -1,5 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
+import * as data from '../src/chat/nfe-proposal-data.js';
+import { provisionChildrenTotal } from '../../../portal/forms/provision-parent-workflow.js';
 import {
   buildNfeProposal, updateNfeProposalSupplier, updateNfeProposalBranch, updateNfeProposalProduct, validateNfeProposal,
 } from '../src/chat/nfe-proposal-model.js';
@@ -33,6 +35,22 @@ const invoice = { supplier:'Aco Exemplo', taxId:'12.345.678/0001-90' };
 const fiscal = { issueDate:'2026-11-08', dueDate:'2026-11-15', total:'19.50', lines:[
   { number:'1', description:'AÇO CA-50 8MM', unit:'KG', quantity:'2', unitPrice:'10', adjustment:'0.50', discount:'1' },
 ] };
+
+test('provision respects the fiscal line quantity and net total with text currency and earliest reviewed due date', () => {
+  const second = { ...fiscal.lines[0], number:'2', quantity:'3', unitPrice:'10', adjustment:'0', discount:'1' };
+  const document = { ...fiscal, total:'48.50', lines:[fiscal.lines[0], second] };
+  const draft = buildNfeProposal(invoice, document, catalog);
+  draft.lines[1].dueDate = '2026-11-12';
+  const result = data.materializeNfeProvision({ type:'NF-e',number:'17',key:'example' }, document, draft, catalog);
+  assert.equal(result.parentFields.VALORTOTAL, '48,5');
+  assert.equal(result.parentFields.DATAPREVISTOPGTO.slice(0,10), '2026-11-12');
+  assert.deepEqual(result.provisionFields.map(({ fields }) => fields.QTD), ['2','3']);
+  assert.deepEqual(result.provisionFields.map(({ fields }) => fields.PGTOAGENDADO), ['PENDENTE','PENDENTE']);
+  const names = { QTD:'QTD', VALORTOTAL:'VALORTOTAL', FRETE:'FRETE' };
+  assert.equal(provisionChildrenTotal(result.provisionFields, names), '48.5');
+  draft.lines[1].dueDate = '';
+  assert.throws(() => data.materializeNfeProvision(invoice, document, draft, catalog), /vencimento.*2/i);
+});
 
 test('proposes the exact supplier registration, its branch, known product and most used eligible stage', () => {
   const draft = buildNfeProposal(invoice, fiscal, catalog);

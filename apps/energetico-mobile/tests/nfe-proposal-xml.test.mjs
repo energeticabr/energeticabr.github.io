@@ -103,6 +103,15 @@ test('represents the national NFS-e service with only the unconditional discount
   });
 });
 
+test('payment provision uses the net amount declared in the national NFS-e', () => {
+  const parseProvision = xml => parseNfeProposalXml(xml, serviceRow, dom.window.DOMParser, { provision:true });
+  const proposal = parseProvision(service);
+  assert.equal(proposal.total, '763.5');
+  assert.equal(proposal.lines[0].discount, '20');
+  assert.equal(proposal.lines[0].adjustment, '-216.5');
+  assert.throws(() => parseProvision(service.replace('<vLiq>763.50</vLiq>', '')), /vLiq.*ausente/i);
+});
+
 test('rejects invoice totals or item gross values that cannot be explained by the fiscal fields', () => {
   assert.throws(() => parse(nfe.replace('<vNF>62.50</vNF>', '<vNF>62.60</vNF>')), /total.*NF-e/i);
   assert.throws(() => parse(nfe.replace('<vProd>62.90</vProd>', '<vProd>62.00</vProd>')), /valor.*produtos/i);
