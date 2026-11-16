@@ -116,11 +116,20 @@ def parent_payload(tax, branches):
         'DATAPREVISTOPGTO':"@concat(variables('Manifesto')?['dueDate'], 'T12:00:00Z')"}
 
 
+SALARY_FAMILY_FIELD = 'CONCILIARSALARIOFAMILIA'
+SALARY_FAMILY_NOTICE = 'SALÁRIO-FAMÍLIA: conferir crédito da competência na DCTFWeb'
+
+
+def salary_family_notice(row, tax, prefix, suffix):
+    flag = row + "?['salaryFamilyReview']"
+    return f"if(and(equals({tax}, 'INSS'), equals(coalesce({flag}, false), true)), '{prefix}{SALARY_FAMILY_NOTICE}{suffix}', '')"
+
+
 def provision_payload(row, tax, parent_id):
     key = "concat('ENCARGOS:', variables('Manifesto')?['competence'], ':', "+tax+", ':', string("+row+"?['supplierId']))"
     amount = "formatNumber(div(if(equals("+tax+", 'INSS'), "+row+"?['inssCents'], "+row+"?['fgtsCents']), 100.0), 'F2', 'en-US')"
     return {'Title':'@'+key,'FOLHAOPERACAO':'@'+key,'FILIAL':'@'+row+"?['branch']",'FORNECEDOR':'@'+row+"?['name']",'PRODUTO':'@'+row+"?['profession']",
-        'OBS':"@concat("+tax+", ' - ', "+row+"?['name'], ' - COMPETÊNCIA ', variables('Manifesto')?['competence'])",'IMOVEL':'TODOS','FORMAPGTO':'','QTD':'1','VALORTOTAL':'@'+amount,'FRETE':'0',
+        'OBS':"@concat("+tax+", ' - ', "+row+"?['name'], ' - COMPETÊNCIA ', variables('Manifesto')?['competence'], "+salary_family_notice(row, tax, ' | ', '.')+")",'IMOVEL':'TODOS','FORMAPGTO':'','QTD':'1','VALORTOTAL':'@'+amount,'FRETE':'0',
         'STATUS':'PAGAMENTO PREVISTO','PGTOAGENDADO':'PENDENTE','DATA':"@concat(variables('Manifesto')?['createdDate'], 'T12:00:00Z')",'DATAPREVISTOPGTO':"@concat(variables('Manifesto')?['dueDate'], 'T12:00:00Z')",
         'DESCRITIVOPROVISAO':'@string('+parent_id+')','IDFOLHA':'@'+row+"?['sheetId']"}
 
@@ -206,7 +215,7 @@ def calculation_actions(previous):
     """Native integer-cent implementation of model.plan_month's data contract."""
     actions = {}; prev = previous
     for label,guid,fields in [
-        ('Cadastros',HR,['Id','Title','IDFORNECEDORORIGEM','CARGO','STATUS','EMPREITEIRO','DATAADMISSAO','DATADESLIGAMENTO','VINCULO']),
+        ('Cadastros',HR,['Id','Title','IDFORNECEDORORIGEM','CARGO','STATUS','EMPREITEIRO','DATAADMISSAO','DATADESLIGAMENTO','VINCULO',SALARY_FAMILY_FIELD]),
         ('Salarios',SALARIES,['Id','CARGO','SALARIO','DATAREFERENCIA']),
         ('Folhas',SHEETS,['Id','FORNECEDOR','MESREFERENCIA'])]:
         new,prev = paginated(label,guid,fields,prev); actions.update(new)
@@ -236,7 +245,7 @@ def calculation_actions(previous):
              'Contribuicao_Faixa':increment('Empregado',"@div(mul(outputs('Largura_Faixa'), items('Cada_Faixa')?['rateBps']), 10000)",'Largura_Faixa'),
              'Guardar_Limite':variable('LimiteAnterior',"@items('Cada_Faixa')?['limitCents']",'Contribuicao_Faixa')}
     person['Cada_Faixa'] = loop("@variables('Regras')?['employeeBrackets']",bands,'Zerar_Faixa')
-    person['Linha_Bruta'] = compose({'supplierId':"@body('Ler_Fornecedor')?['Id']",'employeeId':"@items('Cada_Cadastro')?['Id']",'name':"@trim(body('Ler_Fornecedor')?['Title'])",'branch':"@trim(body('Ler_Fornecedor')?['FILIAL'])",'profession':"@trim(body('Ler_Fornecedor')?['PROFISSAO'])",'cargo':"@items('Cada_Cadastro')?['CARGO']",'admission':"@substring(items('Cada_Cadastro')?['DATAADMISSAO'], 0, 10)",'sheetId':"@first(body('Folhas_Do_Funcionario'))?['Id']",'salaryCents':"@outputs('Salario_Centavos')",'days':"@outputs('Dias')",'divisor':"@outputs('Divisor')",'baseCents':"@outputs('Base_Centavos')",'employeeCents':"@variables('Empregado')",'fgtsCents':"@div(mul(outputs('Base_Centavos'), variables('Regras')?['fgtsBps']), 10000)"},'Cada_Faixa')
+    person['Linha_Bruta'] = compose({'supplierId':"@body('Ler_Fornecedor')?['Id']",'employeeId':"@items('Cada_Cadastro')?['Id']",'name':"@trim(body('Ler_Fornecedor')?['Title'])",'branch':"@trim(body('Ler_Fornecedor')?['FILIAL'])",'profession':"@trim(body('Ler_Fornecedor')?['PROFISSAO'])",'cargo':"@items('Cada_Cadastro')?['CARGO']",'admission':"@substring(items('Cada_Cadastro')?['DATAADMISSAO'], 0, 10)",'sheetId':"@first(body('Folhas_Do_Funcionario'))?['Id']",'salaryCents':"@outputs('Salario_Centavos')",'days':"@outputs('Dias')",'divisor':"@outputs('Divisor')",'baseCents':"@outputs('Base_Centavos')",'employeeCents':"@variables('Empregado')",'salaryFamilyReview':f"@coalesce(items('Cada_Cadastro')?['{SALARY_FAMILY_FIELD}'], false)",'fgtsCents':"@div(mul(outputs('Base_Centavos'), variables('Regras')?['fgtsBps']), 10000)"},'Cada_Faixa')
     person['Acumular_Linha'] = append('LinhasBrutas',"@outputs('Linha_Bruta')",'Linha_Bruta')
     actions['Cada_Cadastro'] = loop("@body('Elegiveis')",person,'Elegiveis')
     actions['IDs_Calculados'] = select("@variables('LinhasBrutas')","@item()?['supplierId']",'Cada_Cadastro')
@@ -279,7 +288,8 @@ def document_actions(previous=None):
     line = {'Zerar_Componentes_HTML':variable('HTMLComponentes','')}
     line['Detalhar_Componentes'] = loop("@variables('Manifesto')?['rules']?['employerComponents']",{
         'Componente_HTML':append('HTMLComponentes',"@concat(' | ', "+escape_html("items('Detalhar_Componentes')?['label']")+", ': R$ ', formatNumber(div(items('Cada_Linha_PDF')?['components']?[items('Detalhar_Componentes')?['code']], 100.0), 'N2', 'pt-BR'))",string=True)},'Zerar_Componentes_HTML')
-    line['Linha_HTML'] = append('HTMLRows',"@concat('<tr><td colspan=\"4\"><strong>', "+escape_html("items('Cada_Linha_PDF')?['name']")+", '</strong> | ', "+escape_html("items('Cada_Linha_PDF')?['profession']")+", ' | IDFOLHA ', string(items('Cada_Linha_PDF')?['sheetId']), '</td></tr><tr><td>Salário R$ ', formatNumber(div(items('Cada_Linha_PDF')?['salaryCents'], 100.0), 'N2', 'pt-BR'), '</td><td>Admissão ', formatDateTime(items('Cada_Linha_PDF')?['admission'], 'dd/MM/yyyy'), '</td><td>', string(items('Cada_Linha_PDF')?['days']), '/', string(items('Cada_Linha_PDF')?['divisor']), ' dias | Base R$ ', formatNumber(div(items('Cada_Linha_PDF')?['baseCents'], 100.0), 'N2', 'pt-BR'), '</td><td><strong>R$ ', formatNumber(div("+amount+", 100.0), 'N2', 'pt-BR'), '</strong></td></tr>', if(equals(items('Criar_Documentos'), 'INSS'), concat('<tr><td colspan=\"4\">Empregado R$ ', formatNumber(div(items('Cada_Linha_PDF')?['components']?['EMPREGADO'], 100.0), 'N2', 'pt-BR'), variables('HTMLComponentes'), '</td></tr>'), ''))",'Detalhar_Componentes',string=True)
+    review = salary_family_notice("items('Cada_Linha_PDF')", "items('Criar_Documentos')", '<tr><td colspan="4"><strong>', '.</strong></td></tr>')
+    line['Linha_HTML'] = append('HTMLRows',"@concat('<tr><td colspan=\"4\"><strong>', "+escape_html("items('Cada_Linha_PDF')?['name']")+", '</strong> | ', "+escape_html("items('Cada_Linha_PDF')?['profession']")+", ' | IDFOLHA ', string(items('Cada_Linha_PDF')?['sheetId']), '</td></tr><tr><td>Salário R$ ', formatNumber(div(items('Cada_Linha_PDF')?['salaryCents'], 100.0), 'N2', 'pt-BR'), '</td><td>Admissão ', formatDateTime(items('Cada_Linha_PDF')?['admission'], 'dd/MM/yyyy'), '</td><td>', string(items('Cada_Linha_PDF')?['days']), '/', string(items('Cada_Linha_PDF')?['divisor']), ' dias | Base R$ ', formatNumber(div(items('Cada_Linha_PDF')?['baseCents'], 100.0), 'N2', 'pt-BR'), '</td><td><strong>R$ ', formatNumber(div("+amount+", 100.0), 'N2', 'pt-BR'), '</strong></td></tr>', if(equals(items('Criar_Documentos'), 'INSS'), concat('<tr><td colspan=\"4\">Empregado R$ ', formatNumber(div(items('Cada_Linha_PDF')?['components']?['EMPREGADO'], 100.0), 'N2', 'pt-BR'), variables('HTMLComponentes'), '</td></tr>'), ''), "+review+")",'Detalhar_Componentes',string=True)
     each['Cada_Linha_PDF'] = loop("@variables('Manifesto')?['rows']",line,'Zerar_HTML')
     each['HTML'] = compose("@concat('<!doctype html><html><head><meta charset=\"utf-8\"><style>@page{size:A4 landscape;margin:15mm}body{font:11px Arial;color:#143746}h1{color:#075367}table{width:100%;border-collapse:collapse}td,th{padding:7px;border:1px solid #bfd0d8;word-wrap:break-word}tr{page-break-inside:avoid}thead{display:table-header-group}.note{font-size:10px}</style></head><body><h1>', items('Criar_Documentos'), ' - memória de cálculo</h1><p>Competência ', variables('Manifesto')?['competence'], ' | Vencimento ', formatDateTime(variables('Manifesto')?['dueDate'], 'dd/MM/yyyy'), '</p><p>Base: somente SALARIO. Regras: ', "+escape_html("variables('Manifesto')?['rulesVersion']")+", '</p><table><thead><tr><th>Salário mensal</th><th>Admissão</th><th>Proporção/base</th><th>', items('Criar_Documentos'), '</th></tr></thead><tbody>', variables('HTMLRows'), '</tbody></table><h2>TOTAL R$ ', formatNumber(div(variables('Manifesto')?['totals']?[items('Criar_Documentos')], 100.0), 'N2', 'pt-BR'), '</h2><p class=\"note\">Valores previstos, ainda não pagos. Não é guia de recolhimento. Prêmio, alimentação e transporte não integram esta base. Admissão: dias corridos inclusivos / dias reais do mês; salário integral no mês completo. FGTS truncado por pessoa e INSS por faixa; componentes patronais totalizados por filial/código, com distribuição apenas de centavos residuais pelas maiores frações. Eventual regra específica da CCT deve ser observada.</p></body></html>')",'Cada_Linha_PDF')
     each['Salvar_HTML'] = api('shared_onedriveforbusiness','CreateFile',{'folderPath':'/','name':"@concat(variables('Manifesto')?['title'], '-', items('Criar_Documentos'), '.html')",'body':"@outputs('HTML')"},'HTML')
