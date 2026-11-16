@@ -20,6 +20,8 @@ const RESERVATION_LIMIT = 63000;
 const RESERVATION_EXPANDED_LIMIT = 4 * 1024 * 1024;
 const GZIP_PREFIX = 'gzip:';
 const READBACK_BATCH_SIZE = 6;
+const PDF_CONFIRMATION_DELAYS = [250, 750, 1500];
+const TRANSIENT_ATTACHMENT_STATUS = new Set([404, 408, 429, 500, 502, 503, 504]);
 const reservedFields = new Set([RESERVATION, ORDER_ORIGIN, LINE_ORIGIN, 'AGRUPAR', 'DESCRITIVOPROVISAO', 'IDPEDIDO', 'ID']);
 const civilDateFields = new Set(['DATAPEDIDO', 'field_2', 'field_3', 'DATA', 'DATAPREVISTOPGTO']);
 const civilDate = /^\d{4}-\d{2}-\d{2}(?:$|T)/;
@@ -349,28 +351,54 @@ export function createNfeProposalPosting({ repository, assertSession = () => {},
   }
 
   async function ensurePdf(list, id, name, pdf, fingerprint, readOnly, signal) {
-    async function confirm() {
+    async function inspect() {
       active(signal);
-      const attachments = await repository.listAttachments('personal', list, id);
+      const attachments = await repository.listAttachments('personal', list, id, { signal, requireCollection:true, namesOnly:true });
       active(signal);
       if (!Array.isArray(attachments)) throw new Error(`A consulta de anexos do ${target} está incompleta.`);
       const matches = attachments.filter(file => file.fileName?.toLowerCase() === name.toLowerCase());
       if (!matches.length) return false;
       if (matches.length !== 1 || matches[0].fileName !== name) throw new Error(`O nome do PDF já está em uso no ${target}.`);
-      const saved = await repository.downloadAttachment('personal', list, id, name, { signal });
-      if (await pdfFingerprint(saved) !== fingerprint) throw new Error(`O PDF do ${target} diverge do PDF fiscal original.`);
-      active(signal);
       return true;
     }
-    if (await confirm()) return;
+    function attachmentError(action, error) {
+      if (!error?.status) return error;
+      return new Error(`Não foi possível ${action} o PDF fiscal no ${target} (HTTP ${error.status}). ${error.message}`, { cause:error });
+    }
+    async function confirm(waitForPdf) {
+      let seen = false;
+      for (let attempt = 0; ; attempt++) {
+        const delay = PDF_CONFIRMATION_DELAYS[attempt];
+        try {
+          if (await inspect()) {
+            seen = true;
+            const saved = await repository.downloadAttachment('personal', list, id, name, { signal });
+            if (await pdfFingerprint(saved) !== fingerprint) throw new Error(`O PDF do ${target} diverge do PDF fiscal original.`);
+            active(signal);
+            return true;
+          }
+          if (delay === undefined && seen) throw new Error(`O PDF fiscal deixou de aparecer nos anexos do ${target} durante a conferência.`);
+          if ((!waitForPdf && !seen) || delay === undefined) return false;
+        } catch (error) {
+          active(signal);
+          if (delay === undefined || !TRANSIENT_ATTACHMENT_STATUS.has(error?.status)) {
+            throw attachmentError('conferir', error);
+          }
+        }
+        await new Promise(resolve => setTimeout(resolve, delay));
+      }
+    }
+    // A successful upload can be visible to SharePoint before the read-back
+    // endpoint serves it. Verify the same bytes before creating any lines.
+    if (await confirm(readOnly)) return;
     if (readOnly) throw new Error(`O PDF fiscal vinculado ao ${target} está indisponível.`);
+    let uploadError;
     active(signal);
     try { await repository.uploadAttachment('personal', list, id, pdf, name, { signal }); }
-    catch (error) {
-      if (await confirm()) return;
-      throw error;
-    }
-    if (!await confirm()) throw new Error(`O SharePoint não confirmou o PDF fiscal no ${target}.`);
+    catch (error) { active(signal); uploadError = error; }
+    if (await confirm(true)) return;
+    if (uploadError) throw attachmentError('anexar', uploadError);
+    throw new Error(`O SharePoint não confirmou o PDF fiscal no ${target}.`);
   }
 
   async function loadReservation(row, { signal } = {}) {

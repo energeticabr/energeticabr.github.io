@@ -721,7 +721,7 @@ test('NFE opens the same proposal from the pencil and directly below it, and sub
   assert.equal(document.activeElement, root.querySelector('.nfe-link-edit'));
 });
 
-test('NFE proposes a provision directly below the launch shortcut and displays the linked description after saving', async t => {
+test('NFE shows the provision shortcut and links the description after saving without an account', async t => {
   const dom = new JSDOM('<main id="app"></main>');
   const { document } = dom.window;
   const writes = [];
@@ -742,7 +742,7 @@ test('NFE proposes a provision directly below the launch shortcut and displays t
     provisionProposal:{
       async load() { return { fiscal,catalog,draft,reserved:false }; },
       async submit(row, edited) {
-        writes.push([row.id, edited.lines[0].dueDate]);
+        writes.push([row.id, edited.lines[0].dueDate, edited.accountId]);
         return { invoiceId:row.id,provisionDescriptionId:'73',provisionIds:['92'] };
       },
     },
@@ -755,10 +755,14 @@ test('NFE proposes a provision directly below the launch shortcut and displays t
   shortcut.click();
   await new Promise(resolve => setImmediate(resolve));
   assert.match(root.querySelector('.nfe-proposal-dialog').getAttribute('aria-label'), /provisão/i);
+  const account = root.querySelector('[name="accountId"]');
+  assert.match(account.options[0].textContent, /opcional/i);
+  account.value = '';
+  account.dispatchEvent(new dom.window.Event('change'));
   assert.equal(writes.length, 0);
   root.querySelector('[data-nfe-proposal-submit]').click();
   await new Promise(resolve => setImmediate(resolve));
-  assert.deepEqual(writes, [['10','2026-11-15']]);
+  assert.deepEqual(writes, [['10','2026-11-15','']]);
   assert.match(root.querySelector('.nfe-link-linked').textContent, /Descritivo.*73/i);
   assert.equal(root.querySelector('.nfe-link-propose'), null);
   assert.equal(root.querySelector('.nfe-link-pencil'), null);

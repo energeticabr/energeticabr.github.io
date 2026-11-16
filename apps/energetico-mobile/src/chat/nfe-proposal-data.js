@@ -43,7 +43,7 @@ function options(items, fields, { status = 'STATUS', filter = () => true } = {})
 
 function normalizedDraft(draft, { supplier, branch, account, date, lines }) {
   return {
-    supplierId:supplier.id, branchId:branch.id, accountId:account.id, date,
+    supplierId:supplier.id, branchId:branch.id, accountId:account?.id ?? '', date,
     ...(draft.reviewStamp ? { reviewStamp:draft.reviewStamp } : {}),
     lines:lines.map(line => ({ number:line.number, productId:line.product.id, stageId:line.stage.id,
       quantity:line.quantity, unitPrice:line.unitPrice, adjustment:line.adjustment, discount:line.discount,
@@ -92,7 +92,7 @@ export function materializeNfeProvision(row, fiscal, draft, catalog) {
   const fiscalLabel = `${row.type} nº ${row.number || row.id}`;
   const source = `${fiscalLabel} · Chave ${row.key}`;
   const title = `APP-NFE-${row.key}`;
-  const common = { FILIAL:branch.label, FORNECEDOR:supplier.label, FORMAPGTO:account.label, STATUS:'PAGAMENTO PREVISTO' };
+  const common = { FILIAL:branch.label, FORNECEDOR:supplier.label, FORMAPGTO:account?.label ?? null, STATUS:'PAGAMENTO PREVISTO' };
   const provisionFields = lines.map(line => {
     const net = new ProvisionDecimal(nfeProposalAmounts(line).total.toFixed(2));
     const quantity = new ProvisionDecimal(line.quantity);

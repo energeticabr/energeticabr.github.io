@@ -105,6 +105,7 @@ function fixture(provision = false) {
     },
     async listAttachments(site, list, id) {
       assert.deepEqual([site,list,id], ['personal',parents,'40']);
+      if (files.size && state.hideSavedAttachment) { state.hideSavedAttachment = false; return []; }
       return [...files.keys()].map(fileName => ({ fileName }));
     },
     async uploadAttachment(site, list, id, file, name) {
@@ -118,6 +119,11 @@ function fixture(provision = false) {
     },
     async downloadAttachment(site, list, id, name) {
       assert.deepEqual([site,list,id], ['personal',parents,'40']);
+      if (state.rejectAttachmentRead?.length) {
+        const status = state.rejectAttachmentRead.shift();
+        assert.equal(tables[children].length, 0, 'provisions wait for the verified attachment');
+        throw Object.assign(new Error('O SharePoint recusou a operação de anexo.'), { status });
+      }
       return files.get(name);
     },
   };
@@ -173,6 +179,18 @@ test('reserves, creates the order, confirms its PDF, creates both launches and l
   assert.equal(fiscal.IDPEDIDO, 40);
   assert.equal(fiscal.NFEPROPOSTA, null);
   assert.deepEqual(tables.LANCAMENTOS.map(({ fields }) => [fields.AGRUPAR,fields.field_14]), [['40','A'],['40','B']]);
+  assert.deepEqual(files.get(pdfName), await pdf.arrayBuffer());
+});
+
+test('a provision verifies a saved PDF after SharePoint temporarily hides it or rejects its download', async () => {
+  const { fiscal,tables,files,events,state,service } = fixture(true);
+  state.hideSavedAttachment = true;
+  state.rejectAttachmentRead = [404, 503];
+  assert.deepEqual(await service().submit(invoice,draft),
+    { invoiceId:'7', provisionDescriptionId:'40', provisionIds:['50','51'] });
+  assert.equal(fiscal.NFEDESCRITIVO, 40);
+  assert.equal(tables.DESCRITIVOPROVISAO.length, 1);
+  assert.equal(events.filter(event => event === 'attach').length, 1);
   assert.deepEqual(files.get(pdfName), await pdf.arrayBuffer());
 });
 

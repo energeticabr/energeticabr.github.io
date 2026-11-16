@@ -219,7 +219,7 @@ export function createNfeProposalView({ document:doc, host, service, onPosted, o
       const account = field(headerFields, 'Conta / forma de pagamento', 'accountId', 'select', value => { entry.draft.accountId = value; });
       populate(supplier, catalog.suppliers, draft.supplierId, 'Selecione o fornecedor');
       populate(branch, catalog.branches, draft.branchId, 'Selecione a filial');
-      populate(account, catalog.accounts, draft.accountId, 'Selecione a conta');
+      populate(account, catalog.accounts, draft.accountId, provision ? 'Sem conta (opcional)' : 'Selecione a conta');
       pickers.set(headerFields, bindSearchableFilterSelects(headerFields, pickerOptions));
       const list = el('div', 'nfe-proposal-lines');
       body.append(list);

@@ -62,6 +62,23 @@ test('proposes the exact supplier registration, its branch, known product and mo
   assert.equal(valid.lines[0].netAdjustment,-0.5);
 });
 
+test('a provision accepts no account and retains a registered account when selected', () => {
+  const draft = buildNfeProposal(invoice, fiscal, catalog);
+  const row = { type:'NF-e', number:'17', key:'example' };
+  const selected = data.materializeNfeProvision(row, fiscal, draft, catalog);
+  assert.equal(selected.parentFields.FORMAPGTO, 'BOLETO');
+  assert.equal(selected.provisionFields[0].fields.FORMAPGTO, 'BOLETO');
+
+  draft.accountId = '';
+  const optional = data.materializeNfeProvision(row, fiscal, draft, catalog);
+  assert.equal(optional.draft.accountId, '');
+  assert.equal(optional.parentFields.FORMAPGTO, null);
+  assert.equal(optional.provisionFields[0].fields.FORMAPGTO, null);
+  assert.throws(() => data.materializeNfeProposal(row, fiscal, draft, catalog), /conta/i);
+  assert.throws(() => data.materializeNfeProvision(row, fiscal, { ...draft, accountId:'999' }, catalog), /conta/i);
+  assert.throws(() => data.materializeNfeProvision(row, fiscal, { ...draft, supplierId:'' }, catalog), /fornecedor/i);
+});
+
 test('branch, supplier and product edits recompute stages from the selected branch only', () => {
   const original = buildNfeProposal(invoice, fiscal, catalog);
   const branch = updateNfeProposalBranch(original, '10', catalog);
