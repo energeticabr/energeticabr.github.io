@@ -401,6 +401,7 @@ test("galerias de fornecedor, conta, tipo e unidade editam e deletam na lista de
         assert.match(card.textContent, /CADASTRO EXEMPLO/);
         assert.match(card.textContent, /ATIVO/);
         assert.ok(card.querySelector('[data-gallery-action="edit"]'));
+        assert.equal(document.querySelector("[data-gallery-create]"), null);
         const editor = await data.loadEditor("17");
         assert.equal(editor.contract.formVariant.id, variant);
         assert.ok(editor.contract.formColumns.some(column => column.name === "Title" && column.editable));

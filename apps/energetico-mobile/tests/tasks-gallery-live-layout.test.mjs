@@ -6,7 +6,7 @@ import { join, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { spawn } from 'node:child_process';
 import { setTimeout as delay } from 'node:timers/promises';
-import { createServer } from 'vite';
+import { createIsolatedViteServer } from './helpers/isolated-vite-server.mjs';
 
 const appRoot = resolve(fileURLToPath(new URL('..', import.meta.url)));
 const browser = [process.env.CHROME_BIN, 'C:\\Program Files\\Google\\Chrome\\Application\\chrome.exe',
@@ -15,8 +15,10 @@ const browser = [process.env.CHROME_BIN, 'C:\\Program Files\\Google\\Chrome\\App
 
 test('rotação preserva tipografia; check e popup de conclusão funcionam em telas pequenas e desktop', { timeout: 120_000 }, async t => {
   if (!browser) return t.skip('Chrome/Edge indisponível');
-  const server = await createServer({ root: appRoot, server: { host: '127.0.0.1', port: 0,
-    fs: { allow: [resolve(appRoot, '../..')] } }, logLevel: 'silent' });
+  const server = await createIsolatedViteServer({ root: appRoot, logLevel: 'silent',
+    optimizeDeps: { noDiscovery: true, include: ['decimal.js', 'pdf-lib', 'pako', '@capacitor/core'] },
+    server: { host: '127.0.0.1', port: 0, hmr: false, fs: { allow: [resolve(appRoot, '../..')] } },
+  });
   const profile = mkdtempSync(join(tmpdir(), 'tasks-gallery-layout-')), pending = new Map();
   let child, socket;
   try {
@@ -76,7 +78,7 @@ test('rotação preserva tipografia; check e popup de conclusão funcionam em te
     // Exercise shared typography in chat and in a report mounted outside #app.
     await send('Emulation.setDeviceMetricsOverride', { width: 390, height: 844, deviceScaleFactor: 1, mobile: true }, sessionId);
     await send('Page.navigate', { url: `http://127.0.0.1:${server.httpServer.address().port}/tests/fixtures/app-zoom-guard.html` }, sessionId);
-    await waitFor('Boolean(document.documentElement.dataset.layout)');
+    await waitFor('Boolean(document.documentElement?.dataset.layout)');
     await verifyRotation(['html', 'body', '.chat-messages', '#menu', '#search']);
     await send('Page.navigate', { url: `http://127.0.0.1:${server.httpServer.address().port}/tests/fixtures/report-landscape.html?visual` }, sessionId);
     await waitFor('Boolean(document.querySelector(".pl-overlay"))');

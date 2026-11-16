@@ -208,7 +208,7 @@ export function createRegistrationGallery({ document: doc = globalThis.document,
   const createShortcut = createGalleryCreationToolbar({ document: doc, root, disclosure: filterDisclosure, onCreate, close: hide,
     label: `Adicionar registro — ${model.title}`, action: 'create-registration',
     isAvailable: () => !destroyed && !attachmentLoading });
-  if (model.readOnly) createShortcut.button.remove();
+  if (model.readOnly || model.allowCreate === false) createShortcut.button.remove();
   const toolbar = el("div", "rg-toolbar");
   const filterFields = model.filterFields || ["STATUS"];
   if (model.filterFields) toolbar.classList.add("rg-toolbar--documents");

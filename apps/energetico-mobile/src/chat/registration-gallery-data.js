@@ -107,7 +107,7 @@ export const REGISTRATION_GALLERY_MODELS = Object.freeze({
   supplier: Object.freeze({
     editFormVariant: "E2- EDITAR FORNECEDOR.pa.yaml#EDITARFORNECEDOR",
     title: "GALERIA FORNECEDOR", screen: "G42- HISTÓRICO FORNECEDOR", listName: "FORNECEDORES", aliases: ["FORNECEDORES"],
-    nativeCard: true, showPdfAttachments: true, deleteConfirmedVersion: true, searchPlaceholder: "Pesquisar fornecedor, filial ou ID",
+    nativeCard: true, showPdfAttachments: true, deleteConfirmedVersion: true, allowCreate: false, searchPlaceholder: "Pesquisar fornecedor, filial ou ID",
     fields: ["CADASTRO", "FILIAL", "EMPREITEIRO", "STATUS", "ID"], filterFields: ["STATUS", "FILIAL", "EMPREITEIRO"],
     fieldAliases: { CADASTRO: ["Title"] }, fieldLabels: { CADASTRO: "Fornecedor" },
     sourceSort: { field: "ID", direction: "desc", type: "number" },
@@ -115,19 +115,19 @@ export const REGISTRATION_GALLERY_MODELS = Object.freeze({
   account: Object.freeze({
     editFormVariant: "GALERIACONTA.pa.yaml#Form52_2",
     title: "GALERIA CONTA", screen: "GALERIACONTA", listName: "CADASTROCONTA", aliases: ["CADASTROCONTA", "CADASTRO CONTA"],
-    nativeCard: true, showPdfAttachments: true, deleteConfirmedVersion: true, searchPlaceholder: "Pesquisar conta ou ID",
+    nativeCard: true, showPdfAttachments: true, deleteConfirmedVersion: true, allowCreate: false, searchPlaceholder: "Pesquisar conta ou ID",
     fields: ["CONTA", "STATUS", "ID"], filterFields: ["STATUS"], fieldAliases: { CONTA: ["Title"] },
   }),
   materialType: Object.freeze({
     editFormVariant: "G2- HISTÓRICO TIPO MATERIAL.pa.yaml#Form13",
     title: "GALERIA TIPO DE MATERIAL", screen: "G2- HISTÓRICO TIPO MATERIAL", listName: "CADASTROTIPOMATERIAL", aliases: ["CADASTROTIPOMATERIAL", "CADASTRO TIPO MATERIAL"],
-    nativeCard: true, showPdfAttachments: true, deleteConfirmedVersion: true, searchPlaceholder: "Pesquisar tipo de material ou ID",
+    nativeCard: true, showPdfAttachments: true, deleteConfirmedVersion: true, allowCreate: false, searchPlaceholder: "Pesquisar tipo de material ou ID",
     fields: ["TIPO", "STATUS", "ID"], filterFields: ["STATUS"], fieldAliases: { TIPO: ["Title"] }, fieldLabels: { TIPO: "Tipo de material" },
   }),
   unitOfMeasure: Object.freeze({
     editFormVariant: "G41- HISTÓRICO UNIDADE MEDIDA.pa.yaml#Form23",
     title: "GALERIA UNIDADE DE MEDIDA", screen: "G41- HISTÓRICO UNIDADE MEDIDA", listName: "CADASTROUNIDADEMEDIDA", aliases: ["CADASTROUNIDADEMEDIDA", "CADASTRO UNIDADE MEDIDA"],
-    nativeCard: true, showPdfAttachments: true, deleteConfirmedVersion: true, searchPlaceholder: "Pesquisar unidade de medida ou ID",
+    nativeCard: true, showPdfAttachments: true, deleteConfirmedVersion: true, allowCreate: false, searchPlaceholder: "Pesquisar unidade de medida ou ID",
     fields: ["UNIDADE MEDIDA", "STATUS", "ID"], filterFields: ["STATUS"],
     fieldAliases: { "UNIDADE MEDIDA": ["Title"] }, fieldLabels: { "UNIDADE MEDIDA": "Unidade de medida" },
   }),

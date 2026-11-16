@@ -64,10 +64,10 @@ test('FOLHAPGTO native selector invokes onCreate before using any composer fallb
   assert.equal(ctx.root().querySelector('[data-payroll-payment-screen]'), null);
 });
 
-test('creation coverage includes every editable registration kind', () => {
-  const editableKinds = Object.entries(REGISTRATION_GALLERY_MODELS)
-    .filter(([, model]) => !model.readOnly).map(([kind]) => kind);
-  assert.deepEqual(registrationKinds.sort(), editableKinds.sort());
+test('creation coverage includes every registration gallery with its own create shortcut', () => {
+  const createKinds = Object.entries(REGISTRATION_GALLERY_MODELS)
+    .filter(([, model]) => !model.readOnly && model.allowCreate !== false).map(([kind]) => kind);
+  assert.deepEqual(registrationKinds.sort(), createKinds.sort());
 });
 
 for (const entry of galleryCases) {
