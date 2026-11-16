@@ -36,7 +36,7 @@ test('a rotated report without a custom frame also fits the keyboard viewport', 
   });
 });
 
-function setup(t, { multiple = false } = {}) {
+function setup(t, { multiple = false, framed = false } = {}) {
   const dom = new JSDOM('<style></style><form><label>PRODUTO<select name="product"><option value="">Todos</option><option value="aco">Aço estrutural</option><option value="cimento">Cimento</option></select></label><button type="button" id="outside">Fora</button></form>');
   const doc = dom.window.document, select = doc.querySelector('select');
   doc.querySelector('style').textContent = css; select.multiple = multiple;
@@ -44,7 +44,14 @@ function setup(t, { multiple = false } = {}) {
   const viewport = new dom.window.EventTarget();
   Object.assign(viewport, { width: 844, height: 390, offsetLeft: 0, offsetTop: 0 });
   Object.defineProperty(dom.window, 'visualViewport', { value: viewport, configurable: true });
-  const binding = bindSearchableFilterSelects(doc.querySelector('form'), { report: true });
+  const form = doc.querySelector('form');
+  const reportFrame = framed ? form : undefined;
+  if (reportFrame) {
+    reportFrame.style.padding = '10px 68px';
+    dom.window.innerWidth = viewport.width;
+    dom.window.innerHeight = viewport.height;
+  }
+  const binding = bindSearchableFilterSelects(form, { report: true, reportFrame });
   const wrapper = doc.querySelector('.sfs'), trigger = wrapper.querySelector('.sfs-trigger');
   trigger.getBoundingClientRect = () => ({ left: 620, right: 760, top: 20, bottom: 47, width: 140, height: 27 });
   const popup = wrapper.querySelector('.sfs-popup'), list = wrapper.querySelector('.sfs-list');
@@ -183,6 +190,55 @@ test('keyboard-induced document and form scrolling keep the report search focuse
   assert.deepEqual([...ctx.list.children].map(item => item.textContent), ['Cimento']);
   ctx.doc.querySelector('#outside').focus();
   assert.equal(ctx.popup.hidden, true, 'moving focus to another control dismisses the picker');
+});
+
+test('the fiscal proposal keeps the full option list height while the keyboard is visible', t => {
+  const ctx = setup(t, { framed:true });
+  ctx.trigger.click();
+  const openingHeight = ctx.popup.style.height, openingListHeight = ctx.list.style.maxHeight;
+  assert.equal(openingListHeight, '292px');
+
+  ctx.search().focus();
+  ctx.viewport.height = 145;
+  ctx.viewport.offsetTop = 20;
+  ctx.viewport.dispatchEvent(new ctx.dom.window.Event('resize'));
+  ctx.type('produto');
+
+  const top = parseFloat(ctx.popup.style.top);
+  const keyboardTop = ctx.viewport.offsetTop + ctx.viewport.height;
+  assert.ok(top >= ctx.viewport.offsetTop && top + 48 < keyboardTop);
+  assert.equal(ctx.popup.style.height, openingHeight);
+  assert.equal(ctx.list.style.maxHeight, openingListHeight);
+  assert.ok(top + parseFloat(openingHeight) > keyboardTop);
+  assert.equal(ctx.list.children.length, 40);
+});
+
+test('dismissing the native keyboard keeps the fiscal proposal search and results open', t => {
+  const ctx = setup(t, { framed:true });
+  ctx.trigger.click();
+  ctx.search().focus();
+  ctx.viewport.height = 145;
+  ctx.viewport.dispatchEvent(new ctx.dom.window.Event('resize'));
+  ctx.type('produto');
+
+  // The native accessory checkmark blurs the input without moving to another control.
+  ctx.search().blur();
+  ctx.viewport.height = 390;
+  ctx.viewport.dispatchEvent(new ctx.dom.window.Event('resize'));
+
+  assert.notEqual(ctx.doc.activeElement, ctx.search());
+  assert.equal(ctx.popup.hidden, false);
+  assert.equal(ctx.search().value, 'produto');
+  assert.equal(ctx.list.children.length, 40);
+  assert.equal(ctx.select.value, '');
+  ctx.list.lastElementChild.click();
+  assert.equal(ctx.select.value, 'p40');
+  assert.equal(ctx.popup.hidden, true);
+
+  ctx.trigger.click();
+  ctx.search().focus();
+  ctx.doc.querySelector('#outside').focus();
+  assert.equal(ctx.popup.hidden, true);
 });
 
 test('Android layout resize and search rerender do not collapse the report picker', t => {

@@ -270,13 +270,17 @@ if (!report.element.hidden) {
     setQuery('sem resultado');
     const empty = !popup.querySelector('.sfs-empty').hidden && !popup.querySelector('.sfs-option');
     setQuery(query);
+    search.blur();
+    const searchSurvivesKeyboardDismissal = !popup.hidden &&
+      document.activeElement !== search && search.value === query;
     const [match, ...otherOptions] = popup.querySelectorAll('.sfs-option');
     const matchRect = match && box(match);
     const canSelect = matchRect && document.elementFromPoint(
       matchRect.x + matchRect.width / 2, matchRect.y + matchRect.height / 2) === match;
     const matching = match?.textContent === expected && !otherOptions.length;
     match?.click();
-    pickerResults[name] = select.hidden && searchIsVisible && searchKeepsFocus && canSelect && empty && matching && popup.hidden &&
+    pickerResults[name] = select.hidden && searchIsVisible && searchKeepsFocus && searchSurvivesKeyboardDismissal &&
+      canSelect && empty && matching && popup.hidden &&
       select.value === value && trigger.value === expected &&
       popupRect.x >= 0 && popupRect.y >= 0 && popupRect.right <= innerWidth && popupRect.bottom <= innerHeight &&
       (rotated ? searchRect.height > searchRect.width : searchRect.width > searchRect.height);

@@ -128,7 +128,7 @@ function createPicker(select, closeOthers, options = {}) {
       const safeRight = parseFloat(safeArea?.paddingRight) || 0;
       const usableWidth = right - left - safeLeft - safeRight;
       const width = Math.max(0, Math.min(480, usableWidth - 24));
-      const availableHeight = selectionActions || options.reportFrame ? viewportHeight : reportViewport.height;
+      const availableHeight = selectionActions ? viewportHeight : reportViewport.height;
       const height = Math.max(0, Math.min(640, availableHeight - safeTop - safeBottom - 24));
       popup.dataset.placement = 'expanded';
       popup.style.width = `${width}px`;
@@ -365,7 +365,12 @@ function createPicker(select, closeOthers, options = {}) {
   function onAncestorScroll(event) {
     if (!selectingOption && (event.target === doc || event.target?.contains?.(wrapper) && !wrapper.contains(event.target))) close();
   }
-  function onFocusOut(event) { if (!selectingOption && !wrapper.contains(event.relatedTarget)) close(); }
+  function onFocusOut(event) {
+    // The native keyboard's Done button blurs the proposal search without
+    // moving focus to another control. Keep the query and options available.
+    if (options.reportFrame && event.target === search && !event.relatedTarget) return;
+    if (!selectingOption && !wrapper.contains(event.relatedTarget)) close();
+  }
   function onReset() { view.queueMicrotask(() => { if (!destroyed) { close(); sync(); } }); }
   function onDismiss() { close({ focus: true }); }
   function onSelectAll() {
