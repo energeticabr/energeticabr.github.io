@@ -235,6 +235,7 @@ if (!report.element.hidden) {
   const editor = proposal.querySelector('details');
   editor.open = true;
   editor.dispatchEvent(new Event('toggle'));
+  const proposalBody = proposal.querySelector('.nfe-proposal-body');
   const pickerResults = {};
   const popupBounds = [];
   for (const [name, query, expected, value] of [
@@ -253,7 +254,11 @@ if (!report.element.hidden) {
     trigger.click();
     const popupRect = box(popup);
     popupBounds.push(popupRect);
-    search.focus({preventScroll:true});
+    search.focus();
+    // Focusing the search with a mobile keyboard can scroll the form and document.
+    proposalBody.dispatchEvent(new Event('scroll'));
+    document.dispatchEvent(new Event('scroll'));
+    const searchKeepsFocus = !popup.hidden && document.activeElement === search;
     const searchRect = box(search);
     const searchIsVisible = document.elementFromPoint(
       searchRect.x + searchRect.width / 2, searchRect.y + searchRect.height / 2) === search;
@@ -270,13 +275,12 @@ if (!report.element.hidden) {
       matchRect.x + matchRect.width / 2, matchRect.y + matchRect.height / 2) === match;
     const matching = match?.textContent === expected && !otherOptions.length;
     match?.click();
-    pickerResults[name] = select.hidden && searchIsVisible && canSelect && empty && matching && popup.hidden &&
+    pickerResults[name] = select.hidden && searchIsVisible && searchKeepsFocus && canSelect && empty && matching && popup.hidden &&
       select.value === value && trigger.value === expected &&
       popupRect.x >= 0 && popupRect.y >= 0 && popupRect.right <= innerWidth && popupRect.bottom <= innerHeight &&
       (rotated ? searchRect.height > searchRect.width : searchRect.width > searchRect.height);
   }
   const changedStage = proposal.querySelector('[name="stageId"]').value;
-  const proposalBody = proposal.querySelector('.nfe-proposal-body');
   const proposalScroll = proposalBody.scrollHeight > proposalBody.clientHeight;
   const proposalSubmit = box(proposal.querySelector('[data-nfe-proposal-submit]'));
   document.documentElement.dataset.proposalBounds = JSON.stringify([box(proposal), proposalSubmit, ...popupBounds]);
