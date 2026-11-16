@@ -1553,7 +1553,7 @@ button.chat-rhid-attendance-card__cluster:focus-visible { outline: 3px solid #15
 .chat-main-holerite-shortcut span { background:#a02536; }
 .chat-main-holerite-shortcut:focus-visible { outline:3px solid var(--accent); outline-offset:3px; }
 .chat-message--commercial-top { row-gap:12px; }
-.chat-main-commercial-shortcuts { grid-column:1 / -1; grid-row:1; display:flex; gap:12px; align-items:center; min-width:0; }
+.chat-main-commercial-shortcuts { grid-column:1 / -1; grid-row:1; display:flex; flex-wrap:wrap; gap:8px 12px; align-items:center; min-width:0; }
 .chat-message.chat-message--commercial-top > .chat-bubble,
 .chat-message--commercial-top > button { grid-row:2; }
 .chat-message--commercial-top > .chat-main-provisions-shortcut { grid-row:1; margin-top:0; z-index:1; }
@@ -1576,6 +1576,8 @@ button.chat-rhid-attendance-card__cluster:focus-visible { outline: 3px solid #15
 .chat-main-sac-pathologies-shortcut { width:44px; height:44px; padding:0; border:0; border-radius:10px; background:#ad3e08; overflow:hidden; cursor:pointer; }
 .chat-main-sac-pathologies-shortcut img { display:block; width:100%; height:100%; object-fit:contain; }
 .chat-main-sac-pathologies-shortcut:focus-visible { outline:3px solid var(--accent); outline-offset:3px; }
+.chat-main-rentals-shortcut { width:44px; height:44px; display:grid; grid-template:30px 14px / minmax(0,1fr); border-radius:10px; background:#ad3e08; color:white; overflow:hidden; cursor:pointer; font:800 9px/14px system-ui,sans-serif; text-align:center; }
+.chat-main-rentals-shortcut:focus-visible { outline:3px solid var(--accent); outline-offset:3px; }
 /* Clean alpha assets: the button alone paints the fill. Never magnify/crop
    a screenshot or blend its matte into the mascot's original colors. */
 .chat-message--external-provisions > button,

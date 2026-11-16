@@ -107,15 +107,42 @@ assert.deepEqual(shortcuts.map(s=>s.action),['open-pending-provisions','open-sic
       assert.deepEqual(payslip, { title: 'Relatório de Holerites', wasInert: true, closeReachable: true, count: '1/2 (50%) enviados · 1 pendente', collapsed: 'false',
         colors: ['rgb(214, 239, 220)', 'rgb(251, 225, 226)'], overflow: false, closed: true, menuRestored: true });
       const mascotFit=await evaluate(`(()=>{return [...document.querySelectorAll('.chat-message--external-provisions > button,.chat-message--external-cargos > button,.chat-main-commercial-shortcuts > button')].filter(b=>b.querySelector('img')).map(b=>{const i=b.querySelector('img'),r=b.getBoundingClientRect(),q=i.getBoundingClientRect(),s=getComputedStyle(i);return {action:b.dataset.action,source:i.naturalWidth,fit:s.objectFit,blend:s.mixBlendMode,transform:s.transform,inside:q.left>=r.left&&q.right<=r.right&&q.top>=r.top&&q.bottom<=r.bottom,fill:getComputedStyle(b).backgroundColor};});})()`);
-      assert.equal(mascotFit.length,24);
+      assert.equal(mascotFit.length,25);
       const commercialTop=await evaluate(`(()=>{const nav=document.querySelector('nav[aria-label="Relatórios comerciais"]'),bubble=document.querySelector('[data-reply-id=group_pending]').closest('.chat-bubble'),blue=document.querySelector('.chat-main-provisions-shortcut');const rect=n=>{const r=n.getBoundingClientRect();return {x:r.x,y:r.y,right:r.right,bottom:r.bottom,width:r.width,height:r.height};};return nav?{row:rect(nav),bubble:rect(bubble),blue:rect(blue),external:!bubble.contains(nav),buttons:[...nav.querySelectorAll('button')].map(b=>({action:b.dataset.action,...rect(b)}))}:null;})()`);
-      assert.ok(commercialTop,'os quatro mascotes comerciais devem ter uma faixa acima do menu');
+      assert.ok(commercialTop,'os mascotes comerciais devem ter uma faixa acima do menu');
       assert.equal(commercialTop.external,true);
-      assert.deepEqual(commercialTop.buttons.map(b=>b.action),['open-commercial-receipts','open-commercial-milestones','open-commercial-documents','open-sac-pathologies']);
+      assert.deepEqual(commercialTop.buttons.map(b=>b.action),['open-commercial-receipts','open-commercial-milestones','open-commercial-documents','open-sac-pathologies', 'open-rentals-report']);
       assert.ok(commercialTop.row.bottom+8<=commercialTop.bubble.y,'o cartão branco desce para abrir espaço à faixa');
       assert.ok(Math.abs(commercialTop.buttons[0].x-commercialTop.blue.x-56)<=1,'primeiro laranja deslocado uma casa para a direita');
       assert.ok(Math.abs(commercialTop.buttons[0].y-commercialTop.blue.y)<=1,'provisões e laranjas na mesma faixa');
       assert.ok(Math.abs(shortcuts[1].y-layout.p.y)<=1,'Sicoob na vaga anterior, alinhada a Pendências');
+      const rentals = commercialTop.buttons.at(-1);
+      await clickAt({ x: rentals.x + rentals.width / 2, y: rentals.y + rentals.height / 2 });
+      const rentalLayout = await evaluate(`(async () => {
+        const overlay = document.querySelector('.rentals-overlay');
+        await new Promise(requestAnimationFrame);
+        const region = overlay.querySelector('.rentals-content');
+        const table = region.querySelector('table');
+        const picker = overlay.querySelector('[role=combobox][aria-label="IMÓVEL"]');
+        picker.click();
+        const search = overlay.querySelector('input[aria-label="Localizar itens de IMÓVEL"]');
+        const optionsVisible = !search.closest('[hidden]');
+        const widths = [region, ...region.querySelectorAll('table')].map(node => node.scrollWidth <= node.clientWidth + 2);
+        const shape = {
+          columns: [...table.querySelectorAll('th')].map(node => node.textContent),
+          count: region.querySelectorAll('table').length,
+          status: table.querySelector('tbody tr td:last-child').textContent.trim(),
+          printer: !overlay.querySelector('[data-action=print-report-pdf]').disabled,
+          overflow: widths.includes(false),
+          optionsVisible,
+        };
+        overlay.querySelector('.report-close-control').click();
+        return { ...shape, closed: !overlay.isConnected };
+      })()`, true);
+      assert.deepEqual(rentalLayout, {
+        columns: ['IMÓVEL','INQUILINO','VENC.','PGTO','VALOR','ATRASO'],
+        count: 4, status: 'VENCIDO há 241 dias', printer: true, overflow: false, optionsVisible: true, closed: true,
+      });
       const sicoobFit = await evaluate(`(async () => {
         const button = document.querySelector('[data-action="open-sicoob-transaction-report"]');
         const hit = button.getBoundingClientRect();
@@ -236,12 +263,15 @@ assert.deepEqual(shortcuts.map(s=>s.action),['open-pending-provisions','open-sic
         report.querySelector('.report-close-control').click();
         return report.hidden;
       })()`), true);
-      assert.ok(commercialTop.buttons.every((b,i)=>b.width>=44&&b.height>=44&&Math.abs(b.y-commercialTop.row.y)<=1&&b.x>=0&&b.right<=width&&(!i||b.x>=commercialTop.buttons[i-1].right+8)),JSON.stringify(commercialTop));
+      assert.ok(commercialTop.buttons.every(b=>b.width>=44&&b.height>=44&&b.x>=0&&b.right<=width),JSON.stringify(commercialTop));
+      assert.ok(commercialTop.buttons.slice(0,-1).every((b,i)=>Math.abs(b.y-commercialTop.row.y)<=1&&(!i||b.x>=commercialTop.buttons[i-1].right+8)),JSON.stringify(commercialTop));
+      const previousRental = commercialTop.buttons.at(-2);
+      assert.ok(rentals.y >= previousRental.bottom + 8 || rentals.x >= previousRental.right + 8, JSON.stringify(commercialTop));
       const pinkActions=mascotFit.filter(m=>['open-cargos-table','open-attendance-summary','open-stage-progress','open-supplier-payroll-report','open-trancid-report','open-contractor-control-report','open-pending-supplier-payments-report','open-holerite-report'].includes(m.action));
       assert.deepEqual(pinkActions.map(m=>m.action),['open-cargos-table','open-attendance-summary','open-stage-progress','open-supplier-payroll-report','open-trancid-report','open-contractor-control-report','open-pending-supplier-payments-report','open-holerite-report']);
       assert.ok(pinkActions.filter(m=>m.action!=='open-stage-progress').every(m=>m.fill==='rgb(207, 117, 122)'),'new contractor button preserves its neighboring pink report backgrounds');
       assert.ok(mascotFit.every(m=>m.source>=256&&m.fit==='contain'&&m.blend==='normal'&&m.transform==='none'&&m.inside),'sharp full-body mascots without cropping or color blending: '+JSON.stringify(mascotFit));
-      assert.ok(mascotFit.filter(m=>m.action.startsWith('open-commercial-')||m.action==='open-sac-pathologies').every(m=>m.fill==='rgb(173, 62, 8)'),'orange fills remain uniform');
+      assert.ok(mascotFit.filter(m=>m.action.startsWith('open-commercial-')||['open-sac-pathologies','open-rentals-report'].includes(m.action)).every(m=>m.fill==='rgb(173, 62, 8)'),'orange fills remain uniform');
       assert.equal(mascotFit.find(m=>m.action==='open-task-association-report')?.fill,'rgb(97, 140, 37)');
       const rhidPosition=await evaluate(`(()=>{
         const rhid=document.querySelector('.chat-main-rhid-shortcut'), red=document.querySelector('.chat-main-cargos-shortcut');
