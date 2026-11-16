@@ -117,7 +117,7 @@ def parent_payload(tax, branches):
 
 
 SALARY_FAMILY_FIELD = 'CONCILIARSALARIOFAMILIA'
-SALARY_FAMILY_NOTICE = 'SALÁRIO-FAMÍLIA: conferir crédito da competência na DCTFWeb'
+SALARY_FAMILY_NOTICE = 'SALÁRIO-FAMÍLIA: anexar XML de Saída da DCTFWeb para conciliação automática'
 
 
 def salary_family_notice(row, tax, prefix, suffix):

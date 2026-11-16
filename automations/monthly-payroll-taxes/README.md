@@ -20,10 +20,33 @@ folha, salário sem vigência, cadastro alterado ou regime não coberto bloqueia
 lote. A automação não inventa nem cria uma folha ausente por suposição.
 
 O campo Sim/Não `CONCILIARSALARIOFAMILIA` de `FUNCIONARIOSRH` sinaliza
-a conferência mensal. Provisões e memórias de INSS destacam o crédito a
-conferir na DCTFWeb para o vínculo marcado. A marcação não fixa valor,
-não altera a previsão bruta e não aparece no FGTS. A coluna deve existir
-com padrão Não antes da publicação; manifestos anteriores aceitam o campo ausente.
+a conciliação mensal. Provisões e memórias de INSS identificam o vínculo
+marcado. A coluna deve existir com padrão Não antes da publicação.
+Manifestos anteriores aceitam o campo ausente.
+
+## Conciliação do salário-família
+
+No descritivo de INSS da competência, anexar o **XML de Saída** obtido em
+**Relatórios** na DCTFWeb após a transmissão. O serviço
+`energetica-inss-dctfweb.timer` consulta os anexos a cada 30 minutos na OCI.
+O arquivo informa o valor vinculado de salário-família no código 1082-01.
+O serviço compara o bruto e o líquido dos códigos da folha com o manifesto
+original. Com um único vínculo marcado, aplica o crédito na provisão desse
+trabalhador, no vínculo FOLHAPGTO e no descritivo. A observação informa o
+crédito e o recibo. Divergências de valor, outros abatimentos nos códigos da
+folha e valores já agendados ou pagos exigem conferência. A retenção de
+prestador (1162) segue a provisão própria.
+
+O agendamento usa os dois arquivos systemd deste diretório e o Python do
+serviço SharePoint existente. Instalar os dois módulos em
+`/opt/energetica-inss-dctfweb` e criar a pasta privada de estado
+`/var/lib/energetica-whatsapp/inss-dctfweb`. Em
+`/etc/energetica-inss-dctfweb.env`, configurar `ENERGETICA_DCTFWEB_CNPJ`
+e `ENERGETICA_DCTFWEB_FROM` (competência inicial, AAAA-MM). O estado
+registra o recibo e a intenção de atualização antes da escrita e permite
+retomar alterações parciais sem aplicar o crédito novamente. O executor
+usa os documentos anexados ao descritivo. A obtenção dos XML diretamente
+da DCTFWeb requer uma fonte autenticada, como o Integra Contador.
 
 ## Configuração e cálculo
 
