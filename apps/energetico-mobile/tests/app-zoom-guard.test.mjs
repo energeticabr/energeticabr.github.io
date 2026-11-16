@@ -31,7 +31,7 @@ test('two fingers cannot magnify menu buttons; one finger and clicks remain usab
   assert.equal(clicks, 2);
 });
 
-test('Safari native page gestures are cancelled outside Power BI, including viewer chrome', t => {
+test('Safari native page gestures are cancelled throughout the app', t => {
   const { dom, doc } = setup(t);
   for (const selector of ['#menu', '#back', '.attachment-preview-pdf-viewport']) {
     for (const type of ['gesturestart', 'gesturechange']) {
@@ -42,13 +42,13 @@ test('Safari native page gestures are cancelled outside Power BI, including view
   }
 });
 
-test('Power BI report keeps native pinch while its navigation buttons do not', t => {
+test('Power BI report and navigation keep the outer viewport fixed during pinch', t => {
   const { dom, doc } = setup(t);
   const frame = doc.querySelector('.powerbi-dashboard__frame-wrap');
   const pinch = touch(dom, 'touchstart', 2); frame.dispatchEvent(pinch);
-  assert.equal(pinch.defaultPrevented, false);
+  assert.equal(pinch.defaultPrevented, true);
   const gesture = new dom.window.Event('gesturestart', { bubbles: true, cancelable: true }); frame.dispatchEvent(gesture);
-  assert.equal(gesture.defaultPrevented, false);
+  assert.equal(gesture.defaultPrevented, true);
   const back = touch(dom, 'touchstart', 2); doc.querySelector('#back').dispatchEvent(back);
   assert.equal(back.defaultPrevented, true);
 });
@@ -69,46 +69,65 @@ test('new mobile fields gain readable focus text without shrinking existing larg
   assert.equal(dom.window.getComputedStyle(small).fontSize, '16px');
 });
 
-test('Power BI close resets page viewport before returning to protected app menus', async t => {
+test('Power BI changes report zoom without enabling app page zoom while switching tabs', async t => {
   const dom = new JSDOM('<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover"><button>Menu</button>');
   const doc = dom.window.document;
   const stop = installAppZoomGuard(doc);
   const viewport = doc.querySelector('meta[name="viewport"]');
-  const report = createPowerBiDashboardView({ documentRef: doc, powerBiClient: { models: { TokenType: { Aad: 0 } }, embed: () => ({ on() {}, off() {} }), reset() {} } });
+  let iframe;
+  let zoom = 0.12;
+  let zoomRequest;
+  let resetCount = 0;
+  const events = new Map();
+  const report = createPowerBiDashboardView({
+    documentRef: doc,
+    powerBiClient: {
+      models: { TokenType: { Aad: 0 }, LayoutType: { Custom: 1 }, DisplayOption: { FitToPage: 0 } },
+      embed(container) {
+        iframe = doc.createElement('iframe');
+        container.append(iframe);
+        iframe.contentDocument.body.textContent = 'Financeiro';
+        return {
+          on(event, handler) { events.set(event, handler); },
+          off() {},
+          async getZoom() { return zoom; },
+          setZoom(value) { zoomRequest = value; zoom = value; },
+          async updateSettings(settings) {
+            assert.deepEqual(settings, { layoutType: 1, customLayout: { displayOption: 0 } });
+            zoom = 0.12;
+          },
+        };
+      },
+      reset() { resetCount++; },
+    },
+  });
   t.after(() => { report.destroy(); stop(); dom.window.close(); });
-  assert.match(viewport.content, /maximum-scale=1/);
+  const appViewport = viewport.content;
   await report.open({ accessToken: 'test', getAccessToken: async () => 'test' });
-  assert.match(viewport.content, /viewport-fit=cover/);
-  assert.equal(viewport.content, 'width=device-width, viewport-fit=cover, initial-scale=1, minimum-scale=1, maximum-scale=2');
+  assert.equal(viewport.content, appViewport, 'opening the report must keep the app viewport at 1×');
+  events.get('loaded')();
+  doc.querySelector('[data-powerbi-zoom="in"]').click();
+  await new Promise(resolve => setImmediate(resolve));
+  assert.equal(zoomRequest, 0.25);
+
+  iframe.contentDocument.body.textContent = 'Provisão Pgto';
+  assert.equal(doc.querySelector('.powerbi-dashboard iframe'), iframe);
+  assert.equal(iframe.contentDocument.body.textContent, 'Provisão Pgto');
+  assert.equal(viewport.content, appViewport);
+  assert.equal(resetCount, 0);
+
+  zoom = 1;
+  doc.querySelector('[data-powerbi-zoom="in"]').click();
+  await new Promise(resolve => setImmediate(resolve));
+  assert.equal(zoom, 1.25, 'the report can also be enlarged on a large desktop viewport');
+
+  doc.querySelector('[data-powerbi-zoom="fit"]').click();
+  await new Promise(resolve => setImmediate(resolve));
+  assert.equal(zoom, 0.12);
   report.close();
   assert.match(viewport.content, /initial-scale=1/);
   assert.match(viewport.content, /maximum-scale=1/);
   assert.equal(doc.querySelector('.powerbi-dashboard'), null);
-});
-
-test('an opening cancelled by close cannot turn off pinch for a reopened Power BI report', async t => {
-  const dom = new JSDOM('<meta name="viewport" content="width=device-width, viewport-fit=cover">');
-  const zoomCalls = [];
-  const firstEnable = Promise.withResolvers();
-  const view = createPowerBiDashboardView({
-    documentRef: dom.window.document,
-    powerBiClient: { models: { TokenType: { Aad: 0 } }, embed: () => ({ on() {}, off() {} }), reset() {} },
-    powerBiZoom: {
-      setEnabled(options) {
-        zoomCalls.push(options);
-        return zoomCalls.length === 1 ? firstEnable.promise : Promise.resolve();
-      },
-    },
-  });
-  t.after(() => { view.destroy(); dom.window.close(); });
-  const options = { accessToken: 'test', getAccessToken: async () => 'test' };
-  const cancelled = view.open(options);
-  view.close();
-  assert.equal(await view.open(options), true);
-  firstEnable.resolve();
-  assert.equal(await cancelled, false);
-  assert.deepEqual(zoomCalls.map(call => call.enabled), [true, false, true]);
-  assert.ok(dom.window.document.querySelector('.powerbi-dashboard'));
 });
 
 test('a raised field can grow with subsequent typography instead of retaining a permanent 16px cap', async t => {

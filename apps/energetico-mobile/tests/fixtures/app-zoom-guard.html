@@ -3,12 +3,50 @@
 <body><main id="app"><section class="chat-messages" style="height:250px;overflow:auto"><button id="menu">SUPRIMENTOS</button><div style="height:1000px">Menu</div></section><input id="search" class="launch-gallery-search" style="font-size:13px"><input id="large" style="font-size:22px"><textarea id="draft" style="font-size:14px"></textarea><div class="chat-signature-pad__surface"><canvas></canvas></div><div class="attachment-preview-pdf-viewport"><canvas></canvas></div></main><script type="module">
 import { installAppZoomGuard } from '/src/web/app-zoom-guard.js';
 import { createPowerBiDashboardView } from '/src/ui/powerbi-dashboard-view.js';
-if (new URLSearchParams(location.search).has('baseline')) {
-  document.querySelectorAll('link').forEach(link => link.disabled = true);
-} else installAppZoomGuard();
+installAppZoomGuard();
 window.touchDiagnostics = [];
 document.addEventListener('touchstart', event => window.touchDiagnostics.push({ target: event.target.className, touches: event.touches.length, cancelled: event.defaultPrevented }));
-window.zoomReport = createPowerBiDashboardView({ documentRef: document, powerBiClient: { models: { TokenType: { Aad: 0 } }, embed: () => ({ on() {}, off() {} }), reset() {} } });
+let embedCount = 0;
+let reportZoom = 0.4;
+window.zoomReport = createPowerBiDashboardView({
+  documentRef: document,
+  powerBiClient: {
+    models: { TokenType: { Aad: 0 }, LayoutType: { Custom: 1 }, DisplayOption: { FitToPage: 0 } },
+    embed(container) {
+      embedCount++;
+      const iframe = document.createElement('iframe');
+      iframe.title = 'Relatório de teste';
+      iframe.srcdoc = '<button id="provision">Provisão Pgto</button><main>Financeiro</main>';
+      iframe.addEventListener('load', () => {
+        const reportDoc = iframe.contentDocument;
+        reportDoc.querySelector('#provision').addEventListener('click', () => {
+          reportDoc.querySelector('main').textContent = 'Provisão Pgto';
+        });
+      }, { once: true });
+      container.append(iframe);
+      return {
+        on(event, handler) { if (event === 'loaded') iframe.addEventListener('load', handler, { once: true }); },
+        off() {},
+        async getZoom() { return reportZoom; },
+        async setZoom(value) { reportZoom = value; },
+      };
+    },
+    reset() {},
+  },
+});
+window.changeReportTabWhileZoomed = async () => {
+  const frame = document.querySelector('.powerbi-dashboard iframe');
+  const zoom = document.querySelector('[data-powerbi-zoom="in"]');
+  if (zoom.parentElement.hidden) await new Promise(resolve => frame.addEventListener('load', resolve, { once: true }));
+  zoom.click();
+  await Promise.resolve();
+  if (reportZoom !== 0.5) throw new Error('O zoom deve mudar dentro do relatório.');
+  frame.contentDocument.querySelector('#provision').click();
+  if (frame.contentDocument.querySelector('main').textContent !== 'Provisão Pgto' ||
+      document.querySelector('.powerbi-dashboard iframe') !== frame || embedCount !== 1) {
+    throw new Error('A troca de abas deve manter o relatório incorporado.');
+  }
+};
 const measure = selector => getComputedStyle(document.querySelector(selector)).touchAction;
 const menu = { action: measure('#menu'), scroller: measure('.chat-messages'), searchSize: parseFloat(getComputedStyle(document.querySelector('#search')).fontSize), largeSize: parseFloat(getComputedStyle(document.querySelector('#large')).fontSize), draftSize: parseFloat(getComputedStyle(document.querySelector('#draft')).fontSize), signature: measure('.chat-signature-pad__surface'), pdf: measure('.attachment-preview-pdf-viewport') };
 const report = document.createElement('section'); report.className = 'powerbi-dashboard'; report.innerHTML = '<div class="powerbi-dashboard__frame-wrap"><iframe title="Report" src="about:blank"></iframe></div>'; document.body.append(report);

@@ -12,7 +12,6 @@ public class MainActivity extends BridgeActivity {
         registerPlugin(DocumentPickerPlugin.class);
         registerPlugin(DocumentScannerPlugin.class);
         registerPlugin(ShareInboxPlugin.class);
-        registerPlugin(PowerBiZoomPlugin.class);
         super.onCreate(savedInstanceState);
         handleIncomingIntent(getIntent());
     }
