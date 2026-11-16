@@ -16,7 +16,7 @@ const snapshot = (presences, suppliers = [{ id: "1", name: "Ana", status: "ATIVO
   ({ complete: true, presences, suppliers });
 const open = { startDate: "", endDate: "", status: "TODOS" };
 
-test("PowerFx counts and finances exclude absent cards and give paid precedence", () => {
+test("attendance counts ignore payment status, daily values and payment links", () => {
   const result = build(snapshot([
     row(1, { dailyValue: 0.1 }), row(2, { dailyValue: 0.2, status: " pago ", paymentId: "91" }),
     row(3, { presence: "PENDENTE", dailyValue: 20 }),
@@ -24,34 +24,11 @@ test("PowerFx counts and finances exclude absent cards and give paid precedence"
     row(5, { supplier: "Bia", profession: "PINTOR", presence: "AUSENTE", dailyValue: 999 }),
     row(6, { presence: "OUTRO", dailyValue: 999 }),
   ]), open);
-  assert.deepEqual(result.summary, { pending: 2, present: 2, absent: 1, total: 0.3 });
-  assert.deepEqual(result.rows.map(item => item.id), ["5", "4", "3", "2", "1"]);
-  assert.deepEqual(result.professions, [{ name: "PEDREIRO", emoji: "🧱", tone: "mixed",
-    recordCount: 4, professionalCount: 1, providers: [{ name: "Ana", tone: "mixed", recordCount: 4,
-      present: 2, pending: 2, financial: { pendingApproval: 20, approvedPayment: 0.1, paid: 30.2, total: 50.3 } }],
-    financial: { pendingApproval: 20, approvedPayment: 0.1, paid: 30.2, total: 50.3 } }]);
-  assert.deepEqual(result.days, [{ date: "2026-10-03", weekday: "Sábado", weekend: true,
-    branches: [{ branch: "B", pending: [{ name: "Ana", count: 2, paymentBadges: [] }],
-      present: [{ name: "Ana", count: 2, paymentBadges: ["IDPGTO: 91", "PENDENTE PGTO"] }],
-      absent: [{ name: "Bia", count: 1, paymentBadges: [] }],
-      professions: [{ name: "PEDREIRO", emoji: "🧱", count: 1 }], total: 0.3 }] }]);
-});
-
-test("profession and provider tones reflect all paid, all awaiting approval or mixed", () => {
-  const result = build(snapshot([row(1, { status: "PAGO" }),
-    row(2, { supplier: "Bia", presence: "PENDENTE", profession: "SERVENTE DE PEDREIRO" }),
-    row(3, { supplier: "Cris", presence: "PENDENTE", status: "PAGO", profession: "ELETRICISTA" }),
-    row(4, { supplier: "Dora", profession: "PINTOR" }),
-    row(5, { supplier: "Eva", profession: "EMPREITEIRO" }),
-    row(6, { supplier: "Fê", profession: "" }),
-  ]), open);
-  const professions = Object.fromEntries(result.professions.map(group => [group.name, group]));
-  assert.equal(professions.PEDREIRO.tone, "paid");
-  assert.equal(professions["SERVENTE DE PEDREIRO"].tone, "pending");
-  assert.equal(professions.ELETRICISTA.tone, "paid");
-  assert.equal(professions.PINTOR.tone, "mixed");
-  assert.equal(professions.EMPREITEIRO.emoji, "🏗️");
-  assert.equal(professions["SEM PROFISSÃO"].emoji, "");
+  assert.deepEqual(result.summary, { pending: 2, present: 2, absent: 1 });
+  assert.deepEqual(result.rows.map(item => item.id), ["5", "4", "3", "2", "1"]);  assert.deepEqual(result.days, [{ date: "2026-10-03", weekday: "Sábado", weekend: true,
+    branches: [{ branch: "B", pending: [{ name: "Ana", count: 2 }],
+      present: [{ name: "Ana", count: 2 }], absent: [{ name: "Bia", count: 1 }],
+      professions: [{ name: "PEDREIRO", emoji: "🧱", count: 1 }] }] }]);
 });
 
 test("supplier registry defaults to active and conflicts or unknown status never grant eligibility", () => {
@@ -74,16 +51,6 @@ test("UI supplierStatus filters override the RH status alias, including cleared 
   assert.equal(build(source, { ...open, status: "ATIVO", supplierStatus: "" }).rows.length, 2);
 });
 
-test("missing or invalid money is null only in affected sums, never a false zero", () => {
-  for (const dailyValue of [null, undefined, NaN, Infinity, "10", "bad"]) {
-    const result = build(snapshot([row(1, { dailyValue }), row(2, { presence: "PENDENTE", dailyValue: 20 })]), open);
-    assert.equal(result.summary.total, null);
-    assert.equal(result.days[0].branches[0].total, null);
-    assert.deepEqual(result.professions[0].financial, { pendingApproval: 20, approvedPayment: null, paid: 0, total: null });
-  }
-  assert.equal(build(snapshot([row(1, { dailyValue: null, presence: "AUSENTE" })]), open).summary.total, 0);
-});
-
 test("date and branch details descend by date, sort branches and count distinct present professionals", () => {
   const result = build(snapshot([row(1, { branch: "Z", date: "2026-10-04", status: "PAGO" }),
     row(2, { branch: "A", date: "2026-10-04", supplier: "Bia" }), row(3),
@@ -91,7 +58,7 @@ test("date and branch details descend by date, sort branches and count distinct 
   assert.deepEqual(result.days.map(day => [day.date, day.weekday, day.weekend]), [
     ["2026-10-05", "Segunda", false], ["2026-10-04", "Domingo", true], ["2026-10-03", "Sábado", true]]);
   assert.deepEqual(result.days[1].branches.map(branch => branch.branch), ["A", "Z"]);
-  assert.deepEqual(result.days[1].branches[1].present[0].paymentBadges, ["PAGO"]);
+  assert.deepEqual(result.days[1].branches[1].present[0], { name: "Ana", count: 1 });
 });
 
 test("open-ended dates and combined normalized filters work; invalid and reversed dates reject", () => {
@@ -121,4 +88,27 @@ test("partial snapshots, malformed source rows and duplicate IDs cannot display 
     snapshot([row(1, { presence: null })])]) {
     assert.throws(() => build(source, open), /complet|inválid|duplicad/i);
   }
+});
+
+test("current assignments form equally colored individual cards across professions without depending on attendance", () => {
+  const suppliers = [
+    { id: "1", name: "Ana", status: "ATIVO", branch: "B", profession: "ARMADOR", stage: "35", activity: "ARMAÇÃO DE VIGAS" },
+    { id: "2", name: "Bia", status: "ATIVO", branch: "B", profession: "PEDREIRO", stage: "35", activity: "armação de vigas " },
+    { id: "3", name: "Cris", status: "ATIVO", branch: "B", profession: "PEDREIRO", stage: "35", activity: "CONCRETAGEM" },
+    { id: "4", name: "Eva", status: "ATIVO", branch: "Z", profession: "PINTOR", stage: "36", activity: "CONCRETAGEM" },
+    { id: "5", name: "Dora", status: "ATIVO", branch: "B", profession: "PEDREIRO", stage: "35" },
+    { id: "6", name: "Comércio de materiais", status: "ATIVO", branch: "B" },
+  ];
+  const result = build({ ...snapshot([row(1, { status: "PAGO", paymentId: "125", dailyValue: 100 })], suppliers),
+    stages: [{ id: "35", stage: "ALVENARIA", property: "TORRE A" }] },
+    { ...open, branch: "B", startDate: "2026-10-04", presence: "AUSENTE" });
+  assert.deepEqual(result.rows, []);
+  assert.deepEqual(result.professions.map(({name, providers}) => [name, providers.map(p => p.name)]),
+    [["PEDREIRO", ["Bia", "Cris", "Dora"]], ["ARMADOR", ["Ana"]]]);
+  const [bia, cris, dora] = result.professions[0].providers;
+  const [ana] = result.professions[1].providers;
+  assert.match(ana.stageLabel, /35.*ALVENARIA.*TORRE A/);
+  assert.equal(ana.assignmentHue, bia.assignmentHue);
+  assert.notEqual(ana.assignmentHue, cris.assignmentHue);
+  assert.equal(dora.assignmentHue, null);
 });

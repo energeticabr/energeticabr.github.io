@@ -469,7 +469,7 @@ assert.deepEqual(shortcuts.map(s=>s.action),['open-pending-provisions','open-sic
       assert.ok(attendanceReady,'segundo mascote da direita abre resumo por profissão');
       const attendanceFit=await evaluate(`(()=>{const c=document.querySelector('.as-content'),f=[...document.querySelectorAll('.as-filters>.pl-filter,.as-filters>.pl-dates')].map(n=>n.getBoundingClientRect()),p=document.querySelector('.as-dialog').getBoundingClientRect();return {aligned:f.every(r=>Math.abs(r.top-f[0].top)<1),fits:c.scrollWidth<=c.clientWidth+1,columns:document.querySelector('.as-daily thead tr').children.length,cards:document.querySelectorAll('.as-metric').length,fullHeight:p.top<=1&&p.bottom>=innerHeight-1,status:document.querySelector('.as-filters [name=supplierStatus]').value};})()`);
       assert.ok(attendanceFit.aligned&&attendanceFit.fits&&attendanceFit.fullHeight,JSON.stringify(attendanceFit));
-      assert.equal(attendanceFit.cards,4);assert.equal(attendanceFit.columns,7);assert.equal(attendanceFit.status,'ATIVO');
+      assert.equal(attendanceFit.cards,3);assert.equal(attendanceFit.columns,6);assert.equal(attendanceFit.status,'ATIVO');
       await evaluate(`document.querySelector('.as-filters [aria-label="Abrir opções de FORNECEDOR"]').click()`);
       const attendanceDropdown=await evaluate(`(()=>{const p=document.querySelector('.as-filters .sfs-popup:not([hidden])'),l=p.querySelector('.sfs-list'),r=l.getBoundingClientRect();return {placement:p.dataset.placement,visible:[...l.children].filter(n=>{const q=n.getBoundingClientRect();return q.top>=r.top-1&&q.bottom<=r.bottom+1;}).length};})()`);
       assert.equal(attendanceDropdown.placement,'expanded');assert.ok(attendanceDropdown.visible>=7,JSON.stringify(attendanceDropdown));

@@ -138,7 +138,7 @@ const validation=createOrderValidationReportView({document,data:{async loadOrder
 view.on('open-order-validation-report',()=>void validation.open());
 const attendance=createAttendanceSummaryReportView({document,now:()=>new Date('2026-10-05T12:00:00Z'),data:{async loadSnapshot(){return {
  complete:true,
- suppliers:Array.from({length:12},(_,i)=>({id:String(i+1),name:`Profissional ${i+1}`,status:'ATIVO'})),
+ suppliers:Array.from({length:12},(_,i)=>({id:String(i+1),name:`Profissional ${i+1}`,status:'ATIVO',profession:['SERVENTE DE PEDREIRO','PEDREIRO','MESTRE DE OBRAS','ARMADOR DE FERRAGEM'][i%4]})),
  presences:Array.from({length:24},(_,i)=>({id:String(i+1),date:'2026-10-05',branch:'004 - EDIFÍCIO XAVANTE',supplier:`Profissional ${i%12+1}`,profession:['SERVENTE DE PEDREIRO','PEDREIRO','MESTRE DE OBRAS','ARMADOR DE FERRAGEM'][i%4],presence:i<12?'PENDENTE':i%3?'PRESENTE':'AUSENTE',status:i<12?'PENDENTE':i%2?'PAGO':'PENDENTE',dailyValue:181,paymentId:i%2?'3505':''}))
  };}}});
 view.on('open-attendance-summary',()=>void attendance.open());
