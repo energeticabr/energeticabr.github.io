@@ -165,7 +165,7 @@ function billingDiscount(invoice, invoiceTotal, productDiscount) {
   return invoiceTotal.minus(net);
 }
 
-function parseNfe(info, rowDate) {
+function parseNfe(info, rowDate, provision) {
   const seen = new Set();
   const lines = children(info, 'det').map(det => {
     const number = det.getAttribute('nItem');
@@ -197,6 +197,9 @@ function parseNfe(info, rowDate) {
   const additionalDiscount = billingDiscount(child(billing, 'fat'), invoiceTotal, discount);
   allocate(lines, additionalDiscount, line => FiscalDecimal.max(0, lineTotal(line)), addDiscount, 'o desconto da fatura', true);
   const dates = children(billing, 'dup').map(installment => calendarDay(value(installment, 'dVenc')));
+  if (provision && new Set(dates).size > 1) {
+    throw new Error('A nota tem parcelas com vencimentos diferentes. Use Nova provisão pgto para cadastrar os valores de cada parcela.');
+  }
   const ide = child(info, 'ide');
   const dateTime = value(ide, 'dhEmi');
   const date = value(ide, 'dEmi');
@@ -208,7 +211,7 @@ function parseNfe(info, rowDate) {
   };
 }
 
-function parseNfse(info, rowDate) {
+function parseNfse(info, rowDate, provision) {
   const dps = child(child(info, 'DPS'), 'infDPS');
   const service = child(child(dps, 'serv'), 'cServ');
   const description = value(service, 'xDescServ', 'no serviço da NFS-e', true);
@@ -218,14 +221,18 @@ function parseNfse(info, rowDate) {
   const discounts = child(values, 'vDescCondIncond');
   const discount = amount(discounts, 'vDescIncond');
   if (discount.gt(unitPrice)) throw new Error('O desconto incondicionado supera o valor do serviço na NFS-e.');
+  const grossAfterDiscount = unitPrice.minus(discount);
+  const net = provision ? decimal(child(info, 'valores'), 'vLiq', { required:true }) : grossAfterDiscount;
+  if (net.gt(grossAfterDiscount)) throw new Error('O valor líquido declarado supera o valor do serviço na NFS-e.');
   return {
     issueDate:invoiceIssueDate(value(info, 'dhProc'), rowDate), dueDate:'',
-    lines:[{ number:'1', code, description, unit:'', quantity:new FiscalDecimal(1), unitPrice, discount, adjustment:zero }],
-    total:unitPrice.minus(discount),
+    lines:[{ number:'1', code, description, unit:'', quantity:new FiscalDecimal(1), unitPrice, discount,
+      adjustment:net.minus(grossAfterDiscount) }],
+    total:net,
   };
 }
 
-export function parseNfeProposalXml(xml, row, DOMParser) {
+export function parseNfeProposalXml(xml, row, DOMParser, { provision = false } = {}) {
   if (typeof xml !== 'string' || !xml || xml.length > 1_125_000 || /<!DOCTYPE|<!ENTITY/i.test(xml)) {
     throw new Error('XML fiscal inválido.');
   }
@@ -243,7 +250,7 @@ export function parseNfeProposalXml(xml, row, DOMParser) {
     throw new Error('A chave de acesso do XML fiscal não corresponde à nota selecionada.');
   }
 
-  const proposal = isNfe ? parseNfe(info, row.date) : parseNfse(info, row.date);
+  const proposal = isNfe ? parseNfe(info, row.date, provision) : parseNfse(info, row.date, provision);
   return {
     issueDate:proposal.issueDate, dueDate:proposal.dueDate, total:proposal.total.toFixed(),
     lines:proposal.lines.map(({ number, code, description, unit, quantity, unitPrice, discount, adjustment }) => ({

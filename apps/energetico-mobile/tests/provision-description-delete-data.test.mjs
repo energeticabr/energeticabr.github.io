@@ -85,6 +85,14 @@ const stale = error => {
   return true;
 };
 
+test('a fiscal provision description retains its invoice link during ordinary deletion', async () => {
+  const f = fixture();
+  f.records.parents.get('42').fields.NFEORIGEM = '35261112345678000123550010000000011000000011';
+  await assert.rejects(f.service().preview('42'), /vínculo com a nota fiscal/i);
+  assert.equal(f.records.children.size, 3);
+  assert.equal(f.writes.length, 0);
+});
+
 for (const phase of ['lists', 'columns', 'records']) {
   test(`preview does not serialize independent ${phase} reads behind a slow request`, async () => {
     const f = fixture(), started = [];

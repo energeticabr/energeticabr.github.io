@@ -9,7 +9,7 @@ import { ddaPaidManually } from './dda-payment-confirmation.js';
 import { createDdaProvisionLink } from './dda-provision-link.js';
 import { DDA_UNLINKED_REVIEW_FIELD } from './dda-bank-status.js';
 import { createDdaUnlinkedReview } from './dda-unlinked-review.js';
-import { createNfeOrderLink, NFE_ORDER_FIELD } from './nfe-order-link.js';
+import { createNfeOrderLink, NFE_ORDER_FIELD, NFE_PROVISION_DESCRIPTION_FIELD } from './nfe-order-link.js';
 import { createSicoobOrderLink } from './sicoob-order-link.js';
 import { createNfeProposalData } from './nfe-proposal-data.js';
 import { createFinancialMovementEditor } from './financial-movement-editor.js';
@@ -46,7 +46,7 @@ export const REGISTRATION_GALLERY_MODELS = Object.freeze({
     title: "GALERIA NOTAS FISCAIS SEFAZ", listName: "NOTAS_FISCAIS_SEFAZ", aliases: ["NOTAS_FISCAIS_SEFAZ"], siteKey: "company",
     nativeCard: true, readOnly: true, readTransport: "rest", recordLabel: "nota fiscal", emptyValue: "Pendente",
     sourceNotice: "Fontes: SEFAZ para NF-e e CT-e; ADN nacional para NFS-e.",
-    restReadFields: [...FISCAL_COMMON_FIELDS, NFE_ORDER_FIELD, "CARTAS_CORRECAO_JSON", "STATUS_RETENCOES", ...Object.keys(SEFAZ_RETENTION_FIELDS), "TOTAL_RETIDO", "ID", "Title", "CHAVE_ACESSO", "CNPJ_FORNECEDOR", "UF_FORNECEDOR", "NUMERO_NOTA", "SERIE", "DATA_EMISSAO", "DATA_EMISSAO_ORIGINAL", "VALOR_TOTAL_NOTA", "DESCONTOS", "VALOR_LIQUIDO", "ORIGEM_LIQUIDO", "SITUACAO", "STATUS_IMPORTACAO", "XML_URL", "ULTIMO_DOCUMENTO_URL", "DANFE_URL", "DIRECAO", "OBSERVACOES_NOTA", "INFORMACOES_FISCO", "NATUREZA_OPERACAO", "DESTINATARIO", "CNPJ_DESTINATARIO", "VALOR_PRODUTOS", "FRETE", "SEGURO", "OUTRAS_DESPESAS", "ICMS", "IPI", "PROTOCOLO", "MODELO", "STATUS_DANFE"],
+    restReadFields: [...FISCAL_COMMON_FIELDS, NFE_ORDER_FIELD, NFE_PROVISION_DESCRIPTION_FIELD, "CARTAS_CORRECAO_JSON", "STATUS_RETENCOES", ...Object.keys(SEFAZ_RETENTION_FIELDS), "TOTAL_RETIDO", "ID", "Title", "CHAVE_ACESSO", "CNPJ_FORNECEDOR", "UF_FORNECEDOR", "NUMERO_NOTA", "SERIE", "DATA_EMISSAO", "DATA_EMISSAO_ORIGINAL", "VALOR_TOTAL_NOTA", "DESCONTOS", "VALOR_LIQUIDO", "ORIGEM_LIQUIDO", "SITUACAO", "STATUS_IMPORTACAO", "XML_URL", "ULTIMO_DOCUMENTO_URL", "DANFE_URL", "DIRECAO", "OBSERVACOES_NOTA", "INFORMACOES_FISCO", "NATUREZA_OPERACAO", "DESTINATARIO", "CNPJ_DESTINATARIO", "VALOR_PRODUTOS", "FRETE", "SEGURO", "OUTRAS_DESPESAS", "ICMS", "IPI", "PROTOCOLO", "MODELO", "STATUS_DANFE"],
     restExpandSystemFields: false,
     searchPlaceholder: "Pesquisar fornecedor, tomador, CNPJ, número, chave ou serviço",
     fieldVisibility: {
@@ -447,14 +447,16 @@ export function createRegistrationGalleryData({ kind, ...options } = {}) {
       ...options.siteConfig.company, writeTransport:'rest', restReadFields:[],
     } };
     const fiscalRepository = galleryRepository({ ...options, siteConfig:fiscalSites });
+    const proposalOptions = {
+      repository:fiscalRepository, fiscalData:readOnlyData, siteConfig:fiscalSites,
+      tokenProvider:options.tokenProvider, assertSession:options.assertSession,
+      accountKey:options.accountKey, userEmail:options.userEmail,
+    };
     return Object.freeze({
       ...readOnlyData,
       orderLink:createNfeOrderLink({ repository:fiscalRepository, assertSession:options.assertSession }),
-      proposal:createNfeProposalData({
-        repository:fiscalRepository, fiscalData:readOnlyData, siteConfig:fiscalSites,
-        tokenProvider:options.tokenProvider, assertSession:options.assertSession,
-        accountKey:options.accountKey, userEmail:options.userEmail,
-      }),
+      proposal:createNfeProposalData(proposalOptions),
+      provisionProposal:createNfeProposalData({ ...proposalOptions, provision:true }),
     });
   }
   const filters = createRegistrationGalleryFilterData({ repository, siteKey: options.siteKey || "personal", kind });

@@ -98,6 +98,9 @@ export function createProvisionDescriptionDeletion({repository, siteKey = 'perso
   }
   function record(item, schema, isParent = false) {
     if (!object(item) || !object(item.fields)) throw stale('O registro do descritivo/provisão é inválido.');
+    if (isParent && String(item.fields.NFEORIGEM ?? '').trim()) {
+      throw new Error('Este descritivo tem vínculo com a nota fiscal. A exclusão comum deixaria a nota apontando para um descritivo excluído.');
+    }
     const id = identity(item.id), eTag = version(item);
     return isParent
       ? {id, eTag, supplier: display(item.fields, schema.parentSupplier)}

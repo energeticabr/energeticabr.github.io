@@ -132,7 +132,10 @@ test('rechecks the linked group before dating it and restores its line if the de
 });
 test('lists only unpaid provision descriptions and ranks supplier or exact total, without auto-linking',async()=>{
  const {state,api}=repository(),service=createDdaProvisionLink({repository:api});
+ state.items.push(provision(8,'PROPOSTA COM ENVIO PENDENTE','58.21'));
+ state.items.at(-1).fields.STATUS='PROPOSTA FISCAL EM GRAVAÇÃO';
  const options=await service.loadOptions();assert.deepEqual(options.map(item=>item.id),['1','2']);
+ await assert.rejects(service.save({ddaId:'31',provisionId:'8'}),/gravação/i);
  const ranked=rankDdaProvisionOptions(options,{supplier:'Swile do Brasil',amount:'58.21'});
  assert.equal(ranked[0].id,'1');assert.equal(ranked[0].recommended,true);assert.equal(ranked[1].amountMatch,true);
  assert.equal(state.writes.length,0);

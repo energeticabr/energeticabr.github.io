@@ -2,6 +2,7 @@ const key = value => String(value ?? '').replace(/_x([0-9a-f]{4})_/gi, (_, hex) 
   .normalize('NFD').replace(/[\u0300-\u036f]/g, '').replace(/[^a-z0-9]/gi, '').toUpperCase();
 const NAMES = ['DATAPREVISTOPGTO', 'DATAPGTOEFETUADO', 'PGTOAGENDADO', 'STATUS'];
 const status = value => String(value ?? '').trim().toUpperCase();
+export const PROVISION_FISCAL_DRAFT_STATUS = 'PROPOSTA FISCAL EM GRAVAÇÃO';
 
 export function provisionDueFields(columns = []) {
   return Object.fromEntries(NAMES.map(name => {

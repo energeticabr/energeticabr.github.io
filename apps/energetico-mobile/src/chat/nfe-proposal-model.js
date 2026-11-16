@@ -177,7 +177,7 @@ function checkedDate(value, label, optional = false) {
   return value;
 }
 
-export function validateNfeProposal(draft, fiscal, catalog) {
+export function validateNfeProposal(draft, fiscal, catalog, { provision = false } = {}) {
   const supplier = select(catalog.suppliers, draft.supplierId);
   const branch = select(catalog.branches, draft.branchId);
   const account = select(catalog.accounts, draft.accountId);
@@ -186,7 +186,7 @@ export function validateNfeProposal(draft, fiscal, catalog) {
   if (!Array.isArray(draft.lines) || draft.lines.length !== fiscal.lines.length || !fiscal.lines.length) {
     throw new Error('A proposta precisa manter todas as linhas da nota fiscal.');
   }
-  const date = checkedDate(draft.date, 'a data do pedido');
+  const date = checkedDate(draft.date, provision ? 'a data da nota' : 'a data do pedido');
   let total = new Decimal(0);
   const lines = draft.lines.map((line, index) => {
     const original = fiscal.lines[index];
@@ -216,9 +216,10 @@ export function validateNfeProposal(draft, fiscal, catalog) {
       quantity:amounts.quantity.toFixed(), unitPrice:amounts.unitPrice.toFixed(),
       discount:amounts.discount.toFixed(2), adjustment:amounts.adjustment.toFixed(2),
       netAdjustment:storedAdjustment, date:checkedDate(line.date, `a data do item ${line.number}`),
-      dueDate:checkedDate(line.dueDate, `o vencimento do item ${line.number}`, true),
+      dueDate:checkedDate(line.dueDate, `o vencimento do item ${line.number}`, !provision),
       unitReviewed:line.unitReviewed === true,
     };
   });
+  if (provision && total.lte(0)) throw new Error('O total da provisão deve ser maior que zero.');
   return { supplier, branch, account, date, lines, total:total.toFixed(2) };
 }

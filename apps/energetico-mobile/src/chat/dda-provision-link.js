@@ -1,6 +1,6 @@
 import {provisionTotal} from './pending-provision-dates.js';
 import {provisionDescriptionLinkColumn} from './provision-description-detail-data.js';
-import {provisionChildPaid,provisionDateKey as paymentDateKey,provisionDueFields,sameProvisionDue} from '../../../../portal/forms/provision-parent-due.js';
+import {PROVISION_FISCAL_DRAFT_STATUS,provisionChildPaid,provisionDateKey as paymentDateKey,provisionDueFields,sameProvisionDue} from '../../../../portal/forms/provision-parent-due.js';
 
 export const DDA_PROVISION_FIELD='DESCRITIVOPROVIS_x00c3_O';
 const validId=value=>/^[1-9]\d*$/.test(String(value??''))&&Number.isSafeInteger(Number(value));
@@ -112,13 +112,15 @@ export function createDdaProvisionLink({repository,siteKey='personal',assertSess
    const fields=line?.fields,parent=String(fields?.[linkName]??'').trim();
    if(!validId(line?.id)||!validId(parent)||!fields)continue;
    const read=(...aliases)=>childField(fields,childColumns,...aliases);
+   if(read('STATUS')===PROVISION_FISCAL_DRAFT_STATUS)continue;
    if(String(read('DATAPGTOEFETUADO')??'').trim()||nameKey(read('STATUS'))==='PAGAMENTO EFETUADO'||nameKey(read('PGTOAGENDADO'))==='PAGO')continue;
    const amount=provisionTotal(read('VALORTOTAL'),read('QTD','QUANTIDADE'),read('FRETE'));
    if(amountKey(amount)==null)continue;
    if(!byParent.has(parent))byParent.set(parent,[]);
    byParent.get(parent).push({id:String(line.id),amount,due:paymentDateKey(read('DATAPREVISTOPGTO','DATAPGTOPREVISTO'))});
   }
-  return items.filter(item=>validId(item.id)&&item.fields&&!String(item.fields.DATAPGTOEFETUADO??'').trim()).map(item=>({
+  return items.filter(item=>validId(item.id)&&item.fields&&item.fields.STATUS!==PROVISION_FISCAL_DRAFT_STATUS
+   &&!String(item.fields.DATAPGTOEFETUADO??'').trim()).map(item=>({
    id:String(item.id),supplier:String(item.fields.FORNECEDOR||'Fornecedor não informado'),amount:item.fields.VALORTOTAL??null,
    due:item.fields.DATAPREVISTOPGTO||'',label:`#${item.id} · ${item.fields.FORNECEDOR||'Fornecedor não informado'}`,provisions:byParent.get(String(item.id))||[],
   }));
@@ -189,6 +191,7 @@ export function createDdaProvisionLink({repository,siteKey='personal',assertSess
   if(!validId(ddaId)||!validId(provisionId))throw new RangeError('ID de vínculo inválido.');
   assertSession();const {dda,provision}=await lists(signal);
   const target=await repository.getItem(siteKey,provision.id,provisionId,'?$expand=fields',{signal});
+  if(target?.fields?.STATUS===PROVISION_FISCAL_DRAFT_STATUS)throw new Error('A proposta de provisão ainda está em gravação. Atualize as opções.');
   if(!target?.fields||String(target.fields.DATAPGTOEFETUADO??'').trim())throw new Error('O descritivo já possui pagamento efetuado. Atualize as opções.');
   const current=await repository.getItem(siteKey,dda.id,ddaId,'?$expand=fields',{signal});
   const eTag=itemVersion(current);

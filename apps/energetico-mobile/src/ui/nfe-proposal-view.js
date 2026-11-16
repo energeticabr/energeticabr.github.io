@@ -10,7 +10,9 @@ const money = new Intl.NumberFormat('pt-BR', { style:'currency', currency:'BRL' 
 const displayDate = date => date ? date.split('-').reverse().join('/') : 'Não informado';
 const labelOf = (options, id, empty) => options.find(option => option.id === id)?.label || (id ? `ID ${id}` : empty);
 
-export function createNfeProposalView({ document:doc, host, service, onPosted, onClose }) {
+export function createNfeProposalView({ document:doc, host, service, onPosted, onClose, provision = false }) {
+  const heading = provision ? 'Proposta de provisão' : 'Relatório proposto de lançamentos';
+  const submitLabel = provision ? 'CRIAR DESCRITIVO E PROVISÕES' : 'SUBMETER PEDIDO E LANÇAMENTOS';
   let current;
   const el = (tag, className = '', text) => {
     const node = doc.createElement(tag);
@@ -44,10 +46,10 @@ export function createNfeProposalView({ document:doc, host, service, onPosted, o
     const dialog = el('section', 'nfe-proposal-dialog');
     dialog.setAttribute('role', 'dialog');
     dialog.setAttribute('aria-modal', 'true');
-    dialog.setAttribute('aria-label', 'Relatório proposto de lançamentos');
+    dialog.setAttribute('aria-label', heading);
     dialog.tabIndex = -1;
     const header = el('header', 'nfe-proposal-header');
-    const title = el('h2', '', 'RELATÓRIO PROPOSTO DE LANÇAMENTOS');
+    const title = el('h2', '', heading.toUpperCase());
     const cancel = () => { if (current === entry && !entry.busy) close(); };
     const closeControl = button('Voltar', cancel);
     header.append(title, closeControl);
@@ -59,7 +61,7 @@ export function createNfeProposalView({ document:doc, host, service, onPosted, o
     const footer = el('footer', 'nfe-proposal-footer');
     const total = el('strong');
     total.dataset.nfeProposalTotal = '';
-    const submit = el('button', 'nfe-proposal-submit', 'SUBMETER PEDIDO E LANÇAMENTOS');
+    const submit = el('button', 'nfe-proposal-submit', submitLabel);
     submit.type = 'submit';
     submit.dataset.nfeProposalSubmit = '';
     submit.disabled = true;
@@ -90,7 +92,7 @@ export function createNfeProposalView({ document:doc, host, service, onPosted, o
     function lock() {
       closeControl.disabled = entry.busy;
       submit.disabled = entry.busy || !entry.draft;
-      submit.textContent = entry.reserved ? 'RETOMAR ENVIO' : 'SUBMETER PEDIDO E LANÇAMENTOS';
+      submit.textContent = entry.reserved ? 'RETOMAR ENVIO' : submitLabel;
       for (const fields of body.querySelectorAll('fieldset')) fields.disabled = entry.busy || entry.reserved;
     }
 
@@ -188,11 +190,14 @@ export function createNfeProposalView({ document:doc, host, service, onPosted, o
       body.replaceChildren();
       summaries = [];
       stageControls = [];
-      const reference = el('p', 'nfe-proposal-reference', `${row.type} · nº ${row.number || row.id} · Emitida em ${displayDate(fiscal.issueDate)} · Valor da nota ${money.format(Number(fiscal.total))}`);
-      const attachment = el('p', 'nfe-proposal-attachment', `PDF fiscal a anexar ao pedido · ${row.pdfName}`);
+      const baseLabel = provision ? 'Valor base da provisão' : 'Valor da nota';
+      const reference = el('p', 'nfe-proposal-reference', `${row.type} · nº ${row.number || row.id} · Emitida em ${displayDate(fiscal.issueDate)} · ${baseLabel} ${money.format(Number(fiscal.total))}`);
+      const attachment = el('p', 'nfe-proposal-attachment', `PDF fiscal a anexar ao ${provision ? 'descritivo' : 'pedido'} · ${row.pdfName}`);
       const headerFields = el('fieldset', 'nfe-proposal-fields');
       body.append(reference, attachment, headerFields);
-      if (!fiscal.dueDate) body.append(el('p', 'nfe-proposal-hint', 'O XML não informa um vencimento único. Confira a data de cada item.'));
+      if (!fiscal.dueDate) body.append(el('p', 'nfe-proposal-hint', provision
+        ? 'O XML não informa o vencimento. Informe a data de cada item.'
+        : 'O XML não informa um vencimento único. Confira a data de cada item.'));
       if (catalog.historyUnavailable) body.append(el('p', 'nfe-proposal-hint', 'Histórico de uso indisponível. Selecione as etapas pelo cadastro da filial.'));
       const supplier = field(headerFields, 'Fornecedor', 'supplierId', 'select', value => {
         entry.manualStages.clear();
@@ -207,12 +212,14 @@ export function createNfeProposalView({ document:doc, host, service, onPosted, o
         entry.draft = updateNfeProposalBranch(entry.draft, value, catalog);
         updateStages();
       });
-      const orderDate = field(headerFields, 'Data do pedido', 'date', 'date', value => { entry.draft.date = value; });
+      if (!provision) {
+        const orderDate = field(headerFields, 'Data do pedido', 'date', 'date', value => { entry.draft.date = value; });
+        orderDate.value = draft.date;
+      }
       const account = field(headerFields, 'Conta / forma de pagamento', 'accountId', 'select', value => { entry.draft.accountId = value; });
       populate(supplier, catalog.suppliers, draft.supplierId, 'Selecione o fornecedor');
       populate(branch, catalog.branches, draft.branchId, 'Selecione a filial');
       populate(account, catalog.accounts, draft.accountId, 'Selecione a conta');
-      orderDate.value = draft.date;
       pickers.set(headerFields, bindSearchableFilterSelects(headerFields, pickerOptions));
       const list = el('div', 'nfe-proposal-lines');
       body.append(list);
@@ -267,7 +274,7 @@ export function createNfeProposalView({ document:doc, host, service, onPosted, o
           updateStages();
           for (const [label, name, type] of [
             ['Quantidade','quantity','decimal'], ['Valor unitário','unitPrice','decimal'], ['Desconto','discount','decimal'],
-            ['Acréscimos / ajustes','adjustment','decimal'], ['Data do lançamento','date','date'], ['Vencimento','dueDate','date'],
+            ['Acréscimos / ajustes','adjustment','decimal'], [provision ? 'Data da provisão' : 'Data do lançamento','date','date'], ['Vencimento','dueDate','date'],
           ]) {
             const control = field(fields, label, name, type, value => { entry.draft.lines[index][name] = value; });
             control.value = line[name] || '';
@@ -286,18 +293,18 @@ export function createNfeProposalView({ document:doc, host, service, onPosted, o
       event.preventDefault();
       if (!isCurrent() || entry.busy || !entry.draft) return;
       if (!entry.reserved) {
-        try { validateNfeProposal(entry.draft, entry.fiscal, entry.catalog); }
+        try { validateNfeProposal(entry.draft, entry.fiscal, entry.catalog, { provision }); }
         catch (error) { feedback(error.message, true); return; }
       }
       entry.busy = true;
       lock();
-      feedback('Gravando pedido, lançamentos e PDF no SharePoint…');
+      feedback(provision ? 'Gravando descritivo, provisões e PDF no SharePoint…' : 'Gravando pedido, lançamentos e PDF no SharePoint…');
       try {
         const receipt = await service.submit(row, entry.draft, {
           signal, catalog:entry.catalog, xmlHash:entry.xmlHash, baseline:entry.baseline,
           manualStages:new Set(entry.manualStages),
           onProgress({ completedLines, totalLines }) {
-            if (isCurrent()) feedback(`Lançamentos conferidos ${completedLines} de ${totalLines}.`);
+            if (isCurrent()) feedback(`${provision ? 'Provisões conferidas' : 'Lançamentos conferidos'} ${completedLines} de ${totalLines}.`);
           },
         });
         if (!isCurrent()) return;
@@ -327,7 +334,8 @@ export function createNfeProposalView({ document:doc, host, service, onPosted, o
       if (!isCurrent()) return;
       Object.assign(entry, proposal);
       feedback(entry.reserved ? 'Há um envio pendente para esta nota. Retome para concluir a gravação.' :
-        'Revise o pedido e abra cada item para editar a proposta.');
+        provision ? 'Revise o descritivo e abra cada item para conferir a provisão e o vencimento.' :
+          'Revise o pedido e abra cada item para editar a proposta.');
       render();
     } catch (error) {
       if (isCurrent()) feedback(error?.message || 'Não foi possível montar a proposta fiscal.', true);
