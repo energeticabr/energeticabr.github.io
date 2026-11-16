@@ -112,7 +112,10 @@ function createPicker(select, closeOthers, options = {}) {
       // let the keyboard cover the list bottom instead of flattening the list.
       // A width change is a new orientation/window size, not a keyboard resize.
       const viewportWidth = right - left, viewportHeight = bottom - top;
-      if (reportViewport?.width === viewportWidth && viewportHeight < reportViewport.height
+      // For the proposal, a desktop window resize still needs to fit the list.
+      const keyboardCanCoverList = !options.reportFrame || view.visualViewport?.height < view.innerHeight
+        || view.matchMedia?.('(any-pointer: coarse)').matches;
+      if (keyboardCanCoverList && reportViewport?.width === viewportWidth && viewportHeight < reportViewport.height
         && (doc.activeElement === search || reportViewport.keyboardOpen)) {
         // Keep this through keyboard dismissal/reopening too. A resize while
         // search is not being edited is an ordinary window resize and may fit.

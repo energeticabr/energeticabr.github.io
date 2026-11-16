@@ -241,6 +241,30 @@ test('dismissing the native keyboard keeps the fiscal proposal search and result
   assert.equal(ctx.popup.hidden, true);
 });
 
+test('a desktop fiscal proposal fits a smaller window even while search is focused', t => {
+  const ctx = setup(t, { framed:true });
+  ctx.trigger.click();
+  ctx.search().focus();
+  ctx.type('produto');
+
+  ctx.dom.window.innerHeight = ctx.viewport.height = 250;
+  ctx.viewport.dispatchEvent(new ctx.dom.window.Event('resize'));
+  assert.equal(ctx.list.style.maxHeight, '152px');
+  assert.equal(ctx.search().value, 'produto');
+  assert.equal(ctx.list.children.length, 40);
+});
+
+test('a touch device can shrink its layout viewport without flattening the fiscal proposal list', t => {
+  const ctx = setup(t, { framed:true });
+  ctx.dom.window.matchMedia = query => ({ matches: query === '(any-pointer: coarse)' });
+  ctx.trigger.click();
+  ctx.search().focus();
+
+  ctx.dom.window.innerHeight = ctx.viewport.height = 145;
+  ctx.viewport.dispatchEvent(new ctx.dom.window.Event('resize'));
+  assert.equal(ctx.list.style.maxHeight, '292px');
+});
+
 test('Android layout resize and search rerender do not collapse the report picker', t => {
   const ctx = setup(t); ctx.trigger.click(); ctx.search().focus();
   ctx.viewport.height = 170;
