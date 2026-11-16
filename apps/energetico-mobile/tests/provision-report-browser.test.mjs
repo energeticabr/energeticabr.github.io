@@ -9,7 +9,7 @@ import {createServer} from 'vite';
 import {JSDOM} from 'jsdom';
 import {runBrowserLayout} from './helpers/browser-layout-runner.mjs';
 
-test('portrait provision report preserves landscape navigation spacing on a tablet',{timeout:90000},async t=>{
+test('provision report fills the space beneath navigation on a tablet in both orientations',{timeout:90000},async t=>{
   const browser=[process.env.CHROME_BIN,'C:\\Program Files\\Google\\Chrome\\Application\\chrome.exe','/usr/bin/google-chrome'].find(path=>path&&existsSync(path));
   if(!browser)return t.skip('Chrome unavailable');
   const cacheRoot=await mkdtemp(join(tmpdir(),'provision-portrait-vite-'));
@@ -22,7 +22,7 @@ test('portrait provision report preserves landscape navigation spacing on a tabl
       const dom=new JSDOM(stdout);const layout=JSON.parse(dom.window.document.documentElement.dataset.layout);dom.window.close();
       assert.equal(layout.error,undefined);paddings.push(layout.navigationPadding);
     }
-    assert.deepEqual(paddings,[58,58],'turning the tablet must not collapse report navigation spacing');
+    assert.deepEqual(paddings,[0,0],'both tablet orientations must use the full report width');
   }finally{await server.close();await rm(cacheRoot,{recursive:true,force:true,maxRetries:5,retryDelay:250});}
 });
 
@@ -49,15 +49,15 @@ test('provision report keeps the original compact tables in landscape and portra
       for(const [index,layout] of result.tableLayouts.entries()){
         assert.equal(layout.display,'table',`${width}x${height}: ${layout.section} turned into cards`);
         assert.equal(layout.headerDisplay,'table-row');assert.notEqual(layout.headerPosition,'absolute');
-        assert.equal(layout.rowDisplay,'table-row');assert.equal(layout.headers.length,[7,14,8][index]);
-        assert.equal(layout.cells.length,[7,14,8][index]);assert.ok(layout.cells.every(cell=>cell.display==='table-cell'));
+        assert.equal(layout.rowDisplay,'table-row');assert.equal(layout.headers.length,[8,14,8][index]);
+        assert.equal(layout.cells.length,[8,14,8][index]);assert.ok(layout.cells.every(cell=>cell.display==='table-cell'));
         for(const [column,cell] of layout.cells.entries()){
           assert.ok(Math.abs(cell.top-layout.cells[0].top)<=1,`${width}px: fields stacked vertically`);
           assert.ok(Math.abs(cell.left-layout.headers[column].left)<=1,`${width}px: header and cell misaligned`);
           assert.ok(Math.abs(cell.width-layout.headers[column].width)<=1);
         }
       }
-      assert.deepEqual(result.tableLayouts[0].headers.map(header=>header.text),['FILIAL','FORNECEDOR','PRODUTO','DATA VENCIMENTO','AGENDAMENTO','VALOR','STATUS']);
+      assert.deepEqual(result.tableLayouts[0].headers.map(header=>header.text),['ANEXOS','FILIAL','FORNECEDOR','PRODUTO','DATA VENCIMENTO','AGENDAMENTO','VALOR','STATUS']);
       assert.equal(result.loads,1);assert.equal(result.logoLoaded,true);assert.equal(result.documentOverflow,0);assert.ok(result.toolbarOverflow<=1);assert.ok(result.contentOverflow<=1);assert.ok(result.contentHeight>80);
       assert.equal(result.rows,4);assert.equal(result.pendingCount,'4 pendência(s)');assert.match(result.pendingTotal,/123\.457\.161,68/);
       assert.equal(result.inactiveRows,1,`${width}px: inactive section must exercise actual records`);
@@ -91,8 +91,8 @@ test('provision report keeps the original compact tables in landscape and portra
       assert.deepEqual(result.cellOverflows,[],`${width}px: cell contents overflow their visible bounds`);
       assert.ok(result.labelledCells.every(cell=>cell.label),`${width}px: responsive field lost its label`);
       assert.equal(result.headerColumns[1],14,`${width}px: annual headers must remain in PDF capture`);
-      if(!result.portrait)for(const wrapper of result.wrappers){assert.ok(wrapper.left>=result.arrows[0].right+2);assert.ok(wrapper.right<=result.arrows[1].left-2);}
-      assert.equal(result.filters.length,5);assert.deepEqual(result.capturedTables.map(table=>table.columns),[7,14,8]);
+      if(!result.portrait)for(const wrapper of result.wrappers){assert.ok(wrapper.left<result.arrows[0].right);assert.ok(wrapper.right>result.arrows[1].left);}
+      assert.equal(result.filters.length,5);assert.deepEqual(result.capturedTables.map(table=>table.columns),[8,14,8]);
       assert.match(result.annualText,/1\.234\.567,89/);assert.match(result.annualText,/02\/01\/2026/);assert.match(result.annualText,/02\/12\/2026/);
       t.diagnostic(`${width}x${height}: compact table rows, no annual status dots, whole dates/amounts and colored text`);
     }
@@ -114,6 +114,8 @@ test('grouped provision rows fit phone and PC canvases when expanded without cha
       const dom=new JSDOM(stdout);let result;try{result=JSON.parse(dom.window.document.documentElement.dataset.layout);}finally{dom.window.close();}
       assert.equal(result.error,undefined);const probe=result.groupProbe;
       assert.ok(probe.collapsedHidden);assert.equal(probe.expanded,'true');assert.ok(probe.focusKept);
+      assert.deepEqual(probe.attachmentColors,[{color:'rgb(21, 101, 192)',paths:1},{color:'rgb(176, 0, 32)',paths:2}]);
+      assert.deepEqual(probe.attachmentFiles,['Recibo-301.pdf','Recibo-302.pdf']);
       assert.deepEqual(probe.originalIds,['301','302']);assert.deepEqual(probe.originalDates,['09/10/2026','11/10/2026']);
       assert.equal(probe.branch,'FILIAL DO PAI');assert.equal(probe.supplier,'FORNECEDOR DE REFERÊNCIA');assert.equal(probe.date,'09/10/2026');
       assert.ok(probe.toggleRect.left>=probe.branchTextRect.right-1,`${width}px: arrow must be right of branch text`);

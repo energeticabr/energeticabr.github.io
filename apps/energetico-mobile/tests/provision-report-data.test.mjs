@@ -44,3 +44,27 @@ test('provision snapshot rejects incomplete parent pagination and cancelled read
   const controller=new AbortController();controller.abort();
   await assert.rejects(createSpendingReportsData({repository}).loadProvisionReportSnapshot({signal:controller.signal}),{name:'AbortError'});
 });
+
+test('report attachment reads and downloads use the matching SharePoint list even when item IDs overlap',async()=>{
+  const requests=[];
+  const repository={
+    async resolveList(_site,aliases){return {status:'resolved',id:aliases[0]};},
+    async listAttachments(site,list,id,{requireCollection}){
+      assert.equal(requireCollection,true);
+      requests.push([site,list,id]);
+      return [{name:list==='DESCRITIVOPROVISAO'?'descritivo.pdf':'provisao.pdf',type:'application/pdf'}];
+    },
+    async downloadAttachment(site,list,id,fileName){
+      requests.push([site,list,id,fileName]);
+      return new TextEncoder().encode('%PDF-1.7').buffer;
+    },
+  };
+  const data=createSpendingReportsData({repository});
+  for(const [kind,fileName] of [['description','descritivo.pdf'],['provision','provisao.pdf']]){
+    assert.deepEqual(await data.listProvisionReportAttachments(kind,'42'),[{fileName,mimeType:'application/pdf'}]);
+    const file=await data.downloadProvisionReportAttachment(kind,'42',fileName);
+    assert.equal(file.type,'application/pdf');assert.equal(await file.text(),'%PDF-1.7');
+  }
+  assert.deepEqual(requests,[['personal','DESCRITIVOPROVISAO','42'],['personal','DESCRITIVOPROVISAO','42','descritivo.pdf'],
+    ['personal','PROVISÃO PGTOS','42'],['personal','PROVISÃO PGTOS','42','provisao.pdf']]);
+});

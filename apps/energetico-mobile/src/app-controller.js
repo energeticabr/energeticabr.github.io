@@ -7858,7 +7858,9 @@ export function createAppController({
               assertRequest(); const token = await auth.getToken(scopes); assertRequest(); return token;
             });
           };
-          const source = await paymentLedgerDataFactory({ tokenProvider });
+          const source = await paymentLedgerDataFactory({ tokenProvider,
+            ...(provision ? { attachmentTokenProvider: ordersGalleryTokenProvider(assertSession, reportId) } : {}),
+          });
           const data = { async [method](options = {}) {
             assertSession();
             requestSignal = options.signal; requestGeneration++;
@@ -7878,7 +7880,10 @@ export function createAppController({
               assertQuery();
               throw error;
             }
-          }, ...(provision ? { async syncRecurringProvisions({ signal } = {}) {
+          }, ...(provision ? {
+            listProvisionReportAttachments: source.listProvisionReportAttachments,
+            downloadProvisionReportAttachment: source.downloadProvisionReportAttachment,
+            async syncRecurringProvisions({ signal } = {}) {
             assertSession();
             if (typeof client.refreshRecurringProvisions !== 'function' || typeof client.getRecurringProvisionRefreshStatus !== 'function') {
               throw new Error('A sincronização de despesas recorrentes está indisponível nesta sessão.');
@@ -7914,7 +7919,9 @@ export function createAppController({
           const factory = validation ? orderValidationReportFactory : provision ? provisionReportFactory : management ? managementReportFactory : paymentLedgerFactory;
           const action = validation ? 'open-order-validation-report' : provision ? 'open-provision-report'
             : management ? 'open-management-report' : 'open-payment-ledger';
-          const panel = decorateControllerReport(await factory({ data, document: globalThis.document }), action);
+          const panel = decorateControllerReport(await factory({ data, document: globalThis.document,
+            ...(provision ? { openMediaCollection: (items, options) => openGalleryMedia(items, assertSession, options) } : {}),
+          }), action);
           if (openingRevision !== spendingReportsRevision || stopped || account !== reportsAccount || sessionRevision !== reportsRevision
             || (validation && (flowBusy() || store.getState().activeFlow))) { panel.destroy?.(); return false; }
           report = panel;

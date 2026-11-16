@@ -11,9 +11,11 @@ const MONTHS = ['JAN','FEV','MAR','ABR','MAI','JUN','JUL','AGO','SET','OUT','NOV
 const money = value => Number.isFinite(value) ? formatReportMoney(value) : 'INCOMPLETO';
 const daysBetween = (start,end) => Math.round((Date.parse(`${end}T00:00:00Z`)-Date.parse(`${start}T00:00:00Z`))/86400000);
 const upper = value => String(value || '').trim().toLocaleUpperCase('pt-BR');
+const PAPERCLIP = '<path d="M20.6 11.4 11 21a6 6 0 0 1-8.5-8.5L13 2a4 4 0 0 1 5.7 5.7L8.2 18.2a2 2 0 0 1-2.8-2.8l9.5-9.5"/>';
+const CROSS = '<circle cx="18" cy="17" r="5" fill="white" stroke="none"/><path d="m15 14 6 6m0-6-6 6"/>';
 let instanceSequence=0;
 
-export function createProvisionReportView({document:doc=globalThis.document,data,now=()=>new Date()}={}) {
+export function createProvisionReportView({document:doc=globalThis.document,data,openMediaCollection,now=()=>new Date()}={}) {
   if (!doc?.body || typeof data?.loadProvisionReportSnapshot !== 'function') throw new TypeError('O relatório de provisões requer documento e sessão SharePoint.');
   const win=doc.defaultView;
   const instance=++instanceSequence;
@@ -35,6 +37,10 @@ export function createProvisionReportView({document:doc=globalThis.document,data
   report.append(filters,notice,content);panel.append(warning,report);root.append(panel);doc.body.append(root);
   let snapshot=null,controller=null,revision=0,pickers=null,destroyed=false,returnFocus=null,oldOverflow='',app=null,oldInert=false;
   let pendingSync=null,syncController=null;
+  let attachmentController,attachmentObserver;
+  const canListAttachments=typeof data.listProvisionReportAttachments==='function';
+  const canOpenAttachments=canListAttachments&&typeof data.downloadProvisionReportAttachment==='function'&&typeof openMediaCollection==='function';
+  const attachmentLoads=new WeakMap();
   const landscape = bindReportLandscape(root);
   addReportCloseControl({root, toolbar:filters, onClose:close});
   const showNotice=text=>{notice.textContent=text;notice.hidden=!text;};
@@ -114,8 +120,104 @@ export function createProvisionReportView({document:doc=globalThis.document,data
         const tone=days<2?'red':days<5?'orange':'green';statusLine(td,`- EM ${days} ${days===1?'DIA':'DIAS'}`,tone,`pr-badge pr-badge--${tone}`);}
     } else textLine(td,row.schedule||'-','pr-muted');
   }
-  function provisionRow(row,today){
+
+  function resetAttachmentReads(){
+    attachmentController?.abort();
+    attachmentObserver?.disconnect();
+    attachmentController=new AbortController();
+    attachmentObserver=null;
+  }
+
+  function watchAttachmentCell(td){
+    if(!attachmentLoads.has(td))return;
+    if(!win?.IntersectionObserver){void attachmentLoads.get(td)();return;}
+    attachmentObserver??=new win.IntersectionObserver(entries=>{
+      for(const entry of entries){
+        if(!entry.isIntersecting)continue;
+        attachmentObserver?.unobserve(entry.target);
+        void attachmentLoads.get(entry.target)?.();
+      }
+    },{root:content,rootMargin:'120px'});
+    attachmentObserver.observe(td);
+  }
+
+  function attachmentCell(tr,{kind,id,hasAttachments,detail}){
+    const td=cell(tr,'attachments','','pr-attachments');
+    const signal=attachmentController.signal;
+    const current=()=>!signal.aborted&&td.isConnected;
+    const itemLabel=`${kind==='description'?'do descritivo':'da provisão'} ${id}`;
+    let files=null;
+    async function read(){
+      if(files)return files;
+      const records=await data.listProvisionReportAttachments(kind,id,{signal});
+      files=records.filter(file=>typeof file?.fileName==='string'&&file.fileName.trim());
+      return files;
+    }
+    async function preview(control,file){
+      if(!current())return;
+      control.disabled=true;
+      try{
+        const items=file?[file]:await read();
+        if(!current())return;
+        if(!items.length){showFiles(items);return;}
+        await openMediaCollection(items.map(({fileName,mimeType})=>({fileName,mimeType,source:options=>{
+          signal.throwIfAborted();
+          return data.downloadProvisionReportAttachment(kind,id,fileName,{...options,signal:options?.signal??signal});
+        }})),{signal,resolveReturnFocus:()=>control.isConnected?control:td.querySelector('button')||panel});
+      }catch{if(current())showNotice(`Não foi possível abrir os anexos ${itemLabel}. Tente novamente.`);}
+      finally{if(current())control.disabled=false;}
+    }
+    function setState(state,label,node){
+      td.dataset.attachmentState=state;
+      td.setAttribute('aria-label',label);
+      td.replaceChildren(node);
+    }
+    function icon(state,label,action){
+      const node=action?button('pr-attachment-icon','',label):make('span','pr-attachment-icon');
+      node.title=label;
+      node.innerHTML=`<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false">${PAPERCLIP}${state==='empty'?CROSS:''}</svg>`;
+      if(action)node.addEventListener('click',()=>void action(node));
+      setState(state,state==='empty'?'Sem anexos':'Com anexos',node);
+    }
+    function showFiles(items){
+      if(!items.length){icon('empty',`Sem anexos ${itemLabel}`);return;}
+      if(!detail){icon('present',`Anexos ${itemLabel}`,canOpenAttachments?preview:null);return;}
+      const list=make('div','pr-attachment-files');
+      for(const file of items){
+        const isPdf=/\.pdf$/i.test(file.fileName)||file.mimeType==='application/pdf';
+        const control=button('pr-attachment-file',isPdf?'PDF':'Anexo',`Abrir ${file.fileName}`);
+        control.title=file.fileName;
+        control.disabled=!canOpenAttachments;
+        control.addEventListener('click',()=>void preview(control,file));
+        list.append(control);
+      }
+      setState('present',items.map(file=>file.fileName).join(', '),list);
+    }
+    async function loadFiles(){
+      if(!current())return;
+      attachmentLoads.delete(td);
+      setState('loading','Consultando anexos',make('span','','…'));
+      try{const items=await read();if(current())showFiles(items);}
+      catch{
+        if(!current())return;
+        const retry=button('pr-attachment-icon','?',`Consultar novamente os anexos ${itemLabel}`);
+        retry.title='Anexos não verificados. Tente novamente.';
+        retry.addEventListener('click',()=>void loadFiles());
+        setState('unknown','Anexos não verificados',retry);
+      }
+    }
+    if(hasAttachments===false)showFiles([]);
+    else if(!detail&&hasAttachments===true)icon('present',`Anexos ${itemLabel}`,canOpenAttachments?preview:null);
+    else{
+      setState('unknown','Anexos não verificados',make('span','','—'));
+      if(canListAttachments&&/^[1-9]\d*$/.test(id))attachmentLoads.set(td,loadFiles);
+    }
+    return td;
+  }
+
+  function provisionRow(row,today,attachmentSource){
     const tr=make('tr');if(row.children)tr.dataset.descriptionId=row.id;else tr.dataset.id=row.id;
+    attachmentCell(tr,attachmentSource);
     cell(tr,'branch',row.branch,'pr-bold');cell(tr,'supplier',row.supplier,'pr-bold');
     const productText=item=>`${item.product}${item.observation?` (${item.observation})`:''}`;
     const product=cell(tr,'product',productText(row),'pr-bold');
@@ -128,12 +230,16 @@ export function createProvisionReportView({document:doc=globalThis.document,data
     statusLine(status,due.label,dueTone,`pr-${dueTone}`);return tr;
   }
   function render(){
-    content.replaceChildren();showNotice('');if(!snapshot)return;
+    resetAttachmentReads();content.replaceChildren();showNotice('');if(!snapshot)return;
     const today=provisionDateKey(now()),result=buildProvisionReport(snapshot,selected(),today);
     const logoFrame=make('div','pr-logo'),logo=make('img');logo.src=LOGO;logo.alt='Logo Energética';logoFrame.append(logo);content.append(logoFrame);
-    const body=table('provisions','⚠ DESPESAS RECORRENTES – PROVISÃO DE PAGAMENTOS',['FILIAL','FORNECEDOR','PRODUTO','DATA VENCIMENTO','AGENDAMENTO','VALOR','STATUS'],[10,16,23,10,14,14,13]);
+    const body=table('provisions','⚠ DESPESAS RECORRENTES – PROVISÃO DE PAGAMENTOS',['ANEXOS','FILIAL','FORNECEDOR','PRODUTO','DATA VENCIMENTO','AGENDAMENTO','VALOR','STATUS'],[8,12,14,20,10,12,13,11]);
+    const descriptions=new Map(snapshot.descriptions?.map(row=>[row.id,row.hasAttachments]));
     for(const row of groupProvisionReportRows(result.rows,snapshot.descriptions)){
-      const tr=provisionRow(row,today);body.append(tr);if(!row.children)continue;
+      const descriptionId=row.children?row.id:row.descriptionId;
+      const attachmentSource=descriptionId?{kind:'description',id:descriptionId,hasAttachments:descriptions.get(descriptionId)}
+        :{kind:'provision',id:row.id,hasAttachments:row.hasAttachments};
+      const tr=provisionRow(row,today,attachmentSource);body.append(tr);watchAttachmentCell(tr.cells[0]);if(!row.children)continue;
       tr.classList.add('pr-description-group');
       const branch=tr.querySelector('[data-column=branch]'),toggle=button('pr-group-toggle','↓',`Expandir itens do descritivo ${row.id}`);
       const branchContent=make('div','pr-group-branch-content');branchContent.append(make('span','',row.branch||'—'),toggle);
@@ -141,7 +247,7 @@ export function createProvisionReportView({document:doc=globalThis.document,data
       const mixedDueDates=row.children.some(item=>item.dueDate!==row.children[0].dueDate);
       const duplicateColumns=mixedDueDates?['branch','supplier','schedule']:['branch','supplier','dueDate','schedule','status'];
       const children=row.children.map((item,index)=>{
-        const child=provisionRow(item,today);child.classList.add('pr-description-child');child.id=`pr-description-${instance}-${revision}-${row.id}-${index}`;
+        const child=provisionRow(item,today,{kind:'provision',id:item.id,hasAttachments:item.hasAttachments,detail:true});child.classList.add('pr-description-child');child.id=`pr-description-${instance}-${revision}-${row.id}-${index}`;
         for(const name of duplicateColumns){
           const parentText=name==='branch'?branch.querySelector('span').textContent:tr.querySelector(`[data-column="${name}"]`).textContent;
           const detail=child.querySelector(`[data-column="${name}"]`);
@@ -159,10 +265,10 @@ export function createProvisionReportView({document:doc=globalThis.document,data
       toggle.addEventListener('click',()=>{
         const expanded=toggle.getAttribute('aria-expanded')!=='true';
         toggle.setAttribute('aria-expanded',String(expanded));toggle.setAttribute('aria-label',`${expanded?'Recolher':'Expandir'} itens do descritivo ${row.id}`);toggle.textContent=expanded?'↑':'↓';
-        for(const child of children)child.hidden=!expanded;
+        for(const child of children){child.hidden=!expanded;if(expanded)watchAttachmentCell(child.cells[0]);}
       });
     }
-    footer(body,'TOTAL DE PROVISÕES COM PAGAMENTO PENDENTE',5,money(result.pendingTotal),'pendingTotal',`${result.pendingCount} pendência(s)`,'pendingCount');
+    footer(body,'TOTAL DE PROVISÕES COM PAGAMENTO PENDENTE',6,money(result.pendingTotal),'pendingTotal',`${result.pendingCount} pendência(s)`,'pendingCount');
     const annual=table('annual','📊 RELATÓRIO ANUAL – PROVISÃO DE PAGAMENTOS',['FORNECEDOR',...MONTHS,'TOTAL'],[16,...MONTHS.map(()=>6.25),9]);
     for(const group of result.annual){const tr=make('tr');tr.dataset.recurrenceId=group.recurrenceId;
       const supplier=cell(tr,'supplier',`${group.supplier} - ${group.property||'-'} ( ID: ${group.recurrenceId})`,'pr-bold');
@@ -220,7 +326,7 @@ export function createProvisionReportView({document:doc=globalThis.document,data
     }finally{if(current===revision){report.setAttribute('aria-busy','false');refresh.disabled=false;}}
   }
   function orientationChanged() { landscape.update();if(win?.requestAnimationFrame)win.requestAnimationFrame(fitAnnualTokens);else fitAnnualTokens(); }
-  function close(){if(root.hidden)return;controller?.abort();revision++;snapshot=null;pickers?.close();content.replaceChildren();root.hidden=true;doc.body.style.overflow=oldOverflow;if(app)app.inert=oldInert;returnFocus?.focus?.();returnFocus=null;}
+  function close(){if(root.hidden)return;controller?.abort();resetAttachmentReads();revision++;snapshot=null;pickers?.close();content.replaceChildren();root.hidden=true;doc.body.style.overflow=oldOverflow;if(app)app.inert=oldInert;returnFocus?.focus?.();returnFocus=null;}
   root.addEventListener('click',event=>{if(event.target===root)close();});
   root.addEventListener('keydown',event=>{
     if(root.hidden)return;if(event.key==='Escape'){event.preventDefault();close();return;}if(event.key!=='Tab')return;

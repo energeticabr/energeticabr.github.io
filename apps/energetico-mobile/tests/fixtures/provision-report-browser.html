@@ -16,7 +16,7 @@ import {createAttachmentPreview} from '../../src/web/attachment-preview.js';
 import {installAppZoomGuard} from '../../src/web/app-zoom-guard.js';
 try {
   installAppZoomGuard(document);
-  const base={recurrenceId:'7',branch:'004 - EDIFÍCIO XAVANTE',supplier:'FORNECEDOR COM NOME EXTENSO LTDA.',product:'LOCAÇÃO DE EQUIPAMENTO',property:'TODOS',paidDate:'',schedule:'',observation:''};
+  const base={recurrenceId:'7',branch:'004 - EDIFÍCIO XAVANTE',supplier:'FORNECEDOR COM NOME EXTENSO LTDA.',product:'LOCAÇÃO DE EQUIPAMENTO',property:'TODOS',paidDate:'',schedule:'',observation:'',hasAttachments:false};
   const provisions=[
     {...base,id:'301',dueDate:'2026-10-09',schedule:'PENDENTE',status:'PAGAMENTO PREVISTO',total:123456789.90},
     {...base,id:'302',dueDate:'2026-10-11',status:'PAGAMENTO PREVISTO',total:121.78},
@@ -28,11 +28,14 @@ try {
   const recurrences=[{...base,id:'7',status:'ATIVO',startDate:'2026-10-03',modified:'2026-10-01T12:00:00Z'},{...base,id:'8',status:'ATIVO',startDate:'2026-01-01',modified:'2026-10-01T12:00:00Z'},
     {...base,id:'9',status:'INATIVO',supplier:'FORNECEDOR INATIVO COM NOME EXTENSO LTDA.',product:'EQUIPAMENTO COM UMA DESCRIÇÃO LONGA PARA QUEBRAR SEM PERDER INFORMAÇÕES',modified:'2026-10-10T12:30:00Z'}];let loads=0;
   const grouped=new URLSearchParams(location.search).has('grouped');
-  const descriptions=grouped?[{id:'42',branch:'FILIAL DO PAI',supplier:'FORNECEDOR DE REFERÊNCIA',dueDate:'2026-10-09'},
-    {id:'43',branch:'FILIAL DO PAI',supplier:'FORNECEDOR DE REFERÊNCIA',dueDate:'2026-10-25'}]:[];
-  if(grouped){provisions[0].descriptionId='42';provisions[0].branch='FILIAL DO PAI';provisions[0].supplier='FORNECEDOR DE REFERÊNCIA';provisions[1].descriptionId='42';provisions[2].descriptionId='43';}
+  const descriptions=grouped?[{id:'42',branch:'FILIAL DO PAI',supplier:'FORNECEDOR DE REFERÊNCIA',dueDate:'2026-10-09',hasAttachments:true},
+    {id:'43',branch:'FILIAL DO PAI',supplier:'FORNECEDOR DE REFERÊNCIA',dueDate:'2026-10-25',hasAttachments:false}]:[];
+  if(grouped){provisions[0].descriptionId='42';provisions[0].branch='FILIAL DO PAI';provisions[0].supplier='FORNECEDOR DE REFERÊNCIA';provisions[1].descriptionId='42';provisions[2].descriptionId='43';provisions[0].hasAttachments=provisions[1].hasAttachments=true;}
   const preview=createAttachmentPreview({canEmbedPdf:()=>false,exportMedia:async()=>{}});
-  const action='open-provision-report',view=decorateReportPrint(decorateReportNavigation(createProvisionReportView({data:{async loadProvisionReportSnapshot(){loads++;return {provisions,recurrences,descriptions};}},now:()=>new Date('2026-10-11T12:00:00Z')}),{action}),{action,previewMedia:preview.open,closePreview:preview.close});
+  const data={async loadProvisionReportSnapshot(){loads++;return {provisions,recurrences,descriptions};},
+    async listProvisionReportAttachments(_kind,id){return [{fileName:`Recibo-${id}.pdf`}];},
+    async downloadProvisionReportAttachment(){return new Blob([],{type:'application/pdf'});}};
+  const action='open-provision-report',view=decorateReportPrint(decorateReportNavigation(createProvisionReportView({data,openMediaCollection:async()=>{},now:()=>new Date('2026-10-11T12:00:00Z')}),{action}),{action,previewMedia:preview.open,closePreview:preview.close});
   await view.open();const root=view.element;
   const portrait=root.dataset.reportPortrait==='true';
   const reportPanel=root.querySelector('[role="dialog"]'),panelBounds=reportPanel.getBoundingClientRect();
@@ -89,13 +92,18 @@ try {
     zoomProbe.resetOverflow=annualScroll.scrollWidth-annualScroll.clientWidth;
     let groupProbe;
     if(grouped){
-      const summary=main.querySelector('[data-description-id="42"]'),toggle=summary.querySelector('button');
+      const summary=main.querySelector('[data-description-id="42"]'),toggle=summary.querySelector('.pr-group-toggle');
       const controlled=toggle.getAttribute('aria-controls').split(' ').map(id=>document.getElementById(id));
       const branchCell=summary.querySelector('[data-column=branch]'),branchText=branchCell.querySelector('span');
       const annualBefore=annual.textContent,totalBefore=root.querySelector('[data-metric=pendingTotal]').textContent;
       const collapsedHidden=controlled.every(node=>node.hidden&&getComputedStyle(node).display==='none');
       toggle.focus();toggle.click();await new Promise(requestAnimationFrame);
+      for(let attempt=0;attempt<10&&controlled.some(row=>!row.querySelector('.pr-attachment-file'));attempt++)await new Promise(requestAnimationFrame);
+      const attachmentColors=[summary,main.querySelector('[data-id="303"]')].map(row=>{
+        const icon=row.querySelector('.pr-attachment-icon');return {color:getComputedStyle(icon).color,paths:icon.querySelectorAll('path').length};
+      });
       groupProbe={collapsedHidden,expanded:toggle.getAttribute('aria-expanded'),focusKept:document.activeElement===toggle,
+        attachmentColors,attachmentFiles:controlled.map(row=>row.querySelector('.pr-attachment-file')?.title),
         branchRect:rect(branchCell),branchDisplay:getComputedStyle(branchCell).display,branchTextRect:rect(branchText),toggleRect:rect(toggle),
         summaryFill:getComputedStyle(summary).backgroundColor,childFill:getComputedStyle(controlled[0]).backgroundColor,
         equalBranch:controlled[0].querySelector('[data-column=branch]').textContent,

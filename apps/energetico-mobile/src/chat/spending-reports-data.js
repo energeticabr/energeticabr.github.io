@@ -1,6 +1,7 @@
 import { SHAREPOINT_SITES } from "../../../../portal/config.js";
 import { createGraphClient } from "../../../../portal/data/graph-client.js";
 import { createSharePointRepository } from "../../../../portal/data/sharepoint-repository.js";
+import { createSharePointAttachmentTransport } from '../../../../portal/data/attachments.js';
 import { normalizeSpendingLaunch, normalizeSpendingProduct, normalizeSpendingProvision, normalizeSpendingRecurrence } from "./spending-reports-model.js";
 import { normalizeProvisionReportRow, normalizeProvisionReportRecurrence, normalizeProvisionReportDescription } from './provision-report-model.js';
 import { normalizeOrderValidationOrder, normalizeOrderValidationLaunch, assertOrderValidationSource } from './order-validation-report-model.js';
@@ -8,16 +9,25 @@ import { normalizeOrderValidationOrder, normalizeOrderValidationLaunch, assertOr
 const SITE = "personal";
 const MAX_PAGES = 100;
 const PREFER = "HonorNonIndexedQueriesWarningMayFailRandomly";
+const PROVISION_LISTS = {
+  description: ['DESCRITIVOPROVISAO'],
+  provision: ['PROVISÃO PGTOS', 'PROVISAO PGTOS', 'PROVISAO PAGAMENTOS'],
+};
 
 function abortIfNeeded(signal) {
   if (signal?.aborted) throw signal.reason || new DOMException("Consulta cancelada.", "AbortError");
 }
 
 export function createSpendingReportsData({
-  tokenProvider, repository: suppliedRepository, fetchImpl = globalThis.fetch, siteConfig = SHAREPOINT_SITES,
+  tokenProvider, attachmentTokenProvider = tokenProvider, repository: suppliedRepository,
+  fetchImpl = globalThis.fetch, siteConfig = SHAREPOINT_SITES,
 } = {}) {
   if (!suppliedRepository && typeof tokenProvider !== "function") throw new TypeError("Os relatórios requerem a sessão Microsoft ativa.");
-  const repository = suppliedRepository || createSharePointRepository(createGraphClient(tokenProvider, { fetch: fetchImpl }), siteConfig);
+  const repository = suppliedRepository || createSharePointRepository(createGraphClient(tokenProvider, { fetch: fetchImpl }), siteConfig, {
+    attachmentTransport: createSharePointAttachmentTransport({
+      tokenProvider: attachmentTokenProvider, allowedSites: Object.values(siteConfig), fetch: fetchImpl,
+    }),
+  });
 
   async function resolve(name, signal) {
     abortIfNeeded(signal);
@@ -115,8 +125,8 @@ export function createSpendingReportsData({
   async function loadProvisionReportSnapshot({ signal } = {}) {
     const [recurrenceList, provisionList, descriptionList] = await Promise.all([
       resolve(['DESPESASRECORRENTES', 'DESPESAS RECORRENTES'], signal),
-      resolve(['PROVISÃO PGTOS', 'PROVISAO PGTOS', 'PROVISAO PAGAMENTOS'], signal),
-      resolve('DESCRITIVOPROVISAO', signal),
+      resolve(PROVISION_LISTS.provision, signal),
+      resolve(PROVISION_LISTS.description, signal),
     ]);
     const [recurrenceColumns, recurrenceItems, provisionColumns, provisionItems, descriptionColumns, descriptionItems] = await Promise.all([
       repository.getColumns(SITE, recurrenceList, signal ? { signal } : {}), allItems(recurrenceList, signal),
@@ -138,6 +148,23 @@ export function createSpendingReportsData({
     });
   }
 
+  function resolveAttachmentList(kind, signal) {
+    if (!Object.hasOwn(PROVISION_LISTS, kind)) throw new RangeError('Origem de anexo inválida.');
+    return resolve(PROVISION_LISTS[kind], signal);
+  }
+
+  async function listProvisionReportAttachments(kind, id, { signal } = {}) {
+    const list = await resolveAttachmentList(kind, signal);
+    const files = await repository.listAttachments(SITE, list, id, { signal, requireCollection: true });
+    return files.map(({ name, type }) => ({ fileName: name, mimeType: type }));
+  }
+
+  async function downloadProvisionReportAttachment(kind, id, fileName, { signal, onProgress } = {}) {
+    const list = await resolveAttachmentList(kind, signal);
+    const bytes = await repository.downloadAttachment(SITE, list, id, fileName, { signal, onProgress });
+    return new Blob([bytes], { type: /\.pdf$/i.test(fileName) ? 'application/pdf' : '' });
+  }
+
   async function loadOrderValidationSnapshot({ signal } = {}) {
     const [orderList, launchList] = await Promise.all([
       resolve('NOTASPENDENTES', signal), resolve('LANCAMENTOS', signal),
@@ -156,5 +183,6 @@ export function createSpendingReportsData({
     });
   }
 
-  return Object.freeze({ loadSnapshot, loadPaymentsSnapshot, loadProvisionReportSnapshot, loadOrderValidationSnapshot });
+  return Object.freeze({ loadSnapshot, loadPaymentsSnapshot, loadProvisionReportSnapshot, loadOrderValidationSnapshot,
+    listProvisionReportAttachments, downloadProvisionReportAttachment });
 }
