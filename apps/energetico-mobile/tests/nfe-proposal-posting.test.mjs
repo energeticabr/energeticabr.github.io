@@ -1,6 +1,7 @@
 import assert from 'node:assert/strict';
 import { createHash } from 'node:crypto';
 import test from 'node:test';
+import { createSharePointRepository } from '../../../portal/data/sharepoint-repository.js';
 import { createNfeProposalPosting, decodeNfeStoredRecord } from '../src/chat/nfe-proposal-posting.js';
 import { createNfeLearningExample, createNfeLearningModel } from '../src/chat/nfe-proposal-learning.js';
 
@@ -24,6 +25,15 @@ function fixture(provision = false) {
   const files = new Map();
   const events = [];
   const state = { revision:1, orderRevision:1, sourcePdf:pdf };
+  const attachmentListId = '12345678-1234-1234-1234-123456789abc';
+  const attachmentRepository = createSharePointRepository(
+    { async request() { assert.fail('attachments must use the SharePoint REST transport'); } },
+    { personal:{ host:'personal.example', path:'/personal/account' } },
+    { attachmentTransport:{ async request(_site, path) {
+      assert.match(path, /\/items\(40\)\/AttachmentFiles(?:\?|$)/);
+      return { value:[...files.keys()].map(FileName => ({ FileName })) };
+    } } },
+  );
   function fiscalItem() { return { id:'7', eTag:`\"${state.revision}\"`, fields:structuredClone(fiscal) }; }
   const repository = {
     async resolveList(site, [name]) {
@@ -103,10 +113,9 @@ function fixture(provision = false) {
       if (state.loseCreate === fields[technical]) throw new Error('response lost after creation');
       return { id };
     },
-    async listAttachments(site, list, id) {
+    async listAttachments(site, list, id, options) {
       assert.deepEqual([site,list,id], ['personal',parents,'40']);
-      if (files.size && state.hideSavedAttachment) { state.hideSavedAttachment = false; return []; }
-      return [...files.keys()].map(fileName => ({ fileName }));
+      return attachmentRepository.listAttachments(site, attachmentListId, id, options);
     },
     async uploadAttachment(site, list, id, file, name) {
       assert.deepEqual([site,list,id,name], ['personal',parents,'40',pdfName]);
@@ -119,11 +128,7 @@ function fixture(provision = false) {
     },
     async downloadAttachment(site, list, id, name) {
       assert.deepEqual([site,list,id], ['personal',parents,'40']);
-      if (state.rejectAttachmentRead?.length) {
-        const status = state.rejectAttachmentRead.shift();
-        assert.equal(tables[children].length, 0, 'provisions wait for the verified attachment');
-        throw Object.assign(new Error('O SharePoint recusou a operação de anexo.'), { status });
-      }
+      if (state.rejectAttachmentRead) throw new Error('attachment read unavailable');
       return files.get(name);
     },
   };
@@ -182,11 +187,16 @@ test('reserves, creates the order, confirms its PDF, creates both launches and l
   assert.deepEqual(files.get(pdfName), await pdf.arrayBuffer());
 });
 
-test('a provision verifies a saved PDF after SharePoint temporarily hides it or rejects its download', async () => {
+test('a provision resumes with the already attached PDF using SharePoint attachment metadata', async () => {
   const { fiscal,tables,files,events,state,service } = fixture(true);
-  state.hideSavedAttachment = true;
-  state.rejectAttachmentRead = [404, 503];
-  assert.deepEqual(await service().submit(invoice,draft),
+  state.rejectAttachmentRead = true;
+  await assert.rejects(service().submit(invoice,draft), /attachment read unavailable/);
+  assert.equal(fiscal.NFEDESCRITIVO, undefined);
+  assert.equal(tables['PROVISÃO PGTOS'].length, 0);
+  assert.equal(files.size, 1);
+
+  state.rejectAttachmentRead = false;
+  assert.deepEqual(await service().submit(invoice, await service().loadReservation(invoice)),
     { invoiceId:'7', provisionDescriptionId:'40', provisionIds:['50','51'] });
   assert.equal(fiscal.NFEDESCRITIVO, 40);
   assert.equal(tables.DESCRITIVOPROVISAO.length, 1);

@@ -130,7 +130,7 @@ async function verifyCrossPosting(t, firstIsProvision) {
       return { id };
     },
     async listAttachments(_site, _list, id) {
-      return attachments.has(id) ? [{ fileName:row.pdfName }] : [];
+      return attachments.has(id) ? [{ name:row.pdfName }] : [];
     },
     async uploadAttachment(_site, _list, id, pdf) { attachments.set(id, pdf); },
     async downloadAttachment(_site, _list, id) { return attachments.get(id); },
