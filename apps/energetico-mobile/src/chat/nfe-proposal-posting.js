@@ -351,12 +351,12 @@ export function createNfeProposalPosting({ repository, assertSession = () => {},
   async function ensurePdf(list, id, name, pdf, fingerprint, readOnly, signal) {
     async function confirm() {
       active(signal);
-      const attachments = await repository.listAttachments('personal', list, id);
+      const attachments = await repository.listAttachments('personal', list, id, { signal, requireCollection:true, namesOnly:true });
       active(signal);
       if (!Array.isArray(attachments)) throw new Error(`A consulta de anexos do ${target} está incompleta.`);
-      const matches = attachments.filter(file => file.fileName?.toLowerCase() === name.toLowerCase());
+      const matches = attachments.filter(file => file.name?.toLowerCase() === name.toLowerCase());
       if (!matches.length) return false;
-      if (matches.length !== 1 || matches[0].fileName !== name) throw new Error(`O nome do PDF já está em uso no ${target}.`);
+      if (matches.length !== 1 || matches[0].name !== name) throw new Error(`O nome do PDF já está em uso no ${target}.`);
       const saved = await repository.downloadAttachment('personal', list, id, name, { signal });
       if (await pdfFingerprint(saved) !== fingerprint) throw new Error(`O PDF do ${target} diverge do PDF fiscal original.`);
       active(signal);

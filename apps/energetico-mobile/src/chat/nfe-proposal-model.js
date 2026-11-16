@@ -182,7 +182,12 @@ export function validateNfeProposal(draft, fiscal, catalog, { provision = false 
   const supplier = select(catalog.suppliers, draft.supplierId);
   const branch = select(catalog.branches, draft.branchId);
   const account = select(catalog.accounts, draft.accountId);
-  if (!supplier || !branch || !account) throw new Error('Selecione um fornecedor, uma filial e uma conta cadastrada.');
+  if (provision) {
+    if (!supplier || !branch) throw new Error('Selecione um fornecedor e uma filial cadastrados.');
+    if (draft.accountId && !account) throw new Error('Selecione uma conta cadastrada ou deixe o campo em branco.');
+  } else if (!supplier || !branch || !account) {
+    throw new Error('Selecione um fornecedor, uma filial e uma conta cadastrada.');
+  }
   const stages = nfeProposalStages(catalog, branch.id);
   if (!Array.isArray(draft.lines) || draft.lines.length !== fiscal.lines.length || !fiscal.lines.length) {
     throw new Error('A proposta precisa manter todas as linhas da nota fiscal.');
