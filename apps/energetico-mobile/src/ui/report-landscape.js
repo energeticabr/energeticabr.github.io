@@ -33,12 +33,12 @@ export function bindReportLandscape(root) {
   return Object.freeze({update,destroy(){destroyed=true;win.removeEventListener('resize',update);win.removeEventListener('orientationchange',update);}});
 }
 
-function insetReportViewport(viewport, frame, width, height) {
-  const padding = frame.ownerDocument.defaultView.getComputedStyle(frame);
-  const top = Math.max(viewport.top, parseFloat(padding.paddingTop) || 0);
-  const left = Math.max(viewport.left, parseFloat(padding.paddingLeft) || 0);
-  const right = Math.min(viewport.left + viewport.width, width - (parseFloat(padding.paddingRight) || 0));
-  const bottom = Math.min(viewport.top + viewport.height, height - (parseFloat(padding.paddingBottom) || 0));
+function insetReportViewport(viewport, width, height, ...styles) {
+  const inset = side => styles.reduce((sum, style) => sum + (parseFloat(style?.[`padding${side}`]) || 0), 0);
+  const top = Math.max(viewport.top, inset('Top'));
+  const left = Math.max(viewport.left, inset('Left'));
+  const right = Math.min(viewport.left + viewport.width, width - inset('Right'));
+  const bottom = Math.min(viewport.top + viewport.height, height - inset('Bottom'));
   return { rotated:viewport.rotated, top, left, width:Math.max(0, right - left), height:Math.max(0, bottom - top) };
 }
 
@@ -48,33 +48,23 @@ export function reportLayoutViewport(element, frame) {
   if (root?.dataset.reportPortrait === 'true') {
     const width = parseFloat(root.style.getPropertyValue('--report-width'));
     const height = parseFloat(root.style.getPropertyValue('--report-height'));
-    if (frame) {
-      // Rotate the visible viewport too, so the physical keyboard cannot cover the search.
-      const visibleWidth = viewport?.width || height;
-      const visible = {
-        rotated:true,
-        top:height - (viewport?.offsetLeft || 0) - visibleWidth,
-        left:viewport?.offsetTop || 0,
-        width:viewport?.height || width,
-        height:visibleWidth,
-      };
-      return insetReportViewport(visible, frame, width, height);
-    }
-    // Pickers share this rotated containing block. Both axes must include
-    // backdrop and panel padding to keep menus within the visible report.
-    const style=win.getComputedStyle(root);
-    const panel=element.closest('[role="dialog"]')||root.querySelector('[role="dialog"]');
-    const panelStyle=panel&&panel!==root?win.getComputedStyle(panel):null;
-    const top=(parseFloat(style.paddingTop)||0)+(parseFloat(panelStyle?.paddingTop)||0);
-    const bottom=(parseFloat(style.paddingBottom)||0)+(parseFloat(panelStyle?.paddingBottom)||0);
-    const left=(parseFloat(style.paddingLeft)||0)+(parseFloat(panelStyle?.paddingLeft)||0);
-    const right=(parseFloat(style.paddingRight)||0)+(parseFloat(panelStyle?.paddingRight)||0);
-    return {rotated:true,top,left,
-      width:Math.max(0,width-left-right),
-      height:Math.max(0,height-top-bottom)};
+    // Convert the visible area to the rotated report's coordinates before
+    // clipping it to the report's safe area.
+    const visibleWidth = viewport?.width || height;
+    const visible = {
+      rotated:true,
+      top:height - (viewport?.offsetLeft || 0) - visibleWidth,
+      left:viewport?.offsetTop || 0,
+      width:viewport?.height || width,
+      height:visibleWidth,
+    };
+    if (frame) return insetReportViewport(visible, width, height, win.getComputedStyle(frame));
+    const panel = element.closest('[role="dialog"]') || root.querySelector('[role="dialog"]');
+    const panelStyle = panel && panel !== root ? win.getComputedStyle(panel) : null;
+    return insetReportViewport(visible, width, height, win.getComputedStyle(root), panelStyle);
   }
   const visible = {rotated:false,top:viewport?.offsetTop||0,left:viewport?.offsetLeft||0,width:viewport?.width||win.innerWidth,height:viewport?.height||win.innerHeight};
-  return frame ? insetReportViewport(visible, frame, win.innerWidth, win.innerHeight) : visible;
+  return frame ? insetReportViewport(visible, win.innerWidth, win.innerHeight, win.getComputedStyle(frame)) : visible;
 }
 
 export function reportLayoutRect(element) {

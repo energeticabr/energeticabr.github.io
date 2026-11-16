@@ -413,7 +413,9 @@ function createPicker(select, closeOthers, options = {}) {
   doc.addEventListener('pointercancel', onOptionPointerCancel);
   select.addEventListener('change', sync); select.form?.addEventListener('reset', onReset);
   doc.addEventListener('pointerdown', onOutside); doc.addEventListener('click', onOutside);
-  doc.addEventListener('scroll', onAncestorScroll, true);
+  // Only inline dropdowns follow their trigger. Expanded report pickers
+  // follow the viewport, which can pan when the mobile keyboard opens.
+  if (!reportPicker) doc.addEventListener('scroll', onAncestorScroll, true);
   view.addEventListener('resize', positionPopup);
   const optionObserver = new view.MutationObserver(sync);
   optionObserver.observe(select, { childList: true, subtree: true, characterData: true, attributes: true, attributeFilter: ['disabled', 'label', 'value', 'selected', 'hidden'] });
@@ -441,7 +443,8 @@ function createPicker(select, closeOthers, options = {}) {
       doc.removeEventListener('pointercancel', onOptionPointerCancel);
       select.removeEventListener('change', sync); select.form?.removeEventListener('reset', onReset);
       doc.removeEventListener('pointerdown', onOutside); doc.removeEventListener('click', onOutside);
-      doc.removeEventListener('scroll', onAncestorScroll, true); view.removeEventListener('resize', positionPopup);
+      if (!reportPicker) doc.removeEventListener('scroll', onAncestorScroll, true);
+      view.removeEventListener('resize', positionPopup);
       observedViewport?.removeEventListener('resize', positionPopup); observedViewport?.removeEventListener('scroll', positionPopup);
       wrapper.remove(); select.hidden = original.hidden;
       for (const [name, value] of [['aria-hidden', original.ariaHidden], ['tabindex', original.tabIndex]]) {
