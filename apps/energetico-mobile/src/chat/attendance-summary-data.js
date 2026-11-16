@@ -28,7 +28,7 @@ const scalar = value => {
   if (value && typeof value === "object") return scalar(value.LookupValue ?? value.Value ?? value.value ?? value.Title ?? value.LookupId);
   return String(value ?? "").trim();
 };
-const valueKey = value => scalar(value).normalize("NFC").toLocaleUpperCase("pt-BR").replace(/\s+/g, " ");
+const valueKey = value => scalar(value).normalize("NFD").replace(/[\u0300-\u036f]/g, "").toUpperCase().replace(/\s+/g, " ");
 const columnKey = value => String(value ?? "").replace(/_x([0-9a-f]{4})_/gi, (_, code) => String.fromCodePoint(Number.parseInt(code, 16)))
   .normalize("NFD").replace(/[\u0300-\u036f]/g, "").toUpperCase().replace(/[^A-Z0-9]/g, "");
 
@@ -81,7 +81,7 @@ function normalizeItem(item, columns, kind) {
   if (kind === "stages") return Object.freeze({
     id, branch: get(0), stage: get(1), property: get(2), status: get(3), activity: get(4), supplier: get(5),
   });
-  if (kind === "activities") return Object.freeze({ branch: get(0), activity: get(1), stage: get(2) });
+  if (kind === "activities") return Object.freeze({ id, branch: get(0), activity: get(1), stage: get(2) });
   if (kind === "directory") return normalizeRhSupplier(item, columns);
   if (kind === "suppliers") {
     const stageColumn = columns[4];
@@ -152,6 +152,19 @@ async function loadList(repository, kind, signal, range) {
   throw new RangeError("Limite seguro de paginação excedido; nenhum total parcial foi disponibilizado.");
 }
 
+async function readCatalogItem(repository, kind, id, signal) {
+  const schema = await resolveSchema(repository, kind, signal);
+  const item = await abortable(() => repository.getItem(SITE, schema.id, id, "", {
+    restrictedFields: selectedFields(schema.columns, kind), signal,
+  }), signal);
+  if (String(item?.id) !== id || !item.fields) throw new Error("O SharePoint não confirmou o vínculo selecionado.");
+  return normalizeItem(item, schema.columns, kind);
+}
+
+function catalogChanged() {
+  return Object.assign(new Error("O catálogo de vínculos mudou no SharePoint."), { code: "ATTENDANCE_CATALOG_CHANGED" });
+}
+
 function supplierRecord(item, columns, id) {
   if (String(item?.id) !== id || !item.fields) throw new Error("O SharePoint não confirmou o cadastro do fornecedor.");
   return normalizeItem(item, columns, "suppliers");
@@ -214,7 +227,8 @@ export function createAttendanceSummaryData({ tokenProvider, repository: supplie
       const [catalog, descriptions] = await Promise.all(
         ["activities", "stages"].map(kind => loadList(repository, kind, activeSignal)),
       );
-      const inBranch = row => !supplier.branch || valueKey(row.branch) === valueKey(supplier.branch);
+      const branch = valueKey(supplier.branch);
+      const inBranch = row => branch && valueKey(row.branch) === branch;
       const activities = catalog.filter(row => row.activity && inBranch(row));
       const stages = descriptions.filter(row => row.id === supplier.stage || (inBranch(row) && valueKey(row.status) === "ATIVIDADE INICIADA"));
       return { supplier, eTag, activities, stages };
@@ -225,24 +239,44 @@ export function createAttendanceSummaryData({ tokenProvider, repository: supplie
     const { supplier, eTag, activities, stages } = editor;
     const { stage, activity } = links;
     const selectedStage = stages.find(row => row.id === stage);
+    const stageChanged = stage !== supplier.stage;
+    const activityChanged = activity !== supplier.activity;
+    const verifyLinks = (stageChanged && stage) || (activityChanged && activity);
     if (!itemId(supplier?.id) || typeof stage !== "string" || typeof activity !== "string"
-      || (stage !== supplier.stage && stage && !selectedStage)
-      || ((stage !== supplier.stage || activity !== supplier.activity) && activity
+      || (stageChanged && stage && !selectedStage)
+      || ((stageChanged || activityChanged) && activity
         && !attendanceActivityOptions(activities, selectedStage?.stage).includes(activity))) {
       throw new TypeError("Selecione vínculos válidos para o fornecedor.");
     }
     return withRepository(signal, async (repository, activeSignal) => {
       const { id, columns } = await resolveSchema(repository, "suppliers", activeSignal);
       const changes = {};
-      if (stage !== supplier.stage) {
+      if (stageChanged) {
         const [name, value] = registryLinkField(columns[4], stage);
         changes[name] = value;
       }
-      if (activity !== supplier.activity) {
+      if (activityChanged) {
         if (columns[5].lookup) throw new Error("O tipo do campo Atividade exercida não aceita o valor selecionado.");
         changes[columns[5].name] = registryLinkField(columns[5], activity)[1];
       }
       if (!Object.keys(changes).length) return supplier;
+      if (verifyLinks) {
+        const activityId = activity
+          ? activities.find(row => row.activity === activity && valueKey(row.stage) === valueKey(selectedStage.stage))?.id : null;
+        try {
+          const [stageNow, activityNow] = await Promise.all([
+            readCatalogItem(repository, "stages", stage, activeSignal),
+            activityId ? readCatalogItem(repository, "activities", activityId, activeSignal) : null,
+          ]);
+          const branch = valueKey(supplier.branch);
+          if (!branch || valueKey(stageNow.branch) !== branch || valueKey(stageNow.status) !== "ATIVIDADE INICIADA"
+            || (activity && (!activityNow || activityNow.activity !== activity || valueKey(activityNow.branch) !== branch
+              || valueKey(activityNow.stage) !== valueKey(stageNow.stage)))) throw catalogChanged();
+        } catch (error) {
+          if (error?.status === 404) throw catalogChanged();
+          throw error;
+        }
+      }
       const readbackFields = selectedFields(columns, "suppliers");
       const item = await abortable(() => repository.updateItem(SITE, id, supplier.id, changes, {
         eTag, readbackFields, signal: activeSignal,

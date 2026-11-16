@@ -33,7 +33,8 @@ export function attendanceStageLabel({ id, stage, activity, property, supplier }
 }
 
 export function attendanceActivityOptions(activities, stage) {
-  return [...new Set(activities.filter(row => !stage || key(row.stage) === key(stage))
+  if (!key(stage)) return [];
+  return [...new Set(activities.filter(row => key(row.stage) === key(stage))
     .map(row => row.activity))].sort(sortText);
 }
 

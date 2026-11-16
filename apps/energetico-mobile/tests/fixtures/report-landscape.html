@@ -68,9 +68,10 @@ if(attendanceMode&&new URL(location.href).searchParams.has('edit')) {
  await new Promise(resolve=>requestAnimationFrame(resolve));
  const editor=card(1).querySelector('form');
  const fits=content.scrollWidth<=content.clientWidth+1&&editor.scrollWidth<=editor.clientWidth+1;
- editor.elements.stage.value='32';
- editor.elements.stage.dispatchEvent(new Event('change'));
- editor.elements.activity.value='ARMAÇÃO DE BLOCOS';
+ const stageSelect=editor.querySelector('[data-attendance-link=stage]');
+ stageSelect.value='32';
+ stageSelect.dispatchEvent(new Event('change'));
+ editor.querySelector('[data-attendance-link=activity]').value='ARMAÇÃO DE BLOCOS';
  editor.requestSubmit();
  await new Promise(resolve=>requestAnimationFrame(resolve));
  document.documentElement.dataset.layout=JSON.stringify({sharesColor,fits,updated:color(1)===color(3)&&color(1)!==color(2),

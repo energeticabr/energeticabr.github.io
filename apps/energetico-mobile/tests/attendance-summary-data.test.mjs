@@ -246,6 +246,7 @@ test("authenticated token retrieval receives read scopes and aborts before netwo
 
 test("supplier link edits update the two registry fields with the loaded ETag and check readback", async () => {
   const patches = [];
+  let catalogueStatus = "ATIVIDADE INICIADA";
   const current = { id: "1", eTag: '"v1"', fields: {
     field_0: "Ana", field_1: "ATIVO", field_2: "B", field_3: "PEDREIRO", field_4: 35, field_5: "ARMAÇÃO",
   } };
@@ -262,7 +263,11 @@ test("supplier link edits update the two registry fields with the loaded ETag an
         { id: "9", fields: { ATIVIDADEEXECUTADA: "OUTRA", FILIAL: "Z", ETAPA: "ESTRUTURA" } },
         { id: "10", fields: { ATIVIDADEEXECUTADA: "PINTURA", FILIAL: "B", ETAPA: "ACABAMENTO" } }], hasMore: false };
     },
-    async getItem() { return current; },
+    async getItem(_site, list, id) {
+      if (list === "DEMONSTRATIVOETAPA") return { ...stage, id, fields: { ...stage.fields, field_3: catalogueStatus } };
+      if (list === "ATIVIDADE EXECUTADA") return { id: "8", fields: { ATIVIDADEEXECUTADA: "CONCRETAGEM", FILIAL: "B", ETAPA: "ESTRUTURA" } };
+      return current;
+    },
     async updateItem(site, list, id, fields, options) {
       patches.push({ site, list, id, fields, eTag: options.eTag });
       if (patches.length > 1) throw Object.assign(new Error("concurrent update"), { status: 412 });
@@ -273,9 +278,15 @@ test("supplier link edits update the two registry fields with the loaded ETag an
   const editor = await data.loadSupplierEditor("1");
   assert.deepEqual(editor.activities.map(row => row.activity), ["CONCRETAGEM", "PINTURA"]);
   assert.throws(() => data.saveSupplierLinks(editor, { stage: "52", activity: "PINTURA" }), /vínculos válidos/);
+  assert.throws(() => data.saveSupplierLinks(editor, { stage: "", activity: "CONCRETAGEM" }), /vínculos válidos/);
+  assert.throws(() => data.saveSupplierLinks(editor, { stage: "", activity: "ARMAÇÃO" }), /vínculos válidos/);
   const saved = await data.saveSupplierLinks(editor, { stage: "52", activity: "CONCRETAGEM" });
   assert.deepEqual(patches, [{ site: "personal", list: "FORNECEDORES", id: "1",
     fields: { field_4: 52, field_5: "CONCRETAGEM" }, eTag: '"v1"' }]);
   assert.equal(saved.stage, "52"); assert.equal(saved.activity, "CONCRETAGEM");
+  catalogueStatus = "ATIVIDADE FINALIZADA";
+  await assert.rejects(data.saveSupplierLinks(editor, { stage: "55", activity: "CONCRETAGEM" }), { code: "ATTENDANCE_CATALOG_CHANGED" });
+  assert.equal(patches.length, 1);
+  catalogueStatus = "ATIVIDADE INICIADA";
   await assert.rejects(data.saveSupplierLinks(editor, { stage: "55", activity: "CONCRETAGEM" }), { status: 412 });
 });

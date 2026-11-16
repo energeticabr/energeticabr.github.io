@@ -381,3 +381,28 @@ test('attendance opening errors are reported once and a new attempt can open', a
   assert.equal(await h.view.emit('open-attendance-summary'), true);
   assert.equal(factories, 2);
 });
+
+test('opening a supplier editor requests write consent before collecting choices and respects session cancellation', async t => {
+  const requestedScopes = [];
+  const h = harness(t, {
+    attendanceSummaryDataFactory: async ({ tokenProvider }) => ({
+      async loadSupplierEditor(id) {
+        await tokenProvider(scopes);
+        return { supplier: { id }, eTag: '"version"' };
+      },
+      async saveSupplierLinks(editor, links) {
+        await tokenProvider(['Sites.ReadWrite.All']);
+        return { ...editor.supplier, ...links };
+      },
+    }),
+    auth: { getToken: async value => { requestedScopes.push(value); return 'sharepoint-token'; } },
+  });
+  const data = await open(h);
+  assert.deepEqual(requestedScopes, []);
+  const editor = await data.loadSupplierEditor('1');
+  assert.deepEqual(requestedScopes, [['Sites.ReadWrite.All'], ['Sites.Read.All']]);
+  assert.deepEqual(await data.saveSupplierLinks(editor, { stage: '5', activity: 'ALVENARIA' }),
+    { id: '1', stage: '5', activity: 'ALVENARIA' });
+  h.controller.stop();
+  await assert.rejects(data.saveSupplierLinks(editor, { stage: '6' }), { name: 'AbortError' });
+});

@@ -47,13 +47,14 @@ export function createAttendanceSummaryReportView({document:doc=globalThis.docum
  let snapshot=null,controller=null,revision=0,pickers=null,destroyed=false,returnFocus=null,oldOverflow='',app=null,oldInert=false;
  let editing=null;
  const landscape = bindReportLandscape(root);
-  addReportCloseControl({root, toolbar:filters, onClose:close});
+ const requestClose=()=>{if(!editing?.saving)close();};
+ const closeControl=addReportCloseControl({root, toolbar:filters, onClose:requestClose});
  const showNotice=text=>{notice.textContent=text;notice.hidden=!text;};
  const selected=()=>Object.fromEntries([...controls].map(([name,node])=>[name,node.value]));
  function endEditing(restoreFocus=false){
   if(!editing)return;
-  const {abort,form,trigger,saving}=editing;
-  if(saving)for(const control of [refresh,...controls.values(),...displays.values()])control.disabled=false;
+  const {abort,form,trigger,lockedControls}=editing;
+  for(const control of lockedControls)control.disabled=false;
   editing=null;
   abort.abort();
   form.remove();
@@ -69,7 +70,7 @@ export function createAttendanceSummaryReportView({document:doc=globalThis.docum
  }
  function linkSelect(form,name,label){
   const wrapper=make('label');
-  const select=make('select');select.name=name;
+  const select=make('select');select.dataset.attendanceLink=name;
   wrapper.append(make('span','',label),select);form.append(wrapper);
   return select;
  }
@@ -79,8 +80,9 @@ export function createAttendanceSummaryReportView({document:doc=globalThis.docum
   const form=make('form','as-provider-editor'),status=make('p','as-edit-status','Carregando cadastro…');
   const cancel=button('as-edit-button','Cancelar');
   const abort=new AbortController();
-  const edit={abort,form,trigger,saving:false};
+  const edit={abort,form,trigger,saving:false,lockedControls:[]};
   editing=edit;
+  form.dataset.reportScreenOnly='';
   trigger.disabled=true;
   trigger.setAttribute('aria-expanded','true');
   status.setAttribute('role','status');
@@ -111,7 +113,11 @@ export function createAttendanceSummaryReportView({document:doc=globalThis.docum
     const links={stage:stage.value,activity:activity.value};
     if(links.stage===supplier.stage&&links.activity===supplier.activity){endEditing(true);return;}
     edit.saving=true;
-    for(const control of [stage,activity,cancel,save,refresh,...controls.values(),...displays.values()])control.disabled=true;
+    const decoratedControls=panel.querySelectorAll('.report-navigation-arrow,[data-action="print-report-pdf"],.sfs-trigger');
+    edit.lockedControls=[stage,activity,cancel,refresh,closeControl,...controls.values(),...displays.values(),...decoratedControls]
+     .filter(control=>!control.disabled);
+    for(const control of edit.lockedControls)control.disabled=true;
+    save.disabled=true;
     status.textContent='Salvando cadastro…';
     try{
      const saved=await data.saveSupplierLinks(source,links,{signal:abort.signal});
@@ -126,12 +132,13 @@ export function createAttendanceSummaryReportView({document:doc=globalThis.docum
     }catch(error){
      if(editing!==edit)return;
      status.textContent=error?.status===412?'O cadastro mudou no SharePoint. Cancele e abra a edição novamente.'
+      :error?.code==='ATTENDANCE_CATALOG_CHANGED'?'Os vínculos disponíveis mudaram. Cancele e abra a edição novamente.'
       :'Não foi possível confirmar o salvamento. Confira o cadastro ao reabrir a edição.';
-     save.disabled=true;
     }finally{
      if(editing===edit){
       edit.saving=false;
-      for(const control of [stage,activity,cancel,refresh,...controls.values(),...displays.values()])control.disabled=false;
+      for(const control of edit.lockedControls)control.disabled=false;
+      edit.lockedControls=[];
      }
     }
    });
@@ -151,6 +158,7 @@ export function createAttendanceSummaryReportView({document:doc=globalThis.docum
   if(provider.id&&typeof data.loadSupplierEditor==='function'&&typeof data.saveSupplierLinks==='function'){
    const edit=button('as-edit-button','✎ Editar');
    edit.dataset.supplierEdit=provider.id;
+   edit.dataset.reportScreenOnly='';
    edit.setAttribute('aria-label',`Editar cadastro de ${provider.name}`);
    edit.setAttribute('aria-expanded','false');
    edit.addEventListener('click',()=>void editSupplier(provider,card,edit));card.append(edit);
@@ -229,7 +237,7 @@ export function createAttendanceSummaryReportView({document:doc=globalThis.docum
  }
  function orientationChanged() { landscape.update(); }
  function close(){if(root.hidden)return;endEditing();controller?.abort();revision++;snapshot=null;pickers?.close();content.replaceChildren();root.hidden=true;doc.body.style.overflow=oldOverflow;if(app)app.inert=oldInert;returnFocus?.focus?.();returnFocus=null;}
- root.addEventListener('click',e=>{if(e.target===root)close();});
+ root.addEventListener('click',e=>{if(e.target===root)requestClose();});
  root.addEventListener('keydown',e=>{
   if(root.hidden)return;if(e.key==='Escape'){e.preventDefault();if(editing){if(!editing.saving)endEditing(true);}else close();return;}if(e.key!=='Tab')return;
   const nodes=[...panel.querySelectorAll('button,input,select,[tabindex="0"]')].filter(n=>!n.disabled&&!n.closest('[hidden]')&&n.tabIndex>=0),first=nodes[0],last=nodes.at(-1);

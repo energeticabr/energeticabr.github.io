@@ -81,7 +81,8 @@ test('untrusted labels stay text and failed/closed loads cannot show stale resul
 
 test('supplier edit reads the current catalog, saves the chosen links and updates just the supplier card', async t=>{
  const dom=new JSDOM('<main id="app"></main>');
- let saved;
+ let saved, finishSave;
+ const pendingSave=new Promise(resolve=>{finishSave=resolve;});
  const registered={id:'1',name:'Alfa',status:'ATIVO',profession:'PEDREIRO',branch:'004 - XAVANTE',stage:'3',activity:'ARMAÇÃO'};
  const stages=[{id:'3',stage:'ESTRUTURA',branch:registered.branch,status:'ATIVIDADE INICIADA'},
   {id:'8',stage:'FUNDAÇÃO',branch:registered.branch,status:'ATIVIDADE INICIADA'}];
@@ -89,7 +90,7 @@ test('supplier edit reads the current catalog, saves the chosen links and update
   async loadSnapshot(){return {...snapshot, stages, suppliers:[registered]};},
   async loadSupplierEditor(id){assert.equal(id,'1');return {supplier:registered,eTag:'"version-1"',stages,
    activities:[{stage:'ESTRUTURA',activity:'ARMAÇÃO'},{stage:'FUNDAÇÃO',activity:'CONCRETAGEM'}]};},
-  async saveSupplierLinks(editor, links){saved={editor,links};return {...registered,...links};}
+  async saveSupplierLinks(editor, links){saved={editor,links};await pendingSave;return {...registered,...links};}
  };
  const view=createAttendanceSummaryReportView({document:dom.window.document,data,now:()=>new Date('2026-10-05T12:00:00Z')});
  t.after(()=>{view.destroy();dom.window.close();});
@@ -99,15 +100,20 @@ test('supplier edit reads the current catalog, saves the chosen links and update
  assert.match(card.textContent,/Alfa.*ESTRUTURA.*ARMAÇÃO/s);
  card.querySelector('button').click();
  await new Promise(resolve=>setImmediate(resolve));
- const stage=root.querySelector('select[name=stage]');
- const activity=root.querySelector('select[name=activity]');
+ const stage=root.querySelector('[data-attendance-link=stage]');
+ const activity=root.querySelector('[data-attendance-link=activity]');
  assert.deepEqual([...activity.options].map(option=>option.value),['','ARMAÇÃO']);
  stage.value='8';stage.dispatchEvent(new dom.window.Event('change'));
  assert.deepEqual([...activity.options].map(option=>option.value),['','CONCRETAGEM']);
  activity.value='CONCRETAGEM';
  const form=root.querySelector('form.as-provider-editor');
  form.dispatchEvent(new dom.window.Event('submit',{cancelable:true,bubbles:true}));
+ assert.equal(root.querySelector('.report-close-control').disabled,true);
+ root.click();
+ assert.equal(root.hidden,false);
+ finishSave();
  await new Promise(resolve=>setImmediate(resolve));
+ assert.equal(root.querySelector('.report-close-control').disabled,false);
  assert.deepEqual(saved.links,{stage:'8',activity:'CONCRETAGEM'});
  assert.equal(saved.editor.eTag,'"version-1"');
  assert.match(root.querySelector('.as-provider').textContent,/Alfa.*FUNDAÇÃO.*CONCRETAGEM/s);

@@ -8058,6 +8058,9 @@ export function createAppController({
       const writing = method === 'saveSupplierLinks';
       if (writing) invalidateGalleryReportSources();
       try {
+        // Consent can redirect to Microsoft. Request it before the user enters a draft.
+        if (!writing) await tokenProvider(['Sites.ReadWrite.All']);
+        assertAction();
         const source = await attendanceSummaryDataFactory({ tokenProvider });
         assertAction();
         const result = await source[method](...args, { signal });
