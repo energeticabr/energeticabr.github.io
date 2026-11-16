@@ -33,8 +33,9 @@ export function createProvisionReportView({document:doc=globalThis.document,data
     const select=make('select');select.name=name;select.setAttribute('aria-label',label);select.append(Object.assign(make('option','','Todos'),{value:''}));
     holder.append(select);filters.append(holder);controls.set(name,select);}
   const notice=make('p','pl-notice');notice.hidden=true;notice.setAttribute('role','status');
+  const attachmentNotice=make('p','pl-notice');attachmentNotice.hidden=true;attachmentNotice.setAttribute('role','status');
   const content=make('div','pl-table-scroll pr-content');content.tabIndex=0;content.setAttribute('role','region');content.setAttribute('aria-label','Tabelas de provisões e recorrências');
-  report.append(filters,notice,content);panel.append(warning,report);root.append(panel);doc.body.append(root);
+  report.append(filters,notice,attachmentNotice,content);panel.append(warning,report);root.append(panel);doc.body.append(root);
   let snapshot=null,controller=null,revision=0,pickers=null,destroyed=false,returnFocus=null,oldOverflow='',app=null,oldInert=false;
   let pendingSync=null,syncController=null;
   let attachmentController,attachmentObserver;
@@ -44,6 +45,7 @@ export function createProvisionReportView({document:doc=globalThis.document,data
   const landscape = bindReportLandscape(root);
   addReportCloseControl({root, toolbar:filters, onClose:close});
   const showNotice=text=>{notice.textContent=text;notice.hidden=!text;};
+  const showAttachmentNotice=text=>{attachmentNotice.textContent=text;attachmentNotice.hidden=!text;};
   const selected=()=>Object.fromEntries([...controls].map(([name,node])=>[name,node.value]));
   function cell(tr,column,text,className=''){const td=make('td',className,String(text??'').trim()||'—');td.dataset.column=column;tr.append(td);return td;}
   function textLine(parent,text,className=''){const line=make('div',className,text);parent.append(line);return line;}
@@ -147,24 +149,25 @@ export function createProvisionReportView({document:doc=globalThis.document,data
     const current=()=>!signal.aborted&&td.isConnected;
     const itemLabel=kind==='description'?(id?`do descritivo ${id}`:'do descritivo'):`da provisão ${id}`;
     let files=null;
-    async function read(){
+    async function read(interactive){
       if(files)return files;
-      const records=await data.listProvisionReportAttachments(kind,id,{signal});
+      const records=await data.listProvisionReportAttachments(kind,id,{signal,interactive});
       files=records.filter(file=>typeof file?.fileName==='string'&&file.fileName.trim());
       return files;
     }
     async function preview(control,file){
       if(!current())return;
       control.disabled=true;
+      showAttachmentNotice('');
       try{
-        const items=file?[file]:await read();
+        const items=file?[file]:await read(true);
         if(!current())return;
         if(!items.length){showFiles(items);return;}
         await openMediaCollection(items.map(({fileName,mimeType})=>({fileName,mimeType,source:options=>{
           signal.throwIfAborted();
           return data.downloadProvisionReportAttachment(kind,id,fileName,{...options,signal:options?.signal??signal});
         }})),{signal,returnLabel:'Voltar ao relatório',resolveReturnFocus:()=>control.isConnected?control:panel});
-      }catch{if(current())showNotice(`Não foi possível abrir os anexos ${itemLabel}. Tente novamente.`);}
+      }catch{if(current())showAttachmentNotice(`Falha ao abrir os anexos ${itemLabel}. Tente novamente.`);}
       finally{if(current())control.disabled=false;}
     }
     function setState(state,label,node){
@@ -193,16 +196,16 @@ export function createProvisionReportView({document:doc=globalThis.document,data
       }
       setState('present',items.map(file=>file.fileName).join(', '),list);
     }
-    async function loadFiles(){
+    async function loadFiles(interactive=false){
       if(!current())return;
       attachmentLoads.delete(td);
       setState('loading','Consultando anexos',make('span','','…'));
-      try{const items=await read();if(current())showFiles(items);}
+      try{const items=await read(interactive);if(current())showFiles(items);}
       catch{
         if(!current())return;
         const retry=button('pr-attachment-icon','?',`Consultar novamente os anexos ${itemLabel}`);
         retry.title='Anexos não verificados. Tente novamente.';
-        retry.addEventListener('click',()=>void loadFiles());
+        retry.addEventListener('click',()=>void loadFiles(true));
         setState('unknown','Anexos não verificados',retry);
       }
     }
@@ -229,7 +232,7 @@ export function createProvisionReportView({document:doc=globalThis.document,data
     statusLine(status,due.label,dueTone,`pr-${dueTone}`);return tr;
   }
   function render(){
-    resetAttachmentReads();content.replaceChildren();showNotice('');if(!snapshot)return;
+    resetAttachmentReads();content.replaceChildren();showNotice('');showAttachmentNotice('');if(!snapshot)return;
     const today=provisionDateKey(now()),result=buildProvisionReport(snapshot,selected(),today);
     const logoFrame=make('div','pr-logo'),logo=make('img');logo.src=LOGO;logo.alt='Logo Energética';logoFrame.append(logo);content.append(logoFrame);
     const body=table('provisions','⚠ DESPESAS RECORRENTES – PROVISÃO DE PAGAMENTOS',['ANEXOS','FILIAL','FORNECEDOR','PRODUTO','DATA VENCIMENTO','AGENDAMENTO','VALOR','STATUS'],[8,12,14,20,10,12,13,11]);
@@ -302,6 +305,7 @@ export function createProvisionReportView({document:doc=globalThis.document,data
     if(root.hidden||destroyed)return;pickers?.close();controller?.abort();const current=++revision,active=new AbortController();controller=active;
     const previousSnapshot=sync?snapshot:null;
     if(!previousSnapshot){snapshot=null;content.replaceChildren();}
+    showAttachmentNotice('');
     showNotice(sync||pendingSync?'Sincronizando despesas recorrentes e provisões…':'Carregando provisões do SharePoint…');report.setAttribute('aria-busy','true');refresh.disabled=true;
     try{
       if(sync){

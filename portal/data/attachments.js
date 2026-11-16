@@ -297,7 +297,8 @@ export function createSharePointRestTransport({ tokenProvider, allowedSites, fet
       if (!Object.hasOwn(permissionScopes, permission)) {
         throw new AttachmentRequestError({ status: 400, code: "invalid_sharepoint_permission", message: "O nivel de permissao SharePoint solicitado e invalido." });
       }
-      const token = await tokenProvider([permissionScopes[permission]]);
+      options.signal?.throwIfAborted();
+      const token = await tokenProvider([permissionScopes[permission]], { signal: options.signal, interactive: options.interactive });
       if (!token) throw new AttachmentRequestError({ status: 401, code: "token_unavailable", message: "Não foi possível obter autorização Microsoft para anexos." });
       if (options.signal?.aborted) {
         if (options.signal.reason instanceof Error) throw options.signal.reason;

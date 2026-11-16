@@ -19,13 +19,13 @@ function abortIfNeeded(signal) {
 }
 
 export function createSpendingReportsData({
-  tokenProvider, attachmentTokenProvider = tokenProvider, repository: suppliedRepository,
+  tokenProvider, repository: suppliedRepository,
   fetchImpl = globalThis.fetch, siteConfig = SHAREPOINT_SITES,
 } = {}) {
   if (!suppliedRepository && typeof tokenProvider !== "function") throw new TypeError("Os relatórios requerem a sessão Microsoft ativa.");
   const repository = suppliedRepository || createSharePointRepository(createGraphClient(tokenProvider, { fetch: fetchImpl }), siteConfig, {
     attachmentTransport: createSharePointAttachmentTransport({
-      tokenProvider: attachmentTokenProvider, allowedSites: Object.values(siteConfig), fetch: fetchImpl,
+      tokenProvider, allowedSites: Object.values(siteConfig), fetch: fetchImpl,
     }),
   });
 
@@ -153,9 +153,9 @@ export function createSpendingReportsData({
     return resolve(PROVISION_LISTS[kind], signal);
   }
 
-  async function listProvisionReportAttachments(kind, id, { signal } = {}) {
+  async function listProvisionReportAttachments(kind, id, { signal, interactive = true } = {}) {
     const list = await resolveAttachmentList(kind, signal);
-    const files = await repository.listAttachments(SITE, list, id, { signal, requireCollection: true });
+    const files = await repository.listAttachments(SITE, list, id, { signal, requireCollection: true, namesOnly: true, interactive });
     return files.map(({ name, type }) => ({ fileName: name, mimeType: type }));
   }
 

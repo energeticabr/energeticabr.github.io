@@ -7846,23 +7846,22 @@ export function createAppController({
       try {
         let report = validation ? orderValidationReport : provision ? provisionReport : management ? managementReport : paymentLedger;
         if (!report) {
-          const tokenProvider = scopes => {
+          const tokenProvider = (scopes, { signal = requestSignal, interactive = true } = {}) => {
             assertSession();
-            const signal = requestSignal, generation = requestGeneration;
+            const generation = requestGeneration;
             const assertRequest = () => {
               assertSession();
               if (signal?.aborted || generation !== requestGeneration) throw new DOMException('Consulta cancelada.', 'AbortError');
             };
+            assertRequest();
             return auth.getToken(scopes).then(token => { assertRequest(); return token; }).catch(async error => {
               assertRequest();
-              if (error?.code !== 'AUTH_REQUIRED' || typeof auth.authorize !== 'function') throw error;
+              if (!interactive || error?.code !== 'AUTH_REQUIRED' || typeof auth.authorize !== 'function') throw error;
               await auth.authorize(scopes, { resumeAction: reportId });
               assertRequest(); const token = await auth.getToken(scopes); assertRequest(); return token;
             });
           };
-          const source = await paymentLedgerDataFactory({ tokenProvider,
-            ...(provision ? { attachmentTokenProvider: ordersGalleryTokenProvider(assertSession, reportId) } : {}),
-          });
+          const source = await paymentLedgerDataFactory({ tokenProvider });
           const data = { async [method](options = {}) {
             assertSession();
             requestSignal = options.signal; requestGeneration++;

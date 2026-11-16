@@ -90,6 +90,24 @@ test('description attachment icon and expanded provision PDFs open files from th
   assert.deepEqual(reads,['description:42','provision:301','provision:302']);
   assert.deepEqual(downloads,['description:42:descritivo.pdf','provision:301:primeira.pdf','provision:302:extra.pdf']);
 });
+
+test('attachment lookup errors leave the report PDF available and clear on retry',async t=>{
+  const {captureFilteredReport}=await import('../src/ui/report-print.js');
+  let requests=0;
+  const {view,root}=setup(t,async()=>({provisions:[{...row,descriptionId:'42'}],recurrences:[recurrence],
+    descriptions:[{id:'42',hasAttachments:true}]}),false,undefined,{
+    async listProvisionReportAttachments(){if(!requests++)throw new Error('Network request failed');return [{fileName:'recibo.pdf'}];},
+    async downloadProvisionReportAttachment(){return new Blob([]);},
+    async openMediaCollection(items){await items[0].source();},
+  });
+  await view.open();
+  const trigger=root.querySelector('[data-column=attachments] button');
+  trigger.click();await new Promise(resolve=>setImmediate(resolve));
+  assert.match(root.textContent,/Falha ao abrir os anexos/);
+  assert.equal(captureFilteredReport(root,{title:'Provisões'}).pages.length,1);
+  trigger.click();await new Promise(resolve=>setImmediate(resolve));
+  assert.doesNotMatch(root.textContent,/Falha ao abrir os anexos/);
+});
 test('refresh waits for recurring-expense flow completion before fetching and showing new provisions',async t=>{
   let release,fetches=0,syncs=0;
   const completed=new Promise(resolve=>{release=resolve;});
