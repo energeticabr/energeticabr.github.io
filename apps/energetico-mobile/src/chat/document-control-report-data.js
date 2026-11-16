@@ -1,7 +1,9 @@
 import { SHAREPOINT_SITES } from "../../../../portal/config.js";
 import { createGraphClient } from "../../../../portal/data/graph-client.js";
 import { createSharePointRepository } from "../../../../portal/data/sharepoint-repository.js";
+import { createSharePointAttachmentTransport } from "../../../../portal/data/attachments.js";
 import { normalizeDocumentControlSnapshot } from "./document-control-report-model.js";
+import { validateAttachment } from "./file-policy.js";
 
 const SITE = "personal";
 const LISTS = ["DOCUMENTOS_1", "DOCUMENTOS1", "DOCUMENTOS 1", "DOCUMENTOS"];
@@ -91,7 +93,7 @@ function abortable(operation, signal) {
   });
 }
 
-async function loadRows(repository, signal) {
+async function resolveDocumentList(repository, signal) {
   // resolveList uses enumeration order; request the PowerFx source first.
   // Its repository-level physical DOCUMENTOS fallback remains available.
   let list;
@@ -100,11 +102,15 @@ async function loadRows(repository, signal) {
     if (list?.status !== "missing") break;
   }
   if (list?.status !== "resolved" || !list.id) throw new Error("A lista DOCUMENTOS não está disponível nesta conta.");
-  const columns = validateSchema(await abortable(() => repository.getColumns(SITE, list.id, { signal }), signal));
+  return list.id;
+}
+
+async function loadRows(repository, listId, signal) {
+  const columns = validateSchema(await abortable(() => repository.getColumns(SITE, listId, { signal }), signal));
   const query = new URLSearchParams({ $expand: `fields($select=${Object.values(columns).join(",")})`, $top: "100" }).toString();
   const rows = []; const ids = new Set(); const cursors = new Set(); let cursor = "";
   for (let index = 0; index < MAX_TOTAL_PAGES; index++) {
-    const page = await abortable(() => repository.getItemsPage(SITE, list.id, query, {
+    const page = await abortable(() => repository.getItemsPage(SITE, listId, query, {
       signal, pageNumber: index % WINDOW_PAGES + 1, maxPages: WINDOW_PAGES,
       headers: { Prefer: "HonorNonIndexedQueriesWarningMayFailRandomly" }, ...(cursor ? { cursor } : {}),
     }), signal);
@@ -128,8 +134,8 @@ async function loadRows(repository, signal) {
   throw new RangeError("Limite seguro de paginação excedido; nenhum resultado parcial foi disponibilizado.");
 }
 
-/** Authenticated GET-only load publishes a frozen snapshot after the full schema and base validate. */
-export function createDocumentControlReportData({ tokenProvider, repository: suppliedRepository } = {}) {
+/** Loading publishes a frozen snapshot after the full schema and base validate. */
+export function createDocumentControlReportData({ tokenProvider, repository: suppliedRepository, includeAttachmentTarget = false } = {}) {
   if (!suppliedRepository && typeof tokenProvider !== "function") throw new TypeError("O relatório exige uma sessão Microsoft ativa.");
   if (suppliedRepository && ["resolveList", "getColumns", "getItemsPage"].some(name => typeof suppliedRepository[name] !== "function")) {
     throw new TypeError("Repositório SharePoint inválido para o controle de documentos.");
@@ -143,14 +149,75 @@ export function createDocumentControlReportData({ tokenProvider, repository: sup
       const repository = suppliedRepository || createSharePointRepository(createGraphClient(
         scopes => abortable(() => tokenProvider(scopes, { signal }), signal),
       ), SHAREPOINT_SITES);
-      const documents = await loadRows(repository, signal);
+      const listId = await resolveDocumentList(repository, signal);
+      const documents = await loadRows(repository, listId, signal);
       abortIfNeeded(signal);
-      return normalizeDocumentControlSnapshot({ documents });
+      const snapshot = normalizeDocumentControlSnapshot({ documents });
+      return includeAttachmentTarget ? Object.freeze({ ...snapshot, attachmentListId: listId }) : snapshot;
     } catch (error) {
       controller.abort(error); throw error;
     } finally {
       externalSignal?.removeEventListener("abort", abort);
     }
   }
-  return Object.freeze({ loadSnapshot });
+  async function uploadAttachments(listId, id, files, { signal = new AbortController().signal } = {}) {
+    abortIfNeeded(signal);
+    if (typeof listId !== "string" || !/^[\da-f]{8}(?:-[\da-f]{4}){3}-[\da-f]{12}$/i.test(listId)
+      || !Number.isSafeInteger(id) || id < 1) throw new Error("O destino do anexo é inválido. Atualize o relatório.");
+    const selected = Array.from(files, file => {
+      const name = validateAttachment(file).normalize("NFC");
+      if (/[\\/\u0000-\u001f]/.test(name) || typeof file.arrayBuffer !== "function") {
+        throw new Error("O nome ou o conteúdo do arquivo é inválido.");
+      }
+      return { name, file };
+    });
+    if (!selected.length) return 0;
+
+    const guardedToken = scopes => abortable(() => tokenProvider(scopes, { signal }), signal);
+    const transport = suppliedRepository ? null : createSharePointAttachmentTransport({
+      tokenProvider: guardedToken, allowedSites: [SHAREPOINT_SITES[SITE]],
+    });
+    // Use the same delegated SharePoint write grant for reads during this upload.
+    const repository = suppliedRepository || createSharePointRepository(createGraphClient(guardedToken), SHAREPOINT_SITES, {
+      attachmentTransport: {
+        request: (site, path, options) => transport.request(site, path, { ...options, permission: "write" }),
+      },
+    });
+    const columns = validateSchema(await abortable(() => repository.getColumns(SITE, listId, { signal }), signal));
+    const current = await abortable(() => repository.getItem(SITE, listId, id, `$expand=fields($select=${columns.status})`, { signal }), signal);
+    if (String(current?.id) !== String(id) || String(scalar(current?.fields?.[columns.status])).trim().toUpperCase() !== "PENDENTE") {
+      throw new Error("O documento precisa estar pendente para receber anexos. Atualize o relatório.");
+    }
+
+    const existing = await abortable(() => repository.listAttachments(SITE, listId, id, {
+      signal, requireCollection: true, namesOnly: true,
+    }), signal);
+    const names = new Map(existing.map(file => [file.name.normalize("NFC").toLowerCase(), file.name]));
+    let saved = 0;
+    for (const { file, name } of selected) {
+      try {
+        const key = name.toLowerCase();
+        if (names.has(key)) {
+          const [uploaded, local] = await abortable(() => Promise.all([
+            repository.downloadAttachment(SITE, listId, id, names.get(key), { signal }), file.arrayBuffer(),
+          ]), signal);
+          const bytes = new Uint8Array(local);
+          const remote = new Uint8Array(uploaded);
+          if (bytes.length !== remote.length || !bytes.every((byte, index) => byte === remote[index])) {
+            throw new Error(`Já existe um anexo chamado "${name}". Renomeie o arquivo para enviar outra versão.`);
+          }
+        } else {
+          await abortable(() => repository.uploadAttachment(SITE, listId, id, file, name, { signal }), signal);
+          names.set(key, name);
+        }
+        saved++;
+      } catch (error) {
+        if (!saved || signal.aborted) throw error;
+        throw new Error(`${saved} de ${selected.length} arquivos confirmados. ${error.message}`, { cause: error });
+      }
+    }
+    return saved;
+  }
+
+  return Object.freeze({ loadSnapshot, uploadAttachments });
 }

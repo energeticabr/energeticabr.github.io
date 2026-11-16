@@ -12,8 +12,11 @@ const date=value=>value?`${value.slice(8,10)}/${value.slice(5,7)}/${value.slice(
 const upper=value=>String(value||'').trim().toUpperCase();
 function homologation(value){const text=upper(value);return text.includes('FILIAL')?['filial','🏢']:text.includes('CONTRATO')?['contract','📑']:text.includes('MÃO DE OBRA')||text.includes('MAO DE OBRA')?['labor','👷']:text.includes('COMERCIAL')?['commercial','🤝']:['other','📌'];}
 const relative=(days,verb)=>days==null?'':days===0?`${verb} hoje`:days>0?`${verb} há ${days} d`:`${verb} em ${Math.abs(days)} d`;
+const ATTACHMENT_SOURCES = [
+ ['camera', 'Tirar foto'], ['scan', 'Escanear'], ['photos', 'Fototeca'], ['files', 'Arquivos'],
+];
 
-export function createDocumentControlReportView({document:doc=globalThis.document,data,now=()=>new Date()}={}){
+export function createDocumentControlReportView({document:doc=globalThis.document,data,attachments,now=()=>new Date()}={}){
  if(!doc?.body||typeof data?.loadSnapshot!=='function'||typeof now!=='function')throw new TypeError('O relatório requer documento e sessão SharePoint.');
  const win=doc.defaultView,make=(tag,cls='',text)=>{const node=doc.createElement(tag);node.className=cls;if(text!==undefined)node.textContent=text;return node;};
  const root=make('div','dcr-overlay');root.hidden=true;
@@ -27,9 +30,94 @@ export function createDocumentControlReportView({document:doc=globalThis.documen
  const content=make('div','dcr-content');content.tabIndex=0;content.setAttribute('role','region');content.setAttribute('aria-label','Indicadores e documentos');
  report.append(toolbar,content);panel.append(warning,report);root.append(panel);doc.body.append(root);
  let snapshot=null,controller=null,revision=0,pickers=null,destroyed=false,returnFocus=null,oldOverflow='',app=null,oldInert=false;
+ let closeAttachmentSources = null;
  const landscape = bindReportLandscape(root);
   addReportCloseControl({root, toolbar:toolbar, onClose:close});
  const selected=()=>{const order=ORDERS.find(entry=>entry[0]===sort.value)||ORDERS[0];return {...Object.fromEntries([...controls].map(([name,node])=>[name,node.value])),order:order[2],direction:order[3]};};
+ function showAttachmentSources(listId, id, trigger) {
+  if (closeAttachmentSources) return;
+  const dialog = make('dialog', 'document-scanner dcr-attachment-chooser');
+  const active = new AbortController();
+  const { signal } = active;
+  const status = make('p', 'dcr-attachment-feedback');
+  status.setAttribute('role', 'status');
+  dialog.setAttribute('aria-label', `Anexar ao documento ${id}`);
+  const choices = make('div', 'dcr-attachment-sources');
+  const buttons = ATTACHMENT_SOURCES.map(([source, label]) => {
+   const button = make('button', '', label);
+   button.type = 'button';
+   button.dataset.source = source;
+   button.addEventListener('click', () => void pick(source, button));
+   return button;
+  });
+  choices.append(...buttons);
+  const authorize = make('button', '', 'Autorizar Microsoft');
+  authorize.type = 'button';
+  authorize.hidden = true;
+  const dismiss = make('button', 'document-scanner-secondary', 'Fechar');
+  dismiss.type = 'button';
+  const disableSources = disabled => buttons.forEach(option => { option.disabled = disabled; });
+  let needsPermission = false;
+  async function checkPermission(request) {
+   disableSources(true);
+   authorize.hidden = true;
+   status.textContent = 'Verificando acesso ao SharePoint…';
+   try {
+    const allowed = await request.call(attachments, { signal });
+    if (signal.aborted) return;
+    needsPermission = !allowed;
+    authorize.hidden = allowed;
+    status.textContent = allowed ? '' : 'Autorize o acesso da Microsoft para escolher e anexar arquivos.';
+    disableSources(!allowed);
+   } catch (error) {
+    if (signal.aborted) return;
+    needsPermission = true;
+    authorize.hidden = false;
+    status.textContent = error?.message || 'Não foi possível verificar o acesso ao SharePoint.';
+   }
+  }
+  function finish() {
+   active.abort();
+   closeAttachmentSources = null;
+   dialog.close();
+   dialog.remove();
+   if (trigger.isConnected) trigger.focus();
+  }
+  async function pick(source, button) {
+   if (signal.aborted || button.disabled) return;
+   disableSources(true);
+   status.textContent = '';
+   try {
+    const files = await attachments.pickAttachments(source, { signal });
+    if (signal.aborted || !files?.length) return;
+    status.textContent = 'Enviando para o SharePoint…';
+    const count = await attachments.uploadAttachments(listId, id, files, { signal });
+    if (!signal.aborted) status.textContent = count === 1 ? '1 arquivo anexado.' : `${count} arquivos anexados.`;
+   } catch (error) {
+    if (signal.aborted) return;
+    if (error?.code === 'AUTH_REQUIRED') {
+     needsPermission = true;
+     authorize.hidden = false;
+     status.textContent = 'O acesso expirou. Autorize a Microsoft e selecione o arquivo novamente.';
+    } else {
+     status.textContent = error?.message || 'Não foi possível anexar. Tente novamente.';
+    }
+   } finally {
+    if (!signal.aborted) {
+     disableSources(needsPermission);
+     if (doc.activeElement === doc.body) button.focus();
+    }
+   }
+  }
+  authorize.addEventListener('click', () => void checkPermission(attachments.authorize));
+  dismiss.addEventListener('click', finish);
+  dialog.addEventListener('cancel', event => { event.preventDefault(); finish(); });
+  dialog.append(make('h2', '', `Anexar ao documento ${id}`), choices, status, authorize, dismiss);
+  doc.body.append(dialog);
+  closeAttachmentSources = finish;
+  dialog.showModal();
+  if (typeof attachments.hasPermission === 'function') void checkPermission(attachments.hasPermission);
+ }
  function render(){
   if(content.contains(doc.activeElement))panel.focus();content.replaceChildren();if(!snapshot)return;
   const result=buildDocumentControlOverview(snapshot,selected(),provisionDateKey(now()));
@@ -45,7 +133,16 @@ export function createDocumentControlReportView({document:doc=globalThis.documen
    for(const [field,days,verb] of [['submittedDate',row.submittedDays,'criado'],['issuedDate',row.issuedDays,'emitido']]){const cell=make('td',`dcr-${field}`);cell.append(make('strong','',date(row[field])));if(row[field])cell.append(make('small','',relative(days,verb)));tr.append(cell);}
    const expiry=make('td',`dcr-expiration ${expired?'dcr-date-expired':row.daysToExpiry!=null&&row.daysToExpiry<=15?'dcr-date-soon':''}`);expiry.append(make('strong','',date(row.expirationDate)));if(row.daysToExpiry!=null)expiry.append(make('small','',row.daysToExpiry<0?`vencido há ${Math.abs(row.daysToExpiry)} d`:row.daysToExpiry===0?'vence hoje':`vence em ${row.daysToExpiry} d`));tr.append(expiry,make('td','dcr-left',row.branch||'—'));
    const [tone,icon]=homologation(row.homologation),hom=make('td');hom.append(make('span',`dcr-badge dcr-homologation-${tone}`,`${icon} ${row.homologation||'—'}`));tr.append(hom,make('td','dcr-type dcr-left',row.documentType||'—'),make('td','dcr-left',row.person||'—'),make('td','dcr-left',row.stage||'—'),make('td','dcr-left',row.property||'—'));
-   const status=make('td'),statusTone={SUBMETIDO:'submitted',PENDENTE:'pending',APROVADO:'approved'}[upper(row.status)]||'other';status.append(make('span',`dcr-badge dcr-status-${statusTone}`,row.status||'—'));tr.append(status);body.append(tr);
+   const status=make('td'),statusTone={SUBMETIDO:'submitted',PENDENTE:'pending',APROVADO:'approved'}[upper(row.status)]||'other';status.append(make('span',`dcr-badge dcr-status-${statusTone}`,row.status||'—'));
+   if (statusTone === 'pending' && attachments) {
+    const attach = make('button', 'dcr-attach', 'Anexar');
+    attach.type = 'button';
+    attach.setAttribute('aria-label', `Anexar ao documento ${row.id}`);
+    const listId = snapshot.attachmentListId;
+    attach.addEventListener('click', () => showAttachmentSources(listId, row.id, attach));
+    status.append(attach);
+   }
+   tr.append(status);body.append(tr);
   }
   content.append(table,make('p','dcr-footer',`📄 TOTAL: ${result.metrics.total} DOCUMENTO(S)`));
  }
@@ -61,7 +158,7 @@ export function createDocumentControlReportView({document:doc=globalThis.documen
   finally{if(current===revision){refresh.disabled=false;report.setAttribute('aria-busy','false');}}
  }
  function orientationChanged() { landscape.update(); }
- function close(){if(root.hidden)return;controller?.abort();revision++;snapshot=null;pickers?.close();content.replaceChildren();root.hidden=true;doc.body.style.overflow=oldOverflow;if(app)app.inert=oldInert;const target=returnFocus?.isConnected?returnFocus:doc.querySelector('[data-action="open-document-control-report"]:not(:disabled)')||app;target?.focus?.();returnFocus=null;}
+ function close(){if(root.hidden)return;closeAttachmentSources?.();controller?.abort();revision++;snapshot=null;pickers?.close();content.replaceChildren();root.hidden=true;doc.body.style.overflow=oldOverflow;if(app)app.inert=oldInert;const target=returnFocus?.isConnected?returnFocus:doc.querySelector('[data-action="open-document-control-report"]:not(:disabled)')||app;target?.focus?.();returnFocus=null;}
  root.addEventListener('click',event=>{if(event.target===root)close();});root.addEventListener('keydown',event=>{
   if(root.hidden)return;if(event.key==='Escape'){event.preventDefault();close();return;}if(event.key!=='Tab')return;
   const nodes=[...panel.querySelectorAll('button,input,select,[tabindex="0"]')].filter(node=>!node.disabled&&!node.closest('[hidden]')&&node.tabIndex>=0),first=nodes[0],last=nodes.at(-1);
