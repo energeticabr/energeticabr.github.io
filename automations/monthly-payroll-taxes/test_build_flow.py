@@ -2,6 +2,7 @@
 import ast
 import base64
 from copy import deepcopy
+from datetime import date
 import importlib.util
 import json
 from pathlib import Path
@@ -81,6 +82,7 @@ class NativePreflight:
                 'createArray':lambda *values:list(values), 'union':lambda a,b:list(dict.fromkeys(a+b)),
                 'div':lambda a,b:a/b, 'formatNumber':lambda value,pattern,locale:format(value,'.2f'),
                 'add':lambda a,b:a+b, 'base64ToBinary':lambda value:base64.b64decode(value,validate=True),
+                'formatDateTime':lambda value,pattern:date.fromisoformat(value[:10]).strftime({'dd/MM/yyyy':'%d/%m/%Y'}[pattern]),
                 'json':json.loads, 'uriComponent':lambda value:quote(str(value),safe=''), 'decodeUriComponent':unquote,
                 'replace':lambda value,old,new:value.replace(old,new), 'workflow':lambda:{'run':{'name':'RUN123'}},
                 'base64':lambda value:value['$content'] if isinstance(value,dict) else base64.b64encode(value if isinstance(value,bytes) else value.encode()).decode(),
@@ -192,6 +194,36 @@ def preflight_fixture():
 
 class MonthlyFlowTests(unittest.TestCase):
     def setUp(self): self.assertIsNotNone(flow, 'The native monthly flow is not implemented')
+
+    def test_salary_family_review_preserves_amount_and_appears_only_in_flagged_inss(self):
+        fixture = preflight_fixture()
+        row = fixture['plan']['rows'][0]
+        engine = NativePreflight(fixture)
+        engine.values['Descritivo'] = 1
+        notice = 'SALÁRIO-FAMÍLIA: conferir crédito da competência na DCTFWeb'
+        for flag in (None, False, True):
+            for tax in ('INSS', 'FGTS'):
+                with self.subTest(flag=flag, tax=tax):
+                    engine.items['row'] = dict(row)
+                    if flag is not None:
+                        engine.items['row']['salaryFamilyReview'] = flag
+                    rendered = engine.evaluate(flow.provision_payload("items('row')", repr(tax), "outputs('Descritivo')"))
+                    self.assertEqual(notice in rendered['OBS'], flag is True and tax == 'INSS')
+                    self.assertEqual(rendered['VALORTOTAL'], f"{row[tax.lower()+'Cents']/100:.2f}")
+                    engine.items.update(Cada_Linha_PDF=engine.items['row'], Criar_Documentos=tax)
+                    engine.variables['HTMLComponentes'] = ''
+                    html_input = flow.document_actions()['Criar_Documentos']['actions']['Cada_Linha_PDF']['actions']['Linha_HTML']['inputs']['value']
+                    self.assertEqual(notice in engine.evaluate(html_input), flag is True and tax == 'INSS')
+
+    def test_salary_family_review_flag_is_read_from_sharepoint_for_the_manifest(self):
+        definition = flow.build_definition()
+        actions = dict(actions_in(definition['actions']))
+        self.assertIn('CONCILIARSALARIOFAMILIA', actions['Iniciar_Pagina_Cadastros']['inputs']['value'])
+        expression = actions['Linha_Bruta']['inputs']['salaryFamilyReview']
+        engine = NativePreflight(preflight_fixture())
+        for source, expected in (({}, False), ({'CONCILIARSALARIOFAMILIA': False}, False), ({'CONCILIARSALARIOFAMILIA': True}, True)):
+            engine.items['Cada_Cadastro'] = source
+            self.assertIs(engine.evaluate(expression), expected)
 
     def preflight(self, fixture):
         financial = flow.build_definition()['actions']['Somente_Dia_01']['actions']

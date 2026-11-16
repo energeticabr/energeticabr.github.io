@@ -19,6 +19,12 @@ IDFORNECEDORORIGEM, e a folha por pessoa e competência. Ausência/duplicidade d
 folha, salário sem vigência, cadastro alterado ou regime não coberto bloqueiam o
 lote. A automação não inventa nem cria uma folha ausente por suposição.
 
+O campo Sim/Não `CONCILIARSALARIOFAMILIA` de `FUNCIONARIOSRH` sinaliza
+a conferência mensal. Provisões e memórias de INSS destacam o crédito a
+conferir na DCTFWeb para o vínculo marcado. A marcação não fixa valor,
+não altera a previsão bruta e não aparece no FGTS. A coluna deve existir
+com padrão Não antes da publicação; manifestos anteriores aceitam o campo ausente.
+
 ## Configuração e cálculo
 
 `/ENERGETICA-ENCARGOS-CONFIG.json` no OneDrive da conexão contém `version`,
