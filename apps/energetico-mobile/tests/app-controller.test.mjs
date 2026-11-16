@@ -2038,19 +2038,23 @@ test("galerias de cadastro e documentos abrem localmente, reutilizam a tela e sÃ
   t.after(() => h.controller.stop());
   await h.controller.start();
   const before = h.chatCalls.length;
-  for (const [id, kind] of [
+  const routes = [
     ["action_group_gallery", "group"], ["action_family_gallery", "family"],
     ["action_subfamily_gallery", "subfamily"], ["action_product_gallery", "product"],
+    ["action_supplier_gallery", "supplier"], ["action_account_gallery", "account"],
+    ["action_material_type_gallery", "materialType"], ["action_unit_of_measure_gallery", "unitOfMeasure"],
     ["action_documents_gallery", "documents"],
-  ]) await h.view.emit("select-reply", { replyId: id });
+  ];
+  for (const [id] of routes) await h.view.emit("select-reply", { replyId: id });
   await h.view.emit("select-reply", { replyId: "action_group_gallery" });
-  assert.deepEqual(created, [["group", "group"], ["family", "family"], ["subfamily", "subfamily"], ["product", "product"], ["documents", "documents"]]);
-  assert.deepEqual(opened, ["group", "family", "subfamily", "product", "documents", "group"]);
+  const kinds = routes.map(([, kind]) => kind);
+  assert.deepEqual(created, kinds.map(kind => [kind, kind]));
+  assert.deepEqual(opened, [...kinds, "group"]);
   assert.deepEqual(previews, [[{ fileName: "contrato.pdf", source: "arquivo-local" }]]);
   assert.equal(typeof previewOptions.onAddToTray, "function");
   assert.equal(h.chatCalls.length, before);
   h.controller.stop();
-  assert.deepEqual(destroyed.sort(), ["documents", "family", "group", "product", "subfamily"]);
+  assert.deepEqual(destroyed.sort(), kinds.sort());
 });
 
 test('NF-e SEFAZ opens locally as a read-only gallery, reuses its panel and disposes on logout', async t => {

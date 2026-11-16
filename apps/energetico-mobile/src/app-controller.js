@@ -507,6 +507,10 @@ const REGISTRATION_GALLERY_KIND = Object.freeze({
   action_family_gallery: "family",
   action_subfamily_gallery: "subfamily",
   action_product_gallery: "product",
+  action_supplier_gallery: "supplier",
+  action_account_gallery: "account",
+  action_material_type_gallery: "materialType",
+  action_unit_of_measure_gallery: "unitOfMeasure",
   action_documents_gallery: "documents",
   action_asset_gallery: "asset",
   action_asset_hub: 'assetMenu',
@@ -10323,7 +10327,7 @@ export function createAppController({
                 refreshSicoobMenuAlert();
               },
             } : {}),
-            ...(reportAction || ["contractorEmployment", "dda", "notas_fiscais_sefaz", 'assetMenu', 'registrationMenu', 'assetLaunches'].includes(sourceKind) ? {} : { onCreate: galleryCreationHandler(replyId, assertSession) }),
+            ...(GALLERY_CREATION_ACTIONS[replyId] ? { onCreate: galleryCreationHandler(replyId, assertSession) } : {}),
             ...(["financial_movement", "notas_fiscais_sefaz", "dda", "presenceDescriptions", "provisionDescription", "documents", "asset", "assetFunction", "assetProduct", "assetGroup", "workDiary", "quotes", "contracts", "contractLines", "measurements", "measurementLines", "stageDemonstratives", "constructionStages", "recurringTasks", "delegatedTasks"].includes(sourceKind) ? {
               openMediaCollection: (items, previewOptions) => {
                 assertSession();

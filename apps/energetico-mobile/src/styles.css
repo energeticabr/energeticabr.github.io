@@ -1045,12 +1045,10 @@ button.chat-rhid-attendance-card__cluster:focus-visible { outline: 3px solid #15
 .chat-choice-columns--launch-menu .chat-choice-button--gallery:hover:not(:disabled) { background: #343a40; }
 .chat-message--registration-menu { gap: 0; }
 .chat-message--registration-menu .chat-bubble { width: min(100%, 1120px); max-width: 100%; }
-.chat-choice-columns--registration-menu { --registration-row-height: max(58px, var(--control-height)); display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); column-gap: clamp(10px, 1.4vw, 18px); align-items: start; }
-.chat-choice-columns--registration-menu .chat-choice-columns__primary,
-.chat-choice-columns--registration-menu .chat-choice-columns__secondary { min-width: 0; }
-.chat-choice-columns--registration-menu .chat-choice-list { width: 100%; grid-template-columns: minmax(0, 1fr); grid-template-rows: repeat(4, var(--registration-row-height)); grid-auto-rows: minmax(var(--registration-row-height), auto); gap: clamp(8px, 1vw, 14px); }
-.chat-choice-columns--registration-menu .chat-gallery-actions { display: grid; grid-template-rows: repeat(4, var(--registration-row-height)); gap: clamp(8px, 1vw, 14px); }
-.chat-choice-columns--registration-menu .chat-choice-button { min-width: 0; min-height: var(--registration-row-height); padding-inline: 4px; overflow-wrap: anywhere; }
+.chat-choice-columns--registration-menu { --registration-row-height: max(58px, var(--control-height)); display: grid; gap: clamp(8px, 1vw, 14px); }
+.chat-registration-pair { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); column-gap: clamp(10px, 1.4vw, 18px); }
+.chat-registration-pair .chat-registration-pair__primary { min-width: 0; width: 100%; grid-template-columns: minmax(0, 1fr); }
+.chat-registration-pair .chat-choice-button { min-width: 0; min-height: var(--registration-row-height); height: auto; padding-inline: 4px; white-space: normal; overflow-wrap: anywhere; }
 .chat-choice-columns--registration-menu .chat-choice-button--gallery { font-size: clamp(.72rem, 2.9vw, .96rem); }
 .chat-choice-columns__secondary { min-width: 0; }
 .chat-gallery-actions > .chat-choice-button { width: 100%; }
@@ -1089,7 +1087,7 @@ button.chat-rhid-attendance-card__cluster:focus-visible { outline: 3px solid #15
   .chat-supplies-extras { grid-template-columns: minmax(0, 1fr); }
   .chat-choice-columns--launch-menu .chat-choice-button--gallery { padding-inline: 2px; font-size: 10px; }
   .chat-supplies-extra-pair { grid-template-columns: minmax(0, .92fr) minmax(0, 1.08fr); }
-  .chat-choice-columns--registration-menu { grid-template-columns: minmax(0, .85fr) minmax(0, 1.15fr); }
+  .chat-registration-pair { grid-template-columns: minmax(0, .85fr) minmax(0, 1.15fr); }
   .chat-choice-columns--registration-menu .chat-choice-button--gallery { padding-inline: 2px; font-size: 10px; }
   .chat-choice-columns--task-menu { grid-template-columns: minmax(0, .85fr) minmax(0, 1.15fr); }
   .chat-choice-columns--task-menu .chat-choice-button--gallery { padding-inline: 2px; font-size: 10px; }

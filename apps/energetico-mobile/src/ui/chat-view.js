@@ -965,21 +965,31 @@ function documentsGalleryOption() {
   return { id: "action_documents_gallery", reply: "action_documents_gallery", label: "📄 GALERIA DOCUMENTOS" };
 }
 
-function registrationOptionOrder(option) {
-  const label = normalizedDateText(option?.label || option?.title || "");
-  if (/cadastr\w*\s+(?:um\s+)?grupo\b/.test(label)) return 0;
-  if (/cadastr\w*\s+(?:uma\s+)?familia\b/.test(label)) return 1;
-  if (/cadastr\w*\s+(?:uma\s+)?subfamilia\b/.test(label)) return 2;
-  if (/cadastr\w*\s+(?:um\s+)?produto\b/.test(label)) return 3;
-  return 4;
+const REGISTRATION_GALLERIES = Object.freeze([
+  ["group", "grupo", "action_group_gallery", "GALERIA GRUPO"],
+  ["family", "familia", "action_family_gallery", "GALERIA FAMÍLIA"],
+  ["subfamily", "subfamilia", "action_subfamily_gallery", "GALERIA SUBFAMÍLIA"],
+  ["product", "produto", "action_product_gallery", "GALERIA PRODUTO"],
+  ["supplier", "fornecedor", "action_supplier_gallery", "GALERIA FORNECEDOR"],
+  ["account", "conta", "action_account_gallery", "GALERIA CONTA"],
+  ["material_type", "tipo(?: de)? material", "action_material_type_gallery", "GALERIA TIPO DE MATERIAL"],
+  ["measurement_unit", "unidade(?: de)? medida", "action_unit_of_measure_gallery", "GALERIA UNIDADE DE MEDIDA"],
+].map(([action, name, id, label]) => ({
+  action: "action_register_supply_" + action, id, reply: id, label,
+  match: new RegExp("\\bcadastr\\w*\\s+(?:(?:de|um|uma)\\s+)?" + name + "\\s*$"),
+})));
+
+function registrationGalleryForOption(option) {
+  const label = normalizedDateText(option?.label || option?.title).replace(/\s+/g, " ");
+  const reply = draftReplyId(option).trim().toLowerCase();
+  return REGISTRATION_GALLERIES.find(gallery => gallery.action === reply)
+    || REGISTRATION_GALLERIES.find(gallery => gallery.match.test(label));
 }
 
-const REGISTRATION_GALLERIES = Object.freeze([
-  { id: "action_group_gallery", reply: "action_group_gallery", label: "GALERIA GRUPO" },
-  { id: "action_family_gallery", reply: "action_family_gallery", label: "GALERIA FAMÍLIA" },
-  { id: "action_subfamily_gallery", reply: "action_subfamily_gallery", label: "GALERIA SUBFAMÍLIA" },
-  { id: "action_product_gallery", reply: "action_product_gallery", label: "GALERIA PRODUTO" },
-]);
+function registrationOptionOrder(option) {
+  const gallery = registrationGalleryForOption(option);
+  return gallery ? REGISTRATION_GALLERIES.indexOf(gallery) : REGISTRATION_GALLERIES.length;
+}
 
 function isDemandsTaskMenu(message) {
   if (message?.type !== "poll") return false;
@@ -1169,7 +1179,7 @@ function menuOptionsWithoutApps(message, options) {
   });
   if (suppliesMenu) return [...filtered, ordersGalleryOption(), launchGalleryOption(), notasSefazGalleryOption(), paymentProgrammingGalleryOption(), provisionDescriptionGalleryOption(), recurringExpensesGalleryOption(), ddaGalleryOption(), ...(filtered.some(isSupplyQuoteOption) ? [quoteGalleryOption()] : []), ...(filtered.some(isSupplyAssetOption) ? [assetGalleryOption()] : []), ...(filtered.some(isSupplyRegistrationOption) ? [registrationGalleryHubOption()] : [])];
   if (pairedMenu) return [...filtered, ...pairedMenu.pairs.filter(pair => filtered.some(option => galleryPairForOption(option, pairedMenu.pairs) === pair)).map(pair => ({ id: pair.id, reply: pair.id, label: pair.label }))];
-  if (registrationsMenu) return [...filtered, ...REGISTRATION_GALLERIES];
+  if (registrationsMenu) return [...filtered, ...new Set(filtered.map(registrationGalleryForOption).filter(Boolean))];
   if (isAuditDocumentsMenu(message)) {
     return [...filtered.filter(option => draftReplyId(option).trim().toLowerCase() !== "action_documents_gallery"), documentsGalleryOption()];
   }
@@ -1876,7 +1886,7 @@ function renderPoll(message, busy, draft = "", databaseFilterMessage = null, act
       };
       return [`<div class="chat-document-option">${pollButton(deleteAction, busy, { deleteButton: true, deleteClass: "chat-document-option__delete" })}${pollButton(option, busy)}</div>`];
     }
-    return [pollButton(option, busy, {
+    const button = pollButton(option, busy, {
       edited: editedDocumentReplies.has(replyId),
       diaryVisit: currentPoll && activeFlow?.id === 'construction_diary_fill' && !hasDiaryTypeOptions && option.diaryFieldVisit === true,
       inLocoVisit: currentPoll && Boolean(selectedDiaryType) && option.diaryFieldVisit === true && isInLocoDiaryOption(option),
@@ -1885,7 +1895,11 @@ function renderPoll(message, busy, draft = "", databaseFilterMessage = null, act
       displayLabel: option.worksiteVisitBranchLabel || (option?.recommendedDate === true
         ? `⭐ ${String(option.label || option.title || option.id || "")}`
         : option.menuDisplayLabel || null),
-    })];
+    });
+    if (!isRegistrationMenu) return [button];
+    const gallery = registrationGalleryForOption(option);
+    const shortcut = gallery ? pollButton(gallery, busy, { galleryButton: true }) : "";
+    return [`<div class="chat-registration-pair"><div class="chat-choice-list chat-registration-pair__primary">${button}</div>${shortcut}</div>`];
   }).join("");
   const questionText = String(message.question || message.prompt || "");
   const changeTable = rawChangeTable
@@ -1960,7 +1974,7 @@ function renderPoll(message, busy, draft = "", databaseFilterMessage = null, act
       : pairedMenu
         ? pairedGalleryMenuChoices(displayOptions, pairedMenu, busy)
       : isRegistrationMenu
-        ? `<div class="chat-choice-columns chat-choice-columns--registration-menu"><div class="chat-choice-columns__primary"><div class="${choiceListClass}">${choices}</div></div><div class="chat-choice-columns__secondary"><div class="chat-gallery-actions">${REGISTRATION_GALLERIES.map(gallery => pollButton(displayOptions.find(option => draftReplyId(option).trim().toLowerCase() === gallery.id), busy, { galleryButton: true })).join("")}</div></div></div>`
+        ? `<div class="chat-choice-columns chat-choice-columns--registration-menu">${choices}</div>`
       : isAuditMenu
         ? `<div class="chat-choice-columns chat-choice-columns--audit-menu"><div class="chat-choice-columns__primary"><div class="${choiceListClass}">${choices}</div></div><div class="chat-choice-columns__secondary"><div class="chat-gallery-actions">${pollButton(documentsGallery, busy, { galleryButton: true })}</div></div></div>`
       : taskCreateOption
