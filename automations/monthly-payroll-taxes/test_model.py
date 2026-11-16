@@ -35,6 +35,28 @@ class MonthlyTaxModelTests(unittest.TestCase):
     def setUp(self):
         self.assertIsNotNone(model, 'The monthly individual calculation is not implemented')
 
+    def test_only_the_configured_marked_employee_gets_the_provisional_credit(self):
+        args = inputs()
+        args['employees'][0].update(DATAADMISSAO='2026-01-01', CONCILIARSALARIOFAMILIA=True)
+        args['salaries'][0]['SALARIO'] = '1800'
+        args['rules']['salaryFamily'] = dict(employeeId=1, quotas=3, limitCents=198038,
+                                             quotaCents=6754, year=2026)
+        for employee_id, marked, salary, expected in (
+                (1, True, '1800', 20262), (2, True, '1800', 0),
+                (1, False, '1800', 0), (1, True, '1980.38', 20262),
+                (1, True, '1980.39', 0)):
+            with self.subTest(employee_id=employee_id, marked=marked, salary=salary):
+                args['employees'][0].update(Id=employee_id, CONCILIARSALARIOFAMILIA=marked)
+                args['salaries'][0]['SALARIO'] = salary
+                plan = model.plan_month(**args)
+                row = plan['rows'][0]
+                self.assertEqual(row.get('salaryFamilyEstimatedCents', 0), expected)
+                self.assertEqual(plan['totals']['INSSNet'], row['inssCents'] - expected)
+                self.assertEqual(model.provision_fields(plan, row, 'INSS', 1)['VALORTOTAL'],
+                                 model.money(row['inssCents'] - expected))
+                self.assertEqual(model.payroll_fields(plan, row, 'FGTS', 1)['VALORUNITARIO'],
+                                 model.money(row['fgtsCents']))
+
     def test_partial_admission_uses_only_salary_and_links_the_exact_person_month(self):
         result = model.plan_month(**inputs())
         self.assertEqual((result['competence'], result['dueDate']), ('2026-09', '2026-10-20'))

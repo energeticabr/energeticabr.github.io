@@ -77,6 +77,14 @@ def validate_rules(rules, competence):
         rate(band.get('rateBps')); previous = limit
     if not isinstance(rules.get('employerComponents'), list) or not rules['employerComponents']:
         raise ValueError('Contribuições patronais não confirmadas.')
+    if 'salaryFamily' in rules:
+        policy = rules['salaryFamily']
+        limits = {'employeeId': 10**12, 'quotas': 100, 'limitCents': 10**9,
+                  'quotaCents': 10**7, 'year': 9999}
+        if not isinstance(policy, dict) or any(
+                type(policy.get(field)) is not int or not 1 <= policy[field] <= limit
+                for field, limit in limits.items()):
+            raise ValueError('Regra de salário-família inválida.')
     codes = set()
     for component in rules['employerComponents']:
         code = str(component.get('code') or '')
@@ -91,12 +99,24 @@ def tax_cents(base_cents, basis_points, rounding='truncate'):
         rounding=ROUND_DOWN if rounding == 'truncate' else ROUND_HALF_UP))
 
 
+def row_amount(row, tax):
+    if tax == 'INSS':
+        return row['inssCents'] - row.get('salaryFamilyEstimatedCents', 0)
+    return row['fgtsCents']
+
+
+def plan_total(plan, tax):
+    totals = plan['totals']
+    return totals.get('INSSNet', totals['INSS']) if tax == 'INSS' else totals['FGTS']
+
+
 def plan_month(employees, suppliers, salaries, sheets, rules, execution_date):
     execution_date = day(execution_date)
     end = execution_date.replace(day=1) - timedelta(days=1)
     start = end.replace(day=1)
     competence = start.isoformat()[:7]
     validate_rules(rules, competence)
+    family_policy = rules.get('salaryFamily')
     rows, seen_ids, seen_names = [], set(), set()
     for employee in employees:
         if normalized(employee.get('STATUS')) != 'ATIVO' or normalized(employee.get('EMPREITEIRO')) != 'SIM': continue
@@ -144,10 +164,16 @@ def plan_month(employees, suppliers, salaries, sheets, rules, execution_date):
         components = {'EMPREGADO': employee_cents}
         components.update({component['code']: tax_cents(base, component['rateBps'], rules['employerRounding'])
                            for component in rules['employerComponents']})
-        rows.append(dict(supplierId=sid, name=name, branch=branch, profession=profession, cargo=cargo,
+        row = dict(supplierId=sid, name=name, branch=branch, profession=profession, cargo=cargo,
                          admission=admission.isoformat(), sheetId=sheet_id, salaryCents=salary_cents,
                          days=worked_days, divisor=divisor, baseCents=base, components=components,
-                         inssCents=sum(components.values()), fgtsCents=tax_cents(base, rules['fgtsBps'])))
+                         inssCents=sum(components.values()), fgtsCents=tax_cents(base, rules['fgtsBps']))
+        row['salaryFamilyReview'] = employee.get('CONCILIARSALARIOFAMILIA') is True
+        if family_policy and row['salaryFamilyReview'] and str(employee.get('Id')) == str(family_policy['employeeId']):
+            if start.year == family_policy['year'] and salary_cents <= family_policy['limitCents']:
+                quota = family_policy['quotaCents'] * family_policy['quotas']
+                row['salaryFamilyEstimatedCents'] = (quota * worked_days + divisor // 2) // divisor
+        rows.append(row)
     rows.sort(key=lambda row: row['supplierId'])
     # Employer contributions are totalized per establishment/branch and revenue
     # code. Allocate ONLY the resulting cent remainders, not an aggregate guide
@@ -161,11 +187,17 @@ def plan_month(employees, suppliers, salaries, sheets, rules, execution_date):
             remaining = target - sum(row['components'][code] for row in group)
             priority = sorted(group, key=lambda row: (-(row['baseCents'] * rate % 10000), row['supplierId']))
             for row in priority[:remaining]: row['components'][code] += 1
-    for row in rows: row['inssCents'] = sum(row['components'].values())
+    for row in rows:
+        row['inssCents'] = sum(row['components'].values())
+        if 'salaryFamilyEstimatedCents' in row:
+            row['salaryFamilyEstimatedCents'] = min(row['salaryFamilyEstimatedCents'], row['inssCents'])
+    totals = {'INSS': sum(row['inssCents'] for row in rows),
+              'FGTS': sum(row['fgtsCents'] for row in rows)}
+    if family_policy:
+        totals['INSSNet'] = sum(row_amount(row, 'INSS') for row in rows)
     return dict(version=1, competence=competence, createdDate=execution_date.isoformat(),
                 dueDate=execution_date.replace(day=20).isoformat(), rulesVersion=rules['version'],
-                rules=rules, rows=rows, totals={'INSS': sum(row['inssCents'] for row in rows),
-                                              'FGTS': sum(row['fgtsCents'] for row in rows)})
+                rules=rules, rows=rows, totals=totals)
 
 
 def parent_fields(plan, tax):
@@ -174,13 +206,13 @@ def parent_fields(plan, tax):
     key = f'ENCARGOS:{plan["competence"]}:{tax}'
     return dict(Title=key, FOLHAOPERACAO=key, FILIAL=next(iter(branches)) if len(branches) == 1 else 'DIVERSAS',
                 FORNECEDOR=plan['rows'][0]['name'] if len(plan['rows']) == 1 else 'DIVERSOS',
-                VALORTOTAL=money(plan['totals'][tax]), OBS=f'{tax} - COMPETÊNCIA {plan["competence"]}',
+                VALORTOTAL=money(plan_total(plan, tax)), OBS=f'{tax} - COMPETÊNCIA {plan["competence"]}',
                 FORMAPGTO='', STATUS='PAGAMENTO PREVISTO', DATAPREVISTOPGTO=plan['dueDate']+'T12:00:00Z')
 
 
 def provision_fields(plan, row, tax, parent_id):
     key = f'ENCARGOS:{plan["competence"]}:{tax}:{row["supplierId"]}'
-    amount = row['inssCents'] if tax == 'INSS' else row['fgtsCents']
+    amount = row_amount(row, tax)
     return dict(Title=key, FOLHAOPERACAO=key, FILIAL=row['branch'], FORNECEDOR=row['name'],
                 PRODUTO=row['profession'], OBS=f'{tax} - {row["name"]} - COMPETÊNCIA {plan["competence"]}',
                 IMOVEL='TODOS', FORMAPGTO='', QTD='1', VALORTOTAL=money(amount), FRETE='0',
@@ -191,6 +223,6 @@ def provision_fields(plan, row, tax, parent_id):
 
 def payroll_fields(plan, row, tax, provision_id):
     return dict(Title=f'APP-folha-provisao-{positive_id(provision_id)}', FORNECEDOR=row['name'], TIPOPGTO=tax,
-                VALORUNITARIO=money(row['inssCents'] if tax == 'INSS' else row['fgtsCents']), QTD='1',
+                VALORUNITARIO=money(row_amount(row, tax)), QTD='1',
                 DATA=plan['dueDate']+'T12:00:00Z', IDFOLHA=str(positive_id(row['sheetId'])),
                 IDPROVISAO=positive_id(provision_id))
