@@ -438,7 +438,7 @@ assert.deepEqual(shortcuts.map(s=>s.action),['open-pending-provisions','open-sic
       assert.ok(provisionReady,'segundo mascote abre as três tabelas de provisões');
       const provisionFit=await evaluate(`(()=>{const c=document.querySelector('.pr-content'),f=[...document.querySelectorAll('.pr-filters .pl-filter')].map(n=>n.getBoundingClientRect()),p=document.querySelector('.pr-dialog').getBoundingClientRect();return {aligned:f.every(r=>Math.abs(r.top-f[0].top)<1),fits:c.scrollWidth<=c.clientWidth+1,logo:document.querySelector('.pr-logo img').naturalWidth>0,columns:document.querySelector('[data-section=provisions] thead tr:last-child').children.length,fullHeight:p.top<=1&&p.bottom>=innerHeight-1,status:document.querySelector('.pr-filters [name=paymentStatus]').value};})()`);
       assert.ok(provisionFit.aligned&&provisionFit.fits&&provisionFit.logo&&provisionFit.fullHeight,JSON.stringify(provisionFit));
-      assert.equal(provisionFit.columns,7);assert.equal(provisionFit.status,'PAGAMENTO PREVISTO');
+      assert.equal(provisionFit.columns,8);assert.equal(provisionFit.status,'PAGAMENTO PREVISTO');
       await evaluate(`document.querySelector('.pr-filters .sfs-arrow[aria-label="Abrir opções de FORNECEDOR"]').click()`);
       const provisionDropdown=await evaluate(`(()=>{const p=document.querySelector('.pr-filters .sfs-popup:not([hidden])'),l=p.querySelector('.sfs-list'),r=l.getBoundingClientRect();return {placement:p.dataset.placement,visible:[...l.children].filter(n=>{const q=n.getBoundingClientRect();return q.top>=r.top-1&&q.bottom<=r.bottom+1;}).length};})()`);
       assert.equal(provisionDropdown.placement,'expanded');assert.ok(provisionDropdown.visible>=7,JSON.stringify(provisionDropdown));

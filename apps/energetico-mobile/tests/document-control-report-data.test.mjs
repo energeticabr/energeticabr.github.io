@@ -40,6 +40,34 @@ test("personal documents schema loads a complete immutable normalized metadata s
   for (const value of [result, result.documents, result.documents[0]]) assert.ok(Object.isFrozen(value));
 });
 
+test("attachments are written only to the selected item after checking its live pending status", async () => {
+  const listId = "12345678-1234-1234-1234-123456789abc";
+  const file = new File(["bytes"], "documento.pdf", { type: "application/pdf" });
+  let status = "SUBMETIDO";
+  const writes = [];
+  const service = create(fixture({
+    async resolveList() { assert.fail("the upload must use the rendered list GUID"); },
+    async getColumns(site, list) {
+      assert.deepEqual([site, list], ["personal", listId]);
+      return columns();
+    },
+    async getItem(site, list, id, query) {
+      assert.deepEqual([site, list, id, query], ["personal", listId, 294, "$expand=fields($select=field_9)"]);
+      return item(id, { field_9: status });
+    },
+    async listAttachments() { return []; },
+    async uploadAttachment(site, list, id, blob, name) {
+      writes.push([site, list, id, await blob.text(), name]);
+      return { FileName: name };
+    },
+  }));
+  await assert.rejects(service.uploadAttachments(listId, 294, [file]), /pendente/i);
+  assert.deepEqual(writes, []);
+  status = "Pendente";
+  assert.equal(await service.uploadAttachments(listId, 294, [file]), 1);
+  assert.deepEqual(writes, [["personal", listId, 294, "bytes", "documento.pdf"]]);
+});
+
 test("registration aliases encoded accents and renamed Title resolve the actual internal columns", async () => {
   const names = ["DATASUBMETIDO", "DATA", "DATAVALIDADE", "Title", "TIPOHOMOLOGACAO", "TIPODOCUMENTO", "PESSOARELACIONADA", "ETAPA", "IM_x00d3_VEL", "STATUS"];
   const result = await create(fixture({ async getColumns() { return [
@@ -232,4 +260,53 @@ test("default authenticated Graph reads the personal site with Sites.Read.All an
   assert.equal(result.documents[0].id, 1); assert.ok(scopes.length);
   assert.ok(scopes.every(value => JSON.stringify(value) === '["Sites.Read.All"]'));
   assert.ok(urls.some(url => url.includes("energeticaltda-my.sharepoint.com") && url.includes("bernardonotini_energeticabr_com")));
+});
+
+test("SharePoint upload uses the resolved list GUID and reconciles a retry with the same file", async t => {
+  const listId = "12345678-1234-1234-1234-123456789abc";
+  const site = "energeticaltda-my.sharepoint.com";
+  const file = new File(["comprovante"], "documento.pdf", { type: "application/pdf" });
+  let stored;
+  let posts = 0;
+  t.mock.method(globalThis, "fetch", async (url, options) => {
+    const { hostname, pathname, searchParams } = new URL(url);
+    if (hostname === "graph.microsoft.com") {
+      assert.equal(options.method, "GET");
+      assert.equal(options.headers.Authorization, "Bearer graph-token");
+      if (pathname.endsWith("/columns")) return Response.json({ value: columns() });
+      if (pathname.endsWith("/items/294")) return Response.json(item(294, { field_9: "PENDENTE" }));
+      if (pathname.endsWith("/items")) return Response.json({ value: [item(294, { field_9: "PENDENTE" })] });
+      if (pathname.endsWith("/lists")) return Response.json({
+        value: [{ id: listId, displayName: "DOCUMENTOS_1", list: { template: "genericList" } }],
+      });
+      return Response.json({ id: "site" });
+    }
+    const target = `/personal/bernardonotini_energeticabr_com/_api/web/lists(guid'${listId}')/items(294)/AttachmentFiles`;
+    assert.equal(hostname, site);
+    assert.equal(options.headers.Authorization, "Bearer sharepoint-token");
+    if (options.method === "POST") {
+      assert.equal(pathname, `${target}/add(FileName='documento.pdf')`);
+      stored = options.body;
+      posts++;
+      return Response.json({ FileName: "documento.pdf" }, { status: 201 });
+    }
+    if (pathname === target) {
+      assert.equal(searchParams.get("$select"), "FileName");
+      return Response.json({ value: stored ? [{ FileName: "documento.pdf" }] : [] });
+    }
+    assert.equal(pathname, `${target}('documento.pdf')/$value`);
+    return new Response(stored);
+  });
+  const service = create({ includeAttachmentTarget: true, async tokenProvider(scopes) {
+    if (scopes[0] === "Sites.Read.All") return "graph-token";
+    assert.deepEqual(scopes, [`https://${site}/AllSites.Write`]);
+    return "sharepoint-token";
+  } });
+  const snapshot = await service.loadSnapshot();
+  assert.equal(snapshot.attachmentListId, listId);
+  assert.equal(await service.uploadAttachments(snapshot.attachmentListId, 294, [file]), 1);
+  assert.equal(await service.uploadAttachments(snapshot.attachmentListId, 294, [file]), 1);
+  const different = new File(["outro conteúdo"], file.name, { type: file.type });
+  await assert.rejects(service.uploadAttachments(snapshot.attachmentListId, 294, [different]), /Renomeie/);
+  assert.equal(posts, 1);
 });

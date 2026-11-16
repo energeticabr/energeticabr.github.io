@@ -54,6 +54,16 @@ function dateISO(value) {
   return Number.isFinite(date.getTime()) ? date.toISOString() : "";
 }
 
+function attachmentPresence(item, columns) {
+  const raw = valueFor(item, columns, ['Attachments', 'Tem anexos', 'Anexos']);
+  if (Array.isArray(raw)) return raw.length > 0;
+  if (typeof item?.hasAttachments === 'boolean') return item.hasAttachments;
+  const flag = scalar(raw).toLowerCase();
+  if (['true', '1', 'sim'].includes(flag)) return true;
+  if (['false', '0', 'não', 'nao'].includes(flag)) return false;
+  return null;
+}
+
 export function normalizeProvisionReportRow(item, columns = []) {
   const read = (...aliases) => valueFor(item, columns, aliases);
   const get = (...aliases) => scalar(read(...aliases));
@@ -71,6 +81,7 @@ export function normalizeProvisionReportRow(item, columns = []) {
     ? String(rawDescriptionId).trim() : "";
   return Object.freeze({
     id: scalar(item?.id ?? read("ID")), recurrenceId: get("IDRECORRENCIA", "ID RECORRENCIA"),
+    hasAttachments: attachmentPresence(item, columns),
     ...(/^[1-9]\d*$/.test(descriptionId) ? { descriptionId } : {}),
     branch: get("FILIAL", "Title"), supplier: get("FORNECEDOR"), product: get("PRODUTO", "DESCRICAOPGTO"),
     observation: get("OBS", "OBSERVAÇÃO", "OBSERVACAO"), property: get("IMOVEL", "IMÓVEL"),
@@ -89,6 +100,7 @@ export function normalizeProvisionReportDescription(item, columns = []) {
   const get = (...aliases) => scalar(valueFor(item, columns, aliases));
   return Object.freeze({
     id: scalar(item?.id ?? get("ID")), branch: get("FILIAL"), supplier: get("FORNECEDOR"),
+    hasAttachments: attachmentPresence(item, columns),
     dueDate: provisionDateKey(get("DATAPREVISTOPGTO", "DATA PREVISTO PGTO")),
   });
 }

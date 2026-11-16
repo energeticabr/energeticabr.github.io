@@ -34,8 +34,9 @@ export function createCameraChooser(documentRef = globalThis.document) {
 }
 
 export function editDocumentScan(file, {
-  documentRef = globalThis.document, urlApi = globalThis.URL, FileCtor = globalThis.File,
+  documentRef = globalThis.document, urlApi = globalThis.URL, FileCtor = globalThis.File, signal,
 } = {}) {
+  if (signal?.aborted) return Promise.resolve(null);
   return new Promise((resolve,reject) => {
     const previous=documentRef.activeElement, dialog=documentRef.createElement('dialog');
     dialog.className='document-scanner document-scanner--editor';
@@ -48,8 +49,11 @@ export function editDocumentScan(file, {
     let disposed=false,processing=false,source=null,corners=null,initial=null,blob=null,stage=null,handles=[],polygon=null;
     const image=new documentRef.defaultView.Image();
     const href=urlApi.createObjectURL(file);
+    const abort=()=>finish(null);
+    signal?.addEventListener('abort',abort,{once:true});
     function finish(result,error) {
       if(disposed)return;disposed=true;dialog.remove();image.removeAttribute('src');urlApi.revokeObjectURL(href);
+      signal?.removeEventListener('abort',abort);
       previous?.isConnected&&previous.focus?.();error?reject(error):resolve(result);
     }
     dialog.addEventListener('cancel',event=>{event.preventDefault();finish(null);});

@@ -120,6 +120,28 @@ test('provision-report pending authorization action reopens the provision view l
   assert.equal(opens, 1);
 });
 
+test('automatic attachment checks and abandoned attachment requests never trigger Microsoft consent',async t=>{
+  let acquire,resolveToken,grants=0;
+  const h=harness({
+    paymentLedgerDataFactory:async({tokenProvider})=>{
+      acquire=tokenProvider;
+      return {loadProvisionReportSnapshot:async()=>({provisions:[],recurrences:[]})};
+    },
+    provisionReportFactory:async({data})=>({open:()=>data.loadProvisionReportSnapshot(),destroy(){}}),
+    auth:{getToken:async()=>new Promise(resolve=>{resolveToken=resolve;}),authorize:async()=>{grants++;}},
+  });
+  t.after(()=>h.controller.stop());await h.controller.start();await h.view.emit('open-provision-report');
+  const scopes=['https://example.sharepoint.com/AllSites.Read'];
+  const background=acquire(scopes,{interactive:false});
+  resolveToken(Promise.reject(authRequired()));
+  await assert.rejects(background,{code:'AUTH_REQUIRED'});
+  const attachment=new AbortController();
+  const pending=acquire(scopes,{signal:attachment.signal});
+  attachment.abort();resolveToken(Promise.reject(authRequired()));
+  await assert.rejects(pending,{name:'AbortError'});
+  assert.equal(grants,0);
+});
+
 for (const end of ['sign-out', 'stop']) {
   test(`provision report factory resolved after ${end} is destroyed without opening`, async t => {
     let finish, opens = 0, destroys = 0;

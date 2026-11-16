@@ -33,7 +33,7 @@ test('responsive provision cells retain every field and month label without addi
   const {view,root}=setup(t);await view.open();
   const main=root.querySelector('table[data-section=provisions]');
   assert.deepEqual([...main.querySelectorAll('tbody tr[data-id] td')].map(cell=>cell.dataset.label),
-    ['FILIAL','FORNECEDOR','PRODUTO','DATA VENCIMENTO','AGENDAMENTO','VALOR','STATUS']);
+    ['ANEXOS','FILIAL','FORNECEDOR','PRODUTO','DATA VENCIMENTO','AGENDAMENTO','VALOR','STATUS']);
   const annual=root.querySelector('table[data-section=annual]');
   const labels=[...annual.querySelector('tbody tr[data-recurrence-id]').cells].map(cell=>cell.dataset.label);
   assert.deepEqual(labels,['FORNECEDOR','JAN','FEV','MAR','ABR','MAI','JUN','JUL','AGO','SET','OUT','NOV','DEZ','TOTAL']);
@@ -43,17 +43,71 @@ test('responsive provision cells retain every field and month label without addi
   assert.equal(main.querySelector('tbody tr[data-id] td').getAttribute('role'),'cell');
   const {captureFilteredReport}=await import('../src/ui/report-print.js');
   const capture=captureFilteredReport(root,{title:'Provisões'}),tables=capture.pages[0].blocks.filter(b=>b.type==='table');
-  assert.deepEqual(tables.map(table=>table.rows.filter(row=>row.header).at(-1).cells.length),[7,14,8]);
-  assert.equal(tables[0].rows[2].cells[0].runs.map(run=>run.text).join('').trim(),row.branch);
+  assert.deepEqual(tables.map(table=>table.rows.filter(row=>row.header).at(-1).cells.length),[8,14,8]);
+  assert.equal(tables[0].rows[2].cells[1].runs.map(run=>run.text).join('').trim(),row.branch);
 });
-function setup(t, loadProvisionReportSnapshot = async () => ({provisions:[row],recurrences:[recurrence]}), portrait=false, syncRecurringProvisions=async()=>{}) {
+function setup(t, loadProvisionReportSnapshot = async () => ({provisions:[row],recurrences:[recurrence]}), portrait=false, syncRecurringProvisions=async()=>{}, attachmentOptions={}) {
   assert.equal(typeof createProvisionReportView, 'function');
   const dom=new JSDOM('<main id="app"><button>Mascote</button></main>');let vertical=portrait;
   dom.window.matchMedia=()=>({get matches(){return vertical;}});
-  const view=createProvisionReportView({document:dom.window.document,data:{loadProvisionReportSnapshot,syncRecurringProvisions},now:()=>new Date('2026-10-05T12:00:00Z')});
+  const {openMediaCollection,...attachments}=attachmentOptions;
+  const view=createProvisionReportView({document:dom.window.document,data:{loadProvisionReportSnapshot,syncRecurringProvisions,...attachments},openMediaCollection,now:()=>new Date('2026-10-05T12:00:00Z')});
   t.after(()=>{view.destroy();dom.window.close();});
   return {view,root:view.element,dom,rotate(v){vertical=v;dom.window.dispatchEvent(new dom.window.Event('resize'));}};
 }
+
+test('description attachment icon and expanded provision PDFs open files from their own records',async t=>{
+  const files=new Map([['description:42',['descritivo.pdf']],['provision:301',['primeira.pdf']],['provision:302',['segunda.pdf','extra.pdf']]]);
+  const reads=[],downloads=[];
+  const {view,root}=setup(t,async()=>({
+    provisions:[{...row,id:'301',descriptionId:'42',hasAttachments:true},{...row,id:'302',descriptionId:'42',hasAttachments:true},
+      {...row,id:'303',descriptionId:'43',hasAttachments:true},{...row,id:'304',hasAttachments:true}],
+    recurrences:[recurrence],descriptions:[{id:'42',hasAttachments:true},{id:'43',hasAttachments:false}],
+  }),false,undefined,{
+    async listProvisionReportAttachments(kind,id){reads.push(`${kind}:${id}`);return files.get(`${kind}:${id}`).map(fileName=>({fileName}));},
+    async downloadProvisionReportAttachment(kind,id,fileName){downloads.push(`${kind}:${id}:${fileName}`);return new Blob([]);},
+    async openMediaCollection(items){await items[0].source();},
+  });
+  await view.open();
+  const group=root.querySelector('[data-description-id="42"]');
+  const attached=group.querySelector('[data-column=attachments] button');
+  assert.equal(group.querySelector('[data-column=attachments]').dataset.attachmentState,'present');
+  const empty=root.querySelector('[data-id="303"] [data-column=attachments]');
+  assert.equal(empty.dataset.attachmentState,'empty');
+  assert.match(empty.getAttribute('aria-label'),/Sem anexos/);
+  assert.equal(root.querySelector('[data-id="304"] [data-column=attachments]').dataset.attachmentState,'empty');
+  assert.deepEqual(reads,[]);
+  attached.click();
+  await new Promise(resolve=>setImmediate(resolve));
+  group.querySelector('.pr-group-toggle').click();
+  await new Promise(resolve=>setImmediate(resolve));
+  for(const [id,names] of [['301',['primeira.pdf']],['302',['segunda.pdf','extra.pdf']]]){
+    const buttons=[...root.querySelectorAll(`[data-id="${id}"] [data-column=attachments] button`)];
+    assert.deepEqual(buttons.map(button=>button.title),names);
+    buttons.at(-1).click();
+    await new Promise(resolve=>setImmediate(resolve));
+  }
+  assert.deepEqual(reads,['description:42','provision:301','provision:302']);
+  assert.deepEqual(downloads,['description:42:descritivo.pdf','provision:301:primeira.pdf','provision:302:extra.pdf']);
+});
+
+test('attachment lookup errors leave the report PDF available and clear on retry',async t=>{
+  const {captureFilteredReport}=await import('../src/ui/report-print.js');
+  let requests=0;
+  const {view,root}=setup(t,async()=>({provisions:[{...row,descriptionId:'42'}],recurrences:[recurrence],
+    descriptions:[{id:'42',hasAttachments:true}]}),false,undefined,{
+    async listProvisionReportAttachments(){if(!requests++)throw new Error('Network request failed');return [{fileName:'recibo.pdf'}];},
+    async downloadProvisionReportAttachment(){return new Blob([]);},
+    async openMediaCollection(items){await items[0].source();},
+  });
+  await view.open();
+  const trigger=root.querySelector('[data-column=attachments] button');
+  trigger.click();await new Promise(resolve=>setImmediate(resolve));
+  assert.match(root.textContent,/Falha ao abrir os anexos/);
+  assert.equal(captureFilteredReport(root,{title:'Provisões'}).pages.length,1);
+  trigger.click();await new Promise(resolve=>setImmediate(resolve));
+  assert.doesNotMatch(root.textContent,/Falha ao abrir os anexos/);
+});
 test('refresh waits for recurring-expense flow completion before fetching and showing new provisions',async t=>{
   let release,fetches=0,syncs=0;
   const completed=new Promise(resolve=>{release=resolve;});
@@ -279,11 +333,11 @@ test('expanded installments with different due dates show each date and payment 
     ['PAGAMENTO PREVISTO','VENCE EM 15 DIAS']);
   const {captureFilteredReport}=await import('../src/ui/report-print.js');
   const exported=captureFilteredReport(root,{title:'Provisões'}).pages[0].blocks.find(block=>block.type==='table');
-  for(const column of [0,1,4]){
+  for(const column of [1,2,5]){
     assert.deepEqual(exported.rows[3].cells[column].runs,[],`PDF repeats parent column ${column}`);
   }
-  assert.equal(exported.rows[3].cells[3].runs.map(run=>run.text).join('').trim(),'20/10/2026');
-  assert.match(exported.rows[3].cells[6].runs.map(run=>run.text).join(' '),/PAGAMENTO PREVISTO.*VENCE EM 15 DIAS/);
+  assert.equal(exported.rows[3].cells[4].runs.map(run=>run.text).join('').trim(),'20/10/2026');
+  assert.match(exported.rows[3].cells[7].runs.map(run=>run.text).join(' '),/PAGAMENTO PREVISTO.*VENCE EM 15 DIAS/);
   assert.match(equal.querySelector('[data-column=product]').textContent,/^Areia \(Conferir quantidade\)$/);
   assert.match(equal.querySelector('[data-column=total]').textContent,/120,00/);
   assert.equal(different.querySelector('[data-column=branch]').textContent,'Outra filial');

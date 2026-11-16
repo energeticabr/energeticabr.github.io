@@ -1,5 +1,6 @@
 import { validateAttachment } from "../chat/file-policy.js";
 import { editDocumentScan } from '../ui/document-scanner.js';
+import { captureBrowserCamera } from './browser-camera.js';
 
 function safeFileName(value) {
   return String(value || "arquivo")
@@ -34,7 +35,7 @@ export function createBrowserPorts({
   navigatorRef = globalThis.navigator,
   urlApi = globalThis.URL,
   FileCtor = globalThis.File,
-  editScan = file => editDocumentScan(file, { documentRef, urlApi, FileCtor }),
+  editScan = (file, { signal } = {}) => editDocumentScan(file, { documentRef, urlApi, FileCtor, signal }),
   selectFiles = options => selectBrowserFiles({ documentRef, ...options }),
   notificationApi = globalThis.Notification,
   setTimeoutImpl = globalThis.setTimeout,
@@ -91,14 +92,20 @@ export function createBrowserPorts({
     return files;
   }
 
-  async function capturePhoto() {
+  async function capturePhoto({ desktopCamera = false, signal } = {}) {
+    if (desktopCamera && navigatorRef?.mediaDevices?.getUserMedia
+      && !(/Android|iPhone|iPad|iPod/i.test(navigatorRef.userAgent || '') || navigatorRef.userAgentData?.mobile
+        || (/Macintosh/i.test(navigatorRef.userAgent || '') && navigatorRef.maxTouchPoints > 1))) {
+      return captureBrowserCamera({ documentRef, mediaDevices: navigatorRef.mediaDevices, FileCtor, signal,
+        selectImage: () => validatedSelection({ accept: "image/*", multiple: false }) });
+    }
     return validatedSelection({ accept: "image/*", capture: "environment", multiple: false });
   }
 
-  async function scanDocument() {
-    const [photo] = await capturePhoto();
-    if (!photo) return [];
-    const edited = await editScan(photo);
+  async function scanDocument(options) {
+    const [photo] = await capturePhoto(options);
+    if (!photo || options?.signal?.aborted) return [];
+    const edited = await editScan(photo, { signal: options?.signal });
     if (edited) validateAttachment(edited);
     return edited ? [edited] : [];
   }

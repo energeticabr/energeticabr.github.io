@@ -22,6 +22,20 @@ test('a safe frame maps a panned portrait viewport into rotated report coordinat
   });
 });
 
+test('a rotated report without a custom frame also fits the keyboard viewport', t => {
+  const dom = new JSDOM('<main class="report-landscape-viewport" data-report-portrait="true" style="padding-left:8px"><section role="dialog" style="padding:3px"><select></select></section></main>');
+  t.after(() => dom.window.close());
+  const root = dom.window.document.querySelector('main');
+  root.style.setProperty('--report-width', '852px');
+  root.style.setProperty('--report-height', '393px');
+  Object.defineProperty(dom.window, 'visualViewport', {
+    value:{ width:393, height:440, offsetTop:55, offsetLeft:0 },
+  });
+  assert.deepEqual(reportLayoutViewport(root.querySelector('select')), {
+    rotated:true, top:3, left:55, width:440, height:387,
+  });
+});
+
 function setup(t, { multiple = false } = {}) {
   const dom = new JSDOM('<style></style><form><label>PRODUTO<select name="product"><option value="">Todos</option><option value="aco">Aço estrutural</option><option value="cimento">Cimento</option></select></label><button type="button" id="outside">Fora</button></form>');
   const doc = dom.window.document, select = doc.querySelector('select');
@@ -148,6 +162,27 @@ test('search keyboard overlays the report list without flattening its opening he
   assert.ok(top + height > 260, 'the keyboard may cover the list bottom, as in PowerApps');
   assert.equal(ctx.search().value, 'produto'); assert.equal(ctx.list.children.length, 40);
   ctx.list.lastElementChild.click(); assert.equal(ctx.select.value, 'p40');
+});
+
+test('keyboard-induced document and form scrolling keep the report search focused', t => {
+  const ctx = setup(t);
+  const { Event } = ctx.dom.window;
+  ctx.trigger.click();
+  ctx.search().focus();
+  ctx.type('aço');
+  ctx.viewport.height = 230;
+  ctx.viewport.offsetTop = 30;
+  ctx.viewport.dispatchEvent(new Event('resize'));
+  ctx.doc.querySelector('form').dispatchEvent(new Event('scroll'));
+  ctx.doc.dispatchEvent(new Event('scroll'));
+  ctx.viewport.dispatchEvent(new Event('scroll'));
+  assert.equal(ctx.popup.hidden, false);
+  assert.equal(ctx.doc.activeElement, ctx.search());
+  assert.equal(ctx.search().value, 'aço');
+  ctx.type('cimento');
+  assert.deepEqual([...ctx.list.children].map(item => item.textContent), ['Cimento']);
+  ctx.doc.querySelector('#outside').focus();
+  assert.equal(ctx.popup.hidden, true, 'moving focus to another control dismisses the picker');
 });
 
 test('Android layout resize and search rerender do not collapse the report picker', t => {
