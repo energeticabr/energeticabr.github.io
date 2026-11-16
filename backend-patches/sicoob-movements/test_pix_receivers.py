@@ -2,6 +2,7 @@ import unittest
 import importlib.util
 import subprocess
 import tempfile
+from datetime import date, datetime
 from pathlib import Path
 from io import BytesIO
 from types import SimpleNamespace
@@ -140,6 +141,153 @@ class PixTest(unittest.TestCase):
                 collector.resolve_inbox(client, [row], False, inbox)
                 self.assertEqual(read.call_count, 1)
                 self.assertEqual(client.updates, 1)
+
+    def test_webhook_matches_only_a_unique_late_batch_debit(self):
+        paid, posted = date(2026, 11, 14), date(2026, 11, 16)
+        end_id = END_ID.replace('20261106', '20261114')
+        pix = {**self.pix, 'endToEndId': end_id, 'horario': '2026-11-14T15:30:00Z'}
+        payer = pix['origem']['cpfCnpj']
+        auth_answer = {'payer_document': payer, 'results': {end_id: {'status': 200, 'result': pix}}}
+        debit = {'data': '2026-11-16T00:00', 'dataLote': posted.isoformat(),
+                 'descricao': 'PIX EMITIDO OUTRA IF', 'numeroDocumento': 'Pix',
+                 'descInfComplementar': 'Pagamento Pix|@***.123.456-**|@',
+                 'transactionId': 'sicoob-debit', 'tipo': 'D', 'valor': '23.50'}
+        other = {**debit, 'transactionId': 'different-bank-debit'}
+        cases = (
+            ('batch post', [debit], True, False, 18),
+            ('posting window still open', [debit], False, False, 16),
+            ('reports a normal transaction time', [{**debit, 'data': '2026-11-16T14:31'}], False, False, 18),
+            ('competing debit not yet in the gallery', [debit, other], False, False, 18),
+            ('other candidate with no payee information', [debit, {**other, 'descInfComplementar': 'Pix'}], False, False, 18),
+            ('an exact-date debit also matches', [debit, {**other, 'data': '2026-11-14T10:00',
+                                                          'dataLote': paid.isoformat()}], False, False, 18),
+            ('other documented recipient', [debit, {**other, 'descInfComplementar': 'Pix|@***.789.123-**|@'}], True, False, 18),
+            ('missing target debit', [], False, False, 18),
+            ('already reconciled to a different payment', [debit], False, True, 18),
+        )
+        for label, entries, matches, claimed, collection_day in cases:
+            with self.subTest(label=label), tempfile.TemporaryDirectory() as directory:
+                inbox = Inbox(Path(directory), create=True)
+                if claimed:
+                    previous_id = end_id[:-1] + 'Z'
+                    inbox.accept({'id': previous_id, 'estado': 'FINALIZADO_SUCESSO'})
+                    inbox.complete(previous_id, 29)
+                inbox.accept({'id': end_id, 'estado': 'FINALIZADO_SUCESSO'})
+                row = collector.movements.payment_rows({'transacoes': [debit]}, posted, posted, '12345', {})[0]
+                row.update(Id=29, **dict.fromkeys(collector.EXTRA))
+                stored = dict(row)
+                def get_fields(item, fields, target):
+                    return {field: stored.get(field) for field in fields}
+                def update(item, fields, etag, target):
+                    self.assertEqual(etag, 'snapshot')
+                    stored.update(fields)
+                client = SimpleNamespace(get_item_fields=get_fields,
+                    get_item_fields_with_etag=lambda *args: (get_fields(*args), 'snapshot'),
+                    update_item_with_etag=update)
+                def statement(start, end):
+                    self.assertEqual(start, paid)
+                    self.assertGreaterEqual(end, posted)
+                    return '12345', {(start, end): {'transacoes': entries}}
+                clock = SimpleNamespace(now=lambda _: datetime(2026, 11, collection_day))
+                with patch.object(collector, 'read_pix', return_value=auth_answer), \
+                     patch.object(collector, 'datetime', clock), \
+                     patch.object(collector.movements, 'read_bank', side_effect=statement) as read:
+                    stats = collector.resolve_inbox(client, [row], False, inbox)
+                self.assertEqual(read.call_count, int(not claimed))
+                self.assertEqual(stats['nomes_gravados'], int(matches))
+                self.assertEqual(stored['RAZAOSOCIALRECEBEDOR'], pix['destino']['nome'] if matches else None)
+                self.assertEqual(stored['DATAPAGAMENTO'], '2026-11-16T12:00:00Z')
+                self.assertEqual(inbox.pending(), [] if matches else [end_id])
+                if claimed:
+                    self.assertFalse(inbox.complete(end_id, 29))
+                    self.assertEqual(inbox.claimed_movements(), {29: {previous_id}})
+
+    def test_webhook_claims_distinct_bank_ids_that_differ_only_in_letter_case(self):
+        other_id = END_ID[:-1] + END_ID[-1].lower()
+        other_pix = {**self.pix, 'endToEndId': other_id, 'destino': {
+            **self.pix['destino'], 'cpfCnpj': '98765432112', 'nome': 'Outro recebedor'}}
+        fields = dict.fromkeys((*collector.IDENTITY, *collector.EXTRA), '')
+        rows = [
+            {**fields, **self.row, 'Id': 1},
+            {**fields, **self.row, 'Id': 2, 'DESCRICAO': 'PIX | ***.654.321-**'},
+        ]
+        stored = {row['Id']: dict(row) for row in rows}
+        def get_fields(item, selected, target):
+            return {field: stored[item].get(field) for field in selected}
+        client = SimpleNamespace(get_item_fields=get_fields,
+            get_item_fields_with_etag=lambda *args: (get_fields(*args), 'snapshot'),
+            update_item_with_etag=lambda item, values, etag, target: stored[item].update(values))
+        data = {'payer_document': self.pix['origem']['cpfCnpj'], 'results': {
+            END_ID: {'status': 200, 'result': self.pix},
+            other_id: {'status': 200, 'result': other_pix}}}
+        with tempfile.TemporaryDirectory() as directory:
+            inbox = Inbox(Path(directory), create=True)
+            for identifier in data['results']:
+                inbox.accept({'id': identifier, 'estado': 'FINALIZADO_SUCESSO'})
+            with patch.object(collector, 'read_pix', return_value=data):
+                self.assertEqual(collector.resolve_inbox(client, rows, False, inbox)['nomes_gravados'], 2)
+            self.assertEqual(inbox.claimed_movements(), {1: {END_ID}, 2: {other_id}})
+            self.assertEqual(inbox.pending(), [])
+
+    def test_webhook_preserves_corporate_legal_name_and_completes_bank_event(self):
+        document = '18189352000100'
+        pix = {**self.pix, 'destino': {**self.pix['destino'], 'nome': 'Nome bancário', 'cpfCnpj': document}}
+        row = {field: '' for field in (*collector.IDENTITY, *collector.EXTRA)}
+        row.update(self.row, Id=4, DOCUMENTORECEBEDOR='18.189.352/0001-00', RAZAOSOCIALRECEBEDOR='Razão social cadastral')
+        stored = dict(row)
+        def get_fields(item, fields, target):
+            return {field: stored.get(field) for field in fields}
+        client = SimpleNamespace(get_item_fields=get_fields,
+            get_item_fields_with_etag=lambda *args: (get_fields(*args), 'snapshot'),
+            update_item_with_etag=lambda item, fields, etag, target: stored.update(fields))
+        data = {'payer_document': pix['origem']['cpfCnpj'], 'results': {END_ID: {'status': 200, 'result': pix}}}
+        with tempfile.TemporaryDirectory() as directory:
+            inbox = Inbox(Path(directory), create=True)
+            inbox.accept({'id': END_ID, 'estado': 'FINALIZADO_SUCESSO'})
+            with patch.object(collector, 'read_pix', return_value=data):
+                collector.resolve_inbox(client, [row], False, inbox)
+            self.assertEqual(inbox.pending(), [])
+        self.assertEqual(stored['RAZAOSOCIALRECEBEDOR'], 'Razão social cadastral')
+        self.assertEqual(stored['CONTARECEBEDOR'], pix['destino']['conta'])
+
+    def test_late_payment_can_use_the_unique_debit_left_after_a_prior_claim(self):
+        paid, posted = date(2026, 11, 6), date(2026, 11, 7)
+        debit = {'data': '2026-11-07T00:00', 'dataLote': posted.isoformat(),
+                 'descricao': 'PIX EMITIDO OUTRA IF', 'numeroDocumento': 'Pix',
+                 'descInfComplementar': 'Pagamento Pix|@***.123.456-**|@',
+                 'transactionId': 'earlier-claim', 'tipo': 'D', 'valor': '23.50'}
+        statement = {'transacoes': [debit, {**debit, 'transactionId': 'new-debit'}]}
+        rows = collector.movements.payment_rows(statement, paid, posted, '12345', {})
+        for i, row in enumerate(rows, 1):
+            row['Id'] = i
+        payer = self.pix['origem']['cpfCnpj']
+        answers = {END_ID: {'status': 200, 'result': self.pix}}
+        claims = {1: {END_ID[:-1] + 'Z'}}
+        clock = SimpleNamespace(now=lambda _: datetime(2026, 11, 10))
+        with patch.object(collector, 'datetime', clock), \
+             patch.object(collector.movements, 'read_bank', return_value=('12345', {(paid, posted): statement})):
+            late = collector.verify_late_postings(rows, answers, '12345', payer, claims)
+        self.assertEqual(late, {END_ID: rows[1][collector.movements.KEY]})
+        self.assertIsNone(bank_match(rows[0], {END_ID: None}, answers, rows, payer, late, claims))
+        self.assertEqual(bank_match(rows[1], {END_ID: None}, answers, rows, payer, late, claims), (self.pix, END_ID, None))
+
+    def test_single_exact_statement_debit_retains_exact_date_matching(self):
+        paid, posted = date(2026, 11, 6), date(2026, 11, 7)
+        exact = {'data': '2026-11-06T18:30', 'dataLote': paid.isoformat(),
+                 'descricao': 'PIX EMITIDO OUTRA IF', 'numeroDocumento': 'Pix',
+                 'descInfComplementar': 'Pagamento Pix|@***.123.456-**|@',
+                 'transactionId': 'exact-debit', 'tipo': 'D', 'valor': '23.50'}
+        different = {**exact, 'data': '2026-11-07T10:00', 'dataLote': posted.isoformat(),
+                     'transactionId': 'normal-debit-next-day'}
+        statement = {'transacoes': [exact, different]}
+        rows = collector.movements.payment_rows(statement, paid, posted, '12345', {})
+        for i, row in enumerate(rows, 1):
+            row['Id'] = i
+        payer = self.pix['origem']['cpfCnpj']
+        answers = {END_ID: {'status': 200, 'result': self.pix}}
+        with patch.object(collector.movements, 'read_bank', return_value=('12345', {(paid, posted): statement})):
+            late = collector.verify_late_postings(rows, answers, '12345', payer)
+        self.assertEqual(bank_match(rows[0], {END_ID: None}, answers, rows, payer, late), (self.pix, END_ID, None))
 
     def test_webhook_failures_and_ambiguous_movements_remain_retryable(self):
         row = {**self.row, 'Id': 1, 'RAZAOSOCIALRECEBEDOR': ''}
