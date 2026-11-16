@@ -2,6 +2,7 @@ import test from "node:test";
 import assert from "node:assert/strict";
 
 import { createChatClient } from "../src/chat/chat-client.js";
+import { resumeConversation } from "../src/chat/resume-conversation.js";
 
 const API_BASE = "https://163-176-171-217.sslip.io";
 
@@ -63,6 +64,31 @@ test('retomada da demonstração não consulta processamento corporativo nem adq
     apiPrefix: '/api/demo', tokenProvider: async () => { throw Error('consulta indevida'); },
   });
   await client.waitForDiaryEvidence();
+});
+
+test('NBPAR retoma diretamente sua sessão sem consultar o Diário de Obras', async () => {
+  const requests = [];
+  const menu = { type: 'poll', question: 'Qual área deseja acessar?', options: [
+    { id: 'group_nb_participacoes', label: 'NB PARTICIPAÇÕES' },
+    { id: 'group_personal_expenses', label: 'GASTOS PESSOAIS' },
+  ] };
+  const client = clientWith(async (_url, options) => {
+    const body = JSON.parse(options.body);
+    requests.push({ body, app: new Headers(options.headers).get('X-Portal-App') });
+    if (body.action === 'diary_evidence_pending') {
+      return jsonResponse({ error: 'Ação indisponível no NB' }, 401);
+    }
+    return jsonResponse({ status: 'processed', messages: [menu] });
+  }, { portalApp: 'nb-participacoes' });
+
+  const result = await resumeConversation(client);
+  assert.equal(result.status, 'processed');
+  assert.deepEqual(result.messages[0].options.map(option => option.id),
+    ['group_nb_participacoes', 'group_personal_expenses']);
+  assert.deepEqual(requests, [{
+    body: { messageId: 'message-id', text: '', replyId: 'input_continue' },
+    app: 'nb-participacoes',
+  }]);
 });
 
 test('PDF preflight preserves temporary HTTP status so reconnection can retry a busy VM', async () => {

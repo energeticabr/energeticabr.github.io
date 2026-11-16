@@ -178,11 +178,15 @@ export function createChatClient({
   const verifySignatureEvidence = options => signatureEvidence("verify", options);
   const captureSignatureEvidence = options => signatureEvidence("capture", options);
 
-  async function request(url, options, read, readOnly = false, { retryTransient = false, transport = fetchImpl } = {}) {
+  function portalRequestOptions(url, options) {
     const scoped = portalApp && [chatUrl.pathname, uploadUrl.pathname, transcriptionUrl.pathname].includes(new URL(url).pathname);
-    const requestOptions = scoped
+    return scoped
       ? { ...options, headers: { ...options.headers, [NB_PORTAL_HEADER]: portalApp }, redirect: "error" }
       : apiPrefix === "/api/demo" ? { ...options, redirect: "error" } : options;
+  }
+
+  async function request(url, options, read, readOnly = false, { retryTransient = false, transport = fetchImpl } = {}) {
+    const requestOptions = portalRequestOptions(url, options);
     for (let attempt = 0; ; attempt++) {
       checkRequestCancellation(options.signal);
       try {
@@ -325,8 +329,7 @@ export function createChatClient({
   }
 
   async function waitForDiaryEvidence({ signal, onProgress } = {}) {
-    // The isolated demonstration has no corporate diary jobs or this action.
-    if (apiPrefix === '/api/demo') return;
+    if (portalApp === NB_PORTAL_APP || apiPrefix === '/api/demo') return;
     for (;;) {
       checkRequestCancellation(signal);
       const abort = new AbortController();
@@ -441,7 +444,7 @@ export function createChatClient({
     const token = await acquireToken(tokenProvider);
     let response;
     try {
-      response = await fetchImpl(transcriptionUrl.href, {
+      const options = {
         method: "POST",
         headers: {
           Accept: "application/json",
@@ -453,7 +456,8 @@ export function createChatClient({
         body: file,
         cache: "no-store",
         credentials: "omit",
-      });
+      };
+      response = await fetchImpl(transcriptionUrl.href, portalApp ? portalRequestOptions(transcriptionUrl.href, options) : options);
     } catch (error) {
       if (error instanceof TypeError || ["NetworkError", "AbortError"].includes(error?.name)) {
         throw new Error("Falha de conexão com o serviço de transcrição. Verifique a internet e tente enviar o áudio novamente.", { cause: error });

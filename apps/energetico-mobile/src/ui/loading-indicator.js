@@ -28,9 +28,10 @@ function spinnerMarkup(progress, progressLabel) {
   return `<span class="app-loading__progress-row">${spinner}<span class="app-loading__percentage" role="progressbar" aria-label="${escapeHtml(progressLabel)}" aria-valuemin="0" aria-valuemax="100" ${valueAttribute}>${percent === null ? '—' : percent}%</span></span>`;
 }
 
-export function loadingIndicatorMarkup(label, { compact = false, progress = 0, progressLabel = DEFAULT_PROGRESS_LABEL } = {}) {
+export function loadingIndicatorMarkup(label, { compact = false, progress = 0, progressLabel = DEFAULT_PROGRESS_LABEL, showMascot = true } = {}) {
   const variant = loadingVariant(label);
-  return `<span class="app-loading${compact ? " app-loading--compact" : ""}" data-loading-variant="${variant}" role="status" aria-live="polite"><img class="app-loading__mascot" src="${MASCOT_URLS[variant]}" alt="" aria-hidden="true" draggable="false">${spinnerMarkup(progress, progressLabel)}<span class="app-loading__text">${escapeHtml(label)}</span></span>`;
+  const mascot = showMascot ? `<img class="app-loading__mascot" src="${MASCOT_URLS[variant]}" alt="" aria-hidden="true" draggable="false">` : "";
+  return `<span class="app-loading${compact ? " app-loading--compact" : ""}" data-loading-variant="${variant}" role="status" aria-live="polite">${mascot}${spinnerMarkup(progress, progressLabel)}<span class="app-loading__text">${escapeHtml(label)}</span></span>`;
 }
 
 export function updateLoadingIndicator(root, { label, progress, progressLabel = DEFAULT_PROGRESS_LABEL } = {}) {

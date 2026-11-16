@@ -38,4 +38,9 @@ class RunningRouteTests(unittest.TestCase):
             handler.authenticated=True
             self.assertEqual(handler.query({'action':'diary_evidence_pending','text':'must not execute'})[0],422)
 
+            handler.identity={**owner,'portalApp':'nb-participacoes'}
+            self.assertEqual(handler.query({'action':'diary_evidence_pending'}),(200,{'status':'unavailable'}))
+            self.assertEqual(handler.query({'action':'diary_evidence_pending','text':'must not execute'})[0],422)
+            self.assertEqual(handler.query({'action':'diary_evidence_progress','requestId':'original-request'})[0],401)
+
 if __name__=='__main__': unittest.main()

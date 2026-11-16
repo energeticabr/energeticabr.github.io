@@ -18,6 +18,18 @@ def scoped_block(source, name, replacements):
     return source[:start] + block + source[end:]
 
 
+def patch_nb_resume(source):
+    return replace(source,
+        '                if identity.get("portalApp") == "nb-participacoes" and action not in {\n',
+        '''                # Older NB builds send this preflight before resuming their own session.
+                if identity.get("portalApp") == "nb-participacoes" and action == "diary_evidence_pending":
+                    if set(body) != {"action"}:
+                        raise ValueError("Parâmetros de recuperação inválidos")
+                    return self._send_json(200, {"status": "unavailable"}, cors_origin=origin)
+                if identity.get("portalApp") == "nb-participacoes" and action not in {
+''')
+
+
 def patch_bridge(source):
     source = replace(source, "def portal_channel_payload(body: dict, identity: dict) -> dict:",
         '''def portal_sender(identity: dict) -> str:
@@ -56,7 +68,7 @@ def portal_channel_payload(body: dict, identity: dict) -> dict:''')
                 }:
                     raise PermissionError("Ação indisponível no NB")
                 if action == "dda_payment_confirm":''')
-    return source
+    return patch_nb_resume(source)
 
 
 def patch_workflow(source):

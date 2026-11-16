@@ -26,7 +26,7 @@ test("NB has its own Microsoft login and only shows its two home areas", () => {
   const markup = renderChatMarkup(state, { portalApp });
   assert.match(markup, /data-reply-id="group_nb_participacoes"/);
   assert.match(markup, /data-reply-id="group_personal_expenses"/);
-  assert.doesNotMatch(markup, /group_financial|action_powerbi_dashboard|open-rhid-attendance-today|open-general-summary-report/);
+  assert.doesNotMatch(markup, /group_financial|action_powerbi_dashboard|open-rhid-attendance-today|open-general-summary-report|open-cargos-table|open-rhid-mascot-report|open-stage-progress|open-trancid-report/);
   assert.match(renderChatMarkup(state), /action_powerbi_dashboard/);
 });
 
@@ -44,6 +44,21 @@ test("NB keeps submenu, field and attachment controls", () => {
   assert.match(markup, /data-reply-id="navigation_main_menu"/);
 });
 
+test("NB uses its own assistant identity on welcome, prompts, text and documents", () => {
+  const messages = [
+    { role: "assistant", type: "poll", question: "Escolha o imóvel", options: [area("123", "Imóvel de teste")] },
+    { role: "assistant", type: "text", text: "Informe o valor" },
+    { role: "assistant", type: "document", id: "arquivo", fileName: "recibo.pdf" },
+  ];
+  const welcome = renderChatMarkup({ ...state, messages: [] }, { portalApp });
+  const conversation = renderChatMarkup({ ...state, messages, resuming: true }, { portalApp });
+  for (const markup of [welcome, conversation]) {
+    assert.match(markup, /chat-avatar--assistant[^>]*>NBPAR</);
+    assert.doesNotMatch(markup, /Energético|mascote-192|app-loading__mascot/);
+  }
+  assert.match(renderChatMarkup({ ...state, messages }), /Mascote Energético/);
+});
+
 test("NB scopes requests while Energético keeps its existing request format", async () => {
   const headers = [];
   const options = {
@@ -51,12 +66,13 @@ test("NB scopes requests while Energético keeps its existing request format", a
     tokenProvider: async () => "synthetic",
     fetchImpl: async (_url, init) => {
       headers.push(new Headers(init.headers));
-      return Response.json({ status: "processed", messages: [] });
+      return Response.json({ status: "processed", messages: [], text: "Descrição do gasto" });
     },
   };
   const nb = createChatClient({ ...options, portalApp });
   await nb.sendText({ replyId: "group_nb_participacoes" });
   await nb.sendFile(new File(["fixture"], "recibo.pdf", { type: "application/pdf" }));
+  await nb.transcribeAudio(new File(["fixture"], "descricao.m4a", { type: "audio/mp4" }));
   await createChatClient(options).sendText({ replyId: "group_financial" });
-  assert.deepEqual(headers.map(item => item.get("X-Portal-App")), [portalApp, portalApp, null]);
+  assert.deepEqual(headers.map(item => item.get("X-Portal-App")), [portalApp, portalApp, portalApp, null]);
 });
