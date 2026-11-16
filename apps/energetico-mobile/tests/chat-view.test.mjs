@@ -4893,28 +4893,47 @@ test("menu inicial não oferece o hub antigo, inclusive em respostas legadas", t
   }
 });
 
-test("menu inicial posiciona Power BI logo depois de Gastos Pessoais", () => {
+test("menu inicial do Energético retira as áreas do NBPAR e conserva o Power BI e o Diário", () => {
   const markup = renderChatMarkup(signedInState({ messages: [{
     id: "main-menu-powerbi",
     role: "assistant",
     type: "poll",
     question: "👉 QUAL ÁREA VOCÊ DESEJA ACESSAR?",
     options: [
-      { id: "group_personal_expenses", reply: "group_personal_expenses", label: "💰 GASTOS PESSOAIS" },
       { id: "group_supplies", reply: "group_supplies", label: "📦 SUPRIMENTOS" },
+      { id: "group_nb_participacoes", reply: "group_nb_participacoes", label: "🏢 NB PARTICIPAÇÕES" },
+      { id: "group_personal_expenses", reply: "group_personal_expenses", label: "💰 GASTOS PESSOAIS" },
       { id: "start_pending_construction_diary", reply: "start_pending_construction_diary", label: "📔 COMEÇAR DIÁRIO DE OBRAS (24/09/2026)" },
     ],
   }] }));
   const dom = new JSDOM(markup);
   const buttons = [...dom.window.document.querySelectorAll(".chat-choice-list > .chat-choice-button")];
   assert.deepEqual(buttons.map(button => button.dataset.replyId), [
-    "group_personal_expenses",
-    "action_powerbi_dashboard",
     "group_supplies",
+    "action_powerbi_dashboard",
     "start_pending_construction_diary",
   ]);
   assert.equal(buttons[1].dataset.label, "📊 POWER BI");
   dom.window.close();
+});
+
+test("seletor de fluxo para anexos retira as áreas transferidas mesmo com IDs legados", t => {
+  const markup = renderChatMarkup(signedInState({ messages: [{
+    id: "attachment-area-menu",
+    role: "assistant",
+    type: "poll",
+    text: "VOCÊ TEM ANEXOS. DESEJA UTILIZAR ELES EM QUAL FLUXO?",
+    options: [
+      { id: "group_nb", label: "🏢 NB PARTICIPAÇÕES" },
+      { id: "group_finance", label: "💵 FINANCEIRO" },
+      { id: "personal_expenses", label: "💰 GASTOS PESSOAIS" },
+      { id: "action_powerbi_dashboard", label: "📊 POWER BI" },
+    ],
+  }] }));
+  const dom = new JSDOM(markup);
+  t.after(() => dom.window.close());
+  const replies = [...dom.window.document.querySelectorAll(".chat-choice-list > .chat-choice-button")];
+  assert.deepEqual(replies.map(button => button.dataset.replyId), ["group_finance", "action_powerbi_dashboard"]);
 });
 
 test("painel Power BI usa token Microsoft no SDK e renova o token sem autenticação automática no iframe", async () => {
