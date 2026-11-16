@@ -1837,6 +1837,7 @@ export function createAppController({
 
   const ddaAutoReminder = createDdaAutoReminder({
     canOpen: canOpenAutomaticDda,
+    accountId: () => String(account?.homeAccountId || account?.username || '').trim(),
     interaction: () => ddaReminderInteraction,
     enabled: () => enableDdaReminders && Boolean(account) && !stopped,
     onChange: () => render(),
