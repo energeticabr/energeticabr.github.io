@@ -13079,6 +13079,35 @@ test("galeria em criação não abre nem apaga nova requisição após reentrar 
   assert.deepEqual(destroyed, ["old"]);
 });
 
+test("consultas simultâneas de PDFs de cadastro compartilham o consentimento Microsoft", async t => {
+  let provider, finishConsent, granted = false;
+  const consent = new Promise(resolve => { finishConsent = resolve; });
+  const authorizations = [];
+  const h = makeHarness({
+    registrationGalleryDataFactory: async options => { provider = options.tokenProvider; return {}; },
+    registrationGalleryFactory: async () => ({ open() {}, destroy() {} }),
+  });
+  t.after(() => h.controller.stop());
+  await h.controller.start();
+  await h.view.emit("select-reply", { replyId: "action_supplier_gallery" });
+  h.auth.getToken = async () => {
+    if (granted) return "sharepoint-token";
+    throw Object.assign(new Error("Consentimento necessário"), { code: "AUTH_REQUIRED" });
+  };
+  h.auth.authorize = async (scopes, options) => { authorizations.push([scopes, options]); return consent; };
+  const scopes = ["https://energeticaltda-my.sharepoint.com/AllSites.Read"];
+  const controller = new AbortController();
+  const cancelled = provider(scopes, { signal: controller.signal }).catch(error => error);
+  const active = provider(scopes);
+  await new Promise(resolve => setImmediate(resolve));
+  controller.abort();
+  granted = true;
+  finishConsent();
+  assert.equal(await active, "sharepoint-token");
+  assert.deepEqual(authorizations, [[scopes, { resumeAction: "action_supplier_gallery" }]]);
+  assert.equal((await cancelled).name, "AbortError");
+});
+
 test("token de galeria recebido após sair não permite gravação com a sessão antiga", async t => {
   let provider, resolveToken;
   const h = makeHarness({
