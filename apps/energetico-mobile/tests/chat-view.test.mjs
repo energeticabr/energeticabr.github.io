@@ -203,13 +203,13 @@ test("mascotes comerciais ficam em uma faixa externa antes do cartão e preserva
     { id: 'group_pending', label: 'PENDÊNCIAS' },
     { id: 'group_supplies', label: 'SUPRIMENTOS' },
   ] };
-  const actions = ['open-commercial-receipts', 'open-commercial-milestones', 'open-commercial-documents', 'open-sac-pathologies', 'open-rentals-report'];
+  const actions = ['open-commercial-receipts', 'open-commercial-milestones', 'open-commercial-documents', 'open-sac-pathologies'];
   const opened = [], selected = [];
   actions.forEach(action => view.on(action, () => opened.push(action)));
   view.on('select-reply', event => selected.push(event));
   view.render(signedInState({ messages: [menu] }));
   const row = root.querySelector('nav[aria-label="Relatórios comerciais"]');
-  assert.ok(row, 'os mascotes laranja precisam de uma faixa própria');
+  assert.ok(row, 'os quatro mascotes laranja precisam de uma faixa própria');
   const bubble = root.querySelector('[data-reply-id="group_pending"]').closest('.chat-bubble');
   assert.equal(bubble.contains(row), false);
   assert.equal(row.parentElement, bubble.parentElement);
@@ -334,7 +334,7 @@ const returnedHomeOptions = [
   { id: 'group_demands', reply: 'group_demands', label: '📋 DEMANDAS' },
 ];
 const returnedHomeActions = [
-  'open-pending-provisions', 'open-commercial-receipts', 'open-commercial-milestones', 'open-commercial-documents', 'open-sac-pathologies', 'open-rentals-report',
+  'open-pending-provisions', 'open-commercial-receipts', 'open-commercial-milestones', 'open-commercial-documents', 'open-sac-pathologies',
   'open-sicoob-transaction-report', 'open-nfe-report', 'open-dda-report', 'open-provision-report', 'open-payment-ledger', 'open-management-report',
   'open-order-validation-report', 'open-depreciation-report', 'open-document-control-report',
   'open-task-association-report', 'open-rhid-mascot-report', 'open-pending-payroll-links', 'open-cargos-table', 'open-attendance-summary',

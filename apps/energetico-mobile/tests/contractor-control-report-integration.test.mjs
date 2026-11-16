@@ -43,7 +43,7 @@ test('pink rail preserves uniform fill and even spacing below the separate orang
  const css=dom.window.getComputedStyle(dom.window.document.querySelector(`[data-action="${action}"]`));assert.equal(css.backgroundColor,'rgb(207, 117, 122)');
  const trancid=dom.window.document.querySelector('[data-action="open-trancid-report"]');
  assert.equal(parseFloat(css.marginTop)-parseFloat(dom.window.getComputedStyle(trancid).marginTop),56);
- const row=dom.window.document.querySelector('nav[aria-label="Relatórios comerciais"]');assert.ok(row);assert.equal(row.querySelectorAll('button').length,5);assert.equal(dom.window.getComputedStyle(row).display,'flex');
+ const row=dom.window.document.querySelector('nav[aria-label="Relatórios comerciais"]');assert.ok(row);assert.equal(row.querySelectorAll('button').length,4);assert.equal(dom.window.getComputedStyle(row).display,'flex');
  assert.ok([...row.querySelectorAll('button')].every(b=>dom.window.getComputedStyle(b).backgroundColor==='rgb(173, 62, 8)'));
 });
 test('HOME and resume double tap open once without sending workflow business commands',async t=>{

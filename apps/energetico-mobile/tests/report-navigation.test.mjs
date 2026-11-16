@@ -27,8 +27,7 @@ for(const [action,previous,next] of [
  ['open-commercial-receipts',null,'open-commercial-milestones'],
  ['open-commercial-milestones','open-commercial-receipts','open-commercial-documents'],
  ['open-commercial-documents','open-commercial-milestones','open-sac-pathologies'],
- ['open-sac-pathologies','open-commercial-documents','open-rentals-report'],
- ['open-rentals-report','open-sac-pathologies',null],
+ ['open-sac-pathologies','open-commercial-documents',null],
  ['open-task-association-report',null,null],
  ...['open-depreciation-report','invalid'].map(action=>[action,null,null]),
 ])test(`${action} advances only within its visible mascot color, without wrapping`,()=>{
