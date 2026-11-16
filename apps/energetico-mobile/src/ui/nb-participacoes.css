@@ -20,6 +20,30 @@
   font-size: 1.05rem;
 }
 
+.chat-transcript--nb-home {
+  padding-block: 16px;
+}
+
+.nb-area-menu {
+  display: grid;
+  justify-items: center;
+}
+
+.nb-area-menu--home {
+  min-height: 100%;
+  margin-bottom: 0;
+  align-items: safe center;
+}
+
+.nb-area-menu .chat-bubble {
+  box-sizing: border-box;
+  width: min(100%, 360px);
+}
+
+.nb-area-menu .chat-bubble p {
+  margin-bottom: 10px;
+}
+
 .chat-avatar.nb-brand-mark {
   border: 1px solid #81b2bf;
   border-radius: 50%;

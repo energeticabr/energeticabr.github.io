@@ -417,7 +417,6 @@ function draftMenuOptions(message) {
   // from the root area chooser even if an older VM response still includes
   // the legacy option there; do not synthesize it into the root menu.
   const isRootAreaMenu = isMainAreaMenu || isAttachmentAreaQuestion(question);
-  if (isRootAreaMenu && message.nbAreaMenu) return options.filter(option => NB_AREA_IDS.has(draftReplyId(option)));
   const hasPendingDiaryList = options.some(option => draftReplyId(option).trim().toLowerCase() === "start_pending_construction_diary");
   const menuOptions = isRootAreaMenu
     ? options
@@ -930,6 +929,16 @@ function isInitialAreaSelectionMenu(message) {
         || (message?.type === "poll" && isAttachmentAreaQuestion(message.question || message.prompt || message.text)))
       && Array.isArray(message.options)
       && message.options.some(option => /^group_/i.test(draftReplyId(option).trim())));
+}
+
+function renderNbAreaMenu(message, busy, centered) {
+  const question = message.question || message.prompt || message.text || "";
+  return `<article class="chat-message chat-message--assistant nb-area-menu${centered ? " nb-area-menu--home" : ""}">
+    <div class="chat-bubble">
+      ${hasInitialAreaMenuHeading(message) ? "" : `<p>${formatChatText(question)}</p>`}
+      <div class="chat-choice-list chat-choice-list--single">${(message.options || []).map(option => pollButton(option, busy)).join("")}</div>
+    </div>
+  </article>`;
 }
 
 function isSuppliesLaunchMenu(message) {
@@ -2984,7 +2993,8 @@ export function renderChatMarkup(state = {}, { showSettings = false, allowDemo =
 
   const rawMessages = Array.isArray(state.messages) ? state.messages : [];
   const sourceMessages = nb ? rawMessages.map(message => isInitialAreaSelectionMenu(message)
-    ? { ...message, nbAreaMenu: true, options: message.options?.filter(option => NB_AREA_IDS.has(draftReplyId(option))) }
+    ? { ...message, nbAreaMenu: true, options: Array.isArray(message.options)
+        ? message.options.filter(option => NB_AREA_IDS.has(draftReplyId(option))) : [] }
     : message) : rawMessages;
   const messages = withLaunchAttachmentPrompt(
     withDocumentAttachmentPrompt(sourceMessages, state.activeFlow, state.attachments),
@@ -3028,7 +3038,10 @@ export function renderChatMarkup(state = {}, { showSettings = false, allowDemo =
   const rhidAttendanceReportPage = isRhidAttendanceReportMessage(latestAssistantMessage);
   const transcriptMessages = rhidAttendanceReportPage
     ? visibleMessages.slice(visibleMessages.lastIndexOf(latestAssistantMessage)) : visibleMessages;
-  const showPendingReminders = !state.rhidMascot && !rhidAttendanceReport?.open && !rhidAttendanceReportPage;
+  const nbHomeMenu = nb && !state.activeFlow && latestAssistantMessage?.nbAreaMenu
+    && isAutomaticMainMenuMessage(latestAssistantMessage) && latestAssistantMessage === transcriptMessages.at(-1)
+    ? latestAssistantMessage : null;
+  const showPendingReminders = !nb && !state.rhidMascot && !rhidAttendanceReport?.open && !rhidAttendanceReportPage;
   const completedCreation = state.completionNavigation?.homeOnly === true;
   const showFlowStatus = !state.rhidMascot && Boolean(state.activeFlow || inferredIntermediateFlow || completedCreation || rhidAttendanceReportPage);
   // Falhas são notificadas no banner de erro; não devem permanecer na barra
@@ -3066,13 +3079,33 @@ export function renderChatMarkup(state = {}, { showSettings = false, allowDemo =
     </header>
     ${showFlowStatus ? flowStatusMarkup(state, visibleMessages, busy, rhidAttendanceReportPage ? "📊 RELATÓRIO DE PRESENÇAS RHID" : latestPollTitle(visibleMessages), { homeOnly: completedCreation, rhidRefresh }) : ""}
     ${state.error && !needsRecovery ? `<div class="error-banner" role="alert"><span>${escapeHtml(state.error)}</span><button type="button" data-action="retry-session"${state.resuming || state.activeText ? " disabled" : ""}>Retomar conversa</button></div>` : ""}
-    <div class="chat-transcript" role="log" aria-live="polite" aria-relevant="additions text">
+    <div class="chat-transcript${nbHomeMenu ? " chat-transcript--nb-home" : ""}" role="log" aria-live="polite" aria-relevant="additions text">
       ${state.recoveryWarning ? `<p class="error-banner" role="alert">${escapeHtml(state.recoveryWarning)}</p>` : ""}
       ${rhidAttendanceReport?.open
         ? rhidAttendanceReport.busy
           ? rhidAttendanceReportLoadingMarkup(rhidAttendanceReport.date, rhidAttendanceReport.progress)
           : rhidAttendanceReportMarkup(rhidAttendanceReport)
-        : transcriptMessages.length ? transcriptMessages.map((message, index) => renderMessage(message, state.account, busy, { finalSignedDocument: index === finalSignedIndex && isSignedDocumentMessage(message), draft: state.draft, databaseFilterMessage: databaseFilter?.message, activeFlow: state.activeFlow, attendanceSelectedIds, attendanceExpandedIds: message === latestPoll ? attendanceExpandedIds : [], attendanceIrregularityChecking: message === latestPoll && attendanceIrregularityChecking, currentPoll: message === latestPoll, attendanceHoursCurrent: message === latestAttendanceMessage, rhidRefresh, launchPayrollSelectedIds, launchPayrollCurrent: message === latestPoll, ddaMenuAlert: state.ddaMenuAlert, sicoobMenuAlert: state.sicoobMenuAlert, nb })).join("") : state.recoveryPreview ? "" : `<article class="chat-message chat-message--assistant">${assistantAvatar(nb)}<div class="chat-bubble"><strong>${nb ? NB_APP_NAME : "Energético"}</strong><p>Olá, ${escapeHtml(firstName)}. O que vamos fazer?</p></div></article>`}
+        : transcriptMessages.length ? transcriptMessages.map((message, index) => {
+            if (nb && message.nbAreaMenu) return renderNbAreaMenu(message, busy, message === nbHomeMenu);
+            const currentPoll = message === latestPoll;
+            return renderMessage(message, state.account, busy, {
+              finalSignedDocument: index === finalSignedIndex && isSignedDocumentMessage(message),
+              draft: state.draft,
+              databaseFilterMessage: databaseFilter?.message,
+              activeFlow: state.activeFlow,
+              attendanceSelectedIds,
+              attendanceExpandedIds: currentPoll ? attendanceExpandedIds : [],
+              attendanceIrregularityChecking: currentPoll && attendanceIrregularityChecking,
+              currentPoll,
+              attendanceHoursCurrent: message === latestAttendanceMessage,
+              rhidRefresh,
+              launchPayrollSelectedIds,
+              launchPayrollCurrent: currentPoll,
+              ddaMenuAlert: state.ddaMenuAlert,
+              sicoobMenuAlert: state.sicoobMenuAlert,
+              nb,
+            });
+          }).join("") : state.recoveryPreview ? "" : `<article class="chat-message chat-message--assistant">${assistantAvatar(nb)}<div class="chat-bubble"><strong>${nb ? NB_APP_NAME : "Energético"}</strong><p>Olá, ${escapeHtml(firstName)}. O que vamos fazer?</p></div></article>`}
     </div>
     ${needsRecovery && !loading ? `<div class="error-banner chat-resume-banner">
       <span role="alert">${escapeHtml(state.error || "Aguardando sincronização com a VM.")}</span>

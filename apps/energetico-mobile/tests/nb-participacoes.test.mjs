@@ -1,8 +1,14 @@
 import assert from "node:assert/strict";
+import { once } from "node:events";
+import { existsSync } from "node:fs";
+import { readFile } from "node:fs/promises";
+import { createServer } from "node:http";
 import test from "node:test";
+import { JSDOM } from "jsdom";
 
 import { createChatClient } from "../src/chat/chat-client.js";
 import { renderChatMarkup } from "../src/ui/chat-view.js";
+import { runBrowserLayout } from "./helpers/browser-layout-runner.mjs";
 
 const portalApp = "nb-participacoes";
 const area = (id, label) => ({ id, reply: id, label });
@@ -17,6 +23,8 @@ const state = {
       area("group_nb_participacoes", "NB PARTICIPAÇÕES"),
       area("group_personal_expenses", "GASTOS PESSOAIS"),
       area("group_financial", "FINANCEIRO"),
+      area("group_pending", "PENDÊNCIAS"),
+      area("action_rhid_attendance_report", "RELATÓRIO RHID"),
     ],
   }],
 };
@@ -28,6 +36,62 @@ test("NB has its own Microsoft login and only shows its two home areas", () => {
   assert.match(markup, /data-reply-id="group_personal_expenses"/);
   assert.doesNotMatch(markup, /group_financial|action_powerbi_dashboard|open-rhid-attendance-today|open-general-summary-report|open-cargos-table|open-rhid-mascot-report|open-stage-progress|open-trancid-report/);
   assert.match(renderChatMarkup(state), /action_powerbi_dashboard/);
+});
+
+test("NB never displays Energético reminders or report shortcuts from a restored state", () => {
+  const restored = { ...state, pendingNotes: { rows: [{ id: "123" }] } };
+  const markup = renderChatMarkup(restored, { portalApp });
+  const document = new JSDOM(markup).window.document;
+  assert.equal(document.querySelector("[class*='chat-main-'][class*='shortcut'], [data-pending-notes-dialog], [data-reply-id='action_rhid_attendance_report']"), null);
+  document.defaultView.close();
+  assert.match(renderChatMarkup(restored), /data-pending-notes-dialog/);
+});
+
+test("NB centers its stacked home buttons when opening and returning to the menu", { timeout: 120_000 }, async t => {
+  const browser = [
+    process.env.CHROME_BIN, "C:/Program Files/Google/Chrome/Application/chrome.exe",
+    "/usr/bin/google-chrome", "/usr/bin/chromium", "/Applications/Google Chrome.app/Contents/MacOS/Google Chrome",
+  ].find(path => path && existsSync(path));
+  if (!browser) return t.skip("Chrome unavailable");
+
+  const styles = await Promise.all(["../src/styles.css", "../src/ui/nb-participacoes.css"]
+    .map(path => readFile(new URL(path, import.meta.url), "utf8")));
+  const server = createServer((request, response) => {
+    const messages = request.url.includes("return")
+      ? [{ type: "text", role: "assistant", text: "Lançamento concluído." }, ...state.messages]
+      : state.messages;
+    response.setHeader("Content-Type", "text/html; charset=utf-8");
+    response.end(`<!doctype html><meta name="viewport" content="width=device-width, initial-scale=1">
+      <style>${styles.join("\n").replace(/^@import[^\n]*$/gm, "")}</style>
+      ${renderChatMarkup({ ...state, messages }, { portalApp })}
+      <script type="module">
+        const transcript = document.querySelector(".chat-transcript");
+        transcript.scrollTop = transcript.scrollHeight;
+        const buttons = [...transcript.querySelectorAll("[data-reply-id]")].map(button => {
+          const { left, right, top, bottom } = button.getBoundingClientRect();
+          return { id: button.dataset.replyId, left, right, top, bottom };
+        });
+        const { left, right, top, bottom } = transcript.getBoundingClientRect();
+        document.documentElement.dataset.layout = JSON.stringify({ buttons, left, right, top, bottom });
+      </script>`);
+  });
+  await once(server.listen(0, "127.0.0.1"), "listening");
+  t.after(() => server.close());
+
+  for (const [width, height, mode] of [[320, 568, "open"], [393, 852, "return"], [1366, 768, "open"]]) {
+    const url = `http://127.0.0.1:${server.address().port}/nb-home-fixture?mode=${mode}`;
+    const { stdout } = await runBrowserLayout(browser, { width, height, url, mobile: width < 700 });
+    const dom = new JSDOM(stdout);
+    const { buttons, left, right, top, bottom } = JSON.parse(dom.window.document.documentElement.dataset.layout);
+    dom.window.close();
+    const description = `${width}x${height} (${mode})`;
+    assert.deepEqual(buttons.map(button => button.id), ["group_nb_participacoes", "group_personal_expenses"]);
+    assert.ok(buttons[0].bottom < buttons[1].top, description);
+    for (const button of buttons) {
+      assert.ok(Math.abs((button.left + button.right - left - right) / 2) <= 2, description);
+    }
+    assert.ok(Math.abs((buttons[0].top + buttons[1].bottom - top - bottom) / 2) <= 2, description);
+  }
 });
 
 test("NB keeps submenu, field and attachment controls", () => {
