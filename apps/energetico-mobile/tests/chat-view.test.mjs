@@ -5211,32 +5211,41 @@ test("menu de Suprimentos não restaura visita em obra antiga quando o rótulo m
   dom.window.close();
 });
 
-test("Efetuar Cadastros alinha as quatro galerias aos cadastros e remove o mascote", () => {
-  const markup = renderChatMarkup(signedInState({
-    messages: [{
-      id: "supply-registrations", role: "assistant", type: "poll",
-      question: "📦 SUPRIMENTOS\nEFETUAR CADASTROS\nQUAL CADASTRO VOCÊ DESEJA EFETUAR?",
-      options: [
-        { id: "register_group", label: "📁 CADASTRAR GRUPO", reply: "register_group" },
-        { id: "register_family", label: "📁 CADASTRAR FAMÍLIA", reply: "register_family" },
-        { id: "register_subfamily", label: "📁 CADASTRAR SUBFAMÍLIA", reply: "register_subfamily" },
-        { id: "register_product", label: "📦 CADASTRAR PRODUTO", reply: "register_product" },
-        { id: "register_supplier", label: "CADASTRAR FORNECEDOR", reply: "register_supplier" },
-      ],
-    }],
-  }));
-  const doc = new JSDOM(markup).window.document;
-  const columns = doc.querySelector(".chat-choice-columns--registration-menu");
-  assert.ok(columns);
-  assert.equal(doc.querySelector(".chat-message--registration-menu .chat-avatar"), null);
-  assert.deepEqual([...columns.querySelectorAll(".chat-choice-columns__primary [data-reply-id]")].map(button => button.dataset.replyId),
-    ["register_group", "register_family", "register_subfamily", "register_product", "register_supplier"]);
-  assert.deepEqual([...columns.querySelectorAll(".chat-choice-columns__secondary [data-reply-id]")].map(button => [button.dataset.replyId, button.textContent]), [
-    ["action_group_gallery", "GALERIA GRUPO"],
-    ["action_family_gallery", "GALERIA FAMÍLIA"],
-    ["action_subfamily_gallery", "GALERIA SUBFAMÍLIA"],
-    ["action_product_gallery", "GALERIA PRODUTO"],
-  ]);
+test("Efetuar Cadastros alinha cada galeria à direita do cadastro correspondente", () => {
+  const expected = [
+    ["action_register_supply_group", "📁 CADASTRAR GRUPO", "action_group_gallery", "GALERIA GRUPO"],
+    ["action_register_supply_family", "📁 CADASTRAR FAMÍLIA", "action_family_gallery", "GALERIA FAMÍLIA"],
+    ["action_register_supply_subfamily", "📁 CADASTRAR SUBFAMÍLIA", "action_subfamily_gallery", "GALERIA SUBFAMÍLIA"],
+    ["action_register_supply_product", "📦 CADASTRAR PRODUTO", "action_product_gallery", "GALERIA PRODUTO"],
+    ["register_supplier", "🤝 CADASTRAR FORNECEDOR", "action_supplier_gallery", "GALERIA FORNECEDOR"],
+    ["register_account", "🏦 CADASTRAR CONTA", "action_account_gallery", "GALERIA CONTA"],
+    ["register_material_type", "🏷️ CADASTRAR TIPO DE MATERIAL", "action_material_type_gallery", "GALERIA TIPO DE MATERIAL"],
+    ["register_unit", "📏 CADASTRAR UNIDADE DE MEDIDA", "action_unit_of_measure_gallery", "GALERIA UNIDADE DE MEDIDA"],
+  ];
+  for (const indices of [[7, 3, 5, 0, 6, 2, 1, 4], [7, 3, 5, 0, 2, 4]]) {
+    const dom = new JSDOM(renderChatMarkup(signedInState({
+      messages: [{
+        id: "supply-registrations", role: "assistant", type: "poll",
+        question: "📦 SUPRIMENTOS\\\nEFETUAR CADASTROS\\\nO QUE VOCÊ DESEJA CADASTRAR?",
+        options: [
+          { id: "action_supplier_gallery", label: "GALERIA FORNECEDOR" },
+          { id: "register_city", label: "CADASTRAR CIDADE" },
+          ...indices.map(index => {
+            const [reply, label] = expected[index];
+            return { id: reply, reply, label };
+          }),
+        ],
+      }],
+    })));
+    const doc = dom.window.document;
+    assert.equal(doc.querySelector(".chat-message--registration-menu .chat-avatar"), null);
+    const rows = [...doc.querySelector(".chat-choice-columns--registration-menu").children];
+    assert.deepEqual(rows.map(row => [...row.querySelectorAll("[data-reply-id]")].map(button => button.dataset.replyId)),
+      [...expected.filter((_, index) => indices.includes(index)).map(([register, , gallery]) => [register, gallery]), ["register_city"]]);
+    assert.deepEqual(rows.flatMap(row => [...row.querySelectorAll(".chat-choice-button--gallery")].map(button => button.textContent)),
+      expected.filter((_, index) => indices.includes(index)).map(([, , , title]) => title));
+    dom.window.close();
+  }
 });
 
 test("botões principais de Suprimentos ocupam a altura das galerias correspondentes", () => {
@@ -5390,6 +5399,12 @@ test("botões de todas as galerias têm cantos arredondados como os azuis e mant
       options: [
         { id: "register_group", label: "CADASTRAR GRUPO", reply: "register_group" },
         { id: "register_family", label: "CADASTRAR FAMÍLIA", reply: "register_family" },
+        { id: "register_subfamily", label: "CADASTRAR SUBFAMÍLIA" },
+        { id: "register_product", label: "CADASTRAR PRODUTO" },
+        { id: "register_supplier", label: "CADASTRAR FORNECEDOR" },
+        { id: "register_account", label: "CADASTRAR CONTA" },
+        { id: "register_material_type", label: "CADASTRAR TIPO DE MATERIAL" },
+        { id: "register_unit", label: "CADASTRAR UNIDADE DE MEDIDA" },
       ],
     },
     {
@@ -5410,12 +5425,12 @@ test("botões de todas as galerias têm cantos arredondados como os azuis e mant
   styleElement.textContent = styles;
   dom.window.document.head.append(styleElement);
 
-  const blueButton = dom.window.document.querySelector(".chat-choice-list button");
+  const blueButton = dom.window.document.querySelector('.chat-registration-pair [data-reply-id="register_group"]');
   const expectedRadius = dom.window.getComputedStyle(blueButton).borderRadius;
-  const galleryButtons = [...dom.window.document.querySelectorAll(".chat-gallery-actions .chat-choice-button--gallery")];
+  const galleryButtons = [...dom.window.document.querySelectorAll(".chat-gallery-actions .chat-choice-button--gallery, .chat-registration-pair .chat-choice-button--gallery")];
 
   assert.equal(expectedRadius, "14px");
-  assert.equal(galleryButtons.length, 12);
+  assert.equal(galleryButtons.length, 16);
   for (const button of galleryButtons) {
     assert.equal(dom.window.getComputedStyle(button).borderRadius, expectedRadius, button.textContent);
     assert.equal(dom.window.getComputedStyle(button).backgroundColor, "rgb(69, 76, 83)", button.textContent);

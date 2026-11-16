@@ -350,3 +350,44 @@ test("galerias interpretam os nomes internos SharePoint dos campos PowerApps", a
     dom.window.close();
   }
 });
+
+
+test("galerias de fornecedor, conta, tipo e unidade leem os cadastros SharePoint existentes", async t => {
+  for (const [kind, list, title, recordName] of [
+    ["supplier", "FORNECEDORES", "GALERIA FORNECEDOR", "FORNECEDOR EXEMPLO"],
+    ["account", "CADASTROCONTA", "GALERIA CONTA", "CONTA EXEMPLO"],
+    ["materialType", "CADASTROTIPOMATERIAL", "GALERIA TIPO DE MATERIAL", "MATERIAL EXEMPLO"],
+    ["unitOfMeasure", "CADASTROUNIDADEMEDIDA", "GALERIA UNIDADE DE MEDIDA", "CAIXA EXEMPLO"],
+  ]) {
+    await t.test(kind, async () => {
+      const dom = new JSDOM("<!doctype html><body></body>");
+      const document = dom.window.document;
+      const data = createRegistrationGalleryData({ kind, repository: {
+        async resolveList(site, aliases) {
+          assert.equal(site, "personal");
+          assert.equal(aliases[0], list);
+          return { status: "resolved", id: list };
+        },
+        async getColumns() {
+          return ["Title", "STATUS"].map(name => ({ name, displayName: name, text: {} }));
+        },
+        async getItemsPage(_site, id) {
+          assert.equal(id, list);
+          return { items: [{ id: "17", fields: { Title: recordName, STATUS: "ATIVO" } }], hasMore: false };
+        },
+      } });
+      const gallery = createRegistrationGallery({ document, kind, data });
+      try {
+        await gallery.open();
+        assert.ok([...document.querySelectorAll("h1")].some(heading => heading.textContent === title));
+        const card = document.querySelector('[data-registration-row="17"]');
+        assert.match(card.textContent, new RegExp(recordName));
+        assert.match(card.textContent, /ATIVO/);
+        assert.equal(card.querySelector('[data-gallery-action="edit"]'), null);
+      } finally {
+        gallery.destroy();
+        dom.window.close();
+      }
+    });
+  }
+});

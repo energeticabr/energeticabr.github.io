@@ -104,6 +104,29 @@ export const REGISTRATION_GALLERY_MODELS = Object.freeze({
   family: Object.freeze({ title: "GALERIA FAMÍLIA", screen: "G8- HISTÓRICO FAMÍLIA", listName: "CADASTRO FAMÍLIA_1", aliases: ["CADASTRO FAMÍLIA_1", "CADASTRO FAMILIA_1"], fields: ["FAMÍLIA", "GRUPO", "STATUS", "ID", "Criado por", "Criado", "Modificado", "Modificado por"], fieldAliases: { "FAMÍLIA": ["field_1"], GRUPO: ["Title"] } }),
   subfamily: Object.freeze({ title: "GALERIA SUBFAMÍLIA", screen: "G35- HISTÓRICO SUBFAMÍLIA", listName: "CADASTROSUBFAMÍLIA", aliases: ["CADASTROSUBFAMÍLIA", "CADASTROSUBFAMILIA", "CADASTRO SUBFAMÍLIA", "CADASTRO SUBFAMILIA"], fields: ["SUBFAMÍLIAS CADASTRADAS", "FAMÍLIA", "UNIDADE", "TIPO", "STATUS", "ID", "Criado por", "Criado", "Modificado", "Modificado por"], fieldAliases: { "SUBFAMÍLIAS CADASTRADAS": ["field_1"], "FAMÍLIA": ["Title"], UNIDADE: ["field_2"], TIPO: ["field_3"] } }),
   product: Object.freeze({ title: "GALERIA PRODUTO", screen: "G38- HISTÓRICO PRODUTO", listName: "CADASTROPRODUTO", aliases: ["CADASTROPRODUTO", "CADASTRO PRODUTO"], fields: ["PRODUTO", "SUBFAMÍLIA", "UNIDADE", "TIPO", "TIPODESPESA", "GERADESEMBOLSO", "STATUS", "ID", "Criado por", "Criado", "Modificado", "Modificado por"], fieldAliases: { PRODUTO: ["field_1"], "SUBFAMÍLIA": ["Title"], STATUS: ["SATUS"] } }),
+  supplier: Object.freeze({
+    title: "GALERIA FORNECEDOR", screen: "G42- HISTÓRICO FORNECEDOR", listName: "FORNECEDORES", aliases: ["FORNECEDORES"],
+    nativeCard: true, readOnly: true, searchPlaceholder: "Pesquisar fornecedor, filial ou ID",
+    fields: ["CADASTRO", "FILIAL", "EMPREITEIRO", "STATUS", "ID"], filterFields: ["STATUS", "FILIAL", "EMPREITEIRO"],
+    fieldAliases: { CADASTRO: ["Title"] }, fieldLabels: { CADASTRO: "Fornecedor" },
+    sourceSort: { field: "ID", direction: "desc", type: "number" },
+  }),
+  account: Object.freeze({
+    title: "GALERIA CONTA", screen: "GALERIACONTA", listName: "CADASTROCONTA", aliases: ["CADASTROCONTA", "CADASTRO CONTA"],
+    nativeCard: true, readOnly: true, searchPlaceholder: "Pesquisar conta ou ID",
+    fields: ["CONTA", "STATUS", "ID"], filterFields: ["STATUS"], fieldAliases: { CONTA: ["Title"] },
+  }),
+  materialType: Object.freeze({
+    title: "GALERIA TIPO DE MATERIAL", screen: "G2- HISTÓRICO TIPO MATERIAL", listName: "CADASTROTIPOMATERIAL", aliases: ["CADASTROTIPOMATERIAL", "CADASTRO TIPO MATERIAL"],
+    nativeCard: true, readOnly: true, searchPlaceholder: "Pesquisar tipo de material ou ID",
+    fields: ["TIPO", "STATUS", "ID"], filterFields: ["STATUS"], fieldAliases: { TIPO: ["Title"] }, fieldLabels: { TIPO: "Tipo de material" },
+  }),
+  unitOfMeasure: Object.freeze({
+    title: "GALERIA UNIDADE DE MEDIDA", screen: "G41- HISTÓRICO UNIDADE MEDIDA", listName: "CADASTROUNIDADEMEDIDA", aliases: ["CADASTROUNIDADEMEDIDA", "CADASTRO UNIDADE MEDIDA"],
+    nativeCard: true, readOnly: true, searchPlaceholder: "Pesquisar unidade de medida ou ID",
+    fields: ["UNIDADE MEDIDA", "STATUS", "ID"], filterFields: ["STATUS"],
+    fieldAliases: { "UNIDADE MEDIDA": ["Title"] }, fieldLabels: { "UNIDADE MEDIDA": "Unidade de medida" },
+  }),
   documents: Object.freeze({
     title: "GALERIA DOCUMENTOS",
     screen: "G47- HISTÓRICO DOCUMENTOS COMERCIAL_1",
