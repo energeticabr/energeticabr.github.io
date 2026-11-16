@@ -5220,7 +5220,7 @@ test("Efetuar Cadastros alinha cada galeria à direita do cadastro correspondent
     ["register_supplier", "🤝 CADASTRAR FORNECEDOR", "action_supplier_gallery", "GALERIA FORNECEDOR"],
     ["register_account", "🏦 CADASTRAR CONTA", "action_account_gallery", "GALERIA CONTA"],
     ["register_material_type", "🏷️ CADASTRAR TIPO DE MATERIAL", "action_material_type_gallery", "GALERIA TIPO DE MATERIAL"],
-    ["register_unit", "📏 CADASTRAR UNIDADE DE MEDIDA", "action_unit_of_measure_gallery", "GALERIA UNIDADE DE MEDIDA"],
+    ["action_register_supply_measurement_unit", "📏 CADASTRO DE UNIDADES", "action_unit_of_measure_gallery", "GALERIA UNIDADE DE MEDIDA"],
   ];
   for (const indices of [[7, 3, 5, 0, 6, 2, 1, 4], [7, 3, 5, 0, 2, 4]]) {
     const dom = new JSDOM(renderChatMarkup(signedInState({

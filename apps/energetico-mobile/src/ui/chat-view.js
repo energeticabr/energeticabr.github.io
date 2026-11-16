@@ -966,19 +966,24 @@ function documentsGalleryOption() {
 }
 
 const REGISTRATION_GALLERIES = Object.freeze([
-  ["grupo", "action_group_gallery", "GALERIA GRUPO"],
-  ["familia", "action_family_gallery", "GALERIA FAMÍLIA"],
-  ["subfamilia", "action_subfamily_gallery", "GALERIA SUBFAMÍLIA"],
-  ["produto", "action_product_gallery", "GALERIA PRODUTO"],
-  ["fornecedor", "action_supplier_gallery", "GALERIA FORNECEDOR"],
-  ["conta", "action_account_gallery", "GALERIA CONTA"],
-  ["tipo(?: de)? material", "action_material_type_gallery", "GALERIA TIPO DE MATERIAL"],
-  ["unidade(?: de)? medida", "action_unit_of_measure_gallery", "GALERIA UNIDADE DE MEDIDA"],
-].map(([name, id, label]) => ({ id, reply: id, label, match: new RegExp("\\bcadastr\\w*\\s+(?:(?:de|um|uma)\\s+)?" + name + "\\s*$") })));
+  ["group", "grupo", "action_group_gallery", "GALERIA GRUPO"],
+  ["family", "familia", "action_family_gallery", "GALERIA FAMÍLIA"],
+  ["subfamily", "subfamilia", "action_subfamily_gallery", "GALERIA SUBFAMÍLIA"],
+  ["product", "produto", "action_product_gallery", "GALERIA PRODUTO"],
+  ["supplier", "fornecedor", "action_supplier_gallery", "GALERIA FORNECEDOR"],
+  ["account", "conta", "action_account_gallery", "GALERIA CONTA"],
+  ["material_type", "tipo(?: de)? material", "action_material_type_gallery", "GALERIA TIPO DE MATERIAL"],
+  ["measurement_unit", "unidade(?: de)? medida", "action_unit_of_measure_gallery", "GALERIA UNIDADE DE MEDIDA"],
+].map(([action, name, id, label]) => ({
+  action: "action_register_supply_" + action, id, reply: id, label,
+  match: new RegExp("\\bcadastr\\w*\\s+(?:(?:de|um|uma)\\s+)?" + name + "\\s*$"),
+})));
 
 function registrationGalleryForOption(option) {
   const label = normalizedDateText(option?.label || option?.title).replace(/\s+/g, " ");
-  return REGISTRATION_GALLERIES.find(gallery => gallery.match.test(label));
+  const reply = draftReplyId(option).trim().toLowerCase();
+  return REGISTRATION_GALLERIES.find(gallery => gallery.action === reply)
+    || REGISTRATION_GALLERIES.find(gallery => gallery.match.test(label));
 }
 
 function registrationOptionOrder(option) {

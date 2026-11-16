@@ -1047,7 +1047,7 @@ button.chat-rhid-attendance-card__cluster:focus-visible { outline: 3px solid #15
 .chat-message--registration-menu .chat-bubble { width: min(100%, 1120px); max-width: 100%; }
 .chat-choice-columns--registration-menu { --registration-row-height: max(58px, var(--control-height)); display: grid; gap: clamp(8px, 1vw, 14px); }
 .chat-registration-pair { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); column-gap: clamp(10px, 1.4vw, 18px); }
-.chat-registration-pair__primary { min-width: 0; width: 100%; }
+.chat-registration-pair .chat-registration-pair__primary { min-width: 0; width: 100%; grid-template-columns: minmax(0, 1fr); }
 .chat-registration-pair .chat-choice-button { min-width: 0; min-height: var(--registration-row-height); height: auto; padding-inline: 4px; white-space: normal; overflow-wrap: anywhere; }
 .chat-choice-columns--registration-menu .chat-choice-button--gallery { font-size: clamp(.72rem, 2.9vw, .96rem); }
 .chat-choice-columns__secondary { min-width: 0; }
