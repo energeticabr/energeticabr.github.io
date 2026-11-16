@@ -45,6 +45,7 @@ test('os aluguéis em aberto atravessam anos e valores do contrato não viram va
 
 test('relatório mostra as quatro tabelas, mantém o imóvel no recarregamento e retorna ao atalho', async () => {
   const { createRentalsReportView } = await import('../src/ui/rentals-report-view.js');
+  const { captureFilteredReport } = await import('../src/ui/report-print.js');
   const window = new JSDOM('<main id="app"><button>Aluguéis</button></main>', { pretendToBeVisual: true }).window;
   const document = window.document;
   const shortcut = document.querySelector('button');
@@ -66,6 +67,10 @@ test('relatório mostra as quatro tabelas, mantém o imóvel no recarregamento e
     assert.equal(view.element.querySelectorAll('table').length, 4);
     assert.match(view.element.querySelector('table').textContent, /VENCIDO há 1 dia/);
     assert.equal(view.element.querySelector('select[name=status]').value, 'ATIVO');
+    const pdf = captureFilteredReport(view.element);
+    assert.deepEqual(pdf.filters.map(({ value }) => value), ['2026', 'Todos', 'Todos', 'Todos', 'ATIVO']);
+    const openTable = pdf.pages[0].blocks.find(block => block.type === 'table');
+    assert.match(openTable.rows[1].cells.at(-1).runs.map(run => run.text).join(''), /VENCIDO há 1 dia/);
     const property = view.element.querySelector('select[name=property]');
     property.value = 'Galpão A';
     property.dispatchEvent(new window.Event('change', { bubbles: true }));

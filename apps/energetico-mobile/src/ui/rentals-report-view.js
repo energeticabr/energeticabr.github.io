@@ -37,6 +37,7 @@ export function createRentalsReportView({ document: doc = globalThis.document, l
     const wrapper = make('label', 'pl-filter');
     const select = make('select');
     select.name = key;
+    select.dataset.reportEmptyValue = 'Todos';
     select.disabled = true;
     select.setAttribute('aria-label', label);
     wrapper.append(make('span', 'pl-filter-label', label), select);
@@ -117,9 +118,10 @@ export function createRentalsReportView({ document: doc = globalThis.document, l
       ? (days < 0 ? expiredLabel : 'EM DIA')
       : (days < 0 ? 'VENCIDO há' : days > 0 ? 'A VENCER em' : 'VENCE HOJE');
     cell.dataset.state = state;
-    cell.append(dot, doc.createTextNode(label));
-    if (expiredLabel || days !== 0) {
-      cell.append(doc.createTextNode(' '), make('strong', '', dayCount(days)));
+    const hasDayCount = expiredLabel || days !== 0;
+    cell.append(dot, doc.createTextNode(hasDayCount ? label + ' ' : label));
+    if (hasDayCount) {
+      cell.append(make('strong', '', dayCount(days)));
       if (expiredLabel) cell.append(doc.createTextNode(days < 0 ? ' em atraso' : ' para vencer'));
     }
     return cell;
