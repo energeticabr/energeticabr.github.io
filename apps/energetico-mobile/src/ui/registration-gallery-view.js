@@ -652,7 +652,7 @@ export function createRegistrationGallery({ document: doc = globalThis.document,
       const card = [...list.children].find(node => node.dataset.registrationRow === String(row.id));
       const actions = card?.querySelector(".gallery-record-actions");
       if (actions) appendPdfAction(row, actions);
-      updateFeedback();
+      if (attachmentCounts.get(String(row.id))?.state === "error") updateFeedback();
       return;
     }
     if (kind !== "workDiary") { render(); return; }
