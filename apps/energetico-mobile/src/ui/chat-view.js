@@ -40,7 +40,6 @@ import { createVoiceInputController } from "./voice-input.js";
 import { normalizeConstructionDiaryText } from "./construction-diary-text.js";
 import { numberDiaryActivityDraft, diaryActivitiesForSubmission } from "./construction-diary-items.js";
 import { appendRecentDiaryActivity, diaryActivityInDraft } from "../chat/construction-diary-activity-suggestions.js";
-import { Capacitor, PowerBiZoom } from "../native/plugins.js";
 import { provisionDateKey, provisionDueState, provisionNumericValue } from "../chat/pending-provision-dates.js";
 import Decimal from "decimal.js";
 import { buildEditChanges, cancelEditReview, confirmEditChanges, ensureEditReviewStyles } from '../../../../portal/ui/edit-review.js';
@@ -6290,7 +6289,6 @@ export function createChatView(root, { onOpenSettings, onDemoAccess, onSignOut, 
       powerBiDashboard = createPowerBiDashboardView({
         documentRef,
         host: documentRef?.body || root,
-        powerBiZoom: Capacitor.isNativePlatform() ? PowerBiZoom : null,
       });
     }
     return powerBiDashboard.open(options);

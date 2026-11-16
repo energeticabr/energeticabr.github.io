@@ -1,17 +1,9 @@
-const viewportContents = new WeakMap();
-
-// Limit the composited area of the embedded Power BI iframe on mobile.
-const POWER_BI_MAX_PAGE_SCALE = 2;
-
-/** Local viewers zoom their contents; only the embedded report needs page zoom. */
-export function setAppPageZoomEnabled(documentRef, enabled) {
+function disableAppPageZoom(documentRef) {
   const viewport = documentRef?.querySelector?.('meta[name="viewport"]');
   if (!viewport) return;
-  if (!viewportContents.has(viewport)) viewportContents.set(viewport, viewport.content);
-  const original = viewportContents.get(viewport);
   viewport.content = [
-    ...original.split(',').map(value => value.trim()).filter(value => value && !/^(initial-scale|minimum-scale|maximum-scale|user-scalable)\s*=/i.test(value)),
-    'initial-scale=1', 'minimum-scale=1', `maximum-scale=${enabled ? POWER_BI_MAX_PAGE_SCALE : 1}`,
+    ...viewport.content.split(',').map(value => value.trim()).filter(value => value && !/^(initial-scale|minimum-scale|maximum-scale|user-scalable)\s*=/i.test(value)),
+    'initial-scale=1', 'minimum-scale=1', 'maximum-scale=1',
   ].join(', ');
 }
 
@@ -19,7 +11,7 @@ export function setAppPageZoomEnabled(documentRef, enabled) {
  * or the PDF/photo/signature viewers' own pointer/touch zoom controllers. */
 export function installAppZoomGuard(documentRef = globalThis.document) {
   if (!documentRef?.addEventListener) return () => {};
-  setAppPageZoomEnabled(documentRef, false);
+  disableAppPageZoom(documentRef);
   const view = documentRef.defaultView;
   const raisedFonts = new WeakMap();
   const inputSelector = 'input:not([type="hidden"]):not([type="checkbox"]):not([type="radio"]):not([type="range"]), select, textarea, [contenteditable="true"]';
@@ -58,10 +50,7 @@ export function installAppZoomGuard(documentRef = globalThis.document) {
   documentRef.addEventListener('focus', beforeInputFocus, true);
   view?.addEventListener?.('resize', onResize);
   const options = { passive: false };
-  const inReport = event => Boolean(event.target?.closest?.('.powerbi-dashboard__frame-wrap'));
-  const preventPageGesture = event => {
-    if (!inReport(event)) event.preventDefault();
-  };
+  const preventPageGesture = event => event.preventDefault();
   const preventPagePinch = event => {
     if (event.touches?.length > 1) preventPageGesture(event);
   };

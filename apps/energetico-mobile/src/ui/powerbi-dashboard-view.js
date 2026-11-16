@@ -1,8 +1,11 @@
 import { applyScreenNavigation } from "./screen-navigation.js";
-import { setAppPageZoomEnabled } from "../web/app-zoom-guard.js";
 export const POWERBI_REPORT_ID = "188c0311-65d4-40f8-9bb9-02090f44a0fb";
 export const POWERBI_EMBED_URL = `https://app.powerbi.com/reportEmbed?reportId=${POWERBI_REPORT_ID}`;
 export const POWERBI_REPORT_URL = `https://app.powerbi.com/groups/me/reports/${POWERBI_REPORT_ID}?experience=power-bi`;
+
+const MIN_REPORT_ZOOM = 0.25;
+const MAX_REPORT_ZOOM = 2;
+const REPORT_ZOOM_STEP = 1.25;
 
 async function createPowerBiClient() {
   const sdkModule = await import("powerbi-client");
@@ -26,7 +29,6 @@ export function createPowerBiDashboardView({
   documentRef = globalThis.document,
   host = documentRef?.body,
   powerBiClient: suppliedPowerBiClient = null,
-  powerBiZoom = null,
 } = {}) {
   if (!documentRef?.createElement || !host?.append) {
     throw new TypeError("A tela do Power BI requer um documento e um contêiner válidos.");
@@ -40,24 +42,11 @@ export function createPowerBiDashboardView({
   let openRevision = 0;
   let onHomeAction = null;
 
-  async function setNativePinchEnabled(enabled) {
-    if (typeof powerBiZoom?.setEnabled !== "function") return false;
-    try {
-      await powerBiZoom.setEnabled({ enabled });
-      return true;
-    } catch {
-      // Browser/PWA zoom remains available if a native bridge is unavailable.
-      return false;
-    }
-  }
-
   function close() {
     if (!dialog) return false;
     const current = dialog;
     dialog = null;
     openRevision += 1;
-    setAppPageZoomEnabled(documentRef, false);
-    void setNativePinchEnabled(false);
     report?.off?.("loaded", handleLoaded);
     report?.off?.("error", handleError);
     report = null;
@@ -81,7 +70,45 @@ export function createPowerBiDashboardView({
       navigateHome?.();
       return;
     }
-    if (event.target?.closest?.("[data-powerbi-close]")) close();
+    if (event.target?.closest?.("[data-powerbi-close]")) {
+      close();
+      return;
+    }
+    const zoomButton = event.target?.closest?.("[data-powerbi-zoom]");
+    if (zoomButton) void changeReportZoom(zoomButton);
+  }
+
+  async function changeReportZoom(button) {
+    const controls = button.parentElement;
+    const currentReport = report;
+    if (!currentReport || controls.hidden || controls.hasAttribute("aria-busy")) return;
+    const status = controls.querySelector('[role="status"]');
+    controls.setAttribute("aria-busy", "true");
+    status.textContent = "";
+    try {
+      const { powerbiZoom: action } = button.dataset;
+      if (action === "fit") {
+        const { LayoutType, DisplayOption } = powerBiClient.models;
+        await currentReport.updateSettings({
+          layoutType: LayoutType.Custom,
+          customLayout: { displayOption: DisplayOption.FitToPage },
+        });
+        return;
+      }
+      const currentZoom = await currentReport.getZoom();
+      if (report !== currentReport) return;
+      if (!Number.isFinite(currentZoom) || currentZoom <= 0) throw new Error("Escala inválida do relatório.");
+      const nextZoom = action === "in"
+        ? Math.min(MAX_REPORT_ZOOM, Math.max(MIN_REPORT_ZOOM, currentZoom * REPORT_ZOOM_STEP))
+        : Math.max(MIN_REPORT_ZOOM, currentZoom / REPORT_ZOOM_STEP);
+      if (action === "in" ? nextZoom > currentZoom : nextZoom < currentZoom) {
+        await currentReport.setZoom(nextZoom);
+      }
+    } catch {
+      if (report === currentReport) status.textContent = "Não foi possível alterar o zoom do relatório. Tente novamente.";
+    } finally {
+      controls.removeAttribute("aria-busy");
+    }
   }
 
   function handleKeydown(event) {
@@ -93,6 +120,7 @@ export function createPowerBiDashboardView({
     const hint = dialog.querySelector(".powerbi-dashboard__hint");
     hint.textContent = "";
     hint.hidden = true;
+    dialog.querySelector(".powerbi-dashboard__zoom").hidden = false;
   }
 
   function handleError(event) {
@@ -150,6 +178,29 @@ export function createPowerBiDashboardView({
     hint.setAttribute("role", "status");
     hint.hidden = true;
 
+    const zoomControls = documentRef.createElement("div");
+    zoomControls.className = "powerbi-dashboard__zoom";
+    zoomControls.setAttribute("role", "group");
+    zoomControls.setAttribute("aria-label", "Zoom do relatório");
+    zoomControls.hidden = true;
+    for (const [action, label, text] of [
+      ["out", "Diminuir zoom do relatório", "−"],
+      ["fit", "Ajustar relatório à tela", "Ajustar"],
+      ["in", "Aumentar zoom do relatório", "+"],
+    ]) {
+      const button = documentRef.createElement("button");
+      button.type = "button";
+      button.dataset.powerbiZoom = action;
+      button.setAttribute("aria-label", label);
+      button.title = label;
+      button.textContent = text;
+      zoomControls.append(button);
+    }
+    const zoomStatus = documentRef.createElement("span");
+    zoomStatus.className = "powerbi-dashboard__zoom-status";
+    zoomStatus.setAttribute("role", "status");
+    zoomControls.append(zoomStatus);
+
     const frameWrap = documentRef.createElement("div");
     frameWrap.className = "powerbi-dashboard__frame-wrap";
     reportContainer = documentRef.createElement("div");
@@ -159,18 +210,15 @@ export function createPowerBiDashboardView({
     applyScreenNavigation({ header, back: closeButton, home: homeButton, title: heading });
     header.append(directLink);
     onHomeAction = typeof onHome === "function" ? onHome : null;
-    dialog.append(header, hint, frameWrap);
+    dialog.append(header, hint, zoomControls, frameWrap);
     dialog.addEventListener("click", handleClick);
     documentRef.addEventListener?.("keydown", handleKeydown);
     host.append(dialog);
-    setAppPageZoomEnabled(documentRef, true);
     closeButton.focus?.();
 
     const currentDialog = dialog;
     const revision = ++openRevision;
     try {
-      await setNativePinchEnabled(true);
-      if (dialog !== currentDialog || openRevision !== revision) return false;
       powerBiClient ||= await createPowerBiClient();
       if (dialog !== currentDialog || openRevision !== revision) return false;
       report = powerBiClient.embed(reportContainer, {
