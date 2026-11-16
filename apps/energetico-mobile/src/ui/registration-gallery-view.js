@@ -329,6 +329,7 @@ export function createRegistrationGallery({ document: doc = globalThis.document,
   const recordActions = createGalleryRecordActions({
     document: doc, host: root,
     actions: model.recordActions,
+    deleteConfirmedVersion: model.deleteConfirmedVersion,
     galleryTitle: model.title,
     getDeletionSummary: row => model.fields.filter(name => !model.computedFields?.[name])
       .map(name => ({ label: name, value: rowFieldValue(row, name) })),
@@ -651,6 +652,7 @@ export function createRegistrationGallery({ document: doc = globalThis.document,
       const card = [...list.children].find(node => node.dataset.registrationRow === String(row.id));
       const actions = card?.querySelector(".gallery-record-actions");
       if (actions) appendPdfAction(row, actions);
+      updateFeedback();
       return;
     }
     if (kind !== "workDiary") { render(); return; }
@@ -1152,9 +1154,11 @@ export function createRegistrationGallery({ document: doc = globalThis.document,
   }
 
   function updateFeedback(count = filteredRows().length) {
+    const pdfNotice = model.showPdfAttachments && [...attachmentCounts.values()].some(item => item.state === "error")
+      ? "Não foi possível verificar os PDFs de alguns itens. Atualize a galeria para tentar novamente." : "";
     feedback.textContent = loadFailed
       ? `Não foi possível carregar ${model.title.toLowerCase()}. Tente atualizar.`
-      : [...filterErrors.values()].join(" ") || attachmentNotice || (count ? `${count} registro(s)` : "Nenhum registro encontrado.");
+      : [...filterErrors.values()].join(" ") || attachmentNotice || pdfNotice || (count ? `${count} registro(s)` : "Nenhum registro encontrado.");
   }
 
   async function openAttachments(row) {
@@ -1185,13 +1189,15 @@ export function createRegistrationGallery({ document: doc = globalThis.document,
         attachmentNotice = `${(model.recordArticle || "o").toUpperCase()} ${model.recordLabel || "documento"} ${row.id} não possui anexos.`;
         return;
       }
+      if (model.showPdfAttachments && (pendingMutations || root.querySelector(".gallery-record-overlay"))) return;
       if (typeof openMediaCollection !== "function") throw new Error("O visualizador de anexos não está disponível neste aparelho.");
       await openMediaCollection(attachments.map(item => ({
         fileName: item.fileName,
         source: options => data.downloadAttachment(row.id, item.fileName, options),
       })), model.showPdfAttachments ? {
+        returnLabel: "Voltar à galeria",
         resolveReturnFocus: () => root.querySelector(
-          '[data-registration-row="' + row.id + '"] [data-action="registration-pdf"]',
+          '[data-registration-row="' + row.id + '"] [data-action="registration-pdf"]:not(:disabled)',
         ) || root,
       } : undefined);
     } catch {

@@ -26,7 +26,7 @@ export function dismissGalleryOverlay(host) {
 /** Shared actions for gallery records; persistence remains owned by the gallery data layer. */
 export function createGalleryRecordActions({ document, host, loadEditor, saveEditor, deleteItem, onChanged, onError, onEdit, renderEditorExtra, getReceiptAttachments, readReceiptAttachment,
   galleryTitle, getDeletionSummary = row => galleryDeletionFields(row.fields || row),
-  actions = ["edit", "delete"] } = {}) {
+  actions = ["edit", "delete"], deleteConfirmedVersion = false } = {}) {
   if (!document?.createElement) throw new TypeError("As ações do registro requerem um documento.");
   let disposed = false;
   let epoch = 0;
@@ -321,7 +321,7 @@ export function createGalleryRecordActions({ document, host, loadEditor, saveEdi
     const yes = button("Sim", "data-gallery-confirm", "yes", () => {
       void mutate(state, () => {
         if (typeof deleteItem !== "function") throw new Error("A exclusão deste registro não está disponível. Tente novamente.");
-        return deleteItem(row.id, { refresh: true });
+        return deleteItem(row.id, deleteConfirmedVersion ? { eTag: row.eTag } : { refresh: true });
       });
     });
     yes.classList.add("gallery-record-dialog-button--danger");

@@ -362,7 +362,7 @@ test("galerias de fornecedor, conta, tipo e unidade editam e deletam na lista de
     await t.test(kind, async () => {
       const dom = new JSDOM("<!doctype html><body></body>");
       const document = dom.window.document;
-      const deletions = [], updates = [];
+      const deletions = [], updates = [], deleteVersions = [];
       const item = { id: "17", eTag: '"revision-17"', fields: { Title: "CADASTRO EXEMPLO", STATUS: "ATIVO", Attachments: false } };
       const data = createRegistrationGalleryData({ kind, repository: {
         async resolveList(site, aliases) {
@@ -387,7 +387,11 @@ test("galerias de fornecedor, conta, tipo e unidade editam e deletam na lista de
           Object.assign(item.fields, fields);
           return item;
         },
-        async deleteItem(...args) { deletions.push(args); },
+        async deleteItem(...args) {
+          deleteVersions.push(args[3].eTag);
+          if (args[3].eTag !== item.eTag) throw Object.assign(new Error("O registro foi alterado. Atualize a galeria."), { status: 412 });
+          deletions.push(args);
+        },
       } });
       const gallery = createRegistrationGallery({ document, kind, data });
       try {
@@ -406,9 +410,17 @@ test("galerias de fornecedor, conta, tipo e unidade editam e deletam na lista de
         document.querySelector('[data-gallery-confirm="no"]').click();
         assert.equal(deletions.length, 0);
         card.querySelector('[data-gallery-action="delete"]').click();
+        item.eTag = '"revision-18"';
         document.querySelector('[data-gallery-confirm="yes"]').click();
         await new Promise(resolve => setImmediate(resolve));
-        assert.deepEqual(deletions, [["personal", list, "17", { eTag: '"revision-17"' }]]);
+        assert.deepEqual(deleteVersions, ['"revision-17"']);
+        assert.deepEqual(deletions, []);
+        document.querySelector('[data-gallery-confirm="no"]').click();
+        await gallery.open();
+        document.querySelector('[data-registration-row="17"] [data-gallery-action="delete"]').click();
+        document.querySelector('[data-gallery-confirm="yes"]').click();
+        await new Promise(resolve => setImmediate(resolve));
+        assert.deepEqual(deletions, [["personal", list, "17", { eTag: '"revision-18"' }]]);
       } finally {
         gallery.destroy();
         dom.window.close();
@@ -421,6 +433,7 @@ test("atalho de PDF aparece no item certo e abre apenas seus PDFs", async () => 
   const dom = new JSDOM("<!doctype html><body></body>");
   const document = dom.window.document;
   const consulted = [], opened = [], downloads = [];
+  let pendingInventory;
   const gallery = createRegistrationGallery({ document, kind: "supplier", data: {
     async loadSnapshot() {
       return { rows: [
@@ -431,6 +444,7 @@ test("atalho de PDF aparece no item certo e abre apenas seus PDFs", async () => 
     },
     async listAttachments(id) {
       consulted.push(id);
+      if (pendingInventory) return pendingInventory;
       const image = { fileName: "foto.png", mimeType: "image/png" };
       return id === "10" ? [{ fileName: "Ficha.PDF" }, image, { fileName: "Contrato.pdf", mimeType: "application/pdf" }] : [image];
     },
@@ -448,6 +462,14 @@ test("atalho de PDF aparece no item certo e abre apenas seus PDFs", async () => 
     assert.deepEqual(opened[0].map(item => item.fileName), ["Ficha.PDF", "Contrato.pdf"]);
     await opened[0][1].source({});
     assert.deepEqual(downloads, [["10", "Contrato.pdf"]]);
+    pendingInventory = new Promise(resolve => {
+      pdfFor("10").click();
+      document.querySelector('[data-registration-row="10"] [data-gallery-action="delete"]').click();
+      resolve([{ fileName: "Ficha.PDF" }]);
+    });
+    await new Promise(resolve => setImmediate(resolve));
+    assert.ok(document.querySelector('[data-gallery-confirm="yes"]'));
+    assert.equal(opened.length, 1);
   } finally {
     gallery.destroy();
     dom.window.close();
