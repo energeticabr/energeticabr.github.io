@@ -418,7 +418,7 @@ function isAttachmentAreaQuestion(question) {
 }
 
 function draftMenuOptions(message) {
-  const question = String(message?.question || message?.prompt || "");
+  const question = String(message?.question || message?.prompt || message?.text || "");
   const isMainAreaMenu = /QUAL\s+(?:ÁREA|AREA)[\s\S]*DESEJA\s+ACESSAR/i.test(question);
   const options = Array.isArray(message?.options)
     ? message.options.map(option => ({ ...option })).filter(option => !isInlineDraftSaveOption(option)

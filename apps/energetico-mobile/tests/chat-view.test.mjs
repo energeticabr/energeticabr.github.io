@@ -4922,7 +4922,7 @@ test("seletor de fluxo para anexos retira as áreas transferidas mesmo com IDs l
     id: "attachment-area-menu",
     role: "assistant",
     type: "poll",
-    question: "VOCÊ TEM ANEXOS. DESEJA UTILIZAR ELES EM QUAL FLUXO?",
+    text: "VOCÊ TEM ANEXOS. DESEJA UTILIZAR ELES EM QUAL FLUXO?",
     options: [
       { id: "group_nb", label: "🏢 NB PARTICIPAÇÕES" },
       { id: "group_finance", label: "💵 FINANCEIRO" },
