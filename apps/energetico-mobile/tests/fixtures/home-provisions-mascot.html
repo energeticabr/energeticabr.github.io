@@ -24,6 +24,8 @@ import { createCommercialMilestonesReportView } from '/src/ui/commercial-milesto
 import '/src/ui/commercial-documents.css';
 import { createCommercialDocumentsReportView } from '/src/ui/commercial-documents-view.js';
 import '/src/ui/sac-pathologies.css';
+import '/src/ui/rentals-report.css';
+import { createRentalsReportView } from '/src/ui/rentals-report-view.js';
 import { createSacPathologiesReportView } from '/src/ui/sac-pathologies-view.js';
 import '/src/ui/depreciation-report.css';
 import { createDepreciationReportView } from '/src/ui/depreciation-report-view.js';
@@ -189,6 +191,17 @@ const pathologies=createSacPathologiesReportView({document,now:()=>new Date('202
  rows:Array.from({length:12},(_,i)=>({id:String(i+1),branch:'001 - OURO PRETO',property:String(740+i),client:`Cliente ${i+1}`,type:i%2?'AUSÊNCIA DE ÁGUA BANHEIRO':'TESTE',description:'Verificar a caixa de água e a pressão dos chuveiros do imóvel.',startDate:'2026-09-12',endDate:'',status:'ATIVO',cost:i}))
 };}}});
 view.on('open-sac-pathologies',()=>void pathologies.open());
+view.on('open-rentals-report', () => {
+ const row = { property: 'GALPÃO A', tenant: 'LOCATÁRIO A', paymentMethod: 'PIX' };
+ const panel = decorateReportPrint(createRentalsReportView({ document,
+  loadSnapshot: async () => ({
+    launches: [{ ...row, id: '20', contractId: '10', dueDate: '2026-03-20', paidDate: '', grossCents: null }],
+    contracts: [{ ...row, id: '10', amountCents: 214186, adjustmentDate: '2026-07-01', expiryDate: '2027-01-01', status: 'ATIVO', index: 'IPCA' }],
+  }),
+  now: () => new Date('2026-11-16T12:00:00Z'), onClose: () => panel.destroy(),
+ }), { action: 'open-rentals-report' });
+ void panel.open();
+});
 window.documentControlLoads=0;
 window.taskAssociationLoads=0;
 const taskAssociation=createTaskAssociationReportView({document,now:()=>new Date('2026-10-06T12:00:00Z'),data:{async loadSnapshot(){window.taskAssociationLoads++;return {

@@ -1,0 +1,39 @@
+.rentals-overlay .rentals-dialog { width:min(1366px,100%); padding-inline:clamp(4px,1vw,12px); gap:8px; }
+.rentals-filters { grid-template-columns:auto minmax(0,1fr) minmax(0,1.3fr) minmax(0,1.5fr) minmax(0,1.45fr) minmax(0,.9fr); }
+.rentals-filters .pl-filter-label { display:grid; place-items:center; min-height:24px; background:#970000; color:#fff; white-space:normal; }
+.rentals-dialog .rentals-filters .sfs-field,
+.rentals-dialog .rentals-filters .sfs .sfs-field > .sfs-trigger { height:clamp(28px,calc(4 * var(--report-vw,1vw)),39px); }
+.rentals-dialog .rentals-filters .sfs .sfs-field > .sfs-trigger { padding-inline-end:27px; }
+.rentals-dialog .rentals-filters .sfs .sfs-arrow { width:25px; font-size:18px; }
+.rentals-dialog .report-close-control { align-self:end; }
+.rentals-dialog .rentals-content { color:#111; font:700 clamp(9px,calc(1.02 * var(--report-vw,1vw)),13px)/1.25 Arial,sans-serif; }
+.rentals-brand { display:grid; place-items:center; box-sizing:border-box; border:3px solid #111; background:#e6f0ff; margin:0 0 9px; }
+.rentals-brand img { display:block; width:auto; max-width:55%; height:clamp(45px,calc(6.6 * var(--report-vw,1vw)),86px); object-fit:contain; }
+.rentals-section { --rentals-grid:#222; margin:0 0 22px; border:1px solid var(--rentals-grid); }
+.rentals-section h2 { margin:0; padding:9px 6px; border-bottom:1px solid var(--rentals-grid); font-size:clamp(12px,calc(1.4 * var(--report-vw,1vw)),18px); }
+.rentals-section table { width:100%; table-layout:fixed; border-collapse:collapse; font:inherit; }
+.rentals-section :is(td,th) { padding:clamp(3px,calc(.42 * var(--report-vw,1vw)),7px); border:1px solid var(--rentals-grid); overflow-wrap:anywhere; vertical-align:middle; }
+.rentals-section th { text-align:center; }
+.rentals-open { --rentals-grid:#b00020; }
+.rentals-open h2 { color:#b00020; background:#fdecea; }
+.rentals-open thead { background:#f8d7da; }
+.rentals-open tbody tr { height:clamp(32px,calc(3.8 * var(--report-vw,1vw)),51px); }
+.rentals-open .rentals-value,.rentals-annual .rentals-total { text-align:right; font-variant-numeric:tabular-nums; }
+.rentals-open .rentals-date,.rentals-calendar .rentals-date { text-align:center; }
+.rentals-date,.rentals-total { color:#b00020; }
+.rentals-due { --rentals-status:#27733a; }
+.rentals-due[data-state=overdue] { --rentals-status:#cc1a23; }
+.rentals-due[data-state=today] { --rentals-status:#a76700; }
+.rentals-due strong { color:var(--rentals-status); white-space:nowrap; }
+.rentals-dot { display:inline-block; width:.9em; height:.9em; margin-inline-end:.32em; border-radius:50%; background:var(--rentals-status); vertical-align:-.05em; }
+.rentals-annual thead,.rentals-annual tfoot { background:#f2f2f2; }
+.rentals-annual .rentals-month { text-align:center; font-size:.91em; }
+.rentals-month span,.rentals-month strong { display:block; }
+.rentals-month-value { color:#27733a; }
+.rentals-month-pending { color:#a65100; }
+.rentals-month-shifted { color:#6a1b9a; }
+.rentals-section .rentals-empty { text-align:center; color:#475569; padding:12px 5px; }
+.rentals-dialog .report-navigation .report-navigation-arrow--previous { color:#638b2c; border-color:#638b2c; }
+@media (max-width:540px) {
+  .rentals-overlay .rentals-dialog { padding-inline:5px; }
+}

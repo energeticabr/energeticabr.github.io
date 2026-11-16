@@ -19,6 +19,7 @@ import "./ui/swile.css";
 import "./ui/gallery-record-actions.css";
 import "./ui/tasks-gallery.css";
 import "./ui/payment-ledger.css";
+import "./ui/rentals-report.css";
 import "./ui/management-report.css";
 import "./ui/cargos.css";
 import "./ui/provision-report.css";

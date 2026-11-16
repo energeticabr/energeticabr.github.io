@@ -10,7 +10,7 @@ import { createSicoobTransactionReportView } from '../src/ui/sicoob-transaction-
 const groups = [
   ['open-pending-provisions', 'open-sicoob-transaction-report', 'open-nfe-report', 'open-dda-report', 'open-provision-report', 'open-payment-ledger', 'open-management-report', 'open-order-validation-report', 'open-document-control-report'],
   ['open-cargos-table', 'open-attendance-summary', 'open-stage-progress', 'open-supplier-payroll-report', 'open-trancid-report', 'open-contractor-control-report', 'open-pending-supplier-payments-report'],
-  ['open-commercial-receipts', 'open-commercial-milestones', 'open-commercial-documents', 'open-sac-pathologies'],
+  ['open-commercial-receipts', 'open-commercial-milestones', 'open-commercial-documents', 'open-sac-pathologies', 'open-rentals-report'],
 ];
 const factories = {
   'open-dda-report': 'ddaReportFactory',
@@ -32,6 +32,7 @@ const factories = {
   'open-commercial-milestones': 'commercialMilestonesViewFactory',
   'open-commercial-documents': 'commercialDocumentsViewFactory',
   'open-sac-pathologies': 'sacPathologiesViewFactory',
+  'open-rentals-report': 'rentalsReportViewFactory',
   'open-depreciation-report': 'depreciationReportViewFactory',
   'open-task-association-report': 'taskAssociationReportViewFactory',
 };
@@ -133,7 +134,7 @@ for (const group of groups) {
 for (const [from, direction] of [
   ['open-pending-provisions', 'previous'], ['open-document-control-report', 'next'],
   ['open-cargos-table', 'previous'], ['open-pending-supplier-payments-report', 'next'],
-  ['open-commercial-receipts', 'previous'], ['open-sac-pathologies', 'next'],
+  ['open-commercial-receipts', 'previous'], ['open-rentals-report', 'next'],
   ['open-depreciation-report', 'previous'],
   ['open-task-association-report', 'previous'], ['open-task-association-report', 'next'], ['unknown', 'next'],
   ['open-provision-report', 'sideways'], ['open-provision-report', '__proto__'],
