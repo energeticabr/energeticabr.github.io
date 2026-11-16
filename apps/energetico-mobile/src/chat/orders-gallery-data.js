@@ -9,7 +9,8 @@ import { createOrdersLinkedReportData } from './orders-linked-report-data.js';
 import { createPayrollSourceReader } from './payroll-editor-policy.js';
 import { filterPayrollRows, payrollFilterOptions, validatePayrollFilters, payrollGalleryDay } from './payroll-gallery-filters.js';
 import { createRegistrationGalleryFilterData } from './registration-gallery-filter-data.js';
-import { loadProvisionDescriptionGroup, provisionDescriptionLinkColumn } from './provision-description-detail-data.js';
+import { loadProvisionDescriptionGroup, provisionDescriptionLinkColumn, publishedProvisionRows } from './provision-description-detail-data.js';
+import { PROVISION_FISCAL_DRAFT_STATUS } from '../../../../portal/forms/provision-parent-due.js';
 import { createAcquisitionProgress, notifyAcquisitionProgress } from './acquisition-progress.js';
 import { createWeeklyPayslipRecord, loadWeeklyPayslipLogo, weeklyPayslipDisplay, weeklyPayslipName } from './weekly-payslip-record.js';
 
@@ -905,8 +906,10 @@ function createSharePointListData({
     const result = !linkName ? rows : rows.map(row => Object.freeze({ ...row, fields: Object.freeze({ ...row.fields,
       DESCRITIVOPROVISAO: row.fields[linkName] ?? '',
     }) }));
+    const published = await publishedProvisionRows(result, { repository, siteKey, signal });
+    progress.check();
     progress.step('links');
-    return result;
+    return published;
   }
 
   async function loadSnapshot({ signal, onProgress, refresh = false } = {}) {
@@ -946,7 +949,8 @@ function createSharePointListData({
         progress.step('items', { pages: pageNumber, records: rows.length });
         if (!preserveSourceOrder) rows.sort((left, right) => Number(right.id) - Number(left.id));
         retryBlockedUntil = 0; retryBlockedError = undefined;
-        const result = Object.freeze({ listName, rows: Object.freeze(await normalizeDescriptionLinks(rows, list.id, signal, progress.forward('normalize'))) });
+        const visible = descriptionEditor ? rows.filter(row => row.fields.STATUS !== PROVISION_FISCAL_DRAFT_STATUS) : rows;
+        const result = Object.freeze({ listName, rows: Object.freeze(await normalizeDescriptionLinks(visible, list.id, signal, progress.forward('normalize'))) });
         progress.step('normalize');
         return result;
       }
@@ -978,7 +982,8 @@ function createSharePointListData({
     if (item == null) { progress.step('normalize', { notFound: true }); return null; }
     const row = normalizeItem(item);
     if (!row || row.id !== id) throw new OrdersGalleryDataError("orders_item_invalid", "O SharePoint não devolveu o pedido solicitado.");
-    const result = (await normalizeDescriptionLinks([row], list.id, signal, progress.forward('normalize')))[0];
+    const result = descriptionEditor && row.fields.STATUS === PROVISION_FISCAL_DRAFT_STATUS ? null
+      : (await normalizeDescriptionLinks([row], list.id, signal, progress.forward('normalize')))[0] ?? null;
     progress.step('normalize');
     return result;
   }
@@ -988,6 +993,9 @@ function createSharePointListData({
     const list = await resolveList();
     if (typeof repository.getItem !== "function") throw new Error("A alteração segura do pedido não está disponível.");
     const item = await repository.getItem(siteKey, list.id, id, "$expand=fields");
+    if (provisionPaymentSync && !(await publishedProvisionRows([item], { repository, siteKey })).length) {
+      throw new Error('A proposta de provisão ainda está em gravação.');
+    }
     const eTag = String(item?.eTag || item?.["@odata.etag"] || item?.["odata.etag"] || "").trim();
     if (!eTag || eTag === "*") throw new Error("Recarregue o pedido antes de alterar; a versão atual não foi identificada.");
     return { id, list, eTag };
@@ -1133,6 +1141,7 @@ function createSharePointListData({
     }
     const query = `$expand=fields&$top=${PAGE_SIZE}&$filter=${filter}`;
     const rows = new Map();
+    const fiscalRows = new Map();
     let cursor = "";
     for (let pageNumber = 1; pageNumber <= MAX_PAGES; pageNumber += 1) {
       if (signal?.aborted) throw signal.reason || new DOMException("A consulta foi cancelada.", "AbortError");
@@ -1165,10 +1174,18 @@ function createSharePointListData({
           product: value(["DESCRICAOPGTO", "PRODUTO", "DESCRIÇÃO PGTO"]),
           branch: value(["FILIAL"]), property: value(["IMOVEL", "IMÓVEL"]),
         }));
+        if (fields.NFELINHA) fiscalRows.set(row.id, row);
       }
       progress.report('items', { pages: pageNumber, records: rows.size });
       if (page?.hasMore !== true) {
         progress.step('items', { pages: pageNumber, records: rows.size });
+        if (fiscalRows.size) {
+          const linkName = provisionDescriptionLinkColumn(columns, { required:false }) || 'DESCRITIVOPROVISAO';
+          const published = await publishedProvisionRows([...fiscalRows.values()], { repository, siteKey, signal, linkName });
+          progress.check();
+          const ids = new Set(published.map(row => row.id));
+          for (const id of fiscalRows.keys()) if (!ids.has(id)) rows.delete(id);
+        }
         const result = Object.freeze([...rows.values()].sort((a, b) => provisionDateKey(a.dueDate).localeCompare(provisionDateKey(b.dueDate)) || Number(a.id) - Number(b.id)));
         progress.step('normalize');
         return result;

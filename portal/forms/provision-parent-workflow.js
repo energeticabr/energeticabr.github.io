@@ -1,5 +1,5 @@
 import { canReselectQueuedProvisionParent } from "./multi-entry.js";
-import { provisionDueFields, provisionEarliestUnpaidDue, sameProvisionDue, provisionChildrenStamp } from './provision-parent-due.js';
+import { PROVISION_FISCAL_DRAFT_STATUS, provisionDueFields, provisionEarliestUnpaidDue, sameProvisionDue, provisionChildrenStamp } from './provision-parent-due.js';
 
 const PAYMENT_MARKERS = ["DATAPGTOEFETUADO", "PGTOAGENDADO", "DATAPGTOAGENDADO", "DATAEXECUCAOAGENDAMENTO"];
 const PARENT_TEXT = ["Title", "FILIAL", "FORNECEDOR", "FORMAPGTO", "OBS", "VALORTOTAL"];
@@ -75,6 +75,8 @@ async function parentContract(repository, entity) {
 
 function requirePending(item, fields, id, expectedEtag = "") {
   if (!item || positiveId(item.id) !== positiveId(id)) throw new Error("A identidade do descritivo mudou no SharePoint.");
+  if (item.fields?.STATUS === PROVISION_FISCAL_DRAFT_STATUS) throw new Error('A proposta de provisão ainda está em gravação.');
+  if (item.fields?.NFEORIGEM) throw new Error('O descritivo fiscal é reservado para as provisões da nota vinculada.');
   if (isWeeklyPayslipProvision(item.fields)) throw new Error('O descritivo da folha é reservado para a provisão da própria rubrica.');
   const currentEtag = etag(item);
   if (PAYMENT_MARKERS.some(name => !blank(item.fields?.[fields[name]]))) throw new Error("O descritivo não está pendente: há pagamento ou agendamento registrado.");

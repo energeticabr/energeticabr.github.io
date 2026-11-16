@@ -1,3 +1,5 @@
+import { PROVISION_FISCAL_DRAFT_STATUS } from '../../../../portal/forms/provision-parent-due.js';
+
 const key = value => String(value ?? '').replace(/_x([0-9a-f]{4})_/gi, (_, hex) => String.fromCodePoint(parseInt(hex, 16)))
   .normalize('NFD').replace(/[\u0300-\u036f]/g, '').replace(/[^a-z0-9]/gi, '').toUpperCase();
 const positiveId = value => {
@@ -18,6 +20,23 @@ export function provisionDescriptionLinkColumn(columns, { required = true } = {}
   if (!selected.length && !required) return '';
   if (selected.length !== 1) throw new Error('Os metadados da coluna de vínculo do descritivo não são únicos.');
   return selected[0].name;
+}
+
+export async function publishedProvisionRows(rows, { repository, siteKey, signal, parents, linkName = 'DESCRITIVOPROVISAO' }) {
+  const candidates = rows.filter(row => row?.fields && row.fields.STATUS !== PROVISION_FISCAL_DRAFT_STATUS);
+  if (!candidates.some(row => row.fields?.NFELINHA)) return candidates;
+  if (!parents) {
+    const list = await repository.resolveList(siteKey, ['DESCRITIVOPROVISAO'], { signal });
+    if (list?.status !== 'resolved' || !list.id) throw unavailable();
+    parents = await repository.getItems(siteKey, list.id, '$select=id&$expand=fields($select=NFEORIGEM,STATUS)', { signal });
+  }
+  signal?.throwIfAborted();
+  if (!Array.isArray(parents)) throw unavailable();
+  // A single parent status publishes the group, even if child activation was interrupted.
+  const published = new Map(parents.filter(parent => parent.fields?.NFEORIGEM && parent.fields.STATUS !== PROVISION_FISCAL_DRAFT_STATUS)
+    .map(parent => [String(parent.id),parent.fields.NFEORIGEM]));
+  return candidates.filter(({ fields }) => !fields?.NFELINHA
+    || published.get(String(fields[linkName] ?? '')) === String(fields.NFELINHA).replace(/-\d+$/, ''));
 }
 
 /** Read a fresh, complete group; never reuse the gallery's filtered/page rows. */
@@ -63,7 +82,9 @@ export async function loadProvisionDescriptionGroup({ repository, siteKey, norma
       throw error;
     }
     if (!item) throw unavailable();
-    return normalize(item, parentId);
+    const row = normalize(item, parentId);
+    if (row.fields.STATUS === PROVISION_FISCAL_DRAFT_STATUS) throw unavailable();
+    return row;
   }
   await parent();
   const children = await resolve(['PROVISÃO PGTOS', 'PROVISAO PGTOS', 'PROVISAO PAGAMENTOS']);

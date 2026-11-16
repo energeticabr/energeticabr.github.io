@@ -311,6 +311,27 @@ test('single-item and upcoming-payment reads report their real foreground bounda
   finished(pointEvents); finished(upcomingEvents);
 });
 
+test('payment programming and reminders require a published fiscal parent even after one child activates', async () => {
+  const origin = '35261112345678000123550010000000011000000011';
+  const child = { id:'2', fields:{ NFELINHA:`${origin}-1`, DESCRITIVOPROVISAO:'42',
+    STATUS:'PAGAMENTO PREVISTO', DATAPREVISTOPGTO:'2026-10-02', VALORTOTAL:'10', QTD:'1' } };
+  const parent = { id:'42', fields:{ NFEORIGEM:origin, STATUS:'PROPOSTA FISCAL EM GRAVAÇÃO' } };
+  const data = createPaymentProgrammingGalleryData({ repository:{
+    resolveList:async (_site, [name]) => list(name),
+    getColumns:async () => [{ name:'DATAPREVISTOPGTO',dateTime:{} }, { name:'DESCRITIVOPROVISAO',text:{} }],
+    getItem:async () => child,
+    getItemsPage:async () => ({ items:[child], hasMore:false }),
+    getItems:async (_site, name) => { assert.equal(name,'DESCRITIVOPROVISAO'); return [parent]; },
+  } });
+  const now = new Date('2026-10-01T12:00:00Z');
+  assert.deepEqual((await data.loadSnapshot()).rows, []);
+  assert.deepEqual(await data.loadUpcomingPayments({ now }), []);
+  assert.equal(await data.loadItem('2'), null);
+  parent.fields.STATUS = 'PAGAMENTO PREVISTO';
+  assert.equal((await data.loadSnapshot()).rows[0].id, '2');
+  assert.equal((await data.loadUpcomingPayments({ now }))[0].id, '2');
+});
+
 test('attachment inventories share transport while retaining cancellation and cache-hit progress', async () => {
   const gate = deferred(), controller = new AbortController(), events = [[], [], []]; let reads = 0;
   const data = createOrdersGalleryData({ repository: {

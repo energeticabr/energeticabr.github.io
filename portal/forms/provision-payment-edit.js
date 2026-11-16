@@ -108,10 +108,12 @@ export function createProvisionPaymentEditor({ repository, siteKey = 'personal',
   async function prepareColumns({ columns, rawColumns, item, signal }) {
     if (!rawColumns.some(column => key(column.name) === 'DESCRITIVOPROVISAO')) return columns;
     const name = field(rawColumns, 'DESCRITIVOPROVISAO');
+    if (item.fields?.NFELINHA) return columns.filter(column => column.name !== name);
     if (rawColumns.find(column => column.name === name).readOnly) return columns;
     const list = await parentSource(signal);
     const current = String(item.fields?.[name] ?? '').trim();
-    const parents = (await allRows(list.id, signal)).filter(row => String(row.id) === current || !isWeeklyPayslipProvision(row.fields))
+    const parents = (await allRows(list.id, signal)).filter(row => String(row.id) === current
+      || !row.fields?.NFEORIGEM && !isWeeklyPayslipProvision(row.fields))
       .sort((a,b) => Number(b.id) - Number(a.id));
     const choices = parents.map(row => id(row.id));
     const optionLabels = Object.fromEntries(parents.map(row => [id(row.id),
@@ -215,6 +217,7 @@ export function createProvisionPaymentEditor({ repository, siteKey = 'personal',
     const confirmParents = async () => {
       for (const parentId of parentIds) {
         const parent = await read(parents.id, parentId, signal);
+        if (parent.fields?.NFEORIGEM) throw new Error('O descritivo fiscal é reservado para as provisões da nota vinculada.');
         if (isWeeklyPayslipProvision(parent.fields)) throw new Error('O descritivo da folha é reservado para a provisão da própria rubrica.');
       }
     };

@@ -3,6 +3,7 @@ import { createGraphClient } from "../../../../portal/data/graph-client.js";
 import { createSharePointRepository } from "../../../../portal/data/sharepoint-repository.js";
 import { createSharePointAttachmentTransport } from '../../../../portal/data/attachments.js';
 import { PROVISION_FISCAL_DRAFT_STATUS } from '../../../../portal/forms/provision-parent-due.js';
+import { provisionDescriptionLinkColumn, publishedProvisionRows } from './provision-description-detail-data.js';
 import { normalizeSpendingLaunch, normalizeSpendingProduct, normalizeSpendingProvision, normalizeSpendingRecurrence } from "./spending-reports-model.js";
 import { normalizeProvisionReportRow, normalizeProvisionReportRecurrence, normalizeProvisionReportDescription } from './provision-report-model.js';
 import { normalizeOrderValidationOrder, normalizeOrderValidationLaunch, assertOrderValidationSource } from './order-validation-report-model.js';
@@ -79,9 +80,11 @@ export function createSpendingReportsData({
       ]);
       abortIfNeeded(signal);
       if (!Array.isArray(recurrenceColumns) || !Array.isArray(provisionColumns)) throw new Error("O SharePoint retornou colunas inválidas.");
+      const linkName = provisionDescriptionLinkColumn(provisionColumns, { required:false }) || 'DESCRITIVOPROVISAO';
+      const published = await publishedProvisionRows(provisionItems, { repository, siteKey:SITE, signal, linkName });
       return Object.freeze({
         recurrences: Object.freeze(recurrenceItems.map(item => normalizeSpendingRecurrence(item, recurrenceColumns))),
-        provisions: Object.freeze(provisionItems.filter(isConfirmedProvision).map(item => normalizeSpendingProvision(item, provisionColumns))),
+        provisions: Object.freeze(published.map(item => normalizeSpendingProvision(item, provisionColumns))),
       });
     }
     const launchList = await resolve("LANCAMENTOS", signal);
@@ -137,8 +140,9 @@ export function createSpendingReportsData({
     ]);
     abortIfNeeded(signal);
     if (![recurrenceColumns, provisionColumns, descriptionColumns].every(Array.isArray)) throw new Error('O SharePoint retornou colunas inválidas.');
-    const seen = new Set(), uniqueProvisions = provisionItems.filter(item => {
-      if (!isConfirmedProvision(item)) return false;
+    const linkName = provisionDescriptionLinkColumn(provisionColumns, { required:false }) || 'DESCRITIVOPROVISAO';
+    const published = await publishedProvisionRows(provisionItems, { parents:descriptionItems, signal, linkName });
+    const seen = new Set(), uniqueProvisions = published.filter(item => {
       const id = String(item.id ?? '').trim();
       if (!id) return true;
       if (seen.has(id)) return false;
