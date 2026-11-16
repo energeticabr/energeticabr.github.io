@@ -10328,7 +10328,7 @@ export function createAppController({
               },
             } : {}),
             ...(GALLERY_CREATION_ACTIONS[replyId] ? { onCreate: galleryCreationHandler(replyId, assertSession) } : {}),
-            ...(["financial_movement", "notas_fiscais_sefaz", "dda", "presenceDescriptions", "provisionDescription", "documents", "asset", "assetFunction", "assetProduct", "assetGroup", "workDiary", "quotes", "contracts", "contractLines", "measurements", "measurementLines", "stageDemonstratives", "constructionStages", "recurringTasks", "delegatedTasks"].includes(sourceKind) ? {
+            ...(["financial_movement", "notas_fiscais_sefaz", "dda", "presenceDescriptions", "provisionDescription", "supplier", "account", "materialType", "unitOfMeasure", "documents", "asset", "assetFunction", "assetProduct", "assetGroup", "workDiary", "quotes", "contracts", "contractLines", "measurements", "measurementLines", "stageDemonstratives", "constructionStages", "recurringTasks", "delegatedTasks"].includes(sourceKind) ? {
               openMediaCollection: (items, previewOptions) => {
                 assertSession();
                 const collection = (Array.isArray(items) ? items : []).map(item => ({

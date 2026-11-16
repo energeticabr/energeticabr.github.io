@@ -22,6 +22,7 @@ import { createDdaPaymentConfirmation } from './dda-payment-confirmation.js';
 import { createDdaGalleryMetrics } from './dda-gallery-metrics.js';
 import { renderProvisionDescriptionCard, provisionDescriptionIcon } from './provision-description-card.js';
 import { createProvisionDescriptionDetail } from './provision-description-detail-view.js';
+import { PDF_ATTACHMENT_ICON } from './report-pdf-attachment-icon.js';
 import { field, displayValue, paymentTotal } from './provision-payment-format.js';
 
 const PAGE_SIZE = 20;
@@ -143,6 +144,10 @@ function usefulPersonName(value) {
   return Boolean(name)
     && !/^\d+$/.test(name)
     && !/^(?:sharepoint(?: app)?|system account|app|microsoft flow|power automate)$/i.test(name);
+}
+
+function isPdfAttachment(attachment) {
+  return /\.pdf$/i.test(attachment?.fileName || "") || attachment?.mimeType === "application/pdf";
 }
 
 function knownAttachmentCount(row) {
@@ -602,9 +607,10 @@ export function createRegistrationGallery({ document: doc = globalThis.document,
   }
 
   function requestAttachmentCounts(visibleRows) {
-    if (!model.showAttachments) return;
+    if (!model.showAttachments && !model.showPdfAttachments) return;
     for (const row of visibleRows) {
-      if (row.hasAttachments === false || knownAttachmentCount(row) != null) continue;
+      const count = knownAttachmentCount(row);
+      if (row.hasAttachments === false || (model.showPdfAttachments ? count === 0 : count != null)) continue;
       const id = String(row.id);
       if (attachmentCounts.has(id)) continue;
       attachmentCounts.set(id, { state: "loading" });
@@ -624,8 +630,10 @@ export function createRegistrationGallery({ document: doc = globalThis.document,
       attachmentCountWorkers += 1;
       void Promise.resolve().then(() => data.listAttachments(row.id, { refresh: true })).then(items => {
         if (destroyed || epoch !== attachmentCountEpoch) return;
-        if (kind === 'provisionDescription' && !Array.isArray(items)) throw new Error('Consulta de anexos incompleta.');
-        attachmentCounts.set(id, { state: "ready", count: Array.isArray(items) ? items.length : 0 });
+        if ((model.showPdfAttachments || kind === 'provisionDescription') && !Array.isArray(items)) throw new Error('Consulta de anexos incompleta.');
+        const attachments = Array.isArray(items) ? items : [];
+        attachmentCounts.set(id, { state: "ready", count: attachments.length,
+          hasPdf: model.showPdfAttachments && attachments.some(isPdfAttachment) });
         if (!root.hidden) refreshAttachmentCount(row);
       }).catch(() => {
         if (destroyed || epoch !== attachmentCountEpoch) return;
@@ -639,6 +647,12 @@ export function createRegistrationGallery({ document: doc = globalThis.document,
   }
 
   function refreshAttachmentCount(row) {
+    if (model.showPdfAttachments) {
+      const card = [...list.children].find(node => node.dataset.registrationRow === String(row.id));
+      const actions = card?.querySelector(".gallery-record-actions");
+      if (actions) appendPdfAction(row, actions);
+      return;
+    }
     if (kind !== "workDiary") { render(); return; }
     // Background counts must not replace the disclosure or interrupt its focus.
     const card = [...list.children].find(node => node.dataset.registrationRow === String(row.id));
@@ -647,6 +661,20 @@ export function createRegistrationGallery({ document: doc = globalThis.document,
     const label = attachmentCountLabel(row);
     rail.querySelector(".rg-row-file__count").textContent = label;
     if (rail.tagName === "BUTTON") rail.setAttribute("aria-label", `Abrir anexos d${model.recordArticle || "o"} ${model.recordLabel || "documento"} ${row.id}: ${label}`);
+  }
+
+  function appendPdfAction(row, actions) {
+    if (!model.showPdfAttachments || !attachmentCounts.get(String(row.id))?.hasPdf
+      || actions.querySelector('[data-action="registration-pdf"]')) return;
+    const button = el("button", "gallery-record-action rg-record-pdf");
+    button.type = "button";
+    button.dataset.action = "registration-pdf";
+    button.setAttribute("aria-label", "Abrir PDF do item de ID " + row.id);
+    button.title = button.getAttribute("aria-label");
+    button.innerHTML = PDF_ATTACHMENT_ICON;
+    button.disabled = attachmentLoading;
+    button.addEventListener("click", () => { void openAttachments(row); });
+    actions.prepend(button);
   }
 
   function appendDocumentDetail(details, field, label, value, className = "", icon = "") {
@@ -1043,7 +1071,7 @@ export function createRegistrationGallery({ document: doc = globalThis.document,
         else renderDocumentDetails(main, row, primary);
         layout.append(fileRail, main);
         card.append(layout);
-      } else if (model.nativeCard && (model.readOnly || bankMovement)) {
+      } else if (model.nativeCard && (model.readOnly || model.showPdfAttachments || bankMovement)) {
         if (kind === 'notas_fiscais_sefaz') {
           card.classList.add('rg-row--sefaz');
           const layout = el('div', 'rg-row-layout rg-sefaz-layout');
@@ -1109,7 +1137,11 @@ export function createRegistrationGallery({ document: doc = globalThis.document,
         cancelledStamp.setAttribute('aria-hidden', 'true');
         card.append(cancelledStamp);
       }
-      if (!model.readOnly && !bankMovement) card.append(recordActions.render(row));
+      if (!model.readOnly && !bankMovement) {
+        const actions = recordActions.render(row);
+        appendPdfAction(row, actions);
+        card.append(actions);
+      }
       list.append(card);
     }
     updateFeedback(filtered.length);
@@ -1135,13 +1167,21 @@ export function createRegistrationGallery({ document: doc = globalThis.document,
       if (typeof data.listAttachments !== "function" || typeof data.downloadAttachment !== "function") {
         throw new Error("A consulta de anexos não está disponível.");
       }
-      const attachments = await data.listAttachments(row.id);
+      const files = await data.listAttachments(row.id, model.showPdfAttachments ? { refresh: true } : undefined);
       if (destroyed || root.hidden || current !== attachmentRequest) return;
+      const attachments = model.showPdfAttachments ? files.filter(isPdfAttachment) : files;
+      if (model.showPdfAttachments) {
+        attachmentCounts.set(String(row.id), { state: "ready", count: files.length, hasPdf: attachments.length > 0 });
+      }
       if (kind === 'provisionDescription') {
         if (!Array.isArray(attachments)) throw new Error('Consulta de anexos incompleta.');
         attachmentCounts.set(String(row.id), { state: 'ready', count: attachments.length });
       }
       if (!attachments.length) {
+        if (model.showPdfAttachments) {
+          attachmentNotice = "O item " + row.id + " não possui PDFs.";
+          return;
+        }
         attachmentNotice = `${(model.recordArticle || "o").toUpperCase()} ${model.recordLabel || "documento"} ${row.id} não possui anexos.`;
         return;
       }
@@ -1149,7 +1189,11 @@ export function createRegistrationGallery({ document: doc = globalThis.document,
       await openMediaCollection(attachments.map(item => ({
         fileName: item.fileName,
         source: options => data.downloadAttachment(row.id, item.fileName, options),
-      })));
+      })), model.showPdfAttachments ? {
+        resolveReturnFocus: () => root.querySelector(
+          '[data-registration-row="' + row.id + '"] [data-action="registration-pdf"]',
+        ) || root,
+      } : undefined);
     } catch {
       if (!destroyed && !root.hidden && current === attachmentRequest) {
         attachmentNotice = `Não foi possível abrir os anexos d${model.recordArticle || "o"} ${model.recordLabel || "documento"} ${row.id}. Tente novamente.`;
@@ -1253,6 +1297,10 @@ export function createRegistrationGallery({ document: doc = globalThis.document,
     recordActions.close();
     searchableFilters.close();
     root.hidden = true;
+    if (model.showPdfAttachments) {
+      attachmentCountEpoch += 1;
+      attachmentCountQueue = [];
+    }
     createShortcut.sync();
     refreshShortcut.sync();
     request += 1;
