@@ -17,6 +17,7 @@ test('menus disable page pinch and double-tap while scrolling, signature and Pow
       const { stdout, gestureScales, gestureDetails } = await runBrowserLayout(browser, { width, height: 844, mobile: true, startupTimeoutMs: 30_000, url: `http://127.0.0.1:${server.httpServer.address().port}/tests/fixtures/app-zoom-guard.html`, gestureProbes: [
         { pinch: { x: width / 2, y: 150, scaleFactor: 1.8 } },
         { expression: "window.zoomReport.open({ accessToken: 'test', getAccessToken: async () => 'test' })", pinch: { x: width / 2, y: 400, scaleFactor: 1.8 }, ...(baseline.gestureScales[0] === 1 ? { pageScaleFactor: 1.8 } : {}) },
+        { pinch: { x: width / 4, y: 300, scaleFactor: 2 }, ...(baseline.gestureScales[0] === 1 ? { pageScaleFactor: 4 } : {}) },
         { expression: 'window.zoomReport.close()' },
       ] });
       const result = JSON.parse(stdout.match(/data-layout="([^"]+)"/)[1].replaceAll('&quot;', '"').replaceAll('&amp;', '&'));
@@ -33,7 +34,8 @@ test('menus disable page pinch and double-tap while scrolling, signature and Pow
       assert.ok(reportTouches.some(touch => touch.touches > 1 && !touch.cancelled), 'report pinch events must remain available to the viewer');
       assert.equal(gestureScales[0], 1, 'real touchscreen pinch must not enlarge menus');
       assert.ok(gestureScales[1] > 1.1, `report zoom state must be reproduced: ${JSON.stringify({ width, gestureScales, gestureDetails })}`);
-      assert.equal(gestureScales[2], 1, 'closing the report must restore the page scale');
+      assert.ok(gestureScales[2] <= 2.01, `excessive report zoom must be capped: ${JSON.stringify({ width, gestureScales })}`);
+      assert.equal(gestureScales[3], 1, 'closing the report must restore the page scale');
     }
   } finally { await server.close(); }
 });

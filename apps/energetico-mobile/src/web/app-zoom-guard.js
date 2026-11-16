@@ -1,5 +1,8 @@
 const viewportContents = new WeakMap();
 
+// Limit the composited area of the embedded Power BI iframe on mobile.
+const POWER_BI_MAX_PAGE_SCALE = 2;
+
 /** Local viewers zoom their contents; only the embedded report needs page zoom. */
 export function setAppPageZoomEnabled(documentRef, enabled) {
   const viewport = documentRef?.querySelector?.('meta[name="viewport"]');
@@ -8,7 +11,7 @@ export function setAppPageZoomEnabled(documentRef, enabled) {
   const original = viewportContents.get(viewport);
   viewport.content = [
     ...original.split(',').map(value => value.trim()).filter(value => value && !/^(initial-scale|minimum-scale|maximum-scale|user-scalable)\s*=/i.test(value)),
-    'initial-scale=1', 'minimum-scale=1', enabled ? 'maximum-scale=5' : 'maximum-scale=1',
+    'initial-scale=1', 'minimum-scale=1', `maximum-scale=${enabled ? POWER_BI_MAX_PAGE_SCALE : 1}`,
   ].join(', ');
 }
 

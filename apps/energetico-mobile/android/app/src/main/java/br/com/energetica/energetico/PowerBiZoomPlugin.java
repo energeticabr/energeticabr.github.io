@@ -14,6 +14,7 @@ public class PowerBiZoomPlugin extends Plugin {
     private Boolean previousSupportZoom;
     private Boolean previousBuiltInZoomControls;
     private Boolean previousDisplayZoomControls;
+    private Boolean previousUseWideViewPort;
     private Float previousPageScale;
 
     @PluginMethod
@@ -37,9 +38,12 @@ public class PowerBiZoomPlugin extends Plugin {
                     previousSupportZoom = settings.supportZoom();
                     previousBuiltInZoomControls = settings.getBuiltInZoomControls();
                     previousDisplayZoomControls = settings.getDisplayZoomControls();
+                    previousUseWideViewPort = settings.getUseWideViewPort();
                     previousPageScale = webView.getScale();
                 }
                 settings.setSupportZoom(true);
+                // Honor the page's viewport meta tag, which limits report magnification.
+                settings.setUseWideViewPort(true);
                 settings.setBuiltInZoomControls(true);
                 settings.setDisplayZoomControls(false);
             } else if (previousSupportZoom != null) {
@@ -50,9 +54,11 @@ public class PowerBiZoomPlugin extends Plugin {
                 settings.setSupportZoom(previousSupportZoom);
                 settings.setBuiltInZoomControls(previousBuiltInZoomControls);
                 settings.setDisplayZoomControls(previousDisplayZoomControls);
+                settings.setUseWideViewPort(previousUseWideViewPort);
                 previousSupportZoom = null;
                 previousBuiltInZoomControls = null;
                 previousDisplayZoomControls = null;
+                previousUseWideViewPort = null;
                 previousPageScale = null;
             }
             call.resolve();
