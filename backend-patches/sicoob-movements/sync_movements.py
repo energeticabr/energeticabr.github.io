@@ -245,17 +245,71 @@ def fetch_public_company(document):
         return None
 
 
+@lru_cache(maxsize=4096)
+def fetch_pix_company(document):
+    """Read the legal name and exact establishment CNPJ from the public register."""
+    import requests
+    try:
+        response = requests.get(f'https://kitana.opencnpj.com/cnpj/{document}', timeout=(3, 5), allow_redirects=False)
+        if response.status_code != 200:
+            return None
+        result = response.json()
+        if result.get('success') is not True:
+            return None
+        company = result['data']
+        return {'cnpj': company['cnpj'], 'razao_social': company.get('razaoSocial')}
+    except (requests.RequestException, ValueError, KeyError, TypeError, AttributeError):
+        return None
+
+
+def fill_existing_pix_name(client, item_id, row, bank_fields):
+    from requests import HTTPError
+
+    document = row['DOCUMENTORECEBEDOR']
+    name = row.get('RAZAOSOCIALRECEBEDOR') or public_receiver_name(document, fetch_pix_company)
+    if not name:
+        return UNKNOWN
+    fields = (*bank_fields, 'DOCUMENTORECEBEDOR', 'RAZAOSOCIALRECEBEDOR')
+    current, etag = client.get_item_fields_with_etag(item_id, fields, LIST)
+    verify_fields(current, row, bank_fields)
+    if text(current.get('RAZAOSOCIALRECEBEDOR')).upper() not in ('', UNKNOWN):
+        return current['RAZAOSOCIALRECEBEDOR']
+    current_document = text(current.get('DOCUMENTORECEBEDOR')).upper()
+    if current_document not in ('', UNKNOWN) and tax_id(current_document) != document:
+        return UNKNOWN
+    name = name[:255]
+    updates = {'DOCUMENTORECEBEDOR': document, 'RAZAOSOCIALRECEBEDOR': name}
+    try:
+        client.update_item_with_etag(item_id, updates, etag, LIST)
+    except HTTPError as error:
+        if error.response is None or error.response.status_code != 412:
+            raise
+        fresh = client.get_item_fields(item_id, fields, LIST)
+        verify_fields(fresh, row, bank_fields)
+        return fresh.get('RAZAOSOCIALRECEBEDOR') or UNKNOWN
+    verify_fields(client.get_item_fields(item_id, fields, LIST), {**row, **updates}, fields)
+    return name
+
+
 def save_movement(client, row):
     key = row[KEY]
+    is_pix = bool(re.search(r'\bPIX\b', bank_label(row['DESCRICAO'])))
+    document = row.get('DOCUMENTORECEBEDOR', '')
     existing = client._find_item(key, LIST, KEY)
     if existing:
         bank_fields = (KEY, 'DATAPAGAMENTO', 'VALOR', 'CONTAPAGADORA', 'REFERENCIABANCARIA', 'ORIGEMMOVIMENTACAO')
         actual = client.get_item_fields(existing['Id'], (*bank_fields, 'RAZAOSOCIALRECEBEDOR'), LIST)
         verify_fields(actual, row, bank_fields)
-        row['RAZAOSOCIALRECEBEDOR'] = actual.get('RAZAOSOCIALRECEBEDOR') or UNKNOWN
+        name = actual.get('RAZAOSOCIALRECEBEDOR')
+        if is_pix and len(document) == 14 and text(name).upper() in ('', UNKNOWN):
+            name = fill_existing_pix_name(client, existing['Id'], row, bank_fields)
+        row['RAZAOSOCIALRECEBEDOR'] = name or UNKNOWN
         return False
-    registered_name = '' if re.search(r'\bPIX\b', bank_label(row['DESCRICAO'])) else public_receiver_name(
-        row.get('DOCUMENTORECEBEDOR', ''), fetch_public_company)
+    registered_name = ''
+    if not is_pix:
+        registered_name = public_receiver_name(document, fetch_public_company)
+    elif not row.get('RAZAOSOCIALRECEBEDOR'):
+        registered_name = public_receiver_name(document, fetch_pix_company)
     if registered_name:
         row['RAZAOSOCIALRECEBEDOR'] = registered_name[:255]
     item_id = client.ensure_item(key, row, target_list=LIST, idempotency_field=KEY, merge_existing=False)

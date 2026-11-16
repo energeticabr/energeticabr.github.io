@@ -1,8 +1,8 @@
-"""Use archived bank receipts only to discover IDs. Receiver fields come from the Sicoob API."""
+"""Use archived receipts to discover IDs and Sicoob APIs to verify payments."""
 import argparse
 from collections import Counter, defaultdict
 from contextlib import closing
-from datetime import timedelta
+from datetime import datetime, timedelta
 from decimal import Decimal, InvalidOperation
 import hashlib
 from io import BytesIO
@@ -41,7 +41,7 @@ def direct_ids(row):
     return extract_end_ids(f"{row.get('DESCRICAO') or ''} {row.get('REFERENCIABANCARIA') or ''}")
 
 
-def pix_matches(row, pix, end_id, payer_document):
+def pix_matches(row, pix, end_id, payer_document, *, allow_posting_delay=False):
     if not isinstance(pix, dict) or pix.get('endToEndId') != end_id or pix.get('estado') != 'FINALIZADO':
         return False
     origin = pix.get('origem') or {}
@@ -56,9 +56,11 @@ def pix_matches(row, pix, end_id, payer_document):
             counterparty_matches = len(document) == 11 and document[3:9] == identity
         else:
             counterparty_matches = document == identity if identity else explicit == {end_id}
+        delay = (day - movements.civil_date(pix['horario'])).days
+        matches_day = delay == 0 or (allow_posting_delay and 0 < delay <= movements.POSTING_OVERLAP_DAYS)
         return (bool(payer_document and movements.tax_id(origin.get('cpfCnpj')) == payer_document)
                 and movements.text(origin.get('conta')).lstrip('0') == account.lstrip('0')
-                and movements.civil_date(pix['horario']) == day and movements.money(pix['valor']) == value
+                and matches_day and movements.money(pix['valor']) == value
                 and counterparty_matches
                 and bool(movements.text(receiver.get('nome'))))
     except (AttributeError, KeyError, TypeError, ValueError):
@@ -204,10 +206,23 @@ def read_pix(account, ids):
     return json.loads(result.stdout)
 
 
-def save_pix(client, row, pix, end_id, payer, content):
+def receiver_field_matches(current, fields, field):
+    value = movements.text(current.get(field))
+    if value.casefold() == fields.get(field, '').casefold():
+        return True
+    document = movements.tax_id(current.get('DOCUMENTORECEBEDOR'))
+    if not document or document != fields.get('DOCUMENTORECEBEDOR'):
+        return False
+    # Banking and registry names can differ for the same establishment.
+    return (field == 'DOCUMENTORECEBEDOR' or
+            (field == 'RAZAOSOCIALRECEBEDOR' and len(document) == 14 and value.upper() not in ('', movements.UNKNOWN)))
+
+
+def save_pix(client, row, pix, end_id, payer, content, *, allow_posting_delay=False):
     item_id = row['Id']
     fresh, _ = client.get_item_fields_with_etag(item_id, (*IDENTITY, *EXTRA), LIST)
-    if any(fresh[field] != row[field] for field in IDENTITY) or not pix_matches(fresh, pix, end_id, payer):
+    if any(fresh[field] != row[field] for field in IDENTITY) or not pix_matches(
+            fresh, pix, end_id, payer, allow_posting_delay=allow_posting_delay):
         raise ValueError('Pix movement identity changed')
     if content:
         filename = f'Comprovante-Sicoob-Pix-{item_id}.pdf'
@@ -215,12 +230,13 @@ def save_pix(client, row, pix, end_id, payer, content):
         if [f['content'] for f in client.get_item_attachments(item_id, LIST) if f['filename'] == filename] != [content]:
             raise ValueError('Pix receipt readback mismatch')
     fresh, etag = client.get_item_fields_with_etag(item_id, (*IDENTITY, *EXTRA), LIST)
-    if any(fresh[field] != row[field] for field in IDENTITY) or not pix_matches(fresh, pix, end_id, payer):
+    if any(fresh[field] != row[field] for field in IDENTITY) or not pix_matches(
+            fresh, pix, end_id, payer, allow_posting_delay=allow_posting_delay):
         raise ValueError('Pix movement identity changed')
     fields = pix_receiver_fields(pix)
     for field in EXTRA:
         current = movements.text(fresh.get(field))
-        if current.upper() not in ('', movements.UNKNOWN) and current.casefold() != fields.get(field, '').casefold():
+        if current.upper() not in ('', movements.UNKNOWN) and not receiver_field_matches(fresh, fields, field):
             return False
     updates = {k: v for k, v in fields.items() if movements.text(fresh.get(k)).upper() in ('', movements.UNKNOWN)}
     client.update_item_with_etag(item_id, updates, etag, LIST)
@@ -256,20 +272,109 @@ def has_account_payment(answers, account, payer):
     return False
 
 
-def bank_match(row, options, answers, movements_in_account, payer):
+def allows_payment(row, end_id, claims):
+    assigned = claims.get(row['Id'])
+    if assigned:
+        return assigned == {end_id}
+    return all(end_id not in identifiers for identifiers in claims.values())
+
+
+def verify_late_postings(pix_rows, answers, account, payer, claims=None):
+    """Map a late Pix to its unique statement key. None marks unverifiable candidates."""
+    late = {}
+    claims = claims or {}
+    for requested, answer in answers.items():
+        payment = payment_details(answer, requested)
+        if not payment:
+            continue
+        pix, end_id = payment
+        try:
+            paid = movements.civil_date(pix['horario'])
+        except (KeyError, ValueError):
+            continue
+        possible = [row for row in pix_rows if row.get(movements.KEY)
+                    and allows_payment(row, end_id, claims)
+                    and (not row.get('Attachments') or direct_ids(row) == {end_id})
+                    and movements.civil_date(row['DATAPAGAMENTO']) > paid
+                    and pix_matches(row, pix, end_id, payer, allow_posting_delay=True)]
+        if possible:
+            late[end_id] = (pix, paid, possible)
+    if not late:
+        return {}
+    verified = dict.fromkeys(late)
+    first = min(paid for _, paid, _ in late.values())
+    today = datetime.now(movements.ZONE).date()
+    overlap = timedelta(days=movements.POSTING_OVERLAP_DAYS)
+    last = min(today, max(paid for _, paid, _ in late.values()) + overlap)
+    if first > last:
+        return verified
+    try:
+        statement_account, statements = movements.read_bank(first, last)
+        if statement_account != account:
+            return verified
+        statement = []
+        for (start, end), payload in statements.items():
+            for entry in payload.get('resultado', payload)['transacoes']:
+                for row in movements.payment_rows({'transacoes': [entry]}, start, end, account, {}):
+                    if re.search(r'\bPIX\b', movements.bank_label(row['DESCRICAO'])):
+                        day = movements.civil_date(row['DATAPAGAMENTO']).isoformat()
+                        batch = (movements.text(entry.get('dataLote')) == day
+                                 and movements.text(entry.get('data')) in (day + 'T00:00', day + 'T00:00:00'))
+                        statement.append((row, batch))
+    except (OSError, ValueError, KeyError, TypeError, subprocess.SubprocessError):
+        return verified
+    claimed_keys = {row[movements.KEY]: row for row in pix_rows
+                    if row.get(movements.KEY) and row['Id'] in claims}
+    for end_id, (pix, paid, possible) in late.items():
+        total = movements.money(pix['valor'])
+        candidates = []
+        for row, batch in statement:
+            day, value, _, identity = pix_key(row)
+            if value != total or (day != paid and not (batch and 0 < (day - paid).days <= movements.POSTING_OVERLAP_DAYS)):
+                continue
+            claimed = claimed_keys.get(row[movements.KEY])
+            if (claimed and not allows_payment(claimed, end_id, claims)
+                    and all(claimed.get(field) == row[field] for field in IDENTITY)):
+                continue
+            # An unidentified debit in the same window could be the payment.
+            if pix_matches(row, pix, end_id, payer, allow_posting_delay=batch) or (not identity and not direct_ids(row)):
+                candidates.append(row)
+        if len(candidates) != 1:
+            continue
+        expected = candidates[0]
+        if pix_matches(expected, pix, end_id, payer):
+            # The statement confirmed one exact-date debit and no late alternative.
+            del verified[end_id]
+            continue
+        if today <= paid + overlap and direct_ids(expected) != {end_id}:
+            # With a masked document, another compatible debit can still post.
+            continue
+        for row in possible:
+            if all(row.get(field) == expected[field] for field in IDENTITY):
+                verified[end_id] = expected[movements.KEY]
+    return verified
+
+
+def bank_match(row, options, answers, movements_in_account, payer, late_postings=None, claims=None):
     if any(answers.get(end_id, {}).get('status') not in (200, 404) for end_id in options):
         return None
     movement_key = pix_key(row)[:3]
     if any(r['Id'] != row['Id'] and not pix_key(r)[-1] and not direct_ids(r) and pix_key(r)[:3] == movement_key
            for r in movements_in_account):
         return None
+    late_postings = late_postings or {}
+    claims = claims or {}
     matches = {}
     for requested_id, content in options.items():
         payment = payment_details(answers[requested_id], requested_id)
         if not payment:
             continue
         pix, end_id = payment
-        compatible = [r['Id'] for r in movements_in_account if pix_matches(r, pix, end_id, payer)]
+        late_key = late_postings.get(end_id)
+        if end_id in late_postings and not late_key and direct_ids(row) != {end_id}:
+            continue
+        compatible = [r['Id'] for r in movements_in_account if allows_payment(r, end_id, claims) and pix_matches(
+            r, pix, end_id, payer, allow_posting_delay=bool(late_key and r.get(movements.KEY) == late_key))]
         if compatible == [row['Id']]:
             prior = matches.get(end_id)
             if prior and prior[0] != pix:
@@ -322,19 +427,26 @@ def resolve_inbox(client, pix_rows, check, inbox=None):
             stats[f"http_{answers[identifier].get('status', 'pendente')}"] += 1
         # A notified payment returning 404 may be temporarily unavailable.
         # It remains unknown, not an eliminated competing payment.
-        if answers.get(identifier, {}).get('status') == 404:
+        answer = answers.get(identifier, {})
+        payment = payment_details(answer, identifier)
+        status = answer.get('status')
+        if status == 404 or (status == 200 and (not payment or payment[1] != identifier)):
             answers[identifier] = {'status': 'pendente'}
     options = dict.fromkeys(identifiers)
+    claims = inbox.claimed_movements()
+    late_postings = verify_late_postings(pix_rows, answers, account, payer, claims)
     for row in pix_rows:
         # Newly received IDs may add another candidate. Retry a fresh snapshot.
         if not set(inbox.pending(limit=10001)).issubset(options):
             break
         explicit = direct_ids(row)
         row_options = {key: value for key, value in options.items() if key in explicit} if explicit else options
-        match = bank_match(row, row_options, answers, pix_rows, payer)
+        match = bank_match(row, row_options, answers, pix_rows, payer, late_postings, claims)
         if not match:
             continue
         pix, canonical, _ = match
+        late_key = late_postings.get(canonical)
+        delayed = bool(late_key and row.get(movements.KEY) == late_key)
         missing = movements.text(row['RAZAOSOCIALRECEBEDOR']).upper() in ('', movements.UNKNOWN)
         fields = pix_receiver_fields(pix)
         if missing:
@@ -344,19 +456,17 @@ def resolve_inbox(client, pix_rows, check, inbox=None):
                 row.update(fields)
             continue
         try:
-            stats['nomes_gravados'] += save_pix(client, row, pix, canonical, payer, None)
+            stats['nomes_gravados'] += save_pix(client, row, pix, canonical, payer, None, allow_posting_delay=delayed)
             fresh = client.get_item_fields(row['Id'], (*IDENTITY, *EXTRA), LIST)
             if any(fresh[field] != row[field] for field in IDENTITY):
                 raise ValueError('Webhook movement changed')
-            if not pix_matches(fresh, pix, canonical, payer):
+            if not pix_matches(fresh, pix, canonical, payer, allow_posting_delay=delayed):
                 raise ValueError('Webhook movement no longer matches')
-            if any(movements.text(fresh.get(field)).casefold() != value.casefold()
-                   for field, value in fields.items()):
+            if any(not receiver_field_matches(fresh, fields, field) for field in fields):
                 continue
             row.update({field: fresh[field] for field in EXTRA})
-            for identifier in identifiers:
-                if identifier.casefold() == canonical.casefold():
-                    inbox.complete(identifier, row['Id'])
+            if inbox.complete(canonical, row['Id']):
+                claims.setdefault(row['Id'], set()).add(canonical)
         except (OSError, ValueError, RuntimeError) as error:
             stats[f'falha_gravacao_{type(error).__name__}'] += 1
     return stats
@@ -399,6 +509,7 @@ def run(check):
                             candidates[end_id] = file['content']
         if candidates:
             by_account[account][row['Id']] = (row, candidates)
+    claims = inbox.claimed_movements()
     for account, group in by_account.items():
         ids = sorted({end_id for _, options in group.values() for end_id in options})
         data = read_pix(account, ids)
@@ -416,7 +527,7 @@ def run(check):
                 else:
                     stats[f'http_{status}'] += 1
             # A refused candidate stays unresolved and still blocks ambiguous matches.
-            match = bank_match(row, options, answers, pix_rows, payer)
+            match = bank_match(row, options, answers, pix_rows, payer, claims=claims)
             if not match:
                 continue
             stats['verificados'] += 1

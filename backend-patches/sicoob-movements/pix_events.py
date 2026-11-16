@@ -118,17 +118,32 @@ class Inbox:
                 pix = result.get('resultado', result) if isinstance(result, dict) else None
                 if (answer.get('status') != 200 or not isinstance(pix, dict)
                         or pix.get('estado') != 'FINALIZADO'
-                        or not isinstance(pix.get('endToEndId'), str)
-                        or pix['endToEndId'].casefold() != identifier.casefold()):
+                        or pix.get('endToEndId') != identifier):
                     continue
                 connection.execute('''INSERT OR REPLACE INTO bank_answers
                     (id,account,payer,answer,checked_at) VALUES (?,?,?,?,?)''',
                     (identifier, account, payer, json.dumps(answer), time.time()))
 
+    def claimed_movements(self):
+        claims = {}
+        if not self.database.exists():
+            return claims
+        with closing(self.connect()) as connection:
+            for movement_id, identifier in connection.execute(
+                    'SELECT movement_id,id FROM events WHERE completed_at IS NOT NULL'):
+                claims.setdefault(movement_id, set()).add(identifier)
+        return claims
+
     def complete(self, identifier, movement_id):
         with closing(self.connect()) as connection, connection:
-            connection.execute('UPDATE events SET completed_at=?,movement_id=? WHERE id=? AND completed_at IS NULL',
-                               (time.time(), int(movement_id), identifier))
+            updated = connection.execute('''
+                UPDATE events SET completed_at=?,movement_id=? WHERE id=? AND completed_at IS NULL
+                AND NOT EXISTS (SELECT 1 FROM events AS prior WHERE prior.completed_at IS NOT NULL
+                                AND ((prior.movement_id=? AND prior.id<>?)
+                                  OR (prior.movement_id<>? AND prior.id=?)))
+                ''', (time.time(), int(movement_id), identifier, int(movement_id), identifier,
+                      int(movement_id), identifier))
+            return updated.rowcount == 1
 
 
 def make_server(inbox, port=8775):
