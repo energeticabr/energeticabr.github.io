@@ -170,10 +170,7 @@ export function createPowerBiDashboardView({
     const revision = ++openRevision;
     try {
       await setNativePinchEnabled(true);
-      if (dialog !== currentDialog || openRevision !== revision) {
-        await setNativePinchEnabled(false);
-        return false;
-      }
+      if (dialog !== currentDialog || openRevision !== revision) return false;
       powerBiClient ||= await createPowerBiClient();
       if (dialog !== currentDialog || openRevision !== revision) return false;
       report = powerBiClient.embed(reportContainer, {

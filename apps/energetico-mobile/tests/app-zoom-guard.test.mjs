@@ -79,11 +79,36 @@ test('Power BI close resets page viewport before returning to protected app menu
   assert.match(viewport.content, /maximum-scale=1/);
   await report.open({ accessToken: 'test', getAccessToken: async () => 'test' });
   assert.match(viewport.content, /viewport-fit=cover/);
-  assert.match(viewport.content, /maximum-scale=5/);
+  assert.equal(viewport.content, 'width=device-width, viewport-fit=cover, initial-scale=1, minimum-scale=1, maximum-scale=2');
   report.close();
   assert.match(viewport.content, /initial-scale=1/);
   assert.match(viewport.content, /maximum-scale=1/);
   assert.equal(doc.querySelector('.powerbi-dashboard'), null);
+});
+
+test('an opening cancelled by close cannot turn off pinch for a reopened Power BI report', async t => {
+  const dom = new JSDOM('<meta name="viewport" content="width=device-width, viewport-fit=cover">');
+  const zoomCalls = [];
+  const firstEnable = Promise.withResolvers();
+  const view = createPowerBiDashboardView({
+    documentRef: dom.window.document,
+    powerBiClient: { models: { TokenType: { Aad: 0 } }, embed: () => ({ on() {}, off() {} }), reset() {} },
+    powerBiZoom: {
+      setEnabled(options) {
+        zoomCalls.push(options);
+        return zoomCalls.length === 1 ? firstEnable.promise : Promise.resolve();
+      },
+    },
+  });
+  t.after(() => { view.destroy(); dom.window.close(); });
+  const options = { accessToken: 'test', getAccessToken: async () => 'test' };
+  const cancelled = view.open(options);
+  view.close();
+  assert.equal(await view.open(options), true);
+  firstEnable.resolve();
+  assert.equal(await cancelled, false);
+  assert.deepEqual(zoomCalls.map(call => call.enabled), [true, false, true]);
+  assert.ok(dom.window.document.querySelector('.powerbi-dashboard'));
 });
 
 test('a raised field can grow with subsequent typography instead of retaining a permanent 16px cap', async t => {
