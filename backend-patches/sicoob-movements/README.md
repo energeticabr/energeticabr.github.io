@@ -33,7 +33,9 @@ Para conferir documentos pendentes e consultas sem gravação, execute
 `sync_boleto_receipts.py --check` com o ambiente da unidade.
 
 Para Pix, o nome vem do extrato Sicoob ou da consulta direta por EndToEndId
-com escopo `pixpagamentos_consulta`. Se o extrato trouxer apenas o CPF
+com escopo `pixpagamentos_consulta`. Se o extrato omitir o nome e informar
+o CNPJ completo, a importação consulta a razão social no OpenCNPJ e confere
+o CNPJ devolvido. Se o extrato trouxer apenas o CPF
 mascarado, o coletor pode localizar o identificador completo em um comprovante
 Sicoob arquivado em LANCAMENTOS. Só grava a resposta do banco se o débito
 corresponder de forma única à conta, ao titular, à data, ao valor e ao documento
@@ -50,6 +52,10 @@ contém um segredo aleatório; não deve aparecer em logs ou relatórios. Campos
 de nome enviados ao webhook são ignorados. O coletor consulta os identificadores
 pela API autenticada e exige a mesma correspondência financeira e unicidade
 usadas na consulta histórica antes de completar os campos vazios.
+Para lançamento em lote até três dias depois da efetivação, o coletor relê
+o extrato e confirma a chave do único débito compatível. Com identificação
+parcial do extrato, aguarda o fechamento da janela antes de conciliar.
+Cada débito é reservado à notificação bancária que o conciliou.
 
 Cada execução consulta até 100 identificadores em lotes de 25, no limite de
 tempo disponível. Respostas bancárias de pagamentos finalizados ficam salvas

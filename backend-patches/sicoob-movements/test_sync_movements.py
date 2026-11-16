@@ -2,6 +2,7 @@ import tempfile
 import unittest
 from datetime import date
 from pathlib import Path
+from unittest.mock import patch
 
 from sync_movements import (BACKFILL_START, BACKFILL_END, NEW_START, import_movements,
                             monthly_windows, payment_rows, public_receiver_name, receiver_names, save_movement, scheduled_start)
@@ -132,6 +133,77 @@ class MovementImportTests(unittest.TestCase):
         stored['VALOR'] = row['VALOR']
         self.assertFalse(save_movement(Existing(), row))
         self.assertEqual(row['RAZAOSOCIALRECEBEDOR'], 'Recebedor confirmado')
+
+    def test_pix_names_new_and_existing_debits_from_the_bank_cnpj(self):
+        from types import SimpleNamespace
+        document = '18189352000100'
+        payload = {'transacoes': [self.transaction(
+            cpfCnpj=None, descInfComplementar='Pagamento Pix|@18.189.352 0001-00|@')]}
+        source = payment_rows(payload, BACKFILL_START, BACKFILL_END, '12', {})[0]
+        name = 'Empresa do CNPJ'
+        company = {'cnpj': document, 'razao_social': name}
+        for existing in (False, True):
+            with self.subTest(existing=existing):
+                stored = dict(source, RAZAOSOCIALRECEBEDOR=None)
+                def get_fields(item, fields, target):
+                    return {field: stored.get(field) for field in fields}
+                def insert(_, values, **options):
+                    stored.update(values)
+                    return 8
+                def update(item, values, etag, target):
+                    self.assertEqual(etag, 'snapshot')
+                    stored.update(values)
+                client = SimpleNamespace(
+                    _find_item=lambda *args: {'Id': 8} if existing else None,
+                    get_item_fields=get_fields, ensure_item=insert,
+                    get_item_fields_with_etag=lambda *args: (get_fields(*args), 'snapshot'),
+                    update_item_with_etag=update)
+                with patch('sync_movements.fetch_pix_company', return_value=company) as lookup:
+                    self.assertEqual(save_movement(client, dict(source)), not existing)
+                lookup.assert_called_once_with(document)
+                self.assertEqual(stored['RAZAOSOCIALRECEBEDOR'], name)
+                self.assertEqual(stored['VALOR'], source['VALOR'])
+
+    def test_pix_cnpj_lookup_never_uses_cpf_or_replaces_bank_statement_name(self):
+        from types import SimpleNamespace
+        document = '18189352000100'
+        wrong = {'cnpj': '00394460000141', 'razao_social': 'Outro CNPJ'}
+        for doc, supplied, expected in ((document, 'Nome do banco', 'Nome do banco'),
+                                        ('12345678900', '', None), (document, '', None)):
+            with self.subTest(doc=doc, supplied=supplied):
+                raw = self.transaction(cpfCnpj=doc, descInfComplementar=f'FAV.: {supplied}' if supplied else 'Pix')
+                row = payment_rows({'transacoes': [raw]}, BACKFILL_START, BACKFILL_END, '12', {})[0]
+                saved = {}
+                def insert(_, values, **options):
+                    saved.update(values)
+                    return 1
+                client = SimpleNamespace(_find_item=lambda *args: None, ensure_item=insert,
+                                         get_item_fields=lambda *args: saved)
+                with patch('sync_movements.fetch_pix_company', return_value=wrong) as lookup:
+                    self.assertTrue(save_movement(client, row))
+                self.assertEqual(saved.get('RAZAOSOCIALRECEBEDOR'), expected)
+                self.assertEqual(lookup.call_count, int(doc == document and not supplied))
+
+    def test_existing_pix_cnpj_keeps_name_saved_after_its_snapshot(self):
+        from requests import HTTPError, Response
+        from types import SimpleNamespace
+        document = '18189352000100'
+        raw = self.transaction(cpfCnpj=document)
+        row = payment_rows({'transacoes': [raw]}, BACKFILL_START, BACKFILL_END, '12', {})[0]
+        stored = dict(row, RAZAOSOCIALRECEBEDOR='')
+        def get_fields(item, fields, target):
+            return {field: stored.get(field) for field in fields}
+        def update(item, values, etag, target):
+            stored['RAZAOSOCIALRECEBEDOR'] = 'Nome confirmado em paralelo'
+            response = Response()
+            response.status_code = 412
+            raise HTTPError(response=response)
+        client = SimpleNamespace(_find_item=lambda *args: {'Id': 8},
+            get_item_fields=get_fields, get_item_fields_with_etag=lambda *args: (get_fields(*args), 'snapshot'),
+            update_item_with_etag=update)
+        with patch('sync_movements.fetch_pix_company', return_value={'cnpj': document, 'razao_social': 'Nome do cadastro'}):
+            self.assertFalse(save_movement(client, row))
+        self.assertEqual(row['RAZAOSOCIALRECEBEDOR'], 'Nome confirmado em paralelo')
 
     def test_reads_sicoob_favoured_party_and_structured_document(self):
         payload = {'transacoes': [
