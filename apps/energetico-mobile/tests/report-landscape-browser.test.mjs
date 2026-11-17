@@ -28,6 +28,8 @@ test('GANTT abre na horizontal e ocupa toda a altura, incluindo o fundo da área
     assert.ok(Math.abs(layout.height-Math.min(width,height))<1,JSON.stringify(layout));
     assert.ok(Math.abs(layout.bottomInset-expectedBottomInset)<1,JSON.stringify(layout));
     assert.ok(layout.closeReachable&&layout.closed,JSON.stringify(layout));
+    assert.deepEqual(layout.clusterColors,{start:'rgb(36, 114, 58)',end:'rgb(170, 40, 57)',responsible:'rgb(23, 93, 155)'});
+    assert.ok(layout.labelWidth<=230&&layout.clustersFit&&layout.noTodos,JSON.stringify(layout));
    }finally{dom.window.close();}
   }
  }finally{await server.close();}

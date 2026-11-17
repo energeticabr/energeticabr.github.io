@@ -27,7 +27,7 @@ test('GANTT expande as atividades abaixo da etapa e exibe datas e estados das ba
   assert.equal(toggle.textContent, '+');
   assert.equal(toggle.getAttribute('aria-expanded'), 'false');
   assert.equal(dialog.querySelectorAll('.gantt-row--activity').length, 0);
-  assert.match(dialog.querySelector('[data-tone="ongoing"]').getAttribute('aria-label'), /01\/11\/2026.*Hoje.*16\/11\/2026/);
+  assert.match(dialog.querySelector('[data-tone="ongoing"]').getAttribute('aria-label'), /01\/11\/2026.*Em Andamento/);
 
   toggle.click();
   assert.equal(toggle.textContent, '−');
@@ -46,6 +46,40 @@ test('GANTT expande as atividades abaixo da etapa e exibe datas e estados das ba
   dialog.querySelector('button[aria-label="Fechar GANTT"]').click();
   assert.equal(dialog.hidden, true);
   assert.equal(document.activeElement, home);
+});
+
+test('GANTT separa datas e responsável em clusters e usa o status mesmo com datas incompletas', async t => {
+  const dom = new JSDOM('<!doctype html>');
+  t.after(() => dom.window.close());
+  const view = createStageGanttView({ document: dom.window.document, data: {
+    loadSnapshot: async () => ({ complete: true,
+      launches: [{ id: 1, branch: 'Xavante', stage: 'Estrutura', type: 'ATIVIDADE COMUM',
+        status: 'INICIADO', startDate: '2026-08-10', endDate: '2026-12-01' }],
+      activities: [
+        { id: 1, branch: 'Xavante', stage: 'Estrutura', activity: 'Parede', property: ' TODOS ',
+          supplier: 'EDGAR NELSON DA SILVA', status: 'ATIVIDADE FINALIZADA', executionDate: '2026-06-19', plannedDate: '2026-09-14' },
+        { id: 2, branch: 'Xavante', stage: 'Estrutura', activity: 'Gabarito', property: 'Casa 2',
+          supplier: '', status: 'ATIVIDADE FINALIZADA', executionDate: '', plannedDate: '2026-09-07' },
+        { id: 3, branch: 'Xavante', stage: 'Estrutura', activity: 'Armação', property: 'todos',
+          supplier: '', status: 'ATIVIDADE INICIADA', executionDate: '2026-08-10', plannedDate: '2026-11-13' },
+      ],
+    }),
+  }});
+  t.after(() => view.destroy());
+  await view.open();
+  view.element.querySelector('.gantt-toggle').click();
+  const rows = [...view.element.querySelectorAll('.gantt-row--stage,.gantt-row--activity')];
+  const row = name => rows.find(node => node.querySelector('.gantt-name').textContent === name);
+  assert.equal(row('Estrutura').querySelector('.gantt-cluster--start').textContent, '10/08/2026');
+  assert.equal(row('Estrutura').querySelector('.gantt-cluster--end').textContent, 'Em Andamento');
+  assert.equal(row('Parede').querySelector('.gantt-cluster--start').textContent, '19/06/2026');
+  assert.equal(row('Parede').querySelector('.gantt-cluster--end').textContent, '14/09/2026');
+  assert.equal(row('Parede').querySelector('.gantt-cluster--responsible').textContent, 'EDGAR NELSON DA SILVA');
+  assert.equal(row('Gabarito').querySelector('.gantt-cluster--end').textContent, '07/09/2026');
+  assert.equal(row('Gabarito').querySelector('.gantt-cluster--responsible'), null);
+  assert.match(row('Gabarito').textContent, /Casa 2/);
+  assert.equal(row('Armação').querySelector('.gantt-cluster--end').textContent, 'Em Andamento');
+  for (const node of rows) assert.doesNotMatch(node.textContent, /TODOS|Início|Fim|Hoje/i);
 });
 
 test('GANTT abre em Xavante, permite trocar a filial e mantém a escolha ao atualizar', async t => {
