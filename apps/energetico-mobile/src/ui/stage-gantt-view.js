@@ -2,6 +2,7 @@ import { buildStageGantt } from '../chat/stage-progress-model.js';
 import { calendarDays, formatOperationsDate } from '../chat/operations-reports-model.js';
 import { addReportCloseControl } from './report-close-control.js';
 import { bindReportLandscape } from './report-landscape.js';
+import { createStageGanttDetailView } from './stage-gantt-detail-view.js';
 
 const DEFAULT_BRANCH = '004 - EDIFÍCIO XAVANTE';
 const monthLabel = new Intl.DateTimeFormat('pt-BR', { month: 'short', year: 'numeric', timeZone: 'UTC' });
@@ -54,12 +55,14 @@ export function createStageGanttView({ document: doc = globalThis.document, data
   root.append(dialog);
   doc.body.append(root);
   addReportCloseControl({ root, toolbar: tools, onClose: close });
+  const detail = createStageGanttDetailView({ root, background: dialog, data });
 
   let request, previousFocus, previousOverflow, previousInert, app;
   let stages = [], today = '', todayRatio = null;
   const announce = message => { notice.textContent = message; notice.hidden = !message; };
 
   function render() {
+    detail.close({ restoreFocus: false });
     const visible = stages.filter(stage => !branches.value || stage.branch === branches.value);
     scroll.replaceChildren();
     scroll.scrollLeft = scroll.scrollTop = 0;
@@ -141,12 +144,14 @@ export function createStageGanttView({ document: doc = globalThis.document, data
       if (item.range) {
         const { start: from, end: to, tone } = item.range;
         const days = calendarDays(from, to) + 1;
-        const bar = make('div', 'gantt-bar', days === 1 ? '1 dia' : `${days} dias`);
+        const bar = button(days === 1 ? '1 dia' : `${days} dias`);
+        bar.className = 'gantt-bar';
         const status = tone === 'finished' ? 'Finalizada' : 'Em andamento';
         const description = `${item.name} · ${status} · ${dates} · ${bar.textContent}`;
         bar.dataset.tone = tone;
-        bar.setAttribute('role', 'img');
         bar.setAttribute('aria-label', description);
+        bar.setAttribute('aria-haspopup', 'dialog');
+        bar.addEventListener('click', () => { void detail.open(item, bar); });
         bar.title = description;
         bar.style.left = percent(calendarDays(start, from));
         bar.style.width = percent(days);
@@ -186,6 +191,7 @@ export function createStageGanttView({ document: doc = globalThis.document, data
   }
 
   async function load(force = false) {
+    detail.close({ restoreFocus: false });
     request?.abort();
     const active = new AbortController();
     request = active;
@@ -219,6 +225,7 @@ export function createStageGanttView({ document: doc = globalThis.document, data
 
   function close() {
     if (root.hidden) return;
+    detail.close({ restoreFocus: false });
     request?.abort();
     root.hidden = true;
     scroll.replaceChildren();
@@ -266,6 +273,6 @@ export function createStageGanttView({ document: doc = globalThis.document, data
       return load();
     },
     close,
-    destroy() { close(); landscape.destroy(); root.remove(); },
+    destroy() { close(); detail.destroy(); landscape.destroy(); root.remove(); },
   };
 }

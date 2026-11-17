@@ -8416,7 +8416,7 @@ export function createAppController({
       const finalizingStage = method === 'finalizeStage';
       const writing = finalizingStage || method === 'finalizeActivity';
       const resumeOptions = writing ? { stageFinishDraft: { id: args[0], date: args[1], ...(finalizingStage ? { kind: 'stage' } : {}) } } : undefined;
-      const getToken = ordersGalleryTokenProvider(assertAction, STAGE_PROGRESS_ID, () => resumeOptions);
+      const getToken = ordersGalleryTokenProvider(assertAction, writing ? STAGE_PROGRESS_ID : resumeAction, () => resumeOptions);
       const writeScopes = ['Sites.ReadWrite.All'];
       try {
         // Finish consent before checking linked descriptions so the write does not
@@ -8518,7 +8518,9 @@ export function createAppController({
         if (!report) {
           const document = globalThis.document;
           const panel = gantt
-            ? await ganttFactory({ data: { loadSnapshot: data.loadSnapshot }, document })
+            ? await ganttFactory({ data: { loadSnapshot: data.loadSnapshot,
+              loadAssignments: (selection, options) => runStageAction('loadGanttAssignments', [selection], options),
+            }, document })
             : decorateControllerReport(await stageProgressFactory({ data, document }), 'open-stage-progress');
           try { assertSession(); }
           catch (error) { panel?.destroy?.(); throw error; }

@@ -111,11 +111,14 @@ export function buildStageGantt(snapshot, today) {
   return stages.filter(stage => stage.stage.trim()).map(stage => ({
     name: stage.launch?.stage || stage.stage,
     branch: stage.launch?.branch || stage.branch,
+    activityIds: stage.rows.map(row => row.id),
     start: stage.startDate,
     end: stage.endDate,
     finished: stage.status.trim().toUpperCase() === 'FINALIZADO',
     range: ganttRange(stage.startDate, stage.endDate, stage.status, day),
     children: stage.rows.map(row => ({
+      branch: row.branch,
+      activityIds: [row.id],
       name: row.activity || "Atividade sem descrição",
       property: row.property,
       supplier: row.supplier,
