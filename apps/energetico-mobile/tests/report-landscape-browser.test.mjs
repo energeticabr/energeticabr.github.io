@@ -7,6 +7,27 @@ import {createServer} from 'vite';
 import {JSDOM} from 'jsdom';
 import {runBrowserLayout} from './helpers/browser-layout-runner.mjs';
 
+test('clique na barra do GANTT abre profissões e expande pessoas em retrato, paisagem e desktop',{timeout:90000},async t=>{
+ const browser=[process.env.CHROME_BIN,'C:\\Program Files\\Google\\Chrome\\Application\\chrome.exe','/usr/bin/google-chrome','/usr/bin/chromium'].find(path=>path&&existsSync(path));
+ if(!browser)return t.skip('Chrome unavailable');
+ const server=await createServer({root:resolve(fileURLToPath(new URL('..',import.meta.url))),server:{host:'127.0.0.1',port:0},logLevel:'silent'});
+ try {
+  await server.listen();
+  for(const [width,height] of [[390,844],[844,390],[1365,1000]]) {
+   const url=`http://127.0.0.1:${server.httpServer.address().port}/tests/fixtures/report-landscape.html?gantt&gantt-detail`;
+   const {stdout}=await runBrowserLayout(browser,{width,height,url});
+   const dom=new JSDOM(stdout);
+   try {
+    const detail=JSON.parse(dom.window.document.documentElement.dataset.detail);
+    assert.ok(detail.barReachable&&detail.fits&&!detail.overflow&&detail.closed&&detail.graphOpen,JSON.stringify(detail));
+    assert.ok(detail.controls.every(Boolean),JSON.stringify(detail));
+    assert.deepEqual(detail.selection,{branch:'004 - EDIFÍCIO XAVANTE',activityIds:['1']});
+    assert.deepEqual(detail.rows,[['JOÃO SILVA','2','19/06/2026','20/06/2026'],['JOSÉ SANTOS','1','20/06/2026','20/06/2026']]);
+   }finally{dom.window.close();}
+  }
+ }finally{await server.close();}
+});
+
 test('GANTT abre na horizontal e ocupa toda a altura, incluindo o fundo da área segura',{timeout:90000},async t=>{
  const browser=[process.env.CHROME_BIN,'C:\\Program Files\\Google\\Chrome\\Application\\chrome.exe','/usr/bin/google-chrome','/usr/bin/chromium'].find(path=>path&&existsSync(path));
  if(!browser)return t.skip('Chrome unavailable');

@@ -1,7 +1,7 @@
 import Decimal from 'decimal.js';
 import { bindBackdropDismiss } from '../../../../portal/ui/backdrop-dismiss.js';
 import {
-  nfeProposalAmounts, nfeProposalStages, nfeProposalUnitMismatch, updateNfeProposalBranch,
+  nfeProposalAmounts, nfeProposalStages, nfeProposalUnit, updateNfeProposalBranch,
   updateNfeProposalProduct, updateNfeProposalSupplier, validateNfeProposal,
 } from '../chat/nfe-proposal-model.js';
 import { bindSearchableFilterSelects } from './searchable-filter-selects.js';
@@ -168,7 +168,7 @@ export function createNfeProposalView({ document:doc, host, service, onPosted, o
         const invoiceUnit = fiscal.lines[index].unit;
         const catalogUnit = entry.catalog.products.find(option => option.id === line.productId)?.unit;
         summaries[index].textContent = [
-          product, stage, `${line.quantity} ${catalogUnit || invoiceUnit || ''} × ${line.unitPrice}`.trim(), value,
+          product, stage, `${line.quantity} ${nfeProposalUnit(entry.legacyUnits ? '' : invoiceUnit, catalogUnit)} × ${line.unitPrice}`.trim(), value,
           `Data ${displayDate(line.date)}`, line.dueDate && `Vencimento ${displayDate(line.dueDate)}`,
         ].filter(Boolean).join(' · ');
       });
@@ -244,27 +244,14 @@ export function createNfeProposalView({ document:doc, host, service, onPosted, o
           const line = entry.draft.lines[index];
           const fields = el('fieldset', 'nfe-proposal-fields');
           editor.append(el('p', 'nfe-proposal-hint',
-            `XML · ${original.quantity} ${original.unit || ''} × ${original.unitPrice} · Confira a unidade do cadastro ao revisar a quantidade.`), fields);
-          const unitCheck = el('label', 'nfe-proposal-unit-check');
-          const unitReviewed = el('input');
-          unitReviewed.type = 'checkbox';
-          const unitHint = el('span');
-          unitCheck.append(unitReviewed, unitHint);
-          const syncUnit = () => {
-            const saved = entry.draft.lines[index];
-            const catalogUnit = catalog.products.find(option => option.id === saved.productId)?.unit;
-            unitCheck.hidden = !nfeProposalUnitMismatch(original.unit, catalogUnit);
-            unitReviewed.checked = saved.unitReviewed === true;
-            unitHint.textContent = `Conferi a quantidade. A nota usa ${original.unit} e o cadastro usa ${catalogUnit}.`;
-          };
-          unitReviewed.addEventListener('change', () => {
-            if (!entry.reserved && !entry.busy) entry.draft.lines[index].unitReviewed = unitReviewed.checked;
-          });
+            `XML · ${original.quantity} ${original.unit || ''} × ${original.unitPrice} · ${entry.legacyUnits
+              ? 'Este envio já iniciado mantém a unidade reservada anteriormente.' : original.unit?.trim()
+              ? 'A unidade da nota fiscal será usada automaticamente.'
+              : 'Sem unidade na nota fiscal. Será usada a unidade do cadastro.'}`), fields);
           const product = field(fields, 'Produto', 'productId', 'select', value => {
             entry.manualStages.delete(String(line.number));
             entry.draft = updateNfeProposalProduct(entry.draft, line.number, value, catalog);
             updateStages();
-            syncUnit();
           });
           populate(product, catalog.products, line.productId, 'Selecione o produto');
           stageControls[index] = field(fields, 'Etapa', 'stageId', 'select', value => {
@@ -279,8 +266,6 @@ export function createNfeProposalView({ document:doc, host, service, onPosted, o
             const control = field(fields, label, name, type, value => { entry.draft.lines[index][name] = value; });
             control.value = line[name] || '';
           }
-          fields.append(unitCheck);
-          syncUnit();
           lock();
           pickers.set(editor, bindSearchableFilterSelects(fields, pickerOptions));
         });

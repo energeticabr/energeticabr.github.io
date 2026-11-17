@@ -373,11 +373,3 @@
 .nfe-proposal-dialog .nfe-proposal-submit { background: #07566b; color: #fff; }
 .nfe-proposal-dialog :is(.nfe-proposal-header,.nfe-proposal-footer) button:disabled { opacity: .55; cursor: default; }
 @media print { .nfe-proposal-overlay { display: none !important; } }
-.nfe-proposal-fields .nfe-proposal-unit-check {
-  grid-column: 1 / -1;
-  display: flex;
-  align-items: center;
-  gap: 8px;
-}
-.nfe-proposal-unit-check[hidden] { display: none !important; }
-.nfe-proposal-unit-check input[type="checkbox"] { width: 20px; min-height: 20px; accent-color: #07566b; }

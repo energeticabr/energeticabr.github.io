@@ -1,5 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
+import { createHash } from 'node:crypto';
 import * as data from '../src/chat/nfe-proposal-data.js';
 import { provisionChildrenTotal } from '../../../portal/forms/provision-parent-workflow.js';
 import {
@@ -137,10 +138,56 @@ test('uses the original unit price and cent-exact financial adjustment with stan
   assert.equal('field_4' in fields, false);
 });
 
-test('requires a quantity review when the invoice and selected product use different units', () => {
-  const current = { ...fiscal, lines:[{ ...fiscal.lines[0],unit:'CX' }] };
+test('uses the fiscal unit without a checkbox or quantity conversion despite the catalog unit', () => {
+  const current = { ...fiscal, total:'769.00', lines:[{ ...fiscal.lines[0], unit:'TN',
+    quantity:'8.4', unitPrice:'91.54762', discount:'0', adjustment:'0' }] };
   const draft = buildNfeProposal(invoice, current, catalog);
-  assert.throws(() => validateNfeProposal(draft,current,catalog), /unidade.*quantidade/i);
-  draft.lines[0].unitReviewed = true;
-  assert.equal(validateNfeProposal(draft,current,catalog).lines[0].unitReviewed, true);
+  // A caller cannot replace the XML unit through an editable or stale draft.
+  draft.lines[0].unit = 'KG';
+  const row = { type:'NF-e', number:'175754', key:'example' };
+  const launch = data.materializeNfeProposal(row, current, draft, catalog);
+  assert.equal(launch.launchFields[0].fields.UN, 'TN');
+  assert.equal(launch.launchFields[0].fields.field_8, 8.4);
+  assert.equal(launch.launchFields[0].fields.field_9, 91.54762);
+  assert.equal(launch.orderFields.VALORTOTAL, '769,00');
+  const provision = data.materializeNfeProvision(row, current, draft, catalog);
+  assert.equal(provision.draft.lines[0].unit, 'TN');
+  assert.equal(provision.provisionFields[0].fields.QTD, '8,4');
+  assert.match(provision.provisionFields[0].fields.OBS, /8\.4 TN/);
+  assert.equal(provision.parentFields.VALORTOTAL, '769');
+  assert.equal(catalog.products[0].unit, 'KG');
+});
+
+test('fiscal unit works without a catalog unit and catalog is only a fallback for a unitless invoice', () => {
+  const withoutUnit = { ...catalog, products:catalog.products.map(product => ({ ...product, unit:'' })) };
+  const draft = buildNfeProposal(invoice, fiscal, withoutUnit);
+  assert.equal(validateNfeProposal(draft, fiscal, withoutUnit).lines[0].unit, 'KG');
+  const unitless = { ...fiscal, lines:[{ ...fiscal.lines[0], unit:'  ' }] };
+  assert.equal(validateNfeProposal(draft, unitless, catalog).lines[0].unit, 'KG');
+  assert.throws(() => validateNfeProposal(draft, unitless, withoutUnit), /unidade/i);
+});
+
+test('legacy reserved plans retain their frozen draft and financial unit semantics', () => {
+  const current = { ...fiscal, lines:[{ ...fiscal.lines[0], unit:'TN' }] };
+  const reserved = { supplierId:'2', branchId:'11', accountId:'20', date:'2026-11-08',
+    lines:[{ number:'1', productId:'30', stageId:'40', quantity:'2', unitPrice:'10',
+      adjustment:'0.50', discount:'1.00', date:'2026-11-08', dueDate:'2026-11-15', unitReviewed:true }] };
+  const row = { type:'NF-e', number:'175754', key:'example' };
+  const launch = data.materializeNfeProposal(row, current, reserved, catalog, { legacyUnits:true });
+  assert.deepEqual(launch.draft, reserved);
+  assert.equal(launch.launchFields[0].fields.UN, 'KG');
+  const provision = data.materializeNfeProvision(row, current, reserved, catalog, { legacyUnits:true });
+  assert.deepEqual(provision.draft, reserved);
+  assert.equal(provision.provisionFields[0].fields.OBS, 'NF-e nº 175754 · Item 1: AÇO CA-50 8MM');
+  const canonical = value => Array.isArray(value) ? `[${value.map(canonical).join(',')}]`
+    : value && typeof value === 'object' ? `{${Object.keys(value).sort().map(key => `${JSON.stringify(key)}:${canonical(value[key])}`).join(',')}}`
+      : JSON.stringify(value);
+  const hash = value => createHash('sha256').update(canonical(value)).digest('hex');
+  // Captured from the unchanged materializers at HEAD 24b0d55.
+  assert.equal(hash(launch), 'b5dea5a0ad748263037eefae176facd9a0bce6022795daffa65a4432cf415624');
+  assert.equal(hash(provision), 'bdcdf081f4a16bfd2cbb8e71ad8ce6d0a2dbee6246c1d2d3578f517256d280da');
+  const fresh = data.materializeNfeProposal(row, current, reserved, catalog);
+  assert.equal(fresh.launchFields[0].fields.UN, 'TN');
+  assert.equal(fresh.draft.lines[0].unit, 'TN');
+  assert.equal(Object.hasOwn(fresh.draft.lines[0], 'unitReviewed'), false);
 });

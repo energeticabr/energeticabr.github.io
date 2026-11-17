@@ -11,12 +11,15 @@ const MAX_TOTAL_PAGES = 10_000;
 const LISTS = {
   activities: ["DEMONSTRATIVOETAPA"], launches: ["LANCAMENTOOBRA"],
   assignments: ["DESCRITIVOPRESENCA", "DESCRITIVO PRESENCA"],
+  ganttAssignments: ["DESCRITIVOPRESENCA", "DESCRITIVO PRESENCA"],
 };
 const STARTED = "ATIVIDADE INICIADA";
 const FINALIZED = "ATIVIDADE FINALIZADA";
 const isItemId = id => /^[1-9]\d*$/.test(id) && Number.isSafeInteger(Number(id));
 const SCHEMA = {
   assignments: [["IDDESCRITIVOETAPA", "ID DESCRITIVO ETAPA"], ["DATA"], ["FORNECEDOR"]],
+  ganttAssignments: [["IDDESCRITIVOETAPA", "ID DESCRITIVO ETAPA"], ["DATA"], ["FORNECEDOR"],
+    ["PROFISSAO", "PROFISSÃO"], ["PRESENCA", "PRESENÇA"], ["FILIAL"]],
   activities: [["FILIAL"], ["ETAPA"], ["ATIVIDADEEXECUTADA", "ATIVIDADE EXECUTADA"], ["IMOVEL", "IMÓVEL"],
     ["FORNECEDOR"], ["DATAEXECUTADO"], ["DATAPREVISTO"], ["STATUS"]],
   launches: [["FILIAL"], ["ETAPA"], ["INÍCIO", "INICIO"], ["FIM"], ["STATUS"],
@@ -172,6 +175,41 @@ export function createStageProgressData({ tokenProvider, repository: suppliedRep
     });
   }
 
+  async function loadGanttAssignments({ branch, activityIds } = {}, { signal } = {}) {
+    if (typeof branch !== 'string' || !branch.trim() || !Array.isArray(activityIds)) {
+      throw new TypeError('Informe a filial e os IDs dos demonstrativos.');
+    }
+    const selected = new Set(activityIds.map(requireActivityId));
+    return withRepository(signal, async (repository, activeSignal) => {
+      if (!selected.size) return Object.freeze({ complete: true, rows: Object.freeze([]) });
+      const { id, columns } = await resolveSchema(repository, 'ganttAssignments', activeSignal);
+      const [reference, date, supplier, profession, presence, filial] = columns;
+      const referenceField = reference.lookup ? `${reference.name}LookupId` : reference.name;
+      const branchKey = stageReportGroupKey({ branch, stage: '' });
+      const normalize = ({ id: itemId, fields }) => {
+        const activityId = scalar(fields[referenceField]);
+        if (!selected.has(activityId) || scalar(fields[presence.name]).toUpperCase() !== 'PRESENTE'
+          || !scalar(fields[supplier.name])
+          || stageReportGroupKey({ branch: scalar(fields[filial.name]), stage: '' }) !== branchKey) return null;
+        const day = normalizeStageProgressDate(scalar(fields[date.name]));
+        if (!day) throw new TypeError('Presença vinculada sem data.');
+        return Object.freeze({ id: String(itemId), activityId, date: day,
+          supplier: scalar(fields[supplier.name]), profession: scalar(fields[profession.name]) });
+      };
+      const $expand = `fields($select=${[referenceField, ...columns.slice(1).map(column => column.name)].join(',')})`;
+      let rows;
+      try {
+        rows = await readCompleteList(repository, id, activeSignal, normalize, {
+          $expand, $filter: `fields/${filial.name} eq '${branch.trim().replace(/'/g, "''")}'`,
+        });
+      } catch (error) {
+        if (error?.status !== 400) throw error;
+        rows = await readCompleteList(repository, id, activeSignal, normalize, { $expand });
+      }
+      return Object.freeze({ complete: true, rows: Object.freeze(rows.filter(Boolean)) });
+    });
+  }
+
   async function loadLatestAssignmentDate(activityId, { signal } = {}) {
     const itemId = requireActivityId(activityId);
     return withRepository(signal, async (repository, activeSignal) => {
@@ -261,5 +299,5 @@ export function createStageProgressData({ tokenProvider, repository: suppliedRep
     });
   }
 
-  return Object.freeze({ loadSnapshot, loadLatestAssignmentDate, finalizeActivity, finalizeStage });
+  return Object.freeze({ loadSnapshot, loadGanttAssignments, loadLatestAssignmentDate, finalizeActivity, finalizeStage });
 }
