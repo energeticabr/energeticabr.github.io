@@ -104,16 +104,16 @@ export function createManagementReportView({document:doc=globalThis.document,dat
         cell(total,'percentage',percent(branch.percentage));body.append(total);
       }
     }
-    if(result.incompleteCount)showNotice(`${result.incompleteCount} lançamento(s) com valores incompletos. Totais afetados aparecem como INCOMPLETO.`);
-    else if(!result.count&&!result.expenseBranches.length)showNotice('Nenhum lançamento corresponde aos filtros.');
+    if(result.incompleteCount)showNotice(`${result.incompleteCount} registro(s) com valores incompletos. Totais afetados aparecem como INCOMPLETO.`);
+    else if(!result.count&&!result.expenseBranches.length)showNotice('Nenhum lançamento ou provisão corresponde aos filtros.');
   }
   function populate() {
     pickers?.destroy();pickers=null;
     for(const [name] of FIELDS) {
       const control=controls.get(name),current=control.value;
       const values=name==='year'?[String(now().getFullYear()),...snapshot.launches.flatMap(row=>
-        [row.date,row.paymentDate||row.expectedPaymentDate].map(date=>date?.slice(0,4)))]
-        :name==='month'?MONTHS.map((_,i)=>String(i+1)):snapshot.launches.map(row=>row[name]);
+        [row.date,row.paymentDate].map(date=>date?.slice(0,4))),...snapshot.provisions.map(row=>row.dueDate?.slice(0,4))]
+        :name==='month'?MONTHS.map((_,i)=>String(i+1)):[...snapshot.launches,...snapshot.provisions].map(row=>row[name]);
       const unique=[...new Set(values.filter(Boolean).map(String))].sort((a,b)=>name==='year'?Number(b)-Number(a):name==='month'?Number(a)-Number(b):a.localeCompare(b,'pt-BR'));
       control.replaceChildren(Object.assign(make('option','','Todos'),{value:''}));
       for(const value of unique)control.append(Object.assign(make('option','',name==='month'?MONTHS[Number(value)-1]:value),{value}));
@@ -128,7 +128,7 @@ export function createManagementReportView({document:doc=globalThis.document,dat
     try {
       const result=await data.loadSnapshot({reportNumber:9,signal:active.signal});
       if(active.signal.aborted||current!==revision||root.hidden||destroyed)return;
-      if(!Array.isArray(result?.launches)||!Array.isArray(result?.productTypes))throw new Error('O SharePoint retornou dados incompletos para o resumo gerencial.');
+      if(![result?.launches,result?.productTypes,result?.provisions].every(Array.isArray))throw new Error('O SharePoint retornou dados incompletos para o resumo gerencial.');
       snapshot={...result,launches:result.launches.map(row=>({...row,disbursement:row.disbursement==='true'?'SIM':row.disbursement==='false'?'NÃO':row.disbursement}))};populate();render();
     } catch(error) {
       if(active.signal.aborted||current!==revision||root.hidden||destroyed)return;

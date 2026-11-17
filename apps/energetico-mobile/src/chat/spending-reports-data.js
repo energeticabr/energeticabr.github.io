@@ -4,7 +4,7 @@ import { createSharePointRepository } from "../../../../portal/data/sharepoint-r
 import { createSharePointAttachmentTransport } from '../../../../portal/data/attachments.js';
 import { PROVISION_FISCAL_DRAFT_STATUS } from '../../../../portal/forms/provision-parent-due.js';
 import { provisionDescriptionLinkColumn, publishedProvisionRows } from './provision-description-detail-data.js';
-import { normalizeSpendingLaunch, normalizeSpendingProduct, normalizeSpendingProvision, normalizeSpendingRecurrence } from "./spending-reports-model.js";
+import { normalizeManagementProvision, normalizeSpendingLaunch, normalizeSpendingProduct, normalizeSpendingProvision, normalizeSpendingRecurrence } from "./spending-reports-model.js";
 import { normalizeProvisionReportRow, normalizeProvisionReportRecurrence, normalizeProvisionReportDescription } from './provision-report-model.js';
 import { normalizeOrderValidationOrder, normalizeOrderValidationLaunch, assertOrderValidationSource } from './order-validation-report-model.js';
 
@@ -19,6 +19,17 @@ const isConfirmedProvision = item => item.fields?.STATUS !== PROVISION_FISCAL_DR
 
 function abortIfNeeded(signal) {
   if (signal?.aborted) throw signal.reason || new DOMException("Consulta cancelada.", "AbortError");
+}
+
+function uniqueProvisionRows(rows) {
+  const seen = new Set();
+  return rows.filter(item => {
+    const id = String(item.id ?? '').trim();
+    if (!id) return true;
+    if (seen.has(id)) return false;
+    seen.add(id);
+    return true;
+  });
 }
 
 export function createSpendingReportsData({
@@ -87,19 +98,37 @@ export function createSpendingReportsData({
         provisions: Object.freeze(published.map(item => normalizeSpendingProvision(item, provisionColumns))),
       });
     }
-    const launchList = await resolve("LANCAMENTOS", signal);
-    const productList = await resolve("CADASTROPRODUTO", signal);
-    const [launchColumns, launchItems, productColumns, productItems] = await Promise.all([
+    const [launchList, productList, provisionList] = await Promise.all([
+      resolve("LANCAMENTOS", signal), resolve("CADASTROPRODUTO", signal), resolve(PROVISION_LISTS.provision, signal),
+    ]);
+    const [launchColumns, launchItems, productColumns, productItems, provisionColumns, provisionItems] = await Promise.all([
       repository.getColumns(SITE, launchList, signal ? { signal } : {}),
       allItems(launchList, signal),
       repository.getColumns(SITE, productList, signal ? { signal } : {}),
       allItems(productList, signal),
+      repository.getColumns(SITE, provisionList, signal ? { signal } : {}),
+      allItems(provisionList, signal, '', true),
     ]);
     abortIfNeeded(signal);
-    if (!Array.isArray(launchColumns) || !Array.isArray(productColumns)) throw new Error("O SharePoint retornou colunas inválidas.");
+    if (![launchColumns, productColumns, provisionColumns].every(Array.isArray)) throw new Error("O SharePoint retornou colunas inválidas.");
+    const linkName = provisionDescriptionLinkColumn(provisionColumns, { required:false }) || 'DESCRITIVOPROVISAO';
+    const published = await publishedProvisionRows(provisionItems, { repository, siteKey:SITE, signal, linkName });
+    abortIfNeeded(signal);
+    const productTypes = productItems.map(item => normalizeSpendingProduct(item, productColumns));
+    const disbursementByProduct = new Map();
+    for (const product of productTypes) {
+      const name = product.product.toLocaleLowerCase('pt-BR');
+      if (name && !disbursementByProduct.has(name)) disbursementByProduct.set(name, product.disbursement);
+    }
+    const provisions = uniqueProvisionRows(published).map(item => {
+      const row = normalizeManagementProvision(item, provisionColumns);
+      const disbursement = row.disbursement || disbursementByProduct.get(row.product.toLocaleLowerCase('pt-BR')) || '';
+      return Object.freeze({ ...row, disbursement });
+    });
     return Object.freeze({
       launches: Object.freeze(launchItems.map(item => normalizeSpendingLaunch(item, launchColumns))),
-      productTypes: Object.freeze(productItems.map(item => normalizeSpendingProduct(item, productColumns))),
+      productTypes: Object.freeze(productTypes),
+      provisions: Object.freeze(provisions),
     });
   }
 
@@ -142,15 +171,9 @@ export function createSpendingReportsData({
     if (![recurrenceColumns, provisionColumns, descriptionColumns].every(Array.isArray)) throw new Error('O SharePoint retornou colunas inválidas.');
     const linkName = provisionDescriptionLinkColumn(provisionColumns, { required:false }) || 'DESCRITIVOPROVISAO';
     const published = await publishedProvisionRows(provisionItems, { parents:descriptionItems, signal, linkName });
-    const seen = new Set(), uniqueProvisions = published.filter(item => {
-      const id = String(item.id ?? '').trim();
-      if (!id) return true;
-      if (seen.has(id)) return false;
-      seen.add(id); return true;
-    });
     return Object.freeze({
       recurrences: Object.freeze(recurrenceItems.map(item => normalizeProvisionReportRecurrence(item, recurrenceColumns))),
-      provisions: Object.freeze(uniqueProvisions.map(item => normalizeProvisionReportRow(item, provisionColumns))),
+      provisions: Object.freeze(uniqueProvisionRows(published).map(item => normalizeProvisionReportRow(item, provisionColumns))),
       descriptions: Object.freeze(descriptionItems.filter(isConfirmedProvision).map(item => normalizeProvisionReportDescription(item, descriptionColumns))),
     });
   }
