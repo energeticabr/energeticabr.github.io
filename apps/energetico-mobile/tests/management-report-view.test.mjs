@@ -21,7 +21,7 @@ test('management shortcut popup guards portrait, rotates, closes outside and res
   root.click();assert.equal(root.hidden,true);assert.equal(dom.window.document.activeElement,trigger);assert.equal(dom.window.document.body.style.overflow,'');
 });
 test('management tables match reference sections with totals, rowspans, safe labels and DATA period',async t=>{
-  const {view,root,dom}=setup(t,async()=>({launches:[row,{...row,id:'2',branch:'Central',quantity:1,total:10,product:'<img src=x onerror=alert(1)>'},{...row,id:'3',date:'2026-09-02',total:900}],productTypes:[{product:'Cimento',expenseType:'MATERIAL'}]}));
+  const {view,root,dom}=setup(t,async()=>({launches:[{...row,paymentDate:'2026-10-02'},{...row,id:'2',branch:'Central',quantity:1,total:10,product:'<img src=x onerror=alert(1)>'},{...row,id:'3',date:'2026-09-02',total:900}],productTypes:[{product:'Cimento',expenseType:'MATERIAL'}]}));
   await view.open();
   assert.equal(root.querySelector('[name=year]').value,'2026');assert.equal(root.querySelector('[name=month]').value,'10');
   assert.deepEqual([...root.querySelectorAll('.gm-section-title')].map(n=>n.textContent),['RESUMO GERENCIAL DE GASTOS','TOTAL GASTO ACUMULADO POR FILIAL','PERCENTUAL POR TIPO DE DESPESA POR FILIAL','PRODUTOS COM MAIOR GASTO POR FILIAL','ETAPAS COM MAIOR GASTO POR FILIAL','PRINCIPAIS FORNECEDORES POR FILIAL','MAIORES GASTOS POR CONTA POR FILIAL']);
@@ -47,4 +47,22 @@ test('management cancellation and partial data never expose stale definitive tot
   const error=setup(t,async()=>{throw new Error('Falha SharePoint');});await error.view.open();
   assert.equal(error.root.querySelectorAll('.gm-table').length,0);assert.match(error.root.querySelector('.pl-notice').textContent,/Atualizar/);
   const invalid=setup(t,async()=>({launches:[row]}));await invalid.view.open();assert.equal(invalid.root.querySelectorAll('.gm-table').length,0);
+});
+
+test('tabela de despesas mostra PAGO, PREVISTO e TOTAL GERAL para tipos e subtotais',async t=>{
+  const {view,root}=setup(t,async()=>({
+    launches:[
+      {...row,date:'2026-09-28',paymentDate:'2026-10-02',expectedPaymentDate:'2026-10-01'},
+      {...row,id:'2',date:'2026-09-29',paymentDate:'',expectedPaymentDate:'2026-10-05',total:35},
+    ],
+    productTypes:[{product:'Cimento',expenseType:'MATERIAL'}],
+  }));
+  await view.open();
+  const table=root.querySelector('[data-section=expense]');
+  assert.deepEqual([...table.querySelectorAll('th[scope=col]')].map(th=>th.textContent),
+    ['FILIAL','TIPO DE DESPESA','PAGO','PREVISTO','% DA FILIAL','TOTAL GERAL']);
+  const amounts=tr=>[...tr.querySelectorAll('.gm-money')].map(td=>td.textContent.replace(/\s/g,''));
+  assert.deepEqual([...table.tBodies[0].rows].map(amounts),[
+    ['R$25,00','R$35,00','R$60,00'],['R$25,00','R$35,00','R$60,00'],
+  ]);
 });
