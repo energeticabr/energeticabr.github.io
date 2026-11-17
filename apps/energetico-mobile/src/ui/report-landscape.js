@@ -1,11 +1,15 @@
+import { reportOrientation } from '../native/report-orientation.js';
+
 // Screen orientation is presentation only. No data, request or authentication
 // state belongs here; turning the device must retain the live report DOM.
-export function bindReportLandscape(root) {
+export function bindReportLandscape(root, { orientation = reportOrientation } = {}) {
   const doc = root.ownerDocument, win = doc.defaultView;
   root.classList.add('report-landscape-viewport');
+  const nativeOrientation = orientation.bind(root);
   let destroyed = false, previous = null;
   function update() {
     if (destroyed) return;
+    nativeOrientation.update();
     let width = win.innerWidth || doc.documentElement.clientWidth;
     let height = win.innerHeight || doc.documentElement.clientHeight;
     // Android can resize the layout viewport for the keyboard. Keep the
@@ -30,7 +34,7 @@ export function bindReportLandscape(root) {
   }
   win.addEventListener('resize',update); win.addEventListener('orientationchange',update);
   update();
-  return Object.freeze({update,destroy(){destroyed=true;win.removeEventListener('resize',update);win.removeEventListener('orientationchange',update);}});
+  return Object.freeze({update,destroy(){destroyed=true;win.removeEventListener('resize',update);win.removeEventListener('orientationchange',update);return nativeOrientation.destroy();}});
 }
 
 function insetReportViewport(viewport, width, height, ...styles) {
