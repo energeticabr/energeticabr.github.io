@@ -63,10 +63,16 @@ test('a later fiscal proposal uses confirmed corrections from the same account a
           NFEAPRENDIZADO:JSON.stringify({ ...example, at:200, lines:[{ ...example.lines[0], stageId:'14' }] }) })];
     },
   };
+  const downloaded = [];
   const data = accountKey => createNfeProposalData({ repository, fiscalData:{
     downloadDocument:async () => new Blob([xml]),
-    listAttachments:async () => [{ fileName:row.pdfName }],
-    downloadAttachment:async () => new Blob(['%PDF-1.7\nexemplo\n%%EOF\n'], { type:'application/pdf' }),
+    listAttachments:async () => [row.pdfName, 'DDA-41-boleto.pdf', 'nota.xml'].map(fileName => ({ fileName })),
+    downloadAttachment:async (id, name) => {
+      assert.equal(id, row.id);
+      downloaded.push(name);
+      return name.endsWith('.xml') ? new Blob([xml], { type:'application/xml' })
+        : new Blob(['%PDF-1.7\nexemplo\n%%EOF\n'], { type:'application/pdf' });
+    },
   }, accountKey, userEmail:'fiscal@example.test', DOMParser:dom.window.DOMParser });
   const service = data('Account-A.Tenant');
   const learned = await service.load(row);
@@ -75,6 +81,7 @@ test('a later fiscal proposal uses confirmed corrections from the same account a
   learned.draft.lines[0].stageId = '14';
   assert.equal(learned.baseline.lines[0].stageId,'15');
   await assert.rejects(service.submit(row, learned.draft, { ...learned, manualStages:new Set(['1']) }), /stopped before financial writes/);
+  assert.deepEqual(downloaded.sort(), ['DDA-41-boleto.pdf','nota.pdf','nota.xml'].sort());
   assert.equal(attemptedReservation.learning.scope, scope);
   const recorded = JSON.parse(attemptedReservation.learning.data);
   assert.deepEqual(recorded.lines.map(line => [line.productId,line.stageId,line.changed]), [['13','14',['stageId']]]);

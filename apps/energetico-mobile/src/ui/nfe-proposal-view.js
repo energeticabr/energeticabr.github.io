@@ -192,7 +192,7 @@ export function createNfeProposalView({ document:doc, host, service, onPosted, o
       stageControls = [];
       const baseLabel = provision ? 'Valor base da provisão' : 'Valor da nota';
       const reference = el('p', 'nfe-proposal-reference', `${row.type} · nº ${row.number || row.id} · Emitida em ${displayDate(fiscal.issueDate)} · ${baseLabel} ${money.format(Number(fiscal.total))}`);
-      const attachment = el('p', 'nfe-proposal-attachment', `PDF fiscal a anexar ao ${provision ? 'descritivo' : 'pedido'} · ${row.pdfName}`);
+      const attachment = el('p', 'nfe-proposal-attachment', `Todos os anexos da nota, inclusive DDA, serão enviados ao ${provision ? 'descritivo' : 'pedido'}. PDF fiscal · ${row.pdfName}`);
       const headerFields = el('fieldset', 'nfe-proposal-fields');
       body.append(reference, attachment, headerFields);
       if (!fiscal.dueDate) body.append(el('p', 'nfe-proposal-hint', provision
@@ -298,7 +298,7 @@ export function createNfeProposalView({ document:doc, host, service, onPosted, o
       }
       entry.busy = true;
       lock();
-      feedback(provision ? 'Gravando descritivo, provisões e PDF no SharePoint…' : 'Gravando pedido, lançamentos e PDF no SharePoint…');
+      feedback(provision ? 'Gravando descritivo, provisões e todos os anexos no SharePoint…' : 'Gravando pedido, lançamentos e todos os anexos no SharePoint…');
       try {
         const receipt = await service.submit(row, entry.draft, {
           signal, catalog:entry.catalog, xmlHash:entry.xmlHash, baseline:entry.baseline,
