@@ -155,24 +155,33 @@ test("relatório 9 ignora mês sem ano e exclui lançamento sem DATA", () => {
   assert.equal(report.total, 90);
 });
 
-test("despesas por filial cruzam a data efetiva e a prevista sem duplicar pagamentos", () => {
+test("despesas por filial somam baixas de lançamentos e provisões abertas pelo vencimento", () => {
   const paid = model.normalizeSpendingLaunch({ id: "1", fields: {
     field_2: "2026-08-01", field_3: "2026-09-02", field_4: "2026-09-03",
     FILIAL: "Filial A", ETAPA: "Fundação", PRODUTO: "Cimento", QUANTIDADE: 1, VALORUNITARIO: ".1",
   } });
   const launches = [
     paid,
-    row(2, { date: "2026-08-01", paymentDate: "", expectedPaymentDate: "2026-09-01", total: .2 }),
-    row(3, { branch: "Filial B", paymentDate: "", expectedPaymentDate: "2026-09-30", total: 150 }),
+    row(2, { date: "2026-08-01", paymentDate: "", expectedPaymentDate: "2026-09-01", total: 999 }),
     row(4, { paymentDate: "2026-10-01", expectedPaymentDate: "2026-09-01", total: 300 }),
     row(5, { paymentDate: "", expectedPaymentDate: "2026-10-01", total: 400 }),
     row(6, { paymentDate: "", expectedPaymentDate: "", total: 500 }),
     row(7, { stage: "Obra", total: 1000 }),
   ];
+  const provision = { branch: "Filial A", product: "Cimento", stage: "Fundação", dueDate: "2026-09-01", total: .2 };
+  const provisions = [
+    { ...provision, schedule: "AGENDADO" },
+    { ...provision, branch: "Filial B", dueDate: "2026-09-30", total: 150 },
+    { ...provision, dueDate: "2026-10-01", total: 555 },
+    { ...provision, stage: "Obra", total: 555 },
+    { ...provision, paidDate: "2026-10-01", total: 555 },
+    { ...provision, schedule: "PAGO", total: 555 },
+    { ...provision, status: "PAGAMENTO EFETUADO", total: 555 },
+  ];
   assert.equal(paid.paymentDate, "2026-09-03");
   assert.equal(paid.expectedPaymentDate, "2026-09-02");
   const report = model.buildSpendingReport9({
-    launches, productTypes: [{ product: "Cimento", expenseType: "Material" }],
+    launches, provisions, productTypes: [{ product: "Cimento", expenseType: "Material" }],
   }, { year: "2026", month: "9", stage: "Fundação" });
   assert.deepEqual(report.expenseBranches.map(({ name, paid, forecast, total }) => [name, paid, forecast, total]), [
     ["Filial B", 0, 150, 150], ["Filial A", .1, .2, .3],
@@ -183,16 +192,18 @@ test("despesas por filial cruzam a data efetiva e a prevista sem duplicar pagame
 });
 
 test("valor ausente em um previsto deixa apenas a previsão e a soma incompletas", () => {
-  const launches = [row(1), row(2, { paymentDate: "", expectedPaymentDate: "2026-09-01", total: null })];
-  const report = model.buildSpendingReport9({ launches }, { year: "2026", month: "9" });
+  const launches = [row(1)];
+  const provisions = [{ branch: "Filial A", dueDate: "2026-09-01", total: null }];
+  const report = model.buildSpendingReport9({ launches, provisions }, { year: "2026", month: "9" });
   const [{ paid, forecast, total }] = report.expenseBranches;
   assert.deepEqual({ paid, forecast, total }, { paid: 45, forecast: null, total: null });
+  assert.equal(report.incompleteCount, 1);
 });
 
 test("total geral soma os centavos apresentados em Pago e Previsto", () => {
-  const launches = [row(1, { total: .115 }),
-    row(2, { paymentDate: "", expectedPaymentDate: "2026-09-01", total: .115 })];
-  const report = model.buildSpendingReport9({ launches }, { year: "2026", month: "9" });
+  const launches = [row(1, { total: .115 })];
+  const provisions = [{ branch: "Filial A", dueDate: "2026-09-01", total: .115 }];
+  const report = model.buildSpendingReport9({ launches, provisions }, { year: "2026", month: "9" });
   const [{ paid, forecast, total }] = report.expenseBranches;
   assert.deepEqual({ paid, forecast, total }, { paid: .12, forecast: .12, total: .24 });
 });

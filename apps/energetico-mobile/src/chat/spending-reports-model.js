@@ -1,4 +1,4 @@
-import { provisionDateKey } from "./pending-provision-dates.js";
+import { provisionDateKey, provisionTotal } from "./pending-provision-dates.js";
 import Decimal from 'decimal.js';
 
 function key(value) {
@@ -66,7 +66,8 @@ export function normalizeSpendingLaunch(item, columns = []) {
 
 export function normalizeSpendingProduct(item, columns = []) {
   const get = (...aliases) => valueFor(item, columns, aliases);
-  return Object.freeze({ product: get("PRODUTO"), expenseType: get("TIPODESPESA", "TIPO DE DESPESA") });
+  return Object.freeze({ product: get("PRODUTO"), expenseType: get("TIPODESPESA", "TIPO DE DESPESA"),
+    disbursement: normalizeDisbursement(get("GERADESEMBOLSO")) });
 }
 
 export function normalizeSpendingRecurrence(item, columns = []) {
@@ -84,13 +85,31 @@ export function normalizeSpendingProvision(item, columns = []) {
   const rawSchedule = scheduleKey ? fields[scheduleKey] : undefined;
   const price = get("VALOR TOTAL", "VALORTOTAL");
   const total = amount(price);
+  const due = scalar(fields.DATAPREVISTOPGTO) || get("DATA PREVISTO PGTO") || get("DATAPGTOPREVISTO");
+  // The payroll workflow serializes a calendar date as midnight UTC.
+  const dueDate = provisionDateKey(/^\d{4}-\d{2}-\d{2}T00:00:00(?:\.0+)?Z$/i.test(due) ? due.slice(0, 10) : due);
   return Object.freeze({ id: scalar(item?.id || get("ID")), recurrenceId: get("IDRECORRENCIA"),
     branch: get("FILIAL"), supplier: get("FORNECEDOR"), product: get("PRODUTO", "DESCRICAOPGTO"),
-    dueDate: provisionDateKey(get("DATA PREVISTO PGTO", "DATAPGTOPREVISTO")),
+    dueDate,
     scheduledDate: provisionDateKey(get("DATAPGTOAGENDADO", "DATA EXECUÇÃO AGENDAMENTO", "DATAEXECUCAOAGENDAMENTO")),
     paidDate: provisionDateKey(get("DATA PGTO EFETUADO", "DATAPGTOEFETUADO")),
     schedule: typeof rawSchedule === "boolean" ? (rawSchedule ? "AGENDADO" : "PENDENTE") : get("PGTOAGENDADO"),
     status: get("STATUS"), total });
+}
+
+function normalizeDisbursement(value) {
+  if (value === "true") return "SIM";
+  if (value === "false") return "NÃO";
+  return value;
+}
+
+export function normalizeManagementProvision(item, columns) {
+  const get = (...aliases) => valueFor(item, columns, aliases);
+  const provision = normalizeSpendingProvision(item, columns);
+  const total = provisionTotal(get("VALORTOTAL"), get("QTD", "QUANTIDADE"), get("FRETE"));
+  return Object.freeze({ ...provision, branch: provision.branch || get("Title"), stage: get("ETAPA"),
+    disbursement: normalizeDisbursement(get("GERADESEMBOLSO")), order: get("IDPEDIDO"),
+    total: Number.isFinite(total) ? total : null });
 }
 
 const equals = (left, right) => scalar(left).toLocaleLowerCase("pt-BR") === scalar(right).toLocaleLowerCase("pt-BR");
@@ -142,7 +161,10 @@ function paymentTotals(rows) {
 
 export function buildSpendingReport9(snapshot, filters = {}) {
   const rows = selectedRows(snapshot?.launches, filters);
-  const expenseRows = selectedRows(snapshot?.launches, filters, row => row.paymentDate || row.expectedPaymentDate);
+  const paidRows = selectedRows(snapshot?.launches, filters, row => row.paymentDate);
+  const forecastRows = selectedRows(snapshot?.provisions, filters, row => row.dueDate)
+    .filter(row => !row.paidDate && key(row.schedule) !== "PAGO" && key(row.status) !== "PAGAMENTOEFETUADO");
+  const expenseRows = [...paidRows, ...forecastRows];
   const total = completeSum(rows, "total");
   const productTypes = new Map();
   for (const row of snapshot?.productTypes || []) {

@@ -1,5 +1,6 @@
 import test from "node:test";
 import assert from "node:assert/strict";
+import { buildSpendingReport9 } from "../src/chat/spending-reports-model.js";
 
 const { createSpendingReportsData } = await import("../src/chat/spending-reports-data.js").catch(() => ({}));
 
@@ -16,7 +17,7 @@ function fixture(overrides = {}) {
       if (list === "PROVISÃO PGTOS") return { items: [{ id: "41", fields: { IDRECORRENCIA: "7", STATUS: "PAGAMENTO PREVISTO",
         FORNECEDOR: "VIVO", PRODUTO: "INTERNET", DATAPGTOPREVISTO: "2026-10-04", PGTOAGENDADO: "PENDENTE",
         VALORTOTAL: "89,99", FILIAL: "004 - EDIFÍCIO XAVANTE" } }], hasMore: false, nextLink: "" };
-      if (list === "CADASTROPRODUTO") return { items: [{ id: "3", fields: { field_1: "Cimento", field_2: "Material" } }], hasMore: false, nextLink: "" };
+      if (list === "CADASTROPRODUTO") return { items: [{ id: "3", fields: { field_1: "Cimento", field_2: "Material", GERADESEMBOLSO: "SIM" } }], hasMore: false, nextLink: "" };
       if (options.pageNumber === 1) return { items: [{ id: "1", fields: { field_9: 10, field_8: 2 } }], hasMore: true, nextLink: "next" };
       return { items: [{ id: "2", fields: { field_9: 30, field_8: 1 } }], hasMore: false, nextLink: "" };
     }, ...overrides,
@@ -64,13 +65,48 @@ test('payment period is constrained at SharePoint before paging, maps dates and 
   assert.equal(result.launches[0].order, '358');
 });
 
-test("carrega todas as páginas de LANCAMENTOS e CADASTROPRODUTO para o relatório 9", async () => {
+test("relatório 9 lê também as parcelas publicadas de Provisão Pgto e calcula o valor de cada vencimento", async () => {
   assert.equal(typeof createSpendingReportsData, "function");
   const { repository, calls } = fixture();
+  const readPage = repository.getItemsPage;
+  const fields = { FILIAL: "Filial A", FORNECEDOR: "Alfa", PRODUTO: "Cimento", ETAPA: "Fundação",
+    VALORTOTAL: "30,00", QTD: "2", FRETE: "5,00", STATUS: "PAGAMENTO PREVISTO" };
+  repository.getItemsPage = async (site, list, query, options) => {
+    if (list !== "PROVISÃO PGTOS") return readPage(site, list, query, options);
+    if (!options.cursor) return { hasMore: true, nextLink: "next-provision", items: [
+      { id: "41", fields: { ...fields, DATAPREVISTOPGTO: "2026-11-01T03:00:00Z" } },
+      { id: "42", fields: { ...fields, DATAPREVISTOPGTO: "2026-11-01T02:59:59Z" } },
+      { id: "45", fields: { ...fields, DATAPREVISTOPGTO: "2026-11-01T00:00:00.000Z" } },
+    ] };
+    assert.equal(options.cursor, "next-provision");
+    return { hasMore: false, items: [
+      { id: "41", fields: { ...fields, DATAPREVISTOPGTO: "2026-11-01T03:00:00Z" } },
+      { id: "43", fields: { ...fields, DATAPGTOPREVISTO: "30/11/2026" } },
+      { id: "44", fields: { ...fields, DATAPREVISTOPGTO: "2026-11-28", NFELINHA: "oculta-1", DESCRITIVOPROVISAO: "5" } },
+    ] };
+  };
+  repository.getItems = async (_site, list) => {
+    assert.equal(list, "DESCRITIVOPROVISAO");
+    return [];
+  };
   const snapshot = await createSpendingReportsData({ repository }).loadSnapshot({ reportNumber: 9 });
   assert.deepEqual(snapshot.launches.map(item => item.id), ["1", "2"]);
   assert.equal(snapshot.productTypes[0].expenseType, "Material");
   assert.ok(calls.some(call => call[0] === "page" && call[1] === "LANCAMENTOS" && call[2] === 2 && call[3] === "next"));
+  assert.deepEqual(snapshot.provisions.map(({ id, dueDate }) => [id, dueDate]), [
+    ["41", "2026-11-01"], ["42", "2026-10-31"], ["45", "2026-11-01"], ["43", "2026-11-30"],
+  ]);
+  const report = buildSpendingReport9(snapshot, { year: "2026", month: "11", stage: "Fundação", supplier: "Alfa", disbursement: "SIM" });
+  assert.deepEqual(report.expenseBranches[0].expenseTypes, [
+    { name: "Material", paid: 0, forecast: 195, total: 195, percentage: 100 },
+  ]);
+});
+
+test("relatório 9 falha se a Provisão Pgto estiver indisponível", async () => {
+  const { repository } = fixture({ async resolveList(_site, [name]) {
+    return name === "PROVISÃO PGTOS" ? { status: "missing" } : { status: "resolved", id: name };
+  } });
+  await assert.rejects(createSpendingReportsData({ repository }).loadSnapshot({ reportNumber: 9 }), /PROVISÃO PGTOS.*não está disponível/);
 });
 
 test("relatório 10 carrega recorrências e provisões vinculáveis sem consultar LANCAMENTOS", async () => {

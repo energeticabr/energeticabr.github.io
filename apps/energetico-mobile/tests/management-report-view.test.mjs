@@ -3,7 +3,7 @@ import assert from 'node:assert/strict';
 import { JSDOM } from 'jsdom';
 const { createManagementReportView } = await import('../src/ui/management-report-view.js').catch(()=>({}));
 const row={id:'1',date:'2026-10-02',paymentDate:'2025-01-01',branch:'004 - EDIFÍCIO XAVANTE',supplier:'Alfa',product:'Cimento',stage:'Fundação',account:'Caixa',disbursement:'SIM',unit:10,quantity:2,freight:5,total:25};
-function setup(t,loadSnapshot=async()=>({launches:[row],productTypes:[{product:'Cimento',expenseType:'MATERIAL'}]}),portrait=false){
+function setup(t,loadSnapshot=async()=>({launches:[row],provisions:[],productTypes:[{product:'Cimento',expenseType:'MATERIAL'}]}),portrait=false){
   assert.equal(typeof createManagementReportView,'function');
   const dom=new JSDOM('<main id="app"><button>Resumo</button></main>');let vertical=portrait;
   dom.window.matchMedia=()=>({get matches(){return vertical;}});
@@ -12,7 +12,7 @@ function setup(t,loadSnapshot=async()=>({launches:[row],productTypes:[{product:'
   return {view,root:view.element,dom,rotate(v){vertical=v;dom.window.dispatchEvent(new dom.window.Event('resize'));}};
 }
 test('management shortcut popup guards portrait, rotates, closes outside and restores focus',async t=>{
-  let calls=0;const {view,root,dom,rotate}=setup(t,async options=>{calls++;assert.equal(options.reportNumber,9);return {launches:[row],productTypes:[]};},true);
+  let calls=0;const {view,root,dom,rotate}=setup(t,async options=>{calls++;assert.equal(options.reportNumber,9);return {launches:[row],provisions:[],productTypes:[]};},true);
   const trigger=dom.window.document.querySelector('#app button');trigger.focus();
   await view.open();assert.equal(calls,1);assert.match(root.textContent,/POSICIONAR O TELEFONE NA HORIZONTAL/);
   rotate(false);await new Promise(r=>setImmediate(r));assert.equal(calls,1);
@@ -21,7 +21,7 @@ test('management shortcut popup guards portrait, rotates, closes outside and res
   root.click();assert.equal(root.hidden,true);assert.equal(dom.window.document.activeElement,trigger);assert.equal(dom.window.document.body.style.overflow,'');
 });
 test('management tables match reference sections with totals, rowspans, safe labels and DATA period',async t=>{
-  const {view,root,dom}=setup(t,async()=>({launches:[{...row,paymentDate:'2026-10-02'},{...row,id:'2',branch:'Central',quantity:1,total:10,product:'<img src=x onerror=alert(1)>'},{...row,id:'3',date:'2026-09-02',total:900}],productTypes:[{product:'Cimento',expenseType:'MATERIAL'}]}));
+  const {view,root,dom}=setup(t,async()=>({launches:[{...row,paymentDate:'2026-10-02'},{...row,id:'2',branch:'Central',quantity:1,total:10,product:'<img src=x onerror=alert(1)>'},{...row,id:'3',date:'2026-09-02',total:900}],provisions:[],productTypes:[{product:'Cimento',expenseType:'MATERIAL'}]}));
   await view.open();
   assert.equal(root.querySelector('[name=year]').value,'2026');assert.equal(root.querySelector('[name=month]').value,'10');
   assert.deepEqual([...root.querySelectorAll('.gm-section-title')].map(n=>n.textContent),['RESUMO GERENCIAL DE GASTOS','TOTAL GASTO ACUMULADO POR FILIAL','PERCENTUAL POR TIPO DE DESPESA POR FILIAL','PRODUTOS COM MAIOR GASTO POR FILIAL','ETAPAS COM MAIOR GASTO POR FILIAL','PRINCIPAIS FORNECEDORES POR FILIAL','MAIORES GASTOS POR CONTA POR FILIAL']);
@@ -40,21 +40,22 @@ test('management tables match reference sections with totals, rowspans, safe lab
 });
 test('management cancellation and partial data never expose stale definitive totals',async t=>{
   let finish,signal;const {view,root}=setup(t,options=>{signal=options.signal;return new Promise(r=>finish=r);});
-  const opening=view.open();view.close();assert.equal(signal.aborted,true);finish({launches:[row],productTypes:[]});await opening;
+  const opening=view.open();view.close();assert.equal(signal.aborted,true);finish({launches:[row],provisions:[],productTypes:[]});await opening;
   assert.equal(root.querySelectorAll('.gm-table').length,0);
-  const incomplete=setup(t,async()=>({launches:[{...row,total:null}],productTypes:[]}));await incomplete.view.open();
+  const incomplete=setup(t,async()=>({launches:[{...row,total:null}],provisions:[],productTypes:[]}));await incomplete.view.open();
   assert.equal(incomplete.root.querySelector('[data-metric=total]').textContent,'INCOMPLETO');
   const error=setup(t,async()=>{throw new Error('Falha SharePoint');});await error.view.open();
   assert.equal(error.root.querySelectorAll('.gm-table').length,0);assert.match(error.root.querySelector('.pl-notice').textContent,/Atualizar/);
-  const invalid=setup(t,async()=>({launches:[row]}));await invalid.view.open();assert.equal(invalid.root.querySelectorAll('.gm-table').length,0);
+  const invalid=setup(t,async()=>({launches:[row],productTypes:[]}));await invalid.view.open();assert.equal(invalid.root.querySelectorAll('.gm-table').length,0);
 });
 
 test('tabela de despesas mostra PAGO, PREVISTO e TOTAL GERAL para tipos e subtotais',async t=>{
-  const {view,root}=setup(t,async()=>({
+  const {view,root,dom}=setup(t,async()=>({
     launches:[
       {...row,date:'2026-09-28',paymentDate:'2026-10-02',expectedPaymentDate:'2026-10-01'},
-      {...row,id:'2',date:'2026-09-29',paymentDate:'',expectedPaymentDate:'2026-10-05',total:35},
+      {...row,id:'2',date:'2026-09-29',paymentDate:'',expectedPaymentDate:'2026-10-05',total:999},
     ],
+    provisions:[{branch:row.branch,product:'Cimento',supplier:'Fornecedor previsto',dueDate:'2026-10-05',total:35}],
     productTypes:[{product:'Cimento',expenseType:'MATERIAL'}],
   }));
   await view.open();
@@ -65,4 +66,8 @@ test('tabela de despesas mostra PAGO, PREVISTO e TOTAL GERAL para tipos e subtot
   assert.deepEqual([...table.tBodies[0].rows].map(amounts),[
     ['R$25,00','R$35,00','R$60,00'],['R$25,00','R$35,00','R$60,00'],
   ]);
+  const supplier=root.querySelector('[name=supplier]');supplier.value='Fornecedor previsto';
+  assert.equal(supplier.value,'Fornecedor previsto');
+  supplier.dispatchEvent(new dom.window.Event('change'));
+  assert.deepEqual(amounts(root.querySelector('[data-section=expense] .gm-total')),['R$0,00','R$35,00','R$35,00']);
 });
