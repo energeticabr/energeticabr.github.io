@@ -75,6 +75,54 @@ def patch_workflow(source):
 '''
     anchor += b'        step = self._current_step(state)\n'
     candidate = replace_once(candidate, anchor, replacement)
+
+    anchor = b'''            step = steps[index] if 0 <= index < len(steps) else None
+            pagination = state.get("option_pagination") or {}
+            pending_date = state.get("pending_past_date_confirmation") or {}
+'''
+    replacement = b'''            step = steps[index] if 0 <= index < len(steps) else None
+            if (
+                state.get("flow") == "construction_stage_demonstrative_create"
+                and step
+                and step["key"] in {
+                    "data_finalizacao_demonstrativo_etapa",
+                    "status_demonstrativo_etapa",
+                }
+            ):
+                result = self._prompt_next_or_summary(state, etag)
+                return {**result, "status": "draft_resumed", "draft_resumed": True,
+                        "batch_id": state["batch_id"], "resumed_stage": state["stage"]}
+'''
+    candidate = replace_once(candidate, anchor, replacement + anchor.split(b"\n", 1)[1])
+
+    anchor = b'''        if state.get("stage") == "awaiting_confirmation":
+            self._send_confirmation_actions(state)
+            result = {}
+        elif state.get("stage") == "selecting_fields":
+'''
+    replacement = b'''        if state.get("stage") == "awaiting_confirmation":
+            self._send_confirmation_actions(state)
+            if state.get("flow") == "construction_stage_demonstrative_create" and (
+                "DATAPREVISTO" in state["fields"]
+                or "DATAPREVISTO" in state["display_values"]
+                or state["display_values"].get("STATUS") != "ATIVIDADE INICIADA"
+            ):
+                self._send_summary_card(state)
+            result = {}
+        elif state.get("stage") == "selecting_fields":
+'''
+    candidate = replace_once(candidate, anchor, replacement)
+
+    anchor = b'    def _send_summary_card(self, state: dict) -> dict:\n'
+    candidate = replace_once(candidate, anchor, anchor + b'''        if state.get("flow") == "construction_stage_demonstrative_create":
+            self._apply_fixed_fields(state)
+''')
+
+    anchor = b'''        selected = resolve_option(raw_reply, state["options"], "edit_field")
+'''
+    candidate = replace_once(candidate, anchor, b'''        if state.get("flow") == "construction_stage_demonstrative_create":
+            state["options"] = self._editable_options(state)
+''' + anchor)
     compile(candidate, WORKFLOW, "exec")
     return candidate
 

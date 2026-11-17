@@ -104,7 +104,7 @@ class DescriptorRegistrationTests(unittest.TestCase):
                 self.assertEqual(result.get("field"), ACTIVITY)
                 self.assertNotIn("ATIVIDADEEXECUTADA", self.current["fields"])
 
-    def test_legacy_confirmation_omits_date_and_overrides_saved_status(self):
+    def set_legacy_confirmation(self):
         self.current.update(stage="awaiting_confirmation")
         self.current["fields"].update(
             ATIVIDADEEXECUTADA="ALVENARIA", DATAEXECUTADO="2026-11-16",
@@ -112,8 +112,47 @@ class DescriptorRegistrationTests(unittest.TestCase):
         )
         self.current["answers"].update({END: "2026-11-17", STATUS: "ATIVIDADE FINALIZADA"})
         self.current["display_values"].update(DATAPREVISTO="17/11/2026", STATUS="ATIVIDADE FINALIZADA")
-        self.engine._save(self.current, None)
+        _, etag = self.state.load(self.key)
+        return self.engine._save(self.current, etag)
+
+    def test_legacy_confirmation_omits_date_and_overrides_saved_status(self):
+        self.set_legacy_confirmation()
         self.confirm()
+
+    def test_resuming_legacy_confirmation_shows_the_current_values(self):
+        for render in (self.engine._resume_draft_prompt, self.engine._resend_current_prompt):
+            with self.subTest(render=render.__name__):
+                etag = self.set_legacy_confirmation()
+                self.summary_builder.calls.clear()
+                render(self.current, etag)
+                self.assertTrue(self.summary_builder.calls)
+                summary = fixtures.WorkflowTests.summary_text(self)
+                self.assertIn(f"*STATUS:* {STARTED}", summary)
+                self.assertNotIn("DATA FINALIZAÇÃO", summary)
+
+    def test_restored_draft_does_not_repeat_the_old_status_prompt(self):
+        self.set_step(STATUS)
+        self.current["options"] = [
+            {"id": 2, "title": "ATIVIDADE FINALIZADA", "value": "ATIVIDADE FINALIZADA"},
+        ]
+        etag = self.engine._save(self.current, None)
+        result = self.engine._resume_draft_prompt(self.current, etag)
+        self.assertTrue(result["draft_resumed"])
+        self.assertEqual(result.get("field"), ACTIVITY)
+        self.assertNotIn("ATIVIDADEEXECUTADA", self.current["fields"])
+
+    def test_an_old_edit_menu_drops_the_removed_options(self):
+        self.set_legacy_confirmation()
+        self.current["stage"] = "editing_field_choice"
+        steps = self.engine._flow_config(self.current)["steps"]
+        index = next(i for i, step in enumerate(steps) if step["key"] == STATUS)
+        self.current["options"] = [{"id": index + 1, "title": "STATUS", "value": index}]
+        etag = self.state.load(self.key)[1]
+        self.engine._save(self.current, etag)
+
+        result = self.send("old-edit", reply_id=f"choice:edit_field:{index + 1}")
+        self.assertEqual(result["status"], "invalid_edit_field")
+        self.assertNotIn(index, [option["value"] for option in self.current["options"]])
 
     def test_existing_record_edit_still_exposes_date_and_status(self):
         self.current["flow"] = "construction_stage_demonstrative_edit"
