@@ -1,4 +1,4 @@
-Implantação verificada em 17/11/2026, com conferência independente final às 17:26 UTC.
+Implantação verificada em 17/11/2026, com conferência independente inicial às 17:26 UTC e confirmação do ciclo automático às 21:41:46 UTC.
 
 - Worker OCI e bridge fiscal publicados. Bridge `63618d6b-74aa-4a3d-a315-60cdd788d201` relido em `Started`, com modos `inventory`, `pdf` e `dda_sync`; últimas 100 execuções consultadas sem falhas.
 - 23 PDFs originais DDA copiados para 18 registros fiscais correspondentes a 22 DDAs. Duas notas têm três parcelas cada; um DDA tem dois espelhos. Nenhuma correlação foi flexibilizada.
@@ -6,7 +6,8 @@ Implantação verificada em 17/11/2026, com conferência independente final às 
 - 189 anexos fiscais anteriores preservados; 72 anexos DDA anteriores preservados por hash. Valores, datas e identificadores das duas listas permaneceram iguais, assim como o significado dos status.
 - Foram observadas variações concorrentes de caixa em SITUACAO (`Em aberto` / `Em Aberto`) nos IDs DDA 43, 44, 49, 50, 51, 52, 53, 54 e 55, sem mudança semântica. Na amostra 43/44/55 o editor SharePoint foi Bernardo notini; o processo responsável não foi identificado. O reconciliador não alterou nem restaurou esses campos.
 - Replay do mesmo serviço utilizado pelo timer: `ExecMainStatus=0`, zero erros e zero anexos novos nas duas direções. Oito pares reversos foram revalidados pelo cache, com dez recibos já existentes. Zero pares reversos pendentes. As dez rechecagens reversas e três verificações fiscais adiadas são limites de trabalho/rechecagem, sem faltar qualquer um dos 23 anexos já conferidos.
-- Timer preservado `enabled` e `active`: 08:40, 13:40 e 18:40 America/Sao_Paulo. Próxima execução observada: 17/11 às 18:40 BRT.
+- Timer preservado `enabled` e `active`: 08:40, 13:40 e 18:40 America/Sao_Paulo. Próxima execução observada após o ciclo automático: 18/11 às 08:40 BRT.
+- Ciclo automático de 17/11: disparo do timer e início do serviço às 18:40:00 BRT; conclusão às 18:41:46 BRT com `ExecMainStatus=0`, zero erros e zero anexos novos nas duas direções. Oito pares reversos conferidos pelo cache, com onze recibos existentes. Nenhuma execução manual foi iniciada para essa comprovação.
 - 36 testes completos passaram, incluindo a definição sanitizada do bridge, correspondência, classificação de originais, múltiplas parcelas, conflito preservado, leitura após gravação, repetição idempotente, mudança de fonte, orçamento esgotado sem downloads e backlog de cache dentro do mesmo limite.
 
 Permanece a revisão preexistente `CONFLICTING_FISCAL_ATTACHMENT` no registro fiscal 31 / DDA 28, comprovada no histórico anterior de 16/11. O PDF fiscal divergente não foi sobrescrito. A cópia reversa do espelho DDA desse par foi concluída e verificada normalmente.
