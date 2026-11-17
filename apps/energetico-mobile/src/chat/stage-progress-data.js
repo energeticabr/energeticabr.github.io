@@ -50,10 +50,10 @@ function abortable(operation, signal) {
 
 function validateSchema(columns, kind) {
   if (!Array.isArray(columns)) throw new TypeError("Esquema de colunas SharePoint inválido.");
-  // Renamed Title also renames auxiliary LinkTitle labels; Graph may omit their
-  // computed facet. Resolve item data only, independent of metadata order.
+  // Graph may omit the computed facet for system columns. LinkTitle copies
+  // the Title label and DocIcon is labeled "Tipo" in Portuguese.
   const dataColumns = columns.filter(column => column?.computed !== true
-    && !/^LinkTitle(?:NoMenu|2)?$/i.test(String(column?.name ?? "")));
+    && !/^(?:LinkTitle(?:NoMenu|2)?|DocIcon)$/i.test(String(column?.name ?? "")));
   const resolved = SCHEMA[kind].map(aliases => {
     const wanted = new Set(aliases.map(columnKey));
     const matches = dataColumns.filter(column => wanted.has(columnKey(column?.name)) || wanted.has(columnKey(column?.displayName)));
