@@ -24,6 +24,7 @@ await new Promise(done => requestAnimationFrame(() => requestAnimationFrame(done
 const choices = [...document.querySelectorAll('[data-registration-gallery]')];
 const layout = { mode, pair, overflow: document.documentElement.scrollWidth > innerWidth + 1,
   choices: choices.map(button => ({ kind: button.dataset.registrationGallery, label: button.textContent, ...rect(button), background: getComputedStyle(button).backgroundColor })),
+  headerBottom: rect(document.querySelector('.registration-gallery-menu .rg-header')).bottom,
   menuVisible: !document.querySelector('.registration-gallery-menu').hidden };
 if (mode === 'chooser') {
   for (const button of choices) { button.click(); await Promise.resolve(); menu.open(); }

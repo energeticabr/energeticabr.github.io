@@ -1,6 +1,6 @@
 import { applyScreenNavigation } from './screen-navigation.js';
 
-export function createGalleryMenu({ document: doc = globalThis.document, title, choices, className, choiceAttribute, onSelect, onHome } = {}) {
+export function createGalleryMenu({ document: doc = globalThis.document, title, question, choices, className, choiceAttribute, onSelect, onHome } = {}) {
   const element = (tag, className, text) => {
     const node = doc.createElement(tag); node.className = className;
     if (text !== undefined) node.textContent = text;
@@ -15,7 +15,7 @@ export function createGalleryMenu({ document: doc = globalThis.document, title, 
   const heading = element('h1', 'rg-title', title);
   applyScreenNavigation({ header, back, home, title: heading });
   const content = element('div', `${className}__content`);
-  content.append(element('p', `${className}__question`, 'O que você deseja acessar?'));
+  if (question) content.append(element('p', `${className}__question`, question));
   const status = element('p', `${className}__status`); status.setAttribute('role', 'status');
   let destroyed = false, selecting = false, revision = 0, returnFocus = null;
   const buttons = choices.map(([kind, label]) => {

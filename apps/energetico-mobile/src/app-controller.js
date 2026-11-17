@@ -1,4 +1,5 @@
 import { createSefazSyncSession } from './ui/sefaz-sync-session.js';
+import { createRegistrationGalleryMenu, REGISTRATION_GALLERY_CHOICES } from './ui/registration-gallery-menu.js';
 import { resumeConversation } from './chat/resume-conversation.js';
 import { createProvisionSettlementParentSession } from './ui/provision-settlement-parent-session.js';
 import { createDdaAutoReminder } from './chat/dda-auto-reminder.js';
@@ -299,7 +300,6 @@ async function defaultSicoobTransactionReportFactory(options) {
 
 async function defaultRegistrationGalleryFactory(options) {
   if (options.kind === 'registrationMenu') {
-    const { createRegistrationGalleryMenu } = await import('./ui/registration-gallery-menu.js');
     return createRegistrationGalleryMenu(options);
   }
   if (options.kind === 'assetMenu') {
@@ -6911,7 +6911,7 @@ export function createAppController({
     });
   }
 
-  function ordersGalleryTokenProvider(assertSession, resumeAction = ORDERS_GALLERY_ID, resumeOptions) {
+  function ordersGalleryTokenProvider(assertSession, resumeAction = ORDERS_GALLERY_ID, getResumeOptions) {
     const inFlight = new Map();
     return async scopes => {
       assertSession();
@@ -6926,7 +6926,7 @@ export function createAppController({
         } catch (error) {
           assertSession();
           if (error?.code !== "AUTH_REQUIRED" || typeof auth.authorize !== "function") throw error;
-          await auth.authorize(scopes, { resumeAction, ...resumeOptions });
+          await auth.authorize(scopes, { resumeAction, ...getResumeOptions?.() });
           assertSession();
           const token = await auth.getToken(scopes);
           assertSession();
@@ -8407,7 +8407,7 @@ export function createAppController({
       const finalizingStage = method === 'finalizeStage';
       const writing = finalizingStage || method === 'finalizeActivity';
       const resumeOptions = writing ? { stageFinishDraft: { id: args[0], date: args[1], ...(finalizingStage ? { kind: 'stage' } : {}) } } : undefined;
-      const getToken = ordersGalleryTokenProvider(assertAction, STAGE_PROGRESS_ID, resumeOptions);
+      const getToken = ordersGalleryTokenProvider(assertAction, STAGE_PROGRESS_ID, () => resumeOptions);
       const writeScopes = ['Sites.ReadWrite.All'];
       try {
         // Finish consent before checking linked descriptions so the write does not
@@ -9468,9 +9468,9 @@ export function createAppController({
       };
       assertAction();
       for (const sourceSignal of signals) sourceSignal.addEventListener('abort', abort, { once: true });
-      const tokenProvider = ordersGalleryTokenProvider(assertAction, TASK_ASSOCIATION_REPORT_ID, {
+      const tokenProvider = ordersGalleryTokenProvider(assertAction, TASK_ASSOCIATION_REPORT_ID, () => ({
         taskFinishDraft: { id, date: completionDate },
-      });
+      }));
       try {
         // Obtain write consent before checking the current item and its version.
         const writeToken = await tokenProvider([...TASK_ASSOCIATION_REPORT_SCOPES, 'Sites.ReadWrite.All']);
@@ -10167,7 +10167,10 @@ export function createAppController({
     const opening = (async () => {
       try {
         if (!registrationGalleries.has(kind)) {
-          const catalogToken = isSupplyCatalog ? ordersGalleryTokenProvider(assertSession, replyId) : null;
+          const catalogToken = isSupplyCatalog ? ordersGalleryTokenProvider(assertSession, replyId, () => {
+            const currentOptions = registrationGalleryOpenOptions.get(registrationGalleries.get(kind)) ?? openOptions;
+            if (currentOptions.fromGalleryMenu === 'registrationMenu') return { returnToRegistrationMenu: true };
+          }) : null;
           const data = isGalleryMenu ? null : await registrationGalleryDataFactory({ kind: sourceKind,assertSession, accountKey: galleryAccount.homeAccountId || galleryAccount.localAccountId || galleryAccount.idTokenClaims?.oid || "", userEmail: galleryAccount.username || galleryAccount.email || "", tokenProvider: async (scopes, { signal } = {}) => {
             if (catalogToken) {
               signal?.throwIfAborted();
@@ -10195,8 +10198,10 @@ export function createAppController({
             kind: sourceKind, data,
             ...(isGalleryMenu ? { onSelect: async target => {
               assertSession();
-              const targets = sourceKind === 'assetMenu' ? ['asset', 'assetLaunches'] : ['group', 'family', 'subfamily', 'product'];
-              if (!targets.includes(target) || flowBusy()) return false;
+              const canOpenTarget = sourceKind === 'assetMenu'
+                ? ['asset', 'assetLaunches'].includes(target)
+                : REGISTRATION_GALLERY_CHOICES.some(([kind]) => kind === target);
+              if (!canOpenTarget || flowBusy()) return false;
               registrationGalleries.get(kind)?.close();
               const targetReply = Object.keys(REGISTRATION_GALLERY_KIND).find(reply => REGISTRATION_GALLERY_KIND[reply] === target);
               const selectionRevision = galleryOpeningRevision;
@@ -13027,7 +13032,10 @@ export function createAppController({
     else if (pendingAction === "action_hr_gallery_folhapgto") await openHrPayrollGallery("FOLHAPGTO");
     else if (pendingAction === "action_hr_gallery_holerite") await openHrPayrollGallery("HOLERITE");
     else if (pendingAction === HOLERITE_REPORT_ACTION) await openHrPayrollGallery("HOLERITE", "report");
-    else if (REGISTRATION_GALLERY_KIND[pendingAction]) await openRegistrationGallery(REGISTRATION_GALLERY_KIND[pendingAction], pendingAction);
+    else if (REGISTRATION_GALLERY_KIND[pendingAction]) {
+      const openOptions = auth.consumePendingRegistrationMenuReturn?.() ? { fromGalleryMenu: 'registrationMenu' } : {};
+      await openRegistrationGallery(REGISTRATION_GALLERY_KIND[pendingAction], pendingAction, openOptions);
+    }
     if (!pendingAction) void ddaAutoReminder.refresh();
   }
 
