@@ -196,12 +196,57 @@ function expenseProducts(items, expenseTotals, branchTotal) {
   }).sort(byValue);
 }
 
-export function buildSpendingReport9(snapshot, filters = {}) {
-  const rows = selectedRows(snapshot?.launches, filters);
+function selectedExpenses(snapshot, filters) {
   const paidRows = selectedRows(snapshot?.launches, filters, row => row.paymentDate);
   const forecastRows = selectedRows(snapshot?.provisions, filters, row => row.dueDate)
     .filter(row => !row.paidDate && key(row.schedule) !== "PAGO" && key(row.status) !== "PAGAMENTOEFETUADO");
-  const expenseRows = [...paidRows, ...forecastRows];
+  return [...paidRows, ...forecastRows];
+}
+
+function expenseBranchesFor(rows, expenseType) {
+  const nameKey = name => scalar(name).toLocaleLowerCase("pt-BR");
+  return groupRows(rows, row => row.branch, nameKey).map(([name, values]) => {
+    const totals = paymentTotals(values);
+    const expenseTypes = groupRows(values, expenseType, nameKey).map(([name, items]) => {
+      const amounts = paymentTotals(items);
+      const products = expenseProducts(items, amounts, totals.total);
+      return Object.freeze({ name, ...amounts, percentage: percentage(amounts.total, totals.total),
+        products: Object.freeze(products) });
+    }).sort(byValue);
+    return Object.freeze({ name, ...totals, percentage: percentage(totals.total, totals.total),
+      expenseTypes: Object.freeze(expenseTypes) });
+  }).sort(byValue);
+}
+
+function monthChange(current, previous) {
+  if (!Number.isFinite(current) || !Number.isFinite(previous)) return null;
+  if (previous === 0) return current === 0 ? 0 : Math.sign(current) * Infinity;
+  return new Decimal(current).minus(previous).div(new Decimal(previous).abs()).times(100).toNumber();
+}
+
+function compareExpenses(current, previous, level = 0) {
+  const child = ["expenseTypes", "products"][level];
+  const nameKey = name => scalar(name).toLocaleLowerCase("pt-BR");
+  const old = new Map(previous.map(item => [nameKey(item.name), item]));
+  const currentNames = new Set(current.map(item => nameKey(item.name)));
+  const all = [...current, ...previous.filter(item => !currentNames.has(nameKey(item.name))).map(item => ({
+    name: item.name, paid: 0, forecast: 0, total: 0, percentage: 0, ...(child ? { [child]: [] } : {}),
+  }))];
+  return all.map(item => {
+    const prior = old.get(nameKey(item.name));
+    const previousTotal = prior ? prior.total : 0;
+    return Object.freeze({ ...item, previousTotal, change: monthChange(item.total, previousTotal),
+      ...(child ? { [child]: Object.freeze(compareExpenses(item[child], prior?.[child] || [], level + 1)) } : {}),
+    });
+  }).filter(item => child || item.total !== 0 || item.previousTotal !== 0).sort(byValue);
+}
+
+const monthPeriod = (year, month) =>
+  `${new Intl.DateTimeFormat("pt-BR", { month: "long" }).format(new Date(2020, Number(month) - 1, 1))}/${year}`;
+
+export function buildSpendingReport9(snapshot, filters = {}) {
+  const rows = selectedRows(snapshot?.launches, filters);
+  const expenseRows = selectedExpenses(snapshot, filters);
   const total = completeSum(rows, "total");
   const productTypes = new Map();
   for (const row of snapshot?.productTypes || []) {
@@ -219,22 +264,20 @@ export function buildSpendingReport9(snapshot, filters = {}) {
   }).sort(byValue);
   const expenseType = row => !row.product ? "SEM PRODUTO"
     : productTypes.get(row.product.toLocaleLowerCase("pt-BR")) || "SEM TIPO DE DESPESA";
-  const expenseBranches = groupRows(expenseRows, branchName).map(([name, values]) => {
-    const totals = paymentTotals(values);
-    const expenseTypes = groupRows(values, expenseType).map(([name, items]) => {
-      const amounts = paymentTotals(items);
-      const products = expenseProducts(items, amounts, totals.total);
-      return Object.freeze({ name, ...amounts, percentage: percentage(amounts.total, totals.total),
-        products: Object.freeze(products) });
-    }).sort(byValue);
-    return Object.freeze({ name, ...totals, percentage: percentage(totals.total, totals.total),
-      expenseTypes: Object.freeze(expenseTypes) });
-  }).sort(byValue);
+  let expenseBranches = expenseBranchesFor(expenseRows, expenseType);
+  let comparisonPeriod = "", previousRows = [];
+  if (filters.year && filters.month) {
+    const previousMonth = Number(filters.month) === 1 ? 12 : Number(filters.month) - 1;
+    const previousYear = Number(filters.month) === 1 ? Number(filters.year) - 1 : Number(filters.year);
+    comparisonPeriod = monthPeriod(previousYear, previousMonth);
+    previousRows = selectedExpenses(snapshot, { ...filters, year: String(previousYear), month: String(previousMonth) });
+    expenseBranches = compareExpenses(expenseBranches, expenseBranchesFor(previousRows, expenseType));
+  }
   const period = filters.year ? filters.month
-    ? `${new Intl.DateTimeFormat("pt-BR", { month: "long" }).format(new Date(2020, Number(filters.month) - 1, 1))}/${filters.year}`
+    ? monthPeriod(filters.year, filters.month)
     : `Ano de ${filters.year}` : "Todos os períodos";
-  const incompleteCount = new Set([...rows, ...expenseRows].filter(row => !Number.isFinite(row.total))).size;
-  return Object.freeze({ count: rows.length, total, period, incompleteCount,
+  const incompleteCount = new Set([...rows, ...expenseRows, ...previousRows].filter(row => !Number.isFinite(row.total))).size;
+  return Object.freeze({ count: rows.length, total, period, comparisonPeriod, incompleteCount,
     branches: Object.freeze(branches), expenseBranches: Object.freeze(expenseBranches) });
 }
 

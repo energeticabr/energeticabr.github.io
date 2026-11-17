@@ -62,7 +62,7 @@ test('tabela de despesas mostra PAGO, PREVISTO e TOTAL GERAL para tipos e subtot
   const table=root.querySelector('[data-section=expense]');
   assert.deepEqual([...table.querySelectorAll('th[scope=col]')].map(th=>th.textContent),
     ['FILIAL','TIPO DE DESPESA','PAGO','PREVISTO','% DA FILIAL','TOTAL GERAL']);
-  const amounts=tr=>[...tr.querySelectorAll('.gm-money')].map(td=>td.textContent.replace(/\s/g,''));
+  const amounts=tr=>[...tr.querySelectorAll('.gm-money')].map(td=>td.firstChild.textContent.replace(/\s/g,''));
   assert.deepEqual([...table.tBodies[0].rows].map(amounts),[
     ['R$25,00','R$35,00','R$60,00'],['R$25,00','R$35,00','R$60,00'],
   ]);
@@ -104,7 +104,7 @@ test('detalha os produtos por filial e tipo, em ordem de total, e recolhe cada g
     const products=[];
     let tr=button.closest('tr').nextElementSibling;
     while(tr?.matches('.gm-expense-product')){
-      products.push(['name','paid','forecast','total'].map(column=>tr.querySelector(`[data-column=${column}]`).textContent.replace(/\s/g,'')));
+      products.push(['name','paid','forecast','total'].map(column=>tr.querySelector(`[data-column=${column}]`).firstChild.textContent.replace(/\s/g,'')));
       tr=tr.nextElementSibling;
     }
     return products;
@@ -147,4 +147,32 @@ test('detalha os produtos por filial e tipo, em ordem de total, e recolhe cada g
     ['Areia','R$0,00','R$5,00','R$5,00'],
     ['Brita','R$0,00','INCOMPLETO','INCOMPLETO'],
   ]);
+});
+
+test('Total Geral exibe a variação mensal após o valor em cada tipo, subtotal e produto',async t=>{
+  const current=(product,total)=>({...row,product,total,paymentDate:'2026-10-05'});
+  const previous=(product,total)=>({...row,product,total,paymentDate:'2026-09-05'});
+  const {view,root,dom}=setup(t,async()=>({
+    launches:[current('Cimento',150),previous('Cimento',100),current('Novo',10),previous('Antigo',80),
+      current('Zero',0),previous('Zero',0)],
+    provisions:[],productTypes:['Cimento','Novo','Antigo','Zero'].map(product=>({product,expenseType:'MATERIAL'})),
+  }));
+  await view.open();
+  const badge=node=>node.querySelector('[data-column=total] .gm-month-change');
+  let table=root.querySelector('[data-section=expense]');
+  const type=table.tBodies[0].rows[0];
+  assert.match(type.querySelector('[data-column=total]').textContent,/R\$\s*160,00 \(- 11,11%\)/);
+  assert.equal(badge(type).dataset.direction,'down');
+  assert.match(badge(type).title,/setembro\/2026/);
+  assert.equal(badge(table.querySelector('.gm-total')).textContent,'(- 11,11%)');
+  type.querySelector('button').click();
+  const details=[...table.querySelectorAll('.gm-expense-product')];
+  assert.deepEqual(details.map(tr=>tr.querySelector('[data-column=name]').textContent),['Cimento','Novo','Antigo']);
+  assert.deepEqual(details.map(tr=>badge(tr).textContent),['(+ 50%)','(+ ∞%)','(- 100%)']);
+  assert.deepEqual(details.map(tr=>badge(tr).dataset.direction),['up','up','down']);
+  type.querySelector('button').click();
+  assert.equal(table.querySelectorAll('.gm-expense-product').length,0);
+  const month=root.querySelector('[name=month]');month.value='';month.dispatchEvent(new dom.window.Event('change'));
+  table=root.querySelector('[data-section=expense]');
+  assert.equal(table.querySelectorAll('.gm-month-change').length,0);
 });
