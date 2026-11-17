@@ -53,10 +53,11 @@ export function createAttendanceSummaryReportView({document:doc=globalThis.docum
  const selected=()=>Object.fromEntries([...controls].map(([name,node])=>[name,node.value]));
  function endEditing(restoreFocus=false){
   if(!editing)return;
-  const {abort,form,trigger,lockedControls}=editing;
+  const {abort,form,trigger,lockedControls,pickers}=editing;
   for(const control of lockedControls)control.disabled=false;
   editing=null;
   abort.abort();
+  pickers?.destroy();
   form.remove();
   trigger.disabled=false;
   trigger.setAttribute('aria-expanded','false');
@@ -69,8 +70,9 @@ export function createAttendanceSummaryReportView({document:doc=globalThis.docum
   select.value=current;
  }
  function linkSelect(form,name,label){
-  const wrapper=make('label');
+  const wrapper=make('label','as-editor-field');
   const select=make('select');select.dataset.attendanceLink=name;
+  select.setAttribute('aria-label',label);
   wrapper.append(make('span','',label),select);form.append(wrapper);
   return select;
  }
@@ -80,7 +82,7 @@ export function createAttendanceSummaryReportView({document:doc=globalThis.docum
   const form=make('form','as-provider-editor'),status=make('p','as-edit-status','Carregando cadastro…');
   const cancel=button('as-edit-button','Cancelar');
   const abort=new AbortController();
-  const edit={abort,form,trigger,saving:false,lockedControls:[]};
+  const edit={abort,form,trigger,pickers:null,saving:false,lockedControls:[]};
   editing=edit;
   form.dataset.reportScreenOnly='';
   trigger.disabled=true;
@@ -103,10 +105,11 @@ export function createAttendanceSummaryReportView({document:doc=globalThis.docum
      allowed.includes(value)||stage.value===supplier.stage?value:'');
    };
    updateActivities(supplier.activity||'');
+   edit.pickers=bindSearchableFilterSelects(form,{report:true,popupHost:panel});
    stage.addEventListener('change',()=>updateActivities(activity.value));
    const actions=make('div','as-edit-actions'),save=make('button','as-edit-button as-edit-button--save','Salvar');
    save.type='submit';actions.append(cancel,save);
-   status.textContent='';form.append(status,actions);stage.focus({preventScroll:true});
+   status.textContent='';form.append(status,actions);cancel.focus({preventScroll:true});
    form.addEventListener('submit',async event=>{
     event.preventDefault();
     if(editing!==edit||edit.saving||save.disabled)return;
