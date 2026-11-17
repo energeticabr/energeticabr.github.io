@@ -62,6 +62,9 @@ function normalizeItem(item, columns) {
     throw new TypeError("Registro ou campos SharePoint inválidos no controle de documentos.");
   }
   const row = { id: item.id };
+  const attachmentFlag = String(item.fields.Attachments ?? item.hasAttachments ?? "").trim().toLowerCase();
+  if (["true", "1"].includes(attachmentFlag)) row.hasAttachments = true;
+  if (["false", "0"].includes(attachmentFlag)) row.hasAttachments = false;
   for (const [field, column] of Object.entries(columns)) {
     const value = scalar(item.fields[column]);
     if (!String(value).trim() && String(scalar(item.fields[`${column}LookupId`])).trim()) {
@@ -74,6 +77,11 @@ function normalizeItem(item, columns) {
 
 function abortIfNeeded(signal) {
   if (signal?.aborted) throw signal.reason || new DOMException("Consulta cancelada.", "AbortError");
+}
+
+function validateAttachmentTarget(listId, id) {
+  if (typeof listId !== "string" || !/^[\da-f]{8}(?:-[\da-f]{4}){3}-[\da-f]{12}$/i.test(listId)
+    || !Number.isSafeInteger(id) || id < 1) throw new Error("O destino do anexo é inválido. Atualize o relatório.");
 }
 
 // Bound every await even when an injected token provider or transport ignores cancellation.
@@ -107,7 +115,8 @@ async function resolveDocumentList(repository, signal) {
 
 async function loadRows(repository, listId, signal) {
   const columns = validateSchema(await abortable(() => repository.getColumns(SITE, listId, { signal }), signal));
-  const query = new URLSearchParams({ $expand: `fields($select=${Object.values(columns).join(",")})`, $top: "100" }).toString();
+  const fields = [...Object.values(columns), "Attachments"].join(",");
+  const query = new URLSearchParams({ $expand: `fields($select=${fields})`, $top: "100" }).toString();
   const rows = []; const ids = new Set(); const cursors = new Set(); let cursor = "";
   for (let index = 0; index < MAX_TOTAL_PAGES; index++) {
     const page = await abortable(() => repository.getItemsPage(SITE, listId, query, {
@@ -160,10 +169,42 @@ export function createDocumentControlReportData({ tokenProvider, repository: sup
       externalSignal?.removeEventListener("abort", abort);
     }
   }
+  function attachmentRepository(signal, permission) {
+    if (suppliedRepository) return suppliedRepository;
+    const guardedToken = scopes => abortable(() => tokenProvider(scopes, { signal }), signal);
+    const transport = createSharePointAttachmentTransport({
+      tokenProvider: guardedToken, allowedSites: [SHAREPOINT_SITES[SITE]],
+    });
+    return createSharePointRepository(createGraphClient(guardedToken), SHAREPOINT_SITES, {
+      attachmentTransport: {
+        request: (site, path, options) => transport.request(site, path, { ...options, permission }),
+      },
+    });
+  }
+
+  async function loadAttachmentCollection(listId, id, { signal = new AbortController().signal } = {}) {
+    abortIfNeeded(signal);
+    validateAttachmentTarget(listId, id);
+    const repository = attachmentRepository(signal, "read");
+    const files = await abortable(() => repository.listAttachments(SITE, listId, id, {
+      signal, requireCollection: true, namesOnly: true,
+    }), signal);
+    return files.map(({ name }) => ({
+      fileName: name,
+      async source({ signal: downloadSignal = signal, onProgress } = {}) {
+        abortIfNeeded(signal);
+        const reader = attachmentRepository(downloadSignal, "read");
+        const payload = await abortable(() => reader.downloadAttachment(SITE, listId, id, name, {
+          signal: downloadSignal, onProgress,
+        }), downloadSignal);
+        return payload instanceof Blob ? payload : new Blob([payload]);
+      },
+    }));
+  }
+
   async function uploadAttachments(listId, id, files, { signal = new AbortController().signal } = {}) {
     abortIfNeeded(signal);
-    if (typeof listId !== "string" || !/^[\da-f]{8}(?:-[\da-f]{4}){3}-[\da-f]{12}$/i.test(listId)
-      || !Number.isSafeInteger(id) || id < 1) throw new Error("O destino do anexo é inválido. Atualize o relatório.");
+    validateAttachmentTarget(listId, id);
     const selected = Array.from(files, file => {
       const name = validateAttachment(file).normalize("NFC");
       if (/[\\/\u0000-\u001f]/.test(name) || typeof file.arrayBuffer !== "function") {
@@ -173,16 +214,8 @@ export function createDocumentControlReportData({ tokenProvider, repository: sup
     });
     if (!selected.length) return 0;
 
-    const guardedToken = scopes => abortable(() => tokenProvider(scopes, { signal }), signal);
-    const transport = suppliedRepository ? null : createSharePointAttachmentTransport({
-      tokenProvider: guardedToken, allowedSites: [SHAREPOINT_SITES[SITE]],
-    });
     // Use the same delegated SharePoint write grant for reads during this upload.
-    const repository = suppliedRepository || createSharePointRepository(createGraphClient(guardedToken), SHAREPOINT_SITES, {
-      attachmentTransport: {
-        request: (site, path, options) => transport.request(site, path, { ...options, permission: "write" }),
-      },
-    });
+    const repository = attachmentRepository(signal, "write");
     const columns = validateSchema(await abortable(() => repository.getColumns(SITE, listId, { signal }), signal));
     const current = await abortable(() => repository.getItem(SITE, listId, id, `$expand=fields($select=${columns.status})`, { signal }), signal);
     if (String(current?.id) !== String(id) || String(scalar(current?.fields?.[columns.status])).trim().toUpperCase() !== "PENDENTE") {
@@ -213,11 +246,13 @@ export function createDocumentControlReportData({ tokenProvider, repository: sup
         saved++;
       } catch (error) {
         if (!saved || signal.aborted) throw error;
-        throw new Error(`${saved} de ${selected.length} arquivos confirmados. ${error.message}`, { cause: error });
+        throw Object.assign(new Error(`${saved} de ${selected.length} arquivos confirmados. ${error.message}`, { cause: error }), {
+          confirmedAttachmentCount: saved,
+        });
       }
     }
     return saved;
   }
 
-  return Object.freeze({ loadSnapshot, uploadAttachments });
+  return Object.freeze({ loadSnapshot, loadAttachmentCollection, uploadAttachments });
 }

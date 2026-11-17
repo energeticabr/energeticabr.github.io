@@ -9227,6 +9227,22 @@ export function createAppController({
       if (signal.aborted) throw cancelled();
     };
     const attachments = {
+      previewAttachments: typeof native.previewMediaCollection !== 'function' ? undefined
+        : async (listId, id, options) => {
+          const { signal } = options;
+          const assertCurrent = () => assertAttachmentSession(signal);
+          assertCurrent();
+          const tokenProvider = ordersGalleryTokenProvider(assertCurrent, DOCUMENT_CONTROL_REPORT_ID, () => ({ interaction: 'popup' }));
+          const source = await documentControlReportDataFactory({ tokenProvider });
+          assertCurrent();
+          const items = await source.loadAttachmentCollection(listId, id, { signal });
+          assertCurrent();
+          if (!items.length) return false;
+          await native.previewMediaCollection(items, {
+            ...options, loadErrorMessage: 'Não foi possível carregar o anexo do SharePoint.',
+          });
+          return true;
+        },
       async hasPermission({ signal }) {
         assertAttachmentSession(signal);
         try {

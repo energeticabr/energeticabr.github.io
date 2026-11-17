@@ -3,6 +3,7 @@ import { addReportCloseControl } from './report-close-control.js';
 import {buildDocumentControlOverview} from '../chat/document-control-report-model.js';
 import {provisionDateKey} from '../chat/pending-provision-dates.js';
 import {bindSearchableFilterSelects} from './searchable-filter-selects.js';
+import {PDF_ATTACHMENT_ICON} from './report-pdf-attachment-icon.js';
 
 const LOGO=new URL('../../../../assets/logo-energetica-oficial.png',import.meta.url).href;
 const FILTERS=[['branch','FILIAL'],['homologation','TIPO HOMOLOGAÇÃO'],['person','PESSOA RELACIONADA'],['documentType','TIPO DOCUMENTO'],['stage','ETAPA'],['property','IMÓVEL'],['status','STATUS']];
@@ -31,10 +32,54 @@ export function createDocumentControlReportView({document:doc=globalThis.documen
  report.append(toolbar,content);panel.append(warning,report);root.append(panel);doc.body.append(root);
  let snapshot=null,controller=null,revision=0,pickers=null,destroyed=false,returnFocus=null,oldOverflow='',app=null,oldInert=false;
  let closeAttachmentSources = null;
+ let cancelAttachmentPreview = null;
+ const uploadedDocuments = new Set();
  const landscape = bindReportLandscape(root);
   addReportCloseControl({root, toolbar:toolbar, onClose:close});
  const selected=()=>{const order=ORDERS.find(entry=>entry[0]===sort.value)||ORDERS[0];return {...Object.fromEntries([...controls].map(([name,node])=>[name,node.value])),order:order[2],direction:order[3]};};
- function showAttachmentSources(listId, id, trigger) {
+ function addAttachmentPreview(status, listId, id) {
+  if (typeof attachments?.previewAttachments !== 'function' || status.querySelector('.dcr-preview-attachment')) return;
+  const button = make('button', 'dcr-preview-attachment');
+  button.type = 'button';
+  button.setAttribute('aria-label', `Abrir anexos do documento ${id}`);
+  button.innerHTML = PDF_ATTACHMENT_ICON;
+  button.append(make('span', '', 'PDF'));
+  const feedback = make('small', 'dcr-attachment-feedback');
+  feedback.setAttribute('role', 'status');
+  button.addEventListener('click', async () => {
+   if (cancelAttachmentPreview) return;
+   const active = new AbortController();
+   const { signal } = active;
+   function finish() {
+    if (cancelAttachmentPreview !== cancel) return;
+    cancelAttachmentPreview = null;
+    button.disabled = false;
+    button.removeAttribute('aria-busy');
+    if (button.isConnected && !root.hidden && !signal.aborted) button.focus({ preventScroll: true });
+   }
+   const cancel = () => { active.abort(); finish(); };
+   cancelAttachmentPreview = cancel;
+   feedback.textContent = '';
+   button.disabled = true;
+   button.setAttribute('aria-busy', 'true');
+   try {
+    const opened = await attachments.previewAttachments(listId, id, {
+     signal, onClose: finish, resolveReturnFocus: () => button, returnLabel: 'Voltar ao controle de documentos',
+    });
+    if (!opened && !signal.aborted) {
+     feedback.textContent = 'Nenhum anexo disponível.';
+     finish();
+    }
+   } catch {
+    if (!signal.aborted) {
+     feedback.textContent = 'Não foi possível abrir os anexos. Tente novamente.';
+     finish();
+    }
+   }
+  });
+  status.firstElementChild.after(button, feedback);
+ }
+ function showAttachmentSources(listId, id, trigger, onUploaded) {
   if (closeAttachmentSources) return;
   const dialog = make('dialog', 'document-scanner dcr-attachment-chooser');
   const active = new AbortController();
@@ -92,9 +137,13 @@ export function createDocumentControlReportView({document:doc=globalThis.documen
     if (signal.aborted || !files?.length) return;
     status.textContent = 'Enviando para o SharePoint…';
     const count = await attachments.uploadAttachments(listId, id, files, { signal });
-    if (!signal.aborted) status.textContent = count === 1 ? '1 arquivo anexado.' : `${count} arquivos anexados.`;
+    if (!signal.aborted) {
+     if (count > 0) onUploaded();
+     status.textContent = count === 1 ? '1 arquivo anexado.' : `${count} arquivos anexados.`;
+    }
    } catch (error) {
     if (signal.aborted) return;
+    if (error?.confirmedAttachmentCount > 0) onUploaded();
     if (error?.code === 'AUTH_REQUIRED') {
      needsPermission = true;
      authorize.hidden = false;
@@ -119,6 +168,7 @@ export function createDocumentControlReportView({document:doc=globalThis.documen
   if (typeof attachments.hasPermission === 'function') void checkPermission(attachments.hasPermission);
  }
  function render(){
+  cancelAttachmentPreview?.();
   if(content.contains(doc.activeElement))panel.focus();content.replaceChildren();if(!snapshot)return;
   const result=buildDocumentControlOverview(snapshot,selected(),provisionDateKey(now()));
   const brand=make('div','dcr-brand'),logo=make('img');logo.src=LOGO;logo.alt='Energética Construtora';brand.append(logo);content.append(brand);
@@ -134,12 +184,16 @@ export function createDocumentControlReportView({document:doc=globalThis.documen
    const expiry=make('td',`dcr-expiration ${expired?'dcr-date-expired':row.daysToExpiry!=null&&row.daysToExpiry<=15?'dcr-date-soon':''}`);expiry.append(make('strong','',date(row.expirationDate)));if(row.daysToExpiry!=null)expiry.append(make('small','',row.daysToExpiry<0?`vencido há ${Math.abs(row.daysToExpiry)} d`:row.daysToExpiry===0?'vence hoje':`vence em ${row.daysToExpiry} d`));tr.append(expiry,make('td','dcr-left',row.branch||'—'));
    const [tone,icon]=homologation(row.homologation),hom=make('td');hom.append(make('span',`dcr-badge dcr-homologation-${tone}`,`${icon} ${row.homologation||'—'}`));tr.append(hom,make('td','dcr-type dcr-left',row.documentType||'—'),make('td','dcr-left',row.person||'—'),make('td','dcr-left',row.stage||'—'),make('td','dcr-left',row.property||'—'));
    const status=make('td'),statusTone={SUBMETIDO:'submitted',PENDENTE:'pending',APROVADO:'approved'}[upper(row.status)]||'other';status.append(make('span',`dcr-badge dcr-status-${statusTone}`,row.status||'—'));
-   if (statusTone === 'pending' && attachments) {
+   const listId = snapshot.attachmentListId;
+   if (row.hasAttachments || uploadedDocuments.has(row.id)) addAttachmentPreview(status, listId, row.id);
+   if (statusTone === 'pending' && typeof attachments?.pickAttachments === 'function') {
     const attach = make('button', 'dcr-attach', 'Anexar');
     attach.type = 'button';
     attach.setAttribute('aria-label', `Anexar ao documento ${row.id}`);
-    const listId = snapshot.attachmentListId;
-    attach.addEventListener('click', () => showAttachmentSources(listId, row.id, attach));
+    attach.addEventListener('click', () => showAttachmentSources(listId, row.id, attach, () => {
+     uploadedDocuments.add(row.id);
+     addAttachmentPreview(status, listId, row.id);
+    }));
     status.append(attach);
    }
    tr.append(status);body.append(tr);
@@ -152,13 +206,14 @@ export function createDocumentControlReportView({document:doc=globalThis.documen
   pickers=bindSearchableFilterSelects(toolbar,{placement:'below',report:true});
  }
  async function load(){
+  cancelAttachmentPreview?.();uploadedDocuments.clear();
   if(root.hidden||destroyed)return;if(content.contains(doc.activeElement))panel.focus();pickers?.close();controller?.abort();const current=++revision,active=new AbortController();controller=active;snapshot=null;refresh.disabled=true;content.replaceChildren(make('p','dcr-notice','Carregando documentos do SharePoint…'));report.setAttribute('aria-busy','true');
   try{const result=await data.loadSnapshot({signal:active.signal});if(active.signal.aborted||current!==revision||root.hidden||destroyed)return;buildDocumentControlOverview(result,{},provisionDateKey(now()));snapshot=result;populate();render();}
   catch(error){if(active.signal.aborted||current!==revision||root.hidden||destroyed)return;snapshot=null;const message=make('p','dcr-notice','Não foi possível carregar o controle de documentos.');message.setAttribute('role','status');const retry=make('button','dcr-retry','Tentar novamente');retry.type='button';retry.addEventListener('click',()=>void load());content.replaceChildren(message,retry);}
   finally{if(current===revision){refresh.disabled=false;report.setAttribute('aria-busy','false');}}
  }
  function orientationChanged() { landscape.update(); }
- function close(){if(root.hidden)return;closeAttachmentSources?.();controller?.abort();revision++;snapshot=null;pickers?.close();content.replaceChildren();root.hidden=true;doc.body.style.overflow=oldOverflow;if(app)app.inert=oldInert;const target=returnFocus?.isConnected?returnFocus:doc.querySelector('[data-action="open-document-control-report"]:not(:disabled)')||app;target?.focus?.();returnFocus=null;}
+ function close(){if(root.hidden)return;cancelAttachmentPreview?.();closeAttachmentSources?.();controller?.abort();revision++;snapshot=null;pickers?.close();content.replaceChildren();root.hidden=true;doc.body.style.overflow=oldOverflow;if(app)app.inert=oldInert;const target=returnFocus?.isConnected?returnFocus:doc.querySelector('[data-action="open-document-control-report"]:not(:disabled)')||app;target?.focus?.();returnFocus=null;}
  root.addEventListener('click',event=>{if(event.target===root)close();});root.addEventListener('keydown',event=>{
   if(root.hidden)return;if(event.key==='Escape'){event.preventDefault();close();return;}if(event.key!=='Tab')return;
   const nodes=[...panel.querySelectorAll('button,input,select,[tabindex="0"]')].filter(node=>!node.disabled&&!node.closest('[hidden]')&&node.tabIndex>=0),first=nodes[0],last=nodes.at(-1);

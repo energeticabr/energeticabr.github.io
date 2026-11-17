@@ -43,10 +43,14 @@
 .dcr-overlay[data-report-max-900="true"] .dcr-badge { padding:2px; }
 .dcr-attach { display:block; box-sizing:border-box; width:100%; max-width:88px; min-height:28px; margin:4px auto 0; padding:2px; border:1px solid #395eac; border-radius:5px; background:#fff; color:#1c3c7b; font:inherit; font-weight:700; cursor:pointer; }
 .dcr-attach:hover { background:#e6f0ff; }
+.dcr-preview-attachment { display:flex; align-items:center; justify-content:center; gap:3px; width:100%; max-width:88px; min-height:32px; box-sizing:border-box; margin:4px auto 0; padding:2px; border:1px solid #ad2828; border-radius:5px; background:#fff; color:#970000; font:inherit; font-size:max(9px,1em); font-weight:800; cursor:pointer; }
+.dcr-preview-attachment svg { flex:none; width:16px; height:16px; }
+.dcr-preview-attachment:hover { background:#fff1f1; }
+.dcr-preview-attachment[aria-busy="true"] { opacity:.65; cursor:progress; }
 .dcr-attachment-sources { display:grid; grid-template-columns:repeat(2,minmax(0,1fr)); gap:8px; }
 .dcr-attachment-chooser .dcr-attachment-feedback { font-size:.9rem; overflow-wrap:anywhere; }
 .dcr-attachment-feedback:empty { display:none; }
 .dcr-attachment-chooser > .document-scanner-secondary { margin-top:12px; }
 .dcr-webcam video { display:block; width:100%; max-height:45dvh; background:#102b39; object-fit:contain; }
 .dcr-webcam video[hidden],.dcr-webcam p:empty { display:none; }
-@media print { .dcr-attach { display:none; } }
+@media print { .dcr-attach,.dcr-preview-attachment,.dcr-attachment-feedback { display:none; } }
