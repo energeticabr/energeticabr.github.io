@@ -45,3 +45,24 @@
 .gm-table--accounts .gm-branch { background:#fff0f0; }
 .gm-table .gm-total td { border-color:#c00000; background:#fff2cc; font-weight:700; }
 .gm-total td:first-child { text-align:right; }
+.gm-product-link { display:block; width:100%; min-height:24px; padding:2px 0; border:0; background:transparent; color:#174c86; font:inherit; font-weight:700; text-align:inherit; text-decoration:underline; overflow-wrap:anywhere; }
+.gm-selectable-product { cursor:pointer; }
+.gm-selectable-product:hover { background:#e2efff; }
+.gm-product-backdrop { position:absolute; inset:0; z-index:20; display:grid; grid-template: minmax(0,1fr) / minmax(0,1fr); place-items:center; box-sizing:border-box; padding:max(12px,env(safe-area-inset-top)) max(12px,env(safe-area-inset-right)) max(12px,env(safe-area-inset-bottom)) max(12px,env(safe-area-inset-left)); background:rgb(5 32 46 / 65%); }
+.report-landscape-viewport[data-report-portrait=true] .gm-product-backdrop { padding:max(12px,env(safe-area-inset-right)) max(12px,env(safe-area-inset-bottom)) max(12px,env(safe-area-inset-left)) max(12px,env(safe-area-inset-top)); }
+.gm-product-backdrop[hidden] { display:none!important; }
+.gm-product-dialog { display:flex; flex-direction:column; min-width:0; min-height:0; width:min(1100px,100%); max-height:94%; box-sizing:border-box; padding:10px; background:white; color:#111; border:2px solid #305496; border-radius:8px; box-shadow:0 12px 45px #061f3f66; font-family:Arial,sans-serif; }
+.gm-product-header { display:flex; justify-content:space-between; align-items:center; gap:10px; flex:none; padding-bottom:8px; }
+.gm-product-header>div { min-width:0; }
+.gm-product-header h2 { margin:0; font-size:clamp(13px,calc(1.8 * var(--report-vw,1vw)),20px); overflow-wrap:anywhere; }
+.gm-product-header p { margin:3px 0 0; font-size:clamp(10px,calc(1.2 * var(--report-vw,1vw)),14px); overflow-wrap:anywhere; }
+.gm-product-close { flex:none; min-height:36px; padding:5px 12px; border:1px solid #c00000; border-radius:5px; background:white; color:#a20000; font:bold 13px Arial,sans-serif; }
+.gm-product-scroll { min-height:0; overflow:auto; overscroll-behavior:contain; }
+.gm-product-table { border-collapse:collapse; table-layout:fixed; width:100%; font:600 clamp(9px,calc(1.2 * var(--report-vw,1vw)),14px)/1.3 Arial,sans-serif; }
+.gm-product-table td,.gm-product-table th { padding:6px 4px; border:1px solid #1c3c7b; text-align:center; overflow-wrap:anywhere; }
+.gm-product-table thead th { position:sticky; top:0; z-index:1; background:#d9eaf7; }
+.gm-product-table .gm-product-period th { background:#305496; color:white; text-align:left; }
+.gm-product-table td[data-column=total] { color:#760012; }
+.gm-product-source { display:block; margin-top:3px; color:#c00000; font-size:.85em; }
+.gm-product-freight { margin:8px 0 0; font-size:11px; }
+.gm-product-dialog :focus-visible { outline:2px solid #2188c1; outline-offset:1px; }

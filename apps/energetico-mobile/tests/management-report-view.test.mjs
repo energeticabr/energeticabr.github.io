@@ -176,3 +176,88 @@ test('Total Geral exibe a variação mensal após o valor em cada tipo, subtotal
   table=root.querySelector('[data-section=expense]');
   assert.equal(table.querySelectorAll('.gm-month-change').length,0);
 });
+
+test('produto abre os registros em popup e Fechar devolve o mesmo relatório, filtros, expansão, rolagem e foco',async t=>{
+  let reads=0;
+  const {view,root,dom}=setup(t,async()=>{
+    reads++;
+    return {launches:[
+      {...row,paymentDate:'2026-10-05'},
+      {...row,id:'2',date:'2026-09-01',paymentDate:'2026-09-05',total:10},
+      {...row,id:'3',supplier:'Outro',paymentDate:'2026-10-05',total:999},
+    ],provisions:[{id:'9',product:'Cimento',branch:row.branch,supplier:'Alfa',date:'2026-10-01',
+      dueDate:'2026-10-15',unit:20,quantity:2,freight:0,total:40}],
+    productTypes:[{product:'Cimento',expenseType:'MATERIAL'}]};
+  });
+  await view.open();
+  const supplier=root.querySelector('[name=supplier]');
+  supplier.value='Alfa';supplier.dispatchEvent(new dom.window.Event('change'));
+  const scroll=root.querySelector('.gm-content');
+  const expense=root.querySelector('[data-section=expense]');
+  const toggle=expense.querySelector('.gm-expense-toggle');
+  toggle.click();
+  const product=expense.querySelector('.gm-expense-product .gm-product-link');
+  assert.ok(product,'o produto precisa ser selecionável');
+  const previousMarkup=scroll.innerHTML;
+  scroll.scrollTop=180;scroll.scrollLeft=7;
+  product.focus();product.click();
+  const popup=root.querySelector('.gm-product-backdrop');
+  assert.equal(popup.hidden,false);
+  assert.equal(root.querySelector('.gm-dialog').inert,true);
+  assert.equal(reads,1,'abrir o produto usa o snapshot completo já carregado');
+  assert.deepEqual([...popup.querySelectorAll('thead th')].map(th=>th.textContent),
+    ['DATA','DATAPGTOEFETUADO','FORNECEDOR','QTD','VALOR UNITÁRIO','TOTAL']);
+  assert.deepEqual([...popup.querySelectorAll('[data-entry-id]')].map(tr=>tr.dataset.entryId),['9','1','2']);
+  assert.match(popup.textContent,/PERÍODO ANALISADO.*outubro\/2026/);
+  assert.match(popup.textContent,/MÊS ANTERIOR.*setembro\/2026/);
+  const cells=[...popup.querySelector('[data-entry-id="1"]').cells].map(td=>td.textContent.replace(/\s/g,''));
+  assert.deepEqual(cells,['02/10/2026','05/10/2026','Alfa','2','R$10,00','R$25,00']);
+  assert.match(popup.querySelector('[data-entry-id="9"]').textContent,/PREVISTO/);
+  popup.querySelector('button').click();
+  assert.equal(popup.hidden,true);
+  assert.equal(root.hidden,false);
+  assert.equal(root.querySelector('.gm-dialog').inert,false);
+  assert.equal(root.querySelector('[data-section=expense]'),expense);
+  assert.equal(scroll.innerHTML,previousMarkup);
+  assert.equal(toggle.getAttribute('aria-expanded'),'true');
+  assert.equal(supplier.value,'Alfa');
+  assert.equal(scroll.scrollTop,180);assert.equal(scroll.scrollLeft,7);
+  assert.equal(dom.window.document.activeElement,product);
+  assert.equal(popup.querySelectorAll('[data-entry-id]').length,0,'fechar remove os dados privados do popup');
+  product.closest('tr').querySelector('[data-column=total]').click();
+  assert.equal(popup.hidden,false,'a linha também abre o produto');
+  popup.querySelector('button').dispatchEvent(new dom.window.KeyboardEvent('keydown',{key:'Escape',bubbles:true,cancelable:true}));
+  assert.equal(popup.hidden,true);assert.equal(root.hidden,false);
+});
+
+test('ranking de produtos abre o próprio período; fechar relatório e atualizar também encerram o popup sem reaparecer',async t=>{
+  const dangerous='<img src=x onerror=alert(1)>';
+  const {view,root,dom}=setup(t,async()=>({launches:[{...row,product:dangerous,supplier:dangerous}],
+    provisions:[],productTypes:[]}));
+  await view.open();
+  const product=root.querySelector('[data-section=products] .gm-product-link');
+  assert.ok(product);
+  product.click();
+  const popup=root.querySelector('.gm-product-backdrop');
+  assert.equal(popup.hidden,false);
+  assert.equal(popup.querySelectorAll('img').length,0);
+  assert.match(popup.textContent,/<img src=x onerror=alert\(1\)>/);
+  assert.equal(popup.querySelectorAll('[data-entry-id]').length,1);
+  assert.equal(popup.querySelectorAll('.gm-product-period').length,1);
+  const close=popup.querySelector('button');
+  close.focus();
+  close.dispatchEvent(new dom.window.KeyboardEvent('keydown',{key:'Tab',shiftKey:true,bubbles:true,cancelable:true}));
+  assert.equal(dom.window.document.activeElement,popup.querySelector('.gm-product-scroll'));
+  popup.click();
+  assert.equal(popup.hidden,true);assert.equal(root.hidden,false);
+  product.click();
+  view.close();
+  assert.equal(root.hidden,true);
+  assert.equal(popup.hidden,true);
+  assert.equal(popup.querySelectorAll('[data-entry-id]').length,0);
+  await view.open();
+  assert.equal(popup.hidden,true);
+  root.querySelector('[data-section=products] .gm-product-link').click();
+  root.querySelector('[name=month]').dispatchEvent(new dom.window.Event('change'));
+  assert.equal(popup.hidden,true,'uma mudança de filtros não deixa o detalhe antigo aberto');
+});
