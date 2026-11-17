@@ -36,10 +36,12 @@ export function createBrowserAuth({ client, config, storage }) {
   let pendingAction = null;
   let pendingStageFinish = null;
   let pendingTaskFinish = null;
+  let pendingRegistrationMenuReturn = false;
 
   async function initialize() {
     pendingStageFinish = null;
     pendingTaskFinish = null;
+    pendingRegistrationMenuReturn = false;
     try {
       await client.initialize();
       const redirect = await client.handleRedirectPromise();
@@ -67,6 +69,7 @@ export function createBrowserAuth({ client, config, storage }) {
         pendingAction = pending.action;
         pendingStageFinish = stageFinishForAction(pending.action, pending.scopes, pending.stageFinishDraft);
         pendingTaskFinish = taskFinishForAction(pending.action, pending.scopes, pending.taskFinishDraft);
+        pendingRegistrationMenuReturn = pending.returnToRegistrationMenu === true && SUPPLY_CATALOG_ACTIONS.includes(pending.action);
       }
       return account;
     } catch (error) {
@@ -101,7 +104,7 @@ export function createBrowserAuth({ client, config, storage }) {
     }
   }
 
-  async function authorize(scopes = ["User.Read"], { resumeAction, stageFinishDraft, taskFinishDraft } = {}) {
+  async function authorize(scopes = ["User.Read"], { resumeAction, stageFinishDraft, taskFinishDraft, returnToRegistrationMenu } = {}) {
     if (!account || !msalAccount) throw new BrowserAuthError("AUTH_REQUIRED", "Entre novamente com a Microsoft.");
     const requestedScopes = [...scopes];
     if (RESUMABLE_ACTIONS.has(resumeAction)) {
@@ -117,6 +120,7 @@ export function createBrowserAuth({ client, config, storage }) {
           scopes: requestedScopes,
           ...(draft ? { stageFinishDraft: draft } : {}),
           ...(taskDraft ? { taskFinishDraft: taskDraft } : {}),
+          ...(returnToRegistrationMenu === true && SUPPLY_CATALOG_ACTIONS.includes(resumeAction) ? { returnToRegistrationMenu: true } : {}),
         }));
       } catch {
         throw new BrowserAuthError("AUTH_FAILED", "Não foi possível preservar a ação solicitada durante a autorização Microsoft.");
@@ -141,6 +145,7 @@ export function createBrowserAuth({ client, config, storage }) {
     pendingAction = null;
     pendingStageFinish = null;
     pendingTaskFinish = null;
+    pendingRegistrationMenuReturn = false;
     removePendingAction(storage);
     await client.logoutRedirect({
       account: signedInAccount,
@@ -152,10 +157,16 @@ export function createBrowserAuth({ client, config, storage }) {
     consumePendingAction() { const action = pendingAction; pendingAction = null; return action; },
     consumePendingStageFinish() { const draft = pendingStageFinish; pendingStageFinish = null; return draft; },
     consumePendingTaskFinish() { const draft = pendingTaskFinish; pendingTaskFinish = null; return draft; },
+    consumePendingRegistrationMenuReturn() {
+      const returnToMenu = pendingRegistrationMenuReturn;
+      pendingRegistrationMenuReturn = false;
+      return returnToMenu;
+    },
   });
 }
 
 const PENDING_ACTION_KEY = "energetico:msal-pending-action:v1";
+const SUPPLY_CATALOG_ACTIONS = ["action_supplier_gallery", "action_account_gallery", "action_material_type_gallery", "action_unit_of_measure_gallery"];
 const RESUMABLE_ACTIONS = new Set([
   'action_investment_gallery',
   'action_financial_movement_gallery',
@@ -194,10 +205,7 @@ const RESUMABLE_ACTIONS = new Set([
   "action_hr_create_idfolha",
   "action_hr_gallery_folhapgto",
   "action_hr_gallery_funcionarios",
-  "action_supplier_gallery",
-  "action_account_gallery",
-  "action_material_type_gallery",
-  "action_unit_of_measure_gallery",
+  ...SUPPLY_CATALOG_ACTIONS,
   "action_asset_gallery",
   "action_asset_function_gallery",
   "action_asset_product_gallery",

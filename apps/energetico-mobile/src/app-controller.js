@@ -6911,7 +6911,7 @@ export function createAppController({
     });
   }
 
-  function ordersGalleryTokenProvider(assertSession, resumeAction = ORDERS_GALLERY_ID, resumeOptions) {
+  function ordersGalleryTokenProvider(assertSession, resumeAction = ORDERS_GALLERY_ID, getResumeOptions) {
     const inFlight = new Map();
     return async scopes => {
       assertSession();
@@ -6926,7 +6926,7 @@ export function createAppController({
         } catch (error) {
           assertSession();
           if (error?.code !== "AUTH_REQUIRED" || typeof auth.authorize !== "function") throw error;
-          await auth.authorize(scopes, { resumeAction, ...resumeOptions });
+          await auth.authorize(scopes, { resumeAction, ...getResumeOptions?.() });
           assertSession();
           const token = await auth.getToken(scopes);
           assertSession();
@@ -8407,7 +8407,7 @@ export function createAppController({
       const finalizingStage = method === 'finalizeStage';
       const writing = finalizingStage || method === 'finalizeActivity';
       const resumeOptions = writing ? { stageFinishDraft: { id: args[0], date: args[1], ...(finalizingStage ? { kind: 'stage' } : {}) } } : undefined;
-      const getToken = ordersGalleryTokenProvider(assertAction, STAGE_PROGRESS_ID, resumeOptions);
+      const getToken = ordersGalleryTokenProvider(assertAction, STAGE_PROGRESS_ID, () => resumeOptions);
       const writeScopes = ['Sites.ReadWrite.All'];
       try {
         // Finish consent before checking linked descriptions so the write does not
@@ -9468,9 +9468,9 @@ export function createAppController({
       };
       assertAction();
       for (const sourceSignal of signals) sourceSignal.addEventListener('abort', abort, { once: true });
-      const tokenProvider = ordersGalleryTokenProvider(assertAction, TASK_ASSOCIATION_REPORT_ID, {
+      const tokenProvider = ordersGalleryTokenProvider(assertAction, TASK_ASSOCIATION_REPORT_ID, () => ({
         taskFinishDraft: { id, date: completionDate },
-      });
+      }));
       try {
         // Obtain write consent before checking the current item and its version.
         const writeToken = await tokenProvider([...TASK_ASSOCIATION_REPORT_SCOPES, 'Sites.ReadWrite.All']);
@@ -10167,7 +10167,10 @@ export function createAppController({
     const opening = (async () => {
       try {
         if (!registrationGalleries.has(kind)) {
-          const catalogToken = isSupplyCatalog ? ordersGalleryTokenProvider(assertSession, replyId) : null;
+          const catalogToken = isSupplyCatalog ? ordersGalleryTokenProvider(assertSession, replyId, () => {
+            const currentOptions = registrationGalleryOpenOptions.get(registrationGalleries.get(kind)) ?? openOptions;
+            if (currentOptions.fromGalleryMenu === 'registrationMenu') return { returnToRegistrationMenu: true };
+          }) : null;
           const data = isGalleryMenu ? null : await registrationGalleryDataFactory({ kind: sourceKind,assertSession, accountKey: galleryAccount.homeAccountId || galleryAccount.localAccountId || galleryAccount.idTokenClaims?.oid || "", userEmail: galleryAccount.username || galleryAccount.email || "", tokenProvider: async (scopes, { signal } = {}) => {
             if (catalogToken) {
               signal?.throwIfAborted();
@@ -13029,7 +13032,10 @@ export function createAppController({
     else if (pendingAction === "action_hr_gallery_folhapgto") await openHrPayrollGallery("FOLHAPGTO");
     else if (pendingAction === "action_hr_gallery_holerite") await openHrPayrollGallery("HOLERITE");
     else if (pendingAction === HOLERITE_REPORT_ACTION) await openHrPayrollGallery("HOLERITE", "report");
-    else if (REGISTRATION_GALLERY_KIND[pendingAction]) await openRegistrationGallery(REGISTRATION_GALLERY_KIND[pendingAction], pendingAction);
+    else if (REGISTRATION_GALLERY_KIND[pendingAction]) {
+      const openOptions = auth.consumePendingRegistrationMenuReturn?.() ? { fromGalleryMenu: 'registrationMenu' } : {};
+      await openRegistrationGallery(REGISTRATION_GALLERY_KIND[pendingAction], pendingAction, openOptions);
+    }
     if (!pendingAction) void ddaAutoReminder.refresh();
   }
 

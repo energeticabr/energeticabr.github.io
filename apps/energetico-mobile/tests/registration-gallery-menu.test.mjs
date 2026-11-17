@@ -5,6 +5,7 @@ import { createChatView } from '../src/ui/chat-view.js';
 import { createAppController } from '../src/app-controller.js';
 import { createConversationStore } from '../src/chat/conversation-store.js';
 import { createRegistrationGallery } from '../src/ui/registration-gallery-view.js';
+import { createBrowserAuth } from '../src/web/browser-auth.js';
 
 const tick = () => new Promise(resolve => setImmediate(resolve));
 const supplies = options => ({ sessionStatus: 'authenticated', pendingFiles: [], draft: '', messages: [{
@@ -31,7 +32,7 @@ test('atalho cinza acompanha Efetuar Cadastros e dispara acesso próprio uma só
   assert.equal(doc.querySelector('[data-reply-id="action_registration_hub"]'), null);
 });
 
-function harness(t, { factory, response } = {}) {
+function harness(t, { factory, response, auth, loadSnapshot = async () => ({ rows: [] }) } = {}) {
   const dom = new JSDOM('<body><button id="origin">Cadastros</button></body>');
   const doc = dom.window.document, handlers = new Map(), requests = [], sources = [], panels = [];
   const view = { on(event, handler) { handlers.set(event, handler); return () => handlers.delete(event); },
@@ -39,11 +40,14 @@ function harness(t, { factory, response } = {}) {
   const account = { homeAccountId: 'registration-menu-test', username: 'test@example.invalid' };
   const store = createConversationStore();
   const controller = createAppController({ view, store,
-    auth: { initialize: async () => account, getToken: async () => 'synthetic-token' },
+    auth: auth ?? { initialize: async () => account, getToken: async () => 'synthetic-token' },
     native: { importSharedItems: async () => [] },
     client: { sendText: async payload => { requests.push(payload); return response ? response(payload) : { status: 'processed', messages: [] }; } },
     pendingProvisionAttachmentsDataFactory: async () => ({ loadUpcomingPayments: async () => [] }),
-    registrationGalleryDataFactory: async ({ kind }) => { sources.push(kind); return { loadSnapshot: async () => ({ rows: [] }) }; },
+    registrationGalleryDataFactory: async ({ kind, tokenProvider }) => {
+      sources.push(kind);
+      return { loadSnapshot: () => loadSnapshot(tokenProvider) };
+    },
     registrationGalleryFactory: async options => {
       panels.push(options);
       if (factory) return factory(options);
@@ -90,6 +94,52 @@ test('somente uma linha de Efetuar Cadastros recebe o atalho; outros cadastros n
   view.render(supplies([{ id: 'action_custom', label: 'CADASTRO DE OUTRO TIPO' }]));
   assert.equal(doc.querySelector('[data-reply-id="action_registration_hub"]'), null);
 });
+
+for (const fromMenu of [true, false]) {
+  test(`retorno após autorização Microsoft preserva a origem ${fromMenu ? 'no seletor' : 'direta'} da galeria`, async t => {
+    const account = { homeAccountId: 'catalog-test', username: 'test@example.invalid' };
+    const config = { webRedirectUri: 'https://example.invalid' };
+    const values = new Map();
+    const storage = { getItem: key => values.get(key), setItem: (key, value) => values.set(key, value), removeItem: key => values.delete(key) };
+    const scopes = ['Sites.Read.All'];
+    let consentNeeded = false;
+    let redirects = 0;
+    const auth = createBrowserAuth({ config, storage, client: {
+      async initialize() {}, async handleRedirectPromise() { return null; }, getAllAccounts: () => [account],
+      async acquireTokenSilent() {
+        if (consentNeeded) throw { errorCode: 'interaction_required' };
+        return { accessToken: 'synthetic-token' };
+      },
+      async acquireTokenRedirect() { redirects++; consentNeeded = false; },
+    } });
+    const first = harness(t, { auth, loadSnapshot: async tokenProvider => { await tokenProvider(scopes); return { rows: [] }; } });
+    const openSupplier = async fromHub => {
+      if (fromHub) {
+        await first.view.emit('select-reply', { replyId: 'action_registration_hub' });
+        first.doc.querySelector('[data-registration-gallery="supplier"]').click();
+      } else await first.view.emit('select-reply', { replyId: 'action_supplier_gallery' });
+      await tick(); await tick();
+    };
+    await first.controller.start();
+    await openSupplier(!fromMenu);
+    first.doc.querySelector('[data-gallery-kind="supplier"] [data-action="registration-close"]').click();
+    await tick();
+    consentNeeded = true;
+    await openSupplier(fromMenu);
+    assert.deepEqual(first.sources, ['supplier']);
+    assert.equal(redirects, 1);
+
+    const resumedAuth = createBrowserAuth({ config, storage, client: {
+      async initialize() {}, getAllAccounts: () => [account],
+      async handleRedirectPromise() { return { account, accessToken: 'synthetic-token', scopes }; },
+    } });
+    const resumed = harness(t, { auth: resumedAuth });
+    await resumed.controller.start();
+    resumed.doc.querySelector('[data-gallery-kind="supplier"] [data-action="registration-close"]').click();
+    await tick(); await tick();
+    assert.equal(resumed.doc.querySelector('.registration-gallery-menu')?.hidden === false, fromMenu);
+  });
+}
 
 for (const [kind, replyId] of [['registrationMenu', 'action_registration_hub'], ['group', 'action_group_gallery']]) {
   test(`navegação pelo chat descarta a fábrica atrasada de ${kind}`, async t => {
