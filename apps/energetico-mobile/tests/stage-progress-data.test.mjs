@@ -55,6 +55,18 @@ test("complete snapshot reads only the two personal lists with exact operations 
   assert.ok(Object.isFrozen(snapshot.launches[0]));
 });
 
+test("reads the TIPO classification when Graph also calls the system DocIcon column Tipo", async () => {
+  const { repository } = fixture({
+    async getColumns(_site, list) {
+      return list === "LANCAMENTOOBRA"
+        ? [{ name: "DocIcon", displayName: "Tipo", readOnly: true }, ...columns(list)]
+        : columns(list);
+    },
+  });
+  const snapshot = await create({ repository }).loadSnapshot();
+  assert.equal(snapshot.launches[0].type, "ATIVIDADE FANTASMA");
+});
+
 test("renamed Title and encoded aliases resolve while computed and title links are excluded", async () => {
   const { repository } = fixture({
     async getColumns(_site, list) {
