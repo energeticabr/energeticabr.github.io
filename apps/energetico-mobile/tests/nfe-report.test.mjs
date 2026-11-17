@@ -731,7 +731,7 @@ test('NFE shows the provision shortcut and links the description after saving wi
   const catalog = {
     suppliers:[{ id:'1',label:'ELÉTRICA TESTE LTDA' }], branches:[{ id:'10',label:'OBRA A' }],
     accounts:[{ id:'40',label:'CONTA TESTE' }], stages:[{ id:'30',label:'FUNDAÇÃO',branch:'OBRA A' }],
-    products:[{ id:'20',label:'CIMENTO EXEMPLO',unit:'SC',expenseType:'MATERIAL' }],
+    products:[{ id:'20',label:'CIMENTO EXEMPLO',unit:'KG',expenseType:'MATERIAL' }],
   };
   const draft = { supplierId:'1',branchId:'10',accountId:'40',date:fiscal.issueDate,
     lines:[{ ...fiscal.lines[0],productId:'20',stageId:'30',date:fiscal.issueDate,dueDate:fiscal.dueDate }] };
@@ -755,6 +755,14 @@ test('NFE shows the provision shortcut and links the description after saving wi
   shortcut.click();
   await new Promise(resolve => setImmediate(resolve));
   assert.match(root.querySelector('.nfe-proposal-dialog').getAttribute('aria-label'), /provisão/i);
+  const line = root.querySelector('.nfe-proposal-line');
+  assert.match(line.querySelector('summary').textContent, /3 SC × 500/);
+  line.open = true;
+  line.dispatchEvent(new dom.window.Event('toggle'));
+  assert.equal(line.querySelector('input[type="checkbox"]'), null);
+  const product = line.querySelector('[name="productId"]');
+  product.dispatchEvent(new dom.window.Event('change'));
+  assert.match(line.querySelector('summary').textContent, /3 SC × 500/);
   const account = root.querySelector('[name="accountId"]');
   assert.match(account.options[0].textContent, /opcional/i);
   account.value = '';

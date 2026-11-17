@@ -15,6 +15,8 @@ const available = value => !['inativo','inativa','bloqueado','bloqueada','cancel
 const iso = day => `${day}T12:00:00Z`;
 const FISCAL_NUMBER = /^\d{1,12}$/;
 const ProvisionDecimal = Decimal.clone({ precision:60 });
+const legacyUnitDraft = draft => draft.lines?.length > 0 && draft.lines.every(line =>
+  typeof line.unitReviewed === 'boolean' && !Object.hasOwn(line, 'unit'));
 
 async function fingerprint(value) {
   const digest = await globalThis.crypto.subtle.digest('SHA-256', new TextEncoder().encode(value));
@@ -41,18 +43,19 @@ function options(items, fields, { status = 'STATUS', filter = () => true } = {})
   })).filter(item => item.label).sort(sortable);
 }
 
-function normalizedDraft(draft, { supplier, branch, account, date, lines }) {
+function normalizedDraft(draft, { supplier, branch, account, date, lines }, { legacyUnits = false } = {}) {
   return {
     supplierId:supplier.id, branchId:branch.id, accountId:account?.id ?? '', date,
     ...(draft.reviewStamp ? { reviewStamp:draft.reviewStamp } : {}),
     lines:lines.map(line => ({ number:line.number, productId:line.product.id, stageId:line.stage.id,
       quantity:line.quantity, unitPrice:line.unitPrice, adjustment:line.adjustment, discount:line.discount,
-      date:line.date, dueDate:line.dueDate, unitReviewed:line.unitReviewed })),
+      date:line.date, dueDate:line.dueDate,
+      ...(legacyUnits ? { unitReviewed:line.unitReviewed } : { unit:line.unit }) })),
   };
 }
 
-export function materializeNfeProposal(row, fiscal, draft, catalog) {
-  const result = validateNfeProposal(draft, fiscal, catalog);
+export function materializeNfeProposal(row, fiscal, draft, catalog, options = {}) {
+  const result = validateNfeProposal(draft, fiscal, catalog, options);
   const { supplier, branch, account, date, lines } = result;
   const number = clean(row.number);
   const fiscalLabel = `${row.type}${number ? ` nº ${number}` : ''}`;
@@ -68,14 +71,14 @@ export function materializeNfeProposal(row, fiscal, draft, catalog) {
       field_16:`${fiscalLabel} · Item ${line.number}: ${line.description}`,
       ...(FISCAL_NUMBER.test(number) ? { field_18:Number(number) } : {}),
       field_19:'PEDIDO FINALIZADO', field_20:`APP-NFE-${row.key}-${line.number}`,
-      TIPODESPESA:product.expenseType, UN:product.unit,
+      TIPODESPESA:product.expenseType, UN:line.unit,
       ...(product.disburses ? { GERADESEMBOLSO:product.disburses } : {}),
       APROVACAO:'PENDENTE DE APROVAÇÃO',
     };
     return { number:line.number, fields };
   });
   return {
-    draft:normalizedDraft(draft, result),
+    draft:normalizedDraft(draft, result, options),
     orderFields:{
       Title:`APP-NFE-${row.key}`, FILIAL:branch.label, FORNECEDOR:supplier.label,
       VALORTOTAL:result.total.replace('.', ','), DATAPEDIDO:iso(date), STATUS:'PENDENTE AUDITORIA',
@@ -86,8 +89,8 @@ export function materializeNfeProposal(row, fiscal, draft, catalog) {
   };
 }
 
-export function materializeNfeProvision(row, fiscal, draft, catalog) {
-  const result = validateNfeProposal(draft, fiscal, catalog, { provision:true });
+export function materializeNfeProvision(row, fiscal, draft, catalog, options = {}) {
+  const result = validateNfeProposal(draft, fiscal, catalog, { ...options, provision:true });
   const { supplier, branch, account, lines, total } = result;
   const fiscalLabel = `${row.type} nº ${row.number || row.id}`;
   const source = `${fiscalLabel} · Chave ${row.key}`;
@@ -105,12 +108,14 @@ export function materializeNfeProvision(row, fiscal, draft, catalog) {
       ...common, Title:`${title}-${line.number}`, PRODUTO:line.product.label, ETAPA:line.stage.label,
       DATA:iso(line.date), DATAPREVISTOPGTO:iso(line.dueDate), PGTOAGENDADO:'PENDENTE',
       QTD:provisionTextTotal(line.quantity), VALORTOTAL:provisionTextTotal(price.toFixed()), FRETE:provisionTextTotal(remainder.toFixed()),
-      OBS:`${fiscalLabel} · Item ${line.number}: ${line.description}`.slice(0,255),
+      OBS:(options.legacyUnits
+        ? `${fiscalLabel} · Item ${line.number}: ${line.description}`
+        : `${fiscalLabel} · Item ${line.number} · ${line.quantity} ${line.unit}: ${line.description}`).slice(0,255),
     } };
   });
   const firstDueDate = lines.map(line => line.dueDate).sort()[0];
   return {
-    draft:normalizedDraft(draft, result),
+    draft:normalizedDraft(draft, result, options),
     parentFields:{ ...common, Title:title, OBS:source, VALORTOTAL:provisionTextTotal(total), DATAPREVISTOPGTO:iso(firstDueDate) },
     provisionFields,
   };
@@ -231,13 +236,15 @@ export function createNfeProposalData({ repository, fiscalData, tokenProvider, s
   const posting = createNfeProposalPosting({
     repository, assertSession, authorizeWrite, downloadAttachments, provision,
     resolveLearningScope:async row => (await learningIdentity(row))?.scope,
-    async prepare(row, draft, { signal, baseline, manualStages }) {
+    async prepare(row, draft, { signal, baseline, manualStages, reserved }) {
       const [{ fiscal, xmlHash }, catalog] = await Promise.all([loadXml(row, signal), loadCatalog(signal)]);
       active(signal);
       if (draft.reviewStamp !== await reviewStamp(draft, catalog, xmlHash)) {
         throw new Error('O XML ou os cadastros desta proposta mudaram. Reabra o relatório para conferir os dados.');
       }
-      const proposal = (provision ? materializeNfeProvision : materializeNfeProposal)(row, fiscal, draft, catalog);
+      // Regenerate old frozen plans exactly; their hashes also protect partially posted records.
+      const legacyUnits = reserved && legacyUnitDraft(draft);
+      const proposal = (provision ? materializeNfeProvision : materializeNfeProposal)(row, fiscal, draft, catalog, { legacyUnits });
       if (baseline) {
         const identity = await learningIdentity(row);
         const example = identity && createNfeLearningExample(identity.invoice, fiscal, baseline, proposal.draft, manualStages);
@@ -264,7 +271,8 @@ export function createNfeProposalData({ repository, fiscalData, tokenProvider, s
       }
       const draft = reserved || buildNfeProposal(row, fiscal, catalog);
       const baseline = learning ? { ...draft, lines:draft.lines.map(line => ({ ...line })) } : null;
-      return { fiscal, catalog, xmlHash, draft, baseline, reserved:Boolean(reserved) };
+      return { fiscal, catalog, xmlHash, draft, baseline, reserved:Boolean(reserved),
+        legacyUnits:Boolean(reserved) && legacyUnitDraft(draft) };
     },
     loadReservation:posting.loadReservation,
     async submit(row, draft, { signal, catalog, xmlHash, onProgress, baseline, manualStages } = {}) {

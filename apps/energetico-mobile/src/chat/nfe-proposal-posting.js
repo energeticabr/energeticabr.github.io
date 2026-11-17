@@ -420,6 +420,7 @@ export function createNfeProposalPosting({ repository, assertSession = () => {},
 
     const candidate = await prepare(source, JSON.parse(input), {
       signal, baseline:current.reservation || current.linked ? null : baseline, manualStages,
+      reserved:Boolean(current.reservation || current.linked),
     });
     const prepared = normalizePayload(candidate, headerKey, linesKey);
     const parentFields = prepared[headerKey], lineFields = prepared[linesKey];

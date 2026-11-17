@@ -18,19 +18,9 @@ const stopWords = new Set(['DE','DA','DO','DAS','DOS','PARA','COM','SEM','E','O'
 const words = text => new Set(nfeProposalKey(text).split(' ').filter(word => word && !stopWords.has(word)));
 const productKey = value => nfeProposalKey(value).replace(/(\d)\s+(?=[a-z])/g, '$1');
 const selectionId = option => option?.id || '';
-const unitAliases = new Map(Object.entries({
-  und:'un',unid:'un',unidade:'un',unidades:'un',pc:'un',pca:'un',peca:'un',
-  cx:'caixa',sc:'saco',sac:'saco',kg:'kg',quilo:'kg',quilograma:'kg',
-  h:'hora',hr:'hora',horas:'hora',mt:'m',metro:'m',metros:'m',
-  mt2:'m2',metroquadrado:'m2',mt3:'m3',metrocubico:'m3',lt:'l',litro:'l',
-}));
-function unitKey(value) {
-  const key = nfeProposalKey(String(value ?? '').normalize('NFKC')).replace(/ /g, '');
-  return unitAliases.get(key) || key;
-}
-
-export function nfeProposalUnitMismatch(fiscalUnit, catalogUnit) {
-  return Boolean(fiscalUnit && catalogUnit && unitKey(fiscalUnit) !== unitKey(catalogUnit));
+// The XML quantity and price are expressed in the fiscal unit, regardless of the catalog.
+export function nfeProposalUnit(fiscalUnit, catalogUnit) {
+  return String(fiscalUnit ?? '').trim() || String(catalogUnit ?? '').trim();
 }
 
 function pickBest(items, score, threshold, margin) {
@@ -124,7 +114,7 @@ export function updateNfeProposalSupplier(draft, supplierId, catalog) {
 
 export function updateNfeProposalProduct(draft, number, productId, catalog) {
   return { ...draft, lines:draft.lines.map(line => line.number === number
-    ? { ...line, productId, unitReviewed:false, stageId:proposedStage(catalog, draft.branchId, productId, number, draft.supplierId) } : line) };
+    ? { ...line, productId, stageId:proposedStage(catalog, draft.branchId, productId, number, draft.supplierId) } : line) };
 }
 
 export function buildNfeProposal(invoice, fiscal, catalog) {
@@ -141,7 +131,7 @@ export function buildNfeProposal(invoice, fiscal, catalog) {
   const lines = fiscal.lines.map(line => ({
     number:line.number, productId:catalog.learning?.product(line, context) || selectionId(proposedProduct(line, products)),
     quantity:line.quantity, unitPrice:line.unitPrice, discount:line.discount, adjustment:line.adjustment,
-    date:fiscal.issueDate, dueDate:fiscal.dueDate || '', unitReviewed:false,
+    date:fiscal.issueDate, dueDate:fiscal.dueDate || '',
   }));
   return updateNfeProposalBranch({ ...draft, lines }, branchId, catalog);
 }
@@ -178,7 +168,7 @@ function checkedDate(value, label, optional = false) {
   return value;
 }
 
-export function validateNfeProposal(draft, fiscal, catalog, { provision = false } = {}) {
+export function validateNfeProposal(draft, fiscal, catalog, { provision = false, legacyUnits = false } = {}) {
   const supplier = select(catalog.suppliers, draft.supplierId);
   const branch = select(catalog.branches, draft.branchId);
   const account = select(catalog.accounts, draft.accountId);
@@ -202,10 +192,8 @@ export function validateNfeProposal(draft, fiscal, catalog, { provision = false 
     if (!product) throw new Error(`Selecione um produto cadastrado no item ${line.number}.`);
     if (!product.expenseType) throw new Error(`O produto do item ${line.number} está sem tipo de despesa no cadastro.`);
     if (!stage) throw new Error(`Selecione uma etapa da filial no item ${line.number}.`);
-    if (!product.unit) throw new Error(`Cadastre a unidade do produto do item ${line.number}.`);
-    if (nfeProposalUnitMismatch(original.unit, product.unit) && line.unitReviewed !== true) {
-      throw new Error(`Confira a unidade e a quantidade no item ${line.number}.`);
-    }
+    const unit = nfeProposalUnit(legacyUnits ? '' : original.unit, product.unit);
+    if (!unit) throw new Error(`Informe a unidade na nota ou no cadastro do produto do item ${line.number}.`);
     const amounts = nfeProposalAmounts(line);
     const rawGross = amounts.quantity.times(amounts.unitPrice);
     // Existing financial reports sum raw quantity × unit price + FRETE.
@@ -223,7 +211,8 @@ export function validateNfeProposal(draft, fiscal, catalog, { provision = false 
       discount:amounts.discount.toFixed(2), adjustment:amounts.adjustment.toFixed(2),
       netAdjustment:storedAdjustment, date:checkedDate(line.date, `a data do item ${line.number}`),
       dueDate:checkedDate(line.dueDate, `o vencimento do item ${line.number}`, !provision),
-      unitReviewed:line.unitReviewed === true,
+      unit,
+      ...(legacyUnits ? { unitReviewed:line.unitReviewed === true } : {}),
     };
   });
   if (provision && total.lte(0)) throw new Error('O total da provisão deve ser maior que zero.');
