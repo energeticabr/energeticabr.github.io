@@ -1,311 +1,115 @@
 name: Energético iOS
 
 on:
-  push:
-    branches:
-      - main
-      - feat/energetico-ios-chat
-    paths:
-      - "apps/energetico-mobile/**"
-      - ".github/workflows/energetico-ios.yml"
-  pull_request:
-    paths:
-      - "apps/energetico-mobile/**"
-      - ".github/workflows/energetico-ios.yml"
   workflow_dispatch:
     inputs:
       distribute:
-        description: "Enviar uma versão assinada ao TestFlight"
+        description: "Distribuir no Intel a revisão imutável já validada, dentro de 24 horas"
         required: true
-        default: false
+        default: true
         type: boolean
-      use_intel_runner:
-        description: "Usar executor Intel quando os servidores ARM estiverem indisponíveis"
-        required: true
-        default: false
-        type: boolean
-      capture_review_screenshots:
-        description: "Capturar telas reais da demonstração nos simuladores iPhone e iPad"
-        required: true
-        default: false
-        type: boolean
-      validate_app_store:
-        description: "Validar requisitos da App Store sem alterar a Apple"
-        required: true
-        default: false
-        type: boolean
-      submit_app_store:
-        description: "Enviar a versão e build indicados para revisão da App Store"
-        required: true
-        default: false
-        type: boolean
-      app_store_version:
-        description: "Versão já enviada à Apple (exemplo: 1.0)"
-        required: false
-        type: string
-      app_store_build:
-        description: "Build já processado pela Apple (exemplo: 6)"
-        required: false
-        type: string
-      attach_latest_testflight:
-        description: "Associar a build processada ao grupo interno do TestFlight sem gerar nova build"
-        required: true
-        default: false
-        type: boolean
-      sync_testflight_testers:
-        description: "Manter somente os e-mails indicados no grupo interno do TestFlight"
-        required: true
-        default: false
-        type: boolean
-      testflight_allowed_emails:
-        description: "E-mails permitidos no grupo interno, separados por vírgula"
-        required: false
-        default: "bernardonotini@energeticabr.com"
-        type: string
 
 permissions:
   contents: read
+  actions: read
 
+# One-off release branch: preserves the registered workflow identity/counter.
+# Main's queued distribution must be checked/cancelled by the release operator.
 concurrency:
-  group: energetico-ios-${{ github.ref }}-${{ github.event_name == 'workflow_dispatch' && (inputs.validate_app_store || inputs.submit_app_store) && 'app-store' || 'build' }}
-  # Finish the active main release; only the newest pending revision waits.
-  cancel-in-progress: ${{ github.ref != 'refs/heads/main' && !(github.event_name == 'workflow_dispatch' && (inputs.validate_app_store || inputs.submit_app_store)) }}
+  group: energetico-ios-validated-intel-${{ github.ref }}
+  cancel-in-progress: false
 
 jobs:
-  app-store-review:
-    name: Validar ou enviar para revisão App Store
-    if: ${{ github.event_name == 'workflow_dispatch' && (inputs.validate_app_store == true || inputs.submit_app_store == true) }}
-    runs-on: ubuntu-latest
-    needs: web-tests
-    environment: app-store-connect
-    concurrency:
-      group: energetico-app-store-review
-      cancel-in-progress: false
-    env:
-      APPLE_API_KEY_ID: ${{ secrets.APPLE_API_KEY_ID }}
-      APPLE_API_ISSUER_ID: ${{ secrets.APPLE_API_ISSUER_ID }}
-      APPLE_API_PRIVATE_KEY_B64: ${{ secrets.APPLE_API_PRIVATE_KEY_B64 }}
-      APPLE_APP_PRIVACY_VERIFIED_FOR: ${{ vars.APPLE_APP_PRIVACY_VERIFIED_FOR }}
-      APP_STORE_VERSION: ${{ inputs.app_store_version }}
-      APP_STORE_BUILD: ${{ inputs.app_store_build }}
-      SUBMIT_APP_STORE: ${{ inputs.submit_app_store }}
-    steps:
-      - name: Baixar código
-        uses: actions/checkout@v4
-      - name: Preparar Node
-        uses: actions/setup-node@v4
-        with:
-          node-version: 24
-      - name: Validar requisitos e executar somente a ação solicitada
-        working-directory: apps/energetico-mobile
-        run: node scripts/app-store-submission.mjs
-
-  web-tests:
-    name: Testes e pacote web
+  validate-previous-checks:
+    name: Validar pré-requisitos imutáveis já executados
+    if: ${{ github.event_name == 'workflow_dispatch' && inputs.distribute == true }}
     runs-on: ubuntu-latest
     steps:
-      - name: Baixar código
-        uses: actions/checkout@v4
+      - name: Confirmar revisão, última tentativa, testes, idade e contador
+        uses: actions/github-script@v7
         with:
-          fetch-depth: 0
-      - name: Preparar pnpm
-        uses: pnpm/action-setup@v4
-        with:
-          version: 10.26.0
-      - name: Preparar Node
-        uses: actions/setup-node@v4
-        with:
-          node-version: 24
-          cache: pnpm
-          cache-dependency-path: apps/energetico-mobile/pnpm-lock.yaml
-      - name: Verificar trava dos gestos da assinatura
-        working-directory: apps/energetico-mobile
-        env:
-          SIGNATURE_GESTURE_BASE_REF: ${{ github.event.pull_request.base.sha || (github.event.before != '0000000000000000000000000000000000000000' && github.event.before) || github.event.repository.default_branch }}
-        run: |
-          base_ref="$SIGNATURE_GESTURE_BASE_REF"
-          if ! git rev-parse --verify "${base_ref}^{commit}" >/dev/null 2>&1; then
-            base_ref="${{ github.event.repository.default_branch }}"
-          fi
-          pnpm guard:signature-gestures -- --base-ref "$base_ref"
-      - name: Instalar dependências fixadas
-        working-directory: apps/energetico-mobile
-        run: pnpm install --frozen-lockfile
-      - name: Validar segredos ausentes
-        working-directory: apps/energetico-mobile
-        run: pnpm secrets:verify
-      - name: Conferir layout da ordenação de tarefas
-        working-directory: apps/energetico-mobile
-        run: node --test tests/tasks-gallery-sort-browser.test.mjs
-      - name: Executar testes
-        working-directory: apps/energetico-mobile
-        run: pnpm test
-      - name: Gerar pacote web
-        working-directory: apps/energetico-mobile
-        run: pnpm build
-
-  native-share-tests:
-    name: Testes nativos do compartilhamento
-    # Keep ARM by default; Intel is an explicit fallback for runner capacity.
-    # Warm the runtime before the same Swift/HTTP and 18 UIKit assertions.
-    runs-on: ${{ inputs.use_intel_runner == true && 'macos-26-intel' || 'macos-26' }}
-    steps:
-      - name: Baixar código
-        uses: actions/checkout@v4
-      - name: Preparar Node
-        uses: actions/setup-node@v4
-        with:
-          node-version: 24
-      - name: Testar recebimento nativo e progresso real de arquivos
-        working-directory: apps/energetico-mobile
-        run: |
-          xcrun swiftc ios/ShareExtension/SharedInboxStore.swift ios/ShareExtension/SharedUploadProgress.swift tests/native-share/progress.swift tests/native-share/main.swift -o "$RUNNER_TEMP/energetico-share-tests"
-          node scripts/verify-native-share.mjs "$RUNNER_TEMP/energetico-share-tests"
-      - name: Aquecer runtime do simulador no executor Intel
-        if: ${{ inputs.use_intel_runner == true }}
-        timeout-minutes: 15
-        shell: bash
-        run: |
-          set -euo pipefail
-          read -r prewarm_runtime prewarm_phone < <(xcrun simctl list --json | python3 -c 'import json,sys; d=json.load(sys.stdin); r=next(x for x in d["runtimes"] if x.get("isAvailable") and x["name"].startswith("iOS 26")); p=next((x for x in d["devicetypes"] if x["name"]=="iPhone 16"),next(x for x in d["devicetypes"] if x["name"].startswith("iPhone"))); print(r["identifier"],p["identifier"])')
-          prewarm_id=$(xcrun simctl create ENERGETICO-Share-Prewarm "$prewarm_phone" "$prewarm_runtime")
-          cleanup_prewarm() {
-            xcrun simctl shutdown "$prewarm_id" >/dev/null 2>&1 || true
-            xcrun simctl delete "$prewarm_id"
-          }
-          trap cleanup_prewarm EXIT
-          xcrun simctl boot "$prewarm_id"
-          xcrun simctl bootstatus "$prewarm_id" -b
-      - name: Verificar o cluster abaixo do mascote no UIKit
-        working-directory: apps/energetico-mobile
-        run: node scripts/verify-native-share-preview.mjs
-      - name: Guardar verificações visuais nativas
-        uses: actions/upload-artifact@v4
-        with:
-          name: energetico-native-share-progress
-          path: apps/energetico-mobile/build/native-share-preview
-          if-no-files-found: error
-          retention-days: 7
-
-  ios-simulator:
-    name: Build iOS sem assinatura
-    runs-on: ${{ inputs.use_intel_runner == true && 'macos-26-intel' || 'macos-26' }}
-    needs: [web-tests, native-share-tests]
-    steps:
-      - name: Baixar código
-        uses: actions/checkout@v4
-      - name: Preparar pnpm
-        uses: pnpm/action-setup@v4
-        with:
-          version: 10.26.0
-      - name: Preparar Node
-        uses: actions/setup-node@v4
-        with:
-          node-version: 24
-          cache: pnpm
-          cache-dependency-path: apps/energetico-mobile/pnpm-lock.yaml
-      - name: Confirmar Xcode 26
-        run: |
-          xcodebuild -version
-          test "$(xcodebuild -version | awk 'NR == 1 { print $2 }' | cut -d. -f1)" = "26"
-      - name: Testar ativação no menu Compartilhar
-        working-directory: apps/energetico-mobile
-        run: |
-          xcrun swiftc tests/share-activation/main.swift -o "$RUNNER_TEMP/energetico-activation-tests"
-          "$RUNNER_TEMP/energetico-activation-tests"
-      - name: Instalar dependências fixadas
-        working-directory: apps/energetico-mobile
-        run: pnpm install --frozen-lockfile
-      - name: Gerar e sincronizar o aplicativo
-        working-directory: apps/energetico-mobile
-        run: |
-          pnpm assets:generate
-          # Keep every test; run files serially on the constrained Intel fallback.
-          pnpm exec node --test --test-concurrency=${{ inputs.use_intel_runner == true && '1' || '2' }} tests/*.test.mjs
-          pnpm build
-          pnpm cap:sync
-          node scripts/configure-share-extension.mjs
-          pnpm ios:verify
-      - name: Resolver MSAL
-        working-directory: apps/energetico-mobile
-        run: xcodebuild -resolvePackageDependencies -project ios/App/App.xcodeproj -scheme App
-      - name: Compilar aplicativo e extensão para o Simulator
-        working-directory: apps/energetico-mobile
-        run: |
-          xcodebuild \
-            -project ios/App/App.xcodeproj \
-            -scheme App \
-            -configuration Debug \
-            -sdk iphonesimulator \
-            -destination 'generic/platform=iOS Simulator' \
-            -derivedDataPath build/DerivedData \
-            CODE_SIGNING_ALLOWED=NO \
-            build
-          test -d build/DerivedData/Build/Products/Debug-iphonesimulator/App.app
-          test -d build/DerivedData/Build/Products/Debug-iphonesimulator/App.app/PlugIns/ShareExtension.appex
-          "$RUNNER_TEMP/energetico-activation-tests" build/DerivedData/Build/Products/Debug-iphonesimulator/App.app/PlugIns/ShareExtension.appex/Info.plist
-      - name: Guardar build gratuito do Simulator
-        uses: actions/upload-artifact@v4
-        with:
-          name: energetico-ios-simulator
-          path: apps/energetico-mobile/build/DerivedData/Build/Products/Debug-iphonesimulator/App.app
-          if-no-files-found: error
-          retention-days: 7
-
-  review-screenshots:
-    name: Capturas reais para App Review
-    if: ${{ github.event_name == 'workflow_dispatch' && inputs.capture_review_screenshots == true }}
-    runs-on: ${{ inputs.use_intel_runner == true && 'macos-26-intel' || 'macos-26' }}
-    needs: ios-simulator
-    environment: app-store-connect
-    steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-node@v4
-        with:
-          node-version: 24
-      - uses: actions/setup-java@v4
-        with:
-          distribution: temurin
-          java-version: 17
-      - uses: actions/download-artifact@v4
-        with:
-          name: energetico-ios-simulator
-          path: apps/energetico-mobile/build/ReviewApp.app
-      - name: Instalar ferramenta de teste fixada
-        env:
-          GH_TOKEN: ${{ github.token }}
-        run: |
-          mkdir -p "$RUNNER_TEMP/maestro-download"
-          gh release download cli-2.10.0 -R mobile-dev-inc/maestro -p maestro.zip -p checksums_sha256.txt -D "$RUNNER_TEMP/maestro-download"
-          cd "$RUNNER_TEMP/maestro-download"
-          shasum -a 256 -c checksums_sha256.txt
-          unzip -q maestro.zip -d "$RUNNER_TEMP/maestro"
-      - name: Capturar somente telas após login de demonstração
-        working-directory: apps/energetico-mobile
-        env:
-          MAESTRO_REVIEW_USER: ${{ secrets.ENERGETICO_REVIEW_USERNAME }}
-          MAESTRO_REVIEW_PASSWORD: ${{ secrets.ENERGETICO_REVIEW_PASSWORD }}
-          MAESTRO_BIN: ${{ runner.temp }}/maestro/maestro/bin/maestro
-        run: |
-          chmod +x build/ReviewApp.app/App
-          node scripts/capture-review.mjs build/ReviewApp.app build/review-screenshots
-      - name: Guardar apenas imagens públicas sem credenciais
-        uses: actions/upload-artifact@v4
-        with:
-          name: energetico-review-screenshots
-          path: apps/energetico-mobile/build/review-screenshots/*.jpg
-          if-no-files-found: error
-          retention-days: 7
+          script: |
+            const owner = 'energeticabr';
+            const repo = 'energeticabr.github.io';
+            const expectedRepository = `${owner}/${repo}`;
+            const expectedPath = '.github/workflows/energetico-ios.yml';
+            const expectedSha = '5d08976cc5731db373e767a388cf74701f52dfd5';
+            const sourceRunId = 44141321820;
+            const sourceRunNumber = 2868;
+            const fail = message => { throw new Error(message); };
+            if (`${context.repo.owner}/${context.repo.repo}` !== expectedRepository) {
+              fail('Repositório de distribuição inesperado.');
+            }
+            const releaseNumber = Number(process.env.GITHUB_RUN_NUMBER);
+            if (!Number.isSafeInteger(releaseNumber) || releaseNumber <= sourceRunNumber) {
+              fail('A distribuição deve usar o contador novo do workflow iOS existente.');
+            }
+            const { data: source } = await github.rest.actions.getWorkflowRun({
+              owner, repo, run_id: sourceRunId,
+            });
+            if (source.id !== sourceRunId || source.run_number !== sourceRunNumber
+                || source.repository?.full_name !== expectedRepository
+                || source.head_repository?.full_name !== expectedRepository
+                || source.path !== expectedPath || source.event !== 'push'
+                || source.head_branch !== 'main' || source.head_sha !== expectedSha) {
+              fail('A execução-base não corresponde à revisão imutável autorizada.');
+            }
+            const createdAt = Date.parse(source.created_at);
+            const age = Date.now() - createdAt;
+            if (!Number.isFinite(createdAt) || age < 0 || age > 24 * 60 * 60 * 1000) {
+              fail('A execução-base precisa ter sido criada nas últimas 24 horas.');
+            }
+            const { data: workflow } = await github.rest.actions.getWorkflow({
+              owner, repo, workflow_id: source.workflow_id,
+            });
+            if (workflow.path !== expectedPath) fail('Caminho do workflow-base inesperado.');
+            const { data: current } = await github.rest.actions.getWorkflowRun({
+              owner, repo, run_id: context.runId,
+            });
+            if (current.workflow_id !== source.workflow_id || current.path !== expectedPath
+                || current.run_number !== releaseNumber || current.event !== 'workflow_dispatch') {
+              fail('A distribuição deve continuar a identidade e o contador do workflow iOS existente.');
+            }
+            const attempt = source.run_attempt;
+            if (!Number.isSafeInteger(attempt) || attempt < 1) fail('Tentativa-base inválida.');
+            const jobs = await github.paginate(github.rest.actions.listJobsForWorkflowRunAttempt, {
+              owner, repo, run_id: sourceRunId, attempt_number: attempt, per_page: 100,
+            });
+            for (const name of [
+              'Testes e pacote web',
+              'Testes nativos do compartilhamento',
+              'Build iOS sem assinatura',
+            ]) {
+              const matches = jobs.filter(job => job.name === name);
+              if (matches.length !== 1 || matches[0].status !== 'completed'
+                  || matches[0].conclusion !== 'success'
+                  || matches[0].head_sha !== expectedSha || matches[0].run_id !== sourceRunId
+                  || matches[0].run_attempt !== attempt) {
+                fail(`Pré-requisito ausente, duplicado ou sem sucesso na última tentativa: ${name}`);
+              }
+            }
+            const { data: fresh } = await github.rest.actions.getWorkflowRun({
+              owner, repo, run_id: sourceRunId,
+            });
+            if (fresh.run_attempt !== attempt || fresh.head_sha !== expectedSha) {
+              fail('A tentativa-base mudou durante a verificação; nenhuma distribuição foi autorizada.');
+            }
+            const { data: main } = await github.rest.repos.getBranch({
+              owner, repo, branch: 'main',
+            });
+            if (main.commit?.sha !== expectedSha) {
+              fail('Main mudou desde a validação; a distribuição fixa não pode substituir uma revisão mais recente.');
+            }
+            core.notice(`Revisão ${expectedSha}; run ${sourceRunNumber}, tentativa ${attempt}; três pré-requisitos aprovados; nova build ${releaseNumber}.`);
 
   testflight:
     name: Distribuição TestFlight
-    if: ${{ (github.event_name == 'push' && github.ref == 'refs/heads/main') || (github.event_name == 'workflow_dispatch' && inputs.distribute == true) }}
-    runs-on: ${{ inputs.use_intel_runner == true && 'macos-26-intel' || 'macos-26' }}
-    needs:
-      - web-tests
-      - ios-simulator
+    if: ${{ github.event_name == 'workflow_dispatch' && inputs.distribute == true }}
+    runs-on: macos-26-intel
+    needs: validate-previous-checks
     environment: app-store-connect
     env:
+      VALIDATED_SOURCE_SHA: 5d08976cc5731db373e767a388cf74701f52dfd5
       APPLE_API_KEY_ID: ${{ secrets.APPLE_API_KEY_ID }}
       APPLE_API_ISSUER_ID: ${{ secrets.APPLE_API_ISSUER_ID }}
       APPLE_API_PRIVATE_KEY_B64: ${{ secrets.APPLE_API_PRIVATE_KEY_B64 }}
@@ -333,6 +137,10 @@ jobs:
           done
       - name: Baixar código
         uses: actions/checkout@v4
+        with:
+          ref: 5d08976cc5731db373e767a388cf74701f52dfd5
+          fetch-depth: 0
+          persist-credentials: false
       - name: Preparar pnpm
         uses: pnpm/action-setup@v4
         with:
@@ -343,6 +151,17 @@ jobs:
           node-version: 24
           cache: pnpm
           cache-dependency-path: apps/energetico-mobile/pnpm-lock.yaml
+      - name: Confirmar revisão imutável antes de compilar
+        shell: bash
+        run: |
+          set -euo pipefail
+          test "$(git rev-parse HEAD)" = "$VALIDATED_SOURCE_SHA"
+      - name: Verificar novamente a trava dos gestos da assinatura
+        working-directory: apps/energetico-mobile
+        shell: bash
+        run: |
+          set -euo pipefail
+          pnpm guard:signature-gestures -- --base-ref "${VALIDATED_SOURCE_SHA}^"
       - name: Instalar dependências e sincronizar
         working-directory: apps/energetico-mobile
         run: |
@@ -411,47 +230,3 @@ jobs:
           TESTFLIGHT_MAX_ATTEMPTS: 40
           TESTFLIGHT_POLL_MS: 30000
         run: node scripts/attach-testflight-build.mjs
-
-  testflight-attach-existing:
-    name: Associar build existente ao TestFlight
-    if: ${{ github.event_name == 'workflow_dispatch' && inputs.attach_latest_testflight == true }}
-    runs-on: ubuntu-latest
-    environment: app-store-connect
-    env:
-      APPLE_API_KEY_ID: ${{ secrets.APPLE_API_KEY_ID }}
-      APPLE_API_ISSUER_ID: ${{ secrets.APPLE_API_ISSUER_ID }}
-      APPLE_API_PRIVATE_KEY_B64: ${{ secrets.APPLE_API_PRIVATE_KEY_B64 }}
-      APP_STORE_BUILD: ${{ inputs.app_store_build }}
-      TESTFLIGHT_MAX_ATTEMPTS: 40
-      TESTFLIGHT_POLL_MS: 30000
-    steps:
-      - name: Baixar código
-        uses: actions/checkout@v4
-      - name: Preparar Node
-        uses: actions/setup-node@v4
-        with:
-          node-version: 24
-      - name: Associar última build processada
-        working-directory: apps/energetico-mobile
-        run: node scripts/attach-testflight-build.mjs
-
-  testflight-testers:
-    name: Ajustar testadores internos do TestFlight
-    if: ${{ github.event_name == 'workflow_dispatch' && inputs.sync_testflight_testers == true }}
-    runs-on: ubuntu-latest
-    environment: app-store-connect
-    env:
-      APPLE_API_KEY_ID: ${{ secrets.APPLE_API_KEY_ID }}
-      APPLE_API_ISSUER_ID: ${{ secrets.APPLE_API_ISSUER_ID }}
-      APPLE_API_PRIVATE_KEY_B64: ${{ secrets.APPLE_API_PRIVATE_KEY_B64 }}
-      TESTFLIGHT_ALLOWED_EMAILS: ${{ inputs.testflight_allowed_emails }}
-    steps:
-      - name: Baixar código
-        uses: actions/checkout@v4
-      - name: Preparar Node
-        uses: actions/setup-node@v4
-        with:
-          node-version: 24
-      - name: Sincronizar testadores internos
-        working-directory: apps/energetico-mobile
-        run: node scripts/manage-testflight-testers.mjs
