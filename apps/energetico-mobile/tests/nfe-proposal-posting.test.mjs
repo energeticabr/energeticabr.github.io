@@ -132,7 +132,8 @@ function fixture(provision = false) {
       return files.get(name);
     },
   };
-  async function prepare(_row, input) {
+  async function prepare(_row, input, options) {
+    (state.prepareReserved ??= []).push(options.reserved);
     if (state.prepareUnavailable) throw new Error('catalog unavailable');
     return { draft:input, learning:state.learning, orderFields:{ FORNECEDOR:'Fornecedor fictício', VALORTOTAL:15, DATAPEDIDO:'2026-11-08T12:00:00Z',
       STATUS:'PENDENTE AUDITORIA', NOTAFISCAL:'SUBMETIDO' },
@@ -155,6 +156,15 @@ function fixture(provision = false) {
     } });
   return { fiscal, tables, files, events, state, service };
 }
+
+test('marks a retry as reserved before regenerating its frozen plan', async () => {
+  const { state, service } = fixture();
+  state.rejectLine = `${key}-2`;
+  await assert.rejects(service().submit(invoice, draft), /launch creation unavailable/);
+  state.rejectLine = null;
+  await service().submit(invoice, await service().loadReservation(invoice));
+  assert.deepEqual(state.prepareReserved, [false,true]);
+});
 
 for (const provision of [false,true]) {
   test(`${provision ? 'provision' : 'order'} carries all DDA installments and non-PDF fiscal attachments, without duplicates`, async () => {
