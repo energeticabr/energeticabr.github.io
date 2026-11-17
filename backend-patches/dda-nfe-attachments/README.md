@@ -27,5 +27,3 @@ For deployment stop the timer, allow the active service to finish, back up code/
 The optional `controlled_backfill.py` uses the same reverse function and lock without repeating forward PDF checks. Run it as root only while the service is inactive and the timer is stopped; it preserves progress and writes a separate audit result.
 
 Before backfill snapshot financial fields and attachment names/hashes on both lists. Afterward verify fiscal reverse copies match original DDA bytes, existing attachments are preserved and financial fields are unchanged. Replay using the same timer/service and verify no duplicate names or new writes. The app repository owns its own attachment-to-order/provision copying.
-
-

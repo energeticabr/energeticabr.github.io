@@ -48,4 +48,3 @@ $reverse=@{type='If';runAfter=@{};expression=$expression;actions=@{DDA_nota=(Rea
 $branch.else.actions=@{Sincronizar_DDA=$reverse}
 $definition|ConvertTo-Json -Depth 100|Set-Content (Join-Path $PSScriptRoot 'fiscal-bridge-definition.json')
 @{status='built';modes=$props.mode.enum}|ConvertTo-Json
-
