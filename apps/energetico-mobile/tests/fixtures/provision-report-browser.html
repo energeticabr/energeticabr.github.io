@@ -99,11 +99,12 @@ try {
       const collapsedHidden=controlled.every(node=>node.hidden&&getComputedStyle(node).display==='none');
       toggle.focus();toggle.click();await new Promise(requestAnimationFrame);
       for(let attempt=0;attempt<10&&controlled.some(row=>!row.querySelector('.pr-attachment-file'));attempt++)await new Promise(requestAnimationFrame);
-      const attachmentColors=[summary,main.querySelector('[data-id="303"]')].map(row=>{
-        const icon=row.querySelector('.pr-attachment-icon');return {color:getComputedStyle(icon).color,paths:icon.querySelectorAll('path').length};
+      const attachmentCells=[summary,main.querySelector('[data-id="303"]')].map(row=>{
+        const cell=row.querySelector('.pr-attachments'),icon=cell.querySelector('.pr-attachment-icon');
+        return {state:cell.dataset.attachmentState,text:cell.textContent,color:icon?getComputedStyle(icon).color:null,icons:cell.querySelectorAll('svg').length};
       });
       groupProbe={collapsedHidden,expanded:toggle.getAttribute('aria-expanded'),focusKept:document.activeElement===toggle,
-        attachmentColors,attachmentFiles:controlled.map(row=>row.querySelector('.pr-attachment-file')?.title),
+        attachmentCells,attachmentFiles:controlled.map(row=>row.querySelector('.pr-attachment-file')?.title),
         branchRect:rect(branchCell),branchDisplay:getComputedStyle(branchCell).display,branchTextRect:rect(branchText),toggleRect:rect(toggle),
         summaryFill:getComputedStyle(summary).backgroundColor,childFill:getComputedStyle(controlled[0]).backgroundColor,
         equalBranch:controlled[0].querySelector('[data-column=branch]').textContent,

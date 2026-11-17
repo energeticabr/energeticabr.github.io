@@ -4,6 +4,7 @@ import { buildProvisionReport, groupProvisionReportRows } from '../chat/provisio
 import { formatReportDate, formatReportMoney } from '../chat/contractor-report-model.js';
 import { provisionDateKey, provisionDueState } from '../chat/pending-provision-dates.js';
 import { bindSearchableFilterSelects } from './searchable-filter-selects.js';
+import { PDF_ATTACHMENT_ICON } from './report-pdf-attachment-icon.js';
 
 const LOGO = new URL('../../../../assets/logo-energetica-oficial.png', import.meta.url).href;
 const FIELDS = [['branch','FILIAL'],['supplier','FORNECEDOR'],['product','PRODUTO'],['paymentStatus','STATUS PAGAMENTOS'],['recurrenceStatus','STATUS']];
@@ -11,8 +12,6 @@ const MONTHS = ['JAN','FEV','MAR','ABR','MAI','JUN','JUL','AGO','SET','OUT','NOV
 const money = value => Number.isFinite(value) ? formatReportMoney(value) : 'INCOMPLETO';
 const daysBetween = (start,end) => Math.round((Date.parse(`${end}T00:00:00Z`)-Date.parse(`${start}T00:00:00Z`))/86400000);
 const upper = value => String(value || '').trim().toLocaleUpperCase('pt-BR');
-const PAPERCLIP = '<path d="M20.6 11.4 11 21a6 6 0 0 1-8.5-8.5L13 2a4 4 0 0 1 5.7 5.7L8.2 18.2a2 2 0 0 1-2.8-2.8l9.5-9.5"/>';
-const CROSS = '<circle cx="18" cy="17" r="5" fill="white" stroke="none"/><path d="m15 14 6 6m0-6-6 6"/>';
 let instanceSequence=0;
 
 export function createProvisionReportView({document:doc=globalThis.document,data,openMediaCollection,now=()=>new Date()}={}) {
@@ -173,17 +172,17 @@ export function createProvisionReportView({document:doc=globalThis.document,data
     function setState(state,label,node){
       td.dataset.attachmentState=state;
       td.setAttribute('aria-label',label);
-      td.replaceChildren(node);
+      td.replaceChildren(...(node?[node]:[]));
     }
     function icon(state,label,action){
       const node=action?button('pr-attachment-icon','',label):make('span','pr-attachment-icon');
       node.title=label;
-      node.innerHTML=`<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false">${PAPERCLIP}${state==='empty'?CROSS:''}</svg>`;
+      node.innerHTML=PDF_ATTACHMENT_ICON;
       if(action)node.addEventListener('click',()=>void action(node));
       setState(state,state==='empty'?'Sem anexos':'Com anexos',node);
     }
     function showFiles(items){
-      if(!items.length){icon('empty',`Sem anexos ${itemLabel}`);return;}
+      if(!items.length){setState('empty',`Sem anexos ${itemLabel}`);return;}
       if(!detail){icon('present',`Anexos ${itemLabel}`,canOpenAttachments?preview:null);return;}
       const list=make('div','pr-attachment-files');
       for(const file of items){
