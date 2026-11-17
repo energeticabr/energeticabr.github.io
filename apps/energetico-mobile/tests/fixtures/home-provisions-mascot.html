@@ -140,7 +140,7 @@ const launches=[{id:'3498',paymentDate:'2026-10-02',supplier:'Alfa',branch:'004 
 launches.push(...Array.from({length:8},(_,i)=>({...launches[0],id:String(4000+i),branch:`Filial de teste ${i}`,unit:0,quantity:1,total:0})));
 const report=createPaymentLedgerView({document,data:{async loadPaymentsSnapshot(){window.reportLoads++;return {launches};}}});
 view.on('open-payment-ledger',()=>{window.reportOpened++;void report.open();});
-const management=createManagementReportView({document,now:()=>new Date('2026-10-05T12:00:00Z'),data:{async loadSnapshot(){return {launches:launches.map(row=>({...row,date:'2026-10-02',stage:'ALVENARIA E ESTRUTURAS'})),productTypes:[{product:'SERVENTE DE PEDREIRO',expenseType:'MÃO DE OBRA'}]};}}});
+const management=createManagementReportView({document,now:()=>new Date('2026-10-05T12:00:00Z'),data:{async loadSnapshot(){return {launches:launches.map(row=>({...row,date:'2026-10-02',stage:'ALVENARIA E ESTRUTURAS'})),provisions:[],productTypes:[{product:'SERVENTE DE PEDREIRO',expenseType:'MÃO DE OBRA'}]};}}});
 view.on('open-management-report',()=>void management.open());
 const provision=createProvisionReportView({document,now:()=>new Date('2026-10-05T12:00:00Z'),data:{async loadProvisionReportSnapshot(){return {provisions:Array.from({length:12},(_,i)=>({id:String(i+1),recurrenceId:'7',supplier:`Fornecedor ${i}`,branch:'004 - EDIFÍCIO XAVANTE',product:'LOCAÇÃO CONTAINER',observation:'Conferir quantidade',property:'Obra',dueDate:'2026-10-08',paidDate:'',status:'PAGAMENTO PREVISTO',total:200})),recurrences:[{id:'7',status:'ATIVO',startDate:'2026-01-08'}]};}}});
 view.on('open-provision-report',()=>void provision.open());

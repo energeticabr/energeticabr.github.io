@@ -70,7 +70,7 @@ test('expanded report picker is not narrowed by a clipping ancestor', t => {
 const reports = [
   ['payment-ledger', 'createPaymentLedgerView', 'loadPaymentsSnapshot', { launches: [] }],
   ['provision-report', 'createProvisionReportView', 'loadProvisionReportSnapshot', { provisions: [], recurrences: [] }],
-  ['management-report', 'createManagementReportView', 'loadSnapshot', { launches: [], productTypes: [] }],
+  ['management-report', 'createManagementReportView', 'loadSnapshot', { launches: [], provisions: [], productTypes: [] }],
   ['order-validation-report', 'createOrderValidationReportView', 'loadOrderValidationSnapshot', { orders: [], launches: [] }],
   ['attendance-summary', 'createAttendanceSummaryReportView', 'loadSnapshot', { presences: [], suppliers: [] }],
   ['stage-progress', 'createStageProgressReportView', 'loadSnapshot', { complete: true, activities: [], launches: [] }],
