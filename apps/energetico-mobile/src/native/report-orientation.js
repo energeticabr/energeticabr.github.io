@@ -14,10 +14,11 @@ export function createReportOrientationController({
   screenOrientation = nativeScreenOrientation,
 } = {}) {
   const documents = new Map();
+  const transitions = new Set();
   let requested = false, applied = false, pending = Promise.resolve();
 
   function update() {
-    const visible = [...documents.values()].some(({ roots }) =>
+    const visible = transitions.size > 0 || [...documents.values()].some(({ roots }) =>
       [...roots].some(root => root.isConnected && !root.closest('[hidden]')));
     if (visible === requested) return pending;
     requested = visible;
@@ -35,7 +36,20 @@ export function createReportOrientationController({
     return pending;
   }
 
-  return Object.freeze({ bind(root) {
+  return Object.freeze({
+    // Navigation closes the source before asynchronously building its neighbor.
+    // Retain an existing landscape request across that gap, without rotating a
+    // browser or a route that did not already own native report orientation.
+    beginTransition() {
+      if (!requested) return () => pending;
+      const transition = {};
+      transitions.add(transition);
+      return () => {
+        if (!transitions.delete(transition)) return pending;
+        return update();
+      };
+    },
+    bind(root) {
     if (!isNative()) return Object.freeze({ update() {}, destroy() {} });
     const doc = root.ownerDocument;
     let entry = documents.get(doc), destroyed = false;

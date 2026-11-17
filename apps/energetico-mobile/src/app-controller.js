@@ -38,6 +38,7 @@ import {
 import { normalizeConstructionDiaryText } from "./ui/construction-diary-text.js";
 import { provisionDateKey, provisionDayOffset } from "./chat/pending-provision-dates.js";
 import { decorateReportNavigation, getReportNeighbors } from "./ui/report-navigation.js";
+import { reportOrientation } from './native/report-orientation.js';
 import { createReportSessionCache } from "./report-session-cache.js";
 import { observeReportMutations, observeReportMutationFactory } from "./report-mutations.js";
 import { subscribeDataMutations } from "../../../portal/data/data-mutations.js";
@@ -1091,6 +1092,7 @@ export function createAppController({
   registrationGalleryFactory = defaultRegistrationGalleryFactory,
   ddaReportFactory = defaultDdaReportFactory,
   nfeReportFactory = defaultNfeReportFactory,
+  reportOrientationController = reportOrientation,
   sicoobTransactionReportFactory = defaultSicoobTransactionReportFactory,
   ddaSyncSessionFactory = createDdaSyncSession,
   sefazSyncSessionFactory = createSefazSyncSession,
@@ -5695,6 +5697,7 @@ export function createAppController({
 
   function returnToMainMenu() {
     if (!account || stopped || flowBusy()) return false;
+    cancelMascotOrientationTransition();
     const flow = store.getState().activeFlow;
     const eligible = unsubmittedUserAttachments(store.getState().attachments);
     if (!pendingAutomaticExit) {
@@ -6733,15 +6736,22 @@ export function createAppController({
       if (panel.element && (!panel.element.isConnected || panel.element.hidden
         || panel.element.closest?.('[hidden]') || panel.element.getAttribute?.('aria-hidden') === 'true')) return false;
     }
-    resetMascotNavigationOverlays();
-    const navigation = {};
+    const navigation = { releaseOrientation: reportOrientationController.beginTransition() };
+    cancelMascotOrientationTransition();
     mascotNavigationOpening = navigation;
     try {
+      resetMascotNavigationOverlays();
       const result = await openMascotReport(target);
       return mascotNavigationOpening === navigation && result;
     } finally {
+      navigation.releaseOrientation();
       if (mascotNavigationOpening === navigation) mascotNavigationOpening = null;
     }
+  }
+
+  function cancelMascotOrientationTransition() {
+    mascotNavigationOpening?.releaseOrientation();
+    mascotNavigationOpening = null;
   }
 
   function resetMascotNavigationOverlays() {
@@ -11491,6 +11501,7 @@ export function createAppController({
   }
 
   async function signOut() {
+    cancelMascotOrientationTransition();
     disposePendingPayrollLinks();
     pendingPayrollRecovery.clear();
     disposeHrBenefitPanel();
@@ -12319,7 +12330,7 @@ export function createAppController({
         && command?.replyId !== 'action_hr_create_idfolha') disposePayrollSheetCreate();
       if (mascotNavigationOpening && (type.startsWith('open-') || type === 'opensacpathologies'
         || ['select-reply','sign-in','confirm-sign-out','send-text','finish-flow'].includes(type))) {
-        mascotNavigationOpening = null;
+        cancelMascotOrientationTransition();
         resetMascotNavigationOverlays();
       }
       if ([
@@ -13079,6 +13090,7 @@ export function createAppController({
   }
 
   function stop() {
+    cancelMascotOrientationTransition();
     disposePendingPayrollLinks();
     pendingPayrollRecovery.clear();
     stopSwileReminder();
