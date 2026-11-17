@@ -38,6 +38,7 @@ import "../ui/management-report.css";
 import "../ui/cargos.css";
 import "../ui/attendance-summary.css";
 import "../ui/stage-progress.css";
+import "../ui/stage-gantt.css";
 import "../ui/supplier-payroll-report.css";
 import "../ui/trancid-report.css";
 import "../ui/commercial-receipts.css";

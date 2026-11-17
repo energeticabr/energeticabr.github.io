@@ -549,3 +549,36 @@ test('the stage report refresh reads a new snapshot when child statuses change o
   assert.deepEqual(await data.loadSnapshot({ refresh: true }), { reads: 3 });
   assert.deepEqual(await data.loadSnapshot(), { reads: 3 });
 });
+
+
+test('GANTT abre localmente, pede leitura e retoma o próprio painel após o login', async t => {
+  const grants = [], panels = [];
+  let tokens = 0, authorized = false;
+  const h = harness(t, {
+    ganttFactory: async ({ data }) => {
+      const panel = { data, open: async () => data.loadSnapshot(), destroy() {} };
+      panels.push(panel);
+      return panel;
+    },
+    stageProgressDataFactory: async ({ tokenProvider }) => ({ loadSnapshot: () => Promise.all([tokenProvider(scopes), tokenProvider(scopes)]) }),
+    auth: {
+      getToken: async requested => {
+        assert.deepEqual(requested, scopes);
+        tokens++;
+        if (!authorized) throw authRequired();
+        return 'renewed-token';
+      },
+      authorize: async (requested, options) => { grants.push([requested, options]); authorized = true; },
+      consumePendingAction: () => 'open-stage-gantt',
+    },
+  });
+  await h.controller.start();
+  assert.equal(panels.length, 1);
+  assert.deepEqual(Object.keys(panels[0].data), ['loadSnapshot']);
+  assert.deepEqual(grants, [[scopes, { resumeAction: 'open-stage-gantt' }]]);
+  assert.equal(tokens, 2, "duas consultas simultâneas compartilham o mesmo consentimento");
+  const count = h.calls.length;
+  assert.equal(await h.view.emit('open-stage-gantt'), true);
+  assert.equal(h.calls.length, count);
+  assert.equal(panels.length, 1);
+});

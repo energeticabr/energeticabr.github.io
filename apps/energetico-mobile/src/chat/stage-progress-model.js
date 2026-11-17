@@ -56,7 +56,7 @@ export function summarizeStageCompletion(activities) {
 /** UI supplies its own defaults. Grouping, zero-activity cards and latest-launch
  * selection remain the shared operations report behavior, isolated per branch.
  */
-export function buildStageProgress(snapshot, filters = {}, today) {
+export function buildStageProgress(snapshot, filters = {}, today, { includeAllLaunches = false } = {}) {
   if (snapshot?.complete !== true || snapshot.error || snapshot.aborted || snapshot.partial || snapshot.truncated
     || !Array.isArray(snapshot.activities) || !Array.isArray(snapshot.launches)) {
     throw new TypeError("O relatório exige um snapshot completo, sem erros ou cancelamento.");
@@ -81,8 +81,38 @@ export function buildStageProgress(snapshot, filters = {}, today) {
   // Keep a stage accessible after its last started activity leaves the initial filter.
   const includeGroups = selected.status.toUpperCase() === "ATIVIDADE INICIADA"
     ? activities.filter(row => completion.get(stageReportGroupKey(row)).ready) : [];
-  const report = buildStageReport({ activities, launches }, selected, date, { includeGroups });
+  const report = buildStageReport({ activities, launches }, selected, date, { includeGroups, includeAllLaunches });
   return { ...report, stages: report.stages.map(stage => ({
     ...stage, completion: completion.get(stageReportGroupKey(stage)) ?? summarizeStageCompletion([]),
   })) };
+}
+
+function ganttRange(start, end, status, today) {
+  const state = status.trim().toUpperCase();
+  const finished = state === "FINALIZADO" || state === "ATIVIDADE FINALIZADA";
+  const ongoing = state === "INICIADO" || state === "ATIVIDADE INICIADA";
+  const throughToday = ongoing && !end;
+  const displayedEnd = throughToday ? today : end;
+  if ((!finished && !ongoing) || !start || !displayedEnd || displayedEnd < start) return null;
+  return { start, end: displayedEnd, throughToday, tone: finished ? "finished" : "ongoing" };
+}
+
+export function buildStageGantt(snapshot, today) {
+  const day = normalizeStageProgressDate(today);
+  const { stages } = buildStageProgress(snapshot, {}, day, { includeAllLaunches: true });
+  return stages.filter(stage => stage.stage.trim()).map(stage => ({
+    name: stage.launch?.stage || stage.stage,
+    branch: stage.launch?.branch || stage.branch,
+    start: stage.startDate,
+    end: stage.endDate,
+    range: ganttRange(stage.startDate, stage.endDate, stage.status, day),
+    children: stage.rows.map(row => ({
+      name: row.activity || "Atividade sem descrição",
+      property: row.property,
+      supplier: row.supplier,
+      start: row.executionDate,
+      end: row.plannedDate,
+      range: ganttRange(row.executionDate, row.plannedDate, row.status, day),
+    })),
+  }));
 }

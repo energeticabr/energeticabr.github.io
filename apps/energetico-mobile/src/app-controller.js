@@ -134,6 +134,11 @@ async function defaultStageProgressFactory(options) {
   return createStageProgressReportView(options);
 }
 
+async function defaultGanttFactory(options) {
+  const { createStageGanttView } = await import('./ui/stage-gantt-view.js');
+  return createStageGanttView(options);
+}
+
 async function defaultStageProgressDataFactory(options) {
   const { createStageProgressData } = await import('./chat/stage-progress-data.js');
   return createStageProgressData(options);
@@ -449,6 +454,7 @@ const RHID_MASCOT_ACTION = 'open-rhid-mascot-report';
 const PENDING_PAYROLL_LINKS_ACTION = 'open-pending-payroll-links';
 const HOLERITE_REPORT_ACTION = 'open-holerite-report';
 const STAGE_PROGRESS_ID = 'action_stage_progress';
+const STAGE_GANTT_ACTION = 'open-stage-gantt';
 const STAGE_PROGRESS_SCOPES = Object.freeze(['Sites.Read.All']);
 const SUPPLIER_PAYROLL_REPORT_ID = 'action_supplier_payroll_report';
 const SUPPLIER_PAYROLL_REPORT_SCOPES = Object.freeze(['Sites.Read.All']);
@@ -1049,6 +1055,7 @@ export function createAppController({
   rhidMonthlyDataFactory = async options => (await import('./chat/rhid-monthly-data.js')).createRhidMonthlyData(options),
   rhidReportLogoLoader = defaultLoadRhidReportLogo,
   stageProgressFactory = defaultStageProgressFactory,
+  ganttFactory = defaultGanttFactory,
   stageProgressDataFactory = defaultStageProgressDataFactory,
   supplierPayrollReportFactory = defaultSupplierPayrollReportFactory,
   supplierPayrollReportDataFactory = defaultSupplierPayrollReportDataFactory,
@@ -8368,7 +8375,7 @@ export function createAppController({
     supplierPayrollReportOpening = request; return request;
   }
 
-  async function openStageProgress({ finishDraft } = {}) {
+  async function openStageProgress({ finishDraft, gantt = false } = {}) {
     if (!account || stopped || flowBusy() || store.getState().activeFlow) return false;
     disposeSupplierPayrollReport();
     disposeSacPathologiesReport();
@@ -8378,11 +8385,13 @@ export function createAppController({
     disposeContractorControlReport();
     disposeGeneralSummaryReport();
     disposePendingSupplierPaymentsReport();
+    if (stageProgressSession && stageProgressSession.gantt !== gantt) disposeStageProgressReport();
     if (stageProgressOpening) return stageProgressOpening;
+    const resumeAction = gantt ? STAGE_GANTT_ACTION : STAGE_PROGRESS_ID;
     const reportsAccount = account;
     const reportsRevision = sessionRevision;
     const session = stageProgressSession || {
-      lifetime: new AbortController(), loadController: null, generation: 0,
+      gantt, lifetime: new AbortController(), loadController: null, generation: 0,
     };
     stageProgressSession = session;
     const cancelled = () => new DOMException('Consulta cancelada.', 'AbortError');
@@ -8448,7 +8457,7 @@ export function createAppController({
       signal.addEventListener('abort', rejectCancelled, { once: true });
       // Each source owns this request's token provider. A source that resumes
       // after replacement must never borrow the replacement's credentials.
-      const tokenProvider = async () => {
+      const acquireToken = async () => {
         const scopes = STAGE_PROGRESS_SCOPES;
         assertQuery();
         try {
@@ -8458,12 +8467,19 @@ export function createAppController({
         } catch (error) {
           assertQuery();
           if (error?.code !== 'AUTH_REQUIRED' || typeof auth.authorize !== 'function') throw error;
-          await auth.authorize(scopes, { resumeAction: STAGE_PROGRESS_ID });
+          await auth.authorize(scopes, { resumeAction });
           assertQuery();
           const token = await auth.getToken(scopes);
           assertQuery();
           return token;
         }
+      };
+      let pendingToken;
+      const tokenProvider = () => {
+        assertQuery();
+        // Both SharePoint lists can request consent at the same time.
+        pendingToken ??= acquireToken().finally(() => { pendingToken = null; });
+        return pendingToken;
       };
       const load = async () => {
         try {
@@ -8500,7 +8516,10 @@ export function createAppController({
         assertSession();
         let report = stageProgressReport;
         if (!report) {
-          const panel = decorateControllerReport(await stageProgressFactory({ data, document: globalThis.document }), 'open-stage-progress');
+          const document = globalThis.document;
+          const panel = gantt
+            ? await ganttFactory({ data: { loadSnapshot: data.loadSnapshot }, document })
+            : decorateControllerReport(await stageProgressFactory({ data, document }), 'open-stage-progress');
           try { assertSession(); }
           catch (error) { panel?.destroy?.(); throw error; }
           stageProgressReport = report = panel;
@@ -8511,7 +8530,7 @@ export function createAppController({
       } catch (error) {
         if (!stopped && account === reportsAccount && sessionRevision === reportsRevision
           && stageProgressSession === session && error?.name !== 'AbortError') {
-          setSessionError(error, 'Não foi possível abrir o progresso das etapas.');
+          setSessionError(error, gantt ? 'Não foi possível abrir o GANTT.' : 'Não foi possível abrir o progresso das etapas.');
         }
         if (stageProgressSession === session && !stageProgressReport) disposeStageProgressReport();
         return false;
@@ -12757,6 +12776,7 @@ export function createAppController({
     bind('open-cargos-table', openCargosTable);
     bind('open-attendance-summary', openAttendanceSummary);
   bind('open-stage-progress', openStageProgress);
+  bind(STAGE_GANTT_ACTION, () => openStageProgress({ gantt: true }));
   bind('open-supplier-payroll-report', openSupplierPayrollReport);
     bind('open-trancid-report', openTrancidReport);
     bind('open-commercial-receipts', openCommercialReceipts);
@@ -13012,6 +13032,7 @@ export function createAppController({
     else if (pendingAction === CARGOS_TABLE_ID) await openCargosTable();
     else if (pendingAction === ATTENDANCE_SUMMARY_ID) await openAttendanceSummary();
     else if (pendingAction === RHID_MASCOT_ACTION) await openRhidMascotReport();
+    else if (pendingAction === STAGE_GANTT_ACTION) await openStageProgress({ gantt: true });
     else if (pendingAction === STAGE_PROGRESS_ID) await openStageProgress({ finishDraft: auth.consumePendingStageFinish?.() });
     else if (pendingAction === SUPPLIER_PAYROLL_REPORT_ID) await openSupplierPayrollReport();
     else if (pendingAction === COMMERCIAL_RECEIPTS_ID) await openCommercialReceipts();

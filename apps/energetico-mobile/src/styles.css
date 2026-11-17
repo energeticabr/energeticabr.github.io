@@ -1558,10 +1558,12 @@ button.chat-rhid-attendance-card__cluster:focus-visible { outline: 3px solid #15
 .chat-main-contractor-control-shortcut { grid-column:3; grid-row:1; align-self:start; margin-top:292px; width:44px; height:44px; padding:0; border:0; border-radius:10px; background:#cf757a; overflow:hidden; cursor:pointer; }
 .chat-main-contractor-control-shortcut:focus-visible { outline:3px solid var(--accent); outline-offset:3px; }
 .chat-main-pending-supplier-payments-shortcut:focus-visible { outline:3px solid var(--accent); outline-offset:3px; }
-.chat-main-holerite-shortcut { grid-column:3; grid-row:1; align-self:start; display:grid; grid-template:30px 14px / minmax(0, 1fr); width:44px; height:44px; margin-top:404px; padding:0; border:0; border-radius:10px; color:#fff; background:#cf757a; font:800 10px/14px system-ui,sans-serif; text-align:center; overflow:hidden; cursor:pointer; }
-.chat-main-holerite-shortcut img { display:block; width:100%; height:100%; object-fit:contain; }
-.chat-main-holerite-shortcut span { background:#a02536; }
-.chat-main-holerite-shortcut:focus-visible { outline:3px solid var(--accent); outline-offset:3px; }
+:is(.chat-main-holerite-shortcut, .chat-main-gantt-shortcut) { grid-column:3; grid-row:1; align-self:start; display:grid; grid-template:30px 14px / minmax(0, 1fr); width:44px; height:44px; padding:0; border:0; border-radius:10px; color:#fff; background:#cf757a; font:800 10px/14px system-ui,sans-serif; text-align:center; overflow:hidden; cursor:pointer; }
+:is(.chat-main-holerite-shortcut, .chat-main-gantt-shortcut) img { display:block; width:100%; height:100%; object-fit:contain; }
+:is(.chat-main-holerite-shortcut, .chat-main-gantt-shortcut) span { background:#a02536; }
+:is(.chat-main-holerite-shortcut, .chat-main-gantt-shortcut):focus-visible { outline:3px solid var(--accent); outline-offset:3px; }
+.chat-main-holerite-shortcut { margin-top: 404px; }
+.chat-main-gantt-shortcut { margin-top: 460px; }
 .chat-message--commercial-top { row-gap:12px; }
 .chat-main-commercial-shortcuts { grid-column:1 / -1; grid-row:1; display:flex; gap:12px; align-items:center; min-width:0; }
 .chat-message.chat-message--commercial-top > .chat-bubble,

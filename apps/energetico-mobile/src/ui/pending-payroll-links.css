@@ -24,6 +24,7 @@
 .chat-message--pending-payroll-links > .chat-main-contractor-control-shortcut { margin-top: 336px; }
 .chat-message--pending-payroll-links > .chat-main-pending-supplier-payments-shortcut { margin-top: 392px; }
 .chat-message--pending-payroll-links > .chat-main-holerite-shortcut { margin-top: 448px; }
+.chat-message--pending-payroll-links > .chat-main-gantt-shortcut { margin-top: 504px; }
 
 .payroll-links-form > [data-payroll-action="add"] { min-height: 44px; }
 .payroll-links-draft { min-width: 0; padding: 12px; border: 1px solid #c4d9df; border-radius: 12px; }

@@ -202,6 +202,7 @@ const RESUMABLE_ACTIONS = new Set([
   "action_hr_gallery_idfolha",
   "action_hr_gallery_holerite",
   "open-holerite-report",
+  "open-stage-gantt",
   "action_hr_create_idfolha",
   "action_hr_gallery_folhapgto",
   "action_hr_gallery_funcionarios",
