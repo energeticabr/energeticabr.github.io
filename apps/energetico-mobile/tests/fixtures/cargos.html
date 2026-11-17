@@ -1,0 +1,73 @@
+<!doctype html>
+<html lang="pt-BR">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+  <title>Tabela de Cargos</title>
+</head>
+<body>
+<main id="app"><button id="mascot">Tabela de Cargos</button></main>
+<script type="module">
+import '/src/styles.css';
+import '/src/ui/cargos.css';
+import '/src/ui/report-print.css';
+import { createCargosView } from '/src/ui/cargos-view.js';
+import { decorateReportNavigation } from '/src/ui/report-navigation.js';
+import { captureFilteredReport, decorateReportPrint } from '/src/ui/report-print.js';
+
+try {
+  const rows = [
+    { group: 'SERVENTE DE PEDREIRO', cargo: 'SERVENTE DE PEDREIRO III', salary: 2032, food: 800, bonus: 445, transport: 238.33, total: 3515.33 },
+    { group: 'PEDREIRO', cargo: 'PEDREIRO III', salary: 3292, food: 800, bonus: 445, transport: 238.33, total: 4775.33 },
+    { group: '', cargo: 'MESTRE DE OBRAS', salary: 4933, food: 800, bonus: 445, transport: 238.33, total: 6416.33 },
+  ];
+  let loads = 0, navigatedTo;
+  const action = 'open-cargos-table';
+  const report = createCargosView({ data: { async loadSnapshot() { loads++; return { rows }; } } });
+  const view = decorateReportNavigation(decorateReportPrint(report, { action }), {
+    action,
+    onNavigate: target => { navigatedTo = target; },
+  });
+  const mascot = document.querySelector('#mascot');
+  mascot.focus();
+  await view.open();
+  const { element } = view;
+  const backdrop = element.parentElement;
+  const scroll = element.querySelector('.cargos-scroll');
+  const table = scroll.querySelector('table');
+  const next = element.querySelector('.report-navigation-arrow--next');
+  const bounds = scroll.getBoundingClientRect();
+  const arrow = next.getBoundingClientRect();
+  const overlap = bounds.left < arrow.right && arrow.left < bounds.right
+    && bounds.top < arrow.bottom && arrow.top < bounds.bottom;
+  const panel = element.getBoundingClientRect();
+  const probe = document.createElement('div');
+  probe.style.padding = 'env(safe-area-inset-top) env(safe-area-inset-right) env(safe-area-inset-bottom) env(safe-area-inset-left)';
+  document.body.append(probe);
+  const insets = getComputedStyle(probe);
+  const capture = captureFilteredReport(element);
+  const layout = {
+    rotated: getComputedStyle(backdrop).transform !== 'none',
+    insideSafeArea: bounds.left >= parseFloat(insets.paddingLeft) - 1 && bounds.top >= parseFloat(insets.paddingTop) - 1
+      && bounds.right <= innerWidth - parseFloat(insets.paddingRight) + 1
+      && bounds.bottom <= innerHeight - parseFloat(insets.paddingBottom) + 1
+      && panel.width <= innerWidth + 1 && panel.height <= innerHeight + 1,
+    columns: table.tHead.rows[0].cells.length,
+    noHorizontalScroll: scroll.scrollWidth <= scroll.clientWidth + 1,
+    cellsFit: [...table.querySelectorAll('th, td')].every(cell => cell.scrollWidth <= cell.clientWidth + 1),
+    arrowClearOfTable: !overlap,
+    pdfHasAllColumns: capture.pages[0].blocks.some(block => block.type === 'table' && block.widths.length === 6),
+  };
+  element.querySelector('[aria-label="Atualizar tabela de cargos"]').click();
+  next.click();
+  element.querySelector('[aria-label="Fechar tabela de cargos"]').click();
+  layout.controlsWork = loads === 2 && navigatedTo === 'open-attendance-summary'
+    && backdrop.hidden && document.activeElement === mascot;
+  view.destroy();
+  document.documentElement.dataset.layout = JSON.stringify(layout);
+} catch (error) {
+  document.documentElement.dataset.layout = JSON.stringify({ error: error.stack });
+}
+</script>
+</body>
+</html>

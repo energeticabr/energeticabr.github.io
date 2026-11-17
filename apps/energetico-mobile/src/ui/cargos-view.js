@@ -1,16 +1,17 @@
 import {addReportCloseControl} from './report-close-control.js';
+import {bindReportLandscape} from './report-landscape.js';
 
 export function createCargosView({document:doc=globalThis.document,data}={}) {
   if(!doc?.body||typeof data?.loadSnapshot!=='function')throw new TypeError('A tabela de cargos requer documento e sessão SharePoint.');
   const make=(tag,cls='',text)=>{const node=doc.createElement(tag);node.className=cls;if(text!==undefined)node.textContent=text;return node;};
   const root=make('section','cargos-screen');root.hidden=true;root.tabIndex=-1;root.setAttribute('role','dialog');root.setAttribute('aria-modal','true');root.setAttribute('aria-label','Tabela de cargos');
- const backdrop=make('div','cargos-backdrop');backdrop.hidden=true;backdrop.append(root);
+  const backdrop=make('div','cargos-backdrop');backdrop.hidden=true;backdrop.append(root);
+  const landscape=bindReportLandscape(backdrop);
   const header=make('header','cargos-header'),back=make('button','','←'),title=make('h1','','TABELA DE CARGOS'),refresh=make('button','','⟳');
   back.type=refresh.type='button';back.setAttribute('aria-label','Fechar tabela de cargos');refresh.setAttribute('aria-label','Atualizar tabela de cargos');header.append(title,refresh);
   addReportCloseControl({root:backdrop,toolbar:header,onClose:close,button:back,inline:true});
   const status=make('p','cargos-status');status.setAttribute('role','status');
-  const hint=make('p','cargos-hint','Deslize para ver todas as colunas.');
-  const content=make('div','cargos-scroll');content.tabIndex=0;content.setAttribute('role','region');content.setAttribute('aria-label','Valores por cargo');root.append(header,status,hint,content);doc.body.append(backdrop);
+  const content=make('div','cargos-scroll');content.tabIndex=0;content.setAttribute('role','region');content.setAttribute('aria-label','Valores por cargo');root.append(header,status,content);doc.body.append(backdrop);
   let destroyed=false,controller=null,revision=0,returnFocus=null,oldOverflow='',app=null,oldInert=false;
   const money=value=>Number.isFinite(value)?new Intl.NumberFormat('pt-BR',{style:'currency',currency:'BRL'}).format(value):'—';
   function render(rows){
@@ -43,6 +44,6 @@ export function createCargosView({document:doc=globalThis.document,data}={}) {
     }
   });
   return Object.freeze({element:root,async open(){if(destroyed)throw new Error('A tabela foi encerrada.');if(!root.hidden)return;
-    returnFocus=doc.activeElement;oldOverflow=doc.body.style.overflow;app=doc.getElementById('app');oldInert=app?.inert||false;if(app)app.inert=true;doc.body.style.overflow='hidden';backdrop.hidden=false;root.hidden=false;root.focus();await load();
-  },close,destroy(){if(destroyed)return;close();destroyed=true;backdrop.remove();}});
+    returnFocus=doc.activeElement;oldOverflow=doc.body.style.overflow;app=doc.getElementById('app');oldInert=app?.inert||false;if(app)app.inert=true;doc.body.style.overflow='hidden';backdrop.hidden=false;root.hidden=false;landscape.update();root.focus();await load();
+  },close,destroy(){if(destroyed)return;close();destroyed=true;landscape.destroy();backdrop.remove();}});
 }
