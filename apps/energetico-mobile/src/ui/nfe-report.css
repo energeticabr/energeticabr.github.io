@@ -172,6 +172,10 @@
   color: #8b2730;
 }
 .nfe-fact small { color: inherit; }
+.nfe-table td:nth-child(7) .nfe-fact {
+  min-width: 98px;
+  margin-inline: min(0px, calc((100% - 98px) / 2));
+}
 .nfe-pager { display: flex; justify-content: center; align-items: center; flex-wrap: wrap; gap: 12px; margin: 10px 0; font-size: 12px; }
 .nfe-pager button {
   min-height: 40px;
