@@ -28,24 +28,29 @@ class DemonstrativeActivityTests(unittest.TestCase):
         _, etag = self.case.state.load(state["key"])
         self.case.state.save(state["key"], state, etag)
 
+    def select(self, field, value):
+        return self.reply(reply_id=f"choice:{field}:{value}")
+
     def start_selector(self, *, nested=False):
         if nested:
-            self.case.start_attendance_validation()
-            self.reply("1")
-            self.reply("9")
+            self.reply("OPA")
+            self.reply("RECURSOS HUMANOS")
+            self.reply("VALIDAR PRESENÇAS APONTADAS")
+            self.select("data_presenca_pendente", 1814)
+            self.select("registro_presenca_pendente", 1814)
+            self.select("revisar_dados_presenca", 1)
+            self.select("edit_field", 9)
             self.reply(reply_id="NOVO_DESCRITIVO_ETAPA_PRESENCA")
         else:
             self.reply("OPA")
             self.reply("ETAPA OBRA")
             self.reply("ETAPA OBRA E DEMONSTRATIVO ETAPA")
             self.reply("CRIAR DEMONSTRATIVO DE ETAPA")
-            self.reply("430")
-        self.reply("431")
-        self.reply("432")
-        self.reply("433")
-        self.reply(reply_id="demonstrative_start_today")
-        self.reply(reply_id="demonstrative_end_blank")
-        result = self.reply("1")
+            self.select("filial_demonstrativo_etapa", 430)
+        self.select("imovel_demonstrativo_etapa", 431)
+        self.select("fornecedor_demonstrativo_etapa", 432)
+        self.select("etapa_demonstrativo_etapa", 433)
+        result = self.reply(reply_id="demonstrative_start_today")
         self.assertEqual(result["field"], "atividade_demonstrativo_etapa")
         return self.current()
 
@@ -61,7 +66,7 @@ class DemonstrativeActivityTests(unittest.TestCase):
         return self.reply("SIM")
 
     def finish_demonstrative(self):
-        self.reply("2")  # no observations
+        self.select("tem_observacao_demonstrativo_etapa", 2)
         summary = self.reply(reply_id="attachment_no")
         self.assertEqual(summary["status"], "awaiting_confirmation")
         return self.reply("SIM")
