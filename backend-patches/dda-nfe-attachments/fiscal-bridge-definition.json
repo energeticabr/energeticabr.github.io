@@ -1,0 +1,663 @@
+{
+  "$schema": "https://schema.management.azure.com/providers/Microsoft.Logic/schemas/2016-06-01/workflowdefinition.json#",
+  "contentVersion": "1.0.0.0",
+  "parameters": {
+    "$authentication": {
+      "defaultValue": {},
+      "type": "SecureObject"
+    },
+    "$connections": {
+      "defaultValue": {},
+      "type": "Object"
+    }
+  },
+  "triggers": {
+    "manual": {
+      "metadata": {},
+      "type": "Request",
+      "kind": "Http",
+      "inputs": {
+        "schema": {
+          "properties": {
+            "mode": {
+              "enum": [
+                "inventory",
+                "pdf",
+                "dda_sync"
+              ],
+              "type": "string"
+            },
+            "afterId": {
+              "minimum": 0,
+              "type": "integer"
+            },
+            "itemId": {
+              "minimum": 1,
+              "type": "integer"
+            },
+            "filename": {
+              "type": "string",
+              "maxLength": 100
+            },
+            "ddaId": {
+              "type": "integer",
+              "minimum": 1
+            },
+            "sourceName": {
+              "minLength": 32,
+              "type": "string",
+              "maxLength": 32
+            },
+            "content": {
+              "type": "string",
+              "maxLength": 26666668
+            },
+            "expectedKey": {
+              "minLength": 44,
+              "type": "string",
+              "maxLength": 50
+            }
+          },
+          "required": [
+            "mode"
+          ],
+          "type": "object"
+        },
+        "triggerAuthenticationType": "All"
+      },
+      "runtimeConfiguration": {
+        "secureData": {
+          "properties": [
+            "outputs"
+          ]
+        }
+      }
+    }
+  },
+  "actions": {
+    "Operacao": {
+      "actions": {
+        "Listar": {
+          "runAfter": {},
+          "type": "OpenApiConnection",
+          "inputs": {
+            "host": {
+              "apiId": "/providers/Microsoft.PowerApps/apis/shared_sharepointonline",
+              "connectionName": "shared_sharepointonline",
+              "operationId": "HttpRequest"
+            },
+            "parameters": {
+              "dataset": "https://energeticaltda.sharepoint.com/sites/energetica",
+              "parameters/method": "GET",
+              "parameters/uri": "_api/web/lists/getbytitle('NOTAS_FISCAIS_SEFAZ')/items?$select=Id,Modified,Title,CHAVE_ACESSO,CNPJ_FORNECEDOR,CNPJ_DESTINATARIO,DATA_EMISSAO,VALOR_TOTAL_NOTA,VALOR_LIQUIDO,VALOR_LIQUIDO_FATURA,VALOR_SERVICOS,SITUACAO,STATUS_IMPORTACAO,STATUS_DANFE,TIPO_FISCAL,NUMERO_NOTA&$filter=Id gt @{int(coalesce(triggerBody()?['afterId'],0))}&$orderby=Id asc&$top=200",
+              "parameters/headers": {
+                "Accept": "application/json;odata=nometadata"
+              }
+            },
+            "authentication": "@parameters('$authentication')"
+          },
+          "runtimeConfiguration": {
+            "secureData": {
+              "properties": [
+                "inputs",
+                "outputs"
+              ]
+            }
+          }
+        },
+        "Responder_lista": {
+          "runAfter": {
+            "Listar": [
+              "Succeeded"
+            ]
+          },
+          "type": "Response",
+          "kind": "Http",
+          "inputs": {
+            "statusCode": 200,
+            "body": {
+              "page": "@body('Listar')"
+            }
+          },
+          "operationOptions": "Asynchronous",
+          "runtimeConfiguration": {
+            "secureData": {
+              "properties": [
+                "inputs"
+              ]
+            }
+          }
+        }
+      },
+      "runAfter": {},
+      "else": {
+        "actions": {
+          "Obter_PDF": {
+            "actions": {
+              "Ler_nota": {
+                "runAfter": {},
+                "type": "OpenApiConnection",
+                "inputs": {
+                  "host": {
+                    "apiId": "/providers/Microsoft.PowerApps/apis/shared_sharepointonline",
+                    "connectionName": "shared_sharepointonline",
+                    "operationId": "HttpRequest"
+                  },
+                  "parameters": {
+                    "dataset": "https://energeticaltda.sharepoint.com/sites/energetica",
+                    "parameters/method": "GET",
+                    "parameters/uri": "_api/web/lists/getbytitle('NOTAS_FISCAIS_SEFAZ')/items(@{int(triggerBody()?['itemId'])})?$select=Id,Modified,Title,CHAVE_ACESSO,CNPJ_FORNECEDOR,CNPJ_DESTINATARIO,DATA_EMISSAO,VALOR_TOTAL_NOTA,VALOR_LIQUIDO,VALOR_LIQUIDO_FATURA,VALOR_SERVICOS,SITUACAO,STATUS_IMPORTACAO,STATUS_DANFE,TIPO_FISCAL,NUMERO_NOTA",
+                    "parameters/headers": {
+                      "Accept": "application/json;odata=nometadata"
+                    }
+                  },
+                  "authentication": "@parameters('$authentication')"
+                },
+                "runtimeConfiguration": {
+                  "secureData": {
+                    "properties": [
+                      "inputs",
+                      "outputs"
+                    ]
+                  }
+                }
+              },
+              "Anexos": {
+                "runAfter": {
+                  "Ler_nota": [
+                    "Succeeded"
+                  ]
+                },
+                "type": "OpenApiConnection",
+                "inputs": {
+                  "host": {
+                    "apiId": "/providers/Microsoft.PowerApps/apis/shared_sharepointonline",
+                    "connectionName": "shared_sharepointonline",
+                    "operationId": "GetItemAttachments"
+                  },
+                  "parameters": {
+                    "dataset": "https://energeticaltda.sharepoint.com/sites/energetica",
+                    "table": "NOTAS_FISCAIS_SEFAZ",
+                    "itemId": "@int(triggerBody()?['itemId'])"
+                  },
+                  "authentication": "@parameters('$authentication')"
+                },
+                "runtimeConfiguration": {
+                  "secureData": {
+                    "properties": [
+                      "inputs",
+                      "outputs"
+                    ]
+                  }
+                }
+              },
+              "PDFs": {
+                "runAfter": {
+                  "Anexos": [
+                    "Succeeded"
+                  ]
+                },
+                "type": "Query",
+                "inputs": {
+                  "where": "@and(endsWith(toLower(item()?['DisplayName']),'.pdf'),not(startsWith(toLower(item()?['DisplayName']),'cce-')),not(startsWith(toLower(item()?['DisplayName']),'dda-')))",
+                  "from": "@body('Anexos')"
+                },
+                "runtimeConfiguration": {
+                  "secureData": {
+                    "properties": [
+                      "inputs",
+                      "outputs"
+                    ]
+                  }
+                }
+              },
+              "PDF_unico": {
+                "actions": {
+                  "Baixar": {
+                    "runAfter": {},
+                    "type": "OpenApiConnection",
+                    "inputs": {
+                      "host": {
+                        "apiId": "/providers/Microsoft.PowerApps/apis/shared_sharepointonline",
+                        "connectionName": "shared_sharepointonline",
+                        "operationId": "GetAttachmentContent"
+                      },
+                      "parameters": {
+                        "dataset": "https://energeticaltda.sharepoint.com/sites/energetica",
+                        "table": "NOTAS_FISCAIS_SEFAZ",
+                        "itemId": "@int(triggerBody()?['itemId'])",
+                        "attachmentId": "@first(body('PDFs'))?['Id']"
+                      },
+                      "authentication": "@parameters('$authentication')"
+                    },
+                    "runtimeConfiguration": {
+                      "secureData": {
+                        "properties": [
+                          "inputs",
+                          "outputs"
+                        ]
+                      }
+                    }
+                  },
+                  "Responder_PDF": {
+                    "runAfter": {
+                      "Baixar": [
+                        "Succeeded"
+                      ]
+                    },
+                    "type": "Response",
+                    "kind": "Http",
+                    "inputs": {
+                      "statusCode": 200,
+                      "body": {
+                        "content": "@body('Baixar')",
+                        "filename": "@first(body('PDFs'))?['DisplayName']",
+                        "status": "ready",
+                        "record": "@body('Ler_nota')"
+                      }
+                    },
+                    "operationOptions": "Asynchronous",
+                    "runtimeConfiguration": {
+                      "secureData": {
+                        "properties": [
+                          "inputs"
+                        ]
+                      }
+                    }
+                  }
+                },
+                "runAfter": {
+                  "PDFs": [
+                    "Succeeded"
+                  ]
+                },
+                "else": {
+                  "actions": {
+                    "Indisponivel": {
+                      "runAfter": {},
+                      "type": "Response",
+                      "kind": "Http",
+                      "inputs": {
+                        "statusCode": 200,
+                        "body": {
+                          "status": "pdf_unavailable"
+                        }
+                      },
+                      "operationOptions": "Asynchronous",
+                      "runtimeConfiguration": {
+                        "secureData": {
+                          "properties": [
+                            "inputs"
+                          ]
+                        }
+                      }
+                    }
+                  }
+                },
+                "expression": "@and(equals(length(body('PDFs')),1),equals(body('Ler_nota')?['STATUS_DANFE'],'DISPONIVEL'),equals(body('Ler_nota')?['SITUACAO'],'AUTORIZADA'),equals(body('Ler_nota')?['STATUS_IMPORTACAO'],'XML_COMPLETO'))",
+                "type": "If"
+              }
+            },
+            "runAfter": {},
+            "else": {
+              "actions": {
+                "Sincronizar_DDA": {
+                  "else": {
+                    "actions": {
+                      "DDA_invalido": {
+                        "operationOptions": "Asynchronous",
+                        "runtimeConfiguration": {
+                          "secureData": {
+                            "properties": [
+                              "inputs"
+                            ]
+                          }
+                        },
+                        "type": "Response",
+                        "runAfter": {},
+                        "inputs": {
+                          "statusCode": 400,
+                          "body": {
+                            "status": "invalid_dda_request"
+                          }
+                        },
+                        "kind": "Http"
+                      }
+                    }
+                  },
+                  "expression": "@and(equals(triggerBody()?['mode'],'dda_sync'),greater(int(triggerBody()?['itemId']),0),startsWith(triggerBody()?['filename'],'DDA-'),greater(int(triggerBody()?['ddaId']),0),equals(triggerBody()?['filename'],concat('DDA-',string(int(triggerBody()?['ddaId'])),'-',triggerBody()?['sourceName'])),equals(triggerBody()?['sourceName'],concat('Espelho_DDA_',last(split(first(split(triggerBody()?['filename'],'.pdf')),'_')),'.pdf')),contains(triggerBody()?['filename'],'-Espelho_DDA_'),endsWith(triggerBody()?['filename'],'.pdf'),equals(length(last(split(first(split(triggerBody()?['filename'],'.pdf')),'_'))),16),equals(replace(replace(replace(replace(replace(replace(replace(replace(replace(replace(replace(replace(replace(replace(replace(replace(last(split(first(split(triggerBody()?['filename'],'.pdf')),'_')),'0',''),'1',''),'2',''),'3',''),'4',''),'5',''),'6',''),'7',''),'8',''),'9',''),'a',''),'b',''),'c',''),'d',''),'e',''),'f',''),''),not(contains(triggerBody()?['filename'],'/')),not(contains(triggerBody()?['filename'],'\\')),not(contains(triggerBody()?['filename'],'''')),not(contains(triggerBody()?['filename'],'%')),not(contains(triggerBody()?['filename'],'..')),startsWith(triggerBody()?['content'],'JVBERi0'),lessOrEquals(length(triggerBody()?['content']),26666668))",
+                  "runAfter": {},
+                  "actions": {
+                    "DDA_nota": {
+                      "runAfter": {},
+                      "type": "OpenApiConnection",
+                      "inputs": {
+                        "host": {
+                          "apiId": "/providers/Microsoft.PowerApps/apis/shared_sharepointonline",
+                          "connectionName": "shared_sharepointonline",
+                          "operationId": "HttpRequest"
+                        },
+                        "parameters": {
+                          "dataset": "https://energeticaltda.sharepoint.com/sites/energetica",
+                          "parameters/method": "GET",
+                          "parameters/uri": "_api/web/lists/getbytitle('NOTAS_FISCAIS_SEFAZ')/items(@{int(triggerBody()?['itemId'])})?$select=Id,Modified,Title,CHAVE_ACESSO,CNPJ_FORNECEDOR,CNPJ_DESTINATARIO,DATA_EMISSAO,VALOR_TOTAL_NOTA,VALOR_LIQUIDO,VALOR_LIQUIDO_FATURA,VALOR_SERVICOS,SITUACAO,STATUS_IMPORTACAO,STATUS_DANFE,TIPO_FISCAL,NUMERO_NOTA",
+                          "parameters/headers": {
+                            "Accept": "application/json;odata=nometadata"
+                          }
+                        },
+                        "authentication": "@parameters('$authentication')"
+                      },
+                      "runtimeConfiguration": {
+                        "secureData": {
+                          "properties": [
+                            "inputs",
+                            "outputs"
+                          ]
+                        }
+                      }
+                    },
+                    "DDA_autorizada": {
+                      "else": {
+                        "actions": {
+                          "DDA_nota_alterada": {
+                            "operationOptions": "Asynchronous",
+                            "runtimeConfiguration": {
+                              "secureData": {
+                                "properties": [
+                                  "inputs"
+                                ]
+                              }
+                            },
+                            "type": "Response",
+                            "runAfter": {},
+                            "inputs": {
+                              "statusCode": 409,
+                              "body": {
+                                "status": "fiscal_changed"
+                              }
+                            },
+                            "kind": "Http"
+                          }
+                        }
+                      },
+                      "expression": "@and(equals(body('DDA_nota')?['CHAVE_ACESSO'],triggerBody()?['expectedKey']),equals(body('DDA_nota')?['SITUACAO'],'AUTORIZADA'),equals(body('DDA_nota')?['STATUS_IMPORTACAO'],'XML_COMPLETO'),equals(body('DDA_nota')?['STATUS_DANFE'],'DISPONIVEL'))",
+                      "runAfter": {
+                        "DDA_nota": [
+                          "Succeeded"
+                        ]
+                      },
+                      "actions": {
+                        "DDA_mesmo_nome": {
+                          "runtimeConfiguration": {
+                            "secureData": {
+                              "properties": [
+                                "inputs",
+                                "outputs"
+                              ]
+                            }
+                          },
+                          "runAfter": {
+                            "DDA_anexos": [
+                              "Succeeded"
+                            ]
+                          },
+                          "type": "Query",
+                          "inputs": {
+                            "where": "@equals(toLower(item()?['DisplayName']),toLower(triggerBody()?['filename']))",
+                            "from": "@body('DDA_anexos')"
+                          }
+                        },
+                        "DDA_final_nome": {
+                          "runtimeConfiguration": {
+                            "secureData": {
+                              "properties": [
+                                "inputs",
+                                "outputs"
+                              ]
+                            }
+                          },
+                          "runAfter": {
+                            "DDA_anexos_final": [
+                              "Succeeded"
+                            ]
+                          },
+                          "type": "Query",
+                          "inputs": {
+                            "where": "@equals(toLower(item()?['DisplayName']),toLower(triggerBody()?['filename']))",
+                            "from": "@body('DDA_anexos_final')"
+                          }
+                        },
+                        "DDA_anexos": {
+                          "runtimeConfiguration": {
+                            "secureData": {
+                              "properties": [
+                                "inputs",
+                                "outputs"
+                              ]
+                            }
+                          },
+                          "runAfter": {},
+                          "type": "OpenApiConnection",
+                          "inputs": {
+                            "host": {
+                              "connectionName": "shared_sharepointonline",
+                              "operationId": "GetItemAttachments",
+                              "apiId": "/providers/Microsoft.PowerApps/apis/shared_sharepointonline"
+                            },
+                            "authentication": "@parameters('$authentication')",
+                            "parameters": {
+                              "dataset": "https://energeticaltda.sharepoint.com/sites/energetica",
+                              "table": "NOTAS_FISCAIS_SEFAZ",
+                              "itemId": "@int(triggerBody()?['itemId'])"
+                            }
+                          }
+                        },
+                        "DDA_se_ausente": {
+                          "else": {
+                            "actions": {}
+                          },
+                          "expression": "@equals(length(body('DDA_mesmo_nome')),0)",
+                          "runAfter": {
+                            "DDA_mesmo_nome": [
+                              "Succeeded"
+                            ]
+                          },
+                          "actions": {
+                            "DDA_adicionar": {
+                              "runtimeConfiguration": {
+                                "secureData": {
+                                  "properties": [
+                                    "inputs",
+                                    "outputs"
+                                  ]
+                                }
+                              },
+                              "runAfter": {},
+                              "type": "OpenApiConnection",
+                              "inputs": {
+                                "host": {
+                                  "connectionName": "shared_sharepointonline",
+                                  "operationId": "CreateAttachment",
+                                  "apiId": "/providers/Microsoft.PowerApps/apis/shared_sharepointonline"
+                                },
+                                "retryPolicy": {
+                                  "type": "none"
+                                },
+                                "authentication": "@parameters('$authentication')",
+                                "parameters": {
+                                  "dataset": "https://energeticaltda.sharepoint.com/sites/energetica",
+                                  "displayName": "@triggerBody()?['filename']",
+                                  "body": "@base64ToBinary(triggerBody()?['content'])",
+                                  "table": "NOTAS_FISCAIS_SEFAZ",
+                                  "itemId": "@int(triggerBody()?['itemId'])"
+                                }
+                              }
+                            }
+                          },
+                          "type": "If"
+                        },
+                        "DDA_unico": {
+                          "else": {
+                            "actions": {
+                              "DDA_duplicado": {
+                                "operationOptions": "Asynchronous",
+                                "runtimeConfiguration": {
+                                  "secureData": {
+                                    "properties": [
+                                      "inputs"
+                                    ]
+                                  }
+                                },
+                                "type": "Response",
+                                "runAfter": {},
+                                "inputs": {
+                                  "statusCode": 409,
+                                  "body": {
+                                    "status": "duplicate_attachment"
+                                  }
+                                },
+                                "kind": "Http"
+                              }
+                            }
+                          },
+                          "expression": "@equals(length(body('DDA_final_nome')),1)",
+                          "runAfter": {
+                            "DDA_final_nome": [
+                              "Succeeded"
+                            ]
+                          },
+                          "actions": {
+                            "DDA_registro_final": {
+                              "runAfter": {
+                                "DDA_baixar": [
+                                  "Succeeded"
+                                ]
+                              },
+                              "type": "OpenApiConnection",
+                              "inputs": {
+                                "host": {
+                                  "apiId": "/providers/Microsoft.PowerApps/apis/shared_sharepointonline",
+                                  "connectionName": "shared_sharepointonline",
+                                  "operationId": "HttpRequest"
+                                },
+                                "parameters": {
+                                  "dataset": "https://energeticaltda.sharepoint.com/sites/energetica",
+                                  "parameters/method": "GET",
+                                  "parameters/uri": "_api/web/lists/getbytitle('NOTAS_FISCAIS_SEFAZ')/items(@{int(triggerBody()?['itemId'])})?$select=Id,Modified,Title,CHAVE_ACESSO,CNPJ_FORNECEDOR,CNPJ_DESTINATARIO,DATA_EMISSAO,VALOR_TOTAL_NOTA,VALOR_LIQUIDO,VALOR_LIQUIDO_FATURA,VALOR_SERVICOS,SITUACAO,STATUS_IMPORTACAO,STATUS_DANFE,TIPO_FISCAL,NUMERO_NOTA",
+                                  "parameters/headers": {
+                                    "Accept": "application/json;odata=nometadata"
+                                  }
+                                },
+                                "authentication": "@parameters('$authentication')"
+                              },
+                              "runtimeConfiguration": {
+                                "secureData": {
+                                  "properties": [
+                                    "inputs",
+                                    "outputs"
+                                  ]
+                                }
+                              }
+                            },
+                            "DDA_responder": {
+                              "operationOptions": "Asynchronous",
+                              "runtimeConfiguration": {
+                                "secureData": {
+                                  "properties": [
+                                    "inputs"
+                                  ]
+                                }
+                              },
+                              "type": "Response",
+                              "runAfter": {
+                                "DDA_registro_final": [
+                                  "Succeeded"
+                                ]
+                              },
+                              "inputs": {
+                                "statusCode": 200,
+                                "body": {
+                                  "status": "@if(equals(length(body('DDA_mesmo_nome')),0),'linked','already_linked')",
+                                  "record": "@body('DDA_registro_final')",
+                                  "content": "@body('DDA_baixar')"
+                                }
+                              },
+                              "kind": "Http"
+                            },
+                            "DDA_baixar": {
+                              "runtimeConfiguration": {
+                                "secureData": {
+                                  "properties": [
+                                    "inputs",
+                                    "outputs"
+                                  ]
+                                }
+                              },
+                              "runAfter": {},
+                              "type": "OpenApiConnection",
+                              "inputs": {
+                                "host": {
+                                  "connectionName": "shared_sharepointonline",
+                                  "operationId": "GetAttachmentContent",
+                                  "apiId": "/providers/Microsoft.PowerApps/apis/shared_sharepointonline"
+                                },
+                                "authentication": "@parameters('$authentication')",
+                                "parameters": {
+                                  "dataset": "https://energeticaltda.sharepoint.com/sites/energetica",
+                                  "attachmentId": "@first(body('DDA_final_nome'))?['Id']",
+                                  "table": "NOTAS_FISCAIS_SEFAZ",
+                                  "itemId": "@int(triggerBody()?['itemId'])"
+                                }
+                              }
+                            }
+                          },
+                          "type": "If"
+                        },
+                        "DDA_anexos_final": {
+                          "runtimeConfiguration": {
+                            "secureData": {
+                              "properties": [
+                                "inputs",
+                                "outputs"
+                              ]
+                            }
+                          },
+                          "runAfter": {
+                            "DDA_se_ausente": [
+                              "Succeeded"
+                            ]
+                          },
+                          "type": "OpenApiConnection",
+                          "inputs": {
+                            "host": {
+                              "connectionName": "shared_sharepointonline",
+                              "operationId": "GetItemAttachments",
+                              "apiId": "/providers/Microsoft.PowerApps/apis/shared_sharepointonline"
+                            },
+                            "authentication": "@parameters('$authentication')",
+                            "parameters": {
+                              "dataset": "https://energeticaltda.sharepoint.com/sites/energetica",
+                              "table": "NOTAS_FISCAIS_SEFAZ",
+                              "itemId": "@int(triggerBody()?['itemId'])"
+                            }
+                          }
+                        }
+                      },
+                      "type": "If"
+                    }
+                  },
+                  "type": "If"
+                }
+              }
+            },
+            "expression": "@equals(triggerBody()?['mode'],'pdf')",
+            "type": "If"
+          }
+        }
+      },
+      "expression": "@equals(triggerBody()?['mode'],'inventory')",
+      "type": "If"
+    }
+  },
+  "outputs": {}
+}
