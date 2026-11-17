@@ -28,10 +28,10 @@
 
 ### Task 1: Server reverse synchronization
 
-- [ ] Retrieve current deployed worker and bridge definition; preserve bounded asynchronous requests and caches.
-- [ ] Add failing tests for reverse DDA transfer, conflict preservation, multiple installments and rerun idempotency.
-- [ ] Implement verified reverse writes, retaining existing matching revalidation.
-- [ ] Run tests, back up/deploy bridge and worker, execute backlog and verify fields and hashes. Record remaining review/deferred cases.
+- [x] Retrieve current deployed worker and bridge definition; preserve bounded asynchronous requests and caches.
+- [x] Add failing tests for reverse DDA transfer, conflict preservation, multiple installments and rerun idempotency.
+- [x] Implement verified reverse writes, retaining existing matching revalidation.
+- [x] Run tests, back up/deploy bridge and worker, execute backlog and verify fields and hashes. 36 tests passed; 23 PDFs on 18 fiscal records/22 DDAs verified; replay created zero attachments and exited successfully. Original timer cadence was verified live as 08:40, 13:40 and 18:40 BRT and preserved. Source and aggregate evidence: `backend-patches/dda-nfe-attachments/DEPLOYMENT-VERIFIED.md`.
 
 ### Task 2: Complete proposal attachments
 
