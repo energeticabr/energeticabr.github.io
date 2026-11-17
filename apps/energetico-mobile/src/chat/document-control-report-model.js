@@ -53,6 +53,7 @@ export function normalizeDocumentControlSnapshot(snapshot) {
     ids.add(normalized.id);
     for (const field of DATE_FIELDS) normalized[field] = calendarDate(row[field]);
     for (const field of FILTER_FIELDS) normalized[field] = text(row[field]);
+    if (typeof row.hasAttachments === "boolean") normalized.hasAttachments = row.hasAttachments;
     return Object.freeze(normalized);
   });
   return Object.freeze({ documents: Object.freeze(documents) });

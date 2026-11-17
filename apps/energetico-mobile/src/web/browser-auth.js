@@ -104,9 +104,23 @@ export function createBrowserAuth({ client, config, storage }) {
     }
   }
 
-  async function authorize(scopes = ["User.Read"], { resumeAction, stageFinishDraft, taskFinishDraft, returnToRegistrationMenu } = {}) {
+  async function authorize(scopes = ["User.Read"], { resumeAction, stageFinishDraft, taskFinishDraft, returnToRegistrationMenu, interaction } = {}) {
     if (!account || !msalAccount) throw new BrowserAuthError("AUTH_REQUIRED", "Entre novamente com a Microsoft.");
     const requestedScopes = [...scopes];
+    if (interaction === "popup") {
+      const activeAccount = msalAccount;
+      let result;
+      try {
+        result = await client.acquireTokenPopup({ account: activeAccount, scopes: requestedScopes, redirectUri: config.webRedirectUri });
+      } catch (error) {
+        throw normalizeError(error);
+      }
+      if (msalAccount !== activeAccount || result?.account?.homeAccountId !== activeAccount.homeAccountId
+        || !result.accessToken || !grantedRequestedScopes(result, requestedScopes)) {
+        throw new BrowserAuthError("AUTH_FAILED", "Não foi possível autorizar o acesso da conta Microsoft atual.");
+      }
+      return;
+    }
     if (RESUMABLE_ACTIONS.has(resumeAction)) {
       try {
         const targetStorage = browserStorage(storage);

@@ -417,6 +417,33 @@ async function open(h) {
   return h.panels.at(-1).data;
 }
 
+test('document control passes every file on the clicked record to the collection viewer', async t => {
+  const listId = '12345678-1234-1234-1234-123456789abc';
+  const files = ['contrato.pdf', 'vistoria.jpg', 'termo.pdf'].map(fileName => ({
+    fileName, source: () => Promise.resolve(new Blob([fileName])),
+  }));
+  const { signal } = new AbortController();
+  let attachments, opened;
+  const h = harness(t, {
+    native: { async previewMediaCollection(items, options) { opened = { items, options }; } },
+    documentControlReportViewFactory: async options => {
+      attachments = options.attachments;
+      return { open() {}, close() {}, destroy() {} };
+    },
+    documentControlReportDataFactory: async () => ({
+      async loadAttachmentCollection(list, id, options) {
+        assert.deepEqual([list, id, options.signal], [listId, 7, signal]);
+        return files;
+      },
+    }),
+  });
+  await h.controller.start();
+  assert.equal(await h.view.emit('open-document-control-report'), true);
+  assert.equal(await attachments.previewAttachments(listId, 7, { signal }), true);
+  assert.deepEqual(opened.items.map(file => file.fileName), ['contrato.pdf', 'vistoria.jpg', 'termo.pdf']);
+  assert.equal(opened.options.signal, signal);
+});
+
 test('HOME and reply open one local document-control report, with an independent read-only data source', async t => {
   let sourceCreates = 0, receivedOptions;
   const requestedScopes = [];

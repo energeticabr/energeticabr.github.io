@@ -165,6 +165,27 @@ test("autoriza interativamente o escopo solicitado e mantém a conta selecionada
   assert.equal(auth.getAccount().username, "pessoa@energeticabr.com");
 });
 
+test("autoriza a prévia de anexos em uma janela separada sem gravar retomada por redirecionamento", async () => {
+  const account = { homeAccountId: "account-1", username: "pessoa@energeticabr.com" };
+  const scopes = ["https://energeticaltda-my.sharepoint.com/AllSites.Read"];
+  const client = {
+    async initialize() {},
+    async handleRedirectPromise() { return null; },
+    getAllAccounts: () => [account],
+    async acquireTokenRedirect() { assert.fail("a autorização deve preservar a página atual"); },
+    async acquireTokenPopup(request) {
+      assert.deepEqual(request, { account, scopes, redirectUri: config.webRedirectUri });
+      return { account, scopes, accessToken: "read-token" };
+    },
+  };
+  const auth = createBrowserAuth({ client, config, storage: {
+    getItem: () => null, removeItem() {}, setItem() { assert.fail("a janela separada não grava retomada"); },
+  } });
+  await auth.initialize();
+  await auth.authorize(scopes, { interaction: "popup", resumeAction: "home-document-control-report" });
+  assert.equal(auth.getAccount().homeAccountId, account.homeAccountId);
+});
+
 test("retoma a abertura da Galeria Pedidos após consentimento Microsoft por redirecionamento", async () => {
   const account = { homeAccountId: "account-1", username: "pessoa@energeticabr.com" };
   const values = new Map();

@@ -24,7 +24,7 @@ function fixture(overrides = {}) {
     async getItemsPage(site, list, query, { signal }) {
       assert.equal(site, "personal"); assert.equal(list, "documents"); assert.ok(signal);
       const parameters = new URLSearchParams(query);
-      assert.equal(parameters.get("$expand"), "fields($select=field_0,field_1,field_2,field_3,field_4,field_5,field_6,field_7,field_8,field_9)");
+      assert.equal(parameters.get("$expand"), "fields($select=field_0,field_1,field_2,field_3,field_4,field_5,field_6,field_7,field_8,field_9,Attachments)");
       assert.equal(parameters.get("$top"), "100"); assert.equal(parameters.has("$filter"), false);
       return { items: [item()], hasMore: false, batchCount: 1 };
     },
@@ -38,6 +38,41 @@ test("personal documents schema loads a complete immutable normalized metadata s
   assert.deepEqual(result, { documents: [{ id: 1, submittedDate: "2026-10-05", issuedDate: "2026-09-30", expirationDate: "2026-10-21",
     branch: "A", homologation: "FEDERAL", documentType: "CERTIDÃO", person: "José", stage: "Obra", property: "Casa 1", status: "SUBMETIDO" }] });
   for (const value of [result, result.documents, result.documents[0]]) assert.ok(Object.isFrozen(value));
+});
+
+test("document attachment presence survives normalization and files load on demand from the rendered item", async () => {
+  const listId = "12345678-1234-1234-1234-123456789abc";
+  const downloads = [];
+  const service = create({ ...fixture({
+    async resolveList() { return { status: "resolved", id: listId }; },
+    async getColumns() { return columns(); },
+    async getItemsPage(_site, _list, query) {
+      assert.match(new URLSearchParams(query).get("$expand"), /,Attachments\)$/);
+      return { items: [item(1, { Attachments: true }), item(2, { Attachments: "false" }), item(3)], hasMore: false };
+    },
+    async listAttachments(site, list, id) {
+      assert.deepEqual([site, list, id], ["personal", listId, 1]);
+      return [{ name: "contrato.pdf" }, { name: "foto.jpg" }];
+    },
+    async downloadAttachment(site, list, id, name, { signal, onProgress }) {
+      assert.deepEqual([site, list, id], ["personal", listId, 1]);
+      assert.ok(signal);
+      onProgress(4);
+      downloads.push(name);
+      return new TextEncoder().encode(name).buffer;
+    },
+  }), includeAttachmentTarget: true });
+  const result = await service.loadSnapshot();
+  assert.deepEqual(result.documents.map(row => row.hasAttachments), [true, false, undefined]);
+  const files = await service.loadAttachmentCollection(result.attachmentListId, 1);
+  assert.deepEqual(files.map(file => file.fileName), ["contrato.pdf", "foto.jpg"]);
+  assert.deepEqual(downloads, []);
+  const progress = [];
+  const { signal } = new AbortController();
+  const blob = await files[1].source({ signal, onProgress: value => progress.push(value) });
+  assert.equal(await blob.text(), "foto.jpg");
+  assert.deepEqual(downloads, ["foto.jpg"]);
+  assert.deepEqual(progress, [4]);
 });
 
 test("attachments are written only to the selected item after checking its live pending status", async () => {
@@ -74,7 +109,7 @@ test("registration aliases encoded accents and renamed Title resolve the actual 
     { name: "LinkTitle", displayName: "FILIAL" }, { name: "computed", displayName: "DATA", computed: {} },
     ...names.map((name, index) => ({ name, ...(index === 3 ? { displayName: "FILIAL", hidden: true } : {}) })),
   ]; }, async getItemsPage(_site, _list, query) {
-    assert.equal(new URLSearchParams(query).get("$expand"), `fields($select=${names.join(",")})`);
+    assert.equal(new URLSearchParams(query).get("$expand"), `fields($select=${names.join(",")},Attachments)`);
     return { items: [{ id: "2", fields: Object.fromEntries(names.map((name, index) => [name, values[index]])) }], hasMore: false };
   } })).loadSnapshot();
   assert.equal(result.documents[0].branch, "A"); assert.equal(result.documents[0].property, "Casa 1");
@@ -236,7 +271,7 @@ test("real repository resolves DOCUMENTOS and paginated schema and lookup labels
   assert.deepEqual(result.documents.map(value => [value.id, value.person]), [[1, "José"], [2, "José"]]);
   assert.ok(source.requests.some(path => path.includes("columns?$skiptoken")));
   assert.equal(new URL(source.requests.find(path => path.includes("/items")), "https://graph.microsoft.com").searchParams.get("$expand"),
-    "fields($select=field_0,field_1,field_2,field_3,field_4,field_5,field_6,field_7,field_8,field_9)");
+    "fields($select=field_0,field_1,field_2,field_3,field_4,field_5,field_6,field_7,field_8,field_9,Attachments)");
   await assert.rejects(create(graphFixture({ unresolved: true })).loadSnapshot(), /lookup/i);
 });
 

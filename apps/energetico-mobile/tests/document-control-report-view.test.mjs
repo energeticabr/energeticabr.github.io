@@ -16,6 +16,39 @@ function setup(t,load=async()=>snapshot,vertical=false,attachments={}){
  return {view,root:view.element,dom,rotate(value){portrait=value;dom.window.dispatchEvent(new dom.window.Event('resize'));}};
 }
 
+test('PDF appears directly under the status only on rows with files and opens that record', async t => {
+ const attachmentListId = '12345678-1234-1234-1234-123456789abc';
+ const calls = [];
+ let closePreview;
+ const { view, root, dom } = setup(t, async () => ({
+  attachmentListId, documents: [row(294, { hasAttachments: true }), row(293, { hasAttachments: false }), row(292)],
+ }), false, {
+  async previewAttachments(listId, id, options) {
+   calls.push([listId, id, options.returnLabel]);
+   closePreview = options.onClose;
+   options.signal.addEventListener('abort', closePreview, { once: true });
+   return true;
+  },
+ });
+ await view.open();
+ const buttons = [...root.querySelectorAll('.dcr-preview-attachment')];
+ assert.equal(buttons.length, 1);
+ const button = buttons[0];
+ assert.equal(button.closest('td').firstElementChild.textContent, 'SUBMETIDO');
+ assert.equal(button.previousElementSibling.textContent, 'SUBMETIDO');
+ assert.ok(button.firstElementChild.matches('svg'));
+ assert.equal(button.lastElementChild.textContent, 'PDF');
+ button.focus();
+ button.click();
+ await tick();
+ assert.deepEqual(calls, [[attachmentListId, 294, 'Voltar ao controle de documentos']]);
+ assert.equal(button.disabled, true);
+ closePreview();
+ assert.equal(button.disabled, false);
+ assert.equal(dom.window.document.activeElement, button);
+ assert.equal(root.hidden, false);
+});
+
 test('only a pending document offers four attachment sources and saves to its row', async t => {
  const files = [new File(['comprovante'], 'documento.pdf', { type: 'application/pdf' })];
  const picked = [], uploaded = [];
@@ -24,6 +57,7 @@ test('only a pending document offers four attachment sources and saves to its ro
  }), false, {
   async pickAttachments(source) { picked.push(source); return source === 'photos' ? [] : files; },
   async uploadAttachments(listId, id, selected) { uploaded.push({ listId, id, selected }); return selected.length; },
+  async previewAttachments() { return true; },
  });
  await view.open();
  const buttons = [...root.querySelectorAll('.dcr-attach')];
@@ -40,6 +74,7 @@ test('only a pending document offers four attachment sources and saves to its ro
   listId: '12345678-1234-1234-1234-123456789abc', id: 294, selected: files,
  })));
  assert.match(dialog.querySelector('[role=status]').textContent, /1 arquivo anexado/);
+ assert.equal(buttons[0].parentElement.querySelector('.dcr-preview-attachment').lastElementChild.textContent, 'PDF');
  view.close();
  assert.equal(dialog.open, false);
 });
