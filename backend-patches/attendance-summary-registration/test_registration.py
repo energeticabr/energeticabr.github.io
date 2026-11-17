@@ -131,14 +131,17 @@ class SummaryRegistrationTests(unittest.TestCase):
         self.choose('descriptor')
         for value in ('431', '432', '433'):
             self.answer(value)
-        self.c.reply(reply_id='demonstrative_start_today')
-        self.c.reply(reply_id='demonstrative_end_blank')
-        for value in ('10', '20', '1', '434', '2', 'NÃO'):
+        activity = self.c.reply(reply_id='demonstrative_start_today')
+        self.assertEqual(activity['field'], 'atividade_demonstrativo_etapa')
+        for value in ('434', '2', 'NÃO'):
             result = self.answer(value)
         self.assertEqual(result['status'], 'awaiting_confirmation')
         result = self.c.reply('SIM')
         self.assertTrue(result['embedded_attendance_summary_registered'])
-        self.assertEqual(self.c.sharepoint.items[result['registered_item_id']]['target_list'], 'DEMONSTRATIVOETAPA')
+        item = self.c.sharepoint.items[result['registered_item_id']]
+        self.assertEqual(item['target_list'], 'DEMONSTRATIVOETAPA')
+        self.assertEqual(item['fields']['STATUS'], 'ATIVIDADE INICIADA')
+        self.assertNotIn('DATAPREVISTO', item['fields'])
         self.assert_summary()
 
     def test_completed_registration_refreshes_catalog_and_preserves_old_values(self):
@@ -157,10 +160,8 @@ class SummaryRegistrationTests(unittest.TestCase):
         self.choose('descriptor')
         for value in ('431', '432', '433'):
             self.answer(value)
-        self.c.reply(reply_id='demonstrative_start_today')
-        self.c.reply(reply_id='demonstrative_end_blank')
-        for value in ('10', '20', '1'):
-            self.answer(value)
+        activity = self.c.reply(reply_id='demonstrative_start_today')
+        self.assertEqual(activity['field'], 'atividade_demonstrativo_etapa')
         self.c.reply(reply_id='NOVO_DEMONSTRATIVO_ETAPA_ATIVIDADE')
         self.c.reply('ATIVIDADE ANINHADA FICTÍCIA')
         result = self.c.reply('SIM')
