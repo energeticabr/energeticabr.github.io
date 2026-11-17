@@ -110,6 +110,7 @@ button.gantt-toggle {
 .gantt-cluster--start { background: #24723a; white-space: nowrap; }
 .gantt-cluster--end { background: #aa2839; white-space: nowrap; }
 .gantt-cluster--responsible { margin-top: 4px; background: #175d9b; }
+.gantt-cluster--description { display: block; padding: 5px 7px; background: #0d4d61; font-size: .9rem; font-weight: 800; white-space: normal; overflow-wrap: anywhere; }
 button.gantt-toggle { flex: 0 0 44px; padding: 0; font-size: 1.15rem; }
 .gantt-axis { position: sticky; top: 0; z-index: 3; background: #eaf3f6; font-size: .78rem; font-weight: 700; }
 .gantt-axis .gantt-label { background: inherit; }

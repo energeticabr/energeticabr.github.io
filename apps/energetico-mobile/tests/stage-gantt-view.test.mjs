@@ -36,6 +36,9 @@ test('GANTT expande as atividades abaixo da etapa e exibe datas e estados das ba
   assert.equal(toggle.getAttribute('aria-expanded'), 'true');
   const child = dialog.querySelector('.gantt-row--stage').nextElementSibling;
   assert.match(child.textContent, /Escavação.*Casa 2/);
+  assert.equal(child.querySelector('.gantt-name').tagName, 'STRONG');
+  assert.ok(child.querySelector('.gantt-name').classList.contains('gantt-cluster--description'));
+  assert.ok(dialog.querySelector('.gantt-row--stage .gantt-name').classList.contains('gantt-cluster--description'));
   assert.match(child.querySelector('[data-tone="finished"]').getAttribute('aria-label'), /03\/11\/2026.*03\/11\/2026/);
   assert.equal(child.querySelector('.gantt-bar-date--start').textContent, '03/11/2026');
   assert.equal(child.querySelector('.gantt-bar-date--end').textContent, '03/11/2026');
