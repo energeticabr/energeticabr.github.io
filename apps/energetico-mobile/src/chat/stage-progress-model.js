@@ -113,6 +113,7 @@ export function buildStageGantt(snapshot, today) {
     branch: stage.launch?.branch || stage.branch,
     start: stage.startDate,
     end: stage.endDate,
+    finished: stage.status.trim().toUpperCase() === 'FINALIZADO',
     range: ganttRange(stage.startDate, stage.endDate, stage.status, day),
     children: stage.rows.map(row => ({
       name: row.activity || "Atividade sem descrição",
@@ -120,6 +121,7 @@ export function buildStageGantt(snapshot, today) {
       supplier: row.supplier,
       start: row.executionDate,
       end: row.plannedDate,
+      finished: row.status.trim().toUpperCase() === 'ATIVIDADE FINALIZADA',
       range: ganttRange(row.executionDate, row.plannedDate, row.status, day),
     })),
   }));

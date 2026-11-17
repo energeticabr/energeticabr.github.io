@@ -117,13 +117,25 @@ export function createStageGanttView({ document: doc = globalThis.document, data
       const row = make('div', `gantt-row gantt-row--${parent ? 'stage' : 'activity'}`);
       const label = make('div', 'gantt-label');
       const text = make('div', 'gantt-row-text');
-      const info = parent ? item.branch : [item.property, item.supplier].filter(Boolean).join(' · ');
+      const property = item.property?.trim() || '';
+      const info = parent ? item.branch : property.toUpperCase() === 'TODOS' ? '' : property;
       const startText = formatOperationsDate(item.start);
-      const endText = item.range?.throughToday ? `Hoje (${formatOperationsDate(today)})` : formatOperationsDate(item.end);
+      const endText = item.finished ? formatOperationsDate(item.end) : 'Em Andamento';
       const dates = `Início ${startText} · Fim ${endText}`;
       text.append(make(parent ? 'strong' : 'span', 'gantt-name', item.name));
       if (info) text.append(make('small', '', info));
-      text.append(make('small', '', dates));
+      if (item.supplier) {
+        const responsible = make('span', 'gantt-cluster gantt-cluster--responsible', item.supplier);
+        responsible.setAttribute('aria-label', `Responsável ${item.supplier}`);
+        text.append(responsible);
+      }
+      const dateClusters = make('div', 'gantt-dates');
+      const startCluster = make('span', 'gantt-cluster gantt-cluster--start', startText);
+      const endCluster = make('span', 'gantt-cluster gantt-cluster--end', endText);
+      startCluster.setAttribute('aria-label', `Início ${startText}`);
+      endCluster.setAttribute('aria-label', `Fim ${endText}`);
+      dateClusters.append(startCluster, endCluster);
+      text.append(dateClusters);
       label.append(text);
       const track = make('div', 'gantt-track');
       if (item.range) {

@@ -12,19 +12,29 @@ import {createStageGanttView} from '../../src/ui/stage-gantt-view.js';
 import {decorateReportNavigation} from '../../src/ui/report-navigation.js';
 let reads=0;
 if(new URL(location.href).searchParams.has('gantt')) {
- const gantt=createStageGanttView({document,data:{async loadSnapshot(){return {complete:true,activities:[],
+ const gantt=createStageGanttView({document,data:{async loadSnapshot(){return {complete:true,activities:[
+  {id:1,branch:'004 - EDIFÍCIO XAVANTE',stage:'TERRAPLANAGEM',activity:'EXECUÇÃO PAREDES ARRIMO',property:'TODOS',supplier:'EDGAR NELSON DA SILVA',status:'ATIVIDADE FINALIZADA',executionDate:'2026-06-19',plannedDate:'2026-09-14'},
+  {id:2,branch:'004 - EDIFÍCIO XAVANTE',stage:'TERRAPLANAGEM',activity:'IMPERMEABILIZAÇÃO ARRIMO',property:'TODOS',supplier:'EDGAR NELSON DA SILVA',status:'ATIVIDADE INICIADA',executionDate:'2026-08-27',plannedDate:''},
+ ],
   launches:[{id:1,branch:'004 - EDIFÍCIO XAVANTE',stage:'TERRAPLANAGEM',type:'ATIVIDADE COMUM',status:'INICIADO',startDate:'2026-09-16'}]};}}});
  await gantt.open();
+ gantt.element.querySelector('.gantt-toggle').click();
  const root=gantt.element,dialog=root.querySelector('[role=dialog]'),scroll=root.querySelector('.gantt-scroll');
  const portrait=root.dataset.reportPortrait==='true';
  const panel=dialog.getBoundingClientRect(),timeline=scroll.getBoundingClientRect();
  const button=root.querySelector('.report-close-control'),close=button.getBoundingClientRect();
  const closeReachable=document.elementFromPoint(close.x+close.width/2,close.y+close.height/2)?.closest('button')===button;
  const transform=getComputedStyle(root).transform;
- button.click();
+ const clusters=[...root.querySelectorAll('.gantt-cluster')];
+ const clusterColors=Object.fromEntries(['start','end','responsible'].map(kind=>[kind,getComputedStyle(root.querySelector('.gantt-cluster--'+kind)).backgroundColor]));
+ const labelWidth=root.querySelector('.gantt-label').offsetWidth;
+ const clustersFit=clusters.every(node=>node.scrollWidth<=node.clientWidth+1);
+ const noTodos=!root.querySelector('.gantt-row--activity').textContent.includes('TODOS');
+ if(!new URL(location.href).searchParams.has('visual'))button.click();
  document.documentElement.dataset.layout=JSON.stringify({
   portrait,rotated:transform==='matrix(0, 1, -1, 0, 0, 0)',height:portrait?panel.width:panel.height,
   bottomInset:portrait?timeline.left-panel.left:panel.bottom-timeline.bottom,closeReachable,closed:root.hidden,
+  clusterColors,labelWidth,clustersFit,noTodos,
  });
 }
 const navigated=[];
