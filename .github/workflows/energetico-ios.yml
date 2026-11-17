@@ -300,7 +300,8 @@ jobs:
   testflight:
     name: Distribuição TestFlight
     if: ${{ (github.event_name == 'push' && github.ref == 'refs/heads/main') || (github.event_name == 'workflow_dispatch' && inputs.distribute == true) }}
-    runs-on: ${{ inputs.use_intel_runner == true && 'macos-26-intel' || 'macos-26' }}
+    # The distribution job does not boot a simulator; keep ARM capacity for its prerequisites.
+    runs-on: macos-26-intel
     needs:
       - web-tests
       - ios-simulator
@@ -391,16 +392,81 @@ jobs:
             -archivePath build/Energetico.xcarchive \
             CURRENT_PROJECT_VERSION="$GITHUB_RUN_NUMBER" \
             archive
-          EXPORT_OPTIONS="$RUNNER_TEMP/ExportOptions.plist"
+          python3 - <<'PY'
+          import os
+          import pathlib
+          import plistlib
+
+          temporary = pathlib.Path(os.environ['RUNNER_TEMP'])
+          with (temporary / 'ExportOptions.plist').open('rb') as source:
+              options = plistlib.load(source)
+          expected_bundles = {'br.com.energetica.energetico', 'br.com.energetica.energetico.share'}
+          assert options.get('method') == 'app-store-connect', 'Unexpected export method'
+          assert options.get('signingStyle') == 'manual', 'Manual signing is required'
+          assert options.get('teamID') == os.environ['APPLE_TEAM_ID'], 'Unexpected signing team'
+          assert options.get('signingCertificate') == 'Apple Distribution', 'Unexpected signing certificate'
+          profiles = options.get('provisioningProfiles', {})
+          assert set(profiles) == expected_bundles and all(profiles.values()), 'Both existing profiles are required'
+          options['destination'] = 'export'
+          options['manageAppVersionAndBuildNumber'] = False
+          options['generateAppStoreInformation'] = False
+          with (temporary / 'ExportOptions-offline.plist').open('wb') as output:
+              plistlib.dump(options, output)
+          PY
+          EXPORT_OPTIONS="$RUNNER_TEMP/ExportOptions-offline.plist"
           xcodebuild \
             -exportArchive \
             -archivePath build/Energetico.xcarchive \
             -exportOptionsPlist "$EXPORT_OPTIONS" \
-            -exportPath build/TestFlight \
-            -allowProvisioningUpdates \
-            -authenticationKeyPath "$ENERGETICO_API_KEY_PATH" \
-            -authenticationKeyID "$APPLE_API_KEY_ID" \
-            -authenticationKeyIssuerID "$APPLE_API_ISSUER_ID"
+            -exportPath build/TestFlight
+          python3 - <<'PY'
+          import os
+          import pathlib
+          import plistlib
+          import re
+          import shlex
+          import zipfile
+
+          packages = sorted(path for path in pathlib.Path('build/TestFlight').rglob('*.ipa') if path.is_file())
+          assert len(packages) == 1, 'Expected exactly one exported IPA'
+          ipa = packages[0].resolve()
+          with zipfile.ZipFile(ipa) as package:
+              root_infos = [name for name in package.namelist() if re.fullmatch(r'Payload/[^/]+\.app/Info\.plist', name)]
+              assert len(root_infos) == 1, 'Expected exactly one exported application Info.plist'
+              info = plistlib.loads(package.read(root_infos[0]))
+          bundle = info.get('CFBundleIdentifier')
+          version = info.get('CFBundleShortVersionString')
+          build = info.get('CFBundleVersion')
+          assert bundle == 'br.com.energetica.energetico', 'Unexpected exported bundle identifier'
+          assert isinstance(version, str) and re.fullmatch(r'[0-9]+(?:\.[0-9]+){0,2}', version), 'Invalid exported marketing version'
+          assert isinstance(build, str) and build == os.environ['GITHUB_RUN_NUMBER'], 'Exported build must equal the workflow run number'
+          archived_infos = list(pathlib.Path('build/Energetico.xcarchive/Products/Applications').glob('*.app/Info.plist'))
+          assert len(archived_infos) == 1, 'Expected exactly one archived application Info.plist'
+          with archived_infos[0].open('rb') as archived_source:
+              archived = plistlib.load(archived_source)
+          for key in ('CFBundleIdentifier', 'CFBundleShortVersionString', 'CFBundleVersion'):
+              assert info.get(key) == archived.get(key), 'Export changed archived application metadata'
+          attach_source = pathlib.Path('scripts/attach-testflight-build.mjs').read_text(encoding='utf-8')
+          app_id = re.search(r"const APP_ID = '([0-9]+)';", attach_source)
+          assert app_id and app_id.group(1) == '6809887853', 'Unexpected App Store application identifier'
+          values = {'IPA_PATH': str(ipa), 'BUNDLE_ID': bundle, 'MARKETING_VERSION': version, 'BUILD_NUMBER': build}
+          metadata = pathlib.Path(os.environ['RUNNER_TEMP']) / 'energetico-ipa-metadata.env'
+          metadata.write_text(''.join(f'{key}={shlex.quote(value)}\n' for key, value in values.items()), encoding='utf-8')
+          metadata.chmod(0o600)
+          PY
+          source "$RUNNER_TEMP/energetico-ipa-metadata.env"
+          xcrun --find altool >/dev/null
+          test -r "$HOME/.appstoreconnect/private_keys/AuthKey_${APPLE_API_KEY_ID}.p8"
+          API_PRIVATE_KEYS_DIR="$HOME/.appstoreconnect/private_keys" \
+            xcrun altool --upload-package "$IPA_PATH" \
+              --type ios \
+              --apple-id 6809887853 \
+              --bundle-id "$BUNDLE_ID" \
+              --bundle-short-version-string "$MARKETING_VERSION" \
+              --bundle-version "$BUILD_NUMBER" \
+              --apiKey "$APPLE_API_KEY_ID" \
+              --apiIssuer "$APPLE_API_ISSUER_ID" \
+              --output-format json
       - name: Associar build processada ao grupo interno do TestFlight
         working-directory: apps/energetico-mobile
         env:

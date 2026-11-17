@@ -35,7 +35,7 @@
 
 ### Task 2: Complete proposal attachments
 
-**Files:** `apps/energetico-mobile/src/chat/nfe-proposal-data.js`, `nfe-proposal-posting.js`, `src/ui/nfe-proposal-view.js`, and focused proposal tests.
+**Files:** `apps/energetico-mobile/src/chat/nfe-proposal-data.js`, `nfe-proposal-posting.js`, shared name/byte validation in `nfe-proposal-attachments.js`, `src/ui/nfe-proposal-view.js`, and focused proposal tests.
 
 - [x] Add failing tests: order and provision copy DANFE, multiple DDA PDFs and non-PDF attachments; retry after upload failure; preserve conflicting destination; include attachments added on retry and reject mid-posting collection changes.
 - [x] Download the complete source collection with validated names and readable nonempty bytes, preserving the original fiscal PDF check. Re-read collection before returning.
@@ -46,5 +46,7 @@
 ### Task 3: Review and release
 
 - [x] Fresh review of final application diff and verification evidence; fix material findings. Late-arriving attachments are rechecked after destination reads while retaining the fiscal ETag for conditional linking. Reviewer independently verified 38 posting tests.
-- [ ] Commit, push, merge via PR; follow web, Android internal and TestFlight jobs for feature-containing revisions.
+- [x] Commit, push, merge via PR; follow web, Android internal and TestFlight jobs for feature-containing revisions. Application PR #1083 and server PR #1084 merged. Web publication and Android internal upload verified; iOS compilation verified on the later main revision containing the same four feature source files.
 - [ ] Verify publication results and provide concise Portuguese outcome with any real pending cases.
+
+Release ruling: preserve all main-workflow web, native-share and simulator prerequisites. Run only distribution on Intel, reserving ARM capacity for its prerequisites and avoiding simulator startup in the publisher. Export the signed archive locally with the existing manual profiles/certificate, validate IPA bundle/version/build, then upload through Apple's documented `altool --upload-package`; keep the existing TestFlight processing/readback step. Integrated Xcode export/upload failed to fetch App Store information on both ARM and Intel. This distribution-only correction lets the newest main revision include the NF-e change and other already merged features. Temporary Intel diagnostic workflows remain outside main; no signature behavior or test assertion was changed.
