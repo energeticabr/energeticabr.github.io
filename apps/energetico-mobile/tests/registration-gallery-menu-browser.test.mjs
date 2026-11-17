@@ -14,7 +14,7 @@ function assertDarkGray(color) {
   assert.ok(channels.every(channel => channel >= 50 && channel <= 100) && Math.max(...channels) - Math.min(...channels) < 32, `botão cinza: ${color}`);
 }
 
-test('Suprimentos e escolha de cadastros mantêm botão pareado e quatro destinos acessíveis no celular e desktop', { timeout: 180_000 }, async t => {
+test('Suprimentos e escolha de cadastros mantêm botão pareado e oito destinos acessíveis no celular e desktop', { timeout: 180_000 }, async t => {
   const browser = [process.env.CHROME_BIN, 'C:/Program Files/Google/Chrome/Application/chrome.exe', '/usr/bin/google-chrome'].find(path => path && existsSync(path));
   if (!browser) return t.skip('Chrome unavailable');
   const root = resolve(fileURLToPath(new URL('..', import.meta.url))), temporaryRoot = resolve(tmpdir());
@@ -24,7 +24,7 @@ test('Suprimentos e escolha de cadastros mantêm botão pareado e quatro destino
   try {
     server = await createServer({ root, cacheDir, logLevel: 'silent', server: { host: '127.0.0.1', port: 0, fs: { allow: [root, cacheDir] } } });
     await server.listen(); mkdirSync(screenshots, { recursive: true });
-    for (const [width, height] of [[320, 740], [390, 844], [1200, 900]]) for (const mode of ['supplies', 'chooser']) {
+    for (const [width, height] of [[320, 640], [390, 844], [1200, 900]]) for (const mode of ['supplies', 'chooser']) {
       const result = await runBrowserLayout(browser, { width, height, captureScreenshot: true,
         url: `http://127.0.0.1:${server.httpServer.address().port}/tests/fixtures/registration-gallery-menu.html?mode=${mode}` });
       const dom = new JSDOM(result.stdout), layout = JSON.parse(dom.window.document.documentElement.dataset.layout); dom.window.close();
@@ -36,7 +36,8 @@ test('Suprimentos e escolha de cadastros mantêm botão pareado e quatro destino
       assertDarkGray(layout.pair.background);
       if (mode === 'chooser') {
         assert.equal(layout.menuVisible, true); assert.equal(layout.hitTargets, true);
-        assert.deepEqual(layout.selected, ['group', 'family', 'subfamily', 'product']);
+        assert.deepEqual(layout.selected, ['group', 'family', 'subfamily', 'product', 'supplier', 'account', 'materialType', 'unitOfMeasure']);
+        assert.ok(layout.choices[0].y - layout.headerBottom <= 16, 'a primeira escolha começa logo abaixo do cabeçalho');
         for (const button of layout.choices) {
           assertDarkGray(button.background);
           assert.ok(button.x >= 0 && button.right <= width && button.y >= 0 && button.bottom <= height, `${button.label} reachable at ${width}`);

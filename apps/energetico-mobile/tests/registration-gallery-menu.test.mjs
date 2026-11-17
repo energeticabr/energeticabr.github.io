@@ -58,13 +58,16 @@ function harness(t, { factory, response } = {}) {
   return { doc, controller, view, panels, requests, sources, store };
 }
 
-test('escolha local abre as quatro galerias reais e Voltar retorna à escolha sem enviar chat', async t => {
+test('escolha local abre as oito galerias e Voltar retorna à escolha sem enviar chat', async t => {
   const h = harness(t); await h.controller.start(); const initialRequests = h.requests.length;
   await Promise.all([h.view.emit('select-reply', { replyId: 'action_registration_hub' }), h.view.emit('select-reply', { replyId: 'action_registration_hub' })]);
   assert.equal(h.panels.length, 1); assert.deepEqual(h.sources, []);
+  assert.equal(h.doc.querySelector('.registration-gallery-menu__question'), null);
   assert.deepEqual([...h.doc.querySelectorAll('[data-registration-gallery]')].map(button => button.textContent),
-    ['GALERIA GRUPO', 'GALERIA FAMÍLIA', 'GALERIA SUBFAMÍLIA', 'GALERIA PRODUTO']);
-  for (const kind of ['group', 'family', 'subfamily', 'product']) {
+    ['GALERIA GRUPO', 'GALERIA FAMÍLIA', 'GALERIA SUBFAMÍLIA', 'GALERIA PRODUTO',
+      'GALERIA FORNECEDOR', 'GALERIA CONTA', 'GALERIA TIPO DE MATERIAL', 'GALERIA UNIDADE DE MEDIDA']);
+  const destinations = ['group', 'family', 'subfamily', 'product', 'supplier', 'account', 'materialType', 'unitOfMeasure'];
+  for (const kind of destinations) {
     h.doc.querySelector(`[data-registration-gallery="${kind}"]`).click();
     await tick(); await tick();
     const child = h.doc.querySelector(`[data-gallery-kind="${kind}"]`);
@@ -73,9 +76,10 @@ test('escolha local abre as quatro galerias reais e Voltar retorna à escolha se
     child.querySelector('[data-action="registration-close"]').click(); await tick(); await tick();
     assert.equal(h.doc.querySelector('.registration-gallery-menu').hidden, false);
   }
-  assert.deepEqual(h.sources, ['group', 'family', 'subfamily', 'product']);
+  assert.deepEqual(h.sources, destinations);
   assert.equal(h.requests.length, initialRequests);
-  await h.panels[0].onSelect('asset'); assert.equal(h.sources.length, 4, 'o menu não aceita destinos externos');
+  assert.equal(await h.panels[0].onSelect('asset'), false);
+  assert.deepEqual(h.sources, destinations, 'o menu não aceita destinos externos');
 });
 
 test('somente uma linha de Efetuar Cadastros recebe o atalho; outros cadastros não recebem', t => {

@@ -1,4 +1,5 @@
 import { createSefazSyncSession } from './ui/sefaz-sync-session.js';
+import { createRegistrationGalleryMenu, REGISTRATION_GALLERY_CHOICES } from './ui/registration-gallery-menu.js';
 import { resumeConversation } from './chat/resume-conversation.js';
 import { createProvisionSettlementParentSession } from './ui/provision-settlement-parent-session.js';
 import { createDdaAutoReminder } from './chat/dda-auto-reminder.js';
@@ -299,7 +300,6 @@ async function defaultSicoobTransactionReportFactory(options) {
 
 async function defaultRegistrationGalleryFactory(options) {
   if (options.kind === 'registrationMenu') {
-    const { createRegistrationGalleryMenu } = await import('./ui/registration-gallery-menu.js');
     return createRegistrationGalleryMenu(options);
   }
   if (options.kind === 'assetMenu') {
@@ -10195,8 +10195,10 @@ export function createAppController({
             kind: sourceKind, data,
             ...(isGalleryMenu ? { onSelect: async target => {
               assertSession();
-              const targets = sourceKind === 'assetMenu' ? ['asset', 'assetLaunches'] : ['group', 'family', 'subfamily', 'product'];
-              if (!targets.includes(target) || flowBusy()) return false;
+              const canOpenTarget = sourceKind === 'assetMenu'
+                ? ['asset', 'assetLaunches'].includes(target)
+                : REGISTRATION_GALLERY_CHOICES.some(([kind]) => kind === target);
+              if (!canOpenTarget || flowBusy()) return false;
               registrationGalleries.get(kind)?.close();
               const targetReply = Object.keys(REGISTRATION_GALLERY_KIND).find(reply => REGISTRATION_GALLERY_KIND[reply] === target);
               const selectionRevision = galleryOpeningRevision;
