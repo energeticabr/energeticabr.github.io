@@ -4,6 +4,7 @@ import { JSDOM } from 'jsdom';
 import { createAppController } from '../src/app-controller.js';
 import { createConversationStore } from '../src/chat/conversation-store.js';
 import { createSicoobTransactionReportView } from '../src/ui/sicoob-transaction-report-view.js';
+import { createReportOrientationController } from '../src/native/report-orientation.js';
 
 // Literal routes catch wrong dispatch and cross-color navigation independently
 // of the helper's neighbor calculation. Only UI/network boundaries are doubled.
@@ -44,7 +45,7 @@ function deferred() {
 
 // Same real controller/store harness used by task-association-report-controller;
 // kept here because that test defines its harness locally rather than exporting it.
-function harness(t, options = {}, { dom = true } = {}) {
+function harness(t, options = {}, { dom = true, orientation } = {}) {
   const document = new JSDOM('<body><main id="app"></main></body>').window.document;
   const handlers = new Map(), calls = [], renders = [], panels = [];
   const view = {
@@ -65,15 +66,17 @@ function harness(t, options = {}, { dom = true } = {}) {
     element.hidden = true;
     element.innerHTML = '<section class="pl-dialog" role="dialog"><header class="pl-header"><h2>Relatório</h2><button class="pl-close">Fechar</button></header></section>';
     document.body.append(element);
+    const landscape = orientation?.bind(element);
     const panel = { action, data, ...(dom ? { element } : {}), opens: 0, closes: 0, destroys: 0,
       open() { panel.opens++; element.hidden = false; },
       close() { panel.closes++; element.hidden = true; },
-      destroy() { panel.destroys++; element.hidden = true; element.remove(); },
+      destroy() { panel.destroys++; element.hidden = true; element.remove(); landscape?.destroy(); },
     };
     panels.push(panel);
     return panel;
   }]));
   const controller = createAppController({ store, view, auth,
+    ...(orientation ? { reportOrientationController: orientation } : {}),
     native: { importSharedItems: async () => [] },
     client: { async sendText(payload) { calls.push(payload); return { status: 'processed', messages: [] }; },
       getPendingProvisionSnapshot: async () => ({ rows: [] }) },
@@ -87,6 +90,56 @@ function harness(t, options = {}, { dom = true } = {}) {
   });
   t.after(() => { controller.stop(); document.defaultView.close(); });
   return { controller, view, handlers, store, calls, renders, panels, document };
+}
+
+test('the recorded management, order-validation and document-control sequence never unlocks between reports', async t => {
+  const rotations = [];
+  const orientation = createReportOrientationController({ isNative: () => true, screenOrientation: {
+    async lock() { rotations.push('landscape'); }, async unlock() { rotations.push('unlock'); },
+  } });
+  const h = harness(t, {}, { orientation });
+  await h.controller.start(); await h.view.emit('open-management-report'); await tick();
+  for (const [from, direction] of [
+    ['open-management-report', 'next'], ['open-order-validation-report', 'next'],
+    ['open-document-control-report', 'previous'], ['open-order-validation-report', 'previous'],
+  ]) {
+    assert.equal(await h.view.emit('navigate-mascot-report', { from, direction }), true);
+    await tick(); assert.deepEqual(rotations, ['landscape']);
+  }
+  h.controller.stop(); await tick();
+  assert.deepEqual(rotations, ['landscape', 'unlock']);
+});
+
+for (const outcome of ['opened', 'failed', 'home', 'stop']) {
+  test(`native report navigation keeps landscape across an asynchronous gap and releases on ${outcome}`, async t => {
+    const rotations = [], loading = deferred();
+    const orientation = createReportOrientationController({ isNative: () => true, screenOrientation: {
+      async lock() { rotations.push('landscape'); }, async unlock() { rotations.push('unlock'); },
+    } });
+    const h = harness(t, { registrationGalleryDataFactory: () => loading.promise,
+      ...(outcome === 'failed' ? { ddaReportFactory: async () => { throw new Error('Report unavailable'); } } : {}),
+    }, { orientation });
+    await h.controller.start();
+    await h.view.emit('open-provision-report'); await tick();
+    assert.deepEqual(rotations, ['landscape']);
+    // This neighbor is created asynchronously after the source is closed.
+    const navigating = h.view.emit('navigate-mascot-report', { from: 'open-provision-report', direction: 'previous' });
+    await tick();
+    assert.deepEqual(rotations, ['landscape'], 'closing the source must not unlock while its neighbor is loading');
+    if (outcome === 'home') await h.view.emit('select-reply', { replyId: 'navigation_main_menu', label: 'RETORNAR AO MENU INICIAL' });
+    if (outcome === 'stop') h.controller.stop();
+    if (['home', 'stop'].includes(outcome)) {
+      await tick(); assert.deepEqual(rotations, ['landscape', 'unlock'], 'cancellation must release without waiting for transport');
+    }
+    loading.resolve({});
+    const opened = await navigating; await tick();
+    assert.equal(opened, outcome === 'opened');
+    if (outcome === 'opened') {
+      assert.deepEqual(rotations, ['landscape'], 'the destination inherits landscape without another OS rotation');
+      h.panels.at(-1).close(); await tick();
+    }
+    assert.deepEqual(rotations, ['landscape', 'unlock']);
+  });
 }
 
 test('printable mascot reports receive an accessible PDF printer',async t=>{
