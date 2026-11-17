@@ -2,6 +2,7 @@ import { buildStageGantt } from '../chat/stage-progress-model.js';
 import { calendarDays, formatOperationsDate } from '../chat/operations-reports-model.js';
 import { addReportCloseControl } from './report-close-control.js';
 
+const DEFAULT_BRANCH = '004 - EDIFÍCIO XAVANTE';
 const monthLabel = new Intl.DateTimeFormat('pt-BR', { month: 'short', year: 'numeric', timeZone: 'UTC' });
 const localDay = date => `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}-${String(date.getDate()).padStart(2, '0')}`;
 const monthStart = day => `${day.slice(0, 7)}-01`;
@@ -186,7 +187,7 @@ export function createStageGanttView({ document: doc = globalThis.document, data
       if (active.signal.aborted) return;
       today = localDay(now());
       stages = buildStageGantt(snapshot, today);
-      const selected = branches.value;
+      const selected = branches.selectedIndex < 0 ? DEFAULT_BRANCH : branches.value;
       const options = [...new Set(stages.map(stage => stage.branch).filter(Boolean))].sort((a, b) => a.localeCompare(b, 'pt-BR'));
       branches.replaceChildren(new doc.defaultView.Option('Todas', ''), ...options.map(name => new doc.defaultView.Option(name, name)));
       branches.value = options.includes(selected) ? selected : '';
@@ -244,6 +245,7 @@ export function createStageGanttView({ document: doc = globalThis.document, data
       previousInert = app?.inert || false;
       if (app) app.inert = true;
       doc.body.style.overflow = 'hidden';
+      branches.replaceChildren();
       root.hidden = false;
       dialog.focus();
       return load();

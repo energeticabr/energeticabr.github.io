@@ -38,3 +38,42 @@ test('GANTT expande as atividades abaixo da etapa e exibe datas e estados das ba
   assert.equal(dialog.hidden, true);
   assert.equal(document.activeElement, home);
 });
+
+test('GANTT abre em Xavante, permite trocar a filial e mantém a escolha ao atualizar', async t => {
+  const dom = new JSDOM('<!doctype html>');
+  t.after(() => dom.window.close());
+  const document = dom.window.document;
+  const view = createStageGanttView({
+    document,
+    data: { loadSnapshot: async () => ({
+      complete: true,
+      launches: [
+        { id: 1, branch: '004 - EDIFÍCIO XAVANTE', stage: 'Fundação', status: 'INICIADO', startDate: '2026-11-01' },
+        { id: 2, branch: '001 - OURO PRETO', stage: 'Pintura', status: 'INICIADO', startDate: '2026-11-03' },
+      ],
+      activities: [],
+    }) },
+  });
+  t.after(() => view.destroy());
+  await view.open();
+
+  const select = view.element.querySelector('select');
+  const renderedStages = () => [...view.element.querySelectorAll('.gantt-row--stage .gantt-name')].map(node => node.textContent);
+  assert.equal(select.value, '004 - EDIFÍCIO XAVANTE');
+  assert.deepEqual(renderedStages(), ['Fundação']);
+
+  select.value = '001 - OURO PRETO';
+  select.dispatchEvent(new dom.window.Event('change'));
+  assert.deepEqual(renderedStages(), ['Pintura']);
+
+  const refresh = view.element.querySelector('[aria-label="Atualizar GANTT"]');
+  refresh.click();
+  await new Promise(resolve => setImmediate(resolve));
+  assert.equal(select.value, '001 - OURO PRETO');
+  assert.deepEqual(renderedStages(), ['Pintura']);
+
+  view.close();
+  await view.open();
+  assert.equal(select.value, '004 - EDIFÍCIO XAVANTE');
+  assert.deepEqual(renderedStages(), ['Fundação']);
+});
