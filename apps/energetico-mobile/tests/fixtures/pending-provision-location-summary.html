@@ -4,11 +4,13 @@
 <body><main id="app"></main><script type="module">
 import { createChatView } from '/src/ui/chat-view.js';
 const root = document.querySelector('#app'), view = createChatView(root);
+const products = ['MESTRE DE OBRAS', 'SERVENTE DE PEDREIRO', 'PEDREIRO', 'PEDREIRO', 'PEDREIRO', 'SERVENTE DE PEDREIRO', 'ENGENHEIRO']
+  .map((product, index) => `${product} (FGTS - COLABORADOR FICTÍCIO ${index + 1} - COMPETÊNCIA 2026-10 / PARCELA 1)`);
 const rows = [
   { id:'306', supplier:'FORNECEDOR FICTÍCIO DE MATERIAIS E SERVIÇOS PARA CONSTRUÇÃO', product:'MATERIAL DE TESTE',
-    productDisplay:'MATERIAL DE TESTE (OBSERVAÇÃO FICTÍCIA DE ENTREGA NO ALMOXARIFADO CENTRAL PARA CONFERÊNCIA)',
+    productDisplay:products.join(' / '),
     branch:'004 - EDIFÍCIO DE TESTE', property:'TORRE A / APARTAMENTO 101', dueDate:'2026-10-26',
-    amountDueDisplay:'R$ 21.600,00', amountPaidDisplay:'R$ 40.000,00', totalDisplay:'R$ 61.600,00', childCount:2 },
+    amountDueDisplay:'R$ 21.600,00', amountPaidDisplay:'R$ 40.000,00', totalDisplay:'R$ 61.600,00', childCount:7 },
   { id:'307', supplier:'SWILE FICTÍCIO', product:'VALE ALIMENTAÇÃO', branch:'000 - ESCRITÓRIO', property:'TODOS',
     dueDate:'2026-10-28', totalDisplay:'R$ 225,00', childCount:1 },
   { id:'308', supplier:'CONSULTA FICTÍCIA EM ANDAMENTO', product:'ITEM DE TESTE', branch:'004 - OBRA', property:'TORRE B',
@@ -46,10 +48,13 @@ const geometry = cards.map(card=>{
   const branch=card.querySelector('[data-field="branch"]'), blue=card.querySelector('.chat-pending-provision__supplier');
   const amount=card.querySelector('[data-field="total"] strong');
   const product=card.querySelector('[data-field="product"] strong');
+  const items=[...card.querySelectorAll('[data-field="product"] li')];
   const s=supplier.getBoundingClientRect(),d=due.getBoundingClientRect(),b=branch.getBoundingClientRect(),box=blue.getBoundingClientRect();
   return {id:card.dataset.paymentId,supplier:supplier.textContent,supplierAbove:s.bottom<=d.top+1,locationInBlue:b.top>=box.top&&b.bottom<=box.bottom,
     locationVisible:branch.checkVisibility(),location:branch.querySelector('strong').textContent,
-    product:product.textContent,productFits:product.checkVisibility()&&product.scrollWidth<=product.clientWidth+1,
+    product:product.textContent,productItems:items.map(item=>item.textContent),
+    productsSeparated:items.every((item,index)=>!index||item.getBoundingClientRect().top>=items[index-1].getBoundingClientRect().bottom+10),
+    productFits:[...card.querySelectorAll('[data-field="product"] strong')].every(item=>item.checkVisibility()&&item.scrollWidth<=item.clientWidth+1),
     amount:amount.textContent,amountFits:amount.checkVisibility()&&amount.scrollWidth<=amount.clientWidth+1,
     horizontalOverflow:card.scrollWidth>card.clientWidth+1,arrowDisabled:card.querySelector('.chat-pending-provision__arrow').disabled};
 });
