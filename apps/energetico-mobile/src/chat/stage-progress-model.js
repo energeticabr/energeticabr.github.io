@@ -104,6 +104,7 @@ function ganttRange(start, end, status, today) {
 }
 
 export function buildStageGantt(snapshot, today) {
+  const byStart = (a, b) => (a.start || '9999-12-31').localeCompare(b.start || '9999-12-31');
   const day = normalizeStageProgressDate(today);
   const { stages } = buildStageProgress(snapshot, {}, day, {
     includeAllLaunches: true, launchType: 'ATIVIDADE COMUM',
@@ -126,6 +127,6 @@ export function buildStageGantt(snapshot, today) {
       end: row.plannedDate,
       finished: row.status.trim().toUpperCase() === 'ATIVIDADE FINALIZADA',
       range: ganttRange(row.executionDate, row.plannedDate, row.status, day),
-    })),
-  }));
+    })).sort(byStart),
+  })).sort(byStart);
 }
