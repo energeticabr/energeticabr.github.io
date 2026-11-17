@@ -2,7 +2,8 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import { buildStageGantt } from '../src/chat/stage-progress-model.js';
 
-const launch = (id, branch, stage, status, startDate, endDate = '') => ({ id, branch, stage, status, startDate, endDate });
+const launch = (id, branch, stage, status, startDate, endDate = '', type = 'ATIVIDADE COMUM') =>
+  ({ id, branch, stage, status, startDate, endDate, type });
 const activity = (id, branch, stage, activity, status, executionDate, plannedDate = '') =>
   ({ id, branch, stage, activity, status, executionDate, plannedDate, property: '', supplier: '' });
 
@@ -42,4 +43,24 @@ test('GANTT não converte data ausente ou anterior ao início em barra finalizad
   }, '2026-11-16');
   assert.equal(stage.range, null);
   assert.equal(stage.children[0].range, null);
+});
+
+test('GANTT usa o TIPO da etapa por filial e exclui fantasmas antes de escolher o lançamento', () => {
+  const stageName = 'DESPESAS COM CORRETAGEM';
+  const stages = buildStageGantt({ complete: true,
+    launches: [
+      launch(1, 'Xavante', stageName, 'INICIADO', '2026-11-01', '', ' atividade comum '),
+      launch(2, 'Xavante', stageName, 'INICIADO', '2026-11-02', '', 'ATIVIDADE FANTASMA'),
+      launch(3, 'Ouro Preto', stageName, 'INICIADO', '2026-11-03', '', 'ATIVIDADE FANTASMA'),
+      launch(4, 'Xavante', 'DESPESAS COM VIGILANCIA E MEDIÇÃO', 'NÃO INICIADO', '', '', 'ATIVIDADE FANTASMA'),
+      launch(5, 'Xavante', 'Sem classificação', 'NÃO INICIADO', '', '', ''),
+    ],
+    activities: [
+      activity(1, 'XAVANTE', stageName.toLowerCase(), 'Atendimento', 'ATIVIDADE INICIADA', '2026-11-01'),
+      activity(2, 'Ouro Preto', stageName, 'Atendimento', 'ATIVIDADE INICIADA', '2026-11-03'),
+      activity(3, 'Xavante', 'Sem etapa correspondente', 'Demonstrativo avulso', 'ATIVIDADE INICIADA', '2026-11-05'),
+    ],
+  }, '2026-11-16');
+  assert.deepEqual(stages.map(row => [row.branch, row.name, row.start, row.children.map(child => child.name)]),
+    [['Xavante', stageName, '2026-11-01', ['Atendimento']]]);
 });

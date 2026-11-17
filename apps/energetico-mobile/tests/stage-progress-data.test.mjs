@@ -12,14 +12,15 @@ const create = options => {
 };
 const names = {
   DEMONSTRATIVOETAPA: ["FILIAL", "ETAPA", "ATIVIDADEEXECUTADA", "IMOVEL", "FORNECEDOR", "DATAEXECUTADO", "DATAPREVISTO", "STATUS"],
-  LANCAMENTOOBRA: ["FILIAL", "ETAPA", "INÍCIO", "FIM", "STATUS", "PERCENTUALEFETUADO"],
+  LANCAMENTOOBRA: ["FILIAL", "ETAPA", "INÍCIO", "FIM", "STATUS", "PERCENTUALEFETUADO", "TIPO"],
 };
 const columns = list => names[list].map((displayName, i) => ({ name: `field_${i}`, displayName }));
 const activity = (id = 1, fields = {}) => ({ id: String(id), fields: { field_0: " A ", field_1: "Fundação",
   field_2: { Value: "Concreto" }, field_3: { LookupValue: "Casa" }, field_4: [{ Title: "João" }],
   field_5: "2026-10-01T23:00:00-03:00", field_6: "03/10/2026", field_7: "ATIVIDADE INICIADA", ...fields } });
 const launch = (id = 7, percent = 0.4, fields = {}) => ({ id: String(id), fields: { field_0: "A", field_1: "Fundação",
-  field_2: "2026-09-30T00:00:00Z", field_3: "", field_4: { value: "INICIADO" }, field_5: percent, ...fields } });
+  field_2: "2026-09-30T00:00:00Z", field_3: "", field_4: { value: "INICIADO" }, field_5: percent,
+  field_6: { Value: " ATIVIDADE FANTASMA " }, ...fields } });
 function fixture(overrides = {}) {
   const calls = [];
   const repository = {
@@ -42,12 +43,13 @@ function fixture(overrides = {}) {
   return { repository, calls };
 }
 
-test("complete snapshot reads only the two personal lists with exact operations row shapes", async () => {
+test("complete snapshot reads only the two personal lists with exact operations row shapes, including TIPO", async () => {
   const { repository, calls } = fixture();
   const snapshot = await create({ repository }).loadSnapshot();
   assert.deepEqual(snapshot, { complete: true, activities: [{ id: "1", branch: "A", stage: "Fundação", activity: "Concreto",
     property: "Casa", supplier: "João", executionDate: "2026-10-01", plannedDate: "2026-10-03", status: "ATIVIDADE INICIADA" }],
-    launches: [{ id: "7", branch: "A", stage: "Fundação", startDate: "2026-09-30", endDate: "", status: "INICIADO", percent: 40 }] });
+    launches: [{ id: "7", branch: "A", stage: "Fundação", startDate: "2026-09-30", endDate: "", status: "INICIADO",
+      percent: 40, type: "ATIVIDADE FANTASMA" }] });
   assert.deepEqual(calls.filter(call => call[0] === "resolve").map(call => call[1]).sort(), ["DEMONSTRATIVOETAPA", "LANCAMENTOOBRA"]);
   assert.ok(Object.isFrozen(snapshot)); assert.ok(Object.isFrozen(snapshot.activities));
   assert.ok(Object.isFrozen(snapshot.launches[0]));

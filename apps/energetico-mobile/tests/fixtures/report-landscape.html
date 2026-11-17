@@ -2,13 +2,31 @@
 import '../../src/ui/payment-ledger.css';
 import '../../src/ui/contractor-control-report.css';
 import '../../src/ui/attendance-summary.css';
+import '../../src/ui/stage-gantt.css';
 import '../../src/ui/searchable-filter-selects.css';
 import '../../src/styles.css';
 import {createPaymentLedgerView} from '../../src/ui/payment-ledger-view.js';
 import {createContractorControlReportView} from '../../src/ui/contractor-control-report-view.js';
 import {createAttendanceSummaryReportView} from '../../src/ui/attendance-summary-view.js';
+import {createStageGanttView} from '../../src/ui/stage-gantt-view.js';
 import {decorateReportNavigation} from '../../src/ui/report-navigation.js';
 let reads=0;
+if(new URL(location.href).searchParams.has('gantt')) {
+ const gantt=createStageGanttView({document,data:{async loadSnapshot(){return {complete:true,activities:[],
+  launches:[{id:1,branch:'004 - EDIFÍCIO XAVANTE',stage:'TERRAPLANAGEM',type:'ATIVIDADE COMUM',status:'INICIADO',startDate:'2026-09-16'}]};}}});
+ await gantt.open();
+ const root=gantt.element,dialog=root.querySelector('[role=dialog]'),scroll=root.querySelector('.gantt-scroll');
+ const portrait=root.dataset.reportPortrait==='true';
+ const panel=dialog.getBoundingClientRect(),timeline=scroll.getBoundingClientRect();
+ const button=root.querySelector('.report-close-control'),close=button.getBoundingClientRect();
+ const closeReachable=document.elementFromPoint(close.x+close.width/2,close.y+close.height/2)?.closest('button')===button;
+ const transform=getComputedStyle(root).transform;
+ button.click();
+ document.documentElement.dataset.layout=JSON.stringify({
+  portrait,rotated:transform==='matrix(0, 1, -1, 0, 0, 0)',height:portrait?panel.width:panel.height,
+  bottomInset:portrait?timeline.left-panel.left:panel.bottom-timeline.bottom,closeReachable,closed:root.hidden,
+ });
+}
 const navigated=[];
 const launches=Array.from({length:new URL(location.href).searchParams.has('visual')?12:440},(_,index)=>({id:String(index+1),paymentDate:'2026-10-01',supplier:'Fornecedor '+(index%3+1),branch:'004 - EDIFÍCIO XAVANTE',product:'Produto',order:String(index+1),account:'Energética - Caixa',unit:10,quantity:1,freight:0,total:10}));
 const contractorMode=new URL(location.href).searchParams.has('contractor');

@@ -56,7 +56,7 @@ export function summarizeStageCompletion(activities) {
 /** UI supplies its own defaults. Grouping, zero-activity cards and latest-launch
  * selection remain the shared operations report behavior, isolated per branch.
  */
-export function buildStageProgress(snapshot, filters = {}, today, { includeAllLaunches = false } = {}) {
+export function buildStageProgress(snapshot, filters = {}, today, { includeAllLaunches = false, launchType = '' } = {}) {
   if (snapshot?.complete !== true || snapshot.error || snapshot.aborted || snapshot.partial || snapshot.truncated
     || !Array.isArray(snapshot.activities) || !Array.isArray(snapshot.launches)) {
     throw new TypeError("O relatório exige um snapshot completo, sem erros ou cancelamento.");
@@ -69,8 +69,14 @@ export function buildStageProgress(snapshot, filters = {}, today, { includeAllLa
   }
   const date = today === undefined ? undefined : normalizeStageProgressDate(today);
   if (date === "") throw new RangeError("Data de hoje inválida no relatório de etapas.");
-  const activities = normalizeRows(snapshot.activities, "activities");
-  const launches = normalizeRows(snapshot.launches, "launches");
+  let activities = normalizeRows(snapshot.activities, "activities");
+  let launches = normalizeRows(snapshot.launches, "launches");
+  if (launchType) {
+    launches = launches.filter(row => row.type?.trim().toUpperCase() === launchType);
+    const groups = new Set(launches.map(stageReportGroupKey));
+    // Demonstrativos inherit their classification from LANCAMENTOOBRA.
+    activities = activities.filter(row => groups.has(stageReportGroupKey(row)));
+  }
   const linked = new Map();
   for (const row of activities) {
     const key = stageReportGroupKey(row);
@@ -99,7 +105,9 @@ function ganttRange(start, end, status, today) {
 
 export function buildStageGantt(snapshot, today) {
   const day = normalizeStageProgressDate(today);
-  const { stages } = buildStageProgress(snapshot, {}, day, { includeAllLaunches: true });
+  const { stages } = buildStageProgress(snapshot, {}, day, {
+    includeAllLaunches: true, launchType: 'ATIVIDADE COMUM',
+  });
   return stages.filter(stage => stage.stage.trim()).map(stage => ({
     name: stage.launch?.stage || stage.stage,
     branch: stage.launch?.branch || stage.branch,

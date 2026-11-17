@@ -7,6 +7,32 @@ import {createServer} from 'vite';
 import {JSDOM} from 'jsdom';
 import {runBrowserLayout} from './helpers/browser-layout-runner.mjs';
 
+test('GANTT abre na horizontal e ocupa toda a altura, incluindo o fundo da área segura',{timeout:90000},async t=>{
+ const browser=[process.env.CHROME_BIN,'C:\\Program Files\\Google\\Chrome\\Application\\chrome.exe','/usr/bin/google-chrome','/usr/bin/chromium'].find(path=>path&&existsSync(path));
+ if(!browser)return t.skip('Chrome unavailable');
+ const server=await createServer({root:resolve(fileURLToPath(new URL('..',import.meta.url))),server:{host:'127.0.0.1',port:0},logLevel:'silent'});
+ try {
+  await server.listen();
+  for(const [width,height,safeAreaInsets,expectedBottomInset] of [
+   [390,844,{top:59,bottom:34,left:11,right:23},11],
+   [844,390,{top:0,bottom:21,left:59,right:59},21],
+   [1365,1000,undefined,0],
+  ]) {
+   const url=`http://127.0.0.1:${server.httpServer.address().port}/tests/fixtures/report-landscape.html?gantt`;
+   const {stdout}=await runBrowserLayout(browser,{width,height,safeAreaInsets,url});
+   const dom=new JSDOM(stdout);
+   try {
+    const layout=JSON.parse(dom.window.document.documentElement.dataset.layout);
+    assert.equal(layout.portrait,height>width);
+    assert.equal(layout.rotated,height>width);
+    assert.ok(Math.abs(layout.height-Math.min(width,height))<1,JSON.stringify(layout));
+    assert.ok(Math.abs(layout.bottomInset-expectedBottomInset)<1,JSON.stringify(layout));
+    assert.ok(layout.closeReachable&&layout.closed,JSON.stringify(layout));
+   }finally{dom.window.close();}
+  }
+ }finally{await server.close();}
+});
+
 test('portrait phone reports fill physical width sideways and keep top and bottom dismissal gaps',{timeout:90000},async t=>{
  const browser=[process.env.CHROME_BIN,'C:\\Program Files\\Google\\Chrome\\Application\\chrome.exe','/usr/bin/google-chrome','/usr/bin/chromium'].find(path=>path&&existsSync(path));
  if(!browser)return t.skip('Chrome unavailable');
