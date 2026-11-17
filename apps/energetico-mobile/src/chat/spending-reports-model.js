@@ -297,19 +297,24 @@ export function buildSpendingReport9(snapshot, filters = {}) {
   const expenseType = row => !row.product ? "SEM PRODUTO"
     : productTypes.get(row.product.toLocaleLowerCase("pt-BR")) || "SEM TIPO DE DESPESA";
   let expenseBranches = expenseBranchesFor(expenseRows, expenseType);
+  const summary = withPaymentTotal({ paid: completeSum(expenseBranches, "paid"),
+    forecast: completeSum(expenseBranches, "forecast") });
   let comparisonPeriod = "", previousRows = [];
   if (filters.year && filters.month) {
     const previousMonth = Number(filters.month) === 1 ? 12 : Number(filters.month) - 1;
     const previousYear = Number(filters.month) === 1 ? Number(filters.year) - 1 : Number(filters.year);
     comparisonPeriod = monthPeriod(previousYear, previousMonth);
     previousRows = selectedExpenses(snapshot, { ...filters, year: String(previousYear), month: String(previousMonth) });
-    expenseBranches = compareExpenses(expenseBranches, expenseBranchesFor(previousRows, expenseType));
+    const previousBranches = expenseBranchesFor(previousRows, expenseType);
+    summary.previousTotal = completeSum(previousBranches, "total");
+    summary.change = monthChange(summary.total, summary.previousTotal);
+    expenseBranches = compareExpenses(expenseBranches, previousBranches);
   }
   const period = filters.year ? filters.month
     ? monthPeriod(filters.year, filters.month)
     : `Ano de ${filters.year}` : "Todos os períodos";
   const incompleteCount = new Set([...rows, ...expenseRows, ...previousRows].filter(row => !Number.isFinite(row.total))).size;
-  return Object.freeze({ count: rows.length, total, period, comparisonPeriod, incompleteCount,
+  return Object.freeze({ count: rows.length, total, summary: Object.freeze(summary), period, comparisonPeriod, incompleteCount,
     branches: Object.freeze(branches), expenseBranches: Object.freeze(expenseBranches) });
 }
 
