@@ -27,8 +27,36 @@ function setup(t, { native = true, lock, unlock } = {}) {
     return { root, binding };
   }
   const flush = () => new Promise(resolve => setImmediate(resolve));
-  return { dom, calls, report, flush };
+  return { dom, calls, report, flush, orientation };
 }
+
+test('navigation holds cannot rotate an idle app and release once after the last overlapping handoff', async t => {
+  const { calls, report, flush, orientation } = setup(t);
+  const idle = orientation.beginTransition();
+  await idle(); assert.deepEqual(calls, []);
+  const { root } = report({ hidden: false }); await flush();
+  const first = orientation.beginTransition(), second = orientation.beginTransition();
+  root.hidden = true; await flush();
+  await first(); await first();
+  assert.deepEqual(calls, [['lock', { orientation: 'landscape' }]]);
+  await second(); await second();
+  assert.deepEqual(calls, [['lock', { orientation: 'landscape' }], ['unlock']]);
+});
+
+test('a navigation handoff retains an in-flight OS lock and skips obsolete unlocks', async t => {
+  let finish;
+  const pending = new Promise(resolve => { finish = resolve; });
+  const { calls, report, flush, orientation } = setup(t, { lock: () => pending });
+  const source = report({ hidden: false }); await flush();
+  const release = orientation.beginTransition();
+  source.binding.destroy();
+  const target = report({ hidden: false });
+  // Do not await the bridge queue until the OS has answered the initial lock.
+  release(); finish(); await flush();
+  assert.deepEqual(calls, [['lock', { orientation: 'landscape' }]]);
+  target.root.hidden = true; await flush();
+  assert.deepEqual(calls, [['lock', { orientation: 'landscape' }], ['unlock']]);
+});
 
 test('only an open connected native report locks landscape; closing restores normal orientation', async t => {
   const { calls, report, flush } = setup(t);
