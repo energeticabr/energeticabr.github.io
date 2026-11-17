@@ -6,6 +6,7 @@ export function createCargosView({document:doc=globalThis.document,data}={}) {
   const make=(tag,cls='',text)=>{const node=doc.createElement(tag);node.className=cls;if(text!==undefined)node.textContent=text;return node;};
   const root=make('section','cargos-screen');root.hidden=true;root.tabIndex=-1;root.setAttribute('role','dialog');root.setAttribute('aria-modal','true');root.setAttribute('aria-label','Tabela de cargos');
   const backdrop=make('div','cargos-backdrop');backdrop.hidden=true;backdrop.append(root);
+  backdrop.toggleAttribute('data-iphone', doc.defaultView.navigator.userAgent.includes('iPhone'));
   const landscape=bindReportLandscape(backdrop);
   const header=make('header','cargos-header'),back=make('button','','←'),title=make('h1','','TABELA DE CARGOS'),refresh=make('button','','⟳');
   back.type=refresh.type='button';back.setAttribute('aria-label','Fechar tabela de cargos');refresh.setAttribute('aria-label','Atualizar tabela de cargos');header.append(title,refresh);

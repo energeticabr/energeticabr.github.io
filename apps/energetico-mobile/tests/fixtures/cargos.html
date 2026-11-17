@@ -10,7 +10,6 @@
 <script type="module">
 import '/src/styles.css';
 import '/src/ui/cargos.css';
-import '/src/ui/report-print.css';
 import { createCargosView } from '/src/ui/cargos-view.js';
 import { decorateReportNavigation } from '/src/ui/report-navigation.js';
 import { captureFilteredReport, decorateReportPrint } from '/src/ui/report-print.js';
@@ -24,10 +23,11 @@ try {
   let loads = 0, navigatedTo;
   const action = 'open-cargos-table';
   const report = createCargosView({ data: { async loadSnapshot() { loads++; return { rows }; } } });
-  const view = decorateReportNavigation(decorateReportPrint(report, { action }), {
+  const navigable = decorateReportNavigation(report, {
     action,
     onNavigate: target => { navigatedTo = target; },
   });
+  const view = decorateReportPrint(navigable, { action });
   const mascot = document.querySelector('#mascot');
   mascot.focus();
   await view.open();
@@ -41,17 +41,17 @@ try {
   const overlap = bounds.left < arrow.right && arrow.left < bounds.right
     && bounds.top < arrow.bottom && arrow.top < bounds.bottom;
   const panel = element.getBoundingClientRect();
-  const probe = document.createElement('div');
-  probe.style.padding = 'env(safe-area-inset-top) env(safe-area-inset-right) env(safe-area-inset-bottom) env(safe-area-inset-left)';
-  document.body.append(probe);
-  const insets = getComputedStyle(probe);
+  const header = element.querySelector('.cargos-header').getBoundingClientRect();
   const capture = captureFilteredReport(element);
   const layout = {
     rotated: getComputedStyle(backdrop).transform !== 'none',
-    insideSafeArea: bounds.left >= parseFloat(insets.paddingLeft) - 1 && bounds.top >= parseFloat(insets.paddingTop) - 1
-      && bounds.right <= innerWidth - parseFloat(insets.paddingRight) + 1
-      && bounds.bottom <= innerHeight - parseFloat(insets.paddingBottom) + 1
-      && panel.width <= innerWidth + 1 && panel.height <= innerHeight + 1,
+    panelFits: panel.width <= innerWidth + 1 && panel.height <= innerHeight + 1,
+    edges: {
+      left: Math.min(bounds.left, header.left, arrow.left),
+      top: Math.min(bounds.top, header.top, arrow.top),
+      right: Math.max(bounds.right, header.right, arrow.right),
+      bottom: Math.max(bounds.bottom, header.bottom, arrow.bottom),
+    },
     columns: table.tHead.rows[0].cells.length,
     noHorizontalScroll: scroll.scrollWidth <= scroll.clientWidth + 1,
     cellsFit: [...table.querySelectorAll('th, td')].every(cell => cell.scrollWidth <= cell.clientWidth + 1),
