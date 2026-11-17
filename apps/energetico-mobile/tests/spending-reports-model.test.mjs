@@ -188,3 +188,11 @@ test("valor ausente em um previsto deixa apenas a previsão e a soma incompletas
   const [{ paid, forecast, total }] = report.expenseBranches;
   assert.deepEqual({ paid, forecast, total }, { paid: 45, forecast: null, total: null });
 });
+
+test("total geral soma os centavos apresentados em Pago e Previsto", () => {
+  const launches = [row(1, { total: .115 }),
+    row(2, { paymentDate: "", expectedPaymentDate: "2026-09-01", total: .115 })];
+  const report = model.buildSpendingReport9({ launches }, { year: "2026", month: "9" });
+  const [{ paid, forecast, total }] = report.expenseBranches;
+  assert.deepEqual({ paid, forecast, total }, { paid: .12, forecast: .12, total: .24 });
+});
