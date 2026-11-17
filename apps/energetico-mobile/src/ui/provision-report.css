@@ -13,10 +13,9 @@
 .pr-table--provisions .pr-money { padding-inline:1px; }
 .pr-table--provisions th:first-child:not([colspan]),.pr-table .pr-attachments { padding-inline:2px; text-align:center; }
 .pr-attachments[data-attachment-state=present] { color:#1565c0; }
-.pr-attachments[data-attachment-state=empty] { color:#b00020; }
 .pr-attachments[data-attachment-state=unknown],.pr-attachments[data-attachment-state=loading] { color:#535d66; }
 .pr-attachment-icon,.pr-attachment-file { display:inline-grid; place-items:center; box-sizing:border-box; min-width:min(28px,100%); min-height:24px; margin:0; padding:2px; border:0; border-radius:3px; background:transparent; color:inherit; font:inherit; vertical-align:middle; }
-.pr-attachment-icon svg { width:19px; height:19px; }
+.pr-attachment-icon svg { width:24px; height:24px; }
 button.pr-attachment-icon,.pr-attachment-file { cursor:pointer; }
 .pr-attachment-icon:focus-visible,.pr-attachment-file:focus-visible { outline:2px solid currentColor; outline-offset:-2px; }
 .pr-attachment-files { display:flex; justify-content:center; flex-wrap:wrap; gap:2px; }
