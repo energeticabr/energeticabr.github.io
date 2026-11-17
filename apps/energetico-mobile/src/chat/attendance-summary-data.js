@@ -15,7 +15,7 @@ const LISTS = { suppliers: ["FORNECEDORES"], directory: ["FORNECEDORES"], presen
   stages: ["DEMONSTRATIVOETAPA"], activities: ["ATIVIDADE EXECUTADA", "ATIVIDADES EXECUTADAS"] };
 const SCHEMA = {
   suppliers: [["CADASTRO"], ["STATUS"], ["FILIAL"], ["PROFISSAO", "PROFISSÃO"],
-    ["DESCRITIVOETAPA ATUAL", "ETAPA ATUAL"], ["ATIVIDADE EXERCIDA"]],
+    ["DESCRITIVOETAPA ATUAL", "ETAPA ATUAL"], ["ATIVIDADE EXERCIDA"], ["EMPREITEIRO"]],
   directory: [["CADASTRO"], ["PROFISSAO", "PROFISSÃO"], ["FILIAL"], ["IMOVEL", "IMÓVEL"]],
   rhid: [["DATA"], ["FORNECEDOR"], ["PRESENCA", "PRESENÇA"]],
   presences: [["DATA"], ["FILIAL"], ["FORNECEDOR"], ["PROFISSAO", "PROFISSÃO"], ["PRESENCA", "PRESENÇA"]],
@@ -87,7 +87,9 @@ function normalizeItem(item, columns, kind) {
     const stageColumn = columns[4];
     const rawStage = item.fields[stageColumn.name];
     const stage = stageColumn.lookup ? scalar(item.fields[`${stageColumn.name}LookupId`] ?? rawStage?.LookupId ?? rawStage) : get(4);
-    return Object.freeze({ id, name: get(0), status: get(1), branch: get(2), profession: get(3), stage, activity: get(5) });
+    const contractorColumn = columns[6];
+    const contractor = valueKey(get(6)) === "SIM" || Boolean(contractorColumn.boolean && item.fields[contractorColumn.name] === true);
+    return Object.freeze({ id, name: get(0), status: get(1), branch: get(2), profession: get(3), stage, activity: get(5), contractor });
   }
   if (kind === "rhid") {
     const { date, supplier, presence } = normalizeRhPresence(item, columns);
@@ -210,7 +212,18 @@ export function createAttendanceSummaryData({ tokenProvider, repository: supplie
         ["suppliers", "presences", "stages"].map(kind => loadList(repository, kind, activeSignal)),
       );
       abortIfNeeded(activeSignal);
-      return Object.freeze({ complete: true, suppliers, presences, stages });
+      const contractors = suppliers.filter(row => row.contractor);
+      const contractorNames = new Set(contractors.map(row => valueKey(row.name)).filter(Boolean));
+      // Attendance identifies suppliers by name. Conflicting registrations cannot confirm eligibility.
+      for (const row of suppliers) {
+        if (!row.contractor) contractorNames.delete(valueKey(row.name));
+      }
+      return Object.freeze({
+        complete: true,
+        suppliers: Object.freeze(contractors),
+        presences: Object.freeze(presences.filter(row => contractorNames.has(valueKey(row.supplier)))),
+        stages,
+      });
     });
   }
 

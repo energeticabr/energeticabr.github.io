@@ -152,8 +152,10 @@ export function createAttendanceSummaryReportView({document:doc=globalThis.docum
   card.classList.toggle('as-provider--assigned',provider.assignmentHue!==null);
   card.append(make('h4','',provider.name));
   const details=make('dl','as-provider-links');
-  details.append(make('dt','','Descritivo etapa'),make('dd','',provider.stageLabel||'Sem vínculo'),
-   make('dt','','Atividade executada'),make('dd','',provider.activity||'Sem vínculo'));
+  for(const [label,value] of [['Descritivo etapa',provider.stageLabel],['Atividade executada',provider.activity]]){
+   const link=make('div','as-provider-link');
+   link.append(make('dt','',label),make('dd','',value||'Sem vínculo'));details.append(link);
+  }
   card.append(details);
   if(provider.id&&typeof data.loadSupplierEditor==='function'&&typeof data.saveSupplierLinks==='function'){
    const edit=button('as-edit-button','✎ Editar');
@@ -219,8 +221,8 @@ export function createAttendanceSummaryReportView({document:doc=globalThis.docum
    const registryValues=snapshot.suppliers.filter(row=>row.profession).map(row=>name==='supplier'?row.name:row[name]);
    const values=name==='supplierStatus'?['ATIVO','INATIVO',...snapshot.suppliers.map(r=>r.status)]
     :name==='presence'?['PENDENTE','PRESENTE','AUSENTE']:[...registryValues,...snapshot.presences.map(r=>r[name])];
-   const unique=[...new Set([...values,current].filter(Boolean))].sort((a,b)=>a.localeCompare(b,'pt-BR'));
-   select.replaceChildren(Object.assign(make('option','','Todos'),{value:''}));for(const value of unique)select.append(Object.assign(make('option','',value),{value}));select.value=current;
+   const unique=[...new Set([...values,name==='supplier'?'':current].filter(Boolean))].sort((a,b)=>a.localeCompare(b,'pt-BR'));
+   select.replaceChildren(Object.assign(make('option','','Todos'),{value:''}));for(const value of unique)select.append(Object.assign(make('option','',value),{value}));select.value=unique.includes(current)?current:'';
   }
   pickers=bindSearchableFilterSelects(filters,{placement:'below',report:true});
  }

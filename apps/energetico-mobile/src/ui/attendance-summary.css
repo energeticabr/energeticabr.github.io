@@ -39,9 +39,10 @@
   --as-border:hsl(var(--as-assignment-hue) 58% 38%); --as-fill:hsl(var(--as-assignment-hue) 72% 94%);
 }
 .as-provider h4 { margin:0 0 6px; font-size:clamp(12px,calc(1.05 * var(--report-vw, 1vw)),15px); }
-.as-provider-links { margin:0 0 7px; font-size:clamp(11px,calc(.96 * var(--report-vw, 1vw)),13px); }
+.as-provider-links { display:grid; gap:5px; margin:0 0 7px; font-size:clamp(11px,calc(.96 * var(--report-vw, 1vw)),13px); }
+.as-provider-link { min-width:0; padding:5px 6px; border:1px solid #a5b2bc; border-radius:5px; background:#fff; }
 .as-provider-links dt { color:#394f60; font-size:.9em; font-weight:700; }
-.as-provider-links dd { margin:1px 0 5px; }
+.as-provider-links dd { margin:2px 0 0; }
 .as-edit-button {
   min-height:36px; padding:4px 8px; border:1px solid #738594; border-radius:5px; background:#fff;
   color:#1d3446; font-size:12px; font-weight:700; cursor:pointer;
