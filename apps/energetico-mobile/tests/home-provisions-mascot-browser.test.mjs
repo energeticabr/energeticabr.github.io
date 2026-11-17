@@ -123,14 +123,15 @@ assert.deepEqual(shortcuts.map(s=>s.action),['open-pending-provisions','open-sic
         toggle.click();
         const child = stage.nextElementSibling, label = stage.querySelector('.gantt-label');
         const bounds = report.querySelector('[role=dialog]').getBoundingClientRect();
-        const before = label.getBoundingClientRect().x;
-        const currentStageVisible = stage.querySelector('.gantt-bar').getBoundingClientRect().left < bounds.right;
+        const axis = report.dataset.reportPortrait === 'true' ? 'y' : 'x';
+        const before = label.getBoundingClientRect()[axis];
+        const currentStageVisible = stage.querySelector('.gantt-bar').getBoundingClientRect()[axis] < bounds[axis === 'y' ? 'bottom' : 'right'];
         const initialScroll = scroll.scrollLeft;
         scroll.scrollLeft = 160;
         const result = {
           collapsed, childName: child.querySelector('.gantt-name').textContent,
           colors: [stage, child].map(row => getComputedStyle(row.querySelector('.gantt-bar')).backgroundColor),
-          currentStageVisible, moved: scroll.scrollLeft < initialScroll, sticky: Math.abs(label.getBoundingClientRect().x - before) < 1,
+          currentStageVisible, moved: scroll.scrollLeft < initialScroll, sticky: Math.abs(label.getBoundingClientRect()[axis] - before) < 1,
           fits: bounds.x >= 0 && bounds.right <= innerWidth && bounds.y >= 0 && bounds.bottom <= innerHeight,
         };
         report.querySelector('.report-close-control').click();

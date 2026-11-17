@@ -73,8 +73,8 @@ view.on('open-holerite-report', () => {
 const gantt = createStageGanttView({ document, now: () => new Date(2026, 10, 16), data: {
   async loadSnapshot() { return { complete: true,
     launches: [
-      { id: 1, branch: 'Obra A', stage: 'FUNDAÇÃO', status: 'INICIADO', startDate: '2025-11-02' },
-      { id: 3, branch: 'Obra B', stage: 'PINTURA', status: 'FINALIZADO', startDate: '2024-01-01', endDate: '2024-03-04' },
+      { id: 1, branch: 'Obra A', stage: 'FUNDAÇÃO', type: 'ATIVIDADE COMUM', status: 'INICIADO', startDate: '2025-11-02' },
+      { id: 3, branch: 'Obra B', stage: 'PINTURA', type: 'ATIVIDADE COMUM', status: 'FINALIZADO', startDate: '2024-01-01', endDate: '2024-03-04' },
     ],
     activities: [{ id: 2, branch: 'Obra A', stage: 'FUNDAÇÃO', activity: 'ESCAVAÇÃO', property: 'Casa 2',
       supplier: '', status: 'ATIVIDADE FINALIZADA', executionDate: '2025-12-01', plannedDate: '2026-01-20' }],
