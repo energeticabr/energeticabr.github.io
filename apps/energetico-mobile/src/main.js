@@ -27,6 +27,7 @@ import "./ui/nfe-report.css";
 import "./ui/order-validation-report.css";
 import "./ui/attendance-summary.css";
 import "./ui/stage-progress.css";
+import "./ui/stage-gantt.css";
 import "./ui/supplier-payroll-report.css";
 import './ui/trancid-report.css';
 import "./ui/commercial-receipts.css";

@@ -236,11 +236,11 @@ test("retoma a abertura da Galeria de Despesas Recorrentes após consentimento M
   assert.equal(values.size, 0);
 });
 
-test("retoma galerias e cargos após consentimento Microsoft", async () => {
+test("retoma galerias, cargos e GANTT após consentimento Microsoft", async () => {
   const account = { homeAccountId: "account-1", username: "pessoa@energeticabr.com" };
-  for (const action of ["action_hr_gallery_idfolha", "action_hr_gallery_folhapgto", "action_hr_gallery_holerite", "open-holerite-report", "action_hr_gallery_funcionarios", "action_cargos_table",
+  for (const action of ["action_hr_gallery_idfolha", "action_hr_gallery_folhapgto", "action_hr_gallery_holerite", "open-holerite-report", "open-stage-gantt", "action_hr_gallery_funcionarios", "action_cargos_table",
     "action_supplier_gallery", "action_account_gallery", "action_material_type_gallery", "action_unit_of_measure_gallery"]) {
-    const scopes = [action.startsWith("action_hr_") || action === "action_cargos_table" ? "Sites.Read.All" : "Sites.ReadWrite.All"];
+    const scopes = [action.startsWith("action_hr_") || ["action_cargos_table", "open-stage-gantt"].includes(action) ? "Sites.Read.All" : "Sites.ReadWrite.All"];
     const values = new Map();
     const storage = {
       getItem(key) { return values.get(key) ?? null; },

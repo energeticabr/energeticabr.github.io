@@ -41,7 +41,7 @@ export function stageReportGroupKey(row) {
   return `${normalized(row.branch)}\u0000${normalized(row.stage)}`;
 }
 
-export function buildStageReport(snapshot, filters = {}, today = new Date().toISOString().slice(0, 10), { includeGroups = [] } = {}) {
+export function buildStageReport(snapshot, filters = {}, today = new Date().toISOString().slice(0, 10), { includeGroups = [], includeAllLaunches = false } = {}) {
   const activities = (snapshot?.activities || []).filter(row => matches(row, filters, ["branch", "stage", "activity", "status", "supplier"]));
   const launches = snapshot?.launches || [];
   const groups = new Map();
@@ -58,7 +58,7 @@ export function buildStageReport(snapshot, filters = {}, today = new Date().toIS
   const hasActivityFilter = ["activity", "status", "supplier"].some(name => Boolean(filters[name]));
   for (const row of launches) {
     if (hasActivityFilter || !text(row.stage) || !matches(row, filters, ["branch", "stage"])) continue;
-    if (!visibleBranches.has(normalized(row.branch)) && !same(filters.branch, row.branch) && !same(filters.stage, row.stage)) continue;
+    if (!includeAllLaunches && !visibleBranches.has(normalized(row.branch)) && !same(filters.branch, row.branch) && !same(filters.stage, row.stage)) continue;
     groupFor(row);
   }
   const stages = [];

@@ -14,6 +14,8 @@ import { createOrderValidationReportView } from '/src/ui/order-validation-report
 import '/src/ui/attendance-summary.css';
 import { createAttendanceSummaryReportView } from '/src/ui/attendance-summary-view.js';
 import '/src/ui/stage-progress.css';
+import { createStageGanttView } from '/src/ui/stage-gantt-view.js';
+import '/src/ui/stage-gantt.css';
 import { createStageProgressReportView } from '/src/ui/stage-progress-view.js';
 import '/src/ui/supplier-payroll-report.css';
 import { createSupplierPayrollReportView } from '/src/ui/supplier-payroll-report-view.js';
@@ -68,6 +70,17 @@ view.on('open-holerite-report', () => {
   });
   return gallery.open();
 });
+const gantt = createStageGanttView({ document, now: () => new Date(2026, 10, 16), data: {
+  async loadSnapshot() { return { complete: true,
+    launches: [
+      { id: 1, branch: 'Obra A', stage: 'FUNDAÇÃO', status: 'INICIADO', startDate: '2025-11-02' },
+      { id: 3, branch: 'Obra B', stage: 'PINTURA', status: 'FINALIZADO', startDate: '2024-01-01', endDate: '2024-03-04' },
+    ],
+    activities: [{ id: 2, branch: 'Obra A', stage: 'FUNDAÇÃO', activity: 'ESCAVAÇÃO', property: 'Casa 2',
+      supplier: '', status: 'ATIVIDADE FINALIZADA', executionDate: '2025-12-01', plannedDate: '2026-01-20' }],
+  }; },
+} });
+view.on('open-stage-gantt', () => gantt.open());
 view.on('open-sicoob-transaction-report', () => {
   let linkedOrder = '11';
   const source = createSicoobTransactionReportView({

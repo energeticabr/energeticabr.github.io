@@ -339,7 +339,7 @@ const returnedHomeActions = [
   'open-order-validation-report', 'open-depreciation-report', 'open-document-control-report',
   'open-task-association-report', 'open-rhid-mascot-report', 'open-pending-payroll-links', 'open-cargos-table', 'open-attendance-summary',
   'open-stage-progress', 'open-supplier-payroll-report', 'open-trancid-report', 'open-contractor-control-report',
-  'open-pending-supplier-payments-report', 'open-holerite-report',
+  'open-pending-supplier-payments-report', 'open-holerite-report', 'open-stage-gantt',
 ];
 
 for (const [variant, field, separator] of [
@@ -396,7 +396,10 @@ test('menu de escolha de fluxo para anexos mantém os mascotes clicáveis e a ba
   assert.ok(shortcuts.every(button => !button.disabled && button.closest('.chat-bubble') === null));
   assert.ok(root.querySelector('.chat-flow-status [data-reply-id="navigation_back"]'));
   assert.match(root.querySelector('.chat-attachments').textContent, /Anexo de teste\.pdf/);
-  const holerite = shortcuts.at(-1);
+  const gantt = shortcuts.at(-1);
+  const holerite = gantt.previousElementSibling;
+  assert.equal(gantt.textContent, 'GANTT');
+  assert.equal(holerite.dataset.action, 'open-holerite-report');
   assert.equal(holerite.textContent, 'Holerite');
   assert.equal(holerite.previousElementSibling.dataset.action, 'open-pending-supplier-payments-report');
   shortcuts.forEach(button => (button.querySelector('img') || button).click());
