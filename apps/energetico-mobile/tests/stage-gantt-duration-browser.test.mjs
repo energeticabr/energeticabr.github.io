@@ -19,10 +19,22 @@ test('GANTT mostra durações curtas à direita, mantém longas dentro e recalcu
     const result=JSON.parse(dom.window.document.documentElement.dataset.layout);
     const row=(rows,name)=>rows.find(row=>row.name===name);
     assert.deepEqual(result.initial.map(row=>row.name),['Longa','Curta','Curta no final']);
-    for(const rows of [result.initial,result.resized]) {
+    for(const rows of [result.initial,result.resized,result.fontResized]) {
      assert.ok(row(rows,'Longa').fits,JSON.stringify(result));
      assert.ok(row(rows,'Curta no final').outside,JSON.stringify(result));
      assert.equal(row(rows,'Curta no final').text,'1 dia');
+     for(const item of rows) {
+      assert.equal(item.dates.length,2,'Início e fim devem aparecer nas extremidades');
+      assert.deepEqual(item.dates.map(date=>date.color),['rgb(36, 114, 58)','rgb(170, 40, 57)']);
+      assert.ok(item.dates.every(date=>date.rowSafe&&date.trackSafe),JSON.stringify(item));
+     }
+     assert.ok(row(rows,'Longa').dates.every(date=>date.inside),JSON.stringify(rows));
+     for(const name of ['Curta','Curta no final']) {
+      const dates=row(rows,name).dates;
+      assert.ok(dates.every(date=>date.below),JSON.stringify(rows));
+      assert.ok(dates[1].top>=dates[0].top+dates[0].height+2,JSON.stringify(rows));
+     }
+     assert.deepEqual(row(rows,'Longa').dates.map(date=>date.text),['02/01/2026','29/04/2026']);
     }
     assert.ok(row(result.initial,'Curta').outside,JSON.stringify(result));
     assert.ok(row(result.resized,'Curta').fits,JSON.stringify(result));
