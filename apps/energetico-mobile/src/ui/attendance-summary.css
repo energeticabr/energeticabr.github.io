@@ -50,8 +50,8 @@
 .as-edit-button--save { background:#203a50; border-color:#203a50; color:#fff; }
 .as-edit-button:disabled { opacity:.65; cursor:default; }
 .as-provider-editor { display:grid; gap:7px; margin-top:8px; padding-top:8px; border-top:1px solid var(--as-border); }
-.as-provider-editor label { display:grid; min-width:0; gap:3px; font-size:11px; font-weight:700; }
-.as-provider-editor select { min-width:0; width:100%; min-height:36px; padding:3px; border:1px solid #738594; border-radius:5px; background:#fff; color:#172936; font-size:16px; }
+.as-editor-field { display:grid; min-width:0; gap:3px; font-size:11px; font-weight:700; }
+.as-provider-editor .sfs-field,.as-provider-editor .sfs .sfs-field>.sfs-trigger { height:36px; }
 .as-edit-actions { display:flex; flex-wrap:wrap; gap:4px; }
 .as-edit-status { margin:0; font-size:11px; }
 .as-edit-status:empty { display:none; }

@@ -68,14 +68,32 @@ if(attendanceMode&&new URL(location.href).searchParams.has('edit')) {
  await new Promise(resolve=>requestAnimationFrame(resolve));
  const editor=card(1).querySelector('form');
  const fits=content.scrollWidth<=content.clientWidth+1&&editor.scrollWidth<=editor.clientWidth+1;
- const stageSelect=editor.querySelector('[data-attendance-link=stage]');
- stageSelect.value='32';
- stageSelect.dispatchEvent(new Event('change'));
- editor.querySelector('[data-attendance-link=activity]').value='ARMAÇÃO DE BLOCOS';
+ const portrait=root.dataset.reportPortrait==='true';
+ const pick=(name,label,expected)=>{
+  const select=editor.querySelector(`[data-attendance-link=${name}]`);
+  select.nextElementSibling?.querySelector('.sfs-arrow')?.click();
+  const popup=root.querySelector('.sfs-popup-layer > .sfs-popup:not([hidden])');
+  if(!popup)return {custom:false};
+  const option=[...popup.querySelectorAll('.sfs-option')].find(item=>item.textContent.includes(label));
+  if(!option)return {custom:true,missing:label};
+  const box=popup.getBoundingClientRect(),row=option.getBoundingClientRect();
+  const safeArea=getComputedStyle(popup.parentElement.querySelector('.sfs-backdrop'));
+  const inside=box.left>=parseFloat(safeArea.paddingLeft)&&box.top>=parseFloat(safeArea.paddingTop)
+   &&box.right<=innerWidth-parseFloat(safeArea.paddingRight)&&box.bottom<=innerHeight-parseFloat(safeArea.paddingBottom);
+  const aligned=Math.abs(box.width-(portrait?popup.offsetHeight:popup.offsetWidth))<1
+   &&Math.abs(box.height-(portrait?popup.offsetWidth:popup.offsetHeight))<1;
+  const target=document.elementFromPoint(row.x+row.width/2,row.y+row.height/2);
+  const hit=target?.closest('.sfs-option')===option;
+  if(hit)target.click();
+  return {custom:select.hidden&&getComputedStyle(popup).position==='fixed',hit,aligned,inside,selected:select.value===expected};
+ };
+ const stage=pick('stage','FUNDAÇÃO','32');
+ const activity=pick('activity','ARMAÇÃO DE BLOCOS','ARMAÇÃO DE BLOCOS');
  editor.requestSubmit();
  await new Promise(resolve=>requestAnimationFrame(resolve));
  document.documentElement.dataset.layout=JSON.stringify({sharesColor,fits,updated:color(1)===color(3)&&color(1)!==color(2),
-  editFocus:document.activeElement?.dataset.supplierEdit,daily:root.querySelector('.as-daily').textContent.includes('Alfa')});
+  editFocus:document.activeElement?.dataset.supplierEdit,daily:root.querySelector('.as-daily').textContent.includes('Alfa'),
+  stage,activity});
 } else if(attendanceMode) {
  await view.open();await new Promise(resolve=>requestAnimationFrame(resolve));
  const root=view.element,panel=root.querySelector('[role=dialog]'),rect=panel.getBoundingClientRect();

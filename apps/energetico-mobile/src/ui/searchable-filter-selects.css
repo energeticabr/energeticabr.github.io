@@ -1,4 +1,5 @@
 .sfs { position: relative; width: 100%; min-width: 0; color: #123b66; }
+.sfs-popup-layer { display:contents; }
 .sfs [hidden] { display: none !important; }
 .sfs-field { position: relative; min-width: 0; }
 .sfs-trigger {

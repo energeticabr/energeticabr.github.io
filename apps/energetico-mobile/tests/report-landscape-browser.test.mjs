@@ -108,19 +108,21 @@ test('attendance summary fills portrait width sideways and dismisses from top an
  }finally{await server.close();}
 });
 
-test('attendance supplier links stay editable without overflow on phone and Windows',{timeout:90000},async t=>{
+test('attendance supplier options follow the report orientation and remain selectable',{timeout:90000},async t=>{
  const browser=[process.env.CHROME_BIN,'C:\\Program Files\\Google\\Chrome\\Application\\chrome.exe','/usr/bin/google-chrome','/usr/bin/chromium'].find(path=>path&&existsSync(path));
  if(!browser)return t.skip('Chrome unavailable');
  const server=await createServer({root:resolve(fileURLToPath(new URL('..',import.meta.url))),server:{host:'127.0.0.1',port:0},logLevel:'silent'});
  try {
   await server.listen();
   const url=`http://127.0.0.1:${server.httpServer.address().port}/tests/fixtures/report-landscape.html?attendance&edit`;
-  for(const [width,height] of [[320,568],[390,844],[1365,768]]) {
-   const {stdout}=await runBrowserLayout(browser,{width,height,url});
+  for(const [width,height] of [[320,568],[390,844],[844,390],[1365,768]]) {
+   const safeAreaInsets=width===390?{top:59,bottom:34,left:11,right:23}:undefined;
+   const {stdout}=await runBrowserLayout(browser,{width,height,url,safeAreaInsets});
    const dom=new JSDOM(stdout);
    try {
+    const picker={custom:true,hit:true,aligned:true,inside:true,selected:true};
     assert.deepEqual(JSON.parse(dom.window.document.documentElement.dataset.layout),
-     {sharesColor:true,fits:true,updated:true,editFocus:'1',daily:true},`${width}×${height}`);
+     {sharesColor:true,fits:true,updated:true,editFocus:'1',daily:true,stage:picker,activity:picker},`${width}×${height}`);
    } finally { dom.window.close(); }
   }
  } finally { await server.close(); }

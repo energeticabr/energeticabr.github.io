@@ -25,6 +25,15 @@ function createPicker(select, closeOthers, options = {}) {
   const reportPicker = options.report === true;
   const selectionActions = reportPicker && select.multiple && options.selectionActions;
   const wrapper = doc.createElement('div'); wrapper.className = reportPicker ? 'sfs sfs--report' : 'sfs';
+  // An expanded list in a scrolling card still needs the report's fixed-position frame.
+  const popupLayer = reportPicker && options.popupHost ? doc.createElement('div') : wrapper;
+  if (popupLayer !== wrapper) {
+    popupLayer.className = 'sfs sfs--report sfs-popup-layer';
+    popupLayer.dataset.reportScreenOnly = '';
+    options.popupHost.append(popupLayer);
+  }
+  const eventRoots = new Set([wrapper, popupLayer]);
+  const contains = node => wrapper.contains(node) || popupLayer.contains(node);
   const fieldBox = doc.createElement('div'); fieldBox.className = 'sfs-field';
   const arrow = doc.createElement('button'); arrow.type = 'button'; arrow.className = 'sfs-arrow'; arrow.textContent = '▾';
   arrow.tabIndex = -1; arrow.setAttribute('aria-label', `Abrir opções de ${labelText}`);
@@ -58,9 +67,9 @@ function createPicker(select, closeOthers, options = {}) {
     dismiss.setAttribute('aria-label', `Fechar opções de ${labelText}`);
     header.append(search, dismiss); popup.append(header);
     backdrop = doc.createElement('div'); backdrop.className = 'sfs-backdrop'; backdrop.hidden = true;
-    backdrop.setAttribute('aria-hidden', 'true'); wrapper.append(backdrop);
+    backdrop.setAttribute('aria-hidden', 'true'); popupLayer.append(backdrop);
   }
-  popup.append(list, empty); wrapper.append(fieldBox, popup); select.after(wrapper);
+  popup.append(list, empty); wrapper.append(fieldBox); popupLayer.append(popup); select.after(wrapper);
   let actionFooter = null, selectAll = null, confirmSelection = null;
   if (selectionActions) {
     actionFooter = doc.createElement('div'); actionFooter.className = 'sfs-selection-actions';
@@ -297,7 +306,9 @@ function createPicker(select, closeOthers, options = {}) {
       }
     }
   }
-  function onOutside(event) { if (!wrapper.contains(event.target) && !event.composedPath?.().includes(wrapper)) close(); }
+  function onOutside(event) {
+    if (!contains(event.target) && !event.composedPath?.().some(node => eventRoots.has(node))) close();
+  }
   function onOptionPointerDown(event) {
     pointerSeen = true;
     const target = event.target.closest?.('.sfs-option, .sfs-selection-actions button');
@@ -372,7 +383,7 @@ function createPicker(select, closeOthers, options = {}) {
     // The native keyboard's Done button blurs the proposal search without
     // moving focus to another control. Keep the query and options available.
     if (options.reportFrame && event.target === search && !event.relatedTarget) return;
-    if (!selectingOption && !wrapper.contains(event.relatedTarget)) close();
+    if (!selectingOption && !contains(event.relatedTarget)) close();
   }
   function onReset() { view.queueMicrotask(() => { if (!destroyed) { close(); sync(); } }); }
   function onDismiss() { close({ focus: true }); }
@@ -414,7 +425,10 @@ function createPicker(select, closeOthers, options = {}) {
   const blockEditing = event => event.preventDefault();
   const editEvents = ['beforeinput','paste','cut','drop'];
   if (selectionOnly) editEvents.forEach(name=>search.addEventListener(name,blockEditing));
-  wrapper.addEventListener('keydown', onKey); wrapper.addEventListener('focusout', onFocusOut);
+  for (const root of eventRoots) {
+    root.addEventListener('keydown', onKey);
+    root.addEventListener('focusout', onFocusOut);
+  }
   list.addEventListener('pointerdown', onOptionPointerDown);
   actionFooter?.addEventListener('pointerdown', onOptionPointerDown);
   doc.addEventListener('pointerup', onOptionPointerUp);
@@ -444,7 +458,11 @@ function createPicker(select, closeOthers, options = {}) {
       search.removeEventListener('input', onSearchInput); search.removeEventListener('change', onSearchChange);
       search.removeEventListener('beforeinput', onSearchEditStart); search.removeEventListener('compositionstart', onSearchEditStart);
       if (selectionOnly) editEvents.forEach(name=>search.removeEventListener(name,blockEditing));
-      wrapper.removeEventListener('keydown', onKey); wrapper.removeEventListener('focusout', onFocusOut);
+      for (const root of eventRoots) {
+        root.removeEventListener('keydown', onKey);
+        root.removeEventListener('focusout', onFocusOut);
+        root.remove();
+      }
       list.removeEventListener('pointerdown', onOptionPointerDown);
       actionFooter?.removeEventListener('pointerdown', onOptionPointerDown);
       doc.removeEventListener('pointerup', onOptionPointerUp);
@@ -454,7 +472,7 @@ function createPicker(select, closeOthers, options = {}) {
       if (!reportPicker) doc.removeEventListener('scroll', onAncestorScroll, true);
       view.removeEventListener('resize', positionPopup);
       observedViewport?.removeEventListener('resize', positionPopup); observedViewport?.removeEventListener('scroll', positionPopup);
-      wrapper.remove(); select.hidden = original.hidden;
+      select.hidden = original.hidden;
       for (const [name, value] of [['aria-hidden', original.ariaHidden], ['tabindex', original.tabIndex]]) {
         if (value === null) select.removeAttribute(name); else select.setAttribute(name, value);
       }
