@@ -24,6 +24,10 @@
 .gm-table--expense .gm-money[data-column=paid] { color:#075e30; }
 .gm-table--expense .gm-money[data-column=forecast] { color:#c00000; }
 .gm-table--expense .gm-money[data-column=total] { color:#760012; }
+.gm-month-change { display:inline-block; white-space:nowrap; color:#333; }
+.gm-month-change[data-direction=up] { color:#075e30; }
+.gm-month-change[data-direction=down] { color:#c00000; }
+.gm-month-change[data-direction=incomplete] { color:#555; }
 .gm-expense-label { display:flex; align-items:center; gap:6px; text-align:left; }
 .gm-expense-toggle {
   display:inline-grid; place-items:center; flex:none; width:26px; height:26px; min-height:0; padding:0;

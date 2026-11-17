@@ -187,8 +187,8 @@ test("despesas por filial somam baixas de lançamentos e provisões abertas pelo
     ["Filial B", 0, 150, 150], ["Filial A", .1, .2, .3],
   ]);
   assert.deepEqual(report.expenseBranches[1].expenseTypes, [
-    { name: "Material", paid: .1, forecast: .2, total: .3, percentage: 100,
-      products: [{ name: "Cimento", paid: .1, forecast: .2, total: .3, percentage: 100 }] },
+    { name: "Material", paid: .1, forecast: .2, total: .3, percentage: 100, previousTotal:0, change:Infinity,
+      products: [{ name: "Cimento", paid: .1, forecast: .2, total: .3, percentage: 100, previousTotal:0, change:Infinity }] },
   ]);
 });
 
