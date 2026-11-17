@@ -1,5 +1,5 @@
 import Decimal from 'decimal.js';
-import { validateAttachment } from '../../../../portal/data/attachments.js';
+import { nfeAttachmentNames } from './nfe-proposal-attachments.js';
 import { provisionTextTotal } from '../../../../portal/forms/provision-parent-workflow.js';
 import { buildNfeProposal, nfeProposalAmounts, nfeProposalKey, validateNfeProposal } from './nfe-proposal-model.js';
 import {
@@ -211,21 +211,25 @@ export function createNfeProposalData({ repository, fiscalData, tokenProvider, s
     return { fiscal:parseNfeProposalXml(xml, row, DOMParser, { provision }), xmlHash:await fingerprint(xml) };
   }
 
-  async function downloadPdf(row, { signal } = {}) {
+  async function downloadAttachments(row, { signal } = {}) {
     const attachments = await fiscalData.listAttachments(row.id, { signal, refresh:true });
-    if (attachments.filter(file => file.fileName === row.pdfName).length !== 1) {
-      throw new Error('O PDF fiscal original não foi encontrado nos anexos da nota.');
+    const names = nfeAttachmentNames(Array.isArray(attachments) ? attachments.map(file => file?.fileName) : null, row.pdfName);
+    const files = [];
+    for (const name of names) {
+      active(signal);
+      const blob = await fiscalData.downloadAttachment(row.id, name, { signal });
+      if (typeof blob?.arrayBuffer !== 'function') throw new Error(`O anexo ${name} não pôde ser lido.`);
+      files.push(new File([blob], name, { type:/\.pdf$/i.test(name) ? 'application/pdf' : blob.type }));
     }
-    const blob = await fiscalData.downloadAttachment(row.id, row.pdfName, { signal });
-    const file = new File([blob], row.pdfName, { type:'application/pdf' });
-    const check = validateAttachment(file);
-    if (!check.valid) throw new Error(check.message);
+    const latest = await fiscalData.listAttachments(row.id, { signal, refresh:true });
+    const confirmed = nfeAttachmentNames(Array.isArray(latest) ? latest.map(file => file?.fileName) : null, row.pdfName);
+    if (JSON.stringify(names) !== JSON.stringify(confirmed)) throw new Error('Os anexos da nota mudaram. Tente novamente para incluir todos.');
     active(signal);
-    return file;
+    return files;
   }
 
   const posting = createNfeProposalPosting({
-    repository, assertSession, authorizeWrite, downloadPdf, provision,
+    repository, assertSession, authorizeWrite, downloadAttachments, provision,
     resolveLearningScope:async row => (await learningIdentity(row))?.scope,
     async prepare(row, draft, { signal, baseline, manualStages }) {
       const [{ fiscal, xmlHash }, catalog] = await Promise.all([loadXml(row, signal), loadCatalog(signal)]);

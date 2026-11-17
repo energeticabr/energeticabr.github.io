@@ -118,8 +118,8 @@ function fixture(provision = false) {
       return attachmentRepository.listAttachments(site, attachmentListId, id, options);
     },
     async uploadAttachment(site, list, id, file, name) {
-      assert.deepEqual([site,list,id,name], ['personal',parents,'40',pdfName]);
-      if (state.rejectAttachment) throw new Error('attachment upload unavailable');
+      assert.deepEqual([site,list,id], ['personal',parents,'40']);
+      if (state.rejectAttachment || state.rejectAttachmentName === name) throw new Error('attachment upload unavailable');
       const bytes = await file.arrayBuffer();
       if (files.has(name)) throw new Error('duplicate file name');
       files.set(name, bytes);
@@ -148,9 +148,120 @@ function fixture(provision = false) {
         number, fields:{ FORMAPGTO:account, PGTOAGENDADO:'PENDENTE', STATUS:'PAGAMENTO PREVISTO' },
       })),
     }) : prepare,
-    downloadPdf:async () => { state.onDownload?.(); return state.sourcePdf; } });
+    downloadPdf:async () => { state.onDownload?.(); return state.sourcePdf; },
+    downloadAttachments:async () => {
+      state.onDownload?.();
+      return [new File([state.sourcePdf], pdfName, { type:'application/pdf' }), ...(state.extraSourceFiles || [])];
+    } });
   return { fiscal, tables, files, events, state, service };
 }
+
+for (const provision of [false,true]) {
+  test(`${provision ? 'provision' : 'order'} carries all DDA installments and non-PDF fiscal attachments, without duplicates`, async () => {
+    const { files,tables,state,service } = fixture(provision);
+    state.extraSourceFiles = [new File([pdf], 'DDA-41-boleto.pdf'), new File([wrongPdf], 'DDA-42-boleto.pdf'),
+      new File(['<nfe>original</nfe>'], 'nota.xml', { type:'application/xml' }), new File(['imagem'], 'comprovante.png')];
+    const receipt = await service().submit(invoice,draft);
+    assert.equal(files.size, 5);
+    for (const file of state.extraSourceFiles) assert.deepEqual(files.get(file.name), await file.arrayBuffer());
+    assert.deepEqual(await service().submit(invoice,draft), receipt);
+    assert.equal(tables[provision ? 'DESCRITIVOPROVISAO' : 'NOTASPENDENTES'].length, 1);
+    assert.equal(tables[provision ? 'PROVISÃO PGTOS' : 'LANCAMENTOS'].length, 2);
+  });
+
+  test(`${provision ? 'provision' : 'order'} stays unlinked when a DDA fails, then resumes with late attachments`, async () => {
+    const { fiscal,files,tables,state,service } = fixture(provision);
+    state.extraSourceFiles = [new File([pdf], 'DDA-41-boleto.pdf')];
+    state.rejectAttachmentName = 'DDA-41-boleto.pdf';
+    await assert.rejects(service().submit(invoice,draft), /upload unavailable/);
+    assert.ok(!fiscal.IDPEDIDO && !fiscal.NFEDESCRITIVO);
+    assert.equal(tables[provision ? 'PROVISÃO PGTOS' : 'LANCAMENTOS'].length, 0);
+    state.rejectAttachmentName = null;
+    state.extraSourceFiles.push(new File([wrongPdf], 'DDA-42-boleto.pdf'));
+    await service().submit(invoice,draft);
+    assert.equal(files.size, 3);
+    assert.equal(tables[provision ? 'DESCRITIVOPROVISAO' : 'NOTASPENDENTES'].length, 1);
+  });
+}
+
+test('preserves a conflicting DDA attachment and does not complete financial posting', async () => {
+  const { fiscal,files,state,service } = fixture();
+  state.extraSourceFiles = [new File([pdf], 'DDA-41-boleto.pdf')];
+  files.set('DDA-41-boleto.pdf', await wrongPdf.arrayBuffer());
+  await assert.rejects(service().submit(invoice,draft), /diverge/i);
+  assert.equal(fiscal.IDPEDIDO, null);
+  assert.deepEqual(files.get('DDA-41-boleto.pdf'), await wrongPdf.arrayBuffer());
+});
+
+test('a DDA arriving during posting prevents an incomplete link and is included by retry', async () => {
+  const { fiscal,files,state,service } = fixture();
+  state.afterLaunch = ({ id }) => { if (id === '51') state.extraSourceFiles = [new File([pdf], 'DDA-41-boleto.pdf')]; };
+  await assert.rejects(service().submit(invoice,draft), /anexos.*mudar|anexos.*altera/i);
+  assert.equal(fiscal.IDPEDIDO, null);
+  state.afterLaunch = null;
+  await service().submit(invoice,draft);
+  assert.ok(files.has('DDA-41-boleto.pdf'));
+});
+
+test('a DDA arriving after financial linking is added without changing or recreating financial rows', async () => {
+  const { files,tables,state,service } = fixture();
+  await service().submit(invoice,draft);
+  const before = structuredClone(tables);
+  state.extraSourceFiles = [new File([pdf], 'DDA-41-boleto.pdf')];
+  await service().submit(invoice,draft);
+  assert.ok(files.has('DDA-41-boleto.pdf'));
+  assert.deepEqual(tables, before);
+});
+
+test('a DDA arriving during final destination readback cannot be hidden by a newer fiscal version', async () => {
+  const { fiscal,files,state,service } = fixture();
+  state.afterLaunch = ({ id }) => {
+    if (id !== '51') return;
+    state.normalizeFinancialReadback = fields => {
+      if (fields.NFELINHA !== `${key}-1`) return;
+      state.extraSourceFiles = [new File([pdf], 'DDA-late.pdf')];
+      state.revision++;
+      state.normalizeFinancialReadback = null;
+    };
+  };
+  await assert.rejects(service().submit(invoice,draft), /anexos.*mudar|anexos.*altera/i);
+  assert.equal(fiscal.IDPEDIDO, null);
+  assert.equal(files.has('DDA-late.pdf'), false);
+  state.afterLaunch = null;
+  await service().submit(invoice,draft);
+  assert.ok(files.has('DDA-late.pdf'));
+});
+
+test('invalid or duplicate source attachment names and incomplete DDA PDFs stop before reservation', async () => {
+  for (const extra of [new File([pdf], '../boleto.pdf'), new File([pdf], pdfName.toLowerCase()),
+    new File(['%PDF-1.7\ntruncated'], 'DDA-41.pdf'), new File([], 'vazio.xml')]) {
+    const { events,state,service } = fixture();
+    state.extraSourceFiles = [extra];
+    await assert.rejects(service().submit(invoice,draft));
+    assert.deepEqual(events, []);
+  }
+});
+
+test('a source attachment change after the final manifest invalidates the conditional fiscal link', async () => {
+  const { fiscal,files,tables,state,service } = fixture();
+  let downloads = 0;
+  state.onDownload = () => {
+    if (++downloads !== 2) return;
+    state.normalizeFinancialReadback = fields => {
+      if (!fields.NFEORIGEM) return;
+      state.extraSourceFiles = [new File([pdf], 'DDA-last-moment.pdf')];
+      state.revision++;
+      state.normalizeFinancialReadback = null;
+    };
+  };
+  await assert.rejects(service().submit(invoice,draft), /vínculo.*não foi confirmado/);
+  assert.equal(fiscal.IDPEDIDO, null);
+  state.onDownload = null;
+  await service().submit(invoice,draft);
+  assert.ok(files.has('DDA-last-moment.pdf'));
+  assert.equal(tables.NOTASPENDENTES.length, 1);
+  assert.equal(tables.LANCAMENTOS.length, 2);
+});
 
 test('provision reserves the fiscal note, resumes partial writes, and links only the confirmed description', async () => {
   const { fiscal,tables,events,state,service } = fixture(true);

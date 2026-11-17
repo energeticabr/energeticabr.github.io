@@ -1,6 +1,7 @@
 import { PROVISION_FISCAL_DRAFT_STATUS } from '../../../../portal/forms/provision-parent-due.js';
 import { NFE_ORDER_FIELD, NFE_PROVISION_DESCRIPTION_FIELD, nfeOrderId } from './nfe-order-link.js';
 import { fiscalDocumentType } from './sefaz-withholding.js';
+import { nfeAttachmentNames, nfeAttachmentFingerprint } from './nfe-proposal-attachments.js';
 
 const RESERVATION = 'NFEPROPOSTA';
 export const NFE_LEARNING_FIELD = 'NFEAPRENDIZADO';
@@ -61,16 +62,6 @@ const fiscalNumber = value => String(value ?? '').trim();
 async function sha256(bytes) {
   const digest = await globalThis.crypto.subtle.digest('SHA-256', bytes);
   return Array.from(new Uint8Array(digest), byte => byte.toString(16).padStart(2,'0')).join('');
-}
-
-async function pdfFingerprint(value) {
-  const source = typeof value?.arrayBuffer === 'function' ? await value.arrayBuffer() : value;
-  const bytes = ArrayBuffer.isView(source) ? new Uint8Array(source.buffer, source.byteOffset, source.byteLength)
-    : Object.prototype.toString.call(source) === '[object ArrayBuffer]' ? new Uint8Array(source) : null;
-  const decoder = new TextDecoder();
-  if (!bytes || !/^%PDF-\d\.\d/.test(decoder.decode(bytes.subarray(0,8)))
-    || !/%%EOF\s*$/.test(decoder.decode(bytes.subarray(-2048)))) throw new Error('O PDF fiscal está inválido ou incompleto.');
-  return sha256(bytes);
 }
 
 function payloadFields(fields, extraFields) {
@@ -153,7 +144,7 @@ function sameField(name, actual, expected) {
   return actual === expected;
 }
 
-export function createNfeProposalPosting({ repository, assertSession = () => {}, authorizeWrite, prepare, downloadPdf, resolveLearningScope, provision = false }) {
+export function createNfeProposalPosting({ repository, assertSession = () => {}, authorizeWrite, prepare, downloadAttachments, resolveLearningScope, provision = false }) {
   const [linkField, otherLinkField, parentName, childName, childLink, headerKey, linesKey] = provision
     ? [NFE_PROVISION_DESCRIPTION_FIELD, NFE_ORDER_FIELD, 'DESCRITIVOPROVISAO', 'PROVISÃO PGTOS', 'DESCRITIVOPROVISAO', 'parentFields', 'provisionFields']
     : [NFE_ORDER_FIELD, NFE_PROVISION_DESCRIPTION_FIELD, 'NOTASPENDENTES', 'LANCAMENTOS', 'AGRUPAR', 'orderFields', 'launchFields'];
@@ -348,7 +339,7 @@ export function createNfeProposalPosting({ repository, assertSession = () => {},
     await readFinancial(list, id, expected, { signal });
   }
 
-  async function ensurePdf(list, id, name, pdf, fingerprint, readOnly, signal) {
+  async function ensureAttachment(list, id, { name, file, hash }, verifyOnly, signal) {
     async function confirm() {
       active(signal);
       const attachments = await repository.listAttachments('personal', list, id, { signal, requireCollection:true, namesOnly:true });
@@ -356,21 +347,40 @@ export function createNfeProposalPosting({ repository, assertSession = () => {},
       if (!Array.isArray(attachments)) throw new Error(`A consulta de anexos do ${target} está incompleta.`);
       const matches = attachments.filter(file => file.name?.toLowerCase() === name.toLowerCase());
       if (!matches.length) return false;
-      if (matches.length !== 1 || matches[0].name !== name) throw new Error(`O nome do PDF já está em uso no ${target}.`);
+      if (matches.length !== 1 || matches[0].name !== name) throw new Error(`O nome do anexo ${name} já está em uso no ${target}.`);
       const saved = await repository.downloadAttachment('personal', list, id, name, { signal });
-      if (await pdfFingerprint(saved) !== fingerprint) throw new Error(`O PDF do ${target} diverge do PDF fiscal original.`);
+      if (await nfeAttachmentFingerprint(saved, name) !== hash) throw new Error(`O ${/\.pdf$/i.test(name) ? 'PDF' : 'anexo'} ${name} do ${target} diverge do original da nota.`);
       active(signal);
       return true;
     }
     if (await confirm()) return;
-    if (readOnly) throw new Error(`O PDF fiscal vinculado ao ${target} está indisponível.`);
+    if (verifyOnly) throw new Error(`O anexo ${name} vinculado ao ${target} está indisponível.`);
     active(signal);
-    try { await repository.uploadAttachment('personal', list, id, pdf, name, { signal }); }
+    try { await repository.uploadAttachment('personal', list, id, file, name, { signal }); }
     catch (error) {
       if (await confirm()) return;
       throw error;
     }
-    if (!await confirm()) throw new Error(`O SharePoint não confirmou o PDF fiscal no ${target}.`);
+    if (!await confirm()) throw new Error(`O SharePoint não confirmou o anexo ${name} no ${target}.`);
+  }
+
+  async function sourceAttachments(source, signal) {
+    const files = await downloadAttachments(source, { signal });
+    active(signal);
+    const names = nfeAttachmentNames(Array.isArray(files) ? files.map(file => file?.name) : null, source.pdfName);
+    const result = [];
+    for (const name of names) {
+      const file = files.find(file => file.name === name);
+      result.push({ name, file, hash:await nfeAttachmentFingerprint(file, name) });
+      active(signal);
+    }
+    return result;
+  }
+
+  async function confirmSourceAttachments(source, attachments, signal) {
+    const latest = await sourceAttachments(source, signal);
+    const manifest = files => JSON.stringify(files.map(({ name, hash }) => [name, hash]));
+    if (manifest(latest) !== manifest(attachments)) throw new Error('Os anexos da nota mudaram. Tente novamente para incluir todos.');
   }
 
   async function loadReservation(row, { signal } = {}) {
@@ -404,9 +414,8 @@ export function createNfeProposalPosting({ repository, assertSession = () => {},
     }
     const encoder = new TextEncoder();
     const inputHash = await sha256(encoder.encode(input));
-    const pdf = await downloadPdf(source, { signal });
-    if (typeof pdf?.arrayBuffer !== 'function') throw new Error('O PDF fiscal original está indisponível.');
-    const pdfHash = await pdfFingerprint(pdf);
+    const attachments = await sourceAttachments(source, signal);
+    const pdfHash = attachments.find(file => file.name === invoice.pdfName).hash;
     active(signal);
 
     const candidate = await prepare(source, JSON.parse(input), {
@@ -448,7 +457,7 @@ export function createNfeProposalPosting({ repository, assertSession = () => {},
     const readOnly = Boolean(current.linked);
     const parentId = await financialItem(parentList, ORDER_ORIGIN, invoice.key, parentFields,
       { readOnly, pending:parentDraft, expectedId:current.linked, signal });
-    await ensurePdf(parentList, parentId, invoice.pdfName, pdf, pdfHash, readOnly, signal);
+    for (const attachment of attachments) await ensureAttachment(parentList, parentId, attachment, false, signal);
     const confirmed = [];
     for (const line of lineFields) {
       const token = `${invoice.key}-${line.number}`;
@@ -461,15 +470,19 @@ export function createNfeProposalPosting({ repository, assertSession = () => {},
         } catch { /* A progress observer cannot affect posting. */ }
       }
     }
+    for (const attachment of attachments) await ensureAttachment(parentList, parentId, attachment, true, signal);
+    if (readOnly) await confirmSourceAttachments(source, attachments, signal);
     if (!readOnly) {
       const reserved = current.rawReservation;
       for (let start = 0; start < confirmed.length; start += READBACK_BATCH_SIZE) {
         await Promise.all(confirmed.slice(start, start + READBACK_BATCH_SIZE).map(({ id, fields }) =>
           readFinancial(childList, id, fields, { pending:childDraft, signal })));
       }
-      await ensurePdf(parentList, parentId, invoice.pdfName, pdf, pdfHash, true, signal);
       const learning = await confirmedLearning(stored, source);
       await finishLink(fiscalList, invoice, reserved, parentId, async () => {
+        // finishLink holds the version used by its conditional link. Recheck
+        // the manifest after destination reads without adopting a newer eTag.
+        await confirmSourceAttachments(source, attachments, signal);
         if (provision) {
           for (const { id, fields } of confirmed) await promoteFinancial(childList, id, fields, childDraft, signal);
         }
