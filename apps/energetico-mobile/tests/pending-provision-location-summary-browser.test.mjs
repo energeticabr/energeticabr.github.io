@@ -29,7 +29,11 @@ test('pending report supplier/location and attachment-only disclosure fit320/390
     assert.equal(layout.geometry[0].location,'004 - EDIFÍCIO DE TESTE (TORRE A / APARTAMENTO 101)');
     assert.equal(layout.geometry[0].amount,'R$ 21.600,00 / R$ 61.600,00');
     assert.match(layout.geometry[0].supplier,/CONSTRUÇÃO \(R\$ 40\.000,00 PAGOS\)$/);
-    assert.equal(layout.geometry[0].product,'MATERIAL DE TESTE (OBSERVAÇÃO FICTÍCIA DE ENTREGA NO ALMOXARIFADO CENTRAL PARA CONFERÊNCIA)');
+    assert.equal(layout.geometry[0].product,'1. MESTRE DE OBRAS (FGTS - COLABORADOR FICTÍCIO 1 - COMPETÊNCIA 2026-10 / PARCELA 1)');
+    assert.equal(layout.geometry[0].productItems.length,7);
+    assert.ok(layout.geometry[0].productItems.every((item,index)=>item.startsWith(`${index+1}. `)));
+    assert.equal(layout.geometry[0].productsSeparated,true);
+    assert.deepEqual(layout.geometry[1].productItems,[]);
     assert.equal(layout.geometry[1].product,'VALE ALIMENTAÇÃO');
     assert.ok(layout.geometry.every(row=>row.productFits), width+'px: all product summaries fit their field');
     assert.equal(layout.geometry[1].amount,'R$ 225,00');

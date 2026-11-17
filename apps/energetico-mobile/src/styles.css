@@ -348,6 +348,8 @@ button:disabled { cursor: wait; opacity: .55; }
 .chat-pending-provision__supplier .chat-pending-provision__actions { flex-direction: column; justify-self: end; width: 48px; }
 .chat-pending-provision__supplier-info { display: grid; gap: 12px; min-width: 0; }
 .chat-pending-provision__field { display: grid; gap: 3px; min-width: 0; }
+.chat-pending-provision__products { display: grid; gap: 12px; margin: 0; padding: 0; list-style: none; min-width: 0; }
+.chat-pending-provision__products li { min-width: 0; }
 .chat-pending-provision__field span { color: var(--muted); font-size: .9rem; }
 .chat-pending-provision__field strong { color: #123f50; font-size: 1rem; line-height: 1.3; overflow-wrap: anywhere; }
 .chat-pending-provision__detail { display: flex; align-items: center; gap: 12px; padding: 10px 12px; }

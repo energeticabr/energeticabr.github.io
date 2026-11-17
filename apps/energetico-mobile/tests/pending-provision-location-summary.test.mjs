@@ -139,12 +139,26 @@ test('shows each linked observation after its own product and preserves blank ob
     productDisplay: 'CONTABILIDADE (FOLHA & <REVISÃO>) / TAXAS',
   } });
   const field = card.querySelector('[data-field="product"]');
-  const expected = 'CONTABILIDADE (FOLHA & <REVISÃO>) / TAXAS';
+  const expected = ['1. CONTABILIDADE (FOLHA & <REVISÃO>)', '2. TAXAS'];
   assert.equal(field.querySelector('span').textContent, 'Produto');
-  assert.equal(field.querySelector('strong').textContent, expected);
+  assert.deepEqual([...field.querySelectorAll('li')].map(item => item.textContent), expected);
   assert.equal(field.querySelector('revisão'), null);
   const blocks = captureFilteredReport(dom.window.document.querySelector('[data-pending-provisions-dialog]')).pages[0].blocks;
-  assert.ok(blocks.some(block => block.runs?.map(run => run.text).join('').includes(expected)));
+  for (const item of expected) assert.ok(blocks.some(block => block.runs?.map(run => run.text).join('').includes(item)));
+});
+
+test('numbers seven linked products without splitting slashes inside their observations', t => {
+  const products = Array.from({ length: 7 }, (_, index) => `PRODUTO ${index + 1} (FGTS / COMPETÊNCIA 2026-10)`);
+  const { card } = render(t, { values: { childCount: 7, productDisplay: products.join(' / ') } });
+  assert.deepEqual([...card.querySelectorAll('[data-field="product"] li')].map(item => item.textContent),
+    products.map((product, index) => `${index + 1}. ${product}`));
+});
+
+test('keeps a single compound product and its observation without numbering', t => {
+  const productDisplay = 'SERVIÇOS / MANUTENÇÃO (SETOR A / B)';
+  const { card } = render(t, { values: { childCount: 1, productDisplay } });
+  assert.equal(card.querySelector('[data-field="product"] ol'), null);
+  assert.equal(card.querySelector('[data-field="product"] strong').textContent, productDisplay);
 });
 
 test('shows only the product for snapshots without a display override', t => {
