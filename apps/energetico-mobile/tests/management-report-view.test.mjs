@@ -71,3 +71,80 @@ test('tabela de despesas mostra PAGO, PREVISTO e TOTAL GERAL para tipos e subtot
   supplier.dispatchEvent(new dom.window.Event('change'));
   assert.deepEqual(amounts(root.querySelector('[data-section=expense] .gm-total')),['R$0,00','R$35,00','R$35,00']);
 });
+
+test('detalha os produtos por filial e tipo, em ordem de total, e recolhe cada grupo separadamente',async t=>{
+  const launch={...row,paymentDate:'2026-10-05'};
+  const provision={branch:row.branch,supplier:'Fornecedor previsto',dueDate:'2026-10-08'};
+  const {view,root,dom}=setup(t,async()=>({
+    launches:[
+      launch,
+      {...launch,id:'2',product:'Tijolo',total:40},
+      {...launch,id:'3',product:'CIMENTO',total:5},
+      {...launch,id:'4',product:'Locação',total:10},
+      {...launch,id:'5',product:'Tijolo',branch:'Central',total:20},
+    ],
+    provisions:[
+      {...provision,product:'Cimento',total:35},
+      {...provision,product:'Areia',total:5},
+      {...provision,product:'Areia',paidDate:'2026-10-02',total:900},
+      {...provision,product:'Areia',dueDate:'2026-11-08',total:900},
+      {...provision,product:'Brita',total:null},
+    ],
+    productTypes:['Cimento','Tijolo','Areia','Brita'].map(product=>({product,expenseType:'MATERIAL'})),
+  }));
+  await view.open();
+  const table=root.querySelector('[data-section=expense]');
+  const buttons=[...table.querySelectorAll('td[data-column=name] button')];
+  const buttonFor=(expense,branch)=>buttons.find(button=>button.getAttribute('aria-label')?.includes(`${expense} — ${branch}`));
+  const materials=buttonFor('MATERIAL',row.branch);
+  const locacao=buttonFor('SEM TIPO DE DESPESA',row.branch);
+  const central=buttonFor('MATERIAL','Central');
+  const branchCell=[...table.querySelectorAll('[data-column=branch]')].find(cell=>cell.textContent===row.branch);
+  const listAfter=button=>{
+    const products=[];
+    let tr=button.closest('tr').nextElementSibling;
+    while(tr?.matches('.gm-expense-product')){
+      products.push(['name','paid','forecast','total'].map(column=>tr.querySelector(`[data-column=${column}]`).textContent.replace(/\s/g,'')));
+      tr=tr.nextElementSibling;
+    }
+    return products;
+  };
+  assert.equal(buttons.length,3);
+  assert.equal(table.querySelectorAll('.gm-total button').length,0);
+  assert.equal(materials.getAttribute('aria-expanded'),'false');
+  assert.equal(materials.textContent,'+');
+  assert.deepEqual(listAfter(materials),[]);
+  materials.focus();
+  materials.click();
+  assert.equal(materials.getAttribute('aria-expanded'),'true');
+  assert.equal(materials.textContent,'−');
+  assert.equal(dom.window.document.activeElement,materials);
+  assert.deepEqual(listAfter(materials),[
+    ['Cimento','R$30,00','R$35,00','R$65,00'],
+    ['Tijolo','R$40,00','R$0,00','R$40,00'],
+    ['Areia','R$0,00','R$5,00','R$5,00'],
+    ['Brita','R$0,00','INCOMPLETO','INCOMPLETO'],
+  ]);
+  assert.equal(branchCell.rowSpan,7);
+  locacao.click();
+  central.click();
+  assert.deepEqual(listAfter(locacao),[['Locação','R$10,00','R$0,00','R$10,00']]);
+  assert.deepEqual(listAfter(central),[['Tijolo','R$20,00','R$0,00','R$20,00']]);
+  assert.equal(branchCell.rowSpan,8);
+  materials.click();
+  assert.deepEqual(listAfter(materials),[]);
+  assert.equal(materials.getAttribute('aria-expanded'),'false');
+  assert.equal(materials.textContent,'+');
+  assert.equal(locacao.getAttribute('aria-expanded'),'true');
+  assert.equal(branchCell.rowSpan,4);
+  const supplier=root.querySelector('[name=supplier]');
+  supplier.value='Fornecedor previsto';
+  supplier.dispatchEvent(new dom.window.Event('change'));
+  const filtered=root.querySelector('[data-section=expense] td[data-column=name] button');
+  filtered.click();
+  assert.deepEqual(listAfter(filtered),[
+    ['Cimento','R$0,00','R$35,00','R$35,00'],
+    ['Areia','R$0,00','R$5,00','R$5,00'],
+    ['Brita','R$0,00','INCOMPLETO','INCOMPLETO'],
+  ]);
+});

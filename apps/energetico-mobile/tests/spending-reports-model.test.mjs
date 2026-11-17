@@ -187,7 +187,8 @@ test("despesas por filial somam baixas de lançamentos e provisões abertas pelo
     ["Filial B", 0, 150, 150], ["Filial A", .1, .2, .3],
   ]);
   assert.deepEqual(report.expenseBranches[1].expenseTypes, [
-    { name: "Material", paid: .1, forecast: .2, total: .3, percentage: 100 },
+    { name: "Material", paid: .1, forecast: .2, total: .3, percentage: 100,
+      products: [{ name: "Cimento", paid: .1, forecast: .2, total: .3, percentage: 100 }] },
   ]);
 });
 
@@ -206,4 +207,19 @@ test("total geral soma os centavos apresentados em Pago e Previsto", () => {
   const report = model.buildSpendingReport9({ launches, provisions }, { year: "2026", month: "9" });
   const [{ paid, forecast, total }] = report.expenseBranches;
   assert.deepEqual({ paid, forecast, total }, { paid: .12, forecast: .12, total: .24 });
+});
+
+test("centavos exibidos por produto reconciliam com Pago e Previsto do tipo sem mudar o subtotal", () => {
+  const sample = (product, total, id) => row(id, { product, total });
+  const launches = [sample("A", .005, 1), sample("B", .005, 2), sample("C", .09, 3)];
+  const provisions = ["A", "B"].map(product => ({ branch: "Filial A", product, dueDate: "2026-09-01", total: .105 }));
+  const productTypes = ["A", "B", "C"].map(product => ({product, expenseType: "Material"}));
+  const report = model.buildSpendingReport9({ launches, provisions, productTypes }, { year: "2026", month: "9" });
+  const [{ expenseTypes: [material] }] = report.expenseBranches;
+  assert.deepEqual([material.paid, material.forecast, material.total], [.10, .21, .31]);
+  for (const field of ["paid", "forecast", "total"]) {
+    const cents = value => Math.round(value * 100);
+    assert.equal(material.products.reduce((sum, product) => sum + cents(product[field]), 0), cents(material[field]), field);
+  }
+  assert.equal(Math.round(material.products.reduce((sum, product) => sum + product.percentage, 0)), 100);
 });

@@ -21,6 +21,19 @@
 .gm-table .gm-label { background:#d9eaf7; font-weight:700; }
 .gm-table td[data-column=branch],.gm-table td[data-column=name],.gm-table td[data-column=period] { font-weight:700; }
 .gm-table .gm-money { color:red; font-weight:700; }
+.gm-table--expense .gm-money[data-column=paid] { color:#075e30; }
+.gm-table--expense .gm-money[data-column=forecast] { color:#c00000; }
+.gm-table--expense .gm-money[data-column=total] { color:#760012; }
+.gm-expense-label { display:flex; align-items:center; gap:6px; text-align:left; }
+.gm-expense-toggle {
+  display:inline-grid; place-items:center; flex:none; width:26px; height:26px; min-height:0; padding:0;
+  border:1px solid currentColor; border-radius:5px; background:#fff; color:#075e30;
+  font:bold 18px/1 Arial,sans-serif; cursor:pointer; touch-action:manipulation;
+}
+.gm-expense-toggle[aria-expanded=true] { color:#c00000; }
+.gm-expense-toggle:focus-visible { outline:2px solid #305496; outline-offset:1px; }
+.gm-expense-product { background:#f3f7fc; }
+.gm-table .gm-expense-product td[data-column=name] { padding-inline-start:clamp(10px,3vw,36px); text-align:left; }
 .gm-table .gm-branch { background:#eef4fb; }
 .gm-table--products .gm-branch { background:#f3f8ef; }
 .gm-table--stages .gm-branch { background:#f5eefc; }

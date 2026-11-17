@@ -134,14 +134,15 @@ function selectedRows(launches, filters, periodDate = row => row.date) {
   });
 }
 
-function groupRows(rows, nameOf) {
+function groupRows(rows, nameOf, keyOf = name => name) {
   const groups = new Map();
   for (const row of rows) {
     const name = scalar(nameOf(row)) || "-";
-    if (!groups.has(name)) groups.set(name, []);
-    groups.get(name).push(row);
+    const groupKey = keyOf(name);
+    if (!groups.has(groupKey)) groups.set(groupKey, [name, []]);
+    groups.get(groupKey)[1].push(row);
   }
-  return [...groups];
+  return [...groups.values()];
 }
 
 function grouped(rows, field, whole, limit = Infinity) {
@@ -152,11 +153,47 @@ function grouped(rows, field, whole, limit = Infinity) {
   }).sort(byValue).slice(0, limit);
 }
 
-function paymentTotals(rows) {
-  const roundCurrency = amount => amount == null ? null : new Decimal(amount).toDecimalPlaces(2).toNumber();
-  const paid = roundCurrency(completeSum(rows.filter(row => row.paymentDate), "total"));
-  const forecast = roundCurrency(completeSum(rows.filter(row => !row.paymentDate), "total"));
+function paymentAmounts(rows) {
+  return {
+    paid: completeSum(rows.filter(row => row.paymentDate), "total"),
+    forecast: completeSum(rows.filter(row => !row.paymentDate), "total"),
+  };
+}
+
+const roundCurrency = amount => amount == null ? null : new Decimal(amount).toDecimalPlaces(2).toNumber();
+const roundPaymentAmounts = ({ paid, forecast }) => ({ paid: roundCurrency(paid), forecast: roundCurrency(forecast) });
+
+function withPaymentTotal({ paid, forecast }) {
   return { paid, forecast, total: completeSum([{ total: paid }, { total: forecast }], "total") };
+}
+
+function paymentTotals(rows) {
+  return withPaymentTotal(roundPaymentAmounts(paymentAmounts(rows)));
+}
+
+function expenseProducts(items, expenseTotals, branchTotal) {
+  const raw = groupRows(items, row => scalar(row.product) || "SEM PRODUTO", name => name.toLocaleLowerCase("pt-BR"))
+    .map(([name, rows]) => ({ name, ...paymentAmounts(rows) }));
+  const products = raw.map(product => ({ name: product.name, ...roundPaymentAmounts(product) }));
+  // Preserve the existing subtotal. When products round in the same direction,
+  // assign the difference to those with the largest remainder in the other direction.
+  for (const field of ["paid", "forecast"]) {
+    if (expenseTotals[field] == null) continue;
+    const correction = new Decimal(expenseTotals[field]).minus(completeSum(products, field)).times(100).toNumber();
+    if (!correction) continue;
+    const direction = Math.sign(correction);
+    const residuals = products.map((product, index) => ({
+      product, remainder: new Decimal(raw[index][field]).minus(product[field]),
+    })).sort((a, b) => direction * b.remainder.cmp(a.remainder)
+      || a.product.name.localeCompare(b.product.name, "pt-BR"));
+    for (const { product } of residuals.slice(0, Math.abs(correction))) {
+      product[field] = new Decimal(product[field]).plus(direction / 100).toNumber();
+    }
+  }
+  return products.map(product => {
+    const amounts = withPaymentTotal(product);
+    return Object.freeze({ name: product.name, ...amounts, percentage: percentage(amounts.total, branchTotal) });
+  }).sort(byValue);
 }
 
 export function buildSpendingReport9(snapshot, filters = {}) {
@@ -186,7 +223,9 @@ export function buildSpendingReport9(snapshot, filters = {}) {
     const totals = paymentTotals(values);
     const expenseTypes = groupRows(values, expenseType).map(([name, items]) => {
       const amounts = paymentTotals(items);
-      return Object.freeze({ name, ...amounts, percentage: percentage(amounts.total, totals.total) });
+      const products = expenseProducts(items, amounts, totals.total);
+      return Object.freeze({ name, ...amounts, percentage: percentage(amounts.total, totals.total),
+        products: Object.freeze(products) });
     }).sort(byValue);
     return Object.freeze({ name, ...totals, percentage: percentage(totals.total, totals.total),
       expenseTypes: Object.freeze(expenseTypes) });

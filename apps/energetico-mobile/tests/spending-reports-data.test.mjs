@@ -98,7 +98,8 @@ test("relatório 9 lê também as parcelas publicadas de Provisão Pgto e calcul
   ]);
   const report = buildSpendingReport9(snapshot, { year: "2026", month: "11", stage: "Fundação", supplier: "Alfa", disbursement: "SIM" });
   assert.deepEqual(report.expenseBranches[0].expenseTypes, [
-    { name: "Material", paid: 0, forecast: 195, total: 195, percentage: 100 },
+    { name: "Material", paid: 0, forecast: 195, total: 195, percentage: 100,
+      products: [{ name: "Cimento", paid: 0, forecast: 195, total: 195, percentage: 100 }] },
   ]);
 });
 
