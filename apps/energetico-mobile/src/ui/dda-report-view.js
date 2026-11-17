@@ -13,7 +13,7 @@ const LOGO=new URL('../../../../assets/logo-energetica-oficial.png',import.meta.
 const money=value=>value==null?'Não disponível':new Intl.NumberFormat('pt-BR',{style:'currency',currency:'BRL'}).format(Number(value));
 const date=value=>value?value.slice(8,10)+'/'+value.slice(5,7)+'/'+value.slice(0,4):'Não informado';
 const daysSince=(day,today)=>Math.round((Date.parse(`${today}T00:00:00Z`)-Date.parse(`${day}T00:00:00Z`))/86400000);
-const ROW_CONTROLS=['data-dda-pdf','data-dda-mirror','data-dda-provision-check','data-dda-provision-pencil','data-dda-settle-provision','data-dda-toggle-barcode','data-dda-copy-barcode','data-dda-unlinked-review'];
+const ROW_CONTROLS=['data-dda-pdf','data-dda-provision-check','data-dda-provision-pencil','data-dda-settle-provision','data-dda-toggle-barcode','data-dda-copy-barcode','data-dda-unlinked-review'];
 function rowControlSelector(element){
  const attribute=ROW_CONTROLS.find(name=>element?.hasAttribute(name));
  return attribute?`[${attribute}="${element.getAttribute(attribute)}"]`:null;
@@ -328,7 +328,7 @@ export function createDdaReportView({document:doc=globalThis.document,data,openM
    check.title=settledDdaIds.has(row.id)?'Sem baixa pendente para este boleto':row.provisionId&&!settlementVerified
     ?'A baixa fica disponível após a conferência da provisão no SharePoint.':check.getAttribute('aria-label');
    check.addEventListener('click',()=>askSettlement(row,check));
-   const open=button('Abrir espelho do DDA '+row.id,'📎 Espelho');open.dataset.ddaMirror=row.id;open.disabled=typeof data.listAttachments!=='function'||typeof data.downloadAttachment!=='function'||typeof openMediaCollection!=='function';open.addEventListener('click',()=>void openPdfs(row,open));actions.append(check,open);files.append(actions);
+   actions.append(check);files.append(actions);
    if(!printAll&&pendingSettlement&&row.provisionId&&typeof onStartSettlement==='function'&&typeof data.loadItem==='function'){
     const settle=button(`Dar baixa na provisão ${row.provisionId} do DDA ${row.id}`,'Dar baixa');
     settle.className='ddr-settle-provision';settle.dataset.ddaSettleProvision=row.id;
@@ -340,7 +340,7 @@ export function createDdaReportView({document:doc=globalThis.document,data,openM
     const id=make('td','ddr-id'),identity=make('div','ddr-row-identity');
     identity.append(make('span','ddr-id-cluster',row.id));id.append(identity);
    if(!printAll){
-    const pdf=button('Abrir PDFs do DDA '+row.id,'');pdf.dataset.ddaPdf=row.id;pdf.className='ddr-open-pdf';pdf.title=pdf.getAttribute('aria-label');pdf.disabled=open.disabled;
+    const pdf=button('Abrir PDFs do DDA '+row.id,'');pdf.dataset.ddaPdf=row.id;pdf.className='ddr-open-pdf';pdf.title=pdf.getAttribute('aria-label');pdf.disabled=typeof data.listAttachments!=='function'||typeof data.downloadAttachment!=='function'||typeof openMediaCollection!=='function';
     pdf.innerHTML=PDF_ATTACHMENT_ICON;
     pdf.addEventListener('click',()=>void openPdfs(row,pdf));
      identity.append(pdf);
