@@ -137,10 +137,10 @@ test('changing filters while printing cancels the expansion and stale restoratio
  doc.querySelector('[data-page-next]').click();restore();assert.equal(doc.querySelectorAll('tbody tr').length,3);
  view.destroy();dom.window.close();
 });
-test('mirror opens only on click and late attachment replies after close are ignored',async()=>{
+test('left PDF is the only attachment button and late replies after close are ignored',async()=>{
  let resolve,reads=0;const opened=[];const data={loadSnapshot:async()=>({rows:[row(1)]}),listAttachments:async()=>{reads++;return [{fileName:'espelho.pdf'}];},downloadAttachment:async()=>new Blob(['%PDF'],{type:'application/pdf'})};
- const {dom,view,doc}=setup(data,{openMediaCollection:(items,{onClose})=>{opened.push(items);onClose();}});await view.open();assert.equal(reads,0);doc.querySelector('[data-dda-mirror]').click();await settle();assert.equal(opened[0][0].fileName,'espelho.pdf');assert.equal((await opened[0][0].source({})).type,'application/pdf');
- data.listAttachments=()=>new Promise(r=>resolve=r);doc.querySelector('[data-dda-mirror]').click();await settle();view.close();resolve([{fileName:'late.pdf'}]);await settle();assert.equal(opened.length,1);
+ const {dom,view,doc}=setup(data,{openMediaCollection:(items,{onClose})=>{opened.push(items);onClose();}});await view.open();assert.equal(reads,0);assert.equal(doc.querySelector('[data-dda-mirror]'),null);assert.doesNotMatch(doc.querySelector('.ddr-row-actions').textContent,/Espelho/);assert.equal(doc.querySelectorAll('[data-dda-pdf]').length,1);doc.querySelector('[data-dda-pdf]').click();await settle();assert.equal(opened[0][0].fileName,'espelho.pdf');assert.equal((await opened[0][0].source({})).type,'application/pdf');
+ data.listAttachments=()=>new Promise(r=>resolve=r);doc.querySelector('[data-dda-pdf]').click();await settle();view.close();resolve([{fileName:'late.pdf'}]);await settle();assert.equal(opened.length,1);
  view.destroy();dom.window.close();
 });
 test('closed loads and failed refresh cannot show stale rows or print stale totals',async()=>{

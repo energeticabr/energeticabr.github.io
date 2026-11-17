@@ -18,7 +18,8 @@ test("workflow mantém validação gratuita antes da distribuição TestFlight",
   assert.match(workflow, /^permissions:\s*\n\s+contents: read/m);
   assert.match(workflow, /workflow_dispatch:[\s\S]*distribute:[\s\S]*type: boolean/);
   assert.ok(/use_intel_runner:[\s\S]*?default: false\s+type: boolean/.test(workflow), 'manual Intel fallback must be a boolean disabled by default');
-  for (const id of ['native-share-tests', 'ios-simulator', 'review-screenshots', 'testflight']) {
+  assert.match(testflightJob, /^    runs-on: macos-26-intel$/m);
+  for (const id of ['native-share-tests', 'ios-simulator', 'review-screenshots']) {
     const nativeJob = workflow.match(new RegExp(`\\n  ${id}:\\n([\\s\\S]*?)(?=\\n  [\\w-]+:\\n|$)`))?.[1] || '';
     const selector = nativeJob.match(/^    runs-on: \$\{\{ (.*) \}\}$/m)?.[1];
     assert.ok(selector, `${id} must preserve ARM by default and allow a manual Intel fallback`);
