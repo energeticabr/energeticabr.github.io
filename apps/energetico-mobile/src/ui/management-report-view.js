@@ -1,6 +1,7 @@
 import { bindReportLandscape } from './report-landscape.js';
 import { addReportCloseControl } from './report-close-control.js';
-import { buildSpendingReport9 } from '../chat/spending-reports-model.js';
+import { buildSpendingReport9, buildManagementProductDetail } from '../chat/spending-reports-model.js';
+import { createManagementProductDetailView } from './management-product-detail-view.js';
 import { formatReportMoney } from '../chat/contractor-report-model.js';
 import { bindSearchableFilterSelects } from './searchable-filter-selects.js';
 
@@ -42,10 +43,27 @@ export function createManagementReportView({document:doc=globalThis.document,dat
   let snapshot=null,controller=null,revision=0,pickers=null,destroyed=false,returnFocus=null,oldOverflow='',app=null,oldInert=false;
   const landscape = bindReportLandscape(root);
   addReportCloseControl({root, toolbar:filters, onClose:close});
+  let reportPosition={top:0,left:0};
+  const productDetail=createManagementProductDetailView({root,onClose(){
+    content.scrollTop=reportPosition.top;content.scrollLeft=reportPosition.left;
+  }});
   const showNotice=text=>{notice.textContent=text;notice.hidden=!text;};
   const selected=()=>Object.fromEntries([...controls].map(([name,n])=>[name,n.value]));
   function cell(tr,column,value,span=1,className='') {
     const td=make('td',className,String(value??'').trim()||'—');td.dataset.column=column;td.rowSpan=span;tr.append(td);return td;
+  }
+  function productCell(tr,product,branch,kind) {
+    const td=cell(tr,'name','');
+    const button=make('button','gm-product-link',product);button.type='button';
+    button.setAttribute('aria-haspopup','dialog');
+    button.setAttribute('aria-label',`Detalhar produto ${product} — ${branch}`);
+    td.replaceChildren(button);tr.classList.add('gm-selectable-product');
+    tr.addEventListener('click',()=>{
+      if(root.hidden||!snapshot||destroyed)return;
+      reportPosition={top:content.scrollTop,left:content.scrollLeft};
+      productDetail.open(buildManagementProductDetail(snapshot,selected(),{product,branch,kind}),button);
+    });
+    return td;
   }
   function table(section,title,labels,widths) {
     const table=make('table',`gm-table gm-table--${section}`);table.dataset.section=section;
@@ -94,7 +112,7 @@ export function createManagementReportView({document:doc=globalThis.document,dat
           } else {
             details=group.products.map(product=>{
               const detail=make('tr','gm-expense-product');
-              cell(detail,'name',product.name);
+              productCell(detail,product.name,branch.name,'expense');
               expenseAmounts(detail,product,comparisonPeriod);
               return detail;
             });
@@ -114,6 +132,7 @@ export function createManagementReportView({document:doc=globalThis.document,dat
     }
   }
   function render() {
+    productDetail.close({restoreFocus:false});
     content.replaceChildren();showNotice('');if(!snapshot)return;
     const result=buildSpendingReport9(snapshot,selected());
     const logoFrame=make('div','gm-logo'),logo=make('img');logo.src=LOGO;logo.alt='Logo Energética';logoFrame.append(logo);content.append(logoFrame);
@@ -137,7 +156,8 @@ export function createManagementReportView({document:doc=globalThis.document,dat
         const groups=branch[section];
         groups.forEach((group,index)=>{
           const tr=make('tr');if(index===0)cell(tr,'branch',branch.name,groups.length+1,'gm-branch');
-          cell(tr,'name',group.name);cell(tr,'count',group.count);if(withQuantity)cell(tr,'quantity',number(group.quantity));
+          if(withQuantity)productCell(tr,group.name,branch.name,'launches');else cell(tr,'name',group.name);
+          cell(tr,'count',group.count);if(withQuantity)cell(tr,'quantity',number(group.quantity));
           cell(tr,'total',money(group.total),1,'gm-money');cell(tr,'percentage',percent(group.percentage));body.append(tr);
         });
         const total=make('tr','gm-total');cell(total,'label','TOTAL DA FILIAL');cell(total,'count',branch.count);
@@ -164,6 +184,7 @@ export function createManagementReportView({document:doc=globalThis.document,dat
   }
   async function load() {
     if(root.hidden||destroyed)return;
+    productDetail.close({restoreFocus:false});
     pickers?.close();controller?.abort();const current=++revision,active=new AbortController();controller=active;snapshot=null;content.replaceChildren();
     showNotice('Carregando gastos do SharePoint…');report.setAttribute('aria-busy','true');refresh.disabled=true;
     try {
@@ -178,11 +199,13 @@ export function createManagementReportView({document:doc=globalThis.document,dat
   }
   function orientationChanged() { landscape.update(); }
   function close() {
+    productDetail.close({restoreFocus:false});
     if(root.hidden)return;controller?.abort();revision++;snapshot=null;pickers?.close();content.replaceChildren();root.hidden=true;
     doc.body.style.overflow=oldOverflow;if(app)app.inert=oldInert;returnFocus?.focus?.();returnFocus=null;
   }
   root.addEventListener('click',event=>{if(event.target===root)close();});
   root.addEventListener('keydown',event=>{
+    if(productDetail.isOpen)return;
     if(root.hidden)return;if(event.key==='Escape'){event.preventDefault();close();return;}if(event.key!=='Tab')return;
     const nodes=[...panel.querySelectorAll('button,input,select,[tabindex="0"]')].filter(n=>!n.disabled&&!n.closest('[hidden]')&&n.tabIndex>=0),first=nodes[0],last=nodes.at(-1);
     if(event.shiftKey&&(doc.activeElement===first||doc.activeElement===panel)){event.preventDefault();last?.focus();}
@@ -196,5 +219,5 @@ export function createManagementReportView({document:doc=globalThis.document,dat
     pickers?.destroy();pickers=null;const date=now();
     for(const [name] of FIELDS){const control=controls.get(name);control.replaceChildren(Object.assign(make('option','','Todos'),{value:''}));const value=name==='year'?String(date.getFullYear()):name==='month'?String(date.getMonth()+1):'';if(value)control.append(Object.assign(make('option','',value),{value}));control.value=value;}
     root.hidden=false;landscape.update();warning.hidden=true;report.hidden=false;panel.classList.toggle('pl-dialog--portrait',false);panel.focus();await load();
-  },close,destroy(){if(destroyed)return;close();destroyed=true;pickers?.destroy();win?.removeEventListener('resize',orientationChanged);win?.removeEventListener('orientationchange',orientationChanged);landscape.destroy();root.remove();}});
+  },close,destroy(){if(destroyed)return;close();destroyed=true;productDetail.destroy();pickers?.destroy();win?.removeEventListener('resize',orientationChanged);win?.removeEventListener('orientationchange',orientationChanged);landscape.destroy();root.remove();}});
 }

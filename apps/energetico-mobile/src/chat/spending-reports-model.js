@@ -1,4 +1,4 @@
-import { provisionDateKey, provisionTotal } from "./pending-provision-dates.js";
+import { provisionDateKey, provisionTotal, provisionNumericValue } from "./pending-provision-dates.js";
 import Decimal from 'decimal.js';
 
 function key(value) {
@@ -107,8 +107,12 @@ export function normalizeManagementProvision(item, columns) {
   const get = (...aliases) => valueFor(item, columns, aliases);
   const provision = normalizeSpendingProvision(item, columns);
   const total = provisionTotal(get("VALORTOTAL"), get("QTD", "QUANTIDADE"), get("FRETE"));
+  const numeric = value => { const number = provisionNumericValue(value); return Number.isFinite(number) ? number : null; };
+  const quantity = get("QTD", "QUANTIDADE"), freight = get("FRETE");
   return Object.freeze({ ...provision, branch: provision.branch || get("Title"), stage: get("ETAPA"),
     disbursement: normalizeDisbursement(get("GERADESEMBOLSO")), order: get("IDPEDIDO"),
+    date: dateOnly(get("DATA")), unit: numeric(get("VALORTOTAL")),
+    quantity: quantity === "" ? 1 : numeric(quantity), freight: freight === "" ? 0 : numeric(freight),
     total: Number.isFinite(total) ? total : null });
 }
 
@@ -243,6 +247,34 @@ function compareExpenses(current, previous, level = 0) {
 
 const monthPeriod = (year, month) =>
   `${new Intl.DateTimeFormat("pt-BR", { month: "long" }).format(new Date(2020, Number(month) - 1, 1))}/${year}`;
+
+export function buildManagementProductDetail(snapshot, filters = {}, { branch, product, kind = "expense" } = {}) {
+  const expense = kind === "expense";
+  const matchesGroup = expense ? equals : (left,right) => scalar(left) === scalar(right);
+  function section(selected, period, previous = false) {
+    const source = expense ? selectedExpenses(snapshot, selected) : selectedRows(snapshot?.launches, selected);
+    const rows = source.filter(row => matchesGroup(scalar(row.branch) || "-", branch)
+      && matchesGroup(scalar(row.product) || (expense ? "SEM PRODUTO" : "-"), product))
+      .map(row => Object.freeze({
+        id: row.id, date: row.date || "", paymentDate: row.paymentDate || row.paidDate || "",
+        dueDate: row.dueDate || "", supplier: scalar(row.supplier),
+        quantity: row.quantity ?? null, unit: row.unit ?? null, freight: row.freight ?? 0, total: row.total ?? null,
+        source: row.paymentDate ? "paid" : expense ? "forecast" : "launch",
+      })).sort((a,b) => (b.paymentDate || b.dueDate || b.date).localeCompare(a.paymentDate || a.dueDate || a.date)
+        || String(a.id ?? "").localeCompare(String(b.id ?? ""), "pt-BR", { numeric:true }));
+    return Object.freeze({ period, previous, rows:Object.freeze(rows) });
+  }
+  const period = filters.year ? filters.month ? monthPeriod(filters.year, filters.month)
+    : `Ano de ${filters.year}` : "Todos os períodos";
+  const sections = [section(filters, period)];
+  if (expense && filters.year && filters.month) {
+    const month = Number(filters.month) === 1 ? 12 : Number(filters.month) - 1;
+    const year = Number(filters.year) - (Number(filters.month) === 1 ? 1 : 0);
+    const previous = section({ ...filters, year:String(year), month:String(month) }, monthPeriod(year, month), true);
+    if (previous.rows.length) sections.push(previous);
+  }
+  return Object.freeze({ product, branch, sections:Object.freeze(sections) });
+}
 
 export function buildSpendingReport9(snapshot, filters = {}) {
   const rows = selectedRows(snapshot?.launches, filters);

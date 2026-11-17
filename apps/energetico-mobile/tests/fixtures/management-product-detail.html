@@ -1,0 +1,49 @@
+<!doctype html>
+<html lang="pt-BR">
+<meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Detalhamento de produto</title>
+<link rel="stylesheet" href="/src/styles.css">
+<link rel="stylesheet" href="/src/ui/payment-ledger.css">
+<link rel="stylesheet" href="/src/ui/management-report.css">
+<link rel="stylesheet" href="/src/ui/report-landscape.css">
+<link rel="stylesheet" href="/src/ui/searchable-filter-selects.css">
+<main id="app"></main>
+<script type="module">
+import {createManagementReportView} from '/src/ui/management-report-view.js';
+try {
+  const launches=Array.from({length:30},(_,index)=>({id:String(index+1),date:'2026-10-02',
+    paymentDate:'2026-10-05',branch:'004 - EDIFÍCIO XAVANTE',supplier:'Fornecedor de materiais de construção e serviços',
+    product:'CIMENTO CP II — SACO DE 50 KG',unit:10.1234,quantity:2,freight:5,total:25.2468}));
+  launches.push({...launches[0],id:'31',date:'2026-09-03',paymentDate:'2026-09-05'});
+  const view=createManagementReportView({document,data:{loadSnapshot:async()=>({launches,provisions:[],productTypes:[]})},
+    now:()=>new Date('2026-10-05T12:00:00Z')});
+  await view.open();
+  const root=view.element,report=root.querySelector('.gm-content'),table=root.querySelector('[data-section=expense]');
+  table.querySelector('.gm-expense-toggle').click();
+  const product=table.querySelector('.gm-product-link');
+  product.scrollIntoView({block:'center',behavior:'instant'});
+  const previous=report.innerHTML,top=report.scrollTop,left=report.scrollLeft;
+  product.click();
+  const popup=root.querySelector('.gm-product-backdrop'),dialog=popup.querySelector('[role=dialog]');
+  const close=popup.querySelector('button'),scroll=popup.querySelector('.gm-product-scroll');
+  const rect=dialog.getBoundingClientRect(),button=close.getBoundingClientRect();
+  document.documentElement.dataset.geometry=JSON.stringify({root:root.getBoundingClientRect().toJSON(),
+    backdrop:popup.getBoundingClientRect().toJSON(),dialog:rect.toJSON(),
+    scroll:scroll.getBoundingClientRect().toJSON(),close:button.toJSON(),height:getComputedStyle(dialog).height,
+    maxHeight:getComputedStyle(dialog).maxHeight,gridRows:getComputedStyle(popup).gridTemplateRows});
+  const results={rows:popup.querySelectorAll('[data-entry-id]').length,
+    inside:rect.left>=-1&&rect.top>=-1&&rect.right<=innerWidth+1&&rect.bottom<=innerHeight+1,
+    closeHit:document.elementFromPoint(button.left+button.width/2,button.top+button.height/2)===close,
+    scrolls:scroll.scrollHeight>scroll.clientHeight,
+    overflow:scroll.scrollWidth>scroll.clientWidth+1,
+    backgroundInert:root.querySelector('.gm-dialog').inert,
+    preciseUnit:popup.querySelector('[data-entry-id] [data-column=unit]').textContent.includes('10,1234')};
+  scroll.scrollTop=1000;
+  close.click();
+  Object.assign(results,{returned:!root.hidden&&popup.hidden,sameDOM:report.innerHTML===previous,
+    sameScroll:report.scrollTop===top&&report.scrollLeft===left,focus:document.activeElement===product});
+  product.click();
+  document.documentElement.dataset.layout=JSON.stringify(results);
+} catch(error) {document.documentElement.dataset.layout=JSON.stringify({error:String(error)});}
+</script>
+</html>
