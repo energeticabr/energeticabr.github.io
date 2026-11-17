@@ -10,7 +10,7 @@ const create = options => {
   assert.equal(typeof dataModule.createAttendanceSummaryData, "function", "createAttendanceSummaryData must be implemented");
   return dataModule.createAttendanceSummaryData(options);
 };
-const names = { FORNECEDORES: ["CADASTRO", "STATUS", "FILIAL", "PROFISSAO", "DESCRITIVOETAPA ATUAL", "ATIVIDADE EXERCIDA"],
+const names = { FORNECEDORES: ["CADASTRO", "STATUS", "FILIAL", "PROFISSAO", "DESCRITIVOETAPA ATUAL", "ATIVIDADE EXERCIDA", "EMPREITEIRO"],
   DESCRITIVOPRESENCA: ["DATA", "FILIAL", "FORNECEDOR", "PROFISSAO", "PRESENCA"],
   DEMONSTRATIVOETAPA: ["FILIAL", "ETAPA", "IMOVEL", "STATUS", "ATIVIDADEEXECUTADA", "FORNECEDOR"] };
 const columns = list => names[list].map((displayName, i) => ({ name: `field_${i}`, displayName }));
@@ -18,7 +18,7 @@ const presence = (id = 1, value = "R$ 1.234,56") => ({ id: String(id), fields: {
   field_1: "B", field_2: { LookupValue: "Ana" }, field_3: "PEDREIRO", field_4: "PRESENTE",
   field_5: "PAGO", field_6: value, field_7: 91 } });
 const supplier = { id: "1", fields: { field_0: "Ana", field_1: { Value: "ATIVO" }, field_2: "B",
-  field_3: "PEDREIRO", field_4: 35, field_5: "ARMAÇÃO" } };
+  field_3: "PEDREIRO", field_4: 35, field_5: "ARMAÇÃO", field_6: "SIM" } };
 const stage = { id: "35", fields: { field_0: "B", field_1: "ESTRUTURA", field_2: "TORRE A", field_3: "ATIVIDADE INICIADA" } };
 function fixture(overrides = {}) {
   const calls = [];
@@ -55,6 +55,31 @@ test("loadSnapshot returns complete frozen RH-normalized supplier and presence d
   assert.equal(source.stages[0].stage, "ESTRUTURA");
   assert.deepEqual(calls.filter(call => call[0] === "resolve").map(call => call[1]).sort(),
     ["DEMONSTRATIVOETAPA", "DESCRITIVOPRESENCA", "FORNECEDORES"]);
+});
+
+test("the summary snapshot includes only verified contractors and their attendance", async () => {
+  const suppliers = [
+    { ...supplier, fields: { ...supplier.fields, field_6: { Value: " sim " } } },
+    { id: "2", fields: { field_0: "Beto", field_1: "ATIVO", field_3: "EMPREITEIRO", field_6: "NÃO" } },
+    { id: "3", fields: { field_0: "Caio", field_1: "ATIVO", field_6: "" } },
+    { id: "4", fields: { field_0: "Duda", field_1: "INATIVO", field_6: "SIM" } },
+    { id: "5", fields: { field_0: "Eva", field_1: "ATIVO", field_6: "SIM" } },
+    { id: "6", fields: { field_0: "Eva", field_1: "ATIVO", field_6: "NÃO" } },
+  ];
+  const presences = ["ANA", "Beto", "Caio", "Duda", "Eva", "Sem cadastro"].map((name, index) => {
+    const row = presence(index + 1);
+    return { ...row, fields: { ...row.fields, field_2: name } };
+  });
+  const { repository } = fixture({
+    async getItemsPage(_site, list, query) {
+      if (list !== "FORNECEDORES") return { items: presences, hasMore: false };
+      assert.match(new URLSearchParams(query).get("$expand"), /,field_6\)$/);
+      return { items: suppliers, hasMore: false };
+    },
+  });
+  const snapshot = await create({ repository }).loadSnapshot();
+  assert.deepEqual(snapshot.suppliers.map(row => row.name), ["Ana", "Duda", "Eva"]);
+  assert.deepEqual(snapshot.presences.map(row => row.supplier), ["ANA", "Duda"]);
 });
 
 test("RHID reads only the selected period and attendance columns across all pages", async () => {
@@ -94,7 +119,7 @@ test("renamed Title resolves CADASTRO without confusing SharePoint computed titl
     },
     async getItemsPage(_site, list) {
       return { items: list === "FORNECEDORES"
-        ? [{ id: "1", fields: { Title: "Ana", STATUS: "ATIVO" } }]
+        ? [{ id: "1", fields: { Title: "Ana", STATUS: "ATIVO", field_6: "SIM" } }]
         : [presence()], hasMore: false };
     },
   });
@@ -248,13 +273,13 @@ test("supplier link edits update the two registry fields with the loaded ETag an
   const patches = [];
   let catalogueStatus = "ATIVIDADE INICIADA";
   const current = { id: "1", eTag: '"v1"', fields: {
-    field_0: "Ana", field_1: "ATIVO", field_2: "B", field_3: "PEDREIRO", field_4: 35, field_5: "ARMAÇÃO",
+    field_0: "Ana", field_1: "ATIVO", field_2: "B", field_3: "PEDREIRO", field_4: 35, field_5: "ARMAÇÃO", field_6: "SIM",
   } };
   const { repository } = fixture({
     async getColumns(_site, list) {
       if (list === "ATIVIDADE EXECUTADA") return [{ name: "ATIVIDADEEXECUTADA" }, { name: "FILIAL" }, { name: "ETAPA" }];
       if (list === "DEMONSTRATIVOETAPA") return columns(list);
-      return ["CADASTRO", "STATUS", "FILIAL", "PROFISSAO", "DESCRITIVOETAPA ATUAL", "ATIVIDADE EXERCIDA"]
+      return names.FORNECEDORES
         .map((displayName, i) => ({ name: `field_${i}`, displayName, ...(i === 4 ? { number: {} } : {}) }));
     },
     async getItemsPage(_site, list) {

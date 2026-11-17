@@ -98,6 +98,9 @@ test('supplier edit reads the current catalog, saves the chosen links and update
  const root=view.element;
  const card=root.querySelector('.as-provider');
  assert.match(card.textContent,/Alfa.*ESTRUTURA.*ARMAÇÃO/s);
+ const clusters=[...card.querySelectorAll('.as-provider-links > .as-provider-link')];
+ assert.deepEqual(clusters.map(cluster=>cluster.querySelector('dt').textContent),['Descritivo etapa','Atividade executada']);
+ assert.deepEqual(clusters.map(cluster=>cluster.querySelector('dd').textContent),['#3 · ESTRUTURA','ARMAÇÃO']);
  card.querySelector('button').click();
  await new Promise(resolve=>setImmediate(resolve));
  const stage=root.querySelector('[data-attendance-link=stage]');
