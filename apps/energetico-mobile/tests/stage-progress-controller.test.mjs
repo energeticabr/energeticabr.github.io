@@ -560,7 +560,15 @@ test('GANTT abre localmente, pede leitura e retoma o próprio painel após o log
       panels.push(panel);
       return panel;
     },
-    stageProgressDataFactory: async ({ tokenProvider }) => ({ loadSnapshot: () => Promise.all([tokenProvider(scopes), tokenProvider(scopes)]) }),
+    stageProgressDataFactory: async ({ tokenProvider }) => ({
+      loadSnapshot: () => Promise.all([tokenProvider(scopes), tokenProvider(scopes)]),
+      async loadGanttAssignments(selection, { signal }) {
+        assert.deepEqual(selection, { branch: 'Xavante', activityIds: ['129'] });
+        assert.equal(signal.aborted, false);
+        assert.equal(await tokenProvider(scopes), 'renewed-token');
+        return { complete: true, rows: [] };
+      },
+    }),
     auth: {
       getToken: async requested => {
         assert.deepEqual(requested, scopes);
@@ -574,9 +582,10 @@ test('GANTT abre localmente, pede leitura e retoma o próprio painel após o log
   });
   await h.controller.start();
   assert.equal(panels.length, 1);
-  assert.deepEqual(Object.keys(panels[0].data), ['loadSnapshot']);
+  assert.deepEqual(Object.keys(panels[0].data), ['loadSnapshot', 'loadAssignments']);
   assert.deepEqual(grants, [[scopes, { resumeAction: 'open-stage-gantt' }]]);
   assert.equal(tokens, 2, "duas consultas simultâneas compartilham o mesmo consentimento");
+  assert.deepEqual(await panels[0].data.loadAssignments({ branch: 'Xavante', activityIds: ['129'] }), { complete: true, rows: [] });
   const count = h.calls.length;
   assert.equal(await h.view.emit('open-stage-gantt'), true);
   assert.equal(h.calls.length, count);
