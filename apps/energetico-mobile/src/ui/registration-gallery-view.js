@@ -840,6 +840,11 @@ export function createRegistrationGallery({ document: doc = globalThis.document,
         const tone = computedValue(row.fields, calculation, model)?.tone;
         if (tone) pair.dataset.tone = tone;
       }
+      if (pair && kind === "supplier" && field === "STATUS") {
+        const status = value.trim().toUpperCase();
+        if (status === "ATIVO") pair.dataset.tone = "success";
+        if (status === "INATIVO") pair.dataset.tone = "danger";
+      }
     }
     container.append(details);
     for (const section of fiscalSections) container.append(section.disclosure);

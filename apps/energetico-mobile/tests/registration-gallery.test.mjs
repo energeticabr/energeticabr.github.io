@@ -430,6 +430,32 @@ test("galerias de fornecedor, conta, tipo e unidade editam e deletam na lista de
   }
 });
 
+test("Galeria Fornecedor distingue visualmente fornecedores ativos e inativos", async () => {
+  const dom = new JSDOM("<!doctype html><body></body>");
+  const document = dom.window.document;
+  const gallery = createRegistrationGallery({ document, kind: "supplier", data: {
+    async loadSnapshot() {
+      return { rows: [
+        { id: "1", fields: { Title: "Fornecedor ativo", STATUS: "ATIVO" } },
+        { id: "2", fields: { Title: "Fornecedor inativo", STATUS: { Value: " Inativo " } } },
+        { id: "3", fields: { Title: "Fornecedor pendente", STATUS: "PENDENTE" } },
+      ] };
+    },
+  } });
+  const statusFor = id => document.querySelector(`[data-registration-row="${id}"] [data-field="STATUS"]`);
+  try {
+    await gallery.open();
+    assert.equal(statusFor("1").dataset.tone, "success");
+    assert.equal(statusFor("2").dataset.tone, "danger");
+    assert.equal(statusFor("3").dataset.tone, undefined);
+    assert.equal(statusFor("1").querySelector("dd").textContent, "ATIVO");
+    assert.equal(statusFor("2").querySelector("dd").textContent.trim(), "Inativo");
+  } finally {
+    gallery.destroy();
+    dom.window.close();
+  }
+});
+
 test("atalho de PDF aparece no item certo e abre apenas seus PDFs", async () => {
   const dom = new JSDOM("<!doctype html><body></body>");
   const document = dom.window.document;
