@@ -59,10 +59,40 @@ export function createManagementReportView({document:doc=globalThis.document,dat
     const body=table('expense','PERCENTUAL POR TIPO DE DESPESA POR FILIAL',
       ['FILIAL','TIPO DE DESPESA','PAGO','PREVISTO','% DA FILIAL','TOTAL GERAL'],[23,25,13,13,10,16]);
     for(const branch of branches) {
+      let branchCell;
       branch.expenseTypes.forEach((group,index)=>{
         const tr=make('tr');
-        if(index===0)cell(tr,'branch',branch.name,branch.expenseTypes.length+1,'gm-branch');
-        cell(tr,'name',group.name);
+        if(index===0)branchCell=cell(tr,'branch',branch.name,branch.expenseTypes.length+1,'gm-branch');
+        const nameCell=cell(tr,'name',group.name);
+        const label=make('div','gm-expense-label');
+        const toggle=make('button','gm-expense-toggle');
+        toggle.type='button';
+        function setExpanded(expanded) {
+          toggle.setAttribute('aria-expanded',String(expanded));
+          toggle.setAttribute('aria-label',`${expanded?'Recolher':'Detalhar'} produtos: ${group.name} — ${branch.name}`);
+          toggle.textContent=expanded?'−':'+';
+        }
+        let details=[];
+        setExpanded(false);
+        toggle.addEventListener('click',()=>{
+          if(details.length){
+            for(const detail of details)detail.remove();
+            branchCell.rowSpan-=details.length;
+            details=[];
+            setExpanded(false);
+          } else {
+            details=group.products.map(product=>{
+              const detail=make('tr','gm-expense-product');
+              cell(detail,'name',product.name);
+              expenseAmounts(detail,product);
+              return detail;
+            });
+            tr.after(...details);
+            branchCell.rowSpan+=details.length;
+            setExpanded(true);
+          }
+        });
+        label.append(toggle,make('span','',group.name));nameCell.replaceChildren(label);
         expenseAmounts(tr,group);
         body.append(tr);
       });
