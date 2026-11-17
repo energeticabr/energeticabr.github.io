@@ -374,6 +374,48 @@ test('report shows fiscal facts, filters by supplier and opens the exact DANFE f
   assert.equal(document.getElementById('app').inert, false);
 });
 
+for (const type of ['NF-e', 'NFS-e']) test(`${type} viewer includes correlated DDA installments and refreshes them on reopening`, async t => {
+  const dom = new JSDOM('<main id="app"></main>');
+  const correction = `CCe-${key}-110110-01.pdf`;
+  const firstDda = 'DDA-2-Espelho_DDA_0123456789abcdef.pdf';
+  const secondDda = 'DDA-10-Espelho_DDA_fedcba9876543210.pdf';
+  const lateDda = 'DDA-11-Espelho_DDA_1111111111111111.pdf';
+  const attachments = [secondDda, firstDda, pdfName, correction, firstDda,
+    'DDA-0-Espelho_DDA_0123456789abcdef.pdf', 'DDA-3-Espelho_DDA_0123456789abcdef.pdf.xml',
+    'DDA-3-Espelho_DDA_0123456789abcdeg.pdf', 'Espelho_DDA_0123456789abcdef.pdf',
+    'FISCAL-NFe-outra-nota.pdf', 'Outro.pdf'];
+  const downloads = [], shown = [];
+  let collectionOptions;
+  const panel = createNfeReportView({ document:dom.window.document, data:{
+    loadSnapshot:async () => ({ rows:[{ ...invoice, fields:{ ...invoice.fields,
+      TIPO_FISCAL:type, CHAVE_ACESSO:type === 'NF-e' ? key : serviceKey,
+      XML_URL:'', STATUS_IMPORTACAO:'RESUMO' } }] }),
+    listAttachments:async (id, options) => {
+      assert.equal(id, '10');
+      assert.equal(options.refresh, true);
+      assert.equal(options.signal.aborted, false);
+      return attachments.map(fileName => ({ fileName }));
+    },
+    downloadAttachment:async (id, name, options) => { downloads.push({ id, name, signal:options.signal }); },
+  }, openMediaCollection:async (items, options) => { shown.push(items); collectionOptions = options; } });
+  t.after(() => { panel.destroy(); dom.window.close(); });
+  await panel.open();
+  for (let opening = 0; opening < 2; opening++) {
+    panel.element.querySelector('button.nfe-pdf').click();
+    await new Promise(resolve => setImmediate(resolve));
+    const expected = [pdfName, ...(type === 'NF-e' ? [correction] : []), firstDda, secondDda,
+      ...(opening ? [lateDda] : [])];
+    assert.deepEqual(shown[opening].map(item => item.fileName), expected);
+    assert.equal(downloads.length, opening, 'files are downloaded only when requested');
+    const requestedSignal = new AbortController().signal;
+    await shown[opening].at(-1).source({ signal:requestedSignal });
+    assert.deepEqual(downloads.at(-1), { id:'10', name:expected.at(-1), signal:requestedSignal });
+    collectionOptions.onClose();
+    await new Promise(resolve => setImmediate(resolve));
+    attachments.push(lateDda);
+  }
+});
+
 test('a registered CC-e stays accessible in the report while the DANFE is pending', async t => {
   const dom = new JSDOM('<main id="app"></main>');
   const fileName = `CCe-${key}-110110-01.pdf`;
