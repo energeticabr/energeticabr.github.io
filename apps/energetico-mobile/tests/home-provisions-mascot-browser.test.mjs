@@ -638,11 +638,20 @@ assert.deepEqual(shortcuts.map(s=>s.action),['open-pending-provisions','open-sic
       await send('Input.dispatchMouseEvent',{type:'mousePressed',x:taskHit.x,y:taskHit.y,button:'left',clickCount:1},sessionId);await send('Input.dispatchMouseEvent',{type:'mouseReleased',x:taskHit.x,y:taskHit.y,button:'left',clickCount:1},sessionId);assert.equal(await evaluate(`document.querySelector('.tar-overlay').hidden`),false);await evaluate(`document.querySelector('.tar-overlay').dispatchEvent(new KeyboardEvent('keydown',{key:'Escape',bubbles:true}))`);
       await send('Emulation.setDeviceMetricsOverride',{width,height:844,deviceScaleFactor:1,mobile:false},sessionId);
       await evaluate(`document.querySelector('.chat-main-cargos-shortcut').click()`);
-      const cargosFit=await evaluate(`(()=>{const r=document.querySelector('.cargos-screen').getBoundingClientRect(),s=document.querySelector('.cargos-scroll'),t=document.querySelector('.cargos-table');return {top:r.top,bottom:r.bottom,rows:t.querySelectorAll('[data-cargo]').length,groups:t.querySelectorAll('.cargos-group').length,pan:s.scrollWidth>s.clientWidth,font:parseFloat(getComputedStyle(t).fontSize),overflow:document.documentElement.scrollWidth>innerWidth+1};})()`);
-      assert.ok(cargosFit.top>=8&&cargosFit.bottom<=836&&!cargosFit.overflow&&cargosFit.font>=14,JSON.stringify(cargosFit));assert.equal(cargosFit.rows,7);assert.equal(cargosFit.groups,2);
-      if(width<870)assert.ok(cargosFit.pan);
-      await evaluate(`document.querySelector('.cargos-scroll').scrollLeft=600`);
-      assert.ok(await evaluate(`(()=>{const th=document.querySelector('.cargos-table tbody tr[data-cargo] th').getBoundingClientRect(),s=document.querySelector('.cargos-scroll').getBoundingClientRect();return Math.abs(th.left-s.left)<=2;})()`),'cargo permanece fixo durante a rolagem');
+      const cargosFit=await evaluate(`(()=>{
+        const panel=document.querySelector('.cargos-screen'),bounds=panel.getBoundingClientRect();
+        const scroll=panel.querySelector('.cargos-scroll'),table=scroll.querySelector('table');
+        return {top:bounds.top,bottom:bounds.bottom,rotated:getComputedStyle(panel.parentElement).transform!=='none',
+          rows:table.querySelectorAll('[data-cargo]').length,groups:table.querySelectorAll('.cargos-group').length,
+          columns:table.tHead.rows[0].cells.length,pan:scroll.scrollWidth>scroll.clientWidth+1,
+          overflow:document.documentElement.scrollWidth>innerWidth+1};
+      })()`);
+      assert.ok(cargosFit.top>=8&&cargosFit.bottom<=836&&!cargosFit.overflow,JSON.stringify(cargosFit));
+      assert.equal(cargosFit.rotated,width<844);
+      assert.equal(cargosFit.pan,false,JSON.stringify(cargosFit));
+      assert.equal(cargosFit.rows,7);
+      assert.equal(cargosFit.groups,2);
+      assert.equal(cargosFit.columns,6);
       await evaluate(`document.querySelector('.cargos-backdrop .report-close-control').click()`);
       if(width===390&&!pwa&&process.env.HOME_MASCOT_SCREENSHOT){const shot=await send('Page.captureScreenshot',{format:'png'},sessionId);writeFileSync(process.env.HOME_MASCOT_SCREENSHOT,Buffer.from(shot.data,'base64'));}
       // Earlier report checks scroll the longer mascot rail. Use the current hit target, not initial coordinates.

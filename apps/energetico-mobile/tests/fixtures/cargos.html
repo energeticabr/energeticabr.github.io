@@ -41,7 +41,8 @@ try {
   const overlap = bounds.left < arrow.right && arrow.left < bounds.right
     && bounds.top < arrow.bottom && arrow.top < bounds.bottom;
   const panel = element.getBoundingClientRect();
-  const header = element.querySelector('.cargos-header').getBoundingClientRect();
+  const toolbar = element.querySelector('.cargos-header');
+  const header = toolbar.getBoundingClientRect();
   const capture = captureFilteredReport(element);
   const layout = {
     rotated: getComputedStyle(backdrop).transform !== 'none',
@@ -56,6 +57,7 @@ try {
     noHorizontalScroll: scroll.scrollWidth <= scroll.clientWidth + 1,
     cellsFit: [...table.querySelectorAll('th, td')].every(cell => cell.scrollWidth <= cell.clientWidth + 1),
     arrowClearOfTable: !overlap,
+    arrowInToolbar: Math.abs(next.offsetTop - toolbar.offsetTop) <= 1,
     pdfHasAllColumns: capture.pages[0].blocks.some(block => block.type === 'table' && block.widths.length === 6),
   };
   element.querySelector('[aria-label="Atualizar tabela de cargos"]').click();
