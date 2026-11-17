@@ -1,0 +1,45 @@
+<!doctype html><html><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"></head><body><main id="app"></main><script type="module">
+import '../../src/styles.css';
+import '../../src/ui/stage-gantt.css';
+import {createStageGanttView} from '../../src/ui/stage-gantt-view.js';
+const branch='004 - EDIFÍCIO XAVANTE';
+const activity=(id,name,start,end)=>({id,branch,stage:'ALVENARIA E ESTRUTURAS',activity:name,executionDate:start,plannedDate:end,property:'',supplier:'Equipe A',status:'ATIVIDADE FINALIZADA'});
+const snapshot=window.ganttFixtureSnapshot??{complete:true,launches:[
+ {id:1,branch,stage:'ALVENARIA E ESTRUTURAS',startDate:'2026-08-10',endDate:'',status:'INICIADO',type:'ATIVIDADE COMUM'},
+ {id:2,branch,stage:'EXECUÇÃO FUNDAÇÃO',startDate:'2026-05-26',endDate:'2026-11-06',status:'FINALIZADO',type:'ATIVIDADE COMUM'},
+ {id:3,branch,stage:'ACABAMENTO SEM INÍCIO',startDate:'',endDate:'',status:'NÃO INICIADO',type:'ATIVIDADE COMUM'},
+],activities:[
+ activity(123,'VERIFICAÇÃO GABARITO OBRA','','2026-09-07'),
+ activity(122,'ARMAÇÃO FERRAGEM ARRIMO','2026-08-10','2026-11-13'),
+ activity(119,'EXECUÇÃO PAREDES ARRIMO','2026-06-19','2026-09-14'),
+]};
+const view=createStageGanttView({document,now:()=>new Date(2026,10,17),data:{async loadSnapshot(){return structuredClone(snapshot);},async loadAssignments(){return {complete:true,rows:[]};}}});
+window.ganttFixtureView=view;
+await view.open();
+const root=view.element;
+const stageRows=()=>[...root.querySelectorAll('.gantt-row--stage')];
+const initial=stageRows().map(row=>row.querySelector('.gantt-name').textContent);
+const masonry=stageRows().find(row=>row.querySelector('.gantt-name').textContent==='ALVENARIA E ESTRUTURAS');
+masonry.querySelector('.gantt-toggle').click();
+await document.fonts.ready;
+await new Promise(resolve=>requestAnimationFrame(()=>requestAnimationFrame(resolve)));
+const children=[];
+for(let row=masonry.nextElementSibling;row?.classList.contains('gantt-row--activity');row=row.nextElementSibling)children.push(row.querySelector('.gantt-name').textContent);
+const names=[...root.querySelectorAll('.gantt-name')].map(node=>{
+ const css=getComputedStyle(node),label=node.closest('.gantt-label');
+ return {name:node.textContent,tag:node.tagName,cluster:node.classList.contains('gantt-cluster--description'),weight:Number(css.fontWeight),background:css.backgroundColor,color:css.color,fits:node.scrollWidth<=node.clientWidth+1&&node.offsetWidth<=label.clientWidth};
+});
+root.querySelector('[aria-label="Atualizar GANTT"]').click();
+await new Promise(resolve=>requestAnimationFrame(()=>requestAnimationFrame(resolve)));
+const refreshed=stageRows().map(row=>row.querySelector('.gantt-name').textContent);
+const branches=root.querySelector('select');
+branches.value='';branches.dispatchEvent(new Event('change'));
+const allDates=stageRows().map(row=>{
+ const date=row.querySelector('.gantt-cluster--start').textContent.match(/^(\d{2})\/(\d{2})\/(\d{4})$/);
+ return date?`${date[3]}-${date[2]}-${date[1]}`:'';
+});
+branches.value=branch;branches.dispatchEvent(new Event('change'));
+stageRows().find(row=>row.querySelector('.gantt-name').textContent==='ALVENARIA E ESTRUTURAS').querySelector('.gantt-toggle').click();
+await new Promise(resolve=>requestAnimationFrame(()=>requestAnimationFrame(resolve)));
+document.documentElement.dataset.layout=JSON.stringify({initial,children,names,refreshed,allDates});
+</script></body></html>

@@ -157,7 +157,7 @@ export function createStageGanttView({ document: doc = globalThis.document, data
       const startText = formatOperationsDate(item.start);
       const endText = item.finished ? formatOperationsDate(item.end) : 'Em Andamento';
       const dates = `Início ${startText} · Fim ${endText}`;
-      text.append(make(parent ? 'strong' : 'span', 'gantt-name', item.name));
+      text.append(make('strong', 'gantt-name gantt-cluster gantt-cluster--description', item.name));
       if (info) text.append(make('small', '', info));
       if (item.supplier) {
         const responsible = make('span', 'gantt-cluster gantt-cluster--responsible', item.supplier);
