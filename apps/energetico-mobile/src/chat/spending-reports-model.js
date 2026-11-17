@@ -134,8 +134,9 @@ function grouped(rows, field, whole, limit = Infinity) {
 }
 
 function paymentTotals(rows) {
-  const paid = completeSum(rows.filter(row => row.paymentDate), "total");
-  const forecast = completeSum(rows.filter(row => !row.paymentDate), "total");
+  const roundCurrency = amount => amount == null ? null : new Decimal(amount).toDecimalPlaces(2).toNumber();
+  const paid = roundCurrency(completeSum(rows.filter(row => row.paymentDate), "total"));
+  const forecast = roundCurrency(completeSum(rows.filter(row => !row.paymentDate), "total"));
   return { paid, forecast, total: completeSum([{ total: paid }, { total: forecast }], "total") };
 }
 
