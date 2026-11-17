@@ -17,7 +17,19 @@ const box=heading.getBoundingClientRect();
 const header=document.querySelector('.chat-attendance-heading');
 const author=header?.querySelector('strong')?.getBoundingClientRect();
 const button=header?.querySelector('button')?.getBoundingClientRect();
-document.documentElement.dataset.layout=JSON.stringify({text:heading.textContent,date:date?.textContent,color:date&&getComputedStyle(date).color,weight:date&&getComputedStyle(date).fontWeight,left:box.left,right:box.right,viewport:innerWidth,
+const bubble=heading.closest('.chat-bubble').getBoundingClientRect();
+const message=heading.closest('.chat-message').getBoundingClientRect();
+const row=document.querySelector('.chat-attendance-select__row');
+const record=row.querySelector('[data-action="select-reply"]').getBoundingClientRect();
+const remove=row.querySelector('[data-action="open-attendance-delete"]');
+const removeBox=remove.getBoundingClientRect();
+const deleteColor=getComputedStyle(remove).backgroundColor;
+const dateStyle={color:getComputedStyle(date).color,weight:getComputedStyle(date).fontWeight};
+remove.click();
+const confirmation=document.querySelector('[data-attendance-delete-dialog] [role="dialog"]').getBoundingClientRect();
+document.documentElement.dataset.layout=JSON.stringify({text:heading.textContent,date:date?.textContent,...dateStyle,left:box.left,right:box.right,viewport:innerWidth,
+  bubbleLeft:bubble.left,messageLeft:message.left,recordRight:record.right,deleteLeft:removeBox.left,deleteRight:removeBox.right,
+  deleteWidth:removeBox.width,deleteHeight:removeBox.height,deleteColor,dialogLeft:confirmation.left,dialogRight:confirmation.right,
   hours:button&&author&&{label:header.querySelector('button').textContent,left:button.left,right:button.right,bottom:button.bottom,
     authorRight:author.right,centers:Math.abs((author.top+author.bottom-button.top-button.bottom)/2),questionTop:box.top}});
 document.documentElement.dataset.ready='true';

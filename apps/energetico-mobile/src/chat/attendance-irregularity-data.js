@@ -14,7 +14,7 @@ function recordDate(value) {
 
 function attendanceRepository(repository, tokenProvider) {
   if (repository) return repository;
-  if (typeof tokenProvider !== 'function') throw new Error('A sessão Microsoft é necessária para consultar a justificativa.');
+  if (typeof tokenProvider !== 'function') throw new Error('A sessão Microsoft é necessária para acessar a presença.');
   const transport = createSharePointAttachmentTransport({ tokenProvider, allowedSites: Object.values(SHAREPOINT_SITES), fetch: globalThis.fetch });
   return createSharePointRepository(createGraphClient(tokenProvider, { fetch: globalThis.fetch }), SHAREPOINT_SITES, { attachmentTransport: transport });
 }
@@ -37,19 +37,57 @@ export function createAttendanceIrregularityData({ repository, tokenProvider, as
   return {
     read: input => run(readAttendanceIrregularity, input),
     save: input => run(saveAttendanceIrregularity, input),
+    remove: input => run(deletePendingAttendance, input),
   };
 }
 
-async function attendanceItem(repository, id, date) {
+function missingAttendanceItem(error) {
+  return error?.status === 404 && error?.code === 'itemNotFound';
+}
+
+async function attendanceItem(repository, id, date, { allowMissing = false } = {}) {
   const recordId = String(id ?? '').trim();
   if (!/^\d+$/.test(recordId) || !isValidRhidReportDate(date)) throw new Error('Registro ou data da presença inválidos.');
   const list = await repository.resolveList('personal', ['DESCRITIVOPRESENCA']);
   if (list.status !== 'resolved' || !list.id) throw new Error('A lista DESCRITIVOPRESENCA não está disponível.');
-  const item = await repository.getItem('personal', list.id, recordId, '$expand=fields');
+  const item = await repository.getItem('personal', list.id, recordId, '$expand=fields').catch(error => {
+    if (allowMissing && missingAttendanceItem(error)) return null;
+    throw error;
+  });
+  if (item === null && allowMissing) return null;
   if (String(item?.id) !== recordId || recordDate(item?.fields?.DATA) !== date) {
     throw new Error('A data do registro mudou. Atualize as presenças antes de prosseguir.');
   }
   return { listId: list.id, item, recordId };
+}
+
+function supplierName(value) {
+  return String(value ?? '').normalize('NFC').trim().replace(/\s+/g, ' ').toLocaleUpperCase('pt-BR');
+}
+
+async function deletePendingAttendance({ repository, assertSession, id, date, name }) {
+  const expectedName = supplierName(name);
+  if (!expectedName) throw new Error('Não foi possível identificar o fornecedor.');
+  const record = await attendanceItem(repository, id, date, { allowMissing: true });
+  assertSession();
+  if (!record) return;
+  const { listId, item, recordId } = record;
+  if (supplierName(item.fields?.FORNECEDOR) !== expectedName) {
+    throw new Error('O fornecedor do registro mudou. Atualize as presenças antes de prosseguir.');
+  }
+  if (String(item.fields?.PRESENCA ?? '').trim().toUpperCase() !== 'PENDENTE') {
+    throw new Error('Esta presença não está mais pendente. Atualize a lista antes de prosseguir.');
+  }
+  const eTag = item.eTag || item['@odata.etag'] || item['odata.etag'];
+  if (typeof eTag !== 'string' || !/^(?:W\/)?"[^"\r\n]+"$/.test(eTag) || /^(?:W\/)?"\*"$/.test(eTag)) {
+    throw new Error('Não foi possível confirmar a versão do registro.');
+  }
+  try {
+    await repository.deleteItem('personal', listId, recordId, { eTag });
+  } catch (error) {
+    if (!missingAttendanceItem(error)) throw error;
+  }
+  assertSession();
 }
 
 /** Read the saved note for this exact presence and date, including after an app reload. */

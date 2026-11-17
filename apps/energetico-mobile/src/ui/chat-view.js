@@ -31,7 +31,7 @@ import { orderEffectivePaymentDateOptions } from "../chat/launch-payment-date-op
 import { LAUNCH_ATTACHMENT_CONTINUE_ID, attachmentFinishOption, isDiaryAttachmentPrompt, isDocumentAttachmentPrompt, withDocumentAttachmentPrompt, withLaunchAttachmentPrompt } from "../chat/attachment-finish.js";
 import { isRhidAttendanceDayFinalized, isRhidAttendanceRowDiscrepant, isRhidAttendanceRowWithoutPunches, isValidRhidReportDate, suggestedRhidAdjustmentTime, summarizeRhidAttendance } from "../chat/rhid-attendance-table.js";
 import { PRESENCE_OTHER_DATES_REPLY_ID } from "../chat/presence-date-scope.js";
-import { attendanceMissingPunchContext, attendanceValidationDate } from "../chat/attendance-rhid-badges.js";
+import { attendanceMissingPunchContext, attendanceValidationDate, pendingAttendanceDeletionContext } from "../chat/attendance-rhid-badges.js";
 import { attendanceIrregularity, isAttendanceHolidayReason } from "../chat/attendance-irregularity.js";
 import { attendanceBulkEligible, attendanceClockExempt } from "../chat/attendance-bulk-selection.js";
 import { createPowerBiDashboardView } from "./powerbi-dashboard-view.js";
@@ -1738,7 +1738,7 @@ function attendanceRhidBadgeMarkup(badge, { message, option, editable = false, s
   return `<span class="chat-attendance-rhid-summary"${selectionAttributes}>${punches}<span class="chat-attendance-rhid-badge chat-attendance-rhid-badge--${tones[badge.status]}" data-rhid-date="${escapeHtml(badge.date || "")}" title="${description}" role="img" aria-label="${description}">${escapeHtml(badge.label)}</span></span>`;
 }
 
-function renderPoll(message, busy, draft = "", databaseFilterMessage = null, activeFlow = null, attendanceSelectedIds = [], currentPoll = false, rhidRefresh = null, launchPayrollSelectedIds = [], launchPayrollCurrent = false, attendanceExpandedIds = [], attendanceIrregularityChecking = false, swileReminder = false) {
+function renderPoll(message, busy, draft = "", databaseFilterMessage = null, activeFlow = null, attendanceSelectedIds = [], currentPoll = false, rhidRefresh = null, launchPayrollSelectedIds = [], launchPayrollCurrent = false, attendanceExpandedIds = [], attendanceIrregularityChecking = false, swileReminder = false, canDeleteAttendance = false) {
   const rawChangeTable = message.change_table || message.changeTable;
   const documentChanges = rawChangeTable?.kind === "document_default_changes" && Array.isArray(rawChangeTable.rows)
     ? rawChangeTable.rows : [];
@@ -2024,6 +2024,10 @@ function renderPoll(message, busy, draft = "", databaseFilterMessage = null, act
         ? `<span class="chat-attendance-select__content"><span class="chat-attendance-select__name">${nameMarkup}</span>${rhidBadge}</span>`
         : nameMarkup;
       const checkbox = `<input type="checkbox" data-action="attendance-select-toggle" data-reply-id="${escapeHtml(id)}" aria-label="Selecionar ${escapeHtml(label)}"${selected.has(id) ? " checked" : ""}${busy || !currentPoll || optionUnavailable || attendanceIrregularityChecking ? " disabled" : ""}>`;
+      const deleteTarget = canDeleteAttendance && pendingAttendanceDeletionContext(option, message);
+      const deleteButton = deleteTarget
+        ? `<button class="chat-attendance-select__delete" type="button" data-action="open-attendance-delete" data-reply-id="${escapeHtml(id)}" aria-label="Deletar presença de ${escapeHtml(deleteTarget.name)}, ID ${escapeHtml(id)}"${busy || attendanceIrregularityChecking ? ' disabled' : ''}><span aria-hidden="true">×</span></button>`
+        : "";
       const detailTable = option.detail_table || option.detailTable;
       const detailRows = Array.isArray(detailTable) ? detailTable : detailTable?.rows;
       const cells = Array.isArray(detailRows) ? detailRows.flat().filter(cell => cell && typeof cell === "object") : [];
@@ -2040,14 +2044,14 @@ function renderPoll(message, busy, draft = "", databaseFilterMessage = null, act
       if (correctable) {
         // Separate real buttons: a missing-slot control must never be nested
         // inside the existing supplier button (HTML reparents nested buttons).
-        records.push(`<div class="chat-attendance-select__row">${checkbox}<div class="chat-attendance-select__card"><div class="chat-attendance-select__record chat-attendance-select__record--correctable"><span class="chat-attendance-select__content"><button type="button" class="chat-attendance-select__name chat-attendance-select__identity"${selectionAttributes}>${nameMarkup}</button>${rhidBadge}</span></div>${detailMarkup}</div></div>`);
+        records.push(`<div class="chat-attendance-select__row">${checkbox}<div class="chat-attendance-select__card"><div class="chat-attendance-select__record chat-attendance-select__record--correctable"><span class="chat-attendance-select__content"><button type="button" class="chat-attendance-select__name chat-attendance-select__identity"${selectionAttributes}>${nameMarkup}</button>${rhidBadge}</span></div>${detailMarkup}</div>${deleteButton}</div>`);
         continue;
       }
       records.push(supplierSync
         ? `<label class="chat-attendance-select__row">${checkbox}<span class="chat-attendance-select__label">${recordMarkup}</span></label>`
         : hasDetails
-          ? `<div class="chat-attendance-select__row">${checkbox}<div class="chat-attendance-select__card"><button class="chat-attendance-select__record" type="button" data-action="select-reply" data-reply-id="${escapeHtml(replyId)}" data-label="${escapeHtml(label)}"${busy || !currentPoll || optionUnavailable || attendanceIrregularityChecking ? " disabled" : ""}>${detailedRecordMarkup}</button>${detailMarkup}</div></div>`
-          : `<div class="chat-attendance-select__row">${checkbox}<button type="button" data-action="select-reply" data-reply-id="${escapeHtml(replyId)}" data-label="${escapeHtml(label)}"${busy || !currentPoll || optionUnavailable || attendanceIrregularityChecking ? " disabled" : ""}>${recordMarkup}</button></div>`);
+          ? `<div class="chat-attendance-select__row">${checkbox}<div class="chat-attendance-select__card"><button class="chat-attendance-select__record" type="button" data-action="select-reply" data-reply-id="${escapeHtml(replyId)}" data-label="${escapeHtml(label)}"${busy || !currentPoll || optionUnavailable || attendanceIrregularityChecking ? " disabled" : ""}>${detailedRecordMarkup}</button>${detailMarkup}</div>${deleteButton}</div>`
+          : `<div class="chat-attendance-select__row">${checkbox}<button type="button" data-action="select-reply" data-reply-id="${escapeHtml(replyId)}" data-label="${escapeHtml(label)}"${busy || !currentPoll || optionUnavailable || attendanceIrregularityChecking ? " disabled" : ""}>${recordMarkup}</button>${deleteButton}</div>`);
     }
     const selectAll = visibleIds.length
       ? `<label class="chat-select-all"><input type="checkbox" data-action="attendance-select-all" aria-label="Selecionar todas as presenças"${bulkIds.length && bulkIds.every(id => selected.has(id)) ? " checked" : ""}${busy || !currentPoll || attendanceIrregularityChecking ? " disabled" : ""}><span>SELECIONAR TODOS</span></label>`
@@ -2261,7 +2265,7 @@ function renderMessage(message, account, busy, { finalSignedDocument = false, dr
     const commercialShortcut = cargosShortcut ? `<nav class="chat-main-commercial-shortcuts" aria-label="Relatórios comerciais"><button class="chat-main-commercial-receipts-shortcut" type="button" data-action="open-commercial-receipts" aria-label="Abrir relatório comercial de contratos e pagamentos" title="Contratos e pagamentos"${busy ? ' disabled' : ''}><img src="${COMMERCIAL_RECEIPTS_MASCOT_URL}" alt="Mascote do relatório comercial"></button><button class="chat-main-commercial-milestones-shortcut" type="button" data-action="open-commercial-milestones" aria-label="Abrir andamento comercial dos imóveis" title="Andamento comercial dos imóveis"${busy ? ' disabled' : ''}><img src="${COMMERCIAL_MILESTONES_MASCOT_URL}" alt="Mascote do andamento comercial"></button><button class="chat-main-commercial-documents-shortcut" type="button" data-action="open-commercial-documents" aria-label="Abrir pendências documentais dos imóveis" title="Pendências documentais dos imóveis"${busy ? ' disabled' : ''}><img src="${COMMERCIAL_DOCUMENTS_MASCOT_URL}" alt="Mascote das pendências documentais"></button><button class="chat-main-sac-pathologies-shortcut" type="button" data-action="open-sac-pathologies" aria-label="Abrir acompanhamento de patologias" title="Acompanhamento de patologias"${busy ? ' disabled' : ''}><img src="${SAC_PATHOLOGIES_MASCOT_URL}" alt="Mascote do acompanhamento de patologias"></button></nav>` : '';
     const sicoobShortcut = `<button class="chat-main-payment-ledger-shortcut chat-main-sicoob-shortcut" type="button" data-action="open-sicoob-transaction-report"${sicoobMenuAlert ? ' data-sicoob-alert aria-label="Abrir relatório Sicoob (há transações sem vinculação)" title="Transações Sicoob sem vinculação"' : ' aria-label="Abrir relatório de transações Sicoob" title="Relatório de transações Sicoob"'}${busy ? " disabled" : ""}><img src="${PENDING_PROVISIONS_MASCOT_URL}" alt=""><span class="chat-main-dda-label" aria-hidden="true">SICOOB</span></button>`;
     const provisionShortcut = provisionOption ? `${sicoobShortcut}<button class="chat-main-payment-ledger-shortcut chat-main-nfe-shortcut" type="button" data-action="open-nfe-report" aria-label="Abrir relatório de notas fiscais" title="Relatório de notas fiscais"${busy ? " disabled" : ""}><img src="${PENDING_PROVISIONS_MASCOT_URL}" alt=""><span class="chat-main-dda-label" aria-hidden="true">NFE</span></button><button class="chat-main-payment-ledger-shortcut chat-main-dda-shortcut" type="button" data-action="open-dda-report"${ddaMenuAlert ? ' data-dda-alert aria-label="Abrir relatório DDA (há boletos em aberto que precisam de atenção)" title="DDAs em aberto que precisam de atenção"' : ' aria-label="Abrir relatório DDA" title="Relatório DDA"'}${busy ? " disabled" : ""}><img src="${PENDING_PROVISIONS_MASCOT_URL}" alt="Mascote do relatório DDA"><span class="chat-main-dda-label" aria-hidden="true">DDA</span></button><button class="chat-main-payment-ledger-shortcut chat-main-provision-report-shortcut" type="button" data-action="open-provision-report" aria-label="Abrir relatório de provisões e despesas recorrentes" title="Relatório de provisões e despesas recorrentes"${busy ? " disabled" : ""}><img src="${PROVISION_REPORT_MASCOT_URL}" alt="Mascote do relatório de provisões"></button><button class="chat-main-payment-ledger-shortcut" type="button" data-action="open-payment-ledger" aria-label="Abrir relatório de pagamentos" title="Relatório de pagamentos"${busy ? " disabled" : ""}><img src="${PAYMENT_LEDGER_MASCOT_URL}" alt="Mascote do relatório de pagamentos"></button><button class="chat-main-payment-ledger-shortcut chat-main-management-shortcut" type="button" data-action="open-management-report" aria-label="Abrir resumo gerencial de gastos" title="Resumo gerencial de gastos"${busy ? " disabled" : ""}><img src="${MANAGEMENT_REPORT_MASCOT_URL}" alt="Mascote do resumo gerencial de gastos"></button><button class="chat-main-payment-ledger-shortcut chat-main-order-validation-shortcut" type="button" data-action="open-order-validation-report" aria-label="Abrir validação de notas pendentes e pedidos para baixa" title="Validação de notas pendentes e pedidos para baixa"${busy ? " disabled" : ""}><img src="${ORDER_VALIDATION_MASCOT_URL}" alt="Mascote da validação de notas"></button><button class="chat-main-payment-ledger-shortcut chat-main-depreciation-shortcut" type="button" data-action="open-depreciation-report" aria-label="Abrir controle de depreciação do imobilizado" title="Controle de depreciação do imobilizado"${busy ? " disabled" : ""}><img src="${DEPRECIATION_REPORT_MASCOT_URL}" alt="Mascote do controle de depreciação"></button><button class="chat-main-payment-ledger-shortcut chat-main-document-control-shortcut" type="button" data-action="open-document-control-report" aria-label="Abrir controle de documentos" title="Controle de documentos"${busy ? " disabled" : ""}><img src="${DOCUMENT_CONTROL_REPORT_MASCOT_URL}" alt="Mascote do controle de documentos"></button><button class="chat-main-payment-ledger-shortcut chat-main-task-association-shortcut" type="button" data-action="open-task-association-report" aria-label="Abrir atividades por associação" title="Atividades por associação"${busy ? " disabled" : ""}><img src="${TASK_ASSOCIATION_REPORT_MASCOT_URL}" alt="Mascote das atividades por associação"></button>` : "";
-    return `<article class="chat-message chat-message--assistant${initialAreaMenu ? " chat-message--initial-area-menu" : ""}${provisionShortcut ? " chat-message--external-provisions" : ""}${cargosShortcut ? " chat-message--external-cargos" : ""}${pendingPayrollShortcut ? " chat-message--pending-payroll-links" : ""}${commercialShortcut ? " chat-message--commercial-top" : ""}${launchMenu ? " chat-message--launch-menu" : ""}${pairedMenu ? ` chat-message--${pairedMenu.kind}-menu` : ""}${registrationMenu ? " chat-message--registration-menu" : ""}${auditMenu ? " chat-message--audit-menu" : ""}${taskMenu ? " chat-message--demand-menu" : ""}${hrGalleryMenu ? " chat-message--hr-gallery-menu" : ""}${rhidReport ? " chat-message--rhid-report" : ""}${supplierComparison ? " chat-message--supplier-comparison" : ""}${launchPayment ? " chat-message--launch-payment" : ""}">${initialAreaMenu || launchMenu || pairedMenu || registrationMenu || auditMenu || taskMenu || hrGalleryMenu || rhidReport || launchPayment || supplierComparison ? "" : assistantAvatar()}${topProvisionShortcut}${commercialShortcut}${provisionShortcut}<div class="chat-bubble">${rhidReport || initialAreaMenu || launchMenu || hrGalleryMenu ? "" : attendanceHeader}${renderPoll(message, busy, draft, databaseFilterMessage, activeFlow, attendanceSelectedIds, currentPoll, rhidRefresh, launchPayrollSelectedIds, launchPayrollCurrent, attendanceExpandedIds, attendanceIrregularityChecking, swileReminder)}</div>${rhidShortcut}${pendingPayrollShortcut}${cargosShortcut}${attendanceShortcut}${payslipShortcut}</article>`;
+    return `<article class="chat-message chat-message--assistant${initialAreaMenu ? " chat-message--initial-area-menu" : ""}${provisionShortcut ? " chat-message--external-provisions" : ""}${cargosShortcut ? " chat-message--external-cargos" : ""}${pendingPayrollShortcut ? " chat-message--pending-payroll-links" : ""}${commercialShortcut ? " chat-message--commercial-top" : ""}${launchMenu ? " chat-message--launch-menu" : ""}${pairedMenu ? ` chat-message--${pairedMenu.kind}-menu` : ""}${registrationMenu ? " chat-message--registration-menu" : ""}${auditMenu ? " chat-message--audit-menu" : ""}${taskMenu ? " chat-message--demand-menu" : ""}${hrGalleryMenu ? " chat-message--hr-gallery-menu" : ""}${rhidReport ? " chat-message--rhid-report" : ""}${supplierComparison ? " chat-message--supplier-comparison" : ""}${launchPayment ? " chat-message--launch-payment" : ""}">${initialAreaMenu || launchMenu || pairedMenu || registrationMenu || auditMenu || taskMenu || hrGalleryMenu || rhidReport || launchPayment || supplierComparison ? "" : assistantAvatar()}${topProvisionShortcut}${commercialShortcut}${provisionShortcut}<div class="chat-bubble">${rhidReport || initialAreaMenu || launchMenu || hrGalleryMenu ? "" : attendanceHeader}${renderPoll(message, busy, draft, databaseFilterMessage, activeFlow, attendanceSelectedIds, currentPoll, rhidRefresh, launchPayrollSelectedIds, launchPayrollCurrent, attendanceExpandedIds, attendanceIrregularityChecking, swileReminder, currentPoll && attendanceHoursCurrent && !demo)}</div>${rhidShortcut}${pendingPayrollShortcut}${cargosShortcut}${attendanceShortcut}${payslipShortcut}</article>`;
   }
   if (message.type === "image" || message.type === "document") {
     const label = message.caption || message.fileName || "Arquivo gerado";
@@ -2379,6 +2383,22 @@ function pendingDocumentDeleteMarkup() {
       <div class="chat-confirmation__actions">
         <button class="chat-confirmation__cancel" type="button" data-action="cancel-pending-document-delete">Não</button>
         <button class="chat-confirmation__confirm" type="button" data-action="confirm-pending-document-delete">Sim</button>
+      </div>
+    </div>
+  </div>`;
+}
+
+function attendanceDeletionMarkup(dialog) {
+  if (!dialog) return '';
+  const date = dialog.date.split('-').reverse().join('/');
+  const disabled = dialog.busy ? ' disabled' : '';
+  return `<div class="chat-confirmation-backdrop" data-popup-backdrop="true" data-popup-close-action="cancel-attendance-delete" data-attendance-delete-dialog>
+    <div class="chat-confirmation" role="dialog" aria-modal="true" aria-labelledby="attendance-delete-title" tabindex="-1">
+      <h2 id="attendance-delete-title">Tem certeza que deseja deletar o ID ${escapeHtml(dialog.id)} da presença do FORNECEDOR ${escapeHtml(dialog.name)} na DATA ${escapeHtml(date)}?</h2>
+      ${dialog.error ? `<p class="chat-attendance-irregularity__error" role="alert">${escapeHtml(dialog.error)}</p>` : ''}
+      <div class="chat-confirmation__actions">
+        <button class="chat-confirmation__cancel" type="button" data-action="cancel-attendance-delete"${disabled}>Não</button>
+        <button class="chat-confirmation__confirm chat-attendance-delete__confirm" type="button" data-action="confirm-attendance-delete"${disabled}>${dialog.busy ? 'Deletando…' : 'Sim'}</button>
       </div>
     </div>
   </div>`;
@@ -3036,7 +3056,7 @@ function chatInteractionBusy(state, rhidReportBusy = false) {
     || rhidReportBusy === true || state.pendingProvisionOpening === true;
 }
 
-export function renderChatMarkup(state = {}, { showSettings = false, allowDemo = false, demo = false, signOutConfirm = false, pendingDocumentDelete = false, attachmentSource = false, datePicker = false, datePickerValue = "", signaturePad = false, signaturePadError = "", signaturePlacement = null, signaturePlacementStampApplied = false, attendanceSelectedIds = [], attendanceExpandedIds = [], attendanceIrregularityDialog = null, attendanceIrregularityChecking = false, launchPayrollSelectedIds = [], rhidAttendanceReport = null, rhidAttendanceAdjustment = null, rhidRefresh = null } = {}) {
+export function renderChatMarkup(state = {}, { showSettings = false, allowDemo = false, demo = false, signOutConfirm = false, pendingDocumentDelete = false, attachmentSource = false, datePicker = false, datePickerValue = "", signaturePad = false, signaturePadError = "", signaturePlacement = null, signaturePlacementStampApplied = false, attendanceSelectedIds = [], attendanceExpandedIds = [], attendanceDeletionDialog = null, attendanceIrregularityDialog = null, attendanceIrregularityChecking = false, launchPayrollSelectedIds = [], rhidAttendanceReport = null, rhidAttendanceAdjustment = null, rhidRefresh = null } = {}) {
   if (state.sessionStatus !== "authenticated") {
     return renderSignedOut(state.sessionStatus, state.error, showSettings, allowDemo);
   }
@@ -3161,6 +3181,7 @@ export function renderChatMarkup(state = {}, { showSettings = false, allowDemo =
     ${signOutConfirm ? signOutConfirmationMarkup() : ""}
     ${pendingDocumentDelete ? pendingDocumentDeleteMarkup() : ""}
     ${attendanceIrregularityMarkup(attendanceIrregularityDialog)}
+    ${attendanceDeletionMarkup(attendanceDeletionDialog)}
     ${datePicker && !rhidAttendanceReport?.open ? datePickerMarkup(datePickerValue) : ""}
     ${signaturePad ? signaturePadMarkup(signaturePadError) : ""}
     ${placement?.status === "ready" && placement.open === false ? signaturePlacementReopenMarkup() : ""}
@@ -3292,6 +3313,7 @@ export function createChatView(root, { onOpenSettings, onDemoAccess, onSignOut, 
   let attendanceOptions = new Map();
   let attendanceSelectionPoll = null;
   let attendanceIrregularityDialog = null;
+  let attendanceDeletionDialog = null;
   let attendanceIrregularityPending = null;
   let attendanceIrregularityQueue = [];
   let attendanceReportSelection = null;
@@ -4570,6 +4592,29 @@ export function createChatView(root, { onOpenSettings, onDemoAccess, onSignOut, 
     render(state);
   }
 
+  async function confirmAttendanceDeletion() {
+    const dialog = attendanceDeletionDialog;
+    if (!dialog || dialog.busy) return;
+    dialog.busy = true;
+    dialog.error = '';
+    rerenderAttendance();
+    try {
+      const remove = [...(handlers.get('delete-attendance') || [])][0];
+      if (!remove) throw new Error('A exclusão da presença está indisponível.');
+      const { id, date, name, messageId } = dialog;
+      await remove({ id, date, name, messageId });
+      if (attendanceDeletionDialog !== dialog) return;
+      attendanceDeletionDialog = null;
+      rerenderAttendance();
+      root.querySelector('[data-action="open-attendance-delete"]:enabled')?.focus({ preventScroll: true });
+    } catch (error) {
+      if (attendanceDeletionDialog !== dialog) return;
+      dialog.busy = false;
+      dialog.error = String(error?.message || 'Não foi possível deletar a presença. Tente novamente.');
+      rerenderAttendance();
+    }
+  }
+
   function attendanceIrregularOption(id) {
     const option = attendanceOptions.get(id);
     if (!option || option.disabled) return null;
@@ -4901,6 +4946,26 @@ export function createChatView(root, { onOpenSettings, onDemoAccess, onSignOut, 
       clickedAction.querySelector("span").textContent = detail.hidden ? "⌄" : "⌃";
       if (detail.hidden) attendanceExpandedIds.delete(command.replyId);
       else attendanceExpandedIds.add(command.replyId);
+      return;
+    }
+    if (command.type === 'open-attendance-delete') {
+      const record = pendingAttendanceDeletionContext(attendanceOptions.get(command.replyId), attendanceSelectionPoll);
+      if (!record || composerBusy || attendanceDeletionDialog || attendanceIrregularityDialog
+        || attendanceIrregularityPending || rhidAttendanceAdjustment) return;
+      attendanceDeletionDialog = { ...record, messageId: attendanceSelectionPoll.id };
+      rerenderAttendance();
+      return;
+    }
+    if (command.type === 'cancel-attendance-delete') {
+      if (!attendanceDeletionDialog || attendanceDeletionDialog.busy) return;
+      const { id } = attendanceDeletionDialog;
+      attendanceDeletionDialog = null;
+      rerenderAttendance();
+      root.querySelector(`[data-action="open-attendance-delete"][data-reply-id="${id}"]`)?.focus({ preventScroll: true });
+      return;
+    }
+    if (command.type === 'confirm-attendance-delete') {
+      void confirmAttendanceDeletion();
       return;
     }
     if (command.type === 'attendance-irregularity-cancel') {
@@ -5712,8 +5777,8 @@ export function createChatView(root, { onOpenSettings, onDemoAccess, onSignOut, 
     return active;
   }
 
-  function rhidMascotKeyDown(event) {
-    if (!['Escape', 'Tab'].includes(event.key) || !root.querySelector('[data-rhid-mascot-report]')) return;
+  function attendanceDialogKeyDown(event) {
+    if (!['Escape', 'Tab'].includes(event.key) || !root.querySelector('[data-rhid-mascot-report], [data-attendance-delete-dialog]')) return;
     const dialog = activeModalDialog();
     const layer = dialog?.closest('[data-popup-close-action]');
     if (!layer || !dialog.contains(event.target)) return;
@@ -6037,8 +6102,11 @@ export function createChatView(root, { onOpenSettings, onDemoAccess, onSignOut, 
     if (sessionKey !== attachmentGestureSessionKey) {
       attachmentGestureSessionKey = sessionKey;
       attachmentSessionRevision++;
+      attendanceDeletionDialog = null;
     }
     const newestPoll = [...(state.messages || [])].reverse().find(message => message?.role !== "user" && message?.type === "poll");
+    if (attendanceDeletionDialog && [...(state.messages || [])].reverse()
+      .find(message => message?.role !== "user") !== newestPoll) attendanceDeletionDialog = null;
     const attendanceTable = newestPoll?.detail_table || newestPoll?.detailTable;
     // Inline choices replace the confirmation table rather than advance to a
     // new question. Keep its reading position across progress and the reply.
@@ -6057,6 +6125,7 @@ export function createChatView(root, { onOpenSettings, onDemoAccess, onSignOut, 
       attendanceSelectedIds.clear();
       attendanceExpandedIds.clear();
       attendanceIrregularityDialog = null;
+      attendanceDeletionDialog = null;
       attendanceIrregularityPending = null;
       attendanceIrregularityQueue = [];
       if (attendanceReportSelection?.key === nextAttendancePollKey) {
@@ -6140,6 +6209,8 @@ export function createChatView(root, { onOpenSettings, onDemoAccess, onSignOut, 
     const previousMascotBody = root.querySelector('.chat-rhid-mascot__body');
     const mascotScroll = previousMascotBody?.scrollTop || 0;
     const previousFocus = root.ownerDocument.activeElement;
+    const previousDeleteLayer = root.querySelector('[data-attendance-delete-dialog]');
+    const deleteFocusAction = previousDeleteLayer?.contains(previousFocus) ? previousFocus.dataset.action : null;
     const sameProvisionLink = state.pendingProvisionLink && state.pendingProvisionLink === lastState?.pendingProvisionLink;
     const previousLinkFields = sameProvisionLink ? ['pending-provision-launch-id', 'pending-provision-link-child']
       .map(id => root.querySelector(`#${id}`)).filter(Boolean) : [];
@@ -6183,6 +6254,7 @@ export function createChatView(root, { onOpenSettings, onDemoAccess, onSignOut, 
       ),
       attendanceSelectedIds: [...attendanceSelectedIds],
       attendanceExpandedIds: [...attendanceExpandedIds],
+      attendanceDeletionDialog,
       attendanceIrregularityDialog,
       attendanceIrregularityChecking: Boolean(attendanceIrregularityPending),
       launchPayrollSelectedIds: [...launchPayrollSelectedIds],
@@ -6276,6 +6348,19 @@ export function createChatView(root, { onOpenSettings, onDemoAccess, onSignOut, 
     } else if (previousMascotBody) {
       composerControls.composer?.removeAttribute('inert');
       root.querySelector('[data-action="open-rhid-mascot-report"]')?.focus({ preventScroll: true });
+    }
+    const deleteLayer = root.querySelector('[data-attendance-delete-dialog]');
+    if (deleteLayer) {
+      const dialog = activeModalDialog();
+      const layer = dialog?.closest('[data-popup-backdrop]');
+      if (layer?.parentElement === composerControls.shell) {
+        for (const child of layer.parentElement.children) child.toggleAttribute('inert', child !== layer);
+        const buttons = [...dialog.querySelectorAll('button:enabled')];
+        (buttons.find(button => button.dataset.action === deleteFocusAction) || buttons[0] || dialog)
+          .focus({ preventScroll: true });
+      }
+    } else if (previousDeleteLayer && !state.rhidMascot) {
+      composerControls.composer?.removeAttribute('inert');
     }
     if (rhidAttendanceReportOpen && !root.inert) {
       const reportDialog = root.querySelector('[data-rhid-attendance-report-dialog]');
@@ -6415,7 +6500,7 @@ export function createChatView(root, { onOpenSettings, onDemoAccess, onSignOut, 
   root.addEventListener("compositionend", compositionEnd);
   root.addEventListener("keydown", voiceKeyDown);
   root.addEventListener("keydown", observationKeyDown);
-  root.addEventListener("keydown", rhidMascotKeyDown);
+  root.addEventListener("keydown", attendanceDialogKeyDown);
   root.addEventListener("keyup", voiceKeyUp);
 
   return Object.freeze({
@@ -6477,7 +6562,7 @@ export function createChatView(root, { onOpenSettings, onDemoAccess, onSignOut, 
       root.removeEventListener("compositionend", compositionEnd);
       root.removeEventListener("keydown", voiceKeyDown);
       root.removeEventListener("keydown", observationKeyDown);
-      root.removeEventListener("keydown", rhidMascotKeyDown);
+      root.removeEventListener("keydown", attendanceDialogKeyDown);
       root.removeEventListener("keyup", voiceKeyUp);
       voiceInput?.destroy();
       voiceInput = null;
