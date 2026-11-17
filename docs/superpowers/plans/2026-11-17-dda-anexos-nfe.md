@@ -42,6 +42,7 @@
 - [x] Generalize posting's verified attachment transfer, keep original PDF hash in reservations, and verify source collection again before linking. Allow existing linked parents to receive missing files.
 - [x] Update review/submission text to say all attachments, including DDA.
 - [x] Run focused tests, signature guard and native/PWA builds: 93 passed, 14 protected blocks intact, both builds succeeded.
+- [x] Include the collector's reverse DDA attachments in the existing fiscal PDF viewer, after DANFE and CC-e, including installments and refreshed arrivals. Reject unrelated/malformed names and retain lazy authenticated downloads. Two regressions reproduced the omission before the fix; 73 report/posting/data/CI tests passed, with both builds and the signature guard passing again.
 
 ### Task 3: Review and release
 

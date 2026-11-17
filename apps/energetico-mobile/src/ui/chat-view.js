@@ -2437,6 +2437,29 @@ function pendingProvisionValue(value) {
   return raw;
 }
 
+function pendingProvisionProductsMarkup(row, grouped) {
+  const value = pendingProvisionValue(row.productDisplay ?? row.product);
+  const products = [];
+  let depth = 0, start = 0;
+  // The snapshot separates products with " / "; observations can contain that text too.
+  if (grouped && Number(row.childCount) !== 1) {
+    for (let index = 0; index < value.length; index++) {
+      if (value[index] === '(') depth++;
+      else if (value[index] === ')') depth = Math.max(0, depth - 1);
+      else if (!depth && value.slice(index, index + 3) === ' / ') {
+        products.push(value.slice(start, index).trim());
+        start = index + 3;
+        index += 2;
+      }
+    }
+  }
+  products.push(value.slice(start).trim());
+  const items = products.filter(Boolean);
+  if (items.length < 2) return `<strong>${escapeHtml(value)}</strong>`;
+  return `<ol class="chat-pending-provision__products">${items.map((product, index) =>
+    `<li><strong>${index + 1}. ${escapeHtml(product)}</strong></li>`).join('')}</ol>`;
+}
+
 function pendingProvisionLocation(row) {
   const branch = pendingProvisionValue(row.branch);
   const property = String(row.property ?? '').trim();
@@ -2688,7 +2711,7 @@ function pendingProvisionsMarkup(
               <div class="chat-pending-provision__due" data-field="dueDate">${pendingProvisionIcon("calendar")}<div><span>Vencimento</span><strong>${escapeHtml(timing.date)}</strong><small class="chat-pending-provision__timing">${escapeHtml(timing.label)}</small></div></div>
               <div class="chat-pending-provision__total${splitAmount ? " chat-pending-provision__total--split" : ""}" data-field="total"><span>Valor</span><strong>${escapeHtml(amountDisplay)}</strong></div>
             </div>
-            <div class="chat-pending-provision__supplier" data-field="summary"><div class="chat-pending-provision__supplier-info">${groupDetails}<div class="chat-pending-provision__field" data-field="product"><span>Produto</span><strong>${escapeHtml(pendingProvisionValue(row.productDisplay ?? row.product))}</strong></div><div class="chat-pending-provision__field" data-field="branch"><span>FILIAL</span><strong>${escapeHtml(pendingProvisionLocation(row))}</strong></div></div><div class="chat-pending-provision__actions">${edit}${check}${link}${remove}${arrow}</div></div>
+            <div class="chat-pending-provision__supplier" data-field="summary"><div class="chat-pending-provision__supplier-info">${groupDetails}<div class="chat-pending-provision__field" data-field="product"><span>Produto</span>${pendingProvisionProductsMarkup(row, grouped)}</div><div class="chat-pending-provision__field" data-field="branch"><span>FILIAL</span><strong>${escapeHtml(pendingProvisionLocation(row))}</strong></div></div><div class="chat-pending-provision__actions">${edit}${check}${link}${remove}${arrow}</div></div>
             ${grouped && row.amountError ? `<p class="chat-pending-provision__error" data-field="amountError" role="status">Baixa bloqueada: ${escapeHtml(row.amountError)}</p>` : ""}
             ${attachmentState.error ? `<small class="chat-pending-provision__error" role="status">${escapeHtml(attachmentState.error)}</small>` : ""}${attachmentState.status === 'error' ? `<button class="chat-pending-provision__retry" type="button" data-action="retry-pending-provision-attachments" data-payment-id="${escapeHtml(paymentId)}" aria-label="Tentar consultar anexos do pagamento ${escapeHtml(paymentId)}"${!paymentId || (Boolean(settlingPaymentId) || uploadsBusy) || reminderOpen ? ' disabled' : ''}>Tentar novamente</button>` : ''}${attachmentState.actionError ? `<small class="chat-pending-provision__error" role="alert">${escapeHtml(attachmentState.actionError)}</small>` : ""}${canExpand ? `<div id="${escapeHtml(listId)}"${expanded ? '' : ' hidden'}>${attachmentList}${expanded ? pendingProvisionAttachmentTray(paymentId, uploadsByPayment[paymentId], (Boolean(settlingPaymentId) || uploadsBusy)) : ''}</div>` : ''}</article>`;
         }).join("")}

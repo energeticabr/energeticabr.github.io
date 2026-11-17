@@ -500,7 +500,10 @@ export function createNfeReportView({ document:doc = globalThis.document, data, 
         }
       }
       const correctionFiles = [...corrections.keys()].sort().map(sequence => corrections.get(sequence));
-      const files = main ? [main, ...correctionFiles.filter(name => name.toLowerCase() !== main.toLowerCase())] : correctionFiles;
+      const ddaFiles = names.filter(name => /^DDA-[1-9][0-9]*-Espelho_DDA_[0-9a-f]{16}\.pdf$/.test(name))
+        .sort((left, right) => left.localeCompare(right, 'en', { numeric:true }));
+      const fiscalFiles = main ? [main, ...correctionFiles.filter(name => name.toLowerCase() !== main.toLowerCase())] : correctionFiles;
+      const files = [...new Set([...fiscalFiles, ...ddaFiles])];
       if (!files.length) throw new Error('PDF ausente no item fiscal');
       trigger.disabled = false;
       await openMediaCollection(files.map(fileName => ({
