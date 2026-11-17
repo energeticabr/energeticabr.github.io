@@ -1,6 +1,7 @@
 import { buildStageGantt } from '../chat/stage-progress-model.js';
 import { calendarDays, formatOperationsDate } from '../chat/operations-reports-model.js';
 import { addReportCloseControl } from './report-close-control.js';
+import { bindReportLandscape } from './report-landscape.js';
 
 const DEFAULT_BRANCH = '004 - EDIFÍCIO XAVANTE';
 const monthLabel = new Intl.DateTimeFormat('pt-BR', { month: 'short', year: 'numeric', timeZone: 'UTC' });
@@ -24,6 +25,7 @@ export function createStageGanttView({ document: doc = globalThis.document, data
 
   const root = make('div', 'gantt-overlay');
   root.hidden = true;
+  const landscape = bindReportLandscape(root);
   const dialog = make('section', 'gantt-dialog');
   dialog.tabIndex = -1;
   dialog.setAttribute('role', 'dialog');
@@ -247,10 +249,11 @@ export function createStageGanttView({ document: doc = globalThis.document, data
       doc.body.style.overflow = 'hidden';
       branches.replaceChildren();
       root.hidden = false;
+      landscape.update();
       dialog.focus();
       return load();
     },
     close,
-    destroy() { close(); root.remove(); },
+    destroy() { close(); landscape.destroy(); root.remove(); },
   };
 }

@@ -19,7 +19,8 @@ const SCHEMA = {
   assignments: [["IDDESCRITIVOETAPA", "ID DESCRITIVO ETAPA"], ["DATA"], ["FORNECEDOR"]],
   activities: [["FILIAL"], ["ETAPA"], ["ATIVIDADEEXECUTADA", "ATIVIDADE EXECUTADA"], ["IMOVEL", "IMÓVEL"],
     ["FORNECEDOR"], ["DATAEXECUTADO"], ["DATAPREVISTO"], ["STATUS"]],
-  launches: [["FILIAL"], ["ETAPA"], ["INÍCIO", "INICIO"], ["FIM"], ["STATUS"], ["PERCENTUALEFETUADO", "PERCENTUAL EFETUADO"]],
+  launches: [["FILIAL"], ["ETAPA"], ["INÍCIO", "INICIO"], ["FIM"], ["STATUS"],
+    ["PERCENTUALEFETUADO", "PERCENTUAL EFETUADO"], ["TIPO"]],
 };
 const scalar = value => {
   if (value == null) return "";
@@ -77,7 +78,7 @@ function normalizeItem(item, columns, kind) {
   const parsed = /^\+?(?:\d+(?:[.,]\d*)?|[.,]\d+)(?:e[+-]?\d+)?$/i.test(raw) ? Number(raw.replace(",", ".")) : NaN;
   return Object.freeze({ id: String(item.id), branch: get(0), stage: get(1),
     startDate: normalizeStageProgressDate(get(2)), endDate: normalizeStageProgressDate(get(3)), status: get(4),
-    percent: Number.isFinite(parsed) && parsed >= 0 && parsed <= 1 ? parsed * 100 : null });
+    percent: Number.isFinite(parsed) && parsed >= 0 && parsed <= 1 ? parsed * 100 : null, type: get(6) });
 }
 
 async function resolveSchema(repository, kind, signal) {
