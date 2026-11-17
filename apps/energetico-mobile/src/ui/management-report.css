@@ -21,9 +21,9 @@
 .gm-table .gm-label { background:#d9eaf7; font-weight:700; }
 .gm-table td[data-column=branch],.gm-table td[data-column=name],.gm-table td[data-column=period] { font-weight:700; }
 .gm-table .gm-money { color:red; font-weight:700; }
-.gm-table--expense .gm-money[data-column=paid] { color:#075e30; }
-.gm-table--expense .gm-money[data-column=forecast] { color:#c00000; }
-.gm-table--expense .gm-money[data-column=total] { color:#760012; }
+.gm-table .gm-money[data-column=paid] { color:#075e30; }
+.gm-table .gm-money[data-column=forecast] { color:#c00000; }
+.gm-table--expense .gm-money[data-column=total],.gm-table--branches .gm-money[data-column=total],.gm-table--summary .gm-money[data-column=total] { color:#760012; }
 .gm-month-change { display:inline-block; white-space:nowrap; color:#333; }
 .gm-month-change[data-direction=up] { color:#075e30; }
 .gm-month-change[data-direction=down] { color:#c00000; }

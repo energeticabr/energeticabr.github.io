@@ -20,12 +20,12 @@ test('management shortcut popup guards portrait, rotates, closes outside and res
   root.querySelector('td').click();assert.equal(root.hidden,false);
   root.click();assert.equal(root.hidden,true);assert.equal(dom.window.document.activeElement,trigger);assert.equal(dom.window.document.body.style.overflow,'');
 });
-test('management tables match reference sections with totals, rowspans, safe labels and DATA period',async t=>{
-  const {view,root,dom}=setup(t,async()=>({launches:[{...row,paymentDate:'2026-10-02'},{...row,id:'2',branch:'Central',quantity:1,total:10,product:'<img src=x onerror=alert(1)>'},{...row,id:'3',date:'2026-09-02',total:900}],provisions:[],productTypes:[{product:'Cimento',expenseType:'MATERIAL'}]}));
+test('management tables match reference sections with totals, rowspans, safe labels and payment period',async t=>{
+  const {view,root,dom}=setup(t,async()=>({launches:[{...row,paymentDate:'2026-10-02'},{...row,id:'2',paymentDate:'2026-10-02',branch:'Central',quantity:1,total:10,product:'<img src=x onerror=alert(1)>'},{...row,id:'3',date:'2026-09-02',paymentDate:'2026-09-02',total:900}],provisions:[],productTypes:[{product:'Cimento',expenseType:'MATERIAL'}]}));
   await view.open();
   assert.equal(root.querySelector('[name=year]').value,'2026');assert.equal(root.querySelector('[name=month]').value,'10');
   assert.deepEqual([...root.querySelectorAll('.gm-section-title')].map(n=>n.textContent),['RESUMO GERENCIAL DE GASTOS','TOTAL GASTO ACUMULADO POR FILIAL','PERCENTUAL POR TIPO DE DESPESA POR FILIAL','PRODUTOS COM MAIOR GASTO POR FILIAL','ETAPAS COM MAIOR GASTO POR FILIAL','PRINCIPAIS FORNECEDORES POR FILIAL','MAIORES GASTOS POR CONTA POR FILIAL']);
-  assert.match(root.querySelector('[data-metric=total]').textContent,/35,00/);assert.equal(root.querySelector('[data-metric=count]').textContent,'2');
+  assert.match(root.querySelector('[data-metric=total]').textContent,/35,00/);assert.equal(root.querySelector('[data-metric=count]'),null);
   assert.equal(root.querySelector('[data-metric=period]').textContent,'outubro/2026');
   assert.equal(root.querySelector('[data-section=expense] [data-column=branch]').rowSpan,2);
   assert.match(root.querySelector('[data-section=expense] .gm-total td').textContent,/TOTAL DA FILIAL/);
@@ -42,7 +42,7 @@ test('management cancellation and partial data never expose stale definitive tot
   let finish,signal;const {view,root}=setup(t,options=>{signal=options.signal;return new Promise(r=>finish=r);});
   const opening=view.open();view.close();assert.equal(signal.aborted,true);finish({launches:[row],provisions:[],productTypes:[]});await opening;
   assert.equal(root.querySelectorAll('.gm-table').length,0);
-  const incomplete=setup(t,async()=>({launches:[{...row,total:null}],provisions:[],productTypes:[]}));await incomplete.view.open();
+  const incomplete=setup(t,async()=>({launches:[{...row,paymentDate:'2026-10-02',total:null}],provisions:[],productTypes:[]}));await incomplete.view.open();
   assert.equal(incomplete.root.querySelector('[data-metric=total]').textContent,'INCOMPLETO');
   const error=setup(t,async()=>{throw new Error('Falha SharePoint');});await error.view.open();
   assert.equal(error.root.querySelectorAll('.gm-table').length,0);assert.match(error.root.querySelector('.pl-notice').textContent,/Atualizar/);

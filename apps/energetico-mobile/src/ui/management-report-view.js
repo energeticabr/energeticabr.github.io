@@ -72,17 +72,21 @@ export function createManagementReportView({document:doc=globalThis.document,dat
     if(labels.length){const tr=make('tr');for(const label of labels){const th=make('th','',label);th.scope='col';tr.append(th);}head.append(tr);}
     const body=make('tbody');table.append(head,body);content.append(table);return body;
   }
+  function appendChange(target, amounts, comparisonPeriod) {
+    if(Object.hasOwn(amounts,'change')){
+      const change=make('span','gm-month-change',changePercent(amounts.change));
+      change.dataset.direction=amounts.change===null?'incomplete':amounts.change>0?'up':amounts.change<0?'down':'same';
+      change.title=`Comparação com ${comparisonPeriod}. Total anterior: ${money(amounts.previousTotal)}.`;
+      target.append(change);
+    }
+  }
   function expenseAmounts(tr, amounts, comparisonPeriod) {
     cell(tr,'paid',money(amounts.paid),1,'gm-money');
     cell(tr,'forecast',money(amounts.forecast),1,'gm-money');
     cell(tr,'percentage',percent(amounts.percentage));
     const total=cell(tr,'total',money(amounts.total),1,'gm-money');
-    if(Object.hasOwn(amounts,'change')){
-      const change=make('span','gm-month-change',changePercent(amounts.change));
-      change.dataset.direction=amounts.change===null?'incomplete':amounts.change>0?'up':amounts.change<0?'down':'same';
-      change.title=`Comparação com ${comparisonPeriod}. Total anterior: ${money(amounts.previousTotal)}.`;
-      total.append(doc.createTextNode(' '),change);
-    }
+    if(Object.hasOwn(amounts,'change'))total.append(doc.createTextNode(' '));
+    appendChange(total,amounts,comparisonPeriod);
   }
   function renderExpenses(branches, comparisonPeriod) {
     const body=table('expense','PERCENTUAL POR TIPO DE DESPESA POR FILIAL',
@@ -136,13 +140,24 @@ export function createManagementReportView({document:doc=globalThis.document,dat
     content.replaceChildren();showNotice('');if(!snapshot)return;
     const result=buildSpendingReport9(snapshot,selected());
     const logoFrame=make('div','gm-logo'),logo=make('img');logo.src=LOGO;logo.alt='Logo Energética';logoFrame.append(logo);content.append(logoFrame);
-    const summary=table('summary','RESUMO GERENCIAL DE GASTOS',[],[46,18,30,6]);
-    const metrics=make('tr');cell(metrics,'label','TOTAL DO MÊS/PERÍODO FILTRADO',1,'gm-label');
-    cell(metrics,'total',money(result.total),1,'gm-money').dataset.metric='total';
-    cell(metrics,'label','QTDE. LANÇAMENTOS',1,'gm-label');cell(metrics,'count',result.count).dataset.metric='count';summary.append(metrics);
+    const summary=table('summary','RESUMO GERENCIAL DE GASTOS',
+      ['PAGO','PREVISTO','ACUMULADO (TOTAL GERAL)','COMPARATIVO % MÊS ANTERIOR'],[24,24,26,26]);
+    const metrics=make('tr');
+    for(const field of ['paid','forecast','total'])cell(metrics,field,money(result.summary[field]),1,'gm-money').dataset.metric=field;
+    const comparison=cell(metrics,'change','');comparison.dataset.metric='change';
+    if(Object.hasOwn(result.summary,'change')){
+      comparison.replaceChildren();appendChange(comparison,result.summary,result.comparisonPeriod);
+      comparison.title=comparison.firstChild.title;
+    }else comparison.textContent='—';
+    summary.append(metrics);
     const period=make('tr');cell(period,'label','PERÍODO',1,'gm-label');const periodValue=cell(period,'period',result.period);periodValue.colSpan=3;periodValue.dataset.metric='period';summary.append(period);
-    const branches=table('branches','TOTAL GASTO ACUMULADO POR FILIAL',['FILIAL','QTDE. LINHAS','TOTAL GASTO','% DO TOTAL DO MÊS'],[35,20,23,22]);
-    for(const branch of result.branches){const tr=make('tr');cell(tr,'branch',branch.name);cell(tr,'count',branch.count);cell(tr,'total',money(branch.total),1,'gm-money');cell(tr,'percentage',percent(branch.percentage));branches.append(tr);}
+    const branches=table('branches','TOTAL GASTO ACUMULADO POR FILIAL',
+      ['FILIAL','PAGO','PREVISTO','% DO TOTAL DO MÊS','TOTAL GERAL'],[32,16,16,16,20]);
+    for(const branch of result.expenseBranches){
+      const tr=make('tr');cell(tr,'branch',branch.name);
+      const share=branch.total==null||result.summary.total==null?null:result.summary.total===0?0:branch.total/result.summary.total*100;
+      expenseAmounts(tr,{...branch,percentage:share},result.comparisonPeriod);branches.append(tr);
+    }
     renderExpenses(result.expenseBranches,result.comparisonPeriod);
     for(const [section,title,label,withQuantity] of [
       ['products','PRODUTOS COM MAIOR GASTO POR FILIAL','PRODUTO',true],
