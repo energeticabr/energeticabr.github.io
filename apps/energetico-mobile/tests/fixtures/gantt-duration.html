@@ -24,7 +24,22 @@ const measure=()=>[...root.querySelectorAll('.gantt-row--activity')].map(row=>{
  const sideways=root.dataset.reportPortrait==='true';
  const left=sideways?labelRect.top-barRect.top:labelRect.left-barRect.left;
  const width=sideways?barRect.height:barRect.width;
+ const barHeight=sideways?barRect.width:barRect.height;
+ const rowRect=row.getBoundingClientRect();
+ const dates=[...bar.querySelectorAll('.gantt-bar-date')].map(node=>{
+  const rect=node.getBoundingClientRect();
+  const dateLeft=sideways?rect.top-barRect.top:rect.left-barRect.left;
+  const dateTop=sideways?barRect.right-rect.right:rect.top-barRect.top;
+  const dateWidth=sideways?rect.height:rect.width;
+  const dateHeight=sideways?rect.width:rect.height;
+  return {text:node.textContent,color:getComputedStyle(node).color,top:dateTop,height:dateHeight,
+   trackSafe:dateLeft+bar.offsetLeft>=-1,
+   inside:dateLeft>=-1&&dateLeft+dateWidth<=width+1&&dateTop>=-1&&dateTop+dateHeight<=barHeight+1,
+   below:dateTop>=barHeight+2,
+   rowSafe:sideways?rect.left>=rowRect.left-1&&rect.right<=rowRect.right+1:rect.top>=rowRect.top-1&&rect.bottom<=rowRect.bottom+1};
+ });
  return {name:row.querySelector('.gantt-name').textContent,text:label.textContent,barWidth:bar.clientWidth,
+  dates,
   labelWidth:label.offsetWidth,outside:label!==bar&&left>=width,
   fits:label!==bar&&left>=0&&left+label.offsetWidth<=width+1};
 });
@@ -33,13 +48,21 @@ const initial=measure();
 root.querySelector('.gantt-sheet').style.setProperty('--gantt-width','1800px');
 await new Promise(resolve=>requestAnimationFrame(()=>requestAnimationFrame(resolve)));
 const resized=measure();
+document.documentElement.style.fontSize='24px';
+await new Promise(resolve=>requestAnimationFrame(()=>requestAnimationFrame(resolve)));
+const fontResized=measure();
+document.documentElement.style.removeProperty('font-size');
+await new Promise(resolve=>requestAnimationFrame(()=>requestAnimationFrame(resolve)));
 scroll.scrollLeft=scroll.scrollWidth;
 const finalBar=[...root.querySelectorAll('.gantt-row--activity')].find(row=>row.textContent.includes('Curta no final')).querySelector('.gantt-bar');
 const label=finalBar.querySelector('span')||finalBar;
 const labelRect=label.getBoundingClientRect(),viewport=scroll.getBoundingClientRect();
 const portrait=root.dataset.reportPortrait==='true';
-const endVisible=portrait?labelRect.bottom<=viewport.bottom+1:labelRect.right<=viewport.right+1;
+const endVisible=[...finalBar.children].every(node=>{
+ const rect=node.getBoundingClientRect();
+ return portrait?rect.bottom<=viewport.bottom+1:rect.right<=viewport.right+1;
+});
 label.click();
 await new Promise(resolve=>setTimeout(resolve,0));
-document.documentElement.dataset.layout=JSON.stringify({initial,resized,endVisible,detailOpen:!root.querySelector('.gantt-detail-backdrop').hidden});
+document.documentElement.dataset.layout=JSON.stringify({initial,resized,fontResized,endVisible,detailOpen:!root.querySelector('.gantt-detail-backdrop').hidden});
 </script></body></html>

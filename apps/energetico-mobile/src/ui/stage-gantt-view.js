@@ -66,15 +66,30 @@ export function createStageGanttView({ document: doc = globalThis.document, data
 
   function layoutDurations() {
     if (root.hidden) return;
-    const measurements = [...scroll.querySelectorAll('.gantt-bar')].map(bar => ({
-      bar, width: bar.clientWidth, textWidth: bar.firstElementChild.offsetWidth,
-    }));
-    for (const { bar, width, textWidth } of measurements) {
+    const measurements = [...scroll.querySelectorAll('.gantt-bar')].map(bar => {
+      const start = bar.querySelector('.gantt-bar-date--start');
+      const end = bar.querySelector('.gantt-bar-date--end');
+      return { bar, width: bar.clientWidth, height: bar.offsetHeight, left: bar.offsetLeft, textWidth: bar.firstElementChild.offsetWidth,
+        startWidth: start.offsetWidth, endWidth: end.offsetWidth,
+        startHeight: start.offsetHeight, endHeight: end.offsetHeight };
+    });
+    for (const { bar, width, height, left, textWidth, startWidth, endWidth, startHeight, endHeight } of measurements) {
       bar.classList.toggle('gantt-bar--outside', textWidth + 8 > width);
+      // Keep the centered duration clear of both endpoint dates.
+      const below = width < 2 * Math.max(startWidth, endWidth) + textWidth + 24;
+      const stacked = below && width < startWidth + endWidth + 8;
+      bar.classList.toggle('gantt-bar--dates-below', below);
+      bar.classList.toggle('gantt-bar--dates-stacked', stacked);
+      bar.style.setProperty('--gantt-start-date-height', `${startHeight}px`);
+      // A short bar at the beginning of the timeline must not put its end date under the sticky column.
+      bar.style.setProperty('--gantt-end-date-left', `${Math.max(-left, width - endWidth)}px`);
+      const dateSpace = below ? 4 + (stacked ? startHeight + 4 + endHeight : Math.max(startHeight, endHeight)) : 0;
+      bar.parentElement.style.setProperty('--gantt-date-space', `${dateSpace}px`);
+      bar.parentElement.style.setProperty('--gantt-bar-height', `${height}px`);
     }
-    // Keep the last day's external label reachable by horizontal scrolling.
+    // Keep the last day's external labels reachable by horizontal scrolling.
     scroll.querySelector('.gantt-sheet')?.style.setProperty('--gantt-duration-space',
-      `${Math.max(0, ...measurements.map(item => item.textWidth)) + 12}px`);
+      `${Math.max(0, ...measurements.flatMap(item => [item.textWidth, item.startWidth, item.endWidth])) + 12}px`);
   }
 
   function render() {
@@ -166,7 +181,12 @@ export function createStageGanttView({ document: doc = globalThis.document, data
         const status = tone === 'finished' ? 'Finalizada' : 'Em andamento';
         const description = `${item.name} · ${status} · ${dates} · ${bar.textContent}`;
         const duration = make('span', 'gantt-duration', bar.textContent);
-        bar.replaceChildren(duration);
+        const startDate = make('span', 'gantt-bar-date gantt-bar-date--start', formatOperationsDate(from));
+        const endDate = make('span', 'gantt-bar-date gantt-bar-date--end',
+          `${item.range.throughToday ? 'Até hoje ' : ''}${formatOperationsDate(to)}`);
+        startDate.setAttribute('aria-label', `Início ${startDate.textContent}`);
+        endDate.setAttribute('aria-label', item.range.throughToday ? endDate.textContent : `Fim ${endDate.textContent}`);
+        bar.replaceChildren(duration, startDate, endDate);
         bar.dataset.tone = tone;
         bar.setAttribute('aria-label', description);
         bar.setAttribute('aria-haspopup', 'dialog');
@@ -176,7 +196,7 @@ export function createStageGanttView({ document: doc = globalThis.document, data
         bar.style.width = percent(days);
         track.append(bar);
         durationObserver?.observe(bar);
-        durationObserver?.observe(duration);
+        for (const barLabel of bar.children) durationObserver?.observe(barLabel);
       }
       row.append(label, track);
       return row;
@@ -205,7 +225,7 @@ export function createStageGanttView({ document: doc = globalThis.document, data
             const bar = child.querySelector('.gantt-bar');
             if (bar) {
               durationObserver?.unobserve(bar);
-              durationObserver?.unobserve(bar.firstElementChild);
+              for (const barLabel of bar.children) durationObserver?.unobserve(barLabel);
             }
             child.remove();
           }

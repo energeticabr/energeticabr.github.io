@@ -28,6 +28,8 @@ test('GANTT expande as atividades abaixo da etapa e exibe datas e estados das ba
   assert.equal(toggle.getAttribute('aria-expanded'), 'false');
   assert.equal(dialog.querySelectorAll('.gantt-row--activity').length, 0);
   assert.match(dialog.querySelector('[data-tone="ongoing"]').getAttribute('aria-label'), /01\/11\/2026.*Em Andamento/);
+  assert.equal(dialog.querySelector('.gantt-bar-date--start')?.textContent, '01/11/2026');
+  assert.equal(dialog.querySelector('.gantt-bar-date--end')?.textContent, 'Até hoje 16/11/2026');
 
   toggle.click();
   assert.equal(toggle.textContent, '−');
@@ -35,6 +37,8 @@ test('GANTT expande as atividades abaixo da etapa e exibe datas e estados das ba
   const child = dialog.querySelector('.gantt-row--stage').nextElementSibling;
   assert.match(child.textContent, /Escavação.*Casa 2/);
   assert.match(child.querySelector('[data-tone="finished"]').getAttribute('aria-label'), /03\/11\/2026.*03\/11\/2026/);
+  assert.equal(child.querySelector('.gantt-bar-date--start').textContent, '03/11/2026');
+  assert.equal(child.querySelector('.gantt-bar-date--end').textContent, '03/11/2026');
 
   dom.window.innerWidth = 844;
   dom.window.innerHeight = 390;
