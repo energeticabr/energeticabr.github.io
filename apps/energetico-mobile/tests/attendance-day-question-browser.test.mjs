@@ -25,6 +25,11 @@ test('attendance day is bold red and question fits phones and desktop',{timeout:
         assert.equal(layout.hours?.label,'HORÁRIO');
         assert.ok(layout.hours.centers<1 && layout.hours.authorRight<layout.hours.left);
         assert.ok(layout.hours.right<=layout.viewport && layout.hours.bottom<=layout.hours.questionTop);
+        assert.equal(layout.bubbleLeft, layout.messageLeft);
+        assert.ok(layout.recordRight < layout.deleteLeft && layout.deleteRight <= layout.viewport);
+        assert.ok(layout.deleteWidth >= 44 && layout.deleteHeight >= 44);
+        assert.equal(layout.deleteColor, 'rgb(180, 35, 24)');
+        assert.ok(layout.dialogLeft >= 0 && layout.dialogRight <= layout.viewport);
       }finally{dom.window.close();}
     }
   }finally{await server.close();}

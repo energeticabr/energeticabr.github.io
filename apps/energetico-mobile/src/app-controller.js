@@ -25,7 +25,7 @@ import { isDiaryAttachmentFinalization, paintDiaryCompletion } from "./chat/diar
 import { audioTranscriptionText, isAudioFile, isConstructionDiaryFlow } from "./chat/audio-transcription.js";
 import { buildRhidAttendanceTable, isRhidAttendanceDayFinalized, isValidRhidReportDate, rhidIrregularCountsByDate, rhidUpdateLabel, shiftRhidReportDate } from "./chat/rhid-attendance-table.js";
 import { rhidMascotAmbiguousNames, rhidMascotDay, rhidMascotFilters, rhidMascotMonths, rhidMascotPageSize } from './chat/rhid-mascot-report.js';
-import { attendanceMissingPunchContext, attendanceRhidOptionContext, attendanceRhidPollEligible, attendanceValidationDate, buildAttendanceRhidBadge } from "./chat/attendance-rhid-badges.js";
+import { attendanceMissingPunchContext, attendanceRhidOptionContext, attendanceRhidPollEligible, attendanceValidationDate, buildAttendanceRhidBadge, isPendingAttendancePoll, pendingAttendanceDeletionContext } from "./chat/attendance-rhid-badges.js";
 import { createAttendanceIrregularityData } from './chat/attendance-irregularity-data.js';
 import {
   PRESENCE_OTHER_DATES_REPLY_ID,
@@ -1503,7 +1503,7 @@ export function createAppController({
       finally { if (tokenRequests.get(key) === pending) tokenRequests.delete(key); }
     };
     const data = attendanceIrregularityDataFactory({ tokenProvider, assertSession });
-    attendanceIrregularitySource = { owner, revision, assertSession, data };
+    attendanceIrregularitySource = { owner, revision, assertSession, data, deletedIds: new Set(), deleting: false };
     return data;
   }
   const reportSnapshots = createReportSessionCache();
@@ -5648,8 +5648,27 @@ export function createAppController({
     }
   }
 
+  function withoutDeletedAttendance(poll, deletedIds) {
+    if (!deletedIds?.size || !Array.isArray(poll?.options) || !isPendingAttendancePoll(poll)) return poll;
+    const keep = option => !deletedIds.has(attendanceRhidOptionContext(option, poll)?.presenceId);
+    const options = poll.options.filter(keep);
+    const previousAllOptions = Array.isArray(poll.presenceDateAllOptions) ? poll.presenceDateAllOptions : null;
+    const allOptions = previousAllOptions?.filter(keep);
+    if (options.length === poll.options.length && allOptions?.length === previousAllOptions?.length) return poll;
+    const date = attendanceValidationDate(poll);
+    const empty = date && !options.some(option => attendanceRhidOptionContext(option, poll));
+    return { ...poll, options, presenceDateKey: date,
+      ...(allOptions ? { presenceDateAllOptions: allOptions } : {}),
+      ...(empty ? { presenceDateSummary: { date, count: 0 } } : {}),
+    };
+  }
+
   function preparePresenceResult(result) {
-    return scopePresenceResult(result, lastPresenceValidationDate);
+    const scoped = scopePresenceResult(result, lastPresenceValidationDate);
+    const source = attendanceIrregularitySource;
+    if (!source?.deletedIds.size || source.owner !== account || source.revision !== sessionRevision
+      || !Array.isArray(scoped.messages)) return scoped;
+    return { ...scoped, messages: scoped.messages.map(message => withoutDeletedAttendance(message, source.deletedIds)) };
   }
 
   function setSessionError(error, fallback) {
@@ -12285,6 +12304,31 @@ export function createAppController({
 
   function bindCommands() {
     bind('attendance-irregularity-read', async command => getAttendanceIrregularitySource().read(command));
+    bind('delete-attendance', async ({ id, date, name, messageId }) => {
+      const poll = latestAssistantPoll();
+      const record = poll?.options.map(option => pendingAttendanceDeletionContext(option, poll)).find(item => item?.id === id);
+      if (!record || record.date !== date || record.name !== name || poll.id !== messageId || flowBusy()) {
+        throw new Error('Abra a lista atual de presenças antes de excluir.');
+      }
+      const source = getAttendanceIrregularitySource(), guard = attendanceIrregularitySource;
+      if (guard.deleting) throw new Error('Aguarde a exclusão em andamento.');
+      guard.deleting = true;
+      try {
+        await source.remove(record);
+        guard.assertSession();
+        guard.deletedIds.add(id);
+        reportSnapshots.invalidate();
+        clearAttendanceRhidBadges(record.date, { preserveConfirmed: true });
+        if (currentAssistantPollSnapshot) {
+          currentAssistantPollSnapshot.poll = withoutDeletedAttendance(currentAssistantPollSnapshot.poll, guard.deletedIds);
+        }
+        const current = latestAssistantPoll();
+        const updated = withoutDeletedAttendance(current, guard.deletedIds);
+        if (updated !== current) store.replaceMessage(current.id, updated);
+      } finally {
+        guard.deleting = false;
+      }
+    });
     bind('attendance-irregularity-save', async command => {
       const source = getAttendanceIrregularitySource(), guard = attendanceIrregularitySource;
       const originalPoll = latestAssistantPoll(store.getState().messages);

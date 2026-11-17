@@ -56,9 +56,20 @@ export function attendanceRhidOptionContext(option, poll) {
   return { presenceId, name, date, ...(rhidId ? { rhidId } : {}) };
 }
 
+export function isPendingAttendancePoll(poll) {
+  return attendanceRhidPollEligible(poll) && poll.presentation !== "attendance_supplier_sync"
+    && !(poll.options || []).some(option => /supplier_sync_target:\d+$/.test(replyId(option)));
+}
+
+export function pendingAttendanceDeletionContext(option, poll) {
+  if (option?.disabled || !isPendingAttendancePoll(poll)) return null;
+  const context = attendanceRhidOptionContext(option, poll);
+  if (!context || !/^[1-9]\d*$/.test(context.presenceId) || !context.date || !context.name || context.name === context.presenceId) return null;
+  return { id: context.presenceId, date: context.date, name: context.name };
+}
+
 export function attendanceValidationDate(poll) {
-  if (!attendanceRhidPollEligible(poll) || poll.presentation === "attendance_supplier_sync"
-    || (poll.options || []).some(option => /supplier_sync_target:\d+$/.test(replyId(option)))) return "";
+  if (!isPendingAttendancePoll(poll)) return "";
   const records = (poll.options || []).map(option => attendanceRhidOptionContext(option, poll)).filter(Boolean);
   const dates = new Set(records.map(record => record.date));
   const date = records.length ? (dates.size === 1 ? [...dates][0] : "") : poll.presenceDateKey;
@@ -68,9 +79,7 @@ export function attendanceValidationDate(poll) {
 // The view may offer only unambiguous, genuinely empty slots. The controller
 // derives this again from its own report before accepting a save command.
 export function attendanceMissingPunchContext(option, poll, slot) {
-  if (!attendanceRhidPollEligible(poll) || poll.presentation === "attendance_supplier_sync"
-    || (poll.options || []).some(item => /supplier_sync_target:\d+$/.test(replyId(item)))
-    || !SLOTS.includes(slot) || option?.disabled) return null;
+  if (!isPendingAttendancePoll(poll) || !SLOTS.includes(slot) || option?.disabled) return null;
   const context = attendanceRhidOptionContext(option, poll);
   const badge = option?.rhidBadge;
   const correction = badge?.correction;
