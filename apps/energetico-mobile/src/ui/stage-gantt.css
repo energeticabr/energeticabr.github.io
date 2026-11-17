@@ -76,7 +76,7 @@ button.gantt-toggle {
   border: 1px solid #c9d8de;
   border-radius: 6px;
 }
-.gantt-sheet { position: relative; width: max(100%, calc(var(--gantt-label) + var(--gantt-width))); }
+.gantt-sheet { position: relative; box-sizing: content-box; width: max(100%, calc(var(--gantt-label) + var(--gantt-width))); padding-right: var(--gantt-duration-space, 0px); }
 .gantt-row { display: grid; grid-template-columns: var(--gantt-label) minmax(0, 1fr); border-bottom: 1px solid #dce5e9; }
 .gantt-label {
   position: sticky;
@@ -115,7 +115,7 @@ button.gantt-toggle { flex: 0 0 44px; padding: 0; font-size: 1.15rem; }
 .gantt-axis .gantt-label { background: inherit; }
 .gantt-axis-months, .gantt-month-grid { display: flex; }
 .gantt-axis-months span { box-sizing: border-box; padding: 9px 5px; white-space: nowrap; border-left: 1px solid #c9d8de; }
-.gantt-month-grid { position: absolute; inset: 0 0 0 var(--gantt-label); pointer-events: none; }
+.gantt-month-grid { position: absolute; inset: 0 var(--gantt-duration-space, 0px) 0 var(--gantt-label); pointer-events: none; }
 .gantt-month-grid > span:not(.gantt-today-line) { box-sizing: border-box; border-left: 1px solid #e4ecef; }
 .gantt-today-line { position: absolute; inset-block: 0; border-left: 1px dashed #a94853; }
 .gantt-track { position: relative; }
@@ -136,9 +136,11 @@ button.gantt-toggle { flex: 0 0 44px; padding: 0; font-size: 1.15rem; }
   line-height: 22px;
   text-align: center;
   white-space: nowrap;
-  overflow: hidden;
-  text-overflow: ellipsis;
+  overflow: visible;
 }
+.gantt-duration { position: absolute; left: 50%; top: 0; transform: translateX(-50%); padding: 0 2px; white-space: nowrap; }
+.gantt-bar--outside .gantt-duration { left: calc(100% + 6px); transform: none; background: #fff; color: var(--gantt-ongoing); border-radius: 3px; }
+.gantt-bar--outside[data-tone="finished"] .gantt-duration { color: var(--gantt-finished); }
 
 .gantt-overlay[data-report-compact-height="true"] {
   padding-inline: env(safe-area-inset-left) env(safe-area-inset-right);

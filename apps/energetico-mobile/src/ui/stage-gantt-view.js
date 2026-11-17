@@ -60,9 +60,26 @@ export function createStageGanttView({ document: doc = globalThis.document, data
   let request, previousFocus, previousOverflow, previousInert, app;
   let stages = [], today = '', todayRatio = null;
   const announce = message => { notice.textContent = message; notice.hidden = !message; };
+  const durationObserver = doc.defaultView.ResizeObserver ? new doc.defaultView.ResizeObserver(layoutDurations) : null;
+  doc.defaultView.addEventListener('resize', layoutDurations);
+  doc.fonts?.ready.then(layoutDurations);
+
+  function layoutDurations() {
+    if (root.hidden) return;
+    const measurements = [...scroll.querySelectorAll('.gantt-bar')].map(bar => ({
+      bar, width: bar.clientWidth, textWidth: bar.firstElementChild.offsetWidth,
+    }));
+    for (const { bar, width, textWidth } of measurements) {
+      bar.classList.toggle('gantt-bar--outside', textWidth + 8 > width);
+    }
+    // Keep the last day's external label reachable by horizontal scrolling.
+    scroll.querySelector('.gantt-sheet')?.style.setProperty('--gantt-duration-space',
+      `${Math.max(0, ...measurements.map(item => item.textWidth)) + 12}px`);
+  }
 
   function render() {
     detail.close({ restoreFocus: false });
+    durationObserver?.disconnect();
     const visible = stages.filter(stage => !branches.value || stage.branch === branches.value);
     scroll.replaceChildren();
     scroll.scrollLeft = scroll.scrollTop = 0;
@@ -148,6 +165,8 @@ export function createStageGanttView({ document: doc = globalThis.document, data
         bar.className = 'gantt-bar';
         const status = tone === 'finished' ? 'Finalizada' : 'Em andamento';
         const description = `${item.name} · ${status} · ${dates} · ${bar.textContent}`;
+        const duration = make('span', 'gantt-duration', bar.textContent);
+        bar.replaceChildren(duration);
         bar.dataset.tone = tone;
         bar.setAttribute('aria-label', description);
         bar.setAttribute('aria-haspopup', 'dialog');
@@ -156,6 +175,8 @@ export function createStageGanttView({ document: doc = globalThis.document, data
         bar.style.left = percent(calendarDays(start, from));
         bar.style.width = percent(days);
         track.append(bar);
+        durationObserver?.observe(bar);
+        durationObserver?.observe(duration);
       }
       row.append(label, track);
       return row;
@@ -180,18 +201,28 @@ export function createStageGanttView({ document: doc = globalThis.document, data
           childRows = stage.children.map(child => renderRow(child, false));
           row.after(...childRows);
         } else {
-          for (const child of childRows) child.remove();
+          for (const child of childRows) {
+            const bar = child.querySelector('.gantt-bar');
+            if (bar) {
+              durationObserver?.unobserve(bar);
+              durationObserver?.unobserve(bar.firstElementChild);
+            }
+            child.remove();
+          }
           childRows = [];
         }
+        layoutDurations();
       });
     }
     scroll.append(sheet);
+    layoutDurations();
     const firstStageStart = visible.find(stage => stage.range)?.range.start || first;
     if (firstStageStart) scroll.scrollLeft = axisLabels.clientWidth * calendarDays(start, monthStart(firstStageStart)) / span;
   }
 
   async function load(force = false) {
     detail.close({ restoreFocus: false });
+    durationObserver?.disconnect();
     request?.abort();
     const active = new AbortController();
     request = active;
@@ -228,6 +259,7 @@ export function createStageGanttView({ document: doc = globalThis.document, data
     detail.close({ restoreFocus: false });
     request?.abort();
     root.hidden = true;
+    durationObserver?.disconnect();
     scroll.replaceChildren();
     stages = [];
     doc.body.style.overflow = previousOverflow;
@@ -273,6 +305,11 @@ export function createStageGanttView({ document: doc = globalThis.document, data
       return load();
     },
     close,
-    destroy() { close(); detail.destroy(); landscape.destroy(); root.remove(); },
+    destroy() {
+      close();
+      durationObserver?.disconnect();
+      doc.defaultView.removeEventListener('resize', layoutDurations);
+      detail.destroy(); landscape.destroy(); root.remove();
+    },
   };
 }

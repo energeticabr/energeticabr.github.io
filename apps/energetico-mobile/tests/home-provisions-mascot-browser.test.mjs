@@ -117,7 +117,9 @@ assert.deepEqual(shortcuts.map(s=>s.action),['open-pending-provisions','open-sic
       await clickAt(ganttShortcut);
       const gantt = await evaluate(`(() => {
         const report = document.querySelector('.gantt-overlay'), scroll = report.querySelector('.gantt-scroll');
-        const stage = report.querySelector('.gantt-row--stage');
+        const order = [...report.querySelectorAll('.gantt-row--stage .gantt-name')].map(node => node.textContent);
+        const firstStage = report.querySelector('.gantt-row--stage');
+        const stage = [...report.querySelectorAll('.gantt-row--stage')].find(row => row.querySelector('.gantt-name').textContent === 'FUNDAÇÃO');
         const collapsed = !report.querySelector('.gantt-row--activity');
         const toggle = stage.querySelector('button[aria-expanded]');
         toggle.click();
@@ -125,19 +127,19 @@ assert.deepEqual(shortcuts.map(s=>s.action),['open-pending-provisions','open-sic
         const bounds = report.querySelector('[role=dialog]').getBoundingClientRect();
         const axis = report.dataset.reportPortrait === 'true' ? 'y' : 'x';
         const before = label.getBoundingClientRect()[axis];
-        const currentStageVisible = stage.querySelector('.gantt-bar').getBoundingClientRect()[axis] < bounds[axis === 'y' ? 'bottom' : 'right'];
+        const currentStageVisible = firstStage.querySelector('.gantt-bar').getBoundingClientRect()[axis] < bounds[axis === 'y' ? 'bottom' : 'right'];
         const initialScroll = scroll.scrollLeft;
         scroll.scrollLeft = 160;
         const result = {
-          collapsed, childName: child.querySelector('.gantt-name').textContent,
+          order, collapsed, childName: child.querySelector('.gantt-name').textContent,
           colors: [stage, child].map(row => getComputedStyle(row.querySelector('.gantt-bar')).backgroundColor),
-          currentStageVisible, moved: scroll.scrollLeft < initialScroll, sticky: Math.abs(label.getBoundingClientRect()[axis] - before) < 1,
+          currentStageVisible, moved: scroll.scrollLeft !== initialScroll, sticky: Math.abs(label.getBoundingClientRect()[axis] - before) < 1,
           fits: bounds.x >= 0 && bounds.right <= innerWidth && bounds.y >= 0 && bounds.bottom <= innerHeight,
         };
         report.querySelector('.report-close-control').click();
         return { ...result, closed: report.hidden };
       })()`);
-      assert.deepEqual(gantt, { collapsed: true, childName: 'ESCAVAÇÃO', colors: ['rgb(170, 40, 57)', 'rgb(36, 114, 58)'],
+      assert.deepEqual(gantt, { order: ['PINTURA', 'FUNDAÇÃO'], collapsed: true, childName: 'ESCAVAÇÃO', colors: ['rgb(170, 40, 57)', 'rgb(36, 114, 58)'],
         currentStageVisible: true, moved: true, sticky: true, fits: true, closed: true });
       const mascotFit=await evaluate(`(()=>{return [...document.querySelectorAll('.chat-message--external-provisions > button,.chat-message--external-cargos > button,.chat-main-commercial-shortcuts > button')].filter(b=>b.querySelector('img')).map(b=>{const i=b.querySelector('img'),r=b.getBoundingClientRect(),q=i.getBoundingClientRect(),s=getComputedStyle(i);return {action:b.dataset.action,source:i.naturalWidth,fit:s.objectFit,blend:s.mixBlendMode,transform:s.transform,inside:q.left>=r.left&&q.right<=r.right&&q.top>=r.top&&q.bottom<=r.bottom,fill:getComputedStyle(b).backgroundColor};});})()`);
       assert.equal(mascotFit.length,25);

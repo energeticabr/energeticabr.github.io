@@ -1,0 +1,45 @@
+<!doctype html><html><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"></head><body><main id="app"></main><script type="module">
+import '../../src/styles.css';
+import '../../src/ui/stage-gantt.css';
+import {createStageGanttView} from '../../src/ui/stage-gantt-view.js';
+const branch='004 - EDIFÍCIO XAVANTE';
+const view=createStageGanttView({document,now:()=>new Date(2026,3,30),data:{
+ async loadSnapshot(){return {complete:true,launches:[
+  {id:1,branch,stage:'Etapa',type:'ATIVIDADE COMUM',status:'FINALIZADO',startDate:'2026-01-01',endDate:'2026-04-30'},
+ ],activities:[
+  {id:1,branch,stage:'Etapa',activity:'Curta no final',property:'',supplier:'',status:'ATIVIDADE FINALIZADA',executionDate:'2026-04-30',plannedDate:'2026-04-30'},
+  {id:2,branch,stage:'Etapa',activity:'Longa',property:'',supplier:'',status:'ATIVIDADE INICIADA',executionDate:'2026-01-02',plannedDate:'2026-04-29'},
+  {id:3,branch,stage:'Etapa',activity:'Curta',property:'',supplier:'',status:'ATIVIDADE INICIADA',executionDate:'2026-01-04',plannedDate:'2026-01-06'},
+ ]};},
+ async loadAssignments(){return {complete:true,rows:[]};},
+}});
+await view.open();
+view.element.querySelector('.gantt-toggle').click();
+await document.fonts.ready;
+await new Promise(resolve=>requestAnimationFrame(()=>requestAnimationFrame(resolve)));
+const root=view.element,scroll=root.querySelector('.gantt-scroll');
+const measure=()=>[...root.querySelectorAll('.gantt-row--activity')].map(row=>{
+ const bar=row.querySelector('.gantt-bar'),label=bar.querySelector('span')||bar;
+ const barRect=bar.getBoundingClientRect(),labelRect=label.getBoundingClientRect();
+ const sideways=root.dataset.reportPortrait==='true';
+ const left=sideways?labelRect.top-barRect.top:labelRect.left-barRect.left;
+ const width=sideways?barRect.height:barRect.width;
+ return {name:row.querySelector('.gantt-name').textContent,text:label.textContent,barWidth:bar.clientWidth,
+  labelWidth:label.offsetWidth,outside:label!==bar&&left>=width,
+  fits:label!==bar&&left>=0&&left+label.offsetWidth<=width+1};
+});
+const initial=measure();
+// Change available timeline width without recreating the report.
+root.querySelector('.gantt-sheet').style.setProperty('--gantt-width','1800px');
+await new Promise(resolve=>requestAnimationFrame(()=>requestAnimationFrame(resolve)));
+const resized=measure();
+scroll.scrollLeft=scroll.scrollWidth;
+const finalBar=[...root.querySelectorAll('.gantt-row--activity')].find(row=>row.textContent.includes('Curta no final')).querySelector('.gantt-bar');
+const label=finalBar.querySelector('span')||finalBar;
+const labelRect=label.getBoundingClientRect(),viewport=scroll.getBoundingClientRect();
+const portrait=root.dataset.reportPortrait==='true';
+const endVisible=portrait?labelRect.bottom<=viewport.bottom+1:labelRect.right<=viewport.right+1;
+label.click();
+await new Promise(resolve=>setTimeout(resolve,0));
+document.documentElement.dataset.layout=JSON.stringify({initial,resized,endVisible,detailOpen:!root.querySelector('.gantt-detail-backdrop').hidden});
+</script></body></html>
