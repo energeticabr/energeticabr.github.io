@@ -50,8 +50,8 @@ test("relatório 9 aplica período e filtros, agrega filiais e limita rankings a
   assert.equal(report.count, 2);
   assert.equal(report.total, 75);
   assert.equal(report.branches[0].total, 75);
-  assert.equal(report.branches[0].expenseTypes[0].name, "Material");
-  assert.equal(report.branches[0].expenseTypes[0].percentage, 100);
+  assert.equal(report.expenseBranches[0].expenseTypes[0].name, "Material");
+  assert.equal(report.expenseBranches[0].expenseTypes[0].percentage, 100);
   assert.deepEqual(report.branches[0].products.map(item => item.name), ["Cimento", "Areia"]);
   const many = model.buildSpendingReport9({ launches: Array.from({ length: 17 }, (_, index) =>
     row(index + 1, { product: `Produto ${index}`, total: index + 1 })), productTypes: [] });
@@ -145,7 +145,7 @@ test("classificação do produto usa a primeira correspondência do cadastro", (
   const report = model.buildSpendingReport9({ launches: [row(1)], productTypes: [
     { product: "Cimento", expenseType: "Material" }, { product: "Cimento", expenseType: "Duplicado" },
   ] });
-  assert.equal(report.branches[0].expenseTypes[0].name, "Material");
+  assert.equal(report.expenseBranches[0].expenseTypes[0].name, "Material");
 });
 
 test("relatório 9 ignora mês sem ano e exclui lançamento sem DATA", () => {
@@ -153,4 +153,38 @@ test("relatório 9 ignora mês sem ano e exclui lançamento sem DATA", () => {
   const report = model.buildSpendingReport9({ launches, productTypes: [] }, { month: "9" });
   assert.equal(report.count, 2);
   assert.equal(report.total, 90);
+});
+
+test("despesas por filial cruzam a data efetiva e a prevista sem duplicar pagamentos", () => {
+  const paid = model.normalizeSpendingLaunch({ id: "1", fields: {
+    field_2: "2026-08-01", field_3: "2026-09-02", field_4: "2026-09-03",
+    FILIAL: "Filial A", ETAPA: "Fundação", PRODUTO: "Cimento", QUANTIDADE: 1, VALORUNITARIO: ".1",
+  } });
+  const launches = [
+    paid,
+    row(2, { date: "2026-08-01", paymentDate: "", expectedPaymentDate: "2026-09-01", total: .2 }),
+    row(3, { branch: "Filial B", paymentDate: "", expectedPaymentDate: "2026-09-30", total: 150 }),
+    row(4, { paymentDate: "2026-10-01", expectedPaymentDate: "2026-09-01", total: 300 }),
+    row(5, { paymentDate: "", expectedPaymentDate: "2026-10-01", total: 400 }),
+    row(6, { paymentDate: "", expectedPaymentDate: "", total: 500 }),
+    row(7, { stage: "Obra", total: 1000 }),
+  ];
+  assert.equal(paid.paymentDate, "2026-09-03");
+  assert.equal(paid.expectedPaymentDate, "2026-09-02");
+  const report = model.buildSpendingReport9({
+    launches, productTypes: [{ product: "Cimento", expenseType: "Material" }],
+  }, { year: "2026", month: "9", stage: "Fundação" });
+  assert.deepEqual(report.expenseBranches.map(({ name, paid, forecast, total }) => [name, paid, forecast, total]), [
+    ["Filial B", 0, 150, 150], ["Filial A", .1, .2, .3],
+  ]);
+  assert.deepEqual(report.expenseBranches[1].expenseTypes, [
+    { name: "Material", paid: .1, forecast: .2, total: .3, percentage: 100 },
+  ]);
+});
+
+test("valor ausente em um previsto deixa apenas a previsão e a soma incompletas", () => {
+  const launches = [row(1), row(2, { paymentDate: "", expectedPaymentDate: "2026-09-01", total: null })];
+  const report = model.buildSpendingReport9({ launches }, { year: "2026", month: "9" });
+  const [{ paid, forecast, total }] = report.expenseBranches;
+  assert.deepEqual({ paid, forecast, total }, { paid: 45, forecast: null, total: null });
 });

@@ -49,6 +49,29 @@ export function createManagementReportView({document:doc=globalThis.document,dat
     if(labels.length){const tr=make('tr');for(const label of labels){const th=make('th','',label);th.scope='col';tr.append(th);}head.append(tr);}
     const body=make('tbody');table.append(head,body);content.append(table);return body;
   }
+  function expenseAmounts(tr, amounts) {
+    cell(tr,'paid',money(amounts.paid),1,'gm-money');
+    cell(tr,'forecast',money(amounts.forecast),1,'gm-money');
+    cell(tr,'percentage',percent(amounts.percentage));
+    cell(tr,'total',money(amounts.total),1,'gm-money');
+  }
+  function renderExpenses(branches) {
+    const body=table('expense','PERCENTUAL POR TIPO DE DESPESA POR FILIAL',
+      ['FILIAL','TIPO DE DESPESA','PAGO','PREVISTO','% DA FILIAL','TOTAL GERAL'],[23,25,13,13,10,16]);
+    for(const branch of branches) {
+      branch.expenseTypes.forEach((group,index)=>{
+        const tr=make('tr');
+        if(index===0)cell(tr,'branch',branch.name,branch.expenseTypes.length+1,'gm-branch');
+        cell(tr,'name',group.name);
+        expenseAmounts(tr,group);
+        body.append(tr);
+      });
+      const total=make('tr','gm-total');
+      cell(total,'label','TOTAL DA FILIAL');
+      expenseAmounts(total,branch);
+      body.append(total);
+    }
+  }
   function render() {
     content.replaceChildren();showNotice('');if(!snapshot)return;
     const result=buildSpendingReport9(snapshot,selected());
@@ -60,17 +83,17 @@ export function createManagementReportView({document:doc=globalThis.document,dat
     const period=make('tr');cell(period,'label','PERÍODO',1,'gm-label');const periodValue=cell(period,'period',result.period);periodValue.colSpan=3;periodValue.dataset.metric='period';summary.append(period);
     const branches=table('branches','TOTAL GASTO ACUMULADO POR FILIAL',['FILIAL','QTDE. LINHAS','TOTAL GASTO','% DO TOTAL DO MÊS'],[35,20,23,22]);
     for(const branch of result.branches){const tr=make('tr');cell(tr,'branch',branch.name);cell(tr,'count',branch.count);cell(tr,'total',money(branch.total),1,'gm-money');cell(tr,'percentage',percent(branch.percentage));branches.append(tr);}
-    for(const [section,title,label,withQuantity,ownPercentage] of [
-      ['expense','PERCENTUAL POR TIPO DE DESPESA POR FILIAL','TIPO DE DESPESA',true,true],
-      ['products','PRODUTOS COM MAIOR GASTO POR FILIAL','PRODUTO',true,false],
-      ['stages','ETAPAS COM MAIOR GASTO POR FILIAL','ETAPA',false,false],
-      ['suppliers','PRINCIPAIS FORNECEDORES POR FILIAL','FORNECEDOR',false,false],
-      ['accounts','MAIORES GASTOS POR CONTA POR FILIAL','CONTA',false,false],
+    renderExpenses(result.expenseBranches);
+    for(const [section,title,label,withQuantity] of [
+      ['products','PRODUTOS COM MAIOR GASTO POR FILIAL','PRODUTO',true],
+      ['stages','ETAPAS COM MAIOR GASTO POR FILIAL','ETAPA',false],
+      ['suppliers','PRINCIPAIS FORNECEDORES POR FILIAL','FORNECEDOR',false],
+      ['accounts','MAIORES GASTOS POR CONTA POR FILIAL','CONTA',false],
     ]) {
-      const labels=['FILIAL',label,'QTDE. LINHAS',...(withQuantity?['QTD TOTAL']:[]),'TOTAL GASTO',ownPercentage?'% DA FILIAL':'% DO TOTAL DO MÊS'];
+      const labels=['FILIAL',label,'QTDE. LINHAS',...(withQuantity?['QTD TOTAL']:[]),'TOTAL GASTO','% DO TOTAL DO MÊS'];
       const body=table(section,title,labels,withQuantity?[24,28,12,12,13,11]:[24,34,14,15,13]);
       for(const branch of result.branches) {
-        const groups=section==='expense'?branch.expenseTypes:branch[section];
+        const groups=branch[section];
         groups.forEach((group,index)=>{
           const tr=make('tr');if(index===0)cell(tr,'branch',branch.name,groups.length+1,'gm-branch');
           cell(tr,'name',group.name);cell(tr,'count',group.count);if(withQuantity)cell(tr,'quantity',number(group.quantity));
@@ -78,17 +101,19 @@ export function createManagementReportView({document:doc=globalThis.document,dat
         });
         const total=make('tr','gm-total');cell(total,'label','TOTAL DA FILIAL');cell(total,'count',branch.count);
         if(withQuantity)cell(total,'quantity',number(branch.quantity));cell(total,'total',money(branch.total),1,'gm-money');
-        cell(total,'percentage',percent(ownPercentage?(branch.total===null?null:branch.total===0?0:100):branch.percentage));body.append(total);
+        cell(total,'percentage',percent(branch.percentage));body.append(total);
       }
     }
     if(result.incompleteCount)showNotice(`${result.incompleteCount} lançamento(s) com valores incompletos. Totais afetados aparecem como INCOMPLETO.`);
-    else if(!result.count)showNotice('Nenhum lançamento corresponde aos filtros.');
+    else if(!result.count&&!result.expenseBranches.length)showNotice('Nenhum lançamento corresponde aos filtros.');
   }
   function populate() {
     pickers?.destroy();pickers=null;
     for(const [name] of FIELDS) {
       const control=controls.get(name),current=control.value;
-      const values=name==='year'?[String(now().getFullYear()),...snapshot.launches.map(row=>row.date?.slice(0,4))]:name==='month'?MONTHS.map((_,i)=>String(i+1)):snapshot.launches.map(row=>row[name]);
+      const values=name==='year'?[String(now().getFullYear()),...snapshot.launches.flatMap(row=>
+        [row.date,row.paymentDate||row.expectedPaymentDate].map(date=>date?.slice(0,4)))]
+        :name==='month'?MONTHS.map((_,i)=>String(i+1)):snapshot.launches.map(row=>row[name]);
       const unique=[...new Set(values.filter(Boolean).map(String))].sort((a,b)=>name==='year'?Number(b)-Number(a):name==='month'?Number(a)-Number(b):a.localeCompare(b,'pt-BR'));
       control.replaceChildren(Object.assign(make('option','','Todos'),{value:''}));
       for(const value of unique)control.append(Object.assign(make('option','',name==='month'?MONTHS[Number(value)-1]:value),{value}));

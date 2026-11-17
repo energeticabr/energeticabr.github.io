@@ -53,7 +53,8 @@ export function normalizeSpendingLaunch(item, columns = []) {
   const freight = amount(get("FRETE", "field_10"));
   return Object.freeze({
     id: scalar(item?.id || get("ID")), date: dateOnly(get("DATA", "field_2")),
-    paymentDate: dateOnly(get("DATA PGTO EFETUADO", "DATAPGTOEFETUADO")),
+    paymentDate: dateOnly(get("DATA PGTO EFETUADO", "DATAPGTOEFETUADO", "field_4")),
+    expectedPaymentDate: dateOnly(get("DATA PGTO PREVISTO", "DATAPGTOPREVISTO", "DATAPREVISTOPGTO", "field_3")),
     supplier: get("FORNECEDOR", "field_5"), product: get("PRODUTO", "field_7"),
     branch: get("FILIAL", "Title"), disbursement: get("GERADESEMBOLSO", "GERA DESEMBOLSO"),
     order: get("AGRUPAR"), stage: get("ETAPA", "field_6"), account: get("CONTA", "field_14"),
@@ -99,69 +100,80 @@ const percentage = (part, whole) => part == null || whole == null ? null : whole
 const byValue = (left, right) => (right.total ?? -Infinity) - (left.total ?? -Infinity)
   || left.name.localeCompare(right.name, "pt-BR");
 
-function selectedRows(launches, filters, reportNumber) {
+function selectedRows(launches, filters, periodDate = row => row.date) {
   return (launches || []).filter(row => {
     for (const field of ["supplier", "product", "branch", "disbursement", "stage"]) {
       if (filters[field] && !equals(row[field], filters[field])) return false;
     }
     if (filters.order && !(equals(row.order, filters.order)
       || Number.isFinite(Number(row.order)) && Number(row.order) === Number(filters.order))) return false;
-    if (reportNumber === 9) {
-      if (!row.date || row.date < "1900-01-01" || row.date >= "2100-01-01") return false;
-      if (filters.year && row.date.slice(0, 4) !== String(filters.year)) return false;
-      if (filters.year && filters.month && Number(row.date.slice(5, 7)) !== Number(filters.month)) return false;
-    } else {
-      if (filters.startDate && (!row.date || row.date < filters.startDate)) return false;
-      if (filters.endDate && (!row.date || row.date > filters.endDate)) return false;
-    }
+    const date = periodDate(row);
+    if (!date || date < "1900-01-01" || date >= "2100-01-01") return false;
+    if (filters.year && date.slice(0, 4) !== String(filters.year)) return false;
+    if (filters.year && filters.month && Number(date.slice(5, 7)) !== Number(filters.month)) return false;
     return true;
   });
 }
 
-function grouped(rows, field, whole, limit = Infinity) {
+function groupRows(rows, nameOf) {
   const groups = new Map();
   for (const row of rows) {
-    const name = scalar(row[field]) || "-";
+    const name = scalar(nameOf(row)) || "-";
     if (!groups.has(name)) groups.set(name, []);
     groups.get(name).push(row);
   }
-  return [...groups].map(([name, values]) => {
+  return [...groups];
+}
+
+function grouped(rows, field, whole, limit = Infinity) {
+  return groupRows(rows, row => row[field]).map(([name, values]) => {
     const total = completeSum(values, "total");
     return Object.freeze({ name, count: values.length, quantity: completeSum(values, "quantity"), total,
       percentage: percentage(total, whole) });
   }).sort(byValue).slice(0, limit);
 }
 
+function paymentTotals(rows) {
+  const paid = completeSum(rows.filter(row => row.paymentDate), "total");
+  const forecast = completeSum(rows.filter(row => !row.paymentDate), "total");
+  return { paid, forecast, total: completeSum([{ total: paid }, { total: forecast }], "total") };
+}
+
 export function buildSpendingReport9(snapshot, filters = {}) {
-  const rows = selectedRows(snapshot?.launches, filters, 9);
+  const rows = selectedRows(snapshot?.launches, filters);
+  const expenseRows = selectedRows(snapshot?.launches, filters, row => row.paymentDate || row.expectedPaymentDate);
   const total = completeSum(rows, "total");
   const productTypes = new Map();
   for (const row of snapshot?.productTypes || []) {
     const product = scalar(row.product).toLocaleLowerCase("pt-BR");
     if (product && !productTypes.has(product)) productTypes.set(product, scalar(row.expenseType));
   }
-  const byBranch = new Map();
-  for (const row of rows) {
-    const name = scalar(row.branch) || "-";
-    if (!byBranch.has(name)) byBranch.set(name, []);
-    byBranch.get(name).push(row);
-  }
-  const branches = [...byBranch].map(([name, values]) => {
+  const branchName = row => row.branch;
+  const branches = groupRows(rows, branchName).map(([name, values]) => {
     const branchTotal = completeSum(values, "total");
-    const classified = values.map(row => ({ ...row, expenseType: !row.product ? "SEM PRODUTO"
-      : productTypes.get(row.product.toLocaleLowerCase("pt-BR")) || "SEM TIPO DE DESPESA" }));
     return Object.freeze({ name, count: values.length, quantity: completeSum(values, "quantity"),
       total: branchTotal, percentage: percentage(branchTotal, total),
-      expenseTypes: grouped(classified, "expenseType", branchTotal),
       products: grouped(values, "product", total, 15), stages: grouped(values, "stage", total, 15),
       suppliers: grouped(values, "supplier", total, 15), accounts: grouped(values, "account", total),
     });
   }).sort(byValue);
+  const expenseType = row => !row.product ? "SEM PRODUTO"
+    : productTypes.get(row.product.toLocaleLowerCase("pt-BR")) || "SEM TIPO DE DESPESA";
+  const expenseBranches = groupRows(expenseRows, branchName).map(([name, values]) => {
+    const totals = paymentTotals(values);
+    const expenseTypes = groupRows(values, expenseType).map(([name, items]) => {
+      const amounts = paymentTotals(items);
+      return Object.freeze({ name, ...amounts, percentage: percentage(amounts.total, totals.total) });
+    }).sort(byValue);
+    return Object.freeze({ name, ...totals, percentage: percentage(totals.total, totals.total),
+      expenseTypes: Object.freeze(expenseTypes) });
+  }).sort(byValue);
   const period = filters.year ? filters.month
     ? `${new Intl.DateTimeFormat("pt-BR", { month: "long" }).format(new Date(2020, Number(filters.month) - 1, 1))}/${filters.year}`
     : `Ano de ${filters.year}` : "Todos os períodos";
-  return Object.freeze({ count: rows.length, total, period, incompleteCount: rows.filter(row => !Number.isFinite(row.total)).length,
-    branches: Object.freeze(branches) });
+  const incompleteCount = new Set([...rows, ...expenseRows].filter(row => !Number.isFinite(row.total))).size;
+  return Object.freeze({ count: rows.length, total, period, incompleteCount,
+    branches: Object.freeze(branches), expenseBranches: Object.freeze(expenseBranches) });
 }
 
 export function buildSpendingReport10(snapshot, filters = {}) {
