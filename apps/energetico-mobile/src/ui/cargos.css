@@ -4,9 +4,14 @@
 /* WKWebView can report a zero inset. In the rotated report, the physical top is the logical left. */
 .cargos-backdrop[data-iphone][data-report-portrait="true"] { padding-left: max(var(--cargos-iphone-edge), env(safe-area-inset-top)) !important; }
 .cargos-screen {
+  --cargos-safe-top: max(12px, env(safe-area-inset-top));
   --cargos-safe-right: max(12px, env(safe-area-inset-right), var(--cargos-iphone-edge));
   position: relative; box-sizing: border-box; display: flex; flex-direction: column; background: #f3f8fa; color: #10375d;
-  padding: max(12px, env(safe-area-inset-top)) var(--cargos-safe-right) max(12px, env(safe-area-inset-bottom)) max(12px, env(safe-area-inset-left), var(--cargos-iphone-edge));
+  padding: var(--cargos-safe-top) var(--cargos-safe-right) max(12px, env(safe-area-inset-bottom)) max(12px, env(safe-area-inset-left), var(--cargos-iphone-edge));
+}
+.cargos-backdrop[data-report-portrait="true"] .cargos-screen {
+  --cargos-safe-top: max(3px, env(safe-area-inset-right));
+  --cargos-safe-right: 3px;
 }
 .cargos-screen[hidden] { display: none; }
 .cargos-header { display: flex; align-items: center; gap: 12px; flex-shrink: 0; margin-bottom: 8px; }
@@ -15,9 +20,12 @@
 .cargos-status { font-size: 14px; margin: 0 0 8px; }
 .cargos-status:empty { display: none; }
 .cargos-scroll { min-height: 0; flex: 1; overflow: auto; overscroll-behavior: contain; border-radius: 10px; border: 1px solid #c1d2df; background: white; }
-.cargos-screen:has(> .report-navigation) .cargos-scroll { margin-inline-end: calc(var(--report-navigation-size) + 8px); }
+.cargos-screen:has(> .report-navigation) { --cargos-navigation-space: calc(var(--report-navigation-size) + 8px); }
+.cargos-scroll { margin-inline-end: var(--cargos-navigation-space, 0px); }
 .cargos-screen .report-navigation .report-navigation-arrow--next { position: absolute; right: var(--cargos-safe-right); }
-.cargos-backdrop[data-report-portrait="true"] .cargos-screen .report-navigation-arrow--next { right: 3px; }
+.cargos-backdrop[data-report-max-650="true"] .cargos-scroll { margin-inline-end: 0; }
+.cargos-backdrop[data-report-max-650="true"] .cargos-header { padding-inline-end: var(--cargos-navigation-space, 0px); }
+.cargos-backdrop[data-report-max-650="true"] .cargos-screen .report-navigation-arrow--next { top: var(--cargos-safe-top); transform: none; }
 .cargos-table { width: 100%; border-collapse: separate; border-spacing: 0; font-size: clamp(11px, calc(1.7 * var(--report-vw)), 14px); }
 .cargos-table th, .cargos-table td { padding: clamp(8px, calc(1.5 * var(--report-vw)), 15px) clamp(4px, var(--report-vw), 12px); border-bottom: 1px solid #d6e2e9; text-align: right; white-space: nowrap; }
 .cargos-table thead th { position: sticky; top: 0; z-index: 2; background: #10375d; color: white; font-size: clamp(10px, calc(1.5 * var(--report-vw)), 12px); white-space: normal; }
