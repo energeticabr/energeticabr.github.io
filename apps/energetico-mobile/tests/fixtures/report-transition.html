@@ -1,6 +1,6 @@
 <!doctype html>
 <html lang="pt-BR"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
-<link rel="stylesheet" href="/src/styles.css"><link rel="stylesheet" href="/src/ui/payment-ledger.css"><link rel="stylesheet" href="/src/ui/provision-report.css"><link rel="stylesheet" href="/src/ui/searchable-filter-selects.css"></head>
+<link rel="stylesheet" href="/src/styles.css"><link rel="stylesheet" href="/src/ui/payment-ledger.css"><link rel="stylesheet" href="/src/ui/provision-report.css"><link rel="stylesheet" href="/src/ui/cargos.css"><link rel="stylesheet" href="/src/ui/attendance-summary.css"><link rel="stylesheet" href="/src/ui/searchable-filter-selects.css"></head>
 <body><main id="app"><button>HOME de teste</button></main><script>
 addEventListener('error',event=>document.documentElement.dataset.layout=JSON.stringify({error:event.message}));
 addEventListener('unhandledrejection',event=>document.documentElement.dataset.layout=JSON.stringify({error:String(event.reason)}));
@@ -11,8 +11,11 @@ import {createAppController} from '/src/app-controller.js';
 import {createConversationStore} from '/src/chat/conversation-store.js';
 import {createPaymentLedgerView} from '/src/ui/payment-ledger-view.js';
 import {createProvisionReportView} from '/src/ui/provision-report-view.js';
+import {createCargosView} from '/src/ui/cargos-view.js';
+import {createAttendanceSummaryReportView} from '/src/ui/attendance-summary-view.js';
 try {
  window.transitionStage='controller';
+ const cargos=new URLSearchParams(location.search).has('cargos'),scrollSelector=cargos?'.cargos-scroll':'.pl-table-scroll';
  const handlers=new Map(),panels=[];
  const view={render(){},on(type,fn){handlers.set(type,fn);return()=>handlers.delete(type);},focusComposer(){}};
  const account={homeAccountId:'transition-test',name:'Teste'};
@@ -24,20 +27,24 @@ try {
   client:{getPendingProvisionSnapshot:async()=>({rows:[]}),sendText:async()=>({status:'processed',messages:[]})},
   native:{importSharedItems:async()=>[]},pendingProvisionAttachmentsDataFactory:async()=>({loadUpcomingPayments:async()=>[]}),
   paymentLedgerDataFactory:async()=>data,
+  cargosDataFactory:async()=>({loadSnapshot:async()=>({rows:Array.from({length:50},(_,i)=>({cargo:`Cargo ${i+1}`,salary:100,food:20,bonus:0,transport:10,total:130}))})}),
+  attendanceSummaryDataFactory:async()=>({async loadSnapshot(){await gate.promise;return {suppliers:[],presences:[]};}}),
+  cargosFactory:options=>{const panel=createCargosView({...options,document});panels.push(panel);return panel;},
+  attendanceSummaryFactory:options=>{const panel=createAttendanceSummaryReportView({...options,document});panels.push(panel);return panel;},
   paymentLedgerFactory:options=>{const panel=createPaymentLedgerView({...options,document});panels.push(panel);return panel;},
   provisionReportFactory:options=>{const panel=createProvisionReportView({...options,document});panels.push(panel);return panel;},
  });
- window.transitionStage='start';await controller.start();window.transitionStage='payments';await handlers.get('open-payment-ledger')({type:'open-payment-ledger'});
- const source=panels[0].element,scroll=source.querySelector('.pl-table-scroll');
+ window.transitionStage='start';await controller.start();window.transitionStage='payments';await handlers.get(cargos?'open-cargos-table':'open-payment-ledger')({});
+ const source=panels[0].element.closest('.report-landscape-viewport'),scroll=source.querySelector(scrollSelector);
  scroll.scrollTop=180;
  const expectedScroll=scroll.scrollTop,rect=source.querySelector('[role="dialog"]').getBoundingClientRect();
- const opening=handlers.get('navigate-mascot-report')({from:'open-payment-ledger',direction:'previous'});
+ const opening=handlers.get('navigate-mascot-report')({from:cargos?'open-cargos-table':'open-payment-ledger',direction:cargos?'next':'previous'});
  window.transitionStage='frames';
  const frames=[];
  for(let i=0;i<4;i++){
   await new Promise(requestAnimationFrame);
   const layer=document.querySelector('[data-report-transition]'),copy=layer?.firstElementChild;
-  frames.push({retained:!!layer,sourceVisible:!source.hidden,scroll:copy?.querySelector('.pl-table-scroll').scrollTop,
+  frames.push({retained:!!layer,sourceVisible:!source.hidden,scroll:copy?.querySelector(scrollSelector).scrollTop,
    topmost:!!document.elementFromPoint(innerWidth/2,innerHeight/2)?.closest('[data-report-transition]'),
    background:copy&&getComputedStyle(copy).backgroundColor});
  }
@@ -46,7 +53,7 @@ try {
  window.transitionStage='destination';gate.resolve();await opening;await new Promise(requestAnimationFrame);
  const destination=panels[1].element;
  document.documentElement.dataset.layout=JSON.stringify({frames,expectedScroll,sameBounds,removed:!document.querySelector('[data-report-transition]'),
-  ready:destination.textContent.includes('Destino pronto'),background:getComputedStyle(destination).backgroundColor,
+  ready:cargos?!destination.querySelector('[aria-busy="true"]')&&!destination.textContent.includes('Carregando presenças'):destination.textContent.includes('Destino pronto'),background:getComputedStyle(destination).backgroundColor,
   visible:!destination.hidden});
 }catch(error){document.documentElement.dataset.layout=JSON.stringify({error:String(error.stack||error)});}
 </script></body></html>

@@ -14,8 +14,8 @@ test('real controller swaps ready reports without HOME or blank frames on phone 
  const server=await createIsolatedViteServer({root,optimizeDeps:{noDiscovery:true,include:['decimal.js','pdf-lib','pako','@capacitor/core']},server:{host:'127.0.0.1',port:0,hmr:false,fs:{allow:[resolve(root,'../..')]}},logLevel:'silent'});
  try{
   await server.listen();
-  for(const [width,height] of [[390,844],[844,390],[1365,1000]]){
-   const {stdout}=await runBrowserLayout(browser,{width,height,url:`http://127.0.0.1:${server.httpServer.address().port}/tests/fixtures/report-transition.html`});
+  for(const mode of ['', '?cargos'])for(const [width,height] of [[390,844],[844,390],[1365,1000]]){
+   const {stdout}=await runBrowserLayout(browser,{width,height,url:`http://127.0.0.1:${server.httpServer.address().port}/tests/fixtures/report-transition.html${mode}`});
    const dom=new JSDOM(stdout);
    try{
     const result=JSON.parse(dom.window.document.documentElement.dataset.layout);
