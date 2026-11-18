@@ -88,6 +88,12 @@ test('NFE opens the horizontal fiscal table from the blue mascot in portrait and
       try {
         const layout = JSON.parse(dom.window.document.documentElement.dataset.layout);
         assert.equal(layout.error, undefined);
+        const proposalControls = JSON.parse(dom.window.document.documentElement.dataset.proposalControls);
+        assert.ok(proposalControls.some(control => control.name === 'paymentDate'));
+        assert.ok(proposalControls.every(control => control.height === 44), JSON.stringify(proposalControls));
+        const [orderDate, paymentDate] = JSON.parse(dom.window.document.documentElement.dataset.proposalDates);
+        assert.equal(orderDate.top, paymentDate.top);
+        assert.ok(paymentDate.left > orderDate.left);
         const { provisions, orange, commercial, sicoob, nfe, dda, open, rowIds, overflow, tableScrolls, rotated, mei, pdfOnLeft, metricsAbove,
           headerControls, amountFits, pdfIconWidth, pdfTargetHeight, reportBodyWidth, availableReportWidth, overlayArrows,
           filterNames, filtersFit, taxHeading, taxStacked, invalidCno, pencilHeight

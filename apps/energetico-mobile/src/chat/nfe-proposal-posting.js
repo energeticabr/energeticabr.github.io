@@ -22,7 +22,7 @@ const RESERVATION_EXPANDED_LIMIT = 4 * 1024 * 1024;
 const GZIP_PREFIX = 'gzip:';
 const READBACK_BATCH_SIZE = 6;
 const reservedFields = new Set([RESERVATION, ORDER_ORIGIN, LINE_ORIGIN, 'AGRUPAR', 'DESCRITIVOPROVISAO', 'IDPEDIDO', 'ID']);
-const civilDateFields = new Set(['DATAPEDIDO', 'field_2', 'field_3', 'DATA', 'DATAPREVISTOPGTO']);
+const civilDateFields = new Set(['DATAPEDIDO', 'field_2', 'field_3', 'field_4', 'DATA', 'DATAPREVISTOPGTO']);
 const civilDate = /^\d{4}-\d{2}-\d{2}(?:$|T)/;
 const blank = value => value == null || value === '';
 const record = value => value && Object.getPrototypeOf(value) === Object.prototype;
