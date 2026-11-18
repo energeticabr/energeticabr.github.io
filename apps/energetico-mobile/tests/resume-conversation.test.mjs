@@ -112,3 +112,52 @@ test('the shared inactivity cap also cancels a pending retry delay', async t => 
   assert.equal(await pending, 'RESUME_TIMEOUT');
   assert.equal(requests, 1);
 });
+
+test('a slow healthy initial menu is not abandoned and queried again after fifteen seconds', async t => {
+  t.mock.timers.enable({ apis: ['setTimeout'] });
+  let requests = 0, finish, settled = false;
+  const pending = resumeConversation({ sendText: () => {
+    requests++; return new Promise(resolve => { finish = resolve; });
+  } }).then(result => { settled = true; return result; });
+  await new Promise(setImmediate);
+  t.mock.timers.tick(16_000); await new Promise(setImmediate);
+  t.mock.timers.tick(750); await new Promise(setImmediate);
+  assert.equal(requests, 1);
+  finish('menu'); await new Promise(setImmediate);
+  assert.equal(await pending, 'menu');
+  assert.equal(settled, true);
+});
+
+test('advancing operation progress extends recovery', async t => {
+  t.mock.timers.enable({ apis: ['setTimeout'] });
+  let report, finish, signal;
+  const pending = resumeConversation({ sendText: (_body, options) => {
+    report = options.onOperationProgress; signal = options.progressSignal;
+    return new Promise(resolve => { finish = resolve; });
+  } }, { timeoutMs: 15_000, onOperationProgress() {} });
+  await new Promise(setImmediate);
+  t.mock.timers.tick(10_000); report({ percent: 40 });
+  t.mock.timers.tick(10_000); await new Promise(setImmediate);
+  assert.equal(signal.aborted, false);
+  report({ percent: 50 });
+  t.mock.timers.tick(10_000); await new Promise(setImmediate);
+  assert.equal(signal.aborted, false);
+  finish('menu'); assert.equal(await pending, 'menu');
+});
+
+test('unchanged operation progress and prepared animations cannot extend a hung recovery', async t => {
+  t.mock.timers.enable({ apis: ['setTimeout'] });
+  let report, signal;
+  const pending = resumeConversation({ sendText: (_body, options) => {
+    report = options.onOperationProgress; signal = options.progressSignal;
+    return new Promise(() => {});
+  } }, { onOperationProgress() {} }).catch(error => error.code);
+  await new Promise(setImmediate);
+  report({ percent: 40 });
+  for (let i = 0; i < 3; i++) {
+    t.mock.timers.tick(10_000); report({ percent: 40 }); report({ percent: 33 });
+    await new Promise(setImmediate);
+  }
+  assert.equal(await pending, 'RESUME_TIMEOUT');
+  assert.equal(signal.aborted, true);
+});

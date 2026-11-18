@@ -30,9 +30,9 @@ function timeoutError() {
 
 // Only the current-question control query is retried. User answers, uploads,
 // confirmations and the controller's subsequent automatic actions stay outside.
-export async function resumeConversation(client, { signal, timeoutMs = 15_000, maxWaitMs = 30_000, retryDelay,
+export async function resumeConversation(client, { signal, timeoutMs = 30_000, maxWaitMs = 30_000, retryDelay,
   onEvidenceProgress, ...options } = {}) {
-  const deadline = Math.max(1, Number(timeoutMs) || 15_000);
+  const deadline = Math.max(1, Number(timeoutMs) || 30_000);
   const lifetime = new AbortController();
   const cancelLifetime = () => lifetime.abort(cancellation(signal));
   check(signal);
@@ -73,7 +73,15 @@ export async function resumeConversation(client, { signal, timeoutMs = 15_000, m
         const result = await client.sendText({ text: '', replyId: 'input_continue' }, {
           ...options, progressSignal: request.signal,
           ...(typeof options.onOperationProgress === 'function' ? { onOperationProgress: value => {
-            if (!request.signal.aborted) options.onOperationProgress(value);
+            if (request.signal.aborted) return;
+            const percent = value?.percent;
+            // Only advancing server stages extend inactivity. Repeated polling,
+            // starting animations and a new transport ID cannot prolong a hang.
+            if (Number.isFinite(percent) && percent > 33 && percent <= 100
+                && percent > (progressByStage.get('operation') ?? -1)) {
+              progressByStage.set('operation', percent); touch(); touchTotal();
+            }
+            options.onOperationProgress(value);
           } } : {}),
         });
         check(request.signal);

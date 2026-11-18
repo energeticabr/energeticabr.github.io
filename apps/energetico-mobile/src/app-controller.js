@@ -1036,7 +1036,7 @@ export function createAppController({
   recovery,
   mediaLoadTimeoutMs = 30_000,
   rhidReportTimeoutMs = 30_000,
-  conversationResumeTimeoutMs = 15_000,
+  conversationResumeTimeoutMs = 30_000,
   conversationResumeRetryDelay,
   attendanceIrregularityDataFactory = createAttendanceIrregularityData,
   authTimeoutMs,
