@@ -120,19 +120,18 @@ export function classifyRhidPunch(value) {
   return RHID_SLOTS.find(([, , start, end]) => minutes >= start && minutes <= end)?.[0] || null;
 }
 
-// Infer a shifted lunch only from a unique, approximately one-hour raw pair
-// between known morning/evening punches. Never replace an already complete lunch.
+// Infer a shifted lunch from a unique 30–90 minute raw pair, even while
+// the day is incomplete. Never replace an already complete lunch.
 function assignShiftedRhidLunch(candidates, outside) {
   const recognized = new Set();
-  if ((candidates.exit1.length && candidates.entry2.length)
-    || ![1, 2].includes(candidates.entry1.length) || ![1, 2].includes(candidates.exit2.length)) return recognized;
+  if (candidates.exit1.length && candidates.entry2.length) return recognized;
   const midday = [...candidates.exit1, ...candidates.entry2,
     ...outside.filter(time => time >= '11:00' && time <= '14:30')].sort();
   if (midday.length !== 2) return recognized;
   const [departure, arrival] = midday;
   const minutes = time => Number(time.slice(0, 2)) * 60 + Number(time.slice(3));
   const interval = minutes(arrival) - minutes(departure);
-  if (departure > '13:30' || interval < 45 || interval > 90) return recognized;
+  if (departure > '13:30' || interval < 30 || interval > 90) return recognized;
   candidates.exit1 = [departure];
   candidates.entry2 = [arrival];
   recognized.add(departure); recognized.add(arrival);

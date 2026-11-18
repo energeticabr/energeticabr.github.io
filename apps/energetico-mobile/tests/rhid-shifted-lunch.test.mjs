@@ -11,6 +11,27 @@ const row = (punches, extra = {}) => ({ Id: '1', ID_PESSOA_RHID: '10', NOME_COLA
   DATA_REFERENCIA: date, BATIDAS_RHID: punches, ...extra });
 const badge = rows => buildAttendanceRhidBadge({ presenceId: '21', name: 'ANA', date }, { date, rows });
 
+test('unfinished shifted lunch is shared by the daily cards, presence badge and monthly report', () => {
+  const source = row('06:39;12:54;13:36');
+  assert.deepEqual(badge([source]).punches, { entry1: '06:39', exit1: '12:54', entry2: '13:36', exit2: null });
+  const monthly = buildRhidMonthlyReport({ month: '2026-10', supplier: { id: '4', name: 'ANA' }, startDate: date, endDate: date,
+    snapshot: { month: '2026-10', presentDates: [date], rows: [source] } });
+  assert.deepEqual(monthly.days[0].slots, ['06:39', '12:54', '13:36', '—']);
+  assert.equal(monthly.incompleteDays, 1);
+  const dom = new JSDOM('<main id="app"></main>');
+  const root = dom.window.document.querySelector('#app');
+  const view = createChatView(root);
+  try {
+    view.render({ sessionStatus: 'authenticated', account: { name: 'Tester' }, draft: '', pendingFiles: [],
+      messages: [{ id: 'lunch', role: 'assistant', type: 'poll', question: 'RHID', options: [],
+        detail_table: { ...buildRhidAttendanceTable([source]), reportDate: date } }] });
+    for (const [slot, time] of [['exit1', '12:54'], ['entry2', '13:36'], ['exit2', '—']]) {
+      assert.equal(root.querySelector(`[data-action="rhid-attendance-adjust-open"][data-slot="${slot}"] strong`).textContent, time);
+    }
+    assert.doesNotMatch(root.textContent, /Batida fora das faixas/);
+  } finally { view.destroy(); dom.window.close(); }
+});
+
 test('a unique 12:31 to 13:49 lunch between morning and evening punches is classified by its interval', () => {
   const source = Object.freeze(row('06:55;12:31;13:49;17:06'));
   const table = buildRhidAttendanceTable([source]);
@@ -78,15 +99,12 @@ test('unsorted JSON punches and fragments of one identity give the same lunch cl
 });
 
 for (const [punches, departure, arrival] of [
-  ['07:00;12:31;13:15;17:00', '12:31', '13:15'], // 44 minutes is not enough evidence for the new inference.
+  ['07:00;12:31;13:00;17:00', '12:31', '13:00'], // Less than 30 minutes.
   ['07:00;12:31;14:02;17:00', '12:31', '14:02'], // More than 90 minutes.
   ['07:00;13:31;14:30;17:00', '13:31', '14:30'], // Departure beyond the lunch window.
   ['07:00;13:01;14:31;17:00', '13:01', '14:31'], // Return beyond the lunch window.
-  ['12:31;13:49;17:00', '12:31', '13:49'], // No raw morning anchor.
-  ['07:00;12:31;13:49', '12:31', '13:49'], // No raw final departure.
   ['07:00;12:31;13:49;14:00;17:00', '12:31', '13:49'], // An additional midday candidate makes the interval ambiguous.
   ['07:00;12:00;13:00;13:49;17:00', '12:00', '13:49'], // An already complete lunch is not overwritten by an extra punch.
-  ['07:00;07:01;07:02;12:31;13:49;17:00', '12:31', '13:49'], // Ambiguous morning anchor.
 ]) {
   test(`insufficient or competing lunch evidence does not reclassify ${punches}`, () => {
     const table = buildRhidAttendanceTable([row(punches)]);
@@ -104,13 +122,14 @@ test('same-period duplicate selection and unrelated out-of-range audit warnings 
   assert.deepEqual(table.people[0].slots.exit2.rhidCandidates, ['16:58', '17:06']);
 });
 
-test('separate identities cannot supply the missing anchors for one another', () => {
+test('a lunch pair is local to its identity and never borrows another person final departure', () => {
   const table = buildRhidAttendanceTable([
     row('06:55;12:31;13:49'), row('17:06', { Id: '2', ID_PESSOA_RHID: '11' }),
   ]);
   assert.equal(table.people.length, 2);
-  assert.equal(table.people[0].slots.exit1.rhid, null);
-  assert.equal(table.people[0].slots.entry2.rhid, '12:31');
+  assert.equal(table.people[0].slots.exit1.rhid, '12:31');
+  assert.equal(table.people[0].slots.entry2.rhid, '13:49');
+  assert.equal(table.people[0].slots.exit2.effective, null);
 });
 
 test('the correction popup exposes 12:31 as original without silently erasing the approved 12:00 correction', () => {
