@@ -100,7 +100,7 @@ export function buildNfeProposal(invoice, fiscal, catalog) {
   const proposedProduct = createNfeProductMatcher(catalog.products);
   const header = catalog.learning?.header;
   const supplierId = header?.supplierId || selectionId(proposedSupplier(invoice, catalog.suppliers));
-  const draft = updateNfeProposalSupplier({ date:fiscal.issueDate, lines:[] }, supplierId, catalog);
+  const draft = updateNfeProposalSupplier({ date:fiscal.issueDate, paymentDate:'', lines:[] }, supplierId, catalog);
   if (header?.accountId) draft.accountId = header.accountId;
   const branchId = header?.branchId || draft.branchId;
   const context = { supplierId, branchId };
@@ -144,7 +144,7 @@ function checkedDate(value, label, optional = false) {
   return value;
 }
 
-export function validateNfeProposal(draft, fiscal, catalog, { provision = false, legacyUnits = false } = {}) {
+export function validateNfeProposal(draft, fiscal, catalog, { provision = false, legacyUnits = false, legacyPaymentDate = false } = {}) {
   const supplier = select(catalog.suppliers, draft.supplierId);
   const branch = select(catalog.branches, draft.branchId);
   const account = select(catalog.accounts, draft.accountId);
@@ -159,6 +159,7 @@ export function validateNfeProposal(draft, fiscal, catalog, { provision = false,
     throw new Error('A proposta precisa manter todas as linhas da nota fiscal.');
   }
   const date = checkedDate(draft.date, provision ? 'a data da nota' : 'a data do pedido');
+  const paymentDate = provision || legacyPaymentDate ? '' : checkedDate(draft.paymentDate, 'a data do pagamento efetuado');
   let total = new Decimal(0);
   const lines = draft.lines.map((line, index) => {
     const original = fiscal.lines[index];
@@ -192,5 +193,5 @@ export function validateNfeProposal(draft, fiscal, catalog, { provision = false,
     };
   });
   if (provision && total.lte(0)) throw new Error('O total da provisão deve ser maior que zero.');
-  return { supplier, branch, account, date, lines, total:total.toFixed(2) };
+  return { supplier, branch, account, date, ...(paymentDate ? { paymentDate } : {}), lines, total:total.toFixed(2) };
 }

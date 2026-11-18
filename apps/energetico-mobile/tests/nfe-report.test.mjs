@@ -832,6 +832,16 @@ test('NFE opens the same proposal from the pencil and directly below it, and sub
   assert.ok(root.querySelector('.nfe-proposal-dialog'));
   assert.deepEqual(proposalLoads, ['10', '10', '10']);
   assert.equal(writes.length, 0);
+  const paymentDate = root.querySelector('[name="paymentDate"]');
+  assert.ok(paymentDate);
+  assert.equal(root.querySelector('[name="date"]').parentElement.nextElementSibling, paymentDate.parentElement);
+  assert.equal(paymentDate.value, '');
+  root.querySelector('[data-nfe-proposal-submit]').click();
+  await tick();
+  assert.equal(writes.length, 0);
+  assert.match(root.querySelector('.nfe-proposal-status').textContent, /pagamento efetuado/i);
+  paymentDate.value = '2026-11-18';
+  paymentDate.dispatchEvent(new Event('change', { bubbles:true }));
   const select = root.querySelector('[name="supplierId"]');
   assert.equal(select.hidden, true);
   const supplierPicker = select.nextElementSibling;
@@ -861,6 +871,7 @@ test('NFE opens the same proposal from the pencil and directly below it, and sub
   root.querySelector('[data-nfe-proposal-submit]').click();
   await tick();
   assert.equal(writes[0][0], '10');
+  assert.equal(writes[0][1].paymentDate, '2026-11-18');
   assert.deepEqual([writes[0][1].supplierId,writes[0][1].branchId,writes[0][1].lines[0].stageId,writes[0][1].lines[0].discount],
     ['2','11','31','5,00']);
   assert.equal(root.querySelector('.nfe-link-linked').textContent, 'ID 48');

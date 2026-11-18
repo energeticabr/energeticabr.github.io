@@ -232,8 +232,13 @@ export function createNfeProposalView({ document:doc, host, service, onPosted, o
         updateStages();
       });
       if (!provision) {
-        const orderDate = field(headerFields, 'Data do pedido', 'date', 'date', value => { entry.draft.date = value; });
+        const dates = el('div', 'nfe-proposal-dates');
+        headerFields.append(dates);
+        const orderDate = field(dates, 'Data do pedido', 'date', 'date', value => { entry.draft.date = value; });
         orderDate.value = draft.date;
+        const paymentDate = field(dates, 'Data pgto efetuado', 'paymentDate', 'date', value => { entry.draft.paymentDate = value; });
+        paymentDate.required = true;
+        paymentDate.value = draft.paymentDate || '';
       }
       const account = field(headerFields, 'Conta / forma de pagamento', 'accountId', 'select', value => { entry.draft.accountId = value; });
       populate(supplier, catalog.suppliers, draft.supplierId, 'Selecione o fornecedor');

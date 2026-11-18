@@ -37,6 +37,21 @@ const fiscal = { issueDate:'2026-11-08', dueDate:'2026-11-15', total:'19.50', li
   { number:'1', description:'AÇO CA-50 8MM', unit:'KG', quantity:'2', unitPrice:'10', adjustment:'0.50', discount:'1' },
 ] };
 
+test('launch proposals require a reviewed payment date and store it on every launch', () => {
+  const document = { ...fiscal, lines:[fiscal.lines[0], { ...fiscal.lines[0], number:'2' }] };
+  const draft = buildNfeProposal(invoice, document, catalog);
+  assert.equal(draft.paymentDate, '');
+  assert.throws(() => validateNfeProposal(draft, document, catalog), /pagamento efetuado/i);
+  draft.paymentDate = '2026-02-30';
+  assert.throws(() => validateNfeProposal(draft, document, catalog), /pagamento efetuado/i);
+  draft.paymentDate = '2026-11-18';
+  const result = data.materializeNfeProposal({ type:'NF-e', number:'17', key:'example' }, document, draft, catalog);
+  assert.equal(result.draft.paymentDate, '2026-11-18');
+  assert.deepEqual(result.launchFields.map(line => line.fields.field_4), ['2026-11-18T12:00:00Z','2026-11-18T12:00:00Z']);
+  assert.equal(result.orderFields.DATAPEDIDO, '2026-11-08T12:00:00Z');
+  assert.ok(result.launchFields.every(line => line.fields.field_3 === '2026-11-15T12:00:00Z'));
+});
+
 test('provision respects the fiscal line quantity and net total with text currency and earliest reviewed due date', () => {
   const second = { ...fiscal.lines[0], number:'2', quantity:'3', unitPrice:'10', adjustment:'0', discount:'1' };
   const document = { ...fiscal, total:'48.50', lines:[fiscal.lines[0], second] };
@@ -55,6 +70,7 @@ test('provision respects the fiscal line quantity and net total with text curren
 
 test('proposes the exact supplier registration, its branch, known product and most used eligible stage', () => {
   const draft = buildNfeProposal(invoice, fiscal, catalog);
+  draft.paymentDate = '2026-11-18';
   assert.deepEqual([draft.supplierId,draft.branchId,draft.accountId,draft.date], ['2','11','20','2026-11-08']);
   assert.deepEqual(draft.lines.map(line=>[line.number,line.productId,line.stageId,line.date,line.dueDate]),
     [['1','30','40','2026-11-08','2026-11-15']]);
@@ -65,6 +81,7 @@ test('proposes the exact supplier registration, its branch, known product and mo
 
 test('a provision accepts no account and retains a registered account when selected', () => {
   const draft = buildNfeProposal(invoice, fiscal, catalog);
+  draft.paymentDate = '2026-11-18';
   const row = { type:'NF-e', number:'17', key:'example' };
   const selected = data.materializeNfeProvision(row, fiscal, draft, catalog);
   assert.equal(selected.parentFields.FORMAPGTO, 'BOLETO');
@@ -82,6 +99,7 @@ test('a provision accepts no account and retains a registered account when selec
 
 test('branch, supplier and product edits recompute stages from the selected branch only', () => {
   const original = buildNfeProposal(invoice, fiscal, catalog);
+  original.paymentDate = '2026-11-18';
   const branch = updateNfeProposalBranch(original, '10', catalog);
   assert.equal(branch.lines[0].stageId,'42');
   const product = updateNfeProposalProduct(branch, '1', '31', catalog);
@@ -110,6 +128,7 @@ test('stage fallback follows the recent product history of the selected branch',
 test('unknown products require a real catalog selection and financial edits retain the fiscal line identities', () => {
   const current = { ...fiscal, lines:[{ ...fiscal.lines[0], description:'DESCRIÇÃO DESCONHECIDA' }] };
   const draft = buildNfeProposal(invoice, current, catalog);
+  draft.paymentDate = '2026-11-18';
   assert.equal(draft.lines[0].productId,'');
   assert.throws(()=>validateNfeProposal(draft,current,catalog),/produto/i);
   const edited = updateNfeProposalProduct(draft,'1','30',catalog);
@@ -126,6 +145,7 @@ test('uses the original unit price and cent-exact financial adjustment with stan
   const current = { ...fiscal, total:'0.91', lines:[{ ...fiscal.lines[0],
     quantity:'3', unitPrice:'0.33333', adjustment:'0.01', discount:'0.10' }] };
   const draft = buildNfeProposal(invoice, current, catalog);
+  draft.paymentDate = '2026-11-18';
   const row = { ...invoice, type:'NF-e', number:'18', key:'1'.repeat(44) };
   const plan = materializeNfeProposal(row, current, draft, catalog);
   assert.equal(plan.orderFields.VALORTOTAL, '0,91');
@@ -135,13 +155,14 @@ test('uses the original unit price and cent-exact financial adjustment with stan
   assert.equal(fields.field_14, 'BOLETO');
   assert.equal(fields.APROVACAO, 'PENDENTE DE APROVAÇÃO');
   assert.equal(new Decimal(fields.field_8).times(fields.field_9).plus(fields.field_10).toFixed(2), '0.91');
-  assert.equal('field_4' in fields, false);
+  assert.equal(fields.field_4, '2026-11-18T12:00:00Z');
 });
 
 test('uses the fiscal unit without a checkbox or quantity conversion despite the catalog unit', () => {
   const current = { ...fiscal, total:'769.00', lines:[{ ...fiscal.lines[0], unit:'TN',
     quantity:'8.4', unitPrice:'91.54762', discount:'0', adjustment:'0' }] };
   const draft = buildNfeProposal(invoice, current, catalog);
+  draft.paymentDate = '2026-11-18';
   // A caller cannot replace the XML unit through an editable or stale draft.
   draft.lines[0].unit = 'KG';
   const row = { type:'NF-e', number:'175754', key:'example' };
@@ -161,6 +182,7 @@ test('uses the fiscal unit without a checkbox or quantity conversion despite the
 test('fiscal unit works without a catalog unit and catalog is only a fallback for a unitless invoice', () => {
   const withoutUnit = { ...catalog, products:catalog.products.map(product => ({ ...product, unit:'' })) };
   const draft = buildNfeProposal(invoice, fiscal, withoutUnit);
+  draft.paymentDate = '2026-11-18';
   assert.equal(validateNfeProposal(draft, fiscal, withoutUnit).lines[0].unit, 'KG');
   const unitless = { ...fiscal, lines:[{ ...fiscal.lines[0], unit:'  ' }] };
   assert.equal(validateNfeProposal(draft, unitless, catalog).lines[0].unit, 'KG');
@@ -173,7 +195,7 @@ test('legacy reserved plans retain their frozen draft and financial unit semanti
     lines:[{ number:'1', productId:'30', stageId:'40', quantity:'2', unitPrice:'10',
       adjustment:'0.50', discount:'1.00', date:'2026-11-08', dueDate:'2026-11-15', unitReviewed:true }] };
   const row = { type:'NF-e', number:'175754', key:'example' };
-  const launch = data.materializeNfeProposal(row, current, reserved, catalog, { legacyUnits:true });
+  const launch = data.materializeNfeProposal(row, current, reserved, catalog, { legacyUnits:true, legacyPaymentDate:true });
   assert.deepEqual(launch.draft, reserved);
   assert.equal(launch.launchFields[0].fields.UN, 'KG');
   const provision = data.materializeNfeProvision(row, current, reserved, catalog, { legacyUnits:true });
@@ -186,7 +208,7 @@ test('legacy reserved plans retain their frozen draft and financial unit semanti
   // Captured from the unchanged materializers at HEAD 24b0d55.
   assert.equal(hash(launch), 'b5dea5a0ad748263037eefae176facd9a0bce6022795daffa65a4432cf415624');
   assert.equal(hash(provision), 'bdcdf081f4a16bfd2cbb8e71ad8ce6d0a2dbee6246c1d2d3578f517256d280da');
-  const fresh = data.materializeNfeProposal(row, current, reserved, catalog);
+  const fresh = data.materializeNfeProposal(row, current, { ...reserved, paymentDate:'2026-11-18' }, catalog);
   assert.equal(fresh.launchFields[0].fields.UN, 'TN');
   assert.equal(fresh.draft.lines[0].unit, 'TN');
   assert.equal(Object.hasOwn(fresh.draft.lines[0], 'unitReviewed'), false);

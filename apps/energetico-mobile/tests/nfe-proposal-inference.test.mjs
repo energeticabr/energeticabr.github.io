@@ -28,6 +28,7 @@ test('infers the actual registered CP IV without history and preserves the XML i
   assert.equal(draft.lines[0].productId, '329');
   assert.equal(draft.lines[0].stageId, '', 'cement alone does not identify its construction stage');
   draft.lines[0].stageId = 'e1';
+  draft.paymentDate = '2026-11-18';
   const launch = materializeNfeProposal(invoice, document, draft, choices).launchFields[0].fields;
   const provision = materializeNfeProvision(invoice, document, draft, choices).provisionFields[0].fields;
   assert.deepEqual([launch.field_7, launch.UN, launch.field_8, launch.field_9], ['CIMENTO CP IV 50 KG', 'SC', 25, 24.4]);

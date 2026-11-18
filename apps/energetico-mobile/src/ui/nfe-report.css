@@ -320,6 +320,7 @@
 .nfe-proposal-status[role="alert"] { background: #fff0f2; color: #8b2730; }
 .nfe-proposal-fields {
   display: grid;
+  align-items: end;
   grid-template-columns: repeat(auto-fit, minmax(min(100%, 150px), 1fr));
   gap: 8px;
   min-width: 0;
@@ -329,16 +330,27 @@
 }
 .nfe-proposal-fields :is(label,.nfe-proposal-select) {
   display: grid;
+  grid-template-rows: auto 44px;
   min-width: 0;
   gap: 3px;
   font-size: 13px;
   font-weight: 700;
 }
+.nfe-proposal-dates {
+  display: grid;
+  grid-column: span 2;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  align-items: end;
+  gap: 8px;
+  min-width: 0;
+}
 .nfe-proposal-fields label > input, .nfe-proposal-select .sfs-trigger {
   box-sizing: border-box;
   width: 100%;
   min-width: 0;
-  min-height: 40px;
+  height: 44px;
+  min-height: 44px;
+  max-height: 44px;
   padding: 5px 7px;
   border: 1px solid #a7c1cd;
   border-radius: 6px;

@@ -43,9 +43,10 @@ function options(items, fields, { status = 'STATUS', filter = () => true } = {})
   })).filter(item => item.label).sort(sortable);
 }
 
-function normalizedDraft(draft, { supplier, branch, account, date, lines }, { legacyUnits = false } = {}) {
+function normalizedDraft(draft, { supplier, branch, account, date, paymentDate, lines }, { legacyUnits = false } = {}) {
   return {
     supplierId:supplier.id, branchId:branch.id, accountId:account?.id ?? '', date,
+    ...(paymentDate ? { paymentDate } : {}),
     ...(draft.reviewStamp ? { reviewStamp:draft.reviewStamp } : {}),
     lines:lines.map(line => ({ number:line.number, productId:line.product.id, stageId:line.stage.id,
       quantity:line.quantity, unitPrice:line.unitPrice, adjustment:line.adjustment, discount:line.discount,
@@ -65,6 +66,7 @@ export function materializeNfeProposal(row, fiscal, draft, catalog, options = {}
     const fields = {
       Title:branch.label, field_1:'CUSTO', field_2:iso(line.date),
       ...(line.dueDate ? { field_3:iso(line.dueDate) } : {}),
+      ...(result.paymentDate ? { field_4:iso(result.paymentDate) } : {}),
       field_5:supplier.label, field_6:stage.label, field_7:product.label,
       field_8:Number(line.quantity), field_9:Number(line.unitPrice), field_10:line.netAdjustment,
       field_14:account.label,
@@ -244,7 +246,8 @@ export function createNfeProposalData({ repository, fiscalData, tokenProvider, s
       }
       // Regenerate old frozen plans exactly; their hashes also protect partially posted records.
       const legacyUnits = reserved && legacyUnitDraft(draft);
-      const proposal = (provision ? materializeNfeProvision : materializeNfeProposal)(row, fiscal, draft, catalog, { legacyUnits });
+      const legacyPaymentDate = reserved && !Object.hasOwn(draft, 'paymentDate');
+      const proposal = (provision ? materializeNfeProvision : materializeNfeProposal)(row, fiscal, draft, catalog, { legacyUnits, legacyPaymentDate });
       if (baseline) {
         const identity = await learningIdentity(row);
         const example = identity && createNfeLearningExample(identity.invoice, fiscal, baseline, proposal.draft, manualStages);

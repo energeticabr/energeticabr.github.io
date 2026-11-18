@@ -8,7 +8,7 @@ function fixture(t, overrides = {}) {
   const doc = dom.window.document, host = doc.querySelector('main');
   const writes = [], discarded = [], picked = [];
   const fiscal = { total:'10',issueDate:'2026-11-18',dueDate:'2026-11-19',lines:[{number:'1',description:'Teste',unit:'UN',quantity:'1',unitPrice:'10',discount:'0',adjustment:'0'}] };
-  const draft = {supplierId:'1',branchId:'2',accountId:'3',date:fiscal.issueDate,lines:[{...fiscal.lines[0],productId:'4',stageId:'5',date:fiscal.issueDate,dueDate:fiscal.dueDate}]};
+  const draft = {supplierId:'1',branchId:'2',accountId:'3',date:fiscal.issueDate,paymentDate:'2026-11-18',lines:[{...fiscal.lines[0],productId:'4',stageId:'5',date:fiscal.issueDate,dueDate:fiscal.dueDate}]};
   const catalog = {suppliers:[{id:'1',label:'Fornecedor'}],branches:[{id:'2',label:'Obra'}],accounts:[{id:'3',label:'Conta'}],products:[{id:'4',label:'Produto',unit:'UN',expenseType:'MATERIAL'}],stages:[{id:'5',label:'Etapa',branch:'Obra'}]};
   const view = createNfeProposalView({ document:doc,host,onPosted:()=>{},
     attachments:{async pick(source) { picked.push(source); return [new File([source], `${source}.jpg`)]; },async discard(sourceId) {discarded.push(sourceId);}},

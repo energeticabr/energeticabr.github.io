@@ -237,6 +237,15 @@ if (!report.element.hidden) {
   editor.open = true;
   editor.dispatchEvent(new Event('toggle'));
   const proposalBody = proposal.querySelector('.nfe-proposal-body');
+  const controls = [...proposal.querySelectorAll('.nfe-proposal-fields label > input, .nfe-proposal-fields .sfs-field > .sfs-trigger')];
+  document.documentElement.dataset.proposalControls = JSON.stringify(controls.map(control => ({
+    name:control.name || control.closest('label')?.querySelector('select')?.name,
+    height:control.offsetHeight,
+  })));
+  const dates = [...proposal.querySelectorAll('.nfe-proposal-dates label')];
+  document.documentElement.dataset.proposalDates = JSON.stringify(dates.map(label => ({
+    left:label.offsetLeft, top:label.offsetTop,
+  })));
   const pickerResults = {};
   const popupBounds = [];
   for (const [name, query, expected, value] of [
