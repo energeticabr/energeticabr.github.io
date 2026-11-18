@@ -168,6 +168,36 @@ export function openSwileView({ document: doc, request, gallery = false, preview
   search.type = 'search';
   search.placeholder = 'Buscar por nome, grupo ou filial';
   search.setAttribute('aria-label', 'Buscar colaboradores');
+  const factors = make('div', '', 'swile-factors');
+  const unit = make('input');
+  unit.type = 'text';
+  unit.inputMode = 'decimal';
+  unit.autocomplete = 'off';
+  unit.value = '45';
+  unit.setAttribute('aria-label', 'Valor unitário em reais');
+  const quantity = make('input');
+  quantity.type = 'text';
+  quantity.inputMode = 'numeric';
+  quantity.autocomplete = 'off';
+  quantity.value = '5';
+  quantity.setAttribute('aria-label', 'Quantidade');
+  factors.append(field('Valor Un:', unit), field('Qtd:', quantity));
+  const isZeroAmount = value => /^0+(?:[.,]0{1,2})?$/.test(value.trim());
+  function calculatedAmount() {
+    const cents = isZeroAmount(unit.value) ? 0 : parseSwileAmount(unit.value);
+    const count = /^\d+$/.test(quantity.value.trim()) ? Number(quantity.value.trim()) : NaN;
+    const validUnit = cents !== null;
+    const validQuantity = Number.isSafeInteger(count) && count >= 0;
+    const product = validUnit && validQuantity ? cents * count : NaN;
+    unit.setAttribute('aria-invalid', String(!validUnit));
+    quantity.setAttribute('aria-invalid', String(!validQuantity || (validUnit && !Number.isSafeInteger(product))));
+    return Number.isSafeInteger(product) ? product : null;
+  }
+  for (const input of [unit, quantity]) input.addEventListener('input', () => {
+    const scroll = rows.scrollTop;
+    showPeople();
+    rows.scrollTop = scroll;
+  });
   const rows = make('div', '', 'swile-rows');
   const total = make('strong');
   total.setAttribute('aria-live', 'polite');
@@ -359,14 +389,17 @@ export function openSwileView({ document: doc, request, gallery = false, preview
 
   function amountFor(row) {
     if (mealItems) return (row.amountCents / 100).toFixed(2).replace('.', ',');
-    return amountOverrides.get(row.id) ?? (/^(bernardo|rafael)(\s|$)/i.test(row.name.trim()) ? '' : '225,00');
+    if (amountOverrides.has(row.id)) return amountOverrides.get(row.id);
+    if (/^(bernardo|rafael)(\s|$)/i.test(row.name.trim())) return '';
+    const cents = calculatedAmount();
+    return cents === null ? '' : (cents / 100).toFixed(2).replace('.', ',');
   }
 
   function orderItems() {
     if (mealItems) return people.map(({ id, amountCents }) => ({ employeeId:id, amountCents }));
     return people.flatMap(row => {
       const value = amountFor(row).trim();
-      return value ? [{ employeeId: row.id, amountCents: parseSwileAmount(value) }] : [];
+      return value && !isZeroAmount(value) ? [{ employeeId: row.id, amountCents: parseSwileAmount(value) }] : [];
     });
   }
 
@@ -423,7 +456,7 @@ export function openSwileView({ document: doc, request, gallery = false, preview
     }
     hideCalendar();
     updateDates();
-    content.replaceChildren(search, rows, dates, footer);
+    content.replaceChildren(search, ...(!mealItems ? [factors] : []), rows, dates, footer);
     if (mealItems) content.prepend(make('p', 'Os valores abaixo são os subtotais do lançamento de Vale Alimentação.'));
     showPeople();
     review.disabled = !people.length;
@@ -447,6 +480,7 @@ export function openSwileView({ document: doc, request, gallery = false, preview
 
   function prepare() {
     return run(async () => {
+      if (!mealItems && calculatedAmount() === null) throw new Error('Confira o valor unitário e a quantidade. Use um valor a partir de zero e uma quantidade inteira.');
       const items = orderItems();
       const invalid = items.find(item => item.amountCents === null);
       if (invalid) throw new Error(`Confira o valor informado para ${people.find(row => row.id === invalid.employeeId)?.name || 'o colaborador'}.`);
