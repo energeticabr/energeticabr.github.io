@@ -66,7 +66,9 @@ test('DDA date and linkage clusters fit on phones, desktop and print',{timeout:9
     assert.ok(state.metrics[4].top>state.metrics[0].top,'new metrics use a second row');
     assert.equal(state.missing,'Não informado');
     assert.deepEqual(state.rows.map(row=>row.text),['-1 d','0 d','1 d','5 d']);
+    assert.deepEqual(state.rows.map(row=>row.dateText),['03/11/2026(terça-feira)','04/11/2026(quarta-feira)','05/11/2026(quinta-feira)','09/11/2026(segunda-feira)']);
     for(const row of state.rows){
+     assert.ok(row.dateFits,JSON.stringify({width,row}));
      assert.ok(row.below&&row.fits&&row.centered,JSON.stringify({width,row}));
      assert.equal(row.background,row.dateColor);
      assert.equal(row.color,'rgb(255, 255, 255)');
