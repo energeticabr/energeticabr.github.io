@@ -1,0 +1,36 @@
+<!doctype html><html><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"></head><body><main id="app"></main><script type="module">
+import '../../src/styles.css';
+import '../../src/ui/stage-gantt.css';
+import {createStageGanttView} from '../../src/ui/stage-gantt-view.js';
+const branch='004 - EDIFÍCIO XAVANTE',stage='ALVENARIA E ESTRUTURAS';
+let costReads=0,professionReads=0;
+const view=createStageGanttView({document,now:()=>new Date(2026,10,17),data:{
+ async loadSnapshot(){return {complete:true,launches:[{id:'1',branch,stage,type:'ATIVIDADE COMUM',status:'INICIADO',startDate:'2026-01-01'}],activities:[{id:'1',branch,stage,activity:'EXECUÇÃO PAREDES ARRIMO',supplier:'Equipe A',property:'',status:'ATIVIDADE INICIADA',executionDate:'2026-01-01'}]};},
+ async loadAssignments(){professionReads++;return {complete:true,rows:[]};},
+ async loadCostSnapshot(){costReads++;return {launches:[
+  {id:'1',branch,stage,paymentDate:'2025-01-01',total:100,product:'Concreto'},
+  {id:'2',branch,stage,paymentDate:'2026-02-01',total:200,product:'Concreto'},
+  {id:'3',branch:'Outra obra',stage,paymentDate:'2027-12-01',total:900,product:'Concreto'}
+ ],provisions:[{id:'4',branch,stage,dueDate:'2026-02-02',total:50,product:'Serviço'}],productTypes:[{product:'Concreto',expenseType:'MATERIAL'},{product:'Serviço',expenseType:'MÃO DE OBRA'}]};}
+}});
+window.ganttCostView=view;
+await view.open();
+const root=view.element,popup=root.querySelector('.gantt-detail-backdrop');
+root.querySelector('.gantt-row--stage .gantt-bar').click();
+const choice={buttons:[...popup.querySelectorAll('[data-analysis]')].map(n=>n.textContent),reads:costReads+professionReads};
+popup.querySelector('[data-analysis="cost"]').click();
+await new Promise(resolve=>setTimeout(resolve,0));
+const initialYears=[...popup.querySelector('[name="year"]').options].map(n=>n.value);
+const year=popup.querySelector('[name="year"]');year.value='2025';year.dispatchEvent(new Event('change'));
+const older={months:[...popup.querySelector('[name="month"]').options].map(n=>n.value),total:popup.querySelector('[data-cost-total="total"]').textContent};
+popup.querySelector('.gantt-detail-close').click();root.querySelector('.gantt-toggle').click();root.querySelector('.gantt-row--activity .gantt-bar').click();
+await new Promise(resolve=>setTimeout(resolve,0));
+const childDirect=professionReads===1&&!popup.querySelector('[data-analysis]');
+popup.querySelector('.gantt-detail-close').click();root.querySelector('.gantt-row--stage .gantt-bar').click();popup.querySelector('[data-analysis="cost"]').click();
+await new Promise(resolve=>setTimeout(resolve,0));popup.querySelector('.gantt-cost-toggle').click();
+await document.fonts.ready;await new Promise(resolve=>requestAnimationFrame(()=>requestAnimationFrame(resolve)));
+const dialog=popup.querySelector('.gantt-detail-dialog'),r=dialog.getBoundingClientRect(),viewport={width:innerWidth,height:innerHeight};
+const controlsVisible=[...popup.querySelectorAll('select,header button')].filter(n=>!n.hidden).every(n=>{const b=n.getBoundingClientRect();return b.left>=r.left-1&&b.right<=r.right+1&&b.top>=r.top-1&&b.bottom<=r.bottom+1;});
+const scroller=popup.querySelector('.gantt-cost-scroll'),before=scroller.scrollLeft;scroller.scrollLeft=scroller.scrollWidth;
+document.documentElement.dataset.layout=JSON.stringify({choice,initialYears,older,childDirect,costReads,professionReads,product:popup.querySelector('.gantt-cost-product')?.textContent,total:popup.querySelector('[data-cost-total="total"]').textContent,controlsVisible,contained:r.left>=-1&&r.top>=-1&&r.right<=viewport.width+1&&r.bottom<=viewport.height+1,tableAccessible:scroller.scrollWidth<=scroller.clientWidth+1||scroller.scrollLeft>before,paidColor:getComputedStyle(popup.querySelector('[data-cost-total="paid"]')).color});
+</script></body></html>
