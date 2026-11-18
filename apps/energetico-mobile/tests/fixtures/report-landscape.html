@@ -62,7 +62,7 @@ if(new URL(location.href).searchParams.has('gantt')) {
  document.documentElement.dataset.layout=JSON.stringify({
   portrait,rotated:transform==='matrix(0, 1, -1, 0, 0, 0)',height:portrait?panel.width:panel.height,
   bottomInset:portrait?timeline.left-panel.left:panel.bottom-timeline.bottom,closeReachable,closed:root.hidden,
-  clusterColors,labelWidth,clustersFit,noTodos,
+  clusterColors,labelWidth,clustersFit,noTodos,stageBranchShown:Boolean(root.querySelector('.gantt-row--stage .gantt-row-text small')),
  });
 }
 const navigated=[];

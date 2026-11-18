@@ -15,7 +15,7 @@
 .gantt-dialog {
   --gantt-ongoing: #aa2839;
   --gantt-finished: #24723a;
-  --gantt-label: clamp(180px, calc(27 * var(--report-vw, 1vw)), 230px);
+  --gantt-label: clamp(220px, calc(32 * var(--report-vw, 1vw)), 280px);
   --gantt-padding: 16px;
   display: flex;
   flex-direction: column;
