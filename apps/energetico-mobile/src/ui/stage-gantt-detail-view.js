@@ -94,8 +94,13 @@ export function createStageGanttDetailView({ root, background, data }) {
       const body = make('tbody');
       for (const person of profession.people) {
         const row = make('tr');
-        for (const value of [person.name, String(person.days), formatOperationsDate(person.firstDate), formatOperationsDate(person.lastDate)]) {
-          row.append(make('td', '', value));
+        for (const [kind, value] of [
+          ['name', person.name], ['days', String(person.days)],
+          ['start', formatOperationsDate(person.firstDate)], ['end', formatOperationsDate(person.lastDate)],
+        ]) {
+          const cell = make('td');
+          cell.append(make('span', `gantt-person-cluster gantt-person-cluster--${kind}`, value));
+          row.append(cell);
         }
         body.append(row);
       }
