@@ -216,7 +216,7 @@
   print-color-adjust: exact;
 }
 :is(.nfe-link-pencil, .nfe-link-edit) { min-width: 44px; min-height: 44px; cursor: pointer; }
-.nfe-link-pencil {
+.nfe-link-pencil, .nfe-link-cancelled {
   border-color: #f2b8c0;
   border-left-color: #c3233b;
   background: #ffeaed;

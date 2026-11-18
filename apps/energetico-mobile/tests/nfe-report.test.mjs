@@ -681,6 +681,35 @@ test('NFE opens PEDIDOS with ranked suggestions, preserves the report and displa
   assert.equal(pencil(), null);
 });
 
+test('cancelled invoices replace all linking and proposal actions with CANCELADA and preserve the PDF', async t => {
+  const dom = new JSDOM('<body/>');
+  const { document } = dom.window;
+  const report = createNfeReportView({ document, data:{
+    loadSnapshot:async () => ({ rows:[
+      ...[{}, { IDPEDIDO:'37' }, { NFEDESCRITIVO:'73' }].map((link, index) => ({
+        id:String(index + 1), fields:{ ...invoice.fields, ...link, SITUACAO:'CANCELADA' },
+      })),
+      invoice,
+    ] }),
+    orderLink:{ async loadOptions() { throw new Error('unexpected picker'); } },
+    proposal:{}, provisionProposal:{},
+  }, openMediaCollection:async () => {} });
+  t.after(() => { report.destroy(); dom.window.close(); });
+  await report.open();
+  for (const id of ['1', '2', '3']) {
+    const row = report.element.querySelector(`[data-invoice-id="${id}"]`);
+    const actions = row.querySelector('.nfe-link');
+    assert.equal(actions.textContent, 'CANCELADA');
+    assert.ok(actions.querySelector('.nfe-link-cluster.nfe-link-cancelled'));
+    assert.equal(actions.querySelector('button'), null);
+    assert.ok(row.querySelector('.nfe-pdf'));
+  }
+  const active = report.element.querySelector('[data-invoice-id="10"]');
+  assert.ok(active.querySelector('.nfe-link-pencil'));
+  assert.deepEqual([...active.querySelectorAll('.nfe-link-propose')].map(button => button.textContent),
+    ['Propor lançamentos', 'Propor provisão']);
+});
+
 test('NFE opens the same proposal from the pencil and directly below it, and submits the edited draft', async t => {
   const dom = new JSDOM('<main id="app"></main>');
   const { document, Event } = dom.window;

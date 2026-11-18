@@ -208,6 +208,10 @@ export function createNfeReportView({ document:doc = globalThis.document, data, 
   }
 
   function renderOrderLink(cell, row, interactive) {
+    if (row.cancelled) {
+      cell.replaceChildren(make('span', 'nfe-link-cluster nfe-link-cancelled', 'CANCELADA'));
+      return;
+    }
     if (row.provisionDescriptionId) {
       cell.replaceChildren(make('span', 'nfe-link-cluster nfe-link-linked', `Descritivo de provisão #${row.provisionDescriptionId}`));
       return;
