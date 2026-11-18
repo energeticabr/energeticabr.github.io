@@ -5,6 +5,8 @@ import { beginLoadingTask } from './loading-task.js';
 import { applyScreenNavigation } from './screen-navigation.js';
 import { bindSearchableFilterSelects } from './searchable-filter-selects.js';
 import { sameMealVoucherTray } from '../chat/meal-voucher-tray.js';
+import { postingCompletionMarkup } from './posting-completion.js';
+import { scheduleCompletionDismiss } from './completion-receipt-dismiss.js';
 
 const money = amount => Number(amount).toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' });
 const observationDate = new Intl.DateTimeFormat('pt-BR', { timeZone:'America/Sao_Paulo', day:'2-digit', month:'2-digit', year:'numeric' });
@@ -42,6 +44,7 @@ export function createMealVoucherView({ data, root, documentRef = globalThis.doc
   let loadingOperation = null;
   let confirmingAbandon = false;
   let swileHandled = false;
+  let cancelReceiptDismiss = null;
   const hasPendingAttempt = () => Boolean(progress.signature || pendingSnapshot);
   function savedFiles(files) { return files.map(file => ({ name: file.name, size: file.size, lastModified: file.lastModified })); }
   function clearPending() {
@@ -79,12 +82,12 @@ export function createMealVoucherView({ data, root, documentRef = globalThis.doc
     progress = { operationId: globalThis.crypto?.randomUUID?.() || `${Date.now()}-${Math.random().toString(36).slice(2)}` };
     expectedFiles = []; reviewedTray = null; result = null; orders = []; assignments = {}; swileHandled = false; step = 'lines';
   }
-  function restartTransport(posted) {
+  function completeTransport(posted) {
     assertPendingCurrent();
     clearPending();
     reset();
-    draft.lines = available.suppliers.map(initialLine);
     result = posted;
+    step = 'done';
     body.scrollTop = 0;
   }
   reset();
@@ -153,7 +156,7 @@ export function createMealVoucherView({ data, root, documentRef = globalThis.doc
     active();
     if (!recovered) return false;
     const reviewedIds = new Set(progress.traySourceIds || []);
-    restartTransport(recovered.result);
+    completeTransport(recovered.result);
     if (!recovered.files.length) return true;
     await cleanupTransport(async cleanupOptions => {
       const sources = trayAccess.snapshot();
@@ -272,11 +275,6 @@ export function createMealVoucherView({ data, root, documentRef = globalThis.doc
   }
   function renderLines() {
     content.append(el('h2', '', `${benefitName} dos fornecedores`));
-    if (transport && result) {
-      const receipt = el('p', 'meal-voucher-restart-receipt', `Pedido ${result.orderId} lançado com sucesso · ${money(result.total)}`);
-      receipt.setAttribute('role', 'status');
-      content.append(receipt);
-    }
     content.append(el('p', '', 'Informe quantidade e valor unitário somente para os fornecedores que receberão lançamentos. Todos os empreiteiros ativos estão listados.'));
     const search = el('input', 'meal-voucher-search'); search.type = 'search'; search.placeholder = 'Filtrar fornecedores'; search.setAttribute('aria-label', 'Filtrar fornecedores'); content.append(search);
     const lineControls = [];
@@ -468,7 +466,7 @@ export function createMealVoucherView({ data, root, documentRef = globalThis.doc
       postOptions.onProgress({ percent: 100 });
       if (transport) {
         const completedSources = reviewedTray || [];
-        restartTransport(posted);
+        completeTransport(posted);
         await cleanupTransport(options => trayAccess.consume?.(completedSources, options), active, cleanupOptions);
         return;
       }
@@ -527,6 +525,39 @@ export function createMealVoucherView({ data, root, documentRef = globalThis.doc
     }
     footer.append(button('Concluir', 'data-meal-done', close));
   }
+  function finishTransport() {
+    if (!close()) return;
+    reset();
+    onHome();
+  }
+  function renderTransportSuccess() {
+    const overlay = el('div', 'meal-voucher-success-overlay');
+    const receipt = el('div', 'meal-voucher-success-dialog');
+    receipt.setAttribute('data-transport-success', '');
+    receipt.setAttribute('role', 'status');
+    receipt.setAttribute('aria-live', 'polite');
+    receipt.setAttribute('aria-atomic', 'true');
+    receipt.tabIndex = -1;
+    receipt.innerHTML = postingCompletionMarkup({
+      kind:'transport-voucher', title:'VALE TRANSPORTE LANÇADO COM SUCESSO',
+      database:'NOTASPENDENTES / LANCAMENTOS / FOLHAPGTO',
+      time:now().toLocaleTimeString('pt-BR', { timeZone:'America/Sao_Paulo', hour:'2-digit', minute:'2-digit' }),
+      records:[
+        { label:'PEDIDO', value:result.orderId, icon:'order' },
+        { label:'LANÇAMENTOS', value:result.lines.length, icon:'launch' },
+        { label:'TOTAL', value:money(result.total), icon:'total' },
+      ],
+    });
+    if (!error.hidden) {
+      const warning = el('p', 'meal-voucher-error', error.textContent);
+      warning.setAttribute('role', 'alert');
+      receipt.querySelector('.launch-completion').append(warning);
+    }
+    overlay.append(receipt); content.append(overlay);
+    receipt.focus({ preventScroll:true });
+    cancelReceiptDismiss?.();
+    cancelReceiptDismiss = scheduleCompletionDismiss(finishTransport);
+  }
   function render(message) {
     detailPickers?.destroy(); detailPickers = null;
     content.replaceChildren(); footer.replaceChildren(); footer.hidden = true; back.disabled = home.disabled = mutating;
@@ -550,6 +581,7 @@ export function createMealVoucherView({ data, root, documentRef = globalThis.doc
     if (step === 'summary') renderSummary();
     if (step === 'invalid') content.append(el('h2', '', 'Tentativa anterior indisponível'));
     if (step === 'done') {
+      if (transport) { renderTransportSuccess(); return; }
       content.append(el('h2', '', `${benefitName} lançado com sucesso`));
       content.append(el('p', '', `Pedido ${result.orderId} · ${result.lines.length} lançamento(s) vinculados às respectivas IDFOLHA · Total ${money(result.total)}`));
       const list = el('ul', 'meal-voucher-summary');
@@ -588,6 +620,7 @@ export function createMealVoucherView({ data, root, documentRef = globalThis.doc
   }
   function navigateBack() {
     if (!opened || destroyed || mutating) return;
+    if (transport && step === 'done') { finishTransport(); return; }
     if (confirmingAbandon) { cancelAbandon(); return; }
     if (step === 'lines' || step === 'done') { close(); return; }
     if (step === 'invalid') { close(); return; }
@@ -600,7 +633,7 @@ export function createMealVoucherView({ data, root, documentRef = globalThis.doc
     onHome();
   });
   page.addEventListener('keydown', event => { if (event.key === 'Escape') { event.preventDefault(); navigateBack(); } });
-  function close() { if (!opened || destroyed || mutating) return false; if (progress.signature && step !== 'done' && (!storageKey || storage.getItem(storageKey) === pendingSnapshot)) savePending(); opened = false; confirmingAbandon = false; epoch++; loadingOperation?.abort.abort(); busy = false; detailPickers?.close(); page.hidden = true; previousFocus?.focus?.(); return true; }
+  function close() { if (!opened || destroyed || mutating) return false; cancelReceiptDismiss?.(); cancelReceiptDismiss = null; if (progress.signature && step !== 'done' && (!storageKey || storage.getItem(storageKey) === pendingSnapshot)) savePending(); opened = false; confirmingAbandon = false; epoch++; loadingOperation?.abort.abort(); busy = false; detailPickers?.close(); page.hidden = true; previousFocus?.focus?.(); return true; }
   return Object.freeze({
     async open() { if (destroyed) return false; assertSession(); if (opened) return true; if (step === 'done') reset(); previousFocus = doc.activeElement; opened = true; epoch++; page.hidden = false; const inMemory = Boolean(progress.signature); await work(async (active, options) => {
       const recovering = inMemory || Boolean(storageKey && storage.getItem(storageKey));
@@ -626,6 +659,6 @@ export function createMealVoucherView({ data, root, documentRef = globalThis.doc
       }
     }, 'Carregando fornecedores…'); return true; },
     close,
-    destroy() { destroyed = true; opened = false; epoch++; loadingOperation?.abort.abort(); unsubscribeTray?.(); detailPickers?.destroy(); detailPickers = null; page.remove(); },
+    destroy() { cancelReceiptDismiss?.(); cancelReceiptDismiss = null; destroyed = true; opened = false; epoch++; loadingOperation?.abort.abort(); unsubscribeTray?.(); detailPickers?.destroy(); detailPickers = null; page.remove(); },
   });
 }

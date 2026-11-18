@@ -3,6 +3,7 @@
 <style>body{margin:0;font:16px Arial,sans-serif}*{box-sizing:border-box}</style></head><body>
 <script type="module">
 import '../../src/ui/meal-voucher.css';
+import '../../src/ui/posting-completion.css';
 import '../../src/ui/searchable-filter-selects.css';
 import { createMealVoucherData } from '../../src/chat/meal-voucher-data.js';
 import { createMealVoucherView } from '../../src/ui/meal-voucher-view.js';
@@ -121,15 +122,19 @@ try {
   delete transportProgress.payroll;
   const transportKey = 'energetico:transport-voucher:pending:browser';
   localStorage.setItem(transportKey, JSON.stringify({ draft:transportDraft, progress:transportProgress, files:[] }));
-  const transportView = createMealVoucherView({ data:transportData, sessionKey:'browser', voucherType:'transport' });
+  let menuCalls = 0;
+  const transportView = createMealVoucherView({ data:transportData, sessionKey:'browser', voucherType:'transport', onHome:() => { menuCalls++; } });
   const beforeReopening = writes;
   await transportView.open();
   result.transportFresh = !localStorage.getItem(transportKey) && writes === beforeReopening
-    && document.querySelector('[data-meal-value="1"]')?.value === '11'
+    && !document.querySelector('[data-meal-value="1"]')
     && !document.querySelector('[data-meal-abandon]')
-    && document.querySelector('[role="status"]')?.textContent.includes(`Pedido ${postedTransport.orderId} lançado com sucesso`);
+    && document.querySelector('[data-transport-success]')?.textContent.includes(postedTransport.orderId);
   result.transportSupplier = rows.NOTASPENDENTES.find(row => row.id === postedTransport.orderId)?.fields.FORNECEDOR;
-  result.transportFits = document.querySelector('.meal-voucher-restart-receipt')?.getBoundingClientRect().right <= innerWidth + 1;
+  const receiptBounds = document.querySelector('.meal-voucher-success-dialog').getBoundingClientRect();
+  result.transportFits = receiptBounds.left >= 0 && receiptBounds.right <= innerWidth + 1 && receiptBounds.bottom <= innerHeight + 1;
+  await new Promise(resolve => setTimeout(resolve, 1600));
+  result.transportMenu = menuCalls === 1 && document.querySelector('.meal-voucher-page').hidden && writes === beforeReopening;
   transportView.destroy();
   document.documentElement.dataset.layout = JSON.stringify(result);
 } catch (error) { document.documentElement.dataset.layout = JSON.stringify({ error:error.stack }); }

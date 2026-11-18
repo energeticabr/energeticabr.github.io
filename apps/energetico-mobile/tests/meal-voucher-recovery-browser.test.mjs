@@ -9,7 +9,7 @@ import { createServer } from 'vite';
 import { JSDOM } from 'jsdom';
 import { runBrowserLayout } from './helpers/browser-layout-runner.mjs';
 
-test('vales reabrem pedido vazio ou reiniciam envio confirmado no celular e PC', { timeout:120000 }, async t => {
+test('vales reabrem pedido vazio ou concluem transporte no menu no celular e PC', { timeout:120000 }, async t => {
   const browser = [process.env.CHROME_BIN, 'C:\\Program Files\\Google\\Chrome\\Application\\chrome.exe', '/usr/bin/google-chrome', '/usr/bin/chromium'].find(path => path && existsSync(path));
   if (!browser) return t.skip('Chrome indisponível');
   const app = resolve(fileURLToPath(new URL('..', import.meta.url))), cache = mkdtempSync(join(tmpdir(),'meal-recovery-vite-'));
@@ -22,7 +22,7 @@ test('vales reabrem pedido vazio ou reiniciam envio confirmado no celular e PC',
       assert.deepEqual(result, { enabled:true, pickers:true, persists:true, noEarlyWrites:true, noOverflow:true, webLock:true, orders:1, launches:1, payroll:1,
         orderDate:'2026-11-02T12:00:00Z', orderAccount:'BANCO', paid:'2026-11-03T12:00:00Z', stage:'ALVENARIA', sheet:'12',
         legacyBlocked:true, abandonFits:true, freshAfterAbandon:true,
-        transportFresh:true, transportSupplier:'TRANCID', transportFits:true }, `${width}px`);
+        transportFresh:true, transportSupplier:'TRANCID', transportFits:true, transportMenu:true }, `${width}px`);
     }
   } finally { await server.close(); await rm(cache, { recursive:true, force:true, maxRetries:5, retryDelay:250 }); }
 });
