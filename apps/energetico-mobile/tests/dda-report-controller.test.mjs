@@ -189,6 +189,30 @@ test('DDA report resumes after authentication and late factories cannot open aft
 });
 
 const autoRow={id:'1',fields:{SITUACAO:'Em aberto',VENCIMENTO:'2020-01-01',VALOR:12}};
+test('marking DDA sem vinculação stops automatic returns after 15h and keeps manual access',async t=>{
+ t.mock.timers.enable({apis:['Date'],now:new Date('2026-11-18T19:18:00Z')});
+ let snapshot={rows:[{id:'49',fields:{SITUACAO:'Em aberto',VENCIMENTO:'2026-11-18',VALOR:1350}}]};
+ const h=setup(t,{
+  client:{sendText:async()=>({status:'processed',activeFlow:null,messages:[{
+   role:'assistant',type:'poll',question:'QUAL ÁREA VOCÊ DESEJA ACESSAR?',options:[{id:'group_pending',label:'PENDÊNCIAS'}],
+  }]})},
+  registrationGalleryDataFactory:async()=>({loadSnapshot:async()=>snapshot}),
+ });
+ await h.controller.start();for(let i=0;i<8;i++)await tick();
+ assert.deepEqual(h.opened,['report']);
+ snapshot={rows:snapshot.rows.map(row=>({...row,fields:{...row.fields,DDA_x0020_sem_x0020_vincula_x00e:true}}))};
+ h.factories[0].onRowsChange(normalizeDdaReportRows(snapshot),{id:'49',linkReviewed:true});
+ h.factories[0].onClose();
+ for(let visit=0;visit<3;visit++){
+  await h.view.emit('select-reply',{replyId:'navigation_main_menu'});
+  await h.controller.handleForeground();
+  for(let i=0;i<8;i++)await tick();
+  assert.deepEqual(h.opened,['report']);
+ }
+ assert.equal(await h.view.emit('open-dda-report'),true);
+ assert.deepEqual(h.opened,['report','report']);
+});
+
 test('the automatic DDA returns after 15h when the user goes back to the main menu',async t=>{
  t.mock.timers.enable({apis:['Date'],now:new Date('2026-11-09T18:00:00Z')});
  const h=setup(t,{
