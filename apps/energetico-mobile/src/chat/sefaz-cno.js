@@ -7,9 +7,9 @@ const CANDIDATE = `(?:${NUMBER}|${NUMERIC_TOKEN})`;
 // A short number after a delimiter may be an address or a quantity.
 const LIST_ENTRY = String.raw`(?=(?:[0-9][\s./-]*){9})` + CANDIDATE;
 const LIST = `${CANDIDATE}(?:\\s*(?:[,;|]|\\be\\b|\\bou\\b)\\s*${LIST_ENTRY})*`;
-const MENTION = new RegExp(String.raw`\b(?:CNOs?|Cadastro\s+Nacional\s+de\s+Obras)\b(?:\s|[:=#.,º°()/\-]|n[uú]mero|n[º°o]|da\s+obra|obra|e\s+endere[cç]o){0,80}(${LIST})`, 'gi');
+const MENTION = new RegExp(String.raw`\b(?:CNOs?|Cadastro\s+Nacional\s+de\s+Obras)\b(?:\s|[:;=#.,º°()/\-]|n[uú]mero|n[º°o]|da\s+obra|obra|e\s+endere[cç]o){0,80}(${LIST})`, 'gi');
 const CORRECTION_LABEL = String.raw`\b(?:CNOs?|Cadastro\s+Nacional\s+de\s+Obras)\b`;
-const CORRECTION_PREFIX = String.raw`(?:\s|[:=#.,º°()/\-]|n[uú]mero|n[º°o]|da\s+obra|obra|e\s+endere[cç]o|para|correto|correta|é|deve\s+ser|passa\s+a\s+ser){0,80}`;
+const CORRECTION_PREFIX = String.raw`(?:\s|[:;=#.,º°()/\-]|n[uú]mero|n[º°o]|da\s+obra|obra|e\s+endere[cç]o|para|correto|correta|é|deve\s+ser|passa\s+a\s+ser){0,80}`;
 const CORRECTION_MENTION = new RegExp(`${CORRECTION_LABEL}${CORRECTION_PREFIX}(${LIST})`, 'gi');
 const REPLACEMENT = new RegExp(String.raw`^\s*[,;:.–—-]?\s*(?:considerar\s+(?:o\s+)?correto|leia[\s-]*se|passa\s+a\s+ser|corrigir\s+para|substituir\s+por|por|pelo|e\s+informar|est[aá]\s+incorret[oa]\s*;\s*(?:o\s+)?correto\s+[ée])\s*[:=#-]?\s*(?:${CORRECTION_LABEL}${CORRECTION_PREFIX})?(${LIST})`, 'i');
 const REMOVAL_BEFORE = /\b(?:remover|excluir|retirar|desconsiderar)\s+(?:o\s+)?$/i;
