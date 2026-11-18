@@ -49,15 +49,15 @@ export async function withAttachmentBrowser(browser, { width = 390, height = 844
       requests.delete(reply.id); clearTimeout(request.timer);
       reply.error ? request.fail(new Error(reply.error.message)) : request.done(reply.result);
     });
-    const send = (method, params = {}, sessionId) => new Promise((done, fail) => {
+    const send = (method, params = {}, sessionId, timeoutMs = 20000) => new Promise((done, fail) => {
       const id = ++sequence;
-      const timer = setTimeout(() => { requests.delete(id); fail(new Error(`${method} expirou.`)); }, 20000);
+      const timer = setTimeout(() => { requests.delete(id); fail(new Error(`${method} expirou.`)); }, timeoutMs);
       requests.set(id, { done, fail, timer });
       socket.send(JSON.stringify({ id, method, params, sessionId }));
     });
     const { targetId } = await send('Target.createTarget', { url: 'about:blank' });
     ({ sessionId } = await send('Target.attachToTarget', { targetId, flatten: true }));
-    const command = (method, params) => send(method, params, sessionId);
+    const command = (method, params, timeoutMs) => send(method, params, sessionId, timeoutMs);
     const evaluate = async expression => {
       const result = await command('Runtime.evaluate', { expression, returnByValue: true, awaitPromise: true });
       if (result.exceptionDetails) throw new Error(result.exceptionDetails.exception?.description || result.exceptionDetails.text);
@@ -86,6 +86,8 @@ export async function withAttachmentBrowser(browser, { width = 390, height = 844
       await evaluate('new Promise(resolve => requestAnimationFrame(() => requestAnimationFrame(resolve)))');
     };
     await command('Page.enable');
+    // Keep rendering active when the headless target loses foreground on CI.
+    await command('Emulation.setFocusEmulationEnabled', { enabled: true });
     await command('Runtime.enable');
     await command('Log.enable');
     await command('Page.setInterceptFileChooserDialog', { enabled: true });
@@ -95,9 +97,14 @@ export async function withAttachmentBrowser(browser, { width = 390, height = 844
       let timer;
       const loaded = new Promise((done, fail) => {
         onLoaded = done;
-        timer = setTimeout(() => fail(new Error('A página de teste não terminou de carregar.')), 20000);
+        // Match the layout driver's bounded budget for cold CI module loads.
+        timer = setTimeout(() => fail(new Error('A página de teste não terminou de carregar.')), 30000);
       });
-      try { await Promise.all([command('Page.navigate', { url }), loaded]); }
+      try {
+        await Promise.all([command('Page.navigate', { url }, 35000).then(result => {
+          if (result?.errorText) throw new Error(`Navegação da página de teste falhou: ${result.errorText}`);
+        }), loaded]);
+      }
       finally { clearTimeout(timer); onLoaded = undefined; }
     };
     try { await run({ evaluate, wait, tap, command, events, navigate }); }
@@ -105,11 +112,18 @@ export async function withAttachmentBrowser(browser, { width = 390, height = 844
       const errors = events.filter(event => event.method === 'Runtime.exceptionThrown'
         || (event.method === 'Log.entryAdded' && ['error', 'warning'].includes(event.params.entry?.level)))
         .slice(-8).map(event => JSON.stringify(event.params).slice(0, 1200));
-      const state = await evaluate(`({ title: document.querySelector('.attachment-preview-title')?.textContent,
+      const pendingNetwork = new Map();
+      for (const event of events) {
+        if (event.method === 'Network.requestWillBeSent') pendingNetwork.set(event.params.requestId, event.params.request.url);
+        if (['Network.loadingFinished', 'Network.loadingFailed'].includes(event.method)) pendingNetwork.delete(event.params.requestId);
+      }
+      const state = await evaluate(`({ url: location.href, readyState: document.readyState,
+        title: document.querySelector('.attachment-preview-title')?.textContent,
         status: document.querySelector('.attachment-preview-status')?.textContent,
         dialogs: [...document.querySelectorAll('dialog')].map(node => ({className:node.className,open:node.open})),
         fixture: window.attachmentAppendFixture?.snapshot() })`).catch(() => null);
-      console.error('Attachment browser diagnostics:', JSON.stringify({ message: error.message, errors, state }));
+      console.error('Attachment browser diagnostics:', JSON.stringify({ message: error.message, errors, state,
+        pendingNetwork: [...pendingNetwork.values()].slice(-12) }));
       throw error;
     }
   } finally {
