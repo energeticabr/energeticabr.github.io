@@ -160,7 +160,7 @@ export function createStageGanttView({ document: doc = globalThis.document, data
       const label = make('div', 'gantt-label');
       const text = make('div', 'gantt-row-text');
       const property = item.property?.trim() || '';
-      const info = parent ? item.branch : property.toUpperCase() === 'TODOS' ? '' : property;
+      const info = parent || property.toUpperCase() === 'TODOS' ? '' : property;
       const startText = formatOperationsDate(item.start);
       const endText = item.finished ? formatOperationsDate(item.end) : 'Em Andamento';
       const dates = `Início ${startText} · Fim ${endText}`;
