@@ -78,6 +78,10 @@
 .swile-dialog button.swile-primary, .swile-gallery-page button.swile-primary { background: #553990; color: #fff; border-color: #553990; }
 .swile-actions, .swile-dates { display: flex; flex-wrap: wrap; gap: .65rem; align-items: center; }
 .swile-search { width: 100%; margin-bottom: .35rem; }
+.swile-factors { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: .65rem; margin: .35rem 0 .5rem; }
+.swile-factors label { display: grid; gap: .25rem; min-width: 0; }
+.swile-factors input { width: 100%; }
+.swile-factors input[aria-invalid='true'] { border-color: #972534; }
 .swile-person {
   display: grid;
   grid-template-columns: minmax(0, 1fr) minmax(5.25rem, 8rem);
