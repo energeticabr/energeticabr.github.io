@@ -2,6 +2,7 @@ package br.com.energetica.energetico;
 
 import android.content.Intent;
 import android.os.Bundle;
+import android.view.WindowManager;
 
 import com.getcapacitor.BridgeActivity;
 
@@ -13,6 +14,11 @@ public class MainActivity extends BridgeActivity {
         registerPlugin(DocumentScannerPlugin.class);
         registerPlugin(ShareInboxPlugin.class);
         super.onCreate(savedInstanceState);
+        // Reports still rotate the native keyboard. Switch directly between
+        // their landscape surface and portrait HOME, without a spinning window.
+        WindowManager.LayoutParams attributes = getWindow().getAttributes();
+        attributes.rotationAnimation = WindowManager.LayoutParams.ROTATION_ANIMATION_JUMPCUT;
+        getWindow().setAttributes(attributes);
         handleIncomingIntent(getIntent());
     }
 

@@ -2,6 +2,20 @@ import Capacitor
 import UIKit
 
 final class EnergeticoBridgeViewController: CAPBridgeViewController {
+    override func setScreenOrientationDefaults() {
+        // Reports acquire landscape only while visible. Launching or returning
+        // to HOME must not follow the device sensor into a sideways menu.
+        supportedOrientations = [UIInterfaceOrientation.portrait.rawValue]
+    }
+
+    override func setNeedsUpdateOfSupportedInterfaceOrientations() {
+        // UIKit documents this scope for nonanimated orientation updates.
+        // Keep native landscape (and its keyboard) without the spinning window.
+        UIView.performWithoutAnimation {
+            super.setNeedsUpdateOfSupportedInterfaceOrientations()
+        }
+    }
+
     override func capacitorDidLoad() {
         let composerBackgroundColor = UIColor { traits in
             UIColor(
