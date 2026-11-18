@@ -73,7 +73,10 @@ def queue_provision(service, owner, reference):
     with service.db() as db:
         db.execute('BEGIN IMMEDIATE')
         order = db.execute('SELECT * FROM orders WHERE id=? AND owner=?', (reference, owner)).fetchone()
-        if (not order or order['state'] != 'created' or order['status'] in REFUSED
+        # This records the user's request, not a financial entry. The receipt
+        # can still hold the asynchronous create response (DRAFT); the worker
+        # checks the exact live group before touching SharePoint.
+        if (not order or order['state'] != 'created' or order['status'] in REFUSED - {'DRAFT'}
                 or not valid_order_code(order['code']) or not json.loads(order['payload']).get('provisionPeople')):
             raise SwileError('A recarga direta ainda não está confirmada para cadastrar a provisão.', 409)
         db.execute("""INSERT OR IGNORE INTO swile_provisions(reference,state,next_try)
