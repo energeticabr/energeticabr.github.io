@@ -9,6 +9,8 @@ struct SharedInboxMetadata: Codable {
     let createdAt: Date
     var state: String
     var error: String?
+    var proposalDestination: String? = nil
+    var usesGeneralUpload: Bool { proposalDestination == nil }
 }
 
 enum SharedInboxStoreError: Error, Equatable {
@@ -45,6 +47,7 @@ final class SharedInboxStore {
     }
 
     func stage(url sourceURL: URL, type: String? = nil, name: String? = nil) throws -> SharedInboxMetadata {
+        let proposalDestination = try currentProposalDestination()
         guard sourceURL.isFileURL else { throw SharedInboxStoreError.invalidAttachment }
         let itemID = UUID().uuidString
         let itemDirectory = rootURL.appendingPathComponent(itemID, isDirectory: true)
@@ -104,7 +107,8 @@ final class SharedInboxStore {
             type: detectedType,
             createdAt: Date(),
             state: "staged",
-            error: nil
+            error: nil,
+            proposalDestination: proposalDestination
         )
         try writeMetadata(metadata)
         committed = true
@@ -151,6 +155,25 @@ final class SharedInboxStore {
         }
         if let coordinationError { throw coordinationError }
         return try result.get()
+    }
+
+    func setProposalDestination(_ destination: String?) throws {
+        let url = rootURL.appendingPathComponent("proposal-destination.json")
+        if let destination {
+            guard let data = destination.data(using: .utf8), data.count <= 2048,
+                  (try JSONSerialization.jsonObject(with: data)) is [String: Any] else {
+                throw SharedInboxStoreError.invalidAttachment
+            }
+            try coordinatedWrite(data, to: url)
+        } else if fileManager.fileExists(atPath: url.path) {
+            try fileManager.removeItem(at: url)
+        }
+    }
+
+    func currentProposalDestination() throws -> String? {
+        let url = rootURL.appendingPathComponent("proposal-destination.json")
+        guard fileManager.fileExists(atPath: url.path) else { return nil }
+        return String(data: try coordinatedRead(url), encoding: .utf8)
     }
 
     func read(id: String) throws -> (metadata: SharedInboxMetadata, data: Data) {

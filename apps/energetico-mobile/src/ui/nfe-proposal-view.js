@@ -5,15 +5,17 @@ import {
   updateNfeProposalProduct, updateNfeProposalSupplier, validateNfeProposal,
 } from '../chat/nfe-proposal-model.js';
 import { bindSearchableFilterSelects } from './searchable-filter-selects.js';
+import { createProposalAttachmentTray } from './nfe-proposal-attachment-tray.js';
 
 const money = new Intl.NumberFormat('pt-BR', { style:'currency', currency:'BRL' });
 const displayDate = date => date ? date.split('-').reverse().join('/') : 'Não informado';
 const labelOf = (options, id, empty) => options.find(option => option.id === id)?.label || (id ? `ID ${id}` : empty);
 
-export function createNfeProposalView({ document:doc, host, service, onPosted, onClose, provision = false }) {
+export function createNfeProposalView({ document:doc, host, service, onPosted, onClose, attachments, provision = false }) {
   const heading = provision ? 'Proposta de provisão' : 'Relatório proposto de lançamentos';
   const submitLabel = provision ? 'CRIAR DESCRITIVO E PROVISÕES' : 'SUBMETER PEDIDO E LANÇAMENTOS';
   let current;
+  const retained = new Map();
   const el = (tag, className = '', text) => {
     const node = doc.createElement(tag);
     if (className) node.className = className;
@@ -31,6 +33,7 @@ export function createNfeProposalView({ document:doc, host, service, onPosted, o
     if (!current) return;
     const { controller, overlay, background, trigger } = current;
     current = undefined;
+    Promise.resolve(attachments?.deactivate?.()).catch(()=>{});
     controller.abort();
     overlay.remove();
     for (const [node, inert] of background) node.inert = inert;
@@ -71,7 +74,10 @@ export function createNfeProposalView({ document:doc, host, service, onPosted, o
     overlay.append(dialog);
     const background = [...host.children].map(node => [node, node.inert === true]);
     for (const [node] of background) node.inert = true;
-    const entry = { overlay, background, trigger, controller:new AbortController(), manualStages:new Set(), busy:false, reserved:false };
+    const key = String(row.key || row.id);
+    if (!retained.has(key)) retained.set(key, { files:[],imports:new Set(),pendingSave:Promise.resolve() });
+    const session = retained.get(key), files = session.files;
+    const entry = { key, overlay, background, trigger, files, session, imports:session.imports, controller:new AbortController(), manualStages:new Set(), busy:false, reserved:false };
     const signal = entry.controller.signal;
     const pickers = new Map();
     function destroyPickers() {
@@ -89,11 +95,24 @@ export function createNfeProposalView({ document:doc, host, service, onPosted, o
       status.textContent = text;
       status.setAttribute('role', error ? 'alert' : 'status');
     };
+    const tray = !provision ? createProposalAttachmentTray({
+      document:doc, files, attachments, signal, changed:()=>{
+        if(current?.session === session) current.refresh?.();
+        const snapshot=[...files];
+        session.pendingSave = session.pendingSave.catch(()=>{}).then(()=>attachments?.save?.(row,snapshot));
+        session.pendingSave.catch(error=>{ if(isCurrent())feedback(error.message,true); });
+        return session.pendingSave;
+      }, isBusy:()=>entry.busy,
+    }) : null;
+    entry.tray = tray;
+    entry.refresh = lock;
+    entry.receive = incoming => tray?.append(incoming);
     function lock() {
       closeControl.disabled = entry.busy;
-      submit.disabled = entry.busy || !entry.draft;
-      submit.textContent = entry.reserved ? 'RETOMAR ENVIO' : submitLabel;
+      submit.disabled = entry.busy || !entry.draft && !entry.attachmentOnly || Boolean(tray?.picking);
+      submit.textContent = entry.attachmentOnly ? 'ENVIAR ANEXOS AO PEDIDO' : entry.reserved ? 'RETOMAR ENVIO' : submitLabel;
       for (const fields of body.querySelectorAll('fieldset')) fields.disabled = entry.busy || entry.reserved;
+      tray?.render();
     }
 
     overlay.addEventListener('keydown', event => {
@@ -270,14 +289,15 @@ export function createNfeProposalView({ document:doc, host, service, onPosted, o
           pickers.set(editor, bindSearchableFilterSelects(fields, pickerOptions));
         });
       });
+      if (tray) body.append(tray.element);
       refreshTotals();
       lock();
     }
 
     form.addEventListener('submit', async event => {
       event.preventDefault();
-      if (!isCurrent() || entry.busy || !entry.draft) return;
-      if (!entry.reserved) {
+      if (!isCurrent() || entry.busy || !entry.draft && !entry.attachmentOnly) return;
+      if (!entry.reserved && !entry.attachmentOnly && !entry.postedReceipt) {
         try { validateNfeProposal(entry.draft, entry.fiscal, entry.catalog, { provision }); }
         catch (error) { feedback(error.message, true); return; }
       }
@@ -285,19 +305,38 @@ export function createNfeProposalView({ document:doc, host, service, onPosted, o
       lock();
       feedback(provision ? 'Gravando descritivo, provisões e todos os anexos no SharePoint…' : 'Gravando pedido, lançamentos e todos os anexos no SharePoint…');
       try {
-        const receipt = await service.submit(row, entry.draft, {
+        let receipt, sentFiles;
+        do {
+          await Promise.all(entry.imports);
+          await session.pendingSave;
+          sentFiles = [...files];
+          if (entry.attachmentOnly || entry.postedReceipt) {
+            receipt = await service.appendAttachments(row, sentFiles, { signal });
+          } else receipt = await service.submit(row, entry.draft, {
           signal, catalog:entry.catalog, xmlHash:entry.xmlHash, baseline:entry.baseline,
+          additionalAttachments:sentFiles,
           manualStages:new Set(entry.manualStages),
           onProgress({ completedLines, totalLines }) {
             if (isCurrent()) feedback(`${provision ? 'Provisões conferidas' : 'Lançamentos conferidos'} ${completedLines} de ${totalLines}.`);
           },
-        });
+          });
+          entry.postedReceipt = receipt;
+          await Promise.all(entry.imports);
+          for (const file of sentFiles) if (file.sourceId) await attachments?.discard?.(file.sourceId);
+          await Promise.all(entry.imports);
+          await session.pendingSave;
+        } while (isCurrent() && (files.length !== sentFiles.length || files.some((file,index)=>file !== sentFiles[index])));
         if (!isCurrent()) return;
+        // Stop accepting new readers only once every captured read was drained.
+        entry.delivered = true;
+        await attachments?.save?.(row,[]);
+        retained.delete(key);
         close();
         onPosted(receipt);
       } catch (error) {
         if (!isCurrent()) return;
-        if (typeof service.loadReservation === 'function') {
+        entry.delivered = false;
+        if (!entry.postedReceipt && !entry.attachmentOnly && typeof service.loadReservation === 'function') {
           try {
             const reserved = await service.loadReservation(row, { signal });
             if (!isCurrent()) return;
@@ -315,6 +354,24 @@ export function createNfeProposalView({ document:doc, host, service, onPosted, o
     });
 
     try {
+      entry.ready = (async()=>{
+        if (provision) return;
+        await attachments?.activate?.(row);
+        const persisted = await attachments?.load?.(row) || [];
+        for (const file of persisted) if (!files.some(item=>item === file || file.sourceId && item.sourceId === file.sourceId
+          || file.proposalAttachmentId && item.proposalAttachmentId === file.proposalAttachmentId)) files.push(file);
+        if (current?.session === session) current.tray?.render();
+      })();
+      await entry.ready;
+      if (!isCurrent()) return;
+      if (!provision && row.orderId) {
+        entry.attachmentOnly = true;
+        body.append(tray.element);
+        feedback(`Envie os anexos pendentes ao pedido #${row.orderId}.`);
+        submit.textContent = 'ENVIAR ANEXOS AO PEDIDO';
+        lock();
+        return;
+      }
       const proposal = await service.load(row, { signal });
       if (!isCurrent()) return;
       Object.assign(entry, proposal);
@@ -327,5 +384,18 @@ export function createNfeProposalView({ document:doc, host, service, onPosted, o
     }
   }
 
-  return Object.freeze({ show, close, get isOpen() { return Boolean(current); } });
+  return Object.freeze({ show, close,
+    captureAttachmentReceiver:() => {
+      if (provision || !current || current.delivered) return null;
+      const entry = current;
+      let finish;
+      const pending = new Promise(resolve=>{finish=resolve;});
+      entry.imports.add(pending);
+      const cancel = () => { entry.imports.delete(pending); finish(); };
+      const receive = async incoming => { try { await entry.ready; return await entry.receive(incoming); } finally { cancel(); } };
+      receive.cancel = cancel;
+      receive.invoiceKey = entry.key;
+      return receive;
+    },
+    get isOpen() { return Boolean(current); } });
 }

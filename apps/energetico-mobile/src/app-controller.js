@@ -43,6 +43,7 @@ import { createReportSessionCache } from "./report-session-cache.js";
 import { observeReportMutations, observeReportMutationFactory } from "./report-mutations.js";
 import { subscribeDataMutations } from "../../../portal/data/data-mutations.js";
 import { SHAREPOINT_SITES } from "../../../portal/config.js";
+import { createNfeProposalAttachmentStore } from './chat/nfe-proposal-attachment-store.js';
 import { decorateReportPrint, openFilteredReportPdf, preserveReportPdfReturn } from "./ui/report-print.js";
 import { beginLoadingTask } from "./ui/loading-task.js";
 import { createAcquisitionProgress } from "./chat/acquisition-progress.js";
@@ -1225,6 +1226,15 @@ export function createAppController({
   let recurringExpensesGallery = null;
   let recurringExpensesGalleryOpening = null;
   const registrationGalleries = new Map();
+  const proposalAttachmentStore = createNfeProposalAttachmentStore();
+  const proposalAccountKey = owner => owner?.homeAccountId || owner?.localAccountId || owner?.idTokenClaims?.oid || owner?.username || '';
+  const pendingProposalInvoices = new Set();
+  let proposalDestinationUpdate = Promise.resolve();
+  function updateProposalShareDestination(destination) {
+    const update = proposalDestinationUpdate.catch(()=>{}).then(()=>native.setProposalShareDestination?.(destination));
+    proposalDestinationUpdate = update;
+    return update;
+  }
   const registrationGalleryOpenings = new Map();
   const registrationGalleryOpenOptions = new WeakMap();
   let supplierPayroll = null;
@@ -10255,6 +10265,13 @@ export function createAppController({
           assertSession();
           const factory = isDdaReport ? ddaReportFactory : isNfeReport ? nfeReportFactory
             : isSicoobTransactionReport ? sicoobTransactionReportFactory : registrationGalleryFactory;
+          if (isNfeReport) {
+            pendingProposalInvoices.clear();
+            for (const entry of await proposalAttachmentStore.list()) {
+              if (entry.account === proposalAccountKey(galleryAccount)) pendingProposalInvoices.add(entry.invoice);
+            }
+            assertSession();
+          }
           const panel = await factory({
             kind: sourceKind, data,
             ...(isGalleryMenu ? { onSelect: async target => {
@@ -10284,7 +10301,33 @@ export function createAppController({
                 flowId: 'payment', replyId: 'action_payment', text: 'CRIAR UMA PROVISÃO DE PAGAMENTO',
               }),
             } : {}),
-            ...(sourceKind === 'notas_fiscais_sefaz' ? { syncMonitor: ensureFinancialSync('fiscal') } : {}),
+            ...(sourceKind === 'notas_fiscais_sefaz' ? {
+              syncMonitor: ensureFinancialSync('fiscal'),
+              proposalAttachments: {
+                hasPending:row => pendingProposalInvoices.has(String(row.key || row.id)),
+                async activate(row) { assertSession(); await updateProposalShareDestination({ account:proposalAccountKey(galleryAccount), invoice:String(row.key || row.id) }); },
+                deactivate:() => updateProposalShareDestination(null),
+                async load(row) { assertSession(); return proposalAttachmentStore.load(proposalAccountKey(galleryAccount),String(row.key || row.id)); },
+                async save(row, files) {
+                  assertSession();
+                  const invoice = String(row.key || row.id);
+                  await proposalAttachmentStore.save(proposalAccountKey(galleryAccount), invoice, files);
+                  if (files.length) pendingProposalInvoices.add(invoice); else pendingProposalInvoices.delete(invoice);
+                },
+                async pick(source, { signal } = {}) {
+                  assertSession();
+                  signal?.throwIfAborted();
+                  const picker = { camera:native.capturePhoto, photos:native.pickPhotos,
+                    scan:native.scanDocument, files:native.pickDocuments }[source];
+                  if (typeof picker !== 'function') throw new Error('Esta opção não está disponível neste dispositivo.');
+                  const files = await picker.call(native, { signal, desktopCamera:true });
+                  assertSession(); signal?.throwIfAborted();
+                  return files;
+                },
+                async open(file) { assertSession(); await showMedia(file, file.name, {returnLabel:'Voltar à proposta'}); },
+                discard:discardConfirmedSharedItem,
+              },
+            } : {}),
             ...(sourceKind === 'financial_movement' ? { syncMonitor: ensureFinancialSync('sicoob') } : {}),
             ...(isSicoobTransactionReport && typeof client.getSicoobLatestAttempt === 'function' ? {
               loadLatestAttempt: async options => {
@@ -11374,6 +11417,7 @@ export function createAppController({
     const importAccount = account;
     const importRevision = sessionRevision;
     const preAuthenticationImport = importAccount == null;
+    const proposalReceiver = registrationGalleries.get('nfeReport')?.captureAttachmentReceiver?.();
     const stillCurrent = () => !stopped && (preAuthenticationImport
       || (account === importAccount && sessionRevision === importRevision));
     try {
@@ -11390,13 +11434,45 @@ export function createAppController({
         const sourceId = String(file?.sourceId || "").trim();
         return !sourceId || !ignoredSharedIds.has(sourceId);
       });
-      store.replaceImportedFiles(currentFiles);
+      const owned = await proposalAttachmentStore.list();
+      if (!stillCurrent()) return [];
+      const ownedIds = new Set(owned.flatMap(entry=>entry.files.map(file=>file.sourceId)).filter(Boolean));
+      const generalIds = new Set(store.getState().pendingFiles.map(file=>file.sourceId).filter(Boolean));
+      const general = [], proposed = [];
+      for (const file of currentFiles) {
+        let destination = file.proposalDestination;
+        if (typeof destination === 'string') {
+          try { destination = JSON.parse(destination); } catch { throw new Error('O destino de um anexo compartilhado está inválido.'); }
+        }
+        if (generalIds.has(file.sourceId)) { general.push(file); continue; }
+        if (ownedIds.has(file.sourceId)) continue;
+        if (proposalReceiver && (!destination || destination.account === proposalAccountKey(importAccount)
+          && destination.invoice === proposalReceiver.invoiceKey)) { proposed.push(file); continue; }
+        if (destination) {
+          if (typeof destination.account !== 'string' || !destination.account || typeof destination.invoice !== 'string' || !destination.invoice) {
+            throw new Error('O destino de um anexo compartilhado está inválido.');
+          }
+          const retained = await proposalAttachmentStore.load(destination.account,destination.invoice);
+          if (!retained.some(item=>item.sourceId === file.sourceId)) retained.push(file);
+          await proposalAttachmentStore.save(destination.account,destination.invoice,retained);
+          if (destination.account === proposalAccountKey(importAccount)) pendingProposalInvoices.add(destination.invoice);
+          continue;
+        }
+        general.push(file);
+      }
+      if (proposalReceiver) {
+        await proposalReceiver(proposed);
+        for (const file of proposed) if (file.sourceId) ignoredSharedIds.add(String(file.sourceId));
+      }
+      store.replaceImportedFiles(general);
       return store.getState().pendingFiles
         .filter(item => item.sourceId && item.status !== "sending")
         .map(item => item.id);
     } catch (error) {
       if (stillCurrent()) setSessionError(error, "Não foi possível ler os itens compartilhados.");
       return [];
+    } finally {
+      proposalReceiver?.cancel?.();
     }
   }
 

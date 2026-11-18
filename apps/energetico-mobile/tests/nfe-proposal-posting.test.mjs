@@ -14,6 +14,61 @@ const wrongPdf = new Blob(['%PDF-1.7\ndifferent\n%%EOF\n'], { type:'application/
 const draft = { lines:[{ number:1, account:'A' }, { number:2, account:'B' }] };
 const expected = { invoiceId:'7', orderId:'40', launchIds:['50','51'] };
 
+test('proposal uploads internal attachments alongside the fiscal files and preserves same-name bytes', async () => {
+  const { service,files,tables } = fixture();
+  const additionalAttachments = [new File(['photo'], 'foto.jpg'), new File(['other'], pdfName.replace('.pdf','.jpg')),
+    new File(['different photo'], 'foto.jpg')];
+  await service().submit(invoice, draft, { additionalAttachments });
+  assert.equal(files.size, 4);
+  for (const file of additionalAttachments) assert.ok([...files.values()].some(bytes => Buffer.from(bytes).equals(Buffer.from(file.name === 'foto.jpg' && file.size === 5 ? 'photo' : file.name === 'foto.jpg' ? 'different photo' : 'other'))));
+  await service().submit(invoice, draft, { additionalAttachments });
+  assert.equal(files.size, 4);
+  assert.equal(tables.NOTASPENDENTES.length, 1);
+  assert.equal(tables.LANCAMENTOS.length, 2);
+});
+
+test('proposal cannot finish after a failed internal upload without recovering the reserved file', async () => {
+  const { service,state,fiscal,tables } = fixture();
+  const file = new File(['photo'], 'foto.jpg');
+  state.rejectAttachmentName = 'foto.jpg';
+  await assert.rejects(service().submit(invoice, draft, { additionalAttachments:[file] }), /attachment upload unavailable/);
+  state.rejectAttachmentName = null;
+  await assert.rejects(service().submit(invoice, draft), /anexo.*foto.jpg/i);
+  assert.equal(fiscal.IDPEDIDO, null);
+  await service().submit(invoice, draft, { additionalAttachments:[file] });
+  assert.equal(tables.NOTASPENDENTES.length, 1);
+  assert.equal(tables.LANCAMENTOS.length, 2);
+});
+
+test('proposal recovers uploaded internal files from the pending order after losing local files', async () => {
+  const { service,state,files } = fixture();
+  state.rejectLine = `${key}-2`;
+  await assert.rejects(service().submit(invoice, draft, { additionalAttachments:[new File(['photo'], 'foto.jpg')] }), /launch creation unavailable/);
+  state.rejectLine = null;
+  await service().submit(invoice, draft);
+  assert.deepEqual(Buffer.from(files.get('foto.jpg')), Buffer.from('photo'));
+});
+
+test('a competing reservation cannot lose another devices required attachment', async () => {
+  const a=fixture();a.state.rejectAttachmentName='a.jpg';
+  await assert.rejects(a.service().submit(invoice,draft,{additionalAttachments:[new File(['a'],'a.jpg')]}));
+  const b=fixture();
+  b.state.onDownload=()=>{b.state.onDownload=null;b.fiscal.NFEPROPOSTA=a.fiscal.NFEPROPOSTA;b.state.revision++;};
+  await assert.rejects(b.service().submit(invoice,draft,{additionalAttachments:[new File(['b'],'b.jpg')]}),/anexos.*outra sessão/i);
+  assert.equal(b.fiscal.IDPEDIDO,null);
+  assert.equal(b.fiscal.NFEPROPOSTA,a.fiscal.NFEPROPOSTA);
+});
+
+test('late files can resume on a linked order without creating or editing financial rows', async()=>{
+  const h=fixture();await h.service().submit(invoice,draft);
+  h.state.rejectAttachmentName='late.jpg';
+  await assert.rejects(h.service().appendAttachments(invoice,[new File(['late'],'late.jpg')]),/attachment upload unavailable/);
+  h.state.rejectAttachmentName=null;
+  await h.service().appendAttachments(invoice,[new File(['late'],'late.jpg'),new File(['different'],'late.jpg')]);
+  assert.equal(h.files.size,3);assert.equal(h.tables.NOTASPENDENTES.length,1);assert.equal(h.tables.LANCAMENTOS.length,2);
+  assert.equal(h.fiscal.IDPEDIDO,40);
+});
+
 function fixture(provision = false) {
   const parents = provision ? 'DESCRITIVOPROVISAO' : 'NOTASPENDENTES';
   const children = provision ? 'PROVISÃO PGTOS' : 'LANCAMENTOS';

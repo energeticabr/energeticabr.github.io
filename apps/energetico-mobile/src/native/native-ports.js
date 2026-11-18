@@ -73,6 +73,7 @@ function makeFile(blob, metadata, { FileCtor, randomUUID }) {
     id: { value: id, enumerable: true },
     sourceId: { value: metadata.sourceId || null, enumerable: true },
     confirmedResult: { value: metadata.confirmedResult || null, enumerable: true },
+    proposalDestination: { value: metadata.proposalDestination || null, enumerable: true },
   });
   validateAttachment(file);
   return file;
@@ -329,6 +330,7 @@ export function createNativePorts({
         name: item.name,
         type: item.type,
         confirmedResult: item.confirmedResult,
+        proposalDestination: item.proposalDestination,
       }, { FileCtor, randomUUID }));
     }
     return files;
@@ -516,6 +518,7 @@ export function createNativePorts({
     pickPhotos,
     pickDocuments,
     importSharedItems,
+    setProposalShareDestination: destination => shareInbox.setProposalDestination({ destination:destination ? JSON.stringify(destination) : null }),
     discardSharedItem,
     exportMedia,
     scheduleFlowReminder,

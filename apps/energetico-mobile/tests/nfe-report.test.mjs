@@ -68,6 +68,43 @@ test('NFE shortcut uses the authenticated fiscal source and ends its session at 
 });
 
 const key = '1'.repeat(44);
+
+test('native shares captured by an open proposal bypass general uploads even if the screen closes during import', async t => {
+  const handlers=new Map(), store=createConversationStore(), received=[], uploaded=[];
+  let resume, receiver=null, completeImport, calls=0;
+  const file=new File(['photo'],'encaminhado.jpg'); Object.defineProperty(file,'sourceId',{value:'proposal-share-1'});
+  const controller=createAppController({store,
+    view:{render(){},focusComposer(){},destroy(){},on(type,fn){handlers.set(type,fn);return ()=>{};}},
+    auth:{initialize:async()=>({homeAccountId:'nfe-test'}),signOut:async()=>{}},
+    client:{sendText:async()=>({status:'processed',messages:[]}),sendFile:async value=>{uploaded.push(value);return {};},refreshSefaz(){},getSefazRefreshStatus(){},getSefazRefreshPending(){},acknowledgeSefazRefresh(){}},
+    native:{onResume:async fn=>{resume=fn;return ()=>{};},importSharedItems:async()=>{calls++;return calls===1?[]:await new Promise(resolve=>{completeImport=resolve;});}},
+    sefazSyncSessionFactory:()=>({resume:async()=>{},destroy(){}}),
+    registrationGalleryDataFactory:async()=>({}),
+    nfeReportFactory:async()=>({open(){receiver=files=>received.push(...files);},captureAttachmentReceiver:()=>receiver,close(){receiver=null;},destroy(){}}),
+    pendingProvisionAttachmentsDataFactory:async()=>({loadUpcomingPayments:async()=>[]}),
+    pendingConstructionDiaryDataFactory:async()=>({loadPending:async()=>[]}),diaryFieldVisitDataFactory:async()=>({load:async()=>[]}),
+  });
+  t.after(()=>controller.stop());await controller.start();await handlers.get('open-nfe-report')({type:'open-nfe-report'});
+  const activation=resume();await new Promise(resolve=>setImmediate(resolve));receiver=null;completeImport([file]);await activation;
+  assert.deepEqual(received,[file]);assert.deepEqual(store.getState().pendingFiles,[]);assert.deepEqual(uploaded,[]);
+});
+
+test('cold-start proposal shares stay out of general attachments and restore to their original invoice',async t=>{
+  const handlers=new Map(),store=createConversationStore();let attachmentPort;
+  const file=new File(['preserved'],'restored.jpg');Object.defineProperties(file,{sourceId:{value:'durable-share'},proposalDestination:{value:JSON.stringify({account:'nfe-test',invoice:'invoice-key'})}});
+  const controller=createAppController({store,
+    view:{render(){},focusComposer(){},destroy(){},on(type,fn){handlers.set(type,fn);return ()=>{};}},
+    auth:{initialize:async()=>({homeAccountId:'nfe-test'})},
+    client:{sendText:async()=>({status:'processed',messages:[]}),refreshSefaz(){},getSefazRefreshStatus(){},getSefazRefreshPending(){},acknowledgeSefazRefresh(){}},
+    native:{importSharedItems:async()=>[file]},sefazSyncSessionFactory:()=>({resume:async()=>{},destroy(){}}),
+    registrationGalleryDataFactory:async()=>({}),nfeReportFactory:async({proposalAttachments})=>{attachmentPort=proposalAttachments;return {open(){},close(){},destroy(){}};},
+    pendingProvisionAttachmentsDataFactory:async()=>({loadUpcomingPayments:async()=>[]}),pendingConstructionDiaryDataFactory:async()=>({loadPending:async()=>[]}),diaryFieldVisitDataFactory:async()=>({load:async()=>[]}),
+  });
+  t.after(()=>controller.stop());await controller.start();assert.deepEqual(store.getState().pendingFiles,[]);
+  await handlers.get('open-nfe-report')({type:'open-nfe-report'});
+  const [restored]=await attachmentPort.load({key:'invoice-key'});
+  assert.equal(await restored.text(),'preserved');assert.equal(restored.sourceId,'durable-share');assert.equal(attachmentPort.hasPending({key:'invoice-key'}),true);
+});
 const serviceKey = '2'.repeat(50);
 const xmlUrl = 'https://example.sharepoint.com/fiscal/nota.xml';
 const pdfName = `DANFE-${key}-deadbeefdeadbeef.pdf`;

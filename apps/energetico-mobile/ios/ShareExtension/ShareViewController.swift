@@ -132,12 +132,21 @@ final class ShareViewController: UIViewController {
             hasPreparationFailures: !stagingFailures.isEmpty
         )
         updateProgress()
+        // Proposal files belong to the invoice, never to the general upload API.
+        let proposalItems = stagedItems.filter { !$0.usesGeneralUpload }
+        for item in proposalItems {
+            try? inboxStore?.updateState(id: item.id, state: "proposalPending")
+        }
+        if proposalItems.count == stagedItems.count {
+            await finish(message: nil, closeImmediately: true)
+            return
+        }
         let audioItems = stagedItems.filter { item in
-            item.type.lowercased().hasPrefix("audio/")
-                || audioExtensions.contains(URL(fileURLWithPath: item.name).pathExtension.lowercased())
+            item.usesGeneralUpload && (item.type.lowercased().hasPrefix("audio/")
+                || audioExtensions.contains(URL(fileURLWithPath: item.name).pathExtension.lowercased()))
         }
         let uploadItems = stagedItems.filter { item in
-            !audioItems.contains(where: { $0.id == item.id })
+            item.usesGeneralUpload && !audioItems.contains(where: { $0.id == item.id })
         }
         // Audio must be transcribed inside the active Diário de Obras flow.
         // Do not upload it blindly from the share extension, because this

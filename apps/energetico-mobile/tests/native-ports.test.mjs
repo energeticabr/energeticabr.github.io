@@ -109,6 +109,16 @@ test("build Android antiga sem ShareInbox inicia sem bloquear o login", async ()
   assert.deepEqual(await ports.importSharedItems(), []);
 });
 
+test('native imports preserve durable proposal destination without submitting or deleting the shared bytes',async()=>{
+  const destination=JSON.stringify({account:'account-a',invoice:'invoice-a'});
+  const ports=createNativePorts({shareInbox:{
+    list:async()=>({items:[{id:'proposal-1',name:'photo.jpg',size:1,type:'image/jpeg',state:'proposalPending',proposalDestination:destination}]}),
+    read:async()=>({data:'eA=='}),remove:async()=>assert.fail('must retain native bytes until confirmed delivery'),
+  }});
+  const [file]=await ports.importSharedItems();
+  assert.equal(file.proposalDestination,destination);assert.equal(file.sourceId,'proposal-1');assert.equal(await file.text(),'x');
+});
+
 test("normaliza uma foto da câmera como arquivo enviável", async () => {
   const ports = createNativePorts({
     camera: { getPhoto: async () => ({ webPath: "blob:photo", format: "jpeg" }) },
