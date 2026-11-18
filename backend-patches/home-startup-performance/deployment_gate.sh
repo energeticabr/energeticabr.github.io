@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 # Existing diary-progress gate: reject new non-root bridge connections,
-# drain accepted requests, and release automatically after 120 seconds.
+# drain requests, and cover forward/rollback health windows for up to 900s.
 DIARY_GATE_ACTIVE=0
 DIARY_GATE_UNIT="energetica-diary-progress-release-$$"
 DIARY_GATE_RULE=(-o lo -d 127.0.0.1 -p tcp --dport 8765 --syn
@@ -14,7 +14,7 @@ diary_block_ingress() {
   fi
   iptables -I OUTPUT 1 "${DIARY_GATE_RULE[@]}"
   DIARY_GATE_ACTIVE=1
-  systemd-run --quiet --unit="$DIARY_GATE_UNIT" --on-active=120s /usr/sbin/iptables -D OUTPUT "${DIARY_GATE_RULE[@]}"
+  systemd-run --quiet --unit="$DIARY_GATE_UNIT" --on-active=900s /usr/sbin/iptables -D OUTPUT "${DIARY_GATE_RULE[@]}"
 }
 
 diary_drain_requests() {
@@ -36,7 +36,7 @@ diary_release_ingress() {
       DIARY_GATE_ACTIVE=0
       systemctl stop "$DIARY_GATE_UNIT.timer" >/dev/null 2>&1 || true
     else
-      echo "Gate cleanup delegated to the 120-second watchdog" >&2
+      echo "Gate cleanup delegated to the 900-second watchdog" >&2
       return 1
     fi
   fi

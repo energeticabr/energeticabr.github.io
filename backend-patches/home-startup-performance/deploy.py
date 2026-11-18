@@ -21,7 +21,7 @@ LOCK = Path('/tmp/energetica-whatsapp-deploy.lock')
 FILES = ('worker/workflow.py',)
 BEFORE = {'worker/workflow.py': '0335a0a4371c85d70e2b88e1169b520b2cb5ce162342d73768129cfdc90aed79'}
 MIRROR_PINS = {'worker/workflow.py': 'bf35d3622b51d3833b37e9c768805f69b66f252c82ee4c10ecbf6af182e722fe'}
-SHARED_RUNNER_SHA = '01d979e4e9d525d35ab522e017d3454be75514f4fc42a1274cc89e7b0a21bbe2'
+SHARED_RUNNER_SHA = '709dfc9f1cfc13670a0c819b2dde34149e996f4d8fff96e21a7f0edc8ec2f716'
 INPUTS = {'patch_backend.py', 'deploy.py', 'deploy.sh', 'deployment_gate.sh', 'shared-deploy.py', 'source.patch', 'menu_method.py'}
 
 

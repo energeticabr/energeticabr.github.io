@@ -452,7 +452,7 @@ iptables() {
   echo "firewall $operation"
 }
 systemd-run() {
-  [[ "$*" == "--quiet --unit=energetica-diary-progress-release-$$ --on-active=120s /usr/sbin/iptables -D OUTPUT -o lo -d 127.0.0.1 -p tcp --dport 8765 --syn -m owner ! --uid-owner 0 -m comment --comment diary-progress-$$ -j REJECT --reject-with tcp-reset" ]] || return 9
+  [[ "$*" == "--quiet --unit=energetica-diary-progress-release-$$ --on-active=900s /usr/sbin/iptables -D OUTPUT -o lo -d 127.0.0.1 -p tcp --dport 8765 --syn -m owner ! --uid-owner 0 -m comment --comment diary-progress-$$ -j REJECT --reject-with tcp-reset" ]] || return 9
   echo watchdog
 }
 systemctl() { echo timer-stop; }

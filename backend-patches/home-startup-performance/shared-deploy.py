@@ -51,10 +51,10 @@ def health():
     return result
 
 def wait_health():
-    for attempt in range(15):
+    for attempt in range(60):
         try: return health()
         except Exception:
-            if attempt == 14: raise
+            if attempt == 59: raise
             time.sleep(1)
 
 def execute(manifest, check_only=False):
