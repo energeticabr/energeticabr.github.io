@@ -5,7 +5,7 @@ from pathlib import Path
 
 from unittest.mock import patch
 
-from swile_recharges import Service, SwileError, document_url, download_document, handle_portal, request_dates
+from swile_recharges import SP, Service, SwileError, document_url, download_document, handle_portal, request_dates
 
 
 class Gateway:
@@ -69,6 +69,25 @@ class ServiceTests(unittest.TestCase):
     def test_swile_due_dates_are_relative_to_credit(self):
         self.assertEqual('2026-11-29', request_dates({**self.data, 'paymentMethod':'BANK_SLIP', 'dueDate':'2026-11-30'}, self.now)['dueDate'])
         self.assertEqual('2026-11-30', request_dates(self.data, self.now)['dueDate'])
+
+    def test_pix_tomorrow_preserves_selected_day_and_exceeds_24_hours(self):
+        self.now = datetime(2026, 11, 18, 15, 53, tzinfo=timezone.utc).timestamp()
+        preview = self.service.preview('user-a', {**self.data, 'creditDate': '2026-11-19'})
+        self.service.confirm('user-a', preview['id'])
+        payload = next(data for path, data, _ in self.gateway.calls if path == 'order/create')
+        credit = datetime.fromisoformat(payload['creditDate']).replace(tzinfo=timezone.utc)
+        self.assertGreaterEqual(credit.timestamp() - self.now, 24 * 3600 + 300)
+        self.assertEqual('2026-11-19', credit.astimezone(SP).date().isoformat())
+        self.assertNotIn('dueDate', payload)
+
+    def test_pix_later_credit_date_keeps_midnight_and_boleto_dates_are_unchanged(self):
+        for payment, expected_due in [('PIX', None), ('BANK_SLIP', '2026-11-29T03:00:00')]:
+            with self.subTest(payment=payment):
+                preview = self.service.preview('user-a', {**self.data, 'paymentMethod': payment})
+                self.service.confirm('user-a', preview['id'])
+                payload = [data for path, data, _ in self.gateway.calls if path == 'order/create'][-1]
+                self.assertEqual('2026-12-01T03:00:00', payload['creditDate'])
+                self.assertEqual(expected_due, payload.get('dueDate'))
 
     def test_directory_paginates_and_returns_only_eligible_public_fields(self):
         records = self.service.directory(public=True)
