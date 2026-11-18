@@ -44,7 +44,7 @@ function deferred() {
 }
 
 for (const outcome of ['opened', 'failed', 'home', 'stop']) {
-  test(`report pixels survive a delayed neighbor and are released on ${outcome}`, async t => {
+  test(`report loading replaces outgoing data and is released on ${outcome}`, async t => {
     const loading = deferred();
     const h = harness(t, { registrationGalleryDataFactory: () => loading.promise,
       ...(outcome === 'failed' ? { ddaReportFactory: async () => { throw new Error('Unavailable'); } } : {}),
@@ -57,8 +57,10 @@ for (const outcome of ['opened', 'failed', 'home', 'stop']) {
     await tick();
     const retained = h.document.querySelector('[data-report-transition]');
     assert.ok(retained, 'never expose HOME while creating the destination');
-    assert.match(retained.textContent, /Provisões já carregadas/);
-    assert.equal(retained.querySelector('[aria-hidden="true"]').inert, true);
+    assert.doesNotMatch(retained.textContent, /Provisões já carregadas/);
+    assert.match(retained.textContent, /Carregando relatório/);
+    assert.ok(retained.querySelector('.app-loading__mascot'));
+    assert.equal(retained.querySelector('[role=progressbar]').getAttribute('aria-valuenow'), '33');
     assert.ok(source.hidden || !source.isConnected, 'live source requests still close normally');
     if (outcome === 'home') await h.view.emit('select-reply', { replyId: 'navigation_main_menu', label: 'RETORNAR AO MENU INICIAL' });
     if (outcome === 'stop') h.controller.stop();
@@ -69,7 +71,7 @@ for (const outcome of ['opened', 'failed', 'home', 'stop']) {
   });
 }
 
-test('the previous report stays painted until the neighbor finishes its initial data load', async t => {
+test('the loading screen stays visible until the neighbor finishes its initial data load', async t => {
   const loading = deferred();
   const h = harness(t, { managementReportFactory: async () => {
     const element = h.document.createElement('div'); element.hidden = true;

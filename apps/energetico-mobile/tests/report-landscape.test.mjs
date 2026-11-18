@@ -6,8 +6,27 @@ import { captureFilteredReport } from '../src/ui/report-print.js';
 import { reportLayoutViewport } from '../src/ui/report-landscape.js';
 import { retainReportPresentation } from '../src/ui/report-navigation.js';
 import { createCargosView } from '../src/ui/cargos-view.js';
+import { createLoadingIndicator, updateLoadingIndicator } from '../src/ui/loading-indicator.js';
 
 const row = {id:'1',paymentDate:'2026-10-01',supplier:'Fornecedor',branch:'Filial',product:'Produto',order:'1',account:'Caixa',unit:10,quantity:1,freight:0,total:10};
+test('transition displays destination progress and releases its observer', async t => {
+  const {view,root,dom}=setup(t,async()=>({launches:[row]}));await view.open();
+  const release=retainReportPresentation(root);t.after(release);view.close();
+  const layer=dom.window.document.querySelector('[data-report-transition]');
+  const visible=layer.querySelector('[role=progressbar]');
+  assert.ok(visible,'loading percentage replaces the outgoing table');
+  assert.equal(layer.querySelector('table'),null);
+  const destination=dom.window.document.createElement('section');
+  destination.dataset.reportAction='open-management-report';
+  const indicator=createLoadingIndicator(dom.window.document,'Carregando despesas...');
+  destination.append(indicator);dom.window.document.body.append(destination);
+  updateLoadingIndicator(indicator,{progress:43});await new Promise(resolve=>setImmediate(resolve));
+  assert.equal(visible.getAttribute('aria-valuenow'),'47');
+  updateLoadingIndicator(indicator,{progress:66});await new Promise(resolve=>setImmediate(resolve));
+  assert.equal(visible.textContent,'55%');
+  release();updateLoadingIndicator(indicator,{progress:100});await new Promise(resolve=>setImmediate(resolve));
+  assert.equal(visible.textContent,'55%');
+});
 function setup(t, load) {
   const dom = new JSDOM('<main id="app"></main>');
   Object.defineProperties(dom.window,{innerWidth:{value:390,writable:true},innerHeight:{value:844,writable:true}});

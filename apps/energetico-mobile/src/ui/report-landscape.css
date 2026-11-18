@@ -7,7 +7,12 @@
  -webkit-backdrop-filter:none!important;
 }
 .report-transition { position:fixed; inset:0; z-index:20000; background:transparent; }
-.report-transition > [inert] { pointer-events:none; }
+.report-transition > :first-child { pointer-events:none; }
+.report-transition .report-transition-surface { position:relative; display:grid; place-items:center; background:#fff!important; color:#173f4b; opacity:1!important; filter:none!important; }
+.report-transition-surface > .app-loading { width:auto; max-width:100%; min-height:0; padding:16px; background:#fff; color:#173f4b; }
+.report-transition-surface .app-loading__percentage { background:#fff; color:#173f4b; }
+.report-transition-surface > .report-close-control,
+.report-transition-surface > button[aria-label^="Fechar"] { position:absolute; top:3px; right:3px; }
 .report-transition-cancel { position:fixed; z-index:1; padding:0; border:0; background:transparent; cursor:pointer; }
 @media print { .report-transition { display:none!important; } }
 
