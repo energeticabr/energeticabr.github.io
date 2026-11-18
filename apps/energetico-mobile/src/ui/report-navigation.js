@@ -17,6 +17,7 @@ export function getReportNeighbors(action) {
 // aborts requests, so a slow neighbor cannot leave a stale report interactive.
 export function retainReportPresentation(root, { onCancel } = {}) {
  if (!root?.isConnected) return () => {};
+ root=root.closest('.report-landscape-viewport')||root;
  const doc=root.ownerDocument, layer=doc.createElement('div'), copy=root.cloneNode(true);
  layer.dataset.reportTransition='';
  layer.className='report-transition';
