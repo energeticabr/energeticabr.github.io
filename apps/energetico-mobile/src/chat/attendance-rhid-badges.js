@@ -233,6 +233,10 @@ function personBadge(person, date) {
     times = [...effectiveSlots.filter(Boolean), ...times.slice(4)];
   }
   if (!times.length) return dailyBadge("absent");
+  // Two lunch punches delimit a break, not a complete work period.
+  if (times.length === 2 && !punches.entry1 && punches.exit1 && punches.entry2 && !punches.exit2) {
+    return dailyBadge("inconsistent");
+  }
   if (times.length % 2 || times.some((time, index) => index > 0 && time <= times[index - 1])) return dailyBadge("inconsistent");
   let minutes = 0;
   for (let index = 0; index < times.length; index += 2) {

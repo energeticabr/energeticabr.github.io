@@ -366,7 +366,7 @@ export function createNfeReportView({ document:doc = globalThis.document, data, 
             facts = invoiceXmlFacts(await blob.text(), row, doc.defaultView.DOMParser);
           } else {
             const blob = await data.downloadAttachment(row.id, row.danfeCnoName, { signal });
-            const danfeCno = await readDanfeCno(blob, row.key, { document:doc, signal });
+            const danfeCno = await readDanfeCno(blob, row.key, { document:doc, signal, type:row.type });
             if (danfeCno) facts = { danfeCno };
           }
         } catch { /* Leave unavailable fiscal documents unclassified. */ }
