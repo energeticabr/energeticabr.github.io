@@ -54,6 +54,51 @@ test('a pending paid DDA repeats at each check from 15h Brasília, even within t
  assert.equal(h.opened.length,3);
 });
 
+test('reviewed unlinked DDAs never trigger automatically, including overdue and scheduled payments',async()=>{
+ for(const [status,due,lifecycle] of [
+  ['Em aberto','2026-11-18',''],
+  ['Em aberto','2026-11-17',''],
+  ['Agendado','2026-11-18',''],
+  ['Pago','2026-11-18','PAGO_AGENDADO'],
+ ]){
+  const unlinked=row(49,status,due);
+  Object.assign(unlinked.fields,{DDA_x0020_sem_x0020_vincula_x00e:true,DDA_CICLO_AGENDAMENTO:lifecycle});
+  const h=setup({now:()=>Date.parse('2026-11-18T19:18:00Z')});
+  h.setRows([unlinked,row(50,'Em aberto','2026-11-19')]);
+  for(let i=0;i<3;i++){
+   assert.equal(await h.reminder.refresh(),false);
+   assert.equal(h.reminder.pending,false);
+   h.reminder.dismiss();
+  }
+  h.reminder.reset();
+  assert.equal(await h.reminder.refresh(),false);
+  assert.deepEqual(h.opened,[]);
+ }
+});
+
+test('regularizing a deferred unlinked DDA cancels its queued automatic report',async()=>{
+ const h=setup({now:()=>Date.parse('2026-11-18T19:18:00Z')});
+ const unlinked=row(49,'Em aberto','2026-11-18');
+ h.setRows([unlinked]);h.setSafe(false);
+ await h.reminder.refresh();assert.equal(h.reminder.pending,true);
+ h.setRows([{...unlinked,fields:{...unlinked.fields,DDA_x0020_sem_x0020_vincula_x00e:true}}]);
+ h.setSafe(true);
+ assert.equal(await h.reminder.drain(),false);
+ assert.equal(h.reminder.pending,false);
+ assert.deepEqual(h.opened,[]);
+});
+
+test('linked and unreviewed DDAs still trigger even alongside reviewed unlinked titles',async()=>{
+ const unlinked=row(49,'Em aberto','2026-11-18');
+ unlinked.fields.DDA_x0020_sem_x0020_vincula_x00e=true;
+ for(const fields of [{},{DESCRITIVOPROVIS_x00c3_O:'56',DDA_x0020_sem_x0020_vincula_x00e:true}]){
+  const payable=row(51,'Em aberto','2026-11-18');Object.assign(payable.fields,fields);
+  const h=setup({now:()=>Date.parse('2026-11-18T19:18:00Z')});h.setRows([unlinked,payable]);
+  assert.equal(await h.reminder.refresh(),true);
+  assert.deepEqual(h.opened[0].initialSnapshot.rows.map(row=>row.id),['49','51']);
+ }
+});
+
 test('a newer visit replaces a stale settlement check without opening the old snapshot',async()=>{
  const paid=row(2,'Pago');
  paid.fields.DESCRITIVOPROVIS_x00c3_O='56';
