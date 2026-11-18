@@ -14,6 +14,7 @@ test('RHID calendar keeps warnings inside cells and aligns the daily report butt
   const appRoot = resolve(fileURLToPath(new URL('..',import.meta.url)));
   const server = await createIsolatedViteServer({
     root: appRoot,
+    resolve: { preserveSymlinks: process.platform === 'win32' },
     optimizeDeps: { noDiscovery: true, include: ['decimal.js', 'pdf-lib', 'pako', '@capacitor/core'] },
     server: { host: '127.0.0.1', port: 0, hmr: false, fs: { allow: [resolve(appRoot, '../..')] } },
     logLevel: 'silent',
@@ -52,6 +53,9 @@ test('RHID calendar keeps warnings inside cells and aligns the daily report butt
       assert.ok(layout.width<=width,JSON.stringify(layout));
       assert.equal(layout.warnings.length,2);
       for(const item of layout.warnings) assert.ok(item.color==='rgb(180, 35, 45)' && item.font<=10 && item.below && item.inside && !item.overflow,JSON.stringify({width,item}));
+      const suspects=await evaluate(`(()=>{return [...document.querySelectorAll('.chat-rhid-calendar__suspect')].map(n=>{const r=n.getBoundingClientRect(),d=n.parentElement.getBoundingClientRect();return {text:n.textContent,orange:getComputedStyle(n.parentElement).backgroundColor==='rgb(245, 187, 101)',inside:r.left>=d.left&&r.right<=d.right,overflow:n.scrollWidth>n.clientWidth+1};});})()`);
+      assert.equal(suspects.length,2);
+      for(const item of suspects) assert.ok(item.orange && item.inside && !item.overflow,JSON.stringify({width,item}));
       if(width===390&&process.env.RHID_CALENDAR_SCREENSHOT){const shot=await send('Page.captureScreenshot',{format:'png',captureBeyondViewport:false},sessionId);writeFileSync(process.env.RHID_CALENDAR_SCREENSHOT,Buffer.from(shot.data,'base64'));}
     }
   } finally {
