@@ -8,7 +8,7 @@ const view=createStageGanttView({document,now:()=>new Date(2026,3,30),data:{
   {id:1,branch,stage:'Etapa',type:'ATIVIDADE COMUM',status:'FINALIZADO',startDate:'2026-01-01',endDate:'2026-04-30'},
  ],activities:[
   {id:1,branch,stage:'Etapa',activity:'Curta no final',property:'',supplier:'',status:'ATIVIDADE FINALIZADA',executionDate:'2026-04-30',plannedDate:'2026-04-30'},
-  {id:2,branch,stage:'Etapa',activity:'Longa',property:'',supplier:'',status:'ATIVIDADE INICIADA',executionDate:'2026-01-02',plannedDate:'2026-04-29'},
+  {id:2,branch,stage:'Etapa',activity:'Longa',property:'',supplier:'',status:'ATIVIDADE FINALIZADA',executionDate:'2026-01-02',plannedDate:'2026-04-29'},
   {id:3,branch,stage:'Etapa',activity:'Curta',property:'',supplier:'',status:'ATIVIDADE INICIADA',executionDate:'2026-01-04',plannedDate:'2026-01-06'},
  ]};},
  async loadAssignments(){return {complete:true,rows:[]};},
@@ -32,14 +32,16 @@ const measure=()=>[...root.querySelectorAll('.gantt-row--activity')].map(row=>{
   const dateTop=sideways?barRect.right-rect.right:rect.top-barRect.top;
   const dateWidth=sideways?rect.height:rect.width;
   const dateHeight=sideways?rect.width:rect.height;
-  return {text:node.textContent,color:getComputedStyle(node).color,top:dateTop,height:dateHeight,
+  return {text:node.textContent,color:getComputedStyle(node).color,left:dateLeft,width:dateWidth,top:dateTop,height:dateHeight,
    trackSafe:dateLeft+bar.offsetLeft>=-1,
    inside:dateLeft>=-1&&dateLeft+dateWidth<=width+1&&dateTop>=-1&&dateTop+dateHeight<=barHeight+1,
    below:dateTop>=barHeight+2,
    rowSafe:sideways?rect.left>=rowRect.left-1&&rect.right<=rowRect.right+1:rect.top>=rowRect.top-1&&rect.bottom<=rowRect.bottom+1};
  });
+ const dash=bar.querySelector('.gantt-bar-date-separator'),dashRect=dash?.getBoundingClientRect();
+ const separator=dash?{text:dash.textContent,visible:getComputedStyle(dash).visibility==='visible',left:sideways?dashRect.top-barRect.top:dashRect.left-barRect.left,width:sideways?dashRect.height:dashRect.width}:null;
  return {name:row.querySelector('.gantt-name').textContent,text:label.textContent,barWidth:bar.clientWidth,
-  dates,
+  dates,separator,
   labelWidth:label.offsetWidth,outside:label!==bar&&left>=width,
   fits:label!==bar&&left>=0&&left+label.offsetWidth<=width+1};
 });

@@ -69,27 +69,34 @@ export function createStageGanttView({ document: doc = globalThis.document, data
     const measurements = [...scroll.querySelectorAll('.gantt-bar')].map(bar => {
       const start = bar.querySelector('.gantt-bar-date--start');
       const end = bar.querySelector('.gantt-bar-date--end');
+      const separator = bar.querySelector('.gantt-bar-date-separator');
       return { bar, width: bar.clientWidth, height: bar.offsetHeight, left: bar.offsetLeft, textWidth: bar.firstElementChild.offsetWidth,
+        trackWidth: bar.parentElement.clientWidth, separatorWidth: separator.offsetWidth, separatorHeight: separator.offsetHeight,
         startWidth: start.offsetWidth, endWidth: end.offsetWidth,
         startHeight: start.offsetHeight, endHeight: end.offsetHeight };
     });
-    for (const { bar, width, height, left, textWidth, startWidth, endWidth, startHeight, endHeight } of measurements) {
-      bar.classList.toggle('gantt-bar--outside', textWidth + 8 > width);
+    let trailingSpace = 0;
+    for (const { bar, width, height, left, trackWidth, textWidth, startWidth, endWidth, startHeight, endHeight, separatorWidth, separatorHeight } of measurements) {
+      const outside = textWidth + 8 > width;
+      bar.classList.toggle('gantt-bar--outside', outside);
       // Keep the centered duration clear of both endpoint dates.
       const below = width < 2 * Math.max(startWidth, endWidth) + textWidth + 24;
-      const stacked = below && width < startWidth + endWidth + 8;
       bar.classList.toggle('gantt-bar--dates-below', below);
-      bar.classList.toggle('gantt-bar--dates-stacked', stacked);
-      bar.style.setProperty('--gantt-start-date-height', `${startHeight}px`);
-      // A short bar at the beginning of the timeline must not put its end date under the sticky column.
-      bar.style.setProperty('--gantt-end-date-left', `${Math.max(-left, width - endWidth)}px`);
-      const dateSpace = below ? 4 + (stacked ? startHeight + 4 + endHeight : Math.max(startHeight, endHeight)) : 0;
+      // Short bars can extend their range to the right, keeping both dates on one line.
+      const separatorLeft = Math.max(startWidth + 4, (width - separatorWidth) / 2);
+      const endLeft = Math.max(width - endWidth, separatorLeft + separatorWidth + 4);
+      bar.style.setProperty('--gantt-date-separator-left', `${separatorLeft}px`);
+      bar.style.setProperty('--gantt-end-date-left', `${endLeft}px`);
+      const dateSpace = below ? 4 + Math.max(startHeight, endHeight, separatorHeight) : 0;
       bar.parentElement.style.setProperty('--gantt-date-space', `${dateSpace}px`);
       bar.parentElement.style.setProperty('--gantt-bar-height', `${height}px`);
+      trailingSpace = Math.max(trailingSpace,
+        outside ? left + width + 6 + textWidth - trackWidth : 0,
+        below ? left + endLeft + endWidth - trackWidth : 0);
     }
     // Keep the last day's external labels reachable by horizontal scrolling.
     scroll.querySelector('.gantt-sheet')?.style.setProperty('--gantt-duration-space',
-      `${Math.max(0, ...measurements.flatMap(item => [item.textWidth, item.startWidth, item.endWidth])) + 12}px`);
+      `${Math.max(0, trailingSpace) + 12}px`);
   }
 
   function render() {
@@ -183,10 +190,12 @@ export function createStageGanttView({ document: doc = globalThis.document, data
         const duration = make('span', 'gantt-duration', bar.textContent);
         const startDate = make('span', 'gantt-bar-date gantt-bar-date--start', formatOperationsDate(from));
         const endDate = make('span', 'gantt-bar-date gantt-bar-date--end',
-          `${item.range.throughToday ? 'Até hoje ' : ''}${formatOperationsDate(to)}`);
+          tone === 'ongoing' ? 'Em andamento' : formatOperationsDate(to));
+        const separator = make('span', 'gantt-bar-date-separator', '—');
+        separator.setAttribute('aria-hidden', 'true');
         startDate.setAttribute('aria-label', `Início ${startDate.textContent}`);
-        endDate.setAttribute('aria-label', item.range.throughToday ? endDate.textContent : `Fim ${endDate.textContent}`);
-        bar.replaceChildren(duration, startDate, endDate);
+        endDate.setAttribute('aria-label', tone === 'ongoing' ? 'Em andamento' : `Fim ${endDate.textContent}`);
+        bar.replaceChildren(duration, startDate, separator, endDate);
         bar.dataset.tone = tone;
         bar.setAttribute('aria-label', description);
         bar.setAttribute('aria-haspopup', 'dialog');

@@ -30,11 +30,15 @@ test('GANTT mostra durações curtas à direita, mantém longas dentro e recalcu
      }
      assert.ok(row(rows,'Longa').dates.every(date=>date.inside),JSON.stringify(rows));
      for(const name of ['Curta','Curta no final']) {
-      const dates=row(rows,name).dates;
+      const {dates,separator}=row(rows,name);
       assert.ok(dates.every(date=>date.below),JSON.stringify(rows));
-      assert.ok(dates[1].top>=dates[0].top+dates[0].height+2,JSON.stringify(rows));
+      assert.ok(Math.abs(dates[1].top-dates[0].top)<1,JSON.stringify(rows));
+      assert.ok(separator?.visible&&separator.text==='—',JSON.stringify(rows));
+      assert.ok(separator.left>=dates[0].left+dates[0].width+2,JSON.stringify(rows));
+      assert.ok(dates[1].left>=separator.left+separator.width+2,JSON.stringify(rows));
      }
      assert.deepEqual(row(rows,'Longa').dates.map(date=>date.text),['02/01/2026','29/04/2026']);
+     assert.equal(row(rows,'Curta').dates[1].text,'Em andamento');
     }
     assert.ok(row(result.initial,'Curta').outside,JSON.stringify(result));
     assert.ok(row(result.resized,'Curta').fits,JSON.stringify(result));
