@@ -37,7 +37,7 @@ test('GANTT expande as atividades abaixo da etapa e exibe datas e estados das ba
   assert.equal(toggle.textContent, '−');
   assert.equal(toggle.getAttribute('aria-expanded'), 'true');
   const child = dialog.querySelector('.gantt-row--stage').nextElementSibling;
-  assert.match(child.textContent, /Escavação.*Casa 2/);
+  assert.equal(child.querySelector('.gantt-row-text').textContent, 'Escavação');
   assert.equal(child.querySelector('.gantt-name').tagName, 'STRONG');
   assert.ok(child.querySelector('.gantt-name').classList.contains('gantt-cluster--description'));
   assert.ok(dialog.querySelector('.gantt-row--stage .gantt-name').classList.contains('gantt-cluster--description'));
@@ -57,7 +57,7 @@ test('GANTT expande as atividades abaixo da etapa e exibe datas e estados das ba
   assert.equal(document.activeElement, home);
 });
 
-test('GANTT separa datas e responsável em clusters e usa o status mesmo com datas incompletas', async t => {
+test('GANTT mantém apenas os nomes na coluna e preserva datas e status nas barras', async t => {
   const dom = new JSDOM('<!doctype html>');
   t.after(() => dom.window.close());
   const view = createStageGanttView({ document: dom.window.document, data: {
@@ -79,15 +79,14 @@ test('GANTT separa datas e responsável em clusters e usa o status mesmo com dat
   view.element.querySelector('.gantt-toggle').click();
   const rows = [...view.element.querySelectorAll('.gantt-row--stage,.gantt-row--activity')];
   const row = name => rows.find(node => node.querySelector('.gantt-name').textContent === name);
-  assert.equal(row('Estrutura').querySelector('.gantt-cluster--start').textContent, '10/08/2026');
-  assert.equal(row('Estrutura').querySelector('.gantt-cluster--end').textContent, 'Em Andamento');
-  assert.equal(row('Parede').querySelector('.gantt-cluster--start').textContent, '19/06/2026');
-  assert.equal(row('Parede').querySelector('.gantt-cluster--end').textContent, '14/09/2026');
-  assert.equal(row('Parede').querySelector('.gantt-cluster--responsible').textContent, 'EDGAR NELSON DA SILVA');
-  assert.equal(row('Gabarito').querySelector('.gantt-cluster--end').textContent, '07/09/2026');
-  assert.equal(row('Gabarito').querySelector('.gantt-cluster--responsible'), null);
-  assert.match(row('Gabarito').textContent, /Casa 2/);
-  assert.equal(row('Armação').querySelector('.gantt-cluster--end').textContent, 'Em Andamento');
+  for (const node of rows) {
+    const label = node.querySelector('.gantt-row-text');
+    assert.equal(label.textContent, node.querySelector('.gantt-name').textContent);
+    assert.equal(label.children.length, 1);
+  }
+  assert.equal(row('Parede').querySelector('.gantt-bar-date--start').textContent, '19/06/2026');
+  assert.equal(row('Parede').querySelector('.gantt-bar-date--end').textContent, '14/09/2026');
+  assert.equal(row('Gabarito').querySelector('.gantt-bar'), null);
   assert.equal(row('Armação').querySelector('.gantt-bar-date--end').textContent, 'Em andamento');
   assert.equal(row('Estrutura').querySelector('.gantt-bar-date--end').textContent, 'Em andamento');
   for (const node of rows) assert.doesNotMatch(node.textContent, /TODOS|Início|Fim|Hoje/i);

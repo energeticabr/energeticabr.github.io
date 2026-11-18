@@ -35,7 +35,7 @@ const refreshed=stageRows().map(row=>row.querySelector('.gantt-name').textConten
 const branches=root.querySelector('select');
 branches.value='';branches.dispatchEvent(new Event('change'));
 const allDates=stageRows().map(row=>{
- const date=row.querySelector('.gantt-cluster--start').textContent.match(/^(\d{2})\/(\d{2})\/(\d{4})$/);
+ const date=(row.querySelector('.gantt-bar-date--start')?.textContent||'').match(/^(\d{2})\/(\d{2})\/(\d{4})$/);
  return date?`${date[3]}-${date[2]}-${date[1]}`:'';
 });
 branches.value=branch;branches.dispatchEvent(new Event('change'));

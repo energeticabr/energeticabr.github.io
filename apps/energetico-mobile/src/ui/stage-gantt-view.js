@@ -82,9 +82,12 @@ export function createStageGanttView({ document: doc = globalThis.document, data
       // Keep the centered duration clear of both endpoint dates.
       const below = width < 2 * Math.max(startWidth, endWidth) + textWidth + 24;
       bar.classList.toggle('gantt-bar--dates-below', below);
-      // Short bars can extend their range to the right, keeping both dates on one line.
-      const separatorLeft = Math.max(startWidth + 4, (width - separatorWidth) / 2);
-      const endLeft = Math.max(width - endWidth, separatorLeft + separatorWidth + 4);
+      // Center the complete date range below short bars; keep it inside the timeline's left edge.
+      const datesWidth = startWidth + separatorWidth + endWidth + 8;
+      const startLeft = Math.max(-left, (width - datesWidth) / 2);
+      const separatorLeft = startLeft + startWidth + 4;
+      const endLeft = separatorLeft + separatorWidth + 4;
+      bar.style.setProperty('--gantt-start-date-left', `${startLeft}px`);
       bar.style.setProperty('--gantt-date-separator-left', `${separatorLeft}px`);
       bar.style.setProperty('--gantt-end-date-left', `${endLeft}px`);
       const dateSpace = below ? 4 + Math.max(startHeight, endHeight, separatorHeight) : 0;
@@ -159,25 +162,10 @@ export function createStageGanttView({ document: doc = globalThis.document, data
       const row = make('div', `gantt-row gantt-row--${parent ? 'stage' : 'activity'}`);
       const label = make('div', 'gantt-label');
       const text = make('div', 'gantt-row-text');
-      const property = item.property?.trim() || '';
-      const info = parent || property.toUpperCase() === 'TODOS' ? '' : property;
       const startText = formatOperationsDate(item.start);
       const endText = item.finished ? formatOperationsDate(item.end) : 'Em Andamento';
       const dates = `Início ${startText} · Fim ${endText}`;
       text.append(make('strong', 'gantt-name gantt-cluster gantt-cluster--description', item.name));
-      if (info) text.append(make('small', '', info));
-      if (item.supplier) {
-        const responsible = make('span', 'gantt-cluster gantt-cluster--responsible', item.supplier);
-        responsible.setAttribute('aria-label', `Responsável ${item.supplier}`);
-        text.append(responsible);
-      }
-      const dateClusters = make('div', 'gantt-dates');
-      const startCluster = make('span', 'gantt-cluster gantt-cluster--start', startText);
-      const endCluster = make('span', 'gantt-cluster gantt-cluster--end', endText);
-      startCluster.setAttribute('aria-label', `Início ${startText}`);
-      endCluster.setAttribute('aria-label', `Fim ${endText}`);
-      dateClusters.append(startCluster, endCluster);
-      text.append(dateClusters);
       label.append(text);
       const track = make('div', 'gantt-track');
       if (item.range) {
