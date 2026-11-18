@@ -111,3 +111,15 @@ test('the consent redirect keeps a stage draft distinct from an activity with th
   assert.equal(second.auth.consumePendingAction(), 'action_stage_progress');
   assert.deepEqual(second.auth.consumePendingStageFinish(), stageFinishDraft);
 });
+
+for (const kind of ['activity', 'stage']) test(`Gantt preserves ${kind} end-date draft across Microsoft redirect`, async () => {
+  const first = harness();
+  const stageFinishDraft = { id: '129', date: '2026-11-12', ...(kind === 'stage' ? { kind } : {}) };
+  await first.auth.initialize();
+  await first.auth.authorize(['Sites.ReadWrite.All'], { resumeAction: 'open-stage-gantt', stageFinishDraft });
+  const second = harness({ account, accessToken: 'write-token', scopes: ['Sites.ReadWrite.All'] }, first.values);
+  await second.auth.initialize();
+  assert.equal(second.auth.consumePendingAction(), 'open-stage-gantt');
+  assert.deepEqual(second.auth.consumePendingStageFinish(), stageFinishDraft);
+  assert.equal(second.auth.consumePendingStageFinish(), null);
+});

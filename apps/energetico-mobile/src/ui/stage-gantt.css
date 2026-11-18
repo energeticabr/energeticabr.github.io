@@ -106,6 +106,20 @@ button.gantt-toggle {
   line-height: 1.35;
 }
 .gantt-cluster--description { display: block; padding: 5px 7px; background: #0d4d61; font-size: .9rem; font-weight: 800; white-space: normal; overflow-wrap: anywhere; }
+.gantt-finish-button { display:block; width:max-content; max-width:100%; min-height:44px; margin-top:6px; padding:6px 10px; border:1px solid #1e6732; border-radius:5px; background:#1e6732; color:#fff; font:inherit; font-size:.78rem; font-weight:800; cursor:pointer; touch-action:manipulation; }
+.gantt-finish-button:disabled { background:#dbe2e8; border-color:#a7b3bc; color:#465763; cursor:default; }
+.gantt-finish-overlay { position:absolute; inset:0; z-index:25; display:grid; place-items:center; padding:12px; box-sizing:border-box; background:#05202e88; }
+.gantt-overlay.report-landscape-viewport .gantt-finish-overlay .gantt-finish-form { display:grid; gap:10px; width:min(100%,360px)!important; height:auto!important; max-height:100%!important; min-height:0; box-sizing:border-box; overflow:auto; padding:16px!important; border-radius:12px!important; background:#fff; color:#112b3a; box-shadow:0 6px 24px #0004; }
+.gantt-finish-form h2 { margin:0; font-size:18px; }
+.gantt-finish-form p { margin:0; overflow-wrap:anywhere; }
+.gantt-finish-subject { font-weight:700; }
+.gantt-finish-form label { display:grid; gap:4px; font-weight:700; }
+.gantt-finish-form input { box-sizing:border-box; width:100%; min-height:44px; padding:6px 10px; border:1px solid #556b78; border-radius:6px; background:#fff; color:#112b3a; font:inherit; color-scheme:light; }
+.gantt-finish-actions { display:flex; justify-content:flex-end; gap:8px; }
+.gantt-finish-actions button { min-height:44px; margin:0; padding:6px 12px; font-size:14px; font-weight:800; cursor:pointer; }
+.gantt-finish-cancel { border:1px solid #556b78; border-radius:5px; background:#fff; color:#112b3a; }
+.gantt-finish-actions button:disabled { opacity:.6; cursor:default; }
+.gantt-finish-form :focus-visible { outline:2px solid #146e9c; outline-offset:-2px; }
 button.gantt-toggle { flex: 0 0 32px; min-height: 32px; padding: 0; font-size: 1rem; }
 .gantt-axis { position: sticky; top: 0; z-index: 3; background: #eaf3f6; font-size: .78rem; font-weight: 700; }
 .gantt-axis .gantt-label { background: inherit; }
