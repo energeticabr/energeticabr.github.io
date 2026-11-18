@@ -4,6 +4,75 @@ import { JSDOM } from 'jsdom';
 import { openSwileView, parseSwileAmount } from '../src/ui/swile-view.js';
 import { createChatClient } from '../src/chat/chat-client.js';
 
+test('Swile recalculates linked employees across search and refresh while preserving individual and zero values', async t => {
+  const { window } = new JSDOM('<body></body>'), { document } = window;
+  const calls = [];
+  let loads = 0;
+  const view = openSwileView({ document, request: async (operation, body) => {
+    calls.push([operation, body]);
+    if (operation === 'directory') return [
+      { id:1, name:'Ana' }, { id:2, name:'Edgar' }, { id:3, name:'Bernardo Notini' },
+      ...(++loads === 2 ? [] : [{ id:4, name:'Helison' }]),
+    ];
+    return { ...body, items:[], totalEmployees:2, creditCents:31737, paymentCents:31737 };
+  } });
+  t.after(() => { view.close(); window.close(); });
+  const settle = () => new Promise(resolve => setImmediate(resolve));
+  const edit = (node, value) => { node.value = value; node.dispatchEvent(new window.Event('input', { bubbles:true })); };
+  const amount = name => document.querySelector(`[aria-label="Valor em reais para ${name}"]`);
+  await settle();
+  const unit = document.querySelector('[aria-label="Valor unitário em reais"]');
+  const quantity = document.querySelector('[aria-label="Quantidade"]');
+  assert.ok(unit, 'Valor Un: deve estar abaixo da busca');
+  assert.ok(quantity);
+  assert.equal(unit.value, '45');
+  assert.equal(quantity.value, '5');
+  edit(amount('Edgar'), '180');
+  edit(amount('Helison'), '0,00');
+  edit(unit, '45,79');
+  assert.equal(amount('Ana').value, '228,95');
+  assert.equal(amount('Edgar').value, '180');
+  assert.equal(amount('Bernardo Notini').value, '');
+  assert.equal(amount('Helison').value, '0,00');
+  edit(document.querySelector('[type=search]'), 'Edgar');
+  edit(quantity, '3');
+  const sync = document.querySelector('[aria-label="Atualizar colaboradores"]');
+  sync.click(); await settle();
+  sync.click(); await settle();
+  edit(document.querySelector('[type=search]'), '');
+  assert.equal(amount('Ana').value, '137,37');
+  assert.equal(amount('Edgar').value, '180');
+  assert.equal(amount('Helison').value, '0,00');
+  assert.match(document.querySelector('.swile-footer strong').textContent, /2 colaboradores.*317,37/);
+  document.querySelector('select').value = 'PIX';
+  for (const invalid of ['', '-1', '1,5', '1e2', '9007199254740992']) {
+    edit(quantity, invalid);
+    document.querySelector('.swile-footer button').click(); await settle();
+    assert.equal(calls.some(([operation]) => operation === 'preview'), false, invalid);
+    assert.equal(quantity.getAttribute('aria-invalid'), 'true');
+  }
+  edit(quantity, '3');
+  for (const invalid of ['', '-45', '45,123', '1e2']) {
+    edit(unit, invalid);
+    document.querySelector('.swile-footer button').click(); await settle();
+    assert.equal(calls.some(([operation]) => operation === 'preview'), false, invalid);
+    assert.equal(unit.getAttribute('aria-invalid'), 'true');
+  }
+  edit(unit, '45,79');
+  document.querySelector('.swile-footer button').click(); await settle();
+  assert.deepEqual(calls.at(-1)[1].items, [{employeeId:1, amountCents:13737}, {employeeId:2, amountCents:18000}]);
+  [...document.querySelectorAll('button')].find(node => node.textContent === 'Editar valores').click();
+  assert.equal(unit.value, '45,79');
+  assert.equal(quantity.value, '3');
+  edit(quantity, '0');
+  assert.equal(amount('Ana').value, '0,00');
+  edit(quantity, '5');
+  assert.equal(amount('Ana').value, '228,95');
+  edit(unit, '0');
+  assert.equal(amount('Ana').value, '0,00');
+  assert.equal(amount('Edgar').value, '180');
+});
+
 test('Swile accepts positive BRL amounts with at most two decimal places', () => {
   for (const [input, expected] of [['225,05', 22505], ['0.1', 10], [' 25 ', 2500],
     ['', null], ['0,00', null], ['1,234', null], ['1e2', null], ['-1', null]]) {
