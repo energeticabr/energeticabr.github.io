@@ -78,6 +78,7 @@ test('a later fiscal proposal uses confirmed corrections from the same account a
   const learned = await service.load(row);
   assert.deepEqual([learned.draft.lines[0].productId,learned.draft.lines[0].stageId], ['13','15']);
   assert.deepEqual([learned.draft.lines[0].quantity,learned.draft.lines[0].unitPrice,learned.draft.lines[0].date], ['2','37.5',row.date]);
+  learned.draft.paymentDate = '2026-11-18';
   learned.draft.lines[0].stageId = '14';
   assert.equal(learned.baseline.lines[0].stageId,'15');
   await assert.rejects(service.submit(row, learned.draft, { ...learned, manualStages:new Set(['1']) }), /stopped before financial writes/);
@@ -156,7 +157,7 @@ async function verifyCrossPosting(t, firstIsProvision) {
   const first = service(firstIsProvision);
   const reviewed = await first.load(row);
   assert.deepEqual([reviewed.draft.supplierId, reviewed.draft.lines[0].productId, reviewed.draft.lines[0].stageId], ['', '', '']);
-  Object.assign(reviewed.draft, { supplierId:'11', branchId:'12', accountId:'16' });
+  Object.assign(reviewed.draft, { supplierId:'11', branchId:'12', accountId:'16', paymentDate:'2026-11-18' });
   Object.assign(reviewed.draft.lines[0], { productId:'13', stageId:'15', dueDate:'2026-11-30' });
   const extra = new File(['camera photo'],'foto.jpg');
   const receipt = await first.submit(row, reviewed.draft, { ...reviewed, manualStages:new Set(['1']), additionalAttachments:[extra] });
@@ -169,12 +170,14 @@ async function verifyCrossPosting(t, firstIsProvision) {
   historyUnavailable = false;
   const reopened = service(!firstIsProvision);
   const later = await reopened.load(next);
+  assert.equal(later.draft.paymentDate, '', 'payment dates must be reviewed for each new invoice');
   assert.deepEqual([later.draft.supplierId, later.draft.branchId, later.draft.accountId], ['11','12','16']);
   const { productId, stageId, quantity, date } = later.draft.lines[0];
   assert.deepEqual([productId, stageId, quantity, date], ['13','15','4',next.date]);
   assert.equal(later.draft.lines[0].dueDate, '', 'the previous posting cannot supply the new note’s due date');
   assert.equal(tables[firstIsProvision ? 'NOTASPENDENTES' : 'DESCRITIVOPROVISAO'].length, 0);
   if (!firstIsProvision) later.draft.lines[0].dueDate = '2026-12-02';
+  later.draft.paymentDate = '2026-11-19';
   await reopened.submit(next, later.draft, { ...later, manualStages:new Set() });
   const confirmation = JSON.parse(notes[1].fields.NFEAPRENDIZADO);
   assert.deepEqual(confirmation.headerChanged, []);

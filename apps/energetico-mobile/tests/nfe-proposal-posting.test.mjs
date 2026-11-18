@@ -200,7 +200,7 @@ function fixture(provision = false) {
     if (state.prepareUnavailable) throw new Error('catalog unavailable');
     return { draft:input, learning:state.learning, orderFields:{ FORNECEDOR:'Fornecedor fictício', VALORTOTAL:15, DATAPEDIDO:'2026-11-08T12:00:00Z',
       STATUS:'PENDENTE AUDITORIA', NOTAFISCAL:'SUBMETIDO' },
-      launchFields:input.lines.map(({ number,account }) => ({ number, fields:{ field_14:account, field_8:1, field_2:'2026-11-08T12:00:00Z' } })) };
+      launchFields:input.lines.map(({ number,account }) => ({ number, fields:{ field_14:account, field_8:1, field_2:'2026-11-08T12:00:00Z', field_4:'2026-11-18T12:00:00Z' } })) };
   }
   const service = (asProvision = provision) => createNfeProposalPosting({ repository, provision:asProvision, assertSession:() => {},
     authorizeWrite:async () => { if (state.unauthorized) throw new Error('write consent denied'); },
@@ -677,7 +677,7 @@ test('accepts SharePoint numeric and civil date representations of the same save
   const { state,service } = fixture();
   state.normalizeFinancialReadback = fields => {
     if ('DATAPEDIDO' in fields) Object.assign(fields, { DATAPEDIDO:'2026-11-08T03:00:00Z', VALORTOTAL:'15.00' });
-    if ('field_2' in fields) Object.assign(fields, { field_2:'2026-11-08', field_8:'1.000' });
+    if ('field_2' in fields) Object.assign(fields, { field_2:'2026-11-08', field_4:'2026-11-18T03:00:00Z', field_8:'1.000' });
   };
   assert.deepEqual(await service().submit(invoice,draft), expected);
 });
