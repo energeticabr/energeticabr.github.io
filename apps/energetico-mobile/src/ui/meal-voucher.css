@@ -12,6 +12,8 @@
 .meal-voucher-error { max-width: 920px; margin: 0 auto 12px; padding: 12px; border-radius: 10px; background: #ffe6e6; color: #a41420; font-weight: 700; }
 .meal-voucher-search, .meal-voucher-field input, .meal-voucher-field select, .meal-voucher-field textarea { width: 100%; min-height: 44px; box-sizing: border-box; border: 1px solid #a4bdc5; border-radius: 8px; padding: 9px; background: #fff; color: #17313d; font: inherit; }
 .meal-voucher-field { display: grid; gap: 5px; font-weight: 700; }
+.meal-voucher-bulk { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 12px; padding: 12px; border: 1px solid #bed0d7; border-radius: 10px; background: #deeff4; }
+.meal-voucher-bulk .meal-voucher-field { min-width: 0; }
 .meal-voucher-table { width: 100%; table-layout: fixed; border-collapse: collapse; background: #fff; border: 1px solid #bed0d7; }
 .meal-voucher-table th:first-child { width: 43%; }
 .meal-voucher-table th:nth-child(2) { width: 14%; }

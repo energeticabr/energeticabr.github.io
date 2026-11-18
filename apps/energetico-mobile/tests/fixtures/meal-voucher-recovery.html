@@ -8,7 +8,7 @@ import { createMealVoucherData } from '../../src/chat/meal-voucher-data.js';
 import { createMealVoucherView } from '../../src/ui/meal-voucher-view.js';
 try {
   const names = {
-    FORNECEDORES:['CADASTRO','STATUS','EMPREITEIRO','FILIAL','PROFISSAO'], CADASTROCONTA:['CONTA'], LANCAMENTOOBRA:['ETAPA','FILIAL'],
+    FORNECEDORES:['CADASTRO','STATUS','EMPREITEIRO','FILIAL','PROFISSAO','CARGO'], CADASTROCONTA:['CONTA'], LANCAMENTOOBRA:['ETAPA','FILIAL'],
     IDFOLHA:['MESREFERENCIA','FORNECEDOR'], FOLHAPGTO:['Title','FORNECEDOR','TIPOPGTO','VALORUNITARIO','QTD','DATA','IDFOLHA','IDLANCAMENTO'],
     NOTASPENDENTES:['Title','FORNECEDOR','VALORTOTAL','DATA PEDIDO','STATUS','OBS','FORMAPGTO','NOTA FISCAL','VALECONTROLE'],
     LANCAMENTOS:['__PowerAppsId__','AGRUPAR','FILIAL','TIPO TRANSAÇÃO','DATA','DATA PGTO PREVISTO','DATA PGTO EFETUADO','FORNECEDOR','PRODUTO','ETAPA','QUANTIDADE','VALOR UNITÁRIO','CONTA','FRETE','OBS','IDFOLHA'],
@@ -19,7 +19,7 @@ try {
   Object.assign(columns.NOTASPENDENTES.find(c=>c.name==='VALECONTROLE'),{hidden:true,text:{allowMultipleLines:true,textType:'plain',appendChangesToExistingText:false}});
   Object.assign(columns.LANCAMENTOS.find(c=>c.name==='IDFOLHA'),{text:undefined,number:{decimalPlaces:'none'},required:false});
   const rows = {
-    FORNECEDORES:[{ id:'1', fields:{ CADASTRO:'Colaborador de teste', STATUS:'ATIVO', EMPREITEIRO:'SIM', FILIAL:'OBRA TESTE', PROFISSAO:'PEDREIRO' } }],
+    FORNECEDORES:[{ id:'1', fields:{ CADASTRO:'Colaborador de teste', STATUS:'ATIVO', EMPREITEIRO:'SIM', FILIAL:'OBRA TESTE', PROFISSAO:'PEDREIRO',CARGO:'PEDREIRO I' } }],
     CADASTROCONTA:[{ id:'8', fields:{ CONTA:'CAIXA' } },{ id:'9', fields:{ CONTA:'BANCO' } }],
     LANCAMENTOOBRA:[{ id:'7', fields:{ ETAPA:'FUNDAÇÃO', FILIAL:'OBRA TESTE' } },{ id:'6', fields:{ ETAPA:'ALVENARIA', FILIAL:'OBRA TESTE' } }],
     IDFOLHA:[{ id:'11', fields:{ MESREFERENCIA:'10/2026', FORNECEDOR:'Colaborador de teste' } },{ id:'12', fields:{ MESREFERENCIA:'11/2026', FORNECEDOR:'Colaborador de teste' } }],
@@ -109,7 +109,7 @@ try {
   await wait('[data-meal-value="1"]');
   resumed.close(); await resumed.open();
   result.freshAfterAbandon = !localStorage.getItem(pendingKey) && JSON.stringify(rows) === savedRows
-    && document.querySelector('[data-meal-value="1"]').value === ''
+    && document.querySelector('[data-meal-value="1"]').value === '45'
     && !document.querySelector('[data-meal-abandon]');
   resumed.destroy();
 
