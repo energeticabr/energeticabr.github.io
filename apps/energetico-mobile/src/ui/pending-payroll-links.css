@@ -2,6 +2,7 @@
   grid-column: 3;
   grid-row: 2;
   align-self: start;
+  margin-top: 12px;
   display: grid;
   grid-template-rows: 25px 15px;
   place-content: center;
@@ -16,15 +17,16 @@
 .chat-main-pending-payroll-links-shortcut span { font-size: 18px; line-height: 25px; }
 .chat-main-pending-payroll-links-shortcut strong { font: 800 8px/15px system-ui, sans-serif; }
 .chat-main-pending-payroll-links-shortcut:focus-visible { outline: 3px solid var(--accent); outline-offset: 3px; }
-.chat-message--pending-payroll-links > .chat-main-cargos-shortcut { margin-top: 56px; }
-.chat-message--pending-payroll-links > .chat-main-attendance-summary-shortcut { margin-top: 112px; }
-.chat-message--pending-payroll-links > .chat-main-stage-progress-shortcut { margin-top: 168px; }
-.chat-message--pending-payroll-links > .chat-main-supplier-payroll-report-shortcut { margin-top: 224px; }
-.chat-message--pending-payroll-links > .chat-main-trancid-report-shortcut { margin-top: 280px; }
-.chat-message--pending-payroll-links > .chat-main-contractor-control-shortcut { margin-top: 336px; }
-.chat-message--pending-payroll-links > .chat-main-pending-supplier-payments-shortcut { margin-top: 392px; }
-.chat-message--pending-payroll-links > .chat-main-holerite-shortcut { margin-top: 448px; }
-.chat-message--pending-payroll-links > .chat-main-gantt-shortcut { margin-top: 504px; }
+/* Match the left rail's 12px inset and 56px row spacing. */
+.chat-message--pending-payroll-links > .chat-main-cargos-shortcut { margin-top: 68px; }
+.chat-message--pending-payroll-links > .chat-main-attendance-summary-shortcut { margin-top: 124px; }
+.chat-message--pending-payroll-links > .chat-main-stage-progress-shortcut { margin-top: 180px; }
+.chat-message--pending-payroll-links > .chat-main-supplier-payroll-report-shortcut { margin-top: 236px; }
+.chat-message--pending-payroll-links > .chat-main-trancid-report-shortcut { margin-top: 292px; }
+.chat-message--pending-payroll-links > .chat-main-contractor-control-shortcut { margin-top: 348px; }
+.chat-message--pending-payroll-links > .chat-main-pending-supplier-payments-shortcut { margin-top: 404px; }
+.chat-message--pending-payroll-links > .chat-main-holerite-shortcut { margin-top: 460px; }
+.chat-message--pending-payroll-links > .chat-main-gantt-shortcut { margin-top: 516px; }
 
 .payroll-links-form > [data-payroll-action="add"] { min-height: 44px; }
 .payroll-links-draft { min-width: 0; padding: 12px; border: 1px solid #c4d9df; border-radius: 12px; }
