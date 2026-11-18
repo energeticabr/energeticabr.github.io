@@ -271,7 +271,7 @@ export function createDdaReportView({document:doc=globalThis.document,data,openM
    due.append(make('span','ddr-due-date',date(row.due)));
    if(row.due)due.append(make('span','ddr-due-days',`${daysSince(today,row.due)} d`));
    const supplier=make('td','ddr-supplier'),status=make('td','ddr-status');status.dataset.status=row.status;
-   supplier.append(make('span','ddr-supplier-name',row.supplier));
+   supplier.append(make('span','ddr-supplier-name ddr-supplier-cluster',row.supplier));
    const history=make('div','ddr-supplier-count');history.dataset.ddaSupplierCount='';
    if(row.supplierDdaCount!=null){
     history.append(make('strong','',`${row.supplierDdaCount} ${row.supplierDdaCount===1?'DDA registrado':'DDAs registrados'}`),make('span','','no SharePoint'));
@@ -282,18 +282,20 @@ export function createDdaReportView({document:doc=globalThis.document,data,openM
    }
    supplier.append(history);
    const overdue=row.status==='Vencido'||(row.status==='Em aberto'&&row.due&&row.due<today);
-   const cluster=make('div','ddr-status-cluster');cluster.dataset.statusTone=row.status==='Pago'?'paid':overdue?'overdue':row.status==='Em aberto'?'open':'neutral';
-   cluster.append(make('strong','',overdue?'Vencido':row.status));cluster.title=row.paidManually?'Pagamento confirmado pelo usuário':row.paidBySchedule?'Pagamento por agendamento':'Situação na última consulta bancária: '+row.status;
+   const scheduled=['Em aberto','Agendado','Vencido'].includes(row.status)&&row.schedule.state==='scheduled';
+   const openUnscheduled=row.schedule.state==='unscheduled'&&['Em aberto','Agendado','Vencido'].includes(row.status);
+   const cluster=make('div','ddr-status-cluster');cluster.dataset.statusTone=row.status==='Pago'?'paid':scheduled?'scheduled':overdue?'overdue':openUnscheduled||row.status==='Em aberto'?'open':'neutral';
+   cluster.append(make('strong','',row.paidBySchedule?'PAGO POR AGENDAMENTO':scheduled?'AGENDADO':openUnscheduled?'Em aberto':row.status));cluster.title=row.paidManually?'Pagamento confirmado pelo usuário':row.paidBySchedule?'Pagamento por agendamento':'Situação na última consulta bancária: '+row.status;
    if(row.paidManually)cluster.append(make('small','','Confirmado pelo usuário'));
    const statusDate=row.paidManually?row.confirmedAt:row.checkedAt;
    if(statusDate){const checked=new Date(statusDate);if(Number.isFinite(checked.getTime()))cluster.append(make('small','',new Intl.DateTimeFormat('pt-BR',{timeZone:'America/Sao_Paulo',dateStyle:'short',timeStyle:'short'}).format(checked)));}
-   const schedule=make('div','ddr-schedule-cluster');
-   schedule.dataset.scheduleState=row.paidBySchedule?'paid':row.schedule.state;
-   schedule.title=row.paidBySchedule?'Pagamento por agendamento':'Agendamento na última consulta ao Sicoob';
-   schedule.append(make('strong','',row.paidBySchedule?'PAGO POR AGENDAMENTO':row.schedule.label));
+   if(scheduled||row.paidBySchedule){
+    cluster.classList.add('ddr-schedule-cluster');
+    cluster.dataset.scheduleState=row.paidBySchedule?'paid':'scheduled';
+   }
    const pendingSettlement=ddaSettlementPending(row,settledDdaIds);
-   if(pendingSettlement)(row.paidBySchedule?schedule:cluster).append(make('small','ddr-settlement-pending','Baixa pendente'));
-   status.append(schedule,cluster);
+   if(pendingSettlement)cluster.append(make('small','ddr-settlement-pending','Baixa pendente'));
+   status.append(cluster);
    const link=make('td','ddr-link');
    const linkState=row.provisionId?'linked':row.linkReviewed?'regularized':'missing';
    const canReview=!printAll&&canReviewDdaUnlinked(row)&&typeof data.unlinkedReview?.save==='function';
@@ -310,15 +312,15 @@ export function createDdaReportView({document:doc=globalThis.document,data,openM
    pencil.disabled=printAll||!data.provisionLink||!Number.isSafeInteger(Number(row.id))||Number(row.id)<=0;
    pencil.addEventListener('click',()=>{if(destroyed||root.hidden||root.getAttribute('aria-busy')==='true')return;void provisionPicker.show(row,pencil);});
    link.append(pencil);
-   if(linkState==='missing'&&(schedule.dataset.scheduleState==='scheduled'||pendingSettlement)){
+   if(linkState==='missing'&&((!row.paidBySchedule&&row.schedule.state==='scheduled')||pendingSettlement)){
     line.classList.add('ddr-scheduled-unlinked');
     link.append(make('span','ddr-link-warning','ATENÇÃO'));
    }
-   const bankDocument=make('td','ddr-bank-document'),bankCluster=make('div','ddr-bank-cluster'),documentCluster=make('div','ddr-document-cluster');
+   const bankDocument=make('td','ddr-bank-document'),bankCluster=make('div','ddr-bank-cluster'),documentCluster=make('div','ddr-document-details');
    bankCluster.dataset.ddaBankCluster='';documentCluster.dataset.ddaDocumentCluster='';
    bankCluster.append(make('small','','Banco emissor'),make('strong','',row.bank||'—'));
    documentCluster.append(make('small','','Nº boleto'),make('strong','',row.document||'—'));
-   bankDocument.append(bankCluster,documentCluster);
+   bankCluster.append(documentCluster);bankDocument.append(bankCluster);
    const issued=make('td','ddr-issued-date');
    if(row.issued)issued.append(make('strong','',date(row.issued)),make('small','ddr-issued-days',`${daysSince(row.issued,today)} d`));
    else issued.append(make('span','','Não informada'));
@@ -346,7 +348,8 @@ export function createDdaReportView({document:doc=globalThis.document,data,openM
      identity.append(pdf);
     }
    line.dataset.stripe=String(body.querySelectorAll('[data-dda-id]').length%2);
-   line.append(id,due,supplier,bankDocument,issued,make('td','ddr-money',money(row.amount)),status,link,files);body.append(line);
+   const amount=make('td','ddr-money');amount.append(make('div','ddr-money-cluster',money(row.amount)));
+   line.append(id,due,supplier,bankDocument,issued,amount,status,link,files);body.append(line);
    if(!printAll)addDdaReportBarcode({document:doc,row,line,actions,expanded:expandedBarcodes,copyText,isCurrent:()=>!destroyed&&!root.hidden&&root.getAttribute('aria-busy')!=='true'});
   }
   content.append(table);

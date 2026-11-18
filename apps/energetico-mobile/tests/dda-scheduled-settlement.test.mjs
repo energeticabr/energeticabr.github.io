@@ -143,7 +143,7 @@ test('an already confirmed scheduled DDA remains visible with its manual audit l
  const data={loadSnapshot:async()=>({rows:[row(1,{...scheduled,...audited,DDA_CICLO_AGENDAMENTO:'AGENDADO'}),row(2)]})};
  const {doc,view,ids}=setup(t,data);await view.open();
  assert.deepEqual(ids(),['1','2']);
- assert.match(doc.querySelector('[data-dda-id="1"] .ddr-status').textContent,/PAGO POR AGENDAMENTO.*Baixa pendente.*Confirmado pelo usuário/s);
+ assert.match(doc.querySelector('[data-dda-id="1"] .ddr-status').textContent,/PAGO POR AGENDAMENTO.*Confirmado pelo usuário.*Baixa pendente/s);
  assert.ok(doc.querySelector('[data-dda-provision-check="1"]').disabled);
 });
 

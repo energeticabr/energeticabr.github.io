@@ -49,7 +49,7 @@ test('status clusters distinguish overdue open bills from paid bills without cha
  const source=[row(1,'Em aberto','2026-10-27'),row(2,'Em aberto','2026-10-28'),row(3,'Pago','2026-10-20'),row(4,'Não confirmado','2026-10-20'),row(5,'Baixado','2026-10-20')];
  const {dom,view,doc}=setup({loadSnapshot:async()=>({rows:source})});await view.open();
  const cluster=id=>doc.querySelector(`[data-dda-id="${id}"] .ddr-status-cluster`);
- assert.equal(cluster(1)?.dataset.statusTone,'overdue');assert.match(cluster(1).textContent,/Vencido/);
+ assert.equal(cluster(1)?.dataset.statusTone,'overdue');assert.match(cluster(1).textContent,/Em aberto/);
  assert.equal(cluster(2)?.dataset.statusTone,'open');assert.match(cluster(2).textContent,/Em aberto/);
  assert.equal(doc.querySelectorAll('tbody tr').length,2);
  const filter=doc.querySelector('[name=status]');filter.value='';filter.dispatchEvent(new dom.window.Event('change'));
@@ -67,46 +67,53 @@ test('report groups bank and boleto number, then shows issue date and calendar d
  const line=doc.querySelector('[data-dda-id="1"]');
  assert.equal(line.querySelector('[data-dda-bank-cluster] strong').textContent,'Banco teste');
  assert.equal(line.querySelector('[data-dda-document-cluster] strong').textContent,'DOC-1');
+ assert.equal(line.querySelector('[data-dda-document-cluster]').parentElement,line.querySelector('[data-dda-bank-cluster]'));
+ assert.equal(line.querySelector('.ddr-money-cluster').textContent.replace(/\s/g,' '),'R$ 12,34');
+ assert.equal(line.querySelector('.ddr-supplier-cluster').textContent,'Fornecedor 1');
  assert.equal(line.querySelector('.ddr-issued-date strong').textContent,'20/10/2026');
  assert.equal(line.querySelector('.ddr-issued-date small').textContent,'8 d');
  assert.equal(doc.querySelector('[data-dda-id="2"] .ddr-issued-date small').textContent,'0 d');
  assert.equal(doc.querySelector('[data-dda-id="3"] .ddr-issued-date').textContent,'Não informada');
  view.destroy();dom.window.close();
 });
-test('report places the bank scheduling badge above the existing situation, independently of manual confirmation',async()=>{
+test('report shows one status cluster with scheduling date inside green and preserves paid and unknown evidence',async()=>{
  const source=[
   row(1),row(2,'Agendado'),row(3,'Em aberto','2026-10-27'),
   row(4,'Agendado'),row(5,'Não confirmado'),row(6,''),row(7,'Agendado'),
+  row(8,'Não confirmado'),row(9,'Baixado'),
  ];
  Object.assign(source[0].fields,{STATUS_DDA:' AGENDADO '});
  Object.assign(source[1].fields,{STATUS_DDA:'Agendado',PGTO_CONFIRMADO:true});
  Object.assign(source[3].fields,{STATUS_DDA:'Não confirmado'});
  Object.assign(source[6].fields,{STATUS_DDA:'Em aberto'});
+ for(const item of source.slice(7))Object.assign(item.fields,{STATUS_DDA:'Agendado'});
  const {dom,view,doc}=setup({loadSnapshot:async()=>({rows:source})});
  try{
   await view.open();
   const filter=doc.querySelector('[name=status]');filter.value='';filter.dispatchEvent(new dom.window.Event('change'));
   const expected=[
-   ['AGENDADO','scheduled','Em aberto'],['AGENDADO','scheduled','Pago'],
-   ['NÃO AGENDADO','unscheduled','Vencido'],
-   ['AGENDAMENTO NÃO CONFIRMADO','unknown','Agendado'],
-   ['AGENDAMENTO NÃO CONFIRMADO','unknown','Não confirmado'],
-   ['AGENDAMENTO NÃO CONFIRMADO','unknown','Não informado'],
-   ['NÃO AGENDADO','unscheduled','Agendado'],
+   ['AGENDADO','scheduled'],['Pago',null],
+   ['Em aberto',null],
+   ['Agendado',null],
+   ['Não confirmado',null],
+   ['Não informado',null],
+   ['Em aberto',null],
+   ['Não confirmado',null],['Baixado',null],
   ];
-  for(const [index,[label,state,situation]] of expected.entries()){
+  for(const [index,[label,state]] of expected.entries()){
    const cell=doc.querySelector(`[data-dda-id="${index+1}"] .ddr-status`);
    const badge=cell.querySelector('.ddr-schedule-cluster');
-   assert.equal(badge?.textContent,label);
-   assert.equal(badge.dataset.scheduleState,state);
-   assert.equal(badge.nextElementSibling,cell.querySelector('.ddr-status-cluster'));
-   assert.equal(badge.nextElementSibling.querySelector('strong').textContent,situation);
+   assert.equal(cell.children.length,1);
+   assert.equal(cell.querySelector('.ddr-status-cluster strong').textContent,label);
+   assert.equal(badge?.dataset.scheduleState??null,state);
+   assert.doesNotMatch(cell.textContent,/NÃO AGENDADO|AGENDAMENTO NÃO CONFIRMADO/);
+   if(state==='scheduled')assert.equal(badge.querySelector('small').textContent,'28/10/2026, 07:00');
   }
   const restore=await view.preparePrint();
   const snapshot=captureFilteredReport(view.element,{title:'Relatório DDA'});
   const table=snapshot.pages[0].blocks.find(block=>block.type==='table');
   const labels=table.rows.slice(1).map(row=>row.cells[6].runs[0].text.trim());
-  assert.deepEqual(labels,['NÃO AGENDADO',...expected.filter((_,index)=>index!==2).map(([label])=>label)]);
+  assert.deepEqual(labels,['Em aberto',...expected.filter((_,index)=>index!==2).map(([label])=>label)]);
   restore();
  }finally{view.destroy();dom.window.close();}
 });
@@ -157,7 +164,7 @@ test('automatic and manual opening both show scheduled titles, with a separate s
  view.close();await view.open();
  const status=doc.querySelector('[name=status]');
  assert.equal(status.value,'Em aberto');assert.equal(doc.querySelectorAll('tbody tr').length,2);
- assert.equal(doc.querySelector('[data-dda-id="2"] .ddr-schedule-cluster').textContent,'AGENDADO');
+ assert.equal(doc.querySelector('[data-dda-id="2"] .ddr-schedule-cluster strong').textContent,'AGENDADO');
  status.value='Agendado';status.dispatchEvent(new dom.window.Event('change'));
  assert.deepEqual([...doc.querySelectorAll('tbody tr')].map(row=>row.dataset.ddaId),['2']);
  view.destroy();dom.window.close();

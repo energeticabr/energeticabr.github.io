@@ -21,7 +21,7 @@ test('DDA printer finishes the real PDF preview instead of remaining at 99%',{ti
    assert.equal(new Set(cards.slice(0,4).map(([x])=>x)).size,4,'each measure has its own card');
    assert.ok(cards[4][1]<cards[0][1]);
    if(count===23)assert.ok(fonts.filter(size=>size>=13).length>=2,`metric values retain their visual emphasis: ${fonts}`);
-   for(const fill of ['#eaf4f7','#e6f0ff','#eaf2ff','#edf6f2','#edf1f4','#eef2f5','#fff0db'])assert.ok(fills.includes(fill),`missing card or badge fill: ${fill}`);
+   for(const fill of ['#eaf4f7','#e6f0ff','#eaf2ff','#ffeaed','#edf1f4','#fff0db'])assert.ok(fills.includes(fill),`missing card or badge fill: ${fill}`);
    assert.equal(actions,false,'screen-only buttons must not reserve a PDF column');
    assert.ok(pages>1);
    if(sample)writeFileSync(process.env.DDA_PDF_SAMPLE,Buffer.from(dom.window.document.querySelector('#pdf-sample').innerHTML,'base64'));

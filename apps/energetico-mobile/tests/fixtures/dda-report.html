@@ -57,7 +57,7 @@ if(settlementLayout){
  await new Promise(resolve=>setTimeout(resolve,0));
  document.documentElement.dataset.settlement=JSON.stringify({label:badge?.querySelector('strong').textContent,pending:note?.textContent,
   fits:badge?.scrollWidth<=badge?.clientWidth+1&&note?.scrollWidth<=note?.clientWidth+1,
-  aligned:badge?.offsetWidth===badge?.nextElementSibling.offsetWidth,
+  aligned:badge?.parentElement.children.length===1,
   actionFits:action?.offsetWidth>0&&action.offsetWidth<=action.parentElement.clientWidth,
   selected:document.documentElement.dataset.ddaSettlementSelected,paidBackgrounds,openBackground});
 }
@@ -131,7 +131,7 @@ if(new URLSearchParams(location.search).has('layout')){
   bankDocuments:[...document.querySelectorAll('.ddr-bank-document')].map(cell=>{
    const bank=cell.querySelector('[data-dda-bank-cluster]'),number=cell.querySelector('[data-dda-document-cluster]');
    return {bank:bank.querySelector('strong').textContent,number:number.querySelector('strong').textContent,
-    ordered:bank.offsetTop+bank.offsetHeight<=number.offsetTop,
+    ordered:number.parentElement===bank&&number.offsetTop>=bank.querySelector('strong').offsetTop+bank.querySelector('strong').offsetHeight,
     fits:bank.offsetWidth<=cell.clientWidth&&number.offsetWidth<=cell.clientWidth};
   }),
   issuedDates:[...document.querySelectorAll('.ddr-issued-date')].map(cell=>({
