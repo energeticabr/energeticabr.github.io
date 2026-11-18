@@ -36,6 +36,7 @@ test('GANTT mostra durações curtas à direita, mantém longas dentro e recalcu
       assert.ok(separator?.visible&&separator.text==='—',JSON.stringify(rows));
       assert.ok(separator.left>=dates[0].left+dates[0].width+2,JSON.stringify(rows));
       assert.ok(dates[1].left>=separator.left+separator.width+2,JSON.stringify(rows));
+      if(name==='Curta no final') assert.ok(Math.abs((dates[0].left+dates[1].left+dates[1].width)/2-row(rows,name).barWidth/2)<1,JSON.stringify(rows));
      }
      assert.deepEqual(row(rows,'Longa').dates.map(date=>date.text),['02/01/2026','29/04/2026']);
      assert.equal(row(rows,'Curta').dates[1].text,'Em andamento');
