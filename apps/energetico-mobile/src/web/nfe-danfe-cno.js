@@ -5,13 +5,24 @@ const MAX_PDF_BYTES = 60_000_000;
 const ADDITIONAL_DATA = /\bDADOS\s+ADICIONAIS\b/i;
 const ACCESS_KEY_LABEL = /\bCHAVE\s+DE\s+ACESSO\b/i;
 const ACCESS_KEY = /(?:^|[^0-9A-Z])((?:[0-9][ \t]*){6}(?:[0-9A-Z][ \t]*){12}(?:[0-9][ \t]*){25}[0-9])(?![0-9A-Z]|[ \t]+[0-9])/gi;
+const FORMATS = {
+  'NF-e': { label:ACCESS_KEY_LABEL, labelStart:/\bCHAVE\b/i, header:/^\s*DANFE\b/i,
+    key:ACCESS_KEY, section:ADDITIONAL_DATA },
+  'NFS-e': {
+    label:/\b(?:IDENTIFICADOR\s+NACIONAL|CHAVE\s+DE\s+ACESSO)\b/i,
+    labelStart:/\b(?:IDENTIFICADOR|CHAVE)\b/i,
+    header:/(?:^\s*(?:DANFS[\s-]*e\b|DOCUMENTO\s+AUXILIAR\s+DA\s+NFS[\s-]*e\b)|\bNOTA\s+FISCAL\s+ELETR[ÔO]NICA\s+DE\s+SERVI[ÇC]OS\s*[-–:]?\s*NFS[\s-]*e\b)/i,
+    key:/(?:^|[^0-9A-Z])((?:[0-9][ \t]*){49}[0-9])(?![0-9A-Z]|[ \t]+[0-9])/gi,
+    section:/\bDISCRIMINA[ÇC][ÃA]O\s+(?:DE|DOS)\s+SERVI[ÇC]OS\b/i,
+  },
+};
 
-function accessKeyLabel(items) {
+function accessKeyLabel(items, format) {
   for (const [index, item] of items.entries()) {
-    if (!/\bCHAVE\b/i.test(item.str)) continue;
+    if (!format.labelStart.test(item.str)) continue;
     let text = item.str;
     let last = item;
-    for (let next = index + 1; next < items.length && !ACCESS_KEY_LABEL.test(text); next++) {
+    for (let next = index + 1; next < items.length && !format.label.test(text); next++) {
       const fragment = items[next];
       const gap = fragment.transform[4] - last.transform[4] - last.width;
       if (last.hasEOL || Math.abs(fragment.transform[5] - item.transform[5]) > 2 ||
@@ -19,16 +30,16 @@ function accessKeyLabel(items) {
       text += fragment.str;
       last = fragment;
     }
-    if (ACCESS_KEY_LABEL.test(text)) return item;
+    if (format.label.test(text)) return item;
   }
   return null;
 }
 
-function danfeAccessKey(items) {
-  const label = accessKeyLabel(items);
+function danfeAccessKey(items, format) {
+  const label = accessKeyLabel(items, format);
   if (!label) return '';
   const [, , , , labelX, labelY] = label.transform;
-  if (!items.some(item => /^\s*DANFE\b/i.test(item.str) && item.transform[5] >= labelY)) return '';
+  if (!items.some(item => format.header.test(item.str) && item.transform[5] >= labelY)) return '';
   const lineHeight = Math.max(5, label.height);
   // Read the printed field by position. PDF text order can place its value
   // after unrelated fields, and referenced invoice keys can appear farther down.
@@ -47,7 +58,7 @@ function danfeAccessKey(items) {
     } else lines.push({ y, endX:x + item.width, text:item.str });
   }
   const keys = new Set(lines.flatMap(({ text }) =>
-    [...text.matchAll(ACCESS_KEY)].map(match => match[1].replace(/[ \t]/g, '').toUpperCase())));
+    [...text.matchAll(format.key)].map(match => match[1].replace(/[ \t]/g, '').toUpperCase())));
   return keys.size === 1 ? [...keys][0] : '';
 }
 
@@ -80,9 +91,10 @@ async function hasRasterizedContent(page, fromY, { OPS, Util }) {
   return false;
 }
 
-export async function readDanfeCno(blob, key, { document, signal }) {
+export async function readDanfeCno(blob, key, { document, signal, type = 'NF-e' }) {
   signal.throwIfAborted();
-  if (blob.size > MAX_PDF_BYTES) return null;
+  const format = FORMATS[type];
+  if (!format || blob.size > MAX_PDF_BYTES) return null;
   const [pdfjs, worker, bytes] = await Promise.all([
     import('pdfjs-dist/legacy/build/pdf.mjs'),
     import('pdfjs-dist/legacy/build/pdf.worker.min.mjs?url'),
@@ -113,16 +125,16 @@ export async function readDanfeCno(blob, key, { document, signal }) {
       const items = content.items.filter(item => typeof item.str === 'string');
       const text = items.map(item => item.str + (item.hasEOL ? '\n' : '')).join('').trim();
       if (!text) return null;
-      if (number === 1 && danfeAccessKey(items) !== key) return null;
-      const heading = items.find(item => ADDITIONAL_DATA.test(item.str));
+      if (number === 1 && danfeAccessKey(items, format) !== key) return null;
+      const heading = items.find(item => format.section.test(item.str));
       const fromY = heading && !page.rotate ? heading.transform[5] + heading.height : Infinity;
       pages.push({ page, text, fromY });
     }
     const text = pages.map(page => page.text).join('\n');
     const cno = invoiceConstructionCno({ OBSERVACOES_NOTA:text });
     if (cno.status !== 'missing') return cno;
-    // Confirm absence only when the additional-data area is readable, including on hybrid PDFs.
-    if (!ADDITIONAL_DATA.test(text) || text.includes('\uFFFD')) return null;
+    // Confirm absence only when the fiscal information area is readable, including on hybrid PDFs.
+    if (!format.section.test(text) || text.includes('\uFFFD')) return null;
     for (const { page, fromY } of pages) {
       signal.throwIfAborted();
       if (await hasRasterizedContent(page, fromY, pdfjs)) return null;

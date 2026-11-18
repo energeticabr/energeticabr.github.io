@@ -34,7 +34,9 @@ export function createDdaAutoReminder({loadData,canOpen,open,accountId=()=>'',in
  async function check(signal){
   const {snapshot,provisionLink}=await loadData({signal});
   signal.throwIfAborted();
-  const rows=normalizeDdaReportRows(snapshot);
+  // Explicitly regularized unlinked titles remain in the report, but do not
+  // request payment or provision-settlement reminders.
+  const rows=normalizeDdaReportRows(snapshot).filter(row=>row.provisionId||!row.linkReviewed);
   const result=buildDdaReport(rows,{status:'Não pagos'},new Date(now()));
   if(result.overdue+result.today>0)return {snapshot};
   const settledDdaIds=await readSettledDdaIds(rows,provisionLink,signal);
