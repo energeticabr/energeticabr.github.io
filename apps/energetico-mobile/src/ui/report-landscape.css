@@ -1,10 +1,10 @@
-/* Report surfaces stay opaque; the surrounding HOME stays visible without
-   darkening and lightening again at every neighbor switch. */
-.report-landscape-viewport:has([role="dialog"]),
-[data-pending-provisions-dialog]:has(.chat-pending-provisions--payments) {
+/* Keep each report's translucent backdrop. During navigation only the retained
+   copy dims HOME, so the incoming report cannot darken it a second time. */
+body:has(> .report-transition) :is(
+ .report-landscape-viewport:has([role="dialog"]),
+ [data-pending-provisions-dialog]:has(.chat-pending-provisions--payments)
+):not(.report-transition *) {
  background:transparent!important;
- backdrop-filter:none!important;
- -webkit-backdrop-filter:none!important;
 }
 .report-transition { position:fixed; inset:0; z-index:20000; background:transparent; }
 .report-transition > :first-child { pointer-events:none; }
