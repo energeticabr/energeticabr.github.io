@@ -88,6 +88,14 @@ test('recognizes minor spelling differences, plurals and known construction term
   assert.equal(suggest('VERGALHAO CA50 8MM', [product('p', 'AÇO CA-50 8 MM', 'KG')], 'KG'), 'p');
 });
 
+test('a recognized technical class can identify a related material without spelling its family name', () => {
+  assert.equal(suggest('CPIV 32-RS'), '329');
+  assert.equal(suggest('CP-IV 32 RS'), '329');
+  assert.equal(suggest('CA50 8MM', [product('steel', 'AÇO CA-50 8 MM', 'KG')], 'KG'), 'steel');
+  assert.equal(suggest('CPV ARI', [cement[0]]), '329');
+  assert.equal(suggest('50 KG', cement, 'SACO'), '');
+});
+
 test('technical differences lower the rank instead of eliminating the only related candidate', () => {
   const products = [product('wrong', 'ACO CA50 125 MM', 'KG'), product('right', 'ACO CA50 12,5 MM', 'KG')];
   assert.equal(suggest('ACO CA50 12.5MM', products, 'KG'), 'right');

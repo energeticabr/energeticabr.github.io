@@ -15,8 +15,7 @@ const unitKey = value => {
 function features(label) {
   const name = normalizeSearchText(String(label ?? '').normalize('NFKC'))
     .replace(/\bcp[\s-]*(vi|iv|iii|ii|v|i|[1-6])\b/g, (_, type) => `cp${roman[type] || type}`)
-    .replace(/\bca[\s-]*(\d+)\b/g, 'ca$1')
-    .replace(/(\d)\s+(?=[a-z])/g, '$1');
+    .replace(/\bca[\s-]*(\d+)\b/g, 'ca$1');
   // Retain decimal measures: 12.5 mm must never become the token 125 mm.
   const terms = new Set((name.match(/[a-z]+\d+(?:\.\d+)?[a-z]*|\d+(?:\.\d+)?[a-z]*\d*|[a-z]+/g) || [])
     .filter(term => !stopWords.has(term)));
@@ -58,6 +57,8 @@ function attributePenalty(source, target) {
 function termSimilarity(left, right) {
   if (left === right) return 1;
   if (terminology.has([left, right].sort().join(':'))) return 0.82;
+  if ((/^cp[1-6]$/.test(left) && /^cp[1-6]$/.test(right))
+    || (/^ca(?:25|50|60)$/.test(left) && /^ca(?:25|50|60)$/.test(right))) return 0.6;
   // Typos/plurals may match words, never dimensions, technical classes or model numbers.
   if (!/^[a-z]{4,}$/.test(left) || !/^[a-z]{4,}$/.test(right)) return 0;
   const limit = Math.min(2, Math.floor(Math.max(left.length, right.length) / 4));
@@ -94,8 +95,8 @@ function score(source, target, sameUnit) {
     sharesWord ||= /^[a-z]{3,}$/.test(term);
     sharesCode ||= /^[a-z]+\d/.test(term);
   }
-  // A unit, measurement or model number alone cannot identify the material.
-  if (!sharesWord || !sourceTerms.length || !targetTerms.length) return 0;
+  // A descriptive word or technical class identifies related material; units/numbers alone do not.
+  if ((!sharesWord && !sharesCode) || !sourceTerms.length || !targetTerms.length) return 0;
   // Related material remains selectable even when every available variant differs.
   return Math.max(0.001, 0.65 * common / targetTerms.length + 0.25 * common / sourceTerms.length
     + (sharesCode ? 0.08 : 0) + (sameUnit ? 0.12 : 0) - attributePenalty(source, target));
