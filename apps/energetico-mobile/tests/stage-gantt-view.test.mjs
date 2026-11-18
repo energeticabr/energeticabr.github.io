@@ -29,7 +29,7 @@ test('GANTT expande as atividades abaixo da etapa e exibe datas e estados das ba
   assert.equal(dialog.querySelectorAll('.gantt-row--activity').length, 0);
   assert.match(dialog.querySelector('[data-tone="ongoing"]').getAttribute('aria-label'), /01\/11\/2026.*Em Andamento/);
   assert.equal(dialog.querySelector('.gantt-bar-date--start')?.textContent, '01/11/2026');
-  assert.equal(dialog.querySelector('.gantt-bar-date--end')?.textContent, 'Até hoje 16/11/2026');
+  assert.equal(dialog.querySelector('.gantt-bar-date--end')?.textContent, 'Em andamento');
 
   toggle.click();
   assert.equal(toggle.textContent, '−');
@@ -86,6 +86,8 @@ test('GANTT separa datas e responsável em clusters e usa o status mesmo com dat
   assert.equal(row('Gabarito').querySelector('.gantt-cluster--responsible'), null);
   assert.match(row('Gabarito').textContent, /Casa 2/);
   assert.equal(row('Armação').querySelector('.gantt-cluster--end').textContent, 'Em Andamento');
+  assert.equal(row('Armação').querySelector('.gantt-bar-date--end').textContent, 'Em andamento');
+  assert.equal(row('Estrutura').querySelector('.gantt-bar-date--end').textContent, 'Em andamento');
   for (const node of rows) assert.doesNotMatch(node.textContent, /TODOS|Início|Fim|Hoje/i);
 });
 
