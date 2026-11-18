@@ -27,7 +27,7 @@ test("calendar highlights existing out-of-range punches orange and clears them a
   const day = root.querySelector('[data-role="rhid-calendar-day"][data-value="2026-09-28"]');
   assert.ok(day.classList.contains('chat-rhid-calendar__day--suspect'));
   assert.match(day.getAttribute('aria-label'), /fora da faixa/);
-  assert.match(day.textContent, /1 conferir/);
+  assert.match(day.querySelector('.chat-rhid-calendar__suspect').textContent, /^1\b/);
   view.setRhidAttendanceMonthStatus({ ...status, outOfRangeCounts: {} });
   assert.equal(root.querySelector('.chat-rhid-calendar__day--suspect'), null);
   view.setRhidAttendanceMonthStatus({ ...status, outOfRangeCounts: { "2026-09-28": 1 } });
