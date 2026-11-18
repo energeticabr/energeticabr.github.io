@@ -58,7 +58,7 @@ function setup(t, loadProvisionReportSnapshot = async () => ({provisions:[row],r
 
 test('description attachment icon and expanded provision PDFs open files from their own records',async t=>{
   const files=new Map([['description:42',['descritivo.pdf']],['provision:301',['primeira.pdf']],['provision:302',['segunda.pdf','extra.pdf']]]);
-  const reads=[],downloads=[];
+  const reads=[],downloads=[],collections=[];
   const {view,root}=setup(t,async()=>({
     provisions:[{...row,id:'301',descriptionId:'42',hasAttachments:true},{...row,id:'302',descriptionId:'42',hasAttachments:true},
       {...row,id:'303',descriptionId:'43',hasAttachments:true},{...row,id:'304',hasAttachments:true}],
@@ -66,7 +66,7 @@ test('description attachment icon and expanded provision PDFs open files from th
   }),false,undefined,{
     async listProvisionReportAttachments(kind,id){reads.push(`${kind}:${id}`);return files.get(`${kind}:${id}`).map(fileName=>({fileName}));},
     async downloadProvisionReportAttachment(kind,id,fileName){downloads.push(`${kind}:${id}:${fileName}`);return new Blob([]);},
-    async openMediaCollection(items){await items[0].source();},
+    async openMediaCollection(items){collections.push(items.map(item=>item.fileName));for(const item of items)await item.source();},
   });
   await view.open();
   const group=root.querySelector('[data-description-id="42"]');
@@ -81,14 +81,18 @@ test('description attachment icon and expanded provision PDFs open files from th
   await new Promise(resolve=>setImmediate(resolve));
   group.querySelector('.pr-group-toggle').click();
   await new Promise(resolve=>setImmediate(resolve));
-  for(const [id,names] of [['301',['primeira.pdf']],['302',['segunda.pdf','extra.pdf']]]){
+  for(const id of ['301','302']){
     const buttons=[...root.querySelectorAll(`[data-id="${id}"] [data-column=attachments] button`)];
-    assert.deepEqual(buttons.map(button=>button.title),names);
-    buttons.at(-1).click();
+    assert.equal(buttons.length,1,'each record needs one attachment control regardless of file count');
+    assert.equal(buttons[0].querySelectorAll('svg').length,1);
+    assert.equal(buttons[0].querySelector('svg').outerHTML,attached.querySelector('svg').outerHTML);
+    assert.equal(buttons[0].childNodes.length,1,'the icon replaces the plain PDF text');
+    buttons[0].click();
     await new Promise(resolve=>setImmediate(resolve));
   }
   assert.deepEqual(reads,['description:42','provision:301','provision:302']);
-  assert.deepEqual(downloads,['description:42:descritivo.pdf','provision:301:primeira.pdf','provision:302:extra.pdf']);
+  assert.deepEqual(collections,[['descritivo.pdf'],['primeira.pdf'],['segunda.pdf','extra.pdf']]);
+  assert.deepEqual(downloads,['description:42:descritivo.pdf','provision:301:primeira.pdf','provision:302:segunda.pdf','provision:302:extra.pdf']);
 });
 
 test('attachment lookup errors leave the report PDF available and clear on retry',async t=>{

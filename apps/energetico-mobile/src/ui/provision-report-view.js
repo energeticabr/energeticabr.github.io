@@ -154,12 +154,12 @@ export function createProvisionReportView({document:doc=globalThis.document,data
       files=records.filter(file=>typeof file?.fileName==='string'&&file.fileName.trim());
       return files;
     }
-    async function preview(control,file){
+    async function preview(control){
       if(!current())return;
       control.disabled=true;
       showAttachmentNotice('');
       try{
-        const items=file?[file]:await read(true);
+        const items=await read(true);
         if(!current())return;
         if(!items.length){showFiles(items);return;}
         await openMediaCollection(items.map(({fileName,mimeType})=>({fileName,mimeType,source:options=>{
@@ -183,17 +183,7 @@ export function createProvisionReportView({document:doc=globalThis.document,data
     }
     function showFiles(items){
       if(!items.length){setState('empty',`Sem anexos ${itemLabel}`);return;}
-      if(!detail){icon('present',`Anexos ${itemLabel}`,canOpenAttachments?preview:null);return;}
-      const list=make('div','pr-attachment-files');
-      for(const file of items){
-        const isPdf=/\.pdf$/i.test(file.fileName)||file.mimeType==='application/pdf';
-        const control=button('pr-attachment-file',isPdf?'PDF':'Anexo',`Abrir ${file.fileName}`);
-        control.title=file.fileName;
-        control.disabled=!canOpenAttachments;
-        control.addEventListener('click',()=>void preview(control,file));
-        list.append(control);
-      }
-      setState('present',items.map(file=>file.fileName).join(', '),list);
+      icon('present',`Anexos ${itemLabel}`,canOpenAttachments?preview:null);
     }
     async function loadFiles(interactive=false){
       if(!current())return;

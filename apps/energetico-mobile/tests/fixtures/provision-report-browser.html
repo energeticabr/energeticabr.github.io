@@ -33,9 +33,9 @@ try {
   if(grouped){provisions[0].descriptionId='42';provisions[0].branch='FILIAL DO PAI';provisions[0].supplier='FORNECEDOR DE REFERÊNCIA';provisions[1].descriptionId='42';provisions[2].descriptionId='43';provisions[0].hasAttachments=provisions[1].hasAttachments=true;}
   const preview=createAttachmentPreview({canEmbedPdf:()=>false,exportMedia:async()=>{}});
   const data={async loadProvisionReportSnapshot(){loads++;return {provisions,recurrences,descriptions};},
-    async listProvisionReportAttachments(_kind,id){return [{fileName:`Recibo-${id}.pdf`}];},
-    async downloadProvisionReportAttachment(){return new Blob([],{type:'application/pdf'});}};
-  const action='open-provision-report',view=decorateReportPrint(decorateReportNavigation(createProvisionReportView({data,openMediaCollection:async()=>{},now:()=>new Date('2026-10-11T12:00:00Z')}),{action}),{action,previewMedia:preview.open,closePreview:preview.close});
+    async listProvisionReportAttachments(_kind,id){return [{fileName:`Recibo-${id}.pdf`},...(id==='302'?[{fileName:`Extra-${id}.pdf`}]:[])];},
+    async downloadProvisionReportAttachment(_kind,_id,fileName){const {PDFDocument}=await import('pdf-lib');const pdf=await PDFDocument.create();pdf.addPage([300,400]).drawText(fileName,{x:30,y:350,size:18});return new Blob([await pdf.save()],{type:'application/pdf'});}};
+  const action='open-provision-report',view=decorateReportPrint(decorateReportNavigation(createProvisionReportView({data,openMediaCollection:preview.openCollection,now:()=>new Date('2026-10-11T12:00:00Z')}),{action}),{action,previewMedia:preview.open,closePreview:preview.close});
   await view.open();const root=view.element;
   const portrait=root.dataset.reportPortrait==='true';
   const reportPanel=root.querySelector('[role="dialog"]'),panelBounds=reportPanel.getBoundingClientRect();
@@ -98,13 +98,13 @@ try {
       const annualBefore=annual.textContent,totalBefore=root.querySelector('[data-metric=pendingTotal]').textContent;
       const collapsedHidden=controlled.every(node=>node.hidden&&getComputedStyle(node).display==='none');
       toggle.focus();toggle.click();await new Promise(requestAnimationFrame);
-      for(let attempt=0;attempt<10&&controlled.some(row=>!row.querySelector('.pr-attachment-file'));attempt++)await new Promise(requestAnimationFrame);
+      for(let attempt=0;attempt<10&&controlled.some(row=>!row.querySelector('.pr-attachment-icon'));attempt++)await new Promise(requestAnimationFrame);
       const attachmentCells=[summary,main.querySelector('[data-id="303"]')].map(row=>{
         const cell=row.querySelector('.pr-attachments'),icon=cell.querySelector('.pr-attachment-icon');
         return {state:cell.dataset.attachmentState,text:cell.textContent,color:icon?getComputedStyle(icon).color:null,icons:cell.querySelectorAll('svg').length};
       });
       groupProbe={collapsedHidden,expanded:toggle.getAttribute('aria-expanded'),focusKept:document.activeElement===toggle,
-        attachmentCells,attachmentFiles:controlled.map(row=>row.querySelector('.pr-attachment-file')?.title),
+        attachmentCells,attachmentControls:controlled.map(row=>({buttons:row.querySelectorAll('.pr-attachments button').length,icons:row.querySelectorAll('.pr-attachments svg').length,label:row.querySelector('.pr-attachment-icon')?.getAttribute('aria-label')})),
         branchRect:rect(branchCell),branchDisplay:getComputedStyle(branchCell).display,branchTextRect:rect(branchText),toggleRect:rect(toggle),
         summaryFill:getComputedStyle(summary).backgroundColor,childFill:getComputedStyle(controlled[0]).backgroundColor,
         equalBranch:controlled[0].querySelector('[data-column=branch]').textContent,
