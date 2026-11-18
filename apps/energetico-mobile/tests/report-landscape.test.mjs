@@ -5,6 +5,7 @@ import { createPaymentLedgerView } from '../src/ui/payment-ledger-view.js';
 import { captureFilteredReport } from '../src/ui/report-print.js';
 import { reportLayoutViewport } from '../src/ui/report-landscape.js';
 import { retainReportPresentation } from '../src/ui/report-navigation.js';
+import { createCargosView } from '../src/ui/cargos-view.js';
 
 const row = {id:'1',paymentDate:'2026-10-01',supplier:'Fornecedor',branch:'Filial',product:'Produto',order:'1',account:'Caixa',unit:10,quantity:1,freight:0,total:10};
 function setup(t, load) {
@@ -30,6 +31,21 @@ test('a retained report follows viewport rotation while its live source is close
   assert.equal(copy.dataset.reportPortrait,'true');
   assert.equal(copy.style.getPropertyValue('--report-height'),'390px');
   release();rotate();assert.equal(copy.dataset.reportPortrait,'true','resize listener is removed with the presentation');
+});
+
+test('retaining cargos includes the external rotated backdrop as well as its inner panel', async t => {
+  const dom=new JSDOM('<main id="app"></main>');
+  Object.defineProperties(dom.window,{innerWidth:{value:390,writable:true},innerHeight:{value:844,writable:true}});
+  dom.window.matchMedia=()=>({get matches(){return dom.window.innerHeight>dom.window.innerWidth;}});
+  const view=createCargosView({document:dom.window.document,data:{loadSnapshot:async()=>({rows:[]})}});
+  t.after(()=>{view.destroy();dom.window.close();});
+  await view.open();
+  const release=retainReportPresentation(view.element);t.after(release);
+  view.close();
+  const copy=dom.window.document.querySelector('[data-report-transition]').firstElementChild;
+  assert.ok(copy.classList.contains('report-landscape-viewport'),'inner panel alone loses its parent rotation');
+  assert.equal(copy.dataset.reportPortrait,'true');
+  assert.ok(copy.querySelector('.cargos-screen'));
 });
 test('portrait immediately opens the real report on a logical landscape surface',async t=>{
   let reads=0;
