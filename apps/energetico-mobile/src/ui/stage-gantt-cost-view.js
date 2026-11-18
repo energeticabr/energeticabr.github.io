@@ -60,7 +60,7 @@ export function renderGanttCostDetail({ container, snapshot, selection }) {
       cell.scope = 'row'; toggle.type = 'button'; toggle.setAttribute('aria-expanded', 'false');
       toggle.setAttribute('aria-label', `Detalhar produtos: ${group.name}`);
       let rows = [];
-      toggle.addEventListener('click', () => {
+      const toggleProducts = () => {
         const expanded = toggle.getAttribute('aria-expanded') === 'true';
         if (expanded) { rows.forEach(node => node.remove()); rows = []; }
         else {
@@ -72,8 +72,10 @@ export function renderGanttCostDetail({ container, snapshot, selection }) {
         }
         toggle.textContent = expanded ? '+' : '−'; toggle.setAttribute('aria-expanded', String(!expanded));
         toggle.setAttribute('aria-label', `${expanded ? 'Detalhar' : 'Recolher'} produtos: ${group.name}`);
-      });
+      };
+      toggle.addEventListener('click', toggleProducts);
       cell.append(toggle, make('span', '', group.name)); row.append(cell); amounts(row, group); body.append(row);
+      toggleProducts();
     }
     const total = make('tr', 'gantt-cost-total'), label = make('th', '', 'TOTAL DA ETAPA'); label.scope = 'row';
     total.append(label); amounts(total, { ...detail.report.summary, percentage: 100 }, true); body.append(total);

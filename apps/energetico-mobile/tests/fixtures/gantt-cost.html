@@ -27,7 +27,7 @@ popup.querySelector('.gantt-detail-close').click();root.querySelector('.gantt-to
 await new Promise(resolve=>setTimeout(resolve,0));
 const childDirect=professionReads===1&&!popup.querySelector('[data-analysis]');
 popup.querySelector('.gantt-detail-close').click();root.querySelector('.gantt-row--stage .gantt-bar').click();popup.querySelector('[data-analysis="cost"]').click();
-await new Promise(resolve=>setTimeout(resolve,0));popup.querySelector('.gantt-cost-toggle').click();
+await new Promise(resolve=>setTimeout(resolve,0));
 await document.fonts.ready;await new Promise(resolve=>requestAnimationFrame(()=>requestAnimationFrame(resolve)));
 const dialog=popup.querySelector('.gantt-detail-dialog'),r=dialog.getBoundingClientRect(),viewport={width:innerWidth,height:innerHeight};
 const controlsVisible=[...popup.querySelectorAll('select,header button')].filter(n=>!n.hidden).every(n=>{const b=n.getBoundingClientRect();return b.left>=r.left-1&&b.right<=r.right+1&&b.top>=r.top-1&&b.bottom<=r.bottom+1;});

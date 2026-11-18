@@ -116,7 +116,6 @@ test('custo abre pago/previsto por período e trocar filtros recalcula sem nova 
   assert.deepEqual([...month.options].map(n => n.value), ['', '2']);
   assert.match(popup.querySelector('[data-cost-total="paid"]').textContent, /200,00/);
   assert.match(popup.querySelector('[data-cost-total="forecast"]').textContent, /50,00/);
-  popup.querySelector('.gantt-cost-toggle').click();
   assert.match(popup.querySelector('.gantt-cost-product').textContent, /Concreto/);
   year.value = '2025'; year.dispatchEvent(new win.Event('change', { bubbles: true }));
   assert.deepEqual([...popup.querySelector('select[name="month"]').options].map(n => n.value), ['', '1']);
