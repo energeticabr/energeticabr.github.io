@@ -1,0 +1,37 @@
+<!doctype html>
+<html lang="pt-BR">
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<link rel="stylesheet" href="../../src/styles.css">
+<link rel="stylesheet" href="../../src/ui/launch-gallery.css">
+<link rel="stylesheet" href="../../src/ui/gallery-record-actions.css">
+<script type="module">
+import { createLaunchGallery } from '../../src/ui/launch-gallery-view.js';
+const rows = [undefined, '', '   ', 'TURNO DA MANHÃ', 'Conferir o acabamento de todos os pilares antes de liberar a próxima etapa. '.repeat(8), 'SEMESPAÇOS'.repeat(80), 'Linha 1\nLinha 2\nLinha 3', '<p>Acabamento &amp; serviço 👷🏽‍♂️</p><script>throw Error("unsafe")<\/script>'].map((observation, i) => ({
+  id: 3837 + i, total: 44, fields: { PRODUTO: 'PEDREIRO', DESCRIÇÃO: observation, QUANTIDADE: 4, 'VALOR TOTAL': 44 },
+}));
+const gallery = createLaunchGallery({ document, request: async operation => {
+  if (operation === 'snapshot') return { rows, count: rows.length, page: 1, pages: 1, totals: { paid: 352 } };
+  throw new Error(operation);
+} });
+await gallery.open();
+await document.fonts.ready;
+await new Promise(resolve => requestAnimationFrame(() => requestAnimationFrame(resolve)));
+const headings = () => [...document.querySelectorAll('.lg-record-product')].map(node => ({
+  text: node.textContent, full: node.getAttribute('aria-label'), height: node.getBoundingClientRect().height,
+  lineHeight: parseFloat(getComputedStyle(node).lineHeight), scrollHeight: node.scrollHeight,
+  hasMarkup: node.children.length > 0,
+}));
+const initial = headings();
+// Reuse the same mounted gallery at a narrower and wider width, as in rotation.
+const cards = document.querySelector('.lg-cards');
+cards.style.width = 'min(100%, 420px)';
+await new Promise(resolve => requestAnimationFrame(() => requestAnimationFrame(resolve)));
+const narrow = headings();
+cards.style.width = '';
+await new Promise(resolve => requestAnimationFrame(() => requestAnimationFrame(resolve)));
+const restored = headings();
+document.querySelector('[data-item-id="3841"]').scrollIntoView({ block: 'start' });
+document.documentElement.dataset.layout = JSON.stringify({ initial, narrow, restored, overflow: document.documentElement.scrollWidth > innerWidth });
+</script>
+</html>

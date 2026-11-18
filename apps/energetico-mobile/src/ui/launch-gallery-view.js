@@ -456,6 +456,31 @@ export function createLaunchGallery({ document: documentRef = globalThis.documen
     onChange: updateAttachmentCount,
   });
   let mediaObserver, previewController;
+  const productHeadings = new Map();
+  function fitProductHeading(heading) {
+    const full = productHeadings.get(heading);
+    if (!full || !heading.clientWidth) return;
+    const maxHeight = Math.ceil(parseFloat(doc.defaultView.getComputedStyle(heading).lineHeight) * 2);
+    heading.textContent = full;
+    if (heading.scrollHeight <= maxHeight) return;
+    // Measure the actual font and available width, reserving space for both … and ).
+    // Start from the original on every resize so widening restores hidden text.
+    const characters = Array.from(full.slice(0, -1));
+    let low = 0, high = characters.length;
+    while (low < high) {
+      const middle = Math.ceil((low + high) / 2);
+      heading.textContent = `${characters.slice(0, middle).join('').trimEnd()}…)`;
+      if (heading.scrollHeight <= maxHeight) low = middle;
+      else high = middle - 1;
+    }
+    heading.textContent = `${characters.slice(0, low).join('').trimEnd()}…)`;
+  }
+  const ProductResizeObserver = doc.defaultView?.ResizeObserver;
+  const productHeadingObserver = typeof ProductResizeObserver === 'function'
+    ? new ProductResizeObserver(entries => entries.forEach(({ target }) => fitProductHeading(target))) : null;
+  const fitProductHeadings = () => productHeadings.forEach((_, heading) => fitProductHeading(heading));
+  doc.fonts?.ready.then(() => { if (!destroyed) fitProductHeadings(); });
+  if (!productHeadingObserver) doc.defaultView?.addEventListener('resize', fitProductHeadings);
 
   function stopRecordMediaLoads() {
     mediaObserver?.disconnect();
@@ -569,7 +594,10 @@ export function createLaunchGallery({ document: documentRef = globalThis.documen
       if (result.sortOptions?.length) setOptions(sort, result.sortOptions);
       releaseRecordPreviews();
       recordItems.clear();
+      productHeadingObserver?.disconnect();
+      productHeadings.clear();
       cards.replaceChildren(...result.rows.map(renderCard));
+      productHeadings.forEach((_, heading) => { productHeadingObserver?.observe(heading); fitProductHeading(heading); });
       listStatus.replaceChildren(element('p', 'lg-hint', result.rows.length ? `${result.count ?? result.rows.length} lançamento(s)` : 'Nenhum lançamento encontrado para estes filtros.'));
       pageLabel.textContent = `Página ${pages ? page : 0} de ${pages}`;
       if (scrollToTop && page !== previousPage) content.scrollTop = 0;
@@ -1155,8 +1183,17 @@ export function createLaunchGallery({ document: documentRef = globalThis.documen
     const recordPreview = renderRecordMedia(item);
     if (recordPreview) card.classList.add('lg-record--with-media');
     const identity = element('header', 'lg-record-heading');
+    // The launch flow stores “Digite a observação” in DESCRIÇÃO (SharePoint field_16).
+    const observation = descriptionText(field(fields, 'DESCRIÇÃO', 'DESCRICAO')).replace(/\s+/g, ' ').trim();
+    const productTitle = element('h2', 'lg-record-product', observation ? `${display(product)}(${observation})` : display(product));
+    if (observation) {
+      productTitle.classList.add('lg-record-product--observed');
+      productTitle.setAttribute('aria-label', productTitle.textContent);
+      productTitle.title = productTitle.textContent;
+      productHeadings.set(productTitle, productTitle.textContent);
+    }
     identity.append(element('span', 'lg-record-id', display(field(fields, 'ID') ?? item.id)),
-      element('h2', 'lg-record-product', display(product)));
+      productTitle);
     const headingSummary = element('div', 'lg-record-heading-summary');
     const status = field(fields, 'CONCLUÍDO', 'CONCLUIDO', 'STATUS');
     if (status) {
@@ -1896,6 +1933,9 @@ export function createLaunchGallery({ document: documentRef = globalThis.documen
   }
   function destroy() {
     if (destroyed) return;
+    productHeadingObserver?.disconnect();
+    productHeadings.clear();
+    doc.defaultView?.removeEventListener('resize', fitProductHeadings);
     stopRecordMediaLoads();
     releaseRecordPreviews();
     loadingScreen.destroy();
