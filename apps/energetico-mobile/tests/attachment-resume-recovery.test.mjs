@@ -237,7 +237,10 @@ test('a stalled attachment snapshot cannot freeze a successful unavailable-file 
   t.mock.timers.enable({ apis: ['setTimeout'] });
   const resuming = h.emit('retry-session');
   await new Promise(setImmediate);
-  t.mock.timers.tick(15_000);
+  t.mock.timers.tick(29_999);
+  await new Promise(setImmediate);
+  assert.equal(h.renders.at(-1).resuming, true, 'the current 30-second recovery window must remain available');
+  t.mock.timers.tick(1);
   await new Promise(setImmediate);
   assert.equal(h.renders.at(-1).resuming, false);
   assert.equal(await resuming, true);
