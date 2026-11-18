@@ -190,7 +190,7 @@ export function createStageGanttView({ document: doc = globalThis.document, data
         bar.dataset.tone = tone;
         bar.setAttribute('aria-label', description);
         bar.setAttribute('aria-haspopup', 'dialog');
-        bar.addEventListener('click', () => { void detail.open(item, bar); });
+        bar.addEventListener('click', () => { void detail.open(item, bar, { stage: parent }); });
         bar.title = description;
         bar.style.left = percent(calendarDays(start, from));
         bar.style.width = percent(days);

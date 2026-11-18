@@ -207,6 +207,13 @@ function selectedExpenses(snapshot, filters) {
   return [...paidRows, ...forecastRows];
 }
 
+// The period picker must use the same paid/unpaid rules as the expense totals.
+export function managementExpensePeriods(snapshot, filters = {}) {
+  return [...new Set(selectedExpenses(snapshot, filters)
+    .filter(row => row.total !== 0)
+    .map(row => (row.paymentDate || row.dueDate).slice(0, 7)))].sort();
+}
+
 function expenseBranchesFor(rows, expenseType) {
   const nameKey = name => scalar(name).toLocaleLowerCase("pt-BR");
   return groupRows(rows, row => row.branch, nameKey).map(([name, values]) => {

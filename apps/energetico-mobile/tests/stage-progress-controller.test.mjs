@@ -582,7 +582,7 @@ test('GANTT abre localmente, pede leitura e retoma o próprio painel após o log
   });
   await h.controller.start();
   assert.equal(panels.length, 1);
-  assert.deepEqual(Object.keys(panels[0].data), ['loadSnapshot', 'loadAssignments']);
+  assert.deepEqual(Object.keys(panels[0].data), ['loadSnapshot', 'loadAssignments', 'loadCostSnapshot']);
   assert.deepEqual(grants, [[scopes, { resumeAction: 'open-stage-gantt' }]]);
   assert.equal(tokens, 2, "duas consultas simultâneas compartilham o mesmo consentimento");
   assert.deepEqual(await panels[0].data.loadAssignments({ branch: 'Xavante', activityIds: ['129'] }), { complete: true, rows: [] });
@@ -590,4 +590,27 @@ test('GANTT abre localmente, pede leitura e retoma o próprio painel após o log
   assert.equal(await h.view.emit('open-stage-gantt'), true);
   assert.equal(h.calls.length, count);
   assert.equal(panels.length, 1);
+});
+
+test('custo do Gantt usa relatório gerencial 9 sob a sessão de leitura e rejeita resposta após logout', async t => {
+  let panel, options, loads = 0;
+  const pending = deferred();
+  const h = harness(t, {
+    ganttFactory: async ({ data }) => (panel = { data, async open() {}, destroy() {} }),
+    paymentLedgerDataFactory: async ({ tokenProvider }) => ({ async loadSnapshot(value) {
+      loads++; options = value;
+      assert.equal(await tokenProvider(['Sites.Read.All']), 'sharepoint-token');
+      return pending.promise;
+    } }),
+  });
+  await h.controller.start(); await h.view.emit('open-stage-gantt');
+  assert.equal(loads, 0);
+  const request = panel.data.loadCostSnapshot();
+  const rejected = assert.rejects(request, { name: 'AbortError' });
+  await tick(); assert.equal(options.reportNumber, 9);
+  await h.view.emit('sign-out');
+  assert.equal(options.signal.aborted, true);
+  pending.resolve({ launches: [], provisions: [], productTypes: [] });
+  await rejected;
+  await assert.rejects(panel.data.loadCostSnapshot(), { name: 'AbortError' });
 });

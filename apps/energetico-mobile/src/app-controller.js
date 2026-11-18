@@ -8437,9 +8437,10 @@ export function createAppController({
           if (writing && scopes?.includes('Sites.ReadWrite.All')) return stageWriteToken || getToken(writeScopes);
           return getToken(STAGE_PROGRESS_SCOPES);
         };
-        const source = await stageProgressDataFactory({ tokenProvider });
+        const cost = method === 'loadCostSnapshot';
+        const source = await (cost ? paymentLedgerDataFactory : stageProgressDataFactory)({ tokenProvider });
         assertAction();
-        const result = await source[method](...args, { ...sourceOptions, signal: controller.signal });
+        const result = await source[cost ? 'loadSnapshot' : method](...args, { ...sourceOptions, signal: controller.signal });
         assertAction();
         return result;
       } finally {
@@ -8530,6 +8531,7 @@ export function createAppController({
           const panel = gantt
             ? await ganttFactory({ data: { loadSnapshot: data.loadSnapshot,
               loadAssignments: (selection, options) => runStageAction('loadGanttAssignments', [selection], options),
+              loadCostSnapshot: options => runStageAction('loadCostSnapshot', [], { ...options, reportNumber: 9 }),
             }, document })
             : decorateControllerReport(await stageProgressFactory({ data, document }), 'open-stage-progress');
           try { assertSession(); }
