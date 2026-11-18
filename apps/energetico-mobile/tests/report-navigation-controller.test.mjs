@@ -43,6 +43,71 @@ function deferred() {
   return { promise, resolve };
 }
 
+for (const outcome of ['opened', 'failed', 'home', 'stop']) {
+  test(`report pixels survive a delayed neighbor and are released on ${outcome}`, async t => {
+    const loading = deferred();
+    const h = harness(t, { registrationGalleryDataFactory: () => loading.promise,
+      ...(outcome === 'failed' ? { ddaReportFactory: async () => { throw new Error('Unavailable'); } } : {}),
+    });
+    await h.controller.start();
+    await h.view.emit('open-provision-report');
+    const source = h.panels.at(-1).element;
+    source.querySelector('h2').textContent = 'Provisões já carregadas';
+    const navigating = h.view.emit('navigate-mascot-report', { from: 'open-provision-report', direction: 'previous' });
+    await tick();
+    const retained = h.document.querySelector('[data-report-transition]');
+    assert.ok(retained, 'never expose HOME while creating the destination');
+    assert.match(retained.textContent, /Provisões já carregadas/);
+    assert.equal(retained.querySelector('[aria-hidden="true"]').inert, true);
+    assert.ok(source.hidden || !source.isConnected, 'live source requests still close normally');
+    if (outcome === 'home') await h.view.emit('select-reply', { replyId: 'navigation_main_menu', label: 'RETORNAR AO MENU INICIAL' });
+    if (outcome === 'stop') h.controller.stop();
+    if (['home', 'stop'].includes(outcome)) assert.equal(retained.isConnected, false, 'cancel without waiting for the network');
+    loading.resolve({});
+    assert.equal(await navigating, outcome === 'opened');
+    assert.equal(h.document.querySelector('[data-report-transition]'), null);
+  });
+}
+
+test('the previous report stays painted until the neighbor finishes its initial data load', async t => {
+  const loading = deferred();
+  const h = harness(t, { managementReportFactory: async () => {
+    const element = h.document.createElement('div'); element.hidden = true;
+    h.document.body.append(element);
+    return { element, async open() { element.hidden = false; await loading.promise; }, close() { element.hidden = true; }, destroy() { element.remove(); } };
+  } });
+  await h.controller.start(); await h.view.emit('open-payment-ledger');
+  const navigating = h.view.emit('navigate-mascot-report', { from: 'open-payment-ledger', direction: 'next' });
+  await tick();
+  assert.ok(h.document.querySelector('[data-report-transition]'), 'hide the blank loading report too');
+  loading.resolve(); assert.equal(await navigating, true);
+  assert.equal(h.document.querySelector('[data-report-transition]'), null);
+});
+
+for (const cancel of ['Escape', 'touch']) {
+  test(`a loading transition blocks covered controls and cancels immediately with ${cancel}`, async t => {
+    const loading = deferred();
+    const h = harness(t, { registrationGalleryDataFactory: () => loading.promise });
+    await h.controller.start(); await h.view.emit('open-provision-report');
+    const navigating = h.view.emit('navigate-mascot-report', { from: 'open-provision-report', direction: 'previous' });
+    await tick();
+    const button = h.document.querySelector('.report-transition-cancel');
+    assert.ok(button); assert.equal(button.tabIndex, -1);
+    const focus = h.document.activeElement;
+    for (const key of ['Tab', 'Enter', 'a']) {
+      const event = new h.document.defaultView.KeyboardEvent('keydown', { key, bubbles: true, cancelable: true });
+      h.document.dispatchEvent(event); assert.equal(event.defaultPrevented, true);
+      assert.equal(h.document.activeElement, focus, 'temporary controls must not become returnFocus');
+    }
+    if (cancel === 'touch') button.click();
+    else h.document.dispatchEvent(new h.document.defaultView.KeyboardEvent('keydown', { key: 'Escape', bubbles: true, cancelable: true }));
+    assert.equal(h.document.querySelector('[data-report-transition]'), null);
+    const restored = new h.document.defaultView.KeyboardEvent('keydown', { key: 'Tab', cancelable: true });
+    h.document.dispatchEvent(restored); assert.equal(restored.defaultPrevented, false);
+    loading.resolve({}); assert.equal(await navigating, false);
+  });
+}
+
 // Same real controller/store harness used by task-association-report-controller;
 // kept here because that test defines its harness locally rather than exporting it.
 function harness(t, options = {}, { dom = true, orientation } = {}) {
@@ -64,7 +129,7 @@ function harness(t, options = {}, { dom = true, orientation } = {}) {
   const factoryOptions = Object.fromEntries(Object.entries(factories).map(([action, factory]) => [factory, async ({ data }) => {
     const element = document.createElement('div');
     element.hidden = true;
-    element.innerHTML = '<section class="pl-dialog" role="dialog"><header class="pl-header"><h2>Relatório</h2><button class="pl-close">Fechar</button></header></section>';
+    element.innerHTML = '<section class="pl-dialog" role="dialog"><header class="pl-header"><h2>Relatório</h2><button class="pl-close" aria-label="Fechar relatório">Fechar</button></header></section>';
     document.body.append(element);
     const landscape = orientation?.bind(element);
     const panel = { action, data, ...(dom ? { element } : {}), opens: 0, closes: 0, destroys: 0,
