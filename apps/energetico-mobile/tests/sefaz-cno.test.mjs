@@ -18,6 +18,27 @@ function correctedFields(events = [correction()], original = 'CNO 900254406972')
     CARTAS_CORRECAO_JSON:JSON.stringify({version:1, key, events})};
 }
 
+test('semicolon after the CNO label preserves valid, conflicting and incomplete registrations', () => {
+  for (const [observation, status, numbers] of [
+    ['CNO; 90.025.44060/72 RUA FICTICIA NUMERO 134', 'valid', ['90.025.44060/72']],
+    ['CNO; 90.025.44069/72', 'conflict', ['90.025.44069/72']],
+    ['CNO; 90.025.4406/72', 'invalid', ['90.025.4406/72']],
+    ['CNO; 90.025.44060/72; 90.025.44069/72', 'conflict', ['90.025.44060/72', '90.025.44069/72']],
+    ['CNO; NAO INFORMADO. PEDIDO 900254406072', 'missing', []],
+  ]) {
+    const result = invoiceConstructionCno({ OBSERVACOES_NOTA:observation });
+    assert.equal(result.status, status, observation);
+    assert.deepEqual(result.numbers, numbers, observation);
+  }
+});
+
+test('authorized CC-e accepts a semicolon between its CNO label and registration', () => {
+  const result = invoiceConstructionCno(correctedFields([correction(2, 'Corrigir CNO; 90.025.44060/72')]));
+  assert.equal(result.status, 'valid');
+  assert.deepEqual(result.numbers, ['90.025.44060/72']);
+  assert.equal(result.corrected, true);
+});
+
 test('a linked authorized CC-e corrects a wrong or missing original CNO, including an old number quoted in the correction', () => {
   for (const original of ['', 'CNO 900254406972']) {
     const result = invoiceConstructionCno(correctedFields([correction(1, 'Onde consta CNO 90.025.44069/72, leia-se CNO 90.025.44060/72.')], original));
