@@ -14,12 +14,14 @@ import com.getcapacitor.BridgeActivity;
 public class MainActivity extends BridgeActivity {
     private boolean landscapeReport;
     private boolean restoreReportStatusBar;
+    private final Runnable reportStatusBarFallback = this::restoreStatusBarAfterReport;
 
     @Override
     public void setRequestedOrientation(int orientation) {
         // The orientation plugin may call from the bridge thread. Insets must
         // change on the UI thread before Android chooses the rotation animation.
         runOnUiThread(() -> {
+            getWindow().getDecorView().removeCallbacks(reportStatusBarFallback);
             boolean landscape = orientation == ActivityInfo.SCREEN_ORIENTATION_LANDSCAPE;
             if (landscape && !landscapeReport) {
                 WindowInsetsCompat insets = ViewCompat.getRootWindowInsets(getWindow().getDecorView());
@@ -37,7 +39,7 @@ public class MainActivity extends BridgeActivity {
                 } else {
                     // Large-screen/multi-window policy can decline portrait,
                     // in which case no configuration callback will arrive.
-                    getWindow().getDecorView().postDelayed(this::restoreStatusBarAfterReport, 1000);
+                    getWindow().getDecorView().postDelayed(reportStatusBarFallback, 1000);
                 }
             }
         });
