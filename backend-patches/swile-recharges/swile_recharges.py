@@ -217,6 +217,22 @@ def provider_payment(payment):
     return {key: value for key, value in payment.items() if key != 'dueDate' or payment['paymentMethod'] == 'BANK_SLIP'}
 
 
+def provider_dates(payment, now):
+    result = provider_payment(payment)
+    for key in ('creditDate', 'dueDate'):
+        if key in result:
+            result[key] += 'T03:00:00'
+    if payment['paymentMethod'] == 'PIX':
+        # Swile also enforces 24 elapsed hours, even when tomorrow is a business day.
+        midnight = datetime.fromisoformat(result['creditDate']).replace(tzinfo=timezone.utc)
+        minimum = datetime.fromtimestamp(now, timezone.utc) + timedelta(hours=24, minutes=5)
+        credit = max(midnight, minimum)
+        if credit.astimezone(SP).date().isoformat() != payment['creditDate']:
+            raise SwileError('Escolha uma data de crédito que permita pelo menos 24 horas para o Pix.')
+        result['creditDate'] = credit.strftime('%Y-%m-%dT%H:%M:%S')
+    return result
+
+
 def order_fingerprints(amounts, payment):
     current = provider_payment(payment)
     previous = dict(current)
@@ -393,6 +409,7 @@ class Service:
             if 'amounts' not in saved:
                 raise SwileError('Gere um novo resumo para conferir o vencimento antes de enviar o pedido.')
             payment = request_dates(saved, self.clock())
+            dates = provider_dates(payment, self.clock())
             if saved.get('dueDate') != payment['dueDate']:
                 raise SwileError('Gere um novo resumo para conferir o vencimento antes de enviar o pedido.')
             fingerprints = order_fingerprints({int(key): val for key, val in saved['amounts'].items()}, payment)
@@ -405,13 +422,10 @@ class Service:
             db.execute("UPDATE orders SET state='sending' WHERE id=?", (identifier,))
         # Preserve the claim before contacting Swile. The same externalId is
         # also recorded at Swile for reconciliation after an interrupted response.
-        payload = {'summaryId': row['summary'], 'externalId': identifier, **provider_payment(payment)}
+        payload = {'summaryId': row['summary'], 'externalId': identifier, **dates}
         if invoice_text:
             payload['benefitPaymentInfo'] = [{'document': saved['payerDocument'], 'invoiceText': invoice_text,
                                               'swileCreditToUse': 0}]
-        for key in ('creditDate', 'dueDate'):
-            if key in payload:
-                payload[key] += 'T03:00:00'
         try:
             result = self.gateway.request('order/create', data=payload)
         except SwileError as error:
