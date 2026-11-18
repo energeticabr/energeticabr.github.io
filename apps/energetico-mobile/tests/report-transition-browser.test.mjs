@@ -22,10 +22,13 @@ test('real controller shows a blank report with mascot and measured percentage o
     assert.equal(result.error,undefined,JSON.stringify(result));
     if(mode==='?pending'){
      assert.ok(result.sameBounds&&result.blank&&result.loading,JSON.stringify(result));
+     assert.equal(result.backdrop,'rgba(5, 35, 45, 0.44)');
+     assert.equal(result.retainedBackdrop,result.backdrop);
      assert.equal(result.percentage,'33%');assert.equal(result.background,'rgb(255, 255, 255)');continue;
     }
     assert.ok(result.sameBounds&&result.removed&&result.ready&&result.visible,JSON.stringify(result));
-    assert.equal(result.background,'rgba(0, 0, 0, 0)');
+    assert.equal(result.background,'rgba(5, 32, 46, 0.58)');
+    assert.ok(result.frames.every(frame=>frame.backdrop==='rgba(5, 32, 46, 0.58)'&&frame.underlay==='rgba(0, 0, 0, 0)'),JSON.stringify(result));
     assert.ok(result.expectedScroll>0);
     assert.ok(result.frames.every(frame=>frame.retained&&!frame.sourceVisible&&frame.topmost&&frame.blank&&frame.loading&&frame.mascot&&frame.within&&/^\d+%$/.test(frame.percentage)&&frame.background==='rgb(255, 255, 255)'),JSON.stringify(result));
    }finally{dom.window.close();}
