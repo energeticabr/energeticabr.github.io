@@ -116,7 +116,7 @@ test('grouped provision rows fit phone and PC canvases when expanded without cha
       assert.equal(result.error,undefined);const probe=result.groupProbe;
       assert.ok(probe.collapsedHidden);assert.equal(probe.expanded,'true');assert.ok(probe.focusKept);
       assert.deepEqual(probe.attachmentCells,[{state:'present',text:'PDF',color:'rgb(21, 101, 192)',icons:1},{state:'empty',text:'',color:null,icons:0}]);
-      assert.deepEqual(probe.attachmentFiles,['Recibo-301.pdf','Recibo-302.pdf']);
+      assert.deepEqual(probe.attachmentControls,[{buttons:1,icons:1,label:'Anexos da provisão 301'},{buttons:1,icons:1,label:'Anexos da provisão 302'}]);
       assert.deepEqual(probe.originalIds,['301','302']);assert.deepEqual(probe.originalDates,['09/10/2026','11/10/2026']);
       assert.equal(probe.branch,'FILIAL DO PAI');assert.equal(probe.supplier,'FORNECEDOR DE REFERÊNCIA');assert.equal(probe.date,'09/10/2026');
       assert.ok(probe.toggleRect.left>=probe.branchTextRect.right-1,`${width}px: arrow must be right of branch text`);
