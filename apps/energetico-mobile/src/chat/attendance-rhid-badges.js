@@ -91,6 +91,23 @@ export function attendanceMissingPunchContext(option, poll, slot) {
   return { ...context, personKey: correction.personKey, personName: correction.name, slots: correction.slots };
 }
 
+export function attendanceEditablePunchContext(option, poll, slot) {
+  const missing = attendanceMissingPunchContext(option, poll, slot);
+  if (missing) return { ...missing, originalTime: "" };
+  if (!isPendingAttendancePoll(poll) || !SLOTS.includes(slot) || option?.disabled) return null;
+  const context = attendanceRhidOptionContext(option, poll);
+  const badge = option?.rhidBadge;
+  const correction = badge?.correction;
+  const field = correction?.slots?.[slot];
+  if (!context || context.date !== badge?.date || !isRhidAttendanceDayFinalized(context.date)
+    || !["present", "inconsistent"].includes(badge?.status)
+    || !/^(?:rhid|id):[^\s:]+$/.test(correction?.personKey || "")
+    || !field?.outOfRange || field.adjustment || field.rhidCandidates?.length !== 1
+    || !field.rhid || field.effective !== field.rhid) return null;
+  return { ...context, personKey: correction.personKey, personName: correction.name,
+    slots: correction.slots, originalTime: field.rhid };
+}
+
 function badge(status, date, minutes) {
   const brDate = date ? date.split("-").reverse().join("/") : "";
   const day = brDate ? ` em ${brDate}` : "";

@@ -24,9 +24,9 @@ import { recommendEffectivePaymentDate } from "./chat/launch-payment-date-option
 import { attachmentFinishOption, isDiaryAttachmentPrompt, isDocumentAttachmentPrompt } from "./chat/attachment-finish.js";
 import { isDiaryAttachmentFinalization, paintDiaryCompletion } from "./chat/diary-attachment-progress.js";
 import { audioTranscriptionText, isAudioFile, isConstructionDiaryFlow } from "./chat/audio-transcription.js";
-import { buildRhidAttendanceTable, isRhidAttendanceDayFinalized, isValidRhidReportDate, rhidIrregularCountsByDate, rhidUpdateLabel, shiftRhidReportDate } from "./chat/rhid-attendance-table.js";
+import { buildRhidAttendanceTable, isRhidAttendanceDayFinalized, isValidRhidReportDate, rhidIrregularCountsByDate, rhidOutOfRangeCountsByDate, rhidUpdateLabel, shiftRhidReportDate } from "./chat/rhid-attendance-table.js";
 import { rhidMascotAmbiguousNames, rhidMascotDay, rhidMascotFilters, rhidMascotMonths, rhidMascotPageSize } from './chat/rhid-mascot-report.js';
-import { attendanceMissingPunchContext, attendanceRhidOptionContext, attendanceRhidPollEligible, attendanceValidationDate, buildAttendanceRhidBadge, isPendingAttendancePoll, pendingAttendanceDeletionContext } from "./chat/attendance-rhid-badges.js";
+import { attendanceEditablePunchContext, attendanceRhidOptionContext, attendanceRhidPollEligible, attendanceValidationDate, buildAttendanceRhidBadge, isPendingAttendancePoll, pendingAttendanceDeletionContext } from "./chat/attendance-rhid-badges.js";
 import { createAttendanceIrregularityData } from './chat/attendance-irregularity-data.js';
 import {
   PRESENCE_OTHER_DATES_REPLY_ID,
@@ -3488,7 +3488,7 @@ export function createAppController({
       const summary = await client.getRhidAttendanceMonth(month);
       if (stopped || account !== reportAccount || sessionRevision !== reportRevision || generation !== rhidAttendanceMonthGeneration) return false;
       view.setRhidAttendanceMonthStatus?.({ month, presentDates: summary.presentDates,
-        ...(Array.isArray(summary.rows) ? { irregularCounts: rhidIrregularCountsByDate(summary.rows, month) } : {}),
+        ...(Array.isArray(summary.rows) ? { irregularCounts: rhidIrregularCountsByDate(summary.rows, month), outOfRangeCounts: rhidOutOfRangeCountsByDate(summary.rows, month) } : {}),
       });
       return true;
     } catch (error) {
@@ -3500,18 +3500,19 @@ export function createAppController({
   }
 
   const rhidAttendanceAdjustmentRequests = new Set();
-  async function saveAttendanceMissingPunch({ messageId, presenceId, personKey, slot, time, reason, adjustmentId }) {
+  async function saveAttendanceMissingPunch({ messageId, presenceId, personKey, slot, time, reason, adjustmentId, originalTime = "" }) {
     const state = store.getState();
     const message = latestAssistantPoll(state.messages);
     const option = message?.options?.find(item => attendanceRhidOptionContext(item, message)?.presenceId === String(presenceId));
     const context = attendanceRhidOptionContext(option, message);
     const entry = attendanceRhidBadgeReports.get(context?.date);
     const target = entry?.status === "ready"
-      ? attendanceMissingPunchContext({ ...option, rhidBadge: buildAttendanceRhidBadge(context, entry.report) }, message, slot) : null;
+      ? attendanceEditablePunchContext({ ...option, rhidBadge: buildAttendanceRhidBadge(context, entry.report) }, message, slot) : null;
     const key = `${target?.date}:${personKey}:${slot}`;
     if (!account || stopped || sessionStatus !== "authenticated" || flowBusy()
       || attendanceRhidBadgeOwner !== account || attendanceRhidBadgeRevision !== sessionRevision
       || String(message?.id || "") !== String(messageId || "") || !target || target.personKey !== personKey
+      || target.originalTime !== originalTime
       || !/^(?:[01]\d|2[0-3]):[0-5]\d$/.test(String(time || "")) || !String(reason || "").trim()
       || typeof client.saveRhidAttendanceAdjustment !== "function" || rhidAttendanceAdjustmentRequests.has(key)) {
       view.setRhidAttendanceAdjustmentStatus?.({ busy: false, adjustmentId, error: "Não foi possível validar o ajuste. Atualize as presenças e tente novamente." });
@@ -3545,12 +3546,12 @@ export function createAppController({
     }
   }
 
-  async function saveRhidAttendanceAdjustment({ messageId, presenceId, personKey, slot, time, reason, adjustmentId, revisionId, remove = false } = {}) {
+  async function saveRhidAttendanceAdjustment({ messageId, presenceId, personKey, slot, time, reason, adjustmentId, originalTime, revisionId, remove = false } = {}) {
     if (!remove && String(messageId || '').startsWith('rhid-mascot:')) {
       return fillRhidMascotPunch({ messageId, personKey, slot, time, reason });
     }
     if (remove && presenceId !== undefined) return false;
-    if (presenceId !== undefined) return saveAttendanceMissingPunch({ messageId, presenceId, personKey, slot, time, reason, adjustmentId });
+    if (presenceId !== undefined) return saveAttendanceMissingPunch({ messageId, presenceId, personKey, slot, time, reason, adjustmentId, originalTime });
     const id = String(messageId || "").trim();
     const message = store.getState().messages.find(item => String(item?.id || "") === id);
     const table = message?.detail_table || message?.detailTable;

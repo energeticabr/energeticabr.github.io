@@ -243,6 +243,20 @@ export function suggestedRhidAdjustmentTime(slot, reportDate, slots) {
 }
 
 export function rhidIrregularCountsByDate(rows = [], month = "") {
+  return rhidCountsByDate(rows, month, person => {
+    const times = RHID_SLOTS.map(([slot]) => person.slots[slot].effective);
+    // Absence is not an incomplete recorded presence.
+    return (person.rawPunches.length || times.some(Boolean)) && times.some(time => !time);
+  });
+}
+
+export function rhidOutOfRangeCountsByDate(rows = [], month = "") {
+  return rhidCountsByDate(rows, month, person => person.rawPunches.some(time =>
+    !classifyRhidPunch(time) && !Object.values(person.slots).some(field =>
+      field.rhidCandidates.includes(time) && (!field.outOfRange || field.adjustment))));
+}
+
+function rhidCountsByDate(rows, month, predicate) {
   const days = new Map();
   for (const row of Array.isArray(rows) ? rows : []) {
     const day = String(row?.DATA_REFERENCIA ?? "").slice(0, 10);
@@ -252,11 +266,7 @@ export function rhidIrregularCountsByDate(rows = [], month = "") {
   }
   const counts = {};
   for (const [day, dailyRows] of days) {
-    const count = buildRhidAttendanceTable(dailyRows).people.filter(person => {
-      const times = RHID_SLOTS.map(([slot]) => person.slots[slot].effective);
-      // Absence is not an incomplete recorded presence.
-      return (person.rawPunches.length || times.some(Boolean)) && times.some(time => !time);
-    }).length;
+    const count = buildRhidAttendanceTable(dailyRows).people.filter(predicate).length;
     if (count) counts[day] = count;
   }
   return counts;
