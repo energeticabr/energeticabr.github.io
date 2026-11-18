@@ -22,3 +22,5 @@
 - [ ] Review diff, commit, create/merge PR and verify web plus internal Android and TestFlight publication for the merged revision.
 
 Pre-flight: one task, no shared task interfaces. Native OS keyboard requires native landscape; portrait-only CSS would regress the user's explicit typing requirement. Nonanimated native updates preserve that requirement.
+
+Review: Android requires a fullscreen top window to honor JUMPCUT. Hide only the status bar while reports own landscape using AndroidX insets, then restore its previous visibility after portrait. Avoid FLAG_FULLSCREEN because it disables keyboard resizing. If large-screen policy declines portrait, restore the status bar after a bounded fallback.
