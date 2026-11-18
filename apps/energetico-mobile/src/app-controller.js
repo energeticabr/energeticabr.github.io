@@ -11426,7 +11426,7 @@ export function createAppController({
       if (!stillCurrent()) {
         for (const file of files || []) {
           const sourceId = String(file?.sourceId || "").trim();
-          if (sourceId) ignoredSharedIds.add(sourceId);
+          if (sourceId && !file.proposalDestination) ignoredSharedIds.add(sourceId);
         }
         return [];
       }

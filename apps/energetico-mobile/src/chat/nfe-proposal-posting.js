@@ -436,7 +436,8 @@ export function createNfeProposalPosting({ repository, assertSession = () => {},
       }
       const hash = await nfeAttachmentFingerprint(file, originalName);
       active(signal);
-      let name = reservedExtras.find(item => item.hash === hash)?.name || originalName;
+      let name = (reservedExtras.find(item => item.originalName === originalName && item.hash === hash)
+        || reservedExtras.find(item => item.hash === hash))?.name || originalName;
       if (used.has(name.toLowerCase()) && used.get(name.toLowerCase()) !== hash) {
         const dot = originalName.lastIndexOf('.');
         const base = dot > 0 ? originalName.slice(0,dot) : originalName;
@@ -451,6 +452,12 @@ export function createNfeProposalPosting({ repository, assertSession = () => {},
     }
     for (const item of reservedExtras) {
       if (attachments.some(file => file.name === item.name && file.hash === item.hash)) continue;
+      const local = attachments.find(file=>file.hash === item.hash);
+      if (local) {
+        attachments.push({ ...item,file:local.file });
+        extraManifest.push(item);
+        continue;
+      }
       const parentId = await findFinancial(parentList, ORDER_ORIGIN, invoice.key, signal);
       if (!parentId) throw new Error(`Selecione novamente o anexo ${item.originalName} para retomar o envio.`);
       let file;

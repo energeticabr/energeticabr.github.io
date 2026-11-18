@@ -69,6 +69,14 @@ test('late files can resume on a linked order without creating or editing financ
   assert.equal(h.fiscal.IDPEDIDO,40);
 });
 
+test('reselecting original bytes under new camera filenames recovers every reserved name',async()=>{
+  const h=fixture();h.state.rejectAttachmentName='second.jpg';
+  await assert.rejects(h.service().submit(invoice,draft,{additionalAttachments:[new File(['same photo'],'first.jpg'),new File(['same photo'],'second.jpg')]}));
+  h.state.rejectAttachmentName=null;
+  await h.service().submit(invoice,draft,{additionalAttachments:[new File(['same photo'],'foto-new-id.jpg')]});
+  assert.equal(h.files.size,3);assert.deepEqual(Buffer.from(h.files.get('second.jpg')),Buffer.from('same photo'));
+});
+
 function fixture(provision = false) {
   const parents = provision ? 'DESCRITIVOPROVISAO' : 'NOTASPENDENTES';
   const children = provision ? 'PROVISÃO PGTOS' : 'LANCAMENTOS';
