@@ -162,7 +162,7 @@ function harness(t, options = {}, { dom = true, orientation } = {}) {
 test('the recorded management, order-validation and document-control sequence never unlocks between reports', async t => {
   const rotations = [];
   const orientation = createReportOrientationController({ isNative: () => true, screenOrientation: {
-    async lock() { rotations.push('landscape'); }, async unlock() { rotations.push('unlock'); },
+    async lock({ orientation }) { rotations.push(orientation); }, async unlock() { rotations.push('unlock'); },
   } });
   const h = harness(t, {}, { orientation });
   await h.controller.start(); await h.view.emit('open-management-report'); await tick();
@@ -174,14 +174,14 @@ test('the recorded management, order-validation and document-control sequence ne
     await tick(); assert.deepEqual(rotations, ['landscape']);
   }
   h.controller.stop(); await tick();
-  assert.deepEqual(rotations, ['landscape', 'unlock']);
+  assert.deepEqual(rotations, ['landscape', 'portrait']);
 });
 
 for (const outcome of ['opened', 'failed', 'home', 'stop']) {
   test(`native report navigation keeps landscape across an asynchronous gap and releases on ${outcome}`, async t => {
     const rotations = [], loading = deferred();
     const orientation = createReportOrientationController({ isNative: () => true, screenOrientation: {
-      async lock() { rotations.push('landscape'); }, async unlock() { rotations.push('unlock'); },
+      async lock({ orientation }) { rotations.push(orientation); }, async unlock() { rotations.push('unlock'); },
     } });
     const h = harness(t, { registrationGalleryDataFactory: () => loading.promise,
       ...(outcome === 'failed' ? { ddaReportFactory: async () => { throw new Error('Report unavailable'); } } : {}),
@@ -196,7 +196,7 @@ for (const outcome of ['opened', 'failed', 'home', 'stop']) {
     if (outcome === 'home') await h.view.emit('select-reply', { replyId: 'navigation_main_menu', label: 'RETORNAR AO MENU INICIAL' });
     if (outcome === 'stop') h.controller.stop();
     if (['home', 'stop'].includes(outcome)) {
-      await tick(); assert.deepEqual(rotations, ['landscape', 'unlock'], 'cancellation must release without waiting for transport');
+      await tick(); assert.deepEqual(rotations, ['landscape', 'portrait'], 'cancellation must release without waiting for transport');
     }
     loading.resolve({});
     const opened = await navigating; await tick();
@@ -205,7 +205,7 @@ for (const outcome of ['opened', 'failed', 'home', 'stop']) {
       assert.deepEqual(rotations, ['landscape'], 'the destination inherits landscape without another OS rotation');
       h.panels.at(-1).close(); await tick();
     }
-    assert.deepEqual(rotations, ['landscape', 'unlock']);
+    assert.deepEqual(rotations, ['landscape', 'portrait']);
   });
 }
 
