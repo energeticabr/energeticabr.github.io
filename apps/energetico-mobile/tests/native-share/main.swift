@@ -11,6 +11,18 @@ let testRoot = FileManager.default.temporaryDirectory.appendingPathComponent("en
 try FileManager.default.createDirectory(at: testRoot, withIntermediateDirectories: true)
 defer { try? FileManager.default.removeItem(at: testRoot) }
 let store = try SharedInboxStore(containerURL: testRoot.appendingPathComponent("inbox"))
+let proposalDestination = "{\"account\":\"test-account\",\"invoice\":\"test-invoice\"}"
+try store.setProposalDestination(proposalDestination)
+let proposalFile = try store.stage(data: Data("proposal photo".utf8), name: "foto.jpg", type: "image/jpeg")
+precondition(proposalFile.proposalDestination == proposalDestination, "A proposal share must durably retain its account and invoice before upload")
+precondition(!proposalFile.usesGeneralUpload, "The extension must queue proposal bytes instead of uploading them to the general workflow")
+try store.setProposalDestination(nil)
+let reopenedProposalStore = try SharedInboxStore(containerURL: testRoot.appendingPathComponent("inbox"))
+let restoredProposalFile = try reopenedProposalStore.read(id: proposalFile.id)
+precondition(restoredProposalFile.metadata.proposalDestination == proposalDestination, "Closing the proposal or restarting must never turn its files into general uploads")
+precondition(restoredProposalFile.data == Data("proposal photo".utf8), "Proposal ownership must preserve original bytes")
+try store.remove(id: proposalFile.id)
+print("PASS: durable per-invoice native proposal ownership")
 let oversized = testRoot.appendingPathComponent("exceeds-server-limit.pdf")
 FileManager.default.createFile(atPath: oversized.path, contents: nil)
 let handle = try FileHandle(forWritingTo: oversized)

@@ -1,0 +1,39 @@
+<!doctype html><html lang="pt-BR"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<link rel="stylesheet" href="/src/styles.css"><link rel="stylesheet" href="/src/ui/report-landscape.css"><link rel="stylesheet" href="/src/ui/nfe-report.css"><link rel="stylesheet" href="/src/ui/searchable-filter-selects.css">
+</head><body><div id="report" class="nfe-report" style="position:fixed;inset:0"></div>
+<script>addEventListener('error',event=>{document.documentElement.dataset.layout=JSON.stringify({error:event.message});});</script>
+<script type="module">
+import {createNfeProposalView} from '/src/ui/nfe-proposal-view.js';
+import {bindReportLandscape} from '/src/ui/report-landscape.js';
+import {createNfeProposalAttachmentStore} from '/src/chat/nfe-proposal-attachment-store.js';
+try {
+const root=document.querySelector('#report');bindReportLandscape(root);
+const store=createNfeProposalAttachmentStore();
+const file=new File(['original camera bytes'],'Comprovante de entrega e recebimento de materiais.jpg',{type:'image/jpeg'});
+Object.defineProperty(file,'sourceId',{value:'layout-share'});
+await store.save('layout-account','layout-invoice',[file]);
+const restored=await createNfeProposalAttachmentStore().load('layout-account','layout-invoice');
+const fiscal={issueDate:'2026-11-18',dueDate:'2026-11-19',total:'725',lines:[
+  {number:'1',description:'DENVERTEC 100 18kg - CX',unit:'CX',quantity:'2',unitPrice:'50',discount:'0',adjustment:'0'},
+  {number:'2',description:'TRINCHA 2 - UN',unit:'UN',quantity:'5',unitPrice:'5',discount:'0',adjustment:'0'},
+  {number:'3',description:'DENVERTEC 540 FIBRAS 18KG - 1/CX',unit:'CX',quantity:'3',unitPrice:'200',discount:'0',adjustment:'0'}]};
+const catalog={suppliers:[{id:'1',label:'FORNECEDOR EXEMPLO'}],branches:[{id:'2',label:'004 - EDIFÍCIO X'}],accounts:[{id:'3',label:'ENERGÉTICA SICOOB'}],products:[{id:'4',label:'DENVERTEC 540',unit:'UN',expenseType:'MATERIAL'}],stages:[{id:'5',label:'ALVENARIA E ESTRUTURAS',branch:'004 - EDIFÍCIO X'}]};
+const draft={supplierId:'1',branchId:'2',accountId:'3',date:fiscal.issueDate,lines:fiscal.lines.map(line=>({...line,productId:'4',stageId:'5',date:fiscal.issueDate,dueDate:fiscal.dueDate}))};
+const view=createNfeProposalView({document,host:root,onPosted(){},attachments:{load:async()=>restored,save:async()=>{},pick:async()=>[],open:async()=>{}},service:{load:async()=>({fiscal,catalog,draft})}});
+await view.show({id:'layout-invoice',type:'NF-e',number:'123',pdfName:'nota-fiscal.pdf'});
+const tray=root.querySelector('.nfe-proposal-attachments'),body=root.querySelector('.nfe-proposal-body');
+tray.querySelector('[data-add-proposal-attachment]').click();
+body.scrollTop=body.scrollHeight;
+await new Promise(resolve=>requestAnimationFrame(()=>requestAnimationFrame(resolve)));
+const visible=node=>{const box=node.getBoundingClientRect();return box.left>=-1&&box.top>=-1&&box.right<=innerWidth+1&&box.bottom<=innerHeight+1;};
+document.documentElement.dataset.layout=JSON.stringify({
+  afterLines:tray.previousElementSibling?.className==='nfe-proposal-lines',
+  choices:tray.querySelectorAll('[data-proposal-source]').length,
+  noOverflow:body.scrollWidth<=body.clientWidth+1,
+  footerVisible:visible(root.querySelector('.nfe-proposal-footer')),
+  fileVisible:visible(tray.querySelector('[data-proposal-file]')),
+  restored:await restored[0].text()==='original camera bytes'&&restored[0].sourceId==='layout-share',
+});
+await store.save('layout-account','layout-invoice',[]);
+}catch(error){document.documentElement.dataset.layout=JSON.stringify({error:error.stack});}
+</script></body></html>

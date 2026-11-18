@@ -8,8 +8,22 @@ final class ShareInboxPlugin: CAPPlugin, CAPBridgedPlugin {
     let pluginMethods: [CAPPluginMethod] = [
         CAPPluginMethod(name: "list", returnType: CAPPluginReturnPromise),
         CAPPluginMethod(name: "read", returnType: CAPPluginReturnPromise),
-        CAPPluginMethod(name: "remove", returnType: CAPPluginReturnPromise)
+        CAPPluginMethod(name: "remove", returnType: CAPPluginReturnPromise),
+        CAPPluginMethod(name: "setProposalDestination", returnType: CAPPluginReturnPromise)
     ]
+
+    override func load() {
+        try? SharedInboxStore().setProposalDestination(nil)
+    }
+
+    @objc func setProposalDestination(_ call: CAPPluginCall) {
+        do {
+            try SharedInboxStore().setProposalDestination(call.getString("destination"))
+            call.resolve()
+        } catch {
+            call.reject("Não foi possível proteger o destino dos anexos da proposta.", "SHARED_INBOX_DESTINATION_FAILED")
+        }
+    }
 
     @objc func list(_ call: CAPPluginCall) {
         do {
@@ -23,6 +37,7 @@ final class ShareInboxPlugin: CAPPlugin, CAPBridgedPlugin {
                     "state": metadata.state,
                     "createdAt": ISO8601DateFormatter().string(from: metadata.createdAt)
                 ]
+                if let destination = metadata.proposalDestination { item["proposalDestination"] = destination }
                 if let responseData = try store.confirmedResponse(id: metadata.id),
                    let response = try JSONSerialization.jsonObject(with: responseData) as? JSObject {
                     item["confirmedResult"] = response

@@ -130,6 +130,12 @@ async function readReservation(value, { id, key, pdfName, xmlUrl, number }) {
       || stored.invoiceId !== id || stored.key !== key || stored.pdfName !== pdfName
       || stored.xmlUrl !== xmlUrl || stored.number !== number
       || !SHA256.test(stored.pdfHash) || !SHA256.test(stored.inputHash) || !SHA256.test(stored.planHash)) throw new Error();
+    if (stored.additionalAttachments !== undefined && (!Array.isArray(stored.additionalAttachments)
+      || stored.additionalAttachments.length > 100 || stored.additionalAttachments.some(item =>
+        !record(item) || typeof item.name !== 'string' || !item.name.trim() || item.name.length > 400
+        || /[/\\\u0000-\u001f]/.test(item.name) || typeof item.originalName !== 'string' || !item.originalName.trim()
+        || !SHA256.test(item.hash))
+      || new Set(stored.additionalAttachments.map(item=>item.name.toLowerCase())).size !== stored.additionalAttachments.length)) throw new Error();
     return stored;
   } catch { throw new Error('A reserva da proposta fiscal está inválida. Atualize o relatório.'); }
 }
@@ -391,7 +397,9 @@ export function createNfeProposalPosting({ repository, assertSession = () => {},
     return current.reservation?.draft ?? null;
   }
 
-  async function submit(row, draft, { signal, onProgress, baseline, manualStages } = {}) {
+  async function submit(row, draft, { signal, onProgress, baseline, manualStages, additionalAttachments = [] } = {}) {
+    additionalAttachments = [...additionalAttachments];
+    if (additionalAttachments.length > 100) throw new Error('Adicione no máximo 100 anexos por proposta.');
     active(signal);
     const invoice = identify(row);
     const source = { ...row, ...invoice };
@@ -414,7 +422,54 @@ export function createNfeProposalPosting({ repository, assertSession = () => {},
     }
     const encoder = new TextEncoder();
     const inputHash = await sha256(encoder.encode(input));
-    const attachments = await sourceAttachments(source, signal);
+    const fiscalAttachments = await sourceAttachments(source, signal);
+    const attachments = [...fiscalAttachments];
+    const extraManifest = [];
+    const reservedExtras = current.reservation?.additionalAttachments || [];
+    const used = new Map(attachments.map(item => [item.name.toLowerCase(), item.hash]));
+    for (const item of reservedExtras) used.set(item.name.toLowerCase(), item.hash);
+    for (const file of additionalAttachments) {
+      const originalName = file?.name?.trim();
+      if (typeof originalName !== 'string' || !originalName.trim() || originalName.length > 180
+        || /["*:<>?|/\\\u0000-\u001f]/.test(originalName) || /^[.]{1,2}$/.test(originalName)) {
+        throw new Error('O nome de um anexo adicional é inválido. Renomeie o arquivo.');
+      }
+      const hash = await nfeAttachmentFingerprint(file, originalName);
+      active(signal);
+      let name = (reservedExtras.find(item => item.originalName === originalName && item.hash === hash)
+        || reservedExtras.find(item => item.hash === hash))?.name || originalName;
+      if (used.has(name.toLowerCase()) && used.get(name.toLowerCase()) !== hash) {
+        const dot = originalName.lastIndexOf('.');
+        const base = dot > 0 ? originalName.slice(0,dot) : originalName;
+        const extension = dot > 0 ? originalName.slice(dot) : '';
+        name = `${base}-${hash}${extension}`;
+        while (used.has(name.toLowerCase()) && used.get(name.toLowerCase()) !== hash) name = `anexo-${name}`;
+      }
+      if (attachments.some(item => item.name.toLowerCase() === name.toLowerCase() && item.hash === hash)) continue;
+      used.set(name.toLowerCase(), hash);
+      attachments.push({ name, file, hash });
+      extraManifest.push({ name, originalName, hash });
+    }
+    for (const item of reservedExtras) {
+      if (attachments.some(file => file.name === item.name && file.hash === item.hash)) continue;
+      const local = attachments.find(file=>file.hash === item.hash);
+      if (local) {
+        attachments.push({ ...item,file:local.file });
+        extraManifest.push(item);
+        continue;
+      }
+      const parentId = await findFinancial(parentList, ORDER_ORIGIN, invoice.key, signal);
+      if (!parentId) throw new Error(`Selecione novamente o anexo ${item.originalName} para retomar o envio.`);
+      let file;
+      try {
+        const bytes = await repository.downloadAttachment('personal', parentList, parentId, item.name, { signal });
+        if (await nfeAttachmentFingerprint(bytes, item.name) !== item.hash) throw new Error();
+        file = new Blob([bytes]);
+      } catch { throw new Error(`Selecione novamente o anexo ${item.originalName} para retomar o envio.`); }
+      attachments.push({ ...item, file });
+      extraManifest.push(item);
+    }
+    if (extraManifest.length > 100) throw new Error('Adicione no máximo 100 anexos por proposta.');
     const pdfHash = attachments.find(file => file.name === invoice.pdfName).hash;
     active(signal);
 
@@ -431,6 +486,7 @@ export function createNfeProposalPosting({ repository, assertSession = () => {},
     if (!current.linked && !current.reservation) {
       const reservation = { version:1, invoiceId:invoice.id, key:invoice.key, pdfName:invoice.pdfName,
         xmlUrl:invoice.xmlUrl, number:invoice.number, inputHash, pdfHash, planHash, draft:prepared.draft,
+        ...(extraManifest.length ? { additionalAttachments:extraManifest } : {}),
         ...(provision ? { provision:true } : {}) };
       let next;
       if (SHA256.test(candidate.learning?.scope) && record(candidate.learning?.example)) {
@@ -444,7 +500,13 @@ export function createNfeProposalPosting({ repository, assertSession = () => {},
       next ??= await encodeReservation(reservation);
       current = await writeFiscal(fiscalList, invoice, current, { [RESERVATION]:next }, signal);
     }
-    const stored = current.reservation;
+    let stored = current.reservation;
+    function confirmReservedExtras() {
+      if (stored?.additionalAttachments?.some(item=>!attachments.some(file=>file.name === item.name && file.hash === item.hash))) {
+        throw new Error('Os anexos reservados por outra sessão mudaram. Reabra a proposta para recuperar todos os arquivos.');
+      }
+    }
+    confirmReservedExtras();
     const storedDraft = stored ? canonicalJson(stored.draft) : '';
     if (stored && stored.inputHash !== inputHash && storedDraft !== input) {
       throw new Error('A nota já tem uma proposta reservada. Reabra a proposta para retomar.');
@@ -454,6 +516,16 @@ export function createNfeProposalPosting({ repository, assertSession = () => {},
       throw new Error('A proposta reservada diverge dos dados validados do XML ou do cadastro.');
     }
     if (!current.linked && !stored || current.linked && stored) throw new Error('O estado da reserva fiscal não foi confirmado.');
+    if (stored && canonicalJson(stored.additionalAttachments || []) !== canonicalJson(extraManifest)) {
+      current = await writeFiscal(fiscalList, invoice, current, {
+        [RESERVATION]:await encodeReservation({ ...stored, additionalAttachments:extraManifest }),
+      }, signal);
+      stored = current.reservation;
+      confirmReservedExtras();
+      if (!stored || canonicalJson(stored.additionalAttachments || []) !== canonicalJson(extraManifest)) {
+        throw new Error('Os anexos reservados por outra sessão mudaram. Reabra a proposta para recuperar todos os arquivos.');
+      }
+    }
 
     const readOnly = Boolean(current.linked);
     const parentId = await financialItem(parentList, ORDER_ORIGIN, invoice.key, parentFields,
@@ -472,7 +544,7 @@ export function createNfeProposalPosting({ repository, assertSession = () => {},
       }
     }
     for (const attachment of attachments) await ensureAttachment(parentList, parentId, attachment, true, signal);
-    if (readOnly) await confirmSourceAttachments(source, attachments, signal);
+    if (readOnly) await confirmSourceAttachments(source, fiscalAttachments, signal);
     if (!readOnly) {
       const reserved = current.rawReservation;
       for (let start = 0; start < confirmed.length; start += READBACK_BATCH_SIZE) {
@@ -483,7 +555,7 @@ export function createNfeProposalPosting({ repository, assertSession = () => {},
       await finishLink(fiscalList, invoice, reserved, parentId, async () => {
         // finishLink holds the version used by its conditional link. Recheck
         // the manifest after destination reads without adopting a newer eTag.
-        await confirmSourceAttachments(source, attachments, signal);
+        await confirmSourceAttachments(source, fiscalAttachments, signal);
         if (provision) {
           for (const { id, fields } of confirmed) await promoteFinancial(childList, id, fields, childDraft, signal);
         }
@@ -496,5 +568,34 @@ export function createNfeProposalPosting({ repository, assertSession = () => {},
       : { invoiceId:invoice.id, orderId:parentId, launchIds:ids };
   }
 
-  return Object.freeze({ loadReservation, submit });
+  async function appendAttachments(row, files, {signal} = {}) {
+    active(signal);
+    const invoice = identify(row);
+    await authorizeWrite({signal});
+    const [fiscalList,parentList] = await Promise.all([
+      resolve('company','NOTAS_FISCAIS_SEFAZ',signal),resolve('personal',parentName,signal),
+    ]);
+    const fiscal = await readFiscal(fiscalList,invoice,signal);
+    const parentId = await findFinancial(parentList,ORDER_ORIGIN,invoice.key,signal);
+    if (!fiscal.linked || fiscal.reservation || fiscal.linked !== parentId) throw new Error('O pedido vinculado à nota não foi confirmado. Atualize o relatório.');
+    for (const file of files) {
+      let name=file?.name?.trim();
+      if (!name || name.length > 180 || /["*:<>?|/\\\u0000-\u001f]/.test(name) || /^[.]{1,2}$/.test(name)) throw new Error('O nome de um anexo adicional é inválido.');
+      const hash=await nfeAttachmentFingerprint(file,name);
+      const names=await repository.listAttachments('personal',parentList,parentId,{signal,requireCollection:true,namesOnly:true});
+      if(!Array.isArray(names))throw new Error('A consulta de anexos do pedido está incompleta.');
+      const existing=names.find(item=>item.name?.toLowerCase() === name.toLowerCase());
+      if(existing) {
+        const bytes=await repository.downloadAttachment('personal',parentList,parentId,existing.name,{signal});
+        if(await nfeAttachmentFingerprint(bytes,existing.name) === hash) continue;
+        const dot=name.lastIndexOf('.');
+        name=dot>0?`${name.slice(0,dot)}-${hash}${name.slice(dot)}`:`${name}-${hash}`;
+      }
+      await ensureAttachment(parentList,parentId,{name,file,hash},false,signal);
+      await ensureAttachment(parentList,parentId,{name,file,hash},true,signal);
+    }
+    active(signal);
+    return {invoiceId:invoice.id,orderId:parentId};
+  }
+  return Object.freeze({ loadReservation, submit, appendAttachments });
 }
