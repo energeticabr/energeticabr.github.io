@@ -8448,7 +8448,7 @@ export function createAppController({
       const finalizingStage = method === 'finalizeStage';
       const writing = finalizingStage || method === 'finalizeActivity';
       const resumeOptions = writing ? { stageFinishDraft: { id: args[0], date: args[1], ...(finalizingStage ? { kind: 'stage' } : {}) } } : undefined;
-      const getToken = ordersGalleryTokenProvider(assertAction, writing ? STAGE_PROGRESS_ID : resumeAction, () => resumeOptions);
+      const getToken = ordersGalleryTokenProvider(assertAction, resumeAction, () => resumeOptions);
       const writeScopes = ['Sites.ReadWrite.All'];
       try {
         // Finish consent before checking linked descriptions so the write does not
@@ -8552,6 +8552,7 @@ export function createAppController({
           const document = globalThis.document;
           const panel = gantt
             ? await ganttFactory({ data: { loadSnapshot: data.loadSnapshot,
+              finalizeActivity: data.finalizeActivity, finalizeStage: data.finalizeStage,
               loadAssignments: (selection, options) => runStageAction('loadGanttAssignments', [selection], options),
               loadCostSnapshot: options => runStageAction('loadCostSnapshot', [], { ...options, reportNumber: 9 }),
             }, document })
@@ -13151,7 +13152,7 @@ export function createAppController({
     else if (pendingAction === CARGOS_TABLE_ID) await openCargosTable();
     else if (pendingAction === ATTENDANCE_SUMMARY_ID) await openAttendanceSummary();
     else if (pendingAction === RHID_MASCOT_ACTION) await openRhidMascotReport();
-    else if (pendingAction === STAGE_GANTT_ACTION) await openStageProgress({ gantt: true });
+    else if (pendingAction === STAGE_GANTT_ACTION) await openStageProgress({ gantt: true, finishDraft: auth.consumePendingStageFinish?.() });
     else if (pendingAction === STAGE_PROGRESS_ID) await openStageProgress({ finishDraft: auth.consumePendingStageFinish?.() });
     else if (pendingAction === SUPPLIER_PAYROLL_REPORT_ID) await openSupplierPayrollReport();
     else if (pendingAction === COMMERCIAL_RECEIPTS_ID) await openCommercialReceipts();

@@ -582,7 +582,7 @@ test('GANTT abre localmente, pede leitura e retoma o próprio painel após o log
   });
   await h.controller.start();
   assert.equal(panels.length, 1);
-  assert.deepEqual(Object.keys(panels[0].data), ['loadSnapshot', 'loadAssignments', 'loadCostSnapshot']);
+  assert.deepEqual(Object.keys(panels[0].data), ['loadSnapshot', 'finalizeActivity', 'finalizeStage', 'loadAssignments', 'loadCostSnapshot']);
   assert.deepEqual(grants, [[scopes, { resumeAction: 'open-stage-gantt' }]]);
   assert.equal(tokens, 2, "duas consultas simultâneas compartilham o mesmo consentimento");
   assert.deepEqual(await panels[0].data.loadAssignments({ branch: 'Xavante', activityIds: ['129'] }), { complete: true, rows: [] });
@@ -613,4 +613,45 @@ test('custo do Gantt usa relatório gerencial 9 sob a sessão de leitura e rejei
   pending.resolve({ launches: [], provisions: [], productTypes: [] });
   await rejected;
   await assert.rejects(panel.data.loadCostSnapshot(), { name: 'AbortError' });
+});
+
+for (const kind of ['activity', 'stage']) test(`Gantt ${kind} writes resume Gantt and retain selected record after consent`, async t => {
+  let panel, granted = false;
+  const grants = [];
+  const row = { id: '129', branch: 'Xavante' };
+  const h = harness(t, {
+    ganttFactory: async ({ data }) => (panel = { data, async open() {}, destroy() {} }),
+    stageProgressDataFactory: async ({ tokenProvider }) => ({
+      async finalizeActivity(id, date, options) {
+        assert.equal(await tokenProvider(['Sites.ReadWrite.All']), 'write-token');
+        assert.deepEqual(options.expectedActivity, row);
+        return { id, plannedDate: date };
+      },
+      async finalizeStage(id, date, options) {
+        assert.equal(granted, true);
+        assert.equal(await tokenProvider(['Sites.ReadWrite.All']), 'write-token');
+        assert.deepEqual(options.expectedStage, row);
+        return { id, endDate: date };
+      },
+    }),
+    auth: {
+      async getToken() { if (!granted) throw authRequired(); return 'write-token'; },
+      async authorize(scopes, options) { grants.push(options); granted = true; },
+    },
+  });
+  await h.controller.start(); await h.view.emit('open-stage-gantt');
+  const method = kind === 'stage' ? 'finalizeStage' : 'finalizeActivity';
+  await panel.data[method]('129', '2026-11-12', { [kind === 'stage' ? 'expectedStage' : 'expectedActivity']: row });
+  assert.deepEqual(grants, [{ resumeAction: 'open-stage-gantt', stageFinishDraft: { id: '129', date: '2026-11-12', ...(kind === 'stage' ? { kind } : {}) } }]);
+});
+
+test('pending Gantt redirect passes finish draft to its own view without writing', async t => {
+  const draft = { id: '129', date: '2026-11-12', kind: 'stage' };
+  let received;
+  const h = harness(t, {
+    ganttFactory: async () => ({ async open(options) { received = options; }, destroy() {} }),
+    auth: { consumePendingAction: () => 'open-stage-gantt', consumePendingStageFinish: () => draft },
+  });
+  await h.controller.start();
+  assert.deepEqual(received, { finishDraft: draft });
 });

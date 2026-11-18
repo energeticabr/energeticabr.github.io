@@ -3,6 +3,7 @@ import { calendarDays, formatOperationsDate } from '../chat/operations-reports-m
 import { addReportCloseControl } from './report-close-control.js';
 import { bindReportLandscape } from './report-landscape.js';
 import { createStageGanttDetailView } from './stage-gantt-detail-view.js';
+import { createStageGanttFinishView } from './stage-gantt-finish-view.js';
 
 const DEFAULT_BRANCH = '004 - EDIFÍCIO XAVANTE';
 const monthLabel = new Intl.DateTimeFormat('pt-BR', { month: 'short', year: 'numeric', timeZone: 'UTC' });
@@ -56,8 +57,18 @@ export function createStageGanttView({ document: doc = globalThis.document, data
   doc.body.append(root);
   addReportCloseControl({ root, toolbar: tools, onClose: close });
   const detail = createStageGanttDetailView({ root, background: dialog, data });
+  const finish = createStageGanttFinishView({ root, background: dialog, data, onSaved(saved, { stage }) {
+    const collection = stage ? 'launches' : 'activities';
+    snapshot = { ...snapshot, [collection]: snapshot[collection].map(row => String(row.id) === String(saved.id) ? saved : row) };
+    stages = buildStageGantt(snapshot, today);
+    render();
+    announce(stage ? 'Etapa finalizada.' : 'Atividade finalizada.');
+    scroll.focus({ preventScroll: true });
+  } });
 
   let request, previousFocus, previousOverflow, previousInert, app;
+  let snapshot;
+  const expanded = new Set();
   let stages = [], today = '', todayRatio = null;
   const announce = message => { notice.textContent = message; notice.hidden = !message; };
   const durationObserver = doc.defaultView.ResizeObserver ? new doc.defaultView.ResizeObserver(layoutDurations) : null;
@@ -103,6 +114,7 @@ export function createStageGanttView({ document: doc = globalThis.document, data
   }
 
   function render() {
+    finish.close({ restoreFocus: false });
     detail.close({ restoreFocus: false });
     durationObserver?.disconnect();
     const visible = stages.filter(stage => !branches.value || stage.branch === branches.value);
@@ -166,6 +178,15 @@ export function createStageGanttView({ document: doc = globalThis.document, data
       const endText = item.finished ? formatOperationsDate(item.end) : 'Em Andamento';
       const dates = `Início ${startText} · Fim ${endText}`;
       text.append(make('strong', 'gantt-name gantt-cluster gantt-cluster--description', item.name));
+      const canWrite = typeof data[parent ? 'finalizeStage' : 'finalizeActivity'] === 'function';
+      if (canWrite && typeof data.loadAssignments === 'function') {
+        const finalize = button('FINALIZAR', `Finalizar ${parent ? 'etapa' : 'atividade'} ${item.name}`);
+        finalize.className = 'gantt-finish-button';
+        finalize.disabled = !item.canFinalize;
+        if (parent && !item.finished && !item.canFinalize) finalize.title = 'Finalize todos os descritivos vinculados antes de finalizar a etapa.';
+        finalize.addEventListener('click', () => { void finish.open(item, finalize, { stage: parent }); });
+        text.append(finalize);
+      }
       label.append(text);
       const track = make('div', 'gantt-track');
       if (item.range) {
@@ -200,6 +221,7 @@ export function createStageGanttView({ document: doc = globalThis.document, data
     }
 
     for (const stage of visible) {
+      const stageKey = String(stage.source?.id);
       const row = renderRow(stage, true);
       sheet.append(row);
       if (!stage.children.length) continue;
@@ -214,6 +236,7 @@ export function createStageGanttView({ document: doc = globalThis.document, data
         toggle.setAttribute('aria-expanded', String(expand));
         toggle.setAttribute('aria-label', `${expand ? 'Recolher' : 'Expandir'} ${toggleLabel}`);
         toggle.textContent = expand ? '−' : '+';
+        if (expand) expanded.add(stageKey); else expanded.delete(stageKey);
         if (expand) {
           childRows = stage.children.map(child => renderRow(child, false));
           row.after(...childRows);
@@ -230,6 +253,7 @@ export function createStageGanttView({ document: doc = globalThis.document, data
         }
         layoutDurations();
       });
+      if (expanded.has(stageKey)) toggle.click();
     }
     scroll.append(sheet);
     layoutDurations();
@@ -238,6 +262,7 @@ export function createStageGanttView({ document: doc = globalThis.document, data
   }
 
   async function load(force = false) {
+    finish.close({ restoreFocus: false });
     detail.close({ restoreFocus: false });
     durationObserver?.disconnect();
     request?.abort();
@@ -251,8 +276,9 @@ export function createStageGanttView({ document: doc = globalThis.document, data
     branches.disabled = refresh.disabled = true;
     announce('Carregando etapas e atividades…');
     try {
-      const snapshot = await data.loadSnapshot({ signal: active.signal, refresh: force });
+      const loaded = await data.loadSnapshot({ signal: active.signal, refresh: force });
       if (active.signal.aborted) return;
+      snapshot = loaded;
       today = localDay(now());
       stages = buildStageGantt(snapshot, today);
       const selected = branches.selectedIndex < 0 ? DEFAULT_BRANCH : branches.value;
@@ -273,12 +299,15 @@ export function createStageGanttView({ document: doc = globalThis.document, data
 
   function close() {
     if (root.hidden) return;
+    finish.close({ restoreFocus: false });
     detail.close({ restoreFocus: false });
     request?.abort();
     root.hidden = true;
     durationObserver?.disconnect();
     scroll.replaceChildren();
     stages = [];
+    snapshot = null;
+    expanded.clear();
     doc.body.style.overflow = previousOverflow;
     if (app) app.inert = previousInert;
     if (previousFocus?.isConnected) previousFocus.focus({ preventScroll: true });
@@ -307,7 +336,7 @@ export function createStageGanttView({ document: doc = globalThis.document, data
 
   return {
     element: root,
-    open() {
+    async open({ finishDraft } = {}) {
       if (!root.hidden) return;
       previousFocus = doc.activeElement;
       previousOverflow = doc.body.style.overflow;
@@ -319,14 +348,22 @@ export function createStageGanttView({ document: doc = globalThis.document, data
       root.hidden = false;
       landscape.update();
       dialog.focus();
-      return load();
+      await load();
+      if (root.hidden || !finishDraft) return;
+      const stage = finishDraft.kind === 'stage';
+      const item = stages.flatMap(row => stage ? [row] : row.children).find(row => String(row.source?.id) === String(finishDraft.id));
+      if (item) {
+        branches.value = item.branch;
+        render();
+        await finish.open(item, dialog, { stage, draftDate: finishDraft.date });
+      }
     },
     close,
     destroy() {
       close();
       durationObserver?.disconnect();
       doc.defaultView.removeEventListener('resize', layoutDurations);
-      detail.destroy(); landscape.destroy(); root.remove();
+      finish.destroy(); detail.destroy(); landscape.destroy(); root.remove();
     },
   };
 }

@@ -110,6 +110,9 @@ export function buildStageGantt(snapshot, today) {
     includeAllLaunches: true, launchType: 'ATIVIDADE COMUM',
   });
   return stages.filter(stage => stage.stage.trim()).map(stage => ({
+    source: stage.launch,
+    canFinalize: stage.completion.ready && stage.status.trim().toUpperCase() === 'INICIADO'
+      && Boolean(stage.launch?.branch && stage.launch?.stage),
     name: stage.launch?.stage || stage.stage,
     branch: stage.launch?.branch || stage.branch,
     activityIds: stage.rows.map(row => row.id),
@@ -118,6 +121,8 @@ export function buildStageGantt(snapshot, today) {
     finished: stage.status.trim().toUpperCase() === 'FINALIZADO',
     range: ganttRange(stage.startDate, stage.endDate, stage.status, day),
     children: stage.rows.map(row => ({
+      source: row,
+      canFinalize: row.status.trim().toUpperCase() === 'ATIVIDADE INICIADA',
       branch: row.branch,
       activityIds: [row.id],
       name: row.activity || "Atividade sem descrição",
