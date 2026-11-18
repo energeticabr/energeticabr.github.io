@@ -40,10 +40,10 @@ test('navigation holds cannot rotate an idle app and release once after the last
   await first(); await first();
   assert.deepEqual(calls, [['lock', { orientation: 'landscape' }]]);
   await second(); await second();
-  assert.deepEqual(calls, [['lock', { orientation: 'landscape' }], ['unlock']]);
+  assert.deepEqual(calls, [['lock', { orientation: 'landscape' }], ['lock', { orientation: 'portrait' }]]);
 });
 
-test('a navigation handoff retains an in-flight OS lock and skips obsolete unlocks', async t => {
+test('a navigation handoff retains an in-flight OS lock and skips obsolete portrait requests', async t => {
   let finish;
   const pending = new Promise(resolve => { finish = resolve; });
   const { calls, report, flush, orientation } = setup(t, { lock: () => pending });
@@ -55,10 +55,10 @@ test('a navigation handoff retains an in-flight OS lock and skips obsolete unloc
   release(); finish(); await flush();
   assert.deepEqual(calls, [['lock', { orientation: 'landscape' }]]);
   target.root.hidden = true; await flush();
-  assert.deepEqual(calls, [['lock', { orientation: 'landscape' }], ['unlock']]);
+  assert.deepEqual(calls, [['lock', { orientation: 'landscape' }], ['lock', { orientation: 'portrait' }]]);
 });
 
-test('only an open connected native report locks landscape; closing restores normal orientation', async t => {
+test('only an open connected native report locks landscape; closing restores portrait instead of following the sensor', async t => {
   const { calls, report, flush } = setup(t);
   const { root, binding } = report();
   await flush();
@@ -76,7 +76,7 @@ test('only an open connected native report locks landscape; closing restores nor
   assert.equal(field.value, 'AREIA');
   root.hidden = true;
   await flush();
-  assert.deepEqual(calls, [['lock', { orientation: 'landscape' }], ['unlock']]);
+  assert.deepEqual(calls, [['lock', { orientation: 'landscape' }], ['lock', { orientation: 'portrait' }]]);
   root.hidden = false; await flush();
   assert.equal(calls.length, 3, 'reopening must reacquire landscape');
 });
@@ -90,11 +90,11 @@ test('overlapping reports keep landscape until the last closes in either order',
     reports[closeFirst].root.hidden = true; await flush();
     assert.deepEqual(calls, [['lock', { orientation: 'landscape' }]]);
     reports[1 - closeFirst].root.hidden = true; await flush();
-    assert.deepEqual(calls, [['lock', { orientation: 'landscape' }], ['unlock']]);
+    assert.deepEqual(calls, [['lock', { orientation: 'landscape' }], ['lock', { orientation: 'portrait' }]]);
   }
 });
 
-test('closing while the native lock is pending queues unlock after completion', async t => {
+test('closing while the native lock is pending queues portrait after completion', async t => {
   let finish;
   const pending = new Promise(resolve => { finish = resolve; });
   const { calls, report, flush } = setup(t, { lock: () => pending });
@@ -103,9 +103,9 @@ test('closing while the native lock is pending queues unlock after completion', 
   root.hidden = true; binding.update(); await flush();
   assert.equal(calls.length, 1);
   finish(); await flush();
-  assert.deepEqual(calls, [['lock', { orientation: 'landscape' }], ['unlock']]);
+  assert.deepEqual(calls, [['lock', { orientation: 'landscape' }], ['lock', { orientation: 'portrait' }]]);
   await binding.destroy();
-  assert.equal(calls.at(-1)[0], 'unlock');
+  assert.deepEqual(calls.at(-1), ['lock', { orientation: 'portrait' }]);
 });
 
 test('rapid reopen and close discard obsolete rotations while an OS request is pending', async t => {
@@ -116,7 +116,7 @@ test('rapid reopen and close discard obsolete rotations while an OS request is p
   await flush();
   for (const hidden of [true, false, true]) { root.hidden = hidden; binding.update(); }
   finish(); await flush();
-  assert.deepEqual(calls, [['lock', { orientation: 'landscape' }], ['unlock']],
+  assert.deepEqual(calls, [['lock', { orientation: 'landscape' }], ['lock', { orientation: 'portrait' }]],
     'a closed report must not rotate the app back to landscape because of a stale queued open');
 });
 
@@ -126,13 +126,13 @@ test('detached reports, hidden ancestors and destruction release orientation wit
   await flush(); assert.deepEqual(calls, []);
   const parent = dom.window.document.createElement('div');
   parent.append(root); dom.window.document.body.append(parent);
-  await flush(); assert.equal(calls.at(-1)[0], 'lock');
-  parent.hidden = true; await flush(); assert.equal(calls.at(-1)[0], 'unlock');
-  parent.hidden = false; await flush(); assert.equal(calls.at(-1)[0], 'lock');
-  root.remove(); await flush(); assert.equal(calls.at(-1)[0], 'unlock');
-  parent.append(root); await flush(); assert.equal(calls.at(-1)[0], 'lock');
+  await flush(); assert.deepEqual(calls.at(-1), ['lock', { orientation: 'landscape' }]);
+  parent.hidden = true; await flush(); assert.deepEqual(calls.at(-1), ['lock', { orientation: 'portrait' }]);
+  parent.hidden = false; await flush(); assert.deepEqual(calls.at(-1), ['lock', { orientation: 'landscape' }]);
+  root.remove(); await flush(); assert.deepEqual(calls.at(-1), ['lock', { orientation: 'portrait' }]);
+  parent.append(root); await flush(); assert.deepEqual(calls.at(-1), ['lock', { orientation: 'landscape' }]);
   await binding.destroy(); await binding.destroy();
-  assert.equal(calls.at(-1)[0], 'unlock');
+  assert.deepEqual(calls.at(-1), ['lock', { orientation: 'portrait' }]);
   const count = calls.length;
   root.hidden = true; root.hidden = false; binding.update(); await flush();
   assert.equal(calls.length, count);
@@ -155,5 +155,5 @@ test('a native denial preserves the CSS report and still restores the orientatio
   assert.equal(root.dataset.reportPortrait, 'true');
   assert.equal(root.hidden, false);
   root.hidden = true; binding.update(); await flush();
-  assert.deepEqual(calls, [['lock', { orientation: 'landscape' }], ['unlock']]);
+  assert.deepEqual(calls, [['lock', { orientation: 'landscape' }], ['lock', { orientation: 'portrait' }]]);
 });

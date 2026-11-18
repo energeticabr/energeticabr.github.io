@@ -3,7 +3,6 @@
 // resolve the plugin only when a native report actually requests rotation.
 const nativeScreenOrientation = {
   async lock(options) { return (await import('@capacitor/screen-orientation')).ScreenOrientation.lock(options); },
-  async unlock() { return (await import('@capacitor/screen-orientation')).ScreenOrientation.unlock(); },
 };
 
 // CSS can rotate a report, but only native orientation rotates the OS keyboard.
@@ -27,10 +26,12 @@ export function createReportOrientationController({
       // with the latest visibility rather than replaying obsolete rotations.
       if (requested === applied) return;
       applied = requested;
-      return applied ? screenOrientation.lock({ orientation: 'landscape' }) : screenOrientation.unlock();
+      // HOME must return to portrait even if the phone is still held sideways.
+      // Unlocking here lets the sensor rotate the menu and the next report again.
+      return screenOrientation.lock({ orientation: applied ? 'landscape' : 'portrait' });
     }).catch(() => {
       // The system may deny rotation (e.g. tablet multitasking). Keep the CSS
-      // fallback usable; still unlock on close because lock can change the
+      // fallback usable; still restore portrait on close because lock can change the
       // supported-orientation mask before a geometry request is rejected.
     });
     return pending;
