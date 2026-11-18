@@ -1,0 +1,72 @@
+<!doctype html>
+<html lang="pt-BR">
+<head><meta charset="utf-8"><title>CNO no DANFSe — dados fictícios</title></head>
+<body><main></main><script type="module">
+import { PDFDocument } from 'pdf-lib';
+import { createNfeReportView } from '/src/ui/nfe-report-view.js';
+
+const key = '3'.repeat(50);
+const notes = {
+  '1':'CNO :90.025.44060/72 RUA FICTICIA NUMERO 134',
+  '2':'CNO :90.025.44060/72',
+  '3':'Sem dados da obra no documento',
+  '4':'CNO :90.025.4406/72',
+  '5':'CNO :90.025.44069/72',
+  '6':'', '7':'', '8':'CNO :90.025.44060/72',
+  '9':'CNO 90.025.44060/72', '10':'CNO :90.025.44060/72',
+};
+const pdfName = id => `DANFSe-${id}.pdf`;
+const rows = Object.keys(notes).map(id => ({ id, fields:{
+  TIPO_FISCAL:'NFS-e', Title:'BENEFICIOS TESTE S.A.', NUMERO_NOTA:id,
+  CHAVE_ACESSO:key, STATUS_IMPORTACAO:'RESUMO_AGUARDANDO_XML',
+  OBSERVACOES_NOTA:'DANFSe original localizado no pedido. XML fiscal pendente. CNO no documento 90.025.44060/72.',
+  STATUS_DANFE:id === '7' ? 'PENDENTE_GERACAO' : 'DISPONIVEL',
+  DANFE_URL:id === '7' ? '' : `https://example.test/Attachments/${id}/${pdfName(id)}`,
+} }));
+const reads = [];
+const report = createNfeReportView({ document, data:{
+  loadSnapshot:async () => ({ rows }),
+  async downloadAttachment(id, fileName) {
+    if (fileName !== pdfName(id) || id === '7') throw Error('Anexo incorreto');
+    reads.push(id);
+    const pdf = await PDFDocument.create();
+    const page = pdf.addPage();
+    const header = id === '10' ? 'CARTA DE CORRECAO ELETRONICA'
+      : id === '9' ? 'DANFSe' : 'NOTA FISCAL ELETRONICA DE SERVICOS - NFS-e';
+    page.drawText(header, { x:36, y:760, size:11 });
+    const label = id === '9' ? 'CHAVE DE ACESSO' : 'Identificador Nacional';
+    const printedKey = id === '2' ? '4'.repeat(50) : key;
+    page.drawText(id === '8' ? `Documento relacionado: ${key}` : `${label}: ${printedKey}`, { x:36, y:724, size:8 });
+    page.drawText('DISCRIMINACAO DE SERVICOS', { x:36, y:686, size:11 });
+    const reference = id === '2' ? `NFS-e referenciada: ${key}\n` : '';
+    page.drawText(reference + notes[id], { x:36, y:666, size:10, lineHeight:15 });
+    if (id === '3' || id === '6') {
+      const image = document.createElement('canvas');
+      image.width = 200; image.height = 30;
+      const context = image.getContext('2d');
+      context.font = '16px sans-serif';
+      context.fillText(id === '6' ? 'CNO 90.025.44060/72' : 'Logomarca', 5, 20);
+      page.drawImage(await pdf.embedPng(image.toDataURL()), { x:36, y:id === '6' ? 620 : 785, width:200, height:30 });
+    }
+    return new Blob([await pdf.save()], { type:'application/pdf' });
+  },
+} });
+const result = {};
+try {
+  await report.open();
+  await report.capturePrint({ title:'CNO no DANFSe' });
+  const displayed = () => [...report.element.querySelectorAll('tbody [data-invoice-id]')];
+  result.notes = Object.fromEntries(displayed().map(row => [row.dataset.invoiceId,
+    row.cells[6].querySelector('.nfe-fact:not([hidden])')?.textContent ?? null]));
+  result.reads = [...reads].sort();
+  result.filters = {};
+  const filter = report.element.querySelector('[name="cno"]');
+  for (const status of ['valid','missing','conflict']) {
+    filter.value = status;
+    filter.dispatchEvent(new Event('change'));
+    await report.capturePrint({ title:'Filtro CNO no DANFSe' });
+    result.filters[status] = displayed().map(row => row.dataset.invoiceId).sort();
+  }
+} catch (error) { result.error = String(error.stack || error); }
+document.documentElement.dataset.layout = JSON.stringify(result);
+</script></body></html>
