@@ -62,7 +62,7 @@ export function projectNfeRows(rows) {
     const supportsXmlFacts = Object.hasOwn(codes, type);
     const validKey = supportsXmlFacts && (type === 'NF-e' ? nfeKey : nfseKey).test(key);
     const pdfName = attachmentName(fields.DANFE_URL);
-    const danfeCnoName = type === 'NF-e' && !complete && cnoState === 'unknown' && validKey
+    const danfeCnoName = !complete && cnoState === 'unknown' && validKey
       && text(fields.STATUS_DANFE).toUpperCase() === 'DISPONIVEL' && !/^CCe-/i.test(pdfName) ? pdfName : '';
     return [{
       id:String(id), orderId:nfeOrderId(fields[NFE_ORDER_FIELD]),
