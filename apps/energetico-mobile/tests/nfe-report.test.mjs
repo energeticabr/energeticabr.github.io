@@ -235,6 +235,28 @@ test('the unfiltered report includes freight documents and opens their exact DAC
   assert.doesNotMatch(JSON.stringify(table.rows), /ELÉTRICA TESTE LTDA/);
 });
 
+test('CT-e shows and filters the CNO supplied after a semicolon in its observations', async t => {
+  const dom = new JSDOM('<main/>');
+  const fields = {
+    MODELO:'57', STATUS_IMPORTACAO:'XML_COMPLETO', NUMERO_NOTA:'1246',
+    OBSERVACOES_NOTA:'CNO; 90.025.44060/72 RUA FICTICIA NUMERO 134',
+  };
+  assert.equal(projectNfeRows([{ id:'161', fields }])[0].cnoState, 'valid');
+  const panel = createNfeReportView({ document:dom.window.document, data:{
+    loadSnapshot:async () => ({ rows:[{ id:'161', fields }] }),
+  } });
+  t.after(() => { panel.destroy(); dom.window.close(); });
+  await panel.open();
+  assert.equal(panel.element.querySelector('tbody tr').cells[6].textContent, 'CNO consta90.025.44060/72');
+  const filter = panel.element.querySelector('[name="cno"]');
+  for (const [status, count] of [['valid', 1], ['missing', 0], ['conflict', 0]]) {
+    filter.value = status;
+    filter.dispatchEvent(new dom.window.Event('change'));
+    await panel.capturePrint({ title:'CNO no CT-e' });
+    assert.equal(panel.element.querySelectorAll('tbody tr[data-invoice-id]').length, count);
+  }
+});
+
 test('CT-e can link to an existing order and change that link', async t => {
   const dom = new JSDOM('<main id="app"></main>');
   const { document } = dom.window;
