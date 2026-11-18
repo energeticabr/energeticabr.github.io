@@ -47,6 +47,57 @@ function correctionButton(h, slot) {
   return h.root.querySelector(`[data-action="attendance-rhid-adjust-open"][data-slot="${slot}"]`);
 }
 
+for (const original of ['13:34', '13:43']) {
+  test(`anomalous existing S2 ${original} requires a typed reason and saves an orange audited correction`, async t => {
+    const h = await harness(t, { rows: [row({ BATIDAS_RHID: `06:40;11:45;12:45;${original}` })] });
+    const button = correctionButton(h, 'exit2');
+    assert.ok(button, 'an out-of-range existing punch must be selectable');
+    assert.match(button.textContent, new RegExp(original));
+    assert.match(button.getAttribute('aria-label'), /Editar/);
+    assert.ok(button.classList.contains('chat-attendance-rhid-punch--suspect'));
+    assert.equal(correctionButton(h, 'entry2'), null);
+    button.click();
+    const dialog = h.root.querySelector('[data-rhid-adjustment-dialog]');
+    assert.match(dialog.textContent, new RegExp(`RHID: ${original}`));
+    assert.equal(dialog.querySelector('input[type="time"]').value, original);
+    assert.equal(dialog.querySelector('textarea').value, '');
+    dialog.querySelector('input[type="time"]').value = '17:00';
+    h.root.querySelector('[data-action="rhid-attendance-adjust-save"]').click();
+    await tick();
+    assert.deepEqual(h.saves, [], 'a blank reason must block persistence');
+    assert.match(h.root.querySelector('[data-rhid-adjustment-dialog] [role="alert"]').textContent, /justificativa/);
+    h.root.querySelector('[data-role="rhid-adjustment-reason"]').value = 'Saída conferida pelo responsável';
+    h.root.querySelector('[data-action="rhid-attendance-adjust-save"]').click();
+    await tick(); await tick();
+    assert.deepEqual(h.saves, [{ date: day, personKey: 'rhid:23', slot: 'exit2', time: '17:00', reason: 'Saída conferida pelo responsável' }]);
+    assert.equal(h.root.querySelector('[data-rhid-adjustment-dialog]'), null);
+    const corrected = h.root.querySelector('[data-rhid-slot="exit2"]');
+    assert.match(corrected.textContent, /17:00/);
+    assert.ok(corrected.classList.contains('chat-attendance-rhid-punch--corrected'));
+    assert.equal(correctionButton(h, 'exit2'), null);
+    assert.equal(h.root.querySelector('.chat-attendance-rhid-badge').textContent, '09h20');
+    assert.deepEqual(h.writes, []);
+  });
+}
+
+test('a refreshed anomalous raw punch cannot be overwritten by an older open dialog', async t => {
+  let clock = Date.now();
+  t.mock.method(Date, 'now', () => clock);
+  const h = await harness(t, { rows: [row({ BATIDAS_RHID: '06:40;11:45;12:45;13:43' })] });
+  assert.ok(correctionButton(h, 'exit2'));
+  correctionButton(h, 'exit2').click();
+  h.client.getRhidAttendanceReport = async date => ({ date, rows: [row({ BATIDAS_RHID: '06:40;11:45;12:45;14:00' })] });
+  clock += 61000;
+  h.store.setDraft('HELISON');
+  await tick(); await tick();
+  h.root.querySelector('[data-role="rhid-adjustment-time"]').value = '17:00';
+  h.root.querySelector('[data-role="rhid-adjustment-reason"]').value = 'Conferido';
+  h.root.querySelector('[data-action="rhid-attendance-adjust-save"]').click();
+  await tick();
+  assert.deepEqual(h.saves, []);
+  assert.match(h.root.querySelector('[data-rhid-adjustment-dialog] [role="alert"]').textContent, /validar o ajuste/);
+});
+
 for (const [slot, label, suggested] of [['entry1', 'Entrada 1', '07:00'], ['exit1', 'Saída 1', '11:00'], ['entry2', 'Entrada 2', '12:00'], ['exit2', 'Saída 2', '17:00']]) {
   const rows = [row({ BATIDAS_RHID: slot === 'entry1' ? '12:00;13:00;17:00' : '06:52' })];
   test(`missing ${slot} opens the existing RHID dialog without selecting or submitting attendance`, async t => {

@@ -31,7 +31,7 @@ import { orderEffectivePaymentDateOptions } from "../chat/launch-payment-date-op
 import { LAUNCH_ATTACHMENT_CONTINUE_ID, attachmentFinishOption, isDiaryAttachmentPrompt, isDocumentAttachmentPrompt, withDocumentAttachmentPrompt, withLaunchAttachmentPrompt } from "../chat/attachment-finish.js";
 import { isRhidAttendanceDayFinalized, isRhidAttendanceRowDiscrepant, isRhidAttendanceRowWithoutPunches, isValidRhidReportDate, suggestedRhidAdjustmentTime, summarizeRhidAttendance } from "../chat/rhid-attendance-table.js";
 import { PRESENCE_OTHER_DATES_REPLY_ID } from "../chat/presence-date-scope.js";
-import { attendanceMissingPunchContext, attendanceValidationDate, pendingAttendanceDeletionContext } from "../chat/attendance-rhid-badges.js";
+import { attendanceEditablePunchContext, attendanceValidationDate, pendingAttendanceDeletionContext } from "../chat/attendance-rhid-badges.js";
 import { attendanceIrregularity, isAttendanceHolidayReason } from "../chat/attendance-irregularity.js";
 import { attendanceBulkEligible, attendanceClockExempt } from "../chat/attendance-bulk-selection.js";
 import { createPowerBiDashboardView } from "./powerbi-dashboard-view.js";
@@ -1730,10 +1730,13 @@ function attendanceRhidBadgeMarkup(badge, { message, option, editable = false, s
   ].map(([slot, short, label, tone]) => {
     const raw = badge.punches?.[slot];
     const time = typeof raw === "string" && /^(?:[01]\d|2[0-3]):[0-5]\d$/.test(raw) ? raw : "";
-    if (editable && attendanceMissingPunchContext(option, message, slot)) {
-      return `<button type="button" class="chat-attendance-rhid-punch chat-attendance-rhid-punch--${tone} chat-attendance-rhid-punch--editable" data-action="attendance-rhid-adjust-open" data-message-id="${escapeHtml(message.id)}" data-reply-id="${escapeHtml(attendanceSelectionId(option))}" data-slot="${slot}" data-rhid-slot="${slot}" aria-label="Preencher ${label} de ${escapeHtml(badge.correction.name)}">${short}- —</button>`;
+    const source = badge.correction?.slots?.[slot]?.source;
+    const adjustmentTone = source === "corrected" ? " chat-attendance-rhid-punch--corrected" : source === "added" ? " chat-attendance-rhid-punch--added" : "";
+    const target = editable && attendanceEditablePunchContext(option, message, slot);
+    if (target) {
+      return `<button type="button" class="chat-attendance-rhid-punch chat-attendance-rhid-punch--${tone} chat-attendance-rhid-punch--editable${target.originalTime ? " chat-attendance-rhid-punch--suspect" : ""}" data-action="attendance-rhid-adjust-open" data-message-id="${escapeHtml(message.id)}" data-reply-id="${escapeHtml(attendanceSelectionId(option))}" data-slot="${slot}" data-rhid-slot="${slot}" aria-label="${target.originalTime ? "Editar" : "Preencher"} ${label} de ${escapeHtml(badge.correction.name)}${target.originalTime ? `: ${target.originalTime}, fora da faixa esperada` : ""}">${short}- ${time || "—"}</button>`;
     }
-    return `<span class="chat-attendance-rhid-punch chat-attendance-rhid-punch--${tone}" data-rhid-slot="${slot}" aria-label="${label}: ${time || "sem batida"}">${short}- ${time || "—"}</span>`;
+    return `<span class="chat-attendance-rhid-punch chat-attendance-rhid-punch--${tone}${adjustmentTone}" data-rhid-slot="${slot}" aria-label="${label}: ${time || "sem batida"}">${short}- ${time || "—"}</span>`;
   }).join("");
   return `<span class="chat-attendance-rhid-summary"${selectionAttributes}>${punches}<span class="chat-attendance-rhid-badge chat-attendance-rhid-badge--${tones[badge.status]}" data-rhid-date="${escapeHtml(badge.date || "")}" title="${description}" role="img" aria-label="${description}">${escapeHtml(badge.label)}</span></span>`;
 }
@@ -2016,7 +2019,7 @@ function renderPoll(message, busy, draft = "", databaseFilterMessage = null, act
       const label = String(option.label || option.title || `${id} - FORNECEDOR`);
       const nameMarkup = formatChatText(label);
       const correctable = !supplierSync && !busy && currentPoll && !optionUnavailable && !attendanceIrregularityChecking
-        && ["entry1", "exit1", "entry2", "exit2"].some(slot => attendanceMissingPunchContext(option, message, slot));
+        && ["entry1", "exit1", "entry2", "exit2"].some(slot => attendanceEditablePunchContext(option, message, slot));
       const selectionAttributes = ` data-action="select-reply" data-reply-id="${escapeHtml(replyId)}" data-label="${escapeHtml(label)}"`;
       const rhidBadge = attendanceRhidBadgeMarkup(option.rhidBadge, { message, option, editable: correctable,
         selectionAttributes: correctable ? selectionAttributes : "" });
@@ -2751,7 +2754,7 @@ function datePickerMarkup(value = "") {
   </div>`;
 }
 
-function rhidCalendarMarkup(month, selectedDate, presentDates = [], knownMonth = false, irregularCounts = {}) {
+function rhidCalendarMarkup(month, selectedDate, presentDates = [], knownMonth = false, irregularCounts = {}, outOfRangeCounts = {}) {
   const [year, monthNumber] = month.split("-").map(Number);
   const monthStart = new Date(Date.UTC(year, monthNumber - 1, 1));
   const monthName = new Intl.DateTimeFormat("pt-BR", { month: "long", timeZone: "UTC" }).format(monthStart);
@@ -2766,17 +2769,18 @@ function rhidCalendarMarkup(month, selectedDate, presentDates = [], knownMonth =
     const iso = `${month}-${String(day).padStart(2, "0")}`;
     const status = knownMonth && iso <= today ? (known.has(iso) ? "present" : "absent") : "unknown";
     const count = knownMonth && iso <= today && Number.isSafeInteger(irregularCounts?.[iso]) && irregularCounts[iso] > 0 ? irregularCounts[iso] : 0;
+    const suspect = knownMonth && iso <= today && Number.isSafeInteger(outOfRangeCounts?.[iso]) && outOfRangeCounts[iso] > 0 ? outOfRangeCounts[iso] : 0;
     const warning = count ? `${count} irreg.` : "";
-    days.push(`<button type="button" class="chat-rhid-calendar__day chat-rhid-calendar__day--${status}${iso === selectedDate ? " chat-rhid-calendar__day--selected" : ""}" data-action="rhid-calendar-select-day" data-role="rhid-calendar-day" data-value="${iso}" aria-label="${day} de ${monthName}${status === "present" ? ", com presença" : status === "absent" ? ", sem presença" : ""}${count ? `, ${count} ${count === 1 ? "apuração irregular" : "apurações irregulares"} após ajustes do administrador` : ""}" aria-pressed="${iso === selectedDate}"><span>${day}</span>${count ? `<small class="chat-rhid-calendar__irregular">${warning}</small>` : ""}</button>`);
+    days.push(`<button type="button" class="chat-rhid-calendar__day chat-rhid-calendar__day--${status}${suspect ? " chat-rhid-calendar__day--suspect" : ""}${iso === selectedDate ? " chat-rhid-calendar__day--selected" : ""}" data-action="rhid-calendar-select-day" data-role="rhid-calendar-day" data-value="${iso}" aria-label="${day} de ${monthName}${status === "present" ? ", com presença" : status === "absent" ? ", sem presença" : ""}${suspect ? `, ${suspect} pessoa(s) com batida fora da faixa esperada` : ""}${count ? `, ${count} ${count === 1 ? "apuração irregular" : "apurações irregulares"} após ajustes do administrador` : ""}" aria-pressed="${iso === selectedDate}"><span>${day}</span>${count ? `<small class="chat-rhid-calendar__irregular">${warning}</small>` : ""}${suspect ? `<small class="chat-rhid-calendar__suspect">${suspect} conferir</small>` : ""}</button>`);
   }
   return `<div class="chat-rhid-calendar" aria-label="Calendário de presenças RHID">
     <div class="chat-rhid-calendar__heading"><button type="button" data-action="rhid-calendar-change-month" data-value="-1" aria-label="Mês anterior">←</button><strong>${escapeHtml(monthLabel)}</strong><button type="button" data-action="rhid-calendar-change-month" data-value="1" aria-label="Próximo mês">→</button></div>
     <div class="chat-rhid-calendar__grid">${weekdays.map(label => `<span class="chat-rhid-calendar__weekday">${label}</span>`).join("")}${days.join("")}</div>
-    <p class="chat-rhid-calendar__legend"><span class="chat-rhid-calendar__legend-present">Com presença</span><span class="chat-rhid-calendar__legend-absent">Sem presença</span></p>
+    <p class="chat-rhid-calendar__legend"><span class="chat-rhid-calendar__legend-present">Com presença</span><span class="chat-rhid-calendar__legend-absent">Sem presença</span><span class="chat-rhid-calendar__legend-suspect">Conferir batida</span></p>
   </div>`;
 }
 
-function rhidAttendanceReportMarkup({ open = false, date = "", messageId = "", busy = false, error = "", directToday = false, month = "", monthLoading = false, monthKnown = false, monthPresentDates = [], monthIrregularCounts = {} } = {}) {
+function rhidAttendanceReportMarkup({ open = false, date = "", messageId = "", busy = false, error = "", directToday = false, month = "", monthLoading = false, monthKnown = false, monthPresentDates = [], monthIrregularCounts = {}, monthOutOfRangeCounts = {} } = {}) {
   if (!open || busy) return "";
   const changingExistingReport = Boolean(messageId);
   return `<section class="chat-confirmation chat-date-picker chat-rhid-report-page" data-rhid-attendance-report-dialog role="dialog" aria-modal="false" aria-labelledby="rhid-attendance-report-title" tabindex="-1">
@@ -2785,7 +2789,7 @@ function rhidAttendanceReportMarkup({ open = false, date = "", messageId = "", b
         <h2 id="rhid-attendance-report-title">${changingExistingReport ? "📅 Alterar data do relatório RHID" : "📊 Relatório de presenças RHID"}</h2>
       </div>
       ${directToday ? `<p>Presenças de: <strong>${escapeHtml(`${date.slice(8, 10)}/${date.slice(5, 7)}/${date.slice(0, 4)}`)}</strong></p>` : `<button class="chat-confirmation__confirm chat-rhid-monthly-entry" type="button" data-action="open-rhid-monthly-report" data-value="${escapeHtml(month || date.slice(0, 7))}">GERAR RELATÓRIO MENSAL</button>`}
-      ${directToday ? "" : rhidCalendarMarkup(month || (date || saoPauloDateIso()).slice(0, 7), date || saoPauloDateIso(), monthPresentDates, monthKnown, monthIrregularCounts)}
+      ${directToday ? "" : rhidCalendarMarkup(month || (date || saoPauloDateIso()).slice(0, 7), date || saoPauloDateIso(), monthPresentDates, monthKnown, monthIrregularCounts, monthOutOfRangeCounts)}
       ${monthLoading ? loadingIndicatorMarkup("Consultando presenças deste mês…", { compact: true }) : ""}
       ${error ? `<p class="error-banner" role="alert">${escapeHtml(error)}</p>` : ""}
       <div class="chat-confirmation__actions">
@@ -3377,6 +3381,7 @@ export function createChatView(root, { onOpenSettings, onDemoAccess, onSignOut, 
   let rhidAttendanceMonthKnown = false;
   let rhidAttendanceMonthPresentDates = [];
   let rhidAttendanceMonthIrregularCounts = {};
+  let rhidAttendanceMonthOutOfRangeCounts = {};
   let rhidAttendanceAdjustment = null;
   let rhidAttendanceAdjustmentSequence = 0;
   let rhidRefresh = { busy: false, message: "", error: false };
@@ -5130,16 +5135,17 @@ export function createChatView(root, { onOpenSettings, onDemoAccess, onSignOut, 
     if (command.type === "attendance-rhid-adjust-open") {
       const message = [...(lastState?.messages || [])].reverse().find(item => item?.role !== "user" && item?.type === "poll");
       const option = message?.options?.find(item => attendanceSelectionId(item) === command.replyId);
-      const target = attendanceMissingPunchContext(option, message, command.slot);
+      const target = attendanceEditablePunchContext(option, message, command.slot);
       if (composerBusy || attendanceIrregularityDialog || attendanceIrregularityPending || rhidAttendanceAdjustment
         || String(message?.id || "") !== String(command.messageId || "") || !target) return;
       const label = { entry1: "Entrada 1", exit1: "Saída 1", entry2: "Entrada 2", exit2: "Saída 2" }[command.slot];
       rhidAttendanceAdjustment = {
         adjustmentId: ++rhidAttendanceAdjustmentSequence,
         messageId: message.id, presenceId: target.presenceId, personKey: target.personKey, slot: command.slot,
-        personName: target.personName, label, rhid: "", currentEffective: "", previous: null,
-        effective: suggestedRhidAdjustmentTime(command.slot, target.date, target.slots),
-        reason: "NÃO BATEU PONTO, APESAR DE ESTAR PRESENTE", busy: false, error: "",
+        personName: target.personName, label, rhid: target.originalTime, currentEffective: target.originalTime, previous: null,
+        originalTime: target.originalTime,
+        effective: target.originalTime || suggestedRhidAdjustmentTime(command.slot, target.date, target.slots),
+        reason: target.originalTime ? "" : "NÃO BATEU PONTO, APESAR DE ESTAR PRESENTE", busy: false, error: "",
       };
       if (lastState) { const state = lastState; lastState = null; render(state); }
       return;
@@ -5206,10 +5212,10 @@ export function createChatView(root, { onOpenSettings, onDemoAccess, onSignOut, 
       const save = () => {
         if (rhidAttendanceAdjustment !== current || current.busy) return;
         rhidAttendanceAdjustment = { ...current, effective: time, reason, busy: true, deleting: false, error: "" };
-        const { messageId, presenceId, personKey, slot, adjustmentId } = rhidAttendanceAdjustment;
+        const { messageId, presenceId, personKey, slot, adjustmentId, originalTime } = rhidAttendanceAdjustment;
         if (lastState) { const state = lastState; lastState = null; render(state); }
         emit({ type: "rhid-attendance-adjust-save", messageId, personKey, slot, time, reason,
-          ...(presenceId === undefined ? {} : { presenceId, adjustmentId }) });
+          ...(presenceId === undefined ? {} : { presenceId, adjustmentId, originalTime }) });
       };
       if (current.previous) void reviewCustomEdit(`Revisar correção — ${current.personName}`).then(accepted => { if (accepted) save(); });
       else save();
@@ -5238,6 +5244,7 @@ export function createChatView(root, { onOpenSettings, onDemoAccess, onSignOut, 
       rhidAttendanceMonthKnown = false;
       rhidAttendanceMonthPresentDates = [];
       rhidAttendanceMonthIrregularCounts = {};
+      rhidAttendanceMonthOutOfRangeCounts = {};
       rhidAttendanceReportBusy = false;
     rhidAttendanceReportProgress = null;
       rhidAttendanceReportError = "";
@@ -5255,6 +5262,7 @@ export function createChatView(root, { onOpenSettings, onDemoAccess, onSignOut, 
       rhidAttendanceMonthKnown = false;
       rhidAttendanceMonthPresentDates = [];
       rhidAttendanceMonthIrregularCounts = {};
+      rhidAttendanceMonthOutOfRangeCounts = {};
       rhidAttendanceReportError = "";
       rhidAttendanceMonthError = "";
       if (lastState) { const state = lastState; lastState = null; render(state); }
@@ -6268,6 +6276,7 @@ export function createChatView(root, { onOpenSettings, onDemoAccess, onSignOut, 
         monthKnown: rhidAttendanceMonthKnown,
         monthPresentDates: rhidAttendanceMonthPresentDates,
         monthIrregularCounts: rhidAttendanceMonthIrregularCounts,
+        monthOutOfRangeCounts: rhidAttendanceMonthOutOfRangeCounts,
       },
       rhidAttendanceAdjustment,
       rhidRefresh,
@@ -6448,12 +6457,13 @@ export function createChatView(root, { onOpenSettings, onDemoAccess, onSignOut, 
     return true;
   }
 
-  function setRhidAttendanceMonthStatus({ month, presentDates = [], irregularCounts = {}, error = "" } = {}) {
+  function setRhidAttendanceMonthStatus({ month, presentDates = [], irregularCounts = {}, outOfRangeCounts = {}, error = "" } = {}) {
     if (!rhidAttendanceReportOpen || month !== rhidAttendanceMonth) return false;
     rhidAttendanceMonthLoading = false;
     rhidAttendanceMonthKnown = !error;
     rhidAttendanceMonthPresentDates = Array.isArray(presentDates) ? presentDates : [];
     rhidAttendanceMonthIrregularCounts = !error && irregularCounts && typeof irregularCounts === "object" ? irregularCounts : {};
+    rhidAttendanceMonthOutOfRangeCounts = !error && outOfRangeCounts && typeof outOfRangeCounts === "object" ? outOfRangeCounts : {};
     rhidAttendanceMonthError = String(error || "");
     if (lastState) { const state = lastState; lastState = null; render(state); }
     return true;

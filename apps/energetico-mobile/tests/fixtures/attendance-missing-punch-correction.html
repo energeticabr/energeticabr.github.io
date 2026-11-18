@@ -7,7 +7,8 @@ import { createConversationStore } from '/src/chat/conversation-store.js';
 const root = document.querySelector('#app'), view = createChatView(root), store = createConversationStore();
 const date = '2020-10-15', name = 'HELISON ROSA LUIS', writes = [], saves = [];
 const params = new URLSearchParams(location.search), interactive = params.get('interactive') === '1';
-const slot = (params.get('slot') || (interactive ? 'entry1' : 'exit1')) === 'entry1' ? 'entry1' : 'exit1';
+const slot = params.get('slot') || (interactive ? 'entry1' : 'exit1');
+const anomalous = slot === 'exit2';
 const account = { homeAccountId: 'isolated-correction-test', name: 'Teste' };
 const controller = createAppController({ store, view,
   auth: { initialize: async () => account, getToken: async () => 'test-token', signOut: async () => {} },
@@ -15,7 +16,7 @@ const controller = createAppController({ store, view,
   pendingProvisionAttachmentsDataFactory: async () => ({ loadUpcomingPayments: async () => [] }),
   client: {
     sendText: async payload => { writes.push(payload); return { status: 'processed', messages: [] }; },
-    getRhidAttendanceReport: async () => ({ date, rows: [{ Id: '10', ID_PESSOA_RHID: '23', DATA_REFERENCIA: date, NOME_COLABORADOR: name, BATIDAS_RHID: slot === 'entry1' ? '13:00;17:00' : '06:52' }] }),
+    getRhidAttendanceReport: async () => ({ date, rows: [{ Id: '10', ID_PESSOA_RHID: '23', DATA_REFERENCIA: date, NOME_COLABORADOR: name, BATIDAS_RHID: anomalous ? '06:40;11:45;12:45;13:43' : slot === 'entry1' ? '13:00;17:00' : '06:52' }] }),
     saveRhidAttendanceAdjustment: async payload => { saves.push(payload); return { time: payload.time, reason: payload.reason }; },
   },
 });
@@ -30,6 +31,7 @@ for (let n = 0; n < 50 && !root.querySelector('[data-action="attendance-rhid-adj
 writes.length = 0;
 const button = root.querySelector(`[data-action="attendance-rhid-adjust-open"][data-slot="${slot}"]`);
 const evidence = { realButton: button?.tagName === 'BUTTON', nestedButtons: root.querySelectorAll('button button').length };
+evidence.initialColor = button && getComputedStyle(button).backgroundColor;
 if (!button) {
   document.documentElement.dataset.layout = JSON.stringify(evidence);
   throw new Error(`Missing correction button for ${slot}`);
@@ -49,15 +51,26 @@ if (interactive) {
   evidence.overflow = dialog.scrollWidth > dialog.clientWidth + 1;
   evidence.suggested = dialog.querySelector('input[type="time"]').value;
   evidence.reason = dialog.querySelector('textarea').value;
+  if (anomalous) {
+    root.querySelector('[data-action="rhid-attendance-adjust-save"]').click(); await frame();
+    evidence.blankReasonBlocked = saves.length === 0 && Boolean(root.querySelector('[data-rhid-adjustment-dialog] [role="alert"]'));
+    dialog.querySelector('input[type="time"]').value = '17:00';
+    dialog.querySelector('textarea').value = 'Saída conferida pelo responsável';
+  }
   root.querySelector('[data-action="rhid-attendance-adjust-save"]').click(); await frame();
   evidence.saved = saves;
   evidence.displayed = root.querySelector(`[data-rhid-slot="${slot}"]`).textContent;
+  evidence.correctedColor = getComputedStyle(root.querySelector(`[data-rhid-slot="${slot}"]`)).backgroundColor;
   evidence.selected = root.querySelector('[data-action="attendance-select-toggle"]').checked;
   evidence.attendanceWrites = writes.length;
   evidence.closed = !root.querySelector('[data-rhid-adjustment-dialog]');
   if (params.get('view') === 'dialog') {
-    const nextSlot = slot === 'entry1' ? 'exit1' : 'entry2';
-    root.querySelector(`[data-action="attendance-rhid-adjust-open"][data-slot="${nextSlot}"]`).click(); await frame();
+    if (anomalous) { button.click(); }
+    else {
+      const nextSlot = slot === 'entry1' ? 'exit1' : 'entry2';
+      root.querySelector(`[data-action="attendance-rhid-adjust-open"][data-slot="${nextSlot}"]`).click();
+    }
+    await frame();
   }
 }
 document.documentElement.dataset.layout = JSON.stringify(evidence);

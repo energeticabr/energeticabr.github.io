@@ -1674,11 +1674,13 @@ test("calendário RHID conta horários efetivos do snapshot mensal após correç
   h.client.getRhidAttendanceMonth = async month => ({ month, presentDates: ["2026-09-28"], rows: [
     { ID_PESSOA_RHID: "1", NOME_COLABORADOR: "Teste", DATA_REFERENCIA: "2026-09-28", BATIDAS_RHID: "07:00; 12:00" },
     { ID_PESSOA_RHID: "2", NOME_COLABORADOR: "Corrigido", DATA_REFERENCIA: "2026-09-28", BATIDAS_RHID: "12:00; 13:00; 17:00", ADMIN_AJUSTES: { entry1: { time: "07:00" } } },
+    { ID_PESSOA_RHID: "3", NOME_COLABORADOR: "Edgar", DATA_REFERENCIA: "2026-09-28", BATIDAS_RHID: "06:40;11:45;12:45;13:43" },
   ] });
   t.after(() => h.controller.stop());
   await h.controller.start();
   await h.view.emit("rhid-attendance-month-load", { value: "2026-09" });
   assert.deepEqual(statuses[0].irregularCounts, { "2026-09-28": 1 });
+  assert.deepEqual(statuses[0].outOfRangeCounts, { "2026-09-28": 1 });
 });
 
 for (const staleError of [false, true]) {
@@ -1698,7 +1700,7 @@ for (const staleError of [false, true]) {
     else requests[0].resolve({ month: "2026-09", presentDates: ["2026-09-28"], rows: [{ ID_PESSOA_RHID: "1", NOME_COLABORADOR: "Teste", DATA_REFERENCIA: "2026-09-28", BATIDAS_RHID: "07:00" }] });
     requests[1].resolve({ month: "2026-10", presentDates: [] });
     await Promise.all([old, middle]);
-    assert.deepEqual(statuses, [{ month: "2026-09", presentDates: [], irregularCounts: {} }]);
+    assert.deepEqual(statuses, [{ month: "2026-09", presentDates: [], irregularCounts: {}, outOfRangeCounts: {} }]);
     const closedRequest = h.view.emit("rhid-attendance-month-load", { value: "2026-09" });
     const reopenedRequest = h.view.emit("rhid-attendance-month-load", { value: "2026-09" });
     requests[4].resolve({ month: "2026-09", presentDates: [], rows: [] });
