@@ -55,6 +55,21 @@ public class ShareInboxPlugin extends Plugin {
     public void load() {
         super.load();
         applicationContext = getContext().getApplicationContext();
+        applicationContext.getSharedPreferences(ROOT_NAME, Context.MODE_PRIVATE).edit().remove("proposalDestination").commit();
+    }
+
+    @PluginMethod
+    public void setProposalDestination(PluginCall call) {
+        String destination = call.getString("destination");
+        try {
+            if (destination != null) new JSONObject(destination);
+            boolean saved = getContext().getSharedPreferences(ROOT_NAME, Context.MODE_PRIVATE).edit()
+                .putString("proposalDestination", destination).commit();
+            if (!saved) throw new IOException("Falha ao gravar destino.");
+            call.resolve();
+        } catch (Exception error) {
+            call.reject("Não foi possível proteger o destino dos anexos da proposta.", "SHARED_INBOX_DESTINATION_FAILED", error);
+        }
     }
 
     /** Called by MainActivity for ACTION_SEND/ACTION_SEND_MULTIPLE intents. */
@@ -66,11 +81,13 @@ public class ShareInboxPlugin extends Plugin {
         if (uris.isEmpty()) return;
         intent.putExtra(HANDLED_FLAG, true);
         Context app = context.getApplicationContext();
+        boolean activeProcess = applicationContext != null;
         applicationContext = app;
+        String destination = activeProcess ? app.getSharedPreferences(ROOT_NAME, Context.MODE_PRIVATE).getString("proposalDestination", null) : null;
         new Thread(() -> {
             for (Uri uri : uris) {
                 try {
-                    stageUri(app, uri);
+                    stageUri(app, uri, destination);
                 } catch (Exception ignored) {
                     // One invalid item must not discard other valid shared files.
                 }
@@ -92,7 +109,7 @@ public class ShareInboxPlugin extends Plugin {
         return result;
     }
 
-    private static void stageUri(Context context, Uri source) throws IOException {
+    private static void stageUri(Context context, Uri source, String destination) throws IOException {
         ContentResolver resolver = context.getContentResolver();
         String id = UUID.randomUUID().toString();
         File directory = new File(new File(context.getFilesDir(), ROOT_NAME), id);
@@ -130,6 +147,7 @@ public class ShareInboxPlugin extends Plugin {
             metadata.put("type", type);
             metadata.put("state", "needsAuthentication");
             metadata.put("createdAt", ISO.format(new Date()));
+            if (destination != null) metadata.put("proposalDestination", destination);
         } catch (Exception error) {
             deleteRecursively(directory);
             throw new IOException("Não foi possível preparar os metadados do anexo.", error);
@@ -181,6 +199,7 @@ public class ShareInboxPlugin extends Plugin {
                     item.put("type", metadata.optString("type", "application/octet-stream"));
                     item.put("state", metadata.optString("state", "needsAuthentication"));
                     item.put("createdAt", metadata.optString("createdAt", ""));
+                    if (metadata.has("proposalDestination")) item.put("proposalDestination", metadata.optString("proposalDestination"));
                     items.put(item);
                 }
             }

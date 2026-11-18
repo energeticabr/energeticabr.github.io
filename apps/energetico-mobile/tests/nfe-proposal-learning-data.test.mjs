@@ -138,10 +138,13 @@ async function verifyCrossPosting(t, firstIsProvision) {
       return { id };
     },
     async listAttachments(_site, _list, id) {
-      return attachments.has(id) ? [{ name:row.pdfName }] : [];
+      return [...(attachments.get(id)?.keys() || [])].map(name=>({name}));
     },
-    async uploadAttachment(_site, _list, id, pdf) { attachments.set(id, pdf); },
-    async downloadAttachment(_site, _list, id) { return attachments.get(id); },
+    async uploadAttachment(_site, _list, id, file, name) {
+      if (!attachments.has(id)) attachments.set(id,new Map());
+      attachments.get(id).set(name,file);
+    },
+    async downloadAttachment(_site, _list, id, name) { return attachments.get(id)?.get(name); },
   };
   const service = provision => createNfeProposalData({ repository, provision, accountKey:'account-a.tenant',
     DOMParser:dom.window.DOMParser, fiscalData:{
@@ -156,7 +159,9 @@ async function verifyCrossPosting(t, firstIsProvision) {
   assert.deepEqual([reviewed.draft.supplierId, reviewed.draft.lines[0].productId, reviewed.draft.lines[0].stageId], ['', '', '']);
   Object.assign(reviewed.draft, { supplierId:'11', branchId:'12', accountId:'16', paymentDate:'2026-11-18' });
   Object.assign(reviewed.draft.lines[0], { productId:'13', stageId:'15', dueDate:'2026-11-30' });
-  const receipt = await first.submit(row, reviewed.draft, { ...reviewed, manualStages:new Set(['1']) });
+  const extra = new File(['camera photo'],'foto.jpg');
+  const receipt = await first.submit(row, reviewed.draft, { ...reviewed, manualStages:new Set(['1']), additionalAttachments:[extra] });
+  assert.equal(await attachments.get('40').get('foto.jpg').text(),'camera photo');
   assert.equal(firstIsProvision ? receipt.provisionDescriptionId : receipt.orderId, '40');
   assert.equal(notes[0].fields[firstIsProvision ? 'NFEDESCRITIVO' : 'IDPEDIDO'], 40);
   assert.equal(notes[0].fields[firstIsProvision ? 'IDPEDIDO' : 'NFEDESCRITIVO'], undefined);

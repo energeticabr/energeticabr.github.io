@@ -278,10 +278,11 @@ export function createNfeProposalData({ repository, fiscalData, tokenProvider, s
         legacyUnits:Boolean(reserved) && legacyUnitDraft(draft) };
     },
     loadReservation:posting.loadReservation,
-    async submit(row, draft, { signal, catalog, xmlHash, onProgress, baseline, manualStages } = {}) {
+    appendAttachments:posting.appendAttachments,
+    async submit(row, draft, { signal, catalog, xmlHash, onProgress, baseline, manualStages, additionalAttachments } = {}) {
       const reviewed = draft.reviewStamp ? draft : { ...draft, reviewStamp:await reviewStamp(draft, catalog, xmlHash) };
       active(signal);
-      return posting.submit(row, reviewed, { signal, onProgress, baseline, manualStages });
+      return posting.submit(row, reviewed, { signal, onProgress, baseline, manualStages, additionalAttachments });
     },
   });
 }

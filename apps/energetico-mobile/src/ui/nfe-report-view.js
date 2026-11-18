@@ -56,7 +56,7 @@ function classifyFiscalFacts(row, facts) {
   return { regime:facts?.regime || '', retention, cno, cnoDetail };
 }
 
-export function createNfeReportView({ document:doc = globalThis.document, data, openMediaCollection, syncMonitor }) {
+export function createNfeReportView({ document:doc = globalThis.document, data, openMediaCollection, syncMonitor, proposalAttachments }) {
   const make = (tag, className = '', text) => {
     const element = doc.createElement(tag);
     if (className) element.className = className;
@@ -171,7 +171,7 @@ export function createNfeReportView({ document:doc = globalThis.document, data, 
   const fiscalFacts = new Map();
   const orderLink = data.orderLink;
   const proposal = data.proposal && createNfeProposalView({
-    document:doc, host:root, service:data.proposal,
+    document:doc, host:root, service:data.proposal, attachments:proposalAttachments,
     onPosted(receipt) { showLinked(receipt); picker?.close(); },
     onClose:reloadFiscalRows,
   });
@@ -236,6 +236,10 @@ export function createNfeReportView({ document:doc = globalThis.document, data, 
     pencil.setAttribute('aria-label', pencil.title);
     pencil.disabled = !canLink;
     controls.append(pencil);
+    if (row.orderId && proposalAttachments?.hasPending?.(row)) {
+      const resume = button('Concluir anexos do pedido',()=>void proposal.show(row,resume),'nfe-link-propose');
+      controls.append(resume);
+    }
     if (propose) {
       const shortcut = button('Propor lançamentos', () => propose(row, shortcut), 'nfe-link-cluster nfe-link-propose');
       shortcut.setAttribute('aria-label', `Propor lançamentos para a nota ${row.number || row.id}`);
@@ -667,6 +671,7 @@ export function createNfeReportView({ document:doc = globalThis.document, data, 
 
   return Object.freeze({
     element:root,
+    captureAttachmentReceiver:() => proposal?.captureAttachmentReceiver() || null,
     capturePrint,
     async open() {
       if (!root.hidden) return;

@@ -385,3 +385,12 @@
 .nfe-proposal-dialog .nfe-proposal-submit { background: #07566b; color: #fff; }
 .nfe-proposal-dialog :is(.nfe-proposal-header,.nfe-proposal-footer) button:disabled { opacity: .55; cursor: default; }
 @media print { .nfe-proposal-overlay { display: none !important; } }
+.nfe-proposal-attachments { margin-top: 14px; padding: 12px; border: 1px solid #c7d9e2; border-radius: 8px; background: #f2f8fa; }
+.nfe-proposal-attachments h3 { margin: 0 0 6px; font-size: 15px; }
+.nfe-proposal-attachments p { margin: 4px 0 10px; font-size: 13px; }
+.nfe-proposal-attachments button { padding: 9px 12px; min-height: 42px; border: 1px solid #87a8b8; border-radius: 7px; color: #173e50; background: white; font: inherit; cursor: pointer; }
+.nfe-proposal-attachments button:disabled { opacity: .55; cursor: default; }
+.nfe-proposal-attachment-sources:not([hidden]) { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 8px; }
+.nfe-proposal-attachments ul { list-style: none; margin: 8px 0 0; padding: 0; }
+.nfe-proposal-attachments li { display: flex; gap: 8px; margin-top: 6px; align-items: center; }
+.nfe-proposal-attachments li button:first-child { flex: 1; min-width: 0; overflow-wrap: anywhere; text-align: left; }
