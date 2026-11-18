@@ -1,5 +1,5 @@
 import { includesSearchText, normalizeSearchText } from '../../../../portal/core/search-text.js';
-import { mealVoucherLines, mealVoucherTotal, mealVoucherKey, validateMealVoucherDraft, VOUCHER_TYPES, TRANSPORT_ORDER_SUPPLIER } from '../chat/meal-voucher.js';
+import { mealVoucherLines, mealVoucherTotal, mealVoucherKey, mealVoucherDefaultLine, validateMealVoucherDraft, VOUCHER_TYPES, TRANSPORT_ORDER_SUPPLIER } from '../chat/meal-voucher.js';
 import { createLoadingIndicator, updateLoadingIndicator } from './loading-indicator.js';
 import { beginLoadingTask } from './loading-task.js';
 import { applyScreenNavigation } from './screen-navigation.js';
@@ -17,6 +17,7 @@ export function createMealVoucherView({ data, root, documentRef = globalThis.doc
   const transport = voucherType === 'transport';
   const benefitName = voucher.name[0].toUpperCase() + voucher.name.slice(1);
   function initialLine(supplier) {
+    if (!transport) return mealVoucherDefaultLine(supplier);
     const excluded = transport && transportExceptions.test(supplier.label.trim());
     return { supplier, quantity:excluded ? '0' : '5', unitValue:transport ? (excluded ? '0' : '11') : '' };
   }
@@ -33,6 +34,7 @@ export function createMealVoucherView({ data, root, documentRef = globalThis.doc
   let detailPickers = null;
   let available = { suppliers: [], accounts: [], stages: [] }, orders = [], assignments = {}, result = null;
   let progress = {}, draft = {}, expectedFiles = [];
+  let bulkValues = { quantity:'5', unitValue:'45' };
   const trayAccess = attachmentTray || {snapshot:()=>[],read:async()=>[]};
   let reviewedTray = null, trayActionBusy = false;
   const storageKey = sessionKey ? `energetico:${voucher.storage}:pending:${sessionKey}` : '';
@@ -72,6 +74,7 @@ export function createMealVoucherView({ data, root, documentRef = globalThis.doc
     return true;
   }
   function reset() {
+    bulkValues = { quantity:'5', unitValue:'45' };
     draft = { lines: [], orderMode: '', orderId: '', date: '', dueDate: '', paymentDate: '', referenceMonth: '', account: null, stage: null, obs: transport ? null : '', files: [] };
     progress = { operationId: globalThis.crypto?.randomUUID?.() || `${Date.now()}-${Math.random().toString(36).slice(2)}` };
     expectedFiles = []; reviewedTray = null; result = null; orders = []; assignments = {}; swileHandled = false; step = 'lines';
@@ -276,12 +279,33 @@ export function createMealVoucherView({ data, root, documentRef = globalThis.doc
     }
     content.append(el('p', '', 'Informe quantidade e valor unitário somente para os fornecedores que receberão lançamentos. Todos os empreiteiros ativos estão listados.'));
     const search = el('input', 'meal-voucher-search'); search.type = 'search'; search.placeholder = 'Filtrar fornecedores'; search.setAttribute('aria-label', 'Filtrar fornecedores'); content.append(search);
+    const lineControls = [];
+    if (!transport) {
+      const bulk = el('div', 'meal-voucher-bulk'); bulk.dataset.mealBulk = '';
+      for (const [property, label, attribute] of [['quantity', 'Quantidade para todos', 'data-meal-bulk-quantity'], ['unitValue', 'Valor unitário para todos', 'data-meal-bulk-value']]) {
+        const input = el('input'); input.type = 'text'; input.inputMode = 'decimal'; input.value = bulkValues[property]; input.setAttribute(attribute, '');
+        input.addEventListener('input', () => {
+          bulkValues[property] = input.value;
+          for (const control of lineControls) {
+            control.line[property] = input.value;
+            control[property].value = input.value;
+            control.recalc();
+          }
+          totals();
+        });
+        bulk.append(field(label, input));
+      }
+      content.append(bulk);
+    }
     const table = el('table', 'meal-voucher-table'); table.setAttribute('aria-label', `Fornecedores e valores de ${voucher.name}`);
     const head = el('thead'), hrow = el('tr'); for (const label of ['Fornecedor', 'Qtd', 'Valor unitário', 'Subtotal']) { const th = el('th', '', label); th.scope = 'col'; hrow.append(th); } head.append(hrow); table.append(head);
     const tbody = el('tbody');
     for (const supplier of available.suppliers) {
       let line = draft.lines.find(item => item.supplier.id === supplier.id);
-      if (!line) { line = initialLine(supplier); draft.lines.push(line); }
+      if (!line) {
+        line = progress.signature ? { supplier, quantity:'0', unitValue:'0' } : initialLine(supplier);
+        if (!locked()) draft.lines.push(line);
+      }
       const row = el('tr'); row.dataset.mealSupplier = supplier.id;
       const identity = el('td'); identity.append(el('strong', '', supplier.label), el('small', '', `${supplier.branch || 'Sem filial'} · ${supplier.profession || 'Sem profissão'}`)); row.append(identity);
       const quantity = el('input'); quantity.type = 'text'; quantity.inputMode = 'decimal'; quantity.value = line.quantity; quantity.setAttribute('aria-label', `Quantidade de ${supplier.label}`); quantity.dataset.mealQuantity = supplier.id;
@@ -291,6 +315,7 @@ export function createMealVoucherView({ data, root, documentRef = globalThis.doc
       quantity.addEventListener('input', () => { line.quantity = quantity.value; recalc(); });
       value.addEventListener('input', () => { line.unitValue = value.value; recalc(); });
       const qcell = el('td'), vcell = el('td'); qcell.append(quantity); vcell.append(value); row.append(qcell, vcell, subtotal); tbody.append(row); recalcSafe();
+      lineControls.push({ line, quantity, unitValue:value, recalc:recalcSafe });
       function recalcSafe() {
         let selected = false;
         try { mealVoucherLines([line]); selected = true; } catch { /* Linha incompleta ou inválida não será lançada. */ }
@@ -585,7 +610,10 @@ export function createMealVoucherView({ data, root, documentRef = globalThis.doc
       const changedElsewhere = storageKey && storage.getItem(storageKey) !== pendingSnapshot;
       const restored = (!inMemory || changedElsewhere) && restorePending();
       if (inMemory && changedElsewhere && !restored) reset();
-      if ((!inMemory || changedElsewhere) && !restored) draft.lines = available.suppliers.map(initialLine);
+      if ((!inMemory || changedElsewhere) && !restored) {
+        bulkValues = { quantity:'5', unitValue:'45' };
+        draft.lines = available.suppliers.map(initialLine);
+      }
       else {
         const inspectionOptions = options.stage(1, 3), nextOptions = options.stage(2, 3);
         if (transport && await recoverTransport(active, inspectionOptions)) return;

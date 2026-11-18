@@ -6,10 +6,55 @@ import { createMealVoucherView } from '../src/ui/meal-voucher-view.js';
 
 const tick = () => new Promise(resolve => setTimeout(resolve, 0));
 
+test('campos gerais de alimentação alteram toda a lista filtrada, recalculam e preservam edições ao voltar', async t => {
+  const dom = new JSDOM('<body></body>', { url:'https://example.invalid' }), doc = dom.window.document;
+  const suppliers = ['Ana', 'Bruno', 'Empresa'].map((label, index) => ({ id:String(index + 1), label, branch:'OBRA A', profession:'PEDREIRO', cargo:'PEDREIRO I' }));
+  let posts = 0;
+  const view = createMealVoucherView({ documentRef:doc, data:{
+    loadOptions:async () => ({ suppliers, accounts:[], stages:[] }), loadOrders:async () => [], post:async () => { posts++; },
+  } });
+  t.after(() => { view.destroy(); dom.window.close(); });
+  const type = (selector, value) => { const input = doc.querySelector(selector); assert.ok(input, selector); input.value = value; input.dispatchEvent(new dom.window.Event('input', { bubbles:true })); };
+  const values = name => [...doc.querySelectorAll(`[data-meal-${name}]`)].map(input => input.value);
+  await view.open();
+  const search = doc.querySelector('.meal-voucher-search'), bulk = doc.querySelector('[data-meal-bulk]');
+  assert.ok(bulk, 'os campos gerais ficam entre o filtro e a tabela');
+  assert.equal(search.nextElementSibling, bulk);
+  assert.equal(bulk.nextElementSibling, doc.querySelector('.meal-voucher-table'));
+  type('[data-meal-quantity="3"]', '0'); type('[data-meal-value="3"]', '0');
+  type('.meal-voucher-search', 'Ana');
+  assert.equal(doc.querySelector('[data-meal-supplier="2"]').hidden, true);
+  type('[data-meal-bulk-quantity]', '4');
+  type('[data-meal-bulk-value]', '12,50');
+  assert.deepEqual(values('quantity'), ['4','4','4']);
+  assert.deepEqual(values('value'), ['12,50','12,50','12,50']);
+  assert.match(doc.querySelector('[data-meal-total]').textContent, /150,00/);
+  assert.equal(doc.querySelectorAll('.meal-voucher-selected-row').length, 3);
+  assert.equal(search.value, 'Ana', 'editar mantém o filtro e o foco do controle');
+  type('[data-meal-quantity="1"]', '2');
+  assert.deepEqual(values('quantity'), ['2','4','4']);
+  assert.match(doc.querySelector('[data-meal-total]').textContent, /125,00/);
+  doc.querySelector('[data-meal-next]').click(); await tick();
+  doc.querySelector('[aria-label="Voltar"]').click();
+  assert.deepEqual(values('quantity'), ['2','4','4']);
+  assert.deepEqual(values('value'), ['12,50','12,50','12,50']);
+  assert.equal(doc.querySelector('[data-meal-bulk-quantity]').value, '4');
+  assert.equal(doc.querySelector('[data-meal-bulk-value]').value, '12,50');
+  type('[data-meal-bulk-value]', '0');
+  assert.deepEqual(values('quantity'), ['2','4','4'], 'editar valor não altera quantidade');
+  assert.deepEqual(values('value'), ['0','0','0']);
+  assert.match(doc.querySelector('[data-meal-total]').textContent, /0,00/);
+  assert.equal(doc.querySelectorAll('.meal-voucher-selected-row').length, 0);
+  assert.equal(posts, 0);
+  view.close(); await view.open();
+  assert.equal(doc.querySelector('[data-meal-bulk-quantity]').value, '5');
+  assert.equal(doc.querySelector('[data-meal-bulk-value]').value, '45');
+});
+
 test('vale transporte inicia os valores e sugere OBS com a data de Brasília', async t => {
   const dom = new JSDOM('<body></body>', { url:'https://example.invalid' }), doc = dom.window.document;
   const suppliers = ['Ana Silva', 'ISRAEL ESCORAMENTO E ARMAÇÕES', 'Rafael Souza', 'Mauro Lima', 'Cleiton Cesar Nonato']
-    .map((label, index) => ({ id:String(index + 1), label, branch:'OBRA A', profession:'PEDREIRO' }));
+    .map((label, index) => ({ id:String(index + 1), label, branch:'OBRA A', profession:'PEDREIRO', cargo:'PEDREIRO I' }));
   const view = createMealVoucherView({ documentRef:doc, voucherType:'transport', now:() => new Date('2026-11-16T01:00:00Z'), data:{
     loadOptions:async () => ({ suppliers, accounts:[{id:'8',label:'CAIXA'}], stages:[{id:'7',label:'FUNDAÇÃO',branch:'OBRA A'}] }),
     loadOrders:async () => [], loadSheetAssignments:async () => ({'1':{id:'11'}}),
@@ -49,7 +94,7 @@ function testTray(initial = []) {
 async function extrasPanel(t,{files=[],post=async()=>({orderId:'5',lines:[],total:50}),onSwileRecharge,voucherType='meal',sessionKey=''}={}) {
   const dom=new JSDOM('<body></body>',{url:'https://example.invalid'}),doc=dom.window.document,tray=testTray(files);
   const panel=createMealVoucherView({documentRef:doc,attachmentTray:tray,onSwileRecharge,voucherType,sessionKey,storage:dom.window.localStorage,data:{
-    loadOptions:async()=>({suppliers:[{id:'1',label:'Ana',branch:'OBRA A',profession:'PEDREIRO'}],accounts:[{id:'8',label:'CAIXA'}],stages:[{id:'7',label:'FUNDAÇÃO',branch:'OBRA A'}]}),
+    loadOptions:async()=>({suppliers:[{id:'1',label:'Ana',branch:'OBRA A',profession:'PEDREIRO', cargo:'PEDREIRO I'}],accounts:[{id:'8',label:'CAIXA'}],stages:[{id:'7',label:'FUNDAÇÃO',branch:'OBRA A'}]}),
     loadOrders:async()=>[],loadSheetAssignments:async()=>({'1':{id:'11'}}),post,
   }});t.after(()=>{panel.destroy();dom.window.close();});
   const type=(selector,value)=>{const input=doc.querySelector(selector);input.value=value;input.dispatchEvent(new dom.window.Event('input',{bubbles:true}));};
@@ -205,22 +250,40 @@ for(const outcome of ['cancel','error','success'])test(`voltar à escolha do ped
   assert.ok(h.doc.querySelector('[name="meal-date"]'),'as escolhas voltam a responder quando a seleção termina');
 });
 
-function recoveryPanel(t, { change = () => {}, canEdit = async () => true, files = [] } = {}) {
+function recoveryPanel(t, { change = () => {}, canEdit = async () => true, files = [], extraSuppliers = [], post } = {}) {
   const dom = new JSDOM('<body></body>', { url:'https://example.invalid' }), doc = dom.window.document;
-  const supplier = { id:'1', label:'Ana', branch:'OBRA A', profession:'PEDREIRO' };
+  const supplier = { id:'1', label:'Ana', branch:'OBRA A', profession:'PEDREIRO', cargo:'PEDREIRO I' };
   const original = { lines:[{ supplier, quantity:'5', unitValue:'10' }], orderMode:'new', orderId:'', date:'2026-10-15', dueDate:'2026-10-30', paymentDate:'', referenceMonth:'2026-10', account:{ id:'8', label:'CAIXA' }, stage:{ id:'7', label:'FUNDAÇÃO', branch:'OBRA A' }, obs:'', files };
   const draft = structuredClone({ ...original, files:[] }); change(draft);
   const storage = dom.window.localStorage, key = 'energetico:meal-voucher:pending:recover-case';
   storage.setItem(key, JSON.stringify({ draft, progress:{ operationId:'recover-case', signature:JSON.stringify(original), editable:true }, files }));
   let sheetReads = 0;
   const panel = createMealVoucherView({ documentRef:doc, storage, sessionKey:'recover-case', data:{
-    loadOptions:async () => ({ suppliers:[supplier], accounts:[original.account], stages:[original.stage] }),
+    loadOptions:async () => ({ suppliers:[supplier,...extraSuppliers], accounts:[original.account], stages:[original.stage] }), post,
     loadOrders:async () => [], canEditPending:canEdit,
     loadSheetAssignments:async () => { sheetReads++; return { '1':{ id:'11' } }; },
   } });
   t.after(() => { panel.destroy(); dom.window.close(); });
   return { panel, doc, dom, storage, key, get sheetReads() { return sheetReads; } };
 }
+
+test('voltar aos fornecedores de uma tentativa protegida não inclui novos elegíveis nem muda sua assinatura', async t => {
+  let posted;
+  const h = recoveryPanel(t, { canEdit:async () => false,
+    extraSuppliers:[{ id:'2', label:'Novo elegível', branch:'OBRA A', profession:'PEDREIRO', cargo:'PEDREIRO I' }],
+    post:async draft => { posted = draft; return { orderId:'5', lines:[], total:50 }; },
+  });
+  await h.panel.open();
+  for (let n = 0; n < 4; n++) h.doc.querySelector('[aria-label="Voltar"]').click();
+  assert.equal(h.doc.querySelector('[data-meal-quantity="2"]').value, '0');
+  assert.equal(h.doc.querySelector('[data-meal-value="2"]').value, '0');
+  assert.equal(h.doc.querySelector('[data-meal-bulk-value]').disabled, true);
+  for (let n = 0; n < 4; n++) h.doc.querySelector('[data-meal-next]').click();
+  assert.equal(h.doc.querySelectorAll('[data-meal-person-card]').length, 1);
+  h.doc.querySelector('[data-meal-confirm]').click(); await tick();
+  assert.deepEqual(posted.lines.map(line => line.supplier.id), ['1']);
+  assert.equal(Object.hasOwn(posted, 'bulkValues'), false, 'metadados dos controles não mudam a assinatura financeira legada');
+});
 
 test('recuperação editável aceita campos incompletos antes de consultar a folha', async t => {
   const h = recoveryPanel(t, { change:draft => { draft.referenceMonth = ''; draft.paymentDate = ''; } });
@@ -265,7 +328,7 @@ test('abandona lote legado com comprovante ausente e volta ao formulário limpo 
   h.doc.querySelector('[data-meal-confirm-abandon]').click(); await tick();
   assert.equal(h.storage.getItem(h.key), null);
   assert.doesNotMatch(h.doc.querySelector('.meal-voucher-content').textContent, /Comprovante_20261022/);
-  assert.equal(h.doc.querySelector('[data-meal-value="1"]').value, '');
+  assert.equal(h.doc.querySelector('[data-meal-value="1"]').value, '45');
   assert.equal(h.doc.querySelector('[data-meal-value="1"]').disabled, false);
 
   h.panel.close(); await h.panel.open();
@@ -309,7 +372,7 @@ test('consulta indisponível recupera o original mesmo se o rascunho editável f
 
 test('rascunho restaurado sem gravações libera os campos e posta os dados corrigidos', async t => {
   const dom = new JSDOM('<body></body>', { url:'https://example.invalid' }), doc = dom.window.document;
-  const supplier = { id:'1', label:'Ana', branch:'OBRA A', profession:'PEDREIRO' };
+  const supplier = { id:'1', label:'Ana', branch:'OBRA A', profession:'PEDREIRO', cargo:'PEDREIRO I' };
   const draft = { lines:[{ supplier, quantity:'5', unitValue:'10' }], orderMode:'new', orderId:'', date:'2026-10-15', dueDate:'2026-10-30', paymentDate:'', referenceMonth:'2026-10', account:{ id:'8', label:'CAIXA' }, stage:{ id:'7', label:'FUNDAÇÃO', branch:'OBRA A' }, obs:'', files:[] };
   const storage = dom.window.localStorage, key = 'energetico:meal-voucher:pending:edit-account';
   storage.setItem(key, JSON.stringify({ draft, progress:{ operationId:'edit-view-1', signature:JSON.stringify(draft) }, files:[] }));
@@ -342,7 +405,7 @@ test('revisão do vale mostra cartões por colaborador, total, OBS e anexos sem 
   const dom = new JSDOM(`<!doctype html><style>${css}</style><body></body>`, { url: 'https://example.invalid' });
   const doc = dom.window.document;
   const suppliers = [
-    { id: '1', label: 'Ana Silva', branch: 'OBRA A', profession: 'PEDREIRO' },
+    { id: '1', label: 'Ana Silva', branch: 'OBRA A', profession: 'PEDREIRO', cargo: 'PEDREIRO I' },
     { id: '2', label: 'Bruno Souza', branch: 'OBRA A', profession: 'MESTRE DE OBRAS' },
   ];
   let posts = 0; const tray=testTray();
@@ -395,7 +458,7 @@ test('dados do vale alimentação permitem filtrar conta e etapa digitando sem m
   const doc = dom.window.document;
   const panel = createMealVoucherView({ documentRef: doc, data: {
     loadOptions: async () => ({
-      suppliers: [{ id: '1', label: 'Ana', branch: 'OBRA A', profession: 'PEDREIRO' }],
+      suppliers: [{ id: '1', label: 'Ana', branch: 'OBRA A', profession: 'PEDREIRO', cargo: 'PEDREIRO I' }],
       accounts: [{ id: '8', label: 'ENERGÉTICA CAIXA' }, { id: '9', label: 'BANCO OBRA' }],
       stages: [{ id: '7', label: 'FUNDAÇÃO', branch: 'OBRA A' }, { id: '6', label: 'ALVENARIA', branch: 'OBRA A' }],
     }),
@@ -443,8 +506,8 @@ test('destaca em verde somente linhas que serão incluídas no lançamento', asy
   const dom = new JSDOM(`<!doctype html><style>${css}</style><body></body>`, { url: 'https://example.invalid' });
   const doc = dom.window.document;
   const suppliers = [
-    { id: '1', label: 'Ana', branch: 'OBRA A', profession: 'PEDREIRO' },
-    { id: '2', label: 'Bruno', branch: 'OBRA A', profession: 'PEDREIRO' },
+    { id: '1', label: 'Ana', branch: 'OBRA A', profession: 'PEDREIRO', cargo: 'PEDREIRO I' },
+    { id: '2', label: 'Bruno', branch: 'OBRA A', profession: 'PEDREIRO', cargo: 'PEDREIRO I' },
   ];
   const panel = createMealVoucherView({ documentRef: doc, data: {
     loadOptions: async () => ({ suppliers, accounts: [], stages: [] }),
@@ -454,8 +517,10 @@ test('destaca em verde somente linhas que serão incluídas no lançamento', asy
   const value = row.querySelector('[data-meal-value]');
   const quantity = row.querySelector('[data-meal-quantity]');
   const background = () => dom.window.getComputedStyle(row).backgroundColor;
-  const plain = background();
   const type = (input, text) => { input.value = text; input.dispatchEvent(new dom.window.Event('input', { bubbles: true })); };
+  type(doc.querySelector('[data-meal-value="1"]'), '0');
+  type(value, '0');
+  const plain = background();
 
   type(value, '10');
   const green = background().match(/\d+/g)?.map(Number);
@@ -478,8 +543,8 @@ test('vale alimentação inicia cada quantidade em 5 e preserva alterações man
   const dom = new JSDOM('<!doctype html><body></body>', { url: 'https://example.invalid' });
   const doc = dom.window.document;
   const suppliers = [
-    { id: '1', label: 'Ana', branch: 'OBRA A', profession: 'PEDREIRO' },
-    { id: '2', label: 'Bruno', branch: 'OBRA A', profession: 'PEDREIRO' },
+    { id: '1', label: 'Ana', branch: 'OBRA A', profession: 'PEDREIRO', cargo: 'PEDREIRO I' },
+    { id: '2', label: 'Bruno', branch: 'OBRA A', profession: 'PEDREIRO', cargo: 'PEDREIRO I' },
   ];
   const panel = createMealVoucherView({ documentRef: doc, data: {
     loadOptions: async () => ({ suppliers, accounts: [], stages: [] }),
@@ -504,7 +569,7 @@ test('vale alimentação inicia cada quantidade em 5 e preserva alterações man
 test('vale alimentação: lista fornecedores, soma valores e só posta depois da confirmação', async () => {
   const dom = new JSDOM('<!doctype html><body></body>', { url: 'https://example.invalid' });
   const doc = dom.window.document;
-  const supplier = { id: '1', label: 'Ana', branch: 'OBRA A', profession: 'PEDREIRO' };
+  const supplier = { id: '1', label: 'Ana', branch: 'OBRA A', profession: 'PEDREIRO', cargo: 'PEDREIRO I' };
   let posts = 0, postedPaymentDate;
   const panel = createMealVoucherView({ documentRef: doc, data: {
     loadOptions: async () => ({ suppliers: [supplier], accounts: [{ id: '8', label: 'CAIXA' }], stages: [{ id: '7', label: 'FUNDAÇÃO', branch: 'OBRA A' }] }),
@@ -546,7 +611,7 @@ test('envio interrompido retoma com o mesmo token após recriar a tela e mostra 
   const dom = new JSDOM('<!doctype html><body></body>', { url: 'https://example.invalid' });
   const doc = dom.window.document, cache = new Map(), attempts = [];
   const storage = { getItem: key => cache.get(key) || null, setItem: (key, value) => cache.set(key, value), removeItem: key => cache.delete(key) };
-  const supplier = { id: '1', label: 'Ana', branch: 'OBRA A', profession: 'PEDREIRO' };
+  const supplier = { id: '1', label: 'Ana', branch: 'OBRA A', profession: 'PEDREIRO', cargo: 'PEDREIRO I' };
   const data = {
     loadOptions: async () => ({ suppliers: [supplier], accounts: [{ id: '8', label: 'CAIXA' }], stages: [{ id: '7', label: 'FUNDAÇÃO', branch: 'OBRA A' }] }),
     loadOrders: async () => [], loadSheetAssignments: async () => ({ '1': { id: '11' } }),
@@ -586,7 +651,7 @@ test('envio interrompido retoma com o mesmo token após recriar a tela e mostra 
 test('seta volta à pergunta anterior após falha no envio sem fechar o vale-alimentação', async () => {
   const dom = new JSDOM('<!doctype html><body></body>', { url: 'https://example.invalid' });
   const doc = dom.window.document;
-  const supplier = { id: '1', label: 'Ana', branch: 'OBRA A', profession: 'PEDREIRO' };
+  const supplier = { id: '1', label: 'Ana', branch: 'OBRA A', profession: 'PEDREIRO', cargo: 'PEDREIRO I' };
   let homeCalls = 0;
   const panel = createMealVoucherView({ documentRef: doc, onHome: () => { homeCalls++; }, data: {
     loadOptions: async () => ({ suppliers: [supplier], accounts: [{ id: '8', label: 'CAIXA' }], stages: [{ id: '7', label: 'FUNDAÇÃO', branch: 'OBRA A' }] }),
@@ -640,7 +705,7 @@ test('retomada com anexos usa a barra e aceita somente os arquivos da tentativa 
   const dom = new JSDOM('<!doctype html><body></body>', { url: 'https://example.invalid' });
   const doc = dom.window.document, cache = new Map();
   const storage = { getItem: key => cache.get(key) || null, setItem: (key, value) => cache.set(key, value), removeItem: key => cache.delete(key) };
-  const supplier = { id: '1', label: 'Ana', branch: 'OBRA A', profession: 'PEDREIRO' };
+  const supplier = { id: '1', label: 'Ana', branch: 'OBRA A', profession: 'PEDREIRO', cargo: 'PEDREIRO I' };
   const tray=testTray(); const data = {
     loadOptions: async () => ({ suppliers: [supplier], accounts: [{ id: '8', label: 'CAIXA' }], stages: [{ id: '7', label: 'FUNDAÇÃO', branch: 'OBRA A' }] }),
     loadOrders: async () => [], loadSheetAssignments: async () => ({ '1': { id: '11' } }),

@@ -1,0 +1,32 @@
+<!doctype html><html lang="pt-BR"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1"><style>body{margin:0;font:16px Arial,sans-serif}*{box-sizing:border-box}</style></head><body>
+<script type="module">
+import '../../src/ui/meal-voucher.css';
+import { createMealVoucherView } from '../../src/ui/meal-voucher-view.js';
+try {
+  const suppliers = [
+    { id:'1', label:'CLEITON CESAR NONATO', cargo:'SERVENTE DE PEDREIRO I', profession:'SERVENTE DE PEDREIRO' },
+    { id:'2', label:'EDGAR NELSON DA SILVA', cargo:'MESTRE DE OBRAS', profession:'MESTRE DE OBRAS' },
+    { id:'3', label:'ISRAEL ESCORAMENTO E ARMAÇÕES', cargo:'ARMADOR DE FERRAGENS', profession:'ARMADOR DE FERRAGENS' },
+  ].map(supplier => ({ ...supplier, branch:'004 - EDIFÍCIO XAVANTE' }));
+  let writes = 0;
+  const view = createMealVoucherView({ data:{ loadOptions:async () => ({ suppliers, accounts:[], stages:[] }), loadOrders:async () => [], post:async () => { writes++; throw new Error('A postagem exige confirmação.'); } } });
+  await view.open();
+  const quantities = () => [...document.querySelectorAll('[data-meal-quantity]')].map(input => input.value);
+  const values = () => [...document.querySelectorAll('[data-meal-value]')].map(input => input.value);
+  const initial = JSON.stringify(quantities()) === '["5","5","0"]' && JSON.stringify(values()) === '["45","45","0"]';
+  const type = (selector, value) => { const input = document.querySelector(selector); input.value = value; input.dispatchEvent(new Event('input', { bubbles:true })); };
+  type('.meal-voucher-search','Cleiton');
+  type('[data-meal-bulk-quantity]','4'); type('[data-meal-bulk-value]','12,50');
+  const allRows = JSON.stringify(quantities()) === '["4","4","4"]' && JSON.stringify(values()) === '["12,50","12,50","12,50"]';
+  const total = document.querySelector('[data-meal-total]').textContent.includes('150,00');
+  const filter = document.querySelector('[data-meal-supplier="2"]').hidden;
+  type('[data-meal-quantity="1"]','2');
+  const individual = JSON.stringify(quantities()) === '["2","4","4"]';
+  type('.meal-voucher-search','');
+  const controls = [...document.querySelectorAll('.meal-voucher-bulk input')];
+  const noOverflow = document.documentElement.scrollWidth <= innerWidth && controls.every(input => {
+    const box = input.getBoundingClientRect(); return box.left >= 0 && box.right <= innerWidth && box.height >= 44;
+  });
+  document.documentElement.dataset.layout = JSON.stringify({ initial, allRows, total, filter, individual, noOverflow, noEarlyWrites:writes === 0 });
+} catch (error) { document.documentElement.dataset.layout = JSON.stringify({ error:error.stack }); }
+</script></body></html>
