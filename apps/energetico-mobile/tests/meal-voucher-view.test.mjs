@@ -91,9 +91,9 @@ function testTray(initial = []) {
     pickFiles:async()=>{actions.push('files');},capture:async()=>{actions.push('camera');},open:async id=>{actions.push(`open:${id}`);},remove:async id=>{actions.push(`remove:${id}`);},
   };
 }
-async function extrasPanel(t,{files=[],post=async()=>({orderId:'5',lines:[],total:50}),onSwileRecharge,voucherType='meal',sessionKey=''}={}) {
+async function extrasPanel(t,{files=[],post=async()=>({orderId:'5',lines:[],total:50}),onSwileRecharge,onHome,voucherType='meal',sessionKey=''}={}) {
   const dom=new JSDOM('<body></body>',{url:'https://example.invalid'}),doc=dom.window.document,tray=testTray(files);
-  const panel=createMealVoucherView({documentRef:doc,attachmentTray:tray,onSwileRecharge,voucherType,sessionKey,storage:dom.window.localStorage,data:{
+  const panel=createMealVoucherView({documentRef:doc,attachmentTray:tray,onSwileRecharge,onHome,voucherType,sessionKey,storage:dom.window.localStorage,data:{
     loadOptions:async()=>({suppliers:[{id:'1',label:'Ana',branch:'OBRA A',profession:'PEDREIRO', cargo:'PEDREIRO I'}],accounts:[{id:'8',label:'CAIXA'}],stages:[{id:'7',label:'FUNDAÇÃO',branch:'OBRA A'}]}),
     loadOrders:async()=>[],loadSheetAssignments:async()=>({'1':{id:'11'}}),post,
   }});t.after(()=>{panel.destroy();dom.window.close();});
@@ -104,20 +104,58 @@ async function extrasPanel(t,{files=[],post=async()=>({orderId:'5',lines:[],tota
   doc.querySelector('[data-meal-next]').click();await tick();return {dom,doc,tray,panel,type};
 }
 
-test('vale transporte confirma, limpa a tentativa e volta à primeira etapa com os valores padrão', async t => {
-  const h = await extrasPanel(t, { voucherType:'transport', sessionKey:'test', post:async (draft, progress, save) => {
+test('vale transporte mostra o popup por 1,5 s e abre o menu sem repetir a postagem', async t => {
+  let homeCalls = 0, posts = 0;
+  const h = await extrasPanel(t, { voucherType:'transport', sessionKey:'test', onHome:() => { homeCalls++; }, post:async (draft, progress, save) => {
+    posts++;
     progress.signature = JSON.stringify(draft);
     save();
     return {orderId:'554',lines:[],total:50};
   } });
   h.doc.querySelector('[data-meal-next]').click();
-  h.doc.querySelector('[data-meal-confirm]').click(); await tick();
-  assert.equal(h.doc.querySelector('h2').textContent, 'Vale transporte dos fornecedores');
-  assert.match(h.doc.querySelector('[role="status"]').textContent, /554.*sucesso/);
-  assert.equal(h.doc.querySelector('[data-meal-value="1"]').value, '11');
+  t.mock.timers.enable({ apis:['setTimeout'] });
+  h.doc.querySelector('[data-meal-confirm]').click(); await new Promise(resolve => setImmediate(resolve));
+  assert.ok(h.doc.querySelector('[data-transport-success] .launch-completion'));
+  assert.match(h.doc.querySelector('[data-transport-success]').textContent, /554/);
+  assert.equal(h.doc.querySelector('[data-meal-value="1"]'), null);
   assert.equal(h.dom.window.localStorage.length, 0);
   assert.equal(h.doc.querySelector('[data-meal-confirm]'), null);
   assert.equal(h.doc.querySelector('[data-meal-done]'), null);
+  assert.equal(homeCalls, 0);
+  t.mock.timers.tick(1499);
+  assert.equal(homeCalls, 0);
+  assert.equal(h.doc.querySelector('.meal-voucher-page').hidden, false);
+  t.mock.timers.tick(1);
+  assert.equal(homeCalls, 1);
+  assert.equal(h.doc.querySelector('.meal-voucher-page').hidden, true);
+  t.mock.timers.tick(1500);
+  assert.equal(homeCalls, 1);
+  assert.equal(posts, 1);
+  t.mock.timers.reset();
+  await h.panel.open();
+  assert.equal(h.doc.querySelector('[data-meal-value="1"]').value, '11');
+  assert.equal(h.doc.querySelector('[data-transport-success]'), null);
+});
+
+test('destruir a tela do popup cancela a navegação agendada', async t => {
+  let homeCalls = 0;
+  const h = await extrasPanel(t, { voucherType:'transport', onHome:() => { homeCalls++; } });
+  h.doc.querySelector('[data-meal-next]').click();
+  h.doc.querySelector('[data-meal-confirm]').click(); await tick();
+  h.panel.destroy();
+  await new Promise(resolve => setTimeout(resolve, 1550));
+  assert.equal(homeCalls, 0);
+});
+
+test('falha na postagem de transporte mantém a revisão sem navegar ao menu', async t => {
+  let homeCalls = 0;
+  const h = await extrasPanel(t, { voucherType:'transport', onHome:() => { homeCalls++; }, post:async () => { throw new Error('Falha de envio'); } });
+  h.doc.querySelector('[data-meal-next]').click();
+  h.doc.querySelector('[data-meal-confirm]').click(); await tick();
+  assert.equal(h.doc.querySelector('[data-transport-success]'), null);
+  assert.match(h.doc.querySelector('[role="alert"]').textContent, /Falha de envio/);
+  assert.equal(homeCalls, 0);
+  assert.equal(h.doc.querySelector('.meal-voucher-page').hidden, false);
 });
 
 for (const sameSource of [true, false]) test(`reabertura limpa apenas a cópia identificada da postagem anterior (${sameSource})`, async t => {
@@ -128,17 +166,22 @@ for (const sameSource of [true, false]) test(`reabertura limpa apenas a cópia i
   const key = 'energetico:transport-voucher:pending:recover';
   storage.setItem(key, JSON.stringify({ draft:{ lines:[] }, files:[{ name:file.name, size:file.size, lastModified:0 }],
     progress:{ signature:'{}', operationId:'recover', traySourceIds:[sameSource ? file.name : 'previous-source'] } }));
-  const panel = createMealVoucherView({ documentRef:doc, attachmentTray:tray, sessionKey:'recover', storage, voucherType:'transport',
+  let homeCalls = 0;
+  const panel = createMealVoucherView({ documentRef:doc, attachmentTray:tray, sessionKey:'recover', storage, voucherType:'transport', onHome:() => { homeCalls++; },
     data:{ loadOptions:async () => ({ suppliers:[], accounts:[], stages:[] }), recoverCompleted:async () => ({
       result:{ orderId:'554', lines:[], total:50 }, files:[file], matchesFiles:async files => assert.deepEqual(files,[file]),
     }) },
   });
   t.after(() => { panel.destroy(); dom.window.close(); });
   await panel.open();
-  assert.match(doc.querySelector('[role="status"]').textContent, /554.*sucesso/);
+  assert.match(doc.querySelector('[data-transport-success]').textContent, /554/);
   assert.equal(storage.getItem(key), null);
   assert.equal(tray.consumed, sameSource ? 1 : 0);
   assert.equal(doc.querySelector('[role="alert"]').hidden, sameSource);
+  assert.equal(Boolean(doc.querySelector('[data-transport-success] [role="alert"]')), !sameSource);
+  doc.querySelector('[aria-label="Voltar"]').click();
+  assert.equal(homeCalls, 1);
+  assert.equal(doc.querySelector('.meal-voucher-page').hidden, true);
 });
 
 for (const accept of [true, false]) test(`fim do vale pergunta pela Swile e só abre a recarga na opção Sim (resposta: ${accept})`, async t => {
