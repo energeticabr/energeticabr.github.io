@@ -12713,7 +12713,7 @@ async function tickController(){await new Promise(resolve=>setImmediate(resolve)
 for(const mode of ['file','camera'])test(`falha real no ${mode} do vale conserva o anexo e bloqueia postagem até descarte deliberado`,async t=>{
   const dom=new JSDOM('<body></body>',{url:'https://example.invalid'}),doc=dom.window.document;let posts=0;
   const h=makeHarness({mealVoucherFactory:async options=>createMealVoucherView({...options,documentRef:doc,storage:dom.window.localStorage}),mealVoucherDataFactory:async()=>({
-    loadOptions:async()=>({suppliers:[{id:'1',label:'Ana',branch:'OBRA A',profession:'PEDREIRO'}],accounts:[{id:'8',label:'CAIXA'}],stages:[{id:'7',label:'FUNDAÇÃO',branch:'OBRA A'}]}),
+    loadOptions:async()=>({suppliers:[{id:'1',label:'Ana',branch:'OBRA A',profession:'PEDREIRO',cargo:'PEDREIRO I'}],accounts:[{id:'8',label:'CAIXA'}],stages:[{id:'7',label:'FUNDAÇÃO',branch:'OBRA A'}]}),
     loadOrders:async()=>[],loadSheetAssignments:async()=>({'1':{id:'11'}}),post:async value=>{posts++;assert.deepEqual(value.files,[]);return {orderId:'5',lines:[],total:50};},
   })});t.after(()=>{h.controller.stop();dom.window.close();});await h.controller.start();openPayrollMenu(h);await h.view.emit('select-reply',{replyId:'action_meal_voucher_launch'});
   const type=(selector,value)=>{const input=doc.querySelector(selector);input.value=value;input.dispatchEvent(new dom.window.Event('input',{bubbles:true}));};

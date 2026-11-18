@@ -237,7 +237,7 @@ export function createMealVoucherData({ repository, graph, tokenProvider, storag
     const loading = createPayrollProgress(onProgress, ['schema', 'items', 'normalized']);
     const descriptor = await describe('FORNECEDORES', { signal, onProgress: loading.child('schema') });
     const result = (await all(descriptor, '', { signal, onProgress: loading.child('items') })).filter(row => key(value(descriptor, row, ['STATUS'])) === 'ATIVO' && key(value(descriptor, row, ['EMPREITEIRO'])) === 'SIM')
-      .map(row => ({ id: String(row.id), label: value(descriptor, row, ['CADASTRO', 'FORNECEDOR']), branch: value(descriptor, row, ['FILIAL']), profession: value(descriptor, row, ['PROFISSAO', 'PROFISSÃO'], false) }))
+      .map(row => ({ id: String(row.id), label: value(descriptor, row, ['CADASTRO', 'FORNECEDOR']), branch: value(descriptor, row, ['FILIAL']), profession: value(descriptor, row, ['PROFISSAO', 'PROFISSÃO'], false), cargo: value(descriptor, row, ['CARGO'], false) }))
       .filter(row => numericId(row.id) && row.label).sort((a, b) => a.label.localeCompare(b.label, 'pt-BR'));
     loading.done('normalized'); return result;
   }

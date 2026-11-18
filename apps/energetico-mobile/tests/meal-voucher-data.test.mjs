@@ -54,6 +54,16 @@ function fixture() {
   };
   return { repo, columns, rows, writes, uploads, deliveries, seedAttachment, failSecond: () => { failSecond = true; }, recover: () => { failSecond = false; }, loseOrderResponse: () => { loseOrderResponse = true; }, appendOrderObs: () => { appendOrderObs = true; }, changeSheetDuringLaunch: () => { changeSheetDuringLaunch = true; }, changeOrderDuringLaunch: () => { changeOrderDuringLaunch = true; } };
 }
+
+test('leitura dos fornecedores traz o cargo do fluxo semanal separado da profissão', async () => {
+  const f = fixture();
+  f.columns.FORNECEDORES.push({ name:'CARGO', displayName:'CARGO', text:{} });
+  f.rows.FORNECEDORES[0].fields.CARGO = 'PEDREIRO II';
+  const { suppliers } = await createMealVoucherData({ repository:f.repo }).loadOptions();
+  assert.equal(suppliers[0].cargo, 'PEDREIRO II');
+  assert.equal(suppliers[0].profession, 'PEDREIRO');
+  assert.equal(suppliers[1].cargo, '');
+});
 const draft = suppliers => ({ date: '2026-10-15', dueDate: '2026-10-30', referenceMonth: '2026-10', stage: { id: '7', label: 'FUNDAÇÃO', branch: 'OBRA A' }, account: { id: '8', label: 'CAIXA' }, orderMode: 'new', obs: 'outubro', files: [], lines: suppliers.map((supplier, index) => ({ supplier, quantity: '1', unitValue: index ? '20' : '10' })) });
 
 test('vale transporte registra a rubrica e a OBS próprias com retomada sem duplicar', async () => {

@@ -10,6 +10,15 @@ export const VOUCHER_TYPES = Object.freeze({
 });
 export const mealVoucherKey = payrollKey;
 
+// Same eligibility and defaults as automations/weekly-meal-provisions/build_flow.py.
+const mealRoles = new Set(['SERVENTE DE PEDREIRO I', 'SERVENTE DE PEDREIRO II', 'SERVENTE DE PEDREIRO III',
+  'PEDREIRO I', 'PEDREIRO II', 'PEDREIRO III', 'MESTRE DE OBRAS', 'SUPERVISOR DE OBRAS', 'PERDEIRO III']);
+export function mealVoucherDefaultLine(supplier) {
+  const role = String(supplier.cargo || '').trim().toUpperCase();
+  const eligible = mealRoles.has(role) || String(supplier.id) === '240' && role === 'ENGENHEIRO';
+  return { supplier, quantity:eligible ? '5' : '0', unitValue:eligible ? '45' : '0' };
+}
+
 function amounts(line) {
   if (!String(line.unitValue ?? '').trim() || !String(line.quantity ?? '').trim()) return null;
   let quantity, unitValue, quantityError, valueError;

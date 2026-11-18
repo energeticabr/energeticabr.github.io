@@ -8,7 +8,7 @@ import { createConversationStore } from '../../src/chat/conversation-store.js';
 import { createMealVoucherTray } from '../../src/chat/meal-voucher-tray.js';
 import { createMealVoucherView } from '../../src/ui/meal-voucher-view.js';
 try {
-  const names={FORNECEDORES:['CADASTRO','STATUS','EMPREITEIRO','FILIAL','PROFISSAO'],CADASTROCONTA:['CONTA'],LANCAMENTOOBRA:['ETAPA','FILIAL'],
+  const names={FORNECEDORES:['CADASTRO','STATUS','EMPREITEIRO','FILIAL','PROFISSAO','CARGO'],CADASTROCONTA:['CONTA'],LANCAMENTOOBRA:['ETAPA','FILIAL'],
     IDFOLHA:['MESREFERENCIA','FORNECEDOR'],FOLHAPGTO:['Title','FORNECEDOR','TIPOPGTO','VALORUNITARIO','QTD','DATA','IDFOLHA','IDLANCAMENTO'],
     NOTASPENDENTES:['Title','FILIAL','FORNECEDOR','VALORTOTAL','DATA PEDIDO','STATUS','OBS','FORMAPGTO','NOTA FISCAL','VALECONTROLE'],
     LANCAMENTOS:['__PowerAppsId__','AGRUPAR','FILIAL','TIPO TRANSAÇÃO','DATA','DATA PGTO PREVISTO','DATA PGTO EFETUADO','FORNECEDOR','PRODUTO','ETAPA','QUANTIDADE','VALOR UNITÁRIO','CONTA','FRETE','OBS','IDFOLHA']};
@@ -16,7 +16,7 @@ try {
   Object.assign(columns.NOTASPENDENTES.find(c=>c.name==='VALECONTROLE'),{hidden:true,text:{allowMultipleLines:true,textType:'plain',appendChangesToExistingText:false}});
   Object.assign(columns.LANCAMENTOS.find(c=>c.name==='IDFOLHA'),{text:undefined,number:{decimalPlaces:'none'},required:false});
   const people=['ANA SILVA (TESTE)','BRUNO SOUZA (TESTE)','CARLA LIMA (TESTE)'];
-  const rows={FORNECEDORES:people.map((name,i)=>({id:String(i+1),fields:{CADASTRO:name,STATUS:'ATIVO',EMPREITEIRO:'SIM',FILIAL:'004 - OBRA DE TESTE',PROFISSAO:'PEDREIRO'}})),
+  const rows={FORNECEDORES:people.map((name,i)=>({id:String(i+1),fields:{CADASTRO:name,STATUS:'ATIVO',EMPREITEIRO:'SIM',FILIAL:'004 - OBRA DE TESTE',PROFISSAO:'PEDREIRO',CARGO:'PEDREIRO I'}})),
     CADASTROCONTA:[{id:'8',fields:{CONTA:'CAIXA DE TESTE'}}],LANCAMENTOOBRA:[{id:'7',fields:{ETAPA:'FUNDAÇÃO',FILIAL:'004 - OBRA DE TESTE'}}],
     IDFOLHA:people.map((name,i)=>({id:String(i+11),fields:{MESREFERENCIA:'10/2026',FORNECEDOR:name}})),NOTASPENDENTES:[],LANCAMENTOS:[],FOLHAPGTO:[]};
   const savedFiles=new Map(),deliveries=[];let failLaunch=true,lostOrder=true;
