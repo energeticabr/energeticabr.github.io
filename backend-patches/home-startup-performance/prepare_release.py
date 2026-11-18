@@ -15,9 +15,9 @@ before = Path(sys.argv[1]).read_bytes()
 if hashlib.sha256(before).hexdigest() != deploy.BEFORE['worker/workflow.py']:
     raise RuntimeError('Captured baseline does not match the reviewed source pin')
 after = patch_backend.patch('worker/workflow.py', before)
-(package / 'source.patch').write_text(''.join(difflib.unified_diff(
+(package / 'source.patch').write_bytes(''.join(difflib.unified_diff(
     before.decode().splitlines(keepends=True), after.decode().splitlines(keepends=True),
-    fromfile='a/worker/workflow.py', tofile='b/worker/workflow.py')), encoding='utf-8')
+    fromfile='a/worker/workflow.py', tofile='b/worker/workflow.py')).encode('utf-8'))
 manifest = {'files': {'worker/workflow.py': {'before': hashlib.sha256(before).hexdigest(),
     'after': hashlib.sha256(after).hexdigest()}}, 'mirror': deploy.MIRROR_PINS,
     'inputs': {name: hashlib.sha256((package / name).read_bytes()).hexdigest() for name in sorted(deploy.INPUTS)}}

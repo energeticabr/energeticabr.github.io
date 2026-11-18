@@ -9,3 +9,5 @@ Read-only benchmark against actual SharePoint sources: original 2.610 s, candida
 The installer checks exact production and independent build-mirror pins, compiles the patched source, drains ingress, backs up, atomically replaces only the live workflow, restarts and verifies health. The build mirror remains guarded because it has an independent baseline. Existing restore/conflict tests are included. Run `python -m unittest discover -s backend-patches/home-startup-performance -v`; Linux covers the gate, lock and permission cases too.
 
 The mobile change gives the first resume request 30 seconds and recognizes advancing normalized operation progress; repeated polling and prepared animations do not reset inactivity. Draft reconciliation, cancellation, finite inactivity and business-write retry rules remain in place.
+
+The package producer writes the pinned diff as LF bytes, so Git checkout on Windows or Linux preserves its reviewed hash. This packaging normalization does not change the installed worker or require another server restart.
