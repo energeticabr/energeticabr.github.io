@@ -52,7 +52,7 @@ if(new URL(location.href).searchParams.has('gantt')) {
   popup.querySelector('.gantt-profession-toggle').click();
   const boundsPopup=popup.getBoundingClientRect();
   const rows=[...popup.querySelectorAll('tbody tr')].filter(row=>!row.closest('[hidden]')).map(row=>[...row.cells].map(cell=>cell.textContent));
-  const controls=[...popup.querySelectorAll('button')].map(control=>{const rect=control.getBoundingClientRect();return document.elementFromPoint(rect.x+rect.width/2,rect.y+rect.height/2)?.closest('button')===control;});
+  const controls=[...popup.querySelectorAll('button')].filter(control=>!control.closest('[hidden]')).map(control=>{const rect=control.getBoundingClientRect();return document.elementFromPoint(rect.x+rect.width/2,rect.y+rect.height/2)?.closest('button')===control;});
   const fits=boundsPopup.left>=0&&boundsPopup.top>=0&&boundsPopup.right<=innerWidth+1&&boundsPopup.bottom<=innerHeight+1&&popup.scrollWidth<=popup.clientWidth+1;
   const emptyStrip=popup.querySelector('.gantt-detail-content').scrollWidth>popup.querySelector('.gantt-detail-content').clientWidth+1;
   if(!new URL(location.href).searchParams.has('visual'))popup.querySelector('.gantt-detail-close').click();

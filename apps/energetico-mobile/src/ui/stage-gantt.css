@@ -185,3 +185,24 @@ button.gantt-toggle { flex: 0 0 44px; padding: 0; font-size: 1.15rem; }
 .gantt-people th:nth-child(2) { width:10%; }
 .gantt-people td:nth-child(n+3) { white-space:nowrap; }
 .gantt-detail-dialog :focus-visible { outline:2px solid #146e9c; outline-offset:-2px; }
+.gantt-detail-actions { display:flex; flex-wrap:wrap; gap:6px; justify-content:flex-end; }
+.gantt-detail-back,.gantt-detail-option,.gantt-cost-toggle { min-height:44px; border:1px solid #b2c9d2; border-radius:5px; background:#fff; color:#0d4d61; padding:6px 10px; font:inherit; font-weight:700; cursor:pointer; }
+.gantt-detail-options { display:flex; flex-wrap:wrap; gap:12px; padding:12px 0; }
+.gantt-detail-option { flex:1 1 210px; background:#0d4d61; color:#fff; min-height:60px; }
+.gantt-cost-filters { display:flex; flex-wrap:wrap; gap:12px; margin:8px 0; }
+.gantt-cost-filters label { display:flex; flex-direction:column; gap:4px; min-width:100px; max-width:100%; font-weight:700; }
+.gantt-cost-filters select { min-height:44px; max-width:100%; padding:6px; border:1px solid #b2c9d2; border-radius:5px; background:#fff; color:#163642; font:inherit; }
+.gantt-cost-explanation,.gantt-cost-warning { font-size:.8rem; margin:8px 0; }
+.gantt-cost-warning { color:#aa2839; font-weight:700; }
+.gantt-cost-scroll { max-width:100%; overflow:auto; overscroll-behavior:contain; }
+.gantt-cost-table { width:100%; min-width:600px; border-collapse:collapse; font-size:.85rem; }
+.gantt-cost-table caption { background:#0d4d61; color:#fff; font-weight:800; padding:10px; text-transform:uppercase; }
+.gantt-cost-table th,.gantt-cost-table td { padding:8px; border:1px solid #b2c9d2; text-align:right; }
+.gantt-cost-table thead th { background:#eaf3f6; }
+.gantt-cost-table th:first-child { text-align:left; min-width:190px; overflow-wrap:anywhere; }
+.gantt-cost-table td { white-space:nowrap; font-weight:700; }
+.gantt-cost-toggle { margin-right:8px; min-width:44px; }
+.gantt-cost-paid { color:#075e30; }
+.gantt-cost-forecast { color:#aa2839; }
+.gantt-cost-total { background:#eaf3f6; font-weight:800; }
+.gantt-cost-product th { padding-left:25px; font-weight:400; }
