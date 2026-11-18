@@ -20,12 +20,13 @@ try {
   source.dataset.pendingProvisionsDialog='';
   source.innerHTML='<div class="chat-confirmation chat-pending-provisions chat-pending-provisions--payments" role="dialog"><button aria-label="Fechar">X</button><div class="chat-pending-provisions__list">'+Array.from({length:30},(_,i)=>`<p>Provisão ${i+1}</p>`).join('')+'</div></div>';
   document.body.append(source);
+  const backdrop=getComputedStyle(source).backgroundColor;
   const rect=source.firstElementChild.getBoundingClientRect(),release=retainReportPresentation(source);
   source.remove();await new Promise(requestAnimationFrame);
   const layer=document.querySelector('[data-report-transition]'),surface=layer.querySelector('[role=dialog]'),after=surface.getBoundingClientRect();
   const sameBounds=['left','top','width','height'].every(key=>Math.abs(rect[key]-after[key])<1);
   const indicator=surface.querySelector('.app-loading');
-  const result={sameBounds,blank:!surface.textContent.includes('Provisão'),loading:!!indicator,percentage:indicator.querySelector('[role=progressbar]').textContent,background:getComputedStyle(surface).backgroundColor};
+  const result={backdrop,retainedBackdrop:getComputedStyle(layer.firstElementChild).backgroundColor,sameBounds,blank:!surface.textContent.includes('Provisão'),loading:!!indicator,percentage:indicator.querySelector('[role=progressbar]').textContent,background:getComputedStyle(surface).backgroundColor};
   release();document.documentElement.dataset.layout=JSON.stringify(result);
  }else{
  window.transitionStage='controller';
@@ -65,6 +66,7 @@ try {
    percentage:badge?.textContent,mascot:!!indicator?.querySelector('.app-loading__mascot'),
    within:loadingRect&&loadingRect.left>=0&&loadingRect.top>=0&&loadingRect.right<=innerWidth&&loadingRect.bottom<=innerHeight,
    topmost:!!document.elementFromPoint(innerWidth/2,innerHeight/2)?.closest('[data-report-transition]'),
+   backdrop:copy&&getComputedStyle(copy).backgroundColor,underlay:getComputedStyle(panels[1].element).backgroundColor,
    background:surface&&getComputedStyle(surface).backgroundColor});
  }
  const copyRect=document.querySelector('[data-report-transition] [role="dialog"]').getBoundingClientRect();
