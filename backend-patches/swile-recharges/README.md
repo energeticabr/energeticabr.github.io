@@ -31,4 +31,6 @@ O pedido e o pagamento têm estados distintos. Consulte a Dash RH para pagar e a
 
 Após confirmar um pedido da Swile, o botão de provisões registra a solicitação vinculada à referência do pedido. O serviço `energetica-swile-provisions` cria o descritivo e as provisões usando a chave única `FOLHAOPERACAO`. Ele consulta o grupo exato da Swile até que possa anexar a nota fiscal e, para boleto, o boleto. Para Pix, o vencimento previsto é interno e fica um dia antes do crédito. No boleto, o vencimento enviado à Swile fica dois dias antes.
 
+A solicitação pode ser registrada quando o recibo da criação ainda mostra `DRAFT`, pois esse estado é assíncrono e pode estar desatualizado. O serviço aguarda a confirmação atual do grupo na Swile antes de criar qualquer registro no SharePoint. Pedidos cancelados, em cancelamento ou recusados continuam bloqueados; repetir a solicitação reutiliza a mesma fila.
+
 Depois da implantação dos módulos, instale `energetica-swile-provisions.service` e `energetica-swile-provisions.timer` em `/etc/systemd/system`, com modo `0644`. Execute `sudo systemctl daemon-reload` e `sudo systemctl enable --now energetica-swile-provisions.timer`. O serviço usa o mesmo diário e o cliente SharePoint da VM.

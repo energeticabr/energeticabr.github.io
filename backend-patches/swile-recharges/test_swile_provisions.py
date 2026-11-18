@@ -58,6 +58,49 @@ class SwileProvisionTests(TestCase):
         self.assertEqual(uploads, [(44,'Boleto Swile ABC.pdf',b'%PDF-boleto'),
                                    (44,'Nota fiscal Swile ABC.pdf',b'%PDF-nota')])
 
+    def test_draft_receipt_can_queue_once_and_waits_for_provider_confirmation(self):
+        with TemporaryDirectory() as directory:
+            gateway = Gateway()
+            gateway.summary_orders = [{'employees':[{'document':'12345678900','cardValue':{'v13':225.05}}]}]
+            now = 1794500000
+            service = Service(gateway, Path(directory) / 'orders.sqlite', clock=lambda:now)
+            preview = service.preview('owner', {
+                'items':[{'employeeId':10,'amountCents':22505}],
+                'creditDate':'2026-12-01','paymentMethod':'PIX'})
+            service.confirm('owner', preview['id'])
+            with service.db() as db:
+                db.execute("UPDATE orders SET status='DRAFT' WHERE id=?", (preview['id'],))
+            first = queue_provision(service, 'owner', preview['id'])
+            self.assertEqual(first['state'], 'queued')
+            self.assertEqual(first, queue_provision(service, 'owner', preview['id']))
+            group = {'statusCode':'DRAFT','orderList':[]}
+            service.corporate_group = lambda code: group
+            # No SharePoint method may be called while Swile still reports DRAFT.
+            process_provisions(service, object())
+            with service.db() as db:
+                job = db.execute('SELECT * FROM swile_provisions').fetchone()
+                self.assertEqual((job['state'], job['parent'], job['plan']), ('retry', None, None))
+                self.assertEqual(db.execute('SELECT COUNT(*) FROM swile_provisions').fetchone()[0], 1)
+            self.assertEqual(len([call for call in gateway.calls if call[0] == 'order/create']), 1)
+
+    def test_terminal_orders_cannot_queue_provisions(self):
+        with TemporaryDirectory() as directory:
+            gateway = Gateway()
+            gateway.summary_orders = [{'employees':[{'document':'12345678900','cardValue':{'v13':225.05}}]}]
+            service = Service(gateway, Path(directory) / 'orders.sqlite', clock=lambda:1794500000)
+            preview = service.preview('owner', {
+                'items':[{'employeeId':10,'amountCents':22505}],
+                'creditDate':'2026-12-01','paymentMethod':'PIX'})
+            service.confirm('owner', preview['id'])
+            for status in ('CANCELED', 'CREATION_ERROR', 'PROCESSING_CANCEL'):
+                with self.subTest(status=status):
+                    with service.db() as db:
+                        db.execute('UPDATE orders SET status=? WHERE id=?', (status, preview['id']))
+                    with self.assertRaises(SwileError):
+                        queue_provision(service, 'owner', preview['id'])
+            with service.db() as db:
+                self.assertEqual(db.execute('SELECT COUNT(*) FROM swile_provisions').fetchone()[0], 0)
+
     def test_worker_resumes_after_partial_creation_and_attaches_late_pdfs_to_same_parent(self):
         class FakeStore:
             rows, uploads = {}, []
@@ -88,6 +131,8 @@ class SwileProvisionTests(TestCase):
             draft = {'items':[{'employeeId':10,'amountCents':22505}],'creditDate':'2026-12-01','paymentMethod':'BANK_SLIP'}
             preview = service.preview('owner',draft)
             service.confirm('owner',preview['id'])
+            with service.db() as db:
+                db.execute("UPDATE orders SET status='DRAFT' WHERE id=?", (preview['id'],))
             queue_provision(service,'owner',preview['id'])
             group = {'statusCode':'WAITING_PAYMENT','orderList':[{'code':'ABC','totalValue':225.05}]}
             service.corporate_group = lambda code: group
