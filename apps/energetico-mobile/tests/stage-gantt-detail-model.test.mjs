@@ -22,6 +22,26 @@ test('dias por profissão somam datas de cada pessoa sem duplicar demonstrativos
   assert.equal(detail.professions.find(item => item.name === 'SEM PROFISSÃO').days, 1);
 });
 
+test('pessoas aparecem das mais presentes para as menos presentes, com desempate pelo nome', () => {
+  let id = 0;
+  const rows = [
+    ['Ana', ['2026-11-02']],
+    ['Zélia', ['2026-11-01', '2026-11-03', '2026-11-02']],
+    ['Márcio', ['2026-11-01', '2026-11-02']],
+    ['João', ['2026-11-03', '2026-11-01', '2026-11-01']],
+  ].flatMap(([supplier, dates]) => dates.map(date => ({
+    id: String(++id), activityId: '19', supplier, profession: 'PEDREIRO', date,
+  })));
+  const detail = buildGanttProfessionDetail({ complete: true, rows });
+  assert.deepEqual(detail.professions[0].people, [
+    { name: 'Zélia', days: 3, firstDate: '2026-11-01', lastDate: '2026-11-03' },
+    { name: 'João', days: 2, firstDate: '2026-11-01', lastDate: '2026-11-03' },
+    { name: 'Márcio', days: 2, firstDate: '2026-11-01', lastDate: '2026-11-02' },
+    { name: 'Ana', days: 1, firstDate: '2026-11-02', lastDate: '2026-11-02' },
+  ]);
+  assert.equal(detail.days, 8);
+});
+
 test('detalhes incompletos ou datas inválidas impedem totais parciais', () => {
   assert.throws(() => buildGanttProfessionDetail({ complete: false, rows: [] }), /complet/i);
   assert.throws(() => buildGanttProfessionDetail({ complete: true, rows: [

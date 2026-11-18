@@ -185,6 +185,11 @@ button.gantt-toggle { flex: 0 0 44px; padding: 0; font-size: 1.15rem; }
 .gantt-people th:first-child { width:40%; }
 .gantt-people th:nth-child(2) { width:10%; }
 .gantt-people td:nth-child(n+3) { white-space:nowrap; }
+.gantt-person-cluster { display:inline-block; box-sizing:border-box; max-width:100%; padding:4px 7px; border-radius:5px; color:#fff; font-weight:700; line-height:1.35; }
+.gantt-person-cluster--name { background:#0d4d61; }
+.gantt-person-cluster--days { min-width:2.5em; background:#175d9b; text-align:center; }
+.gantt-person-cluster--start { background:#24723a; }
+.gantt-person-cluster--end { background:#aa2839; }
 .gantt-detail-dialog :focus-visible { outline:2px solid #146e9c; outline-offset:-2px; }
 .gantt-detail-actions { display:flex; flex-wrap:wrap; gap:6px; justify-content:flex-end; }
 .gantt-detail-back,.gantt-detail-option,.gantt-cost-toggle { min-height:44px; border:1px solid #b2c9d2; border-radius:5px; background:#fff; color:#0d4d61; padding:6px 10px; font:inherit; font-weight:700; cursor:pointer; }

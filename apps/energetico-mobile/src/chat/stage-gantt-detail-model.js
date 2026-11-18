@@ -28,7 +28,7 @@ export function buildGanttProfessionDetail(snapshot) {
     const people = [...profession.people.values()].map(person => {
       const dates = [...person.dates].sort();
       return { name: person.name, days: dates.length, firstDate: dates[0], lastDate: dates.at(-1) };
-    }).sort((a, b) => a.name.localeCompare(b.name, 'pt-BR'));
+    }).sort((a, b) => b.days - a.days || a.name.localeCompare(b.name, 'pt-BR'));
     return { name: profession.name, days: people.reduce((sum, person) => sum + person.days, 0), people };
   }).sort((a, b) => b.days - a.days || a.name.localeCompare(b.name, 'pt-BR'));
   return { days: groups.reduce((sum, profession) => sum + profession.days, 0), professions: groups };
