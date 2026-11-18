@@ -38,14 +38,23 @@ test('DDA date and linkage clusters fit on phones, desktop and print',{timeout:9
     assert.equal(regularized.linkBackground,'rgb(234, 248, 238)');
     assert.ok(regularized.linkFits&&regularized.wordsFit,JSON.stringify({width,regularized}));
     assert.ok(state.linkRows.filter(row=>row!==unlinked).every(row=>row.rowBackground!==unlinked.rowBackground));
-    assert.deepEqual([...new Set(state.schedules.map(badge=>badge.text))].sort(),['AGENDADO','AGENDAMENTO NÃO CONFIRMADO','NÃO AGENDADO']);
+    assert.deepEqual([...new Set(state.schedules.map(badge=>badge.text))].sort(),['AGENDADO','Em aberto']);
     for(const badge of state.schedules){
-     assert.ok(badge.above&&badge.sameWidth&&badge.fits,JSON.stringify({width,badge}));
+     assert.ok(badge.onlyCluster&&badge.fits,JSON.stringify({width,badge}));
      assert.equal(badge.printColorAdjust,'exact');
      if(badge.state==='scheduled'){
       assert.equal(badge.color,'rgb(23, 100, 63)');
       assert.equal(badge.background,'rgb(234, 248, 238)');
+      assert.equal(badge.date,'04/11/2026, 15:15');
      }
+    }
+    for(const cluster of state.clusters){
+     assert.equal(cluster.moneyBackground,'rgb(255, 234, 237)');
+     assert.equal(cluster.moneyColor,'rgb(165, 20, 42)');
+     assert.equal(cluster.supplierBackground,'rgb(234, 242, 255)');
+     assert.equal(cluster.bankBackground,'rgb(234, 242, 255)');
+     assert.ok(cluster.bankContainsNumber&&cluster.fits,JSON.stringify({width,cluster}));
+     if(mediaType==='screen')assert.ok(cluster.stacked&&cluster.centered,JSON.stringify({width,cluster}));
     }
     assert.equal(state.metrics.length,8);
     assert.deepEqual(state.metrics.slice(4,7).map(({label,value})=>({label,value})),[
