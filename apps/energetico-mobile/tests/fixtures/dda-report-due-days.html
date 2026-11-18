@@ -67,6 +67,7 @@ for(const due of document.querySelectorAll('.ddr-due')){
  const style=getComputedStyle(badge);
  // offset positions stay in report coordinates when the phone rotates it.
  state.rows.push({text:badge.textContent,tone:due.dataset.dueTone,color:style.color,background:style.backgroundColor,
+  dateText:date.textContent,dateFits:date.scrollWidth<=date.clientWidth+1&&date.offsetWidth<=due.clientWidth,
   dateColor:getComputedStyle(due).color,border:style.borderTopColor,fontSize:parseFloat(style.fontSize),height:badge.offsetHeight,
   below:badge.offsetTop>=date.offsetTop+date.offsetHeight,
   centered:Math.abs(badge.offsetLeft+badge.offsetWidth/2-due.clientWidth/2)<=1,

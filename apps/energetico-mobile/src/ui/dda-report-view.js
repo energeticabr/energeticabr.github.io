@@ -12,6 +12,7 @@ import {createSicoobBalanceMetric} from './sicoob-balance-metric.js';
 const LOGO=new URL('../../../../assets/logo-energetica-oficial.png',import.meta.url).href;
 const money=value=>value==null?'Não disponível':new Intl.NumberFormat('pt-BR',{style:'currency',currency:'BRL'}).format(Number(value));
 const date=value=>value?value.slice(8,10)+'/'+value.slice(5,7)+'/'+value.slice(0,4):'Não informado';
+const weekday=new Intl.DateTimeFormat('pt-BR',{weekday:'long',timeZone:'UTC'});
 const daysSince=(day,today)=>Math.round((Date.parse(`${today}T00:00:00Z`)-Date.parse(`${day}T00:00:00Z`))/86400000);
 const ROW_CONTROLS=['data-dda-pdf','data-dda-provision-check','data-dda-provision-pencil','data-dda-settle-provision','data-dda-toggle-barcode','data-dda-copy-barcode','data-dda-unlinked-review'];
 function rowControlSelector(element){
@@ -268,7 +269,9 @@ export function createDdaReportView({document:doc=globalThis.document,data,openM
    const line=make('tr');line.dataset.ddaId=row.id;
    line.toggleAttribute('data-dda-paid',row.status==='Pago');
    const due=make('td','ddr-due');due.dataset.dueTone=ddaDueTone(row.due,currentDate);
-   due.append(make('span','ddr-due-date',date(row.due)));
+   const dueDate=make('span','ddr-due-date',date(row.due));
+   if(row.due)dueDate.append(make('wbr'),make('span','ddr-due-weekday',`(${weekday.format(new Date(`${row.due}T00:00:00Z`))})`));
+   due.append(dueDate);
    if(row.due)due.append(make('span','ddr-due-days',`${daysSince(today,row.due)} d`));
    const supplier=make('td','ddr-supplier'),status=make('td','ddr-status');status.dataset.status=row.status;
    supplier.append(make('span','ddr-supplier-name ddr-supplier-cluster',row.supplier));

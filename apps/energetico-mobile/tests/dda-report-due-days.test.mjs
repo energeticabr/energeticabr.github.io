@@ -14,7 +14,7 @@ async function setup(t,dates,instant='2026-11-04T22:00:00-03:00'){
 
 test('report shows signed calendar days below the due date with the existing date tone',async t=>{
  const {cell,report}=await setup(t,['2026-11-04','2026-11-05','2026-11-03','2026-11-09','2026-10-23']);
- for(const [id,label,tone,date] of [[1,'0 d','today','04/11/2026'],[2,'1 d','tomorrow','05/11/2026'],[3,'-1 d','other','03/11/2026'],[4,'5 d','other','09/11/2026'],[5,'-12 d','other','23/10/2026']]){
+ for(const [id,label,tone,date] of [[1,'0 d','today','04/11/2026(quarta-feira)'],[2,'1 d','tomorrow','05/11/2026(quinta-feira)'],[3,'-1 d','other','03/11/2026(terça-feira)'],[4,'5 d','other','09/11/2026(segunda-feira)'],[5,'-12 d','other','23/10/2026(sexta-feira)']]){
   const due=cell(id),badge=due.querySelector('.ddr-due-days');
   assert.ok(badge,'days-until-due badge must exist');
   assert.equal(due.dataset.dueTone,tone);
@@ -23,6 +23,7 @@ test('report shows signed calendar days below the due date with the existing dat
   assert.equal(badge.textContent,label);
  }
  const restore=await report.preparePrint();
+ assert.equal(cell(1).querySelector('.ddr-due-date').textContent,'04/11/2026(quarta-feira)');
  assert.equal(cell(1).querySelector('.ddr-due-days').textContent,'0 d');
  restore();
  assert.equal(cell(3).querySelector('.ddr-due-days').textContent,'-1 d');
@@ -43,9 +44,12 @@ test('day distance uses the São Paulo calendar across UTC midnight and month/ye
   ['2026-11-05T03:00:00Z',['2026-11-04','2026-11-05'],['-1 d','0 d']],
   ['2026-12-31T23:59:00-03:00',['2027-01-01'],['1 d']],
   ['2028-02-28T12:00:00-03:00',['2028-02-29','2028-03-01'],['1 d','2 d']],
+  ['2026-10-30T12:00:00-03:00',['2026-10-31T00:00:00Z'],['1 d']],
   ['2026-10-31T12:00:00-03:00',['2026-11-01T00:00:00Z'],['1 d']]
  ]){
   const {cell}=await setup(t,dates,instant);
   for(let i=0;i<dates.length;i++)assert.equal(cell(i+1).querySelector('.ddr-due-days')?.textContent,expected[i],instant);
+  if(dates[0]==='2026-10-31T00:00:00Z')assert.equal(cell(1).querySelector('.ddr-due-date').textContent,'31/10/2026(sábado)');
+  if(dates[0]==='2026-11-01T00:00:00Z')assert.equal(cell(1).querySelector('.ddr-due-date').textContent,'01/11/2026(domingo)');
  }
 });
