@@ -13,7 +13,21 @@ import {createPaymentLedgerView} from '/src/ui/payment-ledger-view.js';
 import {createProvisionReportView} from '/src/ui/provision-report-view.js';
 import {createCargosView} from '/src/ui/cargos-view.js';
 import {createAttendanceSummaryReportView} from '/src/ui/attendance-summary-view.js';
+import {retainReportPresentation} from '/src/ui/report-navigation.js';
 try {
+ if(new URLSearchParams(location.search).has('pending')){
+  const source=document.createElement('div');source.className='chat-confirmation-backdrop';
+  source.dataset.pendingProvisionsDialog='';
+  source.innerHTML='<div class="chat-confirmation chat-pending-provisions chat-pending-provisions--payments" role="dialog"><button aria-label="Fechar">X</button><div class="chat-pending-provisions__list">'+Array.from({length:30},(_,i)=>`<p>Provisão ${i+1}</p>`).join('')+'</div></div>';
+  document.body.append(source);
+  const rect=source.firstElementChild.getBoundingClientRect(),release=retainReportPresentation(source);
+  source.remove();await new Promise(requestAnimationFrame);
+  const layer=document.querySelector('[data-report-transition]'),surface=layer.querySelector('[role=dialog]'),after=surface.getBoundingClientRect();
+  const sameBounds=['left','top','width','height'].every(key=>Math.abs(rect[key]-after[key])<1);
+  const indicator=surface.querySelector('.app-loading');
+  const result={sameBounds,blank:!surface.textContent.includes('Provisão'),loading:!!indicator,percentage:indicator.querySelector('[role=progressbar]').textContent,background:getComputedStyle(surface).backgroundColor};
+  release();document.documentElement.dataset.layout=JSON.stringify(result);
+ }else{
  window.transitionStage='controller';
  const cargos=new URLSearchParams(location.search).has('cargos'),scrollSelector=cargos?'.cargos-scroll':'.pl-table-scroll';
  const handlers=new Map(),panels=[];
@@ -44,9 +58,14 @@ try {
  for(let i=0;i<4;i++){
   await new Promise(requestAnimationFrame);
   const layer=document.querySelector('[data-report-transition]'),copy=layer?.firstElementChild;
-  frames.push({retained:!!layer,sourceVisible:!source.hidden,scroll:copy?.querySelector(scrollSelector).scrollTop,
+  const indicator=layer?.querySelector('.app-loading'),badge=indicator?.querySelector('[role="progressbar"]');
+  const loadingRect=indicator?.getBoundingClientRect(),surface=layer?.querySelector('[role="dialog"]');
+  frames.push({retained:!!layer,sourceVisible:!source.hidden,blank:!layer?.querySelector('table'),
+   loading:!!indicator&&loadingRect.width>0&&loadingRect.height>0,
+   percentage:badge?.textContent,mascot:!!indicator?.querySelector('.app-loading__mascot'),
+   within:loadingRect&&loadingRect.left>=0&&loadingRect.top>=0&&loadingRect.right<=innerWidth&&loadingRect.bottom<=innerHeight,
    topmost:!!document.elementFromPoint(innerWidth/2,innerHeight/2)?.closest('[data-report-transition]'),
-   background:copy&&getComputedStyle(copy).backgroundColor});
+   background:surface&&getComputedStyle(surface).backgroundColor});
  }
  const copyRect=document.querySelector('[data-report-transition] [role="dialog"]').getBoundingClientRect();
  const sameBounds=['left','top','width','height'].every(key=>Math.abs(rect[key]-copyRect[key])<1);
@@ -55,5 +74,6 @@ try {
  document.documentElement.dataset.layout=JSON.stringify({frames,expectedScroll,sameBounds,removed:!document.querySelector('[data-report-transition]'),
   ready:cargos?!destination.querySelector('[aria-busy="true"]')&&!destination.textContent.includes('Carregando presenças'):destination.textContent.includes('Destino pronto'),background:getComputedStyle(destination).backgroundColor,
   visible:!destination.hidden});
+ }
 }catch(error){document.documentElement.dataset.layout=JSON.stringify({error:String(error.stack||error)});}
 </script></body></html>

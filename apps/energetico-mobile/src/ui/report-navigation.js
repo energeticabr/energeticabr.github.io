@@ -1,4 +1,6 @@
 import { bindReportLandscape } from './report-landscape.js';
+import { createLoadingIndicator } from './loading-indicator.js';
+import { beginLoadingTask } from './loading-task.js';
 
 // Visual mascot families in HOME order. Illustrated/gray mascots remain
 // singletons; families are never inferred from inherited button CSS.
@@ -13,34 +15,53 @@ export function getReportNeighbors(action) {
  return {previous:group?.[index-1]??null,next:group?.[index+1]??null};
 }
 
-// Keep only the outgoing presentation alive. Its real view still closes and
-// aborts requests, so a slow neighbor cannot leave a stale report interactive.
+// Keep the outgoing geometry, with a blank loading surface instead of stale
+// report data. The live view still closes and aborts its requests normally.
 export function retainReportPresentation(root, { onCancel } = {}) {
  if (!root?.isConnected) return () => {};
  root=root.closest('.report-landscape-viewport')||root;
  const doc=root.ownerDocument, layer=doc.createElement('div'), copy=root.cloneNode(true);
  layer.dataset.reportTransition='';
  layer.className='report-transition';
- copy.setAttribute('aria-hidden','true');copy.setAttribute('inert','');copy.inert=true;
  copy.removeAttribute('data-report-action');
  for (const node of [copy,...copy.querySelectorAll('[id]')]) node.removeAttribute('id');
+ const surface=copy.matches('[role="dialog"]')?copy:copy.querySelector('[role="dialog"]')||copy;
+ const sourceSurface=root.matches('[role="dialog"]')?root:root.querySelector('[role="dialog"]')||root;
+ // Some reports size their card from the rows. Keep that blank footprint
+ // while loading, clamped to the logical viewport after a device rotation.
+ if(sourceSurface.offsetHeight>0)surface.style.minHeight=`min(${sourceSurface.offsetHeight}px, calc(var(--report-height, 100dvh) - 16px))`;
+ const close=surface.querySelector('.report-close-control,button[aria-label^="Fechar"]');
+ const indicator=createLoadingIndicator(doc,'Carregando relatório...');
+ const progress=beginLoadingTask(indicator);
+ progress.prepared();
+ surface.replaceChildren(indicator);
+ surface.classList.add('report-transition-surface');
+ surface.removeAttribute('aria-labelledby');
+ surface.setAttribute('aria-label','Carregando relatório');
+ if(close){close.setAttribute('aria-hidden','true');close.setAttribute('inert','');close.tabIndex=-1;surface.append(close);}
  layer.append(copy);
- // cloneNode does not copy current form values or scrolled table positions.
- const sources=[root,...root.querySelectorAll('*')],copies=[copy,...copy.querySelectorAll('*')];
  doc.body.append(layer);
  // The copy owns presentation only; native orientation stays with the real
  // reports and the controller's existing transition lease.
  const layout=root.classList.contains('report-landscape-viewport')
   ?bindReportLandscape(copy,{orientation:{bind:()=>({update(){},destroy(){}})}}):null;
- sources.forEach((source,index)=>{
-  const target=copies[index];
-  target.scrollTop=source.scrollTop;target.scrollLeft=source.scrollLeft;
-  if (source.matches('input:not([type="file"]),textarea,select')) target.value=source.value;
-  if ('checked' in source) target.checked=source.checked;
+ // Destination views already report measured progress. Mirror it while this
+ // cover is above them, including views created after an asynchronous import.
+ const syncProgress=()=>{
+  for(const candidate of doc.querySelectorAll('[data-report-action] .app-loading,[data-pending-provisions-dialog] .app-loading')){
+   if(layer.contains(candidate)||candidate.closest('[hidden],[aria-hidden="true"]'))continue;
+   const badge=candidate.querySelector('[role="progressbar"]');
+   const value=badge?.getAttribute('aria-valuenow');
+   if(value!==null&&value!==undefined)progress.report({percent:Number(value)});
+   break;
+  }
+ };
+ const observer=new doc.defaultView.MutationObserver(records=>{
+  if(records.some(record=>!layer.contains(record.target)))syncProgress();
  });
+ observer.observe(doc.body,{childList:true,subtree:true,attributes:true,attributeFilter:['aria-valuenow','hidden','data-report-action']});
  // A real close target remains usable by touch and keyboard while the copy is
  // inert; all other clicks are blocked rather than reaching the loading view.
- const close=copy.querySelector('.report-close-control,button[aria-label^="Fechar"]');
  let positionCancel=()=>{};
  if(close){
   const cancel=doc.createElement('button');
@@ -56,7 +77,7 @@ export function retainReportPresentation(root, { onCancel } = {}) {
  doc.addEventListener('keydown',keydown,true);
  doc.defaultView.addEventListener('resize',positionCancel);
  doc.defaultView.addEventListener('orientationchange',positionCancel);
- return ()=>{doc.removeEventListener('keydown',keydown,true);doc.defaultView.removeEventListener('resize',positionCancel);doc.defaultView.removeEventListener('orientationchange',positionCancel);layout?.destroy();layer.remove();};
+ return ({complete=false}={})=>{if(complete){progress.acquired();progress.complete();}else progress.stop();observer.disconnect();doc.removeEventListener('keydown',keydown,true);doc.defaultView.removeEventListener('resize',positionCancel);doc.defaultView.removeEventListener('orientationchange',positionCancel);layout?.destroy();layer.remove();};
 }
 
 function arrowMarkup(direction) {

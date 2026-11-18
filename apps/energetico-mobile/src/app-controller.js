@@ -6747,12 +6747,14 @@ export function createAppController({
       cancelMascotOrientationTransition();
       resetMascotNavigationOverlays();
     } });
+    let completed = false;
     try {
       resetMascotNavigationOverlays();
       const result = await openMascotReport(target);
-      return mascotNavigationOpening === navigation && result;
+      completed = mascotNavigationOpening === navigation && result;
+      return completed;
     } finally {
-      navigation.releasePresentation();
+      navigation.releasePresentation({ complete: completed });
       navigation.releaseOrientation();
       if (mascotNavigationOpening === navigation) mascotNavigationOpening = null;
     }
