@@ -4,6 +4,7 @@ import { JSDOM } from 'jsdom';
 import { createPaymentLedgerView } from '../src/ui/payment-ledger-view.js';
 import { captureFilteredReport } from '../src/ui/report-print.js';
 import { reportLayoutViewport } from '../src/ui/report-landscape.js';
+import { retainReportPresentation } from '../src/ui/report-navigation.js';
 
 const row = {id:'1',paymentDate:'2026-10-01',supplier:'Fornecedor',branch:'Filial',product:'Produto',order:'1',account:'Caixa',unit:10,quantity:1,freight:0,total:10};
 function setup(t, load) {
@@ -15,6 +16,21 @@ function setup(t, load) {
   const rotate=()=>{[dom.window.innerWidth,dom.window.innerHeight]=[dom.window.innerHeight,dom.window.innerWidth];dom.window.dispatchEvent(new dom.window.Event('resize'));};
   return {view,dom,root:view.element,rotate};
 }
+
+test('a retained report follows viewport rotation while its live source is closed', async t => {
+  const {view,root,rotate,dom}=setup(t,async()=>({launches:[row]}));
+  await view.open();
+  const release=retainReportPresentation(root);t.after(release);
+  view.close();
+  const copy=dom.window.document.querySelector('[data-report-transition]').firstElementChild;
+  rotate();
+  assert.equal(copy.dataset.reportPortrait,'false');
+  assert.equal(copy.style.getPropertyValue('--report-width'),'844px');
+  rotate();
+  assert.equal(copy.dataset.reportPortrait,'true');
+  assert.equal(copy.style.getPropertyValue('--report-height'),'390px');
+  release();rotate();assert.equal(copy.dataset.reportPortrait,'true','resize listener is removed with the presentation');
+});
 test('portrait immediately opens the real report on a logical landscape surface',async t=>{
   let reads=0;
   const {view,root,rotate}=setup(t,async()=>{reads++;return {launches:[row]};});

@@ -1,0 +1,52 @@
+<!doctype html>
+<html lang="pt-BR"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<link rel="stylesheet" href="/src/styles.css"><link rel="stylesheet" href="/src/ui/payment-ledger.css"><link rel="stylesheet" href="/src/ui/provision-report.css"><link rel="stylesheet" href="/src/ui/searchable-filter-selects.css"></head>
+<body><main id="app"><button>HOME de teste</button></main><script>
+addEventListener('error',event=>document.documentElement.dataset.layout=JSON.stringify({error:event.message}));
+addEventListener('unhandledrejection',event=>document.documentElement.dataset.layout=JSON.stringify({error:String(event.reason)}));
+window.transitionStage='imports';
+setTimeout(()=>{if(!document.documentElement.dataset.layout)document.documentElement.dataset.layout=JSON.stringify({error:'Timed out: '+window.transitionStage});},15000);
+</script><script type="module">
+import {createAppController} from '/src/app-controller.js';
+import {createConversationStore} from '/src/chat/conversation-store.js';
+import {createPaymentLedgerView} from '/src/ui/payment-ledger-view.js';
+import {createProvisionReportView} from '/src/ui/provision-report-view.js';
+try {
+ window.transitionStage='controller';
+ const handlers=new Map(),panels=[];
+ const view={render(){},on(type,fn){handlers.set(type,fn);return()=>handlers.delete(type);},focusComposer(){}};
+ const account={homeAccountId:'transition-test',name:'Teste'};
+ const gate=Promise.withResolvers();
+ const data={loadPaymentsSnapshot:async()=>({launches:Array.from({length:50},(_,i)=>({id:String(i+1),supplier:`Fornecedor ${i+1}`,branch:'004 - EDIFÍCIO XAVANTE',paymentDate:'2026-11-17',product:'MATERIAL',order:String(i+1),unit:200,quantity:1,freight:0,total:200}))}),
+  async loadProvisionReportSnapshot(){await gate.promise;return {provisions:[{id:'7',supplier:'Destino pronto',branch:'004 - EDIFÍCIO XAVANTE',product:'LOCAÇÃO',dueDate:'2026-11-18',status:'PAGAMENTO PREVISTO',total:200}],recurrences:[]};}};
+ const controller=createAppController({store:createConversationStore(),view,
+  auth:{initialize:async()=>account,getToken:async()=> 'test',signOut:async()=>{}},
+  client:{getPendingProvisionSnapshot:async()=>({rows:[]}),sendText:async()=>({status:'processed',messages:[]})},
+  native:{importSharedItems:async()=>[]},pendingProvisionAttachmentsDataFactory:async()=>({loadUpcomingPayments:async()=>[]}),
+  paymentLedgerDataFactory:async()=>data,
+  paymentLedgerFactory:options=>{const panel=createPaymentLedgerView({...options,document});panels.push(panel);return panel;},
+  provisionReportFactory:options=>{const panel=createProvisionReportView({...options,document});panels.push(panel);return panel;},
+ });
+ window.transitionStage='start';await controller.start();window.transitionStage='payments';await handlers.get('open-payment-ledger')({type:'open-payment-ledger'});
+ const source=panels[0].element,scroll=source.querySelector('.pl-table-scroll');
+ scroll.scrollTop=180;
+ const expectedScroll=scroll.scrollTop,rect=source.querySelector('[role="dialog"]').getBoundingClientRect();
+ const opening=handlers.get('navigate-mascot-report')({from:'open-payment-ledger',direction:'previous'});
+ window.transitionStage='frames';
+ const frames=[];
+ for(let i=0;i<4;i++){
+  await new Promise(requestAnimationFrame);
+  const layer=document.querySelector('[data-report-transition]'),copy=layer?.firstElementChild;
+  frames.push({retained:!!layer,sourceVisible:!source.hidden,scroll:copy?.querySelector('.pl-table-scroll').scrollTop,
+   topmost:!!document.elementFromPoint(innerWidth/2,innerHeight/2)?.closest('[data-report-transition]'),
+   background:copy&&getComputedStyle(copy).backgroundColor});
+ }
+ const copyRect=document.querySelector('[data-report-transition] [role="dialog"]').getBoundingClientRect();
+ const sameBounds=['left','top','width','height'].every(key=>Math.abs(rect[key]-copyRect[key])<1);
+ window.transitionStage='destination';gate.resolve();await opening;await new Promise(requestAnimationFrame);
+ const destination=panels[1].element;
+ document.documentElement.dataset.layout=JSON.stringify({frames,expectedScroll,sameBounds,removed:!document.querySelector('[data-report-transition]'),
+  ready:destination.textContent.includes('Destino pronto'),background:getComputedStyle(destination).backgroundColor,
+  visible:!destination.hidden});
+}catch(error){document.documentElement.dataset.layout=JSON.stringify({error:String(error.stack||error)});}
+</script></body></html>

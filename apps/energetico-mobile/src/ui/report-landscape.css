@@ -1,3 +1,16 @@
+/* Report surfaces stay opaque; the surrounding HOME stays visible without
+   darkening and lightening again at every neighbor switch. */
+.report-landscape-viewport:has([role="dialog"]),
+[data-pending-provisions-dialog]:has(.chat-pending-provisions--payments) {
+ background:transparent!important;
+ backdrop-filter:none!important;
+ -webkit-backdrop-filter:none!important;
+}
+.report-transition { position:fixed; inset:0; z-index:20000; background:transparent; }
+.report-transition > [inert] { pointer-events:none; }
+.report-transition-cancel { position:fixed; z-index:1; padding:0; border:0; background:transparent; cursor:pointer; }
+@media print { .report-transition { display:none!important; } }
+
 /* The rotated landscape width becomes the phone's physical height. Keep the
    dismissal gaps on that logical axis so they appear above and below. */
 .report-landscape-viewport[data-report-portrait="true"] {

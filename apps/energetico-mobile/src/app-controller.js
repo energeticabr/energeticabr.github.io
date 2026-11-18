@@ -37,7 +37,7 @@ import {
 } from "./chat/presence-date-scope.js";
 import { normalizeConstructionDiaryText } from "./ui/construction-diary-text.js";
 import { provisionDateKey, provisionDayOffset } from "./chat/pending-provision-dates.js";
-import { decorateReportNavigation, getReportNeighbors } from "./ui/report-navigation.js";
+import { decorateReportNavigation, getReportNeighbors, retainReportPresentation } from "./ui/report-navigation.js";
 import { reportOrientation } from './native/report-orientation.js';
 import { createReportSessionCache } from "./report-session-cache.js";
 import { observeReportMutations, observeReportMutationFactory } from "./report-mutations.js";
@@ -6736,20 +6736,29 @@ export function createAppController({
       if (panel.element && (!panel.element.isConnected || panel.element.hidden
         || panel.element.closest?.('[hidden]') || panel.element.getAttribute?.('aria-hidden') === 'true')) return false;
     }
+    const sourceRoot = reportNavigationPanel(from)?.element
+      || (from === 'open-pending-provisions' ? globalThis.document?.querySelector('[data-pending-provisions-dialog]:has(.chat-pending-provisions--payments)') : null);
     const navigation = { releaseOrientation: reportOrientationController.beginTransition() };
     cancelMascotOrientationTransition();
     mascotNavigationOpening = navigation;
+    navigation.releasePresentation = retainReportPresentation(sourceRoot, { onCancel() {
+      if (mascotNavigationOpening !== navigation) return;
+      cancelMascotOrientationTransition();
+      resetMascotNavigationOverlays();
+    } });
     try {
       resetMascotNavigationOverlays();
       const result = await openMascotReport(target);
       return mascotNavigationOpening === navigation && result;
     } finally {
+      navigation.releasePresentation();
       navigation.releaseOrientation();
       if (mascotNavigationOpening === navigation) mascotNavigationOpening = null;
     }
   }
 
   function cancelMascotOrientationTransition() {
+    mascotNavigationOpening?.releasePresentation?.();
     mascotNavigationOpening?.releaseOrientation();
     mascotNavigationOpening = null;
   }
