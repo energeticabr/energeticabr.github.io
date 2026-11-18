@@ -2,6 +2,7 @@ import DecimalBase from 'decimal.js';
 import { normalizeSearchText } from '../../../../portal/core/search-text.js';
 import { fiscalSupplierSimilarity } from './dda-provision-link.js';
 import { NFE_RECENT_STAGE_USES, preferredNfeStage } from './nfe-proposal-learning.js';
+import { createNfeProductMatcher } from './nfe-product-inference.js';
 
 const Decimal = DecimalBase.clone({ precision:40 });
 export const nfeProposalKey = value => normalizeSearchText(value).replace(/[^a-z0-9]+/g, ' ').trim();
@@ -14,9 +15,6 @@ const byLabel = (items, label) => {
   const key = nfeProposalKey(label);
   return key && items.find(item => nfeProposalKey(item.label) === key);
 };
-const stopWords = new Set(['DE','DA','DO','DAS','DOS','PARA','COM','SEM','E','O','A'].map(nfeProposalKey));
-const words = text => new Set(nfeProposalKey(text).split(' ').filter(word => word && !stopWords.has(word)));
-const productKey = value => nfeProposalKey(value).replace(/(\d)\s+(?=[a-z])/g, '$1');
 const selectionId = option => option?.id || '';
 // The XML quantity and price are expressed in the fiscal unit, regardless of the catalog.
 export function nfeProposalUnit(fiscalUnit, catalogUnit) {
@@ -42,25 +40,6 @@ function proposedSupplier(invoice, suppliers) {
   if (exact?.length === 1) return exact[0];
   return pickBest(exact?.length ? exact : suppliers,
     supplier => fiscalSupplierSimilarity(invoice.supplier, supplier.label), 0.5, 0.06);
-}
-
-function proposedProduct(line, products) {
-  const description = productKey(line.description);
-  const sourceWords = words(description);
-  const unit = nfeProposalKey(line.unit);
-  return pickBest(products, product => {
-    const sameUnit = Boolean(unit && unit === product.unitKey);
-    if (product.name === description) return 1 + (sameUnit ? 0.12 : 0);
-    let common = 0, sharesWord = false;
-    for (const word of product.terms) {
-      if (!sourceWords.has(word)) continue;
-      common++;
-      sharesWord ||= /[a-z]{3}/.test(word);
-    }
-    // A shared measure or model number alone cannot identify a product.
-    if (!sharesWord) return 0;
-    return 0.65 * common / product.terms.size + 0.35 * common / sourceWords.size + (sameUnit ? 0.06 : 0);
-  }, 0.76, 0.08)?.option;
 }
 
 export function nfeProposalStages(catalog, branchId) {
@@ -118,10 +97,7 @@ export function updateNfeProposalProduct(draft, number, productId, catalog) {
 }
 
 export function buildNfeProposal(invoice, fiscal, catalog) {
-  const products = catalog.products.map(option => {
-    const name = productKey(option.label);
-    return { option, name, terms:words(name), unitKey:nfeProposalKey(option.unit) };
-  });
+  const proposedProduct = createNfeProductMatcher(catalog.products);
   const header = catalog.learning?.header;
   const supplierId = header?.supplierId || selectionId(proposedSupplier(invoice, catalog.suppliers));
   const draft = updateNfeProposalSupplier({ date:fiscal.issueDate, lines:[] }, supplierId, catalog);
@@ -129,7 +105,7 @@ export function buildNfeProposal(invoice, fiscal, catalog) {
   const branchId = header?.branchId || draft.branchId;
   const context = { supplierId, branchId };
   const lines = fiscal.lines.map(line => ({
-    number:line.number, productId:catalog.learning?.product(line, context) || selectionId(proposedProduct(line, products)),
+    number:line.number, productId:catalog.learning?.product(line, context) || proposedProduct(line),
     quantity:line.quantity, unitPrice:line.unitPrice, discount:line.discount, adjustment:line.adjustment,
     date:fiscal.issueDate, dueDate:fiscal.dueDate || '',
   }));
