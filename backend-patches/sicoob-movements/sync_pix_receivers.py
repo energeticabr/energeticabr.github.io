@@ -384,7 +384,7 @@ def bank_match(row, options, answers, movements_in_account, payer, late_postings
     return next(iter(matches.values())) if len(matches) == 1 else None
 
 
-def resolve_inbox(client, pix_rows, check, inbox=None):
+def resolve_inbox(client, pix_rows, check, inbox=None, *, proofs=None):
     """Use notified IDs before searching historical attachments; retain failures."""
     inbox = inbox if inbox is not None else Inbox()
     identifiers = inbox.pending(limit=10001)
@@ -452,6 +452,8 @@ def resolve_inbox(client, pix_rows, check, inbox=None):
         if missing:
             stats['verificados'] += 1
         if check:
+            if proofs is not None and row.get(movements.KEY):
+                proofs[row[movements.KEY]] = (pix, canonical, payer, None, delayed)
             if missing:
                 row.update(fields)
             continue
@@ -487,6 +489,62 @@ def run(check):
     # Historical receipts must not bypass unresolved webhook ambiguity.
     if not pending or webhook_pending:
         return dict(stats)
+    stats.update(resolve_receipts(client, pix_rows, pending, check, inbox))
+    return dict(stats)
+
+
+def prepare_import(client, records, account):
+    """Resolve authenticated Pix evidence in memory before publishing any debit."""
+    incoming = [row for row in records if re.search(r'\bPIX\b', movements.bank_label(row['DESCRICAO']))]
+    if not incoming:
+        return {}
+    existing = [row for row in list_movements(client) if row['ORIGEMMOVIMENTACAO'] == 'SICOOB'
+                and row['OPERACAO'] == 'DÉBITO' and movements.text(row['CONTAPAGADORA']) == account
+                and re.search(r'\bPIX\b', movements.bank_label(row['DESCRICAO']))]
+    prior_by_key = {row[movements.KEY]: row for row in existing if row.get(movements.KEY)}
+    prepared = {}
+    for index, row in enumerate(incoming, 1):
+        prior = prior_by_key.get(row[movements.KEY])
+        if prior:
+            movements.verify_fields(prior, row, IDENTITY)
+        candidate = {field: '' for field in EXTRA}
+        candidate.update(row, Id=prior['Id'] if prior else -index, Attachments=bool(prior and prior.get('Attachments')))
+        if prior:
+            for field in EXTRA:
+                if movements.text(prior.get(field)).upper() not in ('', movements.UNKNOWN):
+                    candidate[field] = prior[field]
+        prepared[row[movements.KEY]] = candidate
+    universe = [row for row in existing if row.get(movements.KEY) not in prepared] + list(prepared.values())
+    inbox = Inbox()
+    proofs = {}
+    resolve_inbox(client, universe, True, inbox, proofs=proofs)
+    pending = [row for row in prepared.values()
+               if pix_key(row)[-1] or len(direct_ids(row)) == 1]
+    if pending and not inbox.pending(limit=10001):
+        resolve_receipts(client, universe, pending, True, inbox, proofs=proofs)
+    for row in incoming:
+        for field in EXTRA:
+            value = movements.text(prepared[row[movements.KEY]].get(field))
+            if value.upper() not in ('', movements.UNKNOWN):
+                row[field] = value
+    return proofs
+
+
+def finish_import(client, row, proof):
+    """Retain the original receipt and verified extra fields after item readback."""
+    if proof is None:
+        return
+    item = client._find_item(row[movements.KEY], LIST, movements.KEY)
+    if not item:
+        raise ValueError('Prepared Pix movement was not saved')
+    fresh = client.get_item_fields(item['Id'], (*IDENTITY, *EXTRA), LIST)
+    movements.verify_fields(fresh, row, IDENTITY)
+    pix, end_id, payer, content, delayed = proof
+    save_pix(client, {**fresh, 'Id': item['Id']}, pix, end_id, payer, content, allow_posting_delay=delayed)
+
+
+def resolve_receipts(client, pix_rows, pending, check, inbox, *, proofs=None):
+    stats = Counter()
     days = [pix_key(row)[0] for row in pending]
     launches = launch_dates_and_values(client, min(days), max(days))
     archive = {}
@@ -531,7 +589,17 @@ def run(check):
             if not match:
                 continue
             stats['verificados'] += 1
-            if not check:
+            if check:
+                fields = pix_receiver_fields(match[0])
+                if any(movements.text(row.get(field)).upper() not in ('', movements.UNKNOWN)
+                       and not receiver_field_matches(row, fields, field) for field in EXTRA):
+                    continue
+                row.update({field: value for field, value in fields.items()
+                            if movements.text(row.get(field)).upper() in ('', movements.UNKNOWN)})
+                if proofs is not None and row.get(movements.KEY):
+                    pix, end_id, content = match
+                    proofs[row[movements.KEY]] = (pix, end_id, payer, content, False)
+            else:
                 try:
                     pix, end_id, content = match
                     stats['nomes_gravados'] += save_pix(client, row, pix, end_id, payer, content)

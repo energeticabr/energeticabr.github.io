@@ -69,12 +69,19 @@ def tax_id(value):
 def bank_receiver(entry):
     fields = text(entry.get('descInfComplementar')).split('|@')
     name = re.match(r'^FAV\.:\s*(.+)$', fields[0].strip(), re.I)
+    bank_name = text(name.group(1)) if name else ''
+    parts = [text(field) for field in fields if text(field)]
+    if (not bank_name and len(parts) == 3 and bank_label(parts[0]) == 'PIX ENVIADO'
+            and (BANK_DOCUMENT.fullmatch(parts[2]) or PIX_MASKED_DOCUMENT.fullmatch(parts[2]))
+            and any(letter.isalpha() for letter in parts[1])
+            and bank_label(parts[1]) not in ('N/A', 'PIX', 'PAGAMENTO PIX', 'PIX ENVIADO')):
+        bank_name = parts[1]
     documents = {tax_id(field) for field in fields[1:] if BANK_DOCUMENT.fullmatch(field.strip())}
     documents.discard('')
     document = tax_id(entry.get('cpfCnpj'))
     if not document and len(documents) == 1:
         document = next(iter(documents))
-    return document, text(name.group(1)) if name else ''
+    return document, bank_name
 
 
 def receiver_names(rows):
@@ -181,13 +188,15 @@ def payment_rows(payload, start, end, account, names, excluded=None):
     return records
 
 
-def import_movements(fetch, save, start, end, account, names):
+def import_movements(fetch, save, start, end, account, names, *, prepare=None):
     records, excluded = {}, []
     for first, last in monthly_windows(start, end):
         for row in payment_rows(fetch(first, last), start, end, account, names, excluded):
             key = row[KEY]
             if records.setdefault(key, row) != row:
                 raise ValueError('Conflicting transaction data in the bank response')
+    if prepare is not None:
+        prepare(list(records.values()))
     counts = {'debits': len(records), 'excludedDebits': len(excluded), 'inserted': 0, 'existing': 0, 'unidentified': 0}
     for row in records.values():
         created = save(row)
@@ -265,7 +274,7 @@ def fetch_pix_company(document):
 def fill_existing_pix_name(client, item_id, row, bank_fields):
     from requests import HTTPError
 
-    document = row['DOCUMENTORECEBEDOR']
+    document = row.get('DOCUMENTORECEBEDOR', '')
     name = row.get('RAZAOSOCIALRECEBEDOR') or public_receiver_name(document, fetch_pix_company)
     if not name:
         return UNKNOWN
@@ -278,7 +287,9 @@ def fill_existing_pix_name(client, item_id, row, bank_fields):
     if current_document not in ('', UNKNOWN) and tax_id(current_document) != document:
         return UNKNOWN
     name = name[:255]
-    updates = {'DOCUMENTORECEBEDOR': document, 'RAZAOSOCIALRECEBEDOR': name}
+    updates = {'RAZAOSOCIALRECEBEDOR': name}
+    if document:
+        updates['DOCUMENTORECEBEDOR'] = document
     try:
         client.update_item_with_etag(item_id, updates, etag, LIST)
     except HTTPError as error:
@@ -287,7 +298,7 @@ def fill_existing_pix_name(client, item_id, row, bank_fields):
         fresh = client.get_item_fields(item_id, fields, LIST)
         verify_fields(fresh, row, bank_fields)
         return fresh.get('RAZAOSOCIALRECEBEDOR') or UNKNOWN
-    verify_fields(client.get_item_fields(item_id, fields, LIST), {**row, **updates}, fields)
+    verify_fields(client.get_item_fields(item_id, fields, LIST), {**row, **updates}, (*bank_fields, *updates))
     return name
 
 
@@ -301,7 +312,7 @@ def save_movement(client, row):
         actual = client.get_item_fields(existing['Id'], (*bank_fields, 'RAZAOSOCIALRECEBEDOR'), LIST)
         verify_fields(actual, row, bank_fields)
         name = actual.get('RAZAOSOCIALRECEBEDOR')
-        if is_pix and len(document) == 14 and text(name).upper() in ('', UNKNOWN):
+        if is_pix and (row.get('RAZAOSOCIALRECEBEDOR') or len(document) == 14) and text(name).upper() in ('', UNKNOWN):
             name = fill_existing_pix_name(client, existing['Id'], row, bank_fields)
         row['RAZAOSOCIALRECEBEDOR'] = name or UNKNOWN
         return False
@@ -360,8 +371,16 @@ def run(mode, state):
         rows = payment_rows(statements[(start, end)], start, end, account, {}, excluded)
         return {'status': 'verified_read_only', 'debits': len(rows), 'excludedDebits': len(excluded)}
     names = receiver_names(supplier_rows(client))
+    from sync_pix_receivers import finish_import, prepare_import
+    proofs = {}
+    def prepare(rows):
+        proofs.update(prepare_import(client, rows, account))
+    def save(row):
+        created = save_movement(client, row)
+        finish_import(client, row, proofs.get(row[KEY]))
+        return created
     counts = import_movements(lambda first, last: statements[first, last],
-                              lambda row: save_movement(client, row), start, end, account, names)
+                              save, start, end, account, names, prepare=prepare)
     if mode == 'scheduled':
         temporary = cursor.with_suffix('.tmp')
         temporary.write_text(end.isoformat() + '\n')

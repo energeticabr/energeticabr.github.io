@@ -32,7 +32,17 @@ do banco deve ser obtido no Sicoob e anexado ao movimento como
 Para conferir documentos pendentes e consultas sem gravação, execute
 `sync_boleto_receipts.py --check` com o ambiente da unidade.
 
-Para Pix, o nome vem do extrato Sicoob ou da consulta direta por EndToEndId
+Antes de gravar qualquer débito da rodada, o coletor consulta os vínculos Pix:
+notificações bancárias e, sem ambiguidades na fila, comprovantes originais já
+arquivados em LANCAMENTOS. A consulta autenticada por EndToEndId e a conferência
+de conta, titular, valor, data, documento e unicidade preenchem o recebedor em
+memória antes da primeira gravação. Os dados da notificação não fornecem nomes.
+Comprovantes encontrados são preservados e conferidos depois de salvar o item;
+a consulta se repete nas tentativas seguintes, inclusive quando o nome já foi
+gravado, para recuperar uma falha no anexo sem perder o documento original.
+
+Para Pix, o nome vem do extrato Sicoob (formatos `FAV.: nome` e
+`Pix enviado|@nome|@CPF/CNPJ|@`) ou da consulta direta por EndToEndId
 com escopo `pixpagamentos_consulta`. Se o extrato omitir o nome e informar
 o CNPJ completo, a importação consulta a razão social no OpenCNPJ e confere
 o CNPJ devolvido. Se o extrato trouxer apenas o CPF

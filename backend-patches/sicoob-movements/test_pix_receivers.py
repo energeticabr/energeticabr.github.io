@@ -37,6 +37,68 @@ ID da Transação:
 
 
 class PixTest(unittest.TestCase):
+    def test_preimport_uses_verified_receipt_before_persisting_movement(self):
+        from collections import defaultdict
+        row = {**self.row, collector.movements.KEY: 'new-debit', 'ORIGEMMOVIMENTACAO': 'SICOOB',
+               'OPERACAO': 'DÉBITO', 'REFERENCIABANCARIA': 'Pix'}
+        client = SimpleNamespace(get_item_attachments=lambda *args: [{'filename': 'comprovante-pix.pdf', 'content': b'original'}])
+        with tempfile.TemporaryDirectory() as directory:
+            inbox = Inbox(Path(directory), create=True)
+            with patch.object(collector, 'Inbox', return_value=inbox), \
+                 patch.object(collector, 'list_movements', return_value=[]), \
+                 patch.object(collector, 'launch_dates_and_values', return_value=defaultdict(lambda: [1])), \
+                 patch.object(collector, 'cached_receipt_ids', return_value={END_ID}), \
+                 patch.object(collector, 'read_pix', return_value={'payer_document': '12345678000190',
+                              'results': {END_ID: {'status': 200, 'result': self.pix}}}):
+                proofs = collector.prepare_import(client, [row], '12345')
+                retry_proofs = collector.prepare_import(client, [dict(row)], '12345')
+            self.assertEqual(row.get('RAZAOSOCIALRECEBEDOR'), 'Recebedor Exemplo')
+            self.assertEqual(row.get('DOCUMENTORECEBEDOR'), '98712345612')
+            self.assertNotIn('Id', row)
+            self.assertEqual(proofs['new-debit'][3], b'original')
+            self.assertEqual(retry_proofs['new-debit'][3], b'original')
+            stored = {**row, 'Id': 90, 'Attachments': True}
+            with patch.object(collector, 'Inbox', return_value=inbox), \
+                 patch.object(collector, 'list_movements', return_value=[stored]), \
+                 patch.object(collector, 'launch_dates_and_values', return_value=defaultdict(lambda: [1])), \
+                 patch.object(collector, 'cached_receipt_ids', return_value={END_ID}), \
+                 patch.object(collector, 'read_pix', return_value={'payer_document': '12345678000190',
+                              'results': {END_ID: {'status': 200, 'result': self.pix}}}):
+                persisted_retry = collector.prepare_import(client, [dict(row)], '12345')
+            self.assertEqual(persisted_retry['new-debit'][3], b'original')
+
+    def test_preimport_verifies_notified_name_without_claiming_unsaved_movement(self):
+        row = {**self.row, collector.movements.KEY: 'new-debit', 'ORIGEMMOVIMENTACAO': 'SICOOB',
+               'OPERACAO': 'DÉBITO', 'REFERENCIABANCARIA': 'Pix'}
+        with tempfile.TemporaryDirectory() as directory:
+            inbox = Inbox(Path(directory), create=True)
+            inbox.accept({'id': END_ID, 'status': 'FINALIZADO_SUCESSO', 'nome': 'UNTRUSTED'})
+            with patch.object(collector, 'Inbox', return_value=inbox), \
+                 patch.object(collector, 'list_movements', return_value=[]), \
+                 patch.object(collector, 'read_pix', return_value={'payer_document': '12345678000190',
+                              'results': {END_ID: {'status': 200, 'result': self.pix}}}):
+                collector.prepare_import(None, [row], '12345')
+            self.assertEqual(row.get('RAZAOSOCIALRECEBEDOR'), 'Recebedor Exemplo')
+            self.assertEqual(inbox.pending(), [END_ID])
+            self.assertEqual(inbox.claimed_movements(), {})
+
+    def test_preimport_blocks_ambiguous_notifications_and_keeps_them_unclaimed(self):
+        row = {**self.row, collector.movements.KEY: 'new-debit', 'ORIGEMMOVIMENTACAO': 'SICOOB',
+               'OPERACAO': 'DÉBITO', 'REFERENCIABANCARIA': 'Pix'}
+        other = END_ID[:-1] + 'Z'
+        with tempfile.TemporaryDirectory() as directory:
+            inbox = Inbox(Path(directory), create=True)
+            for identifier in (END_ID, other):
+                inbox.accept({'id': identifier, 'status': 'FINALIZADO_SUCESSO'})
+            with patch.object(collector, 'Inbox', return_value=inbox), \
+                 patch.object(collector, 'list_movements', return_value=[]), \
+                 patch.object(collector, 'read_pix', return_value={'payer_document': '12345678000190',
+                              'results': {END_ID: {'status': 200, 'result': self.pix}, other: {'status': 404}}}):
+                collector.prepare_import(None, [row], '12345')
+            self.assertNotIn('RAZAOSOCIALRECEBEDOR', row)
+            self.assertEqual(len(inbox.pending()), 2)
+            self.assertEqual(inbox.claimed_movements(), {})
+
     def setUp(self):
         self.row = {'DATAPAGAMENTO': '2026-11-06T12:00:00Z', 'CONTAPAGADORA': '12345',
                     'VALOR': '23,50', 'DESCRICAO': 'PIX | ***.123.456-**'}
