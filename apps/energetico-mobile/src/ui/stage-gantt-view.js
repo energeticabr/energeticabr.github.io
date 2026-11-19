@@ -177,9 +177,11 @@ export function createStageGanttView({ document: doc = globalThis.document, data
       const startText = formatOperationsDate(item.start);
       const endText = item.finished ? formatOperationsDate(item.end) : 'Em Andamento';
       const dates = `Início ${startText} · Fim ${endText}`;
-      text.append(make('strong', 'gantt-name gantt-cluster gantt-cluster--description', item.name));
+      const name = make('strong', 'gantt-name gantt-cluster gantt-cluster--description', item.name);
+      name.dataset.tone = item.finished ? 'finished' : 'ongoing';
+      text.append(name);
       const canWrite = typeof data[parent ? 'finalizeStage' : 'finalizeActivity'] === 'function';
-      if (canWrite && typeof data.loadAssignments === 'function') {
+      if (!item.finished && canWrite && typeof data.loadAssignments === 'function') {
         const finalize = button('FINALIZAR', `Finalizar ${parent ? 'etapa' : 'atividade'} ${item.name}`);
         finalize.className = 'gantt-finish-button';
         finalize.disabled = !item.canFinalize;
