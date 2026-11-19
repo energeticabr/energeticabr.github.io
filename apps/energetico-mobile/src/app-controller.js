@@ -9122,7 +9122,11 @@ export function createAppController({
         || depreciationReportSession !== session || session.lifetime.signal.aborted
         || flowBusy() || store.getState().activeFlow) throw cancelled();
     };
-    const data = { async loadSnapshot(options = {}) {
+    const data = {
+      loadSnapshot: (options = {}) => queryReport('loadSnapshot', options),
+      loadAssetReport: (id, options = {}) => queryReport('loadAssetReport', options, id),
+    };
+    async function queryReport(method, options, id) {
       assertSession();
       if (options.signal?.aborted) throw cancelled();
       session.loadController?.abort();
@@ -9174,7 +9178,9 @@ export function createAppController({
           assertQuery();
           const source = cachedReportSource('open-depreciation-report', await depreciationReportDataFactory({ tokenProvider }), assertQuery);
           assertQuery();
-          const snapshot = await source.loadSnapshot({ ...options, signal });
+          const snapshot = method === 'loadAssetReport'
+            ? await source.loadAssetReport(id, { ...options, signal })
+            : await source.loadSnapshot({ ...options, signal });
           assertQuery();
           return snapshot;
         } catch (error) {
@@ -9189,7 +9195,7 @@ export function createAppController({
         signal.removeEventListener('abort', rejectCancelled);
         if (session.loadController === controller) session.loadController = null;
       }
-    } };
+    }
     let cancelOpening;
     const openingCancellation = new Promise(resolve => { cancelOpening = () => resolve(false); });
     session.lifetime.signal.addEventListener('abort', cancelOpening, { once: true });

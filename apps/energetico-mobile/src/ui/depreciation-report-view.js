@@ -1,6 +1,8 @@
 import { bindReportLandscape } from './report-landscape.js';
 import { addReportCloseControl } from './report-close-control.js';
 import {buildDepreciationOverview} from '../chat/depreciation-report-model.js';
+import { createAssetReportView } from './asset-report-view.js';
+import { bindSearchableFilterSelects } from './searchable-filter-selects.js';
 import {provisionDateKey} from '../chat/pending-provision-dates.js';
 
 const LOGO=new URL('../../../../assets/logo-energetica-oficial.png',import.meta.url).href;
@@ -25,13 +27,42 @@ export function createDepreciationReportView({document:doc=globalThis.document,d
  panel.append(warning,toolbar,content);root.append(panel);doc.body.append(root);
  let controller=null,revision=0,destroyed=false,returnFocus=null,oldOverflow='',app=null,oldInert=false;
  const landscape = bindReportLandscape(root);
+ const defaults=()=>({status:'ATIVO',depreciate:'SIM'});
+ let filters=defaults(),pickers=null,positionDate='',backdropPressed=false;
+ const assetReport=createAssetReportView({document:doc,host:root,background:[panel],loadReport:(id,options)=>data.loadAssetReport(id,options)});
+ const resultHost=make('div','dr-results');
+ const fields=[['asset','Produto imobilizado'],['branch','Filial'],['status','Status'],['depreciate','Depreciar'],['patrimony','Número do patrimônio'],['supplier','Fornecedor'],['group','Grupo']];
   addReportCloseControl({root, toolbar:toolbar, onClose:close});
 
  function render(snapshot){
-  const result=buildDepreciationOverview(snapshot,provisionDateKey(now()));content.replaceChildren();
+  pickers?.destroy();pickers=null;content.replaceChildren();
+  positionDate=provisionDateKey(now());
+  const result=buildDepreciationOverview(snapshot,positionDate,filters);
   const header=make('header','dr-header'),brand=make('div','dr-brand'),logo=make('img');logo.src=LOGO;logo.alt='Energética Construtora';brand.append(logo);
   header.append(brand,make('h2','','CONTROLE DE DEPRECIAÇÃO DO IMOBILIZADO'),make('p','dr-subtitle',`ITENS COM DEPRECIAÇÃO PREVISTA ATÉ ${date(result.limitDate)} | POSIÇÃO EM ${date(result.today)}`));content.append(header);
-  if(!result.metrics.records){content.append(make('p','dr-empty',`NENHUM ITEM A DEPRECIAR ATÉ ${date(result.limitDate)}`));return;}
+  const filterBar=make('div','dr-filters');
+  for(const [field,label] of fields){
+   const wrapper=make('label','dr-filter'),select=make('select');select.name=field;select.dataset.filter=field;select.setAttribute('aria-label',label);
+   const values=new Set(snapshot.assets.map(row=>String(row[field]??'').trim()).filter(Boolean));
+   if(field==='status')for(const value of ['ATIVO','INATIVO'])values.add(value);
+   if(field==='depreciate')for(const value of ['SIM','NÃO'])values.add(value);
+   if(filters[field])values.add(filters[field]);
+   select.append(make('option','','Todos'));select.firstChild.value='';
+   for(const value of [...values].sort((a,b)=>a.localeCompare(b,'pt-BR'))){const option=make('option','',value);option.value=value;select.append(option);}
+   select.value=filters[field]||'';
+   select.addEventListener('change',()=>{filters[field]=select.value;renderRows(snapshot);});
+   wrapper.append(make('span','',label),select);filterBar.append(wrapper);
+  }
+  const reset=make('button','dr-reset','Restaurar filtros');reset.type='button';reset.addEventListener('click',()=>{
+   filters=defaults();for(const select of filterBar.querySelectorAll('select'))select.value=filters[select.dataset.filter]||'';
+   pickers.sync();renderRows(snapshot);
+  });filterBar.append(reset);content.append(filterBar,resultHost);
+  pickers=bindSearchableFilterSelects(filterBar,{report:true,popupHost:root});
+  renderRows(snapshot);
+ }
+ function renderRows(snapshot){
+  const result=buildDepreciationOverview(snapshot,positionDate,filters);resultHost.replaceChildren();
+  if(!result.metrics.records){resultHost.append(make('p','dr-empty',`NENHUM ITEM A DEPRECIAR ATÉ ${date(result.limitDate)}`));return;}
   const cards=make('div','dr-cards');
   for(const [key,label,currency] of [
    ['records','TOTAL DE REGISTROS',false],['active','REGISTROS ATIVOS',false],['branches','FILIAIS',false],
@@ -40,7 +71,7 @@ export function createDepreciationReportView({document:doc=globalThis.document,d
    const card=make('div',`dr-card dr-metric-${key}`);card.dataset.metric=key;
    card.append(make('span','',label),make('strong','',currency?money(result.metrics[key]):integer(result.metrics[key])));cards.append(card);
   }
-  content.append(cards);
+  resultHost.append(cards);
   for(const branch of result.branches){
    const block=make('article','dr-branch'),bar=make('header','dr-branch-header');
    bar.append(make('h3','',`FILIAL: ${branch.branch}`),make('span','',`REGISTROS: ${branch.records}`),make('strong','',`VALOR TOTAL: ${money(branch.total)}`));block.append(bar);
@@ -54,18 +85,28 @@ export function createDepreciationReportView({document:doc=globalThis.document,d
      [row.patrimony||'-','dr-patrimony'],[date(row.depreciationDate),`dr-date-${row.dateTone}`],[row.group||'-',''],[row.asset||'-','dr-name'],
      [percent(row.rate),'dr-rate'],[money(row.estimatedUnit),'dr-unit'],[integer(row.quantity),''],
      [money(row.total),'dr-total'],[money(row.depreciated),'dr-depreciated'],[money(row.current),'dr-current'],[money(row.toDepreciate),'dr-next'],
-    ])tr.append(make('td',cls,value));
+    ]){
+     const cell=make('td',cls);
+     if(cls==='dr-name'){
+      cell.setAttribute('aria-label',value);
+      const button=make('button','dr-asset-button',value);button.type='button';button.dataset.assetReportTrigger=String(row.id);
+      button.setAttribute('aria-label',`Abrir ficha e histórico de ${value}, patrimônio ${row.patrimony||row.id}`);button.setAttribute('aria-haspopup','dialog');button.setAttribute('aria-expanded','false');
+      button.title='Ver ficha e histórico de depreciação';button.addEventListener('click',()=>assetReport.open(row.id,button));cell.append(button);
+     }else cell.textContent=value;
+     tr.append(cell);
+    }
     body.append(tr);
    }
    const foot=make('tfoot'),totalRow=make('tr'),label=make('td','',`TOTAL DA FILIAL ${branch.branch}`);label.colSpan=6;totalRow.append(label);
    for(const value of [integer(branch.quantity),money(branch.total),money(branch.depreciated),money(branch.current),money(branch.toDepreciate)])totalRow.append(make('td','',value));
-   foot.append(totalRow);table.append(foot);block.append(table);content.append(block);
+   foot.append(totalRow);table.append(foot);block.append(table);resultHost.append(block);
   }
  }
 
  async function load(){
   if(root.hidden||destroyed)return;
   if(content.contains(doc.activeElement))panel.focus();
+  assetReport.close();pickers?.destroy();pickers=null;
   controller?.abort();const current=++revision,active=new AbortController();controller=active;refresh.disabled=true;
   content.replaceChildren(make('p','dr-notice','Carregando depreciação do SharePoint…'));content.setAttribute('aria-busy','true');
   try{
@@ -83,13 +124,23 @@ export function createDepreciationReportView({document:doc=globalThis.document,d
  refresh.addEventListener('click',()=>void load());
  function orientationChanged() { landscape.update(); }
  function close(){
-  if(root.hidden)return;controller?.abort();revision++;content.replaceChildren();root.hidden=true;doc.body.style.overflow=oldOverflow;if(app)app.inert=oldInert;returnFocus?.focus?.();returnFocus=null;
+  if(root.hidden)return;assetReport.close();pickers?.destroy();pickers=null;controller?.abort();revision++;content.replaceChildren();root.hidden=true;doc.body.style.overflow=oldOverflow;if(app)app.inert=oldInert;returnFocus?.focus?.();returnFocus=null;
  }
- root.addEventListener('click',event=>{if(event.target===root)close();});
+ // Expanding a picker on focus can put its list under the pointer before
+ // mouseup. The browser then retargets click to their common ancestor, root.
+ root.addEventListener('pointerdown',event=>{backdropPressed=event.target===root;});
+ root.addEventListener('pointercancel',()=>{backdropPressed=false;});
+ root.addEventListener('click',event=>{
+  if(event.target===root){
+   if(event.detail===0||backdropPressed)close();
+   else event.stopPropagation(); // Do not let the picker treat this as an outside click either.
+  }
+  backdropPressed=false;
+ });
  root.addEventListener('keydown',event=>{
   if(root.hidden)return;
   if(event.key==='Escape'){event.preventDefault();close();return;}if(event.key!=='Tab')return;
-  const nodes=[...panel.querySelectorAll('button,[tabindex="0"]')].filter(node=>!node.disabled&&!node.closest('[hidden]')),first=nodes[0],last=nodes.at(-1);
+  const nodes=[...panel.querySelectorAll('button,input,select,[tabindex="0"]')].filter(node=>!node.disabled&&!node.closest('[hidden]')&&node.tabIndex!==-1),first=nodes[0],last=nodes.at(-1);
   if(event.shiftKey&&(doc.activeElement===first||doc.activeElement===panel)){event.preventDefault();last?.focus();}
   else if(!event.shiftKey&&(doc.activeElement===last||doc.activeElement===panel)){event.preventDefault();first?.focus();}
  });
@@ -99,9 +150,9 @@ export function createDepreciationReportView({document:doc=globalThis.document,d
   async open(){
    if(destroyed)throw new Error('O relatório foi encerrado.');if(!root.hidden)return;
    returnFocus=doc.activeElement;oldOverflow=doc.body.style.overflow;app=doc.getElementById('app');oldInert=app?.inert||false;doc.body.style.overflow='hidden';if(app)app.inert=true;
-   root.hidden=false;landscape.update();warning.hidden=true;content.hidden=toolbar.hidden=false;panel.classList.toggle('dr-portrait',false);panel.focus();content.scrollTop=0;await load();
+   filters=defaults();root.hidden=false;landscape.update();warning.hidden=true;content.hidden=toolbar.hidden=false;panel.classList.toggle('dr-portrait',false);panel.focus();content.scrollTop=0;await load();
   },
   close,
-  destroy(){if(destroyed)return;close();destroyed=true;win?.removeEventListener('resize',orientationChanged);win?.removeEventListener('orientationchange',orientationChanged);landscape.destroy();root.remove();},
+  destroy(){if(destroyed)return;close();assetReport.destroy();destroyed=true;win?.removeEventListener('resize',orientationChanged);win?.removeEventListener('orientationchange',orientationChanged);landscape.destroy();root.remove();},
  });
 }

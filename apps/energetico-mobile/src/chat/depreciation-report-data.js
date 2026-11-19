@@ -2,6 +2,7 @@ import { SHAREPOINT_SITES } from "../../../../portal/config.js";
 import { createGraphClient } from "../../../../portal/data/graph-client.js";
 import { createSharePointRepository } from "../../../../portal/data/sharepoint-repository.js";
 import { normalizeDepreciationReportSnapshot } from "./depreciation-report-model.js";
+import { createAssetReportData } from "./asset-report-data.js";
 
 const SITE = "personal";
 const LIST = "IMOBILIZADOS";
@@ -14,6 +15,7 @@ const SCHEMA = {
   asset: ["IMOBILIZADO", "ITEM"], estimatedUnit: ["VALOR ESTIMADO", "VALORESTIMADO"],
   residualUnit: ["VALOR RESIDUAL", "VALORRESIDUAL", "VLRRESIDUAL"], quantity: ["QTD"],
   rate: ["% DEPRECIACAO", "OData__x0025_DEPRECIACAO"],
+  supplier: ['FORNECEDOR'], status: ['STATUS'], depreciate: ['DEPRECIAR'],
 };
 const columnKey = value => String(value ?? "").replace(/^OData_/i, "")
   .replace(/_x([0-9a-f]{4})_/gi, (_, code) => String.fromCodePoint(Number.parseInt(code, 16)))
@@ -39,6 +41,7 @@ function validateSchema(columns) {
 
 function scalar(value) {
   if (value == null) return "";
+  if (typeof value === 'boolean') return value ? 'SIM' : 'NÃO';
   if (typeof value === "string" || typeof value === "number" && Number.isFinite(value)) return value;
   if (Array.isArray(value) && value.length <= 1) return scalar(value[0]);
   if (typeof value === "object" && !Array.isArray(value)) {
@@ -90,7 +93,7 @@ async function loadRows(repository, signal) {
   const list = await abortable(() => repository.resolveList(SITE, [LIST], { signal }), signal);
   if (list?.status !== "resolved" || !list.id) throw new Error(`A lista ${LIST} não está disponível nesta conta.`);
   const columns = validateSchema(await abortable(() => repository.getColumns(SITE, list.id, { signal }), signal));
-  // Read the whole base: optional gallery filters and STATUS/DEPRECIAR are not report predicates.
+  // Read the complete base so users can change every filter without another query.
   const selected = Object.values(columns).map(column => column.name).join(",");
   const query = new URLSearchParams({ $expand: `fields($select=${selected})`, $top: "100" }).toString();
   const rows = []; const ids = new Set(); const cursors = new Set(); let cursor = "";
@@ -143,5 +146,12 @@ export function createDepreciationReportData({ tokenProvider, repository: suppli
       externalSignal?.removeEventListener("abort", abort);
     }
   }
-  return Object.freeze({ loadSnapshot });
+  async function loadAssetReport(id, options = {}) {
+    abortIfNeeded(options.signal);
+    const repository = suppliedRepository || createSharePointRepository(createGraphClient(
+      scopes => tokenProvider(scopes, { signal: options.signal }),
+    ), SHAREPOINT_SITES);
+    return createAssetReportData({ repository, siteKey: SITE }).loadAssetReport(id, options);
+  }
+  return Object.freeze({ loadSnapshot, loadAssetReport });
 }
