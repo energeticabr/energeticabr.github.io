@@ -287,7 +287,7 @@ test('multi-item description starts collapsed and expands original linked rows w
   assert.equal(group.querySelector('[data-column=supplier]').textContent,'Referência');
   assert.equal(group.querySelector('[data-column=dueDate]').textContent,'20/10/2026');
   assert.equal(group.querySelector('[data-column=total]').textContent.replace(/\s/g,''),'R$0,30');
-  assert.deepEqual([...group.querySelector('[data-column=product]').children].map(node=>node.textContent),['Água (<b>Original</b>)','Internet']);
+  assert.deepEqual([...group.querySelector('[data-column=product]').children].map(node=>node.textContent),['1. Água (<b>Original</b>)','2. Internet']);
   assert.equal(group.querySelector('b'),null);
   assert.equal(main.querySelectorAll('tr[data-id]:not([hidden])').length,1);assert.equal(main.querySelector('tr[data-id="303"] button'),null);
   const controlled=toggle.getAttribute('aria-controls').split(' ').map(id=>dom.window.document.getElementById(id));
