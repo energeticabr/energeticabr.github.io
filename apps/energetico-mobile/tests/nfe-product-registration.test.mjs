@@ -9,11 +9,16 @@ function fixture() {
   const repo = {
     resolveList:async (_site,[name])=>({status:'resolved',id:name}),
     getColumns:async ()=>columns,
-    getItems:async (_site,list)=>list === 'CADASTROPRODUTO' ? rows : list === 'CADASTROTIPOMATERIAL'
-      ? [{id:'3',fields:{TIPO:'MATERIAL'}}] : [
-        {id:'1',fields:{field_1:'METAL',field_3:'CUSTO',STATUS:'ATIVO'}},
+    getItems:async (_site,list,query)=>{
+      if(list==='CADASTROTIPOMATERIAL'){
+        assert.match(query,/Title/);assert.doesNotMatch(query,/\bTIPO\b/);
+        return [{id:'3',fields:{Title:'MATERIAL',STATUS:'ATIVO'}},{id:'4',fields:{Title:'BLOQUEADO',STATUS:'BLOQUEADO'}}];
+      }
+      return list === 'CADASTROPRODUTO' ? rows : [
+        {id:'1',fields:{field_1:'METAL',field_3:'MATERIAL',STATUS:'ATIVO'}},
         {id:'2',fields:{field_1:'RECEITA',field_3:'RECEITA'}},
-      ],
+      ];
+    },
     createItem:async (site,list,fields)=>{
       writes.push({site,list,fields});
       const row={id:'99',fields}; rows.push(row);
@@ -30,7 +35,8 @@ test('registers in the real product catalog with the subfamily classification',a
   assert.deepEqual(context.subfamilies.map(x=>x.id),['1']);
   const product=await h.service.save(context,h.values);
   assert.deepEqual(product,{id:'99',label:'PISO METÁLICO',unit:'PC',expenseType:'MATERIAL',disburses:'SIM'});
-  assert.deepEqual(h.writes,[{site:'personal',list:'CADASTROPRODUTO',fields:{Title:'METAL',field_1:'PISO METÁLICO',UNIDADE:'PC',TIPO:'CUSTO',TIPODESPESA:'MATERIAL',GERADESEMBOLSO:'SIM',SATUS:'ATIVO'}}]);
+  assert.deepEqual(context.expenseTypes,['MATERIAL']);
+  assert.deepEqual(h.writes,[{site:'personal',list:'CADASTROPRODUTO',fields:{Title:'METAL',field_1:'PISO METÁLICO',UNIDADE:'PC',TIPO:'DESPESA',TIPODESPESA:'MATERIAL',GERADESEMBOLSO:'SIM',SATUS:'ATIVO'}}]);
   assert.equal(h.authorizations,1);
 });
 test('rejects missing, forged and invalid fields without writing',async()=>{

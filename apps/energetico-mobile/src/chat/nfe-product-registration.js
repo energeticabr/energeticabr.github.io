@@ -33,7 +33,7 @@ export function createNfeProductRegistration({ repository, authorizeWrite, asser
     const [columns, subfamilies, expenseRows, productRows] = await Promise.all([
       repository.getColumns('personal', products.id, {signal}),
       rows(families.id,['field_1','field_3','STATUS'],signal),
-      rows(expenses.id,['TIPO'],signal), rows(products.id,productFields,signal),
+      rows(expenses.id,['Title','STATUS'],signal), rows(products.id,productFields,signal),
     ]);
     active(signal);
     for(const name of productFields) if(!columns.some(column=>column.name===name && !column.readOnly))
@@ -42,8 +42,8 @@ export function createNfeProductRegistration({ repository, authorizeWrite, asser
     const context = {
       listId:products.id,
       subfamilies:subfamilies.filter(row=>activeRow(row.fields) && nfeProposalKey(row.fields.field_3)!=='receita')
-        .map(row=>({id:String(row.id),label:clean(row.fields.field_1),type:clean(row.fields.field_3)})).filter(row=>row.label && row.type),
-      expenseTypes:unique([...choices('TIPODESPESA'),...expenseRows.map(row=>row.fields.TIPO),...productRows.filter(row=>activeRow(row.fields)).map(row=>row.fields.TIPODESPESA)]),
+        .map(row=>({id:String(row.id),label:clean(row.fields.field_1)})).filter(row=>row.label),
+      expenseTypes:unique([...choices('TIPODESPESA'),...expenseRows.filter(row=>activeRow(row.fields)).map(row=>row.fields.Title),...productRows.filter(row=>activeRow(row.fields)).map(row=>row.fields.TIPODESPESA)]),
       disburses:choices('GERADESEMBOLSO').length ? choices('GERADESEMBOLSO') : ['SIM','NÃO'],
       status:choices('SATUS').find(value=>nfeProposalKey(value)==='ativo') || (choices('SATUS').length ? null : 'ATIVO'),
       choices:Object.fromEntries(productFields.map(name=>[name,choices(name)])),
@@ -59,7 +59,7 @@ export function createNfeProductRegistration({ repository, authorizeWrite, asser
     if(!family) throw new Error('Selecione a subfamília do produto.');
     if(!context.expenseTypes.includes(values.expenseType)) throw new Error('Selecione o tipo de despesa.');
     if(!context.disburses.includes(values.disburses)) throw new Error('Informe se o produto gera desembolso.');
-    const fields={Title:family.label,field_1:name,UNIDADE:unit,TIPO:family.type,TIPODESPESA:values.expenseType,GERADESEMBOLSO:values.disburses,SATUS:context.status};
+    const fields={Title:family.label,field_1:name,UNIDADE:unit,TIPO:'DESPESA',TIPODESPESA:values.expenseType,GERADESEMBOLSO:values.disburses,SATUS:context.status};
     for(const [key,value] of Object.entries(fields)) if(context.choices[key]?.length && !context.choices[key].includes(value))
       throw new Error(`O valor de ${key} não está disponível no cadastro.`);
     const existing=(await rows(context.listId,productFields,signal)).filter(row=>nfeProposalKey(row.fields.field_1)===nfeProposalKey(name));
