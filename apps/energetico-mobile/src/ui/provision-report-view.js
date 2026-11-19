@@ -212,7 +212,7 @@ export function createProvisionReportView({document:doc=globalThis.document,data
     cell(tr,'branch',row.branch,'pr-bold');cell(tr,'supplier',row.supplier,'pr-bold');
     const productText=item=>`${item.product}${item.observation?` (${item.observation})`:''}`;
     const product=cell(tr,'product',productText(row),'pr-bold');
-    if(row.children){product.replaceChildren();for(const item of row.children)textLine(product,productText(item));}
+    if(row.children){product.replaceChildren();row.children.forEach((item,index)=>textLine(product,`${index+1}. ${productText(item)}`));}
     const dueCell=cell(tr,'dueDate','','pr-red pr-bold');dueCell.replaceChildren();textLine(dueCell,formatReportDate(row.dueDate),'pr-date pr-nowrap');
     scheduling(cell(tr,'schedule',''),row,today);cell(tr,'total',money(row.total),'pr-bold pr-money');
     const status=cell(tr,'status','');status.replaceChildren();const paid=upper(row.status)==='PAGAMENTO EFETUADO',statusTone=paid?'green':upper(row.status)==='PENDENTE'?'orange':'red';
