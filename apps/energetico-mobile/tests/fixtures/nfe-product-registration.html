@@ -1,0 +1,31 @@
+<!doctype html><html lang="pt-BR"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<link rel="stylesheet" href="/src/styles.css"><link rel="stylesheet" href="/src/ui/report-landscape.css"><link rel="stylesheet" href="/src/ui/nfe-report.css"><link rel="stylesheet" href="/src/ui/searchable-filter-selects.css">
+</head><body><div id="report" class="nfe-report" style="position:fixed;inset:0"></div>
+<script>addEventListener('error',event=>{document.documentElement.dataset.layout=JSON.stringify({error:event.message||event.target?.outerHTML||'Falha ao carregar módulo'});},true);addEventListener('unhandledrejection',event=>{document.documentElement.dataset.layout=JSON.stringify({error:String(event.reason)});});</script>
+<script type="module">
+import {createNfeProposalView} from '/src/ui/nfe-proposal-view.js';
+import {bindReportLandscape} from '/src/ui/report-landscape.js';
+try {
+ const root=document.querySelector('#report');bindReportLandscape(root);
+ const fiscal={total:'1575',issueDate:'2026-11-18',dueDate:'2026-11-24',lines:[{number:'1',description:'PISO METALICO 1,5M X 0,37',unit:'PC',quantity:'9',unitPrice:'175',discount:'0',adjustment:'0'}]};
+ const catalog={suppliers:[{id:'1',label:'FORNECEDOR'}],branches:[{id:'2',label:'OBRA'}],accounts:[{id:'3',label:'SICOOB'}],products:[{id:'4',label:'BLOCO DE CIMENTO (PISO)',unit:'PC',expenseType:'MATERIAL'}],stages:[{id:'5',label:'ETAPA',branch:'OBRA'}]};
+ const draft={supplierId:'1',branchId:'2',accountId:'3',date:fiscal.issueDate,paymentDate:fiscal.issueDate,lines:[{...fiscal.lines[0],productId:'4',stageId:'5',date:fiscal.issueDate,dueDate:fiscal.dueDate}]};
+ const view=createNfeProposalView({document,host:root,onPosted(){},service:{load:async()=>({fiscal,catalog,draft}),productRegistration:{
+  load:async()=>({subfamilies:[{id:'8',label:'ESTRUTURAS METÁLICAS'}],expenseTypes:['MATERIAL'],disburses:['SIM','NÃO']}),
+  save:async()=>({id:'9',label:'PISO METALICO 1,5M X 0,37',unit:'PC',expenseType:'MATERIAL',disburses:'SIM'})
+ }}});
+ await view.show({id:'7',type:'NF-e',number:'123',pdfName:'nota.pdf'});
+ const details=root.querySelector('details');details.open=true;details.dispatchEvent(new Event('toggle'));
+ await new Promise(r=>requestAnimationFrame(()=>requestAnimationFrame(r)));
+ const button=root.querySelector('[data-nfe-register-product]'),label=button.previousElementSibling;
+ const b=button.getBoundingClientRect(),l=label.getBoundingClientRect();
+ const state={rightOfProduct:root.dataset.reportPortrait==='true'?b.top>=l.bottom:b.left>=l.right,buttonFits:button.scrollWidth<=button.clientWidth+1};
+ button.click();await new Promise(r=>requestAnimationFrame(()=>requestAnimationFrame(r)));
+ const form=root.querySelector('[data-nfe-product-form]'),body=form.querySelector('.nfe-proposal-body'),footer=form.querySelector('footer');
+ const visible=node=>{const r=node.getBoundingClientRect();return r.left>=-1&&r.top>=-1&&r.right<=innerWidth+1&&r.bottom<=innerHeight+1;};
+ state.formFits=body.scrollWidth<=body.clientWidth+1;state.footerVisible=visible(footer);state.nameSuggested=form.elements.name.value===fiscal.lines[0].description;
+ state.proposalHidden=root.querySelector('.nfe-proposal-form:not(.nfe-product-form)').getBoundingClientRect().height===0;
+ if(!new URLSearchParams(location.search).has('registration'))form.querySelector('[data-nfe-product-cancel]').click();
+ document.documentElement.dataset.layout=JSON.stringify(state);
+}catch(error){document.documentElement.dataset.layout=JSON.stringify({error:error.stack});}
+</script></body></html>

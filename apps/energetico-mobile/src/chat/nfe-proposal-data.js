@@ -8,6 +8,7 @@ import {
 import { createNfeLearningExample, createNfeLearningModel, nfeLearningIssuerHash } from './nfe-proposal-learning.js';
 import { nfeOrderId, NFE_ORDER_FIELD, NFE_PROVISION_DESCRIPTION_FIELD } from './nfe-order-link.js';
 import { parseNfeProposalXml } from './nfe-proposal-xml.js';
+import { createNfeProductRegistration } from './nfe-product-registration.js';
 
 const clean = value => String(value ?? '').trim();
 const sortable = (left, right) => left.label.localeCompare(right.label, 'pt-BR', { numeric:true });
@@ -258,6 +259,7 @@ export function createNfeProposalData({ repository, fiscalData, tokenProvider, s
   });
 
   return Object.freeze({
+    productRegistration:createNfeProductRegistration({ repository, authorizeWrite, assertSession }),
     async load(row, { signal } = {}) {
       const reserved = await posting.loadReservation(row, { signal });
       await authorizeWrite({ signal });

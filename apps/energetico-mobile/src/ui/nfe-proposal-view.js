@@ -6,6 +6,7 @@ import {
 } from '../chat/nfe-proposal-model.js';
 import { bindSearchableFilterSelects } from './searchable-filter-selects.js';
 import { createProposalAttachmentTray } from './nfe-proposal-attachment-tray.js';
+import { showNfeProductRegistration } from './nfe-product-registration-view.js';
 
 const money = new Intl.NumberFormat('pt-BR', { style:'currency', currency:'BRL' });
 const unitMoney = new Intl.NumberFormat('pt-BR', { style:'currency', currency:'BRL', maximumFractionDigits:10 });
@@ -54,7 +55,8 @@ export function createNfeProposalView({ document:doc, host, service, onPosted, o
     dialog.tabIndex = -1;
     const header = el('header', 'nfe-proposal-header');
     const title = el('h2', '', heading.toUpperCase());
-    const cancel = () => { if (current === entry && !entry.busy) close(); };
+    let cancelRegistration;
+    const cancel = () => { if (current === entry && !entry.busy) { if(cancelRegistration) cancelRegistration(); else close(); } };
     const closeControl = button('Voltar', cancel);
     header.append(title, closeControl);
     const form = el('form', 'nfe-proposal-form');
@@ -110,7 +112,7 @@ export function createNfeProposalView({ document:doc, host, service, onPosted, o
     entry.receive = incoming => tray?.append(incoming);
     function lock() {
       closeControl.disabled = entry.busy;
-      submit.disabled = entry.busy || !entry.draft && !entry.attachmentOnly || Boolean(tray?.picking);
+      submit.disabled = entry.busy || entry.registering || !entry.draft && !entry.attachmentOnly || Boolean(tray?.picking);
       submit.textContent = entry.attachmentOnly ? 'ENVIAR ANEXOS AO PEDIDO' : entry.reserved ? 'RETOMAR ENVIO' : submitLabel;
       for (const fields of body.querySelectorAll('fieldset')) fields.disabled = entry.busy || entry.reserved;
       tray?.render();
@@ -211,6 +213,43 @@ export function createNfeProposalView({ document:doc, host, service, onPosted, o
       });
     }
 
+    function registerProduct(index, trigger) {
+      if(!isCurrent() || entry.busy || entry.reserved || entry.registering) return;
+      entry.registering=true;
+      form.hidden=true;
+      title.textContent='CADASTRAR PRODUTO';
+      dialog.setAttribute('aria-label','Cadastrar produto');
+      lock();
+      cancelRegistration=showNfeProductRegistration({document:doc,dialog,service:service.productRegistration,
+        original:entry.fiscal.lines[index],signal,pickerOptions,feedback,
+        onBusy:busy=>{entry.busy=busy;lock();},
+        onFinish:product=>{
+          cancelRegistration=null;entry.registering=false;
+          if(!isCurrent())return;
+          form.hidden=false;title.textContent=heading.toUpperCase();dialog.setAttribute('aria-label',heading);
+          if(product){
+            const products=entry.catalog.products;
+            const existing=products.findIndex(option=>option.id===product.id);
+            if(existing<0) products.push(product); else products[existing]=product;
+            products.sort((a,b)=>a.label.localeCompare(b.label,'pt-BR'));
+            const line=entry.draft.lines[index];
+            const manualStage=entry.manualStages.has(String(line.number)) ? line.stageId : null;
+            entry.draft=updateNfeProposalProduct(entry.draft,line.number,product.id,entry.catalog);
+            if(manualStage!==null)entry.draft.lines[index].stageId=manualStage;
+            updateStages();
+            for(const control of body.querySelectorAll('[name="productId"]')) {
+              const lineIndex=Number(control.dataset.nfeProductLine);
+              populate(control,products,entry.draft.lines[lineIndex].productId,'Selecione o produto');
+            }
+            for(const picker of pickers.values())picker.sync();
+            refreshTotals();
+          }
+          feedback(product?'Produto cadastrado e selecionado na proposta.':'');lock();
+          if(trigger.isConnected)trigger.focus({preventScroll:true});
+        },
+      });
+    }
+
     function render() {
       const { draft, fiscal, catalog } = entry;
       destroyPickers();
@@ -296,6 +335,18 @@ export function createNfeProposalView({ document:doc, host, service, onPosted, o
             entry.draft = updateNfeProposalProduct(entry.draft, line.number, value, catalog);
             updateStages();
           });
+          product.dataset.nfeProductLine=String(index);
+          product.setAttribute('aria-label','Produto');
+          if(service.productRegistration) {
+            const wrapper=product.parentElement;
+            const productField=el('div',wrapper.className);
+            productField.append(...wrapper.childNodes);wrapper.replaceWith(productField);
+            const label=productField.firstElementChild;
+            const labelRow=el('div','nfe-proposal-product-label');
+            const register=button('CADASTRAR',event=>registerProduct(index,event.currentTarget),'nfe-proposal-register-product');
+            register.dataset.nfeRegisterProduct='';register.disabled=entry.reserved;
+            label.replaceWith(labelRow);labelRow.append(label,register);
+          }
           populate(product, catalog.products, line.productId, 'Selecione o produto');
           stageControls[index] = field(fields, 'Etapa', 'stageId', 'select', value => {
             entry.draft.lines[index].stageId = value;
@@ -320,7 +371,7 @@ export function createNfeProposalView({ document:doc, host, service, onPosted, o
 
     form.addEventListener('submit', async event => {
       event.preventDefault();
-      if (!isCurrent() || entry.busy || !entry.draft && !entry.attachmentOnly) return;
+      if (!isCurrent() || entry.busy || entry.registering || !entry.draft && !entry.attachmentOnly) return;
       if (!entry.reserved && !entry.attachmentOnly && !entry.postedReceipt) {
         try { validateNfeProposal(entry.draft, entry.fiscal, entry.catalog, { provision }); }
         catch (error) { feedback(error.message, true); return; }
