@@ -5,6 +5,7 @@ import { createSharePointRepository } from "../../../../portal/data/sharepoint-r
 import { createSharePointAttachmentTransport } from "../../../../portal/data/attachments.js";
 import { createRegistrationGalleryFilterData } from "./registration-gallery-filter-data.js";
 import { FINANCIAL_GALLERY_MODELS } from './financial-gallery-models.js';
+import { TAX_GUIDES_GALLERY_MODEL } from './tax-guides-gallery-model.js';
 import { ddaPaidManually } from './dda-payment-confirmation.js';
 import { createDdaProvisionLink } from './dda-provision-link.js';
 import { DDA_UNLINKED_REVIEW_FIELD } from './dda-bank-status.js';
@@ -41,6 +42,7 @@ const PRESENCE_DESCRIPTION_MODEL = Object.freeze({
 
 // Lista e campos das galerias baseadas nas telas Power Apps.
 export const REGISTRATION_GALLERY_MODELS = Object.freeze({
+  taxGuides: TAX_GUIDES_GALLERY_MODEL,
   ...FINANCIAL_GALLERY_MODELS,
   notas_fiscais_sefaz: Object.freeze({
     title: "GALERIA NOTAS FISCAIS SEFAZ", listName: "NOTAS_FISCAIS_SEFAZ", aliases: ["NOTAS_FISCAIS_SEFAZ"], siteKey: "company",
@@ -562,6 +564,7 @@ export function createRegistrationGalleryData({ kind, ...options } = {}) {
         },
       });
       const editor = createGalleryRecordData({ repository: editorRepository, siteKey: options.siteKey || "personal", listName: model.listName, listAliases: model.aliases, metadataOnly: true,assertSession:options.assertSession,
+        readOnlyEditFields: model.readOnlyEditFields || [],
         ...(model.metadataEditorEntity ? { entity: model.metadataEditorEntity } : {}),
         ...(descriptionEditor ? {persistEdit:descriptionEditor.save} : {}),
         async resolveList(signal) {

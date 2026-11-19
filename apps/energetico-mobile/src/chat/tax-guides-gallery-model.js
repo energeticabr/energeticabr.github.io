@@ -1,0 +1,15 @@
+export const TAX_GUIDES_GALLERY_MODEL = Object.freeze({
+  title: 'GALERIA INSS E FGTS', listName: 'GUIASINSSFGTS', aliases: ['GUIASINSSFGTS'],
+  nativeCard: true, showAttachments: true, allowCreate: false, recordActions: ['edit'],
+  recordLabel: 'guia', recordArticle: 'a', searchPlaceholder: 'Pesquisar tipo, filial ou competência',
+  sourceNotice: 'Todo mês, uma solicitação de INSS e FGTS por filial ativa, referente à competência anterior. Edite a linha para informar vencimento, valor e anexar a guia.',
+  fields: ['TIPO', 'VENCIMENTO', 'COMPETENCIA', 'FILIAL', 'VALOR'],
+  filterFields: ['TIPO', 'COMPETENCIA', 'FILIAL'], dateFilterFields: ['COMPETENCIA'],
+  metadataEditorFields: ['VENCIMENTO', 'COMPETENCIA', 'FILIAL', 'VALOR', 'TIPO'],
+  metadataEditorEntity: { id: 'tax-guides', title: 'Guias INSS e FGTS', siteKey: 'personal', immutableFields: [], messageFields: [] },
+  readOnlyEditFields: ['COMPETENCIA', 'FILIAL', 'TIPO'],
+  fieldLabels: { TIPO: 'Tipo', VENCIMENTO: 'Data vencimento', COMPETENCIA: 'Data competência', FILIAL: 'Filial', VALOR: 'Valor' },
+  fieldTypes: { VENCIMENTO: 'date', COMPETENCIA: 'date', VALOR: 'currency' },
+  fieldDefaults: { VENCIMENTO: 'A informar', VALOR: 'A informar' },
+  sourceSort: [{ field: 'COMPETENCIA', direction: 'desc', type: 'date' }, { field: 'FILIAL', direction: 'asc', type: 'text' }, { field: 'TIPO', direction: 'asc', type: 'text' }],
+});

@@ -1,0 +1,11 @@
+[Unit]
+Description=Conferir guias INSS e FGTS diariamente e recuperar competencias pendentes
+
+[Timer]
+OnCalendar=*-*-* 06:10:00 America/Sao_Paulo
+Persistent=true
+RandomizedDelaySec=60
+Unit=energetica-tax-guides.service
+
+[Install]
+WantedBy=timers.target

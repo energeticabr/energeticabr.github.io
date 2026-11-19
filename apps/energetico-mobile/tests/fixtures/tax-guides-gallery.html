@@ -1,0 +1,38 @@
+<!doctype html><html lang="pt-BR"><head><meta name="viewport" content="width=device-width,initial-scale=1"><meta charset="utf-8">
+<link rel="stylesheet" href="/src/styles.css"><link rel="stylesheet" href="/src/ui/registration-gallery.css"><link rel="stylesheet" href="/src/ui/gallery-record-actions.css">
+</head><body><script type="module">
+import { createRegistrationGallery } from '/src/ui/registration-gallery-view.js';
+import { createRegistrationGalleryData } from '/src/chat/registration-gallery-data.js';
+const rows = [
+  { id: '1', hasAttachments: false, eTag: '"v1"', fields: { TIPO: 'INSS', FILIAL: '000 - ESCRITÓRIO CENTRAL', COMPETENCIA: '2026-10-01T12:00:00Z', VALOR: null, VENCIMENTO: null } },
+  { id: '2', hasAttachments: true, eTag: '"v1"', fields: { TIPO: 'FGTS', FILIAL: '004 - EDIFÍCIO XAVANTE', COMPETENCIA: '2026-10-01T12:00:00Z', VALOR: 1407.4, VENCIMENTO: '2026-11-19T12:00:00Z' } },
+];
+const columns = [
+  { name: 'TIPO', displayName: 'Tipo', choice: { choices: ['INSS', 'FGTS'] }, required: true },
+  { name: 'FILIAL', displayName: 'Filial', text: {}, required: true },
+  { name: 'COMPETENCIA', displayName: 'Data competência', dateTime: { format: 'dateOnly' }, required: true },
+  { name: 'VENCIMENTO', displayName: 'Data vencimento', dateTime: { format: 'dateOnly' } },
+  { name: 'VALOR', displayName: 'Valor', currency: { locale: 'pt-BR' } },
+];
+const data = createRegistrationGalleryData({ kind: 'taxGuides', repository: {
+  resolveList: async () => ({ status: 'resolved', id: 'guides' }),
+  getItemsPage: async () => ({ items: rows, hasMore: false }), getColumns: async () => columns,
+  getItem: async (_site, _list, id) => rows.find(row => row.id === id),
+  listAttachments: async (_site, _list, id) => id === '2' ? [{ name: 'guia-oficial.pdf' }] : [],
+  uploadAttachment: async () => {}, deleteAttachment: async () => {},
+} });
+const gallery = createRegistrationGallery({ document, kind: 'taxGuides', data });
+await gallery.open();
+await new Promise(resolve => setTimeout(resolve, 150));
+if(new URLSearchParams(location.search).get('mode') === 'editor'){
+  document.querySelector('[data-registration-row="1"] [data-gallery-action="edit"]').click();
+  for(let i=0;i<50 && !document.querySelector('input[type="file"]');i++) await new Promise(resolve=>setTimeout(resolve,20));
+}
+await new Promise(resolve=>requestAnimationFrame(()=>requestAnimationFrame(resolve)));
+const visible = node => node.getBoundingClientRect().width > 0;
+const overflows = [...document.querySelectorAll('.rg-row, .gallery-record-dialog')].filter(visible).some(node => node.scrollWidth > node.clientWidth + 2);
+document.documentElement.dataset.layout = JSON.stringify({ overflows, cards: document.querySelectorAll('[data-registration-row]').length,
+  pending: document.body.textContent.includes('Anexar guia INSS'), uploaded: document.body.textContent.includes('Guia anexada'),
+  fields: [...document.querySelectorAll('.gallery-record-dialog input, .gallery-record-dialog select')].map(node=>({ name: node.name, disabled: node.disabled, readOnly: node.readOnly, type: node.type })),
+  fileInput: Boolean(document.querySelector('input[type="file"]')) });
+</script></body></html>

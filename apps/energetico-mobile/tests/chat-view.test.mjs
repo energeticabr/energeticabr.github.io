@@ -1307,7 +1307,7 @@ test("inclui o relatório RHID depois de Contrato somente no menu de Recursos Hu
   const document = new JSDOM(markup).window.document;
   const entries = [...document.querySelectorAll('.swile-menu-entry > button')];
   assert.deepEqual(entries.map(button => button.dataset.replyId), [
-    'action_hr_swile', 'action_hr_swile_gallery', 'action_hr_trancid', 'action_hr_trancid_gallery', 'action_hr_gallery_holerite',
+    'action_hr_swile', 'action_hr_swile_gallery', 'action_hr_trancid', 'action_hr_trancid_gallery', 'action_hr_tax_guides_gallery', 'action_hr_gallery_holerite',
   ]);
   assert.equal(entries[2].textContent, 'TRANCID');
   assert.equal(entries[3].textContent, 'GALERIA TRANCID');
