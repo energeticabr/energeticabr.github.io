@@ -206,7 +206,7 @@ export function createLaunchGallery({ document: documentRef = globalThis.documen
   let session = 0, listVersion = 0, detailVersion = 0;
   let listLoading = false, listBlocking = false, detailLoading = false, returnFocus;
   let current = null, selectedId = null, editor = null, review = null;
-  let editorOrigin = null, detailAbortController = null;
+  let editorOrigin = null, detailAbortController = null, listAbortController = null;
   let page = 1, pages = 0, needsDetailRefresh = false, pendingAttachmentName = null;
   let clusterVersion = 0, clusterReturnFocus = null, clusterAbortController = null, clusterTimer = null;
   const retryIds = new Map();
@@ -379,7 +379,13 @@ export function createLaunchGallery({ document: documentRef = globalThis.documen
   filterForm.append(filterGrid,
     element('p', 'lg-hint', 'Período de empenho: as datas inicial e final são incluídas.'), filterActions);
   const autoFilters = bindAutoFilterForm(filterForm, applyFilters,
-    { externalControls: [search] });
+    { externalControls: [search], onPendingChange: () => {
+      if (!opened || destroyed || !listLoading) return;
+      cancelSnapshot();
+      autoFilters.invalidate();
+      listBlocking = false;
+      updateBusy();
+    } });
   const totals = element('dl', 'lg-totals');
   const notice = element('p', 'lg-notice'); notice.hidden = true;
   const listStatus = element('div', 'lg-list-status'); listStatus.setAttribute('aria-live', 'polite');
@@ -543,11 +549,16 @@ export function createLaunchGallery({ document: documentRef = globalThis.documen
     return { filters: Object.fromEntries([...filterControls].map(([name, control]) =>
       [name, control.type === 'checkbox' ? control.checked : control.value])), sort: sort.value, page: targetPage, pageSize: 20 };
   }
+  function cancelSnapshot() {
+    ++listVersion;
+    listAbortController?.abort();
+    listAbortController = null;
+  }
   function applyFilters({ refresh = false, preservePage = false, blocking = false } = {}) {
     const data = query(1);
     if (preservePage && data.sort === applied.sort && JSON.stringify(data.filters) === JSON.stringify(applied.filters)) data.page = page;
     if (data.filters.dateStart && data.filters.dateEnd && data.filters.dateStart > data.filters.dateEnd) {
-      ++listVersion; listLoading = false; updateBusy();
+      cancelSnapshot(); listLoading = false; updateBusy();
       observeRecordMedia();
       notify('A data final deve ser igual ou posterior à data inicial.', true); return;
     }
@@ -557,6 +568,8 @@ export function createLaunchGallery({ document: documentRef = globalThis.documen
     if (!opened || destroyed || !root.isConnected) return;
     stopRecordMediaLoads();
     attachmentCounts.reset();
+    cancelSnapshot();
+    const controller = listAbortController = new AbortController();
     const version = ++listVersion, epoch = session;
     applied = { ...data, filters: { ...data.filters } };
     const matchesCurrentFilters = () => {
@@ -568,10 +581,11 @@ export function createLaunchGallery({ document: documentRef = globalThis.documen
     if (blocking) listStatus.textContent = '';
     updateBusy();
     const task = (blocking ? loadingScreen : recalculatingScreen).beginTask({
+      signal: controller.signal,
       isCurrent: () => active(epoch) && version === listVersion && (blocking || matchesCurrentFilters()) });
     task.prepared();
     try {
-      const result = await request('snapshot', { ...data, filters: { ...data.filters }, ...(refresh ? { refresh: true } : {}) }, { onProgress: task.report });
+      const result = await request('snapshot', { ...data, filters: { ...data.filters }, ...(refresh ? { refresh: true } : {}) }, { signal: controller.signal, onProgress: task.report });
       if (!active(epoch) || version !== listVersion) return;
       if (!blocking && !matchesCurrentFilters()) { autoFilters.invalidate(); return; }
       if (!Array.isArray(result?.rows)) throw new Error('Resposta de lançamentos inválida');
@@ -605,6 +619,7 @@ export function createLaunchGallery({ document: documentRef = globalThis.documen
       return true;
     } catch (error) {
       if (!active(epoch) || version !== listVersion) return;
+      if (controller.signal.aborted) return;
       if (!blocking && !matchesCurrentFilters()) { autoFilters.invalidate(); return; }
       listStatus.replaceChildren(element('p', 'lg-error', failure(error, 'Erro ao carregar lançamentos')),
         button('Tentar novamente', () => {
@@ -614,6 +629,7 @@ export function createLaunchGallery({ document: documentRef = globalThis.documen
       return false;
     } finally {
       task.stop();
+      if (listAbortController === controller) listAbortController = null;
       if (active(epoch) && version === listVersion) {
         // Keep stale results covered until the newest input has been applied.
         listLoading = autoFilters.hasPendingApplication() && !matchesCurrentFilters(); updateBusy();
@@ -1915,6 +1931,7 @@ export function createLaunchGallery({ document: documentRef = globalThis.documen
   }
   function close() {
     if (!opened || destroyed) return;
+    cancelSnapshot();
     stopRecordMediaLoads();
     releaseRecordPreviews();
     attachmentCounts.reset();
@@ -1933,6 +1950,7 @@ export function createLaunchGallery({ document: documentRef = globalThis.documen
   }
   function destroy() {
     if (destroyed) return;
+    cancelSnapshot();
     productHeadingObserver?.disconnect();
     productHeadings.clear();
     doc.defaultView?.removeEventListener('resize', fitProductHeadings);

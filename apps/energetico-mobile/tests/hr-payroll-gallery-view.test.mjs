@@ -9,6 +9,35 @@ function response(gallery, page = 1, rows = [], hasMore = false) {
   return { gallery, page, pageSize: 25, fields: [], rows, hasMore, nextCursor: hasMore ? "opaque-next-page" : null };
 }
 
+test('payroll filter edits cancel previous page reads before applying the final filters', async t => {
+  const dom = new JSDOM('<main id="root"></main>');
+  const root = dom.window.document.querySelector('#root'), work = [];
+  const gallery = createHrPayrollGallery({ root, gallery: 'IDFOLHA', request: (kind, page, size, cursor, options) => {
+    let resolve;
+    const promise = new Promise(done => { resolve = done; });
+    work.push({ resolve, ...options }); return promise;
+  } });
+  t.after(() => { gallery.destroy(); dom.window.close(); });
+  t.mock.timers.enable({ apis: ['setTimeout'] });
+  dom.window.setTimeout = globalThis.setTimeout; dom.window.clearTimeout = globalThis.clearTimeout;
+  const opening = gallery.open();
+  const field = root.querySelector('input[name="id"]');
+  assert.ok(field);
+  field.value = '22'; field.dispatchEvent(new dom.window.Event('input', { bubbles: true }));
+  assert.equal(work[0].signal?.aborted, true);
+  t.mock.timers.tick(0); await new Promise(resolve => setImmediate(resolve));
+  assert.equal(work.length, 2);
+  work[1].resolve(response('IDFOLHA', 1, [{ id: '22', FORNECEDOR: 'Final' }]));
+  await new Promise(resolve => setImmediate(resolve));
+  work[0].resolve(response('IDFOLHA', 1, [{ id: '99', FORNECEDOR: 'Antigo' }])); await opening;
+  assert.match(root.querySelector('.hr-gallery-cards').textContent, /Final/);
+  assert.doesNotMatch(root.querySelector('.hr-gallery-cards').textContent, /Antigo/);
+  field.value = '23'; field.dispatchEvent(new dom.window.Event('input', { bubbles: true }));
+  t.mock.timers.tick(0); await new Promise(resolve => setImmediate(resolve));
+  gallery.close(); assert.equal(work[2].signal?.aborted, true);
+  work[2].resolve(response('IDFOLHA')); await new Promise(resolve => setImmediate(resolve));
+});
+
 test("holerites exibem funcionário, semana e PDF de cada registro sem excluir ou criar folhas", async t => {
   const dom = new JSDOM("<main id='root'></main>");
   const root = dom.window.document.querySelector("#root");

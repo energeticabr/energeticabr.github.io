@@ -75,6 +75,7 @@ export function createHrPayrollGallery({ document: documentOption,
   let opened = false;
   let destroyed = false;
   let busy = false;
+  let pageController = null;
   let page = 1;
   let hasMore = false;
   const pageCursors = [null, null];
@@ -242,6 +243,7 @@ export function createHrPayrollGallery({ document: documentOption,
   function selectedFilters() { return {search:search.value.trim(),...Object.fromEntries([...filterControls].map(([name,control])=>[name,control.value.trim()]))}; }
   function applyFilters() {
     if(!opened || destroyed) return;
+    cancelPage();
     const filters=selectedFilters();
     try {validatePayrollFilters(gallery,filters);}
     catch(error) {session+=1;busy=false;loadingScreen.sync(false);status.textContent=error.message;cards.replaceChildren();hasMore=false;updateControls();return;}
@@ -249,7 +251,14 @@ export function createHrPayrollGallery({ document: documentOption,
     // Filters update atomically without interrupting an in-progress dropdown.
     void loadPage(1, { quiet: true });
   }
-  const autoFilters=bindAutoFilterForm(filterForm,applyFilters);
+  const autoFilters=bindAutoFilterForm(filterForm,applyFilters, { onPendingChange: () => {
+    if (!opened || destroyed || !pageController) return;
+    cancelPage();
+    autoFilters.invalidate();
+    busy = false;
+    loadingScreen.sync(false);
+    updateControls();
+  } });
   clearFilters.addEventListener('click',()=>{filterForm.reset();autoFilters.sync();applyFilters();});
   function syncFilterOptions(result) {
     const options=result.filterOptions || payrollFilterOptions(gallery,result.rows);
@@ -475,10 +484,16 @@ export function createHrPayrollGallery({ document: documentOption,
     refreshShortcut.sync();
   }
 
+  function cancelPage() {
+    pageController?.abort();
+    pageController = null;
+  }
   async function loadPage(targetPage, {
     cursor = pageCursors[targetPage] || null, quiet = false, refresh = false, scrollToTop = false,
   } = {}) {
     if (!opened || destroyed || busy) return;
+    cancelPage();
+    const controller = pageController = new AbortController();
     busy = true;
     loadingScreen.sync(!quiet);
     if (!quiet) {
@@ -490,7 +505,7 @@ export function createHrPayrollGallery({ document: documentOption,
     const epoch = session;
     const filters = selectedFilters();
     const current = () => {
-      if (!opened || destroyed || !root.isConnected || epoch !== session) return false;
+      if (!opened || destroyed || !root.isConnected || epoch !== session || pageController !== controller || controller.signal.aborted) return false;
       if (JSON.stringify(filters) !== JSON.stringify(selectedFilters())) {
         // Discarded results must not suppress a later return to this query.
         autoFilters.invalidate();
@@ -498,11 +513,11 @@ export function createHrPayrollGallery({ document: documentOption,
       }
       return true;
     };
-    const task = quiet ? null : loadingScreen.beginTask({ isCurrent: current });
+    const task = quiet ? null : loadingScreen.beginTask({ signal: controller.signal, isCurrent: current });
     task?.prepared();
     try {
       let result;
-      const options = { filters, refresh, onProgress: task?.report, ...(isPayslip ? { groupByDate: true } : {}) };
+      const options = { filters, refresh, signal: controller.signal, onProgress: task?.report, ...(isPayslip ? { groupByDate: true } : {}) };
       const pageSize = isPayslip ? 5 : 25;
       try { result = await request(gallery, targetPage, pageSize, cursor, options); }
       catch (error) {
@@ -546,7 +561,8 @@ export function createHrPayrollGallery({ document: documentOption,
       return false;
     } finally {
       task?.stop();
-      if (opened && !destroyed && root.isConnected && epoch === session) {
+      if (opened && !destroyed && root.isConnected && epoch === session && pageController === controller) {
+        pageController = null;
         busy = false;
         loadingScreen.sync(false);
         updateControls();
@@ -579,6 +595,7 @@ export function createHrPayrollGallery({ document: documentOption,
   function closeGallery() {
     if (!opened || destroyed) return;
     if (payslipActions?.isWriting()) return;
+    cancelPage();
     payslipActions?.close(true);
     loadingScreen.sync(false);
     recordActions?.close();
@@ -648,6 +665,7 @@ export function createHrPayrollGallery({ document: documentOption,
     },
     close: closeGallery,
     destroy() {
+      cancelPage();
       payslipActions?.close(true);
       signedPayslips?.destroy();
       rowPreview?.abort();

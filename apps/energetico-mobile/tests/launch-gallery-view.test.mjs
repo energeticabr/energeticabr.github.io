@@ -2143,6 +2143,75 @@ test('opening a launch attachment takes priority over counts waiting in the back
   assert.equal(opened[0].id, 3);
 });
 
+test('typing aborts the previous snapshot immediately and only the final filters render', async t => {
+  const pending = [];
+  const ctx = await setup(t, { request: (operation, payload, options) => {
+    if (operation !== 'snapshot') return detail();
+    const work = { ...deferred(), payload, ...options }; pending.push(work); return work.promise;
+  } });
+  t.mock.timers.enable({ apis: ['setTimeout'] });
+  ctx.dom.window.setTimeout = globalThis.setTimeout; ctx.dom.window.clearTimeout = globalThis.clearTimeout;
+  const opening = ctx.gallery.open();
+  const search = ctx.root().querySelector('[name="search"]');
+  search.value = 'Is'; search.dispatchEvent(new ctx.dom.window.Event('input', { bubbles: true }));
+  assert.equal(pending[0].signal?.aborted, true, 'cancel at input, before the typing delay');
+  t.mock.timers.tick(500);
+  search.value = 'Israel'; search.dispatchEvent(new ctx.dom.window.Event('input', { bubbles: true }));
+  pending[0].onProgress?.({ percent: 99 });
+  pending[0].resolve(snapshot({ rows: [row(99)] })); await opening;
+  assert.equal(ctx.root().querySelectorAll('.lg-record').length, 0, 'even the initial blocking load is stale');
+  assert.equal(ctx.root().getAttribute('aria-busy'), 'true');
+  t.mock.timers.tick(999); assert.equal(pending.length, 1);
+  t.mock.timers.tick(1); await settle();
+  assert.equal(pending.length, 2);
+  assert.equal(pending[1].payload.filters.search, 'Israel');
+  input(ctx, 'id', '22');
+  assert.equal(pending[1].signal?.aborted, true);
+  t.mock.timers.tick(0); await settle();
+  assert.equal(pending[2].payload.filters.search, 'Israel');
+  assert.equal(pending[2].payload.filters.id, '22');
+  pending[2].resolve(snapshot({ rows: [row(22)] })); await settle();
+  pending[1].reject(new Error('obsolete search failed')); await settle();
+  assert.deepEqual([...ctx.root().querySelectorAll('.lg-record-id')].map(node => node.textContent), ['22']);
+  assert.doesNotMatch(ctx.root().textContent, /obsolete search failed/);
+  assert.equal(ctx.root().getAttribute('aria-busy'), 'false');
+});
+
+for (const exit of ['close', 'destroy']) test(`${exit} aborts the active gallery snapshot`, async t => {
+  let signal;
+  const work = deferred();
+  const ctx = await setup(t, { request: (op, payload, options) => { signal = options.signal; return work.promise; } });
+  const opening = ctx.gallery.open();
+  ctx.gallery[exit]();
+  assert.equal(signal?.aborted, true);
+  work.resolve(snapshot()); await opening;
+});
+
+test('returning to the cancelled query still loads it and invalid dates cancel pending work', async t => {
+  const pending = [];
+  const ctx = await setup(t, { request: (op, payload, options) => {
+    if (op !== 'snapshot') return detail();
+    const work = { ...deferred(), payload, ...options }; pending.push(work); return work.promise;
+  } });
+  t.mock.timers.enable({ apis: ['setTimeout'] });
+  ctx.dom.window.setTimeout = globalThis.setTimeout; ctx.dom.window.clearTimeout = globalThis.clearTimeout;
+  const opening = ctx.gallery.open();
+  const search = ctx.root().querySelector('[name="search"]');
+  search.value = 'I'; search.dispatchEvent(new ctx.dom.window.Event('input', { bubbles: true }));
+  search.value = ''; search.dispatchEvent(new ctx.dom.window.Event('input', { bubbles: true }));
+  t.mock.timers.tick(1000); await settle();
+  assert.equal(pending.length, 2, 'cancelled initial filters must be fetched again');
+  pending[0].resolve(snapshot({ rows: [row(99)] })); await opening;
+  input(ctx, 'dateStart', '2026-11-19'); t.mock.timers.tick(0); await settle();
+  input(ctx, 'dateEnd', '2026-11-18'); t.mock.timers.tick(0); await settle();
+  assert.equal(pending.at(-1).signal?.aborted, true);
+  assert.equal(ctx.root().getAttribute('aria-busy'), 'false');
+  assert.match(ctx.root().textContent, /data final deve ser igual ou posterior/);
+  for (const work of pending.slice(1)) work.resolve(snapshot({ rows: [row(99)] }));
+  await settle();
+  assert.equal(ctx.root().querySelectorAll('.lg-record').length, 0);
+});
+
 test('late snapshots cannot replace newer rows or user filter edits and close invalidates loads', async t => {
   const pending = [];
   const ctx = await setup(t, { request: () => { const d = deferred(); pending.push(d); return d.promise; } });

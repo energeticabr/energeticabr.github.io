@@ -3,6 +3,29 @@ import assert from 'node:assert/strict';
 import { JSDOM } from 'jsdom';
 import { bindAutoFilterForm } from '../src/ui/auto-filter-form.js';
 
+test('pending filter changes invalidate work before debounce and ignore picker text and duplicate events', t => {
+  const dom = new JSDOM('<form><input name="id"><select name="supplier"><option value="">Todos</option><option>Mauro</option></select></form><input name="search" data-gallery-quick-search>');
+  const doc = dom.window.document, form = doc.querySelector('form'), search = doc.querySelector('[name="search"]');
+  t.mock.timers.enable({ apis: ['setTimeout'] });
+  dom.window.setTimeout = globalThis.setTimeout; dom.window.clearTimeout = globalThis.clearTimeout;
+  const edits = [], applications = [];
+  const binding = bindAutoFilterForm(form, () => applications.push(search.value), {
+    externalControls: [search], onPendingChange: () => edits.push(search.value),
+  });
+  t.after(() => { binding.destroy(); dom.window.close(); });
+  search.value = 'Is'; search.dispatchEvent(new dom.window.Event('input', { bubbles: true }));
+  search.dispatchEvent(new dom.window.Event('change', { bubbles: true }));
+  assert.deepEqual(edits, ['Is']); assert.deepEqual(applications, []);
+  const picker = doc.querySelector('.sfs-search'); picker.click(); picker.value = 'Mau';
+  picker.dispatchEvent(new dom.window.Event('input', { bubbles: true }));
+  assert.deepEqual(edits, ['Is'], 'searching options does not change the query');
+  search.value = 'Israel'; search.dispatchEvent(new dom.window.Event('input', { bubbles: true }));
+  assert.deepEqual(edits, ['Is', 'Israel']);
+  t.mock.timers.tick(1000); assert.deepEqual(applications, ['Israel']);
+  binding.destroy(); search.value = 'Other'; search.dispatchEvent(new dom.window.Event('input', { bubbles: true }));
+  assert.deepEqual(edits, ['Is', 'Israel']);
+});
+
 
 for (const external of [false, true]) test('automatic application preserves a picker opened after input (external=' + external + ')', t => {
   const dom = new JSDOM('<form><select name="supplier"><option value="">Todos</option><option>Mauro</option></select></form><input name="search"><output></output>');
