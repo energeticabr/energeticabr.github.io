@@ -1,0 +1,85 @@
+--- a/worker/workflow.py
++++ b/worker/workflow.py
+@@ -32589,18 +32589,7 @@
+         if state.get("flow") == "payment_settlement":
+             state["pending_launch_payroll"]["settlement_links_checked"] = True
+             state["pending_launch_payroll"]["settlement_tax_checked"] = True
+-        state["stage"] = LAUNCH_PAYROLL_DECISION_STAGE
+-        state["options"] = []
+-        state.pop("option_pagination", None)
+-        etag = self._save(state, etag)
+-        self._send_launch_payroll_decision_prompt(state)
+-        return {
+-            "status": "awaiting_launch_payroll_decision",
+-            "launch_ids": [item["item_id"] for item in entries],
+-            "eligible_launch_ids": [int(item) for item in eligible_ids],
+-            "batch_id": state["batch_id"],
+-            "etag": etag,
+-        }
++        return self._begin_launch_payroll_linking(state, etag)
+ 
+     def _send_launch_payroll_decision_prompt(self, state: dict) -> None:
+         pending = state.get("pending_launch_payroll") or {}
+@@ -32653,15 +32642,18 @@
+             "nao",
+             "não",
+         }:
+-            self._send_launch_payroll_decision_prompt(state)
+-            etag = self._save(state, etag)
+-            return {"status": "invalid_launch_payroll_decision", "batch_id": state["batch_id"], "etag": etag}
++            self._mark_processed(state, message_id)
++            return self._begin_launch_payroll_linking(state, etag)
+ 
+         self._mark_processed(state, message_id)
+         if command in {normalize_text(LAUNCH_PAYROLL_NO_ID), "nao", "não"}:
+             pending["decision"] = "nao"
+             return self._continue_launch_after_payroll(state, etag)
+ 
++        return self._begin_launch_payroll_linking(state, etag)
++
++    def _begin_launch_payroll_linking(self, state, etag):
++        pending = state.get("pending_launch_payroll") or {}
+         pending["decision"] = "sim"
+         if len(pending.get("entries") or []) > 1:
+             return self._send_launch_payroll_entry_selection(state, etag)
+@@ -32978,7 +32970,9 @@
+                 'QUAL MÊS DESEJA APLICAR A TODOS? CADA PAGAMENTO SERÁ VINCULADO À FOLHA DO SEU FORNECEDOR.',
+                 [entry for entry in pending.get('selected_entries') or [] if not entry.get('IDFOLHA')]),
+             [{'id': f"choice:launch_payroll_shared_month:{option['id']}", 'title': option['title'],
+-              'reply': f"choice:launch_payroll_shared_month:{option['id']}"} for option in state['options']],
++              'reply': f"choice:launch_payroll_shared_month:{option['id']}"} for option in state['options']] +
++            [{'id': LAUNCH_PAYROLL_NO_ID, 'reply': LAUNCH_PAYROLL_NO_ID,
++              'title': '❌ NÃO ADICIONAR A FOLHA DE PAGAMENTO'}],
+             allow_back=False)
+         etag = self._save(state, etag)
+         return {'status': 'awaiting_launch_payroll_shared_month', 'batch_id': state['batch_id'], 'etag': etag}
+@@ -33104,6 +33098,8 @@
+                         "A QUAL FOLHA DESEJA VINCULAR ESTE PAGAMENTO?"
+                     ),
+                     "button_label": "ESCOLHER FOLHA",
++                    "terminal_options": [{"id": LAUNCH_PAYROLL_NO_ID,
++                        "title": "❌ NÃO ADICIONAR A FOLHA DE PAGAMENTO"}],
+                     "source": {"type": "static"},
+                 }
+                 self._send_options(state, step, options)
+@@ -33147,6 +33143,11 @@
+         if payroll_recovery is not None:
+             return payroll_recovery
+         pending = state.get("pending_launch_payroll") or {}
++        if _control_command(event.get("reply_id") or event.get("text") or "") in {
++                normalize_text(LAUNCH_PAYROLL_NO_ID), "nao", "não"}:
++            self._mark_processed(state, message_id)
++            pending["decision"] = "nao"
++            return self._continue_launch_after_payroll(state, etag)
+         if "sheet_entry_index" not in pending:
+             self._mark_processed(state, message_id)
+             return self._prompt_launch_payroll_sheet_for_current_supplier(state, etag)
+@@ -37643,7 +37644,7 @@
+             if stage == LAUNCH_PAYROLL_DECISION_STAGE:
+                 if (state.get("pending_launch_payroll") or {}).get("settlement_loading"):
+                     return self._settlement_payroll_lookup_failed(state, etag)
+-                self._send_launch_payroll_decision_prompt(state)
++                return self._begin_launch_payroll_linking(state, etag)
+             elif stage == LAUNCH_PAYROLL_SELECTION_STAGE:
+                 return self._send_launch_payroll_entry_selection(state, etag)
+             elif stage == LAUNCH_PAYROLL_SHEET_STAGE:
