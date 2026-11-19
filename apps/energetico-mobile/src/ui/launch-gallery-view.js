@@ -582,12 +582,12 @@ export function createLaunchGallery({ document: documentRef = globalThis.documen
     updateBusy();
     const task = (blocking ? loadingScreen : recalculatingScreen).beginTask({
       signal: controller.signal,
-      isCurrent: () => active(epoch) && version === listVersion && matchesCurrentFilters() });
+      isCurrent: () => active(epoch) && version === listVersion && (blocking || matchesCurrentFilters()) });
     task.prepared();
     try {
       const result = await request('snapshot', { ...data, filters: { ...data.filters }, ...(refresh ? { refresh: true } : {}) }, { signal: controller.signal, onProgress: task.report });
       if (!active(epoch) || version !== listVersion) return;
-      if (!matchesCurrentFilters()) { autoFilters.invalidate(); return; }
+      if (!blocking && !matchesCurrentFilters()) { autoFilters.invalidate(); return; }
       if (!Array.isArray(result?.rows)) throw new Error('Resposta de lançamentos inválida');
       task.acquired();
       const previousPage = page;
@@ -620,7 +620,7 @@ export function createLaunchGallery({ document: documentRef = globalThis.documen
     } catch (error) {
       if (!active(epoch) || version !== listVersion) return;
       if (controller.signal.aborted) return;
-      if (!matchesCurrentFilters()) { autoFilters.invalidate(); return; }
+      if (!blocking && !matchesCurrentFilters()) { autoFilters.invalidate(); return; }
       listStatus.replaceChildren(element('p', 'lg-error', failure(error, 'Erro ao carregar lançamentos')),
         button('Tentar novamente', () => {
           autoFilters.sync();
