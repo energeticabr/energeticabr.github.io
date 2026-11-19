@@ -22,5 +22,12 @@ for(const form of document.querySelectorAll('form')) {
   remove.click();
   results.at(-1).cleared=form.querySelector('select').value===''&&!form.querySelector('.sfs-chip')&&form.querySelector('.sfs-popup').hidden;
 }
-document.documentElement.dataset.layout=JSON.stringify({results});
+const months=document.createElement('section');
+months.innerHTML='<select aria-label="Mês"><option value="">Todos</option>'+Array.from({length:12},(_,i)=>`<option value="${i+1}" ${i===9?'selected':''}>Mês ${i+1}</option>`).join('')+'</select>';
+document.body.append(months);
+bindSearchableFilterSelects(months,{report:true});
+months.querySelector('.sfs-arrow').click();
+const list=months.querySelector('.sfs-list'),bounds=list.getBoundingClientRect();
+const visible=[...list.children].filter(node=>{const box=node.getBoundingClientRect();return box.top>=bounds.top-1&&box.bottom<=bounds.bottom+1;}).length;
+document.documentElement.dataset.layout=JSON.stringify({results,visibleAtLeastSeven:visible>=7});
 </script></body></html>
