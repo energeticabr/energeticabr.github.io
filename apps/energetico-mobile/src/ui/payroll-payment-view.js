@@ -53,6 +53,9 @@ export function createPayrollPaymentComposer({document:doc,host,loadOptions,save
         const paidDate=row.paidDate?.split('-').reverse().join('/') || 'Sem pagamento efetuado';
         launch.append(new doc.defaultView.Option(`${row.id} — ${row.supplier} — ${row.description || 'Profissão não informada'} (${total} — ${paidDate})`,row.id));
       }
+      const destination=select('supplierId','Fornecedor','Selecione o fornecedor');destination.disabled=true;
+      const suppliers=options.suppliers||[...new Map(options.launches.map(row=>[payrollFieldKey(row.supplier),{id:row.supplierId||row.supplier,label:row.supplier}])).values()];
+      for(const row of suppliers)destination.append(new doc.defaultView.Option(row.label,row.id));
       const summary=el('table','payroll-payment-summary');summary.setAttribute('aria-label','Dados do fornecedor e do lançamento');summary.hidden=true;
       const rows=el('tbody'),values=[];
       for(const label of ['Fornecedor','Valor unitário','Qtd','Data']) {const row=el('tr'),key=el('th','',label),value=el('td');key.scope='row';row.append(key,value);rows.append(row);values.push(value);}
@@ -64,34 +67,36 @@ export function createPayrollPaymentComposer({document:doc,host,loadOptions,save
       form.append(grid,summary);body.append(form);
       function update({resetCompetence=false}={}) {
         const selected=options.launches.find(row=>row.id===launch.value);
+        const selectedSupplier=suppliers.find(row=>row.id===destination.value);
+        destination.disabled=!selected;
         const tax=payrollTaxType(type.value);
         competenceField.hidden=!tax;competence.disabled=!tax;competence.required=tax;
         if(resetCompetence)competence.value=previousPayrollCompetence(selected?.paidDate||selected?.date);
-        sheet.replaceChildren(new doc.defaultView.Option('Selecione a folha',''));sheet.disabled=!selected;
-        const available=selected?(tax?(options.allSheets||options.sheets):options.sheets).filter(row=>payrollFieldKey(row.supplier)===payrollFieldKey(selected.supplier)&&(!tax||payrollCompetenceMonth(row.label)===competence.value)):[];
+        sheet.replaceChildren(new doc.defaultView.Option('Selecione a folha',''));sheet.disabled=!selected||!selectedSupplier;
+        const available=selected&&selectedSupplier?(tax?(options.allSheets||options.sheets):options.sheets).filter(row=>payrollFieldKey(row.supplier)===payrollFieldKey(selectedSupplier.label)&&(!tax||payrollCompetenceMonth(row.label)===competence.value)):[];
         const ambiguous=tax&&available.length>1;
         for(const row of ambiguous?[]:available)sheet.append(new doc.defaultView.Option(`${row.id} — ${row.label}`,row.id));
-        summary.hidden=!selected;supplier.textContent=selected?.supplier||'';
+        summary.hidden=!selected;supplier.textContent=selectedSupplier?.label||'—';
         const unit=typeof selected?.unitValue==='string'&&selected.unitValue.includes(',')?selected.unitValue.replace(/\./g,'').replace(',','.'):selected?.unitValue;
         unitValue.textContent=selected&&Number.isFinite(Number(unit))?Number(unit).toLocaleString('pt-BR',{style:'currency',currency:'BRL'}):'—';
         quantity.textContent=selected?.quantity??'—';date.textContent=selected?.date?.split('-').reverse().join('/')||'—';
         submit.disabled=!selected||sheet.options.length===1;
-        if(selected&&sheet.options.length===1)fail(new Error(tax?(ambiguous?'Há mais de um IDFOLHA nessa competência. Regularize as folhas antes de vincular.':'Este fornecedor não possui IDFOLHA cadastrado na competência confirmada.'):'Este fornecedor não possui folha cadastrada do mês anterior, atual ou próximo.'));
+        if(selected&&selectedSupplier&&sheet.options.length===1)fail(new Error(tax?(ambiguous?'Há mais de um IDFOLHA nessa competência. Regularize as folhas antes de vincular.':'Este fornecedor não possui IDFOLHA cadastrado na competência confirmada.'):'Este fornecedor não possui folha cadastrada do mês anterior, atual ou próximo.'));
         else error.hidden=true;
         state.picker?.sync();
       }
-      launch.addEventListener('change',()=>update({resetCompetence:true}));type.addEventListener('change',()=>update({resetCompetence:payrollTaxType(type.value)&&!competence.value}));competence.addEventListener('input',()=>update());update();state.picker=bindSearchableFilterSelects(form);
+      launch.addEventListener('change',()=>{const selected=options.launches.find(row=>row.id===launch.value);destination.value=suppliers.find(row=>selected?.supplierId?row.id===selected.supplierId:payrollFieldKey(row.label)===payrollFieldKey(selected?.supplier))?.id||'';update({resetCompetence:true});});destination.addEventListener('change',()=>update());type.addEventListener('change',()=>update({resetCompetence:payrollTaxType(type.value)&&!competence.value}));competence.addEventListener('input',()=>update());update();state.picker=bindSearchableFilterSelects(form);
       form.addEventListener('submit',async event=>{
         event.preventDefault();if(!active()||state.busy)return;
-        if(!state.saved&&(!launch.value||!sheet.value||!type.value||payrollTaxType(type.value)&&!payrollCompetenceMonth(competence.value))){fail(new Error('Selecione o lançamento, o tipo de pagamento, a competência e a folha.'));return;}
+        if(!state.saved&&(!launch.value||!destination.value||!sheet.value||!type.value||payrollTaxType(type.value)&&!payrollCompetenceMonth(competence.value))){fail(new Error('Selecione o lançamento, o fornecedor, o tipo de pagamento, a competência e a folha.'));return;}
         state.busy=true;error.hidden=true;screen.setAttribute('aria-busy','true');
         const controls=[...screen.querySelectorAll('button,input,select')],disabled=controls.map(c=>c.disabled);controls.forEach(c=>{c.disabled=true;});state.picker?.close();
         try {
-          state.saved ||= await save({launchId:launch.value,sheetId:sheet.value,paymentType:type.value,...(payrollTaxType(type.value)?{competence:competence.value}:{})},{operationId:state.operationId});
+          state.saved ||= await save({launchId:launch.value,supplierId:destination.value,sheetId:sheet.value,paymentType:type.value,...(payrollTaxType(type.value)?{competence:competence.value}:{})},{operationId:state.operationId});
           if(!active())return;
           await onSaved?.(state.saved);if(active())close(true);
         } catch(err) {fail(err);if(state.saved)submit.textContent='Atualizar galeria';}
-        finally {if(active()){state.busy=false;screen.setAttribute('aria-busy','false');controls.forEach((c,i)=>{c.disabled=disabled[i];});if(state.saved){launch.disabled=true;sheet.disabled=true;type.disabled=true;competence.disabled=true;}state.picker?.sync();}}
+        finally {if(active()){state.busy=false;screen.setAttribute('aria-busy','false');controls.forEach((c,i)=>{c.disabled=disabled[i];});if(state.saved){launch.disabled=true;destination.disabled=true;sheet.disabled=true;type.disabled=true;competence.disabled=true;}state.picker?.sync();}}
       });
       if(!options.launches.length)fail(new Error('Nenhum lançamento de fornecedor empreiteiro SIM e ATIVO foi encontrado.'));
       task.complete();

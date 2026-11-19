@@ -1,6 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { createPayrollPaymentData } from '../src/chat/payroll-payment-data.js';
+import { createPayrollSourceReader } from '../src/chat/payroll-editor-policy.js';
 
 function fixture(now = () => new Date('2026-10-05T12:00:00Z')) {
   const journal=new Map(),storage={getItem:k=>journal.get(k)??null,setItem:(k,v)=>journal.set(k,v),removeItem:k=>journal.delete(k)};
@@ -28,6 +29,35 @@ function fixture(now = () => new Date('2026-10-05T12:00:00Z')) {
 }
 const draft={launchId:'10',sheetId:'21',paymentType:'SALÁRIO'};
 const operation={operationId:'payment-test-1'};
+
+test('destination supplier catalog includes active contractors without their own launch',async()=>{
+  const f=fixture(),options=await f.data.loadOptions();
+  assert.deepEqual(options.suppliers.map(({id,label})=>({id,label})),[{id:'1',label:'CLEITON'},{id:'2',label:'OUTRO'}]);
+});
+
+test('selected supplier owns payroll while source launch retains its supplier and financial values',async()=>{
+  const f=fixture();
+  const saved=await f.data.save({...draft,supplierId:'2',sheetId:'24'},operation);
+  assert.equal(saved.fields.FORNECEDOR,'OUTRO');assert.equal(saved.fields.IDFOLHA,24);
+  assert.equal(saved.fields.IDLANCAMENTO,10);assert.equal(saved.fields.VALORUNITARIO,168.8);assert.equal(saved.fields.QTD,3);
+  assert.equal(f.rows.LANCAMENTOS[0].fields.FORNECEDOR,'CLEITON');
+});
+
+test('selected supplier must be active and own the sheet before any write',async()=>{
+  const f=fixture();
+  for(const selection of [{supplierId:'2',sheetId:'21'},{supplierId:'3',sheetId:'24'},{supplierId:'999',sheetId:'24'},{supplierId:'',sheetId:'24'}])
+    await assert.rejects(f.data.save({...draft,...selection},operation));
+  assert.equal(f.writes.length,0);
+});
+
+test('uncertain cross supplier payment cannot switch destination on retry',async()=>{
+  const f=fixture(),create=f.repository.createItem;
+  f.repository.createItem=async(...args)=>{await create(...args);throw new Error('response lost');};
+  const selected={...draft,supplierId:'2',sheetId:'24'};
+  await assert.rejects(f.data.save(selected,operation),/response lost/);
+  await assert.rejects(f.data.save({...selected,supplierId:'1',sheetId:'21'},operation),/alterad/i);
+  assert.equal((await f.data.save(selected,operation)).fields.FORNECEDOR,'OUTRO');assert.equal(f.writes.length,1);
+});
 
 test('payment options report completed catalogs while another catalog remains pending', async () => {
   const f = fixture(), events = [], page = f.repository.getItemsPage; let release;
@@ -84,6 +114,21 @@ test('INSS paid in October links the confirmed September competence, not payment
   const saved=await f.data.save({...draft,paymentType:'INSS',sheetId:'20',competence:'2026-09'},operation);
   assert.equal(saved.fields.IDFOLHA,20);
   assert.equal(saved.fields.DATA,'2026-10-04');
+  assert.equal(f.writes.length,1);
+});
+
+test('tax link uses selected supplier sheet and preserves source amounts and competence',async()=>{
+  const f=fixture();enableTaxes(f);
+  f.rows.IDFOLHA.find(row=>row.id==='24').fields.MESREFERENCIA='09/2026';
+  const selected={...draft,supplierId:'2',sheetId:'24',paymentType:'INSS',competence:'2026-09'};
+  const saved=await f.data.save(selected,operation);
+  assert.equal(saved.fields.FORNECEDOR,'OUTRO');assert.equal(saved.fields.IDFOLHA,24);
+  assert.equal(saved.fields.VALORUNITARIO,168.8);assert.equal(saved.fields.QTD,3);assert.equal(saved.fields.IDLANCAMENTO,10);
+  assert.deepEqual(await createPayrollSourceReader(f.repository,'personal')(saved.fields),{VALORUNITARIO:168.8,QTD:3});
+  for(const Title of ['APP-folha-encargo-lancamento-999-INSS','APP-folha-encargo-lancamento-10-FGTS','APP-folha-vinculo-fake'])
+    await assert.rejects(createPayrollSourceReader(f.repository,'personal')({...saved.fields,Title}),/fornecedor|funcionário/i);
+  await assert.rejects(createPayrollSourceReader(f.repository,'personal')({...saved.fields,IDPROVISAO:'99'}),/fornecedor|funcionário|provisão/i);
+  await assert.rejects(f.data.save({...selected,supplierId:'1',sheetId:'20'},{operationId:'other-destination'}),/confirm/i);
   assert.equal(f.writes.length,1);
 });
 

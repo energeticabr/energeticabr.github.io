@@ -3,6 +3,7 @@ import { payrollKey } from './supplier-payroll.js';
 import { payrollFieldKey } from './payroll-editor-policy.js';
 import { createPayrollProvisionReader, payrollProvisionId } from './payroll-provision-source.js';
 import { payrollOrderSupplierMatches } from './payroll-order-ownership.js';
+import { isManualPayrollLaunchLink } from './payroll-manual-launch-link.js';
 
 const scalar = value => String(value?.LookupValue ?? value?.Value ?? value?.value ?? value ?? '').trim();
 const identity = value => {
@@ -18,6 +19,8 @@ export function createPayrollBreakdownSourceReader(repository, siteKey) {
     if (payrollProvisionId(payment)) return readProvision(payment);
     if (scalar(payment.IDPROVISAO)) throw new Error('O vínculo da provisão da folha é inconsistente.');
     if (!payrollKey(supplier?.label) || !payrollKey(supplier?.branch)) throw new Error('Confira o fornecedor e a filial da folha.');
+    let sourceOwner=supplier;
+    const manual=isManualPayrollLaunchLink({title:payment.Title,launchId:payment.IDLANCAMENTO,paymentType:payment.TIPOPGTO});
     async function read(names, id) {
       id = identity(id);
       const list = await repository.resolveList(siteKey, names);
@@ -41,15 +44,20 @@ export function createPayrollBreakdownSourceReader(repository, siteKey) {
       };
     }
     function owned(value) {
-      if (payrollKey(value('FORNECEDOR')) !== payrollKey(supplier.label)) throw new Error('O fornecedor do vínculo financeiro mudou.');
-      if (payrollKey(value('FILIAL')) !== payrollKey(supplier.branch)) throw new Error('A filial do vínculo financeiro mudou.');
+      if (payrollKey(value('FORNECEDOR')) !== payrollKey(sourceOwner.label)) throw new Error('O fornecedor do vínculo financeiro mudou.');
+      if (payrollKey(value('FILIAL')) !== payrollKey(sourceOwner.branch)) throw new Error('A filial do vínculo financeiro mudou.');
     }
     function linked(value) {
+      if(manual)return;
       const sheet = value('IDFOLHA',true), type = value('TIPOPGTO',true);
       if (sheet && sheet !== scalar(payment.IDFOLHA) || type && payrollKey(type) !== payrollKey(payment.TIPOPGTO))
         throw new Error('O vínculo da folha ou rubrica financeira mudou.');
     }
     const launchId = identity(payment.IDLANCAMENTO), launch = await read(['LANCAMENTOS','LANÇAMENTOS'],launchId);
+    if(manual) {
+      sourceOwner={label:launch('FORNECEDOR'),branch:launch('FILIAL')};
+      if(!payrollKey(sourceOwner.label)||!payrollKey(sourceOwner.branch))throw new Error('Confira o fornecedor e a filial do lançamento de origem.');
+    }
     owned(launch); linked(launch);
     const provisionId = launch('IDPGTOAGENDADO',true), orderId = launch('AGRUPAR',true);
     if (provisionId) {
@@ -63,9 +71,9 @@ export function createPayrollBreakdownSourceReader(repository, siteKey) {
     }
     if (orderId) {
       const order = await read(['NOTASPENDENTES'],orderId);
-      if (!payrollOrderSupplierMatches({supplier:supplier.label,orderSupplier:order('FORNECEDOR'),paymentType:payment.TIPOPGTO,hasProvision:!!provisionId}))
+      if (!payrollOrderSupplierMatches({supplier:sourceOwner.label,orderSupplier:order('FORNECEDOR'),paymentType:payment.TIPOPGTO,hasProvision:!!provisionId}))
         throw new Error('O fornecedor do vínculo financeiro mudou.');
-      if (payrollKey(order('FILIAL')) !== payrollKey(supplier.branch)) throw new Error('A filial do vínculo financeiro mudou.');
+      if (payrollKey(order('FILIAL')) !== payrollKey(sourceOwner.branch)) throw new Error('A filial do vínculo financeiro mudou.');
     }
     const decimal = raw => {
       const normalized = raw.includes(',') ? raw.replace(/\./g,'').replace(',','.') : raw;

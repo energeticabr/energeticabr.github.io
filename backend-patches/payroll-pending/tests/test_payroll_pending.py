@@ -344,6 +344,27 @@ class PendingPayrollTests(unittest.TestCase):
         self.assertFalse(has_unresolved_application(self.g, '17'))
         self.assertEqual(self.call('payroll_apply', self.body())['item']['remainingCents'],7989)
 
+    def test_legacy_selected_supplier_owns_sheet_while_values_stay_with_launch(self):
+        request = dict(Title='APP-folha-vinculo-cross-supplier', IDLANCAMENTO='17', IDFOLHA='41',
+                       FORNECEDOR='Ana', TIPOPGTO='SALÁRIO', VALORUNITARIO='33,33',
+                       QTD=3, DATA='2026-11-05')
+        self.assertEqual(self.call('payroll_legacy_link', {'fields': request}), {'id':'101'})
+        self.assertEqual(self.call('payroll_legacy_link', {'fields': request}), {'id':'101'})
+        self.assertEqual(len(self.g.posts), 1)
+        self.assertEqual(self.g.posts[0]['FORNECEDOR'], 'Ana')
+        self.assertEqual(self.g.posts[0]['IDFOLHA'], '41')
+        self.assertEqual(self.g.posts[0]['IDLANCAMENTO'], '17')
+        self.assertEqual(self.g.posts[0]['VALORUNITARIO'], '33,33')
+        self.assertEqual(self.g.db['LANCAMENTOS'][0]['FORNECEDOR'], 'Fornecedor da origem')
+
+    def test_legacy_cross_supplier_rejects_foreign_sheet_and_modified_amount(self):
+        request = dict(Title='APP-folha-vinculo-cross-invalid', IDLANCAMENTO='17', IDFOLHA='42',
+                       FORNECEDOR='Ana', TIPOPGTO='SALÁRIO', VALORUNITARIO='33,33',
+                       QTD=3, DATA='2026-11-05')
+        self.error('conflict', 'payroll_legacy_link', {'fields': request})
+        self.error('conflict', 'payroll_legacy_link', {'fields': request | {'IDFOLHA':'41','VALORUNITARIO':'40'}})
+        self.assertEqual(self.g.posts, [])
+
     def test_legacy_gallery_write_cannot_double_count_after_report_allocation(self):
         self.call('payroll_apply', self.body())
         request = dict(Title='APP-folha-vinculo-operation1', IDLANCAMENTO='17', IDFOLHA='41',

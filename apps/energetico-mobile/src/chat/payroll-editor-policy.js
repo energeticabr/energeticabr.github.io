@@ -2,6 +2,7 @@ import { PAYROLL_RUBRICS } from './supplier-payroll.js';
 import { createPayrollProvisionReader, payrollProvisionId } from './payroll-provision-source.js';
 import { payrollTaxType } from './payroll-tax-competence.js';
 import { readPayrollAllocation } from './payroll-pending-allocation.js';
+import { isManualPayrollLaunchLink } from './payroll-manual-launch-link.js';
 
 export const payrollFieldKey = value => String(value || '')
   .replace(/_x([0-9a-f]{4})_/gi, (_, hex) => String.fromCodePoint(parseInt(hex, 16)))
@@ -50,8 +51,10 @@ export function createPayrollSourceReader(repository, siteKey) {
     if (String(item?.id) !== id || item.fields?.[amount] == null || item.fields?.[quantity] == null) {
       throw new Error(`Não foi possível conferir o lançamento ${id} da folha.`);
     }
-    const tax=payrollTaxType(Object.entries(fields||{}).find(([name])=>payrollFieldKey(name)==='TIPOPGTO')?.[1]);
-    if(tax) {
+    const paymentType=Object.entries(fields||{}).find(([name])=>payrollFieldKey(name)==='TIPOPGTO')?.[1],tax=payrollTaxType(paymentType);
+    const title=Object.entries(fields||{}).find(([name])=>payrollFieldKey(name)==='TITLE')?.[1];
+    const provision=Object.entries(fields||{}).find(([name])=>payrollFieldKey(name)==='IDPROVISAO')?.[1];
+    if(tax&&(String(provision??'').trim()||!isManualPayrollLaunchLink({title,launchId:id,paymentType}))) {
       const employee=Object.entries(fields||{}).find(([name])=>payrollFieldKey(name)==='FORNECEDOR')?.[1];
       if(!supplier||!String(employee??'').trim()||payrollFieldKey(item.fields?.[supplier])!==payrollFieldKey(employee))throw new Error('O fornecedor do lançamento do encargo não corresponde ao funcionário da folha.');
     }
