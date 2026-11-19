@@ -54,7 +54,8 @@ test('finaliza o descritivo com data sugerida pela última presença e permite e
   assert.notEqual(row.querySelector('.gantt-name').dataset.tone, 'finished');
   const finish = row.querySelector('.gantt-finish-button');
   assert.ok(finish, 'cada descritivo tem um botão abaixo do nome');
-  assert.equal(finish.previousElementSibling.textContent, 'Escavação');
+  assert.equal(row.querySelector('.gantt-name').textContent, 'Escavação');
+  assert.equal(finish.previousElementSibling.textContent, 'Parte de: Fundação');
   finish.click(); await tick();
   assert.deepEqual(selection, { branch: 'Obra A', activityIds: ['129'] });
   const input = h.root.querySelector('input[type=date]');

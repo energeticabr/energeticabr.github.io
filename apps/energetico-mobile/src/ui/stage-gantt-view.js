@@ -44,7 +44,8 @@ export function createStageGanttView({ document: doc = globalThis.document, data
   const refresh = button('⟳', 'Atualizar GANTT');
   tools.append(title, branchLabel, todayButton, refresh);
   const legend = make('div', 'gantt-legend');
-  legend.append(make('span', 'gantt-legend--ongoing', 'Em andamento'), make('span', 'gantt-legend--finished', 'Finalizada'));
+  legend.append(make('span', 'gantt-legend--ongoing', 'Em andamento'), make('span', 'gantt-legend--finished', 'Finalizada'),
+    make('span', 'gantt-legend--activity', 'Trecho da etapa'));
   const notice = make('p', 'gantt-notice');
   notice.setAttribute('role', 'status');
   const scroll = make('div', 'gantt-scroll');
@@ -170,7 +171,7 @@ export function createStageGanttView({ document: doc = globalThis.document, data
     axis.append(make('div', 'gantt-label', 'Etapa / atividade'), axisLabels);
     sheet.append(monthGrid, axis);
 
-    function renderRow(item, parent) {
+    function renderRow(item, parent, parentStage = null) {
       const row = make('div', `gantt-row gantt-row--${parent ? 'stage' : 'activity'}`);
       const label = make('div', 'gantt-label');
       const text = make('div', 'gantt-row-text');
@@ -180,6 +181,7 @@ export function createStageGanttView({ document: doc = globalThis.document, data
       const name = make('strong', 'gantt-name gantt-cluster gantt-cluster--description', item.name);
       name.dataset.tone = item.finished ? 'finished' : 'ongoing';
       text.append(name);
+      if (parentStage) text.append(make('small', 'gantt-parent-stage', `Parte de: ${parentStage.name}`));
       const canWrite = typeof data[parent ? 'finalizeStage' : 'finalizeActivity'] === 'function';
       if (!item.finished && canWrite && typeof data.loadAssignments === 'function') {
         const finalize = button('FINALIZAR', `Finalizar ${parent ? 'etapa' : 'atividade'} ${item.name}`);
@@ -197,7 +199,7 @@ export function createStageGanttView({ document: doc = globalThis.document, data
         const bar = button(days === 1 ? '1 dia' : `${days} dias`);
         bar.className = 'gantt-bar';
         const status = tone === 'finished' ? 'Finalizada' : 'Em andamento';
-        const description = `${item.name} · ${status} · ${dates} · ${bar.textContent}`;
+        const description = `${item.name}${parentStage ? ` · Parte de: ${parentStage.name}` : ''} · ${status} · ${dates} · ${bar.textContent}`;
         const duration = make('span', 'gantt-duration', bar.textContent);
         const startDate = make('span', 'gantt-bar-date gantt-bar-date--start', formatOperationsDate(from));
         const endDate = make('span', 'gantt-bar-date gantt-bar-date--end',
@@ -240,7 +242,7 @@ export function createStageGanttView({ document: doc = globalThis.document, data
         toggle.textContent = expand ? '−' : '+';
         if (expand) expanded.add(stageKey); else expanded.delete(stageKey);
         if (expand) {
-          childRows = stage.children.map(child => renderRow(child, false));
+          childRows = stage.children.map(child => renderRow(child, false, stage));
           row.after(...childRows);
         } else {
           for (const child of childRows) {

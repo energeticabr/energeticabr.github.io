@@ -37,7 +37,9 @@ test('GANTT expande as atividades abaixo da etapa e exibe datas e estados das ba
   assert.equal(toggle.textContent, '−');
   assert.equal(toggle.getAttribute('aria-expanded'), 'true');
   const child = dialog.querySelector('.gantt-row--stage').nextElementSibling;
-  assert.equal(child.querySelector('.gantt-row-text').textContent, 'Escavação');
+  assert.equal(child.querySelector('.gantt-parent-stage')?.textContent, 'Parte de: Fundação');
+  assert.equal(dialog.querySelector('.gantt-row--stage .gantt-parent-stage'), null);
+  assert.equal(dialog.querySelector('.gantt-legend--activity')?.textContent, 'Trecho da etapa');
   assert.equal(child.querySelector('.gantt-name').tagName, 'STRONG');
   assert.ok(child.querySelector('.gantt-name').classList.contains('gantt-cluster--description'));
   assert.ok(dialog.querySelector('.gantt-row--stage .gantt-name').classList.contains('gantt-cluster--description'));
@@ -57,7 +59,7 @@ test('GANTT expande as atividades abaixo da etapa e exibe datas e estados das ba
   assert.equal(document.activeElement, home);
 });
 
-test('GANTT mantém apenas os nomes na coluna e preserva datas e status nas barras', async t => {
+test('GANTT identifica a etapa dos trechos inclusive sem datas e preserva datas e status nas barras', async t => {
   const dom = new JSDOM('<!doctype html>');
   t.after(() => dom.window.close());
   const view = createStageGanttView({ document: dom.window.document, data: {
@@ -81,8 +83,9 @@ test('GANTT mantém apenas os nomes na coluna e preserva datas e status nas barr
   const row = name => rows.find(node => node.querySelector('.gantt-name').textContent === name);
   for (const node of rows) {
     const label = node.querySelector('.gantt-row-text');
-    assert.equal(label.textContent, node.querySelector('.gantt-name').textContent);
-    assert.equal(label.children.length, 1);
+    const isChild = node.classList.contains('gantt-row--activity');
+    assert.equal(label.children.length, isChild ? 2 : 1);
+    assert.equal(label.querySelector('.gantt-parent-stage')?.textContent ?? '', isChild ? 'Parte de: Estrutura' : '');
   }
   assert.equal(row('Parede').querySelector('.gantt-bar-date--start').textContent, '19/06/2026');
   assert.equal(row('Parede').querySelector('.gantt-bar-date--end').textContent, '14/09/2026');
