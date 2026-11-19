@@ -65,6 +65,7 @@ button.gantt-toggle {
 .gantt-legend > span::before { content: ''; width: 12px; height: 12px; border-radius: 3px; }
 .gantt-legend--ongoing::before, .gantt-bar[data-tone="ongoing"] { background: var(--gantt-ongoing); }
 .gantt-legend--finished::before, .gantt-bar[data-tone="finished"] { background: var(--gantt-finished); }
+.gantt-legend--activity::before { background: #edf4f7; box-shadow: inset 3px 0 #7da5b5; }
 .gantt-notice { margin: 0; padding: 8px 0; }
 
 .gantt-scroll {
@@ -91,7 +92,9 @@ button.gantt-toggle {
   background: #fff;
 }
 .gantt-row--stage .gantt-label { min-height: 48px; background: #f3f8fa; }
-.gantt-row--activity .gantt-label { padding-inline-start: 20px; }
+.gantt-row--activity { background: #0d4d610d; }
+.gantt-row--activity .gantt-label { padding-inline-start: 20px; background: #edf4f7; box-shadow: inset 3px 0 #7da5b5; }
+.gantt-parent-stage { display: block; margin-top: 4px; color: #385d6c; font-size: .68rem; font-weight: 600; line-height: 1.35; overflow-wrap: anywhere; }
 .gantt-row-text { flex: 1; min-width: 0; overflow-wrap: anywhere; }
 .gantt-name { font-size: .9rem; }
 .gantt-cluster {
