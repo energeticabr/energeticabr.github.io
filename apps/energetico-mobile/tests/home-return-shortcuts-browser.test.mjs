@@ -7,7 +7,7 @@ import { createServer } from 'vite';
 import { JSDOM } from 'jsdom';
 import { runBrowserLayout } from './helpers/browser-layout-runner.mjs';
 
-test('retorno com aviso e anexo restaura mascotes e abre relatório real em320/390/1365px', { timeout: 90000 }, async t => {
+test('retorno com aviso e anexo restaura mascotes e abre relatórios reais no celular e PC', { timeout: 120000 }, async t => {
   const browser = [process.env.CHROME_BIN, 'C:/Program Files/Google/Chrome/Application/chrome.exe', '/usr/bin/google-chrome', '/usr/bin/chromium']
     .find(path => path && existsSync(path));
   if (!browser) return t.skip('Chrome unavailable');
@@ -17,7 +17,7 @@ test('retorno com aviso e anexo restaura mascotes e abre relatório real em320/3
     server: { host: '127.0.0.1', port: 0, hmr: false, watch: null, fs: { allow: [resolve(root, '../..')] } }, logLevel: 'silent' });
   try {
     await server.listen();
-    for (const width of [320, 390, 1365]) {
+    for (const width of [320, 365, 366, 375, 390, 414, 425, 426, 1365]) {
       const { stdout, screenshot } = await runBrowserLayout(browser, { width, height: 844,
         captureScreenshot: Boolean(process.env.HOME_RETURN_SCREENSHOT_PREFIX),
         url: `http://127.0.0.1:${server.httpServer.address().port}/tests/fixtures/home-return-shortcuts.html?probe` });
@@ -25,7 +25,10 @@ test('retorno com aviso e anexo restaura mascotes e abre relatório real em320/3
       try {
         const layout = JSON.parse(dom.window.document.documentElement.dataset.layout);
         assert.equal(layout.submenuIcons, 0);
-        assert.equal(layout.count, 26);
+        assert.equal(layout.count, 27);
+        const [tax,rhid]=layout.taxRhid;
+        assert.ok(tax.right<=rhid.x&&Math.abs(tax.y-rhid.y)<1,'INSS imediatamente à esquerda do RHID');
+        assert.equal(layout.taxCommercialOverlap,false,JSON.stringify({width,tax,rhid}));
         assert.deepEqual(layout.actions.slice(-2), ['open-holerite-report', 'open-stage-gantt']);
         assert.ok(layout.actions.includes('open-pending-payroll-links'));
         assert.equal(new Set(layout.actions).size, layout.count, 'sem atalhos duplicados');
@@ -37,8 +40,11 @@ test('retorno com aviso e anexo restaura mascotes e abre relatório real em320/3
         assert.match(layout.notice, /OS DADOS DO FLUXO FORAM ELIMINADOS[\s\S]*OS ANEXOS FORAM TRANSFERIDOS/);
         assert.match(layout.attachment, /Documento transferido\.pdf/);
         assert.equal(layout.reportReady, true, 'o clique precisa abrir e preencher o relatório, não só emitir evento');
-        assert.deepEqual(layout.opened, ['payments']);
-        assert.deepEqual(layout.reads, ['payments']);
+        assert.equal(layout.taxReportReady,true,'INSS abre dados reais da fonte da galeria');
+        assert.equal(layout.taxClosedBack,true,'fechar INSS volta ao menu e ao mascote');
+        assert.equal(layout.taxReportFits,true,'relatório INSS cabe na área disponível');
+        assert.deepEqual(layout.opened, ['payments','taxGuides']);
+        assert.deepEqual(layout.reads, ['payments','taxGuides']);
         assert.deepEqual(layout.selected, [], 'abrir o relatório não muda o fluxo da conversa');
         if (screenshot) writeFileSync(`${process.env.HOME_RETURN_SCREENSHOT_PREFIX}-${width}.png`, screenshot);
       } finally { dom.window.close(); }

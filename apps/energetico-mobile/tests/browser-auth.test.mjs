@@ -10,7 +10,7 @@ const config = Object.freeze({
   webRedirectUri: "https://www.energeticabr.com/energetico/",
 });
 
-test('native IDFOLHA creation can resume after Microsoft write consent', async () => {
+for(const resumeAction of ['action_hr_create_idfolha','open-tax-guides-report'])test(`${resumeAction} can resume after Microsoft consent`, async () => {
   const account = { homeAccountId: 'account-1', username: 'pessoa@energeticabr.com' };
   const values = new Map();
   const storage = { getItem: key => values.get(key) ?? null,
@@ -19,11 +19,11 @@ test('native IDFOLHA creation can resume after Microsoft write consent', async (
     getAllAccounts: () => [account], async acquireTokenRedirect() {} };
   const first = createBrowserAuth({ client, config, storage });
   await first.initialize();
-  await first.authorize(['Sites.ReadWrite.All'], { resumeAction: 'action_hr_create_idfolha' });
+  await first.authorize(['Sites.ReadWrite.All'], { resumeAction });
   const resumed = createBrowserAuth({ config, storage, client: { ...client,
     async handleRedirectPromise() { return { account, scopes: ['Sites.ReadWrite.All'], accessToken: 'sheet-token' }; } } });
   await resumed.initialize();
-  assert.equal(resumed.consumePendingAction(), 'action_hr_create_idfolha');
+  assert.equal(resumed.consumePendingAction(), resumeAction);
   assert.equal(resumed.consumePendingAction(), null);
   assert.equal(values.size, 0);
 });

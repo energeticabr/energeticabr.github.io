@@ -191,6 +191,7 @@ const RESUMABLE_ACTIONS = new Set([
   'action_taxation_gallery',
   "action_attendance_summary",
   "open-rhid-mascot-report",
+  'open-tax-guides-report',
   "action_stage_progress",
   "action_supplier_payroll_report",
   "action_commercial_receipts",

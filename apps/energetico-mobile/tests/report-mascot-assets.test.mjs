@@ -16,7 +16,7 @@ const dom = new JSDOM(renderChatMarkup({
 }));
 const buttons = [...dom.window.document.querySelectorAll('.chat-message--external-provisions > button, .chat-message--external-cargos > button, .chat-main-commercial-shortcuts > button')];
 const artwork = buttons.filter(button => button.querySelector('img'));
-assert.equal(artwork.length, 25, 'all HOME raster mascot images are exercised');
+assert.equal(artwork.length, 26, 'all HOME raster mascot images are exercised');
 assert.deepEqual(buttons.filter(button => !button.querySelector('img')).map(button => button.dataset.action), ['open-pending-payroll-links']);
 
 for (const button of artwork) {

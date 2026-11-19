@@ -1,10 +1,16 @@
 <!doctype html>
 <html lang="pt-BR">
 <head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1">
-<link rel="stylesheet" href="/src/styles.css"><link rel="stylesheet" href="/src/ui/payment-ledger.css"></head>
-<body><main id="app"></main><script type="module">
+<link rel="stylesheet" href="/src/styles.css"><link rel="stylesheet" href="/src/ui/payment-ledger.css"><link rel="stylesheet" href="/src/ui/tax-guides-report.css"><link rel="stylesheet" href="/src/ui/searchable-filter-selects.css"></head>
+<body><main id="app"></main><script>
+const fixtureError=error=>document.documentElement.dataset.layout=JSON.stringify({fixtureError:String(error?.stack||error)});
+window.addEventListener('error',event=>fixtureError(event.error||event.message));
+window.addEventListener('unhandledrejection',event=>fixtureError(event.reason));
+</script><script type="module">
 import { createChatView } from '/src/ui/chat-view.js';
 import { createPaymentLedgerView } from '/src/ui/payment-ledger-view.js';
+import { createTaxGuidesReportView } from '/src/ui/tax-guides-report-view.js';
+import { decorateReportPrint } from '/src/ui/report-print.js';
 
 const question = 'QUAL ÁREA VOCÊ DESEJA ACESSAR?';
 const notice = '📎 OS DADOS DO FLUXO FORAM ELIMINADOS. OS ANEXOS FORAM TRANSFERIDOS PARA O PRÓXIMO FLUXO.';
@@ -27,6 +33,12 @@ const report = createPaymentLedgerView({ document, data: { async loadPaymentsSna
     description: 'Dado fictício', order: '1', disbursement: 'SIM', account: 'Conta de teste', unit: 45, quantity: 1, freight: 0, total: 45 }] };
 } } });
 view.on('open-payment-ledger', () => { opened.push('payments'); opening = report.open(); });
+const baseTaxReport=createTaxGuidesReportView({document,data:{async loadSnapshot(){reads.push('taxGuides');return {rows:[
+  {id:'7',hasAttachments:false,fields:{TIPO:'INSS',FILIAL:'004 - EDIFÍCIO XAVANTE',COMPETENCIA:'2026-10-20',VENCIMENTO:'2026-11-20',VALOR:null}},
+  {id:'8',hasAttachments:false,fields:{TIPO:'FGTS',FILIAL:'004 - EDIFÍCIO XAVANTE',COMPETENCIA:'2026-10-20',VENCIMENTO:'2026-11-20',VALOR:1407.4}},
+]};}}});
+const taxReport=decorateReportPrint(baseTaxReport,{action:'open-tax-guides-report'});
+view.on('open-tax-guides-report',()=>{opened.push('taxGuides');opening=taxReport.open();});
 view.on('select-reply', event => selected.push(event.replyId));
 view.render({ ...state, attachments: [], messages: [menu] });
 view.render({ ...state, attachments: [], activeFlow: { id: 'submenu' }, messages: [{ ...menu,
@@ -36,18 +48,27 @@ view.render(state);
 await Promise.all([...document.images].map(image => image.decode().catch(() => {})));
 
 let reportReady = false;
+let taxReportReady=false,taxClosedBack=false,taxReportFits=false;
 if (new URLSearchParams(location.search).has('probe')) {
   root.querySelector('[data-action="open-payment-ledger"] img')?.click();
   await opening;
   reportReady = !report.element.hidden && report.element.querySelector('.pl-table tbody')?.textContent.includes('Fornecedor de teste');
   report.close();
+  const taxTrigger=root.querySelector('[data-action="open-tax-guides-report"]');taxTrigger.focus();taxTrigger.querySelector('img').click();await opening;
+  await new Promise(resolve=>requestAnimationFrame(()=>requestAnimationFrame(resolve)));
+  taxReportReady=!taxReport.element.hidden&&taxReport.element.querySelectorAll('tbody tr').length===2&&taxReport.element.textContent.includes('20/10/2026')&&taxReport.element.textContent.includes('20/11/2026');
+  taxReportFits=document.documentElement.scrollWidth<=innerWidth+1&&taxReport.element.querySelector('.tgr-panel').scrollWidth<=taxReport.element.querySelector('.tgr-panel').clientWidth+1;
+  taxReport.element.querySelector('.report-close-control').click();
+  taxClosedBack=taxReport.element.hidden&&!root.hasAttribute('inert')&&document.activeElement===taxTrigger;
   view.render(state);
   await Promise.all([...document.images].map(image => image.decode().catch(() => {})));
 }
 const buttons = [...root.querySelectorAll('.chat-message--assistant button[data-action^="open-"]')];
 const payslip = buttons.find(button => button.dataset.action === 'open-holerite-report');
 document.documentElement.dataset.layout = JSON.stringify({
-  submenuIcons, reportReady, opened, reads, selected,
+  submenuIcons, reportReady, taxReportReady, taxClosedBack, taxReportFits, opened, reads, selected,
+  taxRhid:[...root.querySelectorAll('[data-action="open-tax-guides-report"],[data-action="open-rhid-mascot-report"]')].map(node=>{const r=node.getBoundingClientRect();return {x:r.x,y:r.y,right:r.right,bottom:r.bottom};}),
+  taxCommercialOverlap:[...root.querySelectorAll('.chat-main-commercial-shortcuts > button,.chat-main-provisions-shortcut')].some(node=>{const a=node.getBoundingClientRect(),b=root.querySelector('[data-action="open-tax-guides-report"]').getBoundingClientRect();return a.left<b.right&&a.right>b.left&&a.top<b.bottom&&a.bottom>b.top;}),
   count: buttons.length, actions: buttons.map(button => button.dataset.action),
   payslip: payslip?.textContent.trim(),
   buttons: buttons.map(button => { const rect = button.getBoundingClientRect(); return {
@@ -61,5 +82,9 @@ document.documentElement.dataset.layout = JSON.stringify({
   attachment: root.querySelector('.chat-attachments')?.textContent || '',
   overflow: document.documentElement.scrollWidth > innerWidth + 1,
 });
+if(new URLSearchParams(location.search).has('report')){
+  root.querySelector('[data-action="open-tax-guides-report"]').click();await opening;
+  await new Promise(resolve=>requestAnimationFrame(()=>requestAnimationFrame(resolve)));
+}
 document.documentElement.dataset.ready = 'true';
 </script></body></html>
