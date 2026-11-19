@@ -22,7 +22,13 @@ test('GANTT mostra Fundação de maio acima de Alvenaria de agosto e destaca cad
     assert.deepEqual(result.refreshed,result.initial);
     assert.deepEqual(result.allDates,['2026-05-26','2026-08-10','']);
     assert.ok(result.names.every(name=>name.cluster&&name.tag==='STRONG'&&name.weight>=700&&name.fits),JSON.stringify(result));
-    assert.ok(result.names.every(name=>name.background==='rgb(13, 77, 97)'&&name.color==='rgb(255, 255, 255)'),JSON.stringify(result));
+    assert.deepEqual(result.names.map(name=>name.background),[
+     'rgb(36, 114, 58)', // Fundação finalizada.
+     'rgb(13, 77, 97)', // Alvenaria em andamento.
+     'rgb(36, 114, 58)', 'rgb(36, 114, 58)', 'rgb(36, 114, 58)', // Descritivos finalizados.
+     'rgb(13, 77, 97)', // Acabamento não iniciado.
+    ]);
+    assert.ok(result.names.every(name=>name.color==='rgb(255, 255, 255)'),JSON.stringify(result));
    }finally{dom.window.close();}
   }
  }finally{await server.close();}
