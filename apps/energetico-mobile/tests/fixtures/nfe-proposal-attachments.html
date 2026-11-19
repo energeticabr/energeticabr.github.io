@@ -17,7 +17,8 @@ const fiscal={issueDate:'2026-11-18',dueDate:'2026-11-19',total:'725',lines:[
   {number:'1',description:'DENVERTEC 100 18kg - CX',unit:'CX',quantity:'2',unitPrice:'50',discount:'0',adjustment:'0'},
   {number:'2',description:'TRINCHA 2 - UN',unit:'UN',quantity:'5',unitPrice:'5',discount:'0',adjustment:'0'},
   {number:'3',description:'DENVERTEC 540 FIBRAS 18KG - 1/CX',unit:'CX',quantity:'3',unitPrice:'200',discount:'0',adjustment:'0'}]};
-const catalog={suppliers:[{id:'1',label:'FORNECEDOR EXEMPLO'}],branches:[{id:'2',label:'004 - EDIFÍCIO X'}],accounts:[{id:'3',label:'ENERGÉTICA SICOOB'}],products:[{id:'4',label:'DENVERTEC 540',unit:'UN',expenseType:'MATERIAL'}],stages:[{id:'5',label:'ALVENARIA E ESTRUTURAS',branch:'004 - EDIFÍCIO X'}]};
+const branchLabel='004 - EDIFÍCIO EXEMPLO RESIDENCIAL E COMERCIAL';
+const catalog={suppliers:[{id:'1',label:'FORNECEDOR EXEMPLO COMÉRCIO DE MATERIAIS LTDA'}],branches:[{id:'2',label:branchLabel}],accounts:[{id:'3',label:'ENERGÉTICA SICOOB'}],products:[{id:'4',label:'DENVERTEC 540 FIBRAS IMPERMEABILIZANTE 18 KG',unit:'UN',expenseType:'MATERIAL'}],stages:[{id:'5',label:'ALVENARIA E ESTRUTURAS',branch:branchLabel}]};
 const draft={supplierId:'1',branchId:'2',accountId:'3',date:fiscal.issueDate,lines:fiscal.lines.map(line=>({...line,productId:'4',stageId:'5',date:fiscal.issueDate,dueDate:fiscal.dueDate}))};
 const view=createNfeProposalView({document,host:root,onPosted(){},attachments:{load:async()=>restored,save:async()=>{},pick:async()=>[],open:async()=>{}},service:{load:async()=>({fiscal,catalog,draft})}});
 await view.show({id:'layout-invoice',type:'NF-e',number:'123',pdfName:'nota-fiscal.pdf'});
@@ -26,14 +27,26 @@ tray.querySelector('[data-add-proposal-attachment]').click();
 body.scrollTop=body.scrollHeight;
 await new Promise(resolve=>requestAnimationFrame(()=>requestAnimationFrame(resolve)));
 const visible=node=>{const box=node.getBoundingClientRect();return box.left>=-1&&box.top>=-1&&box.right<=innerWidth+1&&box.bottom<=innerHeight+1;};
-document.documentElement.dataset.layout=JSON.stringify({
+const state={
   afterLines:tray.previousElementSibling?.className==='nfe-proposal-lines',
   choices:tray.querySelectorAll('[data-proposal-source]').length,
   noOverflow:body.scrollWidth<=body.clientWidth+1,
   footerVisible:visible(root.querySelector('.nfe-proposal-footer')),
   fileVisible:visible(tray.querySelector('[data-proposal-file]')),
   restored:await restored[0].text()==='original camera bytes'&&restored[0].sourceId==='layout-share',
-});
+};
+const firstLine=root.querySelector('.nfe-proposal-line');
+body.scrollTop=firstLine.offsetTop-body.offsetTop;
+await new Promise(resolve=>requestAnimationFrame(()=>requestAnimationFrame(resolve)));
+const values=[...firstLine.querySelectorAll('[data-proposal-summary]')];
+state.summaryValues=values.map(node=>node.textContent);
+state.summaryFits=values.every(node=>node.scrollWidth<=node.clientWidth+1);
+const supplier=root.querySelector('[name="supplierId"]').closest('.nfe-proposal-select');
+const branch=root.querySelector('[name="branchId"]').closest('.nfe-proposal-select');
+state.wideHeaderFields=supplier.offsetWidth>body.clientWidth*.4&&branch.offsetWidth>body.clientWidth*.4;
+state.headerChipFills=supplier.querySelector('.sfs-chip').offsetWidth>=supplier.querySelector('.sfs-field-selection').clientWidth-1;
+if(new URLSearchParams(location.search).get('preview')==='header')body.scrollTop=0;
+document.documentElement.dataset.layout=JSON.stringify(state);
 await store.save('layout-account','layout-invoice',[]);
 }catch(error){document.documentElement.dataset.layout=JSON.stringify({error:error.stack});}
 </script></body></html>
