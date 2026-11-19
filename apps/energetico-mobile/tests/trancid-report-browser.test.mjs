@@ -8,22 +8,27 @@ import {createServer} from 'vite';
 import {JSDOM} from 'jsdom';
 import {runBrowserLayout} from './helpers/browser-layout-runner.mjs';
 
-// Break caught: portrait rotation, horizontal clipping, hidden card digits, overlapping controls, or low/normal balances using the same color.
-test('Trancid report fits portrait 320/390 and Windows with full card names, tappable DATA and expandable history', {timeout:120000}, async t=>{
+// Break caught: missing landscape rotation, horizontal clipping, hidden card digits, overlapping controls, or low/normal balances using the same color.
+test('Trancid report opens in landscape on phones and Windows with full card names, tappable DATA and expandable history', {timeout:120000}, async t=>{
   const browser=[process.env.CHROME_BIN,'C:\\Program Files\\Google\\Chrome\\Application\\chrome.exe','/usr/bin/google-chrome'].find(path=>path&&existsSync(path));
   if (!browser) return t.skip('Chrome unavailable');
   const server=await createServer({root:resolve(fileURLToPath(new URL('..',import.meta.url))),server:{host:'127.0.0.1',port:0},logLevel:'silent'});
   try {
     await server.listen();
-    for (const [width,height] of [[320,740],[390,844],[1280,800]]) {
-      const {stdout,screenshot}=await runBrowserLayout(browser,{width,height,url:`http://127.0.0.1:${server.httpServer.address().port}/tests/fixtures/trancid-report-browser.html`,captureScreenshot:Boolean(process.env.TRANCID_SCREENSHOT_DIR)});
+    for (const [width,height,safeAreaInsets] of [[320,568],[390,844,{top:59,bottom:34,left:0,right:0}],[844,390,{top:0,bottom:21,left:59,right:59}],[1280,800]]) {
+      const mobile=width<1000;
+      const userAgent=mobile?'Mozilla/5.0 (iPhone; CPU iPhone OS 26_0 like Mac OS X) AppleWebKit/605.1.15':undefined;
+      const {stdout,screenshot}=await runBrowserLayout(browser,{width,height,mobile,userAgent,safeAreaInsets,url:`http://127.0.0.1:${server.httpServer.address().port}/tests/fixtures/trancid-report-browser.html`,captureScreenshot:Boolean(process.env.TRANCID_SCREENSHOT_DIR)});
       if (screenshot) await writeFile(join(process.env.TRANCID_SCREENSHOT_DIR,`trancid-${width}.png`),screenshot);
       const dom=new JSDOM(stdout); let result;
       try { result=JSON.parse(dom.window.document.documentElement.dataset.layout); } finally { dom.window.close(); }
       assert.equal(result.error,undefined,`${width}px: ${result.error}`);
-      assert.equal(result.transform,'none',`${width}px must remain upright`);
+      assert.equal(result.rotated,height>width,`${width}px must use landscape`);
+      assert.equal(result.transform==='none',height<=width);
       assert.equal(result.busy,'false'); assert.equal(result.loads,0); assert.equal(result.month,'11'); assert.equal(result.year,'2026');
-      assert.ok(result.dialog.left>=0&&result.dialog.right<=width&&result.dialog.top>=0&&result.dialog.bottom<=height,`${width}px dialog outside viewport`);
+      assert.ok(result.dialog.left>=0&&result.dialog.right<=Math.max(width,height)&&result.dialog.top>=0&&result.dialog.bottom<=Math.min(width,height),`${width}px dialog outside viewport`);
+      if(mobile) assert.ok(result.dialog.left>=68,`${width}px must clear the iPhone camera area even with zero insets`);
+      assert.ok(result.body.height>=80,`${width}px must leave room to scroll balances and history`);
       assert.equal(result.documentOverflow,0); assert.ok(result.bodyOverflow<=1); assert.ok(result.toolbarOverflow<=1);
       assert.equal(result.scrollable,true); assert.equal(result.cards.length,8);
       for (const card of result.cards) assert.ok(card.left>=result.dialog.left&&card.right<=result.dialog.right,`${width}px card clipping`);
@@ -38,7 +43,7 @@ test('Trancid report fits portrait 320/390 and Windows with full card names, tap
       for (const arrow of result.arrows) assert.ok(arrow.top>=result.body.bottom&&arrow.bottom<=result.dialog.bottom,`${width}px navigation overlaps a card`);
       assert.deepEqual(result.pdfFilters.map(filter=>filter.value),['Novembro','2026']);
       assert.deepEqual(result.pdfTables,[5,5,5,5,5,5,5,5],'PDF must include the selected month for every card, including collapsed cards');
-      t.diagnostic(`${width}x${height}: upright, no overflow, 14 card digits, history and touch targets visible`);
+      t.diagnostic(`${width}x${height}: landscape, no overflow, 14 card digits, history and touch targets visible`);
     }
   } finally { await server.close(); }
 });
