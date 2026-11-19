@@ -6,7 +6,9 @@
 
 **Publicação:** servidor compartilhado com baseline e espelho fixados por hash, lock, drenagem, backup, instalação atômica, health check e rollback. Atende Android, iOS e Windows/web sem modificar clientes.
 
-- [ ] Criar e executar regressões sintéticas contra runtime atual (RED).
-- [ ] Implementar consulta e retomada, verificar regressões e fluxo do fornecedor do pedido (GREEN).
-- [ ] Revisar patch e instalador, publicar e confirmar saúde/hash/comportamento no servidor.
-- [ ] Integrar pacote reproduzível ao repositório e registrar evidências.
+- [x] Criar e executar regressões sintéticas contra runtime atual (RED).
+- [x] Implementar consulta e retomada, verificar regressões e fluxo do fornecedor do pedido (GREEN).
+- [x] Revisar patch e instalador, publicar e confirmar saúde/hash/comportamento no servidor.
+- [x] Integrar pacote reproduzível ao repositório e registrar evidências.
+
+Evidências: `backend-patches/supplier-provision-payroll-exemption/verification.md`.
