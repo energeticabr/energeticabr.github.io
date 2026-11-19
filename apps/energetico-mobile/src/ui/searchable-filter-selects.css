@@ -2,6 +2,20 @@
 .sfs-popup-layer { display:contents; }
 .sfs [hidden] { display: none !important; }
 .sfs-field { position: relative; min-width: 0; }
+.sfs-selected { display:flex; align-items:center; gap:6px; min-width:0; box-sizing:border-box; }
+.sfs-field-selection { position:absolute; inset:3px 44px 3px 5px; overflow:auto; scrollbar-width:none; cursor:pointer; }
+.sfs:not(.sfs--open) > .sfs-field.sfs-field--selected > .sfs-trigger.sfs-value { color:transparent; }
+.sfs--open > .sfs-field > .sfs-field-selection { display:none; }
+.sfs-popup-selection { flex:0 1 auto; flex-wrap:wrap; max-height:35%; overflow:auto; padding:6px; border-bottom:1px solid #c2d7e8; }
+.sfs-chip { display:inline-flex; align-items:center; flex:0 0 auto; max-width:100%; min-width:0; box-sizing:border-box; border-radius:8px; background:#126bb0; color:#fff; font:600 14px/1.25 Arial,sans-serif; }
+.sfs-chip-label { min-width:0; padding:6px 8px; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+.sfs-popup-selection .sfs-chip-label { white-space:normal; overflow-wrap:anywhere; }
+.sfs .sfs-chip-remove { display:grid; place-items:center; flex:0 0 36px; width:36px; min-width:36px; height:36px; min-height:36px; margin:0; padding:0; border:0; border-radius:0 8px 8px 0; background:transparent; color:#fff; font:normal 24px/1 Arial,sans-serif; cursor:pointer; touch-action:manipulation; }
+.sfs-chip-remove:focus-visible { outline:3px solid #e3aa19; outline-offset:-3px; }
+.sfs .sfs-chip-remove:disabled { opacity:.5; cursor:default; }
+.sfs-field-selection .sfs-chip { height:100%; }
+.sfs-field-selection .sfs-chip-label { padding:2px 6px; line-height:1.1; }
+.sfs .sfs-field-selection .sfs-chip-remove { height:100%; min-height:0; }
 .sfs-trigger {
   width: 100%; min-width: 0; min-height: 44px; padding: 9px 10px;
   border: 1px solid #92aabd; border-radius: 8px; background: #fff;

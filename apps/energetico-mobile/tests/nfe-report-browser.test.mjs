@@ -88,6 +88,9 @@ test('NFE opens the horizontal fiscal table from the blue mascot in portrait and
       try {
         const layout = JSON.parse(dom.window.document.documentElement.dataset.layout);
         assert.equal(layout.error, undefined);
+        assert.deepEqual(JSON.parse(dom.window.document.documentElement.dataset.chipResults), {
+          supplierId:true, branchId:true, accountId:true, productId:true, stageId:true,
+        }, `selected chips at ${width}x${height}`);
         const proposalControls = JSON.parse(dom.window.document.documentElement.dataset.proposalControls);
         assert.ok(proposalControls.some(control => control.name === 'paymentDate'));
         assert.ok(proposalControls.every(control => control.height === 44), JSON.stringify(proposalControls));
