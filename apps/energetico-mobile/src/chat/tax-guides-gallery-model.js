@@ -2,7 +2,7 @@ export const TAX_GUIDES_GALLERY_MODEL = Object.freeze({
   title: 'GALERIA INSS E FGTS', listName: 'GUIASINSSFGTS', aliases: ['GUIASINSSFGTS'],
   nativeCard: true, showAttachments: true, allowCreate: false, recordActions: ['edit'],
   recordLabel: 'guia', recordArticle: 'a', searchPlaceholder: 'Pesquisar tipo, filial ou competência',
-  sourceNotice: 'Todo mês, uma solicitação de INSS e FGTS por filial ativa, referente à competência anterior. Edite a linha para informar vencimento, valor e anexar a guia.',
+  sourceNotice: 'Duas solicitações mensais para a filial 004 - EDIFÍCIO XAVANTE, com vencimento dia 20 e competência no dia 20 do mês anterior. Pelo lápis, preencha o valor e submeta o anexo da guia.',
   fields: ['TIPO', 'VENCIMENTO', 'COMPETENCIA', 'FILIAL', 'VALOR'],
   filterFields: ['TIPO', 'COMPETENCIA', 'FILIAL'], dateFilterFields: ['COMPETENCIA'],
   metadataEditorFields: ['VENCIMENTO', 'COMPETENCIA', 'FILIAL', 'VALOR', 'TIPO'],

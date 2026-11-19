@@ -10,6 +10,7 @@ from zoneinfo import ZoneInfo
 
 LIST = 'GUIASINSSFGTS'
 START = date(2026, 10, 1)
+TARGET_BRANCH_ID = 5  # FILIAIS: 004 - EDIFÍCIO XAVANTE
 FIELDS = {
     'CHAVE': ('Chave da solicitação', 'Text', 'Required="TRUE" Indexed="TRUE" EnforceUniqueValues="TRUE" MaxLength="255"'),
     'COMPETENCIA': ('Data competência', 'DateTime', 'Format="DateOnly" Required="TRUE"'),
@@ -31,19 +32,22 @@ def plan(today, branches):
                 or not label or status not in {'ATIVO', 'INATIVO'}):
             raise ValueError('Cadastro de filiais incompleto, duplicado ou inválido')
         seen.add(ident)
-        if status == 'ATIVO': selected.append((ident, label))
+        if ident == TARGET_BRANCH_ID and status == 'ATIVO' and label.startswith('004 - '):
+            selected.append((ident, label))
     if not selected:
-        raise ValueError('Nenhuma filial ativa confirmada')
+        raise ValueError('Filial 004 ativa não confirmada no cadastro')
     rows, month = [], START
     while month < current:
         competence = month.strftime('%Y-%m')
+        following_month = date(month.year + (month.month == 12), month.month % 12 + 1, 1)
         for ident, label in selected:
             for tax in ('INSS', 'FGTS'):
                 rows.append(dict(Title=f'Solicitar guia {tax} — {competence} — {label}',
                                  CHAVE=f'GUIA:{competence}:{ident}:{tax}',
-                                 COMPETENCIA=month.isoformat() + 'T12:00:00Z',
-                                 FILIAL=label, TIPO=tax, VALOR=None, VENCIMENTO=None))
-        month = date(month.year + (month.month == 12), month.month % 12 + 1, 1)
+                                 COMPETENCIA=month.replace(day=20).isoformat() + 'T12:00:00Z',
+                                 FILIAL=label, TIPO=tax, VALOR=None,
+                                 VENCIMENTO=following_month.replace(day=20).isoformat() + 'T12:00:00Z'))
+        month = following_month
     return rows
 
 

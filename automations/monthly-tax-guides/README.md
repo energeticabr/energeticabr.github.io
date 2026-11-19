@@ -4,9 +4,10 @@ Lista `GUIASINSSFGTS`, site pessoal, ID `405b215c-7688-4ea5-abf9-643ec9b14740`.
 Menu Recursos Humanos → **GALERIA INSS E FGTS** no Energético.
 
 Campos visíveis: data vencimento, data competência, filial, valor e tipo (INSS/FGTS).
-No início de cada mês, solicita as duas guias da competência anterior para cada filial marcada ATIVO em FILIAIS.
+No início de cada mês, solicita uma guia de INSS e uma de FGTS exclusivamente para a filial **004 - EDIFÍCIO XAVANTE** (ID5 em FILIAIS, que deve permanecer ativa).
 O lote inicial é outubro/2026. Não retroage antes dessa competência.
-Vencimento e valor começam nulos para preenchimento conforme a guia oficial.
+Competência: dia20 do mês anterior. Vencimento: dia20 do mês seguinte à competência, sem deslocamento automático por calendário. Exemplo inicial: competência20/10/2026 e vencimento20/11/2026, conforme solicitado pelo usuário.
+Valor começa nulo e os anexos ficam a cargo do usuário. A recorrência nunca estima valores nem produz arquivos de guia.
 Competência, filial e tipo são protegidos na edição; o lápis permite editar vencimento/valor e anexar arquivos.
 O cartão indica guia pendente, anexada ou consulta indisponível conforme a leitura dos anexos reais.
 Nenhuma provisão, lançamento, pagamento ou mensagem a terceiros é criado.
@@ -19,6 +20,12 @@ Servidor: `/opt/energetica-tax-guides/run.py`, usando a identidade SharePoint j�
 O serviço verifica esquema, paginação completa e unicidade da coluna CHAVE antes de qualquer gravação.
 Chave: `GUIA:AAAA-MM:IDFILIAL:TIPO`, única/indexada no SharePoint. Uma nova tentativa lê a chave após conflito ou resposta ambígua.
 Uma solicitação já existente nunca é atualizada pela rotina: valores, vencimentos e anexos informados são preservados.
+
+O botão fica na primeira coluna, imediatamente à esquerda de Galeria Holerites na segunda coluna do menu RH.
+
+## Alinhamento do lote inicial
+
+`realign_initial.py --backup-root <diretorio-privado>` é um alinhamento único, reexecutável, das oito solicitações originais de outubro/2026. Faz backup integral antes de escrever, remove apenas os seis itens próprios e intocados das outras filiais e ajusta as datas dos itens7/8. Qualquer valor, anexo ou edição nos itens a remover interrompe o preflight inteiro. Todas as mutações usam o ETag exato do snapshot; conflitos não autorizam sobrescrita. Nos itens mantidos, valor/anexos e vencimento já preenchido pelo usuário são preservados. A rotina mensal não executa essa migração.
 
 Preparação de esquema: `bootstrap.ps1`, pela conexão delegada Power Platform já autorizada.
 O certificado do servidor possui escrita de itens, mas não criação de listas; não ampliar suas permissões.
