@@ -214,7 +214,7 @@ const documentControl=createDocumentControlReportView({document,now:()=>new Date
 view.on('open-document-control-report',()=>void documentControl.open());
 window.depreciationLoads=0;
 const depreciation=createDepreciationReportView({document,now:()=>new Date('2026-10-06T12:00:00Z'),data:{async loadSnapshot(){window.depreciationLoads++;return {
- assets:Array.from({length:12},(_,i)=>({id:i+1,branch:'004 - EDIFÍCIO XAVANTE',depreciationDate:i===0?'2026-10-05':i===1?'2026-10-06':'2026-11-01',patrimony:String(i+1),group:'FERRAMENTAS CONCRETO',asset:'VIBRADOR DE CONCRETO',estimatedUnit:4338.02,residualUnit:3077.05,quantity:1,rate:2}))
+ assets:Array.from({length:12},(_,i)=>({id:i+1,branch:'004 - EDIFÍCIO XAVANTE',depreciationDate:i===0?'2026-10-05':i===1?'2026-10-06':'2026-11-01',patrimony:String(i+1),group:'FERRAMENTAS CONCRETO',asset:'VIBRADOR DE CONCRETO',estimatedUnit:4338.02,residualUnit:3077.05,quantity:1,rate:2,status:'ATIVO',depreciate:'SIM',supplier:'FORNECEDOR FICTÍCIO'}))
 };}}});
 view.on('open-depreciation-report',()=>void depreciation.open());
 view.on('open-pending-provisions',()=>window.opened++);
