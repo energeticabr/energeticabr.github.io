@@ -6,8 +6,10 @@ const branch='004 - EDIFÍCIO XAVANTE';
 const view=createStageGanttView({document,now:()=>new Date(2026,10,18),data:{
  async loadSnapshot(){return {complete:true,launches:[
   {id:'7',branch,stage:'ALVENARIA E ESTRUTURAS',type:'ATIVIDADE COMUM',status:'INICIADO',startDate:'2026-08-10',endDate:''},
+  {id:'8',branch,stage:'EXECUÇÃO CONTRAPISO',type:'ATIVIDADE COMUM',status:'FINALIZADO',startDate:'',endDate:''},
  ],activities:[
   {id:'129',branch,stage:'ALVENARIA E ESTRUTURAS',activity:'ESCORAMENTO E ARMAÇÃO FERRAGEM SEGUNDA LAJE',property:'',supplier:'JOÃO',status:'ATIVIDADE INICIADA',executionDate:'2026-10-25',plannedDate:''},
+  {id:'130',branch,stage:'ALVENARIA E ESTRUTURAS',activity:'CONCRETAGEM FINALIZADA',property:'',supplier:'JOÃO',status:'ATIVIDADE FINALIZADA',executionDate:'2026-10-20',plannedDate:'2026-10-24'},
  ]};},
  async loadAssignments(){return {complete:true,rows:[{id:'1',date:'2026-11-17',supplier:'JOÃO',profession:'ARMADOR'}]};},
  async finalizeActivity(){throw new Error('fixture does not write');}, async finalizeStage(){throw new Error('fixture does not write');},
@@ -15,7 +17,8 @@ const view=createStageGanttView({document,now:()=>new Date(2026,10,18),data:{
 await view.open(); view.element.querySelector('.gantt-toggle').click();
 await document.fonts.ready;
 const root=view.element;
-const rows=[...root.querySelectorAll('.gantt-row--stage,.gantt-row--activity')].map(row=>{
+const completed=[...root.querySelectorAll('.gantt-name[data-tone="finished"]')].map(name=>({color:getComputedStyle(name).backgroundColor,button:!!name.closest('.gantt-row').querySelector('.gantt-finish-button')}));
+const rows=[...root.querySelectorAll('.gantt-row--stage,.gantt-row--activity')].filter(row=>row.querySelector('.gantt-finish-button')).map(row=>{
  const name=row.querySelector('.gantt-name'),button=row.querySelector('.gantt-finish-button');
  const portrait=root.dataset.reportPortrait==='true';
  const nr=name.getBoundingClientRect(),br=button.getBoundingClientRect();
@@ -25,5 +28,5 @@ root.querySelector('.gantt-row--activity .gantt-finish-button').click();
 await new Promise(resolve=>setTimeout(resolve,0));
 await new Promise(resolve=>requestAnimationFrame(()=>requestAnimationFrame(resolve)));
 const form=root.querySelector('.gantt-finish-form'),rect=form.getBoundingClientRect();
-document.documentElement.dataset.layout=JSON.stringify({rows,date:form.querySelector('input').value,visible:rect.left>=-1&&rect.top>=-1&&rect.right<=innerWidth+1&&rect.bottom<=innerHeight+1,formFits:form.scrollWidth<=form.clientWidth+1});
+document.documentElement.dataset.layout=JSON.stringify({rows,completed,date:form.querySelector('input').value,visible:rect.left>=-1&&rect.top>=-1&&rect.right<=innerWidth+1&&rect.bottom<=innerHeight+1,formFits:form.scrollWidth<=form.clientWidth+1});
 </script></body></html>

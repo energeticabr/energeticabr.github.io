@@ -106,6 +106,7 @@ button.gantt-toggle {
   line-height: 1.35;
 }
 .gantt-cluster--description { display: block; padding: 5px 7px; background: #0d4d61; font-size: .9rem; font-weight: 800; white-space: normal; overflow-wrap: anywhere; }
+.gantt-cluster--description[data-tone="finished"] { background: var(--gantt-finished); }
 .gantt-finish-button { display:block; width:max-content; max-width:100%; min-height:44px; margin-top:6px; padding:6px 10px; border:1px solid #1e6732; border-radius:5px; background:#1e6732; color:#fff; font:inherit; font-size:.78rem; font-weight:800; cursor:pointer; touch-action:manipulation; }
 .gantt-finish-button:disabled { background:#dbe2e8; border-color:#a7b3bc; color:#465763; cursor:default; }
 .gantt-finish-overlay { position:absolute; inset:0; z-index:25; display:grid; place-items:center; padding:12px; box-sizing:border-box; background:#05202e88; }

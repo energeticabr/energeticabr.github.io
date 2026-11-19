@@ -29,7 +29,7 @@ test('GANTT expande as atividades abaixo da etapa e exibe datas e estados das ba
   assert.equal(dialog.querySelectorAll('.gantt-row--activity').length, 0);
   assert.equal(dialog.querySelector('.gantt-row--stage .gantt-row-text small'), null);
   assert.match(dialog.querySelector('select').textContent, /Obra A/);
-  assert.match(dialog.querySelector('[data-tone="ongoing"]').getAttribute('aria-label'), /01\/11\/2026.*Em Andamento/);
+  assert.match(dialog.querySelector('.gantt-bar[data-tone="ongoing"]').getAttribute('aria-label'), /01\/11\/2026.*Em Andamento/);
   assert.equal(dialog.querySelector('.gantt-bar-date--start')?.textContent, '01/11/2026');
   assert.equal(dialog.querySelector('.gantt-bar-date--end')?.textContent, 'Em andamento');
 
@@ -41,7 +41,7 @@ test('GANTT expande as atividades abaixo da etapa e exibe datas e estados das ba
   assert.equal(child.querySelector('.gantt-name').tagName, 'STRONG');
   assert.ok(child.querySelector('.gantt-name').classList.contains('gantt-cluster--description'));
   assert.ok(dialog.querySelector('.gantt-row--stage .gantt-name').classList.contains('gantt-cluster--description'));
-  assert.match(child.querySelector('[data-tone="finished"]').getAttribute('aria-label'), /03\/11\/2026.*03\/11\/2026/);
+  assert.match(child.querySelector('.gantt-bar[data-tone="finished"]').getAttribute('aria-label'), /03\/11\/2026.*03\/11\/2026/);
   assert.equal(child.querySelector('.gantt-bar-date--start').textContent, '03/11/2026');
   assert.equal(child.querySelector('.gantt-bar-date--end').textContent, '03/11/2026');
 
