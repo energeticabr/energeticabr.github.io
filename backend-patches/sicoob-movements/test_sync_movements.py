@@ -9,6 +9,46 @@ from sync_movements import (BACKFILL_START, BACKFILL_END, NEW_START, import_move
 
 
 class MovementImportTests(unittest.TestCase):
+    def test_existing_masked_pix_gets_bank_name_without_inventing_document(self):
+        from types import SimpleNamespace
+        source = payment_rows({'transacoes': [self.transaction(cpfCnpj='',
+                              descInfComplementar='Pix enviado|@Nome Exemplo|@***.292.306-**|@')]},
+                              BACKFILL_START, BACKFILL_END, '001234', {})[0]
+        stored = {**source, 'RAZAOSOCIALRECEBEDOR': None, 'DOCUMENTORECEBEDOR': None}
+        def get_fields(item, fields, target):
+            return {field: stored.get(field) for field in fields}
+        client = SimpleNamespace(_find_item=lambda *args: {'Id': 72}, get_item_fields=get_fields,
+            get_item_fields_with_etag=lambda *args: (get_fields(*args), 'snapshot'),
+            update_item_with_etag=lambda item, fields, etag, target: stored.update(fields))
+        self.assertFalse(save_movement(client, source))
+        self.assertEqual(stored['RAZAOSOCIALRECEBEDOR'], 'Nome Exemplo')
+        self.assertIsNone(stored['DOCUMENTORECEBEDOR'])
+
+    def test_pix_enviado_bank_name_is_available_before_first_save(self):
+        entry = self.transaction(cpfCnpj='', descInfComplementar='Pix enviado|@Mauricio Honorato de Sousa|@***.292.306-**|@')
+        saved = []
+        import_movements(lambda *_: {'transacoes': [entry]}, lambda row: saved.append(dict(row)) or True,
+                         BACKFILL_START, BACKFILL_END, '001234', {})
+        self.assertEqual(saved[0].get('RAZAOSOCIALRECEBEDOR'), 'Mauricio Honorato de Sousa')
+
+    def test_pix_enviado_rejects_unlabelled_or_conflicting_names(self):
+        for description, expected in [('Pagamento Pix|@***.292.306-**|@', None),
+                                      ('Pix enviado|@123456|@***.292.306-**|@', None),
+                                      ('Pix enviado|@Nome Um|@Nome Dois|@***.292.306-**|@', None),
+                                      ('Pix enviado|@Nome Exemplo|@***.292.306-**|@', 'Nome Exemplo')]:
+            row = payment_rows({'transacoes': [self.transaction(cpfCnpj='', descInfComplementar=description)]},
+                               BACKFILL_START, BACKFILL_END, '001234', {})[0]
+            self.assertEqual(row.get('RAZAOSOCIALRECEBEDOR'), expected)
+
+    def test_pix_preparation_failure_prevents_partial_import(self):
+        saved = []
+        def prepare(rows):
+            raise RuntimeError('bank lookup unavailable')
+        with self.assertRaisesRegex(RuntimeError, 'bank lookup unavailable'):
+            import_movements(lambda *_: {'transacoes': [self.transaction()]}, lambda row: saved.append(row),
+                             BACKFILL_START, BACKFILL_END, '001234', {}, prepare=prepare)
+        self.assertEqual(saved, [])
+
     def transaction(self, **changes):
         return {"transactionId": "bank-1", "tipo": "D", "valor": "1.234,56",
                 "data": "2026-10-02T21:55:00-03:00", "dataLote": "2026-10-02",
