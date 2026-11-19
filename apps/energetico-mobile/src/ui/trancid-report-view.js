@@ -1,4 +1,5 @@
 import { addReportCloseControl } from './report-close-control.js';
+import { bindReportLandscape } from './report-landscape.js';
 
 const MONTHS = ['Janeiro', 'Fevereiro', 'Março', 'Abril', 'Maio', 'Junho', 'Julho', 'Agosto', 'Setembro', 'Outubro', 'Novembro', 'Dezembro'];
 const isMoney = value => Number.isSafeInteger(value);
@@ -31,6 +32,8 @@ export function createTrancidReportView({ document: doc = globalThis.document, l
     const node = make('button', className, text); node.type = 'button'; node.setAttribute('aria-label', label); return node;
   };
   const root = make('div', 'trancid-overlay'); root.hidden = true; root.setAttribute('aria-busy', 'false');
+  root.toggleAttribute('data-iphone', doc.defaultView.navigator.userAgent.includes('iPhone'));
+  const landscape = bindReportLandscape(root);
   const panel = make('section', 'trancid-dialog'); panel.tabIndex = -1;
   panel.setAttribute('role', 'dialog'); panel.setAttribute('aria-modal', 'true'); panel.setAttribute('aria-label', 'Trancid — saldos dos cartões');
   const header = make('header', 'trancid-heading'), titles = make('div', 'trancid-titles');
@@ -173,6 +176,7 @@ export function createTrancidReportView({ document: doc = globalThis.document, l
     returnFocus = doc.activeElement; oldOverflow = doc.body.style.overflow; app = doc.getElementById('app'); oldInert = Boolean(app?.inert);
     doc.body.style.overflow = 'hidden'; if (app) app.inert = true;
     root.hidden = false;
+    landscape.update();
     selectPeriod(currentMonth()); body.scrollTop = 0; panel.focus({ preventScroll: true });
     if (initialSnapshot) {
       try { acceptReport(initialSnapshot); } catch { await load(); }
@@ -180,6 +184,6 @@ export function createTrancidReportView({ document: doc = globalThis.document, l
     return true;
   }, close, destroy() {
     if (destroyed) return;
-    close(); destroyed = true; cancel(); root.remove();
+    close(); destroyed = true; cancel(); landscape.destroy(); root.remove();
   } });
 }

@@ -20,6 +20,10 @@ test('Gantt mantém FINALIZAR abaixo dos nomes e diálogo com data visível no c
         assert.ok(result.rows.every(row => row.below && row.touch && row.fits), JSON.stringify({ width, result }));
         assert.equal(result.rows[1].color, 'rgb(30, 103, 50)');
         assert.equal(result.rows[0].disabled, true);
+        assert.deepEqual(result.completed, [
+          { color: 'rgb(36, 114, 58)', button: false },
+          { color: 'rgb(36, 114, 58)', button: false },
+        ]);
         assert.equal(result.date, '2026-11-17');
         assert.ok(result.visible && result.formFits, JSON.stringify({ width, result }));
       } finally { dom.window.close(); }

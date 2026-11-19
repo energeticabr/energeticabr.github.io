@@ -48,6 +48,10 @@ test('finaliza o descritivo com data sugerida pela última presença e permite e
   } });
   await h.view.open(); h.root.querySelector('.gantt-toggle').click();
   const row = h.root.querySelector('.gantt-row--activity');
+  const completed = h.root.querySelectorAll('.gantt-row--activity')[1];
+  assert.equal(completed.querySelector('.gantt-finish-button'), null);
+  assert.equal(completed.querySelector('.gantt-name').dataset.tone, 'finished');
+  assert.notEqual(row.querySelector('.gantt-name').dataset.tone, 'finished');
   const finish = row.querySelector('.gantt-finish-button');
   assert.ok(finish, 'cada descritivo tem um botão abaixo do nome');
   assert.equal(finish.previousElementSibling.textContent, 'Escavação');
@@ -62,7 +66,8 @@ test('finaliza o descritivo com data sugerida pela última presença e permite e
   const updated = h.root.querySelector('.gantt-row--activity');
   assert.equal(updated.querySelector('.gantt-bar').dataset.tone, 'finished');
   assert.equal(updated.querySelector('.gantt-bar-date--end').textContent, '13/11/2026');
-  assert.equal(updated.querySelector('.gantt-finish-button').disabled, true);
+  assert.equal(updated.querySelector('.gantt-finish-button'), null);
+  assert.equal(updated.querySelector('.gantt-name').dataset.tone, 'finished');
 });
 
 test('etapa consulta todos os descritivos e usa presença em vez da data fim dos filhos', async t => {
@@ -83,6 +88,8 @@ test('etapa consulta todos os descritivos e usa presença em vez da data fim dos
   assert.equal(h.writes[0].id, '7');
   assert.equal(h.writes[0].options.expectedStage.id, '7');
   assert.equal(h.root.querySelector('.gantt-row--stage .gantt-bar').dataset.tone, 'finished');
+  assert.equal(h.root.querySelector('.gantt-row--stage .gantt-finish-button'), null);
+  assert.equal(h.root.querySelector('.gantt-row--stage .gantt-name').dataset.tone, 'finished');
 });
 
 test('etapa pendente mantém botão desabilitado e cancelar ignora consulta atrasada', async t => {
