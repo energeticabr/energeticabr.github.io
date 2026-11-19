@@ -58,7 +58,13 @@ function createPicker(select, closeOthers, options = {}) {
   if (select.multiple) list.setAttribute('aria-multiselectable', 'true');
   const empty = doc.createElement('p'); empty.className = 'sfs-empty'; empty.textContent = 'Nenhuma opção encontrada.';
   empty.setAttribute('role', 'status'); empty.hidden = true;
-  fieldBox.append(trigger, arrow);
+  const fieldSelection = doc.createElement('div'); fieldSelection.className = 'sfs-selected sfs-field-selection';
+  const popupSelection = doc.createElement('div'); popupSelection.className = 'sfs-selected sfs-popup-selection';
+  const chipOptions = new WeakMap();
+  let chipState = [];
+  fieldSelection.hidden = popupSelection.hidden = true;
+  for (const summary of [fieldSelection, popupSelection]) summary.setAttribute('aria-label', `Seleção de ${labelText}`);
+  fieldBox.append(trigger, fieldSelection, arrow);
   let backdrop = null, dismiss = null;
   if (reportPicker) {
     search.className = 'sfs-search sfs-report-search'; search.placeholder = 'Localizar itens';
@@ -69,7 +75,7 @@ function createPicker(select, closeOthers, options = {}) {
     backdrop = doc.createElement('div'); backdrop.className = 'sfs-backdrop'; backdrop.hidden = true;
     backdrop.setAttribute('aria-hidden', 'true'); popupLayer.append(backdrop);
   }
-  popup.append(list, empty); wrapper.append(fieldBox); popupLayer.append(popup); select.after(wrapper);
+  popup.append(popupSelection, list, empty); wrapper.append(fieldBox); popupLayer.append(popup); select.after(wrapper);
   let actionFooter = null, selectAll = null, confirmSelection = null;
   if (selectionActions) {
     actionFooter = doc.createElement('div'); actionFooter.className = 'sfs-selection-actions';
@@ -94,11 +100,50 @@ function createPicker(select, closeOthers, options = {}) {
 
   function selectionLabel() {
     return [...select.options].filter(option => option.selected && (!selectionActions || option.value)).map(option => option.label).join(', ')
-      || (selectionActions ? [...select.options].find(option => !option.value)?.label || 'Selecione' : 'Todos');
+      || (selectionActions ? [...select.options].find(option => !option.value)?.label || 'Selecione' : select.multiple ? 'Todos' : '');
   }
 
   function disabled(option) {
     return select.matches(':disabled') || option.disabled || option.parentElement?.tagName === 'OPTGROUP' && option.parentElement.disabled;
+  }
+  function syncSelection() {
+    const selected = [...select.options].filter(option => option.selected && option.value !== '');
+    const state = selected.map(option => ({ option, label: option.label, disabled: disabled(option) }));
+    if (state.length === chipState.length && state.every((item, index) =>
+      item.option === chipState[index].option && item.label === chipState[index].label && item.disabled === chipState[index].disabled)) return;
+    chipState = state;
+    fieldBox.classList.toggle('sfs-field--selected', selected.length > 0);
+    for (const summary of [fieldSelection, popupSelection]) {
+      summary.replaceChildren(...state.map(({ option, label, disabled: isDisabled }) => {
+        const chip = doc.createElement('span'); chip.className = 'sfs-chip';
+        const text = doc.createElement('span'); text.className = 'sfs-chip-label'; text.textContent = label; text.title = label;
+        const remove = doc.createElement('button'); remove.type = 'button'; remove.className = 'sfs-chip-remove';
+        remove.textContent = '×'; remove.disabled = isDisabled;
+        remove.setAttribute('aria-label', `Remover ${label} de ${labelText}`);
+        chipOptions.set(remove, option);
+        remove.addEventListener('click', event => {
+          if (pointerSeen && event.detail > 0) return;
+          removeSelection(option);
+        });
+        chip.append(text, remove); return chip;
+      }));
+      summary.hidden = !selected.length;
+    }
+  }
+  function removeSelection(option) {
+    if (destroyed || disabled(option) || !option.selected || ![...select.options].includes(option)) return;
+    onOptionPointerCancel();
+    if (select.multiple) option.selected = false;
+    else {
+      const blank = [...select.options].find(candidate => candidate.value === '');
+      select.selectedIndex = blank ? blank.index : -1;
+    }
+    search.value = '';
+    sync();
+    restoringFocus = true;
+    trigger.focus({ preventScroll: true });
+    restoringFocus = false;
+    select.dispatchEvent(new view.Event('change', { bubbles: true }));
   }
   function highlight(index) {
     active = index;
@@ -150,7 +195,8 @@ function createPicker(select, closeOthers, options = {}) {
       popup.style.right = 'auto'; popup.style.bottom = 'auto';
       popup.style.height = `${height}px`; popup.style.maxHeight = `${height}px`;
       const footerHeight = actionFooter ? reportLayoutRect(actionFooter).height || 64 : 0;
-      list.style.maxHeight = `${Math.max(0, height - 54 - footerHeight)}px`;
+      const selectionHeight = popupSelection.hidden ? 0 : reportLayoutRect(popupSelection).height;
+      list.style.maxHeight = `${Math.max(0, height - 54 - footerHeight - selectionHeight)}px`;
       return;
     }
     // Keep the dropdown inside scrollable gallery content as well as the
@@ -171,7 +217,8 @@ function createPicker(select, closeOthers, options = {}) {
     popup.style.top = placement === 'below' ? 'calc(100% + 5px)' : 'auto';
     popup.style.bottom = placement === 'above' ? 'calc(100% + 5px)' : 'auto';
     popup.style.maxHeight = `${height}px`;
-    list.style.maxHeight = `${Math.max(0, Math.min(240, height - 14))}px`;
+    const selectionHeight = popupSelection.hidden ? 0 : popupSelection.getBoundingClientRect().height;
+    list.style.maxHeight = `${Math.max(0, Math.min(240, height - 14 - selectionHeight))}px`;
   }
   function render() {
     const query = selectionOnly ? '' : normalizeSearchText(search.value);
@@ -202,6 +249,7 @@ function createPicker(select, closeOthers, options = {}) {
     if (selectionReset !== null) view.clearTimeout(selectionReset);
     selectionReset = null;
     if (!popup.hidden) popup.hidden = true;
+    wrapper.classList.remove('sfs--open');
     if (backdrop && !backdrop.hidden) backdrop.hidden = true;
     trigger.setAttribute('aria-expanded', 'false'); search.setAttribute('aria-expanded', 'false');
     trigger.value = selectionLabel();
@@ -215,6 +263,7 @@ function createPicker(select, closeOthers, options = {}) {
   }
   function sync() {
     if (destroyed) return;
+    syncSelection();
     const selection = selectionLabel();
     search.placeholder = reportPicker ? 'Localizar itens' : selection;
     if (reportPicker || popup.hidden) trigger.value = selection;
@@ -237,6 +286,7 @@ function createPicker(select, closeOthers, options = {}) {
     if (trigger.disabled) return;
     closeOthers();
     search.value = selectionOnly ? selectionLabel() : ''; popup.hidden = false;
+    wrapper.classList.add('sfs--open');
     if (backdrop) backdrop.hidden = false;
     trigger.setAttribute('aria-expanded', 'true'); search.setAttribute('aria-expanded', 'true');
     if (observedViewport !== view.visualViewport) {
@@ -263,7 +313,10 @@ function createPicker(select, closeOthers, options = {}) {
     sync();
     if (changed) select.dispatchEvent(new view.Event('change', { bubbles: true }));
   }
-  function onTriggerClick() { if (popup.hidden) open(); }
+  function onTriggerClick(event) {
+    if (event?.target.closest?.('.sfs-chip-remove')) return;
+    if (popup.hidden) open();
+  }
   function onArrowClick() { if (popup.hidden) open(); else close({ focus: true }); }
   function onSearchEditStart() {
     // Choosing restores the label and focus. Start the next edit before the
@@ -311,8 +364,8 @@ function createPicker(select, closeOthers, options = {}) {
   }
   function onOptionPointerDown(event) {
     pointerSeen = true;
-    const target = event.target.closest?.('.sfs-option, .sfs-selection-actions button');
-    const eligible = target && (list.contains(target) || actionFooter?.contains(target) && !target.disabled);
+    const target = event.target.closest?.('.sfs-option, .sfs-selection-actions button, .sfs-chip-remove');
+    const eligible = target && (list.contains(target) || (actionFooter?.contains(target) || chipOptions.has(target)) && !target.disabled);
     pressedOption = event.button === 0 && event.isPrimary !== false && eligible ? target : null;
     pressedAt = pressedOption ? { x: event.clientX, y: event.clientY, id: event.pointerId } : null;
     selectingOption = Boolean(pressedOption);
@@ -341,7 +394,7 @@ function createPicker(select, closeOthers, options = {}) {
   }
   function onOptionPointerUp(event) {
     if (!selectingOption) return;
-    const target = event.target.closest?.('.sfs-option, .sfs-selection-actions button');
+    const target = event.target.closest?.('.sfs-option, .sfs-selection-actions button, .sfs-chip-remove');
     const travel = Math.hypot(event.clientX - pressedAt.x, event.clientY - pressedAt.y);
     const hit = typeof doc.elementFromPoint === 'function' ? doc.elementFromPoint(event.clientX, event.clientY) : null;
     // A touch tap is identified by its short travel, not hit testing: closing
@@ -351,6 +404,11 @@ function createPicker(select, closeOthers, options = {}) {
       || pressedOption.contains(hit);
     if (event.button === 0 && event.isPrimary !== false && event.pointerId === pressedAt.id
       && travel <= 12 && landed && target === pressedOption) {
+      if (chipOptions.has(target) && !target.disabled) {
+        if (event.pointerType === 'touch') suppressTouchClick();
+        removeSelection(chipOptions.get(target));
+        return;
+      }
       if (actionFooter?.contains(target) && !target.disabled) {
         onOptionPointerCancel();
         if (target === selectAll) onSelectAll();
@@ -416,6 +474,7 @@ function createPicker(select, closeOthers, options = {}) {
     sync();
   }
   trigger.addEventListener('click', onTriggerClick);
+  fieldSelection.addEventListener('click', onTriggerClick);
   trigger.addEventListener('focus', open);
   arrow.addEventListener('click', onArrowClick);
   dismiss?.addEventListener('click', onDismiss); backdrop?.addEventListener('click', onDismiss);
@@ -430,6 +489,8 @@ function createPicker(select, closeOthers, options = {}) {
     root.addEventListener('focusout', onFocusOut);
   }
   list.addEventListener('pointerdown', onOptionPointerDown);
+  fieldSelection.addEventListener('pointerdown', onOptionPointerDown);
+  popupSelection.addEventListener('pointerdown', onOptionPointerDown);
   actionFooter?.addEventListener('pointerdown', onOptionPointerDown);
   doc.addEventListener('pointerup', onOptionPointerUp);
   doc.addEventListener('pointercancel', onOptionPointerCancel);
@@ -452,6 +513,7 @@ function createPicker(select, closeOthers, options = {}) {
       destroyed = true; optionObserver.disconnect(); visibilityObserver.disconnect();
       if (selectionReset !== null) view.clearTimeout(selectionReset);
       trigger.removeEventListener('click', onTriggerClick); trigger.removeEventListener('focus', open);
+      fieldSelection.removeEventListener('click', onTriggerClick);
       arrow.removeEventListener('click', onArrowClick);
       dismiss?.removeEventListener('click', onDismiss); backdrop?.removeEventListener('click', onDismiss);
       selectAll?.removeEventListener('click', onSelectionActionClick); confirmSelection?.removeEventListener('click', onSelectionActionClick);
@@ -464,6 +526,8 @@ function createPicker(select, closeOthers, options = {}) {
         root.remove();
       }
       list.removeEventListener('pointerdown', onOptionPointerDown);
+      fieldSelection.removeEventListener('pointerdown', onOptionPointerDown);
+      popupSelection.removeEventListener('pointerdown', onOptionPointerDown);
       actionFooter?.removeEventListener('pointerdown', onOptionPointerDown);
       doc.removeEventListener('pointerup', onOptionPointerUp);
       doc.removeEventListener('pointercancel', onOptionPointerCancel);

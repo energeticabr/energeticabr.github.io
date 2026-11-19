@@ -1,0 +1,26 @@
+<!doctype html><html lang="pt-BR"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<link rel="stylesheet" href="/src/ui/searchable-filter-selects.css">
+<link rel="stylesheet" href="/src/ui/payment-ledger.css">
+<link rel="stylesheet" href="/src/ui/document-control-report.css">
+<link rel="stylesheet" href="/src/ui/contractor-control-report.css">
+<link rel="stylesheet" href="/src/ui/supplier-payroll-report.css">
+<style>body{margin:12px}.sample{position:static!important;width:280px!important;height:auto!important;max-height:none!important;margin:10px 0}.sample form{display:block}</style>
+</head><body>
+<section class="dcr-dialog sample"><form></form></section>
+<section class="pl-dialog sample"><form></form></section>
+<section class="pl-dialog ccr-dialog sample"><form class="ccr-filters"></form></section>
+<section class="pl-dialog spr-dialog sample"><form class="spr-filters"></form></section>
+<script type="module">
+import { bindSearchableFilterSelects } from '/src/ui/searchable-filter-selects.js';
+const results=[];
+for(const form of document.querySelectorAll('form')) {
+  form.innerHTML='<select aria-label="Produto"><option value="">Selecione</option><option value="1" selected>BLOCO DE CIMENTO COM DESCRIÇÃO LONGA PARA CONFERIR A SELEÇÃO</option></select>';
+  bindSearchableFilterSelects(form,{report:true});
+  const field=form.querySelector('.sfs-field'),input=form.querySelector('.sfs-trigger'),remove=form.querySelector('.sfs-field-selection .sfs-chip-remove');
+  const a=field.getBoundingClientRect(),b=remove.getBoundingClientRect();
+  results.push({transparent:getComputedStyle(input).color==='rgba(0, 0, 0, 0)',fits:b.top>=a.top&&b.bottom<=a.bottom&&b.left>=a.left&&b.right<=a.right,hit:document.elementFromPoint(b.x+b.width/2,b.y+b.height/2)===remove});
+  remove.click();
+  results.at(-1).cleared=form.querySelector('select').value===''&&!form.querySelector('.sfs-chip')&&form.querySelector('.sfs-popup').hidden;
+}
+document.documentElement.dataset.layout=JSON.stringify({results});
+</script></body></html>

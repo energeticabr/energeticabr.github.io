@@ -247,6 +247,7 @@ if (!report.element.hidden) {
     left:label.offsetLeft, top:label.offsetTop,
   })));
   const pickerResults = {};
+  const chipResults = {};
   const popupBounds = [];
   for (const [name, query, expected, value] of [
     ['supplierId','exemplo','Fornecedor Exemplo','21'],
@@ -293,7 +294,29 @@ if (!report.element.hidden) {
       select.value === value && trigger.value === expected &&
       popupRect.x >= 0 && popupRect.y >= 0 && popupRect.right <= innerWidth && popupRect.bottom <= innerHeight &&
       (rotated ? searchRect.height > searchRect.width : searchRect.width > searchRect.height);
+    const closedChip = field.querySelector('.sfs-field-selection .sfs-chip');
+    const closedLabel = closedChip?.querySelector('.sfs-chip-label');
+    const closedVisible = closedChip && getComputedStyle(closedChip).backgroundColor === 'rgb(18, 107, 176)';
+    trigger.click();
+    const chip = popup.querySelector('.sfs-chip');
+    const remove = chip?.querySelector('.sfs-chip-remove');
+    const chipRect = chip && box(chip), removeRect = remove && box(remove);
+    const removeVisible = removeRect && document.elementFromPoint(
+      removeRect.x + removeRect.width / 2, removeRect.y + removeRect.height / 2) === remove;
+    const selectedVisible = closedVisible && closedLabel?.textContent === expected &&
+      chip?.querySelector('.sfs-chip-label')?.textContent === expected && removeVisible &&
+      chipRect.width <= popupRect.width && removeRect.width >= 32 && removeRect.height >= 32;
+    if (name === 'productId' && new URL(location.href).searchParams.has('chip-preview')) {
+      document.documentElement.dataset.layout = JSON.stringify({ preview: true, selectedVisible });
+      await new Promise(() => {});
+    }
+    remove?.click();
+    const cleared = select.value === '' && !popup.querySelector('.sfs-chip') && !popup.hidden;
+    setQuery(query);
+    popup.querySelector('.sfs-option')?.click();
+    chipResults[name] = selectedVisible && cleared && select.value === value && popup.hidden;
   }
+  document.documentElement.dataset.chipResults = JSON.stringify(chipResults);
   const changedStage = proposal.querySelector('[name="stageId"]').value;
   const proposalScroll = proposalBody.scrollHeight > proposalBody.clientHeight;
   const proposalSubmit = box(proposal.querySelector('[data-nfe-proposal-submit]'));
