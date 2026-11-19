@@ -2,6 +2,7 @@ import { matchesSearchTerms, normalizeSearchText } from '../../../../portal/core
 import { pendingProvisionAttachmentTray } from './pending-provision-attachment-tray.js';
 import { payrollAssignmentTableMarkup } from './payroll-assignment-table.js';
 import { supplierDefaultsComparisonMarkup } from './attendance-supplier-defaults-comparison.js';
+import { bindSearchableFilterSelects } from './searchable-filter-selects.js';
 import { fieldChangesMarkup, provisionVariationChangesMarkup } from './provision-variation-changes.js';
 import { loadingIndicatorMarkup } from "./loading-indicator.js";
 import { createCameraChooser } from './document-scanner.js';
@@ -3249,6 +3250,11 @@ export function commandFromTarget(target) {
 }
 
 export function createChatView(root, { onOpenSettings, onDemoAccess, onSignOut, ensureMicrophonePermission, transcribeAudio, demo = false } = {}) {
+  let attendancePickers = [];
+  function clearAttendancePickers() {
+    for (const picker of attendancePickers) picker.destroy();
+    attendancePickers = [];
+  }
   let customEditReview = null;
   function clearCustomEditReview() {
     const current = customEditReview;
@@ -4553,6 +4559,7 @@ export function createChatView(root, { onOpenSettings, onDemoAccess, onSignOut, 
     preserveSignaturePad = false,
     preserveSignaturePlacement = false,
   } = {}) {
+    clearAttendancePickers();
     const shell = root.querySelector('.chat-shell');
     const composer = shell?.querySelector('[data-chat-form]');
     const preservedOverlays = [];
@@ -6311,6 +6318,9 @@ export function createChatView(root, { onOpenSettings, onDemoAccess, onSignOut, 
     }
     const pendingReportList = root.querySelector('.chat-pending-provisions--payments .chat-pending-provisions__list');
     if (pendingReportList && pendingReportScroll !== undefined) pendingReportList.scrollTop = pendingReportScroll;
+    attendancePickers = [...root.querySelectorAll('.chat-presence-table--batch')].map(table =>
+      bindSearchableFilterSelects(table, { report: true, openOnFocus: false, popupHost: root.querySelector('.chat-shell') }));
+    for (const layer of root.querySelectorAll('.chat-shell > .sfs-popup-layer')) layer.classList.add('chat-presence-picker');
     bindCustomEditReview(state, previousCustomEdit);
     provisionSelection.sync(state, chatInteractionBusy(state, rhidAttendanceReportBusy));
     syncComposer(state);
@@ -6558,6 +6568,7 @@ export function createChatView(root, { onOpenSettings, onDemoAccess, onSignOut, 
       return () => handlers.get(type)?.delete(handler);
     },
     destroy() {
+      clearAttendancePickers();
       clearCustomEditReview();
       cameraChooser.destroy();
       signatureTrace.destroy();

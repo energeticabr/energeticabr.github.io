@@ -1,4 +1,5 @@
 <!doctype html><html lang="pt-BR"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><link rel="stylesheet" href="/src/styles.css"></head><body><main id="app"></main><script type="module">
+import '/src/ui/searchable-filter-selects.css';
 import {createChatView} from '/src/ui/chat-view.js';
 const view=createChatView(document.querySelector('#app'));
 const row=(name,id,activity)=>[
@@ -13,5 +14,19 @@ const state={sessionStatus:'authenticated',account:{name:'Teste'},draft:'',pendi
 ]},options:[{id:'attendance_batch_confirm',reply:'attendance_batch_confirm',label:'SUBMETER TODOS'},{id:'attendance_batch_cancel',reply:'attendance_batch_cancel',label:'VOLTAR'}]}]};
 view.render(state);await document.fonts.ready;await new Promise(requestAnimationFrame);
 const selectors=[...document.querySelectorAll('.chat-presence-editor')];
-document.documentElement.dataset.layout=JSON.stringify({viewport:innerWidth,scrollWidth:document.documentElement.scrollWidth,selectors:selectors.map(node=>{const box=node.getBoundingClientRect(),select=node.querySelector('select'),s=select.getBoundingClientRect();return {left:box.left,right:box.right,height:box.height,scroll:node.scrollWidth,width:node.clientWidth,hitWidth:s.width,disabled:select.disabled,blank:select.value===''};}),colors:[...document.querySelectorAll('.chat-presence-table-row')].map(node=>getComputedStyle(node).backgroundColor)});
+try {
+const searches=[];
+for(const [index,query] of [[0,'vedacao'],[1,'alvenaria']]) {
+ const trigger=selectors[index].querySelector('.sfs-trigger');trigger.click();
+ const popup=document.querySelector('.sfs-popup:not([hidden])'),search=popup.querySelector('input');
+ search.focus();search.value=query;search.dispatchEvent(new Event('input',{bubbles:true}));
+ await new Promise(requestAnimationFrame);
+ const box=popup.getBoundingClientRect(),field=search.getBoundingClientRect();
+ searches.push({count:popup.querySelectorAll('[role=option]').length,left:box.left,right:box.right,top:box.top,bottom:box.bottom,searchHeight:field.height,editable:!search.readOnly,focused:document.activeElement===search});
+ search.value='zzzinexistente';search.dispatchEvent(new Event('input',{bubbles:true}));
+ searches.at(-1).empty=!popup.querySelector('.sfs-empty').hidden;
+ popup.querySelector('.sfs-dismiss').click();
+}
+document.documentElement.dataset.layout=JSON.stringify({searches,viewport:innerWidth,scrollWidth:document.documentElement.scrollWidth,selectors:selectors.map(node=>{const box=node.getBoundingClientRect(),select=node.querySelector('select'),s=node.querySelector('.sfs-trigger').getBoundingClientRect();return {left:box.left,right:box.right,height:box.height,scroll:node.scrollWidth,width:node.clientWidth,hitWidth:s.width,disabled:select.disabled,blank:select.value===''};}),colors:[...document.querySelectorAll('.chat-presence-table-row')].map(node=>getComputedStyle(node).backgroundColor)});
+} catch(error) {document.documentElement.dataset.layout=JSON.stringify({error:error.stack});}
 </script></body></html>

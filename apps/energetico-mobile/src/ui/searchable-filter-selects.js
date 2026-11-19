@@ -320,6 +320,9 @@ function createPicker(select, closeOthers, options = {}) {
     if (event?.target.closest?.('.sfs-chip-remove')) return;
     if (popup.hidden) open();
   }
+  function onTriggerFocus() {
+    if (options.openOnFocus !== false) open();
+  }
   function onArrowClick() { if (popup.hidden) open(); else close({ focus: true }); }
   function onSearchEditStart() {
     // Choosing restores the label and focus. Start the next edit before the
@@ -478,7 +481,7 @@ function createPicker(select, closeOthers, options = {}) {
   }
   trigger.addEventListener('click', onTriggerClick);
   fieldSelection.addEventListener('click', onTriggerClick);
-  trigger.addEventListener('focus', open);
+  trigger.addEventListener('focus', onTriggerFocus);
   arrow.addEventListener('click', onArrowClick);
   dismiss?.addEventListener('click', onDismiss); backdrop?.addEventListener('click', onDismiss);
   selectAll?.addEventListener('click', onSelectionActionClick); confirmSelection?.addEventListener('click', onSelectionActionClick);
@@ -515,7 +518,7 @@ function createPicker(select, closeOthers, options = {}) {
       if (destroyed) return;
       destroyed = true; optionObserver.disconnect(); visibilityObserver.disconnect();
       if (selectionReset !== null) view.clearTimeout(selectionReset);
-      trigger.removeEventListener('click', onTriggerClick); trigger.removeEventListener('focus', open);
+      trigger.removeEventListener('click', onTriggerClick); trigger.removeEventListener('focus', onTriggerFocus);
       fieldSelection.removeEventListener('click', onTriggerClick);
       arrow.removeEventListener('click', onArrowClick);
       dismiss?.removeEventListener('click', onDismiss); backdrop?.removeEventListener('click', onDismiss);
