@@ -63,33 +63,16 @@
 .trancid-history-variation--negative { color:#a52b25; }
 .trancid-history-variation--positive { color:#237143; }
 .trancid-history-note, .trancid-empty-history, .trancid-empty { margin:12px 0 0; color:#60768c; font-size:11px; }
-@media (max-width:540px) {
- .trancid-overlay { padding:max(6px,env(safe-area-inset-top)) max(6px,env(safe-area-inset-right)) max(6px,env(safe-area-inset-bottom)) max(6px,env(safe-area-inset-left)); }
- .trancid-dialog { border-radius:12px; font-size:14px; }
- .trancid-heading { padding:12px 14px; gap:8px; }
- .trancid-heading h2 { font-size:21px; }
- .trancid-toolbar { padding:10px 14px; }
- .trancid-toolbar:has(.report-print-actions) { flex-wrap:wrap; gap:8px; }
- .trancid-toolbar:has(.report-print-actions) .trancid-date-filter { flex-basis:100%; }
- .trancid-toolbar .report-print-actions { margin-inline-start:auto; }
- .trancid-date-filter { grid-template-columns:minmax(0,1fr) 86px; gap:6px; }
- .trancid-date-filter select { padding:9px 7px; font-size:16px; }
- .trancid-body { padding:12px 12px 18px; }
- .trancid-position { padding:12px; gap:4px; }
- .trancid-total { font-size:22px; }
- .trancid-position-label { max-width:105px; font-size:10px; }
- .trancid-updated { grid-column:1 / -1; margin-top:4px; font-size:10px; }
- .trancid-total { grid-row:1; }
- .trancid-card-summary { grid-template-columns:minmax(0,1fr) 18px; padding:13px; gap:9px 8px; }
- .trancid-identity { grid-column:1 / -1; }
- .trancid-supplier { font-size:14px; }
- .trancid-card-position { grid-column:1; grid-row:2; justify-items:start; }
- .trancid-balance-label { font-size:9px; }
- .trancid-balance { font-size:24px; }
- .trancid-card-summary::after { grid-column:2; grid-row:2 / 4; }
- .trancid-expand-label { grid-row:3; margin-top:-5px; }
- .trancid-history { padding:0 11px 12px; }
- .trancid-history-table { font-size:11px; }
- .trancid-history-table th, .trancid-history-table td { padding:9px 3px; }
-}
+/* Use logical landscape height, including when the phone is held upright. */
+.trancid-overlay[data-iphone][data-report-portrait="true"] { padding-left:max(68px,env(safe-area-inset-top))!important; }
+.trancid-overlay[data-iphone][data-report-portrait="false"] { padding-left:max(68px,env(safe-area-inset-left)); padding-right:max(68px,env(safe-area-inset-right)); }
+.trancid-overlay[data-report-compact-height="true"] .trancid-heading { padding:6px 12px; gap:8px; }
+.trancid-overlay[data-report-compact-height="true"] .trancid-heading h2 { font-size:20px; }
+.trancid-overlay[data-report-compact-height="true"] .trancid-toolbar { padding:6px 12px; gap:8px; }
+.trancid-overlay[data-report-compact-height="true"] .trancid-date-filter { grid-template-columns:minmax(0,1fr) 86px; gap:6px; }
+.trancid-overlay[data-report-compact-height="true"] .trancid-date-filter select { font-size:16px; }
+.trancid-overlay[data-report-compact-height="true"] .trancid-body { padding:10px 12px; }
+.trancid-overlay[data-report-compact-height="true"] .trancid-position { padding:10px 12px; }
+.trancid-overlay[data-report-compact-height="true"] .trancid-card-summary { padding:10px 12px; gap:4px 12px; }
+.trancid-overlay[data-report-compact-height="true"] .trancid-dialog > .report-navigation { padding:4px 12px; }
 @media (prefers-reduced-motion:reduce) { .trancid-card-summary::after { transition:none; } }

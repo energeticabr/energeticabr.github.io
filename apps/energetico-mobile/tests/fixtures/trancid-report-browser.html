@@ -27,13 +27,14 @@ try {
   document.getElementById('trigger').focus(); await view.open({initialSnapshot:report});
   const root=view.element; root.querySelector('details').open=true;
   await new Promise(resolve=>requestAnimationFrame(()=>requestAnimationFrame(resolve)));
-  const rect=node=>{const {left,right,top,bottom,width,height}=node.getBoundingClientRect();return {left,right,top,bottom,width,height};};
+  const rotated=root.dataset.reportPortrait==='true';
+  const rect=node=>{const {left,right,top,bottom,width,height}=node.getBoundingClientRect();return rotated?{left:top,right:bottom,top:innerWidth-right,bottom:innerWidth-left,width:height,height:width}:{left,right,top,bottom,width,height};};
   const dialog=root.querySelector('[role=dialog]'), body=root.querySelector('.trancid-body'), toolbar=root.querySelector('.trancid-toolbar');
   const controls=[...root.querySelectorAll('button,select')].map(node=>({...rect(node),label:node.getAttribute('aria-label')}));
   const first=root.querySelector('details'), table=first.querySelector('table');
   const printed=captureFilteredReport(root);
   document.documentElement.dataset.layout=JSON.stringify({
-    loads, dialog:rect(dialog), transform:getComputedStyle(dialog).transform,
+    loads, dialog:rect(dialog), rotated, transform:getComputedStyle(root).transform,
     documentOverflow:document.documentElement.scrollWidth-innerWidth,
     bodyOverflow:body.scrollWidth-body.clientWidth, toolbarOverflow:toolbar.scrollWidth-toolbar.clientWidth,
     scrollable:body.scrollHeight>body.clientHeight, controls,
