@@ -120,6 +120,8 @@
 @media (max-width: 480px) { .hr-gallery-toolbar { gap: 6px; } .hr-gallery-filter-toggle { min-width: 88px; padding-inline: 8px; } .hr-gallery-search { padding-inline: 10px; font-size: .9rem; } }
 .payroll-payment-header { display: flex; align-items: center; justify-content: space-between; gap: 12px; margin-bottom: 22px; }
 .payroll-payment-header h2 { margin: 0; }
+.payroll-payment-screen .dynamic-field:has(select[name="IDLANCAMENTO"]),
+.payroll-payment-screen .dynamic-field:has(select[name="supplierId"]) { grid-column: 1 / -1; }
 .payroll-payment-summary { width: 100%; table-layout: fixed; border-collapse: collapse; margin-top: 20px; color: #173042; font-size: 1rem; line-height: 1.4; }
 .payroll-payment-summary th, .payroll-payment-summary td { padding: 10px 12px; border: 1px solid #c5d6df; text-align: left; overflow-wrap: anywhere; }
 .payroll-payment-summary th { width: 40%; background: #eef5f8; font-weight: 700; }

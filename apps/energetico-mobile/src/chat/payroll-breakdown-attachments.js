@@ -2,6 +2,7 @@ import { validateAttachment } from '../../../../portal/data/attachments.js';
 import { payrollKey, validPayrollDate } from './supplier-payroll.js';
 import { payrollProvisionId } from './payroll-provision-source.js';
 import { payrollOrderSupplierMatches } from './payroll-order-ownership.js';
+import { isManualPayrollLaunchLink } from './payroll-manual-launch-link.js';
 
 const SITE = 'personal';
 const scalar = value => String(value?.LookupValue ?? value?.Value ?? value?.value ?? value ?? '').trim();
@@ -56,6 +57,7 @@ export function createPayrollBreakdownAttachments({ repository, assertSession = 
     sheetId = identity(sheetId); paymentId = identity(paymentId);
     if (!scalar(supplier?.label) || !scalar(supplier?.branch)) throw new Error('Confira o fornecedor e a filial desta folha.');
     const descriptions = new Map(), evidence = [];
+    let sourceOwner=supplier;
     async function read(kind, itemId) {
       itemId = identity(itemId);
       let desc = descriptions.get(kind);
@@ -78,27 +80,33 @@ export function createPayrollBreakdownAttachments({ repository, assertSession = 
       const target = { kind, listId: desc.listId, id: itemId, value };
       evidence.push({ kind, listId: desc.listId, id: itemId, fields: canonical }); return target;
     }
-    function owned(target, branch = true) {
-      if (payrollKey(target.value('FORNECEDOR')) !== payrollKey(supplier.label)) throw new Error('O fornecedor do vínculo mudou.');
-      if (branch && payrollKey(target.value('FILIAL')) !== payrollKey(supplier.branch)) throw new Error('A filial do vínculo mudou.');
+    function owned(target, branch = true, owner = sourceOwner) {
+      if (payrollKey(target.value('FORNECEDOR')) !== payrollKey(owner.label)) throw new Error('O fornecedor do vínculo mudou.');
+      if (branch && payrollKey(target.value('FILIAL')) !== payrollKey(owner.branch)) throw new Error('A filial do vínculo mudou.');
     }
     const sheet = await read('sheet',sheetId); owned(sheet,false);
     const payment = await read('payroll',paymentId); owned(payment,false);
     if (payment.value('IDFOLHA') !== sheetId) throw new Error('O vínculo da folha mudou.');
     const type = payment.value('TIPOPGTO'), title = payment.value('Title');
     const explicit = payment.value('IDPROVISAO',true), launchId = payment.value('IDLANCAMENTO',true);
+    const manual=!explicit&&isManualPayrollLaunchLink({title,launchId,paymentType:type});
     let provisionId = payrollProvisionId({ Title: title, IDPROVISAO: explicit });
     if (!provisionId && explicit) throw new Error('O vínculo da provisão é inconsistente.');
     const launches = [], orders = [], targets = [];
     if (!provisionId) {
-      const launch = await read('launch',launchId); owned(launch); launches.push(launch);
+      const launch = await read('launch',launchId);
+      if(manual) {
+        sourceOwner={label:launch.value('FORNECEDOR'),branch:launch.value('FILIAL')};
+        if(!payrollKey(sourceOwner.label)||!payrollKey(sourceOwner.branch))throw new Error('Confira o fornecedor e a filial do lançamento de origem.');
+      }
+      owned(launch); launches.push(launch);
       provisionId = launch.value('IDPGTOAGENDADO',true);
     }
     let provision, paid = true;
     if (provisionId) {
       provision = await read('provision',provisionId); owned(provision);
       const sourceSheet = provision.value('IDFOLHA',true), sourceType = provision.value('TIPOPGTO',true);
-      if (sourceSheet && sourceSheet !== sheetId || sourceType && payrollKey(sourceType) !== payrollKey(type)) throw new Error('O vínculo da folha ou rubrica da provisão mudou.');
+      if (!manual&&(sourceSheet && sourceSheet !== sheetId || sourceType && payrollKey(sourceType) !== payrollKey(type))) throw new Error('O vínculo da folha ou rubrica da provisão mudou.');
       if (title.startsWith('APP-folha-provisao-') && sourceSheet !== sheetId) throw new Error('O vínculo da folha da provisão mudou.');
       const paidDate = provision.value('DATAPGTOEFETUADO');
       if (paidDate && !validPayrollDate(paidDate.slice(0,10))) throw new Error('A data de pagamento da provisão é inválida.');
@@ -118,9 +126,9 @@ export function createPayrollBreakdownAttachments({ repository, assertSession = 
       if (provision && identity(provision.value('IDPEDIDO')) !== orderId) throw new Error('O pedido vinculado à provisão mudou.');
       if (!orders.some(row=>row.id===orderId)) {
         const order = await read('order',orderId);
-        if (!payrollOrderSupplierMatches({supplier:supplier.label,orderSupplier:order.value('FORNECEDOR'),paymentType:type,hasProvision:!!provision}))
+        if (!payrollOrderSupplierMatches({supplier:sourceOwner.label,orderSupplier:order.value('FORNECEDOR'),paymentType:type,hasProvision:!!provision}))
           throw new Error('O fornecedor do vínculo mudou.');
-        if (payrollKey(order.value('FILIAL')) !== payrollKey(supplier.branch)) throw new Error('A filial do vínculo mudou.');
+        if (payrollKey(order.value('FILIAL')) !== payrollKey(sourceOwner.branch)) throw new Error('A filial do vínculo mudou.');
         orders.push(order);
       }
     }

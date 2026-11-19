@@ -322,6 +322,14 @@ function legacyFixture(){
 }
 const legacySupplier={id:'1',label:'Ana',branch:'OBRA A',profession:'PEDREIRO'};
 
+test('manual payment to another supplier loads source money independently of source sheet and branch',async()=>{
+  const f=legacyFixture();
+  f.rows.FOLHAPGTO[0].fields.Title='APP-folha-vinculo-cross-supplier';
+  Object.assign(f.rows.LANCAMENTOS[0].fields,{FORNECEDOR:'Beto',FILIAL:'OBRA B',IDFOLHA:'42'});
+  const context=await f.data.loadPayrollContext(legacySupplier,'2026-10');
+  assert.equal(context.paidTotal,200);assert.equal(context.payments[0].launchId,'91');assert.equal(f.writes.length,0);
+});
+
 function legacyMealFixture() {
   const f=legacyFixture();
   f.rows.FOLHAPGTO[0].fields.TIPOPGTO='VALE REFEIÇÃO';

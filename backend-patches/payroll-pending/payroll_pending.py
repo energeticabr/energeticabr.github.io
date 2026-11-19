@@ -773,7 +773,6 @@ def link_legacy(g, fields):
             destination = sheet_values(g, sheet)
             quantity, unit = _number(launch.get("QUANTIDADE")), _number(launch.get("VALOR UNITÁRIO"))
             if (not destination or folded(destination[0]) != folded(supplier)
-                    or folded(launch.get("FORNECEDOR")) != folded(supplier)
                     or paid_date(launch.get("DATA")) != date or quantity != _number(fields["QTD"])
                     or unit != _number(fields["VALORUNITARIO"])):
                 fail("conflict", "Confira a folha, o fornecedor e os valores do lançamento antes de continuar.", 409)
