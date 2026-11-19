@@ -1,0 +1,24 @@
+{
+  "live": {
+    "before": "87ecb9f4d28280f10bc93d5945796456df9699f2a3e3788203e8f0e9cfd4b963",
+    "after": "7adc68fd3051cfdea038341a6fcd4c80f94ef3f5a5c031938b92cf8e0651a721",
+    "patch": "f36667925cea7ddf2e65ae315de6d0d63f57f1602f5274d4614703db96e00296",
+    "candidate": "live-candidate.py"
+  },
+  "mirror": {
+    "before": "bf35d3622b51d3833b37e9c768805f69b66f252c82ee4c10ecbf6af182e722fe",
+    "after": "8ed755ed6c8b30d3820e79a48c05e1abf5a7e7829ff8349b6f6d09ef729e32d3",
+    "patch": "43242a2de762f8b69563c8cf18740125504b1dc85e415277e78612d5b7bfab4c",
+    "candidate": "mirror-candidate.py"
+  },
+  "tax-live": {
+    "before": null,
+    "after": "8d09ea569de0fc60c97386928cc119eb7b9945064a12bdd0a0f48d7eb5efef2b",
+    "candidate": "payroll_tax_settlement.py"
+  },
+  "tax-mirror": {
+    "before": null,
+    "after": "8d09ea569de0fc60c97386928cc119eb7b9945064a12bdd0a0f48d7eb5efef2b",
+    "candidate": "payroll_tax_settlement.py"
+  }
+}
