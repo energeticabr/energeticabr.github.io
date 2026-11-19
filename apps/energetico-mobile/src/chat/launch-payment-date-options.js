@@ -78,28 +78,14 @@ export function isEffectivePaymentDatePoll(message) {
   return isPaymentDateQuestion(message, "efetuado");
 }
 
-function orderedPaymentDateOptions(options, { recommendationFirst = false } = {}) {
-  return options
-    .map((option, index) => ({ option, index, kind: paymentDateOptionKind(option) }))
-    .sort((left, right) => {
-      const rank = entry => {
-        if (recommendationFirst
-          && entry.option?.recommendedDate === true
-          && entry.kind !== "today"
-          && entry.kind !== "yesterday") return -2;
-        if (entry.kind === "blank") return -1;
-        if (entry.kind === "today") return 0;
-        if (entry.kind === "yesterday") return 1;
-        return 2 + entry.index / Math.max(1, options.length);
-      };
-      return rank(left) - rank(right) || left.index - right.index;
-    })
-    .map(entry => entry.option);
+function paymentDateOptions(options) {
+  return options.filter(option => paymentDateOptionKind(option) !== "tomorrow");
 }
 
 export function orderEffectivePaymentDateOptions(message, options) {
-  if (!isEffectivePaymentDatePoll(message) || !Array.isArray(options)) return options;
-  return orderedPaymentDateOptions(options, { recommendationFirst: true });
+  if (message?.type !== "poll" || !Array.isArray(options)
+    || !(isEffectivePaymentDatePoll(message) || isPaymentDateQuestion(message, "previsto"))) return options;
+  return paymentDateOptions(options);
 }
 
 export function recommendEffectivePaymentDate(previousPoll, submittedText, replyId, result, now = new Date()) {
@@ -118,33 +104,27 @@ export function recommendEffectivePaymentDate(previousPoll, submittedText, reply
     const poll = messages[effectivePollIndex];
     messages[effectivePollIndex] = {
       ...poll,
-      options: orderedPaymentDateOptions(Array.isArray(poll.options) ? poll.options : []),
+      options: paymentDateOptions(Array.isArray(poll.options) ? poll.options : []),
     };
     return { ...result, messages };
   }
 
-  const today = dateIso(saoPauloDateParts(now));
-  const yesterday = shiftIsoDate(today, -1);
-  const recommendedKind = predictedDate === today ? "today"
-    : predictedDate === yesterday ? "yesterday"
-      : "other";
   const effectivePollIndex = lastIndexMatching(result.messages, isEffectivePaymentDatePoll);
   if (effectivePollIndex < 0) return result;
 
   const messages = [...result.messages];
   const poll = messages[effectivePollIndex];
-  const options = (Array.isArray(poll.options) ? poll.options : []).map(option => ({ ...option }));
-  const existingOption = recommendedKind === "other"
-    ? null
-    : options.find(option => paymentDateOptionKind(option) === recommendedKind);
+  const options = paymentDateOptions(Array.isArray(poll.options) ? poll.options : []).map(option => ({ ...option }));
+  const existingOption = options.find(option =>
+    paymentDateIso(option.label || option.title, now) === predictedDate);
   if (existingOption) existingOption.recommendedDate = true;
-  if (recommendedKind === "other") {
+  if (!existingOption) {
     const [year, month, day] = predictedDate.split("-");
     options.unshift({ label: `${day}/${month}/${year}`, recommendedDate: true });
   }
   messages[effectivePollIndex] = {
     ...poll,
-    options: orderedPaymentDateOptions(options, { recommendationFirst: true }),
+    options,
   };
   return { ...result, messages };
 }

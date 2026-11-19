@@ -7703,9 +7703,13 @@ test("mostra o calendário em pergunta de data mesmo sem metadado da VM", () => 
 
   assert.match(markup, /data-action="open-date-picker"/);
   assert.match(markup, /aria-label="Selecionar data pelo calendário"/);
+  const dom = new JSDOM(markup);
+  assert.deepEqual([...dom.window.document.querySelectorAll('.chat-choice-button')]
+    .map(button => button.dataset.replyId), ['blank', 'yesterday', 'today', 'other']);
+  dom.window.close();
 });
 
-test("data paga ordena hoje antes de ontem e exibe a estrela sem alterar o texto enviado", () => {
+test("data paga mantém hoje depois de ontem e exibe a estrela sem alterar o texto enviado", () => {
   const dom = new JSDOM('<div id="app"></div>');
   const root = dom.window.document.querySelector("#app");
   const view = createChatView(root);
@@ -7728,10 +7732,10 @@ test("data paga ordena hoje antes de ontem e exibe a estrela sem alterar o texto
   }));
 
   const buttons = [...root.querySelectorAll(".chat-message:last-of-type .chat-choice-button")];
-  assert.deepEqual(buttons.map(button => button.dataset.replyId), ["blank", "today", "yesterday", "tomorrow", "other"]);
-  assert.match(buttons[1].textContent, /⭐/);
-  assert.equal(buttons[1].dataset.label, "📅 HOJE");
-  buttons[1].click();
+  assert.deepEqual(buttons.map(button => button.dataset.replyId), ["blank", "yesterday", "today", "other"]);
+  assert.match(buttons[2].textContent, /⭐/);
+  assert.equal(buttons[2].dataset.label, "📅 HOJE");
+  buttons[2].click();
   assert.equal(selected.replyId, "today");
   assert.equal(selected.label, "📅 HOJE");
 
@@ -7763,7 +7767,7 @@ test("data prevista personalizada fica em primeiro com estrela mas envia somente
   const buttons = [...root.querySelectorAll(".chat-message:last-of-type .chat-choice-button")];
   assert.equal(buttons[0].dataset.label, "31/12/2099");
   assert.match(buttons[0].textContent, /⭐/);
-  assert.deepEqual(buttons.map(button => button.dataset.replyId), ["", "blank", "today", "yesterday"]);
+  assert.deepEqual(buttons.map(button => button.dataset.replyId), ["", "blank", "yesterday", "today"]);
   buttons[0].click();
   assert.equal(selected.replyId, undefined);
   assert.equal(selected.label, "31/12/2099");

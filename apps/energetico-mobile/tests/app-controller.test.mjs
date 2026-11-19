@@ -12014,7 +12014,7 @@ test("snapshot atrasado não sobrescreve anexos da resposta mais nova", async ()
   assert.deepEqual(harness.store.getState().attachments.map(item => item.id), ["new"]);
 });
 
-test("data prevista vira primeira opção recomendada na data efetivamente paga em lançamentos comuns e múltiplos", async t => {
+test("data prevista marca o atalho existente ou adiciona nova data recomendada em lançamentos comuns e múltiplos", async t => {
   const cases = [
     { name: "lançamento comum", title: "EFETUAR LANÇAMENTO", answer: "31/12/2099", replyId: null, expectedId: "", expectedLabel: "31/12/2099" },
     { name: "lançamento múltiplo", title: "LANÇAMENTO MÚLTIPLO", answer: "31/12/2099", replyId: null, expectedId: "", expectedLabel: "31/12/2099" },
@@ -12069,15 +12069,15 @@ test("data prevista vira primeira opção recomendada na data efetivamente paga 
     const options = h.store.getState().messages.at(-1).options;
     if (scenario.expectedId === null) {
       assert.equal(options.some(option => option.recommendedDate === true), false);
-      assert.equal(options.length, 5);
+      assert.equal(options.length, 4);
     } else {
       const recommendation = options.find(option => option.recommendedDate === true);
       assert.ok(recommendation);
       assert.equal(String(recommendation.id || recommendation.reply || ""), scenario.expectedId);
       if (scenario.expectedLabel) assert.equal(recommendation.label, scenario.expectedLabel);
-      if (scenario.expectedId) assert.equal(options.length, 5);
+      if (scenario.expectedId) assert.equal(options.length, 4);
       else {
-        assert.equal(options.length, 6);
+        assert.equal(options.length, 5);
         assert.equal(options[0], recommendation);
       }
     }
