@@ -1,0 +1,65 @@
+--- a/worker/workflow.py
++++ b/worker/workflow.py
+@@ -31791,6 +31791,13 @@
+                 return self._launch_payroll_is_contractor(status)
+         return False
+ 
++    def _settlement_sync_payroll_tax(self, provision_id, launch_id=None):
++        if __package__:
++            from .payroll_tax_settlement import synchronize
++        else:
++            from payroll_tax_settlement import synchronize
++        return synchronize(self, provision_id, launch_id)
++
+     def _settlement_has_payroll_link(self, provision_id, *, launch_id=None, preserve_write_retry=False,
+                                      expected_payroll=None, check_only=False):
+         fields = ["IDPROVISAO", "IDFOLHA", "Title", "IDLANCAMENTO"]
+@@ -31879,7 +31886,8 @@
+     def _reconcile_pending_settlement_payroll(self, state, etag, event=None):
+         pending = state.get("pending_launch_payroll")
+         if (state.get("flow") != "payment_settlement" or not pending
+-                or pending.get("settlement_links_checked") or pending.get("settlement_loading")
++                or (pending.get("settlement_links_checked") and pending.get("settlement_tax_checked"))
++                or pending.get("settlement_loading")
+                 or state.get("stage") not in {
+                     LAUNCH_PAYROLL_DECISION_STAGE, LAUNCH_PAYROLL_SELECTION_STAGE,
+                     LAUNCH_PAYROLL_SHEET_STAGE, LAUNCH_PAYROLL_TYPE_STAGE,
+@@ -31893,9 +31901,10 @@
+         try:
+             linked_ids = {entry["item_id"] for entry in entries
+                           if entry.get("eligible") and not entry.get("FOLHAPGTO_ID")
+-                          and self._settlement_has_payroll_link(
+-                              entry["provision_id"], launch_id=entry.get("launch_id"),
+-                              preserve_write_retry=stage == LAUNCH_PAYROLL_TYPE_STAGE)}
++                          and (self._settlement_sync_payroll_tax(entry["provision_id"], entry.get("launch_id"))
++                               or (not pending.get("settlement_links_checked") and self._settlement_has_payroll_link(
++                                   entry["provision_id"], launch_id=entry.get("launch_id"),
++                                   preserve_write_retry=stage == LAUNCH_PAYROLL_TYPE_STAGE)))}
+         except Exception:
+             pending["settlement_links_retry_stage"] = stage
+             if message_id:
+@@ -31904,6 +31913,7 @@
+ 
+         retrying = pending.pop("settlement_links_retry_stage", None) is not None
+         pending["settlement_links_checked"] = True
++        pending["settlement_tax_checked"] = True
+         if not linked_ids and not retrying:
+             return None
+         if message_id:
+@@ -31957,6 +31967,8 @@
+                     launch_id = int(launch_id)
+                     if launch_id <= 0:
+                         raise ValueError("Lançamento inválido")
++                if self._settlement_sync_payroll_tax(provision_id, launch_id):
++                    continue
+                 if self._settlement_has_payroll_link(provision_id, launch_id=launch_id):
+                     continue
+                 total = self._launch_payroll_total({"VALOR UNITÁRIO": fields.get("VALOR TOTAL"),
+@@ -32035,6 +32047,7 @@
+         }
+         if state.get("flow") == "payment_settlement":
+             state["pending_launch_payroll"]["settlement_links_checked"] = True
++            state["pending_launch_payroll"]["settlement_tax_checked"] = True
+         state["stage"] = LAUNCH_PAYROLL_DECISION_STAGE
+         state["options"] = []
+         state.pop("option_pagination", None)

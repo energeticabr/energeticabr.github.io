@@ -70,6 +70,11 @@ class Worker:
     def _launch_payroll_total(self, fields):
         return Decimal(fields["VALOR UNITÁRIO"])
 
+    def _settlement_sync_payroll_tax(self, provision_id, launch_id=None):
+        # This extracted-method fixture contains ordinary provisions only.
+        # Employee tax sources are exercised by provision-payroll-taxes/tests.
+        return False
+
     def _maybe_prompt_launch_payroll(self, state, etag, items):
         self.candidates = [item["provision_id"] for item in items]
 
