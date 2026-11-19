@@ -279,8 +279,11 @@ export function createNfeReportView({ document:doc = globalThis.document, data, 
     if (detail) description.append(make('small', '', detail));
   }
 
-  function renderFiscalFacts({ row, regime, retention, cno }, facts) {
+  function renderFiscalFacts({ row, regime, retention, cno, taxStack }, facts) {
     const status = classifyFiscalFacts(row, facts);
+    const mergeTaxFacts = status.retention !== 'yes';
+    taxStack.classList.toggle('nfe-fact', mergeTaxFacts);
+    taxStack.classList.toggle('nfe-tax-merged', mergeTaxFacts);
     const unavailable = facts === null && Boolean(row.xmlUrl);
     const pending = facts === undefined && Boolean(row.xmlUrl);
     setValue(regime, status.regime || (unavailable ? 'Consulta indisponível' : pending ? 'Consultando…' : 'Não informado'));
@@ -338,6 +341,7 @@ export function createNfeReportView({ document:doc = globalThis.document, data, 
     const fields = { row, line };
     const taxCell = make('td');
     const taxStack = make('div', 'nfe-tax-stack');
+    fields.taxStack = taxStack;
     taxCell.append(taxStack);
     const workCell = make('td');
     for (const [name, container] of [['regime', taxStack], ['retention', taxStack], ['cno', workCell]]) {
