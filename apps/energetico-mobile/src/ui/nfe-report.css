@@ -105,6 +105,7 @@
   overflow-wrap: anywhere;
 }
 .nfe-table tbody tr:nth-child(even) { background: #eff6fa; }
+.nfe-table tbody tr.nfe-row-cancelled { background: #ffeaed; print-color-adjust: exact; }
 .nfe-identity { display: grid; justify-items: center; gap: 2px; }
 .nfe-id {
   padding: 3px 6px;
@@ -221,6 +222,13 @@
   border-left-color: #c3233b;
   background: #ffeaed;
   color: #a5142a;
+}
+.nfe-link-cancelled {
+  box-sizing: border-box;
+  padding-inline: 4px;
+  font-size: .9em;
+  white-space: nowrap;
+  overflow-wrap: normal;
 }
 .nfe-link-edit {
   border-color: #efbf8b;
