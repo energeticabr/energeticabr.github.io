@@ -36,15 +36,16 @@ test('supplier cluster appears below the name and keeps the full history count a
  try{
   await view.open();
   const cell=doc.querySelector('[data-dda-id="1"] .ddr-supplier');
-  assert.equal(cell.firstElementChild.textContent,'FORNECEDOR FICTÍCIO');
+  assert.equal(cell.querySelector('.ddr-supplier-name').textContent,'FORNECEDOR FICTÍCIO');
   const cluster=cell.querySelector('[data-dda-supplier-count]');
-  assert.match(cluster.textContent,/2 DDAs registrados/);
-  assert.equal(cluster.previousElementSibling,cell.firstElementChild);
+  assert.equal(cluster.textContent,'2 DDA registrados');
+  assert.equal(cluster.parentElement,cell.querySelector('.ddr-supplier-cluster'));
+  assert.equal(cluster.previousElementSibling,cell.querySelector('.ddr-supplier-name'));
   assert.match(cluster.title,/todos os status/i);
   const search=doc.querySelector('[name=search]');search.value='1';search.dispatchEvent(new dom.window.Event('input'));
-  assert.match(doc.querySelector('[data-dda-supplier-count]').textContent,/2 DDAs registrados/);
+  assert.match(doc.querySelector('[data-dda-supplier-count]').textContent,/2 DDA registrados/);
   const restore=await view.preparePrint();const print=captureFilteredReport(view.element,{title:'DDA'});restore();
-  assert.match(JSON.stringify(print),/2 DDAs registrados/);
+  assert.match(JSON.stringify(print),/2 DDA registrados/);
  }finally{view.destroy();dom.window.close();}
 });
 
@@ -52,9 +53,9 @@ test('counts span later report pages and refresh recalculates them; unavailable 
  const source=Array.from({length:53},(_,i)=>row(i+1));source.push(row(54,''));
  const {dom,doc,view,data}=setup(source);
  try{
-  await view.open();assert.match(doc.querySelector('[data-dda-supplier-count]').textContent,/53 DDAs registrados/);
+  await view.open();assert.match(doc.querySelector('[data-dda-supplier-count]').textContent,/53 DDA registrados/);
   doc.querySelector('[data-page-next]').click();
-  assert.match(doc.querySelector('[data-dda-id="53"] [data-dda-supplier-count]').textContent,/53 DDAs registrados/);
+  assert.match(doc.querySelector('[data-dda-id="53"] [data-dda-supplier-count]').textContent,/53 DDA registrados/);
   const unknown=doc.querySelector('[data-dda-id="54"] [data-dda-supplier-count]');
   assert.match(unknown.textContent,/CNPJ indisponível/);assert.doesNotMatch(unknown.textContent,/0 DDA/);
   data.loadSnapshot=async()=>({rows:[row(1)]});doc.querySelector('[aria-label="Atualizar DDAs"]').click();await settle();

@@ -274,16 +274,17 @@ export function createDdaReportView({document:doc=globalThis.document,data,openM
    due.append(dueDate);
    if(row.due)due.append(make('span','ddr-due-days',`${daysSince(today,row.due)} d`));
    const supplier=make('td','ddr-supplier'),status=make('td','ddr-status');status.dataset.status=row.status;
-   supplier.append(make('span','ddr-supplier-name ddr-supplier-cluster',row.supplier));
+   const supplierCluster=make('div','ddr-supplier-cluster');
+   supplierCluster.append(make('span','ddr-supplier-name',row.supplier));
    const history=make('div','ddr-supplier-count');history.dataset.ddaSupplierCount='';
    if(row.supplierDdaCount!=null){
-    history.append(make('strong','',`${row.supplierDdaCount} ${row.supplierDdaCount===1?'DDA registrado':'DDAs registrados'}`),make('span','','no SharePoint'));
+    history.append(make('strong','',`${row.supplierDdaCount} ${row.supplierDdaCount===1?'DDA registrado':'DDA registrados'}`));
     history.title='Total histórico do mesmo CNPJ na lista DDAS SICOOB, incluindo todos os status e datas, antes dos filtros.';
    }else{
     history.dataset.countState='unknown';history.append(make('span','','CNPJ indisponível'));
     history.title='Contagem indisponível: o registro não possui um CNPJ utilizável. O nome do fornecedor não é usado para adivinhar vínculos.';
    }
-   supplier.append(history);
+   supplierCluster.append(history);supplier.append(supplierCluster);
    const overdue=row.status==='Vencido'||(row.status==='Em aberto'&&row.due&&row.due<today);
    const scheduled=['Em aberto','Agendado','Vencido'].includes(row.status)&&row.schedule.state==='scheduled';
    const openUnscheduled=row.schedule.state==='unscheduled'&&['Em aberto','Agendado','Vencido'].includes(row.status);

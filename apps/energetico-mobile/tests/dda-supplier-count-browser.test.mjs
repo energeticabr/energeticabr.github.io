@@ -33,8 +33,8 @@ test('supplier counts stay below names without overflow on narrow phones, landsc
     for(const item of layout.issuedDates)assert.ok(item.fits,JSON.stringify({width,item}));
     assert.deepEqual(layout.linkClusters.slice(0,2).map(link=>[link.text,link.state,link.fits]),[['ID 46','linked',true],['N/A','missing',true]]);
     assert.equal(layout.linkClusters[1].background,'rgb(255, 234, 237)');
-    assert.equal(layout.clusters.length,3);assert.match(layout.clusters[0].label,/2 DDAs registrados/);
-    for(const cluster of layout.clusters){assert.ok(cluster.below&&cluster.fits,JSON.stringify({width,cluster}));assert.ok(cluster.fontSize>=12);assert.equal(cluster.background,'rgb(234, 242, 255)');}
+    assert.equal(layout.clusters.length,3);assert.equal(layout.clusters[0].label,'2 DDA registrados');
+    for(const cluster of layout.clusters){assert.ok(cluster.below&&cluster.fits&&cluster.unified,JSON.stringify({width,cluster}));assert.ok(cluster.fontSize>=12);assert.equal(cluster.background,'rgb(234, 242, 255)');assert.equal(cluster.divider,'1px');assert.equal(cluster.countBorder,'0px');}
     if(capture){mkdirSync(capture,{recursive:true});writeFileSync(join(capture,`dda-count-preview-${width}.png`),result.screenshot);}
    }finally{dom.window.close();}
   }
