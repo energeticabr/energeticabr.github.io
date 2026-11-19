@@ -186,12 +186,15 @@ function createPicker(select, closeOthers, options = {}) {
       const usableWidth = right - left - safeLeft - safeRight;
       const width = Math.max(0, Math.min(480, usableWidth - 24));
       const availableHeight = selectionActions ? viewportHeight : reportViewport.height;
-      const height = Math.max(0, Math.min(640, availableHeight - safeTop - safeBottom - 24));
+      // Short landscape screens need room for the selection and the original
+      // option list. The viewport already reserves the report's safe insets.
+      const popupInset = !popupSelection.hidden && availableHeight - safeTop - safeBottom < 350 ? 2 : 12;
+      const height = Math.max(0, Math.min(640, availableHeight - safeTop - safeBottom - popupInset * 2));
       popup.dataset.placement = 'expanded';
       popup.style.width = `${width}px`;
       popup.style.left = `${left + safeLeft + (usableWidth - width) / 2}px`;
       // Keep Localizar itens at the visible top even when iOS pans the viewport.
-      popup.style.top = `${top + safeTop + 12}px`;
+      popup.style.top = `${top + safeTop + popupInset}px`;
       popup.style.right = 'auto'; popup.style.bottom = 'auto';
       popup.style.height = `${height}px`; popup.style.maxHeight = `${height}px`;
       const footerHeight = actionFooter ? reportLayoutRect(actionFooter).height || 64 : 0;
