@@ -36,7 +36,8 @@ if(new URL(location.href).searchParams.has('gantt')) {
  const closeReachable=document.elementFromPoint(close.x+close.width/2,close.y+close.height/2)?.closest('button')===button;
  const transform=getComputedStyle(root).transform;
  const clusters=[...root.querySelectorAll('.gantt-cluster')];
- const namesOnly=[...root.querySelectorAll('.gantt-row-text')].every(node=>node.children.length===1&&node.textContent===node.querySelector('.gantt-name').textContent);
+ const stageNamesOnly=[...root.querySelectorAll('.gantt-row--stage .gantt-row-text')].every(node=>node.children.length===1&&node.textContent===node.querySelector('.gantt-name').textContent);
+ const activityParents=[...root.querySelectorAll('.gantt-row--activity .gantt-parent-stage')].map(node=>node.textContent);
  const toggleWidth=root.querySelector('.gantt-toggle').offsetWidth;
  const labelWidth=root.querySelector('.gantt-label').offsetWidth;
  const clustersFit=clusters.every(node=>node.scrollWidth<=node.clientWidth+1);
@@ -63,7 +64,7 @@ if(new URL(location.href).searchParams.has('gantt')) {
  document.documentElement.dataset.layout=JSON.stringify({
   portrait,rotated:transform==='matrix(0, 1, -1, 0, 0, 0)',height:portrait?panel.width:panel.height,
   bottomInset:portrait?timeline.left-panel.left:panel.bottom-timeline.bottom,closeReachable,closed:root.hidden,
-  namesOnly,toggleWidth,labelWidth,clustersFit,noTodos,stageBranchShown:Boolean(root.querySelector('.gantt-row--stage .gantt-row-text small')),
+  stageNamesOnly,activityParents,toggleWidth,labelWidth,clustersFit,noTodos,stageBranchShown:Boolean(root.querySelector('.gantt-row--stage .gantt-row-text small')),
  });
 }
 const navigated=[];
