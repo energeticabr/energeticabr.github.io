@@ -3,12 +3,39 @@ import assert from 'node:assert/strict';
 import { JSDOM } from 'jsdom';
 import { createHrPayrollGallery } from '../src/ui/hr-payroll-gallery-view.js';
 const tick=()=>new Promise(resolve=>setImmediate(resolve));
-const options={launches:[{id:'10',supplier:'CLEITON',date:'2026-10-04',unitValue:200,quantity:3},{id:'11',supplier:'OUTRO',date:'2026-10-04',unitValue:10,quantity:1}],sheets:[{id:'20',supplier:'CLEITON',label:'09/2026'},{id:'21',supplier:'CLEITON',label:'10/2026'},{id:'22',supplier:'CLEITON',label:'11/2026'},{id:'30',supplier:'OUTRO',label:'10/2026'}],paymentTypes:['SALÁRIO','AJUDA DE CUSTO']};
+const options={suppliers:[{id:'1',label:'CLEITON'},{id:'2',label:'OUTRO'}],launches:[{id:'10',supplier:'CLEITON',date:'2026-10-04',unitValue:200,quantity:3},{id:'11',supplier:'OUTRO',date:'2026-10-04',unitValue:10,quantity:1}],sheets:[{id:'20',supplier:'CLEITON',label:'09/2026'},{id:'21',supplier:'CLEITON',label:'10/2026'},{id:'22',supplier:'CLEITON',label:'11/2026'},{id:'30',supplier:'OUTRO',label:'10/2026'}],paymentTypes:['SALÁRIO','AJUDA DE CUSTO']};
 function setup(t,gallery='FOLHAPGTO',overrides={}) {
   const dom=new JSDOM('<main id="root"></main>'),doc=dom.window.document,saves=[];let reads=0;
   const panel=createHrPayrollGallery({document:doc,root:doc.querySelector('#root'),gallery,request:async()=>({gallery,page:1,rows:[],hasMore:false}),loadPaymentOptions:async()=>{reads++;return options;},savePayment:async(...args)=>{saves.push(args);return {id:'100'};},...overrides});
   t.after(()=>{panel.destroy();dom.window.close();});return {panel,doc,dom,saves,reads:()=>reads};
 }
+
+test('supplier defaults from launch then can select another payroll without changing source values',async t=>{
+  const detailed={...options,suppliers:[{id:'1',label:'CLEITON'},{id:'2',label:'OUTRO'},{id:'3',label:'SEM LANÇAMENTO'}]};
+  const f=setup(t,'FOLHAPGTO',{loadPaymentOptions:async()=>detailed});await f.panel.open();
+  f.doc.querySelector('[data-action="add-payroll-payment"]').click();await tick();
+  const screen=f.doc.querySelector('[data-payroll-payment-screen]'),launch=screen.querySelector('[name=IDLANCAMENTO]'),supplier=screen.querySelector('[name=supplierId]'),sheet=screen.querySelector('[name=IDFOLHA]');
+  assert.ok(supplier);assert.equal(launch.closest('.dynamic-field').nextElementSibling,supplier.closest('.dynamic-field'));
+  launch.value='10';launch.dispatchEvent(new f.dom.window.Event('change'));
+  assert.equal(supplier.value,'1');assert.equal(supplier.options.length,4);sheet.value='21';
+  supplier.value='2';supplier.dispatchEvent(new f.dom.window.Event('change'));
+  assert.equal(sheet.value,'');assert.deepEqual([...sheet.options].filter(o=>o.value).map(o=>o.value),['30']);
+  assert.deepEqual([...screen.querySelectorAll('td')].map(n=>n.textContent),['OUTRO','R$ 200,00','3','04/10/2026']);
+  sheet.value='30';screen.querySelector('[name=TIPOPGTO]').value='SALÁRIO';
+  screen.querySelector('form').dispatchEvent(new f.dom.window.Event('submit',{bubbles:true,cancelable:true}));await tick();
+  assert.deepEqual(f.saves[0][0],{launchId:'10',supplierId:'2',sheetId:'30',paymentType:'SALÁRIO'});
+});
+
+test('clearing supplier blocks submit and switching launch restores its default supplier',async t=>{
+  const f=setup(t,'FOLHAPGTO',{loadPaymentOptions:async()=>({...options,suppliers:[{id:'1',label:'CLEITON'},{id:'2',label:'OUTRO'}]})});await f.panel.open();
+  f.doc.querySelector('[data-action="add-payroll-payment"]').click();await tick();
+  const screen=f.doc.querySelector('[data-payroll-payment-screen]'),launch=screen.querySelector('[name=IDLANCAMENTO]'),supplier=screen.querySelector('[name=supplierId]'),sheet=screen.querySelector('[name=IDFOLHA]');
+  assert.ok(supplier);launch.value='10';launch.dispatchEvent(new f.dom.window.Event('change'));
+  supplier.value='';supplier.dispatchEvent(new f.dom.window.Event('change'));
+  assert.equal(sheet.disabled,true);assert.equal(screen.querySelector('[type=submit]').disabled,true);
+  screen.querySelector('form').dispatchEvent(new f.dom.window.Event('submit',{bubbles:true,cancelable:true}));await tick();assert.equal(f.saves.length,0);
+  launch.value='11';launch.dispatchEvent(new f.dom.window.Event('change'));assert.equal(supplier.value,'2');
+});
 
 test('tax composer confirms previous payment month and filters all historical sheets, not the current window',async t=>{
   const detailed={...options,paymentTypes:['SALÁRIO','INSS','FGTS'],
@@ -25,7 +52,7 @@ test('tax composer confirms previous payment month and filters all historical sh
   sheet.value='18';month.value='2026-08';month.dispatchEvent(new f.dom.window.Event('input'));
   assert.equal(sheet.value,'');assert.deepEqual([...sheet.options].filter(o=>o.value).map(o=>o.value),['17']);
   sheet.value='17';screen.querySelector('form').dispatchEvent(new f.dom.window.Event('submit',{bubbles:true,cancelable:true}));await tick();
-  assert.deepEqual(f.saves[0][0],{launchId:'10',sheetId:'17',paymentType:'INSS',competence:'2026-08'});
+  assert.deepEqual(f.saves[0][0],{launchId:'10',supplierId:'1',sheetId:'17',paymentType:'INSS',competence:'2026-08'});
 });
 
 test('tax composer clears incompatible choices, shows missing competence sheet and cancels without writes',async t=>{
@@ -54,7 +81,7 @@ test('white add-payment action opens a full screen with dependent closed selecti
   assert.equal(screen.querySelector('[name=VALORUNITARIO]'),null);assert.equal(screen.querySelector('[name=QTD]'),null);
   sheet.value='21';screen.querySelector('[name=TIPOPGTO]').value='SALÁRIO';
   screen.querySelector('form').dispatchEvent(new f.dom.window.Event('submit',{bubbles:true,cancelable:true}));await tick();
-  assert.deepEqual(f.saves[0][0],{launchId:'10',sheetId:'21',paymentType:'SALÁRIO'});
+  assert.deepEqual(f.saves[0][0],{launchId:'10',supplierId:'1',sheetId:'21',paymentType:'SALÁRIO'});
   assert.match(f.saves[0][1].operationId,/^[a-zA-Z0-9-]+$/);assert.equal(f.doc.querySelector('[data-payroll-payment-screen]'),null);
 });
 test('switching launch clears incompatible sheet and cancel performs no writes',async t=>{
@@ -80,7 +107,7 @@ test('launch picker displays and searches total and paid date while saving only 
   assert.equal(launch.value,'10');
   screen.querySelector('[name=IDFOLHA]').value='21';screen.querySelector('[name=TIPOPGTO]').value='SALÁRIO';
   screen.querySelector('form').dispatchEvent(new f.dom.window.Event('submit',{bubbles:true,cancelable:true}));await tick();
-  assert.deepEqual(f.saves[0][0],{launchId:'10',sheetId:'21',paymentType:'SALÁRIO'});
+  assert.deepEqual(f.saves[0][0],{launchId:'10',supplierId:'1',sheetId:'21',paymentType:'SALÁRIO'});
 });
 
 test('unknown launch amounts and missing paid dates remain explicit and never become zero or purchase dates',async t=>{

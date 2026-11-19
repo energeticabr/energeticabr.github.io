@@ -93,6 +93,7 @@ export function createPayrollPaymentData({repository,siteKey='personal',now=()=>
     const allSheets=sheetRows.map(row=>({id:id(row.id),supplier:value(sheets,row,['FORNECEDOR']),label:value(sheets,row,['MESREFERENCIA','MES REFERENCIA'])}))
       .filter(row=>payrollCompetenceMonth(row.label)).sort((a,b)=>month(a.label).localeCompare(month(b.label))||Number(a.id)-Number(b.id));
     const result = {
+      suppliers:eligible.slice().sort((a,b)=>a.label.localeCompare(b.label,'pt-BR')),
       launches:launchRows.flatMap(row=>{const name=value(launches,row,['FORNECEDOR']),matches=eligible.filter(s=>key(s.label)===key(name));return matches.length===1?[launchRow(launches,row,matches[0])]:[];}).sort((a,b)=>Number(b.id)-Number(a.id)),
       sheets:sheetRows.flatMap(row=>{const reference=value(sheets,row,['MESREFERENCIA','MES REFERENCIA']),supplier=value(sheets,row,['FORNECEDOR']);return window.includes(month(reference))?[{id:id(row.id),supplier,label:reference}]:[];}).sort((a,b)=>month(a.label).localeCompare(month(b.label))||Number(a.id)-Number(b.id)),
       paymentTypes:types(payroll),
@@ -116,13 +117,14 @@ export function createPayrollPaymentData({repository,siteKey='personal',now=()=>
     if(saving) throw new Error('O pagamento já está sendo cadastrado.');
     if(!/^[a-zA-Z0-9-]{1,80}$/.test(String(operationId||''))) throw new Error('A operação não foi identificada.');
     const tax=payrollTaxType(draft?.paymentType);
-    const selection={launchId:id(draft?.launchId),sheetId:id(draft?.sheetId),paymentType:scalar(draft?.paymentType),...(tax?{competence:payrollCompetenceMonth(draft?.competence)}:{})};
+    const selection={launchId:id(draft?.launchId),sheetId:id(draft?.sheetId),paymentType:scalar(draft?.paymentType),...(draft?.supplierId!==undefined?{supplierId:id(draft.supplierId)}:{}),...(tax?{competence:payrollCompetenceMonth(draft?.competence)}:{})};
     if(tax&&!selection.competence)throw new Error('Confirme a competência de INSS/FGTS.');
     const fingerprint=JSON.stringify(selection),previous=operations.get(operationId);
     if(previous&&previous.fingerprint!==fingerprint) throw new Error('A operação não pode ser alterada depois de iniciar o cadastro.');
     saving=true;
     try {
       const [launches,suppliers,sheets,payroll]=await Promise.all(['LANCAMENTOS','FORNECEDORES','IDFOLHA','FOLHAPGTO'].map(describe));
+      const destinationSuppliers=(rows,sourceName)=>rows.filter(row=>selection.supplierId?String(row.id)===selection.supplierId:key(supplierName(suppliers,row))===key(sourceName));
       if(tax) {
         let sourceIdentity;
         async function assertContext({creating=false}={}) {
@@ -130,7 +132,7 @@ export function createPayrollPaymentData({repository,siteKey='personal',now=()=>
           const identity=JSON.stringify([key(name),value(launches,launch,['VALOR UNITÁRIO','VALORUNITARIO']),value(launches,launch,['QUANTIDADE','QTD']),value(launches,launch,['DATA'])]);
           if(sourceIdentity&&sourceIdentity!==identity)throw new Error('O lançamento do encargo foi alterado; revise o fornecedor e os valores.');
           sourceIdentity=identity;
-          const matches=(await all(suppliers)).filter(row=>key(supplierName(suppliers,row))===key(name));
+          const matches=destinationSuppliers(await all(suppliers),name);
           if(matches.length!==1||creating&&!activeSupplier(suppliers,matches[0]))throw new Error('O fornecedor do encargo não foi confirmado como empreiteiro ativo.');
           const supplier=supplierName(suppliers,matches[0]);
           const exact=(await all(sheets)).filter(row=>key(value(sheets,row,['FORNECEDOR']))===key(supplier)&&payrollCompetenceMonth(value(sheets,row,['MESREFERENCIA','MES REFERENCIA']))===selection.competence);
@@ -170,7 +172,7 @@ export function createPayrollPaymentData({repository,siteKey='personal',now=()=>
       }
       if(previous?.attempted) throw new Error('O envio anterior ainda não foi confirmado. Reabra a galeria e confira o pagamento antes de iniciar outro cadastro.');
       const launch=await get(launches,selection.launchId),name=value(launches,launch,['FORNECEDOR']);
-      const matches=(await all(suppliers)).filter(row=>key(supplierName(suppliers,row))===key(name));
+      const matches=destinationSuppliers(await all(suppliers),name);
       if(matches.length!==1||!activeSupplier(suppliers,matches[0])) throw new Error('O fornecedor deve ser empreiteiro SIM e estar ATIVO.');
       const supplier=supplierName(suppliers,matches[0]),sheet=await get(sheets,selection.sheetId);
       const sheetMonth=payrollCompetenceMonth(value(sheets,sheet,['MESREFERENCIA','MES REFERENCIA']));

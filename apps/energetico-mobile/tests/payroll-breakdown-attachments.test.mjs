@@ -35,6 +35,20 @@ test('origem direta resolve a provisão pelo lançamento e não aceita IDs de de
   const f=fixture({direct:true});await f.submit();assert.equal(f.writes.length,3);
 });
 
+test('manual cross supplier attachments follow verified source chain and preserve destination payroll',async()=>{
+  const f=fixture({direct:true});f.rows.FOLHAPGTO[31].Title='APP-folha-vinculo-cross-supplier';
+  for(const [list,id] of [['LANCAMENTOS',91],['PROVISÃO PGTOS',12],['NOTASPENDENTES',41]])Object.assign(f.rows[list][id],{FORNECEDOR:'Beto',FILIAL:'OBRA B'});
+  f.rows['PROVISÃO PGTOS'][12].IDFOLHA='42';
+  assert.equal((await f.submit()).status,'complete');assert.equal(f.writes.length,3);
+  assert.equal(f.rows.FOLHAPGTO[31].FORNECEDOR,'Ana');assert.equal(f.rows.FOLHAPGTO[31].IDFOLHA,'19');
+});
+
+test('manual cross supplier attachments reject a provision outside the source chain',async()=>{
+  const f=fixture({direct:true});f.rows.FOLHAPGTO[31].Title='APP-folha-vinculo-cross-supplier';
+  f.rows.LANCAMENTOS[91].FORNECEDOR='Beto';
+  await assert.rejects(f.submit(),/fornecedor/i);assert.equal(f.writes.length,0);
+});
+
 test('anexos da origem direta reconhecem Title FILIAL com espelhos Graph somente leitura',async()=>{
   const f=fixture({direct:true}),columns=f.repo.getColumns;
   f.repo.getColumns=async(site,list)=>list!=='LANCAMENTOS'?columns(site,list):[

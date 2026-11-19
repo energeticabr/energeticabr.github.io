@@ -3,7 +3,7 @@ import { bindSearchableFilterSelects } from './searchable-filter-selects.js';
 
 const FILTER_CONTROL = 'input:not([type="button"]):not([type="submit"]):not([type="reset"]), select, textarea';
 
-export function bindAutoFilterForm(form, apply, { debounceMs = 0, externalControls = [], strictTextDebounce = false } = {}) {
+export function bindAutoFilterForm(form, apply, { debounceMs = 0, externalControls = [], strictTextDebounce = false, onPendingChange } = {}) {
   if (!form?.addEventListener || typeof apply !== 'function') {
     throw new TypeError('A filter form and its apply callback are required.');
   }
@@ -25,6 +25,15 @@ export function bindAutoFilterForm(form, apply, { debounceMs = 0, externalContro
   }
 
   let lastAppliedValues = values();
+  let lastChangedValues = lastAppliedValues;
+
+  function pendingChange(event) {
+    if (event.target !== quickSearch && !isFilterEvent(event)) return;
+    const nextValues = values();
+    if (nextValues === lastChangedValues) return;
+    lastChangedValues = nextValues;
+    onPendingChange?.();
+  }
 
   function cancelTimer() {
     if (timer !== null) view.clearTimeout(timer);
@@ -41,13 +50,13 @@ export function bindAutoFilterForm(form, apply, { debounceMs = 0, externalContro
   function sync() {
     cancelPending();
     composing.clear();
-    lastAppliedValues = values();
+    lastChangedValues = lastAppliedValues = values();
     searchableSelects.sync();
   }
 
   function applyNow() {
     cancelPending();
-    lastAppliedValues = values();
+    lastChangedValues = lastAppliedValues = values();
     apply();
     searchableSelects.sync();
   }
@@ -70,6 +79,7 @@ export function bindAutoFilterForm(form, apply, { debounceMs = 0, externalContro
   }
 
   function onInput(event) {
+    pendingChange(event);
     if (!isFilterEvent(event)) return;
     searchableSelects.close();
     cancelTimer();
@@ -81,6 +91,7 @@ export function bindAutoFilterForm(form, apply, { debounceMs = 0, externalContro
   }
 
   function onChange(event) {
+    pendingChange(event);
     if (!isFilterEvent(event)) return;
     if (strictTextDebounce && event.target.matches('textarea, input:not([type]), input[type="text"], input[type="search"], input[type="number"], input[type="tel"], input[type="email"], input[type="url"]')) {
       // Blur and the native search event must not shortcut the typing delay.
