@@ -36,3 +36,14 @@
 .dr-overlay[data-report-max-900="true"] .dr-table tfoot td { padding:5px 1px; }
 .dr-overlay[data-report-max-900="true"] .dr-branch-header { padding:6px 3px; }
 .dr-overlay[data-report-max-900="true"] .dr-content { padding:2px; }
+
+.dr-filters { display:grid; grid-template-columns:repeat(4,minmax(0,1fr)); gap:8px; margin-bottom:10px; padding:10px; border:1px solid #a9c2dc; background:#f1f7fc; font-size:clamp(11px,calc(1 * var(--report-vw,1vw)),14px); }
+.dr-filter { display:flex; flex-direction:column; gap:4px; min-width:0; font-weight:700; }
+.dr-filter select { min-height:40px; max-width:100%; font:inherit; }
+.dr-filters .sfs { min-width:0; }
+.dr-reset { align-self:end; min-height:40px; border:1px solid #075267; border-radius:8px; background:white; color:#075267; font:inherit; font-weight:700; cursor:pointer; }
+.dr-table .dr-asset-button { display:block; width:100%; min-height:34px; box-sizing:border-box; padding:4px; border:1px solid #86accb; border-radius:5px; background:#eaf4fc; color:#123b77; text-align:left; font:inherit; font-weight:700; overflow-wrap:anywhere; cursor:pointer; }
+.dr-table .dr-asset-button:hover { background:#d6eaff; }
+.dr-table .dr-asset-button:focus-visible,.dr-reset:focus-visible { outline:2px solid #1476c8; outline-offset:-2px; }
+.dr-overlay[data-report-max-900="true"] .dr-filters { gap:6px; padding:6px; }
+@media print { .dr-filters { display:none; } .dr-table .dr-asset-button { border:0; padding:0; background:none; color:inherit; } }

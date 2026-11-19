@@ -4,7 +4,7 @@ import {readFileSync} from 'node:fs';
 import {JSDOM} from 'jsdom';
 import {createChatView,renderChatMarkup} from '../src/ui/chat-view.js';
 const {createDepreciationReportView}=await import('../src/ui/depreciation-report-view.js').catch(error=>{if(error.code==='ERR_MODULE_NOT_FOUND')return {};throw error;});
-const asset=(id,extra={})=>({id,branch:'004 - EDIFÍCIO XAVANTE',depreciationDate:'2026-11-01',patrimony:String(id),group:'BETONEIRA',asset:'BETONEIRA 400L CSM',estimatedUnit:100,residualUnit:80,quantity:2,rate:3,...extra});
+const asset=(id,extra={})=>({id,branch:'004 - EDIFÍCIO XAVANTE',depreciationDate:'2026-11-01',patrimony:String(id),group:'BETONEIRA',asset:'BETONEIRA 400L CSM',estimatedUnit:100,residualUnit:80,quantity:2,rate:3,status:"ATIVO",depreciate:"SIM",...extra});
 const snapshot={complete:true,assets:[asset(1),asset(2,{depreciationDate:'2026-10-06',residualUnit:20,quantity:1}),asset(3,{depreciationDate:'2026-10-05',residualUnit:0,quantity:1})]};
 const tick=()=>new Promise(resolve=>setImmediate(resolve));
 function setup(t,load=async()=>snapshot,vertical=false,now=()=>new Date('2026-10-06T12:00:00Z')){
@@ -38,7 +38,7 @@ test('report renders logo, seven indicators, eleven columns, branch totals and d
  assert.match(root.querySelector('.dr-table tfoot').textContent,/400,00.*220,00.*180,00.*5,40/);
  assert.equal(root.querySelectorAll('.dr-date-overdue,.dr-date-today,.dr-date-future').length,3);
  assert.equal(dom.window.getComputedStyle(root.querySelector('.dr-depreciated')).color,'rgb(156, 0, 0)');assert.equal(dom.window.getComputedStyle(root.querySelector('.dr-current')).color,'rgb(39, 78, 19)');
- assert.equal(root.querySelectorAll('select,input').length,0);assert.equal(root.querySelector('[aria-label*="Fechar"]').textContent,'❌');
+ assert.equal(root.querySelectorAll('select').length,7);assert.equal(root.querySelector('[aria-label*="Fechar"]').textContent,'❌');
 });
 
 test('portrait avoids reads and rotation loads; inside stays open, outside and Escape restore focus',async t=>{
@@ -88,6 +88,46 @@ test('retry keeps focus inside the persistent panel so Escape closes immediately
 
 test('focus stays in popup, original body/inert settings survive close and destroyed report cannot reopen',async t=>{
  const {view,root,dom}=setup(t);dom.window.document.body.style.overflow='auto';dom.window.document.getElementById('app').inert=true;
- await view.open();const refresh=root.querySelector('.dr-refresh');refresh.focus();root.dispatchEvent(new dom.window.KeyboardEvent('keydown',{key:'Tab',shiftKey:true,bubbles:true}));assert.equal(dom.window.document.activeElement,root.querySelector('.dr-content'));
+ await view.open();const refresh=root.querySelector('.dr-refresh');refresh.focus();root.dispatchEvent(new dom.window.KeyboardEvent('keydown',{key:'Tab',shiftKey:true,bubbles:true}));assert.equal(dom.window.document.activeElement,[...root.querySelectorAll('.dr-asset-button')].at(-1));
  view.close();assert.equal(dom.window.document.body.style.overflow,'auto');assert.equal(dom.window.document.getElementById('app').inert,true);view.destroy();await assert.rejects(view.open(),/encerrado/);
+});
+
+
+test('default active SIM filters combine locally and remain editable after an empty result',async t=>{
+ let reads=0;const {view,root,dom}=setup(t,async()=>{reads++;return {assets:[asset(1,{status:'ATIVO',depreciate:'SIM',supplier:'Acme'}),asset(2,{status:'INATIVO',depreciate:'NÃO',supplier:'Outro'}),asset(3,{status:'ATIVO',depreciate:'SIM',branch:'B',supplier:'Outro'})]};});
+ await view.open();
+ const select=field=>root.querySelector('select[data-filter="'+field+'"]');
+ const change=(field,value)=>{select(field).value=value;select(field).dispatchEvent(new dom.window.Event('change',{bubbles:true}));};
+ assert.equal(select('status')?.value,'ATIVO');assert.equal(select('depreciate')?.value,'SIM');
+ assert.equal(root.querySelectorAll('select').length,7);assert.equal(root.querySelectorAll('tbody tr').length,2);
+ change('branch','B');assert.match(root.querySelector('[data-metric=total]').textContent,/200,00/);
+ change('supplier','Acme');assert.equal(root.querySelectorAll('tbody tr').length,0);assert.ok(select('supplier'));
+ change('supplier','');assert.equal(root.querySelectorAll('tbody tr').length,1);assert.equal(reads,1);
+ root.querySelector('.dr-refresh').click();await tick();assert.equal(select('branch').value,'B');
+ view.close();await view.open();assert.equal(select('branch').value,'');assert.equal(select('status').value,'ATIVO');
+});
+
+test('asset name button opens the shared item card by ID and closes back to the same report',async t=>{
+ const dom=new JSDOM('<main id="app"></main>');let called;
+ const view=createDepreciationReportView({document:dom.window.document,now:()=>new Date('2026-10-06T12:00:00Z'),data:{loadSnapshot:async()=>({assets:[asset(79,{patrimony:'69',status:'ATIVO',depreciate:'SIM'})]}),loadAssetReport:async(id)=>{called=id;return {assetId:id,asset:{id,fields:{IMOBILIZADO:'Betoneira'},details:[]},history:[]};}}});
+ t.after(()=>{view.destroy();dom.window.close();});await view.open();
+ const button=view.element.querySelector('button[data-asset-report-trigger]');assert.ok(button);button.click();await tick();
+ assert.equal(called,'79');assert.ok(view.element.querySelector('[data-asset-report="79"]'));assert.match(view.element.textContent,/Nenhuma depreciação registrada/);
+ view.element.querySelector('[data-action="close-asset-report"]').click();assert.equal(view.element.hidden,false);assert.equal(dom.window.document.activeElement,button);
+});
+
+
+test('opening an expanded picker cannot dismiss the report when mouseup is retargeted to the overlay',async t=>{
+ const {view,root,dom}=setup(t);await view.open();
+ const trigger=root.querySelector('.sfs-trigger');trigger.dispatchEvent(new dom.window.MouseEvent('pointerdown',{bubbles:true}));trigger.focus();
+ root.dispatchEvent(new dom.window.MouseEvent('click',{bubbles:true,detail:1}));assert.equal(root.hidden,false);assert.equal(trigger.getAttribute('aria-expanded'),'true');
+ root.dispatchEvent(new dom.window.MouseEvent('pointerdown',{bubbles:true}));root.dispatchEvent(new dom.window.MouseEvent('click',{bubbles:true,detail:1}));assert.equal(root.hidden,true);
+});
+
+test('filtering uses the displayed position date until refresh even across midnight',async t=>{
+ let instant=new Date('2026-10-07T02:59:59Z');const {view,root,dom}=setup(t,async()=>({assets:[asset(1,{depreciationDate:'2026-11-06'})]}),false,()=>instant);
+ await view.open();instant=new Date('2026-10-07T03:00:00Z');
+ const select=root.querySelector('select[data-filter="status"]');select.value='';select.dispatchEvent(new dom.window.Event('change',{bubbles:true}));
+ assert.equal(root.querySelectorAll('tbody tr').length,0);assert.match(root.querySelector('.dr-subtitle').textContent,/05\/11\/2026/);
+ root.querySelector('.dr-refresh').click();await tick();assert.equal(root.querySelectorAll('tbody tr').length,1);
 });

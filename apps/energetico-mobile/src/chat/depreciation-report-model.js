@@ -77,6 +77,10 @@ export function normalizeDepreciationReportSnapshot(snapshot) {
     }
     const normalized = { id: identifier(row.id), branch: text(row.branch) || "SEM FILIAL", depreciationDate: date(row.depreciationDate),
       patrimony: text(row.patrimony), group: text(row.group), asset: text(row.asset) };
+    for (const field of ['supplier', 'status', 'depreciate']) {
+      if (Object.hasOwn(row, field)) normalized[field] = field === 'depreciate' && typeof row[field] === 'boolean'
+        ? row[field] ? 'SIM' : 'NÃO' : text(row[field]);
+    }
     if (ids.has(normalized.id)) throw new TypeError("ID duplicado no relatório de depreciação.");
     ids.add(normalized.id);
     const decimals = sourceDecimals.get(row) || Object.fromEntries(NUMBER_FIELDS.map(field => [field, number(row[field], field)]));
@@ -114,7 +118,7 @@ function totals(rows) {
 }
 
 /** PowerFx date window and raw product sums; rounding belongs only to the returned displays. */
-export function buildDepreciationOverview(snapshot, todayISO) {
+export function buildDepreciationOverview(snapshot, todayISO, filters = {}) {
   if (typeof todayISO !== "string" || !/^\d{4}-\d{2}-\d{2}$/.test(todayISO)) {
     throw new TypeError("A data de hoje deve estar no formato ISO YYYY-MM-DD.");
   }
@@ -124,7 +128,10 @@ export function buildDepreciationOverview(snapshot, todayISO) {
   if (limit.getUTCFullYear() > 9999) throw new RangeError("Data limite de calendário inválida.");
   const limitDate = limit.toISOString().slice(0, 10);
   const { assets } = normalizeDepreciationReportSnapshot(snapshot);
-  const qualifying = assets.filter(row => row.depreciationDate && row.depreciationDate <= limitDate);
+  const filterKey = value => String(value ?? '').normalize('NFD').replace(/[\u0300-\u036f]/g, '').trim().toUpperCase();
+  const qualifying = assets.filter(row => row.depreciationDate && row.depreciationDate <= limitDate
+    && ['patrimony', 'asset', 'branch', 'supplier', 'status', 'depreciate', 'group']
+      .every(field => !filters[field] || filterKey(row[field]) === filterKey(filters[field])));
   const groups = new Map();
   for (const row of qualifying) {
     if (!groups.has(row.branch)) groups.set(row.branch, []);

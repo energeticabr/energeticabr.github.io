@@ -1,0 +1,16 @@
+<!doctype html><html lang="pt-BR"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>Depreciação — teste</title></head><body><main id="app"></main><script type="module">
+import '../../src/styles.css';
+import '../../src/ui/depreciation-report.css';
+import '../../src/ui/searchable-filter-selects.css';
+import {createDepreciationReportView} from '../../src/ui/depreciation-report-view.js';
+import {captureFilteredReport} from '../../src/ui/report-print.js';
+const row=(id,extra={})=>({id,branch:'004 - FILIAL FICTÍCIA',depreciationDate:'2026-11-01',patrimony:String(id-10),group:'EQUIPAMENTOS',asset:'AMPLIFICADOR DE SINAL WI-FI',estimatedUnit:50,residualUnit:42.94,quantity:1,rate:3,supplier:'FORNECEDOR FICTÍCIO',status:'ATIVO',depreciate:'SIM',...extra});
+const calls=[];
+const report=createDepreciationReportView({document,now:()=>new Date('2026-11-18T12:00:00Z'),data:{
+ async loadSnapshot(){return {assets:[row(79),row(80,{asset:'ESCADA MADEIRA DUPLA',branch:'002 - OURO PRETO',supplier:'OUTRO FORNECEDOR'}),row(81,{status:'INATIVO',depreciate:'NÃO'})]};},
+ async loadAssetReport(id){calls.push(id);return {assetId:id,asset:{id,fields:{IMOBILIZADO:'AMPLIFICADOR DE SINAL WI-FI'},details:[
+  {label:'Valor compra',value:50},{label:'Valor residual',value:42.94},{label:'Número patrimônio',value:'69'},{label:'Filial',value:'004 - FILIAL FICTÍCIA'},{label:'Status',value:'ATIVO'},{label:'Depreciar',value:'SIM'},{label:'Data compra',value:'2026-01-01'}
+ ]},history:[{id:'501',fields:{'ID IMOBILIZADO':Number(id),FILIAL:'004 - FILIAL FICTÍCIA','DATA DE DEPRECIAÇÃO':'2026-10-01','VALOR DEPRECIAÇÃO':1.29,'VALOR RESIDUAL':42.94}}]};}
+}});
+await report.open();window.fixture={report,calls,capture:()=>captureFilteredReport(report.element),ready:true};
+</script></body></html>

@@ -10,9 +10,9 @@ function create(options) {
   assert.equal(typeof data.createDepreciationReportData, "function", "createDepreciationReportData must be implemented");
   return data.createDepreciationReportData(options);
 }
-const headers = ["FILIAL", "DATA DEPRECIAÇÃO", "NÚMEROIMOBILIZADO", "GRUPO IMOBILIZADO", "IMOBILIZADO", "VALOR ESTIMADO", "VALOR RESIDUAL", "QTD", "% DEPRECIACAO"];
+const headers = ["FILIAL", "DATA DEPRECIAÇÃO", "NÚMEROIMOBILIZADO", "GRUPO IMOBILIZADO", "IMOBILIZADO", "VALOR ESTIMADO", "VALOR RESIDUAL", "QTD", "% DEPRECIACAO", "FORNECEDOR", "STATUS", "DEPRECIAR"];
 const columns = () => headers.map((displayName, index) => ({ name: `field_${index}`, displayName }));
-const values = [" A ", "06/10/2026", " PAT-1 ", { LookupValue: "Equipamentos" }, ["Betoneira"], "R$ 1.234,567", "1.000,005", "2,5", "2,75"];
+const values = [" A ", "06/10/2026", " PAT-1 ", { LookupValue: "Equipamentos" }, ["Betoneira"], "R$ 1.234,567", "1.000,005", "2,5", "2,75", "Acme", "ATIVO", "SIM"];
 const item = (id = 1, extra = {}) => ({ id: String(id), fields: { ...Object.fromEntries(values.map((value, index) => [`field_${index}`, value])), ...extra } });
 function fixture(overrides = {}) {
   return { repository: {
@@ -24,7 +24,7 @@ function fixture(overrides = {}) {
     async getItemsPage(site, list, query, { signal }) {
       assert.equal(site, "personal"); assert.equal(list, "IMOBILIZADOS"); assert.ok(signal);
       const parameters = new URLSearchParams(query);
-      assert.equal(parameters.get("$expand"), "fields($select=field_0,field_1,field_2,field_3,field_4,field_5,field_6,field_7,field_8)");
+      assert.equal(parameters.get("$expand"), "fields($select=field_0,field_1,field_2,field_3,field_4,field_5,field_6,field_7,field_8,field_9,field_10,field_11)");
       assert.equal(parameters.get("$top"), "100");
       assert.equal(parameters.has("$filter"), false); assert.equal(parameters.has("$select"), false);
       return { items: [item()], hasMore: false, batchCount: 1 };
@@ -37,7 +37,7 @@ function fixture(overrides = {}) {
 test("full personal IMOBILIZADOS data resolves real headers into the atomic numeric contract", async () => {
   const result = await create(fixture()).loadSnapshot();
   assert.deepEqual(result, { assets: [{ id: 1, branch: "A", depreciationDate: "2026-10-06", patrimony: "PAT-1", group: "Equipamentos", asset: "Betoneira",
-    estimatedUnit: 1234.567, residualUnit: 1000.005, quantity: 2.5, rate: 2.75 }] });
+    estimatedUnit: 1234.567, residualUnit: 1000.005, quantity: 2.5, rate: 2.75, supplier: "Acme", status: "ATIVO", depreciate: "SIM" }] });
   assert.ok(Object.isFrozen(result)); assert.ok(Object.isFrozen(result.assets)); assert.ok(Object.isFrozen(result.assets[0]));
 });
 
@@ -51,7 +51,7 @@ test("normalizing SharePoint rows and then the whole snapshot preserves exact de
 
 test("encoded accents registration aliases and generated OData rate fields resolve without display names", async () => {
   const names = ["FILIAL", "DATADEPRECIA_x00c7__x00c3_O", "N_x00da_MEROIMOBILIZADO", "GRUPO_x0020_IMOBILIZADO", "ITEM",
-    "VALORESTIMADO", "VALORRESIDUAL", "QTD", "OData__x0025_DEPRECIACAO"];
+    "VALORESTIMADO", "VALORRESIDUAL", "QTD", "OData__x0025_DEPRECIACAO", "FORNECEDOR", "STATUS", "DEPRECIAR"];
   const result = await create(fixture({ async getColumns() { return names.map(name => ({ name })); },
     async getItemsPage() { return { items: [{ id: "1", fields: Object.fromEntries(values.map((value, index) => [names[index], value])) }], hasMore: false }; },
   })).loadSnapshot();
@@ -158,7 +158,7 @@ test("missing SharePoint values differ from missing schema and residual invalid 
     return { items: [{ id: "9", fields: {} }, item(10, { field_6: "ISENTO" })], hasMore: false };
   } })).loadSnapshot();
   assert.deepEqual(result.assets[0], { id: 9, branch: "SEM FILIAL", depreciationDate: null, patrimony: "", group: "", asset: "",
-    estimatedUnit: 0, residualUnit: 0, quantity: 0, rate: 0 });
+    estimatedUnit: 0, residualUnit: 0, quantity: 0, rate: 0, supplier: "", status: "", depreciate: "" });
   assert.equal(result.assets[1].residualUnit, 0);
 });
 
@@ -215,7 +215,7 @@ test("real repository reads all paginated metadata and records using GET only", 
 function lookupGraphFixture(scenario = {}) {
   const requests = [];
   const names = ["f0", "DATADEPRECIA_x00c7__x00c3_O", "N_x00da_MEROIMOBILIZADO", "GRUPO_x0020_IMOBILIZADO", "ITEM",
-    "VALORESTIMADO", "VALORRESIDUAL", "QTD", "OData__x0025_DEPRECIACAO"];
+    "VALORESTIMADO", "VALORRESIDUAL", "QTD", "OData__x0025_DEPRECIACAO", "FORNECEDOR", "STATUS", "DEPRECIAR"];
   const repository = createSharePointRepository({ async request(path, options = {}) {
     assert.equal(options.method || "GET", "GET"); requests.push(path);
     if (path.includes("/lists?")) return { value: [{ id: "assets", displayName: "IMOBILIZADOS", list: { template: "genericList" } }] };
@@ -242,7 +242,7 @@ test("real Graph requests resolved column names so lookup branches are returned 
   assert.deepEqual(result.assets.map(asset => asset.branch), ["Filial 42", "Filial 42"]);
   const firstItemsPath = source.requests.find(path => path.includes("/items"));
   const parameters = new URL(firstItemsPath, "https://graph.microsoft.com/v1.0").searchParams;
-  assert.equal(parameters.get("$expand"), "fields($select=f0,DATADEPRECIA_x00c7__x00c3_O,N_x00da_MEROIMOBILIZADO,GRUPO_x0020_IMOBILIZADO,ITEM,VALORESTIMADO,VALORRESIDUAL,QTD,OData__x0025_DEPRECIACAO)");
+  assert.equal(parameters.get("$expand"), "fields($select=f0,DATADEPRECIA_x00c7__x00c3_O,N_x00da_MEROIMOBILIZADO,GRUPO_x0020_IMOBILIZADO,ITEM,VALORESTIMADO,VALORRESIDUAL,QTD,OData__x0025_DEPRECIACAO,FORNECEDOR,STATUS,DEPRECIAR)");
   assert.equal(parameters.has("$filter"), false);
 });
 
@@ -291,4 +291,10 @@ test("default authenticated Graph uses the configured personal site and Sites.Re
   assert.deepEqual(await create({ async tokenProvider(requested, { signal }) { assert.ok(signal); scopes.push(requested); return "test-token"; } }).loadSnapshot(), { assets: [] });
   assert.ok(scopes.length); assert.ok(scopes.every(value => JSON.stringify(value) === '["Sites.Read.All"]'));
   assert.ok(urls.some(url => url.includes("energeticaltda-my.sharepoint.com") && url.includes("bernardonotini_energeticabr_com")));
+});
+
+
+test('gallery filter columns retain supplier status and boolean depreciate from SharePoint', async()=>{
+ const result=await create(fixture({async getItemsPage(){return {items:[item(79,{field_9:{LookupValue:'Acme'},field_10:'ATIVO',field_11:true})],hasMore:false};}})).loadSnapshot();
+ assert.equal(result.assets[0].supplier,'Acme');assert.equal(result.assets[0].status,'ATIVO');assert.equal(result.assets[0].depreciate,'SIM');
 });

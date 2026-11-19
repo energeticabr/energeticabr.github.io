@@ -8,6 +8,17 @@ const model = await import("../src/chat/depreciation-report-model.js").catch(err
 });
 const row = (id, extra = {}) => ({ id, branch: "A", depreciationDate: "2026-10-06", patrimony: `PAT-${id}`,
   group: "Equipamentos", asset: "Betoneira", estimatedUnit: 100, residualUnit: 60, quantity: 2, rate: 10, ...extra });
+
+test('combined gallery filters recalculate totals and allow inactive nondepreciating assets', () => {
+  const source = { assets: [row(1,{status:'ATIVO',depreciate:'SIM',supplier:'Acme'}),
+    row(2,{status:'INATIVO',depreciate:'NÃO',supplier:'Outro'}),
+    row(3,{status:'ATIVO',depreciate:'SIM',supplier:'Acme',branch:'B',quantity:1})] };
+  const filtered = model.buildDepreciationOverview(source,'2026-10-06',{status:'ATIVO',depreciate:'SIM',branch:'B',supplier:'Acme',asset:'Betoneira',patrimony:'PAT-3',group:'Equipamentos'});
+  assert.deepEqual(filtered.branches.flatMap(b=>b.assets.map(a=>a.id)),[3]);
+  assert.equal(filtered.metrics.total,100); assert.equal(filtered.metrics.current,60);
+  assert.equal(model.buildDepreciationOverview(source,'2026-10-06',{status:'INATIVO',depreciate:'NÃO'}).metrics.records,1);
+  assert.equal(model.buildDepreciationOverview(source,'2026-10-06',{supplier:'Ausente'}).metrics.records,0);
+});
 function normalize(snapshot) {
   assert.equal(typeof model.normalizeDepreciationReportSnapshot, "function", "normalizeDepreciationReportSnapshot must be implemented");
   return model.normalizeDepreciationReportSnapshot(snapshot);

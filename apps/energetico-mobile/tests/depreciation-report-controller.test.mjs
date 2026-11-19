@@ -343,7 +343,7 @@ test('HOME and reply open one local depreciation report, with an independent rea
   assert.equal(h.panels.length, 1);
   assert.equal(h.panels[0].opens, 1);
   assert.equal(h.panels[0].document, globalThis.document);
-  assert.deepEqual(Object.keys(h.panels[0].data), ['loadSnapshot']);
+  assert.deepEqual(Object.keys(h.panels[0].data), ['loadSnapshot', 'loadAssetReport']);
   assert.equal(sourceCreates, 0, 'opening the popup does not eagerly load SharePoint');
   const caller = new AbortController();
   assert.equal(await h.panels[0].data.loadSnapshot({ signal: caller.signal, trace: 'commercial' }), snapshot);
@@ -918,7 +918,7 @@ test('depreciation projects every snapshot field and restricts token scopes to r
   const data = await open(h);
   assert.deepEqual(await data.loadSnapshot(), full);
   assert.deepEqual(requested, [['Sites.Read.All']]);
-  assert.deepEqual(Object.keys(data), ['loadSnapshot']);
+  assert.deepEqual(Object.keys(data), ['loadSnapshot', 'loadAssetReport']);
 });
 
 test('a source factory failure permits a fresh retry without reusing failed source state', async t => {
@@ -1067,3 +1067,11 @@ for (const event of ['capture-photo', 'pick-photos', 'pick-document-files']) {
     assert.equal(h.calls.length, before);
   });
 }
+
+
+test('item card loads under the report session and cannot query after sign-out',async t=>{
+ let received;const h=harness(t,{depreciationReportDataFactory:async()=>({loadSnapshot:async()=>snapshot,loadAssetReport:async(id,options)=>{received=id;assert.ok(options.signal);return {assetId:id};}})});
+ await h.controller.start();await h.view.emit('open-depreciation-report');const data=h.panels[0].data;
+ assert.equal(typeof data.loadAssetReport,'function');assert.deepEqual(await data.loadAssetReport('79'),{assetId:'79'});assert.equal(received,'79');
+ await h.view.emit('sign-out');await assert.rejects(data.loadAssetReport('79'),{name:'AbortError'});
+});
