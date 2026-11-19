@@ -5,8 +5,8 @@ import { createRegistrationGallery } from '../src/ui/registration-gallery-view.j
 import { createRegistrationGalleryData } from '../src/chat/registration-gallery-data.js';
 
 const rows = [
-  { id: '1', hasAttachments: false, fields: { TIPO: 'INSS', FILIAL: '000 - CENTRAL', COMPETENCIA: '2026-10-01T12:00:00Z', VALOR: null, VENCIMENTO: null } },
-  { id: '2', hasAttachments: true, fields: { TIPO: 'FGTS', FILIAL: '004 - OBRA', COMPETENCIA: '2026-10-01T12:00:00Z', VALOR: 1407.4, VENCIMENTO: '2026-11-19T12:00:00Z' } },
+  { id: '1', hasAttachments: false, fields: { TIPO: 'INSS', FILIAL: '004 - EDIFÍCIO XAVANTE', COMPETENCIA: '2026-10-20T12:00:00Z', VALOR: null, VENCIMENTO: '2026-11-20T12:00:00Z' } },
+  { id: '2', hasAttachments: true, fields: { TIPO: 'FGTS', FILIAL: '004 - EDIFÍCIO XAVANTE', COMPETENCIA: '2026-10-20T12:00:00Z', VALOR: 1407.4, VENCIMENTO: '2026-11-20T12:00:00Z' } },
 ];
 
 test('tax guides show the requested fields, pending requests, and only their own attachments', async t => {
@@ -25,7 +25,8 @@ test('tax guides show the requested fields, pending requests, and only their own
   assert.match(pending.textContent, /Anexar guia INSS/);
   assert.match(pending.textContent, /Data vencimento/);
   assert.match(pending.textContent, /Data competência/);
-  assert.match(pending.textContent, /01\/10\/2026/);
+  assert.match(pending.textContent, /20\/10\/2026/);
+  assert.match(pending.textContent, /20\/11\/2026/);
   assert.doesNotMatch(pending.textContent, /R\$\s*0,00/);
   assert.equal(pending.querySelector('[data-gallery-action="delete"]'), null);
   assert.ok(pending.querySelector('[data-gallery-action="edit"]'));

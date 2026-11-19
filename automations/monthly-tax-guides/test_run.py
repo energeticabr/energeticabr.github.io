@@ -8,26 +8,30 @@ module = importlib.util.module_from_spec(spec)
 if spec.loader and Path(__file__).with_name('run.py').exists():
     spec.loader.exec_module(module)
 
+BRANCH = {'Id': 5, 'Title': '004 - EDIFÍCIO XAVANTE', 'STATUS': 'ATIVO'}
+
 
 class MonthlyGuidesTests(unittest.TestCase):
-    def test_each_active_branch_receives_both_guides_for_previous_month(self):
+    def test_only_branch_004_receives_two_guides_with_day20_defaults(self):
         rows = module.plan(date(2026, 11, 19), [
             {'Id': 1, 'Title': '001 - CENTRAL', 'STATUS': 'ATIVO'},
-            {'Id': 2, 'Title': '002 - OBRA', 'STATUS': 'ATIVO'},
+            BRANCH,
             {'Id': 3, 'Title': '003 - ANTIGA', 'STATUS': 'INATIVO'},
         ])
         self.assertEqual([(r['FILIAL'], r['TIPO']) for r in rows], [
-            ('001 - CENTRAL', 'INSS'), ('001 - CENTRAL', 'FGTS'),
-            ('002 - OBRA', 'INSS'), ('002 - OBRA', 'FGTS')])
-        self.assertEqual(rows[0]['COMPETENCIA'], '2026-10-01T12:00:00Z')
-        self.assertEqual(rows[0]['CHAVE'], 'GUIA:2026-10:1:INSS')
+            ('004 - EDIFÍCIO XAVANTE', 'INSS'), ('004 - EDIFÍCIO XAVANTE', 'FGTS')])
+        self.assertEqual(rows[0]['COMPETENCIA'], '2026-10-20T12:00:00Z')
+        self.assertEqual(rows[0]['CHAVE'], 'GUIA:2026-10:5:INSS')
         self.assertIsNone(rows[0]['VALOR'])
-        self.assertIsNone(rows[0]['VENCIMENTO'])
+        self.assertEqual(rows[0]['VENCIMENTO'], '2026-11-20T12:00:00Z')
+        self.assertNotIn('Attachments', rows[0])
 
     def test_january_uses_previous_year_and_backfills_missed_months(self):
-        rows = module.plan(date(2027, 1, 1), [{'Id': 4, 'Title': 'FILIAL', 'STATUS': 'ATIVO'}])
+        rows = module.plan(date(2027, 1, 1), [BRANCH])
         self.assertEqual(len(rows), 6)
-        self.assertEqual(rows[-1]['CHAVE'], 'GUIA:2026-12:4:FGTS')
+        self.assertEqual(rows[-1]['CHAVE'], 'GUIA:2026-12:5:FGTS')
+        self.assertEqual(rows[-1]['COMPETENCIA'], '2026-12-20T12:00:00Z')
+        self.assertEqual(rows[-1]['VENCIMENTO'], '2027-01-20T12:00:00Z')
 
     def test_retries_never_change_values_dates_or_attachments(self):
         class Store:
@@ -37,7 +41,7 @@ class MonthlyGuidesTests(unittest.TestCase):
                 self.rows[row['CHAVE']] = dict(row)
                 return True
         store = Store()
-        rows = module.plan(date(2026, 11, 19), [{'Id': 1, 'Title': 'CENTRAL', 'STATUS': 'ATIVO'}])
+        rows = module.plan(date(2026, 11, 19), [BRANCH])
         self.assertEqual(module.synchronize(store, rows), {'expected': 2, 'created': 2, 'existing': 0})
         store.rows[rows[0]['CHAVE']].update(VALOR=152.50, VENCIMENTO='2026-11-19', Attachments=['oficial.pdf'])
         self.assertEqual(module.synchronize(store, rows), {'expected': 2, 'created': 0, 'existing': 2})
@@ -46,15 +50,15 @@ class MonthlyGuidesTests(unittest.TestCase):
 
     def test_unknown_branch_state_is_rejected_before_any_creation(self):
         with self.assertRaises(ValueError):
-            module.plan(date(2026, 11, 19), [{'Id': 1, 'Title': 'CENTRAL'}])
+            module.plan(date(2026, 11, 19), [{'Id': 5, 'Title': '004 - EDIFÍCIO XAVANTE'}])
 
     def test_invalid_and_duplicate_branch_ids_are_rejected(self):
-        branch = {'Id': 1, 'Title': 'CENTRAL', 'STATUS': 'ATIVO'}
+        branch = BRANCH
         with self.assertRaises(ValueError): module.plan(date(2026, 11, 19), [branch, branch])
         with self.assertRaises(ValueError): module.plan(date(2026, 11, 19), [{**branch, 'Id': 0}])
 
     def test_concurrent_create_and_ambiguous_post_are_reconciled_without_another_write(self):
-        expected = module.plan(date(2026, 11, 19), [{'Id': 1, 'Title': 'CENTRAL', 'STATUS': 'ATIVO'}])[0]
+        expected = module.plan(date(2026, 11, 19), [BRANCH])[0]
         for exception in (TimeoutError('response lost'), RuntimeError('unique key conflict')):
             class Client:
                 site_url = 'https://example.sharepoint.com/site'
@@ -76,7 +80,7 @@ class MonthlyGuidesTests(unittest.TestCase):
             self.assertEqual(client.saved['VALOR'], 320.50)
 
     def test_partial_failure_resumes_only_the_missing_guide(self):
-        rows = module.plan(date(2026, 11, 19), [{'Id': 1, 'Title': 'CENTRAL', 'STATUS': 'ATIVO'}])
+        rows = module.plan(date(2026, 11, 19), [BRANCH])
         class Store:
             def __init__(self): self.keys = set(); self.fail = True
             def ensure(self, row):
@@ -97,6 +101,11 @@ class MonthlyGuidesTests(unittest.TestCase):
                 if endpoint != 'web/lists/guide/items': raise AssertionError('Foreign URL fetched')
                 return {'value': [{'Id': 1}], 'odata.nextLink': 'https://other.example/items'}
         with self.assertRaises(ValueError): module.SharePointStore(Client()).find('GUIA:2026-10:1:INSS')
+
+    def test_missing_inactive_or_renamed_target_cannot_generate_for_another_branch(self):
+        for branches in ([{'Id': 1, 'Title': 'CENTRAL', 'STATUS': 'ATIVO'}],
+                         [{**BRANCH, 'STATUS': 'INATIVO'}], [{**BRANCH, 'Title': '000 - CENTRAL'}]):
+            with self.assertRaises(ValueError): module.plan(date(2026, 11, 19), branches)
 
 
 if __name__ == '__main__': unittest.main()

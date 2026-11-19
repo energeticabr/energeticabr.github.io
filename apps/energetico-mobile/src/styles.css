@@ -1110,6 +1110,8 @@ button.chat-rhid-attendance-card__cluster:focus-visible { outline: 3px solid #15
 .chat-choice-columns--hr-galleries { display: grid; grid-auto-rows: 1fr; align-items: stretch; gap: clamp(8px, 1vw, 14px); width: min(100%, 1120px); margin-inline: auto; }
 .chat-choice-columns--hr-galleries > * { min-width: 0; }
 .chat-hr-menu-row, .chat-choice-list.swile-menu-entry { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: clamp(8px, 1vw, 14px); }
+.swile-menu-entry > [data-reply-id="action_hr_tax_guides_gallery"] { grid-column: 1; }
+.swile-menu-entry > [data-reply-id="action_hr_gallery_holerite"] { grid-column: 2; }
 .chat-hr-menu-row > * { min-width: 0; }
 .chat-hr-menu-row .chat-choice-columns__flow { display: grid; }
 .chat-choice-columns--hr-galleries .chat-choice-list { width: 100%; height: 100%; grid-template-columns: minmax(0, 1fr); }
