@@ -198,6 +198,18 @@
 .nfe-report[data-report-compact-height="true"] .nfe-table { font-size: 11px; }
 .nfe-report[data-report-compact-height="true"] .nfe-table :is(th, td) { padding-block: 6px; }
 .nfe-tax-stack { display: grid; gap: 4px; }
+.nfe-tax-merged { gap: 0; }
+.nfe-tax-merged > .nfe-fact {
+  padding: 0;
+  border: 0;
+  border-radius: 0;
+  background: transparent;
+}
+.nfe-tax-merged > .nfe-fact + .nfe-fact {
+  margin-top: 5px;
+  padding-top: 5px;
+  border-top: 1px solid #c8dde4;
+}
 .nfe-table th:last-child, .nfe-link { text-align: center; }
 .nfe-link-controls { display: grid; justify-items: center; gap: 4px; }
 .nfe-link-cluster {
