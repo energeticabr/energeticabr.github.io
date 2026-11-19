@@ -379,6 +379,13 @@
   font: inherit;
   font-size: 16px;
 }
+.nfe-proposal-header-fields { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+.nfe-proposal-header-fields .nfe-proposal-dates { grid-column: auto; }
+.nfe-proposal-header-fields > .nfe-proposal-select:last-child:nth-child(3) { grid-column: 1 / -1; }
+.nfe-proposal-header-fields .sfs-trigger, .nfe-proposal-header-fields .sfs-field-selection .sfs-chip { font-size: 13px; }
+.nfe-proposal-header-fields .sfs-field-selection { right: 40px; }
+.nfe-proposal-header-fields .sfs-field-selection .sfs-chip { width: 100%; }
+.nfe-proposal-header-fields .sfs-field-selection .sfs-chip-label { flex: 1; padding-inline: 4px; }
 .nfe-proposal-line {
   margin: 6px 0;
   border: 1px solid #c8dde4;
@@ -387,7 +394,13 @@
   overflow-wrap: anywhere;
 }
 .nfe-proposal-line summary { padding: 8px 10px; cursor: pointer; }
-.nfe-proposal-line summary small { display: block; margin: 3px 0 0 17px; font-size: 12px; }
+.nfe-proposal-line-summary { display: flex; flex-wrap: wrap; align-items: stretch; gap: 6px; margin-top: 8px; }
+.nfe-proposal-cluster { display: inline-flex; flex-direction: column; justify-content: center; gap: 2px; min-width: 0; max-width: 100%; box-sizing: border-box; padding: 6px 9px; border: 1px solid #abc9db; border-radius: 8px; background: #e6f1f8; color: #17394b; line-height: 1.3; }
+.nfe-proposal-cluster--product, .nfe-proposal-cluster--stage { background: #126bb0; border-color: #126bb0; color: #fff; }
+.nfe-proposal-cluster--total { background: #d9edf5; border-color: #7eafc5; }
+.nfe-proposal-cluster-label { font-size: 11px; font-weight: 600; }
+.nfe-proposal-cluster-value { font-size: 14px; font-weight: 800; overflow-wrap: anywhere; }
+.nfe-proposal-line-dates { display: block; margin-top: 7px; font-size: 13px; font-weight: 600; line-height: 1.4; color: #294f63; }
 .nfe-proposal-line-editor { padding: 0 10px; }
 .nfe-proposal-footer strong { min-width: 0; font-size: 13px; overflow-wrap: anywhere; }
 .nfe-proposal-dialog :is(.nfe-proposal-header,.nfe-proposal-footer) button {

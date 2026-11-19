@@ -8,6 +8,7 @@ import { bindSearchableFilterSelects } from './searchable-filter-selects.js';
 import { createProposalAttachmentTray } from './nfe-proposal-attachment-tray.js';
 
 const money = new Intl.NumberFormat('pt-BR', { style:'currency', currency:'BRL' });
+const unitMoney = new Intl.NumberFormat('pt-BR', { style:'currency', currency:'BRL', maximumFractionDigits:10 });
 const displayDate = date => date ? date.split('-').reverse().join('/') : 'Não informado';
 const labelOf = (options, id, empty) => options.find(option => option.id === id)?.label || (id ? `ID ${id}` : empty);
 
@@ -178,16 +179,23 @@ export function createNfeProposalView({ document:doc, host, service, onPosted, o
         const product = labelOf(entry.catalog.products, line.productId, 'Produto a confirmar');
         const stage = labelOf(stages, line.stageId, 'Etapa a confirmar');
         let value = 'Valor a conferir';
+        let unitPrice = line.unitPrice || 'A conferir';
         try {
           const amounts = nfeProposalAmounts(line);
           sum = sum.plus(amounts.total);
           value = money.format(amounts.total.toNumber());
+          unitPrice = unitMoney.format(amounts.unitPrice.toNumber());
         } catch { incomplete = true; }
         const { fiscal } = entry;
         const invoiceUnit = fiscal.lines[index].unit;
         const catalogUnit = entry.catalog.products.find(option => option.id === line.productId)?.unit;
-        summaries[index].textContent = [
-          product, stage, `${line.quantity} ${nfeProposalUnit(entry.legacyUnits ? '' : invoiceUnit, catalogUnit)} × ${line.unitPrice}`.trim(), value,
+        const { clusters, dates } = summaries[index];
+        clusters.product.textContent = product;
+        clusters.stage.textContent = stage;
+        clusters.quantity.textContent = `${line.quantity} ${nfeProposalUnit(entry.legacyUnits ? '' : invoiceUnit, catalogUnit)}`.trim();
+        clusters.unitPrice.textContent = unitPrice;
+        clusters.total.textContent = value;
+        dates.textContent = [
           `Data ${displayDate(line.date)}`, line.dueDate && `Vencimento ${displayDate(line.dueDate)}`,
         ].filter(Boolean).join(' · ');
       });
@@ -212,7 +220,7 @@ export function createNfeProposalView({ document:doc, host, service, onPosted, o
       const baseLabel = provision ? 'Valor base da provisão' : 'Valor da nota';
       const reference = el('p', 'nfe-proposal-reference', `${row.type} · nº ${row.number || row.id} · Emitida em ${displayDate(fiscal.issueDate)} · ${baseLabel} ${money.format(Number(fiscal.total))}`);
       const attachment = el('p', 'nfe-proposal-attachment', `Todos os anexos da nota, inclusive DDA, serão enviados ao ${provision ? 'descritivo' : 'pedido'}. PDF fiscal · ${row.pdfName}`);
-      const headerFields = el('fieldset', 'nfe-proposal-fields');
+      const headerFields = el('fieldset', 'nfe-proposal-fields nfe-proposal-header-fields');
       body.append(reference, attachment, headerFields);
       if (!fiscal.dueDate) body.append(el('p', 'nfe-proposal-hint', provision
         ? 'O XML não informa o vencimento. Informe a data de cada item.'
@@ -250,8 +258,19 @@ export function createNfeProposalView({ document:doc, host, service, onPosted, o
       fiscal.lines.forEach((original, index) => {
         const details = el('details', 'nfe-proposal-line');
         const summary = el('summary');
-        summaries[index] = el('small');
-        summary.append(el('strong', '', `Item ${original.number} · ${original.description}`), summaries[index]);
+        const meta = el('span', 'nfe-proposal-line-summary');
+        const clusters = {};
+        for (const [name, label] of [['product','Produto'], ['stage','Etapa'], ['quantity','Quantidade'], ['unitPrice','Valor unitário'], ['total','Total']]) {
+          const cluster = el('span', `nfe-proposal-cluster nfe-proposal-cluster--${name}`);
+          const value = el('span', 'nfe-proposal-cluster-value');
+          value.dataset.proposalSummary = name;
+          cluster.append(el('span', 'nfe-proposal-cluster-label', label), value);
+          meta.append(cluster);
+          clusters[name] = value;
+        }
+        const dates = el('span', 'nfe-proposal-line-dates');
+        summaries[index] = { clusters, dates };
+        summary.append(el('strong', '', `Item ${original.number} · ${original.description}`), meta, dates);
         const editor = el('div', 'nfe-proposal-line-editor');
         details.append(summary, editor);
         list.append(details);

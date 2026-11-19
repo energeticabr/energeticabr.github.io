@@ -914,13 +914,14 @@ test('NFE shows the provision shortcut and links the description after saving wi
   await new Promise(resolve => setImmediate(resolve));
   assert.match(root.querySelector('.nfe-proposal-dialog').getAttribute('aria-label'), /provisão/i);
   const line = root.querySelector('.nfe-proposal-line');
-  assert.match(line.querySelector('summary').textContent, /3 SC × 500/);
+  assert.match(line.querySelector('[data-proposal-summary="quantity"]').textContent, /3 SC/);
+  assert.match(line.querySelector('[data-proposal-summary="unitPrice"]').textContent, /500,00/);
   line.open = true;
   line.dispatchEvent(new dom.window.Event('toggle'));
   assert.equal(line.querySelector('input[type="checkbox"]'), null);
   const product = line.querySelector('[name="productId"]');
   product.dispatchEvent(new dom.window.Event('change'));
-  assert.match(line.querySelector('summary').textContent, /3 SC × 500/);
+  assert.match(line.querySelector('[data-proposal-summary="quantity"]').textContent, /3 SC/);
   const account = root.querySelector('[name="accountId"]');
   assert.match(account.options[0].textContent, /opcional/i);
   account.value = '';
