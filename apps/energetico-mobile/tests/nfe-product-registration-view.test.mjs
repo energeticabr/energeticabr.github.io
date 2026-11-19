@@ -17,7 +17,7 @@ function fixture(t,provision=false,{reserved=false,save}={}) {
   t.after(()=>{view.close();dom.window.close();});
   async function open(){await view.show({id:'7',pdfName:'nota.pdf'}); const details=host.querySelector('details'); details.open=true; details.dispatchEvent(new dom.window.Event('toggle'));}
   function change(name,value,event='change'){const el=host.querySelector(`[name="${name}"]`);el.value=value;el.dispatchEvent(new dom.window.Event(event));return el;}
-  return {view,host,doc,open,change,draft,get writes(){return writes;}};
+  return {view,host,doc,open,change,draft,catalog,get writes(){return writes;}};
 }
 for(const provision of [false,true]) test(`register and select product while preserving ${provision?'provision':'launch'} edits`,async t=>{
   const h=fixture(t,provision);await h.open();
@@ -36,6 +36,22 @@ for(const provision of [false,true]) test(`register and select product while pre
   assert.equal(h.host.querySelector('[name="dueDate"]').value,'2026-12-01');
   assert.equal(h.writes,0);
   assert.match(h.host.querySelector('summary').textContent,/PISO METÁLICO/);
+});
+for(const manual of [false,true])test(`registration ${manual?'preserves manual':'recalculates automatic'} stage`,async t=>{
+  const h=fixture(t);
+  h.catalog.stages.push({id:'6',label:'Nova etapa',branch:'Obra'});
+  h.catalog.history=[{product:'PISO METÁLICO',stage:'Nova etapa',branch:'Obra'}];
+  await h.open();if(manual)h.change('stageId','5');
+  h.host.querySelector('[data-nfe-register-product]').click();await tick();
+  h.change('subfamilyId','8');h.change('expenseType','MATERIAL');h.change('disburses','SIM');
+  h.host.querySelector('[data-nfe-product-form]').dispatchEvent(new h.doc.defaultView.Event('submit',{cancelable:true}));await tick();
+  assert.equal(h.host.querySelector('[name="stageId"]').value,manual?'5':'6');
+});
+test('missing selection reports and focuses the visible subfamily control',async t=>{
+  const h=fixture(t);await h.open();h.host.querySelector('[data-nfe-register-product]').click();await tick();
+  h.host.querySelector('[data-nfe-product-form]').dispatchEvent(new h.doc.defaultView.Event('submit',{cancelable:true}));await tick();
+  assert.match(h.host.querySelector('[role="alert"]')?.textContent||'',/subfamília/i);
+  assert.match(h.doc.activeElement.getAttribute('aria-label')||'',/subfamília/i);
 });
 test('cancel and errors keep the proposal open and reserved submissions disable registration',async t=>{
   const h=fixture(t,false,{save:async()=>{throw new Error('Sem conexão');}}); await h.open();

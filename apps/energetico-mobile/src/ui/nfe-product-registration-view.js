@@ -6,7 +6,7 @@ export function showNfeProductRegistration({ document:doc, dialog, service, orig
   form.dataset.nfeProductForm='';form.noValidate=true;
   const body=el('div','nfe-proposal-body');
   const fields=el('fieldset','nfe-proposal-fields');fields.disabled=true;
-  const controls={};
+  const controls={},labels={};
   for(const [name,label,select,value] of [
     ['name','Nome do produto',false,original.description],['subfamilyId','Subfamília',true],
     ['unit','Unidade de medida',false,original.unit],['expenseType','Tipo de despesa',true],['disburses','Gera desembolso',true],
@@ -14,7 +14,7 @@ export function showNfeProductRegistration({ document:doc, dialog, service, orig
     const wrapper=el('label',select?'nfe-proposal-select':'');
     const control=el(select?'select':'input');control.name=name;control.required=true;
     if(!select){control.type='text';control.maxLength=255;control.value=value || '';}
-    wrapper.append(el('span','',label),control);fields.append(wrapper);controls[name]=control;
+    wrapper.append(el('span','',label),control);fields.append(wrapper);controls[name]=control;labels[name]=label;
   }
   const footer=el('footer','nfe-proposal-footer');
   const cancel=el('button','','Voltar à proposta');cancel.type='button';cancel.dataset.nfeProductCancel='';
@@ -34,7 +34,13 @@ export function showNfeProductRegistration({ document:doc, dialog, service, orig
   };
   form.addEventListener('submit',async event=>{
     event.preventDefault();if(!context||busy||finished)return;
-    if(!form.checkValidity()){form.reportValidity();return;}
+    const invalid=Object.entries(controls).find(([,control])=>!control.validity.valid);
+    if(invalid){
+      const [name,control]=invalid;
+      feedback(`Preencha o campo ${labels[name]}.`,true);
+      (control.hidden?control.closest('.nfe-proposal-select')?.querySelector('.sfs-trigger'):control)?.focus({preventScroll:true});
+      return;
+    }
     busy=true;fields.disabled=save.disabled=cancel.disabled=true;onBusy(true);feedback('Cadastrando produto…');
     try {
       const product=await service.save(context,Object.fromEntries(Object.entries(controls).map(([name,control])=>[name,control.value])),{signal});

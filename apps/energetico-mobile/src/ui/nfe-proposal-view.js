@@ -232,7 +232,11 @@ export function createNfeProposalView({ document:doc, host, service, onPosted, o
             const existing=products.findIndex(option=>option.id===product.id);
             if(existing<0) products.push(product); else products[existing]=product;
             products.sort((a,b)=>a.label.localeCompare(b.label,'pt-BR'));
-            entry.draft.lines[index].productId=product.id;
+            const line=entry.draft.lines[index];
+            const manualStage=entry.manualStages.has(String(line.number)) ? line.stageId : null;
+            entry.draft=updateNfeProposalProduct(entry.draft,line.number,product.id,entry.catalog);
+            if(manualStage!==null)entry.draft.lines[index].stageId=manualStage;
+            updateStages();
             for(const control of body.querySelectorAll('[name="productId"]')) {
               const lineIndex=Number(control.dataset.nfeProductLine);
               populate(control,products,entry.draft.lines[lineIndex].productId,'Selecione o produto');

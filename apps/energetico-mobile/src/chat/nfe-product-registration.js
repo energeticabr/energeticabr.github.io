@@ -5,6 +5,8 @@ const activeRow = fields => !['inativo','inativa','bloqueado','bloqueada','cance
 const productOf = row => ({ id:String(row.id), label:clean(row.fields.field_1), unit:clean(row.fields.UNIDADE),
   expenseType:clean(row.fields.TIPODESPESA), disburses:clean(row.fields.GERADESEMBOLSO) });
 const unique = values => [...new Set(values.map(clean).filter(Boolean))].sort((a,b)=>a.localeCompare(b,'pt-BR'));
+// The launch and provision services can share a repository in one app session.
+const repositoryWrites = new WeakMap();
 
 export function createNfeProductRegistration({ repository, authorizeWrite, assertSession = () => {} }) {
   const contexts = new WeakSet(), pending = new WeakMap();
@@ -74,7 +76,13 @@ export function createNfeProductRegistration({ repository, authorizeWrite, asser
   return Object.freeze({load, save(context,values,options) {
     if(!contexts.has(context)) return Promise.reject(new Error('Reabra o cadastro de produto.'));
     if(pending.has(context)) return pending.get(context);
-    const request=persist(context,values,options).finally(()=>pending.delete(context));
+    let queue=repositoryWrites.get(repository);
+    if(!queue){queue=new Map();repositoryWrites.set(repository,queue);}
+    const key=JSON.stringify([context.listId,nfeProposalKey(values.name)]);
+    const request=(queue.get(key)||Promise.resolve()).catch(()=>{}).then(()=>persist(context,values,options)).finally(()=>{
+      pending.delete(context);if(queue.get(key)===request)queue.delete(key);
+    });
+    queue.set(key,request);
     pending.set(context,request); return request;
   }});
 }

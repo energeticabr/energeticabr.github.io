@@ -58,3 +58,8 @@ test('retry reconciliation distinguishes square and cubic units',async()=>{
   await assert.rejects(h.service.save(context,{...h.values,unit:'m³'}),/cadastrado/i);
   assert.equal(h.writes.length,1);
 });
+test('overlapping form contexts reconcile to one product in the same repository',async()=>{
+  const h=fixture(), a=await h.service.load(),b=await h.service.load();
+  const products=await Promise.all([h.service.save(a,h.values),h.service.save(b,h.values)]);
+  assert.deepEqual(products.map(x=>x.id),['99','99']);assert.equal(h.writes.length,1);
+});
