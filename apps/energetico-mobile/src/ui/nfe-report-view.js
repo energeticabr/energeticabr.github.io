@@ -293,7 +293,7 @@ export function createNfeReportView({ document:doc = globalThis.document, data, 
   }
 
   function reportRow(row, includePdf = true) {
-    const line = make('tr');
+    const line = make('tr', row.cancelled ? 'nfe-row-cancelled' : '');
     line.dataset.invoiceId = row.id;
     const id = make('td');
     const identity = make('div', 'nfe-identity');
