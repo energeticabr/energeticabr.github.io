@@ -1,0 +1,19 @@
+{
+  "inputs": {
+    "deploy.py": "67e1de3d40031f645beee58b37a9b37b243c8c0e0906e2fb2f799ddee27f86b6",
+    "patch_backend.py": "cc64b0aff4c7cbc79cc0224a70224f04ffee58ee993052f26e46d69ed4b2492e",
+    "source.patch": "01f03890c8ff41b708b0a54ef439ce3bf01e5284c5596ba90196fee97504ebeb",
+    "deploy.sh": "653cf298c97b4a11638a93bb1376489639e718ff7e09a0663fe3cfa51e3e8040",
+    "deployment_gate.sh": "91c5a777384e9d0724bf5c12e8190aada4837be7b0670c4d4503805193a18c2b"
+  },
+  "files": {
+    "/opt/energetica-whatsapp/worker/workflow.py": {
+      "before": "fc078dfeb5a9d99717c095ba28eb38b015d0a031ee039a9c6ac4af6d8c37b97f",
+      "after": "c630fcee5e140f15a4194235b722ee7eba0e35bfee6a3d3dc33cf8879355728d"
+    },
+    "/home/opc/energetica-build/worker/workflow.py": {
+      "before": "00a6a73f2fe1a543f54e348828e577e83c97389406137e574fc7b7ab0b2bc993",
+      "after": "123d1dcad16dc4fa8a65502e785eabf7e8eb50193aa6575fadb7df0e1bd02f18"
+    }
+  }
+}
