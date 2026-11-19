@@ -52,6 +52,7 @@ import "../ui/pending-supplier-payments-report.css";
 import "../ui/contractor-control-report.css";
 import "../ui/general-summary-report.css";
 import "../ui/registration-gallery.css";
+import '../ui/tax-guides-report.css';
 import "../ui/contractor-employment-view.css";
 import "./attachment-preview.css";
 

@@ -306,6 +306,10 @@ async function defaultSicoobTransactionReportFactory(options) {
 }
 
 async function defaultRegistrationGalleryFactory(options) {
+  if (options.kind === 'taxGuides' && options.presentation === 'report') {
+    const { createTaxGuidesReportView } = await import('./ui/tax-guides-report-view.js');
+    return createTaxGuidesReportView(options);
+  }
   if (options.kind === 'registrationMenu') {
     return createRegistrationGalleryMenu(options);
   }
@@ -6692,6 +6696,7 @@ export function createAppController({
 
   function reportNavigationPanel(action) {
     switch (action) {
+      case 'open-tax-guides-report': return registrationGalleries.get('taxGuidesReport');
       case 'open-dda-report': return registrationGalleries.get('ddaReport');
       case 'open-nfe-report': return registrationGalleries.get('nfeReport');
       case 'open-sicoob-transaction-report': return registrationGalleries.get('sicoobTransactionReport');
@@ -10205,10 +10210,11 @@ export function createAppController({
     const isDdaReport = kind === "ddaReport";
     const isNfeReport = kind === "nfeReport";
     const isSicoobTransactionReport = kind === "sicoobTransactionReport";
+    const isTaxGuidesReport = kind === 'taxGuidesReport';
     const sourceKind = isDdaReport ? "dda" : isNfeReport ? "notas_fiscais_sefaz"
-      : isSicoobTransactionReport ? "financial_movement" : kind;
+      : isSicoobTransactionReport ? "financial_movement" : isTaxGuidesReport ? 'taxGuides' : kind;
     const reportAction = isDdaReport ? 'open-dda-report' : isNfeReport ? 'open-nfe-report'
-      : isSicoobTransactionReport ? 'open-sicoob-transaction-report' : '';
+      : isSicoobTransactionReport ? 'open-sicoob-transaction-report' : isTaxGuidesReport ? 'open-tax-guides-report' : '';
     const isGalleryMenu = ['assetMenu', 'registrationMenu'].includes(sourceKind);
     const isSupplyCatalog = ['supplier', 'account', 'materialType', 'unitOfMeasure'].includes(sourceKind);
     if (reportAction && store.getState().activeFlow) return false;
@@ -10230,7 +10236,7 @@ export function createAppController({
       if (stopped || account !== owner || sessionRevision !== revision || ddaReminderInteraction !== interaction) return false;
       return openRegistrationGallery(kind, replyId, openOptions);
     }
-    if (isGalleryMenu || isNfeReport || isSicoobTransactionReport) {
+    if (isGalleryMenu || isNfeReport || isSicoobTransactionReport || isTaxGuidesReport) {
       // Opening a new destination supersedes earlier gallery requests, even
       // when its transport has not settled after the panel was closed.
       galleryOpeningRevision++;
@@ -10282,6 +10288,7 @@ export function createAppController({
           }
           const panel = await factory({
             kind: sourceKind, data,
+            ...(isTaxGuidesReport ? { presentation: 'report' } : {}),
             ...(isGalleryMenu ? { onSelect: async target => {
               assertSession();
               const canOpenTarget = sourceKind === 'assetMenu'
@@ -10387,7 +10394,7 @@ export function createAppController({
               },
             } : {}),
             ...(GALLERY_CREATION_ACTIONS[replyId] ? { onCreate: galleryCreationHandler(replyId, assertSession) } : {}),
-            ...(isSupplyCatalog || ["financial_movement", "notas_fiscais_sefaz", "dda", "presenceDescriptions", "provisionDescription", "documents", "asset", "assetFunction", "assetProduct", "assetGroup", "workDiary", "quotes", "contracts", "contractLines", "measurements", "measurementLines", "stageDemonstratives", "constructionStages", "recurringTasks", "delegatedTasks"].includes(sourceKind) ? {
+            ...(isSupplyCatalog || ["taxGuides", "financial_movement", "notas_fiscais_sefaz", "dda", "presenceDescriptions", "provisionDescription", "documents", "asset", "assetFunction", "assetProduct", "assetGroup", "workDiary", "quotes", "contracts", "contractLines", "measurements", "measurementLines", "stageDemonstratives", "constructionStages", "recurringTasks", "delegatedTasks"].includes(sourceKind) ? {
               openMediaCollection: (items, previewOptions) => {
                 assertSession();
                 const collection = (Array.isArray(items) ? items : []).map(item => ({
@@ -12918,6 +12925,7 @@ export function createAppController({
     bind('open-general-summary-report', openGeneralSummaryReport);
     bind('open-pending-supplier-payments-report', openPendingSupplierPaymentsReport);
     bind(HOLERITE_REPORT_ACTION, () => openHrPayrollGallery('HOLERITE', 'report'));
+    bind('open-tax-guides-report', () => openRegistrationGallery('taxGuidesReport', 'open-tax-guides-report'));
     bind("dismiss-pending-provisions", () => dismissPendingProvisions({ userDismissal: true }));
     bind("dismiss-pending-notes", dismissPendingNotes);
     bind("dismiss-pending-construction-diaries", dismissPendingConstructionDiaries);
@@ -13180,6 +13188,7 @@ export function createAppController({
     else if (pendingAction === "action_hr_gallery_folhapgto") await openHrPayrollGallery("FOLHAPGTO");
     else if (pendingAction === "action_hr_gallery_holerite") await openHrPayrollGallery("HOLERITE");
     else if (pendingAction === HOLERITE_REPORT_ACTION) await openHrPayrollGallery("HOLERITE", "report");
+    else if (pendingAction === 'open-tax-guides-report') await openRegistrationGallery('taxGuidesReport', 'open-tax-guides-report');
     else if (REGISTRATION_GALLERY_KIND[pendingAction]) {
       const openOptions = auth.consumePendingRegistrationMenuReturn?.() ? { fromGalleryMenu: 'registrationMenu' } : {};
       await openRegistrationGallery(REGISTRATION_GALLERY_KIND[pendingAction], pendingAction, openOptions);

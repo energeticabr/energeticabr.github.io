@@ -1076,6 +1076,16 @@ test('observação: SIM não contorna upload pendente nem envia duas vezes enqua
   assert.deepEqual(h.chatCalls, [['text', { text: 'Arame comprado com Marcos arcelor' }]]);
 });
 
+test('INSS home report uses the tax guides source and keeps the conversation intact',async t=>{
+  const created=[],opened=[];
+  const h=makeHarness({registrationGalleryDataFactory:async({kind})=>{assert.equal(kind,'taxGuides');return {loadSnapshot:async()=>({rows:[]})};},
+    registrationGalleryFactory:async options=>{created.push(options);return {open:async()=>opened.push(true),close(){},destroy(){}};}});
+  t.after(()=>h.controller.stop());await h.controller.start();const before=h.chatCalls.length;
+  await h.view.emit('open-tax-guides-report');
+  assert.equal(created.length,1);assert.equal(created[0].kind,'taxGuides');assert.equal(created[0].presentation,'report');
+  assert.equal(typeof created[0].openMediaCollection,'function');assert.equal(opened.length,1);assert.equal(h.chatCalls.length,before);
+});
+
 test("descritivo provisão abre localmente e reutiliza a galeria sem enviar comandos para a VM", async t => {
   const created = [], opened = [], destroyed = [];
   let sessionGuard;

@@ -1555,6 +1555,9 @@ button.chat-rhid-attendance-card__cluster:focus-visible { outline: 3px solid #15
   font: 800 10px/14px system-ui, sans-serif; cursor: pointer; overflow: hidden;
 }
 .chat-main-rhid-shortcut:focus-visible { outline: 3px solid var(--accent); outline-offset: 3px; }
+.chat-message--commercial-top > .chat-main-tax-guides-shortcut { grid-column: 2; grid-row: 1; align-self: start; justify-self: end; display: grid; grid-template: 30px 14px / minmax(0, 1fr); width: 44px; height: 44px; border-radius: 10px; background: #e6f3ff; color: #123b5d; font: 800 10px/14px system-ui, sans-serif; cursor: pointer; overflow: hidden; }
+.chat-main-tax-guides-shortcut img { display: block; width: 100%; height: 100%; object-fit: contain; }
+.chat-main-tax-guides-shortcut:focus-visible { outline: 3px solid var(--accent); outline-offset: 3px; }
 .chat-main-rhid-shortcut__art { position: relative; display: block; }
 .chat-main-rhid-shortcut__art img { display: block; width: 100%; height: 100%; object-fit: contain; }
 .chat-main-rhid-shortcut__art svg {
@@ -1584,10 +1587,11 @@ button.chat-rhid-attendance-card__cluster:focus-visible { outline: 3px solid #15
 .chat-message.chat-message--commercial-top > .chat-bubble,
 .chat-message--commercial-top > button { grid-row:2; }
 .chat-message--commercial-top > .chat-main-provisions-shortcut { grid-row:1; margin-top:0; z-index:1; }
-@media (max-width: 365px) {
+/* Leave the INSS/RHID pair together above the commercial row on phones. */
+@media (max-width: 425px) {
   .chat-message.chat-message--commercial-top > :is(.chat-bubble, button) { grid-row: 3; }
   .chat-message.chat-message--commercial-top > :is(.chat-main-provisions-shortcut, .chat-main-commercial-shortcuts) { grid-row: 2; }
-  .chat-message.chat-message--commercial-top > .chat-main-rhid-shortcut { grid-row: 1; }
+  .chat-message.chat-message--commercial-top > :is(.chat-main-rhid-shortcut, .chat-main-tax-guides-shortcut) { grid-row: 1; }
 }
 .chat-main-provisions-shortcut + .chat-main-commercial-shortcuts { padding-inline-start:56px; }
 .chat-main-commercial-shortcuts > button { flex:0 0 44px; }
