@@ -356,6 +356,24 @@
   font-size: 13px;
   font-weight: 700;
 }
+.nfe-proposal-form[hidden] { display: none; }
+.nfe-proposal-product-label { display: flex; align-items: center; justify-content: space-between; gap: 4px; min-width: 0; }
+.nfe-proposal-dialog .nfe-proposal-register-product {
+  flex: 0 0 auto;
+  min-height: 26px;
+  padding: 3px 7px;
+  border: 1px solid #176ca8;
+  border-radius: 8px;
+  background: #176ca8;
+  color: #fff;
+  font: inherit;
+  font-size: 10px;
+  font-weight: 800;
+  line-height: 1.2;
+  cursor: pointer;
+}
+.nfe-proposal-register-product:disabled { opacity: .5; cursor: default; }
+.nfe-product-form .nfe-proposal-body { flex: 1 1 auto; }
 .nfe-proposal-dates {
   display: grid;
   grid-column: span 2;
