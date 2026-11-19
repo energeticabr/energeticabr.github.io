@@ -1,2 +1,2 @@
-*.patch text eol=lf
+*.patch text eol=lf whitespace=-blank-at-eol
 *.py text eol=lf

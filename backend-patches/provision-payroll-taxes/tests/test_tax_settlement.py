@@ -265,4 +265,3 @@ class TaxSettlementTest(unittest.TestCase):
     def test_missing_row_creation_must_be_confirmed(self):
         w = Worker(); w.rows = []; w.confirm = False
         self.assertEqual(w._maybe_prompt_settlement_payroll(state(w), None)["status"], "settlement_payroll_load_failed")
-

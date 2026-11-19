@@ -89,4 +89,3 @@ class DeployTest(unittest.TestCase):
         self.assertEqual(result["status"], "checked")
         self.assertFalse(self.log.exists())
         self.assertFalse(self.module.TARGETS["tax-live"].exists())
-
