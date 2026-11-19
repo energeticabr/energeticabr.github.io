@@ -252,3 +252,6 @@
 @media (max-width: 360px) { .rg-row--provision-description .rg-row-layout { grid-template-columns: 46px minmax(0, 1fr); gap: 8px; } .rg-provision-heading { flex-wrap: wrap; align-content: start; } .rg-provision-core { gap: 6px; } .rg-provision-detail--total dd, .rg-provision-detail--paid dd, .rg-provision-detail--due dd { grid-column: 1 / -1; } .rg-provision-detail dt { font-size: .68rem; } .rg-provision-audit { column-gap: 5px; } .rg-provision-audit .rg-provision-detail { grid-template-columns: minmax(0, 1fr); } .rg-provision-audit .rg-provision-icon { display: none; } .rg-provision-audit dt, .rg-provision-audit dd { grid-column: 1; } }
 
 .rg-record-pdf { color: #b42318; background: #fff0ef; border: 1px solid #f2b8b5; }
+.rg-tax-guide-status { margin: 12px 0 0; padding: 8px 12px; border-radius: 10px; background: #fff1dc; color: #8a4b0b; font-size: .85rem; font-weight: 700; overflow-wrap: anywhere; }
+.rg-tax-guide-status[data-guide-state="present"] { background: #e7f7ed; color: #17673b; }
+.rg-tax-guide-status[data-guide-state="error"] { background: #fff0ef; color: #b42318; }

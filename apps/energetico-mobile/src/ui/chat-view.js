@@ -1792,6 +1792,7 @@ function renderPoll(message, busy, draft = "", databaseFilterMessage = null, act
     { id: 'action_hr_swile_gallery', label: 'GALERIA SWILE', galleryButton: true },
     { id: 'action_hr_trancid', label: 'TRANCID' },
     { id: 'action_hr_trancid_gallery', label: 'GALERIA TRANCID', galleryButton: true },
+    { id: 'action_hr_tax_guides_gallery', label: 'GALERIA INSS E FGTS', galleryButton: true },
   ].map(option => ({ ...option, reply: option.id })) : [];
   const payslipOption = isHrGalleryMenu ? { id: 'action_hr_gallery_holerite', reply: 'action_hr_gallery_holerite', label: '📄 GALERIA HOLERITES' } : null;
   for (const localOption of hrBenefitOptions) {

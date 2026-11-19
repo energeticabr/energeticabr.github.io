@@ -487,6 +487,7 @@ const RECURRING_EXPENSES_GALLERY_ID = "action_recurring_expenses_gallery";
 const POWERBI_DASHBOARD_REPLY_ID = "action_powerbi_dashboard";
 const POWERBI_SCOPES = Object.freeze(["https://analysis.windows.net/powerbi/api/Report.Read.All"]);
 const REGISTRATION_GALLERY_KIND = Object.freeze({
+  action_hr_tax_guides_gallery: 'taxGuides',
   action_notas_fiscais_sefaz_gallery: "notas_fiscais_sefaz",
   action_dda_gallery: "dda",
   action_dda_report: "ddaReport",

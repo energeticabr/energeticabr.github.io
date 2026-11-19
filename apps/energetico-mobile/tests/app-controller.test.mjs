@@ -2046,6 +2046,7 @@ test("galerias de cadastro e documentos abrem localmente, reutilizam a tela e s√
     ["action_supplier_gallery", "supplier"], ["action_account_gallery", "account"],
     ["action_material_type_gallery", "materialType"], ["action_unit_of_measure_gallery", "unitOfMeasure"],
     ["action_documents_gallery", "documents"],
+    ['action_hr_tax_guides_gallery', 'taxGuides'],
   ];
   for (const [id] of routes) await h.view.emit("select-reply", { replyId: id });
   await h.view.emit("select-reply", { replyId: "action_group_gallery" });

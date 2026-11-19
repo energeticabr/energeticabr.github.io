@@ -121,7 +121,7 @@ function fieldValue(fields, name, model) {
   }
   if (["number", "rounded-number", "currency", "percent", "days"].includes(type)) {
     const number = registrationNumber(value);
-    if (number == null) return "";
+    if (number == null) return model.fieldDefaults?.[name] || "";
     if (type === "days") return `${number} dia(s)`;
     return new Intl.NumberFormat("pt-BR", type === "currency" ? { style: "currency", currency: "BRL" }
       : type === "percent" ? { style: "percent", maximumFractionDigits: 2 }
@@ -631,7 +631,7 @@ export function createRegistrationGallery({ document: doc = globalThis.document,
       attachmentCountWorkers += 1;
       void Promise.resolve().then(() => data.listAttachments(row.id, { refresh: true })).then(items => {
         if (destroyed || epoch !== attachmentCountEpoch) return;
-        if ((model.showPdfAttachments || kind === 'provisionDescription') && !Array.isArray(items)) throw new Error('Consulta de anexos incompleta.');
+        if ((model.showPdfAttachments || ['provisionDescription', 'taxGuides'].includes(kind)) && !Array.isArray(items)) throw new Error('Consulta de anexos incompleta.');
         const attachments = Array.isArray(items) ? items : [];
         attachmentCounts.set(id, { state: "ready", count: attachments.length,
           hasPdf: model.showPdfAttachments && attachments.some(isPdfAttachment) });
@@ -1032,7 +1032,7 @@ export function createRegistrationGallery({ document: doc = globalThis.document,
         : fieldValue(row.fields, model.fields[0], model) || model.emptyValue || `ID ${row.id}`;
       if (model.showAttachments) {
         const layout = el("div", "rg-row-layout");
-        const attachmentState = kind === 'provisionDescription' ? provisionAttachmentState(row) : null;
+        const attachmentState = ['provisionDescription', 'taxGuides'].includes(kind) ? provisionAttachmentState(row) : null;
         const emptyAttachments = attachmentState ? attachmentState === 'empty' : row.hasAttachments === false;
         const fileRail = el(emptyAttachments ? "aside" : "button", "rg-row-file");
         if (attachmentState) {
@@ -1076,6 +1076,14 @@ export function createRegistrationGallery({ document: doc = globalThis.document,
           } });
         else if (model.nativeCard) renderNativeDetails(main, row, primary, bankMovement ? 'RAZAOSOCIALRECEBEDOR' : undefined);
         else renderDocumentDetails(main, row, primary);
+        if (kind === 'taxGuides') {
+          const error = attachmentCounts.get(String(row.id))?.state === 'error';
+          const notice = el('p', 'rg-tax-guide-status', error ? 'Não foi possível consultar a guia. Atualize para tentar novamente.'
+            : attachmentState === 'present' ? 'Guia anexada'
+            : attachmentState === 'empty' ? `Anexar guia ${rowFieldValue(row, 'TIPO')}` : 'Consultando guia…');
+          notice.dataset.guideState = error ? 'error' : attachmentState;
+          main.append(notice);
+        }
         layout.append(fileRail, main);
         card.append(layout);
       } else if (model.nativeCard && (model.readOnly || model.showPdfAttachments || bankMovement)) {
