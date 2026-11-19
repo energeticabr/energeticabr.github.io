@@ -1,0 +1,22 @@
+name: Backend supplier provision payroll exemption
+on:
+  push:
+    paths:
+      - 'backend-patches/supplier-provision-payroll-exemption/**'
+      - '.github/workflows/backend-supplier-provision-payroll-exemption.yml'
+  pull_request:
+    paths:
+      - 'backend-patches/supplier-provision-payroll-exemption/**'
+      - '.github/workflows/backend-supplier-provision-payroll-exemption.yml'
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  deployment-contract:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - run: python -B backend-patches/supplier-provision-payroll-exemption/test_deploy.py -v
