@@ -134,3 +134,30 @@ for(const apply of [false,true]) test(`the inline edit position survives ${apply
  view.render(state([poll(rows,'copy-finished')],{activeFlow:flow}));
  assert.equal(root.querySelector('[role="log"]').scrollTop,700);
 });
+
+for (const [field, query, expected] of [[0, 'vedacao', 'attendance_inline:ALFA:new'], [1, 'alvenaria', 'attendance_inline:ALFA:other']]) test(`inline ${field === 0 ? 'descriptor' : 'activity'} filters options by typing and selects only the matching row`, t => {
+ const dom = new JSDOM('<main></main>'), root = dom.window.document.querySelector('main'), view = createChatView(root), events = [];
+ t.after(() => { view.destroy(); dom.window.close(); });
+ view.on('select-reply', event => events.push(event));
+ const current = state([poll([row('ALFA'), row('BETA')])]);
+ view.render(current);
+ const editor = root.querySelectorAll('.chat-presence-editor')[field];
+ const trigger = editor.querySelector('.sfs-field .sfs-trigger');
+ assert.ok(trigger, 'both inline fields expose the searchable picker');
+ trigger.focus();
+ assert.equal(root.querySelector('.sfs-popup:not([hidden])'), null, 'pointer focus must not open a layer before the tap finishes');
+ trigger.click();
+ const popup = root.querySelector('.sfs-popup:not([hidden])');
+ const search = popup.querySelector('input');
+ assert.equal(search.readOnly, false);
+ search.value = query; search.dispatchEvent(new dom.window.Event('input', { bubbles: true }));
+ const options = popup.querySelectorAll('[role="option"]');
+ assert.equal(options.length, 1, 'partial words match without accents');
+ assert.equal(events.length, 0, 'typing must not submit an attendance edit');
+ options[0].click();
+ assert.equal(events.length, 1); assert.equal(events[0].replyId, expected); assert.equal(events[0].messageId, 'summary');
+ assert.equal(root.querySelectorAll('select')[field + 2].value, field === 0 ? 'attendance_inline:BETA:old' : 'attendance_inline:BETA:activity');
+ view.render({ ...current, activeText: { id: 'sending' } });
+ assert.equal(root.querySelectorAll('.sfs-popup').length, 4, 'rerender replaces picker layers');
+ assert.ok([...root.querySelectorAll('.chat-presence-editor .sfs-trigger')].every(control => control.disabled));
+});
