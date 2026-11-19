@@ -69,7 +69,7 @@ test('report groups bank and boleto number, then shows issue date and calendar d
  assert.equal(line.querySelector('[data-dda-document-cluster] strong').textContent,'DOC-1');
  assert.equal(line.querySelector('[data-dda-document-cluster]').parentElement,line.querySelector('[data-dda-bank-cluster]'));
  assert.equal(line.querySelector('.ddr-money-cluster').textContent.replace(/\s/g,' '),'R$ 12,34');
- assert.equal(line.querySelector('.ddr-supplier-cluster').textContent,'Fornecedor 1');
+ assert.equal(line.querySelector('.ddr-supplier-cluster .ddr-supplier-name').textContent,'Fornecedor 1');
  assert.equal(line.querySelector('.ddr-issued-date strong').textContent,'20/10/2026');
  assert.equal(line.querySelector('.ddr-issued-date small').textContent,'8 d');
  assert.equal(doc.querySelector('[data-dda-id="2"] .ddr-issued-date small').textContent,'0 d');

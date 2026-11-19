@@ -143,7 +143,10 @@ if(new URLSearchParams(location.search).has('layout')){
    label:cluster.textContent,below:cluster.offsetTop>=cluster.previousElementSibling.offsetTop+cluster.previousElementSibling.offsetHeight-1,
    fits:cluster.scrollWidth<=cluster.clientWidth+1&&cluster.offsetWidth<=cluster.parentElement.clientWidth,
    fontSize:parseFloat(getComputedStyle(cluster.querySelector('strong')||cluster).fontSize),
-   background:getComputedStyle(cluster).backgroundColor
+   background:getComputedStyle(cluster.parentElement).backgroundColor,
+   unified:cluster.parentElement.classList.contains('ddr-supplier-cluster')&&cluster.parentElement.contains(cluster.previousElementSibling),
+   divider:getComputedStyle(cluster).borderTopWidth,
+   countBorder:getComputedStyle(cluster).borderLeftWidth
   }))
  });
 }
