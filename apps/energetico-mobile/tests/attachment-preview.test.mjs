@@ -471,6 +471,16 @@ test('the payslip preview can point a failed source back to the gallery', async 
   assert.doesNotMatch(documentRef.querySelector('.attachment-preview-status').textContent, /salvar|encaminhar/i);
 });
 
+test('a signed payslip collection without submissions shows the empty message and cannot be exported', async t => {
+  const { preview, documentRef } = setup(t);
+  const empty = Object.assign(new Error('Nenhuma via assinada foi enviada para esta data.'), { code: 'NO_SIGNED_PAYSLIPS' });
+  await preview.open(async () => { throw empty; }, 'Holerites-assinados-2026-11-13.pdf', {
+    loadErrorMessage: error => error.code === 'NO_SIGNED_PAYSLIPS' ? error.message : 'Erro de consulta',
+  });
+  assert.equal(documentRef.querySelector('.attachment-preview-explanation').textContent, empty.message);
+  assert.equal(documentRef.querySelector('[role="progressbar"]'), null);
+});
+
 test('measured attachment preparation accepts PDF parse and render callbacks but ignores stale completion', async t => {
   let report, finish;
   const { preview, documentRef } = setup(t, { loadPdfPreview: async () => ({ createPdfPreview: ({ onProgress }) => {

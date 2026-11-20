@@ -282,6 +282,79 @@ test("paginação de holerites preserva datas inteiras e o PDF inclui todos do d
   await assert.rejects(data.downloadPayslipsByDate("2026-11-13"), /José/);
 });
 
+test('PDF verde reúne apenas vias assinadas ativas da data, incluindo todas as páginas e fotos', async () => {
+  const { PDFDocument } = await import('pdf-lib');
+  const { createHash } = await import('node:crypto');
+  const { default: sharp } = await import('sharp');
+  const date = '2026-11-13';
+  const row = (id, name, day = date) => ({ id: String(id), fields: {
+    FORNECEDOR: name, DATA_PAGAMENTO: day, SEMANA_INICIO: '2026-11-09',
+    IDFORNECEDOR: id, CHAVE: `2026-11-09-${id}`, SITUACAO: 'FECHADO',
+  } });
+  const [edgar, jose, rafael, otherDate] = [row(1, 'Edgar'), row(2, 'José'),
+    row(3, 'Rafael'), row(4, 'Ana', '2026-11-12')];
+  const contents = new Map();
+  async function via(id, format, bytes, uploadedAt = date) {
+    const hash = createHash('sha256').update(bytes).digest('hex');
+    const name = `Holerite-2026-11-09-${id}-assinado-${hash}.${format}`;
+    contents.set(name, bytes);
+    return { name, uploadedAt };
+  }
+  const pdf = await PDFDocument.create();
+  pdf.addPage([301, 420]);
+  pdf.addPage([302, 420]);
+  const first = await via(1, 'pdf', await pdf.save(), '2026-11-13T10:00:00Z');
+  const png = await sharp({ create: { width: 50, height: 40, channels: 3, background: '#24723a' } }).png().toBuffer();
+  const photo = await via(1, 'png', png, '2026-11-13T09:00:00Z');
+  const second = await via(2, 'png', png);
+  const archived = await via(2, 'pdf', await pdf.save());
+  const outOfScope = await via(4, 'pdf', await pdf.save());
+  jose.fields.HOLERITE_REVISAO = JSON.stringify({ supplier: 'José', branch: 'Obra A', date,
+    pdf: 'Holerite-2026-11-09-2.pdf', removed: [archived.name] });
+  const receipts = {
+    1: [first, photo, { name: 'Holerite-2026-11-09-1.pdf' }],
+    2: [archived, second, { name: 'comprovante.pdf' }],
+    3: [{ name: 'Holerite-2026-11-09-3.pdf' }],
+    4: [outOfScope],
+  };
+  const downloads = [];
+  let archiveDuringRead = false;
+  const repository = {
+    async resolveList() { return { status: 'resolved', id: 'holerites' }; },
+    async getItemsPage(_site, _list, _query, { cursor }) {
+      return cursor ? { items: [edgar, rafael, jose] } : { items: [jose, otherDate], hasMore: true, nextLink: 'next' };
+    },
+    async getItem(_site, _list, id) { return [edgar, jose, rafael, otherDate].find(item => item.id === id); },
+    async listAttachments(_site, _list, id) { return receipts[id]; },
+    async downloadAttachment(_site, _list, id, name) {
+      downloads.push([id, name]);
+      if (archiveDuringRead && name === second.name) {
+        const revision = JSON.parse(jose.fields.HOLERITE_REVISAO);
+        revision.removed.push(second.name);
+        jose.fields.HOLERITE_REVISAO = JSON.stringify(revision);
+      }
+      return contents.get(name);
+    },
+  };
+  const data = galleryData.createHrPayrollGalleryData({ repository });
+  const result = await data.downloadSignedPayslipsByDate(date);
+  assert.equal(result.type, 'application/pdf');
+  assert.deepEqual(downloads, [['1', photo.name], ['1', first.name], ['2', second.name]]);
+  const merged = await PDFDocument.load(await result.arrayBuffer());
+  assert.deepEqual(merged.getPages().map(page => page.getWidth()), [50, 301, 302, 50]);
+
+  archiveDuringRead = true;
+  await assert.rejects(data.downloadSignedPayslipsByDate(date), /mudaram durante a preparação/);
+  archiveDuringRead = false;
+  jose.fields.HOLERITE_REVISAO = JSON.stringify({ supplier: 'José', branch: 'Obra A', date,
+    pdf: 'Holerite-2026-11-09-2.pdf', removed: [archived.name] });
+  contents.set(second.name, new Uint8Array([1, 2, 3]));
+  await assert.rejects(data.downloadSignedPayslipsByDate(date), /José.*verificar o conteúdo/);
+  receipts[1] = [];
+  receipts[2] = [archived];
+  await assert.rejects(data.downloadSignedPayslipsByDate(date), { code: 'NO_SIGNED_PAYSLIPS' });
+});
+
 test("holerite guarda assinaturas no registro exato e publica correções com controle de versão", async () => {
   const { PDFDocument } = await import("pdf-lib");
   const { readFile } = await import("node:fs/promises");

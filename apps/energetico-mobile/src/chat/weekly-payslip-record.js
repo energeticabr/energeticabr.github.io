@@ -107,11 +107,16 @@ export function createWeeklyPayslipRecord({ repository, siteKey, resolveList, as
     return asBlob(value, type);
   }
 
+  function revisionForDate(target, expectedDate) {
+    const saved = revision(target.current.fields, target.name);
+    if (expectedDate && (saved?.date || payrollGalleryDay(target.current.fields.DATA_PAGAMENTO)) !== expectedDate)
+      throw new Error('A data deste holerite mudou. Atualize a galeria.');
+    return saved;
+  }
+
   async function downloadPayslip(row, options = {}) {
     const target = await read(row, options.signal);
-    const saved = revision(target.current.fields, target.name);
-    if (options.expectedDate && (saved?.date || payrollGalleryDay(target.current.fields.DATA_PAGAMENTO)) !== options.expectedDate)
-      throw new Error('A data deste holerite mudou. Atualize a galeria.');
+    const saved = revisionForDate(target, options.expectedDate);
     const files = await listFiles(target, options.signal);
     const name = saved?.pdf || target.name;
     if (files.filter(file => file.name === name).length !== 1)
@@ -140,8 +145,9 @@ export function createWeeklyPayslipRecord({ repository, siteKey, resolveList, as
       .map(({ name, size, uploadedAt }) => ({ name, size, uploadedAt }));
   }
 
-  async function listSignedPayslips(row, { signal } = {}) {
+  async function listSignedPayslips(row, { signal, expectedDate } = {}) {
     const target = await read(row, signal);
+    if (expectedDate) revisionForDate(target, expectedDate);
     return signedFiles(target, await listFiles(target, signal));
   }
 
@@ -149,12 +155,28 @@ export function createWeeklyPayslipRecord({ repository, siteKey, resolveList, as
     const target = await read(row, options.signal);
     const matches = signedFiles(target, await listFiles(target, options.signal)).filter(file => file.name === attachment?.name);
     if (matches.length !== 1) throw new Error('A via assinada não foi encontrada neste holerite.');
-    const name = matches[0].name;
+    return verifiedSignedBlob(target, matches[0].name, options);
+  }
+
+  async function verifiedSignedBlob(target, name, options) {
     const blob = await fileBlob(target, name, mimeFor(name), options);
     const expected = name.slice(`${target.stem}-assinado-`.length).split('.')[0];
     if (await sha256(await blob.arrayBuffer()) !== expected) throw new Error('Não foi possível verificar o conteúdo da via assinada.');
     check(options.signal);
     return blob;
+  }
+
+  async function* downloadSignedPayslips(row, { signal, expectedDate } = {}) {
+    const target = await read(row, signal);
+    revisionForDate(target, expectedDate);
+    const files = signedFiles(target, await listFiles(target, signal));
+    files.sort((a, b) => (Date.parse(a.uploadedAt) || 0) - (Date.parse(b.uploadedAt) || 0) || a.name.localeCompare(b.name));
+    const names = new Set();
+    for (const { name } of files) {
+      if (names.has(name)) throw new Error('A via assinada tem mais de um anexo com o mesmo nome.');
+      names.add(name);
+      yield { name, blob: await verifiedSignedBlob(target, name, { signal }) };
+    }
   }
 
   async function downloadPayslipAttachment(row, attachment, options = {}) {
@@ -484,5 +506,5 @@ export function createWeeklyPayslipRecord({ repository, siteKey, resolveList, as
     return values;
   }
 
-  return { downloadPayslip, listSignedPayslips, downloadSignedPayslip, downloadPayslipAttachment, uploadSignedPayslips, loadPayslipEditor, savePayslipEditor, saveFromFinance };
+  return { downloadPayslip, listSignedPayslips, downloadSignedPayslip, downloadSignedPayslips, downloadPayslipAttachment, uploadSignedPayslips, loadPayslipEditor, savePayslipEditor, saveFromFinance };
 }

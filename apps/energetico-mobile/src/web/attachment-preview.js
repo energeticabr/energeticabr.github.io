@@ -709,7 +709,7 @@ export function createAttachmentPreview({
       } else {
         explain(session, "Este tipo de arquivo precisa de outro app para visualização. O arquivo original está disponível para abrir ou salvar.");
       }
-    } catch {
+    } catch (error) {
       if (active !== session) return;
       session.downloadComplete = true;
       session.pdf?.destroy();
@@ -725,7 +725,7 @@ export function createAttachmentPreview({
         }
       }
       if (!session.blob && loadErrorMessage) {
-        explain(session, loadErrorMessage);
+        explain(session, typeof loadErrorMessage === "function" ? loadErrorMessage(error) : loadErrorMessage);
         showPreviewStatus(session, '');
         return;
       }

@@ -705,12 +705,16 @@ export function createHrPayrollGalleryData({
   const editors = new Map();
   const payslips = createWeeklyPayslipRecord({ repository, siteKey: SITE_KEY, resolveList, assertSession,
     loadLogo: loadHoleriteLogo, onSaved: () => filterSnapshots.delete('HOLERITE') });
-  async function downloadPayslipsByDate(date, { signal, onProgress } = {}) {
+  async function payslipRowsForDate(date, signal) {
     if (!date || payrollGalleryDay(date) !== date) throw new RangeError('Data da folha inválida.');
-    const progress = createAcquisitionProgress({ signal, onProgress }, ['list', 'pdfs', 'result'], assertSession);
     const { rows } = await loadFilteredPage('HOLERITE', {
       pageSize: 1, filters: { DATA_PAGAMENTO: date }, groupByDate: true, refresh: true, signal,
     });
+    return rows;
+  }
+  async function downloadPayslipsByDate(date, { signal, onProgress } = {}) {
+    const progress = createAcquisitionProgress({ signal, onProgress }, ['list', 'pdfs', 'result'], assertSession);
+    const rows = await payslipRowsForDate(date, signal);
     progress.step('list');
     if (!rows.length) throw new Error('Nenhum holerite postado nesta data.');
     const { PDFDocument } = await import('pdf-lib');
@@ -733,6 +737,72 @@ export function createHrPayrollGalleryData({
     const bytes = await output.save();
     progress.step('result');
     return asBlob(bytes, 'application/pdf');
+  }
+
+  async function downloadSignedPayslipsByDate(date, { signal, onProgress } = {}) {
+    const progress = createAcquisitionProgress({ signal, onProgress }, ['list', 'files', 'pdf', 'verify'], assertSession);
+    const rows = await payslipRowsForDate(date, signal);
+    progress.step('list');
+    const { mergeAttachmentPdf, PDF_COMPOSITION_MAX_BYTES, PDF_COMPOSITION_MAX_PAGES } = await import('../web/append-attachment-pdf.js');
+    const entries = [];
+    const filesByRow = new Map();
+    let totalBytes = 0;
+    const exportError = (message, cause) => Object.assign(new Error(message, { cause }), { code: 'SIGNED_PAYSLIP_PDF_ERROR' });
+    for (const [index, row] of rows.entries()) {
+      progress.check();
+      // Only records with a known original can receive a signed submission.
+      if (row.pdfFileName) {
+        const names = new Set();
+        filesByRow.set(row, names);
+        try {
+          for await (const entry of payslips.downloadSignedPayslips(row, { signal, expectedDate: date })) {
+            totalBytes += entry.blob.size;
+            if (totalBytes > PDF_COMPOSITION_MAX_BYTES || entries.length >= PDF_COMPOSITION_MAX_PAGES) {
+              throw exportError('O conjunto excede o limite de 60 MB ou 200 páginas.');
+            }
+            entries.push({ ...entry, label: row.FORNECEDOR || `ID ${row.id}` });
+            names.add(entry.name);
+          }
+        } catch (error) {
+          progress.check();
+          if (error.code === 'SIGNED_PAYSLIP_PDF_ERROR') throw error;
+          throw new Error(`Não foi possível incluir as vias assinadas de ${row.FORNECEDOR || `ID ${row.id}`}. ${error.message}`, { cause: error });
+        }
+      }
+      progress.units('files', index + 1, rows.length, 'holerites');
+    }
+    if (!entries.length) {
+      const error = new Error('Nenhuma via assinada foi enviada para esta data.');
+      error.code = 'NO_SIGNED_PAYSLIPS';
+      throw error;
+    }
+    let pdf;
+    try {
+      pdf = await mergeAttachmentPdf(entries, `Holerites-assinados-${date}.pdf`, {
+        signal, onProgress: percent => progress.units('pdf', percent, 100, '%'),
+      });
+    } catch (error) {
+      progress.check();
+      throw exportError(error.message, error);
+    }
+    progress.step('pdf');
+    // The original attachment may have been archived, moved, or replaced
+    // while other files were downloading or the PDF was being composed.
+    let checked = 0;
+    for (const [row, names] of filesByRow) {
+      let current;
+      try { current = await payslips.listSignedPayslips(row, { signal, expectedDate: date }); }
+      catch (error) {
+        progress.check();
+        throw exportError('Não foi possível confirmar as vias assinadas. Atualize o relatório e tente novamente.', error);
+      }
+      const currentNames = new Set(current.map(file => file.name));
+      if (current.length !== names.size || currentNames.size !== names.size || [...names].some(name => !currentNames.has(name))) {
+        throw exportError('As vias assinadas mudaram durante a preparação. Atualize o relatório e tente novamente.');
+      }
+      progress.units('verify', ++checked, filesByRow.size, 'holerites');
+    }
+    return pdf;
   }
   function editor(gallery) {
     const config = HR_PAYROLL_GALLERIES[gallery];
@@ -764,7 +834,7 @@ export function createHrPayrollGalleryData({
     return sheetData ||= import('./payroll-sheet-create-data.js').then(({ createPayrollSheetCreateData }) =>
       createPayrollSheetCreateData({ repository, siteKey: SITE_KEY, now, assertSession, attempts: sheetCreationAttempts }));
   }
-  return Object.freeze({ loadPage, loadFilteredPage, ...payslips, downloadPayslipsByDate, loadPaymentsForPayrollId, loadEditor, saveEditor,
+  return Object.freeze({ loadPage, loadFilteredPage, ...payslips, downloadPayslipsByDate, downloadSignedPayslipsByDate, loadPaymentsForPayrollId, loadEditor, saveEditor,
     invalidateRelatedReports: () => { filterSnapshots.delete('FOLHAPGTO'); listRequests.delete('FOLHAPGTO'); },
     loadPaymentOptions: async options => (await payments()).loadOptions(options),
     savePayment: async (draft, options) => (await payments()).save(draft, options),

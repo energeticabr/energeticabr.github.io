@@ -57,7 +57,7 @@ function displayValue(field, value) {
 
 export function createHrPayrollGallery({ document: documentOption,
   root: mountRootOption, gallery, presentation, request, requestReport, invalidateRelatedReports, loadEditor, saveEditor, deleteItem, loadPaymentOptions, savePayment, onClose, onHome, onCreate, getReceiptAttachments, readReceiptAttachment, openPayslip, closePayslip, openDatePayslips,
-  pickSignedPayslip, listSignedPayslips, uploadSignedPayslips, openSignedPayslip, loadPayslipEditor, savePayslipEditor } = {}) {
+  openDateSignedPayslips, pickSignedPayslip, listSignedPayslips, uploadSignedPayslips, openSignedPayslip, loadPayslipEditor, savePayslipEditor } = {}) {
   const documentRef = documentOption || mountRootOption?.ownerDocument || globalThis.document;
   const mountRoot = mountRootOption || documentRef?.body;
   const config = GALLERIES[gallery];
@@ -429,17 +429,22 @@ export function createHrPayrollGallery({ document: documentOption,
         if (!list.hidden && !list.childElementCount) drawRows(rows, list, submission);
       });
       header.append(toggle);
-      if (date && typeof openDatePayslips === "function") {
-        const pdf = element("button", "hr-gallery-button hr-payslip-date-pdf", "PDF");
+      function addDatePdf(openPdf, { action, title, signed = false }) {
+        if (!date || typeof openPdf !== "function") return;
+        const pdf = element("button", signed
+          ? "hr-gallery-button hr-payslip-date-pdf hr-payslip-date-pdf--signed"
+          : "hr-gallery-button hr-payslip-date-pdf", signed ? undefined : "PDF");
+        if (signed) pdf.innerHTML = PDF_ATTACHMENT_ICON;
         pdf.type = "button";
-        pdf.dataset.action = "open-payslip-date";
-        pdf.setAttribute("aria-label", `Abrir o PDF com todos os holerites de ${label}`);
+        pdf.dataset.action = action;
+        pdf.setAttribute("aria-label", title);
+        pdf.title = title;
         pdf.addEventListener("click", async () => {
           if (!opened || destroyed || busy || datePreview) return;
           const controller = datePreview = new AbortController();
           pdf.setAttribute("aria-busy", "true");
           try {
-            await openDatePayslips(date, { signal: controller.signal, resolveReturnFocus: () => pdf.isConnected ? pdf : root });
+            await openPdf(date, { signal: controller.signal, resolveReturnFocus: () => pdf.isConnected ? pdf : root });
           } catch (error) {
             if (opened && !destroyed && !controller.signal.aborted && group.isConnected)
               status.textContent = error?.message || "Não foi possível abrir os holerites desta data.";
@@ -450,6 +455,12 @@ export function createHrPayrollGallery({ document: documentOption,
         });
         header.append(pdf);
       }
+      addDatePdf(openDatePayslips, {
+        action: "open-payslip-date", title: `Abrir o PDF com todos os holerites de ${label}`,
+      });
+      if (isReport) addDatePdf(openDateSignedPayslips, {
+        action: "open-signed-payslip-date", title: `Abrir o PDF com os holerites assinados de ${label}`, signed: true,
+      });
       group.append(header, list);
       cards.append(group);
       for (const [row, entry] of progress) {

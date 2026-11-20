@@ -3054,6 +3054,36 @@ test('o atalho Holerite abre o relatório e consulta as vias mesmo sem permissã
   assert.deepEqual(await options.listSignedPayslips({ id: '17' }), signed);
 });
 
+test('o PDF verde abre a consolidação assinada da data pelo visualizador do relatório', async t => {
+  let options, preview;
+  const calls = [];
+  const h = makeHarness({
+    hrPayrollGalleryDataFactory: async () => ({
+      async loadPage() {},
+      async downloadPayslip() { assert.fail('O PDF verde não deve abrir o modelo.'); },
+      async downloadSignedPayslipsByDate(date, { signal }) {
+        assert.equal(signal.aborted, false);
+        calls.push(date);
+        return new Blob(['%PDF-1.7'], { type: 'application/pdf' });
+      },
+    }),
+    hrPayrollGalleryFactory: async value => { options = value; return { async open() {}, destroy() {} }; },
+  });
+  h.native.previewMedia = async (source, name, settings) => {
+    preview = { name, returnLabel: settings.returnLabel, content: await (await source({})).text() };
+    settings.onClose();
+  };
+  h.native.exportMedia = () => assert.fail('A consolidação abre no visualizador.');
+  t.after(() => h.controller.stop());
+  await h.controller.start();
+  await h.view.emit('open-holerite-report');
+  await options.openDateSignedPayslips('2026-11-13');
+  assert.deepEqual(calls, ['2026-11-13']);
+  assert.deepEqual(preview, {
+    name: 'Holerites-assinados-2026-11-13.pdf', returnLabel: 'Voltar ao relatório de holerites', content: '%PDF-1.7',
+  });
+});
+
 test('o relatório de holerites pode ser reaberto depois de fechar uma consulta lenta', async t => {
   const panels = [];
   let settleFirst;
