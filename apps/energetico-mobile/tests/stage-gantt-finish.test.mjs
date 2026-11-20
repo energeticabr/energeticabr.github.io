@@ -50,12 +50,13 @@ test('finaliza o descritivo com data sugerida pela última presença e permite e
   const row = h.root.querySelector('.gantt-row--activity');
   const completed = h.root.querySelectorAll('.gantt-row--activity')[1];
   assert.equal(completed.querySelector('.gantt-finish-button'), null);
-  assert.equal(completed.querySelector('.gantt-name').dataset.tone, 'finished');
-  assert.notEqual(row.querySelector('.gantt-name').dataset.tone, 'finished');
+  assert.equal(completed.querySelector('.gantt-cluster--description').dataset.tone, 'finished');
+  const cluster = row.querySelector('.gantt-cluster--description');
+  assert.equal(cluster.dataset.tone, 'ongoing');
   const finish = row.querySelector('.gantt-finish-button');
-  assert.ok(finish, 'cada descritivo tem um botão abaixo do nome');
-  assert.equal(row.querySelector('.gantt-name').textContent, 'Escavação');
-  assert.equal(finish.previousElementSibling.textContent, 'Parte de: Fundação');
+  assert.ok(cluster.contains(finish), 'o botão pertence ao mesmo cartão do descritivo');
+  assert.equal(cluster.querySelector('.gantt-name').textContent, 'Escavação');
+  assert.doesNotMatch(row.querySelector('.gantt-label').textContent, /Parte de:/);
   finish.click(); await tick();
   assert.deepEqual(selection, { branch: 'Obra A', activityIds: ['129'] });
   const input = h.root.querySelector('input[type=date]');
@@ -68,7 +69,7 @@ test('finaliza o descritivo com data sugerida pela última presença e permite e
   assert.equal(updated.querySelector('.gantt-bar').dataset.tone, 'finished');
   assert.equal(updated.querySelector('.gantt-bar-date--end').textContent, '13/11/2026');
   assert.equal(updated.querySelector('.gantt-finish-button'), null);
-  assert.equal(updated.querySelector('.gantt-name').dataset.tone, 'finished');
+  assert.equal(updated.querySelector('.gantt-cluster--description').dataset.tone, 'finished');
 });
 
 test('etapa consulta todos os descritivos e usa presença em vez da data fim dos filhos', async t => {
@@ -90,7 +91,7 @@ test('etapa consulta todos os descritivos e usa presença em vez da data fim dos
   assert.equal(h.writes[0].options.expectedStage.id, '7');
   assert.equal(h.root.querySelector('.gantt-row--stage .gantt-bar').dataset.tone, 'finished');
   assert.equal(h.root.querySelector('.gantt-row--stage .gantt-finish-button'), null);
-  assert.equal(h.root.querySelector('.gantt-row--stage .gantt-name').dataset.tone, 'finished');
+  assert.equal(h.root.querySelector('.gantt-row--stage .gantt-cluster--description').dataset.tone, 'finished');
 });
 
 test('etapa pendente mantém botão desabilitado e cancelar ignora consulta atrasada', async t => {

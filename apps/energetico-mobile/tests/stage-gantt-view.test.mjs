@@ -37,12 +37,12 @@ test('GANTT expande as atividades abaixo da etapa e exibe datas e estados das ba
   assert.equal(toggle.textContent, '−');
   assert.equal(toggle.getAttribute('aria-expanded'), 'true');
   const child = dialog.querySelector('.gantt-row--stage').nextElementSibling;
-  assert.equal(child.querySelector('.gantt-parent-stage')?.textContent, 'Parte de: Fundação');
-  assert.equal(dialog.querySelector('.gantt-row--stage .gantt-parent-stage'), null);
+  assert.equal(child.querySelector('.gantt-label').textContent, 'Escavação');
   assert.equal(dialog.querySelector('.gantt-legend--activity')?.textContent, 'Trecho da etapa');
   assert.equal(child.querySelector('.gantt-name').tagName, 'STRONG');
-  assert.ok(child.querySelector('.gantt-name').classList.contains('gantt-cluster--description'));
-  assert.ok(dialog.querySelector('.gantt-row--stage .gantt-name').classList.contains('gantt-cluster--description'));
+  assert.ok(child.querySelector('.gantt-cluster--description .gantt-name'));
+  assert.ok(dialog.querySelector('.gantt-row--stage .gantt-cluster--description .gantt-name'));
+  assert.match(child.querySelector('.gantt-bar').getAttribute('aria-label'), /Parte de: Fundação/);
   assert.match(child.querySelector('.gantt-bar[data-tone="finished"]').getAttribute('aria-label'), /03\/11\/2026.*03\/11\/2026/);
   assert.equal(child.querySelector('.gantt-bar-date--start').textContent, '03/11/2026');
   assert.equal(child.querySelector('.gantt-bar-date--end').textContent, '03/11/2026');
@@ -59,7 +59,7 @@ test('GANTT expande as atividades abaixo da etapa e exibe datas e estados das ba
   assert.equal(document.activeElement, home);
 });
 
-test('GANTT identifica a etapa dos trechos inclusive sem datas e preserva datas e status nas barras', async t => {
+test('GANTT mostra só o nome nos cartões sem ação e preserva datas e status nas barras', async t => {
   const dom = new JSDOM('<!doctype html>');
   t.after(() => dom.window.close());
   const view = createStageGanttView({ document: dom.window.document, data: {
@@ -83,9 +83,7 @@ test('GANTT identifica a etapa dos trechos inclusive sem datas e preserva datas 
   const row = name => rows.find(node => node.querySelector('.gantt-name').textContent === name);
   for (const node of rows) {
     const label = node.querySelector('.gantt-row-text');
-    const isChild = node.classList.contains('gantt-row--activity');
-    assert.equal(label.children.length, isChild ? 2 : 1);
-    assert.equal(label.querySelector('.gantt-parent-stage')?.textContent ?? '', isChild ? 'Parte de: Estrutura' : '');
+    assert.equal(label.textContent, label.querySelector('.gantt-name').textContent);
   }
   assert.equal(row('Parede').querySelector('.gantt-bar-date--start').textContent, '19/06/2026');
   assert.equal(row('Parede').querySelector('.gantt-bar-date--end').textContent, '14/09/2026');

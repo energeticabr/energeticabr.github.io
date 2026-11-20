@@ -17,12 +17,17 @@ const view=createStageGanttView({document,now:()=>new Date(2026,10,18),data:{
 await view.open(); view.element.querySelector('.gantt-toggle').click();
 await document.fonts.ready;
 const root=view.element;
-const completed=[...root.querySelectorAll('.gantt-name[data-tone="finished"]')].map(name=>({color:getComputedStyle(name).backgroundColor,button:!!name.closest('.gantt-row').querySelector('.gantt-finish-button')}));
+const completed=[...root.querySelectorAll('.gantt-cluster--description[data-tone="finished"]')].map(card=>({color:getComputedStyle(card).backgroundColor,button:!!card.closest('.gantt-row').querySelector('.gantt-finish-button')}));
 const rows=[...root.querySelectorAll('.gantt-row--stage,.gantt-row--activity')].filter(row=>row.querySelector('.gantt-finish-button')).map(row=>{
- const name=row.querySelector('.gantt-name'),button=row.querySelector('.gantt-finish-button');
+ const name=row.querySelector('.gantt-name'),card=row.querySelector('.gantt-cluster--description'),button=row.querySelector('.gantt-finish-button');
  const portrait=root.dataset.reportPortrait==='true';
- const nr=name.getBoundingClientRect(),br=button.getBoundingClientRect();
- return {below:portrait?br.right<=nr.left:br.top>=nr.bottom,touch:button.offsetHeight>=44,fits:button.offsetWidth<=button.parentElement.clientWidth,color:getComputedStyle(button).backgroundColor,disabled:button.disabled};
+ const nr=name.getBoundingClientRect(),cr=card.getBoundingClientRect(),br=button.getBoundingClientRect();
+ return {
+  below:portrait?br.right<=nr.left:br.top>=nr.bottom,
+  inside:card.contains(button)&&br.left>cr.left&&br.right<cr.right&&br.top>cr.top&&br.bottom<cr.bottom,
+  touch:button.offsetHeight>=44&&button.offsetWidth>=44,
+  cardColor:getComputedStyle(card).backgroundColor,disabled:button.disabled,
+ };
 });
 root.querySelector('.gantt-row--activity .gantt-finish-button').click();
 await new Promise(resolve=>setTimeout(resolve,0));

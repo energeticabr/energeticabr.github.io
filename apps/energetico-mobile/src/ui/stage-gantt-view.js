@@ -174,14 +174,12 @@ export function createStageGanttView({ document: doc = globalThis.document, data
     function renderRow(item, parent, parentStage = null) {
       const row = make('div', `gantt-row gantt-row--${parent ? 'stage' : 'activity'}`);
       const label = make('div', 'gantt-label');
-      const text = make('div', 'gantt-row-text');
+      const card = make('div', 'gantt-row-text gantt-cluster gantt-cluster--description');
+      card.dataset.tone = item.finished ? 'finished' : 'ongoing';
       const startText = formatOperationsDate(item.start);
       const endText = item.finished ? formatOperationsDate(item.end) : 'Em Andamento';
       const dates = `Início ${startText} · Fim ${endText}`;
-      const name = make('strong', 'gantt-name gantt-cluster gantt-cluster--description', item.name);
-      name.dataset.tone = item.finished ? 'finished' : 'ongoing';
-      text.append(name);
-      if (parentStage) text.append(make('small', 'gantt-parent-stage', `Parte de: ${parentStage.name}`));
+      card.append(make('strong', 'gantt-name', item.name));
       const canWrite = typeof data[parent ? 'finalizeStage' : 'finalizeActivity'] === 'function';
       if (!item.finished && canWrite && typeof data.loadAssignments === 'function') {
         const finalize = button('FINALIZAR', `Finalizar ${parent ? 'etapa' : 'atividade'} ${item.name}`);
@@ -189,9 +187,9 @@ export function createStageGanttView({ document: doc = globalThis.document, data
         finalize.disabled = !item.canFinalize;
         if (parent && !item.finished && !item.canFinalize) finalize.title = 'Finalize todos os descritivos vinculados antes de finalizar a etapa.';
         finalize.addEventListener('click', () => { void finish.open(item, finalize, { stage: parent }); });
-        text.append(finalize);
+        card.append(finalize);
       }
-      label.append(text);
+      label.append(card);
       const track = make('div', 'gantt-track');
       if (item.range) {
         const { start: from, end: to, tone } = item.range;
