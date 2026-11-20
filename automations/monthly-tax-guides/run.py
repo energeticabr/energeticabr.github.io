@@ -18,6 +18,7 @@ FIELDS = {
     'TIPO': ('Tipo', 'Choice', 'Required="TRUE"'),
     'VENCIMENTO': ('Data vencimento', 'DateTime', 'Format="DateOnly"'),
     'VALOR': ('Valor', 'Currency', 'LCID="1046" Decimals="2" Min="0"'),
+    'STATUS': ('Status', 'Text', 'Required="TRUE" MaxLength="255"'),
 }
 
 
@@ -45,7 +46,7 @@ def plan(today, branches):
                 rows.append(dict(Title=f'Solicitar guia {tax} — {competence} — {label}',
                                  CHAVE=f'GUIA:{competence}:{ident}:{tax}',
                                  COMPETENCIA=month.replace(day=20).isoformat() + 'T12:00:00Z',
-                                 FILIAL=label, TIPO=tax, VALOR=None,
+                                 FILIAL=label, TIPO=tax, VALOR=None, STATUS='PENDENTE',
                                  VENCIMENTO=following_month.replace(day=20).isoformat() + 'T12:00:00Z'))
         month = following_month
     return rows
@@ -123,13 +124,15 @@ class SharePointStore:
         return created
 
     def schema(self):
-        fields = self.pages(self.base + '/fields', {'$select': 'Id,InternalName,TypeAsString,Indexed,EnforceUniqueValues', '$top': 500})
+        fields = self.pages(self.base + '/fields', {'$select': 'Id,InternalName,TypeAsString,Indexed,EnforceUniqueValues,DefaultValue,Required', '$top': 500})
         by_name = {f['InternalName']: f for f in fields}
         for name, (_, field_type, _) in FIELDS.items():
             if by_name.get(name, {}).get('TypeAsString') != field_type:
                 raise ValueError(f'Esquema inesperado: {name}')
         if not all(by_name['CHAVE'].get(k) is True for k in ('Indexed', 'EnforceUniqueValues')):
             raise ValueError('Chave mensal sem unicidade garantida pelo SharePoint')
+        if by_name['STATUS'].get('DefaultValue') != 'PENDENTE' or by_name['STATUS'].get('Required') is not True:
+            raise ValueError('Status inicial PENDENTE não garantido pelo SharePoint')
         metadata = self.client._request('GET', self.base, params={'$select': 'Id,EnableAttachments'})
         if metadata.get('EnableAttachments') is not True: raise ValueError('Anexos desabilitados')
 

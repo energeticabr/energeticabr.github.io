@@ -3,8 +3,8 @@ import { addReportCloseControl } from './report-close-control.js';
 import { bindSearchableFilterSelects } from './searchable-filter-selects.js';
 import { PDF_ATTACHMENT_ICON } from './report-pdf-attachment-icon.js';
 
-const FIELDS = [['VENCIMENTO','Data vencimento'],['COMPETENCIA','Data competência'],['FILIAL','Filial'],['VALOR','Valor'],['TIPO','Tipo']];
-const FILTERS = [['COMPETENCIA','Competência'],['FILIAL','Filial'],['TIPO','Tipo']];
+const FIELDS = [['VENCIMENTO','Data vencimento'],['COMPETENCIA','Data competência'],['FILIAL','Filial'],['VALOR','Valor'],['TIPO','Tipo'],['STATUS','Status']];
+const FILTERS = [['COMPETENCIA','Competência'],['FILIAL','Filial'],['TIPO','Tipo'],['STATUS','Status']];
 const dateKey = value => /^\d{4}-\d{2}-\d{2}(?:T|$)/.test(String(value || '')) ? String(value).slice(0,10) : '';
 const dateLabel = value => { const key=dateKey(value); return key ? `${key.slice(8)}/${key.slice(5,7)}/${key.slice(0,4)}` : 'A informar'; };
 const amountLabel = value => {

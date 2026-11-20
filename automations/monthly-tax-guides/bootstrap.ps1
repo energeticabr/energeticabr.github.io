@@ -28,9 +28,11 @@ $fields=@(
     @('FILIAL','Text','<Field Name="FILIAL" StaticName="FILIAL" DisplayName="Filial" Type="Text" Required="TRUE" MaxLength="255" />'),
     @('TIPO','Choice','<Field Name="TIPO" StaticName="TIPO" DisplayName="Tipo" Type="Choice" Required="TRUE"><CHOICES><CHOICE>INSS</CHOICE><CHOICE>FGTS</CHOICE></CHOICES></Field>'),
     @('VENCIMENTO','DateTime','<Field Name="VENCIMENTO" StaticName="VENCIMENTO" DisplayName="Data vencimento" Type="DateTime" Format="DateOnly" />'),
-    @('VALOR','Currency','<Field Name="VALOR" StaticName="VALOR" DisplayName="Valor" Type="Currency" LCID="1046" Decimals="2" Min="0" />')
+    @('VALOR','Currency','<Field Name="VALOR" StaticName="VALOR" DisplayName="Valor" Type="Currency" LCID="1046" Decimals="2" Min="0" />'),
+    @('STATUS','Text','<Field Name="STATUS" StaticName="STATUS" DisplayName="Status" Type="Text" Required="TRUE" MaxLength="255"><Default>PENDENTE</Default></Field>')
 )
-$schema=Invoke-GuideSp GET ($list+'/fields?$select=Id,InternalName,TypeAsString,Indexed,EnforceUniqueValues&$top=500')
+$schemaSelect='/fields?$select=Id,InternalName,TypeAsString,Indexed,EnforceUniqueValues,DefaultValue,Required&$top=500'
+$schema=Invoke-GuideSp GET ($list+$schemaSelect)
 foreach($field in $fields){
     $matches=@($schema.value | Where-Object {$_.InternalName -ceq $field[0]})
     if($matches.Count -eq 0){
@@ -42,10 +44,18 @@ foreach($field in $fields){
     }
     elseif($matches.Count -ne 1 -or $matches[0].TypeAsString -cne $field[1]){throw ('Unexpected field: '+$field[0])}
 }
-$schema=Invoke-GuideSp GET ($list+'/fields?$select=Id,InternalName,TypeAsString,Indexed,EnforceUniqueValues&$top=500')
+$schema=Invoke-GuideSp GET ($list+$schemaSelect)
+$status=@($schema.value | Where-Object {$_.InternalName -ceq 'STATUS'})
+if($status.Count -ne 1 -or $status[0].TypeAsString -cne 'Text'){throw 'Status field not confirmed'}
+if($status[0].DefaultValue -cne 'PENDENTE' -or $status[0].Required -ne $true){
+    $null=Invoke-GuideSp POST ($list+"/fields(guid'$($status[0].Id)')") @{DefaultValue='PENDENTE';Required=$true} @{'X-HTTP-Method'='MERGE';'IF-MATCH'='*'}
+    $schema=Invoke-GuideSp GET ($list+$schemaSelect)
+}
 foreach($field in $fields){$matches=@($schema.value | Where-Object {$_.InternalName -ceq $field[0]});if($matches.Count -ne 1 -or $matches[0].TypeAsString -cne $field[1]){throw ('Schema readback mismatch: '+$field[0]+' expected '+$field[1]+' found '+(ConvertTo-Json -InputObject $matches -Compress))}}
 $key=@($schema.value | Where-Object {$_.InternalName -ceq 'CHAVE'})[0]
 if(-not $key.Indexed -or -not $key.EnforceUniqueValues){throw 'Monthly uniqueness not confirmed'}
+$status=@($schema.value | Where-Object {$_.InternalName -ceq 'STATUS'})[0]
+if($status.DefaultValue -cne 'PENDENTE' -or $status.Required -ne $true){throw 'Pending status default not confirmed'}
 $metadata=Invoke-GuideSp GET ($list+'?$select=Id,Title,EnableAttachments')
 if(-not $metadata.EnableAttachments){throw 'Guide attachments disabled'}
-[ordered]@{listId=$metadata.Id;list=$metadata.Title;uniqueKey=$true;attachments=$true;fields=$fields.Count} | ConvertTo-Json
+[ordered]@{listId=$metadata.Id;list=$metadata.Title;uniqueKey=$true;attachments=$true;fields=$fields.Count;statusDefault=$status.DefaultValue} | ConvertTo-Json
