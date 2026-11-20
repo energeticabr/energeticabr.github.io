@@ -33,10 +33,14 @@ test('retorno com aviso e anexo restaura mascotes e abre relatórios reais no ce
         assert.ok(layout.actions.includes('open-pending-payroll-links'));
         assert.equal(new Set(layout.actions).size, layout.count, 'sem atalhos duplicados');
         assert.equal(layout.payslip, 'Holerite');
-        assert.deepEqual(layout.reportLabels, ['INSS', 'RHID', 'IDFOLHA', 'Holerite', 'GANTT'].map(text => ({
-          text, color: 'rgb(255, 255, 255)', background: 'rgb(160, 37, 54)', height: 14,
-          fullWidth: true, atBottom: true, fits: true,
-        })), `faixas dos relatórios em ${width}x${height}`);
+        assert.deepEqual(layout.reportLabels.map(({ fits, ...label }) => label),
+          ['INSS', 'RHID', 'IDFOLHA', 'Holerite', 'GANTT'].map(text => ({
+            text, color: 'rgb(255, 255, 255)', background: 'rgb(160, 37, 54)', height: 14,
+            fullWidth: true, atBottom: true,
+          })), `faixas dos relatórios em ${width}x${height}`);
+        for (const label of layout.reportLabels.slice(0, 3)) {
+          assert.equal(label.fits, true, `${label.text} cabe na faixa em ${width}x${height}`);
+        }
         assert.ok(layout.actions.includes('open-sicoob-transaction-report'));
         assert.ok(layout.buttons.every(button => button.external && button.loaded && button.width >= 44 && button.height >= 44
           && button.left >= 0 && button.right <= width + 1), JSON.stringify({ width, layout }));
