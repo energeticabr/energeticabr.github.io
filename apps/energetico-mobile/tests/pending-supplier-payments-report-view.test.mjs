@@ -342,10 +342,11 @@ test('real navigation and PDF decorators capture both tables and block export af
     previewMedia:async(pending,_name,options)=>{await pending;previews++;previewOptions=options;},
   });
   t.after(()=>decorated.destroy()); await decorated.open();
-  assert.equal(root.querySelectorAll('.report-navigation-arrow').length,1);
+  assert.equal(root.querySelectorAll('.report-navigation-arrow').length,2);
   root.querySelector('.report-navigation-arrow--previous').click(); await tick();
   assert.equal(navigation,'open-contractor-control-report');
-  assert.equal(root.querySelector('.report-navigation-arrow--next'),null);
+  root.querySelector('.report-navigation-arrow--next').click(); await tick();
+  assert.equal(navigation,'open-holerite-report');
   const print=root.querySelector('.report-print-button');
   assert.equal(print.parentElement.querySelector('.pl-refresh')!==null,true);
   print.click(); await tick(); await tick();
