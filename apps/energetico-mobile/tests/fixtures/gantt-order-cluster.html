@@ -26,8 +26,8 @@ await new Promise(resolve=>requestAnimationFrame(()=>requestAnimationFrame(resol
 const children=[];
 for(let row=masonry.nextElementSibling;row?.classList.contains('gantt-row--activity');row=row.nextElementSibling)children.push(row.querySelector('.gantt-name').textContent);
 const names=[...root.querySelectorAll('.gantt-name')].map(node=>{
- const css=getComputedStyle(node),label=node.closest('.gantt-label');
- return {name:node.textContent,tag:node.tagName,cluster:node.classList.contains('gantt-cluster--description'),weight:Number(css.fontWeight),background:css.backgroundColor,color:css.color,fits:node.scrollWidth<=node.clientWidth+1&&node.offsetWidth<=label.clientWidth};
+ const card=node.closest('.gantt-cluster--description'),css=getComputedStyle(node),label=node.closest('.gantt-label');
+ return {name:node.textContent,tag:node.tagName,cluster:!!card,weight:Number(css.fontWeight),background:card&&getComputedStyle(card).backgroundColor,color:css.color,fits:node.scrollWidth<=node.clientWidth+1&&node.offsetWidth<=label.clientWidth};
 });
 root.querySelector('[aria-label="Atualizar GANTT"]').click();
 await new Promise(resolve=>requestAnimationFrame(()=>requestAnimationFrame(resolve)));
