@@ -10288,7 +10288,15 @@ export function createAppController({
           }
           const panel = await factory({
             kind: sourceKind, data,
-            ...(isTaxGuidesReport ? { presentation: 'report' } : {}),
+            ...(isTaxGuidesReport ? { presentation: 'report',
+              async pickAttachments(source, { signal } = {}) {
+                assertSession();signal?.throwIfAborted();
+                const picker={camera:native.capturePhoto,scan:native.scanDocument,files:native.pickDocuments,photos:native.pickPhotos}[source];
+                if(typeof picker!=='function')throw new Error('Esta opção não está disponível neste dispositivo.');
+                const files=await picker.call(native,{signal,desktopCamera:true});
+                assertSession();signal?.throwIfAborted();return files;
+              },
+            } : {}),
             ...(isGalleryMenu ? { onSelect: async target => {
               assertSession();
               const canOpenTarget = sourceKind === 'assetMenu'
