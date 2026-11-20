@@ -279,6 +279,16 @@ def allows_payment(row, end_id, claims):
     return all(end_id not in identifiers for identifiers in claims.values())
 
 
+def mark_generated_only(client, rows):
+    """A conference PDF must not stand in for an original bank receipt."""
+    from generated_receipt import is_generated_filename
+    for row in rows:
+        row['_generated_only'] = False
+        if row.get('Attachments') and movements.civil_date(row['DATAPAGAMENTO']).isoformat() >= '2026-11-19':
+            names = client.get_attachment_names(row['Id'], LIST)
+            row['_generated_only'] = bool(names) and all(is_generated_filename(name) for name in names)
+
+
 def verify_late_postings(pix_rows, answers, account, payer, claims=None):
     """Map a late Pix to its unique statement key. None marks unverifiable candidates."""
     late = {}
@@ -294,7 +304,7 @@ def verify_late_postings(pix_rows, answers, account, payer, claims=None):
             continue
         possible = [row for row in pix_rows if row.get(movements.KEY)
                     and allows_payment(row, end_id, claims)
-                    and (not row.get('Attachments') or direct_ids(row) == {end_id})
+                    and (not row.get('Attachments') or row.get('_generated_only') or direct_ids(row) == {end_id})
                     and movements.civil_date(row['DATAPAGAMENTO']) > paid
                     and pix_matches(row, pix, end_id, payer, allow_posting_delay=True)]
         if possible:
@@ -479,6 +489,7 @@ def run(check):
     movements.assert_destination(client)
     pix_rows = [row for row in list_movements(client) if row['ORIGEMMOVIMENTACAO'] == 'SICOOB'
                 and row['OPERACAO'] == 'DÉBITO' and re.search(r'\bPIX\b', movements.bank_label(row['DESCRICAO']))]
+    mark_generated_only(client, pix_rows)
     pending = [row for row in pix_rows if movements.text(row['RAZAOSOCIALRECEBEDOR']).upper() in ('', movements.UNKNOWN)
                and (pix_key(row)[-1] or len(direct_ids(row)) == 1)]
     stats = Counter(pendentes=len(pending))
@@ -501,6 +512,7 @@ def prepare_import(client, records, account):
     existing = [row for row in list_movements(client) if row['ORIGEMMOVIMENTACAO'] == 'SICOOB'
                 and row['OPERACAO'] == 'DÉBITO' and movements.text(row['CONTAPAGADORA']) == account
                 and re.search(r'\bPIX\b', movements.bank_label(row['DESCRICAO']))]
+    mark_generated_only(client, existing)
     prior_by_key = {row[movements.KEY]: row for row in existing if row.get(movements.KEY)}
     prepared = {}
     for index, row in enumerate(incoming, 1):
@@ -510,6 +522,7 @@ def prepare_import(client, records, account):
         candidate = {field: '' for field in EXTRA}
         candidate.update(row, Id=prior['Id'] if prior else -index, Attachments=bool(prior and prior.get('Attachments')))
         if prior:
+            candidate['_generated_only'] = prior.get('_generated_only', False)
             for field in EXTRA:
                 if movements.text(prior.get(field)).upper() not in ('', movements.UNKNOWN):
                     candidate[field] = prior[field]

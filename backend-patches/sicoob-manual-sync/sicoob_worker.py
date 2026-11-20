@@ -22,6 +22,7 @@ STAGES = (
     ('movements', (PYTHON, str(CODE / 'sync_movements.py'), 'scheduled')),
     ('boleto', (PYTHON, str(CODE / 'sync_boleto_receipts.py'))),
     ('pix', (PYTHON, str(CODE / 'sync_pix_receivers.py'))),
+    ('generated-pdf', (PYTHON, str(CODE / 'sync_generated_receipts.py'))),
 )
 
 
@@ -62,6 +63,11 @@ def parse_stage(stage, text, exit_code):
             raise ValueError('INCOMPLETE_PIX')
         return {'created': 0, 'updated': value.get('nomes_gravados', 0), 'verified': 0,
                 'pendingDetails': value['pendentes'] - value.get('nomes_gravados', 0)}
+    if stage == 'generated-pdf':
+        if (set(value) != {'eligible', 'attached', 'already_attached', 'failed'} or value['failed']
+                or value['eligible'] != value['attached'] + value['already_attached']):
+            raise ValueError('INCOMPLETE_GENERATED_PDFS')
+        return {'created': 0, 'updated': value['attached'], 'verified': 0, 'pendingDetails': 0}
     raise ValueError('INVALID_STAGE')
 
 

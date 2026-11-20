@@ -1,5 +1,41 @@
 # Importação de pagamentos Sicoob
 
+## PDFs gerados pelo Energético
+
+Desde 19/11/2026, o quarto estágio da coleta manual e programada é
+`sync_generated_receipts.py`. Para cada débito Sicoob com data de lançamento
+igual ou posterior a **19/11/2026**, ele anexa
+`Demonstrativo-Energetico-Sicoob-<ID>.pdf` à própria linha de
+`MOVIMENTACOESFINANCEIRAS`. Datas anteriores ficam fora da geração, inclusive
+em importações tardias. Não escreve campos financeiros nem replica documentos
+para LANCAMENTOS.
+
+O documento usa o layout aprovado e o logotipo público do Sicoob, com aviso
+explícito de que foi gerado pelo Energético e não emitido pelo banco. Reconfere
+conta, chave de importação, data, valor e descrição com o extrato autenticado.
+Dados Pix autenticados do cache e dados de boleto verificados enriquecem o PDF;
+horário, documento, instituição e identificadores ausentes permanecem marcados
+como não disponibilizados. O horário artificial de armazenamento da data na
+lista nunca é exibido como horário bancário.
+
+Arquivos existentes são preservados. O nome estável e a identidade dentro do
+PDF permitem retomar tentativas sem duplicar; cada novo upload é baixado e
+comparado byte a byte. Um PDF gerado não é considerado comprovante original
+pela conciliação Pix. Qualquer erro deixa a atualização como falha e a próxima
+rodada retoma os itens restantes. A agenda e o botão Atualizar executam o mesmo
+pipeline no OCI, sem depender do computador do usuário.
+
+Para validar sem anexar: `sync_generated_receipts.py --check --output-dir <pasta-privada>`
+com o ambiente do serviço. O contador `attached` nesse modo indica arquivos
+planejados; somente a execução sem `--check` publica os anexos.
+
+Ativos públicos: `assets/sicoob-logo.svg` veio do elemento `logo-sicoob` da
+página `https://www.sicoob.com.br/`; o preenchimento herdado usa a cor
+`#003D42` para fundo branco. `assets/sicoob-logo.png` é a rasterização desse
+vetor, sem dados de outros comprovantes;
+`assets/institutions.json` registra as fontes oficiais do Banco Central. Nomes
+ausentes nesse catálogo são mostrados como ISPB, sem inferência.
+
 O coletor lê os pagamentos debitados pela API Conta Corrente v4 com o escopo
 `cco_consulta`. O destino é a lista pessoal existente `MOVIMENTACOESFINANCEIRAS`.
 A chave única `CHAVEIMPORTACAO` combina banco, conta e identificador da transação.
