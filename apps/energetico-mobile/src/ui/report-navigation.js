@@ -6,7 +6,7 @@ import { beginLoadingTask } from './loading-task.js';
 // singletons; families are never inferred from inherited button CSS.
 const GROUPS = [
  ['open-pending-provisions','open-sicoob-transaction-report','open-nfe-report','open-dda-report','open-provision-report','open-payment-ledger','open-management-report','open-order-validation-report','open-document-control-report'],
- ['open-cargos-table','open-attendance-summary','open-stage-progress','open-supplier-payroll-report','open-trancid-report','open-contractor-control-report','open-pending-supplier-payments-report'],
+ ['open-tax-guides-report','open-rhid-mascot-report','open-pending-payroll-links','open-cargos-table','open-attendance-summary','open-stage-progress','open-supplier-payroll-report','open-trancid-report','open-contractor-control-report','open-pending-supplier-payments-report','open-holerite-report','open-stage-gantt'],
  ['open-commercial-receipts','open-commercial-milestones','open-commercial-documents','open-sac-pathologies'],
 ];
 
@@ -105,7 +105,7 @@ export function decorateReportNavigation(panel,{action,onNavigate}) {
  let busy=false,destroyed=false;
  async function navigate(event) {
   const arrow=event.target.closest('[data-report-direction]');
-  if(!arrow||busy||destroyed||root.hidden||!root.isConnected)return;
+  if(!arrow||busy||destroyed||!root.isConnected||arrow.closest('[hidden],[inert]'))return;
   event.preventDefault();event.stopPropagation();busy=true;
   const buttons=[...nav.querySelectorAll('button')];buttons.forEach(button=>button.disabled=true);
   try{await onNavigate?.(neighbors[arrow.dataset.reportDirection]);}

@@ -35,8 +35,8 @@ test('supplier payments mascot keeps its home position and dispatches its local 
  view.render({...home,activeText:{id:'busy'}});const busy=dom.window.document.querySelector(`[data-action="${action}"]`);assert.equal(busy.disabled,true);busy.click();assert.equal(opened,1);
  assert.doesNotMatch(renderChatMarkup({...home,activeFlow:'busy'}),/data-action="open-pending-supplier-payments-report"/);
 });
-test('supplier payments is the last report in the pink navigation group',()=>{
- assert.deepEqual(getReportNeighbors(action),{previous:'open-contractor-control-report',next:null});
+test('supplier payments sits between contractor control and Holerite',()=>{
+ assert.deepEqual(getReportNeighbors(action),{previous:'open-contractor-control-report',next:'open-holerite-report'});
  assert.deepEqual(getReportNeighbors('open-contractor-control-report'),{previous:'open-trancid-report',next:action});
  assert.equal(getReportNeighbors('open-commercial-receipts').previous,null);
  assert.equal(REPORT_PDF_TITLES[action],'Pagamentos pendentes por fornecedor');
@@ -81,12 +81,22 @@ for(const moment of ['before','after'])test(`report rejects auth account drift $
 test('refresh cancels the old token query so a late consent error cannot prompt',async t=>{
  const token=deferred();let tokens=0,grants=0;const h=harness(t,{auth:{getToken:()=>++tokens===1?token.promise:Promise.resolve('fresh'),authorize:async()=>{grants++;}},pendingSupplierPaymentsReportDataFactory:async({tokenProvider})=>({loadSnapshot:()=>tokenProvider()})});await h.controller.start();await h.view.emit(action);const data=h.panels[0].data,old=data.loadSnapshot(),rejected=assert.rejects(old,{name:'AbortError'});await tick();assert.equal(await data.loadSnapshot(),'fresh');await rejected;token.reject(Object.assign(Error('old consent'),{code:'AUTH_REQUIRED'}));await tick();assert.equal(grants,0);
 });
-test('supplier payments navigates back to contractor control and rejects next and forged directions',async t=>{
- let contractor=0;const h=harness(t,{contractorControlReportViewFactory:async()=>({open(){contractor++;},close(){},destroy(){}})});
+test('supplier payments navigates back to contractor control and forward to Holerite',async t=>{
+ let contractor=0,holerite=0;
+ const h=harness(t,{
+  contractorControlReportViewFactory:async()=>({open(){contractor++;},close(){},destroy(){}}),
+  hrPayrollGalleryDataFactory:async()=>({loadPage:async()=>({rows:[]}),downloadPayslip:async()=>new Blob()}),
+  hrPayrollGalleryFactory:async({gallery,presentation})=>{
+   assert.equal(gallery,'HOLERITE');assert.equal(presentation,'report');
+   return {open(){holerite++;},close(){},destroy(){}};
+  },
+ });
  await h.controller.start();await h.view.emit(action);
  assert.equal(await h.view.emit('navigate-mascot-report',{from:action,direction:'orange'}),false);
- assert.equal(await h.view.emit('navigate-mascot-report',{from:action,direction:'next'}),false);
  assert.equal(await h.view.emit('navigate-mascot-report',{from:action,direction:'previous'}),true);assert.equal(contractor,1);
+ assert.equal(await h.view.emit('navigate-mascot-report',{from:'open-contractor-control-report',direction:'next'}),true);
+ assert.equal(await h.view.emit('navigate-mascot-report',{from:action,direction:'next'}),true);assert.equal(holerite,1);
+ assert.equal(await h.view.emit('navigate-mascot-report',{from:'open-holerite-report',direction:'previous'}),true);
 });
 const browserAccount={homeAccountId:'diary-user',username:'person@example.invalid'},pendingKey='energetico:msal-pending-action:v1';
 test('default production financial factory reaches readonly source without a replaced data factory',async t=>{

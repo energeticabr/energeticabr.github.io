@@ -33,7 +33,7 @@ test('new pink wheelbarrow mascot sits immediately below Trancid and launches lo
 test('new entry navigates strictly between Trancid and pink pending payments',()=>{
  assert.deepEqual(getReportNeighbors(action),{previous:'open-trancid-report',next:'open-pending-supplier-payments-report'});
  assert.deepEqual(getReportNeighbors('open-trancid-report'),{previous:'open-supplier-payroll-report',next:action});
- assert.deepEqual(getReportNeighbors('open-pending-supplier-payments-report'),{previous:action,next:null});
+ assert.deepEqual(getReportNeighbors('open-pending-supplier-payments-report'),{previous:action,next:'open-holerite-report'});
  assert.equal(REPORT_PDF_TITLES[action],'Controle de empreiteiros');assert.equal(getReportNeighbors('open-commercial-receipts').previous,null);
 });
 test('pink rail preserves uniform fill and even spacing below the separate orange row',t=>{

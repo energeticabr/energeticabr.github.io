@@ -637,6 +637,7 @@ export function createHrPayrollGallery({ document: documentOption,
   const refreshTimer = gallery === 'FOLHAPGTO' ? doc.defaultView?.setInterval(refreshSource, 15000) : null;
 
   return Object.freeze({
+    ...(backdrop ? { element: backdrop, canNavigate: () => !payslipActions?.isWriting() } : {}),
     async open() {
       if (destroyed) return false;
       opened = true;
