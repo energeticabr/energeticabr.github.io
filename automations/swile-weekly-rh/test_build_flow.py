@@ -42,7 +42,10 @@ class FlowContractTests(unittest.TestCase):
         self.assertIn('IDFORNECEDORORIGEM', uri)
         self.assertIn('PROFISSAO', uri)
         self.assertEqual(self.actions['Linhas']['inputs']['select']['profession'], "@trim(coalesce(item()?['PROFISSAO'],''))")
-        self.assertIn("item()?['profession']", self.actions['RH_Invalid']['inputs']['where'])
+        profession_validation = self.actions['RH_Invalid']['inputs']['where']
+        self.assertIn("item()?['profession']", profession_validation)
+        for char in ('/', '\u00a0', '\u0327', '\u0303'):
+            self.assertIn(",'" + char + "',''", profession_validation)
         self.assertNotIn('CARGO', uri)
         self.assertNotIn('EMPREITEIRO', uri)
         self.assertEqual(self.actions['Elegiveis']['inputs']['where'], "@not(contains(variables('Excluidos'), int(item()?['IDFORNECEDORORIGEM'])))")

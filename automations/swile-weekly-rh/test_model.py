@@ -63,11 +63,18 @@ class PlannerTests(unittest.TestCase):
         cases = [[person(sid='')], [person(sid='0')], [person(sid='1.5')],
                  [person(FILIAL='')], [person(name='')],
                  [person(PROFISSAO='')], [person(PROFISSAO='Vale alimentacao')],
+                 [person(PROFISSAO='VALE/ALIMENTAÇÃO')], [person(PROFISSAO='/')],
+                 [person(PROFISSAO='VALE\u00a0ALIMENTAÇÃO')],
+                 [person(PROFISSAO='VALE ALIMENTAC\u0327A\u0303O')],
                  [person(), person(2, '1001', 'PESSOA B')],
                  [person(), person(2, '1002', 'PESSOA A')]]
         for rows in cases:
             with self.subTest(rows=rows), self.assertRaises(ValueError):
                 model.plan_horizon(rows, date(2026, 10, 26), [])
+
+    def test_profession_with_separator_is_preserved_in_product(self):
+        plan = model.plan_horizon([person(PROFISSAO='MOTORISTA / OPERADOR')], date(2026, 10, 26), [])[0]
+        self.assertEqual(model.child_payload(plan, plan['rows'][0], 808)['PRODUTO'], 'MOTORISTA / OPERADOR')
 
     def test_no_recipients_means_no_empty_financial_group(self):
         self.assertEqual(model.plan_horizon([person(sid='9009')], date(2026, 10, 26), [9009]), [])

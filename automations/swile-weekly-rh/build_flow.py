@@ -99,11 +99,9 @@ def paged(prefix, query, previous=None):
     return a
 
 
-def norm(value):
+def norm(value, replacements=model.TEXT_REPLACEMENTS):
     value = 'toUpper(trim(string(coalesce(' + value + ",''))))"
-    for original, replacement in [(' ', ''), ('-', ''), ('.', ''), ('Á', 'A'), ('À', 'A'), ('Ã', 'A'),
-                                  ('Â', 'A'), ('É', 'E'), ('Ê', 'E'), ('Í', 'I'), ('Ó', 'O'), ('Ô', 'O'),
-                                  ('Õ', 'O'), ('Ú', 'U'), ('Ç', 'C')]:
+    for original, replacement in replacements:
         value = 'replace(' + value + ",'" + original + "','" + replacement + "')"
     return value
 
@@ -112,8 +110,9 @@ def blank(value):
     return "contains(createArray('','0','EMBRANCO')," + norm(value) + ')'
 
 
-def valid_profession(value):
-    return "not(contains(createArray('','0','EMBRANCO','" + model.normalized(model.LABEL) + "')," + norm(value) + '))'
+def invalid_profession(value):
+    invalid = ','.join(repr(label) for label in model.INVALID_PROFESSIONS)
+    return 'contains(createArray(' + invalid + '),' + norm(value, model.PROFESSION_REPLACEMENTS) + ')'
 
 
 def unpaid(row):
@@ -148,7 +147,7 @@ def check_children(prefix, previous):
     suffix = 'last(split(' + key + ",':'))"
     checks = [unpaid(row), default_business(row), 'startsWith(' + key + ",concat(outputs('Chave'),':'))",
               'if(isInt(' + suffix + '),greater(int(' + suffix + '),0),false)', identity_ok,
-              valid_profession(row + "?['PRODUTO']"),
+              'not(' + invalid_profession(row + "?['PRODUTO']") + ')',
               "equals(substring(coalesce(" + row + "?['DATAPREVISTOPGTO'],'0000-00-00'),0,10),outputs('Data_Quarta'))"]
     checks += ['equals(' + number(row + "?['" + field + "']") + ',' + value + ')' for field, value in [('QTD', '5'), ('VALORTOTAL', '45'), ('FRETE', '0')]]
     child = {match: {'type': 'Query', 'inputs': {'from': "@body('Linhas')", 'where': "@equals(concat(outputs('Chave'),':',string(item()?['supplierId']))," + row + "?['FOLHAOPERACAO'])"}, 'runAfter': {}},
@@ -230,8 +229,9 @@ def build_definition(excluded_supplier_ids, start_date):
     a['Linhas'] = select("@body('Elegiveis')", {'supplierId': "@int(item()?['IDFORNECEDORORIGEM'])", 'name': "@trim(coalesce(item()?['Title'],''))",
         'branch': "@trim(coalesce(item()?['FILIAL'],''))", 'profession': "@trim(coalesce(item()?['PROFISSAO'],''))",
         'property': "@if(empty(" + prop + "),'TODOS'," + prop + ')'}, 'Elegiveis')
-    a['RH_Invalid'] = {'type': 'Query', 'inputs': {'from': "@body('Linhas')", 'where': "@or(lessOrEquals(item()?['supplierId'],0),empty(item()?['name']),empty(item()?['branch']),not(" + valid_profession("item()?['profession']") + "))"},
-        'runAfter': after('Linhas')}
+    a['RH_Invalid'] = {'type': 'Query', 'inputs': {'from': "@body('Linhas')", 'where':
+        "@or(lessOrEquals(item()?['supplierId'],0),empty(item()?['name']),empty(item()?['branch']),"
+        + invalid_profession("item()?['profession']") + ')'}, 'runAfter': after('Linhas')}
     a['RH_IDs'] = select("@body('Linhas')", "@item()?['supplierId']", 'RH_Invalid')
     a['RH_Nomes'] = select("@body('Linhas')", '@' + norm("item()?['name']"), 'RH_IDs')
     a['RH_Filiais'] = select("@body('Linhas')", "@item()?['branch']", 'RH_Nomes')
