@@ -12,4 +12,3 @@
 **Base:** 959d183. Testes atuais do relatório: 7/7; trava de assinatura: 14 blocos intactos.
 
 **Ruling:** ferramenta nativa de criação de worktree não retornou após vários minutos; criado checkout isolado com git em `2026-11-19/inss-fgts-acoes-relatorio`. Preservar o checkout concorrente da galeria. Nenhuma edição protegida.
-
