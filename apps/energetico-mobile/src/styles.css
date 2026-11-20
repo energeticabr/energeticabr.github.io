@@ -1586,6 +1586,7 @@ button.chat-rhid-attendance-card__cluster:focus-visible { outline: 3px solid #15
 }
 :is(.chat-main-holerite-shortcut, .chat-main-gantt-shortcut):focus-visible { outline:3px solid var(--accent); outline-offset:3px; }
 .chat-main-holerite-shortcut { margin-top: 404px; }
+.chat-main-holerite-shortcut > span:last-child { font-size: 9px; }
 .chat-main-gantt-shortcut { margin-top: 460px; }
 .chat-message--commercial-top { row-gap:12px; }
 .chat-main-commercial-shortcuts { grid-column:1 / -1; grid-row:1; display:flex; gap:12px; align-items:center; min-width:0; }
