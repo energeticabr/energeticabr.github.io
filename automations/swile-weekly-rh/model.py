@@ -11,6 +11,14 @@ LEGACY = 'DESPESASRECORRENTES'
 PREFIX = 'SWILE-RH:'
 PREPARING = '|PREPARANDO'
 
+TEXT_REPLACEMENTS = ((' ', ''), ('-', ''), ('.', ''), ('Á', 'A'), ('À', 'A'), ('Ã', 'A'),
+                     ('Â', 'A'), ('É', 'E'), ('Ê', 'E'), ('Í', 'I'), ('Ó', 'O'), ('Ô', 'O'),
+                     ('Õ', 'O'), ('Ú', 'U'), ('Ç', 'C'))
+PROFESSION_REPLACEMENTS = TEXT_REPLACEMENTS + (('/', ''), ('_', ''), ('\u00a0', ''),
+                                             ('\u0300', ''), ('\u0301', ''), ('\u0302', ''),
+                                             ('\u0303', ''), ('\u0327', ''))
+INVALID_PROFESSIONS = ('', '0', 'EMBRANCO', 'VALEALIMENTACAO')
+
 
 def normalized(value):
     return ''.join(c for c in unicodedata.normalize('NFD', str(value or '').strip()).upper()
@@ -25,6 +33,13 @@ def identity(value):
 
 def blank(value):
     return value is None or normalized(value) in {'', '0', 'EMBRANCO'}
+
+
+def valid_profession(value):
+    canonical = str(value or '').strip().upper()
+    for original, replacement in PROFESSION_REPLACEMENTS:
+        canonical = canonical.replace(original, replacement)
+    return canonical not in INVALID_PROFESSIONS
 
 
 def unpaid(row, allow_blank_status=False):
@@ -48,11 +63,15 @@ def plan_horizon(rh_rows, reference_date, excluded_supplier_ids):
         name = str(source.get('Title') or '').strip()
         branch = str(source.get('FILIAL') or '').strip()
         prop = str(source.get('IMOVEL') or 'TODOS').strip() or 'TODOS'
+        profession = str(source.get('PROFISSAO') or '').strip()
+        if not valid_profession(profession):
+            raise ValueError('Profissão ausente ou inválida no RH: ' + name)
         if not name or not branch or sid in ids or normalized(name) in names:
             raise ValueError('Nome, filial ou vínculo RH ausente/duplicado')
         ids.add(sid)
         names.add(normalized(name))
-        rows.append({'rhId': rid, 'supplierId': sid, 'name': name, 'branch': branch, 'property': prop})
+        rows.append({'rhId': rid, 'supplierId': sid, 'name': name, 'branch': branch,
+                     'property': prop, 'profession': profession})
     if not rows:
         return []
     rows.sort(key=lambda x: x['supplierId'])
@@ -75,7 +94,7 @@ def child_payload(plan, row, parent_id):
     key = plan['key'] + ':' + str(row['supplierId'])
     return {'Title': key, 'FOLHAOPERACAO': key, 'DESCRITIVOPROVISAO': str(identity(parent_id)),
             'FORNECEDOR': row['name'], 'FILIAL': row['branch'], 'IMOVEL': row['property'],
-            'PRODUTO': LABEL, 'OBS': LABEL, 'FORMAPGTO': '', 'QTD': '5', 'VALORTOTAL': '45', 'FRETE': '0',
+            'PRODUTO': row['profession'], 'OBS': LABEL, 'FORMAPGTO': '', 'QTD': '5', 'VALORTOTAL': '45', 'FRETE': '0',
             'STATUS': 'PAGAMENTO PREVISTO', 'PGTOAGENDADO': 'PENDENTE',
             'DATA': plan['createdDate'] + 'T12:00:00Z',
             'DATAPREVISTOPGTO': plan['dueDate'] + 'T12:00:00Z'}

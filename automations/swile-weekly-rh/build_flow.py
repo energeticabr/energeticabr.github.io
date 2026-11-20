@@ -99,17 +99,20 @@ def paged(prefix, query, previous=None):
     return a
 
 
-def norm(value):
+def norm(value, replacements=model.TEXT_REPLACEMENTS):
     value = 'toUpper(trim(string(coalesce(' + value + ",''))))"
-    for original, replacement in [(' ', ''), ('-', ''), ('.', ''), ('Á', 'A'), ('À', 'A'), ('Ã', 'A'),
-                                  ('Â', 'A'), ('É', 'E'), ('Ê', 'E'), ('Í', 'I'), ('Ó', 'O'), ('Ô', 'O'),
-                                  ('Õ', 'O'), ('Ú', 'U'), ('Ç', 'C')]:
+    for original, replacement in replacements:
         value = 'replace(' + value + ",'" + original + "','" + replacement + "')"
     return value
 
 
 def blank(value):
     return "contains(createArray('','0','EMBRANCO')," + norm(value) + ')'
+
+
+def invalid_profession(value):
+    invalid = ','.join(repr(label) for label in model.INVALID_PROFESSIONS)
+    return 'contains(createArray(' + invalid + '),' + norm(value, model.PROFESSION_REPLACEMENTS) + ')'
 
 
 def unpaid(row):
@@ -138,12 +141,13 @@ def check_children(prefix, previous):
     matched = "first(body('" + match + "'))"
     identity_ok = "if(equals(length(body('" + match + "')),0),true,and(" + ','.join(
         "equals(string(coalesce(" + row + "?['" + field + "'],''))," + matched + "?['" + prop + "'])"
-        for field, prop in [('FORNECEDOR', 'name'), ('FILIAL', 'branch'), ('IMOVEL', 'property')]) + '))'
+        for field, prop in [('FORNECEDOR', 'name'), ('FILIAL', 'branch'), ('IMOVEL', 'property'),
+                            ('PRODUTO', 'profession')]) + '))'
     key = "string(coalesce(" + row + "?['FOLHAOPERACAO'],''))"
     suffix = 'last(split(' + key + ",':'))"
     checks = [unpaid(row), default_business(row), 'startsWith(' + key + ",concat(outputs('Chave'),':'))",
               'if(isInt(' + suffix + '),greater(int(' + suffix + '),0),false)', identity_ok,
-              "equals(" + row + "?['PRODUTO'],'VALE ALIMENTAÇÃO')",
+              'not(' + invalid_profession(row + "?['PRODUTO']") + ')',
               "equals(substring(coalesce(" + row + "?['DATAPREVISTOPGTO'],'0000-00-00'),0,10),outputs('Data_Quarta'))"]
     checks += ['equals(' + number(row + "?['" + field + "']") + ',' + value + ')' for field, value in [('QTD', '5'), ('VALORTOTAL', '45'), ('FRETE', '0')]]
     child = {match: {'type': 'Query', 'inputs': {'from': "@body('Linhas')", 'where': "@equals(concat(outputs('Chave'),':',string(item()?['supplierId']))," + row + "?['FOLHAOPERACAO'])"}, 'runAfter': {}},
@@ -197,7 +201,7 @@ def build_definition(excluded_supplier_ids, start_date):
     excluded = sorted({model.identity(x) for x in excluded_supplier_ids})
     if type(start_date) is not date:
         raise ValueError('Start date must be a local calendar date')
-    rh_uri = "_api/web/lists(guid'" + RH + "')/items?$select=Id,Title,IDFORNECEDORORIGEM,FILIAL,IMOVEL&$orderby=Id&$top=500"
+    rh_uri = "_api/web/lists(guid'" + RH + "')/items?$select=Id,Title,IDFORNECEDORORIGEM,FILIAL,IMOVEL,PROFISSAO&$orderby=Id&$top=500"
     a = {'Agora_Brasilia': compose("@convertTimeZone(utcNow(),'UTC','E. South America Standard Time')")}
     variables = [('Excluidos', 'array', excluded), ('ParentId', 'string', ''), ('Resumo', 'array', [])]
     for prefix in ('RH', 'Antes', 'Depois'):
@@ -223,8 +227,11 @@ def build_definition(excluded_supplier_ids, start_date):
     a['Elegiveis'] = {'type': 'Query', 'inputs': {'from': "@variables('RHRows')", 'where': "@not(contains(variables('Excluidos'), int(item()?['IDFORNECEDORORIGEM'])))"}, 'runAfter': after('Validar_Origens')}
     prop = "trim(coalesce(item()?['IMOVEL'],''))"
     a['Linhas'] = select("@body('Elegiveis')", {'supplierId': "@int(item()?['IDFORNECEDORORIGEM'])", 'name': "@trim(coalesce(item()?['Title'],''))",
-        'branch': "@trim(coalesce(item()?['FILIAL'],''))", 'property': "@if(empty(" + prop + "),'TODOS'," + prop + ')'}, 'Elegiveis')
-    a['RH_Invalid'] = {'type': 'Query', 'inputs': {'from': "@body('Linhas')", 'where': "@or(lessOrEquals(item()?['supplierId'],0),empty(item()?['name']),empty(item()?['branch']))"}, 'runAfter': after('Linhas')}
+        'branch': "@trim(coalesce(item()?['FILIAL'],''))", 'profession': "@trim(coalesce(item()?['PROFISSAO'],''))",
+        'property': "@if(empty(" + prop + "),'TODOS'," + prop + ')'}, 'Elegiveis')
+    a['RH_Invalid'] = {'type': 'Query', 'inputs': {'from': "@body('Linhas')", 'where':
+        "@or(lessOrEquals(item()?['supplierId'],0),empty(item()?['name']),empty(item()?['branch']),"
+        + invalid_profession("item()?['profession']") + ')'}, 'runAfter': after('Linhas')}
     a['RH_IDs'] = select("@body('Linhas')", "@item()?['supplierId']", 'RH_Invalid')
     a['RH_Nomes'] = select("@body('Linhas')", '@' + norm("item()?['name']"), 'RH_IDs')
     a['RH_Filiais'] = select("@body('Linhas')", "@item()?['branch']", 'RH_Nomes')
@@ -263,7 +270,7 @@ def build_definition(excluded_supplier_ids, start_date):
     child_key = "concat(outputs('Chave'),':',string(items('Cada_Novo_Funcionario')?['supplierId']))"
     child_fields = {'Title': '@' + child_key, 'FOLHAOPERACAO': '@' + child_key, 'DESCRITIVOPROVISAO': "@variables('ParentId')",
         'FORNECEDOR': "@items('Cada_Novo_Funcionario')?['name']", 'FILIAL': "@items('Cada_Novo_Funcionario')?['branch']",
-        'IMOVEL': "@items('Cada_Novo_Funcionario')?['property']", 'PRODUTO': model.LABEL, 'OBS': model.LABEL, 'FORMAPGTO': '',
+        'IMOVEL': "@items('Cada_Novo_Funcionario')?['property']", 'PRODUTO': "@items('Cada_Novo_Funcionario')?['profession']", 'OBS': model.LABEL, 'FORMAPGTO': '',
         'QTD': '5', 'VALORTOTAL': '45', 'FRETE': '0', 'STATUS': 'PAGAMENTO PREVISTO', 'PGTOAGENDADO': 'PENDENTE',
         'DATA': "@concat(formatDateTime(outputs('Agora_Brasilia'),'yyyy-MM-dd'),'T12:00:00Z')",
         'DATAPREVISTOPGTO': "@concat(outputs('Data_Quarta'),'T12:00:00Z')"}

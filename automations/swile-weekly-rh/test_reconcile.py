@@ -83,7 +83,8 @@ class Store:
 
 def people(count=6):
     return [{'Id': i, 'IDFORNECEDORORIGEM': str(1000 + i), 'Title': 'PESSOA ' + str(i),
-             'FILIAL': '004 - OBRA TESTE', 'IMOVEL': 'TODOS'} for i in range(1, count + 1)]
+             'FILIAL': '004 - OBRA TESTE', 'IMOVEL': 'TODOS',
+             'PROFISSAO': 'MESTRE DE OBRAS' if i == 1 else 'PEDREIRO'} for i in range(1, count + 1)]
 
 
 class ReconciliationTests(unittest.TestCase):
@@ -113,6 +114,9 @@ class ReconciliationTests(unittest.TestCase):
             self.assertEqual(len(linked), 6)
             self.assertEqual({c['FORNECEDOR'] for c in linked}, {'PESSOA 1', 'PESSOA 2', 'PESSOA 3', 'PESSOA 4', 'PESSOA 5', 'PESSOA 6'})
             self.assertEqual({(c['QTD'], c['VALORTOTAL']) for c in linked}, {('5', '45')})
+            self.assertEqual({c['FORNECEDOR']: c['PRODUTO'] for c in linked},
+                             {r['Title']: r['PROFISSAO'] for r in people()})
+            self.assertEqual({c['OBS'] for c in linked}, {'VALE ALIMENTAÇÃO'})
 
     def test_repeat_and_next_day_repeat_make_no_writes_or_duplicate_rows(self):
         first = self.run_plan()
