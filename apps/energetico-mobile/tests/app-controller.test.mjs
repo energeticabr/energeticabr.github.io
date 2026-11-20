@@ -1084,6 +1084,12 @@ test('INSS home report uses the tax guides source and keeps the conversation int
   await h.view.emit('open-tax-guides-report');
   assert.equal(created.length,1);assert.equal(created[0].kind,'taxGuides');assert.equal(created[0].presentation,'report');
   assert.equal(typeof created[0].openMediaCollection,'function');assert.equal(opened.length,1);assert.equal(h.chatCalls.length,before);
+  for(const [source,port] of [['camera','capturePhoto'],['scan','scanDocument'],['files','pickDocuments'],['photos','pickPhotos']]){
+    h.native[port]=async options=>{assert.equal(options.desktopCamera,true);return [source];};
+    assert.deepEqual(await created[0].pickAttachments(source,{signal:new AbortController().signal}),[source]);
+  }
+  const cancelled=new AbortController();cancelled.abort();
+  await assert.rejects(()=>created[0].pickAttachments('camera',{signal:cancelled.signal}),{name:'AbortError'});
 });
 
 test("descritivo provisão abre localmente e reutiliza a galeria sem enviar comandos para a VM", async t => {

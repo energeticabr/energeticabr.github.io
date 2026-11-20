@@ -2,6 +2,7 @@ import { bindReportLandscape } from './report-landscape.js';
 import { addReportCloseControl } from './report-close-control.js';
 import { bindSearchableFilterSelects } from './searchable-filter-selects.js';
 import { PDF_ATTACHMENT_ICON } from './report-pdf-attachment-icon.js';
+import { openTaxGuideReportEditor } from './tax-guides-report-editor.js';
 
 const FIELDS = [['VENCIMENTO','Data vencimento'],['COMPETENCIA','Data competência'],['FILIAL','Filial'],['VALOR','Valor'],['TIPO','Tipo'],['STATUS','Status']];
 const FILTERS = [['COMPETENCIA','Competência'],['FILIAL','Filial'],['TIPO','Tipo'],['STATUS','Status']];
@@ -13,7 +14,7 @@ const amountLabel = value => {
   return Number.isFinite(number) ? number.toLocaleString('pt-BR',{style:'currency',currency:'BRL'}) : 'A informar';
 };
 
-export function createTaxGuidesReportView({document:doc=globalThis.document,data,openMediaCollection}={}) {
+export function createTaxGuidesReportView({document:doc=globalThis.document,data,openMediaCollection,pickAttachments}={}) {
   if (!doc?.body || typeof data?.loadSnapshot!=='function') throw new TypeError('O relatório requer documento e dados das guias.');
   const make=(tag,cls='',text)=>{const node=doc.createElement(tag);node.className=cls;if(text!==undefined)node.textContent=text;return node;};
   const root=make('div','tgr-backdrop');root.hidden=true;root.dataset.taxGuidesReport='';
@@ -29,7 +30,18 @@ export function createTaxGuidesReportView({document:doc=globalThis.document,data
   head.append(heading);table.append(head,body);scroll.append(table);panel.append(header,filterBar,feedback,scroll);root.append(panel);doc.body.append(root);
   const closeButton=addReportCloseControl({root,toolbar:header,onClose:close});
   const landscape=bindReportLandscape(root),filters=bindSearchableFilterSelects(filterBar);
-  let rows=[],loaded=false,revision=0,controller=null,attachmentController=null,context=null,destroyed=false;
+  let rows=[],loaded=false,revision=0,controller=null,attachmentController=null,context=null,destroyed=false,editor=null;
+  function edit(row,mode,trigger){
+    if(editor||root.hidden)return;
+    editor=openTaxGuideReportEditor({document:doc,host:root,background:panel,row,mode,data,pickAttachments,
+      async onChanged(){await load();if(!root.hidden)(body.querySelector(`[data-guide-id="${row.id}"] button`)||panel).focus({preventScroll:true});},
+      onClose(){editor=null;if(!root.hidden)trigger?.focus({preventScroll:true});}});
+  }
+  function action(row,mode,text){
+    const button=make('button','tgr-cell-action',text);button.type='button';button.dataset.guideAction=mode;
+    button.setAttribute('aria-label',`${mode==='amount'?'Informar valor da':'Anexar'} guia ${row.fields?.TIPO||''}, competência ${dateLabel(row.fields?.COMPETENCIA)}`);
+    button.addEventListener('click',()=>edit(row,mode,button));return button;
+  }
   function syncFilters(){
     for(const [field,select] of controls){
       const previous=select.value,values=[...new Set(rows.map(row=>String(row.fields?.[field]??'')).filter(Boolean))].sort((a,b)=>field==='COMPETENCIA'?b.localeCompare(a):a.localeCompare(b,'pt-BR'));
@@ -44,9 +56,11 @@ export function createTaxGuidesReportView({document:doc=globalThis.document,data
     const visible=rows.filter(row=>[...controls].every(([field,select])=>!select.value||String(row.fields?.[field]??'')===select.value));
     for(const row of visible){
       const tr=make('tr');tr.dataset.guideId=String(row.id);
-      for(const [field] of FIELDS){const value=row.fields?.[field];tr.append(make('td','',field==='VALOR'?amountLabel(value):field==='COMPETENCIA'||field==='VENCIMENTO'?dateLabel(value):String(value??'A informar')));}
+      for(const [field] of FIELDS){const value=row.fields?.[field],cell=make('td','',field==='VALOR'?amountLabel(value):field==='COMPETENCIA'||field==='VENCIMENTO'?dateLabel(value):String(value??'A informar'));
+        if(field==='VALOR'&&amountLabel(value)==='A informar'&&typeof data.saveEditor==='function'){cell.setAttribute('aria-label','A informar');cell.replaceChildren(action(row,'amount','A informar'));}
+        tr.append(cell);}
       const cell=make('td'),hasAttachments=row.hasAttachments??row.fields?.Attachments;
-      if(hasAttachments===false)cell.textContent='Guia pendente';
+      if(hasAttachments===false){cell.setAttribute('aria-label','Guia pendente');if(typeof data.saveEditor==='function'&&typeof pickAttachments==='function')cell.append(action(row,'attach','Guia pendente'));else cell.textContent='Guia pendente';}
       else{const button=make('button','tgr-attachment');button.type='button';button.setAttribute('aria-label',`Abrir guia ${row.fields?.TIPO||''}, competência ${dateLabel(row.fields?.COMPETENCIA)}`);button.innerHTML=PDF_ATTACHMENT_ICON;button.append(make('span','','PDF'));button.addEventListener('click',()=>void preview(row,button));cell.append(button);}
       tr.append(cell);body.append(tr);
     }
@@ -65,6 +79,7 @@ export function createTaxGuidesReportView({document:doc=globalThis.document,data
     finally{if(attachmentController===current)attachmentController=null;trigger.disabled=false;}
   }
   async function load(){
+    editor?.close();
     controller?.abort();const active=new AbortController(),current=++revision;controller=active;loaded=false;rows=[];root.setAttribute('aria-busy','true');refresh.disabled=true;body.replaceChildren();feedback.textContent='Consultando guias INSS e FGTS…';
     try{
       const snapshot=await data.loadSnapshot({refresh:true,signal:active.signal});
@@ -76,7 +91,7 @@ export function createTaxGuidesReportView({document:doc=globalThis.document,data
   }
   function close(){
     if(root.hidden)return;
-    revision++;controller?.abort();attachmentController?.abort();filters.close();root.hidden=true;root.setAttribute('aria-busy','false');landscape.update();
+    revision++;controller?.abort();attachmentController?.abort();editor?.close();filters.close();root.hidden=true;root.setAttribute('aria-busy','false');landscape.update();
     if(context){const previous=context;context=null;if(previous.app&&!previous.inert)previous.app.removeAttribute('inert');doc.body.style.overflow=previous.overflow;(previous.focus?.isConnected?previous.focus:doc.querySelector('[data-action="open-tax-guides-report"]'))?.focus({preventScroll:true});}
   }
   root.addEventListener('click',event=>{if(event.target===root)close();});
