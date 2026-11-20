@@ -87,7 +87,8 @@
   overscroll-behavior: contain;
 }
 .payroll-links-main, .payroll-links-list, .payroll-links-form { display: grid; gap: 10px; }
-.payroll-links-panel button:not(.report-close-control, .sfs-arrow), .payroll-links-panel :is(input, select) {
+.payroll-links-overlay[data-report-navigation-blocked] .report-navigation { display: none; }
+.payroll-links-panel button:not(.report-close-control, .sfs-arrow, .report-navigation-arrow), .payroll-links-panel :is(input, select) {
   min-width: 0;
   min-height: 44px;
   border: 1px solid #91abb6;
@@ -98,7 +99,7 @@
   font-size: 1rem;
 }
 .payroll-links-panel :is(button, input, select):focus-visible { outline: 2px solid #1476c8; outline-offset: 2px; }
-.payroll-links-panel button:not(.report-close-control, .sfs-arrow) { font-size: .875rem; font-weight: 750; }
+.payroll-links-panel button:not(.report-close-control, .sfs-arrow, .report-navigation-arrow) { font-size: .875rem; font-weight: 750; }
 .payroll-links-panel button:disabled { cursor: default; opacity: .55; }
 .payroll-links-panel .payroll-links-confirm:not(:disabled) { background: var(--brand); color: white; border-color: var(--brand); }
 .payroll-links-panel .sfs-arrow { color: var(--brand-strong); }

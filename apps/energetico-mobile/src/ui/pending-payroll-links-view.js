@@ -138,6 +138,11 @@ export function createPendingPayrollLinksView({ root, request, onClose, recovery
     busy = value;
     panel.toggleAttribute('data-loading', value);
     refresh.disabled = value || Boolean(item);
+    backdrop.toggleAttribute('data-report-navigation-blocked', !canNavigate());
+  }
+
+  function canNavigate() {
+    return !busy && !item;
   }
 
   function startRequest() {
@@ -514,7 +519,8 @@ export function createPendingPayrollLinksView({ root, request, onClose, recovery
     }
     if (event.key !== 'Tab') return;
     const controls = [...panel.querySelectorAll('button:enabled, input:enabled, select:enabled')]
-      .filter(node => !node.closest('[hidden]') && node.tabIndex >= 0);
+      .filter(node => !node.closest('[hidden]') && node.tabIndex >= 0
+        && (canNavigate() || !node.closest('.report-navigation')));
     if (!controls.length || (event.shiftKey ? [panel, controls[0]].includes(doc.activeElement) : doc.activeElement === controls.at(-1))) {
       event.preventDefault();
       (event.shiftKey ? controls.at(-1) : controls[0])?.focus();
@@ -533,6 +539,8 @@ export function createPendingPayrollLinksView({ root, request, onClose, recovery
   backdrop.addEventListener('keydown', keydown);
 
   return {
+    element: backdrop,
+    canNavigate,
     open() { return renderPage(1); },
     back,
     destroy() {

@@ -1437,7 +1437,7 @@ function rhidMascotReportMarkup(report) {
   const page = report.page || 0;
   const pageCount = Math.ceil(days.length / rhidMascotPageSize);
   const visibleDays = days.slice(page * rhidMascotPageSize, (page + 1) * rhidMascotPageSize);
-  return `<div class="chat-confirmation-backdrop chat-rhid-mascot-backdrop" data-popup-backdrop="true" data-popup-close-action="close-rhid-mascot-report">
+  return `<div class="chat-confirmation-backdrop chat-rhid-mascot-backdrop" data-report-action="open-rhid-mascot-report" data-popup-backdrop="true" data-popup-close-action="close-rhid-mascot-report">
   <section class="chat-rhid-mascot" data-rhid-mascot-report role="dialog" aria-modal="true" aria-labelledby="rhid-mascot-title" tabindex="-1">
     <div class="chat-rhid-mascot__top">
       <div class="report-close-bar">
@@ -1491,6 +1491,7 @@ function rhidMascotReportMarkup(report) {
       <button type="button" data-action="rhid-mascot-page" data-value="1" aria-label="Próxima página"${page + 1 === pageCount ? ' disabled' : ''}>→</button>
     </nav>` : ''}
     </div>
+    ${report.saving ? '' : reportNavigationMarkup('open-rhid-mascot-report')}
   </section></div>`;
 }
 
@@ -6385,7 +6386,7 @@ export function createChatView(root, { onOpenSettings, onDemoAccess, onSignOut, 
             return ['messageId', 'personKey', 'slot'].every(key => control.dataset[key] === mascotPunch[key]);
           }
           if (mascotFocus?.name) return control.name === mascotFocus.name;
-          return mascotFocus?.dataset.action && ['action', 'value', 'messageId', 'personKey', 'slot']
+          return mascotFocus?.dataset.action && ['action', 'value', 'messageId', 'personKey', 'slot', 'reportDirection']
             .every(key => control.dataset[key] === mascotFocus.dataset[key]);
         });
         (previousControl || dialog.querySelector('[data-role="rhid-adjustment-time"]:enabled') || dialog).focus({ preventScroll: true });
@@ -6553,6 +6554,10 @@ export function createChatView(root, { onOpenSettings, onDemoAccess, onSignOut, 
     render,
     mountPendingPayrollLinks(createPanel, options) {
       return !demo && createPanel({ ...options, root });
+    },
+    getRhidMascotNavigationRoot() {
+      const panel = activeModalDialog();
+      return panel?.matches('[data-rhid-mascot-report]') ? panel.closest('.chat-rhid-mascot-backdrop') : null;
     },
     chooseCaptureMode: () => cameraChooser.choose(),
     openPowerBiDashboard,

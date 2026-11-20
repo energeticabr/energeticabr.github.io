@@ -5,6 +5,11 @@ import { createAppController } from '../src/app-controller.js';
 import { createConversationStore } from '../src/chat/conversation-store.js';
 import { createSicoobTransactionReportView } from '../src/ui/sicoob-transaction-report-view.js';
 import { createReportOrientationController } from '../src/native/report-orientation.js';
+import { createChatView } from '../src/ui/chat-view.js';
+import { createTaxGuidesReportView } from '../src/ui/tax-guides-report-view.js';
+import { createCargosView } from '../src/ui/cargos-view.js';
+import { createHrPayrollGallery } from '../src/ui/hr-payroll-gallery-view.js';
+import { createStageGanttView } from '../src/ui/stage-gantt-view.js';
 
 // Literal routes catch wrong dispatch and cross-color navigation independently
 // of the helper's neighbor calculation. Only UI/network boundaries are doubled.
@@ -37,6 +42,95 @@ const factories = {
   'open-task-association-report': 'taskAssociationReportViewFactory',
 };
 const tick = () => new Promise(resolve => setImmediate(resolve));
+
+test('the red mascot arrows switch the real panels in both directions', async t => {
+  const dom = new JSDOM('<main id="app"></main>');
+  const document = dom.window.document;
+  const view = createChatView(document.querySelector('#app'));
+  const store = createConversationStore();
+  const payrollRequests = [];
+  const controller = createAppController({
+    view, store,
+    auth: { initialize: async () => ({ name: 'Teste', homeAccountId: 'red-reports' }), getToken: async () => 'fixture' },
+    native: { importSharedItems: async () => [] },
+    client: {
+      sendText: async () => ({ status: 'processed', messages: [] }),
+      getRhidAttendanceReport: async date => ({ date, rows: [] }),
+      launchGalleryRequest: async operation => {
+        payrollRequests.push(operation);
+        if (operation === 'payroll_targets') return { items: [], paymentTypes: [] };
+        return { page: 1, pageSize: 25, total: 1, items: [
+          { id: '41', revision: 'original', supplier: 'Fornecedor teste', totalCents: 1000,
+            remainingCents: 1000, allocations: [] },
+        ] };
+      },
+    },
+    registrationGalleryDataFactory: async () => ({ loadSnapshot: async () => ({ rows: [] }) }),
+    registrationGalleryFactory: options => createTaxGuidesReportView({ ...options, document }),
+    attendanceSummaryDataFactory: async () => ({
+      loadSupplierDirectory: async () => [], loadRhidPresences: async () => [],
+    }),
+    cargosDataFactory: async () => ({ loadSnapshot: async () => ({ rows: [] }) }),
+    cargosFactory: options => createCargosView({ ...options, document }),
+    hrPayrollGalleryDataFactory: async () => ({
+      loadPage: async () => ({ gallery: 'HOLERITE', rows: [] }),
+      downloadPayslip: async () => new Blob(),
+    }),
+    hrPayrollGalleryFactory: options => createHrPayrollGallery({ ...options, document }),
+    stageProgressDataFactory: async () => ({ loadSnapshot: async () => ({ complete: true, launches: [], activities: [] }) }),
+    ganttFactory: options => createStageGanttView({ ...options, document }),
+  });
+  t.after(() => { controller.stop(); dom.window.close(); });
+  await controller.start();
+  store.ingestRemoteMessages([{ type: 'poll', question: 'QUAL ÁREA VOCÊ DESEJA ACESSAR?', options: [
+    { id: 'group_pending', label: 'PENDÊNCIAS' }, { id: 'group_supplies', label: 'SUPRIMENTOS' },
+    { id: 'group_human_resources', label: 'RECURSOS HUMANOS' },
+  ] }]);
+
+  const click = async selector => {
+    const button = document.querySelector(selector);
+    assert.ok(button, selector);
+    button.click();
+    for (let attempts = 0; attempts < 100; attempts++) {
+      await new Promise(resolve => setTimeout(resolve, 5));
+      if (!document.querySelector('[data-report-transition]') &&
+        !document.querySelector('.payroll-links-panel[data-loading]')) return;
+    }
+    assert.fail('report transition did not complete');
+  };
+  const visible = () => [...document.querySelectorAll('[data-report-action]')]
+    .filter(node => !node.closest('[hidden]')).map(node => node.dataset.reportAction);
+  const arrow = (action, direction) => `[data-report-action="${action}"]:not([hidden]) [data-report-direction="${direction}"]`;
+  const start = ['open-tax-guides-report', 'open-rhid-mascot-report', 'open-pending-payroll-links', 'open-cargos-table'];
+  const traverse = async (sequence, direction) => {
+    for (const [index, action] of sequence.entries()) {
+      assert.deepEqual(visible(), [action]);
+      if (sequence[index + 1]) await click(arrow(action, direction));
+    }
+  };
+  await click('[data-action="open-tax-guides-report"]');
+  await traverse(start, 'next');
+  await traverse([...start].reverse(), 'previous');
+  assert.equal(document.querySelector(arrow(start[0], 'previous')), null);
+  await click('[data-report-action="open-tax-guides-report"]:not([hidden]) .report-close-control');
+
+  await click('[data-action="open-pending-payroll-links"]');
+  const payroll = document.querySelector('[data-report-action="open-pending-payroll-links"]');
+  assert.ok(!payroll.hasAttribute('data-report-navigation-blocked'));
+  await click('[data-payroll-action="edit"]');
+  assert.ok(payroll.hasAttribute('data-report-navigation-blocked'));
+  await click(arrow('open-pending-payroll-links', 'next'));
+  assert.deepEqual(visible(), ['open-pending-payroll-links']);
+  await click('[data-payroll-action="close"]');
+  assert.ok(payrollRequests.every(operation => ['payroll_pending', 'payroll_targets'].includes(operation)));
+
+  const end = ['open-holerite-report', 'open-stage-gantt'];
+  await click('[data-action="open-holerite-report"]');
+  await traverse(end, 'next');
+  assert.equal(document.querySelector(arrow(end[1], 'next')), null);
+  await traverse([...end].reverse(), 'previous');
+});
+
 function deferred() {
   let resolve;
   const promise = new Promise(yes => { resolve = yes; });
@@ -252,7 +346,7 @@ for (const group of groups) {
 
 for (const [from, direction] of [
   ['open-pending-provisions', 'previous'], ['open-document-control-report', 'next'],
-  ['open-cargos-table', 'previous'], ['open-pending-supplier-payments-report', 'next'],
+  ['open-tax-guides-report', 'previous'], ['open-stage-gantt', 'next'],
   ['open-commercial-receipts', 'previous'], ['open-sac-pathologies', 'next'],
   ['open-depreciation-report', 'previous'],
   ['open-task-association-report', 'previous'], ['open-task-association-report', 'next'], ['unknown', 'next'],

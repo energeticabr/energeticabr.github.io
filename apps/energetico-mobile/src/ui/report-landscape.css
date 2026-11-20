@@ -2,6 +2,8 @@
    copy dims HOME, so the incoming report cannot darken it a second time. */
 body:has(> .report-transition) :is(
  .report-landscape-viewport:has([role="dialog"]),
+ [data-report-action="open-rhid-mascot-report"],
+ [data-report-action="open-pending-payroll-links"],
  [data-pending-provisions-dialog]:has(.chat-pending-provisions--payments)
 ):not(.report-transition *) {
  background:transparent!important;

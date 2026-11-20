@@ -3049,7 +3049,6 @@ export function createAppController({
     if (!account || stopped || sessionStatus !== 'authenticated' || flowBusy()
       || store.getState().activeFlow || pendingPayrollLinks || pendingPayrollLinksOpening) return false;
     resetMascotNavigationOverlays();
-    disposeRhidMascot();
     const opening = {};
     const reportAccount = account;
     pendingPayrollLinksOpening = opening;
@@ -3076,6 +3075,10 @@ export function createAppController({
         makeRequestId: newUploadMessageId,
       });
       if (!panel) return false;
+      panel = decorateReportNavigation(panel, {
+        action: PENDING_PAYROLL_LINKS_ACTION,
+        onNavigate: target => navigateMascotReport(PENDING_PAYROLL_LINKS_ACTION, target, panel),
+      });
       pendingPayrollLinks = panel;
       if (typeof native.onReportBack === 'function') {
         void Promise.resolve().then(() => native.onReportBack(() => {
@@ -6697,6 +6700,9 @@ export function createAppController({
   function reportNavigationPanel(action) {
     switch (action) {
       case 'open-tax-guides-report': return registrationGalleries.get('taxGuidesReport');
+      case PENDING_PAYROLL_LINKS_ACTION: return pendingPayrollLinks;
+      case HOLERITE_REPORT_ACTION: return hrPayrollGalleryName === HOLERITE_REPORT_ACTION ? hrPayrollGallery : null;
+      case STAGE_GANTT_ACTION: return stageProgressSession?.gantt ? stageProgressReport : null;
       case 'open-dda-report': return registrationGalleries.get('ddaReport');
       case 'open-nfe-report': return registrationGalleries.get('nfeReport');
       case 'open-sicoob-transaction-report': return registrationGalleries.get('sicoobTransactionReport');
@@ -6708,7 +6714,7 @@ export function createAppController({
       case 'open-task-association-report': return taskAssociationReport;
       case 'open-cargos-table': return cargosTable;
       case 'open-attendance-summary': return attendanceSummaryReport;
-      case 'open-stage-progress': return stageProgressReport;
+      case 'open-stage-progress': return stageProgressSession?.gantt ? null : stageProgressReport;
       case 'open-supplier-payroll-report': return supplierPayrollReport;
       case 'open-trancid-report': return trancidReport;
       case 'open-contractor-control-report': return contractorControlReport;
@@ -6742,21 +6748,25 @@ export function createAppController({
   }
 
   async function navigateMascotReport(from, target, originPanel) {
-    if (!account || stopped || flowBusy() || store.getState().activeFlow) return false;
+    if (!account || stopped || flowBusy() || store.getState().activeFlow || mascotNavigationOpening) return false;
     const neighbors = getReportNeighbors(from);
     if (typeof target !== 'string' || (target !== neighbors.previous && target !== neighbors.next)) return false;
+    let sourceRoot;
     if (from === 'open-pending-provisions') {
       if (!pendingProvisionSnapshot || pendingProvisionReminderOpen) return false;
+      sourceRoot = globalThis.document?.querySelector('[data-pending-provisions-dialog]:has(.chat-pending-provisions--payments)');
+    } else if (from === RHID_MASCOT_ACTION) {
+      if (!rhidMascot || rhidMascot.saving) return false;
+      sourceRoot = view.getRhidMascotNavigationRoot?.();
+      if (!sourceRoot) return false;
     } else {
       const panel = reportNavigationPanel(from);
       if (!panel || (originPanel && panel !== originPanel)) return false;
-      if (panel.element && (!panel.element.isConnected || panel.element.hidden
-        || panel.element.closest?.('[hidden]') || panel.element.getAttribute?.('aria-hidden') === 'true')) return false;
+      if (panel.canNavigate && !panel.canNavigate()) return false;
+      sourceRoot = panel.element;
+      if (sourceRoot && (!sourceRoot.isConnected || sourceRoot.closest?.('[hidden],[inert],[aria-hidden="true"]'))) return false;
     }
-    const sourceRoot = reportNavigationPanel(from)?.element
-      || (from === 'open-pending-provisions' ? globalThis.document?.querySelector('[data-pending-provisions-dialog]:has(.chat-pending-provisions--payments)') : null);
     const navigation = { releaseOrientation: reportOrientationController.beginTransition() };
-    cancelMascotOrientationTransition();
     mascotNavigationOpening = navigation;
     navigation.releasePresentation = retainReportPresentation(sourceRoot, { onCancel() {
       if (mascotNavigationOpening !== navigation) return;
@@ -6783,6 +6793,11 @@ export function createAppController({
   }
 
   function resetMascotNavigationOverlays() {
+    if (rhidMascot) {
+      disposeRhidMascot();
+      view.closeRhidAttendanceAdjustment?.();
+      render();
+    }
     disposeTrancidReport();
     disposeRhidMonthlyReport();
     // Legacy payment reports do not close other overlays on open. Invalidate
@@ -6810,6 +6825,11 @@ export function createAppController({
   function openMascotReport(target) {
     switch (target) {
       case 'open-pending-provisions': return openPendingProvisions();
+      case 'open-tax-guides-report': return openRegistrationGallery('taxGuidesReport', 'open-tax-guides-report');
+      case RHID_MASCOT_ACTION: return openRhidMascotReport();
+      case PENDING_PAYROLL_LINKS_ACTION: return openPendingPayrollLinks();
+      case HOLERITE_REPORT_ACTION: return openHrPayrollGallery('HOLERITE', 'report');
+      case STAGE_GANTT_ACTION: return openStageProgress({ gantt: true });
       case 'open-dda-report': return openRegistrationGallery('ddaReport', 'action_dda_report');
       case 'open-nfe-report': return openRegistrationGallery('nfeReport', 'action_nfe_report');
       case 'open-sicoob-transaction-report': return openRegistrationGallery('sicoobTransactionReport', 'action_sicoob_transaction_report');
@@ -7657,6 +7677,10 @@ export function createAppController({
             },
           });
           if (!openingIsCurrent()) { panel?.destroy?.(); return false; }
+          if (isReport) panel = decorateReportNavigation(panel, {
+            action: HOLERITE_REPORT_ACTION,
+            onNavigate: target => navigateMascotReport(HOLERITE_REPORT_ACTION, target, panel),
+          });
           hrPayrollGallery = panel;
           hrPayrollGalleryName = panelName;
         }
@@ -8557,11 +8581,11 @@ export function createAppController({
         if (!report) {
           const document = globalThis.document;
           const panel = gantt
-            ? await ganttFactory({ data: { loadSnapshot: data.loadSnapshot,
+            ? decorateControllerReport(await ganttFactory({ data: { loadSnapshot: data.loadSnapshot,
               finalizeActivity: data.finalizeActivity, finalizeStage: data.finalizeStage,
               loadAssignments: (selection, options) => runStageAction('loadGanttAssignments', [selection], options),
               loadCostSnapshot: options => runStageAction('loadCostSnapshot', [], { ...options, reportNumber: 9 }),
-            }, document })
+            }, document }), STAGE_GANTT_ACTION)
             : decorateControllerReport(await stageProgressFactory({ data, document }), 'open-stage-progress');
           try { assertSession(); }
           catch (error) { panel?.destroy?.(); throw error; }
