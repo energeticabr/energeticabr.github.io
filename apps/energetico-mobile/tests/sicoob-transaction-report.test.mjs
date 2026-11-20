@@ -384,6 +384,33 @@ test('Pix proof is matched to the movement ID because its bank reference can be 
   }
 });
 
+test('opens the Energetico PDF for its own row for Pix and transfers without a numeric reference', async t => {
+  for (const description of ['PIX ENVIADO', 'TRANSFERÊNCIA TED']) {
+    await t.test(description, async () => {
+      const dom = new JSDOM('<main id="app"></main>');
+      const generated = 'Demonstrativo-Energetico-Sicoob-3.pdf';
+      let opened;
+      const view = createSicoobTransactionReportView({
+        document: dom.window.document,
+        data: {
+          async loadSnapshot() { return { rows: [{ ...payment(3, { DESCRICAO: description, REFERENCIABANCARIA: 'Pagamento' }), hasAttachments: true }] }; },
+          async listAttachments() { return [{ fileName: 'Demonstrativo-Energetico-Sicoob-2.pdf' }, { fileName: generated }, { fileName: 'Comprovante-Sicoob-Pix-3.pdf' }]; },
+          async downloadAttachment(id, name) { return [id, name]; },
+        },
+        async openMediaCollection(items) { opened = await Promise.all(items.map(item => item.source())); },
+      });
+      try {
+        await view.open();
+        const button = view.element.querySelector('.sicoob-transaction-receipt');
+        assert.ok(button, 'A generated PDF must be available for every transaction type');
+        button.click();
+        await new Promise(resolve => setImmediate(resolve));
+        assert.deepEqual(opened, [['3', generated]]);
+      } finally { view.destroy(); dom.window.close(); }
+    });
+  }
+});
+
 test('Pix without a confirmed recipient is presented as pending identification', async () => {
   const dom = new JSDOM('<main id="app"></main>');
   const view = createSicoobTransactionReportView({

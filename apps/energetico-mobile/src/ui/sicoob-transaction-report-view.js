@@ -70,6 +70,8 @@ function projectTransactions(snapshot) {
     const receiptName = isPix && /^\d+$/.test(transaction.id)
       ? `Comprovante-Sicoob-Pix-${transaction.id}.pdf`
       : /^\d{4,18}$/.test(transaction.reference) ? `Comprovante-Sicoob-${transaction.reference}.pdf` : '';
+    const generatedReceiptName = /^\d+$/.test(transaction.id)
+      ? `Demonstrativo-Energetico-Sicoob-${transaction.id}.pdf` : '';
     return {
       ...transaction,
       recipient: financialMovementRecipient(fields),
@@ -77,8 +79,9 @@ function projectTransactions(snapshot) {
       orderIds: sicoobLinkedOrderIds(fields),
       linkReviewed: fields[SICOOB_UNLINKED_REVIEW_FIELD] === true,
       receiptName,
+      generatedReceiptName,
       searchText: normalizeSearchText([...Object.values(transaction), dateLabel(transaction.date)].join(' ')),
-      hasReceipt: receiptName && (hasAttachments === true || (hasAttachments == null
+      hasReceipt: (receiptName || (hasAttachments === true && generatedReceiptName)) && (hasAttachments === true || (hasAttachments == null
         && (isPix ? Boolean(bankRecipient && bankRecipient.toUpperCase() !== 'N/A')
           : /\b(?:BOLETO|TIT|TITULO)\b/i.test(transaction.description)))),
     };
@@ -376,12 +379,13 @@ export function createSicoobTransactionReportView({ document: doc = globalThis.d
     try {
       const attachments = await data.listAttachments(transaction.id, { refresh: true, signal });
       if (!current()) return;
-      const receiptName = transaction.receiptName;
-      const receipt = attachments.find(item => item.fileName === receiptName);
+      const receipt = attachments.find(item => item.fileName === transaction.generatedReceiptName)
+        ?? attachments.find(item => item.fileName === transaction.receiptName);
       if (!receipt) {
         showNotice('Ainda não há comprovante Sicoob anexado a esta transação.');
         return;
       }
+      const receiptName = receipt.fileName;
       trigger.disabled = false;
       await openMediaCollection([{
         fileName: receiptName,

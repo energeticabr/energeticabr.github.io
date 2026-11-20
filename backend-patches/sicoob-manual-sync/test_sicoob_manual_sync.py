@@ -135,6 +135,17 @@ class RunnerTests(unittest.TestCase):
     def receipt(self, stage, payload, code=0):
         return self.module.parse_stage(stage, json.dumps(payload), code)
 
+    def test_generated_pdf_stage_is_shared_by_manual_and_scheduled_runs(self):
+        self.assertEqual(self.module.STAGES[-1][0], 'generated-pdf')
+        self.assertIn('sync_generated_receipts.py', self.module.STAGES[-1][1][-1])
+        self.assertEqual(self.receipt('generated-pdf', {'eligible':3,'attached':2,'already_attached':1,'failed':0}),
+                         {'created':0,'updated':2,'verified':0,'pendingDetails':0})
+        for payload in ({'eligible':2,'attached':1,'already_attached':0,'failed':1},
+                        {'eligible':3,'attached':1,'already_attached':0,'failed':0},
+                        {'eligible':0,'attached':0,'already_attached':0,'failed':False}):
+            with self.subTest(payload=payload),self.assertRaises(ValueError):
+                self.receipt('generated-pdf',payload)
+
     def test_statement_requires_real_bank_read_and_consistent_verified_counts(self):
         self.assertEqual(self.receipt('movements', {'status': 'ok', 'from': '2026-11-10', 'through': '2026-11-11', 'debits': 4, 'inserted': 1, 'existing': 3, 'excludedDebits': 2, 'unidentified': 1}), {'created': 1, 'updated': 0, 'verified': 4, 'pendingDetails': 0})
         for value in ({'status': 'not_due'}, {'status': 'ok', 'debits': 4, 'inserted': 1, 'existing': 2}, {'status': 'ok', 'debits': True, 'inserted': 1, 'existing': 0}):
