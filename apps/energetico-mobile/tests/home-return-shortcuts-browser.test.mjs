@@ -17,8 +17,8 @@ test('retorno com aviso e anexo restaura mascotes e abre relatórios reais no ce
     server: { host: '127.0.0.1', port: 0, hmr: false, watch: null, fs: { allow: [resolve(root, '../..')] } }, logLevel: 'silent' });
   try {
     await server.listen();
-    for (const width of [320, 365, 366, 375, 390, 414, 425, 426, 1365]) {
-      const { stdout, screenshot } = await runBrowserLayout(browser, { width, height: 844,
+    for (const [width,height] of [[320,844],[365,844],[366,844],[375,844],[390,844],[414,844],[425,844],[426,844],[1365,844],[568,320]]) {
+      const { stdout, screenshot } = await runBrowserLayout(browser, { width, height,
         captureScreenshot: Boolean(process.env.HOME_RETURN_SCREENSHOT_PREFIX),
         url: `http://127.0.0.1:${server.httpServer.address().port}/tests/fixtures/home-return-shortcuts.html?probe` });
       const dom = new JSDOM(stdout);
@@ -42,7 +42,7 @@ test('retorno com aviso e anexo restaura mascotes e abre relatórios reais no ce
         assert.equal(layout.reportReady, true, 'o clique precisa abrir e preencher o relatório, não só emitir evento');
         assert.equal(layout.taxReportReady,true,'INSS abre dados reais da fonte da galeria');
         assert.equal(layout.taxClosedBack,true,'fechar INSS volta ao menu e ao mascote');
-        assert.equal(layout.taxReportFits,true,'relatório INSS cabe na área disponível');
+        assert.equal(layout.taxReportFits,true,`relatório INSS cabe na área disponível em ${width}x${height}`);
         assert.deepEqual(layout.opened, ['payments','taxGuides']);
         assert.deepEqual(layout.reads, ['payments','taxGuides']);
         assert.deepEqual(layout.selected, [], 'abrir o relatório não muda o fluxo da conversa');

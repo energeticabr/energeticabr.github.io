@@ -5,9 +5,9 @@ import { createTaxGuidesReportView } from '../src/ui/tax-guides-report-view.js';
 import { decorateReportPrint, captureFilteredReport } from '../src/ui/report-print.js';
 
 const rows = [
-  { id:'7', hasAttachments:false, fields:{TIPO:'INSS',FILIAL:'004 - EDIFÍCIO XAVANTE',COMPETENCIA:'2026-10-20T12:00:00Z',VENCIMENTO:'2026-11-20T12:00:00Z',VALOR:null} },
-  { id:'8', hasAttachments:true, fields:{TIPO:'FGTS',FILIAL:'004 - EDIFÍCIO XAVANTE',COMPETENCIA:'2026-10-20T12:00:00Z',VENCIMENTO:'2026-11-20T12:00:00Z',VALOR:1407.4} },
-  { id:'9', hasAttachments:false, fields:{TIPO:'INSS',FILIAL:'004 - EDIFÍCIO XAVANTE',COMPETENCIA:'2026-11-20T12:00:00Z',VENCIMENTO:'2026-12-20T12:00:00Z',VALOR:0} },
+  { id:'7', hasAttachments:false, fields:{TIPO:'INSS',STATUS:'PENDENTE',FILIAL:'004 - EDIFÍCIO XAVANTE',COMPETENCIA:'2026-10-20T12:00:00Z',VENCIMENTO:'2026-11-20T12:00:00Z',VALOR:null} },
+  { id:'8', hasAttachments:true, fields:{TIPO:'FGTS',STATUS:'PENDENTE',FILIAL:'004 - EDIFÍCIO XAVANTE',COMPETENCIA:'2026-10-20T12:00:00Z',VENCIMENTO:'2026-11-20T12:00:00Z',VALOR:1407.4} },
+  { id:'9', hasAttachments:false, fields:{TIPO:'INSS',STATUS:'CONCLUÍDO',FILIAL:'004 - EDIFÍCIO XAVANTE',COMPETENCIA:'2026-11-20T12:00:00Z',VENCIMENTO:'2026-12-20T12:00:00Z',VALOR:0} },
 ];
 function setup(t, data, options={}) {
   const dom=new JSDOM('<!doctype html><body><main id="app"><button data-action="open-tax-guides-report">INSS</button></main></body>',{pretendToBeVisual:true});
@@ -23,7 +23,11 @@ test('INSS report reads the shared rows, distinguishes missing amounts from zero
   const {doc,report,trigger}=setup(t,{loadSnapshot:async()=>{reads++;return {rows};}});
   await report.open();
   assert.equal(reads,1);assert.equal(doc.querySelector('#app').hasAttribute('inert'),true);
-  assert.deepEqual([...report.element.querySelectorAll('th')].map(n=>n.textContent),['Data vencimento','Data competência','Filial','Valor','Tipo','Guia']);
+  assert.deepEqual([...report.element.querySelectorAll('th')].map(n=>n.textContent),['Data vencimento','Data competência','Filial','Valor','Tipo','Status','Guia']);
+  assert.match(report.element.querySelector('[data-guide-id="7"]').textContent,/PENDENTE/);
+  const status=report.element.querySelector('[name="STATUS"]');status.value='CONCLUÍDO';status.dispatchEvent(new doc.defaultView.Event('change',{bubbles:true}));
+  assert.equal(report.element.querySelectorAll('tbody tr').length,1);assert.ok(report.element.querySelector('[data-guide-id="9"]'));
+  status.value='';status.dispatchEvent(new doc.defaultView.Event('change',{bubbles:true}));
   assert.match(report.element.querySelector('[data-guide-id="7"]').textContent,/20\/11\/2026.*20\/10\/2026.*A informar.*INSS/);
   assert.match(report.element.querySelector('[data-guide-id="9"]').textContent,/0,00/);
   const type=report.element.querySelector('[name="TIPO"]');type.value='FGTS';type.dispatchEvent(new doc.defaultView.Event('change',{bubbles:true}));

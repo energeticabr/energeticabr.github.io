@@ -31,10 +31,12 @@ test('INSS and FGTS requests and attachment editor fit phones and Windows', { ti
       }
       assert.equal(layout.overflows, false, `${mode}/${width}: no overflow`);
       assert.equal(layout.cards, 2); assert.equal(layout.pending, true); assert.equal(layout.uploaded, true);
+      assert.equal(layout.pendingStatuses, 2);
       if (mode === 'editor') {
         assert.equal(layout.fileInput, true);
         for (const name of ['TIPO', 'FILIAL', 'COMPETENCIA']) assert.ok(layout.fields.some(field => field.name === name && (field.disabled || field.readOnly)), name);
-        for (const name of ['VENCIMENTO', 'VALOR']) assert.ok(layout.fields.some(field => field.name === name && !field.disabled && !field.readOnly), name);
+        for (const name of ['VENCIMENTO', 'VALOR', 'STATUS']) assert.ok(layout.fields.some(field => field.name === name && !field.disabled && !field.readOnly), name);
+        assert.equal(layout.fields.find(field => field.name === 'STATUS').value, 'PENDENTE');
         assert.equal(layout.fields.find(field => field.name === 'VENCIMENTO').value, '2026-11-20');
         assert.equal(layout.fields.find(field => field.name === 'COMPETENCIA').value, '2026-10-20');
       }

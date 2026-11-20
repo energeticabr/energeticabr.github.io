@@ -34,8 +34,8 @@ const report = createPaymentLedgerView({ document, data: { async loadPaymentsSna
 } } });
 view.on('open-payment-ledger', () => { opened.push('payments'); opening = report.open(); });
 const baseTaxReport=createTaxGuidesReportView({document,data:{async loadSnapshot(){reads.push('taxGuides');return {rows:[
-  {id:'7',hasAttachments:false,fields:{TIPO:'INSS',FILIAL:'004 - EDIFÍCIO XAVANTE',COMPETENCIA:'2026-10-20',VENCIMENTO:'2026-11-20',VALOR:null}},
-  {id:'8',hasAttachments:false,fields:{TIPO:'FGTS',FILIAL:'004 - EDIFÍCIO XAVANTE',COMPETENCIA:'2026-10-20',VENCIMENTO:'2026-11-20',VALOR:1407.4}},
+  {id:'7',hasAttachments:false,fields:{TIPO:'INSS',STATUS:'PENDENTE',FILIAL:'004 - EDIFÍCIO XAVANTE',COMPETENCIA:'2026-10-20',VENCIMENTO:'2026-11-20',VALOR:null}},
+  {id:'8',hasAttachments:false,fields:{TIPO:'FGTS',STATUS:'PENDENTE',FILIAL:'004 - EDIFÍCIO XAVANTE',COMPETENCIA:'2026-10-20',VENCIMENTO:'2026-11-20',VALOR:1407.4}},
 ]};}}});
 const taxReport=decorateReportPrint(baseTaxReport,{action:'open-tax-guides-report'});
 view.on('open-tax-guides-report',()=>{opened.push('taxGuides');opening=taxReport.open();});
@@ -56,8 +56,8 @@ if (new URLSearchParams(location.search).has('probe')) {
   report.close();
   const taxTrigger=root.querySelector('[data-action="open-tax-guides-report"]');taxTrigger.focus();taxTrigger.querySelector('img').click();await opening;
   await new Promise(resolve=>requestAnimationFrame(()=>requestAnimationFrame(resolve)));
-  taxReportReady=!taxReport.element.hidden&&taxReport.element.querySelectorAll('tbody tr').length===2&&taxReport.element.textContent.includes('20/10/2026')&&taxReport.element.textContent.includes('20/11/2026');
-  taxReportFits=document.documentElement.scrollWidth<=innerWidth+1&&taxReport.element.querySelector('.tgr-panel').scrollWidth<=taxReport.element.querySelector('.tgr-panel').clientWidth+1;
+  taxReportReady=!taxReport.element.hidden&&taxReport.element.querySelectorAll('tbody tr').length===2&&taxReport.element.textContent.includes('20/10/2026')&&taxReport.element.textContent.includes('20/11/2026')&&[...taxReport.element.querySelectorAll('tbody tr')].every(node=>node.textContent.includes('PENDENTE'));
+  taxReportFits=document.documentElement.scrollWidth<=innerWidth+1&&taxReport.element.querySelector('.tgr-panel').scrollWidth<=taxReport.element.querySelector('.tgr-panel').clientWidth+1&&taxReport.element.querySelector('.tgr-scroll').scrollWidth<=taxReport.element.querySelector('.tgr-scroll').clientWidth+1;
   taxReport.element.querySelector('.report-close-control').click();
   taxClosedBack=taxReport.element.hidden&&!root.hasAttribute('inert')&&document.activeElement===taxTrigger;
   view.render(state);
