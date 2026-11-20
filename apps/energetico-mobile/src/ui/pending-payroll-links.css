@@ -4,18 +4,17 @@
   align-self: start;
   margin-top: 12px;
   display: grid;
-  grid-template-rows: 25px 15px;
-  place-content: center;
+  grid-template: 30px 14px / minmax(0, 1fr);
   width: 44px;
-  min-height: 44px;
+  height: 44px;
   border-radius: 10px;
   background: #cf757a;
-  color: #533604;
   text-align: center;
+  overflow: hidden;
   cursor: pointer;
 }
-.chat-main-pending-payroll-links-shortcut span { font-size: 18px; line-height: 25px; }
-.chat-main-pending-payroll-links-shortcut strong { font: 800 8px/15px system-ui, sans-serif; }
+.chat-main-pending-payroll-links-shortcut span { align-self: center; font-size: 18px; line-height: 25px; }
+.chat-main-pending-payroll-links-shortcut strong { font: 800 8px/14px system-ui, sans-serif; }
 .chat-main-pending-payroll-links-shortcut:focus-visible { outline: 3px solid var(--accent); outline-offset: 3px; }
 /* Match the left rail's 12px inset and 56px row spacing. */
 .chat-message--pending-payroll-links > .chat-main-cargos-shortcut { margin-top: 68px; }

@@ -1551,11 +1551,11 @@ button.chat-rhid-attendance-card__cluster:focus-visible { outline: 3px solid #15
 .chat-message--commercial-top > .chat-main-rhid-shortcut {
   grid-column: 3; grid-row: 1; align-self: start; z-index: 1;
   display: grid; grid-template-rows: 30px 14px; width: 44px; height: 44px;
-  border-radius: 10px; background: #cf757a; color: #123b5d;
+  border-radius: 10px; background: #cf757a;
   font: 800 10px/14px system-ui, sans-serif; cursor: pointer; overflow: hidden;
 }
 .chat-main-rhid-shortcut:focus-visible { outline: 3px solid var(--accent); outline-offset: 3px; }
-.chat-message--commercial-top > .chat-main-tax-guides-shortcut { grid-column: 2; grid-row: 1; align-self: start; justify-self: end; display: grid; grid-template: 30px 14px / minmax(0, 1fr); width: 44px; height: 44px; border-radius: 10px; background: #cf757a; color: #123b5d; font: 800 10px/14px system-ui, sans-serif; cursor: pointer; overflow: hidden; }
+.chat-message--commercial-top > .chat-main-tax-guides-shortcut { grid-column: 2; grid-row: 1; align-self: start; justify-self: end; display: grid; grid-template: 30px 14px / minmax(0, 1fr); width: 44px; height: 44px; border-radius: 10px; background: #cf757a; font: 800 10px/14px system-ui, sans-serif; cursor: pointer; overflow: hidden; }
 .chat-main-tax-guides-shortcut img { display: block; width: 100%; height: 100%; object-fit: contain; }
 .chat-main-tax-guides-shortcut:focus-visible { outline: 3px solid var(--accent); outline-offset: 3px; }
 .chat-main-rhid-shortcut__art { position: relative; display: block; }
@@ -1576,9 +1576,14 @@ button.chat-rhid-attendance-card__cluster:focus-visible { outline: 3px solid #15
 .chat-main-contractor-control-shortcut { grid-column:3; grid-row:1; align-self:start; margin-top:292px; width:44px; height:44px; padding:0; border:0; border-radius:10px; background:#cf757a; overflow:hidden; cursor:pointer; }
 .chat-main-contractor-control-shortcut:focus-visible { outline:3px solid var(--accent); outline-offset:3px; }
 .chat-main-pending-supplier-payments-shortcut:focus-visible { outline:3px solid var(--accent); outline-offset:3px; }
-:is(.chat-main-holerite-shortcut, .chat-main-gantt-shortcut) { grid-column:3; grid-row:1; align-self:start; display:grid; grid-template:30px 14px / minmax(0, 1fr); width:44px; height:44px; padding:0; border:0; border-radius:10px; color:#fff; background:#cf757a; font:800 10px/14px system-ui,sans-serif; text-align:center; overflow:hidden; cursor:pointer; }
+:is(.chat-main-holerite-shortcut, .chat-main-gantt-shortcut) { grid-column:3; grid-row:1; align-self:start; display:grid; grid-template:30px 14px / minmax(0, 1fr); width:44px; height:44px; padding:0; border:0; border-radius:10px; background:#cf757a; font:800 10px/14px system-ui,sans-serif; text-align:center; overflow:hidden; cursor:pointer; }
 :is(.chat-main-holerite-shortcut, .chat-main-gantt-shortcut) img { display:block; width:100%; height:100%; object-fit:contain; }
-:is(.chat-main-holerite-shortcut, .chat-main-gantt-shortcut) span { background:#a02536; }
+:is(.chat-main-tax-guides-shortcut, .chat-main-rhid-shortcut,
+    .chat-main-holerite-shortcut, .chat-main-gantt-shortcut) > span:last-child,
+.chat-main-pending-payroll-links-shortcut > strong {
+  color: #fff;
+  background: #a02536;
+}
 :is(.chat-main-holerite-shortcut, .chat-main-gantt-shortcut):focus-visible { outline:3px solid var(--accent); outline-offset:3px; }
 .chat-main-holerite-shortcut { margin-top: 404px; }
 .chat-main-gantt-shortcut { margin-top: 460px; }

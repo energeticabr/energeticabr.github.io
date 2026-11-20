@@ -65,12 +65,30 @@ if (new URLSearchParams(location.search).has('probe')) {
 }
 const buttons = [...root.querySelectorAll('.chat-message--assistant button[data-action^="open-"]')];
 const payslip = buttons.find(button => button.dataset.action === 'open-holerite-report');
+const reportLabels = ['open-tax-guides-report', 'open-rhid-mascot-report', 'open-pending-payroll-links',
+  'open-holerite-report', 'open-stage-gantt'].map(action => {
+  const button = buttons.find(button => button.dataset.action === action);
+  const label = button.lastElementChild;
+  const style = getComputedStyle(label);
+  const bounds = label.getBoundingClientRect();
+  const buttonBounds = button.getBoundingClientRect();
+  return {
+    text: label.textContent,
+    color: style.color,
+    background: style.backgroundColor,
+    height: bounds.height,
+    fullWidth: bounds.left === buttonBounds.left && bounds.right === buttonBounds.right,
+    atBottom: bounds.bottom === buttonBounds.bottom,
+    fits: label.scrollWidth <= label.clientWidth,
+  };
+});
 document.documentElement.dataset.layout = JSON.stringify({
   submenuIcons, reportReady, taxReportReady, taxClosedBack, taxReportFits, opened, reads, selected,
   taxRhid:[...root.querySelectorAll('[data-action="open-tax-guides-report"],[data-action="open-rhid-mascot-report"]')].map(node=>{const r=node.getBoundingClientRect();return {x:r.x,y:r.y,right:r.right,bottom:r.bottom};}),
   taxCommercialOverlap:[...root.querySelectorAll('.chat-main-commercial-shortcuts > button,.chat-main-provisions-shortcut')].some(node=>{const a=node.getBoundingClientRect(),b=root.querySelector('[data-action="open-tax-guides-report"]').getBoundingClientRect();return a.left<b.right&&a.right>b.left&&a.top<b.bottom&&a.bottom>b.top;}),
   count: buttons.length, actions: buttons.map(button => button.dataset.action),
   payslip: payslip?.textContent.trim(),
+  reportLabels,
   buttons: buttons.map(button => { const rect = button.getBoundingClientRect(); return {
     left: rect.left, right: rect.right, width: rect.width, height: rect.height,
     external: button.closest('.chat-bubble') === null,
