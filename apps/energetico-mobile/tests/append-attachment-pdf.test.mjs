@@ -7,7 +7,7 @@ import {
 } from 'pdf-lib';
 import { getDocument, OPS, Util } from 'pdfjs-dist/legacy/build/pdf.mjs';
 
-import { appendAttachmentPdf, isAppendableAttachment } from '../src/web/append-attachment-pdf.js';
+import { appendAttachmentPdf, isAppendableAttachment, mergeAttachmentPdf } from '../src/web/append-attachment-pdf.js';
 
 function replaceGlobal(t, name, value) {
   const descriptor = Object.getOwnPropertyDescriptor(globalThis, name);
@@ -195,9 +195,17 @@ test('rejects encrypted PDFs rather than loading them with ignored encryption', 
     /criptograf|senha|encrypted/i);
 });
 
-async function signatureFile({ signed = true, direct = false } = {}) {
-  return pdfFile([[300, 200, '/Sig /ByteRange in ordinary text']], 'signed.pdf', pdf => {
-    const field = pdf.context.obj({ FT: 'Sig', T: PDFString.of('signature'), Type: 'Annot', Subtype: 'Widget', Rect: [0, 0, 0, 0], P: pdf.getPage(0).ref });
+async function signatureFile({ signed = true, direct = false, visible = false, hidden = false } = {}) {
+  return pdfFile([[300, 200, '/Sig /ByteRange in ordinary text']], 'signed.pdf', async pdf => {
+    const field = pdf.context.obj({ FT: 'Sig', T: PDFString.of('signature'), Type: 'Annot', Subtype: 'Widget',
+      Rect: visible ? [20, 60, 180, 85] : [0, 0, 0, 0], P: pdf.getPage(0).ref, F: hidden ? 2 : 4 });
+    if (visible) {
+      const font = await pdf.embedFont(StandardFonts.Helvetica);
+      const appearance = pdf.context.flateStream('BT /SignedFont 10 Tf 3 10 Td (Assinatura visivel) Tj ET', {
+        Type: 'XObject', Subtype: 'Form', BBox: [0, 0, 160, 25], Resources: { Font: { SignedFont: font.ref } },
+      });
+      field.set(PDFName.of('AP'), pdf.context.obj({ N: pdf.context.register(appearance) }));
+    }
     if (signed) {
       const signature = pdf.context.obj({ Type: 'Sig', Filter: 'Adobe.PPKLite', SubFilter: 'adbe.pkcs7.detached', ByteRange: [0, 100, 200, 100], Contents: PDFHexString.of('30820100010203') });
       field.set(PDFName.of('V'), direct ? signature : pdf.context.register(signature));
@@ -220,6 +228,46 @@ test('does not confuse an empty signature field or signature-like text with an a
   const original = await signatureFile({ signed: false });
   const result = await appendAttachmentPdf(original, original.name, [await pdfFile([[50, 60, 'END']])]);
   assert.deepEqual(await pageTexts(result), ['/Sig /ByteRange in ordinary text', 'END']);
+});
+
+test('a separate collection copies digitally signed pages without modifying the original or carrying the signature field', async () => {
+  const signed = await signatureFile({ visible: true });
+  const hidden = await signatureFile({ hidden: true });
+  const bytes = new Uint8Array(await signed.arrayBuffer());
+  const combined = await mergeAttachmentPdf([{ blob: signed, name: signed.name },
+    { blob: hidden, name: hidden.name }], 'Vias assinadas.pdf');
+  assert.equal(combined.name, 'Vias assinadas.pdf');
+  assert.deepEqual(await pageTexts(combined), ['/Sig /ByteRange in ordinary text Assinatura visivel', '/Sig /ByteRange in ordinary text']);
+  const copy = await PDFDocument.load(await combined.arrayBuffer());
+  assert.equal(copy.getForm().getFields().length, 0);
+  assert.deepEqual(new Uint8Array(await signed.arrayBuffer()), bytes);
+});
+
+test('a collection refuses to expose layers turned off in a source PDF', async () => {
+  const layered = await pdfFile([[300, 200, 'Page']], 'layers.pdf', pdf => {
+    const hiddenLayer = pdf.context.register(pdf.context.obj({ Type: 'OCG', Name: PDFString.of('Hidden'), }));
+    pdf.catalog.set(PDFName.of('OCProperties'), pdf.context.obj({
+      OCGs: [hiddenLayer], D: { BaseState: 'OFF', OFF: [hiddenLayer] },
+    }));
+  });
+  await assert.rejects(mergeAttachmentPdf([{ blob: layered, name: layered.name, label: 'José' }], 'signed.pdf'),
+    /José.*camadas.*PDF estático/);
+});
+
+test('a collection reduces a valid 24 MP portrait scan while append keeps its existing limit', async t => {
+  const source = await imageFile(6000, 4000, 'jpeg', 6);
+  const smaller = await imageFile(28, 42);
+  await assert.rejects(appendAttachmentPdf(source, source.name, [smaller]), /20 milhões de pixels/);
+  let resized;
+  replaceGlobal(t, 'createImageBitmap', async () => ({ width: 4000, height: 6000, close() {} }));
+  replaceGlobal(t, 'OffscreenCanvas', class {
+    getContext() { return { drawImage: (_bitmap, _x, _y, width, height) => { resized = [width, height]; } }; }
+    async convertToBlob({ type }) { assert.equal(type, 'image/jpeg'); return smaller; }
+  });
+  const result = await mergeAttachmentPdf([{ blob: source, name: source.name }], 'Assinados.pdf');
+  const pdf = await PDFDocument.load(await result.arrayBuffer());
+  assert.deepEqual(resized, [2828, 4242]);
+  assert.deepEqual(pdf.getPage(0).getSize(), { width: 28, height: 42 });
 });
 
 test('flattens the existing filled form appearance without regenerating it from its value', async () => {

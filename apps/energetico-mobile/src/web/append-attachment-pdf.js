@@ -6,9 +6,12 @@ import { jpegOrientation } from '../native/jpeg-orientation.js';
 
 const MAX_BYTES = 60_000_000;
 const MAX_PAGES = 200;
+export { MAX_BYTES as PDF_COMPOSITION_MAX_BYTES, MAX_PAGES as PDF_COMPOSITION_MAX_PAGES };
 // Bound raster allocations before asking either pdf-lib or a browser to decode.
 const MAX_IMAGE_PIXELS = 20_000_000;
 const MAX_IMAGE_SIDE = 16_384;
+const MAX_COLLECTION_PHOTO_PIXELS = 48_000_000;
+const RESIZED_PHOTO_PIXELS = 12_000_000;
 const IMAGE_TYPES = new Set(['jpeg', 'jpg', 'png', 'gif', 'webp', 'bmp', 'avif', 'heic', 'heif']);
 const nameOf = value => PDFName.of(value);
 const textAt = (bytes, offset, length) => String.fromCharCode(...bytes.subarray(offset, offset + length));
@@ -32,12 +35,12 @@ export function isAppendableAttachment(blob, name) {
   return attachmentKind(blob, name) !== null;
 }
 
-function imageSize(width, height) {
+function imageSize(width, height, maxPixels = MAX_IMAGE_PIXELS) {
   if (!Number.isSafeInteger(width) || !Number.isSafeInteger(height) || width < 1 || height < 1) {
     throw new Error('Imagem inválida: dimensões ausentes ou corrompidas.');
   }
-  if (width > MAX_IMAGE_SIDE || height > MAX_IMAGE_SIDE || width * height > MAX_IMAGE_PIXELS) {
-    throw new Error('A imagem excede a resolução segura: 20 milhões de pixels e 16.384 pixels por lado. Reduza suas dimensões.');
+  if (width > MAX_IMAGE_SIDE || height > MAX_IMAGE_SIDE || width * height > maxPixels) {
+    throw new Error(`A imagem excede a resolução segura: ${maxPixels / 1_000_000} milhões de pixels e 16.384 pixels por lado. Reduza suas dimensões.`);
   }
   return { width, height };
 }
@@ -50,7 +53,7 @@ function invalidImage() {
   throw new Error('Imagem inválida, corrompida ou em formato não suportado.');
 }
 
-function jpegSize(bytes, view, signal) {
+function jpegSize(bytes, view, signal, maxPixels) {
   let offset = 2;
   while (offset + 4 <= bytes.length) {
     checkAbort(signal);
@@ -64,16 +67,16 @@ function jpegSize(bytes, view, signal) {
     if (length < 2 || offset + length > bytes.length) break;
     if (marker >= 0xc0 && marker <= 0xcf && ![0xc4, 0xc8, 0xcc].includes(marker)) {
       if (length < 8) break;
-      return imageSize(view.getUint16(offset + 5), view.getUint16(offset + 3));
+      return imageSize(view.getUint16(offset + 5), view.getUint16(offset + 3), maxPixels);
     }
     offset += length;
   }
   return invalidImage();
 }
 
-function pngSize(bytes, view, signal) {
+function pngSize(bytes, view, signal, maxPixels) {
   if (bytes.length < 33 || textAt(bytes, 12, 4) !== 'IHDR') return invalidImage();
-  const size = imageSize(view.getUint32(16), view.getUint32(20));
+  const size = imageSize(view.getUint32(16), view.getUint32(20), maxPixels);
   let offset = 8;
   while (offset + 12 <= bytes.length) {
     checkAbort(signal);
@@ -117,7 +120,7 @@ function gifSize(bytes, view, signal) {
   return invalidImage();
 }
 
-function webpSize(bytes, view, signal) {
+function webpSize(bytes, view, signal, maxPixels) {
   let offset = 12, size;
   const uint24 = at => bytes[at] + bytes[at + 1] * 256 + bytes[at + 2] * 65536;
   while (offset + 8 <= bytes.length) {
@@ -127,13 +130,13 @@ function webpSize(bytes, view, signal) {
     if (type === 'ANIM' || type === 'ANMF') animatedImage();
     if (type === 'VP8X' && length >= 10) {
       if (bytes[data] & 2) animatedImage();
-      size = imageSize(uint24(data + 4) + 1, uint24(data + 7) + 1);
+      size = imageSize(uint24(data + 4) + 1, uint24(data + 7) + 1, maxPixels);
     } else if (type === 'VP8 ' && length >= 10) {
-      const frame = imageSize(view.getUint16(data + 6, true) & 0x3fff, view.getUint16(data + 8, true) & 0x3fff);
+      const frame = imageSize(view.getUint16(data + 6, true) & 0x3fff, view.getUint16(data + 8, true) & 0x3fff, maxPixels);
       size ||= frame;
     } else if (type === 'VP8L' && length >= 5) {
       const bits = view.getUint32(data + 1, true);
-      const frame = imageSize((bits & 0x3fff) + 1, ((bits >>> 14) & 0x3fff) + 1);
+      const frame = imageSize((bits & 0x3fff) + 1, ((bits >>> 14) & 0x3fff) + 1, maxPixels);
       size ||= frame;
     }
     offset = data + length + (length % 2);
@@ -175,12 +178,12 @@ function isoImageSize(bytes, view, signal) {
   return size;
 }
 
-function inspectImage(bytes, signal) {
+function inspectImage(bytes, signal, maxPixels) {
   const view = new DataView(bytes.buffer, bytes.byteOffset, bytes.byteLength);
-  if (bytes.length >= 4 && view.getUint16(0) === 0xffd8) return { type: 'jpeg', ...jpegSize(bytes, view, signal) };
-  if (bytes.length >= 8 && view.getUint32(0) === 0x89504e47 && view.getUint32(4) === 0x0d0a1a0a) return { type: 'png', ...pngSize(bytes, view, signal) };
+  if (bytes.length >= 4 && view.getUint16(0) === 0xffd8) return { type: 'jpeg', ...jpegSize(bytes, view, signal, maxPixels) };
+  if (bytes.length >= 8 && view.getUint32(0) === 0x89504e47 && view.getUint32(4) === 0x0d0a1a0a) return { type: 'png', ...pngSize(bytes, view, signal, maxPixels) };
   if (['GIF87a', 'GIF89a'].includes(textAt(bytes, 0, 6))) return { type: 'gif', ...gifSize(bytes, view, signal) };
-  if (textAt(bytes, 0, 4) === 'RIFF' && textAt(bytes, 8, 4) === 'WEBP') return { type: 'webp', ...webpSize(bytes, view, signal) };
+  if (textAt(bytes, 0, 4) === 'RIFF' && textAt(bytes, 8, 4) === 'WEBP') return { type: 'webp', ...webpSize(bytes, view, signal, maxPixels) };
   if (bytes.length >= 26 && textAt(bytes, 0, 2) === 'BM') {
     const core = view.getUint32(14, true) === 12;
     return { type: 'bmp', ...imageSize(core ? view.getUint16(18, true) : view.getInt32(18, true), core ? view.getUint16(20, true) : Math.abs(view.getInt32(22, true))) };
@@ -217,12 +220,15 @@ async function decodeBrowserImage(blob, signal) {
   } catch (error) { release(); throw error; }
 }
 
-async function convertImage(blob, signal) {
+async function convertImage(blob, signal, { resize = false, format = 'png' } = {}) {
   let decoded, canvas;
   try {
     decoded = await decodeBrowserImage(blob, signal);
     checkAbort(signal);
-    const { width, height } = imageSize(decoded.image.naturalWidth || decoded.image.width, decoded.image.naturalHeight || decoded.image.height);
+    const size = imageSize(decoded.image.naturalWidth || decoded.image.width, decoded.image.naturalHeight || decoded.image.height,
+      resize ? MAX_COLLECTION_PHOTO_PIXELS : MAX_IMAGE_PIXELS);
+    const scale = resize ? Math.min(1, Math.sqrt(RESIZED_PHOTO_PIXELS / (size.width * size.height))) : 1;
+    const width = Math.max(1, Math.floor(size.width * scale)), height = Math.max(1, Math.floor(size.height * scale));
     canvas = globalThis.document?.createElement('canvas');
     if (!canvas && typeof globalThis.OffscreenCanvas === 'function') canvas = new globalThis.OffscreenCanvas(width, height);
     if (!canvas) throw new Error('O navegador não suporta converter esta imagem em PDF. Use JPEG ou PNG.');
@@ -231,14 +237,15 @@ async function convertImage(blob, signal) {
     if (!context) throw new Error('Não foi possível converter a imagem no navegador. Use JPEG ou PNG.');
     context.drawImage(decoded.image, 0, 0, width, height);
     checkAbort(signal);
-    const png = typeof canvas.convertToBlob === 'function'
-      ? await canvas.convertToBlob({ type: 'image/png' })
-      : await new Promise(resolve => canvas.toBlob(resolve, 'image/png'));
+    const type = `image/${format}`;
+    const encoded = typeof canvas.convertToBlob === 'function'
+      ? await canvas.convertToBlob({ type, quality: .92 })
+      : await new Promise(resolve => canvas.toBlob(resolve, type, .92));
     checkAbort(signal);
-    if (!png || png.size > MAX_BYTES) throw new Error('Não foi possível converter a imagem com segurança dentro do limite de 60 MB.');
-    const bytes = new Uint8Array(await png.arrayBuffer());
+    if (!encoded || encoded.size > MAX_BYTES) throw new Error('Não foi possível converter a imagem com segurança dentro do limite de 60 MB.');
+    const bytes = new Uint8Array(await encoded.arrayBuffer());
     checkAbort(signal);
-    if (inspectImage(bytes, signal).type !== 'png') return invalidImage();
+    if (inspectImage(bytes, signal).type !== format) return invalidImage();
     return bytes;
   } finally {
     if (canvas) { canvas.width = 0; canvas.height = 0; }
@@ -271,7 +278,7 @@ async function rejectDigitalSignatures(pdf, signal) {
   }
 }
 
-function flattenExistingAppearances(pdf, signal) {
+function flattenExistingAppearances(pdf, signal, separateCopy) {
   const acroForm = pdf.catalog.lookupMaybe(nameOf('AcroForm'), PDFDict);
   if (!acroForm) return;
   if (acroForm.has(nameOf('XFA'))) throw new Error('Formulários XFA não podem ser acrescentados sem perder sua aparência. Converta o formulário para PDF estático.');
@@ -279,18 +286,27 @@ function flattenExistingAppearances(pdf, signal) {
     const form = pdf.getForm();
     for (const field of form.getFields()) {
       checkAbort(signal);
+      const widgets = field.acroField.getWidgets();
       // A blank, unsigned signature placeholder has no appearance to preserve.
       if (field instanceof PDFSignature) {
-        for (const widget of field.acroField.getWidgets()) {
+        const omit = separateCopy && widgets.every(widget => {
+          const { width, height } = widget.getRectangle();
+          return widget.getFlags() & (1 | 2 | 32) || !width || !height;
+        });
+        for (const widget of widgets) {
           const rectangle = widget.getRectangle();
-          if (!widget.AP()?.get(nameOf('N')) && (!rectangle.width || !rectangle.height)) {
+          if (omit || (!widget.AP()?.get(nameOf('N')) && (!rectangle.width || !rectangle.height))) {
             widget.setNormalAppearance(pdf.context.register(pdf.context.flateStream('', {
               Type: 'XObject', Subtype: 'Form', BBox: [0, 0, 1, 1], Resources: {},
             })));
           }
         }
+        if (omit) {
+          form.removeField(field);
+          continue;
+        }
       }
-      for (const widget of field.acroField.getWidgets()) {
+      for (const widget of widgets) {
         checkAbort(signal);
         // Flattening ignores annotation visibility and could expose internal
         // values. A static export is required when view/print visibility differs.
@@ -330,18 +346,30 @@ function addImagePage(pdf, image, orientation) {
 }
 
 /** Compose a new PDF in memory. Persisting/replacing the original is the caller's job. */
-export async function appendAttachmentPdf(originalBlob, originalName, additions, { signal, onProgress } = {}) {
-  checkAbort(signal);
+export async function appendAttachmentPdf(originalBlob, originalName, additions, options = {}) {
+  checkAbort(options.signal);
   if (!Array.isArray(additions) || !additions.length) throw new Error('Selecione ao menos um arquivo para acrescentar ao anexo.');
   const entries = [{ blob: originalBlob, name: originalName || originalBlob?.name }, ...additions.map(blob => ({ blob, name: blob?.name }))];
+  return composePdf(entries, originalName || originalBlob?.name, options, true);
+}
+
+// A separate copy can keep the visible pages of signed PDFs. Cryptographic
+// signatures, which cover the original bytes, belong to the original files.
+export async function mergeAttachmentPdf(entries, name, options = {}) {
+  if (!entries.length) throw new Error('Nenhum arquivo para reunir no PDF.');
+  return composePdf(entries, name, options, false);
+}
+
+async function composePdf(sources, fileName, { signal, onProgress }, rejectSigned) {
   let inputBytes = 0;
-  for (const entry of entries) {
+  const entries = sources.map(({ blob, name, label }) => {
     checkAbort(signal);
-    entry.kind = attachmentKind(entry.blob, entry.name);
-    if (!entry.kind) throw new Error('Arquivo vazio, inválido ou em formato não suportado. Selecione PDF ou uma imagem estática.');
-    inputBytes += entry.blob.size;
+    const kind = attachmentKind(blob, name);
+    if (!kind) throw new Error('Arquivo vazio, inválido ou em formato não suportado. Selecione PDF ou uma imagem estática.');
+    inputBytes += blob.size;
     if (inputBytes > MAX_BYTES) throw new Error('O tamanho total dos arquivos excede o limite de 60 MB.');
-  }
+    return { blob, kind, label };
+  });
   if (entries.length > MAX_PAGES) throw new Error('O PDF final não pode exceder 200 páginas.');
   // Each source completes its read, inspection/parse, and appended pages;
   // creating the output and serializing it are two additional real units.
@@ -357,7 +385,7 @@ export async function appendAttachmentPdf(originalBlob, originalName, additions,
   const output = await PDFDocument.create();
   checkAbort(signal);
   progress(1, { phase: 'created', completedSources: 0 });
-  for (const [index, entry] of entries.entries()) {
+  async function appendSource(entry, index) {
     checkAbort(signal);
     const bytes = new Uint8Array(await entry.blob.arrayBuffer());
     checkAbort(signal);
@@ -376,9 +404,12 @@ export async function appendAttachmentPdf(originalBlob, originalName, additions,
       if (!count) throw new Error('O PDF selecionado está vazio, sem páginas.');
       if (output.getPageCount() + count > MAX_PAGES) throw new Error('O PDF final não pode exceder 200 páginas.');
       progress(3 + index * 3, { phase: 'parsed', completedSources: index, totalPages: count });
-      await rejectDigitalSignatures(source, signal);
+      if (rejectSigned) await rejectDigitalSignatures(source, signal);
+      else if (source.catalog.has(nameOf('OCProperties'))) {
+        throw new Error('O PDF contém camadas com visibilidade própria. Use uma cópia em PDF estático para preservar o que aparece no original.');
+      }
       checkAbort(signal);
-      flattenExistingAppearances(source, signal);
+      flattenExistingAppearances(source, signal, !rejectSigned);
       // One copier per source preserves shared fonts/images instead of multiplying
       // their byte size for every page. The source is already bounded to 200 pages.
       const copied = await output.copyPages(source, source.getPageIndices());
@@ -393,16 +424,18 @@ export async function appendAttachmentPdf(originalBlob, originalName, additions,
       }
     } else {
       if (output.getPageCount() >= MAX_PAGES) throw new Error('O PDF final não pode exceder 200 páginas.');
-      const metadata = inspectImage(bytes, signal);
+      const metadata = inspectImage(bytes, signal, rejectSigned ? MAX_IMAGE_PIXELS : MAX_COLLECTION_PHOTO_PIXELS);
+      const resize = metadata.width * metadata.height > MAX_IMAGE_PIXELS;
+      const jpeg = metadata.type === 'jpeg';
       progress(3 + index * 3, { phase: 'inspected', completedSources: index, totalPages: 1 });
       let image;
       try {
-        if (metadata.type === 'jpeg') image = await output.embedJpg(bytes);
-        else if (metadata.type === 'png') image = await output.embedPng(bytes);
+        if (!resize && jpeg) image = await output.embedJpg(bytes);
+        else if (!resize && metadata.type === 'png') image = await output.embedPng(bytes);
         else {
-          const converted = await convertImage(entry.blob, signal);
+          const converted = await convertImage(entry.blob, signal, { resize, format: jpeg ? 'jpeg' : 'png' });
           checkAbort(signal);
-          image = await output.embedPng(converted);
+          image = jpeg ? await output.embedJpg(converted) : await output.embedPng(converted);
         }
         checkAbort(signal);
         // Compress/flush this image now so decoded pixel buffers can be released
@@ -413,15 +446,24 @@ export async function appendAttachmentPdf(originalBlob, originalName, additions,
         checkAbort(signal);
         throw new Error(`Não foi possível converter a imagem em PDF. ${cause?.message || 'Imagem inválida ou não suportada.'}`, { cause });
       }
-      addImagePage(output, image, metadata.type === 'jpeg' ? jpegOrientation(bytes) : 1);
+      // The browser decoder has already applied EXIF to resized JPEGs.
+      addImagePage(output, image, jpeg && !resize ? jpegOrientation(bytes) : 1);
       progress(4 + index * 3, { phase: 'append', completedSources: index + 1, appendedPages: 1, totalPages: 1 });
+    }
+  }
+  for (const [index, entry] of entries.entries()) {
+    try { await appendSource(entry, index); }
+    catch (error) {
+      checkAbort(signal);
+      if (!entry.label) throw error;
+      throw new Error(`${entry.label}: ${error.message}`, { cause: error });
     }
   }
   progress(totalUnits - 1, { phase: 'serialize', completedSources: entries.length });
   const bytes = await output.save({ updateFieldAppearances: false });
   checkAbort(signal);
   if (bytes.byteLength > MAX_BYTES) throw new Error('O PDF gerado excede o limite de 60 MB.');
-  const name = String(originalName || originalBlob.name || 'anexo').split(/[\\/]/).at(-1).replace(/\.[^.]+$/, '') || 'anexo';
+  const name = String(fileName || 'anexo').split(/[\\/]/).at(-1).replace(/\.[^.]+$/, '') || 'anexo';
   const result = new File([bytes], `${name}.pdf`, { type: 'application/pdf' });
   progress(totalUnits, { phase: 'ready', completedSources: entries.length });
   return result;

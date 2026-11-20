@@ -88,6 +88,38 @@ test("holerites exibem funcionário, semana e PDF de cada registro sem excluir o
   assert.deepEqual(opened, [["17", "Holerite-2026-11-09-253.pdf"]]);
 });
 
+test('o relatório abre o PDF verde da data ao lado do PDF comum e cancela a leitura ao fechar', async t => {
+  const dom = new JSDOM('<main id="app"></main>');
+  const root = dom.window.document.querySelector('#app');
+  const rows = [{ id: '17', pdfFileName: 'Holerite-17.pdf' }];
+  const calls = [];
+  let finish;
+  const gallery = createHrPayrollGallery({ root, gallery: 'HOLERITE', presentation: 'report',
+    request: async kind => ({ ...response(kind, 1, rows), dateGroups: [{ date: '2026-11-13', rows }] }),
+    openDatePayslips: () => assert.fail('o ícone verde não abre o PDF comum'),
+    openDateSignedPayslips: (date, options) => {
+      calls.push([date, options]);
+      return new Promise(resolve => { finish = resolve; });
+    },
+  });
+  t.after(() => { gallery.destroy(); dom.window.close(); });
+  await gallery.open();
+  const original = root.querySelector('[data-action=open-payslip-date]');
+  const signed = root.querySelector('[data-action=open-signed-payslip-date]');
+  assert.equal(original.nextElementSibling, signed);
+  assert.ok(signed.querySelector('svg[aria-hidden="true"]'));
+  assert.match(signed.getAttribute('aria-label'), /assinados.*13\/11\/2026/);
+  signed.click();
+  signed.click();
+  assert.equal(calls.length, 1);
+  assert.equal(calls[0][0], '2026-11-13');
+  assert.equal(calls[0][1].resolveReturnFocus(), signed);
+  assert.equal(signed.getAttribute('aria-busy'), 'true');
+  gallery.close();
+  assert.equal(calls[0][1].signal.aborted, true);
+  finish();
+});
+
 test('o total de cada holerite expande apenas suas próprias rubricas', async t => {
   const dom = new JSDOM("<main id='root'></main>");
   const root = dom.window.document.querySelector('#root');

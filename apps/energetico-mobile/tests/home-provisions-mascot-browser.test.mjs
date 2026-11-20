@@ -98,15 +98,25 @@ assert.deepEqual(shortcuts.map(s=>s.action),['open-pending-provisions','open-sic
         const overflow = content.scrollWidth > content.clientWidth || cards.some(card => card.scrollWidth > card.clientWidth + 1);
         const overlay = toggle.closest('.hr-gallery-overlay');
         const title = overlay.querySelector('h1').textContent;
+        const original = overlay.querySelector('[data-action=open-payslip-date]');
+        const signed = overlay.querySelector('[data-action=open-signed-payslip-date]');
+        const signedRect = signed.getBoundingClientRect();
+        const signedAtRight = original.nextElementSibling === signed && signed.offsetLeft > original.offsetLeft;
+        const signedReachable = document.elementFromPoint(signedRect.x + signedRect.width / 2, signedRect.y + signedRect.height / 2)?.closest('button') === signed;
+        const green = getComputedStyle(signed.querySelector('svg')).color;
+        if (signedReachable) signed.click();
+        const date = overlay.parentElement.dataset.signedPdfDate;
+        const compact = overlay.offsetWidth <= 880 && overlay.offsetHeight <= 720 && getComputedStyle(overlay).fontSize === '14px';
         const menu = document.querySelector('#app'), wasInert = menu.hasAttribute('inert');
         const close = overlay.querySelector('.report-close-control'), rect = close.getBoundingClientRect();
         const closeReachable = document.elementFromPoint(rect.x + 22, rect.y + 22) === close;
         close.click();
-        return { title, wasInert, closeReachable, count, collapsed, colors, overflow, closed: !overlay.isConnected,
+        return { title, wasInert, closeReachable, count, collapsed, colors, overflow, compact, signedAtRight, signedReachable, green, date, closed: !overlay.isConnected,
           menuRestored: !menu.hasAttribute('inert') && menu.contains(document.activeElement) };
       })()`, true);
       assert.deepEqual(payslip, { title: 'Relatório de Holerites', wasInert: true, closeReachable: true, count: '1/2 (50%) enviados · 1 pendente', collapsed: 'false',
-        colors: ['rgb(214, 239, 220)', 'rgb(251, 225, 226)'], overflow: false, closed: true, menuRestored: true });
+        colors: ['rgb(214, 239, 220)', 'rgb(251, 225, 226)'], overflow: false, compact: true,
+        signedAtRight: true, signedReachable: true, green: 'rgb(32, 102, 56)', date: '2026-11-13', closed: true, menuRestored: true });
       const ganttShortcut = await evaluate(`(() => {
         const button = document.querySelector('[data-action=open-stage-gantt]');
         const r = button.getBoundingClientRect(), holerite = button.previousElementSibling.getBoundingClientRect();

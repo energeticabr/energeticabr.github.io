@@ -7610,6 +7610,13 @@ export function createAppController({
                   loadErrorMessage: `Não foi possível preparar os holerites desta data. Volte ${payslipPlace} e tente novamente.`,
                 });
               } : undefined,
+              openDateSignedPayslips: isReport && typeof data.downloadSignedPayslipsByDate === 'function' ? (date, options) =>
+                previewPayslip(sourceOptions => data.downloadSignedPayslipsByDate(date, sourceOptions), `Holerites-assinados-${date}.pdf`, {
+                  ...options,
+                  loadErrorMessage: error => ['NO_SIGNED_PAYSLIPS', 'SIGNED_PAYSLIP_PDF_ERROR'].includes(error?.code)
+                    ? error.message
+                    : 'Não foi possível reunir todas as vias assinadas desta data. Volte ao relatório e tente novamente.',
+                }) : undefined,
               openPayslip: (row, options) => previewPayslip(sourceOptions => data.downloadPayslip(row, sourceOptions), row.pdfFileName, {
                 ...options, row,
               }),
