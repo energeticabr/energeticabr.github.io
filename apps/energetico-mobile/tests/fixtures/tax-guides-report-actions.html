@@ -3,7 +3,7 @@
 <body><main id="app"></main><script type="module">
 import { createTaxGuidesReportView } from '/src/ui/tax-guides-report-view.js';
 import { decorateReportPrint } from '/src/ui/report-print.js';
-const row={id:'7',hasAttachments:false,fields:{TIPO:'INSS',FILIAL:'004 - EDIFÍCIO XAVANTE',COMPETENCIA:'2026-10-20',VENCIMENTO:'2026-11-20',VALOR:null}};
+const row={id:'7',hasAttachments:false,fields:{TIPO:'INSS',FILIAL:'004 - EDIFÍCIO XAVANTE',COMPETENCIA:'2026-10-20',VENCIMENTO:'2026-11-20',VALOR:null,STATUS:'PENDENTE'}};
 const data={loadSnapshot:async()=>({rows:[row,{...row,id:'8',fields:{...row.fields,TIPO:'FGTS'}}]}),
 loadEditor:async()=>({item:row,attachments:{existingFiles:[]}}),saveEditor:async()=>{}};
 const params=new URLSearchParams(location.search);

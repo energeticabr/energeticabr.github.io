@@ -10,10 +10,10 @@ async function until(check){for(let i=0;i<80;i++){if(check())return;await tick()
 function setup(t,options={}){
   const dom=new JSDOM('<body><main id="app"></main></body>',{pretendToBeVisual:true});
   const doc=dom.window.document;
-  const item={id:'7',eTag:'"v1"',fields:{TIPO:'INSS',FILIAL:'004 - EDIFÍCIO XAVANTE',COMPETENCIA:'2026-10-20',VENCIMENTO:'2026-11-20',VALOR:null}};
+  const item={id:'7',eTag:'"v1"',fields:{TIPO:'INSS',FILIAL:'004 - EDIFÍCIO XAVANTE',COMPETENCIA:'2026-10-20',VENCIMENTO:'2026-11-20',VALOR:null,STATUS:'PENDENTE'}};
   const files=[],writes=[];
   const columns=[{name:'TIPO',choice:{choices:['INSS','FGTS']},required:true},{name:'FILIAL',text:{},required:true},
-    {name:'COMPETENCIA',dateTime:{format:'dateOnly'},required:true},{name:'VENCIMENTO',dateTime:{format:'dateOnly'}},{name:'VALOR',currency:{locale:'pt-BR'}}];
+    {name:'COMPETENCIA',dateTime:{format:'dateOnly'},required:true},{name:'VENCIMENTO',dateTime:{format:'dateOnly'}},{name:'VALOR',currency:{locale:'pt-BR'}},{name:'STATUS',text:{},required:true}];
   const repository={resolveList:async()=>({status:'resolved',id:'guides'}),getColumns:async()=>columns,
     getItem:async()=>structuredClone(item),listAttachments:async()=>files.map(file=>({name:file.name})),deleteAttachment:async()=>{},
     uploadAttachment:async(site,list,id,file,name)=>{assert.equal(list,'guides');assert.equal(id,'7');if(options.upload)await options.upload();files.push({name,blob:file});},
@@ -25,7 +25,7 @@ function setup(t,options={}){
   const report=createTaxGuidesReportView({document:doc,data,pickAttachments:async(source,{signal})=>{
     picks.push(source);if(options.pick)return options.pick(source,{signal});return [new dom.window.File(['original'],`${source}.pdf`,{type:'application/pdf'})];}});
   t.after(()=>{report.destroy();dom.window.close();});
-  return {doc,dom,report,item,files,writes,picks};
+  return {doc,dom,report,item,files,writes,picks,data};
 }
 function action(report,name){const node=report.element.querySelector(`[data-guide-action="${name}"]`);assert.ok(node,`missing ${name} action`);node.click();}
 
@@ -101,4 +101,11 @@ test('failed amount read can be retried without leaving the editor',async t=>{
   fail=false;h.doc.querySelector('[data-guide-load-retry]').click();
   await until(()=>!h.doc.querySelector('[data-guide-save]').disabled);
   assert.equal(h.doc.querySelector('input[name="guideAmount"]').disabled,false);
+});
+
+test('tax guide partial edits reject status and other fields outside the amount scope',async t=>{
+  const h=setup(t);const context=await h.data.loadEditor('7');
+  await assert.rejects(()=>h.data.saveEditor(context,{STATUS:'PAGO'},{editedFields:['STATUS']}),/escopo/);
+  await assert.rejects(()=>h.data.saveEditor(context,{VALOR:1,STATUS:'PAGO'},{editedFields:['VALOR']}),/escopo/);
+  assert.deepEqual(h.writes,[]);assert.equal(h.item.fields.STATUS,'PENDENTE');
 });
