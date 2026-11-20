@@ -106,11 +106,14 @@ def _preserve_reason(parent, children, plan):
             return 'Vínculo ou linha alterada manualmente'
         keys.add(key)
         if not _matches(child, {'QTD': '5', 'VALORTOTAL': '45', 'FRETE': '0',
-                              'PRODUTO': model.LABEL, 'DATAPREVISTOPGTO': plan['dueDate']}):
+                              'DATAPREVISTOPGTO': plan['dueDate']}):
             return 'Valor ou vencimento alterado manualmente'
+        if not model.valid_profession(child.get('PRODUTO')):
+            return 'Produto sem profissão válida'
         if key in expected:
             row = expected[key]
-            if not _matches(child, {'FORNECEDOR': row['name'], 'FILIAL': row['branch'], 'IMOVEL': row['property']}):
+            if not _matches(child, {'FORNECEDOR': row['name'], 'FILIAL': row['branch'],
+                                    'IMOVEL': row['property'], 'PRODUTO': row['profession']}):
                 return 'Cadastro ou localização alterados'
     if parent.get('Title') == plan['key'] and not _same('VALORTOTAL', parent.get('VALORTOTAL'), 225 * len(children)):
         return 'Total do descritivo alterado manualmente'

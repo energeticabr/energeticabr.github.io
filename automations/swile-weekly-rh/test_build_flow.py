@@ -40,6 +40,9 @@ class FlowContractTests(unittest.TestCase):
         uri = self.actions['Inicializar_RHNext']['inputs']['variables'][0]['value']
         self.assertIn("8311a380-ee1e-42eb-a529-7452a47b0ae3", uri)
         self.assertIn('IDFORNECEDORORIGEM', uri)
+        self.assertIn('PROFISSAO', uri)
+        self.assertEqual(self.actions['Linhas']['inputs']['select']['profession'], "@trim(coalesce(item()?['PROFISSAO'],''))")
+        self.assertIn("item()?['profession']", self.actions['RH_Invalid']['inputs']['where'])
         self.assertNotIn('CARGO', uri)
         self.assertNotIn('EMPREITEIRO', uri)
         self.assertEqual(self.actions['Elegiveis']['inputs']['where'], "@not(contains(variables('Excluidos'), int(item()?['IDFORNECEDORORIGEM'])))")
@@ -53,6 +56,12 @@ class FlowContractTests(unittest.TestCase):
         self.assertEqual(child['FORNECEDOR'], "@items('Cada_Novo_Funcionario')?['name']")
         self.assertEqual(child['DESCRITIVOPROVISAO'], "@variables('ParentId')")
         self.assertEqual(child['STATUS'], 'PAGAMENTO PREVISTO')
+        self.assertEqual(child['PRODUTO'], "@items('Cada_Novo_Funcionario')?['profession']")
+        self.assertEqual(child['OBS'], 'VALE ALIMENTAÇÃO')
+        for action in ('Antes_Invalida', 'Depois_Invalida'):
+            expression = self.actions[action]['expression']
+            self.assertIn("?['PRODUTO']", expression)
+            self.assertIn("?['profession']", expression)
         self.assertEqual(child['PGTOAGENDADO'], 'PENDENTE')
         self.assertNotIn('IDRECORRENCIA', child)
         self.assertNotIn('DATAPGTOEFETUADO', child)

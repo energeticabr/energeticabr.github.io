@@ -12,7 +12,7 @@ if PATH.exists():
 
 
 def person(rid=1, sid='1001', name='PESSOA A', **extra):
-    return {'Id': rid, 'IDFORNECEDORORIGEM': sid, 'Title': name,
+    return {'Id': rid, 'IDFORNECEDORORIGEM': sid, 'Title': name, 'PROFISSAO': 'PEDREIRO',
             'FILIAL': '004 - OBRA TESTE', 'IMOVEL': 'TODOS', **extra}
 
 
@@ -46,7 +46,7 @@ class PlannerTests(unittest.TestCase):
         self.assertEqual(plans[0]['rows'][0]['supplierId'], 1001)
 
     def test_child_uses_origin_identity_and_rh_location_with_exact_225_total(self):
-        p = model.plan_horizon([person(rid=77, IMOVEL='TORRE B')], date(2026, 10, 26), [9009])[0]
+        p = model.plan_horizon([person(rid=77, IMOVEL='TORRE B', PROFISSAO='  SERVENTE DE PEDREIRO  ', CARGO='SERVENTE DE PEDREIRO I')], date(2026, 10, 26), [9009])[0]
         row = model.child_payload(p, p['rows'][0], 808)
         self.assertEqual(row['FOLHAOPERACAO'], 'SWILE-RH:2026-10-28:1001')
         self.assertEqual(row['DESCRITIVOPROVISAO'], '808')
@@ -54,6 +54,7 @@ class PlannerTests(unittest.TestCase):
         self.assertEqual((row['QTD'], row['VALORTOTAL'], row['FRETE']), ('5', '45', '0'))
         self.assertEqual((row['DATA'], row['DATAPREVISTOPGTO']), ('2026-10-26T12:00:00Z', '2026-10-28T12:00:00Z'))
         self.assertEqual(row['PGTOAGENDADO'], 'PENDENTE')
+        self.assertEqual(row['PRODUTO'], 'SERVENTE DE PEDREIRO')
         self.assertEqual(row['OBS'], 'VALE ALIMENTAÇÃO')
         for forbidden in ['DATAPGTOEFETUADO', 'IDLANCAMENTOS', 'IDPEDIDO', 'IDRECORRENCIA', 'IDFOLHA']:
             self.assertNotIn(forbidden, row)
@@ -61,6 +62,7 @@ class PlannerTests(unittest.TestCase):
     def test_missing_or_ambiguous_rh_identity_fails_before_any_payload(self):
         cases = [[person(sid='')], [person(sid='0')], [person(sid='1.5')],
                  [person(FILIAL='')], [person(name='')],
+                 [person(PROFISSAO='')], [person(PROFISSAO='Vale alimentacao')],
                  [person(), person(2, '1001', 'PESSOA B')],
                  [person(), person(2, '1002', 'PESSOA A')]]
         for rows in cases:

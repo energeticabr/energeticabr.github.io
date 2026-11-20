@@ -7,6 +7,8 @@ fragment. No role or supplier-catalog filter determines eligibility.
 
 Each Wednesday has one `DESCRITIVOPROVISAO` whose supplier is SWILE. Its child
 `PROVISÃO PGTOS` rows use the respective RH supplier, branch and property. Each
+child stores the employee's RH `PROFISSAO` in `PRODUTO` and `VALE ALIMENTAÇÃO`
+in `OBS`. The flow validates the profession before creating provisions. Each
 child stores QTD5 × unit45, freight0 = R$225. `VALORTOTAL` on the child is the
 existing **unit price** column; the parent holds the extended aggregate total.
 
