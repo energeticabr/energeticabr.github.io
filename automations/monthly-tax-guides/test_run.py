@@ -25,6 +25,17 @@ class MonthlyGuidesTests(unittest.TestCase):
         self.assertIsNone(rows[0]['VALOR'])
         self.assertEqual(rows[0]['VENCIMENTO'], '2026-11-20T12:00:00Z')
         self.assertNotIn('Attachments', rows[0])
+        self.assertTrue(all(row['STATUS'] == 'PENDENTE' for row in rows))
+
+    def test_month_boundary_adds_only_one_pair_for_the_previous_competence(self):
+        november = module.plan(date(2026, 11, 30), [BRANCH])
+        december = module.plan(date(2026, 12, 1), [BRANCH])
+        old_keys = {row['CHAVE'] for row in november}
+        new_rows = [row for row in december if row['CHAVE'] not in old_keys]
+        self.assertEqual(len(november), 2)
+        self.assertEqual([row['TIPO'] for row in new_rows], ['INSS', 'FGTS'])
+        self.assertTrue(all(row['COMPETENCIA'][:10] == '2026-11-20' and row['VENCIMENTO'][:10] == '2026-12-20' and row['STATUS'] == 'PENDENTE' for row in new_rows))
+        self.assertEqual({row['CHAVE'] for row in module.plan(date(2026, 12, 31), [BRANCH])}, {row['CHAVE'] for row in december})
 
     def test_january_uses_previous_year_and_backfills_missed_months(self):
         rows = module.plan(date(2027, 1, 1), [BRANCH])
@@ -43,10 +54,25 @@ class MonthlyGuidesTests(unittest.TestCase):
         store = Store()
         rows = module.plan(date(2026, 11, 19), [BRANCH])
         self.assertEqual(module.synchronize(store, rows), {'expected': 2, 'created': 2, 'existing': 0})
-        store.rows[rows[0]['CHAVE']].update(VALOR=152.50, VENCIMENTO='2026-11-19', Attachments=['oficial.pdf'])
+        store.rows[rows[0]['CHAVE']].update(VALOR=152.50, VENCIMENTO='2026-11-19', Attachments=['oficial.pdf'], STATUS='CONCLUÍDO')
         self.assertEqual(module.synchronize(store, rows), {'expected': 2, 'created': 0, 'existing': 2})
         self.assertEqual(store.rows[rows[0]['CHAVE']]['VALOR'], 152.50)
         self.assertEqual(store.rows[rows[0]['CHAVE']]['Attachments'], ['oficial.pdf'])
+        self.assertEqual(store.rows[rows[0]['CHAVE']]['STATUS'], 'CONCLUÍDO')
+
+    def test_schema_requires_the_pending_default_for_every_creation_path(self):
+        class Client:
+            site_url = 'https://example.sharepoint.com/site'
+            def _list_endpoint(self, _): return 'web/lists/guide'
+            def _request(self, method, endpoint, **kwargs):
+                if endpoint.endswith('/fields'):
+                    return {'value': [dict(Id=name, InternalName=name, TypeAsString=value[1], Indexed=True, EnforceUniqueValues=True, DefaultValue=self.default, Required=True) for name, value in module.FIELDS.items()]}
+                return {'EnableAttachments': True}
+        client = Client(); client.default = 'PENDENTE'
+        store = module.SharePointStore(client)
+        store.schema()
+        client.default = 'OUTRO'
+        with self.assertRaises(ValueError): store.schema()
 
     def test_unknown_branch_state_is_rejected_before_any_creation(self):
         with self.assertRaises(ValueError):

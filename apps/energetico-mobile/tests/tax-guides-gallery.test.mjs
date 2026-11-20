@@ -5,8 +5,8 @@ import { createRegistrationGallery } from '../src/ui/registration-gallery-view.j
 import { createRegistrationGalleryData } from '../src/chat/registration-gallery-data.js';
 
 const rows = [
-  { id: '1', hasAttachments: false, fields: { TIPO: 'INSS', FILIAL: '004 - EDIFÍCIO XAVANTE', COMPETENCIA: '2026-10-20T12:00:00Z', VALOR: null, VENCIMENTO: '2026-11-20T12:00:00Z' } },
-  { id: '2', hasAttachments: true, fields: { TIPO: 'FGTS', FILIAL: '004 - EDIFÍCIO XAVANTE', COMPETENCIA: '2026-10-20T12:00:00Z', VALOR: 1407.4, VENCIMENTO: '2026-11-20T12:00:00Z' } },
+  { id: '1', hasAttachments: false, fields: { TIPO: 'INSS', STATUS: 'PENDENTE', FILIAL: '004 - EDIFÍCIO XAVANTE', COMPETENCIA: '2026-10-20T12:00:00Z', VALOR: null, VENCIMENTO: '2026-11-20T12:00:00Z' } },
+  { id: '2', hasAttachments: true, fields: { TIPO: 'FGTS', STATUS: 'PENDENTE', FILIAL: '004 - EDIFÍCIO XAVANTE', COMPETENCIA: '2026-10-20T12:00:00Z', VALOR: 1407.4, VENCIMENTO: '2026-11-20T12:00:00Z' } },
 ];
 
 test('tax guides show the requested fields, pending requests, and only their own attachments', async t => {
@@ -25,6 +25,8 @@ test('tax guides show the requested fields, pending requests, and only their own
   assert.match(pending.textContent, /Anexar guia INSS/);
   assert.match(pending.textContent, /Data vencimento/);
   assert.match(pending.textContent, /Data competência/);
+  assert.match(pending.textContent, /Status/);
+  assert.match(pending.textContent, /PENDENTE/);
   assert.match(pending.textContent, /20\/10\/2026/);
   assert.match(pending.textContent, /20\/11\/2026/);
   assert.doesNotMatch(pending.textContent, /R\$\s*0,00/);
@@ -53,6 +55,7 @@ test('tax guide editor keeps monthly identity immutable and enables authenticate
     { name: 'COMPETENCIA', displayName: 'Data competência', dateTime: { format: 'dateOnly' }, required: true },
     { name: 'VENCIMENTO', displayName: 'Data vencimento', dateTime: { format: 'dateOnly' } },
     { name: 'VALOR', displayName: 'Valor', currency: { locale: 'pt-BR' } },
+    { name: 'STATUS', displayName: 'Status', text: {}, required: true },
   ];
   const data = createRegistrationGalleryData({ kind: 'taxGuides', repository: {
     resolveList: async (_site, aliases) => { assert.equal(aliases[0], 'GUIASINSSFGTS'); return { status: 'resolved', id: 'guides' }; },
@@ -63,5 +66,5 @@ test('tax guide editor keeps monthly identity immutable and enables authenticate
   const context = await data.loadEditor('1');
   assert.equal(context.attachments.canEdit, true);
   assert.deepEqual(context.columns.filter(c => c.readOnly).map(c => c.name).sort(), ['COMPETENCIA', 'FILIAL', 'TIPO']);
-  assert.deepEqual(context.columns.filter(c => !c.readOnly).map(c => c.name).sort(), ['VALOR', 'VENCIMENTO']);
+  assert.deepEqual(context.columns.filter(c => !c.readOnly).map(c => c.name).sort(), ['STATUS', 'VALOR', 'VENCIMENTO']);
 });

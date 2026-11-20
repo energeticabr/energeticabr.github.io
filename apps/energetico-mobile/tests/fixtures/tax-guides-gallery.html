@@ -23,8 +23,8 @@ if (mode === 'menu') {
     payslipCount: document.querySelectorAll('[data-reply-id="action_hr_gallery_holerite"]').length });
 } else {
 const rows = [
-  { id: '1', hasAttachments: false, eTag: '"v1"', fields: { TIPO: 'INSS', FILIAL: '004 - EDIFÍCIO XAVANTE', COMPETENCIA: '2026-10-20T12:00:00Z', VALOR: null, VENCIMENTO: '2026-11-20T12:00:00Z' } },
-  { id: '2', hasAttachments: true, eTag: '"v1"', fields: { TIPO: 'FGTS', FILIAL: '004 - EDIFÍCIO XAVANTE', COMPETENCIA: '2026-10-20T12:00:00Z', VALOR: 1407.4, VENCIMENTO: '2026-11-20T12:00:00Z' } },
+  { id: '1', hasAttachments: false, eTag: '"v1"', fields: { TIPO: 'INSS', STATUS: 'PENDENTE', FILIAL: '004 - EDIFÍCIO XAVANTE', COMPETENCIA: '2026-10-20T12:00:00Z', VALOR: null, VENCIMENTO: '2026-11-20T12:00:00Z' } },
+  { id: '2', hasAttachments: true, eTag: '"v1"', fields: { TIPO: 'FGTS', STATUS: 'PENDENTE', FILIAL: '004 - EDIFÍCIO XAVANTE', COMPETENCIA: '2026-10-20T12:00:00Z', VALOR: 1407.4, VENCIMENTO: '2026-11-20T12:00:00Z' } },
 ];
 const columns = [
   { name: 'TIPO', displayName: 'Tipo', choice: { choices: ['INSS', 'FGTS'] }, required: true },
@@ -32,6 +32,7 @@ const columns = [
   { name: 'COMPETENCIA', displayName: 'Data competência', dateTime: { format: 'dateOnly' }, required: true },
   { name: 'VENCIMENTO', displayName: 'Data vencimento', dateTime: { format: 'dateOnly' } },
   { name: 'VALOR', displayName: 'Valor', currency: { locale: 'pt-BR' } },
+  { name: 'STATUS', displayName: 'Status', text: {}, required: true },
 ];
 const data = createRegistrationGalleryData({ kind: 'taxGuides', repository: {
   resolveList: async () => ({ status: 'resolved', id: 'guides' }),
@@ -51,6 +52,7 @@ await new Promise(resolve=>requestAnimationFrame(()=>requestAnimationFrame(resol
 const visible = node => node.getBoundingClientRect().width > 0;
 const overflows = [...document.querySelectorAll('.rg-row, .gallery-record-dialog')].filter(visible).some(node => node.scrollWidth > node.clientWidth + 2);
 document.documentElement.dataset.layout = JSON.stringify({ overflows, cards: document.querySelectorAll('[data-registration-row]').length,
+  pendingStatuses: [...document.querySelectorAll('[data-registration-row]')].filter(node=>node.textContent.includes('PENDENTE')).length,
   pending: document.body.textContent.includes('Anexar guia INSS'), uploaded: document.body.textContent.includes('Guia anexada'),
   fields: [...document.querySelectorAll('.gallery-record-dialog input, .gallery-record-dialog select')].map(node=>({ name: node.name, value: node.value, disabled: node.disabled, readOnly: node.readOnly, type: node.type })),
   fileInput: Boolean(document.querySelector('input[type="file"]')) });
