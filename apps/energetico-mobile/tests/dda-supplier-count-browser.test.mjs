@@ -16,7 +16,7 @@ test('supplier counts stay below names without overflow on narrow phones, landsc
   await server.listen();
   for(const [width,height] of [[320,740],[390,844],[844,390],[1365,900]]){
    const capture=process.env.DDA_COUNT_CAPTURE_DIR;
-   const result=await runBrowserLayout(browser,{width,height,captureScreenshot:Boolean(capture),url:`http://127.0.0.1:${server.httpServer.address().port}/tests/fixtures/dda-report.html?report=1&layout=1`});
+   const result=await runBrowserLayout(browser,{width,height,captureScreenshot:Boolean(capture),url:`http://127.0.0.1:${server.httpServer.address().port}/tests/fixtures/dda-report.html?report=1&layout=1&standalone=1`});
    const dom=new JSDOM(result.stdout);
    try{
     const layout=JSON.parse(dom.window.document.documentElement.dataset.layout);
