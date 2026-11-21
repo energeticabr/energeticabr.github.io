@@ -1,6 +1,6 @@
 import { ddaPaidManually } from '../chat/dda-payment-confirmation.js';
 import { resolveDdaPaymentLine } from '../chat/dda-payment-line.js';
-import { ddaBankSchedule } from '../chat/dda-bank-status.js';
+import { DDA_REFUSED_STATUS, ddaBankSchedule } from '../chat/dda-bank-status.js';
 const ICONS = {
  check:['M5 12l4 4L19 6'],
  calendar:['M4 5h16v16H4z','M8 2v6M16 2v6M4 10h16'],
@@ -65,14 +65,15 @@ export function renderDdaCard({document:doc,container,rowId,title,value,raw=valu
  const el=(tag,cls,text)=>{const e=doc.createElement(tag);e.className=cls;if(text!==undefined)e.textContent=text;return e;};
  const heading=el('div','rg-dda-heading');heading.append(el('strong','rg-row-title',title),el('span','rg-dda-id','ID '+rowId));container.append(heading);
  const actions=el('div','rg-dda-card-actions');
- if(onConfirmPayment){
+ const refused=value('SITUACAO')===DDA_REFUSED_STATUS;
+ if(onConfirmPayment&&!refused){
   const paid=ddaPaidManually(raw('PGTO_CONFIRMADO'))||/^(pago|liquidado)(\b|$)/i.test(String(value('SITUACAO')));
   const button=el('button','rg-dda-confirm-payment');button.type='button';button.dataset.ddaConfirmPayment=String(rowId);
   button.disabled=paid;button.setAttribute('aria-label',paid?'Pagamento já confirmado do DDA '+rowId:'Confirmar pagamento do DDA '+rowId);
   button.title=paid?'Pagamento confirmado':'Confirmar pagamento';button.append(icon(doc,'check'));actions.append(button);
   button.addEventListener('click',()=>onConfirmPayment(button));
  }
- if(onCreateProvision){
+ if(onCreateProvision&&!refused){
   const button=el('button','rg-dda-create-provision','PROVISÃO');button.type='button';button.dataset.ddaCreateProvision=String(rowId);
   button.disabled=provisionBusy;button.setAttribute('aria-label','Criar provisão de pagamento com anexos do DDA '+rowId);
   button.addEventListener('click',()=>onCreateProvision(button));actions.append(button);
@@ -90,7 +91,7 @@ export function renderDdaCard({document:doc,container,rowId,title,value,raw=valu
  const normalized=String(value('SITUACAO')).normalize('NFD').replace(/[\u0300-\u036f]/g,'').toLowerCase();
  status.dataset.statusTone=/^(pago|liquidado)/.test(normalized)?'paid':/^agendado/.test(normalized)?'scheduled':/^em aberto/.test(normalized)?'open':'neutral';
  container.append(core);
- if(ddaPaidManually(raw('PGTO_CONFIRMADO'))){
+ if(!refused&&ddaPaidManually(raw('PGTO_CONFIRMADO'))){
   const audit=el('p','rg-dda-payment-audit','Confirmado pelo usuário');
   const date=String(raw('PGTO_CONFIRMADO_EM')||'');const by=String(raw('PGTO_CONFIRMADO_POR')||'');
   if(date&&Number.isFinite(Date.parse(date)))audit.append(el('span','',new Intl.DateTimeFormat('pt-BR',{dateStyle:'short',timeStyle:'short',timeZone:'America/Sao_Paulo'}).format(new Date(date))));

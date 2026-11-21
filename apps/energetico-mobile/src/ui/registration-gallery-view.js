@@ -16,7 +16,7 @@ import { renderAssetGalleryCard } from './asset-gallery-card.js';
 import { renderAssetLaunchesCard, assetLaunchesIcon } from './asset-launches-card.js';
 import { createAssetReportView } from './asset-report-view.js';
 import { renderDdaCard, updateDdaDueTones, ddaTodayKey } from './dda-card.js';
-import { isDdaOpenStatus } from '../chat/dda-bank-status.js';
+import { DDA_REFUSED_STATUS, isDdaOpenStatus } from '../chat/dda-bank-status.js';
 import { createDdaSyncReceipt } from './dda-sync-receipt.js';
 import { createDdaPaymentConfirmation } from './dda-payment-confirmation.js';
 import { createDdaGalleryMetrics } from './dda-gallery-metrics.js';
@@ -556,8 +556,12 @@ export function createRegistrationGallery({ document: doc = globalThis.document,
       return financialMovementType(description, isImportedFinancialMovement(row.fields) ? 'Pagamento' : description.split('|')[0].trim());
     }
     if (model.nativeCard && ["Criado por", "Modificado por"].includes(field)) return documentAuthorValue(row, field);
-    if (kind === 'dda' && field === 'SITUACAO'
-      && String(registrationRawField(row.fields, 'DDA_CICLO_AGENDAMENTO', model) ?? '').trim() === 'PAGO_AGENDADO') return 'Pago';
+    if (kind === 'dda' && field === 'SITUACAO') {
+      const status = fieldValue(row.fields, field, model);
+      if (status !== DDA_REFUSED_STATUS
+        && String(registrationRawField(row.fields, 'DDA_CICLO_AGENDAMENTO', model) ?? '').trim() === 'PAGO_AGENDADO') return 'Pago';
+      return status;
+    }
     if (kind === 'provisionDescription' && field === 'STATUS') {
       const status = fieldValue(row.fields, field, model);
       // Legacy parents have an empty textual STATUS; execution dates provide
@@ -914,7 +918,8 @@ export function createRegistrationGallery({ document: doc = globalThis.document,
       values.sort((left, right) => field === "ID"
         ? Number(right) - Number(left)
         : left.localeCompare(right, "pt-BR", { sensitivity: "base", numeric: true }));
-      control.replaceChildren(option("Todos", ""), ...values.map(value => option(value, value)));
+      control.replaceChildren(option("Todos", ""), ...values.map(value =>
+        option(kind === 'dda' && field === 'SITUACAO' && value === DDA_REFUSED_STATUS ? 'Recusados' : value, value)));
       if (!hasLoaded) retainProvisionStatusFilter(field, control, model.defaultFilters?.[field]);
       if (control.multiple) {
         const selected = !hasLoaded ? model.defaultFilters?.[field] || [] : selectedValue;
@@ -964,6 +969,8 @@ export function createRegistrationGallery({ document: doc = globalThis.document,
     const query = committedSearch.trim().normalize("NFD").replace(/[\u0300-\u036f]/g, "").toLowerCase();
     const filtered = rows.filter(row => {
       if (kind === 'provisionDescription' && filterControls.get('STATUS').value === model.defaultFilters.STATUS && provisionExecuted(row)) return false;
+      if (kind === 'dda' && rowFieldValue(row, 'SITUACAO') === DDA_REFUSED_STATUS
+        && filterControls.get('SITUACAO').value !== DDA_REFUSED_STATUS) return false;
       for (const [field, control] of filterControls) {
         if (control.multiple) {
           const selected = [...control.selectedOptions].map(option => option.value).filter(Boolean);

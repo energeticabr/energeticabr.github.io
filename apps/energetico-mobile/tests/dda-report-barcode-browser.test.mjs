@@ -6,6 +6,19 @@ import {fileURLToPath} from 'node:url';
 import {JSDOM} from 'jsdom';
 import {createServer} from 'vite';
 import {runBrowserLayout} from './helpers/browser-layout-runner.mjs';
+test('refusal fits between the check and arrow and the confirmation stays inside mobile and desktop viewports',{timeout:90000},async t=>{
+ const browser=[process.env.CHROME_BIN,'C:/Program Files/Google/Chrome/Application/chrome.exe','/usr/bin/google-chrome','/usr/bin/chromium'].find(p=>p&&existsSync(p));
+ if(!browser)return t.skip('Chrome unavailable');
+ const root=resolve(fileURLToPath(new URL('..',import.meta.url))),server=await createServer({root,server:{host:'127.0.0.1',port:0,fs:{allow:[resolve(root,'../..')]}},logLevel:'silent'});
+ try{await server.listen();for(const [width,height] of [[320,740],[390,844],[1365,900]]){
+  const result=await runBrowserLayout(browser,{width,height,url:`http://127.0.0.1:${server.httpServer.address().port}/tests/fixtures/dda-report.html?report=1&refusal=1&layout=1`});
+  const dom=new JSDOM(result.stdout);
+  try {
+   assert.deepEqual(JSON.parse(dom.window.document.documentElement.dataset.refusal),
+    {ordered:true,buttonFits:true,dialogFits:true,cancelFocused:true},`Viewport ${width}×${height}`);
+  }finally{dom.window.close();}
+ }}finally{await server.close();}
+});
 test('barcode disclosure fits mobile rotated report and desktop; copies only on button click',{timeout:90000},async t=>{
  const browser=[process.env.CHROME_BIN,'C:/Program Files/Google/Chrome/Application/chrome.exe','/usr/bin/google-chrome','/usr/bin/chromium'].find(p=>p&&existsSync(p));
  if(!browser)return t.skip('Chrome unavailable');

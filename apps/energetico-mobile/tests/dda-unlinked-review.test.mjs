@@ -42,7 +42,7 @@ test('writes only the review flag on the verified SharePoint version and rejects
  const change=(reviewed)=>review.save({row:normalizeDdaReportRows(snapshot(row(5,{[flag]:!reviewed})))[0],reviewed});
  await change(true);await change(false);
  assert.deepEqual(writes.map(({fields,eTag})=>[fields,eTag]),[[{[flag]:true},'"7"'],[{[flag]:false},'"7"']]);
- for(const fields of [{SITUACAO:'Pago'},{[link]:'58'},{CHAVE_DDA:'outro'},{[flag]:true}]){
+ for(const fields of [{SITUACAO:'Pago'},{DDA_RECUSADO:true},{[link]:'58'},{CHAVE_DDA:'outro'},{[flag]:true}]){
   current=row(5,{[flag]:false,...fields});await assert.rejects(change(true));
  }
  assert.equal(writes.length,2);

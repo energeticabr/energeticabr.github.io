@@ -1,10 +1,10 @@
-import { DDA_UNLINKED_REVIEW_FIELD } from './dda-bank-status.js';
+import { DDA_REFUSED_FIELD, DDA_UNLINKED_REVIEW_FIELD } from './dda-bank-status.js';
 import { DDA_PROVISION_FIELD } from './dda-provision-link.js';
 import { canReviewDdaUnlinked, normalizeDdaReportRows } from './dda-report-model.js';
 
 const fields = ['ID', 'CHAVE_DDA', 'VENCIMENTO', 'SITUACAO', 'PGTO_CONFIRMADO', 'PGTO_CONFIRMADO_EM',
   'PGTO_CONFIRMADO_POR', 'DDA_CICLO_AGENDAMENTO', 'STATUS_DDA', 'STATUS_CONSULTADO_EM', 'ULTIMA_CONSULTA',
-  DDA_PROVISION_FIELD, DDA_UNLINKED_REVIEW_FIELD];
+  DDA_PROVISION_FIELD, DDA_UNLINKED_REVIEW_FIELD, DDA_REFUSED_FIELD];
 
 export function createDdaUnlinkedReview({ repository, siteKey = 'personal', assertSession = () => {} }) {
   const checkSession = signal => { signal?.throwIfAborted(); assertSession(); };

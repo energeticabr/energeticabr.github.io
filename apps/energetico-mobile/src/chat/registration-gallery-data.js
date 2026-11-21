@@ -8,7 +8,8 @@ import { FINANCIAL_GALLERY_MODELS } from './financial-gallery-models.js';
 import { TAX_GUIDES_GALLERY_MODEL } from './tax-guides-gallery-model.js';
 import { ddaPaidManually } from './dda-payment-confirmation.js';
 import { createDdaProvisionLink } from './dda-provision-link.js';
-import { DDA_UNLINKED_REVIEW_FIELD } from './dda-bank-status.js';
+import { DDA_REFUSED_FIELD, DDA_REFUSED_STATUS, DDA_UNLINKED_REVIEW_FIELD } from './dda-bank-status.js';
+import { createDdaRefusal } from './dda-refusal.js';
 import { createDdaUnlinkedReview } from './dda-unlinked-review.js';
 import { createNfeOrderLink, NFE_ORDER_FIELD, NFE_PROVISION_DESCRIPTION_FIELD } from './nfe-order-link.js';
 import { createSicoobOrderLink } from './sicoob-order-link.js';
@@ -65,12 +66,12 @@ export const REGISTRATION_GALLERY_MODELS = Object.freeze({
   dda: Object.freeze({
     title: "GALERIA DDA", listName: "DDAS SICOOB", aliases: ["DDAS SICOOB"],
     nativeCard: true, readOnly: true, readTransport: "rest", showAttachments: true, recordLabel: "DDA",
-    restReadFields: ["ID", "Title", "CHAVE_DDA", "PGTO_CONFIRMADO", "PGTO_CONFIRMADO_EM", "PGTO_CONFIRMADO_POR", "VENCIMENTO", "EMISSAO", "VALOR", "SITUACAO", "STATUS_DDA", "STATUS_CONSULTADO_EM", "DDA_CICLO_AGENDAMENTO", "CNPJ_FORNECEDOR", "DOCUMENTO", "BANCO", "VALOR_PAGAMENTO", "NOSSO_NUMERO", "LINHA_DIGITAVEL", "CODIGO_BARRAS", "PAGADOR", "CNPJ_PAGADOR", "BLOQUEADO", "MENSAGEM", "ULTIMA_CONSULTA", "DESCRITIVOPROVIS_x00c3_O", DDA_UNLINKED_REVIEW_FIELD],
+    restReadFields: ["ID", "Title", "CHAVE_DDA", "PGTO_CONFIRMADO", "PGTO_CONFIRMADO_EM", "PGTO_CONFIRMADO_POR", "VENCIMENTO", "EMISSAO", "VALOR", "SITUACAO", "STATUS_DDA", "STATUS_CONSULTADO_EM", "DDA_CICLO_AGENDAMENTO", "CNPJ_FORNECEDOR", "DOCUMENTO", "BANCO", "VALOR_PAGAMENTO", "NOSSO_NUMERO", "LINHA_DIGITAVEL", "CODIGO_BARRAS", "PAGADOR", "CNPJ_PAGADOR", "BLOQUEADO", "MENSAGEM", "ULTIMA_CONSULTA", "DESCRITIVOPROVIS_x00c3_O", DDA_UNLINKED_REVIEW_FIELD, DDA_REFUSED_FIELD],
     restExpandSystemFields: false,
     searchPlaceholder: "Pesquisar fornecedor, documento ou ID",
     fields: ["FORNECEDOR", "VENCIMENTO", "EMISSAO", "VALOR", "SITUACAO", "CNPJ_FORNECEDOR", "DOCUMENTO", "BANCO", "VALOR_PAGAMENTO", "NOSSO_NUMERO", "LINHA_DIGITAVEL", "CODIGO_BARRAS", "PAGADOR", "CNPJ_PAGADOR", "BLOQUEADO", "MENSAGEM", "ULTIMA_CONSULTA", "DESCRITIVOPROVIS_x00c3_O", "ID"],
     filterFields: ["FORNECEDOR", "SITUACAO", "BANCO"], dateRangeField: "VENCIMENTO",
-    defaultFilters: { SITUACAO: "Em aberto" }, filterChoices: { SITUACAO: ["Em aberto"] }, resetFiltersOnOpen: ["SITUACAO"],
+    defaultFilters: { SITUACAO: "Em aberto" }, filterChoices: { SITUACAO: ["Em aberto", DDA_REFUSED_STATUS] }, resetFiltersOnOpen: ["SITUACAO"],
     fieldAliases: { FORNECEDOR: ["Title", "Fornecedor"] },
     fieldTypes: { VENCIMENTO: "date", EMISSAO: "date", VALOR: "currency", VALOR_PAGAMENTO: "currency", ULTIMA_CONSULTA: "datetime", BLOQUEADO: "boolean" },
     fieldLabels: { FORNECEDOR: "Fornecedor", VENCIMENTO: "Vencimento", EMISSAO: "Emissão", VALOR: "Valor nominal", SITUACAO: "Situação na última consulta", CNPJ_FORNECEDOR: "CPF/CNPJ fornecedor", DOCUMENTO: "Documento", BANCO: "Banco", VALOR_PAGAMENTO: "Valor para pagamento", NOSSO_NUMERO: "Nosso número", LINHA_DIGITAVEL: "Linha digitável", CODIGO_BARRAS: "Código de barras", PAGADOR: "Pagador", CNPJ_PAGADOR: "CPF/CNPJ pagador", BLOQUEADO: "Pagamento bloqueado", MENSAGEM: "Mensagem do banco", ULTIMA_CONSULTA: "Última consulta", DESCRITIVOPROVIS_x00c3_O: "Descritivo provisão" },
@@ -291,8 +292,10 @@ export function registrationRawField(fields, name, model) {
   if (model === REGISTRATION_GALLERY_MODELS.notas_fiscais_sefaz && name === "TIPO_FISCAL") return fiscalDocumentType(fields);
   if (model === REGISTRATION_GALLERY_MODELS.notas_fiscais_sefaz && name === 'DATA_EMISSAO'
     && registrationDateKey(fields?.DATA_EMISSAO_ORIGINAL)) return fields.DATA_EMISSAO_ORIGINAL;
-  if (model === REGISTRATION_GALLERY_MODELS.dda && name === 'SITUACAO'
-    && ddaPaidManually(registrationRawField(fields, 'PGTO_CONFIRMADO', model))) return 'Pago';
+  if (model === REGISTRATION_GALLERY_MODELS.dda && name === 'SITUACAO') {
+    if (fields?.[DDA_REFUSED_FIELD] === true) return DDA_REFUSED_STATUS;
+    if (ddaPaidManually(registrationRawField(fields, 'PGTO_CONFIRMADO', model))) return 'Pago';
+  }
   const accepted = [name, ...(model.fieldAliases?.[name] || [])].map(registrationFieldKey);
   return Object.entries(fields || {}).find(([key, value]) => value != null && accepted.includes(registrationFieldKey(key)))?.[1];
 }
@@ -466,7 +469,7 @@ export function createRegistrationGalleryData({ kind, ...options } = {}) {
           return result;
         },
       } : {}),
-      ...(kind === 'dda' ? { loadItem: data.loadItem, unlinkedReview: ddaUnlinkedReview(), provisionLink: createDdaProvisionLink({
+      ...(kind === 'dda' ? { loadItem: data.loadItem, ...ddaReviewActions(), provisionLink: createDdaProvisionLink({
         repository: galleryRepository({ ...options, siteConfig: linkSiteConfig, strictSnapshot: false }),
         siteKey: options.siteKey || 'personal', assertSession: options.assertSession,
       }) } : {}),
@@ -577,13 +580,13 @@ export function createRegistrationGalleryData({ kind, ...options } = {}) {
         siteKey: options.siteKey || 'personal', assertSession: options.assertSession }) : editor;
     });
   }
-  function ddaUnlinkedReview() {
+  function ddaReviewActions() {
     const siteKey = options.siteKey || 'personal';
     const siteConfig = { ...options.siteConfig, [siteKey]: {
       ...options.siteConfig[siteKey], readTransport: 'rest', writeTransport: 'rest',
     } };
-    return createDdaUnlinkedReview({ repository: galleryRepository({ ...options, siteConfig }),
-      siteKey, assertSession: options.assertSession });
+    const writeOptions = { repository: galleryRepository({ ...options, siteConfig }), siteKey, assertSession: options.assertSession };
+    return { unlinkedReview: createDdaUnlinkedReview(writeOptions), rejectDda: createDdaRefusal(writeOptions) };
   }
   function financialMovementOrderLink() {
     const siteKey = options.siteKey || 'personal';

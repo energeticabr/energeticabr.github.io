@@ -4,7 +4,7 @@ import {REGISTRATION_GALLERY_MODELS,registrationRawField,registrationDateKey,reg
 import {ddaTodayKey} from '../ui/dda-card.js';
 import {ddaPaidManually} from './dda-payment-confirmation.js';
 import {resolveDdaPaymentLine} from './dda-payment-line.js';
-import {DDA_UNLINKED_REVIEW_FIELD,ddaBankSchedule,isDdaOpenStatus,normalizeDdaStatus} from './dda-bank-status.js';
+import {DDA_REFUSED_STATUS,DDA_UNLINKED_REVIEW_FIELD,ddaBankSchedule,isDdaOpenStatus,normalizeDdaStatus} from './dda-bank-status.js';
 const Money=Decimal.clone({precision:40});
 export {ddaSearchKey} from './dda-bank-status.js';
 const text=value=>typeof value==='string'||typeof value==='number'?String(value).trim():'';
@@ -22,7 +22,7 @@ export function ddaSettlementPending(row,settledDdaIds){
 }
 
 export async function readSettledDdaIds(rows,provisionLink,signal,{includeUnpaid=false}={}){
- const candidates=rows.filter(row=>row.provisionId&&(includeUnpaid||row.status==='Pago'));
+ const candidates=rows.filter(row=>row.provisionId&&row.status!==DDA_REFUSED_STATUS&&(includeUnpaid||row.status==='Pago'));
  if(!candidates.length)return new Set();
  if(typeof provisionLink?.loadSettledDdaIds!=='function')return null;
  try{
@@ -54,7 +54,8 @@ export function normalizeDdaReportRows(snapshot){
   const paidManually=ddaPaidManually(value('PGTO_CONFIRMADO')),confirmedAt=text(value('PGTO_CONFIRMADO_EM'));
   const audited=paidManually&&text(value('PGTO_CONFIRMADO_POR'))&&Number.isFinite(auditTime(confirmedAt));
   const paidBySchedule=scheduleLifecycle==='PAGO_AGENDADO'||Boolean(audited&&ddaWasScheduledAt({scheduledAt},confirmedAt));
-  return {id,paymentLine,key:text(value('CHAVE_DDA')),paidManually,confirmedAt,paidBySchedule,scheduledAt,supplier:text(value('FORNECEDOR'))||'Fornecedor não informado',supplierCnpj:supplierCnpj(value('CNPJ_FORNECEDOR')),due:registrationDateKey(value('VENCIMENTO')),issued:registrationDateKey(value('EMISSAO')),amount,status:paidBySchedule?'Pago':normalizeDdaStatus(value('SITUACAO')),schedule,document:text(value('DOCUMENTO')),bank:text(value('BANCO')),payer:text(value('PAGADOR')),checkedAt,provisionId:provisionId(value('DESCRITIVOPROVIS_x00c3_O')),linkReviewed:value(DDA_UNLINKED_REVIEW_FIELD)===true};
+  const status=normalizeDdaStatus(value('SITUACAO'));
+  return {id,paymentLine,key:text(value('CHAVE_DDA')),paidManually,confirmedAt,paidBySchedule,scheduledAt,supplier:text(value('FORNECEDOR'))||'Fornecedor não informado',supplierCnpj:supplierCnpj(value('CNPJ_FORNECEDOR')),due:registrationDateKey(value('VENCIMENTO')),issued:registrationDateKey(value('EMISSAO')),amount,status:paidBySchedule&&status!==DDA_REFUSED_STATUS?'Pago':status,schedule,document:text(value('DOCUMENTO')),bank:text(value('BANCO')),payer:text(value('PAGADOR')),checkedAt,provisionId:provisionId(value('DESCRITIVOPROVIS_x00c3_O')),linkReviewed:value(DDA_UNLINKED_REVIEW_FIELD)===true};
  });
  const counts=new Map();
  for(const row of normalized)if(row.supplierCnpj)counts.set(row.supplierCnpj,(counts.get(row.supplierCnpj)||0)+1);
@@ -72,7 +73,9 @@ export function buildDdaReport(rows,{status='Em aberto',bank='',search='',settle
  const query=normalizeSearchText(search),today=ddaTodayKey(now);
  const seventhDay=new Date(Date.parse(today+'T12:00:00Z')+7*86400000).toISOString().slice(0,10);
  const openFilter=status==='Em aberto'||status==='Não pagos';
- const matchesStatus=row=>!status||(openFilter?isDdaOpenStatus(row.status):row.status===status);
+ const matchesStatus=row=>row.status===DDA_REFUSED_STATUS
+  ? status===DDA_REFUSED_STATUS
+  : !status||(openFilter?isDdaOpenStatus(row.status):row.status===status);
  const filtered=rows.filter(row=>(matchesStatus(row)||(openFilter&&ddaSettlementPending(row,settledDdaIds)))&&(!bank||row.bank===bank)&&(!query||includesSearchText(normalizeSearchText([row.id,row.supplier,row.document,row.bank].join(' ')),query)))
   .sort((a,b)=>(a.due||'9999').localeCompare(b.due||'9999')||Number(a.id)-Number(b.id));
  const inStatus=filtered.filter(matchesStatus);
@@ -83,6 +86,6 @@ export function buildDdaReport(rows,{status='Em aberto',bank='',search='',settle
  return {rows:filtered,total:totalAmount(inStatus),missingAmounts,visibleOutsideStatus:filtered.length-inStatus.length,
   overdue:inStatus.filter(row=>row.due&&row.due<today).length,today:dueToday.length,
   dueWithin7Days:dueWithin7Days.length,totalDueWithin7Days:totalAmount(dueWithin7Days),totalDueToday:totalAmount(dueToday),
-  statuses:[...new Set(['Em aberto','Não pagos',...rows.map(row=>row.status)])].sort((a,b)=>a.localeCompare(b,'pt-BR')),
+  statuses:[...new Set(['Em aberto','Não pagos',DDA_REFUSED_STATUS,...rows.map(row=>row.status)])].sort((a,b)=>a.localeCompare(b,'pt-BR')),
   banks:[...new Set(rows.map(row=>row.bank).filter(Boolean))].sort((a,b)=>a.localeCompare(b,'pt-BR'))};
 }

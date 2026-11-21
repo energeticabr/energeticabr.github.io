@@ -1,7 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import {JSDOM} from 'jsdom';
-import {normalizeDdaReportRows,buildDdaReport} from '../src/chat/dda-report-model.js';
+import {normalizeDdaReportRows,buildDdaReport,hasDdaMenuAlert} from '../src/chat/dda-report-model.js';
 import {createDdaReportView} from '../src/ui/dda-report-view.js';
 import {createRegistrationGalleryData,REGISTRATION_GALLERY_MODELS} from '../src/chat/registration-gallery-data.js';
 import {captureFilteredReport,decorateReportPrint} from '../src/ui/report-print.js';
@@ -32,6 +32,49 @@ test('DDA source rejects malformed pages before the gallery can discard invalid 
  }
 });
 function setup(data,options={}){const dom=new JSDOM('<body><main id="app"><button id="home">DDA</button></main></body>',{url:'https://example.test'});dom.window.document.querySelector('button').focus();const view=createDdaReportView({document:dom.window.document,data,now,...options});return {dom,view,doc:dom.window.document};}
+test('a refusal takes precedence over all bank and payment states and stays out of Todas',()=>{
+ const source=['Em aberto','Agendado','Pago','Baixado'].map((status,index)=>{
+  const item=row(index+1,status,'2026-10-27');
+  Object.assign(item.fields,{DDA_RECUSADO:true,STATUS_DDA:status});
+  return item;
+ });
+ Object.assign(source[2].fields,{PGTO_CONFIRMADO:true,DDA_CICLO_AGENDAMENTO:'PAGO_AGENDADO'});
+ const rows=normalizeDdaReportRows({rows:source});
+ for(const status of ['Em aberto','Não pagos','','Pago','Agendado','Baixado']){
+  assert.deepEqual(buildDdaReport(rows,{status,settledDdaIds:new Set()},now()).rows,[]);
+ }
+ assert.equal(hasDdaMenuAlert(rows,now()),false);
+ assert.deepEqual(buildDdaReport(rows,{status:'Recusado'},now()).rows.map(item=>item.status),Array(4).fill('Recusado'));
+});
+test('report X cancels without saving, confirms once and honors refusal after bank refresh',async()=>{
+ let saves=0;
+ const item=row(1);
+ Object.assign(item.fields,{CHAVE_DDA:'boleto-1',LINHA_DIGITAVEL:'00190500954014481606906809350314337370000000100'});
+ const {dom,view,doc}=setup({
+  loadSnapshot:async()=>({rows:[item,row(2)]}),
+  rejectDda:async({row:current})=>{saves++;assert.equal(current.key,'boleto-1');item.fields.DDA_RECUSADO=true;return {id:current.id};},
+ });
+ try{
+  await view.open();
+  const selector='[data-dda-refuse="1"]',filter=doc.querySelector('[name=status]');
+  const clickRefuse=()=>doc.querySelector(selector).click();
+  const dialog=()=>doc.querySelector('[aria-label="Deseja recusar esse boleto?"]');
+  const choose=(label)=>dialog().querySelector(`button[aria-label="${label}"]`).click();
+  const changeFilter=value=>{filter.value=value;filter.dispatchEvent(new dom.window.Event('change'));};
+  assert.deepEqual([...doc.querySelector(selector).parentNode.children].map(button=>button.textContent),['✓','×','▸']);
+  clickRefuse();choose('Não');
+  assert.equal(saves,0);assert.equal(dialog(),null);assert.ok(doc.querySelector(selector));
+  clickRefuse();choose('Sim');choose('Sim');await settle();
+  assert.equal(saves,1);assert.equal(dialog(),null);assert.equal(doc.querySelector('[data-dda-id="1"]'),null);
+  item.fields.SITUACAO='Pago';item.fields.DDA_CICLO_AGENDAMENTO='PAGO_AGENDADO';
+  doc.querySelector('[aria-label="Atualizar DDAs"]').click();await settle();
+  changeFilter('');assert.equal(doc.querySelector('[data-dda-id="1"]'),null);
+  const refused=[...filter.options].find(option=>option.textContent==='Recusados');
+  assert.ok(refused);changeFilter(refused.value);
+  assert.equal(doc.querySelector('[data-dda-id="1"] .ddr-status-cluster strong').textContent,'Recusado');
+  assert.equal(doc.querySelector(selector),null);
+ }finally{view.destroy();dom.window.close();}
+});
 test('report header places logo before printer, title on the right and filters on the next line',async()=>{
  const {dom,view:base,doc}=setup({loadSnapshot:async()=>({rows:[row(1)]})});
  const view=decorateReportPrint(base,{action:'open-dda-report',previewMedia:async()=>{}});

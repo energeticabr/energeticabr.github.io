@@ -1,5 +1,6 @@
 import Decimal from 'decimal.js';
 import { normalizeDdaReportRows } from './dda-report-model.js';
+import { DDA_REFUSED_STATUS } from './dda-bank-status.js';
 import { registrationRawField, registrationNumber, REGISTRATION_GALLERY_MODELS } from './registration-gallery-data.js';
 import { ddaTodayKey } from '../ui/dda-card.js';
 
@@ -32,6 +33,6 @@ export function buildDdaGalleryMetrics(snapshot, now = new Date()) {
     week: missingDue ? null : sum(pending.filter(row => row.due >= weekStart && row.due <= weekEnd)),
     weekStart, weekEnd, todayKey,
     lastCommunication: times.length ? new Date(times.reduce((max, time) => Math.max(max, time), -Infinity)).toISOString() : null,
-    unknownCount: rows.filter(row => !['Em aberto', 'Agendado', 'Pago', 'Baixado'].includes(row.status)).length,
+    unknownCount: rows.filter(row => !['Em aberto', 'Agendado', 'Pago', 'Baixado', DDA_REFUSED_STATUS].includes(row.status)).length,
   };
 }
