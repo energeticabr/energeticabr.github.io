@@ -3,7 +3,6 @@
 <title>Relatório DDA — dados fictícios</title>
 <link rel="stylesheet" href="/src/styles.css"><link rel="stylesheet" href="/src/ui/payment-ledger.css"><link rel="stylesheet" href="/src/ui/dda-report.css"></head>
 <body><main id="app"></main><script type="module">
-import {createChatView} from '/src/ui/chat-view.js';
 import {createDdaReportView} from '/src/ui/dda-report-view.js';
 import {decorateReportPrint} from '/src/ui/report-print.js';
 import {decorateReportNavigation} from '/src/ui/report-navigation.js';
@@ -16,6 +15,7 @@ const source=[
 ];
 const settlementLayout=new URLSearchParams(location.search).has('settlement');
 const paymentMode=new URLSearchParams(location.search).get('payment');
+const refusalMode=new URLSearchParams(location.search).has('refusal');
 if(settlementLayout)Object.assign(source[3].fields,{VENCIMENTO:'2026-10-28',DDA_CICLO_AGENDAMENTO:'PAGO_AGENDADO',DESCRITIVOPROVIS_x00c3_O:'56'});
 source[0].fields.CNPJ_FORNECEDOR='00.111.111/0001-22';
 source[0].fields.DESCRITIVOPROVIS_x00c3_O='46';
@@ -35,17 +35,37 @@ const syncMonitor=syncMode?{get running(){return syncRunning;},subscribe(fn){syn
 const report=decorateReportPrint(decorateReportNavigation(createDdaReportView({document,now:()=>new Date('2026-10-28T12:00:00Z'),
  copyText:async text=>{window.ddaBarcodeCopies.push(text);},syncMonitor,data:{
   loadSnapshot:async()=>{snapshotLoads++;return {rows:source};},
+  ...(refusalMode?{async rejectDda({row}){source.find(item=>item.id===row.id).fields.DDA_RECUSADO=true;return {id:row.id};}}:{}),
   listAttachments:async()=>{window.ddaMirrorClicks++;return [];},downloadAttachment:async()=>null,
   ...((settlementLayout||paymentMode)?{loadItem:async id=>source.find(row=>row.id===id),provisionLink:{loadSettledDdaIds:async()=>new Set()}}:{})
  },openMediaCollection:()=>{},
  onStartSettlement:async id=>{document.documentElement.dataset.ddaSettlementSelected=id;return !paymentMode;},
  confirmPayment:async({itemId,key})=>{window.ddaPaymentCalls++;return {status:'confirmed',itemId,key,confirmedAt:'2026-10-28T18:00:00Z',confirmedBy:'demo@example.test'};}}),{action:'open-dda-report',onNavigate:()=>report.close()}),
  {action:'open-dda-report',previewMedia:async(source)=>{const url=URL.createObjectURL(await source);window.open(url,'_blank','noopener');}});
-const chat=createChatView(document.querySelector('#app'));chat.on('open-dda-report',()=>report.open());
-chat.render({sessionStatus:'authenticated',account:{name:'Demonstração'},draft:'',pendingFiles:[],messages:[{id:'home',role:'assistant',type:'poll',question:'QUAL ÁREA VOCÊ DESEJA ACESSAR?',options:[
- {id:'group_pending',label:'⏳ PENDÊNCIAS'},...['SUPRIMENTOS','FINANCEIRO','DEMANDAS','RECURSOS HUMANOS','ETAPA OBRA','COMERCIAL','AUDITORIA E DOCUMENTOS','NB PARTICIPAÇÕES','GASTOS PESSOAIS','POWER BI'].map((label,i)=>({id:'group_'+i,label}))]}]});
+if(!refusalMode){
+ const {createChatView}=await import('/src/ui/chat-view.js');
+ const chat=createChatView(document.querySelector('#app'));chat.on('open-dda-report',()=>report.open());
+ chat.render({sessionStatus:'authenticated',account:{name:'Demonstração'},draft:'',pendingFiles:[],messages:[{id:'home',role:'assistant',type:'poll',question:'QUAL ÁREA VOCÊ DESEJA ACESSAR?',options:[
+  {id:'group_pending',label:'⏳ PENDÊNCIAS'},...['SUPRIMENTOS','FINANCEIRO','DEMANDAS','RECURSOS HUMANOS','ETAPA OBRA','COMERCIAL','AUDITORIA E DOCUMENTOS','NB PARTICIPAÇÕES','GASTOS PESSOAIS','POWER BI'].map((label,i)=>({id:'group_'+i,label}))]}]});
+}
 window.ddaReport=report;
 if(new URLSearchParams(location.search).has('report'))await report.open();
+if(refusalMode){
+ await document.fonts.ready;
+ const check=document.querySelector('[data-dda-provision-check="1"]');
+ const refuse=document.querySelector('[data-dda-refuse="1"]');
+ const arrow=document.querySelector('[data-dda-toggle-barcode="1"]');
+ refuse.scrollIntoView({block:'center'});
+ const state={
+  ordered:check.offsetTop+check.offsetHeight<=refuse.offsetTop&&refuse.offsetTop+refuse.offsetHeight<=arrow.offsetTop,
+  buttonFits:refuse.offsetWidth>=44&&refuse.offsetHeight>=44&&refuse.offsetWidth<=refuse.closest('td').clientWidth,
+ };
+ refuse.click();
+ const dialog=document.querySelector('[data-dda-refuse-dialog]'),box=dialog.getBoundingClientRect();
+ state.dialogFits=box.width>0&&box.height>0&&box.left>=-1&&box.top>=-1&&box.right<=innerWidth+1&&box.bottom<=innerHeight+1;
+ state.cancelFocused=document.activeElement===dialog.querySelector('button[aria-label="Não"]');
+ document.documentElement.dataset.refusal=JSON.stringify(state);
+}
 if(settlementLayout){
  await document.fonts.ready;await new Promise(resolve=>requestAnimationFrame(()=>requestAnimationFrame(resolve)));
  const badge=document.querySelector('[data-dda-id="4"] .ddr-schedule-cluster'),note=badge?.querySelector('.ddr-settlement-pending');

@@ -1,4 +1,5 @@
 import {normalizeDdaReportRows,buildDdaReport,ddaSettlementPending,readSettledDdaIds,canReviewDdaUnlinked} from '../chat/dda-report-model.js';
+import {DDA_REFUSED_STATUS} from '../chat/dda-bank-status.js';
 import {ddaDueTone,ddaTodayKey} from './dda-card.js';
 import {bindReportLandscape} from './report-landscape.js';
 import {addReportCloseControl} from './report-close-control.js';
@@ -14,7 +15,7 @@ const money=value=>value==null?'Não disponível':new Intl.NumberFormat('pt-BR',
 const date=value=>value?value.slice(8,10)+'/'+value.slice(5,7)+'/'+value.slice(0,4):'Não informado';
 const weekday=new Intl.DateTimeFormat('pt-BR',{weekday:'long',timeZone:'UTC'});
 const daysSince=(day,today)=>Math.round((Date.parse(`${today}T00:00:00Z`)-Date.parse(`${day}T00:00:00Z`))/86400000);
-const ROW_CONTROLS=['data-dda-pdf','data-dda-provision-check','data-dda-provision-pencil','data-dda-settle-provision','data-dda-toggle-barcode','data-dda-copy-barcode','data-dda-unlinked-review'];
+const ROW_CONTROLS=['data-dda-pdf','data-dda-provision-check','data-dda-provision-pencil','data-dda-settle-provision','data-dda-toggle-barcode','data-dda-copy-barcode','data-dda-unlinked-review','data-dda-refuse'];
 function rowControlSelector(element){
  const attribute=ROW_CONTROLS.find(name=>element?.hasAttribute(name));
  return attribute?`[${attribute}="${element.getAttribute(attribute)}"]`:null;
@@ -46,7 +47,7 @@ export function createDdaReportView({document:doc=globalThis.document,data,openM
  const balanceMetric=loadBalance?createSicoobBalanceMetric(doc,loadBalance,'Saldo em conta corrente (Sicoob)'):null;
  let settledDdaIds=new Set(),settlementVerified=false,settlementRequest=null,settlementRenderPending=false,settlementOpening=false;
  const expandedBarcodes=new Set();
- let settlementDialog=null,unlinkedDialog=null;
+ let settlementDialog=null,decisionDialog=null;
  const provisionPicker=createDdaProvisionPicker({document:doc,host:root,service:data.provisionLink,onClose:resumeDeferredRefresh,resolveReturnFocus:replacementControl,onLinked:receipt=>{
   if(destroyed||root.hidden||!rows)return;
   rows=rows.map(row=>row.id===receipt.ddaId?Object.freeze({...row,provisionId:receipt.provisionId}):row);
@@ -61,7 +62,7 @@ export function createDdaReportView({document:doc=globalThis.document,data,openM
  function populate(){
   const result=buildDdaReport(rows,{},now());
   for(const [name,values] of [['status',result.statuses],['bank',result.banks]]){
-   const current=controls[name].value;controls[name].replaceChildren(option('Todas',''),...[...new Set([...values,current].filter(Boolean))].map(value=>option(value,value)));controls[name].value=current;
+   const current=controls[name].value;controls[name].replaceChildren(option('Todas',''),...[...new Set([...values,current].filter(Boolean))].map(value=>option(name==='status'&&value===DDA_REFUSED_STATUS?'Recusados':value,value)));controls[name].value=current;
   }
  }
  function showNotice(message=''){notice.textContent=message;notice.hidden=!message;}
@@ -76,7 +77,7 @@ export function createDdaReportView({document:doc=globalThis.document,data,openM
   if(rowControlSelector(focused)&&[doc.body,panel].includes(doc.activeElement))replacementControl(focused).focus({preventScroll:true});
  }
  function renderKeepingPosition(){const position=reportPosition();render();restoreReportPosition(position);}
- function nestedViewOpen(){return settlementDialog||unlinkedDialog||provisionPicker.isOpen||pdfRequest;}
+ function nestedViewOpen(){return settlementDialog||decisionDialog||provisionPicker.isOpen||pdfRequest;}
  function renderSettlement(){
   if(!settlementRenderPending||nestedViewOpen())return;
   settlementRenderPending=false;renderKeepingPosition();
@@ -100,7 +101,7 @@ export function createDdaReportView({document:doc=globalThis.document,data,openM
   settledDdaIds=settled;settlementRenderPending=true;renderSettlement();
  }
  function canStartSettlement(row){
-  return settlementVerified&&row.provisionId&&!settledDdaIds.has(row.id)
+  return settlementVerified&&row.status!==DDA_REFUSED_STATUS&&row.provisionId&&!settledDdaIds.has(row.id)
    &&Number.isSafeInteger(Number(row.id))&&Number(row.id)>0
    &&typeof onStartSettlement==='function'&&typeof data.loadItem==='function';
  }
@@ -123,7 +124,7 @@ export function createDdaReportView({document:doc=globalThis.document,data,openM
    const item=await readSettlementItem(row.id,signal);
    if(!current()||(!fromCheck&&nestedViewOpen()))return false;
    const live=item&&normalizeDdaReportRows({rows:[item]})[0];
-   if(live?.id!==row.id||live.provisionId!==row.provisionId||live.due!==row.due||live.key!==row.key||(!fromCheck&&live.status!=='Pago')){
+   if(live?.id!==row.id||live.status===DDA_REFUSED_STATUS||live.provisionId!==row.provisionId||live.due!==row.due||live.key!==row.key||(!fromCheck&&live.status!=='Pago')){
     onError('O DDA ou seu vínculo mudou no SharePoint. Atualize o relatório antes de dar baixa.');
     return false;
    }
@@ -144,46 +145,69 @@ export function createDdaReportView({document:doc=globalThis.document,data,openM
   (trigger.isConnected&&!trigger.disabled?trigger:replacementControl(trigger)).focus({preventScroll:true});
   resumeDeferredRefresh();
  }
- function closeUnlinkedDialog(){
-  if(!unlinkedDialog)return;
-  const {overlay,trigger}=unlinkedDialog;unlinkedDialog=null;
+ function closeDecisionDialog(){
+  if(!decisionDialog)return;
+  const {overlay,trigger}=decisionDialog;decisionDialog=null;
   overlay.remove();panel.inert=false;
   replacementControl(trigger).focus({preventScroll:true});
   resumeDeferredRefresh();
  }
  function askUnlinkedReview(row,trigger){
-  if(destroyed||root.hidden||root.getAttribute('aria-busy')==='true'||nestedViewOpen()||settlementOpening||!rows?.includes(row))return;
   const reviewed=!row.linkReviewed;
-  const question=reviewed?'Deseja tornar a não vinculação regular?':'Deseja reverter a não vinculação?';
+  askDdaDecision(row,trigger,{
+   question:reviewed?'Deseja tornar a não vinculação regular?':'Deseja reverter a não vinculação?',
+   marker:'ddaUnlinkedDialog',
+   errorMessage:'Não foi possível confirmar a alteração. Atualize o relatório e confira a vinculação.',
+   async save(signal){
+    const receipt=await data.unlinkedReview.save({row,reviewed,signal});
+    if(receipt?.id!==row.id||receipt.reviewed!==reviewed)throw new Error('Confirmação inválida.');
+    return {linkReviewed:reviewed};
+   },
+  });
+ }
+ function askRefusal(row,trigger){
+  askDdaDecision(row,trigger,{
+   question:'Deseja recusar esse boleto?',
+   marker:'ddaRefuseDialog',
+   errorMessage:'Não foi possível confirmar a recusa. Tente novamente ou atualize o relatório.',
+   async save(signal){
+    const receipt=await data.rejectDda({row,signal});
+    if(receipt?.id!==row.id)throw new Error('Confirmação inválida.');
+    return {status:DDA_REFUSED_STATUS};
+   },
+  });
+ }
+ function askDdaDecision(row,trigger,{question,marker,errorMessage,save}){
+  if(destroyed||root.hidden||root.getAttribute('aria-busy')==='true'||nestedViewOpen()||settlementOpening||!rows?.includes(row))return;
   const overlay=make('div','gallery-record-overlay dda-payment-overlay');
   const dialog=make('section','gallery-record-dialog dda-payment-dialog');
-  dialog.dataset.ddaUnlinkedDialog='';dialog.tabIndex=-1;
+  dialog.dataset[marker]='';dialog.tabIndex=-1;
   dialog.setAttribute('role','dialog');dialog.setAttribute('aria-modal','true');dialog.setAttribute('aria-label',question);
   const feedback=make('p','dda-payment-feedback');feedback.setAttribute('role','status');
   const actions=make('div','gallery-record-dialog-buttons'),no=button('Não'),yes=button('Sim');
   yes.className='dda-payment-yes';actions.append(no,yes);
   dialog.append(make('h2','',question),make('p','dda-payment-summary',row.supplier+' · DDA '+row.id),feedback,actions);
   overlay.append(dialog);
-  const entry=unlinkedDialog={overlay,trigger};
-  no.addEventListener('click',closeUnlinkedDialog);
+  const entry=decisionDialog={overlay,trigger};
+  no.addEventListener('click',closeDecisionDialog);
   yes.addEventListener('click',async()=>{
-   if(yes.disabled||unlinkedDialog!==entry)return;
+   if(yes.disabled||decisionDialog!==entry)return;
    no.disabled=yes.disabled=true;feedback.setAttribute('role','status');feedback.textContent='Salvando no SharePoint…';dialog.focus();
    try{
-    const receipt=await data.unlinkedReview.save({row,reviewed,signal:controller.signal});
-    if(unlinkedDialog!==entry)return;
-    if(receipt?.id!==row.id||receipt.reviewed!==reviewed)throw new Error('Confirmação inválida.');
-    rows=rows.map(item=>item.id===row.id?Object.freeze({...item,linkReviewed:reviewed}):item);
-    renderKeepingPosition();closeUnlinkedDialog();onRowsChange(rows,{id:row.id,linkReviewed:reviewed});
+    const change=await save(controller.signal);
+    if(decisionDialog!==entry)return;
+    if(change.status===DDA_REFUSED_STATUS)expandedBarcodes.delete(row.id);
+    rows=rows.map(item=>item.id===row.id?Object.freeze({...item,...change}):item);
+    renderKeepingPosition();closeDecisionDialog();onRowsChange(rows,{id:row.id,...change});
    }catch{
-    if(unlinkedDialog!==entry)return;
-    feedback.setAttribute('role','alert');feedback.textContent='Não foi possível confirmar a alteração. Atualize o relatório e confira a vinculação.';
+    if(decisionDialog!==entry)return;
+    feedback.setAttribute('role','alert');feedback.textContent=errorMessage;
     no.disabled=yes.disabled=false;no.focus();
    }
   });
   overlay.addEventListener('keydown',event=>{
    if(event.key==='Escape'){
-    event.preventDefault();event.stopPropagation();if(!no.disabled)closeUnlinkedDialog();
+    event.preventDefault();event.stopPropagation();if(!no.disabled)closeDecisionDialog();
    }else if(event.key==='Tab'){
     event.preventDefault();event.stopPropagation();
     (no.disabled?dialog:doc.activeElement===no?yes:no).focus();
@@ -259,13 +283,14 @@ export function createDdaReportView({document:doc=globalThis.document,data,openM
   if(balanceMetric)summary.append(balanceMetric.element);
   for(const [label,value,hint] of [['DDAs encontrados',result.rows.length],['Valor nominal total',money(result.total)],['Vencidos no filtro',result.overdue],['Vencem hoje',result.today],['Qtd DDA vencendo em 7d',result.dueWithin7Days,'De hoje até daqui a 7 dias, inclusive, conforme os filtros.'],['Valor DDA vencendo em 7d',money(result.totalDueWithin7Days),'De hoje até daqui a 7 dias, inclusive, conforme os filtros.'],['Valor DDA vencendo hoje',money(result.totalDueToday),'Vencimento hoje, conforme os filtros.']]){const metric=make('div','ddr-metric');if(hint)metric.title=hint;metric.append(make('span','',label),make('strong','',value));summary.append(metric);}
   summary.append(lastUpdate.element,refreshStatus.element);content.append(summary);
-  content.append(make('p','ddr-source','Situação bancária ou pagamento confirmado pelo usuário. Ordenação pelo vencimento mais próximo.'));
+  content.append(make('p','ddr-source','Situação bancária, pagamento confirmado ou recusa registrada pelo usuário. Ordenação pelo vencimento mais próximo.'));
   if(result.visibleOutsideStatus)content.append(make('p','ddr-source',`${result.visibleOutsideStatus} DDA(s) pagos com baixa pendente ficam fora dos totais da situação selecionada.`));
   if(result.missingAmounts)content.append(make('p','ddr-warning',`${result.missingAmounts} DDA(s) sem valor nominal válido. Total indisponível.`));
   if(!result.rows.length){content.append(make('p','ddr-empty','Nenhum DDA encontrado para os filtros selecionados.'));return;}
   const table=make('table','ddr-table');table.setAttribute('aria-label','DDAs da empresa');const head=make('thead'),tr=make('tr'),body=make('tbody');
   for(const label of ['ID','VENCIMENTO','FORNECEDOR','BANCO / BOLETO','DATA EMISSÃO','VALOR NOMINAL','SITUAÇÃO','VINCULAÇÃO','AÇÕES']){const th=make('th','',label);th.scope='col';if(label==='AÇÕES')th.dataset.reportScreenOnly='';tr.append(th);}head.append(tr);table.append(head,body);
   for(const row of printAll?result.rows:result.rows.slice((page-1)*50,page*50)){
+   const refused=row.status===DDA_REFUSED_STATUS;
    const line=make('tr');line.dataset.ddaId=row.id;
    line.toggleAttribute('data-dda-paid',row.status==='Pago');
    const due=make('td','ddr-due');due.dataset.dueTone=ddaDueTone(row.due,currentDate);
@@ -288,12 +313,12 @@ export function createDdaReportView({document:doc=globalThis.document,data,openM
    const overdue=row.status==='Vencido'||(row.status==='Em aberto'&&row.due&&row.due<today);
    const scheduled=['Em aberto','Agendado','Vencido'].includes(row.status)&&row.schedule.state==='scheduled';
    const openUnscheduled=row.schedule.state==='unscheduled'&&['Em aberto','Agendado','Vencido'].includes(row.status);
-   const cluster=make('div','ddr-status-cluster');cluster.dataset.statusTone=row.status==='Pago'?'paid':scheduled?'scheduled':overdue?'overdue':openUnscheduled||row.status==='Em aberto'?'open':'neutral';
-   cluster.append(make('strong','',row.paidBySchedule?'PAGO POR AGENDAMENTO':scheduled?'AGENDADO':openUnscheduled?'Em aberto':row.status));cluster.title=row.paidManually?'Pagamento confirmado pelo usuário':row.paidBySchedule?'Pagamento por agendamento':'Situação na última consulta bancária: '+row.status;
-   if(row.paidManually)cluster.append(make('small','','Confirmado pelo usuário'));
-   const statusDate=row.paidManually?row.confirmedAt:row.checkedAt;
+   const cluster=make('div','ddr-status-cluster');cluster.dataset.statusTone=refused?'refused':row.status==='Pago'?'paid':scheduled?'scheduled':overdue?'overdue':openUnscheduled||row.status==='Em aberto'?'open':'neutral';
+   cluster.append(make('strong','',refused?DDA_REFUSED_STATUS:row.paidBySchedule?'PAGO POR AGENDAMENTO':scheduled?'AGENDADO':openUnscheduled?'Em aberto':row.status));cluster.title=refused?'Recusado pelo usuário':row.paidManually?'Pagamento confirmado pelo usuário':row.paidBySchedule?'Pagamento por agendamento':'Situação na última consulta bancária: '+row.status;
+   if(row.paidManually&&!refused)cluster.append(make('small','','Confirmado pelo usuário'));
+   const statusDate=refused?'':row.paidManually?row.confirmedAt:row.checkedAt;
    if(statusDate){const checked=new Date(statusDate);if(Number.isFinite(checked.getTime()))cluster.append(make('small','',new Intl.DateTimeFormat('pt-BR',{timeZone:'America/Sao_Paulo',dateStyle:'short',timeStyle:'short'}).format(checked)));}
-   if(scheduled||row.paidBySchedule){
+   if(!refused&&(scheduled||row.paidBySchedule)){
     cluster.classList.add('ddr-schedule-cluster');
     cluster.dataset.scheduleState=row.paidBySchedule?'paid':'scheduled';
    }
@@ -313,10 +338,10 @@ export function createDdaReportView({document:doc=globalThis.document,data,openM
    link.append(linkCluster);
    const pencil=button('Vincular DDA '+row.id+' a descritivo provisão','✎');pencil.className='ddr-provision-pencil';pencil.dataset.ddaProvisionPencil=row.id;
    pencil.dataset.linkState=row.provisionId?'linked':'missing';
-   pencil.disabled=printAll||!data.provisionLink||!Number.isSafeInteger(Number(row.id))||Number(row.id)<=0;
+   pencil.disabled=printAll||refused||!data.provisionLink||!Number.isSafeInteger(Number(row.id))||Number(row.id)<=0;
    pencil.addEventListener('click',()=>{if(destroyed||root.hidden||root.getAttribute('aria-busy')==='true')return;void provisionPicker.show(row,pencil);});
    link.append(pencil);
-   if(linkState==='missing'&&((!row.paidBySchedule&&row.schedule.state==='scheduled')||pendingSettlement)){
+   if(!refused&&linkState==='missing'&&((!row.paidBySchedule&&row.schedule.state==='scheduled')||pendingSettlement)){
     line.classList.add('ddr-scheduled-unlinked');
     link.append(make('span','ddr-link-warning','ATENÇÃO'));
    }
@@ -335,6 +360,11 @@ export function createDdaReportView({document:doc=globalThis.document,data,openM
     ?'A baixa fica disponível após a conferência da provisão no SharePoint.':check.getAttribute('aria-label');
    check.addEventListener('click',()=>askSettlement(row,check));
    actions.append(check);files.append(actions);
+   if(!printAll&&!refused&&row.key&&typeof data.rejectDda==='function'){
+    const refuse=button('Recusar boleto DDA '+row.id,'×');
+    refuse.className='ddr-refuse';refuse.dataset.ddaRefuse=row.id;refuse.title='Recusar boleto';
+    refuse.addEventListener('click',()=>askRefusal(row,refuse));actions.append(refuse);
+   }
    if(!printAll&&pendingSettlement&&row.provisionId&&typeof onStartSettlement==='function'&&typeof data.loadItem==='function'){
     const settle=button(`Dar baixa na provisão ${row.provisionId} do DDA ${row.id}`,'Dar baixa');
     settle.className='ddr-settle-provision';settle.dataset.ddaSettleProvision=row.id;
@@ -398,7 +428,7 @@ export function createDdaReportView({document:doc=globalThis.document,data,openM
  }
  async function load(initialSnapshot,position,initialSettledDdaIds){
   if(root.hidden||destroyed)return;
-  closeSettlementDialog();closeUnlinkedDialog();provisionPicker.close();pdfRequest=null;controller?.abort();cancelSettlement();
+  closeSettlementDialog();closeDecisionDialog();provisionPicker.close();pdfRequest=null;controller?.abort();cancelSettlement();
   const current=++revision,active=controller=new AbortController(),filters=filterRevision;
   const isCurrent=()=>!active.signal.aborted&&current===revision&&!root.hidden&&!destroyed;
   rows=null;settledDdaIds=new Set();settlementVerified=false;printAll=false;
@@ -438,7 +468,7 @@ export function createDdaReportView({document:doc=globalThis.document,data,openM
   }
   finally{if(current===revision){root.setAttribute('aria-busy','false');syncRefreshButton();}}
  }
- function close(){if(root.hidden)return;balanceMetric?.clear();expandedBarcodes.clear();reloadPending=false;pdfRequest=null;closeSettlementDialog();closeUnlinkedDialog();provisionPicker.close();controller?.abort();cancelSettlement();revision++;rows=null;printAll=false;content.replaceChildren();showNotice();root.hidden=true;doc.body.style.overflow=oldOverflow;if(app)app.inert=oldInert;const target=returnFocus?.isConnected?returnFocus:doc.querySelector('[data-action="open-dda-report"]')||app;target?.focus?.();returnFocus=null;onClose();}
+ function close(){if(root.hidden)return;balanceMetric?.clear();expandedBarcodes.clear();reloadPending=false;pdfRequest=null;closeSettlementDialog();closeDecisionDialog();provisionPicker.close();controller?.abort();cancelSettlement();revision++;rows=null;printAll=false;content.replaceChildren();showNotice();root.hidden=true;doc.body.style.overflow=oldOverflow;if(app)app.inert=oldInert;const target=returnFocus?.isConnected?returnFocus:doc.querySelector('[data-action="open-dda-report"]')||app;target?.focus?.();returnFocus=null;onClose();}
  const filter=()=>{filterRevision++;printAll=false;page=1;if(rows){render();content.scrollTop=0;}showNotice();};
  controls.status.addEventListener('change',filter);controls.bank.addEventListener('change',filter);controls.search.addEventListener('input',filter);refresh.addEventListener('click',()=>void manualRefresh());
  const unsubscribeBank=syncMonitor?.subscribe(state=>{
@@ -466,6 +496,6 @@ export function createDdaReportView({document:doc=globalThis.document,data,openM
   landscape.update();panel.focus();void balanceMetric?.refresh();
   await load(initialSnapshot,undefined,initialSettledDdaIds);
  },close,
-  async preparePrint(){if(root.hidden||destroyed||!rows||unlinkedDialog||root.getAttribute('aria-busy')==='true')throw new Error('Não foi possível imprimir: aguarde a consulta completa dos DDAs.');const current=revision,filters=filterRevision,position=[content.scrollTop,content.scrollLeft],oldPage=page;printAll=true;render();return()=>{if(root.hidden||destroyed||current!==revision||filters!==filterRevision)return;printAll=false;page=oldPage;render();[content.scrollTop,content.scrollLeft]=position;};},
+  async preparePrint(){if(root.hidden||destroyed||!rows||decisionDialog||root.getAttribute('aria-busy')==='true')throw new Error('Não foi possível imprimir: aguarde a consulta completa dos DDAs.');const current=revision,filters=filterRevision,position=[content.scrollTop,content.scrollLeft],oldPage=page;printAll=true;render();return()=>{if(root.hidden||destroyed||current!==revision||filters!==filterRevision)return;printAll=false;page=oldPage;render();[content.scrollTop,content.scrollLeft]=position;};},
   destroy(){if(destroyed)return;close();destroyed=true;unsubscribeBank?.();landscape.destroy();root.remove();}});
 }

@@ -55,6 +55,24 @@ test('DDA preserves explicit Todos during refresh and restores Em aberto when re
  gallery.close();await gallery.open();
  assert.equal(status.value,'Em aberto');assert.equal(doc.querySelectorAll('.rg-row--dda').length,1);
 });
+test('DDA gallery shows refused boletos exclusively under Recusados after a bank status update',async t=>{
+ const dom=new JSDOM('<body/>'),doc=dom.window.document;
+ const refused={id:'8',fields:{...sample.fields,Title:'Boleto recusado',SITUACAO:'Pago',
+  DDA_RECUSADO:true,DDA_CICLO_AGENDAMENTO:'PAGO_AGENDADO',PGTO_CONFIRMADO:true}};
+ const gallery=createRegistrationGallery({document:doc,kind:'dda',
+  data:{loadSnapshot:async()=>({rows:[sample,refused]})}});
+ t.after(()=>{gallery.destroy();dom.window.close();});await gallery.open();
+ const status=doc.querySelector('[data-filter-field="SITUACAO"]');
+ const select=value=>{status.value=value;status.dispatchEvent(new dom.window.Event('change'));};
+ select('');assert.equal(doc.querySelector('[data-registration-row="8"]'),null);
+ const option=[...status.options].find(item=>item.textContent==='Recusados');
+ assert.ok(option);select(option.value);
+ const card=doc.querySelector('[data-registration-row="8"]');
+ assert.equal(card.querySelector('[data-field="SITUACAO"] dd').textContent,'Recusado');
+ assert.equal(card.querySelector('[data-dda-confirm-payment]'),null);
+ assert.equal(card.querySelector('.rg-dda-payment-audit'),null);
+ assert.equal(doc.querySelector('[data-registration-row="7"]'),null);
+});
 test('DDA reads its list and PDFs without exposing mutations',async()=>{
  const calls=[];
  const data=createRegistrationGalleryData({kind:'dda',repository:{

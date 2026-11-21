@@ -1,4 +1,5 @@
 import { formatDdaElapsed } from '../chat/dda-bank-refresh.js';
+import { DDA_REFUSED_FIELD } from '../chat/dda-bank-status.js';
 
 function sicoobSummary(result) {
   if (result.status === 'failed') return 'A consulta ao Sicoob ou a importação das transações falhou.';
@@ -61,6 +62,7 @@ export function createDdaSyncReceipt({ document: doc, host, format, source = 'dd
     const byId = new Map(rows.map(row => [String(row.id), row]));
     if (source === 'dda' && hasNew && validIds) for (const id of ids) {
       const row = byId.get(String(id));
+      if (row?.fields?.[DDA_REFUSED_FIELD] === true) continue;
       const item = el('li', 'dda-sync-item');
       item.append(el('span', 'rg-dda-id', `ID ${id}`));
       item.append(el('strong', 'dda-sync-supplier', row ? format(row, 'Title') : 'DDA adicionado'));
@@ -74,7 +76,7 @@ export function createDdaSyncReceipt({ document: doc, host, format, source = 'dd
       list.append(item);
     }
     else if (source === 'dda' && hasNew) list.append(el('li', 'dda-sync-item', 'A sincronização confirmou a criação, mas não informou os IDs dos novos itens.'));
-    if (source === 'dda' && hasNew) dialog.append(list);
+    if (list.childElementCount) dialog.append(list);
     const button = el('button', 'gallery-record-dialog-button', 'Entendi'); button.type = 'button';
     button.addEventListener('click', async () => {
       if (current?.dialog !== dialog || button.disabled) return;
