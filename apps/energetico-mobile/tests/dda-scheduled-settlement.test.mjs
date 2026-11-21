@@ -131,7 +131,8 @@ test('the pending row participates in pagination and filtered print, and disappe
  const restore=await view.preparePrint(),snapshot=captureFilteredReport(view.element,{title:'Relatório DDA'});
  const table=snapshot.pages[0].blocks.find(block=>block.type==='table');
  assert.equal(table.rows.length,53);
- assert.match(table.rows.at(-1).cells[6].runs.map(run=>run.text).join(' '),/PAGO POR AGENDAMENTO.*Baixa pendente/s);
+ const statusColumn=table.rows[0].cells.findIndex(cell=>cell.runs[0].text.trim()==='SITUAÇÃO');
+ assert.match(table.rows.at(-1).cells[statusColumn].runs.map(run=>run.text).join(' '),/PAGO POR AGENDAMENTO.*Baixa pendente/s);
  restore();assert.deepEqual(ids(),['51','52']);
  settled=true;doc.querySelector('[aria-label="Atualizar DDAs"]').click();await tick();
  assert.equal(lookups,2);assert.deepEqual(ids(),['51']);

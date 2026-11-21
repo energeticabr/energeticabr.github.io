@@ -32,7 +32,7 @@ test('report shows signed calendar days below the due date with the existing dat
 test('missing and invalid due dates do not show a fabricated day count',async t=>{
  const {cell}=await setup(t,[null,'','invalid','2026-02-30']);
  for(let id=1;id<=4;id++){
-  assert.equal(cell(id).textContent,'Não informado');
+  assert.equal(cell(id).querySelector('.ddr-due-date').textContent,'Não informado');
   assert.equal(cell(id).dataset.dueTone,'unknown');
   assert.equal(cell(id).querySelector('.ddr-due-days'),null);
  }

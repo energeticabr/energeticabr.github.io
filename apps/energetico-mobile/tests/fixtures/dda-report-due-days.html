@@ -26,7 +26,7 @@ state.linkRows=[...document.querySelectorAll('[data-dda-id]')].map(row=>{
   return word.getClientRects().length===1;
  });
  return {id:row.dataset.ddaId,link:link.textContent,warning:warning?.textContent??null,
-  linkBackground:getComputedStyle(link).backgroundColor,linkFits:link.scrollWidth<=link.clientWidth+1&&link.offsetWidth<=row.cells[7].clientWidth,wordsFit,
+  linkBackground:getComputedStyle(link).backgroundColor,linkFits:link.scrollWidth<=link.clientWidth+1&&link.offsetWidth<=link.parentElement.clientWidth,wordsFit,
   below:Boolean(warning&&warning.offsetTop>=link.offsetTop+link.offsetHeight),
   fits:Boolean(warning&&warning.scrollWidth<=warning.clientWidth+1),
   rowBackground:getComputedStyle(row).backgroundColor,
@@ -63,7 +63,7 @@ state.metrics=[...document.querySelectorAll('.ddr-metric:not([hidden])')].map(ca
 }));
 for(const due of document.querySelectorAll('.ddr-due')){
  const badge=due.querySelector('.ddr-due-days'),date=due.querySelector('.ddr-due-date');
- if(!badge){state.missing=due.textContent;continue;}
+ if(!badge){state.missing=date.textContent;continue;}
  const style=getComputedStyle(badge);
  // offset positions stay in report coordinates when the phone rotates it.
  state.rows.push({text:badge.textContent,tone:due.dataset.dueTone,color:style.color,background:style.backgroundColor,
@@ -74,15 +74,16 @@ for(const due of document.querySelectorAll('.ddr-due')){
   fits:badge.offsetWidth<=due.clientWidth&&badge.offsetLeft>=0&&badge.offsetLeft+badge.offsetWidth<=due.clientWidth,
   printColorAdjust:style.printColorAdjust});
 }
-for(const cell of document.querySelectorAll('.ddr-issued-date')){
- const badge=cell.querySelector('.ddr-issued-days'),date=cell.querySelector('strong');
- if(!badge){state.missingIssued=cell.textContent;continue;}
- const style=getComputedStyle(badge);
- state.issued.push({text:badge.textContent,color:style.color,background:style.backgroundColor,
-  fontSize:parseFloat(style.fontSize),height:badge.offsetHeight,
-  below:badge.offsetTop>=date.offsetTop+date.offsetHeight,
-  centered:Math.abs(badge.offsetLeft+badge.offsetWidth/2-cell.clientWidth/2)<=1,
-  fits:badge.offsetWidth<=cell.clientWidth&&badge.offsetLeft>=0&&badge.offsetLeft+badge.offsetWidth<=cell.clientWidth,
+for(const issuance of document.querySelectorAll('.ddr-due > .ddr-issuance')){
+ const badge=issuance.querySelector('.ddr-issued-cluster'),label=issuance.querySelector('.ddr-issued-label');
+ if(!badge){state.missingIssued=issuance.querySelector('.ddr-issued-missing').textContent;continue;}
+ const style=getComputedStyle(badge),labelStyle=getComputedStyle(label),dueBadge=issuance.previousElementSibling;
+ state.issued.push({text:badge.querySelector('time').textContent,age:badge.querySelector('small').textContent,
+  label:label.textContent,labelColor:labelStyle.color,divider:labelStyle.borderTopWidth,color:style.color,background:style.backgroundColor,
+  fontSize:parseFloat(style.fontSize),
+  below:label.offsetTop>=dueBadge.offsetTop+dueBadge.offsetHeight&&badge.offsetTop>=label.offsetTop+label.offsetHeight,
+  centered:Math.abs(badge.offsetLeft+badge.offsetWidth/2-label.offsetLeft-label.offsetWidth/2)<=1,
+  fits:badge.scrollWidth<=badge.clientWidth+1&&badge.offsetWidth<=issuance.clientWidth,
   printColorAdjust:style.printColorAdjust});
 }
 document.documentElement.dataset.dueDays=JSON.stringify(state);

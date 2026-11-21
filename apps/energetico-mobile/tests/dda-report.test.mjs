@@ -101,22 +101,30 @@ test('status clusters distinguish overdue open bills from paid bills without cha
  assert.equal(source[0].fields.SITUACAO,'Em aberto');assert.ok(cluster(1).querySelector('small'));
  view.destroy();dom.window.close();
 });
-test('report groups bank and boleto number, then shows issue date and calendar days since issue',async()=>{
+test('report groups bank and boleto number and shows issue date and age inside Vencimento on screen and print',async()=>{
  const issued=row(1);issued.fields.EMISSAO='2026-10-20T00:00:00Z';
  const today=row(2);today.fields.EMISSAO='2026-10-28';
  const unknown=row(3);unknown.fields.EMISSAO='';
  const {dom,view,doc}=setup({loadSnapshot:async()=>({rows:[issued,today,unknown]})});await view.open();
- assert.deepEqual([...doc.querySelectorAll('.ddr-table thead th')].map(cell=>cell.textContent),['ID','VENCIMENTO','FORNECEDOR','BANCO / BOLETO','DATA EMISSÃO','VALOR NOMINAL','SITUAÇÃO','VINCULAÇÃO','AÇÕES']);
+ assert.deepEqual([...doc.querySelectorAll('.ddr-table thead th')].map(cell=>cell.textContent),['ID','VENCIMENTO','FORNECEDOR','BANCO / BOLETO','VALOR NOMINAL','SITUAÇÃO','VINCULAÇÃO','AÇÕES']);
  const line=doc.querySelector('[data-dda-id="1"]');
  assert.equal(line.querySelector('[data-dda-bank-cluster] strong').textContent,'Banco teste');
  assert.equal(line.querySelector('[data-dda-document-cluster] strong').textContent,'DOC-1');
  assert.equal(line.querySelector('[data-dda-document-cluster]').parentElement,line.querySelector('[data-dda-bank-cluster]'));
  assert.equal(line.querySelector('.ddr-money-cluster').textContent.replace(/\s/g,' '),'R$ 12,34');
  assert.equal(line.querySelector('.ddr-supplier-cluster .ddr-supplier-name').textContent,'Fornecedor 1');
- assert.equal(line.querySelector('.ddr-issued-date strong').textContent,'20/10/2026');
- assert.equal(line.querySelector('.ddr-issued-date small').textContent,'8 d');
- assert.equal(doc.querySelector('[data-dda-id="2"] .ddr-issued-date small').textContent,'0 d');
- assert.equal(doc.querySelector('[data-dda-id="3"] .ddr-issued-date').textContent,'Não informada');
+ const issuance=line.querySelector('.ddr-due > .ddr-issuance');
+ assert.equal(issuance.previousElementSibling.className,'ddr-due-days');
+ assert.equal(issuance.querySelector('.ddr-issued-label').textContent,'Emitido em');
+ assert.equal(issuance.querySelector('.ddr-issued-cluster time').textContent,'20/10/2026');
+ assert.equal(issuance.querySelector('time').dateTime,'2026-10-20');
+ assert.equal(issuance.querySelector('.ddr-issued-days').textContent,'8 d');
+ assert.equal(doc.querySelector('[data-dda-id="2"] .ddr-issued-days').textContent,'0 d');
+ assert.equal(doc.querySelector('[data-dda-id="3"] .ddr-issued-missing').textContent,'Não informada');
+ assert.equal(doc.querySelector('[data-dda-id="3"] .ddr-issued-cluster'),null);
+ const restore=await view.preparePrint();
+ assert.equal(doc.querySelector('[data-dda-id="1"] .ddr-due .ddr-issued-cluster time').textContent,'20/10/2026');
+ restore();
  view.destroy();dom.window.close();
 });
 test('report shows one status cluster with scheduling date inside green and preserves paid and unknown evidence',async()=>{
@@ -155,7 +163,8 @@ test('report shows one status cluster with scheduling date inside green and pres
   const restore=await view.preparePrint();
   const snapshot=captureFilteredReport(view.element,{title:'Relatório DDA'});
   const table=snapshot.pages[0].blocks.find(block=>block.type==='table');
-  const labels=table.rows.slice(1).map(row=>row.cells[6].runs[0].text.trim());
+  const statusColumn=table.rows[0].cells.findIndex(cell=>cell.runs[0].text.trim()==='SITUAÇÃO');
+  const labels=table.rows.slice(1).map(row=>row.cells[statusColumn].runs[0].text.trim());
   assert.deepEqual(labels,['Em aberto',...expected.filter((_,index)=>index!==2).map(([label])=>label)]);
   restore();
  }finally{view.destroy();dom.window.close();}

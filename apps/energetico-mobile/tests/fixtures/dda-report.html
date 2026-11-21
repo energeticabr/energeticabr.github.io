@@ -42,7 +42,7 @@ const report=decorateReportPrint(decorateReportNavigation(createDdaReportView({d
  onStartSettlement:async id=>{document.documentElement.dataset.ddaSettlementSelected=id;return !paymentMode;},
  confirmPayment:async({itemId,key})=>{window.ddaPaymentCalls++;return {status:'confirmed',itemId,key,confirmedAt:'2026-10-28T18:00:00Z',confirmedBy:'demo@example.test'};}}),{action:'open-dda-report',onNavigate:()=>report.close()}),
  {action:'open-dda-report',previewMedia:async(source)=>{const url=URL.createObjectURL(await source);window.open(url,'_blank','noopener');}});
-if(!refusalMode){
+if(!refusalMode&&!new URLSearchParams(location.search).has('standalone')){
  const {createChatView}=await import('/src/ui/chat-view.js');
  const chat=createChatView(document.querySelector('#app'));chat.on('open-dda-report',()=>report.open());
  chat.render({sessionStatus:'authenticated',account:{name:'Demonstração'},draft:'',pendingFiles:[],messages:[{id:'home',role:'assistant',type:'poll',question:'QUAL ÁREA VOCÊ DESEJA ACESSAR?',options:[
@@ -154,9 +154,9 @@ if(new URLSearchParams(location.search).has('layout')){
     ordered:number.parentElement===bank&&number.offsetTop>=bank.querySelector('strong').offsetTop+bank.querySelector('strong').offsetHeight,
     fits:bank.offsetWidth<=cell.clientWidth&&number.offsetWidth<=cell.clientWidth};
   }),
-  issuedDates:[...document.querySelectorAll('.ddr-issued-date')].map(cell=>({
-   text:cell.textContent,weight:getComputedStyle(cell.querySelector('strong')||cell).fontWeight,
-   fits:cell.scrollWidth<=cell.clientWidth+1
+  issuedDates:[...document.querySelectorAll('.ddr-due .ddr-issued-cluster')].map(cluster=>({
+   date:cluster.querySelector('time').textContent,age:cluster.querySelector('small').textContent,
+   fits:cluster.scrollWidth<=cluster.clientWidth+1&&cluster.offsetWidth<=cluster.parentElement.clientWidth
   })),
   linkClusters:[...document.querySelectorAll('.ddr-link-cluster')].map(cluster=>({text:cluster.textContent,state:cluster.dataset.linkState,background:getComputedStyle(cluster).backgroundColor,fits:cluster.offsetWidth<=cluster.parentElement.clientWidth})),
   clusters:[...document.querySelectorAll('[data-dda-supplier-count]')].map(cluster=>({
