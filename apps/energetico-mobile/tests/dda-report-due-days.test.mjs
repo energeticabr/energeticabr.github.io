@@ -12,9 +12,9 @@ async function setup(t,dates,instant='2026-11-04T22:00:00-03:00'){
  return {report,cell:id=>dom.window.document.querySelector(`[data-dda-id="${id}"] .ddr-due`)};
 }
 
-test('report shows signed calendar days below the due date with the existing date tone',async t=>{
+test('report distinguishes overdue, today, tomorrow and later due dates in the day cluster',async t=>{
  const {cell,report}=await setup(t,['2026-11-04','2026-11-05','2026-11-03','2026-11-09','2026-10-23']);
- for(const [id,label,tone,date] of [[1,'0 d','today','04/11/2026(quarta-feira)'],[2,'1 d','tomorrow','05/11/2026(quinta-feira)'],[3,'-1 d','other','03/11/2026(terça-feira)'],[4,'5 d','other','09/11/2026(segunda-feira)'],[5,'-12 d','other','23/10/2026(sexta-feira)']]){
+ for(const [id,label,tone,date] of [[1,'0 d','today','04/11/2026(quarta-feira)'],[2,'1 d','tomorrow','05/11/2026(quinta-feira)'],[3,'-1 d','overdue','03/11/2026(terça-feira)'],[4,'5 d','other','09/11/2026(segunda-feira)'],[5,'-12 d','overdue','23/10/2026(sexta-feira)']]){
   const due=cell(id),badge=due.querySelector('.ddr-due-days');
   assert.ok(badge,'days-until-due badge must exist');
   assert.equal(due.dataset.dueTone,tone);
@@ -25,6 +25,7 @@ test('report shows signed calendar days below the due date with the existing dat
  const restore=await report.preparePrint();
  assert.equal(cell(1).querySelector('.ddr-due-date').textContent,'04/11/2026(quarta-feira)');
  assert.equal(cell(1).querySelector('.ddr-due-days').textContent,'0 d');
+ assert.equal(cell(3).dataset.dueTone,'overdue');
  restore();
  assert.equal(cell(3).querySelector('.ddr-due-days').textContent,'-1 d');
 });

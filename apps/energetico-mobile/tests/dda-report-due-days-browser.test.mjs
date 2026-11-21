@@ -77,7 +77,8 @@ test('DDA date and linkage clusters fit on phones, desktop and print',{timeout:9
      assert.ok(row.height>=20&&row.height<24,'vencimento cluster must be slightly more compact');
      assert.equal(row.printColorAdjust,'exact');
     }
-    assert.equal(state.rows[1].background,'rgb(183, 24, 42)');
+    assert.equal(state.rows[0].background,'rgb(183, 24, 42)');
+    assert.equal(state.rows[1].background,state.rows[0].background);
     assert.equal(state.rows[2].background,'rgb(169, 75, 0)');
     assert.equal(state.rows[3].background,'rgb(23, 100, 63)');
     assert.equal(state.missingIssued,'Não informada');

@@ -293,7 +293,8 @@ export function createDdaReportView({document:doc=globalThis.document,data,openM
    const refused=row.status===DDA_REFUSED_STATUS;
    const line=make('tr');line.dataset.ddaId=row.id;
    line.toggleAttribute('data-dda-paid',row.status==='Pago');
-   const due=make('td','ddr-due');due.dataset.dueTone=ddaDueTone(row.due,currentDate);
+   const pastDue=Boolean(row.due&&row.due<today);
+   const due=make('td','ddr-due');due.dataset.dueTone=pastDue?'overdue':ddaDueTone(row.due,currentDate);
    const dueDate=make('span','ddr-due-date',date(row.due));
    if(row.due)dueDate.append(make('wbr'),make('span','ddr-due-weekday',`(${weekday.format(new Date(`${row.due}T00:00:00Z`))})`));
    due.append(dueDate);
@@ -320,7 +321,7 @@ export function createDdaReportView({document:doc=globalThis.document,data,openM
     history.title='Contagem indisponível: o registro não possui um CNPJ utilizável. O nome do fornecedor não é usado para adivinhar vínculos.';
    }
    supplierCluster.append(history);supplier.append(supplierCluster);
-   const overdue=row.status==='Vencido'||(row.status==='Em aberto'&&row.due&&row.due<today);
+   const overdue=row.status==='Vencido'||(row.status==='Em aberto'&&pastDue);
    const scheduled=['Em aberto','Agendado','Vencido'].includes(row.status)&&row.schedule.state==='scheduled';
    const openUnscheduled=row.schedule.state==='unscheduled'&&['Em aberto','Agendado','Vencido'].includes(row.status);
    const cluster=make('div','ddr-status-cluster');cluster.dataset.statusTone=refused?'refused':row.status==='Pago'?'paid':scheduled?'scheduled':overdue?'overdue':openUnscheduled||row.status==='Em aberto'?'open':'neutral';
