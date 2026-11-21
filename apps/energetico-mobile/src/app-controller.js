@@ -4,6 +4,7 @@ import { resumeConversation } from './chat/resume-conversation.js';
 import { createProvisionSettlementParentSession } from './ui/provision-settlement-parent-session.js';
 import { createDdaAutoReminder } from './chat/dda-auto-reminder.js';
 import { hasDdaMenuAlert, normalizeDdaReportRows } from './chat/dda-report-model.js';
+import { DDA_REFUSED_STATUS } from './chat/dda-bank-status.js';
 import { refreshDdaBank } from './chat/dda-bank-refresh.js';
 import { loadDdaPaymentLaunchFiles, waitForDdaPaymentLaunch, reconcileDdaLaunchAttachments } from './chat/dda-payment-launch.js';
 import { createDdaSyncSession } from './ui/dda-sync-session.js';
@@ -1606,19 +1607,27 @@ export function createAppController({
   let pendingProvisionLastAutoShownAt = null;
   let pendingProvisionEveDismissals = null;
   let ddaReminderInteraction = 0;
+  const ddaMenuRefusedIds = new Set();
   let ddaMenuRows = null, ddaMenuVersion = 0, ddaMenuRequest = null;
   let renderedDdaMenuAlert = false;
   function ddaMenuHasAlert() {
     return Boolean(account && !stopped && ddaMenuRows?.account === account &&
       ddaMenuRows.revision === sessionRevision && hasDdaMenuAlert(ddaMenuRows.rows));
   }
-  function updateDdaMenuRows(rows) {
-    ddaMenuRows = { account, revision: sessionRevision, rows };
+  function updateDdaMenuRows(rows, change) {
+    // A confirmed refusal stays effective for this session even when another read still shows the bank status.
+    for (const row of rows) {
+      if (row.status === DDA_REFUSED_STATUS) ddaMenuRefusedIds.add(row.id);
+    }
+    const current = ddaMenuRows?.account === account && ddaMenuRows.revision === sessionRevision ? ddaMenuRows.rows : null;
+    const updatedRows = change && current ? current.map(row => row.id === change.id ? { ...row, ...change } : row) : rows;
+    ddaMenuRows = { account, revision: sessionRevision, rows: updatedRows.filter(row => !ddaMenuRefusedIds.has(row.id)) };
     if (renderedDdaMenuAlert !== ddaMenuHasAlert()) render();
   }
   function resetDdaMenuAlert() {
     abortDdaMenuRequest();
     ddaMenuRows = null;
+    ddaMenuRefusedIds.clear();
     ddaMenuVersion++;
   }
   function abortDdaMenuRequest() {
@@ -10405,8 +10414,7 @@ export function createAppController({
                 assertSession();
                 // A reminder started before a report save must not restore the old color.
                 ddaMenuVersion++;
-                const current = ddaMenuRows?.account === account && ddaMenuRows.revision === sessionRevision ? ddaMenuRows.rows : null;
-                updateDdaMenuRows(change && current ? current.map(row => row.id === change.id ? { ...row, ...change } : row) : rows);
+                updateDdaMenuRows(rows, change);
                 if (change && enableDdaMenuAlert) {
                   abortDdaMenuRequest();
                   refreshDdaMenuAlert();
