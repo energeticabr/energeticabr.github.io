@@ -92,6 +92,28 @@ test('the authenticated DDA snapshot and report changes control only the DDA mas
  await h.view.emit('sign-out');
  assert.equal(h.renders.at(-1).ddaMenuAlert,false);
 });
+
+test('a confirmed refusal keeps an unlinked DDA out of the mascot warning even after a stale read',async t=>{
+ const item={id:'5',fields:{SITUACAO:'Em aberto',VENCIMENTO:'2099-01-01'}};
+ const stale={rows:[item]};
+ const h=setup(t,{enableDdaReminders:false,enableDdaMenuAlert:true,
+  registrationGalleryDataFactory:async()=>({loadSnapshot:async()=>stale})});
+ await h.controller.start();await tick();
+ const hasAlert=()=>h.renders.at(-1).ddaMenuAlert;
+ assert.equal(hasAlert(),true);
+ await h.view.emit('open-dda-report');
+ const {onRowsChange}=h.factories[0];
+ const refused={...item,fields:{...item.fields,DDA_RECUSADO:true}};
+ onRowsChange(normalizeDdaReportRows({rows:[refused]}),{id:item.id,status:'Recusado'});
+ assert.equal(hasAlert(),false,'confirmation clears the alert immediately');
+ await tick();
+ assert.equal(hasAlert(),false,'an older bank snapshot cannot restore the alert');
+ onRowsChange(normalizeDdaReportRows(stale));
+ assert.equal(hasAlert(),false,'an older report snapshot cannot restore the alert');
+ onRowsChange(normalizeDdaReportRows({rows:[item,{...item,id:'6'}]}));
+ assert.equal(hasAlert(),true,'another open, unlinked DDA still raises the alert');
+});
+
 test('gallery receives the authenticated bank refresh callback and it expires with logout',async t=>{
  let options,called=0;
  const h=setup(t,{client:{sendText:async()=>({status:'processed',messages:[]}),
