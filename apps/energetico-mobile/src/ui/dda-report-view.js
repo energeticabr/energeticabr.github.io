@@ -288,7 +288,7 @@ export function createDdaReportView({document:doc=globalThis.document,data,openM
   if(result.missingAmounts)content.append(make('p','ddr-warning',`${result.missingAmounts} DDA(s) sem valor nominal válido. Total indisponível.`));
   if(!result.rows.length){content.append(make('p','ddr-empty','Nenhum DDA encontrado para os filtros selecionados.'));return;}
   const table=make('table','ddr-table');table.setAttribute('aria-label','DDAs da empresa');const head=make('thead'),tr=make('tr'),body=make('tbody');
-  for(const label of ['ID','VENCIMENTO','FORNECEDOR','BANCO / BOLETO','DATA EMISSÃO','VALOR NOMINAL','SITUAÇÃO','VINCULAÇÃO','AÇÕES']){const th=make('th','',label);th.scope='col';if(label==='AÇÕES')th.dataset.reportScreenOnly='';tr.append(th);}head.append(tr);table.append(head,body);
+  for(const label of ['ID','VENCIMENTO','FORNECEDOR','BANCO / BOLETO','VALOR NOMINAL','SITUAÇÃO','VINCULAÇÃO','AÇÕES']){const th=make('th','',label);th.scope='col';if(label==='AÇÕES')th.dataset.reportScreenOnly='';tr.append(th);}head.append(tr);table.append(head,body);
   for(const row of printAll?result.rows:result.rows.slice((page-1)*50,page*50)){
    const refused=row.status===DDA_REFUSED_STATUS;
    const line=make('tr');line.dataset.ddaId=row.id;
@@ -298,6 +298,16 @@ export function createDdaReportView({document:doc=globalThis.document,data,openM
    if(row.due)dueDate.append(make('wbr'),make('span','ddr-due-weekday',`(${weekday.format(new Date(`${row.due}T00:00:00Z`))})`));
    due.append(dueDate);
    if(row.due)due.append(make('span','ddr-due-days',`${daysSince(today,row.due)} d`));
+   const issuance=make('div','ddr-issuance');
+   issuance.append(make('span','ddr-issued-label',row.issued?'Emitido em':'Emissão'));
+   if(row.issued){
+    const issued=make('time','ddr-issued-value',date(row.issued));
+    issued.dateTime=row.issued;
+    const issuedCluster=make('div','ddr-issued-cluster');
+    issuedCluster.append(issued,make('small','ddr-issued-days',`${daysSince(row.issued,today)} d`));
+    issuance.append(issuedCluster);
+   }else issuance.append(make('span','ddr-issued-missing','Não informada'));
+   due.append(issuance);
    const supplier=make('td','ddr-supplier'),status=make('td','ddr-status');status.dataset.status=row.status;
    const supplierCluster=make('div','ddr-supplier-cluster');
    supplierCluster.append(make('span','ddr-supplier-name',row.supplier));
@@ -350,9 +360,6 @@ export function createDdaReportView({document:doc=globalThis.document,data,openM
    bankCluster.append(make('small','','Banco emissor'),make('strong','',row.bank||'—'));
    documentCluster.append(make('small','','Nº boleto'),make('strong','',row.document||'—'));
    bankCluster.append(documentCluster);bankDocument.append(bankCluster);
-   const issued=make('td','ddr-issued-date');
-   if(row.issued)issued.append(make('strong','',date(row.issued)),make('small','ddr-issued-days',`${daysSince(row.issued,today)} d`));
-   else issued.append(make('span','','Não informada'));
    const files=make('td'),actions=make('div','ddr-row-actions'),check=button(row.provisionId?'Iniciar baixa da provisão '+row.provisionId+' do DDA '+row.id:'Vincule um descritivo de pagamento ao DDA '+row.id+' para iniciar a baixa','✓');
    check.className='ddr-provision-check';check.dataset.ddaProvisionCheck=row.id;
    check.disabled=printAll||!canStartSettlement(row);
@@ -383,7 +390,7 @@ export function createDdaReportView({document:doc=globalThis.document,data,openM
     }
    line.dataset.stripe=String(body.querySelectorAll('[data-dda-id]').length%2);
    const amount=make('td','ddr-money');amount.append(make('div','ddr-money-cluster',money(row.amount)));
-   line.append(id,due,supplier,bankDocument,issued,amount,status,link,files);body.append(line);
+   line.append(id,due,supplier,bankDocument,amount,status,link,files);body.append(line);
    if(!printAll)addDdaReportBarcode({document:doc,row,line,actions,expanded:expandedBarcodes,copyText,isCurrent:()=>!destroyed&&!root.hidden&&root.getAttribute('aria-busy')!=='true'});
   }
   content.append(table);

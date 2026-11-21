@@ -83,10 +83,13 @@ test('DDA date and linkage clusters fit on phones, desktop and print',{timeout:9
     assert.equal(state.missingIssued,'Não informada');
     assert.equal(state.issued.length,4);
     for(const row of state.issued){
-     assert.equal(row.text,'12 d');
+     assert.equal(row.text,'23/10/2026');
+     assert.equal(row.age,'12 d');
+     assert.equal(row.label,'Emitido em');
+     assert.equal(row.divider,'1px');
+     assert.equal(row.labelColor,'rgb(69, 99, 117)');
      assert.ok(row.below&&row.fits&&row.centered,JSON.stringify({width,row}));
      assert.ok(row.fontSize>10&&row.fontSize<12,'emissão must be slightly larger than before');
-     assert.ok(row.height>=20&&row.height<24);
      assert.equal(row.background,'rgb(237, 241, 244)');
      assert.equal(row.color,'rgb(69, 99, 117)');
      assert.equal(row.printColorAdjust,'exact');

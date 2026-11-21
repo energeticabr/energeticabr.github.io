@@ -27,9 +27,7 @@ test('supplier counts stay below names without overflow on narrow phones, landsc
     assert.deepEqual(layout.bankDocuments[0].bank,'BANCO EXEMPLO');
     assert.deepEqual(layout.bankDocuments[0].number,'EX-001');
     for(const item of layout.bankDocuments)assert.ok(item.ordered&&item.fits,JSON.stringify({width,item}));
-    assert.equal(layout.issuedDates[0].text,'20/10/20268 d');
-    assert.equal(layout.issuedDates[0].weight,'600');
-    assert.equal(layout.issuedDates[1].text,'28/10/20260 d');
+    assert.deepEqual(layout.issuedDates.map(({date,age})=>[date,age]),[['20/10/2026','8 d'],['28/10/2026','0 d']]);
     for(const item of layout.issuedDates)assert.ok(item.fits,JSON.stringify({width,item}));
     assert.deepEqual(layout.linkClusters.slice(0,2).map(link=>[link.text,link.state,link.fits]),[['ID 46','linked',true],['N/A','missing',true]]);
     assert.equal(layout.linkClusters[1].background,'rgb(255, 234, 237)');

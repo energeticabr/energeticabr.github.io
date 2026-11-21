@@ -11,7 +11,7 @@ export function addDdaReportBarcode({document:doc,row,line,actions,expanded,copy
   if(!open){toggle.removeAttribute('aria-controls');return;}
   toggle.setAttribute('aria-controls',id);
   detail=make('tr','ddr-barcode-detail');detail.dataset.ddaBarcodePanel=row.id;detail.id=id;
-  const cell=make('td'),panel=make('div','ddr-barcode-cluster'),text=make('div','ddr-barcode-text');cell.colSpan=9;
+  const cell=make('td'),panel=make('div','ddr-barcode-cluster'),text=make('div','ddr-barcode-text');cell.colSpan=line.cells.length;
   const paymentLine=row.paymentLine;
   text.append(make('strong','','Linha digitável para pagamento'),make('code','',paymentLine||'Linha digitável não disponível.'));
   const copy=make('button','ddr-barcode-copy','⧉ Copiar linha digitável');copy.type='button';copy.dataset.ddaCopyBarcode=row.id;copy.disabled=!paymentLine;copy.setAttribute('aria-label','Copiar linha digitável do DDA '+row.id);

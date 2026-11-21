@@ -154,9 +154,9 @@ if(new URLSearchParams(location.search).has('layout')){
     ordered:number.parentElement===bank&&number.offsetTop>=bank.querySelector('strong').offsetTop+bank.querySelector('strong').offsetHeight,
     fits:bank.offsetWidth<=cell.clientWidth&&number.offsetWidth<=cell.clientWidth};
   }),
-  issuedDates:[...document.querySelectorAll('.ddr-issued-date')].map(cell=>({
-   text:cell.textContent,weight:getComputedStyle(cell.querySelector('strong')||cell).fontWeight,
-   fits:cell.scrollWidth<=cell.clientWidth+1
+  issuedDates:[...document.querySelectorAll('.ddr-due .ddr-issued-cluster')].map(cluster=>({
+   date:cluster.querySelector('time').textContent,age:cluster.querySelector('small').textContent,
+   fits:cluster.scrollWidth<=cluster.clientWidth+1&&cluster.offsetWidth<=cluster.parentElement.clientWidth
   })),
   linkClusters:[...document.querySelectorAll('.ddr-link-cluster')].map(cluster=>({text:cluster.textContent,state:cluster.dataset.linkState,background:getComputedStyle(cluster).backgroundColor,fits:cluster.offsetWidth<=cluster.parentElement.clientWidth})),
   clusters:[...document.querySelectorAll('[data-dda-supplier-count]')].map(cluster=>({
