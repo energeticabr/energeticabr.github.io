@@ -1,7 +1,9 @@
 import { SHAREPOINT_SITES } from "../../../../portal/config.js";
 import { createGraphClient } from "../../../../portal/data/graph-client.js";
 import { createSharePointRepository } from "../../../../portal/data/sharepoint-repository.js";
-import { canStartStageProgress, normalizeStageProgressDate, summarizeStageCompletion } from "./stage-progress-model.js";
+import {
+  canStartStageProgress, normalizeStageProgressDate, STAGE_GANTT_HIDDEN, STAGE_GANTT_VISIBLE, summarizeStageCompletion,
+} from "./stage-progress-model.js";
 import { stageReportGroupKey } from "./operations-reports-model.js";
 
 const SITE = "personal";
@@ -15,6 +17,8 @@ const LISTS = {
 };
 const STARTED = "ATIVIDADE INICIADA";
 const FINALIZED = "ATIVIDADE FINALIZADA";
+const GANTT_VISIBILITY_COLUMN = "GANTT_EXIBICAO";
+const COMMON_STAGE = "ATIVIDADE COMUM";
 const isItemId = id => /^[1-9]\d*$/.test(id) && Number.isSafeInteger(Number(id));
 const SCHEMA = {
   assignments: [["IDDESCRITIVOETAPA", "ID DESCRITIVO ETAPA"], ["DATA"], ["FORNECEDOR"]],
@@ -79,15 +83,23 @@ function normalizeItem(item, columns, kind) {
   });
   const raw = get(5);
   const parsed = /^\+?(?:\d+(?:[.,]\d*)?|[.,]\d+)(?:e[+-]?\d+)?$/i.test(raw) ? Number(raw.replace(",", ".")) : NaN;
+  const visibility = columns[7] && (get(7) === STAGE_GANTT_HIDDEN ? STAGE_GANTT_HIDDEN : STAGE_GANTT_VISIBLE);
   return Object.freeze({ id: String(item.id), branch: get(0), stage: get(1),
     startDate: normalizeStageProgressDate(get(2)), endDate: normalizeStageProgressDate(get(3)), status: get(4),
-    percent: Number.isFinite(parsed) && parsed >= 0 && parsed <= 1 ? parsed * 100 : null, type: get(6) });
+    percent: Number.isFinite(parsed) && parsed >= 0 && parsed <= 1 ? parsed * 100 : null, type: get(6),
+    ...(visibility && { visibility }) });
 }
 
 async function resolveSchema(repository, kind, signal) {
   const resolved = await abortable(() => repository.resolveList(SITE, LISTS[kind], { signal }), signal);
   if (resolved?.status !== "resolved" || !resolved.id) throw new Error(`A lista ${LISTS[kind][0]} não está disponível nesta conta.`);
-  const columns = validateSchema(await abortable(() => repository.getColumns(SITE, resolved.id, { signal }), signal), kind);
+  const metadata = await abortable(() => repository.getColumns(SITE, resolved.id, { signal }), signal);
+  const columns = validateSchema(metadata, kind);
+  if (kind === "launches") {
+    const visibility = metadata.find(column => column?.name === GANTT_VISIBILITY_COLUMN);
+    if (visibility?.choice?.choices?.includes(STAGE_GANTT_VISIBLE) && visibility.choice.choices.includes(STAGE_GANTT_HIDDEN)
+      && !visibility.readOnly && !visibility.computed) columns.push(visibility);
+  }
   return { id: resolved.id, columns };
 }
 
@@ -175,6 +187,34 @@ export function createStageProgressData({ tokenProvider, repository: suppliedRep
     });
   }
 
+  async function setStageVisibility(launchId, visibility, { expectedStage, signal } = {}) {
+    const itemId = String(launchId ?? "");
+    if (!isItemId(itemId) || ![STAGE_GANTT_VISIBLE, STAGE_GANTT_HIDDEN].includes(visibility)) {
+      throw new TypeError("Etapa ou classificação de exibição inválida.");
+    }
+    return withRepository(signal, async (repository, activeSignal) => {
+      const { id, columns } = await resolveSchema(repository, "launches", activeSignal);
+      const field = columns[7]?.name;
+      if (!field) throw new Error("A coluna de exibição do Gantt não está disponível no SharePoint.");
+      const options = { signal: activeSignal };
+      const current = await abortable(() => repository.getItem(SITE, id, itemId, "$expand=fields", options), activeSignal);
+      if (String(current?.id) !== itemId || !current.fields) throw new Error("O SharePoint não confirmou a etapa selecionada.");
+      const row = normalizeItem(current, columns, "launches");
+      if (!row.stage || row.type.toUpperCase() !== COMMON_STAGE
+        || expectedStage && (row.branch !== expectedStage.branch || row.stage !== expectedStage.stage)) {
+        throw Object.assign(new Error("A etapa mudou. Atualize o Gantt para conferir."), { code: "stage_progress_changed" });
+      }
+      if (row.visibility === visibility) return row;
+      const saved = await repository.updateItem(SITE, id, itemId, { [field]: visibility }, {
+        ...options, eTag: current.eTag || current["@odata.etag"],
+      });
+      if (String(saved?.id) !== itemId || scalar(saved.fields?.[field]) !== visibility) {
+        throw new Error("O SharePoint não confirmou a exibição da etapa. Atualize o Gantt para conferir.");
+      }
+      return normalizeItem(saved, columns, "launches");
+    });
+  }
+
   async function loadGanttAssignments({ branch, activityIds } = {}, { signal } = {}) {
     if (typeof branch !== 'string' || !branch.trim() || !Array.isArray(activityIds)) {
       throw new TypeError('Informe a filial e os IDs dos demonstrativos.');
@@ -252,7 +292,7 @@ export function createStageProgressData({ tokenProvider, repository: suppliedRep
       const current = await abortable(() => repository.getItem(SITE, id, itemId, "$expand=fields", { signal: activeSignal }), activeSignal);
       const row = readRecord(current, columns);
       const applied = row.status.toUpperCase() === status && row[dateField] === date;
-      const changed = expected && Object.keys(row).some(field => field !== "status"
+      const changed = expected && Object.keys(row).some(field => field !== "status" && field !== "visibility"
         && !(applied && field === dateField) && row[field] !== expected[field]);
       if (changed || !applied && !canStartStageProgress(row, stage)) {
         throw Object.assign(new Error("O registro mudou. Atualize o Gantt para conferir."), { code: "stage_progress_changed" });
@@ -342,5 +382,8 @@ export function createStageProgressData({ tokenProvider, repository: suppliedRep
     });
   }
 
-  return Object.freeze({ loadSnapshot, loadGanttAssignments, loadLatestAssignmentDate, startActivity, startStage, finalizeActivity, finalizeStage });
+  return Object.freeze({
+    loadSnapshot, setStageVisibility, loadGanttAssignments, loadLatestAssignmentDate,
+    startActivity, startStage, finalizeActivity, finalizeStage,
+  });
 }

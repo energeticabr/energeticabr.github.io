@@ -1,5 +1,8 @@
 import { buildStageReport, stageReportGroupKey } from "./operations-reports-model.js";
 
+export const STAGE_GANTT_VISIBLE = "EXIBIR";
+export const STAGE_GANTT_HIDDEN = "NÃO EXIBIR";
+
 /** Preserve the source calendar day, including SharePoint timestamps with offsets.
  * Blank is unknown; invalid dates reject rather than rolling over into durations.
  */

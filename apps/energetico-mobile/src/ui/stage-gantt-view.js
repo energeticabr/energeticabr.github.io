@@ -1,4 +1,4 @@
-import { buildStageGantt } from '../chat/stage-progress-model.js';
+import { buildStageGantt, STAGE_GANTT_HIDDEN, STAGE_GANTT_VISIBLE } from '../chat/stage-progress-model.js';
 import { calendarDays, formatOperationsDate } from '../chat/operations-reports-model.js';
 import { addReportCloseControl } from './report-close-control.js';
 import { bindReportLandscape } from './report-landscape.js';
@@ -10,6 +10,7 @@ const monthLabel = new Intl.DateTimeFormat('pt-BR', { month: 'short', year: 'num
 const localDay = date => `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}-${String(date.getDate()).padStart(2, '0')}`;
 const monthStart = day => `${day.slice(0, 7)}-01`;
 const isoDay = date => date.toISOString().slice(0, 10);
+const stageVisibility = stage => stage.source?.visibility ?? STAGE_GANTT_VISIBLE;
 
 export function createStageGanttView({ document: doc = globalThis.document, data, now = () => new Date() } = {}) {
   const make = (tag, className = '', text = '') => {
@@ -39,10 +40,14 @@ export function createStageGanttView({ document: doc = globalThis.document, data
   const branches = make('select');
   branches.disabled = true;
   branchLabel.append(branches);
+  const visibilityLabel = make('label', '', 'Exibição');
+  const visibilityFilter = make('select', 'gantt-visibility-filter');
+  visibilityFilter.append(...[STAGE_GANTT_VISIBLE, STAGE_GANTT_HIDDEN].map(value => new doc.defaultView.Option(value)));
+  visibilityLabel.append(visibilityFilter);
   const todayButton = button('Hoje', 'Ir para hoje na linha do tempo');
   todayButton.hidden = true;
   const refresh = button('⟳', 'Atualizar GANTT');
-  tools.append(title, branchLabel, todayButton, refresh);
+  tools.append(title, branchLabel, visibilityLabel, todayButton, refresh);
   const legend = make('div', 'gantt-legend');
   legend.append(make('span', 'gantt-legend--ongoing', 'Em andamento'), make('span', 'gantt-legend--finished', 'Finalizada'),
     make('span', 'gantt-legend--activity', 'Trecho da etapa'));
@@ -69,12 +74,50 @@ export function createStageGanttView({ document: doc = globalThis.document, data
 
   let request, previousFocus, previousOverflow, previousInert, app;
   let snapshot;
+  let savingVisibility = false;
   const expanded = new Set();
   let stages = [], today = '', todayRatio = null;
   const announce = message => { notice.textContent = message; notice.hidden = !message; };
   const durationObserver = doc.defaultView.ResizeObserver ? new doc.defaultView.ResizeObserver(layoutDurations) : null;
   doc.defaultView.addEventListener('resize', layoutDurations);
   doc.fonts?.ready.then(layoutDurations);
+
+  function setVisibilityBusy(busy) {
+    savingVisibility = busy;
+    refresh.disabled = busy;
+    for (const control of scroll.querySelectorAll('.gantt-row button[aria-haspopup="dialog"], .gantt-visibility-button')) {
+      if (busy) control.setAttribute('aria-disabled', 'true');
+      else control.removeAttribute('aria-disabled');
+    }
+  }
+
+  async function changeVisibility(item, control, target) {
+    if (savingVisibility) return;
+    const { signal } = request;
+    setVisibilityBusy(true);
+    announce('Salvando exibição da etapa…');
+    let saved;
+    try {
+      saved = await data.setStageVisibility(item.source.id, target, { expectedStage: item.source, signal });
+    } catch (error) {
+      if (signal.aborted) return;
+      announce(error?.code === 'stage_progress_changed' || error?.status === 412
+        ? 'A etapa mudou. Use Atualizar para conferir.'
+        : 'Não foi possível alterar a exibição da etapa. Use Atualizar para conferir ou tente novamente.');
+      return;
+    } finally {
+      if (!signal.aborted) setVisibilityBusy(false);
+    }
+    if (signal.aborted) return;
+    const keepFocus = doc.activeElement === control;
+    const top = scroll.scrollTop;
+    snapshot = { ...snapshot, launches: snapshot.launches.map(row => String(row.id) === String(saved.id) ? saved : row) };
+    stages = buildStageGantt(snapshot, today);
+    render();
+    scroll.scrollTop = top;
+    if (keepFocus) visibilityFilter.focus({ preventScroll: true });
+    announce(target === STAGE_GANTT_HIDDEN ? 'Etapa movida para NÃO EXIBIR.' : 'Etapa movida para EXIBIR.');
+  }
 
   function layoutDurations() {
     if (root.hidden) return;
@@ -118,7 +161,8 @@ export function createStageGanttView({ document: doc = globalThis.document, data
     finish.close({ restoreFocus: false });
     detail.close({ restoreFocus: false });
     durationObserver?.disconnect();
-    const visible = stages.filter(stage => !branches.value || stage.branch === branches.value);
+    const visible = stages.filter(stage => stageVisibility(stage) === visibilityFilter.value
+      && (!branches.value || stage.branch === branches.value));
     scroll.replaceChildren();
     scroll.scrollLeft = scroll.scrollTop = 0;
     scroll.hidden = !visible.length;
@@ -182,21 +226,35 @@ export function createStageGanttView({ document: doc = globalThis.document, data
       card.append(make('strong', 'gantt-name', item.name));
       const actions = make('div', 'gantt-row-actions');
       const subjectName = parent ? 'etapa' : 'atividade';
+      if (parent && item.source && typeof data.setStageVisibility === 'function') {
+        const suppressed = visibilityFilter.value === STAGE_GANTT_HIDDEN;
+        const action = suppressed ? 'EXIBIR' : 'SUPRIMIR';
+        const visibility = button(action, (suppressed ? 'Exibir' : 'Suprimir') + ' etapa ' + item.name);
+        visibility.className = 'gantt-visibility-button';
+        const target = suppressed ? STAGE_GANTT_VISIBLE : STAGE_GANTT_HIDDEN;
+        visibility.addEventListener('click', () => { void changeVisibility(item, visibility, target); });
+        actions.append(visibility);
+      }
       if (item.canStart && typeof data[parent ? 'startStage' : 'startActivity'] === 'function') {
         const start = button('INICIAR', `Iniciar ${subjectName} ${item.name}`);
         start.className = 'gantt-start-button';
         start.setAttribute('aria-haspopup', 'dialog');
-        start.addEventListener('click', () => { void finish.open(item, start, { stage: parent, starting: true }); });
+        start.addEventListener('click', () => {
+          if (!savingVisibility) void finish.open(item, start, { stage: parent, starting: true });
+        });
         actions.append(start);
       }
       if (!item.finished && typeof data[parent ? 'finalizeStage' : 'finalizeActivity'] === 'function'
         && typeof data.loadAssignments === 'function') {
         const finalize = button('FINALIZAR', `Finalizar ${subjectName} ${item.name}`);
         finalize.className = 'gantt-finish-button';
+        finalize.setAttribute('aria-haspopup', 'dialog');
         finalize.disabled = !item.canFinalize;
         if (item.canStart) finalize.title = `Inicie a ${subjectName} antes de finalizar.`;
         else if (parent && !item.canFinalize) finalize.title = 'Finalize todos os descritivos vinculados antes de finalizar a etapa.';
-        finalize.addEventListener('click', () => { void finish.open(item, finalize, { stage: parent }); });
+        finalize.addEventListener('click', () => {
+          if (!savingVisibility) void finish.open(item, finalize, { stage: parent });
+        });
         actions.append(finalize);
       }
       if (actions.childElementCount) card.append(actions);
@@ -221,7 +279,9 @@ export function createStageGanttView({ document: doc = globalThis.document, data
         bar.dataset.tone = tone;
         bar.setAttribute('aria-label', description);
         bar.setAttribute('aria-haspopup', 'dialog');
-        bar.addEventListener('click', () => { void detail.open(item, bar, { stage: parent }); });
+        bar.addEventListener('click', () => {
+          if (!savingVisibility) void detail.open(item, bar, { stage: parent });
+        });
         bar.title = description;
         bar.style.left = percent(calendarDays(start, from));
         bar.style.width = percent(days);
@@ -253,6 +313,7 @@ export function createStageGanttView({ document: doc = globalThis.document, data
         if (expand) {
           childRows = stage.children.map(child => renderRow(child, false, stage));
           row.after(...childRows);
+          if (savingVisibility) setVisibilityBusy(true);
         } else {
           for (const child of childRows) {
             const bar = child.querySelector('.gantt-bar');
@@ -269,6 +330,7 @@ export function createStageGanttView({ document: doc = globalThis.document, data
       if (expanded.has(stageKey)) toggle.click();
     }
     scroll.append(sheet);
+    if (savingVisibility) setVisibilityBusy(true);
     layoutDurations();
     const firstStageStart = visible.find(stage => stage.range)?.range.start || first;
     if (firstStageStart) scroll.scrollLeft = axisLabels.clientWidth * calendarDays(start, monthStart(firstStageStart)) / span;
@@ -286,7 +348,7 @@ export function createStageGanttView({ document: doc = globalThis.document, data
     todayButton.hidden = true;
     const refreshWasFocused = doc.activeElement === refresh;
     if (refreshWasFocused) dialog.focus({ preventScroll: true });
-    branches.disabled = refresh.disabled = true;
+    branches.disabled = visibilityFilter.disabled = refresh.disabled = true;
     announce('Carregando etapas e atividades…');
     try {
       const loaded = await data.loadSnapshot({ signal: active.signal, refresh: force });
@@ -299,6 +361,7 @@ export function createStageGanttView({ document: doc = globalThis.document, data
       branches.replaceChildren(new doc.defaultView.Option('Todas', ''), ...options.map(name => new doc.defaultView.Option(name, name)));
       branches.value = options.includes(selected) ? selected : '';
       branches.disabled = options.length === 0;
+      visibilityFilter.disabled = false;
       render();
     } catch {
       if (!active.signal.aborted) announce('Não foi possível carregar as etapas e atividades. Use Atualizar para tentar novamente.');
@@ -320,6 +383,7 @@ export function createStageGanttView({ document: doc = globalThis.document, data
     scroll.replaceChildren();
     stages = [];
     snapshot = null;
+    savingVisibility = false;
     expanded.clear();
     doc.body.style.overflow = previousOverflow;
     if (app) app.inert = previousInert;
@@ -328,6 +392,7 @@ export function createStageGanttView({ document: doc = globalThis.document, data
   }
 
   branches.addEventListener('change', render);
+  visibilityFilter.addEventListener('change', render);
   refresh.addEventListener('click', () => { void load(true); });
   todayButton.addEventListener('click', () => {
     const axis = scroll.querySelector('.gantt-axis-months');
@@ -358,6 +423,7 @@ export function createStageGanttView({ document: doc = globalThis.document, data
       if (app) app.inert = true;
       doc.body.style.overflow = 'hidden';
       branches.replaceChildren();
+      visibilityFilter.value = STAGE_GANTT_VISIBLE;
       root.hidden = false;
       landscape.update();
       dialog.focus();
@@ -367,9 +433,10 @@ export function createStageGanttView({ document: doc = globalThis.document, data
       const starting = finishDraft.operation === 'start';
       const item = stages.flatMap(row => stage ? [row] : row.children).find(row => String(row.source?.id) === String(finishDraft.id));
       if (item) {
-        const parent = starting && !stage ? stages.find(row => row.children.includes(item)) : null;
+        const parent = stage ? item : stages.find(row => row.children.includes(item));
         branches.value = parent?.branch ?? item.branch;
-        if (parent) expanded.add(String(parent.source?.id));
+        visibilityFilter.value = parent ? stageVisibility(parent) : STAGE_GANTT_VISIBLE;
+        if (starting && !stage && parent) expanded.add(String(parent.source?.id));
         render();
         await finish.open(item, dialog, { stage, starting, draftDate: finishDraft.date });
       }

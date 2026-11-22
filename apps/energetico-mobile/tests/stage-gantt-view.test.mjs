@@ -131,3 +131,82 @@ test('GANTT abre em Xavante, permite trocar a filial e mantém a escolha ao atua
   assert.equal(select.value, '004 - EDIFÍCIO XAVANTE');
   assert.deepEqual(renderedStages(), ['Fundação']);
 });
+
+test('GANTT suprime etapas junto de INICIAR e deixa restaurá-las no filtro NÃO EXIBIR', async t => {
+  const dom = new JSDOM('<!doctype html>');
+  t.after(() => dom.window.close());
+  const launches = [
+    { id: '1', branch: 'Obra A', stage: 'Fundação', type: 'ATIVIDADE COMUM', status: 'NÃO INICIADO' },
+    { id: '2', branch: 'Obra A', stage: 'Pintura', type: 'ATIVIDADE COMUM', status: 'FINALIZADO', visibility: 'NÃO EXIBIR' },
+    { id: '3', branch: 'Obra B', stage: 'Estrutura', type: 'ATIVIDADE COMUM', status: 'INICIADO' },
+  ];
+  const writes = [];
+  const view = createStageGanttView({ document: dom.window.document, data: {
+    async loadSnapshot() {
+      return { complete: true, launches: [...launches], activities: [
+        { id: '4', branch: 'Obra A', stage: 'Fundação', activity: 'Escavação', property: '',
+          supplier: '', status: 'ATIVIDADE NÃO INICIADA' },
+      ] };
+    },
+    async startStage() {},
+    async setStageVisibility(id, visibility, { expectedStage, signal }) {
+      assert.equal(signal.aborted, false);
+      writes.push([id, visibility]);
+      const index = launches.findIndex(row => row.id === id);
+      assert.equal(expectedStage.stage, launches[index].stage);
+      if (writes.length === 1) throw new Error('Falha de conexão');
+      launches[index] = { ...launches[index], visibility };
+      return launches[index];
+    },
+  }});
+  t.after(() => view.destroy());
+  await view.open();
+  const root = view.element;
+  const filial = root.querySelector('.gantt-tools select');
+  const display = root.querySelector('.gantt-visibility-filter');
+  const stages = () => [...root.querySelectorAll('.gantt-row--stage .gantt-name')].map(row => row.textContent);
+  const change = (select, value) => {
+    select.value = value;
+    select.dispatchEvent(new dom.window.Event('change'));
+  };
+  const wait = () => new Promise(resolve => setImmediate(resolve));
+
+  assert.equal(display.value, 'EXIBIR');
+  assert.deepEqual(stages(), ['Estrutura', 'Fundação']);
+  change(filial, 'Obra A');
+  assert.deepEqual(stages(), ['Fundação']);
+  root.querySelector('.gantt-toggle').click();
+  assert.ok(root.querySelector('.gantt-row--activity'));
+  assert.equal(root.querySelector('.gantt-row--activity .gantt-visibility-button'), null);
+  const suppress = root.querySelector('.gantt-visibility-button');
+  assert.equal(suppress.textContent, 'SUPRIMIR');
+  assert.equal(suppress.nextElementSibling.textContent, 'INICIAR');
+  suppress.click();
+  assert.equal(suppress.nextElementSibling.getAttribute('aria-disabled'), 'true');
+  suppress.nextElementSibling.click();
+  assert.equal(root.querySelector('.gantt-finish-overlay').hidden, true);
+  await wait();
+  assert.deepEqual(stages(), ['Fundação']);
+  assert.match(root.querySelector('.gantt-notice').textContent, /não foi possível/i);
+  suppress.click();
+  suppress.click();
+  await wait();
+  assert.deepEqual(stages(), []);
+  assert.equal(root.querySelector('.gantt-row--activity'), null);
+
+  change(display, 'NÃO EXIBIR');
+  assert.deepEqual(stages(), ['Fundação', 'Pintura']);
+  assert.ok(root.querySelector('.gantt-row--activity'));
+  const restore = root.querySelector('.gantt-visibility-button');
+  assert.equal(restore.textContent, 'EXIBIR');
+  restore.click();
+  await wait();
+  assert.deepEqual(stages(), ['Pintura']);
+  root.querySelector('[aria-label="Atualizar GANTT"]').click();
+  await wait();
+  assert.equal(display.value, 'NÃO EXIBIR');
+  assert.deepEqual(stages(), ['Pintura']);
+  change(display, 'EXIBIR');
+  assert.deepEqual(stages(), ['Fundação']);
+  assert.deepEqual(writes, [['1', 'NÃO EXIBIR'], ['1', 'NÃO EXIBIR'], ['1', 'EXIBIR']]);
+});
