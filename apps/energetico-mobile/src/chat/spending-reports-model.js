@@ -117,8 +117,8 @@ export function normalizeManagementProvision(item, columns) {
 }
 
 const equals = (left, right) => scalar(left).toLocaleLowerCase("pt-BR") === scalar(right).toLocaleLowerCase("pt-BR");
-const completeSum = (rows, field) => rows.every(row => Number.isFinite(row[field]))
-  ? rows.reduce((sum, row) => sum.plus(row[field]), new Decimal(0)).toNumber() : null;
+const completeSum = (rows, field, formatValue = value => value) => rows.every(row => Number.isFinite(row[field]))
+  ? rows.reduce((sum, row) => sum.plus(formatValue(row[field])), new Decimal(0)).toNumber() : null;
 const percentage = (part, whole) => part == null || whole == null ? null : whole === 0 ? 0 : part / whole * 100;
 const byValue = (left, right) => (right.total ?? -Infinity) - (left.total ?? -Infinity)
   || left.name.localeCompare(right.name, "pt-BR");
@@ -258,9 +258,9 @@ const monthPeriod = (year, month) =>
 export function buildManagementProductDetail(snapshot, filters = {}, { branch, product, kind = "expense" } = {}) {
   const expense = kind === "expense";
   const matchesGroup = expense ? equals : (left,right) => scalar(left) === scalar(right);
-  function section(selected, period, previous = false) {
+  function detailRows(selected) {
     const source = expense ? selectedExpenses(snapshot, selected) : selectedRows(snapshot?.launches, selected);
-    const rows = source.filter(row => matchesGroup(scalar(row.branch) || "-", branch)
+    return source.filter(row => matchesGroup(scalar(row.branch) || "-", branch)
       && matchesGroup(scalar(row.product) || (expense ? "SEM PRODUTO" : "-"), product))
       .map(row => Object.freeze({
         id: row.id, date: row.date || "", paymentDate: row.paymentDate || row.paidDate || "",
@@ -269,16 +269,36 @@ export function buildManagementProductDetail(snapshot, filters = {}, { branch, p
         source: row.paymentDate ? "paid" : expense ? "forecast" : "launch",
       })).sort((a,b) => (b.paymentDate || b.dueDate || b.date).localeCompare(a.paymentDate || a.dueDate || a.date)
         || String(a.id ?? "").localeCompare(String(b.id ?? ""), "pt-BR", { numeric:true }));
-    return Object.freeze({ period, previous, rows:Object.freeze(rows) });
   }
-  const period = filters.year ? filters.month ? monthPeriod(filters.year, filters.month)
-    : `Ano de ${filters.year}` : "Todos os períodos";
-  const sections = [section(filters, period)];
-  if (expense && filters.year && filters.month) {
-    const month = Number(filters.month) === 1 ? 12 : Number(filters.month) - 1;
-    const year = Number(filters.year) - (Number(filters.month) === 1 ? 1 : 0);
-    const previous = section({ ...filters, year:String(year), month:String(month) }, monthPeriod(year, month), true);
-    if (previous.rows.length) sections.push(previous);
+  function monthSection(rows, period, previous = false) {
+    const subtotal = Object.freeze({
+      quantity: completeSum(rows, "quantity"),
+      // Add the cent values displayed in the detail rows.
+      total: completeSum(rows, "total", roundCurrency),
+    });
+    return Object.freeze({ period, previous, rows: Object.freeze(rows), subtotal });
+  }
+  const rows = detailRows(filters);
+  const sections = [];
+  if (filters.year && filters.month) {
+    sections.push(monthSection(rows, monthPeriod(filters.year, filters.month)));
+    if (expense) {
+      const month = Number(filters.month) === 1 ? 12 : Number(filters.month) - 1;
+      const year = Number(filters.year) - (Number(filters.month) === 1 ? 1 : 0);
+      const previous = detailRows({ ...filters, year: String(year), month: String(month) });
+      if (previous.length) sections.push(monthSection(previous, monthPeriod(year, month), true));
+    }
+  } else if (rows.length) {
+    const dateOf = expense ? row => row.paymentDate || row.dueDate : row => row.date;
+    const months = groupRows(rows, row => dateOf(row).slice(0, 7));
+    months.sort(([left], [right]) => right.localeCompare(left));
+    for (const [key, monthRows] of months) {
+      const [year, month] = key.split("-");
+      sections.push(monthSection(monthRows, monthPeriod(year, month)));
+    }
+  } else {
+    const period = filters.year ? `Ano de ${filters.year}` : "Todos os períodos";
+    sections.push(Object.freeze({ period, previous: false, rows: Object.freeze(rows), subtotal: null }));
   }
   return Object.freeze({ product, branch, sections:Object.freeze(sections) });
 }

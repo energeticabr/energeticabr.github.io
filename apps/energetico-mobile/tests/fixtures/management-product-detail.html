@@ -15,7 +15,8 @@ try {
     paymentDate:'2026-10-05',branch:'004 - EDIFÍCIO XAVANTE',supplier:'Fornecedor de materiais de construção e serviços',
     product:'CIMENTO CP II — SACO DE 50 KG',unit:10.1234,quantity:2,freight:5,total:25.2468}));
   launches.push({...launches[0],id:'31',date:'2026-09-03',paymentDate:'2026-09-05'});
-  const view=createManagementReportView({document,data:{loadSnapshot:async()=>({launches,provisions:[],productTypes:[]})},
+  const provisions=[{...launches[0],id:'32',paymentDate:'',dueDate:'2026-10-06',unit:20,quantity:3,total:65}];
+  const view=createManagementReportView({document,data:{loadSnapshot:async()=>({launches,provisions,productTypes:[]})},
     now:()=>new Date('2026-10-05T12:00:00Z')});
   await view.open();
   const root=view.element,report=root.querySelector('.gm-content'),table=root.querySelector('[data-section=expense]');
@@ -31,13 +32,19 @@ try {
     backdrop:popup.getBoundingClientRect().toJSON(),dialog:rect.toJSON(),
     scroll:scroll.getBoundingClientRect().toJSON(),close:button.toJSON(),height:getComputedStyle(dialog).height,
     maxHeight:getComputedStyle(dialog).maxHeight,gridRows:getComputedStyle(popup).gridTemplateRows});
+  const forecast=popup.querySelector('[data-source=forecast]');
+  const paid=popup.querySelector('[data-source=paid]');
   const results={rows:popup.querySelectorAll('[data-entry-id]').length,
+    forecastOrange:[...forecast.cells].every(cell=>getComputedStyle(cell).backgroundColor==='rgb(255, 224, 178)'),
+    paidOrange:[...paid.cells].some(cell=>getComputedStyle(cell).backgroundColor==='rgb(255, 224, 178)'),
+    subtotals:[...popup.querySelectorAll('tbody')].map(body=>
+      [...body.lastElementChild.cells].map(cell=>cell.textContent.replace(/\s+/g,' ').trim())),
     inside:rect.left>=-1&&rect.top>=-1&&rect.right<=innerWidth+1&&rect.bottom<=innerHeight+1,
     closeHit:document.elementFromPoint(button.left+button.width/2,button.top+button.height/2)===close,
     scrolls:scroll.scrollHeight>scroll.clientHeight,
     overflow:scroll.scrollWidth>scroll.clientWidth+1,
     backgroundInert:root.querySelector('.gm-dialog').inert,
-    preciseUnit:popup.querySelector('[data-entry-id] [data-column=unit]').textContent.includes('10,1234')};
+    preciseUnit:paid.querySelector('[data-column=unit]').textContent.includes('10,1234')};
   scroll.scrollTop=1000;
   close.click();
   Object.assign(results,{returned:!root.hidden&&popup.hidden,sameDOM:report.innerHTML===previous,

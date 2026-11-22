@@ -21,7 +21,9 @@ test('popup do produto cabe no celular e PC, mantém Fechar acessível e devolve
       const dom=new JSDOM(stdout);
       try {
         const result=JSON.parse(dom.window.document.documentElement.dataset.layout);
-        assert.deepEqual(result,{rows:31,inside:true,closeHit:true,scrolls:true,overflow:false,
+        assert.deepEqual(result,{rows:32,forecastOrange:true,paidOrange:false,
+          subtotals:[['TOTAL DO MÊS','63','','R$ 822,50'],['TOTAL DO MÊS','2','','R$ 25,25']],
+          inside:true,closeHit:true,scrolls:true,overflow:false,
           backgroundInert:true,preciseUnit:true,returned:true,sameDOM:true,sameScroll:true,focus:true},
           `${width}×${height}: ${dom.window.document.documentElement.dataset.geometry}`);
         const {close}=JSON.parse(dom.window.document.documentElement.dataset.geometry);
