@@ -68,29 +68,82 @@ export function openTaxGuideReportEditor({ document:doc, host, background, row, 
     retry.addEventListener('click',()=>void readAmount());void readAmount();
   }else{
     const sources=make('div','tgr-editor-sources'),retry=make('button','tgr-button','Tentar envio novamente');
-    retry.type='button';retry.dataset.guideRetry='';retry.hidden=true;
-    controls.append(sources,retry);
+    const confirmation=make('div','tgr-editor-confirmation');
+    const yes=make('button','tgr-button','SIM'),no=make('button','tgr-button','NÃO');
+    yes.type=no.type=retry.type='button';
+    confirmation.dataset.guideConfirm='';confirmation.hidden=true;
+    const question=make('p','','Você quer considerar a guia preenchida?');
+    question.id='tgr-guide-confirm-question';
+    confirmation.setAttribute('role','group');confirmation.setAttribute('aria-labelledby',question.id);
+    confirmation.append(question,yes,no);
+    retry.dataset.guideRetry='';retry.hidden=true;
+    controls.append(sources,confirmation,retry);
+    let selectedPdfs=[],submit=false,uploaded=false;
+
     async function upload(){
-      const latest=await currentContext();
-      if(latest.attachments?.existingFiles?.length){await changed();return;}
-      status.textContent='Enviando guia…';
-      await data.saveEditor(latest,{}, {attachments:{uploads:pendingFiles,deletions:[]},signal});
-      if(!signal.aborted)await changed();
+      if(busy||signal.aborted)return;
+      setBusy(true);retry.hidden=true;dialog.focus({preventScroll:true});
+      try{
+        if(!uploaded){
+          status.textContent='Enviando guia…';
+          const latest=await currentContext();
+          await data.saveEditor(latest,{}, {attachments:{uploads:pendingFiles,deletions:[]},signal});
+          uploaded=true;
+        }
+        signal.throwIfAborted();
+        if(submit){
+          status.textContent='Atualizando status da guia…';
+          const latest=await data.loadEditor(String(row.id),{signal,includeAttachments:true});
+          signal.throwIfAborted();
+          if(String(latest.item?.fields?.STATUS||'').trim().toUpperCase()==='PENDENTE'){
+            const names=new Set(latest.attachments?.existingFiles?.map(file=>String(file.name).trim().toLowerCase()));
+            if(!selectedPdfs.every(name=>names.has(name)))throw new Error('O PDF não foi localizado nos anexos desta guia.');
+            await data.saveEditor(latest,{STATUS:'SUBMETIDO'},{signal});
+          }
+        }
+        await changed();
+      }catch(error){
+        if(!signal.aborted){
+          status.textContent=uploaded?`O PDF foi enviado, mas o status não pôde ser atualizado. ${errorMessage(error)}`:errorMessage(error);
+          retry.textContent=uploaded?'Tentar atualizar status novamente':'Tentar envio novamente';
+          retry.hidden=false;
+        }
+      }finally{
+        if(!signal.aborted){
+          setBusy(false);
+          if(!retry.hidden)retry.focus({preventScroll:true});
+        }
+      }
     }
+
     async function pick(source){
       if(busy||signal.aborted)return;
-      setBusy(true);status.textContent='';retry.hidden=true;
+      setBusy(true);status.textContent='';
       try{
-        if(source){pendingFiles=await pickAttachments(source,{signal});signal.throwIfAborted();}
-        if(pendingFiles?.length)await upload();
-      }catch(error){if(!signal.aborted){status.textContent=errorMessage(error);retry.hidden=!pendingFiles?.length;}}
-      finally{if(!signal.aborted)setBusy(false);}
+        pendingFiles=await pickAttachments(source,{signal});
+        signal.throwIfAborted();
+      }catch(error){
+        if(!signal.aborted)status.textContent=errorMessage(error);
+        return;
+      }finally{if(!signal.aborted)setBusy(false);}
+      if(!pendingFiles?.length)return;
+      selectedPdfs=pendingFiles.map(file=>String(file.name||'').trim().toLowerCase()).filter(name=>name.endsWith('.pdf'));
+      sources.hidden=true;
+      if(!selectedPdfs.length){await upload();return;}
+      confirmation.hidden=false;
+      no.focus({preventScroll:true});
     }
+
+    function answer(submitted){
+      submit=submitted;confirmation.hidden=true;
+      void upload();
+    }
+    yes.addEventListener('click',()=>answer(true));no.addEventListener('click',()=>answer(false));
     for(const [source,text] of [['camera','Tirar foto'],['scan','Escanear'],['files','Anexar arquivo'],['photos','Anexar foto']]){
       const button=make('button','tgr-button',text);button.type='button';button.dataset.source=source;
       button.addEventListener('click',()=>void pick(source));sources.append(button);
     }
-    retry.addEventListener('click',()=>void pick(null));
+    retry.addEventListener('click',()=>void upload());
   }
   return {close};
 }

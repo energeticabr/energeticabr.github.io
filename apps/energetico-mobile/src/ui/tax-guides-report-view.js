@@ -34,7 +34,10 @@ export function createTaxGuidesReportView({document:doc=globalThis.document,data
   function edit(row,mode,trigger){
     if(editor||root.hidden)return;
     editor=openTaxGuideReportEditor({document:doc,host:root,background:panel,row,mode,data,pickAttachments,
-      async onChanged(){await load();if(!root.hidden)(body.querySelector(`[data-guide-id="${row.id}"] button`)||panel).focus({preventScroll:true});},
+      async onChanged(){await load();if(!root.hidden){
+        const updated=body.querySelector(`[data-guide-id="${row.id}"]`);
+        (updated?.querySelector(`[data-guide-action="${mode}"]`)||updated?.querySelector('button')||panel).focus({preventScroll:true});
+      }},
       onClose(){editor=null;if(!root.hidden)trigger?.focus({preventScroll:true});}});
   }
   function action(row,mode,text){
@@ -56,12 +59,26 @@ export function createTaxGuidesReportView({document:doc=globalThis.document,data
     const visible=rows.filter(row=>[...controls].every(([field,select])=>!select.value||String(row.fields?.[field]??'')===select.value));
     for(const row of visible){
       const tr=make('tr');tr.dataset.guideId=String(row.id);
+      tr.dataset.guideStatus=String(row.fields?.STATUS??'').trim().toUpperCase();
       for(const [field] of FIELDS){const value=row.fields?.[field],cell=make('td','',field==='VALOR'?amountLabel(value):field==='COMPETENCIA'||field==='VENCIMENTO'?dateLabel(value):String(value??'A informar'));
         if(field==='VALOR'&&amountLabel(value)==='A informar'&&typeof data.saveEditor==='function'){cell.setAttribute('aria-label','A informar');cell.replaceChildren(action(row,'amount','A informar'));}
         tr.append(cell);}
       const cell=make('td'),hasAttachments=row.hasAttachments??row.fields?.Attachments;
-      if(hasAttachments===false){cell.setAttribute('aria-label','Guia pendente');if(typeof data.saveEditor==='function'&&typeof pickAttachments==='function')cell.append(action(row,'attach','Guia pendente'));else cell.textContent='Guia pendente';}
-      else{const button=make('button','tgr-attachment');button.type='button';button.setAttribute('aria-label',`Abrir guia ${row.fields?.TIPO||''}, competência ${dateLabel(row.fields?.COMPETENCIA)}`);button.innerHTML=PDF_ATTACHMENT_ICON;button.append(make('span','','PDF'));button.addEventListener('click',()=>void preview(row,button));cell.append(button);}
+      const canAttach=typeof data.saveEditor==='function'&&typeof pickAttachments==='function';
+      if(hasAttachments===false){
+        cell.setAttribute('aria-label','Guia pendente');
+        if(canAttach)cell.append(action(row,'attach','Guia pendente'));else cell.textContent='Guia pendente';
+      }else{
+        const actions=make('div','tgr-attachment-actions'),button=make('button','tgr-attachment');
+        button.type='button';button.setAttribute('aria-label',`Abrir guia ${row.fields?.TIPO||''}, competência ${dateLabel(row.fields?.COMPETENCIA)}`);
+        button.innerHTML=PDF_ATTACHMENT_ICON;button.append(make('span','','PDF'));button.addEventListener('click',()=>void preview(row,button));
+        actions.append(button);
+        if(canAttach){
+          const add=action(row,'attach','+');add.className='tgr-button tgr-attachment-add';add.title=add.getAttribute('aria-label');
+          actions.append(add);
+        }
+        cell.append(actions);
+      }
       tr.append(cell);body.append(tr);
     }
     feedback.textContent=visible.length?`${visible.length} guia(s)`:'Nenhuma guia encontrada para os filtros selecionados.';
