@@ -1,0 +1,86 @@
+<!doctype html>
+<html lang="pt-BR">
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Anexos da validação de pedidos</title>
+<main id="app"></main>
+<script type="module">
+import '../../src/styles.css';
+import '../../src/ui/payment-ledger.css';
+import '../../src/ui/order-validation-report.css';
+import '../../src/ui/searchable-filter-selects.css';
+import '../../src/ui/report-print.css';
+import '../../src/web/attachment-preview.css';
+import { createOrderValidationReportView } from '../../src/ui/order-validation-report-view.js';
+import { decorateReportNavigation } from '../../src/ui/report-navigation.js';
+import { createAttachmentPreview } from '../../src/web/attachment-preview.js';
+import { PDFDocument } from 'pdf-lib';
+
+async function waitFor(read) {
+  for (let attempt = 0; attempt < 120; attempt++) {
+    const result = read();
+    if (result) return result;
+    await new Promise(resolve => setTimeout(resolve, 40));
+  }
+  throw new Error('A tabela ou o visualizador não apresentou o elemento esperado.');
+}
+
+try {
+  const pdf = await PDFDocument.create();
+  pdf.addPage();
+  const blob = new Blob([await pdf.save()], { type: 'application/pdf' });
+  const preview = createAttachmentPreview({ canEmbedPdf: () => false });
+  const ids = ['1234567', '578', '577', ...Array.from({ length: 45 }, (_, i) => String(500-i)), '42'];
+  const orders = ids.map(id => ({ id, branch: 'Xavante', supplier: 'Alfa', status: 'PENDENTE AUDITORIA', total: 1 }));
+  const queried = new Set();
+  const view = decorateReportNavigation(createOrderValidationReportView({
+    openMediaCollection: preview.openCollection,
+    data: {
+      async loadOrderValidationSnapshot() { return { orders, launches: [] }; },
+      async listOrderPdfs(id) {
+        queried.add(id);
+        if (!['1234567', '577', '42'].includes(id)) return [];
+        return ['nota', 'comprovante'].map(name => ({ fileName: `${id}-${name}.pdf`, source: async () => blob }));
+      },
+    },
+  }), { action: 'open-order-validation-report' });
+  await view.open();
+  const root = view.element;
+  const scroll = root.querySelector('.ov-content');
+  root.querySelector('tr[data-id="578"]').scrollIntoView({ block: 'center', inline: 'nearest' });
+  const button = id => root.querySelector(`tr[data-id="${id}"] [aria-label="Abrir PDFs do pedido ${id}"]`);
+  await waitFor(() => button('1234567') && button('577') && queried.has('578'));
+  const unopenedOffscreen = !queried.has('42');
+  const controls = ['1234567', '577'].map(id => {
+    const control = button(id);
+    const number = control.previousElementSibling;
+    const rect = control.getBoundingClientRect(), cell = control.closest('td').getBoundingClientRect();
+    const hit = document.elementFromPoint(rect.x + rect.width / 2, rect.y + rect.height / 2);
+    const visible = control.querySelector('svg').getBoundingClientRect().width >= 10 && control.contains(hit);
+    return {
+      id: number.textContent,
+      right: control.offsetLeft >= number.offsetLeft + number.offsetWidth - 1,
+      fits: rect.left >= cell.left - 1 && rect.right <= cell.right + 1 && rect.top >= cell.top - 1 && rect.bottom <= cell.bottom + 1,
+      color: getComputedStyle(control.querySelector('svg rect')).fill,
+      visible,
+      ...(!visible ? { hit: hit?.closest('button')?.getAttribute('aria-label') || hit?.tagName } : {}),
+    };
+  });
+  const onlyPdf = !button('578');
+  const order = button('577');
+  const visiblePdf = name => waitFor(() => document.querySelector('.attachment-preview-dialog[open] .attachment-preview-title')?.textContent === name &&
+    document.querySelector('.attachment-preview-content canvas'));
+  order.click();
+  await visiblePdf('577-nota.pdf');
+  document.querySelector('.attachment-preview-collection-next').click();
+  await visiblePdf('577-comprovante.pdf');
+  document.querySelector('.attachment-preview-back').click();
+  const focusRestored = document.activeElement === order;
+  scroll.scrollTop = scroll.scrollHeight;
+  await waitFor(() => button('42'));
+  document.documentElement.dataset.layout = JSON.stringify({ controls, onlyPdf, unopenedOffscreen, focusRestored, foundAfterScrolling: queried.has('42') });
+} catch (error) {
+  document.documentElement.dataset.layout = JSON.stringify({ error: error.stack || String(error) });
+}
+</script>
+</html>

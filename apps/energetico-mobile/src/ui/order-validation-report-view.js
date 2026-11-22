@@ -3,6 +3,7 @@ import { addReportCloseControl } from './report-close-control.js';
 import {buildOrderValidationReport} from '../chat/order-validation-report-model.js';
 import {formatReportDate,formatReportMoney} from '../chat/contractor-report-model.js';
 import {bindSearchableFilterSelects} from './searchable-filter-selects.js';
+import {createReportPdfAttachments} from './report-pdf-attachments.js';
 import Decimal from 'decimal.js';
 
 const LOGO=new URL('../../../../assets/logo-energetica-oficial.png',import.meta.url).href;
@@ -11,7 +12,7 @@ const METRICS=[['orderCount','TOTAL DE PEDIDOS'],['total','VALOR TOTAL'],['invoi
 const money=value=>Number.isFinite(value)?formatReportMoney(value):'INCOMPLETO';
 const same=(a,b)=>String(a??'').trim().toLocaleLowerCase('pt-BR')===String(b??'').trim().toLocaleLowerCase('pt-BR');
 
-export function createOrderValidationReportView({document:doc=globalThis.document,data}={}){
+export function createOrderValidationReportView({document:doc=globalThis.document,data,openMediaCollection}={}){
   if(!doc?.body||typeof data?.loadOrderValidationSnapshot!=='function')throw new TypeError('A validação de notas requer documento e sessão SharePoint.');
   const win=doc.defaultView;
   const make=(tag,className='',text)=>{const n=doc.createElement(tag);n.className=className;if(text!==undefined)n.textContent=text;return n;};
@@ -23,12 +24,18 @@ export function createOrderValidationReportView({document:doc=globalThis.documen
   for(const [name,label] of FIELDS){const holder=make('label','pl-filter'),select=make('select');select.name=name;select.setAttribute('aria-label',label);holder.append(make('span','pl-filter-label',label),select);filters.append(holder);controls.set(name,select);}
   const refresh=make('button','pl-refresh','⟳');refresh.type='button';refresh.setAttribute('aria-label','Atualizar validação de notas');filters.append(refresh);
   const notice=make('p','pl-notice');notice.hidden=true;notice.setAttribute('role','status');
+  const retryPdfs=make('button','pl-pdf-retry','Consultar PDFs novamente');
+  retryPdfs.type='button';retryPdfs.hidden=true;retryPdfs.dataset.reportScreenOnly='';
   const content=make('div','pl-table-scroll ov-content');content.tabIndex=0;content.setAttribute('role','region');content.setAttribute('aria-label','Resumo e validação dos pedidos');
-  report.append(filters,notice,content);panel.append(warning,report);root.append(panel);doc.body.append(root);
+  report.append(filters,notice,retryPdfs,content);panel.append(warning,report);root.append(panel);doc.body.append(root);
   let snapshot=null,controller=null,revision=0,pickers=null,destroyed=false,returnFocus=null,oldOverflow='',app=null,oldInert=false;
   const landscape = bindReportLandscape(root);
   addReportCloseControl({root, toolbar:filters, onClose:close});
   const showNotice=text=>{notice.textContent=text;notice.hidden=!text;};
+  const pdfAttachments=createReportPdfAttachments({
+    root,scroll:content,retryButton:retryPdfs,openMediaCollection,showNotice,getSignal:()=>controller?.signal,
+    loadPdfs:typeof data.listOrderPdfs==='function'?(_kind,id,options)=>data.listOrderPdfs(id,options):undefined,
+  });
   const selected=()=>Object.fromEntries([...controls].map(([name,node])=>[name,node.value]));
   const cell=(tr,column,text,className='')=>{const td=make('td',className,String(text??'').trim()||'-');td.dataset.column=column;tr.append(td);return td;};
   function section(title,key){const node=make('section','ov-section');node.dataset.section=key;node.append(make('h2','ov-section-title',title));content.append(node);return node;}
@@ -45,7 +52,7 @@ export function createOrderValidationReportView({document:doc=globalThis.documen
       for(const launch of row.launches){const tr=make('tr');const branchOk=!!row.branch&&same(launch.branch,row.branch),supplierOk=!!row.supplier&&same(launch.supplier,row.supplier);cell(tr,'id',launch.id);cell(tr,'branch',launch.branch,branchOk?'ov-good':'ov-bad');cell(tr,'supplier',launch.supplier,supplierOk?'ov-good':'ov-bad');cell(tr,'product',launch.product);cell(tr,'total',money(launch.total));cell(tr,'description',launch.description);launches.append(tr);}detail.append(linked);}
   }
   function render(){
-    content.replaceChildren();showNotice('');if(!snapshot)return;
+    pdfAttachments?.clearCells();content.replaceChildren();showNotice('');if(!snapshot)return;
     const result=buildOrderValidationReport(snapshot,selected());
     const logoFrame=make('div','ov-logo'),logo=make('img');logo.src=LOGO;logo.alt='Logo Energética';logoFrame.append(logo,make('h1','','VALIDAÇÃO ÚNICA DE NOTAS PENDENTES / PEDIDOS PARA BAIXA'));content.append(logoFrame);
     if(!result.rows.length){showNotice('Nenhum pedido encontrado para os filtros selecionados.');return;}
@@ -53,12 +60,15 @@ export function createOrderValidationReportView({document:doc=globalThis.documen
     METRICS.forEach(([key,label],i)=>{const card=make('div',`ov-card ov-card--${i}`),value=make('strong','',key==='total'?money(result.summary[key]):String(result.summary[key]));value.dataset.metric=key;card.append(make('span','',label),value);cards.append(card);});overview.append(cards);
     if(!controls.get('id').value)overview.append(make('p','ov-hint','🔎 Para ver o detalhamento completo, selecione um pedido específico no filtro de ID.'));
     const orders=section('TABELA PRINCIPAL DE PEDIDOS','orders');orders.querySelector('h2').append(make('span','ov-detail-badge','ORDENADA POR ID — MAIOR PARA MENOR'));
-    const body=table(orders,['ID','FILIAL','FORNECEDOR','VALOR','NOTA FISCAL','STATUS','APTO','PENDÊNCIAS'],[5,10,18,9,10,10,7,31]);
-    for(const row of result.rows){const tr=make('tr',row.apto?'ov-row-good':'ov-row-bad');tr.dataset.id=row.id;cell(tr,'id',row.id,row.apto?'ov-id-ok':'ov-bad');
+    const body=table(orders,['ID','FILIAL','FORNECEDOR','VALOR','NOTA FISCAL','STATUS','APTO','PENDÊNCIAS'],[7,10,18,9,10,10,7,29]);
+    for(const row of result.rows){const tr=make('tr',row.apto?'ov-row-good':'ov-row-bad');tr.dataset.id=row.id;const idCell=cell(tr,'id',row.id,row.apto?'ov-id-ok':'ov-bad');
       if(row.branchRowSpan){const td=cell(tr,'branch',row.branch,row.branchGroupProblem?'ov-bad':'ov-good');td.rowSpan=row.branchRowSpan;}
       if(row.supplierRowSpan){const td=cell(tr,'supplier',row.supplier,row.supplierGroupProblem?'ov-bad':'ov-good');td.rowSpan=row.supplierRowSpan;}
       cell(tr,'total',row.total==null?(row.invalidTotal?'INCOMPLETO':'-'):money(row.total),row.valueProblem||row.missingLaunch?'ov-bad':'ov-good');cell(tr,'invoice',row.invoice,row.nfPending?'ov-bad':'ov-good');cell(tr,'status',row.status);cell(tr,'apto',row.apto?'SIM':'NÃO',row.apto?'ov-good':'ov-bad');
-      const tags=cell(tr,'issues','');tags.replaceChildren();if(row.apto)tags.append(make('span','ov-tag ov-tag--ok','SEM PENDÊNCIA'));else for(const issue of row.issues){const tag=make('span','ov-tag',issue.type);tag.dataset.issue=issue.type;tag.title=issue.detail;tags.append(tag);}body.append(tr);}
+      const tags=cell(tr,'issues','');tags.replaceChildren();if(row.apto)tags.append(make('span','ov-tag ov-tag--ok','SEM PENDÊNCIA'));else for(const issue of row.issues){const tag=make('span','ov-tag',issue.type);tag.dataset.issue=issue.type;tag.title=issue.detail;tags.append(tag);}
+      body.append(tr);
+      pdfAttachments?.watchCell(idCell,'order',row.id);
+    }
     const total=make('tr','ov-total');const heading=cell(total,'label','CONSOLIDADO DA TABELA PRINCIPAL — TOTAL GERAL');heading.colSpan=3;cell(total,'total',money(result.summary.total));const count=cell(total,'count',`${result.summary.orderCount} PEDIDO(S)`);count.colSpan=4;body.append(total);
     if(result.detail)renderDetail(result.detail);
   }
@@ -70,14 +80,14 @@ export function createOrderValidationReportView({document:doc=globalThis.documen
     pickers=bindSearchableFilterSelects(filters,{placement:'below',report:true});
   }
   async function load(){
-    if(root.hidden||destroyed)return;pickers?.close();controller?.abort();const current=++revision,active=new AbortController();controller=active;snapshot=null;content.replaceChildren();showNotice('Carregando pedidos e lançamentos do SharePoint…');report.setAttribute('aria-busy','true');refresh.disabled=true;
+    if(root.hidden||destroyed)return;pickers?.close();controller?.abort();pdfAttachments?.reset();const current=++revision,active=new AbortController();controller=active;snapshot=null;content.replaceChildren();showNotice('Carregando pedidos e lançamentos do SharePoint…');report.setAttribute('aria-busy','true');refresh.disabled=true;
     try{const result=await data.loadOrderValidationSnapshot({signal:active.signal});if(active.signal.aborted||current!==revision||root.hidden||destroyed)return;
       if(!Array.isArray(result?.orders)||!Array.isArray(result?.launches))throw new Error('Dados incompletos para a validação de notas.');snapshot=result;populate();render();
     }catch(error){if(active.signal.aborted||current!==revision||root.hidden||destroyed)return;content.replaceChildren();showNotice('Não foi possível carregar a validação. Use Atualizar para tentar novamente.');}
     finally{if(current===revision){report.setAttribute('aria-busy','false');refresh.disabled=false;}}
   }
   function orientationChanged() { landscape.update(); }
-  function close(){if(root.hidden)return;controller?.abort();revision++;snapshot=null;pickers?.close();content.replaceChildren();root.hidden=true;doc.body.style.overflow=oldOverflow;if(app)app.inert=oldInert;returnFocus?.focus?.();returnFocus=null;}
+  function close(){if(root.hidden)return;controller?.abort();pdfAttachments?.reset();revision++;snapshot=null;pickers?.close();content.replaceChildren();root.hidden=true;doc.body.style.overflow=oldOverflow;if(app)app.inert=oldInert;returnFocus?.focus?.();returnFocus=null;}
   root.addEventListener('click',event=>{if(event.target===root)close();});
   root.addEventListener('keydown',event=>{if(root.hidden)return;if(event.key==='Escape'){event.preventDefault();close();return;}if(event.key!=='Tab')return;
     const nodes=[...panel.querySelectorAll('button,input,select,[tabindex="0"]')].filter(n=>!n.disabled&&!n.closest('[hidden]')&&n.tabIndex>=0),first=nodes[0],last=nodes.at(-1);
@@ -88,5 +98,5 @@ export function createOrderValidationReportView({document:doc=globalThis.documen
     returnFocus=doc.activeElement;oldOverflow=doc.body.style.overflow;app=doc.getElementById('app');oldInert=app?.inert||false;doc.body.style.overflow='hidden';if(app)app.inert=true;
     pickers?.destroy();pickers=null;for(const [name] of FIELDS){const node=controls.get(name),value=name==='status'?'PENDENTE AUDITORIA':'';node.replaceChildren(Object.assign(make('option','',name==='status'?'PENDENTE AUDITORIA':'Todos'),{value:''}));if(value)node.append(Object.assign(make('option','',value),{value}));node.value=value;}
     root.hidden=false;landscape.update();warning.hidden=true;report.hidden=false;panel.classList.toggle('pl-dialog--portrait',false);panel.focus();await load();
-  },close,destroy(){if(destroyed)return;close();destroyed=true;pickers?.destroy();win?.removeEventListener('resize',orientationChanged);win?.removeEventListener('orientationchange',orientationChanged);landscape.destroy();root.remove();}});
+  },close,destroy(){if(destroyed)return;close();destroyed=true;pdfAttachments?.destroy();pickers?.destroy();win?.removeEventListener('resize',orientationChanged);win?.removeEventListener('orientationchange',orientationChanged);landscape.destroy();root.remove();}});
 }

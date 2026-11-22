@@ -7943,6 +7943,7 @@ export function createAppController({
     const reportId = validation ? ORDER_VALIDATION_REPORT_ID : provision ? PROVISION_REPORT_ID : management ? MANAGEMENT_REPORT_ID : PAYMENT_LEDGER_ID;
     const method = validation ? 'loadOrderValidationSnapshot' : provision ? 'loadProvisionReportSnapshot' : management ? 'loadSnapshot' : 'loadPaymentsSnapshot';
     const ledger = method === 'loadPaymentsSnapshot';
+    const opensReportPdfs = ledger || validation;
     const reportsAccount = account;
     const reportsRevision = sessionRevision;
     const openingRevision = spendingReportsRevision;
@@ -7966,7 +7967,7 @@ export function createAppController({
             return auth.getToken(scopes).then(token => { assertRequest(); return token; }).catch(async error => {
               assertRequest();
               if (!interactive || error?.code !== 'AUTH_REQUIRED' || typeof auth.authorize !== 'function') throw error;
-              const attachmentPopup = ledger && scopes?.some(scope => scope.endsWith('/AllSites.Read'));
+              const attachmentPopup = opensReportPdfs && scopes?.some(scope => scope.endsWith('/AllSites.Read'));
               await auth.authorize(scopes, { resumeAction: reportId, ...(attachmentPopup ? { interaction: 'popup' } : {}) });
               assertRequest(); const token = await auth.getToken(scopes); assertRequest(); return token;
             });
@@ -7991,7 +7992,13 @@ export function createAppController({
               assertQuery();
               throw error;
             }
-          }, ...(ledger ? { listPaymentLedgerPdfs: source.listPaymentLedgerPdfs } : {}), ...(provision ? {
+          }, ...(ledger ? { listPaymentLedgerPdfs: source.listPaymentLedgerPdfs } : {}),
+          ...(validation && typeof source.listPaymentLedgerPdfs === 'function' ? {
+            async listOrderPdfs(id, options) {
+              assertSession();
+              return source.listPaymentLedgerPdfs('order', id, options);
+            },
+          } : {}), ...(provision ? {
             listProvisionReportAttachments: source.listProvisionReportAttachments,
             downloadProvisionReportAttachment: source.downloadProvisionReportAttachment,
             async syncRecurringProvisions({ signal } = {}) {
@@ -8031,7 +8038,7 @@ export function createAppController({
           const action = validation ? 'open-order-validation-report' : provision ? 'open-provision-report'
             : management ? 'open-management-report' : 'open-payment-ledger';
           const panel = decorateControllerReport(await factory({ data, document: globalThis.document,
-            ...(ledger || provision ? { openMediaCollection: (items, options) => openGalleryMedia(items, assertSession, options) } : {}),
+            ...(opensReportPdfs || provision ? { openMediaCollection: (items, options) => openGalleryMedia(items, assertSession, options) } : {}),
           }), action);
           if (openingRevision !== spendingReportsRevision || stopped || account !== reportsAccount || sessionRevision !== reportsRevision
             || (validation && (flowBusy() || store.getState().activeFlow))) { panel.destroy?.(); return false; }

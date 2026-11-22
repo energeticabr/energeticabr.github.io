@@ -4,8 +4,7 @@ import { buildPaymentLedger } from '../chat/payment-ledger-model.js';
 import { formatReportDate, formatReportMoney } from '../chat/contractor-report-model.js';
 import { bindSearchableFilterSelects } from './searchable-filter-selects.js';
 import { captureFilteredReport, REPORT_PDF_TITLES } from './report-print.js';
-import { createGalleryAttachmentCounts } from './gallery-attachment-counts.js';
-import { PDF_ATTACHMENT_ICON } from './report-pdf-attachment-icon.js';
+import { createReportPdfAttachments } from './report-pdf-attachments.js';
 
 const COLUMNS = ['DATA PGTO', 'PEDIDO', 'ID', 'FORNECEDOR', 'FILIAL', 'CONTA', 'PRODUTO', 'VU', 'QTD', 'FRETE', 'TOTAL', 'TOTAL FORN. DIA'];
 const FILTERS = [['branch', 'FILIAL'], ['order', 'ID PEDIDO'], ['product', 'PRODUTO'], ['supplier', 'FORNECEDOR'], ['disbursement', 'DESEMBOLSO']];
@@ -47,7 +46,7 @@ export function createPaymentLedgerView({ document: doc = globalThis.document, d
       const parsed = new Date(`${iso}T12:00:00Z`);
       const valid = !text || (match && Number(match[3]) >= 1000 && Number.isFinite(parsed.getTime()) && parsed.toISOString().slice(0,10) === iso);
       display.setCustomValidity(valid ? '' : 'Data inválida. Use dd/mm/yyyy.');
-      if (!valid) { controller?.abort(); resetPdfLookups(); revision++; snapshot=null; empty(); report.setAttribute('aria-busy','false'); refresh.disabled=false; showNotice('Data inválida. Use dd/mm/yyyy.'); return; }
+      if (!valid) { controller?.abort(); pdfAttachments?.reset(); revision++; snapshot=null; empty(); report.setAttribute('aria-busy','false'); refresh.disabled=false; showNotice('Data inválida. Use dd/mm/yyyy.'); return; }
       input.value = iso; input.dispatchEvent(new win.Event('change'));
     });
     holder.append(display, calendar, input); dateFields.append(holder); controls.set(name, input); dateDisplays.set(name, display);
@@ -83,97 +82,13 @@ export function createPaymentLedgerView({ document: doc = globalThis.document, d
   const landscape = bindReportLandscape(root);
   addReportCloseControl({root, toolbar:filters, onClose:close});
   const showNotice = text => { notice.textContent = text; notice.hidden = !text; };
-  const canOpenPdfs = typeof data.listPaymentLedgerPdfs === 'function' && typeof openMediaCollection === 'function';
-  const pdfCells = new Map(), pdfTargets = new WeakMap(), pdfFailures = new Map();
-  let interactiveTarget;
-  const pdfLookups = createGalleryAttachmentCounts({
-    async loadAttachments(target, { signal }) {
-      const interactive = interactiveTarget === target.id;
-      if (interactive) interactiveTarget = undefined;
-      try {
-        return await data.listPaymentLedgerPdfs(target.kind, target.itemId, { signal, interactive });
-      } catch (error) {
-        if (!signal.aborted) pdfFailures.set(target.id, { target, needsConsent: error?.code === 'AUTH_REQUIRED' });
-        throw error;
-      }
-    },
-    onChange(target) {
-      if (!pdfLookups.hasError(target)) pdfFailures.delete(target.id);
-      retryPdfs.hidden = !pdfFailures.size;
-      const files = pdfLookups.attachmentsFor(target);
-      if (files?.length) for (const td of pdfCells.get(target.id) || []) showPdfControl(td, target, files);
-    },
-  });
-  const pdfObserver = canOpenPdfs && win?.IntersectionObserver ? new win.IntersectionObserver((changes, observer) => {
-    for (const change of changes) {
-      if (!change.isIntersecting || !change.target.isConnected) continue;
-      observer.unobserve(change.target);
-      const target = pdfTargets.get(change.target);
-      if (target) void pdfLookups.load(target).catch(() => {});
-    }
-  }, { root: scroll, rootMargin: '100px' }) : null;
-  function resetPdfLookups() {
-    pdfLookups.reset(); pdfFailures.clear(); interactiveTarget = undefined;
-    retryPdfs.hidden = true; retryPdfs.disabled = false;
-  }
-  function showPdfControl(td, { kind, itemId }, files) {
-    const label = kind === 'order' ? `pedido ${itemId}` : `lançamento ${itemId}`;
-    const control = button('pl-pdf-attachment');
-    control.innerHTML = PDF_ATTACHMENT_ICON;
-    control.title = `Abrir PDFs do ${label}`; control.setAttribute('aria-label', control.title);
-    let opening = false;
-    control.addEventListener('click', async () => {
-      if (opening) return;
-      const { signal } = controller;
-      opening = true;
-      try {
-        await openMediaCollection(files, {
-          signal, returnLabel: 'Voltar ao relatório',
-          resolveReturnFocus: () => root.hidden ? null : control.isConnected ? control : scroll,
-        });
-      } catch {
-        if (!signal.aborted) showNotice(`Não foi possível abrir os PDFs do ${label}.`);
-      } finally { opening = false; }
-    });
-    const content = make('span', 'pl-number-with-pdf');
-    content.append(make('span', '', itemId), control);
-    td.replaceChildren(content);
-  }
-  function watchPdfCell(td, kind, itemId) {
-    if (!/^[1-9]\d*$/.test(itemId)) return;
-    const target = { id: `${kind}:${itemId}`, kind, itemId };
-    if (!pdfCells.has(target.id)) pdfCells.set(target.id, new Set());
-    pdfCells.get(target.id).add(td);
-    const files = pdfLookups.attachmentsFor(target);
-    if (files) {
-      if (files.length) showPdfControl(td, target, files);
-    } else if (!pdfLookups.hasError(target)) {
-      if (pdfObserver) { pdfTargets.set(td, target); pdfObserver.observe(td); }
-      else void pdfLookups.load(target).catch(() => {});
-    }
-  }
-  retryPdfs.addEventListener('click', async () => {
-    const failures = [...pdfFailures.values()];
-    const first = failures.find(item => item.needsConsent) || failures[0];
-    if (!first) return;
-    const { signal } = controller;
-    retryPdfs.disabled = true;
-    interactiveTarget = first.target.id;
-    try {
-      await pdfLookups.load(first.target, { force: true, priority: true }).catch(() => {});
-      if (!signal.aborted) {
-        await Promise.allSettled(failures.filter(item => item !== first)
-          .map(({ target }) => pdfLookups.load(target, { force: true })));
-      }
-    } finally {
-      if (!signal.aborted) {
-        retryPdfs.disabled = false;
-        if (retryPdfs.hidden && doc.activeElement === retryPdfs) scroll.focus();
-      }
-    }
+  const pdfAttachments = createReportPdfAttachments({
+    root, scroll, retryButton: retryPdfs,
+    loadPdfs: typeof data.listPaymentLedgerPdfs === 'function' ? data.listPaymentLedgerPdfs.bind(data) : undefined,
+    openMediaCollection, getSignal: () => controller?.signal, showNotice,
   });
   function clearRows() {
-    pdfObserver?.disconnect(); pdfCells.clear();
+    pdfAttachments?.clearCells();
     body.replaceChildren(); rendered = 0; lastGroup = lastRow = null; currentDay = ''; dayIndex = -1;
     dateCell = supplierCell = totalCell = null; merged.clear(); loadStatus.textContent = '';
   }
@@ -207,7 +122,7 @@ export function createPaymentLedgerView({ document: doc = globalThis.document, d
       }
       const orderCell = mergedCell('order', ['branch', 'account', 'order']);
       const launchCell = cell(tr, 'id', values.id);
-      if (canOpenPdfs && !printing) {
+      if (pdfAttachments && !printing) {
         if (orderCell) attachmentCells.push([orderCell, 'order', values.order]);
         if (row.hasAttachments !== false) attachmentCells.push([launchCell, 'launch', values.id]);
       }
@@ -222,7 +137,7 @@ export function createPaymentLedgerView({ document: doc = globalThis.document, d
       fragment.append(tr); lastGroup = group; lastRow = row;
     }
     body.append(fragment);
-    for (const [td, kind, id] of attachmentCells) watchPdfCell(td, kind, id);
+    for (const [td, kind, id] of attachmentCells) pdfAttachments.watchCell(td, kind, id);
     loadStatus.textContent = entries.length ? `${rendered} de ${entries.length} lançamento(s)${rendered < entries.length ? ' · Role para baixo para carregar mais.' : ' · Fim da lista.'}` : '';
   }
   function render() {
@@ -250,7 +165,7 @@ export function createPaymentLedgerView({ document: doc = globalThis.document, d
   }
   async function load() {
     if (root.hidden || destroyed) return;
-    pickers?.close(); controller?.abort(); resetPdfLookups(); const current = ++revision;
+    pickers?.close(); controller?.abort(); pdfAttachments?.reset(); const current = ++revision;
     const active = new AbortController(); controller = active; snapshot = null; empty();
     showNotice('Carregando pagamentos do SharePoint…'); report.setAttribute('aria-busy', 'true'); refresh.disabled = true;
     try {
@@ -269,7 +184,7 @@ export function createPaymentLedgerView({ document: doc = globalThis.document, d
   function orientationChanged() { landscape.update(); }
   function close() {
     if (root.hidden) return;
-    root.hidden = true; controller?.abort(); resetPdfLookups(); revision++; snapshot = null; pickers?.close(); empty();
+    root.hidden = true; controller?.abort(); pdfAttachments?.reset(); revision++; snapshot = null; pickers?.close(); empty();
     doc.body.style.overflow = oldOverflow; if (app) app.inert = oldInert;
     returnFocus?.focus?.(); returnFocus = null;
   }
@@ -353,6 +268,6 @@ export function createPaymentLedgerView({ document: doc = globalThis.document, d
         if (current === revision && entries === printedEntries && !root.hidden && !destroyed) { clearRows(); appendRows(count); scroll.scrollTop = top; lastScrollTop = scroll.scrollTop; }
       };
     },
-    destroy() { if (destroyed) return; close(); destroyed = true; pickers?.destroy(); scroll.removeEventListener('scroll', onScroll); win?.removeEventListener('resize', orientationChanged); win?.removeEventListener('orientationchange', orientationChanged); landscape.destroy();root.remove(); },
+    destroy() { if (destroyed) return; close(); destroyed = true; pdfAttachments?.destroy(); pickers?.destroy(); scroll.removeEventListener('scroll', onScroll); win?.removeEventListener('resize', orientationChanged); win?.removeEventListener('orientationchange', orientationChanged); landscape.destroy();root.remove(); },
   });
 }
