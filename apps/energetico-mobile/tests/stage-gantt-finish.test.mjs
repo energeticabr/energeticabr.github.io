@@ -58,7 +58,7 @@ for (const kind of ['stage', 'activity']) test(`inicia ${kind} informando a data
   const start = findRow().querySelector('button[aria-label^="Iniciar"]');
   assert.ok(start);
   const finish = findRow().querySelector('.gantt-finish-button');
-  assert.ok(start.compareDocumentPosition(finish) & 4);
+  assert.equal(start.nextElementSibling, finish);
   assert.equal(finish.disabled, true);
   assert.equal(findRow().querySelector('.gantt-bar'), null);
   start.click();
@@ -81,7 +81,10 @@ for (const kind of ['stage', 'activity']) test(`inicia ${kind} informando a data
 test('retoma o início no Gantt com a data escolhida sem enviar automaticamente', async t => {
   const h = fixture(t, { loadAssignments: () => assert.fail('Iniciar não consulta presença') });
   h.snapshot.activities[0].status = 'ATIVIDADE NÃO INICIADA';
+  h.snapshot.activities[0].branch = 'OBRA A';
   await h.view.open({ finishDraft: { id: '129', date: '2026-11-09', operation: 'start' } });
+  assert.equal(h.root.querySelector('select').value, 'Obra A');
+  assert.equal(h.root.querySelector('.gantt-toggle').getAttribute('aria-expanded'), 'true');
   assert.equal(h.root.querySelector('.gantt-finish-overlay').hidden, false);
   assert.match(h.root.querySelector('.gantt-finish-form h2').textContent, /Iniciar atividade/);
   assert.equal(h.root.querySelector('input').value, '2026-11-09');

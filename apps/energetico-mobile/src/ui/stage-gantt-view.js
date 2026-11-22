@@ -367,11 +367,9 @@ export function createStageGanttView({ document: doc = globalThis.document, data
       const starting = finishDraft.operation === 'start';
       const item = stages.flatMap(row => stage ? [row] : row.children).find(row => String(row.source?.id) === String(finishDraft.id));
       if (item) {
-        branches.value = item.branch;
-        if (starting && !stage) {
-          const parent = stages.find(row => row.children.includes(item));
-          if (parent) expanded.add(String(parent.source?.id));
-        }
+        const parent = starting && !stage ? stages.find(row => row.children.includes(item)) : null;
+        branches.value = parent?.branch ?? item.branch;
+        if (parent) expanded.add(String(parent.source?.id));
         render();
         await finish.open(item, dialog, { stage, starting, draftDate: finishDraft.date });
       }
