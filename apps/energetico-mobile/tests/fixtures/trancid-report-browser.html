@@ -23,17 +23,19 @@ try {
     })),
   };
   let loads=0;
-  const view=decorateReportPrint(decorateReportNavigation(createTrancidReportView({loadReport:async ({month})=>{loads++;return {...report,month};}}),{action:'open-trancid-report',onNavigate:async()=>{}}),{action:'open-trancid-report'});
+  const destinations=[];
+  const view=decorateReportPrint(decorateReportNavigation(createTrancidReportView({loadReport:async ({month})=>{loads++;return {...report,month};}}),{action:'open-trancid-report',onNavigate:async destination=>{destinations.push(destination);}}),{action:'open-trancid-report'});
   document.getElementById('trigger').focus(); await view.open({initialSnapshot:report});
   const root=view.element; root.querySelector('details').open=true;
   await new Promise(resolve=>requestAnimationFrame(()=>requestAnimationFrame(resolve)));
   const rotated=root.dataset.reportPortrait==='true';
   const rect=node=>{const {left,right,top,bottom,width,height}=node.getBoundingClientRect();return rotated?{left:top,right:bottom,top:innerWidth-right,bottom:innerWidth-left,width:height,height:width}:{left,right,top,bottom,width,height};};
   const dialog=root.querySelector('[role=dialog]'), body=root.querySelector('.trancid-body'), toolbar=root.querySelector('.trancid-toolbar');
-  const controls=[...root.querySelectorAll('button,select')].map(node=>({...rect(node),label:node.getAttribute('aria-label')}));
+  const controls=[...root.querySelectorAll('button:not(.report-navigation-arrow),select')].map(node=>({...rect(node),label:node.getAttribute('aria-label')}));
+  const arrows=[...root.querySelectorAll('.report-navigation-arrow')];
   const first=root.querySelector('details'), table=first.querySelector('table');
   const printed=captureFilteredReport(root);
-  document.documentElement.dataset.layout=JSON.stringify({
+  const layout={
     loads, dialog:rect(dialog), rotated, transform:getComputedStyle(root).transform,
     documentOverflow:document.documentElement.scrollWidth-innerWidth,
     bodyOverflow:body.scrollWidth-body.clientWidth, toolbarOverflow:toolbar.scrollWidth-toolbar.clientWidth,
@@ -43,11 +45,23 @@ try {
     headerCells:[...table.tHead.rows[0].cells].map(node=>({...rect(node),text:node.textContent})),
     name:rect(first.querySelector('.trancid-supplier')),cardNumber:rect(first.querySelector('.trancid-card-number')),
     balanceColors:[...root.querySelectorAll('.trancid-balance')].map(node=>getComputedStyle(node).color),
-    arrows:[...root.querySelectorAll('.report-navigation-arrow')].map(rect),
+    arrows:arrows.map(rect),
     actions:[...root.querySelectorAll('.report-print-actions > button')].map(rect),
-    body:rect(body), navigation:root.querySelector('.report-navigation')?rect(root.querySelector('.report-navigation')):null,
+    body:rect(body),
     pdfFilters:printed.filters,pdfTables:printed.pages[0].blocks.filter(block=>block.type==='table').map(block=>block.rows.length),
     busy:root.getAttribute('aria-busy'),month:root.querySelector('[name=month]').value,year:root.querySelector('[name=year]').value,
-  });
+  };
+  body.scrollTop=body.scrollHeight;
+  layout.lastCardBottom=rect(root.querySelector('.trancid-card:last-child')).bottom;
+  layout.arrowsAfterScroll=arrows.map(rect);
+  for (const arrow of arrows) {
+    const bounds=arrow.getBoundingClientRect();
+    const hit=document.elementFromPoint(bounds.left+bounds.width/2,bounds.top+bounds.height/2);
+    hit?.closest('button')?.click();
+    await Promise.resolve();
+  }
+  layout.destinations=destinations;
+  body.scrollTop=0;
+  document.documentElement.dataset.layout=JSON.stringify(layout);
 } catch(error) {document.documentElement.dataset.layout=JSON.stringify({error:String(error.stack||error)});}
 </script></body></html>
