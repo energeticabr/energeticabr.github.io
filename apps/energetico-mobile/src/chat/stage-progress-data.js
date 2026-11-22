@@ -2,7 +2,7 @@ import { SHAREPOINT_SITES } from "../../../../portal/config.js";
 import { createGraphClient } from "../../../../portal/data/graph-client.js";
 import { createSharePointRepository } from "../../../../portal/data/sharepoint-repository.js";
 import {
-  canStartStageProgress, normalizeStageProgressDate, STAGE_GANTT_HIDDEN, STAGE_GANTT_VISIBLE, summarizeStageCompletion,
+  canStartStageProgress, canSuppressStage, normalizeStageProgressDate, STAGE_GANTT_HIDDEN, STAGE_GANTT_VISIBLE, summarizeStageCompletion,
 } from "./stage-progress-model.js";
 import { stageReportGroupKey } from "./operations-reports-model.js";
 
@@ -205,6 +205,9 @@ export function createStageProgressData({ tokenProvider, repository: suppliedRep
         throw Object.assign(new Error("A etapa mudou. Atualize o Gantt para conferir."), { code: "stage_progress_changed" });
       }
       if (row.visibility === visibility) return row;
+      if (visibility === STAGE_GANTT_HIDDEN && !canSuppressStage(row)) {
+        throw Object.assign(new Error("A etapa já tem data de início ou fim."), { code: "stage_progress_changed" });
+      }
       const saved = await repository.updateItem(SITE, id, itemId, { [field]: visibility }, {
         ...options, eTag: current.eTag || current["@odata.etag"],
       });

@@ -55,9 +55,24 @@ const visibility={
   filterFits:filterRect.left>=-1&&filterRect.top>=-1&&filterRect.right<=innerWidth+1&&filterRect.bottom<=innerHeight+1,
   filterOptions:[...filter.options].map(option=>option.textContent),
 };
+suppress.click();
+const confirmation=root.querySelector('.gantt-visibility-confirm');
+const confirmationRect=confirmation.querySelector('.gantt-visibility-confirm-card').getBoundingClientRect();
+const cancelConfirmation=confirmation.querySelector('.gantt-finish-cancel');
+const confirmationLayout={
+  fits:confirmationRect.left>=-1&&confirmationRect.top>=-1&&confirmationRect.right<=innerWidth+1&&confirmationRect.bottom<=innerHeight+1,
+  touch:[...confirmation.querySelectorAll('button')].every(button=>button.offsetWidth>=44&&button.offsetHeight>=44),
+  focus:document.activeElement===cancelConfirmation,
+};
+cancelConfirmation.click();
+const colors={
+  start:getComputedStyle(start).backgroundColor,
+  finish:getComputedStyle(root.querySelector('.gantt-finish-button:enabled')).backgroundColor,
+  disabled:getComputedStyle(start.nextElementSibling).backgroundColor,
+};
 start.click();
 const startFormRect=form.getBoundingClientRect();
 const startDialog={startFits,touch:start.offsetWidth>=44&&start.offsetHeight>=44,date:form.querySelector('input').value,
  visible:startFormRect.left>=-1&&startFormRect.top>=-1&&startFormRect.right<=innerWidth+1&&startFormRect.bottom<=innerHeight+1};
-document.documentElement.dataset.layout=JSON.stringify({rows,completed,...finishDialog,startDialog,visibility});
+document.documentElement.dataset.layout=JSON.stringify({rows,completed,...finishDialog,startDialog,visibility,confirmationLayout,colors});
 </script></body></html>
