@@ -276,7 +276,7 @@ export function createAttachmentPreview({
     if (event.target !== appendButton && !appendMenu.contains(event.target)) setAppendMenuOpen(false);
   });
 
-  const isCompactReportPdf = layout => layout === 'dda-report-pdf' || layout === 'nfe-report-pdf';
+  const isCompactReportPdf = layout => ['dda-report-pdf', 'nfe-report-pdf', 'tax-guides-report-pdf'].includes(layout);
 
   function updateCollectionNavigation() {
     const hasCollection = Boolean(collection?.items?.length);
@@ -675,7 +675,7 @@ export function createAttachmentPreview({
           onProgress: value => presentationProgress(session, value),
           onDdaCopyReady: available => { if (active === session) { ddaCopyButton.hidden = !available; if (available) dialog.dataset.ddaCopy = 'true'; else delete dialog.dataset.ddaCopy; } },
           fit: layout === 'report-pdf' ? 'page' : 'width',
-          navigation: compactReport ? 'paged' : 'scroll',
+          navigation: compactReport && layout !== 'tax-guides-report-pdf' ? 'paged' : 'scroll',
           rotatesWithViewport: compactReport,
           initialPage,
           onPageChange: page => {

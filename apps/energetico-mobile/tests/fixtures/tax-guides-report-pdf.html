@@ -1,0 +1,122 @@
+<!doctype html>
+<html lang="pt-BR"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Guias INSS e FGTS — PDFs fictícios</title>
+<link rel="stylesheet" href="/src/styles.css"><link rel="stylesheet" href="/src/ui/tax-guides-report.css">
+<link rel="stylesheet" href="/src/web/attachment-preview.css"></head>
+<body><main id="app"></main><script type="module">
+import { PDFDocument } from 'pdf-lib';
+import { createTaxGuidesReportView } from '/src/ui/tax-guides-report-view.js';
+import { createAttachmentPreview } from '/src/web/attachment-preview.js';
+
+const state = {}, downloads = [];
+let holdDownload = false, heldSignal;
+const get = selector => document.querySelector(selector);
+const frame = () => new Promise(resolve => requestAnimationFrame(resolve));
+async function until(check) {
+  for (let frameIndex = 0; frameIndex < 480; frameIndex++) {
+    if (check()) return;
+    await frame();
+  }
+  throw new Error('A guia não foi renderizada.');
+}
+const files = { 7: ['INSS_102026_ENERGETICA.pdf'], 8: ['FGTS_102026_ENERGETICA.pdf', `Anexo_${'FGTS_'.repeat(26)}.pdf`] };
+const rows = ['INSS', 'FGTS'].map((type, index) => ({
+  id: String(index + 7), hasAttachments: true,
+  fields: { TIPO: type, FILIAL: '004 - EDIFÍCIO XAVANTE', COMPETENCIA: '2026-10-20', STATUS: 'SUBMETIDO' },
+}));
+const preview = createAttachmentPreview({ documentRef: document, exportMedia() {} });
+const report = createTaxGuidesReportView({
+  document,
+  openMediaCollection: (items, options) => preview.openCollection(items, { ...options, onAddToTray() {} }),
+  data: {
+    loadSnapshot: async () => ({ rows }),
+    listAttachments: async id => files[id].map(fileName => ({ fileName })),
+    downloadAttachment: async (id, fileName, { signal }) => {
+      downloads.push([id, fileName]);
+      if (holdDownload) {
+        heldSignal = signal;
+        await new Promise((_, reject) => signal.addEventListener('abort', () => reject(signal.reason), { once: true }));
+      }
+      const pdf = await PDFDocument.create();
+      pdf.addPage([595, 842]).drawText(`Guia fictícia de ${rows.find(row => row.id === id).fields.TIPO}`, { x: 42, y: 760, size: 30 });
+      if (fileName === files[8][1]) pdf.addPage([595, 842]).drawText('Segunda página do anexo', { x: 42, y: 760, size: 30 });
+      return new Blob([await pdf.save()], { type: 'application/pdf' });
+    },
+  },
+});
+const dialog = get('.attachment-preview-dialog'), title = get('.attachment-preview-title');
+const close = get('.attachment-preview-close'), footer = get('.attachment-preview-footer');
+const next = get('[data-preview-action="next"]'), previous = get('[data-preview-action="previous"]');
+const nav = next.parentElement;
+async function ready(name) {
+  await until(() => dialog.open && title.textContent === name
+    && get('.attachment-preview-pdf-page:not([hidden]) canvas')
+    && get('.attachment-preview-status').textContent.includes('100%'));
+  await frame();
+}
+function measure() {
+  const viewport = get('.attachment-preview-pdf-viewport');
+  const canvas = viewport.querySelector('canvas');
+  const rect = dialog.getBoundingClientRect();
+  const rotated = innerHeight > innerWidth;
+  viewport.scrollTop = viewport.scrollHeight;
+  return {
+    closeLeft: close.textContent === '×' && close.offsetLeft < title.offsetLeft && getComputedStyle(close).color === 'rgb(176, 0, 0)',
+    horizontal: dialog.offsetWidth > dialog.offsetHeight && (rotated ? rect.height > rect.width : rect.width > rect.height),
+    fits: rect.left >= -1 && rect.top >= -1 && rect.right <= innerWidth + 1 && rect.bottom <= innerHeight + 1,
+    visiblePdf: viewport.clientHeight / dialog.clientHeight,
+    fullWidth: canvas.offsetWidth / viewport.clientWidth,
+    scrolls: viewport.scrollTop > 0,
+    compactFooter: footer.offsetHeight <= 56 && footer.scrollWidth <= footer.clientWidth + 1,
+    footerSize: [footer.clientWidth, footer.offsetHeight, ...[...footer.children].filter(node => !node.hidden).map(node => node.offsetWidth)],
+    actionsVisible: ['add-to-tray', 'export'].every(action => {
+      const button = get(`[data-preview-action="${action}"]`);
+      return button.offsetWidth > 0 && !button.disabled;
+    }),
+  };
+}
+try {
+  await report.open();
+  const inss = get('[data-guide-id="7"] .tgr-attachment');
+  const fgts = get('[data-guide-id="8"] .tgr-attachment');
+  inss.click();
+  await ready(files[7][0]);
+  state.inss = measure();
+  state.singleNoNav = nav.hidden && get('.attachment-preview-back').hidden;
+  close.click();
+  state.inssReturns = !dialog.open && !report.element.hidden && document.activeElement === inss;
+  fgts.click();
+  await ready(files[8][0]);
+  state.fgts = measure();
+  state.first = !nav.hidden && previous.disabled && !next.disabled && get('[data-preview-action="collection-status"]').textContent === '1 de 2';
+  next.click();
+  await ready(files[8][1]);
+  state.second = !previous.disabled && next.disabled && get('[data-preview-action="collection-status"]').textContent === '2 de 2';
+  state.longTitle = title.offsetHeight <= 24 && title.title === files[8][1];
+  state.attachment = measure();
+  const pageTwo = get('[data-page-number="2"] canvas');
+  const viewport = get('.attachment-preview-pdf-viewport').getBoundingClientRect();
+  const page = pageTwo?.getBoundingClientRect();
+  const rotated = innerHeight > innerWidth;
+  state.pageTwoVisible = Boolean(page && (rotated
+    ? page.left < viewport.right && page.right > viewport.left
+    : page.top < viewport.bottom && page.bottom > viewport.top));
+  previous.click();
+  await ready(files[8][0]);
+  close.click();
+  state.fgtsReturns = !dialog.open && !report.element.hidden && document.activeElement === fgts;
+  holdDownload = true;
+  inss.click();
+  await until(() => dialog.open && inss.disabled && heldSignal);
+  close.click();
+  state.cancelReturns = heldSignal.aborted && !dialog.open && !report.element.hidden
+    && !inss.disabled && document.activeElement === inss;
+  holdDownload = false;
+  if (new URLSearchParams(location.search).has('capture')) {
+    fgts.click();
+    await ready(files[8][0]);
+  }
+  state.downloads = downloads;
+} catch (error) { state.error = error.message; }
+document.documentElement.dataset.layout = JSON.stringify(state);
+</script></body></html>

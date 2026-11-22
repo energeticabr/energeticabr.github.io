@@ -108,7 +108,13 @@ export function createTaxGuidesReportView({document:doc=globalThis.document,data
       if(destroyed||root.hidden||current.signal.aborted)return;
       const items=files.map(file=>({fileName:String(file.fileName||file.name||''),source:options=>data.downloadAttachment(String(row.id),String(file.fileName||file.name||''),options)})).filter(file=>file.fileName);
       if(!items.length){feedback.textContent='Nenhuma guia anexada a este registro.';return;}
-      await openMediaCollection(items,{signal:current.signal,returnLabel:'Voltar ao relatório INSS e FGTS',resolveReturnFocus:()=>trigger});
+      await openMediaCollection(items,{
+        layout:'tax-guides-report-pdf',
+        signal:current.signal,
+        onClose(){if(attachmentController===current)trigger.disabled=false;},
+        resolveReturnFocus:()=>trigger.isConnected?trigger:closeButton,
+        loadErrorMessage:'Não foi possível carregar este anexo. Feche o visualizador e tente novamente no relatório INSS e FGTS.',
+      });
     }catch(error){if(!current.signal.aborted&&!root.hidden)feedback.textContent='Não foi possível abrir os anexos da guia. Tente novamente.';}
     finally{if(attachmentController===current)attachmentController=null;trigger.disabled=false;}
   }
