@@ -7,7 +7,7 @@ import {createServer} from 'vite';
 import {JSDOM} from 'jsdom';
 import {runBrowserLayout} from './helpers/browser-layout-runner.mjs';
 
-test('popup do produto cabe no celular e PC, mantém Fechar acessível e devolve a tabela intacta',{timeout:150000},async t=>{
+test('popup do produto e detalhes dos rankings cabem no celular e PC',{timeout:150000},async t=>{
   const browser=[process.env.CHROME_BIN,'C:/Program Files/Google/Chrome/Application/chrome.exe','/usr/bin/google-chrome','/usr/bin/chromium'].find(path=>path&&existsSync(path));
   if(!browser)return t.skip('Chrome unavailable');
   const server=await createServer({root:resolve(fileURLToPath(new URL('..',import.meta.url))),
@@ -24,7 +24,8 @@ test('popup do produto cabe no celular e PC, mantém Fechar acessível e devolve
         assert.deepEqual(result,{rows:32,forecastOrange:true,paidOrange:false,
           subtotals:[['TOTAL DO MÊS','63','','R$ 822,50'],['TOTAL DO MÊS','2','','R$ 25,25']],
           inside:true,closeHit:true,scrolls:true,overflow:false,
-          backgroundInert:true,preciseUnit:true,returned:true,sameDOM:true,sameScroll:true,focus:true},
+          backgroundInert:true,preciseUnit:true,returned:true,sameDOM:true,sameScroll:true,focus:true,
+          rankings:Array.from({length:3},()=>({leftOfLabel:true,fitsWidth:true,count:30,collapsed:true}))},
           `${width}×${height}: ${dom.window.document.documentElement.dataset.geometry}`);
         const {close}=JSON.parse(dom.window.document.documentElement.dataset.geometry);
         assert.ok(close.left>=insets.left-1&&close.right<=width-insets.right+1

@@ -13,7 +13,8 @@ import {createManagementReportView} from '/src/ui/management-report-view.js';
 try {
   const launches=Array.from({length:30},(_,index)=>({id:String(index+1),date:'2026-10-02',
     paymentDate:'2026-10-05',branch:'004 - EDIFÍCIO XAVANTE',supplier:'Fornecedor de materiais de construção e serviços',
-    product:'CIMENTO CP II — SACO DE 50 KG',unit:10.1234,quantity:2,freight:5,total:25.2468}));
+    product:'CIMENTO CP II — SACO DE 50 KG',stage:'ALVENARIA E ESTRUTURAS',account:'ENERGÉTICA SICOOB',
+    unit:10.1234,quantity:2,freight:5,total:25.2468}));
   launches.push({...launches[0],id:'31',date:'2026-09-03',paymentDate:'2026-09-05'});
   const provisions=[{...launches[0],id:'32',paymentDate:'',dueDate:'2026-10-06',unit:20,quantity:3,total:65}];
   const view=createManagementReportView({document,data:{loadSnapshot:async()=>({launches,provisions,productTypes:[]})},
@@ -49,6 +50,21 @@ try {
   close.click();
   Object.assign(results,{returned:!root.hidden&&popup.hidden,sameDOM:report.innerHTML===previous,
     sameScroll:report.scrollTop===top&&report.scrollLeft===left,focus:document.activeElement===product});
+  results.rankings=['suppliers','stages','accounts'].map(section=>{
+    const ranking=root.querySelector(`[data-section=${section}]`);
+    const toggle=ranking.querySelector('button[aria-expanded]');
+    const label=toggle.nextElementSibling;
+    const leftOfLabel=toggle.offsetLeft<label.offsetLeft;
+    toggle.click();
+    const detail=toggle.closest('tr').nextElementSibling;
+    const nested=detail.querySelector('button[aria-expanded]');
+    nested?.click();
+    const fitsWidth=report.scrollWidth<=report.clientWidth+1;
+    const count=detail.querySelectorAll('[data-launch-id]').length;
+    toggle.click();
+    return {leftOfLabel,fitsWidth,count,collapsed:!detail.isConnected};
+  });
+  report.scrollTop=top;report.scrollLeft=left;
   product.click();
   document.documentElement.dataset.layout=JSON.stringify(results);
 } catch(error) {document.documentElement.dataset.layout=JSON.stringify({error:String(error)});}

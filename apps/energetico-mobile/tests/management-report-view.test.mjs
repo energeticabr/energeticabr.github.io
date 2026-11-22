@@ -49,6 +49,75 @@ test('management cancellation and partial data never expose stale definitive tot
   const invalid=setup(t,async()=>({launches:[row],productTypes:[]}));await invalid.view.open();assert.equal(invalid.root.querySelectorAll('.gm-table').length,0);
 });
 
+test('rankings expand exact branch and period rows, with product and supplier breakdowns and independent toggles',async t=>{
+  const launch={...row,paymentDate:'2026-10-07'};
+  let loads=0;
+  const {view,root,dom}=setup(t,async()=>{loads++;return {launches:[
+    launch,
+    {...launch,id:'2',product:'Brita',quantity:3,unit:10.1234,freight:0,total:30.3702,paymentDate:''},
+    {...launch,id:'3',product:'Brita',supplier:'Beta',account:'Banco',total:80},
+    {...launch,id:'4',supplier:'ALFA',stage:'Outros',account:'Caixa',total:20},
+    {...launch,id:'5',supplier:'Beta',account:'Caixa',total:15},
+    {...launch,id:'6',branch:'Central',total:100},
+    {...launch,id:'7',date:'2026-09-20',total:200},
+  ],provisions:[{...launch,id:'8',dueDate:'2026-10-11',total:800}],productTypes:[]};});
+  await view.open();
+  const section=name=>root.querySelector(`[data-section=${name}]`);
+  const toggle=(table,text)=>[...table.querySelectorAll('button[aria-expanded]')]
+    .find(button=>button.parentElement.lastElementChild.textContent===text);
+  const detailOf=button=>button.closest('tr').nextElementSibling.querySelector('table');
+  const launchIds=table=>[...table.querySelectorAll('[data-launch-id]')].map(tr=>tr.dataset.launchId);
+  const text=value=>value.replace(/\s+/g,' ').trim();
+  const supplier=toggle(section('suppliers'),'Alfa');
+  assert.equal(supplier.textContent,'+');
+  assert.equal(supplier.getAttribute('aria-expanded'),'false');
+  const branchCell=section('suppliers').querySelector('[data-column=branch]');
+  const originalSpan=branchCell.rowSpan;
+  supplier.click();
+  assert.equal(supplier.textContent,'−');
+  assert.equal(branchCell.rowSpan,originalSpan+1);
+  const supplierLaunches=detailOf(supplier);
+  assert.deepEqual(launchIds(supplierLaunches),['1','2']);
+  assert.deepEqual([...supplierLaunches.querySelectorAll('th[scope=col]')].map(th=>th.textContent),
+    ['PRODUTO','DATA PGTO EFETUADO','QTD','VALOR UNITÁRIO','FRETE','TOTAL']);
+  assert.deepEqual([...supplierLaunches.querySelector('[data-launch-id="1"]').cells].map(td=>text(td.textContent)),
+    ['Cimento','07/10/2026','2','R$ 10,00','R$ 5,00','R$ 25,00']);
+  assert.deepEqual([...supplierLaunches.querySelector('[data-launch-id="2"]').cells].map(td=>text(td.textContent)),
+    ['Brita','—','3','R$ 10,1234','R$ 0,00','R$ 30,37']);
+  assert.match(supplierLaunches.textContent,/TOTAL DO MÊS.*outubro\/2026/);
+  assert.match(supplierLaunches.textContent,/55,37/);
+
+  const stage=toggle(section('stages'),'Fundação');
+  stage.click();
+  const products=detailOf(stage),brita=toggle(products,'Brita');
+  assert.ok(brita);
+  assert.match(brita.closest('tr').textContent,/110,37/);
+  brita.click();
+  assert.deepEqual(launchIds(detailOf(brita)),['3','2']);
+
+  const account=toggle(section('accounts'),'Caixa');
+  account.click();
+  const suppliers=detailOf(account),accountAlfa=toggle(suppliers,'Alfa'),accountUpper=toggle(suppliers,'ALFA');
+  assert.deepEqual([...suppliers.querySelectorAll('button[aria-expanded]')].map(button=>button.parentElement.lastElementChild.textContent),
+    ['Alfa','ALFA','Beta']);
+  accountAlfa.click();accountUpper.click();
+  assert.deepEqual(launchIds(detailOf(accountAlfa)),['1','2']);
+  assert.deepEqual(launchIds(detailOf(accountUpper)),['4']);
+  assert.equal(supplier.getAttribute('aria-expanded'),'true');
+  account.click();
+  assert.equal(account.getAttribute('aria-expanded'),'false');
+  assert.equal(supplier.getAttribute('aria-expanded'),'true');
+  supplier.click();
+  assert.equal(branchCell.rowSpan,originalSpan);
+  const month=root.querySelector('[name=month]');
+  month.value='';month.dispatchEvent(new dom.window.Event('change'));
+  const allMonths=toggle(section('suppliers'),'Alfa');
+  allMonths.click();
+  assert.deepEqual(launchIds(detailOf(allMonths)),['1','2','7']);
+  assert.equal(detailOf(allMonths).querySelectorAll('tbody').length,2);
+  assert.equal(loads,1);
+});
+
 test('tabela de despesas mostra PAGO, PREVISTO e TOTAL GERAL para tipos e subtotais',async t=>{
   const {view,root,dom}=setup(t,async()=>({
     launches:[
