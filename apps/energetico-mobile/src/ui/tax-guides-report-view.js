@@ -109,7 +109,7 @@ export function createTaxGuidesReportView({document:doc=globalThis.document,data
       const items=files.map(file=>({fileName:String(file.fileName||file.name||''),source:options=>data.downloadAttachment(String(row.id),String(file.fileName||file.name||''),options)})).filter(file=>file.fileName);
       if(!items.length){feedback.textContent='Nenhuma guia anexada a este registro.';return;}
       await openMediaCollection(items,{
-        layout:'tax-guides-report-pdf',
+        layout:'compact-report-pdf',
         signal:current.signal,
         onClose(){if(attachmentController===current)trigger.disabled=false;},
         resolveReturnFocus:()=>trigger.isConnected?trigger:closeButton,

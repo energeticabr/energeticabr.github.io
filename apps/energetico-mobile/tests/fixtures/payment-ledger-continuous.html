@@ -11,11 +11,13 @@ async function checkAttachments(){
   const {createAttachmentPreview}=await import('../../src/web/attachment-preview.js');
   const {PDFDocument}=await import('pdf-lib');
   await import('../../src/web/attachment-preview.css');
-  const pdf=await PDFDocument.create();pdf.addPage();
+  const pdf=await PDFDocument.create();
+  pdf.addPage([595,842]).drawText('Comprovante fictício', {x:42,y:760,size:30});
   const blob=new Blob([await pdf.save()],{type:'application/pdf'});
-  const preview=createAttachmentPreview({canEmbedPdf:()=>false});
+  const preview=createAttachmentPreview({canEmbedPdf:()=>false,exportMedia(){}});
+  const orderPdf='20261119-181055_COMPROVANTE_DE_PAGAMENTO_SICOOB_2026_19_11_14_33_33_PIX.pdf';
   const base={paymentDate:'2026-10-02',supplier:'Alfa',branch:'Xavante',product:'SERVIÇO',account:'CAIXA',unit:1,quantity:1,freight:0,total:1};
-  const view=decorateReportNavigation(createPaymentLedgerView({openMediaCollection:preview.openCollection,data:{
+  const view=decorateReportNavigation(createPaymentLedgerView({openMediaCollection:(items,options)=>preview.openCollection(items,{...options,onAddToTray(){}}),data:{
     async loadPaymentsSnapshot(){return {launches:[
       {...base,id:'3851',order:'569',hasAttachments:true},
       {...base,id:'3875',order:'578',hasAttachments:false},
@@ -23,7 +25,8 @@ async function checkAttachments(){
     ]};},
     async listPaymentLedgerPdfs(kind,id){
       if(id==='578')return [];
-      return [`${kind}-${id}.pdf`, `${kind}-aditivo.pdf`].map(fileName=>({fileName,source:async()=>blob}));
+      const names=id==='569'?[orderPdf]:[`${kind}-${id}.pdf`, `${kind}-aditivo.pdf`];
+      return names.map(fileName=>({fileName,source:async()=>blob}));
     },
   }}),{action:'open-payment-ledger'});
   await view.open();
@@ -51,14 +54,41 @@ async function checkAttachments(){
   const controls=[order,launch,otherOrder,otherLaunch];
   const result={controls:controls.map(geometry),count:root.querySelectorAll('.pl-pdf-attachment').length,
     iconColors:controls.map(control=>getComputedStyle(control.querySelector('svg rect')).fill)};
-  const title=()=>document.querySelector('.attachment-preview-dialog[open] .attachment-preview-title')?.textContent;
-  const visiblePdf=name=>waitFor(()=>title()===name&&document.querySelector('.attachment-preview-content canvas'));
-  order.click();await visiblePdf('order-569.pdf');
-  document.querySelector('.attachment-preview-collection-next').click();await visiblePdf('order-aditivo.pdf');
-  document.querySelector('.attachment-preview-back').click();result.orderFocus=document.activeElement===order;
+  const dialog=document.querySelector('.attachment-preview-dialog');
+  const title=dialog.querySelector('.attachment-preview-title'),close=dialog.querySelector('.attachment-preview-close');
+  const next=dialog.querySelector('.attachment-preview-collection-next'),previous=dialog.querySelector('.attachment-preview-collection-previous');
+  const nav=next.parentElement,back=dialog.querySelector('.attachment-preview-back');
+  const visiblePdf=name=>waitFor(()=>dialog.open&&title.textContent===name&&dialog.querySelector('.attachment-preview-content canvas')
+    &&dialog.querySelector('.attachment-preview-status').textContent.includes('100%'));
+  function measure(){
+    const viewport=dialog.querySelector('.attachment-preview-pdf-viewport'),bounds=dialog.getBoundingClientRect();
+    const footer=dialog.querySelector('.attachment-preview-footer');
+    viewport.scrollTop=viewport.scrollHeight;
+    return {
+      fits:bounds.left>=-1&&bounds.top>=-1&&bounds.right<=innerWidth+1&&bounds.bottom<=innerHeight+1,
+      horizontal:dialog.offsetWidth>dialog.offsetHeight&&(innerHeight>innerWidth?bounds.height>bounds.width:bounds.width>bounds.height),
+      leftClose:close.textContent==='×'&&close.offsetLeft<title.offsetLeft&&getComputedStyle(close).color==='rgb(176, 0, 0)',
+      compactFooter:footer.offsetHeight<=56&&footer.scrollWidth<=footer.clientWidth+1,
+      visiblePdf:viewport.clientHeight/dialog.clientHeight,
+      scrollable:viewport.scrollTop>0,
+      actions:['add-to-tray','export'].every(action=>{
+        const button=footer.querySelector(`[data-preview-action="${action}"]`);
+        return button.offsetWidth>0&&!button.disabled;
+      }),
+    };
+  }
+  order.click();await visiblePdf(orderPdf);
+  result.orderPdf=measure();
+  result.singleNavHidden=nav.hidden&&back.hidden;
+  result.longTitle=title.offsetHeight<=24&&title.title===orderPdf;
+  close.click();result.orderFocus=!dialog.open&&!root.hidden&&document.activeElement===order;
   launch.click();await visiblePdf('launch-3851.pdf');
-  document.querySelector('.attachment-preview-collection-next').click();await visiblePdf('launch-aditivo.pdf');
-  document.querySelector('.attachment-preview-back').click();result.launchFocus=document.activeElement===launch;
+  result.launchPdf=measure();
+  result.firstLaunchPdf=!nav.hidden&&previous.disabled&&!next.disabled;
+  next.click();await visiblePdf('launch-aditivo.pdf');
+  result.secondLaunchPdf=!previous.disabled&&next.disabled;
+  previous.click();await visiblePdf('launch-3851.pdf');
+  close.click();result.launchFocus=!dialog.open&&!root.hidden&&document.activeElement===launch;
   return result;
 }
 try {
