@@ -28,7 +28,7 @@ test('Trancid report opens in landscape on phones and Windows with full card nam
       assert.equal(result.transform==='none',height<=width);
       assert.equal(result.busy,'false'); assert.equal(result.loads,0); assert.equal(result.month,'11'); assert.equal(result.year,'2026');
       assert.ok(result.dialog.left>=0&&result.dialog.right<=Math.max(width,height)&&result.dialog.top>=0&&result.dialog.bottom<=Math.min(width,height),`${width}px dialog outside viewport`);
-      if(iPhone) assert.ok(result.dialog.left>=68,`${width}px must clear the iPhone camera area even with zero insets`);
+      const logicalWidth=Math.max(width,height);
       const logicalHeight=Math.min(width,height);
       assert.ok(Math.abs(result.dialog.top)<=1&&Math.abs(result.dialog.bottom-logicalHeight)<=1,`${width}px dialog must reach both vertical edges`);
       const safeBottom=(result.rotated?safeAreaInsets?.left:safeAreaInsets?.bottom)||0;
@@ -46,6 +46,10 @@ test('Trancid report opens in landscape on phones and Windows with full card nam
       assert.equal(result.arrows.length,2); assert.equal(result.actions.length,2,'PDF and refresh must both be available');
       const [previous,next]=result.arrows;
       assert.ok(previous.right<=result.dialog.left&&next.left>=result.dialog.right,`${width}px navigation must sit beside the panel`);
+      if (iPhone) {
+        assert.ok(previous.left>=68,`${width}px previous arrow must clear the iPhone camera area even with zero insets`);
+        if (!result.rotated) assert.ok(next.right<=logicalWidth-68,`${width}px next arrow must clear the iPhone camera area in landscape`);
+      }
       for (const arrow of result.arrows) {
         assert.ok(arrow.width>=44&&arrow.height>=44,`${width}px navigation touch target`);
         assert.ok(Math.abs((arrow.top+arrow.bottom)/2-logicalHeight/2)<=1,`${width}px navigation must sit at mid-height`);

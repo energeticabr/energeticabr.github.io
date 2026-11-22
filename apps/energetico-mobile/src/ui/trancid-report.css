@@ -1,19 +1,26 @@
 .trancid-overlay[hidden], .trancid-overlay [hidden] { display:none !important; }
 .trancid-overlay {
+ --trancid-camera-left:0px;
+ --trancid-camera-right:0px;
+ --trancid-arrow-left:max(6px,var(--trancid-camera-left),env(safe-area-inset-left));
+ --trancid-arrow-right:max(6px,var(--trancid-camera-right),env(safe-area-inset-right));
  --trancid-arrow-room:calc(var(--report-navigation-size,56px) + 8px);
- --trancid-side-safe-min:0px;
+ --trancid-panel-insets:calc(var(--trancid-arrow-left) + var(--trancid-arrow-room))
+  calc(var(--trancid-arrow-right) + var(--trancid-arrow-room));
  position:fixed; inset:0; z-index:1200; display:flex; justify-content:center;
- box-sizing:border-box;
- padding-inline:max(var(--trancid-side-safe-min),calc(max(6px,env(safe-area-inset-left)) + var(--trancid-arrow-room)))
-  max(var(--trancid-side-safe-min),calc(max(6px,env(safe-area-inset-right)) + var(--trancid-arrow-room)));
+ box-sizing:border-box; padding-inline:var(--trancid-panel-insets);
  background:rgb(9 27 48 / .6); overscroll-behavior:contain;
 }
-.trancid-overlay[data-iphone] { --trancid-side-safe-min:68px; }
+.trancid-overlay[data-iphone] { --trancid-camera-left:68px; }
+.trancid-overlay[data-iphone][data-report-portrait="false"] { --trancid-camera-right:68px; }
 /* The shared side arrows are outside the panel, with rotated safe areas in portrait. */
 .trancid-overlay[data-report-portrait="true"] {
- padding-inline:calc(max(16px,env(safe-area-inset-top)) + var(--trancid-arrow-room))
-  calc(max(16px,env(safe-area-inset-bottom)) + var(--trancid-arrow-room))!important;
+ --trancid-arrow-left:max(16px,var(--trancid-camera-left),env(safe-area-inset-top));
+ --trancid-arrow-right:max(16px,env(safe-area-inset-bottom));
+ padding-inline:var(--trancid-panel-insets)!important;
 }
+.trancid-overlay .report-navigation .report-navigation-arrow--previous { left:var(--trancid-arrow-left); }
+.trancid-overlay .report-navigation .report-navigation-arrow--next { right:var(--trancid-arrow-right); }
 .trancid-overlay *, .trancid-overlay *::before, .trancid-overlay *::after { box-sizing:border-box; }
 .trancid-dialog {
  display:flex; flex-direction:column; width:min(100%,880px); min-height:0;
