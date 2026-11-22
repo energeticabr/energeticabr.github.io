@@ -87,6 +87,10 @@ export function openTaxGuideReportEditor({ document:doc, host, background, row, 
         if(!uploaded){
           status.textContent='Enviando guia…';
           const latest=await currentContext();
+          if(latest.attachments?.canEdit===false){
+            context=null;
+            throw new Error(latest.attachments.error||'Não foi possível consultar os anexos da guia.');
+          }
           await data.saveEditor(latest,{}, {attachments:{uploads:pendingFiles,deletions:[]},signal});
           uploaded=true;
         }
@@ -106,6 +110,7 @@ export function openTaxGuideReportEditor({ document:doc, host, background, row, 
         if(!signal.aborted){
           status.textContent=uploaded?`O PDF foi enviado, mas o status não pôde ser atualizado. ${errorMessage(error)}`:errorMessage(error);
           retry.textContent=uploaded?'Tentar atualizar status novamente':'Tentar envio novamente';
+          sources.hidden=uploaded;
           retry.hidden=false;
         }
       }finally{
@@ -120,13 +125,15 @@ export function openTaxGuideReportEditor({ document:doc, host, background, row, 
       if(busy||signal.aborted)return;
       setBusy(true);status.textContent='';
       try{
-        pendingFiles=await pickAttachments(source,{signal});
+        const files=await pickAttachments(source,{signal});
         signal.throwIfAborted();
+        if(!files?.length)return;
+        pendingFiles=files;
       }catch(error){
         if(!signal.aborted)status.textContent=errorMessage(error);
         return;
       }finally{if(!signal.aborted)setBusy(false);}
-      if(!pendingFiles?.length)return;
+      submit=false;retry.hidden=true;
       selectedPdfs=pendingFiles.map(file=>String(file.name||'').trim().toLowerCase()).filter(name=>name.endsWith('.pdf'));
       sources.hidden=true;
       if(!selectedPdfs.length){await upload();return;}
@@ -135,6 +142,7 @@ export function openTaxGuideReportEditor({ document:doc, host, background, row, 
     }
 
     function answer(submitted){
+      if(confirmation.hidden||busy||signal.aborted)return;
       submit=submitted;confirmation.hidden=true;
       void upload();
     }

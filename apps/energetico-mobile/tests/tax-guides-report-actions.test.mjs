@@ -15,9 +15,9 @@ function setup(t,options={}){
   const columns=[{name:'TIPO',choice:{choices:['INSS','FGTS']},required:true},{name:'FILIAL',text:{},required:true},
     {name:'COMPETENCIA',dateTime:{format:'dateOnly'},required:true},{name:'VENCIMENTO',dateTime:{format:'dateOnly'}},{name:'VALOR',currency:{locale:'pt-BR'}},{name:'STATUS',text:{},required:true}];
   const repository={resolveList:async()=>({status:'resolved',id:'guides'}),getColumns:async()=>columns,
-    getItem:async()=>structuredClone(item),listAttachments:async()=>files.map(file=>({name:file.name})),deleteAttachment:async()=>{},
-    uploadAttachment:async(site,list,id,file,name)=>{assert.equal(list,'guides');assert.equal(id,'7');if(options.upload)await options.upload();files.push({name,blob:file});},
-    updateItem:async(site,list,id,fields,{eTag})=>{assert.equal(id,'7');assert.equal(eTag,'"v1"');if(options.update)await options.update(fields);writes.push(fields);Object.assign(item.fields,fields);return structuredClone(item);}};
+    getItem:async()=>structuredClone(item),listAttachments:async()=>{if(options.list)await options.list();return files.map(file=>({name:file.name}));},deleteAttachment:async()=>{},
+    uploadAttachment:async(site,list,id,file,name)=>{assert.equal(list,'guides');assert.equal(id,'7');if(options.upload)await options.upload();files.push({name,blob:file});item.eTag=`"v${files.length+1}"`;},
+    updateItem:async(site,list,id,fields,{eTag})=>{assert.equal(id,'7');assert.equal(eTag,item.eTag);if(options.update)await options.update(fields);writes.push(fields);Object.assign(item.fields,fields);return structuredClone(item);}};
   const source=createRegistrationGalleryData({kind:'taxGuides',repository});
   const data={...source,loadSnapshot:async()=>({rows:[{...structuredClone(item),hasAttachments:files.length>0}]})};
   if(options.loadEditor)data.loadEditor=options.loadEditor;
@@ -136,6 +136,25 @@ test('a duplicate PDF from another session does not get uploaded or submit the g
   h.doc.querySelector('[data-source="files"]').click();await confirm(h,'SIM');
   await until(()=>h.doc.querySelector('.tgr-editor-status').textContent.includes('já existe'));
   assert.deepEqual(h.files.map(f=>f.name),['files.pdf']);assert.deepEqual(h.writes,[]);
+});
+
+test('a temporary attachment list failure can be retried with the selected PDF',async t=>{
+  let fail=true;const h=setup(t,{list:()=>{if(fail)throw new Error('offline');}});
+  await h.report.open();action(h.report,'attach');h.doc.querySelector('[data-source="files"]').click();await confirm(h,'SIM');
+  await until(()=>h.doc.querySelector('[data-guide-retry]:not([hidden])'));
+  fail=false;h.doc.querySelector('[data-guide-retry]').click();await until(()=>h.writes.length===1);
+  assert.deepEqual(h.picks,['files']);assert.deepEqual(h.files.map(file=>file.name),['files.pdf']);
+});
+
+test('a rejected file can be replaced in the same editor and asks again',async t=>{
+  let selected='invalid.exe';
+  const h=setup(t,{pick:()=>[new h.dom.window.File(['original'],selected)]});
+  await h.report.open();action(h.report,'attach');h.doc.querySelector('[data-source="files"]').click();
+  await until(()=>h.doc.querySelector('[data-guide-retry]:not([hidden])'));
+  assert.equal(h.doc.querySelector('.tgr-editor-sources').hidden,false);
+  selected='válido.pdf';h.doc.querySelector('[data-source="files"]').click();await confirm(h,'SIM');
+  await until(()=>h.writes.length===1);
+  assert.deepEqual(h.files.map(file=>file.name),['válido.pdf']);
 });
 
 test('failed amount read can be retried without leaving the editor',async t=>{
