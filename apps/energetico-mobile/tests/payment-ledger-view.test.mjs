@@ -4,15 +4,79 @@ import { JSDOM } from 'jsdom';
 import { captureFilteredReport } from '../src/ui/report-print.js';
 const { createPaymentLedgerView } = await import('../src/ui/payment-ledger-view.js').catch(() => ({}));
 const row = { id: '3498', paymentDate: '2026-10-02', supplier: 'Alfa', branch: 'Xavante', product: '<img src=x onerror=alert(1)>', order: '358', disbursement: 'SIM', account: 'Caixa', description: 'Observação', unit: 11, quantity: 3, freight: 0, total: 33 };
-function setup(t, loadSnapshot = async () => ({ launches: [row] }), portrait = false) {
+function setup(t, loadSnapshot = async () => ({ launches: [row] }), portrait = false, {listPaymentLedgerPdfs, openMediaCollection} = {}) {
   assert.equal(typeof createPaymentLedgerView, 'function');
   const dom = new JSDOM('<main id="app"><button>Relatório</button></main>');
   let orientation = portrait;
   dom.window.matchMedia = () => ({ get matches() { return orientation; } });
-  const view = createPaymentLedgerView({ document: dom.window.document, data: { loadPaymentsSnapshot: loadSnapshot } });
+  const view = createPaymentLedgerView({ document: dom.window.document, data: { loadPaymentsSnapshot: loadSnapshot, listPaymentLedgerPdfs }, openMediaCollection });
   t.after(() => { view.destroy(); dom.window.close(); });
   return { dom, view, root: view.element, rotate(value) { orientation = value; dom.window.dispatchEvent(new dom.window.Event('resize')); } };
 }
+
+test('PDF buttons stay next to the right number and preserve attachment identities across merged rows', async t => {
+  const calls = [], previews = [];
+  const { view, root, dom } = setup(t, async () => ({ launches: [
+    { ...row, id: '358', hasAttachments: true },
+    { ...row, id: '360', hasAttachments: false },
+    { ...row, id: '361', account: 'Outro', hasAttachments: true },
+    { ...row, id: '362', order: '359', hasAttachments: false },
+  ] }), false, {
+    async listPaymentLedgerPdfs(kind, id) {
+      calls.push([kind, id]);
+      if (id === '359' || id === '361') return [];
+      return [`${kind}-${id}.pdf`, `${kind}-outro.pdf`].map(fileName => ({ fileName, source: async () => new Blob() }));
+    },
+    async openMediaCollection(files, options) { previews.push({ files, options }); },
+  });
+  await view.open(); await new Promise(resolve => setImmediate(resolve));
+  assert.deepEqual(calls.map(call => call.join(':')).sort(), ['launch:358', 'launch:361', 'order:358', 'order:359']);
+  const buttons = [...root.querySelectorAll('tbody button')];
+  assert.equal(buttons.length, 3);
+  const orders = buttons.filter(button => button.closest('td').dataset.column === 'order');
+  assert.equal(orders.length, 2);
+  const merged = orders.find(button => button.closest('td').rowSpan === 2);
+  assert.equal(merged.previousElementSibling.textContent, '358');
+  const launch = root.querySelector('[data-column=id] button');
+  assert.equal(launch.previousElementSibling.textContent, '358');
+  merged.click(); launch.click(); await new Promise(resolve => setImmediate(resolve));
+  assert.deepEqual(previews.map(preview => preview.files.map(file => file.fileName)), [
+    ['order-358.pdf', 'order-outro.pdf'], ['launch-358.pdf', 'launch-outro.pdf'],
+  ]);
+  assert.equal(previews[0].options.resolveReturnFocus(), merged);
+  const printed = captureFilteredReport(root, { title: 'Relatório de pagamentos' });
+  assert.doesNotMatch(JSON.stringify(printed), /Abrir PDFs|order-358\.pdf|launch-358\.pdf/);
+  const filter = root.querySelector('[name=order]'); filter.value = '359'; filter.dispatchEvent(new dom.window.Event('change'));
+  assert.equal(root.querySelectorAll('tbody button').length, 0);
+  assert.equal(calls.length, 4, 'filtering reuses attachment metadata');
+  view.close(); assert.equal(previews[0].options.signal.aborted, true);
+});
+
+test('retry prioritizes Microsoft permission and recovers other PDFs independently of an inaccessible item', async t => {
+  let authorized = false;
+  const calls = [];
+  const { view, root } = setup(t, async () => ({ launches: [
+    { ...row, order: '358' }, { ...row, id: '3502', order: '359', hasAttachments: false },
+  ] }), false, {
+    async listPaymentLedgerPdfs(kind, id, { interactive }) {
+      calls.push([kind, id, interactive]);
+      if (kind === 'order' && id === '358') throw Object.assign(Error('Forbidden'), { status: 403 });
+      if (interactive) authorized = true;
+      if (!authorized) throw Object.assign(Error('Missing permission'), { code: 'AUTH_REQUIRED' });
+      return [{ fileName: 'Documento.pdf', source: async () => new Blob() }];
+    },
+    async openMediaCollection() {},
+  });
+  await view.open(); await new Promise(resolve => setImmediate(resolve));
+  const retry = root.querySelector('.pl-pdf-retry');
+  assert.equal(retry.hidden, false);
+  assert.equal(root.querySelectorAll('tbody button').length, 0);
+  retry.click(); await new Promise(resolve => setImmediate(resolve));
+  assert.deepEqual(calls.filter(([, , interactive]) => interactive), [['launch', '3498', true]]);
+  assert.equal(root.querySelectorAll('tbody button').length, 2);
+  assert.equal(root.querySelector('[aria-label="Abrir PDFs do pedido 358"]'), null);
+  assert.equal(retry.disabled, false);
+});
 test('portrait opens horizontal report immediately, rotation keeps data, outside click closes', async t => {
   let calls = 0;
   const { view, root, rotate, dom } = setup(t, async () => { calls++; return { launches: [row] }; }, true);

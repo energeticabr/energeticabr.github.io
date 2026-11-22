@@ -7942,6 +7942,7 @@ export function createAppController({
     if (opening) return opening;
     const reportId = validation ? ORDER_VALIDATION_REPORT_ID : provision ? PROVISION_REPORT_ID : management ? MANAGEMENT_REPORT_ID : PAYMENT_LEDGER_ID;
     const method = validation ? 'loadOrderValidationSnapshot' : provision ? 'loadProvisionReportSnapshot' : management ? 'loadSnapshot' : 'loadPaymentsSnapshot';
+    const ledger = method === 'loadPaymentsSnapshot';
     const reportsAccount = account;
     const reportsRevision = sessionRevision;
     const openingRevision = spendingReportsRevision;
@@ -7965,7 +7966,8 @@ export function createAppController({
             return auth.getToken(scopes).then(token => { assertRequest(); return token; }).catch(async error => {
               assertRequest();
               if (!interactive || error?.code !== 'AUTH_REQUIRED' || typeof auth.authorize !== 'function') throw error;
-              await auth.authorize(scopes, { resumeAction: reportId });
+              const attachmentPopup = ledger && scopes?.some(scope => scope.endsWith('/AllSites.Read'));
+              await auth.authorize(scopes, { resumeAction: reportId, ...(attachmentPopup ? { interaction: 'popup' } : {}) });
               assertRequest(); const token = await auth.getToken(scopes); assertRequest(); return token;
             });
           };
@@ -7989,7 +7991,7 @@ export function createAppController({
               assertQuery();
               throw error;
             }
-          }, ...(provision ? {
+          }, ...(ledger ? { listPaymentLedgerPdfs: source.listPaymentLedgerPdfs } : {}), ...(provision ? {
             listProvisionReportAttachments: source.listProvisionReportAttachments,
             downloadProvisionReportAttachment: source.downloadProvisionReportAttachment,
             async syncRecurringProvisions({ signal } = {}) {
@@ -8029,7 +8031,7 @@ export function createAppController({
           const action = validation ? 'open-order-validation-report' : provision ? 'open-provision-report'
             : management ? 'open-management-report' : 'open-payment-ledger';
           const panel = decorateControllerReport(await factory({ data, document: globalThis.document,
-            ...(provision ? { openMediaCollection: (items, options) => openGalleryMedia(items, assertSession, options) } : {}),
+            ...(ledger || provision ? { openMediaCollection: (items, options) => openGalleryMedia(items, assertSession, options) } : {}),
           }), action);
           if (openingRevision !== spendingReportsRevision || stopped || account !== reportsAccount || sessionRevision !== reportsRevision
             || (validation && (flowBusy() || store.getState().activeFlow))) { panel.destroy?.(); return false; }

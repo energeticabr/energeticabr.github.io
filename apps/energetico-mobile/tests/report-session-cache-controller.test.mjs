@@ -153,6 +153,19 @@ test('refresh capture invalidates before the view handler, including an icon cli
   await panel.open(); assert.equal(reads, 2);
 });
 
+test('refresh rereads the payment ledger after an attachment is added outside the app', async t => {
+  let hasAttachments = false;
+  const h = harness(t, { paymentLedgerDataFactory: async () => ({
+    loadPaymentsSnapshot: async () => ({ launches: [{ id: '3851', hasAttachments }] }),
+  }) });
+  await h.controller.start(); await h.view.emit('open-payment-ledger');
+  const panel = h.panels[0];
+  assert.equal(panel.latest.launches[0].hasAttachments, false);
+  hasAttachments = true;
+  panel.refresh.click(); await panel.refreshPromise;
+  assert.equal(panel.latest.launches[0].hasAttachments, true);
+});
+
 test('parameter keys separate reads but ignore signals and object property order', async t => {
   let reads = 0;
   const h = harness(t, { depreciationReportDataFactory: async () => ({ loadSnapshot: async () => ({ rows: [{ id: ++reads }] }) }) });

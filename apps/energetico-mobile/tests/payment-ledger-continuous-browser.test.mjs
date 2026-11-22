@@ -62,3 +62,21 @@ test('payments scroll in batches of 200, reset after filtering, keep PDF complet
     }
   }finally{await server.close();}
 });
+
+test('mini PDF buttons fit next to the numbers and open their own PDF collection',{timeout:120000},async t=>{
+  const browser=[process.env.CHROME_BIN,'C:\\Program Files\\Google\\Chrome\\Application\\chrome.exe','/usr/bin/google-chrome'].find(path=>path&&existsSync(path));
+  if(!browser)return t.skip('Chrome unavailable');
+  const server=await createServer({root:resolve(fileURLToPath(new URL('..',import.meta.url))),optimizeDeps:{noDiscovery:true,include:['decimal.js','pdf-lib']},server:{host:'127.0.0.1',port:0,hmr:false,watch:null},logLevel:'silent'});
+  try{
+    await server.listen();
+    for(const [width,height,safeAreaInsets] of [[320,568],[844,390,{left:47,right:47,bottom:21}],[1280,589]]){
+      const {stdout}=await runBrowserLayout(browser,{width,height,safeAreaInsets,url:`http://127.0.0.1:${server.httpServer.address().port}/tests/fixtures/payment-ledger-continuous.html?attachments`});
+      const dom=new JSDOM(stdout);let result;try{result=JSON.parse(dom.window.document.documentElement.dataset.layout);}finally{dom.window.close();}
+      assert.equal(result.error,undefined,result.error);
+      assert.deepEqual(result.controls,['569','3851','1234567','1234567'].map(label=>({label,right:true,fits:true,icon:true,clickable:true})),JSON.stringify({width,height,result}));
+      assert.equal(result.count,4);
+      assert.equal(result.orderFocus,true);
+      assert.equal(result.launchFocus,true);
+    }
+  }finally{await server.close();}
+});

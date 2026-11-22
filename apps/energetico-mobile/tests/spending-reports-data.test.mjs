@@ -52,6 +52,39 @@ test("payment ledger queries only launches, follows pagination and preserves pay
   assert.equal(calls.some(c => c[1] === 'CADASTROPRODUTO'), false);
 });
 
+test('payment ledger lists only PDFs and downloads from the corresponding order or launch list', async () => {
+  const reads = [];
+  const bytes = new TextEncoder().encode('%PDF-1.7').buffer;
+  const { repository } = fixture({
+    async listAttachments(site, list, id, options) {
+      assert.equal(site, 'personal');
+      assert.equal(options.requireCollection, true);
+      assert.equal(options.namesOnly, true);
+      assert.equal(options.interactive, false);
+      reads.push(['list', list, id]);
+      return [{ name: 'Foto.jpg' }, { name: `${list}.PDF` }];
+    },
+    async downloadAttachment(site, list, id, name) {
+      assert.equal(site, 'personal');
+      reads.push(['download', list, id, name]);
+      return bytes;
+    },
+  });
+  const data = createSpendingReportsData({ repository });
+  for (const [kind, list] of [['order', 'NOTASPENDENTES'], ['launch', 'LANCAMENTOS']]) {
+    const files = await data.listPaymentLedgerPdfs(kind, '569');
+    assert.deepEqual(files.map(file => file.fileName), [`${list}.PDF`]);
+    const blob = await files[0].source();
+    assert.equal(blob.type, 'application/pdf');
+    assert.equal(await blob.text(), '%PDF-1.7');
+  }
+  assert.deepEqual(reads, [
+    ['list', 'NOTASPENDENTES', '569'], ['download', 'NOTASPENDENTES', '569', 'NOTASPENDENTES.PDF'],
+    ['list', 'LANCAMENTOS', '569'], ['download', 'LANCAMENTOS', '569', 'LANCAMENTOS.PDF'],
+  ]);
+  await assert.rejects(data.listPaymentLedgerPdfs('other', '569'), /inválid/);
+});
+
 test('payment period is constrained at SharePoint before paging, maps dates and boolean disbursement', async () => {
   const queries = [];
   const { repository } = fixture({
