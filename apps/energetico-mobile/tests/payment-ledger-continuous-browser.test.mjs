@@ -75,6 +75,7 @@ test('mini PDF buttons fit next to the numbers and open their own PDF collection
       assert.equal(result.error,undefined,result.error);
       assert.deepEqual(result.controls,['569','3851','1234567','1234567'].map(label=>({label,right:true,fits:true,icon:true,clickable:true})),JSON.stringify({width,height,result}));
       assert.equal(result.count,4);
+      assert.deepEqual(result.iconColors,Array(4).fill('rgb(28, 60, 123)'));
       assert.equal(result.orderFocus,true);
       assert.equal(result.launchFocus,true);
     }
