@@ -137,24 +137,21 @@
 
 .attachment-preview-dialog[data-compact-report-pdf] {
   --compact-preview-edge: max(24px, env(safe-area-inset-left), env(safe-area-inset-right));
-  --compact-preview-block: max(8px, env(safe-area-inset-top), env(safe-area-inset-bottom));
   position: fixed;
   inset: 50% auto auto 50%;
   transform: translate(-50%, -50%);
   width: min(1280px, calc(100vw - 2 * var(--compact-preview-edge)));
-  height: min(1200px, calc(100dvh - 2 * var(--compact-preview-block)));
+  height: 100dvh;
   max-width: none;
   max-height: none;
   margin: 0;
-  border: 1px solid #d3dedb;
-  border-radius: 12px;
+  border: 0;
+  border-radius: 0;
 }
 @media (orientation: portrait) {
   .attachment-preview-dialog[data-compact-report-pdf] {
-    --compact-preview-edge: max(24px, env(safe-area-inset-top), env(safe-area-inset-bottom));
-    --compact-preview-block: max(8px, env(safe-area-inset-left), env(safe-area-inset-right));
-    width: min(1280px, calc(100dvh - 2 * var(--compact-preview-edge)));
-    height: min(1200px, calc(100vw - 2 * var(--compact-preview-block)));
+    width: 100dvh;
+    height: 100vw;
     transform: translate(-50%, -50%) rotate(90deg);
   }
 }
@@ -186,7 +183,7 @@
 .attachment-preview-dialog[data-compact-report-pdf] button { min-height: 44px; }
 .attachment-preview-dialog[data-compact-report-pdf] .attachment-preview-content { padding: 4px 8px; }
 .attachment-preview-dialog[data-compact-report-pdf] .attachment-preview-status { padding: 2px 8px; }
-.attachment-preview-dialog[data-compact-report-pdf] .attachment-preview-footer { padding: 4px 8px; gap: 8px; }
+.attachment-preview-dialog[data-compact-report-pdf] .attachment-preview-footer { padding: 4px 8px max(4px, env(safe-area-inset-bottom)); gap: 8px; }
 .attachment-preview-dialog[data-compact-report-pdf] .attachment-preview-footer button { flex: 0 0 auto; padding: 4px 10px; }
 .attachment-preview-dialog[data-compact-report-pdf] .attachment-preview-collection-nav { flex: 0 0 auto; gap: 8px; }
 .attachment-preview-dialog[data-compact-report-pdf] .attachment-preview-pdf-navigation { padding-top: 2px; }
