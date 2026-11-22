@@ -137,8 +137,9 @@ test('GANTT suprime etapas junto de INICIAR e deixa restaurá-las no filtro NÃO
   t.after(() => dom.window.close());
   const launches = [
     { id: '1', branch: 'Obra A', stage: 'Fundação', type: 'ATIVIDADE COMUM', status: 'NÃO INICIADO' },
-    { id: '2', branch: 'Obra A', stage: 'Pintura', type: 'ATIVIDADE COMUM', status: 'FINALIZADO', visibility: 'NÃO EXIBIR' },
-    { id: '3', branch: 'Obra B', stage: 'Estrutura', type: 'ATIVIDADE COMUM', status: 'INICIADO' },
+    { id: '2', branch: 'Obra A', stage: 'Pintura', type: 'ATIVIDADE COMUM', status: 'FINALIZADO', visibility: 'NÃO EXIBIR', endDate: '2026-11-02' },
+    { id: '3', branch: 'Obra B', stage: 'Estrutura', type: 'ATIVIDADE COMUM', status: 'INICIADO', startDate: '2026-11-01' },
+    { id: '5', branch: 'Obra B', stage: 'Revestimento', type: 'ATIVIDADE COMUM', status: 'FINALIZADO', endDate: '2026-11-04' },
   ];
   const writes = [];
   const view = createStageGanttView({ document: dom.window.document, data: {
@@ -170,9 +171,15 @@ test('GANTT suprime etapas junto de INICIAR e deixa restaurá-las no filtro NÃO
     select.dispatchEvent(new dom.window.Event('change'));
   };
   const wait = () => new Promise(resolve => setImmediate(resolve));
+  const popup = () => root.querySelector('.gantt-visibility-confirm');
+  const press = text => [...popup().querySelectorAll('button')].find(node => node.textContent === text).click();
+  const actionFor = name => [...root.querySelectorAll('.gantt-row--stage')]
+    .find(row => row.querySelector('.gantt-name').textContent === name)?.querySelector('.gantt-visibility-button') ?? null;
 
   assert.equal(display.value, 'EXIBIR');
-  assert.deepEqual(stages(), ['Estrutura', 'Fundação']);
+  assert.deepEqual(stages(), ['Estrutura', 'Fundação', 'Revestimento']);
+  assert.equal(actionFor('Estrutura'), null);
+  assert.equal(actionFor('Revestimento'), null);
   change(filial, 'Obra A');
   assert.deepEqual(stages(), ['Fundação']);
   root.querySelector('.gantt-toggle').click();
@@ -182,6 +189,27 @@ test('GANTT suprime etapas junto de INICIAR e deixa restaurá-las no filtro NÃO
   assert.equal(suppress.textContent, 'SUPRIMIR');
   assert.equal(suppress.nextElementSibling.textContent, 'INICIAR');
   suppress.click();
+  assert.equal(popup().hidden, false);
+  assert.match(popup().textContent, /certeza.*suprimir.*Fundação/i);
+  assert.match(popup().getAttribute('aria-label'), /Fundação.*Obra A/);
+  const tab = shiftKey => dom.window.document.activeElement.dispatchEvent(
+    new dom.window.KeyboardEvent('keydown', { key: 'Tab', bubbles: true, shiftKey }),
+  );
+  assert.equal(dom.window.document.activeElement.textContent, 'CANCELAR');
+  tab(true);
+  assert.equal(dom.window.document.activeElement.textContent, 'SIM');
+  tab(false);
+  assert.equal(dom.window.document.activeElement.textContent, 'CANCELAR');
+  assert.equal(writes.length, 0);
+  press('CANCELAR');
+  assert.equal(popup().hidden, true);
+  assert.equal(dom.window.document.activeElement, suppress);
+  suppress.click();
+  popup().dispatchEvent(new dom.window.KeyboardEvent('keydown', { key: 'Escape', bubbles: true }));
+  assert.equal(popup().hidden, true);
+  assert.equal(writes.length, 0);
+  suppress.click();
+  press('SIM');
   assert.equal(suppress.nextElementSibling.getAttribute('aria-disabled'), 'true');
   suppress.nextElementSibling.click();
   assert.equal(root.querySelector('.gantt-finish-overlay').hidden, true);
@@ -189,7 +217,8 @@ test('GANTT suprime etapas junto de INICIAR e deixa restaurá-las no filtro NÃO
   assert.deepEqual(stages(), ['Fundação']);
   assert.match(root.querySelector('.gantt-notice').textContent, /não foi possível/i);
   suppress.click();
-  suppress.click();
+  press('SIM');
+  press('SIM');
   await wait();
   assert.deepEqual(stages(), []);
   assert.equal(root.querySelector('.gantt-row--activity'), null);
@@ -199,7 +228,14 @@ test('GANTT suprime etapas junto de INICIAR e deixa restaurá-las no filtro NÃO
   assert.ok(root.querySelector('.gantt-row--activity'));
   const restore = root.querySelector('.gantt-visibility-button');
   assert.equal(restore.textContent, 'EXIBIR');
+  assert.equal(actionFor('Pintura').textContent, 'EXIBIR');
   restore.click();
+  assert.match(popup().textContent, /certeza.*exibir.*Fundação/i);
+  assert.equal(writes.length, 2);
+  press('CANCELAR');
+  assert.equal(writes.length, 2);
+  restore.click();
+  press('SIM');
   await wait();
   assert.deepEqual(stages(), ['Pintura']);
   root.querySelector('[aria-label="Atualizar GANTT"]').click();

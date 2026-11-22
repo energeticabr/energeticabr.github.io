@@ -400,7 +400,7 @@ test("GANTT reads the display classification and writes only that field in both 
   const name = "GANTT_EXIBICAO";
   const hidden = "NÃO EXIBIR";
   const visible = "EXIBIR";
-  let item = { ...launch(7, 0.4, { field_6: "ATIVIDADE COMUM" }), eTag: '"stage,0"' };
+  let item = { ...launch(7, 0.4, { field_2: "", field_6: "ATIVIDADE COMUM" }), eTag: '"stage,0"' };
   let writes = 0;
   const { repository } = fixture({
     async getColumns(_site, list) {
@@ -432,4 +432,32 @@ test("GANTT reads the display classification and writes only that field in both 
     { code: "stage_progress_changed" });
   assert.deepEqual(await data.setStageVisibility("7", visible, { expectedStage: suppressed }), initial);
   assert.equal(writes, 2);
+});
+
+test("GANTT cannot suppress a stage if either date was saved after the snapshot", async () => {
+  const name = "GANTT_EXIBICAO";
+  for (const dateField of ["field_2", "field_3"]) {
+    let item = launch(7, 0.4, { field_2: "", field_6: "ATIVIDADE COMUM" });
+    const { repository } = fixture({
+      async getColumns(_site, list) {
+        return list === "LANCAMENTOOBRA"
+          ? [...columns(list), { name, choice: { choices: ["EXIBIR", "NÃO EXIBIR"] } }]
+          : columns(list);
+      },
+      async getItemsPage(_site, list) {
+        return { items: [list === "LANCAMENTOOBRA" ? item : activity()], hasMore: false };
+      },
+      async getItem() { return item; },
+      async updateItem(_site, _list, _id, fields) {
+        assert.deepEqual(fields, { [name]: "EXIBIR" });
+        return { ...item, fields: { ...item.fields, ...fields } };
+      },
+    });
+    const data = create({ repository });
+    const expectedStage = (await data.loadSnapshot()).launches[0];
+    item = { ...item, fields: { ...item.fields, [dateField]: "2026-10-08" } };
+    await assert.rejects(data.setStageVisibility("7", "NÃO EXIBIR", { expectedStage }), { code: "stage_progress_changed" });
+    item = { ...item, fields: { ...item.fields, [name]: "NÃO EXIBIR" } };
+    assert.equal((await data.setStageVisibility("7", "EXIBIR")).visibility, "EXIBIR");
+  }
 });

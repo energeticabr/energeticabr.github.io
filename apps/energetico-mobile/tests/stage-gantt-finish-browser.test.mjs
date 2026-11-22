@@ -30,6 +30,8 @@ test('Gantt alinha SUPRIMIR à esquerda de INICIAR e abre os formulários no cel
         assert.deepEqual(result.startDialog, { startFits: true, touch: true, date: '', visible: true }, JSON.stringify({ width, result }));
         assert.deepEqual(result.visibility, { nextToStart: true, inside: true, touch: true, filterFits: true,
           filterOptions: ['EXIBIR', 'NÃO EXIBIR'] }, JSON.stringify({ width, result }));
+        assert.deepEqual(result.confirmationLayout, { fits: true, touch: true, focus: true }, JSON.stringify({ width, result }));
+        assert.deepEqual(result.colors, { start: 'rgb(230, 133, 36)', finish: 'rgb(36, 114, 58)', disabled: 'rgb(219, 226, 232)' });
       } finally { dom.window.close(); }
     }
   } finally { await server.close(); }
