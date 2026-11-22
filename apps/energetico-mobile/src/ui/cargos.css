@@ -34,3 +34,22 @@
 .cargos-table .cargos-group th { background: #dcebf1; color: #10375d; font-weight: 800; }
 .cargos-table .cargos-level { padding-inline-start: clamp(10px, calc(2 * var(--report-vw)), 22px); }
 .cargos-table [data-column="total"] { font-weight: 800; color: #16733d; }
+.cargos-table .cargos-role { padding-inline-start: clamp(20px, calc(3 * var(--report-vw)), 36px); }
+.cargos-toggle {
+  position: absolute; inset: 0; width: 100%; border: 0; padding: 0; border-radius: 0;
+  background: transparent; color: inherit; cursor: pointer; touch-action: manipulation;
+}
+.cargos-toggle::before {
+  content: ''; position: absolute; inset-inline-start: clamp(6px, var(--report-vw), 14px); top: 50%;
+  width: 6px; height: 6px; border: solid currentColor; border-width: 0 2px 2px 0;
+  transform: translateY(-70%) rotate(45deg);
+}
+.cargos-toggle[aria-expanded="true"] { background: rgb(16 55 93 / 7%); }
+.cargos-toggle[aria-expanded="true"]::before { transform: translateY(-30%) rotate(225deg); }
+.cargos-toggle:focus-visible { outline: 2px solid currentColor; outline-offset: -3px; }
+.cargos-table .cargos-details td { position: static; background: #eef5f8; overflow-wrap: anywhere; }
+.cargos-details-notice { margin: 0; }
+.cargos-details-retry { margin-top: 4px; min-height: 32px; cursor: pointer; }
+.cargos-people { list-style: none; margin: 0; padding: 0; }
+.cargos-people li { display: flex; flex-wrap: wrap; gap: 2px 12px; }
+.cargos-people li + li { margin-top: 6px; }

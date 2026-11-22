@@ -1,5 +1,8 @@
 import {addReportCloseControl} from './report-close-control.js';
 import {bindReportLandscape} from './report-landscape.js';
+import {cargoKey} from '../chat/cargos-model.js';
+
+let nextDetailId=0;
 
 export function createCargosView({document:doc=globalThis.document,data}={}) {
   if(!doc?.body||typeof data?.loadSnapshot!=='function')throw new TypeError('A tabela de cargos requer documento e sessão SharePoint.');
@@ -15,15 +18,66 @@ export function createCargosView({document:doc=globalThis.document,data}={}) {
   const content=make('div','cargos-scroll');content.tabIndex=0;content.setAttribute('role','region');content.setAttribute('aria-label','Valores por cargo');root.append(header,status,content);doc.body.append(backdrop);
   let destroyed=false,controller=null,revision=0,returnFocus=null,oldOverflow='',app=null,oldInert=false;
   const money=value=>Number.isFinite(value)?new Intl.NumberFormat('pt-BR',{style:'currency',currency:'BRL'}).format(value):'—';
-  function render(rows){
+  function render(rows,signal){
     const table=make('table','cargos-table'),thead=make('thead'),head=make('tr'),body=make('tbody');
     for(const label of ['CARGO','SALÁRIO','VALE ALIMENTAÇÃO','PRÊMIO','VALE TRANSPORTE','TOTAL']){const th=make('th','',label);th.scope='col';head.append(th);}thead.append(head);table.append(thead,body);
+    let assignmentsRequest;
+    function loadAssignments(){
+      assignmentsRequest ??= Promise.resolve().then(()=>data.loadAssignments({signal})).catch(error=>{
+        assignmentsRequest=undefined;
+        throw error;
+      });
+      return assignmentsRequest;
+    }
     let previous='';
     for(const row of rows){
       if(row.group&&row.group!==previous){const group=make('tr','cargos-group'),cell=make('th','',row.group);cell.colSpan=6;cell.scope='rowgroup';group.append(cell);body.append(group);}
       previous=row.group;const tr=make('tr');tr.dataset.cargo=row.cargo;
-      const th=make('th',row.group?'cargos-level':'',row.cargo);th.scope='row';tr.append(th);
+      const th=make('th','cargos-role'+(row.group?' cargos-level':''));th.scope='row';tr.append(th);
+      const toggle=make('button','cargos-toggle');toggle.type='button';
+      toggle.setAttribute('aria-label',`Colaboradores de ${row.cargo}`);
+      toggle.setAttribute('aria-expanded','false');
+      th.append(toggle,make('span','',row.cargo));
       for(const name of ['salary','food','bonus','transport','total']){const td=make('td','',money(row[name]));td.dataset.column=name;tr.append(td);}body.append(tr);
+
+      const detail=make('tr','cargos-details');detail.hidden=true;detail.id=`cargos-detail-${++nextDetailId}`;
+      detail.setAttribute('data-report-screen-only','');
+      const cell=make('td');cell.colSpan=head.cells.length;detail.append(cell);body.append(detail);
+      toggle.setAttribute('aria-controls',detail.id);
+      const notice=make('p','cargos-details-notice');notice.setAttribute('role','status');
+      let loading=false,loaded=false;
+      async function populate(){
+        if(loading||loaded)return;
+        loading=true;
+        notice.textContent='Consultando colaboradores…';cell.replaceChildren(notice);
+        try{
+          const assignments=await loadAssignments();
+          if(signal.aborted)return;
+          const people=assignments.get(cargoKey(row.cargo))||[];
+          if(people.length){
+            const list=make('ul','cargos-people');
+            list.setAttribute('aria-label',`Colaboradores de ${row.cargo}`);
+            for(const person of people){
+              const item=make('li');item.append(make('strong','',person.name));
+              const information=[person.branch,person.status].filter(Boolean).join(' · ');
+              if(information)item.append(make('span','',information));
+              list.append(item);
+            }
+            cell.replaceChildren(list);
+          }else notice.textContent='Nenhum colaborador vinculado a este cargo.';
+          loaded=true;
+        }catch{
+          if(signal.aborted)return;
+          notice.textContent='Consulta de colaboradores indisponível.';
+          const retry=make('button','cargos-details-retry','Tentar novamente');retry.type='button';
+          retry.addEventListener('click',()=>{toggle.focus();void populate();});cell.append(retry);
+        }finally{loading=false;}
+      }
+      toggle.addEventListener('click',()=>{
+        detail.hidden=!detail.hidden;
+        toggle.setAttribute('aria-expanded',String(!detail.hidden));
+        if(!detail.hidden){void populate();detail.scrollIntoView?.({block:'nearest',inline:'nearest'});}
+      });
     }
     content.replaceChildren(table);status.textContent=rows.some(row=>row.total===null)?'Valores ausentes ou conflitantes na base aparecem como —.':'';
   }
@@ -31,7 +85,7 @@ export function createCargosView({document:doc=globalThis.document,data}={}) {
     if(root.hidden||destroyed)return;controller?.abort();const active=new AbortController();controller=active;const current=++revision;
     content.replaceChildren();status.textContent='Carregando cargos do SharePoint…';root.setAttribute('aria-busy','true');refresh.disabled=true;
     try{const result=await data.loadSnapshot({signal:active.signal});if(active.signal.aborted||current!==revision||root.hidden||destroyed)return;
-      if(!Array.isArray(result?.rows))throw new Error('Resposta incompleta.');render(result.rows);
+      if(!Array.isArray(result?.rows))throw new Error('Resposta incompleta.');render(result.rows,active.signal);
     }catch(error){if(active.signal.aborted||current!==revision||root.hidden||destroyed)return;content.replaceChildren();status.textContent='Não foi possível consultar CARGOS. Toque em Atualizar para tentar novamente.';}
     finally{if(current===revision){root.setAttribute('aria-busy','false');refresh.disabled=false;}}
   }

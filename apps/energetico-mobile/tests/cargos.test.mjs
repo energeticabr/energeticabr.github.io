@@ -3,6 +3,7 @@ import assert from 'node:assert/strict';
 import { buildCargosTable, parseCargosMoney } from '../src/chat/cargos-model.js';
 import { createCargosData } from '../src/chat/cargos-data.js';
 import { createCargosView } from '../src/ui/cargos-view.js';
+import { captureFilteredReport } from '../src/ui/report-print.js';
 import { JSDOM } from 'jsdom';
 
 const columns=['CARGO','SALARIO','VALEALIMENTACAO','PREMIO','DATAREFERENCIA'].map(name=>({name,displayName:name})).concat({name:'vt_real',displayName:'VALE TRANSPORTE'});
@@ -44,4 +45,86 @@ test('tela inteira com grupos, atualização e cancelamento não reapresenta con
   const pending=late.open();late.close();finish({rows:[]});await pending;
   assert.equal(doc.querySelector('.cargos-screen').hidden,true);assert.equal(doc.querySelectorAll('.cargos-table').length,0);
   late.destroy();dom.window.close();
+});
+
+test('consulta vínculos RH paginados pelo cargo cadastrado e retorna só os campos do detalhe', async () => {
+  const employee = (id, Title, CARGO, PROFISSAO, STATUS = 'ATIVO') => ({ id, fields: {
+    Title, CARGO, PROFISSAO, STATUS, FILIAL: 'Obra 01', Extra: 'Campo privado',
+  } });
+  const repository = {
+    async resolveList(site, names) {
+      assert.equal(site, 'personal');
+      assert.deepEqual(names, ['FUNCIONARIOSRH']);
+      return { status: 'resolved', id: 'rh' };
+    },
+    async getItemsPage(site, id, query, { cursor }) {
+      assert.equal(id, 'rh');
+      assert.equal(new URLSearchParams(query).get('$expand'), 'fields($select=Title,CARGO,FILIAL,STATUS)');
+      return cursor === 'page2' ? {
+        items: [employee('3', 'Ana', 'servente de pedreiro i', 'Outra profissão', 'INATIVO'), employee('4', 'Caio', 'PEDREIRO II', 'SERVENTE DE PEDREIRO I')], hasMore: false,
+      } : {
+        items: [employee('1', 'Bia', 'SERVENTE DE PEDREIRO I', ''), employee('2', 'Dani', '', 'SERVENTE DE PEDREIRO I')], hasMore: true, nextLink: 'page2',
+      };
+    },
+  };
+  const data = createCargosData({ repository });
+  const links = await data.loadAssignments();
+  assert.deepEqual(links.get('SERVENTEDEPEDREIROI'), [
+    { name: 'Ana', branch: 'Obra 01', status: 'INATIVO' },
+    { name: 'Bia', branch: 'Obra 01', status: 'ATIVO' },
+  ]);
+  assert.deepEqual(links.get('PEDREIROII'), [{ name: 'Caio', branch: 'Obra 01', status: 'ATIVO' }]);
+  assert.equal(links.has('SERVENTEDEPEDREIROII'), false);
+  repository.getItemsPage = async () => ({ items: [], hasMore: true, nextLink: 'repeated' });
+  await assert.rejects(data.loadAssignments(), /paginação.*FUNCIONARIOSRH/i);
+});
+
+test('cada linha expande seus próprios vínculos, reusa a consulta e mantém os nomes fora do PDF', async t => {
+  const dom = new JSDOM('<main id="app"></main>');
+  t.after(() => dom.window.close());
+  const doc = dom.window.document;
+  let loads = 0;
+  const view = createCargosView({ document: doc, data: {
+    loadSnapshot: async () => ({ rows: buildCargosTable([item('SERVENTE DE PEDREIRO I')], columns, '2026-10-05') }),
+    loadAssignments: async () => {
+      loads++;
+      if (loads === 1) throw new Error('Falha de rede');
+      return new Map([['SERVENTEDEPEDREIROI', [{ name: 'Ana Teste', branch: 'Obra 01', status: 'ATIVO' }]]]);
+    },
+  } });
+  t.after(() => view.destroy());
+  await view.open();
+  const button = cargo => doc.querySelector(`tr[data-cargo="${cargo}"] button`);
+  const first = button('SERVENTE DE PEDREIRO I');
+  const second = button('SERVENTE DE PEDREIRO II');
+  const details = control => doc.getElementById(control.getAttribute('aria-controls'));
+  const flush = () => new Promise(resolve => setImmediate(resolve));
+  assert.equal(loads, 0);
+  assert.equal(first.getAttribute('aria-expanded'), 'false');
+  first.click();
+  await flush();
+  assert.match(details(first).textContent, /indisponível/i);
+  details(first).querySelector('button').click();
+  second.click();
+  await flush();
+  assert.equal(loads, 2);
+  assert.equal(first.getAttribute('aria-expanded'), 'true');
+  assert.match(details(first).textContent, /Ana Teste.*Obra 01.*ATIVO/);
+  assert.match(details(second).textContent, /Nenhum colaborador vinculado/);
+  assert.doesNotMatch(details(second).textContent, /Ana Teste/);
+  const pdf = JSON.stringify(captureFilteredReport(view.element));
+  assert.match(pdf, /SERVENTE DE PEDREIRO I/);
+  assert.doesNotMatch(pdf, /Ana Teste|Nenhum colaborador vinculado/);
+  first.click();
+  assert.equal(first.getAttribute('aria-expanded'), 'false');
+  assert.equal(details(first).hidden, true);
+  assert.equal(details(second).hidden, false);
+  first.click();
+  await flush();
+  assert.equal(loads, 2);
+  doc.querySelector('[aria-label="Atualizar tabela de cargos"]').click();
+  await flush();
+  button('SERVENTE DE PEDREIRO I').click();
+  await flush();
+  assert.equal(loads, 3);
 });
