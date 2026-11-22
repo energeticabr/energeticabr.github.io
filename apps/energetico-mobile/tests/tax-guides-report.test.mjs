@@ -23,7 +23,11 @@ test('INSS report reads the shared rows, distinguishes missing amounts from zero
   const {doc,report,trigger}=setup(t,{loadSnapshot:async()=>{reads++;return {rows};}});
   await report.open();
   assert.equal(reads,1);assert.equal(doc.querySelector('#app').hasAttribute('inert'),true);
-  assert.deepEqual([...report.element.querySelectorAll('th')].map(n=>n.textContent),['Data vencimento','Data competência','Filial','Valor','Tipo','Status','Guia']);
+  assert.equal(report.element.querySelector('h2').textContent,'INSS, FGTS');
+  assert.deepEqual([...report.element.querySelectorAll('th')].map(n=>n.textContent),['Data vencimento','Data competência','Filial','Valor','Tipo','Situação','Guia']);
+  assert.equal(report.element.querySelector('[name="STATUS"]').getAttribute('aria-label'),'Situação');
+  assert.deepEqual([...report.element.querySelectorAll('.tgr-tax-type')].map(node=>node.dataset.guideType),['INSS','FGTS','INSS']);
+  assert.equal(report.element.querySelector('[data-guide-action="status"]'),null);
   assert.match(report.element.querySelector('[data-guide-id="7"]').textContent,/PENDENTE/);
   const status=report.element.querySelector('[name="STATUS"]');status.value='CONCLUÍDO';status.dispatchEvent(new doc.defaultView.Event('change',{bubbles:true}));
   assert.equal(report.element.querySelectorAll('tbody tr').length,1);assert.ok(report.element.querySelector('[data-guide-id="9"]'));

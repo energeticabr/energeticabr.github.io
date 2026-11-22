@@ -8,7 +8,8 @@ export function openTaxGuideReportEditor({ document:doc, host, background, row, 
   const overlay=make('div','tgr-editor-overlay'),dialog=make('section','tgr-editor');
   overlay.dataset.reportScreenOnly='';
   dialog.tabIndex=-1;dialog.setAttribute('role','dialog');dialog.setAttribute('aria-modal','true');
-  const title=mode==='amount'?'Informar valor da guia':'Anexar guia';dialog.setAttribute('aria-label',title);
+  const titles={amount:'Informar valor da guia',attach:'Anexar guia',status:'Alterar situação da guia'};
+  const title=titles[mode];dialog.setAttribute('aria-label',title);
   const status=make('p','tgr-editor-status');status.setAttribute('role','status');
   const cancel=make('button','tgr-button','Cancelar');cancel.type='button';
   const controls=make('div','tgr-editor-controls');
@@ -35,6 +36,17 @@ export function openTaxGuideReportEditor({ document:doc, host, background, row, 
     if(cancel.disabled)return;
     if(attachmentSaved){void changed();return;}
     close();
+  }
+  function submissionConfirmation(text,onYes,onNo){
+    const confirmation=make('div','tgr-editor-confirmation'),question=make('p','',text);
+    const yes=make('button','tgr-button','SIM'),no=make('button','tgr-button','NÃO');
+    yes.type=no.type='button';
+    question.id='tgr-guide-confirm-question';
+    confirmation.dataset.guideConfirm='';
+    confirmation.setAttribute('role','group');confirmation.setAttribute('aria-labelledby',question.id);
+    yes.addEventListener('click',onYes);no.addEventListener('click',onNo);
+    confirmation.append(question,yes,no);
+    return {confirmation,yes,no};
   }
   cancel.addEventListener('click',dismiss);
   overlay.addEventListener('click',event=>{if(event.target===overlay)dismiss();});
@@ -71,16 +83,36 @@ export function openTaxGuideReportEditor({ document:doc, host, background, row, 
       }catch(error){if(!signal.aborted){status.textContent=errorMessage(error);retry.hidden=false;retry.disabled=false;}}
     }
     retry.addEventListener('click',()=>void readAmount());void readAmount();
+  }else if(mode==='status'){
+    const {confirmation,yes,no}=submissionConfirmation('Quer alterar a situação da guia para SUBMETIDO?',()=>void submitStatus(),dismiss);
+    cancel.hidden=true;
+    controls.append(confirmation);
+    no.focus({preventScroll:true});
+
+    async function submitStatus(){
+      if(busy||signal.aborted)return;
+      setBusy(true);cancel.disabled=true;
+      dialog.focus({preventScroll:true});
+      status.textContent='Atualizando situação da guia…';
+      try{
+        const latest=await data.loadEditor(String(row.id),{signal,includeAttachments:false});
+        signal.throwIfAborted();
+        if(String(latest.item?.fields?.STATUS||'').trim().toUpperCase()==='PENDENTE'){
+          await data.saveEditor(latest,{STATUS:'SUBMETIDO'},{signal});
+        }
+        await changed();
+      }catch(error){
+        if(!signal.aborted)status.textContent=errorMessage(error);
+      }finally{
+        if(!signal.aborted){
+          setBusy(false);cancel.disabled=false;yes.focus({preventScroll:true});
+        }
+      }
+    }
   }else{
     const sources=make('div','tgr-editor-sources'),retry=make('button','tgr-button','Tentar envio novamente');
-    const confirmation=make('div','tgr-editor-confirmation');
-    const yes=make('button','tgr-button','SIM'),no=make('button','tgr-button','NÃO');
-    yes.type=no.type=retry.type='button';
-    confirmation.dataset.guideConfirm='';confirmation.hidden=true;
-    const question=make('p','','Você quer considerar a guia preenchida?');
-    question.id='tgr-guide-confirm-question';
-    confirmation.setAttribute('role','group');confirmation.setAttribute('aria-labelledby',question.id);
-    confirmation.append(question,yes,no);
+    const {confirmation,no}=submissionConfirmation('Você quer considerar a guia preenchida?',()=>answer(true),()=>answer(false));
+    retry.type='button';confirmation.hidden=true;
     retry.dataset.guideRetry='';retry.hidden=true;
     controls.append(sources,confirmation,retry);
     let pendingFiles=[],selectedPdfs=[],submit=false;
@@ -152,7 +184,6 @@ export function openTaxGuideReportEditor({ document:doc, host, background, row, 
       submit=submitted;confirmation.hidden=true;
       void upload();
     }
-    yes.addEventListener('click',()=>answer(true));no.addEventListener('click',()=>answer(false));
     for(const [source,text] of [['camera','Tirar foto'],['scan','Escanear'],['files','Anexar arquivo'],['photos','Anexar foto']]){
       const button=make('button','tgr-button',text);button.type='button';button.dataset.source=source;
       button.addEventListener('click',()=>void pick(source));sources.append(button);

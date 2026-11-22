@@ -96,7 +96,49 @@ test('printed pending cells retain their status after becoming clickable',async 
   const h=setup(t);await h.report.open();
   const snapshot=captureFilteredReport(h.report.element);
   const output=JSON.stringify(snapshot);
-  assert.match(output,/A informar/);assert.match(output,/Guia pendente/);
+  assert.match(output,/A informar/);assert.match(output,/Guia pendente/);assert.match(output,/PENDENTE/);
+});
+
+test('the pending status asks before submitting the same row without requiring an attachment',async t=>{
+  const h=setup(t);await h.report.open();
+  const fieldsBefore={...h.item.fields};
+  const confirmStatus=()=>{
+    action(h.report,'status');
+    const confirmation=h.doc.querySelector('[data-guide-confirm]:not([hidden])');
+    assert.match(confirmation.textContent,/alterar a situação da guia para SUBMETIDO/i);
+    assert.equal(h.doc.activeElement.textContent,'NÃO');
+    assert.deepEqual(h.writes,[]);
+    return confirmation;
+  };
+  confirmStatus().querySelector('button:last-child').click();
+  assert.equal(h.doc.activeElement.dataset.guideAction,'status');
+  confirmStatus().dispatchEvent(new h.dom.window.KeyboardEvent('keydown',{key:'Escape',bubbles:true,cancelable:true}));
+  assert.equal(h.doc.querySelector('.tgr-editor-overlay'),null);
+  const yes=confirmStatus().querySelector('button');
+  yes.click();yes.click();
+  await until(()=>h.report.element.querySelector('[data-guide-status="SUBMETIDO"]'));
+  assert.deepEqual(h.item.fields,{...fieldsBefore,STATUS:'SUBMETIDO'});
+  assert.deepEqual(h.writes,[{STATUS:'SUBMETIDO'}]);
+  assert.deepEqual(h.files,[]);
+  assert.deepEqual(h.picks,[]);
+  assert.equal(h.report.element.querySelector('[data-guide-action="status"]'),null);
+});
+
+test('retrying status after a lost save response reconciles the latest row without a second write',async t=>{
+  let attempts=0;
+  const h=setup(t,{update:()=>{
+    attempts++;
+    h.item.fields.STATUS='SUBMETIDO';
+    throw new Error('resposta perdida');
+  }});
+  await h.report.open();action(h.report,'status');
+  const yes=h.doc.querySelector('[data-guide-confirm] button');
+  yes.click();
+  await until(()=>!yes.disabled&&h.doc.querySelector('.tgr-editor-status').textContent.includes('resposta perdida'));
+  assert.ok(h.report.element.querySelector('[data-guide-status="PENDENTE"]'));
+  yes.click();
+  await until(()=>h.report.element.querySelector('[data-guide-status="SUBMETIDO"]'));
+  assert.equal(attempts,1);
 });
 
 test('PDF selection asks again when the row already has an attachment and updates only its status on SIM',async t=>{

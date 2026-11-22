@@ -16,7 +16,7 @@ loadEditor:async()=>({item:row,attachments:{existingFiles:[]}}),saveEditor:async
 if(params.has('keyboard'))Object.defineProperty(window,'visualViewport',{value:Object.assign(new EventTarget(),{width:innerWidth,height:Math.round(innerHeight*.55),offsetTop:0,offsetLeft:0})});
 const view=decorateReportPrint(createTaxGuidesReportView({document,data,pickAttachments:async()=>[new File(['guide'],'guia.pdf',{type:'application/pdf'})]}),{action:'open-tax-guides-report'});
 await view.open();
-if(['attach','amount','confirm'].includes(mode)){
+if(['attach','amount','confirm','status'].includes(mode)){
   view.element.querySelector(`[data-guide-id="7"] [data-guide-action="${mode==='confirm'?'attach':mode}"]`).click();
   if(mode==='confirm')view.element.querySelector('[data-source="files"]').click();
   await new Promise(resolve=>setTimeout(resolve,40));
@@ -30,6 +30,8 @@ await new Promise(resolve=>requestAnimationFrame(()=>requestAnimationFrame(resol
 const rect=node=>{const r=node.getBoundingClientRect();return {x:r.x,y:r.y,right:r.right,bottom:r.bottom,width:r.width,height:r.height};};
 const panel=document.querySelector('.tgr-panel'),editor=document.querySelector('.tgr-editor');
 const rowFills=Object.fromEntries([...panel.querySelectorAll('tbody tr')].map(row=>[row.dataset.guideStatus,[...row.cells].map(cell=>getComputedStyle(cell).backgroundColor)]));
+const typeFills=Object.fromEntries([...panel.querySelectorAll('.tgr-tax-type')].map(cluster=>[cluster.dataset.guideType,getComputedStyle(cluster).backgroundColor]));
+const dataWeight=getComputedStyle(panel.querySelector('tbody td')).fontWeight;
 const scroll=panel.querySelector('.tgr-scroll');
 if(mode==='many-rows'){
   scroll.scrollTop=scroll.scrollHeight;
@@ -49,9 +51,10 @@ if(mode==='transition'){
 }
 document.documentElement.dataset.layout=JSON.stringify({panel:panelRect,editor:editor&&rect(editor),transition,
 rootOverflow:document.documentElement.scrollWidth>innerWidth+1,panelOverflow:panel.scrollWidth>panel.clientWidth+1,
-tableScrollTop:scroll.scrollTop,tableOverflow:scroll.scrollWidth>scroll.clientWidth+1,lastRowInScroll,printError:mode==='print-error'?rect(printStatus):null,
+tableScrollTop:scroll.scrollTop,tableOverflow:scroll.scrollWidth>scroll.clientWidth+1,tableWidth:scroll.scrollWidth,scrollWidth:scroll.clientWidth,
+lastRowInScroll,printError:mode==='print-error'?rect(printStatus):null,
 buttons:[...document.querySelectorAll('.tgr-editor button')].filter(n=>!n.closest('[hidden]')).map(rect),
-confirmation:[...document.querySelectorAll('[data-guide-confirm]:not([hidden]) button')].map(button=>button.textContent),rowFills,
+confirmation:[...document.querySelectorAll('[data-guide-confirm]:not([hidden]) button')].map(button=>button.textContent),rowFills,typeFills,dataWeight,
 input:editor?.querySelector('input')&&rect(editor.querySelector('input')), sources:editor?.querySelectorAll('[data-source]').length,
 visibleHeight:window.visualViewport?.height||innerHeight,logicalWidth:Number.parseFloat(view.element.style.getPropertyValue('--report-width'))||innerWidth});
 </script></body></html>

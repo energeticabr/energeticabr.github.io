@@ -4,8 +4,8 @@ import { bindSearchableFilterSelects } from './searchable-filter-selects.js';
 import { PDF_ATTACHMENT_ICON } from './report-pdf-attachment-icon.js';
 import { openTaxGuideReportEditor } from './tax-guides-report-editor.js';
 
-const FIELDS = [['VENCIMENTO','Data vencimento'],['COMPETENCIA','Data competência'],['FILIAL','Filial'],['VALOR','Valor'],['TIPO','Tipo'],['STATUS','Status']];
-const FILTERS = [['COMPETENCIA','Competência'],['FILIAL','Filial'],['TIPO','Tipo'],['STATUS','Status']];
+const FIELDS = [['VENCIMENTO','Data vencimento'],['COMPETENCIA','Data competência'],['FILIAL','Filial'],['VALOR','Valor'],['TIPO','Tipo'],['STATUS','Situação']];
+const FILTERS = [['COMPETENCIA','Competência'],['FILIAL','Filial'],['TIPO','Tipo'],['STATUS','Situação']];
 const dateKey = value => /^\d{4}-\d{2}-\d{2}(?:T|$)/.test(String(value || '')) ? String(value).slice(0,10) : '';
 const dateLabel = value => { const key=dateKey(value); return key ? `${key.slice(8)}/${key.slice(5,7)}/${key.slice(0,4)}` : 'A informar'; };
 const amountLabel = value => {
@@ -19,7 +19,7 @@ export function createTaxGuidesReportView({document:doc=globalThis.document,data
   const make=(tag,cls='',text)=>{const node=doc.createElement(tag);node.className=cls;if(text!==undefined)node.textContent=text;return node;};
   const root=make('div','tgr-backdrop');root.hidden=true;root.dataset.taxGuidesReport='';
   const panel=make('section','tgr-panel');panel.tabIndex=-1;panel.setAttribute('role','dialog');panel.setAttribute('aria-modal','true');panel.setAttribute('aria-label','Relatório INSS e FGTS');
-  const header=make('header','tgr-header'),title=make('h2','','INSS E FGTS'),refresh=make('button','tgr-button','↻');
+  const header=make('header','tgr-header'),title=make('h2','','INSS, FGTS'),refresh=make('button','tgr-button','↻');
   refresh.type='button';refresh.setAttribute('aria-label','Atualizar relatório INSS e FGTS');header.append(title,refresh);
   const filterBar=make('div','tgr-filters'),controls=new Map();
   for(const [field,label] of FILTERS){const holder=make('label','tgr-filter'),select=make('select');select.name=field;select.setAttribute('aria-label',label);holder.append(make('span','',label),select);filterBar.append(holder);controls.set(field,select);}
@@ -42,7 +42,12 @@ export function createTaxGuidesReportView({document:doc=globalThis.document,data
   }
   function action(row,mode,text){
     const button=make('button','tgr-cell-action',text);button.type='button';button.dataset.guideAction=mode;
-    button.setAttribute('aria-label',`${mode==='amount'?'Informar valor da':'Anexar'} guia ${row.fields?.TIPO||''}, competência ${dateLabel(row.fields?.COMPETENCIA)}`);
+    const labels={amount:'Informar valor da guia',attach:'Anexar guia',status:'PENDENTE. Alterar situação da guia'};
+    button.setAttribute('aria-label',`${labels[mode]} ${row.fields?.TIPO||''}, competência ${dateLabel(row.fields?.COMPETENCIA)}`);
+    if(mode==='status'){
+      button.setAttribute('aria-haspopup','dialog');
+      if(row.fields?.FILIAL)button.setAttribute('aria-label',`${button.getAttribute('aria-label')}, filial ${row.fields.FILIAL}`);
+    }
     button.addEventListener('click',()=>edit(row,mode,button));return button;
   }
   function syncFilters(){
@@ -62,6 +67,18 @@ export function createTaxGuidesReportView({document:doc=globalThis.document,data
       tr.dataset.guideStatus=String(row.fields?.STATUS??'').trim().toUpperCase();
       for(const [field] of FIELDS){const value=row.fields?.[field],cell=make('td','',field==='VALOR'?amountLabel(value):field==='COMPETENCIA'||field==='VENCIMENTO'?dateLabel(value):String(value??'A informar'));
         if(field==='VALOR'&&amountLabel(value)==='A informar'&&typeof data.saveEditor==='function'){cell.setAttribute('aria-label','A informar');cell.replaceChildren(action(row,'amount','A informar'));}
+        if(field==='TIPO'){
+          const type=String(value??'').trim().toUpperCase();
+          if(type==='INSS'||type==='FGTS'){
+            const cluster=make('span','tgr-tax-type',type);
+            cluster.dataset.guideType=type;
+            cell.replaceChildren(cluster);
+          }
+        }
+        if(field==='STATUS'&&tr.dataset.guideStatus==='PENDENTE'&&typeof data.loadEditor==='function'&&typeof data.saveEditor==='function'){
+          cell.setAttribute('aria-label','PENDENTE');
+          cell.replaceChildren(action(row,'status','PENDENTE'));
+        }
         tr.append(cell);}
       const cell=make('td'),hasAttachments=row.hasAttachments??row.fields?.Attachments;
       const canAttach=typeof data.saveEditor==='function'&&typeof pickAttachments==='function';
