@@ -65,6 +65,7 @@ export function normalizeTaskAssociationSnapshot(snapshot) {
       throw new TypeError("Registro ou campo incompleto no relatório de tarefas por associação.");
     }
     const normalized = { id: identifier(row.id) };
+    if (typeof row.hasAttachments === "boolean") normalized.hasAttachments = row.hasAttachments;
     if (ids.has(normalized.id)) throw new TypeError("ID duplicado no relatório de tarefas por associação.");
     ids.add(normalized.id);
     for (const field of DATE_FIELDS) normalized[field] = calendarDate(row[field]);

@@ -3,6 +3,8 @@ import { addReportCloseControl } from './report-close-control.js';
 import {buildTaskAssociationOverview,isCompletedTaskStatus} from '../chat/task-association-report-model.js';
 import {provisionDateKey} from '../chat/pending-provision-dates.js';
 import {bindSearchableFilterSelects} from './searchable-filter-selects.js';
+import { createGalleryAttachmentCounts } from './gallery-attachment-counts.js';
+import { PDF_ATTACHMENT_ICON } from './report-pdf-attachment-icon.js';
 
 const LOGO=new URL('../../../../assets/logo-energetica-oficial.png',import.meta.url).href;
 const DEFAULT_STATUSES=['ATIVIDADE CRIADA','EM ATENDIMENTO'];
@@ -10,7 +12,7 @@ const SELECTS=[['id','ID'],['supplier','FORNECEDOR'],['difficulty','DIFICULDADE'
 const COLUMNS=[['🆔 ID',7],['📅 DATA CRIAÇÃO',14],['⏰ DATA FATAL',15],['📝 TAREFA',34],['🚨 PRIORIDADE',14],['STATUS',16]];
 const date=value=>value?`${value.slice(8,10)}/${value.slice(5,7)}/${value.slice(0,4)}`:'—';
 
-export function createTaskAssociationReportView({document:doc=globalThis.document,data,now=()=>new Date()}={}){
+export function createTaskAssociationReportView({document:doc=globalThis.document,data,openMediaCollection,now=()=>new Date()}={}){
  if(!doc?.body||typeof data?.loadSnapshot!=='function'||typeof now!=='function')throw new TypeError('O relatório requer documento e sessão SharePoint.');
  const win=doc.defaultView,make=(tag,cls='',text)=>{const node=doc.createElement(tag);node.className=cls;if(text!==undefined)node.textContent=text;return node;};
  const button=(label,cls,text)=>{const node=make('button',cls,text);node.type='button';node.setAttribute('aria-label',label);return node;};
@@ -29,6 +31,24 @@ export function createTaskAssociationReportView({document:doc=globalThis.documen
  const notice=make('p','tar-save-notice');notice.hidden=true;notice.setAttribute('role','status');notice.dataset.reportScreenOnly='';
  const content=make('div','tar-content');content.tabIndex=0;content.setAttribute('role','region');content.setAttribute('aria-label','Indicadores e atividades por associação');report.append(toolbar,notice,content);panel.append(warning,report);root.append(panel);doc.body.append(root);
  let snapshot=null,controller=null,revision=0,pickers=null,destroyed=false,returnFocus=null,oldOverflow='',app=null,oldInert=false;
+ const canOpenPdfs=typeof data.listPdfAttachments==='function'&&typeof openMediaCollection==='function';
+ const pdfSlots=new Map(),interactivePdfReads=new Set(),pdfPermissionFailures=new Map();
+ let pdfObserver;
+ const pdfAttachments=createGalleryAttachmentCounts({
+  async loadAttachments(row,{signal}){
+   try{
+    const files=await data.listPdfAttachments(snapshot.attachmentListId,row.id,{
+     signal,interactive:interactivePdfReads.delete(row.id),
+    });
+    if(!signal.aborted)pdfPermissionFailures.delete(row.id);
+    return files;
+   }catch(error){
+    if(!signal.aborted&&error?.code==='AUTH_REQUIRED')pdfPermissionFailures.set(row.id,row);
+    throw error;
+   }
+  },
+  onChange:updatePdfControl,
+ });
  const landscape = bindReportLandscape(root);
  addReportCloseControl({root, toolbar:toolbar, onClose:close});
 
@@ -47,6 +67,66 @@ export function createTaskAssociationReportView({document:doc=globalThis.documen
  let finishing=null;
 
  function finishMessage(text){finishNotice.textContent=text;finishNotice.hidden=!text;}
+ function resetPdfSlots(){
+  pdfObserver?.disconnect();pdfObserver=null;pdfSlots.clear();
+ }
+ function clearPdfAttachments(){
+  resetPdfSlots();interactivePdfReads.clear();pdfPermissionFailures.clear();pdfAttachments.reset();
+ }
+ function updatePdfControl(row){
+  const cell=pdfSlots.get(row.id)?.cell;
+  if(!cell?.isConnected)return;
+  const files=pdfAttachments.attachmentsFor(row);
+  const previous=cell.querySelector('button');
+  let control;
+  if(files?.length){
+   control=button(`Abrir PDFs da atividade ${row.id}`,'tar-pdf-attachment');
+   control.innerHTML=PDF_ATTACHMENT_ICON;
+   control.addEventListener('click',async()=>{
+    const {signal}=controller;
+    control.disabled=true;
+    try{
+     await openMediaCollection(files,{
+      signal,returnLabel:'Voltar ao relatório',
+      onClose:()=>{control.disabled=false;},
+      resolveReturnFocus:()=>!root.hidden?(pdfSlots.get(row.id)?.cell.querySelector('button')||panel):null,
+     });
+    }catch{
+     if(!signal.aborted){notice.textContent=`Não foi possível abrir os PDFs da atividade ${row.id}.`;notice.hidden=false;}
+    }finally{control.disabled=false;}
+   });
+  }else if(pdfAttachments.hasError(row)){
+   control=button(`Consultar novamente os anexos da atividade ${row.id}`,'tar-pdf-attachment','↻');
+   control.addEventListener('click',()=>{
+    control.disabled=true;
+    interactivePdfReads.add(row.id);
+    void pdfAttachments.load(row,{force:true,priority:true}).then(items=>{
+     if(!items)return;
+     for(const missing of pdfPermissionFailures.values())void pdfAttachments.load(missing,{force:true}).catch(()=>{});
+    }).catch(()=>{});
+   });
+  }
+  const hadFocus=previous&&doc.activeElement===previous;
+  previous?.remove();
+  if(control){control.title=control.getAttribute('aria-label');cell.append(control);}
+  if(hadFocus)(control||panel).focus();
+ }
+ function watchPdfCell(cell,row){
+  if(!canOpenPdfs||!snapshot.attachmentListId||row.hasAttachments===false)return;
+  pdfSlots.set(row.id,{cell,row});
+  updatePdfControl(row);
+  if(pdfAttachments.attachmentsFor(row)||pdfAttachments.hasError(row))return;
+  if(!win?.IntersectionObserver){void pdfAttachments.load(row).catch(()=>{});return;}
+  pdfObserver??=new win.IntersectionObserver((entries,observer)=>{
+   for(const entry of entries){
+    if(!entry.isIntersecting)continue;
+    observer.unobserve(entry.target);
+    const slot=pdfSlots.get(Number(entry.target.parentElement.dataset.taskId));
+    if(slot?.cell===entry.target)void pdfAttachments.load(slot.row).catch(()=>{});
+   }
+  },{root:content,rootMargin:'120px'});
+  pdfObserver.observe(cell);
+ }
  function openFinish(row,trigger,draftDate){
   if(finishing||root.hidden)return;
   finishing={row,trigger,controller:new AbortController(),saving:false};
@@ -82,12 +162,12 @@ export function createTaskAssociationReportView({document:doc=globalThis.documen
   }
   if(finishing!==active)return;
   closeFinish(false);
-  snapshot={...snapshot,tasks:snapshot.tasks.map(row=>Number(row.id)===saved.id?saved:row)};
+  snapshot={...snapshot,tasks:snapshot.tasks.map(row=>Number(row.id)===saved.id?{...row,...saved}:row)};
   populate();render();notice.textContent=`Atividade #${saved.id} concluída.`;notice.hidden=false;content.focus({preventScroll:true});
  });
  const selected=()=>({...Object.fromEntries([...controls].filter(([name])=>name!=='status').map(([name,node])=>[name,node.value])),description:description.value,dueDate:native.value,statuses:[...controls.get('status').selectedOptions].map(option=>option.value).filter(Boolean)});
  function render(){
-  if(content.contains(doc.activeElement))panel.focus();content.replaceChildren();if(!snapshot)return;
+  if(content.contains(doc.activeElement))panel.focus();resetPdfSlots();content.replaceChildren();if(!snapshot)return;
   const result=buildTaskAssociationOverview(snapshot,selected(),provisionDateKey(now()));
   const brand=make('div','tar-brand'),logo=make('img');logo.src=LOGO;logo.alt='Energética Construtora';brand.append(logo);content.append(brand);
   const cards=make('div','tar-cards');for(const [name,label] of [['pending','⏳ ATIVIDADES PENDENTES'],['completed','✅ ATIVIDADES CONCLUÍDAS'],['total','📊 TOTAL DE ATIVIDADES']]){const card=make('div',`tar-card tar-metric-${name}`);card.dataset.metric=name;card.append(make('span','',label),make('strong','',String(result.metrics[name])));cards.append(card);}content.append(cards);
@@ -95,9 +175,11 @@ export function createTaskAssociationReportView({document:doc=globalThis.documen
   for(const group of result.groups){
    const article=make('article','tar-group'),aside=make('div','tar-association');aside.style.backgroundColor=group.color;aside.append(make('span','','🏢 ASSOCIAÇÃO'),make('h2','',group.association),make('strong','tar-association-total',`TOTAL: ${group.total}`),make('span','',`PENDENTES: ${group.pending}`));
    const wrap=make('div','tar-table-wrap'),table=make('table','tar-table'),cols=make('colgroup'),head=make('thead'),header=make('tr'),body=make('tbody'),foot=make('tfoot');table.setAttribute('aria-label',`Atividades da associação ${group.association}`);
+   const idCells=[];
    for(const [label,width] of COLUMNS){const col=make('col');col.style.width=`${width}%`;cols.append(col);const th=make('th','',label);th.scope='col';header.append(th);}head.append(header);
    for(const row of group.tasks){
-    const tr=make('tr');tr.dataset.taskId=String(row.id);tr.style.backgroundColor=row.rowColor;tr.append(make('td','tar-id',String(row.id)));
+    const tr=make('tr');tr.dataset.taskId=String(row.id);tr.style.backgroundColor=row.rowColor;
+    const idCell=make('td','tar-id');idCell.append(make('span','',String(row.id)));tr.append(idCell);
     const created=make('td','tar-created');created.append(make('strong','',date(row.createdDate)));if(row.createdDays!=null)created.append(make('small','',`HÁ ${row.createdDays} DIAS`));tr.append(created);
     const due=make('td','tar-due');due.append(make('strong','',row.dueDate?date(row.dueDate):'SEM DATA'));if(row.dueDate){const label=make('small','',row.dueLabel);label.style.color=row.dueColor;due.append(label);}else due.style.color=row.dueColor;tr.append(due,make('td','tar-task',row.description||'—'));
     const priority=make('td','tar-priority',row.priority||'—');priority.style.color=row.priorityColor;
@@ -107,8 +189,10 @@ export function createTaskAssociationReportView({document:doc=globalThis.documen
      finish.addEventListener('click',()=>openFinish(row,finish));status.append(finish);
     }
     tr.append(priority,status);body.append(tr);
+    idCells.push([idCell,row]);
    }
    const footerRow=make('tr'),footer=make('td','',`TOTAL DE ATIVIDADES NESTA ASSOCIAÇÃO: ${group.total}`);footer.colSpan=COLUMNS.length;footerRow.append(footer);foot.append(footerRow);table.append(cols,head,body,foot);wrap.append(table);article.append(aside,wrap);content.append(article);
+   for(const [cell,row] of idCells)watchPdfCell(cell,row);
   }
  }
  function populate(reset=false){
@@ -119,13 +203,13 @@ export function createTaskAssociationReportView({document:doc=globalThis.documen
   if(focusedSelect&&!root.hidden){focusedSelect.nextElementSibling?.querySelector('.sfs-trigger')?.focus();pickers.close();}
  }
  async function load(){
-  if(root.hidden||destroyed||finishing)return;if(content.contains(doc.activeElement))panel.focus();pickers?.close();controller?.abort();const current=++revision,active=new AbortController();controller=active;snapshot=null;refresh.disabled=true;notice.hidden=true;content.replaceChildren(make('p','tar-notice','Carregando atividades do SharePoint…'));report.setAttribute('aria-busy','true');
+  if(root.hidden||destroyed||finishing)return;if(content.contains(doc.activeElement))panel.focus();pickers?.close();controller?.abort();clearPdfAttachments();const current=++revision,active=new AbortController();controller=active;snapshot=null;refresh.disabled=true;notice.hidden=true;content.replaceChildren(make('p','tar-notice','Carregando atividades do SharePoint…'));report.setAttribute('aria-busy','true');
   try{const result=await data.loadSnapshot({signal:active.signal});if(active.signal.aborted||current!==revision||root.hidden||destroyed)return;buildTaskAssociationOverview(result,selected(),provisionDateKey(now()));snapshot=result;populate();render();}
   catch(error){if(active.signal.aborted||current!==revision||root.hidden||destroyed)return;snapshot=null;const message=make('p','tar-notice','Não foi possível carregar as atividades por associação.');message.setAttribute('role','status');const retry=button('Tentar novamente','tar-retry','Tentar novamente');retry.addEventListener('click',()=>void load());content.replaceChildren(message,retry);}
   finally{if(current===revision){refresh.disabled=false;report.setAttribute('aria-busy','false');}}
  }
  function orientationChanged() { landscape.update(); }
- function close(){if(root.hidden)return;closeFinish(false);controller?.abort();revision++;snapshot=null;pickers?.close();content.replaceChildren();root.hidden=true;doc.body.style.overflow=oldOverflow;if(app)app.inert=oldInert;const target=returnFocus?.isConnected?returnFocus:doc.querySelector('[data-action="open-task-association-report"]:not(:disabled)')||app;target?.focus?.();returnFocus=null;}
+ function close(){if(root.hidden)return;closeFinish(false);root.hidden=true;controller?.abort();clearPdfAttachments();revision++;snapshot=null;pickers?.close();content.replaceChildren();doc.body.style.overflow=oldOverflow;if(app)app.inert=oldInert;const target=returnFocus?.isConnected?returnFocus:doc.querySelector('[data-action="open-task-association-report"]:not(:disabled)')||app;target?.focus?.();returnFocus=null;}
  root.addEventListener('click',event=>{if(event.target===root&&!finishing)close();});
  root.addEventListener('keydown',event=>{
   if(root.hidden)return;

@@ -450,7 +450,7 @@ test('HOME and reply open one local task-association report, with an independent
   assert.equal(h.panels.length, 1);
   assert.equal(h.panels[0].opens, 1);
   assert.equal(h.panels[0].document, globalThis.document);
-  assert.deepEqual(Object.keys(h.panels[0].data), ['loadSnapshot', 'finalizeTask']);
+  assert.deepEqual(Object.keys(h.panels[0].data), ['loadSnapshot', 'listPdfAttachments', 'finalizeTask']);
   assert.equal(sourceCreates, 0, 'opening the popup does not eagerly load SharePoint');
   const caller = new AbortController();
   assert.equal(await h.panels[0].data.loadSnapshot({ signal: caller.signal, trace: 'commercial' }), snapshot);
