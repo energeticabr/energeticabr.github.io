@@ -85,7 +85,7 @@ export function createPaymentLedgerView({ document: doc = globalThis.document, d
   const pdfAttachments = createReportPdfAttachments({
     root, scroll, retryButton: retryPdfs,
     loadPdfs: typeof data.listPaymentLedgerPdfs === 'function' ? data.listPaymentLedgerPdfs.bind(data) : undefined,
-    openMediaCollection, getSignal: () => controller?.signal, showNotice,
+    openMediaCollection, previewLayout: 'compact-report-pdf', getSignal: () => controller?.signal, showNotice,
   });
   function clearRows() {
     pdfAttachments?.clearCells();

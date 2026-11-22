@@ -1,7 +1,7 @@
 import { createGalleryAttachmentCounts } from './gallery-attachment-counts.js';
 import { PDF_ATTACHMENT_ICON } from './report-pdf-attachment-icon.js';
 
-export function createReportPdfAttachments({ root, scroll, retryButton, loadPdfs, openMediaCollection, getSignal, showNotice }) {
+export function createReportPdfAttachments({ root, scroll, retryButton, loadPdfs, openMediaCollection, previewLayout, getSignal, showNotice }) {
   if (typeof loadPdfs !== 'function' || typeof openMediaCollection !== 'function') return null;
   const doc = root.ownerDocument;
   const cells = new Map(), targets = new WeakMap(), failures = new Map();
@@ -49,7 +49,7 @@ export function createReportPdfAttachments({ root, scroll, retryButton, loadPdfs
       opening = true;
       try {
         await openMediaCollection(files, {
-          signal, returnLabel: 'Voltar ao relatório',
+          signal, layout: previewLayout, returnLabel: 'Voltar ao relatório',
           resolveReturnFocus: () => root.hidden ? null : control.isConnected ? control : scroll,
         });
       } catch {

@@ -169,7 +169,7 @@
   color: #b00000;
 }
 .attachment-preview-dialog[data-compact-report-pdf] .attachment-preview-title { font-size: 14px; }
-.attachment-preview-dialog:is([data-layout="nfe-report-pdf"], [data-layout="tax-guides-report-pdf"]) .attachment-preview-title {
+.attachment-preview-dialog:is([data-layout="nfe-report-pdf"], [data-layout="compact-report-pdf"]) .attachment-preview-title {
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
@@ -198,16 +198,16 @@
 }
 
 @media (max-width: 680px) and (orientation: landscape), (max-height: 680px) and (orientation: portrait) {
-  .attachment-preview-dialog[data-layout="tax-guides-report-pdf"] .attachment-preview-status > .app-loading__percentage { min-width: 48px; padding: 2px 8px; font-size: .85rem; }
-  .attachment-preview-dialog[data-layout="tax-guides-report-pdf"] :is(.attachment-preview-footer, .attachment-preview-collection-nav) { gap: 4px; }
-  .attachment-preview-dialog[data-layout="tax-guides-report-pdf"] .attachment-preview-footer { padding-inline: 4px; }
-  .attachment-preview-dialog[data-layout="tax-guides-report-pdf"] .attachment-preview-footer button { min-width: 44px; padding-inline: 4px; font-size: 12px; }
-  .attachment-preview-dialog[data-layout="tax-guides-report-pdf"] .attachment-preview-collection-status { min-width: 32px; white-space: nowrap; }
-  .attachment-preview-dialog[data-layout="tax-guides-report-pdf"] .attachment-preview-collection-nav button { font-size: 0; }
-  .attachment-preview-dialog[data-layout="tax-guides-report-pdf"] .attachment-preview-collection-nav button::before { font-size: 22px; }
-  .attachment-preview-dialog[data-layout="tax-guides-report-pdf"] .attachment-preview-collection-previous::before { content: "‹"; content: "‹" / ""; }
-  .attachment-preview-dialog[data-layout="tax-guides-report-pdf"] .attachment-preview-collection-next::before { content: "›"; content: "›" / ""; }
-  .attachment-preview-dialog[data-layout="tax-guides-report-pdf"] .attachment-preview-export svg { width: 18px; height: 18px; }
+  .attachment-preview-dialog[data-layout="compact-report-pdf"] .attachment-preview-status > .app-loading__percentage { min-width: 48px; padding: 2px 8px; font-size: .85rem; }
+  .attachment-preview-dialog[data-layout="compact-report-pdf"] :is(.attachment-preview-footer, .attachment-preview-collection-nav) { gap: 4px; }
+  .attachment-preview-dialog[data-layout="compact-report-pdf"] .attachment-preview-footer { padding-inline: 4px; }
+  .attachment-preview-dialog[data-layout="compact-report-pdf"] .attachment-preview-footer button { min-width: 44px; padding-inline: 4px; font-size: 12px; }
+  .attachment-preview-dialog[data-layout="compact-report-pdf"] .attachment-preview-collection-status { min-width: 32px; white-space: nowrap; }
+  .attachment-preview-dialog[data-layout="compact-report-pdf"] .attachment-preview-collection-nav button { font-size: 0; }
+  .attachment-preview-dialog[data-layout="compact-report-pdf"] .attachment-preview-collection-nav button::before { font-size: 22px; }
+  .attachment-preview-dialog[data-layout="compact-report-pdf"] .attachment-preview-collection-previous::before { content: "‹"; content: "‹" / ""; }
+  .attachment-preview-dialog[data-layout="compact-report-pdf"] .attachment-preview-collection-next::before { content: "›"; content: "›" / ""; }
+  .attachment-preview-dialog[data-layout="compact-report-pdf"] .attachment-preview-export svg { width: 18px; height: 18px; }
 }
 
 @media (max-width: 600px) {

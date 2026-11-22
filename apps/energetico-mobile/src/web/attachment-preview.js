@@ -3,6 +3,11 @@ import { createLoadingIndicator, updateLoadingIndicator } from "../ui/loading-in
 import { beginLoadingTask } from "../ui/loading-task.js";
 
 let nextPreviewId = 0;
+const compactReportPdfLocations = new Map([
+  ['dda-report-pdf', 'no relatório DDA'],
+  ['nfe-report-pdf', 'no relatório de notas fiscais'],
+  ['compact-report-pdf', 'no relatório'],
+]);
 
 function previewKind(blob, fileName) {
   const type = String(blob.type || "").toLowerCase().split(";")[0];
@@ -276,11 +281,9 @@ export function createAttachmentPreview({
     if (event.target !== appendButton && !appendMenu.contains(event.target)) setAppendMenuOpen(false);
   });
 
-  const isCompactReportPdf = layout => ['dda-report-pdf', 'nfe-report-pdf', 'tax-guides-report-pdf'].includes(layout);
-
   function updateCollectionNavigation() {
     const hasCollection = Boolean(collection?.items?.length);
-    collectionNav.hidden = !hasCollection || (isCompactReportPdf(collection.layout) && collection.items.length === 1);
+    collectionNav.hidden = !hasCollection || (compactReportPdfLocations.has(collection.layout) && collection.items.length === 1);
     if (!hasCollection) return;
     const last = collection.items.length - 1;
     previousButton.disabled = collection.index <= 0;
@@ -475,7 +478,7 @@ export function createAttachmentPreview({
     if (destroyed) throw new Error("O visualizador já foi encerrado.");
     if (!dialog.open) returnFocus = typeof resolveReturnFocus === "function" ? resolveReturnFocus : documentRef.activeElement;
     release();
-    const compactReport = isCompactReportPdf(layout);
+    const compactReport = compactReportPdfLocations.has(layout);
     dialog.dataset.layout = compactReport || ['flow-summary', 'report-pdf'].includes(layout) ? layout : "media";
     dialog.toggleAttribute('data-compact-report-pdf', compactReport);
     const reportLayout = dialog.dataset.layout !== "media";
@@ -675,7 +678,7 @@ export function createAttachmentPreview({
           onProgress: value => presentationProgress(session, value),
           onDdaCopyReady: available => { if (active === session) { ddaCopyButton.hidden = !available; if (available) dialog.dataset.ddaCopy = 'true'; else delete dialog.dataset.ddaCopy; } },
           fit: layout === 'report-pdf' ? 'page' : 'width',
-          navigation: compactReport && layout !== 'tax-guides-report-pdf' ? 'paged' : 'scroll',
+          navigation: compactReport && layout !== 'compact-report-pdf' ? 'paged' : 'scroll',
           rotatesWithViewport: compactReport,
           initialPage,
           onPageChange: page => {
@@ -731,7 +734,7 @@ export function createAttachmentPreview({
       }
       explain(session, session.blob
         ? "Não foi possível mostrar este arquivo. Se o PDF tiver senha ou estiver danificado, tente abri-lo em outro app."
-        : `Não foi possível carregar este arquivo. Feche esta janela e tente novamente ${layout === 'dda-report-pdf' ? 'no relatório DDA' : compactReport ? 'no relatório de notas fiscais' : 'no chat'}.`);
+        : `Não foi possível carregar este arquivo. Feche esta janela e tente novamente ${compactReportPdfLocations.get(layout) ?? 'no chat'}.`);
       if (!session.blob) showPreviewStatus(session, "O arquivo ainda não está disponível para salvar.");
     }
   }

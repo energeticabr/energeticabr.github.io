@@ -63,7 +63,7 @@ test('payments scroll in batches of 200, reset after filtering, keep PDF complet
   }finally{await server.close();}
 });
 
-test('mini PDF buttons fit next to the numbers and open their own PDF collection',{timeout:120000},async t=>{
+test('mini PDF buttons open their own collection in the compact horizontal viewer',{timeout:120000},async t=>{
   const browser=[process.env.CHROME_BIN,'C:\\Program Files\\Google\\Chrome\\Application\\chrome.exe','/usr/bin/google-chrome'].find(path=>path&&existsSync(path));
   if(!browser)return t.skip('Chrome unavailable');
   const server=await createServer({root:resolve(fileURLToPath(new URL('..',import.meta.url))),optimizeDeps:{noDiscovery:true,include:['decimal.js','pdf-lib']},server:{host:'127.0.0.1',port:0,hmr:false,watch:null},logLevel:'silent'});
@@ -78,6 +78,14 @@ test('mini PDF buttons fit next to the numbers and open their own PDF collection
       assert.deepEqual(result.iconColors,Array(4).fill('rgb(28, 60, 123)'));
       assert.equal(result.orderFocus,true);
       assert.equal(result.launchFocus,true);
+      const detail=JSON.stringify({width,height,result});
+      for(const flag of ['singleNavHidden','longTitle','firstLaunchPdf','secondLaunchPdf']){
+        assert.equal(result[flag],true,`${flag}: ${detail}`);
+      }
+      for(const preview of [result.orderPdf,result.launchPdf]){
+        assert.ok(preview.fits&&preview.horizontal&&preview.leftClose,detail);
+        assert.ok(preview.compactFooter&&preview.visiblePdf>=.50&&preview.scrollable&&preview.actions,detail);
+      }
     }
   }finally{await server.close();}
 });
