@@ -38,6 +38,8 @@ test('PDF appears directly under the status only on rows with files and opens th
  assert.equal(button.previousElementSibling.textContent, 'SUBMETIDO');
  assert.ok(button.firstElementChild.matches('svg'));
  assert.equal(button.lastElementChild.textContent, 'PDF');
+ assert.equal(dom.window.getComputedStyle(button.firstElementChild).color, 'rgb(28, 60, 123)');
+ assert.equal(dom.window.getComputedStyle(button).borderTopColor, 'rgb(28, 60, 123)');
  button.focus();
  button.click();
  await tick();
