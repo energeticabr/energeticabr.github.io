@@ -282,6 +282,7 @@ export function createStageGanttView({ document: doc = globalThis.document, data
         const action = suppressed ? 'EXIBIR' : 'SUPRIMIR';
         const visibility = button(action, (suppressed ? 'Exibir' : 'Suprimir') + ' etapa ' + item.name);
         visibility.className = 'gantt-visibility-button';
+        visibility.classList.toggle('gantt-suppress-button', !suppressed);
         visibility.setAttribute('aria-haspopup', 'dialog');
         const target = suppressed ? STAGE_GANTT_VISIBLE : STAGE_GANTT_HIDDEN;
         visibility.addEventListener('click', () => {

@@ -133,6 +133,9 @@ button.gantt-toggle {
   color: #0d4d61;
 }
 .gantt-row-actions > button:not(:only-child) { padding-inline: 6px; }
+.gantt-row-actions > .gantt-suppress-button:not(:disabled, [aria-disabled="true"]) {
+  background: var(--gantt-ongoing); border-color: #8a202e; color: #fff;
+}
 .gantt-row-actions > .gantt-start-button:not(:disabled, [aria-disabled="true"]) {
   background: #e68524; border-color: #a4510c; color: #241606;
 }
