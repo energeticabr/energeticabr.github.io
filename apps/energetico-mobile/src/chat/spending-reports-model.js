@@ -153,7 +153,7 @@ function grouped(rows, field, whole, limit = Infinity) {
   return groupRows(rows, row => row[field]).map(([name, values]) => {
     const total = completeSum(values, "total");
     return Object.freeze({ name, count: values.length, quantity: completeSum(values, "quantity"), total,
-      percentage: percentage(total, whole) });
+      percentage: percentage(total, whole), rows: Object.freeze(values) });
   }).sort(byValue).slice(0, limit);
 }
 
@@ -255,6 +255,34 @@ function compareExpenses(current, previous, level = 0) {
 const monthPeriod = (year, month) =>
   `${new Intl.DateTimeFormat("pt-BR", { month: "long" }).format(new Date(2020, Number(month) - 1, 1))}/${year}`;
 
+function monthSection(rows, period, previous = false) {
+  const subtotal = Object.freeze({
+    quantity: completeSum(rows, "quantity"),
+    // Add the cent values displayed in the detail rows.
+    total: completeSum(rows, "total", roundCurrency),
+  });
+  return Object.freeze({ period, previous, rows: Object.freeze(rows), subtotal });
+}
+
+function detailMonths(rows, dateOf) {
+  return groupRows(rows, row => dateOf(row).slice(0, 7))
+    .sort(([left], [right]) => right.localeCompare(left))
+    .map(([key, monthRows]) => {
+      const [year, month] = key.split("-");
+      return monthSection(monthRows, monthPeriod(year, month));
+    });
+}
+
+export function buildManagementRankingBreakdown(group, section) {
+  return grouped(group.rows, section === "stages" ? "product" : "supplier", group.total);
+}
+
+export function buildManagementRankingLaunchMonths(rows) {
+  const sorted = [...rows].sort((a, b) => (b.paymentDate || b.date).localeCompare(a.paymentDate || a.date)
+    || scalar(a.id).localeCompare(scalar(b.id), "pt-BR", { numeric: true }));
+  return detailMonths(sorted, row => row.date);
+}
+
 export function buildManagementProductDetail(snapshot, filters = {}, { branch, product, kind = "expense" } = {}) {
   const expense = kind === "expense";
   const matchesGroup = expense ? equals : (left,right) => scalar(left) === scalar(right);
@@ -270,14 +298,6 @@ export function buildManagementProductDetail(snapshot, filters = {}, { branch, p
       })).sort((a,b) => (b.paymentDate || b.dueDate || b.date).localeCompare(a.paymentDate || a.dueDate || a.date)
         || String(a.id ?? "").localeCompare(String(b.id ?? ""), "pt-BR", { numeric:true }));
   }
-  function monthSection(rows, period, previous = false) {
-    const subtotal = Object.freeze({
-      quantity: completeSum(rows, "quantity"),
-      // Add the cent values displayed in the detail rows.
-      total: completeSum(rows, "total", roundCurrency),
-    });
-    return Object.freeze({ period, previous, rows: Object.freeze(rows), subtotal });
-  }
   const rows = detailRows(filters);
   const sections = [];
   if (filters.year && filters.month) {
@@ -290,12 +310,7 @@ export function buildManagementProductDetail(snapshot, filters = {}, { branch, p
     }
   } else if (rows.length) {
     const dateOf = expense ? row => row.paymentDate || row.dueDate : row => row.date;
-    const months = groupRows(rows, row => dateOf(row).slice(0, 7));
-    months.sort(([left], [right]) => right.localeCompare(left));
-    for (const [key, monthRows] of months) {
-      const [year, month] = key.split("-");
-      sections.push(monthSection(monthRows, monthPeriod(year, month)));
-    }
+    sections.push(...detailMonths(rows, dateOf));
   } else {
     const period = filters.year ? `Ano de ${filters.year}` : "Todos os períodos";
     sections.push(Object.freeze({ period, previous: false, rows: Object.freeze(rows), subtotal: null }));

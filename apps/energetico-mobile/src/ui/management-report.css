@@ -29,6 +29,7 @@
 .gm-month-change[data-direction=down] { color:#c00000; }
 .gm-month-change[data-direction=incomplete] { color:#555; }
 .gm-expense-label { display:flex; align-items:center; gap:6px; text-align:left; }
+.gm-expense-label > span { min-width:0; }
 .gm-expense-toggle {
   display:inline-grid; place-items:center; flex:none; width:26px; height:26px; min-height:0; padding:0;
   border:1px solid currentColor; border-radius:5px; background:#fff; color:#075e30;
@@ -45,6 +46,12 @@
 .gm-table--accounts .gm-branch { background:#fff0f0; }
 .gm-table .gm-total td { border-color:#c00000; background:#fff2cc; font-weight:700; }
 .gm-total td:first-child { text-align:right; }
+.gm-table .gm-ranking-detail-cell { padding:clamp(3px,calc(.55 * var(--report-vw, 1vw)),8px); background:#f3f7fc; }
+.gm-ranking-detail { width:100%; table-layout:fixed; border-collapse:collapse; background:white; }
+.gm-table .gm-ranking-detail th,.gm-table .gm-ranking-detail td { border:1px solid #305496; }
+.gm-table .gm-ranking-detail td[data-column=product],.gm-table .gm-ranking-subtotal th { text-align:left; }
+.gm-table .gm-ranking-subtotal td { background:#f3f7fc; }
+.gm-table .gm-ranking-detail .gm-money { color:#760012; }
 .gm-product-link { display:block; width:100%; min-height:24px; padding:2px 0; border:0; background:transparent; color:#174c86; font:inherit; font-weight:700; text-align:inherit; text-decoration:underline; overflow-wrap:anywhere; }
 .gm-selectable-product { cursor:pointer; }
 .gm-selectable-product:hover { background:#e2efff; }

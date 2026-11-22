@@ -1,10 +1,14 @@
 import {formatReportMoney} from '../chat/contractor-report-model.js';
 
 let sequence=0;
+const quantityFormat=new Intl.NumberFormat('pt-BR',{maximumFractionDigits:6});
+const unitFormat=new Intl.NumberFormat('pt-BR',{style:'currency',currency:'BRL',maximumFractionDigits:6});
 const date=value=>/^[0-9]{4}-[0-9]{2}-[0-9]{2}$/.test(value||'')?value.split('-').reverse().join('/'):'—';
 const amount=value=>Number.isFinite(value)?formatReportMoney(value):'INCOMPLETO';
-const quantity=value=>Number.isFinite(value)?new Intl.NumberFormat('pt-BR',{maximumFractionDigits:6}).format(value):'INCOMPLETO';
-const unit=value=>Number.isFinite(value)?new Intl.NumberFormat('pt-BR',{style:'currency',currency:'BRL',maximumFractionDigits:6}).format(value):'INCOMPLETO';
+const quantity=value=>Number.isFinite(value)?quantityFormat.format(value):'INCOMPLETO';
+const unit=value=>Number.isFinite(value)?unitFormat.format(value):'INCOMPLETO';
+
+export {date as formatDetailDate, quantity as formatDetailQuantity, unit as formatDetailUnit};
 
 export function createManagementProductDetailView({root,onClose=()=>{}}) {
   const doc=root.ownerDocument;

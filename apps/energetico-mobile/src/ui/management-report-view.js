@@ -1,7 +1,12 @@
 import { bindReportLandscape } from './report-landscape.js';
 import { addReportCloseControl } from './report-close-control.js';
-import { buildSpendingReport9, buildManagementProductDetail } from '../chat/spending-reports-model.js';
-import { createManagementProductDetailView } from './management-product-detail-view.js';
+import {
+  buildSpendingReport9, buildManagementProductDetail,
+  buildManagementRankingBreakdown, buildManagementRankingLaunchMonths,
+} from '../chat/spending-reports-model.js';
+import {
+  createManagementProductDetailView, formatDetailDate, formatDetailQuantity, formatDetailUnit,
+} from './management-product-detail-view.js';
 import { formatReportMoney } from '../chat/contractor-report-model.js';
 import { bindSearchableFilterSelects } from './searchable-filter-selects.js';
 
@@ -52,6 +57,33 @@ export function createManagementReportView({document:doc=globalThis.document,dat
   function cell(tr,column,value,span=1,className='') {
     const td=make('td',className,String(value??'').trim()||'—');td.dataset.column=column;td.rowSpan=span;tr.append(td);return td;
   }
+  function addExpansion(tr,nameCell,name,description,createRows,branchCell) {
+    const label=make('div','gm-expense-label');
+    const toggle=make('button','gm-expense-toggle');
+    toggle.type='button';
+    function setExpanded(expanded) {
+      toggle.setAttribute('aria-expanded',String(expanded));
+      toggle.setAttribute('aria-label',`${expanded?'Recolher':'Detalhar'} ${description}`);
+      toggle.textContent=expanded?'−':'+';
+    }
+    let details=[];
+    setExpanded(false);
+    toggle.addEventListener('click',()=>{
+      if(toggle.getAttribute('aria-expanded')==='true'){
+        for(const detail of details)detail.remove();
+        if(branchCell)branchCell.rowSpan-=details.length;
+        details=[];
+        setExpanded(false);
+      } else {
+        details=createRows();
+        tr.after(...details);
+        if(branchCell)branchCell.rowSpan+=details.length;
+        setExpanded(true);
+      }
+    });
+    label.append(toggle,make('span','',name));
+    nameCell.replaceChildren(label);
+  }
   function productCell(tr,product,branch,kind) {
     const td=cell(tr,'name','');
     const button=make('button','gm-product-link',product);button.type='button';
@@ -66,11 +98,69 @@ export function createManagementReportView({document:doc=globalThis.document,dat
     return td;
   }
   function table(section,title,labels,widths) {
-    const table=make('table',`gm-table gm-table--${section}`);table.dataset.section=section;
+    const table=tableWithColumns(`gm-table gm-table--${section}`,labels,widths);table.dataset.section=section;
+    const titleRow=make('tr'),heading=make('th','gm-section-title',title);
+    heading.colSpan=widths.length;titleRow.append(heading);table.tHead.prepend(titleRow);
+    content.append(table);
+    return table.createTBody();
+  }
+  function tableWithColumns(className,labels,widths) {
+    const table=make('table',className);
     const colgroup=make('colgroup');for(const width of widths){const col=make('col');col.style.width=`${width}%`;colgroup.append(col);}table.append(colgroup);
-    const head=make('thead'),titleRow=make('tr'),heading=make('th','gm-section-title',title);heading.colSpan=widths.length;titleRow.append(heading);head.append(titleRow);
-    if(labels.length){const tr=make('tr');for(const label of labels){const th=make('th','',label);th.scope='col';tr.append(th);}head.append(tr);}
-    const body=make('tbody');table.append(head,body);content.append(table);return body;
+    const tr=table.createTHead().insertRow();
+    for(const label of labels){const th=make('th','',label);th.scope='col';tr.append(th);}
+    return table;
+  }
+  function rankingDetailRow(table) {
+    const row=make('tr','gm-ranking-detail-row'),container=make('td','gm-ranking-detail-cell');
+    container.colSpan=4;
+    container.append(table);
+    row.append(container);
+    return row;
+  }
+  function rankingLaunches(rows,description) {
+    const table=tableWithColumns('gm-ranking-detail gm-ranking-launches',
+      ['PRODUTO','DATA PGTO EFETUADO','QTD','VALOR UNITÁRIO','FRETE','TOTAL'],[27,18,11,16,13,15]);
+    table.setAttribute('aria-label',`Lançamentos de ${description}`);
+    for(const month of buildManagementRankingLaunchMonths(rows)) {
+      const body=table.createTBody();
+      for(const launch of month.rows) {
+        const tr=body.insertRow();
+        tr.dataset.launchId=launch.id??'';
+        cell(tr,'product',launch.product);
+        cell(tr,'paymentDate',formatDetailDate(launch.paymentDate));
+        cell(tr,'quantity',formatDetailQuantity(launch.quantity));
+        cell(tr,'unit',formatDetailUnit(launch.unit));
+        cell(tr,'freight',money(launch.freight??0));
+        cell(tr,'total',money(launch.total),1,'gm-money');
+      }
+      const total=body.insertRow();
+      total.className='gm-ranking-subtotal';
+      const label=make('th','',`TOTAL DO MÊS — ${month.period}`);
+      label.scope='row';label.colSpan=2;total.append(label);
+      cell(total,'quantity',formatDetailQuantity(month.subtotal.quantity));
+      const spacer=make('td');spacer.colSpan=2;total.append(spacer);
+      cell(total,'total',money(month.subtotal.total),1,'gm-money');
+    }
+    return table;
+  }
+  function rankingBreakdown(group,section,branch) {
+    const byProduct=section==='stages';
+    const heading=byProduct?'PRODUTO':'FORNECEDOR';
+    const table=tableWithColumns('gm-ranking-detail gm-ranking-breakdown',
+      [heading,'QTDE. LINHAS','QTD TOTAL','TOTAL GASTO'],[47,15,17,21]);
+    table.setAttribute('aria-label',`${byProduct?'Produtos da etapa':'Fornecedores da conta'} ${group.name} — ${branch}`);
+    const body=table.createTBody();
+    for(const item of buildManagementRankingBreakdown(group,section)) {
+      const tr=body.insertRow(),name=cell(tr,'name',item.name);
+      const description=`${item.name} — ${group.name} — ${branch}`;
+      addExpansion(tr,name,item.name,`lançamentos: ${description}`,
+        ()=>[rankingDetailRow(rankingLaunches(item.rows,description))]);
+      cell(tr,'count',item.count);
+      cell(tr,'quantity',formatDetailQuantity(item.quantity));
+      cell(tr,'total',money(item.total),1,'gm-money');
+    }
+    return table;
   }
   function appendChange(target, amounts, comparisonPeriod) {
     if(Object.hasOwn(amounts,'change')){
@@ -97,35 +187,12 @@ export function createManagementReportView({document:doc=globalThis.document,dat
         const tr=make('tr');
         if(index===0)branchCell=cell(tr,'branch',branch.name,branch.expenseTypes.length+1,'gm-branch');
         const nameCell=cell(tr,'name',group.name);
-        const label=make('div','gm-expense-label');
-        const toggle=make('button','gm-expense-toggle');
-        toggle.type='button';
-        function setExpanded(expanded) {
-          toggle.setAttribute('aria-expanded',String(expanded));
-          toggle.setAttribute('aria-label',`${expanded?'Recolher':'Detalhar'} produtos: ${group.name} — ${branch.name}`);
-          toggle.textContent=expanded?'−':'+';
-        }
-        let details=[];
-        setExpanded(false);
-        toggle.addEventListener('click',()=>{
-          if(toggle.getAttribute('aria-expanded')==='true'){
-            for(const detail of details)detail.remove();
-            branchCell.rowSpan-=details.length;
-            details=[];
-            setExpanded(false);
-          } else {
-            details=group.products.map(product=>{
-              const detail=make('tr','gm-expense-product');
-              productCell(detail,product.name,branch.name,'expense');
-              expenseAmounts(detail,product,comparisonPeriod);
-              return detail;
-            });
-            tr.after(...details);
-            branchCell.rowSpan+=details.length;
-            setExpanded(true);
-          }
-        });
-        label.append(toggle,make('span','',group.name));nameCell.replaceChildren(label);
+        addExpansion(tr,nameCell,group.name,`produtos: ${group.name} — ${branch.name}`,()=>group.products.map(product=>{
+          const detail=make('tr','gm-expense-product');
+          productCell(detail,product.name,branch.name,'expense');
+          expenseAmounts(detail,product,comparisonPeriod);
+          return detail;
+        }),branchCell);
         expenseAmounts(tr,group,comparisonPeriod);
         body.append(tr);
       });
@@ -169,9 +236,20 @@ export function createManagementReportView({document:doc=globalThis.document,dat
       const body=table(section,title,labels,withQuantity?[24,28,12,12,13,11]:[24,34,14,15,13]);
       for(const branch of result.branches) {
         const groups=branch[section];
+        let branchCell;
         groups.forEach((group,index)=>{
-          const tr=make('tr');if(index===0)cell(tr,'branch',branch.name,groups.length+1,'gm-branch');
-          if(withQuantity)productCell(tr,group.name,branch.name,'launches');else cell(tr,'name',group.name);
+          const tr=make('tr');
+          if(index===0)branchCell=cell(tr,'branch',branch.name,groups.length+1,'gm-branch');
+          if(withQuantity)productCell(tr,group.name,branch.name,'launches');
+          else {
+            const name=cell(tr,'name',group.name);
+            const description=`${group.name} — ${branch.name}`;
+            const detailType={suppliers:'lançamentos',stages:'produtos',accounts:'fornecedores'}[section];
+            addExpansion(tr,name,group.name,`${detailType}: ${description}`,()=>{
+              const detail=section==='suppliers'?rankingLaunches(group.rows,description):rankingBreakdown(group,section,branch.name);
+              return [rankingDetailRow(detail)];
+            },branchCell);
+          }
           cell(tr,'count',group.count);if(withQuantity)cell(tr,'quantity',number(group.quantity));
           cell(tr,'total',money(group.total),1,'gm-money');cell(tr,'percentage',percent(group.percentage));body.append(tr);
         });
