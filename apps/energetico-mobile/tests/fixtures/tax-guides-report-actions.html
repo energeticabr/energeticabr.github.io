@@ -4,13 +4,18 @@
 import { createTaxGuidesReportView } from '/src/ui/tax-guides-report-view.js';
 import { decorateReportPrint } from '/src/ui/report-print.js';
 const row={id:'7',hasAttachments:false,fields:{TIPO:'INSS',FILIAL:'004 - EDIFÍCIO XAVANTE',COMPETENCIA:'2026-10-20',VENCIMENTO:'2026-11-20',VALOR:null,STATUS:'PENDENTE'}};
-const data={loadSnapshot:async()=>({rows:[row,{...row,id:'8',hasAttachments:true,fields:{...row.fields,TIPO:'FGTS',STATUS:'SUBMETIDO'}}]}),
+const params=new URLSearchParams(location.search),mode=params.get('mode');
+const submitted={...row,id:'8',hasAttachments:true,fields:{...row.fields,TIPO:'FGTS',STATUS:'SUBMETIDO'}};
+const rows=[row,submitted];
+if(mode==='many-rows'){
+  for(let i=0;i<40;i++)rows.push({...row,id:String(9+i)});
+}
+const data={loadSnapshot:async()=>({rows}),
 loadEditor:async()=>({item:row,attachments:{existingFiles:[]}}),saveEditor:async()=>{}};
-const params=new URLSearchParams(location.search);
 if(params.has('keyboard'))Object.defineProperty(window,'visualViewport',{value:Object.assign(new EventTarget(),{width:innerWidth,height:Math.round(innerHeight*.55),offsetTop:0,offsetLeft:0})});
 const view=decorateReportPrint(createTaxGuidesReportView({document,data,pickAttachments:async()=>[new File(['guide'],'guia.pdf',{type:'application/pdf'})]}),{action:'open-tax-guides-report'});
-await view.open();const mode=params.get('mode');
-if(mode!=='report'){
+await view.open();
+if(mode!=='report'&&mode!=='many-rows'){
   view.element.querySelector(`[data-guide-id="7"] [data-guide-action="${mode==='confirm'?'attach':mode}"]`).click();
   if(mode==='confirm')view.element.querySelector('[data-source="files"]').click();
   await new Promise(resolve=>setTimeout(resolve,40));
@@ -19,8 +24,16 @@ await new Promise(resolve=>requestAnimationFrame(()=>requestAnimationFrame(resol
 const rect=node=>{const r=node.getBoundingClientRect();return {x:r.x,y:r.y,right:r.right,bottom:r.bottom,width:r.width,height:r.height};};
 const panel=document.querySelector('.tgr-panel'),editor=document.querySelector('.tgr-editor');
 const rowFills=Object.fromEntries([...panel.querySelectorAll('tbody tr')].map(row=>[row.dataset.guideStatus,[...row.cells].map(cell=>getComputedStyle(cell).backgroundColor)]));
+const scroll=panel.querySelector('.tgr-scroll');
+if(mode==='many-rows')scroll.scrollTop=scroll.scrollHeight;
+const scrollRect=rect(scroll),lastRow=rect(scroll.querySelector('tbody tr:last-child'));
+const rotated=view.element.dataset.reportPortrait==='true';
+const lastRowInScroll=mode==='many-rows'&&(rotated
+  ? lastRow.x>=scrollRect.x-1&&lastRow.right<=scrollRect.right+1
+  : lastRow.y>=scrollRect.y-1&&lastRow.bottom<=scrollRect.bottom+1);
 document.documentElement.dataset.layout=JSON.stringify({panel:rect(panel),editor:editor&&rect(editor),
 rootOverflow:document.documentElement.scrollWidth>innerWidth+1,panelOverflow:panel.scrollWidth>panel.clientWidth+1,
+tableScrollTop:scroll.scrollTop,lastRowInScroll,
 buttons:[...document.querySelectorAll('.tgr-editor button')].filter(n=>!n.closest('[hidden]')).map(rect),
 confirmation:[...document.querySelectorAll('[data-guide-confirm]:not([hidden]) button')].map(button=>button.textContent),rowFills,
 input:editor?.querySelector('input')&&rect(editor.querySelector('input')), sources:editor?.querySelectorAll('[data-source]').length,
