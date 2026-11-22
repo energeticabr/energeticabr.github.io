@@ -108,7 +108,7 @@ button.gantt-toggle {
 }
 .gantt-cluster--description[data-tone="finished"] { background: var(--gantt-finished); }
 .gantt-name { font-size: .9rem; font-weight: 800; white-space: normal; overflow-wrap: anywhere; }
-:is(.gantt-start-button, .gantt-finish-button) {
+:is(.gantt-visibility-button, .gantt-start-button, .gantt-finish-button) {
   display: block;
   width: max-content;
   max-width: 100%;
@@ -124,8 +124,8 @@ button.gantt-toggle {
   cursor: pointer;
   touch-action: manipulation;
 }
-.gantt-row-actions { display: flex; justify-content: flex-end; gap: 4px; }
-.gantt-row-actions > :is(.gantt-start-button, .gantt-finish-button) {
+.gantt-row-actions { display: flex; flex-wrap: wrap; justify-content: flex-end; gap: 4px; }
+.gantt-row-actions > :is(.gantt-visibility-button, .gantt-start-button, .gantt-finish-button) {
   margin: 0;
   min-width: 44px;
   border-color: #bfd7e1;
@@ -133,7 +133,9 @@ button.gantt-toggle {
   color: #0d4d61;
 }
 .gantt-row-actions > button:not(:only-child) { padding-inline: 6px; }
-.gantt-finish-button:disabled { background:#dbe2e8; border-color:#a7b3bc; color:#465763; cursor:default; }
+.gantt-row-actions > :is(:disabled, [aria-disabled="true"]) {
+  background:#dbe2e8; border-color:#a7b3bc; color:#465763; cursor:default;
+}
 .gantt-finish-overlay { position:absolute; inset:0; z-index:25; display:grid; place-items:center; padding:12px; box-sizing:border-box; background:#05202e88; }
 .gantt-overlay.report-landscape-viewport .gantt-finish-overlay .gantt-finish-form { display:grid; gap:10px; width:min(100%,360px)!important; height:auto!important; max-height:100%!important; min-height:0; box-sizing:border-box; overflow:auto; padding:16px!important; border-radius:12px!important; background:#fff; color:#112b3a; box-shadow:0 6px 24px #0004; }
 .gantt-finish-form h2 { margin:0; font-size:18px; }
@@ -185,6 +187,7 @@ button.gantt-toggle { flex: 0 0 32px; min-height: 32px; padding: 0; font-size: 1
 .gantt-bar--dates-below .gantt-bar-date--start { left: var(--gantt-start-date-left); }
 .gantt-bar--dates-below .gantt-bar-date--end { left: var(--gantt-end-date-left); right: auto; }
 .gantt-bar--dates-below .gantt-bar-date-separator { top: calc(100% + 4px); left: var(--gantt-date-separator-left); transform: none; visibility: visible; }
+.gantt-bar[aria-disabled="true"] { cursor: wait; }
 
 .gantt-overlay[data-report-compact-height="true"] {
   padding-inline: env(safe-area-inset-left) env(safe-area-inset-right);

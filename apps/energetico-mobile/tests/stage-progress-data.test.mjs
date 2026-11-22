@@ -395,3 +395,41 @@ test("stage finalization refuses a pending description on a later page", async (
   });
   await assert.rejects(create({ repository }).finalizeStage("7", "2026-10-08"), { code: "stage_progress_incomplete" });
 });
+
+test("GANTT reads the display classification and writes only that field in both directions", async () => {
+  const name = "GANTT_EXIBICAO";
+  const hidden = "NÃO EXIBIR";
+  const visible = "EXIBIR";
+  let item = { ...launch(7, 0.4, { field_6: "ATIVIDADE COMUM" }), eTag: '"stage,0"' };
+  let writes = 0;
+  const { repository } = fixture({
+    async getColumns(_site, list) {
+      return list === "LANCAMENTOOBRA" ? [...columns(list), { name, choice: { choices: [visible, hidden] } }] : columns(list);
+    },
+    async getItemsPage(_site, list) {
+      return { items: [list === "LANCAMENTOOBRA" ? item : activity()], hasMore: false };
+    },
+    async getItem(_site, list, id) {
+      assert.deepEqual([list, id], ["LANCAMENTOOBRA", "7"]);
+      return item;
+    },
+    async updateItem(site, list, id, fields, { eTag }) {
+      assert.deepEqual([site, list, id, eTag], ["personal", "LANCAMENTOOBRA", "7", '"stage,' + writes + '"']);
+      assert.deepEqual(fields, { [name]: writes === 0 ? hidden : visible });
+      writes++;
+      item = { ...item, eTag: '"stage,' + writes + '"', fields: { ...item.fields, ...fields } };
+      return item;
+    },
+  });
+  const data = create({ repository });
+  const initial = (await data.loadSnapshot()).launches[0];
+  assert.equal(initial.visibility, visible);
+  const suppressed = await data.setStageVisibility("7", hidden, { expectedStage: initial });
+  assert.deepEqual(suppressed, { ...initial, visibility: hidden });
+  assert.deepEqual(await data.setStageVisibility("7", hidden, { expectedStage: initial }), suppressed);
+  assert.equal((await data.loadSnapshot()).launches[0].visibility, hidden);
+  await assert.rejects(data.setStageVisibility("7", visible, { expectedStage: { ...suppressed, branch: "Outra filial" } }),
+    { code: "stage_progress_changed" });
+  assert.deepEqual(await data.setStageVisibility("7", visible, { expectedStage: suppressed }), initial);
+  assert.equal(writes, 2);
+});

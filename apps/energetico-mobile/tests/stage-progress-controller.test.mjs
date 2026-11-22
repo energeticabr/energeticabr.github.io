@@ -582,7 +582,8 @@ test('GANTT abre localmente, pede leitura e retoma o próprio painel após o log
   });
   await h.controller.start();
   assert.equal(panels.length, 1);
-  assert.deepEqual(Object.keys(panels[0].data), ['loadSnapshot', 'startActivity', 'startStage', 'finalizeActivity', 'finalizeStage', 'loadAssignments', 'loadCostSnapshot']);
+  assert.deepEqual(Object.keys(panels[0].data), ['loadSnapshot', 'setStageVisibility', 'startActivity', 'startStage',
+    'finalizeActivity', 'finalizeStage', 'loadAssignments', 'loadCostSnapshot']);
   assert.deepEqual(grants, [[scopes, { resumeAction: 'open-stage-gantt' }]]);
   assert.equal(tokens, 2, "duas consultas simultâneas compartilham o mesmo consentimento");
   assert.deepEqual(await panels[0].data.loadAssignments({ branch: 'Xavante', activityIds: ['129'] }), { complete: true, rows: [] });
@@ -642,6 +643,32 @@ for (const [kind, operation] of [['activity', 'finalize'], ['stage', 'finalize']
   assert.deepEqual(grants, [{ resumeAction: 'open-stage-gantt', stageFinishDraft: { id: '129', date: '2026-11-12',
     ...(kind === 'stage' ? { kind } : {}), ...(operation === 'start' ? { operation } : {}),
   } }]);
+});
+
+test('Gantt changes stage visibility after authorizing without leaving the current filter', async t => {
+  let panel, granted = false;
+  const row = { id: '129', branch: 'Xavante', stage: 'Fundação', visibility: 'NÃO EXIBIR' };
+  const h = harness(t, {
+    ganttFactory: async ({ data }) => (panel = { data, async open() {}, destroy() {} }),
+    stageProgressDataFactory: async ({ tokenProvider }) => ({
+      async setStageVisibility(id, visibility, options) {
+        assert.equal(await tokenProvider(['Sites.ReadWrite.All']), 'write-token');
+        assert.equal(options.expectedStage, row);
+        assert.equal(options.signal.aborted, false);
+        return { ...row, id, visibility };
+      },
+    }),
+    auth: {
+      async getToken() { if (!granted) throw authRequired(); return 'write-token'; },
+      async authorize(scopes, options) {
+        assert.deepEqual(scopes, ['Sites.ReadWrite.All']);
+        assert.deepEqual(options, { resumeAction: 'open-stage-gantt', interaction: 'popup' });
+        granted = true;
+      },
+    },
+  });
+  await h.controller.start(); await h.view.emit('open-stage-gantt');
+  assert.deepEqual(await panel.data.setStageVisibility(row.id, 'EXIBIR', { expectedStage: row }), { ...row, visibility: 'EXIBIR' });
 });
 
 test('pending Gantt redirect passes finish draft to its own view without writing', async t => {

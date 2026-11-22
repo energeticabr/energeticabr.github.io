@@ -8511,17 +8511,18 @@ export function createAppController({
       for (const signal of signals) signal.addEventListener('abort', cancel, { once: true });
       const finalizingStage = method === 'finalizeStage';
       const starting = method === 'startStage' || method === 'startActivity';
-      const writing = starting || finalizingStage || method === 'finalizeActivity';
-      const resumeOptions = writing ? { stageFinishDraft: { id: args[0], date: args[1],
+      const changingDates = starting || finalizingStage || method === 'finalizeActivity';
+      const changingVisibility = method === 'setStageVisibility';
+      const writing = changingDates || changingVisibility;
+      const resumeOptions = changingDates ? { stageFinishDraft: { id: args[0], date: args[1],
         ...(finalizingStage || method === 'startStage' ? { kind: 'stage' } : {}),
         ...(starting ? { operation: 'start' } : {}),
-      } } : undefined;
+      } } : changingVisibility ? { interaction: 'popup' } : undefined;
       const getToken = ordersGalleryTokenProvider(assertAction, resumeAction, () => resumeOptions);
       const writeScopes = ['Sites.ReadWrite.All'];
       try {
-        // Finish consent before checking linked descriptions so the write does not
-        // wait on an authorization screen after the fresh dependency check.
-        const stageWriteToken = finalizingStage ? await getToken(writeScopes) : null;
+        // Complete consent before checking dependencies or starting the immediate visibility update.
+        const stageWriteToken = finalizingStage || changingVisibility ? await getToken(writeScopes) : null;
         const tokenProvider = async scopes => {
           assertAction();
           if (writing && scopes?.includes('Sites.ReadWrite.All')) return stageWriteToken || getToken(writeScopes);
@@ -8620,6 +8621,7 @@ export function createAppController({
           const document = globalThis.document;
           const panel = gantt
             ? decorateControllerReport(await ganttFactory({ data: { loadSnapshot: data.loadSnapshot,
+              setStageVisibility: (id, visibility, options) => runStageAction('setStageVisibility', [id, visibility], options),
               startActivity: (id, date, options) => runStageAction('startActivity', [id, date], options),
               startStage: (id, date, options) => runStageAction('startStage', [id, date], options),
               finalizeActivity: data.finalizeActivity, finalizeStage: data.finalizeStage,

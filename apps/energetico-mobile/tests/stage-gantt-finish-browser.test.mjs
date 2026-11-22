@@ -6,7 +6,7 @@ import { createServer } from 'vite';
 import { JSDOM } from 'jsdom';
 import { runBrowserLayout } from './helpers/browser-layout-runner.mjs';
 
-test('Gantt alinha INICIAR à esquerda de FINALIZAR e abre os formulários no celular e PC', { timeout: 90000 }, async t => {
+test('Gantt alinha SUPRIMIR à esquerda de INICIAR e abre os formulários no celular e PC', { timeout: 90000 }, async t => {
   const browser = [process.env.CHROME_BIN, 'C:/Program Files/Google/Chrome/Application/chrome.exe', '/usr/bin/google-chrome', '/usr/bin/chromium'].find(path => path && existsSync(path));
   if (!browser) return t.skip('Chrome unavailable');
   const server = await createServer({ root: fileURLToPath(new URL('..', import.meta.url)), server: { host: '127.0.0.1', port: 0 }, logLevel: 'silent' });
@@ -28,6 +28,8 @@ test('Gantt alinha INICIAR à esquerda de FINALIZAR e abre os formulários no ce
         assert.equal(result.date, '2026-11-17');
         assert.ok(result.visible && result.formFits, JSON.stringify({ width, result }));
         assert.deepEqual(result.startDialog, { startFits: true, touch: true, date: '', visible: true }, JSON.stringify({ width, result }));
+        assert.deepEqual(result.visibility, { nextToStart: true, inside: true, touch: true, filterFits: true,
+          filterOptions: ['EXIBIR', 'NÃO EXIBIR'] }, JSON.stringify({ width, result }));
       } finally { dom.window.close(); }
     }
   } finally { await server.close(); }
