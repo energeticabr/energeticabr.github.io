@@ -1,7 +1,7 @@
 import { reportLayoutRect } from './report-landscape.js';
 const LOGO = new URL('../../../../assets/logo-energetica-oficial.png', import.meta.url).href;
 export const REPORT_PDF_TITLES = Object.freeze({
- 'open-tax-guides-report':'Relatório INSS e FGTS',
+ 'open-tax-guides-report':'Relatório INSS, FGTS',
  'open-dda-report':'Relatório DDA',
  'open-nfe-report':'Relatório de notas fiscais',
  'open-sicoob-transaction-report':'Relatório de transações Sicoob',

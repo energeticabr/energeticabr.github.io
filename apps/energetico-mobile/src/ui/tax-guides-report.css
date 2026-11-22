@@ -46,10 +46,14 @@
 .tgr-table { width: 100%; border-collapse: collapse; background: #fff; }
 .tgr-table th, .tgr-table td { padding: 10px; border: 1px solid #c2d4dd; text-align: left; vertical-align: middle; }
 .tgr-table th { color: #fff; background: #07566b; }
+.tgr-table td, .tgr-table td button { font-weight: 600; }
 .tgr-table tr[data-guide-status="PENDENTE"] > td { background: #ffd9dc; }
 .tgr-table tr[data-guide-status="SUBMETIDO"] > td { background: #d5f2dc; }
 .tgr-table td:nth-child(3) { min-width: 120px; overflow-wrap: anywhere; }
 .tgr-table td:nth-child(4) { white-space: nowrap; }
+.tgr-tax-type { display: inline-block; padding: 2px 5px; border-radius: 999px; font-weight: 700; }
+.tgr-tax-type[data-guide-type="INSS"] { color: #123d71; background: #d8eaff; }
+.tgr-tax-type[data-guide-type="FGTS"] { color: #542578; background: #eee1fa; }
 .tgr-attachment { display: inline-flex; align-items: center; gap: 4px; }
 .tgr-attachment svg { width: 24px; height: 28px; }
 .tgr-attachment-actions { display: inline-flex; gap: 4px; }
@@ -87,6 +91,7 @@
 .tgr-backdrop[data-report-compact-height="true"] .tgr-panel { --tgr-padding: 8px; }
 .tgr-backdrop[data-report-compact-height="true"] .tgr-filters { gap: 8px; }
 .tgr-backdrop[data-report-compact-height="true"] :is(.tgr-table th, .tgr-table td) { padding: 6px; font-size: 12px; }
+.tgr-backdrop[data-report-width-mode="narrow"] .tgr-panel { width: 96%; }
 .tgr-backdrop[data-report-width-mode="narrow"] :is(.tgr-table th, .tgr-table td) { padding: 4px; font-size: 11px; }
 .tgr-backdrop[data-report-width-mode="narrow"] .tgr-table td:nth-child(3) { min-width: 72px; }
 .tgr-backdrop[data-report-width-mode="narrow"] .tgr-attachment-actions { flex-wrap: wrap; }
