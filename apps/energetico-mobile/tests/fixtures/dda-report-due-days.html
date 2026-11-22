@@ -67,7 +67,8 @@ for(const due of document.querySelectorAll('.ddr-due')){
  const style=getComputedStyle(badge);
  // offset positions stay in report coordinates when the phone rotates it.
  state.rows.push({text:badge.textContent,tone:due.dataset.dueTone,color:style.color,background:style.backgroundColor,
-  dateText:date.textContent,dateFits:date.scrollWidth<=date.clientWidth+1&&date.offsetWidth<=due.clientWidth,
+  dateText:date.textContent,dateAlign:getComputedStyle(date).textAlign,
+  dateFits:date.scrollWidth<=date.clientWidth+1&&date.offsetWidth<=due.clientWidth,
   dateColor:getComputedStyle(due).color,border:style.borderTopColor,fontSize:parseFloat(style.fontSize),height:badge.offsetHeight,
   below:badge.offsetTop>=date.offsetTop+date.offsetHeight,
   centered:Math.abs(badge.offsetLeft+badge.offsetWidth/2-due.clientWidth/2)<=1,
@@ -79,7 +80,8 @@ for(const issuance of document.querySelectorAll('.ddr-due > .ddr-issuance')){
  if(!badge){state.missingIssued=issuance.querySelector('.ddr-issued-missing').textContent;continue;}
  const style=getComputedStyle(badge),labelStyle=getComputedStyle(label),dueBadge=issuance.previousElementSibling;
  state.issued.push({text:badge.querySelector('time').textContent,age:badge.querySelector('small').textContent,
-  label:label.textContent,labelColor:labelStyle.color,divider:labelStyle.borderTopWidth,color:style.color,background:style.backgroundColor,
+  label:label.textContent,labelAlign:labelStyle.textAlign,labelColor:labelStyle.color,
+  divider:labelStyle.borderTopWidth,color:style.color,background:style.backgroundColor,
   fontSize:parseFloat(style.fontSize),
   below:label.offsetTop>=dueBadge.offsetTop+dueBadge.offsetHeight&&badge.offsetTop>=label.offsetTop+label.offsetHeight,
   centered:Math.abs(badge.offsetLeft+badge.offsetWidth/2-label.offsetLeft-label.offsetWidth/2)<=1,
