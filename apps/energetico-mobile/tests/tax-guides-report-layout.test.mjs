@@ -12,7 +12,8 @@ test('full-height tax report and edit dialogs fit landscape phones, rotated phon
  const root=fileURLToPath(new URL('..',import.meta.url)),outDir=resolve(root,'work/tax-report-layout');
  await build({root,configFile:false,base:'/',logLevel:'silent',build:{outDir,emptyOutDir:true,rollupOptions:{input:resolve(root,'tests/fixtures/tax-guides-report-actions.html')}}});
  const server=await preview({root,configFile:false,logLevel:'silent',build:{outDir},preview:{host:'127.0.0.1',port:0}});
- try{for(const [width,height] of [[320,700],[390,844],[844,390],[1365,900]])for(const mode of ['report','many-rows','attach','amount','amount-keyboard','confirm']){
+ const viewports=[[320,700],[390,844],[844,390],[1365,900],[390,220]];
+ try{for(const [width,height] of viewports)for(const mode of (height<250?['many-rows']:['report','many-rows','attach','amount','amount-keyboard','confirm','transition','print-error'])){
    const keyboard=mode==='amount-keyboard';
    const result=await runBrowserLayout(browser,{width,height,captureScreenshot:Boolean(process.env.TAX_REPORT_SCREENSHOTS),url:`http://127.0.0.1:${server.httpServer.address().port}/tests/fixtures/tax-guides-report-actions.html?mode=${keyboard?'amount':mode}${keyboard?'&keyboard=1':''}`});
    const dom=new JSDOM(result.stdout),layout=JSON.parse(dom.window.document.documentElement.dataset.layout);dom.window.close();
@@ -25,6 +26,17 @@ test('full-height tax report and edit dialogs fit landscape phones, rotated phon
    if(mode==='many-rows'){
      assert.ok(layout.tableScrollTop>0,desc);
      assert.ok(layout.lastRowInScroll,desc);
+   }
+   if(mode==='print-error'){
+     const {printError,panel}=layout;
+     assert.ok(printError.x>panel.x&&printError.right<panel.right&&printError.y>panel.y&&printError.bottom<panel.bottom,desc);
+   }
+   if(mode==='transition'){
+     const {surface,indicator}=layout.transition;
+     for(const edge of ['x','y','right','bottom'])assert.ok(Math.abs(surface[edge]-layout.panel[edge])<1,desc);
+     for(const [start,end] of [['x','right'],['y','bottom']]){
+       assert.ok(Math.abs((surface[start]+surface[end])-(indicator[start]+indicator[end]))<2,desc);
+     }
    }
    for(const r of [layout.panel,layout.editor,...layout.buttons,layout.input].filter(Boolean))assert.ok(r.x>=-1&&r.y>=-1&&r.right<=width+1&&r.bottom<=height+1,desc);
    if(keyboard)for(const r of [...layout.buttons,layout.input].filter(Boolean))assert.ok(r.y>=-1&&r.bottom<=layout.visibleHeight+1,desc);
