@@ -1,17 +1,78 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import {JSDOM} from 'jsdom';
+import {captureFilteredReport} from '../src/ui/report-print.js';
 const {createOrderValidationReportView}=await import('../src/ui/order-validation-report-view.js').catch(()=>({}));
 const order={id:'362',branch:'004 - EDIFÍCIO XAVANTE',supplier:'PETRANET',invoice:'PENDENTE',status:'PENDENTE AUDITORIA',total:99.8,created:'2026-10-05',invalidTotal:false};
 const launch={id:'3505',orderId:'362',branch:order.branch,supplier:order.supplier,product:'TARIFA DE INTERNET',description:'<img src=x onerror=alert(1)>',total:99.8,invalidTotal:false};
-function setup(t,loader=async()=>({orders:[order],launches:[launch]}),portrait=false){
+function setup(t,loader=async()=>({orders:[order],launches:[launch]}),portrait=false,{listOrderPdfs,openMediaCollection}={}){
   assert.equal(typeof createOrderValidationReportView,'function');
   const dom=new JSDOM('<main id="app"><button>Mascote</button></main>');let vertical=portrait;
   dom.window.matchMedia=()=>({get matches(){return vertical;}});
-  const view=createOrderValidationReportView({document:dom.window.document,data:{loadOrderValidationSnapshot:loader}});
+  const view=createOrderValidationReportView({document:dom.window.document,data:{loadOrderValidationSnapshot:loader,listOrderPdfs},openMediaCollection});
   t.after(()=>{view.destroy();dom.window.close();});
   return {view,root:view.element,dom,rotate(value){vertical=value;dom.window.dispatchEvent(new dom.window.Event('resize'));}};
 }
+
+const tick=()=>new Promise(resolve=>setImmediate(resolve));
+
+test('main table shows one PDF button to the right of each matching order ID, with a separate collection per order',async t=>{
+  const files=id=>['nota','comprovante'].map(name=>({fileName:`${id}-${name}.pdf`}));
+  const orders=[order,{...order,id:'577'},{...order,id:'578'}];
+  const lookups=[],previews=[];
+  const {view,root,dom}=setup(t,async()=>({orders,launches:[launch]}),false,{
+    async listOrderPdfs(id){lookups.push(id);return id==='578'?[]:files(id);},
+    async openMediaCollection(items,options){previews.push({items,options});},
+  });
+  await view.open();await tick();
+  const button=id=>root.querySelector(`[aria-label="Abrir PDFs do pedido ${id}"]`);
+  assert.deepEqual([...lookups].sort(),['362','577','578']);
+  for(const id of ['362','577']){
+    const control=button(id);
+    assert.equal(control.closest('td').dataset.column,'id');
+    assert.equal(control.closest('tr').dataset.id,id);
+    assert.equal(control.previousElementSibling.textContent,id);
+    assert.ok(control.querySelector('svg'));
+    control.click();
+    assert.deepEqual(previews.at(-1).items,files(id));
+    assert.equal(previews.at(-1).options.resolveReturnFocus(),control);
+  }
+  assert.equal(button('578'),null);
+  const filter=root.querySelector('[name=id]');filter.value='362';filter.dispatchEvent(new dom.window.Event('change'));
+  assert.equal(root.querySelectorAll('.pl-pdf-attachment').length,1);
+  assert.equal(previews[0].options.resolveReturnFocus(),root.querySelector('.ov-content'));
+  assert.equal(lookups.length,3,'changing filters reuses attachment results');
+  const table=captureFilteredReport(root).pages[0].blocks.find(block=>block.type==='table');
+  assert.equal(table.rows[1].cells[0].runs.map(run=>run.text).join(''),'362');
+  view.close();
+  assert.equal(previews[0].options.signal.aborted,true);
+});
+
+test('refresh clears cached PDF results and closing aborts attachment discovery',async t=>{
+  const requests=[];
+  const {view,root}=setup(t,undefined,false,{
+    listOrderPdfs(id,{signal,interactive}){
+      return new Promise((resolve,reject)=>requests.push({id,signal,interactive,resolve,reject}));
+    },
+    async openMediaCollection(){},
+  });
+  await view.open();
+  requests[0].reject(Object.assign(new Error('Consent required'),{code:'AUTH_REQUIRED'}));
+  await tick();
+  const retry=root.querySelector('.pl-pdf-retry');
+  assert.equal(retry.hidden,false);
+  retry.click();await tick();
+  assert.equal(requests[1].interactive,true);
+  requests[1].resolve([]);await tick();
+  assert.equal(retry.hidden,true);
+  root.querySelector('.pl-refresh').click();await tick();
+  assert.equal(requests[2].id,order.id);
+  assert.equal(requests[2].interactive,false);
+  view.close();
+  assert.equal(requests[2].signal.aborted,true);
+  requests[2].resolve([{fileName:'late.pdf'}]);await tick();
+  assert.equal(root.querySelector('.pl-pdf-attachment'),null);
+});
 test('fifth report shows six filtered summary cards and ID-selected full detail without executing baixa',async t=>{
   const {view,root,dom}=setup(t);await view.open();
   assert.equal(root.querySelectorAll('.ov-filters select').length,6);

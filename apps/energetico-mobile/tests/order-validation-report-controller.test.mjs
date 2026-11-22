@@ -88,6 +88,53 @@ test('validation consent uses its own resume ID and reacquires exactly the reque
   assert.deepEqual(scopesRequested, [['Sites.Read.All'], ['Sites.Read.All']]);
 });
 
+test('validation forwards order PDFs and preserves the report session when granting attachment access', async t => {
+  const scopes=['https://example.sharepoint.com/AllSites.Read'];
+  const abort=new AbortController();
+  const query={signal:abort.signal,interactive:true};
+  const files=[{fileName:'577.pdf',source:async()=>new Blob()}];
+  const accesses=[],grants=[],previews=[];
+  let tokens=0,reportData;
+  const h=harness({
+    paymentLedgerDataFactory:async ({tokenProvider})=>({
+      async loadOrderValidationSnapshot(){return {orders:[],launches:[]};},
+      async listPaymentLedgerPdfs(kind,id,options){
+        assert.equal(await tokenProvider(scopes,options),'attachment-token');
+        accesses.push({kind,id,options});
+        return files;
+      },
+    }),
+    orderValidationReportFactory:async ({data,openMediaCollection})=>{
+      reportData=data;
+      return {
+        async open(){
+          await data.loadOrderValidationSnapshot({signal:abort.signal});
+          await openMediaCollection(await data.listOrderPdfs('577',query),{signal:abort.signal,returnLabel:'Voltar ao relatório'});
+        },
+        destroy(){},
+      };
+    },
+    native:{
+      importSharedItems:async()=>[],
+      previewMediaCollection(items,options){previews.push({items,options});},
+    },
+    auth:{
+      async getToken(){if(++tokens===1)throw authRequired();return 'attachment-token';},
+      async authorize(scopes,options){grants.push({scopes,options});},
+    },
+  });
+  t.after(()=>h.controller.stop());
+  await h.controller.start();
+  assert.equal(await h.view.emit('open-order-validation-report'),true);
+  assert.deepEqual(accesses,[{kind:'order',id:'577',options:query}]);
+  assert.deepEqual(grants,[{scopes,options:{resumeAction:'order-validation-report',interaction:'popup'}}]);
+  assert.deepEqual(previews[0].items,files);
+  assert.equal(previews[0].options.signal,abort.signal);
+  h.controller.stop();
+  await assert.rejects(reportData.listOrderPdfs('577',query),/relatório foi encerrada/);
+  assert.equal(accesses.length,1);
+});
+
 test('pending validation redirect action reopens locally', async t => {
   let opens = 0;
   const h = harness({

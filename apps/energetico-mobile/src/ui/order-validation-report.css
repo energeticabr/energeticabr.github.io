@@ -1,6 +1,10 @@
 .ov-dialog:not(.pl-dialog--portrait) { height:100dvh; max-height:100dvh; }
 .ov-filters { grid-template-columns:12fr 15fr 19fr 21fr 13fr 17fr 6fr; }
 .ov-content { font-family:Arial,sans-serif; color:#003366; }
+.ov-dialog:has(> .report-navigation) .ov-content {
+  /* Keep the first-column PDF targets clear of the navigation arrows. */
+  padding-inline:max(0px,calc(var(--report-navigation-size,56px) + 10px - max(0px,(var(--report-width,100vw) - 1400px) / 2)));
+}
 .ov-logo { background:#e6f0ff; border:2px solid #003366; text-align:center; margin-bottom:7px; }
 .ov-logo img { display:block; margin:4px auto; height:clamp(32px,calc(5 * var(--report-vw, 1vw)),70px); max-width:40%; object-fit:contain; }
 .ov-logo h1 { border-top:2px solid #003366; padding:5px; margin:0; font-size:clamp(9px,calc(1.25 * var(--report-vw, 1vw)),16px); font-weight:900; }
@@ -20,6 +24,7 @@
 .ov-table { width:100%; table-layout:fixed; border-collapse:collapse; font:700 clamp(6px,calc(.8 * var(--report-vw, 1vw)),11px)/1.2 Arial,sans-serif; color:black; }
 .ov-table td,.ov-table th { border:1px solid #7f9db9; padding:clamp(2px,calc(.4 * var(--report-vw, 1vw)),7px); text-align:center; vertical-align:middle; overflow-wrap:anywhere; }
 .ov-table th { background:#d9eaf7; color:#003366; }
+.ov-section[data-section=orders] .ov-table td[data-column=id] { padding-inline:2px; }
 .ov-table td[data-column=supplier],.ov-table td[data-column=product],.ov-table td[data-column=description],.ov-table td[data-column=issues] { text-align:left; }
 .ov-row-good { background:#f3fbf3; }.ov-row-bad { background:#fff2f2; }
 .ov-table .ov-good { background:#eaf6ea; color:#274e13; }.ov-table .ov-bad { background:#fff2f2; color:#990000; }.ov-id-ok { color:#003366; }
