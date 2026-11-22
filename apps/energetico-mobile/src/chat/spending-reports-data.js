@@ -11,6 +11,7 @@ import { normalizeOrderValidationOrder, normalizeOrderValidationLaunch, assertOr
 const SITE = "personal";
 const MAX_PAGES = 100;
 const PREFER = "HonorNonIndexedQueriesWarningMayFailRandomly";
+const PAYMENT_LEDGER_LISTS = Object.freeze({ order: 'NOTASPENDENTES', launch: 'LANCAMENTOS' });
 const PROVISION_LISTS = {
   description: ['DESCRITIVOPROVISAO'],
   provision: ['PROVISÃO PGTOS', 'PROVISAO PGTOS', 'PROVISAO PAGAMENTOS'],
@@ -151,9 +152,38 @@ export function createSpendingReportsData({
     abortIfNeeded(signal);
     return Object.freeze({ launches: Object.freeze(items.map(item => {
       const row = normalizeSpendingLaunch(item, columns);
+      const attachmentFlag = String(item.fields?.Attachments ?? item.hasAttachments ?? '').trim().toLowerCase();
+      const hasAttachments = ['true', '1'].includes(attachmentFlag) ? true
+        : ['false', '0'].includes(attachmentFlag) ? false : undefined;
       return Object.freeze({ ...row, disbursement: row.disbursement === 'true' ? 'SIM'
-        : row.disbursement === 'false' ? 'NÃO' : row.disbursement });
+        : row.disbursement === 'false' ? 'NÃO' : row.disbursement, hasAttachments });
     })) });
+  }
+
+  async function listPaymentLedgerPdfs(kind, id, { signal, interactive = false } = {}) {
+    if (!Object.hasOwn(PAYMENT_LEDGER_LISTS, kind) || !/^[1-9]\d*$/.test(id)) {
+      throw new TypeError('Origem de anexo inválida.');
+    }
+    const list = await resolve(PAYMENT_LEDGER_LISTS[kind], signal);
+    let files;
+    try {
+      files = await repository.listAttachments(SITE, list, id, { signal, requireCollection: true, namesOnly: true, interactive });
+    } catch (error) {
+      abortIfNeeded(signal);
+      if (error?.status === 404) return []; // Historical launches can reference a deleted item.
+      throw error;
+    }
+    abortIfNeeded(signal);
+    return files.filter(({ name }) => /\.pdf$/i.test(name)).map(({ name }) => ({
+      fileName: name,
+      mimeType: 'application/pdf',
+      async source({ signal: downloadSignal = signal, onProgress } = {}) {
+        abortIfNeeded(signal);
+        const bytes = await repository.downloadAttachment(SITE, list, id, name, { signal: downloadSignal, onProgress });
+        abortIfNeeded(downloadSignal);
+        return new Blob([bytes], { type: 'application/pdf' });
+      },
+    }));
   }
 
   async function loadProvisionReportSnapshot({ signal } = {}) {
@@ -213,6 +243,6 @@ export function createSpendingReportsData({
     });
   }
 
-  return Object.freeze({ loadSnapshot, loadPaymentsSnapshot, loadProvisionReportSnapshot, loadOrderValidationSnapshot,
+  return Object.freeze({ loadSnapshot, loadPaymentsSnapshot, listPaymentLedgerPdfs, loadProvisionReportSnapshot, loadOrderValidationSnapshot,
     listProvisionReportAttachments, downloadProvisionReportAttachment });
 }

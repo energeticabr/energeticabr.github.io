@@ -4,6 +4,8 @@ import { buildPaymentLedger } from '../chat/payment-ledger-model.js';
 import { formatReportDate, formatReportMoney } from '../chat/contractor-report-model.js';
 import { bindSearchableFilterSelects } from './searchable-filter-selects.js';
 import { captureFilteredReport, REPORT_PDF_TITLES } from './report-print.js';
+import { createGalleryAttachmentCounts } from './gallery-attachment-counts.js';
+import { PDF_ATTACHMENT_ICON } from './report-pdf-attachment-icon.js';
 
 const COLUMNS = ['DATA PGTO', 'PEDIDO', 'ID', 'FORNECEDOR', 'FILIAL', 'CONTA', 'PRODUTO', 'VU', 'QTD', 'FRETE', 'TOTAL', 'TOTAL FORN. DIA'];
 const FILTERS = [['branch', 'FILIAL'], ['order', 'ID PEDIDO'], ['product', 'PRODUTO'], ['supplier', 'FORNECEDOR'], ['disbursement', 'DESEMBOLSO']];
@@ -12,7 +14,7 @@ const BATCH_SIZE = 200;
 const money = value => Number.isFinite(value) ? formatReportMoney(value) : 'INCOMPLETO';
 const quantity = value => Number.isFinite(value) ? new Intl.NumberFormat('pt-BR', { maximumFractionDigits: 4 }).format(value) : '—';
 
-export function createPaymentLedgerView({ document: doc = globalThis.document, data } = {}) {
+export function createPaymentLedgerView({ document: doc = globalThis.document, data, openMediaCollection } = {}) {
   if (!doc?.body || typeof data?.loadPaymentsSnapshot !== 'function') throw new TypeError('O relatório requer documento e sessão SharePoint.');
   const win = doc.defaultView;
   const make = (tag, className = '', text) => {
@@ -45,7 +47,7 @@ export function createPaymentLedgerView({ document: doc = globalThis.document, d
       const parsed = new Date(`${iso}T12:00:00Z`);
       const valid = !text || (match && Number(match[3]) >= 1000 && Number.isFinite(parsed.getTime()) && parsed.toISOString().slice(0,10) === iso);
       display.setCustomValidity(valid ? '' : 'Data inválida. Use dd/mm/yyyy.');
-      if (!valid) { controller?.abort(); revision++; snapshot=null; empty(); report.setAttribute('aria-busy','false'); refresh.disabled=false; showNotice('Data inválida. Use dd/mm/yyyy.'); return; }
+      if (!valid) { controller?.abort(); resetPdfLookups(); revision++; snapshot=null; empty(); report.setAttribute('aria-busy','false'); refresh.disabled=false; showNotice('Data inválida. Use dd/mm/yyyy.'); return; }
       input.value = iso; input.dispatchEvent(new win.Event('change'));
     });
     holder.append(display, calendar, input); dateFields.append(holder); controls.set(name, input); dateDisplays.set(name, display);
@@ -60,17 +62,19 @@ export function createPaymentLedgerView({ document: doc = globalThis.document, d
   const logoFrame = make('div', 'pl-ledger-logo-frame');
   const logo = make('img', 'pl-logo'); logo.src = LOGO; logo.alt = 'Logo Energética'; logoFrame.append(logo);
   const notice = make('p', 'pl-notice'); notice.hidden = true; notice.setAttribute('role', 'status');
+  const retryPdfs = button('pl-pdf-retry', 'Consultar PDFs novamente'); retryPdfs.hidden = true;
+  retryPdfs.dataset.reportScreenOnly = '';
   const scroll = make('div', 'pl-table-scroll'); scroll.tabIndex = 0;
   scroll.setAttribute('role', 'region'); scroll.setAttribute('aria-label', 'Tabela de pagamentos');
   const table = make('table', 'pl-table'); const head = make('thead'); const headRow = make('tr');
   const colgroup=make('colgroup');
-  for(const width of [82,62,55,95,82,82,250,72,55,65,80,90]) { const col=make('col'); col.style.width=`${width/1170*100}%`; colgroup.append(col); }
+  for(const width of [82,62,60,95,82,82,245,72,55,65,80,90]) { const col=make('col'); col.style.width=`${width/1170*100}%`; colgroup.append(col); }
   for (const label of COLUMNS) { const th = make('th', '', label); th.scope = 'col'; headRow.append(th); }
   const body = make('tbody'); head.append(headRow); table.append(colgroup, head, body);
   const loadStatus = make('p', 'pl-load-status'); loadStatus.setAttribute('role', 'status');
   loadStatus.setAttribute('data-report-screen-only', '');
   scroll.append(table, loadStatus);
-  report.append(filters, logoFrame, notice, scroll);
+  report.append(filters, logoFrame, notice, retryPdfs, scroll);
   panel.append(warning, report); root.append(panel); doc.body.append(root);
   let destroyed = false, snapshot = null, controller = null, revision = 0, pickers = null;
   let entries = [], rendered = 0, lastGroup = null, lastRow = null, currentDay = '', dayIndex = -1;
@@ -79,7 +83,97 @@ export function createPaymentLedgerView({ document: doc = globalThis.document, d
   const landscape = bindReportLandscape(root);
   addReportCloseControl({root, toolbar:filters, onClose:close});
   const showNotice = text => { notice.textContent = text; notice.hidden = !text; };
+  const canOpenPdfs = typeof data.listPaymentLedgerPdfs === 'function' && typeof openMediaCollection === 'function';
+  const pdfCells = new Map(), pdfTargets = new WeakMap(), pdfFailures = new Map();
+  let interactiveTarget;
+  const pdfLookups = createGalleryAttachmentCounts({
+    async loadAttachments(target, { signal }) {
+      const interactive = interactiveTarget === target.id;
+      if (interactive) interactiveTarget = undefined;
+      try {
+        return await data.listPaymentLedgerPdfs(target.kind, target.itemId, { signal, interactive });
+      } catch (error) {
+        if (!signal.aborted) pdfFailures.set(target.id, { target, needsConsent: error?.code === 'AUTH_REQUIRED' });
+        throw error;
+      }
+    },
+    onChange(target) {
+      if (!pdfLookups.hasError(target)) pdfFailures.delete(target.id);
+      retryPdfs.hidden = !pdfFailures.size;
+      const files = pdfLookups.attachmentsFor(target);
+      if (files?.length) for (const td of pdfCells.get(target.id) || []) showPdfControl(td, target, files);
+    },
+  });
+  const pdfObserver = canOpenPdfs && win?.IntersectionObserver ? new win.IntersectionObserver((changes, observer) => {
+    for (const change of changes) {
+      if (!change.isIntersecting || !change.target.isConnected) continue;
+      observer.unobserve(change.target);
+      const target = pdfTargets.get(change.target);
+      if (target) void pdfLookups.load(target).catch(() => {});
+    }
+  }, { root: scroll, rootMargin: '100px' }) : null;
+  function resetPdfLookups() {
+    pdfLookups.reset(); pdfFailures.clear(); interactiveTarget = undefined;
+    retryPdfs.hidden = true; retryPdfs.disabled = false;
+  }
+  function showPdfControl(td, { kind, itemId }, files) {
+    const label = kind === 'order' ? `pedido ${itemId}` : `lançamento ${itemId}`;
+    const control = button('pl-pdf-attachment');
+    control.innerHTML = PDF_ATTACHMENT_ICON;
+    control.title = `Abrir PDFs do ${label}`; control.setAttribute('aria-label', control.title);
+    let opening = false;
+    control.addEventListener('click', async () => {
+      if (opening) return;
+      const { signal } = controller;
+      opening = true;
+      try {
+        await openMediaCollection(files, {
+          signal, returnLabel: 'Voltar ao relatório',
+          resolveReturnFocus: () => root.hidden ? null : control.isConnected ? control : scroll,
+        });
+      } catch {
+        if (!signal.aborted) showNotice(`Não foi possível abrir os PDFs do ${label}.`);
+      } finally { opening = false; }
+    });
+    const content = make('span', 'pl-number-with-pdf');
+    content.append(make('span', '', itemId), control);
+    td.replaceChildren(content);
+  }
+  function watchPdfCell(td, kind, itemId) {
+    if (!/^[1-9]\d*$/.test(itemId)) return;
+    const target = { id: `${kind}:${itemId}`, kind, itemId };
+    if (!pdfCells.has(target.id)) pdfCells.set(target.id, new Set());
+    pdfCells.get(target.id).add(td);
+    const files = pdfLookups.attachmentsFor(target);
+    if (files) {
+      if (files.length) showPdfControl(td, target, files);
+    } else if (!pdfLookups.hasError(target)) {
+      if (pdfObserver) { pdfTargets.set(td, target); pdfObserver.observe(td); }
+      else void pdfLookups.load(target).catch(() => {});
+    }
+  }
+  retryPdfs.addEventListener('click', async () => {
+    const failures = [...pdfFailures.values()];
+    const first = failures.find(item => item.needsConsent) || failures[0];
+    if (!first) return;
+    const { signal } = controller;
+    retryPdfs.disabled = true;
+    interactiveTarget = first.target.id;
+    try {
+      await pdfLookups.load(first.target, { force: true, priority: true }).catch(() => {});
+      if (!signal.aborted) {
+        await Promise.allSettled(failures.filter(item => item !== first)
+          .map(({ target }) => pdfLookups.load(target, { force: true })));
+      }
+    } finally {
+      if (!signal.aborted) {
+        retryPdfs.disabled = false;
+        if (retryPdfs.hidden && doc.activeElement === retryPdfs) scroll.focus();
+      }
+    }
+  });
   function clearRows() {
+    pdfObserver?.disconnect(); pdfCells.clear();
     body.replaceChildren(); rendered = 0; lastGroup = lastRow = null; currentDay = ''; dayIndex = -1;
     dateCell = supplierCell = totalCell = null; merged.clear(); loadStatus.textContent = '';
   }
@@ -94,6 +188,7 @@ export function createPaymentLedgerView({ document: doc = globalThis.document, d
   }
   function appendRows(limit = BATCH_SIZE) {
     const end = Math.min(entries.length, rendered + limit), fragment = doc.createDocumentFragment();
+    const attachmentCells = [];
     for (; rendered < end; rendered++) {
       const { group, row } = entries[rendered], sameGroup = group === lastGroup;
       const values = displayValues(group, row);
@@ -104,9 +199,18 @@ export function createPaymentLedgerView({ document: doc = globalThis.document, d
       else dateCell.rowSpan++;
       function mergedCell(column, keys) {
         if (sameGroup && keys.every(key => lastRow[key] === row[key])) merged.get(column).rowSpan++;
-        else merged.set(column, cell(tr, column, values[column]));
+        else {
+          const td = cell(tr, column, values[column]);
+          merged.set(column, td);
+          return td;
+        }
       }
-      mergedCell('order', ['branch', 'account', 'order']); cell(tr, 'id', values.id);
+      const orderCell = mergedCell('order', ['branch', 'account', 'order']);
+      const launchCell = cell(tr, 'id', values.id);
+      if (canOpenPdfs && !printing) {
+        if (orderCell) attachmentCells.push([orderCell, 'order', values.order]);
+        if (row.hasAttachments !== false) attachmentCells.push([launchCell, 'launch', values.id]);
+      }
       if (!sameGroup) supplierCell = cell(tr, 'supplier', values.supplier); else supplierCell.rowSpan++;
       mergedCell('branch', ['branch']); mergedCell('account', ['branch', 'account']);
       const product = cell(tr, 'product', ''); product.replaceChildren(make('strong', '', values.product));
@@ -118,6 +222,7 @@ export function createPaymentLedgerView({ document: doc = globalThis.document, d
       fragment.append(tr); lastGroup = group; lastRow = row;
     }
     body.append(fragment);
+    for (const [td, kind, id] of attachmentCells) watchPdfCell(td, kind, id);
     loadStatus.textContent = entries.length ? `${rendered} de ${entries.length} lançamento(s)${rendered < entries.length ? ' · Role para baixo para carregar mais.' : ' · Fim da lista.'}` : '';
   }
   function render() {
@@ -145,7 +250,7 @@ export function createPaymentLedgerView({ document: doc = globalThis.document, d
   }
   async function load() {
     if (root.hidden || destroyed) return;
-    pickers?.close(); controller?.abort(); const current = ++revision;
+    pickers?.close(); controller?.abort(); resetPdfLookups(); const current = ++revision;
     const active = new AbortController(); controller = active; snapshot = null; empty();
     showNotice('Carregando pagamentos do SharePoint…'); report.setAttribute('aria-busy', 'true'); refresh.disabled = true;
     try {
@@ -164,7 +269,7 @@ export function createPaymentLedgerView({ document: doc = globalThis.document, d
   function orientationChanged() { landscape.update(); }
   function close() {
     if (root.hidden) return;
-    controller?.abort(); revision++; snapshot = null; pickers?.close(); empty(); root.hidden = true;
+    root.hidden = true; controller?.abort(); resetPdfLookups(); revision++; snapshot = null; pickers?.close(); empty();
     doc.body.style.overflow = oldOverflow; if (app) app.inert = oldInert;
     returnFocus?.focus?.(); returnFocus = null;
   }
@@ -244,8 +349,8 @@ export function createPaymentLedgerView({ document: doc = globalThis.document, d
       const count = rendered, top = scroll.scrollTop, current = revision, printedEntries = entries;
       printing = true; appendRows(entries.length);
       return () => {
-        if (current === revision && entries === printedEntries && !root.hidden && !destroyed) { clearRows(); appendRows(count); scroll.scrollTop = top; lastScrollTop = scroll.scrollTop; }
         printing = false;
+        if (current === revision && entries === printedEntries && !root.hidden && !destroyed) { clearRows(); appendRows(count); scroll.scrollTop = top; lastScrollTop = scroll.scrollTop; }
       };
     },
     destroy() { if (destroyed) return; close(); destroyed = true; pickers?.destroy(); scroll.removeEventListener('scroll', onScroll); win?.removeEventListener('resize', orientationChanged); win?.removeEventListener('orientationchange', orientationChanged); landscape.destroy();root.remove(); },

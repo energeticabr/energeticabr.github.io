@@ -52,6 +52,12 @@
 .pl-table td[data-column=paymentDate],.pl-table td[data-column=order],.pl-table td[data-column=supplier],.pl-table td[data-column=total] { font-weight:700; }
 .pl-table td[data-column=id],.pl-table td[data-column=branch],.pl-table td[data-column=account],.pl-table td[data-column=unit],.pl-table td[data-column=quantity],.pl-table strong { font-weight:600; }
 .pl-table td[data-column=supplierTotal] { color:red; font-weight:700; }
+.pl-table td:is([data-column=order],[data-column=id]) { padding-inline:1px; }
+.pl-number-with-pdf { display:inline-flex; align-items:center; gap:1px; max-width:100%; }
+.pl-number-with-pdf > span { min-width:0; overflow-wrap:anywhere; }
+.pl-pdf-attachment { display:inline-grid; place-items:center; flex:0 0 clamp(11px,calc(1.6 * var(--report-vw, 1vw)),19px); min-width:0; min-height:22px; padding:0; border:0; border-radius:3px; background:transparent; color:#9b1515; cursor:pointer; }
+.pl-pdf-attachment svg { display:block; width:100%; max-width:16px; height:auto; }
+.pl-pdf-retry { align-self:center; flex-shrink:0; padding:2px 6px; font:inherit; color:#9b1515; cursor:pointer; }
 .pl-day-blue { background:#e6f0ff; }
 .pl-pager { flex-shrink:0; display:flex; align-items:center; justify-content:space-between; gap:6px; font-size:10px; }
 .pl-dialog .pl-page-button { border:2px solid #a20000; border-radius:50%; width:28px; min-width:0; height:28px; min-height:0; padding:0; color:#a20000; background:white; font-size:18px; }

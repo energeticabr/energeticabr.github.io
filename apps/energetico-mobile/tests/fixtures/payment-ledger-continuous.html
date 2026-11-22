@@ -7,7 +7,62 @@ import '../../src/ui/report-print.css';
 import {createPaymentLedgerView} from '../../src/ui/payment-ledger-view.js';
 import {decorateReportNavigation} from '../../src/ui/report-navigation.js';
 import {decorateReportPrint,captureFilteredReport} from '../../src/ui/report-print.js';
+async function checkAttachments(){
+  const {createAttachmentPreview}=await import('../../src/web/attachment-preview.js');
+  const {PDFDocument}=await import('pdf-lib');
+  await import('../../src/web/attachment-preview.css');
+  const pdf=await PDFDocument.create();pdf.addPage();
+  const blob=new Blob([await pdf.save()],{type:'application/pdf'});
+  const preview=createAttachmentPreview({canEmbedPdf:()=>false});
+  const base={paymentDate:'2026-10-02',supplier:'Alfa',branch:'Xavante',product:'SERVIÇO',account:'CAIXA',unit:1,quantity:1,freight:0,total:1};
+  const view=decorateReportNavigation(createPaymentLedgerView({openMediaCollection:preview.openCollection,data:{
+    async loadPaymentsSnapshot(){return {launches:[
+      {...base,id:'3851',order:'569',hasAttachments:true},
+      {...base,id:'3875',order:'578',hasAttachments:false},
+      {...base,id:'1234567',order:'1234567',hasAttachments:true},
+    ]};},
+    async listPaymentLedgerPdfs(kind,id){
+      if(id==='578')return [];
+      return [`${kind}-${id}.pdf`, `${kind}-aditivo.pdf`].map(fileName=>({fileName,source:async()=>blob}));
+    },
+  }}),{action:'open-payment-ledger'});
+  await view.open();
+  const root=view.element;
+  async function waitFor(callback){
+    for(let i=0;i<120;i++){
+      const result=callback();
+      if(result)return result;
+      await new Promise(resolve=>setTimeout(resolve,40));
+    }
+    throw Error('O elemento esperado não apareceu no visualizador.');
+  }
+  const order=await waitFor(()=>root.querySelector('td[data-column=order] .pl-pdf-attachment'));
+  const launch=await waitFor(()=>root.querySelector('td[data-column=id] .pl-pdf-attachment'));
+  const otherOrder=await waitFor(()=>root.querySelector('[aria-label="Abrir PDFs do pedido 1234567"]'));
+  const otherLaunch=await waitFor(()=>root.querySelector('[aria-label="Abrir PDFs do lançamento 1234567"]'));
+  const geometry=control=>{
+    const r=control.getBoundingClientRect(),c=control.closest('td').getBoundingClientRect();
+    const n=control.previousElementSibling;
+    const hit=document.elementFromPoint(r.x+r.width/2,r.y+r.height/2);
+    return {label:n.textContent,right:control.offsetLeft>=n.offsetLeft+n.offsetWidth-1,
+      fits:r.x>=c.x-1&&r.right<=c.right+1&&r.y>=c.y-1&&r.bottom<=c.bottom+1,
+      icon:control.querySelector('svg').getBoundingClientRect().width>=10,clickable:control.contains(hit)};
+  };
+  const result={controls:[order,launch,otherOrder,otherLaunch].map(geometry),count:root.querySelectorAll('.pl-pdf-attachment').length};
+  const title=()=>document.querySelector('.attachment-preview-dialog[open] .attachment-preview-title')?.textContent;
+  const visiblePdf=name=>waitFor(()=>title()===name&&document.querySelector('.attachment-preview-content canvas'));
+  order.click();await visiblePdf('order-569.pdf');
+  document.querySelector('.attachment-preview-collection-next').click();await visiblePdf('order-aditivo.pdf');
+  document.querySelector('.attachment-preview-back').click();result.orderFocus=document.activeElement===order;
+  launch.click();await visiblePdf('launch-3851.pdf');
+  document.querySelector('.attachment-preview-collection-next').click();await visiblePdf('launch-aditivo.pdf');
+  document.querySelector('.attachment-preview-back').click();result.launchFocus=document.activeElement===launch;
+  return result;
+}
 try {
+  if(new URLSearchParams(location.search).has('attachments')){
+    document.documentElement.dataset.layout=JSON.stringify(await checkAttachments());
+  }else{
   const launches=Array.from({length:451},(_,i)=>({id:String(i+1),paymentDate:'2026-10-02',supplier:i<250?'Alfa':'Beta',branch:'004 - EDIFÍCIO XAVANTE',product:'SERVENTE DE PEDREIRO',order:String(350+i),disbursement:'SIM',account:'CAIXA',description:'Descrição do pagamento',unit:1,quantity:1,freight:0,total:1}));
   let printed,finishPrint;const printDone=new Promise(resolve=>finishPrint=resolve);
   const view=decorateReportPrint(decorateReportNavigation(createPaymentLedgerView({data:{async loadPaymentsSnapshot(){return {launches};}}}),{action:'open-payment-ledger'}),{
@@ -37,6 +92,7 @@ try {
   document.documentElement.dataset.layout=JSON.stringify({counts,anchored,printer,filteredInitial,filteredEnd,filterScroll,printRows:captured.pages[0].blocks.find(block=>block.type==='table').rows.length,restoredScroll:scroll.scrollTop===beforePrint,
     ids:[...root.querySelectorAll('[data-column=id]')].map(node=>node.textContent),pager:Boolean(root.querySelector('.pl-pager')),logoBackground:getComputedStyle(logo.parentElement).backgroundColor,logoLoaded:logo.naturalWidth>0,
     overflow:scroll.scrollWidth-scroll.clientWidth,documentOverflow:document.documentElement.scrollWidth-innerWidth,tableHeight:scroll.clientHeight});
+  }
   }
 }catch(error){document.documentElement.dataset.layout=JSON.stringify({error:String(error.stack||error)});}
 </script></body></html>
