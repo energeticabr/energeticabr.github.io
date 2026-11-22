@@ -20,6 +20,12 @@ test('sete níveis ordenados, total exato, referência vigente e conflito explí
   assert.equal(buildCargosTable([item('PEDREIRO I'),item('PEDREIRO I',{PREMIO:100})],columns,'2026-10-05')[3].total,null);
   assert.equal(buildCargosTable([item('PEDREIRO I',{vt_real:''})],columns,'2026-10-05')[3].total,null);
 });
+test('Supervisor de Obras recebe uma linha quando cadastrado na base salarial',()=>{
+  const rows=buildCargosTable([item('Supervisor de Obras')],columns,'2026-10-05');
+  assert.equal(rows.length,8);
+  assert.equal(rows[7].cargo,'SUPERVISOR DE OBRAS');
+  assert.equal(rows[7].total,3283.33);
+});
 test('leitor usa metadados reais, todas as páginas e recusa paginação quebrada',async()=>{
   let calls=0;
   const repository={resolveList:async(site,names)=>{assert.equal(site,'personal');assert.deepEqual(names,['CARGOS']);return {status:'resolved',id:'cargos'};},getColumns:async()=>columns,getItemsPage:async()=>++calls===1?{items:[item('PEDREIRO I')],hasMore:true,nextLink:'page2'}:{items:[item('MESTRE DE OBRAS')],hasMore:false}};
@@ -61,7 +67,7 @@ test('consulta vínculos RH paginados pelo cargo cadastrado e retorna só os cam
       assert.equal(id, 'rh');
       assert.equal(new URLSearchParams(query).get('$expand'), 'fields($select=Title,CARGO,FILIAL,STATUS)');
       return cursor === 'page2' ? {
-        items: [employee('3', 'Ana', 'servente de pedreiro i', 'Outra profissão', 'INATIVO'), employee('4', 'Caio', 'PEDREIRO II', 'SERVENTE DE PEDREIRO I')], hasMore: false,
+        items: [employee('3', 'Ana', 'servente  de pedreiro i', 'Outra profissão', 'INATIVO'), employee('4', 'Caio', 'PEDREIRO II', 'SERVENTE DE PEDREIRO I'), employee('5', 'Eva', 'PEDREIRO I/II', '')], hasMore: false,
       } : {
         items: [employee('1', 'Bia', 'SERVENTE DE PEDREIRO I', ''), employee('2', 'Dani', '', 'SERVENTE DE PEDREIRO I')], hasMore: true, nextLink: 'page2',
       };
@@ -69,12 +75,13 @@ test('consulta vínculos RH paginados pelo cargo cadastrado e retorna só os cam
   };
   const data = createCargosData({ repository });
   const links = await data.loadAssignments();
-  assert.deepEqual(links.get('SERVENTEDEPEDREIROI'), [
+  assert.deepEqual(links.get('SERVENTE DE PEDREIRO I'), [
     { name: 'Ana', branch: 'Obra 01', status: 'INATIVO' },
     { name: 'Bia', branch: 'Obra 01', status: 'ATIVO' },
   ]);
-  assert.deepEqual(links.get('PEDREIROII'), [{ name: 'Caio', branch: 'Obra 01', status: 'ATIVO' }]);
-  assert.equal(links.has('SERVENTEDEPEDREIROII'), false);
+  assert.deepEqual(links.get('PEDREIRO II'), [{ name: 'Caio', branch: 'Obra 01', status: 'ATIVO' }]);
+  assert.equal(links.has('SERVENTE DE PEDREIRO II'), false);
+  assert.equal(links.has('PEDREIRO III'), false);
   repository.getItemsPage = async () => ({ items: [], hasMore: true, nextLink: 'repeated' });
   await assert.rejects(data.loadAssignments(), /paginação.*FUNCIONARIOSRH/i);
 });
@@ -89,7 +96,7 @@ test('cada linha expande seus próprios vínculos, reusa a consulta e mantém os
     loadAssignments: async () => {
       loads++;
       if (loads === 1) throw new Error('Falha de rede');
-      return new Map([['SERVENTEDEPEDREIROI', [{ name: 'Ana Teste', branch: 'Obra 01', status: 'ATIVO' }]]]);
+      return new Map([['SERVENTE DE PEDREIRO I', [{ name: 'Ana Teste', branch: 'Obra 01', status: 'ATIVO' }]]]);
     },
   } });
   t.after(() => view.destroy());

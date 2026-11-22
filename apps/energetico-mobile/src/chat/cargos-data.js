@@ -1,7 +1,7 @@
 import { SHAREPOINT_SITES } from '../../../../portal/config.js';
 import { createGraphClient } from '../../../../portal/data/graph-client.js';
 import { createSharePointRepository } from '../../../../portal/data/sharepoint-repository.js';
-import { buildCargosTable, cargoKey } from './cargos-model.js';
+import { buildCargosTable, cargoRoleKey } from './cargos-model.js';
 
 export function createCargosData({tokenProvider,repository:supplied,fetchImpl=globalThis.fetch,siteConfig=SHAREPOINT_SITES,now=()=>new Date()}={}) {
   if(!supplied&&typeof tokenProvider!=='function')throw new TypeError('A tabela de cargos requer a sessão Microsoft ativa.');
@@ -44,7 +44,7 @@ export function createCargosData({tokenProvider,repository:supplied,fetchImpl=gl
     for(const {id,fields} of items){
       if(!id||ids.has(String(id))||!fields)throw new Error('A consulta de vínculos de RH retornou registros incompletos ou repetidos.');
       ids.add(String(id));
-      const cargo=cargoKey(fields.CARGO);
+      const cargo=cargoRoleKey(fields.CARGO);
       if(!cargo)continue;
       if(!assignments.has(cargo))assignments.set(cargo,[]);
       assignments.get(cargo).push({

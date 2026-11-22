@@ -1,8 +1,10 @@
 import Decimal from 'decimal.js';
+import { CONTRACTOR_EMPLOYMENT_CARGOS } from '../../../../portal/forms/contractor-employment.js';
 
 export const CARGOS_FIELDS = ['CARGO','SALARIO','VALEALIMENTACAO','PREMIO','VALE TRANSPORTE'];
 export const cargoKey = value => String(value ?? '').replace(/_x([0-9a-f]{4})_/gi,(_,hex)=>String.fromCodePoint(parseInt(hex,16))).normalize('NFD').replace(/[\u0300-\u036f]/g,'').toUpperCase().replace(/[^A-Z0-9]/g,'');
-const ROLES = ['SERVENTE DE PEDREIRO I','SERVENTE DE PEDREIRO II','SERVENTE DE PEDREIRO III','PEDREIRO I','PEDREIRO II','PEDREIRO III','MESTRE DE OBRAS'];
+export const cargoRoleKey = value => String(value ?? '').normalize('NFC').trim().replace(/\s+/g,' ').toLocaleUpperCase('pt-BR');
+const SUPERVISOR = 'SUPERVISOR DE OBRAS';
 export function cargosColumn(columns,label,required=true) {
   const matches=columns.filter(c=>cargoKey(c.name)===cargoKey(label)||cargoKey(c.displayName)===cargoKey(label));
   if(matches.length!==1){if(required||matches.length)throw new Error(`A coluna ${label} da lista CARGOS não pôde ser identificada.`);return null;}
@@ -27,7 +29,9 @@ function dateKey(value) {
 export function buildCargosTable(items,columns,today) {
   const names=CARGOS_FIELDS.map(label=>cargosColumn(columns,label));
   const reference=cargosColumn(columns,'DATAREFERENCIA',false);
-  return ROLES.map(cargo=>{
+  const supervisorRegistered=items.some(item=>cargoKey(item.fields?.[names[0]])===cargoKey(SUPERVISOR));
+  const roles=CONTRACTOR_EMPLOYMENT_CARGOS.filter(cargo=>cargo!==SUPERVISOR||supervisorRegistered);
+  return roles.map(cargo=>{
     const rows=items.filter(item=>cargoKey(item.fields?.[names[0]])===cargoKey(cargo)).map(item=>{
       const date=reference?dateKey(item.fields?.[reference]):'';
       return {date,values:names.slice(1).map(name=>parseCargosMoney(item.fields?.[name]))};

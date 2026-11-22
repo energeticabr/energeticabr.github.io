@@ -32,11 +32,11 @@
 .cargos-table tr > :first-child { position: sticky; left: 0; text-align: left; z-index: 1; background: #fff; white-space: normal; }
 .cargos-table thead tr > :first-child { width: 30%; z-index: 3; background: #10375d; }
 .cargos-table .cargos-group th { background: #dcebf1; color: #10375d; font-weight: 800; }
-.cargos-table .cargos-level { padding-inline-start: clamp(10px, calc(2 * var(--report-vw)), 22px); }
 .cargos-table [data-column="total"] { font-weight: 800; color: #16733d; }
-.cargos-table .cargos-role { padding-inline-start: clamp(20px, calc(3 * var(--report-vw)), 36px); }
+.cargos-table .cargos-role { padding-inline-start: clamp(20px, calc(2.6 * var(--report-vw)), 30px); }
+.cargos-table .cargos-level { padding-inline-start: clamp(22px, calc(3 * var(--report-vw)), 36px); }
 .cargos-toggle {
-  position: absolute; inset: 0; width: 100%; border: 0; padding: 0; border-radius: 0;
+  position: absolute; inset: 0; width: 100%; min-height: 0; border: 0; padding: 0; border-radius: 0;
   background: transparent; color: inherit; cursor: pointer; touch-action: manipulation;
 }
 .cargos-toggle::before {

@@ -50,6 +50,7 @@ test('Tabela de Cargos abre na horizontal com as seis colunas visíveis', { time
           assert.equal(layout.arrowClearOfTable, true, detail);
           assert.equal(layout.arrowInToolbar, Math.max(width, height) <= 650, detail);
           assert.equal(layout.pdfHasAllColumns, true, detail);
+          assert.equal(layout.toggleFits, true, detail);
           assert.equal(layout.detailsOpen, true, detail);
           assert.equal(layout.detailsClose, true, detail);
           assert.equal(layout.controlsWork, true, detail);

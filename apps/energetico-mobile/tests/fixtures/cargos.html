@@ -25,7 +25,7 @@ try {
   const report = createCargosView({ data: {
     async loadSnapshot() { loads++; return { rows }; },
     async loadAssignments() {
-      return new Map([['SERVENTEDEPEDREIROIII', [{
+      return new Map([['SERVENTE DE PEDREIRO III', [{
         name: 'Colaborador de Teste com Nome Completo', branch: 'Filial de Teste com Nome Longo', status: 'ATIVO',
       }]]]);
     },
@@ -43,7 +43,9 @@ try {
   const scroll = element.querySelector('.cargos-scroll');
   const table = scroll.querySelector('table');
   const toggle = table.querySelector('.cargos-toggle');
-  toggle.click();
+  const toggleBounds = toggle.getBoundingClientRect();
+  const hit = document.elementFromPoint((toggleBounds.left + toggleBounds.right) / 2, (toggleBounds.top + toggleBounds.bottom) / 2);
+  hit?.click();
   await new Promise(resolve => setTimeout(resolve, 0));
   const detail = document.getElementById(toggle.getAttribute('aria-controls'));
   const next = element.querySelector('.report-navigation-arrow--next');
@@ -70,6 +72,8 @@ try {
     arrowClearOfTable: !overlap,
     arrowInToolbar: Math.abs(next.offsetTop - toolbar.offsetTop) <= 1,
     pdfHasAllColumns: capture.pages[0].blocks.some(block => block.type === 'table' && block.widths.length === 6),
+    toggleFits: hit === toggle && [...table.querySelectorAll('.cargos-toggle')].every(button =>
+      button.offsetWidth <= button.parentElement.offsetWidth + 1 && button.offsetHeight <= button.parentElement.offsetHeight + 1),
     detailsOpen: toggle.getAttribute('aria-expanded') === 'true' && !detail.hidden && detail.offsetHeight > 0
       && detail.textContent.includes('Colaborador de Teste') && !JSON.stringify(capture).includes('Colaborador de Teste'),
   };

@@ -1,6 +1,6 @@
 import {addReportCloseControl} from './report-close-control.js';
 import {bindReportLandscape} from './report-landscape.js';
-import {cargoKey} from '../chat/cargos-model.js';
+import {cargoRoleKey} from '../chat/cargos-model.js';
 
 let nextDetailId=0;
 
@@ -53,9 +53,10 @@ export function createCargosView({document:doc=globalThis.document,data}={}) {
         try{
           const assignments=await loadAssignments();
           if(signal.aborted)return;
-          const people=assignments.get(cargoKey(row.cargo))||[];
+          const people=assignments.get(cargoRoleKey(row.cargo))||[];
           if(people.length){
             const list=make('ul','cargos-people');
+            list.setAttribute('role','list');
             list.setAttribute('aria-label',`Colaboradores de ${row.cargo}`);
             for(const person of people){
               const item=make('li');item.append(make('strong','',person.name));
@@ -63,7 +64,9 @@ export function createCargosView({document:doc=globalThis.document,data}={}) {
               if(information)item.append(make('span','',information));
               list.append(item);
             }
-            cell.replaceChildren(list);
+            notice.classList.add('sr-only');
+            notice.textContent=`${people.length} ${people.length===1?'colaborador vinculado':'colaboradores vinculados'}.`;
+            cell.append(list);
           }else notice.textContent='Nenhum colaborador vinculado a este cargo.';
           loaded=true;
         }catch{
