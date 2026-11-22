@@ -7,6 +7,7 @@ import { createGraphClient } from '../../../portal/data/graph-client.js';
 import { notifyDataMutation } from '../../../portal/data/data-mutations.js';
 import { createSupplierPayrollReportData } from '../src/chat/supplier-payroll-report-data.js';
 import { createCargosData } from '../src/chat/cargos-data.js';
+import { createCargosView } from '../src/ui/cargos-view.js';
 
 const tick = () => new Promise(resolve => setImmediate(resolve));
 function deferred() {
@@ -376,6 +377,36 @@ test('real controller, CARGOS source, repository and Graph reuse both pages afte
   h.panels.at(-1).refresh.click(); await h.panels.at(-1).refreshPromise;
   assert.equal(h.panels.at(-1).latest.rows.find(row => row.cargo === 'PEDREIRO I').total, 2060);
   assert.equal(requests.length, initialReads * 2);
+});
+
+test('Cargos abre pelo controlador, busca os vínculos da sessão e cancela ao atualizar', async t => {
+  let reads = 0, firstSignal;
+  const previous = deferred();
+  const h = harness(t, {
+    cargosFactory: createCargosView,
+    cargosDataFactory: async ({ tokenProvider }) => ({
+      loadSnapshot: async () => ({ rows: [{ cargo: 'PEDREIRO I', group: 'PEDREIRO' }] }),
+      async loadAssignments({ signal }) {
+        assert.equal(await tokenProvider(['Sites.Read.All']), 'token');
+        if (++reads === 1) { firstSignal = signal; return previous.promise; }
+        return new Map([['PEDREIRO I', [{ name: 'Joana Teste' }]]]);
+      },
+    }),
+  });
+  await h.controller.start();
+  assert.equal(await h.view.emit('open-cargos-table'), true);
+  const report = globalThis.document.querySelector('.cargos-screen');
+  const expand = () => report.querySelector('[aria-label="Colaboradores de PEDREIRO I"]').click();
+  expand(); await tick();
+  assert.equal(reads, 1);
+  assert.equal(firstSignal.aborted, false);
+  report.querySelector('[aria-label="Atualizar tabela de cargos"]').click(); await tick();
+  assert.equal(firstSignal.aborted, true);
+  expand(); await tick();
+  previous.resolve(new Map([['PEDREIRO I', [{ name: 'Cadastro antigo' }]]])); await tick();
+  assert.equal(reads, 2);
+  assert.match(report.textContent, /Joana Teste/);
+  assert.doesNotMatch(report.textContent, /Cadastro antigo/);
 });
 
 test('contractor loadDetails separates IDs, survives recreation and is invalidated with overview refresh', async t => {

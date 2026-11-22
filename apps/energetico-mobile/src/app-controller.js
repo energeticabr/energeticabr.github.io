@@ -8075,7 +8075,6 @@ export function createAppController({
     const opening = cargosTableOpening;
     if (opening) return opening;
     const reportId = CARGOS_TABLE_ID;
-    const method = 'loadSnapshot';
     const reportsAccount = account;
     const reportsRevision = sessionRevision;
     const openingRevision = cargosTableRevision;
@@ -8083,6 +8082,9 @@ export function createAppController({
     const assertSession = () => {
       if (openingRevision !== cargosTableRevision) throw new DOMException('Consulta substituída.', 'AbortError');
       if (stopped || account !== reportsAccount || sessionRevision !== reportsRevision) throw new Error('A sessão do relatório foi encerrada.');
+      if (typeof auth.getAccount === 'function' && auth.getAccount()?.homeAccountId !== reportsAccount.homeAccountId) {
+        throw new DOMException('Consulta cancelada.', 'AbortError');
+      }
     };
     const request = Promise.resolve().then(async () => {
       try {
@@ -8103,7 +8105,7 @@ export function createAppController({
             });
           };
           const source = await cargosDataFactory({ tokenProvider });
-          const data = { async [method](options = {}) {
+          async function runQuery(options, read) {
             assertSession();
             requestSignal = options.signal; requestGeneration++;
             const signal = requestSignal, generation = requestGeneration;
@@ -8111,8 +8113,15 @@ export function createAppController({
               assertSession();
               if (signal?.aborted || generation !== requestGeneration) throw new DOMException('Consulta cancelada.', 'AbortError');
             };
-            return cachedReportSource('open-cargos-table', source, assertQuery)[method](options);
-          } };
+            assertQuery();
+            const result = await read(assertQuery);
+            assertQuery();
+            return result;
+          }
+          const data = {
+            loadSnapshot: (options = {}) => runQuery(options, assertQuery => cachedReportSource('open-cargos-table', source, assertQuery).loadSnapshot(options)),
+            loadAssignments: (options = {}) => runQuery(options, () => source.loadAssignments(options)),
+          };
           assertSession();
           const factory = cargosFactory;
           const panel = decorateControllerReport(await factory({ data, document: globalThis.document }), 'open-cargos-table');

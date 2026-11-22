@@ -22,7 +22,14 @@ try {
   ];
   let loads = 0, navigatedTo;
   const action = 'open-cargos-table';
-  const report = createCargosView({ data: { async loadSnapshot() { loads++; return { rows }; } } });
+  const report = createCargosView({ data: {
+    async loadSnapshot() { loads++; return { rows }; },
+    async loadAssignments() {
+      return new Map([['SERVENTE DE PEDREIRO III', [{
+        name: 'Colaborador de Teste com Nome Completo', branch: 'Filial de Teste com Nome Longo', status: 'ATIVO',
+      }]]]);
+    },
+  } });
   const navigable = decorateReportNavigation(report, {
     action,
     onNavigate: target => { navigatedTo = target; },
@@ -35,6 +42,12 @@ try {
   const backdrop = element.parentElement;
   const scroll = element.querySelector('.cargos-scroll');
   const table = scroll.querySelector('table');
+  const toggle = table.querySelector('.cargos-toggle');
+  const toggleBounds = toggle.getBoundingClientRect();
+  const hit = document.elementFromPoint((toggleBounds.left + toggleBounds.right) / 2, (toggleBounds.top + toggleBounds.bottom) / 2);
+  hit?.click();
+  await new Promise(resolve => setTimeout(resolve, 0));
+  const detail = document.getElementById(toggle.getAttribute('aria-controls'));
   const next = element.querySelector('.report-navigation-arrow--next');
   const bounds = scroll.getBoundingClientRect();
   const arrow = next.getBoundingClientRect();
@@ -59,7 +72,13 @@ try {
     arrowClearOfTable: !overlap,
     arrowInToolbar: Math.abs(next.offsetTop - toolbar.offsetTop) <= 1,
     pdfHasAllColumns: capture.pages[0].blocks.some(block => block.type === 'table' && block.widths.length === 6),
+    toggleFits: hit === toggle && [...table.querySelectorAll('.cargos-toggle')].every(button =>
+      button.offsetWidth <= button.parentElement.offsetWidth + 1 && button.offsetHeight <= button.parentElement.offsetHeight + 1),
+    detailsOpen: toggle.getAttribute('aria-expanded') === 'true' && !detail.hidden && detail.offsetHeight > 0
+      && detail.textContent.includes('Colaborador de Teste') && !JSON.stringify(capture).includes('Colaborador de Teste'),
   };
+  toggle.click();
+  layout.detailsClose = toggle.getAttribute('aria-expanded') === 'false' && detail.hidden && detail.offsetHeight === 0;
   element.querySelector('[aria-label="Atualizar tabela de cargos"]').click();
   next.click();
   element.querySelector('[aria-label="Fechar tabela de cargos"]').click();
