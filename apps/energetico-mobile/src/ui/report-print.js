@@ -104,7 +104,7 @@ function runsOf(node,{parts,keepLines=false}={}){
 }
 function tableBlock(table,root){
  const rows=[],spans=[];let columns=0;
- for(const row of [...table.rows].filter(row=>row.closest('table')===table&&!hidden(row))){
+ for(const row of [...table.rows].filter(row=>row.closest('table')===table&&!row.hasAttribute('data-report-screen-only')&&!hidden(row))){
   const cells=[];let column=0;
   function carried(){while(spans[column]?.remaining>0){const span=spans[column];cells.push({...span.cell,column});span.remaining--;column+=span.cell.colSpan;}}
   for(const cell of row.cells){
