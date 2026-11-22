@@ -62,6 +62,9 @@
 .gm-product-table td,.gm-product-table th { padding:6px 4px; border:1px solid #1c3c7b; text-align:center; overflow-wrap:anywhere; }
 .gm-product-table thead th { position:sticky; top:0; z-index:1; background:#d9eaf7; }
 .gm-product-table .gm-product-period th { background:#305496; color:white; text-align:left; }
+.gm-product-table tr[data-source=forecast] td { background:#ffe0b2; }
+.gm-product-table .gm-product-subtotal { background:#d9eaf7; font-weight:700; }
+.gm-product-table .gm-product-subtotal th { text-align:left; }
 .gm-product-table td[data-column=total] { color:#760012; }
 .gm-product-source { display:block; margin-top:3px; color:#c00000; font-size:.85em; }
 .gm-product-freight { margin:8px 0 0; font-size:11px; }

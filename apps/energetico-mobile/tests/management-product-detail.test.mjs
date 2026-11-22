@@ -19,6 +19,7 @@ test('detalhes de despesa preservam os registros e os mesmos filtros de pagament
   const detail=buildManagementProductDetail(snapshot,filters,{branch:'XAVANTE',product:'Cimento',kind:'expense'});
   assert.deepEqual(detail.sections.map(section=>section.period),['novembro/2026','outubro/2026']);
   assert.deepEqual(detail.sections.map(section=>section.rows.map(row=>row.id)),[['9','1'],['2']]);
+  assert.deepEqual(detail.sections.map(({subtotal})=>subtotal),[{quantity:5,total:90},{quantity:2,total:30}]);
   const [provision,launch]=detail.sections[0].rows;
   assert.deepEqual([launch.date,launch.paymentDate,launch.supplier,launch.quantity,launch.unit,launch.total],
     ['2026-10-03','2026-11-02','Alfa',2,10,25]);
@@ -53,7 +54,22 @@ test('produtos ausentes e sem registros no mês não passam a selecionar todos o
   const previous=buildManagementProductDetail({launches:[paid('3','Antigo',80,{paymentDate:'2026-10-02'})]},
     filters,{branch:'Xavante',product:'Antigo',kind:'expense'});
   assert.equal(previous.sections[0].rows.length,0);
+  assert.deepEqual(previous.sections[0].subtotal,{quantity:0,total:0});
   assert.equal(previous.sections[1].rows[0].total,80);
+});
+
+test('detalhamento sem mês selecionado subtotaliza por competência e soma o valor exibido em cada linha',()=>{
+  const snapshot={launches:[
+    paid('1','Cimento',25.2468,{quantity:0.1}),
+    paid('2','Cimento',-1.245,{quantity:0.2}),
+    paid('3','Cimento',30,{date:'2026-11-05',paymentDate:'2026-10-03',quantity:null}),
+  ],provisions:[{...forecast,quantity:0.3}]};
+  const expense=buildManagementProductDetail(snapshot,{year:'2026'},{branch:'Xavante',product:'Cimento'});
+  assert.deepEqual(expense.sections.map(({period,rows,subtotal})=>[period,rows.length,subtotal.quantity,subtotal.total]),
+    [['novembro/2026',3,0.6,89],['outubro/2026',1,null,30]]);
+  const ranking=buildManagementProductDetail(snapshot,{}, {branch:'Xavante',product:'Cimento',kind:'launches'});
+  assert.deepEqual(ranking.sections.map(({period,rows,subtotal})=>[period,rows.length,subtotal.quantity,subtotal.total]),
+    [['novembro/2026',1,null,30],['outubro/2026',2,0.3,24]]);
 });
 
 test('normalização de provisão preserva data, preço, quantidade e frete sem alterar a fórmula do relatório',()=>{

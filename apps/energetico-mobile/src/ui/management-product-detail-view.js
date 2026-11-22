@@ -69,6 +69,18 @@ export function createManagementProductDetailView({root,onClose=()=>{}}) {
           if(entry.freight){hasFreight=true;row.cells[5].title=`Total inclui frete de ${amount(entry.freight)}.`;}
           body.append(row);
         }
+        if(section.subtotal) {
+          const {quantity:totalQuantity,total}=section.subtotal;
+          const row=make('tr','gm-product-subtotal');
+          const label=make('th','','TOTAL DO MÊS');
+          label.colSpan=3;label.scope='row';
+          const quantityCell=make('td','',quantity(totalQuantity));
+          quantityCell.dataset.column='quantity';
+          const totalCell=make('td','',amount(total));
+          totalCell.dataset.column='total';
+          row.append(label,quantityCell,make('td'),totalCell);
+          body.append(row);
+        }
         table.append(body);
       }
       scroll.replaceChildren(table);
