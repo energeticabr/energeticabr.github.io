@@ -7,7 +7,7 @@ const tick = () => new Promise(resolve => setImmediate(resolve));
 function fixture(t, overrides = {}) {
   const dom = new JSDOM('<!doctype html>');
   const snapshot = { complete: true,
-    launches: [{ id: '7', branch: 'Obra A', stage: 'Fundação', type: 'ATIVIDADE COMUM', status: 'INICIADO', startDate: '2026-11-01', endDate: '' }],
+    launches: [{ id: '7', branch: 'Obra A', stage: 'Fundação', type: 'ATIVIDADE COMUM', status: 'INICIADO', startDate: '2026-11-01', endDate: '', percent: null }],
     activities: [
       { id: '129', branch: 'Obra A', stage: 'Fundação', activity: 'Escavação', property: '', supplier: 'João', status: 'ATIVIDADE INICIADA', executionDate: '2026-11-02', plannedDate: '' },
       { id: '130', branch: 'Obra A', stage: 'Fundação', activity: 'Concreto', property: '', supplier: 'João', status: 'ATIVIDADE FINALIZADA', executionDate: '2026-11-03', plannedDate: '2026-11-17' },
@@ -28,6 +28,14 @@ function fixture(t, overrides = {}) {
     finalizeStage: async (id, date, options) => {
       writes.push({ id, date, options });
       return { ...snapshot.launches[0], endDate: date, status: 'FINALIZADO' };
+    },
+    startStage: async (id, date, options) => {
+      writes.push({ id, date, options });
+      return { ...snapshot.launches[0], startDate: date, status: 'INICIADO' };
+    },
+    startActivity: async (id, date, options) => {
+      writes.push({ id, date, options });
+      return { ...snapshot.activities.find(row => row.id === id), executionDate: date, status: 'ATIVIDADE INICIADA' };
     }, ...overrides,
   };
   const view = createStageGanttView({ document: dom.window.document, data, now: () => new Date(2026, 10, 18) });
@@ -36,6 +44,52 @@ function fixture(t, overrides = {}) {
   const submit = () => root.querySelector('.gantt-finish-form').dispatchEvent(new dom.window.Event('submit', { bubbles: true, cancelable: true }));
   return { view, root, snapshot, writes, submit };
 }
+
+for (const kind of ['stage', 'activity']) test(`inicia ${kind} informando a data e atualiza a barra do Gantt`, async t => {
+  const h = fixture(t, { loadAssignments: () => assert.fail('Iniciar não consulta presença') });
+  const row = kind === 'stage' ? h.snapshot.launches[0] : h.snapshot.activities[0];
+  row.status = kind === 'stage' ? 'NÃO INICIADO' : 'ATIVIDADE NÃO INICIADA';
+  if (kind === 'stage') row.startDate = '';
+  else row.executionDate = '';
+  await h.view.open();
+  if (kind === 'activity') h.root.querySelector('.gantt-toggle').click();
+  const findRow = () => [...h.root.querySelectorAll(`.gantt-row--${kind}`)]
+    .find(node => node.querySelector('.gantt-name').textContent === (row.activity || row.stage));
+  const start = findRow().querySelector('button[aria-label^="Iniciar"]');
+  assert.ok(start);
+  const finish = findRow().querySelector('.gantt-finish-button');
+  assert.equal(start.nextElementSibling, finish);
+  assert.equal(finish.disabled, true);
+  assert.equal(findRow().querySelector('.gantt-bar'), null);
+  start.click();
+  const input = h.root.querySelector('input[type=date]');
+  assert.match(input.parentElement.textContent, /Data de início/);
+  assert.equal(input.value, '');
+  h.submit();
+  assert.equal(h.writes.length, 0);
+  input.value = '2026-11-10';
+  h.submit(); h.submit(); await tick();
+  assert.equal(h.writes.length, 1);
+  assert.equal(h.writes[0].id, row.id);
+  assert.equal(h.writes[0].date, '2026-11-10');
+  assert.deepEqual(h.writes[0].options[kind === 'stage' ? 'expectedStage' : 'expectedActivity'], row);
+  assert.equal(findRow().querySelector('button[aria-label^="Iniciar"]'), null);
+  assert.equal(findRow().querySelector('.gantt-bar').dataset.tone, 'ongoing');
+  assert.equal(findRow().querySelector('.gantt-bar-date--start').textContent, '10/11/2026');
+});
+
+test('retoma o início no Gantt com a data escolhida sem enviar automaticamente', async t => {
+  const h = fixture(t, { loadAssignments: () => assert.fail('Iniciar não consulta presença') });
+  h.snapshot.activities[0].status = 'ATIVIDADE NÃO INICIADA';
+  h.snapshot.activities[0].branch = 'OBRA A';
+  await h.view.open({ finishDraft: { id: '129', date: '2026-11-09', operation: 'start' } });
+  assert.equal(h.root.querySelector('select').value, 'Obra A');
+  assert.equal(h.root.querySelector('.gantt-toggle').getAttribute('aria-expanded'), 'true');
+  assert.equal(h.root.querySelector('.gantt-finish-overlay').hidden, false);
+  assert.match(h.root.querySelector('.gantt-finish-form h2').textContent, /Iniciar atividade/);
+  assert.equal(h.root.querySelector('input').value, '2026-11-09');
+  assert.equal(h.writes.length, 0);
+});
 
 test('finaliza o descritivo com data sugerida pela última presença e permite editar antes de salvar', async t => {
   let selection;

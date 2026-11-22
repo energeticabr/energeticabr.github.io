@@ -45,21 +45,23 @@ export function createStageGanttFinishView({ root, background, data, onSaved }) 
     if (restoreFocus && previous.trigger?.isConnected) previous.trigger.focus({ preventScroll: true });
   }
 
-  async function open(item, trigger, { stage = false, draftDate = '' } = {}) {
-    if (active || !item.canFinalize) return;
-    const current = { item, trigger, stage, controller: new AbortController(), saving: false, inert: background.inert };
+  async function open(item, trigger, { stage = false, starting = false, draftDate = '' } = {}) {
+    if (active || !(starting ? item.canStart : item.canFinalize)) return;
+    const current = { item, trigger, stage, starting, controller: new AbortController(), saving: false, inert: background.inert };
     active = current;
     background.inert = true;
-    heading.textContent = stage ? 'Finalizar etapa' : 'Finalizar atividade';
+    heading.textContent = `${starting ? 'Iniciar' : 'Finalizar'} ${stage ? 'etapa' : 'atividade'}`;
     overlay.setAttribute('aria-label', heading.textContent);
     subject.textContent = `${item.name} · ${item.branch}`;
     overlay.hidden = false;
+    label.firstChild.textContent = starting ? 'Data de início' : 'Data fim';
     date.value = draftDate;
-    date.disabled = submit.disabled = !draftDate;
+    const suggestDate = !starting && !draftDate;
+    date.disabled = submit.disabled = suggestDate;
     cancel.disabled = false;
-    message(draftDate ? '' : 'Buscando a última data de presença…');
+    message(suggestDate ? 'Buscando a última data de presença…' : '');
     form.focus();
-    if (draftDate) return;
+    if (!suggestDate) return;
     try {
       const snapshot = await data.loadAssignments({ branch: item.branch, activityIds: item.activityIds }, { signal: current.controller.signal });
       if (active !== current) return;
@@ -80,25 +82,29 @@ export function createStageGanttFinishView({ root, background, data, onSaved }) 
     const current = active;
     if (!current || current.saving || date.disabled || !form.reportValidity()) return;
     current.saving = true;
-    const endDate = date.value;
+    const selectedDate = date.value;
     date.disabled = submit.disabled = cancel.disabled = true;
-    message(current.stage ? 'Finalizando etapa…' : 'Finalizando atividade…');
+    const { stage, starting } = current;
+    const subjectName = stage ? 'etapa' : 'atividade';
+    message(`${starting ? 'Iniciando' : 'Finalizando'} ${subjectName}…`);
     form.focus();
     try {
-      const options = { signal: current.controller.signal };
-      const saved = current.stage
-        ? await data.finalizeStage(current.item.source.id, endDate, { ...options, expectedStage: current.item.source })
-        : await data.finalizeActivity(current.item.source.id, endDate, { ...options, expectedActivity: current.item.source });
+      const method = `${starting ? 'start' : 'finalize'}${stage ? 'Stage' : 'Activity'}`;
+      const saved = await data[method](current.item.source.id, selectedDate, {
+        signal: current.controller.signal,
+        [stage ? 'expectedStage' : 'expectedActivity']: current.item.source,
+      });
       if (active !== current) return;
       close({ restoreFocus: false });
-      onSaved(saved, { stage: current.stage });
+      onSaved(saved, { stage, starting });
     } catch (error) {
       if (active !== current) return;
       current.saving = false;
       date.disabled = submit.disabled = cancel.disabled = false;
       if (error?.code === 'stage_progress_incomplete') message('Finalize todos os descritivos vinculados antes de finalizar a etapa.');
       else if (error?.status === 412 || error?.code === 'stage_progress_changed') message('O registro mudou no SharePoint. Cancele e atualize o Gantt para conferir.');
-      else message('Não foi possível confirmar a finalização. Confira a data e tente novamente.');
+      else message(starting ? 'Não foi possível confirmar o início. Confira a data e tente novamente.'
+        : 'Não foi possível confirmar a finalização. Confira a data e tente novamente.');
       submit.focus();
     }
   });

@@ -1,7 +1,7 @@
 import { SHAREPOINT_SITES } from "../../../../portal/config.js";
 import { createGraphClient } from "../../../../portal/data/graph-client.js";
 import { createSharePointRepository } from "../../../../portal/data/sharepoint-repository.js";
-import { normalizeStageProgressDate, summarizeStageCompletion } from "./stage-progress-model.js";
+import { canStartStageProgress, normalizeStageProgressDate, summarizeStageCompletion } from "./stage-progress-model.js";
 import { stageReportGroupKey } from "./operations-reports-model.js";
 
 const SITE = "personal";
@@ -235,6 +235,49 @@ export function createStageProgressData({ tokenProvider, repository: suppliedRep
     });
   }
 
+  async function startItem(itemId, startDate, { stage, expected, signal }) {
+    itemId = String(itemId ?? "");
+    if (!isItemId(itemId)) throw new TypeError("ID inválido para registrar o início.");
+    const date = normalizeStageProgressDate(startDate);
+    if (!date || date !== startDate) throw new TypeError("Informe uma data de início válida.");
+    const kind = stage ? "launches" : "activities";
+    const status = stage ? "INICIADO" : STARTED;
+    const dateField = stage ? "startDate" : "executionDate";
+    function readRecord(item, columns) {
+      if (String(item?.id) !== itemId || !item.fields) throw new Error("O SharePoint não confirmou o registro selecionado.");
+      return normalizeItem(item, columns, kind);
+    }
+    return withRepository(signal, async (repository, activeSignal) => {
+      const { id, columns } = await resolveSchema(repository, kind, activeSignal);
+      const current = await abortable(() => repository.getItem(SITE, id, itemId, "$expand=fields", { signal: activeSignal }), activeSignal);
+      const row = readRecord(current, columns);
+      const applied = row.status.toUpperCase() === status && row[dateField] === date;
+      const changed = expected && Object.keys(row).some(field => field !== "status"
+        && !(applied && field === dateField) && row[field] !== expected[field]);
+      if (changed || !applied && !canStartStageProgress(row, stage)) {
+        throw Object.assign(new Error("O registro mudou. Atualize o Gantt para conferir."), { code: "stage_progress_changed" });
+      }
+      if (applied) return row;
+      const saved = await repository.updateItem(SITE, id, itemId, {
+        [columns[stage ? 2 : 5].name]: `${date}T12:00:00Z`,
+        [columns[stage ? 4 : 7].name]: status,
+      }, { eTag: current.eTag || current["@odata.etag"], signal: activeSignal });
+      const updated = readRecord(saved, columns);
+      if (updated.status.toUpperCase() !== status || updated[dateField] !== date) {
+        throw new Error("O SharePoint não confirmou a data e o status do início.");
+      }
+      return updated;
+    });
+  }
+
+  function startActivity(id, date, { expectedActivity, signal } = {}) {
+    return startItem(id, date, { stage: false, expected: expectedActivity, signal });
+  }
+
+  function startStage(id, date, { expectedStage, signal } = {}) {
+    return startItem(id, date, { stage: true, expected: expectedStage, signal });
+  }
+
   async function finalizeActivity(activityId, endDate, { expectedActivity, signal } = {}) {
     const itemId = requireActivityId(activityId);
     const date = normalizeStageProgressDate(endDate);
@@ -299,5 +342,5 @@ export function createStageProgressData({ tokenProvider, repository: suppliedRep
     });
   }
 
-  return Object.freeze({ loadSnapshot, loadGanttAssignments, loadLatestAssignmentDate, finalizeActivity, finalizeStage });
+  return Object.freeze({ loadSnapshot, loadGanttAssignments, loadLatestAssignmentDate, startActivity, startStage, finalizeActivity, finalizeStage });
 }

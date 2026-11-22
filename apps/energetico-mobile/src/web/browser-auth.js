@@ -241,7 +241,10 @@ function stageFinishForAction(action, scopes, value) {
   if (!["action_stage_progress", "open-stage-gantt"].includes(action) || !scopes.some(scope => /^Sites\.Read(?:Write)?\.All$/i.test(scope))
     || typeof value?.id !== "string" || !/^[1-9]\d*$/.test(value.id) || !Number.isSafeInteger(Number(value.id))
     || typeof value.date !== "string" || !/^\d{4}-\d{2}-\d{2}$/.test(value.date)) return null;
-  return { id: value.id, date: value.date, ...(value.kind === "stage" ? { kind: "stage" } : {}) };
+  if (value.operation && (value.operation !== "start" || action !== "open-stage-gantt")) return null;
+  return { id: value.id, date: value.date, ...(value.kind === "stage" ? { kind: "stage" } : {}),
+    ...(value.operation === "start" ? { operation: "start" } : {}),
+  };
 }
 
 function taskFinishForAction(action, scopes, value) {

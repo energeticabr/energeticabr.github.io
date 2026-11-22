@@ -7,12 +7,15 @@ const view=createStageGanttView({document,now:()=>new Date(2026,10,18),data:{
  async loadSnapshot(){return {complete:true,launches:[
   {id:'7',branch,stage:'ALVENARIA E ESTRUTURAS',type:'ATIVIDADE COMUM',status:'INICIADO',startDate:'2026-08-10',endDate:''},
   {id:'8',branch,stage:'EXECUÇÃO CONTRAPISO',type:'ATIVIDADE COMUM',status:'FINALIZADO',startDate:'',endDate:''},
+  {id:'9',branch,stage:'PREPARAÇÃO E EXECUÇÃO LAJE',type:'ATIVIDADE COMUM',status:'NÃO INICIADO',startDate:'',endDate:''},
  ],activities:[
   {id:'129',branch,stage:'ALVENARIA E ESTRUTURAS',activity:'ESCORAMENTO E ARMAÇÃO FERRAGEM SEGUNDA LAJE',property:'',supplier:'JOÃO',status:'ATIVIDADE INICIADA',executionDate:'2026-10-25',plannedDate:''},
   {id:'130',branch,stage:'ALVENARIA E ESTRUTURAS',activity:'CONCRETAGEM FINALIZADA',property:'',supplier:'JOÃO',status:'ATIVIDADE FINALIZADA',executionDate:'2026-10-20',plannedDate:'2026-10-24'},
+  {id:'131',branch,stage:'PREPARAÇÃO E EXECUÇÃO LAJE',activity:'MONTAGEM',property:'',supplier:'JOÃO',status:'ATIVIDADE NÃO INICIADA',executionDate:'',plannedDate:''},
  ]};},
  async loadAssignments(){return {complete:true,rows:[{id:'1',date:'2026-11-17',supplier:'JOÃO',profession:'ARMADOR'}]};},
  async finalizeActivity(){throw new Error('fixture does not write');}, async finalizeStage(){throw new Error('fixture does not write');},
+ async startStage(){throw new Error('fixture does not write');},
 }});
 await view.open(); view.element.querySelector('.gantt-toggle').click();
 await document.fonts.ready;
@@ -33,5 +36,17 @@ root.querySelector('.gantt-row--activity .gantt-finish-button').click();
 await new Promise(resolve=>setTimeout(resolve,0));
 await new Promise(resolve=>requestAnimationFrame(()=>requestAnimationFrame(resolve)));
 const form=root.querySelector('.gantt-finish-form'),rect=form.getBoundingClientRect();
-document.documentElement.dataset.layout=JSON.stringify({rows,completed,date:form.querySelector('input').value,visible:rect.left>=-1&&rect.top>=-1&&rect.right<=innerWidth+1&&rect.bottom<=innerHeight+1,formFits:form.scrollWidth<=form.clientWidth+1});
+const finishDialog={date:form.querySelector('input').value,visible:rect.left>=-1&&rect.top>=-1&&rect.right<=innerWidth+1&&rect.bottom<=innerHeight+1,formFits:form.scrollWidth<=form.clientWidth+1};
+root.querySelector('.gantt-finish-cancel').click();
+const start=root.querySelector('.gantt-start-button');
+const startRect=start.getBoundingClientRect(),finishRect=start.nextElementSibling.getBoundingClientRect();
+const cardRect=start.closest('.gantt-cluster--description').getBoundingClientRect();
+const portrait=root.dataset.reportPortrait==='true';
+const startFits=portrait ? startRect.top>=cardRect.top&&startRect.bottom<finishRect.top&&finishRect.bottom<=cardRect.bottom
+ : startRect.left>=cardRect.left&&startRect.right<finishRect.left&&finishRect.right<=cardRect.right;
+start.click();
+const startFormRect=form.getBoundingClientRect();
+const startDialog={startFits,touch:start.offsetWidth>=44&&start.offsetHeight>=44,date:form.querySelector('input').value,
+ visible:startFormRect.left>=-1&&startFormRect.top>=-1&&startFormRect.right<=innerWidth+1&&startFormRect.bottom<=innerHeight+1};
+document.documentElement.dataset.layout=JSON.stringify({rows,completed,...finishDialog,startDialog});
 </script></body></html>

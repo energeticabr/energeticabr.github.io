@@ -312,6 +312,51 @@ test("does not finalize after the displayed activity changes while its popup is 
   await assert.rejects(data.finalizeActivity("129", "2026-10-07", { expectedActivity }), { code: "stage_progress_changed" });
 });
 
+for (const stage of [false, true]) test(`starts a ${stage ? "stage" : "demonstrative"} with the date and status in one versioned update`, async () => {
+  const listName = stage ? "LANCAMENTOOBRA" : "DEMONSTRATIVOETAPA";
+  const itemId = stage ? "7" : "129";
+  const initial = stage ? launch(7, 0.4, { field_4: "NÃO INICIADO" })
+    : activity(129, { field_5: "", field_7: "ATIVIDADE NÃO INICIADA" });
+  const payload = stage ? { field_2: "2026-10-07T12:00:00Z", field_4: "INICIADO" }
+    : { field_5: "2026-10-07T12:00:00Z", field_7: "ATIVIDADE INICIADA" };
+  let item = { ...initial, eTag: '"item,5"' };
+  let writes = 0;
+  const { repository } = fixture({
+    async getItem(_site, list, id) {
+      assert.deepEqual([list, id], [listName, itemId]);
+      return item;
+    },
+    async updateItem(site, list, id, fields, options) {
+      assert.deepEqual([site, list, id, options.eTag], ["personal", listName, itemId, '"item,5"']);
+      assert.deepEqual(fields, payload);
+      writes++;
+      item = { ...item, fields: { ...item.fields, ...fields }, eTag: '"item,6"' };
+      return item;
+    },
+  });
+  const data = create({ repository });
+  const method = stage ? "startStage" : "startActivity";
+  assert.equal(typeof data[method], "function");
+  const date = "2026-10-07";
+  const saved = await data[method](itemId, date);
+  assert.equal(saved[stage ? "startDate" : "executionDate"], date);
+  assert.equal(saved.status, stage ? "INICIADO" : "ATIVIDADE INICIADA");
+  assert.deepEqual(await data[method](itemId, date), saved);
+  await assert.rejects(data[method](itemId, "2026-10-08"), { code: "stage_progress_changed" });
+  assert.equal(writes, 1);
+});
+
+test("does not start a stage if its displayed record changed before confirmation", async () => {
+  const { repository } = fixture({
+    async getItem() { return { ...launch(7, 0.4, { field_4: "NÃO INICIADO" }), eTag: '"item,6"' }; },
+    async updateItem() { assert.fail("A stale dialog must not overwrite the selected stage"); },
+  });
+  const data = create({ repository });
+  assert.equal(typeof data.startStage, "function");
+  const expectedStage = { branch: "A", stage: "Pintura", startDate: "2026-09-30", endDate: "", percent: 40, type: "ATIVIDADE FANTASMA" };
+  await assert.rejects(data.startStage("7", "2026-10-07", { expectedStage }), { code: "stage_progress_changed" });
+});
+
 test("stage finalization reads every page of descriptions and writes FIM and FINALIZADO together", async () => {
   let writes = 0;
   const { repository } = fixture({

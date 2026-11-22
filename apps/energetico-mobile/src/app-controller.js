@@ -8494,8 +8494,12 @@ export function createAppController({
       assertAction();
       for (const signal of signals) signal.addEventListener('abort', cancel, { once: true });
       const finalizingStage = method === 'finalizeStage';
-      const writing = finalizingStage || method === 'finalizeActivity';
-      const resumeOptions = writing ? { stageFinishDraft: { id: args[0], date: args[1], ...(finalizingStage ? { kind: 'stage' } : {}) } } : undefined;
+      const starting = method === 'startStage' || method === 'startActivity';
+      const writing = starting || finalizingStage || method === 'finalizeActivity';
+      const resumeOptions = writing ? { stageFinishDraft: { id: args[0], date: args[1],
+        ...(finalizingStage || method === 'startStage' ? { kind: 'stage' } : {}),
+        ...(starting ? { operation: 'start' } : {}),
+      } } : undefined;
       const getToken = ordersGalleryTokenProvider(assertAction, resumeAction, () => resumeOptions);
       const writeScopes = ['Sites.ReadWrite.All'];
       try {
@@ -8600,6 +8604,8 @@ export function createAppController({
           const document = globalThis.document;
           const panel = gantt
             ? decorateControllerReport(await ganttFactory({ data: { loadSnapshot: data.loadSnapshot,
+              startActivity: (id, date, options) => runStageAction('startActivity', [id, date], options),
+              startStage: (id, date, options) => runStageAction('startStage', [id, date], options),
               finalizeActivity: data.finalizeActivity, finalizeStage: data.finalizeStage,
               loadAssignments: (selection, options) => runStageAction('loadGanttAssignments', [selection], options),
               loadCostSnapshot: options => runStageAction('loadCostSnapshot', [], { ...options, reportNumber: 9 }),
