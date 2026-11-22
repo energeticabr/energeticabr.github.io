@@ -13,7 +13,7 @@ test('full-height tax report and edit dialogs fit landscape phones, rotated phon
  await build({root,configFile:false,base:'/',logLevel:'silent',build:{outDir,emptyOutDir:true,rollupOptions:{input:resolve(root,'tests/fixtures/tax-guides-report-actions.html')}}});
  const server=await preview({root,configFile:false,logLevel:'silent',build:{outDir},preview:{host:'127.0.0.1',port:0}});
  const viewports=[[568,320],[390,220],[320,700],[390,844],[844,390],[1365,900]];
- try{for(const [width,height] of viewports)for(const mode of (height<250||width===568?['many-rows']:['report','many-rows','attach','amount','amount-keyboard','confirm','transition','print-error'])){
+ try{for(const [width,height] of viewports)for(const mode of (height<250||width===568?['many-rows','status']:['report','many-rows','attach','amount','amount-keyboard','confirm','status','transition','print-error'])){
    const keyboard=mode==='amount-keyboard';
    const result=await runBrowserLayout(browser,{width,height,captureScreenshot:Boolean(process.env.TAX_REPORT_SCREENSHOTS),url:`http://127.0.0.1:${server.httpServer.address().port}/tests/fixtures/tax-guides-report-actions.html?mode=${keyboard?'amount':mode}${keyboard?'&keyboard=1':''}`});
    const dom=new JSDOM(result.stdout),layout=JSON.parse(dom.window.document.documentElement.dataset.layout);dom.window.close();
@@ -42,7 +42,9 @@ test('full-height tax report and edit dialogs fit landscape phones, rotated phon
    for(const r of [layout.panel,layout.editor,...layout.buttons,layout.input].filter(Boolean))assert.ok(r.x>=-1&&r.y>=-1&&r.right<=width+1&&r.bottom<=height+1,desc);
    if(keyboard)for(const r of [...layout.buttons,layout.input].filter(Boolean))assert.ok(r.y>=-1&&r.bottom<=layout.visibleHeight+1,desc);
    if(mode==='attach')assert.equal(layout.sources,4,desc);
-   if(mode==='confirm')assert.deepEqual(layout.confirmation,['SIM','NÃO'],desc);
+   if(mode==='confirm'||mode==='status')assert.deepEqual(layout.confirmation,['SIM','NÃO'],desc);
+   assert.deepEqual(layout.typeFills,{INSS:'rgb(216, 234, 255)',FGTS:'rgb(238, 225, 250)'},desc);
+   assert.equal(layout.dataWeight,'600',desc);
    assert.deepEqual(layout.rowFills.PENDENTE,Array(7).fill('rgb(255, 217, 220)'),desc);
    assert.deepEqual(layout.rowFills.SUBMETIDO,Array(7).fill('rgb(213, 242, 220)'),desc);
    if(process.env.TAX_REPORT_SCREENSHOTS){mkdirSync(process.env.TAX_REPORT_SCREENSHOTS,{recursive:true});writeFileSync(resolve(process.env.TAX_REPORT_SCREENSHOTS,`${width}-${mode}.png`),result.screenshot);}
