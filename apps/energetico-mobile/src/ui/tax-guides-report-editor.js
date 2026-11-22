@@ -12,7 +12,7 @@ export function openTaxGuideReportEditor({ document:doc, host, background, row, 
   const status=make('p','tgr-editor-status');status.setAttribute('role','status');
   const cancel=make('button','tgr-button','Cancelar');cancel.type='button';
   const controls=make('div','tgr-editor-controls');
-  let context=null,busy=false,pendingFiles=null;
+  let context=null,busy=false,attachmentSaved=false;
   const win=doc.defaultView,viewport=win.visualViewport;
   function position(){
     const visible=reportLayoutViewport(host,host);
@@ -31,11 +31,16 @@ export function openTaxGuideReportEditor({ document:doc, host, background, row, 
   dialog.append(make('h3','',title),make('p','tgr-editor-summary',`${row.fields?.TIPO||''} · ${row.fields?.FILIAL||''} · ${String(row.fields?.COMPETENCIA||'').slice(0,10).split('-').reverse().join('/')}`),controls,status,cancel);
   overlay.append(dialog);host.append(overlay);background.setAttribute('inert','');dialog.focus({preventScroll:true});
   win.addEventListener('resize',position);viewport?.addEventListener('resize',position);viewport?.addEventListener('scroll',position);position();
-  cancel.addEventListener('click',close);
-  overlay.addEventListener('click',event=>{if(event.target===overlay)close();});
+  function dismiss(){
+    if(cancel.disabled)return;
+    if(attachmentSaved){void changed();return;}
+    close();
+  }
+  cancel.addEventListener('click',dismiss);
+  overlay.addEventListener('click',event=>{if(event.target===overlay)dismiss();});
   dialog.addEventListener('keydown',event=>{
     if(event.defaultPrevented)return;
-    if(event.key==='Escape'){event.preventDefault();event.stopPropagation();close();return;}
+    if(event.key==='Escape'){event.preventDefault();event.stopPropagation();dismiss();return;}
     if(event.key!=='Tab')return;
     const nodes=[...dialog.querySelectorAll('button:not(:disabled),input:not(:disabled)')].filter(node=>!node.closest('[hidden]'));
     const first=nodes[0],last=nodes.at(-1);
@@ -68,29 +73,91 @@ export function openTaxGuideReportEditor({ document:doc, host, background, row, 
     retry.addEventListener('click',()=>void readAmount());void readAmount();
   }else{
     const sources=make('div','tgr-editor-sources'),retry=make('button','tgr-button','Tentar envio novamente');
-    retry.type='button';retry.dataset.guideRetry='';retry.hidden=true;
-    controls.append(sources,retry);
+    const confirmation=make('div','tgr-editor-confirmation');
+    const yes=make('button','tgr-button','SIM'),no=make('button','tgr-button','NÃO');
+    yes.type=no.type=retry.type='button';
+    confirmation.dataset.guideConfirm='';confirmation.hidden=true;
+    const question=make('p','','Você quer considerar a guia preenchida?');
+    question.id='tgr-guide-confirm-question';
+    confirmation.setAttribute('role','group');confirmation.setAttribute('aria-labelledby',question.id);
+    confirmation.append(question,yes,no);
+    retry.dataset.guideRetry='';retry.hidden=true;
+    controls.append(sources,confirmation,retry);
+    let pendingFiles=[],selectedPdfs=[],submit=false;
+
     async function upload(){
-      const latest=await currentContext();
-      if(latest.attachments?.existingFiles?.length){await changed();return;}
-      status.textContent='Enviando guia…';
-      await data.saveEditor(latest,{}, {attachments:{uploads:pendingFiles,deletions:[]},signal});
-      if(!signal.aborted)await changed();
+      if(busy||signal.aborted)return;
+      setBusy(true);cancel.disabled=true;retry.hidden=true;dialog.focus({preventScroll:true});
+      try{
+        if(!attachmentSaved){
+          status.textContent='Enviando guia…';
+          const latest=await currentContext();
+          if(latest.attachments?.canEdit===false){
+            context=null;
+            throw new Error(latest.attachments.error||'Não foi possível consultar os anexos da guia.');
+          }
+          await data.saveEditor(latest,{}, {attachments:{uploads:pendingFiles,deletions:[]},signal});
+          attachmentSaved=true;
+        }
+        signal.throwIfAborted();
+        if(submit){
+          status.textContent='Atualizando status da guia…';
+          const latest=await data.loadEditor(String(row.id),{signal,includeAttachments:true});
+          signal.throwIfAborted();
+          if(String(latest.item?.fields?.STATUS||'').trim().toUpperCase()==='PENDENTE'){
+            const names=new Set(latest.attachments?.existingFiles?.map(file=>String(file.name).trim().toLowerCase()));
+            if(!selectedPdfs.every(name=>names.has(name)))throw new Error('O PDF não foi localizado nos anexos desta guia.');
+            await data.saveEditor(latest,{STATUS:'SUBMETIDO'},{signal});
+          }
+        }
+        await changed();
+      }catch(error){
+        if(!signal.aborted){
+          status.textContent=attachmentSaved?`O PDF foi enviado, mas o status não pôde ser atualizado. ${errorMessage(error)}`:errorMessage(error);
+          retry.textContent=attachmentSaved?'Tentar atualizar status novamente':'Tentar envio novamente';
+          sources.hidden=attachmentSaved;
+          retry.hidden=false;
+        }
+      }finally{
+        if(!signal.aborted){
+          setBusy(false);cancel.disabled=false;
+          if(!retry.hidden)retry.focus({preventScroll:true});
+        }
+      }
     }
+
     async function pick(source){
       if(busy||signal.aborted)return;
-      setBusy(true);status.textContent='';retry.hidden=true;
+      setBusy(true);status.textContent='';
       try{
-        if(source){pendingFiles=await pickAttachments(source,{signal});signal.throwIfAborted();}
-        if(pendingFiles?.length)await upload();
-      }catch(error){if(!signal.aborted){status.textContent=errorMessage(error);retry.hidden=!pendingFiles?.length;}}
-      finally{if(!signal.aborted)setBusy(false);}
+        const files=await pickAttachments(source,{signal});
+        signal.throwIfAborted();
+        if(!files?.length)return;
+        context=null;
+        pendingFiles=files;
+      }catch(error){
+        if(!signal.aborted)status.textContent=errorMessage(error);
+        return;
+      }finally{if(!signal.aborted)setBusy(false);}
+      submit=false;retry.hidden=true;
+      selectedPdfs=pendingFiles.map(file=>String(file.name||'').trim().toLowerCase()).filter(name=>name.endsWith('.pdf'));
+      sources.hidden=true;
+      if(!selectedPdfs.length){await upload();return;}
+      confirmation.hidden=false;
+      no.focus({preventScroll:true});
     }
+
+    function answer(submitted){
+      if(confirmation.hidden||busy||signal.aborted)return;
+      submit=submitted;confirmation.hidden=true;
+      void upload();
+    }
+    yes.addEventListener('click',()=>answer(true));no.addEventListener('click',()=>answer(false));
     for(const [source,text] of [['camera','Tirar foto'],['scan','Escanear'],['files','Anexar arquivo'],['photos','Anexar foto']]){
       const button=make('button','tgr-button',text);button.type='button';button.dataset.source=source;
       button.addEventListener('click',()=>void pick(source));sources.append(button);
     }
-    retry.addEventListener('click',()=>void pick(null));
+    retry.addEventListener('click',()=>void upload());
   }
   return {close};
 }

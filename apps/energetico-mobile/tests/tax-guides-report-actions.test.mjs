@@ -15,9 +15,9 @@ function setup(t,options={}){
   const columns=[{name:'TIPO',choice:{choices:['INSS','FGTS']},required:true},{name:'FILIAL',text:{},required:true},
     {name:'COMPETENCIA',dateTime:{format:'dateOnly'},required:true},{name:'VENCIMENTO',dateTime:{format:'dateOnly'}},{name:'VALOR',currency:{locale:'pt-BR'}},{name:'STATUS',text:{},required:true}];
   const repository={resolveList:async()=>({status:'resolved',id:'guides'}),getColumns:async()=>columns,
-    getItem:async()=>structuredClone(item),listAttachments:async()=>files.map(file=>({name:file.name})),deleteAttachment:async()=>{},
-    uploadAttachment:async(site,list,id,file,name)=>{assert.equal(list,'guides');assert.equal(id,'7');if(options.upload)await options.upload();files.push({name,blob:file});},
-    updateItem:async(site,list,id,fields,{eTag})=>{assert.equal(id,'7');assert.equal(eTag,'"v1"');writes.push(fields);Object.assign(item.fields,fields);return structuredClone(item);}};
+    getItem:async()=>structuredClone(item),listAttachments:async()=>{if(options.list)await options.list();return files.map(file=>({name:file.name}));},deleteAttachment:async()=>{},
+    uploadAttachment:async(site,list,id,file,name)=>{assert.equal(list,'guides');assert.equal(id,'7');if(options.upload)await options.upload();files.push({name,blob:file});item.eTag=`"v${files.length+1}"`;},
+    updateItem:async(site,list,id,fields,{eTag})=>{assert.equal(id,'7');assert.equal(eTag,item.eTag);if(options.update)await options.update(fields);writes.push(fields);Object.assign(item.fields,fields);return structuredClone(item);}};
   const source=createRegistrationGalleryData({kind:'taxGuides',repository});
   const data={...source,loadSnapshot:async()=>({rows:[{...structuredClone(item),hasAttachments:files.length>0}]})};
   if(options.loadEditor)data.loadEditor=options.loadEditor;
@@ -29,14 +29,25 @@ function setup(t,options={}){
 }
 function action(report,name){const node=report.element.querySelector(`[data-guide-action="${name}"]`);assert.ok(node,`missing ${name} action`);node.click();}
 
+async function confirm(h,answer){
+  const confirmation=h.doc.querySelector('[data-guide-confirm]');
+  await until(()=>confirmation&&!confirmation.hidden);
+  assert.match(confirmation.textContent,/considerar a guia preenchida/i);
+  assert.deepEqual([...confirmation.querySelectorAll('button')].map(button=>button.textContent),['SIM','NÃO']);
+  [...confirmation.querySelectorAll('button')].find(button=>button.textContent===answer).click();
+}
+
 for(const source of ['camera','scan','files','photos'])test(`pending guide saves original ${source} file to its own SharePoint row`,async t=>{
   const h=setup(t);await h.report.open();action(h.report,'attach');
   const overlay=h.doc.querySelector('.tgr-editor-overlay');assert.ok(overlay);
   assert.deepEqual([...overlay.querySelectorAll('[data-source]')].map(b=>b.dataset.source).sort(),['camera','files','photos','scan']);
   overlay.querySelector(`[data-source="${source}"]`).click();
+  await until(()=>h.doc.querySelector('[data-guide-confirm]:not([hidden])'));
+  assert.deepEqual(h.files,[]);
+  await confirm(h,'NÃO');
   await until(()=>h.files.length===1&&!h.doc.querySelector('.tgr-editor-overlay'));
   assert.equal(h.files[0].name,`${source}.pdf`);assert.deepEqual(h.writes,[]);
-  assert.ok(h.report.element.querySelector('.tgr-attachment'));assert.equal(h.report.element.querySelector('[data-guide-action="attach"]'),null);
+  assert.ok(h.report.element.querySelector('.tgr-attachment'));assert.ok(h.report.element.querySelector('[data-guide-action="attach"]'));
 });
 
 for(const [input,value] of [['1.234,56',1234.56],['0',0],['1234.56',1234.56]])test(`missing amount accepts ${input} and persists only VALOR`,async t=>{
@@ -62,9 +73,10 @@ test('cancelled picker leaves the guide pending and allows selecting another sou
 
 test('failed upload keeps the selected original for retry without capturing again',async t=>{
   let fail=true;const h=setup(t,{upload:()=>{if(fail)throw new Error('offline');}});await h.report.open();action(h.report,'attach');
-  h.doc.querySelector('[data-source="scan"]').click();await until(()=>h.doc.querySelector('[data-guide-retry]:not([hidden])'));
-  assert.equal(h.files.length,0);fail=false;h.doc.querySelector('[data-guide-retry]').click();await until(()=>h.files.length===1);
-  assert.deepEqual(h.picks,['scan']);assert.equal(h.files[0].name,'scan.pdf');
+  h.doc.querySelector('[data-source="scan"]').click();await confirm(h,'SIM');await until(()=>h.doc.querySelector('[data-guide-retry]:not([hidden])'));
+  assert.equal(h.files.length,0);assert.deepEqual(h.writes,[]);
+  fail=false;h.doc.querySelector('[data-guide-retry]').click();await until(()=>h.writes.length===1);
+  assert.deepEqual(h.picks,['scan']);assert.equal(h.files[0].name,'scan.pdf');assert.deepEqual(h.writes,[{STATUS:'SUBMETIDO'}]);
 });
 
 test('closing aborts capture and a late camera response never uploads',async t=>{
@@ -87,10 +99,100 @@ test('printed pending cells retain their status after becoming clickable',async 
   assert.match(output,/A informar/);assert.match(output,/Guia pendente/);
 });
 
-test('a guide attached in another session is refreshed without uploading a second file',async t=>{
-  const h=setup(t);await h.report.open();h.files.push({name:'already.pdf'});action(h.report,'attach');
-  h.doc.querySelector('[data-source="files"]').click();await until(()=>!h.doc.querySelector('.tgr-editor-overlay'));
-  assert.deepEqual(h.files.map(f=>f.name),['already.pdf']);assert.ok(h.report.element.querySelector('.tgr-attachment'));
+test('PDF selection asks again when the row already has an attachment and updates only its status on SIM',async t=>{
+  let selected=0;
+  const h=setup(t,{pick:()=>[new h.dom.window.File(['original'],`guia-${++selected}.PDF`)]});await h.report.open();
+  const row=()=>h.report.element.querySelector('[data-guide-id="7"]');
+  assert.equal(row().dataset.guideStatus,'PENDENTE');
+  for(const [answer,expectedStatus,count] of [['NÃO','PENDENTE',1],['SIM','SUBMETIDO',2],['SIM','SUBMETIDO',3]]){
+    action(h.report,'attach');h.doc.querySelector('[data-source="files"]').click();
+    await confirm(h,answer);await until(()=>h.files.length===count&&row()&&!h.doc.querySelector('.tgr-editor-overlay'));
+    assert.equal(row().dataset.guideStatus,expectedStatus);
+    assert.equal(row().cells[5].textContent,expectedStatus);
+    assert.ok(row().querySelector('.tgr-attachment'));
+  }
+  assert.deepEqual(h.writes,[{STATUS:'SUBMETIDO'}]);
+  assert.deepEqual(h.files.map(file=>file.name),['guia-1.PDF','guia-2.PDF','guia-3.PDF']);
+});
+
+test('image-only attachments keep the original attachment flow',async t=>{
+  const h=setup(t,{pick:()=>[new h.dom.window.File(['photo'],'guia.jpg',{type:'image/jpeg'})]});await h.report.open();action(h.report,'attach');
+  h.doc.querySelector('[data-source="photos"]').click();await until(()=>h.files.length===1&&!h.doc.querySelector('.tgr-editor-overlay'));
+  assert.equal(h.files[0].name,'guia.jpg');assert.deepEqual(h.writes,[]);
+});
+
+test('retry after status failure keeps the original PDF without uploading it again',async t=>{
+  let fail=true;
+  const h=setup(t,{update:()=>{assert.equal(h.files.length,1);if(fail)throw new Error('offline');}});
+  await h.report.open();action(h.report,'attach');h.doc.querySelector('[data-source="files"]').click();await confirm(h,'SIM');
+  await until(()=>h.doc.querySelector('[data-guide-retry]:not([hidden])'));
+  assert.equal(h.item.fields.STATUS,'PENDENTE');
+  fail=false;h.doc.querySelector('[data-guide-retry]').click();await until(()=>h.writes.length===1&&!h.doc.querySelector('.tgr-editor-overlay'));
+  assert.deepEqual(h.files.map(f=>f.name),['files.pdf']);assert.deepEqual(h.writes,[{STATUS:'SUBMETIDO'}]);
+});
+
+test('a confirmed attachment stays open while the status is being saved',async t=>{
+  let finish;
+  const h=setup(t,{update:()=>new Promise(resolve=>{finish=resolve;})});
+  await h.report.open();action(h.report,'attach');h.doc.querySelector('[data-source="files"]').click();await confirm(h,'SIM');
+  await until(()=>finish);
+  const dialog=h.doc.querySelector('.tgr-editor'),overlay=dialog.parentElement;
+  const cancel=[...dialog.querySelectorAll('button')].find(button=>button.textContent==='Cancelar');
+  assert.equal(cancel.disabled,true);cancel.click();
+  dialog.dispatchEvent(new h.dom.window.KeyboardEvent('keydown',{key:'Escape',bubbles:true,cancelable:true}));
+  overlay.click();assert.equal(dialog.isConnected,true);
+  finish();await until(()=>h.writes.length===1&&!dialog.isConnected);
+  assert.deepEqual(h.writes,[{STATUS:'SUBMETIDO'}]);
+});
+
+test('dismissing a status failure refreshes the saved PDF and pending status',async t=>{
+  const h=setup(t,{update:()=>{throw new Error('offline');}});
+  await h.report.open();action(h.report,'attach');h.doc.querySelector('[data-source="files"]').click();await confirm(h,'SIM');
+  await until(()=>h.doc.querySelector('[data-guide-retry]:not([hidden])'));
+  [...h.doc.querySelectorAll('.tgr-editor button')].find(button=>button.textContent==='Cancelar').click();
+  await until(()=>h.report.element.querySelector('[data-guide-status="PENDENTE"] .tgr-attachment'));
+  assert.deepEqual(h.writes,[]);
+});
+
+test('a duplicate PDF from another session does not get uploaded or submit the guide',async t=>{
+  const h=setup(t);await h.report.open();h.files.push({name:'files.pdf'});action(h.report,'attach');
+  h.doc.querySelector('[data-source="files"]').click();await confirm(h,'SIM');
+  await until(()=>h.doc.querySelector('.tgr-editor-status').textContent.includes('já existe'));
+  assert.deepEqual(h.files.map(f=>f.name),['files.pdf']);assert.deepEqual(h.writes,[]);
+});
+
+test('a temporary attachment list failure can be retried with the selected PDF',async t=>{
+  let fail=true;const h=setup(t,{list:()=>{if(fail)throw new Error('offline');}});
+  await h.report.open();action(h.report,'attach');h.doc.querySelector('[data-source="files"]').click();await confirm(h,'SIM');
+  await until(()=>h.doc.querySelector('[data-guide-retry]:not([hidden])'));
+  fail=false;h.doc.querySelector('[data-guide-retry]').click();await until(()=>h.writes.length===1);
+  assert.deepEqual(h.picks,['files']);assert.deepEqual(h.files.map(file=>file.name),['files.pdf']);
+});
+
+test('a rejected file can be replaced in the same editor and asks again',async t=>{
+  let selected='invalid.exe';
+  const h=setup(t,{pick:()=>[new h.dom.window.File(['original'],selected)]});
+  await h.report.open();action(h.report,'attach');h.doc.querySelector('[data-source="files"]').click();
+  await until(()=>h.doc.querySelector('[data-guide-retry]:not([hidden])'));
+  assert.equal(h.doc.querySelector('.tgr-editor-sources').hidden,false);
+  selected='válido.pdf';h.doc.querySelector('[data-source="files"]').click();await confirm(h,'SIM');
+  await until(()=>h.writes.length===1);
+  assert.deepEqual(h.files.map(file=>file.name),['válido.pdf']);
+});
+
+test('reselecting the same filename after an uncertain upload does not submit the earlier file',async t=>{
+  let content='primeiro PDF';
+  const h=setup(t,{pick:()=>[new h.dom.window.File([content],'guia.pdf')],upload:()=>{
+    h.files.push({name:'guia.pdf'});throw new Error('resposta perdida');
+  }});
+  await h.report.open();action(h.report,'attach');
+  const pick=h.doc.querySelector('[data-source="files"]');
+  pick.click();await confirm(h,'SIM');
+  await until(()=>h.doc.querySelector('[data-guide-retry]:not([hidden])'));
+  content='PDF diferente';pick.click();await confirm(h,'SIM');
+  await until(()=>h.doc.querySelector('.tgr-editor-status').textContent.includes('já existe'));
+  assert.deepEqual(h.files.map(file=>file.name),['guia.pdf']);
+  assert.deepEqual(h.writes,[]);
 });
 
 test('failed amount read can be retried without leaving the editor',async t=>{
