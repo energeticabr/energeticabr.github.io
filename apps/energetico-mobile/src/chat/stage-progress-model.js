@@ -93,6 +93,12 @@ export function buildStageProgress(snapshot, filters = {}, today, { includeAllLa
   })) };
 }
 
+export function canStartStageProgress(row, stage) {
+  if (!row?.branch || !row.stage) return false;
+  const status = row.status.trim().toUpperCase();
+  return stage ? /^N[ÃA]O INICIADO$/.test(status) : /^ATIVIDADE N[ÃA]O INICIADA$/.test(status);
+}
+
 function ganttRange(start, end, status, today) {
   const state = status.trim().toUpperCase();
   const finished = state === "FINALIZADO" || state === "ATIVIDADE FINALIZADA";
@@ -111,6 +117,7 @@ export function buildStageGantt(snapshot, today) {
   });
   return stages.filter(stage => stage.stage.trim()).map(stage => ({
     source: stage.launch,
+    canStart: canStartStageProgress(stage.launch, true),
     canFinalize: stage.completion.ready && stage.status.trim().toUpperCase() === 'INICIADO'
       && Boolean(stage.launch?.branch && stage.launch?.stage),
     name: stage.launch?.stage || stage.stage,
@@ -122,6 +129,7 @@ export function buildStageGantt(snapshot, today) {
     range: ganttRange(stage.startDate, stage.endDate, stage.status, day),
     children: stage.rows.map(row => ({
       source: row,
+      canStart: canStartStageProgress(row, false),
       canFinalize: row.status.trim().toUpperCase() === 'ATIVIDADE INICIADA',
       branch: row.branch,
       activityIds: [row.id],

@@ -58,12 +58,12 @@ export function createStageGanttView({ document: doc = globalThis.document, data
   doc.body.append(root);
   addReportCloseControl({ root, toolbar: tools, onClose: close });
   const detail = createStageGanttDetailView({ root, background: dialog, data });
-  const finish = createStageGanttFinishView({ root, background: dialog, data, onSaved(saved, { stage }) {
+  const finish = createStageGanttFinishView({ root, background: dialog, data, onSaved(saved, { stage, starting }) {
     const collection = stage ? 'launches' : 'activities';
     snapshot = { ...snapshot, [collection]: snapshot[collection].map(row => String(row.id) === String(saved.id) ? saved : row) };
     stages = buildStageGantt(snapshot, today);
     render();
-    announce(stage ? 'Etapa finalizada.' : 'Atividade finalizada.');
+    announce(`${stage ? 'Etapa' : 'Atividade'} ${starting ? 'iniciada' : 'finalizada'}.`);
     scroll.focus({ preventScroll: true });
   } });
 
@@ -180,15 +180,26 @@ export function createStageGanttView({ document: doc = globalThis.document, data
       const endText = item.finished ? formatOperationsDate(item.end) : 'Em Andamento';
       const dates = `Início ${startText} · Fim ${endText}`;
       card.append(make('strong', 'gantt-name', item.name));
-      const canWrite = typeof data[parent ? 'finalizeStage' : 'finalizeActivity'] === 'function';
-      if (!item.finished && canWrite && typeof data.loadAssignments === 'function') {
-        const finalize = button('FINALIZAR', `Finalizar ${parent ? 'etapa' : 'atividade'} ${item.name}`);
+      const actions = make('div', 'gantt-row-actions');
+      const subjectName = parent ? 'etapa' : 'atividade';
+      if (item.canStart && typeof data[parent ? 'startStage' : 'startActivity'] === 'function') {
+        const start = button('INICIAR', `Iniciar ${subjectName} ${item.name}`);
+        start.className = 'gantt-start-button';
+        start.setAttribute('aria-haspopup', 'dialog');
+        start.addEventListener('click', () => { void finish.open(item, start, { stage: parent, starting: true }); });
+        actions.append(start);
+      }
+      if (!item.finished && typeof data[parent ? 'finalizeStage' : 'finalizeActivity'] === 'function'
+        && typeof data.loadAssignments === 'function') {
+        const finalize = button('FINALIZAR', `Finalizar ${subjectName} ${item.name}`);
         finalize.className = 'gantt-finish-button';
         finalize.disabled = !item.canFinalize;
-        if (parent && !item.finished && !item.canFinalize) finalize.title = 'Finalize todos os descritivos vinculados antes de finalizar a etapa.';
+        if (item.canStart) finalize.title = `Inicie a ${subjectName} antes de finalizar.`;
+        else if (parent && !item.canFinalize) finalize.title = 'Finalize todos os descritivos vinculados antes de finalizar a etapa.';
         finalize.addEventListener('click', () => { void finish.open(item, finalize, { stage: parent }); });
-        card.append(finalize);
+        actions.append(finalize);
       }
+      if (actions.childElementCount) card.append(actions);
       label.append(card);
       const track = make('div', 'gantt-track');
       if (item.range) {
@@ -353,11 +364,16 @@ export function createStageGanttView({ document: doc = globalThis.document, data
       await load();
       if (root.hidden || !finishDraft) return;
       const stage = finishDraft.kind === 'stage';
+      const starting = finishDraft.operation === 'start';
       const item = stages.flatMap(row => stage ? [row] : row.children).find(row => String(row.source?.id) === String(finishDraft.id));
       if (item) {
         branches.value = item.branch;
+        if (starting && !stage) {
+          const parent = stages.find(row => row.children.includes(item));
+          if (parent) expanded.add(String(parent.source?.id));
+        }
         render();
-        await finish.open(item, dialog, { stage, draftDate: finishDraft.date });
+        await finish.open(item, dialog, { stage, starting, draftDate: finishDraft.date });
       }
     },
     close,
