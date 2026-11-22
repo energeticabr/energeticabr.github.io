@@ -131,6 +131,29 @@ test('retry after status failure keeps the original PDF without uploading it aga
   assert.deepEqual(h.files.map(f=>f.name),['files.pdf']);assert.deepEqual(h.writes,[{STATUS:'SUBMETIDO'}]);
 });
 
+test('a confirmed attachment stays open while the status is being saved',async t=>{
+  let finish;
+  const h=setup(t,{update:()=>new Promise(resolve=>{finish=resolve;})});
+  await h.report.open();action(h.report,'attach');h.doc.querySelector('[data-source="files"]').click();await confirm(h,'SIM');
+  await until(()=>finish);
+  const dialog=h.doc.querySelector('.tgr-editor'),overlay=dialog.parentElement;
+  const cancel=[...dialog.querySelectorAll('button')].find(button=>button.textContent==='Cancelar');
+  assert.equal(cancel.disabled,true);cancel.click();
+  dialog.dispatchEvent(new h.dom.window.KeyboardEvent('keydown',{key:'Escape',bubbles:true,cancelable:true}));
+  overlay.click();assert.equal(dialog.isConnected,true);
+  finish();await until(()=>h.writes.length===1&&!dialog.isConnected);
+  assert.deepEqual(h.writes,[{STATUS:'SUBMETIDO'}]);
+});
+
+test('dismissing a status failure refreshes the saved PDF and pending status',async t=>{
+  const h=setup(t,{update:()=>{throw new Error('offline');}});
+  await h.report.open();action(h.report,'attach');h.doc.querySelector('[data-source="files"]').click();await confirm(h,'SIM');
+  await until(()=>h.doc.querySelector('[data-guide-retry]:not([hidden])'));
+  [...h.doc.querySelectorAll('.tgr-editor button')].find(button=>button.textContent==='Cancelar').click();
+  await until(()=>h.report.element.querySelector('[data-guide-status="PENDENTE"] .tgr-attachment'));
+  assert.deepEqual(h.writes,[]);
+});
+
 test('a duplicate PDF from another session does not get uploaded or submit the guide',async t=>{
   const h=setup(t);await h.report.open();h.files.push({name:'files.pdf'});action(h.report,'attach');
   h.doc.querySelector('[data-source="files"]').click();await confirm(h,'SIM');
@@ -155,6 +178,21 @@ test('a rejected file can be replaced in the same editor and asks again',async t
   selected='válido.pdf';h.doc.querySelector('[data-source="files"]').click();await confirm(h,'SIM');
   await until(()=>h.writes.length===1);
   assert.deepEqual(h.files.map(file=>file.name),['válido.pdf']);
+});
+
+test('reselecting the same filename after an uncertain upload does not submit the earlier file',async t=>{
+  let content='primeiro PDF';
+  const h=setup(t,{pick:()=>[new h.dom.window.File([content],'guia.pdf')],upload:()=>{
+    h.files.push({name:'guia.pdf'});throw new Error('resposta perdida');
+  }});
+  await h.report.open();action(h.report,'attach');
+  const pick=h.doc.querySelector('[data-source="files"]');
+  pick.click();await confirm(h,'SIM');
+  await until(()=>h.doc.querySelector('[data-guide-retry]:not([hidden])'));
+  content='PDF diferente';pick.click();await confirm(h,'SIM');
+  await until(()=>h.doc.querySelector('.tgr-editor-status').textContent.includes('já existe'));
+  assert.deepEqual(h.files.map(file=>file.name),['guia.pdf']);
+  assert.deepEqual(h.writes,[]);
 });
 
 test('failed amount read can be retried without leaving the editor',async t=>{
