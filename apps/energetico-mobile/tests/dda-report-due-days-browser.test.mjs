@@ -83,6 +83,8 @@ test('DDA date and linkage clusters fit on phones, desktop and print',{timeout:9
     assert.equal(state.rows[3].background,'rgb(23, 100, 63)');
     assert.equal(state.missingIssued,'Não informada');
     assert.equal(state.issued.length,4);
+    assert.deepEqual([...new Set(state.rows.map(row=>row.dateAlign))],['center'],`due dates at ${width}px in ${mediaType}`);
+    assert.deepEqual([...new Set(state.issued.map(row=>row.labelAlign))],['center'],`issuance labels at ${width}px in ${mediaType}`);
     for(const row of state.issued){
      assert.equal(row.text,'23/10/2026');
      assert.equal(row.age,'12 d');
