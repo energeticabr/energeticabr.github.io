@@ -31,7 +31,9 @@ test('opens a single PDF control below the task ID with that task’s files and 
  assert.deepEqual(listed,[1,4]);
  assert.equal(control.previousElementSibling.textContent,'1');
  assert.equal(control.getAttribute('aria-label'),'Abrir PDFs da atividade 1');
- assert.ok(control.querySelector('svg'));
+ const icon=control.querySelector('svg');
+ assert.ok(icon);
+ assert.equal(dom.window.getComputedStyle(icon).color,'rgb(28, 60, 123)');
  assert.equal(idCell(2).querySelector('button'),null);
  assert.equal(idCell(4).querySelector('button'),null);
  control.click();await tick();assert.deepEqual(preview.items,files);
