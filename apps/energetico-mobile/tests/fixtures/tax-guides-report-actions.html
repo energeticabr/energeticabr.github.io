@@ -49,7 +49,7 @@ if(mode==='transition'){
 }
 document.documentElement.dataset.layout=JSON.stringify({panel:panelRect,editor:editor&&rect(editor),transition,
 rootOverflow:document.documentElement.scrollWidth>innerWidth+1,panelOverflow:panel.scrollWidth>panel.clientWidth+1,
-tableScrollTop:scroll.scrollTop,lastRowInScroll,printError:mode==='print-error'?rect(printStatus):null,
+tableScrollTop:scroll.scrollTop,tableOverflow:scroll.scrollWidth>scroll.clientWidth+1,lastRowInScroll,printError:mode==='print-error'?rect(printStatus):null,
 buttons:[...document.querySelectorAll('.tgr-editor button')].filter(n=>!n.closest('[hidden]')).map(rect),
 confirmation:[...document.querySelectorAll('[data-guide-confirm]:not([hidden]) button')].map(button=>button.textContent),rowFills,
 input:editor?.querySelector('input')&&rect(editor.querySelector('input')), sources:editor?.querySelectorAll('[data-source]').length,

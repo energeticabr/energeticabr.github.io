@@ -88,4 +88,5 @@
 .tgr-backdrop[data-report-compact-height="true"] .tgr-filters { gap: 8px; }
 .tgr-backdrop[data-report-compact-height="true"] :is(.tgr-table th, .tgr-table td) { padding: 6px; font-size: 12px; }
 .tgr-backdrop[data-report-width-mode="narrow"] :is(.tgr-table th, .tgr-table td) { padding: 4px; font-size: 11px; }
-.tgr-backdrop[data-report-width-mode="narrow"] .tgr-table td:nth-child(3) { min-width: 100px; }
+.tgr-backdrop[data-report-width-mode="narrow"] .tgr-table td:nth-child(3) { min-width: 72px; }
+.tgr-backdrop[data-report-width-mode="narrow"] .tgr-attachment-actions { flex-wrap: wrap; }
