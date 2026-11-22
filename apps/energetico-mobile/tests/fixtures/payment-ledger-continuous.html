@@ -48,7 +48,9 @@ async function checkAttachments(){
       fits:r.x>=c.x-1&&r.right<=c.right+1&&r.y>=c.y-1&&r.bottom<=c.bottom+1,
       icon:control.querySelector('svg').getBoundingClientRect().width>=10,clickable:control.contains(hit)};
   };
-  const result={controls:[order,launch,otherOrder,otherLaunch].map(geometry),count:root.querySelectorAll('.pl-pdf-attachment').length};
+  const controls=[order,launch,otherOrder,otherLaunch];
+  const result={controls:controls.map(geometry),count:root.querySelectorAll('.pl-pdf-attachment').length,
+    iconColors:controls.map(control=>getComputedStyle(control.querySelector('svg rect')).fill)};
   const title=()=>document.querySelector('.attachment-preview-dialog[open] .attachment-preview-title')?.textContent;
   const visiblePdf=name=>waitFor(()=>title()===name&&document.querySelector('.attachment-preview-content canvas'));
   order.click();await visiblePdf('order-569.pdf');

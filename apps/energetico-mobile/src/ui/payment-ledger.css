@@ -55,7 +55,7 @@
 .pl-table td:is([data-column=order],[data-column=id]) { padding-inline:1px; }
 .pl-number-with-pdf { display:inline-flex; align-items:center; gap:1px; max-width:100%; }
 .pl-number-with-pdf > span { min-width:0; overflow-wrap:anywhere; }
-.pl-pdf-attachment { display:inline-grid; place-items:center; flex:0 0 clamp(11px,calc(1.6 * var(--report-vw, 1vw)),19px); min-width:0; min-height:22px; padding:0; border:0; border-radius:3px; background:transparent; color:#9b1515; cursor:pointer; }
+.pl-pdf-attachment { display:inline-grid; place-items:center; flex:0 0 clamp(11px,calc(1.6 * var(--report-vw, 1vw)),19px); min-width:0; min-height:22px; padding:0; border:0; border-radius:3px; background:transparent; color:#1c3c7b; cursor:pointer; }
 .pl-pdf-attachment svg { display:block; width:100%; max-width:16px; height:auto; }
 .pl-pdf-retry { align-self:center; flex-shrink:0; padding:2px 6px; font:inherit; color:#9b1515; cursor:pointer; }
 .pl-day-blue { background:#e6f0ff; }
