@@ -661,6 +661,23 @@ assert.deepEqual(shortcuts.map(s=>s.action),['open-pending-provisions','open-sic
       assert.ok(taskReady,'task association mascot loads grouped tasks and keeps pending statuses initially selected');
       const taskFit=await evaluate(`(()=>{const p=document.querySelector('.tar-dialog'),table=p.querySelector('table'),r=p.getBoundingClientRect(),last=table.querySelector('th:last-child').getBoundingClientRect(),c=p.querySelector('.tar-content'),filters=[...p.querySelectorAll('.tar-filter')].map(n=>n.getBoundingClientRect()),cards=[...p.querySelectorAll('.tar-card')];return {top:r.top,bottom:r.bottom,height:innerHeight,right:r.right,last:last.right,columns:table.querySelectorAll('thead th').length,filters:filters.length,aligned:filters.every(f=>Math.abs(f.top-filters[0].top)<1),cards:cards.length,cardAligned:cards.every(n=>Math.abs(n.getBoundingClientRect().top-cards[0].getBoundingClientRect().top)<1),overflow:c.scrollWidth>c.clientWidth+1,font:parseFloat(getComputedStyle(table).fontSize),emergency:getComputedStyle(p.querySelector('[data-task-id="1"]')).backgroundColor,metrics:[...p.querySelectorAll('.tar-card strong')].map(n=>n.textContent)};})()`);
       assert.ok(taskFit.top===0&&taskFit.bottom===taskFit.height&&!taskFit.overflow&&taskFit.last<=taskFit.right&&taskFit.aligned&&taskFit.cardAligned&&taskFit.font>=6,JSON.stringify(taskFit));assert.equal(taskFit.columns,6);assert.equal(taskFit.filters,7);assert.equal(taskFit.cards,3);assert.equal(taskFit.emergency,'rgb(255, 205, 210)');assert.deepEqual(taskFit.metrics,['12','1','13']);
+      await evaluate(`document.querySelector('[data-task-id="1"]').scrollIntoView({block:'center'})`);
+      const pdfControl='.tar-id .tar-pdf-attachment';
+      for(let n=0;n<50&&!await evaluate(`Boolean(document.querySelector(${JSON.stringify(pdfControl)}))`);n++)await delay(50);
+      const pdfHit=await evaluate(`(()=>{const b=document.querySelector('${pdfControl}'),r=b.getBoundingClientRect(),id=b.previousElementSibling.getBoundingClientRect(),cell=b.parentElement.getBoundingClientRect(),x=r.x+r.width/2,y=r.y+r.height/2;return {x,y,below:r.top>=id.bottom,inside:r.left>=cell.left&&r.right<=cell.right,hit:document.elementFromPoint(x,y)===b||b.contains(document.elementFromPoint(x,y)),count:document.querySelectorAll('${pdfControl}').length};})()`);
+      assert.ok(pdfHit.below&&pdfHit.inside&&pdfHit.hit,JSON.stringify(pdfHit));
+      assert.equal(pdfHit.count,1);
+      if(width===320||width===1365||pwa){
+        await clickAt(pdfHit);
+        const isPreviewing=name=>evaluate(`document.querySelector('.attachment-preview-dialog[open] .attachment-preview-title')?.textContent===${JSON.stringify(name)}&&Boolean(document.querySelector('.attachment-preview-content canvas'))`);
+        for(let n=0;n<100&&!await isPreviewing('Contrato.pdf');n++)await delay(50);
+        assert.equal(await isPreviewing('Contrato.pdf'),true);
+        await evaluate(`document.querySelector('.attachment-preview-collection-next').click()`);
+        for(let n=0;n<100&&!await isPreviewing('Aditivo.pdf');n++)await delay(50);
+        assert.equal(await isPreviewing('Aditivo.pdf'),true);
+        await evaluate(`document.querySelector('.attachment-preview-back').click()`);
+        assert.equal(await evaluate(`!document.querySelector('.tar-overlay').hidden&&document.activeElement===document.querySelector('${pdfControl}')`),true);
+      }
       await evaluate(`document.querySelector('.tar-filter [aria-label="Abrir opções de FORNECEDOR"]').click()`);
       const taskDropdown=await evaluate(`(()=>{const p=document.querySelector('.tar-dialog .sfs-popup:not([hidden])'),l=p.querySelector('.sfs-list'),r=l.getBoundingClientRect();return {placement:p.dataset.placement,visible:[...l.children].filter(n=>{const q=n.getBoundingClientRect();return q.top>=r.top-1&&q.bottom<=r.bottom+1;}).length};})()`);
       assert.equal(taskDropdown.placement,'expanded');assert.ok(taskDropdown.visible>=7,JSON.stringify(taskDropdown));

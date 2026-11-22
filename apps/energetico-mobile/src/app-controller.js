@@ -9581,6 +9581,23 @@ export function createAppController({
         signal.removeEventListener('abort', rejectCancelled);
         if (session.loadController === controller) session.loadController = null;
       }
+    }, async listPdfAttachments(listId, id, { signal, interactive } = {}) {
+      const assertRead = requestSignal => {
+        assertSession();
+        if (signal?.aborted || requestSignal?.aborted) throw cancelled();
+      };
+      const authorize = ordersGalleryTokenProvider(assertRead, TASK_ASSOCIATION_REPORT_ID, () => ({ interaction: 'popup' }));
+      assertRead();
+      const source = await taskAssociationReportDataFactory({ async tokenProvider(scopes, options = {}) {
+        assertRead(options.signal);
+        const token = await (interactive && options.interactive ? authorize(scopes) : auth.getToken(scopes));
+        assertRead(options.signal);
+        return token;
+      } });
+      assertRead();
+      const files = await source.listPdfAttachments(listId, id, { signal, interactive });
+      assertRead();
+      return files;
     }, async finalizeTask(id, completionDate, { expectedTask, signal } = {}) {
       const controller = new AbortController();
       const signals = [session.lifetime.signal, signal].filter(Boolean);
@@ -9619,7 +9636,10 @@ export function createAppController({
         assertSession();
         let report = taskAssociationReport;
         if (!report) {
-          const panel = decorateControllerReport(await taskAssociationReportViewFactory({ data, document: globalThis.document }), 'open-task-association-report');
+          const panel = decorateControllerReport(await taskAssociationReportViewFactory({
+            data, document: globalThis.document,
+            openMediaCollection: (items, options) => openGalleryMedia(items, assertSession, options),
+          }), 'open-task-association-report');
           try { assertSession(); }
           catch (error) { panel?.destroy?.(); throw error; }
           taskAssociationReport = report = panel;

@@ -21,7 +21,7 @@ function fixture(overrides = {}) {
     async getItemsPage(site, list, query, { signal }) {
       assert.equal(site, "personal"); assert.equal(list, "tasks"); assert.ok(signal);
       const params = new URLSearchParams(query);
-      assert.equal(params.get("$expand"), "fields($select=field_0,field_1,field_2,field_3,field_4,field_5,field_6,field_7)");
+      assert.equal(params.get("$expand"), "fields($select=field_0,field_1,field_2,field_3,field_4,field_5,field_6,field_7,Attachments)");
       assert.equal(params.get("$top"), "100"); assert.equal(params.has("$filter"), false);
       return { items: [item()], hasMore: false, batchCount: 1 };
     },
@@ -32,8 +32,37 @@ function fixture(overrides = {}) {
 test("loads the exact immutable task contract with actual SharePoint ID and resolved supplier label", async () => {
   const result = await create(fixture()).loadSnapshot();
   assert.deepEqual(result, { tasks: [{ id: 1, createdDate: "2026-10-01", dueDate: "2026-10-07", description: "Revisar projeto", association: "ENGENHARIA",
-    status: "ATIVIDADE CRIADA", priority: "ATIVIDADE EMERGENCIAL", difficulty: "MÉDIA", supplier: "José" }] });
+    status: "ATIVIDADE CRIADA", priority: "ATIVIDADE EMERGENCIAL", difficulty: "MÉDIA", supplier: "José" }], attachmentListId: "tasks" });
   for (const value of [result, result.tasks, result.tasks[0]]) assert.ok(Object.isFrozen(value));
+});
+
+test("keeps the task attachment flag and resolves only PDFs from the same list item", async () => {
+  const bytes = new TextEncoder().encode("%PDF-1.7").buffer;
+  const source = create(fixture({
+    async getItemsPage(_site, _list, query) {
+      assert.match(new URLSearchParams(query).get("$expand"), /,Attachments\)$/);
+      return { items: [item(1, { Attachments: true }), item(2, { Attachments: false }), item(3)], hasMore: false };
+    },
+    async listAttachments(site, list, id, options) {
+      assert.deepEqual([site, list, id], ["personal", "tasks", "1"]);
+      assert.equal(options.requireCollection, true);
+      assert.equal(options.namesOnly, true);
+      return [{ name: "Contrato.PDF" }, { name: "foto.jpg" }, { name: "Segundo.pdf" }];
+    },
+    async downloadAttachment(site, list, id, name, options) {
+      assert.deepEqual([site, list, id, name], ["personal", "tasks", "1", "Segundo.pdf"]);
+      assert.ok(options.signal);
+      return bytes;
+    },
+  }));
+  const snapshot = await source.loadSnapshot();
+  assert.equal(snapshot.attachmentListId, "tasks");
+  assert.deepEqual(snapshot.tasks.map(row => row.hasAttachments), [true, false, undefined]);
+  const files = await source.listPdfAttachments(snapshot.attachmentListId, 1);
+  assert.deepEqual(files.map(file => file.fileName), ["Contrato.PDF", "Segundo.pdf"]);
+  const pdf = await files[1].source();
+  assert.equal(pdf.type, "application/pdf");
+  assert.equal(await pdf.text(), "%PDF-1.7");
 });
 
 test("finalization writes the completion fields with the latest version and preserves an existing completion", async () => {
@@ -70,7 +99,7 @@ test("schema resolves encoded accents and spaces, renamed Title and internal ali
   const names = ["DATAIDENTIFICACAO", "DATA_x0020_FATAL", "Title", "ASSOCIA_x00c7__x00c3_O", "CONCLU_x00cd_DO", "PRIORIT_x00c1_RIA", "DIFICULDADE", "REFERENTE"];
   const result = await create(fixture({ async getColumns() { return [{ name: "LinkTitle", displayName: "TAREFA" }, { name: "computed", displayName: "DATA FATAL", computed: {} },
     ...names.map((name, i) => ({ name, ...(i === 2 ? { displayName: "TAREFA", hidden: true } : {}) }))]; },
-    async getItemsPage(_site, _list, query) { assert.equal(new URLSearchParams(query).get("$expand"), `fields($select=${names.join(",")})`);
+    async getItemsPage(_site, _list, query) { assert.equal(new URLSearchParams(query).get("$expand"), `fields($select=${names.join(",")},Attachments)`);
       return { items: [{ id: "42", fields: Object.fromEntries(names.map((name, i) => [name, values[i]])) }], hasMore: false }; } })).loadSnapshot();
   assert.equal(result.tasks[0].id, 42); assert.equal(result.tasks[0].association, "ENGENHARIA");
 });

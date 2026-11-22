@@ -1,6 +1,7 @@
 import { SHAREPOINT_SITES } from "../../../../portal/config.js";
 import { createGraphClient } from "../../../../portal/data/graph-client.js";
 import { createSharePointRepository } from "../../../../portal/data/sharepoint-repository.js";
+import { createSharePointAttachmentTransport } from "../../../../portal/data/attachments.js";
 import { calendarDate, isCompletedTaskStatus, normalizeTaskAssociationSnapshot } from "./task-association-report-model.js";
 
 const SITE = "personal";
@@ -61,6 +62,9 @@ function normalizeItem(item, columns) {
     throw new TypeError("Registro ou campos SharePoint inválidos no relatório de tarefas por associação.");
   }
   const row = { id: item.id };
+  const attachmentFlag = String(item.fields.Attachments ?? item.hasAttachments ?? "").trim().toLowerCase();
+  if (["true", "1"].includes(attachmentFlag)) row.hasAttachments = true;
+  if (["false", "0"].includes(attachmentFlag)) row.hasAttachments = false;
   for (const [field, column] of Object.entries(columns)) {
     const value = scalar(item.fields[column]);
     if (!String(value).trim() && String(scalar(item.fields[`${column}LookupId`])).trim()) {
@@ -105,7 +109,8 @@ async function resolveTaskSchema(repository, signal, schema = SCHEMA) {
 
 async function loadRows(repository, signal) {
   const { list, columns } = await resolveTaskSchema(repository, signal);
-  const query = new URLSearchParams({ $expand: `fields($select=${Object.values(columns).join(",")})`, $top: "100" }).toString();
+  const fields = [...Object.values(columns), "Attachments"].join(",");
+  const query = new URLSearchParams({ $expand: `fields($select=${fields})`, $top: "100" }).toString();
   const rows = []; const ids = new Set(); const cursors = new Set(); let cursor = "";
   for (let index = 0; index < MAX_TOTAL_PAGES; index++) {
     const page = await abortable(() => repository.getItemsPage(SITE, list.id, query, {
@@ -125,7 +130,7 @@ async function loadRows(repository, signal) {
       if (ids.has(row.id)) throw new TypeError("ID duplicado na paginação de LANCAMENTOTAREFAS.");
       ids.add(row.id); rows.push(row);
     }
-    if (!page.hasMore) return rows;
+    if (!page.hasMore) return { rows, listId: list.id };
     if (cursors.has(next)) throw new TypeError("Cursor repetido: ciclo de paginação de LANCAMENTOTAREFAS.");
     cursors.add(next); cursor = next;
   }
@@ -143,9 +148,13 @@ export function createTaskAssociationReportData({ tokenProvider, repository: sup
     const abort = () => controller.abort(externalSignal.reason);
     externalSignal?.addEventListener("abort", abort, { once: true });
     try {
-      const repository = suppliedRepository || createSharePointRepository(createGraphClient(
-        scopes => abortable(() => tokenProvider(scopes, { signal }), signal),
-      ), { personal: SHAREPOINT_SITES.personal });
+      const guardedToken = (scopes, options) => abortable(() => tokenProvider(scopes, { ...options, signal }), signal);
+      const sites = { personal: SHAREPOINT_SITES.personal };
+      const repository = suppliedRepository || createSharePointRepository(createGraphClient(guardedToken), sites, {
+        attachmentTransport: createSharePointAttachmentTransport({
+          tokenProvider: guardedToken, allowedSites: [sites.personal],
+        }),
+      });
       const result = await operation(repository, signal);
       abortIfNeeded(signal);
       return result;
@@ -157,8 +166,31 @@ export function createTaskAssociationReportData({ tokenProvider, repository: sup
   }
 
   function loadSnapshot({ signal } = {}) {
-    return withRepository(signal, async (repository, activeSignal) =>
-      normalizeTaskAssociationSnapshot({ tasks: await loadRows(repository, activeSignal) }));
+    return withRepository(signal, async (repository, activeSignal) => {
+      const { rows, listId } = await loadRows(repository, activeSignal);
+      return Object.freeze({ ...normalizeTaskAssociationSnapshot({ tasks: rows }), attachmentListId: listId });
+    });
+  }
+
+  async function listPdfAttachments(listId, id, { signal, interactive = false } = {}) {
+    if (!listId || !Number.isSafeInteger(id) || id < 1) throw new TypeError("Atividade inválida.");
+    const itemId = String(id);
+    const files = await withRepository(signal, (repository, activeSignal) =>
+      abortable(() => repository.listAttachments(SITE, listId, itemId, {
+        signal: activeSignal, requireCollection: true, namesOnly: true, interactive,
+      }), activeSignal));
+    return files.filter(({ name }) => /\.pdf$/i.test(name)).map(({ name }) => ({
+      fileName: name,
+      mimeType: "application/pdf",
+      async source({ signal: downloadSignal = signal, onProgress } = {}) {
+        signal?.throwIfAborted();
+        const payload = await withRepository(downloadSignal, (repository, activeSignal) =>
+          abortable(() => repository.downloadAttachment(SITE, listId, itemId, name, {
+            signal: activeSignal, onProgress,
+          }), activeSignal));
+        return new Blob([payload], { type: "application/pdf" });
+      },
+    }));
   }
 
   async function finalizeTask(id, completionDate, { expectedTask, signal } = {}) {
@@ -196,5 +228,5 @@ export function createTaskAssociationReportData({ tokenProvider, repository: sup
     });
   }
 
-  return Object.freeze({ loadSnapshot, finalizeTask });
+  return Object.freeze({ loadSnapshot, listPdfAttachments, finalizeTask });
 }

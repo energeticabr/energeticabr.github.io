@@ -9,12 +9,57 @@ const row=(id,extra={})=>({id,createdDate:'2026-10-04',dueDate:'2026-10-05',desc
 const snapshot={tasks:[row(1),row(2,{priority:'ATIVIDADE PRIORITÁRIA',dueDate:'2026-10-06',status:'EM ATENDIMENTO'}),row(3,{association:'ENGENHARIA',status:'CONCLUÍDO'}),row(4,{association:'ENGENHARIA',priority:'NÃO PRIORITÁRIA',dueDate:'',supplier:'Edgar'})]};
 const tick=()=>new Promise(resolve=>setImmediate(resolve));
 const home={sessionStatus:'authenticated',account:{name:'Bernardo'},draft:'',pendingFiles:[],messages:[{id:'home',role:'assistant',type:'poll',question:'QUAL ÁREA VOCÊ DESEJA ACESSAR?',options:[{id:'group_pending',label:'PENDÊNCIAS'},{id:'group_supplies',label:'SUPRIMENTOS'}]}]};
-function setup(t,load=async()=>snapshot,vertical=false,finalizeTask){
+function setup(t,load=async()=>snapshot,vertical=false,finalizeTask,{listPdfAttachments,openMediaCollection}={}){
  assert.equal(typeof createTaskAssociationReportView,'function','new report factory must exist');const dom=new JSDOM('<main id="app"><button>Mascote</button></main>');let portrait=vertical;
  dom.window.matchMedia=()=>({get matches(){return portrait;}});const style=dom.window.document.createElement('style');style.textContent=readFileSync(new URL('../src/ui/task-association-report.css',import.meta.url),'utf8');dom.window.document.head.append(style);
- const view=createTaskAssociationReportView({document:dom.window.document,data:{loadSnapshot:load,finalizeTask},now:()=>new Date('2026-10-06T12:00:00Z')});t.after(()=>{view.destroy();dom.window.close();});
+ const view=createTaskAssociationReportView({document:dom.window.document,data:{loadSnapshot:load,finalizeTask,listPdfAttachments},openMediaCollection,now:()=>new Date('2026-10-06T12:00:00Z')});t.after(()=>{view.destroy();dom.window.close();});
  return {view,root:view.element,dom,rotate(value){portrait=value;dom.window.dispatchEvent(new dom.window.Event('resize'));}};
 }
+test('opens a single PDF control below the task ID with that task’s files and cancels the preview on close',async t=>{
+ const listed=[];
+ const files=['Contrato.PDF','Segundo.pdf'].map(fileName=>({fileName,source:async()=>new Blob([],{type:'application/pdf'})}));
+ let preview;
+ const {view,root,dom}=setup(t,async()=>({attachmentListId:'tasks',tasks:[
+  row(1,{hasAttachments:true}),row(2,{hasAttachments:false}),row(4),
+ ]}),false,undefined,{
+  async listPdfAttachments(list,id){assert.equal(list,'tasks');listed.push(id);return id===1?files:[];},
+  async openMediaCollection(items,options){preview={items,options};},
+ });
+ await view.open();await tick();
+ const idCell=id=>root.querySelector(`[data-task-id="${id}"] .tar-id`);
+ const control=idCell(1).querySelector('button');
+ assert.deepEqual(listed,[1,4]);
+ assert.equal(control.previousElementSibling.textContent,'1');
+ assert.equal(control.getAttribute('aria-label'),'Abrir PDFs da atividade 1');
+ assert.ok(control.querySelector('svg'));
+ assert.equal(idCell(2).querySelector('button'),null);
+ assert.equal(idCell(4).querySelector('button'),null);
+ control.click();await tick();assert.deepEqual(preview.items,files);
+ assert.equal(preview.options.resolveReturnFocus(),control);
+ const filter=root.querySelector('input[name=description]');filter.value='conferir';filter.dispatchEvent(new dom.window.Event('input'));
+ await tick();assert.deepEqual(listed,[1,4]);
+ view.close();assert.equal(preview.options.signal.aborted,true);
+});
+test('rechecks other task PDFs silently after the user recovers SharePoint permission',async t=>{
+ const attempts=[];
+ let authorized=false;
+ const {view,root}=setup(t,async()=>({attachmentListId:'tasks',tasks:[
+  row(1,{hasAttachments:true}),row(2,{hasAttachments:true}),
+ ]}),false,undefined,{
+  async listPdfAttachments(_list,id,{interactive}){
+   attempts.push([id,interactive]);
+   if(interactive)authorized=true;
+   if(!authorized)throw Object.assign(Error('Permission required'),{code:'AUTH_REQUIRED'});
+   return [{fileName:'Atividade.pdf',source:async()=>new Blob([],{type:'application/pdf'})}];
+  },
+  async openMediaCollection(){},
+ });
+ await view.open();await tick();
+ root.querySelector('[aria-label="Consultar novamente os anexos da atividade 1"]').click();
+ await tick();
+ assert.deepEqual(attempts,[[1,false],[2,false],[1,true],[2,false]]);
+ assert.equal(root.querySelectorAll('button[aria-label^="Abrir PDFs da atividade"]').length,2);
+});
 test('ninth left HOME mascot is after document control and clicking its provided image opens its own action',t=>{
  const dom=new JSDOM('<main id="app"></main>');dom.window.HTMLCanvasElement.prototype.getContext=()=>null;const view=createChatView(dom.window.document.querySelector('#app'));t.after(()=>{view.destroy();dom.window.close();});
  let calls=0;view.on('open-task-association-report',()=>calls++);view.render(home);const button=dom.window.document.querySelector('[data-action=open-task-association-report]');assert.ok(button);assert.equal(button.previousElementSibling.dataset.action,'open-document-control-report');assert.ok(button.nextElementSibling.classList.contains('chat-bubble'));assert.match(button.querySelector('img').src,/task-association\.png$/);button.querySelector('img').click();assert.equal(calls,1);
