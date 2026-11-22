@@ -1,13 +1,31 @@
 .trancid-overlay[hidden], .trancid-overlay [hidden] { display:none !important; }
 .trancid-overlay {
- position:fixed; inset:0; z-index:1200; display:flex; align-items:center; justify-content:center;
- box-sizing:border-box; padding:max(10px,env(safe-area-inset-top)) max(10px,env(safe-area-inset-right)) max(10px,env(safe-area-inset-bottom)) max(10px,env(safe-area-inset-left));
+ --trancid-camera-left:0px;
+ --trancid-camera-right:0px;
+ --trancid-arrow-left:max(6px,var(--trancid-camera-left),env(safe-area-inset-left));
+ --trancid-arrow-right:max(6px,var(--trancid-camera-right),env(safe-area-inset-right));
+ --trancid-arrow-room:calc(var(--report-navigation-size,56px) + 8px);
+ --trancid-panel-insets:calc(var(--trancid-arrow-left) + var(--trancid-arrow-room))
+  calc(var(--trancid-arrow-right) + var(--trancid-arrow-room));
+ position:fixed; inset:0; z-index:1200; display:flex; justify-content:center;
+ box-sizing:border-box; padding-inline:var(--trancid-panel-insets);
  background:rgb(9 27 48 / .6); overscroll-behavior:contain;
 }
+.trancid-overlay[data-iphone] { --trancid-camera-left:68px; }
+.trancid-overlay[data-iphone][data-report-portrait="false"] { --trancid-camera-right:68px; }
+/* The shared side arrows are outside the panel, with rotated safe areas in portrait. */
+.trancid-overlay[data-report-portrait="true"] {
+ --trancid-arrow-left:max(16px,var(--trancid-camera-left),env(safe-area-inset-top));
+ --trancid-arrow-right:max(16px,env(safe-area-inset-bottom));
+ padding-inline:var(--trancid-panel-insets)!important;
+}
+.trancid-overlay .report-navigation .report-navigation-arrow--previous { left:var(--trancid-arrow-left); }
+.trancid-overlay .report-navigation .report-navigation-arrow--next { right:var(--trancid-arrow-right); }
 .trancid-overlay *, .trancid-overlay *::before, .trancid-overlay *::after { box-sizing:border-box; }
 .trancid-dialog {
- display:flex; flex-direction:column; width:min(100%,880px); max-width:100%; height:min(880px,100%); max-height:100%; min-height:0;
- overflow:hidden; border:1px solid #c9d6e5; border-radius:16px; background:#f4f7fb; color:#132c49;
+ display:flex; flex-direction:column; width:min(100%,880px); min-height:0;
+ padding-block:env(safe-area-inset-top) env(safe-area-inset-bottom);
+ overflow:hidden; border-inline:1px solid #c9d6e5; background:#f4f7fb; color:#132c49;
  box-shadow:0 18px 70px rgb(0 0 0 / .25); font:15px/1.45 Arial,sans-serif;
 }
 .trancid-heading { display:flex; gap:16px; align-items:center; justify-content:space-between; flex-shrink:0; padding:18px 22px 15px; background:#fff; border-bottom:1px solid #e0e7ef; }
@@ -25,8 +43,6 @@
 .trancid-toolbar .report-print-actions > button { flex:0 0 44px; width:44px; min-width:44px; height:44px; border:1px solid #b8cadd; border-radius:8px; background:#eaf3fe; color:#17558f; }
 .trancid-toolbar .report-print-actions > button > svg { width:27px; height:27px; }
 .trancid-dialog > .report-pdf-status { padding:6px 14px; }
-.trancid-dialog > .report-navigation { display:flex; flex-shrink:0; justify-content:space-between; align-items:center; gap:12px; padding:7px 14px; border-top:1px solid #dce5ef; background:#fff; pointer-events:auto; }
-.trancid-dialog > .report-navigation .report-navigation-arrow { position:static; inset:auto; transform:none; width:44px; min-width:44px; height:44px; min-height:44px; border-width:2px; }
 .trancid-overlay :is(button,select,summary,[tabindex]):focus-visible { outline:3px solid #267bd3; outline-offset:-3px; }
 .trancid-body { flex:1; min-height:0; overflow:auto; overscroll-behavior:contain; padding:16px 22px 22px; -webkit-overflow-scrolling:touch; }
 .trancid-filter-note { margin:0 0 14px; color:#536c83; font-size:12px; }
@@ -64,8 +80,6 @@
 .trancid-history-variation--positive { color:#237143; }
 .trancid-history-note, .trancid-empty-history, .trancid-empty { margin:12px 0 0; color:#60768c; font-size:11px; }
 /* Use logical landscape height, including when the phone is held upright. */
-.trancid-overlay[data-iphone][data-report-portrait="true"] { padding-left:max(68px,env(safe-area-inset-top))!important; }
-.trancid-overlay[data-iphone][data-report-portrait="false"] { padding-left:max(68px,env(safe-area-inset-left)); padding-right:max(68px,env(safe-area-inset-right)); }
 .trancid-overlay[data-report-compact-height="true"] .trancid-heading { padding:6px 12px; gap:8px; }
 .trancid-overlay[data-report-compact-height="true"] .trancid-heading h2 { font-size:20px; }
 .trancid-overlay[data-report-compact-height="true"] .trancid-toolbar { padding:6px 12px; gap:8px; }
@@ -74,5 +88,4 @@
 .trancid-overlay[data-report-compact-height="true"] .trancid-body { padding:10px 12px; }
 .trancid-overlay[data-report-compact-height="true"] .trancid-position { padding:10px 12px; }
 .trancid-overlay[data-report-compact-height="true"] .trancid-card-summary { padding:10px 12px; gap:4px 12px; }
-.trancid-overlay[data-report-compact-height="true"] .trancid-dialog > .report-navigation { padding:4px 12px; }
 @media (prefers-reduced-motion:reduce) { .trancid-card-summary::after { transition:none; } }
