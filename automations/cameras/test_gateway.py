@@ -1,5 +1,6 @@
 import http.client
 import json
+import secrets
 import threading
 import unittest
 from http.server import ThreadingHTTPServer
@@ -14,7 +15,7 @@ class CameraGatewayTest(unittest.TestCase):
             "viewers": ["owner"],
             "ffmpeg": "unused",
             "channels": [{"id": "ch-1", "label": "Câmera de teste", "format": "hevc",
-                          "command": ["/unused"], "input": {"password": "private"}}],
+                          "command": ["/unused"], "input": {"password": secrets.token_urlsafe(16)}}],
         }
         gateway = Gateway(config, identity=lambda token: {"id": token, "userType": "Member"})
         self.server = ThreadingHTTPServer(("127.0.0.1", 0), handler_for(gateway))
