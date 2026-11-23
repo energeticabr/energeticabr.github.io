@@ -1,6 +1,6 @@
 # Câmeras no Energético
 
-O aplicativo lista os canais disponíveis para o usuário autenticado. A API consulta o Microsoft Graph com a sessão do Energético e confere o ID da conta contra a lista de visualizadores. O serviço mantém uma única transmissão sob demanda. A sessão de vídeo vence em 20 minutos ou é encerrada após 12 segundos sem pedidos.
+O aplicativo lista os canais disponíveis para o usuário autenticado. A API consulta o Microsoft Graph com a sessão do Energético e confere o ID da conta contra a lista de visualizadores. O serviço mantém até três transmissões simultâneas sob demanda, compartilhando esse limite entre usuários. Cada sessão de vídeo vence em 20 minutos ou é encerrada após 12 segundos sem pedidos. O uso simultâneo deve ser validado com as fontes reais e com os limites do servidor antes do deploy.
 
 Instale `gateway.py`, o adaptador da fonte e seus runtimes em `/opt/energetico-cameras`. A unidade systemd lê o arquivo privado `/etc/energetico-cameras/cameras.json` por meio de `LoadCredential`. O proxy HTTPS deve enviar somente `/api/portal-cameras` e `/api/portal-camera-media/*` para `127.0.0.1:8872`. Remova o caminho de mídia dos logs de acesso do proxy, pois ele contém uma chave temporária de reprodução.
 

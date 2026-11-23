@@ -111,14 +111,14 @@ class Gateway:
         self.ffmpeg = config["ffmpeg"]
         self.identity = identity
         self.lock = threading.Lock()
-        self.stream = None
+        self.streams = {}
         self.graph_slots = threading.BoundedSemaphore(2)
 
     def authorize(self, authorization):
         scheme, _, token = authorization.partition(" ")
         if scheme.casefold() != "bearer" or not token or len(token) > 10000:
             raise PlaybackError(401)
-        if not self.graph_slots.acquire(blocking=False):
+        if not self.graph_slots.acquire(timeout=8):
             raise PlaybackError(429)
         try:
             identity = self.identity(token)
@@ -139,22 +139,19 @@ class Gateway:
             raise PlaybackError(404)
         with self.lock:
             self.expire()
-            if self.stream:
-                if self.stream.viewer != viewer:
+            stream = self.streams.get((viewer, channel))
+            if not stream:
+                if len(self.streams) >= 3:
                     raise PlaybackError(429)
-                if self.stream.channel != channel:
-                    self.stream.close()
-                    self.stream = None
-            if not self.stream:
                 try:
-                    self.stream = Stream(self.entries[channel], self.ffmpeg, viewer)
+                    stream = Stream(self.entries[channel], self.ffmpeg, viewer)
+                    self.streams[(viewer, channel)] = stream
                 except (BrokenPipeError, OSError):
                     raise PlaybackError(503) from None
-            stream = self.stream
         deadline = time.monotonic() + 40
         while time.monotonic() < deadline:
             with self.lock:
-                if self.stream is not stream or not stream.alive():
+                if self.streams.get((viewer, channel)) is not stream or not stream.alive():
                     raise PlaybackError(503)
                 stream.last_request = time.monotonic()
                 try:
@@ -164,13 +161,18 @@ class Gateway:
                 if b"#EXTINF" in playlist:
                     return f"{MEDIA}/{stream.capability}/index.m3u8"
             time.sleep(0.25)
+        with self.lock:
+            if self.streams.get((viewer, channel)) is stream:
+                del self.streams[(viewer, channel)]
+                stream.close()
         raise PlaybackError(503)
 
     def get(self, capability, filename):
         with self.lock:
             self.expire()
-            stream = self.stream
-            if not stream or not secrets.compare_digest(stream.capability, capability):
+            stream = next((item for item in self.streams.values()
+                           if secrets.compare_digest(item.capability, capability)), None)
+            if not stream:
                 raise PlaybackError(404)
             try:
                 payload = stream.read(filename)
@@ -181,10 +183,11 @@ class Gateway:
 
     def expire(self):
         now = time.monotonic()
-        if self.stream and (now - self.stream.last_request > 12
-                            or now > self.stream.expires or not self.stream.alive()):
-            self.stream.close()
-            self.stream = None
+        for key, stream in list(self.streams.items()):
+            if (now - stream.last_request > 12
+                    or now > stream.expires or not stream.alive()):
+                del self.streams[key]
+                stream.close()
 
     def reap(self):
         while True:

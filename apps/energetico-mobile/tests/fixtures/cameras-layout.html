@@ -1,0 +1,22 @@
+<!doctype html><html><head><meta name="viewport" content="width=device-width,initial-scale=1"><link rel="stylesheet" href="/src/ui/cameras-view.css"><link rel="stylesheet" href="/src/ui/report-landscape.css"></head>
+<body><script type="module">
+import { createCamerasView } from '/src/ui/cameras-view.js';
+createCamerasView(document).open({
+  list: async () => [1,2,3,4].map(n => ({ id: 'camera-'+n, label: 'Obra Xavante • canal '+n })),
+  start: async () => new Promise(() => {}),
+});
+await new Promise(resolve => setTimeout(resolve, 100));
+if (location.search.includes('player')) {
+  document.querySelector('[data-camera-grid]').click();
+  for (let i=0;i<3;i++) {
+    const checkbox=document.querySelectorAll('[data-camera-select]')[i];
+    checkbox.checked=true; checkbox.dispatchEvent(new Event('change'));
+  }
+  document.querySelector('[data-camera-open-grid]').click();
+}
+await new Promise(resolve => setTimeout(resolve, 100));
+const dialog=document.querySelector('.cameras-view'), player=document.querySelector('.cameras-player');
+const rect=node=>{const r=node.getBoundingClientRect(); return {left:r.left,top:r.top,right:r.right,bottom:r.bottom,width:r.width,height:r.height}};
+document.documentElement.dataset.layout=JSON.stringify({viewport:rect(dialog), cards:[...document.querySelectorAll('.camera-card')].map(rect),
+  player:player && rect(player), portrait:player?.dataset.reportPortrait, tiles:[...document.querySelectorAll('.cameras-player__tile')].map(rect)});
+</script></body></html>
