@@ -12675,6 +12675,9 @@ export function createAppController({
         return view.openCameras?.({
           list: client.listCameraChannels,
           start: client.startCameraPlayback,
+          move: client.moveCamera,
+          listRecordings: client.listCameraRecordings,
+          playRecording: client.playCameraRecording,
         }) ?? false;
       }
       if (REGISTRATION_GALLERY_KIND[command.replyId]) return openRegistrationGallery(REGISTRATION_GALLERY_KIND[command.replyId], command.replyId);

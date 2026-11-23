@@ -4,7 +4,7 @@ const GRID_LIMIT = 3;
 export function createCamerasView(documentRef) {
   let dialog, closeCurrent;
 
-  function open({ list, start }) {
+  function open({ list, start, move, listRecordings, playRecording }) {
     if (dialog) return true;
     const previousFocus = documentRef.activeElement;
     const page = new AbortController();
@@ -85,6 +85,7 @@ export function createCamerasView(documentRef) {
     function stopPlayer() {
       for (const item of playback) {
         item.controller.abort();
+        item.searchController?.abort();
         item.hls?.destroy();
         item.video.pause(); item.video.removeAttribute('src'); item.video.load();
       }
@@ -104,11 +105,17 @@ export function createCamerasView(documentRef) {
         status.textContent = 'Transmissão pausada. Selecione uma câmera para retomar.';
       }
     }
-    async function connect(item, channel) {
+    async function connect(item, channel, recordingId = null) {
+      item.controller.abort();
+      item.hls?.destroy(); item.hls = null;
+      item.video.pause(); item.video.removeAttribute('src'); item.video.load();
+      item.controller = new AbortController();
+      item.mode = recordingId ? 'playback' : 'live';
+      item.connected = false; item.updateControls?.();
       const { signal } = item.controller;
-      item.status.textContent = 'Conectando…';
+      item.status.textContent = recordingId ? 'Abrindo gravação…' : 'Conectando…';
       try {
-        const url = await start(channel.id, { signal });
+        const url = recordingId ? await playRecording(channel.id, recordingId, { signal }) : await start(channel.id, { signal });
         if (signal.aborted) return;
         if (item.video.canPlayType('application/vnd.apple.mpegurl')) item.video.src = url;
         else {
@@ -122,9 +129,10 @@ export function createCamerasView(documentRef) {
           item.hls.loadSource(url); item.hls.attachMedia(item.video);
         }
         item.status.textContent = '';
+        item.connected = true; item.updateControls?.();
         void item.video.play().catch(() => { item.status.textContent = 'Toque no vídeo para reproduzir.'; });
       } catch (error) {
-        if (!signal.aborted) item.status.textContent = error.message || 'Não foi possível abrir esta câmera.';
+        if (!signal.aborted) { item.status.textContent = error.message || 'Não foi possível abrir esta câmera.'; item.updateControls?.(); }
       }
     }
     function openPlayer(chosen) {
@@ -138,6 +146,8 @@ export function createCamerasView(documentRef) {
       header.append(back, make('strong', '', chosen.length === 1 ? chosen[0].label : 'Câmeras ao vivo'));
       const tiles = make('div', 'cameras-player__tiles');
       tiles.dataset.count = String(chosen.length);
+      const workspace = make('div', 'cameras-player__workspace');
+      let controls;
       for (const channel of chosen) {
         const tile = make('div', 'cameras-player__tile');
         const video = documentRef.createElement('video'); video.playsInline = true; video.controls = true; video.muted = true;
@@ -145,7 +155,7 @@ export function createCamerasView(documentRef) {
         const label = make('span', 'cameras-player__label', channel.label);
         const notice = make('span', 'cameras-player__status'); notice.setAttribute('role', 'status');
         video.addEventListener('error', () => { if (!item.controller.signal.aborted) notice.textContent = 'Transmissão interrompida. Volte e tente novamente.'; });
-        const item = { controller: new AbortController(), video, status: notice, hls: null };
+        const item = { controller: new AbortController(), video, status: notice, hls: null, mode: 'live', connected: false };
         video.addEventListener('playing', () => {
           if (thumbnails.has(channel.id) || !video.videoWidth || !video.videoHeight) return;
           try {
@@ -157,9 +167,65 @@ export function createCamerasView(documentRef) {
             render();
           } catch { /* A source without canvas access still plays normally. */ }
         });
-        playback.push(item); tile.append(video, label, notice); tiles.append(tile);
+        playback.push(item); tile.append(video, label, notice);
+        if (chosen.length > 1 && (move || listRecordings)) {
+          const focus = make('button', 'cameras-player__focus', 'Controlar');
+          focus.type = 'button'; focus.addEventListener('click', () => openPlayer([channel]));
+          tile.append(focus);
+        }
+        tiles.append(tile);
+        if (chosen.length === 1 && (move || listRecordings)) {
+          controls = make('aside', 'cameras-player__controls');
+          const controlStatus = make('p', 'cameras-player__control-status'); controlStatus.setAttribute('role', 'status');
+          const arrows = make('div', 'cameras-player__arrows');
+          const buttons = [];
+          if (move) for (const [direction, label, symbol] of [['up','Mover para cima','↑'],['left','Mover para a esquerda','←'],['down','Mover para baixo','↓'],['right','Mover para a direita','→']]) {
+            const button = make('button', '', symbol); button.type = 'button'; button.dataset.cameraMove = direction;
+            button.setAttribute('aria-label', label); button.disabled = true;
+            button.addEventListener('click', async () => {
+              button.disabled = true;
+              try { await move(channel.id, direction, { signal: item.controller.signal }); controlStatus.textContent = 'Comando enviado.'; }
+              catch (error) { if (!item.controller.signal.aborted) controlStatus.textContent = error.message || 'Não foi possível mover a câmera.'; }
+              finally { item.updateControls(); }
+            });
+            arrows.append(button); buttons.push(button);
+          }
+          item.updateControls = () => { for (const button of buttons) button.disabled = !item.connected || item.mode !== 'live'; };
+          controls.append(arrows, controlStatus);
+          if (listRecordings && playRecording) {
+            const show = make('button', 'cameras-player__action', 'Gravações'); show.type = 'button'; show.dataset.cameraRecordings = '';
+            const live = make('button', 'cameras-player__action', 'Ao vivo'); live.type = 'button'; live.dataset.cameraLive = '';
+            const history = make('div', 'cameras-player__history'); history.hidden = true;
+            const day = documentRef.createElement('input'); day.type = 'date'; day.dataset.cameraDay = ''; day.setAttribute('aria-label', 'Data das gravações');
+            const now = new Date(); day.value = `${now.getFullYear()}-${String(now.getMonth()+1).padStart(2,'0')}-${String(now.getDate()).padStart(2,'0')}`;
+            const search = make('button', 'cameras-player__action', 'Buscar'); search.type = 'button'; search.dataset.cameraSearch = '';
+            const results = make('div', 'cameras-player__recordings'); results.setAttribute('aria-live', 'polite');
+            show.addEventListener('click', () => { history.hidden = !history.hidden; });
+            live.addEventListener('click', () => { void connect(item, channel); });
+            search.addEventListener('click', async () => {
+              item.searchController?.abort(); item.searchController = new AbortController();
+              const { signal } = item.searchController;
+              search.disabled = true; results.textContent = 'Consultando…';
+              try {
+                const rows = await listRecordings(channel.id, day.value, { signal });
+                if (signal.aborted) return;
+                results.replaceChildren();
+                if (!rows.length) results.textContent = 'Nenhuma gravação nesta data.';
+                for (const record of rows) {
+                  const open = make('button', 'cameras-player__recording', `${record.start.slice(11,16)} – ${record.end.slice(11,16)}`);
+                  open.type = 'button'; open.dataset.cameraRecording = record.id;
+                  open.addEventListener('click', () => { void connect(item, channel, record.id); });
+                  results.append(open);
+                }
+              } catch (error) { if (!signal.aborted) results.textContent = error.message || 'Não foi possível consultar as gravações.'; }
+              finally { if (!signal.aborted) search.disabled = false; }
+            });
+            history.append(day, search, results); controls.append(show, live, history);
+          }
+        }
       }
-      panel.append(header, tiles); player.append(panel); dialog.append(player);
+      workspace.append(tiles); if (controls) workspace.append(controls);
+      panel.append(header, workspace); player.append(panel); dialog.append(player);
       landscape = bindReportLandscape(player);
       chosen.forEach((channel, index) => { void connect(playback[index], channel); });
     }
