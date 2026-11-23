@@ -16,7 +16,9 @@ function setup(t) {
   document.querySelector('button').focus();
   const starts = [], moves = [], searches = [], archives = [];
   const view = createCamerasView(document);
-  view.open({ list: async () => [1, 2, 3, 4, 5].map(n => ({ id: `site-${n}`, label: `Obra ${n}` })),
+  view.open({ list: async () => Array.from({ length: 10 }, (_, index) => ({
+    id: `site-${index + 1}`, label: `Obra ${index + 1}`,
+  })),
     start: async (id, { signal }) => { starts.push({ id, signal }); return 'https://video.example/index.m3u8'; },
     move: async (id, direction) => { moves.push({ id, direction }); },
     listRecordings: async (id, day, options) => { searches.push({ id, day, hour:options.hour }); return [{id:'record-1',start:'2026-11-23 10:00:00',end:'2026-11-23 10:05:00'}]; },
@@ -25,7 +27,7 @@ function setup(t) {
 }
 test('lista dispositivos e abre uma câmera em paisagem, retornando à lista', async t => {
   const { document, starts } = setup(t); await flush();
-  assert.equal(document.querySelectorAll('[data-camera-open]').length, 5);
+  assert.equal(document.querySelectorAll('[data-camera-open]').length, 10);
   document.querySelectorAll('[data-camera-open]')[1].click(); await flush();
   assert.equal(starts[0].id, 'site-2');
   const video = document.querySelector('.report-landscape-viewport video');
@@ -36,7 +38,7 @@ test('lista dispositivos e abre uma câmera em paisagem, retornando à lista', a
   video.dispatchEvent(new document.defaultView.Event('playing'));
   document.querySelector('[data-camera-player-back]').click();
   assert.equal(starts[0].signal.aborted, true);
-  assert.equal(document.querySelectorAll('[data-camera-open]').length, 5);
+  assert.equal(document.querySelectorAll('[data-camera-open]').length, 10);
   assert.equal(document.querySelectorAll('[data-camera-open]')[1].querySelector('img').src, 'data:image/jpeg;base64,AAAA');
   document.querySelector('[data-camera-back]').click();
   assert.equal(document.querySelector('dialog'), null);
@@ -58,17 +60,18 @@ test('movimenta a câmera ao vivo e abre gravação da data escolhida', async t 
   document.querySelector('[data-camera-live]').click(); await flush();
   assert.equal(document.querySelector('[data-camera-move="up"]').disabled, false);
 });
-test('grade seleciona até três câmeras e abre todas simultaneamente', async t => {
+test('grade seleciona até oito câmeras e abre todas simultaneamente', async t => {
   const { document, starts } = setup(t); await flush();
   document.querySelector('[data-camera-grid]').click();
-  for (let i = 0; i < 3; i++) {
-    const check = document.querySelectorAll('[data-camera-select]')[i];
-    check.checked = true; check.dispatchEvent(new document.defaultView.Event('change'));
+  for (let i = 0; i < 8; i++) {
+    document.querySelectorAll('[data-camera-select]')[i].click();
   }
-  assert.equal(document.querySelectorAll('[data-camera-select]')[3].disabled, true);
+  assert.equal(document.querySelectorAll('[data-camera-select]')[8].disabled, true);
+  document.querySelectorAll('[data-camera-open]')[8].click();
+  assert.equal(document.querySelector('[data-camera-count]').textContent, '8 de 8 selecionadas');
   document.querySelector('[data-camera-open-grid]').click(); await flush();
-  assert.deepEqual(starts.map(item => item.id), ['site-1', 'site-2', 'site-3']);
-  assert.equal(document.querySelectorAll('.report-landscape-viewport video').length, 3);
+  assert.deepEqual(starts.map(item => item.id), Array.from({ length: 8 }, (_, index) => `site-${index + 1}`));
+  assert.equal(document.querySelectorAll('.report-landscape-viewport video').length, 8);
   document.querySelector('[data-camera-player-back]').click();
   assert.ok(starts.every(item => item.signal.aborted));
 });

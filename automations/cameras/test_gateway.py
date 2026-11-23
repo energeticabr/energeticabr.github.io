@@ -55,11 +55,13 @@ class CameraGatewayTest(unittest.TestCase):
         self.assertEqual(self.request("GET", MEDIA + "/" + "a" * 43 + "/../gateway.py")[0], 404)
         self.assertEqual(self.request("OPTIONS", CATALOG, origin="https://example.com")[0], 403)
 
-    def test_multiple_streams_remain_available_until_individually_expired(self):
+    def test_eight_streams_remain_available_until_individually_expired(self):
         import gateway
+        from concurrent.futures import ThreadPoolExecutor
+        names = [f"camera-{index}" for index in range(1, 10)]
         config = {"origins": [], "viewers": ["owner"], "ffmpeg": "/unused", "channels": [
             {"id": name, "label": name, "format": "hevc", "command": ["/unused"]}
-            for name in ["one", "two", "three", "four"]
+            for name in names
         ]}
         class FakeStream:
             def __init__(self, entry, ffmpeg, viewer):
@@ -73,13 +75,19 @@ class CameraGatewayTest(unittest.TestCase):
             def close(self): self.closed = True
         with patch.object(gateway, "Stream", FakeStream):
             server = Gateway(config)
-            for name in ("one", "two", "three"):
-                server.start(name, "owner")
-            self.assertEqual(server.get("one", "segment-1.ts"), b"video")
-            self.assertEqual(server.get("three", "segment-1.ts"), b"video")
+            with ThreadPoolExecutor(max_workers=8) as pool:
+                list(pool.map(lambda name: server.start(name, "owner"), names[:8]))
+            for name in names[:8]:
+                self.assertEqual(server.get(name, "segment-1.ts"), b"video")
             with self.assertRaises(gateway.PlaybackError) as error:
-                server.start("four", "owner")
+                server.start(names[8], "owner")
             self.assertEqual(error.exception.status, 429)
+            server.streams[("owner", names[0])].last_request -= 13
+            server.start(names[8], "owner")
+            with self.assertRaises(gateway.PlaybackError) as expired:
+                server.get(names[0], "segment-1.ts")
+            self.assertEqual(expired.exception.status, 404)
+            self.assertEqual(server.get(names[8], "segment-1.ts"), b"video")
 
     def test_motion_requires_the_viewers_own_live_stream_and_a_valid_direction(self):
         import gateway

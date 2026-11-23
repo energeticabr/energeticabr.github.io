@@ -1,6 +1,6 @@
 import { bindReportLandscape } from "./report-landscape.js";
 
-const GRID_LIMIT = 3;
+const GRID_LIMIT = 8;
 export function createCamerasView(documentRef) {
   let dialog, closeCurrent;
 
