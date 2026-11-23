@@ -14,6 +14,32 @@ test('management totals use exact decimal sums without truncating over 2000 rows
   assert.equal(many.count,2001);assert.equal(many.total,2001);
 });
 
+test('dashboard de tipo agrega os últimos 12 meses e rankings da filial por gasto e participação',()=>{
+  const result=model.buildManagementExpenseTypeDashboard({
+    launches:[
+      row('1',{date:'2026-10-02',paymentDate:'2026-10-03',product:'Cimento',supplier:'Alfa',stage:'Fundação',total:60}),
+      row('2',{date:'2026-09-02',paymentDate:'2026-09-03',product:'Brita',supplier:'Beta',stage:'Estrutura',total:40}),
+      row('3',{branch:'Filial B',date:'2026-10-02',paymentDate:'2026-10-03',total:900}),
+      row('4',{product:'Locação',total:800}),
+    ],
+    provisions:[{id:'p1',branch:'Filial A',product:'Cimento',supplier:'Beta',stage:'Estrutura',dueDate:'2026-10-20',total:30}],
+    productTypes:[{product:'Cimento',expenseType:'Material'},{product:'Brita',expenseType:'Material'},{product:'Locação',expenseType:'Serviços'}],
+  },{year:'2026',month:'10',supplier:'Alfa'},{branch:'Filial A',expenseType:'MATERIAL',now:new Date('2026-10-05T12:00:00Z')});
+
+  assert.equal(result.total,130);
+  assert.equal(result.months.length,12);
+  assert.deepEqual(result.months.map(month=>month.period),[
+    '2025-11','2025-12','2026-01','2026-02','2026-03','2026-04',
+    '2026-05','2026-06','2026-07','2026-08','2026-09','2026-10',
+  ]);
+  assert.deepEqual(result.months.slice(-2).map(month=>month.total),[40,90]);
+  assert.deepEqual(result.products.map(item=>[item.name,item.total,item.percentage]),[
+    ['Cimento',90,69.23076923076923],['Brita',40,30.76923076923077],
+  ]);
+  assert.deepEqual(result.suppliers.map(item=>item.name),['Beta','Alfa']);
+  assert.deepEqual(result.stages.map(item=>item.name),['Estrutura','Fundação']);
+});
+
 test('management line multiplication preserves half-cent amounts before Brazilian money rounding',async()=>{
   const normalized=model.normalizeSpendingLaunch({id:'1',fields:{DATA:'2026-10-02',FILIAL:'Xavante',FORNECEDOR:'Alfa',PRODUTO:'Cimento',VALORUNITARIO:'2,30',QUANTIDADE:'0,05',FRETE:'0'}});
   assert.equal(normalized.total,.115);

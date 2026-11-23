@@ -2,13 +2,14 @@ import { bindReportLandscape } from './report-landscape.js';
 import { addReportCloseControl } from './report-close-control.js';
 import {
   buildSpendingReport9, buildManagementProductDetail,
-  buildManagementRankingBreakdown, buildManagementRankingLaunchMonths,
+  buildManagementRankingBreakdown, buildManagementRankingLaunchMonths, buildManagementExpenseTypeDashboard,
 } from '../chat/spending-reports-model.js';
 import {
   createManagementProductDetailView, formatDetailDate, formatDetailQuantity, formatDetailUnit,
 } from './management-product-detail-view.js';
 import { formatReportMoney } from '../chat/contractor-report-model.js';
 import { bindSearchableFilterSelects } from './searchable-filter-selects.js';
+import { createManagementExpenseTypeDashboardView } from './management-expense-type-dashboard-view.js';
 
 const LOGO = new URL('../../../../assets/logo-energetica-oficial.png', import.meta.url).href;
 const FIELDS = [['year','Ano'],['month','Mês'],['branch','FILIAL'],['stage','ETAPA'],['product','PRODUTO'],['supplier','FORNECEDOR'],['disbursement','DESEMBOLSO']];
@@ -50,6 +51,9 @@ export function createManagementReportView({document:doc=globalThis.document,dat
   addReportCloseControl({root, toolbar:filters, onClose:close});
   let reportPosition={top:0,left:0};
   const productDetail=createManagementProductDetailView({root,onClose(){
+    content.scrollTop=reportPosition.top;content.scrollLeft=reportPosition.left;
+  }});
+  const expenseTypeDashboard=createManagementExpenseTypeDashboardView({root,onClose(){
     content.scrollTop=reportPosition.top;content.scrollLeft=reportPosition.left;
   }});
   const showNotice=text=>{notice.textContent=text;notice.hidden=!text;};
@@ -187,12 +191,23 @@ export function createManagementReportView({document:doc=globalThis.document,dat
         const tr=make('tr');
         if(index===0)branchCell=cell(tr,'branch',branch.name,branch.expenseTypes.length+1,'gm-branch');
         const nameCell=cell(tr,'name',group.name);
-        addExpansion(tr,nameCell,group.name,`produtos: ${group.name} — ${branch.name}`,()=>group.products.map(product=>{
-          const detail=make('tr','gm-expense-product');
-          productCell(detail,product.name,branch.name,'expense');
-          expenseAmounts(detail,product,comparisonPeriod);
-          return detail;
-        }),branchCell);
+        const label=make('div','gm-expense-label');
+        const toggle=make('button','gm-expense-toggle');toggle.type='button';
+        toggle.setAttribute('aria-expanded','false');toggle.setAttribute('aria-label',`Detalhar produtos: ${group.name} — ${branch.name}`);toggle.textContent='+';
+        let details=[];
+        toggle.addEventListener('click',()=>{
+          const expanded=toggle.getAttribute('aria-expanded')==='true';
+          if(expanded){for(const detail of details)detail.remove();branchCell.rowSpan-=details.length;details=[];toggle.setAttribute('aria-expanded','false');toggle.textContent='+';}
+          else {details=group.products.map(product=>{const detail=make('tr','gm-expense-product');productCell(detail,product.name,branch.name,'expense');expenseAmounts(detail,product,comparisonPeriod);return detail;});tr.after(...details);branchCell.rowSpan+=details.length;toggle.setAttribute('aria-expanded','true');toggle.textContent='−';}
+        });
+        const type=make('button','gm-expense-type-link',group.name);type.type='button';type.dataset.expenseType=group.name;
+        type.setAttribute('aria-haspopup','dialog');type.setAttribute('aria-label',`Analisar despesas ${group.name} — ${branch.name}`);
+        type.addEventListener('click',()=>{
+          if(root.hidden||!snapshot||destroyed)return;
+          reportPosition={top:content.scrollTop,left:content.scrollLeft};
+          expenseTypeDashboard.open(buildManagementExpenseTypeDashboard(snapshot,selected(),{branch:branch.name,expenseType:group.name,now:now()}),type);
+        });
+        label.append(toggle,type);nameCell.replaceChildren(label);
         expenseAmounts(tr,group,comparisonPeriod);
         body.append(tr);
       });
@@ -292,13 +307,13 @@ export function createManagementReportView({document:doc=globalThis.document,dat
   }
   function orientationChanged() { landscape.update(); }
   function close() {
-    productDetail.close({restoreFocus:false});
+    productDetail.close({restoreFocus:false});expenseTypeDashboard.close({restoreFocus:false});
     if(root.hidden)return;controller?.abort();revision++;snapshot=null;pickers?.close();content.replaceChildren();root.hidden=true;
     doc.body.style.overflow=oldOverflow;if(app)app.inert=oldInert;returnFocus?.focus?.();returnFocus=null;
   }
   root.addEventListener('click',event=>{if(event.target===root)close();});
   root.addEventListener('keydown',event=>{
-    if(productDetail.isOpen)return;
+    if(productDetail.isOpen||expenseTypeDashboard.isOpen)return;
     if(root.hidden)return;if(event.key==='Escape'){event.preventDefault();close();return;}if(event.key!=='Tab')return;
     const nodes=[...panel.querySelectorAll('button,input,select,[tabindex="0"]')].filter(n=>!n.disabled&&!n.closest('[hidden]')&&n.tabIndex>=0),first=nodes[0],last=nodes.at(-1);
     if(event.shiftKey&&(doc.activeElement===first||doc.activeElement===panel)){event.preventDefault();last?.focus();}
@@ -312,5 +327,5 @@ export function createManagementReportView({document:doc=globalThis.document,dat
     pickers?.destroy();pickers=null;const date=now();
     for(const [name] of FIELDS){const control=controls.get(name);control.replaceChildren(Object.assign(make('option','','Todos'),{value:''}));const value=name==='year'?String(date.getFullYear()):name==='month'?String(date.getMonth()+1):'';if(value)control.append(Object.assign(make('option','',value),{value}));control.value=value;}
     root.hidden=false;landscape.update();warning.hidden=true;report.hidden=false;panel.classList.toggle('pl-dialog--portrait',false);panel.focus();await load();
-  },close,destroy(){if(destroyed)return;close();destroyed=true;productDetail.destroy();pickers?.destroy();win?.removeEventListener('resize',orientationChanged);win?.removeEventListener('orientationchange',orientationChanged);landscape.destroy();root.remove();}});
+  },close,destroy(){if(destroyed)return;close();destroyed=true;productDetail.destroy();expenseTypeDashboard.destroy();pickers?.destroy();win?.removeEventListener('resize',orientationChanged);win?.removeEventListener('orientationchange',orientationChanged);landscape.destroy();root.remove();}});
 }

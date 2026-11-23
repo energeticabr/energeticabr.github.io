@@ -283,6 +283,37 @@ export function buildManagementRankingLaunchMonths(rows) {
   return detailMonths(sorted, row => row.date);
 }
 
+export function buildManagementExpenseTypeDashboard(snapshot, filters = {},
+  { branch, expenseType, now = new Date() } = {}) {
+  const productTypes = new Map();
+  for (const row of snapshot?.productTypes || []) {
+    const product = scalar(row.product).toLocaleLowerCase("pt-BR");
+    if (product && !productTypes.has(product)) productTypes.set(product, scalar(row.expenseType));
+  }
+  const typeFor = row => !row.product ? "SEM PRODUTO"
+    : productTypes.get(scalar(row.product).toLocaleLowerCase("pt-BR")) || "SEM TIPO DE DESPESA";
+  // This view analyzes the full selected type; the report's date and ranking filters
+  // must not silently truncate the twelve-month trend or its category shares.
+  const rows = selectedExpenses(snapshot, { ...filters, year: "", month: "", branch: "", product: "", supplier: "", stage: "", order: "" })
+    .filter(row => equals(scalar(row.branch) || "-", branch) && equals(typeFor(row), expenseType));
+  const current = new Date(now.getFullYear(), now.getMonth(), 1);
+  const months = Array.from({ length: 12 }, (_, index) => {
+    const date = new Date(current.getFullYear(), current.getMonth() - 11 + index, 1);
+    const period = `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, "0")}`;
+    const monthRows = rows.filter(row => (row.paymentDate || row.dueDate || "").slice(0, 7) === period);
+    const paid = completeSum(monthRows.filter(row => row.paymentDate), "total");
+    const forecast = completeSum(monthRows.filter(row => !row.paymentDate), "total");
+    return Object.freeze({ period, paid, forecast,
+      total: paid == null || forecast == null ? null : new Decimal(paid).plus(forecast).toNumber() });
+  });
+  const inRange = new Set(months.map(item => item.period));
+  const trendRows = rows.filter(row => inRange.has((row.paymentDate || row.dueDate || "").slice(0, 7)));
+  const total = completeSum(trendRows, "total");
+  const breakdown = field => Object.freeze(grouped(trendRows, field, total, 8).map(item => Object.freeze(item)));
+  return Object.freeze({ branch, expenseType, total, months: Object.freeze(months),
+    products: breakdown("product"), suppliers: breakdown("supplier"), stages: breakdown("stage") });
+}
+
 export function buildManagementProductDetail(snapshot, filters = {}, { branch, product, kind = "expense" } = {}) {
   const expense = kind === "expense";
   const matchesGroup = expense ? equals : (left,right) => scalar(left) === scalar(right);
