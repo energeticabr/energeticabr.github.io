@@ -3070,7 +3070,7 @@ test('o PDF verde abre a consolidação assinada da data pelo visualizador do re
     hrPayrollGalleryFactory: async value => { options = value; return { async open() {}, destroy() {} }; },
   });
   h.native.previewMedia = async (source, name, settings) => {
-    preview = { name, returnLabel: settings.returnLabel, content: await (await source({})).text() };
+    preview = { name, returnLabel: settings.returnLabel, layout: settings.layout, content: await (await source({})).text() };
     settings.onClose();
   };
   h.native.exportMedia = () => assert.fail('A consolidação abre no visualizador.');
@@ -3080,7 +3080,8 @@ test('o PDF verde abre a consolidação assinada da data pelo visualizador do re
   await options.openDateSignedPayslips('2026-11-13');
   assert.deepEqual(calls, ['2026-11-13']);
   assert.deepEqual(preview, {
-    name: 'Holerites-assinados-2026-11-13.pdf', returnLabel: 'Voltar ao relatório de holerites', content: '%PDF-1.7',
+    name: 'Holerites-assinados-2026-11-13.pdf', returnLabel: 'Voltar ao relatório de holerites',
+    layout: 'payslip-report-pdf', content: '%PDF-1.7',
   });
 });
 

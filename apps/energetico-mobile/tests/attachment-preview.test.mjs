@@ -537,7 +537,41 @@ test('report PDF requests whole-page fit without changing ordinary attachments',
  const fits=[];const {preview}=setup(t,{loadPdfPreview:async()=>({createPdfPreview:options=>{fits.push(options.fit);return {ready:Promise.resolve(),destroy(){}};}})});
  const blob=new Blob(['pdf'],{type:'application/pdf'});
  await preview.open(blob,'presencas-rhid.pdf',{layout:'report-pdf'});assert.equal(fits[0],'page');
- await preview.open(blob,'outro.pdf');assert.equal(fits[1],'width');
+ await preview.open(blob,'holerite.pdf',{layout:'payslip-report-pdf'});assert.equal(fits[1],'page');
+ await preview.open(blob,'outro.pdf');assert.equal(fits[2],'width');
+});
+
+test('completed payroll report PDF status sits to the right of forward in the footer', async t => {
+  const { preview, documentRef } = setup(t, {
+    loadPdfPreview: async () => ({ createPdfPreview: () => ({
+      ready: Promise.resolve(), destroy() {}, getSummary: () => '8 páginas • 3,92 MB',
+    }) }),
+  });
+  await preview.open(new Blob(['%PDF-1.7'], { type: 'application/pdf' }), 'holerites.pdf', {
+    layout: 'payslip-report-pdf', returnLabel: 'Voltar ao relatório de holerites',
+  });
+
+  const footer = documentRef.querySelector('.attachment-preview-footer');
+  const forward = footer.querySelector('[data-preview-action="export"]');
+  const meta = footer.querySelector('.attachment-preview-report-meta');
+  assert.ok(meta, 'a região de informações fica no rodapé do relatório');
+  assert.ok(forward.compareDocumentPosition(meta) & documentRef.defaultView.Node.DOCUMENT_POSITION_FOLLOWING,
+    'as informações aparecem à direita de ENCAMINHAR');
+  assert.match(meta.textContent, /100%/);
+  assert.match(meta.textContent, /8 páginas • 3,92 MB/);
+  assert.equal(documentRef.querySelector('.attachment-preview-status').textContent, '',
+    'a faixa intermediária deixa de ocupar espaço após a conclusão');
+});
+
+test('completed generic report PDF status keeps its existing central placement', async t => {
+  const { preview, documentRef } = setup(t, {
+    loadPdfPreview: async () => ({ createPdfPreview: () => ({
+      ready: Promise.resolve(), destroy() {}, getSummary: () => '3 páginas • 1 MB',
+    }) }),
+  });
+  await preview.open(new Blob(['%PDF-1.7'], { type: 'application/pdf' }), 'relatorio-rhid.pdf', { layout: 'report-pdf' });
+  assert.match(documentRef.querySelector('.attachment-preview-status').textContent, /3 páginas • 1 MB/);
+  assert.equal(documentRef.querySelector('.attachment-preview-report-meta').hidden, true);
 });
 
 test('PDF signature actions carry the displayed page rather than always the first employee',async t=>{

@@ -97,6 +97,10 @@ export function createAttachmentPreview({
   const status = element("p", "attachment-preview-status");
   status.setAttribute("role", "status");
   const footer = element("footer", "attachment-preview-footer");
+  const reportMeta = element("div", "attachment-preview-report-meta");
+  reportMeta.setAttribute("role", "status");
+  reportMeta.setAttribute("aria-live", "polite");
+  reportMeta.hidden = true;
   const ddaCopyButton = element('button', 'attachment-preview-dda-copy', 'Copiar linha digitável');
   ddaCopyButton.type = 'button';ddaCopyButton.hidden = true;
   ddaCopyButton.dataset.previewAction = 'copy-dda-barcode';
@@ -155,7 +159,7 @@ export function createAttachmentPreview({
   collectionStatus.dataset.previewAction = "collection-status";
   nextButton.dataset.previewAction = "next";
   collectionNav.append(previousButton, collectionStatus, nextButton);
-  footer.append(collectionNav, addChoice, signActions, backButton, ddaCopyButton, addToTrayButton, exportButton);
+  footer.append(collectionNav, addChoice, signActions, backButton, ddaCopyButton, addToTrayButton, exportButton, reportMeta);
   dialog.append(header, content, status, footer);
   documentRef.body.append(dialog);
   let active = null;
@@ -452,7 +456,11 @@ export function createAttachmentPreview({
     session.previewReady = true;
     const badge = session.loader.querySelector('[role="progressbar"]');
     if (session.layout === 'nfe-report-pdf') badge?.setAttribute('data-preview-complete', '');
-    showPreviewStatus(session, badge, ` ${message}`);
+    if (session.layout === 'payslip-report-pdf') {
+      reportMeta.replaceChildren(badge, documentRef.createTextNode(` ${message}`));
+      reportMeta.hidden = false;
+      showPreviewStatus(session, '');
+    } else showPreviewStatus(session, badge, ` ${message}`);
   }
 
   async function showNativePdf(session) {
@@ -479,9 +487,11 @@ export function createAttachmentPreview({
     if (!dialog.open) returnFocus = typeof resolveReturnFocus === "function" ? resolveReturnFocus : documentRef.activeElement;
     release();
     const compactReport = compactReportPdfLocations.has(layout);
-    dialog.dataset.layout = compactReport || ['flow-summary', 'report-pdf'].includes(layout) ? layout : "media";
+    dialog.dataset.layout = compactReport || ['flow-summary', 'report-pdf', 'payslip-report-pdf'].includes(layout) ? layout : "media";
     dialog.toggleAttribute('data-compact-report-pdf', compactReport);
     const reportLayout = dialog.dataset.layout !== "media";
+    reportMeta.replaceChildren();
+    reportMeta.hidden = true;
     closeButton.textContent = compactReport ? '×' : reportLayout ? '❌' : 'Fechar';
     closeButton.setAttribute('aria-label', compactReport ? 'Fechar PDF' : reportLayout ? 'Fechar relatório' : 'Fechar');
     previousButton.textContent = compactReport ? '‹ PDF anterior' : '‹ Anterior';
@@ -677,7 +687,7 @@ export function createAttachmentPreview({
           blob, container: content, documentRef, signal: session.abort.signal,
           onProgress: value => presentationProgress(session, value),
           onDdaCopyReady: available => { if (active === session) { ddaCopyButton.hidden = !available; if (available) dialog.dataset.ddaCopy = 'true'; else delete dialog.dataset.ddaCopy; } },
-          fit: layout === 'report-pdf' ? 'page' : 'width',
+          fit: ['report-pdf', 'payslip-report-pdf'].includes(layout) ? 'page' : 'width',
           navigation: compactReport && layout !== 'compact-report-pdf' ? 'paged' : 'scroll',
           rotatesWithViewport: compactReport,
           initialPage,

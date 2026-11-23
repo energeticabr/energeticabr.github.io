@@ -7521,7 +7521,8 @@ export function createAppController({
                 if (collection) preview.signal.removeEventListener('abort', cancelRead);
               }
             };
-            const settings = { onClose: release, returnLabel: `Voltar ${payslipPlace} de holerites`, resolveReturnFocus, loadErrorMessage };
+            const settings = { onClose: release, returnLabel: `Voltar ${payslipPlace} de holerites`, resolveReturnFocus, loadErrorMessage,
+              ...(isReport ? { layout: 'payslip-report-pdf' } : {}) };
             let usingCollection = false;
             try {
               if (row && typeof data.listSignedPayslips === 'function' && typeof data.downloadSignedPayslip === 'function') {
@@ -7599,7 +7600,8 @@ export function createAppController({
                       }
                       finally { viewer?.removeEventListener('abort', cancel); }
                     },
-                      file.label || file.name, { onClose: release, returnLabel: returnLabel || 'Voltar às vias assinadas' });
+                      file.label || file.name, { onClose: release, returnLabel: returnLabel || 'Voltar às vias assinadas',
+                        ...(isReport ? { layout: 'payslip-report-pdf' } : {}) });
                   } catch (error) {
                     const cancelled = preview.signal.aborted;
                     release();
