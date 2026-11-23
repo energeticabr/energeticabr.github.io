@@ -48,7 +48,7 @@
 .cameras-player__control-status:empty { display: none; }
 .cameras-player__action, .cameras-player__recording { width: 100%; min-height: 35px; margin-top: 4px; border: 0; border-radius: 5px; background: #2a70db; color: #fff; }
 .cameras-player__history[hidden] { display: none; }
-.cameras-player__history input { box-sizing: border-box; width: 100%; min-height: 34px; margin-top: 4px; font: inherit; }
+.cameras-player__history input, .cameras-player__history select { box-sizing: border-box; width: 100%; min-height: 34px; margin-top: 4px; font: inherit; }
 .cameras-player__recordings { font-size: 12px; }
 .cameras-player__recording { background: #365363; }
 .cameras-player__focus { position: absolute; top: 6px; right: 6px; padding: 5px 7px; border: 0; border-radius: 4px; background: #000b; color: white; }

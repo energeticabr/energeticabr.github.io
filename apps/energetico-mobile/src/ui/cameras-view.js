@@ -198,6 +198,12 @@ export function createCamerasView(documentRef) {
             const history = make('div', 'cameras-player__history'); history.hidden = true;
             const day = documentRef.createElement('input'); day.type = 'date'; day.dataset.cameraDay = ''; day.setAttribute('aria-label', 'Data das gravações');
             const now = new Date(); day.value = `${now.getFullYear()}-${String(now.getMonth()+1).padStart(2,'0')}-${String(now.getDate()).padStart(2,'0')}`;
+            const hour = documentRef.createElement('select'); hour.dataset.cameraHour = ''; hour.setAttribute('aria-label', 'Hora das gravações');
+            const allHours = documentRef.createElement('option'); allHours.value = ''; allHours.textContent = 'Dia inteiro'; hour.append(allHours);
+            for (let n=0; n<24; n++) {
+              const option = documentRef.createElement('option'); option.value = String(n).padStart(2,'0');
+              option.textContent = `${option.value}:00 – ${option.value}:59`; hour.append(option);
+            }
             const search = make('button', 'cameras-player__action', 'Buscar'); search.type = 'button'; search.dataset.cameraSearch = '';
             const results = make('div', 'cameras-player__recordings'); results.setAttribute('aria-live', 'polite');
             show.addEventListener('click', () => { history.hidden = !history.hidden; });
@@ -207,10 +213,11 @@ export function createCamerasView(documentRef) {
               const { signal } = item.searchController;
               search.disabled = true; results.textContent = 'Consultando…';
               try {
-                const rows = await listRecordings(channel.id, day.value, { signal });
+                const rows = await listRecordings(channel.id, day.value, { signal, hour:hour.value || undefined });
                 if (signal.aborted) return;
                 results.replaceChildren();
                 if (!rows.length) results.textContent = 'Nenhuma gravação nesta data.';
+                if (rows.length === 512) results.append(make('p', '', 'Exibindo até 512 trechos. Escolha uma hora para buscar outro período.'));
                 for (const record of rows) {
                   const open = make('button', 'cameras-player__recording', `${record.start.slice(11,16)} – ${record.end.slice(11,16)}`);
                   open.type = 'button'; open.dataset.cameraRecording = record.id;
@@ -220,7 +227,7 @@ export function createCamerasView(documentRef) {
               } catch (error) { if (!signal.aborted) results.textContent = error.message || 'Não foi possível consultar as gravações.'; }
               finally { if (!signal.aborted) search.disabled = false; }
             });
-            history.append(day, search, results); controls.append(show, live, history);
+            history.append(day, hour, search, results); controls.append(show, live, history);
           }
         }
       }

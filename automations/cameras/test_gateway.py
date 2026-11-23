@@ -127,6 +127,12 @@ class CameraGatewayTest(unittest.TestCase):
         self.assertEqual(instance.recording_entry("ch-1", "owner", token)["file_name"], "/private/camera-file")
         with self.assertRaises(gateway.PlaybackError):
             instance.recordings("ch-1", "owner", "invalid")
+        with patch.object(gateway.subprocess, "run", return_value=result) as run:
+            instance.recordings("ch-1", "owner", "2026-11-23", "14")
+            sent = json.loads(run.call_args.kwargs["input"])
+            self.assertEqual(sent["hour"], 14)
+        with self.assertRaises(gateway.PlaybackError):
+            instance.recordings("ch-1", "owner", "2026-11-23", "24")
 
     def test_recording_query_does_not_overload_several_live_streams(self):
         import gateway

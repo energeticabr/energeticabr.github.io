@@ -154,7 +154,7 @@ class Gateway:
     def catalog(self):
         return [{"id": entry["id"], "label": entry["label"]} for entry in self.entries.values()]
 
-    def recordings(self, channel, viewer, day):
+    def recordings(self, channel, viewer, day, hour=None):
         if not isinstance(channel, str) or channel not in self.entries:
             raise PlaybackError(404)
         try:
@@ -162,6 +162,8 @@ class Gateway:
                 raise ValueError()
         except ValueError:
             raise PlaybackError(400) from None
+        if hour is not None and (not isinstance(hour, str) or not re.fullmatch(r"0[0-9]|1[0-9]|2[0-3]", hour)):
+            raise PlaybackError(400)
         if not self.query_slots.acquire(blocking=False):
             raise PlaybackError(429)
         entry = self.entries[channel]
@@ -172,6 +174,8 @@ class Gateway:
                     raise PlaybackError(429)
                 self.query_active = True
             params = {**entry.get("input", {}), "operation": "recordings", "day": day}
+            if hour is not None:
+                params["hour"] = int(hour)
             result = subprocess.run(entry["command"], input=json.dumps(params).encode() + b"\n",
                                     stdout=subprocess.PIPE, stderr=subprocess.DEVNULL, timeout=60)
             if result.returncode or len(result.stdout) > 262144:
@@ -348,7 +352,7 @@ def handler_for(gateway):
                     gateway.move(data.get("channelId"), viewer, data.get("direction"))
                     result = {"accepted": True}
                 elif data.get("action") == "recordings":
-                    result = {"recordings": gateway.recordings(data.get("channelId"), viewer, data.get("day"))}
+                    result = {"recordings": gateway.recordings(data.get("channelId"), viewer, data.get("day"), data.get("hour"))}
                 elif data.get("action") == "play-recording":
                     channel = data.get("channelId")
                     record = gateway.recording_entry(channel, viewer, data.get("recordingId"))
