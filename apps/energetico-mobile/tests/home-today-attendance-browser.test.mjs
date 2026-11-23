@@ -20,6 +20,7 @@ test('red today shortcut fits one line above diary on phones and desktop',{timeo
         assert.equal(l.background,'rgb(165, 39, 39)');
         assert.ok(l.height>=44);
         assert.ok(l.bottom<=l.diaryTop);
+        assert.ok(l.powerBiBottom<=l.camerasTop, JSON.stringify({width,l}));
         assert.equal(new Set(l.lines.map(r=>Math.round(r.top))).size,1,JSON.stringify({width,l}));
         assert.ok(l.lines.every(r=>r.left>=l.left&&r.right<=l.right),JSON.stringify({width,l}));
       }finally{dom.window.close();}
