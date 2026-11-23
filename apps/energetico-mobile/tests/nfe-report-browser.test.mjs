@@ -126,7 +126,8 @@ test('NFE opens the horizontal fiscal table from the blue mascot in portrait and
         assert.match(text, /Retenção informada.*Pelo comprador.*R\$\s*15,00/);
         assert.equal(pdfIconWidth, 34);
         assert.ok(pdfTargetHeight >= 44);
-        assert.deepEqual(filterNames, ['document', 'retention', 'cno', 'regime']);
+        assert.deepEqual(filterNames, ['document', 'status', 'retention', 'cno', 'regime']);
+        assert.ok(layout.statusFilterWidth >= 128, 'the status selector has room to display Canceladas');
         assert.equal(filtersFit, true);
         assert.equal(taxHeading, 'TIPO FORNECEDOR/ RETENÇÃO');
         assert.equal(taxStacked, true);
