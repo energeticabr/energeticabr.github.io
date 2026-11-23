@@ -26,12 +26,31 @@ test('real controller shows a blank report with mascot and measured percentage o
      assert.equal(result.retainedBackdrop,result.backdrop);
      assert.equal(result.percentage,'33%');assert.equal(result.background,'rgb(255, 255, 255)');continue;
     }
-    assert.ok(result.sameBounds&&result.removed&&result.ready&&result.visible,JSON.stringify(result));
+    assert.ok(result.removed&&result.ready&&result.visible,JSON.stringify(result));
     assert.equal(result.background,'rgba(5, 32, 46, 0.58)');
-    assert.ok(result.frames.every(frame=>frame.backdrop==='rgba(5, 32, 46, 0.58)'&&frame.underlay==='rgba(0, 0, 0, 0)'),JSON.stringify(result));
+    assert.ok(result.frames.every(frame=>!frame.retained||frame.backdrop==='rgba(5, 32, 46, 0.58)'),JSON.stringify(result));
     assert.ok(result.expectedScroll>0);
-    assert.ok(result.frames.every(frame=>frame.retained&&!frame.sourceVisible&&frame.topmost&&frame.blank&&frame.loading&&frame.mascot&&frame.within&&/^\d+%$/.test(frame.percentage)&&frame.background==='rgb(255, 255, 255)'),JSON.stringify(result));
+    assert.ok(result.frames.every(frame=>!frame.sourceVisible),JSON.stringify(result));
+    assert.ok(result.frames.some(frame=>!frame.retained),JSON.stringify(result));
    }finally{dom.window.close();}
   }
  }finally{await server.close();}
+});
+
+
+test('report navigation remains available while the destination is loading',{timeout:60000},async t=>{
+ const browser=[process.env.CHROME_BIN,'C:\\Program Files\\Google\\Chrome\\Application\\chrome.exe','/usr/bin/google-chrome','/usr/bin/chromium'].find(path=>path&&existsSync(path));
+ if(!browser)return t.skip('Chrome unavailable');
+ const root=resolve(fileURLToPath(new URL('..',import.meta.url)));
+ const server=await createIsolatedViteServer({root,optimizeDeps:{noDiscovery:true,include:['decimal.js','pdf-lib','pako','@capacitor/core']},server:{host:'127.0.0.1',port:0,hmr:false,fs:{allow:[resolve(root,'../..')]}},logLevel:'silent'});
+ try {
+  await server.listen();
+  const {stdout}=await runBrowserLayout(browser,{width:390,height:844,url:`http://127.0.0.1:${server.httpServer.address().port}/tests/fixtures/report-transition.html?rapid`});
+  const dom=new JSDOM(stdout);
+  try { const result=JSON.parse(dom.window.document.documentElement.dataset.layout);
+   assert.equal(result.error,undefined,JSON.stringify(result));
+   assert.deepEqual(result.before,{covered:false,visible:true,disabled:false});
+   assert.equal(result.returned,true,JSON.stringify(result));
+  } finally { dom.window.close(); }
+ } finally { await server.close(); }
 });

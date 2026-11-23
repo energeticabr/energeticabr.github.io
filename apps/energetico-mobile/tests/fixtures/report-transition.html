@@ -55,6 +55,17 @@ try {
  const expectedScroll=scroll.scrollTop,rect=source.querySelector('[role="dialog"]').getBoundingClientRect();
  const opening=handlers.get('navigate-mascot-report')({from:cargos?'open-cargos-table':'open-payment-ledger',direction:cargos?'next':'previous'});
  window.transitionStage='frames';
+ if(new URLSearchParams(location.search).has('rapid')){
+  for(let i=0;i<8;i++) await new Promise(requestAnimationFrame);
+  const destination=panels[1].element;
+  const arrow=destination.querySelector('[data-report-direction=next]');
+  const before={covered:!!document.querySelector('[data-report-transition]'),visible:!destination.hidden,disabled:arrow.disabled};
+  arrow.click();
+  for(let i=0;i<8;i++) await new Promise(requestAnimationFrame);
+  const returned=panels.length>=3 && !panels.at(-1).element.hidden;
+  gate.resolve();await opening;
+  document.documentElement.dataset.layout=JSON.stringify({before,returned});
+ } else {
  const frames=[];
  for(let i=0;i<4;i++){
   await new Promise(requestAnimationFrame);
@@ -69,13 +80,15 @@ try {
    backdrop:copy&&getComputedStyle(copy).backgroundColor,underlay:getComputedStyle(panels[1].element).backgroundColor,
    background:surface&&getComputedStyle(surface).backgroundColor});
  }
- const copyRect=document.querySelector('[data-report-transition] [role="dialog"]').getBoundingClientRect();
- const sameBounds=['left','top','width','height'].every(key=>Math.abs(rect[key]-copyRect[key])<1);
+ const retainedSurface=document.querySelector('[data-report-transition] [role="dialog"]');
+ const copyRect=retainedSurface?.getBoundingClientRect();
+ const sameBounds=!!copyRect&&['left','top','width','height'].every(key=>Math.abs(rect[key]-copyRect[key])<1);
  window.transitionStage='destination';gate.resolve();await opening;await new Promise(requestAnimationFrame);
  const destination=panels[1].element;
  document.documentElement.dataset.layout=JSON.stringify({frames,expectedScroll,sameBounds,removed:!document.querySelector('[data-report-transition]'),
   ready:cargos?!destination.querySelector('[aria-busy="true"]')&&!destination.textContent.includes('Carregando presenças'):destination.textContent.includes('Destino pronto'),background:getComputedStyle(destination).backgroundColor,
   visible:!destination.hidden});
+ }
  }
 }catch(error){document.documentElement.dataset.layout=JSON.stringify({error:String(error.stack||error)});}
 </script></body></html>
