@@ -21,6 +21,8 @@ MEDIA_FILE = re.compile(r"index\.m3u8|segment-[0-9]+\.ts")
 MEDIA_ROUTE = re.compile(rf"{MEDIA}/([A-Za-z0-9_-]{{43}})/(index\.m3u8|segment-[0-9]+\.ts)")
 CHANNEL_ID = re.compile(r"[a-z0-9-]{1,48}")
 GRAPH_ME = "https://graph.microsoft.com/v1.0/me?$select=id,userPrincipalName,userType"
+MAX_STREAMS = 8
+START_TIMEOUT_SECONDS = 75
 
 
 class PlaybackError(Exception):
@@ -239,7 +241,7 @@ class Gateway:
                 del self.streams[(viewer, channel)]
                 stream = None
             if not stream:
-                if len(self.streams) >= 3:
+                if len(self.streams) >= MAX_STREAMS:
                     raise PlaybackError(429)
                 try:
                     entry = dict(self.entries[channel])
@@ -249,7 +251,7 @@ class Gateway:
                     self.streams[(viewer, channel)] = stream
                 except (BrokenPipeError, OSError):
                     raise PlaybackError(503) from None
-        deadline = time.monotonic() + 40
+        deadline = time.monotonic() + START_TIMEOUT_SECONDS
         while time.monotonic() < deadline:
             with self.lock:
                 if self.streams.get((viewer, channel)) is not stream or not stream.alive():

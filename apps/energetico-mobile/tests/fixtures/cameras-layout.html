@@ -2,7 +2,9 @@
 <body><script type="module">
 import { createCamerasView } from '/src/ui/cameras-view.js';
 createCamerasView(document).open({
-  list: async () => [1,2,3,4].map(n => ({ id: 'camera-'+n, label: 'Obra Xavante • canal '+n })),
+  list: async () => Array.from({ length: 9 }, (_, index) => ({
+    id: 'camera-' + (index + 1), label: 'Obra Xavante • canal ' + (index + 1),
+  })),
   start: async () => new Promise(() => {}),
   move: async () => {},
   listRecordings: async () => [],
@@ -14,9 +16,8 @@ if (location.search.includes('single')) {
   document.querySelector('[data-camera-recordings]').click();
 } else if (location.search.includes('player')) {
   document.querySelector('[data-camera-grid]').click();
-  for (let i=0;i<3;i++) {
-    const checkbox=document.querySelectorAll('[data-camera-select]')[i];
-    checkbox.checked=true; checkbox.dispatchEvent(new Event('change'));
+  for (let i = 0; i < 8; i++) {
+    document.querySelectorAll('[data-camera-select]')[i].click();
   }
   document.querySelector('[data-camera-open-grid]').click();
 }
