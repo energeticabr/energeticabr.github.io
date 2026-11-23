@@ -561,10 +561,11 @@ test('NFE printer captures all filtered pages with XML facts and preserves the p
 test('invoice status starts at Todas and filters the report, search results and print', async t => {
   const dom = new JSDOM('<main id="app"></main>');
   const { document, Event } = dom.window;
-  const rows = Array.from({ length:13 }, (_, index) => ({
+  const situations = ['CANCELADA', 'AUTORIZADA', '', ...Array(10).fill('AUTORIZADA'), 'SUBSTITUIDA'];
+  const rows = situations.map((situation, index) => ({
     id:String(index + 1),
-    fields:{ ...invoice.fields, Title:index < 2 ? 'Fornecedor Alvo' : 'Outro fornecedor',
-      NUMERO_NOTA:String(101 + index), SITUACAO:index === 0 ? 'CANCELADA' : 'AUTORIZADA' },
+    fields:{ ...invoice.fields, Title:index < 2 || situation === 'SUBSTITUIDA' ? 'Fornecedor Alvo' : 'Outro fornecedor',
+      NUMERO_NOTA:String(101 + index), SITUACAO:situation },
   }));
   const panel = createNfeReportView({ document, data:{
     loadSnapshot:async () => ({ rows }),
@@ -585,17 +586,18 @@ test('invoice status starts at Todas and filters the report, search results and 
   assert.equal(status.selectedOptions[0].textContent, 'Todas');
   assert.equal(ids().length, 12);
   element.querySelector('.nfe-pager button:last-child').click();
-  assert.deepEqual(ids(), ['1']);
+  assert.deepEqual(ids(), ['2', '1']);
 
-  choose('active');
+  choose('AUTORIZADA');
   assert.equal(ids().length, 12);
-  assert.ok(ids().includes('2') && !ids().includes('1'));
+  assert.ok(ids().includes('2') && ids().includes('3'));
+  assert.ok(!ids().includes('1') && !ids().includes('14'));
   assert.equal(element.querySelector('.nfe-pager').hidden, true);
   const search = element.querySelector('[name="search"]');
   search.value = 'alvo';
   search.dispatchEvent(new Event('input'));
   assert.deepEqual(ids(), ['2']);
-  choose('cancelled');
+  choose('CANCELADA');
   assert.deepEqual(ids(), ['1']);
   assert.equal(element.querySelector('.nfe-metrics dd').textContent, '1');
   const snapshot = await panel.capturePrint({ title:'Notas canceladas' });
@@ -604,8 +606,8 @@ test('invoice status starts at Todas and filters the report, search results and 
   assert.match(JSON.stringify(printed.rows[1]), /101.*Cancelada/);
 
   choose('');
-  assert.deepEqual(ids(), ['2', '1']);
-  choose('cancelled');
+  assert.deepEqual(ids(), ['14', '2', '1']);
+  choose('CANCELADA');
   panel.close();
   await panel.open();
   assert.equal(status.selectedOptions[0].textContent, 'Todas');

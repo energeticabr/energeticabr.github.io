@@ -51,7 +51,8 @@ export function projectNfeRows(rows) {
     const rawDate = registrationRawField(fields, 'DATA_EMISSAO', model);
     const date = registrationDateKey(rawDate);
     const complete = text(fields.STATUS_IMPORTACAO).toUpperCase() === 'XML_COMPLETO';
-    const cancelled = text(fields.SITUACAO).toUpperCase() === 'CANCELADA';
+    const situation = text(fields.SITUACAO).toUpperCase();
+    const cancelled = situation === 'CANCELADA';
     const retentionCode = text(fields.STATUS_RETENCOES).toUpperCase();
     const withholding = complete ? buyerWithholding(fields) : null;
     const retention = !complete ? 'unknown' : retentionCode === 'RETENCAO_INFORMADA_XML' ? 'yes'
@@ -71,7 +72,7 @@ export function projectNfeRows(rows) {
       supplier:text(fields.Title) || text(fields.FORNECEDOR),
       taxId:text(fields.CNPJ_FORNECEDOR), key, number:text(fields.NUMERO_NOTA),
       total:complete ? registrationNumber(fields.VALOR_TOTAL_NOTA) : null,
-      retention, withholding, cno, cnoState, complete, cancelled,
+      retention, withholding, cno, cnoState, complete, situation, cancelled,
       xmlUrl:complete && validKey ? url(fields.XML_URL) : '',
       pdfName, danfeCnoName,
       correctionCount:type === 'NF-e' ? new Set(registeredInvoiceCorrections(fields).map(event => event.sequence)).size : 0,
