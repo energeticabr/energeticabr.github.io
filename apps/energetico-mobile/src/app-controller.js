@@ -6796,7 +6796,8 @@ export function createAppController({
       if (mascotNavigationOpening !== navigation) return;
       const root = reportNavigationPanel(target)?.element;
       if (root?.isConnected && !root.closest('[hidden],[inert],[aria-hidden="true"]')
-        && root.querySelector('.report-navigation-arrow')) release(true);
+        && root.querySelector('.report-navigation-arrow')
+        && root.querySelector('[aria-busy="true"], .app-loading')) release(true);
     };
     try {
       resetMascotNavigationOverlays();
