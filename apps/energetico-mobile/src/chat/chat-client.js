@@ -948,10 +948,12 @@ export function createChatClient({
     await cameraRequest({ action: "move", channelId, direction }, signal);
   }
 
-  async function listCameraRecordings(channelId, day, { signal } = {}) {
+  async function listCameraRecordings(channelId, day, { signal, hour } = {}) {
     if (!/^[a-z0-9-]{1,48}$/.test(channelId ?? "") || !/^\d{4}-\d{2}-\d{2}$/.test(day ?? ""))
       throw new Error("Selecione uma data válida.");
-    const result = await cameraRequest({ action: "recordings", channelId, day }, signal);
+    if (hour !== undefined && !/^(0[0-9]|1[0-9]|2[0-3])$/.test(hour))
+      throw new Error("Selecione uma hora válida.");
+    const result = await cameraRequest({ action: "recordings", channelId, day, hour }, signal);
     if (!Array.isArray(result?.recordings)) throw new Error("Não foi possível consultar as gravações.");
     return result.recordings.filter(item => /^[A-Za-z0-9_-]{22}$/.test(item?.id)
       && typeof item.start === "string" && typeof item.end === "string");

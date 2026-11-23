@@ -10,7 +10,7 @@ import ssl
 import sys
 import threading
 import urllib.request
-from datetime import datetime
+from datetime import datetime, timedelta
 from urllib.parse import urlsplit
 
 
@@ -165,7 +165,21 @@ def main():
             return frame
         service._build_opfilequery_followup = build_channel_query
         day = datetime.strptime(settings["day"], "%Y-%m-%d")
-        records, _meta = service.fetch_device_recordings(config, day=day, timeout=20, max_pages=8)
+        if "hour" in settings:
+            begin = day.replace(hour=int(settings["hour"]))
+            end = begin + timedelta(hours=1) - timedelta(seconds=1)
+            query_page = service._query_device_recordings_page
+            def query_hour(**kwargs):
+                requested = datetime.strptime(kwargs["begin_time"], "%Y-%m-%d %H:%M:%S")
+                if requested > end:
+                    return {"Ret": 100, "OPFileQuery": []}, {}, None
+                kwargs["begin_time"] = max(begin, requested).strftime("%Y-%m-%d %H:%M:%S")
+                kwargs["end_time"] = end.strftime("%Y-%m-%d %H:%M:%S")
+                return query_page(**kwargs)
+            service._query_device_recordings_page = query_hour
+        records, meta = service.fetch_device_recordings(config, day=day, timeout=20, max_pages=8)
+        if meta.get("partial_error") or any(page.get("error") for page in meta.get("pages", [])):
+            raise RuntimeError("recording query incomplete")
         items = [{"start_time": r.start_time, "end_time": r.end_time,
                   "duration_seconds": r.duration_seconds, "file_name": r.file_name,
                   "file_length": r.file_length, "channel": r.channel}
