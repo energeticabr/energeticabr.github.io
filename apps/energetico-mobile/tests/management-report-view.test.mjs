@@ -144,7 +144,7 @@ test('tabela de despesas mostra PAGO, PREVISTO e TOTAL GERAL para tipos e subtot
 test('clicar no nome do tipo abre dashboard acima do relatório e fechar retorna ao mesmo contexto',async t=>{
   let loads=0;
   const launch={...row,date:'2026-10-02',paymentDate:'2026-10-03'};
-  const {view,root}=setup(t,async()=>{loads++;return {
+  const {view,root,dom}=setup(t,async()=>{loads++;return {
     launches:[launch,{...launch,id:'2',product:'Brita',supplier:'Beta',stage:'Estrutura',total:40}],
     provisions:[{id:'p1',branch:row.branch,product:'Cimento',supplier:'Beta',stage:'Estrutura',dueDate:'2026-10-20',total:30}],
     productTypes:[{product:'Cimento',expenseType:'MATERIAL'},{product:'Brita',expenseType:'MATERIAL'}],
@@ -161,6 +161,18 @@ test('clicar no nome do tipo abre dashboard acima do relatório e fechar retorna
   assert.match(dashboard.textContent,/MATERIAL/);
   assert.match(dashboard.textContent,/004 - EDIFÍCIO XAVANTE/);
   assert.equal(dashboard.querySelectorAll('.gm-expense-dashboard-series.is-total circle').length,12);
+  assert.equal(dashboard.querySelectorAll('.gm-dashboard-value-label').length,36);
+  const monthDetail=dashboard.querySelector('.gm-expense-dashboard-month-detail');
+  assert.ok(monthDetail);
+  const trend=dashboard.querySelector('.gm-expense-dashboard-trend');
+  trend.getBoundingClientRect=()=>({left:0,width:900});
+  trend.dispatchEvent(new dom.window.MouseEvent('pointermove',{bubbles:true,clientX:96+10*(750/11)}));
+  assert.equal(monthDetail.dataset.month,'2026-09');
+  const octoberPaid=[...dashboard.querySelectorAll('.gm-expense-dashboard-series.is-paid circle')]
+    .find(point=>point.getAttribute('aria-label').includes('out/26'));
+  octoberPaid.dispatchEvent(new dom.window.MouseEvent('click',{bubbles:true}));
+  assert.match(monthDetail.textContent,/out\/26/i);
+  assert.match(monthDetail.textContent.replace(/\u00a0/g,' '),/Pago.*R\$ 65,00/s);
   assert.deepEqual([...dashboard.querySelectorAll('.gm-expense-dashboard-ranking h3')].map(node=>node.textContent),
     ['Principais produtos','Principais fornecedores','Principais etapas']);
   assert.equal(dashboard.querySelector('.gm-expense-dashboard-metric.is-total strong').textContent.replace(/\u00a0/g,' '),'R$ 95,00');
