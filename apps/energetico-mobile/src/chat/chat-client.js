@@ -909,6 +909,37 @@ export function createChatClient({
     }, response => parsePortalResponse(response, "A consulta do menu"), true);
   }
 
+  async function cameraRequest(payload, signal) {
+    if (apiPrefix !== "/api") return { channels: [] };
+    const token = await cancellableToken(tokenProvider, signal);
+    return request(new URL("/api/portal-cameras", baseUrl).href, {
+      method: "POST",
+      headers: { Accept: "application/json", Authorization: `Bearer ${token}`, "Content-Type": "application/json" },
+      body: JSON.stringify(payload), credentials: "omit", cache: "no-store", redirect: "error", signal,
+    }, async response => {
+      if (response.status === 403) throw new Error("Sua conta não tem acesso às câmeras.");
+      if (response.status === 429) throw new Error("Outra transmissão está em uso. Tente novamente em instantes.");
+      if (!response.ok) throw new Error("O serviço de câmeras está indisponível. Tente novamente em instantes.");
+      return readJson(response);
+    }, true);
+  }
+
+  async function listCameraChannels({ signal } = {}) {
+    const result = await cameraRequest({ action: "list" }, signal);
+    if (!Array.isArray(result?.channels)) throw new Error("Não foi possível carregar as câmeras.");
+    return result.channels.filter(channel => /^[a-z0-9-]{1,48}$/.test(channel?.id)
+      && typeof channel.label === "string" && channel.label.length <= 120);
+  }
+
+  async function startCameraPlayback(channelId, { signal } = {}) {
+    if (!/^[a-z0-9-]{1,48}$/.test(channelId ?? "")) throw new Error("Selecione uma câmera.");
+    const result = await cameraRequest({ action: "play", channelId }, signal);
+    const url = typeof result?.path === "string" && /^\/api\/portal-camera-media\/[A-Za-z0-9_-]{43}\/index\.m3u8$/.test(result.path)
+      ? new URL(result.path, baseUrl).href : null;
+    if (!url) throw new Error("Não foi possível abrir a transmissão.");
+    return url;
+  }
+
   async function fetchMedia(message = {}, { signal, maxBytes, onProgress } = {}) {
     if (maxBytes !== undefined && (!Number.isSafeInteger(maxBytes) || maxBytes <= 0)) throw new TypeError('Limite de prévia inválido.');
     let mediaUrl;
@@ -940,5 +971,5 @@ export function createChatClient({
     }, true);
   }
 
-  return Object.freeze({ swileRequest, trancidRechargeRequest, getSicoobBalance, getSicoobLatestAttempt, refreshSicoob, getSicoobRefreshStatus, getSicoobRefreshPending, acknowledgeSicoobRefresh, waitForDiaryEvidence, refreshSefaz, getSefazRefreshStatus, getSefazRefreshPending, acknowledgeSefazRefresh, sendText, sendFile, replaceAttachment, transcribeAudio, fetchMedia, getAttachments, launchGalleryRequest, uploadLaunchGalleryFile, getPendingProvisionSnapshot, getPendingNotesSnapshot, getRhidAttendanceReport, startRhidPendingValidation, startRhidDayValidation, getRhidAttendanceMonth, saveRhidAttendanceAdjustment, deleteRhidAttendanceAdjustment, refreshRhidAttendance, getRhidRefreshStatus, refreshRecurringProvisions, getRecurringProvisionRefreshStatus, refreshDda, getDdaRefreshStatus, getDdaRefreshPending, acknowledgeDdaRefresh, confirmDdaPayment, deleteAttachment, deleteAllAttachments, compressAttachment, chooseAttachmentCompression, getCompletionMenu, prepareSignatureEvidence, confirmSignatureEvidence, verifySignatureEvidence, captureSignatureEvidence });
+  return Object.freeze({ listCameraChannels, startCameraPlayback, swileRequest, trancidRechargeRequest, getSicoobBalance, getSicoobLatestAttempt, refreshSicoob, getSicoobRefreshStatus, getSicoobRefreshPending, acknowledgeSicoobRefresh, waitForDiaryEvidence, refreshSefaz, getSefazRefreshStatus, getSefazRefreshPending, acknowledgeSefazRefresh, sendText, sendFile, replaceAttachment, transcribeAudio, fetchMedia, getAttachments, launchGalleryRequest, uploadLaunchGalleryFile, getPendingProvisionSnapshot, getPendingNotesSnapshot, getRhidAttendanceReport, startRhidPendingValidation, startRhidDayValidation, getRhidAttendanceMonth, saveRhidAttendanceAdjustment, deleteRhidAttendanceAdjustment, refreshRhidAttendance, getRhidRefreshStatus, refreshRecurringProvisions, getRecurringProvisionRefreshStatus, refreshDda, getDdaRefreshStatus, getDdaRefreshPending, acknowledgeDdaRefresh, confirmDdaPayment, deleteAttachment, deleteAllAttachments, compressAttachment, chooseAttachmentCompression, getCompletionMenu, prepareSignatureEvidence, confirmSignatureEvidence, verifySignatureEvidence, captureSignatureEvidence });
 }
