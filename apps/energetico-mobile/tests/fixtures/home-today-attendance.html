@@ -19,11 +19,14 @@ await document.fonts.ready;
 await new Promise(requestAnimationFrame);
 const button=document.querySelector('[data-reply-id="start_today_pending_attendance"]');
 const diary=document.querySelector('[data-reply-id="start_pending_construction_diary"]');
+const powerBi=document.querySelector('[data-reply-id="action_powerbi_dashboard"]');
+const cameras=document.querySelector('[data-reply-id="action_cameras"]');
 const box=button.getBoundingClientRect(), range=document.createRange();
 range.selectNodeContents(button);
 document.documentElement.dataset.layout=JSON.stringify({
   text:button.textContent,height:box.height,background:getComputedStyle(button).backgroundColor,
   left:box.left,right:box.right,bottom:box.bottom,diaryTop:diary.getBoundingClientRect().top,
+  powerBiBottom:powerBi.getBoundingClientRect().bottom,camerasTop:cameras.getBoundingClientRect().top,
   lines:[...range.getClientRects()].map(r=>({top:r.top,left:r.left,right:r.right})),
 });
 document.documentElement.dataset.ready='true';

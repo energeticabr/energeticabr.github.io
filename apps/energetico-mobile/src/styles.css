@@ -1371,6 +1371,10 @@ button.chat-rhid-attendance-card__cluster:focus-visible { outline: 3px solid #15
   .chat-transcript { padding: 24px clamp(18px, 3vw, 42px) 16px; }
   .chat-message--assistant .chat-bubble { flex: 1 1 auto; max-width: none; min-width: 0; }
   .chat-choice-list { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .chat-choice-list > [data-reply-id="action_cameras"],
+  .chat-choice-list > .chat-choice-button--today-attendance + .chat-choice-button--diary {
+    grid-column-start: 1;
+  }
   .chat-choice-list--single { grid-template-columns: minmax(0, 1fr); }
   .chat-choice-list--single .chat-choice-button { width: min(100%, 760px); min-height: var(--control-height); padding: var(--control-padding-block) var(--control-padding-inline); justify-self: center; }
   .chat-confirmation-backdrop[data-signature-pad-dialog] { padding: max(8px, env(safe-area-inset-top)) 8px max(8px, env(safe-area-inset-bottom)); }
