@@ -36,6 +36,7 @@ import { attendanceEditablePunchContext, attendanceValidationDate, pendingAttend
 import { attendanceIrregularity, isAttendanceHolidayReason } from "../chat/attendance-irregularity.js";
 import { attendanceBulkEligible, attendanceClockExempt } from "../chat/attendance-bulk-selection.js";
 import { createPowerBiDashboardView } from "./powerbi-dashboard-view.js";
+import { createCamerasView } from "./cameras-view.js";
 import { observeSignatureTrace } from "../web/signature-trace.js";
 import { createVoiceInputController } from "./voice-input.js";
 import { normalizeConstructionDiaryText } from "./construction-diary-text.js";
@@ -404,12 +405,18 @@ function isPersonalExpensesArea(option) {
     || areaMenuLabel(option) === "gastos pessoais";
 }
 
-function energeticAreaOptions(options) {
+function energeticAreaOptions(options, includeCameras) {
   const hasPowerBi = options.some(option => draftReplyId(option).trim().toLowerCase() === "action_powerbi_dashboard");
   // Preserve Power BI for the same menu responses, replacing the retired area in place.
   const powerBiIndex = hasPowerBi ? -1 : options.findIndex(isPersonalExpensesArea);
   return options.flatMap((option, index) => {
-    if (index === powerBiIndex) return [powerBiDashboardOption()];
+    if (draftReplyId(option).trim().toLowerCase() === "action_cameras") return [];
+    if (index === powerBiIndex || draftReplyId(option).trim().toLowerCase() === "action_powerbi_dashboard") {
+      const powerBi = index === powerBiIndex ? powerBiDashboardOption() : option;
+      return includeCameras
+        ? [powerBi, { id: "action_cameras", reply: "action_cameras", label: "CÂMERAS" }]
+        : [powerBi];
+    }
     if (isPersonalExpensesArea(option)
       || draftReplyId(option).trim().toLowerCase() === "group_nb_participacoes"
       || areaMenuLabel(option) === "nb participacoes") return [];
@@ -452,7 +459,7 @@ function draftMenuOptions(message) {
         return option;
       })
     : options;
-  if (!/RASCUNHOS?/i.test(question)) return isRootAreaMenu ? energeticAreaOptions(menuOptions) : menuOptions;
+  if (!/RASCUNHOS?/i.test(question)) return isRootAreaMenu ? energeticAreaOptions(menuOptions, isMainAreaMenu) : menuOptions;
 
   const deleteIds = new Set(menuOptions
     .map(option => String(option.reply || option.id || ""))
@@ -3344,6 +3351,7 @@ export function createChatView(root, { onOpenSettings, onDemoAccess, onSignOut, 
   let attendanceInlineScroll = null;
   let pendingProvisionRenderDay = "";
   let powerBiDashboard = null;
+  const cameras = createCamerasView(root.ownerDocument);
   const attendanceSelectedIds = new Set();
   const attendanceExpandedIds = new Set();
   let attendanceSelectionPollKey = "";
@@ -6142,6 +6150,7 @@ export function createChatView(root, { onOpenSettings, onDemoAccess, onSignOut, 
     const sessionKey = JSON.stringify([state.sessionStatus, state.account?.homeAccountId ?? state.account?.localAccountId
       ?? state.account?.username ?? state.account?.id ?? state.account?.name ?? null]);
     if (sessionKey !== attachmentGestureSessionKey) {
+      cameras.close();
       attachmentGestureSessionKey = sessionKey;
       attachmentSessionRevision++;
       attendanceDeletionDialog = null;
@@ -6561,6 +6570,8 @@ export function createChatView(root, { onOpenSettings, onDemoAccess, onSignOut, 
     },
     chooseCaptureMode: () => cameraChooser.choose(),
     openPowerBiDashboard,
+    openCameras: cameras.open,
+    closeCameras: cameras.close,
     openRhidAttendanceToday,
     setRhidAttendanceReportStatus,
     setRhidAttendanceMonthStatus,
@@ -6630,6 +6641,7 @@ export function createChatView(root, { onOpenSettings, onDemoAccess, onSignOut, 
       composing = false;
       handlers.clear();
       powerBiDashboard?.destroy?.();
+      cameras.close();
       powerBiDashboard = null;
       lastState = null;
       signaturePlacementRuntime?.destroy();

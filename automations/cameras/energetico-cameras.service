@@ -1,0 +1,30 @@
+[Unit]
+Description=Câmeras Energético
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+DynamicUser=yes
+WorkingDirectory=/opt/energetico-cameras
+Environment=PYTHONPATH=/opt/energetico-cameras/client:/opt/energetico-cameras/deps
+Environment=ENERGETICO_CAMERA_CONFIG=%d/cameras.json
+Environment=PYTHONDONTWRITEBYTECODE=1
+LoadCredential=cameras.json:/etc/energetico-cameras/cameras.json
+ExecStart=/usr/bin/python3 /opt/energetico-cameras/gateway.py
+Restart=on-failure
+RestartSec=5
+PrivateTmp=yes
+NoNewPrivileges=yes
+ProtectSystem=strict
+ProtectHome=yes
+ProtectKernelTunables=yes
+ProtectKernelModules=yes
+ProtectControlGroups=yes
+MemoryMax=180M
+CPUQuota=50%
+TasksMax=40
+Nice=10
+
+[Install]
+WantedBy=multi-user.target

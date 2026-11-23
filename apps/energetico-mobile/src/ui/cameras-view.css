@@ -1,0 +1,29 @@
+.cameras-view {
+  box-sizing: border-box;
+  inset: 0;
+  width: min(100%, 940px);
+  max-width: 100%;
+  height: max-content;
+  max-height: calc(100dvh - 24px - env(safe-area-inset-top) - env(safe-area-inset-bottom));
+  padding: clamp(12px, 3vw, 24px);
+  border: 1px solid #cbdde1;
+  border-radius: 14px;
+  background: #f8fbfc;
+  color: #173042;
+  overflow: auto;
+}
+
+.cameras-view::backdrop { background: rgb(15 35 47 / 65%); }
+.cameras-view > header { display: grid; grid-template-columns: auto minmax(0, 1fr); gap: 12px; align-items: center; }
+.cameras-view h1 { margin: 0; font-size: clamp(16px, 4vw, 22px); }
+.cameras-view__content { display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: 8px; padding-top: 12px; }
+.cameras-view__content label,
+.cameras-view__content p,
+.cameras-view video { grid-column: 1 / -1; }
+.cameras-view select,
+.cameras-view [data-camera-play] { min-height: 44px; border: 1px solid #99b6c1; border-radius: 8px; padding: 6px 10px; font: inherit; }
+.cameras-view [data-camera-play] { background: #17516e; color: #fff; }
+.cameras-view [data-camera-play]:disabled { opacity: .6; }
+.cameras-view p { margin: 0; }
+.cameras-view p:empty { display: none; }
+.cameras-view video { width: 100%; max-height: 58dvh; aspect-ratio: 16 / 9; background: #102331; border-radius: 8px; }

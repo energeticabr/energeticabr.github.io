@@ -11701,6 +11701,7 @@ export function createAppController({
   }
 
   async function signOut() {
+    view.closeCameras?.();
     cancelMascotOrientationTransition();
     disposePendingPayrollLinks();
     pendingPayrollRecovery.clear();
@@ -12669,6 +12670,13 @@ export function createAppController({
         return returnToPreviousFlowStep(command);
       }
       if (command.replyId === POWERBI_DASHBOARD_REPLY_ID) return openPowerBiDashboard();
+      if (command.replyId === "action_cameras") {
+        if (!account || stopped || !client.listCameraChannels) return false;
+        return view.openCameras?.({
+          list: client.listCameraChannels,
+          start: client.startCameraPlayback,
+        }) ?? false;
+      }
       if (REGISTRATION_GALLERY_KIND[command.replyId]) return openRegistrationGallery(REGISTRATION_GALLERY_KIND[command.replyId], command.replyId);
       if (command.replyId === LAUNCH_GALLERY_ID) return openLaunchGallery();
       if (command.replyId === ORDERS_GALLERY_ID) return openOrdersGallery();
@@ -13292,6 +13300,7 @@ export function createAppController({
   }
 
   function stop() {
+    view.closeCameras?.();
     cancelMascotOrientationTransition();
     disposePendingPayrollLinks();
     pendingPayrollRecovery.clear();

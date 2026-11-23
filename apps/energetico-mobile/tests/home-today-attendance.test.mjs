@@ -22,7 +22,8 @@ test('today shortcut is red immediately before diary and sends only its navigati
   const {dom,view,buttons}=render(t,[diary,attendance]);
   const index=buttons.findIndex(b=>b.dataset.replyId===attendance.id);
   assert.equal(buttons[index+1]?.dataset.replyId,diary.id);
-  assert.equal(buttons[index-1]?.dataset.replyId,'action_powerbi_dashboard');
+  assert.equal(buttons[index-2]?.dataset.replyId,'action_powerbi_dashboard');
+  assert.equal(buttons[index-1]?.dataset.replyId,'action_cameras');
   const button=dom.window.document.querySelector(`[data-reply-id="${attendance.id}"]`);
   assert.ok(button.classList.contains('chat-choice-button--danger'));
   assert.equal(button.textContent,'👷 PRESENÇAS (10)');

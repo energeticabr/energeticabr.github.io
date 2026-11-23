@@ -4914,6 +4914,7 @@ test("menu inicial do Energético retira as áreas do NBPAR e conserva o Power B
   assert.deepEqual(buttons.map(button => button.dataset.replyId), [
     "group_supplies",
     "action_powerbi_dashboard",
+    "action_cameras",
     "start_pending_construction_diary",
   ]);
   assert.equal(buttons[1].dataset.label, "📊 POWER BI");
