@@ -30,6 +30,9 @@
 .gm-month-change[data-direction=incomplete] { color:#555; }
 .gm-expense-label { display:flex; align-items:center; gap:6px; text-align:left; }
 .gm-expense-label > span { min-width:0; }
+.gm-expense-type-link { min-width:0; padding:3px 0; border:0; background:transparent; color:#111; font:inherit; font-weight:700; text-align:left; text-decoration:underline; text-decoration-color:#9db1c7; text-underline-offset:2px; overflow-wrap:anywhere; cursor:pointer; }
+.gm-expense-type-link:hover { color:#174c86; text-decoration-color:currentColor; }
+.gm-expense-type-link:focus-visible { outline:2px solid #305496; outline-offset:2px; }
 .gm-expense-toggle {
   display:inline-grid; place-items:center; flex:none; width:26px; height:26px; min-height:0; padding:0;
   border:1px solid currentColor; border-radius:5px; background:#fff; color:#075e30;
@@ -76,3 +79,63 @@
 .gm-product-source { display:block; margin-top:3px; color:#c00000; font-size:.85em; }
 .gm-product-freight { margin:8px 0 0; font-size:11px; }
 .gm-product-dialog :focus-visible { outline:2px solid #2188c1; outline-offset:1px; }
+.gm-expense-dashboard-backdrop { position:absolute; inset:0; z-index:22; display:grid; grid-template:minmax(0,1fr)/minmax(0,1fr); box-sizing:border-box; padding:max(10px,env(safe-area-inset-top)) max(10px,env(safe-area-inset-right)) max(10px,env(safe-area-inset-bottom)) max(10px,env(safe-area-inset-left)); background:rgb(5 32 46 / 72%); }
+.report-landscape-viewport[data-report-portrait=true] .gm-expense-dashboard-backdrop { padding:max(10px,env(safe-area-inset-right)) max(10px,env(safe-area-inset-bottom)) max(10px,env(safe-area-inset-left)) max(10px,env(safe-area-inset-top)); }
+.gm-expense-dashboard-backdrop[hidden] { display:none!important; }
+.gm-expense-dashboard { display:flex; flex-direction:column; min-width:0; min-height:0; width:100%; height:100%; box-sizing:border-box; padding:clamp(8px,1.2vw,16px); overflow:hidden; background:#f2f6fb; color:#142b45; border:2px solid #305496; border-radius:9px; box-shadow:0 12px 45px #061f3f66; font-family:Arial,sans-serif; }
+.gm-expense-dashboard-header { display:flex; flex:none; justify-content:space-between; align-items:center; gap:12px; min-width:0; padding:0 0 9px; border-bottom:1px solid #ccd7e3; }
+.gm-expense-dashboard-header>div { min-width:0; }
+.gm-expense-dashboard-header h2 { margin:0; color:#173b64; font-size:clamp(15px,calc(2 * var(--report-vw,1vw)),23px); overflow-wrap:anywhere; }
+.gm-expense-dashboard-header p { margin:3px 0 0; color:#5b6d80; font-size:clamp(10px,calc(1.15 * var(--report-vw,1vw)),14px); }
+.gm-expense-dashboard-close { flex:none; min-height:34px; padding:5px 14px; border:1px solid #b33a42; border-radius:6px; background:#fff; color:#9c1e2b; font:bold 13px Arial,sans-serif; cursor:pointer; }
+.gm-expense-dashboard-scroll { min-width:0; min-height:0; flex:1; overflow:auto; overscroll-behavior:contain; padding:8px 2px 2px; }
+.gm-expense-dashboard-metrics { display:grid; grid-template-columns:repeat(3,minmax(0,1fr)); gap:8px; margin-bottom:8px; }
+.gm-expense-dashboard-metric { display:flex; justify-content:space-between; align-items:center; gap:8px; min-width:0; padding:8px 11px; border:1px solid #d8e2ed; border-left:4px solid #305496; border-radius:7px; background:#fff; box-shadow:0 2px 7px #183d5d0c; }
+.gm-expense-dashboard-metric span { color:#617286; font-size:clamp(9px,1.05vw,12px); }
+.gm-expense-dashboard-metric strong { color:#173b64; font-size:clamp(12px,1.5vw,18px); white-space:nowrap; }
+.gm-expense-dashboard-metric.is-paid { border-left-color:#198754; }
+.gm-expense-dashboard-metric.is-paid strong { color:#146c43; }
+.gm-expense-dashboard-metric.is-forecast { border-left-color:#d08a16; }
+.gm-expense-dashboard-metric.is-forecast strong { color:#94600d; }
+.gm-expense-dashboard-card { min-width:0; padding:10px; border:1px solid #d8e2ed; border-radius:8px; background:#fff; box-shadow:0 3px 10px #183d5d0c; }
+.gm-expense-dashboard-trend-card { margin-bottom:8px; }
+.gm-expense-dashboard-card-heading { display:flex; justify-content:space-between; align-items:baseline; gap:8px; }
+.gm-expense-dashboard-card h3 { margin:0 0 7px; color:#274864; font-size:clamp(11px,1.3vw,15px); }
+.gm-expense-dashboard-card-heading span { color:#8290a0; font-size:10px; }
+.gm-expense-dashboard-trend { display:block; width:100%; height:clamp(125px,22vh,205px); overflow:visible; }
+.gm-dashboard-grid { stroke:#e4eaf0; stroke-width:1; }
+.gm-dashboard-line { stroke-width:3.2; stroke-linecap:round; stroke-linejoin:round; vector-effect:non-scaling-stroke; }
+.gm-expense-dashboard-series.is-total { --gm-chart-total:#305496; }
+.gm-expense-dashboard-series.is-paid { --gm-chart-paid:#198754; }
+.gm-expense-dashboard-series.is-forecast { --gm-chart-forecast:#d08a16; }
+.gm-expense-dashboard-series circle { stroke:#fff; stroke-width:2; vector-effect:non-scaling-stroke; cursor:help; }
+.gm-expense-dashboard-series circle:focus-visible { outline:2px solid #173b64; }
+.gm-dashboard-month-label { fill:#758396; font:10px Arial,sans-serif; }
+.gm-dashboard-scale-label { fill:#758396; font:9px Arial,sans-serif; }
+.gm-expense-dashboard-legend { display:flex; flex-wrap:wrap; justify-content:center; gap:6px 15px; margin-top:2px; }
+.gm-dashboard-legend-item { position:relative; padding:3px 5px 3px 18px; border:0; background:transparent; color:#42566b; font:bold 10px Arial,sans-serif; cursor:pointer; }
+.gm-dashboard-legend-item::before { position:absolute; top:50%; left:3px; width:9px; height:9px; border-radius:50%; background:#305496; content:""; transform:translateY(-50%); }
+.gm-dashboard-legend-item.is-paid::before { background:#198754; }
+.gm-dashboard-legend-item.is-forecast::before { background:#d08a16; }
+.gm-dashboard-legend-item[aria-pressed=false] { opacity:.42; text-decoration:line-through; }
+.gm-expense-dashboard-rankings { display:grid; grid-template-columns:repeat(3,minmax(0,1fr)); gap:8px; }
+.gm-expense-dashboard-ranking h3 { padding-bottom:6px; border-bottom:1px solid #e8edf2; }
+.gm-expense-dashboard-ranking.is-products h3 { color:#256b4b; }
+.gm-expense-dashboard-ranking.is-suppliers h3 { color:#9a6b0d; }
+.gm-expense-dashboard-ranking.is-stages h3 { color:#644691; }
+.gm-dashboard-rank-row { display:grid; grid-template-columns:21px minmax(45px,1fr) minmax(26px,.8fr) auto auto; align-items:center; gap:5px; min-width:0; padding:5px 0; border-bottom:1px solid #f0f3f6; }
+.gm-dashboard-rank-number { color:#9aa7b4; font:700 9px Arial,sans-serif; }
+.gm-dashboard-rank-name { min-width:0; overflow:hidden; color:#334c62; font-size:clamp(8px,.95vw,11px); text-overflow:ellipsis; white-space:nowrap; }
+.gm-dashboard-rank-track { height:7px; overflow:hidden; border-radius:8px; background:#eef2f6; }
+.gm-dashboard-rank-bar { display:block; height:100%; min-width:2px; border-radius:inherit; background:linear-gradient(90deg,#5685b5,#305496); }
+.is-suppliers .gm-dashboard-rank-bar { background:linear-gradient(90deg,#e6bd5b,#c28b15); }
+.is-stages .gm-dashboard-rank-bar { background:linear-gradient(90deg,#a88bcf,#704ca1); }
+.gm-dashboard-rank-value { color:#284660; font-size:clamp(8px,.95vw,11px); white-space:nowrap; }
+.gm-dashboard-rank-share { min-width:31px; color:#778698; font-size:9px; text-align:right; white-space:nowrap; }
+.gm-expense-dashboard-empty { margin:0; color:#738193; font-size:11px; }
+.gm-expense-dashboard :focus-visible { outline:2px solid #2188c1; outline-offset:2px; }
+@media (max-width: 600px) {
+  .gm-expense-dashboard-rankings { grid-template-columns:1fr; }
+  .gm-expense-dashboard-metric { align-items:flex-start; flex-direction:column; gap:3px; padding:7px; }
+  .gm-expense-dashboard-trend { height:145px; }
+}

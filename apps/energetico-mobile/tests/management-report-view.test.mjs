@@ -141,6 +141,39 @@ test('tabela de despesas mostra PAGO, PREVISTO e TOTAL GERAL para tipos e subtot
   assert.deepEqual(amounts(root.querySelector('[data-section=expense] .gm-total')),['R$0,00','R$35,00','R$35,00']);
 });
 
+test('clicar no nome do tipo abre dashboard acima do relatório e fechar retorna ao mesmo contexto',async t=>{
+  let loads=0;
+  const launch={...row,date:'2026-10-02',paymentDate:'2026-10-03'};
+  const {view,root}=setup(t,async()=>{loads++;return {
+    launches:[launch,{...launch,id:'2',product:'Brita',supplier:'Beta',stage:'Estrutura',total:40}],
+    provisions:[{id:'p1',branch:row.branch,product:'Cimento',supplier:'Beta',stage:'Estrutura',dueDate:'2026-10-20',total:30}],
+    productTypes:[{product:'Cimento',expenseType:'MATERIAL'},{product:'Brita',expenseType:'MATERIAL'}],
+  };});
+  await view.open();
+  const expense=root.querySelector('[data-section=expense]');
+  const typeButton=expense.querySelector('[data-expense-type]');
+  const expandButton=expense.querySelector('.gm-expense-toggle');
+  const focused=typeButton;
+  typeButton.click();
+  const dashboard=root.querySelector('[aria-label="Análise do tipo de despesa"]');
+  assert.ok(dashboard);
+  assert.equal(root.querySelector('.gm-dialog').inert,true);
+  assert.match(dashboard.textContent,/MATERIAL/);
+  assert.match(dashboard.textContent,/004 - EDIFÍCIO XAVANTE/);
+  assert.equal(dashboard.querySelectorAll('.gm-expense-dashboard-series.is-total circle').length,12);
+  assert.deepEqual([...dashboard.querySelectorAll('.gm-expense-dashboard-ranking h3')].map(node=>node.textContent),
+    ['Principais produtos','Principais fornecedores','Principais etapas']);
+  assert.equal(dashboard.querySelector('.gm-expense-dashboard-metric.is-total strong').textContent.replace(/\u00a0/g,' '),'R$ 95,00');
+  dashboard.querySelector('.gm-expense-dashboard-close').click();
+  assert.equal(root.querySelector('.gm-expense-dashboard-backdrop').hidden,true);
+  assert.equal(root.querySelector('.gm-dialog').inert,false);
+  assert.equal(root.ownerDocument.activeElement,focused);
+  assert.equal(loads,1);
+  assert.equal(expandButton.getAttribute('aria-expanded'),'false');
+  expandButton.click();
+  assert.equal(expandButton.getAttribute('aria-expanded'),'true');
+});
+
 test('detalha os produtos por filial e tipo, em ordem de total, e recolhe cada grupo separadamente',async t=>{
   const launch={...row,paymentDate:'2026-10-05'};
   const provision={branch:row.branch,supplier:'Fornecedor previsto',dueDate:'2026-10-08'};
@@ -163,8 +196,9 @@ test('detalha os produtos por filial e tipo, em ordem de total, e recolhe cada g
   }));
   await view.open();
   const table=root.querySelector('[data-section=expense]');
-  const buttons=[...table.querySelectorAll('td[data-column=name] button')];
-  const buttonFor=(expense,branch)=>buttons.find(button=>button.getAttribute('aria-label')?.includes(`${expense} — ${branch}`));
+  const buttons=[...table.querySelectorAll('td[data-column=name] button.gm-expense-type-link')];
+  const buttonFor=(expense,branch)=>buttons.find(button=>button.getAttribute('aria-label')?.includes(`${expense} — ${branch}`))
+    ?.closest('tr').querySelector('.gm-expense-toggle');
   const materials=buttonFor('MATERIAL',row.branch);
   const locacao=buttonFor('SEM TIPO DE DESPESA',row.branch);
   const central=buttonFor('MATERIAL','Central');
