@@ -6782,23 +6782,48 @@ export function createAppController({
       cancelMascotOrientationTransition();
       resetMascotNavigationOverlays();
     } });
-    let completed = false;
-    try {
-      resetMascotNavigationOverlays();
-      const result = await openMascotReport(target);
-      completed = mascotNavigationOpening === navigation && result;
-      return completed;
-    } finally {
-      navigation.releasePresentation({ complete: completed });
+    let completed = false, released = false, observer;
+    const release = (complete = false) => {
+      if (released) return;
+      released = true;
+      observer?.disconnect();
+      navigation.releasePresentation({ complete });
       navigation.releaseOrientation();
       if (mascotNavigationOpening === navigation) mascotNavigationOpening = null;
+    };
+    navigation.release = release;
+    const revealDestination = () => {
+      if (mascotNavigationOpening !== navigation) return;
+      const root = reportNavigationPanel(target)?.element;
+      if (root?.isConnected && !root.closest('[hidden],[inert],[aria-hidden="true"]')
+        && root.querySelector('.report-navigation-arrow')
+        && root.querySelector('[aria-busy="true"], .app-loading')) release(true);
+    };
+    try {
+      resetMascotNavigationOverlays();
+      const doc = sourceRoot?.ownerDocument;
+      if (doc?.defaultView?.MutationObserver) {
+        observer = new doc.defaultView.MutationObserver(revealDestination);
+        observer.observe(doc.body, { childList: true, subtree: true, attributes: true,
+          attributeFilter: ['hidden', 'inert', 'aria-hidden', 'data-report-action'] });
+      }
+      const opening = openMascotReport(target);
+      revealDestination();
+      const result = await opening;
+      completed = result && (released || mascotNavigationOpening === navigation);
+      return completed;
+    } finally {
+      release(completed);
     }
   }
 
   function cancelMascotOrientationTransition() {
-    mascotNavigationOpening?.releasePresentation?.();
-    mascotNavigationOpening?.releaseOrientation();
-    mascotNavigationOpening = null;
+    if (mascotNavigationOpening?.release) mascotNavigationOpening.release();
+    else {
+      mascotNavigationOpening?.releasePresentation?.();
+      mascotNavigationOpening?.releaseOrientation();
+      mascotNavigationOpening = null;
+    }
   }
 
   function resetMascotNavigationOverlays() {
