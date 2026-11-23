@@ -10,6 +10,7 @@ export function createCamerasView(documentRef) {
     const page = new AbortController();
     let player, landscape, playback = [], channels = [], choosing = false;
     const selected = new Set();
+    const thumbnails = new Map();
 
     dialog = documentRef.createElement("dialog");
     dialog.className = "cameras-view";
@@ -61,6 +62,11 @@ export function createCamerasView(documentRef) {
         const openButton = make('button', 'camera-card__preview');
         openButton.type = 'button'; openButton.dataset.cameraOpen = channel.id;
         openButton.setAttribute('aria-label', `Abrir ${channel.label}`);
+        if (thumbnails.has(channel.id)) {
+          const image = documentRef.createElement('img');
+          image.className = 'camera-card__image'; image.src = thumbnails.get(channel.id); image.alt = '';
+          openButton.append(image);
+        }
         const play = make('span', 'camera-card__play', '▶'); play.setAttribute('aria-hidden', 'true');
         const caption = make('span', 'camera-card__caption', 'Toque para ver ao vivo');
         openButton.append(play, caption);
@@ -140,6 +146,17 @@ export function createCamerasView(documentRef) {
         const notice = make('span', 'cameras-player__status'); notice.setAttribute('role', 'status');
         video.addEventListener('error', () => { if (!item.controller.signal.aborted) notice.textContent = 'Transmissão interrompida. Volte e tente novamente.'; });
         const item = { controller: new AbortController(), video, status: notice, hls: null };
+        video.addEventListener('playing', () => {
+          if (thumbnails.has(channel.id) || !video.videoWidth || !video.videoHeight) return;
+          try {
+            const canvas = documentRef.createElement('canvas');
+            canvas.width = Math.min(video.videoWidth, 480);
+            canvas.height = Math.round(canvas.width * video.videoHeight / video.videoWidth);
+            canvas.getContext('2d').drawImage(video, 0, 0, canvas.width, canvas.height);
+            thumbnails.set(channel.id, canvas.toDataURL('image/jpeg', 0.7));
+            render();
+          } catch { /* A source without canvas access still plays normally. */ }
+        });
         playback.push(item); tile.append(video, label, notice); tiles.append(tile);
       }
       panel.append(header, tiles); player.append(panel); dialog.append(player);

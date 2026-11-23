@@ -25,10 +25,16 @@ test('lista dispositivos e abre uma câmera em paisagem, retornando à lista', a
   assert.equal(document.querySelectorAll('[data-camera-open]').length, 5);
   document.querySelectorAll('[data-camera-open]')[1].click(); await flush();
   assert.equal(starts[0].id, 'site-2');
-  assert.ok(document.querySelector('.report-landscape-viewport video'));
+  const video = document.querySelector('.report-landscape-viewport video');
+  assert.ok(video);
+  Object.defineProperties(video, { videoWidth: { value: 640 }, videoHeight: { value: 360 } });
+  document.defaultView.HTMLCanvasElement.prototype.getContext = () => ({ drawImage() {} });
+  document.defaultView.HTMLCanvasElement.prototype.toDataURL = () => 'data:image/jpeg;base64,AAAA';
+  video.dispatchEvent(new document.defaultView.Event('playing'));
   document.querySelector('[data-camera-player-back]').click();
   assert.equal(starts[0].signal.aborted, true);
   assert.equal(document.querySelectorAll('[data-camera-open]').length, 5);
+  assert.equal(document.querySelectorAll('[data-camera-open]')[1].querySelector('img').src, 'data:image/jpeg;base64,AAAA');
   document.querySelector('[data-camera-back]').click();
   assert.equal(document.querySelector('dialog'), null);
   assert.equal(document.activeElement.textContent, 'Menu');
