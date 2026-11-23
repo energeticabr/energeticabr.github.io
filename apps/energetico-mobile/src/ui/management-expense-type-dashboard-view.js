@@ -3,6 +3,7 @@ import {formatReportMoney} from '../chat/contractor-report-model.js';
 let sequence=0;
 const money=value=>Number.isFinite(value)?formatReportMoney(value):'INCOMPLETO';
 const compactMoney=value=>new Intl.NumberFormat('pt-BR',{style:'currency',currency:'BRL',notation:'compact',maximumFractionDigits:1}).format(value);
+const compactValue=value=>new Intl.NumberFormat('pt-BR',{notation:'compact',maximumFractionDigits:1}).format(value);
 const shortMonth=period=>{
   const [year,month]=period.split('-');
   return `${['jan','fev','mar','abr','mai','jun','jul','ago','set','out','nov','dez'][Number(month)-1]}/${year.slice(-2)}`;
@@ -33,6 +34,7 @@ export function createManagementExpenseTypeDashboardView({root,onClose=()=>{}}) 
   function renderTrend(data) {
     const section=make('section','gm-expense-dashboard-card gm-expense-dashboard-trend-card');
     const heading=make('div','gm-expense-dashboard-card-heading');heading.append(make('h3','','Gastos nos últimos 12 meses'),make('span','','R$'));section.append(heading);
+    const monthDetail=make('div','gm-expense-dashboard-month-detail');monthDetail.hidden=true;monthDetail.setAttribute('role','status');monthDetail.setAttribute('aria-live','polite');section.append(monthDetail);
     const svg=doc.createElementNS('http://www.w3.org/2000/svg','svg');svg.classList.add('gm-expense-dashboard-trend');
     svg.setAttribute('viewBox','0 0 900 280');svg.setAttribute('role','img');svg.setAttribute('aria-label','Evolução mensal de gastos pagos, previstos e totais nos últimos 12 meses');
     const max=Math.max(0,...data.months.flatMap(month=>[month.paid,month.forecast,month.total]).filter(Number.isFinite));
@@ -42,6 +44,17 @@ export function createManagementExpenseTypeDashboardView({root,onClose=()=>{}}) 
       const scaleLabel=doc.createElementNS(svg.namespaceURI,'text');scaleLabel.setAttribute('x','85');scaleLabel.setAttribute('y',String(y-4));scaleLabel.setAttribute('text-anchor','end');scaleLabel.textContent=compactMoney(max*grid/3);scaleLabel.classList.add('gm-dashboard-scale-label');svg.append(scaleLabel);
     }
     const series=[['total','Total','var(--gm-chart-total)'],['paid','Pago','var(--gm-chart-paid)'],['forecast','Previsto','var(--gm-chart-forecast)']];
+    const occupiedLabels=[];
+    function showMonth(index) {
+      const month=data.months[index];if(!month)return;
+      monthDetail.replaceChildren();monthDetail.dataset.month=month.period;monthDetail.dataset.monthIndex=String(index);
+      monthDetail.append(make('strong','gm-expense-dashboard-month-title',shortMonth(month.period)));
+      for(const [field,label] of series){
+        const value=make('span',`gm-expense-dashboard-month-value is-${field}`);
+        value.append(make('span','',label),make('strong','',money(month[field])));monthDetail.append(value);
+      }
+      monthDetail.hidden=false;
+    }
     for(const [field,label,color] of series){
       const group=doc.createElementNS(svg.namespaceURI,'g');group.classList.add('gm-expense-dashboard-series',`is-${field}`);group.dataset.series=field;
       const points=data.months.map((month,index)=>({x:xAt(index),y:yAt(month[field]??0),month,value:month[field]}));
@@ -52,16 +65,41 @@ export function createManagementExpenseTypeDashboardView({root,onClose=()=>{}}) 
         return `C ${mid} ${previous.y}, ${mid} ${point.y}, ${point.x} ${point.y}`;
       }).join(' ');
       path.setAttribute('d',commands);path.setAttribute('fill','none');path.setAttribute('stroke',color);path.classList.add('gm-dashboard-line');group.append(path);
-      for(const point of points){
+      for(const [index,point] of points.entries()){
         const circle=doc.createElementNS(svg.namespaceURI,'circle');circle.setAttribute('cx',String(point.x));circle.setAttribute('cy',String(point.y));circle.setAttribute('r','4');circle.setAttribute('fill',color);circle.setAttribute('tabindex','0');
+        circle.dataset.monthIndex=String(index);
         circle.setAttribute('aria-label',`${label} em ${shortMonth(point.month.period)}: ${money(point.value)}`);
         const tooltip=doc.createElementNS(svg.namespaceURI,'title');tooltip.textContent=`${label} · ${shortMonth(point.month.period)}: ${money(point.value)}`;circle.append(tooltip);group.append(circle);
+        circle.addEventListener('focus',()=>showMonth(index));circle.addEventListener('click',()=>showMonth(index));
+      }
+      for(const point of points){
+        if(!Number.isFinite(point.value))continue;
+        const text=compactValue(point.value),width=Math.max(14,text.length*5.5+4),preferred=point.y-10;
+        const offsets=[0,-12,12,-24,24,-36,36,-48,48];
+        const y=offsets.map(offset=>preferred+offset).find(candidate=>candidate>=25&&candidate<=215&&
+          !occupiedLabels.some(rect=>Math.abs(rect.x-point.x)<(rect.width+width)/2&&Math.abs(rect.y-candidate)<11));
+        if(y===undefined)continue;
+        occupiedLabels.push({x:point.x,y,width});
+        const valueLabel=doc.createElementNS(svg.namespaceURI,'text');valueLabel.classList.add('gm-dashboard-value-label');
+        valueLabel.setAttribute('x',String(point.x));valueLabel.setAttribute('y',String(y));valueLabel.setAttribute('text-anchor','middle');
+        valueLabel.setAttribute('aria-hidden','true');valueLabel.textContent=text;group.append(valueLabel);
       }
       svg.append(group);
     }
     for(const [index,month] of data.months.entries()){
       const label=doc.createElementNS(svg.namespaceURI,'text');label.setAttribute('x',String(xAt(index)));label.setAttribute('y','246');label.setAttribute('text-anchor','middle');label.textContent=shortMonth(month.period);label.classList.add('gm-dashboard-month-label');svg.append(label);
     }
+    svg.addEventListener('pointermove',event=>{
+      const bounds=svg.getBoundingClientRect();if(!bounds.width)return;
+      const chartX=(event.clientX-bounds.left)*900/bounds.width;
+      showMonth(Math.max(0,Math.min(data.months.length-1,Math.round((chartX-96)/(750/11)))));
+    });
+    svg.addEventListener('pointerleave',event=>{if(event.pointerType!=='touch')monthDetail.hidden=true;});
+    svg.addEventListener('keydown',event=>{
+      if(!['ArrowLeft','ArrowRight'].includes(event.key))return;event.preventDefault();
+      const current=Number(monthDetail.dataset.monthIndex||0),next=Math.max(0,Math.min(data.months.length-1,current+(event.key==='ArrowRight'?1:-1)));
+      showMonth(next);
+    });
     const legend=make('div','gm-expense-dashboard-legend');
     for(const [field,label] of series){
       const button=make('button',`gm-dashboard-legend-item is-${field}`,label);button.type='button';button.dataset.series=field;button.setAttribute('aria-pressed','true');
