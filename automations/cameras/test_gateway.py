@@ -109,9 +109,10 @@ class CameraGatewayTest(unittest.TestCase):
     def test_recordings_are_opaque_scoped_to_user_and_channel(self):
         import gateway
         from types import SimpleNamespace
+        secret = secrets.token_urlsafe(16)
         config = {"origins": [], "viewers": ["owner"], "ffmpeg": "/unused", "channels": [
             {"id": "ch-1", "label": "Camera", "format": "hevc", "command": ["/unused"],
-             "input": {"password": "private"}}]}
+             "input": {"password": secret}}]}
         instance = Gateway(config)
         records = [{"start_time": "2026-11-23 10:00:00", "end_time": "2026-11-23 10:05:00",
                     "file_name": "/private/camera-file", "channel": 0}]
@@ -121,6 +122,7 @@ class CameraGatewayTest(unittest.TestCase):
         self.assertEqual(len(listed), 1)
         self.assertNotIn("file_name", listed[0])
         self.assertNotIn("private", json.dumps(listed))
+        self.assertNotIn(secret, json.dumps(listed))
         token = listed[0]["id"]
         with self.assertRaises(gateway.PlaybackError):
             instance.recording_entry("ch-1", "other", token)
