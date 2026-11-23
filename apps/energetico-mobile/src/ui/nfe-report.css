@@ -21,13 +21,17 @@
   overflow-wrap: anywhere;
 }
 .nfe-header > .pl-refresh { width: 44px; }
-.nfe-filters { display: grid; grid-template-columns: minmax(0, .85fr) minmax(0, 2fr) repeat(2, minmax(0, 1fr)) minmax(0, 1.45fr); gap: 10px; }
+.nfe-filters {
+  display: grid;
+  grid-template-columns: minmax(0, .9fr) minmax(0, 2fr) minmax(128px, 1.15fr) repeat(2, minmax(0, 1fr)) minmax(0, 1.45fr);
+  gap: 10px;
+}
 .nfe-report[data-report-max-680="true"] .nfe-filters {
-  grid-template-columns: repeat(3, minmax(0, 1fr));
+  grid-template-columns: repeat(3, minmax(0, 1fr)) minmax(128px, 1fr);
   padding-inline: calc(var(--report-navigation-size, 46px) + 10px);
 }
-.nfe-report[data-report-max-680="true"] .nfe-filters label:nth-child(2) { grid-column: span 2; }
-.nfe-filters label { min-width: 0; display: grid; gap: 4px; color: #17394b; font-size: 12px; font-weight: 700; }
+.nfe-report[data-report-max-680="true"] .nfe-filters label:is(:nth-child(2), :last-child) { grid-column: span 2; }
+.nfe-filters label { min-width: 0; display: grid; grid-template-rows: 1fr auto; gap: 4px; color: #17394b; font-size: 12px; font-weight: 700; }
 .nfe-filters :is(input, select) {
   box-sizing: border-box;
   width: 100%;

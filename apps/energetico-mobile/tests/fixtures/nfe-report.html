@@ -181,6 +181,7 @@ const layout = {
   pdfIconWidth:pdf?.querySelector('svg')?.getBoundingClientRect().width ?? 0,
   pdfTargetHeight:pdf?.offsetHeight ?? 0,
   filterNames:fiscalControls.map(control => control.name),
+  statusFilterWidth:panel.querySelector('select[name="status"]')?.offsetWidth,
   filtersFit,
   taxHeading:panel.querySelector('th:nth-child(6)')?.textContent,
   taxStacked:Boolean(isBefore(...panel.querySelectorAll('[data-invoice-id="3"] .nfe-tax-stack .nfe-fact'), 'block')),

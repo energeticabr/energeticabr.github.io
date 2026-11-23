@@ -558,6 +558,60 @@ test('NFE printer captures all filtered pages with XML facts and preserves the p
   assert.ok((await PDFDocument.load(await pdf.arrayBuffer())).getPageCount() > 0);
 });
 
+test('invoice status starts at Todas and filters the report, search results and print', async t => {
+  const dom = new JSDOM('<main id="app"></main>');
+  const { document, Event } = dom.window;
+  const rows = Array.from({ length:13 }, (_, index) => ({
+    id:String(index + 1),
+    fields:{ ...invoice.fields, Title:index < 2 ? 'Fornecedor Alvo' : 'Outro fornecedor',
+      NUMERO_NOTA:String(101 + index), SITUACAO:index === 0 ? 'CANCELADA' : 'AUTORIZADA' },
+  }));
+  const panel = createNfeReportView({ document, data:{
+    loadSnapshot:async () => ({ rows }),
+    downloadDocument:async () => new Blob([issuerXml]),
+  } });
+  t.after(() => { panel.destroy(); dom.window.close(); });
+  await panel.open();
+  const { element } = panel;
+  const status = element.querySelector('select[name="status"]');
+  const ids = () => [...element.querySelectorAll('tbody tr')].map(row => row.dataset.invoiceId);
+  const choose = value => {
+    status.value = value;
+    status.dispatchEvent(new Event('change'));
+  };
+
+  assert.ok(status);
+  assert.deepEqual([...status.options].map(option => option.textContent), ['Todas', 'Ativas', 'Canceladas']);
+  assert.equal(status.selectedOptions[0].textContent, 'Todas');
+  assert.equal(ids().length, 12);
+  element.querySelector('.nfe-pager button:last-child').click();
+  assert.deepEqual(ids(), ['1']);
+
+  choose('active');
+  assert.equal(ids().length, 12);
+  assert.ok(ids().includes('2') && !ids().includes('1'));
+  assert.equal(element.querySelector('.nfe-pager').hidden, true);
+  const search = element.querySelector('[name="search"]');
+  search.value = 'alvo';
+  search.dispatchEvent(new Event('input'));
+  assert.deepEqual(ids(), ['2']);
+  choose('cancelled');
+  assert.deepEqual(ids(), ['1']);
+  assert.equal(element.querySelector('.nfe-metrics dd').textContent, '1');
+  const snapshot = await panel.capturePrint({ title:'Notas canceladas' });
+  const printed = snapshot.pages[0].blocks.find(block => block.type === 'table');
+  assert.equal(printed.rows.length, 2);
+  assert.match(JSON.stringify(printed.rows[1]), /101.*Cancelada/);
+
+  choose('');
+  assert.deepEqual(ids(), ['2', '1']);
+  choose('cancelled');
+  panel.close();
+  await panel.open();
+  assert.equal(status.selectedOptions[0].textContent, 'Todas');
+  assert.equal(ids().length, 12);
+});
+
 test('fiscal filters cover every page and combine document, search and XML classifications', async t => {
   const dom = new JSDOM('<main id="app"></main>');
   const { document, Event } = dom.window;
@@ -645,7 +699,7 @@ test('fiscal filters cover every page and combine document, search and XML class
 
   panel.close();
   await panel.open();
-  assert.deepEqual([...element.querySelectorAll('.nfe-filters select')].map(select => select.value), ['', '', '', '']);
+  assert.deepEqual([...element.querySelectorAll('.nfe-filters select')].map(select => select.value), ['', '', '', '', '']);
 });
 
 test('NFE opens PEDIDOS with ranked suggestions, preserves the report and displays the verified link', async t => {

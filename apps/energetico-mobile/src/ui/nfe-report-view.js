@@ -103,16 +103,19 @@ export function createNfeReportView({ document:doc = globalThis.document, data, 
   search.placeholder = 'Fornecedor, CNPJ ou nota';
   const type = make('select');
   type.name = 'document';
+  const statusFilter = make('select');
+  statusFilter.name = 'status';
   const retentionFilter = make('select');
   retentionFilter.name = 'retention';
   const cnoFilter = make('select');
   cnoFilter.name = 'cno';
   const regimeFilter = make('select');
   regimeFilter.name = 'regime';
-  const selects = [type, retentionFilter, cnoFilter, regimeFilter];
+  const selects = [type, statusFilter, retentionFilter, cnoFilter, regimeFilter];
   for (const [control, label, options] of [
     [type, 'Documento', [['', 'Todos'], ...NFE_REPORT_DOCUMENT_TYPES.map(value => [value, value])]],
     [search, 'Pesquisar fornecedor, CNPJ ou nota', []],
+    [statusFilter, 'Situação', [['', 'Todas'], ['active', 'Ativas'], ['cancelled', 'Canceladas']]],
     [retentionFilter, 'Retenção', [['', 'Todas'], ['yes', 'Com retenção'], ['no', 'Sem retenção']]],
     [cnoFilter, 'CNO', [['', 'Todas'], ['valid', 'CNO correta'], ['conflict', 'CNO Divergente'], ['missing', 'Sem CNO']]],
     [regimeFilter, 'Tipo de empresa', [['', 'Todos'], ...NFE_SUPPLIER_REGIMES.map(regime => [regime, regime])]],
@@ -386,6 +389,7 @@ export function createNfeReportView({ document:doc = globalThis.document, data, 
     const terms = searchKey(search.value.trim()).split(/\s+/).filter(Boolean);
     return (rows || []).filter(row =>
       (!type.value || row.type === type.value) &&
+      (!statusFilter.value || row.cancelled === (statusFilter.value === 'cancelled')) &&
       terms.every(term => searchKey([row.supplier, row.number, row.taxId, row.key, row.taxId.replace(/\D/g, '')].join(' ')).includes(term)));
   }
 
