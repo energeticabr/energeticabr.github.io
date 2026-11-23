@@ -4,9 +4,15 @@ import { createCamerasView } from '/src/ui/cameras-view.js';
 createCamerasView(document).open({
   list: async () => [1,2,3,4].map(n => ({ id: 'camera-'+n, label: 'Obra Xavante • canal '+n })),
   start: async () => new Promise(() => {}),
+  move: async () => {},
+  listRecordings: async () => [],
+  playRecording: async () => new Promise(() => {}),
 });
 await new Promise(resolve => setTimeout(resolve, 100));
-if (location.search.includes('player')) {
+if (location.search.includes('single')) {
+  document.querySelector('[data-camera-open]').click();
+  document.querySelector('[data-camera-recordings]').click();
+} else if (location.search.includes('player')) {
   document.querySelector('[data-camera-grid]').click();
   for (let i=0;i<3;i++) {
     const checkbox=document.querySelectorAll('[data-camera-select]')[i];
@@ -18,5 +24,6 @@ await new Promise(resolve => setTimeout(resolve, 100));
 const dialog=document.querySelector('.cameras-view'), player=document.querySelector('.cameras-player');
 const rect=node=>{const r=node.getBoundingClientRect(); return {left:r.left,top:r.top,right:r.right,bottom:r.bottom,width:r.width,height:r.height}};
 document.documentElement.dataset.layout=JSON.stringify({viewport:rect(dialog), cards:[...document.querySelectorAll('.camera-card')].map(rect),
-  player:player && rect(player), portrait:player?.dataset.reportPortrait, tiles:[...document.querySelectorAll('.cameras-player__tile')].map(rect)});
+  player:player && rect(player), portrait:player?.dataset.reportPortrait, tiles:[...document.querySelectorAll('.cameras-player__tile')].map(rect),
+  controls:document.querySelector('.cameras-player__controls') && rect(document.querySelector('.cameras-player__controls'))});
 </script></body></html>

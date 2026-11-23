@@ -1,6 +1,7 @@
 """Private camera catalog and on-demand HLS gateway behind the Energético proxy."""
 
 import contextlib
+from datetime import date
 import json
 import os
 import re
@@ -43,6 +44,8 @@ class Stream:
         self.source = self.encoder = None
         self.channel = entry["id"]
         self.viewer = viewer
+        self.mode = entry.get("input", {}).get("operation", "live")
+        self.last_move = 0
         self.last_request = time.monotonic()
         self.capability = secrets.token_urlsafe(32)
         self.expires = self.last_request + 20 * 60
@@ -53,8 +56,8 @@ class Stream:
                 entry["command"], stdin=subprocess.PIPE, stdout=subprocess.PIPE,
                 stderr=subprocess.DEVNULL, close_fds=True,
             )
-            with self.source.stdin:
-                self.source.stdin.write(json.dumps(entry.get("input", {})).encode() + b"\n")
+            self.source.stdin.write(json.dumps(entry.get("input", {})).encode() + b"\n")
+            self.source.stdin.flush()
             self.encoder = subprocess.Popen(
                 [ffmpeg, "-nostdin", "-hide_banner", "-loglevel", "error",
                  "-threads", "1", "-filter_threads", "1",
@@ -75,7 +78,18 @@ class Stream:
             raise
 
     def alive(self):
-        return self.source.poll() is None and self.encoder.poll() is None
+        source = self.source.poll()
+        encoder = self.encoder.poll()
+        return ((source is None and encoder is None) or
+                (self.mode == "playback" and source in (None, 0) and encoder in (None, 0)))
+
+    def control(self, direction):
+        now = time.monotonic()
+        if now - self.last_move < 0.8:
+            raise PlaybackError(429)
+        self.source.stdin.write(json.dumps({"move": direction}).encode() + b"\n")
+        self.source.stdin.flush()
+        self.last_move = now
 
     def read(self, filename):
         assert MEDIA_FILE.fullmatch(filename)
@@ -92,6 +106,9 @@ class Stream:
             except subprocess.TimeoutExpired:
                 process.kill()
                 process.wait()
+        if self.source and self.source.stdin:
+            with contextlib.suppress(OSError):
+                self.source.stdin.close()
         self.directory.cleanup()
 
 
@@ -113,6 +130,9 @@ class Gateway:
         self.lock = threading.Lock()
         self.streams = {}
         self.graph_slots = threading.BoundedSemaphore(2)
+        self.query_slots = threading.BoundedSemaphore(1)
+        self.query_active = False
+        self.recording_tokens = {}
 
     def authorize(self, authorization):
         scheme, _, token = authorization.partition(" ")
@@ -134,17 +154,94 @@ class Gateway:
     def catalog(self):
         return [{"id": entry["id"], "label": entry["label"]} for entry in self.entries.values()]
 
-    def start(self, channel, viewer):
+    def recordings(self, channel, viewer, day):
+        if not isinstance(channel, str) or channel not in self.entries:
+            raise PlaybackError(404)
+        try:
+            if not isinstance(day, str) or date.fromisoformat(day).isoformat() != day:
+                raise ValueError()
+        except ValueError:
+            raise PlaybackError(400) from None
+        if not self.query_slots.acquire(blocking=False):
+            raise PlaybackError(429)
+        entry = self.entries[channel]
+        try:
+            with self.lock:
+                self.expire()
+                if len(self.streams) > 1:
+                    raise PlaybackError(429)
+                self.query_active = True
+            params = {**entry.get("input", {}), "operation": "recordings", "day": day}
+            result = subprocess.run(entry["command"], input=json.dumps(params).encode() + b"\n",
+                                    stdout=subprocess.PIPE, stderr=subprocess.DEVNULL, timeout=60)
+            if result.returncode or len(result.stdout) > 262144:
+                raise PlaybackError(503)
+            rows = json.loads(result.stdout)
+            if not isinstance(rows, list) or len(rows) > 512:
+                raise PlaybackError(503)
+            safe = []
+            with self.lock:
+                now = time.monotonic()
+                self.recording_tokens = {k: v for k, v in self.recording_tokens.items() if v[0] > now}
+                if len(self.recording_tokens) > 1536:
+                    self.recording_tokens.clear()
+                for row in rows:
+                    if not isinstance(row, dict) or not all(isinstance(row.get(k), str) for k in ("start_time", "end_time", "file_name")):
+                        continue
+                    token = secrets.token_urlsafe(16)
+                    self.recording_tokens[(viewer, channel, token)] = (now + 600, row)
+                    safe.append({"id": token, "start": row["start_time"], "end": row["end_time"]})
+            return safe
+        except (OSError, ValueError, subprocess.TimeoutExpired):
+            raise PlaybackError(503) from None
+        finally:
+            with self.lock:
+                self.query_active = False
+            self.query_slots.release()
+
+    def recording_entry(self, channel, viewer, token):
+        if not isinstance(channel, str) or not isinstance(token, str) or len(token) > 48:
+            raise PlaybackError(404)
+        with self.lock:
+            item = self.recording_tokens.get((viewer, channel, token))
+            if not item or item[0] < time.monotonic():
+                raise PlaybackError(404)
+            return dict(item[1])
+
+    def move(self, channel, viewer, direction):
+        if not isinstance(channel, str) or not isinstance(direction, str) or direction not in {"up", "down", "left", "right"}:
+            raise PlaybackError(400)
+        with self.lock:
+            self.expire()
+            stream = self.streams.get((viewer, channel))
+            if not stream or stream.mode != "live" or not stream.alive():
+                raise PlaybackError(404)
+            try:
+                stream.control(direction)
+            except (OSError, BrokenPipeError):
+                raise PlaybackError(503) from None
+
+    def start(self, channel, viewer, recording=None):
         if not isinstance(channel, str) or channel not in self.entries:
             raise PlaybackError(404)
         with self.lock:
             self.expire()
             stream = self.streams.get((viewer, channel))
+            desired = "playback" if recording is not None else "live"
+            if self.query_active and (not stream or stream.mode != desired or desired == "playback"):
+                raise PlaybackError(429)
+            if stream and (stream.mode != desired or desired == "playback"):
+                stream.close()
+                del self.streams[(viewer, channel)]
+                stream = None
             if not stream:
                 if len(self.streams) >= 3:
                     raise PlaybackError(429)
                 try:
-                    stream = Stream(self.entries[channel], self.ffmpeg, viewer)
+                    entry = dict(self.entries[channel])
+                    if recording is not None:
+                        entry["input"] = {**entry.get("input", {}), "operation": "playback", "recording": recording}
+                    stream = Stream(entry, self.ffmpeg, viewer)
                     self.streams[(viewer, channel)] = stream
                 except (BrokenPipeError, OSError):
                     raise PlaybackError(503) from None
@@ -247,6 +344,15 @@ def handler_for(gateway):
                     result = {"channels": gateway.catalog()}
                 elif data.get("action") == "play":
                     result = {"path": gateway.start(data.get("channelId"), viewer)}
+                elif data.get("action") == "move":
+                    gateway.move(data.get("channelId"), viewer, data.get("direction"))
+                    result = {"accepted": True}
+                elif data.get("action") == "recordings":
+                    result = {"recordings": gateway.recordings(data.get("channelId"), viewer, data.get("day"))}
+                elif data.get("action") == "play-recording":
+                    channel = data.get("channelId")
+                    record = gateway.recording_entry(channel, viewer, data.get("recordingId"))
+                    result = {"path": gateway.start(channel, viewer, record)}
                 else:
                     raise ValueError("invalid action")
                 self.send(200, json.dumps(result).encode())

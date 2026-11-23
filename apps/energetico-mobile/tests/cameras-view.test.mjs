@@ -14,11 +14,14 @@ function setup(t) {
   HTMLMediaElement.prototype.pause = () => {};
   HTMLMediaElement.prototype.load = () => {};
   document.querySelector('button').focus();
-  const starts = [];
+  const starts = [], moves = [], searches = [], archives = [];
   const view = createCamerasView(document);
   view.open({ list: async () => [1, 2, 3, 4, 5].map(n => ({ id: `site-${n}`, label: `Obra ${n}` })),
-    start: async (id, { signal }) => { starts.push({ id, signal }); return 'https://video.example/index.m3u8'; } });
-  return { document, starts, view };
+    start: async (id, { signal }) => { starts.push({ id, signal }); return 'https://video.example/index.m3u8'; },
+    move: async (id, direction) => { moves.push({ id, direction }); },
+    listRecordings: async (id, day) => { searches.push({ id, day }); return [{id:'record-1',start:'2026-11-23 10:00:00',end:'2026-11-23 10:05:00'}]; },
+    playRecording: async (id, record, {signal}) => { archives.push({id,record,signal}); return 'https://video.example/archive.m3u8'; } });
+  return { document, starts, moves, searches, archives, view };
 }
 test('lista dispositivos e abre uma câmera em paisagem, retornando à lista', async t => {
   const { document, starts } = setup(t); await flush();
@@ -38,6 +41,21 @@ test('lista dispositivos e abre uma câmera em paisagem, retornando à lista', a
   document.querySelector('[data-camera-back]').click();
   assert.equal(document.querySelector('dialog'), null);
   assert.equal(document.activeElement.textContent, 'Menu');
+});
+test('movimenta a câmera ao vivo e abre gravação da data escolhida', async t => {
+  const { document, moves, searches, archives } = setup(t); await flush();
+  document.querySelector('[data-camera-open]').click(); await flush();
+  document.querySelector('[data-camera-move="up"]').click(); await flush();
+  assert.deepEqual(moves, [{id:'site-1', direction:'up'}]);
+  document.querySelector('[data-camera-recordings]').click();
+  const day = document.querySelector('[data-camera-day]'); day.value='2026-11-23';
+  document.querySelector('[data-camera-search]').click(); await flush();
+  assert.deepEqual(searches, [{id:'site-1',day:'2026-11-23'}]);
+  document.querySelector('[data-camera-recording]').click(); await flush();
+  assert.equal(archives[0].record,'record-1');
+  assert.equal(document.querySelector('[data-camera-move="up"]').disabled, true);
+  document.querySelector('[data-camera-live]').click(); await flush();
+  assert.equal(document.querySelector('[data-camera-move="up"]').disabled, false);
 });
 test('grade seleciona até três câmeras e abre todas simultaneamente', async t => {
   const { document, starts } = setup(t); await flush();

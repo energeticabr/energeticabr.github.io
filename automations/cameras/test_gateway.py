@@ -19,6 +19,7 @@ class CameraGatewayTest(unittest.TestCase):
                           "command": ["/unused"], "input": {"password": secrets.token_urlsafe(16)}}],
         }
         gateway = Gateway(config, identity=lambda token: {"id": token, "userType": "Member"})
+        self.gateway = gateway
         self.server = ThreadingHTTPServer(("127.0.0.1", 0), handler_for(gateway))
         self.thread = threading.Thread(target=self.server.serve_forever, daemon=True)
         self.thread.start()
@@ -63,6 +64,7 @@ class CameraGatewayTest(unittest.TestCase):
         class FakeStream:
             def __init__(self, entry, ffmpeg, viewer):
                 self.channel, self.viewer = entry["id"], viewer
+                self.mode = entry.get("input", {}).get("operation", "live")
                 self.capability = self.channel
                 self.last_request, self.expires = gateway.time.monotonic(), gateway.time.monotonic() + 60
                 self.closed = False
@@ -78,6 +80,71 @@ class CameraGatewayTest(unittest.TestCase):
             with self.assertRaises(gateway.PlaybackError) as error:
                 server.start("four", "owner")
             self.assertEqual(error.exception.status, 429)
+
+    def test_motion_requires_the_viewers_own_live_stream_and_a_valid_direction(self):
+        import gateway
+        class FakeStream:
+            channel, viewer, mode = "ch-1", "owner", "live"
+            def __init__(self): self.moves = []
+            def alive(self): return True
+            def control(self, direction): self.moves.append(direction)
+        config = {"origins": [], "viewers": ["owner"], "ffmpeg": "/unused", "channels": [
+            {"id": "ch-1", "label": "Camera", "format": "hevc", "command": ["/unused"]}]}
+        instance = Gateway(config)
+        instance.expire = lambda: None
+        stream = FakeStream()
+        instance.streams[("owner", "ch-1")] = stream
+        instance.move("ch-1", "owner", "left")
+        self.assertEqual(stream.moves, ["left"])
+        for viewer, direction in [("other", "left"), ("owner", "reboot")]:
+            with self.assertRaises(gateway.PlaybackError):
+                instance.move("ch-1", viewer, direction)
+
+    def test_http_motion_checks_identity_and_rejects_untrusted_directions(self):
+        self.assertEqual(self.request("POST", CATALOG, body={"action": "move", "channelId": "ch-1", "direction": "up"})[0], 401)
+        self.assertEqual(self.request("POST", CATALOG, "another", {"action": "move", "channelId": "ch-1", "direction": "up"})[0], 403)
+        self.assertEqual(self.request("POST", CATALOG, "owner", {"action": "move", "channelId": [], "direction": "up"})[0], 400)
+        self.assertEqual(self.request("POST", CATALOG, "owner", {"action": "move", "channelId": "ch-1", "direction": "reboot"})[0], 400)
+
+    def test_recordings_are_opaque_scoped_to_user_and_channel(self):
+        import gateway
+        from types import SimpleNamespace
+        config = {"origins": [], "viewers": ["owner"], "ffmpeg": "/unused", "channels": [
+            {"id": "ch-1", "label": "Camera", "format": "hevc", "command": ["/unused"],
+             "input": {"password": "private"}}]}
+        instance = Gateway(config)
+        records = [{"start_time": "2026-11-23 10:00:00", "end_time": "2026-11-23 10:05:00",
+                    "file_name": "/private/camera-file", "channel": 0}]
+        result = SimpleNamespace(returncode=0, stdout=json.dumps(records).encode())
+        with patch.object(gateway.subprocess, "run", return_value=result):
+            listed = instance.recordings("ch-1", "owner", "2026-11-23")
+        self.assertEqual(len(listed), 1)
+        self.assertNotIn("file_name", listed[0])
+        self.assertNotIn("private", json.dumps(listed))
+        token = listed[0]["id"]
+        with self.assertRaises(gateway.PlaybackError):
+            instance.recording_entry("ch-1", "other", token)
+        self.assertEqual(instance.recording_entry("ch-1", "owner", token)["file_name"], "/private/camera-file")
+        with self.assertRaises(gateway.PlaybackError):
+            instance.recordings("ch-1", "owner", "invalid")
+
+    def test_recording_query_does_not_overload_several_live_streams(self):
+        import gateway
+        config = {"origins": [], "viewers": ["owner"], "ffmpeg": "/unused", "channels": [
+            {"id": "ch-1", "label": "Camera", "format": "hevc", "command": ["/unused"]}]}
+        instance = Gateway(config)
+        instance.expire = lambda: None
+        instance.streams = {("owner", "one"): object(), ("owner", "two"): object()}
+        with patch.object(gateway.subprocess, "run") as runner:
+            with self.assertRaises(gateway.PlaybackError) as error:
+                instance.recordings("ch-1", "owner", "2026-11-23")
+            self.assertEqual(error.exception.status, 429)
+            runner.assert_not_called()
+        instance.streams.clear()
+        instance.query_active = True
+        with self.assertRaises(gateway.PlaybackError) as error:
+            instance.start("ch-1", "owner")
+        self.assertEqual(error.exception.status, 429)
 
 
 if __name__ == "__main__":
