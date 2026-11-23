@@ -150,9 +150,8 @@
 }
 @media (orientation: portrait) {
   .attachment-preview-dialog[data-compact-report-pdf] {
-    --compact-preview-block: max(8px, env(safe-area-inset-left), env(safe-area-inset-right));
     width: 100dvh;
-    height: calc(100vw - 2 * var(--compact-preview-block));
+    height: 100vw;
     transform: translate(-50%, -50%) rotate(90deg);
   }
 }
