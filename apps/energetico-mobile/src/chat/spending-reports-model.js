@@ -255,6 +255,48 @@ function compareExpenses(current, previous, level = 0) {
 const monthPeriod = (year, month) =>
   `${new Intl.DateTimeFormat("pt-BR", { month: "long" }).format(new Date(2020, Number(month) - 1, 1))}/${year}`;
 
+function asYearMonth(value) {
+  if (typeof value === "string") {
+    const match = value.match(/^(\d{4})-(\d{2})/);
+    if (match && Number(match[2]) >= 1 && Number(match[2]) <= 12) return `${match[1]}-${match[2]}`;
+  }
+  const date = value instanceof Date ? value : new Date(value);
+  if (!Number.isFinite(date.getTime())) throw new TypeError("A data final da análise do produto é inválida.");
+  return `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, "0")}`;
+}
+
+function previousMonthKey(year, month, offset) {
+  const date = new Date(Number(year), Number(month) - 1 - offset, 1);
+  return `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, "0")}`;
+}
+
+function buildManagementProductPurchaseAnalytics(snapshot, { branch, product, matchesGroup, asOfDate }) {
+  const endKey = asYearMonth(asOfDate);
+  const [endYear, endMonth] = endKey.split("-");
+  const keys = Array.from({ length: 12 }, (_, index) => previousMonthKey(endYear, endMonth, 11 - index));
+  const monthly = new Map(keys.map(key => [key, []]));
+  const launches = (snapshot?.launches || []).filter(row =>
+    matchesGroup(scalar(row.branch) || "-", branch)
+    && matchesGroup(scalar(row.product) || "-", product)
+    && monthly.has(String(row.date || "").slice(0, 7)));
+  for (const row of launches) monthly.get(row.date.slice(0, 7)).push(row);
+  const months = keys.map(key => {
+    const [year, month] = key.split("-");
+    const rows = monthly.get(key);
+    const monthDate = new Date(Date.UTC(Number(year), Number(month) - 1, 1));
+    const label = new Intl.DateTimeFormat("pt-BR", { month: "short", timeZone: "UTC" }).format(monthDate).replace(/\.$/, "");
+    return Object.freeze({ key, label, period: monthPeriod(year, month),
+      total: rows.length ? completeSum(rows, "total") : 0,
+      quantity: rows.length ? completeSum(rows, "quantity") : 0,
+      count: rows.length });
+  });
+  const suppliers = groupRows(launches, row => row.supplier).map(([name, rows]) => Object.freeze({
+    name, total: completeSum(rows, "total"), quantity: completeSum(rows, "quantity"), count: rows.length,
+  })).sort(byValue);
+  return Object.freeze({ startPeriod: months[0].period, endPeriod: months.at(-1).period,
+    months: Object.freeze(months), suppliers: Object.freeze(suppliers) });
+}
+
 function monthSection(rows, period, previous = false) {
   const subtotal = Object.freeze({
     quantity: completeSum(rows, "quantity"),
@@ -314,7 +356,7 @@ export function buildManagementExpenseTypeDashboard(snapshot, filters = {},
     products: breakdown("product"), suppliers: breakdown("supplier"), stages: breakdown("stage") });
 }
 
-export function buildManagementProductDetail(snapshot, filters = {}, { branch, product, kind = "expense" } = {}) {
+export function buildManagementProductDetail(snapshot, filters = {}, { branch, product, kind = "expense", asOfDate = new Date() } = {}) {
   const expense = kind === "expense";
   const matchesGroup = expense ? equals : (left,right) => scalar(left) === scalar(right);
   function detailRows(selected) {
@@ -346,7 +388,8 @@ export function buildManagementProductDetail(snapshot, filters = {}, { branch, p
     const period = filters.year ? `Ano de ${filters.year}` : "Todos os períodos";
     sections.push(Object.freeze({ period, previous: false, rows: Object.freeze(rows), subtotal: null }));
   }
-  return Object.freeze({ product, branch, sections:Object.freeze(sections) });
+  const analytics = buildManagementProductPurchaseAnalytics(snapshot, { branch, product, matchesGroup, asOfDate });
+  return Object.freeze({ product, branch, sections:Object.freeze(sections), analytics });
 }
 
 export function buildSpendingReport9(snapshot, filters = {}) {

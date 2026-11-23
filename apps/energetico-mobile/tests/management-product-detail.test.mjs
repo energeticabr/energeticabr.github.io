@@ -58,6 +58,44 @@ test('produtos ausentes e sem registros no mês não passam a selecionar todos o
   assert.equal(previous.sections[1].rows[0].total,80);
 });
 
+test('análise de compras cobre 12 meses por produto e filial sem herdar filtros de período ou fornecedor',()=>{
+  const snapshot={launches:[
+    paid('1','Cimento',100,{date:'2026-11-05',paymentDate:'2026-11-06',supplier:'Alfa',quantity:2}),
+    paid('2','Cimento',200,{date:'2026-11-15',paymentDate:'',supplier:'Beta',quantity:4}),
+    paid('3','Cimento',50,{date:'2026-10-05',paymentDate:'2026-10-06',supplier:'Alfa',quantity:3}),
+    paid('4','Cimento',25,{date:'2025-12-31',paymentDate:'2026-01-02',supplier:'Alfa',quantity:1}),
+    paid('5','Cimento',999,{date:'2025-11-30'}),
+    paid('6','Areia',999,{date:'2026-11-12'}),
+    paid('7','Cimento',999,{date:'2026-11-12',branch:'Outra'}),
+  ],provisions:[{...forecast,id:'90',date:'2026-11-10',dueDate:'2026-11-20',total:500,quantity:10,supplier:'Futuro'}]};
+  const detail=buildManagementProductDetail(snapshot,{year:'2026',month:'11',supplier:'Alfa'},
+    {branch:'Xavante',product:'Cimento',kind:'expense',asOfDate:'2026-11-22'});
+  const analytics=detail.analytics;
+  assert.equal(analytics.months.length,12);
+  assert.deepEqual([analytics.startPeriod,analytics.endPeriod],['dezembro/2025','novembro/2026']);
+  assert.deepEqual(analytics.months.filter(month=>month.count).map(({key,total,quantity,count})=>({key,total,quantity,count})),[
+    {key:'2025-12',total:25,quantity:1,count:1},
+    {key:'2026-10',total:50,quantity:3,count:1},
+    {key:'2026-11',total:300,quantity:6,count:2},
+  ]);
+  assert.deepEqual(analytics.suppliers.map(({name,total,count})=>({name,total,count})),[
+    {name:'Alfa',total:175,count:3},{name:'Beta',total:200,count:1},
+  ].sort((left,right)=>right.total-left.total));
+});
+
+test('gráficos marcam somas incompletas sem converter valores ausentes em zero ou subtotal parcial',()=>{
+  const detail=buildManagementProductDetail({launches:[
+    paid('1','Cimento',100,{date:'2026-11-05',supplier:'Alfa',quantity:2}),
+    paid('2','Cimento',null,{date:'2026-11-12',supplier:'Alfa',quantity:null}),
+    paid('3','Cimento',50,{date:'2026-11-14',supplier:'Beta',quantity:1}),
+  ]},{},{branch:'Xavante',product:'Cimento',kind:'expense',asOfDate:'2026-11-22'});
+  const current=detail.analytics.months.at(-1);
+  assert.deepEqual([current.total,current.quantity,current.count],[null,null,3]);
+  assert.deepEqual(detail.analytics.suppliers.map(({name,total,quantity})=>[name,total,quantity]),[
+    ['Beta',50,1],['Alfa',null,null],
+  ]);
+});
+
 test('detalhamento sem mês selecionado subtotaliza por competência e soma o valor exibido em cada linha',()=>{
   const snapshot={launches:[
     paid('1','Cimento',25.2468,{quantity:0.1}),

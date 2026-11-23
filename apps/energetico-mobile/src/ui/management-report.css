@@ -58,10 +58,10 @@
 .gm-product-link { display:block; width:100%; min-height:24px; padding:2px 0; border:0; background:transparent; color:#174c86; font:inherit; font-weight:700; text-align:inherit; text-decoration:underline; overflow-wrap:anywhere; }
 .gm-selectable-product { cursor:pointer; }
 .gm-selectable-product:hover { background:#e2efff; }
-.gm-product-backdrop { position:absolute; inset:0; z-index:20; display:grid; grid-template: minmax(0,1fr) / minmax(0,1fr); place-items:center; box-sizing:border-box; padding:max(12px,env(safe-area-inset-top)) max(12px,env(safe-area-inset-right)) max(12px,env(safe-area-inset-bottom)) max(12px,env(safe-area-inset-left)); background:rgb(5 32 46 / 65%); }
-.report-landscape-viewport[data-report-portrait=true] .gm-product-backdrop { padding:max(12px,env(safe-area-inset-right)) max(12px,env(safe-area-inset-bottom)) max(12px,env(safe-area-inset-left)) max(12px,env(safe-area-inset-top)); }
+.gm-product-backdrop { position:absolute; inset:0; z-index:20; display:grid; grid-template: minmax(0,1fr) / minmax(0,1fr); place-items:center; box-sizing:border-box; padding:max(0px,env(safe-area-inset-top)) max(12px,env(safe-area-inset-right)) max(0px,env(safe-area-inset-bottom)) max(12px,env(safe-area-inset-left)); background:rgb(5 32 46 / 65%); }
+.report-landscape-viewport[data-report-portrait=true] .gm-product-backdrop { padding:max(0px,env(safe-area-inset-right)) max(0px,env(safe-area-inset-bottom)) max(0px,env(safe-area-inset-left)) max(0px,env(safe-area-inset-top)); }
 .gm-product-backdrop[hidden] { display:none!important; }
-.gm-product-dialog { display:flex; flex-direction:column; min-width:0; min-height:0; width:min(1100px,100%); max-height:94%; box-sizing:border-box; padding:10px; background:white; color:#111; border:2px solid #305496; border-radius:8px; box-shadow:0 12px 45px #061f3f66; font-family:Arial,sans-serif; }
+.gm-product-dialog { display:flex; flex-direction:column; min-width:0; min-height:0; width:min(1100px,100%); height:100%; box-sizing:border-box; padding:10px; background:white; color:#111; border:2px solid #305496; border-radius:0; box-shadow:0 12px 45px #061f3f66; font-family:Arial,sans-serif; }
 .gm-product-header { display:flex; justify-content:space-between; align-items:center; gap:10px; flex:none; padding-bottom:8px; }
 .gm-product-header>div { min-width:0; }
 .gm-product-header h2 { margin:0; font-size:clamp(13px,calc(1.8 * var(--report-vw,1vw)),20px); overflow-wrap:anywhere; }
@@ -78,6 +78,22 @@
 .gm-product-table td[data-column=total] { color:#760012; }
 .gm-product-source { display:block; margin-top:3px; color:#c00000; font-size:.85em; }
 .gm-product-freight { margin:8px 0 0; font-size:11px; }
+.gm-product-analytics { margin-top:14px; }
+.gm-product-analytics-title { margin:0 0 10px; padding:7px 10px; background:#305496; color:#fff; font:bold 12px Arial,sans-serif; text-align:center; }
+.gm-product-chart { min-width:0; margin:9px 0; padding:8px; border:1px solid #b7cce1; background:#f6f9fd; }
+.gm-product-chart h3 { margin:0; color:#183c68; font:bold 12px Arial,sans-serif; }
+.gm-product-chart-period { margin:3px 0 7px; color:#536678; font:10px Arial,sans-serif; }
+.gm-product-chart-svg { display:block; width:100%; height:auto; overflow:visible; font-family:Arial,sans-serif; }
+.gm-product-chart-grid { stroke:#d5dfeb; stroke-width:1; }
+.gm-product-chart-zero { stroke:#8b9dad; stroke-width:1; }
+.gm-product-chart-axis,.gm-product-chart-month { fill:#43566a; font-size:10px; }
+.gm-product-chart-line { fill:none; stroke:#16709a; stroke-width:3; stroke-linecap:round; stroke-linejoin:round; }
+.gm-product-chart-point { fill:#fff; stroke:#16709a; stroke-width:2; }
+.gm-product-chart-bar { fill:#2f77a3; }
+.gm-product-chart-column { fill:#4b8eae; }
+.gm-product-chart-bar--incomplete { fill:#b1bbc5; stroke:#718096; stroke-width:1; stroke-dasharray:3 2; }
+.gm-product-chart-label,.gm-product-chart-value { fill:#263746; font-size:11px; }
+.gm-product-chart-empty { margin:8px 0 0; color:#536678; font:11px Arial,sans-serif; }
 .gm-product-dialog :focus-visible { outline:2px solid #2188c1; outline-offset:1px; }
 .gm-expense-dashboard-backdrop { position:absolute; inset:0; z-index:22; display:grid; grid-template:minmax(0,1fr)/minmax(0,1fr); box-sizing:border-box; padding:max(10px,env(safe-area-inset-top)) max(10px,env(safe-area-inset-right)) max(10px,env(safe-area-inset-bottom)) max(10px,env(safe-area-inset-left)); background:rgb(5 32 46 / 72%); }
 .report-landscape-viewport[data-report-portrait=true] .gm-expense-dashboard-backdrop { padding:max(10px,env(safe-area-inset-right)) max(10px,env(safe-area-inset-bottom)) max(10px,env(safe-area-inset-left)) max(10px,env(safe-area-inset-top)); }

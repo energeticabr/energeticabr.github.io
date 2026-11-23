@@ -97,7 +97,7 @@ export function createManagementReportView({document:doc=globalThis.document,dat
     tr.addEventListener('click',()=>{
       if(root.hidden||!snapshot||destroyed)return;
       reportPosition={top:content.scrollTop,left:content.scrollLeft};
-      productDetail.open(buildManagementProductDetail(snapshot,selected(),{product,branch,kind}),button);
+      productDetail.open(buildManagementProductDetail(snapshot,selected(),{product,branch,kind,asOfDate:now()}),button);
     });
     return td;
   }
