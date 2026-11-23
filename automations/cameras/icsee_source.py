@@ -5,10 +5,12 @@ import http.client
 import ipaddress
 import json
 import os
+import select
 import ssl
 import sys
 import threading
 import urllib.request
+from datetime import datetime
 from urllib.parse import urlsplit
 
 
@@ -133,6 +135,7 @@ def main():
     os.dup2(sys.stderr.fileno(), sys.stdout.fileno())
     from xmplayer.config.loader import load_monitor_config
     from xmplayer.core import legacy_api, service
+    from xmplayer.core.ptz import PtzCommandQueue
     from xmplayer.media.live_hevc import LiveXStreamHevcAssembler
 
     settings = json.loads(sys.stdin.buffer.readline(16384))
@@ -151,8 +154,54 @@ def main():
         kwargs["wakeup_probe_enabled"] = False
         return run(self, **kwargs)
     legacy_api.RpsLiveChain.run = run_channel
+    operation = settings.get("operation", "live")
+    if operation == "recordings":
+        build_query = service._build_opfilequery_followup
+        def build_channel_query(begin, end):
+            frame = build_query(begin, end)
+            payload = json.loads(frame["plain_payload_text"])
+            payload["OPFileQuery"]["Channel"] = int(settings["channel"])
+            frame["plain_payload_text"] = json.dumps(payload, separators=(",", ":"))
+            return frame
+        service._build_opfilequery_followup = build_channel_query
+        day = datetime.strptime(settings["day"], "%Y-%m-%d")
+        records, _meta = service.fetch_device_recordings(config, day=day, timeout=20, max_pages=8)
+        items = [{"start_time": r.start_time, "end_time": r.end_time,
+                  "duration_seconds": r.duration_seconds, "file_name": r.file_name,
+                  "file_length": r.file_length, "channel": r.channel}
+                 for r in records if r.channel == int(settings["channel"])]
+        media.write(json.dumps(items).encode())
+        media.close()
+        return
     assembler = LiveXStreamHevcAssembler(track_timestamps=True)
     stop = threading.Event()
+    ptz = PtzCommandQueue()
+
+    def commands():
+        buffer = b""
+        while not stop.is_set():
+            if not select.select([sys.stdin.fileno()], [], [], 0.25)[0]:
+                continue
+            chunk = os.read(sys.stdin.fileno(), 4096)
+            if not chunk:
+                return
+            buffer += chunk
+            if len(buffer) > 16384:
+                return
+            while b"\n" in buffer:
+                raw, buffer = buffer.split(b"\n", 1)
+                try:
+                    command = json.loads(raw)
+                    direction = command.get("move") if isinstance(command, dict) else None
+                    if direction in {"up", "down", "left", "right"}:
+                        ptz.enqueue_pulse(direction, speed=4, hold=0.35)
+                except (ValueError, TypeError):
+                    continue
+
+    command_thread = None
+    if operation == "live":
+        command_thread = threading.Thread(target=commands, daemon=True)
+        command_thread.start()
 
     def receive(data, key):
         assembler.set_random_str(key)
@@ -173,12 +222,21 @@ def main():
                     break
 
     try:
-        result = service.run_monitor_live_stream(config, quality="sd", data_frame_callback=receive,
-                                                 status_callback=status, stop_event=stop, attempts=1)
+        if operation == "playback":
+            record = service.RecordingItem(title="", **settings["recording"])
+            result = service.run_recording_playback_stream(config, record, data_frame_callback=receive,
+                                                           status_callback=status, stop_event=stop, attempts=1)
+        else:
+            result = service.run_monitor_live_stream(config, quality="sd", data_frame_callback=receive,
+                                                     status_callback=status, stop_event=stop, attempts=1,
+                                                     ptz_queue=ptz)
         if os.environ.get("ENERGETICO_CAMERA_DIAGNOSTIC") == "1":
             print("Source stage:", service._detect_failure_stage(result.result).get("stage"),
                   file=sys.stderr, flush=True)
     finally:
+        stop.set()
+        if command_thread:
+            command_thread.join(timeout=1)
         media.close()
 
 

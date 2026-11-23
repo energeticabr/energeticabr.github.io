@@ -5,6 +5,13 @@ import { createChatClient } from "../src/chat/chat-client.js";
 
 const API_BASE = "https://163-176-171-217.sslip.io";
 
+test('um comando de movimento não é reenviado após falha de rede incerta', async () => {
+  let attempts = 0;
+  const client = clientWith(async () => { attempts++; throw new TypeError('rede'); }, { retryDelay: async () => {} });
+  await assert.rejects(client.moveCamera('site-1', 'left'));
+  assert.equal(attempts, 1);
+});
+
 test('Sicoob balance uses the authenticated read action and preserves a zero balance', async () => {
   const asOf = '2026-11-11T21:17:00Z';
   const replies = [{ balanceCents: 0, asOf }, { balanceCents: null, asOf }, null];
