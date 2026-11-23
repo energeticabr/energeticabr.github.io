@@ -20,6 +20,16 @@
 .cargos-status { font-size: 14px; margin: 0 0 8px; }
 .cargos-status:empty { display: none; }
 .cargos-scroll { min-height: 0; flex: 1; overflow: auto; overscroll-behavior: contain; border-radius: 10px; border: 1px solid #c1d2df; background: white; }
+.cargos-unassigned { padding: clamp(12px, calc(1.8 * var(--report-vw)), 20px); border-bottom: 1px solid #c1d2df; background: #eef5f8; }
+.cargos-unassigned h2 { margin: 0 0 4px; color: #10375d; font-size: clamp(13px, calc(1.8 * var(--report-vw)), 17px); }
+.cargos-unassigned-description, .cargos-unassigned-status { margin: 0 0 8px; font-size: clamp(12px, calc(1.5 * var(--report-vw)), 14px); }
+.cargos-unassigned-list { display: grid; gap: 8px; margin: 0; padding: 0; list-style: none; }
+.cargos-unassigned-item { display: grid; grid-template-columns: minmax(150px, 1fr) minmax(190px, 1fr) auto; align-items: center; gap: 8px; padding: 8px; border: 1px solid #c1d2df; border-radius: 8px; background: #fff; }
+.cargos-unassigned-name { overflow-wrap: anywhere; }
+.cargos-role-select, .cargos-role-submit { box-sizing: border-box; min-height: 40px; border: 1px solid #99afc1; border-radius: 8px; padding: 6px 10px; background: #fff; color: #10375d; font: inherit; }
+.cargos-role-submit { border-color: #10375d; background: #10375d; color: #fff; font-weight: 700; cursor: pointer; touch-action: manipulation; }
+.cargos-role-submit:disabled { cursor: default; opacity: .55; }
+.cargos-role-select:focus-visible, .cargos-role-submit:focus-visible { outline: 2px solid #16733d; outline-offset: 2px; }
 .cargos-screen:has(> .report-navigation) { --cargos-navigation-space: calc(var(--report-navigation-size) + 8px); }
 .cargos-scroll { margin-inline-end: var(--cargos-navigation-space, 0px); }
 .cargos-screen .report-navigation .report-navigation-arrow--next { position: absolute; right: var(--cargos-safe-right); }
@@ -53,3 +63,7 @@
 .cargos-people { list-style: none; margin: 0; padding: 0; }
 .cargos-people li { display: flex; flex-wrap: wrap; gap: 2px 12px; }
 .cargos-people li + li { margin-top: 6px; }
+@media (max-width: 560px) {
+  .cargos-unassigned-item { grid-template-columns: minmax(0, 1fr); }
+  .cargos-role-select, .cargos-role-submit { width: 100%; }
+}

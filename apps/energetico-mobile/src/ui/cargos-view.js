@@ -1,6 +1,7 @@
 import {addReportCloseControl} from './report-close-control.js';
 import {bindReportLandscape} from './report-landscape.js';
 import {cargoRoleKey} from '../chat/cargos-model.js';
+import {CONTRACTOR_EMPLOYMENT_CARGOS} from '../../../../portal/forms/contractor-employment.js';
 
 let nextDetailId=0;
 
@@ -18,7 +19,7 @@ export function createCargosView({document:doc=globalThis.document,data}={}) {
   const content=make('div','cargos-scroll');content.tabIndex=0;content.setAttribute('role','region');content.setAttribute('aria-label','Valores por cargo');root.append(header,status,content);doc.body.append(backdrop);
   let destroyed=false,controller=null,revision=0,returnFocus=null,oldOverflow='',app=null,oldInert=false;
   const money=value=>Number.isFinite(value)?new Intl.NumberFormat('pt-BR',{style:'currency',currency:'BRL'}).format(value):'—';
-  function render(rows,signal){
+  function render(rows,signal,contractors=null,contractorError=false){
     const table=make('table','cargos-table'),thead=make('thead'),head=make('tr'),body=make('tbody');
     for(const label of ['CARGO','SALÁRIO','VALE ALIMENTAÇÃO','PRÊMIO','VALE TRANSPORTE','TOTAL']){const th=make('th','',label);th.scope='col';head.append(th);}thead.append(head);table.append(thead,body);
     let assignmentsRequest;
@@ -82,13 +83,58 @@ export function createCargosView({document:doc=globalThis.document,data}={}) {
         if(!detail.hidden){void populate();detail.scrollIntoView?.({block:'nearest',inline:'nearest'});}
       });
     }
-    content.replaceChildren(table);status.textContent=rows.some(row=>row.total===null)?'Valores ausentes ou conflitantes na base aparecem como —.':'';
+    const fragment=doc.createDocumentFragment();
+    if(typeof data.loadUnassignedContractors==='function'){
+      const section=make('section','cargos-unassigned');section.setAttribute('aria-labelledby','cargos-unassigned-title');
+      const heading=make('h2','','FORNECEDORES SEM CARGO');heading.id='cargos-unassigned-title';section.append(heading);
+      const label=make('p','cargos-unassigned-description','Fornecedores ativos marcados como empreiteiro e sem cargo vinculado.');
+      section.append(label);
+      if(contractorError)section.append(make('p','cargos-unassigned-status','Não foi possível consultar os fornecedores sem cargo. Atualize a tabela para tentar novamente.'));
+      else if(!contractors?.length)section.append(make('p','cargos-unassigned-status','Nenhum fornecedor elegível sem cargo vinculado.'));
+      else {
+        const list=make('ul','cargos-unassigned-list');
+        for(const supplier of contractors){
+          const item=make('li','cargos-unassigned-item');
+          item.append(make('strong','cargos-unassigned-name',supplier.name));
+          const select=make('select','cargos-role-select');select.setAttribute('aria-label',`Cargo para ${supplier.name}`);
+          const prompt=make('option','','Selecione um cargo');prompt.value='';select.append(prompt);
+          for(const role of CONTRACTOR_EMPLOYMENT_CARGOS){const option=make('option','',role);option.value=role;select.append(option);}
+          const post=make('button','cargos-role-submit','Atribuir cargo');post.type='button';post.disabled=true;
+          select.addEventListener('change',()=>{post.disabled=!select.value;});
+          post.addEventListener('click',async()=>{
+            if(!select.value||signal.aborted)return;
+            const role=select.value;post.disabled=true;select.disabled=true;post.textContent='Gravando…';
+            status.textContent=`Atribuindo ${role} a ${supplier.name}…`;
+            try{
+              await data.assignContractorRole(supplier.id,role,{signal});
+              if(signal.aborted)return;
+              status.textContent=`Cargo ${role} atribuído a ${supplier.name}. Atualizando a tabela…`;
+              await load();
+            }catch(error){
+              if(signal.aborted)return;
+              status.textContent=error?.message||'Não foi possível atribuir o cargo. Atualize a tabela e confira o vínculo.';
+              post.textContent='Atribuir cargo';select.disabled=false;post.disabled=!select.value;
+            }
+          });
+          item.append(select,post);list.append(item);
+        }
+        section.append(list);
+      }
+      fragment.append(section);
+    }
+    fragment.append(table);content.replaceChildren(fragment);status.textContent=rows.some(row=>row.total===null)?'Valores ausentes ou conflitantes na base aparecem como —.':'';
   }
   async function load(){
     if(root.hidden||destroyed)return;controller?.abort();const active=new AbortController();controller=active;const current=++revision;
     content.replaceChildren();status.textContent='Carregando cargos do SharePoint…';root.setAttribute('aria-busy','true');refresh.disabled=true;
     try{const result=await data.loadSnapshot({signal:active.signal});if(active.signal.aborted||current!==revision||root.hidden||destroyed)return;
-      if(!Array.isArray(result?.rows))throw new Error('Resposta incompleta.');render(result.rows,active.signal);
+      if(!Array.isArray(result?.rows))throw new Error('Resposta incompleta.');
+      let contractors=null,contractorError=false;
+      if(typeof data.loadUnassignedContractors==='function'){
+        try{contractors=await data.loadUnassignedContractors({signal:active.signal});if(!Array.isArray(contractors))throw new Error('Resposta incompleta.');}
+        catch(error){if(active.signal.aborted||current!==revision||root.hidden||destroyed)return;contractorError=true;}
+      }
+      if(active.signal.aborted||current!==revision||root.hidden||destroyed)return;render(result.rows,active.signal,contractors,contractorError);
     }catch(error){if(active.signal.aborted||current!==revision||root.hidden||destroyed)return;content.replaceChildren();status.textContent='Não foi possível consultar CARGOS. Toque em Atualizar para tentar novamente.';}
     finally{if(current===revision){root.setAttribute('aria-busy','false');refresh.disabled=false;}}
   }
