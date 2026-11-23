@@ -3,6 +3,7 @@ import json
 import secrets
 import threading
 import unittest
+from unittest.mock import patch
 from http.server import ThreadingHTTPServer
 
 from gateway import CATALOG, MEDIA, Gateway, handler_for
@@ -52,6 +53,31 @@ class CameraGatewayTest(unittest.TestCase):
         self.assertEqual(self.request("GET", MEDIA + "/" + "a" * 43 + "/index.m3u8")[0], 404)
         self.assertEqual(self.request("GET", MEDIA + "/" + "a" * 43 + "/../gateway.py")[0], 404)
         self.assertEqual(self.request("OPTIONS", CATALOG, origin="https://example.com")[0], 403)
+
+    def test_multiple_streams_remain_available_until_individually_expired(self):
+        import gateway
+        config = {"origins": [], "viewers": ["owner"], "ffmpeg": "/unused", "channels": [
+            {"id": name, "label": name, "format": "hevc", "command": ["/unused"]}
+            for name in ["one", "two", "three", "four"]
+        ]}
+        class FakeStream:
+            def __init__(self, entry, ffmpeg, viewer):
+                self.channel, self.viewer = entry["id"], viewer
+                self.capability = self.channel
+                self.last_request, self.expires = gateway.time.monotonic(), gateway.time.monotonic() + 60
+                self.closed = False
+            def alive(self): return not self.closed
+            def read(self, filename): return b"#EXTINF" if filename.endswith(".m3u8") else b"video"
+            def close(self): self.closed = True
+        with patch.object(gateway, "Stream", FakeStream):
+            server = Gateway(config)
+            for name in ("one", "two", "three"):
+                server.start(name, "owner")
+            self.assertEqual(server.get("one", "segment-1.ts"), b"video")
+            self.assertEqual(server.get("three", "segment-1.ts"), b"video")
+            with self.assertRaises(gateway.PlaybackError) as error:
+                server.start("four", "owner")
+            self.assertEqual(error.exception.status, 429)
 
 
 if __name__ == "__main__":

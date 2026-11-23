@@ -918,7 +918,7 @@ export function createChatClient({
       body: JSON.stringify(payload), credentials: "omit", cache: "no-store", redirect: "error", signal,
     }, async response => {
       if (response.status === 403) throw new Error("Sua conta não tem acesso às câmeras.");
-      if (response.status === 429) throw new Error("Outra transmissão está em uso. Tente novamente em instantes.");
+      if (response.status === 429) throw new Error("O limite de transmissões está em uso. Tente novamente em instantes.");
       if (!response.ok) throw new Error("O serviço de câmeras está indisponível. Tente novamente em instantes.");
       return readJson(response);
     }, true);
