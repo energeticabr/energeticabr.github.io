@@ -10,6 +10,126 @@ const unit=value=>Number.isFinite(value)?unitFormat.format(value):'INCOMPLETO';
 
 export {date as formatDetailDate, quantity as formatDetailQuantity, unit as formatDetailUnit};
 
+const svgNamespace='http://www.w3.org/2000/svg';
+function svgNode(doc,name,attributes={}) {
+  const node=doc.createElementNS(svgNamespace,name);
+  for(const [key,value] of Object.entries(attributes))node.setAttribute(key,String(value));
+  return node;
+}
+const chartMoney=value=>Number.isFinite(value)?formatReportMoney(value):'INCOMPLETO';
+const chartQuantity=value=>Number.isFinite(value)?quantityFormat.format(value):'INCOMPLETO';
+function chartScale(values) {
+  const finite=values.filter(Number.isFinite);
+  let min=Math.min(0,...finite),max=Math.max(0,...finite);
+  if(min===max)max=min+1;
+  return {min,max,position:value=>(value-min)/(max-min)};
+}
+function addChartHeading(doc,container,title,subtitle) {
+  const heading=doc.createElement('h3');heading.textContent=title;container.append(heading);
+  if(subtitle){const note=doc.createElement('p');note.className='gm-product-chart-period';note.textContent=subtitle;container.append(note);}
+}
+function chartTitle(doc,svg,title,description) {
+  const titleNode=svgNode(doc,'title');titleNode.textContent=title;
+  const descriptionNode=svgNode(doc,'desc');descriptionNode.textContent=description;
+  svg.append(titleNode,descriptionNode);
+}
+function appendMonthlyValueChart(doc,parent,analytics) {
+  const section=doc.createElement('section');section.className='gm-product-chart';section.dataset.chart='monthly-purchases';
+  addChartHeading(doc,section,'Valor mensal das compras',`${analytics.startPeriod} a ${analytics.endPeriod}`);
+  const months=analytics.months,values=months.map(month=>month.total),scale=chartScale(values);
+  const svg=svgNode(doc,'svg',{class:'gm-product-chart-svg',viewBox:'0 0 760 260',role:'img',
+    'aria-label':`Valor mensal das compras em reais, de ${analytics.startPeriod} a ${analytics.endPeriod}`});
+  chartTitle(doc,svg,'Valor mensal das compras',months.map(month=>`${month.period}: ${chartMoney(month.total)}.`).join(' '));
+  const left=96,right=748,top=18,bottom=207,plotHeight=bottom-top;
+  for(let tick=0;tick<=4;tick++){
+    const value=scale.min+(scale.max-scale.min)*tick/4,y=bottom-plotHeight*tick/4;
+    svg.append(svgNode(doc,'line',{class:'gm-product-chart-grid',x1:left,x2:right,y1:y,y2:y}));
+    const label=svgNode(doc,'text',{class:'gm-product-chart-axis',x:left-8,y:y+4,'text-anchor':'end'});
+    label.textContent=chartMoney(value);svg.append(label);
+  }
+  const xFor=index=>left+(right-left)*index/Math.max(1,months.length-1);
+  const yFor=value=>bottom-plotHeight*scale.position(value);
+  const commands=[];let previous=null;
+  months.forEach((month,index)=>{
+    const value=month.total,x=xFor(index);
+    if(!Number.isFinite(value)){previous=null;return;}
+    const y=yFor(value);
+    if(previous&&previous.index===index-1){const middle=(previous.x+x)/2;commands.push(`C ${middle} ${previous.y} ${middle} ${y} ${x} ${y}`);}
+    else commands.push(`M ${x} ${y}`);
+    previous={index,x,y};
+  });
+  svg.append(svgNode(doc,'path',{class:'gm-product-chart-line',d:commands.join(' '),'data-series':''}));
+  months.forEach((month,index)=>{
+    const x=xFor(index),label=svgNode(doc,'text',{class:'gm-product-chart-month',x,y:231,'text-anchor':'middle'});
+    label.textContent=month.label;svg.append(label);
+    if(Number.isFinite(month.total)){
+      const point=svgNode(doc,'circle',{class:'gm-product-chart-point',cx:x,cy:yFor(month.total),r:4,'data-month-point':month.key});
+      const pointTitle=svgNode(doc,'title');pointTitle.textContent=`${month.period}: ${chartMoney(month.total)}`;point.append(pointTitle);svg.append(point);
+    }
+  });
+  section.append(svg);parent.append(section);
+}
+function appendSupplierChart(doc,parent,analytics) {
+  const section=doc.createElement('section');section.className='gm-product-chart';section.dataset.chart='suppliers';
+  addChartHeading(doc,section,'Valor comprado por fornecedor',`${analytics.startPeriod} a ${analytics.endPeriod}`);
+  if(!analytics.suppliers.length){const empty=doc.createElement('p');empty.className='gm-product-chart-empty';empty.textContent='Nenhuma compra registrada neste período.';section.append(empty);parent.append(section);return;}
+  const width=900,rowHeight=38,height=Math.max(72,analytics.suppliers.length*rowHeight+22);
+  const svg=svgNode(doc,'svg',{class:'gm-product-chart-svg gm-product-supplier-svg',viewBox:`0 0 ${width} ${height}`,
+    role:'img','aria-label':`Valor comprado por fornecedor, de ${analytics.startPeriod} a ${analytics.endPeriod}`});
+  chartTitle(doc,svg,'Valor comprado por fornecedor',analytics.suppliers.map(row=>`${row.name}: ${chartMoney(row.total)}.`).join(' '));
+  const values=analytics.suppliers.map(row=>row.total),scale=chartScale(values),xStart=326,plotWidth=396,valueX=892;
+  const zeroX=xStart+plotWidth*scale.position(0);
+  svg.append(svgNode(doc,'line',{class:'gm-product-chart-zero',x1:zeroX,x2:zeroX,y1:8,y2:height-5}));
+  analytics.suppliers.forEach((supplier,index)=>{
+    const y=18+index*rowHeight,rowY=y+10;
+    const label=svgNode(doc,'text',{class:'gm-product-chart-label',x:310,y:rowY+4,'text-anchor':'end',
+      textLength:296,lengthAdjust:'spacingAndGlyphs'});
+    label.textContent=supplier.name;const labelTitle=svgNode(doc,'title');labelTitle.textContent=supplier.name;label.append(labelTitle);svg.append(label);
+    const bar=svgNode(doc,'rect',{class:`gm-product-chart-bar${Number.isFinite(supplier.total)?'':' gm-product-chart-bar--incomplete'}`,
+      x:Number.isFinite(supplier.total)?Math.min(zeroX,xStart+plotWidth*scale.position(supplier.total)):zeroX,
+      y,width:Number.isFinite(supplier.total)?Math.max(1,Math.abs(plotWidth*scale.position(supplier.total)-plotWidth*scale.position(0))):1,
+      height:18,rx:3,'data-supplier-bar':supplier.name});
+    const barTitle=svgNode(doc,'title');barTitle.textContent=`${supplier.name}: ${chartMoney(supplier.total)}`;bar.append(barTitle);svg.append(bar);
+    const amount=svgNode(doc,'text',{class:'gm-product-chart-value',x:valueX,y:rowY+4,'text-anchor':'end'});
+    amount.textContent=chartMoney(supplier.total);svg.append(amount);
+  });
+  section.append(svg);parent.append(section);
+}
+function appendMonthlyQuantityChart(doc,parent,analytics) {
+  const section=doc.createElement('section');section.className='gm-product-chart';section.dataset.chart='monthly-quantity';
+  addChartHeading(doc,section,'Quantidade adquirida por mês',`${analytics.startPeriod} a ${analytics.endPeriod}`);
+  const months=analytics.months,values=months.map(month=>month.quantity),scale=chartScale(values);
+  const svg=svgNode(doc,'svg',{class:'gm-product-chart-svg',viewBox:'0 0 760 260',role:'img',
+    'aria-label':`Quantidade adquirida por mês, de ${analytics.startPeriod} a ${analytics.endPeriod}`});
+  chartTitle(doc,svg,'Quantidade adquirida por mês',months.map(month=>`${month.period}: ${chartQuantity(month.quantity)}.`).join(' '));
+  const left=96,right=748,top=18,bottom=207,plotHeight=bottom-top;
+  for(let tick=0;tick<=4;tick++){
+    const value=scale.min+(scale.max-scale.min)*tick/4,y=bottom-plotHeight*tick/4;
+    svg.append(svgNode(doc,'line',{class:'gm-product-chart-grid',x1:left,x2:right,y1:y,y2:y}));
+    const label=svgNode(doc,'text',{class:'gm-product-chart-axis',x:left-8,y:y+4,'text-anchor':'end'});
+    label.textContent=chartQuantity(value);svg.append(label);
+  }
+  const zeroY=bottom-plotHeight*scale.position(0),slot=(right-left)/months.length,barWidth=slot*.56;
+  months.forEach((month,index)=>{
+    const x=left+slot*index+slot/2,label=svgNode(doc,'text',{class:'gm-product-chart-month',x,y:231,'text-anchor':'middle'});
+    label.textContent=month.label;svg.append(label);
+    const value=month.quantity,known=Number.isFinite(value),valueY=known?bottom-plotHeight*scale.position(value):zeroY;
+    const bar=svgNode(doc,'rect',{class:`gm-product-chart-bar gm-product-chart-column${known?'':' gm-product-chart-bar--incomplete'}`,
+      x:x-barWidth/2,y:known?Math.min(zeroY,valueY):zeroY,width:barWidth,
+      height:known?Math.max(1,Math.abs(zeroY-valueY)):1,rx:2,'data-month-bar':month.key});
+    const barTitle=svgNode(doc,'title');barTitle.textContent=`${month.period}: ${chartQuantity(value)}`;bar.append(barTitle);svg.append(bar);
+  });
+  section.append(svg);parent.append(section);
+}
+function appendProductAnalytics(doc,parent,analytics) {
+  const section=doc.createElement('section');section.className='gm-product-analytics';
+  const heading=doc.createElement('h3');heading.className='gm-product-analytics-title';heading.textContent='ANÁLISE DE COMPRAS · ÚLTIMOS 12 MESES';section.append(heading);
+  appendMonthlyValueChart(doc,section,analytics);
+  appendSupplierChart(doc,section,analytics);
+  appendMonthlyQuantityChart(doc,section,analytics);
+  parent.append(section);
+}
+
 export function createManagementProductDetailView({root,onClose=()=>{}}) {
   const doc=root.ownerDocument;
   const make=(tag,className='',text)=>{const node=doc.createElement(tag);node.className=className;if(text!==undefined)node.textContent=text;return node;};
@@ -89,6 +209,7 @@ export function createManagementProductDetailView({root,onClose=()=>{}}) {
       }
       scroll.replaceChildren(table);
       if(hasFreight)scroll.append(make('p','gm-product-freight','Os totais incluem o frete informado no registro.'));
+      if(detail.analytics)appendProductAnalytics(doc,scroll,detail.analytics);
       background=[...root.children].filter(node=>node!==backdrop).map(node=>[node,Boolean(node.inert)]);
       for(const [node] of background)node.inert=true;
       backdrop.hidden=false;scroll.scrollTop=0;closeButton.focus({preventScroll:true});

@@ -16,7 +16,8 @@ try {
     product:'CIMENTO CP II — SACO DE 50 KG',stage:'ALVENARIA E ESTRUTURAS',account:'ENERGÉTICA SICOOB',
     unit:10.1234,quantity:2,freight:5,total:25.2468}));
   launches.push({...launches[0],id:'31',date:'2026-09-03',paymentDate:'2026-09-05'});
-  const provisions=[{...launches[0],id:'32',paymentDate:'',dueDate:'2026-10-06',unit:20,quantity:3,total:65}];
+  launches.push({...launches[0],id:'32',date:'2026-08-15',paymentDate:'2026-08-18',supplier:'Fornecedor secundário',unit:10,quantity:5,freight:0,total:50});
+  const provisions=[{...launches[0],id:'33',paymentDate:'',dueDate:'2026-10-06',unit:20,quantity:3,total:65}];
   const view=createManagementReportView({document,data:{loadSnapshot:async()=>({launches,provisions,productTypes:[]})},
     now:()=>new Date('2026-10-05T12:00:00Z')});
   await view.open();
@@ -29,10 +30,17 @@ try {
   const popup=root.querySelector('.gm-product-backdrop'),dialog=popup.querySelector('[role=dialog]');
   const close=popup.querySelector('button'),scroll=popup.querySelector('.gm-product-scroll');
   const rect=dialog.getBoundingClientRect(),button=close.getBoundingClientRect();
+  const safeProbe=document.createElement('div');
+  safeProbe.style.cssText='position:fixed;visibility:hidden;padding-top:env(safe-area-inset-top);padding-bottom:env(safe-area-inset-bottom)';
+  document.body.append(safeProbe);
+  const safeStyle=getComputedStyle(safeProbe),safeTop=parseFloat(safeStyle.paddingTop)||0,safeBottom=parseFloat(safeStyle.paddingBottom)||0;
+  safeProbe.remove();
   document.documentElement.dataset.geometry=JSON.stringify({root:root.getBoundingClientRect().toJSON(),
     backdrop:popup.getBoundingClientRect().toJSON(),dialog:rect.toJSON(),
     scroll:scroll.getBoundingClientRect().toJSON(),close:button.toJSON(),height:getComputedStyle(dialog).height,
-    maxHeight:getComputedStyle(dialog).maxHeight,gridRows:getComputedStyle(popup).gridTemplateRows});
+    maxHeight:getComputedStyle(dialog).maxHeight,gridRows:getComputedStyle(popup).gridTemplateRows,
+    fillsReportHeight:Math.abs(rect.top-(popup.getBoundingClientRect().top+safeTop))<=1
+      &&Math.abs(rect.bottom-(popup.getBoundingClientRect().bottom-safeBottom))<=1});
   const forecast=popup.querySelector('[data-source=forecast]');
   const paid=popup.querySelector('[data-source=paid]');
   const results={rows:popup.querySelectorAll('[data-entry-id]').length,
@@ -45,7 +53,12 @@ try {
     scrolls:scroll.scrollHeight>scroll.clientHeight,
     overflow:scroll.scrollWidth>scroll.clientWidth+1,
     backgroundInert:root.querySelector('.gm-dialog').inert,
-    preciseUnit:paid.querySelector('[data-column=unit]').textContent.includes('10,1234')};
+    preciseUnit:paid.querySelector('[data-column=unit]').textContent.includes('10,1234'),
+    charts:{smoothValueLine:scroll.querySelector('[data-chart=monthly-purchases] [data-series]')?.getAttribute('d')?.includes('C')||false,
+      monthlyValues:scroll.querySelectorAll('[data-chart=monthly-purchases] [data-month-point]').length,
+      supplierBars:scroll.querySelectorAll('[data-chart=suppliers] [data-supplier-bar]').length,
+      monthlyQuantities:scroll.querySelectorAll('[data-chart=monthly-quantity] [data-month-bar]').length}};
+  results.fillsReportHeight=JSON.parse(document.documentElement.dataset.geometry).fillsReportHeight;
   scroll.scrollTop=1000;
   close.click();
   Object.assign(results,{returned:!root.hidden&&popup.hidden,sameDOM:report.innerHTML===previous,
