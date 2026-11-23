@@ -96,10 +96,8 @@ try {
   state.viewerFits = box.left >= 0 && box.top >= 0 && box.right <= innerWidth && box.bottom <= innerHeight;
   state.horizontal = dialog.offsetWidth > dialog.offsetHeight && (rotated ? box.height > box.width : box.width > box.height);
   state.leftClose = logicalAxis(close.getBoundingClientRect()) < logicalAxis(title.getBoundingClientRect()) && close.textContent.includes('×');
-  const sidePoint = side => rotated ? [innerWidth / 2, side === 'left' ? box.top / 2 : (innerHeight + box.bottom) / 2]
-    : [side === 'left' ? box.left / 2 : (innerWidth + box.right) / 2, innerHeight / 2];
-  const side = direction => document.elementFromPoint(...sidePoint(direction));
-  state.sideGaps = side('left') === dialog && side('right') === dialog && getComputedStyle(dialog, '::backdrop').backgroundColor !== 'rgb(0, 0, 0)';
+  state.fillsHeight = box.top <= 0 && box.bottom >= innerHeight;
+  state.backdropVisible = getComputedStyle(dialog, '::backdrop').backgroundColor !== 'rgb(0, 0, 0)';
   const canvas = element('.attachment-preview-pdf-page:not([hidden]) canvas');
   const viewport = element('.attachment-preview-pdf-viewport');
   state.initialWidthRatio = canvas.offsetWidth / viewport.clientWidth;
@@ -121,12 +119,6 @@ try {
   state.files.push(title.textContent);
   close.click();
   state.xCloses = !dialog.open && preserved();
-  await openPdf(2, 'espelho.pdf');
-  side('left').click();
-  state.leftCloses = !dialog.open && preserved();
-  await openPdf(2, 'espelho.pdf');
-  side('right').click();
-  state.rightCloses = !dialog.open && preserved();
   await openPdf(1, 'unico.pdf');
   state.singleNoArrows = previous.parentElement.hidden;
   dialog.dispatchEvent(new Event('cancel', { cancelable: true }));

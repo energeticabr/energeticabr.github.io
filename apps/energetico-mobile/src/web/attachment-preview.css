@@ -183,7 +183,7 @@
 .attachment-preview-dialog[data-compact-report-pdf] button { min-height: 44px; }
 .attachment-preview-dialog[data-compact-report-pdf] .attachment-preview-content { padding: 4px 8px; }
 .attachment-preview-dialog[data-compact-report-pdf] .attachment-preview-status { padding: 2px 8px; }
-.attachment-preview-dialog[data-compact-report-pdf] .attachment-preview-footer { padding: 4px 8px max(4px, env(safe-area-inset-bottom)); gap: 8px; }
+.attachment-preview-dialog[data-compact-report-pdf] .attachment-preview-footer { padding: 4px 8px; gap: 8px; }
 .attachment-preview-dialog[data-compact-report-pdf] .attachment-preview-footer button { flex: 0 0 auto; padding: 4px 10px; }
 .attachment-preview-dialog[data-compact-report-pdf] .attachment-preview-collection-nav { flex: 0 0 auto; gap: 8px; }
 .attachment-preview-dialog[data-compact-report-pdf] .attachment-preview-pdf-navigation { padding-top: 2px; }
