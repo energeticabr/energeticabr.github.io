@@ -9,3 +9,12 @@ O JSON tem os campos `viewers` (IDs dos usuários no diretório), `origins` (ori
 O adaptador iCSee utiliza a interface do cliente `xmplayer` instalado separadamente. Configure `PYTHONPATH` para apontar para essa instalação e para suas dependências, com Python 3.11 ou superior para o adaptador. O diretório do cliente precisa conter `desktop_monitor.json` e o diretório `screenshots` criado previamente. O campo `input` inclui `cloudId`, `username`, `password`, `channel` (índice a partir de zero), e `tlsPins` (`status` e `relay`, SHA-256 dos certificados aprovados). Se o fornecedor trocar um desses certificados, valide o novo certificado antes de atualizar o pin. Uma fonte compatível com o mesmo contrato pode ser usada para outros fabricantes.
 
 Execute `python -B -m unittest discover -s automations/cameras -v` para testar a autorização e as rotas.
+
+## V380 Pro
+
+O adaptador `v380_source.py` recebe as credenciais permanentes do dispositivo
+pelo stdin e lê o protocolo nativo V380 por LAN/VPN ou relay. Não depende da
+opção ONVIF no aplicativo. Instale `requirements-v380.txt` antes de executar
+a suíte completa. Veja [V380.md](V380.md) para instalação no gateway existente,
+configuração privada, limites de compatibilidade e o que os testes verificam.
+O QR/PIN temporário de compartilhamento não é uma credencial dessa fonte.
