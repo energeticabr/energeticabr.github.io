@@ -28,7 +28,7 @@ function canPlayHevc(video) {
 }
 
 export function createCamerasView(documentRef) {
-  let dialog, closeCurrent;
+  let dialog, closeCurrent, suspendCurrent, resumeCurrent;
 
   function clearPreviews(accountKey) {
     const prefix = thumbnailStoragePrefix(accountKey);
@@ -46,10 +46,11 @@ export function createCamerasView(documentRef) {
     if (dialog) return true;
     const previousFocus = documentRef.activeElement;
     const page = new AbortController();
-    let player, gridRequest, playback = [], channels = [], choosing = false;
+    let player, gridRequest, playback = [], playerChannels = [], channels = [], choosing = false;
     let cameraOrientationBinding = null;
     let nameEditor = null, nameEditorReturnFocus = null, nameEditorChannelId = null;
     let playerReturnFocus = null, playerReturnChannelId = null;
+    let playerSuspended = false;
     let thumbnailsChanged = false;
     const selected = new Set();
     const thumbnails = new Map();
@@ -270,6 +271,8 @@ export function createCamerasView(documentRef) {
         detachVideo(item);
       }
       playback = [];
+      playerChannels = [];
+      playerSuspended = false;
       player?.remove(); player = null;
       for (const node of background) node.inert = false;
       if (thumbnailsChanged) {
@@ -285,41 +288,87 @@ export function createCamerasView(documentRef) {
       }
       if (hadPlayer && !preserveReturnFocus) { playerReturnFocus = null; playerReturnChannelId = null; }
     }
+    function suspendPlayer() {
+      if (!player || playerSuspended) return;
+      saveCurrentThumbnails();
+      playerSuspended = true;
+      gridRequest?.abort(); gridRequest = null;
+      for (const item of playback) {
+        item.controller.abort();
+        if (item.searchController) {
+          item.searchController.abort(); item.searchController = null;
+          if (item.searchButton) item.searchButton.disabled = false;
+          if (item.searchResults?.textContent === 'Consultando gravações…') {
+            item.searchResults.textContent = 'Busca interrompida. Toque em Buscar para tentar novamente.';
+          }
+        }
+        item.connected = false;
+        item.connectionState = 'connecting'; item.failureLabel = '';
+        item.liveBadge.hidden = true;
+        item.status.dataset.loading = 'true';
+        item.status.textContent = 'Retomando transmissão…';
+        item.updateControls?.(); item.updateHeader?.();
+        detachVideo(item);
+      }
+    }
+    function connectPlayer() {
+      let startPlayback = start;
+      if (playerChannels.length > 1 && prepareGrid) {
+        gridRequest = new AbortController();
+        startPlayback = prepareGrid(playerChannels.map(channel => channel.id), {
+          signal: gridRequest.signal, codecs: playback[0]?.codecs ?? [],
+        });
+      }
+      playerChannels.forEach((channel, index) => {
+        void connect(playback[index], channel, playback[index].recordingId ?? null, startPlayback,
+          { preserveViewState: true });
+      });
+    }
+    function resumePlayer() {
+      if (!player || !playerSuspended || documentRef.hidden) return;
+      playerSuspended = false;
+      connectPlayer();
+    }
     function close() {
       page.abort(); closeNameEditor({ restoreFocus: false }); stopPlayer({ restoreFocus: false });
       cameraOrientationBinding?.destroy(); cameraOrientationBinding = null;
       documentRef.removeEventListener('visibilitychange', visibilityChanged);
-      windowRef?.removeEventListener('pagehide', saveCurrentThumbnails);
+      windowRef?.removeEventListener('pagehide', pageHidden);
+      windowRef?.removeEventListener('pageshow', pageShown);
       dialog.remove(); dialog = null; closeCurrent = null;
+      suspendCurrent = null; resumeCurrent = null;
       previousFocus?.focus?.();
     }
     function visibilityChanged() {
-      if (documentRef.hidden && player) {
-        stopPlayer();
-        status.textContent = 'Transmissão pausada. Selecione uma câmera para retomar.';
-      }
+      if (documentRef.hidden) suspendPlayer();
+      else resumePlayer();
     }
+    function pageHidden() { saveCurrentThumbnails(); suspendPlayer(); }
+    function pageShown() { resumePlayer(); }
     function clearWaiting(item) {
       if (item.waitingTimer === null) return;
       windowRef.clearTimeout(item.waitingTimer);
       item.waitingTimer = null;
     }
-    async function connect(item, channel, recordingId = null, startPlayback = start) {
+    async function connect(item, channel, recordingId = null, startPlayback = start, { preserveViewState = false } = {}) {
       saveThumbnail(item);
       item.controller.abort();
       item.onPlaybackError = null;
       detachVideo(item);
       item.controller = new AbortController();
+      item.recordingId = recordingId;
       item.mode = recordingId ? 'playback' : 'live';
       item.thumbnailTime = null;
       item.played = false;
       item.connected = false; item.connectionState = 'connecting'; item.failureLabel = '';
       item.playAttempted = false; item.retry.hidden = true; item.updateControls?.();
       item.reconnect = null;
-      item.video.muted = true; item.video.defaultMuted = true;
-      item.collapseDrawer?.();
+      if (!preserveViewState) {
+        item.video.muted = true; item.video.defaultMuted = true;
+        item.collapseDrawer?.();
+      }
       item.liveBadge.hidden = true;
-      if (item.audioButton) {
+      if (item.audioButton && !preserveViewState) {
         item.audioButton.setAttribute('aria-pressed', 'false');
         item.audioButton.querySelector('.cameras-player__action-label').textContent = 'Áudio';
       }
@@ -449,6 +498,7 @@ export function createCamerasView(documentRef) {
         playerReturnChannelId = playerReturnFocus?.dataset?.cameraOpen || null;
       }
       stopPlayer({ restoreFocus: false, preserveReturnFocus: replacingPlayer });
+      playerChannels = chosen;
       for (const node of background) node.inert = true;
       player = make('div', 'cameras-player');
       player.dataset.count = String(chosen.length);
@@ -504,7 +554,8 @@ export function createCamerasView(documentRef) {
         retry.dataset.cameraPlayRetry = ''; retry.hidden = true;
         const item = { controller: new AbortController(), video, status: notice, retry, liveBadge, hls: null,
           mode: 'live', connected: false, connectionState: 'connecting', failureLabel: '', playAttempted: false,
-          preview, channelId: channel.id, thumbnailTime: null, played: false, retriedNetwork: false,
+          preview, channelId: channel.id, recordingId: null, searchButton: null, searchResults: null,
+          thumbnailTime: null, played: false, retriedNetwork: false,
           waitingTimer: null, reconnect: null, codecs: canPlayHevc(video) ? ['h264', 'hevc'] : ['h264'] };
         video.addEventListener('playing', () => {
           if (item.controller.signal.aborted || item.connectionState === 'error') return;
@@ -661,6 +712,7 @@ export function createCamerasView(documentRef) {
           hour.value = String(now.getHours()).padStart(2, '0');
           const search = make('button', 'cameras-player__search', 'Buscar'); search.type = 'button'; search.dataset.cameraSearch = '';
           const results = make('div', 'cameras-player__recordings'); results.setAttribute('aria-live', 'polite');
+          item.searchButton = search; item.searchResults = results;
           results.textContent = 'Escolha a data e a hora para localizar gravações.';
           function setDrawerOpen(expanded) {
             history.dataset.open = String(expanded);
@@ -734,8 +786,11 @@ export function createCamerasView(documentRef) {
       chosen.forEach((channel, index) => { void connect(playback[index], channel, null, startPlayback); });
     }
     closeCurrent = close;
+    suspendCurrent = suspendPlayer;
+    resumeCurrent = resumePlayer;
     documentRef.addEventListener('visibilitychange', visibilityChanged);
-    windowRef?.addEventListener('pagehide', saveCurrentThumbnails);
+    windowRef?.addEventListener('pagehide', pageHidden);
+    windowRef?.addEventListener('pageshow', pageShown);
     dialog.addEventListener('cancel', event => {
       event.preventDefault();
       if (nameEditor) closeNameEditor();
@@ -758,5 +813,11 @@ export function createCamerasView(documentRef) {
     }).catch(error => { if (!page.signal.aborted) status.textContent = error.message || 'Não foi possível carregar as câmeras.'; });
     return true;
   }
-  return { open, close: () => closeCurrent?.(), clearPreviews };
+  return {
+    open,
+    close: () => closeCurrent?.(),
+    suspend: () => suspendCurrent?.(),
+    resume: () => resumeCurrent?.(),
+    clearPreviews,
+  };
 }

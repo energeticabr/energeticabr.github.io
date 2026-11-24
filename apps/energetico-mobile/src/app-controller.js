@@ -2524,6 +2524,7 @@ export function createAppController({
   }
 
   function handleBackground() {
+    view.suspendCameras?.();
     sefazSyncSession?.suspend();
     sicoobSyncSession?.suspend();
     // A WebView may be backgrounded without delivering the final pointerup.
@@ -2562,6 +2563,7 @@ export function createAppController({
   }
 
   async function handleForeground() {
+    view.resumeCameras?.();
     void refreshSwileReminder();
     resumeDdaSync();
     resumeSefazSync();
