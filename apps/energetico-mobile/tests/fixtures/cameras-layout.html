@@ -34,6 +34,8 @@ if (location.search.includes('single')) {
   const start=document.createElement('strong'); start.textContent='09:49';
   const end=document.createElement('small'); end.textContent='09:54'; times.append(start,end);
   recording.append(preview,times); document.querySelector('.cameras-player__recordings').replaceChildren(recording);
+  // Measure the open drawer after its CSS height transition has settled.
+  await new Promise(resolve => setTimeout(resolve, 250));
 }
 const dialog=document.querySelector('.cameras-view'), player=document.querySelector('.cameras-player');
 const rect=node=>{const r=node.getBoundingClientRect(); return {left:r.left,top:r.top,right:r.right,bottom:r.bottom,width:r.width,height:r.height}};
