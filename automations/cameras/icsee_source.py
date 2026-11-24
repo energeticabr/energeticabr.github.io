@@ -129,6 +129,35 @@ def install_transport(api, pins):
     api._create_tcp_connection = public_relay_only
 
 
+def run_live_source(attempt, stop, *, can_reconnect, capture_error):
+    try:
+        result = attempt()
+    except capture_error:
+        if not can_reconnect() or stop.is_set():
+            raise
+        result = None
+    if can_reconnect() and not stop.wait(2):
+        return attempt()
+    return result
+
+
+def run_guarded_live_attempt(run, forward):
+    stopped = threading.Event()
+    lock = threading.Lock()
+
+    def receive(data, key):
+        with lock:
+            if stopped.is_set():
+                return False
+            return forward(data, key)
+
+    try:
+        return run(receive, stopped)
+    finally:
+        with lock:
+            stopped.set()
+
+
 def main():
     # Keep any messages printed by the vendor runtime out of its media output.
     media = os.fdopen(os.dup(sys.stdout.fileno()), "wb", buffering=0)
@@ -187,7 +216,7 @@ def main():
         media.write(json.dumps(items).encode())
         media.close()
         return
-    assembler = LiveXStreamHevcAssembler(track_timestamps=True)
+    sent_video = False
     stop = threading.Event()
     ptz = PtzCommandQueue()
 
@@ -217,11 +246,13 @@ def main():
         command_thread = threading.Thread(target=commands, daemon=True)
         command_thread.start()
 
-    def receive(data, key):
+    def forward_video(assembler, data, key):
+        nonlocal sent_video
         assembler.set_random_str(key)
         video, _audio = assembler.push_media_payload(data)
         if video:
             media.write(video)
+            sent_video = True
         return bool(video)
 
     def status(state, _details):
@@ -237,14 +268,27 @@ def main():
 
     try:
         if operation == "playback":
+            assembler = LiveXStreamHevcAssembler(track_timestamps=True)
             record = service.RecordingItem(title="", **settings["recording"])
-            result = service.run_recording_playback_stream(config, record, data_frame_callback=receive,
+            def receive_recording(data, key):
+                return forward_video(assembler, data, key)
+            result = service.run_recording_playback_stream(config, record, data_frame_callback=receive_recording,
                                                            status_callback=status, stop_event=stop, attempts=1)
         else:
-            result = service.run_monitor_live_stream(config, quality="sd", data_frame_callback=receive,
-                                                     status_callback=status, stop_event=stop, attempts=1,
-                                                     ptz_queue=ptz)
-        if os.environ.get("ENERGETICO_CAMERA_DIAGNOSTIC") == "1":
+            def play(receive, stopped):
+                return service.run_monitor_live_stream(config, quality="sd", data_frame_callback=receive,
+                                                       status_callback=status, stop_event=stopped, attempts=1,
+                                                       ptz_queue=ptz)
+
+            def attempt_live():
+                assembler = LiveXStreamHevcAssembler(track_timestamps=True)
+                return run_guarded_live_attempt(play, lambda data, key: forward_video(assembler, data, key))
+
+            preview = os.environ.get("ENERGETICO_CAMERA_LIVE_PREVIEW") == "1"
+            result = run_live_source(attempt_live, stop,
+                                     can_reconnect=lambda: preview and sent_video,
+                                     capture_error=service.MonitorCaptureError)
+        if result is not None and os.environ.get("ENERGETICO_CAMERA_DIAGNOSTIC") == "1":
             print("Source stage:", service._detect_failure_stage(result.result).get("stage"),
                   file=sys.stderr, flush=True)
     finally:

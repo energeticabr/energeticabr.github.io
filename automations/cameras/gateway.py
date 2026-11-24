@@ -78,6 +78,7 @@ class Stream:
             self.source = subprocess.Popen(
                 entry["command"], stdin=subprocess.PIPE, stdout=subprocess.PIPE,
                 stderr=subprocess.DEVNULL, close_fds=True,
+                env={**os.environ, "ENERGETICO_CAMERA_LIVE_PREVIEW": "1"} if preview else None,
             )
             self.source.stdin.write(json.dumps(entry.get("input", {})).encode() + b"\n")
             self.source.stdin.flush()

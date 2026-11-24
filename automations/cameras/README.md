@@ -12,6 +12,8 @@ O adaptador iCSee utiliza a interface do cliente `xmplayer` instalado separadame
 
 O adaptador iCSee aceita comandos curtos de movimento somente durante uma sessão ao vivo. O histórico é consultado por data e, opcionalmente, por hora no armazenamento da própria câmera; cada item recebe uma identificação temporária vinculada ao usuário e ao canal, e o caminho original não é enviado ao aplicativo. A busca de um dia inteiro mostra até 512 trechos; o filtro de hora permite consultar períodos adicionais. A capacidade de movimento e a existência de gravações dependem de cada dispositivo.
 
+Se uma prévia iCSee que já enviou vídeo perder a conexão, o adaptador tenta reconectar uma vez. O adaptador mantém a saída aberta durante a reconexão para preservar a mesma lista de reprodução.
+
 ## Fonte Yoosee
 
 A fonte Yoosee abre vídeo ao vivo pela nuvem e entrega HEVC ao gateway, que gera o mesmo HLS em H.264 usado pelas outras câmeras. Cada canal aponta para `/usr/bin/python3`, `/opt/energetico-cameras/yoosee/yoosee_source.py` e `/opt/energetico-cameras/yoosee`, com formato `hevc` e `input.deviceId` numérico. O adaptador atual oferece vídeo ao vivo.
