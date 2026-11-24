@@ -76,6 +76,13 @@
 
 - [x] Rodar `pnpm guard:signature-gestures`, `pnpm build` e `pnpm build:pwa` em `apps/energetico-mobile`.
 - [x] Conferir que as alterações staged incluem apenas arquivos desta tarefa; preservar as mudanças de serviço Yoosee ainda não commitadas.
-- [ ] Fazer push da revisão e acompanhar CI; exigir sucesso das verificações automatizadas antes de distribuir os pacotes.
-- [ ] Acionar iOS com `distribute=true` e Android com `build_play_aab=true`, `publish_play=true`, faixa `internal`, sem duplicar fluxo já iniciado por push em `main`.
-- [ ] Confirmar separadamente a revisão, o resultado de TestFlight, o envio ao teste interno Play e a atualização web/Windows.
+- [x] Fazer push da revisão e acompanhar CI; exigir sucesso das verificações automatizadas antes de distribuir os pacotes.
+- [x] Acionar iOS com `distribute=true` e Android com `build_play_aab=true`, `publish_play=true`, faixa `internal`, sem duplicar fluxo já iniciado por push em `main`.
+- [x] Confirmar separadamente a revisão, o resultado de TestFlight, o envio ao teste interno Play e a atualização web/Windows.
+
+### Evidências do release — 2026-11-24
+
+- Revisão integrada: PR [#1242](https://github.com/energeticabr/energeticabr.github.io/pull/1242), commit `848b9e9dcab666dfcbedb5b41743c0e0608dedbe`.
+- Web/Windows: [Deploy GitHub Pages concluído](https://github.com/energeticabr/energeticabr.github.io/actions/runs/45437890905); [Energético](https://www.energeticabr.com/energetico/) respondeu HTTP 200.
+- Android: [AAB publicado na faixa de teste interno da Google Play](https://github.com/energeticabr/energeticabr.github.io/actions/runs/45437891351), com APK de teste gerado.
+- iOS: [build enviada e associada ao grupo interno do TestFlight](https://github.com/energeticabr/energeticabr.github.io/actions/runs/45437890999).
