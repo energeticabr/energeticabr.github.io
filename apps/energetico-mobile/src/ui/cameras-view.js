@@ -1,3 +1,5 @@
+import { reportOrientation } from '../native/report-orientation.js';
+
 const GRID_LIMIT = 8;
 const THUMBNAIL_PREFIX = 'energetico:camera-preview:v1:';
 const CAMERA_NAME_PREFIX = 'energetico:camera-name:v1:';
@@ -45,6 +47,7 @@ export function createCamerasView(documentRef) {
     const previousFocus = documentRef.activeElement;
     const page = new AbortController();
     let player, gridRequest, playback = [], channels = [], choosing = false;
+    let cameraOrientationBinding = null;
     let nameEditor = null, nameEditorReturnFocus = null, nameEditorChannelId = null;
     let playerReturnFocus = null, playerReturnChannelId = null;
     let thumbnailsChanged = false;
@@ -284,6 +287,7 @@ export function createCamerasView(documentRef) {
     }
     function close() {
       page.abort(); closeNameEditor({ restoreFocus: false }); stopPlayer({ restoreFocus: false });
+      cameraOrientationBinding?.destroy(); cameraOrientationBinding = null;
       documentRef.removeEventListener('visibilitychange', visibilityChanged);
       windowRef?.removeEventListener('pagehide', saveCurrentThumbnails);
       dialog.remove(); dialog = null; closeCurrent = null;
@@ -742,6 +746,7 @@ export function createCamerasView(documentRef) {
     gridButton.addEventListener('click', () => { choosing = !choosing; selected.clear(); render(); });
     gridOpen.addEventListener('click', () => openPlayer(channels.filter(channel => selected.has(channel.id)), gridOpen));
     documentRef.body.append(dialog); dialog.showModal();
+    cameraOrientationBinding = reportOrientation.bindCameraPlayer(dialog);
     status.textContent = 'Carregando câmeras…';
     Promise.resolve().then(() => list({ signal: page.signal })).then(result => {
       if (page.signal.aborted) return;

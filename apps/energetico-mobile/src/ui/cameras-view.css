@@ -540,7 +540,12 @@ dialog.camera-name-editor::backdrop { background: #101113a8; }
   .cameras-player__live-state[data-state="error"] { color: #ffaaa5; }
   .cameras-player__live-state[data-state="error"]::before { background: #ffaaa5; }
   .cameras-player__stage[data-count="2"] { grid-template-columns: repeat(2, minmax(0, 1fr)); grid-template-rows: minmax(0, 1fr); }
-  .cameras-player__stage[data-count="3"], .cameras-player__stage[data-count="4"] {
+  .cameras-player__stage[data-count="3"] {
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+    grid-template-rows: minmax(0, 1fr);
+    overflow: hidden;
+  }
+  .cameras-player__stage[data-count="4"] {
     grid-template-columns: repeat(2, minmax(0, 1fr));
     grid-template-rows: repeat(2, minmax(0, 1fr));
     overflow: hidden;
