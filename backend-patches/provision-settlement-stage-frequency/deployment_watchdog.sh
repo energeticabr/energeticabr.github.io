@@ -5,8 +5,10 @@ transaction_lock=$1
 snapshot=$2
 mutation_marker=$3
 shared_lock=$4
-mirror_sha=$5
-shift 5
+before_sha=$5
+after_sha=$6
+mirror_sha=$7
+shift 7
 opc_uid=$(/usr/bin/id -u opc)
 
 # Wait for the launcher, Python installer, and any systemctl restart child.
@@ -25,7 +27,7 @@ while :; do
     sleep 1
     continue
   fi
-  if ! exec 8<> "$shared_lock"; then
+  if ! exec 8< "$shared_lock"; then
     sleep 1
     continue
   fi
@@ -53,7 +55,15 @@ while :; do
   source_pins="$(/opt/energetica-whatsapp/.venv/bin/python -I -B -c 'import hashlib,pathlib,sys; live=pathlib.Path(sys.argv[1]); mirror=pathlib.Path(sys.argv[2]); assert not live.is_symlink() and not mirror.is_symlink(); source=live.read_bytes(); compile(source,str(live),"exec"); print(hashlib.sha256(source).hexdigest(),hashlib.sha256(mirror.read_bytes()).hexdigest())' \
     /opt/energetica-whatsapp/worker/workflow.py /home/opc/energetica-build/worker/workflow.py 2>/dev/null)"
   read -r live_sha mirror_actual <<< "$source_pins"
-  if [[ ! "$live_sha" =~ ^[0-9a-f]{64}$ || "$mirror_actual" != "$mirror_sha" ]] \
+  verified_source=0
+  if [[ "$live_sha" == "$before_sha" || "$live_sha" == "$after_sha" ]]; then
+    verified_source=1
+  elif [[ "$live_sha" =~ ^[0-9a-f]{64}$ ]] \
+      && /opt/energetica-whatsapp/.venv/bin/python -I -B \
+        "$snapshot/verify_successor.py" "$live_sha"; then
+    verified_source=1
+  fi
+  if [[ "$verified_source" != 1 || "$mirror_actual" != "$mirror_sha" ]] \
       || ! /usr/bin/systemctl is-active --quiet energetica-channel-bridge.service \
       || ! /usr/bin/systemctl is-active --quiet energetica-whatsmeow.service \
       || ! /usr/bin/curl -fsS --max-time 5 http://127.0.0.1:8765/health \

@@ -66,7 +66,7 @@ EXPECTED_INPUTS="$("$PYTHON" -I -B -c 'import json,sys; print("\n".join(k+" "+v 
 while read -r relative expected_sha; do
   [[ -n "$relative" && "$relative" != */* && "$expected_sha" =~ ^[0-9a-f]{64}$ ]]
   case "$relative" in
-    deploy.py|deployment_gate.sh|deployment_watchdog.sh|patch_backend.py|shared-deploy.py|source.patch) ;;
+    deploy.py|deployment_gate.sh|deployment_watchdog.sh|patch_backend.py|shared-deploy.py|source.patch|verify_successor.py) ;;
     *) echo "Unexpected package input: $relative" >&2; exit 1 ;;
   esac
   install -m 600 -- "$PACKAGE/$relative" "$SNAPSHOT/$relative"
@@ -82,7 +82,8 @@ flock -n 9
 PROVISION_STAGE_FREQUENCY_STAGE="$SNAPSHOT" \
   "$PYTHON" -I -B "$SNAPSHOT/deploy.py" --check "$MANIFEST_SHA"
 
-PROVISION_STAGE_FREQUENCY_MIRROR_SHA="$("$PYTHON" -I -B -c 'import json,sys; print(json.load(open(sys.argv[1]))["mirror"]["worker/workflow.py"])' "$SNAPSHOT/deploy-manifest.json")"
+DEPLOYMENT_PINS="$("$PYTHON" -I -B -c 'import json,sys; m=json.load(open(sys.argv[1])); print(m["files"]["worker/workflow.py"]["before"],m["files"]["worker/workflow.py"]["after"],m["mirror"]["worker/workflow.py"])' "$SNAPSHOT/deploy-manifest.json")"
+read -r PROVISION_STAGE_FREQUENCY_BEFORE_SHA PROVISION_STAGE_FREQUENCY_AFTER_SHA PROVISION_STAGE_FREQUENCY_MIRROR_SHA <<< "$DEPLOYMENT_PINS"
 source "$SNAPSHOT/deployment_gate.sh"
 provision_stage_frequency_block_ingress
 provision_stage_frequency_drain_requests

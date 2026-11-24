@@ -9,11 +9,12 @@
     "worker/workflow.py": "a77df64274c20e1ae175d074ae7b96cb51cf6b5e7ba4ca0c917783d94a16dbc3"
   },
   "inputs": {
-    "deploy.py": "4524ca68e4776db0418e1217662dcefcf23fd5ef6d17415ff1c184b2772664d0",
-    "deployment_gate.sh": "e6d69126f89c7f3b9a0f5349f62e1fb8c685d67f1d5077eca64cc65e001075a5",
-    "deployment_watchdog.sh": "bf98d0b89f87bbca3eb91e1eb17373eca4ca94cb2fd646fa01e6ca3b9e990da1",
+    "deploy.py": "be66aa021cec7a9decf9dbbd1f85faf634dfc547f51b9dc855d9ba5ed5833b5f",
+    "deployment_gate.sh": "1de51dc10e5e689f40306412e49e478a0cf9bf6862ba12b01836c3abe39d5237",
+    "deployment_watchdog.sh": "ec4a7f781bb81a340a9ee5fc51f9bdf678bd70eec9dc4883f739decd8f51d5b5",
     "patch_backend.py": "65e4c543509bf64a4ce1665129097b929e150188a4486a4a004f1959b78a4d16",
     "shared-deploy.py": "01d979e4e9d525d35ab522e017d3454be75514f4fc42a1274cc89e7b0a21bbe2",
-    "source.patch": "959862dcc6592c2a471a80d87c8d2f74d44f0061a89674a7001468565eef2280"
+    "source.patch": "959862dcc6592c2a471a80d87c8d2f74d44f0061a89674a7001468565eef2280",
+    "verify_successor.py": "fbbb0bc9659d86c28fea947e91cfd6fe373334fb1317cfea6967947043ef8e2b"
   }
 }
