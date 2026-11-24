@@ -1,0 +1,21 @@
+--- a/worker/workflow.py
++++ b/worker/workflow.py
+@@ -20364 +20364,7 @@
+-        if state.get("flow") != "launch" or step.get("key") != "etapa_lancamento" or not options:
++        is_launch_stage = (
++            state.get("flow") == "launch" and step.get("key") == "etapa_lancamento"
++        )
++        is_settlement_stage = (
++            state.get("flow") == "payment_settlement" and step.get("key") == "etapa_baixa"
++        )
++        if not (is_launch_stage or is_settlement_stage) or not options:
+@@ -20384,2 +20390,4 @@
+-            return sorted(options, key=lambda item: -counts.get(
+-                normalize_text(str(item.get("value") or "")), 0))
++            return sorted(options, key=lambda item: (
++                0 if is_settlement_stage and str(item.get("id") or "") == "NOVA_ETAPA_BAIXA_PROVISAO" else 1,
++                -counts.get(normalize_text(str(item.get("value") or "")), 0),
++            ))
+@@ -20387 +20395 @@
+-            # A history outage must never remove catalog choices or block launch.
++            # A history outage must never remove catalog choices or block either flow.
