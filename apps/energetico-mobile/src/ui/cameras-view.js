@@ -153,14 +153,21 @@ export function createCamerasView(documentRef) {
       }
     }
 
+    function detachVideo(item) {
+      item.hls?.destroy();
+      item.hls = null;
+      item.video.pause();
+      item.video.removeAttribute('src');
+      item.video.load();
+    }
+
     function stopPlayer() {
       saveCurrentThumbnails();
       gridRequest?.abort(); gridRequest = null;
       for (const item of playback) {
         item.controller.abort();
         item.searchController?.abort();
-        item.hls?.destroy();
-        item.video.pause(); item.video.removeAttribute('src'); item.video.load();
+        detachVideo(item);
       }
       playback = [];
       player?.remove(); player = null;
@@ -192,8 +199,7 @@ export function createCamerasView(documentRef) {
       saveThumbnail(item);
       item.controller.abort();
       item.onPlaybackError = null;
-      item.hls?.destroy(); item.hls = null;
-      item.video.pause(); item.video.removeAttribute('src'); item.video.load();
+      detachVideo(item);
       item.controller = new AbortController();
       item.mode = recordingId ? 'playback' : 'live';
       item.thumbnailTime = null;
@@ -215,7 +221,10 @@ export function createCamerasView(documentRef) {
         reopenLive(previousUrl);
       };
       const showDisconnected = message => {
+        saveThumbnail(item);
         item.connected = false;
+        item.onPlaybackError = null;
+        detachVideo(item);
         item.updateControls?.();
         item.status.textContent = message;
         if (item.preview && !recordingId) {
@@ -246,7 +255,6 @@ export function createCamerasView(documentRef) {
             retryCompatible(url);
             return;
           }
-          item.onPlaybackError = null;
           showDisconnected('Transmissão interrompida.');
         };
         item.onPlaybackError = failed;
@@ -303,9 +311,9 @@ export function createCamerasView(documentRef) {
         video.addEventListener('error', () => item.onPlaybackError?.(video.error?.code === 2));
         if (preview) {
           video.addEventListener('waiting', () => {
-            if (!item.connected || !item.played) return;
-            notice.textContent = 'Reconectando…';
-            if (item.waitingTimer === null && !item.retriedNetwork) {
+            if (!item.connected) return;
+            if (item.played || item.retriedNetwork) notice.textContent = 'Reconectando…';
+            if (item.waitingTimer === null) {
               item.waitingTimer = windowRef.setTimeout(() => item.onPlaybackError?.(true), GRID_RECONNECT_DELAY_MS);
             }
           });

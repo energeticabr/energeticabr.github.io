@@ -99,12 +99,15 @@ test('a grade reconecta uma transmissão interrompida sem reabrir os demais cana
   await flush();
   assert.deepEqual(grids.map(grid => grid.ids), [['site-1', 'site-2'], ['site-1']]);
   assert.deepEqual(starts.at(-1).codecs, ['h264', 'hevc']);
-  const error = { code: 2 };
-  Object.defineProperty(video, 'error', { value: error });
   video.dispatchEvent(new Event('playing'));
-  video.dispatchEvent(new Event('error'));
+  video.dispatchEvent(new Event('waiting'));
+  reconnectTimer();
   await flush();
   assert.equal(grids.length, 2);
+  assert.match(notice.textContent, /Toque no vídeo para tentar novamente/);
+  video.click();
+  await flush();
+  assert.equal(grids.length, 3);
   assert.equal(starts.filter(item => item.id === 'site-2').length, 1);
 });
 
