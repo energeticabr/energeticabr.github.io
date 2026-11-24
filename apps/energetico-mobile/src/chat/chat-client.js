@@ -947,13 +947,18 @@ export function createChatClient({
     return url;
   }
 
-  function prepareCameraGrid(channelIds, { signal, codecs } = {}) {
+  function prepareCameraGrid(channelIds, { signal, codecs, previousUrl } = {}) {
     const payload = { action: "play-grid", channelIds, codecs };
+    if (channelIds?.length === 1 && typeof previousUrl === "string" && previousUrl.startsWith(baseUrl.origin + "/")) {
+      const previousPath = previousUrl.slice(baseUrl.origin.length);
+      if (cameraPlaylistUrl(previousPath)) payload.replacePath = previousPath;
+    }
     const open = () => cameraRequest(payload, signal);
     let retried;
-    const retry = () => {
-      // Let previews from a recently closed player reach the gateway's idle timeout.
-      retried ??= retryDelay(25000).then(open);
+    const retry = hint => {
+      // The gateway can release an inactive preview from this same channel earlier.
+      const delay = payload.replacePath && Number.isFinite(hint) ? Math.max(250, Math.min(5000, hint)) : 25000;
+      retried ??= retryDelay(delay).then(open);
       return retried;
     };
     const opened = open().catch(error => {
@@ -962,7 +967,7 @@ export function createChatClient({
     });
     return async (channelId, { signal } = {}) => {
       let result = await opened;
-      if (result?.busy?.includes(channelId)) result = await retry();
+      if (result?.busy?.includes(channelId)) result = await retry(result.retryAfterMs);
       if (result?.busy?.includes(channelId)) throw new Error("O serviço de câmeras está ocupado. Tente novamente em instantes.");
       const url = cameraPlaylistUrl(result?.paths?.[channelId]);
       if (!url) throw new Error("Não foi possível abrir esta câmera.");
