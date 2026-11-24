@@ -28,8 +28,18 @@ function harness(t, { client, timeoutMs = 20, native = {} } = {}) {
     diaryFieldVisitDataFactory: async () => ({ load: async () => [] }),
   });
   t.after(() => controller.stop());
-  return { store, controller, renders, emit: (name, body) => commands.get(name)?.(body), state: () => renders.at(-1) };
+  return { store, recovery, controller, renders, emit: (name, body) => commands.get(name)?.(body), state: () => renders.at(-1) };
 }
+
+test('ordinary main-menu startup skips the diary evidence preflight', async t => {
+  const calls = [];
+  const h = harness(t, { client: {
+    waitForDiaryEvidence: async () => { calls.push('diary_evidence_pending'); },
+    sendText: async body => { calls.push(body.replyId); return menu(); },
+  } });
+  await h.controller.start();
+  assert.deepEqual(calls, ['input_continue']);
+});
 
 test('a shared receipt that clears the send error still exposes Retomar and uploads once after synchronization', async t => {
   const file = Object.assign(new File(['synthetic proof'], 'comprovante.pdf', { type: 'application/pdf' }), { sourceId: 'shared-proof' });
@@ -108,7 +118,12 @@ test('Retomar after interrupted startup recovers when connectivity returns beyon
     },
   });
   const h = harness(t, { client: { sendText: wire.sendText, waitForDiaryEvidence: wire.waitForDiaryEvidence, getAttachments: wire.getAttachments }, timeoutMs: 1000 });
+  h.recovery.schedule('reconnection-test', {
+    activeFlow: { id: 'construction_diary_fill', title: 'DIÁRIO', rows: [] },
+  });
+  h.recovery.flush();
   await h.controller.start();
+  assert.ok(sent.some(body => body.action === 'diary_evidence_pending'), 'an interrupted diary keeps its preflight');
   assert.equal(h.state().recoveryBlocked, true);
   assert.match(h.state().error, /conexão/i);
   h.emit('draft-changed', { value: 'rascunho preservado' });

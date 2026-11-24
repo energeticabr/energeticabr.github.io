@@ -6012,7 +6012,14 @@ export function createAppController({
     const conversationRevision = sessionRevision;
     const currentConversation = () => account === conversationAccount && sessionRevision === conversationRevision && !stopped
       && conversationResumeRecord === genericProgress && !genericProgress.abort.signal.aborted;
-    const previousFlow = store.getState().activeFlow;
+    const previousState = store.getState();
+    const previousFlow = previousState.activeFlow;
+    const savedRecoveryStates = [recoveryPreview, recoveryReference, ...olderReferences];
+    const checkDiaryEvidence = Boolean(previousFlow?.id === 'construction_diary_fill'
+      || previousState.pendingFiles.length
+      || recoveryUncertain
+      || savedRecoveryStates.some(saved => saved?.activeFlow?.id === 'construction_diary_fill'
+        || saved?.uncertain === true || saved?.pendingNames?.length));
     const resumeDraftRevision = draftEditRevision;
     const genericProgress = beginOperationProgress('Restabelecendo conexão com a VM…');
     conversationResumeRecord = genericProgress;
@@ -6026,7 +6033,7 @@ export function createAppController({
       let paymentProvisionAutoReplyError = null;
       const resumed = await resumeConversation(client, {
         ...genericProgress.options, signal: genericProgress.abort.signal,
-        timeoutMs: conversationResumeTimeoutMs, retryDelay: conversationResumeRetryDelay,
+        timeoutMs: conversationResumeTimeoutMs, retryDelay: conversationResumeRetryDelay, checkDiaryEvidence,
         onEvidenceProgress: value => {
           if (!currentConversation()) return;
           diaryAttachmentProgress = value;
