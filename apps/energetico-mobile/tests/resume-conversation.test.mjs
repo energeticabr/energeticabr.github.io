@@ -14,6 +14,17 @@ test('reconnection retries only the empty current-question command, even without
   assert.deepEqual(bodies, [{ text: '', replyId: 'input_continue' }, { text: '', replyId: 'input_continue' }]);
 });
 
+test('ordinary resume can skip the diary evidence preflight', async () => {
+  let checks = 0, resumes = 0;
+  const result = await resumeConversation({
+    waitForDiaryEvidence: async () => { checks++; },
+    sendText: async () => { resumes++; return 'menu'; },
+  }, { checkDiaryEvidence: false });
+  assert.equal(result, 'menu');
+  assert.equal(checks, 0);
+  assert.equal(resumes, 1);
+});
+
 test('authentication and throttling failures do not cause automatic reconnection retries', async () => {
   for (const status of [401, 403, 429]) {
     let requests = 0;

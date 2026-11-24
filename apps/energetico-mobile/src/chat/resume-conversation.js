@@ -31,7 +31,7 @@ function timeoutError() {
 // Only the current-question control query is retried. User answers, uploads,
 // confirmations and the controller's subsequent automatic actions stay outside.
 export async function resumeConversation(client, { signal, timeoutMs = 30_000, maxWaitMs = 30_000, retryDelay,
-  onEvidenceProgress, ...options } = {}) {
+  onEvidenceProgress, checkDiaryEvidence = true, ...options } = {}) {
   const deadline = Math.max(1, Number(timeoutMs) || 30_000);
   const lifetime = new AbortController();
   const cancelLifetime = () => lifetime.abort(cancellation(signal));
@@ -58,7 +58,7 @@ export async function resumeConversation(client, { signal, timeoutMs = 30_000, m
     touch();
     try {
       const work = (async () => {
-        if (typeof client.waitForDiaryEvidence === 'function') {
+        if (checkDiaryEvidence && typeof client.waitForDiaryEvidence === 'function') {
           await client.waitForDiaryEvidence({ signal: request.signal, onProgress: value => {
             if (request.signal.aborted) return;
             const key = JSON.stringify([value?.requestId, value?.stage]);
