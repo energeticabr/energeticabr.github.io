@@ -12,4 +12,12 @@ O adaptador iCSee utiliza a interface do cliente `xmplayer` instalado separadame
 
 O adaptador iCSee aceita comandos curtos de movimento somente durante uma sessão ao vivo. O histórico é consultado por data e, opcionalmente, por hora no armazenamento da própria câmera; cada item recebe uma identificação temporária vinculada ao usuário e ao canal, e o caminho original não é enviado ao aplicativo. A busca de um dia inteiro mostra até 512 trechos; o filtro de hora permite consultar períodos adicionais. A capacidade de movimento e a existência de gravações dependem de cada dispositivo.
 
+## Fonte Yoosee
+
+A fonte Yoosee abre vídeo ao vivo pela nuvem e entrega HEVC ao gateway, que gera o mesmo HLS em H.264 usado pelas outras câmeras. Cada canal aponta para `/usr/bin/python3`, `/opt/energetico-cameras/yoosee/yoosee_source.py` e `/opt/energetico-cameras/yoosee`, com formato `hevc` e `input.deviceId` numérico. O adaptador atual oferece vídeo ao vivo.
+
+Compile `yoosee_live.cpp` com MSVC x64 e `/MD`, usando o cabeçalho e a biblioteca de importação do mesmo pacote do [GWTimes IoTVideo-PC](https://github.com/GWTimes/IoTVideo-PC). Instale o executável e as DLLs correspondentes em `yoosee/bin`. Instale o Wine x64 e os arquivos de idioma e dependências MinGW em `yoosee/runtime`, preservando a estrutura `usr` dos pacotes. Instale também o módulo de autenticação `yoosee_cloud` com seu arquivo de chaves e sua licença no diretório `yoosee`.
+
+Instale e habilite a unidade `energetico-yoosee.service`. Forneça o JSON `yoosee.json` contendo `account`, `password` e os IDs numéricos das câmeras em `devices` em `/etc/energetico-cameras`, com acesso restrito a root. O serviço reutiliza a autenticação e mantém o fluxo comprimido de cada câmera em um processo do SDK com um prefixo Wine próprio. O gateway recebe o vídeo pelo socket Unix privado e só inicia a conversão HLS quando solicitado. O systemd fornece a credencial apenas à fonte. Valide o primeiro segmento e o avanço da sequência HLS de cada canal. Para cadastrar mais de uma câmera, valide também a reprodução simultânea.
+
 Execute `python -B -m unittest discover -s automations/cameras -v` para testar a autorização e as rotas.
