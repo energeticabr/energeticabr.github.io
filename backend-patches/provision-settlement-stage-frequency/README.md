@@ -26,7 +26,7 @@ sudo install -o root -g root -m 0755 \
   /usr/local/sbin/provision-settlement-stage-frequency-deploy
 ```
 
-Conferir o hash do launcher instalado contra o checkout revisado e confirmar que o dono é root e o modo não permite escrita por grupo/outros. Depois, executar:
+Conferir o hash do launcher instalado contra o checkout revisado e confirmar que o arquivo e `/usr/local/sbin` pertencem a root e não permitem escrita por grupo/outros. Depois, executar:
 
 ```sh
 sudo -n /usr/local/sbin/provision-settlement-stage-frequency-deploy \
@@ -34,6 +34,6 @@ sudo -n /usr/local/sbin/provision-settlement-stage-frequency-deploy \
   <SHA256_DO_MANIFESTO>
 ```
 
-O launcher autentica o manifesto e copia os arquivos do pacote para um snapshot root-owned em `/run`; confere cada hash antes de executar código do pacote. O carregador verifica e executa os mesmos bytes lidos. Um lock de transação herdado pelo launcher, pelo Python e pelo comando de reinício mantém o watchdog ativo até instalação ou rollback terminar. O watchdog é armado antes do bloqueio do ingress e repete a remoção da regra até confirmar que ela saiu. A implantação compila o candidato, adquire também o lock compartilhado, bloqueia novas requisições do bridge e espera o esvaziamento antes de instalar atomicamente. Mantém backup recuperável, reinicia o bridge, confirma que o worker WhatsApp continua ativo e espera até 60 segundos pela saúde local após cold start. Se houver falha, restaura o arquivo, reinicia o bridge e espera a saúde da versão restaurada antes de liberar o tráfego. O mirror é apenas verificado.
+O launcher autentica o manifesto e copia os arquivos do pacote para um snapshot root-owned em `/run`; confere cada hash antes de executar código do pacote. O carregador verifica e executa os mesmos bytes lidos. Um lock de transação herdado pelo launcher, pelo Python e pelo comando de reinício mantém o watchdog ativo até instalação ou rollback terminar. O watchdog é armado antes do bloqueio do ingress e só libera quando o lock fecha, as conexões antigas terminam, o hash instalado é o baseline ou candidato esperado, ambos os serviços estão ativos e a saúde local retorna `ok`; ele repete a remoção da regra até confirmar que ela saiu. A implantação compila o candidato, adquire também o lock compartilhado, bloqueia novas requisições do bridge e espera o esvaziamento antes de instalar atomicamente. Mantém backup recuperável, reinicia o bridge, confirma que o worker WhatsApp continua ativo e espera até 60 segundos pela saúde local após cold start. Se houver falha, restaura o arquivo, reinicia o bridge e espera a saúde da versão restaurada antes de liberar o tráfego. O mirror é apenas verificado.
 
 Após o deploy, confirmar também `https://163-176-171-217.sslip.io/health` e os hashes ativos de produção e do mirror; registrar o recibo antes de concluir.

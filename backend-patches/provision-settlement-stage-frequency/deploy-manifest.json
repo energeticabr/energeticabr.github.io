@@ -9,8 +9,9 @@
     "worker/workflow.py": "a77df64274c20e1ae175d074ae7b96cb51cf6b5e7ba4ca0c917783d94a16dbc3"
   },
   "inputs": {
-    "deploy.py": "1ddf0a05aeeacf93fe097175948eea9fdd5733031a1bc5c016b667c9f9c6dd5d",
-    "deployment_gate.sh": "a80665702f93f788bed5e5d07cc0b1ad36585adfe327f09a6eae2150c9b964d0",
+    "deploy.py": "168cb9192edddf19376bd5b1818ba83710eda82fb6c91002ea59aa15c79a59b9",
+    "deployment_gate.sh": "1d8d86c06ddd79350e1d92bb61ad0b70684445923602ef6393a2ef691474cd42",
+    "deployment_watchdog.sh": "4622c5d321372a5e98d38a3c2bb5a424017ed34b90ddca4f3baba892616644cf",
     "patch_backend.py": "65e4c543509bf64a4ce1665129097b929e150188a4486a4a004f1959b78a4d16",
     "shared-deploy.py": "01d979e4e9d525d35ab522e017d3454be75514f4fc42a1274cc89e7b0a21bbe2",
     "source.patch": "959862dcc6592c2a471a80d87c8d2f74d44f0061a89674a7001468565eef2280"

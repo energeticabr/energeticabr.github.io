@@ -12,7 +12,7 @@ FILES = ("worker/workflow.py",)
 BEFORE = {"worker/workflow.py": "131b5f5956c0d2b4bac60a7de380e81a3b8700ea8eeae8033962f4f709b9caef"}
 MIRROR_PINS = {"worker/workflow.py": "a77df64274c20e1ae175d074ae7b96cb51cf6b5e7ba4ca0c917783d94a16dbc3"}
 SHARED_RUNNER_SHA = "01d979e4e9d525d35ab522e017d3454be75514f4fc42a1274cc89e7b0a21bbe2"
-INPUTS = {"patch_backend.py", "deploy.py", "deployment_gate.sh", "shared-deploy.py", "source.patch"}
+INPUTS = {"patch_backend.py", "deploy.py", "deployment_gate.sh", "deployment_watchdog.sh", "shared-deploy.py", "source.patch"}
 
 
 def digest(data):
