@@ -4,11 +4,12 @@ const GRID_LIMIT = 8;
 export function createCamerasView(documentRef) {
   let dialog, closeCurrent;
 
-  function open({ list, start, move, listRecordings, playRecording }) {
+  function open({ list, start, prepareGrid, move, listRecordings, playRecording }) {
     if (dialog) return true;
     const previousFocus = documentRef.activeElement;
     const page = new AbortController();
-    let player, landscape, playback = [], channels = [], choosing = false;
+    let player, landscape, gridRequest, playback = [], channels = [], choosing = false;
+    let thumbnailsChanged = false;
     const selected = new Set();
     const thumbnails = new Map();
 
@@ -83,6 +84,7 @@ export function createCamerasView(documentRef) {
     }
 
     function stopPlayer() {
+      gridRequest?.abort(); gridRequest = null;
       for (const item of playback) {
         item.controller.abort();
         item.searchController?.abort();
@@ -92,6 +94,10 @@ export function createCamerasView(documentRef) {
       playback = [];
       player?.remove(); player = null;
       landscape?.destroy(); landscape = null;
+      if (thumbnailsChanged) {
+        thumbnailsChanged = false;
+        render();
+      }
     }
     function close() {
       page.abort(); stopPlayer();
@@ -105,7 +111,7 @@ export function createCamerasView(documentRef) {
         status.textContent = 'Transmissão pausada. Selecione uma câmera para retomar.';
       }
     }
-    async function connect(item, channel, recordingId = null) {
+    async function connect(item, channel, recordingId = null, startPlayback = start) {
       item.controller.abort();
       item.hls?.destroy(); item.hls = null;
       item.video.pause(); item.video.removeAttribute('src'); item.video.load();
@@ -115,14 +121,16 @@ export function createCamerasView(documentRef) {
       const { signal } = item.controller;
       item.status.textContent = recordingId ? 'Abrindo gravação…' : 'Conectando…';
       try {
-        const url = recordingId ? await playRecording(channel.id, recordingId, { signal }) : await start(channel.id, { signal });
+        const url = recordingId ? await playRecording(channel.id, recordingId, { signal }) : await startPlayback(channel.id, { signal });
         if (signal.aborted) return;
         if (item.video.canPlayType('application/vnd.apple.mpegurl')) item.video.src = url;
         else {
           const { default: Hls } = await import('hls.js');
           if (signal.aborted) return;
           if (!Hls.isSupported()) throw new Error('Reprodução não disponível neste dispositivo.');
-          item.hls = new Hls({ maxBufferLength: 8 });
+          item.hls = new Hls(item.preview
+            ? { maxBufferLength: 6, maxMaxBufferLength: 8, backBufferLength: 4 }
+            : { maxBufferLength: 8 });
           item.hls.on(Hls.Events.ERROR, (_event, details) => {
             if (details.fatal && !signal.aborted) item.status.textContent = 'Transmissão interrompida. Volte e tente novamente.';
           });
@@ -137,6 +145,7 @@ export function createCamerasView(documentRef) {
     }
     function openPlayer(chosen) {
       stopPlayer();
+      const preview = chosen.length > 1;
       player = make('div', 'cameras-player');
       const panel = make('section', 'cameras-player__panel');
       panel.setAttribute('role', 'dialog'); panel.setAttribute('aria-label', 'Câmeras ao vivo');
@@ -150,12 +159,26 @@ export function createCamerasView(documentRef) {
       let controls;
       for (const channel of chosen) {
         const tile = make('div', 'cameras-player__tile');
-        const video = documentRef.createElement('video'); video.playsInline = true; video.controls = true; video.muted = true;
+        const video = documentRef.createElement('video');
+        video.playsInline = true; video.controls = !preview; video.defaultMuted = true; video.muted = true;
         video.crossOrigin = 'anonymous'; video.setAttribute('aria-label', channel.label);
         const label = make('span', 'cameras-player__label', channel.label);
         const notice = make('span', 'cameras-player__status'); notice.setAttribute('role', 'status');
         video.addEventListener('error', () => { if (!item.controller.signal.aborted) notice.textContent = 'Transmissão interrompida. Volte e tente novamente.'; });
-        const item = { controller: new AbortController(), video, status: notice, hls: null, mode: 'live', connected: false };
+        const item = { controller: new AbortController(), video, status: notice, hls: null, mode: 'live', connected: false, preview };
+        if (preview) {
+          const resume = () => {
+            if (item.connected && video.paused) void video.play().then(() => { notice.textContent = ''; }).catch(() => {});
+          };
+          video.tabIndex = 0;
+          video.addEventListener('click', resume);
+          video.addEventListener('keydown', event => {
+            if (event.key === 'Enter' || event.key === ' ') {
+              event.preventDefault();
+              resume();
+            }
+          });
+        }
         video.addEventListener('playing', () => {
           if (thumbnails.has(channel.id) || !video.videoWidth || !video.videoHeight) return;
           try {
@@ -164,7 +187,7 @@ export function createCamerasView(documentRef) {
             canvas.height = Math.round(canvas.width * video.videoHeight / video.videoWidth);
             canvas.getContext('2d').drawImage(video, 0, 0, canvas.width, canvas.height);
             thumbnails.set(channel.id, canvas.toDataURL('image/jpeg', 0.7));
-            render();
+            thumbnailsChanged = true;
           } catch { /* A source without canvas access still plays normally. */ }
         });
         playback.push(item); tile.append(video, label, notice);
@@ -234,7 +257,12 @@ export function createCamerasView(documentRef) {
       workspace.append(tiles); if (controls) workspace.append(controls);
       panel.append(header, workspace); player.append(panel); dialog.append(player);
       landscape = bindReportLandscape(player);
-      chosen.forEach((channel, index) => { void connect(playback[index], channel); });
+      let startPlayback = start;
+      if (preview && prepareGrid) {
+        gridRequest = new AbortController();
+        startPlayback = prepareGrid(chosen.map(channel => channel.id), { signal: gridRequest.signal });
+      }
+      chosen.forEach((channel, index) => { void connect(playback[index], channel, null, startPlayback); });
     }
     closeCurrent = close;
     documentRef.addEventListener('visibilitychange', visibilityChanged);
