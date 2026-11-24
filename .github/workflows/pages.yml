@@ -169,10 +169,36 @@ jobs:
             !_site/energetico/assets/**/*.map
 
       - name: Upload static site
+        id: pages-artifact
         uses: actions/upload-pages-artifact@v3
         with:
           name: github-pages-attempt-${{ github.run_attempt }}
           path: _site
+
+      - name: Wait for the uploaded Pages artifact
+        uses: actions/github-script@v7
+        env:
+          PAGES_ARTIFACT_ID: ${{ steps.pages-artifact.outputs.artifact_id }}
+          PAGES_ARTIFACT_NAME: github-pages-attempt-${{ github.run_attempt }}
+        with:
+          retries: 3
+          script: |
+            const { setTimeout: delay } = require('node:timers/promises');
+            const id = Number(process.env.PAGES_ARTIFACT_ID);
+            const name = process.env.PAGES_ARTIFACT_NAME;
+            if (!Number.isSafeInteger(id) || id <= 0) throw new Error('Pages upload returned no artifact ID.');
+            for (let attempt = 0; attempt < 12; attempt++) {
+              const { data: { artifacts } } = await github.rest.actions.listWorkflowRunArtifacts({
+                ...context.repo, run_id: context.runId, name,
+              });
+              if (artifacts.some(artifact => artifact.id === id && artifact.name === name && !artifact.expired)) {
+                core.info(`Pages artifact ${id} is visible. Waiting for the deployment index to catch up.`);
+                await delay(20000);
+                return;
+              }
+              if (attempt < 11) await delay(5000);
+            }
+            throw new Error(`Pages artifact ${id} was not indexed for this run.`);
 
       - name: Deploy
         id: deployment
