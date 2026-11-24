@@ -7,7 +7,7 @@ import { createServer } from 'vite';
 import { JSDOM } from 'jsdom';
 import { runBrowserLayout } from './helpers/browser-layout-runner.mjs';
 
-test('salary paid/expected uses green whole currency amounts on portrait landscape and desktop with actual report styles', { timeout: 180_000 }, async t => {
+test('salary paid, expected and remaining fit the report on portrait, landscape and desktop', { timeout: 180_000 }, async t => {
   const browser = [process.env.CHROME_BIN, 'C:/Program Files/Google/Chrome/Application/chrome.exe', '/usr/bin/google-chrome', '/usr/bin/chromium'].find(path => path && existsSync(path));
   if (!browser) return t.skip('Chrome unavailable');
   const capture = process.env.PAYROLL_SALARY_EXPECTED_CAPTURE_DIR;
@@ -27,11 +27,15 @@ test('salary paid/expected uses green whole currency amounts on portrait landsca
           assert.equal(layout.portrait, height > width, detail);
           for (const field of ['pageHorizontalOverflow', 'contentHorizontalOverflow']) assert.equal(layout[field], false, `${field}: ${detail}`);
           for (const field of ['noExpectedOn13Salary', 'allCardsFit', 'noExternalResources']) assert.equal(layout[field], true, `${field}: ${detail}`);
-          assert.deepEqual(layout.salaryTexts, ['R$ 99.999.999,99 / R$ 123.456.789,00', 'R$ 527,00 / Não informado', 'R$ 627,00 / R$ 3.200,50'], detail);
+          assert.deepEqual(layout.salaryTexts, ['R$ 99.999.999,99 / R$ 123.456.789,00', 'R$ 527,00 / Não informado', 'R$ 627,00 / R$ 3.200,50', 'R$ 0,00 / R$ 5.000,00'], detail);
+          assert.deepEqual(layout.amounts.map(row => row.balance.text), ['R$ 23.456.789,01', 'Não calculado', 'R$ 2.573,50', 'R$ 5.000,00'], detail);
           assert.equal(layout.paid13, 'R$ 1.200,00', detail); assert.equal(layout.otherRubricPaid, 'R$ 600,00', detail);
           assert.equal(layout.totalPaidUnchanged, 'R$ 100.000.599,99', detail);
           for (const row of layout.amounts) {
             assert.ok(row.scrollWidth <= row.width + 1, detail);
+            assert.equal(row.balance.fitsRow, true, detail);
+            assert.equal(row.balance.fitsContent, true, detail);
+            assert.notEqual(row.balance.background, row.balance.parentBackground, detail);
             for (const amount of row.atoms) {
               assert.equal(amount.oneLine, true, detail); assert.equal(amount.fitsValue, true, detail); assert.equal(amount.fitsRow, true, detail);
               assert.equal(amount.whiteSpace, 'nowrap', detail); assert.equal(amount.color, 'rgb(22, 121, 77)', detail);
